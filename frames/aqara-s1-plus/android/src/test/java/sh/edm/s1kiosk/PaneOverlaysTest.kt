@@ -16,13 +16,16 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
-import sh.edm.s1kiosk.camera.CameraDot
-import sh.edm.s1kiosk.gecko.GeckoPinHarness
-import sh.edm.s1kiosk.gecko.GeckoShadows
-import sh.edm.s1kiosk.notifications.NotificationOverlay
-import sh.edm.s1kiosk.settings.KioskSettingsOverlay
-import sh.edm.s1kiosk.settings.SettingsMenu
-import sh.edm.s1kiosk.setup.ThreadJoinOverlay
+import dev.glassworks.camera.CameraDot
+import dev.glassworks.engine.gecko.GeckoPinHarness
+import dev.glassworks.engine.gecko.GeckoShadows
+import dev.glassworks.notifications.NotificationOverlay
+import dev.glassworks.settings.KioskSettingsOverlay
+import dev.glassworks.settings.SettingsMenu
+import dev.glassworks.setup.ThreadJoinOverlay
+import dev.glassworks.TimerOverlay
+import dev.glassworks.VoiceOverlay
+import dev.glassworks.glassworks
 
 /** The activity adds the layers the app builds for it ([AppParts.overlays]) in their order, over the page. */
 @RunWith(RobolectricTestRunner::class)

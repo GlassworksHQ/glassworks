@@ -22,6 +22,7 @@ import dev.glassworks.esphome.SwitchEntity
 import sh.edm.s1kiosk.frame.AqaraS1Plus
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import dev.glassworks.KioskPrefs
 
 /**
  * #185: a setting saved just before the app exits survives the restart. The app exits right after some

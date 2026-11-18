@@ -15,33 +15,37 @@ import dev.glassworks.pane.Pane
 import dev.glassworks.pane.PaneDefinition
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
-import sh.edm.s1kiosk.AppParts
-import sh.edm.s1kiosk.GlassworksRuntime
-import sh.edm.s1kiosk.KioskPrefs
+import dev.glassworks.AppParts
+import dev.glassworks.GlassworksRuntime
+import dev.glassworks.KioskPrefs
+import dev.glassworks.AppComponents
+import sh.edm.s1kiosk.AdminReceiver
+import sh.edm.s1kiosk.KioskService
 import sh.edm.s1kiosk.MainActivity
-import sh.edm.s1kiosk.OverlayHost
-import sh.edm.s1kiosk.PaneOverlay
-import sh.edm.s1kiosk.PaneFiles
-import sh.edm.s1kiosk.TimerOverlay
-import sh.edm.s1kiosk.VoiceOverlay
-import sh.edm.s1kiosk.auth.HaTokenClient
-import sh.edm.s1kiosk.camera.CameraWiring
-import sh.edm.s1kiosk.auth.SignInServer
-import sh.edm.s1kiosk.esphome.DeviceHost
-import sh.edm.s1kiosk.manage.AppManage
-import sh.edm.s1kiosk.sendspin.SendspinDefinition
-import sh.edm.s1kiosk.sendspin.SendspinPane
-import sh.edm.s1kiosk.timers.TimersPane
-import sh.edm.s1kiosk.voice.AssistDefinition
-import sh.edm.s1kiosk.voice.AssistPane
-import sh.edm.s1kiosk.voice.SpeakerMedia
+import sh.edm.s1kiosk.update.UpdateInstallReceiver
+import dev.glassworks.OverlayHost
+import dev.glassworks.PaneOverlay
+import dev.glassworks.PaneFiles
+import dev.glassworks.TimerOverlay
+import dev.glassworks.VoiceOverlay
+import dev.glassworks.auth.HaTokenClient
+import dev.glassworks.camera.CameraWiring
+import dev.glassworks.auth.SignInServer
+import dev.glassworks.device.DeviceHost
+import dev.glassworks.manage.AppManage
+import dev.glassworks.speaker.SendspinDefinition
+import dev.glassworks.speaker.SendspinPane
+import dev.glassworks.timers.TimersPane
+import dev.glassworks.assist.AssistDefinition
+import dev.glassworks.assist.AssistPane
+import dev.glassworks.assist.SpeakerMedia
 import dev.glassworks.voice.VoiceEngine
 import dev.glassworks.voice.VoiceEvent
-import sh.edm.s1kiosk.voice.VoiceLevels
-import sh.edm.s1kiosk.voice.VoicePrefs
-import sh.edm.s1kiosk.voice.VoiceUi
-import sh.edm.s1kiosk.voice.chime
-import sh.edm.s1kiosk.voice.wakeChime
+import dev.glassworks.assist.VoiceLevels
+import dev.glassworks.assist.VoicePrefs
+import dev.glassworks.assist.VoiceUi
+import dev.glassworks.assist.chime
+import dev.glassworks.assist.wakeChime
 
 /**
  * The generic app's parts ([AppParts]): its fixed set of panes (#23), Assist with its timers and Sendspin, which
@@ -87,7 +91,8 @@ class GenericParts : AppParts {
     // Settings from intent extras: only a start of MainActivity itself, which takes WRITE_SECURE_SETTINGS (adb) unless
     // it is the app's own; never through the launcher alias ([LAUNCHER]), which any app can start. AppParts'
     // trustsExtras does exactly that (#409).
-    override val mainActivity = MainActivity::class.java
+    // The subclasses at the names the Tablet, the Mirror and Kiln know (#22).
+    override val components = AppComponents(MainActivity::class.java, KioskService::class.java, AdminReceiver::class.java, UpdateInstallReceiver::class.java)
 
     override fun serviceStarted(context: Context, runtime: GlassworksRuntime) {
         runtime.voiceState = if (VoicePrefs(paneFile(context, "assist")).enabled) "idle" else "off"

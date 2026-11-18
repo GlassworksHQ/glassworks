@@ -8,7 +8,7 @@ That bridge goes MA → HA → `media_player.<device>_speaker` and has no sync.
 Code: the player is the [`sendspin`](../libs/sendspin/README.md) library (`dev.glassworks.sendspin`,
 #152), which any Android app can use. Its protocol core is pure JVM (`SendspinSession`, `SsCrypto`,
 `TimeFilter`, `PlaybackScheduler`, `WsClient`, `Flac`, `AudioPipeline`); `SendspinPlayer` and
-`MediaCodecFlacDecoder` are the Android glue. The pane, `panes/sendspin/src/main/java/sh/edm/s1kiosk/sendspin/`,
+`MediaCodecFlacDecoder` are the Android glue. The pane, `panes/sendspin/src/main/java/dev/glassworks/speaker/`,
 adds the settings, the entities, the settings page and `PrefsSsStore`, which keeps the keys sealed. It is owned by `PanelDevice` and runs in the foreground
 `KioskService`. Logs: `adb logcat -s S1Sendspin`.
 

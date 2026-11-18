@@ -14,6 +14,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import sh.edm.s1kiosk.frame.AqaraS1Plus
+import dev.glassworks.glassworks
 
 /** The panes' adb extras (frames/aqara-s1-plus/android/README.md): each pane's on/off (#67), then its own, from their definitions. */
 @RunWith(RobolectricTestRunner::class)

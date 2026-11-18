@@ -1,9 +1,9 @@
 package sh.edm.s1kiosk.frame
 
 import android.util.Log
-import sh.edm.s1kiosk.radio.RadioHelper
-import sh.edm.s1kiosk.radio.ShellProps
-import sh.edm.s1kiosk.radio.SysProps
+import dev.glassworks.radio.RadioHelper
+import dev.glassworks.radio.ShellProps
+import dev.glassworks.radio.SysProps
 import java.util.TimeZone
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService

@@ -5,7 +5,7 @@ import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
 import dev.glassworks.pane.SettingsItem
-import sh.edm.s1kiosk.ui.Glass
+import dev.glassworks.ui.Glass
 
 /**
  * The wall base's relays and buttons on its settings page (#212): a card per channel, three to a row,

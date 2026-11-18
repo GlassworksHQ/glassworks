@@ -15,16 +15,19 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import sh.edm.s1kiosk.auth.StoredAuth
+import dev.glassworks.auth.StoredAuth
 import sh.edm.s1kiosk.base.BaseBackend
 import sh.edm.s1kiosk.base.BaseLayout
 import sh.edm.s1kiosk.base.UartBaseLink
 import sh.edm.s1kiosk.base.WallBase
-import sh.edm.s1kiosk.sendspin.PrefsSsStore
+import dev.glassworks.speaker.PrefsSsStore
 import dev.glassworks.sendspin.SsPairingRecord
 import java.io.File
 import java.lang.reflect.Method
 import java.lang.reflect.Proxy
+import dev.glassworks.KioskPrefs
+import dev.glassworks.TimerOverlay
+import dev.glassworks.glassworks
 
 /**
  * Pins every SharedPreferences file and key the app reads or writes, with its type and the default

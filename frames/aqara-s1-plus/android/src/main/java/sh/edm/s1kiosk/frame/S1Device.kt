@@ -9,10 +9,10 @@ import dev.glassworks.pane.SettingsItem
 import dev.glassworks.pane.SettingsSection
 import dev.glassworks.update.SilentUpdates
 import sh.edm.s1kiosk.PanePrefs
-import sh.edm.s1kiosk.radio.RadioHelper
-import sh.edm.s1kiosk.radio.RadioMode
-import sh.edm.s1kiosk.radio.ShellProps
-import sh.edm.s1kiosk.radio.SysProps
+import dev.glassworks.radio.RadioHelper
+import dev.glassworks.radio.RadioMode
+import dev.glassworks.radio.ShellProps
+import dev.glassworks.radio.SysProps
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors

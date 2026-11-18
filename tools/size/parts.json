@@ -20,24 +20,23 @@
   "zxing": {"dex": ["com.google.zxing."], "used_by": ["core"], "_why": "the sign-in QR code (ui/)"}
  },
  "panes": {
-  "assist": {"dex": ["sh.edm.s1kiosk.voice.AssistPane", "sh.edm.s1kiosk.voice.AssistDefinition", "sh.edm.s1kiosk.voice.SpeakerMedia",
-                     "sh.edm.s1kiosk.voice.VoicePrefs", "sh.edm.s1kiosk.voice.VoiceUi", "sh.edm.s1kiosk.voice.VoiceLevels",
-                     "sh.edm.s1kiosk.voice.AudioLevel", "sh.edm.s1kiosk.voice.LevelSmoother", "sh.edm.s1kiosk.voice.VoiceTexts",
-                     "sh.edm.s1kiosk.voice.MainTextFit", "sh.edm.s1kiosk.voice.TextFade", "sh.edm.s1kiosk.voice.Fader", "sh.edm.s1kiosk.voice.VoiceStatus",
-                     "dev.glassworks.voice.", "sh.edm.s1kiosk.VoiceOverlay"],
-             "_why": "the pane, its engine library (libs/voice, #152: the Assist client, the wake word, the microphone) and its overlay. sh.edm.s1kiosk.voice is shared with the core (ExoAudioPlayer, TtsPlayer, VoiceLog, OrbArt: #352), so the pane's classes are listed one by one; test_apksize checks the list against the sources"},
-  "sendspin": {"dex": ["sh.edm.s1kiosk.sendspin.", "dev.glassworks.sendspin."], "_why": "the pane and its engine library (libs/sendspin, #152). The library's WsClient also serves the core's HaThreadClient, and is counted here"},
-  "radio": {"dex": ["sh.edm.s1kiosk.radio."], "assets": ["assets/radio-bundle/"],
+  "assist": {"dex": ["dev.glassworks.assist.AssistPane", "dev.glassworks.assist.AssistDefinition", "dev.glassworks.assist.SpeakerMedia",
+                     "dev.glassworks.assist.VoicePrefs", "dev.glassworks.assist.VoiceUi", "dev.glassworks.assist.VoiceLevels",
+                     "dev.glassworks.assist.AudioLevel", "dev.glassworks.assist.LevelSmoother", "dev.glassworks.assist.VoiceTexts",
+                     "dev.glassworks.assist.MainTextFit", "dev.glassworks.assist.TextFade", "dev.glassworks.assist.Fader", "dev.glassworks.assist.VoiceStatus",
+                     "dev.glassworks.voice.", "dev.glassworks.VoiceOverlay"],
+             "_why": "the pane, its engine library (libs/voice, #152: the Assist client, the wake word, the microphone) and its overlay. dev.glassworks.assist is shared with the core (ExoAudioPlayer, TtsPlayer, VoiceLog, OrbArt: #352), so the pane's classes are listed one by one; test_apksize checks the list against the sources"},
+  "sendspin": {"dex": ["dev.glassworks.speaker.", "dev.glassworks.sendspin."], "_why": "the pane and its engine library (libs/sendspin, #152). The library's WsClient also serves the core's HaThreadClient, and is counted here"},
+  "radio": {"dex": ["dev.glassworks.radio."], "assets": ["assets/radio-bundle/"],
             "_why": "the signed radio bundle, which the release adds to armeabi-v7a (release.yml, RadioBundle.kt)"},
   "wall-base": {"dex": ["sh.edm.s1kiosk.base."]},
-  "timers": {"dex": ["sh.edm.s1kiosk.timers.", "sh.edm.s1kiosk.TimerBoard", "sh.edm.s1kiosk.TimerOverlay"]},
+  "timers": {"dex": ["dev.glassworks.timers.", "dev.glassworks.TimerBoard", "dev.glassworks.TimerOverlay"]},
   "time-zone": {"dex": ["sh.edm.s1kiosk.frame.TimeZonePane", "sh.edm.s1kiosk.frame.TimeZoneKeeper"],
                 "_why": "TimeZoneKeeper is used only by TimeZonePane"},
   "diagnostics": {"dex": ["dev.glassworks.diagnostics."]},
   "bluetooth-proxy": {"dex": ["dev.glassworks.bluetoothproxy.", "dev.glassworks.esphome.bluetoothproxy.", "sh.edm.s1kiosk.settings.BluetoothProxyPage"]},
-  "notifications": {"dex": ["dev.glassworks.notifications.", "sh.edm.s1kiosk.notifications."],
-                    "_why": "the pane (dev.glassworks.notifications) and its overlay (sh.edm.s1kiosk.notifications)"},
-  "camera": {"dex": ["dev.glassworks.camera.", "sh.edm.s1kiosk.CameraAdbActivity", "sh.edm.s1kiosk.camera."],
-             "_why": "the camera pane (#117); CameraAdbActivity sets its settings from adb, and sh.edm.s1kiosk.camera draws its cards and the privacy dot, used by nothing else"}
+  "notifications": {"dex": ["dev.glassworks.notifications."], "_why": "the pane and its overlay"},
+  "camera": {"dex": ["dev.glassworks.camera.", "sh.edm.s1kiosk.CameraAdbActivity"],
+             "_why": "the camera pane (#117); CameraAdbActivity sets its settings from adb (the app's subclass at its old name, #22); the cards and the privacy dot are used by nothing else"}
  }
 }

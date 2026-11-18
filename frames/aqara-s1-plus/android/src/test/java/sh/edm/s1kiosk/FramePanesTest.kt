@@ -29,14 +29,16 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowLog
 import sh.edm.s1kiosk.frame.AqaraS1Plus
-import sh.edm.s1kiosk.settings.CoreSettings
-import sh.edm.s1kiosk.settings.MenuFixture
-import sh.edm.s1kiosk.setup.ChannelState
-import sh.edm.s1kiosk.setup.SetupChannel
-import sh.edm.s1kiosk.setup.SetupChannelServer
-import sh.edm.s1kiosk.setup.SetupFlow
-import sh.edm.s1kiosk.setup.SetupOverlay
+import dev.glassworks.settings.CoreSettings
+import dev.glassworks.settings.MenuFixture
+import dev.glassworks.setup.ChannelState
+import dev.glassworks.setup.SetupChannel
+import dev.glassworks.setup.SetupChannelServer
+import dev.glassworks.setup.SetupFlow
+import dev.glassworks.setup.SetupOverlay
 import java.util.concurrent.ScheduledExecutorService
+import dev.glassworks.KioskPrefs
+import dev.glassworks.glassworks
 
 /**
  * What a frame's panes add to setup and settings, through the same runtime as the S1's: the real
@@ -160,7 +162,7 @@ class FramePanesTest {
             }
         }
         assertTrue("PaneDefinition.setupSteps read outside GlassworksRuntime; use GlassworksRuntime.setupSteps:\n${found.joinToString("\n")}", found.isEmpty())
-        assertTrue(read.containsMatchIn(RepoFiles.source("sh/edm/s1kiosk/GlassworksRuntime.kt").readText()))
+        assertTrue(read.containsMatchIn(RepoFiles.source("dev/glassworks/GlassworksRuntime.kt").readText()))
     }
 
     @Test

@@ -10,7 +10,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowBuild
 import sh.edm.s1kiosk.frame.AqaraS1Plus
-import sh.edm.s1kiosk.setup.LoadingOverlay
+import dev.glassworks.setup.LoadingOverlay
 
 /**
  * What the direct-boot splash draws. The S1 continues its boot animation's last frame, with the

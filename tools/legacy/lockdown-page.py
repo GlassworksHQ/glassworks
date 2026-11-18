@@ -13,7 +13,7 @@ reaches them through `adb reverse`:
 
   python3 tools/legacy/lockdown-page.py
   adb -s <serial> reverse tcp:18125 tcp:18125 && adb -s <serial> reverse tcp:18126 tcp:18126
-  adb -s <serial> shell am start -n sh.edm.s1kiosk.legacy/sh.edm.s1kiosk.legacycheck.EngineCheckActivity \\
+  adb -s <serial> shell am start -n sh.edm.s1kiosk.legacy/dev.glassworks.legacycheck.EngineCheckActivity \\
       --es url http://127.0.0.1:18125/
 
 On an emulator, `--es url http://10.0.2.2:18125/` reaches the same server without `adb reverse`, at a host that

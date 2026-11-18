@@ -14,7 +14,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import sh.edm.s1kiosk.settings.PaneFixtures
+import dev.glassworks.settings.PaneFixtures
 import java.util.TimeZone
 
 /** #269: the time zone page's twin on the Manage page (CodeRabbit on #331: UTC, and a match that was dropped). */

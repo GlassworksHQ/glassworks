@@ -22,7 +22,7 @@
 
         <!-- The engine and its lockdown alone, without the S1 app's MainActivity (EngineCheckActivity.kt). -->
         <activity
-            android:name="sh.edm.s1kiosk.legacycheck.EngineCheckActivity"
+            android:name="dev.glassworks.legacycheck.EngineCheckActivity"
             android:label="Legacy engine check"
             android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen"
             android:exported="true"

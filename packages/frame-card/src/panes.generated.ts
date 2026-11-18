@@ -14,7 +14,7 @@ export const PANE_FILES: readonly PaneInfo[] = [
     "status": "beta",
     "docs": "docs/esphome.md#voice-assistant",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"9\" y=\"3\" width=\"6\" height=\"11\" rx=\"3\"/><path d=\"M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21\"/></svg>",
-    "source": "panes/assist/src/main/java/sh/edm/s1kiosk/voice"
+    "source": "panes/assist/src/main/java/dev/glassworks/assist"
   },
   {
     "id": "sendspin",
@@ -26,7 +26,7 @@ export const PANE_FILES: readonly PaneInfo[] = [
     "status": "beta",
     "docs": "docs/sendspin.md",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M9 18V6l10-2v12\"/><circle cx=\"6.5\" cy=\"18\" r=\"2.5\"/><circle cx=\"16.5\" cy=\"16\" r=\"2.5\"/></svg>",
-    "source": "panes/sendspin/src/main/java/sh/edm/s1kiosk/sendspin"
+    "source": "panes/sendspin/src/main/java/dev/glassworks/speaker"
   },
   {
     "id": "timers",
@@ -39,7 +39,7 @@ export const PANE_FILES: readonly PaneInfo[] = [
     "status": "beta",
     "docs": "docs/esphome.md#timers-on-screen",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"13.5\" r=\"7.5\"/><path d=\"M12 13.5V9.5M9.5 2.5h5\"/></svg>",
-    "source": "panes/timers/src/main/java/sh/edm/s1kiosk/timers"
+    "source": "panes/timers/src/main/java/dev/glassworks/timers"
   },
   {
     "id": "radio",
@@ -51,7 +51,7 @@ export const PANE_FILES: readonly PaneInfo[] = [
     "status": "beta",
     "docs": "frames/aqara-s1-plus/docs/radio.md",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"2\"/><path d=\"M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M5 5a10 10 0 0 0 0 14M19 5a10 10 0 0 1 0 14\"/></svg>",
-    "source": "panes/zigbee-thread/src/main/java/sh/edm/s1kiosk/radio"
+    "source": "panes/zigbee-thread/src/main/java/dev/glassworks/radio"
   },
   {
     "id": "bluetooth-proxy",

@@ -1,0 +1,38 @@
+package dev.glassworks.radio
+
+import android.content.Context
+import dev.glassworks.Glassworks
+import dev.glassworks.KioskPrefs
+import sh.edm.s1kiosk.PanePrefs
+import dev.glassworks.radio.ui.RadioFollowUp
+import dev.glassworks.setup.SetupState
+
+/** A radio as the mock-ups and view tests show it: fixed facts, no controller behind it. */
+class FixedReadout(
+    var facts: RadioFollowUp.Facts?,
+    private val running: Boolean = facts != null,
+    private val allowedNow: String? = null,
+    private val mode: RadioMode = facts?.mode ?: RadioMode.OFF,
+    private val haBase: String? = facts?.haBase,
+    private val panelIp: String? = facts?.panelIp,
+) : RadioReadout {
+    override fun controller(): RadioController? = null
+    override fun running() = running
+    override fun mode() = facts?.mode ?: mode
+    override fun facts() = facts
+    override fun haBase() = haBase
+    override fun panelIp() = panelIp
+    override fun allowedClients() = ""
+    override fun allowedNow() = allowedNow
+}
+
+/** The radio's definition over [readout], with the app's prefs (`kiosk.xml`). */
+fun radioDefinition(context: Context, readout: RadioReadout): RadioDefinition {
+    val prefs = KioskPrefs(context)
+    val panePrefs = PanePrefs(context)
+    return RadioDefinition(panePrefs.radio, { SetupState.setUpBefore(prefs.haBase != null, prefs.haSeen, prefs.apiEncryption, prefs.haSetupSkipped) }, readout, RunningRadio())
+}
+
+/** Where the app's radio definition reads the running radio pane's controller (RadioDefinition.running). */
+internal fun Glassworks.runningRadio(context: Context): RunningRadio =
+    paneDefinitions(context).filterIsInstance<RadioDefinition>().single().running

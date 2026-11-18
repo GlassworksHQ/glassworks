@@ -1,11 +1,12 @@
 package sh.edm.s1kiosk.manage
 
 import android.content.Context
-import sh.edm.s1kiosk.GlassworksRuntime
-import sh.edm.s1kiosk.KioskPrefs
-import sh.edm.s1kiosk.auth.HaTokenClient
-import sh.edm.s1kiosk.auth.SignInServer
-import sh.edm.s1kiosk.auth.ThreadJoin
+import dev.glassworks.GlassworksRuntime
+import dev.glassworks.KioskPrefs
+import dev.glassworks.auth.HaTokenClient
+import dev.glassworks.auth.SignInServer
+import dev.glassworks.auth.ThreadJoin
+import dev.glassworks.manage.AppManage
 
 /**
  * The S1's Manage page (#33): the core's [AppManage], plus what only the S1 has. The radio's row links the

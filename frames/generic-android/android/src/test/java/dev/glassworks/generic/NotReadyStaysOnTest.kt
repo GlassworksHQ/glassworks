@@ -19,10 +19,10 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowNetwork
 import org.robolectric.shadows.ShadowNetworkCapabilities
 import org.robolectric.shadows.ShadowNetworkInfo
-import sh.edm.s1kiosk.KioskPrefs
-import sh.edm.s1kiosk.gecko.GeckoPinHarness
-import sh.edm.s1kiosk.gecko.GeckoShadows
-import sh.edm.s1kiosk.setup.SetupOverlay
+import dev.glassworks.KioskPrefs
+import dev.glassworks.engine.gecko.GeckoPinHarness
+import dev.glassworks.engine.gecko.GeckoShadows
+import dev.glassworks.setup.SetupOverlay
 
 /**
  * #449: the Mirror (no presence sensor) slept 20 s after boot at night, with the connecting screen up. The real

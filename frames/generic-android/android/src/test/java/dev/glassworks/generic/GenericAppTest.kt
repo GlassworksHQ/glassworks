@@ -32,18 +32,18 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowBuild
-import sh.edm.s1kiosk.GlassworksRuntime
-import sh.edm.s1kiosk.KioskPrefs
-import sh.edm.s1kiosk.auth.HaTokenClient
-import sh.edm.s1kiosk.auth.HttpPoster
-import sh.edm.s1kiosk.auth.SignInServer
-import sh.edm.s1kiosk.esphome.MdnsAdvertiser
-import sh.edm.s1kiosk.esphome.PanelDevice
-import sh.edm.s1kiosk.manage.AppManage
-import sh.edm.s1kiosk.settings.S1Settings
-import sh.edm.s1kiosk.update.ReleaseLine
-import sh.edm.s1kiosk.update.UpdateManager
-import sh.edm.s1kiosk.voice.AssistDefinition
+import dev.glassworks.GlassworksRuntime
+import dev.glassworks.KioskPrefs
+import dev.glassworks.auth.HaTokenClient
+import dev.glassworks.auth.HttpPoster
+import dev.glassworks.auth.SignInServer
+import dev.glassworks.device.MdnsAdvertiser
+import dev.glassworks.device.PanelDevice
+import dev.glassworks.manage.AppManage
+import dev.glassworks.settings.S1Settings
+import dev.glassworks.update.ReleaseLine
+import dev.glassworks.update.UpdateManager
+import dev.glassworks.assist.AssistDefinition
 
 /**
  * #23: Glassworks for generic Android is its own app on the core: its own id and name, Android's standard
@@ -111,8 +111,8 @@ class GenericAppTest {
     /** #23: the service's notification says the app's name, which the core once hard-coded as "S1 Kiosk". */
     @Test @Config(application = GenericApp::class)
     fun theServicesNotificationSaysTheAppsName() {
-        val service = org.robolectric.Robolectric.buildService(sh.edm.s1kiosk.KioskService::class.java).get()
-        val build = sh.edm.s1kiosk.KioskService::class.java.getDeclaredMethod("buildNotification").apply { isAccessible = true }
+        val service = org.robolectric.Robolectric.buildService(dev.glassworks.KioskService::class.java).get()
+        val build = dev.glassworks.KioskService::class.java.getDeclaredMethod("buildNotification").apply { isAccessible = true }
         val n = build.invoke(service) as android.app.Notification
         assertEquals("Glassworks", n.extras.getString(android.app.Notification.EXTRA_TITLE))
     }
@@ -135,10 +135,10 @@ class GenericAppTest {
         val parts = GenericParts()
         fun start(cls: String) = Intent().setClassName(app.packageName, cls).putExtra("url", "http://192.0.2.66/").putExtra("api_encryption", false)
         val viaLauncher = start(GenericParts.LAUNCHER)
-        assertTrue("dropped", sh.edm.s1kiosk.MainActivity.screenExtras(viaLauncher, parts::trustsExtras))
+        assertTrue("dropped", dev.glassworks.MainActivity.screenExtras(viaLauncher, parts::trustsExtras))
         assertNull(viaLauncher.extras)
         val direct = start("sh.edm.s1kiosk.MainActivity")
-        assertFalse("kept", sh.edm.s1kiosk.MainActivity.screenExtras(direct, parts::trustsExtras))
+        assertFalse("kept", dev.glassworks.MainActivity.screenExtras(direct, parts::trustsExtras))
         assertEquals("http://192.0.2.66/", direct.getStringExtra("url"))
     }
 

@@ -25,9 +25,14 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowBuild
 import org.robolectric.shadows.ShadowLog
-import sh.edm.s1kiosk.auth.StoredAuth
-import sh.edm.s1kiosk.sendspin.PrefsSsStore
+import dev.glassworks.auth.StoredAuth
+import dev.glassworks.speaker.PrefsSsStore
 import dev.glassworks.sendspin.SsPairingRecord
+import dev.glassworks.KioskPrefs
+import dev.glassworks.SecretFiles
+import dev.glassworks.SignInNotStored
+import dev.glassworks.applyApiKeyExtras
+import dev.glassworks.glassworks
 
 /**
  * The app's own openers with their default store, [SecretStore.keystore], over a software stand-in for
@@ -100,7 +105,7 @@ class KeystoreSecretsTest {
         val logs = ShadowLog.getLogsForTag(SecretStore.TAG).map { it.msg }
         assertTrue(logs.toString(), logs.any { "made a new one" in it })
         assertTrue(logs.none { token in it })
-        prefs.auth = sh.edm.s1kiosk.auth.StoredAuth("http://192.0.2.10:8123", "http://192.0.2.20/", "made-up-new-token")
+        prefs.auth = dev.glassworks.auth.StoredAuth("http://192.0.2.10:8123", "http://192.0.2.20/", "made-up-new-token")
         assertEquals("signing in again works", "made-up-new-token", KioskPrefs(app).auth?.refreshToken)
     }
 
@@ -234,7 +239,7 @@ class KeystoreSecretsTest {
             build = AppBuild("1.0.0", 10000, debug = false),
         )
         FakeAndroidKeyStore.down = true
-        val pane = sh.edm.s1kiosk.sendspin.SendspinPane(ctx, haBase = { null })
+        val pane = dev.glassworks.speaker.SendspinPane(ctx, haBase = { null })
         val server = dev.glassworks.esphome.ApiServer(0, { ctx.device }, emptyList<dev.glassworks.esphome.ApiEntity>(), null as ByteArray?)
         pane.bind(server)
         pane.start()

@@ -5,8 +5,8 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import sh.edm.s1kiosk.radio.RadioHelper
-import sh.edm.s1kiosk.radio.SysProps
+import dev.glassworks.radio.RadioHelper
+import dev.glassworks.radio.SysProps
 
 class TimeZoneKeeperTest {
     private class Props(version: Int = 4) : SysProps {

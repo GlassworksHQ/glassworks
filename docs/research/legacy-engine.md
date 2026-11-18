@@ -93,6 +93,7 @@ Three things to find out:
    W LegacyCheck: Lockdown: refused window from 127.0.0.1:18126
    W LegacyCheck: Lockdown: refused download from 127.0.0.1:18125
    ```
+   (Recorded 2026-11-15, before #22. The activity is `dev.glassworks.legacycheck.EngineCheckActivity` now; the package id is unchanged.)
    The other origin's server logged no request at all. The page showed `window.s1kiosk` (the S1 helper's
    `content.js`, unchanged), the same-origin image and frame, and the note at the bottom for each refusal.
    `onSubframeLoadRequest` does fire for an iframe's `src` on 144, so the navigation delegate refuses
@@ -588,7 +589,7 @@ On an emulator or device (writes only the test APK, `sh.edm.s1kiosk.legacy`; und
 1. `./gradlew :kiosk-legacy:assembleDebug`, then `adb -s <serial> install` the APK from
    `engines/engine-gecko-legacy/test-app/build/outputs/apk/debug/`.
 2. `python3 tools/legacy/lockdown-page.py`, and `adb -s <serial> reverse tcp:18125 tcp:18125` and the same for 18126.
-3. `adb -s <serial> shell am start -n sh.edm.s1kiosk.legacy/sh.edm.s1kiosk.legacycheck.EngineCheckActivity --es url
+3. `adb -s <serial> shell am start -n sh.edm.s1kiosk.legacy/dev.glassworks.legacycheck.EngineCheckActivity --es url
    http://127.0.0.1:18125/`. The page lists what must load and what must not. On an emulator, also run it with
    `--es url http://10.0.2.2:18125/` (after `am force-stop`): a host that isn't loopback, as a real HA's isn't,
    so the page is an allowlisted secure context, as in the app (step 15).

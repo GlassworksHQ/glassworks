@@ -12,10 +12,10 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import sh.edm.s1kiosk.KioskPrefs
+import dev.glassworks.KioskPrefs
 import sh.edm.s1kiosk.MainActivity
-import sh.edm.s1kiosk.gecko.GeckoPinHarness
-import sh.edm.s1kiosk.gecko.GeckoShadows
+import dev.glassworks.engine.gecko.GeckoPinHarness
+import dev.glassworks.engine.gecko.GeckoShadows
 
 /**
  * CodeRabbit on #364: another app on the device must not change a setting through MainActivity's extras. The

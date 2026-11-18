@@ -18,8 +18,8 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import dev.glassworks.esphome.DeviceIdentity
 import sh.edm.s1kiosk.PanePrefs
-import sh.edm.s1kiosk.radio.SysProps
-import sh.edm.s1kiosk.ui.Mockup
+import dev.glassworks.radio.SysProps
+import dev.glassworks.ui.Mockup
 import java.util.TimeZone
 
 /** #235 verifier N1: matching Home Assistant's zone reads a year of offsets, so it never runs on the main thread. */

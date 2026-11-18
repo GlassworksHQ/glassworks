@@ -15,9 +15,10 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
 import org.robolectric.annotation.Config
-import sh.edm.s1kiosk.gecko.GeckoPinHarness
-import sh.edm.s1kiosk.gecko.GeckoShadows
-import sh.edm.s1kiosk.voice.VoicePrefs
+import dev.glassworks.engine.gecko.GeckoPinHarness
+import dev.glassworks.engine.gecko.GeckoShadows
+import dev.glassworks.assist.VoicePrefs
+import dev.glassworks.glassworksRuntime
 
 /** The shell calls the app's hooks ([AppParts.serviceStarted], [AppParts.activityStarted]) as it starts. */
 @RunWith(RobolectricTestRunner::class)

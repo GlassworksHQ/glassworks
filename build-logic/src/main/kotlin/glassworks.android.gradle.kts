@@ -63,6 +63,11 @@ fun Test.readsRepoFiles(repo: File) {
             exclude("**/build/**", "**/node_modules/**", "**/.gradle/**")
         }
     }).withPropertyName("repoModules").withPathSensitivity(PathSensitivity.RELATIVE)
+    // OldPackageGuardTest (#22): a new file under any sh/edm folder re-runs it.
+    inputs.files(fileTree(repo) {
+        include("**/sh/edm/**")
+        exclude("**/build/**", "**/node_modules/**", "**/.gradle/**", "**/.git/**", "**/.next/**", "dumps/**")
+    }).withPropertyName("oldPackage").withPathSensitivity(PathSensitivity.RELATIVE)
     val files = listOf(
         "CHANGELOG.md", "README.md", "THIRD-PARTY-NOTICES.md", "kiln/packages/brand/src/tokens.css",
         "kiln/packages/setup-channel/test/s1-kiosk-transcript.json", "branding/glass-tile/bootanimation.zip",

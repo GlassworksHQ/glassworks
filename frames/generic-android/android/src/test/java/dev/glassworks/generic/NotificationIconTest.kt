@@ -29,7 +29,7 @@ class NotificationIconTest {
 
     @Test fun theServicesNotificationShowsTheMark() {
         val service = Robolectric.buildService(KioskService::class.java).get()
-        val build = KioskService::class.java.getDeclaredMethod("buildNotification").apply { isAccessible = true }
+        val build = dev.glassworks.KioskService::class.java.getDeclaredMethod("buildNotification").apply { isAccessible = true }
         val n = build.invoke(service) as Notification
         assertEquals(R.drawable.ic_notification, n.smallIcon.resId)
         assertNotNull(n.smallIcon.loadDrawable(app))

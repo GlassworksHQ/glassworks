@@ -3,10 +3,10 @@ package sh.edm.s1kiosk.frame
 import android.os.SystemClock
 import android.util.Log
 import dev.glassworks.frame.RootUpdates
-import sh.edm.s1kiosk.radio.ShellProps
-import sh.edm.s1kiosk.radio.SysProps
-import sh.edm.s1kiosk.update.UpdateHelper
-import sh.edm.s1kiosk.update.UpdateManager
+import dev.glassworks.radio.ShellProps
+import dev.glassworks.radio.SysProps
+import dev.glassworks.update.UpdateHelper
+import dev.glassworks.update.UpdateManager
 
 /**
  * Installs app updates through the root service in the S1's patched boot image ([UpdateHelper]),

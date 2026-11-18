@@ -26,7 +26,7 @@ import sh.edm.s1kiosk.frame.WifiScanPolicy.Link
  *
  * `startScan` needs the location permission, location on, and the location app-op allowed. With
  * the screen off, Android 10 allows that op only because KioskService runs with the location type
- * ([sh.edm.s1kiosk.KioskForeground]). A refused scan returns false, and the scanner logs why.
+ * ([dev.glassworks.KioskForeground]). A refused scan returns false, and the scanner logs why.
  * The first refusal for the app-op in each run calls [onForegroundOnly], so the service can take
  * the location type when fine location was granted after it started. `startScan` needs fine
  * location, so a coarse-only grant is refused as [WifiScanPolicy.Refusal.NO_PERMISSION] and never

@@ -12,7 +12,7 @@ build outputs.
   python3 tools/legacy/api23-report.py --write-baseline BASELINE
   python3 tools/legacy/api23-report.py --no-gradle ...         # read the reports a run already left
 
-A baseline line is `<package path>|<API>`, e.g. `sh/edm/s1kiosk/KioskService.kt|android.content.Context#startForegroundService`:
+A baseline line is `<package path>|<API>`, e.g. `dev/glassworks/KioskService.kt|android.content.Context#startForegroundService`:
 no module and no line number, so code that moves between modules, or within a file, stays listed. Calls that core
 library desugaring covers are in the table but never fail the check: the legacy build enables desugaring.
 """
@@ -72,7 +72,7 @@ def run_lint(mods):
 
 
 def package_path(file):
-    """The file's path inside its source root: sh/edm/s1kiosk/KioskService.kt."""
+    """The file's path inside its source root: dev/glassworks/KioskService.kt."""
     rel = os.path.relpath(file, ROOT).replace(os.sep, "/")
     m = re.search(r"/src/[^/]+/(?:java|kotlin)/(.+)$", rel)
     return m.group(1) if m else rel

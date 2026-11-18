@@ -10,7 +10,11 @@ import dev.glassworks.frame.GenericAndroid
 import dev.glassworks.platform.AppBuild
 import dev.glassworks.platform.Platform
 import sh.edm.s1kiosk.frame.AqaraS1Plus
-import sh.edm.s1kiosk.update.ReleaseLine
+import dev.glassworks.update.ReleaseLine
+import dev.glassworks.GlassworksApp
+import dev.glassworks.GlassworksRuntime
+import dev.glassworks.KioskPrefs
+import dev.glassworks.glassworks
 
 class KioskApp : Application(), GlassworksApp {
 

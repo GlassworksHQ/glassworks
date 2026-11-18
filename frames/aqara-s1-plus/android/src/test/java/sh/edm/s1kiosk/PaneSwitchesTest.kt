@@ -13,6 +13,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import sh.edm.s1kiosk.frame.AqaraS1Plus
+import dev.glassworks.glassworks
 
 /** #67 on the S1: every pane has an on/off, in the settings, on setup's Panes step (design 05) and in Home Assistant. */
 @RunWith(RobolectricTestRunner::class)

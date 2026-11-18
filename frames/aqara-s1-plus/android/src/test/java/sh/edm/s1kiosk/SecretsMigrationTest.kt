@@ -16,7 +16,9 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import sh.edm.s1kiosk.sendspin.PrefsSsStore
+import dev.glassworks.speaker.PrefsSsStore
+import dev.glassworks.KioskPrefs
+import dev.glassworks.glassworks
 
 /**
  * The update from a build that stored secrets in plaintext (`src/test/resources/secrets-golden`, made-up
@@ -96,7 +98,7 @@ class SecretsMigrationTest {
         val ss = PrefsSsStore(app, store)
         assertTrue("unpaired", ss.records().isEmpty())
         assertFalse("a new identity", ss.identity().privateKey.contentEquals(ByteArray(32) { (1 + it).toByte() }))
-        prefs.auth = sh.edm.s1kiosk.auth.StoredAuth("http://192.0.2.10:8123", "http://192.0.2.20/", "made-up-new-token")
+        prefs.auth = dev.glassworks.auth.StoredAuth("http://192.0.2.10:8123", "http://192.0.2.20/", "made-up-new-token")
         assertEquals("signing in again works", "made-up-new-token", KioskPrefs(app, store).auth?.refreshToken)
     }
 

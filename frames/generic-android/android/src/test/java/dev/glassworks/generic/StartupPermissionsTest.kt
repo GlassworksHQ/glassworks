@@ -20,10 +20,10 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowInputDevice
-import sh.edm.s1kiosk.gecko.GeckoPinHarness
-import sh.edm.s1kiosk.gecko.GeckoShadows
-import sh.edm.s1kiosk.glassworks
-import sh.edm.s1kiosk.voice.VoicePrefs
+import dev.glassworks.engine.gecko.GeckoPinHarness
+import dev.glassworks.engine.gecko.GeckoShadows
+import dev.glassworks.glassworks
+import dev.glassworks.assist.VoicePrefs
 
 /**
  * #461 and #463: the real MainActivity under GenericApp asks Android at start only for what the panes that are on need,
