@@ -439,6 +439,8 @@ class ManageServer(
         if (s.id !in sessions.liveIds()) return json(401, JSONObject().put("problem", MANAGE_ENDED))
         // The address changed while HA answered, whatever it said: reload for the new one (CodeRabbit on #534).
         if (movedNow()) { endKept(s.id); return addressChanged() }
+        // All panels' Sign out, or HA's refusal, came meanwhile: no Try again for a sign-in that's over (CodeRabbit on #534).
+        if (kept[s.id] !== k) return json(404, JSONObject().put("problem", "This sign-in has ended."))
         return when (t) {
             is HaGateway.Tokens.Ok -> if (kept[s.id] !== k) {
                 // All panels' Sign out, or HA's refusal, came meanwhile: no token for a sign-in that's over.

@@ -166,6 +166,10 @@ async function ending(t) {
   say(listCard, 'Panels in Home Assistant', 'Signing out…');
   const ok = await end(t);
   if (mine !== generation) return;
+  if (ok === 'busy') {
+    return say(listCard, 'Panels in Home Assistant', "The panel is busy, so it hasn't signed out yet. Try again in a moment.",
+      h('button', { class: 'pill', type: 'button', onclick: () => ending(t) }, 'Try again'));
+  }
   if (ok === 'left') {
     return say(listCard, 'Panels in Home Assistant',
       "Signed out of this page. This panel's Home Assistant address changed, so it couldn't end the sign-in at the old one. Remove it in Home Assistant: your profile, Security, Refresh tokens.",

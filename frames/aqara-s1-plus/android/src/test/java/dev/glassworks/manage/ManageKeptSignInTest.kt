@@ -333,6 +333,26 @@ class ManageKeptSignInTest {
         assertTrue(f.events.any { it.contains("address changed") })
     }
 
+    @Test fun aRefusedSignInIsAnsweredBeforeItsTokenIsRevoked() {
+        f.user = HaUser("Sam", isAdmin = false)
+        val later = ArrayList<() -> Unit>()
+        f.deferred = later
+        val r = f.Browser().signInWithHa()
+        assertEquals(403, r.status)
+        assertTrue("the refusal didn't wait for Home Assistant", f.revoked.isEmpty())
+        f.deferred = null
+        later.forEach { it() }
+        assertEquals(listOf("REFRESH"), f.revoked)
+    }
+
+    @Test fun aGrantEndedWhileARenewalFailsGetsNoTryAgain() {
+        val b = signedIn()
+        val csrf = b.csrf()
+        f.refreshAnswer = HaGateway.Tokens.Failed("unreachable", unreachable = true)
+        f.duringRefresh = { f.duringRefresh = null; b.post(ManageServer.HA_FORGET, mapOf("csrf" to csrf)) }
+        assertEquals("the sign-in is over: Continue, not Try again", 404, access(b, csrf = csrf).status)
+    }
+
     @Test fun aRevokeHaDoesntTakeAsThePageStopsIsInTheLog() {
         signedIn()
         f.revokeWorks = false

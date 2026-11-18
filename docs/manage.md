@@ -292,7 +292,7 @@ diagnostics). See the [core's README](../pane-api/src/main/java/dev/glassworks/R
    Assistant no longer takes it, the Manage session stays but All panels asks for **Continue with Home
    Assistant** again. After the app restarts, a browser that ticked *Remember this browser* is still signed in to
    Manage, and All panels asks for Continue; any other browser signs in to Manage again first. If this Manage
-   page's own sign-in has ended, All panels says so, with **Sign in**, the next time it asks the panel for anything (a renewal, Manage, Copy or Sign out); an open tab doesn't notice before that. Only a sign-in with Home Assistant on this
+   page's own sign-in has ended, All panels says so, with **Sign in**, when it next asks this panel to renew or end the sign-in it keeps: on loading, when its token runs out (Manage and Copy renew it then), or at Sign out. Until then, and in a tab signed in to Home Assistant on its own, Manage and Copy go on with the token the tab has. Only a sign-in with Home Assistant on this
    panel's own Manage page is kept: one that came through **Manage** on another panel's All panels keeps none, so
    All panels on this panel asks for Continue. Signed in with the code on the panel, the
    page asks for Continue too: the

@@ -378,6 +378,12 @@ export async function tokenRequest(ha, form, fetchFn = fetch, ms = TOKEN_MS) {
 /** How long a token exchange or refresh may take. */
 export const TOKEN_MS = 15_000;
 
+/**
+ * How long the panel may take to renew its kept sign-in: one call to Home Assistant, up to its connect timeout and a
+ * read timeout for the head and another for the body (10 s each), and the answer back (CodeRabbit on #534).
+ */
+export const ACCESS_MS = 35_000;
+
 /** Asks Home Assistant at [ha] to drop [refresh] and every access token made from it. True only when it said yes. */
 export async function revokeAt(ha, refresh, fetchFn = fetch, ms = REVOKE_MS) {
   // Its answer's status is all that counts: the timer covers the wait for it, not the (empty) body.
@@ -423,7 +429,7 @@ export function storedFor(raw, ha, session) {
  * panel run). `{ access_token, expires_in }`; null when the panel keeps none (a code sign-in) or HA refused it; or
  * `{ outage, problem }` when Home Assistant (or this panel) didn't answer: the sign-in is still there, try again.
  */
-export async function panelAccess(csrf, fetchFn = fetch, ms = TOKEN_MS) {
+export async function panelAccess(csrf, fetchFn = fetch, ms = ACCESS_MS) {
   let r;
   try {
     r = await timed(fetchFn, '/manage/ha/access', { method: 'POST', body: new URLSearchParams({ csrf }) }, ms);
@@ -455,7 +461,8 @@ export async function panelForget(csrf, fetchFn = fetch, ms = FORGET_MS) {
     // 403: the form token is another session's (signed in again in another tab); Try again would be refused the same.
     // 200 with left: HA's address had changed, so the panel didn't send the token to the old one: not revoked.
     if (r.status === 200) return r.body && r.body.left ? 'left' : true;
-    return r.status === 401 ? 'ended' : r.status === 403 ? 'stale' : false;
+    // 503: the panel was busy and didn't start; the sign-in is still kept, so it's for Try again, not "may stay active".
+    return r.status === 401 ? 'ended' : r.status === 403 ? 'stale' : r.status === 503 ? 'busy' : false;
   } catch {
     return false;
   }

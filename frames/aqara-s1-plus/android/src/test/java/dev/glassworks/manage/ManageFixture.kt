@@ -78,7 +78,8 @@ class ManageFixture(
     /** How long each of those lookups takes, on [monoMs]. */
     var lookupMs = 0L
     val signIn = HaSignIn(gateway, resolve = { resolved += it; monoMs += lookupMs; listOf(InetAddress.getByName(it)) }, clock = { now },
-        local = { HaSignIn.isLocalAddress(it) || it.hostAddress.startsWith("192.0.2.") }, warn = { warnings += it })
+        local = { HaSignIn.isLocalAddress(it) || it.hostAddress.startsWith("192.0.2.") }, warn = { warnings += it },
+        cleanup = { work -> deferred?.add(work) ?: work() })
 
     val warnings = Collections.synchronizedList(ArrayList<String>())
     val events = Collections.synchronizedList(ArrayList<String>())

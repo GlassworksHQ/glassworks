@@ -104,6 +104,8 @@ const forgetCsrfs = [];
 let accessStatus = 200;
 /** While set, this panel takes the page's form token for another session's (signed in again in another tab). */
 let staleCsrf = false;
+/** While set, Porch holds its settings answers ({ waiting }) until the test answers them. */
+let porchHeld = null;
 /** Which script this panel stalls on, if any; the stalled answers ({ res, open }), to end later. */
 let stallScript = null;
 const stalled = [];
@@ -182,8 +184,12 @@ async function handle(req, res) {
   }
   if (u.pathname.startsWith('/manage/js/')) return send(res, 200, readFileSync(join(assets, u.pathname.slice(11))), 'text/javascript');
   // Slow, like a panel whose Home Assistant check takes a while: the page draws the others first.
-  if (u.host === 'porch-panel.local:8099' && u.pathname === '/manage/api/settings')
-    return setTimeout(() => send(res, 401, { problem: "Home Assistant didn't confirm this sign-in. Sign in again." }), 1500);
+  if (u.host === 'porch-panel.local:8099' && u.pathname === '/manage/api/settings') {
+    const answer = () => send(res, 401, { problem: "Home Assistant didn't confirm this sign-in. Sign in again." });
+    // Held by a test until it says so, else answered after 1.5 s.
+    if (porchHeld) return void porchHeld.waiting.push(answer);
+    return setTimeout(answer, 1500);
+  }
   if (p && u.pathname === '/manage/api/settings') {
     if (req.method === 'GET') return send(res, 200, p);
     const f = await form(req);
@@ -494,13 +500,21 @@ try {
   accessStatus = 200;
   // Manage while a slow panel is still being read, and the panel says the Manage sign-in ended: Sign in stays, the slow
   // panel's late answer doesn't draw the list back over it (CodeRabbit on #534).
+  porchHeld = { waiting: [] };
   await call('Page.navigate', { url: PAGE });
-  await until("[...document.querySelectorAll('#gw-list .chip')].some((c) => c.textContent === 'Asking') && [...document.querySelectorAll('#gw-list .row')].some((r) => r.textContent.includes('Bedroom') && r.querySelector('.chip')?.textContent === 'Up')", 'Bedroom up, Porch still asking');
+  await until("[...document.querySelectorAll('#gw-list .row')].some((r) => r.textContent.includes('Bedroom') && r.querySelector('.chip')?.textContent === 'Up')", 'Bedroom up');
+  for (let i = 0; i < 50 && !porchHeld.waiting.length; i++) await sleep(100);
+  assert.equal(porchHeld.waiting.length, 1, "Porch's read is held");
   await expire();
   accessStatus = 401;
   await js("[...document.querySelectorAll('#gw-list .row')].find((r) => r.textContent.includes('Bedroom')).querySelector('button.pill').click()", true);
   await until("[...document.querySelectorAll('#gw-list button')].some((b) => b.textContent === 'Sign in')", 'Sign in from the Manage click');
-  await sleep(2_000);
+  // Porch answers now, after Sign in is up; the browser has it once its fetch to Porch is done.
+  const porchAnswered = await js("performance.getEntriesByType('resource').filter((e) => e.name.includes('porch-panel') && e.name.includes('/manage/api/settings')).length");
+  porchHeld.waiting.splice(0).forEach((answer) => answer());
+  porchHeld = null;
+  await until("performance.getEntriesByType('resource').filter((e) => e.name.includes('porch-panel') && e.name.includes('/manage/api/settings')).length > " + porchAnswered, "the browser got Porch's answer");
+  await sleep(300);
   assert.ok(await js("[...document.querySelectorAll('#gw-list button')].some((b) => b.textContent === 'Sign in')"), 'Sign in still there after the slow panel answered');
   accessStatus = 200;
   // Signed in again in another tab: this page's form token is another session's. Reload, not a second HA sign-in.

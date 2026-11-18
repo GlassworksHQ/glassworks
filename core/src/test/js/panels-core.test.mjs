@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
 import { test } from 'node:test';
-import { FORGET_MS, TOKEN_MS, MAX_WAIT_S, SETTINGS_MS, TRIES, WRITE_MS, accepts, copyRows, authorizeUrl, hello, localHost, manageOrigin, panelAccess, panelForget, revokeAt, storedFor, tokenRequest, usable, writeSetting, outcome, panelsFrom, pkceChallenge, plan, reachability, readPanel, retrying, sha256 } from '../../main/assets/manage/panels-core.js';
+import { ACCESS_MS, FORGET_MS, TOKEN_MS, MAX_WAIT_S, SETTINGS_MS, TRIES, WRITE_MS, accepts, copyRows, authorizeUrl, hello, localHost, manageOrigin, panelAccess, panelForget, revokeAt, storedFor, tokenRequest, usable, writeSetting, outcome, panelsFrom, pkceChallenge, plan, reachability, readPanel, retrying, sha256 } from '../../main/assets/manage/panels-core.js';
 
 const MODEL = 'Panel Hub S1 Plus (S1 Kiosk)';
 const device = (id, url, more = {}) => ({ id, name: 'Glassworks Panel', model: MODEL, config_entries: ['esp'], configuration_url: url, area_id: null, disabled_by: null, ...more });
@@ -510,4 +510,7 @@ test('after a sign-out mid-read no token goes out; server errors and a skipped r
   assert.equal((await panelAccess('CSRF', answer(500, null), 1_000)).outage, true, 'a 500 is an outage, not a missing sign-in');
   assert.equal(await panelForget('CSRF', answer(200, { ok: true, left: true }), 1_000), 'left', 'not revoked: HA moved');
   assert.equal(await panelForget('CSRF', answer(200, { ok: true }), 1_000), true);
+  assert.equal(await panelForget('CSRF', answer(503, { problem: 'busy' }), 1_000), 'busy', 'not started: Try again, not "may stay active"');
+  // The panel's renewal gets longer than a direct token request: its own call to HA can take most of 30 s.
+  assert.ok(ACCESS_MS >= 30_000 && ACCESS_MS > TOKEN_MS);
 });

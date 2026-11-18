@@ -61,6 +61,11 @@ class HaSignIn(
     private val ttlMs: Long = 10 * 60_000L,
     /** A problem worth a line in the log (a revoke HA didn't take). Never gets a token. */
     private val warn: (String) -> Unit = {},
+    /**
+     * Where a refused sign-in's token is revoked: off the web server's thread, so the refusal doesn't wait for Home
+     * Assistant (CodeRabbit on #534). One thread, so a run of refusals can't take more than one at a time.
+     */
+    private val cleanup: (() -> Unit) -> Unit = { work -> CLEANUP.execute(work) },
 ) {
     class Pending(val state: String, val verifier: String, val browser: String, val haBase: String, val clientId: String,
                   val redirectUri: String, val remember: Boolean, val next: String, val createdMs: Long)
@@ -126,7 +131,7 @@ class HaSignIn(
             // An administrator's sign-in is kept for their session, for All panels (#466); anyone else's is revoked
             // whatever happens next. Once more if HA didn't take it; if it still didn't, the token stays in HA (the
             // person's profile) until removed.
-            if (user?.isAdmin != true) tokens.refreshToken?.let { revokeTwice(p.haBase, p.clientId, it) }
+            if (user?.isAdmin != true) tokens.refreshToken?.let { r -> cleanup { revokeTwice(p.haBase, p.clientId, r) } }
         }
         val kept = tokens.refreshToken?.let { Kept(p.haBase, p.clientId, it) }
         return when {
@@ -173,6 +178,9 @@ class HaSignIn(
     }
 
     companion object {
+        /** [cleanup]'s one thread, shared by every sign-in page in the app. */
+        private val CLEANUP = java.util.concurrent.Executors.newSingleThreadExecutor { r -> Thread(r, "gw-signin-cleanup").apply { isDaemon = true } }
+
         const val CALLBACK = "/manage/callback"
 
         fun isLocalAddress(a: InetAddress): Boolean =
