@@ -334,3 +334,34 @@ test('a copy stops at the first write the panel does not answer; the rest are no
   await copyRows(p, 'TOKEN', rows.slice(0, 1), new Map([['screen\na', 'ask-1']]), async (u, init) => (bodies.push(String(init.body)), { status: 200, headers: { get: () => null }, json: async () => ({ ok: true }) }), 1_000, noWait);
   assert.deepEqual(bodies, ['section=screen&key=a&value=1&answer=ask-1'], 'a question is answered with its one-shot id');
 });
+
+test("a slider value off the other panel's steps isn't sent: it would be snapped to another value", () => {
+  const slider = { kind: 'slider', min: '0', max: '1', step: '0.5' };
+  assert.ok(accepts(slider, '0.5'));
+  assert.ok(accepts(slider, '1'));
+  assert.ok(!accepts(slider, '0.7'), '0.7 would land as 0.5');
+  assert.ok(accepts({ kind: 'slider', min: '0', max: '2.5', step: '0.1' }, '1.2'), 'float steps still match');
+  assert.ok(accepts({ kind: 'slider', min: '0', max: '2.5', step: '0' }, '1.234'), 'no step: any value in range');
+  const from = panel('2', [sec('screen', 'Screen', [{ key: 'Range', kind: 'slider', value: '0.7', shown: '0.7', min: '0', max: '1', step: '0.1' }])]);
+  const to = panel('1', [sec('screen', 'Screen', [{ key: 'Range', kind: 'slider', value: '0', shown: '0', min: '0', max: '1', step: '0.5' }])]);
+  assert.equal(plan(from, to).rows[0].state, 'cant');
+});
+
+test('sign-out gives up on a Home Assistant that never answers, and says so', { timeout: 5_000 }, async () => {
+  // Never answers, and ignores the abort too: the page's own timer must still end the wait.
+  const silent = () => new Promise(() => {});
+  assert.equal(await revokeAt('http://192.0.2.10:8123', 'REFRESH', silent, 30), false);
+  const headersOnly = async () => ({ status: 200, headers: { get: () => null }, json: () => new Promise(() => {}) });
+  assert.equal(await revokeAt('http://192.0.2.10:8123', 'REFRESH', headersOnly, 30), true, 'a 200 is an answer even if its empty body never ends');
+});
+
+test('a copy stops sending when the person signs out during it', async () => {
+  const p = { ...panelAt('kitchen-panel.local:8099'), name: 'Bedroom panel', trusted: true, settings };
+  const rows = ['a', 'b', 'c'].map((k) => ({ section: 'screen', key: k, value: '1' }));
+  let signedOut = false;
+  const sent = [];
+  const fetchFn = async (u, init) => { sent.push(String(init.body)); signedOut = true; return { status: 200, headers: { get: () => null }, json: async () => ({ ok: true }) }; };
+  const r = await copyRows(p, 'TOKEN', rows, null, fetchFn, 1_000, noWait, () => signedOut);
+  assert.equal(sent.length, 1, 'nothing more after the sign-out');
+  assert.deepEqual([...r.keys()], ['screen\na']);
+});

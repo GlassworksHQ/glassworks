@@ -145,7 +145,12 @@ export function accepts(item, value) {
     case 'duration': return (item.choices || []).includes(Number(value));
     case 'slider': {
       const n = Number(value);
-      return Number.isFinite(n) && n >= Number(item.min) - 1e-4 && n <= Number(item.max) + 1e-4;
+      const [min, max, step] = [Number(item.min), Number(item.max), Number(item.step)];
+      if (!Number.isFinite(n) || n < min - 1e-4 || n > max + 1e-4) return false;
+      // On the other panel's steps too: it would snap anything else to its nearest step, and the copy would be wrong.
+      if (!(step > 0)) return true;
+      const k = (n - min) / step;
+      return Math.abs(k - Math.round(k)) < 1e-4;
     }
     case 'switch': return value === 'on' || value === 'off';
     default: return true;
@@ -300,10 +305,13 @@ export async function writeSetting(p, access, fields, fetchFn = fetch, ms = SETT
 /**
  * [rows] (from [plan]) to [p], one at a time, as a Map of row key to [writeSetting]'s outcome. [answers]: each row's
  * one-shot question id, when the person agreed. Stops at the first write [p] didn't answer: the rest say they weren't sent.
+ * [stop]: asked before each write; true ends the copy there (the person signed out).
  */
-export async function copyRows(p, access, rows, answers = null, fetchFn = fetch, ms = SETTINGS_MS, sleep = undefined) {
+export async function copyRows(p, access, rows, answers = null, fetchFn = fetch, ms = SETTINGS_MS, sleep = undefined, stop = () => false) {
   const result = new Map();
   for (let i = 0; i < rows.length; i++) {
+    // Signed out meanwhile: nothing more is sent with the token.
+    if (stop()) break;
     const r = rows[i];
     const k = r.section + '\n' + r.key;
     const id = answers && answers.get(k);
@@ -336,11 +344,20 @@ async function timed(fetchFn, url, init, ms) {
 }
 
 /** Asks Home Assistant at [ha] to drop [refresh] and every access token made from it. True only when it said yes. */
-export async function revokeAt(ha, refresh, fetchFn = fetch) {
+export async function revokeAt(ha, refresh, fetchFn = fetch, ms = REVOKE_MS) {
+  // Its answer's status is all that counts: the timer covers the wait for it, not the (empty) body.
+  const c = new AbortController();
+  let t;
+  const late = new Promise((_, no) => { t = setTimeout(() => { c.abort(); no(new DOMException('Home Assistant took too long.', 'AbortError')); }, ms); });
   try {
-    const r = await fetchFn(ha + '/auth/revoke', { method: 'POST', body: new URLSearchParams({ token: refresh }) });
+    const r = await Promise.race([fetchFn(ha + '/auth/revoke', { method: 'POST', body: new URLSearchParams({ token: refresh }), signal: c.signal }), late]);
     return r.status >= 200 && r.status < 300;
   } catch {
     return false;
+  } finally {
+    clearTimeout(t);
   }
 }
+
+/** How long sign-out waits for Home Assistant to take the revoke before it says it may not have. */
+export const REVOKE_MS = 10_000;

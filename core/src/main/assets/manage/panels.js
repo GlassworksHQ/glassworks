@@ -263,6 +263,9 @@ function copied(result, toP) {
  */
 async function apply(fromP, toP, rows, asked) {
   if (applying) return;
+  // Signed out (or started again) during the copy: stop sending, and draw nothing from it (CodeRabbit on #488).
+  const mine = generation;
+  const stale = () => mine !== generation;
   // The panel as the list has it now, not as the card was drawn: what reads it last decides.
   const current = panels.find((p) => p.origin === toP.origin);
   if (!usable(current)) return drawCopy(fromP, current || toP);
@@ -273,8 +276,10 @@ async function apply(fromP, toP, rows, asked) {
     const access = await token().catch(() => null);
     if (!access) return start();
     const answers = asked ? new Map(rows.map((r) => [r.section + '\n' + r.key, asked.get(r.section + '\n' + r.key).ask.id])) : null;
-    const result = await copyRows(toP, access, rows, answers);
+    const result = await copyRows(toP, access, rows, answers, undefined, undefined, undefined, stale);
+    if (stale()) return;
     const again = await readPanel(toP, access);
+    if (stale()) return;
     panels = panels.map((p) => (p.origin === toP.origin ? again : p));
     drawList(stored()?.user || '');
     const to = panels.find((p) => p.origin === toP.origin);
