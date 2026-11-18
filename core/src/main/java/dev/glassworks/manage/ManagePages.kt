@@ -447,13 +447,14 @@ ${ownCard(v, s, "log")}<section class="card logs">$rows</section>"""
      */
     fun panels(s: PanelStatus, v: Viewer, ha: String?, session: String, noHa: String? = null): String {
         val first = when {
-            ha != null -> "This page needs JavaScript to ask Home Assistant and the other panels."
+            ha != null -> FINDING
             noHa != null -> noHa
             else -> "This panel has no Home Assistant on your network to find the others with."
         }
         val main = """<h1 class="ph">All panels</h1><p class="sub">Every panel in Home Assistant. Open one, or copy settings from one to another.</p>
 <div id="gw-panels" data-ha="${esc(ha.orEmpty())}" data-session="${esc(session)}"><section class="card list" id="gw-list"><div class="lh"><b>Panels in Home Assistant</b></div>
 <div class="row static note"><span>${esc(first)}</span></div></section><section class="card list" id="gw-copy" hidden></section></div>
+${if (ha == null) "" else """<noscript><style>#gw-list .note{display:none}</style><section class="card list"><div class="row static note"><span>${esc(NEEDS_SCRIPT)}</span></div></section></noscript>"""}
 ${if (ha == null) "" else """<script type="module" src="$PANELS_SCRIPT"></script>"""}"""
         return frame(s, PANELS, "All panels", v, main, css = PANELS_CSS)
     }
@@ -494,6 +495,10 @@ ${if (ha == null) "" else """<script type="module" src="$PANELS_SCRIPT"></script
         /** All panels (#466), after the Overview in the nav. */
         const val PANELS = "/panels"
         const val PANELS_SCRIPT = "/manage/js/panels.js"
+
+        /** All panels while its script starts (a slow panel or phone can take seconds), and without scripts (#466 run). */
+        const val FINDING = "Finding your panels…"
+        const val NEEDS_SCRIPT = "This page needs JavaScript to ask Home Assistant and the other panels."
 
         /** All panels' own: the copy card's pickers and rows. */
         val PANELS_CSS = """

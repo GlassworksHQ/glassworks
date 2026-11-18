@@ -447,3 +447,14 @@ test('a write that the panel answers after the read timeout still counts as done
     globalThis.clearTimeout = realClear;
   }
 });
+
+test("each panel's own Home Assistant address is never copied (2026-11-18 panel run)", () => {
+  const ha = (value, copy = false) => ({ key: 'Home Assistant', title: 'Home Assistant', kind: 'text', value, shown: value, ...(copy ? {} : { copy: false }) });
+  const s1 = panel('2', [sec('dashboard', 'Home Assistant & dashboard', [ha('http://192.0.2.10:8123'), sw('Full screen', 'on')])]);
+  const tab = panel('2', [sec('dashboard', 'Home Assistant & dashboard', [ha('http://homeassistant.local:8123'), sw('Full screen', 'off')])]);
+  const { rows } = plan(s1, tab);
+  assert.deepEqual(rows.map((r) => [r.key, r.state]), [['Home Assistant', 'own'], ['Full screen', 'send']]);
+  // Either side's mark is enough: an older source that doesn't mark it still never sends it to a target that does.
+  const old = panel('1', [sec('dashboard', 'Home Assistant & dashboard', [ha('http://192.0.2.10:8123', true)])]);
+  assert.equal(plan(old, tab).rows[0].state, 'own');
+});

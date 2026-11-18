@@ -39,14 +39,14 @@ const range = (m) => ({ key: 'Presence range', title: 'Presence range', kind: 's
 const wake = (id, ids) => ({ key: 'Wake word', title: 'Wake word', kind: 'choice', value: id, shown: { okay_nabu: 'Okay Nabu', hey_jarvis: 'Hey Jarvis' }[id], options: ids.map((i) => [i, { okay_nabu: 'Okay Nabu', hey_jarvis: 'Hey Jarvis' }[i]]) });
 const panels = {
   'kitchen-panel.local:8099': { api: 1, name: 'Glassworks Panel', frame: 'S1 Plus', version: '0.9.2', sections: [
-    { id: 'dashboard', title: 'Home Assistant & dashboard', items: [sw('Full screen', true)] },
+    { id: 'dashboard', title: 'Home Assistant & dashboard', items: [{ key: 'Home Assistant', title: 'Home Assistant', kind: 'text', value: 'http://192.0.2.10:8123', shown: '192.0.2.10', copy: false }, sw('Full screen', true)] },
     { id: 'screen', title: 'Screen', items: [sw('Wakes when someone comes close', true), range(1.2), idle(300, [30, 60, 120, 300, 600, 0]), sw('Brightness', true)] },
     { id: 'assist', title: 'Voice', items: [sw('on', true), wake('hey_jarvis', ['okay_nabu', 'hey_jarvis']), sw('Wake sound', false)] },
     { id: 'radio', title: 'Radio', items: [sw('on', true)] },
     { id: 'camera', title: 'Camera', items: [{ key: 'Stream sign-in', title: 'Stream sign-in', kind: 'sign-in', set: true }] },
   ] },
   'bedroom-panel.local:8099': { api: 1, name: 'Glassworks Panel', frame: 'S1 Plus', version: '0.9.1', sections: [
-    { id: 'dashboard', title: 'Home Assistant & dashboard', items: [sw('Full screen', false)] },
+    { id: 'dashboard', title: 'Home Assistant & dashboard', items: [{ key: 'Home Assistant', title: 'Home Assistant', kind: 'text', value: 'http://homeassistant.local:8123', shown: 'homeassistant.local', copy: false }, sw('Full screen', false)] },
     { id: 'screen', title: 'Screen', items: [sw('Wakes when someone comes close', true), range(0.8), idle(120, [30, 60, 120, 600, 0])] },
     { id: 'assist', title: 'Voice', items: [sw('on', false), wake('okay_nabu', ['okay_nabu', 'hey_jarvis'])] },
     { id: 'radio', title: 'Radio', items: [sw('on', false)] },
@@ -75,6 +75,8 @@ const contacted = new Set();
 /** Every request, as `METHOD host/path`. */
 const requests = [];
 let challenge = null;
+/** Whether a copy ever sent a panel's own Home Assistant address (the 2026-11-18 panel run's blocker). */
+let haAddressSent = false;
 /** Whether the fake Home Assistant takes a revoke. */
 let revokeOk = true;
 const initial = JSON.stringify(panels);
@@ -122,6 +124,7 @@ async function handle(req, res) {
   if (p && u.pathname === '/manage/api/settings') {
     if (req.method === 'GET') return send(res, 200, p);
     const f = await form(req);
+    if (f.get('key') === 'Home Assistant') haAddressSent = true;
     const item = p.sections.find((s) => s.id === f.get('section'))?.items.find((i) => i.key === f.get('key'));
     if (!item) return send(res, 404, { problem: "This panel doesn't have that setting.", missing: true });
     if (f.get('section') === 'radio' && f.get('answer') !== 'ask-1') return send(res, 409, { ask: { title: 'Turn the radio on?', detail: 'Zigbee devices on this panel join again.', action: 'Turn on', id: 'ask-1' } });
@@ -309,6 +312,7 @@ try {
   assert.ok(refused.some((t) => t.includes('203.0.113.9')), 'the served CSP refuses what it should: ' + JSON.stringify(refused));
   assert.deepEqual([...tokenTo].sort(), ['bedroom-panel.local:8099', 'kitchen-panel.local:8099', 'porch-panel.local:8099'], 'the token went to the panels that answered as panels, no one else');
   assert.ok(!contacted.has('203.0.113.7:8099'), 'a panel off the local network got no request at all');
+  assert.ok(!haAddressSent, "no copy sent a panel's own Home Assistant address");
   console.log('ok: CSP served and nothing refused; PKCE verified; the token went to', [...tokenTo].sort().join(', ') + '; nothing went to 203.0.113.7');
 } finally {
   cdp.close();

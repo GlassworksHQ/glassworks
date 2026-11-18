@@ -272,8 +272,8 @@ diagnostics). See the [core's README](../pane-api/src/main/java/dev/glassworks/R
 3. **Manage** opens that panel's own Manage page in a new tab, already signed in.
 4. **Copy settings.** Pick a panel to copy from and one to copy to. The page lists every setting that differs,
    ticked, as *its value now → the new value*. Settings the other panel's version or hardware doesn't have,
-   values it can't take (an option its version lacks) and sign-ins are greyed out and never sent. **Copy**
-   changes only what is ticked, on that panel alone. A change that asks first on the panel (the radio) is
+   values it can't take (an option its version lacks), sign-ins and each panel's own Home Assistant address are
+   greyed out and never sent. **Copy** changes only what is ticked, on that panel alone. A change that asks first on the panel (the radio) is
    listed with the panel's question and **Change them too**.
 
 All panels is the one Manage page with a script, served by the panel itself. Its Content-Security-Policy

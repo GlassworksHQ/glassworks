@@ -167,7 +167,9 @@ async function open(p) {
   // A new tab, without rel: the panel there gets the token in the post anyway, so what window.opener would add (it
   // could only send this tab elsewhere; it can't read it, being another origin) gives it nothing more.
   const f = h('form', { method: 'post', action: p.origin + '/manage/ha/token', target: '_blank' },
-    h('input', { type: 'hidden', name: 'token', value: access }), h('input', { type: 'hidden', name: 'next', value: '/' }));
+    h('input', { type: 'hidden', name: 'token', value: access }), h('input', { type: 'hidden', name: 'next', value: '/' }),
+    // For the other panel's Log: Safari posts this from a new tab with `Origin: null` (2026-11-18 panel run).
+    h('input', { type: 'hidden', name: 'from', value: location.host }));
   document.body.append(f);
   f.submit();
   f.remove();
@@ -214,7 +216,7 @@ function drawCopy(fromP, toP, result) {
   } }, options(now, skip));
   const { rows, same } = plan(fromP.settings, toP.settings);
   const send = rows.filter((r) => r.state === 'send');
-  const grey = { missing: toP.name + "'s version or hardware doesn't have this. It isn't sent.", cant: toP.name + " can't take this value. It isn't sent.", skip: "Sign-ins aren't copied: their passwords never leave a panel." };
+  const grey = { missing: toP.name + "'s version or hardware doesn't have this. It isn't sent.", cant: toP.name + " can't take this value. It isn't sent.", skip: "Sign-ins aren't copied: their passwords never leave a panel.", own: "Each panel keeps its own Home Assistant address. It isn't copied." };
   const lines = rows.map((r) => {
     const done = result && result.get(r.section + '\n' + r.key);
     if (r.state !== 'send') return h('div', { class: 'row static quiet cp' }, h('div', {}, h('b', {}, r.label), h('span', {}, grey[r.state])));

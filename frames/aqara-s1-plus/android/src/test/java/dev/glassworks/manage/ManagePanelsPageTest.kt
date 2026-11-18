@@ -30,6 +30,17 @@ class ManagePanelsPageTest {
         assertFalse("no inline script", csp.contains("unsafe-inline';") && csp.contains("script-src 'unsafe"))
     }
 
+    @Test fun whileItsScriptStartsItSaysItIsFindingPanelsAndTheJavaScriptLineIsOnlyForNoScripts() {
+        val b = f.Browser().also { it.signInWithHa() }
+        val html = b.get(ManagePages.PANELS).text()
+        val list = html.substringAfter("id=\"gw-list\"").substringBefore("</section>")
+        assertTrue(list, list.contains(ManagePages.FINDING))
+        assertFalse(list, list.contains(ManagePages.NEEDS_SCRIPT))
+        val noscript = html.substringAfter("<noscript>").substringBefore("</noscript>")
+        assertTrue(noscript, noscript.contains(ManagePages.NEEDS_SCRIPT))
+        assertEquals("the JavaScript line is nowhere else", 1, Regex(Regex.escape(ManagePages.NEEDS_SCRIPT)).findAll(html).count())
+    }
+
     @Test fun everyOtherPageStaysWithoutScripts() {
         val b = f.Browser().also { it.signInWithHa() }
         for (p in listOf("/", "/log", "/security", "/about", "/screen")) {

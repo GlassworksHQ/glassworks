@@ -163,7 +163,8 @@ export function accepts(item, value) {
  * - `send`: [to] has it, with another value it can take;
  * - `missing`: [to]'s version or hardware doesn't have it, so it is never sent;
  * - `cant`: [to] has it, but not that value (an option its version lacks), so it is never sent;
- * - `skip`: a sign-in, whose password never leaves a panel.
+ * - `skip`: a sign-in, whose password never leaves a panel;
+ * - `own`: the panel's own connection (its Home Assistant address, `copy: false`), never copied.
  * [same] counts the ones that already match. Nothing on [to] that [from] lacks is touched.
  */
 export function plan(from, to) {
@@ -175,7 +176,9 @@ export function plan(from, to) {
     for (const i of s.items) {
       const row = { section: s.id, key: i.key, label: label(s, i.key), from: i.shown ?? '' };
       const t = theirs.get(s.id + '\n' + i.key);
-      if (!t || t.kind !== i.kind) rows.push({ ...row, state: 'missing' });
+      // The panel's own connection (its Home Assistant address): never copied (the 2026-11-18 panel run signed a dashboard out).
+      if (i.copy === false || (t && t.copy === false)) rows.push({ ...row, state: 'own' });
+      else if (!t || t.kind !== i.kind) rows.push({ ...row, state: 'missing' });
       else if (i.kind === 'sign-in') rows.push({ ...row, state: 'skip' });
       else if (t.value === i.value) same++;
       else if (!accepts(t, i.value)) rows.push({ ...row, state: 'cant', to: t.shown ?? '' });
