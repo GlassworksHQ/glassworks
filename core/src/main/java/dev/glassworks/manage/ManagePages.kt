@@ -475,7 +475,7 @@ ${ownCard(v, s, "log")}<section class="card logs">$rows</section>"""
 <div id="gw-panels" data-ha="${esc(ha.orEmpty())}" data-session="${esc(session)}" data-ha-signin="${if (haSignIn) "1" else ""}" data-csrf="${esc(v.csrf)}"><section class="card list" id="gw-list"><div class="lh"><b>Panels in Home Assistant</b></div>
 <div class="row static note"><span>${esc(first)}</span></div></section><section class="card list" id="gw-copy" hidden></section></div>
 ${if (ha == null) "" else """<noscript><style>#gw-list .note{display:none}</style><section class="card list"><div class="row static note"><span>${esc(NEEDS_SCRIPT)}</span></div></section></noscript>"""}
-${if (ha == null) "" else """<script type="module" src="$PANELS_SCRIPT"></script><script src="$PANELS_BOOT" defer></script>"""}"""
+${if (ha == null) "" else """<script src="$PANELS_BOOT"></script><script type="module" src="$PANELS_SCRIPT"></script>"""}"""
         return frame(s, PANELS, "All panels", v, main, css = PANELS_CSS)
     }
 
