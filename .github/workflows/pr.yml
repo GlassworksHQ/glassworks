@@ -209,6 +209,12 @@ jobs:
             grep -q '<testsuite [^>]* skipped="0"' "$report" || { echo "::error::$report: a test skipped"; exit 1; }
           done
 
+      # So a failed run can't save a remembered "missing" artifact into the cache (docs/ci.md, Caches).
+      - name: Forget Gradle's dependency metadata after a failure
+        if: failure()
+        run: rm -rf ~/.gradle/caches/modules-2/metadata-*
+
+
   libs-api23:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.libs_api23 != 'false') }}
@@ -250,6 +256,12 @@ jobs:
   # 23 for this run only (tools/legacy/api23-lint.gradle) and fails on a call tools/legacy/api23-baseline.txt doesn't
   # list. The libraries are minSdk 23 already (libs-api23); this covers the core, the pane API, the panes and the
   # legacy engine. docs/research/legacy-engine.md has the table.
+
+      # So a failed run can't save a remembered "missing" artifact into the cache (docs/ci.md, Caches).
+      - name: Forget Gradle's dependency metadata after a failure
+        if: failure()
+        run: rm -rf ~/.gradle/caches/modules-2/metadata-*
+
   api23:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.api23 != 'false') }}
@@ -281,6 +293,12 @@ jobs:
         # Without the report's init script: every check, at its own minSdk. Its manifest asks for
         # INSTALL_PACKAGES, REBOOT and WRITE_SECURE_SETTINGS on purpose (tools:ignore="ProtectedPermissions").
         run: ./gradlew --no-daemon :generic-android:lintDebug
+
+      # So a failed run can't save a remembered "missing" artifact into the cache (docs/ci.md, Caches).
+      - name: Forget Gradle's dependency metadata after a failure
+        if: failure()
+        run: rm -rf ~/.gradle/caches/modules-2/metadata-*
+
 
   libs-publish:
     needs: changes
@@ -326,6 +344,12 @@ jobs:
   # Python, must fire in its own word only and score within 0.01 of pymicro-wakeword. It skips without
   # MWW_PYTHON, so this job fails if it skipped. The models come from raw.githubusercontent.com at
   # the commit WakeWords.kt pins, checked against its SHA-256s, and are cached by that commit.
+
+      # So a failed run can't save a remembered "missing" artifact into the cache (docs/ci.md, Caches).
+      - name: Forget Gradle's dependency metadata after a failure
+        if: failure()
+        run: rm -rf ~/.gradle/caches/modules-2/metadata-*
+
   wake-word:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.wake_word != 'false') }}
@@ -385,6 +409,12 @@ jobs:
           report=libs/voice/build/test-results/testDebugUnitTest/TEST-dev.glassworks.voice.MicroWakeWordClipTest.xml
           [ -z "$failed" ] || { cat "$report"; exit 1; }
           grep -q '<testsuite [^>]* skipped="0"' "$report" || { echo "::error::$report: the test skipped"; exit 1; }
+
+      # So a failed run can't save a remembered "missing" artifact into the cache (docs/ci.md, Caches).
+      - name: Forget Gradle's dependency metadata after a failure
+        if: failure()
+        run: rm -rf ~/.gradle/caches/modules-2/metadata-*
+
 
   web:
     needs: changes
@@ -665,6 +695,12 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+      # So a failed run can't save a remembered "missing" artifact into the cache (docs/ci.md, Caches).
+      - name: Forget Gradle's dependency metadata after a failure
+        if: failure()
+        run: rm -rf ~/.gradle/caches/modules-2/metadata-*
+
+
   size-generic:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.size_generic != 'false') }}
@@ -741,6 +777,12 @@ jobs:
         if: always()
         run: |
           [ -f "$RUNNER_TEMP/generic/size.md" ] && cat "$RUNNER_TEMP/generic/size.md" >> "$GITHUB_STEP_SUMMARY" || true
+
+      # So a failed run can't save a remembered "missing" artifact into the cache (docs/ci.md, Caches).
+      - name: Forget Gradle's dependency metadata after a failure
+        if: failure()
+        run: rm -rf ~/.gradle/caches/modules-2/metadata-*
+
 
   branding:
     needs: changes
