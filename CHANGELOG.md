@@ -9,6 +9,9 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 ## [Unreleased]
 
 ### Added
+- **Manage sends a test notification and shows the panel's notifications.** The Notifications page on the Manage
+  page lists what is on the panel now, read-only, and has a *Send* button for the test notification. On the panel,
+  *Send a test notification* is now a row with a *Send* button.
 - **Setup says when updates would ask for a tap.** On a new setup of an S1 whose boot image has no update
   service, a *Silent updates* step follows Panes: Kiln adds the service from a computer, with a QR code to it.
   It's never required: Continue moves on. Panels that are already set up don't see it, and an S1 with the
