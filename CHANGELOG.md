@@ -10,8 +10,9 @@ below as the release notes.
 ### Added
 - **Setup offers silent updates when it can.** On a new setup, a *Silent updates* step follows Panes when
   updates would ask for a tap and something can change that. On a tablet with Android 12 or newer it opens
-  Android's "Install unknown apps" page for Glassworks. On Android 6 to 11 it says a device owner skips the
-  tap, with a QR code to Kiln. On an S1 whose boot image has no update service, it says Kiln adds one. It's
+  Android's "Install unknown apps" page for Glassworks. On Android 6 to 11, and on newer Android while this
+  release targets an older API than Android wants for silent updates, it says a device owner skips the tap,
+  with a QR code to Kiln. On an S1 whose boot image has no update service, it says Kiln adds one. It's
   never required: Continue or Not now moves on. Panels that are already set up don't see it, and updates
   that already install by themselves skip it.
 - **Voice says when it can't get ready.** When the wake word model doesn't download (no internet, a

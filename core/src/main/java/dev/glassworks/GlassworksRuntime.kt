@@ -121,7 +121,8 @@ class GlassworksRuntime(
      */
     override fun setupPanes(context: Context): List<SetupPane> {
         val definitions = paneDefinitions(context)
-        val kept = SetupFlow.usable(definitions.flatMap { it.setupSteps }) { Log.e(TAG, it) }.toSet()
+        // The device's own steps go first, so a pane's step can't take their id or request names (CodeRabbit on #513).
+        val kept = SetupFlow.usable(deviceSetupSteps(context) + definitions.flatMap { it.setupSteps }) { Log.e(TAG, it) }.toSet()
         return definitions.mapNotNull { d ->
             val steps = d.setupSteps.filter { it in kept }
             val card = d.setupChoice

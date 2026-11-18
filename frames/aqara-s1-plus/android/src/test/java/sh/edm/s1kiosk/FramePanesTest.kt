@@ -167,6 +167,16 @@ class FramePanesTest {
     }
 
     @Test
+    fun aPanesStepCantTakeTheDevicesOwnStepsId() {
+        ShadowLog.clear()
+        val r = runtimeWith(FakeFrame("silent_updates" to "look"))
+        assertEquals(listOf("radio", "silent_updates"), r.setupSteps(app).map { it.id })
+        assertTrue("the device's own step", r.setupSteps(app).last() === r.deviceSetupSteps(app).single())
+        val errors = ShadowLog.getLogsForTag("S1Kiosk").filter { it.type == Log.ERROR }.map { it.msg }
+        assertTrue(errors.toString(), errors.any { "'silent_updates'" in it })
+    }
+
+    @Test
     fun aPanesStepsWithoutACardAreLeftOut() {
         // F6: a pane's steps sit under Panes only while its card is on; with no card they could never be
         // answered on the panel, so setup leaves them out (and says so) instead of waiting for ever.
