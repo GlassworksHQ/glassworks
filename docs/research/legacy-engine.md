@@ -580,6 +580,32 @@ Test builds publish the legacy APK (`generic-test-build.yml`, arm64-v8a, 0.1.0 a
 `release.yml` doesn't build the generic app or its legacy build; the release key exists since 2026-11-17. The app's legacy
 release line ([above](#updates-on-the-legacy-build-198-phase-c)) is ready for one.
 
+## Code that Android 6's verifier rejects (#435, verified 2026-11-18)
+
+Newer Android runs dex that Android 6 rejects. On the Mirror, the legacy build of #435 crashed at every start with
+`VerifyError: Rejecting class dev.glassworks.platform.UsbDebugging$Requests because it failed compile-time
+verification`. On an API 23 arm64 emulator, dex2oat at install gave the reason:
+
+```
+Verification error in void dev.glassworks.platform.UsbDebugging$Requests.start$lambda$0(…)
+… [0xC1] expected to be within a catch-all for an instruction where a monitor is held
+Verifier rejected class dev.glassworks.platform.UsbDebugging$Requests due to bad method …
+```
+
+The method was a thread's body with `synchronized` blocks, a `useLines` loop and a `return@Thread` out of both. R8
+left an instruction that can throw outside the monitor's catch-all, which Android 6 refuses and later Android accepts.
+The fix keeps monitors out of such bodies: each locked step is its own small `@Synchronized` method. What rules
+apply:
+
+- **Android 6 verifies every class at install** (dex2oat), so the install's log shows a rejected class before any
+  code runs. A class rejected there throws `VerifyError` when first used, which can be only on one device (the
+  Mirror's privileged path) and never on an emulator start.
+- **The core's conformance APK doesn't show it.** R8 shapes the release dex. `tools/legacy/verify-api23.sh` installs
+  the real legacy APK on an API 23 emulator and fails on a rejected Glassworks class; CI runs it
+  (core-emulators.yml, `legacy-verify`).
+- **A part the panel can run without loads through `orWithout`** (the Manage page, the "Allow a new computer"
+  card), so a class like this costs that part, not the app.
+
 ## How to reproduce
 
 Off-device: `./gradlew :engine-gecko-legacy:testDebugUnitTest` (the policy in Kotlin and in `policy.js`, the gate).
