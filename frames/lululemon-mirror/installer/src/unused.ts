@@ -1,6 +1,6 @@
 // The image's apps a Mirror never uses, which Kiln leaves out of system (patchSystem). On the unit they
 // cost RAM: the Qualcomm and telephony services restart after every lowmemorykiller kill, around 25
-// times in 30 minutes each, while the Mirror sat at "critical" (docs/research/mirror-memory.md). The list is what
+// times in 30 minutes each, while the Mirror sat at "critical" (frames/lululemon-mirror/research/mirror-memory.md). The list is what
 // the root hid on the unit on 2026-11-18 (pm hide), which took free RAM from about 60 MB to 205 MB
 // (one sample). Folders read from the pinned image 2 with tools/mirror/list-apps.ts (2026-11-18).
 // The way back is Kiln's restore: the plain Glass Panes images bring every app back.
