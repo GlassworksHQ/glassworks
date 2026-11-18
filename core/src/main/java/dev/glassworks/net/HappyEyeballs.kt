@@ -40,6 +40,7 @@ class HappyEyeballs(
      */
     @Throws(IOException::class)
     fun connect(host: String, port: Int, timeoutMs: Int): Socket {
+        if (port !in 0..65535) throw IOException("port $port is out of range")
         val addresses = order(resolve(host.removeSurrounding("[", "]")))
         if (addresses.isEmpty()) throw ConnectException("$host has no address this device can reach")
         val deadline = System.nanoTime() + timeoutMs * 1_000_000L

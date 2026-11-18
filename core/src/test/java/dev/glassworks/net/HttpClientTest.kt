@@ -56,4 +56,8 @@ class HttpClientTest {
         answer("HTTP/1.1 401 Unauthorized\r\nContent-Length: 100\r\n\r\n")
         try { http.request("GET", url); fail() } catch (_: IOException) {}
     }
+
+    @Test fun `a port out of range is an IOException`() {
+        try { http.request("GET", "http://127.0.0.1:65536/auth/token"); fail() } catch (_: IOException) {}
+    }
 }

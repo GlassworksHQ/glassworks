@@ -187,7 +187,7 @@ public class WsClient private constructor(
             val host = uri.host ?: throw IOException("no host in $url")
             val port = if (uri.port > 0) uri.port else if (tls) 443 else 80
             val path = (uri.rawPath?.ifEmpty { "/" } ?: "/") + (uri.rawQuery?.let { "?$it" } ?: "")
-            val plain = openSocket(host, port, connectTimeoutMs)
+            val plain = try { openSocket(host, port, connectTimeoutMs) } catch (e: RuntimeException) { throw IOException(e.message, e) }
             var s: Socket = plain
             try {
                 plain.tcpNoDelay = true
