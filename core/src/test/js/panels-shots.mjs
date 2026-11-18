@@ -116,8 +116,9 @@ async function handle(req, res) {
   }
   if (u.pathname === '/manage/api/hello' && hellos[u.host]) return send(res, 200, { api: 1, glassworks: true, model: hellos[u.host] });
   if (u.pathname.startsWith('/manage/js/')) return send(res, 200, readFileSync(join(assets, u.pathname.slice(11))), 'text/javascript');
+  // Slow, like a panel whose Home Assistant check takes a while: the page draws the others first.
   if (u.host === 'porch-panel.local:8099' && u.pathname === '/manage/api/settings')
-    return send(res, 401, { problem: "Home Assistant didn't confirm this sign-in. Sign in again." });
+    return setTimeout(() => send(res, 401, { problem: "Home Assistant didn't confirm this sign-in. Sign in again." }), 1500);
   if (p && u.pathname === '/manage/api/settings') {
     if (req.method === 'GET') return send(res, 200, p);
     const f = await form(req);
@@ -230,8 +231,13 @@ try {
   assert.equal(await js("[...document.querySelectorAll('#gw-list .row')].find((r) => r.textContent.includes('Garage')).querySelector('.chip').textContent"), 'Not a panel');
   assert.equal(await js("[...document.querySelectorAll('#gw-list .row')].find((r) => r.textContent.includes('Office')).querySelector('.chip').textContent"), 'Not on your network');
   assert.equal(await js("[...document.querySelectorAll('#gw-list .row')].find((r) => r.textContent.includes('Porch')).querySelector('.chip').textContent"), 'Refused', 'answered hello, then 401: Refused, not Down');
-  await js("document.querySelector('#gw-copy button[type=submit]').click()");
+  // Copy clicked twice: one copy runs, each setting is sent once.
+  const posts = () => requests.filter((r) => r === 'POST bedroom-panel.local:8099/manage/api/settings').length;
+  const before = posts();
+  const ticked = await js("document.querySelectorAll('#gw-copy input[type=checkbox]:checked').length");
+  await js("const b = document.querySelector('#gw-copy button[type=submit]'); b.click(); b.click();");
   await until("document.querySelector('.cpa')", 'the copy result');
+  assert.equal(posts() - before, ticked, 'a double click sent each setting once');
   await shot('03-copied-asks-first');
   await js("document.querySelector('.cpa button').click()");
   await until("!document.querySelector('.cpa')", 'the confirmed change');
@@ -280,6 +286,14 @@ try {
   revokeOk = true;
   await js("[...document.querySelectorAll('#gw-list button')].find((b) => b.textContent === 'Try again').click()");
   await until("document.querySelector('#gw-list .note')?.textContent.includes('Sign in with a Home Assistant administrator')", 'signed out after Try again');
+  // Sign out while a slow panel is still being read: its late answer must not bring the signed-in page back.
+  admin = true;
+  await js("document.querySelector('#gw-list button').click()");
+  await until("[...document.querySelectorAll('#gw-list .chip')].some((c) => c.textContent === 'Asking')", 'a panel still being read');
+  await js("[...document.querySelectorAll('#gw-list button')].find((b) => b.textContent === 'Sign out').click()");
+  await sleep(2500);
+  assert.ok(await js("document.querySelector('#gw-list .note')?.textContent.includes('Sign in with a Home Assistant administrator') && !document.querySelector('#gw-list .chip') && document.getElementById('gw-copy').hidden"),
+    'still signed out after the slow panel answered');
   assert.deepEqual(refused, [], 'the CSP blocked nothing the page did');
   // The CSP is on: a request it doesn't allow is refused, and logged.
   await js("fetch('http://203.0.113.9:1234/').catch(() => 0)");

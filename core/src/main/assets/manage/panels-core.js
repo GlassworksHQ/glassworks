@@ -246,18 +246,7 @@ export function usable(p) {
  */
 export async function readPanel(p, access, fetchFn = fetch, ms = 6_000, sleep = undefined, settingsMs = SETTINGS_MS) {
   if (p.local !== true) return { ...p, trusted: false, reach: { state: 'remote', why: REMOTE }, settings: null };
-  const get = async (path, headers, timeout) => {
-    const r = await retrying(async () => {
-      const c = new AbortController();
-      const t = setTimeout(() => c.abort(), timeout);
-      try {
-        return await fetchFn(p.origin + path, { headers, signal: c.signal });
-      } finally {
-        clearTimeout(t);
-      }
-    }, sleep);
-    return { status: r.status, body: await r.json().catch(() => null) };
-  };
+  const get = (path, headers, timeout) => retrying(() => timed(fetchFn, p.origin + path, { headers }, timeout), sleep);
   let hi;
   try {
     // Hello never answers 503 (it asks Home Assistant nothing), so only the settings read can wait: one read stays
@@ -295,22 +284,54 @@ export function reachability(status, body) {
  * settings read: the panel asks its Home Assistant first. A write that timed out may still have landed, so it says so.
  */
 export async function writeSetting(p, access, fields, fetchFn = fetch, ms = SETTINGS_MS, sleep = undefined) {
+  // Checked here too, not only by the caller: nothing else stands between a later caller and the token (CodeRabbit on #488).
+  if (!usable(p)) return { state: 'failed', why: 'Not sent: ' + p.name + " isn't a trusted panel on your network now." };
   try {
-    const res = await retrying(async () => {
-      const c = new AbortController();
-      const t = setTimeout(() => c.abort(), ms);
-      try {
-        return await fetchFn(p.origin + '/manage/api/settings', {
-          method: 'POST', headers: { Authorization: 'Bearer ' + access }, body: new URLSearchParams(fields), signal: c.signal,
-        });
-      } finally {
-        clearTimeout(t);
-      }
-    }, sleep);
-    return outcome(res.status, await res.json().catch(() => null));
+    const res = await retrying(() => timed(fetchFn, p.origin + '/manage/api/settings', {
+      method: 'POST', headers: { Authorization: 'Bearer ' + access }, body: new URLSearchParams(fields),
+    }, ms), sleep);
+    return outcome(res.status, res.body);
   } catch (e) {
-    if (e && e.name === 'AbortError') return { state: 'failed', why: p.name + " didn't answer in time. The setting may have changed: check its page." };
-    return { state: 'failed', why: "Can't reach " + p.name + '.' };
+    if (e && e.name === 'AbortError') return { state: 'failed', unreachable: true, why: p.name + " didn't answer in time. The setting may have changed: check its page." };
+    return { state: 'failed', unreachable: true, why: "Can't reach " + p.name + '.' };
+  }
+}
+
+/**
+ * [rows] (from [plan]) to [p], one at a time, as a Map of row key to [writeSetting]'s outcome. [answers]: each row's
+ * one-shot question id, when the person agreed. Stops at the first write [p] didn't answer: the rest say they weren't sent.
+ */
+export async function copyRows(p, access, rows, answers = null, fetchFn = fetch, ms = SETTINGS_MS, sleep = undefined) {
+  const result = new Map();
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    const k = r.section + '\n' + r.key;
+    const id = answers && answers.get(k);
+    const o = await writeSetting(p, access, { section: r.section, key: r.key, value: r.value, ...(id ? { answer: id } : {}) }, fetchFn, ms, sleep);
+    result.set(k, o);
+    if (o.unreachable) {
+      for (const rest of rows.slice(i + 1)) result.set(rest.section + '\n' + rest.key, { state: 'failed', why: 'Not sent: ' + p.name + ' stopped answering.' });
+      break;
+    }
+  }
+  return result;
+}
+
+/**
+ * [fetchFn] of [url] as `{ status, headers, body }` (the body as JSON, or null), within [ms] in all: the timer stays
+ * armed until the body is read, so a panel that sends headers and then stalls can't hold the page (CodeRabbit on #488).
+ */
+async function timed(fetchFn, url, init, ms) {
+  const c = new AbortController();
+  const t = setTimeout(() => c.abort(), ms);
+  const aborted = new Promise((_, no) => c.signal.addEventListener('abort', () => no(new DOMException('The request took too long.', 'AbortError'))));
+  aborted.catch(() => {});
+  try {
+    const r = await Promise.race([fetchFn(url, { ...init, signal: c.signal }), aborted]);
+    const body = await Promise.race([r.json().catch((e) => { if (e && e.name === 'AbortError') throw e; return null; }), aborted]);
+    return { status: r.status, headers: r.headers, body };
+  } finally {
+    clearTimeout(t);
   }
 }
 

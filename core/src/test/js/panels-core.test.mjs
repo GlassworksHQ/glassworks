@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
 import { test } from 'node:test';
-import { MAX_WAIT_S, SETTINGS_MS, TRIES, accepts, authorizeUrl, hello, localHost, manageOrigin, revokeAt, usable, writeSetting, outcome, panelsFrom, pkceChallenge, plan, reachability, readPanel, retrying, sha256 } from '../../main/assets/manage/panels-core.js';
+import { MAX_WAIT_S, SETTINGS_MS, TRIES, accepts, copyRows, authorizeUrl, hello, localHost, manageOrigin, revokeAt, usable, writeSetting, outcome, panelsFrom, pkceChallenge, plan, reachability, readPanel, retrying, sha256 } from '../../main/assets/manage/panels-core.js';
 
 const MODEL = 'Panel Hub S1 Plus (S1 Kiosk)';
 const device = (id, url, more = {}) => ({ id, name: 'Glassworks Panel', model: MODEL, config_entries: ['esp'], configuration_url: url, area_id: null, disabled_by: null, ...more });
@@ -269,7 +269,7 @@ test('the settings read waits longer than hello: the panel asks its Home Assista
 });
 
 test('a copied setting gives up after its timeout and says it may have changed; a network failure says can\'t reach', async () => {
-  const p = { ...panelAt('kitchen-panel.local:8099'), name: 'Kitchen panel' };
+  const p = { ...panelAt('kitchen-panel.local:8099'), name: 'Kitchen panel', trusted: true, settings };
   const fields = { section: 'screen', key: 'Turn off when idle', value: '60' };
   const seen = [];
   const ok = await writeSetting(p, 'TOKEN', fields, async (url, init) => (seen.push([url, init.method, init.headers.Authorization, String(init.body)]),
@@ -279,10 +279,10 @@ test('a copied setting gives up after its timeout and says it may have changed; 
 
   const silent = (url, init) => new Promise((_, no) => init.signal.addEventListener('abort', () => no(new DOMException('aborted', 'AbortError'))));
   const late = await writeSetting(p, 'TOKEN', fields, silent, 30, noWait);
-  assert.deepEqual(late, { state: 'failed', why: "Kitchen panel didn't answer in time. The setting may have changed: check its page." });
+  assert.deepEqual(late, { state: 'failed', unreachable: true, why: "Kitchen panel didn't answer in time. The setting may have changed: check its page." });
 
   const gone = await writeSetting(p, 'TOKEN', fields, async () => { throw new TypeError('Failed to fetch'); }, 1_000, noWait);
-  assert.deepEqual(gone, { state: 'failed', why: "Can't reach Kitchen panel." });
+  assert.deepEqual(gone, { state: 'failed', unreachable: true, why: "Can't reach Kitchen panel." });
 });
 
 test('sign-out counts as done only when Home Assistant says so', async () => {
@@ -292,4 +292,45 @@ test('sign-out counts as done only when Home Assistant says so', async () => {
   assert.deepEqual(calls[0], ['http://192.0.2.10:8123/auth/revoke', 'token=REFRESH']);
   assert.equal(await revokeAt('http://192.0.2.10:8123', 'REFRESH', with_(500)), false);
   assert.equal(await revokeAt('http://192.0.2.10:8123', 'REFRESH', async () => { throw new TypeError('Failed to fetch'); }), false);
+});
+
+test('writeSetting sends nothing to a panel that is not usable now', async () => {
+  const sent = [];
+  const fetchFn = async (url) => (sent.push(url), { status: 200, json: async () => ({ ok: true }), headers: { get: () => null } });
+  const base = { ...panelAt('kitchen-panel.local:8099'), name: 'Kitchen panel', trusted: true, settings };
+  for (const p of [{ ...base, local: false }, { ...base, trusted: false }, { ...base, settings: null }, { ...panelAt('203.0.113.7:8099'), name: 'Office panel', trusted: true, settings }]) {
+    const o = await writeSetting(p, 'TOKEN', { section: 's', key: 'k', value: 'v' }, fetchFn, 1_000, noWait);
+    assert.equal(o.state, 'failed');
+    assert.ok(o.why.startsWith('Not sent: '), o.why);
+  }
+  assert.deepEqual(sent, [], 'no request at all');
+});
+
+test('a body that stalls after the headers still times out, for reads and writes', { timeout: 5_000 }, async () => {
+  const stall = (url, init) => Promise.resolve({
+    status: 200, headers: { get: () => null },
+    json: () => (url.endsWith('/manage/api/hello') ? Promise.resolve({ api: 1, glassworks: true, model: MODEL }) : new Promise(() => {})),
+  });
+  const read = await readPanel(panelAt('kitchen-panel.local:8099'), 'TOKEN', stall, 1_000, noWait, 30);
+  assert.equal(read.reach.state, 'unchecked');
+  const p = { ...panelAt('kitchen-panel.local:8099'), name: 'Kitchen panel', trusted: true, settings };
+  const write = await writeSetting(p, 'TOKEN', { section: 's', key: 'k', value: 'v' }, stall, 30, noWait);
+  assert.equal(write.state, 'failed');
+  assert.ok(write.unreachable && write.why.includes('may have changed'), write.why);
+});
+
+test('a copy stops at the first write the panel does not answer; the rest are not sent', async () => {
+  const p = { ...panelAt('kitchen-panel.local:8099'), name: 'Bedroom panel', trusted: true, settings };
+  const rows = ['a', 'b', 'c'].map((k) => ({ section: 'screen', key: k, value: '1' }));
+  let calls = 0;
+  const firstOk = async () => (++calls === 1 ? { status: 200, headers: { get: () => null }, json: async () => ({ ok: true }) } : (() => { throw new TypeError('Failed to fetch'); })());
+  const r = await copyRows(p, 'TOKEN', [...rows, { section: 'screen', key: 'd', value: '1' }], null, firstOk, 1_000, noWait);
+  assert.equal(calls, 2, 'one more after the failure? no: it stops at the failed one');
+  assert.deepEqual([...r.values()].map((o) => o.state), ['done', 'failed', 'failed', 'failed']);
+  assert.equal(r.get('screen\nb').why, "Can't reach Bedroom panel.");
+  assert.equal(r.get('screen\nc').why, 'Not sent: Bedroom panel stopped answering.');
+
+  const bodies = [];
+  await copyRows(p, 'TOKEN', rows.slice(0, 1), new Map([['screen\na', 'ask-1']]), async (u, init) => (bodies.push(String(init.body)), { status: 200, headers: { get: () => null }, json: async () => ({ ok: true }) }), 1_000, noWait);
+  assert.deepEqual(bodies, ['section=screen&key=a&value=1&answer=ask-1'], 'a question is answered with its one-shot id');
 });

@@ -8,7 +8,7 @@
 // signed in, and copies settings from one panel to another. No panel sees another's requests. The token goes
 // only to a device Home Assistant lists as a Glassworks panel that answers as one first (readPanel).
 
-import { authorizeUrl, base64url, panelsFrom, pkceChallenge, plan, readPanel, revokeAt, usable, writeSetting } from './panels-core.js';
+import { authorizeUrl, base64url, copyRows, panelsFrom, pkceChallenge, plan, readPanel, revokeAt, usable } from './panels-core.js';
 
 const root = document.getElementById('gw-panels');
 const ha = (root.dataset.ha || '').replace(/\/+$/, '');
@@ -21,6 +21,12 @@ const VERIFIER = 'gw-ha-verifier';
 
 /** Every panel found, with what it answered: { ...panel, reach, settings }. */
 let panels = [];
+
+/** Bumped by each start and sign-out: a slower, older start finds it changed and draws nothing (CodeRabbit on #488). */
+let generation = 0;
+
+/** A copy is running: another Copy or Change them too waits for it to end. */
+let applying = false;
 
 // ------------------------------------------------------------------ the page's bits
 
@@ -112,6 +118,7 @@ function signIn() {
 
 /** Home Assistant drops the refresh token and every access token made from it: no panel can use them after. */
 async function signOut() {
+  generation++;
   const t = stored();
   keep(KEY, null);
   if (t && !(await revokeAt(ha, t.refresh))) return revokeFailed(t.refresh);
@@ -255,29 +262,33 @@ function copied(result, toP) {
  * person agreed to its questions: each row goes again with its question's one-shot id.
  */
 async function apply(fromP, toP, rows, asked) {
+  if (applying) return;
   // The panel as the list has it now, not as the card was drawn: what reads it last decides.
   const current = panels.find((p) => p.origin === toP.origin);
   if (!usable(current)) return drawCopy(fromP, current || toP);
   toP = current;
-  const result = new Map();
-  const access = await token().catch(() => null);
-  if (!access) return start();
-  for (const r of rows) {
-    const o = await writeSetting(toP, access,
-      { section: r.section, key: r.key, value: r.value, ...(asked ? { answer: asked.get(r.section + '\n' + r.key).ask.id } : {}) });
-    result.set(r.section + '\n' + r.key, o);
+  applying = true;
+  for (const e of copyCard.querySelectorAll('button, input, select')) e.disabled = true;
+  try {
+    const access = await token().catch(() => null);
+    if (!access) return start();
+    const answers = asked ? new Map(rows.map((r) => [r.section + '\n' + r.key, asked.get(r.section + '\n' + r.key).ask.id])) : null;
+    const result = await copyRows(toP, access, rows, answers);
+    const again = await readPanel(toP, access);
+    panels = panels.map((p) => (p.origin === toP.origin ? again : p));
+    drawList(stored()?.user || '');
+    const to = panels.find((p) => p.origin === toP.origin);
+    // Usable or not, the card says what happened; one that stopped answering as a panel says why.
+    drawCopy(fromP, to, result);
+  } finally {
+    applying = false;
   }
-  const again = await readPanel(toP, access);
-  panels = panels.map((p) => (p.origin === toP.origin ? again : p));
-  drawList(stored()?.user || '');
-  const to = panels.find((p) => p.origin === toP.origin);
-  // Usable or not, the card says what happened; one that stopped answering as a panel says why.
-  drawCopy(fromP, to, result);
 }
 
 // ------------------------------------------------------------------ start
 
 async function start() {
+  const mine = ++generation;
   copyCard.hidden = true;
   if (!ha) return;
   try {
@@ -298,6 +309,7 @@ async function start() {
     if (e.signIn) keep(KEY, null);
     return say(listCard, 'Panels in Home Assistant', e.message, h('button', { class: 'pill primary', type: 'button', onclick: e.signIn ? signIn : start }, e.signIn ? 'Continue with Home Assistant ↗' : 'Try again'));
   }
+  if (mine !== generation) return;
   if (!me.is_admin) {
     return say(listCard, 'Panels in Home Assistant', me.name + " isn't a Home Assistant administrator. Only administrators manage panels.",
       h('button', { class: 'pill', type: 'button', onclick: signOut }, 'Sign out'));
@@ -312,9 +324,12 @@ async function start() {
   }
   // Each row as soon as its panel answers: a slow one doesn't hold the others back.
   await Promise.all(panels.map(async (p, i) => {
-    panels[i] = await readPanel(p, access);
+    const got = await readPanel(p, access);
+    if (mine !== generation) return;
+    panels[i] = got;
     drawList(me.name);
   }));
+  if (mine !== generation) return;
   drawList(me.name);
   drawCopy();
 }

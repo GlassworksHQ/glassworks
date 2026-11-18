@@ -277,7 +277,9 @@ diagnostics). See the [core's README](../pane-api/src/main/java/dev/glassworks/R
    listed with the panel's question and **Change them too**.
 
 All panels is the one Manage page with a script, served by the panel itself. Its Content-Security-Policy
-lets it reach only this panel's Home Assistant and Manage pages on port 8099. The other pages still have
+lets it connect to this panel's Home Assistant and to any HTTP host on port 8099, and post forms to any such
+host: the policy can't name the other panels, so it doesn't limit them to Manage pages or to your network. The
+script does that itself (no request off your network, the token only after hello). The other pages still have
 no scripts.
 
 Each panel lets a page on another panel read and change its settings. That page holds a Home
