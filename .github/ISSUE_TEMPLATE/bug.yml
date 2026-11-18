@@ -95,7 +95,8 @@ body:
       label: Diagnostics
       description: |
         Whatever applies: the installer's log, the **Radio status**, **Radio helper** or **Update status**
-        sensors, or `adb logcat -s Glassworks Glassworks.ESPHome Glassworks.Voice Glassworks.Sendspin`. Remove tokens, Wi-Fi
+        sensors, or `adb logcat -s Glassworks Glassworks.ESPHome Glassworks.Voice Glassworks.Sendspin`
+        (up to 0.4.3: `adb logcat -s S1Kiosk S1ESPHome S1Voice S1Sendspin`). Remove tokens, Wi-Fi
         passwords and Thread datasets first.
       render: text
 
