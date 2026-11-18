@@ -1,7 +1,7 @@
 // The setup steps that run over the app's setup channel: Home Assistant (the address, sign-in on the
 // panel's own page) and the radio role. The same code whether the channel comes over USB (Kiln's wizard,
 // through adb) or the LAN (the panel's own page, #34): only `open` differs.
-import { NOT_PAIRED, NotSent, Refused, validHaUrl, type SetupChannel, type SetupState, type WifiNetwork } from '@glassworks/setup-channel';
+import { kilnSignInUrl, NOT_PAIRED, NotSent, openSignInWindow, Refused, validHaUrl, type SetupChannel, type SetupState, type WifiNetwork } from '@glassworks/setup-channel';
 import type { Setup } from '../wizard/state';
 import { radioPlan, type PanelApp } from './radioPlan';
 
@@ -19,7 +19,7 @@ export interface ChannelSetupDeps {
   unreachable(e?: unknown): void;
   /** The installed app, which decides how a Thread router gets its network. No answer counts as an older app. */
   app(): Promise<PanelApp | undefined>;
-  /** Opens a tab; must run inside the click (popup blockers). */
+  /** Opens the sign-in's window (a pop-up, else a tab); must run inside the click (pop-up blockers). */
   openTab?: (url: string) => Window | null;
   /**
    * Signs in in this tab instead: the panel's own page goes to the panel's sign-in, which brings the browser back to
@@ -155,7 +155,10 @@ export class ChannelSetup {
     if (!c) return await this.d.done(); // older app: the panel's own setup does the rest
     c.onState = (s) => {
       const cur = this.d.phase();
-      if (cur.phase === 'ha') this.haState(s, { note: cur.note, signingIn: cur.signingIn && !s.ha.signedIn });
+      if (cur.phase !== 'ha') return;
+      // A sign-in this page started has finished in its own window: on to the next step, with no click.
+      if (cur.signingIn && s.ha.signedIn) { this.haState(s); void this.radio(); return; }
+      this.haState(s, { note: cur.note, signingIn: cur.signingIn });
     };
     this.haState(c.state!);
     clearInterval(this.haTimer);
@@ -231,16 +234,17 @@ export class ChannelSetup {
   }
 
   /**
-   * Sign in, once the address is saved: in this tab where [ChannelSetupDeps.signInHere] can, else in a tab that opens
-   * inside the click and is pointed at the panel's sign-in page.
+   * Sign in, once the address is saved: in this tab where [ChannelSetupDeps.signInHere] can, else in a window that
+   * opens inside the click (Kiln) and is pointed at the panel's sign-in. That window closes itself at the end, and
+   * this page moves on when the panel reports the sign-in ([homeAssistant]'s state).
    */
   signIn(url: string): void {
     const s = this.d.phase();
     if (s.phase !== 'ha') return;
     if (!validHaUrl(url)) { this.haState({ ...this.channel!.state!, ha: s.ha }, { error: NOT_AN_ADDRESS }); return; }
     const here = this.d.signInHere;
-    const tab = here ? null : (this.d.openTab ?? ((u) => window.open(u, '_blank')))('about:blank');
-    const note = here ? 'Opening Home Assistant\'s sign-in. You come back here after it.' : 'Sign in on the tab that opened. This page notices when you are done.';
+    const tab = here ? null : (this.d.openTab ?? (() => openSignInWindow()))('about:blank');
+    const note = here ? 'Opening Home Assistant\'s sign-in. You come back here after it.' : 'Sign in to Home Assistant in the window that opened. This step moves on by itself when the panel is signed in.';
     this.d.show({ ...s, error: undefined, signingIn: true, note });
     void (async () => {
       try {
@@ -251,8 +255,8 @@ export class ChannelSetup {
           const cur = this.d.phase();
           if (this.d.here() && cur.phase === 'ha' && cur.signingIn) here();
         }
-        else if (tab) tab.location.href = st.ha.signinUrl;
-        else if (!window.open(st.ha.signinUrl, '_blank')) throw new Error('The browser blocked the sign-in tab. Allow pop-ups for this page, then sign in again.');
+        else if (tab) tab.location.href = kilnSignInUrl(st.ha.signinUrl);
+        else if (!window.open(kilnSignInUrl(st.ha.signinUrl), '_blank')) throw new Error('The browser blocked the sign-in window. Allow pop-ups for this page, then sign in again.');
       } catch (e) {
         tab?.close();
         const cur = this.d.phase();

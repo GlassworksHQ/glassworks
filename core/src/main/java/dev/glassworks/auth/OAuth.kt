@@ -123,18 +123,30 @@ data class PendingSignIn(
     val purpose: String = PURPOSE_SIGNIN,
     /** PKCE secret for this sign-in. Never log it. */
     val codeVerifier: String,
-    /** Started from the setup page (#453): the callback goes back to it, and only in the browser that started. */
-    val toSetup: Boolean = false,
+    /** Where it started, so how its callback ends (#453). */
+    val then: Then = Then.QR,
     /** A setup sign-in's binding cookie ([StateStore.create]), or -1. */
     val slot: Int = -1,
 ) {
     override fun toString() =
         "PendingSignIn(clientId=$clientId, redirectUri=$redirectUri, haBase=$haBase, createdAt=$createdAt, " +
-            "purpose=$purpose, toSetup=$toSetup, slot=$slot, codeVerifier=<redacted>)"
+            "purpose=$purpose, then=$then, slot=$slot, codeVerifier=<redacted>)"
 
     companion object {
         const val PURPOSE_SIGNIN = "signin"
         const val PURPOSE_THREAD = "thread"
+    }
+}
+
+/**
+ * Where a sign-in started (`/signin/continue?then=…`), so how its callback ends: the QR code's done page, back to the
+ * setup page in the same tab (bound to that browser), or Kiln's window, which closes as Kiln moves on by itself.
+ */
+enum class Then {
+    QR, SETUP, KILN;
+
+    companion object {
+        fun of(param: String?) = when (param) { "setup" -> SETUP; "kiln" -> KILN; else -> QR }
     }
 }
 
@@ -154,7 +166,7 @@ class StateStore(
 
     @Synchronized
     fun create(
-        clientId: String, redirectUri: String, haBase: String, purpose: String = PendingSignIn.PURPOSE_SIGNIN, toSetup: Boolean = false,
+        clientId: String, redirectUri: String, haBase: String, purpose: String = PendingSignIn.PURPOSE_SIGNIN, then: Then = Then.QR,
     ): NewSignIn {
         prune()
         while (pending.size >= max) pending.remove(pending.keys.first())
@@ -162,8 +174,8 @@ class StateStore(
         val verifier = OAuth.newCodeVerifier()
         // A setup sign-in gets a slot no other pending one holds, so its binding cookie never replaces a live one,
         // and a browser never holds more than [max] of them. There is always one free: fewer than [max] are pending.
-        val slot = if (toSetup) (0 until max).first { n -> pending.values.none { it.toSetup && it.slot == n } } else -1
-        pending[s] = PendingSignIn(clientId, redirectUri, haBase, clock(), purpose, verifier, toSetup, slot)
+        val slot = if (then == Then.SETUP) (0 until max).first { n -> pending.values.none { it.then == Then.SETUP && it.slot == n } } else -1
+        pending[s] = PendingSignIn(clientId, redirectUri, haBase, clock(), purpose, verifier, then, slot)
         return NewSignIn(s, OAuth.codeChallenge(verifier), slot)
     }
 

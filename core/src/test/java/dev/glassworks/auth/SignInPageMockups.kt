@@ -38,6 +38,8 @@ class SignInPageMockups {
             .handle(SignInServer.Request("GET", "/nope", emptyMap(), emptyMap())))
         // A sign-in the setup page started (#453): its errors lead back to the setup page.
         val fromSetup = mapOf("cookie" to "${SignInServer.HANDOFF}0=nope")
+        // Kiln's sign-in window (#453), where the browser didn't let it close itself
+        save("11-kiln-signed-in", SignInServer.page(200, "OK", "Signed in", "Kiln has moved on.", Look.DONE))
         save("09-expired-from-setup", server.handle(SignInServer.Request("GET", "/callback", mapOf("state" to "nope", "code" to "x"), fromSetup)))
         save("10-another-browser", SignInServer(0, { ha }, HaTokenClient(UrlConnectionPoster()), { _, _ -> }).let { s ->
             val host = mapOf("host" to "192.0.2.10:8099")
