@@ -60,6 +60,9 @@ class PrTypes(unittest.TestCase):
     def test_a_module_build_file_is_not_the_root_one(self):
         self.assertNotEqual(running('core/build.gradle.kts'), set(changes.RULES))
 
+    def test_the_s1_hotspot_name_overlay_runs_app_and_its_release_build(self):
+        self.assertTrue({'app', 'app_apk'} <= running('frames/aqara-s1-plus/tools/radio/hotspot-name/build.sh'))
+
     def test_a_packaged_licence_runs_the_publishing_dry_run(self):
         self.assertIn('libs_publish', running('LICENSES/BSD-3-Clause.txt'))
 
