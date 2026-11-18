@@ -356,6 +356,28 @@ describe('the panel\'s setup page', () => {
     });
   });
 
+  describe('skipping the sign-in (the panel asks for it on its screen)', () => {
+    it('keeps a valid address and moves on', async () => {
+      const panel = fakePanel();
+      panel.paired = true;
+      const lan = new LanSession(panel);
+      await lan.start();
+      await lan.skipHa('http://192.0.2.20:8123');
+      expect(panel.st.ha.url).toBe('http://192.0.2.20:8123');
+      expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'radio' } });
+    });
+
+    it('moves on without saving an address that isn\'t one', async () => {
+      const panel = fakePanel();
+      panel.paired = true;
+      const lan = new LanSession(panel);
+      await lan.start();
+      await lan.skipHa('not an address');
+      expect(panel.asked).not.toContain('set_ha');
+      expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'radio' } });
+    });
+  });
+
   describe('Home Assistant\'s sign-in in this tab (#453)', () => {
     it('saves the address, then goes to the panel\'s sign-in here: no tab', async () => {
       const panel = fakePanel();

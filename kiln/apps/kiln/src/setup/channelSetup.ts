@@ -36,6 +36,8 @@ export interface SetupSteps {
   haAddress?: string;
   signIn(url: string): void;
   saveHa(url: string): Promise<void>;
+  /** Skip the sign-in (the panel asks for it on its own screen): keeps a valid address, then moves on. */
+  skipHa(url: string): Promise<void>;
   radio(): Promise<void>;
   applyRadio(mode: string): Promise<void>;
   /** Ends setup; a promise keeps the button that ran it busy until it settles. */
@@ -284,6 +286,12 @@ export class ChannelSetup {
     const st = await this.state().catch(() => undefined);
     if (st?.ha.signedIn) await this.radio();
     else await this.homeAssistant();
+  }
+
+  /** Moves on without signing in: a valid address is saved as Continue would; anything else is left for the panel. */
+  async skipHa(url: string): Promise<void> {
+    if (!validHaUrl(url)) return this.radio();
+    return this.saveHa(url);
   }
 
   /** The radio role. */

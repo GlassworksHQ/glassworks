@@ -187,7 +187,7 @@ goes from Home Assistant straight to the panel. When you are signed in, the wind
 moves on to the radio by itself. (A browser that blocks pop-ups gets a tab instead; it ends on
 "Signed in. Kiln has moved on.")
 
-<img src="../../../docs/img/kiln/home-assistant.webp" alt="Sign in to Home Assistant. Found at homeassistant.local:8123. An Address field, a Sign in button. Link: Skip, do it on the panel. Button: Continue." width="100%">
+<img src="../../../docs/img/kiln/home-assistant.webp" alt="Sign in to Home Assistant. Found at homeassistant.local:8123. An Address field. Link: Skip, sign in on the panel. Button: Sign in." width="100%">
 
 *Home Assistant also finds the panel by itself. Click **Add** on the discovered panel in
 Settings → Devices & services.*
