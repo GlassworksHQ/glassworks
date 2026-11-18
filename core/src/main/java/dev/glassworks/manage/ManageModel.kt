@@ -73,6 +73,13 @@ interface PanelActions {
 interface ManageHost {
     /** The panel's name ("Glassworks Panel"), for pages that need nothing else. Cheap. */
     val name: String
+
+    /**
+     * The device's model as the panel gives it to Home Assistant ("Panel Hub S1 Plus (S1 Kiosk)"), for a page on
+     * another panel to match against Home Assistant's device registry before it sends a token ([ManageApi.HELLO]).
+     * Cheap. "" when the app doesn't say.
+     */
+    val model: String get() = ""
     fun status(): PanelStatus
     val actions: PanelActions
     /** The panel's diagnostics, as text, before redaction (the server redacts the whole file). */

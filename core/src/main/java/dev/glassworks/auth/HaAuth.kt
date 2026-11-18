@@ -31,7 +31,7 @@ object HaAuth {
     }
 
     /** The Manage log reads it as "Setup" (S1Manage.logSource). */
-    private const val LAN_TAG = "S1Kiosk.SetupChannel"
+    private const val LAN_TAG = "Glassworks.SetupChannel"
 
     private lateinit var prefs: KioskPrefs
     private val main = Handler(Looper.getMainLooper())
@@ -128,7 +128,7 @@ object HaAuth {
             // The setup hotspot's key shows only on the panel's screen, so anyone on it can see the screen (#197).
             pairingOpen = { prefs.lanPairingOpen || context.glassworks.setupHotspot?.isOn == true },
             event = { msg -> android.util.Log.i(LAN_TAG, msg) },
-            onDone = { main.post { context.glassworks.setupHotspot?.cancel() } },
+            onDone = { main.post { context.glassworks.setupHotspot?.cancel(); context.glassworks.settleDeviceSteps(context) } },
             // A phone on the setup hotspot: the screen then shows the setup page's address (#460).
             phoneJoin = dev.glassworks.setup.PhoneJoin(
                 hotspot = { context.glassworks.setupHotspot },

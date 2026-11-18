@@ -32,10 +32,12 @@ class CoreSettings(
     /** Who the dashboard is signed in as in Home Assistant ("Signed in as Alex"); null leaves the row out. */
     private val account: () -> String? = { null },
     /** The app's name, before [version] in About ([dev.glassworks.platform.AppBuild.product]). */
-    private val product: String = dev.glassworks.platform.AppBuild.S1_KIOSK,
+    private val product: String = dev.glassworks.platform.AppBuild.PRODUCT,
     /** The panel's address on Wi-Fi, for the setup page's (null while it has none). */
     private val panelIp: () -> String? = dev.glassworks.InstallerGlue::wlanIpv4,
     private val now: () -> Long = System::currentTimeMillis,
+    /** The device has a PIN, pattern or password ([dev.glassworks.platform.ScreenLock]): the Screen page says what that means. */
+    private val screenLock: () -> Boolean = { false },
 ) {
     class Live(
         /** Full screen: the page hides or shows HA's header and sidebar. */
@@ -52,6 +54,8 @@ class CoreSettings(
                 "Home Assistant", "Found automatically", TextKind.ADDRESS,
                 value = { prefs.urlSetting.takeIf { it != KioskPrefs.AUTO }.orEmpty() },
                 shown = { it.ifBlank { found() } }, restartsApp = true,
+                // The panel's own connection: copying another panel's would sign this one's dashboard out (#466 panel run).
+                perPanel = true,
             ) { prefs.urlSetting = it.ifBlank { KioskPrefs.AUTO } },
             account()?.let { SettingsItem.Info(title = { ACCOUNT_TITLE }, detail = { account().orEmpty() }) },
             switch("Full screen", "Hide Home Assistant's header and sidebar", { prefs.hideHeader }) {
@@ -71,6 +75,7 @@ class CoreSettings(
         )),
         SettingsPlace.SCREEN to SettingsSection(SCREEN, "Screen", presence() + listOfNotNull(
             idle(),
+            lock(),
             if (hardware.light) switch("Brightness", "Follows the room's light", { prefs.autoBrightness }) { prefs.autoBrightness = it; live.brightness() } else null,
             // Android's settings need a finger on the panel's own screen.
             deviceSettings?.takeIf { hardware.touch },
@@ -121,22 +126,28 @@ class CoreSettings(
     }
 
     /**
-     * "Turn off when idle". Without presence it is the screen's only on/off: Home Assistant's `Screen mode` "always"
-     * (which the wake switch also sets) reads as Never, and a time here puts the mode back, so the row says what the screen does.
+     * "Turn off when idle", the same on every frame: Home Assistant's `Screen mode` "always" (the default since #522, and
+     * what the wake switch sets when off) reads as Never, and a time here puts the mode back to presence, as Home
+     * Assistant's *Idle timeout* does, so the row says what the screen does.
      */
-    private fun idle(): SettingsItem.Duration {
-        if (hardware.sensesPresence) return SettingsItem.Duration(
-            "Turn off when idle", value = { prefs.idleOffSec }, choices = IDLE_CHOICES, shown = ::afterIdle,
-        ) { v, done -> prefs.idleOffSec = v; done(null) }
-        return SettingsItem.Duration(
-            "Turn off when idle", value = { if (prefs.screenMode == "always") 0 else prefs.idleOffSec }, choices = IDLE_CHOICES, shown = ::afterIdle,
-        ) { v, done ->
-            prefs.idleOffSec = v
-            // Never leaves the mode as it is, so an "always" screen stays on.
-            if (v > 0) prefs.screenMode = "presence"
-            done(null)
-        }
+    private fun idle() = SettingsItem.Duration(
+        "Turn off when idle", value = { if (prefs.screenMode == "always") 0 else prefs.idleOffSec }, choices = IDLE_CHOICES, shown = ::afterIdle,
+    ) { v, done ->
+        prefs.idleOffSec = v
+        // Never leaves the mode as it is, so an "always" screen stays on.
+        if (v > 0) prefs.screenMode = "presence"
+        done(null)
     }
+
+    /**
+     * A screen lock (#522): when the screen turns off, Android locks the device and someone has to unlock it by hand. Amber,
+     * with the two ways out; while the screen stays on by itself, only the one that's left. None without a lock.
+     */
+    private fun lock(): SettingsItem.Info? = if (!screenLock()) null else SettingsItem.Info(
+        title = { LOCK_TITLE },
+        detail = { if (prefs.screenMode == "always" || prefs.idleOffSec <= 0) LOCK_ALWAYS_ON else LOCK_TURNS_OFF },
+        fixable = { true },
+    )
 
     /**
      * "Allow setup over the network" (#34): pairing for the setup page at `/setup` is open until Home Assistant
@@ -167,8 +178,8 @@ class CoreSettings(
 
     private fun text(
         title: String, hint: String, kind: TextKind, value: () -> String,
-        shown: (String) -> String = { it }, restartsApp: Boolean = false, save: (String) -> Unit,
-    ) = SettingsItem.Text(title, hint, kind, value, shown = shown, restartsApp = restartsApp, save = { v, done -> save(v.trim()); done(null) })
+        shown: (String) -> String = { it }, restartsApp: Boolean = false, perPanel: Boolean = false, save: (String) -> Unit,
+    ) = SettingsItem.Text(title, hint, kind, value, shown = shown, restartsApp = restartsApp, perPanel = perPanel, save = { v, done -> save(v.trim()); done(null) })
 
     private fun switch(title: String, detail: String, value: () -> Boolean, save: (Boolean) -> Unit) =
         SettingsItem.Switch(title, detail, value) { v, done -> save(v); done(null) }
@@ -181,6 +192,11 @@ class CoreSettings(
         const val ACCOUNT_TITLE = "Dashboard sign-in"
         const val WAKE_TITLE = "Wake when someone's near"
         const val SETUP_OVER_NETWORK = "Allow setup over the network"
+        const val LOCK_TITLE = "Screen lock"
+        const val LOCK_TURNS_OFF = "This panel has a screen lock. When the screen turns off, someone has to unlock it. " +
+            "Turn the lock off in Android's settings, or keep the screen always on."
+        const val LOCK_ALWAYS_ON = "This panel has a screen lock. If Home Assistant turns the screen off, someone has to " +
+            "unlock it. Turn the lock off in Android's settings."
         const val LICENCES_TITLE = "Open source licences"
         const val LICENCES_DETAIL = "The open-source software in the app and the radio package"
 

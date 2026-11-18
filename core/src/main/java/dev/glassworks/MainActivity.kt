@@ -86,6 +86,8 @@ open class MainActivity : Activity() {
     /** The panes on setup's Panes step, each with its steps (only usable ones). */
     private val setupPanes by lazy { glassworks.setupPanes(this) }
     private val paneSteps by lazy { setupPanes.flatMap { it.steps } }
+    /** The device's own steps, after Panes (#422's Silent updates). */
+    private val deviceSteps by lazy { glassworks.deviceSetupSteps(this) }
 
     /** "Sign in on this panel instead" was chosen: don't cover HA's login page again (this process). */
     private var usePanelLogin = false
@@ -208,7 +210,7 @@ open class MainActivity : Activity() {
         }
         loadingOverlay = LoadingOverlay(this, glassworks.frame.bootRest).apply { onAction = ::openWifiSettings }
         overlays = runtime.app.overlays(runtime, overlayHost)
-        setupOverlay = SetupOverlay(this, glassworks.frame, setupPanes).apply {
+        setupOverlay = SetupOverlay(this, glassworks.frame, setupPanes, deviceSteps).apply {
             onUsePanel = ::onUsePanelLogin
             onManualUrl = ::onManualHaUrl
             onChooseNetwork = { if (!setupPreview) glassworks.setupHotspot?.configured(); openWifiSettings() }
@@ -271,7 +273,7 @@ open class MainActivity : Activity() {
         intent?.let { i -> handler.post { applySetupPreview(i) } }
         handler.post(setupTick)
         // The app's upkeep on each start (the S1's direct-boot splash).
-        Thread({ runtime.app.activityStarted(applicationContext) }, "s1-boot-splash").start()
+        Thread({ runtime.app.activityStarted(applicationContext) }, "glassworks-boot-splash").start()
         hideSystemUi()
     }
 
@@ -388,6 +390,7 @@ open class MainActivity : Activity() {
             usePanelLogin = usePanelLogin,
             showing = setupOverlay.isShowing && !setupPreview,
             paneSteps = steps,
+            ownSteps = deviceSteps.map { PaneStepFacts(it.id, it.done(), it.reason) },
             panesChosen = setupOverlay.panesChosen,
             dashboardLoaded = currentUrl.let { u -> u != null && FrontendUrls.sameOrigin(u, prefs.haBase) && !FrontendUrls.isAuthorizePage(u, prefs.haBase) },
             improv = ImprovController.setupFacts,
@@ -433,6 +436,7 @@ open class MainActivity : Activity() {
             setupOverlay.render(setupModel(d, d.step, d.done, preview = false))
         } else if (setupOverlay.isShowing && setupOverlay.model?.step != SetupFlow.DONE) {
             Log.i(TAG, "Setup complete; loading the dashboard")
+            glassworks.settleDeviceSteps(this)
             glassworks.setupHotspot?.cancel() // setup is over: its hotspot too (#197)
             hotspotAsked = false
             setupOverlay.finish { loadDashboardIfNeeded() }
@@ -457,7 +461,7 @@ open class MainActivity : Activity() {
     }
 
     /** Every step a preview can show: all the panes' steps, as if every pane were on. */
-    private fun previewFlow() = SetupFlow.ids(setupPanes.isNotEmpty(), paneSteps.map { it.id })
+    private fun previewFlow() = SetupFlow.ids(setupPanes.isNotEmpty(), paneSteps.map { it.id }, deviceSteps.map { it.id })
 
     private fun setupModel(d: dev.glassworks.setup.SetupDecision, step: String, done: Set<String>, preview: Boolean) =
         SetupOverlay.Model(
@@ -526,10 +530,13 @@ open class MainActivity : Activity() {
         if (!onDashboard && !justLoaded) loadDashboard()
     }
 
-    /** `--ez show_setup true [--es setup_step wifi|ha|panes|signin|done]`, `--ez show_signin true` (= signin). */
+    /**
+     * `--ez show_setup true [--es setup_step <id>]` (a core step, wifi|signin|ha|panes|done, a pane's step such as `radio`,
+     * or a device step such as `silent_updates`), `--ez show_signin true` (= signin).
+     */
     private fun applySetupPreview(intent: Intent) {
         val asked = intent.getStringExtra("setup_step")
-        val step = SetupFlow.parse(asked, setupPanes.isNotEmpty(), paneSteps.map { it.id })
+        val step = SetupFlow.parse(asked, setupPanes.isNotEmpty(), paneSteps.map { it.id }, deviceSteps.map { it.id })
         if (asked != null && step == null) Log.e(TAG, "setup_step '$asked' is not a step: ${previewFlow()}")
         when {
             intent.getBooleanExtra("show_signin", false) -> startSetupPreview(SetupFlow.SIGNIN)
@@ -1251,7 +1258,7 @@ open class MainActivity : Activity() {
          */
         fun screenExtras(intent: Intent, trusted: (Intent) -> Boolean): Boolean {
             if (intent.extras == null || trusted(intent)) return false
-            Log.w("S1Kiosk", "ignored the extras of a start through ${intent.component?.shortClassName}: settings change only through adb")
+            Log.w("Glassworks", "ignored the extras of a start through ${intent.component?.shortClassName}: settings change only through adb")
             intent.replaceExtras(null as Bundle?)
             return true
         }
@@ -1265,7 +1272,7 @@ open class MainActivity : Activity() {
 
         /** Onboarding/dashboard background (#0a0b0f), also used to cover the page until first paint. */
         private const val BACKGROUND = 0xFF0A0B0F.toInt()
-        private const val TAG = "S1Kiosk"
+        private const val TAG = "Glassworks"
         private const val REQ_STARTUP = 1
         private const val REQ_GECKO = 2
         private const val REQ_HOTSPOT = 3

@@ -9,7 +9,7 @@ import dev.glassworks.update.UpdateInstallReceiver
 /**
  * The classes the app's manifest declares for the core's Android components. Android knows a component by its
  * class name: device admin, the HOME choice, PackageInstaller's status receiver and `am start -n` all name it. An
- * app whose installed apps know other names (the S1's and the generic app's `sh.edm.s1kiosk.*`, #22) declares a
+ * app whose installed apps know other names (the S1's `sh.edm.s1kiosk.*`, #22) declares a
  * subclass under each, and the core starts and names the app's classes, never its own.
  */
 class AppComponents(

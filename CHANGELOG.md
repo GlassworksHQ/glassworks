@@ -9,6 +9,18 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 ## [Unreleased]
 
 ### Added
+- **Setup says when updates would ask for a tap.** On a new setup of an S1 whose boot image has no update
+  service, a *Silent updates* step follows Panes: Kiln adds the service from a computer, with a QR code to it.
+  It's never required: Continue moves on. Panels that are already set up don't see it, and an S1 with the
+  service, whose updates install by themselves, skips it.
+- **The panel shows its frame version.** The S1 Plus page in the panel's settings and on the Manage page has a new
+  *Frame version* row: the version of the parts of the panel Glassworks owns, such as its boot-side services and boot
+  animation, not Android's. A panel installed before frame versions shows *Before 1.0.0*. A new *Frame update*
+  entity in Home Assistant says when a newer frame version is out and how to install it. The first one comes with
+  Glassworks 1.0.0, and a panel installed before it needs one update with Kiln to get it.
+- **The Screen settings warn about a screen lock.** On a tablet with a PIN, pattern or password, Android locks
+  it when the screen turns off, and someone has to unlock it. The panel's **Settings → Screen** and the Manage
+  page now say so in amber, with the way out: turn the lock off in Android's settings, or keep the screen on.
 - **Glassworks for generic Android gets the Diagnostics pane.** The app on tablets and the lululemon Mirror, in
   both of its builds, now sends its CPU, RAM, storage, Wi-Fi and uptime to Home Assistant, as S1 Kiosk does, and
   shows them on its Diagnostics page on the panel and on the Manage page. These devices have no CPU temperature
@@ -157,8 +169,7 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   stepping each second. See [Open a view](docs/notifications.md#open-a-view).
 - **Glassworks has its own icon.** The launcher, the home app chooser and Settings show the Glassworks
   mark on night, the brand's app icon, where they showed Android's green robot on Android 6 and 7. On
-  Android 13 and later it follows themed icons. The notification shows the mark in white. This is the
-  generic app's icon; S1 Kiosk keeps its own.
+  Android 13 and later it follows themed icons. The notification shows the mark in white.
 - **Glassworks for Android 6 and 7 tablets and the lululemon Mirror.** Devices on Android 6.0 to 7.1 get
   a legacy build of Glassworks for generic Android, a separate app with its own updates. Kiln knows which
   build a device needs and refuses the other one, and the legacy build is what it installs on the Mirror.
@@ -175,6 +186,17 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   setting if it was already on. Other devices don't show the chip.
 
 ### Changed
+- **S1 Kiosk is now Glassworks.** The panel's app shows as Glassworks, with the Glassworks icon, in the launcher,
+  in Android's Settings → Apps, in About and in its notification. In Home Assistant the device's model reads
+  *Panel Hub S1 Plus (Glassworks)* and the update card is called *Glassworks*. The rename keeps the device, its entities and
+  their ids, and the update installs over the old app with its settings. With the radio as a Zigbee
+  router, ZHA reads the maker as Glassworks after it interviews the panel again.
+- **The screen stays on until you pick a timeout.** A panel that never chose a screen mode now keeps its screen
+  on (*Screen mode* `always`), so an S1 that never chose stops turning off after the update. To have it turn
+  off again, pick a time in **Settings → Screen → Turn off when idle**, turn on **Wake when someone's near**, or
+  set *Screen mode* or *Idle timeout* from Home Assistant. A choice you made stays as it is. While the screen is
+  always on, **Turn off when idle** reads *Never*, also on the S1, and Home Assistant's *Screen* light can still
+  turn it off on a device without device admin.
 - **The setup screen's Wi-Fi step leads with one way to join.** It shows the best way the panel can do
   right now: Bluetooth setup from Home Assistant, else **Set up from a phone** through the panel's own
   Wi-Fi, else **Choose a network** to type it on the panel. The other ways are one tap away behind
@@ -191,6 +213,13 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   *Camera presence*. Home Assistant removes the ones a device can't back on the next reconnect after the
   update; if the hardware comes back, so does the entity, usually with its old id. An automation that used
   one stops working. Nothing changes on the S1.
+- **Setup signs in to Home Assistant without leaving you in another tab.** On the panel's setup page (`:8099/setup`),
+  **Sign in** now takes you to Home Assistant's sign-in in the same tab and brings you back to the setup
+  page at the next step, instead of leaving you in a second tab. Kiln over USB signs in in a small window
+  that closes by itself, and Kiln moves on to the radio without a click. The Home Assistant step offers one
+  way on: **Sign in** until the panel is signed in, then **Continue**; "Skip, sign in on the panel" keeps
+  the address and leaves the sign-in to the panel's screen. The list of steps shows only the steps
+  your panel has: a panel without a radio no longer lists a Radio step it skips.
 - **The S1's Bluetooth proxy goes by the panel's Bluetooth address.** The proxy now tells Home
   Assistant the panel's own Bluetooth address, as ESPHome proxies do, instead of its network address.
   Home Assistant moves the panel's scanner to the new address by itself, once, with nothing for you to
@@ -396,6 +425,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   which a panel without touch, such as the Mirror, can't offer: turning on the ONVIF stream ended at
   "Needs Presence + camera." It now has the panel's two cards, *Presence only* and *Presence + camera*,
   on every panel, and the Log says who changed it. "Needs Presence + camera." links to them.
+- **Setup's Home Assistant step: sign in first, then add it.** The two sub-steps now always read *Sign in*,
+  then *Add it*, and the marker sits on the one the card shows. Before, the screen could show the sign-in
+  under *Add it*, and after signing in *Sign in* turned green while *Add it* stayed current. If Home
+  Assistant added the panel before the sign-in, *Add it* shows green and *Sign in* is current.
 - **A screen without touch waits for Home Assistant after phone setup.** On the Mirror, the setup screen
   kept showing "Scan to set it up." after the phone signed in. It now says it is waiting for Home
   Assistant to add the panel, and where: Settings → Devices & services, or the old entry's
@@ -581,6 +614,13 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   interface. Comes with the radio bundle.
 - **Settings menu: cards were cut off 30 dp from the top and bottom of the screen.** They now scroll
   all the way to the screen edges.
+- **Signing in works when Home Assistant's name also gives an IPv6 address the panel can't reach.** On a
+  network where `homeassistant.local` resolves to Home Assistant's IPv6 address as well as its IPv4 one,
+  for example a VLAN without IPv6 behind an mDNS reflector, the Manage page's sign-in stopped after about
+  9 seconds with "Home Assistant didn't say who signed in", and checking a panel's sign-in failed the same
+  way. The dashboard was fine. The panel now tries Home Assistant's addresses the way a browser does, so it
+  connects over IPv4 straight away. This covers the sign-in, keeping it signed in, finding Home Assistant,
+  notification pictures and the Thread and blueprint calls.
 
 ### Changed
 - **Updates are found among the repo's other releases.** The panel now picks its own newest release

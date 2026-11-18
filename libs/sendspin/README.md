@@ -90,7 +90,7 @@ store.
 | `WsClient` | The WebSocket client the player runs on (`ws://` and `wss://`), usable on its own. |
 | internal | The protocol messages, the Noise `KKpsk2` handshake, clock sync (`TimeFilter`), the FLAC framing and MediaCodec decoder, the jitter buffer and the playback scheduler on an `AudioTrack`. |
 
-The manifest adds `INTERNET` and `ACCESS_NETWORK_STATE`. Logs use the tag `S1Sendspin` and never
+The manifest adds `INTERNET` and `ACCESS_NETWORK_STATE`. Logs use the tag `Glassworks.Sendspin` and never
 contain a key or token. How the player behaves on the S1, and how its sync was measured, is in
 [docs/sendspin.md](../../docs/sendspin.md).
 

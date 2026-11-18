@@ -9,11 +9,11 @@ plugins {
 val probeVersion = (findProperty("probeVersion") as String?)?.toInt() ?: 1
 
 android {
-    // The Mirror pipeline accepts only sh.edm.s1kiosk (image.ts), so the probe borrows S1 Kiosk's id.
-    namespace = "sh.edm.s1kiosk"
+    // Its own id (#527); the Mirror pipeline takes it with --probe (frames/lululemon-mirror/installer/src/app.ts).
+    namespace = "dev.glassworks.mirror.probe"
     compileSdk = 36
     defaultConfig {
-        applicationId = "sh.edm.s1kiosk"
+        applicationId = "dev.glassworks.mirror.probe"
         minSdk = 23
         // Android 6 (the Mirror): runtime permissions as API 23 has them, nothing newer to opt out of.
         targetSdk = 23

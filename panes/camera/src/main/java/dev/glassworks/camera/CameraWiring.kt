@@ -27,7 +27,7 @@ import dev.glassworks.PaneOverlay
 import dev.glassworks.device.DeviceHost
 
 /**
- * The camera pane (#117) as an app builds it: its definition, the pane for the device, and the privacy dot. S1 Kiosk
+ * The camera pane (#117) as an app builds it: its definition, the pane for the device, and the privacy dot. The S1 app
  * (S1Panes) and the generic app (GenericParts) both build it here, so the two can't drift apart. In the shell's
  * package: it builds on the app's runtime and device host, which the pane's own code (dev.glassworks) never names.
  */

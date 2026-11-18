@@ -84,7 +84,7 @@ const FINGERPRINT = 'Android/msm8916_64/msm8916_64:6.0.1/MMB29M/11120023:userdeb
 
 /**
  * A stand-in for the legacy build of Glassworks for generic Android (#408), as its manifest is: the
- * package, the privileged permissions, MainActivity (sh.edm.s1kiosk.MainActivity) behind
+ * package, the privileged permissions, MainActivity (dev.glassworks.MainActivity) behind
  * WRITE_SECURE_SETTINGS, and the Launcher alias with MAIN+HOME+DEFAULT. Each option breaks one thing.
  */
 export function fakeMirrorApk(o: {
@@ -99,8 +99,8 @@ export function fakeMirrorApk(o: {
   const aliasFilters = home === 'none' ? [filter(['MAIN'], ['LAUNCHER'])]
     : [filter(['MAIN'], ['LAUNCHER']), filter(['MAIN'], home === 'no-default' ? ['HOME'] : ['HOME', 'DEFAULT'])];
   const tree: FakeEl[] = [...perms, { el: 'application', children: [
-    { el: 'activity', attrs: { name: 'sh.edm.s1kiosk.MainActivity', permission: 'android.permission.WRITE_SECURE_SETTINGS', exported: true } },
-    { el: 'activity-alias', attrs: { name: 'dev.glassworks.generic.Launcher', targetActivity: 'sh.edm.s1kiosk.MainActivity', exported: true }, children: aliasFilters },
+    { el: 'activity', attrs: { name: 'dev.glassworks.MainActivity', permission: 'android.permission.WRITE_SECURE_SETTINGS', exported: true } },
+    { el: 'activity-alias', attrs: { name: 'dev.glassworks.generic.Launcher', targetActivity: 'dev.glassworks.MainActivity', exported: true }, children: aliasFilters },
   ] }];
   return fakeApk(o.package ?? GLASSWORKS.package, { minSdk: o.minSdk ?? 23, home: tree, ...(o.libs ? { libs: o.libs } : {}) });
 }
@@ -283,7 +283,7 @@ export class FirstBootMirror implements PanelShell {
         `    mConfiguration={1.0 ?mcc?mnc en_US ldltr sw1080dp w${w}dp h${h - 48}dp 240dpi xlrg ${rot % 2 ? 'port' : 'land'} finger -keyb/v/h -nav/h s.4}`,
         '    mHasSurface=true mShownFrame=[0.0,0.0][1080.0,1920.0] isReadyForDisplay()=true',
         '',
-        '  mCurrentFocus=Window{9a3e21c u0 dev.glassworks.generic_android.legacy/sh.edm.s1kiosk.MainActivity}',
+        '  mCurrentFocus=Window{9a3e21c u0 dev.glassworks.generic_android.legacy/dev.glassworks.MainActivity}',
         '  mInTouchMode=true mLayoutSeq=58',
         `  mScreenRect=[0,0][${w},${h}]`,
         '  mDisplayFrozen=false windows=0 client=false apps=0  waitingForConfig=false',

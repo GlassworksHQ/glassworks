@@ -180,6 +180,13 @@ address changes.
 for everyone for about a minute. The Reboot button only shows where the app can reboot the panel
 (when it's the device owner).
 
+**Home Assistant's name gives more than one address.** A `.local` name can resolve to Home
+Assistant's IPv6 address as well as its IPv4 one, also on a network where the panel has no IPv6 (an
+mDNS reflector relays it from another VLAN). The panel tries the addresses the way a browser does: an
+address that doesn't answer gets a quarter of a second, then the next one starts, and the first to
+connect wins. Older versions tried only the first address, and the sign-in failed after about 9
+seconds.
+
 **Administrators only, for now.** Like Home Assistant's own device pages, only an administrator can
 manage a panel. Whether other users get a say is open (#124).
 
@@ -251,3 +258,45 @@ may come later.
 
 The server is `dev.glassworks.manage.ManageServer`; a frame supplies a `ManageHost` (status, actions,
 diagnostics). See the [core's README](../pane-api/src/main/java/dev/glassworks/README.md#the-manage-page).
+
+## Other panels, through Home Assistant
+
+Each panel lets a page on another panel read and change its settings (#466). That page holds a Home
+Assistant access token, and each panel checks it with its own Home Assistant. No panel trusts another,
+and there are no shared keys and no leader.
+
+- **Who may.** Administrators only, as on the page itself. The panel asks its Home Assistant who the token
+  belongs to (`auth/current_user`), at the address it uses, and only when that address is on your network.
+  It keeps the answer for a minute, so a token revoked in Home Assistant still works here for up to a minute.
+  An answer counts only for the address that gave it: when the panel's Home Assistant address changes, the
+  page has to sign in again.
+  A token Home Assistant didn't confirm stays refused for 10 seconds, except for a sign-in from another panel's
+  page, which always asks. The panel asks Home Assistant about at most two tokens at a time: while Home Assistant
+  is slow, the rest are told to try again in a moment. One address (one computer, usually) can start at most
+  five such sign-ins in 10 seconds; then it waits.
+  Whether other Home Assistant users get a say is still open.
+- **What it reads.** Every setting the page can change, with its value as text, the way the page's forms send
+  it. A sign-in (a camera's) says only whether it is set: no password or user name leaves the panel.
+  Actions such as **Allow setup over the network** aren't listed.
+  The panel's own Home Assistant address (which is also its dashboard's) is marked as its own: All panels never
+  copies it, and a page on another panel can't change it.
+- **What it changes.** One setting at a time, through the same checks and saves as the panel's own menu.
+  A change that asks first on the panel (turning the radio off) answers with the panel's question and a
+  one-time id. It runs only when the same token sends the same change again with that id, within 5 minutes,
+  as the page's own dialogs do. A sign-in and an action can't be changed this way. Each change goes in the Log with the user and
+  the address of the page that sent it.
+- **Signing in from another panel's page.** That page can also sign your browser in here with its token,
+  so the panel's own Manage page opens without another Home Assistant sign-in. The panel asks Home Assistant
+  about the token then and there, without the minute-old answer or a recent refusal. The sign-in lasts until
+  the browser closes. The panel doesn't keep or revoke the token: it belongs to the other page.
+- **What it can't protect.** The token travels over plain HTTP, as it does to a Home Assistant on
+  `http://`. Someone who can read your Wi-Fi traffic could use it until it expires (30 minutes) or the
+  other page signs out. The panel never writes the token anywhere, including the Log and the diagnostics.
+
+For developers: `GET` and `POST` `/manage/api/settings` with `Authorization: Bearer <token>`, form-encoded
+`section`, `key`, `value` and, for a question's answer, `answer=<id>` (`ManageApi`); `POST /manage/ha/token`
+with `token` and `next` signs the browser in (`ManageServer.HANDOFF`). `GET /manage/api/hello` needs no token
+and answers only that this is a Glassworks panel and its model as Home Assistant shows it. Any page on any site can read it, so a site you visit can learn that a panel answers at an address on your
+network, and its model; no token, setting or name of yours comes with it. Any page may call
+them (CORS `*`): no cookie counts there. Chrome's private-network permission goes only to a page on the local
+network (a private address, `localhost` or a `.local` name).

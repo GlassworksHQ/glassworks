@@ -1993,16 +1993,16 @@ class PanesAsAsked(unittest.TestCase):
     both, and Assist read -0.4 % of a core. Only samples whose kiosk log shows what their label says
     count, and the report says when Assist was off by its microphone mute alone."""
 
-    LOG = ("11-13 00:00:01.000  100  100 I S1ESPHome: ESPHome device 'panel' mac 00:00:00:00:00:00, voice=true\n"
-           "11-13 00:00:02.000  100  100 I S1Sendspin: Sendspin player starting\n"
-           "11-13 00:00:03.000  100  100 I S1Voice: Microphone open: source=VOICE_RECOGNITION\n")
+    LOG = ("11-13 00:00:01.000  100  100 I Glassworks.ESPHome: ESPHome device 'panel' mac 00:00:00:00:00:00, voice=true\n"
+           "11-13 00:00:02.000  100  100 I Glassworks.Sendspin: Sendspin player starting\n"
+           "11-13 00:00:03.000  100  100 I Glassworks.Voice: Microphone open: source=VOICE_RECOGNITION\n")
 
     def test_the_kiosk_log_gives_what_ran(self):
         self.assertEqual(P.pane_state(self.LOG), {"voice": True, "sendspin": True, "mic": True})
-        muted = self.LOG + "11-13 00:00:04.000  100  100 I S1Voice: Microphone muted (released)\n"
+        muted = self.LOG + "11-13 00:00:04.000  100  100 I Glassworks.Voice: Microphone muted (released)\n"
         self.assertEqual(P.pane_state(muted), {"voice": True, "sendspin": True, "mic": False})
         # A later start (the app restarted) is the one that counts: nothing after it ran yet.
-        restarted = self.LOG + "11-13 00:00:09.000  200  200 I S1ESPHome: ESPHome device 'panel' mac 00:00:00:00:00:00, voice=false\n"
+        restarted = self.LOG + "11-13 00:00:09.000  200  200 I Glassworks.ESPHome: ESPHome device 'panel' mac 00:00:00:00:00:00, voice=false\n"
         self.assertEqual(P.pane_state(restarted), {"voice": False, "sendspin": False, "mic": False})
         self.assertIsNone(P.pane_state("nothing from the kiosk")["voice"])
 

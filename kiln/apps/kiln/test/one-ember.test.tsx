@@ -41,7 +41,7 @@ describe('one ember action per screen', () => {
     ['radio-thread-old', 'Finish'],
     ['wifi', 'Continue'],
     ['wifi-new', 'Connect'],
-    ['home-assistant', 'Continue'],
+    ['home-assistant', 'Sign in'], // not signed in yet: Sign in is the way on, not Continue
     ['radio', 'Finish'],
     ['radio-next', 'Finish'],
     ['undo', 'Continue'],
@@ -77,7 +77,7 @@ describe('one ember action per screen', () => {
 
   it('Thread router on 0.4.3, which can\'t: says so; pasting the dataset only under More help', async () => {
     await show('radio-thread-old');
-    expect(document.querySelector('.lede')!.textContent).toMatch(/S1 Kiosk 0\.4\.3 can't get your Thread network from Home Assistant itself/);
+    expect(document.querySelector('.lede')!.textContent).toMatch(/Glassworks 0\.4\.3 can't get your Thread network from Home Assistant itself/);
     expect(document.body.textContent).not.toMatch(/Active dataset TLVs/);
     await act(async () => { [...document.querySelectorAll('button')].find((b) => b.textContent === 'More help')!.click(); });
     const more = document.body.textContent!;

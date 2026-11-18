@@ -219,12 +219,12 @@ class ManagePartsTest {
     }
 
     @Test fun logcatLines() {
-        val src: (String) -> String? = { if (it.startsWith("S1")) "Radio" else null }
-        val e = ManageLog.fromLogcat("1731456000.123  1234  1250 W S1Kiosk.Radio: ZHA disconnected", src)!!
+        val src: (String) -> String? = { if (it.startsWith("Glassworks.Radio")) "Radio" else null }
+        val e = ManageLog.fromLogcat("1731456000.123  1234  1250 W Glassworks.Radio: ZHA disconnected", src)!!
         assertEquals(1731456000123L, e.timeMs)
         assertEquals(LogEntry.Level.WARNING, e.level)
         assertEquals("ZHA disconnected", e.text)
-        assertNull(ManageLog.fromLogcat("1731456000.123  1234  1250 D S1Kiosk.Radio: debug", src))
+        assertNull(ManageLog.fromLogcat("1731456000.123  1234  1250 D Glassworks.Radio: debug", src))
         assertNull(ManageLog.fromLogcat("1731456000.123  1234  1250 I GeckoConsole: page", src))
         assertNull(ManageLog.fromLogcat("--------- beginning of main", src))
     }

@@ -122,6 +122,9 @@ open class AppManage(
 
         override val name = PageShell.PRODUCT_NAME
 
+        /** The model [PanelDevice] gives Home Assistant (its `DeviceIdentity.model`); `ManageModelPinTest` keeps the two the same. */
+        override val model: String get() = deviceModel(runtime.frame.hardware.model, runtime.build.product)
+
         override fun status(): PanelStatus {
             val defs = runtime.paneDefinitions(app)
             // The panel menu's own model (#242): the same sections, items and saves.
@@ -322,7 +325,10 @@ open class AppManage(
     }
 
     companion object {
-        const val TAG = "S1Manage"
+        const val TAG = "Glassworks.Manage"
+
+        /** "Panel Hub S1 Plus (S1 Kiosk)": the device's model as Home Assistant shows it. */
+        fun deviceModel(model: String, product: String) = "$model ($product)"
 
         /** How long a restart or reboot waits, so the page that started it reaches the browser first. */
         const val ACTION_DELAY_MS = 1_000L
@@ -346,16 +352,17 @@ open class AppManage(
 
         /** The core's log tags, in words, for the Manage log. The rest (Gecko, Android) stays out; an app adds its own ([Own.logSource]). */
         fun logSource(tag: String): String? = when {
-            tag.startsWith("S1Kiosk.Screen") -> "Screen"
-            tag.startsWith("S1Kiosk.Wifi") -> "Wi-Fi"
-            tag.startsWith("S1Kiosk.Update") -> "Updates"
-            tag.startsWith("S1Kiosk.Improv") || tag.startsWith("S1Kiosk.SetupChannel") -> "Setup"
-            tag.startsWith("S1Kiosk.Voice") || tag == "S1Voice" -> "Voice"
-            tag == "S1Sendspin" -> "Music"
-            tag == "S1Auth" -> "Sign-in"
-            tag == "S1Discovery" -> "Home Assistant"
+            tag.startsWith("Glassworks.Screen") -> "Screen"
+            tag.startsWith("Glassworks.Wifi") -> "Wi-Fi"
+            tag.startsWith("Glassworks.Update") -> "Updates"
+            tag.startsWith("Glassworks.Improv") || tag.startsWith("Glassworks.SetupChannel") -> "Setup"
+            tag.startsWith("Glassworks.Voice") -> "Voice"
+            tag == "Glassworks.Sendspin" -> "Music"
+            tag == "Glassworks.Auth" -> "Sign-in"
+            tag == "Glassworks.Discovery" -> "Home Assistant"
             tag == PanelDevice.ESPHOME_LOG_TAG -> "Home Assistant"
-            tag == "S1Kiosk" || tag.startsWith("S1Kiosk.") -> "App"
+            tag == TAG -> null
+            tag == "Glassworks" || tag.startsWith("Glassworks.") -> "App"
             else -> null
         }
     }

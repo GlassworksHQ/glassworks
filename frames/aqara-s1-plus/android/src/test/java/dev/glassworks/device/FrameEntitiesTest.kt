@@ -72,13 +72,18 @@ class FrameEntitiesTest {
             listOf("screen", "auto_brightness", "illuminance", "screen_mode", "idle_timeout", "max_brightness", "camera_presence"),
         ) { sensor(Sensor.TYPE_LIGHT); camera() },
         Case(
-            "lululemon-mirror: a camera, no sensors, no touch", { generic() },
+            "lululemon-mirror: a camera, no sensors, no touch", { generic(sh.edm.s1kiosk.frame.TestFrames.MIRROR_PROPS) },
             listOf("screen", "screen_mode", "idle_timeout", "camera_presence"),
         ) { camera(); keysOnly() },
     )
 
     @Test fun eachFrameListsTheScreenEntitiesItsHardwareBacks() {
         for (c in cases) assertEquals(c.name, c.screen, entityIds(c).filter { it in screenIds })
+    }
+
+    /** #139: the Frame update entity only on a frame with releases of its own. */
+    @Test fun onlyTheS1AndTheMirrorHaveAFrameUpdate() {
+        for (c in cases) assertEquals(c.name, c.name.startsWith("aqara-s1-plus") || c.name.startsWith("lululemon-mirror"), "frame_update" in entityIds(c))
     }
 
     @Test fun theCameraPaneOffKeepsCameraPresence() {
@@ -136,7 +141,8 @@ class FrameEntitiesTest {
     }
 
     /** The generic app's frame: Android's standard proximity and light sensors, when the device lists them. */
-    private fun generic() = GenericAndroid(app, presence = ProximityPresence("test"), light = AmbientLight("test"))
+    private fun generic(props: Map<String, String> = emptyMap()) =
+        GenericAndroid(app, presence = ProximityPresence("test"), light = AmbientLight("test"), prop = { props[it].orEmpty() })
 
     private fun sensor(type: Int, maxRange: Float = 5f) {
         val s = ShadowSensor.newInstance(type)

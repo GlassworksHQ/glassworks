@@ -19,10 +19,10 @@ import dev.glassworks.AppParts
 import dev.glassworks.GlassworksRuntime
 import dev.glassworks.KioskPrefs
 import dev.glassworks.AppComponents
-import sh.edm.s1kiosk.AdminReceiver
-import sh.edm.s1kiosk.KioskService
-import sh.edm.s1kiosk.MainActivity
-import sh.edm.s1kiosk.update.UpdateInstallReceiver
+import dev.glassworks.AdminReceiver
+import dev.glassworks.KioskService
+import dev.glassworks.MainActivity
+import dev.glassworks.update.UpdateInstallReceiver
 import dev.glassworks.OverlayHost
 import dev.glassworks.PaneOverlay
 import dev.glassworks.PaneFiles
@@ -52,7 +52,7 @@ import dev.glassworks.assist.wakeChime
 /**
  * The generic app's parts ([AppParts]): its fixed set of panes (#23), Assist with its timers and Sendspin, which
  * need a microphone and a speaker, the camera (#117), which needs a camera, and diagnostics, which needs nothing. A
- * device without a pane's hardware hides the pane (CantRun). The wiring of each pane is S1 Kiosk's (S1Panes), with
+ * device without a pane's hardware hides the pane (CantRun). The wiring of each pane is the S1 app's (S1Panes), with
  * the S1's own panes left out.
  */
 class GenericParts : AppParts {
@@ -95,7 +95,7 @@ class GenericParts : AppParts {
     // Settings from intent extras: only a start of MainActivity itself, which takes WRITE_SECURE_SETTINGS (adb) unless
     // it is the app's own; never through the launcher alias ([LAUNCHER]), which any app can start. AppParts'
     // trustsExtras does exactly that (#409).
-    // The subclasses at the names the Tablet, the Mirror and Kiln know (#22).
+    // The core's own classes: this app has no older names to keep (#527).
     override val components = AppComponents(MainActivity::class.java, KioskService::class.java, AdminReceiver::class.java, UpdateInstallReceiver::class.java)
 
     override fun serviceStarted(context: Context, runtime: GlassworksRuntime) {
@@ -103,7 +103,7 @@ class GenericParts : AppParts {
         voiceUi = VoiceUi(runtime.voiceState)
     }
 
-    /** Each pane's settings where S1 Kiosk keeps them ([PaneFiles]): `kiosk.xml`, opened through SecretFiles. */
+    /** Each pane's settings where the S1 app keeps them ([PaneFiles]): `kiosk.xml`, opened through SecretFiles. */
     override fun paneFile(context: Context, namespace: String): SharedPreferences {
         require(namespace in PANES) { "No settings file for pane '$namespace'" }
         return PaneFiles.open(context, namespace)
@@ -115,7 +115,7 @@ class GenericParts : AppParts {
     /** A voice event (main thread): the overlay, the voice state and the screen follow it. */
     private fun onVoiceEvent(runtime: GlassworksRuntime, e: VoiceEvent) {
         voiceUi = voiceUi.on(e)
-        try { runtime.onVoiceUi?.invoke() } catch (t: Throwable) { Log.w("S1Kiosk.Voice", "voice overlay failed", t) }
+        try { runtime.onVoiceUi?.invoke() } catch (t: Throwable) { Log.w("Glassworks.Voice", "voice overlay failed", t) }
         if (e is VoiceEvent.Heard || e is VoiceEvent.Reply) return
         runtime.voiceState = voiceUi.state
         if (e !is VoiceEvent.Idle && e !is VoiceEvent.Error) runtime.screen.wake("voice")

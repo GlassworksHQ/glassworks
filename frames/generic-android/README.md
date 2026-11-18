@@ -61,7 +61,10 @@ Kiln grants the camera. On a camera without 1280x720 (Android 6-7's) its stream 
 stays off with the reason on the Camera page; presence works either way. The screen follows Android's standard proximity sensor (near means under
 5 cm, so a hand over it, not a person across the room) and the light sensor for brightness. Many tablets have
 no proximity sensor; then the screen goes off after the idle time and wakes on a touch. Until setup is done and
-the dashboard has loaded, it stays on (#449).
+the dashboard has loaded, it stays on (#449). The screen stays on until someone picks a time in **Settings → Screen →
+Turn off when idle** or turns on waking (#522). On a device with a PIN, pattern or password, Android locks it when the
+screen goes off, and someone has to unlock it: the Screen settings and the Manage page say so in amber, with the way
+out (turn the lock off in Android's settings, or keep the screen on).
 
 | | S1 Kiosk on a tablet | Glassworks for generic Android |
 |---|---|---|
@@ -71,7 +74,7 @@ the dashboard has loaded, it stays on (#449).
 | Presence and light | None | Android's proximity and light sensors |
 
 Settings that S1 Kiosk takes as intent extras (`--es url …`, `--es api_key …`, the panes' switches) reach
-this app only from adb: `adb shell am start -n dev.glassworks.generic_android/sh.edm.s1kiosk.MainActivity --es …`.
+this app only from adb: `adb shell am start -n dev.glassworks.generic_android/dev.glassworks.MainActivity --es …`.
 Starting that activity takes `WRITE_SECURE_SETTINGS`, which adb's shell has and other apps can't get. The
 launcher and the home screen use an alias whose extras the app drops, so another app on the device can't
 change a setting.
@@ -153,7 +156,9 @@ Kiln's recipe for it is in [`installer/`](installer) (`@glassworks/generic-andro
 installs or updates in place, grants what adb can of what the APK asks for (the microphone, secure settings, the overlay, the device
 admin, the camera) and reads each grant back, allows "Install unknown apps" on Android 12+
 so updates install by themselves ([Silent self-update](#silent-self-update-android-12)), makes it the home screen (`cmd package set-home-activity` on Android 7+, else
-Android's chooser), and hands over to setup over the LAN. Its table of brands maps a USB vendor ID, or adb's
+Android's chooser), hands over to setup over the LAN, and reads whether the device has a PIN, pattern or password
+(`dumpsys lock_settings`, [research/screen-lock.md](research/screen-lock.md)): with one, Done says someone has to
+unlock it each time the screen turns off, and how to turn the lock off. Its table of brands maps a USB vendor ID, or adb's
 maker and model, to the brand's steps to turn on USB debugging, each with its source. Tested against a fake
 device only; how it works per Android version is in [research/kiln-install.md](research/kiln-install.md).
 
@@ -185,8 +190,8 @@ publishes both builds on the tags above, with notes from [CHANGELOG.md](CHANGELO
 [docs/releasing.md](../../docs/releasing.md#glassworks-for-generic-android-and-its-legacy-build)). There has been
 no release of either yet.
 
-The commands below use the generic app's id, `dev.glassworks.generic_android`. For S1 Kiosk on a
-tablet, use `sh.edm.s1kiosk`.
+The commands below use the generic app's id and component names (`dev.glassworks.generic_android/dev.glassworks.…`).
+For the S1 app on a tablet, use its own: `sh.edm.s1kiosk/.AdminReceiver` and `sh.edm.s1kiosk/.improv.ImprovActivity`.
 
 There is no root update service here, so the app installs the new APK through Android's
 PackageInstaller. Two routes install it without anyone touching the screen:
@@ -241,10 +246,10 @@ Android allows it only on a device with no accounts and a single user: remove th
 first, or set it up right after a factory reset.
 
 ```sh
-adb shell dpm set-device-owner dev.glassworks.generic_android/sh.edm.s1kiosk.AdminReceiver
+adb shell dpm set-device-owner dev.glassworks.generic_android/dev.glassworks.AdminReceiver
 adb shell dumpsys device_policy | grep -A3 "Device Owner"
 # undo (`dpm remove-active-admin` doesn't work for a release build):
-adb shell am start -n dev.glassworks.generic_android/sh.edm.s1kiosk.improv.ImprovActivity --ez release_device_owner true
+adb shell am start -n dev.glassworks.generic_android/dev.glassworks.provisioning.ImprovActivity --ez release_device_owner true
 ```
 
 While it is device owner, the app can't be uninstalled until you undo it. The details are in
@@ -325,6 +330,8 @@ API 26, 29 and 34 in CI: `CoreConformanceTest` boots the core with a fake frame
 
 - [kiln-install.md](research/kiln-install.md): which adb commands work on which Android, and how Kiln tells a
   device's brand before USB debugging is on (#403)
+- [screen-lock.md](research/screen-lock.md): how Kiln reads over adb, without root, whether the device has a PIN,
+  pattern or password (#522)
 
 ## Files
 

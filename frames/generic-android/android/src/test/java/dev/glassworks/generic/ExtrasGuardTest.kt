@@ -13,7 +13,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import dev.glassworks.KioskPrefs
-import sh.edm.s1kiosk.MainActivity
+import dev.glassworks.MainActivity
 import dev.glassworks.engine.gecko.GeckoPinHarness
 import dev.glassworks.engine.gecko.GeckoShadows
 
@@ -47,7 +47,7 @@ class ExtrasGuardTest {
         GeckoPinHarness(start(GenericParts.LAUNCHER), prefs = { it.urlSetting = before }).use { h ->
             assertEquals("the alias reaches MainActivity", GenericParts.LAUNCHER, h.activity.intent.component?.className)
             assertEquals(before, url())
-            assertTrue(h.logs("S1Kiosk").any { it.startsWith("ignored the extras of a start through") })
+            assertTrue(h.logs("Glassworks").any { it.startsWith("ignored the extras of a start through") })
         }
     }
 

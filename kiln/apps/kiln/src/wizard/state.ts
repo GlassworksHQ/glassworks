@@ -43,7 +43,7 @@ export type Setup =
       /** Once sent on the panel's own page: what happens next, as this page can't see the outcome. */
       joinNote?: string;
     }
-  /** signingIn: a sign-in tab is open, and the panel isn't signed in yet */
+  /** signingIn: a sign-in window is open (Kiln's), or the page is leaving for the sign-in (the panel's setup page), and the panel isn't signed in yet */
   | { phase: 'ha'; ha: SetupState['ha']; note?: string; error?: string; busy?: boolean; signingIn?: boolean }
   | { phase: 'radio'; radio: SetupState['radio']; note: string; error?: string; busy?: boolean }
   | { phase: 'radio-next'; plan: RadioPlan };

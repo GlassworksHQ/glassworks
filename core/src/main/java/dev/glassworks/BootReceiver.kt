@@ -8,11 +8,11 @@ import android.util.Log
 /** Brings the kiosk up after boot / app update (in addition to being the HOME activity). */
 open class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        Log.i("S1Kiosk", "BootReceiver: ${intent.action}")
+        Log.i("Glassworks", "BootReceiver: ${intent.action}")
         try {
             KioskService.start(context)
         } catch (e: Exception) {
-            Log.w("S1Kiosk", "Could not start KioskService", e)
+            Log.w("Glassworks", "Could not start KioskService", e)
         }
         try {
             val launch = Intent(context, context.glassworks.components.mainActivity)
@@ -21,7 +21,7 @@ open class BootReceiver : BroadcastReceiver() {
         } catch (e: Exception) {
             // Background activity starts can be blocked on Android 10+ unless the app has
             // SYSTEM_ALERT_WINDOW (appops) or is the default HOME app.
-            Log.w("S1Kiosk", "Could not start kiosk from boot", e)
+            Log.w("Glassworks", "Could not start kiosk from boot", e)
         }
     }
 }

@@ -6,7 +6,7 @@ package dev.glassworks.voice
  * can't depend on the core.
  */
 internal object VoiceLog {
-    private const val TAG = "S1Voice"
+    private const val TAG = "Glassworks.Voice"
     private val onAndroid = System.getProperty("java.vendor")?.contains("Android") == true
 
     fun d(msg: String) = if (onAndroid) { android.util.Log.d(TAG, msg); Unit } else println("D/$TAG: $msg")

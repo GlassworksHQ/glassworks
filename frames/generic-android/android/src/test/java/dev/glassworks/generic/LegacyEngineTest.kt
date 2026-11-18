@@ -79,9 +79,9 @@ class LegacyEngineTest {
         GeckoPinHarness(prefs = { it.urlSetting = DASHBOARD }).use { h ->
             h.newIntent(Intent().putExtra("remote_debug", true))
             assertFalse("the setting stays off", KioskPrefs(app).remoteDebugging(false))
-            assertTrue(h.logs("S1Kiosk").contains(
+            assertTrue(h.logs("Glassworks").contains(
                 "remote_debug ignored: the legacy engine is frozen and loads only Home Assistant, so it stays off"))
-            assertFalse("no restart for it", h.logs("S1Kiosk").any { "restart" in it })
+            assertFalse("no restart for it", h.logs("Glassworks").any { "restart" in it })
         }
     }
 
@@ -90,7 +90,7 @@ class LegacyEngineTest {
         GeckoPinHarness(prefs = { it.urlSetting = DASHBOARD }).use { h ->
             h.newIntent(Intent().putExtra("remote_debug", true))
             assertTrue(KioskPrefs(app).remoteDebugging(false))
-            assertTrue("it restarts to apply it", h.logs("S1Kiosk").any { "restart" in it })
+            assertTrue("it restarts to apply it", h.logs("Glassworks").any { "restart" in it })
         }
     }
 

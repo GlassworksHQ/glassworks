@@ -164,36 +164,42 @@ class SetupStateTest {
 
     @Test
     fun freshPanelWalksThroughTheSteps() {
-        // Online, HA not found yet: HA step with the manual URL field.
+        // Online, HA not found yet: Home Assistant's first step, Sign in, with the manual URL field.
         var i = fresh
         var d = SetupState.decide(i)
         assertTrue(d.show)
-        assertEquals(SetupFlow.HA, d.step)
+        assertEquals(SetupFlow.SIGNIN, d.step)
         assertTrue(d.wifiDone)
 
-        // HA found by mDNS; not added yet, within the 2 min grace: the trigger is gone but the
-        // screen is already up, so it stays (no flicker) on "Add to Home Assistant".
+        // HA found by mDNS; its login page not loaded yet, within the 2 min grace: the trigger is gone but the
+        // screen is already up, so it stays (no flicker) on Sign in.
         i = i.copy(haKnown = true, showing = true)
         d = SetupState.decide(i)
         assertTrue(d.show)
-        assertEquals(SetupFlow.HA, d.step)
+        assertEquals(SetupFlow.SIGNIN, d.step)
         assertTrue(d.reasons.isEmpty())
 
+        // HA's login page loaded: still Sign in.
+        i = i.copy(onAuthPage = true)
+        d = SetupState.decide(i)
+        assertEquals(SetupFlow.SIGNIN, d.step)
+        assertFalse(d.signinDone)
+
+        // Signed in with the QR code: on to Add it, the other half of Home Assistant.
+        i = i.copy(signedIn = true, onAuthPage = false)
+        d = SetupState.decide(i)
+        assertEquals(SetupFlow.HA, d.step)
+        assertTrue(d.signinDone)
+        assertTrue(d.show)
+
         // HA's discovery probe says Hello: not "added" yet.
-        i = i.copy(haHelloThisProcess = true, onAuthPage = true)
+        i = i.copy(haHelloThisProcess = true)
         d = SetupState.decide(i)
         assertEquals(SetupFlow.HA, d.step)
         assertFalse(d.haDone)
 
-        // HA added the panel (subscribed): on to signing in, the other half of Home Assistant.
+        // HA added the panel (subscribed): on to Panes, which panes are on.
         i = i.copy(haSeen = true)
-        d = SetupState.decide(i)
-        assertEquals(SetupFlow.SIGNIN, d.step)
-        assertTrue(d.haDone)
-        assertTrue(d.show)
-
-        // Signed in with the QR code: on to Panes, which panes are on.
-        i = i.copy(signedIn = true, onAuthPage = false)
         d = SetupState.decide(i)
         assertEquals(SetupFlow.PANES, d.step)
         assertFalse(SetupFlow.PANES in d.done)
@@ -217,7 +223,8 @@ class SetupStateTest {
         assertFalse(SetupState.decide(i.copy(uptimeMs = 119_000)).show)
         val d = SetupState.decide(i.copy(uptimeMs = 121_000))
         assertTrue(d.show)
-        assertEquals(SetupFlow.HA, d.step)
+        assertEquals(SetupFlow.SIGNIN, d.step) // Sign in comes first
+        assertEquals(SetupFlow.HA, SetupState.decide(i.copy(uptimeMs = 121_000, signedIn = true)).step)
         assertEquals(listOf("not added to home assistant"), d.reasons)
         // Any recorded evidence suppresses it (a panel with its radio step done).
         val r = i.copy(paneSteps = radio(true))
@@ -249,11 +256,11 @@ class SetupStateTest {
         assertEquals(SetupFlow.SIGNIN, SetupFlow.parse("signin", true, steps))
         assertEquals(SetupFlow.PANES, SetupFlow.parse("panes", true, steps))
         assertEquals("radio", SetupFlow.parse("radio", true, steps)) // a pane's own step
-        // Step order: the rail and the preview rely on it. Home Assistant (add, sign in), then Panes
+        // Step order: the rail and the preview rely on it. Home Assistant (sign in, add it), then Panes
         // (choose, then the panes' steps).
-        assertEquals(listOf("wifi", "ha", "signin", "panes", "radio", "done"), SetupFlow.ids(true, steps))
-        assertEquals(listOf("wifi", "ha", "signin", "panes", "done"), SetupFlow.ids(true))
-        assertEquals(listOf("wifi", "ha", "signin", "done"), SetupFlow.ids(false))
+        assertEquals(listOf("wifi", "signin", "ha", "panes", "radio", "done"), SetupFlow.ids(true, steps))
+        assertEquals(listOf("wifi", "signin", "ha", "panes", "done"), SetupFlow.ids(true))
+        assertEquals(listOf("wifi", "signin", "ha", "done"), SetupFlow.ids(false))
         assertEquals(SetupFlow.DONE, SetupFlow.parse("done", true, steps))
         assertEquals(null, SetupFlow.parse("radio", false, steps))
         assertEquals(null, SetupFlow.parse("panes", false))
@@ -261,6 +268,41 @@ class SetupStateTest {
         assertEquals(null, SetupFlow.parse(null, true, steps))
         // The rail's groups.
         assertEquals(listOf(null, "ha", "ha", "panes", "panes", null), SetupFlow.ids(true, steps).map(SetupFlow::group))
+    }
+
+    /** The device's own steps (#422) follow Panes, each a rail row of its own, not under Panes. */
+    @Test fun theDevicesOwnStepsFollowPanesOnRowsOfTheirOwn() {
+        val own = listOf("silent_updates")
+        val ids = SetupFlow.ids(true, listOf("radio"), own)
+        assertEquals(listOf("wifi", "signin", "ha", "panes", "radio", "silent_updates", "done"), ids)
+        assertEquals(listOf(null, "ha", "ha", "panes", "panes", null, null), ids.map { SetupFlow.group(it, own) })
+        assertEquals(listOf("wifi", "signin", "ha", "silent_updates", "done"), SetupFlow.ids(false, own = own))
+        assertEquals("silent_updates", SetupFlow.parse("silent_updates", true, listOf("radio"), own))
+    }
+
+    @Test fun theDevicesOwnStepComesAfterEveryPaneStepAndKeepsTheScreenUp() {
+        val silent = PaneStepFacts("silent_updates", false, "updates ask for a tap, and the person can change that")
+        val i = fresh.copy(haKnown = true, haSeen = true, signedIn = true, ownSteps = listOf(silent))
+        // Panes and the radio first: the device's step never jumps ahead of them, nor holds Panes.
+        assertEquals(SetupFlow.PANES, SetupState.decide(i).step)
+        val chosen = i.copy(panesChosen = true)
+        assertEquals("radio", SetupState.decide(chosen).step)
+        var d = SetupState.decide(chosen.copy(paneSteps = radio(true)))
+        assertEquals("silent_updates", d.step)
+        assertEquals(listOf(silent.reason), d.reasons)
+        assertTrue(d.show)
+        // A pane turned off on Panes doesn't skip it either.
+        assertEquals("silent_updates", SetupState.decide(chosen.copy(paneSteps = radio(false).map { it.copy(wanted = false) })).step)
+        // Answered: done, and Done is next.
+        d = SetupState.decide(chosen.copy(paneSteps = radio(true), ownSteps = listOf(silent.copy(done = true)), showing = true))
+        assertEquals(SetupFlow.DONE, d.step)
+        assertTrue("silent_updates" in d.done)
+        // Not over Home Assistant's login page while the person signs in there ("Sign in on this panel instead").
+        val panelLogin = chosen.copy(signedIn = false, usePanelLogin = true, dashboardLoaded = false, paneSteps = radio(true))
+        assertFalse(silent.reason in SetupState.decide(panelLogin).reasons)
+        assertTrue(silent.reason in SetupState.decide(panelLogin.copy(dashboardLoaded = true)).reasons)
+        // A frame with no panes at all: straight after Sign in.
+        assertEquals("silent_updates", SetupState.decide(i.copy(paneSteps = emptyList())).step)
     }
 
     @Test
@@ -333,7 +375,31 @@ class SetupStateTest {
         val i = fresh.copy(online = false, offlineForMs = 60_000, haKnown = true, haSeen = true)
         assertEquals(SetupFlow.WIFI, SetupState.decide(i).step)
         assertFalse("not a reason while offline", "radio mode not chosen" in SetupState.decide(i).reasons)
-        assertEquals(SetupFlow.HA, SetupState.decide(fresh.copy(haKnown = true, showing = true)).step)
+        assertEquals(SetupFlow.HA, SetupState.decide(fresh.copy(haKnown = true, showing = true, signedIn = true)).step)
+    }
+
+    @Test
+    fun homeAssistantSignsInFirstThenWaitsForTheAdd() {
+        // The Mirror on 2026-11-18: Add it stayed current after the sign-in. Sign in comes first, whichever half
+        // happened first, and each half is done on its own evidence.
+        val i = fresh.copy(haKnown = true, onAuthPage = true, uptimeMs = 10 * min, showing = true)
+        fun at(x: SetupInputs) = SetupState.decide(x).let { Triple(it.step, it.signinDone, it.haDone) }
+        assertEquals("neither", Triple(SetupFlow.SIGNIN, false, false), at(i))
+        assertEquals("neither, login page still loading", Triple(SetupFlow.SIGNIN, false, false), at(i.copy(onAuthPage = false)))
+        assertEquals("signed in, not added", Triple(SetupFlow.HA, true, false), at(i.copy(signedIn = true, onAuthPage = false)))
+        assertEquals("added before the sign-in", Triple(SetupFlow.SIGNIN, false, true), at(i.copy(haSeen = true)))
+        assertEquals("both", Triple(SetupFlow.PANES, true, true), at(i.copy(signedIn = true, onAuthPage = false, haSeen = true)))
+        assertEquals("not found", Triple(SetupFlow.SIGNIN, false, false), at(i.copy(haKnown = false, onAuthPage = false)))
+        // "Sign in on this panel instead" before Home Assistant added it: HA's login page stays uncovered, also after
+        // the grace; once the page is left (signed in there), Add it asks.
+        val panel = i.copy(usePanelLogin = true, showing = false)
+        assertFalse("on HA's login page", SetupState.decide(panel).show)
+        assertFalse("while that page loads", SetupState.decide(panel.copy(onAuthPage = false)).show)
+        val left = SetupState.decide(panel.copy(onAuthPage = false, dashboardLoaded = true))
+        assertTrue(left.show)
+        assertEquals(SetupFlow.HA, left.step)
+        // A session the page already has counts as signed in: on to Add it.
+        assertEquals("cookie session", Triple(SetupFlow.HA, true, false), at(i.copy(onAuthPage = false, dashboardLoaded = true)))
     }
 
     // ---- Improv / installer Wi-Fi

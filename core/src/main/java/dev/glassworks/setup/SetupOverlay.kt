@@ -53,11 +53,11 @@ import dev.glassworks.ui.StackView.Look
 
 /**
  * The first-boot setup screen (docs/onboarding.md, step 4), as drawn in #63: a native, full-screen
- * overlay over the page. Left, the steps (Wi-Fi, Home Assistant, Panes, Sign in) and the stack, whose
+ * overlay over the page. Left, the steps (Wi-Fi, Home Assistant, Panes) and the stack, whose
  * plates set one per step. Right, a glass card for the current step: one idea, a short heading, one
  * white button. Done is the lit stack on its own, the same picture as boot.
  *
- * The rail groups the steps (#63 round 2): Wi-Fi, Home Assistant (add it, sign in), Panes (choose which,
+ * The rail groups the steps (#63 round 2): Wi-Fi, Home Assistant (sign in, add it), Panes (choose which,
  * then each step of a pane that is on, drawn by the pane through [SetupCard]), Done. A step that is done
  * shows so, with Continue; the rail and Continue move between steps, also in a preview. Panes only asks
  * which panes are on: one card per pane that offers one ([PaneChoice]). The Wi-Fi step shows Improv (Wi-Fi over Bluetooth) inline, Allow included, so
@@ -76,6 +76,8 @@ class SetupOverlay(
      * None: no Panes group.
      */
     private val setupPanes: List<SetupPane> = emptyList(),
+    /** The device's own steps (#422's Silent updates): each a row of its own after Panes (Glassworks.deviceSetupSteps). */
+    private val ownSteps: List<SetupStep> = emptyList(),
 ) : FrameLayout(context) {
 
     private val haName = frame.friendlyName()
@@ -122,9 +124,9 @@ class SetupOverlay(
     var onStepDone: (() -> Unit)? = null
 
     /**
-     * Whether the screen takes a tap ([Frame.input]). Without ([Input.NONE]) every step but Sign in shows where to
-     * set the panel up from a computer (the setup page over the network, #34), and no card has a button. Once signed in,
-     * the Home Assistant step waits for Home Assistant to add the panel instead (#484).
+     * Whether the screen takes a tap ([Frame.input]). Without ([Input.NONE]) every step shows where to set the panel up
+     * from a computer (the setup page over the network, #34), and no card has a button. Sign in shows its phone code
+     * instead once Home Assistant has added the panel, and once signed in, Add it waits for Home Assistant (#484).
      */
     val input: Input = frame.input
 
@@ -154,8 +156,10 @@ class SetupOverlay(
     private var qrFor: String? = null
     private val main = Handler(Looper.getMainLooper())
 
-    /** Each pane's steps, by id, and which pane (its index in [choices]) they belong to. */
-    private val stepsById = setupPanes.flatMapIndexed { i, p -> p.steps.map { it.id to (i to it) } }.toMap()
+    /** Each pane's steps, by id, and which pane (its index in [choices]) they belong to; the device's own, [OWN]. */
+    private val stepsById = (setupPanes.flatMapIndexed { i, p -> p.steps.map { it.id to (i to it) } } + ownSteps.map { it.id to (OWN to it) }).toMap()
+
+    private val ownIds = ownSteps.map { it.id }
 
     /**
      * The step on screen when it isn't the current one: one picked on the rail or reached with Continue
@@ -164,8 +168,11 @@ class SetupOverlay(
     private var viewing: String? = null
 
     /** Every step in order, with the steps of the panes that are on ([wanted]). */
-    private fun flow(): List<String> =
-        SetupFlow.ids(choices.isNotEmpty(), stepsById.filter { (_, v) -> model?.preview == true || wanted(v.first) }.keys.toList())
+    private fun flow(): List<String> = SetupFlow.ids(
+        choices.isNotEmpty(),
+        stepsById.filter { (_, v) -> v.first != OWN && (model?.preview == true || wanted(v.first)) }.keys.toList(),
+        ownIds,
+    )
 
     // ---- left: the brand, the steps, the stack
     private val railRows = GroupedRail(context).apply { onTap = { id -> open(id) } }
@@ -504,12 +511,15 @@ class SetupOverlay(
         bind(m, true)
     }
 
-    /** Continue on a step that is done: the next one (the current one ends the walk). */
+    /**
+     * Continue on a step that is done: the next one, or back to the current step when the next one can't open yet
+     * (Done, or Panes after an Add it that Home Assistant did before the sign-in).
+     */
     private fun advance() {
         val m = model ?: return
         val f = flow()
         val next = f.getOrNull(f.indexOf(shown()) + 1) ?: return
-        if (next == SetupFlow.DONE && !m.preview) { viewing = null; bind(m, true); return }
+        if (!m.preview && next != m.step && next !in m.done) { viewing = null; bind(m, true); return }
         open(next)
     }
 
@@ -550,7 +560,7 @@ class SetupOverlay(
     /** The step [id] of a pane belongs to a pane that is on: as chosen on the Panes step, else as it runs. */
     fun wanted(id: String): Boolean = stepsById[id]?.let { wanted(it.first) } ?: true
 
-    private fun wanted(pane: Int): Boolean = panes.wanted(pane)
+    private fun wanted(pane: Int): Boolean = pane == OWN || panes.wanted(pane)
 
     /** Every couple of seconds while the app runs: the panes' steps follow their state. */
     fun tick() {
@@ -607,7 +617,7 @@ class SetupOverlay(
         railRows.bind(
             flow.map { id ->
                 GroupedRail.Row(
-                    id, title(id), SetupFlow.group(id),
+                    id, title(id), SetupFlow.group(id, ownIds),
                     mark = when { id == shown || id == m.step -> GroupedRail.Mark.CURRENT; id in m.done -> GroupedRail.Mark.DONE; else -> GroupedRail.Mark.PENDING },
                     // Without touch (Input.NONE) nothing on this screen takes a tap, the rail included.
                     enabled = input == Input.TOUCH && (m.preview || id == m.step || id in m.done),
@@ -655,10 +665,11 @@ class SetupOverlay(
         if (shown == null) return
         // A step that is done says so, also as a preview's current step (reopened on a set-up panel).
         val done = shown in m.done
-        cardLabel.text = SetupFlow.group(shown)?.let { grp -> "${GROUPS.getValue(grp)} · ${title(shown)}" } ?: title(shown)
+        cardLabel.text = SetupFlow.group(shown, ownIds)?.let { grp -> "${GROUPS.getValue(grp)} · ${title(shown)}" } ?: title(shown)
         if (input == Input.NONE) {
-            // Nothing here takes a tap: the steps happen on a computer, or on a phone for Sign in.
-            if (shown == SetupFlow.SIGNIN) {
+            // Nothing here takes a tap: the steps happen on a computer, or on a phone for Sign in. Before Home Assistant
+            // added the panel, Sign in is the setup page's, which also finds Home Assistant.
+            if (shown == SetupFlow.SIGNIN && (done || SetupFlow.HA in m.done || m.signinMoved)) {
                 bindSignin(m, done)
                 // Neither "on this panel instead" nor a done step's Continue: the next step comes by itself.
                 plainLeft.visibility = View.GONE
@@ -673,8 +684,12 @@ class SetupOverlay(
         var content: View? = null
         when (shown) {
             SetupFlow.WIFI -> content = bindWifi(m, done)
-            SetupFlow.HA -> content = bindHa(m, done)
-            SetupFlow.SIGNIN -> bindSignin(m, done)
+            // Both Home Assistant steps need its address first.
+            SetupFlow.SIGNIN, SetupFlow.HA -> content = when {
+                !done && m.haUrl == null -> bindFind()
+                shown == SetupFlow.HA -> bindHa(m, done)
+                else -> { bindSignin(m, done); null }
+            }
             SetupFlow.PANES -> content = bindPanes(m, stepChanged)
             else -> {
                 // A pane's step fills the card itself (SetupCard.content), slot included, and sets its status
@@ -887,14 +902,6 @@ class SetupOverlay(
             plainLeft.setOnClickListener { manualShown = true; bind(m, false) }
             return null
         }
-        if (m.haUrl == null) {
-            cardTitle.text = "Find Home Assistant."
-            cardBody.text = "The panel is looking for it on the network. If it doesn't show up, enter its address."
-            primary.text = "Connect"
-            primary.visibility = View.VISIBLE
-            primary.setOnClickListener { submit() }
-            return urlField
-        }
         cardTitle.text = "Add it in Home Assistant."
         waitingText.text = "Waiting for Home Assistant…"
         cardBody.text = SpannableStringBuilder().apply {
@@ -911,6 +918,16 @@ class SetupOverlay(
         plain.visibility = View.VISIBLE
         plain.setOnClickListener { onSkipHa?.invoke() }
         return waiting
+    }
+
+    /** Home Assistant not found yet: the panel looks for it, or takes its address. */
+    private fun bindFind(): View {
+        cardTitle.text = "Find Home Assistant."
+        cardBody.text = "The panel is looking for it on the network. If it doesn't show up, enter its address."
+        primary.text = "Connect"
+        primary.visibility = View.VISIBLE
+        primary.setOnClickListener { submit() }
+        return urlField
     }
 
     private fun bindPanes(m: Model, stepChanged: Boolean): View {
@@ -986,8 +1003,8 @@ class SetupOverlay(
             return null
         }
         val url = "http://$ip:${OAuth.SIGNIN_PORT}${dev.glassworks.setup.LanSetup.PAGE}"
-        // Signed in from the setup page, and only Home Assistant's add is left: nothing to scan any more (#484).
-        if (shown() == SetupFlow.HA && m.signedIn && SetupFlow.HA !in m.done) return bindAddWait(url)
+        // Signed in, and only Home Assistant's add is left: nothing to scan any more (#484).
+        if (shown() == SetupFlow.HA && SetupFlow.SIGNIN in m.done && SetupFlow.HA !in m.done) return bindAddWait(url)
         if (qrFor != url) {
             qrImage.setImageBitmap(QrCode.bitmap(url, px(200f)))
             qrFor = url
@@ -1229,7 +1246,7 @@ class SetupOverlay(
             redraw()
             val results = arrayOfNulls<String>(choices.size)
             val workers = choices.mapIndexed { i, c ->
-                Thread({ results[i] = runCatching { c.apply(wanted[i]) }.getOrElse { it.message ?: "failed" } }, "s1-setup-pane-$i").apply { isDaemon = true; start() }
+                Thread({ results[i] = runCatching { c.apply(wanted[i]) }.getOrElse { it.message ?: "failed" } }, "glassworks-setup-pane-$i").apply { isDaemon = true; start() }
             }
             val started = System.currentTimeMillis()
             fun check() {
@@ -1334,6 +1351,9 @@ class SetupOverlay(
 
         /** The Bluetooth tile narrower than this (a phone's card) puts its button under its words (#468). */
         const val NARROW_TILE_DP = 360f
+
+        /** [stepsById]'s pane index for the device's own steps: always wanted. */
+        private const val OWN = -1
 
         /** Continue on Panes waits this long for every card in all (the radio's Off waits for its helper). */
         const val BUDGET_MS = 30_000L

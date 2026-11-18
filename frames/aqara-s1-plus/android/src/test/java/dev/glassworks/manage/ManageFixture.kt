@@ -41,15 +41,29 @@ class ManageFixture(
     var tokens: HaGateway.Tokens = HaGateway.Tokens.Ok("ACCESS", "REFRESH")
     val exchanged = Collections.synchronizedList(ArrayList<String>())
     val revoked = Collections.synchronizedList(ArrayList<String>())
+    /** The HA address of each `auth/current_user` the panel asked. */
+    val userChecks = Collections.synchronizedList(ArrayList<String>())
+    /** When set, each `auth/current_user` waits for it: Home Assistant slow or down. */
+    @Volatile var userGate: java.util.concurrent.CountDownLatch? = null
+    /** Tokens the fake HA doesn't know. */
+    val refusedTokens = Collections.synchronizedSet(HashSet<String>())
     val gateway = object : HaGateway {
         override fun exchangeCode(haBase: String, clientId: String, code: String, codeVerifier: String): HaGateway.Tokens {
             exchanged += "$haBase $clientId $code"
             return tokens
         }
-        override fun currentUser(haBase: String, accessToken: String) = user
+        override fun currentUser(haBase: String, accessToken: String): HaUser? {
+            userChecks += haBase
+            userGate?.await()
+            return if (accessToken in refusedTokens) null else user
+        }
         override fun revoke(haBase: String, clientId: String, refreshToken: String): Boolean { revoked += refreshToken; return revokeWorks }
     }
-    val signIn = HaSignIn(gateway, resolve = { listOf(InetAddress.getByName(it)) }, clock = { now },
+    /** Every name the panel looked up to decide whether Home Assistant is local. */
+    val resolved = Collections.synchronizedList(ArrayList<String>())
+    /** How long each of those lookups takes, on [monoMs]. */
+    var lookupMs = 0L
+    val signIn = HaSignIn(gateway, resolve = { resolved += it; monoMs += lookupMs; listOf(InetAddress.getByName(it)) }, clock = { now },
         local = { HaSignIn.isLocalAddress(it) || it.hostAddress.startsWith("192.0.2.") }, warn = { warnings += it })
 
     val warnings = Collections.synchronizedList(ArrayList<String>())
@@ -94,7 +108,7 @@ class ManageFixture(
                 SettingsItem.Native("radio-mode") { throw UnsupportedOperationException() },
             )),
         ),
-        about = listOf("Glassworks Panel" to "S1 Kiosk 0.9.2", "Frame" to "Aqara Panel Hub S1 Plus", "Android" to "10"),
+        about = listOf("Glassworks Panel" to "Glassworks 0.9.2", "Frame" to "Aqara Panel Hub S1 Plus", "Android" to "10"),
     )
 
     /** When set, the status the server reads, page by page (a model that changes with each save). */
@@ -105,6 +119,7 @@ class ManageFixture(
 
     val host = object : ManageHost {
         override val name = "Glassworks Panel"
+        override val model = "Panel Hub S1 Plus (S1 Kiosk)"
         override fun status() = statusFn?.invoke() ?: status
         override fun onMain(f: () -> Unit) { onMainCalls++; f() }
         override val actions = this@ManageFixture.actions

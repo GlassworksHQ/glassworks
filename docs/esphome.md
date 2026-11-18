@@ -19,7 +19,7 @@ the panel's entities and glue are `PanelDevice` in
 `core/src/main/java/dev/glassworks/device/` and the voice assistant in the
 [`voice`](../libs/voice/README.md) library (`VoiceAssistantController`, `VoiceEngine`), wrapped by `panes/assist`, with the wall base and the Aqara cloud switch in `frames/aqara-s1-plus/panes/wall-base`
 (`WallBasePane.kt`) and the radio in `radio/RadioPane.kt`, owned by the foreground `KioskService`, so it
-keeps working while the screen is off. Logs: `adb logcat -s S1ESPHome S1Voice`.
+keeps working while the screen is off. Logs: `adb logcat -s Glassworks.ESPHome Glassworks.Voice`.
 
 ## Add it to Home Assistant
 
@@ -71,8 +71,8 @@ Details and sources: [onboarding.md](onboarding.md#2-adoption--encryption-esphom
 |---|---|
 | name / friendly name | `aqara-s1-plus-a1b2c3` / `Aqara S1 Plus`: what the device is, and the end of its MAC (see [Names](#names)). Before #260: `s1-panel` / `Glassworks Panel` |
 | MAC (unique id in HA) | the Wi-Fi MAC of `wlan0` if readable, else a locally administered MAC derived from the chip serial (SHA-256 of `ro.serialno`), else a random one; persisted in prefs (`device_mac`). The first two come out the same after a reinstall, so HA keeps the same device |
-| manufacturer / model | The frame's: `Aqara` / `Panel Hub S1 Plus (S1 Kiosk)` on the S1. Elsewhere the device's own (`Build.MANUFACTURER` / `Build.MODEL`): `Google` / `Pixel Tablet (S1 Kiosk)` |
-| esphome_version / compilation_time | `2026.10.2` / `S1 Kiosk <app version>` (HA shows "2026.10.2 (S1 Kiosk 0.1.0)") |
+| manufacturer / model | The frame's: `Aqara` / `Panel Hub S1 Plus (Glassworks)` on the S1. Elsewhere the device's own (`Build.MANUFACTURER` / `Build.MODEL`): `Google` / `Pixel Tablet (Glassworks)`. Up to 0.4.3 the S1 app said `(S1 Kiosk)` |
+| esphome_version / compilation_time | `2026.10.2` / `Glassworks <app version>` (HA shows "2026.10.2 (Glassworks 0.1.0)") |
 | API version | 1.20 (as ESPHome 2026.10/11); `DeviceCapabilitiesRequest` is answered |
 | Sendspin | `DeviceCapabilitiesResponse.sendspin` = `{feature_flags: PAIRING_TOKEN, client_id}`; `SendspinPairingTokenRequest` (159) → `SendspinPairingTokenResponse` (160), token only over Noise with a key ([sendspin.md](sendspin.md#esphome-hand-off-how-ha-gives-ma-the-token)) |
 | voice_assistant_feature_flags | 61 = VOICE_ASSISTANT 1 + API_AUDIO 4 + TIMERS 8 + ANNOUNCE 16 + START_CONVERSATION 32 (0 when `voice_enabled` is false). Voice turned on or off while the panel runs changes it, and the panel asks Home Assistant to reconnect so it reads it again (#67) |
@@ -156,6 +156,7 @@ open the entity, and turn on *Enabled*.
 | Restart app | `restart_app` | core | config | on | Used often |
 | Screen mode | `screen_mode` | core | config | on | Automations (night, away) |
 | App update | `app_update` | core | config | on | HA shows updates only while it is on |
+| Frame update | `frame_update` | core | config | on | Only on the S1 and the Mirror ([frame updates](#frame-updates)) |
 | Allow setup over the network | `lan_setup` | core | config | on | The way back to setup from a laptop once HA has the panel |
 | IP address | `ip_address` | core | diagnostic | on | People check it |
 | Silent updates | `silent_updates` | core | diagnostic | on | People check it: whether an update needs someone at the panel |
@@ -252,7 +253,7 @@ So on a panel HA already has:
 | switch `Auto brightness` | `auto_brightness` | light-sensor brightness curve. Only with a light sensor ([by frame](#screen-entities-by-frame)) |
 | binary_sensor `Presence` (occupancy) | `presence` | the frame's presence sensor "near": the VI5300 ToF on the S1, a proximity sensor elsewhere. A camera's is `camera_presence` |
 | sensor `Illuminance` (lx) | `illuminance` | the light sensor: the MK6212 on the S1 |
-| select `Screen mode` | `screen_mode` | `presence` / `always` |
+| select `Screen mode` | `screen_mode` | `presence` / `always`. `always` until someone picks one (#522) |
 | number `Idle timeout` (s) | `idle_timeout` | screen off after idle (0 = never). Above 0 it also sets `Screen mode` to `presence`, as the panel's own *Turn off when idle* does. The panel has no night timeout of its own: an automation changes this one, such as the [Panel night mode](blueprints.md) blueprint |
 | number `Max auto brightness` (%, 5–100, step 5) | `max_brightness` | the most *Auto brightness* reaches (100 by default). Lower it at night to keep the screen dim when the room's lights are on. A held screen (a high or critical notification) ignores it. A fixed brightness from the `Screen` light doesn't follow it |
 | number `Presence range` (m, 0–2.5, step 0.1) | `presence_range` | VI5300 threshold (needs `WRITE_SECURE_SETTINGS`); 0 = firmware default |
@@ -293,6 +294,7 @@ So on a panel HA already has:
 | text_sensor `Time zone status` | `time_zone_status` | diagnostic; whether the zone is being kept |
 | text_sensor `App version` | `app_version` | diagnostic |
 | update `App update` (firmware) | `app_update` | the latest GitHub release vs this app; install from HA ([app updates](#app-updates)) |
+| update `Frame update` (firmware) | `frame_update` | the frame's latest release vs its frame version; on the S1 and the Mirror only ([frame updates](#frame-updates)) |
 | text_sensor `Update status` | `update_status` | diagnostic; e.g. `up to date (1.2.0)`, `1.3.0 available`, `Downloading 1.3.0: 42%`, `Install of 1.3.0 failed: …` |
 | text_sensor `Silent updates` | `silent_updates` | diagnostic; whether app updates install with nobody at the panel, and why: `Yes: …` or `No: …` ([Silent updates](#silent-updates)) |
 | text_sensor `Home Assistant URL` | `home_assistant_url` | diagnostic; the HA the panel uses: the origin of a configured dashboard URL, else the discovered one ([onboarding.md](onboarding.md)) |
@@ -409,7 +411,7 @@ the four marked *on* are enabled when HA adds the panel. Turn the others on from
 
 The pane samples once a minute. It sends a value only when it moved by at least its band since the
 last value it sent, so a quiet panel sends almost nothing. It reads files in `/proc` and `/sys` and
-asks Android. It runs no shell commands and needs no root. S1 Kiosk and the generic app (both of its
+asks Android. It runs no shell commands and needs no root. The S1 app and the generic app (both of its
 builds, Android 6 and up) have it.
 
 | Entity | object_id | Default | Band | Source |
@@ -430,7 +432,7 @@ builds, Android 6 and up) have it.
 - CPU usage and App CPU usage are unknown for the first minute after a start: they need two samples.
 - CPU usage counts I/O wait as idle. `top` shows `iow` apart from `idle`, so a busy share worked out from `top`'s `idle` column counts I/O wait as busy and reads higher.
 - The timestamps are accurate to about a minute, because ESPHome sends sensor values as 32-bit floats.
-- The pane logs its own cost under `S1ESPHome` (`diagnostics: sample N took X ms CPU`) for the
+- The pane logs its own cost under `Glassworks.ESPHome` (`diagnostics: sample N took X ms CPU`) for the
   first three samples and then once an hour.
 
 ### Wall base entities
@@ -526,21 +528,21 @@ the stream). Its component and the main activity's differ per app:
 
 | App | Camera settings | Main activity |
 |---|---|---|
-| S1 Kiosk | `sh.edm.s1kiosk/.CameraAdbActivity` | `sh.edm.s1kiosk/.MainActivity` |
-| Glassworks for generic Android | `dev.glassworks.generic_android/sh.edm.s1kiosk.CameraAdbActivity` | `dev.glassworks.generic_android/sh.edm.s1kiosk.MainActivity` |
-| Its legacy build (Android 6-7, the lululemon Mirror) | `dev.glassworks.generic_android.legacy/sh.edm.s1kiosk.CameraAdbActivity` | `dev.glassworks.generic_android.legacy/sh.edm.s1kiosk.MainActivity` |
+| Glassworks on the Aqara S1 Plus | `sh.edm.s1kiosk/.CameraAdbActivity` | `sh.edm.s1kiosk/.MainActivity` |
+| Glassworks for generic Android | `dev.glassworks.generic_android/dev.glassworks.camera.CameraAdbActivity` | `dev.glassworks.generic_android/dev.glassworks.MainActivity` |
+| Its legacy build (Android 6-7, the lululemon Mirror) | `dev.glassworks.generic_android.legacy/dev.glassworks.camera.CameraAdbActivity` | `dev.glassworks.generic_android.legacy/dev.glassworks.MainActivity` |
 
-For example, on S1 Kiosk: `adb shell am start -n sh.edm.s1kiosk/.CameraAdbActivity --es camera_use snapshots --ez onvif_stream true`.
+For example, on the S1: `adb shell am start -n sh.edm.s1kiosk/.CameraAdbActivity --es camera_use snapshots --ez onvif_stream true`.
 `--es camera_stream_sign_in 'user:password'` sets the stream's sign-in, and an empty value clears
 it, which closes the stream until a sign-in is set again. The pane's on/off is the
 usual `--ez camera_enabled true` on the main activity, for example
-`adb shell am start -n dev.glassworks.generic_android.legacy/sh.edm.s1kiosk.MainActivity --ez camera_enabled true` on the Mirror.
+`adb shell am start -n dev.glassworks.generic_android.legacy/dev.glassworks.MainActivity --ez camera_enabled true` on the Mirror.
 
 ### App updates
 
 `update/UpdateManager.kt`; releases and signing in [releasing.md](releasing.md).
 
-- **State:** `current_version` is the app's versionName and `title` is `S1 Kiosk`. `missing_state`
+- **State:** `current_version` is the app's versionName and `title` is `Glassworks` (`S1 Kiosk` up to 0.4.3). `missing_state`
   stays set until the first successful check, and until then `latest_version` = `current_version`:
   Home Assistant 2026.11 ignores `missing_state` for update entities, and an empty `latest_version`
   can't be compared, which its `UpdateEntity.has_update` counts as an update (the entity turned on with
@@ -592,6 +594,33 @@ usual `--ez camera_enabled true` on the main activity, for example
   6. Any failure, or a phase stuck for 30 min (download) or 10 min (verify/install), ends with
      `in_progress` off and the reason on top of the summary.
 - A debug build can't update to a release: the keys differ, and the entity says so.
+
+### Frame updates
+
+`update/FrameUpdate.kt` (#139). A frame version is the version of the parts of a device that Glassworks owns: the
+S1's boot-side services, scripts and boot animation, or the Mirror's patched image (the Glass Panes release plus
+Kiln's recipe). It is not Android's version, which the Device page still shows as *Android*. Frame versions use
+semantic versioning and start at 1.0.0, with Glassworks 1.0.0.
+
+| Frame | Frame version row and *Frame update* entity | Installs from Home Assistant |
+|---|---|---|
+| S1 | Yes | Not yet. A panel without the loader in its boot image needs one Kiln update first, and the card says so |
+| Mirror | Yes | No. The card says to flash the Mirror again with Kiln |
+| Pixel Tablet, any other generic Android device | No: Google or the maker updates the device | - |
+
+- **The version** comes from two system properties: `ro.glassworks.frame.id` (the frame's id) and
+  `ro.glassworks.frame.version`. Kiln stamps them into the Mirror's `build.prop` when it flashes it. The S1's loader
+  will set them at boot. A device without them shows *Before 1.0.0*, and a Mirror names its Glass Panes image from
+  `ro.build.fingerprint` (*Before 1.0.0 (Glass Panes image 2)*). Such a device is older than any frame release.
+- **The check** is the app's own: the same release list, read at the same times. The newest stable release tagged
+  `frames/<id>/v<version>` is the frame's latest ([releasing.md](releasing.md#frame-releases)).
+- **State:** `current_version` is the frame version, `title` is the frame's name and "frame" (`Aqara S1 Plus frame`).
+  While no newer release is out, `latest_version` = `current_version`, as for the app. When one is out:
+  `latest_version`, `release_url`, and `release_summary`, which starts with how to install it.
+- **Install:** Home Assistant's ESPHome update entity always has an Install button. Here it does nothing (the
+  log says why), and the summary says how to install the update.
+- **The Device page and Manage** show a *Frame version* row from the same model: the version, and when a newer
+  one is out, which and how to install it, in amber.
 
 ### Silent updates
 
@@ -685,7 +714,7 @@ Assistant still does, unless the microphone is the problem. Each failure shows i
   went wrong, what to do and when the panel tries again, and a **Try again** row under *Listening* for
   the failures the panel retries. The pane's chip in the settings list reads *Problem*.
 - **The `voice_status` sensor** in Home Assistant (diagnostic, on by default).
-- **The log** (`S1Voice`, the Manage page's *Voice* source): one line per new failure, with the reason.
+- **The log** (`Glassworks.Voice`, the Manage page's *Voice* source): one line per new failure, with the reason.
   It never holds a token or a network name.
 
 A failed download or engine start is tried again after 30 s, then 1, 2 and 5 minutes, then every 10

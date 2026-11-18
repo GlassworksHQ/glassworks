@@ -16,12 +16,12 @@ import android.widget.FrameLayout
  * The page's side of a notification's half-screen view (#230): its still picture, and its place on screen.
  *
  * What a capture costs is logged only when asked, so the panel pays nothing for it otherwise:
- * `adb shell setprop log.tag.S1Kiosk.ViewCapture DEBUG`. One line per capture: the time from the request
+ * `adb shell setprop log.tag.Glassworks.ViewCapture DEBUG`. One line per capture: the time from the request
  * to the picture, its size, and this process's PSS before and after ([Debug.getPss]; the engine's own
  * content processes are not in it).
  */
 object PageCapture {
-    const val TAG = "S1Kiosk.ViewCapture"
+    const val TAG = "Glassworks.ViewCapture"
 
     fun capture(page: Page?, done: (Bitmap?) -> Unit) {
         if (page == null) return done(null)

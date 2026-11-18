@@ -49,7 +49,8 @@ interface HaGateway {
  * port, which HA's IndieAuth accepts without fetching anything (`components/auth/indieauth.py`).
  */
 class HaSignIn(
-    private val gateway: HaGateway,
+    /** Home Assistant, also for checking a token another panel's page brings ([HaTokenCheck]). */
+    val gateway: HaGateway,
     private val resolve: (String) -> List<InetAddress> = { InetAddress.getAllByName(it).toList() },
     /** Which addresses count as the local network. Tests add the RFC 5737 ranges their examples use. */
     private val local: (InetAddress) -> Boolean = ::isLocalAddress,
@@ -92,7 +93,7 @@ class HaSignIn(
         val p = synchronized(pending) { prune(); state?.let { pending.remove(it) } }
             ?: return Result.Failed("This sign-in has expired", "Start again from the Manage page.")
         // Another browser's state (login CSRF): refuse, the code is not used.
-        if (browser == null || browser != p.browser) return Result.Failed("Can't sign in", "Start again from the Manage page, in this browser.")
+        if (browser == null || !MessageDigest.isEqual(browser.toByteArray(), p.browser.toByteArray())) return Result.Failed("Can't sign in", "Start again from the Manage page, in this browser.")
         if (error != null) return Result.Failed("Sign-in cancelled", "Home Assistant answered: $error.")
         if (code.isNullOrEmpty()) return Result.Failed("Can't sign in", "Home Assistant didn't send an authorization code.")
         val tokens = gateway.exchangeCode(p.haBase, p.clientId, code, p.verifier)

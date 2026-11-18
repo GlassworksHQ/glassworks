@@ -58,6 +58,7 @@ object S1Settings {
             screenBlueprints = blueprints(CoreSettings.SCREEN),
             account = runtime.dashboardAccount::shown,
             product = runtime.build.product,
+            screenLock = { dev.glassworks.platform.ScreenLock.secure(context) },
         )
         // One pane's failure leaves the others' pages.
         val sections = panes.flatMap { d ->
@@ -76,5 +77,5 @@ object S1Settings {
     /** Whether [context]'s frame has its own settings app, for [model]. */
     fun hasDeviceSettings(runtime: Glassworks, context: Context): Boolean = runtime.frame.systemSettings(context) != null
 
-    private const val TAG = "S1Kiosk.Settings"
+    private const val TAG = "Glassworks.Settings"
 }

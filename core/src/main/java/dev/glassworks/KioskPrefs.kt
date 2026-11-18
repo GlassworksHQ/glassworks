@@ -134,6 +134,16 @@ class KioskPrefs(
         get() = sp.getBoolean("setup_ha_skipped", false)
         set(v) = sp.edit().putBoolean("setup_ha_skipped", v).apply()
 
+    /** Setup's Silent updates step was answered: Continue or Not now, or the panel was set up before the step (#422). */
+    var silentUpdatesAnswered: Boolean
+        get() = sp.getBoolean("setup_silent_updates_answered", false)
+        set(v) = sp.edit().putBoolean("setup_silent_updates_answered", v).apply()
+
+    /** The device's own setup steps had their once-per-install check (GlassworksRuntime.deviceSetupSteps). */
+    var deviceStepsMigrated: Boolean
+        get() = sp.getBoolean("setup_device_steps_migrated", false)
+        set(v) = sp.edit().putBoolean("setup_device_steps_migrated", v).apply()
+
     /** Lovelace dashboards the "Dashboard" select was last built from (`[{url_path,title}]`). */
     var dashboardsJson: String
         get() = sp.getString("dashboards", "") ?: ""
@@ -195,9 +205,12 @@ class KioskPrefs(
 
     // ---- screen policy (see dev.glassworks.screen.ScreenPolicy)
 
-    /** "presence" = on while someone is near / recently touched, off after idle; "always" = never off. */
+    /**
+     * "presence" = on while someone is near / recently touched, off after idle; "always" = never off. "always" until
+     * someone picks (#522): a frame with nothing that senses presence would otherwise just turn off when idle.
+     */
     override var screenMode: String
-        get() = sp.getString("screen_mode", "presence") ?: "presence"
+        get() = sp.getString("screen_mode", "always") ?: "always"
         set(v) = sp.edit().putString("screen_mode", v).apply()
 
     override var idleOffSec: Int

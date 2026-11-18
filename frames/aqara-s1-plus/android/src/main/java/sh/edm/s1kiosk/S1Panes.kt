@@ -194,10 +194,10 @@ class S1Panes : AppParts {
     /** A voice event from the assistant (main thread): the voice overlay, the voice state and the screen follow it. */
     fun onVoiceEvent(runtime: GlassworksRuntime, e: VoiceEvent) {
         voiceUi = voiceUi.on(e)
-        try { runtime.onVoiceUi?.invoke() } catch (t: Throwable) { Log.w("S1Kiosk.Voice", "voice overlay failed", t) }
+        try { runtime.onVoiceUi?.invoke() } catch (t: Throwable) { Log.w("Glassworks.Voice", "voice overlay failed", t) }
         if (e is VoiceEvent.Heard || e is VoiceEvent.Reply) return // texts only, no state change
         runtime.voiceState = voiceUi.state
-        Log.i("S1Kiosk.Voice", "voice: ${runtime.voiceState}")
+        Log.i("Glassworks.Voice", "voice: ${runtime.voiceState}")
         // Talking to the panel counts as activity: wake the screen and keep it on.
         if (e !is VoiceEvent.Idle && e !is VoiceEvent.Error) runtime.screen.wake("voice")
         runtime.screen.onStateChanged?.invoke()

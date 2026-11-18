@@ -72,7 +72,7 @@ class SetupNoTouchTest {
     }
 
     @Test fun everyStepPointsAtTheSetupPageAndNothingTakesATap() {
-        for (step in listOf(SetupFlow.HA, SetupFlow.PANES, "radio")) {
+        for (step in listOf(SetupFlow.SIGNIN, SetupFlow.HA, SetupFlow.PANES, "radio")) {
             val s = screen(step, theMirror())
             val texts = shown(s).map { it.first }
             assertTrue("$step: $texts", "Scan to set it up." in texts)
@@ -161,7 +161,8 @@ class SetupNoTouchTest {
     }
 
     @Test fun signInKeepsItsPhoneCodeWithoutTheOnPanelWay() {
-        val s = screen(SetupFlow.SIGNIN, theMirror())
+        // Home Assistant added it first (a reinstall it remembers): the sign-in's own code.
+        val s = screen(SetupFlow.SIGNIN, theMirror(), done = setOf(SetupFlow.WIFI, SetupFlow.HA))
         val texts = shown(s).map { it.first }
         assertTrue(texts.toString(), "Scan to sign in." in texts)
         assertTrue(texts.toString(), "Sign in on this panel instead" !in texts)

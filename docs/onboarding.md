@@ -3,7 +3,7 @@
 > **Setting up a panel?** Follow [install.md](../frames/aqara-s1-plus/docs/install.md) (steps 4 and 5). This page is the design and
 > research behind those steps: how each piece works and what was verified.
 
-Goal: a user who has just installed S1 Kiosk never types a URL, token, IP or key on the panel.
+Goal: a user who has just installed Glassworks never types a URL, token, IP or key on the panel.
 Everything rides on standard Home Assistant mechanisms (ESPHome discovery, HA OAuth, Improv),
 not on a custom integration.
 
@@ -18,12 +18,16 @@ lightly tested end to end. Nothing below is implemented unless marked ✅.
    through adb, see [From the web installer](#from-the-web-installer-improv-serial--setup-channel-over-adb-)).
    Without it, a fresh or reset panel gets Wi-Fi through **Improv via BLE**, with an on-screen
    picker as fallback.
-2. **HA finds it.** "New device discovered: Aqara S1 Plus" appears in HA → click **Add**. HA generates
-   and pushes the encryption key itself.
-3. **Sign in with your phone.** The panel shows a QR code. Scan it, sign in to HA on the phone (normal
+2. **Sign in with your phone.** The panel shows a QR code. Scan it, sign in to HA on the phone (normal
    HA login, password manager works), done. The panel never shows a login form.
+3. **HA finds it.** "New device discovered: Aqara S1 Plus" appears in HA → click **Add**. HA generates
+   and pushes the encryption key itself. If HA added it before the sign-in, the panel shows Add it as done.
 4. **Choose the panes**: voice, music and the Zigbee / Thread radio. A pane that is on then asks what
    it needs (the radio: its mode, then what to do in HA).
+   **Silent updates** follows, only when updates ask for a tap and there's a way to change that: an S1
+   whose boot image has no update service (Kiln adds it), or a tablet where Android needs "Install unknown
+   apps" allowed or a device owner (#422). Never required: Continue or Not now answers it. A panel that was
+   set up before this step existed never sees it.
 5. **Pick a dashboard** from a dropdown on the panel's device page in HA (defaults to your default
    dashboard). HA adds that dropdown turned off: turn on **Dashboard** first
    ([how](esphome.md#categories-and-defaults)).
@@ -220,7 +224,7 @@ glue `frames/aqara-s1-plus/android/…/improv/ImprovSerialServer.kt`). [Improv S
 - Wi-Fi settings: state Provisioning, then joins through `ImprovController.connectFromInstaller` on
   the same `WifiProvisioner` as Improv via BLE (it turns Wi-Fi on first). Then state Provisioned +
   an RPC result with `http://<ip>:8099/signin`, or error 0x03 and back to Ready.
-- Request state (+ the URL as a result when provisioned), request device info (`S1 Kiosk`, app
+- Request state (+ the URL as a result when provisioned), request device info (`Glassworks`, app
   version, the frame's chip (`Allwinner A133` on the S1), and the friendly name as Home Assistant shows
   it, "Aqara S1 Plus" on the S1).
 - Scan: a fresh WifiManager scan (Wi-Fi turned on if off; results on `SCAN_RESULTS_AVAILABLE` or after
@@ -429,7 +433,10 @@ The original design notes:
   user signs in on the phone. HA redirects the phone back to the panel with an auth code, and the panel
   exchanges it for a **refresh token** (`/auth/token`). The phone shows "Panel signed in.". The Thread
   join's QR code (`/thread`) works the same way: a page that asks for an administrator, then
-  `/thread/continue`. The pages are one template in `SignInServer.kt` (system font, inline mark, dark
+  `/thread/continue`. The panel's setup page starts the same flow in its own tab with
+  `/signin/continue?then=setup`; its callback goes back to `/setup` instead (#453). Kiln over USB opens
+  `/signin/continue?then=kiln` in a pop-up; its callback closes that window, and Kiln moves on when the
+  panel reports the sign-in. The pages are one template in `SignInServer.kt` (system font, inline mark, dark
   or light as the phone is).
 - **PKCE.** The callback is plain HTTP on the LAN, so both sign-ins (this one and the Thread join's
   admin sign-in) use PKCE (RFC 7636, S256). Each attempt gets a fresh secret that stays on the panel.
@@ -514,14 +521,14 @@ whose plates set one per step (`ui/StackView.kt`). Right: a card for the current
 Laid out for 960×480 dp. On a screen taller than wide (`onMeasure`, #415) it stacks into one column: the
 rail above the card, without the stack art, and the QR code under the card's text at full size.
 
-The rail (`ui/GroupedRail.kt`, #63 round 2) groups the steps: Wi-Fi, **Home Assistant** (Add it, Sign
-in), **Panes** (Choose, then each pane's own steps while that pane is on), Done. A group shows its rows
-while one of them is current and folds to one row otherwise. The order is Wi-Fi → Home Assistant →
-Panes → Done (`SetupFlow.ids`): nothing a pane asks needs to come before signing in, and the radio's
+The rail (`ui/GroupedRail.kt`, #63 round 2) groups the steps: Wi-Fi, **Home Assistant** (Sign in, Add
+it), **Panes** (Choose, then each pane's own steps while that pane is on), the device's own steps (Silent
+updates, each a row of its own), Done. A group shows its rows while one of them is current and folds to one row
+otherwise. The order is Wi-Fi → Home Assistant → Panes → Silent updates → Done (`SetupFlow.ids`): nothing a pane asks needs to come before signing in, and the radio's
 Thread router can then join Home Assistant's Thread network from its own step. Tapping a row opens
 it: in a live setup only a step that is done or current, in a preview any step. A step that is done
-says so and leads with **Continue** ("Connected to <SSID>.", "Added to Home Assistant.", "Signed
-in."), with the way to change it second ("Use another network", "Add it by hand").
+says so and leads with **Continue** ("Connected to <SSID>.", "Signed in.", "Added to Home
+Assistant."), with the way to change it second ("Use another network", "Add it by hand").
 
 1. **Wi-Fi**: "Connected to <SSID>" (Ethernet too), or "Not connected: set up Wi-Fi over Bluetooth
    from Home Assistant, or [Choose network]". The button opens `Settings.Panel.ACTION_WIFI` (falls
@@ -543,16 +550,18 @@ in."), with the way to change it second ("Use another network", "Add it by hand"
    [From the web installer](#from-the-web-installer-improv-serial--setup-channel-over-adb-)); the
    join uses the same `WifiProvisioner.connect` as Improv (it turns Wi-Fi on first) and its progress
    shows here: connecting to <SSID> (with the provisioner's progress), then connected or failed.
-2. **Home Assistant**: done once an ESPHome client whose Hello says "Home Assistant"
+2. **Sign in** (under Home Assistant): "Scan to sign in.", the QR code, and "Sign in on this panel
+   instead" (or "Find Home Assistant." with a URL field when HA wasn't found). It is answered by a refresh
+   token, or once the dashboard loads while a later step still waits (a panel signed in with a cookie
+   session). Without touch it shows the setup page's QR code until Home Assistant has added the panel,
+   then the sign-in's own. If Home Assistant added the panel first, Add it is green and Sign in current.
+3. **Add it** (under Home Assistant): done once an ESPHome client whose Hello says "Home Assistant"
    **subscribes to states**. HA's config flow only probes DeviceInfo during discovery, so a plain
    Hello doesn't count. `ApiServer.onStatesSubscribed` → `PanelDevice` persists `ha_seen` and
    notifies `SetupSignals`. Until then the step shows "Add it in Home Assistant. Settings → Devices &
    services → <the panel's name> → Add", "Waiting for Home Assistant…", and the panel's IP + port
-   6053 for a manual ESPHome add (or "Find Home Assistant." with a URL field when HA wasn't found).
-   **Skip** persists `setup_ha_skipped` (for kiosk-only use without the ESPHome device).
-3. **Sign in** (under Home Assistant): "Scan to sign in.", the QR code, and "Sign in on this panel
-   instead". It is answered by a refresh token, or once the dashboard loads with the panes still to
-   choose (a panel signed in with a cookie session).
+   6053 for a manual ESPHome add. Without touch, once signed in, it waits for Home Assistant to add the
+   panel (#484). **Skip** persists `setup_ha_skipped` (for kiosk-only use without the ESPHome device).
 4. **Panes**: "Choose", one card per pane that offers one (`PaneDefinition.setupChoice`): Voice
    (Assist and timers), Music (a Sendspin speaker), the Zigbee / Thread radio, the Bluetooth proxy
    (for BLE sensors, off by default; no card on a panel without Bluetooth LE) and the Wall base (the
@@ -564,7 +573,7 @@ in."), with the way to change it second ("Use another network", "Add it by hand"
    that doesn't answer ("The Music didn't answer."), shows in rose with every problem listed and keeps
    the step; the cards are locked while it applies. Then each pane that is on has its own steps under
    Panes (`PaneDefinition.setupSteps`, each with a `title` for its row and a `screen` for the card).
-   A pane with steps but no card is left out, with an error in the `S1Kiosk` log.
+   A pane with steps but no card is left out, with an error in the `Glassworks` log.
    **Radio**: "What should the radio do?", technology first (`radio/ui/RadioTechPicker.kt`): Zigbee
    (Coordinator, Repeater β) or Thread (Border router, Repeater β), no Off (that is the Panes card).
    Continue applies it through the same request as the installer's `radio.set_mode`, within 30 s
@@ -574,7 +583,13 @@ in."), with the way to change it second ("Use another network", "Add it by hand"
    web installer over the setup channel). A panel set up before the radio step existed has it marked
    done once at the first start of the new build (`RadioDefinition`'s one-time check: a known HA,
    `ha_seen`, an API key, a skipped HA step or a stored radio mode), so it never sees it.
-5. **Done**: the lit stack on its own, "You're all set." and "Opening your dashboard…". The dashboard
+5. **Silent updates** (`SilentUpdatesStep`, #422), only when updates ask for a tap and there's a way to change
+   that, and only on a screen that takes a tap: Android 12+ with "Install unknown apps" off opens Android's page for
+   it; Android 6 to 11, or a release that targets too low an API, says a device owner skips the tap (QR code to
+   Kiln); an S1 whose boot image has no update service says Kiln adds one. Continue or Not now answers it
+   (`setup_silent_updates_answered`), and so does `silent_updates.answer` over the setup channel. A panel set up
+   before the step existed has it marked answered once, at the first start of the new build.
+6. **Done**: the lit stack on its own, "You're all set." and "Opening your dashboard…". The dashboard
    loads (unless it's already showing), then the screen fades out.
 
 **When it shows** (`SetupState.decide`). Only strong evidence counts, so it never covers a panel
@@ -586,19 +601,24 @@ session without a refresh token):
   loading screen's offline text would point at a button nobody can press (#448);
 - online but HA isn't known at all (no saved URL, nothing discovered);
 - HA never added the panel: no HA client connected within 2 min of startup *and* no `ha_seen`, no
-  API key, not skipped;
+  API key, not skipped (not after "Sign in on this panel instead" until the page shows Home Assistant: the person
+  signs in on HA's own login page first);
 - no refresh token *and* the GeckoView actually reached HA's `/auth/authorize` (or the user signed
   out on the panel), unless "Sign in on this panel instead" was chosen;
 - online, HA step done, the panes not chosen yet or a chosen pane's step not answered (so it comes back
-  after a reboot).
+  after a reboot);
+- online, HA step done, every pane's step answered, and the Silent updates step pending: something to offer, on a
+  screen that takes a tap, not answered yet (step 5 above). Until the app has read whether updates are silent (a
+  moment after it starts), the step shows *Checking updates* and setup waits for that first answer; with nothing to
+  offer it then moves on by itself.
 
-The current step is the first one not done (Wi-Fi → HA → Sign in → Panes → each pane's steps). Once shown, the screen stays
+The current step is the first one not done (Wi-Fi → Sign in → Add it → Panes → each pane's steps → Silent updates). Once shown, the screen stays
 until all steps are done, so it doesn't flicker between steps. It is re-evaluated on connectivity,
-sign-in, HA connection and page changes, and every 2 s. The trigger is logged (`S1Kiosk`:
+sign-in, HA connection and page changes, and every 2 s. The trigger is logged (`Glassworks`:
 "Setup screen: <reasons> (step …)").
 
 Preview without changing state: `--ez show_setup true` (live step), `--es setup_step
-wifi|ha|signin|panes|radio|done` (a given step; a pane's step id opens that step), `--ez show_setup false` to close.
+wifi|ha|signin|panes|radio|silent_updates|done` (a given step; a pane's or the device's step id opens that step), `--ez show_setup false` to close.
 In preview, Skip, the manual URL and Continue save nothing, and "Preview · Close" is shown. `--ez show_signin true` = the Sign-in step.
 
 ## Build order

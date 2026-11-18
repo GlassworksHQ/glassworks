@@ -59,6 +59,13 @@ class ManageServer(
 ) {
     private val random = SecureRandom()
 
+    /** A Home Assistant token another panel's page brings, checked with this panel's own Home Assistant (#466). */
+    private val tokens = HaTokenCheck(signIn.gateway, haBase, signIn::isLocal, monoMs)
+
+    private val handoffs = PerAddress(HANDOFFS_PER_WINDOW, HANDOFF_WINDOW_MS)
+
+    private val api = ManageApi(host, tokens, haBase, ::apply, PENDING, event, ::ask) { id, owner, section, key, value -> answered(id, owner, section, key, value) }
+
     /** A question's answer (#269 verifier): the change it asked about, for one session, until it runs out. */
     private data class Asked(val session: String, val section: String, val key: String, val value: String, val untilMs: Long)
 
@@ -98,6 +105,9 @@ class ManageServer(
         // Before setup, / is the QR sign-in, except for a browser already signed in to Manage (with the code).
         if (req.path == "/" && !setUp() && sessions.lookup(req.cookies[SESSION], haBase()) == null) return qrPage(req)
         if (!hostAllowed(req.headers["host"], ownHosts())) return HttpResponse.text(400, "Open this page with the panel's address.")
+        // Called from a page on another panel, with a Home Assistant token rather than this page's cookie (#466).
+        if (req.path.startsWith(ManageApi.PREFIX)) return api.handle(req)
+        if (req.path == HANDOFF) return if (req.method == "POST") handoff(req) else HttpResponse.seeOther("/")
         if (req.method != "GET" && req.method != "HEAD" && req.method != "POST") return HttpResponse.text(405, "Not allowed.")
         if (req.method == "POST" && !sameOrigin(req)) return HttpResponse.text(403, "This form didn't come from the panel's own page.")
         val session = sessions.lookup(req.cookies[SESSION], haBase())
@@ -181,6 +191,41 @@ class ManageServer(
                     extra = mapOf("Set-Cookie" to sessionCookie(token, r.remember) + "\n" + clearCookie(PRE)))
             }
         }
+    }
+
+    /**
+     * [HANDOFF], POST from a page on another panel (#466): `token` is the Home Assistant access token that page
+     * holds. This panel asks its own Home Assistant who it belongs to ([HaTokenCheck]) and, for an administrator,
+     * signs this browser in as a Home Assistant sign-in would, until the browser closes. The token is neither kept
+     * nor revoked: it is the other page's. It comes from another site, so no Origin check; the token is the proof.
+     */
+    private fun handoff(req: HttpRequest): HttpResponse {
+        fun refused(title: String, text: String, status: Int = 403, log: Boolean = true, extra: Map<String, String> = emptyMap()): HttpResponse {
+            if (log) event("A sign-in from another panel's page was refused: $title")
+            return html(status, PageShell.qrPage(name(), title, PageShell.esc(text), PageShell.Look.PROBLEM,
+                button = """<a class="btn" href="/">Sign in here</a>"""), extra = extra)
+        }
+        // A fresh check asks Home Assistant every time: a page posting made-up tokens over and over (a cross-site form
+        // can) would keep its few questions busy. So a few sign-ins per address at a time, then a pause (verifier on #487).
+        if (!handoffs.allow(req.remote ?: "?", monoMs())) return refused("Too many sign-ins", HANDOFF_PAUSE, 429, log = false,
+            extra = mapOf("Retry-After" to (HANDOFF_WINDOW_MS / 1000).toString()))
+        // Asked fresh: an answer kept from before must not start a 12-hour sign-in for a token revoked since.
+        val ok = when (val r = tokens.check(req.form["token"], fresh = true)) {
+            is HaTokenCheck.Result.Ok -> r
+            is HaTokenCheck.Result.NotAdmin -> return refused("Administrators only", "${r.name} isn't a Home Assistant administrator. Sign in with an administrator's account.")
+            HaTokenCheck.Result.NoHa -> return refused("Can't check who you are", ManageApi.NO_HA)
+            HaTokenCheck.Result.Refused -> return refused("Can't sign in", ManageApi.REFUSED)
+            HaTokenCheck.Result.Busy -> return refused("Try again in a moment", ManageApi.BUSY)
+        }
+        // Bound to the address that confirmed the user, as haCallback binds its own: if it changed since, start again.
+        val ha = haBase()
+        if (ok.haBase != ha?.trim()?.trimEnd('/')) return refused("Home Assistant's address changed", "Sign in again.")
+        val (token, s) = sessions.create(ok.user.name, SignedInWith.HOME_ASSISTANT, SessionStore.browserName(req.headers["user-agent"]), false, ha)
+        event("${ok.user.name} signed in with Home Assistant from the Manage page on ${ManageApi.from(req, req.form["from"])} (${s.browser})")
+        // A page from another site posted here: a redirect would still be cross-site for the Strict cookie (see haCallback).
+        val next = safeNext(req.form["next"])
+        return html(200, PageShell.document(name(), "", """<meta http-equiv="refresh" content="0;url=${PageShell.esc(next)}">"""),
+            extra = mapOf("Set-Cookie" to sessionCookie(token, false)))
     }
 
     /** `/manage/code`, POST: show a code on the panel, or check the one typed. */
@@ -301,7 +346,7 @@ class ManageServer(
         val page = "/" + (status.panes.firstOrNull { it.sectionId == id }?.id ?: id)
         val key = req.form["key"].orEmpty()
         val item = SettingsChange.find(section, key) ?: return HttpResponse.seeOther("$page?done=gone")
-        val what = "${section.title} › " + if (key == SettingsChange.MASTER) "on/off" else key.replace("/", " › ")
+        val what = ManageApi.what(section, key)
         if (item is SettingsItem.SignIn) return changeSignIn(req, s, viewer, page, key, what, item)
         // The time window's dialog sends On, From and To; the rest send their value as text. Trimmed here, as
         // SettingsChange.change trims it, so a padded value (" run ") can't skip the question (CodeRabbit on #331).
@@ -309,13 +354,7 @@ class ManageServer(
             else req.form["value"].orEmpty()).trim()
         // A change that asks first on the panel asks here too, and runs only with the answer to that question:
         // a one-shot token the dialog carries, for this session and this exact change (#269 verifier).
-        val question: SettingsItem.Confirm? = when {
-            item is SettingsItem.Switch && (raw == "on" || raw == "off") -> runCatching { item.confirm(raw == "on") }.getOrNull()
-            item is SettingsItem.Action && raw == SettingsItem.Action.RUN -> item.confirm
-            // A choice that asks first (the radio's role).
-            item is SettingsItem.Choice -> runCatching { item.confirm(raw) }.getOrNull()
-            else -> null
-        }
+        val question = ManageApi.question(item, raw)
         if (question != null && !answered(req.form["answer"], s.id, id, key, raw)) {
             return settingsPage(status, viewer, page.removePrefix("/"), ManagePages.Dialog.Confirm(key, raw, question, ask(s.id, id, key, raw)))!!
         }
@@ -518,6 +557,14 @@ class ManageServer(
             return if (q.isEmpty()) req.path else req.path + "?" + q.entries.joinToString("&") { (k, v) -> dev.glassworks.web.HttpServer.enc(k) + "=" + dev.glassworks.web.HttpServer.enc(v) }
         }
         const val PRE = "gw_pre"
+
+        /** How many sign-ins from another panel's page one address may start in [HANDOFF_WINDOW_MS]. */
+        const val HANDOFFS_PER_WINDOW = 5
+        const val HANDOFF_WINDOW_MS = 10_000L
+        const val HANDOFF_PAUSE = "This address started several sign-ins in a short time. Try again in a few seconds."
+
+        /** Where a page on another panel signs this browser in with its Home Assistant token (#466). */
+        const val HANDOFF = "/manage/ha/token"
 
         /** [apply]'s answer while a change is still running. */
         private const val PENDING = "\u0000pending"

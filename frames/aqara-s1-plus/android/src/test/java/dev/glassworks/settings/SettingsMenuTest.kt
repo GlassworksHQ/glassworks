@@ -163,7 +163,7 @@ class SettingsMenuTest {
     @Test
     fun aboutHasNoDebugLine() {
         val about = menu().first { it.id == "about" }.items[0] as SettingsItem.Info
-        assertEquals("S1 Kiosk 0.4.3", about.title())
+        assertEquals("Glassworks 0.4.3", about.title())
         assertEquals("", about.detail())
         val log = menu().first { it.id == "log" }.items[0] as SettingsItem.Info
         assertEquals("screen on", log.detail())
@@ -207,7 +207,7 @@ class SettingsMenuTest {
         assertEquals(1.5f, prefs.zoom)
         assertEquals("ha.local", prefs.extraSecureHosts)
         assertFalse(prefs.hideHeader); assertFalse(prefs.hideSidebar) // one switch for both
-        assertEquals("always", prefs.screenMode)
+        assertEquals("presence", prefs.screenMode) // the wake switch said always, then the picked time put presence back (#522)
         assertEquals(300, prefs.idleOffSec)
         assertEquals(2.1f, prefs.presenceRangeM)
         assertTrue(prefs.autoBrightness)

@@ -45,9 +45,9 @@ class OrbBakes(
         try {
             // The work never throws: Bakery drops a failed bake without calling back, which would leave
             // baking set and the waiting orbs (and their views) held for good.
-            bake({ Outcome(runCatching { make(art) }.onFailure { Log.w("S1Kiosk", "orb layers failed", it) }.getOrNull()) }) { finish(it.layers) }
+            bake({ Outcome(runCatching { make(art) }.onFailure { Log.w("Glassworks", "orb layers failed", it) }.getOrNull()) }) { finish(it.layers) }
         } catch (t: Throwable) {
-            Log.w("S1Kiosk", "orb layers not baked", t)
+            Log.w("Glassworks", "orb layers not baked", t)
             finish(null)
         }
     }
