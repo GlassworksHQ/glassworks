@@ -8,7 +8,7 @@
 // signed in, and copies settings from one panel to another. No panel sees another's requests. The token goes
 // only to a device Home Assistant lists as a Glassworks panel that answers as one first (readPanel).
 
-import { authorizeUrl, base64url, copyRows, panelsFrom, pkceChallenge, plan, readPanel, revokeAt, usable } from './panels-core.js';
+import { authorizeUrl, base64url, copyRows, panelsFrom, pkceChallenge, plan, readPanel, revokeAt, tokenRequest, usable } from './panels-core.js';
 
 const root = document.getElementById('gw-panels');
 const ha = (root.dataset.ha || '').replace(/\/+$/, '');
@@ -65,16 +65,7 @@ function stored() {
   }
 }
 
-async function tokenCall(form) {
-  let r;
-  try {
-    r = await fetch(ha + '/auth/token', { method: 'POST', body: new URLSearchParams(form) });
-  } catch {
-    throw new Error("Can't reach Home Assistant.");
-  }
-  if (!r.ok) throw new Error('Home Assistant refused the sign-in. Sign in again.');
-  return r.json();
-}
+const tokenCall = (form) => tokenRequest(ha, form);
 
 /** A current access token, renewed from the refresh token a minute before it runs out; null when signed out. */
 async function token() {

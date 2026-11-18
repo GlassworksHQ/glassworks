@@ -175,7 +175,14 @@ await new Promise((ok) => proxy.listen(0, '127.0.0.1', ok));
 const profile = mkdtempSync(join(tmpdir(), 'gw-panels-shots-'));
 const browser = spawn(chrome, ['--headless=new', '--remote-debugging-port=0', '--user-data-dir=' + profile, '--no-first-run',
   '--proxy-server=http://127.0.0.1:' + proxy.address().port, '--proxy-bypass-list=<-loopback>', 'about:blank'], { stdio: ['ignore', 'ignore', 'pipe'] });
-const wsUrl = await new Promise((ok) => browser.stderr.on('data', (d) => { const m = /ws:\/\/\S+/.exec(String(d)); if (m) ok(m[0]); }));
+const cleanUp = () => { browser.kill(); proxy.close(); inner.close(); rmSync(profile, { recursive: true, force: true }); };
+// Chrome that never starts, or exits first, fails the run instead of leaving it waiting (CodeRabbit on #488).
+const wsUrl = await new Promise((ok, no) => {
+  const late = setTimeout(() => no(new Error("Chrome didn't start within 30 s")), 30_000);
+  browser.on('error', (e) => { clearTimeout(late); no(e); });
+  browser.on('exit', (code) => { clearTimeout(late); no(new Error('Chrome exited before it started (' + code + ')')); });
+  browser.stderr.on('data', (d) => { const m = /ws:\/\/\S+/.exec(String(d)); if (m) { clearTimeout(late); ok(m[0]); } });
+}).catch((e) => { cleanUp(); throw e; });
 const targets = await (await fetch(wsUrl.replace('ws://', 'http://').replace(/\/devtools.*/, '/json/list'))).json();
 const cdp = new WebSocket(targets.find((t) => t.type === 'page').webSocketDebuggerUrl);
 await new Promise((ok) => cdp.addEventListener('open', ok));

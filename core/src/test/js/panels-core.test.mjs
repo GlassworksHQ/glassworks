@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
 import { test } from 'node:test';
-import { MAX_WAIT_S, SETTINGS_MS, TRIES, accepts, copyRows, authorizeUrl, hello, localHost, manageOrigin, revokeAt, usable, writeSetting, outcome, panelsFrom, pkceChallenge, plan, reachability, readPanel, retrying, sha256 } from '../../main/assets/manage/panels-core.js';
+import { MAX_WAIT_S, SETTINGS_MS, TRIES, accepts, copyRows, authorizeUrl, hello, localHost, manageOrigin, revokeAt, tokenRequest, usable, writeSetting, outcome, panelsFrom, pkceChallenge, plan, reachability, readPanel, retrying, sha256 } from '../../main/assets/manage/panels-core.js';
 
 const MODEL = 'Panel Hub S1 Plus (S1 Kiosk)';
 const device = (id, url, more = {}) => ({ id, name: 'Glassworks Panel', model: MODEL, config_entries: ['esp'], configuration_url: url, area_id: null, disabled_by: null, ...more });
@@ -377,4 +377,33 @@ test('a sign-out during a busy wait sends no further try', async () => {
   let calls = 0;
   await retrying(async () => (calls++, { status: 503, headers: { get: () => '1' } }), noWait, () => false);
   assert.equal(calls, TRIES, 'without a sign-out, the retries still run');
+});
+
+test("Home Assistant's token exchange has one deadline for the request and its body", { timeout: 5_000 }, async () => {
+  const ok = await tokenRequest('http://192.0.2.10:8123', { grant_type: 'refresh_token' }, async (url, init) => {
+    assert.equal(url, 'http://192.0.2.10:8123/auth/token');
+    assert.equal(String(init.body), 'grant_type=refresh_token');
+    return { status: 200, headers: { get: () => null }, json: async () => ({ access_token: 'A', expires_in: 1800 }) };
+  }, 1_000);
+  assert.equal(ok.access_token, 'A');
+  const never = () => new Promise(() => {});
+  await assert.rejects(tokenRequest('http://192.0.2.10:8123', {}, never, 30), { message: "Home Assistant didn't answer in time. Try again." });
+  const stalledBody = async () => ({ status: 200, headers: { get: () => null }, json: () => new Promise(() => {}) });
+  await assert.rejects(tokenRequest('http://192.0.2.10:8123', {}, stalledBody, 30), { message: "Home Assistant didn't answer in time. Try again." });
+  await assert.rejects(tokenRequest('http://192.0.2.10:8123', {}, async () => ({ status: 400, headers: { get: () => null }, json: async () => ({ error: 'invalid_grant' }) }), 1_000),
+    { message: 'Home Assistant refused the sign-in. Sign in again.' });
+  await assert.rejects(tokenRequest('http://192.0.2.10:8123', {}, async () => { throw new TypeError('Failed to fetch'); }, 1_000), { message: "Can't reach Home Assistant." });
+});
+
+test('no request to a panel or to Home Assistant follows a redirect', async () => {
+  const modes = [];
+  const fetchFn = async (url, init) => {
+    modes.push([new URL(url).pathname, init.redirect]);
+    return { status: 200, headers: { get: () => null }, json: async () => (url.endsWith('/manage/api/hello') ? { api: 1, glassworks: true, model: MODEL } : settings) };
+  };
+  const p = await readPanel(panelAt('kitchen-panel.local:8099'), 'TOKEN', fetchFn, 1_000, noWait);
+  await writeSetting({ ...p, name: 'Kitchen panel' }, 'TOKEN', { section: 's', key: 'k', value: 'v' }, fetchFn, 1_000, noWait);
+  await revokeAt('http://192.0.2.10:8123', 'R', fetchFn, 1_000);
+  await tokenRequest('http://192.0.2.10:8123', {}, fetchFn, 1_000).catch(() => {});
+  assert.deepEqual(modes, [['/manage/api/hello', 'error'], ['/manage/api/settings', 'error'], ['/manage/api/settings', 'error'], ['/auth/revoke', 'error'], ['/auth/token', 'error']]);
 });

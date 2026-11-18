@@ -338,13 +338,32 @@ async function timed(fetchFn, url, init, ms) {
   const aborted = new Promise((_, no) => c.signal.addEventListener('abort', () => no(new DOMException('The request took too long.', 'AbortError'))));
   aborted.catch(() => {});
   try {
-    const r = await Promise.race([fetchFn(url, { ...init, signal: c.signal }), aborted]);
+    // No redirects: one could take the request to a host off the local network, past every check above (CodeRabbit on #488).
+    const r = await Promise.race([fetchFn(url, { ...init, redirect: 'error', signal: c.signal }), aborted]);
     const body = await Promise.race([r.json().catch((e) => { if (e && e.name === 'AbortError') throw e; return null; }), aborted]);
     return { status: r.status, headers: r.headers, body };
   } finally {
     clearTimeout(t);
   }
 }
+
+/**
+ * Home Assistant's `/auth/token` with [form], as its JSON, within [ms] in all (the request and its body): a stalled
+ * answer can't leave a copy's controls disabled (CodeRabbit on #488). Throws an Error whose message the page shows.
+ */
+export async function tokenRequest(ha, form, fetchFn = fetch, ms = TOKEN_MS) {
+  let r;
+  try {
+    r = await timed(fetchFn, ha + '/auth/token', { method: 'POST', body: new URLSearchParams(form) }, ms);
+  } catch (e) {
+    throw new Error(e && e.name === 'AbortError' ? "Home Assistant didn't answer in time. Try again." : "Can't reach Home Assistant.");
+  }
+  if (r.status < 200 || r.status >= 300 || !r.body) throw new Error('Home Assistant refused the sign-in. Sign in again.');
+  return r.body;
+}
+
+/** How long a token exchange or refresh may take. */
+export const TOKEN_MS = 15_000;
 
 /** Asks Home Assistant at [ha] to drop [refresh] and every access token made from it. True only when it said yes. */
 export async function revokeAt(ha, refresh, fetchFn = fetch, ms = REVOKE_MS) {
@@ -353,7 +372,7 @@ export async function revokeAt(ha, refresh, fetchFn = fetch, ms = REVOKE_MS) {
   let t;
   const late = new Promise((_, no) => { t = setTimeout(() => { c.abort(); no(new DOMException('Home Assistant took too long.', 'AbortError')); }, ms); });
   try {
-    const r = await Promise.race([fetchFn(ha + '/auth/revoke', { method: 'POST', body: new URLSearchParams({ token: refresh }), signal: c.signal }), late]);
+    const r = await Promise.race([fetchFn(ha + '/auth/revoke', { method: 'POST', body: new URLSearchParams({ token: refresh }), redirect: 'error', signal: c.signal }), late]);
     return r.status >= 200 && r.status < 300;
   } catch {
     return false;
