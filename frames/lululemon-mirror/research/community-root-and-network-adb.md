@@ -108,13 +108,16 @@ of the hard numbers already match ours:
 
 | ABI input | Theirs (`shihanqu`) | Ours (mirror-root.md §4, verified) | For our unit |
 |---|---|---|---|
-| `module_layout` CRC | `0xa5b7f7dd` (`docs/ABI.md:34`) | `0xa5b7f7dd` | **already matches** |
-| `kallsyms_lookup_name` / `call_usermodehelper` CRC | primitive-signature, reproducible | — | reproducible (same kernel family) |
-| `struct module` layout | from `pronto_wlan.ko` DWARF | we hold the same 70 MB `pronto_wlan.ko` | re-derivable |
-| vermagic string | `…-g87fe01fd365…` | `…-gf46dad5260f…` | **change this one string** |
+| `module_layout` CRC | `0xa5b7f7dd` (`docs/ABI.md:34`) | `0xa5b7f7dd` | **matches** (the one measured agreement) |
+| `kallsyms_lookup_name` / `call_usermodehelper` CRC | primitive-signature, reproducible | not measured on our unit | **assume** reproducible — not checked |
+| `struct module` layout | from `pronto_wlan.ko` DWARF | we hold the same 70 MB `pronto_wlan.ko` | **assume** re-derivable — not checked |
+| vermagic string | `…-g87fe01fd365…` | `…-gf46dad5260f…` | **differs** — must change |
 
-So adapting to our unit is, on paper, swapping the vermagic string (`module_layout` already agrees,
-the two imports are primitive). **Untested** — nobody has built it for our kernel.
+So the one input we have actually compared is `module_layout` (it agrees); the vermagic plainly
+differs and must change; the two imported CRCs and the `struct module` layout are **assumptions** —
+primitive-signature CRCs *should* reproduce and the DWARF layout *should* re-derive, but neither has
+been compared against our kernel, so changing the vermagic alone may not be enough. **Untested end to
+end** — nobody has built it for our kernel.
 
 ### What we'd gain, and the two things it settles
 
@@ -197,13 +200,16 @@ build we run under, or something the Glass Panes system does, still not separate
 
 ### What we'd gain, and the one open question it touches
 
-- It is the **first report of authorised adb on a stock Mirror** (`README.md:81-89`). That bears
-  directly on [option-c.md](option-c.md)'s biggest open question — "Can a stock Mirror give adb at
-  all?" — which we marked untested. For **one** unit at firmware 1.16.0, the answer is **yes, over
-  network adb** (and the author notes firmware **1.2x+ is reported to break** the key method —
-  `README.md:87-89`). If it held generally, a stock Mirror's **own lululemon vendor files** (never
-  read by anyone we know) would become the cleanest source for option C — no Glass Panes licence
-  question at all.
+- It is the first report of authorised adb on a stock Mirror **over the network** (`README.md:81-89`).
+  It is **not** the first stock-adb report over **USB**: the project itself credits earlier owner
+  reports of USB authorisation on stock — porcuswine's RevP18 `adb_keys` recipe and the
+  `TimStewartJ` issue #5 thread, which it calls "the only prior working 1.16.0 report"
+  (`README.md:316-333`). So the new thing here is the network path, not stock adb as such. That still
+  bears directly on [option-c.md](option-c.md)'s biggest open question — "Can a stock Mirror give adb
+  at all?" — which we marked untested: for **one** unit at firmware 1.16.0, the answer is **yes**
+  (and the author notes firmware **1.2x+ is reported to break** the key method — `README.md:87-89`).
+  If it held generally, a stock Mirror's **own lululemon vendor files** (never read by anyone we know)
+  would become the cleanest source for option C — no Glass Panes licence question at all.
 - The **persistent TCP listener** is a headless-recovery idea worth noting for #435/#486 and #577.
 
 ### Cost and risk
@@ -257,7 +263,7 @@ Both repos were read, not run. To repeat the reading, clone each into its **own 
 Compare against our verified notes: [mirror-root.md](mirror-root.md) §4 and §7,
 [adbd-keys.md](adbd-keys.md), [option-c.md](option-c.md), [image-patch.md](image-patch.md).
 
-A short **read-only** panel check (for the root — only the root drives the Mirror) would settle
+A short **read-only** panel check (for the root — only the root drives the Mirror) would help settle
 whether `shihanqu`'s exact mechanism — a free `adsprpc.ko` slot that `init` loads on boot — exists on
 **our** image. All of it is `ls`/`cat`/`dmesg`/`getprop`, no writes, no serial printed
 (`S=$(cat /tmp/mirror-serial)`):
@@ -265,7 +271,7 @@ whether `shihanqu`'s exact mechanism — a free `adsprpc.ko` slot that `init` lo
 ```sh
 # Is the adsprpc.ko slot free, and does init try (and fail) to load it on boot?
 adb -s "$S" shell ls -l /system/lib/modules/adsprpc.ko     # expect "No such file" if free
-adb -s "$S" shell 'dmesg | grep -iE "adsprpc|insmod"'      # a failed-insmod line = the init trigger exists
+adb -s "$S" shell 'dmesg | grep -iE "adsprpc|insmod"'      # a failed-insmod line CONFIRMS the trigger
 adb -s "$S" shell cat /proc/modules                        # expect wlan, not adsprpc
 # Does our image ship /system/xbin/su (shihanqu needs it)?
 adb -s "$S" shell ls -l /system/xbin/su                    # mode if readable, else Permission denied
@@ -273,16 +279,22 @@ adb -s "$S" shell ls -l /system/xbin/su                    # mode if readable, e
 adb -s "$S" shell cat /proc/version
 ```
 
-The fuller version, with the pass/fail reading for each, is in the root's trail
+The check is asymmetric: a failed-insmod line **confirms** the trigger exists; a **blank** result is
+**inconclusive**, not proof it's absent. AOSP 6.0.1 `init` logs a command's result at a log level
+that may not reach the kernel log on this build, and the ring buffer scrolls, so the trigger could be
+present with no visible line. Reading the ramdisk `init.qcom.rc` (or watching a module load across a
+clean boot) is the only thing that would settle the negative case, and both are out of `shell`'s
+reach. The fuller version, with the pass/fail reading for each, is in the root's trail
 (`~/.t3/glassworks-m1/573/panel-plan.md`). Nothing in this note needs a device.
 
 ## Open questions
 
 - **Does our Glass Panes image have the free `adsprpc.ko` slot and the init `insmod` trigger?** The
   trigger lives in the boot ramdisk's `init.qcom.rc` (0750 root, unreadable as `shell`), so it can be
-  read only indirectly — see the panel plan (a failed-insmod line in `dmesg`, and `ls
-  /system/lib/modules`). If the slot is occupied or `init` never tries it, `shihanqu`'s approach
-  would need a different trigger on our image.
+  read only indirectly — see the panel plan (a failed-insmod line in `dmesg` confirms it; a blank
+  result is inconclusive, not a negative), and `ls /system/lib/modules`. If the slot turns out to be
+  occupied, or the trigger is shown absent (by reading the ramdisk, not by a blank `dmesg`),
+  `shihanqu`'s approach would need a different trigger on our image.
 - **Does our image ship `/system/xbin/su` (04750)?** `shihanqu` relies on it; our image is the same
   userdebug family, but we never confirmed `su` is present and setuid. Read-only check in the plan.
 - **Would a vermagic-adapted module load on our `-gf46dad5260f` kernel?** `module_layout` already

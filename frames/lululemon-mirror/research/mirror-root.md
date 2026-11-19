@@ -431,8 +431,10 @@ from the policy, `dmesg` and AOSP 6.0.1_r81; `flash_recovery` stays untested and
   and nothing here rules out another. A community project has since built this route and reported it
   working on two units, recovering the ABI from the vendor `pronto_wlan.ko`'s DWARF rather than a
   kernel build, and loading at the free `adsprpc.ko` init slot instead of chain-loading `wlan` — see
-  [community-root-and-network-adb.md](community-root-and-network-adb.md). Our unit's `module_layout`
-  CRC already matches theirs (`0xa5b7f7dd`); only the vermagic string differs. Still **untested** on
+  [community-root-and-network-adb.md](community-root-and-network-adb.md). The one input we've compared
+  matches — our unit's `module_layout` CRC equals theirs (`0xa5b7f7dd`) — and the vermagic plainly
+  differs; the two imported CRCs and the `struct module` layout are **assumed** reproducible but not
+  checked against our kernel, so changing the vermagic alone may not suffice. Still **untested** on
   our kernel, and a shipped module is a GPL payload (rule 4).
 - **`qti_init_shell` root via `post_boot.sh`:** done (§7). It is enough to read `/firmware/image` and
   the top-level `/persist` files, and it holds `sys_module`. It is not enough for partition dumps.
