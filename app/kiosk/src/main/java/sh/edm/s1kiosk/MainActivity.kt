@@ -139,6 +139,7 @@ class MainActivity : Activity() {
         prefs = KioskPrefs(this)
         prefs.migrateRadioStep() // an already set-up panel never sees the radio step
         HaAuth.init(this)
+        intent?.let(::screenExtras)
         applyIntent(intent, fromNewIntent = false)
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -640,6 +641,7 @@ class MainActivity : Activity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        screenExtras(intent)
         applyIntent(intent, fromNewIntent = true)
     }
 
@@ -1214,6 +1216,18 @@ class MainActivity : Activity() {
     }
 
     companion object {
+        /**
+         * Drops [intent]'s extras unless it named MainActivity itself (#374). The manifest guards MainActivity
+         * with WRITE_SECURE_SETTINGS, so only adb, root, the system and this app can start it; the launcher's
+         * alias, which any app can start, changes no setting. Returns whether it dropped any. Public for tests.
+         */
+        fun screenExtras(intent: Intent): Boolean {
+            if (intent.extras == null || intent.component?.className == MainActivity::class.java.name) return false
+            Log.w(TAG, "ignored the extras of a start through ${intent.component?.shortClassName}: settings change only through adb")
+            intent.replaceExtras(null as Bundle?)
+            return true
+        }
+
         /** Onboarding/dashboard background (#0a0b0f), also used to cover the page until first paint. */
         private const val BACKGROUND = 0xFF0A0B0F.toInt()
         private const val TAG = "S1Kiosk"
