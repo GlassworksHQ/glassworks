@@ -934,7 +934,9 @@ ap_up() { # the kiosk's sockets as Android's dual-stack Java sockets show them
   socks udp6 "$AP4:1F75 07 10050" "$AP6:1F75 07 10050"; socks tcp6 "$AP4:1FA2 0A 10050"; : > "$T/net/udp"; : > "$T/net/tcp"
   echo "23: wlan0    inet 192.168.43.1/24 brd 192.168.43.255 scope global wlan0\       valid_lft forever preferred_lft forever" > "$T/ip-addr4"
 }
-portal() { LOOPS=1 helper S1R_PROC_NET="$T/net"; }
+# ipt_idle: until no fake iptables call is running (a helper's loop it killed on exit may have one in flight)
+ipt_idle() { i=0; while pgrep -f /t/ipt.py >/dev/null && [ $i -lt 100 ]; do sleep 0.1; i=$((i + 1)); done; }
+portal() { LOOPS=1 helper S1R_PROC_NET="$T/net"; ipt_idle; }
 nat() { cat "$T/ipt/$1-nat" 2>/dev/null; }
 RULE4_DNS='-A S1PORTAL -s 192.168.43.1/24 -d 192.168.43.1/32 -i wlan0 -p udp -m udp --dport 53 -j DNAT --to-destination 192.168.43.1:8053'
 RULE4_WEB='-A S1PORTAL -s 192.168.43.1/24 -d 192.168.43.1/32 -i wlan0 -p tcp -m tcp --dport 80 -j DNAT --to-destination 192.168.43.1:8098'
@@ -949,7 +951,7 @@ check "...DNS to the AP's IPv6 address too" test "$(nat 6 | grep '^-A S1PORTAL')
 check "...one jump from PREROUTING in each" test "$(nat 4 | grep -c '^-A PREROUTING -j S1PORTAL$')$(nat 6 | grep -c '^-A PREROUTING -j S1PORTAL$')" = 11
 check "...and the status says on which interface" test "$(prop sys.s1kiosk.portal.status)" = "on wlan0"
 check "...never with an address in the log" test -z "$(grep -e 192.168 -e 2001: "$T/log")"
-: > "$T/setprop.log"; rm -f "$T/ipt/restores"; LOOPS=3 helper S1R_PROC_NET="$T/net" S1R_PORTAL_SLEEP=0.3
+: > "$T/setprop.log"; rm -f "$T/ipt/restores"; LOOPS=3 helper S1R_PROC_NET="$T/net" S1R_PORTAL_SLEEP=0.3; ipt_idle
 check "a new helper keeps rules already in place: not rebuilt, one jump, the status written once" \
   test "$(cat "$T/ipt/restores" 2>/dev/null | wc -l)/$(nat 4 | grep -c '^-A PREROUTING -j S1PORTAL$')/$(grep -c '^sys.s1kiosk.portal.status=' "$T/setprop.log")" = 0/1/1
 # ip6tables-save prints the address short; a rule in that form is the same rule, not a stale one
@@ -965,7 +967,10 @@ ap_up; portal
 logged() { i=0; until grep -q "$1" "$T/setprop.log" || [ $i -ge 600 ]; do sleep 0.1; i=$((i + 1)); done; }
 first_check() { logged '^sys.s1kiosk.portal.status='; }
 # bg_until <test...>: waits (60 s at most, an emulated ARM under load is slow) until it holds, then stops the helper
-bg_until() { i=0; until "$@" || [ $i -ge 600 ]; do sleep 0.1; i=$((i + 1)); done; pkill -f s1kiosk_radio.sh; wait "$H" 2>/dev/null; }
+# helpers_gone: after a pkill, until no helper and no fake iptables call of one is left (one already running would
+# still write its table after the test has moved on)
+helpers_gone() { pkill -f s1kiosk_radio.sh; wait "$H" 2>/dev/null; i=0; while pgrep -f '/t/ipt.py|s1kiosk_radio.sh' >/dev/null && [ $i -lt 100 ]; do sleep 0.1; i=$((i + 1)); done; }
+bg_until() { i=0; until "$@" || [ $i -ge 600 ]; do sleep 0.1; i=$((i + 1)); done; helpers_gone; }
 jumps4() { test "$(nat 4 | grep -c '^-A PREROUTING -j S1PORTAL$')" = 1; }
 rules4() { test -n "$(nat 4 | grep '^-A S1PORTAL')"; }
 : > "$T/setprop.log"; LOOPS=100000 helper S1R_PROC_NET="$T/net" S1R_PORTAL_SLEEP=0.2 S1R_SLEEP=0.1 &
@@ -1008,7 +1013,7 @@ check "the helper killed, a table unreadable at first: the leftover loop still r
   test -z "$(nat 4 | grep S1PORTAL)$(nat 6 | grep S1PORTAL)"
 i=0; while pgrep -f s1kiosk_radio.sh >/dev/null && [ $i -lt 100 ]; do sleep 0.1; i=$((i + 1)); done
 check "...and then it ends too" test -z "$(pgrep -f s1kiosk_radio.sh)"
-pkill -f s1kiosk_radio.sh; wait "$H" 2>/dev/null; hostapd_off
+helpers_gone; hostapd_off
 hostapd_on
 socks udp6 "$AP4:1F75 07 10077" "$AP6:1F75 07 10077"; portal
 check "the sockets of another app: no rules" test -z "$(nat 4 | grep S1PORTAL)"
