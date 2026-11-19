@@ -144,6 +144,7 @@ What we found on this device, and how ([all notes](../../docs/research/README.md
 - [privileged-app.md](research/privileged-app.md): Does an app in `/system/priv-app` get Android 6's privileged permissions (silent updates, reboot, secure settings) and keep them after it updates? Yes: read from AOSP 6.0.1 and verified on the unit with the probe app (2026-11-16). Whether it can approve a computer's adb key: read; the permission verified on the unit (read-only), the approval untested (#29)
 - [adbd-keys.md](research/adbd-keys.md): Why doesn't adbd accept a key from `/data/misc/adb/adb_keys`? The stock lululemon boot's adbd most likely doesn't verify against that file. The AOSP key-loading timing is ruled out and SELinux is ruled out by the policy; a malformed key file is narrowed, not ruled out. So the `services.jar` rewrite (#426) is the only lever Kiln has without the boot partition, which it never writes (read/inferred, 2026-11-16, #29)
 - [mirror-memory.md](research/mirror-memory.md): Why Glassworks "crashes" on the Mirror: the lowmemorykiller at memory status critical, not a crash; the memory budget, why GeckoView 144's GPU process dies when the app leaves the front, and what the app and the image cut (2026-11-18)
+- [option-c.md](research/option-c.md): Our own system image with vendor files taken off the person's Mirror (option C): which files (about 140 without the camera), which adb's shell can read (all but 13 daemons), the AOSP 6 build and its CI cost, how Kiln would assemble it, and the plan (read, off-device, 2026-11-18, #334)
 
 ## Files
 
