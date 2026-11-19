@@ -78,6 +78,8 @@ tools/perf/run.sh --frame aqara-s1-plus --name "Aqara S1 Plus" --runs 3 \
 | `--frame` | (required) | The frame id that goes in the report |
 | `--name` | the frame id | The frame's name in the report's headline |
 | `--serial` | `$ANDROID_SERIAL` | Which device |
+| `--package` | `sh.edm.s1kiosk` | The Glassworks app to measure: `dev.glassworks.generic_android` for the generic app, `dev.glassworks.generic_android.legacy` for its legacy build (the Mirror) |
+| `--activity` | read from the device | The app's activity that takes Clarity's extras. The runner reads it from the app's task (see [Other Glassworks apps, and Android 6](#other-glassworks-apps-and-android-6)); give it only if the app hasn't run since the device booted |
 | `--runs` | 3 | Repeats of each part. The report gives the median and range |
 | `--restore-dashboard` | (required for the grade) | The kiosk's dashboard setting now: a URL, or `auto`. The graded part puts it back when it ends and on any exit. The runner can't read it (it never reads app data), so you give it. It can't be the fake Home Assistant's address |
 | `--pane-ram` | | Also measure each switchable pane's RAM, with the panes' settings now, which it puts back: `assist=on,sendspin=on,wall-base=on,time-zone=on,diagnostics=on,mic=on` (`mic` is Assist's microphone: on unless muted). It runs one warm-up cycle first, not recorded. See [RAM](#ram) |
@@ -174,7 +176,7 @@ tools/perf/report.py <dir>` rebuilds the report from the raw files at any time, 
 - **Taps and swipes**, only on the reference pages and only when the page asks: each page logs
   where its "Living room" toggle is (`input tap`) and where to swipe (`input swipe`), tagged with
   that page load's nonce. A request with another page's nonce is ignored. Before anything reaches
-  `adb shell`, the runner checks the request: whole pixels inside the screen (`wm size`), 1 to 50
+  `adb shell`, the runner checks the request: whole pixels inside the screen as it is turned, 1 to 50
   taps (and no more than `--taps`), a swipe of 50 to 2000 ms. A bad request isn't sent; that page
   gets an error and isn't graded. A gesture is sent only while its page is still the current one,
   and the next page opens only after the last page's gestures are done. Nothing else is touched.
@@ -183,8 +185,75 @@ tools/perf/report.py <dir>` rebuilds the report from the raw files at any time, 
   the system at once (0.2 s on the S1). Otherwise the runner starts it with `am start -W` after 3 s.
   If the run stops early, or the last restart doesn't reach the dashboard, the exit trap restarts
   the app. While the app restarts, Home Assistant sees the panel go offline for a few seconds.
+- **On Android 6 only, five lines in the device's log** per runner step, ten in the steps that record the
+  clock's drift (`ClarityClock: <nonce> <n>`):
+  how the runner ties logcat's wall clock to the monotonic one (see
+  [Other Glassworks apps, and Android 6](#other-glassworks-apps-and-android-6)).
 - Everything else is read-only: `getprop`, `/proc`, `dumpsys meminfo`, `dumpsys SurfaceFlinger
-  --latency`, logcat.
+  --latency`, `dumpsys activity recents` (the app's activity), logcat.
+
+### Other Glassworks apps, and Android 6
+
+Clarity runs on any Glassworks app: the S1's (`sh.edm.s1kiosk`), the generic app
+(`dev.glassworks.generic_android`) and its legacy build (`dev.glassworks.generic_android.legacy`, the
+lululemon Mirror's Android 6). Give the app with `--package`.
+
+**The activity.** Clarity's extras go to the activity the kiosk runs in. The runner reads it from the app's
+most recent task (`realActivity=` in `dumpsys activity recents`, the same on Android 6 to 17): `.MainActivity`
+on the S1, `dev.glassworks.MainActivity` on the generic app. It doesn't take the app's launcher entry
+(`cmd package resolve-activity`, or `pm dump` on Android 6, which has no `cmd`): on the generic app that is an
+alias, `dev.glassworks.generic.Launcher`, and the app drops extras that come through it. A task stays listed
+after the app stops, until the device reboots. If the app hasn't run since then, the runner says so and asks for
+`--activity`.
+
+**Android 6** (checked on an API 23 arm64 emulator, 2026-11-18; the Mirror runs 6.0.1) lacks some of what the
+runner uses. What the runner does instead:
+
+| What | Android 6 | The runner |
+|---|---|---|
+| `logcat -v monotonic` | "Invalid parameter monotonic to -v" | Asks once per runner step. Without it: `-v usec`, the wall clock to the µs, tied to the monotonic clock (below) |
+| `date +%N`, `nproc` | No nanoseconds (`1795071980.N`); no `nproc` | Counts the `cpuN` lines of `/proc/stat`, the same online CPUs as `nproc` |
+| `ps -A -o PID,NAME` | Ignores the options: its own columns (`USER PID PPID VSIZE RSS WCHAN PC S NAME`) | Reads the PID column by its header and the name last |
+| `pidof <package>` | Lists every process | Not used: the runner reads `ps` |
+| SurfaceFlinger's layer | Plain `SurfaceView`, without the app (Android 10: `SurfaceView - <pkg>/<activity>`, Android 12+: `SurfaceView[<pkg>/<activity>]`) | Takes plain `SurfaceView` while the app has a window listed: a kiosk is the only app on screen |
+| `dumpsys meminfo` | `65128 kB: name` instead of `65,128K: name`; the legacy engine's content process is `:tab32` | Reads both; `:tab<n>` is a tab process |
+| `toybox nc` (camera video over the LAN) | No `nc` in toybox | The camera video goes over adb (`lanprobe.py` already falls back) |
+| `cmd` | Not there | Not used |
+
+`screencap`, `wm size`, `input tap`/`swipe` with a duration, `am start -W`, `am force-stop`, `stat -c`,
+`logcat -T`, `adb reverse` and `dumpsys SurfaceFlinger --latency` work as on Android 10.
+
+**The clock on Android 6.** SurfaceFlinger's frame times are on the monotonic clock (`CLOCK_MONOTONIC`), and the
+runner cuts them to the windows the page logs. Android 6's logcat stamps lines only with the wall clock. So the
+runner measures the offset once per runner step: five times, it reads the monotonic clock from
+`/proc/timer_list` (`now at <ns> nsecs`, read by the shell itself, no process started), writes a log line
+(`log -t ClarityClock`), and reads the clock again. The line's stamp lies between the two reads, so the tightest
+of the five pairs gives the offset to within half its width. The run's files on Android 6 carry it in
+`logcat_clock` (refstart, coldstart and idle samples): `offset_err_ms`, and `drift_ms`, how far the offset
+moved by the end of that step. A wall-clock change during a step (a network-time step, daylight saving) moves
+every later line by that much, and shows in `drift_ms`. Measured on the API 23 emulator (2026-11-18), in a `--quick` run: the offset's error was 0.76 to 1.9 ms
+in every step, and it moved by 0.35 ms at most within one. Where logcat has `-v monotonic` (Android 7 and later, the S1, the tablet) nothing changes: the
+runner reads it as before.
+
+**The legacy engine's lockdown** (#198) loads pages only from the dashboard's origin, which it takes when its
+process starts. The animation test page opens on the fake Home Assistant's origin with `--es open`, so the
+legacy engine refuses it ("Lockdown: refused page from 127.0.0.1"). The runner sees that line, skips the
+animation test page (detail, not graded) and goes on.
+
+**No touchscreen.** `input tap` and `input swipe` inject touch events whether or not the device has a
+touchscreen. The API 23 emulator was set up without one (`hw.screen=no-touch`, which Android reports as
+`-touch`), with the Mirror's legacy build of the app (0.2.0). There (2026-11-18) the taps reached the page:
+the first two views counted all their taps by the page's own `pointerdown`, and Event Timing measured them. But
+no swipe scrolled the page, on any view, while the same `input swipe` scrolled Android's own Settings list. So
+on a frame without a touchscreen, the legacy engine takes injected taps but doesn't scroll for injected swipes,
+and the scroll task isn't measured there: the grade comes out provisional. How the rubric treats a frame without
+touch is an open question; nothing in the rubric changed for it.
+
+**Portrait.** The pages place their taps and swipes from the page's own size (`innerWidth`, `innerHeight`,
+`devicePixelRatio`): the swipe runs down the middle from 85 % to 15 % of the height. Nothing assumes landscape.
+The runner checks each request against the screen's current size, turned as it is shown (`cur=` in
+`dumpsys window displays`), which is what `input tap` takes. `wm size` gives the panel's own size, unturned: the
+Pixel Tablet's `1600x2560` while it shows 2560 × 1600, against which a tap right of x 1600 would be refused.
 
 ## The reference dashboards
 

@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""A stand-in for `adb` that answers like an Android 10 panel, for test_runner.py.
+"""A stand-in for `adb` that answers like an Android 10 panel, for test_runner.py. FAKE_ANDROID6: like the
+lululemon Mirror's Android 6 instead (checked against an API 23 emulator, 2026-11-18): logcat has no
+`-v monotonic`, only the wall clock to the µs (`-v usec`); `ps` ignores `-A -o` and prints its own columns; there
+is no `nproc`; SurfaceFlinger names the app's layer plain `SurfaceView`; `dumpsys meminfo` writes "kB"; and the
+kiosk is the generic app, whose activity is dev.glassworks.MainActivity behind a launcher alias.
 
 State lives in $FAKE_ADB_STATE (a directory): the nonce of the page the runner opened, the taps it
 sent, and the time ranges in which the fake screen paints. logcat, SurfaceFlinger and the fake page
@@ -11,6 +15,7 @@ import os
 import re
 import sys
 import threading
+import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import clock as C  # noqa: E402
@@ -18,6 +23,10 @@ import clock as C  # noqa: E402
 STATE = os.environ["FAKE_ADB_STATE"]
 PKG = "sh.edm.s1kiosk"
 PERIOD_NS = 16_666_666
+ANDROID6 = bool(os.environ.get("FAKE_ANDROID6"))
+ACTIVITY = "dev.glassworks.MainActivity" if ANDROID6 else ".MainActivity"
+# The fake Android 6's wall clock: its monotonic clock plus this (logcat -v usec prints it).
+WALL_SHIFT = 1_795_000_000.0
 PIDS = {PKG: 4242, PKG + ":gpu_disable_art_image_": 4300, PKG + ":sandboxed_tab_disable_art_image_24": 4301, "otbr-agent": 900}
 
 
@@ -51,6 +60,26 @@ def paint(start, end):
 
 def now():
     return C.mono()
+
+
+def stamp(at):
+    """A logcat line's time: monotonic seconds, or on FAKE_ANDROID6 the wall clock as `-v usec` writes it."""
+    if not ANDROID6:
+        return f"{at:10.3f}"
+    w = at + WALL_SHIFT
+    return time.strftime("%m-%d %H:%M:%S", time.gmtime(w)) + f".{int(w % 1 * 1e6):06d}"
+
+
+def clock_pairs(cmd):
+    """perfrun's Device.wall_clock on Android 6: the monotonic clock read around each log line it writes."""
+    nonce = re.search(r'ClarityClock \"?(\w+)', cmd).group(1)
+    out = []
+    for i in range(1, int(re.search(r"seq 1 (\d+)", cmd).group(1)) + 1):
+        m1 = now()
+        save("clock_marks.json", state("clock_marks.json", []) + [[now(), f"{nonce} {i}"]])
+        m2 = now()
+        out.append(f"CLOCKPAIR {i} now at {int(m1 * 1e9)} nsecs now at {int(m2 * 1e9)} nsecs")
+    return "\n".join(out) + "\n" + time.strftime("%Y", time.gmtime(now() + WALL_SHIFT)) + "\n"
 
 
 WALL_MINUS_MONO = []
@@ -138,7 +167,7 @@ def shell(cmd):
                   or os.environ.get("FAKE_REF_URL_FAILS") and "127.0.0.1" in u.group(1)):
             # The kiosk didn't take the restore (am exits 0 all the same): nothing is saved.
             save("restore_refused.json", state("restore_refused.json", 0) + 1)
-            return "Starting: Intent { cmp=sh.edm.s1kiosk/.MainActivity }\nError: Activity not started, unable to resolve Intent\n"
+            return f"Starting: Intent {{ cmp={PKG}/{ACTIVITY} }}\nError: Activity not started, unable to resolve Intent\n"
         if u:
             # Like the kiosk: `url` saves the dashboard (a URL or "auto") and loads it.
             save("saved_url.json", u.group(1))
@@ -155,7 +184,10 @@ def shell(cmd):
             save("settings.json", dict(state("settings.json", {}), **keep))
         m = re.search(r"--es open '([^']+)'", cmd)
         # Like the S1 kiosk (#103's pins): `open` is dropped until GeckoView's session is up.
-        if m and state("session_up.json", True):
+        if m and os.environ.get("FAKE_LOCKDOWN") and "127.0.0.1" in m.group(1):
+            # The legacy engine's lockdown (#198): only the dashboard's origin loads.
+            save("lockdown.json", True)
+        elif m and state("session_up.json", True):
             nonce = re.search(r"nonce=(\w+)", m.group(1))
             if nonce:
                 save("refnonce.json" if "/clarity-" in m.group(1) else "nonce.json", [nonce.group(1), m.group(1)])
@@ -165,28 +197,40 @@ def shell(cmd):
             # A launch (the cold start); an intent with a setting goes to the running kiosk instead.
             if not os.environ.get("FAKE_NO_DASHBOARD") and not u and not ez:
                 save("cold.json", True)
-            return "Starting: Intent\nStatus: ok\nActivity: sh.edm.s1kiosk/.MainActivity\nTotalTime: 1700\nWaitTime: 1710\nComplete\n"
+            return f"Starting: Intent\nStatus: ok\nActivity: {PKG}/{ACTIVITY}\nTotalTime: 1700\nWaitTime: 1710\nComplete\n"
         return "Starting: Intent\n"
+    if cmd.startswith("logcat -d") and ANDROID6 and "-v monotonic" in cmd:
+        return "Invalid parameter monotonic to -v\nUsage: logcat [options] [filterspecs]\n"
+    if cmd.startswith("logcat -d") and "-s ClarityClock" in cmd:
+        return "".join(f"{stamp(at)}  5151  5151 I ClarityClock: {msg}\n" for at, msg in state("clock_marks.json", []))
+    if "/proc/timer_list" in cmd and "ClarityClock" in cmd:
+        return clock_pairs(cmd) if ANDROID6 else ""
+    if cmd == "dumpsys activity recents":
+        if os.environ.get("FAKE_NO_TASK"):
+            return "ACTIVITY MANAGER RECENT TASKS (dumpsys activity recents)\n"
+        real = f"{PKG}/{ACTIVITY}"
+        return ("ACTIVITY MANAGER RECENT TASKS (dumpsys activity recents)\n  Recent tasks:\n  * Recent #0: TaskRecord{91b2af #4 A=x}\n"
+                f"    realActivity={real}\n  * Recent #1: TaskRecord{{2a #3 A=y}}\n    realActivity=com.android.launcher3/.Launcher\n")
     if cmd.startswith("logcat -d"):
         # The kiosk's start lines for the panes it runs now (perflib.pane_state reads them).
         s = state("settings.json", {})
         voice = s.get("voice_enabled", "true") == "true"
         t = now()
-        out = [f"{t - 5:10.3f}  31236  31237 I Glassworks.ESPHome: ESPHome device 'aqara-s1-plus-000000' mac 00:00:00:00:00:00, voice={'true' if voice else 'false'}"]
+        out = [f"{stamp(t - 5)}  31236  31237 I Glassworks.ESPHome: ESPHome device 'aqara-s1-plus-000000' mac 00:00:00:00:00:00, voice={'true' if voice else 'false'}"]
         if s.get("sendspin_enabled", "true") == "true":
-            out.append(f"{t - 4.9:10.3f}  31236  31237 I Glassworks.Sendspin: Sendspin player starting (client id test)")
+            out.append(f"{stamp(t - 4.9)}  31236  31237 I Glassworks.Sendspin: Sendspin player starting (client id test)")
         for pane in ("wall-base", "time-zone", "diagnostics"):   # #67: the kiosk says what each switch is
             on = s.get(pane.replace("-", "_") + "_enabled", "true") == "true"
-            out.append(f"{t - 4.8:10.3f}  31236  31237 I Glassworks.ESPHome: Pane {pane} {'on' if on else 'off'}")
+            out.append(f"{stamp(t - 4.8)}  31236  31237 I Glassworks.ESPHome: Pane {pane} {'on' if on else 'off'}")
         if voice and s.get("mic_muted", "false") != "true":
-            out.append(f"{t - 3:10.3f}  31236  31237 I Glassworks.Voice: Microphone open: source=6 buffer=20480")
+            out.append(f"{stamp(t - 3)}  31236  31237 I Glassworks.Voice: Microphone open: source=6 buffer=20480")
         if os.environ.get("FAKE_IDLE_SCREEN_OFF") and " -t 1" not in cmd:
             # One before the sample's window (an earlier night, not this sample's) and one in it.
-            out.insert(0, f"{t - 600:10.3f}   1919   1920 I PowerManagerService: Going to sleep due to timeout (uid 1000)...")
-            out.append(f"{t - 0.5:10.3f}   1919   1920 I PowerManagerService: Going to sleep due to device_admin (uid 1000)...")
-        out += [f"{at:10.3f}  31236  31236 I Glassworks.Screen: {said}" for at, said in state("hold_log.json", [])]
+            out.insert(0, f"{stamp(t - 600)}   1919   1920 I PowerManagerService: Going to sleep due to timeout (uid 1000)...")
+            out.append(f"{stamp(t - 0.5)}   1919   1920 I PowerManagerService: Going to sleep due to device_admin (uid 1000)...")
+        out += [f"{stamp(at)}  31236  31236 I Glassworks.Screen: {said}" for at, said in state("hold_log.json", [])]
         if " -t 1" in cmd:
-            out = [f"{t - 2:10.3f}      1      1 I old: the last line"]
+            out = [f"{stamp(t - 2)}      1      1 I old: the last line"]
         return "\n".join(out) + "\n"
     if cmd.startswith(("input swipe", "input tap")):
         # Like a page: a gesture nobody asked for (no current *-ready left to answer) lands on whatever
@@ -200,6 +244,8 @@ def shell(cmd):
         save("asked.json", asked)
         save(f"{kind}s.json", state(f"{kind}s.json", 0) + 1)
         return ""
+    if cmd.startswith("dumpsys SurfaceFlinger --list") and ANDROID6:
+        return f"DimLayer\ncom.android.systemui.ImageWallpaper\nSurfaceView\n{PKG}/{ACTIVITY}\nStatusBar\nNavigationBar\n"
     if cmd.startswith("dumpsys SurfaceFlinger --list"):
         return f"Display Root#0\nSurfaceView - {PKG}/{PKG}.MainActivity#0\nBackground for -SurfaceView - {PKG}/{PKG}.MainActivity#0\n"
     if cmd.startswith("dumpsys SurfaceFlinger --latency"):
@@ -217,8 +263,9 @@ def shell(cmd):
         return "package:/data/app/sh.edm.s1kiosk-1/base.apk\n"
     if cmd.startswith("stat -c %s"):
         return "123456789\n"
-    if cmd.startswith("pidof"):
-        return "4242\n"
+    if cmd == "ps -A -o PID,NAME" and ANDROID6:
+        rows = "".join(f"u0_a55    {p:<5} 1203  1234   5678  SyS_epoll_ 0000000000 S {n}\n" for n, p in PIDS.items())
+        return "USER      PID   PPID  VSIZE  RSS   WCHAN              PC  NAME\nroot      1     0     4264   1304  SyS_epoll_ 00004acfc4 S /init\n" + rows
     if cmd == "ps -A -o PID,NAME":
         return "  PID NAME\n" + "".join(f"{p} {n}\n" for n, p in PIDS.items()) + "  1 init\n"
     if cmd == "dumpsys meminfo":
@@ -230,7 +277,8 @@ def shell(cmd):
         main = 190_000 + (30_000 if assist else 0) + (10_000 if on.get("sendspin_enabled") == "true" else 0) + sum(
             kb for k, kb in (("wall_base_enabled", 3_000), ("time_zone_enabled", 1_000), ("diagnostics_enabled", 2_000)) if on.get(k) == "true")
         rows = {PKG + ":gpu_disable_art_image_": 200_000, PKG: main, PKG + ":sandboxed_tab_disable_art_image_24": 180_000, "otbr-agent": 2_500}
-        body = "".join(f"    {v:,}K: {n} (pid {PIDS[n]}{' / activities' if n == PKG else ''})\n" for n, v in rows.items())
+        body = "".join(f"    {v if ANDROID6 else format(v, ',')}{' kB' if ANDROID6 else 'K'}: {n} (pid {PIDS[n]}{' / activities' if n == PKG else ''})\n"
+                       for n, v in rows.items())
         return "Total PSS by process:\n" + body + "\nTotal PSS by OOM adjustment:\n"
     if cmd.startswith("dumpsys meminfo "):
         return " App Summary\n                       Pss(KB)\n           Java Heap:     9032\n         Native Heap:    24792\n" \
@@ -245,7 +293,7 @@ def shell(cmd):
         for pid in re.findall(r"echo PID (\d+)", cmd):
             out += f"PID {pid}\n{pid} (Gecko Main) S 1 1 0 0 -1 1 2 3 4 5 {j // 10} {j // 20} 1 1 10 -10\n"
         return out
-    if cmd == "nproc":
+    if cmd == "nproc 2>/dev/null || grep -c '^cpu[0-9]' /proc/stat":
         if os.environ.get("FAKE_IDLE_FAILS"):
             # The device step reads it first; the idle sample's read then fails: a run that stops
             # partway (run.sh's exit trap).
@@ -264,6 +312,9 @@ def shell(cmd):
             return "".join(f"/sys/devices/system/cpu/cpu{i}/cpufreq/{name} {khz}\n" for i in (0, 1, 2, 3))
     if cmd == "cat /proc/loadavg":
         return "0.50 0.60 0.70 1/500 1234\n"
+    if cmd == "dumpsys window displays":
+        size = "1080x1920" if ANDROID6 else "1440x720"
+        return f"WINDOW MANAGER DISPLAY CONTENTS (dumpsys window displays)\n  Display: mDisplayId=0\n    init={size} 240dpi cur={size} app={size}\n"
     if cmd.startswith("wm size"):
         return "Physical size: 1440x720\n"
     if cmd.startswith("wm density"):
@@ -352,7 +403,7 @@ def line(tag, msg, pid=4242, at=None):
     if tag == PAGE_TAG:
         msg = msg.encode()[:PAGE_LINE_BYTES].decode(errors="ignore")
     with LOCK:
-        print(f"{now() if at is None else at:10.3f}  {pid}  {pid + 1} I {tag}: {msg}", flush=True)
+        print(f"{stamp(now() if at is None else at)}  {pid}  {pid + 1} I {tag}: {msg}", flush=True)
 
 
 def noise(every):
@@ -600,7 +651,8 @@ def dashboard():
     is up from here), then the kiosk's own dashboard."""
     line("ActivityManager", f"Start proc 5555:{PKG}/u0a83 for activity {{{PKG}/{PKG}.MainActivity}}", pid=1918)
     save("kiosk_awake_at.json", C.now())   # the new process's idle timer starts
-    line("ActivityTaskManager", f"Displayed {PKG}/.MainActivity: +1s714ms", pid=1918)
+    # The generic app comes back as the home app through its launcher alias, and is displayed under it.
+    line("ActivityTaskManager", f"Displayed {PKG}/{'dev.glassworks.generic.Launcher' if ANDROID6 else '.MainActivity'}: +1s714ms", pid=1918)
     C.sleep(0.6)
     line("GeckoSession", "handleMessage GeckoView:PageStart uri=about:blank")
     line("GeckoSession", "handleMessage GeckoView:PageStop uri=null")
@@ -706,8 +758,11 @@ def screen_timeout(after_s):
             line("PowerManagerService", "Going to sleep due to device_admin (uid 1000)...", pid=1919)
 
 
-def logcat():
-    print("    1.000  1  1 I old: line from before", flush=True)
+def logcat(fmt):
+    if ANDROID6 and fmt == "monotonic":
+        print("Invalid parameter monotonic to -v", flush=True)
+        return
+    print(f"{stamp(1.0)}  1  1 I old: line from before", flush=True)
     if os.environ.get("FAKE_HA_URL"):
         threading.Thread(target=take_commands, args=(os.environ["FAKE_HA_URL"],), daemon=True).start()
     if os.environ.get("FAKE_LOGCAT_NOISE"):
@@ -717,6 +772,9 @@ def logcat():
     # A cap, so no fake logcat outlives its test for long; the runner ends it before that.
     end = now() + 600
     while now() < end:
+        if state("lockdown.json"):
+            save("lockdown.json", None)
+            line("Glassworks.Lockdown", "Lockdown: refused page from 127.0.0.1", pid=4242)
         if state("nonce.json"):
             nonce = state("nonce.json")[0]
             save("nonce.json", None)
@@ -745,7 +803,7 @@ def main():
     elif args[:1] == ["reverse"]:
         pass
     elif args[:1] == ["logcat"]:
-        logcat()
+        logcat(args[args.index("-v") + 1] if "-v" in args else "brief")
     elif args[:1] == ["shell"]:
         sys.stdout.write(shell(" ".join(args[1:])))
 

@@ -2,7 +2,10 @@
 """Device side of Clarity, the Glassworks perf test (MIT). Called by tools/perf/run.sh; see docs/perf.md.
 
 What it touches on the device:
+  activity   read-only: the app's activity, from `dumpsys activity recents` (Device.resolve_activity).
   device     read-only (getprop, /proc, dumpsys, wm size).
+  Every step on Android 6 (no `logcat -v monotonic`) writes five `ClarityClock` lines to the device's log, twice
+  in steps that record the clock's drift (Device.wall_clock).
   hold       `am start --ez test_hold true --ei test_hold_s <s>`, the kiosk's test hold (#240): the
              screen on (no setting changes), through restarts of the app, until it expires or
              `hold --off` (`--ez test_hold false`). Then reads logcat for the kiosk's answer.
@@ -39,15 +42,77 @@ import perflib as P  # noqa: E402
 
 
 class Device:
-    def __init__(self, serial, package, activity):
+    def __init__(self, serial, package, activity=""):
         self.adb = [os.environ.get("ADB", "adb")] + (["-s", serial] if serial else [])
         self.package = package
-        self.component = f"{package}/{activity}"
+        self.activity = activity          # "" until resolve_activity(), on the first use of `component`
+        self._clock = None
         self.nudges = []                  # wake keys sent and maybe not yet through adb (nudge, nudged)
 
     def sh(self, cmd, timeout=60):
         r = subprocess.run(self.adb + ["shell", cmd], capture_output=True, text=True, timeout=timeout)
         return r.stdout
+
+    @property
+    def component(self):
+        if not self.activity:
+            self.activity = self.resolve_activity()
+        return f"{self.package}/{self.activity}"
+
+    def resolve_activity(self):
+        """The activity the kiosk runs in, which takes Clarity's extras: the `realActivity` of the package's
+        most recent task, as ActivityManager lists it (Android 6 and later). Not the launcher entry that
+        `cmd package resolve-activity` or `pm dump` name: the generic app's is an alias
+        (dev.glassworks.generic.Launcher) whose extras the app drops. A task stays listed after the app
+        stops; one that never ran since the device booted has none, and --activity names it then."""
+        out = self.sh("dumpsys activity recents")
+        m = re.search(rf"realActivity=\{{?{re.escape(self.package)}/([\w.$]+)", out)
+        if not m:
+            sys.exit(f"{self.package} has no task on the device to read its activity from: start the app, "
+                     f"or give --activity (.MainActivity on the S1, dev.glassworks.MainActivity on the generic app)")
+        return m.group(1)
+
+    @property
+    def clock(self):
+        """How this device's logcat stamps lines (perflib.LogClock), found once per runner process: `-v monotonic`
+        where logcat has it, else (Android 6) the wall clock to the µs, tied to CLOCK_MONOTONIC."""
+        if self._clock is None:
+            probe = self.sh("logcat -d -v monotonic -t 1")
+            self._clock = self.wall_clock() if "Invalid parameter" in probe or "Usage:" in probe else P.LogClock()
+        return self._clock
+
+    def wall_clock(self, pairs=5):
+        """Android 6's logcat has no monotonic stamps. `pairs` times: CLOCK_MONOTONIC from /proc/timer_list
+        (read by the shell itself, no process started), a log line, the clock again; the tightest pair ties
+        logcat's wall clock to the monotonic one (perflib.wall_offset)."""
+        nonce = secrets.token_hex(4)
+        read = "{ read a; read b; read c; } < /proc/timer_list"
+        out = self.sh(f"for i in $(seq 1 {pairs}); do {read}; m1=$c; log -t ClarityClock \"{nonce} $i\"; {read}; "
+                      f"echo \"CLOCKPAIR $i $m1 $c\"; done; date +%Y")
+        years = re.findall(r"^\s*(\d{4})\s*$", out, re.M)
+        marks = self.sh("logcat -d -v usec -s ClarityClock")
+        clock = P.wall_offset(out, marks, nonce, int(years[-1]) if years else time.gmtime().tm_year)
+        if clock is None:
+            sys.exit("this device's logcat has no -v monotonic, and its monotonic clock couldn't be tied to "
+                     "logcat's wall clock (is /proc/timer_list readable?): " + out.strip()[-200:])
+        return clock
+
+    def clock_note(self):
+        """For a run's file, on a wall-clock logcat: the offset's error, and how far the offset moved by the
+        end (a network-time step during the run shows here). Nothing on a monotonic logcat."""
+        if self.clock.fmt == "monotonic":
+            return {}
+        again = self.wall_clock()
+        return {"logcat_clock": {"format": self.clock.fmt, "offset_err_ms": self.clock.err_ms,
+                                 "end_err_ms": again.err_ms,
+                                 "drift_ms": round((again.offset_s - self.clock.offset_s) * 1000, 3)}}
+
+    def parse(self, line):
+        return self.clock.parse(line)
+
+    def log_dump(self, tail=None, timeout=60):
+        """`logcat -d` on this device's clock (its last `tail` lines only, if given)."""
+        return self.sh(f"logcat -d -v {self.clock.fmt}" + (f" -t {tail}" if tail else ""), timeout=timeout)
 
     def hold(self):
         """The kiosk's test hold again, for TEST_HOLD_S from now, before a part that may outlast what is
@@ -75,7 +140,7 @@ class Device:
         self.nudges = [p for p in self.nudges if p.poll() is None]
 
     def logcat(self):
-        p = subprocess.Popen(self.adb + ["logcat", "-v", "monotonic", "-T", "1"],
+        p = subprocess.Popen(self.adb + ["logcat", "-v", self.clock.fmt, "-T", "1"],
                              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, errors="replace")
         p.stdout.readline()  # -T 1 starts with one old line
         return p
@@ -83,8 +148,7 @@ class Device:
     def sf(self):
         """(period_ms, present times ns) of the app's SurfaceView, the layer GeckoView draws into.
         After a restart an old layer can still be listed; the live one has the newest frame."""
-        names = [l.strip() for l in self.sh("dumpsys SurfaceFlinger --list").splitlines()
-                 if l.startswith(f"SurfaceView - {self.package}/")]
+        names = P.surfaceview_layers(self.sh("dumpsys SurfaceFlinger --list"), self.package)
         best = (None, [])
         for name in sorted(names, key=P.layer_number, reverse=True):
             period, presents = P.parse_sf_latency(self.sh(f"dumpsys SurfaceFlinger --latency '{name}'"))
@@ -96,12 +160,13 @@ class Device:
 
     def pids(self, names):
         """name -> pid for the app's processes and any process named in `names`."""
-        out = {}
-        for line in self.sh("ps -A -o PID,NAME").splitlines()[1:]:
-            parts = line.split(None, 1)
-            if len(parts) == 2 and (parts[1].startswith(self.package) or parts[1] in names):
-                out[parts[1].strip()] = int(parts[0])
-        return out
+        return {name: pid for pid, name in P.parse_ps(self.sh("ps -A -o PID,NAME"))
+                if name.startswith(self.package) or name in names}
+
+    def ncpu(self):
+        """Online CPUs: nproc, or (Android 6 has none) the cpuN lines of /proc/stat, which count the same."""
+        out = self.sh("nproc 2>/dev/null || grep -c '^cpu[0-9]' /proc/stat").strip()
+        return int(out or 0)
 
 
 def write_json(path, obj):
@@ -110,6 +175,11 @@ def write_json(path, obj):
 
 
 # ---- device
+
+def cmd_activity(dev, a):
+    """Print the kiosk's component (package/activity), for run.sh's own intents."""
+    print(dev.component)
+
 
 def cmd_device(dev, a):
     props = {k: dev.sh(f"getprop {k}").strip() for k in (
@@ -131,7 +201,7 @@ def cmd_device(dev, a):
         "android": props["ro.build.version.release"], "api": int(props["ro.build.version.sdk"] or 0),
         "abi": props["ro.product.cpu.abi"], "abilist": props["ro.product.cpu.abilist"].split(","),
         "soc": props["ro.board.platform"] or props["ro.hardware"],
-        "cpu": {"cores": int(dev.sh("nproc").strip() or 0), "parts": parts,
+        "cpu": {"cores": dev.ncpu(), "parts": parts,
                 "max_mhz": sorted({int(f) // 1000 for f in freqs if f.isdigit()})},
         "mem_total_kb": P.parse_proc_meminfo(dev.sh("cat /proc/meminfo"))["mem_total_kb"],
         "display": {"px": [int(size.group(1)), int(size.group(2))] if size else None,
@@ -152,7 +222,7 @@ def cmd_device(dev, a):
 def cmd_synthetic(dev, a):
     path = os.path.join(a.out, f"synthetic-{a.run}.jsonl")
     # The kiosk applies `open` only to a running activity (onNewIntent), so start it first.
-    if not dev.sh(f"pidof {dev.package}").strip():
+    if dev.package not in dev.pids(()):
         dev.sh(f"am start -n {dev.component}")
         C.sleep(20)
     dev.hold()
@@ -169,7 +239,10 @@ def cmd_synthetic(dev, a):
     with open(path, "w") as f:
         lines_in = P.PageLines()
         for line in lc.stdout:
-            rec = P.parse_logcat_line(line)
+            rec = dev.parse(line)
+            if rec and not seen.is_set() and LOCKDOWN_RE.search(rec["msg"]):
+                status = "lockdown"
+                break
             if rec and seen.is_set() and SLEEP_RE.search(rec["msg"]):
                 # The screen went off while the test page ran: its frames aren't the panel's then.
                 f.write(json.dumps({"t": "screen_off", "mono": rec["mono"]}) + "\n")
@@ -202,6 +275,9 @@ def cmd_synthetic(dev, a):
     timer.cancel()
     no_page.cancel()
     lc.terminate()
+    if status == "lockdown":
+        print(f"synthetic run {a.run}: the app's lockdown refused the test page", file=sys.stderr)
+        sys.exit(LOCKDOWN_EXIT)
     if not seen.is_set():
         status = "the test page sent nothing in 90 s (is the app in front, and adb reverse up?)"
     if status != "done":
@@ -262,7 +338,7 @@ def cmd_panes(dev, a):
         else:
             dev.sh(f"am start -W -n {dev.component} --ez restart true", timeout=60)
         C.sleep(a.settle)
-        st = P.pane_state(dev.sh("logcat -d -v monotonic", timeout=60))
+        st = P.pane_state(dev.log_dump())
         res["state"] = st
         exp = expected_state(want, st["voice"])
         res["ok"] = st["voice"] is not None and all(st.get(k) == v for k, v in exp.items()) and res["url_taken"] is not False
@@ -300,11 +376,12 @@ def cmd_hold(dev, a):
         except subprocess.TimeoutExpired:
             sys.exit(1)
 
-    mark = last_mono(sh("logcat -d -v monotonic -t 1"))
+    fmt = dev.clock.fmt
+    mark = last_mono(dev, sh(f"logcat -d -v {fmt} -t 1"))
     sh(f"am start -W -n {dev.component} {HOLD_ON}")
     while True:
-        for line in sh("logcat -d -v monotonic").splitlines():
-            rec = P.parse_logcat_line(line)
+        for line in sh(f"logcat -d -v {fmt}").splitlines():
+            rec = dev.parse(line)
             if rec and (mark is None or rec["mono"] > mark) and TEST_HOLD_RE.search(rec["msg"]):
                 print(json.dumps({"hold_s": TEST_HOLD_S, "said": rec["msg"]}))
                 return
@@ -327,9 +404,10 @@ OWN_PAGE_QUIET_S = 2.0    # the kiosk's own page must have stopped this long, wi
 
 
 def screen_size(dev):
-    """(width, height) in pixels from `wm size`; an override size, listed last, wins."""
-    m = re.findall(r"(\d+)x(\d+)", dev.sh("wm size"))
-    return (int(m[-1][0]), int(m[-1][1])) if m else None
+    """(width, height) in pixels as `input tap` takes them: the display's current size, turned as the screen is
+    (`cur=` in `dumpsys window displays`, Android 6 to 17). `wm size` gives the panel's own, unturned: the Pixel
+    Tablet's 1600x2560 while it shows 2560x1600. Without `cur=`, `wm size`, whose override, listed last, wins."""
+    return P.current_size(dev.sh("dumpsys window displays")) or P.wm_size(dev.sh("wm size"))
 
 
 def _whole(v, lo, hi):
@@ -371,6 +449,11 @@ def own_page_finished(stop_mono, stop_at, now):
 # ---- cold start to dashboard
 
 PAGE_RE = re.compile(r"GeckoView:(PageStart|PageStop) uri=(\S+)")
+# The legacy engine's lockdown (#198) loads pages only from the dashboard's origin, fixed when its process
+# starts: the animation test page, opened one-off on the fake's origin, is refused while the kiosk shows
+# another dashboard. cmd_synthetic exits LOCKDOWN_EXIT then, and run.sh skips that part (detail, not graded).
+LOCKDOWN_RE = re.compile(r"Lockdown: refused page from")
+LOCKDOWN_EXIT = 4
 # Android's PowerManagerService, on any device: the screen is going off. With the screen off Gecko
 # runs no animation frames and slows its timers, so nothing timed then is the panel's (smoke10: the
 # kiosk's 20 s night idle timeout held light's view switch back 22 s and stopped heavy).
@@ -658,7 +741,7 @@ def cmd_coldstart(dev, a):
             res["proc_mono"] = rec["mono"]
             res["launch"] = res["launch"] or "relaunched-by-system"
         if res["ttid_ms"] is None:
-            res["ttid_ms"] = P.parse_displayed(msg, dev.component)
+            res["ttid_ms"] = P.parse_displayed(msg, dev.package)
             if res["ttid_ms"] is not None:
                 res["displayed_mono"] = rec["mono"]
         cur = st["current"]
@@ -818,7 +901,7 @@ def cmd_coldstart(dev, a):
                 line = lines.get_nowait()
             except queue.Empty:
                 return False
-            rec = P.parse_logcat_line(line)
+            rec = dev.parse(line)
             if rec and handle(rec):
                 return True
 
@@ -946,7 +1029,7 @@ def cmd_coldstart(dev, a):
             open_next()
             continue
         try:
-            rec = P.parse_logcat_line(lines.get(timeout=C.real(0.2)))
+            rec = dev.parse(lines.get(timeout=C.real(0.2)))
         except queue.Empty:
             continue
         if rec and handle(rec):
@@ -1003,6 +1086,7 @@ def cmd_coldstart(dev, a):
     poller.join()
     res["sf_period_ms"] = period[0]
     res["presents_mono_ms"] = sorted(t / 1e6 for t in presents)
+    res.update(dev.clock_note())
     write_json(os.path.join(a.out, f"{a.cmd}-{a.run}.json"), res)
     if res["error"]:
         sys.exit(f"{a.cmd} {a.run}: {res['error']}")
@@ -1034,9 +1118,9 @@ def cmd_idle(dev, a):
     dev.hold()
     C.sleep(a.settle + 3)
     pids = dev.pids(radio)
-    ncpu = int(dev.sh("nproc").strip() or 1)
+    ncpu = dev.ncpu() or 1
     # Where the log is now, so a screen that goes off in the window can be found in it afterwards.
-    mark = last_mono(dev.sh("logcat -d -v monotonic -t 1", timeout=60))
+    mark = last_mono(dev, dev.log_dump(tail=1))
     before = cpu_snapshot(dev, pids)
     # Frames from before the window are still in SurfaceFlinger's history; keep only newer ones.
     period, history = dev.sf()
@@ -1049,31 +1133,31 @@ def cmd_idle(dev, a):
         period = p or period
         presents.update(t for t in ts if t > newest_before)
     after = cpu_snapshot(dev, pids)
-    log = dev.sh("logcat -d -v monotonic", timeout=120)
+    log = dev.log_dump(timeout=120)
     mem = memory_sample(dev, radio)
     write_json(os.path.join(a.out, f"idle-{a.label}-{a.run}.json"), dict({
         "label": a.label, "run": a.run, "window_s": a.window, "ncpu": ncpu,
         "cpu": P.cpu_percent(before, after, ncpu),
         "frames": {"period_ms": period, "presents_mono_ms": sorted(t / 1e6 for t in presents)},
         # The screen going off in the window: its CPU and frames aren't the panel's at work.
-        "screen_off": screen_offs(log, mark),
+        "screen_off": screen_offs(dev, log, mark),
         # What the kiosk ran (voice, Sendspin, the wake word's microphone), from its log.
         "panes_state": P.pane_state(log),
-    }, **mem))
+    }, **mem, **dev.clock_note()))
 
 
-def last_mono(logcat_text):
-    """The monotonic time of the last line of a `logcat -v monotonic` dump (None if it has none)."""
-    recs = [P.parse_logcat_line(l) for l in logcat_text.splitlines()]
+def last_mono(dev, logcat_text):
+    """The monotonic time of the last line of a `logcat -d` dump (None if it has none)."""
+    recs = [dev.parse(l) for l in logcat_text.splitlines()]
     monos = [r["mono"] for r in recs if r]
     return monos[-1] if monos else None
 
 
-def screen_offs(logcat_text, since):
+def screen_offs(dev, logcat_text, since):
     """When the screen went off after `since` (monotonic s), from Android's PowerManagerService."""
     out = []
     for line in logcat_text.splitlines():
-        rec = P.parse_logcat_line(line)
+        rec = dev.parse(line)
         if rec and (since is None or rec["mono"] > since) and SLEEP_RE.search(rec["msg"]):
             out.append(round(rec["mono"], 3))
     return out
@@ -1096,13 +1180,14 @@ def memory_sample(dev, radio, summaries=True):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=["device", "hold", "synthetic", "refstart", "coldstart", "idle", "panes"])
+    ap.add_argument("cmd", choices=["activity", "device", "hold", "synthetic", "refstart", "coldstart", "idle", "panes"])
     ap.add_argument("--off", action="store_true", help="hold: end the test hold")
     ap.add_argument("--set", help="panes: the kiosk's pane extras, extra=true|false,...")
     ap.add_argument("--tries", type=int, default=3, help="panes: attempts")
     ap.add_argument("--serial", default=os.environ.get("ANDROID_SERIAL"))
     ap.add_argument("--package", default="sh.edm.s1kiosk")
-    ap.add_argument("--activity", default=".MainActivity")
+    ap.add_argument("--activity", default="", help="the kiosk's activity (.MainActivity, dev.glassworks.MainActivity); "
+                    "default: read from the device (Device.resolve_activity)")
     ap.add_argument("--frame", default="unknown")
     ap.add_argument("--name", default=None, help="device: the frame's display name for the report")
     ap.add_argument("--out", required=True)
@@ -1132,7 +1217,7 @@ def main():
     os.makedirs(a.out, exist_ok=True)
     dev = Device(a.serial, a.package, a.activity)
     C.check_device(lambda name: dev.sh(f"getprop {name}"))
-    {"device": cmd_device, "hold": cmd_hold, "synthetic": cmd_synthetic, "refstart": cmd_coldstart, "coldstart": cmd_coldstart,
+    {"activity": cmd_activity, "device": cmd_device, "hold": cmd_hold, "synthetic": cmd_synthetic, "refstart": cmd_coldstart, "coldstart": cmd_coldstart,
      "idle": cmd_idle, "panes": cmd_panes}[a.cmd](dev, a)
 
 
