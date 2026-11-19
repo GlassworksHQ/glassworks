@@ -477,6 +477,8 @@ GW_LOADER_ONCE=1 L run agent; check "...with the root-made marker it runs" test 
 rm -f /data/glassworks/dev/override
 
 sed -i 's/^version 2000007$/version 2000097/' "$B/current/manifest"
+check "(setup: the loaded manifest says 2000097 now, and its signature no longer checks)" \
+  sh -c 'grep -qx "version 2000097" "$1/manifest" && ! /system/bin/sh "$2" check "$1" >/dev/null 2>&1' _ "$B/current" "$TBL/glassworks_loader.sh"
 mkframe "$T/f10" 2.0.8 "$T/key.pem" --file "services/agent.sh=$T/svc-agent.sh:0700"
 stage_frame "$T/f10/frame-bundle"; s=$(install_frame)
 check "a loaded manifest whose signature fails can't raise the floor" has "$s" "ok: frame bundle 2.0.8 staged"
@@ -560,11 +562,13 @@ mkframe "$T/b5" 1.3.1 "$T/key.pem" --file "fw/btl.gbl=$T/btl.gbl:0644" --firmwar
 CUR=$T/b5/frame-bundle; LOOPS=1 helper
 check "an image with a bootloader tag is never offered" test "$(prop sys.glassworks.radio.fw_targets)" = "stock:${STOCK_SHA:0:12}:0017"
 req "btl $(sha256sum "$T/btl.gbl" | cut -c 1-12)"; : > "$T/flashed"; LOOPS=1 helper
-check "...nor flashed" test ! -s "$T/flashed" -a -n "$(has "$(prop sys.glassworks.radio.fw)" "replace the bootloader" && echo y)"
+check "...nor flashed" test ! -s "$T/flashed"
+check "...and the status says why" has "$(prop sys.glassworks.radio.fw)" "replace the bootloader"
 gbl "$T/trunc.gbl" "" truncate
 mkframe "$T/b6" 1.3.2 "$T/key.pem" --file "fw/t.gbl=$T/trunc.gbl:0644" --firmware "trunc=fw/t.gbl:0018:x"
-CUR=$T/b6/frame-bundle; req "trunc $(sha256sum "$T/trunc.gbl" | cut -c 1-12)"; : > "$T/flashed"; LOOPS=1 helper
+CUR=$T/b6/frame-bundle; req "trunc $(sha256sum "$T/trunc.gbl" | cut -c 1-12)"; : > "$T/flashed"; rm -f "$T/props/sys.glassworks.radio.fw"; LOOPS=1 helper
 check "a truncated image is refused" test ! -s "$T/flashed"
+check "...by its format, in a fresh result" has "$(prop sys.glassworks.radio.fw)" "error trunc"
 echo "stock $STOCK_SHA 1" > /data/s1kiosk/radio/fw/in-progress; LOOPS=1 helper
 check "an interrupted flash is reported at start" has "$(prop sys.glassworks.radio.fw)" "flash was interrupted"
 rm -f /data/s1kiosk/radio/fw/in-progress
@@ -1100,7 +1104,9 @@ echo keep > "$T/not-ours"; rm -f "$BTP/bluetooth-address"; ln -s "$T/not-ours" "
 LOOPS=1 helper GWA_PUB="$BTP"
 check "a planted symlink is replaced, its target untouched" test ! -L "$BTP/bluetooth-address" -a "$(cat "$T/not-ours")" = keep -a "$(cat "$BTP/bluetooth-address")" = 02:AA:00:00:00:01
 rm -rf "$BTP"; touch "$T/settings-hang"; t0=$(date +%s)
+( sleep 90; pkill -f "sleep 1000" ) & W=$!   # an outer deadline: an agent without its own bound fails, not hangs
 LOOPS=1 helper GWA_PUB="$BTP" GWA_BT_TIMEOUT=1
+kill "$W" 2>/dev/null
 check "a settings call that never returns doesn't stall the loop (bounded, then retried later)" test $(( $(date +%s) - t0 )) -lt 15 -a ! -e "$BTP/bluetooth-address"
 check "...and the radio's status was still set" test -n "$(prop sys.glassworks.radio.status)"
 rm -f "$T/settings-hang"; pkill -f "sleep 1000" 2>/dev/null
@@ -1167,6 +1173,7 @@ if name.endswith('-restore'):
         elif l == 'COMMIT': store(t, chains, rules)
     sys.exit(0)
 chains, rules = load(table); op, c, rest = args[0], args[1], ' '.join(args[2:])
+if op in ('-D', '-F', '-X') and os.path.exists('/t/ipt-nodel'): sys.exit(1)   # removals refused (a busy xtables lock)
 if op == '-I':
     n, rest = (int(args[2]), ' '.join(args[3:])) if len(args) > 2 and args[2].isdigit() else (1, rest)
     if c not in chains: sys.exit(1)
@@ -1233,6 +1240,10 @@ check "an IPv6 rule as ip6tables-save prints it (2001:db8::1) is kept, not rebui
 socks udp6 "$AP4:1F75 07 10050" "B80D0120000000000000000002000000:1F75 07 10050"; portal
 check "the hotspot's IPv6 address moved (IPv4 the same): the IPv6 rule follows it" \
   test "$(nat 6 | grep -c 'to-destination \[2001:db8:0:0:0:0:0:2\]:8053$')/$(nat 6 | grep -c '2001:db8::1\|0:0:0:0:0:1\]')" = 1/0
+ap_up; portal
+echo "23: wlan0    inet 192.168.43.1/25 brd 192.168.43.127 scope global wlan0" > "$T/ip-addr4"; rm -f "$T/ipt/restores"; portal
+check "the hotspot's subnet changed (/24 to /25, same address): the IPv4 rules are rebuilt for it" \
+  test -s "$T/ipt/restores" -a "$(nat 4 | grep -c '^-A GWPORTAL -s 192.168.43.1/25 ')" = 2 -a -z "$(nat 4 | grep '/24 ')"
 ap_up; portal
 # first_check: until the helper started in the background has done its first check (its status line)
 # logged <pattern>: waits (60 s at most, an emulated ARM under load is slow) until setprop.log has a line for it
@@ -1316,6 +1327,14 @@ check "ip6tables refuses after the IPv4 rules went in: nothing left half-done (n
   test -z "$(nat 4 | grep GWPORTAL)$(nat 6 | grep GWPORTAL)" -a "$(prop sys.glassworks.portal.status)" = "error: iptables refused the rules"
 rm -f /t/ipt-refuse; portal
 check "...and on once it takes them" test "$(prop sys.glassworks.portal.status)" = "on wlan0"
+# One agent all along: ip6tables refuses, and the IPv4 rules can't be removed either. When the hotspot then stops,
+# the next check must still clear them, not take the failed clear for "off".
+hostapd_off; ap_up; portal; hostapd_on; echo 6 > /t/ipt-refuse; touch /t/ipt-nodel; rm -f "$T/ipt/6-nat"; : > "$T/setprop.log"
+LOOPS=100000 helper GWA_PROC_NET="$T/net" GWA_PORTAL_SLEEP=0.2 GWA_SLEEP=0.1 &
+H=$!; logged '^sys.glassworks.portal.status=error: iptables refused the rules'
+check "(the half-done IPv4 rules stay, the clear refused)" rules4
+hostapd_off; rm -f /t/ipt-refuse /t/ipt-nodel; bg_until gone
+check "...once the hotspot stops and iptables takes removals again, the same agent clears them and says off" gone
 hostapd_off; ap_up; portal
 check "a new helper removes what an old one left" test -z "$(nat 4 | grep GWPORTAL)$(nat 6 | grep GWPORTAL)"
 check "...the filter tables untouched" test "$(cat "$T/ipt/4-filter")" = "$FILTER" -a "$(cat "$T/ipt/6-filter")" = "$FILTER"

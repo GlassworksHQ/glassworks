@@ -714,8 +714,10 @@ portal_ok() {
   n_=$(portal_rules "$@" | grep -c .)
   [ "$(printf '%s\n' "$s_" | grep -c "^-A $PORTAL_CHAIN ")" = "$n_" ] || return 1
   if [ "$1" = 4 ]; then
+    # the source match too: iptables-save prints it as the network (192.168.43.0/24), so the prefix is what
+    # tells a rule for the hotspot's subnet now from one for a narrower or wider one before
     for p_ in $PORTAL_DNS $PORTAL_HTTP; do
-      printf '%s\n' "$s_" | grep -q "^-A $PORTAL_CHAIN .*-i $2 .*--to-destination $3:$p_\$" || return 1
+      printf '%s\n' "$s_" | grep -q "^-A $PORTAL_CHAIN -s [0-9.]*/$4 -d $3/32 -i $2 .*--to-destination $3:$p_\$" || return 1
     done
   elif [ -n "$5" ]; then
     # ip6tables-save shortens the address (2001:db8::20): the -d match and the target are compared with the
@@ -779,7 +781,9 @@ portal_check() {
     if portal_set 4 "$w_" && portal_set 6 "$w_" && portal_ok 4 "$w_" && portal_ok 6 "$w_"; then
       PORTAL_STATE=$w_; portal_say "on ${w_%% *}"
     else
-      portal_clear; PORTAL_STATE=off; portal_say "error: iptables refused the rules"
+      # "off" only once the clear went through: else the next check, wanted or not, clears again
+      if portal_clear; then PORTAL_STATE=off; else PORTAL_STATE=""; fi
+      portal_say "error: iptables refused the rules"
     fi
   fi
 }

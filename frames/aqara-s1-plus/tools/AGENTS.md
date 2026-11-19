@@ -28,9 +28,12 @@ before you change the boot path. The tools every frame shares are in [`tools/`](
   Services take no input except files owned by the kiosk's uid, which they check. They don't follow
   symlinks (`glassworks_verify --copy`), and they report through `sys.glassworks.*.status`. Don't add an
   input path that skips those checks. Read [`../research/root.md`](../research/root.md) first.
-- Helper fixes reach panels through the **signed frame bundle**, not by reflashing `boot`. A change
-  that needs a new boot image is a much bigger deal, because every user reruns the installer. Say
-  which of the two your change needs.
+- Frame agent fixes reach panels in a **signed bundle**, not by reflashing `boot`. Which bundle depends on
+  the panel's boot image: a frame-loader image (S1 frame 1.0.0 on) takes only the **frame bundle**
+  (`frame-release.yml`); a 0.4.3 image takes only the old **radio bundle** (`s1kiosk_radio.sh`, shipped in the
+  APK by `release.yml`), until those images are gone (#528). A fix that 0.4.3 panels need goes into
+  `s1kiosk_radio.sh` too. A change that needs a new boot image is a much bigger deal, because every user
+  reruns the installer. Say which of these your change needs.
 - `.rc` and service changes must be tested on a real panel. Off-device tests can't see init.
 
 ## FEL and fastboot gotchas
