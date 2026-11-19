@@ -33,6 +33,6 @@ class ApiKeyWaitTest {
         // Kiln's image patch writes this property (frames/lululemon-mirror/installer/src/image.ts API_KEY_HANDOVER_PROP)
         assertEquals("ro.glassworks.api_key.handover", PanelDevice.API_KEY_HANDOVER_PROP)
         // and the installers open this socket (kiln/packages/app-adb API_KEY_SOCKET)
-        assertEquals("glassworks_api_key", ApiKeyHandoverServer.SOCKET)
+        assertEquals("glassworks_api_key", SecretHandoverServer.SOCKET)
     }
 }

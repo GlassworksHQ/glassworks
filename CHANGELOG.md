@@ -463,11 +463,15 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   new build fails and the old build comes back, the installer says so if the app's data didn't come back
   with it, and keeps the copy on the panel instead of deleting it. It no longer says Glassworks saved the
   panel's Wi-Fi when it can't tell who did. This is in Kiln and in the command line installer.
-- **A switch says you sign in again, even with root.** Switching a development build to a release on a panel
-  where adb has root keeps the app's settings, but not its Home Assistant sign-in or encryption key: Android
-  deletes the old app's Keystore keys when it removes it, and those secrets are sealed with them. The
-  installer used to say the sign-in was kept. Now its plan and its Done line say to sign in again, and that
-  Home Assistant may ask to confirm the panel's encryption key. This is in Kiln and in the command line installer.
+- **Switching a development build to a release keeps you signed in to Home Assistant.** On a panel where adb has
+  root, the switch keeps the app's settings, and now its Home Assistant sign-in and encryption key too: the
+  installer reads them from the running app before it removes it, and gives them to the new one. The panel goes
+  straight back to its dashboard, and Home Assistant reconnects without asking to confirm the key. Before, the
+  sign-in and key were lost, because Android deletes the old app's Keystore keys, which seal them; the installer
+  even said the sign-in was kept. The camera's stream password and the Music Assistant pairing are still not
+  carried, and the installer says so. A switch from a build without this change still loses the sign-in (and,
+  before the Mirror key hand-over, the key), and the plan and the Done line say to sign in again. This is in Kiln
+  and in the command line installer, and needs this app version on the panel before the switch.
 - **A Mirror reflash keeps its Home Assistant device.** Kiln and the headless flash give the Mirror an id from its
   serial number and keep it in the image, so a later reflash comes back as the same device with the same entity
   ids. The first flash with this still shows up as a new device once. On other Android devices, an app reinstall

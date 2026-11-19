@@ -66,6 +66,13 @@ SW_DATA=/data/s1kiosk/switch # where glassworks-switch.sh keeps the app's data b
 IMPROV_SEND=${S1_IMPROV_SEND:-$HERE/install/improv-send.py}
 WIFI_OWNER=none WIFI_SSID="" HAS_ROOT=0 DEBUG_BUILD=0 INSTALLED_VER="" SWITCHED=0 DATA_KEPT=0 WIFI_LOST=0
 WIFI_PSK="" HAVE_PSK=0 APP_AFTER_UNDO=removed
+# Sealed secrets (#584): Android deletes the app's Keystore key with the old app, so the copied data can't open its
+# Home Assistant sign-in or ESPHome API key. With root they are read from the running app over its adb-only hand-over
+# socket into these variables (base64, never printed, never in a command line: they reach handover.py on stdin), and
+# handed to the new app once it runs. CARRY_*: the running app can hand it over. *_STATE: carry (read, to hand over),
+# kept, lost, or none (there was none).
+HANDOVER=${S1_HANDOVER:-$HERE/install/handover.py}
+CARRY_KEY=0 CARRY_SIGNIN=0 SEC_KEY="" SEC_SIGNIN="" KEY_STATE=lost SIGNIN_STATE=lost
 
 # `dumpsys wifi` on stdin -> "<kiosk|other|unknown|none><TAB><ssid>": the current network id from
 # "mWifiInfo ... Net ID: n", then that network's "ID: n SSID: "x" ..." entry and its " cname=<pkg>".
@@ -106,6 +113,18 @@ net_name() { if [[ -n $WIFI_SSID ]]; then printf '"%s"' "$WIFI_SSID"; else print
 is_key_mismatch() { grep -qiE 'INSTALL_FAILED_UPDATE_INCOMPATIBLE|signatures do not match' <<<"$1"; }
 has_root() { [[ "$(adb shell "timeout 15 su -c 'id -u' 2>/dev/null" | tr -d '\r' | tail -1)" == 0 ]]; }
 su_() { adb shell "su -c 'sh $SW_SH $*'"; }
+# Request lines on stdin -> reply lines on stdout, over the app's hand-over socket (adb forward; adb only). Fails when
+# the app doesn't listen or answer.
+handover_up() { [[ "$(adb shell "grep -c ' @glassworks_api_key\$' /proc/net/unix" | tr -d '\r')" -gt 0 ]] 2>/dev/null; }
+handover_req() {
+  local port rc=0
+  handover_up && command -v python3 >/dev/null || return 1
+  port=$(adb forward tcp:0 localabstract:glassworks_api_key | tr -d '\r') && [[ $port =~ ^[0-9]+$ ]] || return 1
+  python3 "$HANDOVER" "$port" || rc=$?
+  adb forward --remove "tcp:$port" >/dev/null 2>&1 || true
+  return $rc
+}
+fingerprint() { printf '%s' "$1" | python3 "$HANDOVER" --fingerprint 2>/dev/null || echo "?"; }
 # XML text as Android writes it (&quot; &apos; &lt; &gt; &amp;); fails on anything else (&#...;).
 # The value goes to sed on stdin, not as an argument.
 xml_unescape() {
@@ -121,7 +140,83 @@ probe_switch() {
   INSTALLED_VER=$(sed -n 's/^ *versionName=\([^ ]*\).*/\1/p' <<<"$d" | head -1)
   if grep -qE 'pkgFlags=\[[^]]*DEBUGGABLE' <<<"$d"; then DEBUG_BUILD=1; else DEBUG_BUILD=0; fi
   if has_root; then HAS_ROOT=1; else HAS_ROOT=0; fi
+  # What the running app can hand over (#584): an app from #574 refuses `carries` but hands over the key.
+  CARRY_KEY=0 CARRY_SIGNIN=0
+  if [[ $HAS_ROOT -eq 1 ]]; then
+    case "$(printf 'carries\n' | handover_req 2>/dev/null)" in
+      "carries "*api_key*signin*) CARRY_KEY=1 CARRY_SIGNIN=1 ;;
+      "refused unknown request") CARRY_KEY=1 ;;
+    esac
+  fi
   panel_wifi
+}
+# What the plan says about the sealed secrets on a panel with root (frames/aqara-s1-plus/installer/src/switch.ts says the same).
+explain_secrets() {
+  if [[ $CARRY_KEY -eq 1 && $CARRY_SIGNIN -eq 1 ]]; then
+    echo "  adb has root on this panel, so the app's settings are kept, and so are its Home Assistant"
+    echo "  sign-in and encryption key: the installer reads them from the running app and hands them to"
+    echo "  the new one. The camera's stream password and the Music Assistant pairing are not carried: set"
+    echo "  and pair them again if you use them."
+  elif [[ $CARRY_KEY -eq 1 ]]; then
+    echo "  adb has root on this panel, so the app's settings are kept, and so is its encryption key: the"
+    echo "  installer reads it from the running app and hands it to the new one. Its Home Assistant sign-in"
+    echo "  is not: this build of the app can't hand it over, and Android deletes the app's Keystore keys,"
+    echo "  which seal it, when it removes the old app. Sign in again afterwards. The camera's stream"
+    echo "  password and the Music Assistant pairing are not carried either: set and pair them again if you"
+    echo "  use them."
+  else
+    echo "  adb has root on this panel, so the app's settings are kept. Its Home Assistant sign-in and"
+    echo "  encryption key are not: Android deletes the app's Keystore keys when it removes the old app,"
+    echo "  and those secrets are sealed with them. Sign in again; Home Assistant may ask to confirm the"
+    echo "  panel's encryption key."
+  fi
+}
+# Reads the sign-in and the API key from the running app into memory. One it holds but can't hand over is lost to
+# the switch: the run goes on and says so, as for the Wi-Fi.
+read_secrets() {
+  local r
+  SIGNIN_STATE=lost KEY_STATE=lost
+  if [[ $CARRY_SIGNIN -eq 1 ]]; then
+    r=$(printf 'get-signin\n' | handover_req 2>/dev/null) || r=""
+    if [[ $r =~ ^signin\ ([A-Za-z0-9+/]+={0,2})$ ]]; then
+      SEC_SIGNIN=${BASH_REMATCH[1]} SIGNIN_STATE=carry
+      echo "  Home Assistant sign-in: read from the running app (fingerprint $(fingerprint "$SEC_SIGNIN")), kept in memory for the new app"
+    elif [[ $r == none ]]; then SIGNIN_STATE=none; echo "  Home Assistant sign-in: none to carry"
+    else echo "  Home Assistant sign-in: could not read it (${r%% *}); sign in again afterwards"; fi
+  else echo "  Home Assistant sign-in: this build of the app can't hand it over; sign in again afterwards"; fi
+  if [[ $CARRY_KEY -eq 1 ]]; then
+    r=$(printf 'get\n' | handover_req 2>/dev/null) || r=""
+    if [[ $r =~ ^key\ ([A-Za-z0-9+/]{43}=)$ ]]; then
+      SEC_KEY=${BASH_REMATCH[1]} KEY_STATE=carry
+      echo "  Encryption key: read from the running app (fingerprint $(fingerprint "$SEC_KEY")), kept in memory for the new app"
+    elif [[ $r == none ]]; then KEY_STATE=none; echo "  Encryption key: none to carry"
+    else echo "  Encryption key: could not read it (${r%% *}); Home Assistant may ask to confirm it"; fi
+  else echo "  Encryption key: this build of the app can't hand it over; Home Assistant may ask to confirm it"; fi
+  r=""; [[ x =~ x ]] # clears BASH_REMATCH, which held a secret (read-only in bash 3.2)
+}
+forget_secrets() { SEC_KEY="" SEC_SIGNIN=""; }
+# Hands what read_secrets read to the app installed now (it must be started), then forgets it. Tries again while the
+# socket isn't up or doesn't answer, for up to 90 s; a refusal is final.
+hand_back() {
+  local r i
+  if [[ $KEY_STATE == carry ]]; then
+    for i in $(seq 1 60); do r=$(printf 'set %s\n' "$SEC_KEY" | handover_req 2>/dev/null) || r=""; [[ -n $r ]] && break; sleep 1.5; done
+    if [[ $r == ok ]]; then KEY_STATE=kept; echo "  Encryption key: handed to the app"
+    else KEY_STATE=lost; echo "  Encryption key: the app did not take it (${r:-no answer}); Home Assistant may ask to confirm it"; fi
+  fi
+  if [[ $SIGNIN_STATE == carry ]]; then
+    for i in $(seq 1 60); do r=$(printf 'set-signin %s\n' "$SEC_SIGNIN" | handover_req 2>/dev/null) || r=""; [[ -n $r ]] && break; sleep 1.5; done
+    if [[ $r == ok ]]; then SIGNIN_STATE=kept; echo "  Home Assistant sign-in: handed to the app"
+    else SIGNIN_STATE=lost; echo "  Home Assistant sign-in: the app did not take it (${r:-no answer}); sign in again"; fi
+  fi
+  forget_secrets
+}
+# The sealed secrets the switch lost, as words for a message ("Home Assistant sign-in and encryption key"), or empty.
+lost_secrets() {
+  local l=()
+  [[ $SIGNIN_STATE == lost || $SIGNIN_STATE == carry ]] && l+=("Home Assistant sign-in")
+  [[ $KEY_STATE == lost || $KEY_STATE == carry ]] && l+=("encryption key")
+  if [[ ${#l[@]} -eq 2 ]]; then echo "${l[0]} and ${l[1]}"; elif [[ ${#l[@]} -eq 1 ]]; then echo "${l[0]}"; fi
 }
 explain_switch() { # [if]: --dry-run, before Android said anything (the keys may well match)
   if [[ $DEBUG_BUILD -eq 1 ]]; then echo "  Glassworks on the panel is a development build${INSTALLED_VER:+ ($INSTALLED_VER)}."
@@ -129,10 +224,7 @@ explain_switch() { # [if]: --dry-run, before Android said anything (the keys may
   else echo "  Glassworks on the panel is signed with a different key than $(basename "$APK")."; fi
   echo "  Android can't update it in place: it has to be removed and installed again."
   if [[ $HAS_ROOT -eq 1 ]]; then
-    echo "  adb has root on this panel, so the app's settings are kept. Its Home Assistant sign-in and"
-    echo "  encryption key are not: Android deletes the app's Keystore keys when it removes the old app,"
-    echo "  and those secrets are sealed with them. Sign in again; Home Assistant may ask to confirm the"
-    echo "  panel's encryption key."
+    explain_secrets
     if [[ $WIFI_OWNER == kiosk ]]; then echo "  Android would forget $(net_name) with the old app; it is sent to the new app afterwards."
     elif wifi_at_risk; then echo "  Android may forget $(net_name) with the old app; it is sent to the new app afterwards."; fi
   else
@@ -148,7 +240,7 @@ explain_switch() { # [if]: --dry-run, before Android said anything (the keys may
 # Uninstall the installed Glassworks and install $APK, carrying its data over when adb has root.
 # The usual steps (permissions, admin, HOME) follow in the main script.
 switch_key() {
-  local path out list n kind raw i k v ans owner=0 rout
+  local path out list n kind raw i k v ans owner=0 rout lost
   step "Switch Glassworks to this build"
   probe_switch
   explain_switch
@@ -188,6 +280,8 @@ switch_key() {
       if [[ $HAVE_PSK -eq 1 ]]; then echo "  Wi-Fi $(net_name): read as root, kept in memory for the new app"
       else echo "  Wi-Fi: could not read it as root; send it again afterwards (see the end)"; fi
     fi
+    # 2b. the sign-in and the API key, from the running app into memory (#584); before step 3 stops it
+    read_secrets
   fi
   # 3. Android won't uninstall an active device admin (a device owner is released first). The app
   #    has to be running for these, so they come before it is stopped.
@@ -202,7 +296,7 @@ switch_key() {
   if [[ $HAS_ROOT -eq 1 ]]; then
     if ! out=$(su_ backup 2>&1); then
       su_ discard >/dev/null 2>&1 || true; switch_undo; adb shell rm -f "$OLD_APK" "$SW_SH" || true
-      WIFI_PSK=""
+      WIFI_PSK=""; forget_secrets
       echo "ERROR: could not keep Glassworks' data: $(tr -d '\r' <<<"$out" | tail -1). Nothing was changed." >&2; exit 1
     fi
     echo "  app data kept: $(tr -d '\r' <<<"$out" | tail -1)"
@@ -213,7 +307,7 @@ switch_key() {
     switch_undo
     if [[ $HAS_ROOT -eq 1 ]]; then su_ discard >/dev/null 2>&1 || true; fi
     adb shell rm -f "$OLD_APK" "$SW_SH" || true
-    WIFI_PSK=""
+    WIFI_PSK=""; forget_secrets
     echo "ERROR: Android would not remove the installed Glassworks ($out). It is unchanged." >&2; exit 1
   fi
   echo "  removed the old build"
@@ -228,7 +322,11 @@ switch_key() {
         echo "ERROR: the new Glassworks would not install. The previous build is back." >&2
       elif rout=$(restore_into 2>&1); then
         switch_undo; su_ discard >/dev/null 2>&1 || true
-        echo "ERROR: the new Glassworks would not install. The previous build is back with its data." >&2
+        # The old build lost its Keystore key too: hand its sign-in and key back, as to a new one (#584).
+        lost=""
+        if [[ $KEY_STATE == carry || $SIGNIN_STATE == carry ]]; then adb shell am start -n "$ACT" >/dev/null || true; hand_back; fi
+        lost=$(lost_secrets)
+        echo "ERROR: the new Glassworks would not install. The previous build is back with its data${lost:+, but not its $lost}$([[ $SIGNIN_STATE == lost ]] && echo ': sign in again')." >&2
       else
         switch_undo
         echo "ERROR: the new Glassworks would not install. The previous build is back, but its data is not ($(tr -d '\r' <<<"$rout" | tail -1))." >&2
@@ -239,13 +337,16 @@ switch_key() {
       if [[ $HAS_ROOT -eq 1 ]]; then echo "  Its data is kept on the panel in $SW_DATA (root only)." >&2; fi
     fi
     adb shell rm -f "$OLD_APK" "$SW_SH" || true
-    WIFI_PSK=""; exit 1
+    WIFI_PSK=""; forget_secrets; exit 1
   fi
   echo "  installed the new build"
   # 7. the data back in, owned by the new uid, labels restored
   if [[ $HAS_ROOT -eq 1 ]]; then
     if out=$(restore_into 2>&1); then DATA_KEPT=1; su_ discard >/dev/null 2>&1 || true; echo "  app data restored"
-    else echo "  WARNING: could not restore the app's data ($(tr -d '\r' <<<"$out" | tail -1)); it starts fresh. The copy stays in $SW_DATA (root only)."; fi
+    else
+      forget_secrets; KEY_STATE=lost SIGNIN_STATE=lost # a fresh app has no sign-in to take them
+      echo "  WARNING: could not restore the app's data ($(tr -d '\r' <<<"$out" | tail -1)); it starts fresh. The copy stays in $SW_DATA (root only)."
+    fi
   fi
   if [[ $owner -eq 1 ]] && ! adb shell dpm set-device-owner "$PKG/.AdminReceiver" >/dev/null 2>&1; then
     echo "  NOTE: Glassworks was device owner and could not be made device owner again; it works without."
@@ -381,12 +482,18 @@ if [[ $DRY -eq 1 ]]; then
     echo "  + adb shell cp <installed APK> $OLD_APK      # to fall back on"
     if [[ $HAS_ROOT -eq 1 ]]; then
       if wifi_at_risk; then echo "  + (as root) $SW_SH wifi-list / wifi-psk: Wi-Fi details of $(net_name), into memory only"; fi
+      if [[ $CARRY_KEY -eq 1 || $CARRY_SIGNIN -eq 1 ]]; then
+        echo "  + the app's hand-over socket: $([[ $CARRY_SIGNIN -eq 1 ]] && echo 'Home Assistant sign-in and ')encryption key, into memory only"
+      fi
       echo "  + (as root) $SW_SH backup                 # app data -> /data/s1kiosk/switch"
     fi
     echo "  + adb shell am start -n $ACT --ez remove_admin true"
     echo "  + adb shell pm uninstall $PKG"
     echo "  + adb install -r -g $APK      # on failure: pm install -r -g $OLD_APK$([[ $HAS_ROOT -eq 1 ]] && echo ' + restore')"
     if [[ $HAS_ROOT -eq 1 ]]; then echo "  + (as root) $SW_SH restore; $SW_SH discard"; fi
+    if [[ $HAS_ROOT -eq 1 && ( $CARRY_KEY -eq 1 || $CARRY_SIGNIN -eq 1 ) ]]; then
+      echo "  + after starting the kiosk: the sign-in and key to the new app over its hand-over socket (frames/aqara-s1-plus/tools/install/handover.py)"
+    fi
     if wifi_at_risk; then echo "  + after starting the kiosk: Wi-Fi $(net_name) to the new app over Improv (frames/aqara-s1-plus/tools/install/improv-send.py)"; fi
   fi
 else
@@ -453,15 +560,21 @@ else
   sh_ am start -n "$ACT"
 fi
 
+# Before the Wi-Fi: joining a network can restart the app, and the sign-in shows the dashboard at once.
+if [[ $SWITCHED -eq 1 && ( $KEY_STATE == carry || $SIGNIN_STATE == carry ) ]]; then
+  step "Sign-in and encryption key to the new app"
+  hand_back
+fi
+forget_secrets
 if [[ $SWITCHED -eq 1 && $HAVE_PSK -eq 1 ]]; then resend_wifi; fi
 WIFI_PSK=""
 
 # A factory-fresh panel has no Wi-Fi yet (no wlan0): that must not fail the run under set -e.
 IP=$(adb shell ip -4 -o addr show wlan0 2>/dev/null | sed -n 's/.*inet \([0-9.]*\).*/\1/p' | head -1 || true)
+printf '\nDone.\n'
+# a switch that carried the sign-in (#584) leaves the panel signed in
+if [[ $SIGNIN_STATE != kept ]]; then echo "- Log in to Home Assistant on the panel once (the session is remembered)."; fi
 cat <<EOF
-
-Done.
-- Log in to Home Assistant on the panel once (the session is remembered).
 - Home Assistant: Settings -> Devices & services -> Add integration -> ESPHome,
   host ${IP:-<panel IP>}, port 6053 (or accept the auto-discovered "S1 Panel").
 - Hidden settings on the panel: tap the top-left corner 5 times.
@@ -469,8 +582,17 @@ Done.
 EOF
 if [[ $SWITCHED -eq 1 ]]; then
   if [[ $DATA_KEPT -eq 1 ]]; then
-    echo "- Switched builds: the app's settings were kept, but not its Home Assistant sign-in or encryption key"
-    echo "  (Android deleted the old app's Keystore keys). Sign in again; Home Assistant may ask to confirm the key."
+    lost=$(lost_secrets)
+    if [[ -z $lost ]]; then
+      if [[ $SIGNIN_STATE == kept && $KEY_STATE == kept ]]; then kept="settings, Home Assistant sign-in and encryption key"
+      elif [[ $SIGNIN_STATE == kept ]]; then kept="settings and Home Assistant sign-in"
+      elif [[ $KEY_STATE == kept ]]; then kept="settings and encryption key"
+      else kept="settings"; fi
+      echo "- Switched builds: the app's $kept were kept."
+    else
+      echo "- Switched builds: the app's settings were kept, but not its $lost"
+      echo "  (Android deleted the old app's Keystore keys).$([[ $SIGNIN_STATE == lost || $SIGNIN_STATE == carry ]] && echo ' Sign in again.')$([[ $KEY_STATE == lost || $KEY_STATE == carry ]] && echo ' Home Assistant may ask to confirm the key.')"
+    fi
   else echo "- Switched builds: the app's settings were reset (sign in again; Home Assistant may ask to set the panel up again)."; fi
 fi
 if [[ $WIFI_LOST -eq 1 ]]; then

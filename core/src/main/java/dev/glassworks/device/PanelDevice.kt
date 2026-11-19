@@ -133,7 +133,7 @@ class PanelDevice(
         } + ")"
 
         /**
-         * Set to `1` in build.prop by an installer that carries the API key over a reflash ([ApiKeyHandover], #574):
+         * Set to `1` in build.prop by an installer that carries the API key over a reflash ([SecretHandover], #574):
          * the fresh app then keeps its API server shut until the key comes, so Home Assistant, which still holds that
          * key, never meets a device without one and opens no re-authentication.
          */

@@ -13,9 +13,16 @@
 // is read from Android's store into this page's memory and sent to the new app over Improv. Without
 // root the app starts fresh and the Wi-Fi step asks for the password again.
 //
-// The Wi-Fi password never goes into a command line, a log line or an error message.
+// Sealed secrets (#584): the app seals its Home Assistant sign-in and ESPHome API key with a key in the Android
+// Keystore, and Android deletes that key with the old app. The copied data still holds them, but nothing can open
+// them. So, with root, the installer reads both from the running app (its adb-only hand-over socket, the one #574
+// made for the Mirror's reflash) into this page's memory, and hands them to the new app once it runs.
+//
+// The Wi-Fi password, the sign-in and the key never go into a command line, a log line or an error message.
 import type { PanelShell } from '@glassworks/adb';
-import { ADMIN, PKG, dropAdmin } from '@glassworks/app-adb';
+import {
+  ACT, ADMIN, PKG, type Carries, apiKeyFingerprint, dropAdmin, handOverApiKey, handOverSignIn, handoverCarries, readApiKey, readSignIn,
+} from '@glassworks/app-adb';
 import { IMPROV_SOCKET, ImprovSerialClient } from './improv';
 import switchScript from '../../tools/install/glassworks-switch.sh?raw';
 
@@ -109,6 +116,29 @@ export class WifiSecret {
   toJSON() { return { ssid: this.ssid }; }
 }
 
+/**
+ * The sign-in and the API key, read from the running app before the switch (#584) and held in memory until the new
+ * app has them. Nothing prints them: toString and toJSON say only which there are.
+ */
+export class CarriedSecrets {
+  #apiKey?: string;
+  #signIn?: string;
+  constructor(apiKey?: string, signIn?: string) { this.#apiKey = apiKey; this.#signIn = signIn; }
+  /** Base64 of the API key, as the app's hand-over socket gives it. */
+  get apiKey(): string | undefined { return this.#apiKey; }
+  /** Base64 of the refresh token, as the app's hand-over socket gives it. */
+  get signIn(): string | undefined { return this.#signIn; }
+  forget() { this.#apiKey = undefined; this.#signIn = undefined; }
+  toString() { return `CarriedSecrets(${[this.#signIn && 'sign-in', this.#apiKey && 'API key'].filter(Boolean).join(', ') || 'none'})`; }
+  toJSON() { return { apiKey: this.#apiKey !== undefined, signIn: this.#signIn !== undefined }; }
+}
+
+/**
+ * What happens to one sealed secret. carry: read from the old app, to hand to the new one. kept: the new app has it.
+ * lost: it doesn't, so it is set again (signed in again, or confirmed in Home Assistant). none: there was none.
+ */
+export type Carried = 'carry' | 'kept' | 'lost' | 'none';
+
 export interface SwitchPlan {
   /** versionName of the installed app, if dumpsys shows it. */
   installedVersion?: string;
@@ -116,15 +146,25 @@ export interface SwitchPlan {
   debugBuild: boolean;
   /**
    * adb's shell has root (`su`): the app's data is kept and the Wi-Fi password re-sent. Secrets sealed with the
-   * Android Keystore (the HA sign-in, the ESPHome API key) are not: uninstalling deletes the app's keys (#584).
+   * Android Keystore are not copied: uninstalling deletes the app's keys (#584). See `carries`.
    */
   root: boolean;
+  /**
+   * With root: what the running app can hand over across the switch (its `carries`). Without root nothing is carried:
+   * the data, which holds the rest of the sign-in, isn't kept.
+   */
+  carries: Carries;
   wifi: PanelWifi;
 }
 
 export interface SwitchOutcome {
-  /** The app's settings came across. Its Keystore-sealed secrets (the HA sign-in, the API key) never do (#584). */
+  /** The app's settings came across. Its Keystore-sealed secrets don't by themselves (#584): see `secrets`. */
   dataKept: boolean;
+  /** The HA sign-in and the API key: `carry` for one read from the old app and in `secrets`, for provision to hand over. */
+  signIn: Carried;
+  apiKey: Carried;
+  /** What was read from the old app, only while the new app still needs it (dataKept). */
+  secrets?: CarriedSecrets;
   /**
    * kept: the network was not Glassworks', so Android keeps it. resend: read as root, to be sent to
    * the new app (provision does). lost: Android forgot it; the Wi-Fi step must ask for it.
@@ -155,7 +195,29 @@ export async function planSwitch(p: PanelShell): Promise<SwitchPlan> {
   const dump = (await p.run(`dumpsys package ${PKG}`)).out;
   const installedVersion = /versionName=(\S+)/.exec(dump)?.[1];
   const debugBuild = /pkgFlags=\[[^\]]*\bDEBUGGABLE\b/.test(dump);
-  return { installedVersion, debugBuild, root: await hasRoot(p), wifi: await panelWifi(p) };
+  const root = await hasRoot(p);
+  const carries = root ? await handoverCarries(p) : { apiKey: false, signIn: false };
+  return { installedVersion, debugBuild, root, carries, wifi: await panelWifi(p) };
+}
+
+const noun = { signIn: 'Home Assistant sign-in', apiKey: 'encryption key' } as const;
+const both = (xs: string[]) => xs.join(' and ');
+
+/** What the confirm says about the sealed secrets on a panel with root. */
+function describeSecrets(c: Carries): string {
+  const kept = (['signIn', 'apiKey'] as const).filter((k) => c[k]);
+  const lost = (['signIn', 'apiKey'] as const).filter((k) => !c[k]);
+  if (!kept.length) {
+    return 'This panel gives the installer root, so the app\'s settings are kept. Its Home Assistant sign-in and encryption key are not: Android deletes the app\'s Keystore keys when it removes the old app, and those secrets are sealed with them. Sign in again afterwards; Home Assistant may ask to confirm the panel\'s encryption key.';
+  }
+  const many = (xs: readonly unknown[], one: string, more: string) => (xs.length > 1 ? more : one);
+  let t = `This panel gives the installer root, so the app's settings are kept, and so ${many(kept, 'is', 'are')} its ${both(kept.map((k) => noun[k]))}: the installer reads ${many(kept, 'it', 'them')} from the running app and hands ${many(kept, 'it', 'them')} to the new one.`;
+  if (lost.length) {
+    t += ` Its ${both(lost.map((k) => noun[k]))} ${many(lost, 'is', 'are')} not: this build of the app can't hand ${many(lost, 'it', 'them')} over, and Android deletes the app's Keystore keys, which seal ${many(lost, 'it', 'them')}, when it removes the old app.`;
+    if (lost.includes('signIn')) t += ' Sign in again afterwards.';
+    if (lost.includes('apiKey')) t += ' Home Assistant may ask to confirm the panel\'s encryption key.';
+  }
+  return `${t} The camera's stream password and the Music Assistant pairing are not carried${lost.length ? ' either' : ''}: set and pair them again if you use them.`;
 }
 
 /** Wi-Fi is at risk when the network is Glassworks', or when we can't tell whose it is. */
@@ -169,7 +231,7 @@ export function describeSwitch(plan: SwitchPlan): string {
   const lines = [what, 'Android can\'t update it in place: it has to be removed and installed again.', ''];
   const net = plan.wifi.ssid ? `"${plan.wifi.ssid}"` : 'its Wi-Fi network';
   if (plan.root) {
-    lines.push('This panel gives the installer root, so the app\'s settings are kept. Its Home Assistant sign-in and encryption key are not: Android deletes the app\'s Keystore keys when it removes the old app, and those secrets are sealed with them. Sign in again afterwards; Home Assistant may ask to confirm the panel\'s encryption key.');
+    lines.push(describeSecrets(plan.carries));
     if (wifiAtRisk(plan.wifi)) lines.push(`${plan.wifi.owner === 'kiosk' ? 'Android would forget' : 'Android may forget'} ${net} with the old app; the installer sends it to the new app, so the panel stays online.`);
   } else {
     lines.push('The installer has no root on this panel, so the app starts fresh: its settings, Home Assistant sign-in and pairing key are reset (Home Assistant may ask to set the panel up again).');
@@ -183,11 +245,66 @@ export function describeSwitch(plan: SwitchPlan): string {
 }
 
 /**
- * One line for the end of a switch (the installer's Done row). With root the settings come across, but the
- * Keystore-sealed sign-in doesn't (#584), so it says to sign in again either way.
+ * One line for the end of a switch (the installer's Done row). With root the settings come across, and the sign-in
+ * when the installer could carry it (#584); otherwise it says to sign in again.
  */
-export function describeSwitched(sw: { dataKept: boolean; wifi: 'kept' | 'resent' | 'lost' }): string {
-  return `${sw.dataKept ? 'Settings kept, sign in again' : 'Settings reset'} · ${sw.wifi === 'lost' ? 'Wi-Fi needs its password again' : 'Wi-Fi kept'}`;
+export function describeSwitched(sw: { dataKept: boolean; signIn: Carried; wifi: 'kept' | 'resent' | 'lost' }): string {
+  const settings = !sw.dataKept ? 'Settings reset'
+    : sw.signIn === 'kept' ? 'Settings and sign-in kept'
+    : sw.signIn === 'none' ? 'Settings kept'
+    : 'Settings kept, sign in again';
+  return `${settings} · ${sw.wifi === 'lost' ? 'Wi-Fi needs its password again' : 'Wi-Fi kept'}`;
+}
+
+/**
+ * Reads the sign-in and the API key from the running app into memory (only what `carries` says it can hand over).
+ * A secret it holds but can't read now is lost to the switch: the run goes on and says so, as for the Wi-Fi.
+ */
+export async function readSecrets(p: PanelShell, carries: Carries, log: SwitchLog): Promise<{ signIn: Carried; apiKey: Carried; secrets: CarriedSecrets }> {
+  const read = async (k: 'signIn' | 'apiKey', get: () => Promise<string | undefined>, again: string): Promise<[Carried, string | undefined]> => {
+    const name = noun[k][0]!.toUpperCase() + noun[k].slice(1);
+    if (!carries[k]) { log(`${name}: this build of the app can't hand it over; ${again}`); return ['lost', undefined]; }
+    try {
+      const v = await get();
+      log(v === undefined ? `${name}: none to carry` : `${name}: read from the running app (fingerprint ${await apiKeyFingerprint(v)}), kept in memory for the new app`);
+      return v === undefined ? ['none', undefined] : ['carry', v];
+    } catch (e) {
+      log(`${name}: could not read it (${(e as Error).message}); ${again}`);
+      return ['lost', undefined];
+    }
+  };
+  const [signIn, token] = await read('signIn', () => readSignIn(p), 'sign in again afterwards');
+  const [apiKey, key] = await read('apiKey', () => readApiKey(p), 'Home Assistant may ask to confirm it');
+  return { signIn, apiKey, secrets: new CarriedSecrets(key, token) };
+}
+
+/**
+ * Hands what readSecrets read to the app installed now, once it runs and listens, then forgets it. `carry` becomes
+ * kept or lost; the rest stays as it was.
+ */
+export async function handBackSecrets(p: PanelShell, sw: { signIn: Carried; apiKey: Carried; secrets?: CarriedSecrets }, log: SwitchLog,
+  sleep: (ms: number) => Promise<void>, waitMs = 90_000): Promise<{ signIn: Carried; apiKey: Carried }> {
+  const s = sw.secrets;
+  const out = { signIn: sw.signIn, apiKey: sw.apiKey };
+  try {
+    if (out.apiKey === 'carry') {
+      out.apiKey = s?.apiKey !== undefined && await handOverApiKey(p, s.apiKey, sleep, waitMs) ? 'kept' : 'lost';
+      log(out.apiKey === 'kept' ? 'Encryption key: handed to the app' : 'Encryption key: the app did not take it; Home Assistant may ask to confirm it');
+    }
+    if (out.signIn === 'carry') {
+      out.signIn = s?.signIn !== undefined && await handOverSignIn(p, s.signIn, sleep, waitMs) ? 'kept' : 'lost';
+      log(out.signIn === 'kept' ? 'Home Assistant sign-in: handed to the app' : 'Home Assistant sign-in: the app did not take it; sign in again');
+    }
+  } finally {
+    s?.forget();
+  }
+  return out;
+}
+
+/** The sealed secrets a switch lost, for a message ("its Home Assistant sign-in and encryption key"), or undefined. */
+export function lostSecrets(r: { signIn: Carried; apiKey: Carried }): string | undefined {
+  const lost = (['signIn', 'apiKey'] as const).filter((k) => r[k] === 'lost' || r[k] === 'carry');
+  return lost.length ? `its ${both(lost.map((k) => noun[k]))}` : undefined;
 }
 
 export type SwitchLog = (detail: string) => void;
@@ -201,7 +318,7 @@ const lastLine = (s: string) => s.trim().split(/\r?\n/).pop() || 'no detail';
  */
 export async function switchSigningKey(p: PanelShell, apk: Uint8Array, plan: SwitchPlan, log: SwitchLog,
   sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms))): Promise<SwitchOutcome> {
-  const out: SwitchOutcome = { dataKept: false, wifi: wifiAtRisk(plan.wifi) ? 'lost' : 'kept', ssid: plan.wifi.ssid, notes: [] };
+  const out: SwitchOutcome = { dataKept: false, signIn: 'lost', apiKey: 'lost', wifi: wifiAtRisk(plan.wifi) ? 'lost' : 'kept', ssid: plan.wifi.ssid, notes: [] };
   const su = (cmd: string) => p.run(`su -c 'sh ${SWITCH_SH} ${cmd}'`);
   const cleanup = async () => { await p.run(`rm -f ${OLD_APK} ${NEW_APK} ${SWITCH_SH}`); };
 
@@ -228,7 +345,10 @@ export async function switchSigningKey(p: PanelShell, apk: Uint8Array, plan: Swi
       }
       log(out.wifi === 'resend' ? `Wi-Fi ${out.ssid}: read as root; sent to the new app after installing` : 'Wi-Fi: could not read it as root; the Wi-Fi step will ask for it');
     }
+    // 2b. The sign-in and the API key, from the running app into memory (#584). Before step 3, which stops it.
+    Object.assign(out, await readSecrets(p, plan.carries, log));
   }
+  const dropSecrets = () => { out.secrets?.forget(); out.secrets = undefined; };
 
   // 3. Device admin: Android won't uninstall an active admin. A device owner is released first.
   //    The app has to be running for these, so they come before it is stopped.
@@ -252,6 +372,7 @@ export async function switchSigningKey(p: PanelShell, apk: Uint8Array, plan: Swi
   if (root) {
     const b = await su('backup');
     if (b.code !== 0) {
+      dropSecrets();
       await su('discard');
       await undo();
       await cleanup();
@@ -263,6 +384,7 @@ export async function switchSigningKey(p: PanelShell, apk: Uint8Array, plan: Swi
   // 5. Remove the old build.
   const un = (await p.run(`pm uninstall ${PKG}`)).out;
   if (!/Success/.test(un)) {
+    dropSecrets();
     await undo();
     if (root) await su('discard');
     await cleanup();
@@ -286,11 +408,20 @@ export async function switchSigningKey(p: PanelShell, apk: Uint8Array, plan: Swi
     if (restored?.code === 0) await su('discard');
     await cleanup();
     out.secret?.forget();
+    // The old build lost its Keystore key too: hand its sign-in and key back, as to a new one.
+    let lost = '';
+    if (restored?.code === 0) {
+      await p.run(`am start -n ${ACT}`);
+      const r = await handBackSecrets(p, out, log, sleep);
+      const what = lostSecrets(r);
+      if (what) lost = `, but not ${what}${r.signIn === 'lost' ? ': sign in again' : ''}`;
+    }
+    dropSecrets();
     const why = `the new Glassworks would not install (${inst.trim()})`;
     const kept = ` Its data is kept on the panel in ${SWITCH_DATA} (root only).`;
     if (!back) throw new Error(`${why}, and neither would the previous one. Run the installer again.${root ? kept : ''}`);
     if (!restored) throw new Error(`${why}. The previous build is back.`);
-    if (restored.code === 0) throw new Error(`${why}. The previous build is back with its data.`);
+    if (restored.code === 0) throw new Error(`${why}. The previous build is back with its data${lost}.`);
     throw new Error(`${why}. The previous build is back, but its data is not (${lastLine(restored.out)}).${kept}`);
   }
   log('installed the new build');
@@ -301,6 +432,9 @@ export async function switchSigningKey(p: PanelShell, apk: Uint8Array, plan: Swi
     if (r.code === 0) { out.dataKept = true; await su('discard'); log('app data restored'); }
     else {
       root = false;
+      dropSecrets();
+      out.signIn = 'lost';
+      out.apiKey = 'lost';
       out.notes.push(`could not restore the app's data (${lastLine(r.out)}); it starts fresh. The copy stays on the panel in ${SWITCH_DATA} (root only).`);
     }
   }

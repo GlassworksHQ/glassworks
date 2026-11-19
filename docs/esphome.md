@@ -96,7 +96,7 @@ Assistant's entry keeps it. A fresh app that answers with no key makes HA open a
 2026-11-18). So the headless Mirror flash carries the key over (#574):
 
 1. Just before it restarts the Mirror into fastboot, it reads the key from the running app over adb, on the app's
-   socket `@glassworks_api_key` (`ApiKeyHandover`: adb only, uid 0 or 2000; never on the LAN). It prints the key's
+   socket `@glassworks_api_key` (`SecretHandover`: adb only, uid 0 or 2000; never on the LAN). It prints the key's
    4-hex fingerprint, never the key. If the app has a key but can't hand it over now, the flash stops there, with
    nothing written.
 2. It writes `ro.glassworks.api_key.handover=1` into the image's `build.prop`: a flag, not the key, since every app
@@ -112,7 +112,7 @@ What each installer can reach before the flash:
 |---|---|---|
 | `tools/mirror/flash-node.ts` | adb to the running app (the Mirror on our image lets the flash's adb key in) | Yes, from an app with #574. An older app has no socket: HA asks once more |
 | Kiln's page | Only fastboot: its Mirror flow starts at the button inside the Mirror's back, with no adb step before it | Not yet. It writes no flag, so the app starts as before and HA asks once |
-| The S1 | Not reflashed: updates install in place and keep the key | Not needed |
+| The S1 | Not reflashed: updates install in place and keep the key. A signing-key switch (a development build to a release) uninstalls the app, and with it the key's Keystore key | On a switch with root, yes: Kiln and `install.sh` read it from the running app and hand it to the new one, with the Home Assistant sign-in (#584). The new app's API stays locked until then, so HA asks nothing |
 
 If the hand-over fails, the app starts without a key after the 15 minutes, as before, and HA asks once. A key derived
 from the serial, like the MAC, would need no hand-over, but anyone who knows the serial could compute it.

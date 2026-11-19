@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { PanelShell } from '@glassworks/adb';
+import { FakeKeySocket } from '@glassworks/app-adb/fakes';
 import { IMPROV_SOCKET, PacketReader, PacketType, Rpc, frame, parseResult, strings, type ByteStream } from '../src/improv';
 import { KeyMismatchError, provision, unprovision } from '../src/provision';
 import {
@@ -19,6 +20,9 @@ const fixture = (f: string) => readFileSync(join(FIX, f), 'utf8');
 const SCRIPT = join(REPO, 'frames/aqara-s1-plus/tools/install/glassworks-switch.sh');
 /** The fixture's (fake) password for "Home & Garden", as the app must receive it. */
 const PSK = 'fixture <not> "real" & fake';
+/** Made up: base64 of 32 bytes 1..32 and of a token. Never a real key or sign-in. */
+const KEY = btoa(String.fromCharCode(...Array.from({ length: 32 }, (_, i) => i + 1)));
+const TOKEN = btoa('made-up-refresh-token-0123456789abcdef');
 const MISMATCH = 'Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE: Package sh.edm.s1kiosk signatures do not match previously installed version; ignoring!]\n';
 
 /** Glassworks' Improv server over adb, as far as the installer uses it. */
@@ -61,6 +65,37 @@ class SwitchPanel implements PanelShell {
   restoredInto?: 'debug' | 'release';
   wifiSent: { ssid: string; psk: string }[] = [];
   streams = 0;
+  /** Every hand-over socket this panel had, oldest first. */
+  sockets: FakeKeySocket[] = [];
+  /**
+   * What the debug build can hand over (#584): both (this change on), key (#574's build), none (older: no socket).
+   * The build installed after it is always this one. Set it with `oldApp`.
+   */
+  oldCarries: 'both' | 'key' | 'none' = 'both';
+  /** What the debug build holds, sealed with its Keystore key. */
+  held: { key?: string; signIn?: string } = { key: KEY, signIn: TOKEN };
+  /** The hand-over socket of the app installed now; undefined while none runs. */
+  handover?: FakeKeySocket = this.oldApp('both');
+
+  /** The debug build that runs before the switch, holding `held`. */
+  oldApp(carries: SwitchPanel['oldCarries'], held = this.held): FakeKeySocket | undefined {
+    this.oldCarries = carries;
+    this.held = held;
+    this.handover = this.socketFor('debug');
+    if (this.handover) Object.assign(this.handover, { key: held.key, signIn: held.signIn, signInHere: true });
+    return this.handover;
+  }
+
+  /** A freshly installed `build`'s socket: its data (if any) comes with a restore. */
+  socketFor(build: 'debug' | 'release'): FakeKeySocket | undefined {
+    const carries = build === 'release' ? 'both' : this.oldCarries;
+    if (carries === 'none') return undefined;
+    const s = new FakeKeySocket();
+    s.keyOnly = carries === 'key';
+    s.signInHere = false;
+    this.sockets.push(s);
+    return s;
+  }
 
   async run(cmd: string) {
     this.cmds.push(cmd);
@@ -72,9 +107,15 @@ class SwitchPanel implements PanelShell {
       if (!this.newInstallWorks) return { out: 'Failure [INSTALL_FAILED_INSUFFICIENT_STORAGE]\n', code: 1 };
       this.installed = 'release';
       this.disabled = false;
+      this.handover = this.socketFor('release');
       return ok('Success\n');
     }
-    if (cmd === 'pm install -r -g /data/local/tmp/glassworks-old.apk') { this.installed = 'debug'; this.disabled = false; return ok('Success\n'); }
+    if (cmd === 'pm install -r -g /data/local/tmp/glassworks-old.apk') {
+      this.installed = 'debug'; this.disabled = false; this.handover = this.socketFor('debug'); return ok('Success\n');
+    }
+    const sock = this.handover?.shell(cmd);
+    if (sock) return sock;
+    if (cmd === `grep -c ' @glassworks_api_key$' /proc/net/unix`) return { out: '0\n', code: 1 };
     if (cmd === 'pm disable-user --user 0 sh.edm.s1kiosk') {
       if (this.installed === 'none') return { out: 'Error: java.lang.IllegalArgumentException: Unknown package: sh.edm.s1kiosk\n', code: 255 };
       this.disabled = true;
@@ -91,6 +132,7 @@ class SwitchPanel implements PanelShell {
     if (cmd === 'pm uninstall sh.edm.s1kiosk') {
       if (this.installed === 'none' || !this.adminAsked) return { out: 'Failure [DELETE_FAILED_DEVICE_POLICY_MANAGER]\n', code: 1 };
       this.installed = 'none';
+      this.handover = undefined;
       return ok('Success\n');
     }
     if (cmd === `grep -c ' @s1kiosk_improv$' /proc/net/unix`) return ok(this.installed === 'none' ? '0\n' : '1\n');
@@ -113,6 +155,8 @@ class SwitchPanel implements PanelShell {
         expect(this.disabled).toBe(true); // or it would start as HOME while its data is replaced
         if (!this.restoreWorks) return { out: 'glassworks-switch: could not restore the app\'s data\n', code: 1 };
         this.restoredInto = this.installed;
+        // the copied data: the sign-in and the key, sealed with the key Android deleted with the old app
+        if (this.handover) Object.assign(this.handover, { key: this.held.key, signIn: this.held.signIn, lost: true, signInHere: true });
         return ok('restored for uid 10072\n');
       }
       if (args[0] === 'discard') { this.backup = false; return ok(); }
@@ -121,6 +165,10 @@ class SwitchPanel implements PanelShell {
   }
   async push(path: string, data: Uint8Array) { this.pushed.set(path, data); }
   async openStream(service: string) {
+    if (service === 'localabstract:glassworks_api_key') {
+      if (!this.handover) throw new Error('connection refused');
+      return this.handover.open(service);
+    }
     expect(service).toBe(IMPROV_SOCKET);
     this.streams++;
     return improvApp((ssid, psk) => this.wifiSent.push({ ssid, psk }));
@@ -155,10 +203,11 @@ describe('Wi-Fi owner and store parsing', () => {
   });
 
   it('says plainly what is kept, with and without root', () => {
-    const plan: SwitchPlan = { installedVersion: '0.1.0', debugBuild: true, root: true, wifi: { owner: 'kiosk', ssid: 'Home' } };
+    const plan: SwitchPlan = { installedVersion: '0.1.0', debugBuild: true, root: true, carries: { apiKey: false, signIn: false }, wifi: { owner: 'kiosk', ssid: 'Home' } };
     const withRoot = describeSwitch(plan);
     expect(withRoot).toMatch(/development build \(0\.1\.0\)[\s\S]*settings are kept[\s\S]*"Home"[\s\S]*stays online/);
-    // #584: uninstalling deletes the app's Keystore keys, so the sealed sign-in and API key never come across.
+    // #584: uninstalling deletes the app's Keystore keys, so from an app that can't hand them over the sealed sign-in
+    // and API key never come across.
     expect(withRoot).toMatch(/Home Assistant sign-in and encryption key are not: Android deletes the app's Keystore keys/);
     expect(withRoot).toMatch(/Sign in again afterwards; Home Assistant may ask to confirm the panel's encryption key\./);
     expect(withRoot).not.toMatch(/sign-in and keys are kept/);
@@ -168,13 +217,31 @@ describe('Wi-Fi owner and store parsing', () => {
     expect(describeSwitch({ ...plan, wifi: { owner: 'other', ssid: 'Home' } })).toMatch(/wasn't saved by Glassworks and stays/);
   });
 
-  it('says at the end to sign in again, even when the settings came across (#584)', () => {
-    expect(describeSwitched({ dataKept: true, wifi: 'resent' })).toBe('Settings kept, sign in again · Wi-Fi kept');
-    expect(describeSwitched({ dataKept: false, wifi: 'lost' })).toBe('Settings reset · Wi-Fi needs its password again');
+  it('says the sign-in is kept when the running app can hand it over, and what isn\'t (#584)', () => {
+    const plan: SwitchPlan = { installedVersion: '0.1.0', debugBuild: true, root: true, carries: { apiKey: true, signIn: true }, wifi: { owner: 'kiosk', ssid: 'Home' } };
+    const both = describeSwitch(plan);
+    expect(both).toMatch(/settings are kept, and so are its Home Assistant sign-in and encryption key: the installer reads them from the running app and hands them to the new one\./);
+    expect(both).not.toMatch(/Sign in again/);
+    expect(both).toMatch(/camera's stream password and the Music Assistant pairing are not carried: set and pair them again/);
+    // #574's build hands over the key, not the sign-in
+    const keyOnly = describeSwitch({ ...plan, carries: { apiKey: true, signIn: false } });
+    expect(keyOnly).toMatch(/and so is its encryption key: the installer reads it from the running app/);
+    expect(keyOnly).toMatch(/Its Home Assistant sign-in is not: this build of the app can't hand it over[\s\S]*Sign in again afterwards\./);
+    expect(keyOnly).not.toMatch(/confirm the panel's encryption key/);
+    expect(keyOnly).toMatch(/not carried either/);
+    // nothing is carried without root, whatever the app could hand over
+    expect(describeSwitch({ ...plan, root: false })).toMatch(/starts fresh/);
+  });
+
+  it('says at the end whether to sign in again (#584)', () => {
+    expect(describeSwitched({ dataKept: true, signIn: 'kept', wifi: 'resent' })).toBe('Settings and sign-in kept · Wi-Fi kept');
+    expect(describeSwitched({ dataKept: true, signIn: 'none', wifi: 'kept' })).toBe('Settings kept · Wi-Fi kept');
+    expect(describeSwitched({ dataKept: true, signIn: 'lost', wifi: 'resent' })).toBe('Settings kept, sign in again · Wi-Fi kept');
+    expect(describeSwitched({ dataKept: false, signIn: 'lost', wifi: 'lost' })).toBe('Settings reset · Wi-Fi needs its password again');
   });
 
   it('says Glassworks saved the network only when dumpsys says so', () => {
-    const plan: SwitchPlan = { installedVersion: '0.1.0', debugBuild: true, root: false, wifi: { owner: 'unknown', ssid: 'Home' } };
+    const plan: SwitchPlan = { installedVersion: '0.1.0', debugBuild: true, root: false, carries: { apiKey: false, signIn: false }, wifi: { owner: 'unknown', ssid: 'Home' } };
     const noRoot = describeSwitch(plan);
     expect(noRoot).not.toMatch(/Glassworks saved/);
     expect(noRoot).toMatch(/can't tell who saved "Home", so the panel may lose its Wi-Fi[\s\S]*asks for its password again/);
@@ -193,17 +260,26 @@ describe('switching a development build to this one', () => {
       confirmSwitch: async (plan) => { asked = plan; return true; },
     }, (s, d) => text.push(s || d || ''), noSleep);
 
-    expect(asked).toEqual({ installedVersion: '0.1.0', debugBuild: true, root: true, wifi: { owner: 'kiosk', ssid: 'Home & Garden' } });
-    expect(res.switched).toEqual({ dataKept: true, wifi: 'resent', ssid: 'Home & Garden', notes: [] });
+    expect(asked).toEqual({ installedVersion: '0.1.0', debugBuild: true, root: true, carries: { apiKey: true, signIn: true }, wifi: { owner: 'kiosk', ssid: 'Home & Garden' } });
+    expect(res.switched).toEqual({ dataKept: true, signIn: 'kept', apiKey: 'kept', wifi: 'resent', ssid: 'Home & Garden', notes: [] });
+    // #584: the new app has the old one's sign-in and key, sealed with its own Keystore key now
+    expect(p.handover).toMatchObject({ key: KEY, signIn: TOKEN });
     expect(p.wifiSent).toEqual([{ ssid: 'Home & Garden', psk: PSK }]);
     expect(p.installed).toBe('release');
     expect(p.restoredInto).toBe('release');
     expect(p.disabled).toBe(false);
     expect(p.backup).toBe(false); // discarded after the restore
 
-    // the password: never in a command, a step or a detail
-    for (const s of [...p.cmds, ...text]) expect(s).not.toContain('fixture');
+    // the password, the sign-in and the key: never in a command, a step or a detail
+    for (const s of [...p.cmds, ...text]) for (const secret of ['fixture', TOKEN, KEY, atob(TOKEN)]) expect(s).not.toContain(secret);
     expect(JSON.stringify(res)).not.toContain('fixture');
+    expect(JSON.stringify(res)).not.toContain(TOKEN);
+    expect(text.some((t) => /^Home Assistant sign-in: read from the running app \(fingerprint [0-9a-f]{4}\)/.test(t))).toBe(true);
+    expect(text).toContain('Home Assistant sign-in: handed to the app');
+    expect(text).toContain('Encryption key: handed to the app');
+    const [old, fresh] = p.sockets;
+    expect(old!.verbs).toEqual(['carries', 'get-signin', 'get']);
+    expect(fresh!.verbs).toEqual(['set', 'set-signin']);
 
     const i = (c: string) => p.cmds.indexOf(c);
     const su = (c: string) => i(`su -c 'sh /data/local/tmp/glassworks-switch.sh ${c}'`);
@@ -217,6 +293,11 @@ describe('switching a development build to this one', () => {
     expect(i('dpm set-active-admin sh.edm.s1kiosk/.AdminReceiver')).toBeGreaterThan(su('restore'));
     expect(i('cmd package set-home-activity sh.edm.s1kiosk/.MainActivity')).toBeGreaterThan(su('restore'));
     expect(p.cmds.indexOf(`grep -c ' @s1kiosk_improv$' /proc/net/unix`)).toBeGreaterThan(i('am start -n sh.edm.s1kiosk/.MainActivity'));
+    // the secrets are read while the old app runs, before it is stopped, and handed over once the new one starts
+    const sock = `grep -c ' @glassworks_api_key$' /proc/net/unix`;
+    expect(i(sock)).toBeLessThan(i('pm disable-user --user 0 sh.edm.s1kiosk'));
+    expect(p.cmds.lastIndexOf(sock)).toBeGreaterThan(i('am start -n sh.edm.s1kiosk/.MainActivity'));
+    expect(p.cmds.lastIndexOf(sock)).toBeLessThan(p.cmds.indexOf(`grep -c ' @s1kiosk_improv$' /proc/net/unix`));
     expect(p.cmds).toContain('rm -f /data/local/tmp/glassworks-old.apk /data/local/tmp/glassworks.apk /data/local/tmp/glassworks-switch.sh');
     expect(text).toContain('Switch to this build (remove the old one, install this one)');
   });
@@ -224,8 +305,12 @@ describe('switching a development build to this one', () => {
   it('without root: says the app starts fresh, does no root step, leaves Wi-Fi to the Wi-Fi step', async () => {
     const p = new SwitchPanel();
     p.root = false;
-    const res = await provision(p, { kioskApk: new Uint8Array([1]), debloat: false, confirmSwitch: async (plan) => !plan.root }, () => {}, noSleep);
-    expect(res.switched).toEqual({ dataKept: false, wifi: 'lost', ssid: 'Home & Garden', notes: [] });
+    let asked: SwitchPlan | undefined;
+    const res = await provision(p, { kioskApk: new Uint8Array([1]), debloat: false, confirmSwitch: async (plan) => { asked = plan; return !plan.root; } }, () => {}, noSleep);
+    expect(res.switched).toEqual({ dataKept: false, signIn: 'lost', apiKey: 'lost', wifi: 'lost', ssid: 'Home & Garden', notes: [] });
+    // nothing is read without root: the data, which holds the rest of the sign-in, doesn't come across
+    expect(asked!.carries).toEqual({ apiKey: false, signIn: false });
+    expect(p.sockets.flatMap((x) => x.verbs)).toEqual([]);
     expect(p.cmds.filter((c) => c.startsWith('su '))).toEqual([]);
     expect(p.pushed.has('/data/local/tmp/glassworks-switch.sh')).toBe(false);
     expect(p.streams).toBe(0);
@@ -254,13 +339,66 @@ describe('switching a development build to this one', () => {
     const p = new SwitchPanel();
     p.newInstallWorks = false;
     await expect(provision(p, { kioskApk: new Uint8Array([1]), confirmSwitch: async () => true }, () => {}, noSleep))
-      .rejects.toThrow(/previous build is back with its data/);
+      .rejects.toThrow(/previous build is back with its data\.$/);
     expect(p.installed).toBe('debug');
     expect(p.restoredInto).toBe('debug');
+    // it lost its Keystore key too: it gets its sign-in and key back (#584)
+    expect(p.handover).toMatchObject({ key: KEY, signIn: TOKEN });
+    expect(p.cmds).toContain('am start -n sh.edm.s1kiosk/.MainActivity');
     expect(p.disabled).toBe(false);
     expect(p.cmds).toContain('dpm set-active-admin sh.edm.s1kiosk/.AdminReceiver');
     expect(p.backup).toBe(false);
     expect(p.wifiSent).toEqual([]); // the old app still has its network
+  });
+
+  it('from an app of #574 (before #584): carries the key, says to sign in again', async () => {
+    const p = new SwitchPanel();
+    const old = p.oldApp('key')!;
+    const text: string[] = [];
+    let asked: SwitchPlan | undefined;
+    const res = await provision(p, { kioskApk: new Uint8Array([1]), debloat: false, confirmSwitch: async (plan) => { asked = plan; return true; } },
+      (st, d) => text.push(st || d || ''), noSleep);
+    expect(asked!.carries).toEqual({ apiKey: true, signIn: false });
+    expect(res.switched).toMatchObject({ dataKept: true, signIn: 'lost', apiKey: 'kept' });
+    expect(text).toContain('Home Assistant sign-in: this build of the app can\'t hand it over; sign in again afterwards');
+    expect(old.verbs).toEqual(['carries', 'get']);
+    expect(p.handover).toMatchObject({ key: KEY });
+    expect(p.handover!.verbs).toEqual(['set']);
+  });
+
+  it('from an app with no hand-over at all: carries nothing, as before #584', async () => {
+    const p = new SwitchPanel();
+    p.oldApp('none');
+    const text: string[] = [];
+    const res = await provision(p, { kioskApk: new Uint8Array([1]), debloat: false, confirmSwitch: async () => true }, (st, d) => text.push(st || d || ''), noSleep);
+    expect(res.switched).toMatchObject({ dataKept: true, signIn: 'lost', apiKey: 'lost' });
+    expect(text).not.toContain('Sign-in and encryption key to the new app');
+    expect(p.handover!.verbs).toEqual([]);
+  });
+
+  it('an app that isn\'t signed in: nothing to carry, nothing to say', async () => {
+    const p = new SwitchPanel();
+    p.oldApp('both', { key: KEY });
+    const res = await provision(p, { kioskApk: new Uint8Array([1]), debloat: false, confirmSwitch: async () => true }, () => {}, noSleep);
+    expect(res.switched).toMatchObject({ dataKept: true, signIn: 'none', apiKey: 'kept' });
+    expect(p.handover!.verbs).toEqual(['set']);
+  });
+
+  it('an app that can\'t read its sign-in now: the switch goes on and says to sign in again', async () => {
+    const p = new SwitchPanel();
+    p.oldApp('both')!.unreadable = true;
+    const text: string[] = [];
+    const res = await provision(p, { kioskApk: new Uint8Array([1]), debloat: false, confirmSwitch: async () => true }, (st, d) => text.push(st || d || ''), noSleep);
+    expect(res.switched).toMatchObject({ dataKept: true, signIn: 'lost', apiKey: 'lost' });
+    expect(text.some((t) => /^Home Assistant sign-in: could not read it \(the app has a sign-in but can't read it right now/.test(t))).toBe(true);
+  });
+
+  it('when the data won\'t go into the new build, hands nothing over (a fresh app has no sign-in to take it)', async () => {
+    const p = new SwitchPanel();
+    p.restoreWorks = false;
+    const res = await provision(p, { kioskApk: new Uint8Array([1]), debloat: false, confirmSwitch: async () => true }, () => {}, noSleep);
+    expect(res.switched).toMatchObject({ dataKept: false, signIn: 'lost', apiKey: 'lost' });
+    expect(p.handover!.verbs).toEqual([]);
   });
 
   it('if the old build comes back but its data won\'t go in, says so and keeps the copy', async () => {

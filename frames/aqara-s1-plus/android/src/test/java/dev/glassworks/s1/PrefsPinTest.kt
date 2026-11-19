@@ -114,9 +114,12 @@ class PrefsPinTest {
         kiosk.shownHost("http://192.0.2.10:8123/")
         kiosk.auth = StoredAuth("http://192.0.2.10:8123", "http://192.0.2.20/", "pin-token")
         kiosk.auth
+        kiosk.carryOverRefreshToken("pin-token") // a switch's hand-over (#584): the same file and keys as the sign-in
         kiosk.auth = null
         kiosk.noiseKeyStore.save(ByteArray(32))
         kiosk.noiseKeyStore.save(null)
+        kiosk.carryOverApiKey(ByteArray(32) { 1 })
+        kiosk.carryOverApiKey(ByteArray(32) { 1 })
         PanePrefs.PANE_FILES.keys.forEach(panes::paneFile)
         kiosk.remoteDebugging(BuildConfig.DEBUG) // the default the runtime passes (GlassworksRuntime.build)
         panes.camera.use = dev.glassworks.camera.CameraUse.PRESENCE_AND_SNAPSHOTS
@@ -243,7 +246,7 @@ class PrefsPinTest {
         val COMPOSITE = setOf(
             "KioskPrefs.setHaUrl", "KioskPrefs.shownHost", "KioskPrefs.setAuth", "KioskPrefs.remoteDebugging", "PanePrefs.paneFile", "KioskPrefs.registerListener", "KioskPrefs.unregisterListener",
             ".save", "PrefsSsStore.putRecord", "PrefsSsStore.touchRecord", "PrefsSsStore.removeRecord",
-            "CameraPrefs.setUse", "CameraPrefs.setSignIn",
+            "CameraPrefs.setUse", "CameraPrefs.setSignIn", "KioskPrefs.carryOverRefreshToken", "KioskPrefs.carryOverApiKey",
         )
     }
 }
