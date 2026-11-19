@@ -159,7 +159,8 @@ second try can fail on that record.
 
 So every Gradle job runs `.github/actions/gradle-resolve` after its Android SDK step, before its own Gradle steps. It
 configures the build once (`./gradlew help`), which fetches the plugins and `build-logic`'s classpath into Gradle's
-cache. When that fails on a download ("Could not find", "Could not resolve", …) it deletes Gradle's dependency
+cache. When that fails on a download ("Could not find", "Could not resolve", or a plugin "was not found in any of the
+following sources") it deletes Gradle's dependency
 metadata, as the jobs' last step does after a failure, waits 15 then 30 seconds, and tries again, three times in all.
 Any other failure fails at once. Downloads later in a job (a test's or lint's dependencies) aren't retried.
 `tools/ci/test/test_gradle_resolve.py` runs the script against a fake `gradlew` and checks that every Gradle job runs it.

@@ -13,6 +13,9 @@
 # Touches only Gradle's metadata under GRADLE_USER_HOME (~/.gradle) on a retry. Env: GW_RESOLVE_ATTEMPTS (3),
 # GW_RESOLVE_BACKOFF (15: seconds before the second try, twice that before the third).
 set -uo pipefail
+# What Gradle prints when a download failed: "Could not find …" (a 404 for a dependency), "Could not resolve …", and
+# for a plugin "Plugin [id: …] was not found in any of the following sources … could not resolve plugin artifact".
+download='could not (find|resolve|download|get|head) |was not found in any of the following sources'
 attempts=${GW_RESOLVE_ATTEMPTS:-3}
 backoff=${GW_RESOLVE_BACKOFF:-15}
 home=${GRADLE_USER_HOME:-$HOME/.gradle}
@@ -24,12 +27,12 @@ for ((i = 1; i <= attempts; i++)); do
     if [ "$i" -gt 1 ]; then echo "Configured on attempt $i of $attempts."; else echo "Configured."; fi
     exit 0
   fi
-  if ! grep -qE 'Could not (find|resolve|download|GET|HEAD) ' "$log"; then
+  if ! grep -qiE "$download" "$log"; then
     cat "$log"
     echo "::error::Configuring the build failed, and not on a download: no retry."
     exit 1
   fi
-  grep -E 'Could not (find|resolve|download|GET|HEAD) ' "$log" | sed 's/^[[:space:]>]*//' | sort -u | head -n 5
+  grep -iE "$download" "$log" | sed 's/^[[:space:]>]*//' | sort -u | head -n 5
   if [ "$i" -lt "$attempts" ]; then
     echo "::warning::Gradle couldn't fetch a dependency (attempt $i of $attempts). Dropping its metadata and trying again."
     rm -rf "$home"/caches/modules-2/metadata-*

@@ -19,6 +19,18 @@ Error resolving plugin [id: 'com.android.application', version: '9.3.3', apply: 
         Searched in the following locations:
           - https://plugins.gradle.org/m2/org/jetbrains/kotlin/kotlin-stdlib/2.4.10/kotlin-stdlib-2.4.10.pom
 """
+# What it printed with kotlin-dsl's plugin marker missing from the cache and the repository (#631's injected run).
+PLUGIN_MISSING = """FAILURE: Build failed with an exception.
+* Where:
+Build file '/home/runner/work/glassworks/glassworks/build-logic/build.gradle.kts' line: 2
+* What went wrong:
+Plugin [id: 'org.gradle.kotlin.kotlin-dsl', version: '6.7.6'] was not found in any of the following sources:
+- Gradle Core Plugins (plugin is not in 'org.gradle' namespace)
+- Included Builds (No included builds contain this plugin)
+- Plugin Repositories (could not resolve plugin artifact 'org.gradle.kotlin.kotlin-dsl:org.gradle.kotlin.kotlin-dsl.gradle.plugin:6.7.6')
+  Searched in the following repositories:
+    Gradle Central Plugin Repository
+"""
 COMPILE_ERROR = """FAILURE: Build failed with an exception.
 * What went wrong:
 Script compilation error:
@@ -62,6 +74,11 @@ class Resolve(unittest.TestCase):
         self.assertIn('Could not find org.jetbrains.kotlin:kotlin-stdlib:2.4.10.', out)
         self.assertIn('::warning::', out)
         self.assertIn('Configured on attempt 2 of 3.', out)
+
+    def test_a_plugin_the_portal_did_not_answer_for_is_a_download_too(self):
+        code, out, calls, metadata, _ = self.run_with([PLUGIN_MISSING])
+        self.assertEqual((code, calls, metadata), (0, 2, False), out)
+        self.assertIn("Plugin [id: 'org.gradle.kotlin.kotlin-dsl', version: '6.7.6'] was not found", out)
 
     def test_another_failure_fails_at_once_with_gradles_output(self):
         code, out, calls, metadata, _ = self.run_with([COMPILE_ERROR])
