@@ -13,7 +13,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import dev.glassworks.esphome.DeviceIdentity
 import dev.glassworks.s1.PanePrefs
-import dev.glassworks.radio.RadioHelper
+import dev.glassworks.s1.radio.RadioHelper
 import dev.glassworks.radio.SysProps
 
 /**

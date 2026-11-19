@@ -173,7 +173,7 @@ override `Frame.agent` get it. A pane checks `offers` (or `declared`, for a pass
 The radio and time zone panes talk to their root side only through these (maintainer, 2026-11-19).
 They hold no property, path or service name. A frame whose agent uses Android properties, init services
 and app files, as the S1's does, can use the radio pane's `PropsRadio` and `PropsBundle` with its own
-names (`RadioNames`); the S1's are `dev.glassworks.radio.RadioHelper` and `S1TimeZone`, in the S1 app.
+names (`RadioNames`); the S1's are `dev.glassworks.s1.radio.RadioHelper` and `S1TimeZone`, in the S1 app.
 
 ## The contract test
 

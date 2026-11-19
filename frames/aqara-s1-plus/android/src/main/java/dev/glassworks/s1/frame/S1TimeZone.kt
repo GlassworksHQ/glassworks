@@ -1,7 +1,7 @@
 package dev.glassworks.s1.frame
 
 import dev.glassworks.frame.TimeZoneAgent
-import dev.glassworks.radio.RadioHelper
+import dev.glassworks.s1.radio.RadioHelper
 import dev.glassworks.radio.ShellProps
 import dev.glassworks.radio.SysProps
 

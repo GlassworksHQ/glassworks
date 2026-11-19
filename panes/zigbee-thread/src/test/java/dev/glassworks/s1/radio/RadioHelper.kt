@@ -1,16 +1,20 @@
-package dev.glassworks.radio
+package dev.glassworks.s1.radio
 
 import dev.glassworks.frame.RadioFile
 import dev.glassworks.frame.RadioSetting
 import dev.glassworks.frame.RadioStatus
+import dev.glassworks.radio.RadioMode
+import dev.glassworks.radio.RadioNames
+import dev.glassworks.radio.SisdkZigbeed
 
-// The S1's radio names: its frame agent's side of the radio (docs/frame-agent.md#the-s1-the-reference). They sit in
-// dev.glassworks.radio, where they were before #641, so the S1 code and tests that name them stay as they are.
+// The S1's radio names: its frame agent's side of the radio (docs/frame-agent.md#the-s1-the-reference). The radio
+// pane in dev.glassworks.radio holds none (PanelDeviceFrameTest: no package of the core is an app's).
 
 /**
  * Contract with the root helper that the boot-image patch installs (frames/aqara-s1-plus/docs/radio.md).
  * The app writes [PROP_MODE] and `ctl.restart`s [SERVICE]; the helper (frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh)
- * applies the mode, supervises its processes and reports in [PROP_STATUS]. The formats are [RadioReports].
+ * applies the mode, supervises its processes and reports in [PROP_STATUS]. The formats are
+ * [dev.glassworks.radio.RadioReports].
  */
 object RadioHelper {
     /** Init service name; `init.svc.<SERVICE>` is non-empty iff the .rc snippet is installed. */
@@ -91,7 +95,7 @@ object RadioHelper {
     /** Where the radio bundle service publishes the installed bundle: "<ok|bad|none> <version> <floor>", root 0644. */
     const val BUNDLE_STATE_FILE = "/data/s1kiosk-pub/radio-bundle"
 
-    /** The radio pane's names for these ([PropsRadio]). */
+    /** The radio pane's names for these ([dev.glassworks.radio.PropsRadio]). */
     val NAMES = RadioNames(
         service = SERVICE,
         version = PROP_VERSION,

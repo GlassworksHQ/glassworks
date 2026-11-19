@@ -5,7 +5,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import dev.glassworks.radio.RadioHelper
+import dev.glassworks.s1.radio.RadioHelper
 import dev.glassworks.radio.SysProps
 
 class TimeZoneKeeperTest {

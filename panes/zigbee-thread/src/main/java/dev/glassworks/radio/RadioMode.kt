@@ -72,7 +72,7 @@ enum class ZigbeeStack(val id: String, val label: String) {
 /**
  * The radio's report formats and the versions they came with (docs/frame-agent.md#capabilities): what the radio pane
  * parses from its frame agent ([dev.glassworks.frame.RadioAgent]). The names behind them are the frame's (the S1's
- * `dev.glassworks.radio.RadioHelper`, in its own app).
+ * `dev.glassworks.s1.radio.RadioHelper`, in its own app).
  */
 object RadioReports {
     /** The radio contract version this app knows (the S1's helper v4). */

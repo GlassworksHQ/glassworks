@@ -1,12 +1,13 @@
 package dev.glassworks.radio
 
+import dev.glassworks.s1.radio.RadioHelper
 import dev.glassworks.frame.AgentCapability
 import dev.glassworks.frame.FrameAgent
 import dev.glassworks.frame.RadioAgent
 import java.io.File
 
 /**
- * The radio pane's tests run over the S1's names (RadioHelper.kt next to this file, a byte-for-byte copy of the S1
+ * The radio pane's tests run over the S1's names (s1/radio/RadioHelper.kt in these tests, a byte-for-byte copy of the S1
  * app's, which `S1RadioNamesTest` checks), through the same [PropsRadio] the S1's agent uses.
  */
 fun s1Agent(props: SysProps): FrameAgent = object : FrameAgent {
