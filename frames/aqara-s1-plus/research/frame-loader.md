@@ -689,7 +689,7 @@ FEL with our U-Boot) or flashed with the usual backup. The app can stay on 0.4.3
 | L2 | The slots under init | `init.svc.glassworks_agent`, `_netwatch` = `running`; `init.svc.glassworks_firstboot` = `stopped` (it exits at once: the 0.4.3 marker says the panel was provisioned); no `init.svc.s1kiosk_*` |
 | L3 | The radio from the old setting. Starts from a known state: 0.4.3 running `thread_router` (step 0 of the run sheet checks it), no `/data/s1kiosk/radio/.settings-moved`, no frame bundle | `persist.glassworks.radio_mode` = `thread_router`, `sys.glassworks.radio.status` = `ok thread_router…`, `sys.glassworks.agent.source` = `boot`, otbr runs |
 | L4 | The boot animation mount from a shell at `post-fs-data` | the Glassworks animation plays at boot (film it); `/proc/mounts` lists `bootanimation.zip` |
-| L5 | The check's cost at `post-fs-data` | the `glassworks_loader` log lines' times, with and without a bundle (a bundle needs the bundles PR) |
+| L5 | The check's cost at `post-fs-data` | `dmesg \| grep glassworks_loader`: the times of `boot: checking the frame bundle` and `boot: done: …`, with and without a bundle (a bundle needs the bundles PR). Not logcat: at `post-fs-data` logd isn't running, and the S1 run of 2026-11-19 found nothing there; the loader writes every line to `/dev/kmsg` too |
 
 ## Open questions
 

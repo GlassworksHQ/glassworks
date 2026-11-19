@@ -319,10 +319,10 @@ printf 'stock-anim' > "$T/anim.zip"; printf 'not a zip' > "$T/badanim.zip"
 python3 -c 'import sys, zipfile; z = zipfile.ZipFile(sys.argv[1], "w", zipfile.ZIP_STORED); z.writestr("desc.txt", "1440 720 30\n"); z.close()' "$T/banim.zip"
 printf '#!/bin/sh\nsetprop test.agent "bundle-script|${GW_SOURCE}|${GW_BUNDLE}"\n' > "$T/svc-agent.sh"
 printf '#!/bin/sh\nexit 3\n' > "$T/svc-crash.sh"
-L() { GW_RUN="$T/run" GW_ANIM="$T/anim.zip" /system/bin/sh "$TBL/glassworks_loader.sh" "$@"; }
+L() { GW_RUN="$T/run" GW_ANIM="$T/anim.zip" GW_KMSG="$T/kmsg" /system/bin/sh "$TBL/glassworks_loader.sh" "$@"; }
 reset_frame() {
   rm -rf /data/glassworks /data/glassworks-pub "${T:?}/run" "${APP:?}/files/frame"
-  rm -f "${T:?}"/props/ro.glassworks.* "${T:?}"/props/sys.glassworks.* "${T:?}"/props/test.* "${T:?}/mounts"
+  rm -f "${T:?}"/props/ro.glassworks.* "${T:?}"/props/sys.glassworks.* "${T:?}"/props/test.* "${T:?}/mounts" "${T:?}/kmsg"
 }
 mkframe() { # out frame-version key extra-args...
   local out=$1 v=$2 k=$3; shift 3
@@ -339,6 +339,11 @@ L boot
 check "no bundle: the boot image's frame id and version" test "$(prop ro.glassworks.frame.id)/$(prop ro.glassworks.frame.version)" = "aqara-s1-plus/1.0.0"
 check "...state none, published for the app" test "$(prop sys.glassworks.bundle.state)/$(cat /data/glassworks-pub/frame-bundle)" = "none/none - 0 -"
 check "...the boot image's animation is mounted" has "$(cat "$T/mounts")" "-o bind $TBL/glassworks_bootanimation.zip $T/anim.zip"
+# L5: at post-fs-data logd isn't running yet, so the boot step's lines go to the kernel log as well
+check "...its start and end in the kernel log, prefixed, for dmesg's timestamps" \
+  test "$(grep -c '^glassworks_loader: boot: ' "$T/kmsg")" = 2
+check "...the end line says what loaded" grep -qx "glassworks_loader: boot: done: frame 1.0.0, bundle none, boot animation $TBL/glassworks_bootanimation.zip" "$T/kmsg"
+rm -f "$T/kmsg"
 GW_LOADER_ONCE=1 L run agent
 check "...the agent slot runs the boot copy" test "$(prop test.agent)" = "boot||$TBL"
 
@@ -381,6 +386,7 @@ echo junk >> /data/glassworks/bundle/current/services/agent.sh
 L boot
 check "a damaged bundle: the boot image's frame version" test "$(prop ro.glassworks.frame.version)" = 1.0.0
 check "...state says why" has "$(prop sys.glassworks.bundle.state)" "bad: services/agent.sh does not match the manifest"
+check "...and so does the kernel log, where it outlives the boot step" grep -q "^glassworks_loader: frame bundle rejected: services/agent.sh does not match the manifest" "$T/kmsg"
 check "...published as bad" test "$(cat /data/glassworks-pub/frame-bundle)" = "bad - 1000001 -"
 check "...the boot image's animation" has "$(tail -1 "$T/mounts")" "$TBL/glassworks_bootanimation.zip"
 GW_LOADER_ONCE=1 L run agent
