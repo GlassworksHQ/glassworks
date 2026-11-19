@@ -6,7 +6,7 @@ import { fmtSize } from '@glassworks/kiln-core';
 import type { FastbootReport } from '@glassworks/lululemon-mirror-installer';
 import * as RadioGroup from '@radix-ui/react-radio-group';
 import { useEffect, useState } from 'react';
-import { BuiltOn, Credit } from '../../components/Credit';
+import { BuiltOn } from '../../components/Credit';
 import { Shell, useBrowserChip } from '../../components/Shell';
 import { FRAMES } from '../../frames/catalog';
 import type { RailStep } from '../../wizard/state';
@@ -14,12 +14,13 @@ import { flashDemo } from '../flashDemo';
 import { OPTIONS, imageFromLink, option, type ImageOption } from './options';
 import c from './choice.module.css';
 
-export const IMAGE_DEMOS = ['image-choose', 'image-choose-open', 'image-choose-panes', 'image-link', 'image-download', 'image-download-done', 'image-download-bad', 'image-confirm',
+export const IMAGE_DEMOS = ['image-choose', 'image-choose-open', 'image-choose-panes', 'image-link', 'image-download', 'image-download-done', 'image-download-bad', 'image-download-error', 'image-confirm',
   'image-writing', 'image-done', 'image-done-glassworks', 'image-back-glassworks', 'image-back-panes'] as const;
 export type ImageDemo = (typeof IMAGE_DEMOS)[number];
 
 type Screen = 'choose' | 'download' | 'confirm' | 'writing' | 'done';
-type FileState = { state: 'idle' | 'downloading' | 'waiting' | 'ok' | 'bad'; x: number };
+/** `bad`: the bytes came but aren't the release's; `error`: Kiln's route couldn't serve them. Both are Kiln's bug to fix, never the person's. */
+type FileState = { state: 'idle' | 'downloading' | 'waiting' | 'ok' | 'bad' | 'error'; x: number; why?: string };
 
 const RAIL = ['Mirror', 'Choose', 'Download', 'Fastboot', 'Install', 'Done'];
 const AT: Record<Screen, number> = { choose: 1, download: 2, confirm: 3, writing: 4, done: 6 };
@@ -31,14 +32,24 @@ const panesCredit = () => FRAMES.find((x) => x.id === 'lululemon-mirror')?.credi
 
 const Out = ({ l }: { l: { name: string; href: string } }) => <a className="link" href={l.href} target="_blank" rel="noopener">{l.name}</a>;
 
-/** Whose software this screen installs: on every screen of a community install, above the heading. Plain text: the credit line links them. */
+/**
+ * Who makes the image and where questions about it go: on every screen of a community install, above
+ * the heading. It is the image's credit too (frame.json `credits`), so the screens carry no second one.
+ */
 function Whose({ o }: { o: ImageOption }) {
   return (
     <div className={c.whose}>
       <span className="pill soon">Community image</span>
-      <span className="small"><b className={c.fg}>{o.name}</b>, by {o.by.name}. Kiln installs it; it isn&apos;t Glassworks.</span>
+      <span className="small"><b className={c.fg}>{o.name}</b> is made by <Out l={o.by} />. Questions about it go to <Out l={{ name: 'its project', href: o.project.href }} />.</span>
     </div>
   );
+}
+
+/** A new issue on Glassworks with what Kiln saw: a download Kiln can't serve is Kiln's bug. */
+function reportUrl(o: ImageOption, f: ImageOption['files'][number], why: string) {
+  const title = `Kiln couldn't download ${f.name} for ${o.name}`;
+  const body = `Image: ${o.id}\nFile: ${f.name} (${f.size} bytes)\nWhat Kiln saw: ${why}\n`;
+  return `https://github.com/GlassworksHQ/glassworks/issues/new?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
 }
 
 function Card({ o }: { o: ImageOption }) {
@@ -47,13 +58,13 @@ function Card({ o }: { o: ImageOption }) {
       <span className={c.head}>
         <span className="rd" aria-hidden="true" />
         <b className={c.name}>{o.name}</b>
-        <span className="pill soon">{o.community ? 'Community image' : 'Recommended'}</span>
+        {o.community && <span className="pill soon">Community image</span>}
       </span>
       <span className={c.summary}>{o.summary}</span>
       <dl className={c.facts}>
         <dt>By</dt><dd>{o.by.name}</dd>
         <dt>Licence</dt><dd>{o.licence}</dd>
-        <dt>Support</dt><dd>{o.community ? 'Its own project, not Glassworks' : o.support.name}</dd>
+        <dt>Support</dt><dd>{o.community ? 'Its project, on GitHub' : o.support.name}</dd>
         <dt>Project</dt><dd><a className="link" href={o.project.href} target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()}>{o.project.name}</a></dd>
       </dl>
     </RadioGroup.Item>
@@ -83,7 +94,7 @@ function Choose({ picked, setPicked, from, open, setOpen, next }: {
       </RadioGroup.Root>
       <p className={`small ${c.more}`}>
         <button type="button" className="link" aria-expanded={open} aria-controls="images" onClick={toggle}>{open ? 'Hide community images' : `Show community images (${others})`}</button>
-        <span>{open ? 'Both take the same steps: fastboot, Kiln’s checks, and a warning before anything is written.' : 'Made by other projects, not Glassworks.'}</span>
+        <span>{open ? 'Both take the same steps: fastboot, Kiln’s checks, and a warning before anything is written.' : 'Made by other projects.'}</span>
       </p>
       <div className="foot">
         <span className="small">Choosing writes nothing.</span>
@@ -93,7 +104,7 @@ function Choose({ picked, setPicked, from, open, setOpen, next }: {
   );
 }
 
-function FileRow({ f, st }: { f: ImageOption['files'][number]; st: FileState }) {
+function FileRow({ o, f, st }: { o: ImageOption; f: ImageOption['files'][number]; st: FileState }) {
   const pct = Math.floor(st.x * 100);
   return (
     <div className="well">
@@ -108,9 +119,18 @@ function FileRow({ f, st }: { f: ImageOption['files'][number]; st: FileState }) 
         {st.state === 'idle' && <span className="small">Not downloaded yet.</span>}
         {st.state === 'waiting' && <span className="small">Next, once {f.name === 'system.img' ? 'the image' : 'system.img'} is in.</span>}
         {st.state === 'ok' && <span className="status ok">✓ Checks out: SHA-256 as the release publishes it.</span>}
-        {st.state === 'bad' && <span className="status err" role="alert">This isn&apos;t the file the release publishes (its SHA-256 differs). Kiln deleted it. Nothing was written to the Mirror.</span>}
+        {(st.state === 'bad' || st.state === 'error') && (
+          <span className="status err" role="alert">
+            {st.state === 'bad'
+              ? 'Kiln got a different file from the one the release publishes (its SHA-256 differs), so it deleted it.'
+              : `Kiln couldn’t download it: ${st.why}.`}
+            {' '}Nothing was written to the Mirror. This is a bug in Kiln, not something you did.
+          </span>
+        )}
+        {(st.state === 'bad' || st.state === 'error') && (
+          <span className="small"><a className="link" href={reportUrl(o, f, st.why ?? 'its SHA-256 differs from the release')} target="_blank" rel="noopener">Report this</a> on GitHub, with what Kiln saw filled in.</span>
+        )}
       </div>
-      {st.state === 'bad' && <button type="button" className="btn ghost">Download it again</button>}
     </div>
   );
 }
@@ -124,7 +144,7 @@ function Download({ o, files, link, start, back, toGlassworks, next }: {
 }) {
   const ready = files.every((x) => x.state === 'ok');
   const idle = files.every((x) => x.state === 'idle');
-  const credit = panesCredit();
+  const failed = files.some((x) => x.state === 'bad' || x.state === 'error');
   return (
     <section className="card" aria-labelledby="h">
       <Whose o={o} />
@@ -132,24 +152,22 @@ function Download({ o, files, link, start, back, toGlassworks, next }: {
       <p className="lede">{idle
         ? `Kiln downloads ${o.name} from its own release on GitHub, checks every file against the SHA-256 the release publishes, then takes you through fastboot, its checks and a warning before it writes anything.`
         : 'From its own release on GitHub, into this browser. Kiln checks every file against the SHA-256 the release publishes before anything goes near the Mirror.'}</p>
-      {o.files.map((f, i) => <FileRow key={f.name} f={f} st={files[i]!} />)}
-      {credit && <Credit c={credit} built="image" />}
-      <p className="small">Release <code>mirror-android-2</code>, through Refract, Kiln&apos;s download proxy, which passes it on and stores nothing. Its vendor files belong to Qualcomm and Quectel, not to Glassworks.</p>
+      {o.files.map((f, i) => <FileRow key={f.name} o={o} f={f} st={files[i]!} />)}
+      <p className="small">Release <code>mirror-android-2</code>, through Refract, Kiln&apos;s download proxy, which passes it on and stores nothing. Its vendor files belong to Qualcomm and Quectel.</p>
       <div className="foot">
         <span className="links">
-          {link
-            ? <>Glassworks is recommended for the Mirror. <button type="button" className="link" onClick={toGlassworks}>Install Glassworks instead</button></>
-            : <button type="button" className="link" onClick={back}>Choose another image</button>}
+          {!link && <><button type="button" className="link" onClick={back}>Back</button><span aria-hidden="true">·</span></>}
+          <button type="button" className="link" onClick={toGlassworks}>Install Glassworks instead</button>
         </span>
-        {idle
-          ? <button type="button" className="btn ember" onClick={start}>Download {o.name}</button>
+        {idle ? <button type="button" className="btn ember" onClick={start}>Download {o.name}</button>
+          : failed ? <button type="button" className="btn ember" onClick={start}>Try again</button>
           : <button type="button" className="btn ember" disabled={!ready} onClick={next}>{files.some((x) => x.state === 'downloading' || x.state === 'waiting') ? 'Downloading…' : 'Continue'}</button>}
       </div>
     </section>
   );
 }
 
-function Confirm({ o, checks, back, next }: { o: ImageOption; checks: FastbootReport['checks']; back: () => void; next: () => void }) {
+function Confirm({ o, checks, back, toGlassworks, next }: { o: ImageOption; checks: FastbootReport['checks']; back: () => void; toGlassworks: () => void; next: () => void }) {
   const [ok, setOk] = useState(false);
   return (
     <section className="card" aria-labelledby="h">
@@ -160,16 +178,13 @@ function Confirm({ o, checks, back, next }: { o: ImageOption; checks: FastbootRe
         {o.name} goes on as its release has it, with a fresh start: what the Mirror runs now and its data are replaced, Glassworks included.
         If it still has lululemon&apos;s software, that can&apos;t be restored, by Kiln or anyone.
       </p>
-      <div className="well">
-        <div className="grow">
-          <span>After this, the Mirror runs {o.by.name}&apos;s software, not Glassworks.</span>
-          <span className="small">Questions about it go to <Out l={o.support} />. Glassworks can&apos;t help with it beyond this install.</span>
-        </div>
-      </div>
       {REVERSIBLE && <p className="small">{REVERSIBLE}.</p>}
       <label className="check"><input type="checkbox" checked={ok} onChange={(e) => setOk(e.target.checked)} /> I understand everything on the Mirror is replaced.</label>
       <div className="foot">
-        <span className="links"><button type="button" className="link" onClick={back}>Back</button></span>
+        <span className="links">
+          <button type="button" className="link" onClick={back}>Back</button><span aria-hidden="true">·</span>
+          <button type="button" className="link" onClick={toGlassworks}>Install Glassworks instead</button>
+        </span>
         <button type="button" className="btn ember" disabled={!ok} onClick={next}>Install {o.name}</button>
       </div>
     </section>
@@ -210,29 +225,19 @@ function WayBack({ other, go }: { other: ImageOption; go: () => void }) {
 }
 
 function DoneCommunity({ o, back }: { o: ImageOption; back: () => void }) {
-  const credit = panesCredit();
   return (
     <section className="card" aria-labelledby="h">
       <Whose o={o} />
       <span className="okmark" aria-hidden="true">✓</span>
       <h2 id="h">{o.name} is on the Mirror.</h2>
       <p className="lede">The Mirror is starting it. Its first start takes a few minutes, then it opens its own Mirror Kiosk app. Kiln&apos;s part is done.</p>
-      <div className={c.next}>
-        <div className="well">
-          <div className="grow">
-            <span className="small">Next, in {o.name}</span>
-            <span>Set it up as {o.guide ? <Out l={o.guide} /> : 'its project'} says. Unplug the Mirror from this computer first.</span>
-          </div>
-        </div>
-        <div className="well">
-          <div className="grow">
-            <span className="small">Support</span>
-            <span>Questions about {o.name} go to its own project on GitHub, not to Glassworks.</span>
-          </div>
+      <div className="well">
+        <div className="grow">
+          <span className="small">Next, in {o.name}</span>
+          <span>Set it up as the README of its project says. Unplug the Mirror from this computer first.</span>
         </div>
       </div>
       <WayBack other={option('glassworks')} go={back} />
-      {credit && <Credit c={credit} built="image" />}
       <div className="foot"><button type="button" className="link">Technical log</button></div>
     </section>
   );
@@ -256,6 +261,7 @@ const FILES: Record<string, FileState[]> = {
   'image-download': [{ state: 'downloading', x: 0.42 }, { state: 'waiting', x: 0 }],
   'image-download-done': [{ state: 'ok', x: 1 }, { state: 'ok', x: 1 }],
   'image-download-bad': [{ state: 'ok', x: 1 }, { state: 'bad', x: 1 }],
+  'image-download-error': [{ state: 'error', x: 0.31, why: 'Refract answered 502 (GitHub answered 503)' }, { state: 'waiting', x: 0 }],
   'image-link': [{ state: 'idle', x: 0 }, { state: 'idle', x: 0 }],
 };
 
@@ -268,6 +274,7 @@ const START: Record<ImageDemo, Start> = {
   'image-download': { screen: 'download', picked: 'glass-panes' },
   'image-download-done': { screen: 'download', picked: 'glass-panes' },
   'image-download-bad': { screen: 'download', picked: 'glass-panes' },
+  'image-download-error': { screen: 'download', picked: 'glass-panes' },
   'image-confirm': { screen: 'confirm', picked: 'glass-panes' },
   'image-writing': { screen: 'writing', picked: 'glass-panes' },
   'image-done': { screen: 'done', picked: 'glass-panes' },
@@ -305,7 +312,7 @@ export function ImageChoiceDemo({ name, search = location.search, toGlassworks =
     <Shell steps={rail(screen, !!start.link)} level={ours ? 4 : 0} chip={chip}>
       {screen === 'choose' ? <Choose picked={picked} setPicked={setPicked} from={from ? option(from) : undefined} open={open} setOpen={setOpen} next={() => (o.community ? setScreen('download') : toGlassworks())} />
         : screen === 'download' ? <Download o={o} files={files} link={!!start.link} start={() => setFiles(FILES['image-download']!)} back={() => setScreen('choose')} toGlassworks={toGlassworks} next={() => setScreen('confirm')} />
-        : screen === 'confirm' ? <Confirm o={o} checks={checks} back={() => setScreen('download')} next={() => setScreen('writing')} />
+        : screen === 'confirm' ? <Confirm o={o} checks={checks} back={() => setScreen('download')} toGlassworks={toGlassworks} next={() => setScreen('writing')} />
         : screen === 'writing' ? <Writing o={o} />
         : ours ? <DoneGlassworks back={() => backTo('glass-panes')} />
         : <DoneCommunity o={o} back={() => backTo('glassworks')} />}

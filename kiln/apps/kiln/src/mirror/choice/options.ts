@@ -18,8 +18,6 @@ export interface ImageOption {
   community: boolean;
   /** Fetched and checked by Kiln, in this order. */
   files: readonly { name: string; size: number; sha256: string }[];
-  /** After Done: the project's own guide for its first start. */
-  guide?: Link;
 }
 
 const panes = FRAMES.find((f) => f.id === 'lululemon-mirror')?.credits?.find((c) => c.id === 'glass-panes-image');
@@ -46,7 +44,6 @@ export const OPTIONS: readonly ImageOption[] = [
     support: { name: 'Glass Panes on GitHub', href: `${GLASS_PANES.project.href}/issues` },
     community: true,
     files: [GLASS_PANES.system, GLASS_PANES_USERDATA],
-    guide: { name: 'Glass Panes’ install guide', href: `${GLASS_PANES.project.href}#readme` },
   },
 ];
 

@@ -26,8 +26,6 @@
 .from { border-left: 2px solid var(--edge); padding-left: 10px; }
 .fileHead { display: flex; align-items: baseline; gap: 10px; }
 .progress { display: grid; gap: 6px; }
-.next { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.next :global(.link) { font-size: inherit; }
 @media (max-width: 760px) {
-  .cards, .next { grid-template-columns: minmax(0, 1fr); }
+  .cards { grid-template-columns: minmax(0, 1fr); }
 }
