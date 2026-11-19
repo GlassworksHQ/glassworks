@@ -9,7 +9,8 @@ import { ProxyError, WrongImage } from '@glassworks/lululemon-mirror-installer';
 import { claimAndSweep, imageJobs, jobQueue, sessionDir, type BuildOptions, type JobHandle, type Locks } from './imageJobs';
 
 type In = { id: number; op: 'fetch'; url: string } | { id: number; op: 'download'; url: string; file: ImageFile } | ({ id: number; op: 'build' } & BuildOptions)
-  | { id: number; op: 'check'; file: Blob; want: ImageFile } | { id: number; op: 'discard' };
+  | { id: number; op: 'check'; file: Blob; want: ImageFile } | { id: number; op: 'discard' }
+  | { id: number; op: 'wifi'; userdata: ImageFile; system: ImageFile; makes: string; wifi: { ssid: string; password: string } };
 
 const DIR = (self as unknown as { name?: string }).name || sessionDir(crypto.randomUUID());
 const root = () => navigator.storage.getDirectory();
@@ -39,6 +40,8 @@ const jobs = imageJobs(
     return (fh as unknown as { createSyncAccessHandle(): Promise<JobHandle> }).createSyncAccessHandle();
   },
   async () => { await (await root()).removeEntry(DIR, { recursive: true }).catch(() => {}); },
+  undefined,
+  async (name) => (await (await (await root()).getDirectoryHandle(DIR)).getFileHandle(name)).getFile(),
 );
 
 const post = (m: object) => (self as unknown as Worker).postMessage(m);
@@ -50,6 +53,7 @@ async function run(m: In, signal: AbortSignal) {
     else if (m.op === 'download') await jobs.download(m.url, m.file, progress, undefined, signal);
     else if (m.op === 'build') await jobs.build(m, (step, x) => progress(x, step));
     else if (m.op === 'check') await jobs.check(m.file, m.want, progress);
+    else if (m.op === 'wifi') await jobs.wifi(m, progress);
     else await jobs.discard();
     post({ id: m.id, done: true });
   } catch (err) {

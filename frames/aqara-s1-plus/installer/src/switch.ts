@@ -179,6 +179,23 @@ export interface SwitchOutcome {
   /** Present only for wifi = resend. */
   secret?: WifiSecret;
   notes: string[];
+  /** Port 6053 is blocked and the helper is on the panel (#626): provision ends that with `openApiPort` after the hand-over. */
+  guarded: boolean;
+}
+
+/**
+ * The end of a switch with root, once the app has its data and key: port 6053 open again (`glassworks-switch.sh
+ * unguard`), the helper gone. Runs once. A rule it can't remove goes with the next reboot.
+ */
+export async function openApiPort(p: PanelShell, sw: { guarded: boolean }, log: SwitchLog): Promise<void> {
+  if (!sw.guarded) return;
+  sw.guarded = false;
+  try {
+    const r = await p.run(`su -c 'sh ${SWITCH_SH} unguard'`);
+    log(r.code === 0 ? 'ESPHome API port 6053 open again' : 'could not open port 6053 again; Home Assistant can\'t reach the panel until it restarts');
+  } finally {
+    await p.run(`rm -f ${SWITCH_SH}`);
+  }
 }
 
 /** Wi-Fi the panel is on, and who saved it. Falls back to wlan0's address when dumpsys is unreadable. */
@@ -337,9 +354,31 @@ const lastLine = (s: string) => s.trim().split(/\r?\n/).pop() || 'no detail';
  */
 export async function switchSigningKey(p: PanelShell, apk: Uint8Array, plan: SwitchPlan, log: SwitchLog,
   sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms))): Promise<SwitchOutcome> {
-  const out: SwitchOutcome = { dataKept: false, signIn: 'lost', apiKey: 'lost', wifi: wifiAtRisk(plan.wifi) ? 'lost' : 'kept', ssid: plan.wifi.ssid, notes: [] };
+  const out: SwitchOutcome = { dataKept: false, signIn: 'lost', apiKey: 'lost', wifi: wifiAtRisk(plan.wifi) ? 'lost' : 'kept', ssid: plan.wifi.ssid, notes: [], guarded: false };
+  /** The installed build has empty data: installed, and no restore into it has worked yet. */
+  const at = { fresh: false };
+  try {
+    return await switchSteps(p, apk, plan, log, sleep, out, at);
+  } catch (e) {
+    // Any failure, not only the ones the steps handle: provision never gets `out` to open the port later (#628 review).
+    if (out.guarded && at.fresh) {
+      // Cut off with a build that has no data or key: it serves an API anyone could provision, so the port stays
+      // blocked. Home Assistant can't use a keyless build anyway, and a restart clears the rule (#628 review).
+      out.guarded = false;
+      log('ESPHome API port 6053 stays blocked: Glassworks has no data or key yet. Restart the panel to open it.');
+      await p.run(`rm -f ${SWITCH_SH}`).catch(() => {});
+    } else {
+      await openApiPort(p, out, log).catch(() => {});
+    }
+    throw e;
+  }
+}
+
+async function switchSteps(p: PanelShell, apk: Uint8Array, plan: SwitchPlan, log: SwitchLog,
+  sleep: (ms: number) => Promise<void>, out: SwitchOutcome, at: { fresh: boolean }): Promise<SwitchOutcome> {
   const su = (cmd: string) => p.run(`su -c 'sh ${SWITCH_SH} ${cmd}'`);
-  const cleanup = async () => { await p.run(`rm -f ${OLD_APK} ${NEW_APK} ${SWITCH_SH}`); };
+  /** The APKs; the helper stays until openApiPort, after the hand-over. */
+  const cleanup = async () => { await p.run(`rm -f ${OLD_APK} ${NEW_APK}`); };
 
   // 1. The installed APK, for putting it back if the new one won't install.
   const path = /^package:(\S+)/m.exec((await p.run(`pm path ${PKG}`)).out)?.[1];
@@ -349,6 +388,15 @@ export async function switchSigningKey(p: PanelShell, apk: Uint8Array, plan: Swi
   let root = plan.root;
   if (root) {
     await p.push(SWITCH_SH, new TextEncoder().encode(SWITCH_SCRIPT), 0o755);
+    // 1b. The API port closed until the new build has its data and key. Android starts each build it installs as HOME
+    //     at once, before `pm install` returns, and with empty data it serves an API with no key (#626).
+    const g = await su('guard');
+    if (g.code !== 0) {
+      await p.run(`rm -f ${OLD_APK} ${SWITCH_SH}`);
+      throw new Error(`could not block the ESPHome API port for the switch (${lastLine(g.out)}). Nothing was changed.`);
+    }
+    out.guarded = true;
+    log('ESPHome API port 6053 blocked until the switch is done');
     // 2. Wi-Fi, from Android's store into memory. Only this network's password, nothing logged.
     if (wifiAtRisk(plan.wifi)) {
       const nets = parseWifiList((await su('wifi-list')).out);
@@ -397,6 +445,7 @@ export async function switchSigningKey(p: PanelShell, apk: Uint8Array, plan: Swi
       await su('discard');
       await undo();
       await cleanup();
+      await openApiPort(p, out, log);
       throw new Error(`could not keep Glassworks' data (${lastLine(b.out)}). Nothing was changed.`);
     }
     log(`app data kept: ${lastLine(b.out)}`);
@@ -409,6 +458,7 @@ export async function switchSigningKey(p: PanelShell, apk: Uint8Array, plan: Swi
     await undo();
     if (root) await su('discard');
     await cleanup();
+    await openApiPort(p, out, log);
     throw new Error(`Android would not remove the installed Glassworks (${un.trim()}). It is unchanged.`);
   }
   log('removed the old build');
@@ -422,10 +472,13 @@ export async function switchSigningKey(p: PanelShell, apk: Uint8Array, plan: Swi
     try { return await su(handover ? 'restore handover' : 'restore'); } finally { await p.run(`pm enable ${PKG}`); }
   };
   await p.push(NEW_APK, apk, 0o644);
+  at.fresh = true; // from before the install: Android may have it running before `pm install` returns
   const inst = (await p.run(`pm install -r -g ${NEW_APK}`)).out;
   if (!/Success/.test(inst)) {
     const back = /Success/.test((await p.run(`pm install -r -g ${OLD_APK}`)).out);
+    at.fresh = back;
     const restored = back && root ? await restoreInto() : undefined;
+    if (restored?.code === 0) at.fresh = false;
     if (back) await undo();
     // The copy is the only one left until a restore worked: keep it otherwise.
     if (restored?.code === 0) await su('discard');
@@ -440,6 +493,7 @@ export async function switchSigningKey(p: PanelShell, apk: Uint8Array, plan: Swi
       if (what) lost = `, but not ${what}${r.signIn === 'lost' ? ': sign in again' : ''}`;
     }
     dropSecrets();
+    await openApiPort(p, out, log);
     const why = `the new Glassworks would not install (${inst.trim()})`;
     const kept = ` Its data is kept on the panel in ${SWITCH_DATA} (root only).`;
     if (!back) throw new Error(`${why}, and neither would the previous one. Run the installer again.${root ? kept : ''}`);
@@ -452,7 +506,7 @@ export async function switchSigningKey(p: PanelShell, apk: Uint8Array, plan: Swi
   // 7. The data back in, owned by the new uid, labels restored.
   if (root) {
     const r = await restoreInto();
-    if (r.code === 0) { out.dataKept = true; await su('discard'); log('app data restored'); }
+    if (r.code === 0) { out.dataKept = true; at.fresh = false; await su('discard'); log('app data restored'); }
     else {
       root = false;
       dropSecrets();

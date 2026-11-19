@@ -62,6 +62,17 @@ class SwitchPanel implements PanelShell {
   adminAsked = false;
   disabled = false;
   backup = false;
+  /** The installed build has empty data: a fresh install, before a restore. */
+  fresh = false;
+  /** Port 6053 is blocked (glassworks-switch.sh guard). */
+  guarded = false;
+  guardWorks = true;
+  /**
+   * Commands before which Android had started the app with empty data while the switch held its real data, and port
+   * 6053 was open. Android starts an enabled HOME app at once, before `pm install` returns, and with empty data it
+   * serves an API with no key (#626).
+   */
+  ranUnkeyed: string[] = [];
   restoredInto?: 'debug' | 'release';
   /** The last restore's argument: `handover` when the installer marked a hand-over to come (#608). */
   restoreArg?: string;
@@ -103,6 +114,7 @@ class SwitchPanel implements PanelShell {
 
   async run(cmd: string) {
     this.cmds.push(cmd);
+    if (this.installed !== 'none' && !this.disabled && this.fresh && this.backup && !this.guarded) this.ranUnkeyed.push(cmd);
     const ok = (out = '') => ({ out, code: 0 });
     if (cmd === 'getprop ro.product.model') return ok('Aqara S1 Plus\n');
     if (cmd === 'getprop ro.build.version.sdk') return ok('29\n');
@@ -112,11 +124,12 @@ class SwitchPanel implements PanelShell {
       if (!this.newInstallWorks) return { out: 'Failure [INSTALL_FAILED_INSUFFICIENT_STORAGE]\n', code: 1 };
       this.installed = 'release';
       this.disabled = false;
+      this.fresh = true;
       this.handover = this.socketFor('release');
       return ok('Success\n');
     }
     if (cmd === 'pm install -r -g /data/local/tmp/glassworks-old.apk') {
-      this.installed = 'debug'; this.disabled = false; this.handover = this.socketFor('debug'); return ok('Success\n');
+      this.installed = 'debug'; this.disabled = false; this.fresh = true; this.handover = this.socketFor('debug'); return ok('Success\n');
     }
     const sock = this.handover?.shell(cmd);
     if (sock) return sock;
@@ -161,11 +174,18 @@ class SwitchPanel implements PanelShell {
         if (!this.restoreWorks) return { out: 'glassworks-switch: could not restore the app\'s data\n', code: 1 };
         this.restoredInto = this.installed;
         this.restoreArg = args[1];
+        this.fresh = false;
         // the copied data: the sign-in and the key, sealed with the key Android deleted with the old app
         if (this.handover) Object.assign(this.handover, { key: this.held.key, signIn: this.held.signIn, lost: true, signInHere: true });
         return ok('restored for uid 10072\n');
       }
       if (args[0] === 'discard') { this.backup = false; return ok(); }
+      if (args[0] === 'guard') {
+        if (!this.guardWorks) return { out: 'glassworks-switch: could not block port 6053 with ip6tables\n', code: 1 };
+        this.guarded = true;
+        return ok('API port 6053 blocked\n');
+      }
+      if (args[0] === 'unguard') { this.guarded = false; return ok('API port 6053 open\n'); }
     }
     return ok();
   }
@@ -315,7 +335,15 @@ describe('switching a development build to this one', () => {
     expect(i(sock)).toBeLessThan(i('pm disable-user --user 0 sh.edm.s1kiosk'));
     expect(p.cmds.lastIndexOf(sock)).toBeGreaterThan(i('am start -n sh.edm.s1kiosk/.MainActivity'));
     expect(p.cmds.lastIndexOf(sock)).toBeLessThan(p.cmds.indexOf(`grep -c ' @s1kiosk_improv$' /proc/net/unix`));
-    expect(p.cmds).toContain('rm -f /data/local/tmp/glassworks-old.apk /data/local/tmp/glassworks.apk /data/local/tmp/glassworks-switch.sh');
+    expect(p.cmds).toContain('rm -f /data/local/tmp/glassworks-old.apk /data/local/tmp/glassworks.apk');
+    expect(p.cmds).toContain('rm -f /data/local/tmp/glassworks-switch.sh');
+    // #626: port 6053 blocked before anything changes, open again after the hand-over, before the Wi-Fi
+    expect(p.ranUnkeyed).toEqual([]);
+    expect(p.guarded).toBe(false);
+    expect(su('guard')).toBeLessThan(i('am start -n sh.edm.s1kiosk/.MainActivity --ez remove_admin true'));
+    expect(su('unguard')).toBeGreaterThan(p.cmds.lastIndexOf(sock));
+    expect(su('unguard')).toBeLessThan(p.cmds.indexOf(`grep -c ' @s1kiosk_improv$' /proc/net/unix`));
+    expect(text).toContain('ESPHome API port 6053 open again');
     expect(text).toContain('Switch to this build (remove the old one, install this one)');
   });
 
@@ -332,6 +360,53 @@ describe('switching a development build to this one', () => {
     expect(p.pushed.has('/data/local/tmp/glassworks-switch.sh')).toBe(false);
     expect(p.streams).toBe(0);
     expect(p.installed).toBe('release');
+  });
+
+  it('with root, a panel whose API port can\'t be blocked is left as it was (#626)', async () => {
+    const p = new SwitchPanel();
+    p.guardWorks = false;
+    await expect(provision(p, { kioskApk: new Uint8Array([1]), confirmSwitch: async () => true }, () => {}, noSleep))
+      .rejects.toThrow(/could not block the ESPHome API port for the switch \(glassworks-switch: could not block port 6053 with ip6tables\)\. Nothing was changed\./);
+    expect(p.installed).toBe('debug');
+    expect(p.disabled).toBe(false);
+    expect(p.adminAsked).toBe(false);
+    expect(p.cmds.at(-1)).toBe('rm -f /data/local/tmp/glassworks-old.apk /data/local/tmp/glassworks-switch.sh');
+  });
+
+  it('a failure in the middle of the switch still opens the API port (#628 review)', async () => {
+    const p = new SwitchPanel();
+    const run = p.run.bind(p);
+    p.run = async (cmd) => { if (cmd === 'pm uninstall sh.edm.s1kiosk') { p.cmds.push(cmd); throw new Error('USB transfer failed'); } return run(cmd); };
+    await expect(provision(p, { kioskApk: new Uint8Array([1]), confirmSwitch: async () => true }, () => {}, noSleep)).rejects.toThrow(/USB transfer failed/);
+    expect(p.guarded).toBe(false);
+    expect(p.cmds.at(-1)).toBe('rm -f /data/local/tmp/glassworks-switch.sh');
+  });
+
+  it('a restore that throws leaves the port blocked while the build has no data or key (#628 review)', async () => {
+    for (const newInstallWorks of [true, false]) {
+      const p = new SwitchPanel();
+      p.newInstallWorks = newInstallWorks;
+      const run = p.run.bind(p);
+      p.run = async (cmd) => { if (/glassworks-switch\.sh restore/.test(cmd)) { p.cmds.push(cmd); throw new Error('USB transfer failed'); } return run(cmd); };
+      const text: string[] = [];
+      await expect(provision(p, { kioskApk: new Uint8Array([1]), confirmSwitch: async () => true }, (s, d) => text.push(s || d || ''), noSleep))
+        .rejects.toThrow(/USB transfer failed/);
+      expect(p.installed).toBe(newInstallWorks ? 'release' : 'debug');
+      expect(p.fresh).toBe(true);
+      expect(p.guarded).toBe(true);
+      expect(p.cmds).not.toContain("su -c 'sh /data/local/tmp/glassworks-switch.sh unguard'");
+      expect(p.cmds.at(-1)).toBe('rm -f /data/local/tmp/glassworks-switch.sh');
+      expect(text).toContain('ESPHome API port 6053 stays blocked: Glassworks has no data or key yet. Restart the panel to open it.');
+    }
+  });
+
+  it('a step after the switch that fails still opens the API port (#626)', async () => {
+    const p = new SwitchPanel();
+    const run = p.run.bind(p);
+    p.run = async (cmd) => (cmd.startsWith('cmd package set-home-activity') ? (p.cmds.push(cmd), { out: 'Error: no such activity\n', code: 1 }) : run(cmd));
+    await expect(provision(p, { kioskApk: new Uint8Array([1]), debloat: false, confirmSwitch: async () => true }, () => {}, noSleep)).rejects.toThrow();
+    expect(p.guarded).toBe(false);
+    expect(p.cmds.at(-1)).toBe('rm -f /data/local/tmp/glassworks-switch.sh');
   });
 
   it('a network the app did not save is left alone', async () => {
@@ -359,6 +434,10 @@ describe('switching a development build to this one', () => {
       .rejects.toThrow(/previous build is back with its data\.$/);
     expect(p.installed).toBe('debug');
     expect(p.restoredInto).toBe('debug');
+    // the old build, keyless until its restore, was never reachable; the port opens after the hand-back (#626)
+    expect(p.ranUnkeyed).toEqual([]);
+    expect(p.guarded).toBe(false);
+    expect(p.cmds.indexOf("su -c 'sh /data/local/tmp/glassworks-switch.sh unguard'")).toBeGreaterThan(p.cmds.lastIndexOf(`grep -c ' @glassworks_api_key$' /proc/net/unix`));
     // it lost its Keystore key too: it gets its sign-in and key back (#584)
     expectHandedBack(p.handover);
     expect(p.cmds).toContain('am start -n sh.edm.s1kiosk/.MainActivity');
@@ -464,6 +543,7 @@ describe('switching a development build to this one', () => {
     expect(p.disabled).toBe(false);
     expect(p.backup).toBe(true);
     expect(p.cmds.some((c) => c.endsWith('glassworks-switch.sh discard\''))).toBe(false);
+    expect(p.guarded).toBe(false);
   });
 
   it('if neither build installs, the data copy is kept', async () => {
@@ -474,6 +554,7 @@ describe('switching a development build to this one', () => {
     await expect(provision(p, { kioskApk: new Uint8Array([1]), confirmSwitch: async () => true }, () => {}, noSleep))
       .rejects.toThrow(/neither would the previous one\. Run the installer again\. Its data is kept on the panel in \/data\/s1kiosk\/switch/);
     expect(p.backup).toBe(true);
+    expect(p.guarded).toBe(false);
   });
 
   it('an older build says so, before any switch, with nothing changed (#608 panel run)', async () => {
@@ -503,7 +584,12 @@ describe('switching a development build to this one', () => {
     expect(p.installed).toBe('debug');
     expect(p.disabled).toBe(false);
     expect(p.backup).toBe(false);
-    expect(p.cmds.at(-1)).toBe('rm -f /data/local/tmp/glassworks-old.apk /data/local/tmp/glassworks.apk /data/local/tmp/glassworks-switch.sh');
+    expect(p.cmds.slice(-3)).toEqual([
+      'rm -f /data/local/tmp/glassworks-old.apk /data/local/tmp/glassworks.apk',
+      "su -c 'sh /data/local/tmp/glassworks-switch.sh unguard'",
+      'rm -f /data/local/tmp/glassworks-switch.sh',
+    ]);
+    expect(p.guarded).toBe(false);
     expect(p.cmds).toContain('dpm set-active-admin sh.edm.s1kiosk/.AdminReceiver');
   });
 });

@@ -84,6 +84,8 @@ bootloader, `boot` or the modem).
 | `restart` | | Restarts the device into what was written |
 | `patch` | `file`, `makes` | Kiln's own change to a downloaded image. Glassworks only |
 | `first-start` | | Kiln's first start over adb with the browser's key. Glassworks only |
+| `wifi` | `file`, `template`, `makes` | Optional: when the person gives a network, saves it in a copy of a checked userdata image (`file`), named `makes`. It writes one file, `/misc/wifi/wpa_supplicant.conf`: the template from the checked system image (`template`'s `/etc/wifi/wpa_supplicant.conf`, read where it lies), then the network with its PSK, never the password. It re-hashes the userdata as it reads it. Without a network, `makes` is the userdata as published |
+| `wifi-on` | `key` | After the restart, when a network was saved: connects over adb with the image's own **published** adb key (`key`, a checked download, held in memory for that one connection) and runs `svc wifi enable`, nothing else, then waits for `dumpsys wifi` to say "Wi-Fi is enabled" (the driver up, not only the switch asked for). For an image that ships with Wi-Fi off, so the saved network joins without anyone opening its Settings |
 
 A new kind of step is a change to Kiln's code, with its own review and tests, not part of adding an
 image.
@@ -113,8 +115,11 @@ CI:
 - `flash` writes a checked file, after `fastboot`, to a partition the frame allows.
 - The recipe writes something and ends with `restart`.
 - A community image has no `patch` and no `first-start`: it goes on as its project publishes it.
-- The frame's own test checks each file against Refract's allowlist: the same release URL, size and
-  SHA-256.
+- `wifi` takes only checked downloads and names one new file; it's listed once.
+- `wifi-on` comes after `restart` and a `wifi` step, once, with a key that is a checked download.
+  It takes no command: what it runs is Kiln's code.
+- The frame's own test checks each file against Refract's allowlist: the same source (a release
+  file, or a repository file at a pinned commit), size and SHA-256.
 
 ## Adding your image, step by step
 

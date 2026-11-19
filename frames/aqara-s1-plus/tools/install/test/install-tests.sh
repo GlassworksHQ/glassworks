@@ -56,6 +56,27 @@ w "$T/pbin/restorecon" <<'EOF'
 #!/bin/sh
 echo "restorecon $*" >> "$S1T/root.log"
 EOF
+# iptables and ip6tables: the INPUT chain, one rule per line, in $S1T/fw.<name>. fw-fail=<name> makes that one fail.
+w "$T/pbin/iptables" <<'EOF'
+#!/bin/sh
+n=$(basename "$0"); f="$S1T/fw.$n"; touch "$f"
+[ "$(cat "$S1T/fw-fail" 2>/dev/null)" = "$n" ] && { echo "$n: can't initialize iptables table \`filter'" >&2; exit 3; }
+[ "$1" = -w ] || { echo "TEST: $n without -w" >> "$S1T/violations"; }
+[ "$1" = -w ] && shift
+op=$1; shift
+case "$op" in
+  -C) grep -qxF -- "$*" "$f" ;;
+  -I) { echo "$*"; cat "$f"; } > "$f.new" && mv "$f.new" "$f" ;;
+  -D) grep -qxF -- "$*" "$f" || exit 1
+      awk -v r="$*" '!done && $0 == r { done = 1; next } { print }' "$f" > "$f.new" && mv "$f.new" "$f" ;;
+  *) exit 2 ;;
+esac
+EOF
+cp "$T/pbin/iptables" "$T/pbin/ip6tables"
+w "$T/pbin/log" <<'EOF'
+#!/bin/sh
+echo "log $*" >> "$S1T/root.log"
+EOF
 
 # A fresh app data dir, as installd makes it: lib -> the install's native libs, empty cache dirs.
 fresh_data() { # <uid> <build>
@@ -75,6 +96,14 @@ fresh_data() {
   ln -s "/data/app/sh.edm.s1kiosk-$2/lib/arm" "$S/panel/ce/lib"; echo "$1" > "$S/uid"; echo fresh > "$S/panel/ce/fresh"
 }
 echo "$*" >> "$S/adb.log"
+# Between two adb commands, Android starts an enabled HOME app at once (before `pm install` even returns). One with
+# empty data while the switch still holds the real data serves an API with no key: a fault unless port 6053 is
+# blocked for IPv4 and IPv6 (#626).
+guarded() { for n in iptables ip6tables; do grep -qxF "INPUT -p tcp --dport 6053 -j DROP" "$S/fw.$n" 2>/dev/null || return 1; done; }
+[ -n "$(st installed)" ] && [ "$(st installed)" != none ] && [ "$(st disabled)" != 1 ] && [ -f "$S/panel/ce/fresh" ] &&
+  [ -f "$S/panel/work/complete" ] && ! guarded && echo "before: $*" >> "$S/unkeyed"
+# The run stops after the command in stop-after (Ctrl-C, a cable pulled): SIGTERM to the install.sh in main.pid.
+stop_here() { [ -n "$(st stop-after)" ] && [ "$*" = "$(st stop-after)" ] && kill -TERM "$(st main.pid)"; return 0; }
 case "$1" in
   get-state) echo device; exit 0 ;;
   push) cp "$2" "$S/panel/$(basename "$3")"; exit 0 ;;
@@ -87,7 +116,7 @@ case "$1" in
     esac
     [ "$(st new-install)" = fail ] && { echo "Failure [INSTALL_FAILED_INSUFFICIENT_STORAGE]"; exit 1; }
     [ "$(st installed)" = none ] && fresh_data 10072 release
-    put installed release; put disabled 0; echo "Performing Streamed Install"; echo Success; exit 0 ;;
+    put installed release; put disabled 0; echo "Performing Streamed Install"; echo Success; stop_here install; exit 0 ;;
   shell) shift; cat > /dev/null ;; # like adb: `adb shell` forwards (and so drains) stdin
   *) exit 0 ;;
 esac
@@ -146,6 +175,7 @@ case "$cmd" in
     exit $? ;;
   *) : ;;
 esac
+stop_here "shell $cmd"
 exit 0
 EOF
 # The new app's Improv over adb: records what it was sent (the password only as a hash).
@@ -192,7 +222,7 @@ APK="$T/kiosk-release.apk"; echo apk > "$APK"
 
 # A debug build with its data, as HOME + device admin, on Wi-Fi it saved.
 panel() { # [wifi fixture]
-  rm -rf "$T/panel" "$T"/{adb.log,root-cmds,root.log,violations,improv.got,installed,disabled,root,admin,home,new-install,uninstall,restore,disable,old-install,list,chooser,handover.log,old-carries,down-after-admin,socket-down,handover.passing,downgrade} "$T"/app.* "$T"/copy.*
+  rm -rf "$T/panel" "$T"/{adb.log,root-cmds,root.log,violations,unkeyed,fw.iptables,fw.ip6tables,fw-fail,stop-after,main.pid,improv.got,installed,disabled,root,admin,home,new-install,uninstall,restore,disable,old-install,list,chooser,handover.log,old-carries,down-after-admin,socket-down,handover.passing,downgrade} "$T"/app.* "$T"/copy.*
   mkdir -p "$T/panel"
   cp "$FIX/WifiConfigStore.xml" "$T/WifiConfigStore.xml"
   fresh_data 10071 debug
@@ -214,6 +244,8 @@ handed_back() {
     { echo "    not handed back: $(ls "$T" | grep '^app\.' | tr '\n' ' ')"; return 1; }
 }
 inst() { "$REPO/frames/aqara-s1-plus/tools/install.sh" --apk "$APK" --no-models --no-debloat "$@" </dev/null 2>&1; }
+# Port 6053 is open again: no rule left (#626).
+port_open() { ! grep -q 6053 "$T/fw.iptables" "$T/fw.ip6tables" 2>/dev/null || { echo "    rules left: $(cat "$T"/fw.* 2>/dev/null | tr '\n' ';')"; return 1; }; }
 
 echo "== glassworks-switch.sh (panel side)"
 panel
@@ -251,6 +283,18 @@ check "restore without a copy fails" bash -c '! "$@" restore 2>/dev/null' _ env 
 printf none > "$T/installed"
 mkdir -p "$T/panel/work"; touch "$T/panel/work/complete"
 check "restore refuses when PackageManager disagrees" bash -c '! "$@" restore 2>/dev/null' _ env PATH="$T/pbin:$PATH" S1_CE="$T/panel/ce" S1_WORK="$T/panel/work" sh "$SW"
+rule="INPUT -p tcp --dport 6053 -j DROP"
+env_sw guard >/dev/null; env_sw guard >/dev/null
+check "guard: drops 6053 over IPv4 and IPv6, once however often it runs (#626)" bash -c '[ "$(cat "$1/fw.iptables")" = "$2" ] && [ "$(cat "$1/fw.ip6tables")" = "$2" ]' _ "$T" "$rule"
+check "guard: says so in logcat" grep -q "log -t glassworks-switch API port 6053 blocked for the switch" "$T/root.log"
+echo "$rule" >> "$T/fw.iptables"
+out=$(env_sw unguard)
+check "unguard: every copy gone" bash -c '[ "$1" = "API port 6053 open" ] && ! grep -q 6053 "$2/fw.iptables" "$2/fw.ip6tables"' _ "$out" "$T"
+check "unguard: says so in logcat" grep -q "log -t glassworks-switch API port 6053 open again" "$T/root.log"
+check "unguard with nothing to remove is fine" bash -c 'PATH="$1/pbin:$PATH" sh "$2" unguard >/dev/null' _ "$T" "$SW"
+printf ip6tables > "$T/fw-fail"
+check "guard: fails if IPv6 can't be blocked, and leaves no IPv4 rule" bash -c '! "$@" guard 2>/dev/null && ! grep -q 6053 "$0/fw.iptables"' "$T" env PATH="$T/pbin:$PATH" sh "$SW"
+rm -f "$T/fw-fail"
 
 echo "== improv-send.py against a fake Glassworks"
 python3 - "$REPO/frames/aqara-s1-plus/tools/install/improv-send.py" <<'EOF' && ok "improv-send: sends ssid + password, exit 0; wrong password exit 3; never prints it" || no "improv-send"
@@ -340,6 +384,12 @@ check "the Wi-Fi went to the new app" test "$(cat "$T/improv.got" 2>/dev/null)" 
 check "the password is in no output" hasnt "$out" "fixture"
 check "the password is in no adb command" hasnt "$log" "fixture"
 check "backup and restore with the app disabled" test ! -e "$T/violations"
+check "the new app, keyless before the restore, was never reachable (#626)" test ! -s "$T/unkeyed"
+check "port 6053 blocked before anything changed" before "$log" "glassworks-switch.sh guard" "remove_admin true"
+check "...open again after the hand-over is done" before "$(sed -n '/pm uninstall/,$p' <<<"$log")" "forward tcp:0 localabstract:glassworks_api_key" "glassworks-switch.sh unguard"
+check "...before the Wi-Fi is sent" before "$(sed -n '/pm uninstall/,$p' <<<"$log")" "glassworks-switch.sh unguard" "forward tcp:0 localabstract:s1kiosk_improv"
+check "...and no rule left" port_open
+check "...said so" has "$out" "ESPHome API port 6053 open again"
 check "data carried into the new install" bash -c '[ -f "$1/shared_prefs/kiosk.xml" ] && [ ! -e "$1/fresh" ]' _ "$T/panel/ce"
 check "ends enabled, release, admin" test "$(cat "$T/installed") $(cat "$T/disabled") $(cat "$T/admin")" = "release 0 1"
 check "copy discarded" test ! -e "$T/panel/work"
@@ -351,7 +401,7 @@ check "Wi-Fi sent after the kiosk is started" before "$(sed -n '/pm uninstall/,$
 check "secrets read before the app is stopped" before "$log" "forward tcp:0 localabstract:glassworks_api_key" "pm disable-user --user 0 sh.edm.s1kiosk"
 check "...and after the admin is dropped, as late as can be" before "$(sed -n '/remove_admin true/,$p' <<<"$log")" "remove_admin true" "forward tcp:0 localabstract:glassworks_api_key"
 check "...handed back after the kiosk is started, before the Wi-Fi" before "$(sed -n '/am start -n sh.edm.s1kiosk\/.MainActivity$/,$p' <<<"$log")" "forward tcp:0 localabstract:glassworks_api_key" "forward tcp:0 localabstract:s1kiosk_improv"
-check "temporary files removed" has "$log" "shell rm -f /data/local/tmp/glassworks-old.apk /data/local/tmp/glassworks-switch.sh"
+check "temporary files removed" bash -c 'grep -qx "shell rm -f /data/local/tmp/glassworks-old.apk" <<<"$1" && grep -qx "shell rm -f /data/local/tmp/glassworks-switch.sh" <<<"$1"' _ "$log"
 check "no 'forgot its Wi-Fi' note" hasnt "$out" "forgot its Wi-Fi"
 
 echo "== install.sh: without root"
@@ -361,6 +411,7 @@ log=$(cat "$T/adb.log")
 check "exit 0" test $rc -eq 0
 check "says it starts fresh" has "$out" "the app starts fresh"
 check "no root commands" hasnt "$log" "su -c 'sh"
+check "no port block without root" hasnt "$out" "6053 blocked"
 check "no root script pushed" hasnt "$log" "push "
 check "no password to send (no terminal to ask)" test ! -e "$T/improv.got"
 check "says how to send the Wi-Fi again" has "$out" "forgot its Wi-Fi \"Home & Garden\""
@@ -415,12 +466,14 @@ out=$(inst --switch --timezone 'not a zone!'); rc=$?
 check "stops" test $rc -ne 0
 check "the new app still gets the sign-in and key" handed_back
 check "...says so" has "$out" "Stopping early: handing the sign-in and encryption key to the new app first"
+check "...then opens port 6053 again" bash -c 'port_open() { ! grep -q 6053 "$1"/fw.* 2>/dev/null; }; port_open "$2" && grep -q "glassworks-switch.sh unguard" "$2/adb.log"' _ "$T" "$T"
 check "...after starting it" before "$(sed -n '/pm uninstall/,$p' "$T/adb.log")" "shell am start -n sh.edm.s1kiosk/.MainActivity" "forward tcp:0 localabstract:glassworks_api_key"
 
 echo "== install.sh: the data won't go into the new build (#584)"
 panel; printf fail > "$T/restore"
 out=$(inst --switch); rc=$?
 check "hands nothing to the fresh app" test "$(tr '\n' ' ' < "$T/handover.log")" = "carries get-signin get "
+check "port 6053 open again for the fresh app" port_open
 check "says the settings were reset" has "$out" "settings were reset"
 
 echo "== install.sh: an older build than the panel's (#608 panel run)"
@@ -455,6 +508,8 @@ check "...and its sign-in and key, handed back to it (#584)" handed_back
 check "...after starting it" before "$(sed -n '/pm install -r -g \/data\/local\/tmp\/glassworks-old.apk/,$p' "$T/adb.log")" "shell am start -n sh.edm.s1kiosk/.MainActivity" "forward tcp:0 localabstract:glassworks_api_key"
 check "old build back, enabled, admin, data restored" bash -c '[ "$(cat "$1/installed") $(cat "$1/disabled") $(cat "$1/admin")" = "debug 0 1" ] && [ -f "$1/panel/ce/shared_prefs/kiosk.xml" ]' _ "$T"
 check "copy discarded" test ! -e "$T/panel/work"
+check "the old build, keyless before its restore, was never reachable (#626)" test ! -s "$T/unkeyed"
+check "port 6053 open again after the hand-back" bash -c 'port_open() { ! grep -q 6053 "$1"/fw.* 2>/dev/null; }; port_open "$1" && [ "$(grep -n "unguard" "$1/adb.log" | cut -d: -f1)" -gt "$(grep -n "localabstract:glassworks_api_key" "$1/adb.log" | tail -1 | cut -d: -f1)" ]' _ "$T"
 
 echo "== install.sh: the new build won't install, and the old one's data won't go back in"
 panel; printf fail > "$T/new-install"; printf fail > "$T/restore"
@@ -466,6 +521,7 @@ check "says where the copy is" has "$out" "Its data is kept on the panel in /dat
 check "copy kept" test -f "$T/panel/work/complete"
 check "no discard" hasnt "$(cat "$T/root-cmds")" "discard"
 check "old build back, enabled, admin" test "$(cat "$T/installed") $(cat "$T/disabled") $(cat "$T/admin")" = "debug 0 1"
+check "port 6053 open again" port_open
 
 echo "== install.sh: neither build installs"
 panel; printf fail > "$T/new-install"; printf fail > "$T/old-install"
@@ -473,12 +529,41 @@ out=$(inst --switch); rc=$?
 check "fails" test $rc -ne 0
 check "says neither installed, and where the copy is" has "$out" "Its data is kept on the panel in /data/s1kiosk/switch (root only)"
 check "copy kept" test -f "$T/panel/work/complete"
+check "port 6053 open again" port_open
 
 echo "== install.sh: Android won't remove the old build"
 panel; printf fail > "$T/uninstall"
 out=$(inst --switch); rc=$?
 check "fails, unchanged" bash -c '[ "$1" -ne 0 ] && [ "$(cat "$2/installed") $(cat "$2/disabled") $(cat "$2/admin")" = "debug 0 1" ]' _ $rc "$T"
 check "says so" has "$out" "It is unchanged"
+check "port 6053 open again" port_open
+
+echo "== install.sh: port 6053 can't be blocked (#626)"
+panel; printf ip6tables > "$T/fw-fail"
+out=$(inst --switch); rc=$?
+check "stops" test $rc -ne 0
+check "says so, nothing changed" has "$out" "could not block the ESPHome API port for the switch (glassworks-switch: could not block port 6053 with ip6tables). Nothing was changed."
+check "nothing changed" bash -c '[ "$(cat "$1/installed") $(cat "$1/disabled") $(cat "$1/admin")" = "debug 0 1" ] && ! grep -q "pm uninstall\|remove_admin" "$1/adb.log"' _ "$T"
+check "no IPv4 rule left" port_open
+
+echo "== install.sh: the run stops after the new build is in, before its data (#626)"
+panel; printf install > "$T/stop-after"
+"$REPO/frames/aqara-s1-plus/tools/install.sh" --apk "$APK" --no-models --no-debloat --switch </dev/null > "$T/out" 2>&1 &
+printf '%s' $! > "$T/main.pid"; wait $!; rc=$?; out=$(cat "$T/out")
+check "stops" test $rc -ne 0
+check "no restore ran" hasnt "$(cat "$T/root-cmds")" "restore"
+check "port 6053 stays blocked: the build has no data or key (#628 review)" bash -c 'grep -qx "INPUT -p tcp --dport 6053 -j DROP" "$1/fw.iptables" && grep -qx "INPUT -p tcp --dport 6053 -j DROP" "$1/fw.ip6tables"' _ "$T"
+check "...said so, with the way out" has "$out" "ESPHome API port 6053 stays blocked: Glassworks has no data or key yet. Restart the panel to open it."
+check "...and the helper is gone" bash -c 'tail -1 "$1/adb.log" | grep -qx "shell rm -f /data/local/tmp/glassworks-switch.sh"' _ "$T"
+check "Glassworks on, the copy kept" bash -c '[ "$(cat "$1/installed") $(cat "$1/disabled")" = "release 0" ] && [ -f "$1/panel/work/complete" ]' _ "$T"
+
+echo "== install.sh: the run stops while the new build is copied, before the uninstall (#626)"
+panel; printf 'shell pm uninstall sh.edm.s1kiosk' > "$T/stop-after"
+"$REPO/frames/aqara-s1-plus/tools/install.sh" --apk "$APK" --no-models --no-debloat --switch </dev/null > "$T/out" 2>&1 &
+printf '%s' $! > "$T/main.pid"; wait $!; rc=$?; out=$(cat "$T/out")
+check "stops" test $rc -ne 0
+check "no build with empty data: port 6053 open again" port_open
+check "...said so" has "$out" "ESPHome API port 6053 open again"
 
 echo "== install.sh --dry-run on a debug build"
 panel
@@ -486,6 +571,7 @@ out=$(inst --dry-run); rc=$?
 log=$(cat "$T/adb.log")
 check "exit 0" test $rc -eq 0
 check "prints the plan" has "$out" "(as root) /data/local/tmp/glassworks-switch.sh backup"
+check "...with the port block and its end (#626)" bash -c 'grep -q "glassworks-switch.sh guard " <<<"$1" && grep -q "glassworks-switch.sh unguard " <<<"$1"' _ "$out"
 check "prints the Wi-Fi re-send" has "$out" "Wi-Fi \"Home & Garden\" to the new app over Improv"
 check "the plan: settings, sign-in and key kept (#584)" has "$out" "so the app's settings are kept, and so are its Home Assistant"
 check "prints the secrets' read and hand-back" has "$out" "the app's hand-over socket: Home Assistant sign-in and encryption key, into memory only"

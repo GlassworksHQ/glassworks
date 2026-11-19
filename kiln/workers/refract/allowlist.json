@@ -25,5 +25,14 @@
     "size": 159,
     "sha256": "c3cbc37798b30c1245db0f7dbda74ee56e05f64bebffd5ff2e527cfb1674d02a",
     "credit": { "name": "git-nimrod", "url": "https://github.com/git-nimrod/glass-panes", "project": "Glass Panes" }
+  },
+  "glass-panes/project-key/adbkey": {
+    "owner": "git-nimrod",
+    "repo": "glass-panes",
+    "commit": "8ea31141cecc9d3e42ceb72ec08f92bd8ed38801",
+    "path": "mirror-app/android/project-key/adbkey",
+    "size": 1704,
+    "sha256": "89908fe23b497864d623c2e6567df4a6a9e4bfa7c8281f78e5ce61cb6c38da2d",
+    "credit": { "name": "git-nimrod", "url": "https://github.com/git-nimrod/glass-panes", "project": "Glass Panes" }
   }
 }

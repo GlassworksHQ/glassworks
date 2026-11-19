@@ -40,6 +40,7 @@ function setup(o: { system?: number; flashFails?: number; buildFails?: boolean; 
     async download(url) { calls.push(`download ${url}`); },
     async file(name) { calls.push(`file ${name}`); return new Blob([name]); },
     async check(_b, want) { calls.push(`check ${want.name}`); },
+    async wifi() { throw new Error('not for Glassworks'); },
     async build(b, onProgress) { built.push(b); if (o.buildFails) throw new Error('No space left on the device'); calls.push(`build userdata=${b.userdataBytes} key=${b.adbKey.split(' ')[1]}${b.fill === false ? ' nofill' : ''}`); onProgress('patch', 1); return { system: new Blob(['SS']), userdata: new Blob(['U']) }; },
     async discard() { calls.push('discard'); },
   };

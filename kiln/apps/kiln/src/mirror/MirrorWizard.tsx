@@ -3,7 +3,7 @@
 // installable (MIRROR_OPEN); until then ?apk=release (the newest Mirror release) and ?apk=local (a file from this
 // computer) are test links, or a demo.
 // The screens follow Kiln's (docs/design/kiln): one idea each, one ember button, the log one click away.
-import { Panel, loadOrCreateAdbKey, type AdbKey, type PanelShell } from '@glassworks/adb';
+import { Panel, adbKeyFromPkcs8, loadOrCreateAdbKey, type AdbKey, type PanelShell } from '@glassworks/adb';
 import { Assets, fmtSize } from '@glassworks/kiln-core';
 import { credits, type MirrorPhase } from '@glassworks/lululemon-mirror-installer';
 import * as Collapsible from '@radix-ui/react-collapsible';
@@ -105,6 +105,8 @@ function realSessions(on: boolean, from: ApkFrom = 'local'): { mirror: MirrorSes
       if (!k || !adbDevice) throw new Error('no panel selected');
       return Panel.connect(k, adbDevice, { authMs: o?.authMs ?? AUTH_MS });
     },
+    // a community image's own published key (Glass Panes' wifi-on step): in memory, for that one connection
+    adbWithKey: (pkcs8) => adbKeyHolder(async () => adbKeyFromPkcs8(pkcs8, 'kiln@published-key')).connectWith((k) => Panel.connect(k)),
     adbKey: () => keys.key()?.publicKey,
     flashedHere: FLASHED_HERE,
     holdingKey: leaveWarning(),
