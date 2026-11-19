@@ -15,6 +15,11 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 internal class Microphone(
     gain: Float,
+    /**
+     * Whether the app holds `RECORD_AUDIO`. Without it no recorder is made: on Android 6 one made without it
+     * crashed the app in native code (#583). It's asked before every try, so a grant takes effect.
+     */
+    private val allowed: () -> Boolean,
     private val frameSamples: Int = OwwFeatures.FRAME,
     private val onError: (String) -> Unit,
     private val onFrame: (ShortArray) -> Unit,
@@ -22,9 +27,15 @@ internal class Microphone(
     private val onOpenFailed: () -> Unit = { onError("Cannot open the microphone (RECORD_AUDIO granted? mic busy?)") },
     /** A read failed with this code. It opens the microphone again 1 s later. */
     private val onReadFailed: (Int) -> Unit = { onError("Microphone read error $it") },
+    /** Makes a recorder for an audio source with this buffer size in bytes. Tests count the calls. */
+    private val newRecorder: (source: Int, bufBytes: Int) -> AudioRecord = ::recorder,
 ) {
     companion object {
         const val RATE = 16_000
+
+        @SuppressLint("MissingPermission") // loop() checks [allowed] first.
+        private fun recorder(source: Int, bufBytes: Int) =
+            AudioRecord(source, RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufBytes)
     }
 
     /** Linear gain applied to every sample; may be changed while running. */
@@ -47,13 +58,12 @@ internal class Microphone(
         thread = null
     }
 
-    @SuppressLint("MissingPermission") // RECORD_AUDIO is declared and granted at install (-g) / runtime.
     private fun open(): AudioRecord? {
         val minBuf = AudioRecord.getMinBufferSize(RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
         val bufBytes = maxOf(minBuf * 2, frameSamples * 2 * 8)
         for (source in intArrayOf(MediaRecorder.AudioSource.VOICE_RECOGNITION, MediaRecorder.AudioSource.MIC)) {
             val rec = try {
-                AudioRecord(source, RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufBytes)
+                newRecorder(source, bufBytes)
             } catch (e: Exception) {
                 VoiceLog.w("AudioRecord(source=$source) failed", e)
                 continue
@@ -82,7 +92,7 @@ internal class Microphone(
     private fun loop() {
         Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
         while (running.get()) {
-            val rec = open()
+            val rec = if (allowed()) open() else null
             if (rec == null) {
                 if (running.get()) onOpenFailed()
                 sleepQuietly(5_000)
