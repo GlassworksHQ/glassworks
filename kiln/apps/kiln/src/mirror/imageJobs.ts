@@ -12,6 +12,8 @@ export interface JobHandle extends SyncHandle { truncate(n: number): void; flush
 export interface BuildOptions {
   apk: Uint8Array; bootAnimation?: Uint8Array; settingsOverlay?: Uint8Array; adbKey: string; userdataBytes: number; fill?: boolean;
   deviceMac?: string; wifi?: { ssid: string; password: string };
+  /** ro.glassworks.api_key.handover=1 (issue 580): a flag, never the key */
+  apiKeyHandover?: boolean;
 }
 
 export function imageJobs(open: (name: string) => Promise<JobHandle>, removeAll: () => Promise<void>,
