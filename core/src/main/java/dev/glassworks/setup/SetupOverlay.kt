@@ -996,6 +996,14 @@ class SetupOverlay(
     private fun bindFromComputer(m: Model): View? {
         // No Wi-Fi works and the panel opens its own: a phone joins it first (#197).
         m.hotspot?.takeIf { it.title != null && !m.wifi.online }?.let { return bindHotspotCard(it) }
+        // Bluetooth setup open by itself for its first minutes (#611): a phone or Home Assistant sends the Wi-Fi.
+        if (!m.wifi.online && m.improv.phase in NO_TOUCH_IMPROV) {
+            cardLabel.text = m.improv.label
+            cardTitle.text = m.improv.title
+            cardBody.text = m.improv.detail
+            status.visibility = View.GONE // nor the hotspot's line from before: the join turns Wi-Fi on itself
+            return null
+        }
         val ip = m.panelIp
         if (ip == null) {
             cardTitle.text = "Waiting for Wi-Fi."
@@ -1341,6 +1349,9 @@ class SetupOverlay(
 
     companion object {
         private val GROUPS = mapOf(SetupFlow.HA to "Home Assistant", SetupFlow.PANES to "Panes")
+
+        /** Without touch, Bluetooth setup fills the Wi-Fi card while it takes Wi-Fi: open by itself, a retry, a join. */
+        private val NO_TOUCH_IMPROV = setOf(WifiStep.Phase.AUTHORIZED, WifiStep.Phase.FAILED, WifiStep.Phase.CONNECTING)
 
         /**
          * The card's spacing (#63): the gap between its heading and the step's view, and between the

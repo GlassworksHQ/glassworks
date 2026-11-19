@@ -93,7 +93,7 @@ and its entities get new ids. Where each frame stands (#523):
 The API key ([Encryption](#encryption-automatic)) lives in the app's data too, so a reflash wipes it, while Home
 Assistant's entry keeps it. A fresh app that answers with no key makes HA open a re-authentication
 (`reauth_encryption_removed_confirm`), and the entities stay unavailable until someone confirms it (seen on the Mirror
-2026-11-18). So the headless Mirror flash carries the key over (#574):
+2026-11-18). So the Mirror's flashes carry the key over (#574; Kiln's page since #580):
 
 1. Just before it restarts the Mirror into fastboot, it reads the key from the running app over adb, on the app's
    socket `@glassworks_api_key` (`ApiKeyHandover`: adb only, uid 0 or 2000; never on the LAN). It prints the key's
@@ -111,7 +111,7 @@ What each installer can reach before the flash:
 | Installer | Before the flash | Carries the key |
 |---|---|---|
 | `tools/mirror/flash-node.ts` | adb to the running app (the Mirror on our image lets the flash's adb key in) | Yes, from an app with #574. An older app has no socket: HA asks once more |
-| Kiln's page | Only fastboot: its Mirror flow starts at the button inside the Mirror's back, with no adb step before it | Not yet. It writes no flag, so the app starts as before and HA asks once |
+| Kiln's page | adb to the running app over WebUSB, in its keep step before fastboot (#580). The Mirror lets in only the browser that last installed Glassworks on it, so Kiln opens that step by itself in that browser; elsewhere it is a link under the fastboot steps | Yes, from an app with #574: the same steps as flash-node, and Kiln restarts the Mirror into fastboot itself. The key stays in the tab's memory until the first start. Another browser, a Mirror that doesn't start, or an older app: no flag, and HA asks once (Kiln's Done says what to click) |
 | The S1 | Not reflashed: updates install in place and keep the key | Not needed |
 
 If the hand-over fails, the app starts without a key after the 15 minutes, as before, and HA asks once. A key derived
@@ -314,7 +314,7 @@ So on a panel HA already has:
 | binary_sensor `Presence` (occupancy) | `presence` | the frame's presence sensor "near": the VI5300 ToF on the S1, a proximity sensor elsewhere. A camera's is `camera_presence` |
 | sensor `Illuminance` (lx) | `illuminance` | the light sensor: the MK6212 on the S1 |
 | binary_sensor `Docked` (plug) | `docked` | on while the device sits on its dock, off once it's lifted off; only on a device that docks ([Docked](#docked)) |
-| select `Screen mode` | `screen_mode` | `presence` / `always`. `always` until someone picks one (#522) |
+| select `Screen mode` | `screen_mode` | `presence` / `always`. `always` until someone picks one (#522). `presence`: walking up wakes the screen, and it turns off after the idle timeout. `always`: it never turns off by itself, and walking up never turns it on, so a screen Home Assistant turned off stays off (#601). `presence` still reports in both |
 | number `Idle timeout` (s) | `idle_timeout` | screen off after idle (0 = never). Above 0 it also sets `Screen mode` to `presence`, as the panel's own *Turn off when idle* does. The panel has no night timeout of its own: an automation changes this one, such as the [Panel night mode](blueprints.md) blueprint |
 | number `Max auto brightness` (%, 5–100, step 5) | `max_brightness` | the most *Auto brightness* reaches (100 by default). Lower it at night to keep the screen dim when the room's lights are on. A held screen (a high or critical notification) ignores it. A fixed brightness from the `Screen` light doesn't follow it |
 | number `Presence range` (m, 0–2.5, step 0.1) | `presence_range` | VI5300 threshold (needs `WRITE_SECURE_SETTINGS`); 0 = firmware default |
@@ -665,7 +665,13 @@ usual `--ez camera_enabled true` on the main activity, for example
     (`UnknownHostException`, no route, timeouts; not TLS or HTTP errors) is retried 10 s after Wi-Fi
     is back (available or validated; callbacks debounced, at most one such retry per 30 s) instead of
     after its backoff.
-  - Ignored: drafts, pre-releases (GitHub's flag or a `-rc` tag), and releases without both
+  - **Update channel** (#605): the Device page's *Update channel* row, on the panel and on the Manage page.
+    Stable, the default, skips GitHub pre-releases without reporting them. Beta takes them too, and offers the
+    highest version of both. A lower version is never offered: back on Stable after a beta, `latest_version`
+    stays the installed version until a stable release is higher. When the offer is a beta, `Beta: …` goes on
+    top of the summary. It is not an entity: someone picks it once, on the panel or the Manage page, and no
+    automation would change it ([principles](principles.md#entities)).
+  - Ignored: drafts, pre-releases on Stable (GitHub's flag), `-rc` tags on both channels, and releases without both
     the APK for one of the device's ABIs and its `.sha256`. The S1 (`armeabi-v7a`) takes
     `s1-kiosk-<version>.apk`; an `arm64-v8a` device takes `s1-kiosk-arm64-v8a-<version>.apk`
     ([releasing.md](releasing.md#abis)). Assets must download from github.com over HTTPS.

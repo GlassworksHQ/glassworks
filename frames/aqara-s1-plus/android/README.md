@@ -204,7 +204,7 @@ size until reboot. Use `zoom` instead.
 I="adb shell am start -n sh.edm.s1kiosk/.improv.ImprovActivity"
 $I --ez improv true        # start provisioning mode (10 min); false = stop
 $I --ez improv_auto false  # don't auto-start when there's no network after boot (default true)
-$I --ez improv_proximity_auth true   # also authorize by approaching the panel (default false)
+$I --ez improv_proximity_auth true   # also authorize by approaching the panel (default false; on without touch)
 $I --ez release_device_owner true    # escape hatch: clearDeviceOwnerApp()
 adb logcat -s Glassworks.Improv          # BLE support report at startup, states, RPCs
 ```

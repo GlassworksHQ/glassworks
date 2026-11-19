@@ -23,7 +23,7 @@ import kotlin.math.log10
 /**
  * When the screen is on and how bright it is, from the frame's [presence] and [light] sources.
  *
- *  - Approaching the panel wakes the screen, and it stays on while someone is near.
+ *  - Approaching the panel wakes the screen ([ScreenSettings.approachWakes]), and it stays on while someone is near.
  *  - After `idleOffSec` with nobody near and no touch, the screen turns off.
  *  - Brightness follows ambient light (log curve), up to `maxBrightness`.
  *  - Nothing here knows the time of day (#473): Home Assistant changes the idle timeout and the
@@ -373,7 +373,8 @@ class ScreenPolicy(
         Log.i(logTag, "presence ${if (near) "NEAR" else "far"} (raw=$raw)")
         if (near) {
             lastActivity = SystemClock.elapsedRealtime()
-            if (!screenOn && prefs.wakeOnApproach) wake("approach")
+            // Presence is still reported in "always" (the binary_sensor); only the wake waits for the mode (#601).
+            if (!screenOn && prefs.approachWakes) wake("approach")
         }
         notifyChanged()
     }

@@ -1422,6 +1422,110 @@ class SyntheticScreenOff(unittest.TestCase):
             self.assertIn("The screen went off in 1 run(s)", f.read())
 
 
+class Android6(unittest.TestCase):
+    """The lululemon Mirror's Android 6 (FAKE_ANDROID6, as an API 23 emulator answered on 2026-11-18): logcat has
+    no -v monotonic, ps ignores -A -o, there is no nproc, the app's layer is plain `SurfaceView`, and the kiosk is
+    the generic app, whose activity (dev.glassworks.MainActivity) sits behind a launcher alias."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp()
+        env, cls.state = fake_env(cls.tmp, FAKE_ANDROID6="1", FAKE_HA_URL=f"http://127.0.0.1:{port(83)}", GW_PERF_COLD_SETTLE="0",
+                                  GW_PERF_RUN_GAP="0", GW_PERF_BETWEEN_QUIET="0.5")
+        cls.out = os.path.join(cls.tmp, "out")
+        cls.proc = subprocess.run([RUN, "--frame", "test-frame", "--runs", "1", "--out", cls.out, "--port", port(83), "--taps", "2",
+                                   "--quick", "--restore-dashboard", RESTORE], env=env, capture_output=True, text=True, timeout=300)
+        with open(os.path.join(cls.state, "commands.log")) as f:
+            cls.commands = f.read().splitlines()
+        cls.rep = None
+        if cls.proc.returncode == 0:
+            with open(os.path.join(cls.out, "report.json")) as f:
+                cls.rep = json.load(f)
+
+    def test_the_whole_run_is_graded(self):
+        self.assertEqual(self.proc.returncode, 0, self.proc.stderr[-3000:])
+        g = self.rep["grade"]
+        self.assertEqual(g["grade"], "A+")
+        self.assertFalse(g["provisional"], g["missing"])
+        ref = self.rep["graded"]["reference"]
+        self.assertEqual(ref["errors"], [])
+        for t in ("light", "typical-nocam", "typical", "heavy"):
+            # The plain SurfaceView layer's frames, cut to windows on the monotonic clock logcat's wall stamps went to.
+            self.assertEqual(ref["tiers"][t]["sf_valid"], [True], t)
+            self.assertEqual(ref["tiers"][t]["scrolled_px"]["median"], 1400, t)
+            self.assertIsNotNone(ref["tiers"][t]["inp_ms"], t)
+        ru = self.rep["real_use"]
+        self.assertEqual(ru["android_ttid_ms"]["median"], 1714)                  # displayed under the launcher alias
+        self.assertEqual(ru["memory"]["idle"]["app_pss_kb"]["median"], 570000)   # meminfo's "kB"
+        self.assertEqual(self.rep["frame"]["device"]["cpu"]["cores"], 4)         # no nproc
+
+    def test_its_intents_go_to_the_activity_behind_the_alias(self):
+        am = [c for c in self.commands if c.startswith("shell am start")]
+        self.assertTrue(am)
+        self.assertEqual([c for c in am if "sh.edm.s1kiosk/dev.glassworks.MainActivity" not in c], [])
+        # Read once by run.sh, and once by each perfrun process that wasn't told it.
+        self.assertEqual(self.commands.count("shell dumpsys activity recents"), 1)
+
+    def test_logcat_is_read_on_its_wall_clock(self):
+        streams = [c for c in self.commands if c.startswith("logcat ")]
+        self.assertTrue(streams)
+        self.assertEqual([c for c in streams if c != "logcat -v usec -T 1"], [])
+        self.assertEqual([c for c in self.commands if c.startswith("shell logcat -d -v monotonic") and "-t 1" not in c], [])
+        with open(os.path.join(self.out, "refstart-1.json")) as f:
+            note = json.load(f)["logcat_clock"]
+        self.assertEqual(note["format"], "usec")
+        # The fake's pairs are this computer's own clock reads, microseconds apart on the 0.2 clock.
+        self.assertLess(note["offset_err_ms"], 50)
+        self.assertLess(abs(note["drift_ms"]), 100)
+
+
+class Android6ClockStep(unittest.TestCase):
+    def test_a_wall_clock_step_during_a_graded_run_fails_it(self):
+        """CodeRabbit on #619: on Android 6 the logcat lines carry the wall clock; a step of it moves the windows away
+        from SurfaceFlinger's frames. The run fails rather than grade frames it didn't measure."""
+        tmp = tempfile.mkdtemp()
+        p, r = refstart(tmp, FAKE_ANDROID6="1", FAKE_CLOCK_STEP_S="2")
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("wall clock moved +2000", r["error"])
+        self.assertGreater(r["logcat_clock"]["drift_ms"], 1900)
+
+
+class Android6Refusals(unittest.TestCase):
+    def test_no_task_to_read_the_activity_from_is_refused_before_anything_changes(self):
+        tmp = tempfile.mkdtemp()
+        env, state = fake_env(tmp, FAKE_ANDROID6="1", FAKE_NO_TASK="1")
+        p = subprocess.run([RUN, "--frame", "test-frame", "--runs", "1", "--out", os.path.join(tmp, "out"), "--port", port(85),
+                            "--restore-dashboard", RESTORE], env=env, capture_output=True, text=True, timeout=120)
+        self.assertEqual(p.returncode, 2, p.stderr[-2000:])
+        self.assertIn("give --activity", p.stderr)
+        with open(os.path.join(state, "commands.log")) as f:
+            self.assertEqual([c for c in f.read().splitlines() if c.startswith("shell am ")], [])
+
+    def test_activity_names_it_and_nothing_is_read(self):
+        tmp = tempfile.mkdtemp()
+        env, state = fake_env(tmp, FAKE_ANDROID6="1", FAKE_NO_TASK="1")
+        p = subprocess.run([RUN, "--frame", "test-frame", "--out", os.path.join(tmp, "out"), "--idle-only", "all-on",
+                            "--activity", "dev.glassworks.MainActivity"], env=env, capture_output=True, text=True, timeout=120)
+        self.assertEqual(p.returncode, 0, p.stderr[-2000:])
+        with open(os.path.join(state, "commands.log")) as f:
+            commands = f.read().splitlines()
+        self.assertNotIn("shell dumpsys activity recents", commands)
+        self.assertIn("shell am start -n sh.edm.s1kiosk/dev.glassworks.MainActivity --ez test_hold false", commands)
+
+    def test_the_legacy_engines_lockdown_skips_the_animation_page_and_the_run_goes_on(self):
+        """#198: the legacy engine loads only its dashboard's origin, and refuses the test page opened on the fake's."""
+        tmp = tempfile.mkdtemp()
+        env, state = fake_env(tmp, FAKE_ANDROID6="1", FAKE_LOCKDOWN="1", GW_PERF_COLD_SETTLE="0", GW_PERF_RUN_GAP="0")
+        out = os.path.join(tmp, "out")
+        p = subprocess.run([RUN, "--frame", "test-frame", "--runs", "2", "--out", out, "--port", port(87), "--quick",
+                            "--skip-reference"], env=env, capture_output=True, text=True, timeout=180)
+        self.assertEqual(p.returncode, 0, p.stderr[-2000:])
+        self.assertIn("lockdown refused the animation test page", p.stderr)
+        self.assertEqual(p.stderr.count("synthetic run "), 2)       # one try, and its refusal: no second run
+        self.assertFalse(os.path.exists(os.path.join(out, "idle-after-synthetic-1.json")))
+        self.assertTrue(os.path.exists(os.path.join(out, "idle-all-on-1.json")))
+
+
 class IdleOnly(unittest.TestCase):
     """The pane-diff steps in docs/perf.md, starting from an empty directory."""
 

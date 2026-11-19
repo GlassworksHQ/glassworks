@@ -77,8 +77,18 @@ manifest (permissions + `ImprovActivity`), and one ESPHome button in `PanelDevic
 **Authorization** (physical action): the overlay's **Allow** button. Allowed for **2 minutes**
 (spec suggests ~1 min; 2 gives time to type a password on a phone), restarted after a failed connect.
 **Not now** stops Improv. Optional alternative: a proximity far→near approach
-(`--ez improv_proximity_auth true`, off by default because on a desk the VI5300 reads "near"
-permanently and only fires on threshold crossings).
+(`--ez improv_proximity_auth true`, off by default on a touchscreen because on a desk the VI5300 reads
+"near" permanently and only fires on threshold crossings).
+
+**Without a touchscreen** (the frame's `Input.NONE`, the lululemon Mirror; #611) nobody can press Allow.
+There Improv starts **authorized for 5 minutes** when it starts with no network, and the setup screen says
+"Send the Wi-Fi from a phone" with the countdown. After the 5 minutes it asks for authorization again,
+and the setup hotspot opens if it can start (it waits for the window: 30 s + 5 min instead of 3 min). When it
+can't (Wi-Fi switched off, or a failed start), the Wi-Fi step says why and how to set the panel up from a
+computer. An approach opens the window again: approach authorization is on by default there, and on a
+device without a proximity sensor the camera pane's presence is the approach. Both only while the panel has **no network**: an online panel
+is never sent new Wi-Fi without a person. Once Wi-Fi joins, Improv ends as above. 5 minutes is the
+exposure of an ESPHome device, which asks for no authorization at all.
 
 **Capabilities** = `0x07`: identify, device info, scan Wi-Fi. Hostname (0x05) and device name
 (0x06) are answered with error 0x02 *unknown RPC*: Android 10 doesn't let an app set the DHCP

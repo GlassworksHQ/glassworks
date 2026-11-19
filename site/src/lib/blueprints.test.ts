@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { PANES } from "@glassworks/frame-card";
 import { describe, expect, it } from "vitest";
-import { ASSET, appReleases, findBlueprints, fromAsset, isCore, releaseName, type GithubRelease } from "./blueprints";
+import { ASSET, appReleases, fetchReleases, findBlueprints, fromAsset, isCore, releaseName, type GithubRelease } from "./blueprints";
 
 // The app's own list, as this commit has it: what the site reads from GitHub at a release.
 const asset = readFileSync(join(import.meta.dirname, "../../..", ASSET), "utf8");
@@ -123,7 +123,7 @@ describe("the release the blueprints come from", () => {
       auth = new Headers(init?.headers).get("authorization");
       return new Response("rate limited", { status: 403 });
     }) as typeof fetch;
-    await expect(findBlueprints(get, undefined, "t0ken")).rejects.toThrow("HTTP 403");
+    await expect(fetchReleases(get, "t0ken")).rejects.toThrow("HTTP 403");
     expect(auth).toBe("Bearer t0ken");
     await expect(findBlueprints(get)).rejects.toThrow("set GITHUB_TOKEN");
   });

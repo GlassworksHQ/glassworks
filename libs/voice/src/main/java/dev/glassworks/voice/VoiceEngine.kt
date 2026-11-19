@@ -316,7 +316,7 @@ public class VoiceEngine internal constructor(
 
     private fun startMic() {
         if (!running || muted || mic != null) return
-        val m = Microphone(gain = gain, onError = ::error, onFrame = ::onMicFrame, onOpenFailed = ::micOpenFailed, onReadFailed = ::micReadFailed)
+        val m = Microphone(gain = gain, allowed = ::micAllowed, onError = ::error, onFrame = ::onMicFrame, onOpenFailed = ::micOpenFailed, onReadFailed = ::micReadFailed)
         mic = m
         m.start()
     }
@@ -350,9 +350,12 @@ public class VoiceEngine internal constructor(
         publish()
     }
 
-    /** Mic thread, every 5 s while no source opens. Logged once per reason, not on every try. */
+    private fun micAllowed(): Boolean =
+        appContext.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+
+    /** Mic thread, every 5 s while no source opens, or it may not open one. Logged once per reason, not on every try. */
     internal fun micOpenFailed() {
-        val allowed = appContext.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+        val allowed = micAllowed()
         val now = if (allowed) VoiceReadiness.MicrophoneUnavailable else VoiceReadiness.MicrophoneNotAllowed
         if (now == micProblem) return
         micProblem = now

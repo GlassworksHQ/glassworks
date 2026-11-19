@@ -1,0 +1,16 @@
+{
+  "$comment": "Kiln's install for this frame, as data. Format: docs/design/kiln/frames-as-data.md. A draft (#621): the contract (kiln/apps/kiln/test/contract) reads route, touch and each step's id, writes, reboots, downloads and taps; the engine reads the rest from phase 2.",
+  "route": "/android",
+  "touch": true,
+  "flows": {
+    "install": {
+      "steps": [
+        { "id": "find", "transport": "usb", "inputs": ["apk", "brand"] },
+        { "id": "connect", "transport": "adb", "enter": { "how": "usb-debugging" }, "taps": ["allow-usb-debugging"] },
+        { "id": "install", "transport": "adb", "writes": true, "checks": ["android-version", "abi", "own-frame"], "taps": ["home-always-android-6"] }
+      ],
+      "then": "set-up"
+    }
+  },
+  "wayBack": { "how": "remove-app" }
+}

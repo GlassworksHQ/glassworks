@@ -11,7 +11,34 @@ line of each version is what Home Assistant shows on the update card. A change o
 
 ## [Unreleased]
 
+### Added
+- **Notifications and the Bluetooth proxy, in both builds.** Home Assistant can show notifications on the panel
+  with the panel's notify action, and a device with Bluetooth LE can relay nearby BLE sensors to Home Assistant.
+  Both are off until you turn them on, in the panel's settings, on the Manage page or from Home Assistant. A device
+  without Bluetooth LE doesn't show the proxy anywhere. On a screen without touch, such as the lululemon Mirror, a
+  high or critical notification with no `tag` and no `timeout` closes after 2 minutes, since nothing else could
+  close it. On the Mirror the proxy scans only once the app has the location permission, which Kiln doesn't grant yet.
+- **Pick an update channel: Stable or Beta.** The device page in the panel's settings and on the Manage page has an
+  *Update channel* row. Stable, the default, gets releases as before. Beta also gets betas, new versions before
+  they're stable, which may have bugs; Home Assistant's update card says when the update it offers is a beta. Going
+  back to Stable never installs an older version: the panel waits for a stable release newer than the one it runs.
+
+### Fixed
+- **Wi-Fi setup over Bluetooth works on the lululemon Mirror.** On a panel with no touchscreen, nobody could press
+  Allow, so Home Assistant and phones could never send it Wi-Fi over Bluetooth. Now, when it starts with no network,
+  Bluetooth setup is open by itself for 5 minutes, and the setup screen says to send the Wi-Fi from Home Assistant or
+  improv-wifi.com on a phone, with the time left. Where the camera sees presence, walking up to the panel opens it
+  again. It never opens while the panel is online. After the 5 minutes the panel opens its own setup Wi-Fi, if it
+  can, and otherwise the setup screen says how to set it up from a computer.
+- **The setup Wi-Fi opens on the lululemon Mirror.** The legacy build's setup screen said "This device doesn't let apps
+  open a Wi-Fi hotspot." on the Mirror. Android 6 and 7 want one more permission for it, which the legacy build now
+  asks for. An update is enough: no new flash. If Android still refuses, the reason is in the log.
+
+## [0.2.0] - 2026-11-19
+
 **The first release of Glassworks for Android tablets and panels, with Assist, Sendspin and the camera pane.**
+
+Experimental: run on a lululemon Mirror and a Pixel Tablet so far, not yet on other devices.
 
 ### Added
 - **Allow a new computer over USB on a panel with no touchscreen.** On the lululemon Mirror (the legacy build), the Manage
@@ -57,6 +84,14 @@ line of each version is what Home Assistant shows on the update card. A change o
   avoid that: turn the lock off in Android's settings, or keep the screen on.
 
 ### Fixed
+- **The camera recovers by itself when it stops sending frames.** If the camera opens but sends no picture for
+  5 seconds, the camera pane now closes it and opens it again, at once the first time and then less and less often
+  while it stays silent. Before, presence and the stream stayed dead until something else reopened the camera, such
+  as turning *Camera privacy* on and off. This was seen on the lululemon Mirror's first open after a flash.
+- **With Screen mode set to always, walking up no longer turns on a screen you turned off.** If you turn the screen
+  off from Home Assistant, it stays off when someone comes close, whether the panel senses them with its own sensor
+  or with the camera pane. *Presence* in Home Assistant still turns on. In the presence mode, walking up still wakes
+  the screen, as before.
 - **A wrong Wi-Fi password on the lululemon Mirror no longer needs a reflash.** Send the right password with Improv,
   over USB from a computer or over Bluetooth, and the Mirror replaces the network Kiln saved and joins. Before, Android
   refused, and only a second flash fixed it. Comes with the next flash: the copy Kiln writes into the Mirror's image must
@@ -65,3 +100,7 @@ line of each version is what Home Assistant shows on the update card. A change o
   draws in the app's own process instead of a separate GPU process, which Android killed whenever the screen went
   off or a system dialog came up. It also no longer runs GeckoView's crash helper, which did nothing for the app
   and was restarted about once a minute. Legacy build only. Not yet run on a real Mirror.
+- **No crash when the app may not use the microphone.** Without the Microphone permission, voice no longer tries to
+  open the microphone, which on Android 6 could crash the app. The Assist page on the device and on the Manage page
+  says *Voice isn't allowed to use the microphone*, and Home Assistant's *Voice status* reads *Microphone not
+  allowed*. Once the permission is given, voice starts listening within a few seconds. Both builds.

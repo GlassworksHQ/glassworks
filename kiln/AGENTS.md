@@ -7,6 +7,30 @@ A new package with a README needs a branded header: a library banner if anyone c
 own (like `improv-serial`), or the Kiln badge if it's part of Kiln. See
 [Branding](../AGENTS.md#branding).
 
+## One engine, frames as data
+
+**Kiln's app and packages hold no frame-specific code or copy.** Everything about a frame is declared
+in `frames/<id>/`: its steps and their transports, its inputs, checks, image and APK sources, the
+words that name its hardware, its way back, and whether it has touch. That is `design/frame.json`
+and `design/installer.json`, plus code in `frames/<id>/installer` only behind the typed step
+interface, for what data can't say (patching an image, building a partition). **A new frame needs no
+change under `kiln/apps` or `kiln/packages`.**
+
+The engine gives every frame the S1's forgiveness, and no frame can turn it off: Try again from the
+step's own screen, resume after a reload, waiting through a reboot, stall watchdogs, no touch it
+doesn't declare, a way back on every screen that writes. A frame is public in Kiln only when it
+passes the whole contract. The design: [frames-as-data.md](../docs/design/kiln/frames-as-data.md).
+The checks, in `apps/kiln/test/contract/`:
+
+- `contract.test.ts`: every flow through the same failures on a fake device. Today's failures are
+  marked in `expected-failures.json`; fix one and remove its line in the same PR.
+- `gate.test.ts`: no public frame with a mark, and no Kiln page without a contract.
+- `frame-neutral.test.ts`: no new frame name in `apps/kiln/src` or `packages/*/src`. Its allowlist
+  only shrinks.
+
+The Mirror and Android pages don't follow this yet (#621, phase 2). Don't copy them: build on the
+shared engine.
+
 ## What it is
 
 Plain TypeScript (ES2022, no framework), built with Vite, running over WebUSB in Chrome or Edge.
@@ -25,7 +49,7 @@ lockfile swap). Its `package.json` lists `kiln` (the page), `kiln/packages/*`, `
 | Path | What |
 |---|---|
 | `src/`, `test/`, `index.html` | The page s1.edm.sh serves: `app/` (the UI). Stays until Kiln's Next.js app has passed a real install (#27) |
-| `apps/kiln` | Kiln on Next.js: the device picker and one wizard per frame, on the Kiln design (`docs/design/kiln`). See its [README](apps/kiln/README.md) |
+| `apps/kiln` | Kiln on Next.js: the device picker and one install engine that runs every frame from its data, on the Kiln design (`docs/design/kiln`). See [One engine, frames as data](#one-engine-frames-as-data) and its [README](apps/kiln/README.md) |
 | `packages/brand` | The Glassworks tokens, mark, and Kiln's favicon (the small cut of its ember-floor mark) and app icon, generated from glassworks.dev by `sync.mjs`. Don't edit `src/` |
 | `packages/fel`, `fastboot`, `adb`, `bootpatch`, `setup-channel`, `improv-serial` | Protocol modules: TypeScript source, each with its own tests. Not published (`"private": true`) |
 | `packages/app-adb` | Our app over adb, the same on every frame (Glassworks by default, another app by its `AppId`): install, permissions, start with the Home Assistant URL, its version, its device admin. The S1's provisioning and the Mirror's recipe both use it; the S1's command sequence is pinned (`frames/aqara-s1-plus/installer/test/adb-commands-pin.test.ts`) |

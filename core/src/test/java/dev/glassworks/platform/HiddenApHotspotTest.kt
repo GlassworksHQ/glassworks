@@ -26,6 +26,7 @@ class HiddenApHotspotTest {
     private class FakeDevice(var wifiOn: Boolean, var config: String? = "Home hotspot") : ApControls<String> {
         var apOn = false
         var refuse: Throwable? = null
+        var answer = true
         var listener: ((ApControls.State) -> Unit)? = null
 
         override fun wifiEnabled() = wifiOn
@@ -35,6 +36,7 @@ class HiddenApHotspotTest {
 
         override fun setAp(net: HotspotNetwork?, on: Boolean): Boolean {
             refuse?.let { throw it }
+            if (!answer) return false
             if (on) { config = net!!.ssid; wifiOn = false } // what Android 6 does: saves it, and drops the client
             apOn = on
             return true
@@ -46,11 +48,12 @@ class HiddenApHotspotTest {
     private val handler = Handler(Looper.getMainLooper())
     private val net = HotspotNetwork("Glassworks-TEST", "abcdefghjkmn")
     private val events = mutableListOf<Hotspot.Event>()
+    private val logged = mutableListOf<String>()
 
     /** The hotspot interface's address, as the hotspot reads it; null until tethering gives it one. */
     private var address: String? = "192.168.43.1"
 
-    private fun hotspot(d: FakeDevice) = HiddenApHotspot(d, handler, address = { address }, newNetwork = { net }, startTimeoutMs = 5_000)
+    private fun hotspot(d: FakeDevice) = HiddenApHotspot(d, handler, address = { address }, newNetwork = { net }, startTimeoutMs = 5_000, log = { logged += it })
 
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
 
@@ -94,6 +97,28 @@ class HiddenApHotspotTest {
         assertEquals("Home hotspot", d.config)
         assertTrue(d.wifiOn)
         assertNull(d.listener)
+    }
+
+    @Test
+    fun `a refusal logs Android's reason once, without the key`() {
+        // What the Mirror's Android 6.0.1 throws without WRITE_SETTINGS (Settings.isCallingPackageAllowedToPerformAppOpsProtectedOperation).
+        val reason = "dev.glassworks.generic_android.legacy was not granted  this permission: android.permission.WRITE_SETTINGS."
+        val d = FakeDevice(wifiOn = true).apply { refuse = SecurityException("$reason (${net.passphrase})") }
+        hotspot(d).start { events += it }
+        idle()
+        assertEquals(1, logged.size)
+        assertTrue(logged.single(), logged.single().startsWith("setup hotspot refused: java.lang.SecurityException: $reason"))
+        assertFalse(logged.single(), net.passphrase in logged.single())
+    }
+
+    @Test
+    fun `Android answering false is a refusal too, and logged`() {
+        val d = FakeDevice(wifiOn = true).apply { answer = false }
+        hotspot(d).start { events += it }
+        idle()
+        assertEquals(listOf<Hotspot.Event>(Hotspot.Event.Failed(HotspotFailure.NOT_ALLOWED)), events)
+        assertEquals(listOf("setup hotspot refused: setWifiApEnabled returned false"), logged)
+        assertTrue(d.wifiOn)
     }
 
     @Test

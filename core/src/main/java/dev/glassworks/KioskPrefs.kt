@@ -143,6 +143,14 @@ class KioskPrefs(
         get() = sp.getBoolean("setup_silent_updates_answered", false)
         set(v) = sp.edit().putBoolean("setup_silent_updates_answered", v).apply()
 
+    /**
+     * Which releases the app updates to (#605): Stable, the default, or Beta, which also takes pre-releases. The update
+     * check reads it every time; the Device page's *Update channel* row and the Manage page set it.
+     */
+    var updateChannel: dev.glassworks.update.UpdateChannel
+        get() = dev.glassworks.update.UpdateChannel.of(sp.getString(KEY_UPDATE_CHANNEL, null))
+        set(v) { sp.edit().putString(KEY_UPDATE_CHANNEL, v.id).apply() }
+
     /** The device's own setup steps had their once-per-install check (GlassworksRuntime.deviceSetupSteps). */
     var deviceStepsMigrated: Boolean
         get() = sp.getBoolean("setup_device_steps_migrated", false)
@@ -302,10 +310,17 @@ class KioskPrefs(
         get() = sp.getBoolean("improv_auto", true)
         set(v) = sp.edit().putBoolean("improv_auto", v).apply()
 
-    /** Also accept a proximity approach (VI5300 far -> near) as the Improv authorization. */
+    /**
+     * Also accept an approach (the screen's presence going far to near: the S1's VI5300, or the camera's presence on a
+     * device without a sensor) as the Improv authorization. Read [improvProximityAuthChosen]: unset, the frame decides.
+     */
     var improvProximityAuth: Boolean
         get() = sp.getBoolean("improv_proximity_auth", false)
         set(v) = sp.edit().putBoolean("improv_proximity_auth", v).apply()
+
+    /** [improvProximityAuth] once it was set (`--ez improv_proximity_auth`), else null (on without touch, ImprovSelfAuth). */
+    val improvProximityAuthChosen: Boolean?
+        get() = if (sp.contains("improv_proximity_auth")) improvProximityAuth else null
 
     /**
      * What the web engine starts with that the dashboard address can change: the secure-context hosts, and the
@@ -341,6 +356,7 @@ class KioskPrefs(
         }
 
         const val KEY_URL = "url"
+        const val KEY_UPDATE_CHANNEL = "update_channel"
         const val KEY_HA_SEEN = "ha_seen"
         const val KEY_WIFI_SEEN = "wifi_seen"
         private const val KEY_ZOOM = "zoom"

@@ -21,6 +21,7 @@ import dev.glassworks.screen.PresenceSource
 import dev.glassworks.GlassworksApp
 import dev.glassworks.update.FrameUpdateModel
 import dev.glassworks.update.SilentUpdates
+import dev.glassworks.update.UpdateChannelRow
 import java.util.concurrent.ScheduledExecutorService
 
 /**
@@ -79,12 +80,13 @@ class GenericAndroid(
     override fun panes(ctx: PaneContext, device: ScheduledExecutorService) = emptyList<Pane>()
 
     /**
-     * The Device page, named after the device: silent updates, the home screen and turning the screen off (setup's This
-     * device step, #403), device owner, model, the frame version on a device frame, and Android.
+     * The Device page, named after the device: silent updates, the update channel (#605), the home screen and turning the
+     * screen off (setup's This device step, #403), device owner, model, the frame version on a device frame, and Android.
      */
     override fun deviceSection(context: Context, running: (String) -> Pane?): SettingsSection =
         SettingsSection(DEVICE, friendlyName().ifBlank { "Device" }, listOfNotNull(
             silentUpdatesItem { SilentUpdates.read(context, SilentUpdates.Root.NONE) },
+            UpdateChannelRow.item(context),
             SettingsItem.Info({ HOME_TITLE }, { if (Platform.isHomeApp(context)) HOME_YES else HOME_NO }, fixable = { !Platform.isHomeApp(context) }),
             SettingsItem.Info({ SCREEN_OFF_TITLE }, {
                 when {

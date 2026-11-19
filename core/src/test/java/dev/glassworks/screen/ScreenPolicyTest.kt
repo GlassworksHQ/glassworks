@@ -32,6 +32,8 @@ class ScreenPolicyTest {
     private class Settings(
         autoBrightness: Boolean = true,
         manualBrightness: Float = -1f,
+        override val screenMode: String = "presence",
+        override val wakeOnApproach: Boolean = true,
     ) : ScreenSettings {
         /** The saved settings the policy wrote. */
         val writes = mutableListOf<String>()
@@ -39,9 +41,7 @@ class ScreenPolicyTest {
             set(v) { writes += "autoBrightness"; field = v }
         override var manualBrightness = manualBrightness
             set(v) { writes += "manualBrightness"; field = v }
-        override val screenMode = "presence"
         override var idleOffSec = 120
-        override val wakeOnApproach = true
         override val presenceRangeM = 0f
         override val minBrightness = 0.1f
         override var maxBrightness = 1f
@@ -80,6 +80,54 @@ class ScreenPolicyTest {
     }
 
     private fun testHoldLog() = ShadowLog.getLogsForTag("Test.Screen").map { it.msg }.filter { it.startsWith("test hold") }
+
+    /**
+     * Someone walks up to a screen that is off, with [settings]. Returns whether it woke, and checks that presence is
+     * reported either way: `near`, and a change for the listeners that send the `presence` binary_sensor.
+     */
+    private fun approachToAScreenThatIsOff(settings: Settings): Boolean {
+        ShadowLog.clear()
+        val presence = FakeSource()
+        val screen = policy(presence = presence, settings = settings)
+        screen.start(context)
+        screen.sleep("home assistant")
+        shadowOf(context.getSystemService(PowerManager::class.java)).setIsInteractive(false)
+        context.sendBroadcast(Intent(Intent.ACTION_SCREEN_OFF))
+        advance(10)
+        assertFalse(screen.screenOn)
+        var changes = 0
+        screen.addListener { changes++ }
+
+        presence.presence!!(true, 1f)
+
+        assertTrue("presence is near", screen.near)
+        assertEquals("presence is reported", 1, changes)
+        val woke = ShadowLog.getLogsForTag("Test.Screen").any { it.msg == "wake (approach)" }
+        screen.stop()
+        return woke
+    }
+
+    /** #601: the Mirror's camera turned on a screen Home Assistant had turned off, in "always". */
+    @Test fun alwaysDoesNotWakeOnApproachAndStillReportsPresence() {
+        assertFalse(approachToAScreenThatIsOff(Settings(screenMode = "always")))
+    }
+
+    @Test fun presenceWakesOnApproach() {
+        assertTrue(approachToAScreenThatIsOff(Settings(screenMode = "presence")))
+    }
+
+    @Test fun wakeOnApproachOffDoesNotWakeInEitherMode() {
+        assertFalse(approachToAScreenThatIsOff(Settings(screenMode = "presence", wakeOnApproach = false)))
+        assertFalse(approachToAScreenThatIsOff(Settings(screenMode = "always", wakeOnApproach = false)))
+    }
+
+    /** The settings' wake switch reads the same condition the policy wakes on. */
+    @Test fun approachWakesOnlyInPresenceWithWakeOnApproach() {
+        assertTrue(Settings(screenMode = "presence", wakeOnApproach = true).approachWakes)
+        assertFalse(Settings(screenMode = "presence", wakeOnApproach = false).approachWakes)
+        assertFalse(Settings(screenMode = "always", wakeOnApproach = true).approachWakes)
+        assertFalse(Settings(screenMode = "always", wakeOnApproach = false).approachWakes)
+    }
 
     /** The runtime builds the policy long before the activity starts it; the idle countdown starts at start(). */
     @Test fun theIdleCountdownStartsAtStartNotWhenThePolicyWasBuilt() {

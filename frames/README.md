@@ -10,6 +10,7 @@ and glassworks.dev read them from here.
 | `<id>/installer/` | Kiln's recipe for the device (`@glassworks/<id>-installer`), an npm workspace of the repo root. Only frames that install from Kiln have one |
 | `<id>/design/frame.json` | What the device looks like and what the catalog says about it. Every frame has one |
 | `<id>/research/` | Its research notes (the index of every note: [docs/research](../docs/research/README.md)) |
+| `<id>/design/installer.json` | Its install in Kiln, as data: route, touch, each flow's steps and transports, downloads, taps, way back (format: [frames as data](../docs/design/kiln/frames-as-data.md)). Every frame with a Kiln page has one |
 | `<id>/design/recovery.json` | The steps into recovery mode, as drawing data (format: [docs/design/kiln](../docs/design/kiln/README.md#the-recovery-section)) |
 
 | Frame | Status | Installer | Design |
