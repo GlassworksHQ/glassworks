@@ -178,11 +178,16 @@ A frame that declares an agent must pass `FrameAgentContract`, in the style of K
 driver: a test class that gives the suite the frame's agent over a fake transport. The suite checks:
 
 1. `declared` is exactly the frame's `frame.json` list, and every word is a known capability.
-2. With no root side at all, the agent reports no version and offers nothing, and nothing throws.
+2. With no root side at all (nothing of the agent on the device, not even a file in `/data`), the
+   agent reports no version and offers nothing, and nothing throws.
 3. With the newest root side, every declared capability is offered.
 4. `offers` is never true for a capability the frame doesn't declare, at any version.
 5. Each declared capability goes away when its own discovery goes away (the frame names that
    discovery in its driver).
+   For a file an undo can leave behind, the driver's case is that undo: this boot's marker gone, the
+   file kept. Only a capability whose file stays true without the agent may still be offered then
+   ([Discovery](#discovery)); the S1's `bluetooth-address` is the one today, and its driver keeps
+   the file in every case but its own.
 
 A gate fails the build when a `frame.json` declares an agent with no driver, or a driver has no
 `frame.json` agent. Frames without an agent need nothing.
