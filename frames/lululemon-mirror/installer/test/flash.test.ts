@@ -285,7 +285,10 @@ describe('first boot', () => {
       { apiKey: btoa('x'.repeat(32)), onStep: (s, d) => lines.push(s || d || ''), sleep: async () => {} });
     expect(r.apiKey).toBe(false);
     expect(r.home.result).toBe('set');
-    expect(lines.join('\n')).toMatch(/didn't take it.*re-authenticate once/);
+    expect(lines.join('\n')).toMatch(/didn't take it, so Home Assistant may ask to re-authenticate once/);
+    // the app already holds another key here: no promise that it starts without one (#575 review)
+    expect(lines.join('\n')).toMatch(/If Glassworks has no key, it starts without one after 15 minutes/);
+    expect(lines.join('\n')).not.toMatch(/didn't take it: after 15 minutes/);
   });
 
   it('without the app\'s Improv socket, says the Wi-Fi wasn\'t confirmed, and never logs the network\'s name or password', async () => {
