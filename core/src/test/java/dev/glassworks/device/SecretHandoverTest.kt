@@ -104,7 +104,7 @@ class SecretHandoverTest {
         assertEquals("ok", h.handle("set $b64"))
         assertEquals("ok", h.handle("set-signin $tokenB64"))
         assertEquals(2, s.written)
-        assertEquals(1, signIns)
+        assertEquals("a retried sign-in tells the screens again, in case the first never did", 2, signIns)
     }
 
     @Test fun setNeverReplacesAValueInUse() {

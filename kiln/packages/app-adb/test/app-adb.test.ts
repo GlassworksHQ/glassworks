@@ -343,6 +343,21 @@ describe('the Home Assistant sign-in across a signing-key switch (#584)', () => 
     expect(fresh.signIn).toBeUndefined();
   });
 
+  it('tries again while the app\'s key store is down for a moment, and stops at a final refusal (#608 review)', async () => {
+    const s = new FakeKeySocket();
+    s.passing = 2;
+    expect(await handOverSignIn(shell(s), TOKEN, async () => {}, 60_000, 5)).toBe(true);
+    expect(s.verbs).toEqual(['set-signin', 'set-signin', 'set-signin']);
+    const inUse = new FakeKeySocket();
+    inUse.signIn = btoa('made-up-other');
+    expect(await handOverSignIn(shell(inUse), TOKEN, async () => {}, 60_000, 5)).toBe(false);
+    expect(inUse.verbs).toEqual(['set-signin']);
+    // the key store never comes back: false once the wait is over, never thrown
+    const down = new FakeKeySocket();
+    down.passing = 1_000;
+    expect(await handOverApiKey(shell(down), KEY, async () => {}, 0, 5)).toBe(false);
+  });
+
   it('fingerprints a sign-in as the app logs it', async () => {
     expect(await apiKeyFingerprint(TOKEN)).toMatch(/^[0-9a-f]{4}$/);
   });

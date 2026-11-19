@@ -104,7 +104,7 @@ case "$cmd" in
   "ip -4 -o addr show wlan0") echo "3: wlan0    inet 192.0.2.50/24 brd 192.0.2.255 scope global wlan0" ;;
   "pm path sh.edm.s1kiosk") echo "package:/data/app/sh.edm.s1kiosk-Abc==/base.apk" ;;
   "cp /data/app/sh.edm.s1kiosk-Abc==/base.apk /data/local/tmp/glassworks-old.apk") : ;;
-  *"--ez remove_admin true") put admin 0 ;;
+  *"--ez remove_admin true") put admin 0; [ "$(st down-after-admin)" = 1 ] && put socket-down 1 ;;
   "dumpsys device_policy") [ "$(st admin)" = 1 ] && echo "Admin sh.edm.s1kiosk/.AdminReceiver" || echo "no admins" ;;
   "dpm set-active-admin sh.edm.s1kiosk/.AdminReceiver") put admin 1 ;;
   "pm disable-user --user 0 sh.edm.s1kiosk")
@@ -121,7 +121,7 @@ case "$cmd" in
   # the app's secret hand-over socket (#584): listens while an app that has one runs
   "grep -c ' @glassworks_api_key\$' /proc/net/unix")
     c=both; [ "$(st installed)" = debug ] && c=$(st old-carries)
-    if [ "$(st installed)" != none ] && [ "$(st disabled)" != 1 ] && [ "${c:-both}" != none ]; then echo 1; else echo 0; fi ;;
+    if [ "$(st installed)" != none ] && [ "$(st disabled)" != 1 ] && [ "${c:-both}" != none ] && [ "$(st socket-down)" != 1 ]; then echo 1; else echo 0; fi ;;
   "grep -c ' @s1kiosk_improv\$' /proc/net/unix") echo 1 ;;
   "cmd package set-home-activity com.aqara.inhome.launcher/.MainActivity") put home aqara ;;
   "cmd package resolve-activity"*)
@@ -178,7 +178,9 @@ for line in sys.stdin.read().splitlines():
         r = "none" if not v else "unreadable" if lost or st("app.unreadable") == "1" else ("key " if verb == "get" else "signin ") + v
     else:
         f = "app.key" if verb == "set" else "app.signin"; held = "" if lost else st(f)
-        if verb == "set-signin" and st("app.signinhere") != "1": r = "refused no sign-in here to carry it into"
+        passing = int(st("app.passing", "0") or 0)
+        if passing > 0: put("app.passing", str(passing - 1)); r = "refused the key store isn't available right now"
+        elif verb == "set-signin" and st("app.signinhere") != "1": r = "refused no sign-in here to carry it into"
         elif not held or held == arg: put(f, arg); r = "ok"
         else: r = "refused a different value is set already"
     print(r)
@@ -188,7 +190,7 @@ APK="$T/kiosk-release.apk"; echo apk > "$APK"
 
 # A debug build with its data, as HOME + device admin, on Wi-Fi it saved.
 panel() { # [wifi fixture]
-  rm -rf "$T/panel" "$T"/{adb.log,root-cmds,root.log,violations,improv.got,installed,disabled,root,admin,home,new-install,uninstall,restore,disable,old-install,list,chooser,handover.log,old-carries} "$T"/app.* "$T"/copy.*
+  rm -rf "$T/panel" "$T"/{adb.log,root-cmds,root.log,violations,improv.got,installed,disabled,root,admin,home,new-install,uninstall,restore,disable,old-install,list,chooser,handover.log,old-carries,down-after-admin,socket-down} "$T"/app.* "$T"/copy.*
   mkdir -p "$T/panel"
   cp "$FIX/WifiConfigStore.xml" "$T/WifiConfigStore.xml"
   fresh_data 10071 debug
@@ -326,6 +328,7 @@ check "backup before the uninstall" before "$log" "glassworks-switch.sh backup" 
 check "restore after the new install" before "$(sed -n '/pm uninstall/,$p' <<<"$log")" "install -r -g $APK" "glassworks-switch.sh restore"
 check "Wi-Fi sent after the kiosk is started" before "$(sed -n '/pm uninstall/,$p' <<<"$log")" "am start -n sh.edm.s1kiosk/.MainActivity" "forward tcp:0 localabstract:s1kiosk_improv"
 check "secrets read before the app is stopped" before "$log" "forward tcp:0 localabstract:glassworks_api_key" "pm disable-user --user 0 sh.edm.s1kiosk"
+check "...and after the admin is dropped, as late as can be" before "$(sed -n '/remove_admin true/,$p' <<<"$log")" "remove_admin true" "forward tcp:0 localabstract:glassworks_api_key"
 check "...handed back after the kiosk is started, before the Wi-Fi" before "$(sed -n '/am start -n sh.edm.s1kiosk\/.MainActivity$/,$p' <<<"$log")" "forward tcp:0 localabstract:glassworks_api_key" "forward tcp:0 localabstract:s1kiosk_improv"
 check "temporary files removed" has "$log" "shell rm -f /data/local/tmp/glassworks-old.apk /data/local/tmp/glassworks-switch.sh"
 check "no 'forgot its Wi-Fi' note" hasnt "$out" "forgot its Wi-Fi"
@@ -369,6 +372,19 @@ out=$(inst --switch); rc=$?
 check "goes on" test $rc -eq 0
 check "says it could not read them" has "$out" "Home Assistant sign-in: could not read it (unreadable); sign in again afterwards"
 check "Done: sign in again" has "$out" "but not its Home Assistant sign-in and encryption key"
+
+echo "== install.sh: the old app stops answering before the read (#608 review)"
+panel; printf 1 > "$T/down-after-admin"
+out=$(S1_HANDOVER_READ_WAIT=2 inst --switch); rc=$?
+check "goes on" test $rc -eq 0
+check "lost, never taken for none" has "$out" "Home Assistant sign-in: could not read it (no answer); sign in again afterwards"
+check "Done: sign in again" has "$out" "but not its Home Assistant sign-in and encryption key"
+
+echo "== install.sh: the new app's key store is down for a moment at the hand-back (#608 review)"
+panel; printf 2 > "$T/app.passing"
+out=$(inst --switch); rc=$?
+check "tries again, and both are handed over" test "$(cat "$T/app.signin" 2>/dev/null) $(cat "$T/app.key" 2>/dev/null)" = "$TOKEN $KEY"
+check "...said so" has "$out" "Switched builds: the app's settings, Home Assistant sign-in and encryption key were kept."
 
 echo "== install.sh: the data won't go into the new build (#584)"
 panel; printf fail > "$T/restore"

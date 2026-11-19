@@ -393,6 +393,27 @@ describe('switching a development build to this one', () => {
     expect(text.some((t) => /^Home Assistant sign-in: could not read it \(the app has a sign-in but can't read it right now/.test(t))).toBe(true);
   });
 
+  it('an app that stops answering before the read: lost, never taken for "none" (#608 review)', async () => {
+    const p = new SwitchPanel();
+    const run = p.run.bind(p);
+    // releasing the device admin restarts it, and its socket doesn't come back in time
+    p.run = async (cmd) => { if (cmd.includes('remove_admin')) p.handover!.listening = false; return run(cmd); };
+    const text: string[] = [];
+    const res = await provision(p, { kioskApk: new Uint8Array([1]), debloat: false, confirmSwitch: async () => true }, (st, d) => text.push(st || d || ''), noSleep);
+    expect(res.switched).toMatchObject({ dataKept: true, signIn: 'lost', apiKey: 'lost' });
+    expect(text).toContain('Home Assistant sign-in: the app isn\'t answering on its hand-over socket; sign in again afterwards');
+    expect(p.sockets[0]!.verbs).toEqual(['carries']);
+  });
+
+  it('a later step that fails still hands the sign-in and key to the new app (#608 review)', async () => {
+    const p = new SwitchPanel();
+    await expect(provision(p, { kioskApk: new Uint8Array([1]), debloat: false, timezone: 'not a zone!', confirmSwitch: async () => true }, () => {}, noSleep))
+      .rejects.toThrow(/bad time zone/);
+    expect(p.installed).toBe('release');
+    expect(p.handover).toMatchObject({ key: KEY, signIn: TOKEN });
+    expect(p.cmds).toContain('am start -n sh.edm.s1kiosk/.MainActivity');
+  });
+
   it('when the data won\'t go into the new build, hands nothing over (a fresh app has no sign-in to take it)', async () => {
     const p = new SwitchPanel();
     p.restoreWorks = false;

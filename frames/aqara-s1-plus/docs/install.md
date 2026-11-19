@@ -454,7 +454,13 @@ plan without changing anything.
   Right after the installer starts it, it hands both back. The app seals them with its new key over the
   copied values, never over a value it can read, and only into the sign-in the copied data holds (its
   Home Assistant address and client id). The dashboard opens, and Home Assistant reconnects within about
-  a minute. A rollback to the old build does the same for the old build.
+  a minute. A rollback to the old build does the same for the old build, with what was read from it: an old
+  build without the hand-over gave nothing, so after a rollback it is signed out too (its own Keystore key went with
+  the uninstall), and the installer says to sign in again.
+- **When.** The installer reads the two right before it stops the old app, after it drops its device admin, so a
+  sign-in finished while the installer runs is the one it carries. A socket that doesn't answer then (the app
+  restarting) is waited for, and counts as lost, never as "nothing to carry". The hand-back tries each for up to
+  90 seconds, also while the app's key store is down for a moment; a refusal for any other reason is final.
 - **What still goes** ([docs/secrets.md](../../../docs/secrets.md#what-is-sealed) has the full list).
   The new install makes its key when the sign-in is handed over; from then on each old value it didn't
   get fails to open and is removed when it is next read:

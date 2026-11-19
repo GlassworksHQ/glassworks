@@ -2,13 +2,14 @@
 """Talks to Glassworks' secret hand-over socket (core SecretHandover, @glassworks_api_key) through an adb forward.
 
     adb forward tcp:0 localabstract:glassworks_api_key        # prints the local port
-    printf 'get-signin\\n' | handover.py <port>                # one reply line per request line
+    printf 'get-signin\\n' | handover.py <port> [seconds]      # one reply line per request line
     printf '%s' "$base64" | handover.py --fingerprint          # the 4-hex fingerprint the app logs
 
 The app hands out and takes back its Home Assistant sign-in and ESPHome API key there, for install.sh's signing-key
 switch (#584). Requests come on stdin, never as arguments, because a request can carry a secret, and so can a reply:
 the caller keeps replies in memory and never prints them. Touches nothing on the panel but that socket, which only adb
-can open. Exit status: 0 every request had a reply, 1 the connection failed or a reply didn't come in 10 s.
+can open. Exit status: 0 every request had a reply, 1 the connection failed or a reply didn't come in time (10 s, or
+the seconds given).
 """
 import base64
 import hashlib
@@ -25,12 +26,13 @@ def main():
     if sys.argv[1:] == ["--fingerprint"]:
         print(fingerprint(sys.stdin.read()))
         return 0
-    if len(sys.argv) != 2 or not sys.argv[1].isdigit():
-        print("usage: handover.py <port> | --fingerprint  (requests or the secret on stdin)", file=sys.stderr)
+    if len(sys.argv) not in (2, 3) or not all(a.isdigit() for a in sys.argv[1:]):
+        print("usage: handover.py <port> [seconds] | --fingerprint  (requests or the secret on stdin)", file=sys.stderr)
         return 2
+    timeout = max(1, int(sys.argv[2])) if len(sys.argv) == 3 else 10
     requests = [line.strip() for line in sys.stdin.read().splitlines() if line.strip()]
     try:
-        with socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=10) as s:
+        with socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=timeout) as s:
             f = s.makefile("rwb")
             for r in requests:
                 f.write(r.encode("ascii") + b"\n")

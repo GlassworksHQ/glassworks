@@ -152,6 +152,22 @@ export async function provision(p: PanelShell, opts: ProvisionOptions, onStep: S
     sw.notes.forEach((n) => r.detail(n));
   }
 
+  try {
+    return await afterInstall(p, r, opts, phase, sw, sleep);
+  } catch (e) {
+    // A step after the switch failed: the new app still needs the sign-in and key it was carrying, or they are gone.
+    if (sw && (sw.signIn === 'carry' || sw.apiKey === 'carry')) {
+      r.step('Sign-in and encryption key to the new app');
+      await r.try(`am start -n ${ACT}`);
+      await handBackSecrets(p, sw, (d) => r.detail(d), sleep).catch(() => {});
+    }
+    throw e;
+  }
+}
+
+/** Everything after the app is installed (or switched): permissions, HOME, preferences, the start, the hand-backs. */
+async function afterInstall(p: PanelShell, r: Steps, opts: ProvisionOptions, phase: (ph: AppPhase) => void,
+  sw: SwitchOutcome | undefined, sleep: (ms: number) => Promise<void>): Promise<Provisioned> {
   phase({ step: 'home' });
   await grantPermissions(r);
 

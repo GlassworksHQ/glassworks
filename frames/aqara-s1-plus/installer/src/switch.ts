@@ -21,7 +21,7 @@
 // The Wi-Fi password, the sign-in and the key never go into a command line, a log line or an error message.
 import type { PanelShell } from '@glassworks/adb';
 import {
-  ACT, ADMIN, PKG, type Carries, apiKeyFingerprint, dropAdmin, handOverApiKey, handOverSignIn, handoverCarries, readApiKey, readSignIn,
+  ACT, ADMIN, PKG, type Carries, apiKeyFingerprint, dropAdmin, handOverApiKey, handOverSignIn, handoverCarries, handoverUp, readApiKey, readSignIn,
 } from '@glassworks/app-adb';
 import { IMPROV_SOCKET, ImprovSerialClient } from './improv';
 import switchScript from '../../tools/install/glassworks-switch.sh?raw';
@@ -258,12 +258,23 @@ export function describeSwitched(sw: { dataKept: boolean; signIn: Carried; wifi:
 
 /**
  * Reads the sign-in and the API key from the running app into memory (only what `carries` says it can hand over).
- * A secret it holds but can't read now is lost to the switch: the run goes on and says so, as for the Wi-Fi.
+ * A secret it holds but can't read now is lost to the switch: the run goes on and says so, as for the Wi-Fi. Only the
+ * app's own `none` means there is none: a socket that is down (the app restarting) is waited for up to `waitMs`, then
+ * counts as lost.
  */
-export async function readSecrets(p: PanelShell, carries: Carries, log: SwitchLog): Promise<{ signIn: Carried; apiKey: Carried; secrets: CarriedSecrets }> {
+export async function readSecrets(p: PanelShell, carries: Carries, log: SwitchLog,
+  sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)), waitMs = 15_000): Promise<{ signIn: Carried; apiKey: Carried; secrets: CarriedSecrets }> {
+  const up = async () => {
+    for (let tries = Math.max(1, Math.ceil(waitMs / 1500)); ; tries--) {
+      if (await handoverUp(p)) return true;
+      if (tries <= 1) return false;
+      await sleep(1500);
+    }
+  };
   const read = async (k: 'signIn' | 'apiKey', get: () => Promise<string | undefined>, again: string): Promise<[Carried, string | undefined]> => {
     const name = noun[k][0]!.toUpperCase() + noun[k].slice(1);
     if (!carries[k]) { log(`${name}: this build of the app can't hand it over; ${again}`); return ['lost', undefined]; }
+    if (!(await up())) { log(`${name}: the app isn't answering on its hand-over socket; ${again}`); return ['lost', undefined]; }
     try {
       const v = await get();
       log(v === undefined ? `${name}: none to carry` : `${name}: read from the running app (fingerprint ${await apiKeyFingerprint(v)}), kept in memory for the new app`);
@@ -345,8 +356,6 @@ export async function switchSigningKey(p: PanelShell, apk: Uint8Array, plan: Swi
       }
       log(out.wifi === 'resend' ? `Wi-Fi ${out.ssid}: read as root; sent to the new app after installing` : 'Wi-Fi: could not read it as root; the Wi-Fi step will ask for it');
     }
-    // 2b. The sign-in and the API key, from the running app into memory (#584). Before step 3, which stops it.
-    Object.assign(out, await readSecrets(p, plan.carries, log));
   }
   const dropSecrets = () => { out.secrets?.forget(); out.secrets = undefined; };
 
@@ -364,6 +373,10 @@ export async function switchSigningKey(p: PanelShell, apk: Uint8Array, plan: Swi
     await p.run(`dpm set-active-admin ${ADMIN}`);
     if (owner) await p.run(`dpm set-device-owner ${ADMIN}`);
   };
+
+  // 3b. The sign-in and the API key, from the running app into memory (#584), as late as can be: right before it is
+  //    stopped, so a sign-in finished meanwhile is the one read, and the one the backup copies.
+  if (root) Object.assign(out, await readSecrets(p, plan.carries, log, sleep));
 
   // 4. Stop it for good: as the HOME app a force-stopped kiosk is started again at once, and its
   //    data must not change while it is copied. Disabling keeps its Wi-Fi networks (uninstalling

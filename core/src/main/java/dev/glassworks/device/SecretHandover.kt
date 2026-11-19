@@ -97,16 +97,18 @@ class SecretHandover(
         val token = String(raw, Charsets.US_ASCII)
         return synchronized(lock) {
             val r = store.carryOverSignIn(token) ?: return@synchronized "refused no sign-in here to carry it into"
-            reply(r, "sign-in") {
+            // SAME too: a retried hand-over whose first reply was lost, or a commit Android kept in memory but
+            // reported failed. The screens may still show the QR code; telling them twice only reloads the dashboard.
+            reply(r, "sign-in", same = onSignIn) {
                 log("Home Assistant sign-in handed over by adb (fingerprint ${NoiseKeys.fingerprint(raw)})")
                 onSignIn()
             }
         }
     }
 
-    private inline fun reply(r: CarryOver, what: String, stored: () -> Unit): String = when (r) {
+    private inline fun reply(r: CarryOver, what: String, same: () -> Unit = {}, stored: () -> Unit): String = when (r) {
         CarryOver.STORED -> { stored(); "ok" }
-        CarryOver.SAME -> "ok"
+        CarryOver.SAME -> { same(); "ok" }
         CarryOver.DIFFERENT -> "refused a different $what is set already"
         CarryOver.UNAVAILABLE -> "refused the key store isn't available right now"
         CarryOver.NOT_STORED -> "refused the $what can't be stored right now"

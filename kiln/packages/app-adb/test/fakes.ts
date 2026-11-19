@@ -172,8 +172,14 @@ export class FakeKeySocket {
   drop = 0;
   /** what a `get` answers for a value it holds: `unreadable` for a key store that is down */
   unreadable = false;
-  /** the held values were sealed with a key the app no longer has (its data copied across a switch): a set replaces them */
-  lost = false;
+  /** the held key was sealed with a key the app no longer has (its data copied across a switch): a set replaces it */
+  keyLost = false;
+  /** the same for the held sign-in */
+  signInLost = false;
+  /** both lost: the app's data copied across a switch */
+  set lost(v: boolean) { this.keyLost = v; this.signInLost = v; }
+  /** the next `passing` sets get a refusal that may pass (the key store down for a moment) */
+  passing = 0;
   /** the app has a sign-in (Home Assistant address and client id) to carry a token into */
   signInHere = true;
   /** an app from #574 (2026-11-18), before #584: it knows only `get` and `set` */
@@ -183,12 +189,13 @@ export class FakeKeySocket {
   shell(cmd: string): { out: string; code: number } | undefined {
     return cmd === `grep -c ' @glassworks_api_key$' /proc/net/unix` ? { out: `${this.listening ? 1 : 0}\n`, code: this.listening ? 0 : 1 } : undefined;
   }
-  #get(v: string | undefined, word: string): string {
-    return v ? (this.unreadable || this.lost ? 'unreadable' : `${word} ${v}`) : 'none';
+  #get(v: string | undefined, lost: boolean, word: string): string {
+    return v ? (this.unreadable || lost ? 'unreadable' : `${word} ${v}`) : 'none';
   }
-  #set(held: string | undefined, arg: string | undefined, what: string, put: (v: string) => void): string {
+  #set(held: string | undefined, lost: boolean, arg: string | undefined, what: string, put: (v: string) => void): string {
     if (!arg) return 'refused not base64';
-    if (!held || held === arg || this.lost) { put(arg); return 'ok'; }
+    if (this.passing > 0) { this.passing--; return 'refused the key store isn\'t available right now'; }
+    if (!held || held === arg || lost) { put(arg); return 'ok'; }
     return `refused a different ${what} is set already`;
   }
   async open(service: string) {
@@ -201,11 +208,11 @@ export class FakeKeySocket {
         const known = this.keyOnly ? ['get', 'set'] : ['carries', 'get', 'set', 'get-signin', 'set-signin'];
         const reply = !known.includes(verb!) ? 'refused unknown request'
           : verb === 'carries' ? 'carries api_key signin'
-          : verb === 'get' ? this.#get(this.key, 'key')
-          : verb === 'set' ? this.#set(this.lost ? undefined : this.key, arg, 'key', (v) => { this.key = v; })
-          : verb === 'get-signin' ? this.#get(this.signIn, 'signin')
+          : verb === 'get' ? this.#get(this.key, this.keyLost, 'key')
+          : verb === 'set' ? this.#set(this.key, this.keyLost, arg, 'key', (v) => { this.key = v; this.keyLost = false; })
+          : verb === 'get-signin' ? this.#get(this.signIn, this.signInLost, 'signin')
           : !this.signInHere ? 'refused no sign-in here to carry it into'
-          : this.#set(this.lost ? undefined : this.signIn, arg, 'sign-in', (v) => { this.signIn = v; });
+          : this.#set(this.signIn, this.signInLost, arg, 'sign-in', (v) => { this.signIn = v; this.signInLost = false; });
         if (this.drop > 0) { this.drop--; return; }
         queueMicrotask(() => cb(new TextEncoder().encode(`${reply}\n`)));
       },

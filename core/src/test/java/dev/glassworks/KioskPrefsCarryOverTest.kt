@@ -6,6 +6,7 @@ package dev.glassworks
 
 import android.content.Context
 import dev.glassworks.auth.StoredAuth
+import dev.glassworks.esphome.NoiseKeys
 import dev.glassworks.esphome.StoredKey
 import dev.glassworks.secrets.SecretPrefs
 import dev.glassworks.secrets.SecretStore
@@ -13,6 +14,7 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -52,7 +54,12 @@ class KioskPrefsCarryOverTest {
             assertTrue(noiseKeyStore.save(key))
         }
         val p = KioskPrefs(app, newInstall)
-        assertEquals("the copied key is stored but can't be read: the API server stays locked", StoredKey.Unreadable, p.noiseKeyStore.read())
+        assertEquals("the copied key is stored but can't be read", StoredKey.Unreadable, p.noiseKeyStore.read())
+        // so the API server lets nobody in, not plaintext and not the zero PSK, and isn't provisionable: Home
+        // Assistant only meets a refused connection, and opens no re-authentication, until the key comes (#608 review)
+        val locked = NoiseKeys(p.noiseKeyStore)
+        assertTrue(locked.locked)
+        assertFalse(locked.provisionable)
         assertNull("the panel shows the sign-in QR code meanwhile", p.auth)
 
         assertEquals(SecretPrefs.CarryOver.STORED, p.carryOverApiKey(key))
@@ -62,6 +69,8 @@ class KioskPrefsCarryOverTest {
         assertArrayEquals(key, (after.noiseKeyStore.read() as StoredKey.Present).key)
         assertEquals(signIn, after.auth)
         assertTrue(after.apiEncryption)
+        // the server's next try reads it: unlocked, with the key Home Assistant holds
+        assertTrue(NoiseKeys(after.noiseKeyStore).let { !it.locked && it.hasKey })
     }
 
     @Test fun theSignInGoesOnlyIntoTheCopiedOne() {

@@ -72,6 +72,9 @@ WIFI_PSK="" HAVE_PSK=0 APP_AFTER_UNDO=removed
 # handed to the new app once it runs. CARRY_*: the running app can hand it over. *_STATE: carry (read, to hand over),
 # kept, lost, or none (there was none).
 HANDOVER=${S1_HANDOVER:-$HERE/install/handover.py}
+READ_WAIT=${S1_HANDOVER_READ_WAIT:-15} # seconds the read waits for the old app's socket (it may be restarting)
+# Refusals that may pass within the hand-back's wait (the key store down for a moment, a failed write). The others are final.
+PASSING_RE="^refused (the key store isn't available right now|the .+ can't be stored right now)$"
 CARRY_KEY=0 CARRY_SIGNIN=0 SEC_KEY="" SEC_SIGNIN="" KEY_STATE=lost SIGNIN_STATE=lost
 
 # `dumpsys wifi` on stdin -> "<kiosk|other|unknown|none><TAB><ssid>": the current network id from
@@ -116,15 +119,31 @@ su_() { adb shell "su -c 'sh $SW_SH $*'"; }
 # Request lines on stdin -> reply lines on stdout, over the app's hand-over socket (adb forward; adb only). Fails when
 # the app doesn't listen or answer.
 handover_up() { [[ "$(adb shell "grep -c ' @glassworks_api_key\$' /proc/net/unix" | tr -d '\r')" -gt 0 ]] 2>/dev/null; }
-handover_req() {
+handover_req() { # [seconds to wait for each reply, 10 by default]
   local port rc=0
   handover_up && command -v python3 >/dev/null || return 1
   port=$(adb forward tcp:0 localabstract:glassworks_api_key | tr -d '\r') && [[ $port =~ ^[0-9]+$ ]] || return 1
-  python3 "$HANDOVER" "$port" || rc=$?
+  python3 "$HANDOVER" "$port" "${1:-10}" || rc=$?
   adb forward --remove "tcp:$port" >/dev/null 2>&1 || true
   return $rc
 }
 fingerprint() { printf '%s' "$1" | python3 "$HANDOVER" --fingerprint 2>/dev/null || echo "?"; }
+# One request (on stdin: it may hold a secret) until it gets an answer that isn't a passing refusal, or until the
+# deadline <$1, in $SECONDS> passes. Each try waits at most the time left. Prints the last reply, empty for none.
+ask_until() {
+  local req r="" left
+  req=$(cat)
+  while :; do
+    left=$(( $1 - SECONDS ))
+    (( left >= 1 )) || break
+    r=$(printf '%s\n' "$req" | handover_req "$(( left < 10 ? left : 10 ))" 2>/dev/null) || r=""
+    if [[ -n $r && ! $r =~ $PASSING_RE ]]; then break; fi
+    (( $1 - SECONDS > 1 )) || break
+    sleep 1.5
+  done
+  req=""
+  printf '%s' "$r"
+}
 # XML text as Android writes it (&quot; &apos; &lt; &gt; &amp;); fails on anything else (&#...;).
 # The value goes to sed on stdin, not as an argument.
 xml_unescape() {
@@ -177,35 +196,35 @@ read_secrets() {
   local r
   SIGNIN_STATE=lost KEY_STATE=lost
   if [[ $CARRY_SIGNIN -eq 1 ]]; then
-    r=$(printf 'get-signin\n' | handover_req 2>/dev/null) || r=""
+    r=$(printf 'get-signin\n' | ask_until $(( SECONDS + READ_WAIT )))
     if [[ $r =~ ^signin\ ([A-Za-z0-9+/]+={0,2})$ ]]; then
       SEC_SIGNIN=${BASH_REMATCH[1]} SIGNIN_STATE=carry
       echo "  Home Assistant sign-in: read from the running app (fingerprint $(fingerprint "$SEC_SIGNIN")), kept in memory for the new app"
     elif [[ $r == none ]]; then SIGNIN_STATE=none; echo "  Home Assistant sign-in: none to carry"
-    else echo "  Home Assistant sign-in: could not read it (${r%% *}); sign in again afterwards"; fi
+    else r=${r%% *}; echo "  Home Assistant sign-in: could not read it (${r:-no answer}); sign in again afterwards"; fi
   else echo "  Home Assistant sign-in: this build of the app can't hand it over; sign in again afterwards"; fi
   if [[ $CARRY_KEY -eq 1 ]]; then
-    r=$(printf 'get\n' | handover_req 2>/dev/null) || r=""
+    r=$(printf 'get\n' | ask_until $(( SECONDS + READ_WAIT )))
     if [[ $r =~ ^key\ ([A-Za-z0-9+/]{43}=)$ ]]; then
       SEC_KEY=${BASH_REMATCH[1]} KEY_STATE=carry
       echo "  Encryption key: read from the running app (fingerprint $(fingerprint "$SEC_KEY")), kept in memory for the new app"
     elif [[ $r == none ]]; then KEY_STATE=none; echo "  Encryption key: none to carry"
-    else echo "  Encryption key: could not read it (${r%% *}); Home Assistant may ask to confirm it"; fi
+    else r=${r%% *}; echo "  Encryption key: could not read it (${r:-no answer}); Home Assistant may ask to confirm it"; fi
   else echo "  Encryption key: this build of the app can't hand it over; Home Assistant may ask to confirm it"; fi
   r=""; [[ x =~ x ]] # clears BASH_REMATCH, which held a secret (read-only in bash 3.2)
 }
 forget_secrets() { SEC_KEY="" SEC_SIGNIN=""; }
-# Hands what read_secrets read to the app installed now (it must be started), then forgets it. Tries again while the
-# socket isn't up or doesn't answer, for up to 90 s; a refusal is final.
+# Hands what read_secrets read to the app installed now (it must be started), then forgets it. Tries each for up to
+# 90 s while the socket isn't up, doesn't answer, or refuses for a reason that may pass; any other refusal is final.
 hand_back() {
-  local r i
+  local r
   if [[ $KEY_STATE == carry ]]; then
-    for i in $(seq 1 60); do r=$(printf 'set %s\n' "$SEC_KEY" | handover_req 2>/dev/null) || r=""; [[ -n $r ]] && break; sleep 1.5; done
+    r=$(printf 'set %s\n' "$SEC_KEY" | ask_until $(( SECONDS + 90 )))
     if [[ $r == ok ]]; then KEY_STATE=kept; echo "  Encryption key: handed to the app"
     else KEY_STATE=lost; echo "  Encryption key: the app did not take it (${r:-no answer}); Home Assistant may ask to confirm it"; fi
   fi
   if [[ $SIGNIN_STATE == carry ]]; then
-    for i in $(seq 1 60); do r=$(printf 'set-signin %s\n' "$SEC_SIGNIN" | handover_req 2>/dev/null) || r=""; [[ -n $r ]] && break; sleep 1.5; done
+    r=$(printf 'set-signin %s\n' "$SEC_SIGNIN" | ask_until $(( SECONDS + 90 )))
     if [[ $r == ok ]]; then SIGNIN_STATE=kept; echo "  Home Assistant sign-in: handed to the app"
     else SIGNIN_STATE=lost; echo "  Home Assistant sign-in: the app did not take it (${r:-no answer}); sign in again"; fi
   fi
@@ -280,8 +299,6 @@ switch_key() {
       if [[ $HAVE_PSK -eq 1 ]]; then echo "  Wi-Fi $(net_name): read as root, kept in memory for the new app"
       else echo "  Wi-Fi: could not read it as root; send it again afterwards (see the end)"; fi
     fi
-    # 2b. the sign-in and the API key, from the running app into memory (#584); before step 3 stops it
-    read_secrets
   fi
   # 3. Android won't uninstall an active device admin (a device owner is released first). The app
   #    has to be running for these, so they come before it is stopped.
@@ -290,6 +307,9 @@ switch_key() {
   fi
   adb shell am start -n "$ACT" --ez remove_admin true >/dev/null || true
   for _ in $(seq 1 30); do adb shell dumpsys device_policy | grep -q "$PKG" || break; sleep 0.5; done
+  # 3b. the sign-in and the API key, from the running app into memory (#584), as late as can be: right before it is
+  #     stopped, so a sign-in finished meanwhile is the one read, and the one the backup copies
+  if [[ $HAS_ROOT -eq 1 ]]; then read_secrets; fi
   # 4. stop it for good: as the HOME app a force-stopped kiosk is started again at once, and its data
   #    must not change while it is copied. Disabling keeps its Wi-Fi networks (uninstalling doesn't).
   adb shell pm disable-user --user 0 "$PKG" >/dev/null || true

@@ -179,6 +179,10 @@ async function keyRequest(p: PanelShell, line: string, timeoutMs = 10_000): Prom
 }
 
 /** Whether the app listens on its hand-over socket now (an app older than #574 never does). */
+export async function handoverUp(p: PanelShell): Promise<boolean> {
+  return keySocketUp(p);
+}
+
 async function keySocketUp(p: PanelShell): Promise<boolean> {
   return Number.parseInt((await p.run(`grep -c ' @glassworks_api_key$' /proc/net/unix`)).out.trim(), 10) > 0;
 }
@@ -238,7 +242,16 @@ export async function readSignIn(p: PanelShell, replyMs = 10_000): Promise<strin
   return readSecret(p, 'get-signin', 'signin', /[A-Za-z0-9+/]+={0,2}/, 'a sign-in', replyMs);
 }
 
-/** Sends `line` until the app answers `ok` (true), refuses (false), or `waitMs` has passed (false). Never throws. */
+/**
+ * Refusals that may clear within the hand-back's wait: the key store was down, or the write failed. The others (a
+ * different value is set, no sign-in to carry it into, not a key) are final.
+ */
+const PASSING = /^refused (the key store isn't available right now|the .+ can't be stored right now)$/;
+
+/**
+ * Sends `line` until the app answers `ok` (true), refuses for good (false), or `waitMs` has passed (false). A
+ * refusal that may pass is tried again until then. Never throws.
+ */
 async function handOver(p: PanelShell, line: string, sleep: (ms: number) => Promise<void>, waitMs: number, replyMs: number): Promise<boolean> {
   if (!p.openStream) return false;
   const until = Date.now() + waitMs;
@@ -247,7 +260,7 @@ async function handOver(p: PanelShell, line: string, sleep: (ms: number) => Prom
       if (await keySocketUp(p)) {
         const r = await keyRequest(p, line, replyMs);
         if (r === 'ok') return true;
-        if (r.startsWith('refused ')) return false; // a different value, or one it can't store: trying again won't help
+        if (r.startsWith('refused ') && !PASSING.test(r)) return false; // a different value, or no sign-in: final
       }
     } catch { /* the socket failed or didn't answer: try again */ }
     if (Date.now() > until) return false;
