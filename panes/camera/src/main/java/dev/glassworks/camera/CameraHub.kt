@@ -40,6 +40,9 @@ import java.util.concurrent.TimeUnit
  *
  * Everything happens on the hub's own thread, so the camera's state has one writer. Frames reach
  * presence at about the rate it asked for; the rest are dropped without a copy.
+ *
+ * A session that sends no frame for [SILENT_MS] is closed and the camera opened again ([ReopenBackoff]): a
+ * LEGACY camera's first session can start and never deliver (the Mirror, 2026-11-19, #599).
  */
 class CameraHub(
     context: Context,
@@ -51,6 +54,8 @@ class CameraHub(
     private val manager = app.getSystemService(Context.CAMERA_SERVICE) as CameraManager
     private val thread = HandlerThread("glassworks-camera").apply { start() }
     private val handler = Handler(thread.looper)
+    /** The hub's thread, for tests that run its work on Robolectric's clock. */
+    internal val looper get() = thread.looper
 
     private class Sink(val fps: Float, val sink: FrameSink) { var lastMs = 0L }
     private class Waiter(val latch: CountDownLatch) { @Volatile var jpeg: ByteArray? = null }
@@ -83,6 +88,11 @@ class CameraHub(
     private var openFit: StreamFit = StreamFit.Refused(SIZES_UNREADABLE)
     /** The camera the hub opens or holds open, for [availability]. */
     private var openId: String? = null
+    /** When the reader last had an image, or the session's requests started: the silence watchdog's mark. */
+    private var lastImageMs = 0L
+    private val reopen = ReopenBackoff()
+    /** A silent camera isn't opened again before this ([ReopenBackoff]). */
+    private var reopenAt = 0L
 
     private val wanted get() = sinks.isNotEmpty() || waiters.isNotEmpty() || encoder != null ||
         SystemClock.elapsedRealtime() < lingerUntil
@@ -162,8 +172,9 @@ class CameraHub(
     private fun settle() {
         noteRate()
         if (released) return
-        if (!wanted) { closeCamera(); return }
-        if (device == null) { if (!opening) openCamera(); return }
+        // Nobody wants the camera (privacy, the pane stopping): the next use starts without a backoff.
+        if (!wanted) { closeCamera(); reopen.reset(); reopenAt = 0L; return }
+        if (device == null) { if (!opening && SystemClock.elapsedRealtime() >= reopenAt) openCamera(); return }
         if (session == null && !configuring) startSession()
     }
 
@@ -348,6 +359,8 @@ class CameraHub(
                             else presenceRange?.let { set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
                         }
                         s.setRepeatingRequest(req.build(), null, handler)
+                        lastImageMs = SystemClock.elapsedRealtime()
+                        watchSilence(gen, SILENT_MS)
                     } catch (e: Exception) {
                         fail("camera session failed: ${e.javaClass.simpleName}")
                     }
@@ -369,6 +382,8 @@ class CameraHub(
         val image = try { r.acquireLatestImage() } catch (e: IllegalStateException) { null } ?: return
         try {
             val now = SystemClock.elapsedRealtime()
+            lastImageMs = now
+            reopen.reset()
             val due = sinks.filter { now - it.lastMs >= (1000f / it.fps).toLong() }
             if (due.isNotEmpty()) {
                 val frame = try { lumaOf(image) } catch (e: IllegalStateException) { null }
@@ -410,6 +425,24 @@ class CameraHub(
     private fun displayDegrees(): Int {
         val d = (app.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager).getDisplay(Display.DEFAULT_DISPLAY)
         return when (d?.rotation) { Surface.ROTATION_90 -> 90; Surface.ROTATION_180 -> 180; Surface.ROTATION_270 -> 270; else -> 0 }
+    }
+
+    /**
+     * Checks session [gen] for silence in [delayMs]: no image for [SILENT_MS] closes the camera and opens it again,
+     * at once the first time and later after each silence that follows ([ReopenBackoff]). Presence reports the
+     * silence on its own ([CameraPresence.STALE_MS]); this is what ends it.
+     */
+    private fun watchSilence(gen: Int, delayMs: Long) {
+        handler.postDelayed({
+            if (gen != generation || session == null || released) return@postDelayed
+            val idle = SystemClock.elapsedRealtime() - lastImageMs
+            if (idle < SILENT_MS) { watchSilence(gen, SILENT_MS - idle); return@postDelayed }
+            val wait = reopen.silence()
+            log("camera: reopen ${reopen.attempt} ${if (wait == 0L) "now" else "in ${wait / 1000} s"} (no frames for ${idle / 1000} s)")
+            closeCamera()
+            reopenAt = SystemClock.elapsedRealtime() + wait
+            handler.postDelayed(::settle, wait)
+        }, delayMs)
     }
 
     /** Tells presence the camera is gone, answers waiting stills, and tries again later while it is still wanted. */
@@ -458,9 +491,35 @@ class CameraHub(
         const val STILL_WAIT_MS = 2_000L
         const val LINGER_MS = 10_000L
         const val RETRY_MS = 5_000L
+        /** A session that sends no frame this long is reopened: [CameraPresence.STALE_MS], so both see one silence. */
+        const val SILENT_MS = CameraPresence.STALE_MS
         const val DETACH_WAIT_MS = 1_000L
         const val SIZES_UNREADABLE = "The panel couldn't read the camera's sizes"
         const val NO_CAMERA = "The panel has no camera now"
+    }
+}
+
+/**
+ * How long a camera that went silent waits before it is opened again: not at all the first time, then [firstMs],
+ * doubling up to [capMs], so a camera that is truly broken isn't hammered. A frame [reset]s it. One thread.
+ */
+internal class ReopenBackoff(private val firstMs: Long = FIRST_MS, private val capMs: Long = CAP_MS) {
+    /** Silences since the last frame; the reopen's number in the log. */
+    var attempt = 0
+        private set
+
+    /** One more silence: the wait before the camera opens again. */
+    fun silence(): Long {
+        attempt++
+        if (attempt == 1) return 0L
+        return (firstMs shl minOf(attempt - 2, 20)).coerceAtMost(capMs)
+    }
+
+    fun reset() { attempt = 0 }
+
+    companion object {
+        const val FIRST_MS = 10_000L
+        const val CAP_MS = 300_000L
     }
 }
 

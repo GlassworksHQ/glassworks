@@ -43,6 +43,10 @@ line of each version is what Home Assistant shows on the update card. A change o
   avoid that: turn the lock off in Android's settings, or keep the screen on.
 
 ### Fixed
+- **The camera recovers by itself when it stops sending frames.** If the camera opens but sends no picture for
+  5 seconds, the camera pane now closes it and opens it again, at once the first time and then less and less often
+  while it stays silent. Before, presence and the stream stayed dead until something else reopened the camera, such
+  as turning *Camera privacy* on and off. This was seen on the lululemon Mirror's first open after a flash.
 - **A wrong Wi-Fi password on the lululemon Mirror no longer needs a reflash.** Send the right password with Improv,
   over USB from a computer or over Bluetooth, and the Mirror replaces the network Kiln saved and joins. Before, Android
   refused, and only a second flash fixed it. Comes with the next flash: the copy Kiln writes into the Mirror's image must
