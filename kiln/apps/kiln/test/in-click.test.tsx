@@ -35,7 +35,7 @@ async function setup(flow: 'install' | 'undo' = 'install') {
   // imported after navigator.usb exists: ya-webadb reads it when its module loads
   const [{ FelDevice }, { webUsbDevices }, { s1Plus }, { Session }, { Wizard }, { s1PlusUi }, { initial }] = await Promise.all([
     import('@glassworks/fel'), import('@glassworks/kiln-core'), import('@glassworks/aqara-s1-plus-installer'),
-    import('../src/wizard/session'), import('../src/wizard/Wizard'), import('../src/frames/aqara-s1-plus'), import('../src/wizard/state'),
+    import('../src/wizard/session'), import('../src/wizard/Wizard'), import('../src/app/aqara-s1-plus/frame').then((m) => ({ s1PlusUi: m.frame })), import('../src/wizard/state'),
   ]);
   const key = { publicKey: 'QAAAA test@example', store: { generateKey: () => { throw new Error('unused'); }, iterateKeys: () => [] } };
   const meta = { id: 's1-backup-20261112-090000', created: '', bootWasPatched: false, files: [] };

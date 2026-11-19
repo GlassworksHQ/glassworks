@@ -52,7 +52,7 @@ All of it at the frame level, in `frames/<id>/`. A new frame needs no change und
 | Whether it writes, and whether the device restarts after | step `writes`, `reboots` | S1 install: both |
 | Taps on the device's own screen | step `taps`; none on a frame without touch | Android: `allow-usb-debugging` |
 | Its way back | `installer.json` `wayBack` | S1: restore the backup; Mirror: flash the Glass Panes images |
-| Words that name its hardware | the frame's copy (today `apps/kiln/src/frames/aqara-s1-plus.ts`; it moves in phase 2) | "Hold VOL−" |
+| Words that name its hardware | `installer.json` `words`: the USB names at each "your turn", help links, the way back's words, the Silent updates words by state | "USB Device (1f3a:efe8)" |
 | Recovery drawing | `design/recovery.json` | (unchanged) |
 
 `installer.json` is a draft today. The contract reads `route`, `touch` and each step's `id`,
@@ -78,6 +78,26 @@ interface FrameSteps {
 `kiln-core`'s `Recipe` is the S1's version of this today (`checkChip`, `checkLayout`, `patchBoot`,
 `writesBeforeBoot`, `setUp`). The Mirror's image building (`image.ts`, `buildImages`) and Android's
 `installGeneric` become `build` and `setUp`. Code never decides order, retries, waits or screens.
+
+Since phase 2's first step, the shared wizard reads a frame only through `KilnFrame`
+(`apps/kiln/src/wizard/frame.ts`): the `words` above, checked where they come in (`frameWords`), its
+recovery drawing and photo, and `FrameCode`, the S1's `kiln` export in
+`frames/aqara-s1-plus/installer/src/kiln.ts`:
+
+| `FrameCode` | What it says | The S1's |
+|---|---|---|
+| `recipe` | The device steps | `s1Plus` |
+| `appId` | The app on the device | Glassworks' `sh.edm.s1kiosk` |
+| `appOptions` | The recipe's setUp options from the settings step | Asks before a signing-key switch |
+| `wifiName` | The network the device is on, read-only | `dumpsys wifi` |
+| `updates` | A key of `words.silent`, read-only | The boot image's root update service |
+| `giveBack` | Undo's "keep its settings": the device's own apps back | `unprovision` |
+| `sim` | The simulated device for `?demo=…` and the tests | The recipe with FEL, layout and patch faked |
+
+A frame's route folder (`apps/kiln/src/app/<id>/frame.ts`) puts the three together. That binding and
+the route folder itself are the last per-frame code in the app; one route for every frame replaces
+them later in phase 2. The radio's next steps (`setup/radioPlan.ts`) are the radio pane's, not a
+frame's: the panel's own setup page shows them on any frame whose app reports a radio.
 
 ## What the engine owns
 
@@ -147,7 +167,9 @@ in `kiln/AGENTS.md`, `docs/principles.md` and the root `AGENTS.md`. Files that o
 **Phase 2**, after #596, #603, #607 and #617 merge:
 
 1. Make `apps/kiln/src/wizard` frame-neutral first. The S1's copy, `radioPlan` and FEL move behind
-   the frame's declaration and its `FrameSteps`. The allowlist shrinks as they go.
+   the frame's declaration and its `FrameSteps`. The allowlist shrinks as they go. Done: the wizard,
+   `setup/radioPlan.ts` and the S1's words in `SilentUpdates.tsx` name no frame. FEL stays an engine
+   transport the S1 declares (`connect`'s `transport`).
 2. Move the Mirror onto the shared engine, then Android, one frame per PR. Delete their own sessions
    (`mirror/session.ts`, `mirror/flash.ts`, `android/session.ts`) and screens. Each move deletes
    that frame's lines in `expected-failures.json`, and its driver becomes the shared one.

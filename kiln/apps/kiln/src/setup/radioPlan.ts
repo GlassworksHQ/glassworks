@@ -3,18 +3,19 @@
 import type { RadioPlan, RadioStep } from '../wizard/state';
 
 /**
- * The first S1 app that gets the Thread network from Home Assistant itself (#49: Get it from Home
+ * The first Glassworks that gets the Thread network from Home Assistant itself (#49: Get it from Home
  * Assistant on the panel, Join Home Assistant's Thread network on its device page). #49 came after
- * v0.4.3 (versionCode 403), so the next release is the first to have it.
+ * v0.4.3 (versionCode 403), so the next release is the first to have it. The radio pane's frames run
+ * that version line.
  */
 export const THREAD_FROM_HA = 404;
 
-/** The S1 app on the panel, from `dumpsys package`: what the Thread step can ask of it. */
+/** Glassworks on the panel, from `dumpsys package`: what the Thread step can ask of it. */
 export interface PanelApp { version?: string; code?: number }
 
 /**
- * After the radio role is applied: what to do in Home Assistant to use it, per mode (frames/aqara-s1-plus/docs/radio.md).
- * Undefined when there is nothing to do (Off). `app`: the installed S1 app, which decides how the
+ * After the radio role is applied: what to do in Home Assistant to use it, per mode (the radio pane's
+ * docs/radio.md, in its frame). Undefined when there is nothing to do (Off). `app`: the installed Glassworks, which decides how the
  * Thread router gets its network.
  */
 export function radioPlan(mode: string, ip: string, haUrl: string, allowed: string | undefined, app: PanelApp = {}): RadioPlan | undefined {

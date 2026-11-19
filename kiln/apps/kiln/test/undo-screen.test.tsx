@@ -7,7 +7,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: ReactNode }) => <a href={href} {...p}>{children}</a> }));
 
-import { s1PlusUi } from '../src/frames/aqara-s1-plus';
+import { frame as s1PlusUi } from '../src/app/aqara-s1-plus/frame';
 import { demoSession, enterDemo, type Demo } from '../src/wizard/demo';
 import { Wizard } from '../src/wizard/Wizard';
 
@@ -20,7 +20,7 @@ beforeAll(() => {
 afterEach(() => cleanup());
 
 async function undo(which: Demo) {
-  const s = demoSession(which);
+  const s = demoSession(s1PlusUi, which);
   render(<Wizard session={s} frame={s1PlusUi} base="/aqara-s1-plus" />);
   await act(() => enterDemo(s, which));
   return s;
