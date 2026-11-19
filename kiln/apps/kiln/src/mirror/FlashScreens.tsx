@@ -18,13 +18,14 @@ import { Choose, ConfirmCommunity, DoneCommunity, Download, DownloadButton, File
 import { ReleaseApk, TestOnly } from './ReleaseApk';
 import type { MirrorSession, MirrorState } from './session';
 import { SilentUpdates, mirrorSilent } from '../components/SilentUpdates';
+import { FlashKeep, KeyOutcome, keyHeld } from './KeepScreens';
 
 type P = { f: FlashSession; s: FlashState; m: MirrorSession; ms: MirrorState };
 
 /** Arriving by an image's link skips the choice, so its rail has no Choose step. */
 export function flashRail(s: FlashState): RailStep[] {
   const names = ['Mirror', 'Choose', 'Download', 'Fastboot', 'Install', 'Done'];
-  const at = { choose: 1, image: 2, download: 2, fastboot: 3, confirm: 3, working: 4, adb: 4, error: 4, done: 6 }[s.screen];
+  const at = { choose: 1, image: 2, download: 2, keep: 3, fastboot: 3, confirm: 3, working: 4, adb: 4, error: 4, done: 6 }[s.screen];
   return names.map((name, i): RailStep => {
     const mark: RailMark = i < at ? 'done' : i > at ? 'todo' : s.screen === 'error' ? 'bad' : s.screen === 'adb' ? 'turn' : 'now';
     return { name, mark };
@@ -175,9 +176,11 @@ const ROWS: Record<string, { id: WorkStep; text: string }[]> = {
   restart: [{ id: 'restart', text: 'Restart the Mirror' }],
   'first-start': [{ id: 'first-boot', text: 'First start: Home Assistant, Wi-Fi, home screen' }],
 };
+/** Issue 580: the hand-back row joins Glassworks' first start, when the tab holds Home Assistant's key. */
+const HAND_BACK = { id: 'hand-back' as WorkStep, text: 'Give Glassworks Home Assistant’s key back' };
 
 export function FlashWorking({ f, s }: P) {
-  const rows = f.writes().flatMap((x) => ROWS[x.do === 'flash' ? `flash-${x.partition}` : x.do] ?? []);
+  const rows = f.writes().flatMap((x) => [...(ROWS[x.do === 'flash' ? `flash-${x.partition}` : x.do] ?? []), ...(x.do === 'first-start' && keyHeld(s.key) ? [HAND_BACK] : [])]);
   const at = Math.max(0, rows.findIndex((r) => r.id === s.work?.step));
   const x = s.work?.x ?? 0;
   return (
@@ -202,7 +205,7 @@ export function FlashAdb({ f, s }: P) {
     <section className="card" aria-labelledby="h">
       <span className="turn-label"><span className="pulse" />Your turn</span>
       <h2 id="h">One last click.</h2>
-      <p className="lede">The Mirror is starting Glassworks for the first time. Its glass stays dark for a few minutes while it does: that&apos;s expected, so leave it plugged in. Click Connect and pick the Mirror in the browser&apos;s list now: Kiln waits until it&apos;s ready, and it knows this browser&apos;s key, so it doesn&apos;t ask on its screen.</p>
+      <p className="lede">The Mirror is starting Glassworks for the first time. Its glass stays dark for a few minutes while it does: that&apos;s expected, so leave it plugged in. Click Connect and pick the Mirror in the browser&apos;s list now: Kiln waits until it&apos;s ready, and it knows this browser&apos;s key, so it doesn&apos;t ask on its screen.{keyHeld(s.key) && ' Then Kiln gives Glassworks Home Assistant’s key back.'}</p>
       {s.connecting && !s.adbWaiting && <p className="status work" role="status">Pick the Mirror in the browser&apos;s list…</p>}
       {s.adbWaiting && <p className="status work" role="status">The Mirror is still starting. Kiln asks again every few seconds…</p>}
       {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
@@ -254,6 +257,7 @@ export function FlashDone({ f, s }: P) {
         </p>
       )}
       {fb && <SilentUpdates words={mirrorSilent(fb.updates)} />}
+      {fb && <KeyOutcome k={s.key} />}
       {other && <WayBack f={f} other={other} />}
       <BuiltOn credits={glassPanes()} />
       {REVERSIBLE && <p className="small">{REVERSIBLE}.</p>}
@@ -289,6 +293,7 @@ export function FlashScreens(p: P) {
   return s.screen === 'choose' ? <Choose f={p.f} s={s} />
     : s.screen === 'image' ? <FlashImage {...p} />
     : s.screen === 'download' ? <Download f={p.f} s={s} />
+    : s.screen === 'keep' ? <FlashKeep {...p} />
     : s.screen === 'fastboot' ? <FlashFastboot {...p} />
     : s.screen === 'confirm' ? <FlashConfirm {...p} />
     : s.screen === 'working' ? <FlashWorking {...p} />

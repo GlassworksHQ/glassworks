@@ -7,10 +7,13 @@
 // to download a file. Glassworks is built from the checked image in a worker (images.ts) and finishes
 // over adb with this browser's key; a community image goes on as its release has it.
 // Behind ?apk=release or ?apk=local, like the rest of the Mirror's page, until MIRROR_OPEN (session.ts).
-import type { PanelShell } from '@glassworks/adb';
+// A Mirror that runs Glassworks already can go through `keep` first (issue 580): Kiln reads Home Assistant's ESPHome key
+// from the running app over adb and gives it back at the first start, as tools/mirror's flash-node does (PR 575).
+import { AdbAuthTimeout, type PanelShell } from '@glassworks/adb';
+import { apiKeyFingerprint, apiKeySocketUp, kioskVersion, readApiKey } from '@glassworks/app-adb';
 import { imageFromLink, plan, writtenAsIs, type ImageFile, type ImageRecipe, type PlannedStep } from '@glassworks/kiln-core';
 import {
-  MIRROR_IMAGES, ProxyError, WrongImage, checkFastboot, firstBoot, makeOnlyHome,
+  GLASSWORKS, MIRROR_IMAGES, ProxyError, WrongImage, checkFastboot, firstBoot, makeOnlyHome,
   type FastbootLike, type FastbootReport, type FirstBoot, type PrepareStep,
 } from '@glassworks/lululemon-mirror-installer';
 
@@ -26,7 +29,9 @@ export interface ImageMaker {
   check(blob: Blob, want: ImageFile, onProgress: (x: number) => void): Promise<void>;
   /** Builds both images from the fetched one; can run again (after a failed flash) until discard(). */
   build(o: { apk: Uint8Array; bootAnimation?: Uint8Array; settingsOverlay?: Uint8Array; adbKey: string; userdataBytes: number; fill?: boolean;
-    deviceMac?: string; wifi?: { ssid: string; password: string } },
+    deviceMac?: string; wifi?: { ssid: string; password: string };
+    /** ro.glassworks.api_key.handover=1: the app waits for the key Kiln holds (issue 574). The flag only: the key never goes to the worker */
+    apiKeyHandover?: boolean },
     onProgress: (step: PrepareStep, x: number) => void): Promise<{ system: Blob; userdata: Blob }>;
   /** Deletes what it kept (the downloads, the built copies). */
   discard(): Promise<void>;
@@ -42,8 +47,12 @@ export interface FlashDeps {
   search?: string;
   /** The browser's device list for the Mirror's fastboot, inside the click. */
   requestFastboot(): Promise<FastbootLike>;
-  /** The browser's device list for the Mirror's adb after the first boot, inside the click. */
-  requestAdb(): Promise<PanelShell>;
+  /**
+   * The browser's device list for the Mirror's adb, inside the click: after the first boot, and before the flash to
+   * read Home Assistant's key (issue 580). With `authMs` (the read before the flash), throws AdbAuthTimeout when the Mirror
+   * hasn't let this browser's key in by then; after the flash it waits as long as the Mirror takes.
+   */
+  requestAdb(o?: { authMs?: number }): Promise<PanelShell>;
   /**
    * adb again on the device requestAdb picked, with no list: while the Mirror is still starting it refuses this
    * browser's key (adbd answers before it reads the adb_keys in the new userdata), so Kiln asks again.
@@ -53,6 +62,17 @@ export interface FlashDeps {
   adbPicked?(): boolean;
   /** How many times Kiln asks again, 5 s apart (default 60: five minutes of the first start). */
   adbTries?: number;
+  /**
+   * Whether this browser has flashed a Mirror before, kept across visits (no secret: a flag). Only that browser's key
+   * gets in over adb, so Continue opens the keep step for it (issue 580). None: never.
+   */
+  flashedHere?: { get(): boolean; set(): void };
+  /**
+   * Told when the tab starts and stops holding Home Assistant's key (issue 580), so the page can ask before it closes.
+   * The session outlives its screen (Kiln's registry), so this follows the session, not the screen.
+   */
+  holdingKey?(on: boolean): void;
+
   /** This browser's adb public key line, once loaded. */
   adbKey(): string | undefined;
   /** The app's APK (Glassworks' legacy build, from its release or a local file), checked by the page. */
@@ -70,8 +90,29 @@ export interface FlashDeps {
 const nothingPicked = (e: unknown) => (e as { name?: string } | undefined)?.name === 'NotFoundError' || (e as Error | undefined)?.message === 'no panel selected';
 
 /** `image`: Glassworks' download and settings; `download`: a community image's. */
-export type FlashScreen = 'choose' | 'image' | 'download' | 'fastboot' | 'confirm' | 'working' | 'adb' | 'done' | 'error';
-export type WorkStep = PrepareStep | 'flash-system' | 'flash-userdata' | 'restart' | 'first-boot';
+export type FlashScreen = 'choose' | 'image' | 'download' | 'keep' | 'fastboot' | 'confirm' | 'working' | 'adb' | 'done' | 'error';
+export type WorkStep = PrepareStep | 'flash-system' | 'flash-userdata' | 'restart' | 'first-boot' | 'hand-back';
+/**
+ * Home Assistant's ESPHome key across a reflash (issue 580): read from the running app before the flash, given back at the
+ * first start. The key itself never goes in the state or the log, only its 4-hex fingerprint; the session holds it in
+ * memory until the hand-back.
+ */
+export type KeyStep =
+  /** 0: Glassworks answers over USB, 1: the key is read, 2: the Mirror restarts into fastboot */
+  | { state: 'reading'; at: 0 | 1 | 2 }
+  /** read, and the Mirror is restarting into fastboot */
+  | { state: 'held'; fingerprint: string }
+  /** the app answered with no key (Home Assistant hasn't added this Mirror), or no Glassworks: nothing to keep */
+  | { state: 'none' }
+  /**
+   * no adb (another browser installed it, or it doesn't start), or an app from before the hand-over. `restarted`: Kiln
+   * restarted an old app's Mirror into fastboot itself
+   */
+  | { state: 'unreachable'; why: 'no-adb' | 'old-app'; app?: string; restarted?: boolean }
+  /** after the first start */
+  | { state: 'handed'; fingerprint: string }
+  | { state: 'refused'; fingerprint: string };
+
 
 /**
  * One file of the picked image. `error`: Kiln's route couldn't serve it; `bad`: the bytes came but
@@ -101,6 +142,7 @@ export interface FlashState {
   understood: boolean;
   work?: { step: WorkStep; x: number };
   firstBoot?: FirstBoot;
+  key?: KeyStep;
   /** build zeros as RAW blocks: the retry for a bootloader that refused a FILL chunk */
   noFill?: boolean;
   /** the HOME fix on Done is running */
@@ -110,6 +152,15 @@ export interface FlashState {
   error?: string;
   log: string[];
 }
+
+/**
+ * How long the keep step waits for the Mirror to let this browser's adb key in. A Mirror that trusts another browser's
+ * key waits for a tap on a screen it can't take, so it never would.
+ */
+export const AUTH_MS = 20_000;
+
+/** The person went on to fastboot by hand while the keep step's read ran. */
+class Skipped extends Error {}
 
 const waiting = (r: ImageRecipe): FileCheck[] => r.files.map((f) => ({ name: f.name, size: f.size, state: 'waiting', progress: 0 }));
 
@@ -121,6 +172,12 @@ export class FlashSession {
   private panel?: PanelShell;
   private made: Record<string, Blob> = {};
   private runs = 0;
+  /** Home Assistant's ESPHome key from before the flash (issue 580). A secret: never in the state, the log or an error */
+  private apiKey?: string;
+  /** an old app's Mirror, connected, for its restart into fastboot */
+  private running?: PanelShell;
+  /** The keep step's read in progress: skipKeep bumps `gen`, and the read then lets go of `p` and changes nothing */
+  private read: { gen: number; p?: PanelShell; got?: { key: string; fingerprint: string } } = { gen: 0 };
 
   constructor(private readonly d: FlashDeps) {
     this.recipes = d.recipes ?? MIRROR_IMAGES;
@@ -132,7 +189,13 @@ export class FlashSession {
 
   subscribe = (l: () => void) => { this.listeners.add(l); return () => { this.listeners.delete(l); }; };
   get = () => this.state;
-  private set(patch: Partial<FlashState>) { this.state = { ...this.state, ...patch }; for (const l of this.listeners) l(); }
+  private held = false;
+  private set(patch: Partial<FlashState>) {
+    this.state = { ...this.state, ...patch };
+    const held = this.holdsKey();
+    if (held !== this.held) { this.held = held; this.d.holdingKey?.(held); }
+    for (const l of this.listeners) l();
+  }
   private log = (step: string, detail?: string) => this.set({ log: [...this.state.log, step || `  ${detail}`].slice(-400) });
 
   /** The picked image's recipe. */
@@ -280,7 +343,129 @@ export class FlashSession {
     return undefined;
   }
 
-  toFastboot() { if (!this.blocked()) this.set({ screen: 'fastboot', connectError: undefined }); }
+  /** Continue: fastboot, or the keep step first in a browser that has flashed a Mirror before (it alone gets in over adb). */
+  toFastboot() {
+    if (this.blocked()) return;
+    if (!this.recipe.community && !this.state.key && this.d.flashedHere?.get()) this.toKeep();
+    else this.set({ screen: 'fastboot', connectError: undefined });
+  }
+
+  /** The step before the flash, for a Mirror that runs Glassworks (issue 580). A key read earlier stays until a new one is read. */
+  toKeep() { if (!this.blocked()) this.set({ screen: 'keep', key: this.apiKey ? this.state.key : undefined, connectError: undefined }); }
+
+  /** Going on with fastboot by hand: a key read already stays, to give back after the flash; Done says what HA does. */
+  skipKeep() {
+    let k = this.state.key;
+    // a read still running stops: its connection goes, and whatever it does next is dropped (PR 603 review)
+    const { got, p } = this.read;
+    this.read = { gen: this.read.gen + 1 };
+    void p?.close?.().catch(() => {});
+    void this.running?.close?.().catch(() => {});
+    this.running = undefined;
+    if (k?.state === 'reading') {
+      // a key it read already stays, to give back after the flash
+      if (got) { this.apiKey = got.key; k = { state: 'held', fingerprint: got.fingerprint }; } else k = undefined;
+    }
+    this.set({ screen: 'fastboot', key: k, connecting: false, connectError: undefined });
+  }
+
+  /** Whether the tab holds a key that would be lost if it closed now (the page warns before it leaves). */
+  holdsKey(): boolean { return !!this.apiKey && this.state.key?.state === 'held'; }
+
+  /**
+   * Inside the click, on the keep step: the Mirror over adb with this browser's key, read-only, then Home Assistant's
+   * key from the app (readApiKey, as flash-node does), then the restart into fastboot. Nothing is written. A key the app
+   * has but can't hand over now stops here, before the restart: a flash would lose it.
+   */
+  async readKey(): Promise<void> {
+    const req = this.d.requestAdb({ authMs: AUTH_MS });
+    const gen = this.read.gen + 1;
+    this.read = { gen };
+    this.set({ connecting: true, connectError: undefined, key: { state: 'reading', at: 0 } });
+    let p: PanelShell;
+    try {
+      p = await req;
+    } catch (e) {
+      if (gen !== this.read.gen) return; // skipped meanwhile
+      if (e instanceof AdbAuthTimeout) {
+        this.log('', 'adb: the Mirror didn\'t let this browser\'s key in');
+        this.set({ connecting: false, key: { state: 'unreachable', why: 'no-adb' } });
+      } else {
+        this.set({ connecting: false, key: undefined, connectError: (e as Error).message });
+      }
+      return;
+    }
+    if (gen !== this.read.gen) { await p.close?.().catch(() => {}); return; }
+    this.read.p = p;
+    this.set({ connecting: false });
+    const sleep = this.d.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+    /** after each wait on the Mirror: stop if the person went on to fastboot by hand meanwhile */
+    const live = () => { if (gen !== this.read.gen) throw new Skipped(); };
+    try {
+      this.log('Reading Home Assistant\'s key from Glassworks');
+      const board = (await p.run('getprop ro.board.platform')).out.trim();
+      live();
+      if (board !== 'msm8916') throw new Error(`This isn't the Mirror (board ${board || 'unknown'}, needs msm8916). Nothing was changed.`);
+      const app = await kioskVersion(p, undefined, GLASSWORKS);
+      live();
+      this.log('', app ? `${GLASSWORKS.name} ${app.name ?? app.code}` : `no ${GLASSWORKS.name} on the Mirror`);
+      // the app opens its socket as it starts: a Mirror still starting gets a little time, an app older than issue 574 never opens it
+      let up = !!app && !!p.openStream && await apiKeySocketUp(p);
+      for (let i = 0; app && p.openStream && !up && i < 10; i++) { await sleep(2000); live(); up = await apiKeySocketUp(p); }
+      live();
+      if (app && !up) {
+        this.log('', 'no API key socket: an app from before the hand-over (issue 574)');
+        this.running = p;
+        this.read = { gen };
+        this.set({ key: { state: 'unreachable', why: 'old-app', app: app.name ?? String(app.code) } });
+        return;
+      }
+      this.set({ key: { state: 'reading', at: 1 } });
+      // read as late as the app still runs, so a key HA changed meanwhile is the one carried
+      // the socket listened just now: one gone by the read is an app that restarted, so stop rather than carry nothing
+      const key = up ? await readApiKey(p, undefined, { socket: 'required' }) : undefined;
+      const fingerprint = key ? await apiKeyFingerprint(key) : undefined;
+      live(); // before it saves anything: a read skipped meanwhile must not write into the next one's record
+      if (key && fingerprint) this.read.got = { key, fingerprint };
+      this.log('', fingerprint ? `Home Assistant API key read, fingerprint ${fingerprint}, held in this tab only` : 'no Home Assistant API key to keep');
+      this.set({ key: { state: 'reading', at: 2 } });
+      await this.restart(p);
+      live();
+      this.read = { gen };
+      this.apiKey = key;
+      this.set({ key: fingerprint ? { state: 'held', fingerprint } : { state: 'none' } });
+    } catch (e) {
+      // skipped, or overtaken by a newer read: let go of this connection only, and leave the state to the newer one
+      if (e instanceof Skipped || gen !== this.read.gen) { await p.close?.().catch(() => {}); return; }
+      this.read = { gen };
+      // the reply's first word at most (readApiKey): no key material in the message
+      this.log('Stopped', (e as Error).message);
+      // let go of the connection, so Try again starts a clean one on the same device
+      await p.close?.().catch(() => {});
+      this.set({ key: undefined, connectError: `Kiln couldn't read the key: ${(e as Error).message}. Nothing was written to the Mirror. Try again.` });
+    }
+  }
+
+  /** An old app's Mirror (no key to read): Kiln restarts it into fastboot, then the person connects fastboot. */
+  async restartOld(): Promise<void> {
+    const k = this.state.key;
+    const p = this.running;
+    if (k?.state !== 'unreachable' || !p) { this.skipKeep(); return; }
+    this.set({ connecting: true, connectError: undefined });
+    try {
+      await this.restart(p);
+      this.running = undefined;
+      this.set({ connecting: false, key: { ...k, restarted: true } });
+    } catch (e) {
+      this.set({ connecting: false, connectError: (e as Error).message });
+    }
+  }
+
+  private async restart(p: PanelShell) {
+    if (!p.rebootToBootloader) throw new Error('this connection can\'t restart the Mirror: put it in fastboot by hand');
+    this.log('Restarting the Mirror into fastboot');
+    await p.rebootToBootloader();
+  }
 
   /** Inside the click: the browser's device list opens first, then Kiln's checks read the Mirror's fastboot (read-only). */
   async connectFastboot(): Promise<void> {
@@ -338,6 +523,8 @@ export class FlashSession {
           this.made = await this.d.images.build({
             apk: this.d.apk()!, bootAnimation: await this.d.bootAnimation?.(), settingsOverlay: await this.d.settingsOverlay?.(),
             adbKey, userdataBytes: s.fastboot.userdataBytes, fill: !s.noFill, ...(s.fastboot.deviceMac ? { deviceMac: s.fastboot.deviceMac } : {}), ...(wifi ? { wifi } : {}),
+            // the flag only: the key stays in this tab until the first start
+            ...(this.apiKey ? { apiKeyHandover: true } : {}),
           }, (step, x) => { built(step); work(step, x); });
           built('');
           building = false;
@@ -371,6 +558,7 @@ export class FlashSession {
           await fb.reboot();
           this.fb = undefined;
           this.made = {};
+          if (!r.community) this.d.flashedHere?.set(); // this browser's key is in the Glassworks it wrote: the keep step can read it next time
           await this.d.images.discard();
           // nothing kept any more: another install downloads again
           this.set({ files: waiting(r) });
@@ -427,8 +615,18 @@ export class FlashSession {
         await sleep(2000);
       }
       const { ssid, password } = this.state.wifi;
-      const fb = await firstBoot(p, { haUrl: this.state.haUrl || undefined, wifi: ssid ? { ssid, password } : undefined, onStep: this.log, sleep });
-      this.set({ screen: 'done', firstBoot: fb, work: { step: 'first-boot', x: 1 } });
+      const k = this.state.key;
+      // firstBoot hands the key back right after it starts the app (PR 575): the row turns to it there
+      const onStep = (step: string, detail?: string) => {
+        if (step.startsWith('Home Assistant API key')) this.set({ work: { step: 'hand-back', x: 0 } });
+        this.log(step, detail);
+      };
+      const fb = await firstBoot(p, { haUrl: this.state.haUrl || undefined, wifi: ssid ? { ssid, password } : undefined, onStep, sleep,
+        ...(this.apiKey ? { apiKey: this.apiKey } : {}) });
+      const key: KeyStep | undefined = k?.state === 'held' && fb.apiKey !== undefined
+        ? { state: fb.apiKey ? 'handed' : 'refused', fingerprint: k.fingerprint } : k;
+      if (fb.apiKey !== undefined) this.apiKey = undefined; // given back or refused: the tab lets go of it
+      this.set({ screen: 'done', firstBoot: fb, key, work: { step: this.state.work?.step ?? 'first-boot', x: 1 } });
     } catch (e) {
       this.log('Stopped', (e as Error).message);
       this.set({ screen: 'error', error: (e as Error).message });

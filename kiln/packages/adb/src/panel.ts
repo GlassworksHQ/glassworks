@@ -17,6 +17,18 @@ export interface PanelShell {
   push(path: string, data: Uint8Array, mode?: number): Promise<void>;
   /** A raw stream to a service on the panel (e.g. 'localabstract:…'), if the transport has one. */
   openStream?(service: string): Promise<ByteStream>;
+  /** Restarts the device into its bootloader (adb's `reboot:bootloader` service, as `adb reboot bootloader`), if the transport can. */
+  rebootToBootloader?(): Promise<void>;
+  /** Lets go of the connection, so the next connect to the same device starts clean. */
+  close?(): Promise<void>;
+}
+
+/**
+ * The device took the connection but didn't let this key in within the time given: it may be waiting
+ * for someone to allow the key on its screen, or it trusts another computer's key only.
+ */
+export class AdbAuthTimeout extends Error {
+  constructor() { super('the device didn\'t let this browser\'s adb key in'); this.name = 'AdbAuthTimeout'; }
 }
 
 export class Panel implements PanelShell {
@@ -35,9 +47,11 @@ export class Panel implements PanelShell {
 
   /**
    * Asks for the panel's adb interface (needs a user gesture), then authenticates with `key`. With `device`, no
-   * list: that device, or the permitted one with its serial number when it came back after a restart.
+   * list: that device, or the permitted one with its serial number when it came back after a restart. With `authMs`, a
+   * device that hasn't let the key in after that long (it waits for a tap on its screen) is closed and AdbAuthTimeout
+   * thrown; without it, the wait has no end, as adb's own. A refused key closes the device too, so a later try can claim it.
    */
-  static async connect(key: AdbKey, device?: USBDevice): Promise<Panel> {
+  static async connect(key: AdbKey, device?: USBDevice, o: { authMs?: number } = {}): Promise<Panel> {
     const manager = AdbDaemonWebUsbDeviceManager.BROWSER;
     if (!manager) throw new Error('this browser has no WebUSB (use Chrome or Edge)');
     let d: AdbDaemonWebUsbDevice | undefined;
@@ -57,15 +71,22 @@ export class Panel implements PanelShell {
       }
       throw e;
     }
-    let transport;
+    const auth = AdbDaemonTransport.authenticate({
+      serial: d.serial, connection, credentialStore: key.store,
+    });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = o.authMs === undefined ? undefined
+      : new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new AdbAuthTimeout()), o.authMs); });
     try {
-      transport = await AdbDaemonTransport.authenticate({ serial: d.serial, connection, credentialStore: key.store });
+      return new Panel(new Adb(await (late ? Promise.race([auth, late]) : auth)));
     } catch (e) {
-      // refused (adbd up before it reads its keys, or not this browser's key): let go, so a later try can claim it
+      // refused (adbd up before it reads its keys, or not this browser's key) or too late: let go, so a later try can claim it
+      if (e instanceof AdbAuthTimeout) auth.then((t) => t.close(), () => {}); // a key allowed after all: let go of it
       await d.raw.close().catch(() => {});
       throw e;
+    } finally {
+      clearTimeout(timer);
     }
-    return new Panel(new Adb(transport));
   }
 
   /** Already-permitted adb devices (no prompt). */
@@ -98,6 +119,12 @@ export class Panel implements PanelShell {
   openStream(service: string): Promise<ByteStream> {
     // Adds the NUL terminator Android 10's adbd needs (see openAdbStream).
     return openAdbStream(this.adb, service);
+  }
+
+  /** adb's `reboot:bootloader`. The device drops the connection as it restarts, so a lost reply counts as done. */
+  async rebootToBootloader(): Promise<void> {
+    await this.adb.power.bootloader().catch(() => {});
+    await this.adb.close().catch(() => {});
   }
 
   async close(): Promise<void> {
