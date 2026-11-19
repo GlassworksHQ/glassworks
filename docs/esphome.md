@@ -93,7 +93,7 @@ and its entities get new ids. Where each frame stands (#523):
 The API key ([Encryption](#encryption-automatic)) lives in the app's data too, so a reflash wipes it, while Home
 Assistant's entry keeps it. A fresh app that answers with no key makes HA open a re-authentication
 (`reauth_encryption_removed_confirm`), and the entities stay unavailable until someone confirms it (seen on the Mirror
-2026-11-18). So the headless Mirror flash carries the key over (#574):
+2026-11-18). So the Mirror's flashes carry the key over (#574; Kiln's page since #580):
 
 1. Just before it restarts the Mirror into fastboot, it reads the key from the running app over adb, on the app's
    socket `@glassworks_api_key` (`ApiKeyHandover`: adb only, uid 0 or 2000; never on the LAN). It prints the key's
@@ -111,7 +111,7 @@ What each installer can reach before the flash:
 | Installer | Before the flash | Carries the key |
 |---|---|---|
 | `tools/mirror/flash-node.ts` | adb to the running app (the Mirror on our image lets the flash's adb key in) | Yes, from an app with #574. An older app has no socket: HA asks once more |
-| Kiln's page | Only fastboot: its Mirror flow starts at the button inside the Mirror's back, with no adb step before it | Not yet. It writes no flag, so the app starts as before and HA asks once |
+| Kiln's page | adb to the running app over WebUSB, in its keep step before fastboot (#580). The Mirror lets in only the browser that last installed Glassworks on it, so Kiln opens that step by itself in that browser; elsewhere it is a link under the fastboot steps | Yes, from an app with #574: the same steps as flash-node, and Kiln restarts the Mirror into fastboot itself. The key stays in the tab's memory until the first start. Another browser, a Mirror that doesn't start, or an older app: no flag, and HA asks once (Kiln's Done says what to click) |
 | The S1 | Not reflashed: updates install in place and keep the key | Not needed |
 
 If the hand-over fails, the app starts without a key after the 15 minutes, as before, and HA asks once. A key derived

@@ -17,6 +17,7 @@ import { IMAGE_PROXY, MIRROR_FASTBOOT } from '@glassworks/lululemon-mirror-insta
 import { MIRROR_DEMOS, mirrorDemo, type MirrorDemo } from './demo';
 import { FlashSession } from './flash';
 import { FLASH_DEMOS, flashDemo, type FlashDemo } from './flashDemo';
+import { KEEP_DEMOS, keepDemo, type KeepDemo } from './keepDemo';
 import { FlashScreens, flashLevel, flashRail } from './FlashScreens';
 import { workerImages } from './images';
 import { registry } from '../wizard/registry';
@@ -45,6 +46,15 @@ export function keyedConnect(loadKey: () => Promise<AdbKey>, connect: (key: AdbK
   return adbKeyHolder(loadKey).connectWith(connect);
 }
 
+/**
+ * Whether this browser has flashed a Mirror (issue 580): a flag in its storage, never a key. Storage may be off (a private
+ * window): then the keep step is the link under the fastboot steps only.
+ */
+const FLASHED_HERE = {
+  get: () => { try { return localStorage.getItem('kiln.mirror.flashed') === '1'; } catch { return false; } },
+  set: () => { try { localStorage.setItem('kiln.mirror.flashed', '1'); } catch { /* storage off: the link stays the way in */ } },
+};
+
 /** The page's two paths on one adb key: the app over adb (MirrorSession), or Glassworks over fastboot (FlashSession). */
 function realSessions(on: boolean): { mirror: MirrorSession; flash: FlashSession } {
   if (!on) {
@@ -63,8 +73,9 @@ function realSessions(on: boolean): { mirror: MirrorSession; flash: FlashSession
     // Refract, Kiln's release proxy (PR 347); NEXT_PUBLIC_KILN_PROXY at build time points it elsewhere, e.g. a local Worker
     imageUrl: `${process.env.NEXT_PUBLIC_KILN_PROXY ?? IMAGE_PROXY.base}/${IMAGE_PROXY.systemImg}`,
     requestFastboot: () => Fastboot.request([MIRROR_FASTBOOT]),
-    requestAdb: keys.connectWith((k) => Panel.connect(k)),
+    requestAdb: (o) => keys.connectWith((k) => Panel.connect(k, undefined, o))(),
     adbKey: () => keys.key()?.publicKey,
+    flashedHere: FLASHED_HERE,
     apk: () => mirror.apkBytes(),
   });
   return { mirror, flash };
@@ -275,7 +286,7 @@ function Failed({ s, session }: { s: MirrorState; session: MirrorSession }) {
   );
 }
 
-const DEMOS = [...MIRROR_DEMOS, ...FLASH_DEMOS];
+const DEMOS = [...MIRROR_DEMOS, ...FLASH_DEMOS, ...KEEP_DEMOS];
 
 /**
  * With ?apk=local: Glassworks over fastboot (the default), or the app alone over adb on a Mirror that
@@ -300,7 +311,8 @@ export function MirrorWizard() {
   useEffect(() => {
     const d = start.m.demo;
     if (!d) return;
-    if (d.startsWith('flash-')) void flashDemo(d as FlashDemo).then(setDemo);
+    if ((KEEP_DEMOS as readonly string[]).includes(d)) void keepDemo(d as KeepDemo).then(setDemo);
+    else if (d.startsWith('flash-')) void flashDemo(d as FlashDemo).then(setDemo);
     else void mirrorDemo(d as MirrorDemo).then((mirror) => setDemo({ mirror }));
   }, [start]);
   const live = start.real ?? demo;
@@ -314,10 +326,19 @@ export function Flash({ flash, mirror, toApp }: { flash: FlashSession; mirror: M
   const ms = useSyncExternalStore(mirror.subscribe, mirror.get, mirror.get);
   const chip = useBrowserChip();
   useEffect(() => { document.title = s.screen === 'adb' ? 'Your turn · lululemon Studio Mirror · Kiln' : 'lululemon Studio Mirror · Kiln'; }, [s.screen]);
+  // Home Assistant's key lives in this tab only until the first start (issue 580): closing it loses the key, so the browser asks first
+  const holds = flash.holdsKey();
+  useEffect(() => {
+    if (!holds) return;
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [holds]);
   return (
     <Shell steps={flashRail(s)} level={flashLevel(s)} error={s.screen === 'error'} chip={chip}>
       <FlashScreens f={flash} s={s} m={mirror} ms={ms} />
       {toApp && s.screen === 'image' && <p className="small">Already runs the Glass Panes image? <button type="button" className="link" onClick={toApp}>Add the app only, over adb</button></p>}
+      {s.screen === 'fastboot' && !s.back && !s.key && <p className="small">Glassworks already runs on this Mirror? <button type="button" className="link" onClick={() => flash.toKeep()}>Keep its Home Assistant device first</button></p>}
     </Shell>
   );
 }

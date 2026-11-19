@@ -141,7 +141,9 @@ export async function sendWifi(p: PanelShell, ssid: string, password: string, sl
     if (Date.now() > until) return false;
     await sleep(1500);
   }
-  const c = new ImprovSerialClient(await p.openStream(IMPROV_SOCKET), { deviceLabel: 'device' });
+  let stream: Awaited<ReturnType<NonNullable<PanelShell['openStream']>>>;
+  try { stream = await p.openStream(IMPROV_SOCKET); } catch { return false; } // the socket refused: not joined, as below
+  const c = new ImprovSerialClient(stream, { deviceLabel: 'device' });
   try {
     await c.requestState(5000);
     await c.provision(ssid, password);
@@ -176,7 +178,7 @@ async function keyRequest(p: PanelShell, line: string, timeoutMs = 10_000): Prom
 }
 
 /** Whether the app listens on its API key socket now (an app older than #574 never does). */
-async function keySocketUp(p: PanelShell): Promise<boolean> {
+export async function apiKeySocketUp(p: PanelShell): Promise<boolean> {
   return Number.parseInt((await p.run(`grep -c ' @glassworks_api_key$' /proc/net/unix`)).out.trim(), 10) > 0;
 }
 
@@ -187,7 +189,7 @@ async function keySocketUp(p: PanelShell): Promise<boolean> {
  * a flash then would lose it. It is a secret: never put it in a log line, an error or a command line.
  */
 export async function readApiKey(p: PanelShell, replyMs = 10_000): Promise<string | undefined> {
-  if (!p.openStream || !(await keySocketUp(p))) return undefined;
+  if (!p.openStream || !(await apiKeySocketUp(p))) return undefined;
   const r = await keyRequest(p, 'get', replyMs);
   if (r === 'none') return undefined;
   const m = /^key ([A-Za-z0-9+/]{43}=)$/.exec(r);
@@ -208,7 +210,7 @@ export async function handOverApiKey(p: PanelShell, key: string, sleep: (ms: num
   const until = Date.now() + waitMs;
   for (;;) {
     try {
-      if (await keySocketUp(p)) {
+      if (await apiKeySocketUp(p)) {
         const r = await keyRequest(p, `set ${key}`, replyMs);
         if (r === 'ok') return true;
         if (r.startsWith('refused ')) return false; // a different key, or one it can't store: trying again won't help
