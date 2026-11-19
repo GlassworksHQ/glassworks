@@ -69,4 +69,18 @@ describe('Panel.connect with authMs', () => {
       vi.useRealTimers();
     }
   });
+
+  it('close lets go within a second even when the release never settles', async () => {
+    vi.useFakeTimers();
+    try {
+      const panel = Object.assign(Object.create(Panel.prototype), { adb: { close: () => never<void>() } }) as { close(): Promise<void> };
+      let done = false;
+      const closing = panel.close().then(() => { done = true; });
+      await vi.advanceTimersByTimeAsync(1100);
+      await closing;
+      expect(done).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

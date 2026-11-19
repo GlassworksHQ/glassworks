@@ -152,7 +152,8 @@ export class Panel implements PanelShell {
     await Promise.race([this.adb.close().catch(() => {}), new Promise((r) => setTimeout(r, RELEASE_MS))]);
   }
 
+  /** Lets go of the connection; WebUSB's close has no deadline, so it waits at most RELEASE_MS. */
   async close(): Promise<void> {
-    await this.adb.close();
+    await Promise.race([this.adb.close(), new Promise((r) => setTimeout(r, RELEASE_MS))]);
   }
 }

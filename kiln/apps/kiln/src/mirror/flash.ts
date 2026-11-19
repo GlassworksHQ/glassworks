@@ -173,6 +173,12 @@ export const FIRST_START_AUTH_MS = 60_000;
 /** The person went on to fastboot by hand while the keep step's read ran. */
 class Skipped extends Error {}
 
+/** The Mirror's SoC, read over adb before Kiln reads from it or restarts it: anything else isn't a Mirror. */
+async function checkIsMirror(p: PanelShell): Promise<void> {
+  const board = (await p.run('getprop ro.board.platform')).out.trim();
+  if (board !== 'msm8916') throw new Error(`This isn't the Mirror (board ${board || 'unknown'}, needs msm8916). Nothing was changed.`);
+}
+
 const waiting = (r: ImageRecipe): FileCheck[] => r.files.map((f) => ({ name: f.name, size: f.size, state: 'waiting', progress: 0 }));
 
 export class FlashSession {
@@ -205,6 +211,8 @@ export class FlashSession {
   private held = false;
   /** Screen changes so far: a restart asked for on one visit to the fastboot screen doesn't run on a later one. */
   private visits = 0;
+  /** Restarts asked for so far: only the latest may change the state. */
+  private restarts = 0;
   private set(patch: Partial<FlashState>) {
     if (patch.screen !== undefined && patch.screen !== this.state.screen) this.visits++;
     this.state = { ...this.state, ...patch };
@@ -434,9 +442,8 @@ export class FlashSession {
     const live = () => { if (gen !== this.read.gen) throw new Skipped(); };
     try {
       this.log('Reading Home Assistant\'s key from Glassworks');
-      const board = (await p.run('getprop ro.board.platform')).out.trim();
+      await checkIsMirror(p);
       live();
-      if (board !== 'msm8916') throw new Error(`This isn't the Mirror (board ${board || 'unknown'}, needs msm8916). Nothing was changed.`);
       const app = await kioskVersion(p, undefined, GLASSWORKS);
       live();
       this.log('', app ? `${GLASSWORKS.name} ${app.name ?? app.code}` : `no ${GLASSWORKS.name} on the Mirror`);
@@ -502,14 +509,23 @@ export class FlashSession {
     if (this.state.connecting) return;
     const req = this.d.requestAdb({ authMs: AUTH_MS });
     this.set({ connecting: true, connectError: undefined, restarted: false });
+    // this restart counts only while it is the latest one and its visit to the screen lasts: an older one, or one whose
+    // screen was left (Back, maybe Continue back to it), lets go of its connection and changes nothing
+    const restart = ++this.restarts;
     const visit = this.visits;
+    const latest = () => restart === this.restarts;
+    const mine = () => latest() && visit === this.visits;
+    let p: PanelShell | undefined;
     try {
-      const p = await req;
-      // left the screen meanwhile (Back, maybe Continue back to it): this restart belongs to a visit that is over
-      if (this.visits !== visit) { await p.close?.().catch(() => {}); this.set({ connecting: false }); return; }
+      p = await req;
+      if (!mine()) { void p.close?.().catch(() => {}); if (latest()) this.set({ connecting: false }); return; }
+      await checkIsMirror(p);
+      if (!mine()) { void p.close?.().catch(() => {}); if (latest()) this.set({ connecting: false }); return; }
       await this.restart(p);
-      this.set({ connecting: false, restarted: true });
+      if (latest()) this.set({ connecting: false, restarted: mine() });
     } catch (e) {
+      void p?.close?.().catch(() => {}); // a refusal (not the Mirror) or a failed restart: let go of the connection
+      if (!mine()) { if (latest()) this.set({ connecting: false }); return; }
       this.set({ connecting: false, connectError: e instanceof AdbAuthTimeout
         ? 'The Mirror didn\'t let this browser in over adb: it runs lululemon\'s software, or Glassworks from another browser. Put it in fastboot by hand, below.'
         : (e as Error).message });

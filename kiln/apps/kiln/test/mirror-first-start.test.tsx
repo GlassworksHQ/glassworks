@@ -194,7 +194,7 @@ describe('finishing a first start that didn\'t finish', () => {
 describe('restarting into fastboot over adb: no button to hold', () => {
   it('a Mirror that lets this browser in restarts into fastboot, and Connect comes next', async () => {
     const rebootToBootloader = vi.fn(async () => {});
-    const { f } = setup({ request: async () => ({ run: async () => ({ out: '', code: 0 }), push: async () => {}, rebootToBootloader }) });
+    const { f } = setup({ request: async () => ({ run: async () => ({ out: 'msm8916\n', code: 0 }), push: async () => {}, rebootToBootloader }) });
     f.state = { ...f.state, screen: 'fastboot' };
     await f.restartToFastboot();
     expect(rebootToBootloader).toHaveBeenCalledTimes(1);
@@ -243,6 +243,34 @@ describe('restarting into fastboot over adb: no button to hold', () => {
     f.state = { ...f.state, screen: 'error', work: { step: 'flash-system', x: 0.5 }, files: f.state.files.map((x) => ({ ...x, state: 'ok' as const })) };
     f.reconnectFastboot();
     expect(f.state).toMatchObject({ screen: 'fastboot', restarted: true });
+  });
+
+  it('restarts only a Mirror: another device (its board isn\'t msm8916) is let go, with nothing changed', async () => {
+    const rebootToBootloader = vi.fn(async () => {});
+    const close = vi.fn(async () => {});
+    const { f } = setup({ request: async () => ({ run: async () => ({ out: 'sun50iw10\n', code: 0 }), push: async () => {}, rebootToBootloader, close }) });
+    f.state = { ...f.state, screen: 'fastboot' };
+    await f.restartToFastboot();
+    expect(rebootToBootloader).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalled();
+    expect(f.state).toMatchObject({ connecting: false, restarted: false });
+    expect(f.state.connectError).toMatch(/^This isn't the Mirror \(board sun50iw10/);
+  });
+
+  it('an older restart that fails after a newer one started leaves the newer one\'s state alone', async () => {
+    const asks: { give: (p: PanelShell) => void; fail: (e: Error) => void }[] = [];
+    const { f } = setup({ request: () => new Promise<PanelShell>((give, fail) => { asks.push({ give, fail }); }) });
+    f.state = { ...f.state, screen: 'fastboot' };
+    const first = f.restartToFastboot();
+    f.state = { ...f.state, connecting: false }; // as followLink() leaves it while the first request is out
+    const second = f.restartToFastboot();
+    asks[0]!.fail(new Error('USB transfer failed'));
+    await first;
+    expect(f.state).toMatchObject({ connecting: true }); // the second one's
+    expect(f.state.connectError).toBeUndefined();
+    asks[1]!.give({ run: async () => ({ out: 'msm8916\n', code: 0 }), push: async () => {}, rebootToBootloader: async () => {} });
+    await second;
+    expect(f.state).toMatchObject({ connecting: false, restarted: true });
   });
 
   it('a Mirror that won\'t let this browser in says so and points to the steps by hand', async () => {
