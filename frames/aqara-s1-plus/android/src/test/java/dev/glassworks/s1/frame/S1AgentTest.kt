@@ -107,7 +107,7 @@ class S1AgentTest {
     /** The S1's bundle install with its state file holding [state] (none when null), owned by root. */
     private fun bundleWith(props: SysProps, state: String?): PropsBundle {
         val f = File(Files.createTempDirectory("s1-bundle").toFile(), "radio-bundle").apply { if (state != null) writeText(state) }
-        return PropsBundle(props, RadioHelper.BUNDLE_SERVICE, RadioHelper.PROP_BUNDLE_STATUS, RadioHelper.BUNDLE_STAGE_DIR, f) { if (it.exists()) 0 else null }
+        return PropsBundle(props, RadioHelper.BUNDLE_SERVICE, RadioHelper.PROP_BUNDLE_STATUS, RadioHelper.BUNDLE_STAGE_DIR, f, ownerUid = { if (it.exists()) 0 else null })
     }
 
 }

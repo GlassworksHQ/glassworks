@@ -107,6 +107,7 @@ class PropsBundle(
     override val stageDir: String,
     private val stateFile: File,
     private val ownerUid: (File) -> Int? = ::lstatUid,
+    override val format: String = "S1RADIO-BUNDLE 1",
 ) : BundleAgent {
     override fun state(): String? {
         if (ownerUid(stateFile) != 0 || stateFile.parentFile?.let(ownerUid) != 0) return null

@@ -1,5 +1,6 @@
 package dev.glassworks.s1.manage
 
+import dev.glassworks.s1.frame.S1Names
 import android.content.Context
 import dev.glassworks.GlassworksRuntime
 import dev.glassworks.KioskPrefs
@@ -35,8 +36,6 @@ class S1Manage(
             else -> null
         }
 
-        private val ROOT_PROPS = listOf("sys.s1kiosk.radio.status", "sys.s1kiosk.radio.version", "sys.s1kiosk.radio.fw", "sys.s1kiosk.net.status",
-            "sys.s1kiosk.update.version", "sys.s1kiosk.timezone.status", "sys.s1kiosk.portal.status", "persist.s1kiosk.radio_mode", "persist.s1kiosk.radio_zigbee")
 
         internal val S1 = Own(
             paneLinks = { id -> if (id == "radio") listOf("Share Home Assistant's Thread network (start it on the panel first)" to ThreadJoin.PATH) else emptyList() },
@@ -44,7 +43,8 @@ class S1Manage(
             diagnostics = {
                 appendLine()
                 appendLine("Root side:")
-                for (k in ROOT_PROPS) appendLine("  $k = ${AppManage.prop(k)}")
+                // The boot image's names: the loader's on a frame loader image, else 0.4.3's (S1Names).
+                for (k in S1Names.of(AppManage::prop).diagnostics) appendLine("  $k = ${AppManage.prop(k)}")
             },
             logSource = ::s1LogSource,
             licence = "MIT, with the Glassworks core under MPL-2.0",
