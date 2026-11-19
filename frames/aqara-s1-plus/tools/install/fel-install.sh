@@ -31,6 +31,18 @@ FEL=${SUNXI_FEL:-sunxi-fel}; FB=${FASTBOOT:-fastboot}; ADB=${ADB:-adb}
 # serial: keep it for adb only, or fastboot waits forever for a device that never appears.
 ADB_SERIAL=${ANDROID_SERIAL:-}; unset ANDROID_SERIAL
 adb_() { "$ADB" ${ADB_SERIAL:+-s "$ADB_SERIAL"} "$@"; }
+# Without ANDROID_SERIAL, step 9 waits on the device that wasn't on adb while the panel sat in our U-Boot (the
+# panel, back from the flash), so another phone or panel on the same adb server can't make it fail with "more than one device".
+adb_serials() { "$ADB" devices 2>/dev/null | awk 'NR > 1 && NF >= 2 { print $1 }' | sort; }
+# Prints the one serial in adb_serials that $1 (the list taken during fastboot) doesn't have, or the only one if
+# that list was empty; prints nothing while that isn't clear yet.
+pick_adb_serial() {
+  local now new
+  now=$(adb_serials); new=$(comm -13 <(printf '%s\n' "$1" | sed '/^$/d') <(printf '%s\n' "$now" | sed '/^$/d'))
+  if [ "$(printf '%s\n' "$new" | sed '/^$/d' | wc -l)" -eq 1 ]; then printf '%s\n' "$new"
+  elif [ -z "$1" ] && [ "$(printf '%s\n' "$now" | sed '/^$/d' | wc -l)" -eq 1 ]; then printf '%s\n' "$now"
+  fi
+}
 UBUILD=${UBOOT_BUILD:-$HOME/src/u-boot-s1/build-s1}
 MODE=install
 if [ "${1:-}" = --undo ]; then MODE=undo; UNDO=${2:?usage: fel-install.sh --undo <backup-dir>}; fi
@@ -159,6 +171,8 @@ else
   fi
 fi
 
+# The panel is in our U-Boot now, so it isn't on adb: whatever is there now isn't the panel (step 9)
+ADB_BEFORE=""; [ -n "$ADB_SERIAL" ] || ADB_BEFORE=$(adb_serials)
 say "8/9 Flashing boot"
 "$FB" flash boot "$OUT/s1-boot.img"
 "$HERE/fb-read-partition.sh" boot "$OUT/boot.readback.img" >/dev/null
@@ -169,12 +183,17 @@ echo "boot flashed and verified"
 
 say "9/9 Waiting for Android and adb (first boot can take a few minutes)"
 for i in $(seq 1 90); do
+  if [ -z "$ADB_SERIAL" ]; then
+    ADB_SERIAL=$(pick_adb_serial "$ADB_BEFORE")
+    [ -n "$ADB_SERIAL" ] || { sleep 4; continue; }
+    echo "adb: waiting on $ADB_SERIAL (the device that came back; set ANDROID_SERIAL to choose)"
+  fi
   st=$(adb_ get-state 2>/dev/null || true)
   [ "$st" = device ] && adb_ shell true 2>/dev/null && break
   sleep 4
 done
 adb_ shell 'echo "android up: $(getprop ro.build.version.release), boot_completed=$(getprop sys.boot_completed)"' ||
-  die "adb not authorized yet: check the panel screen for a USB debugging prompt"
+  die "adb not authorized yet: check the panel screen for a USB debugging prompt$([ -n "$ADB_SERIAL" ] || echo ", or name the panel with ANDROID_SERIAL=<serial> if several devices share adb")"
 echo
 echo "Done. Next: frames/aqara-s1-plus/tools/install.sh --url http://<home-assistant>:8123/<dashboard>"
 echo "Backup: $OUT (keep it: it is your undo)"

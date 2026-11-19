@@ -1,15 +1,15 @@
 ---
 topic: boot
-evidence: read
+evidence: verified
 ---
 
 # Magisk modules: why none loaded on our panels, and the busybox Magisk needs first
 
-**Status (2026-11-19): read and built, waiting on a real panel.** Magisk v31.1 loads no module, and runs
-no `post-fs-data.d` or `service.d` script, until `/data/adb/magisk/busybox` exists. The Magisk app puts it
-there; our installers never ran that step, so no panel we installed loaded a module. The S1's boot image now
-carries Magisk's own busybox and copies it in place at `post-fs-data`, just before Magisk checks. The panel run
-that proves it is pending.
+**Status (2026-11-19): working on the S1.** Magisk v31.1 loads no module, and runs no `post-fs-data.d` or
+`service.d` script, until `/data/adb/magisk/busybox` exists. The Magisk app puts it there; our installers never ran
+that step, so no panel we installed loaded a module. The S1's boot image now carries Magisk's own busybox and copies
+it in place at `post-fs-data`, just before Magisk checks. Verified on the dev S1 on 2026-11-19: busybox in place on
+the first boot, and #430's module mounted. The fresh-install path (no `/data/adb` yet) is read, not run.
 
 Device: Aqara S1 Plus, Android 10, our Magisk v31.1 boot patch (Kiln or `patch-boot-magisk.sh`). Tools: Magisk
 v31.1 source (tag `v31.1`, commit `0972f67`), AOSP `android10-release`.
@@ -80,6 +80,17 @@ after a restart nothing was mounted. Why, and what's the smallest fix that reach
    preinit on `metadata`), then Kiln's `patchBoot` over the same inputs: byte-identical in all eight. The
    goldens hold Aqara's boot images and live outside the repo.
 
+7. **The panel run** (2026-11-19, verified by the root on the dev S1, boot image from this change through
+   `fel-install.sh`, `DEV_SU_HOURS`). The panel's `boot` was already our Magisk dev image.
+   - First boot: `/data/adb/magisk/busybox` root, `-rwxr-xr-x`, 1,282,828 bytes, sha256 `7edf6024…1b6d`.
+     `magisk.log` goes from `Initializing Magisk environment` on to the module scripts: no `environment incomplete`.
+   - Second restart (33 s): busybox written again at that boot (its mtime), Magisk's bootloop count `0`. With #430's
+     module in place: `s1kiosk_hotspot_name: loading module files`, the overlay mounted under
+     `/product/overlay/S1HotspotName/` and enabled.
+   - The radio stayed `ok thread_router` throughout.
+   - On the host, the patch first stopped at `cat: magisk.cfg: Permission denied` with that already-patched input
+     (see "How to reproduce"); fixed in the script since.
+
 ## Result
 
 | Option | Verdict |
@@ -120,14 +131,15 @@ What changes on a panel with (b):
   The S1's panel plan for #430 and this change has the exact steps.
 - **The goldens (host only):** run `patch-boot-magisk.sh` over the eight inputs (as
   `~/src/aqara-panel-backups/web-golden/gen.sh` does), copy `s1kiosk_magiskenv.rc` into `fixtures/overlay/`, then
-  `S1_WEB_GOLDEN=<dir> npx vitest run` in `kiln/packages/bootpatch`. On macOS with OrbStack the CLI can't `cat`
-  the mode-000 `magisk.cfg` it extracts (root in the container can't override the host's permissions); that line only
-  prints the config, so a local `chmod 644 magisk.cfg` before it leaves the image bytes as they are.
+  `S1_WEB_GOLDEN=<dir> npx vitest run` in `kiln/packages/bootpatch`. Through OrbStack on macOS, root in the container
+  can't read the mode-000 `magisk.cfg` the CLI extracts (the host's permissions win). The CLI now makes it readable
+  before printing it (`chmod u+r`); before that it stopped there. The image bytes don't depend on it. The root's run
+  of 2026-11-19 hit the same stop with an already-patched input.
 
 ## Open questions
 
-- The panel run: does the copy happen before Magisk's check on the S1 (`/cache/magisk.log` past "Initializing Magisk
-  environment", and the module mounted)? Untested.
+- The fresh-install path on a real panel (no `/data/adb` on the first boot): read only. The combined panel plan's
+  step 4b simulates it by moving `/data/adb` aside for two boots.
 - Is the S1's `/data` file-encrypted (`ro.crypto.type`)? The rc avoids the one path where it matters, so the answer
   doesn't change the fix.
 - With the frame loader (#549), the three lines move into `glassworks.rc`'s `on post-fs-data` block, before the
