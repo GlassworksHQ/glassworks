@@ -1,5 +1,6 @@
 """tools/ci/rerun_flakes.py: which red runs get their failed jobs rerun, and the workflow that runs it (docs/ci.md, Reruns)."""
 import importlib.util
+import json
 import re
 import unittest
 from pathlib import Path
@@ -93,6 +94,19 @@ class DownloadFailure(unittest.TestCase):
         # Not even next to a download line: the build script is broken either way.
         self.assertIsNone(rf.download_failure(METHOD_NEXT_TO_DOWNLOAD))
 
+    def test_a_download_next_to_another_failure_is_not_one(self):
+        for name, text in [('portal 404 and a test', PORTAL_404 + TEST_FAILURE),
+                           ('Robolectric and a test', ROBOLECTRIC + TEST_FAILURE),
+                           ('apt and Clarity', APT_503 + CLARITY_FAILURE),
+                           ('a dropped connection and a compile error', SITE_PRERENDER + COMPILE_ERROR)]:
+            with self.subTest(name):
+                self.assertIsNone(rf.download_failure(text))
+
+    def test_robolectric_counts_only_when_every_failed_test_says_its_fetch(self):
+        two = ROBOLECTRIC + log('SystemLocaleApi23SetTest > classMethod FAILED', '    java.lang.AssertionError at MavenArtifactFetcher.java:130')
+        self.assertIsNotNone(rf.download_failure(two))
+        self.assertIsNone(rf.download_failure(ROBOLECTRIC + log('CantRunTest > shows FAILED', '    java.lang.AssertionError at CantRunTest.kt:40')))
+
     def test_other_failures_are_not_downloads(self):
         for name, text in [('test', TEST_FAILURE), ('compile', COMPILE_ERROR), ('Clarity', CLARITY_FAILURE), ('empty', '')]:
             with self.subTest(name):
@@ -121,6 +135,76 @@ class Decide(unittest.TestCase):
 
     def test_no_failed_job_no_rerun(self):
         self.assertEqual(rf.decide([]), (False, 'no failed job'))
+
+
+class FakeGh:
+    """gh for judge(): the run as GitHub returns it on each read, one failed job, the PR's head on each read."""
+
+    def __init__(self, runs, logs, heads=None):
+        self.runs, self.logs, self.heads, self.calls = list(runs), logs, list(heads or []), []
+
+    def __call__(self, *args):
+        self.calls.append(args)
+        url = args[-1]
+        if args[0] == 'run':
+            return ''
+        if url.endswith('/logs'):
+            return self.logs[url.split('/')[-2]]
+        if '/jobs' in url:
+            return json.dumps([{'jobs': [{'id': int(i), 'name': f'job{i}', 'conclusion': 'failure'} for i in self.logs]}])
+        if '/pulls/' in url:
+            return json.dumps({'head': {'sha': self.heads.pop(0)}})
+        return json.dumps(self.runs.pop(0) if len(self.runs) > 1 else self.runs[0])
+
+    def reran(self):
+        return any(c[:3] == ('run', 'rerun', '7') for c in self.calls)
+
+
+def a_run(attempt=1, conclusion='failure', repo='o/r', prs=(5,)):
+    return {'run_attempt': attempt, 'conclusion': conclusion, 'head_sha': 'abc',
+            'head_repository': {'full_name': repo}, 'pull_requests': [{'number': n} for n in prs]}
+
+
+class Judge(unittest.TestCase):
+    def test_a_first_failed_attempt_on_downloads_reruns_its_failed_jobs(self):
+        g = FakeGh([a_run(), a_run()], {'1': PORTAL_404, '2': ROBOLECTRIC}, heads=['abc', 'abc'])
+        line = rf.judge('o/r', 7, gh=g)
+        self.assertTrue(g.reran())
+        self.assertIn(('run', 'rerun', '7', '--failed', '-R', 'o/r'), g.calls)
+        self.assertTrue(line.startswith('Run 7: reran the failed jobs'), line)
+
+    def test_a_new_attempt_while_the_logs_were_read_stops_it(self):
+        g = FakeGh([a_run(), a_run(attempt=2, conclusion='failure')], {'1': PORTAL_404}, heads=['abc'])
+        line = rf.judge('o/r', 7, gh=g)
+        self.assertFalse(g.reran())
+        self.assertIn('since its logs were read', line)
+
+    def test_a_new_commit_on_the_pr_while_the_logs_were_read_stops_it(self):
+        g = FakeGh([a_run(), a_run()], {'1': PORTAL_404}, heads=['abc', 'def'])
+        line = rf.judge('o/r', 7, gh=g)
+        self.assertFalse(g.reran())
+        self.assertIn('PR #5 has a newer commit', line)
+
+    def test_a_pr_that_moved_on_before_is_left_alone(self):
+        g = FakeGh([a_run()], {'1': PORTAL_404}, heads=['def'])
+        self.assertIn('PR #5 has a newer commit', rf.judge('o/r', 7, gh=g))
+        self.assertFalse(any('/jobs' in c[-1] for c in g.calls), 'no logs read')
+
+    def test_never_a_forks_run_or_a_second_attempt(self):
+        for run in (a_run(repo='someone/fork'), a_run(attempt=2)):
+            g = FakeGh([run], {'1': PORTAL_404}, heads=['abc'])
+            rf.judge('o/r', 7, gh=g)
+            self.assertFalse(g.reran())
+
+    def test_a_dry_run_reruns_nothing(self):
+        g = FakeGh([a_run()], {'1': PORTAL_404}, heads=['abc'])
+        self.assertTrue(rf.judge('o/r', 7, gh=g, dry_run=True).endswith('(dry run).'))
+        self.assertFalse(g.reran())
+
+    def test_a_real_failure_reruns_nothing(self):
+        g = FakeGh([a_run()], {'1': PORTAL_404, '2': TEST_FAILURE}, heads=['abc'])
+        self.assertIn('`job2` failed on something other than a download', rf.judge('o/r', 7, gh=g))
+        self.assertFalse(g.reran())
 
 
 class TheWorkflow(unittest.TestCase):

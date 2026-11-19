@@ -5,8 +5,8 @@
 fails on one runner tends to keep failing there for a minute or more (#631: the plugin portal and Maven Central both
 answered 404 three times in a row, 45 s apart), and a rerun on a fresh runner passed every time (5 of 5 on
 2026-11-18 and 19). So it reruns the failed jobs, through `gh run rerun --failed`, and only when each one's log
-shows a download failure. One real failure anywhere, a job without a log, or a run that isn't the first attempt:
-no rerun.
+shows a download failure and no other failure. One real failure anywhere, a job without a log, a run that isn't the
+first attempt, or a PR with a newer commit: no rerun. It checks the run and the PR again just before the rerun.
 
 Reads the run's jobs and logs and asks GitHub for the rerun, with `gh` (GH_TOKEN). Writes one line to the job summary
 when given --summary. Never comments on a PR.
@@ -42,11 +42,18 @@ DOWNLOAD = [
     ('a connection dropped', re.compile(r'\b(?:ECONNRESET|ETIMEDOUT|EAI_AGAIN)\b|Connection reset by peer|TLS handshake timeout')),
 ]
 
-# What says it was something else, even next to a download line: these never rerun.
-NOT_DOWNLOAD = [
-    # A build script error, not a download ("Could not find method implementation() for arguments …").
-    re.compile(r'Could not find method '),
+# A failure that isn't a download. A log with any of these never reruns, whatever download line it also has.
+OTHER_FAILURE = [
+    re.compile(r'Could not find method '),            # a build script error ("Could not find method implementation() …")
+    re.compile(r'Script compilation error'),          # a Gradle build script that doesn't compile
+    re.compile(r'^e: (?:file:|/)', re.M),             # Kotlin's compiler
+    re.compile(r': error: |\berror TS\d+'),           # javac, clang, TypeScript
+    re.compile(r'^\s*\d+:\d+\s+error\s', re.M),       # ESLint
+    re.compile(r'^(?:FAIL|ERROR): \w', re.M),          # Python's unittest
+    re.compile(r'^\s*\u2716 |^not ok \d+', re.M),      # node --test ("✖ name"), TAP
 ]
+# A Gradle test that failed, and the line under it with the cause: only Robolectric's fetch counts as a download.
+TEST_FAILED = re.compile(r'^\S[^\n]* > [^\n]* FAILED\n([^\n]*)', re.M)
 
 # A mirror's address in apt's or curl's output ("[IP: 192.0.2.7 80]", "http://192.0.2.7/"): kept out of the summary.
 IPV4 = re.compile(r'(?<=IP: )\d{1,3}(?:\.\d{1,3}){3}|(?<=://)\d{1,3}(?:\.\d{1,3}){3}')
@@ -60,9 +67,12 @@ def clean(log):
 
 
 def download_failure(log):
-    """What the log says failed to download ('<kind>: <line>'), or None when it isn't (only) a download failure."""
+    """What the log says failed to download ('<kind>: <line>'), or None when it shows no download failure or also shows
+    any other failure (a test, a compile error, a build script error)."""
     text = clean(log)
-    if any(p.search(text) for p in NOT_DOWNLOAD):
+    if any(p.search(text) for p in OTHER_FAILURE):
+        return None
+    if any('MavenArtifactFetcher' not in m.group(1) for m in TEST_FAILED.finditer(text)):
         return None
     for kind, pattern in DOWNLOAD:
         m = pattern.search(text)
@@ -91,6 +101,47 @@ def gh(*args):
     return subprocess.run(['gh', *args], check=True, capture_output=True, text=True).stdout
 
 
+def why_not(repo, run, gh):
+    """None when this run may rerun now, else why not."""
+    if run.get('run_attempt') != 1 or run.get('conclusion') != 'failure':
+        return f"attempt {run.get('run_attempt')}, {run.get('conclusion')}: only a first attempt that failed reruns"
+    if (run.get('head_repository') or {}).get('full_name') != repo:
+        return "a fork's run"
+    # A PR with a newer commit: a rerun would only report on the old one.
+    for pr in run.get('pull_requests') or []:
+        if json.loads(gh('api', f"repos/{repo}/pulls/{pr['number']}"))['head']['sha'] != run['head_sha']:
+            return f"PR #{pr['number']} has a newer commit, whose own run counts"
+    return None
+
+
+def judge(repo, run_id, gh=gh, dry_run=False, any_attempt=False):
+    """Decides, reruns unless dry_run, and returns the summary line."""
+    run = json.loads(gh('api', f'repos/{repo}/actions/runs/{run_id}'))
+    reason = None if any_attempt else why_not(repo, run, gh)
+    if reason:
+        return f'Run {run_id}: {reason}; no rerun.'
+    failed = []
+    for page in json.loads(gh('api', '--paginate', '--slurp', f'repos/{repo}/actions/runs/{run_id}/attempts/1/jobs?per_page=100')):
+        for job in page['jobs']:
+            if job['conclusion'] in ('failure', 'timed_out'):
+                try:
+                    log = gh('api', '--allow-escape-sequences', f"repos/{repo}/actions/jobs/{job['id']}/logs")
+                except subprocess.CalledProcessError:
+                    log = None
+                failed.append((job['name'], log))
+    rerun, line = decide(failed)
+    if not rerun:
+        return f'Run {run_id}: {line}; no rerun.'
+    if dry_run:
+        return f'Run {run_id}: {line} (dry run).'
+    # Reading the logs takes a while: a new attempt or a new commit may have come since. Look again just before.
+    reason = why_not(repo, json.loads(gh('api', f'repos/{repo}/actions/runs/{run_id}')), gh)
+    if reason:
+        return f'Run {run_id}: {reason} (since its logs were read); no rerun.'
+    gh('run', 'rerun', str(run_id), '--failed', '-R', repo)
+    return f'Run {run_id}: {line}.'
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     ap.add_argument('--repo', required=True)
@@ -102,34 +153,7 @@ def main():
     a = ap.parse_args()
     if a.any_attempt and not a.dry_run:
         ap.error('--any-attempt needs --dry-run')
-
-    run = json.loads(gh('api', f'repos/{a.repo}/actions/runs/{a.run}'))
-    # A PR that has a newer commit since: rerunning this one would only report on the old commit.
-    moved = None
-    for pr in [] if a.any_attempt else run.get('pull_requests') or []:
-        if json.loads(gh('api', f"repos/{a.repo}/pulls/{pr['number']}"))['head']['sha'] != run['head_sha']:
-            moved = pr['number']
-    if not a.any_attempt and (run.get('run_attempt') != 1 or run.get('conclusion') != 'failure'):
-        rerun, line = False, f"attempt {run.get('run_attempt')}, {run.get('conclusion')}: only a first attempt that failed reruns"
-    elif run.get('head_repository', {}).get('full_name') != a.repo:
-        rerun, line = False, 'a fork\'s run'
-    elif moved:
-        rerun, line = False, f'PR #{moved} has a newer commit, whose own run counts'
-    else:
-        jobs = json.loads(gh('api', '--paginate', '--slurp', f'repos/{a.repo}/actions/runs/{a.run}/attempts/1/jobs?per_page=100'))
-        failed = []
-        for page in jobs:
-            for job in page['jobs']:
-                if job['conclusion'] in ('failure', 'timed_out'):
-                    try:
-                        log = gh('api', '--allow-escape-sequences', f"repos/{a.repo}/actions/jobs/{job['id']}/logs")
-                    except subprocess.CalledProcessError:
-                        log = None
-                    failed.append((job['name'], log))
-        rerun, line = decide(failed)
-    if rerun and not a.dry_run:
-        gh('run', 'rerun', str(a.run), '--failed', '-R', a.repo)
-    line = f"Run {a.run}: {line}" + (' (dry run)' if rerun and a.dry_run else '') + ('.' if rerun else '; no rerun.')
+    line = judge(a.repo, a.run, dry_run=a.dry_run, any_attempt=a.any_attempt)
     print(line)
     if a.summary:
         with open(a.summary, 'a') as f:

@@ -104,7 +104,8 @@ the report job after every job.
 
 A new push to a PR cancels that PR's older run (`concurrency` with the PR's number). A push to `main`,
 the nightly run and a manual run each get a group of their own (`github.run_id`), so nothing cancels or
-holds them. `core-emulators.yml` runs on no PR, so it has no group: every run finishes. The test builds (`test-build.yml`,
+holds them. So does a rerun (attempt 2 on, by hand or by [Reruns](#reruns)): rerunning an older commit's jobs
+must not cancel the newer commit's run in the PR's group. A new push doesn't cancel a rerun either. `core-emulators.yml` runs on no PR, so it has no group: every run finishes. The test builds (`test-build.yml`,
 `generic-test-build.yml`) cancel per branch. Releases and the libraries' release never cancel.
 
 ## Caches
@@ -171,9 +172,12 @@ jobs once (`gh run rerun --failed`). It writes one line in its job summary and p
 
 It doesn't rerun:
 
-- a run whose failed jobs include one that failed on anything else (a test, a compile error, Clarity);
+- a run whose failed jobs include one that failed on anything else (a test, a compile error, Clarity), or a job
+  whose log shows such a failure next to a download one. A Gradle test that failed counts as a download only when
+  the line under it is Robolectric's fetch;
 - a log with `Could not find method …`, a build script error, even next to a download line;
-- a job without a log, a second attempt, a fork's run, or a PR's run when the PR has a newer commit;
+- a job without a log, a second attempt, a fork's run, or a PR's run when the PR has a newer commit (it looks again
+  just before the rerun, after reading the logs);
 - a cancelled run.
 
 Like `size-comment.yml`, it runs from the default branch after the PR's run, checks out the default branch only for the
