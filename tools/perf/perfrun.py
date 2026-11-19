@@ -54,6 +54,7 @@ class Device:
         self.nudges = []                  # wake keys sent and maybe not yet through adb (nudge, nudged)
         self.sf_warned = False            # said once that SurfaceFlinger listed no layer of the app's (sf)
         self.sf_name = None               # the layer sf() last read its frames from
+        self.sf_period = None             # and its refresh period
 
     def sh(self, cmd, timeout=60):
         r = subprocess.run(self.adb + ["shell", cmd], capture_output=True, text=True, timeout=timeout)
@@ -172,6 +173,7 @@ class Device:
                 best, self.sf_name = (period, presents), name
             elif period and best[0] is None:
                 best, self.sf_name = (period, presents), name
+        self.sf_period = best[0]
         return best
 
     def sf_layer(self, name):
@@ -192,6 +194,21 @@ class Device:
 # Seconds between SurfaceFlinger reads during a window (#643), from run.sh's preflight (cmd_sfcheck): 0 reads
 # once after each window, as on the S1; more on a device whose history is shorter than a window.
 SF_POLL_S = float(os.environ.get("GW_PERF_SF_POLL") or 0)
+
+
+# At the poll rhythm, the full listing (Device.sf) every this many reads; the known layer alone in between. A new
+# layer (after a restart) is then found within three reads, 0.9 s on the tablet: inside its 0.98 s history.
+SF_RELIST = 3
+
+
+def sf_poll_read(dev, k):
+    """The k-th read at the poll rhythm (#643): (period_ms, present times ns). One `--latency` of the layer sf() last
+    picked, as the window reads; the full listing every SF_RELIST reads, or when that layer is unknown or answers
+    nothing (gone)."""
+    if dev.sf_name is None or k % SF_RELIST == 0:
+        return dev.sf()
+    ts = dev.sf_layer(dev.sf_name)
+    return (dev.sf_period, ts) if ts else dev.sf()
 
 
 class SfReads:
@@ -757,15 +774,27 @@ def cmd_coldstart(dev, a):
     stop, paused = threading.Event(), threading.Event()
 
     def poll():
+        if SF_POLL_S:
+            # As often as the window reads go (#643), from one read's start to the next: a shorter history than
+            # a second loses the frames the open and the restart are timed to.
+            due, k = C.mono(), 0
+            while not stop.is_set():
+                if not paused.is_set():
+                    p, ts = sf_poll_read(dev, k)
+                    k += 1
+                    if p:
+                        period[0] = p
+                        presents.update(ts)
+                due += SF_POLL_S
+                stop.wait(C.real(max(0.0, due - C.mono())))
+            return
         while not stop.is_set():
             if not paused.is_set():
                 p, ts = dev.sf()
                 if p:
                     period[0] = p
                     presents.update(ts)
-            # Every second, or as often as the window reads go (#643): a shorter history than that loses the
-            # frames the open and the restart are timed to.
-            stop.wait(C.real(SF_POLL_S or 1.0))
+            stop.wait(C.real(1.0))
 
     # keep_awake's look at `held` and its wake key, against hold()'s: one at a time, so no wake key
     # is sent after a hold.
@@ -1344,10 +1373,17 @@ def cmd_idle(dev, a):
     newest_before = max(history, default=0)
     presents = set()
     t_end = C.now() + a.window
+    due, k = C.mono(), 0
     while C.now() < t_end:
-        # Every 1.5 s, or as often as the window reads go where the history is shorter (#643).
-        C.sleep(SF_POLL_S or 1.5)
-        p, ts = dev.sf()
+        if SF_POLL_S:
+            # As often as the window reads go where the history is shorter (#643), from one read's start to the next.
+            due += SF_POLL_S
+            C.sleep(max(0.0, due - C.mono()))
+            p, ts = sf_poll_read(dev, k)
+            k += 1
+        else:
+            C.sleep(1.5)
+            p, ts = dev.sf()
         period = p or period
         presents.update(t for t in ts if t > newest_before)
     after = cpu_snapshot(dev, pids)

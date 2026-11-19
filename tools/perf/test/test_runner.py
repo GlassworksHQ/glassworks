@@ -791,14 +791,28 @@ class SurfaceFlingerCheckInRunSh(unittest.TestCase):
         self.assertIn("the SurfaceFlinger check failed, before the run", p.stderr)
         self.assertEqual([f for f in os.listdir(out) if f.startswith(("synthetic-", "refstart-"))], [])
 
-    def test_a_set_way_skips_the_check(self):
-        p, out, state = self.run_sh("--sf-check-only", "--sf-poll", "0.2")
-        self.assertEqual(p.returncode, 0, p.stderr[-2000:])
-        self.assertFalse(os.path.exists(os.path.join(out, "sfcheck.json")))
-        self.assertIn("reads every 0.2 s", p.stderr)
+    def test_a_set_way(self):
+        # --sf-check-only is the check: a set way would skip it (CodeRabbit on #648).
+        p, out, _ = self.run_sh("--sf-check-only", "--sf-poll", "0.2")
+        self.assertEqual(p.returncode, 2)
+        self.assertIn("--sf-check-only runs the check", p.stderr)
         p, _, _ = self.run_sh("--sf-poll", "often")
         self.assertEqual(p.returncode, 2)
         self.assertIn("--sf-poll is auto, 0 or seconds", p.stderr)
+
+    def test_an_idle_only_sample_takes_the_set_way(self):
+        """CodeRabbit on #648: --idle-only leaves before the check; it reads at --sf-poll's rhythm, the known layer
+        alone between full listings (sf_poll_read), or once every 1.5 s without it."""
+        counts = {}
+        for poll in ("0", "0.1"):
+            p, out, state = self.run_sh("--idle-only", "x", "--sf-poll", poll, GW_PERF_IDLE_WINDOW="3", GW_PERF_TIME_SCALE="1")
+            self.assertEqual(p.returncode, 0, p.stderr[-2000:])
+            with open(os.path.join(state, "commands.log")) as f:
+                sf = [l for l in f.read().splitlines() if "dumpsys SurfaceFlinger" in l]
+            counts[poll] = (sum("--list" in l for l in sf), sum("--latency" in l for l in sf))
+        self.assertEqual(counts["0"][0], counts["0"][1])                 # each read a listing and its layer
+        self.assertGreater(counts["0.1"][1], counts["0.1"][0])           # the layer alone between listings
+        self.assertGreater(counts["0.1"][1], 2 * counts["0"][1])
 
 
 class LongLines(unittest.TestCase):

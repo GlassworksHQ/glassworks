@@ -269,6 +269,8 @@ stops growing. Then it decides (`perflib.sf_plan`), and writes `sfcheck.json`:
    there, and its records are the same, byte for byte.
 2. **A read every N seconds during each window** too, when it reaches less. N is half the reach, at most
    0.3 s (the tablet: 0.3 s). The reads keep that rhythm, so a slow read is followed at once. The
+   frame log behind the restart and the open, and the idle sample, read at the same rhythm: the known
+   layer alone, with the full listing every third read. The
    runner joins the reads by present time (`perflib.stitch_reads`). A window counts as covered back to
    where the reads overlap without a gap, as one read covered it before. Each window's record then has
    `reads`, how many it took.
@@ -1877,7 +1879,11 @@ busy main thread delays less than its timers; the taps wait 5 s each; and the ru
 deadline covers only a view that never became usable ("A view the panel can't finish"). Rubric
 v10 and v11 (2026-11-13) split typical into typical without and with its camera and made each letter
 add one page. Since Clarity v1 the numbers start again (below): protocol 2 and rubric 2 are Clarity
-v2's (the blocking time), protocol 3 and rubric 3 Clarity v3's (the more-info dialog).
+v2's (the blocking time), protocol 3 and rubric 3 Clarity v3's (the more-info dialog). Within protocol 3
+(#643, 2026-11-19): where SurfaceFlinger's history is shorter than a window, the runner reads it during
+the window too. That isn't a new protocol: what is measured, the frames on screen in the window, is the
+same. Where one read covered a window (the S1), nothing changes, record for record. Where it didn't,
+the old result rested on rAF and said so (provisional), so no stored grade changes meaning.
 
 ### Versions
 
