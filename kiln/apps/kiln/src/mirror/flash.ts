@@ -58,11 +58,13 @@ export interface FlashDeps {
    * browser's key (adbd answers before it reads the adb_keys in the new userdata), so Kiln asks again. Each call gives
    * up after AUTH_MS, closing the device, so a key left pending can't hold the loop.
    */
-  reopenAdb?(): Promise<PanelShell>;
+  reopenAdb?(o?: { authMs?: number }): Promise<PanelShell>;
   /** Whether the last requestAdb picked a device: one that failed before the list (no key yet, no WebUSB) isn't retried. */
   adbPicked?(): boolean;
-  /** How many times Kiln asks again, 5 s apart (default 60: five minutes of the first start). */
+  /** How many times Kiln asks again, 5 s apart (default 60). */
   adbTries?: number;
+  /** How long Kiln keeps asking, from the first refusal (default five minutes of the first start); each try gets what's left. */
+  adbWindowMs?: number;
   /**
    * Whether this browser has flashed a Mirror before, kept across visits (no secret: a flag). Only that browser's key
    * gets in over adb, so Continue opens the keep step for it (issue 580). None: never.
@@ -635,11 +637,14 @@ export class FlashSession {
     try { p = await req; } catch (e) { last = e; }
     // a closed list, or a device another program holds (the computer's adb): asking again changes nothing
     const tries = this.d.reopenAdb && !nothingPicked(last) && !(last instanceof AdbBusy) && (this.d.adbPicked?.() ?? true) ? this.d.adbTries ?? 60 : 0;
-    for (let i = 0; !p && i < tries; i++) {
+    const until = Date.now() + (this.d.adbWindowMs ?? 5 * 60_000);
+    for (let i = 0; !p && i < tries && Date.now() < until; i++) {
       this.log('', `The Mirror didn't let this browser in yet (${(last as Error).message}): it is still starting. Asking again in 5 s.`);
       this.set({ adbWaiting: true });
-      await sleep(5000);
-      try { p = await this.d.reopenAdb!(); } catch (e) { last = e; }
+      await sleep(Math.min(5000, Math.max(0, until - Date.now())));
+      const left = until - Date.now();
+      if (left <= 0) break;
+      try { p = await this.d.reopenAdb!({ authMs: Math.min(AUTH_MS, left) }); } catch (e) { last = e; }
       if (last instanceof AdbBusy) break;
     }
     if (!p) {

@@ -59,38 +59,46 @@ export class Panel implements PanelShell {
   static async connect(key: AdbKey, device?: USBDevice, o: { authMs?: number } = {}): Promise<Panel> {
     const manager = AdbDaemonWebUsbDeviceManager.BROWSER;
     if (!manager) throw new Error('this browser has no WebUSB (use Chrome or Edge)');
-    let d: AdbDaemonWebUsbDevice | undefined;
-    if (device) {
-      const known = await manager.getDevices();
-      d = known.find((x) => x.raw === device) ?? (device.serialNumber ? known.find((x) => x.serial === device.serialNumber) : undefined);
-    } else {
-      d = await manager.requestDevice();
-    }
-    if (!d) throw new Error('no panel selected');
-    let connection;
-    try {
-      connection = await d.connect();
-    } catch (e) {
-      if (e instanceof AdbDaemonWebUsbDevice.DeviceBusyError) throw new AdbBusy();
-      throw e;
-    }
-    const auth = AdbDaemonTransport.authenticate({
-      serial: d.serial, connection, credentialStore: key.store,
-    });
+    // the browser's list waits on the person; with authMs, one deadline covers every wait after it (finding the device
+    // again, claiming it, the key), so a stalled USB call can't hold a caller that asks again
+    const picked = device ? undefined : await manager.requestDevice();
     let timer: ReturnType<typeof setTimeout> | undefined;
     const late = o.authMs === undefined ? undefined
       : new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new AdbAuthTimeout()), o.authMs); });
+    late?.catch(() => {});
+    const within = <T>(p: Promise<T>): Promise<T> => (late ? Promise.race([p, late]) : p);
     try {
-      return new Panel(new Adb(await (late ? Promise.race([auth, late]) : auth)));
-    } catch (e) {
-      // refused (adbd up before it reads its keys, or not this browser's key) or too late: let go, so a later try can claim it
-      if (e instanceof AdbAuthTimeout) auth.then((t) => t.close(), () => {}); // a key allowed after all: let go of it
-      await d.raw.close().catch(() => {});
-      throw e;
+      let d: AdbDaemonWebUsbDevice | undefined = picked;
+      if (device) {
+        const known = await within(manager.getDevices());
+        d = known.find((x) => x.raw === device) ?? (device.serialNumber ? known.find((x) => x.serial === device.serialNumber) : undefined);
+      }
+      if (!d) throw new Error('no panel selected');
+      const claiming = d.connect();
+      let connection;
+      try {
+        connection = await within(claiming);
+      } catch (e) {
+        if (e instanceof AdbDaemonWebUsbDevice.DeviceBusyError) throw new AdbBusy();
+        if (e instanceof AdbAuthTimeout) { const dev = d; claiming.then(() => dev.raw.close(), () => {}).catch(() => {}); } // claimed too late: let go
+        throw e;
+      }
+      const auth = AdbDaemonTransport.authenticate({
+        serial: d.serial, connection, credentialStore: key.store,
+      });
+      try {
+        return new Panel(new Adb(await within(auth)));
+      } catch (e) {
+        // refused (adbd up before it reads its keys, or not this browser's key) or too late: let go, so a later try can claim it
+        if (e instanceof AdbAuthTimeout) auth.then((t) => t.close(), () => {}); // a key allowed after all: let go of it
+        await d.raw.close().catch(() => {});
+        throw e;
+      }
     } finally {
       clearTimeout(timer);
     }
   }
+
 
   /** Already-permitted adb devices (no prompt). */
   static async known(): Promise<USBDevice[]> {

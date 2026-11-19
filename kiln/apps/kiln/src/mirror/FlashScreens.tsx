@@ -279,7 +279,8 @@ export function FlashError({ f, s }: P) {
       <div className="foot">
         <Log s={s} />
         <span className="links">
-          {s.work?.step === 'first-boot' && <button type="button" className="btn ghost" onClick={() => f.finishFirstStart()}>Try the first start again</button>}
+          {/* the first start, or its key hand-back (PR 603): the Mirror runs Android, so adb again, never fastboot */}
+          {(s.work?.step === 'first-boot' || s.work?.step === 'hand-back') && <button type="button" className="btn ghost" onClick={() => f.finishFirstStart()}>Try the first start again</button>}
           {s.flashFailed && !f.recipe.community && !s.noFill && <button type="button" className="btn ghost" onClick={() => f.retryWithoutFill()}>Try again without FILL</button>}
           <button type="button" className="btn ghost" onClick={() => f.retry()}>Back to the download</button>
         </span>

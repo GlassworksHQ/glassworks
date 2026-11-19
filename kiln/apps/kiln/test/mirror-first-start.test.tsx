@@ -11,7 +11,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: ReactNode }) => <a href={href} {...p}>{children}</a> }));
 
-import { FlashSession, type ImageMaker } from '../src/mirror/flash';
+import { AUTH_MS, FlashSession, type ImageMaker } from '../src/mirror/flash';
 import { Flash } from '../src/mirror/MirrorWizard';
 import { MirrorSession } from '../src/mirror/session';
 
@@ -26,7 +26,7 @@ afterEach(() => cleanup());
 /** What @yume-chan/adb throws when the Mirror refuses the key and the public-key fallback has nobody to approve it. */
 const REFUSED = 'No authenticator can handle the request';
 
-function setup(adb: { request: () => Promise<PanelShell>; reopen?: () => Promise<PanelShell>; tries?: number; picked?: () => boolean }) {
+function setup(adb: { request: () => Promise<PanelShell>; reopen?: (o?: { authMs?: number }) => Promise<PanelShell>; tries?: number; picked?: () => boolean; windowMs?: number }) {
   const images: ImageMaker = {
     async fetch(_, onProgress) { onProgress(1); },
     async download() {},
@@ -44,7 +44,7 @@ function setup(adb: { request: () => Promise<PanelShell>; reopen?: () => Promise
   const mirror = new MirrorSession({ connect: async () => { throw new Error('unused'); } }, true);
   const f = new FlashSession({
     images, refract: 'https://proxy.test', requestFastboot: async () => fb, requestAdb: adb.request,
-    ...(adb.reopen ? { reopenAdb: adb.reopen } : {}), ...(adb.tries !== undefined ? { adbTries: adb.tries } : {}), ...(adb.picked ? { adbPicked: adb.picked } : {}),
+    ...(adb.reopen ? { reopenAdb: adb.reopen } : {}), ...(adb.tries !== undefined ? { adbTries: adb.tries } : {}), ...(adb.picked ? { adbPicked: adb.picked } : {}), ...(adb.windowMs !== undefined ? { adbWindowMs: adb.windowMs } : {}),
     adbKey: () => 'QAAA= kiln@glassworks', apk: () => mirror.apkBytes(), sleep: async () => {},
   });
   f.choose();
@@ -109,6 +109,23 @@ describe('connecting while the Mirror is still starting', () => {
   });
 
 
+  it('keeps asking only for its time window, each try given at most what is left of it', async () => {
+    const asked: (number | undefined)[] = [];
+    const reopen = vi.fn(async (o?: { authMs?: number }): Promise<PanelShell> => {
+      asked.push(o?.authMs);
+      await new Promise((r) => setTimeout(r, 30)); // a try that takes its time
+      throw new Error(REFUSED);
+    });
+    const { f, mirror } = setup({ request: async () => { throw new Error(REFUSED); }, reopen, windowMs: 100 });
+    await flashed(f, mirror);
+    await f.connectAdb();
+    expect(reopen.mock.calls.length).toBeGreaterThan(0);
+    expect(reopen.mock.calls.length).toBeLessThan(10); // the window ends it, not the 60 tries
+    expect(asked.every((ms) => ms !== undefined && ms > 0 && ms <= Math.min(AUTH_MS, 100))).toBe(true);
+    expect(f.state).toMatchObject({ connecting: false, adbWaiting: false });
+    expect(f.state.connectError).toMatch(/didn't let this browser in through its first start/);
+  });
+
   it('a closed list is not retried', async () => {
     const reopen = vi.fn();
     const { f, mirror } = setup({ request: async () => { throw Object.assign(new Error('No device selected.'), { name: 'NotFoundError' }); }, reopen });
@@ -159,6 +176,16 @@ describe('finishing a first start that didn\'t finish', () => {
     expect(close).toHaveBeenCalledTimes(1); // the stopped first start's connection, let go before Connect opens a new one
     await f.connectAdb();
     expect(f.state.screen).toBe('done');
+  });
+});
+
+describe('a first start that stopped during the key hand-back', () => {
+  it('offers the first start again, never fastboot: the Mirror runs Android', async () => {
+    const { f, mirror } = setup({ request: async () => new FirstBootMirror() });
+    await flashed(f, mirror);
+    f.state = { ...f.state, screen: 'error', error: 'USB transfer failed', work: { step: 'hand-back', x: 0 } };
+    render(<Flash flash={f} mirror={mirror} />);
+    expect(screen.getByRole('button', { name: 'Try the first start again' })).toBeTruthy();
   });
 });
 
