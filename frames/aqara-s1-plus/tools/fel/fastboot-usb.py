@@ -28,7 +28,8 @@ Why not the platform `fastboot` CLI (read from the BSP U-Boot 2018 source, drive
 - `boot` sends no reply at all, not even its own FAIL. It boots only a legacy uImage at offset 2048.
   Anything else prints "Booting raw image..", "do_go fail" and returns to the command loop.
 
-Exit status: 0 done (for `boot`: USB dropped, so the kernel is starting), 2 U-Boot came back from
+Exit status: 0 done (for `boot`: the device left the bus, so the board left U-Boot; which boot came
+up is for adb to tell), 2 U-Boot came back from
 `boot` without booting, 1 anything else (for `boot`: no answer and USB still up, so unknown).
 """
 import os
@@ -48,6 +49,7 @@ REPLY_MS = 5_000
 CHUNK_MS = 30_000
 DATA_DONE_MS = 30_000
 BOOT_REPLY_MS = 10_000
+SETTLE_S = 2             # after an I/O error, time for a reset board to leave the bus
 
 
 class FastbootError(Exception):
@@ -64,6 +66,10 @@ class Timeout(FastbootError):
 
 class Gone(FastbootError):
     pass
+
+
+class UsbIo(FastbootError):
+    """EIO from libusb. Not proof of a disconnect: after `boot`, the tool checks before it decides."""
 
 
 def check_command(cmd):
@@ -138,20 +144,24 @@ class Fastboot:
         self.log(f"download: OKAY, {len(data)} bytes in {secs:.1f} s ({len(data) / secs / 1e6:.1f} MB/s)")
 
     def boot(self):
-        """True: USB dropped (the kernel is starting). False: U-Boot came back without booting."""
+        """True: USB dropped (the board left U-Boot). False: U-Boot came back without booting."""
         self.send("boot")
         try:
             kind, value = self.reply("boot", BOOT_REPLY_MS)
             self.log(f"boot: {kind}{value} (the stock U-Boot normally sends nothing)")
         except Timeout:
             self.log(f"boot: no reply in {BOOT_REPLY_MS // 1000} s (expected: the stock U-Boot sends none)")
-        except Gone:
+        except Gone as e:
+            self.log(f"boot: {e}")
             return True
+        except UsbIo as e:
+            self.log(f"boot: {e}; checking whether the device is still there")
+            time.sleep(SETTLE_S)
         if not self.t.present():
             return True
         try:
             self.getvar("version")
-        except Timeout:
+        except (Timeout, UsbIo):
             raise FastbootError(
                 "boot: no reply, and U-Boot doesn't answer getvar, but USB is still up. Watch the "
                 "screen and wait for adb; with no Android in 4 minutes, power-cycle (nothing was written)."
@@ -212,6 +222,8 @@ class PyUsb:
         except self.usb.core.USBError as e:
             if e.errno == 19 or "No such device" in str(e):
                 raise Gone(f"USB device gone ({e})") from None
+            if e.errno == 5:
+                raise UsbIo(f"USB I/O error ({e})") from None
             raise FastbootError(f"USB error: {e}") from None
 
     def write(self, data, timeout_ms):
@@ -261,7 +273,8 @@ def main(argv):
         limit = int(fb.getvar("max-download-size"), 16)
         fb.download(data, limit)
         if fb.boot():
-            print("boot: USB dropped. The kernel is starting from RAM: wait for adb.")
+            print("boot: USB dropped: the board left U-Boot, by a jump to the kernel or by a reset. "
+                  "Wait for adb, then `getprop ro.boot.gw139`: `ram` is this image, empty is a reset into flash.")
             return 0
         print("boot: U-Boot answered again after `boot`: it did not boot this image. Nothing was written.")
         return 2

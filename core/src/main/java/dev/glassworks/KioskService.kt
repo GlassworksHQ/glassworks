@@ -36,8 +36,9 @@ import dev.glassworks.frame.systemSettings
 import dev.glassworks.discovery.HaDiscovery
 import dev.glassworks.device.PanelDevice
 import dev.glassworks.provisioning.ImprovController
+import dev.glassworks.provisioning.ImprovSelfAuth
 import dev.glassworks.provisioning.ImprovSerialServer
-import dev.glassworks.device.ApiKeyHandoverServer
+import dev.glassworks.device.SecretHandoverServer
 import dev.glassworks.improv.AdbSocketServer
 import dev.glassworks.manage.CodeOverlay
 import dev.glassworks.setup.SetupChannelServer
@@ -55,7 +56,7 @@ open class KioskService : Service() {
     private var device: PanelDevice? = null
     private var discovery: HaDiscovery? = null
     /** The ESPHome API key's hand-over over adb, for a reflash (#574). */
-    private var apiKeyHandover: AdbSocketServer? = null
+    private var secretHandover: AdbSocketServer? = null
     private var frameWork: ServiceWork? = null
     private var codeOverlay: CodeOverlay? = null
     private lateinit var foreground: KioskForeground
@@ -114,7 +115,7 @@ open class KioskService : Service() {
         // The web installer, over adb (docs/onboarding.md): Wi-Fi via Improv Serial, then HA + radio.
         ImprovSerialServer.start(glassworks.frame, glassworks.build)
         SetupChannelServer.start(this, glassworks)
-        apiKeyHandover = ApiKeyHandoverServer.create(this).also { it.start() }
+        secretHandover = SecretHandoverServer.create(this).also { it.start() }
         startSetupHotspot()
         Log.i("Glassworks", "KioskService started")
     }
@@ -140,6 +141,8 @@ open class KioskService : Service() {
             // The screen follows at once (a phone joined: the setup page's QR), not on its 2 s tick.
             onChange = { dev.glassworks.setup.SetupSignals.changed() },
             log = { Log.i(HOTSPOT_TAG, it) },
+            // Without touch, after Bluetooth setup's own 5 minutes (#611).
+            graceMs = ImprovSelfAuth.hotspotGraceMs(glassworks.frame.input, KioskPrefs(this).improvAuto, ImprovController.BOOT_GRACE_MS),
             blocked = { if (WifiRadio.lockedOff(this)) HotspotFailure.WIFI_OFF else null },
             // A fresh scan first (up to 15 s): the radio can't scan once it is the access point.
             beforeStart = { start ->
@@ -167,8 +170,8 @@ open class KioskService : Service() {
         glassworks.setupHotspot = null
         glassworks.voiceCancel = null
         SetupChannelServer.stop()
-        apiKeyHandover?.stop()
-        apiKeyHandover = null
+        secretHandover?.stop()
+        secretHandover = null
         ImprovSerialServer.stop()
         ImprovController.shutdown()
         runtime.device = null

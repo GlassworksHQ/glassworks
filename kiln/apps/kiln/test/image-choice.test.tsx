@@ -45,7 +45,7 @@ async function show(d: FlashDemo) {
 }
 
 /** A session on fakes that records what reaches Refract, the worker and the Mirror, in order. */
-function setup(o: { search?: string; fail?: 'route' | 'hash' | 'flash' | 'changed' | 'gone' } = {}) {
+function setup(o: { search?: string; fail?: 'route' | 'hash' | 'flash' | 'changed' | 'gone' | 'discard'; userdataBytes?: number; fastboot?: Promise<void> } = {}) {
   const calls: string[] = [];
   let fail = o.fail;
   const images: ImageMaker = {
@@ -63,11 +63,11 @@ function setup(o: { search?: string; fail?: 'route' | 'hash' | 'flash' | 'change
       if (fail === 'changed' && want.name === 'userdata.sparse') { fail = undefined; throw new WrongImage('its SHA-256 is 00…, not the release\'s'); }
     },
     async build() { calls.push('build'); return { system: new Blob(['S']), userdata: new Blob(['U']) }; },
-    async discard() { calls.push('discard'); },
+    async discard() { calls.push('discard'); if (fail === 'discard') throw new Error('the browser\'s storage is busy'); },
   };
   const fb: FastbootLike = {
     async getvar(n) { if (n === 'max-download-size') return '0x10000000'; throw new Error('FAIL'); },
-    async partitionSize(n) { calls.push(`read ${n} size`); return n === 'system' ? SYSTEM_BYTES : USERDATA_BYTES; },
+    async partitionSize(n) { calls.push(`read ${n} size`); await o.fastboot; return n === 'system' ? SYSTEM_BYTES : (o.userdataBytes ?? USERDATA_BYTES); },
     async flashBlob(p, blob) { if (fail === 'flash') { fail = undefined; throw new Error('flash:system: FAILed'); } calls.push(`flash ${p} ${(blob as Blob & { tag?: string }).tag}`); },
     async reboot() { calls.push('reboot'); },
   };
@@ -133,9 +133,9 @@ describe('Glass Panes', () => {
       'download https://refract.test/glass-panes/mirror-android-2/system.img',
       'download https://refract.test/glass-panes/mirror-android-2/userdata.sparse',
       'read system size', 'read userdata size',
-      // each file checked again, as the very Blob fastboot sends, right before it is written
-      'file system.img', 'check system.img bdb6b844', 'flash system system.img',
-      'file userdata.sparse', 'check userdata.sparse 74b1f57a', 'flash userdata userdata.sparse', 'reboot', 'discard',
+      // every file checked again before the first write, as the very Blobs fastboot then sends
+      'file system.img', 'check system.img bdb6b844', 'file userdata.sparse', 'check userdata.sparse 74b1f57a',
+      'flash system system.img', 'flash userdata userdata.sparse', 'reboot', 'discard',
     ]);
     expect(f.state.screen).toBe('done'); // no first start over adb: it doesn't trust Kiln's key
     expect(f.state.files.every((x) => x.state === 'waiting')).toBe(true); // discarded: another install downloads again
@@ -157,12 +157,12 @@ describe('Glass Panes', () => {
     expect(calls.filter((c) => c.endsWith('system.img'))).toHaveLength(1); // not downloaded twice
   });
 
-  it('a stored file that no longer checks out right before its write is not written, and must be downloaded again', async () => {
+  it('a stored file that no longer checks out before the writes: nothing is written, not even the other partition', async () => {
     const { f, calls } = setup({ fail: 'changed' });
     f.showCommunity(true); f.pick('glass-panes'); f.choose();
     await f.download(); f.toFastboot(); await f.connectFastboot(); f.understand(true); await f.flash();
     expect(f.state.screen).toBe('error');
-    expect(calls.filter((c) => c.startsWith('flash'))).toEqual(['flash system system.img']);
+    expect(calls.filter((c) => c.startsWith('flash'))).toEqual([]);
     expect(calls).not.toContain('reboot');
     f.retry();
     expect(f.state.files.map((x) => x.state)).toEqual(['waiting', 'waiting']);
@@ -176,6 +176,42 @@ describe('Glass Panes', () => {
     expect(f.state.screen).toBe('error');
     expect(calls.filter((c) => c.startsWith('flash'))).toEqual([]);
     expect(f.state.files.map((x) => x.state)).toEqual(['waiting', 'waiting']);
+  });
+
+  it('a userdata partition smaller than its published userdata image stops at fastboot, with nothing written', async () => {
+    const { f, calls } = setup({ userdataBytes: 4 * 1024 ** 3 });
+    f.showCommunity(true); f.pick('glass-panes'); f.choose();
+    await f.download(); f.toFastboot(); await f.connectFastboot();
+    expect(f.state.screen).toBe('fastboot');
+    expect(f.state.fastboot?.checks.at(-1)).toMatchObject({ what: 'Userdata partition for Glass Panes', ok: false, need: expect.stringMatching(/at least 5583458304 bytes/) });
+    f.understand(true); await f.flash();
+    expect(calls.filter((c) => c.startsWith('flash'))).toEqual([]);
+    // Glassworks builds its userdata to fit: the same partition is fine for it
+    const g = setup({ userdataBytes: 4 * 1024 ** 3 });
+    g.f.choose(); await g.f.download(); g.f.state = { ...g.f.state }; // no APK needed to read fastboot
+    g.f.state.screen = 'fastboot'; await g.f.connectFastboot();
+    expect(g.f.state.fastboot?.checks.some((c) => c.what.startsWith('Userdata partition for'))).toBe(false);
+  });
+
+  it('a fastboot check from before a link changed the image is ignored', async () => {
+    let release!: () => void;
+    const { f } = setup({ fastboot: new Promise<void>((r) => { release = r; }) });
+    f.choose(); await f.download();
+    f.state = { ...f.state, screen: 'fastboot' };
+    const pending = f.connectFastboot(); // Glassworks' fastboot, still reading
+    f.followLink('?image=glass-panes'); // the person comes back by Glass Panes' link
+    release(); await pending;
+    expect(f.state).toMatchObject({ screen: 'download', picked: 'glass-panes', fastboot: undefined });
+    expect(f.state.files.every((x) => x.state === 'waiting')).toBe(true);
+  });
+
+  it('a download store that fails to clear after the restart is logged; the install still ends on Done', async () => {
+    const { f } = setup({ fail: 'discard' });
+    f.showCommunity(true); f.pick('glass-panes'); f.choose();
+    await f.download(); f.toFastboot(); await f.connectFastboot(); f.understand(true); await f.flash();
+    expect(f.state.screen).toBe('done');
+    expect(f.state.files.every((x) => x.state === 'waiting')).toBe(true);
+    expect(f.state.log.join('\n')).toContain('deleting the downloads failed: the browser\'s storage is busy');
   });
 
   it('a failed write: back to the download with the files kept, then fastboot again', async () => {

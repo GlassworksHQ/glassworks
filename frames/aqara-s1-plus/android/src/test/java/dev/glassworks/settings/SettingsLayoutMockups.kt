@@ -100,6 +100,16 @@ class SettingsLayoutMockups {
         java.io.File(Mockup.dir!!, "$name-manage.html").writeBytes(b.get("/device").body)
     }
 
+    /** #605: the Manage page's question before Beta, as HTML. */
+    private fun manageAskBeta(name: String) {
+        val device = lastDevice ?: return
+        val f = ManageFixture()
+        f.statusFn = { f.status.copy(frame = lastFrame, sections = listOf(device)) }
+        val b = f.Browser().also { it.signInWithHa() }
+        val form = mapOf("csrf" to b.csrf(), "section" to "device", "key" to dev.glassworks.update.UpdateChannelRow.TITLE, "value" to "beta")
+        java.io.File(Mockup.dir!!, "$name-manage.html").writeBytes(b.post("/settings", form).body)
+    }
+
     private fun shots(prefix: String, w: Int, h: Int, open: () -> KioskSettingsOverlay) {
         fun shot(name: String, id: String?, then: (KioskSettingsOverlay) -> Unit = {}) {
             val o = open()
@@ -121,6 +131,15 @@ class SettingsLayoutMockups {
         if (lastDevice?.items?.any { it is dev.glassworks.pane.SettingsItem.Info && it.title() == "Frame version" } == true) {
             shot("08b-device-frame-version", "device") { Mockup.idle(); it.previewScrollTo(Mockup.label(it, "Frame version"), alignBottom = true) }
         }
+        // #605: the Update channel row, its choices, and the row on Beta.
+        val channel = dev.glassworks.update.UpdateChannelRow.TITLE
+        shot("08c-device-update-channel", "device") { Mockup.idle(); it.previewScrollTo(Mockup.label(it, channel), alignBottom = true) }
+        shot("08d-update-channel-pick", "device") { it.previewEdit(channel) }
+        manageAskBeta("$prefix-08d-update-channel-ask-beta")
+        KioskPrefs(app).updateChannel = dev.glassworks.update.UpdateChannel.BETA
+        shot("08e-update-channel-beta", "device") { Mockup.idle(); it.previewScrollTo(Mockup.label(it, channel), alignBottom = true) }
+        manageDevice("$prefix-08e-update-channel-beta")
+        KioskPrefs(app).updateChannel = dev.glassworks.update.UpdateChannel.STABLE
     }
 
     @Test

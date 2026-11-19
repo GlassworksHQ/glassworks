@@ -216,6 +216,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   is frozen and gets no security fixes, so it loads only your Home Assistant, and remote debugging is off.
   Remote debugging now stays off there for real: the adb extra that turns it on is ignored, and so is the
   setting if it was already on. Other devices don't show the chip.
+- **Pick an update channel: Stable or Beta.** The device page in the panel's settings and on the Manage page has an
+  *Update channel* row. Stable, the default, gets releases as before. Beta also gets betas, new versions before
+  they're stable, which may have bugs; Home Assistant's update card says when the update it offers is a beta. Going
+  back to Stable never installs an older version: the panel waits for a stable release newer than the one it runs.
 
 ### Changed
 - **A room's "lights off" no longer turns the panel's screen off.** The screen is still a light with the same
@@ -458,6 +462,8 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   it straight away. The *Thread join* sensor says how it went. Pasting the dataset still works.
 
 ### Fixed
+- **Kiln no longer waits for ever on a download that stopped.** If one of the installer's files stops arriving
+  for 30 seconds, Kiln stops with an error and *Try again*, instead of a progress bar that never moves.
 - **With Screen mode set to always, walking up no longer turns on a screen you turned off.** If you turn the screen
   off from Home Assistant, it stays off when someone comes close, whether the panel senses them with its own sensor
   or with the camera pane. *Presence* in Home Assistant still turns on. In the presence mode, walking up still wakes
@@ -468,11 +474,16 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   new build fails and the old build comes back, the installer says so if the app's data didn't come back
   with it, and keeps the copy on the panel instead of deleting it. It no longer says Glassworks saved the
   panel's Wi-Fi when it can't tell who did. This is in Kiln and in the command line installer.
-- **A switch says you sign in again, even with root.** Switching a development build to a release on a panel
-  where adb has root keeps the app's settings, but not its Home Assistant sign-in or encryption key: Android
-  deletes the old app's Keystore keys when it removes it, and those secrets are sealed with them. The
-  installer used to say the sign-in was kept. Now its plan and its Done line say to sign in again, and that
-  Home Assistant may ask to confirm the panel's encryption key. This is in Kiln and in the command line installer.
+- **Switching a development build to a release keeps you signed in to Home Assistant.** On a panel where adb has
+  root, the switch keeps the app's settings, and now its Home Assistant sign-in and encryption key too: the
+  installer reads them from the running app before it removes it, and gives them to the new one. The panel goes
+  straight back to its dashboard, and Home Assistant reconnects without asking to confirm the key. Before, the
+  sign-in and key were lost, because Android deletes the old app's Keystore keys, which seal them; the installer
+  even said the sign-in was kept. The camera's stream password and the Music Assistant pairing are still not
+  carried, and the installer says so. A switch from a build without this change still loses the sign-in (and,
+  before the Mirror key hand-over, the key), and the plan and the Done line say to sign in again. This is in Kiln
+  and in the command line installer, and needs this app version on the panel before the switch. A build older than
+  the panel's is now refused with a clear message instead of a plain install failure.
 - **A Mirror reflash keeps its Home Assistant device.** Kiln and the headless flash give the Mirror an id from its
   serial number and keep it in the image, so a later reflash comes back as the same device with the same entity
   ids. The first flash with this still shows up as a new device once. On other Android devices, an app reinstall

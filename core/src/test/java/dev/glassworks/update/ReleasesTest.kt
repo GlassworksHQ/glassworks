@@ -444,4 +444,69 @@ class ReleasesTest {
             try { Releases.parseList(bad); fail("accepted '$bad'") } catch (_: ReleaseFormatException) {}
         }
     }
+
+    // ---------------------------------------------------------------- update channel (#605)
+
+    private fun beta(r: JSONObject) = r.put("prerelease", true)
+
+    @Test fun stableIgnoresPrereleasesWithoutAProblem() {
+        val list = Releases.parseList(list(beta(release("aqara-s1-plus-v1.4.0", "1.4.0")), release("v1.3.0")))
+        val pick = Releases.newest(list, S1, ReleaseLine.AQARA_S1_PLUS, UpdateChannel.STABLE)
+        assertEquals(AppVersion(1, 3, 0), pick.offer!!.version)
+        assertFalse(pick.offer!!.prerelease)
+        assertNull("a beta is no problem on Stable", pick.problem)
+        assertEquals("the default is Stable", pick.offer, Releases.newest(list, S1, ReleaseLine.AQARA_S1_PLUS).offer)
+    }
+
+    @Test fun betaTakesTheHighestOfBoth() {
+        val newerBeta = Releases.parseList(list(beta(release("aqara-s1-plus-v1.4.0", "1.4.0")), release("v1.3.0")))
+        val b = Releases.newest(newerBeta, S1, ReleaseLine.AQARA_S1_PLUS, UpdateChannel.BETA).offer!!
+        assertEquals(AppVersion(1, 4, 0), b.version)
+        assertTrue(b.prerelease)
+        // A stable newer than the last beta (the beta promoted, or a later stable): Beta takes the stable.
+        val newerStable = Releases.parseList(list(release("aqara-s1-plus-v1.5.0", "1.5.0"), beta(release("aqara-s1-plus-v1.4.0", "1.4.0"))))
+        val s = Releases.newest(newerStable, S1, ReleaseLine.AQARA_S1_PLUS, UpdateChannel.BETA).offer!!
+        assertEquals(AppVersion(1, 5, 0), s.version)
+        assertFalse(s.prerelease)
+    }
+
+    @Test fun aPromotedBetaIsTheSameOfferOnBothChannels() {
+        // Promoting un-marks the pre-release on the same release: same tag, same APK.
+        val promoted = Releases.parseList(list(release("aqara-s1-plus-v1.4.0", "1.4.0")))
+        val stable = Releases.newest(promoted, S1, ReleaseLine.AQARA_S1_PLUS, UpdateChannel.STABLE).offer!!
+        val beta = Releases.newest(promoted, S1, ReleaseLine.AQARA_S1_PLUS, UpdateChannel.BETA).offer!!
+        assertEquals(stable, beta)
+        assertEquals("s1-kiosk-1.4.0.apk", stable.apk.name)
+    }
+
+    @Test fun betaStillRefusesDraftsAndSemverPrereleaseTags() {
+        val r = Releases.parse(beta(release("v1.4.0-rc.1", "1.4.0")).toString())
+        try {
+            Releases.offer(r, S1, ReleaseLine.AQARA_S1_PLUS, UpdateChannel.BETA); fail("expected a refusal")
+        } catch (e: ReleaseFormatException) { assertTrue(e.message!!.contains("pre-release")) }
+        val pick = Releases.newest(Releases.parseList(list(release("aqara-s1-plus-v1.5.0", "1.5.0", draft = true), release("v1.3.0"))), S1, ReleaseLine.AQARA_S1_PLUS, UpdateChannel.BETA)
+        assertEquals(AppVersion(1, 3, 0), pick.offer!!.version)
+        assertTrue(pick.problem!!.contains("draft"))
+    }
+
+    @Test fun betaReadsOnlyItsOwnLinesPrereleases() {
+        // Every line on Beta: another line's beta, however high, is never offered.
+        val all = Releases.parseList(list(
+            beta(genericRelease("3.0.0")), beta(legacyRelease("2.5.0")), beta(release("aqara-s1-plus-v2.0.0", "2.0.0")),
+            genericRelease("1.3.0"), legacyRelease("1.2.0"), release("v1.1.0", "1.1.0"),
+        ))
+        assertEquals(AppVersion(2, 0, 0), Releases.newest(all, S1, ReleaseLine.AQARA_S1_PLUS, UpdateChannel.BETA).offer!!.version)
+        assertEquals(AppVersion(3, 0, 0), Releases.newest(all, tablet, ReleaseLine.GENERIC_ANDROID, UpdateChannel.BETA).offer!!.version)
+        assertEquals(AppVersion(2, 5, 0), Releases.newest(all, tablet, ReleaseLine.GENERIC_ANDROID_LEGACY, UpdateChannel.BETA).offer!!.version)
+        assertEquals(AppVersion(1, 1, 0), Releases.newest(all, S1, ReleaseLine.AQARA_S1_PLUS, UpdateChannel.STABLE).offer!!.version)
+        assertEquals(AppVersion(1, 3, 0), Releases.newest(all, tablet, ReleaseLine.GENERIC_ANDROID, UpdateChannel.STABLE).offer!!.version)
+        assertEquals(AppVersion(1, 2, 0), Releases.newest(all, tablet, ReleaseLine.GENERIC_ANDROID_LEGACY, UpdateChannel.STABLE).offer!!.version)
+    }
+
+    @Test fun aChannelReadsBackAsSaved() {
+        assertEquals(UpdateChannel.BETA, UpdateChannel.of("beta"))
+        assertEquals(UpdateChannel.STABLE, UpdateChannel.of("stable"))
+        assertEquals("none saved: Stable", UpdateChannel.STABLE, UpdateChannel.of(null))
+        assertEquals("unknown: Stable", UpdateChannel.STABLE, UpdateChannel.of("nightly"))
+    }
 }

@@ -2,7 +2,8 @@
 // commands and Improv bytes, in this order, whatever the code behind them looks like (their shared
 // steps moved to @glassworks/app-adb in #29's PR without changing one byte). Covered: provision with
 // every option and with the 12-hour clock, the app alone, the key switch with and without root
-// (device owner, data kept, Wi-Fi re-sent over Improv), the switch's rollback when the new build
+// (device owner, data kept, the sign-in and API key carried over the hand-over socket (#584), Wi-Fi re-sent over
+// Improv: the socket's requests are pinned by their first word, never a secret), the switch's rollback when the new build
 // won't install, and undo with and without Glassworks' own Wi-Fi. The golden was written from main's
 // code before the move. A change to it is a change to what the panel sees: review it as one.
 // Rewrite it on purpose with S1_PIN_WRITE=1.
@@ -10,6 +11,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { PanelShell } from '@glassworks/adb';
+import { FakeKeySocket } from '@glassworks/app-adb/fakes';
 import { IMPROV_SOCKET, PacketReader, PacketType, Rpc, frame, parseResult, strings, type ByteStream } from '../src/improv';
 import { provision, unprovision } from '../src/provision';
 
@@ -20,7 +22,9 @@ const MISMATCH = 'Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE: Package sh.edm.s1
 /** Records every command and push. `answer` gives an output for the commands a path branches on. */
 class Recorder implements PanelShell {
   cmds: string[] = [];
-  constructor(private readonly answer: (cmd: string, n: number) => { out: string; code: number } | undefined = () => undefined) {}
+  constructor(private readonly answer: (cmd: string, n: number) => { out: string; code: number } | undefined = () => undefined,
+    /** The app's secret hand-over socket (#584), when the scenario has one. */
+    private readonly handover?: FakeKeySocket) {}
   async run(cmd: string) {
     this.cmds.push(cmd);
     return this.answer(cmd, this.cmds.filter((c) => c === cmd).length) ?? { out: '', code: 0 };
@@ -29,6 +33,14 @@ class Recorder implements PanelShell {
   /** Glassworks' Improv socket: answers state and Wi-Fi settings, and records every byte sent to it. */
   async openStream(service: string): Promise<ByteStream> {
     this.cmds.push(`open ${service}`);
+    if (this.handover && service === 'localabstract:glassworks_api_key') {
+      const s = await this.handover.open(service);
+      return {
+        write: async (d) => { this.cmds.push(`handover ${new TextDecoder().decode(d).trim().split(' ')[0]}`); await s.write(d); },
+        onData: (f) => s.onData(f),
+        close: async () => { this.cmds.push(`close ${service}`); await s.close(); },
+      };
+    }
     expect(service).toBe(IMPROV_SOCKET);
     const rd = new PacketReader();
     let cb: (b: Uint8Array) => void = () => {};
@@ -111,7 +123,7 @@ async function scenarios(): Promise<Record<string, string[]>> {
     if (cmd.endsWith("glassworks-switch.sh restore'")) return { out: 'restored for uid 10072\n', code: 0 };
     if (cmd.startsWith('grep -c')) return { out: '1\n', code: 0 };
     return common(cmd);
-  });
+  }, Object.assign(new FakeKeySocket(btoa('k'.repeat(32))), { signIn: btoa('made-up-token') }));
   const rooted = rootPanel(true);
   await provision(rooted, { kioskApk: new Uint8Array(5), confirmSwitch: async () => true }, () => {}, noSleep);
   out['provision, signing-key switch with root, device owner and Wi-Fi re-sent'] = rooted.cmds;
