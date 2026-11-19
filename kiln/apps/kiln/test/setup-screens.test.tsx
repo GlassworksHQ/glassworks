@@ -8,7 +8,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: ReactNode }) => <a href={href} {...p}>{children}</a> }));
 
-import { s1PlusUi } from '../src/frames/aqara-s1-plus';
+import { frame as s1PlusUi, demoFrame as s1Demo } from '../src/app/aqara-s1-plus/frame';
 import { demoSession } from '../src/wizard/demo';
 import { Wizard } from '../src/wizard/Wizard';
 
@@ -25,7 +25,7 @@ const checked = () => screen.getAllByRole('radio').find((r) => r.getAttribute('d
 
 describe('the set-up forms', () => {
   it('Wi-Fi: a pick that a rescan no longer lists is replaced', () => {
-    const s = demoSession('connect');
+    const s = demoSession(s1Demo, 'connect');
     render(<Wizard session={s} frame={s1PlusUi} base="/aqara-s1-plus" />);
     act(() => s.store.dispatch({ type: 'setup', setup: { phase: 'wifi', status: '', networks: nets('Home Net', 'Home Net 5G') } }));
     fireEvent.click(screen.getByRole('radio', { name: /Home Net 5G/ }));
@@ -36,7 +36,7 @@ describe('the set-up forms', () => {
   });
 
   it('Wi-Fi: the replaced pick\'s password goes with it', () => {
-    const s = demoSession('connect');
+    const s = demoSession(s1Demo, 'connect');
     render(<Wizard session={s} frame={s1PlusUi} base="/aqara-s1-plus" />);
     act(() => s.store.dispatch({ type: 'setup', setup: { phase: 'wifi', status: '', networks: nets('Home Net', 'Home Net 5G') } }));
     fireEvent.click(screen.getByRole('radio', { name: /Home Net 5G/ }));
@@ -52,7 +52,7 @@ describe('the set-up forms', () => {
   });
 
   it('Radio: Skip and Finish are off while a radio change runs', async () => {
-    const s = demoSession('radio');
+    const s = demoSession(s1Demo, 'radio');
     render(<Wizard session={s} frame={s1PlusUi} base="/aqara-s1-plus" />);
     await act(() => s.route('radio'));
     const skip = () => screen.getByRole('button', { name: 'Skip, leave it as it is' }) as HTMLButtonElement;
@@ -67,7 +67,7 @@ describe('the set-up forms', () => {
   });
 
   it('Home Assistant: the address follows discovery until the person types', () => {
-    const s = demoSession('connect');
+    const s = demoSession(s1Demo, 'connect');
     const ha = (discovered = '') => ({ discovered, url: '', signedIn: false, signinUrl: '' });
     render(<Wizard session={s} frame={s1PlusUi} base="/aqara-s1-plus" />);
     act(() => s.store.dispatch({ type: 'setup', setup: { phase: 'ha', ha: ha() } }));
@@ -82,7 +82,7 @@ describe('the set-up forms', () => {
   });
 
   it('Firing, after an earlier try wrote: no claim that nothing is written yet', () => {
-    const s = demoSession('connect');
+    const s = demoSession(s1Demo, 'connect');
     render(<Wizard session={s} frame={s1PlusUi} base="/aqara-s1-plus" />);
     act(() => {
       s.store.dispatch({ type: 'changed', by: 'written' });
@@ -94,7 +94,7 @@ describe('the set-up forms', () => {
   });
 
   it('the rail lists set-up\'s steps; the ones done link back, and not while something runs', () => {
-    const s = demoSession('connect');
+    const s = demoSession(s1Demo, 'connect');
     render(<Wizard session={s} frame={s1PlusUi} base="/aqara-s1-plus" />);
     act(() => s.store.dispatch({ type: 'setup', setup: { phase: 'ha', ha: { signedIn: false } } }));
     const rail = screen.getByRole('navigation', { name: 'Steps' });
@@ -107,7 +107,7 @@ describe('the set-up forms', () => {
   });
 
   it('Settings, gone back to after the app went in: shows what was chosen', async () => {
-    const s = demoSession('app');
+    const s = demoSession(s1Demo, 'app');
     render(<Wizard session={s} frame={s1PlusUi} base="/aqara-s1-plus" />);
     await act(() => s.route('resume'));
     await act(() => s.installApp({ locale: 'de-DE', timezone: 'Europe/Berlin', clock24: true, keyboard: false }));
@@ -122,7 +122,7 @@ describe('the set-up forms', () => {
   }, 20_000);
 
   it('Wi-Fi: a panel already on Wi-Fi says which first; another network is the other way, not the default', async () => {
-    const s = demoSession('wifi');
+    const s = demoSession(s1Demo, 'wifi');
     render(<Wizard session={s} frame={s1PlusUi} base="/aqara-s1-plus" />);
     await act(() => s.route('wifi'));
     expect(screen.getByRole('heading').textContent).toBe('Connected to Home Net.');
@@ -137,7 +137,7 @@ describe('the set-up forms', () => {
   }, 20_000);
 
   it('Wi-Fi: a panel not on Wi-Fi goes straight to the networks it can see', async () => {
-    const s = demoSession('wifi-new');
+    const s = demoSession(s1Demo, 'wifi-new');
     render(<Wizard session={s} frame={s1PlusUi} base="/aqara-s1-plus" />);
     await act(() => s.route('wifi'));
     expect(screen.getByRole('heading').textContent).toBe('Which Wi-Fi?');
@@ -147,7 +147,7 @@ describe('the set-up forms', () => {
   }, 20_000);
 
   it('Installing the app: every APK and phase the panel reports, in order, then Wi-Fi', async () => {
-    const s = demoSession('app');
+    const s = demoSession(s1Demo, 'app');
     render(<Wizard session={s} frame={s1PlusUi} base="/aqara-s1-plus" />);
     await act(() => s.route('resume')); // the demo panel has no Glassworks: a first install
     const rows = () => [...document.querySelectorAll('.join li')].map((li) => `${li.className || '-'} ${li.firstChild?.textContent}`);
@@ -171,7 +171,7 @@ describe('the set-up forms', () => {
   }, 20_000);
 
   it('Updating the app already on the panel: its restarts are called expected', async () => {
-    const s = demoSession('app-update');
+    const s = demoSession(s1Demo, 'app-update');
     render(<Wizard session={s} frame={s1PlusUi} base="/aqara-s1-plus" />);
     await act(() => s.route('resume'));
     expect(screen.getByRole('heading').textContent).toBe('Update Glassworks.');
@@ -185,7 +185,7 @@ describe('the set-up forms', () => {
   }, 20_000);
 
   it('Settings: an edit not yet installed survives going to another step and back', async () => {
-    const s = demoSession('app-update');
+    const s = demoSession(s1Demo, 'app-update');
     render(<Wizard session={s} frame={s1PlusUi} base="/aqara-s1-plus" />);
     await act(() => s.route('resume'));
     fireEvent.change(screen.getAllByRole('combobox')[0]!, { target: { value: 'fr-FR' } });
@@ -196,7 +196,7 @@ describe('the set-up forms', () => {
   }, 20_000);
 
   it('Home Assistant: a typed address survives going to another step and back', async () => {
-    const s = demoSession('home-assistant');
+    const s = demoSession(s1Demo, 'home-assistant');
     render(<Wizard session={s} frame={s1PlusUi} base="/aqara-s1-plus" />);
     await act(() => s.route('home-assistant'));
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'http://192.0.2.20:8123' } });

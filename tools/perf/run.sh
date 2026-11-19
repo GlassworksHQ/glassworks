@@ -29,7 +29,8 @@
 #     step, to tie logcat's wall clock to the monotonic one (docs/perf.md, "Other Glassworks apps, and Android 6").
 #   Read-only otherwise: getprop, /proc, dumpsys meminfo, SurfaceFlinger and activity recents (the app's
 #   activity), logcat.
-#   On this computer: a Python venv for the fake's WebRTC peer (aiortc, from webrtc-requirements.txt,
+#   On this computer: 40 pings to its default gateway and 40 to the panel before the graded part (netcheck.py,
+#   #649: a stalling link of this computer's makes the report provisional); a Python venv for the fake's WebRTC peer (aiortc, from webrtc-requirements.txt,
 #   locked with hashes) in ~/.cache/glassworks-perf, and two `adb reverse` ports (--port and the
 #   WebRTC relay's, --port + 1), removed on exit.
 #
@@ -50,7 +51,7 @@
 # window (the S1: 2.1 s), the runner reads once after each window; where it doesn't (the Pixel Tablet: 1 s), it
 # reads during each window too and joins the reads. If not even that can cover a window, the run stops there
 # (exit 2, sfcheck.json). --sf-poll 0 or SECONDS skips the check and reads that way; --sf-check-only runs the
-# check and stops.
+# checks before a run (this one and netcheck.py's) and stops.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -303,6 +304,11 @@ if [ "$SYNTH" = 1 ] || [ "$REF" = 1 ] || [ -n "$PANE_RAM" ]; then
   elif [ "$WEBRTC_TRANSPORT" = auto ]; then
     WEBRTC_TRANSPORT=adb
   fi
+  if [ "$REF" = 1 ] || [ "$SF_CHECK_ONLY" = 1 ]; then
+    # This computer's own network (#649): 40 pings to its gateway and to the panel. A stalling link (macOS Wi-Fi)
+    # adds to the live updates and cameras where they cross it; the report is then provisional. Never fails the run.
+    python3 "$HERE/netcheck.py" --out "$OUT" || log "the network check failed (netcheck.py); the report won't have it"
+  fi
   # Something else on the ports (an earlier run's fake left behind) would answer for ours.
   if curl -s -o /dev/null --connect-timeout 1 --max-time 3 "http://127.0.0.1:$PORT/manifest.json"; then
     echo "port $PORT is already in use (an earlier run's fake Home Assistant?); stop it or use --port" >&2
@@ -333,7 +339,7 @@ fi
 # Seconds between SurfaceFlinger reads during each window; 0: one read after it (perfrun.py SF_POLL_S).
 export GW_PERF_SF_POLL="$SF_POLL"
 if [ "$SF_CHECK_ONLY" = 1 ]; then
-  log "SurfaceFlinger check done (--sf-check-only): reads every ${SF_POLL} s during a window (0: once after it)"
+  log "checks done (--sf-check-only): SurfaceFlinger read every ${SF_POLL} s during a window (0: once after it); the network in netcheck.json"
   exit 0
 fi
 

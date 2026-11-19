@@ -90,6 +90,7 @@ function load(): Source[] {
     }
   }
   add({ file: "frames/README.md", url: "/docs/frames", section: "frames", label: "Writing a frame" });
+  add({ file: "docs/frame-agent.md", url: "/docs/frame-agent", section: "frames", label: "The frame agent" });
 
   add({ file: "docs/principles.md", url: "/docs/principles", section: "philosophy", label: "Principles" });
   add({ file: PANE_API, url: "/docs/what-makes-a-pane", section: "philosophy", cut: "What makes a pane", label: "What makes a pane" });

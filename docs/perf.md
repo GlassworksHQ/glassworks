@@ -88,7 +88,7 @@ tools/perf/run.sh --frame aqara-s1-plus --name "Aqara S1 Plus" --runs 3 --out pe
 | `--idle-only LABEL` | | Take one idle sample with this label and nothing else (for [panes on your dashboard](#ram-of-each-pane-on-your-own-dashboard)) |
 | `--max-start-temp` | 50 | Waits up to 10 minutes for the CPU to cool below this (°C) |
 | `--sf-poll` | `auto` | How SurfaceFlinger's frames are read. `auto` runs the check below first; `0` reads once after each window (the S1's way); seconds read that often during each window too. A number skips the check |
-| `--sf-check-only` | | Run the SurfaceFlinger check and stop: about 30 s, no cameras, nothing graded |
+| `--sf-check-only` | | Run the checks before a run and stop: SurfaceFlinger's history (`sfcheck.json`) and this computer's network (`netcheck.json`). About 40 s, no cameras, nothing graded |
 
 The first run fetches HA's frontend (117 MB, once) into `~/.cache/glassworks-perf` and checks its
 SHA-256 (`tools/perf/hafrontend.py`). A full run with `--runs 3` should take about 40 minutes, and
@@ -110,6 +110,40 @@ its `complete` is `false` and its facts say why.
 The output directory holds the raw files, `report.json` and `report.md`. A full run needs a new or
 empty directory; `--idle-only` adds samples to an existing one. `python3
 tools/perf/report.py <dir>` rebuilds the report from the raw files at any time, without the device.
+
+### The test computer's network
+
+The fake Home Assistant runs on your computer. Put that computer where a real Home Assistant server would be: on a
+wired link, or a quiet one. Its stalls otherwise land in the panel's numbers, wherever the test's traffic crosses
+its link:
+
+- **The live updates**, when adb reaches the panel over the network (wireless debugging). The fake's stream goes
+  through `adb reverse`, which then rides this computer's Wi-Fi. Over USB it doesn't.
+- **The cameras' video**, when it goes over the LAN (`lan-udp` or `lan-turn`, below), on any panel.
+
+Before the graded part, `run.sh` runs `tools/perf/netcheck.py` (#649). It sends 40 pings to this computer's
+default gateway and 40 to the panel, at the same time (8 s), and writes the numbers to `netcheck.json`. No
+address is recorded. If this computer's own pings to its gateway go over 20 ms, at p95 or at most, and that link
+carried graded traffic, the run warns and the report is provisional ("the test computer's network"). The
+numbers are in `report.json` (`test_network`) and on one line of `report.md` either way.
+
+Measured 2026-11-19, the Pixel Tablet's run 3:
+
+| From → to | min | max |
+|---|---|---|
+| A Mac on Wi-Fi (the fake's computer) → its gateway | 2.3 ms | 68 to 84 ms |
+| The tablet → the same gateway | 2.3 ms | 9.7 ms |
+| The Mac → the tablet | | 93 to 97 ms |
+
+The live changes then waited 65 to 91 ms (p95) to reach the page. That was the Mac's link, not the tablet's: a
+low-latency Wi-Fi lock on the tablet (#646) changed nothing. On a Mac, Wi-Fi stalls like this usually come from
+AWDL (AirDrop, Sidecar), which takes the radio off its channel now and then. For a run, use a wired link, or turn
+AWDL off with `sudo ifconfig awdl0 down` and back on with `sudo ifconfig awdl0 up` after. AirDrop or Sidecar may
+turn it back on by themselves.
+
+The S1's published grade (2026-11-17) ran over USB adb, so its live updates didn't cross the Mac's link: their
+arrival waits were 32 to 56 ms (p95) on light and typical. Its cameras went over the LAN, so their numbers may
+include the Mac's link. They don't decide its D: that's typical without a camera, blocked 2.7 s after it's drawn.
 
 ### What it changes on the device
 

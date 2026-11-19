@@ -8,7 +8,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: ReactNode }) => <a href={href} {...p}>{children}</a> }));
 
-import { s1PlusUi } from '../src/frames/aqara-s1-plus';
+import { frame as s1PlusUi, demoFrame as s1Demo } from '../src/app/aqara-s1-plus/frame';
 import { demoSession, enterDemo } from '../src/wizard/demo';
 import type { Session } from '../src/wizard/session';
 import { Wizard } from '../src/wizard/Wizard';
@@ -34,7 +34,7 @@ async function toDone(s: Session, before: (s: Session) => void = () => {}) {
 
 describe('the hand-off to the panel\'s setup page', () => {
   it('Done gives the page\'s address when the app has it, after opening pairing for it', async () => {
-    const s = demoSession('radio');
+    const s = demoSession(s1Demo, 'radio');
     let armed = 0;
     let closed = 0;
     await toDone(s, (x) => {
@@ -51,7 +51,7 @@ describe('the hand-off to the panel\'s setup page', () => {
   });
 
   it('an app without it (pairing.arm unknown) gets no hand-off', async () => {
-    const s = demoSession('radio');
+    const s = demoSession(s1Demo, 'radio');
     let asked = 0;
     let closed = 0;
     await toDone(s, (x) => {
@@ -68,7 +68,7 @@ describe('the hand-off to the panel\'s setup page', () => {
   });
 
   it('links the address in the panel\'s reply to pairing.arm, and none when the reply has none', async () => {
-    const moved = demoSession('radio');
+    const moved = demoSession(s1Demo, 'radio');
     await toDone(moved, (x) => {
       const c = steps(x).channel!;
       // the panel's address changed between Finish and the reply (DHCP)
@@ -77,7 +77,7 @@ describe('the hand-off to the panel\'s setup page', () => {
     await vi.waitFor(() => expect(moved.store.state.done?.setupPage).toBe('http://192.0.2.77:8099/setup'));
     moved.close();
 
-    const gone = demoSession('radio');
+    const gone = demoSession(s1Demo, 'radio');
     let replied = 0;
     await toDone(gone, (x) => {
       const c = steps(x).channel!;
@@ -90,7 +90,7 @@ describe('the hand-off to the panel\'s setup page', () => {
   });
 
   it('a backup download that fails while the hand-off is pending shows its error, and the link stays', async () => {
-    const s = demoSession('radio');
+    const s = demoSession(s1Demo, 'radio');
     s.store.dispatch({ type: 'backup', backup: { id: 's1-backup-20261116-101500', created: '', bootWasPatched: false, files: [{ part: 'boot', size: 1, sha256: '' }] } });
     let reply!: () => void;
     let fail!: (e: Error) => void;
@@ -113,7 +113,7 @@ describe('the hand-off to the panel\'s setup page', () => {
   });
 
   it('a panel without an address on the network gets no hand-off, and isn\'t asked', async () => {
-    const s = demoSession('wifi-new'); // the simulated panel isn't on Wi-Fi
+    const s = demoSession(s1Demo, 'wifi-new'); // the simulated panel isn't on Wi-Fi
     let asked = 0;
     let closed = 0;
     await toDone(s, (x) => {
@@ -130,9 +130,9 @@ describe('the hand-off to the panel\'s setup page', () => {
   });
 
   it('shows the address and opens the page in a new tab', async () => {
-    const s = demoSession('done');
+    const s = demoSession(s1Demo, 'done');
     render(<Wizard session={s} frame={s1PlusUi} base="/aqara-s1-plus" />);
-    await act(() => enterDemo(s, 'done'));
+    await act(() => enterDemo(s, s1Demo, 'done'));
     const open = screen.getByRole('link', { name: 'Open' });
     expect(open.getAttribute('href')).toBe('http://192.0.2.50:8099/setup');
     expect(open.getAttribute('target')).toBe('_blank');

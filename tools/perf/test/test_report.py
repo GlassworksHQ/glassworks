@@ -2300,5 +2300,59 @@ class ScreenOff(unittest.TestCase):
         self.assertEqual(s["js_burst_ms"]["median"], 9.0)
 
 
+class TestNetwork(unittest.TestCase):
+    """#649: the test computer's own link. A stalling one (a Mac's Wi-Fi: max 68 to 84 ms to its gateway, 2026-11-19)
+    that carried graded traffic makes the grade provisional; the numbers are in report.json either way."""
+    setUp, write = Build.setUp, Build.write
+    NOISY = {"sent": 40, "received": 40, "min_ms": 2.3, "median_ms": 3.7, "p95_ms": 68.6, "max_ms": 89.8}
+    QUIET = {"sent": 40, "received": 40, "min_ms": 0.4, "median_ms": 0.6, "p95_ms": 1.1, "max_ms": 2.0}
+
+    def net(self, gateway, adb_over_network, transport=None, link="wifi"):
+        quiet = gateway["p95_ms"] <= 20 and gateway["max_ms"] <= 20
+        self.write("netcheck.json", {"gateway": gateway, "panel": dict(gateway, max_ms=97.0), "link": link,
+                                     "adb_over_network": adb_over_network, "tail_ms": 20, "quiet": quiet})
+        if transport:
+            self.write("transport.json", {"transport": transport, "chosen_by": "auto", "reason": "r", "checks": {}})
+        return R.build(self.dir)
+
+    def test_a_noisy_link_carrying_the_live_updates(self):
+        before = self.rep["grade"]
+        rep = self.net(self.NOISY, True)
+        n = rep["test_network"]
+        self.assertEqual((n["link"], n["carried"], n["quiet"]), ("wifi", ["live updates"], False))
+        self.assertEqual(n["gateway"], self.NOISY)
+        self.assertTrue(rep["grade"]["provisional"])
+        self.assertIn("the test computer's network: its own link to its gateway reached p95 68.6 ms, max 89.8 ms "
+                      "(over 20 ms) and carried the live updates", rep["grade"]["provisional_reasons"][-1])
+        self.assertEqual(rep["grade"]["grade"], before["grade"])            # the letter is kept, flagged
+        md = R.markdown(rep)
+        self.assertIn("The test computer's network (wifi): to its gateway p95 68.6 ms, max 89.8 ms; to the panel p95 68.6 ms, "
+                      "max 97.0 ms. It carried the live updates. **Limited by the test:**", md)
+
+    def test_a_noisy_link_carrying_the_cameras_only(self):
+        rep = self.net(self.NOISY, False, "lan-udp")
+        self.assertEqual(rep["test_network"]["carried"], ["camera video"])
+        self.assertIn("carried the camera video", rep["grade"]["provisional_reasons"][-1])
+
+    def test_a_noisy_link_that_carried_nothing_graded(self):
+        # The S1 on USB with its video through adb: the computer's Wi-Fi is on no graded path.
+        before = self.rep["grade"]
+        rep = self.net(self.NOISY, False, "adb")
+        self.assertEqual(rep["test_network"]["carried"], [])
+        self.assertIsNone(rep["test_network"]["limited"])
+        self.assertEqual(rep["grade"].get("provisional_reasons"), before.get("provisional_reasons"))
+        self.assertIn("It carried no graded traffic (adb over USB, video over adb).", R.markdown(rep))
+
+    def test_a_quiet_link(self):
+        before = self.rep["grade"]
+        rep = self.net(self.QUIET, True, "lan-udp", link="wired")
+        self.assertIsNone(rep["test_network"]["limited"])
+        self.assertEqual(rep["grade"].get("provisional_reasons"), before.get("provisional_reasons"))
+
+    def test_runs_before_the_check(self):
+        self.assertIsNone(self.rep["test_network"])
+        self.assertNotIn("The test computer's network", R.markdown(self.rep))
+
+
 if __name__ == "__main__":
     unittest.main()
