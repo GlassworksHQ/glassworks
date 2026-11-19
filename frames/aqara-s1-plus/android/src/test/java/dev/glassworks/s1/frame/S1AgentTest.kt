@@ -1,7 +1,9 @@
 package dev.glassworks.s1.frame
 
 import android.app.Application
+import dev.glassworks.frame.AgentCapability
 import dev.glassworks.frame.AgentCapability.APP_UPDATES
+import dev.glassworks.frame.AgentCapability.BLUETOOTH_ADDRESS
 import dev.glassworks.frame.AgentCapability.FRAME_BUNDLE
 import dev.glassworks.frame.AgentCapability.RADIO_FIREWALL
 import dev.glassworks.frame.AgentCapability.RADIO_FIRMWARE
@@ -12,6 +14,8 @@ import dev.glassworks.radio.RadioController
 import dev.glassworks.radio.RadioFirmware
 import dev.glassworks.radio.RadioHelper
 import dev.glassworks.radio.SysProps
+import java.io.File
+import java.nio.file.Files
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -73,6 +77,14 @@ class S1AgentTest {
         props.p[RadioHelper.PROP_BUNDLE_LOADER] = "1"
         assertFalse("the marker alone", S1Agent(props, bundle = { null }).offers(FRAME_BUNDLE))
         assertTrue("both", S1Agent(props, bundle = { ok }).offers(FRAME_BUNDLE))
+    }
+
+    /** After an undo (the stock boot image, /data kept): only the adapter's own address, which stays true, is offered. */
+    @Test fun afterAnUndoOnlyTheBluetoothAddressIsOffered() {
+        val bt = File(Files.createTempDirectory("s1-undo").toFile(), "bluetooth-address").apply { writeText("00:00:5E:00:53:01\n") }
+        val agent = S1Agent(Props(), bundle = { RadioBundle.Installed("ok", 5, 5) }, bluetoothFile = bt)
+        assertNull(agent.version())
+        assertEquals(setOf(BLUETOOTH_ADDRESS), AgentCapability.entries.filter(agent::offers).toSet())
     }
 
     @Test fun noHelperNoVersion() {
