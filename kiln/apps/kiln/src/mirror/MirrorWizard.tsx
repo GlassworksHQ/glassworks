@@ -190,10 +190,10 @@ function Pick({ s, session }: { s: MirrorState; session: MirrorSession }) {
       <TestOnly />
       {s.release ? <>
         <h2 id="h">Install Glassworks on the Mirror.</h2>
-        <p className="lede">Kiln downloads Glassworks from its newest release, the legacy build for Android 6, checks it, and installs it over USB. Nothing else on the Mirror changes.</p>
+        <p className="lede">Kiln downloads Glassworks from its newest release, the legacy build for Android 6, checks it, and installs it over USB. It also turns the screen upright and makes Glassworks the Mirror&apos;s only home screen.</p>
       </> : <>
         <h2 id="h">Install a test build on the Mirror.</h2>
-        <p className="lede">Kiln installs an APK file from this computer: the legacy build of Glassworks for generic Android, for Android 6. Only for testing. Nothing else on the Mirror changes.</p>
+        <p className="lede">Kiln installs an APK file from this computer: the legacy build of Glassworks for generic Android, for Android 6. Only for testing. Kiln also turns the screen upright and makes Glassworks the Mirror&apos;s only home screen.</p>
       </>}
       <Inputs s={s} session={session} />
       <BuiltOn credits={stepCredits('lululemon-mirror', credits)} />

@@ -135,7 +135,8 @@ describe('finishing a first start that didn\'t finish', () => {
   it('from the error screen after a first start that stopped', async () => {
     const adb = new FirstBootMirror();
     let fail = true;
-    const broken = Object.assign(Object.create(adb), { run: async (cmd: string) => { if (fail && cmd.startsWith('getprop')) throw new Error('the device was disconnected'); return adb.run(cmd); } }) as PanelShell;
+    const close = vi.fn(async () => {});
+    const broken = Object.assign(Object.create(adb), { close, run: async (cmd: string) => { if (fail && cmd.startsWith('getprop')) throw new Error('the device was disconnected'); return adb.run(cmd); } }) as PanelShell;
     const { f, mirror } = setup({ request: async () => (fail ? broken : adb) });
     await flashed(f, mirror);
     await f.connectAdb();
@@ -144,6 +145,7 @@ describe('finishing a first start that didn\'t finish', () => {
     fail = false;
     fireEvent.click(screen.getByRole('button', { name: 'Try the first start again' }));
     expect(f.state.screen).toBe('adb');
+    expect(close).toHaveBeenCalledTimes(1); // the stopped first start's connection, let go before Connect opens a new one
     await f.connectAdb();
     expect(f.state.screen).toBe('done');
   });

@@ -579,6 +579,10 @@ export class FlashSession {
    */
   finishFirstStart() {
     if (this.recipe.community || this.inputsBlocked() || this.state.screen === 'working') return;
+    // the connection of a first start that stopped: let go, so Connect opens one fresh (not awaited: Connect's list stays in its click)
+    const stale = this.panel;
+    this.panel = undefined;
+    void stale?.close?.().catch(() => {});
     this.set({ screen: 'adb', error: undefined, connectError: undefined, adbWaiting: false, work: undefined, flashFailed: false });
   }
 
