@@ -63,11 +63,14 @@ PUB_DIR=${GW_PUB:-/data/glassworks-pub}
 PUBKEY=${GW_PUBKEY:-$HERE/glassworks_bundle.pub}
 VERIFY=${GW_VERIFY:-$HERE/glassworks_verify}
 ANIM=${GW_ANIM:-/system/media/bootanimation.zip}
+KMSG=${GW_KMSG:-/dev/kmsg}
 MAX_FILES=200
 MAX_TOTAL=$((96 * 1024 * 1024))
 MAX_MANIFEST=65536
 
-say() { log -t glassworks_loader "$*" 2>/dev/null; }
+# logd and the kernel log both: the boot step runs at post-fs-data, before logd starts, so only the kernel log
+# (dmesg, with its timestamps) keeps its lines. As glassworks_netwatch.sh and glassworks_firstboot.sh do.
+say() { log -t glassworks_loader "$*" 2>/dev/null; echo "glassworks_loader: $*" >> "$KMSG" 2>/dev/null; }
 setp() { # name value: setprop refuses values over 91 bytes (PROP_VALUE_MAX) and keeps the old one
   v_=$2; [ ${#v_} -gt 91 ] && v_="$(printf '%.88s' "$v_")..."
   setprop "$1" "$v_"
@@ -249,6 +252,7 @@ check)
 
 # --- boot ---------------------------------------------------------------------------------------
 boot)
+  say "boot: checking the frame bundle"   # with "boot: done" below: dmesg's timestamps give the step's cost (L5)
   rm -rf "$RUN"; mkdir -p "$RUN" && chmod 700 "$RUN"
   own_dirs || say "cannot prepare $BDIR"
   # A record from an earlier boot must never pass for this one's: the file is written again below.
@@ -331,6 +335,7 @@ boot)
   if [ -n "$z" ] && [ -f "$ANIM" ]; then
     mount -o bind "$z" "$ANIM" || say "cannot mount the boot animation"
   fi
+  say "boot: done: frame $fv, bundle $state${why:+ ($why)}, boot animation ${z:-stock}"
   exit 0 ;;
 
 # --- run <slot> ---------------------------------------------------------------------------------
