@@ -11,14 +11,17 @@ import android.content.IntentFilter
 import android.net.wifi.WifiConfiguration
 import android.net.wifi.WifiManager
 import android.os.Handler
+import android.util.Log
 import java.lang.reflect.InvocationTargetException
 import java.security.SecureRandom
 
 /**
  * The setup hotspot on Android 6 and 7, which have no local-only hotspot: the hidden
- * `WifiManager.setWifiApEnabled`, through [ApControls]. On Android 6.0.1 and 7 any app with
- * `CHANGE_WIFI_STATE` and `CHANGE_NETWORK_STATE` may call it, unless the device has a carrier's tethering
- * check; 6.0.0 wants `WRITE_SETTINGS`. A refusal comes back as [HotspotFailure.NOT_ALLOWED].
+ * `WifiManager.setWifiApEnabled`, through [ApControls]. Android 6 and 7 check `CHANGE_WIFI_STATE`, then
+ * `WRITE_SETTINGS` (the app-op, or the permission, which a system app gets at install). A device with a carrier's
+ * tethering check (`config_mobile_hotspot_provision_app`) wants `CONNECTIVITY_INTERNAL` (6) or `TETHER_PRIVILEGED`
+ * (7.1) instead. Read from AOSP 6.0.1 and 7.1.2 and the Mirror's image: frames/lululemon-mirror/research/privileged-app.md.
+ * A refusal comes back as [HotspotFailure.NOT_ALLOWED], and its reason goes to [log].
  *
  * The panel names the network itself (`Glassworks-XXXX`, a fresh random WPA2 key each start). Two things
  * change on the device, and [stop] puts both back (the undo rule in #197):
@@ -41,6 +44,7 @@ class HiddenApHotspot<C>(
     private val newNetwork: () -> HotspotNetwork = ::randomNetwork,
     private val startTimeoutMs: Long = 20_000,
     private val addressTimeoutMs: Long = 5_000,
+    private val log: (String) -> Unit = { Log.w(TAG, it) },
 ) : Hotspot {
     /** What the start changed, to put back: the device's hotspot settings and whether Wi-Fi was on. */
     private class Before<C>(val config: C?, val wifiOn: Boolean)
@@ -70,13 +74,14 @@ class HiddenApHotspot<C>(
                 ApControls.State.OTHER -> Unit
             }
         }
-        val ok = try {
-            ap.setAp(net, true)
-        } catch (_: Exception) {
+        val refused = try {
+            if (ap.setAp(net, true)) null else "setWifiApEnabled returned false"
+        } catch (e: Exception) {
             // A SecurityException, or a device without the hidden method (NoSuchMethodException).
-            false
+            "${e.javaClass.name}: ${e.message}"
         }
-        if (!ok) {
+        if (refused != null) {
+            log("setup hotspot refused: ${refused.replace(net.passphrase, "<key>")}")
             restore()
             handler.post { onEvent(Hotspot.Event.Failed(HotspotFailure.NOT_ALLOWED)) }
             return
@@ -134,6 +139,7 @@ class HiddenApHotspot<C>(
         private const val LETTERS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789" // no 0/O, 1/I/L: the key may be typed from the screen
         private val random = SecureRandom()
         private const val ADDRESS_POLL_MS = 500L
+        private const val TAG = "Glassworks.Hotspot"
 
         private fun pick(n: Int) = String(CharArray(n) { LETTERS[random.nextInt(LETTERS.length)] })
 
