@@ -186,3 +186,13 @@ it('keeps "Keep holding" in view while the camera is on the Mirror\'s switch, fa
   const [x, y] = svg.querySelector('#kr-hold')!.getAttribute('transform')!.match(/-?[\d.]+/g)!.map(Number);
   expect(x! >= 0 && x! + 132 <= 640 && y! - 16 >= 0 && y! + 16 <= 400, `at ${x}, ${y}`).toBe(true);
 });
+
+it('the Mirror\'s stand screws\' halos leave with its tube stand', () => {
+  const f = data('lululemon-mirror');
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  const p = mount(svg, f);
+  const stand = svg.querySelector('#kr-stand')!;
+  expect(stand.querySelectorAll('.kr-halo')).toHaveLength(4);
+  p.draw(timeline(f).stand!.end + 0.05);
+  expect(stand.getAttribute('opacity')).toBe('0.000');
+});

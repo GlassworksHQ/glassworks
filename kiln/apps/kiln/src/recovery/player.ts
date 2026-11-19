@@ -205,7 +205,7 @@ export function mount(svg: SVGSVGElement, f: RecoveryData, onBeat?: (i: number) 
     const [X, Y] = P(u(x) + (st?.edge === 'right' ? out : 0), u(y) + (st?.edge === 'bottom' ? out : 0));
     if (z === undefined) return { back: [u(x), u(y)] as Mm, at: [X, Y] as Mm, out: [0, -16] as Mm, stand: false };
     const [nx, ny] = x >= W ? [1, 0] : [0, 1];
-    return { at: [X, Y + u(z) * s * 0.4] as Mm, out: [16 * C * (nx - ny), 16 * SN * (nx + ny)] as Mm, stand: out > 0 };
+    return { at: [X, Y + u(z) * s * 0.4] as Mm, out: [16 * C * (nx - ny), 16 * SN * (nx + ny)] as Mm, stand: onStand(f, sc) };
   });
 
   let PORT: { top: Mm; at: Mm; angle: number; visible: boolean } | null = null;
