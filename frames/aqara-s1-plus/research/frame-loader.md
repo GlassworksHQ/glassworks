@@ -13,7 +13,8 @@ route needs a wrapped image (attempt 10). Panel tests T0, T1, T3 and T5 have run
 wrapped image (attempt 11) took the download and the `boot`, and then the board reset into its flash
 boot within seconds. The canary of plan E (attempt 12) reset the same way, so the reset comes
 before our code runs, in the stock U-Boot or ATF. Attempt 13 reads that path: no step read so far
-explains it, and plan F splits it at LOADOS. All of it goes through [`fastboot-usb.py`](../tools/fel/fastboot-usb.py), not the
+explains it, and plan F splits it at LOADOS. That rests on one unread premise: no watchdog armed at
+the handoff (the SCP firmware and boot0 aren't read). All of it goes through [`fastboot-usb.py`](../tools/fel/fastboot-usb.py), not the
 `fastboot` CLI.
 
 Device: Aqara S1 Plus, firmware 4.5.80. Sources: the stock `boot`, `misc` and boot package
@@ -326,9 +327,15 @@ Every S1 in the field needs one more Kiln update to get the loader. Before build
       one a normal boot takes, apart from the image format, and the image passed every check the
       code makes.
     - **Result (E1, 2026-11-19, verified by the root):** the canary reset like plan D. The board
-      was back in its flash boot within seconds, with `ro.boot.gw139` empty and pstore empty. So the
-      reset comes before our first instruction: in the stock U-Boot or in ATF. The prediction was
-      wrong.
+      was back in its flash boot within seconds, with `ro.boot.gw139` empty and pstore empty. The
+      prediction was wrong. **This places the reset before our first instruction (in the stock
+      U-Boot or ATF) only if no watchdog is armed at the handoff.** A watchdog that fires while the
+      canary spins would look the same. What is known (attempt 13): the stock U-Boot touches the SoC
+      watchdog only in `reset_cpu`. ATF's `RUNNSOS` arms none (read). The panel sat about 15 s idle
+      in fastboot before `boot` without a reset, so a watchdog already running would need a longer
+      period (verified, E1 timeline). The SCP firmware, which references the R_WDOG at `0x07020400`,
+      and boot0 are **unread**. Until they are, "before our code runs" is the likely reading, not a
+      settled one.
 
 13. **Where the stock `bootm` path can reset, read for this image** (2026-11-19, read: the same
     U-Boot disassembly as attempt 10, plus the boot package's `monitor` item (ATF) at file offset
@@ -364,8 +371,8 @@ Every S1 in the field needs one more Kiln update to get the loader. Before build
     `gd` (`0x4A006C40`, table: button, irq, usb, battery, unknow). A watchdog reset doesn't power-cycle
     the PMIC, so the latched code stays at its last cold start (read).
 
-    **What's left.** No step read so far makes our image fault where the flash boot doesn't. The
-    reset is then an abort in code not read in full (`fdt_chosen` and the sunxi board fixups, the
+    **What's left.** No step read so far makes our image fault where the flash boot doesn't. If the
+    reset is in U-Boot (E1's premise: no watchdog armed at the handoff, see attempt 12), it is an abort in code not read in full (`fdt_chosen` and the sunxi board fixups, the
     overlay apply, the steps before LOADOS), or `boot_jump_linux` returning. The steps up to LOADOS
     and the steps after it can be told apart without a debugger:
 
@@ -381,6 +388,10 @@ Every S1 in the field needs one more Kiln update to get the loader. Before build
       - **It resets like E1**: the reset comes before PREP, in `do_bootm`'s first steps or in
         FINDOS/LOADOS. Read `0x4A0067DC` (called at the end of update_bootargs) and the LOADOS
         cache flush next.
+      - **What F1 can't settle:** it never jumps, so it can't tell a watchdog at the handoff from a
+        U-Boot reset after LOADOS. If F1 exits 2, the open premise above (a watchdog
+        armed at the handoff) still has to be ruled out before PREP and GO are blamed. Reading the
+        SCP firmware's R_WDOG use is the host-only way to do that.
       - Prediction: exit 2 (a guess, about 65 %). The steps up to LOADOS read clean, and most
         image-specific work (the DT, the merge) comes later.
     - **For any later real boot (not a cause of the reset):** strip the keys update_bootargs adds
@@ -617,8 +628,8 @@ bytes with `SHA256SUMS`, and `fastboot reboot`.
 
 ## Open questions
 
-- What resets the board after the wrapped image's `boot` (attempts 11–13): it happens before our
-  code runs (E1). Plan F tells the steps through LOADOS from the ones after. Until a RAM boot of
+- What resets the board after the wrapped image's `boot` (attempts 11–13): before our code runs
+  (E1), unless a watchdog is armed at the handoff (unread: the SCP firmware and boot0). Plan F tells the steps through LOADOS from the ones after. Until a RAM boot of
   Android works, the RAM test in the no-opening route is untested.
 - The legacy `bootm` path doesn't read `androidboot.dtbo_idx` (attempt 13), so a RAM boot through it
   gets the wrong DT overlays. How to give the kernel the right DT on this path is open.
