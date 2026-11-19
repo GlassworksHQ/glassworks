@@ -5,7 +5,7 @@ import { fakeAdbKey, fakeMirrorApk, fakeServicesJar } from '@glassworks/lululemo
 import { describe, expect, it } from 'vitest';
 import { Disk, MemoryStore, mkfs, writeSparse } from '@glassworks/ext4';
 import { GLASS_PANES } from '@glassworks/lululemon-mirror-installer';
-import { Cancelled, imageJobs, type JobHandle } from '../src/mirror/imageJobs';
+import { Cancelled, imageJobs, jobQueue, type JobHandle } from '../src/mirror/imageJobs';
 
 /** A file in memory, shaped like OPFS's FileSystemSyncAccessHandle. */
 class MemHandle implements JobHandle {
@@ -130,5 +130,48 @@ describe('the image worker\'s jobs', () => {
     const queued = jobs.signal(); // as the worker keeps it for a request still in its queue
     jobs.cancel();
     await expect(jobs.download('https://refract.test/x', want, () => {}, stall, queued)).rejects.toBeInstanceOf(Cancelled);
+  });
+
+  it('a cancel while the download is still opening its file stops it before any byte is fetched', async () => {
+    const want = { name: 'system.img', url: 'https://example.com/system.img', refract: 'x/system.img', size: 100, sha256: 'a'.repeat(64) };
+    let opened!: (h: MemHandle) => void;
+    const h = new MemHandle();
+    let fetched = 0;
+    const net = (async () => { fetched++; return new Response(new Uint8Array(100), { status: 200, headers: { 'content-length': '100' } }); }) as unknown as typeof fetch;
+    const jobs = imageJobs(() => new Promise<MemHandle>((r) => { opened = r; }), async () => {});
+    const run = jobs.download('https://refract.test/x', want, () => {}, net);
+    jobs.cancel(); // fresh() is still waiting on the file
+    opened(h);
+    await expect(run).rejects.toBeInstanceOf(Cancelled);
+    expect(fetched).toBe(0);
+    expect(h.buf.length).toBe(0);
+  });
+
+  it('the worker\'s queue: one job at a time; a discard stops the running and queued downloads and ends before the next one starts', async () => {
+    const jobs = imageJobs(async () => new MemHandle(), async () => {});
+    const order: string[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    // a download that runs until its signal aborts; a discard that takes a while
+    const run = async (m: { op: string; n: number }, signal: AbortSignal) => {
+      order.push(`start ${m.op} ${m.n}`);
+      if (m.op === 'download') {
+        if (signal.aborted) { order.push(`cancelled ${m.n}`); return; }
+        await Promise.race([gate, new Promise<void>((r) => signal.addEventListener('abort', () => r(), { once: true }))]);
+        order.push(signal.aborted ? `cancelled ${m.n}` : `done ${m.n}`);
+      } else {
+        await new Promise((r) => setTimeout(r, 5));
+        order.push(`end ${m.op} ${m.n}`);
+      }
+    };
+    const receive = jobQueue(jobs, run);
+    void receive({ op: 'download', n: 1 }); // running
+    void receive({ op: 'download', n: 2 }); // queued behind it
+    void receive({ op: 'discard', n: 3 });  // stops both
+    const last = receive({ op: 'download', n: 4 }); // sent after the discard: runs, after it
+    await new Promise((r) => setTimeout(r, 0));
+    release();
+    await last;
+    expect(order).toEqual(['start download 1', 'cancelled 1', 'start download 2', 'cancelled 2', 'start discard 3', 'end discard 3', 'start download 4', 'done 4']);
   });
 });

@@ -4,7 +4,7 @@
 // itself is imageJobs.ts; this file only carries messages.
 import type { ImageFile } from '@glassworks/kiln-core';
 import { ProxyError, WrongImage } from '@glassworks/lululemon-mirror-installer';
-import { imageJobs, type BuildOptions, type JobHandle } from './imageJobs';
+import { imageJobs, jobQueue, type BuildOptions, type JobHandle } from './imageJobs';
 
 type In = { id: number; op: 'fetch'; url: string } | { id: number; op: 'download'; url: string; file: ImageFile } | ({ id: number; op: 'build' } & BuildOptions)
   | { id: number; op: 'check'; file: Blob; want: ImageFile } | { id: number; op: 'discard' };
@@ -35,14 +35,6 @@ async function run(m: In, signal: AbortSignal) {
   }
 }
 
-// One operation at a time, in the order the page sent them, all on the one `kiln-mirror` folder: a
-// discard ends before the next download creates its file there. A discard first stops the download
-// in flight, and those still queued, so it doesn't wait for a gigabyte nobody wants any more: each
-// request keeps the signal current when it arrived.
-let queue = Promise.resolve();
-self.onmessage = (e: MessageEvent<In>) => {
-  const m = e.data;
-  if (m.op === 'discard') jobs.cancel();
-  const signal = jobs.signal();
-  queue = queue.then(() => run(m, signal));
-};
+// One operation at a time, in the order the page sent them (jobQueue).
+const receive = jobQueue(jobs, run);
+self.onmessage = (e: MessageEvent<In>) => { void receive(e.data); };
