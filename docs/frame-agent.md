@@ -33,6 +33,12 @@ The core learns about the agent in two steps.
    core never asks for a capability the frame doesn't declare, and the frame never offers one it
    doesn't declare.
 
+**Discovery comes from this boot.** An undo restores the partitions and keeps `/data`, so a file the
+agent left there can outlive it. Such a file doesn't count as discovery on its own: pair it with a
+marker this boot sets (a property init sets when the service exists, a status the running agent
+writes). The exception is a file whose content stays true without the agent, such as the Bluetooth
+adapter's address.
+
 A frame reports its agent's version through its own transport. The S1 reports `4` in
 `sys.s1kiosk.radio.version` today, and `5` in `sys.glassworks.agent.version` after #549.
 
@@ -133,12 +139,12 @@ S1's `FrameAgent` is the one place in the app that changes with them.
 | `radio-mode` | `persist.s1kiosk.radio_mode`, `persist.s1kiosk.radio_zigbee`; files `files/radio/thread-dataset`, `thread-leave`, `zigbeed-8.2.2` | `sys.s1kiosk.radio.status`, `.zigbee`, `.thread_leave`, `.thread_stored`, `.otbr`, `.peer` | the agent runs |
 | `radio-firewall` | `persist.s1kiosk.radio_allow` | `sys.s1kiosk.radio.allowed` | version 3 and up |
 | `radio-firmware` | file `files/radio/fw-request` | `sys.s1kiosk.radio.fw`, `.fw_targets` | version 4 and up |
-| `frame-bundle` | stage `files/radio/bundle-in`, `sys.s1kiosk.bundle.status=requested`, `ctl.start s1kiosk_bundle` | `/data/s1kiosk-pub/radio-bundle` (root-owned), `sys.s1kiosk.bundle.status` | the root-owned file exists |
+| `frame-bundle` | stage `files/radio/bundle-in`, `sys.s1kiosk.bundle.status=requested`, `ctl.start s1kiosk_bundle` | `/data/s1kiosk-pub/radio-bundle` (root-owned), `sys.s1kiosk.bundle.status` | `sys.s1kiosk.bundle.loader` is `1` (init sets it at boot when the service exists) and the root-owned file holds a state |
 | `app-updates` | file `files/update/pending.apk`, `sys.s1kiosk.update.status=requested`, `ctl.start s1kiosk_update` | `sys.s1kiosk.update.status` | `sys.s1kiosk.update.version` is 1 or more |
 | `time-zone` | `persist.s1kiosk.timezone` | `sys.s1kiosk.timezone.status` | version 4 and up |
 | `hotspot-portal` | the app listens on udp 8053 and tcp 8098 | `sys.s1kiosk.portal.status` | the status is set |
 | `hotspot-name` | `persist.s1kiosk.hotspot_name` (`android` undoes) | `sys.s1kiosk.hotspot_name.status` | the status is set |
-| `bluetooth-address` | none | `/data/s1kiosk-pub/bluetooth-address` (root-owned) | the file exists |
+| `bluetooth-address` | none | `/data/s1kiosk-pub/bluetooth-address` (root-owned) | the file holds an address. It is the adapter's own, so it stays true when an undo keeps `/data` |
 
 Two S1 details sit outside the agent script but inside this contract. App updates and bundle
 installs are separate init services (`s1kiosk_update`, `s1kiosk_bundle`; after #549, slots of the
