@@ -22,7 +22,8 @@
 #                                        the loader bind-mounts it over /system/media/bootanimation.zip
 #   overlay.d/sbin/magisk-busybox        Magisk's own busybox (lib/armeabi-v7a/libbusybox.so from the same Magisk APK);
 #                                        glassworks.rc copies it to /data/adb/magisk, without which Magisk loads no module
-# Nothing is flashed here; see frames/aqara-s1-plus/research/root.md.
+# The patch itself is patch-ramdisk.sh, run here in the container and on the panel by the boot writer
+# (glassworks_bootwriter.sh, #139 route 2). # Nothing is flashed here; see frames/aqara-s1-plus/research/root.md.
 #
 # Magisk is GPLv3 (the busybox inside it GPLv2) and is not redistributed by this repo: the official release is downloaded and its
 # SHA-256 checked against the digest GitHub publishes for the asset.
@@ -76,7 +77,7 @@ bad = [i.filename for i in z.infolist() if i.compress_type != zipfile.ZIP_STORED
 assert not bad, f"bootanimation.zip entries must be STORED, not compressed: {bad[:3]}"
 PY
   cp "$BOOT_ANIMATION" "$W/p/glassworks_bootanimation.zip"
-  BRANDING_CPIO='"add 0644 overlay.d/sbin/glassworks_bootanimation.zip glassworks_bootanimation.zip"'
+  BRANDING_CPIO="0644 overlay.d/sbin/glassworks_bootanimation.zip glassworks_bootanimation.zip"
 fi
 cp "$IN" "$W/p/boot.img"
 
@@ -87,51 +88,38 @@ if [ -n "${DEV_SU_HOURS:-}" ]; then
   case "$DEV_SU_HOURS" in *[!0-9]*|'') echo "DEV_SU_HOURS must be a number of hours"; exit 1 ;; esac
   cp "$HERE/dev/glassworks_devsu.rc" "$W/p/"
   sed "s/__HOURS__/$DEV_SU_HOURS/" "$HERE/dev/glassworks_devsu.sh" > "$W/p/glassworks_devsu.sh"
-  DEV_CPIO='"add 0644 overlay.d/glassworks_devsu.rc glassworks_devsu.rc" "add 0700 overlay.d/sbin/glassworks_devsu.sh glassworks_devsu.sh"'
+  DEV_CPIO="0644 overlay.d/glassworks_devsu.rc glassworks_devsu.rc
+0700 overlay.d/sbin/glassworks_devsu.sh glassworks_devsu.sh"
   echo "WARNING: development image: adb shell gets root for $DEV_SU_HOURS h after each boot"
 fi
-docker run --rm --platform linux/arm64 -e PREINITDEVICE="$PREINITDEVICE" -e BRANDING_CPIO="$BRANDING_CPIO" -e DEV_CPIO="$DEV_CPIO" -v "$W/p":/w -w /w \
+# What goes into overlay.d, for patch-ramdisk.sh (the same file the boot writer uses on the panel)
+{
+  cat <<'LIST'
+0644 overlay.d/glassworks.rc glassworks.rc
+0700 overlay.d/sbin/glassworks_loader.sh glassworks_loader.sh
+0700 overlay.d/sbin/glassworks_verify glassworks_verify
+0644 overlay.d/sbin/glassworks_bundle.pub glassworks_bundle.pub
+0600 overlay.d/sbin/glassworks_adb_keys glassworks_adb_keys
+0700 overlay.d/sbin/glassworks_agent.sh glassworks_agent.sh
+0700 overlay.d/sbin/otbr-agent otbr-agent
+0700 overlay.d/sbin/ot-ctl ot-ctl
+0700 overlay.d/sbin/glassworks_firstboot.sh glassworks_firstboot.sh
+0700 overlay.d/sbin/glassworks_netwatch.sh glassworks_netwatch.sh
+0700 overlay.d/sbin/glassworks_update.sh glassworks_update.sh
+0700 overlay.d/sbin/magisk-busybox magisk-busybox
+LIST
+  [ -z "$BRANDING_CPIO" ] || printf '%s\n' "$BRANDING_CPIO"
+  [ -z "$DEV_CPIO" ] || printf '%s\n' "$DEV_CPIO"
+} > "$W/p/overlay.list"
+cp "$HERE/patch-ramdisk.sh" "$W/p/"
+docker run --rm --platform linux/arm64 -e PREINITDEVICE="$PREINITDEVICE" -v "$W/p":/w -w /w \
   arm64v8/ubuntu:22.04 sh -euc '
-  chmod 755 magiskboot magiskinit magisk init-ld
   # Outside Android: boot_patch.sh needs dos2unix (its grep_prop reads the stock SHA1/PREINITDEVICE
-  # back from an already-patched image) and an OUTFD for ui_print.
+  # back from an already-patched image) and an OUTFD for ui_print. (No apostrophes in this block: it is
+  # one single-quoted sh -c argument.)
   mkdir -p /tmp/bin && printf "#!/bin/sh\nexec sed \"s/\\r\$//\"\n" > /tmp/bin/dos2unix && chmod 755 /tmp/bin/dos2unix
   export PATH=/tmp/bin:$PATH OUTFD=1
-  KEEPVERITY=true KEEPFORCEENCRYPT=true sh boot_patch.sh /w/boot.img
-  ./magiskboot cleanup
-  ./magiskboot unpack new-boot.img
-  # A boot image patched before still carries the overlay files added then, because the Magisk
-  # restore only undoes its own changes. Drop every overlay.d entry but the Magisk ones, so a re-patch
-  # equals a patch of stock (the s1kiosk_* services of a 0.4.3 image would otherwise run as well).
-  for e in $(./magiskboot cpio ramdisk.cpio "ls -r overlay.d" 2>/dev/null | awk "{print \$NF}"); do
-    case "$e" in
-      overlay.d/sbin|overlay.d/sbin/magisk.xz|overlay.d/sbin/init-ld.xz) ;;
-      overlay.d/*) ./magiskboot cpio ramdisk.cpio "rm -r $e" ;;
-    esac
-  done
-  ./magiskboot cpio ramdisk.cpio \
-    "add 0644 overlay.d/glassworks.rc glassworks.rc" \
-    "add 0700 overlay.d/sbin/glassworks_loader.sh glassworks_loader.sh" \
-    "add 0700 overlay.d/sbin/glassworks_verify glassworks_verify" \
-    "add 0644 overlay.d/sbin/glassworks_bundle.pub glassworks_bundle.pub" \
-    "add 0600 overlay.d/sbin/glassworks_adb_keys glassworks_adb_keys" \
-    "add 0700 overlay.d/sbin/glassworks_agent.sh glassworks_agent.sh" \
-    "add 0700 overlay.d/sbin/otbr-agent otbr-agent" \
-    "add 0700 overlay.d/sbin/ot-ctl ot-ctl" \
-    "add 0700 overlay.d/sbin/glassworks_firstboot.sh glassworks_firstboot.sh" \
-    "add 0700 overlay.d/sbin/glassworks_netwatch.sh glassworks_netwatch.sh" \
-    "add 0700 overlay.d/sbin/glassworks_update.sh glassworks_update.sh" \
-    "add 0700 overlay.d/sbin/magisk-busybox magisk-busybox"
-  [ -z "$BRANDING_CPIO" ] || eval "./magiskboot cpio ramdisk.cpio $BRANDING_CPIO"
-  [ -z "$DEV_CPIO" ] || eval "./magiskboot cpio ramdisk.cpio $DEV_CPIO"
-  ./magiskboot cpio ramdisk.cpio "extract .backup/.magisk magisk.cfg"
-  # From an already-patched input the entry extracts without read permission; through the mounts of some Docker
-  # hosts (macOS) root cannot override that, and set -e would stop here. The config is only printed: the image is
-  # unchanged. (No apostrophes in this block: it is one single-quoted sh -c argument.)
-  chmod u+r magisk.cfg
-  echo "--- Magisk config:"; cat magisk.cfg
-  echo "--- overlay.d:"; ./magiskboot cpio ramdisk.cpio "ls -r overlay.d"
-  ./magiskboot repack new-boot.img s1-boot.img'
+  sh patch-ramdisk.sh'
 cp "$W/p/s1-boot.img" "$OUT"
 [ "$(wc -c < "$OUT")" = "$(wc -c < "$IN")" ] || { echo "size changed: refusing"; exit 1; }
 echo "patched: $OUT"

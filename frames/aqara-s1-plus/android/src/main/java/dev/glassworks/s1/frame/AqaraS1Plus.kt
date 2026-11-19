@@ -80,9 +80,18 @@ class AqaraS1Plus(private val aqaraCloud: AqaraCloud = AqaraCloud()) : Frame {
         FrameRelease(board, stamp, install = if (stamp != null) null else NEEDS_LOADER)
     }
 
-    /** Its Wi-Fi chip has no PNO scans, so the app scans while the screen is off (#3). One per service run. */
+    /**
+     * Its Wi-Fi chip has no PNO scans, so the app scans while the screen is off (#3); and the boot writer's Magisk APK,
+     * fetched only while the writer asks for it (#139). One of each per service run.
+     */
     override fun serviceWork(context: Context, onForegroundOnly: () -> Unit): ServiceWork =
-        ScreenOffWifiScanner(context, onForegroundOnly = onForegroundOnly)
+        S1ServiceWork(listOf(ScreenOffWifiScanner(context, onForegroundOnly = onForegroundOnly), MagiskFetch(context)))
+
+    /** The S1's per-run work, started and stopped together, in order. */
+    class S1ServiceWork(val parts: List<ServiceWork>) : ServiceWork {
+        override fun start() = parts.forEach { it.start() }
+        override fun stop() = parts.forEach { it.stop() }
+    }
 
     override val shortName = "S1 Plus"
 
@@ -111,7 +120,8 @@ class AqaraS1Plus(private val aqaraCloud: AqaraCloud = AqaraCloud()) : Frame {
         const val SETTINGS_TITLE = "Aqara's own settings"
 
         /** How a panel without the loader gets a frame update (#139). */
-        const val NEEDS_LOADER = "To install it: update the panel once with Kiln, at ${FrameRelease.KILN}. Later frame updates install over the air"
+        const val NEEDS_LOADER = "It comes with the next app update, which puts the frame loader into the boot image over the air " +
+            "(the Device page shows how far it got). Later frame updates install over the air"
 
         /**
          * `Build.HARDWARE` on the S1's A133 (read 2026-11-14), the S1 frame's only check. Its other build

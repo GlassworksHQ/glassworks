@@ -66,7 +66,10 @@ class SettingsLayoutMockups {
         val byId = running.associateBy { it.id }
         fun model() = MenuFixture.model(app, radio, status = "screen on · presence near · voice=idle", panes = defs, running = { byId[it] }).let { m ->
             // The frame's Device page, after Screen, as S1Settings puts it.
-            val device = if (frame is AqaraS1Plus) dev.glassworks.s1.frame.S1Device(dev.glassworks.s1.frame.AqaraCloud(run = { "stopped" }), props, reader = { it.run() }).section(app, frame.frameRelease) { byId[it] }
+            val device = if (frame is AqaraS1Plus) dev.glassworks.s1.frame.S1Device(dev.glassworks.s1.frame.AqaraCloud(run = { "stopped" }), props, reader = { it.run() },
+                // #139's boot writer, half way (illustrative)
+                record = { dev.glassworks.s1.frame.BootWriter.Record("checking", 1_800_000_000, "patching a copy of boot") })
+                .section(app, frame.frameRelease) { byId[it] }
                 else frame.deviceSection(app) { byId[it] }
             device?.let { lastDevice = it; lastFrame = frameName }
             val at = m.sections.indexOfFirst { it.id == "screen" } + 1

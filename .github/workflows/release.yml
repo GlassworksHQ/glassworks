@@ -162,6 +162,8 @@ jobs:
           printf '%s\n' "$S1_RADIO_BUNDLE_KEY" > "$RUNNER_TEMP/radio-bundle.pem"
           IFS=. read -r major minor patch <<< "$VERSION"
           code=$((major * 10000 + minor * 100 + patch))   # = the APK's versionCode: only ever goes up
+          # The boot writer (#139, route 2): a 0.4.3 boot image gets the frame loader from this bundle, over the air
+          frames/aqara-s1-plus/tools/root/bootwriter-files.sh "$RUNNER_TEMP/bootwriter"
           python3 frames/aqara-s1-plus/tools/radio/make-bundle.py --version "$code" --app-version "$VERSION" \
             --key "$RUNNER_TEMP/radio-bundle.pem" \
             --out "$RUNNER_TEMP/signed" --pubkey frames/aqara-s1-plus/tools/root/glassworks_bundle.pub \
@@ -169,6 +171,7 @@ jobs:
             --file "otbr-agent=$RUNNER_TEMP/radio-in/otbr-agent:0700" \
             --file "ot-ctl=$RUNNER_TEMP/radio-in/ot-ctl:0700" \
             --file "hotspot-name.apk=$RUNNER_TEMP/hotspot-name/hotspot-name.apk:0644" \
+            --dir "bootwriter=$RUNNER_TEMP/bootwriter" \
             --dir "sisdk=$RUNNER_TEMP/sisdk"
 
       - name: Remove the key

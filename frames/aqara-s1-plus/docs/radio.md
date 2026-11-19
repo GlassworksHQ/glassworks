@@ -444,6 +444,12 @@ Glassworks names, run in the loader's `glassworks_agent` slot. What changes agai
 | the hotspot name overlay from the radio bundle | from the frame bundle (`hotspot-name.apk` at its top level). The Magisk module keeps its id `s1kiosk_hotspot_name` and the overlay its package `sh.edm.s1kiosk.overlay.hotspotname`: a 0.4.3 helper made that module, and a second id would leave two |
 | developer override `$DIR/dev-override` + `$DIR/s1kiosk_radio.sh` | the loader's `/data/glassworks/dev/override` + `dev/agent.sh` |
 
+**Getting there over the air (#139 route 2).** On a 0.4.3 boot image, the radio bundle's helper starts the boot
+writer (`bootwriter/glassworks_bootwriter.sh`), which puts this loader into the panel's own boot image once and
+restarts; the frame agent checks the result after that restart. State in `$DIR/boot-writer/`, the record for Manage
+in `/data/glassworks-pub/boot-writer`, the app's Magisk hand-off in `files/boot-writer/magisk.apk`
+([s1-boot-writer.md](../../../docs/research/s1-boot-writer.md)).
+
 Unchanged: `$DIR` stays `/data/s1kiosk/radio`, because `otbr-agent` has `$DIR/run` (and the Thread
 settings under it) compiled in. Everything else in the v4 table holds. The app reads both sets of names
 for one release; `s1kiosk_radio.sh` and `s1kiosk_bundle.sh` stay in the repo for that release, for the
