@@ -15,6 +15,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   another: it changes only what you tick, and greys out what the other panel's version doesn't have.
   Administrators only. Each panel checks the sign-in with Home Assistant itself, so panels never trust
   each other. Every panel needs this version for the page to reach it.
+- **Kiln's Done says whether the S1's updates install by themselves.** After an install or a setup, Kiln reads the
+  panel back and shows a *Silent updates* block: *On* when the boot image has its root update service, or *A tap
+  each* with how to add it when it doesn't. The lululemon Mirror's test install shows the same block, read from
+  whether Glassworks went in as a system app.
 - **Manage sends a test notification and shows the panel's notifications.** The Notifications page on the Manage
   page lists what is on the panel now, read-only, and has a *Send* button for the test notification. On the panel,
   *Send a test notification* is now a row with a *Send* button.
@@ -437,6 +441,12 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   it straight away. The *Thread join* sensor says how it went. Pasting the dataset still works.
 
 ### Fixed
+- **Undo and a failed switch say what really happened.** When the installer gives the panel back to
+  Aqara's apps, it now says whether Glassworks was removed, turned off, or is still on because Android
+  refused to turn it off. Before, it could say Glassworks was gone when it wasn't. When a switch to a
+  new build fails and the old build comes back, the installer says so if the app's data didn't come back
+  with it, and keeps the copy on the panel instead of deleting it. It no longer says Glassworks saved the
+  panel's Wi-Fi when it can't tell who did. This is in Kiln and in the command line installer.
 - **Assist's reply stays on a narrow screen.** On the Mirror, which stands portrait, the reply ran off
   both edges of the screen on one line. It now wraps inside the screen and gets smaller for a long
   reply, with room for up to five lines before it is cut short. The S1 and landscape tablets look as before.

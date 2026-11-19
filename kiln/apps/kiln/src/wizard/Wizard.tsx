@@ -14,7 +14,8 @@ function announce(s: WizardState, frame: FrameUi): string {
   if (s.ask) return `Your turn. ${frame.asks[s.ask.kind].title} Pick ${frame.asks[s.ask.kind].pick} in the list.`;
   if (s.screen === 'firing') { const m = milestones(s, frame.short).at(-1); return m ? `${m.text}${m.done ? ', done' : ''}.` : ''; }
   if (s.screen === 'error') return `${s.failure?.title} ${s.failure?.body}`;
-  if (s.screen === 'done') return s.done?.title ?? '';
+  // the Silent updates read-back lands after Done opens: its word changes the text, so it is read out too
+  if (s.screen === 'done') return s.done ? `${s.done.title}${s.done.updates ? ` Silent updates: ${s.done.updates.word}.` : ''}` : '';
   return '';
 }
 

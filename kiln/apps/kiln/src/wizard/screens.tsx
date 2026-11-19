@@ -7,6 +7,7 @@ import * as RadioGroup from '@radix-ui/react-radio-group';
 import { fmtSize } from '@glassworks/kiln-core';
 import Link from 'next/link';
 import { BuiltOn, stepCredits } from '../components/Credit';
+import { SilentUpdates } from '../components/SilentUpdates';
 import { LastRun } from '../components/LastRun';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FrameUi } from '../frames/aqara-s1-plus';
@@ -283,6 +284,7 @@ export function Done({ s, session, frame }: P) {
       <span className="okmark" aria-hidden="true">✓</span>
       <h2 id="h">{d.title}</h2>
       <p className="lede">{d.body}</p>
+      {d.updates && <SilentUpdates words={d.updates} />}
       {d.backup && (
         <div className="well">
           <span className="grow"><span>{d.backup.hint}</span><span className="small">{d.backup.name} · {d.backup.info}</span><span className="small">The latest backup made in this browser tab.</span></span>
