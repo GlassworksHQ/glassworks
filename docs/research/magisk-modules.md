@@ -106,7 +106,10 @@ What changes on a panel with (b):
   `/data/adb/magisk` stays and nothing reads it. With this boot image, removing `/data/adb/magisk/busybox` does
   nothing: init copies it back on the next boot, before Magisk checks. To stop one module, leave a `disable` file in
   its directory (what Magisk's app does), or, for #430's, set the name back to Android. To stop every module, go
-  back to a boot image without `s1kiosk_magiskenv.rc`, then remove the file.
+  back to a boot image without `s1kiosk_magiskenv.rc`, then remove the file. Each takes effect at the next boot:
+  Magisk mounts modules once, at `post-fs-data`, and what it mounted stays until a restart. So restart after the
+  change (after removing the file, in the last case: the boot that brought the old image back may still have
+  loaded them).
 
 ## How to reproduce
 
