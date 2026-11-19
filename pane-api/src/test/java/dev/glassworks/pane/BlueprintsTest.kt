@@ -30,14 +30,17 @@ class BlueprintsTest {
 
     // ------------------------------------------------------------------ links
 
-    @Test fun theRefIsTheReleaseTagTheTestBuildsCommitOrMain() {
-        assertEquals("v0.5.0", BlueprintLinks.ref(AppBuild("0.5.0", 500, debug = false)))
-        assertEquals("28c157d", BlueprintLinks.ref(AppBuild("0.4.3", 403, debug = false, testBuild = "28c157d")))
+    /** The release line's tag for a version (ReleaseLine.tag in core; ReleasesTest checks each line's). */
+    private val tag = { v: String -> "line-v$v" }
+
+    @Test fun theRefIsTheReleaseLinesTagTheTestBuildsCommitOrMain() {
+        assertEquals("line-v0.5.0", BlueprintLinks.ref(AppBuild("0.5.0", 500, debug = false), tag))
+        assertEquals("28c157d", BlueprintLinks.ref(AppBuild("0.4.3", 403, debug = false, testBuild = "28c157d"), tag))
         // a development build: the build's default version, no release set
-        assertEquals("main", BlueprintLinks.ref(AppBuild("0.1.0", 1, debug = true)))
-        assertEquals("main", BlueprintLinks.ref(AppBuild("0.1.0", 1, debug = false)))
+        assertEquals("main", BlueprintLinks.ref(AppBuild("0.1.0", 1, debug = true), tag))
+        assertEquals("main", BlueprintLinks.ref(AppBuild("0.1.0", 1, debug = false), tag))
         // a release's code always matches its name, also the smallest one
-        assertEquals("v0.0.1", BlueprintLinks.ref(AppBuild("0.0.1", 1, debug = false)))
+        assertEquals("line-v0.0.1", BlueprintLinks.ref(AppBuild("0.0.1", 1, debug = false), tag))
     }
 
     @Test fun theRawUrlIsPinnedToTheRef() {

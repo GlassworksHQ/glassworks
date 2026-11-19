@@ -70,12 +70,52 @@ Details and sources: [onboarding.md](onboarding.md#2-adoption--encryption-esphom
 | Field | Value |
 |---|---|
 | name / friendly name | `aqara-s1-plus-a1b2c3` / `Aqara S1 Plus`: what the device is, and the end of its MAC (see [Names](#names)). Before #260: `s1-panel` / `Glassworks Panel` |
-| MAC (unique id in HA) | the Wi-Fi MAC of `wlan0` if readable, else a locally administered MAC derived from the chip serial (SHA-256 of `ro.serialno`), else a random one; persisted in prefs (`device_mac`). The first two come out the same after a reinstall, so HA keeps the same device |
+| MAC (unique id in HA) | Kept in prefs (`device_mac`) once chosen. With none saved, the first of: `ro.glassworks.device.mac` (Kiln writes it into the Mirror's image, see [Identity across reinstalls](#identity-across-reinstalls)); the Wi-Fi MAC of `wlan0` if readable; a locally administered MAC derived from the chip serial (SHA-256 of `ro.serialno`); one derived from `ANDROID_ID`; else a random one |
 | manufacturer / model | The frame's: `Aqara` / `Panel Hub S1 Plus (Glassworks)` on the S1. Elsewhere the device's own (`Build.MANUFACTURER` / `Build.MODEL`): `Google` / `Pixel Tablet (Glassworks)`. Up to 0.4.3 the S1 app said `(S1 Kiosk)` |
 | esphome_version / compilation_time | `2026.10.2` / `Glassworks <app version>` (HA shows "2026.10.2 (Glassworks 0.1.0)") |
 | API version | 1.20 (as ESPHome 2026.10/11); `DeviceCapabilitiesRequest` is answered |
 | Sendspin | `DeviceCapabilitiesResponse.sendspin` = `{feature_flags: PAIRING_TOKEN, client_id}`; `SendspinPairingTokenRequest` (159) → `SendspinPairingTokenResponse` (160), token only over Noise with a key ([sendspin.md](sendspin.md#esphome-hand-off-how-ha-gives-ma-the-token)) |
 | voice_assistant_feature_flags | 61 = VOICE_ASSISTANT 1 + API_AUDIO 4 + TIMERS 8 + ANNOUNCE 16 + START_CONVERSATION 32 (0 when `voice_enabled` is false). Voice turned on or off while the panel runs changes it, and the panel asks Home Assistant to reconnect so it reads it again (#67) |
+
+
+### Identity across reinstalls
+
+Home Assistant keys the device and every entity's unique id by the MAC above. A new MAC means a new device in HA,
+and its entities get new ids. Where each frame stands (#523):
+
+| Frame | After a reinstall or reflash | Why |
+|---|---|---|
+| S1 | Same device | An update installs in place and keeps the saved MAC. With the app's data wiped, `wlan0` is readable on its Android 10, so it comes out the same |
+| Mirror (Kiln or `tools/mirror/flash-node.ts`) | Same device, from the first flash that writes `ro.glassworks.device.mac` | A flash writes a fresh userdata, which wipes the app's data. Kiln derives the MAC from the serial its bootloader reports (`fastboot getvar serialno`), with the app's own formula, and writes it into `build.prop`. The Mirror's current MAC isn't the one derived from its serial (checked 2026-11-18), so the first flash with this moves it to a new device once |
+| Generic app, Android 6 to 7 | Same device | `ro.serialno` is readable |
+| Generic app, Android 8 and later | Same device, unless the device is factory reset or the APK's signing key changes | `ANDROID_ID`, which Android keeps for the same app signing key until a factory reset. `wlan0` and `ro.serialno` are hidden from apps there. An install from before this change may have saved a random MAC: an update keeps it, but the first reinstall after it moves to the `ANDROID_ID` one, a new device once |
+
+The API key ([Encryption](#encryption-automatic)) lives in the app's data too, so a reflash wipes it, while Home
+Assistant's entry keeps it. A fresh app that answers with no key makes HA open a re-authentication
+(`reauth_encryption_removed_confirm`), and the entities stay unavailable until someone confirms it (seen on the Mirror
+2026-11-18). So the headless Mirror flash carries the key over (#574):
+
+1. Just before it restarts the Mirror into fastboot, it reads the key from the running app over adb, on the app's
+   socket `@glassworks_api_key` (`ApiKeyHandover`: adb only, uid 0 or 2000; never on the LAN). It prints the key's
+   4-hex fingerprint, never the key. If the app has a key but can't hand it over now, the flash stops there, with
+   nothing written.
+2. It writes `ro.glassworks.api_key.handover=1` into the image's `build.prop`: a flag, not the key, since every app
+   can read `build.prop`.
+3. On that flag, the fresh app keeps its API server shut and unannounced until a key comes, for up to 15 minutes. HA
+   only gets "connection refused" and retries, which opens no re-authentication.
+4. At the first boot, right after it starts the app, the flash hands the key back on the same socket, and tries again
+   while the socket fails or doesn't answer. `set` only fills an empty key store: it never replaces a key in use. The app starts its API server with the key, and HA reconnects.
+
+What each installer can reach before the flash:
+
+| Installer | Before the flash | Carries the key |
+|---|---|---|
+| `tools/mirror/flash-node.ts` | adb to the running app (the Mirror on our image lets the flash's adb key in) | Yes, from an app with #574. An older app has no socket: HA asks once more |
+| Kiln's page | Only fastboot: its Mirror flow starts at the button inside the Mirror's back, with no adb step before it | Not yet. It writes no flag, so the app starts as before and HA asks once |
+| The S1 | Not reflashed: updates install in place and keep the key | Not needed |
+
+If the hand-over fails, the app starts without a key after the 15 minutes, as before, and HA asks once. A key derived
+from the serial, like the MAC, would need no hand-over, but anyone who knows the serial could compute it.
 
 ## Entities
 
@@ -151,7 +191,7 @@ open the entity, and turn on *Enabled*.
 | Presence | `presence` | core | none | on | Automations |
 | Illuminance | `illuminance` | core | none | on | Automations |
 | Docked | `docked` | core | none | on | Automations: what the panel does on and off its dock. Only on a device that docks ([Docked](#docked)) |
-| Screen | `screen` | core | none | on | Dashboards and automations |
+| Screen | `screen` | core | config | on | Dashboards and automations, by its entity id. Config keeps it out of a room's "lights off" ([below](#the-screen-is-a-config-light)) |
 | Speaker | `speaker` | core | none | on | Dashboards, Music Assistant, announcements |
 | Reload dashboard | `reload_dashboard` | core | none | on | Used often |
 | Restart app | `restart_app` | core | config | on | Used often |
@@ -215,6 +255,25 @@ open the entity, and turn on *Enabled*.
 | Base relay N, Base button N, Base power, Base energy | `base_relay_N`, `base_button_N`, `base_power`, `base_energy` | wall base | none | on | The reason to mount a base |
 | Base protection | `base_protection` | wall base | diagnostic | on | Overheat and overload; people automate on it. It had no category before #132 |
 
+#### The screen is a config light
+
+Most people don't count their wall panel as one of the room's lights. Up to #591 the screen had no
+category, so every "lights off" aimed at the panel's area turned the screen off too: a presence
+automation's "room empty", a Good Night script, Assist's "turn off the bedroom lights". Home Assistant
+leaves an entity with a category out of a target it reaches through an area, floor, device or a labelled
+device or area, and doesn't show it to Assist unless someone exposes it (`helpers/target.py` 2026.11.0:227). So the screen is `config`, and it keeps its object id, key and entity id.
+
+| | Before #591 | Now |
+|---|---|---|
+| `light.turn_off` with an `area_id`, `floor_id` or `device_id`, or a `label_id` on the panel's device or area | Turns the screen off | Skips it |
+| `light.turn_off` with the screen's `entity_id`, or a `label_id` put on the screen entity itself; a dashboard card | Turns it off | Turns it off |
+| Assist, a panel HA adds from now on | Sees it | Doesn't see it until someone exposes it |
+| Assist, a panel HA already has | Sees it | Still sees it: HA saved the choice when it first saw the entity. Turn off **Expose** once in **Settings → Voice assistants → Expose** |
+
+HA's registry takes the category only when it adds the panel's entities again: after a restart of HA or a
+**Reload** of the ESPHome entry (Settings → Devices & services → ESPHome → the panel → ⋮ → Reload). The app
+update's reconnect alone isn't enough (verified on the S1, 2026-11-19, HA 2026.11).
+
 HA adds its own voice entities (*Assist satellite*, *Assist pipeline*, *Wake word*, *Finished speaking
 detection*). The panel doesn't send those, so their defaults are HA's.
 
@@ -242,7 +301,7 @@ So on a panel HA already has:
 |---|---|
 | Entities that were on | Stay on, with the same entity id, area and name |
 | Entities you turned off | Stay off |
-| Category | Follows the panel: *Base protection* moves to the device page's *Diagnostic* section. No other category changes |
+| Category | Follows the panel: *Base protection* moves to the device page's *Diagnostic* section, and *Screen* to *Configuration* ([the screen is a config light](#the-screen-is-a-config-light)). No other category changes |
 | Entities that appear later (a new pane, a wall base mounted after the update) | Get the new default when HA first sees them |
 | Removing the panel from HA and adding it back | Each entity gets back the state it had, while HA still remembers the deleted entities |
 
@@ -573,11 +632,11 @@ the stream). Its component and the main activity's differ per app:
 
 | App | Camera settings | Main activity |
 |---|---|---|
-| Glassworks on the Aqara S1 Plus | `sh.edm.s1kiosk/.CameraAdbActivity` | `sh.edm.s1kiosk/.MainActivity` |
+| Glassworks on the Aqara S1 Plus | `sh.edm.s1kiosk/dev.glassworks.camera.CameraAdbActivity` | `sh.edm.s1kiosk/.MainActivity` |
 | Glassworks for generic Android | `dev.glassworks.generic_android/dev.glassworks.camera.CameraAdbActivity` | `dev.glassworks.generic_android/dev.glassworks.MainActivity` |
 | Its legacy build (Android 6-7, the lululemon Mirror) | `dev.glassworks.generic_android.legacy/dev.glassworks.camera.CameraAdbActivity` | `dev.glassworks.generic_android.legacy/dev.glassworks.MainActivity` |
 
-For example, on the S1: `adb shell am start -n sh.edm.s1kiosk/.CameraAdbActivity --es camera_use snapshots --ez onvif_stream true`.
+For example, on the S1: `adb shell am start -n sh.edm.s1kiosk/dev.glassworks.camera.CameraAdbActivity --es camera_use snapshots --ez onvif_stream true`.
 `--es camera_stream_sign_in 'user:password'` sets the stream's sign-in, and an empty value clears
 it, which closes the stream until a sign-in is set again. The pane's on/off is the
 usual `--ez camera_enabled true` on the main activity, for example

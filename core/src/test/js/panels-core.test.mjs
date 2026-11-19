@@ -9,7 +9,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { test } from 'node:test';
 import { ACCESS_MS, FORGET_MS, TOKEN_MS, MAX_WAIT_S, SETTINGS_MS, TRIES, WRITE_MS, accepts, copyRows, authorizeUrl, hello, localHost, manageOrigin, panelAccess, panelForget, revokeAt, storedFor, tokenRequest, usable, writeSetting, outcome, panelsFrom, pkceChallenge, plan, reachability, readPanel, retrying, sha256 } from '../../main/assets/manage/panels-core.js';
 
-const MODEL = 'Panel Hub S1 Plus (S1 Kiosk)';
+const MODEL = 'Panel Hub S1 Plus (Glassworks)';
 const device = (id, url, more = {}) => ({ id, name: 'Glassworks Panel', model: MODEL, config_entries: ['esp'], configuration_url: url, area_id: null, disabled_by: null, ...more });
 const entries = [{ entry_id: 'esp', domain: 'esphome' }, { entry_id: 'ma', domain: 'music_assistant' }];
 

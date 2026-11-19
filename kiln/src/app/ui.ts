@@ -5,7 +5,7 @@ import type { Fastboot } from '@glassworks/fastboot';
 import { FelDevice } from '@glassworks/fel';
 import { kilnSignInUrl, openSignInWindow, SETUP_SOCKET, SetupChannel, validHaUrl, type SetupState } from '@glassworks/setup-channel';
 import {
-  IMPROV_SOCKET, ImprovSerialClient, PacketReader, PacketType, Rpc, State as ImprovState, describeSwitch, frame, parseResult, s1Plus, strings, unprovision,
+  IMPROV_SOCKET, ImprovSerialClient, PacketReader, PacketType, Rpc, State as ImprovState, describeSwitch, describeSwitched, frame, parseResult, s1Plus, strings, unprovision,
   type AssetName, type ByteStream, type Provisioned, type SetUpOptions,
 } from '@glassworks/aqara-s1-plus-installer';
 import {
@@ -1128,7 +1128,7 @@ class Installer {
       });
       const sw = res.switched;
       this.adbRow('ok', sw ? 'Glassworks switched to this version' : 'Glassworks installed',
-        sw ? `${sw.dataKept ? 'Settings kept' : 'Settings reset'} · ${sw.wifi === 'lost' ? 'Wi-Fi needs its password again' : 'Wi-Fi kept'}` : 'Set as the home screen', 'Done');
+        sw ? describeSwitched(sw) : 'Set as the home screen', 'Done');
       $('#hands').hidden = true;
       this.ip = res.ip;
       this.wifiHint = sw?.wifi === 'lost'

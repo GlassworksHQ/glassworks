@@ -44,6 +44,7 @@ TEST_INPUTS = APK_INPUTS + (
     'kiln/packages/brand/src/tokens.css', 'kiln/packages/setup-channel/test/aqara-s1-plus-transcript.json',
     'branding/glass-tile/bootanimation.zip', 'frames/aqara-s1-plus/tools/bracket/base_emulator.py',
     'frames/aqara-s1-plus/tools/debloat/debloat.sh', 'frames/generic-android/installer/src/devices.ts',
+    'frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh',  # CaptivePortalTest: the portal's ports are the helper's
     '**/sh/edm/**',
 )
 
@@ -71,7 +72,7 @@ RULES = {
     'app_apk': Rule('app: release build, update check', when=ANDROID + APK_INPUTS + (
         'tools/release/check-update-compat.sh', HOTSPOT_NAME)),
     'esphome': Rule('app: aioesphomeapi tests', when=LIBS),
-    'libs_api23': Rule('libs-api23', when=LIBS),
+    'libs_api23': Rule('libs-api23: lint at minSdk 23', when=LIBS),
     'api23': Rule('api23', when=ANDROID + ('tools/legacy',)),
     'libs_publish': Rule('libs-publish', when=LIBS + (
         'LICENSE', 'LICENSES', 'THIRD-PARTY-NOTICES.md', 'tools/release/check-lib-artifact.sh',

@@ -88,6 +88,13 @@ export interface SystemPatch {
    * first boot is the image's own.
    */
   settingsOverlay?: Uint8Array;
+  /** The device's MAC, written as DEVICE_MAC_PROP (from checkFastboot's `deviceMac`); none: the app picks its own. */
+  deviceMac?: string;
+  /**
+   * The installer read the app's ESPHome API key before the flash and hands it over at the first boot (#574): written
+   * as API_KEY_HANDOVER_PROP=1, so the fresh app opens no API server until the key comes. Never the key itself.
+   */
+  apiKeyHandover?: boolean;
   /** Seconds since 1970 for new files; default now. */
   time?: number;
 }
@@ -101,6 +108,32 @@ export const SETTINGS_OVERLAY = {
   path: '/vendor/overlay/GlassworksSettings.apk',
   sha256: '4a8796d33b41da6a7ad44c065d57a5bfcad860794006d52b9977ff19f5f1c342',
 } as const;
+
+/**
+ * The build.prop key the app takes its Home Assistant identity from when its data is new (PanelDevice.IMAGE_MAC_PROP).
+ * A reflash wipes the app's data; with this the Mirror stays the same device in Home Assistant (#523).
+ */
+export const DEVICE_MAC_PROP = 'ro.glassworks.device.mac';
+
+/**
+ * The build.prop key that tells the app the installer hands its ESPHome API key over at the first boot
+ * (PanelDevice.API_KEY_HANDOVER_PROP, #574). Only a flag: the key never goes in build.prop, which every app can read.
+ */
+export const API_KEY_HANDOVER_PROP = 'ro.glassworks.api_key.handover';
+
+const MAC = /^([0-9A-F]{2}:){5}[0-9A-F]{2}$/;
+
+/**
+ * The device's MAC for its chip serial, as the app derives it (PanelDevice.macFromSerial): SHA-256 of the salted
+ * serial, its first 6 bytes, made unicast and locally administered. Undefined for a serial that isn't one.
+ */
+export async function macFromSerial(serial: string | undefined): Promise<string | undefined> {
+  const s = serial?.trim() ?? '';
+  if (s.length < 8 || s === 'unknown') return undefined;
+  const b = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`s1kiosk-device-mac:${s}`))).slice(0, 6);
+  b[0] = (b[0]! & 0xfc) | 0x02;
+  return [...b].map((x) => x.toString(16).padStart(2, '0').toUpperCase()).join(':');
+}
 
 const dirAttrs = (time: number): Attrs => ({ mode: 0o755, uid: AID.root, gid: AID.root, label: LABELS.system, time });
 const fileAttrs = (time: number): Attrs => ({ mode: 0o644, uid: AID.root, gid: AID.root, label: LABELS.system, time });
@@ -162,6 +195,7 @@ export async function patchSystem(fs: Ext4, o: SystemPatch, log: (line: string) 
     const got = [...new Uint8Array(await crypto.subtle.digest('SHA-256', o.settingsOverlay as Uint8Array<ArrayBuffer>))].map((b) => b.toString(16).padStart(2, '0')).join('');
     if (got !== SETTINGS_OVERLAY.sha256) throw new Error(`the settings overlay isn't the one Kiln builds (SHA-256 ${got}). Nothing was changed.`);
   }
+  if (o.deviceMac !== undefined && !MAC.test(o.deviceMac)) throw new Error('the device id isn\'t a MAC (AA:BB:CC:DD:EE:FF). Nothing was changed.');
   const app = o.app ?? GLASSWORKS;
   await checkMirrorApk(o.apk, app);
   // the ABI with real libraries (lib/<abi>/<name>.so), as apkInfo reads them
@@ -213,6 +247,13 @@ export async function patchSystem(fs: Ext4, o: SystemPatch, log: (line: string) 
 
   let next = setProp(setProp(prop, 'ro.glassworks.frame.id', MIRROR_FRAME.id), 'ro.glassworks.frame.version', MIRROR_FRAME.version);
   const set = [`ro.glassworks.frame.version=${MIRROR_FRAME.version}`];
+  // the value is device-unique: the log names the key only. Without one, an earlier build's goes: after a failed
+  // flash Kiln patches the same image again, maybe for another Mirror.
+  if (o.deviceMac) { next = setProp(next, DEVICE_MAC_PROP, o.deviceMac); set.push(DEVICE_MAC_PROP); }
+  else next = next.split('\n').filter((l) => !l.startsWith(`${DEVICE_MAC_PROP}=`)).join('\n');
+  // the same for the key's flag: a rebuild that carries no key must not make the app wait for one
+  if (o.apiKeyHandover) { next = setProp(next, API_KEY_HANDOVER_PROP, '1'); set.push(`${API_KEY_HANDOVER_PROP}=1`); }
+  else next = next.split('\n').filter((l) => !l.startsWith(`${API_KEY_HANDOVER_PROP}=`)).join('\n');
 
   // No swipe lock screen, with the overlay: the two make the first boot with nothing to tap, and
   // without the overlay the first boot is the image's own. SettingsProvider's DatabaseHelper and

@@ -202,9 +202,11 @@ export function FlashFastboot({ f, s }: P) {
       <h2 id="h">Put the Mirror in fastboot.</h2>
       <Recovery data={RECOVERY} />
       <ol className="join">
-        <li>Unplug the Mirror&apos;s power and lay it face down. Take out the 4 screws in the bottom edge, by the feet, then the 12 in the back, and lift the back off.</li>
-        <li>On the small green board at the top end, hold VOL&minus;, the one nearer the frame&apos;s edge (SW3).</li>
-        <li>Keep holding while you plug its micro-USB port into this computer, then the power. Hold for about 5 seconds more. Its screen stays black: that&apos;s fastboot.</li>
+        <li>Switch the Mirror off with the rocker switch in its bottom edge, unplug its power cord, and lay it face down. Take out the 4 screws in the bottom edge that hold the stand, and take the stand off. Then take out the 14 screws in the back, 2 of them either side of the recess by the feet, and lift the back off.</li>
+        <li>Plug the power cord back into its socket in that recess. Leave the switch off.</li>
+        <li>Plug the micro-USB port, in the top end&apos;s corner, into this computer.</li>
+        <li>On the small green board at the top end, hold VOL&minus; (SW3): of its two buttons side by side, the one nearer the top end&apos;s edge.</li>
+        <li>Keep holding while you switch the Mirror on, and for about 5 seconds more. Its screen stays black: that&apos;s fastboot.</li>
       </ol>
       <p className="small">Hold only VOL&minus;. Both buttons together start a Qualcomm mode Kiln can&apos;t use, and VOL+ opens an update screen. Some Mirrors have a service hatch in the back that reaches the board: open that instead.</p>
       <p className="small">Then click Connect and pick the Mirror (<code>Android</code>) in the browser&apos;s list. Kiln only reads it here.</p>

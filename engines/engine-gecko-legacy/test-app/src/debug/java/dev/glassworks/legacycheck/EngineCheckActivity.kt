@@ -28,7 +28,7 @@ import org.json.JSONObject
  * [Engine] API, without the S1 app's MainActivity (whose API 24+ calls are a later part of #198). It opens one
  * page with the S1 app's helper extension and shows, on top, what ran:
  *
- *   adb -s <serial> shell am start -n sh.edm.s1kiosk.legacy/dev.glassworks.legacycheck.EngineCheckActivity --es url http://127.0.0.1:18125/
+ *   adb -s <serial> shell am start -n dev.glassworks.s1.legacy/dev.glassworks.legacycheck.EngineCheckActivity --es url http://127.0.0.1:18125/
  *
  * The URL is the dashboard the engine starts with, so its origin is the one the lockdown allows, for the life of
  * the process: to check another origin, `am force-stop` the app first. Without `url` it opens the last one.

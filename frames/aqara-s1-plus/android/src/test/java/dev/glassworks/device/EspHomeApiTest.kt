@@ -62,7 +62,7 @@ class EspHomeApiTest {
         var muted = false
         var volume = 1f
         return listOf(
-            BrightnessLightEntity("screen", "Screen", get = { screenOn to brightness },
+            BrightnessLightEntity("screen", "Screen", category = EntityCategory.CONFIG, get = { screenOn to brightness },
                 set = { on, b -> on?.let { screenOn = it }; b?.let { brightness = it } }),
             SwitchEntity("auto_brightness", "Auto brightness", category = EntityCategory.CONFIG, disabledByDefault = true, get = { auto }, set = { auto = it }),
             BinarySensorEntity("presence", "Presence", deviceClass = "occupancy", get = { true }),
@@ -224,6 +224,7 @@ class EspHomeApiTest {
             assertEquals(expected, flags.keys().asSequence().associateWith { flags.getString(it) })
             assertEquals("true/1", flags.getString("auto_brightness"))
             assertEquals("false/2", flags.getString("ip_address"))
+            assertEquals("false/1", flags.getString("screen"))
             assertEquals("double", r.getString("event_type"))
             // Update entity: UpdateCommand CHECK (2) then INSTALL (1), decoded by the real client.
             assertEquals(listOf(2, 1), updateCommands.toList())

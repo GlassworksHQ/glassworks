@@ -26,3 +26,19 @@ interface ManagePage {
     /** The Overview's actions, the same on the page and in the panel's menu. */
     val actions: PanelActions
 }
+
+/**
+ * [make]'s result, or null when it can't load or start: for a part the panel runs without, such as the Manage page or
+ * one of its cards. A class Android refuses to load throws a LinkageError (VerifyError, NoClassDefFoundError); not
+ * caught, it ended the app at every start on the Mirror (#435, 2026-11-18). [warn] gets what failed and why.
+ */
+inline fun <T> orWithout(what: String, warn: (String) -> Unit, make: () -> T): T? =
+    try {
+        make()
+    } catch (e: LinkageError) {
+        warn("$what can't load, so the panel runs without it: $e")
+        null
+    } catch (e: RuntimeException) {
+        warn("$what can't start, so the panel runs without it: $e")
+        null
+    }

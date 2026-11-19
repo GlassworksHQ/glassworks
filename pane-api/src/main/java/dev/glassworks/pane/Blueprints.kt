@@ -43,13 +43,15 @@ object BlueprintLinks {
     const val REPO = "GlassworksHQ/glassworks"
 
     /**
-     * The git ref the app's blueprints come from: a test build's commit, a release's tag `v<versionName>`,
-     * else `main`. A release's versionCode is always major*10000 + minor*100 + patch of its versionName
-     * (build.gradle.kts); a development build's defaults (0.1.0 with code 1) don't match, so it follows main.
+     * The git ref the app's blueprints come from: a test build's commit, a release's tag, else `main`. [tag]
+     * is the app's own release line's tag for a version (ReleaseLine.tag in core: `aqara-s1-plus-v0.5.0` on
+     * the S1, `generic-android-v0.2.0`, `generic-android-legacy-v0.2.0`). A release's versionCode is always
+     * major*10000 + minor*100 + patch of its versionName (build.gradle.kts); a development build's defaults
+     * (0.1.0 with code 1) don't match, so it follows main.
      */
-    fun ref(build: AppBuild): String = when {
+    fun ref(build: AppBuild, tag: (version: String) -> String): String = when {
         build.testBuild.isNotEmpty() -> build.testBuild
-        build.versionCode == releaseCode(build.versionName) -> "v${build.versionName}"
+        build.versionCode == releaseCode(build.versionName) -> tag(build.versionName)
         else -> "main"
     }
 

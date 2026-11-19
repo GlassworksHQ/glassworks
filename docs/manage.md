@@ -21,7 +21,7 @@ It has the same settings as the panel's own menu, and changes them the same way.
 | Home Assistant & dashboard, Screen, each pane | Every setting the panel's own menu has, in the same order and words, and you can change each one here. Screen and some panes end with their [blueprints for Home Assistant](blueprints.md#adding-one-from-the-manage-page), such as Panel night mode. A pane's page has its on/off at the top right and shows what it's doing; a pane that's off says what that means. The radio's page links to the Thread join |
 | The device's page (S1 Plus, or the device's model) | What belongs to the device and to no pane. On the S1: **Block Aqara cloud**, the cloud daemon's state, which of Aqara's apps are turned off, the radio's mode (it opens the Radio page) and **Silent updates**. Elsewhere: **Silent updates**, whether the app is the device owner, the model and the Android version. **Silent updates** says whether an update from Home Assistant installs with nobody at the panel, and why; where it can't, how to change that on this kind of device, in amber ([Silent updates](esphome.md#silent-updates)) |
 | Log | The last 7 days, kept across reboots. Filter by warnings or errors, search, and **Download diagnostics** |
-| Security | The browsers signed in, each with **Sign out** |
+| Security | The browsers signed in, each with **Sign out**. Where the app may answer USB debugging (the Mirror): **Allow a new computer**, for the one asking now, and the **Allowed computers**, each with **Remove** |
 | About | Versions, frame, licences |
 
 On a phone the menu folds behind the ☰ button. Light or dark follows your phone or computer.
@@ -115,7 +115,8 @@ no cable and no Bluetooth (an iPhone too).
    from a phone** on its Wi-Fi step. It never opens while the panel is on a network.
 2. **Join it.** The setup screen shows a QR code: scan it with the phone's camera to join. The network's name
    and password are under it too, for typing. Then open the address it shows (`http://<address>:8099/setup`)
-   and pair as above.
+   and pair as above. On the S1 an iPhone, or an Android 11+ phone that joined from its Wi-Fi settings, opens the
+   page by itself once it joins; Android 10 shows a "Sign in to Wi-Fi network" notification to tap instead.
 3. **Send your Wi-Fi.** The page starts with Wi-Fi, since the panel is on no network. Pick yours and type the
    password. The panel closes its own Wi-Fi and joins; its screen shows how it goes. Put the phone back on
    your own Wi-Fi.
@@ -135,7 +136,7 @@ no cable and no Bluetooth (an iPhone too).
 | Wi-Fi turned off | From Android 10 an app can't turn Wi-Fi on. With the panel's Wi-Fi off, it doesn't open its own: it couldn't join what the phone sends. The setup screen says so, with **Turn on Wi-Fi** |
 | Android 8 and newer | Android's local-only hotspot: Android names it (`AndroidShare_…` on the S1) and picks its key. No setting changes. On Android 13 and newer the panel asks for *Nearby devices* first; on 8 to 12 it needs location on |
 | Android 6 and 7 | A hidden Android call opens it as `Glassworks-…`. The panel puts back the device's own hotspot settings and its Wi-Fi when it closes |
-| A captive portal | Not yet: the page doesn't open by itself. It comes later, on panels with root |
+| The page opens by itself | On the S1: joining the panel's Wi-Fi brings up the setup page, like a hotel's Wi-Fi sign-in. iOS opens its sign-in sheet. Android 11 and newer open the page by themselves when you joined from the Wi-Fi settings; Android 10, or a join from the camera, shows a "Sign in to Wi-Fi network" notification to tap. While its own Wi-Fi is open, the panel answers the phone's DNS and its web check, and its root helper sends them there (#197, `docs/research/setup-hotspot-portal-and-name.md`). Elsewhere, open the address on the screen: Android doesn't let an app do this without root |
 
 ## Changing settings
 

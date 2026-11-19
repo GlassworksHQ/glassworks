@@ -63,6 +63,8 @@ class ManageServer(
     sweepMs: Long = 60_000,
     /** Runs [stop]'s last revokes off the caller's thread (it may be the main thread); tests run them at once. */
     private val background: (() -> Unit) -> Unit = { work -> Thread(work, "gw-manage-stop").apply { isDaemon = true }.start() },
+    /** "Allow a new computer" on the Security page, where the app can answer adb's question (#435); null elsewhere. */
+    private val usb: ManageUsbDebugging? = null,
 ) {
     private val random = SecureRandom()
 
@@ -544,7 +546,8 @@ class ManageServer(
                 html(200, pages.log(status, viewer, log.read(level, q), level, q))
             }
             path == "/log/diagnostics.txt" -> diagnostics()
-            path == "/security" -> html(200, pages.security(status, viewer, sessions.list(haBase()), s.id, notice(req.query["done"])))
+            path == "/security" -> html(200, pages.security(status, viewer, sessions.list(haBase()), s.id, notice(req.query["done"]),
+                more = usb?.cards(viewer, req.query["usb"]).orEmpty()))
             path == "/about" -> html(200, pages.about(status, viewer))
             path == ManagePages.PANELS -> panels(status, viewer, s.id)
             path == "/confirm/reboot" -> html(200, rebootDialog(status, viewer, null))
@@ -698,6 +701,8 @@ class ManageServer(
                 Ended.LEFT -> json(200, JSONObject().put("ok", true).put("left", true))
                 Ended.NOT_CONFIRMED -> json(502, JSONObject().put("problem", "Home Assistant didn't confirm it ended the sign-in. Try again."))
             }
+            ManageUsbDebugging.ALLOW, ManageUsbDebugging.REMOVE ->
+                usb?.post(req.path, req.form, who(s), homeAssistant = s.with == SignedInWith.HOME_ASSISTANT) ?: HttpResponse.text(404, "Not found.")
             "/security/signout" -> {
                 val id = req.form["id"].orEmpty()
                 val target = sessions.list(haBase()).firstOrNull { it.id == id }

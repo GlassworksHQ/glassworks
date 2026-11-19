@@ -56,7 +56,7 @@ const panels = {
     { id: 'camera', title: 'Camera', items: [{ key: 'Stream sign-in', title: 'Stream sign-in', kind: 'sign-in', set: false }] },
   ] },
 };
-const S1 = 'Panel Hub S1 Plus (S1 Kiosk)';
+const S1 = 'Panel Hub S1 Plus (Glassworks)';
 const devices = [
   { id: 'k', name: 'Aqara S1 Plus', name_by_user: 'Kitchen panel', model: S1, config_entries: ['esp-k'], area_id: 'kitchen', configuration_url: 'http://kitchen-panel.local:8099', disabled_by: null },
   { id: 'b', name: 'Aqara S1 Plus', name_by_user: 'Bedroom panel', model: S1, config_entries: ['esp-b'], area_id: 'bedroom', configuration_url: 'http://bedroom-panel.local:8099', disabled_by: null },

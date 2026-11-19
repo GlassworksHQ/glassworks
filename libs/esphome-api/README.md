@@ -230,7 +230,7 @@ entity types marked Supported or Partial are exactly the ones the server lists.
 | Number (`number`) | 49–51 | Supported | 0.1.0 | |
 | Select (`select`) | 52–54 | Supported | 0.1.0 | |
 | Text (`text`) | 97–99 | Supported | 0.1.0 | |
-| Light (`light`) | 15, 24, 32 | Partial: on, off and brightness only | 0.1.0 | `BrightnessLightEntity`. No color modes, effects, transition or flash, and no category or disabled-by-default |
+| Light (`light`) | 15, 24, 32 | Partial: on, off and brightness only | 0.1.0 | `BrightnessLightEntity`. No color modes, effects, transition or flash |
 | Media player (`media_player`) | 63–65 | Partial: no category or disabled-by-default | 0.1.0 | Supported formats carry the format and purpose, not the sample rate, channels or sample size |
 | Camera (`camera`) | 43–45 | Partial: no idle image | 0.1.0 | Single images and streams work. ESPHome also sends a frame every `idle_update_interval` |
 | Event (`event`) | 107, 108 | Supported | 0.1.0 | |

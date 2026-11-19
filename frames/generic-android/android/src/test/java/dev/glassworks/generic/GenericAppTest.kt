@@ -191,7 +191,9 @@ class GenericAppTest {
      */
     @Test fun everyBuildAsksForThePrivilegedPermissionsAndHasOneHomeFilter() {
         val requested = app.packageManager.getPackageInfo(app.packageName, PackageManager.GET_PERMISSIONS).requestedPermissions.orEmpty().toList()
-        for (p in listOf("android.permission.INSTALL_PACKAGES", "android.permission.REBOOT", "android.permission.WRITE_SECURE_SETTINGS")) {
+        // #435: MANAGE_USB and READ_LOGS let the Manage page allow a new computer over adb.
+        for (p in listOf("android.permission.INSTALL_PACKAGES", "android.permission.REBOOT", "android.permission.WRITE_SECURE_SETTINGS",
+                "android.permission.MANAGE_USB", "android.permission.READ_LOGS")) {
             assertTrue(p, p in requested)
         }
         val manifest = javax.xml.parsers.DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }

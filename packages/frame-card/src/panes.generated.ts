@@ -125,7 +125,7 @@ export const PANE_FILES: readonly PaneInfo[] = [
     "status": "beta",
     "frame": "aqara-s1-plus",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"8.5\"/><path d=\"M12 3.5a4.5 8.5 0 0 0 0 17\"/><path d=\"M12 7.5V12h3.8\"/></svg>",
-    "source": "frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/frame"
+    "source": "frames/aqara-s1-plus/android/src/main/java/dev/glassworks/s1/frame"
   },
   {
     "id": "wall-base",
@@ -138,6 +138,6 @@ export const PANE_FILES: readonly PaneInfo[] = [
     "frame": "aqara-s1-plus",
     "docs": "docs/esphome.md#wall-base-entities",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"4\" y=\"6\" width=\"16\" height=\"12\" rx=\"3\"/><path d=\"M8 18v2M16 18v2M9 12h6\"/></svg>",
-    "source": "frames/aqara-s1-plus/panes/wall-base/src/main/java/sh/edm/s1kiosk/base"
+    "source": "frames/aqara-s1-plus/panes/wall-base/src/main/java/dev/glassworks/s1/base"
   }
 ];

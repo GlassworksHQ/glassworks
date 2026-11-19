@@ -5,7 +5,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { fakeApk } from '@glassworks/app-adb/fakes';
+import { FakeKeySocket, fakeApk } from '@glassworks/app-adb/fakes';
 import { MemoryStore, writeSparse } from '@glassworks/ext4';
 import { clean, cleanup, debugfs, debugfsCat, fsck, haveTools, load, mke2fs, scratch } from '@glassworks/ext4/testing';
 import { Fastboot } from '@glassworks/fastboot';
@@ -35,7 +35,18 @@ describe('fastboot checks (read-only)', () => {
     expect(r.ok).toBe(true);
     expect(r.checks.map((c) => c.what)).toEqual(['System partition', 'Userdata partition', 'Download size']);
     expect(r.userdataBytes).toBe(0x14cc00000);
-    expect(r.info).toEqual(['product MSM8916', 'max-download-size 0x20000000', 'secure not reported']);
+    expect(r.info).toEqual(['product MSM8916', 'max-download-size 0x20000000', 'secure not reported', 'Home Assistant id: no serial reported, so the app picks a new one']);
+    expect(r.deviceMac).toBeUndefined();
+  });
+
+  it('gives the Mirror the id the app derives from its serial, so every reflash keeps its Home Assistant device (#523)', async () => {
+    const sizes = { 'partition-size:system': `0x${SYSTEM_BYTES.toString(16)}`, 'partition-size:userdata': '0x14cc00000' };
+    // core's DeviceMacPinTest pins the same serial to the same bytes
+    const r = await checkFastboot(lk({ ...sizes, serialno: '0123456789abcdef' }));
+    expect(r.deviceMac).toBe('E6:79:E6:E0:96:A3');
+    expect(r.info.join('\n')).not.toContain('E6:79');
+    expect(r.info).toContain('Home Assistant id: from the serial, the same on every reflash');
+    expect((await checkFastboot(lk({ ...sizes, serialno: 'unknown' }))).deviceMac).toBeUndefined();
   });
 
   it('refuses another system size, or none reported', async () => {
@@ -242,6 +253,42 @@ describe('first boot', () => {
   it('stops if the Mirror didn\'t start the image Kiln wrote, or the app is missing', async () => {
     await expect(firstBoot(new FirstBootMirror('Android/other/x:6.0.1/X/1:user/release-keys'), {})).rejects.toThrow(/not the image Kiln wrote/);
     await expect(firstBoot(new FirstBootMirror(GLASS_PANES.fingerprint, false), {})).rejects.toThrow(/isn't on the Mirror/);
+  });
+
+  it('hands the API key from before the flash to the fresh app right after it starts, and never logs it (#574)', async () => {
+    const KEY = btoa(String.fromCharCode(...Array.from({ length: 32 }, (_, i) => 200 - i))); // made up
+    const p = new FirstBootMirror().withKeySocket();
+    const lines: string[] = [];
+    const r = await firstBoot(p, { haUrl: 'http://homeassistant.local:8123', apiKey: KEY, onStep: (s, d) => lines.push(s || d || ''), sleep: async () => {} });
+    expect(r.apiKey).toBe(true);
+    expect(p.keys!.key).toBe(KEY);
+    expect(p.keys!.verbs).toEqual(['set']);
+    expect(lines).toContain('Home Assistant API key: the one from before the flash');
+    expect(lines.join('\n')).not.toContain(KEY);
+    expect(p.cmds.join('\n')).not.toContain(KEY);
+    // after the start that runs the app, before the home screen and the Wi-Fi
+    const start = p.cmds.findIndex((c) => c.startsWith(`am start -n ${GLASSWORKS.activity}`));
+    const grep = p.cmds.findIndex((c) => c.includes('@glassworks_api_key'));
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(grep).toBeGreaterThan(start);
+    expect(p.cmds.findIndex((c) => c.startsWith('pm hide'))).toBeGreaterThan(grep);
+
+    // without a key, nothing is asked of the socket
+    const q = new FirstBootMirror().withKeySocket();
+    expect((await firstBoot(q, { sleep: async () => {} })).apiKey).toBeUndefined();
+    expect(q.keys!.verbs).toEqual([]);
+  });
+
+  it('says so when the fresh app doesn\'t take the key, and goes on', async () => {
+    const lines: string[] = [];
+    const r = await firstBoot(new FirstBootMirror().withKeySocket(new FakeKeySocket(btoa('y'.repeat(32)))),
+      { apiKey: btoa('x'.repeat(32)), onStep: (s, d) => lines.push(s || d || ''), sleep: async () => {} });
+    expect(r.apiKey).toBe(false);
+    expect(r.home.result).toBe('set');
+    expect(lines.join('\n')).toMatch(/didn't take it, so Home Assistant may ask to re-authenticate once/);
+    // the app already holds another key here: no promise that it starts without one (#575 review)
+    expect(lines.join('\n')).toMatch(/If Glassworks has no key, it starts without one after 15 minutes/);
+    expect(lines.join('\n')).not.toMatch(/didn't take it: after 15 minutes/);
   });
 
   it('without the app\'s Improv socket, says the Wi-Fi wasn\'t confirmed, and never logs the network\'s name or password', async () => {
