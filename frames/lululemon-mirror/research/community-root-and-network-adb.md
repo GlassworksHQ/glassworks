@@ -103,8 +103,8 @@ foreign one.
 One gap stops the **prebuilt** module from loading on our dev unit: the vermagic. Our unit's kernel
 is `3.10.49-perf-gf46dad5260f` ([mirror-root.md](mirror-root.md) §4, verified 2026-11-15), **not**
 the `-g87fe01fd365` their module carries (`mod/mirror_root.c:111`). The module compares vermagic
-verbatim, so theirs would be refused on our unit. But their **method** transfers directly, and most
-of the hard numbers already match ours:
+verbatim, so theirs would be refused on our unit. Their **method** looks portable to our unit, but
+only one of its inputs has actually been checked against our kernel; the rest are assumptions:
 
 | ABI input | Theirs (`shihanqu`) | Ours (mirror-root.md §4, verified) | For our unit |
 |---|---|---|---|
