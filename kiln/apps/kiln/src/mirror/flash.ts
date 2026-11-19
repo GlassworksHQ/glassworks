@@ -318,8 +318,8 @@ export class FlashSession {
       // the socket listened just now: one gone by the read is an app that restarted, so stop rather than carry nothing
       const key = up ? await readApiKey(p, undefined, { socket: 'required' }) : undefined;
       const fingerprint = key ? await apiKeyFingerprint(key) : undefined;
+      live(); // before it saves anything: a read skipped meanwhile must not write into the next one's record
       if (key && fingerprint) this.read.got = { key, fingerprint };
-      live();
       this.log('', fingerprint ? `Home Assistant API key read, fingerprint ${fingerprint}, held in this tab only` : 'no Home Assistant API key to keep');
       this.set({ key: { state: 'reading', at: 2 } });
       await this.restart(p);
@@ -328,7 +328,8 @@ export class FlashSession {
       this.apiKey = key;
       this.set({ key: fingerprint ? { state: 'held', fingerprint } : { state: 'none' } });
     } catch (e) {
-      if (e instanceof Skipped) { await p.close?.().catch(() => {}); return; }
+      // skipped, or overtaken by a newer read: let go of this connection only, and leave the state to the newer one
+      if (e instanceof Skipped || gen !== this.read.gen) { await p.close?.().catch(() => {}); return; }
       this.read = { gen };
       // the reply's first word at most (readApiKey): no key material in the message
       this.log('Stopped', (e as Error).message);

@@ -251,6 +251,27 @@ describe('the keep step, on the real session (#580)', () => {
     expect(after.keys?.key).toBe(KEY);
   });
 
+  it('a read that fails after a skip leaves the screen and the next read alone (PR 603 review)', async () => {
+    const r = running({ key: KEY });
+    let fail!: () => void;
+    const gate = new Promise<void>((res) => { fail = res; });
+    const run = r.m.run.bind(r.m);
+    let waiting = false;
+    r.m.run = async (cmd: string) => {
+      if (cmd === 'getprop ro.board.platform') { waiting = true; await gate; throw new Error('transfer error'); }
+      return run(cmd);
+    };
+    const { f } = await ready({ before: async () => r.m });
+    f.toKeep();
+    const reading = f.readKey();
+    await vi.waitFor(() => expect(waiting).toBe(true));
+    f.skipKeep();
+    fail();
+    await reading;
+    expect(f.state).toMatchObject({ screen: 'fastboot', key: undefined, connectError: undefined });
+    expect(f.state.log.join('\n')).not.toContain('transfer error');
+  });
+
   it('a socket that goes away between the check and the read stops before the restart (PR 603 review)', async () => {
     const r = running({ key: KEY });
     const shell = r.keys.shell.bind(r.keys);
