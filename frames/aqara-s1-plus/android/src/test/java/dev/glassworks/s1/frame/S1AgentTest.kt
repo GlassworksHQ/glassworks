@@ -12,7 +12,7 @@ import dev.glassworks.frame.AgentCapability.TIME_ZONE
 import dev.glassworks.radio.PropsBundle
 import dev.glassworks.radio.RadioController
 import dev.glassworks.radio.RadioFirmware
-import dev.glassworks.radio.RadioHelper
+import dev.glassworks.s1.radio.RadioHelper
 import dev.glassworks.radio.RadioReports
 import dev.glassworks.radio.SysProps
 import java.io.File

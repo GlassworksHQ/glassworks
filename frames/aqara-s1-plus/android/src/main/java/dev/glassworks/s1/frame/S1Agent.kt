@@ -16,7 +16,7 @@ import dev.glassworks.frame.FrameAgent
 import dev.glassworks.radio.RadioBundle
 import dev.glassworks.radio.PropsBundle
 import dev.glassworks.radio.PropsRadio
-import dev.glassworks.radio.RadioHelper
+import dev.glassworks.s1.radio.RadioHelper
 import dev.glassworks.radio.RadioReports
 import dev.glassworks.radio.ShellProps
 import dev.glassworks.radio.SysProps

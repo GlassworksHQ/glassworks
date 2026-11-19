@@ -1,5 +1,7 @@
 package dev.glassworks.radio
 
+import dev.glassworks.s1.radio.AqaraRadio
+import dev.glassworks.s1.radio.RadioHelper
 import dev.glassworks.frame.RadioFile
 import dev.glassworks.frame.RadioSetting
 import dev.glassworks.frame.RadioStatus
@@ -24,8 +26,8 @@ class S1RadioNamesTest {
     }
 
     @Test fun theRadioPanesTestsRunOnTheseNames() {
-        val app = RepoFiles.source("dev/glassworks/radio/RadioHelper.kt")
-        val pane = RepoFiles.source("dev/glassworks/radio/RadioHelper.kt", sourceSet = "test")
+        val app = RepoFiles.source("dev/glassworks/s1/radio/RadioHelper.kt")
+        val pane = RepoFiles.source("dev/glassworks/s1/radio/RadioHelper.kt", sourceSet = "test")
         assertEquals("panes/zigbee-thread's test copy of the S1's names", app.readText(), pane.readText())
     }
 

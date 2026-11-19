@@ -12,7 +12,7 @@ import dev.glassworks.pane.SettingsSection
 import dev.glassworks.update.SilentUpdates
 import dev.glassworks.update.UpdateChannelRow
 import dev.glassworks.s1.PanePrefs
-import dev.glassworks.radio.RadioHelper
+import dev.glassworks.s1.radio.RadioHelper
 import dev.glassworks.radio.RadioMode
 import dev.glassworks.radio.ShellProps
 import dev.glassworks.radio.SysProps
