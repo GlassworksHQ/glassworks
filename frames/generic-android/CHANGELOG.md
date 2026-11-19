@@ -62,3 +62,7 @@ line of each version is what Home Assistant shows on the update card. A change o
   draws in the app's own process instead of a separate GPU process, which Android killed whenever the screen went
   off or a system dialog came up. It also no longer runs GeckoView's crash helper, which did nothing for the app
   and was restarted about once a minute. Legacy build only. Not yet run on a real Mirror.
+- **No crash when the app may not use the microphone.** Without the Microphone permission, voice no longer tries to
+  open the microphone, which on Android 6 could crash the app. The Assist page on the device and on the Manage page
+  says *Voice isn't allowed to use the microphone*, and Home Assistant's *Voice status* reads *Microphone not
+  allowed*. Once the permission is given, voice starts listening within a few seconds. Both builds.
