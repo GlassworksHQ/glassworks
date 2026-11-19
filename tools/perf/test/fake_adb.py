@@ -875,9 +875,10 @@ def main():
     elif args[:1] == ["reverse"]:
         pass
     elif args[:1] == ["devices"]:
-        # netcheck.py (#649): the S1 on USB, or FAKE_ADB_WIFI: a panel on wireless debugging (no usb: field).
+        # netcheck.py (#649): the S1 on USB, or FAKE_ADB_WIFI: a panel on wireless debugging (an mDNS name).
+        serial = "adb-FAKE0001-x1._adb-tls-connect._tcp" if os.environ.get("FAKE_ADB_WIFI") else "FAKE0001"
         how = "" if os.environ.get("FAKE_ADB_WIFI") else " usb:1-1"
-        print(f"List of devices attached\nFAKE0001               device{how} product:fake model:Fake device:fake transport_id:1")
+        print(f"List of devices attached\n{serial} device{how} product:fake model:Fake device:fake transport_id:1")
     elif args[:1] == ["logcat"]:
         logcat(args[args.index("-v") + 1] if "-v" in args else "brief")
     elif args[:1] == ["shell"]:

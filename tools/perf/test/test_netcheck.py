@@ -58,6 +58,9 @@ class Parsing(unittest.TestCase):
         self.assertIs(N.parse_adb_devices(listing, "192.0.2.10:5555"), True)
         self.assertIs(N.parse_adb_devices(listing, "adb-FAKE0002-abc._adb-tls-connect._tcp"), True)
         self.assertIs(N.parse_adb_devices(listing, "emulator-5554"), False)       # stays on this computer
+        # adb's libusb backend lists a USB device without usb: (CodeRabbit on #650): still USB.
+        self.assertIs(N.parse_adb_devices("List of devices attached\nFAKE0003 device product:p model:m transport_id:5\n", None), False)
+        self.assertIs(N.parse_adb_devices("List of devices attached\nadb-FAKE4-y._adb._tcp. device transport_id:6\n", None), True)
         self.assertIsNone(N.parse_adb_devices(listing, None))                      # four devices, none named
         self.assertIsNone(N.parse_adb_devices(listing, "OTHER"))
         one = "List of devices attached\nFAKE0001 device usb:1-1 transport_id:1\n"
@@ -70,12 +73,11 @@ class Parsing(unittest.TestCase):
         self.assertIsNone(N.parse_panel_address("1: lo    inet 127.0.0.1/8 scope host lo\n"))
 
     def test_quiet(self):
-        stats = lambda p95, mx: {"p95_ms": p95, "max_ms": mx}  # noqa: E731
-        self.assertIs(N.quiet(stats(3.8, 9.7)), True)            # the Pixel Tablet's own Wi-Fi to its gateway
-        self.assertIs(N.quiet(stats(20, 20)), True)
-        self.assertIs(N.quiet(stats(12, 84)), False)             # a Mac on Wi-Fi: max 68 to 84 ms
-        self.assertIs(N.quiet(stats(25, 25)), False)
-        self.assertIsNone(N.quiet(None))
+        self.assertIs(N.quiet([2.3, 3.8, 9.7] * 10), True)           # the Pixel Tablet's own Wi-Fi to its gateway
+        self.assertIs(N.quiet([20.0] * 40), True)                    # exactly the bar is quiet
+        self.assertIs(N.quiet([20.04] * 40), False)                  # over it, though the report rounds it to 20.0
+        self.assertIs(N.quiet([3.0] * 39 + [84.0]), False)           # a Mac on Wi-Fi: one stall is enough
+        self.assertIsNone(N.quiet([]))
 
 
 class Cli(unittest.TestCase):
@@ -114,6 +116,16 @@ class Cli(unittest.TestCase):
         self.assertIs(out["quiet"], False)
         self.assertIn("warning: this computer's own link to its gateway goes over 20 ms", p.stderr)
         self.assertIn("sudo ifconfig awdl0 down", p.stderr)
+
+    def test_the_bar_is_judged_before_rounding(self):
+        """CodeRabbit on #650: replies of 20.04 ms are over 20 ms, though the file says 20.0."""
+        p, out, _ = self.run_it(FAKE_PING_GATEWAY_MS="20.04")
+        self.assertEqual((out["gateway"]["p95_ms"], out["gateway"]["max_ms"]), (20.0, 20.0))
+        self.assertIs(out["quiet"], False)
+        self.assertIn("warning", p.stderr)
+        p, out, _ = self.run_it(FAKE_PING_GATEWAY_MS="20.0")
+        self.assertIs(out["quiet"], True)
+        self.assertNotIn("warning", p.stderr)
 
     def test_a_gateway_that_doesnt_answer(self):
         p, out, _ = self.run_it(FAKE_PING_SILENT="192.0.2.1")

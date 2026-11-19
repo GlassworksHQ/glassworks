@@ -113,17 +113,22 @@ def link_kind(iface):
     return parse_hardware_ports(out, iface)
 
 
+# A device adb reaches over the network: `host:port` (adb connect, or wireless debugging by address) or an mDNS
+# service name (wireless debugging, `adb-<serial>-<id>._adb-tls-connect._tcp`). Not the absence of a `usb:` field:
+# adb's libusb backend lists USB devices without one too (CodeRabbit on #650, from adb's manual).
+NETWORK_SERIAL_RE = re.compile(r"^\S+:\d+$|\._adb(-tls-connect)?\._tcp\.?$")
+
+
 def parse_adb_devices(text, serial):
-    """From `adb devices -l`: True when the device reaches adb over the network (no `usb:` field), False over USB,
-    None when it isn't listed. `serial` is adb's (ANDROID_SERIAL), or None for the only device."""
+    """From `adb devices -l`: True when the device reaches adb over the network (its serial is an address or an
+    mDNS name), False otherwise (USB, an emulator), None when it isn't listed. `serial` is adb's (ANDROID_SERIAL),
+    or None for the only device."""
     rows = [l.split() for l in text.splitlines()[1:] if l.strip() and not l.startswith("*")]
     rows = [r for r in rows if len(r) > 1 and r[1] == "device"]
     row = next((r for r in rows if r[0] == serial), None) if serial else (rows[0] if len(rows) == 1 else None)
     if row is None:
         return None
-    if row[0].startswith("emulator-"):
-        return False                     # an emulator's adb stays on this computer
-    return not any(f.startswith("usb:") for f in row[2:])
+    return bool(NETWORK_SERIAL_RE.search(row[0]))
 
 
 def parse_panel_address(text):
@@ -141,11 +146,13 @@ def adb(*args):
         return ""
 
 
-def quiet(gateway):
-    """This computer's own link is quiet: its gateway's pings at or under NET_TAIL_MS at p95 and at most."""
-    if not gateway:
+def quiet(rtts):
+    """This computer's own link is quiet: its gateway's round trips (ms, as measured: the report's are rounded) at
+    or under NET_TAIL_MS at p95 and at most. None when none came back."""
+    if not rtts:
         return None
-    return gateway["p95_ms"] <= NET_TAIL_MS and gateway["max_ms"] <= NET_TAIL_MS
+    xs = sorted(rtts)
+    return P.nearest_rank(xs, 0.95) <= NET_TAIL_MS and xs[-1] <= NET_TAIL_MS
 
 
 def main():
@@ -158,16 +165,17 @@ def main():
     results = {}
 
     def run(name, host):
-        results[name] = ping_stats(ping(host, a.count), a.count)
+        results[name] = ping(host, a.count)
     threads = [threading.Thread(target=run, args=(n, h)) for n, h in (("gateway", gw), ("panel", panel))]
     for t in threads:
         t.start()
     for t in threads:
         t.join()
-    out = {"gateway": results.get("gateway"), "panel": results.get("panel"), "link": link_kind(iface),
+    out = {"gateway": ping_stats(results.get("gateway"), a.count), "panel": ping_stats(results.get("panel"), a.count),
+           "link": link_kind(iface),
            "adb_over_network": parse_adb_devices(adb("devices", "-l"), os.environ.get("ANDROID_SERIAL")),
            "tail_ms": NET_TAIL_MS}
-    out["quiet"] = quiet(out["gateway"])
+    out["quiet"] = quiet(results.get("gateway"))
     with open(os.path.join(a.out, "netcheck.json"), "w") as f:
         json.dump(out, f, indent=1)
     g, p = out["gateway"], out["panel"]
