@@ -121,3 +121,14 @@ export async function extractMagiskPayload(apk: Uint8Array, comp: Compressor): P
   }
   return p;
 }
+
+/**
+ * Magisk's busybox for the panel's ABI (`lib/armeabi-v7a/libbusybox.so`), which Magisk needs in /data/adb/magisk
+ * before it loads any module. The Magisk app puts it there; a frame's boot image can carry it instead (its overlay).
+ */
+export function extractMagiskBusybox(apk: Uint8Array, comp: Compressor): Uint8Array {
+  const name = `lib/${PAYLOAD_ABI}/libbusybox.so`;
+  const e = zipEntries(apk).get(name);
+  if (!e) throw new Error(`Magisk APK has no ${name}`);
+  return zipRead(apk, e, comp);
+}

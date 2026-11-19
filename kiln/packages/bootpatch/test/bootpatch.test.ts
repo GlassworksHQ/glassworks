@@ -14,7 +14,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { type Compressor, loadCompressor } from '../src/compress';
 import { crc32 } from '../src/apk';
 import {
-  type OverlayFile, isMagiskPatched, patchBoot, replaceBootlogo, s1Overlay, vbmetaFlags, withVbmetaFlags,
+  type OverlayFile, isMagiskPatched, magiskBusybox, patchBoot, replaceBootlogo, s1Overlay, vbmetaFlags, withVbmetaFlags,
 } from '../src/index';
 
 const GOLDEN = process.env.S1_WEB_GOLDEN ?? join(homedir(), 'src/aqara-panel-backups/web-golden');
@@ -76,14 +76,20 @@ describe('s1Overlay (unit)', () => {
   const base = { radioRc: enc.encode('a'), radioSh: enc.encode('b'), otbrAgent: enc.encode('c'), otCtl: enc.encode('d'),
     firstbootRc: enc.encode('e'), firstbootSh: enc.encode('f'), netwatchRc: enc.encode('g'), netwatchSh: enc.encode('h'),
     updateRc: enc.encode('i'), updateSh: enc.encode('j'), bundleRc: enc.encode('k'), bundleSh: enc.encode('l'),
-    verify: enc.encode('m'), bundlePub: enc.encode(`${'ab'.repeat(32)}\n`) };
+    verify: enc.encode('m'), bundlePub: enc.encode(`${'ab'.repeat(32)}\n`), magiskEnvRc: enc.encode('n'), magiskBusybox: enc.encode('o') };
   it('refuses a key that is not an adb public key, accepts none', () => {
     expect(() => s1Overlay({ ...base, adbKeys: enc.encode('ssh-rsa AAAA') })).toThrow(/QAAAA/);
-    expect(s1Overlay({ ...base, adbKeys: new Uint8Array(0) })).toHaveLength(15);
+    expect(s1Overlay({ ...base, adbKeys: new Uint8Array(0) })).toHaveLength(17);
   });
   it('refuses a radio bundle key that is not 32 hex bytes, and an empty verifier', () => {
     expect(() => s1Overlay({ ...base, adbKeys: new Uint8Array(0), bundlePub: enc.encode('abc') })).toThrow(/public key/);
     expect(() => s1Overlay({ ...base, adbKeys: new Uint8Array(0), verify: new Uint8Array(0) })).toThrow(/verify/);
+  });
+  it('carries Magisk\'s busybox for its own setup (root only), and refuses an empty one', () => {
+    const files = s1Overlay({ ...base, adbKeys: new Uint8Array(0) });
+    expect(files.find((f) => f.path === 'overlay.d/s1kiosk_magiskenv.rc')).toMatchObject({ mode: 0o644, data: enc.encode('n') });
+    expect(files.find((f) => f.path === 'overlay.d/sbin/magisk-busybox')).toMatchObject({ mode: 0o700, data: enc.encode('o') });
+    expect(() => s1Overlay({ ...base, adbKeys: new Uint8Array(0), magiskBusybox: new Uint8Array(0) })).toThrow(/busybox/);
   });
 });
 
@@ -110,6 +116,7 @@ describe.skipIf(!HAVE_GOLDEN)('golden: patchBoot == frames/aqara-s1-plus/tools/r
     netwatchRc: ov('s1kiosk_netwatch.rc'), netwatchSh: ov('s1kiosk_netwatch.sh'),
     updateRc: ov('s1kiosk_update.rc'), updateSh: ov('s1kiosk_update.sh'),
     bundleRc: ov('s1kiosk_bundle.rc'), bundleSh: ov('s1kiosk_bundle.sh'), verify: ov('s1kiosk_verify'), bundlePub: ov('s1kiosk_bundle.pub'),
+    magiskEnvRc: ov('s1kiosk_magiskenv.rc'), magiskBusybox: busybox,
     branding: opts.anim === false ? undefined : { rc: ov('s1kiosk_branding.rc'), bootAnimation: ov('s1kiosk_bootanimation.zip') },
   });
   /** The config the CLI printed ("--- Magisk config:" in out/<case>.log). */
@@ -118,7 +125,8 @@ describe.skipIf(!HAVE_GOLDEN)('golden: patchBoot == frames/aqara-s1-plus/tools/r
     return log.split('--- Magisk config:\n')[1]!.split('--- overlay.d:')[0]!;
   };
   let apk: Uint8Array;
-  beforeAll(() => { apk = g('fixtures/Magisk-v31.1.apk'); });
+  let busybox: Uint8Array;
+  beforeAll(async () => { apk = g('fixtures/Magisk-v31.1.apk'); busybox = await magiskBusybox(apk); });
 
   const cases: { name: string; input: string; wasMagisk: boolean; key?: boolean; anim?: boolean; preinit?: string }[] = [
     { name: 'stock-4.5.80', input: 'in/boot-4.5.80.img', wasMagisk: false },

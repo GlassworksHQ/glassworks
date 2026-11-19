@@ -5,7 +5,7 @@
 #   the helper's loader (bundle helper, fallback, quick-exit marking, dev override),
 #   the helper v4 (off, firmware flashing + rollback + request guards, GBL checks, Zigbee stack),
 #   s1kiosk_update.sh (incl. a framework restart mid-install), netwatch's ActivityManager check (#248)
-#   and the setup hotspot's portal rules (#197).
+#   the setup hotspot's portal rules (#197), and the boot image's Magisk setup rc (static checks).
 set -uo pipefail
 R=/repo; T=/t; TB=/tb
 PASS=0; FAILS=0
@@ -653,6 +653,21 @@ check "a test wait (not 300 s) is logged" grep -q "RESTART_WAIT is 10s (S1U_REST
 check "framework restarted, package not committed: an error that says so" has "$(upd restart-noup)" "error: framework restarted mid-install, not updated; pm install: Exc"
 check "...cut to what a property holds" test "$(prop sys.s1kiosk.update.status | wc -c)" -le 91
 rm -f "$T/pm-mode"; pkill -x system_server
+
+# ------------------------------------------------------------------ Magisk's setup (boot image)
+# s1kiosk_magiskenv.rc runs in init at post-fs-data, before Magisk's own step (docs/research/magisk-modules.md).
+# init can't run here, so these pin what keeps it safe; the panel run checks that it works.
+echo "--- s1kiosk_magiskenv.rc"
+RC="$R/frames/aqara-s1-plus/tools/root/s1kiosk_magiskenv.rc"
+body=$(grep -v '^[[:space:]]*#' "$RC" | grep -v '^[[:space:]]*$')
+check "magiskenv: a single action, on post-fs-data" test "$(printf '%s\n' "$body" | grep -c '^on ')/$(printf '%s\n' "$body" | head -1)" = "1/on post-fs-data"
+cmds=$(printf '%s\n' "$body" | grep -v '^on ' | awk '{print $1}' | sort -u | tr '\n' ' ')
+check "...init built-ins only (no exec or service that could hang the boot)" test "$cmds" = "chmod copy mkdir "
+check "...never makes a top-level /data directory (init would give it an encryption policy, or boot into recovery)" \
+  sh -c '! printf "%s\n" "$1" | grep -Eq "^[[:space:]]*mkdir[[:space:]]+/data/[^/[:space:]]+/?([[:space:]]|$)"' _ "$body"
+check "...copies the boot image's busybox to where Magisk checks, executable" sh -c 'printf "%s\n" "$1" | grep -qx "    copy \${MAGISKTMP}/magisk-busybox /data/adb/magisk/busybox" && printf "%s\n" "$1" | grep -qx "    chmod 0755 /data/adb/magisk/busybox"' _ "$body"
+check "patch-boot-magisk.sh puts both in the ramdisk, from the Magisk APK" sh -c 'grep -q "\"add 0644 overlay.d/s1kiosk_magiskenv.rc s1kiosk_magiskenv.rc\"" "$1" && grep -q "\"add 0700 overlay.d/sbin/magisk-busybox magisk-busybox\"" "$1" && grep -q "libbusybox.so\" \"\$W/p/magisk-busybox\"" "$1"' _ "$R/frames/aqara-s1-plus/tools/root/patch-boot-magisk.sh"
+check "...and Kiln's overlay the same paths and modes" sh -c 'grep -q "path: .overlay.d/s1kiosk_magiskenv.rc., mode: 0o644" "$1" && grep -q "path: .overlay.d/sbin/magisk-busybox., mode: 0o700" "$1"' _ "$R/kiln/packages/bootpatch/src/overlay.ts"
 
 # --------------------------------------------------------------- ActivityManager watchdog (#248)
 echo "--- s1kiosk_netwatch.sh: ActivityManager"
