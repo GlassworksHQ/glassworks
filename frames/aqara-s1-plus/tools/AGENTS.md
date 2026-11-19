@@ -10,7 +10,7 @@ before you change the boot path. The tools every frame shares are in [`tools/`](
 |---|---|---|
 | `fel/` | `build-uboot.sh`, `fel-boot.sh`, the board defconfig and DTS, patches against mainline U-Boot | RAM only: nothing is written to eMMC |
 | `fel/fastboot-usb.py` | The stock U-Boot's fastboot (`1f3a:1010`) over pyusb: `getvar`, a RAM `boot` and a plain `reboot`, nothing else (#139) | Refuses flash, erase, oem and the rest. Tests: `fel/test/` |
-| `fel/wrap-ram-boot.py` | Host only: wraps the panel's `boot` as a uImage the stock fastboot `boot` can run from RAM (#139, plans D and E: `--canary` spins at the entry) | Its output holds the panel's command line: keep it with the backup. Tests: `fel/test/` |
+| `fel/wrap-ram-boot.py` | Host only: wraps the panel's `boot` as a uImage the stock fastboot `boot` can run from RAM (#139, plans D–F: `--canary` spins at the entry, `--stop-os` stops bootm after LOADOS) | Its output holds the panel's command line: keep it with the backup. Tests: `fel/test/` |
 | `fel/uboot/patches/0001` | A133 DDR4 controller setup matching boot0 (MR0 is the actual fix) | MR0 was sent upstream on 2026-11-11; drop that hunk once it lands |
 | `fel/uboot/patches/0002` | fastboot `upload`, for reading partitions back (`fastboot get_staged`) | |
 | `install/` | `fel-install.sh` (FEL → backup → patch → flash → verify), `fb-read-partition.sh`, the `--undo` path; `install-churn.py`: one row per kiosk install or force-stop from a saved logcat (#248) | Has off-device tests in `install/test/`; `install-churn.py` reads a file only |

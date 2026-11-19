@@ -9,6 +9,10 @@ the repo, and never paste it. Only the root RAM-boots it, with fastboot-usb.py.
     wrap-ram-boot.py --canary BOOT_IMG CMDLINE_FILE OUT
                                                     the same, with the kernel's first instruction
                                                     replaced by an AArch64 `b .` (plan E)
+    wrap-ram-boot.py --stop-os BOOT_IMG CMDLINE_FILE OUT
+                                                    the canary, with ih_os OpenBSD: stock bootm has no
+                                                    handler for it, so it stops after LOADOS and
+                                                    returns to fastboot (plan F)
     wrap-ram-boot.py --check OUT                    check an image built earlier
 
 BOOT_IMG is the panel's own `boot` (Android header v2, page 2048). CMDLINE_FILE is /proc/cmdline from
@@ -35,6 +39,7 @@ UIMG = 0x800                  # stock `boot` looks for the uImage here
 CMDLINE = 0x40                # and takes bootargs from here
 UIMAGE_MAGIC = 0x27051956
 IH_OS_LINUX, IH_ARCH_ARM, IH_TYPE_KERNEL_NOLOAD, IH_COMP_NONE = 5, 2, 14, 0
+IH_OS_OPENBSD = 1             # no entry in the stock boot_os table (frame-loader.md, attempt 13)
 KERNEL_PHYS = 0x41080000      # 2 MiB aligned base 0x41000000 + text_offset 0x80000
 RAMDISK_ALIGN = 0x100000
 PAGE0_MAGIC = b"GW139RAM"     # not ANDROID!: this file must never be mistaken for a boot partition
@@ -72,15 +77,16 @@ def arm64_layout(kernel):
     return image_size
 
 
-def uimage_header(data, ep):
+def uimage_header(data, ep, os_=IH_OS_LINUX):
     fields = [UIMAGE_MAGIC, 0, 0, len(data), 0, ep, zlib.crc32(data)]
-    tail = bytes([IH_OS_LINUX, IH_ARCH_ARM, IH_TYPE_KERNEL_NOLOAD, IH_COMP_NONE]) + b"gw139 ram".ljust(32, b"\0")
+    tail = bytes([os_, IH_ARCH_ARM, IH_TYPE_KERNEL_NOLOAD, IH_COMP_NONE]) + b"gw139 ram".ljust(32, b"\0")
     hdr = struct.pack(">7I", *fields) + tail
     hcrc = zlib.crc32(hdr)
     return hdr[:4] + struct.pack(">I", hcrc) + hdr[8:]
 
 
-def build(boot, cmdline, canary=False):
+def build(boot, cmdline, canary=False, stop_os=False):
+    canary = canary or stop_os
     kernel, ramdisk = android_parts(boot)
     image_size = arm64_layout(kernel)
     cmdline = cmdline.strip()
@@ -105,7 +111,8 @@ def build(boot, cmdline, canary=False):
     r = rd_phys - BUF
     out[r:r + len(ramdisk)] = ramdisk
     data_start = UIMG + 64
-    out[UIMG:data_start] = uimage_header(bytes(out[data_start:]), k - data_start)
+    out[UIMG:data_start] = uimage_header(bytes(out[data_start:]), k - data_start,
+                                         IH_OS_OPENBSD if stop_os else IH_OS_LINUX)
     return bytes(out)
 
 
@@ -125,7 +132,7 @@ def check(img, boot=None, canary=False):
         problems.append("bad header CRC")
     if size != len(data) or zlib.crc32(data) != dcrc:
         problems.append("data size or CRC wrong")
-    if (os_, arch, typ, comp) != (IH_OS_LINUX, IH_ARCH_ARM, IH_TYPE_KERNEL_NOLOAD, IH_COMP_NONE):
+    if os_ not in (IH_OS_LINUX, IH_OS_OPENBSD) or (arch, typ, comp) != (IH_ARCH_ARM, IH_TYPE_KERNEL_NOLOAD, IH_COMP_NONE):
         problems.append(f"os/arch/type/comp {os_}/{arch}/{typ}/{comp}")
     if load != 0:
         problems.append("ih_load isn't 0: stock do_bootm would read it as a ramdisk size")
@@ -158,8 +165,11 @@ def check(img, boot=None, canary=False):
     if problems:
         raise WrapError("; ".join(problems))
     spin = struct.unpack_from("<I", img, entry - BUF)[0] == CANARY
+    if os_ == IH_OS_OPENBSD and not spin:
+        raise WrapError("ih_os OpenBSD without the canary: build it with --stop-os")
     return (f"ok: {len(img)} bytes, kernel at {KERNEL_PHYS:#x}, {initrd[0].split(',')[0]}, "
-            f"command line {len(line)} bytes (not shown)" + (", canary: `b .` at the entry" if spin else ""))
+            f"command line {len(line)} bytes (not shown)" + (", canary: `b .` at the entry" if spin else "")
+            + (", stop: ih_os OpenBSD, bootm returns after LOADOS" if os_ == IH_OS_OPENBSD else ""))
 
 
 def main(argv):
@@ -167,13 +177,14 @@ def main(argv):
         if len(argv) == 3 and argv[1] == "--check":
             print(check(open(argv[2], "rb").read()))
             return 0
-        canary = argv[1:2] == ["--canary"]
+        stop_os = argv[1:2] == ["--stop-os"]
+        canary = stop_os or argv[1:2] == ["--canary"]
         args = argv[2:] if canary else argv[1:]
         if len(args) != 3:
             sys.stderr.write(__doc__.split("\n\n")[2] + "\n")
             return 1
         boot = open(args[0], "rb").read()
-        img = build(boot, open(args[1], encoding="ascii").read(), canary)
+        img = build(boot, open(args[1], encoding="ascii").read(), canary, stop_os)
         print(check(img, boot, canary))
         with open(args[2], "wb") as f:
             f.write(img)
