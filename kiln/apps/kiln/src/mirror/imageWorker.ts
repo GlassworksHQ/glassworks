@@ -18,16 +18,20 @@ const root = () => navigator.storage.getDirectory();
  * This page's lock on its folder, held until the worker ends, before any file is made; then closed tabs'
  * folders get swept, each only under its own lock (claimAndSweep). Every job waits for this.
  */
-const ready = (async () => {
+const ready: Promise<Error | undefined> = (async () => {
   const locks = (navigator as Navigator & { locks?: Locks }).locks;
-  if (!locks) return;
+  if (!locks) return undefined; // no Web Locks: the page's own folder still keeps tabs apart, and nothing is swept
   try {
     await claimAndSweep(locks, DIR, async () => {
       const names: string[] = [];
       for await (const name of (await root() as unknown as { keys(): AsyncIterable<string> }).keys()) names.push(name);
       return names;
     }, async (name) => { await (await root()).removeEntry(name, { recursive: true }); });
-  } catch { /* a sweep that fails leaves storage as it was */ }
+    return undefined;
+  } catch (e) {
+    // the page's lock was refused: no job runs, so no file is made outside it; each says why
+    return new Error(`Kiln couldn't claim this page's storage (${(e as Error).message}). Reload the page and try again.`);
+  }
 })();
 const jobs = imageJobs(
   async (name) => {
@@ -54,5 +58,9 @@ async function run(m: In, signal: AbortSignal) {
 }
 
 // One operation at a time, in the order the page sent them (jobQueue).
-const receive = jobQueue(jobs, async (m: In, signal: AbortSignal) => { await ready; return run(m, signal); });
+const receive = jobQueue(jobs, async (m: In, signal: AbortSignal) => {
+  const failed = await ready;
+  if (failed) { post({ id: m.id, error: failed.message }); return; }
+  return run(m, signal);
+});
 self.onmessage = (e: MessageEvent<In>) => { void receive(e.data); };

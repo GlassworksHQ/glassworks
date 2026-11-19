@@ -232,4 +232,11 @@ describe('the image worker\'s jobs', () => {
     expect(removed).toEqual(['kiln-mirror', 'kiln-mirror-old']); // never B's live folder, never A's own
     expect(held.has('kiln-mirror-a') && held.has('kiln-mirror-b')).toBe(true);
   });
+
+  it('a lock the browser refuses: the claim fails, so the worker makes no file, and nothing is swept (PR 596 review)', async () => {
+    const locks = { request: () => Promise.reject(new DOMException('The request is not allowed', 'SecurityError')) } as unknown as Locks;
+    let listed = 0, removed = 0;
+    await expect(claimAndSweep(locks, 'kiln-mirror-a', async () => { listed++; return ['kiln-mirror']; }, async () => { removed++; })).rejects.toThrow(/not allowed/);
+    expect([listed, removed]).toEqual([0, 0]);
+  });
 });

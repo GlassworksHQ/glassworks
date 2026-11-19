@@ -35,9 +35,12 @@ export interface Locks {
  * of two pages interleave. Resolves once the sweep is done; the own lock stays held until the worker ends.
  */
 export async function claimAndSweep(locks: Locks, own: string, list: () => Promise<string[]>, remove: (name: string) => Promise<void>): Promise<void> {
-  await new Promise<void>((held) => { void locks.request(own, () => { held(); return new Promise<void>(() => {}); }); });
-  for (const n of staleDirs(await list(), [], own)) {
-    await locks.request(n, { ifAvailable: true }, async (lock) => { if (lock) await remove(n).catch(() => {}); });
+  // a lock the browser refuses (SecurityError, no lock manager) rejects here: the caller makes no file without it
+  await new Promise<void>((held, refused) => { locks.request(own, () => { held(); return new Promise<void>(() => {}); }).catch(refused); });
+  let names: string[];
+  try { names = await list(); } catch { return; } // a sweep that fails leaves storage as it was
+  for (const n of staleDirs(names, [], own)) {
+    await locks.request(n, { ifAvailable: true }, async (lock) => { if (lock) await remove(n).catch(() => {}); }).catch(() => {});
   }
 }
 
