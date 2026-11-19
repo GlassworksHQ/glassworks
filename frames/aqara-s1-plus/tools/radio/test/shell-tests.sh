@@ -4,7 +4,7 @@
 #   s1kiosk_verify + make-bundle.py, and the old radio bundle of 0.4.3 boot images (s1kiosk_bundle.sh,
 #   s1kiosk_radio.sh's loader; kept for one release, #528),
 #   glassworks_loader.sh (frame bundles: install, boot, slots, fallback, quick-exit marking, refusals),
-#   the radio helper glassworks_radio.sh (off, firmware flashing + rollback + request guards, GBL
+#   the frame agent glassworks_agent.sh (off, firmware flashing + rollback + request guards, GBL
 #   checks, Zigbee stack, the old setting names), glassworks_update.sh (incl. a framework restart
 #   mid-install), glassworks_netwatch.sh's ActivityManager check (#248), the setup hotspot's portal rules and
 #   name module (#197), and glassworks.rc's Magisk setup (static checks).
@@ -140,7 +140,7 @@ touch /dev/shm/cpcd/cpcd_0/ctrl.cpcd.sock
 
 # The boot image: helper + loader, bundle service, verifier, a throwaway test key, fake otbr.
 cp "$R/frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh" "$R/frames/aqara-s1-plus/tools/root/s1kiosk_bundle.sh" "$R/frames/aqara-s1-plus/tools/root/out/s1kiosk_verify" "$TB/"
-cp "$R/frames/aqara-s1-plus/tools/radio/glassworks_radio.sh" "$TB/"; cp "$TB/s1kiosk_verify" "$TB/glassworks_verify"
+cp "$R/frames/aqara-s1-plus/tools/radio/glassworks_agent.sh" "$TB/"; cp "$TB/s1kiosk_verify" "$TB/glassworks_verify"
 openssl genpkey -algorithm ed25519 -out "$T/key.pem" 2>/dev/null
 openssl pkey -in "$T/key.pem" -pubout -outform DER | tail -c 32 | xxd -p -c 64 > "$TB/s1kiosk_bundle.pub"
 cp "$TB/s1kiosk_bundle.pub" "$TB/glassworks_bundle.pub"
@@ -302,7 +302,7 @@ TBL=/tbl; mkdir -p "$TBL"
 cp "$R/frames/aqara-s1-plus/tools/root/glassworks_loader.sh" "$TBL/"
 cp "$TB/s1kiosk_verify" "$TBL/glassworks_verify"; cp "$TB/s1kiosk_bundle.pub" "$TBL/glassworks_bundle.pub"
 printf 'boot-anim' > "$TBL/glassworks_bootanimation.zip"
-for s in radio netwatch firstboot update; do   # fake boot copies: they report how they were run
+for s in agent netwatch firstboot update; do   # fake boot copies: they report how they were run
   printf '#!/bin/sh\nsetprop test.%s "${GW_SOURCE}|${GW_BUNDLE}|${GW_BOOT}"\n' "$s" > "$TBL/glassworks_$s.sh"
 done
 w "$T/bin/mount" <<'MOUNT'
@@ -317,7 +317,7 @@ exec /bin/mv "$@"
 MV
 printf 'stock-anim' > "$T/anim.zip"; printf 'not a zip' > "$T/badanim.zip"
 python3 -c 'import sys, zipfile; z = zipfile.ZipFile(sys.argv[1], "w", zipfile.ZIP_STORED); z.writestr("desc.txt", "1440 720 30\n"); z.close()' "$T/banim.zip"
-printf '#!/bin/sh\nsetprop test.radio "bundle-script|${GW_SOURCE}|${GW_BUNDLE}"\n' > "$T/svc-radio.sh"
+printf '#!/bin/sh\nsetprop test.agent "bundle-script|${GW_SOURCE}|${GW_BUNDLE}"\n' > "$T/svc-agent.sh"
 printf '#!/bin/sh\nexit 3\n' > "$T/svc-crash.sh"
 L() { GW_RUN="$T/run" GW_ANIM="$T/anim.zip" /system/bin/sh "$TBL/glassworks_loader.sh" "$@"; }
 reset_frame() {
@@ -339,10 +339,10 @@ L boot
 check "no bundle: the boot image's frame id and version" test "$(prop ro.glassworks.frame.id)/$(prop ro.glassworks.frame.version)" = "aqara-s1-plus/1.0.0"
 check "...state none, published for the app" test "$(prop sys.glassworks.bundle.state)/$(cat /data/glassworks-pub/frame-bundle)" = "none/none - 0 -"
 check "...the boot image's animation is mounted" has "$(cat "$T/mounts")" "-o bind $TBL/glassworks_bootanimation.zip $T/anim.zip"
-GW_LOADER_ONCE=1 L run radio
-check "...the radio slot runs the boot copy" test "$(prop test.radio)" = "boot||$TBL"
+GW_LOADER_ONCE=1 L run agent
+check "...the agent slot runs the boot copy" test "$(prop test.agent)" = "boot||$TBL"
 
-mkframe "$T/f1" 1.0.1 "$T/key.pem" --file "services/radio.sh=$T/svc-radio.sh:0700" --file "bootanimation.zip=$T/banim.zip"
+mkframe "$T/f1" 1.0.1 "$T/key.pem" --file "services/agent.sh=$T/svc-agent.sh:0700" --file "bootanimation.zip=$T/banim.zip"
 stage_frame "$T/f1/frame-bundle"; s=$(install_frame)
 check "a signed frame bundle is staged" has "$s" "ok: frame bundle 1.0.1 staged"
 check "...it loads at the next boot, not now" test -d /data/glassworks/bundle/next -a ! -e /data/glassworks/bundle/current
@@ -354,8 +354,8 @@ check "...nothing staged any more" test -z "$(prop sys.glassworks.bundle.staged)
 check "...state ok, published with the floor" test "$(prop sys.glassworks.bundle.state)/$(cat /data/glassworks-pub/frame-bundle)" = "ok 1.0.1/ok 1.0.1 1000001 -"
 check "...root-only, nothing left staged" test "$(stat -c %a:%u /data/glassworks/bundle/current)" = 700:0 -a ! -e /data/glassworks/bundle/next
 check "...the bundle's animation is mounted" has "$(tail -1 "$T/mounts")" "/data/glassworks/bundle/current/bootanimation.zip $T/anim.zip"
-GW_LOADER_ONCE=1 L run radio
-check "the radio slot runs the bundle's script" test "$(prop test.radio)" = "bundle-script|bundle 1.0.1|/data/glassworks/bundle/current"
+GW_LOADER_ONCE=1 L run agent
+check "the agent slot runs the bundle's script" test "$(prop test.agent)" = "bundle-script|bundle 1.0.1|/data/glassworks/bundle/current"
 L run update
 check "a slot without a bundle script runs the boot copy, with the bundle's files" test "$(prop test.update)" = "boot|/data/glassworks/bundle/current|$TBL"
 L run svc1; rc=$?
@@ -364,42 +364,42 @@ L run nope >/dev/null 2>&1; rc=$?
 check "an unknown slot is refused" test $rc = 2
 s=$(install_frame); check "the same bundle again: nothing to do" has "$s" "already loaded"
 
-mkframe "$T/f0" 1.0.0 "$T/key.pem" --file "services/radio.sh=$T/svc-radio.sh:0700"
+mkframe "$T/f0" 1.0.0 "$T/key.pem" --file "services/agent.sh=$T/svc-agent.sh:0700"
 stage_frame "$T/f0/frame-bundle"; s=$(install_frame); check "an older frame version is refused" has "$s" "below the floor"
 python3 "$R/frames/aqara-s1-plus/tools/radio/make-bundle.py" --frame other-frame --frame-version 2.0.0 --key "$T/key.pem" \
-  --out "$T/fo" --created test --file "services/radio.sh=$T/svc-radio.sh:0700" >/dev/null
+  --out "$T/fo" --created test --file "services/agent.sh=$T/svc-agent.sh:0700" >/dev/null
 stage_frame "$T/fo/frame-bundle"; s=$(install_frame); check "another frame's bundle is refused" has "$s" "a bundle for other-frame, not aqara-s1-plus"
-mkframe "$T/fx" 2.0.0 "$T/other.pem" --file "services/radio.sh=$T/svc-radio.sh:0700"
+mkframe "$T/fx" 2.0.0 "$T/other.pem" --file "services/agent.sh=$T/svc-agent.sh:0700"
 stage_frame "$T/fx/frame-bundle"; s=$(install_frame); check "a bundle signed with another key is refused" has "$s" "bad signature"
 stage_frame "$T/b1/radio-bundle"; s=$(install_frame); check "an old radio bundle is refused" has "$s" "not a frame bundle"
-mkframe "$T/f2" 2.0.0 "$T/key.pem" --file "services/radio.sh=$T/svc-crash.sh:0700"
-stage_frame "$T/f2/frame-bundle"; ln -sf /etc/passwd "$APP/files/frame/bundle-in/services/radio.sh"
+mkframe "$T/f2" 2.0.0 "$T/key.pem" --file "services/agent.sh=$T/svc-crash.sh:0700"
+stage_frame "$T/f2/frame-bundle"; ln -sf /etc/passwd "$APP/files/frame/bundle-in/services/agent.sh"
 s=$(install_frame); check "a symlink in the staging dir is refused" has "$s" "is a symlink"
 check "...and nothing is staged" test ! -e /data/glassworks/bundle/next
 
-echo junk >> /data/glassworks/bundle/current/services/radio.sh
+echo junk >> /data/glassworks/bundle/current/services/agent.sh
 L boot
 check "a damaged bundle: the boot image's frame version" test "$(prop ro.glassworks.frame.version)" = 1.0.0
-check "...state says why" has "$(prop sys.glassworks.bundle.state)" "bad: services/radio.sh does not match the manifest"
+check "...state says why" has "$(prop sys.glassworks.bundle.state)" "bad: services/agent.sh does not match the manifest"
 check "...published as bad" test "$(cat /data/glassworks-pub/frame-bundle)" = "bad - 1000001 -"
 check "...the boot image's animation" has "$(tail -1 "$T/mounts")" "$TBL/glassworks_bootanimation.zip"
-GW_LOADER_ONCE=1 L run radio
-check "...the radio slot runs the boot copy" test "$(prop test.radio)" = "boot||$TBL"
+GW_LOADER_ONCE=1 L run agent
+check "...the agent slot runs the boot copy" test "$(prop test.agent)" = "boot||$TBL"
 
 stage_frame "$T/f2/frame-bundle"; s=$(install_frame); check "a newer bundle stages over a damaged one" has "$s" "staged"
 L boot
 check "...and loads" test "$(prop ro.glassworks.frame.version)" = 2.0.0
-L run radio
-check "a bundle script that keeps exiting is marked bad, for its version" test "$(cat /data/glassworks/bundle/bad-radio)" = 2.0.0
-check "...and the boot copy takes over" test "$(prop test.radio)" = "boot (bundle 2.0.0: its radio script kept exiting)||$TBL"
-rm -f "$T/props/test.radio"; GW_LOADER_ONCE=1 L run radio
-check "...also on the next start" test "$(prop test.radio)" = "boot (bundle 2.0.0: its radio script kept exiting)||$TBL"
+L run agent
+check "a bundle script that keeps exiting is marked bad, for its version" test "$(cat /data/glassworks/bundle/bad-agent)" = 2.0.0
+check "...and the boot copy takes over" test "$(prop test.agent)" = "boot (bundle 2.0.0: its radio script kept exiting)||$TBL"
+rm -f "$T/props/test.agent"; GW_LOADER_ONCE=1 L run agent
+check "...also on the next start" test "$(prop test.agent)" = "boot (bundle 2.0.0: its radio script kept exiting)||$TBL"
 s=$(install_frame); check "the same bundle with a slot marked bad installs again" has "$s" "staged"
-L boot; check "...and loading it clears the mark" test ! -e /data/glassworks/bundle/bad-radio
+L boot; check "...and loading it clears the mark" test ! -e /data/glassworks/bundle/bad-agent
 
-mkframe "$T/f3" 2.0.1 "$T/key.pem" --file "services/radio.sh=$T/svc-radio.sh:0700"
+mkframe "$T/f3" 2.0.1 "$T/key.pem" --file "services/agent.sh=$T/svc-agent.sh:0700"
 stage_frame "$T/f3/frame-bundle"; s=$(install_frame); check "2.0.1 staged" has "$s" "staged"
-echo junk >> /data/glassworks/bundle/next/services/radio.sh
+echo junk >> /data/glassworks/bundle/next/services/agent.sh
 L boot
 check "a staged bundle that fails its check is dropped at boot" test ! -e /data/glassworks/bundle/next -a "$(prop ro.glassworks.frame.version)" = 2.0.0
 check "...and doesn't move the floor" test "$(cat /data/glassworks/bundle/version)" = 2000000
@@ -407,23 +407,23 @@ stage_frame "$T/f3/frame-bundle"; install_frame >/dev/null; mv /data/glassworks/
 L boot
 check "an install stopped with the staged bundle moved aside: it still loads" test "$(prop ro.glassworks.frame.version)" = 2.0.1 -a ! -e /data/glassworks/bundle/next.old
 
-mkframe "$T/f4" 2.0.2 "$T/key.pem" --file "services/radio.sh=$T/svc-radio.sh:0700" --file "bootanimation.zip=$T/badanim.zip"
+mkframe "$T/f4" 2.0.2 "$T/key.pem" --file "services/agent.sh=$T/svc-agent.sh:0700" --file "bootanimation.zip=$T/badanim.zip"
 stage_frame "$T/f4/frame-bundle"; install_frame >/dev/null; rm -f "$T/mounts"; L boot
 check "a bundle animation that is not a usable zip: the boot image's is mounted" test "$(cat "$T/mounts")" = "-o bind $TBL/glassworks_bootanimation.zip $T/anim.zip"
 check "...and the bundle still loads" test "$(prop ro.glassworks.frame.version)" = 2.0.2
 : > "$T/runblock"; GW_RUN="$T/runblock/run" GW_ANIM="$T/anim.zip" /system/bin/sh "$TBL/glassworks_loader.sh" boot
 check "no active record can be written: the boot copies run, and it says why" test "$(prop ro.glassworks.frame.version)/$(prop sys.glassworks.bundle.state)" = "1.0.0/bad: cannot record the active bundle"
-rm -f "$T/props/test.radio"; GW_LOADER_ONCE=1 GW_RUN="$T/runblock/run" /system/bin/sh "$TBL/glassworks_loader.sh" run radio
-check "...the radio slot runs the boot copy" test "$(prop test.radio)" = "boot||$TBL"
+rm -f "$T/props/test.agent"; GW_LOADER_ONCE=1 GW_RUN="$T/runblock/run" /system/bin/sh "$TBL/glassworks_loader.sh" run agent
+check "...the agent slot runs the boot copy" test "$(prop test.agent)" = "boot||$TBL"
 GW_RUN="$T/runblock/run" GW_ANIM="$T/anim.zip" /system/bin/sh "$TBL/glassworks_loader.sh" install >/dev/null 2>&1
 check "...installing that same bundle says it runs only after a restart" has "$(prop sys.glassworks.bundle.status)" "in place, but not running this boot"
 rm -f "$T/runblock"; L boot
 
-mkframe "$T/f5" 2.0.3 "$T/key.pem" --file "services/radio.sh=$T/svc-radio.sh:0700"
-mkframe "$T/f6" 2.0.4 "$T/key.pem" --file "services/radio.sh=$T/svc-radio.sh:0700"
+mkframe "$T/f5" 2.0.3 "$T/key.pem" --file "services/agent.sh=$T/svc-agent.sh:0700"
+mkframe "$T/f6" 2.0.4 "$T/key.pem" --file "services/agent.sh=$T/svc-agent.sh:0700"
 stage_frame "$T/f5/frame-bundle"; install_frame >/dev/null; mv /data/glassworks/bundle/next "$T/keep5"
 stage_frame "$T/f6/frame-bundle"; install_frame >/dev/null; mv "$T/keep5" /data/glassworks/bundle/next.old
-echo junk >> /data/glassworks/bundle/next/services/radio.sh
+echo junk >> /data/glassworks/bundle/next/services/agent.sh
 check "(setup: next.old is a valid 2.0.3)" test "$(L check /data/glassworks/bundle/next.old)" = "2.0.3 2000003"
 check "(setup: next is there and fails its check)" has "$(L check /data/glassworks/bundle/next)" "does not match the manifest"
 L boot
@@ -442,46 +442,46 @@ check "...from this boot's own record" test "$(cat /data/glassworks-pub/frame-bu
 check "...which now names it" test "$(cat /data/glassworks-pub/frame-bundle | cut -d' ' -f4)" = 2.0.4
 L boot; check "...and it loads" test "$(prop ro.glassworks.frame.version)" = 2.0.4
 rm -f "$T/run/state"; before=$(cat /data/glassworks-pub/frame-bundle)
-mkframe "$T/f7" 2.0.5 "$T/key.pem" --file "services/radio.sh=$T/svc-radio.sh:0700"; stage_frame "$T/f7/frame-bundle"
+mkframe "$T/f7" 2.0.5 "$T/key.pem" --file "services/agent.sh=$T/svc-agent.sh:0700"; stage_frame "$T/f7/frame-bundle"
 L install >/dev/null 2>&1; rc=$?
 check "no record of this boot's decision: staged, but nothing made up for the state file" test $rc = 1 -a "$(cat /data/glassworks-pub/frame-bundle)" = "$before"
 L boot; check "...it loads at the next boot all the same" test "$(prop ro.glassworks.frame.version)" = 2.0.5
 mv /data/glassworks/bundle/current /data/glassworks/bundle/old
 check "(setup: the loaded bundle is moved aside)" test ! -e /data/glassworks/bundle/current -a -d /data/glassworks/bundle/old
 L boot; check "a promotion cut short between its renames: the loaded bundle comes back" test "$(prop ro.glassworks.frame.version)" = 2.0.5 -a -d /data/glassworks/bundle/current
-echo 2.0.4 > /data/glassworks/bundle/bad-radio
-check "(setup: a marker for 2.0.4 is there)" test "$(cat /data/glassworks/bundle/bad-radio)" = 2.0.4
-rm -f "$T/props/test.radio"; GW_LOADER_ONCE=1 L run radio
-check "a bad-script marker written for another bundle doesn't count" test "$(prop test.radio)" = "bundle-script|bundle 2.0.5|/data/glassworks/bundle/current"
-rm -f /data/glassworks/bundle/bad-radio
+echo 2.0.4 > /data/glassworks/bundle/bad-agent
+check "(setup: a marker for 2.0.4 is there)" test "$(cat /data/glassworks/bundle/bad-agent)" = 2.0.4
+rm -f "$T/props/test.agent"; GW_LOADER_ONCE=1 L run agent
+check "a bad-script marker written for another bundle doesn't count" test "$(prop test.agent)" = "bundle-script|bundle 2.0.5|/data/glassworks/bundle/current"
+rm -f /data/glassworks/bundle/bad-agent
 
 B=/data/glassworks/bundle
-mkframe "$T/f8" 2.0.6 "$T/key.pem" --file "services/radio.sh=$T/svc-radio.sh:0700"
+mkframe "$T/f8" 2.0.6 "$T/key.pem" --file "services/agent.sh=$T/svc-agent.sh:0700"
 stage_frame "$T/f8/frame-bundle"; install_frame >/dev/null; mv "$B/current" "$B/old"; echo "$B/old" > "$T/mv-fail"
 L boot
 check "the loaded bundle can't be put back from old: nothing is promoted" test -d "$B/old" -a -d "$B/next" -a ! -e "$B/current"
 rm -f "$T/mv-fail"; L boot
 check "...the next boot puts it back and promotes" test "$(prop ro.glassworks.frame.version)" = 2.0.6 -a ! -e "$B/old" -a ! -e "$B/next"
-mkframe "$T/f9" 2.0.7 "$T/key.pem" --file "services/radio.sh=$T/svc-radio.sh:0700"
+mkframe "$T/f9" 2.0.7 "$T/key.pem" --file "services/agent.sh=$T/svc-agent.sh:0700"
 stage_frame "$T/f9/frame-bundle"; install_frame >/dev/null; printf '%s\n' "$B/next" "$B/old" > "$T/mv-fail"
 L boot
 check "move-in and rollback both fail: old and the staged bundle survive" test -d "$B/old" -a -d "$B/next" -a ! -e "$B/current"
 rm -f "$T/mv-fail"; L boot
 check "...the next boot restores and promotes" test "$(prop ro.glassworks.frame.version)" = 2.0.7 -a ! -e "$B/old" -a ! -e "$B/next"
 
-mkdir -p /data/glassworks/dev; printf '#!/bin/sh\nsetprop test.radio "dev|${GW_SOURCE}|${GW_DEV}"\n' > /data/glassworks/dev/radio.sh
-rm -f "$T/props/test.radio"; GW_LOADER_ONCE=1 L run radio
-check "a developer script without the marker is ignored: the bundle's runs" test "$(prop test.radio)" = "bundle-script|bundle 2.0.7|/data/glassworks/bundle/current"
+mkdir -p /data/glassworks/dev; printf '#!/bin/sh\nsetprop test.agent "dev|${GW_SOURCE}|${GW_DEV}"\n' > /data/glassworks/dev/radio.sh
+rm -f "$T/props/test.agent"; GW_LOADER_ONCE=1 L run agent
+check "a developer script without the marker is ignored: the bundle's runs" test "$(prop test.agent)" = "bundle-script|bundle 2.0.7|/data/glassworks/bundle/current"
 touch /data/glassworks/dev/override
-GW_LOADER_ONCE=1 L run radio; check "...with the root-made marker it runs" test "$(prop test.radio)" = "dev|dev|1"
+GW_LOADER_ONCE=1 L run agent; check "...with the root-made marker it runs" test "$(prop test.agent)" = "dev|dev|1"
 rm -f /data/glassworks/dev/override
 
 sed -i 's/^version 2000007$/version 2000097/' "$B/current/manifest"
-mkframe "$T/f10" 2.0.8 "$T/key.pem" --file "services/radio.sh=$T/svc-radio.sh:0700"
+mkframe "$T/f10" 2.0.8 "$T/key.pem" --file "services/agent.sh=$T/svc-agent.sh:0700"
 stage_frame "$T/f10/frame-bundle"; s=$(install_frame)
 check "a loaded manifest whose signature fails can't raise the floor" has "$s" "ok: frame bundle 2.0.8 staged"
 L boot; check "...and the update loads" test "$(prop ro.glassworks.frame.version)" = 2.0.8 -a "$(cat "$B/version")" = 2000008
-mkframe "$T/f11" 2.0.9 "$T/key.pem" --file "services/radio.sh=$T/svc-radio.sh:0700"
+mkframe "$T/f11" 2.0.9 "$T/key.pem" --file "services/agent.sh=$T/svc-agent.sh:0700"
 stage_frame "$T/f11/frame-bundle"; install_frame >/dev/null; echo "$B/version.tmp" > "$T/mv-fail"
 L boot
 check "the floor can't be recorded: the promotion is undone" test "$(prop ro.glassworks.frame.version)" = 2.0.8 -a "$(cat "$B/version")" = 2000008
@@ -490,22 +490,23 @@ rm -f "$T/mv-fail"; L boot
 check "...and loads once it can" test "$(prop ro.glassworks.frame.version)" = 2.0.9 -a "$(cat "$B/version")" = 2000009
 reset_frame
 
-# --------------------------------------------------------------------- radio helper v5 (frame loader)
-# From here on the helper is glassworks_radio.sh, the frame loader's radio slot. A test bundle is a
+# ----------------------------------------------------------------------- frame agent v5 (frame loader)
+# From here on `helper` runs glassworks_agent.sh, the frame agent in the loader's agent slot. A test bundle is a
 # make-bundle.py output dir passed as GW_BUNDLE ($CUR), as the loader passes the checked bundle.
 CUR=""
 reset_radio() { rm -rf /data/s1kiosk/radio; rm -f "${T:?}"/props/sys.s1kiosk.* "${T:?}"/props/sys.glassworks.* "${T:?}/restarts" "${T:?}/log"; CUR=""; }
 helper() { # env... : run the helper for a couple of loops
-  env GWR_ONCE=${LOOPS:-2} GWR_SLEEP=0 GW_BOOT="$TB" GW_BUNDLE="$CUR" "$@" /system/bin/sh "$TB/glassworks_radio.sh" >/dev/null 2>&1
+  env GWA_ONCE=${LOOPS:-2} GWA_SLEEP=0 GW_BOOT="$TB" GW_BUNDLE="$CUR" "$@" /system/bin/sh "$TB/glassworks_agent.sh" >/dev/null 2>&1
 }
-echo "--- glassworks_radio.sh: names"
+echo "--- glassworks_agent.sh: names"
 reset_radio; rm -f "${T:?}"/props/persist.s1kiosk.* "${T:?}"/props/persist.glassworks.*
 echo off > "$T/props/persist.glassworks.radio_mode"
 LOOPS=1 helper
 check "v5 reports on sys.glassworks.*" has "$(prop sys.glassworks.radio.status)" "ok off"
-check "...contract version 5" test "$(prop sys.glassworks.radio.version)" = 5
+check "...contract version 5" test "$(prop sys.glassworks.agent.version)" = 5
 check "...and sets no sys.s1kiosk.* property" test -z "$(ls "$T/props" | grep '^sys\.s1kiosk\.')"
-check "...source boot" test "$(prop sys.glassworks.radio.source)" = boot
+check "...source boot" test "$(prop sys.glassworks.agent.source)" = boot
+check "...the agent's own facts under sys.glassworks.agent.*, not radio" test -z "$(prop sys.glassworks.radio.version)$(prop sys.glassworks.radio.source)"
 
 # -------------------------------------------------------------------------------------- firmware
 echo "--- radio firmware"
@@ -574,7 +575,7 @@ open(sys.argv[1], 'wb').write(d)
 PY
 mkframe "$T/b9" 1.3.3 "$T/key.pem" --file "fw/h.gbl=$T/huge.gbl:0644" --firmware "huge=fw/h.gbl:0018:x"
 CUR=$T/b9/frame-bundle; rm -f "$T/props/sys.glassworks.radio.fw_targets"
-timeout 60 env GWR_ONCE=1 GWR_SLEEP=0 GW_BUNDLE="$CUR" /system/bin/sh "$TB/glassworks_radio.sh" >/dev/null 2>&1
+timeout 60 env GWA_ONCE=1 GWA_SLEEP=0 GW_BUNDLE="$CUR" /system/bin/sh "$TB/glassworks_agent.sh" >/dev/null 2>&1
 check "a GBL tag length of 0xfffffff8 is refused (no endless loop)" test $? != 124 -a "$(prop sys.glassworks.radio.fw_targets)" = "stock:${STOCK_SHA:0:12}:0017"
 
 # Aqara's zigbee_cpcd starting mid-flash is stopped again
@@ -763,7 +764,7 @@ HDR6='  sl  local_address                         remote_address                
 tcp() { { echo "$HDR"; i=0; for l in "$@"; do printf '%4d: %s 00000000:00000000 00:00000000 00000000     0        0 %d 1 00000000 20 4 30 10 -1\n' $i "$l" $((10000 + i)); i=$((i + 1)); done; } > "$T/net/tcp"; }
 tcp6() { { echo "$HDR6"; i=0; for l in "$@"; do printf '%4d: %s 00000000:00000000 00:00000000 00000000     0        0 %d 1 00000000 20 4 30 10 -1\n' $i "$l" $((20000 + i)); i=$((i + 1)); done; } > "$T/net/tcp6"; }
 LISTEN='00000000:19EE 00000000:0000 0A'
-peer() { LOOPS=${1:-1} helper GWR_PROC_NET="$T/net"; prop sys.glassworks.radio.peer; }
+peer() { LOOPS=${1:-1} helper GWA_PROC_NET="$T/net"; prop sys.glassworks.radio.peer; }
 echo off > "$T/props/persist.glassworks.radio_mode"; tcp "$LISTEN" "0A0200C0:19EE 140200C0:C350 01"; tcp6
 p=$(peer); check "off: nothing reported" test -z "$p" -a -e "$T/props/sys.glassworks.radio.peer"
 echo zigbee_tcp > "$T/props/persist.glassworks.radio_mode"; tcp "$LISTEN"
@@ -808,7 +809,7 @@ check "...detached, no name" has "$(prop sys.glassworks.radio.status)" "ok threa
 check "...and never more than the role and the name" test -z "$(grep '^sys.glassworks.radio' /t/setprop.log | grep -i -E 'key|pskc|extpanid|0e08')"
 rm -f "$T/ot-state" "$T/ot-name"; pkill -f "sleep 1000"
 mkfifo "$APP/files/radio/thread-dataset"; chown 10050 "$APP/files/radio/thread-dataset"
-timeout 60 env GWR_ONCE=1 GWR_SLEEP=0 GW_BUNDLE="$CUR" /system/bin/sh "$TB/glassworks_radio.sh" >/dev/null 2>&1
+timeout 60 env GWA_ONCE=1 GWA_SLEEP=0 GW_BUNDLE="$CUR" /system/bin/sh "$TB/glassworks_agent.sh" >/dev/null 2>&1
 check "a FIFO dataset never blocks the helper" test $? != 124
 check "...and changes nothing" test "$(cat /data/s1kiosk/radio/thread-dataset)" = 0e080000000000010000
 rm -f "$APP/files/radio/thread-dataset"; pkill -f "sleep 1000"
@@ -1009,12 +1010,12 @@ check "...status ok" test "$(prop sys.glassworks.timezone.status)" = "ok Europe/
 : > "$T/tz-calls"; LOOPS=1 helper
 check "already right: no call" test ! -s "$T/tz-calls"
 # Aqara's sync running later (its gateway prop changed, or a slow boot): caught by the loop
-LOOPS=4 GWR_SLEEP=3 env GWR_ONCE=4 GWR_SLEEP=3 GW_BUNDLE="$CUR" /system/bin/sh "$TB/glassworks_radio.sh" >/dev/null 2>&1 &
+LOOPS=4 GWA_SLEEP=3 env GWA_ONCE=4 GWA_SLEEP=3 GW_BUNDLE="$CUR" /system/bin/sh "$TB/glassworks_agent.sh" >/dev/null 2>&1 &
 H=$!; sleep 2; printf 'Antarctica/Casey' > "$T/props/persist.sys.timezone"; wait $H
 check "a later reset is re-applied by the watch loop" test "$(prop persist.sys.timezone)" = Europe/Berlin
 # The loop notices a gone helper at its next check (<= 5 s); allow for a loaded/emulated host.
-i=0; while [ -n "$(pgrep -f 'glassworks_radio.sh' | head -1)" ] && [ $i -lt 20 ]; do sleep 0.5; i=$((i + 1)); done
-check "...and the loop ends with the helper" test -z "$(pgrep -f 'glassworks_radio.sh' | head -1)"
+i=0; while [ -n "$(pgrep -f 'glassworks_agent.sh' | head -1)" ] && [ $i -lt 20 ]; do sleep 0.5; i=$((i + 1)); done
+check "...and the loop ends with the helper" test -z "$(pgrep -f 'glassworks_agent.sh' | head -1)"
 printf 'Mars/Olympus_Mons' > "$T/props/persist.glassworks.timezone"; echo Mars/Olympus_Mons > "$T/tz-unknown"; : > "$T/tz-calls"
 LOOPS=1 helper
 check "a zone Android doesn't know is reported" has "$(prop sys.glassworks.timezone.status)" "error Mars/Olympus_Mons: Android did not accept it (now GMT)"
@@ -1079,31 +1080,31 @@ check "...once" test ! -e "$T/settings.calls"
 echo "--- Bluetooth address"
 reset_radio; echo off > "$T/props/persist.glassworks.radio_mode"
 BTP=$T/pub; rm -rf "$BTP"; rm -f "$T/settings.secure.bluetooth_address"
-LOOPS=1 helper GWR_PUB="$BTP"
+LOOPS=1 helper GWA_PUB="$BTP"
 check "Android has none yet (the mock answers 1): nothing written" test ! -e "$BTP/bluetooth-address"
 for bad in null 02:00:00:00:00:00 00:00:00:00:00:00 ff:ff:ff:ff:ff:ff 02:00:00:00:00 02:00:00:00:00:0g '02:00:00:00:00:01; reboot' ' 02:00:00:00:00:01'; do
-  printf '%s' "$bad" > "$T/settings.secure.bluetooth_address"; LOOPS=1 helper GWR_PUB="$BTP"
+  printf '%s' "$bad" > "$T/settings.secure.bluetooth_address"; LOOPS=1 helper GWA_PUB="$BTP"
   check "placeholder or malformed '$bad': never written" test ! -e "$BTP/bluetooth-address"
 done
 : > "$T/settings.calls"; printf null > "$T/settings.secure.bluetooth_address"
-LOOPS=3 helper GWR_PUB="$BTP"
+LOOPS=3 helper GWA_PUB="$BTP"
 check "until there is one, asked once a minute, not every loop" test "$(grep -c 'get secure bluetooth_address' "$T/settings.calls")" = 1
 printf '02:aa:00:00:00:01' > "$T/settings.secure.bluetooth_address"; : > "$T/log"
-LOOPS=1 helper GWR_PUB="$BTP"
+LOOPS=1 helper GWA_PUB="$BTP"
 check "a real address is written for the app, upper case" test "$(cat "$BTP/bluetooth-address")" = 02:AA:00:00:00:01
 check "...root 0644 in a root 0755 dir" test "$(stat -c %a:%u "$BTP/bluetooth-address")/$(stat -c %a:%u "$BTP")" = "644:0/755:0"
 check "...and never logged" sh -c "! grep -qi '02:aa:00:00:00:01' '$T/log' && grep -q 'bluetooth address published' '$T/log'"
-: > "$T/settings.calls"; LOOPS=3 helper GWR_PUB="$BTP"
+: > "$T/settings.calls"; LOOPS=3 helper GWA_PUB="$BTP"
 check "once written, asked once per start only" test "$(grep -c 'get secure bluetooth_address' "$T/settings.calls")" = 1
 echo keep > "$T/not-ours"; rm -f "$BTP/bluetooth-address"; ln -s "$T/not-ours" "$BTP/bluetooth-address"
-LOOPS=1 helper GWR_PUB="$BTP"
+LOOPS=1 helper GWA_PUB="$BTP"
 check "a planted symlink is replaced, its target untouched" test ! -L "$BTP/bluetooth-address" -a "$(cat "$T/not-ours")" = keep -a "$(cat "$BTP/bluetooth-address")" = 02:AA:00:00:00:01
 rm -rf "$BTP"; touch "$T/settings-hang"; t0=$(date +%s)
-LOOPS=1 helper GWR_PUB="$BTP" GWR_BT_TIMEOUT=1
+LOOPS=1 helper GWA_PUB="$BTP" GWA_BT_TIMEOUT=1
 check "a settings call that never returns doesn't stall the loop (bounded, then retried later)" test $(( $(date +%s) - t0 )) -lt 15 -a ! -e "$BTP/bluetooth-address"
 check "...and the radio's status was still set" test -n "$(prop sys.glassworks.radio.status)"
 rm -f "$T/settings-hang"; pkill -f "sleep 1000" 2>/dev/null
-touch "$T/settings-fail"; LOOPS=1 helper GWR_PUB="$BTP"
+touch "$T/settings-fail"; LOOPS=1 helper GWA_PUB="$BTP"
 check "a lookup that prints an address and then fails: nothing written" test ! -e "$BTP/bluetooth-address"
 rm -f "$T/settings-fail"
 rm -rf "$BTP" "$T/not-ours" "$T/settings.secure.bluetooth_address"
@@ -1207,7 +1208,7 @@ ap_up() { # the kiosk's sockets as Android's dual-stack Java sockets show them
 }
 # ipt_idle: until no fake iptables call is running (a helper's loop it killed on exit may have one in flight)
 ipt_idle() { i=0; while pgrep -f /t/ipt.py >/dev/null && [ $i -lt 100 ]; do sleep 0.1; i=$((i + 1)); done; }
-portal() { LOOPS=1 helper GWR_PROC_NET="$T/net"; ipt_idle; }
+portal() { LOOPS=1 helper GWA_PROC_NET="$T/net"; ipt_idle; }
 nat() { cat "$T/ipt/$1-nat" 2>/dev/null; }
 RULE4_DNS='-A GWPORTAL -s 192.168.43.1/24 -d 192.168.43.1/32 -i wlan0 -p udp -m udp --dport 53 -j DNAT --to-destination 192.168.43.1:8053'
 RULE4_WEB='-A GWPORTAL -s 192.168.43.1/24 -d 192.168.43.1/32 -i wlan0 -p tcp -m tcp --dport 80 -j DNAT --to-destination 192.168.43.1:8098'
@@ -1222,7 +1223,7 @@ check "...DNS to the AP's IPv6 address too" test "$(nat 6 | grep '^-A GWPORTAL')
 check "...one jump from PREROUTING in each" test "$(nat 4 | grep -c '^-A PREROUTING -j GWPORTAL$')$(nat 6 | grep -c '^-A PREROUTING -j GWPORTAL$')" = 11
 check "...and the status says on which interface" test "$(prop sys.glassworks.portal.status)" = "on wlan0"
 check "...never with an address in the log" test -z "$(grep -e 192.168 -e 2001: "$T/log")"
-: > "$T/setprop.log"; rm -f "$T/ipt/restores"; LOOPS=3 helper GWR_PROC_NET="$T/net" GWR_PORTAL_SLEEP=0.3; ipt_idle
+: > "$T/setprop.log"; rm -f "$T/ipt/restores"; LOOPS=3 helper GWA_PROC_NET="$T/net" GWA_PORTAL_SLEEP=0.3; ipt_idle
 check "a new helper keeps rules already in place: not rebuilt, one jump, the status written once" \
   test "$(cat "$T/ipt/restores" 2>/dev/null | wc -l)/$(nat 4 | grep -c '^-A PREROUTING -j GWPORTAL$')/$(grep -c '^sys.glassworks.portal.status=' "$T/setprop.log")" = 0/1/1
 # ip6tables-save prints the address short; a rule in that form is the same rule, not a stale one
@@ -1240,11 +1241,11 @@ first_check() { logged '^sys.glassworks.portal.status='; }
 # bg_until <test...>: waits (60 s at most, an emulated ARM under load is slow) until it holds, then stops the helper
 # helpers_gone: after a pkill, until no helper and no fake iptables call of one is left (one already running would
 # still write its table after the test has moved on)
-helpers_gone() { pkill -f glassworks_radio.sh; wait "$H" 2>/dev/null; i=0; while pgrep -f '/t/ipt.py|glassworks_radio.sh' >/dev/null && [ $i -lt 100 ]; do sleep 0.1; i=$((i + 1)); done; }
+helpers_gone() { pkill -f glassworks_agent.sh; wait "$H" 2>/dev/null; i=0; while pgrep -f '/t/ipt.py|glassworks_agent.sh' >/dev/null && [ $i -lt 100 ]; do sleep 0.1; i=$((i + 1)); done; }
 bg_until() { i=0; until "$@" || [ $i -ge 600 ]; do sleep 0.1; i=$((i + 1)); done; helpers_gone; }
 jumps4() { test "$(nat 4 | grep -c '^-A PREROUTING -j GWPORTAL$')" = 1; }
 rules4() { test -n "$(nat 4 | grep '^-A GWPORTAL')"; }
-: > "$T/setprop.log"; LOOPS=100000 helper GWR_PROC_NET="$T/net" GWR_PORTAL_SLEEP=0.2 GWR_SLEEP=0.1 &
+: > "$T/setprop.log"; LOOPS=100000 helper GWA_PROC_NET="$T/net" GWA_PORTAL_SLEEP=0.2 GWA_SLEEP=0.1 &
 H=$!; first_check; sed -i '/^-A PREROUTING -j GWPORTAL$/d' "$T/ipt/4-nat"; bg_until jumps4
 check "a jump lost while it runs (netd restarted) is put back by the loop" test "$(nat 4 | grep -c '^-A PREROUTING -j GWPORTAL$')" = 1
 socks tcp6; portal
@@ -1253,7 +1254,7 @@ check "the redirect's socket gone: everything removed, both families" \
 ap_up; portal; hostapd_off; portal
 check "hostapd gone (the hotspot stopped): removed" test -z "$(nat 4 | grep GWPORTAL)$(nat 6 | grep GWPORTAL)"
 ap_up; hostapd_on; portal; hostapd_off; touch /t/ipt-nat-unreadable; : > "$T/setprop.log"
-LOOPS=100000 helper GWR_PROC_NET="$T/net" GWR_PORTAL_SLEEP=0.2 GWR_SLEEP=0.1 &
+LOOPS=100000 helper GWA_PROC_NET="$T/net" GWA_PORTAL_SLEEP=0.2 GWA_SLEEP=0.1 &
 H=$!; logged '^sys.glassworks.portal.status=error'
 check "a rule table that can't be read at the hotspot's end: not called off" \
   sh -c "grep -q '^sys.glassworks.portal.status=error' '$T/setprop.log' && ! grep -q '^sys.glassworks.portal.status=off' '$T/setprop.log'"
@@ -1263,11 +1264,11 @@ check "...and the next check removes the rules, then says off" gone
 # The helper itself dies (killed, as init does on a restart) while the hotspot is up: the loop that outlives it
 # takes the rules away, and tries again when a table can't be read the first time.
 ap_up; hostapd_on; portal; : > "$T/setprop.log"
-LOOPS=100000 helper GWR_PROC_NET="$T/net" GWR_PORTAL_SLEEP=0.2 GWR_SLEEP=0.1 &
-H=$!; first_check; P=$(pgrep -P "$H" -f glassworks_radio.sh | head -1)   # the helper itself, not its loops
+LOOPS=100000 helper GWA_PROC_NET="$T/net" GWA_PORTAL_SLEEP=0.2 GWA_SLEEP=0.1 &
+H=$!; first_check; P=$(pgrep -P "$H" -f glassworks_agent.sh | head -1)   # the helper itself, not its loops
 # its two loops (time zone, portal) are its sh children; wait until both are there, then pause them
-i=0; until [ "$(pgrep -P "$P" -f glassworks_radio.sh | wc -l)" -ge 2 ] || [ $i -ge 600 ]; do sleep 0.1; i=$((i + 1)); done
-L=$(pgrep -P "$P" -f glassworks_radio.sh | tr '\n' ' ')
+i=0; until [ "$(pgrep -P "$P" -f glassworks_agent.sh | wc -l)" -ge 2 ] || [ $i -ge 600 ]; do sleep 0.1; i=$((i + 1)); done
+L=$(pgrep -P "$P" -f glassworks_agent.sh | tr '\n' ' ')
 check "(the helper's loops are up)" test "$(echo $L | wc -w)" -ge 2
 kill -STOP $L; kill -9 "$P"
 i=0; while kill -0 "$P" 2>/dev/null && [ $i -lt 100 ]; do sleep 0.1; i=$((i + 1)); done   # until its parent reaps it
@@ -1275,15 +1276,15 @@ check "(the helper is killed)" sh -c "! kill -0 $P 2>/dev/null"
 : > /t/ipt-nat-fails; touch /t/ipt-nat-unreadable; kill -CONT $L
 # Unreadable until the leftover loop has failed 8 reads (several cleanup tries) or has ended: a loop that tried
 # once and gave up is gone by then, with the rules still there.
-i=0; until [ "$(wc -l < /t/ipt-nat-fails)" -ge 8 ] || [ -z "$(pgrep -f glassworks_radio.sh)" ] || [ $i -ge 600 ]; do
+i=0; until [ "$(wc -l < /t/ipt-nat-fails)" -ge 8 ] || [ -z "$(pgrep -f glassworks_agent.sh)" ] || [ $i -ge 600 ]; do
   sleep 0.1; i=$((i + 1)); done
 check "(the leftover loop's cleanup reads fail)" test -s /t/ipt-nat-fails
 rm -f /t/ipt-nat-unreadable
 i=0; until test -z "$(nat 4 | grep GWPORTAL)$(nat 6 | grep GWPORTAL)" || [ $i -ge 600 ]; do sleep 0.1; i=$((i + 1)); done
 check "the helper killed, a table unreadable at first: the leftover loop still removes the rules, both families" \
   test -z "$(nat 4 | grep GWPORTAL)$(nat 6 | grep GWPORTAL)"
-i=0; while pgrep -f glassworks_radio.sh >/dev/null && [ $i -lt 100 ]; do sleep 0.1; i=$((i + 1)); done
-check "...and then it ends too" test -z "$(pgrep -f glassworks_radio.sh)"
+i=0; while pgrep -f glassworks_agent.sh >/dev/null && [ $i -lt 100 ]; do sleep 0.1; i=$((i + 1)); done
+check "...and then it ends too" test -z "$(pgrep -f glassworks_agent.sh)"
 helpers_gone; hostapd_off
 hostapd_on
 socks udp6 "$AP4:1F75 07 10077" "$AP6:1F75 07 10077"; portal
@@ -1302,7 +1303,7 @@ ap_up; socks udp6 "$AP4:1F75 07 10050"; portal
 check "no IPv6 socket: IPv4 only" test -n "$(nat 4 | grep '^-A GWPORTAL')" -a -z "$(nat 6 | grep '^-A GWPORTAL')"
 ap_up; socks udp "012BA8C0:1F75 07 10050"; socks udp6; socks tcp "012BA8C0:1FA2 0A 10050"; socks tcp6; portal
 check "plain IPv4 sockets (udp, tcp) count too" test "$(nat 4 | grep -c '^-A GWPORTAL')" = 2
-ap_up; portal; hostapd_off; : > "$T/setprop.log"; LOOPS=100000 helper GWR_PROC_NET="$T/net" GWR_PORTAL_SLEEP=0.2 GWR_SLEEP=0.1 &
+ap_up; portal; hostapd_off; : > "$T/setprop.log"; LOOPS=100000 helper GWA_PROC_NET="$T/net" GWA_PORTAL_SLEEP=0.2 GWA_SLEEP=0.1 &
 # the whole portal: both families' rules, one jump each, and the status
 portal_up() {
   test "$(prop sys.glassworks.portal.status)" = "on wlan0" && jumps4 && test "$(nat 4 | grep -c '^-A GWPORTAL')" = 2 &&
@@ -1326,7 +1327,7 @@ EOF
 rm -rf "$T/net" "$T/ipt" "$T/ip-addr4"; rm -f /data/s1kiosk/radio/radio.conf
 
 # ------------------------------------------------------------------------------ setup hotspot name
-# #197: with hotspot-name.apk in the running radio bundle, the helper puts it on /product through a Magisk module
+# #197: with hotspot-name.apk in the running frame bundle, the agent puts it on /product through a Magisk module
 # (Android applies it from the next restart); without it, or with persist.glassworks.hotspot_name=android, it removes
 # the module. A fake `cmd overlay list` says whether Android applies the overlay now.
 echo "--- setup hotspot name (#197)"
@@ -1344,14 +1345,14 @@ EOF
 printf 'overlay-v1' > "$T/rb/hotspot-name.apk"
 MOD="$T/modules/s1kiosk_hotspot_name"; APKP="$MOD/system/product/overlay/S1HotspotName/S1HotspotName.apk"
 mkdir -p "$T/magisk" && : > "$T/magisk/busybox"   # Magisk's own setup, as the Magisk app leaves it
-name() { LOOPS=1 helper GW_BUNDLE="$T/rb" GWR_MODULES="$T/modules" GWR_MAGISK_BB="$T/magisk/busybox" GWR_HN_LIVE=/t/overlay-on "$@"; prop sys.glassworks.hotspot_name.status; }
+name() { LOOPS=1 helper GW_BUNDLE="$T/rb" GWA_MODULES="$T/modules" GWA_MAGISK_BB="$T/magisk/busybox" GWA_HN_LIVE=/t/overlay-on "$@"; prop sys.glassworks.hotspot_name.status; }
 st=$(umask 077; name)   # as init runs services: what root writes is private unless the helper says otherwise
 check "the overlay in the bundle: a Magisk module puts it on /product" test "$(cat "$APKP")" = overlay-v1
 check "...with its module.prop" grep -qx "id=s1kiosk_hotspot_name" "$MOD/module.prop"
 check "...root-owned, readable by Android (system_server), not writable by others" \
   test "$(stat -c %a:%u "$APKP")/$(stat -c %a "$MOD")/$(stat -c %a "${APKP%/*}")/$(stat -c %a "$MOD/module.prop")" = "644:0/755/755/644"
 check "...and Glassworks from the next restart" test "$st" = "glassworks after a restart"
-st=$(name GWR_MAGISK_BB="$T/magisk/none")
+st=$(name GWA_MAGISK_BB="$T/magisk/none")
 check "Magisk without its setup (no busybox in /data/adb/magisk): said so, no promise of a restart" \
   test "$st" = "android: Magisk loads no modules here (no $T/magisk/none)"
 check "...and the module stays in place for when it has one" test "$(cat "$APKP")" = overlay-v1
@@ -1448,7 +1449,7 @@ check "Android's overlay query fails: an error, not a guess" test "$st" = "error
 # never answering: an outer deadline (a watchdog ends the hang after 120 s) so a helper without its own bound is
 # caught as slow, not left hanging the suite
 touch /t/cmd-hang; : > "$T/setprop.log"; ( sleep 120; pkill -f "sleep 1000" ) & W=$!
-t0=$(date +%s); st=$(name GWR_HN_TIMEOUT=2); t1=$(date +%s)
+t0=$(date +%s); st=$(name GWA_HN_TIMEOUT=2); t1=$(date +%s)
 kill "$W" 2>/dev/null; rm -f /t/cmd-hang; pkill -f "sleep 1000" 2>/dev/null
 check "a query that never returns: bounded, an error, and the helper goes on to its radio loop" \
   test "$st" = "error: Android didn't say whether the overlay is on" -a $((t1 - t0)) -lt 90 \

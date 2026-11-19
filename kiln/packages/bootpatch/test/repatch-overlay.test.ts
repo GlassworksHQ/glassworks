@@ -23,7 +23,7 @@ const OLD: OverlayFile[] = [
   { path: 'overlay.d/sbin/s1kiosk_radio.sh', mode: 0o700, data: enc.encode('#!/system/bin/sh\n') },
 ];
 const NEW: OverlayFile[] = [
-  { path: 'overlay.d/glassworks.rc', mode: 0o644, data: enc.encode('service glassworks_radio\n') },
+  { path: 'overlay.d/glassworks.rc', mode: 0o644, data: enc.encode('service glassworks_agent\n') },
   { path: 'overlay.d/sbin/glassworks_loader.sh', mode: 0o700, data: enc.encode('#!/system/bin/sh\n') },
 ];
 const patch = async (boot: Uint8Array, overlay: OverlayFile[]) => (await patchBootImage({ boot, magisk: MAGISK, overlay })).image;

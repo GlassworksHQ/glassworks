@@ -419,7 +419,7 @@ Every S1 in the field needs one more Kiln update to get the loader. Before build
     ```
     The Magisk restore only undoes the Magisk changes, so the overlay files of the earlier patch stay.
     Kiln's update path patches the panel's own, already-patched `boot`, so a 0.4.3 panel would have run
-    `s1kiosk_radio` next to `glassworks_radio`, both driving the radio. Both patchers now drop every
+    `s1kiosk_radio` next to the new radio slot, both driving the radio. Both patchers now drop every
     `overlay.d` entry but the Magisk ones before adding theirs. After the fix, `repatch-bundled` equals
     `stock-old` and every golden case matches byte for byte (61 tests). It also fixed an older slip:
     re-patching with `BOOT_ANIMATION=none` used to keep the animation of the earlier patch.
@@ -441,7 +441,7 @@ Every S1 in the field needs one more Kiln update to get the loader. Before build
 - **Fixed slots.** One `.rc` in the boot image (`overlay.d/glassworks.rc`) names every service the
   frame can run, and each slot runs `glassworks_loader.sh run <slot>`. The loader execs the slot's
   script from the active bundle, or the boot image's own copy when there is no valid bundle.
-  - Slots: `glassworks_radio`, `glassworks_netwatch`, `glassworks_firstboot`, `glassworks_update`,
+  - Slots: `glassworks_agent` (the frame agent, [principles](../../../docs/principles.md#the-frame-agent)), `glassworks_netwatch`, `glassworks_firstboot`, `glassworks_update`,
     `glassworks_bundle`, and two spares, `glassworks_svc1` and `glassworks_svc2`, which start at boot
     and exit unless the bundle has `services/svc1.sh` or `services/svc2.sh`.
   - A generic runner (one service that starts whatever a bundle lists) was ruled out. Init would
@@ -464,7 +464,7 @@ Every S1 in the field needs one more Kiln update to get the loader. Before build
   `glassworks_loader.sh install`, so a bundle can't replace the code that checks bundles.
 - **Fallback.** A missing bundle, a failed check, or another frame's bundle means the boot image's
   copies run. A slot whose bundle script exits 3 times within a minute is marked bad, and that slot
-  runs the boot copy from then on. That is the radio helper's rule today, applied to every slot.
+  runs the boot copy from then on. That was the 0.4.3 radio helper's rule, applied to every slot.
 
 ### What the app reads
 
@@ -496,9 +496,9 @@ end
 - **Signed per frame id.** The frame id is inside the signed manifest, and the loader compares it
   with its own (built into the boot image). A bundle signed for another frame is refused, even with
   a valid signature.
-- **What it carries** at S1 frame 1.0.0: the slot scripts (`services/radio.sh`, `netwatch.sh`,
-  `firstboot.sh`, `update.sh`), the radio helper's binaries and firmware (all of today's radio
-  bundle), and `bootanimation.zip`.
+- **What it carries** at S1 frame 1.0.0: the slot scripts (`services/agent.sh`, `netwatch.sh`,
+  `firstboot.sh`, `update.sh`), the frame agent's binaries and firmware (all of today's radio
+  bundle, and its `hotspot-name.apk`), and `bootanimation.zip`.
 - **The old `S1RADIO-BUNDLE 1` format** is refused cleanly by the new loader ("not a frame bundle").
   The app ships only the frame bundle from S1 frame 1.0.0 on.
 - **Where it comes from.** The app ships the bundle in its assets, as it ships the radio bundle now.
@@ -511,12 +511,13 @@ bundle, once the loader makes that possible over the air.
 
 | 0.4.3 boot image | S1 frame 1.0.0 | Notes |
 |---|---|---|
-| init services `s1kiosk_radio`, `_update`, `_bundle`, `_netwatch`, `_firstboot` | `glassworks_radio`, `_update`, `_bundle`, `_netwatch`, `_firstboot` | Plus `glassworks_svc1`, `_svc2` |
+| init services `s1kiosk_radio`, `_update`, `_bundle`, `_netwatch`, `_firstboot` | `glassworks_agent`, `_update`, `_bundle`, `_netwatch`, `_firstboot` | The radio helper does far more than the radio now, so it is the frame agent (maintainer, 2026-11-19). Plus `glassworks_svc1`, `_svc2` |
 | `s1kiosk_devsu` (dev images) | `glassworks_devsu` | |
 | `s1kiosk_verify`, `s1kiosk_bundle.pub`, `s1kiosk_adb_keys`, `s1kiosk_bootanimation.zip`, `s1kiosk_*.rc` | `glassworks_verify`, `glassworks_bundle.pub`, `glassworks_adb_keys`, `glassworks_bootanimation.zip`, `glassworks.rc` | In the ramdisk (`overlay.d`) |
-| `sys.s1kiosk.update.*`, `sys.s1kiosk.bundle.*`, `sys.s1kiosk.radio.*`, `sys.s1kiosk.timezone.status` | `sys.glassworks.*`, same suffixes | |
-| `persist.s1kiosk.radio_mode`, `radio_zigbee`, `radio_allow`, `timezone` | `persist.glassworks.*` | The radio helper copies each old value at its first start (where the new one is empty), then again only when the old value changes, so the radio mode and the time zone survive the reflash and a stopped update. Removed with the old names |
+| `sys.s1kiosk.update.*`, `sys.s1kiosk.bundle.*`, `sys.s1kiosk.radio.*`, `sys.s1kiosk.timezone.status`, `sys.s1kiosk.portal.status`, `sys.s1kiosk.hotspot_name.status` | `sys.glassworks.*`, same suffixes, except the agent's own two: `sys.glassworks.agent.version`, `sys.glassworks.agent.source` (were `radio.version`, `radio.source`) | |
+| `persist.s1kiosk.radio_mode`, `radio_zigbee`, `radio_allow`, `timezone`, `hotspot_name` | `persist.glassworks.*` | The frame agent copies each old value at its first start (where the new one is empty), then again only when the old value changes, so the radio mode and the time zone survive the reflash and a stopped update. Removed with the old names |
 | `/data/s1kiosk` (bundle store, update copy, markers), `/data/s1kiosk-pub` | `/data/glassworks`, `/data/glassworks-pub` | |
+| Magisk module `s1kiosk_hotspot_name`, overlay package `sh.edm.s1kiosk.overlay.hotspotname` | **stay** | A 0.4.3 helper made the module; a second id would leave two, one the undo can't see |
 | `/data/s1kiosk/radio` (dataset, Zigbee NVM, otbr's Thread settings in `run/thread`) | **stays** | `otbr-agent` has `/data/s1kiosk/radio/run` compiled in (`build-otbr.sh` line 127). It moves in a later bundle, with an otbr built for the new path and a one-time move of `run/thread` |
 | `applicationId` `sh.edm.s1kiosk`, `files/update/pending.apk` | stays | The app id stays (maintainer). App-private paths sit under it |
 | (none) | `ro.glassworks.frame.id`, `ro.glassworks.frame.version` | New |
@@ -685,8 +686,8 @@ FEL with our U-Boot) or flashed with the usual backup. The app can stay on 0.4.3
 | Test | What it settles | Expect |
 |---|---|---|
 | L1 | `/data` at `post-fs-data`, and the `exec` step (on a store with no bundle: no `/data/glassworks/bundle/current`, `next` or `next.old`; with one, expect `ok <its version>` instead) | `getprop ro.glassworks.frame.id` = `aqara-s1-plus`, `ro.glassworks.frame.version` = `1.0.0`, `sys.glassworks.bundle.state` = `none`; `logcat -d -s glassworks_loader` |
-| L2 | The slots under init | `init.svc.glassworks_radio`, `_netwatch` = `running`; `init.svc.glassworks_firstboot` = `stopped` (it exits at once: the 0.4.3 marker says the panel was provisioned); no `init.svc.s1kiosk_*` |
-| L3 | The radio from the old setting. Starts from a known state: 0.4.3 running `thread_router` (step 0 of the run sheet checks it), no `/data/s1kiosk/radio/.settings-moved`, no frame bundle | `persist.glassworks.radio_mode` = `thread_router`, `sys.glassworks.radio.status` = `ok thread_router…`, `sys.glassworks.radio.source` = `boot`, otbr runs |
+| L2 | The slots under init | `init.svc.glassworks_agent`, `_netwatch` = `running`; `init.svc.glassworks_firstboot` = `stopped` (it exits at once: the 0.4.3 marker says the panel was provisioned); no `init.svc.s1kiosk_*` |
+| L3 | The radio from the old setting. Starts from a known state: 0.4.3 running `thread_router` (step 0 of the run sheet checks it), no `/data/s1kiosk/radio/.settings-moved`, no frame bundle | `persist.glassworks.radio_mode` = `thread_router`, `sys.glassworks.radio.status` = `ok thread_router…`, `sys.glassworks.agent.source` = `boot`, otbr runs |
 | L4 | The boot animation mount from a shell at `post-fs-data` | the Glassworks animation plays at boot (film it); `/proc/mounts` lists `bootanimation.zip` |
 | L5 | The check's cost at `post-fs-data` | the `glassworks_loader` log lines' times, with and without a bundle (a bundle needs the bundles PR) |
 

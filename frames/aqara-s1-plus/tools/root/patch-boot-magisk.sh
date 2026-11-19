@@ -15,7 +15,7 @@
 #   overlay.d/sbin/glassworks_adb_keys   this computer's adb public key, authorized on first boot so a
 #                                        factory panel (no adb) can continue with frames/aqara-s1-plus/tools/install.sh
 #                                        (ADB_PUBKEY=<file>, default ~/.android/adbkey.pub; none = skip)
-#   overlay.d/sbin/glassworks_radio.sh   the radio helper (frames/aqara-s1-plus/tools/radio/glassworks_radio.sh)
+#   overlay.d/sbin/glassworks_agent.sh   the frame agent (frames/aqara-s1-plus/tools/radio/glassworks_agent.sh)
 #   overlay.d/sbin/{otbr-agent,ot-ctl}   Thread stack (frames/aqara-s1-plus/tools/radio/build-otbr.sh)
 #   overlay.d/sbin/glassworks_firstboot.sh, glassworks_netwatch.sh, glassworks_update.sh
 #   overlay.d/sbin/glassworks_bootanimation.zip   (BOOT_ANIMATION=<zip>, default branding/glass-tile; none = stock)
@@ -58,7 +58,7 @@ for b in magiskinit magisk init-ld; do cp "$W/x/lib/$PAYLOAD_ABI/lib$b.so" "$W/p
 cp "$W/x/lib/$PAYLOAD_ABI/libbusybox.so" "$W/p/magisk-busybox"
 cp "$HERE/glassworks.rc" "$HERE/glassworks_loader.sh" "$HERE/glassworks_bundle.pub" "$W/p/"
 cp "$HERE/out/s1kiosk_verify" "$W/p/glassworks_verify"   # the pinned release binary keeps its old file name
-cp "$RADIO/glassworks_radio.sh" "$RADIO/out/otbr-agent" "$RADIO/out/ot-ctl" "$W/p/"
+cp "$RADIO/glassworks_agent.sh" "$RADIO/out/otbr-agent" "$RADIO/out/ot-ctl" "$W/p/"
 cp "$HERE/glassworks_firstboot.sh" "$HERE/glassworks_netwatch.sh" "$HERE/glassworks_update.sh" "$W/p/"
 if [ "$ADB_PUBKEY" = none ]; then : > "$W/p/glassworks_adb_keys"
 elif [ -s "$ADB_PUBKEY" ]; then
@@ -115,7 +115,7 @@ docker run --rm --platform linux/arm64 -e PREINITDEVICE="$PREINITDEVICE" -e BRAN
     "add 0700 overlay.d/sbin/glassworks_verify glassworks_verify" \
     "add 0644 overlay.d/sbin/glassworks_bundle.pub glassworks_bundle.pub" \
     "add 0600 overlay.d/sbin/glassworks_adb_keys glassworks_adb_keys" \
-    "add 0700 overlay.d/sbin/glassworks_radio.sh glassworks_radio.sh" \
+    "add 0700 overlay.d/sbin/glassworks_agent.sh glassworks_agent.sh" \
     "add 0700 overlay.d/sbin/otbr-agent otbr-agent" \
     "add 0700 overlay.d/sbin/ot-ctl ot-ctl" \
     "add 0700 overlay.d/sbin/glassworks_firstboot.sh glassworks_firstboot.sh" \

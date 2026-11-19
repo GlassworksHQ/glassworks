@@ -78,7 +78,7 @@ if (sha256(apk) !== pinned) fail(`${opt.apk} is not the pinned Magisk APK (sha25
 const from = opt['overlay-dir']
   ? (name) => read(join(opt['overlay-dir'], name))
   : (name) => read({
-    'glassworks_radio.sh': join(radio, name),
+    'glassworks_agent.sh': join(radio, name),
     'otbr-agent': join(radio, 'out', name), 'ot-ctl': join(radio, 'out', name),
     'glassworks_verify': join(root, 'out', 's1kiosk_verify'),
     'glassworks_bootanimation.zip': join(REPO, 'branding/glass-tile/bootanimation.zip'),
@@ -90,7 +90,7 @@ const { s1Overlay } = await import(pathToFileURL(join(REPO, 'kiln/packages/bootp
 const overlay = s1Overlay({
   rc: from('glassworks.rc'), loaderSh: from('glassworks_loader.sh'), verify: from('glassworks_verify'), bundlePub: from('glassworks_bundle.pub'),
   adbKeys: adbKey === 'none' ? new Uint8Array(0) : read(adbKey),
-  radioSh: from('glassworks_radio.sh'), otbrAgent: from('otbr-agent'), otCtl: from('ot-ctl'),
+  agentSh: from('glassworks_agent.sh'), otbrAgent: from('otbr-agent'), otCtl: from('ot-ctl'),
   firstbootSh: from('glassworks_firstboot.sh'), netwatchSh: from('glassworks_netwatch.sh'), updateSh: from('glassworks_update.sh'),
   magiskBusybox: await magiskBusybox(apk),
   bootAnimation: opt['no-anim'] ? undefined : from('glassworks_bootanimation.zip'),

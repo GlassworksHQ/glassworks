@@ -91,7 +91,7 @@ describe('s1Overlay (unit)', () => {
     zip.set(cd); zip.set(end, cd.length);
     return zip;
   };
-  const base = { rc: enc.encode('a'), loaderSh: enc.encode('b'), radioSh: enc.encode('c'), otbrAgent: enc.encode('d'),
+  const base = { rc: enc.encode('a'), loaderSh: enc.encode('b'), agentSh: enc.encode('c'), otbrAgent: enc.encode('d'),
     otCtl: enc.encode('e'), firstbootSh: enc.encode('f'), netwatchSh: enc.encode('g'), updateSh: enc.encode('h'),
     verify: enc.encode('m'), bundlePub: enc.encode(`${'ab'.repeat(32)}\n`), magiskBusybox: enc.encode('o') };
   it('refuses a key that is not an adb public key, accepts none', () => {
@@ -102,7 +102,7 @@ describe('s1Overlay (unit)', () => {
     const files = s1Overlay({ ...base, adbKeys: new Uint8Array(0), bootAnimation: storedZip() });
     expect(files.map((f) => `${f.mode.toString(8)} ${f.path}`)).toEqual([
       '644 overlay.d/glassworks.rc', '700 overlay.d/sbin/glassworks_loader.sh', '700 overlay.d/sbin/glassworks_verify',
-      '644 overlay.d/sbin/glassworks_bundle.pub', '600 overlay.d/sbin/glassworks_adb_keys', '700 overlay.d/sbin/glassworks_radio.sh',
+      '644 overlay.d/sbin/glassworks_bundle.pub', '600 overlay.d/sbin/glassworks_adb_keys', '700 overlay.d/sbin/glassworks_agent.sh',
       '700 overlay.d/sbin/otbr-agent', '700 overlay.d/sbin/ot-ctl', '700 overlay.d/sbin/glassworks_firstboot.sh',
       '700 overlay.d/sbin/glassworks_netwatch.sh', '700 overlay.d/sbin/glassworks_update.sh', '700 overlay.d/sbin/magisk-busybox',
       '644 overlay.d/sbin/glassworks_bootanimation.zip',
@@ -139,7 +139,7 @@ describe.skipIf(!HAVE_GOLDEN)('golden: patchBoot == frames/aqara-s1-plus/tools/r
   const overlay = (opts: { key?: boolean; anim?: boolean } = {}): OverlayFile[] => s1Overlay({
     rc: ov('glassworks.rc'), loaderSh: ov('glassworks_loader.sh'), verify: ov('glassworks_verify'), bundlePub: ov('glassworks_bundle.pub'),
     adbKeys: opts.key === false ? new Uint8Array(0) : g('fixtures/test_adbkey.pub'),
-    radioSh: ov('glassworks_radio.sh'), otbrAgent: ov('otbr-agent'), otCtl: ov('ot-ctl'),
+    agentSh: ov('glassworks_agent.sh'), otbrAgent: ov('otbr-agent'), otCtl: ov('ot-ctl'),
     firstbootSh: ov('glassworks_firstboot.sh'), netwatchSh: ov('glassworks_netwatch.sh'), updateSh: ov('glassworks_update.sh'),
     magiskBusybox: busybox,
     bootAnimation: opts.anim === false ? undefined : ov('glassworks_bootanimation.zip'),

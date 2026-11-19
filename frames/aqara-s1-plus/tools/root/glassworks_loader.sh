@@ -26,7 +26,7 @@
 #   created <text>                       informational
 #   file <mode> <size> <sha256> <path>   mode 0600|0644|0700|0755; path: up to 5 components of
 #                                        [A-Za-z0-9._+-], none starting with "." ("manifest*" reserved)
-#   firmware <id> <path> <app> <label>   a radio firmware image among the files (glassworks_radio.sh)
+#   firmware <id> <path> <app> <label>   a radio firmware image among the files (glassworks_agent.sh)
 #   end
 # plus manifest.sig: the Ed25519 signature of manifest, 128 hex digits. Known paths: services/<slot>.sh,
 # bootanimation.zip, and the radio's files (otbr-agent, ot-ctl, sisdk/, firmware images).
@@ -337,7 +337,7 @@ boot)
 run)
   slot=$2
   case "$slot" in
-    radio|netwatch|svc1|svc2) long=1 ;;
+    agent|netwatch|svc1|svc2) long=1 ;;
     firstboot|update) long="" ;;
     *) say "unknown slot '$slot'"; exit 2 ;;
   esac

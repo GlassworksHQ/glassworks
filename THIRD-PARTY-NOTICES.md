@@ -374,7 +374,7 @@ The Ed25519 checker for radio bundles. Release `installer-files-3`, sha256 `6aa0
 
 All MIT, from this repository:
 - The frame loader, the root helpers and their init file: `frames/aqara-s1-plus/tools/root/glassworks_*.sh`,
-  `frames/aqara-s1-plus/tools/root/glassworks.rc`, `frames/aqara-s1-plus/tools/radio/glassworks_radio.sh`, and for one
+  `frames/aqara-s1-plus/tools/root/glassworks.rc`, `frames/aqara-s1-plus/tools/radio/glassworks_agent.sh`, and for one
   release the old radio bundle's `frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh` and
   `frames/aqara-s1-plus/tools/root/s1kiosk_bundle.sh`.
 - `frames/aqara-s1-plus/tools/root/glassworks_bundle.pub`.

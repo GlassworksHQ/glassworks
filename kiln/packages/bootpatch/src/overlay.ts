@@ -12,7 +12,7 @@ export interface S1OverlayInputs {
   bundlePub: Uint8Array;      // frames/aqara-s1-plus/tools/root/glassworks_bundle.pub (bundle signing key, public half)
   /** adb authorized_keys line(s) ('QAAAA... name\n'), or empty (ADB_PUBKEY=none). */
   adbKeys: Uint8Array;
-  radioSh: Uint8Array;        // frames/aqara-s1-plus/tools/radio/glassworks_radio.sh
+  agentSh: Uint8Array;        // frames/aqara-s1-plus/tools/radio/glassworks_agent.sh
   otbrAgent: Uint8Array;      // frames/aqara-s1-plus/tools/radio/out/otbr-agent
   otCtl: Uint8Array;          // frames/aqara-s1-plus/tools/radio/out/ot-ctl
   firstbootSh: Uint8Array;    // frames/aqara-s1-plus/tools/root/glassworks_firstboot.sh
@@ -40,7 +40,7 @@ export function s1Overlay(i: S1OverlayInputs): OverlayFile[] {
     { path: 'overlay.d/sbin/glassworks_verify', mode: 0o700, data: i.verify },
     { path: 'overlay.d/sbin/glassworks_bundle.pub', mode: 0o644, data: i.bundlePub },
     { path: 'overlay.d/sbin/glassworks_adb_keys', mode: 0o600, data: i.adbKeys },
-    { path: 'overlay.d/sbin/glassworks_radio.sh', mode: 0o700, data: i.radioSh },
+    { path: 'overlay.d/sbin/glassworks_agent.sh', mode: 0o700, data: i.agentSh },
     { path: 'overlay.d/sbin/otbr-agent', mode: 0o700, data: i.otbrAgent },
     { path: 'overlay.d/sbin/ot-ctl', mode: 0o700, data: i.otCtl },
     { path: 'overlay.d/sbin/glassworks_firstboot.sh', mode: 0o700, data: i.firstbootSh },

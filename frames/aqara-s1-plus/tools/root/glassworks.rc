@@ -23,9 +23,10 @@ on post-fs-data
     chmod 0755 /data/adb/magisk/busybox
     exec u:r:su:s0 root root -- /system/bin/sh ${MAGISKTMP}/glassworks_loader.sh boot
 
-# The radio helper (docs/radio.md). Never exits. The app changes the mode with
-# setprop persist.glassworks.radio_mode <id>; setprop ctl.restart glassworks_radio
-service glassworks_radio /system/bin/sh ${MAGISKTMP}/glassworks_loader.sh run radio
+# The frame agent (docs/radio.md): the root-side service that gives the panes the S1's hardware (radio
+# modes, firewall, radio firmware, time zone, the setup hotspot's portal and name). Never exits. The app
+# changes the radio mode with setprop persist.glassworks.radio_mode <id>; setprop ctl.restart glassworks_agent
+service glassworks_agent /system/bin/sh ${MAGISKTMP}/glassworks_loader.sh run agent
     user root
     group root system
     seclabel u:r:su:s0
@@ -84,6 +85,6 @@ on property:sys.boot_completed=1
     setprop sys.glassworks.update.version 1
     start glassworks_firstboot
     start glassworks_netwatch
-    start glassworks_radio
+    start glassworks_agent
     start glassworks_svc1
     start glassworks_svc2

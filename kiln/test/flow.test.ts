@@ -31,7 +31,7 @@ function assets(): Record<AssetName, () => Uint8Array> {
     magisk: () => rd(join(G, 'fixtures/Magisk-v31.1.apk')),
     'otbr-agent': ov('otbr-agent'), 'ot-ctl': ov('ot-ctl'),
     rc: ov('glassworks.rc'), 'loader-sh': ov('glassworks_loader.sh'), verify: ov('glassworks_verify'), 'bundle-pub': ov('glassworks_bundle.pub'),
-    'radio-sh': ov('glassworks_radio.sh'), 'firstboot-sh': ov('glassworks_firstboot.sh'),
+    'agent-sh': ov('glassworks_agent.sh'), 'firstboot-sh': ov('glassworks_firstboot.sh'),
     'netwatch-sh': ov('glassworks_netwatch.sh'), 'update-sh': ov('glassworks_update.sh'),
     bootanimation: ov('glassworks_bootanimation.zip'),
     bootlogo: () => rd(join(G, 'fixtures/bootlogo.bmp')),

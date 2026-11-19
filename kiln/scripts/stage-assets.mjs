@@ -42,7 +42,7 @@ const assets = [
   { name: 'ot-ctl', file: repo('frames/aqara-s1-plus/tools/radio/out/ot-ctl'), license: 'BSD-3-Clause', source: `${SRC}/blob/main/frames/aqara-s1-plus/docs/radio.md (ot-br-posix, built by frames/aqara-s1-plus/tools/radio)` },
   { name: 'rc', file: repo('frames/aqara-s1-plus/tools/root/glassworks.rc'), license: 'MIT', source: SRC },
   { name: 'loader-sh', file: repo('frames/aqara-s1-plus/tools/root/glassworks_loader.sh'), license: 'MIT', source: SRC },
-  { name: 'radio-sh', file: repo('frames/aqara-s1-plus/tools/radio/glassworks_radio.sh'), license: 'MIT', source: SRC },
+  { name: 'agent-sh', file: repo('frames/aqara-s1-plus/tools/radio/glassworks_agent.sh'), license: 'MIT', source: SRC },
   { name: 'firstboot-sh', file: repo('frames/aqara-s1-plus/tools/root/glassworks_firstboot.sh'), license: 'MIT', source: SRC },
   { name: 'netwatch-sh', file: repo('frames/aqara-s1-plus/tools/root/glassworks_netwatch.sh'), license: 'MIT', source: SRC },
   { name: 'update-sh', file: repo('frames/aqara-s1-plus/tools/root/glassworks_update.sh'), license: 'MIT', source: SRC },

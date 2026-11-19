@@ -3,7 +3,7 @@
 
     frames/aqara-s1-plus/tools/radio/make-bundle.py --frame aqara-s1-plus --frame-version 1.0.1 \\
         --key KEY.pem --out OUTDIR \\
-        --file services/radio.sh=frames/aqara-s1-plus/tools/radio/glassworks_radio.sh:0700 \\
+        --file services/agent.sh=frames/aqara-s1-plus/tools/radio/glassworks_agent.sh:0700 \\
         --file otbr-agent=frames/aqara-s1-plus/tools/radio/out/otbr-agent:0700 \\
         --dir sisdk=frames/aqara-s1-plus/tools/radio/out/sisdk \\
         [--file bootanimation.zip=branding/glass-tile/bootanimation.zip] \\

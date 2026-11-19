@@ -19,7 +19,7 @@ const G = process.env.S1_WEB_GOLDEN ?? join(B, 'web-golden');
 const OUT = process.env.S1_WIRE_TRACE;
 const HAVE = existsSync(join(STOCK, 'boot.img')) && existsSync(join(G, 'out/SHA256SUMS'));
 /** The overlay files this revision's recipe reads: goldens made for another overlay can't drive the trace. */
-const OVERLAY = ['glassworks.rc', 'glassworks_loader.sh', 'glassworks_verify', 'glassworks_bundle.pub', 'glassworks_radio.sh',
+const OVERLAY = ['glassworks.rc', 'glassworks_loader.sh', 'glassworks_verify', 'glassworks_bundle.pub', 'glassworks_agent.sh',
   'glassworks_firstboot.sh', 'glassworks_netwatch.sh', 'glassworks_update.sh', 'glassworks_bootanimation.zip', 'otbr-agent', 'ot-ctl'];
 const MISSING = HAVE ? OVERLAY.filter((f) => !existsSync(join(G, 'fixtures/overlay', f))) : [];
 if (OUT && !HAVE) {
@@ -50,7 +50,7 @@ function assets(): Record<AssetName, () => Uint8Array> {
     magisk: () => rd(join(G, 'fixtures/Magisk-v31.1.apk')),
     'otbr-agent': ov('otbr-agent'), 'ot-ctl': ov('ot-ctl'),
     rc: ov('glassworks.rc'), 'loader-sh': ov('glassworks_loader.sh'), verify: ov('glassworks_verify'), 'bundle-pub': ov('glassworks_bundle.pub'),
-    'radio-sh': ov('glassworks_radio.sh'), 'firstboot-sh': ov('glassworks_firstboot.sh'),
+    'agent-sh': ov('glassworks_agent.sh'), 'firstboot-sh': ov('glassworks_firstboot.sh'),
     'netwatch-sh': ov('glassworks_netwatch.sh'), 'update-sh': ov('glassworks_update.sh'),
     bootanimation: ov('glassworks_bootanimation.zip'),
     bootlogo: () => rd(join(G, 'fixtures/bootlogo.bmp')),

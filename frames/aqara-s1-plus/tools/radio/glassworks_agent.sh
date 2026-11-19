@@ -1,26 +1,28 @@
 #!/system/bin/sh
-# glassworks_radio: root helper for the S1's radio modes (docs/radio.md), contract v5: v4 with
-# Glassworks names, run by the frame loader (frames/aqara-s1-plus/research/frame-loader.md).
+# glassworks_agent: the S1's frame agent, the root-side service that gives the panes the hardware they
+# need (docs/principles.md#the-frame-agent): the radio modes and their firewall, radio firmware, the time zone, the
+# Bluetooth address, and the setup hotspot's portal and name (docs/radio.md). Contract v5: the radio
+# helper's v4 with Glassworks names, run by the frame loader (frames/aqara-s1-plus/research/frame-loader.md).
 #
-# Runs in the glassworks_radio slot (glassworks.rc: root, u:r:su:s0, started at boot, never exits):
-# glassworks_loader.sh runs this file from the frame bundle (services/radio.sh), or the boot image's
-# copy. The old helper with the s1kiosk names, s1kiosk_radio.sh, is kept for one release only (#528).
+# Runs in the glassworks_agent slot (glassworks.rc: root, u:r:su:s0, started at boot, never exits):
+# glassworks_loader.sh runs this file from the frame bundle (services/agent.sh), or the boot image's
+# copy. The old radio helper with the s1kiosk names, s1kiosk_radio.sh, is kept for one release only (#528).
 # Reads persist.glassworks.radio_mode, brings Aqara's radio services to the state that mode needs,
 # starts/supervises our own processes (EZSP TCP bridges, zigbeed, otbr-agent) and reports in
 # sys.glassworks.radio.status as "<applying|ok|error> <mode>[: detail]".
-# The app changes mode with: setprop persist.glassworks.radio_mode <id>; setprop ctl.restart glassworks_radio
+# The app changes mode with: setprop persist.glassworks.radio_mode <id>; setprop ctl.restart glassworks_agent
 # (init kills the whole process group on restart, so our children go with it.)
 #
 # Mode ids: off (default) | zigbee_tcp | zigbee_router | thread | thread_router
 #   experimental, not offered by the app: zigbee_tcp_thread (Zigbee + Thread on one multi-PAN radio)
-# There is no stock mode: Aqara's services are init services, so removing this helper (or the app,
+# There is no stock mode: Aqara's services are init services, so removing this agent (or the app,
 # tools/install.sh --undo) and rebooting brings the stock stack back.
 #
 #   zigbee_tcp     zigbeed's EZSP on tcp:$ZIGBEE_PORT (ZHA: socket://<panel>:6638, Zigbee2MQTT:
 #                  tcp://<panel>:6638). Zigbee stack (v4): Aqara's zigbeed 7.3.3 (EZSP 12, default) or
 #                  Silicon Labs' zigbeed 8.2.2 (EZSP 18, persist.glassworks.radio_zigbee=sisdk). The 8.2.2
 #                  binary is Silicon Labs MSLA code: never in our bundles; the app downloads it from
-#                  Silicon Labs and this helper accepts it only with the pinned SHA-256.
+#                  Silicon Labs and this agent accepts it only with the pinned SHA-256.
 #   zigbee_router  zigbeed's EZSP on 127.0.0.1:$ROUTER_PORT only; the app's router host
 #                  (radio/ZigbeeRouterHost.kt) drives zigbeed as an EMBER_ROUTER. Always Aqara's
 #                  zigbeed (the router host speaks EZSP 12). zigbeed's NVM is copied to
@@ -31,7 +33,7 @@
 #                  policy-routing rules Android needs. With the minimal proof build: agent only.
 #   thread_router  otbr-agent without a backbone (no border routing), joins with the active dataset
 #                  in $DIR/thread-dataset. The app hands a new dataset over in $APP_DATASET (its own
-#                  private files dir); the helper moves it into $DIR (root 0600) and deletes the
+#                  private files dir); the agent moves it into $DIR (root 0600) and deletes the
 #                  app's copy. Without a dataset the stack runs and waits ("ready to join").
 #
 # Firewall (contract v3): in every mode but off, an iptables/ip6tables INPUT chain ($FW_CHAIN) lets
@@ -42,12 +44,12 @@
 #
 # Frame bundles (contract v5): glassworks_loader.sh picks this script and passes GW_BOOT (the boot
 # image's files), GW_BUNDLE (the checked frame bundle, whose binaries and firmware win over the boot
-# image's), GW_SOURCE and GW_DEV. sys.glassworks.radio.source says which copy runs:
+# image's), GW_SOURCE and GW_DEV. sys.glassworks.agent.source says which copy runs:
 # "boot[ (why)]" | "bundle <frame version>" | "dev". At its first start on a panel it moves the app
 # settings from the persist.s1kiosk.* names to persist.glassworks.*, once (#528, see below).
 #
 # Radio firmware (contract v4): never automatic. The app writes "<id> <sha256 prefix>" to its own
-# files/radio/fw-request; within 3 s the helper stops the radio, flashes that image with Aqara's own
+# files/radio/fw-request; within 3 s the agent stops the radio, flashes that image with Aqara's own
 # /vendor/bin/cpcd -c /etc/cpcd_ota.conf -f (the only proven path on this board), reads the radio's
 # version back over CPC and rolls back to Aqara's stock image from /vendor/firmware if that fails.
 # Images: "stock" (Aqara's GBL on /vendor) or a "firmware" item of the signed radio bundle.
@@ -62,13 +64,13 @@
 #   ZIGBEED_ARGS="..."                     (extra arguments for Silicon Labs' zigbeed, e.g. "-v 1 -d 3")
 # Time zone (contract v4): Aqara's SystemManager resets the zone at every boot (and whenever its own
 # gateway time-zone setting changes): with that setting empty, as on our panels with Aqara's cloud
-# blocked, it picks the first zone at UTC+8, Antarctica/Casey. A background loop of this helper keeps
+# blocked, it picks the first zone at UTC+8, Antarctica/Casey. A background loop of this agent keeps
 # the owner's zone instead: persist.glassworks.timezone (an Olson id, set by the installer or the app's
 # `Time zone` entity) is re-applied with `service call alarm 3 s16 <id>` (AlarmManager.setTimeZone)
 # whenever persist.sys.timezone differs, every 5 s for the first 10 minutes, then every 15 s. A zone
 # Android doesn't accept is reported once and not retried until the wanted zone changes. Status:
 # sys.glassworks.timezone.status = "<ok|error|none> [<id>][: detail]". The loop runs whatever the radio
-# mode does (also after "giving up"), and is restarted with the helper.
+# mode does (also after "giving up"), and is restarted with the agent.
 #
 # Bluetooth address (#246): Android 10 hides the Bluetooth adapter's address from apps, and the app's
 # Bluetooth proxy sends it to Home Assistant (bluetooth_mac_address), as an ESPHome proxy does. Once
@@ -93,7 +95,7 @@
 # $DIR keeps its s1kiosk name: otbr-agent has $DIR/run compiled in (build-otbr.sh), with the Thread
 # settings under it. It moves with an otbr built for the new path, in a later bundle.
 
-DIR=${GWR_DIR:-/data/s1kiosk/radio}     # radio.conf, thread-dataset, zigbee-nvm/, fw/, sisdk/
+DIR=${GWA_DIR:-/data/s1kiosk/radio}     # radio.conf, thread-dataset, zigbee-nvm/, fw/, sisdk/
 CONTRACT=5
 BOOT=${0%/*}                             # where this script lives (boot image: ${MAGISKTMP})
 
@@ -122,11 +124,11 @@ OTBR_ARGS=""
 RADIO_ALLOW=""
 ZIGBEE_STACK=""                          # radio.conf: aqara|sisdk; empty = persist.glassworks.radio_zigbee
 ZIGBEED_ARGS=""
-PROP_ALLOW=persist.glassworks.radio_allow # app -> helper: allowed addresses ("" | any | "<ip|cidr> ...")
-PROP_ALLOWED=sys.glassworks.radio.allowed   # helper -> app: "<app|conf> <any|none|<ip|cidr> ...>", "" in off
+PROP_ALLOW=persist.glassworks.radio_allow # app -> agent: allowed addresses ("" | any | "<ip|cidr> ...")
+PROP_ALLOWED=sys.glassworks.radio.allowed   # agent -> app: "<app|conf> <any|none|<ip|cidr> ...>", "" in off
 FW_CHAIN=GWRADIO
 APP_DATA=/data/data/sh.edm.s1kiosk
-APP_DATASET=$APP_DATA/files/radio/thread-dataset  # app -> helper hand-off (thread_router)
+APP_DATASET=$APP_DATA/files/radio/thread-dataset  # app -> agent hand-off (thread_router)
 EZSP_PTY=/dev/ttyZigbeeNCP               # host side of Aqara's socat pty pair (zigbeed is on /tmp/ttyZigbeeNCP)
 ZIGBEED_PTY=/tmp/ttyZigbeeNCP
 ZIGBEED_NVM=/data/zigbee_host/zigbeed_host_token.nvm
@@ -140,14 +142,14 @@ SISDK_SHA256=a66d45842a770e1c449a55208a6d2a3b36786eb1c94bf10d3c3aac317274e3bb
 SISDK_SIZE=663312
 SISDK_BIN=$DIR/sisdk/zigbeed-$SISDK_VERSION   # root 0700, taken from the app's download
 SISDK_STATE=$DIR/zigbeed-sisdk                # its host_token.nvm (Aqara's NVM is never touched)
-APP_ZIGBEED=radio/zigbeed-$SISDK_VERSION      # app -> helper hand-off, relative to the app's files/
+APP_ZIGBEED=radio/zigbeed-$SISDK_VERSION      # app -> agent hand-off, relative to the app's files/
 ZIGBEED_URL='spinel+cpc://cpcd_0?iid=1&iid-list=0'
 # Radio firmware: Aqara's stock RCP image (the rollback target) and the ones we know.
 FW_DIR=$DIR/fw
 STOCK_GLOB='/vendor/firmware/lichun#30000000#*.bin'
 KNOWN_STOCK="d7b79c6fab1e36e438d0e510bc596de7ac053f6d7b4b99a291af3f323baa8fa9:0017"
-APP_FW_REQ=radio/fw-request                   # app -> helper, relative to the app's files/
-APP_THREAD_LEAVE=radio/thread-leave           # app -> helper: forget the Thread network (any mode)
+APP_FW_REQ=radio/fw-request                   # app -> agent, relative to the app's files/
+APP_THREAD_LEAVE=radio/thread-leave           # app -> agent: forget the Thread network (any mode)
 
 # Root-only state dir; created on first run so a freshly flashed boot image needs no other install step.
 [ -d "$DIR" ] || { mkdir -p "$DIR" && chown root:root "$DIR" && chmod 700 "$DIR"; }
@@ -176,10 +178,10 @@ bin() {
 }
 [ -r "$DIR/radio.conf" ] && . "$DIR/radio.conf"
 
-MODE=${GWR_MODE:-$(getprop persist.glassworks.radio_mode)}  # GWR_MODE: manual test without touching the persist prop
+MODE=${GWA_MODE:-$(getprop persist.glassworks.radio_mode)}  # GWA_MODE: manual test without touching the persist prop
 [ -n "$MODE" ] || MODE=off
 
-say() { log -t glassworks_radio "$*" 2>/dev/null; }
+say() { log -t glassworks_agent "$*" 2>/dev/null; }
 SHOWN=""
 status() { # state [detail]; only writes when it changed
   if [ -n "$2" ]; then st_="$1 $MODE: $2"; else st_="$1 $MODE"; fi
@@ -190,8 +192,8 @@ status() { # state [detail]; only writes when it changed
   setprop sys.glassworks.radio.status "$st_"
   say "$st_"
 }
-setprop sys.glassworks.radio.version $CONTRACT   # v5 = v4 (v3 + bundles, Zigbee stack, radio firmware) with Glassworks names
-setp sys.glassworks.radio.source "$SOURCE"
+setprop sys.glassworks.agent.version $CONTRACT   # v5 = v4 (v3 + bundles, Zigbee stack, radio firmware) with Glassworks names
+setp sys.glassworks.agent.source "$SOURCE"
 
 # What the installed otbr-agent can do (app: which Thread modes are real): br | agent | none
 otbr_kind() {
@@ -241,7 +243,7 @@ tz_check() {
 }
 tz_start() { # one check now (so the first pass is done before the radio work), then the loop
   tz_check
-  parent_=$$   # the helper; the loop ends with it (also if it exits without tz_stop)
+  parent_=$$   # the agent; the loop ends with it (also if it exits without tz_stop)
   ( t0_=$(date +%s)
     while :; do
       if [ $(( $(date +%s) - t0_ )) -lt 600 ]; then sleep 5; else sleep 15; fi
@@ -281,7 +283,7 @@ take_app_file() {
 }
 
 # --- Zigbee stack (zigbee_tcp only) ---------------------------------------------------------------
-ZWANT=${GWR_ZIGBEE:-${ZIGBEE_STACK:-$(getprop persist.glassworks.radio_zigbee)}}
+ZWANT=${GWA_ZIGBEE:-${ZIGBEE_STACK:-$(getprop persist.glassworks.radio_zigbee)}}
 [ "$ZWANT" = sisdk ] || ZWANT=aqara
 ZRUN=aqara; [ "$MODE" = zigbee_tcp ] && [ "$ZWANT" = sisdk ] && ZRUN=sisdk
 SISDK_DIR=""; [ -n "$RBUNDLE" ] && [ -f "$RBUNDLE/sisdk/zigbeed.sh" ] && SISDK_DIR=$RBUNDLE/sisdk
@@ -567,7 +569,7 @@ fw_off() {
 # mode. One peer at most (the bridge serves one client); the one shown stays while it is connected. The
 # address is for the app and Home Assistant only, never for the log.
 PROP_PEER=sys.glassworks.radio.peer
-PROC_NET=${GWR_PROC_NET:-/proc/net}
+PROC_NET=${GWA_PROC_NET:-/proc/net}
 PEER_KEY=""; PEER_VALUE=""; PEER_SHOWN=unset
 
 hex_ip4() { # 8 hex digits as /proc/net/tcp prints them (little-endian, as this panel is) -> dotted
@@ -631,13 +633,13 @@ peer_report() { # every loop
 # kernel's socket tables; another app can at most point the hotspot's DNS at the kiosk's own sockets.
 # IPv6: when the kiosk also has a udp socket on :$PORTAL_DNS at one IPv6 address, udp:53 to that address
 # goes there too (the RA's RDNSS). Status: sys.glassworks.portal.status = "off" | "on <iface>" | "error: ...".
-# The loop runs in every radio mode (also after "giving up") and starts with the helper, which first
+# The loop runs in every radio mode (also after "giving up") and starts with the agent, which first
 # removes whatever an earlier run left.
 PORTAL_DNS=8053
 PORTAL_HTTP=8098
 PORTAL_CHAIN=GWPORTAL
 PORTAL_PROP=sys.glassworks.portal.status
-PORTAL_EVERY=${GWR_PORTAL_SLEEP:-2}
+PORTAL_EVERY=${GWA_PORTAL_SLEEP:-2}
 PORTAL_STATE=""; PORTAL_SHOWN=""; PORTAL_PID=""
 
 # The kiosk's sockets on one address: family proto port [state] -> each address (4: dotted, 6: hex).
@@ -770,7 +772,7 @@ portal_check() {
     return 0
   fi
   if portal_ok 4 "$w_" && portal_ok 6 "$w_"; then
-    # in place (also a new helper finding its predecessor's): kept as they are, no gap for the phones
+    # in place (also a new agent finding its predecessor's): kept as they are, no gap for the phones
     PORTAL_STATE=$w_; portal_say "on ${w_%% *}"
   else
     portal_clear
@@ -787,9 +789,9 @@ portal_start() { # one check now (it also removes an earlier run's rules), then 
   ( while :; do
       sleep "$PORTAL_EVERY"
       if ! kill -0 "$parent_" 2>/dev/null; then
-        # The helper is gone (init restarts it, and its first check clears too). Take the rules away now, and
+        # The agent is gone (init restarts it, and its first check clears too). Take the rules away now, and
         # if a table can't be read, try again for a minute: cleanup only, never portal_check, which could put
-        # rules back. Bounded, so a loop that outlived its helper doesn't stay.
+        # rules back. Bounded, so a loop that outlived its agent doesn't stay.
         i_=0; until portal_clear || [ $i_ -ge 30 ]; do sleep "$PORTAL_EVERY"; i_=$((i_ + 1)); done
         exit 0
       fi
@@ -808,7 +810,7 @@ portal_stop() { alive "$PORTAL_PID" && kill "$PORTAL_PID"; PORTAL_PID=""; }
 #   $HN_MOD/module.prop
 #   $HN_MOD/$HN_PATH      the overlay, hotspot-name.apk from the signed frame bundle (tools/radio/hotspot-name/),
 #                         or with dev-override a root-made $DIR/hotspot-name.apk
-# Once per helper start: with the overlay in the running bundle, the module is put in place (or replaced when the
+# Once per agent start: with the overlay in the running bundle, the module is put in place (or replaced when the
 # bundle's overlay differs); without it, or with persist.glassworks.hotspot_name=android (the undo; any app may set it,
 # which can only give Android's name back), the module is removed. Either takes effect at the next restart.
 # Nothing else is touched: no file of Android's, no setting. Status: sys.glassworks.hotspot_name.status =
@@ -817,14 +819,14 @@ portal_stop() { alive "$PORTAL_PID" && kill "$PORTAL_PID"; PORTAL_PID=""; }
 #   | "error: ..."
 HN_APK=hotspot-name.apk
 HN_PKG=sh.edm.s1kiosk.overlay.hotspotname
-HN_MODS=${GWR_MODULES:-/data/adb/modules}
+HN_MODS=${GWA_MODULES:-/data/adb/modules}
 # Magisk mounts modules only once its own setup is in /data/adb/magisk: without busybox there, post-fs-data stops
 # with "Magisk environment incomplete, abort" before any module (Magisk v31.1 native/src/core/bootstages.rs:76-79,
 # :132-134). The Magisk app puts it there; our boot image does since #615 (glassworks.rc in the loader image). A panel installed
 # before that still lacks it until its next install with Kiln.
-HN_MAGISK_BB=${GWR_MAGISK_BB:-/data/adb/magisk/busybox}
-# Staged in the helper's own root-only dir, never in $HN_MODS: Magisk loads every directory there at boot, dot-names
-# included, so a stage a stopped helper left would load. Same /data filesystem, so the final mv is a rename.
+HN_MAGISK_BB=${GWA_MAGISK_BB:-/data/adb/magisk/busybox}
+# Staged in the agent's own root-only dir, never in $HN_MODS: Magisk loads every directory there at boot, dot-names
+# included, so a stage a stopped agent left would load. Same /data filesystem, so the final mv is a rename.
 HN_STAGE=$DIR/hotspot-name-module.new
 HN_NEWAPK=$DIR/hotspot-name.apk.new   # a new overlay for an installed module, renamed into it when complete
 # The module id and the overlay's package keep their s1kiosk names (#528): a 0.4.3 helper made this module, and a
@@ -834,7 +836,7 @@ HN_PATH=system/product/overlay/S1HotspotName/S1HotspotName.apk
 HN_PROP=persist.glassworks.hotspot_name
 HN_STATUS=sys.glassworks.hotspot_name.status
 # Where Magisk mounts the overlay while it is on: AssetManager loads framework overlays from the APKs it finds there
-HN_LIVE=${GWR_HN_LIVE:-/product/${HN_PATH#system/product/}}
+HN_LIVE=${GWA_HN_LIVE:-/product/${HN_PATH#system/product/}}
 
 hn_say() { setp $HN_STATUS "$1"; say "hotspot name: $1"; }
 hn_apply() {
@@ -874,7 +876,7 @@ hn_apply() {
         t_=$HN_STAGE
         if mkdir -p "$t_/${HN_PATH%/*}" && cp "$src_" "$t_/$HN_PATH" &&
            printf '%s\n' "id=s1kiosk_hotspot_name" "name=Glassworks setup hotspot name" "version=1" "versionCode=1" \
-             "author=Glassworks" "description=Names the S1's setup hotspot Glassworks_NNNN (installed by the radio helper)" \
+             "author=Glassworks" "description=Names the S1's setup hotspot Glassworks_NNNN (installed by the frame agent)" \
              > "$t_/module.prop" &&
            { [ ! -e "$HN_MOD/disable" ] || : > "$t_/disable"; } &&   # the operator's off switch in Magisk stays
            chown -R root:root "$t_" && find "$t_" -type d -exec chmod 755 {} + && find "$t_" -type f -exec chmod 644 {} +; then
@@ -897,7 +899,7 @@ hn_apply() {
   noenv_=""; if [ "$want_" = glassworks ] && [ ! -f "$HN_MAGISK_BB" ]; then want_=android; noenv_=1; fi
   # Bounded, and a query that fails is said as such: a framework that doesn't answer isn't "android", and mustn't
   # hold up the radio work after this
-  if ! o_=$(timeout ${GWR_HN_TIMEOUT:-20} cmd overlay list $HN_PKG 2>/dev/null); then
+  if ! o_=$(timeout ${GWA_HN_TIMEOUT:-20} cmd overlay list $HN_PKG 2>/dev/null); then
     hn_say "error: Android didn't say whether the overlay is on"; return 0
   fi
   # Android 10 never forgets a static overlay of framework-res whose APK went away: its boot-time cleanup skips
@@ -959,7 +961,7 @@ write_relay() { # (stdin from /dev/null for the drain: the client's bytes must s
   rm -f "$RELAY.tmp"
   ( umask 077
     { echo '#!/system/bin/sh'
-      echo "# Written by glassworks_radio.sh at every start; one EZSP client session of the bridge (drain, relay)."
+      echo "# Written by glassworks_agent.sh at every start; one EZSP client session of the bridge (drain, relay)."
       echo "timeout 2 /vendor/bin/socat -u -T $RELAY_QUIET FILE:$EZSP_PTY,raw,echo=0 - </dev/null >/dev/null 2>&1"
       echo "exec /vendor/bin/socat - FILE:$EZSP_PTY,raw,echo=0"
     } > "$RELAY.tmp" ) && mv -f "$RELAY.tmp" "$RELAY"
@@ -1090,7 +1092,7 @@ take_app_dataset() {
   alive "$OTBR_PID" && { kill "$OTBR_PID"; OTBR_PID=""; }
 }
 # "Leave Thread network" (v4, any mode, Off included): the app writes files/radio/thread-leave; the
-# helper detaches a running router, then deletes the dataset it was given ($DIR/thread-dataset, the
+# agent detaches a running router, then deletes the dataset it was given ($DIR/thread-dataset, the
 # network key) and the router's OpenThread settings ($DIR/thread-router). The border-router mode's own
 # network ($DIR/thread) is not touched. Result in sys.glassworks.radio.thread_leave = "<ok|error> <epoch>: ...".
 thread_leave() {
@@ -1297,7 +1299,7 @@ fw_attempt() { # id -> flash it (2 tries) and verify; FW_* from fw_resolve
   return 1
 }
 
-fw_do() { # id sha-prefix: the whole explicit operation; the helper restarts afterwards
+fw_do() { # id sha-prefix: the whole explicit operation; the agent restarts afterwards
   id_=$1
   fw_resolve "$id_" || { fwstat "error $id_: $WHY"; return 0; }
   case "$FW_SHA" in "$2"*) ;; *) fwstat "error $id_: the image is not the one requested (${2})"; return 0 ;; esac
@@ -1333,7 +1335,7 @@ fw_do() { # id sha-prefix: the whole explicit operation; the helper restarts aft
     fi
   fi
   # Start over cleanly (children are gone; the loop state belongs to the old services).
-  say "firmware: restarting the helper"
+  say "firmware: restarting the agent"
   loops_stop
   exec /system/bin/sh "$0"
 }
@@ -1353,7 +1355,7 @@ fw_request() {
   fw_do "$id_" "$sha_"
 }
 
-# At start: a flash that was interrupted (the helper was killed, the panel lost power) may have left
+# At start: a flash that was interrupted (the agent was killed, the panel lost power) may have left
 # the radio without an application. Then the mode's stack must not start; instead Aqara's stock image
 # is flashed back (at most twice across restarts), and if that fails too the radio is held off until
 # the owner flashes it from Home Assistant.
@@ -1369,7 +1371,7 @@ fw_recover() {
       rm -f "$FW_DIR/in-progress" "$FW_DIR/restore-tries"
       echo "stock $FW_APP $FW_SPINEL" > "$FW_DIR/current"
       fwdone "error $i_: the flash was interrupted; restored stock (APP $FW_APP)"
-      say "firmware: restarting the helper"
+      say "firmware: restarting the agent"
       loops_stop
       exec /system/bin/sh "$0"
     fi
@@ -1468,7 +1470,7 @@ thread_stored() {
 }
 TSTORED=""
 
-PUB_DIR=${GWR_PUB:-/data/glassworks-pub} # as glassworks_loader.sh: root 0755, app-readable
+PUB_DIR=${GWA_PUB:-/data/glassworks-pub} # as glassworks_loader.sh: root 0755, app-readable
 BT_DONE=""; BT_NEXT=0
 bt_valid() { # AA:BB:CC:DD:EE:FF, and not a placeholder Android hands out
   h_='[0-9A-Fa-f][0-9A-Fa-f]'
@@ -1479,10 +1481,10 @@ bt_valid() { # AA:BB:CC:DD:EE:FF, and not a placeholder Android hands out
 bt_publish() {
   [ -n "$BT_DONE" ] && return 0
   now_=$(date +%s); [ "$now_" -lt "$BT_NEXT" ] && return 0
-  BT_NEXT=$((now_ + ${GWR_BT_EVERY:-60}))
+  BT_NEXT=$((now_ + ${GWA_BT_EVERY:-60}))
   # Bounded: this runs before enforce, so a `settings` that never returns must not stall supervision.
   # Its own exit status decides: what a failed or timed-out lookup printed is dropped.
-  a_=$(timeout ${GWR_BT_TIMEOUT:-10} settings get secure bluetooth_address 2>/dev/null) || a_=""
+  a_=$(timeout ${GWA_BT_TIMEOUT:-10} settings get secure bluetooth_address 2>/dev/null) || a_=""
   a_=$(printf '%s' "$a_" | tr -d '\r')
   bt_valid "$a_" || return 0
   a_=$(echo "$a_" | tr a-f A-F)
@@ -1502,10 +1504,10 @@ zstate
 fw_init
 portal_start
 hn_apply
-[ -n "$GWR_ONCE" ] && LOOPS=$GWR_ONCE   # tests: run this many loops, then exit
+[ -n "$GWA_ONCE" ] && LOOPS=$GWA_ONCE   # tests: run this many loops, then exit
 
 while true; do
-  fw_request   # an explicit firmware request runs first (and restarts the helper when done)
+  fw_request   # an explicit firmware request runs first (and restarts the agent when done)
   thread_leave # "Leave Thread network", in every mode
   thread_stored
   bt_publish   # the Bluetooth adapter's address for the app (#246), in every mode
@@ -1515,7 +1517,7 @@ while true; do
     WANT=""; enforce; br_net_off; fw_off
     status error "radio firmware missing after an interrupted flash: flash Aqara stock"
     if [ -n "$LOOPS" ]; then LOOPS=$((LOOPS - 1)); [ $LOOPS -le 0 ] && { loops_stop; exit 0; }; fi
-    sleep ${GWR_SLEEP:-3}; continue
+    sleep ${GWA_SLEEP:-3}; continue
   fi
   # Re-enforce every 3 s, in every mode incl. off: Aqara's boot sequence (zigbee_cpcd_factory ->
   # sys.gateway.config=10, sys.svc.gateway=5 -> ha_matter) and its watchdog (sys.gateway.config=11)
@@ -1540,5 +1542,5 @@ while true; do
   fi
   if [ $FAILS -gt 20 ]; then status error "giving up after repeated failures"; exec sleep 2147483647; fi
   if [ -n "$LOOPS" ]; then LOOPS=$((LOOPS - 1)); [ $LOOPS -le 0 ] && { loops_stop; exit 0; }; fi
-  sleep ${GWR_SLEEP:-3}
+  sleep ${GWA_SLEEP:-3}
 done
