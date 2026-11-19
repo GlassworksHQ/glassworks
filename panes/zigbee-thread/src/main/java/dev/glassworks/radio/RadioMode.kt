@@ -1,8 +1,8 @@
 package dev.glassworks.radio
 
 /**
- * The panel's EFR32 radio modes (frames/aqara-s1-plus/docs/radio.md). [id] is what is stored (app prefs and the helper's
- * `persist.s1kiosk.radio_mode`); [label] is the option shown in Home Assistant's `Radio mode` select.
+ * The panel's EFR32 radio modes (frames/aqara-s1-plus/docs/radio.md). [id] is what is stored (app prefs and the agent's
+ * mode setting, [dev.glassworks.frame.RadioSetting.MODE]); [label] is the option shown in Home Assistant's `Radio mode` select.
  *
  * There is no "Aqara (stock)" mode: with Aqara's launcher/apps disabled and its cloud blocked nothing
  * can use the hub's own Zigbee network. Stock comes back by uninstalling the app (or
@@ -12,9 +12,9 @@ package dev.glassworks.radio
  * endpoints), Thread border router, Thread router (repeater joining an existing network).
  *
  * [needsHelper]: the mode runs processes as root (TCP bridge on the root-only EZSP pty, otbr-agent on
- * the root-only CPC socket) and so needs the root helper service [RadioHelper.SERVICE]. [OFF] only
- * stops Aqara's init services, which the app uid can do (SELinux permissive).
- * [minHelperVersion]: the helper contract version the mode needs (v2: router modes, see RadioHelper).
+ * the root-only CPC socket) and so needs the frame agent ([dev.glassworks.frame.RadioAgent]). [OFF] only
+ * stops the vendor's radio services, which the app uid can do on the S1 (SELinux permissive).
+ * [minHelperVersion]: the radio contract version the mode needs (v2: router modes, see [RadioReports]).
  */
 enum class RadioMode(val id: String, val label: String, val needsHelper: Boolean, val minHelperVersion: Int = 1) {
     OFF("off", "Off", false),
@@ -28,25 +28,6 @@ enum class RadioMode(val id: String, val label: String, val needsHelper: Boolean
     // Concurrent Zigbee + Thread on the one multi-PAN radio (shared channel) is deliberately not a
     // mode here: Home Assistant deprecated multiprotocol for the same hardware design (frames/aqara-s1-plus/docs/radio.md).
     // The helper still accepts the experimental id "zigbee_tcp_thread" when set by hand.
-
-    /**
-     * Wanted state (true = running) of each of Aqara's radio services in this mode. Aqara's own
-     * consumers (Z3Gateway, zigbee_agent, the ha_matter bridge) never run; our modes reuse only
-     * cpcd (the CPC daemon) and, for Zigbee, the socat pty pair + zigbeed.
-     */
-    val aqaraServices: Map<String, Boolean>
-        get() {
-            val cpcd = this != OFF
-            val zigbeed = this == ZIGBEE_TCP || this == ZIGBEE_ROUTER
-            return linkedMapOf(
-                AqaraRadio.CPCD to cpcd,
-                AqaraRadio.SOCAT to zigbeed, // the pty pair zigbeed's EZSP interface lives on
-                AqaraRadio.ZIGBEED to zigbeed,
-                AqaraRadio.HOST to false,   // Z3Gateway, Aqara's coordinator app
-                AqaraRadio.AGENT to false,
-                AqaraRadio.MATTER to false,
-            )
-        }
 
     companion object {
         val DEFAULT = OFF
@@ -71,7 +52,7 @@ enum class RadioMode(val id: String, val label: String, val needsHelper: Boolean
 }
 
 /**
- * The Zigbee stack behind the coordinator mode (helper v4, [RadioHelper.PROP_ZIGBEE_STACK]). Aqara's
+ * The Zigbee stack behind the coordinator mode (helper v4, [dev.glassworks.frame.RadioSetting.ZIGBEE_STACK]). Aqara's
  * zigbeed 7.3.3 speaks EZSP 12 (ZHA only); Silicon Labs' zigbeed 8.2.2 speaks EZSP 18 (Zigbee2MQTT's
  * `ember` adapter, and ZHA), runs on the same stock radio firmware, and is downloaded by the panel from
  * Silicon Labs ([SisdkZigbeed]). The Zigbee router mode always uses Aqara's (its host speaks EZSP 12).
@@ -88,98 +69,21 @@ enum class ZigbeeStack(val id: String, val label: String) {
     }
 }
 
-/** Aqara's radio init services (/vendor/etc/init/gateway.rc), root, u:r:su:s0. */
-object AqaraRadio {
-    const val CPCD = "zigbee_cpcd"     // cpcd -c /etc/cpcd.conf (CPC daemon, owns /dev/spidev2.0)
-    const val SOCAT = "zigbee_socat"   // socat pty,link=/dev/ttyZigbeeNCP pty,link=/tmp/ttyZigbeeNCP
-    const val ZIGBEED = "zigbee_zigbeed" // zigbeed: spinel iid=1 <-> EZSP on /tmp/ttyZigbeeNCP
-    const val HOST = "zigbee_host"     // Z3Gateway -p ttyZigbeeNCP (EZSP host on /dev/ttyZigbeeNCP)
-    const val AGENT = "zigbee_agent"   // zigbee_agent (Aqara's MQTT glue around Z3Gateway)
-    const val MATTER = "ha_matter"     // Aqara's Matter bridge (Wi-Fi, :5540) for its Zigbee devices
-
-    /** Services [RadioMode.aqaraServices] manages; `frames/aqara-s1-plus/tools/install.sh --undo` starts them again. */
-    val ALL = listOf(CPCD, SOCAT, ZIGBEED, HOST, AGENT, MATTER)
-
-    /**
-     * Consumers first. The wrappers of socat/zigbeed/Z3Gateway run `setprop sys.gateway.config 11`
-     * when their binary exits *by itself*, which restarts the whole stack; stopping a provider before
-     * its consumer would make the consumer exit and trigger that.
-     */
-    val STOP_ORDER = listOf(MATTER, AGENT, HOST, ZIGBEED, SOCAT, CPCD)
-
-    /** Providers first (the wrappers also sleep 3-8 s so their providers are up). */
-    val START_ORDER = STOP_ORDER.reversed()
-}
-
 /**
- * Contract with the root helper that the boot-image patch will install (frames/aqara-s1-plus/docs/radio.md).
- * The app writes [PROP_MODE] and `ctl.restart`s [SERVICE]; the helper (frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh)
- * applies the mode, supervises its processes and reports in [PROP_STATUS].
+ * The radio's report formats and the versions they came with (docs/frame-agent.md#capabilities): what the radio pane
+ * parses from its frame agent ([dev.glassworks.frame.RadioAgent]). The names behind them are the frame's (the S1's
+ * `dev.glassworks.radio.RadioHelper`, in its own app).
  */
-object RadioHelper {
-    /** Init service name; `init.svc.<SERVICE>` is non-empty iff the .rc snippet is installed. */
-    const val SERVICE = "s1kiosk_radio"
-    const val PROP_SVC_STATE = "init.svc.$SERVICE"
-    /** Wanted mode, a [RadioMode.id]; persistent so the helper applies it at boot before the app runs. */
-    const val PROP_MODE = "persist.s1kiosk.radio_mode"
-    /** Helper -> app: "<state> <mode-id>[: detail]", state = applying | ok | error. */
-    const val PROP_STATUS = "sys.s1kiosk.radio.status"
-    /**
-     * Helper -> app: contract version the installed helper implements. v2 (frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh
-     * 2026-11): zigbee_router = EZSP bridge on 127.0.0.1:[ZIGBEE_ROUTER_PORT] for the app's host,
-     * thread_router = dataset hand-off from the app ([DATASET_FILE]), "applying <mode>: waiting for …"
-     * until the stack answers, [PROP_OTBR].
-     */
-    const val PROP_VERSION = "sys.s1kiosk.radio.version"
+object RadioReports {
+    /** The radio contract version this app knows (the S1's helper v4). */
     const val VERSION = 4
-    /** v3: the firewall ([PROP_ALLOW], [PROP_ALLOWED]); otherwise the same as v2. */
+    /** v3: the firewall (the allow list and what it enforces); otherwise the same as v2. */
     const val FIREWALL_VERSION = 3
     /**
      * v4 (boot image with the radio bundle loader): signed radio bundles ([RadioBundle]), the Zigbee
-     * stack choice ([PROP_ZIGBEE_STACK]), radio firmware updates ([RadioFirmware]). Otherwise as v3.
+     * stack choice, radio firmware updates ([RadioFirmware]). Otherwise as v3.
      */
     const val BUNDLE_VERSION = 4
-    /** Helper -> app (v4): which helper runs: "boot[ (why)]" | "bundle <version>" | "dev". */
-    const val PROP_SOURCE = "sys.s1kiosk.radio.source"
-    /** Helper -> app (v4): the installed radio bundle: "none" | "ok <version>" | "bad: <why>". */
-    const val PROP_BUNDLE = "sys.s1kiosk.radio.bundle"
-    /** App -> helper (v4): Zigbee stack for the coordinator mode, a [ZigbeeStack] id (persistent). */
-    const val PROP_ZIGBEE_STACK = "persist.s1kiosk.radio_zigbee"
-    /**
-     * Helper -> app (v4): "aqara" | "sisdk ready <ver>" | "sisdk missing <ver> <sha256>" (the app should
-     * download it) | "sisdk no-runtime" (the radio bundle lacks it) | "sisdk bad <why>".
-     */
-    const val PROP_ZIGBEE = "sys.s1kiosk.radio.zigbee"
-    /** Helper -> app (v4): "<idle|flashing|ok|error> <id>[: detail]" ([RadioFirmware]). */
-    const val PROP_FW = "sys.s1kiosk.radio.fw"
-    /** Helper -> app (v4): flashable images, "<id>:<sha256 prefix>:<APP version> ..." (stock first). */
-    const val PROP_FW_TARGETS = "sys.s1kiosk.radio.fw_targets"
-    /** App -> helper (v4): "<id> <sha256 prefix>\n" in the app's files dir; taken within 3 s, ignored after 2 min. */
-    const val FW_REQUEST_FILE = "radio/fw-request"
-    /** App -> helper (v4): Silicon Labs' zigbeed, downloaded by the app; taken only with the pinned SHA-256. */
-    const val ZIGBEED_FILE = "radio/zigbeed-${SisdkZigbeed.VERSION}"
-
-    /** Radio bundle install service (boot image with the loader): oneshot, started by the app. */
-    const val BUNDLE_SERVICE = "s1kiosk_bundle"
-    /** Set to 1 by init at boot when [BUNDLE_SERVICE] exists. Informational only: any app can set sys.*
-     *  props, so the app decides from [RadioBundle.PUB_FILE] instead. */
-    const val PROP_BUNDLE_LOADER = "sys.s1kiosk.bundle.loader"
-    /** Service -> app: "requested" (app) | "running: …" | "ok: …" | "error: …". */
-    const val PROP_BUNDLE_STATUS = "sys.s1kiosk.bundle.status"
-    /** App -> helper (v4): "Leave Thread network" request in the app's files dir (any mode). */
-    const val THREAD_LEAVE_FILE = "radio/thread-leave"
-    /** Helper -> app (v4): "<ok|error> <epoch seconds>: <detail>" for the last Thread leave. */
-    const val PROP_THREAD_LEAVE = "sys.s1kiosk.radio.thread_leave"
-    /** Where the app stages the bundle for [BUNDLE_SERVICE] (files/radio/bundle-in). */
-    const val BUNDLE_STAGE_DIR = "radio/bundle-in"
-    /**
-     * Helper -> app (0.4.3 bundle): "yes" when a Thread router network is stored (a dataset or the
-     * router's settings, what `Leave Thread network` deletes), "no" when not; unset with older helpers.
-     */
-    const val PROP_THREAD_STORED = "sys.s1kiosk.radio.thread_stored"
-    /** Helper -> app (v2): which otbr-agent is installed: `br` (border router, REST), `agent` (proof build), `none`. */
-    const val PROP_OTBR = "sys.s1kiosk.radio.otbr"
-
     /** EZSP-over-TCP port of the coordinator modes (bellows/ZHA: socket://<panel>:6638). */
     const val ZIGBEE_TCP_PORT = 6638
     /** zigbee_router: the helper's localhost-only EZSP bridge for [ZigbeeRouterHost]. */
@@ -187,31 +91,7 @@ object RadioHelper {
     /** thread (border-router build): REST API for Home Assistant's OTBR integration. */
     const val OTBR_REST_PORT = 8081
 
-    /**
-     * thread_router: the app writes the active dataset (hex TLVs) here, in its own files dir
-     * (`files/radio/thread-dataset`); the helper moves it to its root-only dir and deletes this copy.
-     */
-    const val DATASET_FILE = "radio/thread-dataset"
-
-    /**
-     * App -> helper (v3): who may reach tcp:[ZIGBEE_TCP_PORT] and tcp:[OTBR_REST_PORT] (iptables, every
-     * mode but off). "" = nobody but loopback (no Home Assistant address known yet), "any" = no firewall,
-     * else space-separated IPv4/IPv6 addresses or CIDRs ([RadioAllow.decide]). Persistent so the helper
-     * has it at boot before the app runs; re-read every 3 s (no helper restart). `RADIO_ALLOW` in the
-     * helper's radio.conf wins over it.
-     */
-    const val PROP_ALLOW = "persist.s1kiosk.radio_allow"
-    /** Helper -> app (v3): what the firewall enforces now: "<app|conf> <any|none|addr ...>"; "" in off. */
-    const val PROP_ALLOWED = "sys.s1kiosk.radio.allowed"
-
-    /**
-     * Helper -> app (#217): who is connected to the EZSP port now, in the coordinator modes: "none", or
-     * "<address> <epoch seconds first seen>" (one client at most). "" in every other mode and with older
-     * helpers. Re-read every 3 s by the helper.
-     */
-    const val PROP_PEER = "sys.s1kiosk.radio.peer"
-
-    /** [PROP_PEER] parsed. */
+    /** [dev.glassworks.frame.RadioStatus.PEER] parsed. */
     sealed interface Peer {
         /** The helper doesn't report one: another mode, or a helper from before #217. */
         data object NotReported : Peer

@@ -7,6 +7,7 @@ import org.junit.Test
 import dev.glassworks.radio.RadioController
 import dev.glassworks.radio.RadioHelper
 import dev.glassworks.radio.RadioMode
+import dev.glassworks.radio.s1Agent
 import dev.glassworks.radio.SysProps
 import dev.glassworks.radio.ui.RadioStep.Result
 
@@ -82,7 +83,7 @@ class RadioStepTest {
             override fun sleep(ms: Long) {}
         }
         var stored: String? = null
-        val c = RadioController(props, load = { stored }, store = { stored = it }, inline = true, log = {})
+        val c = RadioController(s1Agent(props), load = { stored }, store = { stored = it }, inline = true, log = {})
         var accepted: Boolean? = null
         c.request(RadioMode.ZIGBEE_TCP.label, "test") { accepted = it }
         assertEquals(false, accepted)

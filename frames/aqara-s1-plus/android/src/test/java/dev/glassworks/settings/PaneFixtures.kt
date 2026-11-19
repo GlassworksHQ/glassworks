@@ -21,6 +21,7 @@ import dev.glassworks.s1.base.WallBasePane
 import dev.glassworks.s1.frame.AqaraCloud
 import dev.glassworks.s1.frame.AqaraS1Plus
 import dev.glassworks.s1.frame.TimeZoneKeeper
+import dev.glassworks.s1.frame.S1TimeZone
 import dev.glassworks.s1.frame.TimeZonePane
 import dev.glassworks.s1.frame.TimeZonePrefs
 import dev.glassworks.radio.SysProps
@@ -156,11 +157,11 @@ class PaneFixtures(private val app: Application) {
     fun timeZone(haRule: String = "CET-1CEST,M3.5.0,M10.5.0/3"): TimeZonePane {
         TimeZone.setDefault(TimeZone.getTimeZone("Europe/Madrid"))
         val props = object : SysProps {
-            val values = mutableMapOf(TimeZoneKeeper.PROP to "Europe/Madrid", TimeZoneKeeper.PROP_STATUS to "ok Europe/Madrid")
+            val values = mutableMapOf(S1TimeZone.PROP to "Europe/Madrid", S1TimeZone.PROP_STATUS to "ok Europe/Madrid")
             override fun get(name: String) = values[name].orEmpty()
             override fun set(name: String, value: String) { values[name] = value }
         }
-        val p = TimeZonePane(ctx, TimeZonePrefs(PanePrefs(app).paneFile("time-zone")), TimeZoneKeeper(props, inline = true))
+        val p = TimeZonePane(ctx, TimeZonePrefs(PanePrefs(app).paneFile("time-zone")), TimeZoneKeeper(S1TimeZone(props), inline = true))
         p.start()
         p.onEvent(PanelEvent.HomeAssistantTimeZone(haRule))
         return p

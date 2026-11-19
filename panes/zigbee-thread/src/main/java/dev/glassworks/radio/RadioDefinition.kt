@@ -1,5 +1,6 @@
 package dev.glassworks.radio
 
+import dev.glassworks.frame.FrameAgent
 import dev.glassworks.frame.Capability
 import android.content.Context
 import android.os.Handler
@@ -86,6 +87,8 @@ class RadioDefinition(
     private val threadJoin: () -> ThreadJoin = { HaAuth.threadJoin },
     /** The panel is signed in to Home Assistant (the setup channel's `ha.signedIn`). */
     private val signedIn: () -> Boolean = { HaAuth.signedIn },
+    /** The frame's agent, which the running [RadioPane]'s controller talks to the radio through ([pane]). */
+    private val agent: FrameAgent? = null,
 ) : PaneDefinition {
 
     override val id = "radio"
@@ -276,7 +279,7 @@ class RadioDefinition(
         // Poll the helper's one prop here (this isn't the radio thread), then refresh once.
         while (SystemClock.elapsedRealtime() < until) {
             Thread.sleep(500)
-            val a = RadioHelper.parseAllowed(ShellProps.get(RadioHelper.PROP_ALLOWED)) ?: break // Off / no firewall
+            val a = r.enforcedAllow() ?: break // Off / no firewall
             if ((if (a.any) RadioAllow.ANY else a.addresses.joinToString(" ")) == want) break
         }
         val refreshed = CountDownLatch(1)
@@ -434,7 +437,8 @@ class RadioDefinition(
     }
 
     /** The device shell's radio pane, which puts its controller where this definition's step and section read it. */
-    fun pane(ctx: PaneContext, panelIp: () -> String?): RadioPane = RadioPane(ctx, running, panelIp)
+    fun pane(ctx: PaneContext, panelIp: () -> String?): RadioPane =
+        RadioPane(ctx, running, panelIp, requireNotNull(agent) { "the radio pane needs the frame agent (RadioDefinition.app)" })
 
     /** The app's: the controller [RadioPane] puts in [running] while it runs. */
     class AppReadout(
@@ -461,9 +465,9 @@ class RadioDefinition(
 
     companion object {
         /** The app's definition: its step and section read the controller of the running [RadioPane]. */
-        fun app(prefs: RadioPrefs, setUpBefore: () -> Boolean, haBase: () -> String?): RadioDefinition {
+        fun app(prefs: RadioPrefs, setUpBefore: () -> Boolean, agent: FrameAgent, haBase: () -> String?): RadioDefinition {
             val running = RunningRadio()
-            return RadioDefinition(prefs, setUpBefore, AppReadout(running, prefs, haBase), running)
+            return RadioDefinition(prefs, setUpBefore, AppReadout(running, prefs, haBase), running, agent = agent)
         }
 
         private const val TAG = "Glassworks.SetupChannel"

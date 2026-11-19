@@ -1,5 +1,6 @@
 package dev.glassworks.setup
 
+import dev.glassworks.s1.frame.S1Agent
 import android.app.Application
 import dev.glassworks.pane.SetupStep
 import dev.glassworks.platform.AppBuild
@@ -72,7 +73,7 @@ class SetupChannelStepsTest {
         runtime = KioskApp.runtime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false))
         val panePrefs = PanePrefs(app)
         runtime.runningRadio(app).controller = RadioController(
-            TestInit(), load = { panePrefs.radio.mode }, store = { panePrefs.radio.mode = it }, inline = true, log = {}, filesDir = tmp.root,
+            S1Agent(TestInit()), load = { panePrefs.radio.mode }, store = { panePrefs.radio.mode = it }, inline = true, log = {}, filesDir = tmp.root,
         ).also { it.start() }
         steps = runtime.paneDefinitions(app).flatMap { it.setupSteps }
     }

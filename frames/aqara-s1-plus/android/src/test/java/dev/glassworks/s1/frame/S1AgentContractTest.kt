@@ -13,8 +13,9 @@ import dev.glassworks.frame.AgentCapability.RADIO_FIRMWARE
 import dev.glassworks.frame.AgentCapability.RADIO_MODE
 import dev.glassworks.frame.AgentCapability.TIME_ZONE
 import dev.glassworks.frame.FrameAgent
-import dev.glassworks.radio.RadioBundle
+import dev.glassworks.radio.PropsBundle
 import dev.glassworks.radio.RadioHelper
+import dev.glassworks.radio.RadioReports
 import dev.glassworks.radio.SysProps
 import dev.glassworks.testing.FrameAgentContract
 import dev.glassworks.update.UpdateHelper
@@ -33,7 +34,7 @@ class S1AgentContractTest : FrameAgentContract("aqara-s1-plus") {
         val p = HashMap<String, String>()
         if (!none) {
             p[RadioHelper.PROP_SVC_STATE] = "running"
-            p[RadioHelper.PROP_VERSION] = "${RadioHelper.VERSION}"
+            p[RadioHelper.PROP_VERSION] = "${RadioReports.VERSION}"
             p[UpdateHelper.PROP_VERSION] = "${UpdateHelper.VERSION}"
             p[RadioHelper.PROP_BUNDLE_LOADER] = "1"
             p[S1Agent.PORTAL_STATUS] = "off"
@@ -41,8 +42,8 @@ class S1AgentContractTest : FrameAgentContract("aqara-s1-plus") {
         }
         when (without) {
             RADIO_MODE -> p.remove(RadioHelper.PROP_SVC_STATE)
-            RADIO_FIREWALL -> p[RadioHelper.PROP_VERSION] = "${RadioHelper.FIREWALL_VERSION - 1}"
-            RADIO_FIRMWARE, TIME_ZONE -> p[RadioHelper.PROP_VERSION] = "${RadioHelper.BUNDLE_VERSION - 1}"
+            RADIO_FIREWALL -> p[RadioHelper.PROP_VERSION] = "${RadioReports.FIREWALL_VERSION - 1}"
+            RADIO_FIRMWARE, TIME_ZONE -> p[RadioHelper.PROP_VERSION] = "${RadioReports.BUNDLE_VERSION - 1}"
             APP_UPDATES -> p.remove(UpdateHelper.PROP_VERSION)
             HOTSPOT_PORTAL -> p.remove(S1Agent.PORTAL_STATUS)
             HOTSPOT_NAME -> p.remove(S1Agent.HOTSPOT_NAME_STATUS)
@@ -50,14 +51,15 @@ class S1AgentContractTest : FrameAgentContract("aqara-s1-plus") {
             FRAME_BUNDLE -> p.remove(RadioHelper.PROP_BUNDLE_LOADER)
             BLUETOOTH_ADDRESS, LOADER_INSTALL, null -> Unit
         }
-        val bundle = RadioBundle.Installed("ok", 5, 5).takeIf { !none }
-        val bt = File(Files.createTempDirectory("s1-agent").toFile(), "bluetooth-address")
-        if (!none && without != BLUETOOTH_ADDRESS) bt.writeText("00:00:5E:00:53:01\n")
         val props = object : SysProps {
             override fun get(name: String) = p[name] ?: ""
             override fun set(name: String, value: String) { p[name] = value }
         }
-        return S1Agent(props, bundle = { bundle }, bluetoothFile = bt)
+        val state = File(Files.createTempDirectory("s1-bundle").toFile(), "radio-bundle").apply { if (!none) writeText("ok 5 5\n") }
+        val bundle = PropsBundle(props, RadioHelper.BUNDLE_SERVICE, RadioHelper.PROP_BUNDLE_STATUS, RadioHelper.BUNDLE_STAGE_DIR, state) { if (it.exists()) 0 else null }
+        val bt = File(Files.createTempDirectory("s1-agent").toFile(), "bluetooth-address")
+        if (!none && without != BLUETOOTH_ADDRESS) bt.writeText("00:00:5E:00:53:01\n")
+        return S1Agent(props, bundle = bundle, bluetoothFile = bt)
     }
 
     override fun none() = side(none = true)

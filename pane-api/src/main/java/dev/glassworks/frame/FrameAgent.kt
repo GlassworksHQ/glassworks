@@ -52,6 +52,15 @@ interface FrameAgent {
      * Bluetooth proxy, or null when it has none. It reads a file: not on the main thread.
      */
     fun bluetoothAddress(): String? = null
+
+    /** The radio's requests and status ([AgentCapability.RADIO_MODE] and the radio's other capabilities); null when the frame declares none. */
+    val radio: RadioAgent? get() = null
+
+    /** [AgentCapability.TIME_ZONE]'s requests and status; null when the frame doesn't declare it. */
+    val timeZone: TimeZoneAgent? get() = null
+
+    /** [AgentCapability.FRAME_BUNDLE]'s state and install; null when the frame doesn't declare it. */
+    val bundle: BundleAgent? get() = null
 }
 
 /** A frame without an agent (generic Android, the Mirror): nothing declared, nothing runs, nothing offered. */
