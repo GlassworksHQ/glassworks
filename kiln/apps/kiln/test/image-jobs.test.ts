@@ -114,4 +114,21 @@ describe('the image worker\'s jobs', () => {
     await jobs.check(new Blob([b]), want, () => {});
     await expect(jobs.check(new Blob([new Uint8Array([1, 2, 4])]), want, () => {})).rejects.toThrow(/not the published/);
   });
+
+  it('cancel() interrupts a read that waits on the network, and a request received before the cancel stops too', async () => {
+    const want = { name: 'system.img', url: 'https://example.com/system.img', refract: 'x/system.img', size: 100, sha256: 'a'.repeat(64) };
+    let aborted = false;
+    // the first chunk arrives, then the network stalls; the request's signal reaches the fetch
+    const stall = (async (_u: unknown, init?: RequestInit) => {
+      init?.signal?.addEventListener('abort', () => { aborted = true; });
+      return new Response(new ReadableStream({ start(c) { c.enqueue(new Uint8Array(10)); } }), { status: 200, headers: { 'content-length': '100' } });
+    }) as unknown as typeof fetch;
+    const jobs = imageJobs(async () => new MemHandle(), async () => {});
+    const run = jobs.download('https://refract.test/x', want, () => { setTimeout(() => jobs.cancel(), 0); }, stall);
+    await expect(run).rejects.toBeInstanceOf(Cancelled);
+    expect(aborted).toBe(true);
+    const queued = jobs.signal(); // as the worker keeps it for a request still in its queue
+    jobs.cancel();
+    await expect(jobs.download('https://refract.test/x', want, () => {}, stall, queued)).rejects.toBeInstanceOf(Cancelled);
+  });
 });

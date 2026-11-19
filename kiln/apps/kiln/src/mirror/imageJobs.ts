@@ -21,23 +21,40 @@ export interface BuildOptions {
 /** cancel() stopped a download or fetch: the person picked another image, or left. */
 export class Cancelled extends Error {}
 
-/** `source`'s stream, ending in Cancelled as soon as `signal` aborts. */
+/**
+ * `source`'s stream, ending in Cancelled as soon as `signal` aborts, even while a read is waiting on
+ * the network: the pending read is dropped and the source cancelled.
+ */
 function abortable(source: { size: number; stream(): ReadableStream<Uint8Array> }, signal: AbortSignal) {
+  const stopped = new Promise<never>((_, reject) => {
+    const stop = () => reject(new Cancelled('stopped: another image was picked'));
+    if (signal.aborted) stop(); else signal.addEventListener('abort', stop, { once: true });
+  });
+  stopped.catch(() => {});
   return {
     size: source.size,
     stream(): ReadableStream<Uint8Array> {
       const r = source.stream().getReader();
       return new ReadableStream<Uint8Array>({
         async pull(c) {
-          if (signal.aborted) { void r.cancel(); c.error(new Cancelled('stopped: another image was picked')); return; }
-          const { done, value } = await r.read();
-          if (done) c.close(); else c.enqueue(value);
+          try {
+            if (signal.aborted) throw new Cancelled('stopped: another image was picked');
+            const { done, value } = await Promise.race([r.read(), stopped]);
+            if (done) c.close(); else c.enqueue(value);
+          } catch (e) {
+            if (e instanceof Cancelled) void r.cancel().catch(() => {});
+            c.error(e);
+          }
         },
         cancel() { void r.cancel(); },
       });
     },
   };
 }
+
+/** `f` (or the global fetch) with `signal` on every request, so a cancel also ends the connection. */
+const withSignal = (signal: AbortSignal, f: typeof fetch = fetch.bind(globalThis)): typeof fetch =>
+  ((u: RequestInfo | URL, init?: RequestInit) => f(u, { ...init, signal })) as typeof fetch;
 
 export function imageJobs(open: (name: string) => Promise<JobHandle>, removeAll: () => Promise<void>,
   want: { name: string; size: number; sha256: string } = GLASS_PANES.system) {
@@ -59,20 +76,24 @@ export function imageJobs(open: (name: string) => Promise<JobHandle>, removeAll:
   return {
     /** From a Blob instead of Refract: the tests' way in. */
     load: (file: Blob, onProgress: (x: number) => void) => loadFrom(file, onProgress),
-    fetch: (url: string, onProgress: (x: number) => void, f?: typeof fetch) => loadFrom(abortable(resumableBody(url, want.size, f ? { fetch: f } : {}), abort.signal), onProgress),
-    /** Stops a download or fetch in flight. The worker calls it as a discard arrives, before the discard waits its turn. */
+    /** `signal`: the one current when the worker received the request (signal()), so a discard sent after it stops it. */
+    fetch: (url: string, onProgress: (x: number) => void, f?: typeof fetch, signal = abort.signal) =>
+      loadFrom(abortable(resumableBody(url, want.size, { fetch: withSignal(signal, f) }), signal), onProgress),
+    /** Stops every download or fetch received so far, running or queued. The worker calls it as a discard arrives. */
     cancel() { abort.abort(); abort = new AbortController(); },
+    /** The signal a request received now runs under. */
+    signal: () => abort.signal,
     /**
      * A file as its release publishes it, from Refract into storage, hashed as it is written. One
      * that isn't the release's (another SHA-256) is emptied before the error, so nothing of it is kept.
      */
-    async download(url: string, file: ImageFile, onProgress: (x: number) => void, f?: typeof fetch): Promise<void> {
+    async download(url: string, file: ImageFile, onProgress: (x: number) => void, f?: typeof fetch, signal = abort.signal): Promise<void> {
       const name = downloaded(file.name);
       const h = await fresh(name);
       const sha = new Sha256();
       let at = 0;
       try {
-        const r = abortable(resumableBody(url, file.size, f ? { fetch: f } : {}), abort.signal).stream().getReader();
+        const r = abortable(resumableBody(url, file.size, { fetch: withSignal(signal, f) }), signal).stream().getReader();
         for (;;) {
           const { done, value } = await r.read();
           if (done) break;

@@ -45,7 +45,7 @@ async function show(d: FlashDemo) {
 }
 
 /** A session on fakes that records what reaches Refract, the worker and the Mirror, in order. */
-function setup(o: { search?: string; fail?: 'route' | 'hash' | 'flash' | 'changed' } = {}) {
+function setup(o: { search?: string; fail?: 'route' | 'hash' | 'flash' | 'changed' | 'gone' } = {}) {
   const calls: string[] = [];
   let fail = o.fail;
   const images: ImageMaker = {
@@ -57,7 +57,7 @@ function setup(o: { search?: string; fail?: 'route' | 'hash' | 'flash' | 'change
       if (fail === 'hash' && want.name === 'system.img') { fail = undefined; throw new WrongImage('its SHA-256 differs from the release'); }
       expect(want.sha256).toMatch(/^[0-9a-f]{64}$/);
     },
-    async file(name) { calls.push(`file ${name}`); return Object.assign(new Blob([name]), { tag: name }); },
+    async file(name) { calls.push(`file ${name}`); if (fail === 'gone') { fail = undefined; throw new DOMException('A requested file or directory could not be found', 'NotFoundError'); } return Object.assign(new Blob([name]), { tag: name }); },
     async check(blob, want) {
       calls.push(`check ${(blob as Blob & { tag?: string }).tag} ${want.sha256.slice(0, 8)}`);
       if (fail === 'changed' && want.name === 'userdata.sparse') { fail = undefined; throw new WrongImage('its SHA-256 is 00…, not the release\'s'); }
@@ -167,6 +167,15 @@ describe('Glass Panes', () => {
     f.retry();
     expect(f.state.files.map((x) => x.state)).toEqual(['waiting', 'waiting']);
     expect(f.blocked()).toMatch(/Download system\.img first/);
+  });
+
+  it('a stored file that is gone (another tab discarded it) must be downloaded again', async () => {
+    const { f, calls } = setup({ fail: 'gone' });
+    f.showCommunity(true); f.pick('glass-panes'); f.choose();
+    await f.download(); f.toFastboot(); await f.connectFastboot(); f.understand(true); await f.flash();
+    expect(f.state.screen).toBe('error');
+    expect(calls.filter((c) => c.startsWith('flash'))).toEqual([]);
+    expect(f.state.files.map((x) => x.state)).toEqual(['waiting', 'waiting']);
   });
 
   it('a failed write: back to the download with the files kept, then fastboot again', async () => {

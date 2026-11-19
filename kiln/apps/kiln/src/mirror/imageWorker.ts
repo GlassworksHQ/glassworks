@@ -21,11 +21,11 @@ const jobs = imageJobs(
 
 const post = (m: object) => (self as unknown as Worker).postMessage(m);
 
-async function run(m: In) {
+async function run(m: In, signal: AbortSignal) {
   const progress = (x: number, step?: string) => post({ id: m.id, progress: x, step });
   try {
-    if (m.op === 'fetch') await jobs.fetch(m.url, progress);
-    else if (m.op === 'download') await jobs.download(m.url, m.file, progress);
+    if (m.op === 'fetch') await jobs.fetch(m.url, progress, undefined, signal);
+    else if (m.op === 'download') await jobs.download(m.url, m.file, progress, undefined, signal);
     else if (m.op === 'build') await jobs.build(m, (step, x) => progress(x, step));
     else if (m.op === 'check') await jobs.check(m.file, m.want, progress);
     else await jobs.discard();
@@ -37,10 +37,12 @@ async function run(m: In) {
 
 // One operation at a time, in the order the page sent them, all on the one `kiln-mirror` folder: a
 // discard ends before the next download creates its file there. A discard first stops the download
-// in flight, so it doesn't wait for a gigabyte nobody wants any more.
+// in flight, and those still queued, so it doesn't wait for a gigabyte nobody wants any more: each
+// request keeps the signal current when it arrived.
 let queue = Promise.resolve();
 self.onmessage = (e: MessageEvent<In>) => {
   const m = e.data;
   if (m.op === 'discard') jobs.cancel();
-  queue = queue.then(() => run(m));
+  const signal = jobs.signal();
+  queue = queue.then(() => run(m, signal));
 };

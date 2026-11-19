@@ -294,7 +294,7 @@ export class FlashSession {
     const work = (step: WorkStep, x: number) => this.set({ work: { step, x } });
     const first = steps.find((x) => x.do !== 'backup');
     this.set({ screen: 'working', error: undefined, flashFailed: false, work: { step: first?.do === 'patch' ? 'patch' : first?.do === 'flash' ? `flash-${first.partition}` as WorkStep : 'restart', x: 0 } });
-    let building = false;
+    let building = false, reading = false;
     try {
       // the Mirror's LK can't read anything back: Kiln's backup step is the record of what it writes
       this.log('Backup: none possible, the Mirror\'s bootloader can\'t read anything back. What Kiln writes:');
@@ -320,10 +320,12 @@ export class FlashSession {
           if (!blob) {
             // a downloaded file, checked again as the very Blob fastboot will send: nothing else can have changed it
             const want = r.files.find((f) => f.name === step.file)!;
+            reading = true;
             blob = await this.d.images.file(step.file);
             this.log('', `${step.file}: checking it again before writing`);
             work(id, 0);
             await this.d.images.check(blob, want, () => {});
+            reading = false;
           }
           this.log(`Flashing ${step.partition}${r.community ? ` with ${step.file} as published` : s.noFill ? ' (zeros as RAW, no FILL chunks)' : ''}`);
           this.set({ flashFailed: true }); // until the restart: a failure from here is the bootloader's
@@ -344,9 +346,9 @@ export class FlashSession {
       this.set({ screen: steps.some((x) => x.do === 'first-start') ? 'adb' : 'done' });
     } catch (e) {
       this.log('Stopped', (e as Error).message);
-      // a failed build dropped the fetched image (it may be patched halfway), and a stored file that no longer
-      // checks out can't be written: either way, download again
-      this.set({ screen: 'error', error: (e as Error).message, ...(building || e instanceof WrongImage ? { files: waiting(r) } : {}) });
+      // a failed build dropped the fetched image (it may be patched halfway), and a stored file that is gone or
+      // no longer checks out can't be written: either way, download again. A refused write keeps the downloads.
+      this.set({ screen: 'error', error: (e as Error).message, ...(building || reading ? { files: waiting(r) } : {}) });
     }
   }
 
