@@ -11,7 +11,7 @@ export interface JobHandle extends SyncHandle { truncate(n: number): void; flush
 
 export interface BuildOptions {
   apk: Uint8Array; bootAnimation?: Uint8Array; settingsOverlay?: Uint8Array; adbKey: string; userdataBytes: number; fill?: boolean;
-  wifi?: { ssid: string; password: string };
+  deviceMac?: string; wifi?: { ssid: string; password: string };
 }
 
 export function imageJobs(open: (name: string) => Promise<JobHandle>, removeAll: () => Promise<void>,

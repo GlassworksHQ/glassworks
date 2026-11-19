@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Per-install table of what an install or force-stop of S1 Kiosk did to the panel (#248).
+"""Per-install table of what an install or force-stop of Glassworks did to the panel (#248).
 
 Off-device and read-only: reads a logcat saved on the computer and touches nothing.
 

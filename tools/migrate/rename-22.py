@@ -71,7 +71,6 @@ COMPONENTS = {
 # Apps whose installed base knows the old component names: module -> its namespace (for `.Name` in its manifest).
 SHIM_MODULES = {
     "frames/aqara-s1-plus/android": "sh.edm.s1kiosk",
-    "frames/generic-android/android": "dev.glassworks.generic_android",
     # The S1 app's legacy test APK compiles the S1's sources and names their components; it has no shims of its own.
     "engines/engine-gecko-legacy/test-app": "sh.edm.s1kiosk",
 }
@@ -102,7 +101,7 @@ CHECK_UNCHANGED = [
     "frames/aqara-s1-plus/tools/install",
     "frames/aqara-s1-plus/tools/install.sh",
     "kiln/packages/app-adb/src",
-    "kiln/packages/setup-channel/test/s1-kiosk-transcript.json",
+    "kiln/packages/setup-channel/test/aqara-s1-plus-transcript.json",
     "tools/perf/run.sh", "tools/perf/perfrun.py", "tools/perf/perflib.py",
 ]
 

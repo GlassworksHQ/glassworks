@@ -1,5 +1,5 @@
 {
-  "comment": "Blobs the installer downloads at build time (scripts/stage-assets.mjs --remote). Each is checked against its sha256; a mismatch fails the build. The kiosk APK is not here: it comes from the latest S1 Kiosk release (v*), with the .sha256 published next to it.",
+  "comment": "Blobs the installer downloads at build time (scripts/stage-assets.mjs --remote). Each is checked against its sha256; a mismatch fails the build. The kiosk APK is not here: it comes from the latest Glassworks release (v*), with the .sha256 published next to it.",
   "assets": [
     {
       "name": "uboot-spl",

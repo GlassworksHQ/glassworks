@@ -362,7 +362,9 @@ steps but no card, with an error in the log: the person could never turn it on o
 (entities as Home Assistant shows them). A slider, a duration (picked from its choices, with units), a
 choice and a daily window are never typed (#63 round 2), so a browser can draw the same controls.
 A `Link` with a `section` opens that section's page instead of something outside the menu (the S1's
-Device page opens the Radio pane this way), on the panel and the Manage page alike.
+Device page opens the Radio pane this way), on the panel and the Manage page alike. A `Link` that opens
+something of the pane's own on the panel gives a `twin` (#518): what it opens, as typed items, which the
+Manage page draws under the link's title (the notifications on the panel, read-only).
 `Info`, `Status`, `Tiles`, `States` and a `Slider` not being dragged are read again every couple of
 seconds while the page is open. If the page itself changes (a base mounted, the pane turned off from
 Home Assistant, the device started), the menu draws it again from the definitions. A `Switch` can ask first (`confirm` gives a `Confirm`: the question, what it costs,
@@ -381,8 +383,8 @@ at ("Needs Presence + camera." at the camera's use), and the Manage page links t
 to it. `Native` is a view only the panel draws,
 where its own layout is nicer than rows (the time zone's picker). Give it a `twin` (#269): the same
 rows and actions as typed items, which every other surface draws instead, so the Manage page has the
-same features. Never put a secret in a twin: it goes to a browser and the diagnostics. A native view
-with no twin says "On the panel" on the Manage page, and `PanelManageParityTest` lists the ones left.
+same features. Never put a secret in a twin: it goes to a browser and the diagnostics. Every native view
+has one: `PanelManageParityTest` fails on a view without it (#518).
 
 **One way to change a setting (#242).** The panel's menu and the Manage page change an item through
 `SettingsChange.change(item, raw, done)`: it checks the value as the panel's control limits it (a
@@ -513,8 +515,9 @@ main thread on Android), so a change from the browser takes the panel's own path
 asks first on the panel asks here too, and the change runs only with that dialog's answer: a one-shot
 token for the same session and change, good for five minutes and dropped when that session signs out (#269). Either sign-in may change any item, a pane's `master`
 included (maintainer, 2026-11-15: the sign-in is the only extra layer). An `Action` is a button that
-posts `run`; one with a `confirm` asks first. A `Native` draws its `twin`'s rows (#269), or says "On the
-panel" when it has none, as a `Link` to something outside the menu does. A pane's row (`manage.paneRow`) takes its name and on/off from its section: the title,
+posts `run`; one with a `confirm` asks first. A `Native` draws its `twin`'s rows (#269), and a `Link`
+its `twin` under its title (#518). Only a `Link` to another app (Android's or Aqara's settings, the
+licences) says "On the panel". A pane's row (`manage.paneRow`) takes its name and on/off from its section: the title,
 `unavailable` for Can't run, the `master` switch (#67) for Off; its chip is `chipWord` and
 `chipTone`, as on the rail. Off panes fold under "Off · N" in the nav, as in the rail.
 `PanelManageParityTest` walks every item the menu draws and fails when one is missing on the Manage
@@ -578,6 +581,7 @@ A frame (`dev.glassworks.frame.Frame`) is what the core asks the device:
 | `board` | The `board` TXT record in the mDNS advert. |
 | `presence`, `light` | The sensors `ScreenPolicy` reads. Null when the device has none. A `PresenceSource` reports near or not with the raw value, and may support `setRange(metres)`. |
 | `cpuThermalZone` | The `type` of the thermal zone that measures the CPU, for the diagnostics pane. Null (the default) means no temperature entity. The S1's is `cpu_thermal_zone`. |
+| `dock` | Whether the device docks, for the core's *Docked* sensor: `NO` (the default, the S1: no sensor, nothing listens), `IF_SEEN` (the sensor comes once the device reports a dock, and stays) or `YES` (there from the start). `GenericAndroid` says `YES` for a frame with `"dock": true` or a device with Google's dock manager ([docs/esphome.md](../../../../../../docs/esphome.md#docked)). |
 | `systemSettingsIntents()` | The device's own settings screens, best first. `Frame.systemSettings(context)` picks the first that resolves. |
 | `wifiSettingsIntents()` | Where to choose a Wi-Fi network, best first. The default is Android's Wi-Fi panel and settings. |
 | `paneDefinitions(context)` | The definitions of the frame's panes: their setup steps, settings sections and adb extras. |

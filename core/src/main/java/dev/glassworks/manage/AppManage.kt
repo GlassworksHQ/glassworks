@@ -134,6 +134,7 @@ open class AppManage(
         qr = { req -> qr(signIn, req) },
         ownHosts = ::ownHosts,
         event = ::event,
+        scripts = { name -> runCatching { app.assets.open("manage/$name").use { it.readBytes() } }.getOrNull() },
         // Without its log reader the card could see no computer asking, so it shows only with both.
         usb = adb?.takeIf { adbRequests != null }?.let { ManageUsbDebugging(it, ManagePages()::time, ::event) },
     )
@@ -195,6 +196,9 @@ open class AppManage(
         override val actions: PanelActions = Actions()
 
         override val name = PageShell.PRODUCT_NAME
+
+        /** The model [PanelDevice] gives Home Assistant (its `DeviceIdentity.model`); `ManageModelPinTest` keeps the two the same. */
+        override val model: String get() = deviceModel(runtime.frame.hardware.model, runtime.build.product)
 
         override fun status(): PanelStatus {
             val defs = runtime.paneDefinitions(app)
@@ -287,6 +291,7 @@ open class AppManage(
             is SettingsItem.Action -> listOf("${i.title}: ${v(i.detail)}")
             // A native view's typed twin, as the Manage page shows it; never a secret (SettingsItem.Native).
             is SettingsItem.Native -> itemLines(dev.glassworks.pane.SettingsChange.twinOf(i))
+            // Its twin too: what a link opens is the person's (the notifications' words), not the panel's state.
             is SettingsItem.Link -> emptyList()
         }
     }
@@ -397,6 +402,9 @@ open class AppManage(
 
     companion object {
         const val TAG = "Glassworks.Manage"
+
+        /** "Panel Hub S1 Plus (S1 Kiosk)": the device's model as Home Assistant shows it. */
+        fun deviceModel(model: String, product: String) = "$model ($product)"
 
         private const val ADB_CARD = "Allow a new computer"
 

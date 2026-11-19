@@ -35,10 +35,10 @@ for v in 1 2; do
     --out "$apk" "$HERE"/build/outputs/apk/release/*-release-unsigned.apk
   rm -f "$apk.idsig"
   badging="$("$BT/aapt2" dump badging "$apk")"
-  for want in "package: name='sh.edm.s1kiosk' versionCode='$v' versionName='$v'" "minSdkVersion:'23'" "targetSdkVersion:'23'" \
+  for want in "package: name='dev.glassworks.mirror.probe' versionCode='$v' versionName='$v'" "minSdkVersion:'23'" "targetSdkVersion:'23'" \
     "uses-permission: name='android.permission.INSTALL_PACKAGES'" "uses-permission: name='android.permission.REBOOT'" \
     "uses-permission: name='android.permission.WRITE_SECURE_SETTINGS'" "uses-permission: name='android.permission.MANAGE_USB'" \
-    "launchable-activity: name='sh.edm.s1kiosk.MainActivity'"; do
+    "launchable-activity: name='dev.glassworks.mirror.probe.MainActivity'"; do
     grep -qF "$want" <<<"$badging" || { echo "probe-v$v.apk: no \"$want\" in aapt2 dump badging" >&2; exit 1; }
   done
   tree="$("$BT/aapt2" dump xmltree --file AndroidManifest.xml "$apk")"

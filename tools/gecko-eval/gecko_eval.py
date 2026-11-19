@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Evaluate JavaScript in the S1 Kiosk's GeckoView page over the Firefox
+"""Evaluate JavaScript in the S1 app's GeckoView page over the Firefox
 Remote Debugging Protocol (no Firefox desktop needed).
 
 Prereqs: kiosk built with remote debugging on (debug builds default to on, or

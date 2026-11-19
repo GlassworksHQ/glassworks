@@ -7,8 +7,8 @@
 #   generic-android-legacy-v*  dev.glassworks.generic_android.legacy  glassworks-generic-android-legacy-<abi>-<version>.apk
 # one APK and its .sha256 per ABI in frames/generic-android/design/frame.json, signed with Glassworks' key (the
 # `release-signing` environment's GENERIC_* secrets, as generic-test-build.yml), notes from
-# frames/generic-android/CHANGELOG.md. Published with --latest=false: releases/latest stays S1 Kiosk's, which
-# panels up to 0.4.3 read (release.yml). S1 Kiosk's tags (v*, aqara-s1-plus-v*) never match here.
+# frames/generic-android/CHANGELOG.md. Published with --latest=false: releases/latest stays the S1 app's, which
+# panels up to 0.4.3 read (release.yml). The S1 app's tags (v*, aqara-s1-plus-v*) never match here.
 #
 # A manual run (Actions tab, or `gh workflow run generic-release.yml --ref main -f tag=generic-android-v1.2.3`) is a
 # dry run: the same build job, with the APKs as an artifact, and no release. The environment only lets main,
@@ -218,6 +218,6 @@ jobs:
           tools/release/check-newer-than-released.sh "$LINE" "$VERSION"
           tools/release/changelog-section.sh "$CHANGELOG_VERSION" frames/generic-android/CHANGELOG.md > "$RUNNER_TEMP/notes.md"
           # One create with every asset, so a release never has half of its ABIs (docs/releasing.md "ABIs").
-          # --latest=false: releases/latest must stay S1 Kiosk's (panels up to 0.4.3 read only that).
+          # --latest=false: releases/latest must stay the S1 app's (panels up to 0.4.3 read only that).
           gh release create "$TAG" dist/*.apk dist/*.apk.sha256 \
             --verify-tag --latest=false --title "$TITLE" --notes-file "$RUNNER_TEMP/notes.md"

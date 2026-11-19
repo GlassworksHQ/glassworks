@@ -9,6 +9,23 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 ## [Unreleased]
 
 ### Added
+- **Set up every panel from one Manage page.** *All panels*, in the Manage page's menu, signs in to
+  Home Assistant and lists the house's panels with their area and version. A panel that's down shows as
+  down. *Manage* opens another panel's page, already signed in, and *Copy settings* makes one panel like
+  another: it changes only what you tick, and greys out what the other panel's version doesn't have.
+  Administrators only. Each panel checks the sign-in with Home Assistant itself, so panels never trust
+  each other. Every panel needs this version for the page to reach it.
+- **Kiln's Done says whether the S1's updates install by themselves.** After an install or a setup, Kiln reads the
+  panel back and shows a *Silent updates* block: *On* when the boot image has its root update service, or *A tap
+  each* with how to add it when it doesn't. The lululemon Mirror's test install shows the same block, read from
+  whether Glassworks went in as a system app.
+- **Manage sends a test notification and shows the panel's notifications.** The Notifications page on the Manage
+  page lists what is on the panel now, read-only, and has a *Send* button for the test notification. On the panel,
+  *Send a test notification* is now a row with a *Send* button.
+- **Setup says when updates would ask for a tap.** On a new setup of an S1 whose boot image has no update
+  service, a *Silent updates* step follows Panes: Kiln adds the service from a computer, with a QR code to it.
+  It's never required: Continue moves on. Panels that are already set up don't see it, and an S1 with the
+  service, whose updates install by themselves, skips it.
 - **The panel shows its frame version.** The S1 Plus page in the panel's settings and on the Manage page has a new
   *Frame version* row: the version of the parts of the panel Glassworks owns, such as its boot-side services and boot
   animation, not Android's. A panel installed before frame versions shows *Before 1.0.0*. A new *Frame update*
@@ -69,6 +86,16 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   and off, the overlay, the device admin) and checks each one, makes it the home screen and opens its setup page.
   A tablet that refuses a step is told plainly, and undo removes the app. The APK is a test build you pick on the
   computer until Glassworks for Android has a release.
+- **Get Glassworks on a tablet from the tablet itself.** Open `kiln.glassworks.dev/android/tablet` in the tablet's
+  browser. Kiln says what the tablet is, even in Chrome's desktop mode, and offers Glassworks as a download: the
+  build for its Android version, through Kiln's own address. It then says what the app's setup asks, and how to
+  finish with Kiln over USB for the one setting that needs a computer. Until Glassworks for Android has a release,
+  the page says it isn't out yet.
+- **Know when the tablet is on its dock.** A Pixel Tablet now has a *Docked* sensor in Home Assistant: on
+  while it sits on its dock, off when you lift it off. Automate on it, for example to
+  show another dashboard while someone holds the tablet. The tablet's page in the panel's settings, and on the
+  Manage page, says *Docked* or *Not docked* as it changes. Other tablets get both once they have been on a
+  dock; the S1 and ordinary tablets have neither.
 - **See whether updates install with nobody at the panel.** A new *Silent updates* sensor in Home
   Assistant says yes or no, and why: the S1's boot image installs them, the app is device owner or a
   system app, or Android 12+ lets it update itself. The device's page in the panel's settings and on
@@ -198,6 +225,11 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   Wi-Fi, else **Choose a network** to type it on the panel. The other ways are one tap away behind
   **Other ways to set up ›**, and **Not now** is the quietest button on the card. The step now fits on a
   small phone too. A panel without touch (the Mirror) looks as before.
+- **Kiln's Mirror flash leaves out apps a Mirror never uses.** The image Kiln writes no longer has
+  36 of the community image's apps: the phone and SMS apps, Qualcomm's diagnostic and modem services,
+  demo apps and Bluetooth test tools. They kept restarting and took memory the dashboard needs. The
+  phone stack, the keyboard, the display's own services, Bluetooth and Settings stay. Kiln's way back,
+  the plain community image, brings them all back. Not yet run on a real Mirror.
 - **Home Assistant shows only the screen entities your device can back.** *Presence range* is only on a
   device whose presence sensor has a range (the S1), and *Auto brightness*, *Illuminance* and *Max auto
   brightness* only on one with a light sensor. On a tablet with a camera, presence is the Camera pane's
@@ -409,6 +441,17 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   it straight away. The *Thread join* sensor says how it went. Pasting the dataset still works.
 
 ### Fixed
+- **Undo and a failed switch say what really happened.** When the installer gives the panel back to
+  Aqara's apps, it now says whether Glassworks was removed, turned off, or is still on because Android
+  refused to turn it off. Before, it could say Glassworks was gone when it wasn't. When a switch to a
+  new build fails and the old build comes back, the installer says so if the app's data didn't come back
+  with it, and keeps the copy on the panel instead of deleting it. It no longer says Glassworks saved the
+  panel's Wi-Fi when it can't tell who did. This is in Kiln and in the command line installer.
+- **A Mirror reflash keeps its Home Assistant device.** Kiln and the headless flash give the Mirror an id from its
+  serial number and keep it in the image, so a later reflash comes back as the same device with the same entity
+  ids. The first flash with this still shows up as a new device once. On other Android devices, an app reinstall
+  now keeps the device where Android allows it. There too, the first reinstall after this update can show up as a
+  new device once.
 - **Assist's reply stays on a narrow screen.** On the Mirror, which stands portrait, the reply ran off
   both edges of the screen on one line. It now wraps inside the screen and gets smaller for a long
   reply, with room for up to five lines before it is cut short. The S1 and landscape tablets look as before.

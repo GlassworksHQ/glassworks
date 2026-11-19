@@ -1,3 +1,6 @@
+export {
+  CHROME_NEEDS_OREO, FINGERPRINTS, FROZEN_ANDROID_PLATFORM, identifyBrowser, type AppFit, type BrowserFacts, type OnDevice,
+} from './browser';
 export { APPS, GENERIC, LEGACY, MIN_API, androidName, appFor, type GenericApp } from './app';
 export {
   BRANDS, CHIP_VENDORS, GENERIC_STEPS, MODELS, OWN_FRAMES, identifyAdb, identifyPicked, identifyUsb, ownFrame,

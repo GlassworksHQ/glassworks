@@ -19,8 +19,8 @@ export function fakeGenericApk(o: { app?: GenericApp; package?: string; minSdk?:
     'android.permission.REQUEST_INSTALL_PACKAGES', 'android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION'])
     .map((name): FakeEl => ({ el: 'uses-permission', attrs: { name } }));
   const tree: FakeEl[] = [...perms, { el: 'application', children: [
-    { el: 'activity', attrs: { name: 'sh.edm.s1kiosk.MainActivity', permission: 'android.permission.WRITE_SECURE_SETTINGS', exported: true } },
-    { el: 'activity-alias', attrs: { name: 'dev.glassworks.generic.Launcher', targetActivity: 'sh.edm.s1kiosk.MainActivity', exported: true },
+    { el: 'activity', attrs: { name: 'dev.glassworks.MainActivity', permission: 'android.permission.WRITE_SECURE_SETTINGS', exported: true } },
+    { el: 'activity-alias', attrs: { name: 'dev.glassworks.generic.Launcher', targetActivity: 'dev.glassworks.MainActivity', exported: true },
       children: [filter(['MAIN'], ['LAUNCHER']), filter(['MAIN'], ['HOME', 'DEFAULT'])] },
   ] }];
   const libs = Object.fromEntries((o.abis ?? ['arm64-v8a']).map((a) => [a, { 'libxul.so': Uint8Array.of(0x7f, 0x45, 0x4c, 0x46) }]));

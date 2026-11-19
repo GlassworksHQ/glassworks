@@ -124,9 +124,9 @@ class GenericAppTest {
             assertEquals(category, listOf(GenericParts.LAUNCHER), found.map { it.activityInfo.name })
         }
         val info = pm.getPackageInfo(app.packageName, PackageManager.GET_SERVICES or PackageManager.GET_RECEIVERS or PackageManager.GET_ACTIVITIES)
-        assertTrue(info.services.orEmpty().any { it.name == "sh.edm.s1kiosk.KioskService" })
-        assertTrue(info.receivers.orEmpty().map { it.name }.containsAll(listOf("sh.edm.s1kiosk.BootReceiver", "sh.edm.s1kiosk.update.UpdateInstallReceiver")))
-        val main = info.activities.orEmpty().single { it.name == "sh.edm.s1kiosk.MainActivity" }
+        assertTrue(info.services.orEmpty().any { it.name == "dev.glassworks.KioskService" })
+        assertTrue(info.receivers.orEmpty().map { it.name }.containsAll(listOf("dev.glassworks.BootReceiver", "dev.glassworks.update.UpdateInstallReceiver")))
+        val main = info.activities.orEmpty().single { it.name == "dev.glassworks.MainActivity" }
         assertEquals("other apps can't start it with settings in its extras", "android.permission.WRITE_SECURE_SETTINGS", main.permission)
     }
 
@@ -137,7 +137,7 @@ class GenericAppTest {
         val viaLauncher = start(GenericParts.LAUNCHER)
         assertTrue("dropped", dev.glassworks.MainActivity.screenExtras(viaLauncher, parts::trustsExtras))
         assertNull(viaLauncher.extras)
-        val direct = start("sh.edm.s1kiosk.MainActivity")
+        val direct = start("dev.glassworks.MainActivity")
         assertFalse("kept", dev.glassworks.MainActivity.screenExtras(direct, parts::trustsExtras))
         assertEquals("http://192.0.2.66/", direct.getStringExtra("url"))
     }
@@ -173,6 +173,15 @@ class GenericAppTest {
         assertEquals("http://192.0.2.10:8123/lovelace/0", GenericApp.engineSettings(app, build).dashboard)
         prefs.url = ""
         assertNull("none set up yet", GenericApp.engineSettings(app, build).dashboard)
+    }
+
+    /**
+     * #556: the /system copy asks to change networks it didn't save, so Improv can replace the one Kiln wrote into the
+     * Mirror's image when its password is wrong. An update can never add the permission.
+     */
+    @Test fun everyBuildAsksToReplaceASavedNetwork() {
+        val requested = app.packageManager.getPackageInfo(app.packageName, PackageManager.GET_PERMISSIONS).requestedPermissions.orEmpty().toList()
+        assertTrue("android.permission.OVERRIDE_WIFI_CONFIG" in requested)
     }
 
     /**
@@ -236,6 +245,20 @@ class GenericAppTest {
         assertEquals(listOf("sendspin", "assist", "timers", "camera", "diagnostics"), device.paneList().map { it.id })
         assertTrue("its camera's entities", device.entityList().map { it.objectId }.containsAll(listOf("camera", "camera_presence", "camera_privacy", "camera_pane")))
         assertFalse("nothing of the S1", device.entityList().any { it.objectId.startsWith("radio_") || it.objectId.startsWith("base_") })
+    }
+
+    /** The Pixel Tablet docks (its frame.json's `dock`): this app gives Home Assistant its Docked sensor; another tablet has none until it docks (DockedEntityTest). */
+    @Test fun aPixelTabletHasTheDockedSensor() {
+        val (_, device) = run(runtime())
+        val docked = device.entityList().single { it.objectId == "docked" }
+        assertEquals("Docked", docked.name)
+        assertFalse("on by default", docked.disabledByDefault)
+    }
+
+    @Test fun anOrdinaryTabletHasNoDockedSensor() {
+        ShadowBuild.setModel("Lenovo TB-X606F")
+        val (_, device) = run(runtime())
+        assertTrue(device.entityList().none { it.objectId == "docked" })
     }
 
     @Test fun aPaneTheDeviceCantRunIsHiddenEverywhere() {

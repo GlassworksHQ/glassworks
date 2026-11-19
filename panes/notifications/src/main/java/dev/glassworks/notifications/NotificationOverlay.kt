@@ -701,7 +701,7 @@ class NotificationOverlay(
         })
         s.addView(View(context).apply { setBackgroundColor(BD) }, LinearLayout.LayoutParams(-1, px(1f).coerceAtLeast(1)).apply { bottomMargin = px(12f) })
         val rows = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-        if (state.list.isEmpty()) rows.addView(g.text(15f, MU).apply { text = "Nothing on the panel." })
+        if (state.list.isEmpty()) rows.addView(g.text(15f, MU).apply { text = NotificationsDefinition.NOTHING })
         state.list.forEachIndexed { i, e -> rows.addView(row(e), LinearLayout.LayoutParams(-1, -2).apply { if (i > 0) topMargin = px(10f) }) }
         s.addView(ScrollView(context).apply {
             isVerticalFadingEdgeEnabled = true
@@ -709,7 +709,7 @@ class NotificationOverlay(
             addView(rows, LayoutParams(-1, -2))
             if (scrolled > 0) post { scrollTo(0, scrolled) }
         }, LinearLayout.LayoutParams(-1, 0, 1f))
-        s.addView(g.text(13f, FA).apply { text = "Kept until the panel restarts. Home Assistant can send them again." },
+        s.addView(g.text(13f, FA).apply { text = NotificationsDefinition.KEPT },
             LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(10f) })
     }
 

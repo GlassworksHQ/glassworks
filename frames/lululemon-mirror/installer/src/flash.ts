@@ -7,9 +7,10 @@ import { Steps, grantPermissions, kioskVersion, sendWifi, startApp, type StepFn 
 import { GLASSWORKS, type MirrorApp } from './app';
 import { Disk, Ext4, MemoryStore, Sha256, hex, readSparse, writeSparse, type Store } from '@glassworks/ext4';
 import { ProxyError } from './download';
-import { GLASS_PANES, buildUserdata, patchSystem, type SystemPatch } from './image';
+import { GLASS_PANES, buildUserdata, macFromSerial, patchSystem, type SystemPatch } from './image';
 import { adbKeyLines } from './services';
 import type { Check } from './recipe';
+import { describeMirrorUpdates, readMirrorUpdates, type MirrorUpdates } from './updates';
 
 /** The Mirror's LK in fastboot, as the Glass Panes install guide reads it on a Mac (not yet seen by Kiln). */
 export const MIRROR_FASTBOOT: USBDeviceFilter = { vendorId: 0x18d1, productId: 0xd00d };
@@ -30,7 +31,9 @@ export interface FastbootLike {
   reboot(): Promise<void>;
 }
 
-export interface FastbootReport { checks: Check[]; ok: boolean; userdataBytes: number; info: string[] }
+export interface FastbootReport { checks: Check[]; ok: boolean; userdataBytes: number; info: string[];
+  /** The Mirror's id in Home Assistant, from its serial: the same on every reflash (#523). None when LK gives no serial. */
+  deviceMac?: string }
 
 const optional = async (fb: FastbootLike, name: string) => { try { return await fb.getvar(name); } catch { return undefined; } };
 
@@ -53,8 +56,10 @@ export async function checkFastboot(fb: FastbootLike): Promise<FastbootReport> {
     { what: 'Userdata partition', found: mb(userdata), ok: !!userdata && userdata >= 1024 ** 3 && userdata % 4096 === 0, need: 'at least 1 GiB, whole 4 KiB blocks' },
     { what: 'Download size', found: mb(maxBytes), ok: !!maxBytes && maxBytes >= 4096, need: 'max-download-size reported in hex (0x…), at least one 4 KiB block' },
   ];
-  const info = [`product ${product ?? 'not reported'}`, `max-download-size ${max ?? 'not reported'}`, `secure ${secure ?? 'not reported'}`];
-  return { checks, ok: checks.every((c) => c.ok), userdataBytes: userdata ?? 0, info };
+  const deviceMac = await macFromSerial(await optional(fb, 'serialno'));
+  const info = [`product ${product ?? 'not reported'}`, `max-download-size ${max ?? 'not reported'}`, `secure ${secure ?? 'not reported'}`,
+    deviceMac ? 'Home Assistant id: from the serial, the same on every reflash' : 'Home Assistant id: no serial reported, so the app picks a new one'];
+  return { checks, ok: checks.every((c) => c.ok), userdataBytes: userdata ?? 0, info, ...(deviceMac ? { deviceMac } : {}) };
 }
 
 /** Writes both images, system first, then restarts the Mirror. `onProgress(part, 0..1)`. */
@@ -100,17 +105,19 @@ export async function loadSystem(file: { size: number; stream(): ReadableStream<
  * The two images Kiln flashes, written as sparse images to the sinks: the loaded system image with
  * the app (Glassworks), services.jar trusting `adbKey`'s first line, and the rest (patchSystem), and a
  * fresh userdata the partition's size with `adbKey` in adb_keys (buildUserdata).
+ * `log`: patchSystem's own lines (the app's libraries, the unused apps left out, build.prop, services.jar).
+ * `fill: false`: zeros go as RAW blocks, not FILL chunks, for a bootloader that refuses FILL.
  */
-/** `fill: false`: zeros go as RAW blocks, not FILL chunks, for a bootloader that refuses FILL. */
 export async function buildImages(loaded: Loaded, o: SystemPatch & { adbKey: string; userdataBytes: number; fill?: boolean;
   /** saved in userdata's wpa_supplicant.conf, so Android joins it on the first boot with nothing tapped */
   wifi?: { ssid: string; password: string } },
   sinks: { system: (b: Uint8Array) => Promise<void> | void; userdata: (b: Uint8Array) => Promise<void> | void },
-  onProgress: (step: PrepareStep, x: number) => void = () => {}): Promise<void> {
+  onProgress: (step: PrepareStep, x: number) => void = () => {},
+  log: (line: string) => void = () => {}): Promise<void> {
   adbKeyLines(o.adbKey); // every line, before the system image is touched
   onProgress('patch', 0);
   const sys = await Ext4.open(loaded.disk);
-  await patchSystem(sys, o);
+  await patchSystem(sys, o, log);
   // the image's own template: the saved network goes after its lines, as the Wi-Fi HAL would copy it
   const template = o.wifi ? new TextDecoder().decode(await sys.readFile('/etc/wifi/wpa_supplicant.conf')) : '';
   onProgress('patch', 1);
@@ -130,6 +137,8 @@ export const OTHER_HOMES = ['com.android.launcher3', 'com.cyanogenmod.trebuchet'
  * hidden: the image's launcher stays the home screen.
  */
 export interface FirstBoot { app: { name?: string; code: number }; hidden: string[]; home: HomeCheck; wifi?: boolean;
+  /** whether its updates install by themselves: the image's copy in /system/priv-app, read back */
+  updates: MirrorUpdates;
   /** the display rotation Android reports after the rotation step: always MIRROR_ROTATION */
   rotation: number }
 
@@ -232,6 +241,8 @@ export async function firstBoot(p: PanelShell, o: { haUrl?: string; locale?: str
   if (!app) throw new Error(`${ours.name} (${ours.package}) isn't on the Mirror after the install`);
   r.detail(`${ours.name} ${app.name ?? app.code}`);
   await grantPermissions(r, ours);
+  const updates = await readMirrorUpdates(p, ours);
+  r.detail(describeMirrorUpdates(updates));
 
   // before the app starts, so it opens in portrait (it follows the system's rotation, #434)
   r.step('Turn the screen upright (portrait)');
@@ -250,7 +261,7 @@ export async function firstBoot(p: PanelShell, o: { haUrl?: string; locale?: str
     wifi = await sendWifi(p, o.wifi.ssid, o.wifi.password, sleep);
     r.detail(wifi ? 'joined' : `${ours.name} didn't confirm it joined (the image's saved network still applies)`);
   }
-  return { app, hidden, home, rotation, ...(wifi !== undefined ? { wifi } : {}) };
+  return { app, hidden, home, rotation, updates, ...(wifi !== undefined ? { wifi } : {}) };
 }
 
 /** The way back: the plain Glass Panes images, as downloaded, checked against the release's hashes. */

@@ -35,7 +35,18 @@ describe('fastboot checks (read-only)', () => {
     expect(r.ok).toBe(true);
     expect(r.checks.map((c) => c.what)).toEqual(['System partition', 'Userdata partition', 'Download size']);
     expect(r.userdataBytes).toBe(0x14cc00000);
-    expect(r.info).toEqual(['product MSM8916', 'max-download-size 0x20000000', 'secure not reported']);
+    expect(r.info).toEqual(['product MSM8916', 'max-download-size 0x20000000', 'secure not reported', 'Home Assistant id: no serial reported, so the app picks a new one']);
+    expect(r.deviceMac).toBeUndefined();
+  });
+
+  it('gives the Mirror the id the app derives from its serial, so every reflash keeps its Home Assistant device (#523)', async () => {
+    const sizes = { 'partition-size:system': `0x${SYSTEM_BYTES.toString(16)}`, 'partition-size:userdata': '0x14cc00000' };
+    // core's DeviceMacPinTest pins the same serial to the same bytes
+    const r = await checkFastboot(lk({ ...sizes, serialno: '0123456789abcdef' }));
+    expect(r.deviceMac).toBe('E6:79:E6:E0:96:A3');
+    expect(r.info.join('\n')).not.toContain('E6:79');
+    expect(r.info).toContain('Home Assistant id: from the serial, the same on every reflash');
+    expect((await checkFastboot(lk({ ...sizes, serialno: 'unknown' }))).deviceMac).toBeUndefined();
   });
 
   it('refuses another system size, or none reported', async () => {
@@ -93,10 +104,13 @@ describe.skipIf(!haveTools)('image to partitions, judged by e2fsck', () => {
 
     const out = { system: [] as Uint8Array<ArrayBuffer>[], userdata: [] as Uint8Array<ArrayBuffer>[] };
     const steps = new Set<string>();
+    const logs: string[] = [];
     const userdataBytes = 40 * 1024 * 1024;
-    await buildImages(loaded, { apk: fakeMirrorApk(), adbKey: KEY, userdataBytes, time: T },
-      { system: (b) => { out.system.push(b.slice()); }, userdata: (b) => { out.userdata.push(b.slice()); } }, (s) => steps.add(s));
+    await buildImages(loaded, { apk: fakeMirrorApk({ libs: { 'arm64-v8a': { 'libxul.so': new Uint8Array(8) } } }), adbKey: KEY, userdataBytes, time: T },
+      { system: (b) => { out.system.push(b.slice()); }, userdata: (b) => { out.userdata.push(b.slice()); } }, (s) => steps.add(s), (l) => logs.push(l));
     expect([...steps]).toEqual(['patch', 'system', 'userdata']);
+    // patchSystem's own lines reach the caller's log (#557)
+    expect(logs).toContain('1 native library for arm64-v8a in /priv-app/Glassworks/lib/arm64');
 
     // through the real Fastboot class onto Qualcomm LK as far as flashBlob uses it, 16 MiB per download
     const fake = new FakeLk(16 << 20, [['system', loaded.disk.blocks * 4096], ['userdata', userdataBytes]]);
@@ -142,7 +156,7 @@ describe('first boot', () => {
     const p = new FirstBootMirror();
     const r = await firstBoot(p, { haUrl: 'http://homeassistant.local:8123', sleep: async () => {} });
     expect(r).toEqual({ app: { name: '0.5.0-legacy', code: 600 }, hidden: ['com.android.launcher3'], rotation: 3,
-      home: { result: 'set', focused: GLASSWORKS.activity, left: [] } });
+      home: { result: 'set', focused: GLASSWORKS.activity, left: [] }, updates: { state: 'on', privileged: true } });
     const at = (c: string) => p.cmds.findIndex((x) => x.startsWith(c));
     expect(at('pm grant')).toBeLessThan(at(`am start -n ${GLASSWORKS.activity} --es url 'http://homeassistant.local:8123'`));
     expect(at(`am start -n ${GLASSWORKS.activity} --es url`)).toBeLessThan(at('pm hide com.android.launcher3'));
@@ -162,7 +176,8 @@ describe('first boot', () => {
       `pm grant ${pkg} android.permission.WRITE_SECURE_SETTINGS`,
       `appops set ${pkg} SYSTEM_ALERT_WINDOW allow`,
       `pm grant ${pkg} android.permission.CHANGE_CONFIGURATION`,
-      `dpm set-active-admin ${pkg}/sh.edm.s1kiosk.AdminReceiver`,
+      `dpm set-active-admin ${pkg}/dev.glassworks.AdminReceiver`,
+      `dumpsys package ${pkg}`,
       'settings put system accelerometer_rotation 0',
       'settings put system user_rotation 3',
       'dumpsys window windows',

@@ -537,7 +537,7 @@ export function Stack() {
           >
             <span className="label">Example</span>
             <p className={styles.panelLead}>
-              S1 Unleashed is the Aqara S1 Plus frame, with the radio and
+              The Aqara S1 Plus is one frame, with the radio and
               wall-base panes.
             </p>
             <p className={styles.panelHint}>Hover a layer for details.</p>

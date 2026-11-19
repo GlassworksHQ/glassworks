@@ -1,0 +1,4 @@
+/* /android/tablet (issue 403, part 3): what android.css doesn't already draw. */
+.tab-fc { max-width: 360px; }
+.addr { font-size: 15px; overflow-wrap: anywhere; }
+.num li > .link { margin-left: 4px; }
