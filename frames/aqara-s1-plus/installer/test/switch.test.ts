@@ -10,7 +10,7 @@ import type { PanelShell } from '@glassworks/adb';
 import { IMPROV_SOCKET, PacketReader, PacketType, Rpc, frame, parseResult, strings, type ByteStream } from '../src/improv';
 import { KeyMismatchError, provision, unprovision } from '../src/provision';
 import {
-  SWITCH_SCRIPT, describeSwitch, isKeyMismatch, parseWifiList, parseWifiOwner, xmlUnescape, type SwitchPlan,
+  SWITCH_SCRIPT, describeSwitch, describeSwitched, isKeyMismatch, parseWifiList, parseWifiOwner, xmlUnescape, type SwitchPlan,
 } from '../src/switch';
 
 const REPO = join(__dirname, '../../../..');
@@ -156,11 +156,21 @@ describe('Wi-Fi owner and store parsing', () => {
 
   it('says plainly what is kept, with and without root', () => {
     const plan: SwitchPlan = { installedVersion: '0.1.0', debugBuild: true, root: true, wifi: { owner: 'kiosk', ssid: 'Home' } };
-    expect(describeSwitch(plan)).toMatch(/development build \(0\.1\.0\)[\s\S]*settings, sign-in and keys are kept[\s\S]*"Home"[\s\S]*stays online/);
+    const withRoot = describeSwitch(plan);
+    expect(withRoot).toMatch(/development build \(0\.1\.0\)[\s\S]*settings are kept[\s\S]*"Home"[\s\S]*stays online/);
+    // #584: uninstalling deletes the app's Keystore keys, so the sealed sign-in and API key never come across.
+    expect(withRoot).toMatch(/Home Assistant sign-in and encryption key are not: Android deletes the app's Keystore keys/);
+    expect(withRoot).toMatch(/Sign in again afterwards; Home Assistant may ask to confirm the panel's encryption key\./);
+    expect(withRoot).not.toMatch(/sign-in and keys are kept/);
     const noRoot = describeSwitch({ ...plan, root: false });
     expect(noRoot).toMatch(/starts fresh/);
     expect(noRoot).toMatch(/forgets "Home"[\s\S]*asks for its password again/);
     expect(describeSwitch({ ...plan, wifi: { owner: 'other', ssid: 'Home' } })).toMatch(/wasn't saved by Glassworks and stays/);
+  });
+
+  it('says at the end to sign in again, even when the settings came across (#584)', () => {
+    expect(describeSwitched({ dataKept: true, wifi: 'resent' })).toBe('Settings kept, sign in again · Wi-Fi kept');
+    expect(describeSwitched({ dataKept: false, wifi: 'lost' })).toBe('Settings reset · Wi-Fi needs its password again');
   });
 
   it('says Glassworks saved the network only when dumpsys says so', () => {

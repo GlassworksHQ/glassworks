@@ -436,9 +436,15 @@ plan without changing anything.
 
 | | adb has root | adb has no root (a normal install) |
 |---|---|---|
-| App settings, sign-in, pairing key | Kept: copied out before the removal, then copied back to the new install | **Reset**: sign in again, and set the panel's options again (dashboard, screen and voice settings, for example). Home Assistant may ask to add the panel again, and Music Assistant shows it as a new player |
+| App settings | Kept: copied out before the removal, then copied back to the new install | **Reset**: set the panel's options again (dashboard, screen and voice settings, for example). Home Assistant may ask to add the panel again, and Music Assistant shows it as a new player |
+| Home Assistant sign-in, encryption key and other sealed secrets | **Lost**: sign in again. Home Assistant may ask to confirm the panel's encryption key | **Reset**: sign in again |
 | Wi-Fi | Read from Android's Wi-Fi store into Kiln's or the CLI's memory, then sent to the new app over USB | Kiln: the Wi-Fi step asks for the password. CLI: asks in the terminal (Enter skips) |
 
+- **Why the sign-in goes even with root.** The app seals its secrets with a key in the Android
+  Keystore: the Home Assistant sign-in, the ESPHome encryption key, the camera stream password and the
+  Music Assistant (Sendspin) pairing. Android deletes an app's Keystore keys when it uninstalls the
+  app, so the copied data still holds those secrets, but nothing can open them. The new install
+  drops them on its first start and asks for them again.
 - **Root** here means that adb's shell can run `su`. That is only the case with a development boot
   image (`DEV_SU_HOURS`) or a Magisk policy for the adb shell, see
   [frames/aqara-s1-plus/research/root.md](../research/root.md#persistent-root-magisk--the-s1-kiosk-root-helper). A normal

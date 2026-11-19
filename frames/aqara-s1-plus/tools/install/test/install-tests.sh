@@ -232,7 +232,11 @@ out=$(inst --switch); rc=$?
 log=$(cat "$T/adb.log")
 check "exit 0" test $rc -eq 0
 check "explains it" has "$out" "development build (0.1.0)"
-check "says the data is kept" has "$out" "settings, sign-in and keys are kept"
+check "says the settings are kept" has "$out" "so the app's settings are kept"
+check "...but not the sealed sign-in and key (#584)" has "$out" "Its Home Assistant sign-in and"$'\n'"  encryption key are not: Android deletes the app's Keystore keys"
+check "...never that the sign-in is kept" hasnt "$out" "sign-in and keys are kept"
+check "Done: sign in again, may confirm the key" has "$out" "settings were kept, but not its Home Assistant sign-in or encryption key"
+check "...and says what to do" has "$out" "Sign in again; Home Assistant may ask to confirm the key."
 check "app data restored" has "$out" "app data restored"
 check "the Wi-Fi went to the new app" test "$(cat "$T/improv.got" 2>/dev/null)" = "Home & Garden"$'\n'"$PSK_SHA"
 check "the password is in no output" hasnt "$out" "fixture"
@@ -316,6 +320,8 @@ log=$(cat "$T/adb.log")
 check "exit 0" test $rc -eq 0
 check "prints the plan" has "$out" "(as root) /data/local/tmp/glassworks-switch.sh backup"
 check "prints the Wi-Fi re-send" has "$out" "Wi-Fi \"Home & Garden\" to the new app over Improv"
+check "the plan: settings kept, sign-in lost (#584)" has "$out" "so the app's settings are kept. Its Home Assistant sign-in and"
+check "...never that the sign-in is kept" hasnt "$out" "sign-in and keys are kept"
 check "changes nothing" test "$(cat "$T/installed") $(cat "$T/disabled") $(cat "$T/admin")" = "debug 0 1"
 for c in "install " "push " "pm uninstall" "pm disable-user" "glassworks-switch.sh" "forward "; do
   check "dry run: no '$c'" hasnt "$log" "$c"

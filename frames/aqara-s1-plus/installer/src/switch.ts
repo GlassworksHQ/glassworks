@@ -114,13 +114,16 @@ export interface SwitchPlan {
   installedVersion?: string;
   /** The installed app is debuggable (a debug build). */
   debugBuild: boolean;
-  /** adb's shell has root (`su`): the app's data is kept and the Wi-Fi password re-sent. */
+  /**
+   * adb's shell has root (`su`): the app's data is kept and the Wi-Fi password re-sent. Secrets sealed with the
+   * Android Keystore (the HA sign-in, the ESPHome API key) are not: uninstalling deletes the app's keys (#584).
+   */
   root: boolean;
   wifi: PanelWifi;
 }
 
 export interface SwitchOutcome {
-  /** The app's settings, sign-in and keys came across. */
+  /** The app's settings came across. Its Keystore-sealed secrets (the HA sign-in, the API key) never do (#584). */
   dataKept: boolean;
   /**
    * kept: the network was not Glassworks', so Android keeps it. resend: read as root, to be sent to
@@ -166,7 +169,7 @@ export function describeSwitch(plan: SwitchPlan): string {
   const lines = [what, 'Android can\'t update it in place: it has to be removed and installed again.', ''];
   const net = plan.wifi.ssid ? `"${plan.wifi.ssid}"` : 'its Wi-Fi network';
   if (plan.root) {
-    lines.push('This panel gives the installer root, so the app\'s settings, sign-in and keys are kept.');
+    lines.push('This panel gives the installer root, so the app\'s settings are kept. Its Home Assistant sign-in and encryption key are not: Android deletes the app\'s Keystore keys when it removes the old app, and those secrets are sealed with them. Sign in again afterwards; Home Assistant may ask to confirm the panel\'s encryption key.');
     if (wifiAtRisk(plan.wifi)) lines.push(`${plan.wifi.owner === 'kiosk' ? 'Android would forget' : 'Android may forget'} ${net} with the old app; the installer sends it to the new app, so the panel stays online.`);
   } else {
     lines.push('The installer has no root on this panel, so the app starts fresh: its settings, Home Assistant sign-in and pairing key are reset (Home Assistant may ask to set the panel up again).');
@@ -177,6 +180,14 @@ export function describeSwitch(plan: SwitchPlan): string {
   if (!wifiAtRisk(plan.wifi) && plan.wifi.owner === 'other') lines.push(`The panel's Wi-Fi ${net} wasn't saved by Glassworks and stays.`);
   lines.push('', 'If installing the new version fails, the old one is put back.');
   return lines.join('\n');
+}
+
+/**
+ * One line for the end of a switch (the installer's Done row). With root the settings come across, but the
+ * Keystore-sealed sign-in doesn't (#584), so it says to sign in again either way.
+ */
+export function describeSwitched(sw: { dataKept: boolean; wifi: 'kept' | 'resent' | 'lost' }): string {
+  return `${sw.dataKept ? 'Settings kept, sign in again' : 'Settings reset'} · ${sw.wifi === 'lost' ? 'Wi-Fi needs its password again' : 'Wi-Fi kept'}`;
 }
 
 export type SwitchLog = (detail: string) => void;
