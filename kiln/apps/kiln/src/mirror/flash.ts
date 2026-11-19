@@ -262,8 +262,9 @@ export class FlashSession {
     const linked = imageFromLink(this.recipes, search);
     if (!linked || this.state.screen === 'working' || this.state.screen === 'adb' || (this.state.link && this.state.picked === linked.id)) return;
     this.selected++; // a link that changes the install: a fastboot check from before it is ignored
+    const key = this.endKeepRead(); // and a key read from before it stops (PR 596 review)
     if (linked.id !== this.state.picked) void this.forget();
-    this.set({ screen: 'download', picked: linked.id, open: true, link: true, from: undefined,
+    this.set({ screen: 'download', picked: linked.id, open: true, link: true, from: undefined, key, connecting: false,
       files: linked.id === this.state.picked ? this.state.files : waiting(linked), fastboot: undefined, understood: false, error: undefined });
   }
 
@@ -342,18 +343,25 @@ export class FlashSession {
 
   /** Going on with fastboot by hand: a key read already stays, to give back after the flash; Done says what HA does. */
   skipKeep() {
+    this.set({ screen: 'fastboot', key: this.endKeepRead(), connecting: false, connectError: undefined });
+  }
+
+  /**
+   * Ends a keep-step read still running: its connection goes, and whatever it does next is dropped, so it can't restart
+   * the Mirror or store a key afterwards (PR 603 review). Gives the key state to go on with: a key it had read already
+   * stays, held for the hand-back; a read with nothing yet leaves none, never `reading`.
+   */
+  private endKeepRead(): KeyStep | undefined {
     let k = this.state.key;
-    // a read still running stops: its connection goes, and whatever it does next is dropped (PR 603 review)
     const { got, p } = this.read;
     this.read = { gen: this.read.gen + 1 };
     void p?.close?.().catch(() => {});
     void this.running?.close?.().catch(() => {});
     this.running = undefined;
     if (k?.state === 'reading') {
-      // a key it read already stays, to give back after the flash
       if (got) { this.apiKey = got.key; k = { state: 'held', fingerprint: got.fingerprint }; } else k = undefined;
     }
-    this.set({ screen: 'fastboot', key: k, connecting: false, connectError: undefined });
+    return k;
   }
 
   /** Whether the tab holds a key that would be lost if it closed now (the page warns before it leaves). */
