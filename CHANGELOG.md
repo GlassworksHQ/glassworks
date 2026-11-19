@@ -216,6 +216,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   is frozen and gets no security fixes, so it loads only your Home Assistant, and remote debugging is off.
   Remote debugging now stays off there for real: the adb extra that turns it on is ignored, and so is the
   setting if it was already on. Other devices don't show the chip.
+- **Pick an update channel: Stable or Beta.** The device page in the panel's settings and on the Manage page has an
+  *Update channel* row. Stable, the default, gets releases as before. Beta also gets betas, new versions before
+  they're stable, which may have bugs; Home Assistant's update card says when the update it offers is a beta. Going
+  back to Stable never installs an older version: the panel waits for a stable release newer than the one it runs.
 
 ### Changed
 - **A room's "lights off" no longer turns the panel's screen off.** The screen is still a light with the same
@@ -458,6 +462,8 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   it straight away. The *Thread join* sensor says how it went. Pasting the dataset still works.
 
 ### Fixed
+- **Kiln no longer waits for ever on a download that stopped.** If one of the installer's files stops arriving
+  for 30 seconds, Kiln stops with an error and *Try again*, instead of a progress bar that never moves.
 - **With Screen mode set to always, walking up no longer turns on a screen you turned off.** If you turn the screen
   off from Home Assistant, it stays off when someone comes close, whether the panel senses them with its own sensor
   or with the camera pane. *Presence* in Home Assistant still turns on. In the presence mode, walking up still wakes

@@ -172,8 +172,8 @@ gh release upload installer-files-3 frames/aqara-s1-plus/tools/root/out/s1kiosk_
 
 Versions are `MAJOR.MINOR.PATCH`, with minor and patch below 100. The versionCode is
 `major*10000 + minor*100 + patch`, so `1.2.3` is 10203. Every release must have a higher version
-than the last one. Pre-release tags (`v1.2.3-rc.1`) are refused by the workflow, and the app would
-ignore them anyway.
+than the last one. SemVer pre-release tags (`v1.2.3-rc.1`) are refused by the workflow, and the app would
+ignore them anyway: a beta is a plain version, published as a GitHub pre-release ([Betas](#betas)).
 
 ### ABIs
 
@@ -287,6 +287,52 @@ Vercel preview. Production builds come only from that deploy hook, called by `re
 `main` that changes an installer input (`kiln/`, `branding/`, or a repo file the installer stages), or
 by hand from the Actions tab.
 
+## Betas
+
+Every app has an **Update channel** on its Device page and on the Manage page (#605): Stable, the default, or Beta.
+Stable takes releases only. Beta also takes GitHub pre-releases of its own line, and offers whichever version is
+highest. A lower version is never offered, so a panel that goes back to Stable keeps its beta until a stable release
+is higher.
+
+**A beta is an ordinary higher version, published as a GitHub pre-release.** It is the same tag, the same versionCode
+and the same APK a stable would be. Promoting it un-marks the pre-release on that release, so nothing is rebuilt and
+panels on Beta that already run it see no update.
+
+### Cut a beta
+
+Write the version's CHANGELOG section as for any release (its notes are the update card). Then tag it with the line
+`Channel: beta` in the tag's message, on any line's tag:
+
+```sh
+git tag -a aqara-s1-plus-v0.6.0 -m "Glassworks 0.6.0" -m "Channel: beta"
+git tag -a generic-android-legacy-v0.3.0 -m "Glassworks for generic Android 0.3.0, legacy build" -m "Channel: beta"
+git push origin aqara-s1-plus-v0.6.0
+```
+
+The workflow reads the channel with `tools/release/tag-channel.sh`, builds and checks everything as usual, and
+publishes with `--prerelease` and `--latest=false`, " beta" after the title. `releases/latest` stays the S1 app's
+last stable, and the S1 workflow doesn't rebuild the web installer, which installs stable releases only. A tag
+without a `Channel:` line, or a lightweight tag, is a stable release, exactly as before. Any other `Channel:` value
+fails the run before the build.
+
+Versions keep going up across both channels: `tools/release/check-newer-than-released.sh` compares a new tag with the
+line's releases **and** pre-releases, so a stable can't go out below a published beta. After beta 0.6.0, the next
+stable is 0.6.0 promoted, or 0.6.1 and up.
+
+### Promote a beta
+
+```sh
+gh release edit aqara-s1-plus-v0.6.0 --repo GlassworksHQ/glassworks --prerelease=false --latest \
+  --title "Glassworks for the Aqara S1 Plus 0.6.0"
+gh workflow run installer-deploy.yml --repo GlassworksHQ/glassworks   # the installer takes the new stable
+gh release edit generic-android-legacy-v0.3.0 --repo GlassworksHQ/glassworks --prerelease=false --latest=false \
+  --title "Glassworks for generic Android, legacy build 0.3.0"
+```
+
+`--latest` for the S1 app only, as when it is published; every other line keeps `--latest=false`. Panels on Stable
+see it at their next check. A beta with a bug is fixed by a higher version, beta or stable: panels that run it are
+never offered anything lower.
+
 ## Glassworks for generic Android and its legacy build
 
 Two more apps release from this repo, each on its own tag and asset names, which are the ones its update check
@@ -310,7 +356,7 @@ that people running both apps would notice, a core change for example, gets a li
 the update card's text in Home Assistant, as for the S1 app.
 
 **Versions.** `MAJOR.MINOR.PATCH`, versionCode `major*10000 + minor*100 + patch`, as for the S1 app. The workflow
-refuses a version that isn't higher than the line's last release. Start at **0.2.0**: test builds are 0.1.0 and
+refuses a version that isn't higher than the line's last release or beta ([Betas](#betas)). Start at **0.2.0**: test builds are 0.1.0 and
 0.1.1, and a device on test build 0.1.1 is offered only a higher version (and `adb install -r` refuses a lower
 versionCode).
 
@@ -373,8 +419,8 @@ gh run list --repo GlassworksHQ/glassworks --workflow generic-release.yml --limi
 
 Each tag runs the workflow once. Its `build` job (environment `release-signing`, read-only token):
 
-1. reads the app and version from the tag, and refuses a version that isn't higher than the line's last release
-   (`tools/release/check-newer-than-released.sh`);
+1. reads the app and version from the tag, and refuses a version that isn't higher than the line's last release or
+   beta (`tools/release/check-newer-than-released.sh`), and the channel from the tag's message ([Betas](#betas));
 2. takes the notes from the CHANGELOG, before the slow build;
 3. builds `:generic-android:assembleRelease` (or `assembleLegacy`) with `-PgenericVersion` once per ABI of the
    frame, with `GENERIC_REQUIRE_RELEASE_SIGNING=true`;

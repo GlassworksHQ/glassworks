@@ -665,7 +665,13 @@ usual `--ez camera_enabled true` on the main activity, for example
     (`UnknownHostException`, no route, timeouts; not TLS or HTTP errors) is retried 10 s after Wi-Fi
     is back (available or validated; callbacks debounced, at most one such retry per 30 s) instead of
     after its backoff.
-  - Ignored: drafts, pre-releases (GitHub's flag or a `-rc` tag), and releases without both
+  - **Update channel** (#605): the Device page's *Update channel* row, on the panel and on the Manage page.
+    Stable, the default, skips GitHub pre-releases without reporting them. Beta takes them too, and offers the
+    highest version of both. A lower version is never offered: back on Stable after a beta, `latest_version`
+    stays the installed version until a stable release is higher. When the offer is a beta, `Beta: …` goes on
+    top of the summary. It is not an entity: someone picks it once, on the panel or the Manage page, and no
+    automation would change it ([principles](principles.md#entities)).
+  - Ignored: drafts, pre-releases on Stable (GitHub's flag), `-rc` tags on both channels, and releases without both
     the APK for one of the device's ABIs and its `.sha256`. The S1 (`armeabi-v7a`) takes
     `s1-kiosk-<version>.apk`; an `arm64-v8a` device takes `s1-kiosk-arm64-v8a-<version>.apk`
     ([releasing.md](releasing.md#abis)). Assets must download from github.com over HTTPS.

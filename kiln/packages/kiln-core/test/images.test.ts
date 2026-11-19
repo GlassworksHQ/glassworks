@@ -74,6 +74,12 @@ describe('a recipe', () => {
     expect(validateImage(late, FRAME)).toContain('step 3: "download" must come before Kiln connects to the device: every file is checked first');
   });
 
+  it('runs patch after fastboot, where Kiln runs it (it uses what fastboot reports): before it would be skipped', () => {
+    const early = glassworks();
+    const st = early.steps;
+    expect(validateImage({ ...early, steps: [st[0]!, st[2]!, st[1]!, ...st.slice(3)] }, FRAME)).toContain('step 2: patch comes after fastboot and before restart');
+  });
+
   it('keeps a community image as published: no patch, no first start with Kiln\'s key', () => {
     const r = community({ steps: steps({ do: 'download', file: 'system.img' }, { do: 'download', file: 'userdata.img' }, { do: 'patch', file: 'system.img', makes: ['system'] },
       ...community().steps.slice(2), { do: 'first-start' }) });

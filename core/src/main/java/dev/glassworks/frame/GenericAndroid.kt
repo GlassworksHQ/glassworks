@@ -21,6 +21,7 @@ import dev.glassworks.screen.PresenceSource
 import dev.glassworks.GlassworksApp
 import dev.glassworks.update.FrameUpdateModel
 import dev.glassworks.update.SilentUpdates
+import dev.glassworks.update.UpdateChannelRow
 import java.util.concurrent.ScheduledExecutorService
 
 /**
@@ -78,10 +79,11 @@ class GenericAndroid(
 
     override fun panes(ctx: PaneContext, device: ScheduledExecutorService) = emptyList<Pane>()
 
-    /** The Device page, named after the device: silent updates, device owner, model, the frame version on a device frame, and Android. */
+    /** The Device page, named after the device: silent updates, the update channel (#605), device owner, model, the frame version on a device frame, and Android. */
     override fun deviceSection(context: Context, running: (String) -> Pane?): SettingsSection =
         SettingsSection(DEVICE, friendlyName().ifBlank { "Device" }, listOfNotNull(
             silentUpdatesItem { SilentUpdates.read(context, SilentUpdates.Root.NONE) },
+            UpdateChannelRow.item(context),
             SettingsItem.Info({ OWNER_TITLE }, { if (SilentUpdates.deviceOwner(context)) "Yes: the app can reboot the device and keep its screen" else "No" }),
             SettingsItem.Info({ MODEL_TITLE }, { "${hardware.manufacturer} ${hardware.model}".trim() }),
             frameRelease?.let { frameVersionItem(context, it) },

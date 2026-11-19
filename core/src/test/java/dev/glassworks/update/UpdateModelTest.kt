@@ -50,10 +50,14 @@ class UpdateModelTest {
         assertEquals("up to date (1.3.0)", m.statusText())
         assertNull("nothing to install", m.beginInstall(0))
 
-        // A local build ahead of the latest release: HA shows "up to date" (latest < installed).
+        // A build ahead of the latest release (a test build, or a beta then Stable, #605): HA shows "up to date",
+        // with the installed version as the latest, never a lower one, and no link to the lower release.
         val ahead = UpdateModel("2.0.0").apply { onChecked(offer("1.3.0")) }
         assertFalse(ahead.updateAvailable)
-        assertEquals("1.3.0", ahead.view().latestVersion)
+        assertEquals("2.0.0", ahead.view().latestVersion)
+        assertEquals("", ahead.view().releaseUrl)
+        assertEquals("up to date (2.0.0)", ahead.statusText())
+        assertNull(ahead.beginInstall(0))
 
         // No usable release published: latest = installed.
         val none = UpdateModel("0.1.0").apply { onChecked(null) }
@@ -174,5 +178,40 @@ class UpdateModelTest {
         m.onInfo("Last update: 10200 -> 10300")
         m.onChecked(offer("1.3.0"))
         assertEquals("up to date (1.3.0); Last update: 10200 -> 10300", m.statusText())
+    }
+
+    // ---------------------------------------------------------------- update channel (#605)
+
+    @Test fun aBetaOfferSaysSoOnTheCard() {
+        val m = UpdateModel("1.3.0")
+        m.onChecked(offer("1.4.0").copy(prerelease = true))
+        val v = m.view()
+        assertEquals("1.4.0", v.latestVersion)
+        assertTrue(v.releaseSummary, v.releaseSummary.startsWith(UpdateModel.BETA_NOTE + "\n\n* new things"))
+        assertEquals("1.4.0 beta available", m.statusText())
+    }
+
+    @Test fun theBetaNoteAndTheInstallNoteBothShow() {
+        val m = UpdateModel("1.3.0").apply { installNote = UpdateManager.CONFIRM_NOTE }
+        m.onChecked(offer("1.4.0").copy(prerelease = true))
+        assertTrue(m.view().releaseSummary.startsWith(UpdateModel.BETA_NOTE + "\n" + UpdateManager.CONFIRM_NOTE + "\n\n"))
+    }
+
+    @Test fun aStableOfferHasNoBetaNote() {
+        val m = UpdateModel("1.3.0").apply { onChecked(offer("1.4.0")) }
+        assertFalse(m.view().releaseSummary.contains("Beta"))
+    }
+
+    @Test fun backOnStableAfterABetaNothingLowerIsOffered() {
+        // On beta 1.4.0; Stable's newest is 1.3.0. Not an update, and HA keeps 1.4.0 as the latest.
+        val m = UpdateModel("1.4.0").apply { onChecked(offer("1.3.0")) }
+        assertFalse(m.updateAvailable)
+        assertEquals("1.4.0", m.view().latestVersion)
+        assertEquals("", m.view().releaseSummary)
+        assertNull(m.beginInstall(0))
+        // A stable 1.5.0 later is offered.
+        m.onChecked(offer("1.5.0"))
+        assertTrue(m.updateAvailable)
+        assertEquals("1.5.0", m.view().latestVersion)
     }
 }

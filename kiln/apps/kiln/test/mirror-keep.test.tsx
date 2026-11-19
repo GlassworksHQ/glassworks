@@ -326,4 +326,31 @@ describe('the keep step, on the real session (#580)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
     expect(read).toHaveBeenCalledOnce();
   });
+
+  it('the way back to a fresh install clears an earlier key outcome, so the keep step and Done start over (#579)', async () => {
+    const d = await keepDemo('flash-done-kept', true);
+    expect(d.flash.state.key?.state).toBe('handed');
+    d.flash.wayBack('glass-panes');
+    expect(d.flash.state.key).toBeUndefined();
+    d.flash.wayBack('glassworks');
+    expect(d.flash.state.key).toBeUndefined();
+  });
+
+  it('an image link while the key is being read stops the read: no restart, no key stored, nothing left reading (#596)', async () => {
+    let answer!: (p: PanelShell) => void;
+    const before = () => new Promise<PanelShell>((r) => { answer = r; });
+    const { f } = await ready({ before, flashed: true });
+    f.toFastboot();
+    expect(f.state.screen).toBe('keep');
+    const reading = f.readKey(); // the browser's list is open: the read waits for the Mirror
+    expect(f.state.key).toEqual({ state: 'reading', at: 0 });
+    f.followLink('?image=glass-panes');
+    const r = running({ key: DEMO_KEY });
+    answer(r.m);
+    await reading;
+    expect(f.state).toMatchObject({ screen: 'download', picked: 'glass-panes', key: undefined, connecting: false });
+    expect(r.reboots).toEqual([]); // no restart into fastboot
+    expect(r.closed).toHaveLength(1); // the connection it got is let go
+    expect(f.holdsKey()).toBe(false);
+  });
 });

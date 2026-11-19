@@ -8,6 +8,42 @@ import {
   GLASS_PANES, WrongImage, buildImages, checkDownload, loadSystem, resumableBody, type Loaded, type PrepareStep,
 } from '@glassworks/lululemon-mirror-installer';
 
+/**
+ * Each page's own storage folder, so another Kiln tab can't change a file between its check and its
+ * write. The worker holds a Web Lock named after it for as long as it lives.
+ */
+export const DIR_PREFIX = 'kiln-mirror';
+export const sessionDir = (id: string) => `${DIR_PREFIX}-${id}`;
+/**
+ * The folders to delete when a worker starts: Kiln's (the old shared one, or a page's) whose lock no
+ * page holds or waits for, so a closed tab's downloads don't stay behind. Never its own.
+ */
+export function staleDirs(names: readonly string[], locked: readonly string[], own: string): string[] {
+  return names.filter((n) => (n === DIR_PREFIX || n.startsWith(`${DIR_PREFIX}-`)) && n !== own && !locked.includes(n));
+}
+
+/** The part of the Web Locks API the sweep uses (navigator.locks in a worker; a fake in the tests). */
+export interface Locks {
+  request(name: string, cb: () => Promise<void>): Promise<void>;
+  request(name: string, o: { ifAvailable: true }, cb: (lock: unknown) => Promise<void>): Promise<void>;
+}
+
+/**
+ * Claims this page's folder, then sweeps: waits until it holds its own folder's lock (it creates no
+ * file before), then takes each other Kiln folder's lock if it is free, and deletes that folder only
+ * while holding it. A folder whose page is alive (its lock held) is never deleted, however the starts
+ * of two pages interleave. Resolves once the sweep is done; the own lock stays held until the worker ends.
+ */
+export async function claimAndSweep(locks: Locks, own: string, list: () => Promise<string[]>, remove: (name: string) => Promise<void>): Promise<void> {
+  // a lock the browser refuses (SecurityError, no lock manager) rejects here: the caller makes no file without it
+  await new Promise<void>((held, refused) => { locks.request(own, () => { held(); return new Promise<void>(() => {}); }).catch(refused); });
+  let names: string[];
+  try { names = await list(); } catch { return; } // a sweep that fails leaves storage as it was
+  for (const n of staleDirs(names, [], own)) {
+    await locks.request(n, { ifAvailable: true }, async (lock) => { if (lock) await remove(n).catch(() => {}); }).catch(() => {});
+  }
+}
+
 /** Where download() keeps a file, apart from the images Kiln builds. */
 export const downloaded = (name: string) => `download-${name}`;
 
@@ -25,32 +61,34 @@ export class Cancelled extends Error {}
 
 /**
  * `source`'s stream, ending in Cancelled as soon as `signal` aborts, even while a read is waiting on
- * the network: the pending read is dropped and the source cancelled.
+ * the network. Each transfer has one abort listener, removed when it ends, fails or is cancelled: on
+ * abort it cancels the source, which settles a read in flight, and the stream ends in Cancelled.
  */
 function abortable(source: { size: number; stream(): ReadableStream<Uint8Array> }, signal: AbortSignal) {
-  const stopped = new Promise<never>((_, reject) => {
-    const stop = () => reject(new Cancelled('stopped: another image was picked'));
-    if (signal.aborted) stop(); else signal.addEventListener('abort', stop, { once: true });
-  });
-  stopped.catch(() => {});
+  const stopped = () => new Cancelled('stopped: another image was picked');
   return {
     size: source.size,
     stream(): ReadableStream<Uint8Array> {
       // cancelled before it began (e.g. while its file was opening): don't open the source, which would start fetching
-      if (signal.aborted) return new ReadableStream<Uint8Array>({ start(c) { c.error(new Cancelled('stopped: another image was picked')); } });
+      if (signal.aborted) return new ReadableStream<Uint8Array>({ start(c) { c.error(stopped()); } });
       const r = source.stream().getReader();
+      const onAbort = () => { void r.cancel(stopped()).catch(() => {}); };
+      signal.addEventListener('abort', onAbort, { once: true });
+      const release = () => signal.removeEventListener('abort', onAbort);
       return new ReadableStream<Uint8Array>({
         async pull(c) {
           try {
-            if (signal.aborted) throw new Cancelled('stopped: another image was picked');
-            const { done, value } = await Promise.race([r.read(), stopped]);
-            if (done) c.close(); else c.enqueue(value);
+            if (signal.aborted) throw stopped();
+            const { done, value } = await r.read();
+            if (signal.aborted) throw stopped(); // the read settled because the source was cancelled
+            if (done) { release(); c.close(); } else c.enqueue(value);
           } catch (e) {
-            if (e instanceof Cancelled) void r.cancel().catch(() => {});
+            release();
+            void r.cancel(e).catch(() => {});
             c.error(e);
           }
         },
-        cancel() { void r.cancel(); },
+        cancel(reason) { release(); void r.cancel(reason).catch(() => {}); },
       });
     },
   };
@@ -68,7 +106,7 @@ export function imageJobs(open: (name: string) => Promise<JobHandle>, removeAll:
   const fresh = async (name: string) => {
     handles.get(name)?.close();
     const h = await open(name);
-    h.truncate(0);
+    try { h.truncate(0); } catch (e) { h.close(); throw e; } // a handle that failed to empty isn't kept open
     handles.set(name, h);
     return h;
   };
@@ -96,8 +134,9 @@ export function imageJobs(open: (name: string) => Promise<JobHandle>, removeAll:
       const h = await fresh(name);
       const sha = new Sha256();
       let at = 0;
+      let r: ReadableStreamDefaultReader<Uint8Array> | undefined;
       try {
-        const r = abortable(resumableBody(url, file.size, { fetch: withSignal(signal, f) }), signal).stream().getReader();
+        r = abortable(resumableBody(url, file.size, { fetch: withSignal(signal, f) }), signal).stream().getReader();
         for (;;) {
           const { done, value } = await r.read();
           if (done) break;
@@ -111,6 +150,8 @@ export function imageJobs(open: (name: string) => Promise<JobHandle>, removeAll:
         const got = hex(sha.digest());
         if (at !== file.size || got !== file.sha256) throw new WrongImage(`its SHA-256 is ${got}, not the ${file.sha256} the release publishes`);
       } catch (e) {
+        // this download only: its own reader and request stop, the shared signal and other jobs don't
+        await r?.cancel(e).catch(() => {});
         h.truncate(0);
         throw e;
       } finally {

@@ -27,8 +27,9 @@ export type ImageStep =
   /** Downloads one file through Refract and checks its size and SHA-256. Writes nothing to the device. */
   | { do: 'download'; file: string }
   /**
-   * Kiln's own change to a downloaded image (on the Mirror: Glassworks added, a fresh userdata with this
-   * browser's key, sized from what fastboot reports). Only Glassworks. Writes nothing to the device.
+   * Kiln's own change to a downloaded image: the frame's patch, which adds Glassworks (and, for a frame
+   * that needs one, a fresh userdata with this browser's key, sized from what fastboot reports). Only
+   * Glassworks. Writes nothing to the device.
    */
   | { do: 'patch'; file: string; makes: readonly string[] }
   /** The person puts the device in fastboot and Kiln connects. Read-only. */
@@ -143,6 +144,8 @@ export function validateImage(r: ImageRecipe, frame: FrameAccess): string[] {
       case 'patch':
         if (r.community) bad.push(`${at(i)}: a community image goes on as its project publishes it, with no patch`);
         if (!checked.has(s.file)) bad.push(`${at(i)}: patch needs ${s.file} downloaded first`);
+        // Kiln runs it after its checks and the warning (it uses what fastboot reports), so before fastboot it would be skipped
+        if (!fastboot || restarted) bad.push(`${at(i)}: patch comes after fastboot and before restart`);
         if (!Array.isArray(s.makes) || !s.makes.length) bad.push(`${at(i)}: patch must say what it makes`);
         for (const m of s.makes ?? []) made.add(m);
         break;

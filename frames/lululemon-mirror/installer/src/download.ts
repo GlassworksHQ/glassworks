@@ -47,6 +47,8 @@ export function resumableBody(url: string, size: number, o: ResumeOptions = {}):
     stream() {
       let got = 0, tries = 0;
       let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+      /** cancelled by its reader: a read it cut short isn't a dropped connection, and nothing is fetched again */
+      let cancelled = false;
       const open = async () => {
         let r: Response;
         try {
@@ -74,6 +76,7 @@ export function resumableBody(url: string, size: number, o: ResumeOptions = {}):
       return new ReadableStream<Uint8Array>({
         async pull(c) {
           for (;;) {
+            if (cancelled) return;
             try {
               if (!reader) await open();
               const { done, value } = await reader!.read();
@@ -87,12 +90,13 @@ export function resumableBody(url: string, size: number, o: ResumeOptions = {}):
               return;
             } catch (e) {
               reader = undefined;
+              if (cancelled) return;
               if (e instanceof Refused || ++tries > retries) { c.error(e instanceof ProxyError ? e : new ProxyError((e as Error).message)); return; }
               await sleep(e instanceof Busy && e.ms ? e.ms : 1000 * tries);
             }
           }
         },
-        cancel() { void reader?.cancel(); },
+        cancel() { cancelled = true; void reader?.cancel(); },
       });
     },
   };
