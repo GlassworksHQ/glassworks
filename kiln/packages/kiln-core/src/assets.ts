@@ -1,6 +1,62 @@
 // Pinned blobs (kiln/scripts/stage-assets.mjs writes <base>manifest.json). Every blob is checked
-// against its SHA-256 before use; a mismatch is refused. `A` is the recipe's asset names.
+// against its SHA-256 before use; a mismatch is refused. A download that stops sending ends with an
+// error after `stallMs` without a byte, so the step can be tried again (#621). `A` is the recipe's asset names.
 import { toHex } from './backup';
+
+/** How long a download may go without a byte before it fails: the stall watchdog's default. */
+export const STALL_MS = 30_000;
+
+export interface AssetsOptions {
+  /** No bytes (or no answer) for this long ends the download with an error; default STALL_MS. */
+  stallMs?: number;
+}
+
+/**
+ * A stall watchdog for one download: `arm()` starts (or restarts) the clock, and `race(p)` fails `p` once
+ * `ms` pass with no `arm()`. When it fires it also aborts `signal`, so fetch stops the request.
+ */
+function watchdog(ms: number, what: string) {
+  const ac = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let fire!: (e: Error) => void;
+  const fired = new Promise<never>((_, reject) => { fire = reject; });
+  fired.catch(() => {});
+  return {
+    signal: ac.signal,
+    arm() {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        const e = new Error(`could not download ${what}: nothing arrived for ${Math.round(ms / 1000)} s, so Kiln stopped waiting`);
+        ac.abort(e);
+        fire(e);
+      }, ms);
+    },
+    race: <T>(p: Promise<T>) => Promise.race([p, fired]),
+    stop() { clearTimeout(timer); },
+  };
+}
+
+/** A response's whole body, re-arming `w` on every chunk: what counts is the time since the last byte. */
+async function readAll(r: Response, w: ReturnType<typeof watchdog>): Promise<Uint8Array> {
+  if (!r.body) return new Uint8Array(await w.race(r.arrayBuffer()));
+  const reader = r.body.getReader();
+  const chunks: Uint8Array[] = [];
+  try {
+    for (;;) {
+      const { done, value } = await w.race(reader.read());
+      if (done) break;
+      if (value.length) w.arm();
+      chunks.push(value);
+    }
+  } catch (e) {
+    void reader.cancel().catch(() => {});
+    throw e;
+  }
+  const out = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
+  let at = 0;
+  for (const c of chunks) { out.set(c, at); at += c.length; }
+  return out;
+}
 
 export interface AssetEntry<A extends string = string> { name: A; path: string; sha256: string; size: number; license: string; source: string }
 export interface Manifest<A extends string = string> { generated: string; assets: AssetEntry<A>[] }
@@ -10,13 +66,23 @@ export class Assets<A extends string> {
   private cache = new Map<A, Promise<Uint8Array>>();
 
   /** `base`: where manifest.json is, ending in a slash (e.g. `/assets/`). */
-  constructor(private readonly base: string, private readonly f: typeof fetch = fetch.bind(globalThis)) {}
+  constructor(private readonly base: string, private readonly f: typeof fetch = fetch.bind(globalThis), private readonly o: AssetsOptions = {}) {}
 
+  private get stallMs() { return this.o.stallMs ?? STALL_MS; }
+
+  /** The manifest, under the same stall watchdog as the blobs. A failed read isn't kept, so a retry reads it again. */
   getManifest(): Promise<Manifest<A>> {
-    this.manifest ??= this.f(`${this.base}manifest.json`, { cache: 'no-cache' }).then(async (r) => {
-      if (!r.ok) throw new Error(`installer files are missing (manifest.json: HTTP ${r.status})`);
-      return (await r.json()) as Manifest<A>;
-    });
+    if (!this.manifest) {
+      const w = watchdog(this.stallMs, 'manifest.json');
+      w.arm();
+      const p = (async () => {
+        const r = await w.race(this.f(`${this.base}manifest.json`, { cache: 'no-cache', signal: w.signal }));
+        if (!r.ok) throw new Error(`installer files are missing (manifest.json: HTTP ${r.status})`);
+        return JSON.parse(new TextDecoder().decode(await readAll(r, w))) as Manifest<A>;
+      })().finally(() => w.stop());
+      p.catch(() => { if (this.manifest === p) this.manifest = undefined; });
+      this.manifest = p;
+    }
     return this.manifest;
   }
 
@@ -39,18 +105,30 @@ export class Assets<A extends string> {
     const entry = (await this.getManifest()).assets.find((a) => a.name === name);
     if (!entry) throw new Error(`installer file ${name} is not in the manifest`);
     const url = /^(\/|https?:)/.test(entry.path) ? entry.path : `${this.base}${entry.path}`;
-    const r = await this.f(url);
-    if (!r.ok || !r.body) throw new Error(`could not download ${name} (HTTP ${r.status})`);
+    // re-armed by every chunk: a download that stops sending fails, and its request is aborted
+    const w = watchdog(this.stallMs, name);
     const out = new Uint8Array(entry.size);
     let got = 0;
-    const reader = r.body.getReader();
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      if (got + value.length > out.length) throw new Error(`${name} is larger than the manifest says`);
-      out.set(value, got);
-      got += value.length;
-      onProgress?.(got, entry.size);
+    let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    try {
+      w.arm();
+      const r = await w.race(this.f(url, { signal: w.signal }));
+      if (!r.ok || !r.body) throw new Error(`could not download ${name} (HTTP ${r.status})`);
+      reader = r.body.getReader();
+      for (;;) {
+        const { done, value } = await w.race(reader.read());
+        if (done) break;
+        w.arm();
+        if (got + value.length > out.length) throw new Error(`${name} is larger than the manifest says`);
+        out.set(value, got);
+        got += value.length;
+        onProgress?.(got, entry.size);
+      }
+    } catch (e) {
+      void reader?.cancel().catch(() => {});
+      throw e;
+    } finally {
+      w.stop();
     }
     if (got !== entry.size) throw new Error(`${name}: got ${got} bytes, expected ${entry.size}`);
     const sha = toHex(await crypto.subtle.digest('SHA-256', out));
