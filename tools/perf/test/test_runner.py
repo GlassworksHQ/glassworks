@@ -602,6 +602,45 @@ class FakeSplitsLikeThePage(unittest.TestCase):
             self.assertEqual(re.findall(r"PROTOCOL\s*=\s*\d|[\"']protocol[\"']\s*:\s*\d", f.read()), [])
 
 
+class SurfaceFlingerNames(unittest.TestCase):
+    """The Pixel Tablet's Android 17 run (2026-11-19): SurfaceFlinger listed every layer as
+    `RequestedLayerState{…}`, the SurfaceView's after the view's hash; the runner named none, and open, restart and live updates were n/a on
+    every view. The runner reads that listing, and says so when it can't read one."""
+
+    def build(self, tmp):
+        with open(os.path.join(tmp, "device.json"), "w") as f:
+            json.dump({"frame": "f", "mem_total_kb": 1, "display": {"density": "240"}, "app": {"package": "sh.edm.s1kiosk"}}, f)
+        return report.build(tmp)
+
+    def test_android_15_and_later_layers_give_frames(self):
+        tmp = tempfile.mkdtemp()
+        p, c = refstart(tmp, FAKE_SF_WRAPPED="1")
+        self.assertEqual(p.returncode, 0, p.stderr[-1500:])
+        self.assertNotIn("SurfaceView this runner can read", p.stderr)
+        self.assertTrue(c["presents_mono_ms"])
+        with open(os.path.join(tmp, "state", "commands.log")) as f:
+            latency = {c for c in f.read().splitlines() if "--latency" in c}
+        # By the whole name, the view's hash and #<id> included (the fake, as API 37, answers no other); the
+        # BLAST child (the frames) and its parent (none) are both asked, and the newest frame wins.
+        self.assertTrue(any("--latency 'f5fea55 SurfaceView[sh.edm.s1kiosk/sh.edm.s1kiosk.MainActivity](BLAST)#163'" in c
+                            for c in latency), latency)
+        run = self.build(tmp)["graded"]["reference"]["per_run"][0]
+        self.assertIsNone(run["start_error"])
+        self.assertGreater(run["start_ms"], 0)
+        for t, r in run["tiers"].items():
+            self.assertIsNotNone(r.get("load_ms"), (t, r.get("load_error")))
+            self.assertIsNotNone(r.get("latency"), (t, r.get("updates_error")))
+            self.assertIs(r["sf_valid"], True, t)               # scrolling from frames on screen, not rAF only
+
+    def test_a_listing_it_cant_read_is_said_once(self):
+        tmp = tempfile.mkdtemp()
+        p, c = refstart(tmp, FAKE_SF_UNNAMED="1")
+        self.assertEqual(p.returncode, 0, p.stderr[-1500:])
+        self.assertEqual(p.stderr.count("SurfaceView this runner can read"), 1, p.stderr[-1500:])
+        self.assertIn("SomeNewLayer<sh.edm.s1kiosk/", p.stderr)
+        self.assertEqual(c["presents_mono_ms"], [])
+
+
 class LongLines(unittest.TestCase):
     """The S1 keeps 1023 bytes of a page's console line (smoke7, 2026-11-12). Pages split longer
     lines into parts (stats.js consoleLines) and the runner joins them (perflib.PageLines)."""

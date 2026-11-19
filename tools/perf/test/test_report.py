@@ -137,6 +137,46 @@ class SurfaceViewLayers(unittest.TestCase):
         # Plain SurfaceView with another app on screen: not ours.
         self.assertEqual(P.surfaceview_layers("SurfaceView\ncom.android.launcher3/com.android.launcher3.Launcher\n", pkg), [])
 
+    def test_android_15_and_later_wrap_each_layer(self):
+        # The lines API 35 and 37 emulators listed for the generic app with GeckoView on screen (2026-11-19).
+        # Before the fix the runner named no layer and never asked `--latency`, so every window had no frames
+        # (the Pixel Tablet's Android 17 run). The names come back whole: `--latency` takes nothing else.
+        pkg = "dev.glassworks.generic_android"
+        act = f"{pkg}/dev.glassworks.MainActivity"
+        api35 = (
+            "RequestedLayerState{Display 0 name=\"Built-in Screen\"#41}\n"
+            f"RequestedLayerState{{Background for SurfaceView[{act}]#170 parentId=168 relativeParentId=164 z=-2147483648}}\n"
+            f"RequestedLayerState{{SurfaceView[{act}](BLAST)#169 parentId=168}}\n"
+            f"RequestedLayerState{{178b495 ActivityRecordInputSink {act}#125 parentId=121 !handle z=-2147483648}}\n"
+            f"RequestedLayerState{{ActivityRecord{{4f16477 u0 {act}#121}}\n"
+            f"RequestedLayerState{{SurfaceView[{act}]#168 parentId=167 relativeParentId=164 z=-2}}\n"
+            "RequestedLayerState{SurfaceView[com.other/.Main](BLAST)#9 parentId=8}\n")
+        self.assertEqual(P.surfaceview_layers(api35, pkg), [f"SurfaceView[{act}](BLAST)#169", f"SurfaceView[{act}]#168"])
+        api37 = (
+            f"RequestedLayerState{{Background for f5fea55 SurfaceView[{act}]#164 parentId=162 relativeParentId=158 z=-2147483648}}\n"
+            f"RequestedLayerState{{f5fea55 SurfaceView[{act}](BLAST)#163 parentId=162}}\n"
+            f"RequestedLayerState{{ActivityRecord{{104391098 u0 {act} t10}}#147 parentId=146}}\n"
+            f"RequestedLayerState{{23cb354 {act}#155 parentId=147}}\n"
+            f"RequestedLayerState{{f5fea55 SurfaceView[{act}]#162 parentId=161 relativeParentId=158 z=-2}}\n"
+            "RequestedLayerState{9a6f5b2 SurfaceView[com.other/.Main](BLAST)#9 parentId=8}\n")
+        self.assertEqual(P.surfaceview_layers(api37, pkg), [f"f5fea55 SurfaceView[{act}](BLAST)#163", f"f5fea55 SurfaceView[{act}]#162"])
+        self.assertEqual(P.layer_number(f"f5fea55 SurfaceView[{act}](BLAST)#163"), 163)
+
+    def test_layer_names(self):
+        self.assertEqual(P.sf_layer_name("RequestedLayerState{SurfaceView[a/b](BLAST)#169 parentId=168}"), "SurfaceView[a/b](BLAST)#169")
+        self.assertEqual(P.sf_layer_name("RequestedLayerState{Task=187#582}"), "Task=187#582")
+        self.assertEqual(P.sf_layer_name("RequestedLayerState{ImeContainer#10 parentId=109 relativeParentId=124 z=1}"), "ImeContainer#10")
+        self.assertEqual(P.sf_layer_name("RequestedLayerState{x#5 parentId=4 !handle z=-2147483648 layerStack=1}"), "x#5")
+        # A name with a space, braces or a # of its own keeps them; only the fields after it go.
+        self.assertEqual(P.sf_layer_name("RequestedLayerState{ActivityRecord{1 u0 p/a t10}#147 parentId=146}"),
+                         "ActivityRecord{1 u0 p/a t10}#147")
+        self.assertEqual(P.sf_layer_name("RequestedLayerState{Leaf:0:1#5 parentId=4}"), "Leaf:0:1#5")
+        # A line with no #<id> (as the root copied one off the tablet): the name is what comes before the fields.
+        self.assertEqual(P.sf_layer_name("RequestedLayerState{abc1d8b SurfaceView[p/a](BLAST) parentId=826}"),
+                         "abc1d8b SurfaceView[p/a](BLAST)")
+        # Older Androids print the bare name.
+        self.assertEqual(P.sf_layer_name("  SurfaceView - p/p.A#0 "), "SurfaceView - p/p.A#0")
+
 
 class ScreenSize(unittest.TestCase):
     def test_the_size_taps_use_is_the_turned_one(self):

@@ -51,6 +51,7 @@ class Device:
         self.activity = activity          # "" until resolve_activity(), on the first use of `component`
         self._clock = None
         self.nudges = []                  # wake keys sent and maybe not yet through adb (nudge, nudged)
+        self.sf_warned = False            # said once that SurfaceFlinger listed no layer of the app's (sf)
 
     def sh(self, cmd, timeout=60):
         r = subprocess.run(self.adb + ["shell", cmd], capture_output=True, text=True, timeout=timeout)
@@ -151,7 +152,17 @@ class Device:
     def sf(self):
         """(period_ms, present times ns) of the app's SurfaceView, the layer GeckoView draws into.
         After a restart an old layer can still be listed; the live one has the newest frame."""
-        names = P.surfaceview_layers(self.sh("dumpsys SurfaceFlinger --list"), self.package)
+        listing = self.sh("dumpsys SurfaceFlinger --list")
+        names = P.surfaceview_layers(listing, self.package)
+        if not names and not self.sf_warned and f"{self.package}/" in listing:
+            # The app has a window but no SurfaceView this runner can name: every window falls back to
+            # rAF and the graded tasks that need frames on screen are n/a. Say it where the run is
+            # watched, with the app's lines (a new Android's naming shows up here first).
+            self.sf_warned = True
+            mine = [l.strip() for l in listing.splitlines() if self.package in l][:6]
+            print(f"warning: SurfaceFlinger listed a window of {self.package} but no SurfaceView this runner can read. "
+                  "If a page was open, its windows have no frames (rAF only; open, restart and live updates n/a). "
+                  "Its lines for the app:\n  " + "\n  ".join(mine), file=sys.stderr)
         best = (None, [])
         for name in sorted(names, key=P.layer_number, reverse=True):
             period, presents = P.parse_sf_latency(self.sh(f"dumpsys SurfaceFlinger --latency '{name}'"))

@@ -3,7 +3,9 @@
 lululemon Mirror's Android 6 instead (checked against an API 23 emulator, 2026-11-18): logcat has no
 `-v monotonic`, only the wall clock to the µs (`-v usec`); `ps` ignores `-A -o` and prints its own columns; there
 is no `nproc`; SurfaceFlinger names the app's layer plain `SurfaceView`; `dumpsys meminfo` writes "kB"; and the
-kiosk is the generic app, whose activity is dev.glassworks.MainActivity behind a launcher alias.
+kiosk is the generic app, whose activity is dev.glassworks.MainActivity behind a launcher alias. FAKE_SF_WRAPPED:
+SurfaceFlinger lists layers as Android 17 does (`RequestedLayerState{…}`, the view's hash); FAKE_SF_UNNAMED: in a way the
+runner can't read.
 
 State lives in $FAKE_ADB_STATE (a directory): the nonce of the page the runner opened, the taps it
 sent, and the time ranges in which the fake screen paints. logcat, SurfaceFlinger and the fake page
@@ -25,6 +27,9 @@ PKG = "sh.edm.s1kiosk"
 PERIOD_NS = 16_666_666
 ANDROID6 = bool(os.environ.get("FAKE_ANDROID6"))
 ACTIVITY = "dev.glassworks.MainActivity" if ANDROID6 else ".MainActivity"
+# FAKE_SF_WRAPPED's SurfaceView: the view's hash, and the BLAST layer's whole name, the only one --latency takes.
+SF_HASH, SF_ACT = "f5fea55", f"{PKG}/{PKG}.MainActivity"
+SF_BLAST = f"{SF_HASH} SurfaceView[{SF_ACT}](BLAST)#163"
 # The fake Android 6's wall clock: its monotonic clock plus this (logcat -v usec prints it).
 WALL_SHIFT = 1_795_000_000.0
 PIDS = {PKG: 4242, PKG + ":gpu_disable_art_image_": 4300, PKG + ":sandboxed_tab_disable_art_image_24": 4301, "otbr-agent": 900}
@@ -282,8 +287,26 @@ def shell(cmd):
         return ""
     if cmd.startswith("dumpsys SurfaceFlinger --list") and ANDROID6:
         return f"DimLayer\ncom.android.systemui.ImageWallpaper\nSurfaceView\n{PKG}/{ACTIVITY}\nStatusBar\nNavigationBar\n"
+    if cmd.startswith("dumpsys SurfaceFlinger --list") and os.environ.get("FAKE_SF_WRAPPED"):
+        # Android 17 (as an API 37 emulator listed it, 2026-11-19): each layer in RequestedLayerState{…}, the
+        # SurfaceView's name after the view's hash; the frames on its (BLAST) child, none on its parent.
+        return (f"RequestedLayerState{{Display 0 name=\"Built-in Screen\"#41}}\n"
+                f"RequestedLayerState{{Background for {SF_HASH} SurfaceView[{SF_ACT}]#164 parentId=162 relativeParentId=158 z=-2147483648}}\n"
+                f"RequestedLayerState{{{SF_BLAST} parentId=162}}\n"
+                f"RequestedLayerState{{ActivityRecord{{104391098 u0 {SF_ACT} t10}}#147 parentId=146}}\n"
+                f"RequestedLayerState{{VRI-{SF_ACT}#158 parentId=155}}\n"
+                f"RequestedLayerState{{{SF_HASH} SurfaceView[{SF_ACT}]#162 parentId=161 relativeParentId=158 z=-2}}\n")
+    if cmd.startswith("dumpsys SurfaceFlinger --list") and os.environ.get("FAKE_SF_UNNAMED"):
+        # A naming this runner can't read: the app's window is listed, its SurfaceView isn't.
+        return f"Display Root#0\nSomeNewLayer<{PKG}/{PKG}.MainActivity>#7\n{PKG}/{PKG}.MainActivity#3\n"
     if cmd.startswith("dumpsys SurfaceFlinger --list"):
         return f"Display Root#0\nSurfaceView - {PKG}/{PKG}.MainActivity#0\nBackground for -SurfaceView - {PKG}/{PKG}.MainActivity#0\n"
+    if cmd.startswith("dumpsys SurfaceFlinger --latency") and os.environ.get("FAKE_SF_WRAPPED"):
+        name = re.search(r"--latency '(.*)'", cmd).group(1)
+        if name == f"{SF_HASH} SurfaceView[{SF_ACT}]#162":
+            return f"{PERIOD_NS}\n0\t0\t0\n"          # the parent: no buffers of its own
+        if name != SF_BLAST:
+            return f"{PERIOD_NS}\n"                   # any other form of the name: the period alone
     if cmd.startswith("dumpsys SurfaceFlinger --latency"):
         t, frames = int(now() * 1e9), []
         for a, b in state("paint.json", []):

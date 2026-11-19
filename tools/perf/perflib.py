@@ -99,14 +99,33 @@ def parse_sf_latency(text):
     return period_ms, sorted(set(presents))
 
 
+# Android 15 and later list each layer as `RequestedLayerState{<name> parentId=… z=…}` (SurfaceFlinger's new
+# front end): the name, then only these fields. Android 17 (API 37) also starts a SurfaceView's name with the
+# view's hash: `f5fea55 SurfaceView[<pkg>/<activity>](BLAST)#163`. `--latency` takes only the whole name, the hash
+# and the `#<id>` included; any other form answers with the refresh period alone, as an unknown name does
+# (API 35 and 37 emulators, 2026-11-19). The Pixel Tablet's Android 17 run named no layer before this.
+REQUESTED_LAYER_RE = re.compile(r"^RequestedLayerState\{(.*?)(?: (?:parentId|relativeParentId|z|layerStack)=-?\d+| !handle)*\}$")
+# The view's hash in front of a SurfaceView's name (Android 17).
+VIEW_HASH_RE = re.compile(r"^[0-9a-f]+ (?=SurfaceView)")
+
+
+def sf_layer_name(line):
+    """One `dumpsys SurfaceFlinger --list` line -> the layer's name, as `--latency` takes it."""
+    line = line.strip()
+    m = REQUESTED_LAYER_RE.match(line)
+    return m.group(1) if m else line
+
+
 def surfaceview_layers(listing, package):
     """The app's SurfaceView layers in `dumpsys SurfaceFlinger --list`, by Android's naming:
     `SurfaceView - <pkg>/<activity>#0` (Android 10, the S1); `SurfaceView[<pkg>/<activity>]#12` and its
-    `(BLAST)` buffer layer (Android 12 and later: read from AOSP's SurfaceView.java, to check on the Pixel Tablet);
+    `(BLAST)` buffer layer (Android 12 and later, from AOSP's SurfaceView.java; the BLAST one holds the frames),
+    wrapped in `RequestedLayerState{…}` on Android 15 and later and with the view's hash in front on 17
+    (sf_layer_name; the names come back whole, for `--latency`);
     plain `SurfaceView` on Android 6, without the app (checked on an API 23 emulator, 2026-11-18): then that one,
     while the app has a window listed, as a kiosk is the only app on screen. Never their `Background for` layers."""
-    listed = [l.strip() for l in listing.splitlines()]
-    names = [l for l in listed if l.startswith((f"SurfaceView - {package}/", f"SurfaceView[{package}/"))]
+    listed = [sf_layer_name(l) for l in listing.splitlines()]
+    names = [l for l in listed if VIEW_HASH_RE.sub("", l).startswith((f"SurfaceView - {package}/", f"SurfaceView[{package}/"))]
     if not names and "SurfaceView" in listed and any(l.startswith(f"{package}/") for l in listed):
         names = ["SurfaceView"]
     return names
