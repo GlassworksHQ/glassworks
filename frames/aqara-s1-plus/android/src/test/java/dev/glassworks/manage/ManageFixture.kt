@@ -69,6 +69,14 @@ class ManageFixture(
             revokeGate?.let { if (!it.await(10, java.util.concurrent.TimeUnit.SECONDS)) revokeGateTimedOut = true }
             return revokeWorks
         }
+        override fun createLongLived(haBase: String, accessToken: String, name: String, days: Int): String? {
+            madeLongLived += Triple(accessToken, name, days)
+            return longLivedAnswer
+        }
+        override fun endLongLived(haBase: String, token: String): Boolean {
+            endedLongLived += token
+            return endLongLivedWorks
+        }
         override fun refresh(haBase: String, clientId: String, refreshToken: String): HaGateway.Tokens {
             refreshed += refreshToken
             duringRefresh?.invoke()
@@ -95,6 +103,12 @@ class ManageFixture(
 
     /** While set, the server's background work waits here until the test runs it; else it runs at once. */
     @Volatile var deferred: MutableList<() -> Unit>? = null
+
+    /** Long-lived tokens the panel had HA make (handed token, name, days) and end; what the fake HA answers. */
+    val madeLongLived = Collections.synchronizedList(ArrayList<Triple<String, String, Int>>())
+    val endedLongLived = Collections.synchronizedList(ArrayList<String>())
+    @Volatile var longLivedAnswer: String? = "LONG-LIVED"
+    @Volatile var endLongLivedWorks = true
 
     /** Runs while Home Assistant takes a revoke (an address that changes meanwhile). */
     @Volatile var duringRevoke: (() -> Unit)? = null

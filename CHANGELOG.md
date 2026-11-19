@@ -23,9 +23,9 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   down. *Manage* opens another panel's page, already signed in, and *Copy settings* makes one panel like
   another: it changes only what you tick, and greys out what the other panel's version doesn't have.
   Administrators only. Each panel checks the sign-in with Home Assistant itself, so panels never trust
-  each other. Signed in to a panel's Manage page with Home Assistant, All panels there needs no second
-  sign-in; after you sign out of All panels, or the app restarts, it asks for one again. Every panel needs
-  this version for the page to reach it.
+  each other. One Home Assistant sign-in covers every panel the browser opens: All panels on the panel you
+  signed in to, and on each panel you reach with *Manage*, needs no second login. After you sign out of All panels,
+  or the app restarts, it asks for one again. Every panel needs this version for the page to reach it.
 - **Kiln's Done says whether the S1's updates install by themselves.** After an install or a setup, Kiln reads the
   panel back and shows a *Silent updates* block: *On* when the boot image has its root update service, or *A tap
   each* with how to add it when it doesn't. The lululemon Mirror's test install shows the same block, read from

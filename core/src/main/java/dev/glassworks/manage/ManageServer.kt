@@ -313,7 +313,7 @@ class ManageServer(
 
     private fun signedOut(req: HttpRequest): HttpResponse {
         // All panels' calls get an answer the page can read: a redirect is an error to it, which it would take for an outage.
-        if (req.method == "POST" && (req.path == HA_ACCESS || req.path == HA_FORGET)) return json(401, JSONObject().put("problem", MANAGE_ENDED))
+        if (req.method == "POST" && (req.path == HA_ACCESS || req.path == HA_FORGET || req.path == HA_KEEP)) return json(401, JSONObject().put("problem", MANAGE_ENDED))
         if (req.method == "POST") return HttpResponse.seeOther("/")
         // Arrived from another site (HA's "Visit"): the SameSite=Strict cookie stayed behind. Load the page again
         // from here, which is same-site, so the cookie comes. Browsers send Sec-Fetch-Site only to https and
@@ -404,10 +404,59 @@ class ManageServer(
         if (ok.haBase != ha?.trim()?.trimEnd('/')) return refused("Home Assistant's address changed", "Sign in again.")
         val (token, s) = sessions.create(ok.user.name, SignedInWith.HOME_ASSISTANT, SessionStore.browserName(req.headers["user-agent"]), false, ha)
         event("${ok.user.name} signed in with Home Assistant from the Manage page on ${ManageApi.from(req, req.form["from"])} (${s.browser})")
+        keepLongLived(req, s, ok.haBase, req.form["token"].orEmpty())
         // A page from another site posted here: a redirect would still be cross-site for the Strict cookie (see haCallback).
         val next = safeNext(req.form["next"])
         return html(200, PageShell.document(name(), "", """<meta http-equiv="refresh" content="0;url=${PageShell.esc(next)}">"""),
             extra = mapOf("Set-Cookie" to sessionCookie(token, false)))
+    }
+
+    /**
+     * A handoff's session gets this panel's own Home Assistant sign-in, so All panels here needs no second login (2026-11-19
+     * panel run): a long-lived token made with the handed access token, for a day, named after this panel and the browser
+     * so it reads plainly under the person's profile. Kept in memory with the session and deleted in HA when it ends, like
+     * any kept sign-in. The sender's own sign-in is never handed over; panels still don't trust each other. When HA
+     * doesn't make one (or its calls are all busy), All panels here asks for Continue, as before.
+     */
+    private fun keepLongLived(req: HttpRequest, s: Session, ha: String, handed: String) {
+        if (handed.isEmpty() || !haCalls.tryAcquire()) return
+        val name = "Glassworks Manage on ${req.headers["host"] ?: "this panel"} (${s.browser}) " +
+            ByteArray(2).also(random::nextBytes).joinToString("") { "%02x".format(it) }
+        val made = try { signIn.gateway.createLongLived(ha, handed, name, LONG_LIVED_DAYS) } finally { haCalls.release() }
+        if (made == null) { event("Home Assistant didn't make a sign-in for All panels here; it asks for one there"); return }
+        kept[s.id] = HaSignIn.Kept(ha, "", made, longLived = true, untilMs = monoMs() + LONG_LIVED_USE_MS)
+        // The page stopped meanwhile: no sweep will end this one.
+        if (stopping) drain()
+    }
+
+    /**
+     * [HA_KEEP], POST from All panels on this panel (same origin, CSRF): the tab signed in to Home Assistant on its own
+     * (Continue), and hands that sign-in's refresh token to this panel, which keeps it for the session as a Manage
+     * sign-in with HA would be kept. The tab then drops its copy: one sign-in, used by every tab and every handoff of this
+     * browser's session (2026-11-19 panel run). HA must renew it and name an administrator first.
+     */
+    private fun haKeep(req: HttpRequest, s: Session): HttpResponse {
+        val refresh = req.form["refresh"].orEmpty()
+        if (refresh.isEmpty() || refresh.length > 4096) return json(400, JSONObject().put("problem", "No sign-in to keep."))
+        val ha = haBase()?.trim()?.trimEnd('/')?.takeIf { signIn.isLocal(it) } ?: return json(404, JSONObject().put("problem", ManageApi.NO_HA))
+        if (kept.containsKey(s.id)) return json(200, JSONObject().put("ok", true).put("already", true))
+        val host = req.headers["host"] ?: return json(400, JSONObject().put("problem", "No sign-in to keep."))
+        val clientId = "http://$host/"
+        if (!haCalls.tryAcquire()) return json(503, JSONObject().put("problem", BUSY))
+        try {
+            val t = signIn.gateway.refresh(ha, clientId, refresh)
+            if (t !is HaGateway.Tokens.Ok) return json(if ((t as HaGateway.Tokens.Failed).refused) 404 else 503,
+                JSONObject().put("problem", if (t.refused) "Home Assistant no longer takes this sign-in." else "Can't reach Home Assistant. Try again in a moment."))
+            val user = signIn.gateway.currentUser(ha, t.accessToken)
+            if (user?.isAdmin != true) return json(403, JSONObject().put("problem", "Only Home Assistant administrators manage panels."))
+            if (s.id !in sessions.liveIds()) return json(401, JSONObject().put("problem", MANAGE_ENDED))
+            kept.putIfAbsent(s.id, HaSignIn.Kept(ha, clientId, refresh))
+            if (stopping) drain()
+            event("${user.name}'s Home Assistant sign-in from All panels is kept for this browser (${s.browser})")
+            return json(200, JSONObject().put("ok", true))
+        } finally {
+            haCalls.release()
+        }
     }
 
     /**
@@ -445,6 +494,12 @@ class ManageServer(
         // The page has the old address: it reloads to get the new one, rather than signing in at the old (CodeRabbit on #534).
         val addressChanged = { json(404, JSONObject().put("problem", ADDRESS_RELOAD).put("reload", true)) }
         if (movedNow()) { endKept(s.id); return addressChanged() }
+        // A long-lived token from a handoff is used as it is, until a little before HA lets it run out.
+        if (k.longLived) {
+            val leftMs = k.untilMs - monoMs()
+            if (leftMs <= 60_000) { endKept(s.id); return json(404, JSONObject().put("problem", "This sign-in has ended.")) }
+            return json(200, JSONObject().put("access_token", k.refreshToken).put("expires_in", minOf(leftMs / 1000, 1800L)))
+        }
         // Home Assistant slow to answer mustn't take every worker: the Manage page's other requests still get one.
         if (!haCalls.tryAcquire()) return json(503, JSONObject().put("problem", BUSY))
         val t = try { signIn.gateway.refresh(k.haBase, k.clientId, k.refreshToken) } finally { haCalls.release() }
@@ -691,6 +746,7 @@ class ManageServer(
             }
             "/settings" -> changeSetting(req, s, viewer)
             HA_ACCESS -> haAccess(s)
+            HA_KEEP -> haKeep(req, s)
             HA_FORGET -> if (!haCalls.tryAcquire()) json(503, JSONObject().put("problem", BUSY))
             else when (try { endKept(s.id) } finally { haCalls.release() }) {
                 Ended.DONE -> {
@@ -842,6 +898,10 @@ class ManageServer(
         /** All panels' fresh access token from this session's kept Home Assistant sign-in, and its end (#466). */
         const val HA_ACCESS = "/manage/ha/access"
         const val HA_FORGET = "/manage/ha/forget"
+        const val HA_KEEP = "/manage/ha/keep"
+        /** A handoff's own long-lived token: HA's lifespan in days, and how long this panel uses it (an hour less). */
+        const val LONG_LIVED_DAYS = 1
+        const val LONG_LIVED_USE_MS = 23L * 3600 * 1000
         const val MANAGE_ENDED = "Your sign-in to this Manage page has ended. Sign in again."
         const val ADDRESS_RELOAD = "This panel's Home Assistant address changed. Reload the page to go on."
         /** Revokes HA didn't take that one sweep tries again; the rest wait for the next. */

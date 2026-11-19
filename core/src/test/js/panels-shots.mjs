@@ -106,6 +106,9 @@ const forgetCsrfs = [];
 let accessStatus = 200;
 /** While set, this panel takes the page's form token for another session's (signed in again in another tab). */
 let staleCsrf = false;
+/** Whether this panel takes a tab's own sign-in to keep (`/manage/ha/keep`), and the forms it got. */
+let keepOk = false;
+const keeps = [];
 /** While set, Porch holds its settings answers ({ waiting }) until the test answers them. */
 let porchHeld = null;
 /** Which script this panel stalls on, if any; the stalled answers ({ res, open }), to end later. */
@@ -170,6 +173,15 @@ async function handle(req, res) {
     if (accessStatus === 503) return send(res, 503, { problem: "Can't reach Home Assistant. Try again in a moment." });
     if (accessStatus === 401) return send(res, 401, { problem: 'Your sign-in to this Manage page has ended. Sign in again.' });
     return send(res, 200, { access_token: 'fake-access-from-panel', expires_in: 1800 });
+  }
+  if (u.host === 'kitchen-panel.local:8099' && u.pathname === '/manage/ha/keep' && req.method === 'POST') {
+    const f = await form(req);
+    keeps.push({ csrf: f.get('csrf'), refresh: f.get('refresh') });
+    if (!keepOk || f.get('csrf') !== csrfOnPage) return send(res, 404, { problem: 'Not kept.' });
+    // Kept: from now on this panel gives All panels its token.
+    panelSignIn = true;
+    panelKeeps = true;
+    return send(res, 200, { ok: true });
   }
   if (u.host === 'kitchen-panel.local:8099' && u.pathname === '/manage/ha/forget' && req.method === 'POST') {
     const f = await form(req);
@@ -537,6 +549,17 @@ try {
   await call('Page.navigate', { url: PAGE });
   await until("[...document.querySelectorAll('#gw-list button')].some((b) => b.textContent.startsWith('Continue with Home Assistant'))", 'Continue after the panel forgot');
   assert.equal(await js("sessionStorage.getItem('gw-ha')"), null);
+  // Continue here: the tab's own sign-in goes to this panel to keep, and the tab drops its copy, so the one sign-in also
+  // serves other tabs and the panels this browser opens (2026-11-19 panel run).
+  keepOk = true;
+  const keptBefore = keeps.length;
+  await js("[...document.querySelectorAll('#gw-list button')].find((b) => b.textContent.startsWith('Continue with Home Assistant')).click()");
+  await until(listed, 'the panels after Continue, from the panel');
+  assert.deepEqual(keeps.slice(keptBefore), [{ csrf: csrfOnPage, refresh: 'fake-refresh' }], "the tab's sign-in went to its own panel, with the form token");
+  assert.ok(await js("JSON.parse(sessionStorage.getItem('gw-ha')).viaPanel"), 'the tab keeps no refresh token of its own now');
+  assert.equal(await js("JSON.parse(sessionStorage.getItem('gw-ha')).refresh"), undefined);
+  assert.equal(wsTokens.at(-1), 'fake-access-from-panel', "and the list came with the panel's token");
+  keepOk = false;
   panelSignIn = true;
   // The module's download stalls (CodeRabbit on #488): the page says to reload it, rather than "Finding your panels…" for good.
   stallScript = 'panels-core.js';

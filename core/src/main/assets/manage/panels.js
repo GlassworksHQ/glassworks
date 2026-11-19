@@ -8,7 +8,7 @@
 // signed in, and copies settings from one panel to another. No panel sees another's requests. The token goes
 // only to a device Home Assistant lists as a Glassworks panel that answers as one first (readPanel).
 
-import { authorizeUrl, base64url, copyRows, panelAccess, panelForget, panelsFrom, pkceChallenge, plan, readPanel, revokeAt, storedFor, tokenRequest, usable } from './panels-core.js';
+import { panelKeep, authorizeUrl, base64url, copyRows, panelAccess, panelForget, panelsFrom, pkceChallenge, plan, readPanel, revokeAt, storedFor, tokenRequest, usable } from './panels-core.js';
 
 const root = document.getElementById('gw-panels');
 // Running, imports loaded: panels-boot.js leaves the page alone.
@@ -16,7 +16,8 @@ root.dataset.started = '1';
 const ha = (root.dataset.ha || '').replace(/\/+$/, '');
 const session = root.dataset.session || '';
 /** The panel keeps this browser's Manage sign-in with Home Assistant: All panels uses it, with no second sign-in. */
-const haSignIn = root.dataset.haSignin === '1';
+// Whether this panel keeps a Home Assistant sign-in for this session; true too once this tab hands it its own (panelKeep).
+let haSignIn = root.dataset.haSignin === '1';
 const csrf = root.dataset.csrf || '';
 const listCard = document.getElementById('gw-list');
 const copyCard = document.getElementById('gw-copy');
@@ -440,6 +441,19 @@ async function start() {
   } catch (e) {
     return say(listCard, 'Panels in Home Assistant', e.message, h('button', { class: 'pill primary', type: 'button', onclick: signIn }, 'Continue with Home Assistant ↗'));
   }
+  // Signed in on its own (Continue) while the panel keeps none: the panel keeps it for the session, and the tab drops its
+  // copy, so this one sign-in also serves other tabs and the panels this browser opens (2026-11-19 panel run).
+  const own = stored();
+  if (!haSignIn && own && !own.viaPanel && own.refresh) {
+    const kept = await panelKeep(csrf, own.refresh);
+    if (mine !== generation) return;
+    if (kept === 'already') await revokeAt(ha, own.refresh);
+    if (kept) {
+      keep(KEY, null);
+      haSignIn = true;
+    }
+  }
+  if (mine !== generation) return;
   // Signed in to this Manage page with Home Assistant: the panel's kept sign-in serves, no second one (#466 panel run).
   // A panel-backed token renews through the panel already: its outage shows as it is, with no second request to the
   // panel (CodeRabbit on #534). A tab's own that HA won't renew falls back to the panel's, then to Continue.

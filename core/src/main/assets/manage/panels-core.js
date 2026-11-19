@@ -450,6 +450,21 @@ export async function panelAccess(csrf, fetchFn = fetch, ms = ACCESS_MS) {
 }
 
 /**
+ * Hands this tab's own Home Assistant sign-in to this panel (`POST /manage/ha/keep`, same origin, the form token), which
+ * keeps it for the Manage session: then every tab and every handoff of this browser uses that one sign-in (2026-11-19
+ * panel run). True when the panel kept it, 'already' when it keeps one already, false otherwise (the tab keeps its own).
+ */
+export async function panelKeep(csrf, refresh, fetchFn = fetch, ms = ACCESS_MS) {
+  try {
+    const r = await timed(fetchFn, '/manage/ha/keep', { method: 'POST', body: new URLSearchParams({ csrf, refresh }) }, ms);
+    if (r.status !== 200 || !r.body || r.body.ok !== true) return false;
+    return r.body.already ? 'already' : true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Ends the sign-in this panel keeps for All panels (`POST /manage/ha/forget`): it revokes it in Home Assistant. True when
  * HA confirmed it, false when not, and 'ended' when this Manage page's sign-in has ended, so the panel can't say.
  */

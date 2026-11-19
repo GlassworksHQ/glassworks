@@ -36,6 +36,19 @@ interface HaGateway {
 
     /** `POST <haBase>/auth/revoke` with the refresh token: HA drops it and every access token made from it. */
     fun revoke(haBase: String, clientId: String, refreshToken: String): Boolean
+
+    /**
+     * `auth/long_lived_access_token` over HA's websocket, signed in with [accessToken]: a token of this panel's own for
+     * [days], listed under the person's profile as [name]. Null when HA didn't make one.
+     */
+    fun createLongLived(haBase: String, accessToken: String, name: String, days: Int): String? = null
+
+    /**
+     * Deletes the long-lived token [token] in HA, signed in with that token itself (`auth/refresh_tokens` names it as the
+     * current one, `auth/delete_refresh_token` ends it). True when HA ended it, or no longer takes it; false when HA
+     * didn't answer.
+     */
+    fun endLongLived(haBase: String, token: String): Boolean = false
 }
 
 /**
@@ -83,8 +96,13 @@ class HaSignIn(
      * An administrator's Home Assistant sign-in, kept in memory for their Manage session (#466): what All panels needs
      * so the person signs in once. Never logged; [toString] leaves the token out.
      */
-    class Kept(val haBase: String, val clientId: String, val refreshToken: String) {
-        override fun toString() = "Kept(haBase=$haBase, clientId=$clientId, refreshToken=<redacted>)"
+    /**
+     * A Home Assistant sign-in kept for a Manage session. Either a refresh token (the session's own sign-in, renewed at
+     * `/auth/token`), or, when [longLived], a long-lived token this panel made from a handoff's access token: used as it
+     * is until [untilMs] (on the server's monotonic clock), then dropped.
+     */
+    class Kept(val haBase: String, val clientId: String, val refreshToken: String, val longLived: Boolean = false, val untilMs: Long = Long.MAX_VALUE) {
+        override fun toString() = "Kept(haBase=$haBase, clientId=$clientId, longLived=$longLived, token=<redacted>)"
     }
 
     private val random = SecureRandom()
@@ -143,7 +161,14 @@ class HaSignIn(
 
     /** Ends a kept sign-in in Home Assistant: its refresh token and every access token made from it. */
     /** [again]: whether the second try may still go (the caller checks HA's address hasn't moved meanwhile). */
-    fun end(k: Kept, again: () -> Boolean = { true }): Boolean = revokeTwice(k.haBase, k.clientId, k.refreshToken, again)
+    fun end(k: Kept, again: () -> Boolean = { true }): Boolean =
+        if (k.longLived) endLongLivedTwice(k, again) else revokeTwice(k.haBase, k.clientId, k.refreshToken, again)
+
+    private fun endLongLivedTwice(k: Kept, again: () -> Boolean): Boolean {
+        if (gateway.endLongLived(k.haBase, k.refreshToken) || (again() && gateway.endLongLived(k.haBase, k.refreshToken))) return true
+        warn("Home Assistant didn't delete the Manage page's long-lived token; it stays under the user's profile until it runs out or is removed there")
+        return false
+    }
 
     /** True when Home Assistant took the revoke, at the first or the second try. */
     private fun revokeTwice(haBase: String, clientId: String, refreshToken: String, again: () -> Boolean = { true }): Boolean {

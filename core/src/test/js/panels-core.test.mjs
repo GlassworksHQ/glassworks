@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
 import { test } from 'node:test';
-import { ACCESS_MS, FORGET_MS, TOKEN_MS, MAX_WAIT_S, SETTINGS_MS, TRIES, WRITE_MS, accepts, copyRows, authorizeUrl, hello, localHost, manageOrigin, panelAccess, panelForget, revokeAt, storedFor, tokenRequest, usable, writeSetting, outcome, panelsFrom, pkceChallenge, plan, reachability, readPanel, retrying, sha256 } from '../../main/assets/manage/panels-core.js';
+import { panelKeep, ACCESS_MS, FORGET_MS, TOKEN_MS, MAX_WAIT_S, SETTINGS_MS, TRIES, WRITE_MS, accepts, copyRows, authorizeUrl, hello, localHost, manageOrigin, panelAccess, panelForget, revokeAt, storedFor, tokenRequest, usable, writeSetting, outcome, panelsFrom, pkceChallenge, plan, reachability, readPanel, retrying, sha256 } from '../../main/assets/manage/panels-core.js';
 
 const MODEL = 'Panel Hub S1 Plus (Glassworks)';
 const device = (id, url, more = {}) => ({ id, name: 'Glassworks Panel', model: MODEL, config_entries: ['esp'], configuration_url: url, area_id: null, disabled_by: null, ...more });
@@ -514,4 +514,16 @@ test('after a sign-out mid-read no token goes out; server errors and a skipped r
   assert.equal(await panelForget('CSRF', answer(200, null), 1_000), false, 'an unreadable answer confirms nothing');
   // The panel's renewal gets longer than a direct token request: its own call to HA can take most of 30 s.
   assert.ok(ACCESS_MS >= 30_000 && ACCESS_MS > TOKEN_MS);
+});
+
+test("a tab's own sign-in goes to its own panel to keep, with the form token (2026-11-19 panel run)", async () => {
+  const seen = [];
+  const answer = (status, body) => async (url, init) => (seen.push([url, init.method, String(init.body), init.redirect]),
+    { status, headers: { get: () => null }, json: async () => body });
+  assert.equal(await panelKeep('CSRF', 'R', answer(200, { ok: true }), 1_000), true);
+  assert.deepEqual(seen[0], ['/manage/ha/keep', 'POST', 'csrf=CSRF&refresh=R', 'error'], 'this panel only, in the body, never a URL');
+  assert.equal(await panelKeep('CSRF', 'R', answer(200, { ok: true, already: true }), 1_000), 'already');
+  for (const [status, body] of [[403, { problem: 'x' }], [404, null], [503, { problem: 'busy' }], [200, null]]) {
+    assert.equal(await panelKeep('CSRF', 'R', answer(status, body), 1_000), false, String(status));
+  }
 });
