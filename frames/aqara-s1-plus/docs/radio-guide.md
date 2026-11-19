@@ -1,6 +1,6 @@
 # Using the panel's Zigbee/Thread radio
 
-The S1 Plus has a Silicon Labs EFR32 radio inside. S1 Unleashed can offer it to Home Assistant in one
+The S1 Plus has a Silicon Labs EFR32 radio inside. Glassworks can offer it to Home Assistant in one
 role at a time. You pick the role in Home Assistant, or on the panel itself ([below](#on-the-panel)).
 This page is the how-to. [radio.md](radio.md) is the technical reference: how each mode works, what was tested, and
 the root helper.
@@ -70,7 +70,7 @@ work over the panel's encrypted connection; on the panel, being there is what al
 
 ## Zigbee coordinator with Zigbee2MQTT (experimental)
 
-Zigbee2MQTT needs a newer Zigbee stack than the one Aqara ships. This needs S1 Kiosk 0.4.0 or later
+Zigbee2MQTT needs a newer Zigbee stack than the one Aqara ships. This needs Glassworks 0.4.0 or later
 and the boot software that came with it (Home Assistant's **Radio helper** sensor says whether you have
 it; [install.md](install.md#updating) says how to update it). Forming a network, resuming it and
 pairing have been tested on the panel, but not yet for long with real devices.

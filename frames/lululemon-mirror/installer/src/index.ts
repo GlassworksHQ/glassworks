@@ -14,3 +14,4 @@ export { IMAGE_PROXY, MAX_RETRY_AFTER_MS, ProxyError, resumableBody, retryAfterM
 export { ADB_KEY_LINE, GLASS_PANES_KEY_FINGERPRINT, SERVICES_JAR, adbFingerprint, adbKeyLines, md5, replaceDexString, trustAdbKey, trustFingerprint } from './services';
 export { KEPT_APPS, UNUSED_APPS, type UnusedApp } from './unused';
 export { APP_DIRS, GLASSWORKS, MIRROR_PROBE, PRIVILEGED, type MirrorApp } from './app';
+export { describeMirrorUpdates, parseMirrorUpdates, readMirrorUpdates, type MirrorUpdates } from './updates';

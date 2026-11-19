@@ -101,6 +101,7 @@ open class AppManage(
         qr = { req -> qr(signIn, req) },
         ownHosts = ::ownHosts,
         event = { msg -> Log.i(TAG, msg); runCatching { log.append(LogEntry(System.currentTimeMillis(), LogEntry.Level.INFO, "Manage", msg)) } },
+        scripts = { name -> runCatching { app.assets.open("manage/$name").use { it.readBytes() } }.getOrNull() },
     )
 
     override fun http(port: Int) = HttpServer(port, server::handle, log = { Log.d(TAG, it) })
@@ -216,6 +217,7 @@ open class AppManage(
             is SettingsItem.Action -> listOf("${i.title}: ${v(i.detail)}")
             // A native view's typed twin, as the Manage page shows it; never a secret (SettingsItem.Native).
             is SettingsItem.Native -> itemLines(dev.glassworks.pane.SettingsChange.twinOf(i))
+            // Its twin too: what a link opens is the person's (the notifications' words), not the panel's state.
             is SettingsItem.Link -> emptyList()
         }
     }

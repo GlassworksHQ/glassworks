@@ -40,7 +40,6 @@ describe('the release route', () => {
   });
 
   it.each([
-    'generic-android', // its release line is still in PR 365
     'lululemon-mirror',
     'AQARA-S1-PLUS',
     'aqara-s1-plus ',

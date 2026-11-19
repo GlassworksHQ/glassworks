@@ -25,7 +25,7 @@ class FakePanel implements ByteStream {
       const { command } = { command: p.data[0] };
       const body = p.data.subarray(2, 2 + p.data[1]!);
       if (command === Rpc.RequestState) this.send(PacketType.State, Uint8Array.of(State.Ready));
-      if (command === Rpc.RequestInfo) this.result(Rpc.RequestInfo, 'S1 Kiosk', '0.1.0', 'Allwinner A133', 'S1 Panel');
+      if (command === Rpc.RequestInfo) this.result(Rpc.RequestInfo, 'Glassworks', '0.1.0', 'Allwinner A133', 'S1 Panel');
       if (command === Rpc.ScanWifi) {
         this.result(Rpc.ScanWifi, 'Home Net', '-61', 'YES');
         this.result(Rpc.ScanWifi, 'Cafe', '-70', 'NO');

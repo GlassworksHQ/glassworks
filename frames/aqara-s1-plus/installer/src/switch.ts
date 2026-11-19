@@ -1,10 +1,10 @@
 // Moving a panel from one signing key to another (in practice: a debug build to a release build)
-// without it losing its Wi-Fi, and keeping S1 Kiosk's data where the installer has root. Same steps
-// as frames/aqara-s1-plus/tools/install.sh's switch; the panel side is frames/aqara-s1-plus/tools/install/s1kiosk-switch.sh.
+// without it losing its Wi-Fi, and keeping Glassworks' data where the installer has root. Same steps
+// as frames/aqara-s1-plus/tools/install.sh's switch; the panel side is frames/aqara-s1-plus/tools/install/glassworks-switch.sh.
 //
 // Why this is needed: Android won't update an app across signing keys, so the only way is uninstall
 // + install. Uninstalling deletes the app's data, and on Android 10 also every Wi-Fi network the app
-// saved (WifiConfiguration.creatorUid). S1 Kiosk saves the panel's Wi-Fi itself (Improv), so a plain
+// saved (WifiConfiguration.creatorUid). Glassworks saves the panel's Wi-Fi itself (Improv), so a plain
 // uninstall takes the panel off the network.
 //
 // Root: adb's shell has none on a normal install (the boot image's root helpers are init services
@@ -17,14 +17,16 @@
 import type { PanelShell } from '@glassworks/adb';
 import { ADMIN, PKG, dropAdmin } from '@glassworks/app-adb';
 import { IMPROV_SOCKET, ImprovSerialClient } from './improv';
-import switchScript from '../../tools/install/s1kiosk-switch.sh?raw';
+import switchScript from '../../tools/install/glassworks-switch.sh?raw';
 
 export const SWITCH_SCRIPT: string = switchScript;
-export const SWITCH_SH = '/data/local/tmp/s1kiosk-switch.sh';
-export const OLD_APK = '/data/local/tmp/s1kiosk-old.apk';
-const NEW_APK = '/data/local/tmp/s1kiosk.apk';
+export const SWITCH_SH = '/data/local/tmp/glassworks-switch.sh';
+/** Where glassworks-switch.sh keeps the app's data between backup and restore. */
+const SWITCH_DATA = '/data/s1kiosk/switch';
+export const OLD_APK = '/data/local/tmp/glassworks-old.apk';
+const NEW_APK = '/data/local/tmp/glassworks.apk';
 
-/** Who saved the network the panel is on: S1 Kiosk, someone else, can't tell, or no Wi-Fi. */
+/** Who saved the network the panel is on: Glassworks, someone else, can't tell, or no Wi-Fi. */
 export type WifiOwner = 'kiosk' | 'other' | 'unknown' | 'none';
 export interface PanelWifi { owner: WifiOwner; ssid?: string }
 
@@ -85,7 +87,7 @@ export function unquote(v: string): string {
 
 export interface SavedNetwork { n: number; kind: 'psk' | 'open' | 'wep' | 'other'; ssid?: string }
 
-/** `s1kiosk-switch.sh wifi-list` output. */
+/** `glassworks-switch.sh wifi-list` output. */
 export function parseWifiList(out: string): SavedNetwork[] {
   const nets: SavedNetwork[] = [];
   for (const line of out.split(/\r?\n/)) {
@@ -121,7 +123,7 @@ export interface SwitchOutcome {
   /** The app's settings, sign-in and keys came across. */
   dataKept: boolean;
   /**
-   * kept: the network was not S1 Kiosk's, so Android keeps it. resend: read as root, to be sent to
+   * kept: the network was not Glassworks', so Android keeps it. resend: read as root, to be sent to
    * the new app (provision does). lost: Android forgot it; the Wi-Fi step must ask for it.
    */
   wifi: 'kept' | 'resend' | 'lost';
@@ -153,24 +155,26 @@ export async function planSwitch(p: PanelShell): Promise<SwitchPlan> {
   return { installedVersion, debugBuild, root: await hasRoot(p), wifi: await panelWifi(p) };
 }
 
-/** Wi-Fi is at risk when the network is S1 Kiosk's, or when we can't tell whose it is. */
+/** Wi-Fi is at risk when the network is Glassworks', or when we can't tell whose it is. */
 export const wifiAtRisk = (w: PanelWifi) => w.owner === 'kiosk' || w.owner === 'unknown';
 
 /** Plain-language summary for the confirmation (no secrets in it: only the network's name). */
 export function describeSwitch(plan: SwitchPlan): string {
   const what = plan.debugBuild
-    ? `S1 Kiosk on the panel is a development build${plan.installedVersion ? ` (${plan.installedVersion})` : ''}.`
-    : 'S1 Kiosk on the panel is signed with a different key than this version.';
+    ? `Glassworks on the panel is a development build${plan.installedVersion ? ` (${plan.installedVersion})` : ''}.`
+    : 'Glassworks on the panel is signed with a different key than this version.';
   const lines = [what, 'Android can\'t update it in place: it has to be removed and installed again.', ''];
   const net = plan.wifi.ssid ? `"${plan.wifi.ssid}"` : 'its Wi-Fi network';
   if (plan.root) {
     lines.push('This panel gives the installer root, so the app\'s settings, sign-in and keys are kept.');
-    if (wifiAtRisk(plan.wifi)) lines.push(`Android would forget ${net} with the old app; the installer sends it to the new app, so the panel stays online.`);
+    if (wifiAtRisk(plan.wifi)) lines.push(`${plan.wifi.owner === 'kiosk' ? 'Android would forget' : 'Android may forget'} ${net} with the old app; the installer sends it to the new app, so the panel stays online.`);
   } else {
     lines.push('The installer has no root on this panel, so the app starts fresh: its settings, Home Assistant sign-in and pairing key are reset (Home Assistant may ask to set the panel up again).');
-    if (wifiAtRisk(plan.wifi)) lines.push(`Android also forgets ${net}, which S1 Kiosk saved. The next step asks for its password again; the cable keeps the panel reachable meanwhile.`);
+    if (wifiAtRisk(plan.wifi)) {
+      lines.push(`${plan.wifi.owner === 'kiosk' ? `Android also forgets ${net}, which Glassworks saved.` : `The installer can't tell who saved ${net}, so the panel may lose its Wi-Fi.`} The next step asks for its password again; the cable keeps the panel reachable meanwhile.`);
+    }
   }
-  if (!wifiAtRisk(plan.wifi) && plan.wifi.owner === 'other') lines.push(`The panel's Wi-Fi ${net} wasn't saved by S1 Kiosk and stays.`);
+  if (!wifiAtRisk(plan.wifi) && plan.wifi.owner === 'other') lines.push(`The panel's Wi-Fi ${net} wasn't saved by Glassworks and stays.`);
   lines.push('', 'If installing the new version fails, the old one is put back.');
   return lines.join('\n');
 }
@@ -193,7 +197,7 @@ export async function switchSigningKey(p: PanelShell, apk: Uint8Array, plan: Swi
   // 1. The installed APK, for putting it back if the new one won't install.
   const path = /^package:(\S+)/m.exec((await p.run(`pm path ${PKG}`)).out)?.[1];
   if (!path || (await p.run(`cp ${path} ${OLD_APK}`)).code !== 0) {
-    throw new Error('could not keep a copy of the installed S1 Kiosk to fall back on. Nothing was changed.');
+    throw new Error('could not keep a copy of the installed Glassworks to fall back on. Nothing was changed.');
   }
   let root = plan.root;
   if (root) {
@@ -240,7 +244,7 @@ export async function switchSigningKey(p: PanelShell, apk: Uint8Array, plan: Swi
       await su('discard');
       await undo();
       await cleanup();
-      throw new Error(`could not keep S1 Kiosk's data (${lastLine(b.out)}). Nothing was changed.`);
+      throw new Error(`could not keep Glassworks' data (${lastLine(b.out)}). Nothing was changed.`);
     }
     log(`app data kept: ${lastLine(b.out)}`);
   }
@@ -251,7 +255,7 @@ export async function switchSigningKey(p: PanelShell, apk: Uint8Array, plan: Swi
     await undo();
     if (root) await su('discard');
     await cleanup();
-    throw new Error(`Android would not remove the installed S1 Kiosk (${un.trim()}). It is unchanged.`);
+    throw new Error(`Android would not remove the installed Glassworks (${un.trim()}). It is unchanged.`);
   }
   log('removed the old build');
 
@@ -265,14 +269,18 @@ export async function switchSigningKey(p: PanelShell, apk: Uint8Array, plan: Swi
   const inst = (await p.run(`pm install -r -g ${NEW_APK}`)).out;
   if (!/Success/.test(inst)) {
     const back = /Success/.test((await p.run(`pm install -r -g ${OLD_APK}`)).out);
-    if (back && root) await restoreInto();
+    const restored = back && root ? await restoreInto() : undefined;
     if (back) await undo();
-    if (root) await su('discard');
+    // The copy is the only one left until a restore worked: keep it otherwise.
+    if (restored?.code === 0) await su('discard');
     await cleanup();
     out.secret?.forget();
-    throw new Error(back
-      ? `the new S1 Kiosk would not install (${inst.trim()}). The previous build is back${root ? ' with its data' : ''}.`
-      : `the new S1 Kiosk would not install (${inst.trim()}), and neither would the previous one. Run the installer again.`);
+    const why = `the new Glassworks would not install (${inst.trim()})`;
+    const kept = ` Its data is kept on the panel in ${SWITCH_DATA} (root only).`;
+    if (!back) throw new Error(`${why}, and neither would the previous one. Run the installer again.${root ? kept : ''}`);
+    if (!restored) throw new Error(`${why}. The previous build is back.`);
+    if (restored.code === 0) throw new Error(`${why}. The previous build is back with its data.`);
+    throw new Error(`${why}. The previous build is back, but its data is not (${lastLine(restored.out)}).${kept}`);
   }
   log('installed the new build');
 
@@ -282,12 +290,12 @@ export async function switchSigningKey(p: PanelShell, apk: Uint8Array, plan: Swi
     if (r.code === 0) { out.dataKept = true; await su('discard'); log('app data restored'); }
     else {
       root = false;
-      out.notes.push(`could not restore the app's data (${lastLine(r.out)}); it starts fresh. The copy stays on the panel in /data/s1kiosk/switch (root only).`);
+      out.notes.push(`could not restore the app's data (${lastLine(r.out)}); it starts fresh. The copy stays on the panel in ${SWITCH_DATA} (root only).`);
     }
   }
   if (owner) {
     const d = await p.run(`dpm set-device-owner ${ADMIN}`);
-    if (d.code !== 0) out.notes.push('S1 Kiosk was device owner and could not be made device owner again; it works without (see ImprovActivity).');
+    if (d.code !== 0) out.notes.push('Glassworks was device owner and could not be made device owner again; it works without (see ImprovActivity).');
   }
   await cleanup();
   return out;
@@ -300,7 +308,7 @@ export async function resendWifi(p: PanelShell, secret: WifiSecret, log: SwitchL
     if (!p.openStream) return false;
     const until = Date.now() + waitMs;
     while (Number.parseInt((await p.run(`grep -c ' @s1kiosk_improv$' /proc/net/unix`)).out.trim(), 10) <= 0) {
-      if (Date.now() > until) { log('S1 Kiosk did not start listening for Wi-Fi details'); return false; }
+      if (Date.now() > until) { log('Glassworks did not start listening for Wi-Fi details'); return false; }
       await sleep(1500);
     }
     for (let i = 0; i < 3; i++) {

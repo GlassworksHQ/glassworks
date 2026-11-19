@@ -10,7 +10,7 @@ class Shell implements PanelShell {
   async push(path: string) { this.cmds.push(`push ${path}`); }
 }
 
-describe('S1 Kiosk over adb', () => {
+describe('Glassworks over adb', () => {
   it('starts the app with the URL and language quoted, or with neither', async () => {
     const s = new Shell();
     await startApp(new Steps(s), { haUrl: `http://ha.local:8123/it's`, locale: 'en-GB' });

@@ -37,6 +37,8 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import dev.glassworks.KioskPrefs
+import dev.glassworks.manage.ManageFixture
+import dev.glassworks.manage.paneRow
 import sh.edm.s1kiosk.PanePrefs
 import dev.glassworks.radio.FixedReadout
 import dev.glassworks.radio.RadioMode
@@ -266,12 +268,18 @@ class NotificationsMockups {
             MenuFixture.cardOnly("voice", "Voice", "Assist and timers"), MenuFixture.cardOnly("sendspin", "Music", "A Sendspin speaker"),
             notify, radio,
         ) + MenuFixture.switchOnly(app)
-        o.show(MenuFixture.model(app, radio, status = "screen on", panes = panes))
+        val model = MenuFixture.model(app, radio, status = "screen on", panes = panes)
+        o.show(model)
         Mockup.idle()
         o.previewSection("notifications")
         Mockup.idle()
         Mockup.layout(o)
         Mockup.save(name, o)
+        // The same page on the Manage page (#518), as HTML to render in a browser.
+        val f = ManageFixture()
+        f.statusFn = { f.status.copy(panes = model.sections.filter { it.id in model.panes }.map { paneRow(it.id, it) }, sections = model.sections) }
+        val b = f.Browser().also { it.signInWithHa() }
+        java.io.File(Mockup.dir!!, "manage").apply { mkdirs() }.resolve("$name.html").writeBytes(b.get("/notifications").body)
     }
 
     private fun setupPanes() {

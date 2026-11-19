@@ -37,12 +37,13 @@ C d 1	1	500	sh.edm.s1kiosk.frame.AqaraS1Plus
 """
 
 
-def make_apk(path, extra=(), dex=20_000, xul=500_000):
+def make_apk(path, extra=(), dex=20_000, xul=500_000, arm64=False):
+    abi = "arm64-v8a" if arm64 else "armeabi-v7a"
     with zipfile.ZipFile(path, "w", zipfile.ZIP_STORED) as z:
         z.writestr("classes.dex", b"d" * dex)
-        z.writestr("lib/armeabi-v7a/libxul.so", b"x" * xul)
-        z.writestr("lib/armeabi-v7a/libtensorflowlite_jni.so", b"t" * 30_000)
-        z.writestr("lib/armeabi-v7a/libown.so", b"o" * 1_000)
+        z.writestr(f"lib/{abi}/libxul.so", b"x" * xul)
+        z.writestr(f"lib/{abi}/libtensorflowlite_jni.so", b"t" * 30_000)
+        z.writestr(f"lib/{abi}/libown.so", b"o" * 1_000)
         z.writestr("assets/omni.ja", b"j" * 100_000)
         z.writestr("assets/extension/content.js", b"c" * 2_000)
         z.writestr("org/bouncycastle/x509/CertPathReviewerMessages.properties", b"b" * 3_000)
@@ -334,6 +335,24 @@ class Comment(unittest.TestCase):
             with self.assertRaises(ValueError):
                 A.markdown(bad)
 
+    def test_one_comment_for_two_frames(self):
+        """The S1's report and generic Android's (#68): one marker, a section each in the order given,
+        each with its own change column, and the footer once."""
+        d = tempfile.mkdtemp()
+        generic = A.build_report("generic-android", {"arm64-v8a": make_apk(os.path.join(d, "head.apk"), arm64=True)},
+                                 {"arm64-v8a": make_apk(os.path.join(d, "base.apk"), arm64=True, dex=10_000)}, PARTS,
+                                 {"size": {}}, None, classes_of=lambda p: A.parse_classes(CLASSES))
+        md = A.markdown(self.rep(), generic)
+        self.assertEqual(md.count(A.MARKER), 1)
+        self.assertTrue(md.startswith(A.MARKER))
+        self.assertLess(md.index("### APK size: `aqara-s1-plus`"), md.index("### APK size: `generic-android`"))
+        self.assertIn("#### arm64-v8a: ", md.split("`generic-android`")[1])
+        self.assertIn("+10.0 kB against the base branch", md.split("`generic-android`")[1])
+        self.assertEqual(md.count("How this is measured"), 1)
+        for bad in ((), (self.rep(), self.rep()), (self.rep(), {"schema": "x"}), tuple(self.rep() for _ in range(A.MAX_REPORTS + 1))):
+            with self.assertRaises(ValueError):
+                A.markdown(*bad)
+
     def test_render_from_the_command_line(self):
         d = tempfile.mkdtemp()
         p = os.path.join(d, "size.json")
@@ -342,9 +361,16 @@ class Comment(unittest.TestCase):
         out = subprocess.run([sys.executable, TOOL, "render", p], capture_output=True, text=True)
         self.assertEqual(out.returncode, 0, out.stderr)
         self.assertTrue(out.stdout.startswith(A.MARKER))
+        g = os.path.join(d, "generic.json")
+        with open(g, "w") as f:
+            json.dump(dict(self.rep(), frame="generic-android"), f)
+        out = subprocess.run([sys.executable, TOOL, "render", p, g], capture_output=True, text=True)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        self.assertIn("### APK size: `generic-android`", out.stdout)
         with open(p, "w") as f:
             f.write('{"schema": "x"}')
         self.assertNotEqual(subprocess.run([sys.executable, TOOL, "render", p], capture_output=True).returncode, 0)
+        self.assertNotEqual(subprocess.run([sys.executable, TOOL, "render", g, p], capture_output=True).returncode, 0)
 
 
 class Parts(unittest.TestCase):
@@ -389,6 +415,24 @@ class Cli(unittest.TestCase):
                                 "--json", os.path.join(d, "x"), "--md", os.path.join(d, "y")], capture_output=True, text=True)
             self.assertEqual(p.returncode, 2, (bad, p.stderr))
         self.assertTrue(os.access(TOOL, os.X_OK))
+
+    def test_generic_androids_size_reaches_the_comment(self):
+        """#68: size-generic builds its base for the change column and uploads its report under the
+        name size-comment.yml downloads and renders, after the S1's."""
+        wf = os.path.join(ROOT, ".github", "workflows")
+        with open(os.path.join(wf, "pr.yml")) as f:
+            pr = f.read()
+        with open(os.path.join(wf, "size-comment.yml")) as f:
+            comment = f.read()
+        job = pr.split("\n  size-generic:\n", 1)[1].split("\n  branding:\n", 1)[0]
+        self.assertIn("name: Release APKs of the base", job)
+        self.assertIn("--base-apk $a=", job)
+        self.assertNotIn("=not-built", job)
+        upload = job.split("name: apk-size-generic", 1)[1].split("\n\n", 1)[0]
+        self.assertIn("generic/size.json", upload)
+        self.assertIn("-n apk-size-generic -D \"$RUNNER_TEMP/in/generic\"", comment)
+        self.assertIn('for f in "$in/size.json" "$in/generic/size.json"', comment)
+        self.assertIn('apksize.py render "${reports[@]}"', comment)
 
     def test_the_size_job_bundles_what_the_release_does(self):
         """tools/size/radio-bundle.sh and release.yml's "Sign the radio bundle" step bundle the same files."""

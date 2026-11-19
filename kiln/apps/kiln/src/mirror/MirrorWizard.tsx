@@ -10,6 +10,7 @@ import Link from 'next/link';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { BuiltOn, stepCredits } from '../components/Credit';
 import { Shell, useBrowserChip } from '../components/Shell';
+import { SilentUpdates, mirrorSilent } from '../components/SilentUpdates';
 import type { RailMark, RailStep } from '../wizard/state';
 import { Fastboot } from '@glassworks/fastboot';
 import { IMAGE_PROXY, MIRROR_FASTBOOT } from '@glassworks/lululemon-mirror-installer';
@@ -251,6 +252,7 @@ function Done({ s, session }: { s: MirrorState; session: MirrorSession }) {
       <span className="okmark" aria-hidden="true">✓</span>
       <h2 id="h">{title}</h2>
       <p className="lede">{body}</p>
+      {r.flow === 'install' && <SilentUpdates words={mirrorSilent(r.installed.updates)} />}
       <BuiltOn credits={stepCredits('lululemon-mirror', credits)} />
       <div className="foot">
         <Log s={s} />

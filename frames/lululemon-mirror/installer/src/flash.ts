@@ -10,6 +10,7 @@ import { ProxyError } from './download';
 import { GLASS_PANES, buildUserdata, macFromSerial, patchSystem, type SystemPatch } from './image';
 import { adbKeyLines } from './services';
 import type { Check } from './recipe';
+import { describeMirrorUpdates, readMirrorUpdates, type MirrorUpdates } from './updates';
 
 /** The Mirror's LK in fastboot, as the Glass Panes install guide reads it on a Mac (not yet seen by Kiln). */
 export const MIRROR_FASTBOOT: USBDeviceFilter = { vendorId: 0x18d1, productId: 0xd00d };
@@ -136,6 +137,8 @@ export const OTHER_HOMES = ['com.android.launcher3', 'com.cyanogenmod.trebuchet'
  * hidden: the image's launcher stays the home screen.
  */
 export interface FirstBoot { app: { name?: string; code: number }; hidden: string[]; home: HomeCheck; wifi?: boolean;
+  /** whether its updates install by themselves: the image's copy in /system/priv-app, read back */
+  updates: MirrorUpdates;
   /** with `apiKey`: whether the fresh app took the key it had before the flash (#574) */
   apiKey?: boolean;
   /** the display rotation Android reports after the rotation step: always MIRROR_ROTATION */
@@ -242,6 +245,8 @@ export async function firstBoot(p: PanelShell, o: { haUrl?: string; locale?: str
   if (!app) throw new Error(`${ours.name} (${ours.package}) isn't on the Mirror after the install`);
   r.detail(`${ours.name} ${app.name ?? app.code}`);
   await grantPermissions(r, ours);
+  const updates = await readMirrorUpdates(p, ours);
+  r.detail(describeMirrorUpdates(updates));
 
   // before the app starts, so it opens in portrait (it follows the system's rotation, #434)
   r.step('Turn the screen upright (portrait)');
@@ -269,7 +274,7 @@ export async function firstBoot(p: PanelShell, o: { haUrl?: string; locale?: str
     wifi = await sendWifi(p, o.wifi.ssid, o.wifi.password, sleep);
     r.detail(wifi ? 'joined' : `${ours.name} didn't confirm it joined (the image's saved network still applies)`);
   }
-  return { app, hidden, home, rotation, ...(wifi !== undefined ? { wifi } : {}), ...(apiKey !== undefined ? { apiKey } : {}) };
+  return { app, hidden, home, rotation, updates, ...(wifi !== undefined ? { wifi } : {}), ...(apiKey !== undefined ? { apiKey } : {}) };
 }
 
 /** The way back: the plain Glass Panes images, as downloaded, checked against the release's hashes. */

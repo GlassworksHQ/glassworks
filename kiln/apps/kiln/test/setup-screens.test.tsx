@@ -113,7 +113,7 @@ describe('the set-up forms', () => {
     await act(() => s.installApp({ locale: 'de-DE', timezone: 'Europe/Berlin', clock24: true, keyboard: false }));
     expect(s.store.state.setup.phase).toBe('wifi');
     await act(() => s.route('resume')); // Back, or the rail's App
-    expect(screen.getByRole('heading').textContent).toBe('Update S1 Kiosk.'); // the app is on the panel now
+    expect(screen.getByRole('heading').textContent).toBe('Update Glassworks.'); // the app is on the panel now
     const [language, zone] = screen.getAllByRole('combobox') as HTMLSelectElement[];
     expect([language!.value, zone!.value]).toEqual(['de-DE', 'Europe/Berlin']);
     expect(screen.getByRole('radio', { name: '24-hour' }).getAttribute('data-state')).toBe('checked');
@@ -149,19 +149,19 @@ describe('the set-up forms', () => {
   it('Installing the app: every APK and phase the panel reports, in order, then Wi-Fi', async () => {
     const s = demoSession('app');
     render(<Wizard session={s} frame={s1PlusUi} base="/aqara-s1-plus" />);
-    await act(() => s.route('resume')); // the demo panel has no S1 Kiosk: a first install
+    await act(() => s.route('resume')); // the demo panel has no Glassworks: a first install
     const rows = () => [...document.querySelectorAll('.join li')].map((li) => `${li.className || '-'} ${li.firstChild?.textContent}`);
     const going = s.installApp({ clock24: true, keyboard: true });
-    await act(() => new Promise((r) => setTimeout(r, 1200))); // S1 Kiosk's pm install (the demo holds it 2.5 s)
-    expect(screen.getByRole('heading').textContent).toBe('Installing S1 Kiosk.');
-    expect(rows()).toEqual(['cur Install S1 Kiosk', '- Make it the panel\'s home screen', '- Install the on-screen keyboard', '- Apply your time zone, language and clock', '- First start']);
+    await act(() => new Promise((r) => setTimeout(r, 1200))); // Glassworks' pm install (the demo holds it 2.5 s)
+    expect(screen.getByRole('heading').textContent).toBe('Installing Glassworks.');
+    expect(rows()).toEqual(['cur Install Glassworks', '- Make it the panel\'s home screen', '- Install the on-screen keyboard', '- Apply your time zone, language and clock', '- First start']);
     expect(document.querySelector('.join li.cur .sub-step')?.textContent).toBe('Android installs it and optimises it for this panel');
-    expect(screen.getByRole('status').textContent).toBe('Install S1 Kiosk. Android installs it and optimises it for this panel'); // what a screen reader hears
+    expect(screen.getByRole('status').textContent).toBe('Install Glassworks. Android installs it and optimises it for this panel'); // what a screen reader hears
     expect(document.body.textContent).not.toMatch(/restart/); // no app runs yet, so nothing restarts
     await act(async () => { // the keyboard's turn
       for (let i = 0; i < 300 && !document.querySelector('.join li.cur')?.textContent?.startsWith('Install the on-screen keyboard'); i++) await new Promise((r) => setTimeout(r, 10));
     });
-    expect(rows()).toEqual(['done Install S1 Kiosk', 'done Make it the panel\'s home screen', 'cur Install the on-screen keyboard', '- Apply your time zone, language and clock', '- First start']);
+    expect(rows()).toEqual(['done Install Glassworks', 'done Make it the panel\'s home screen', 'cur Install the on-screen keyboard', '- Apply your time zone, language and clock', '- First start']);
     expect(screen.getByRole('status').textContent).toMatch(/^Install the on-screen keyboard\. (Copying it to the panel|Android installs it)$/); // each step is announced
     const phases = (s.store.state.setup as { installing?: { step: string; apk?: string; stage?: string }[] }).installing!.map((p) => p.apk ? `${p.apk} ${p.stage}` : p.step);
     expect(phases.slice(0, 4)).toEqual(['kiosk copy', 'kiosk install', 'home', 'keyboard copy']);
@@ -174,11 +174,11 @@ describe('the set-up forms', () => {
     const s = demoSession('app-update');
     render(<Wizard session={s} frame={s1PlusUi} base="/aqara-s1-plus" />);
     await act(() => s.route('resume'));
-    expect(screen.getByRole('heading').textContent).toBe('Update S1 Kiosk.');
+    expect(screen.getByRole('heading').textContent).toBe('Update Glassworks.');
     const going = s.installApp({ clock24: true, keyboard: false });
-    await act(() => new Promise((r) => setTimeout(r, 1200))); // S1 Kiosk's pm install
-    expect(screen.getByRole('heading').textContent).toBe('Updating S1 Kiosk.');
-    expect(screen.getByRole('status').textContent).toBe('Install S1 Kiosk. Android installs it and optimises it for this panel. The app on the panel closes and restarts during this. That\'s expected.');
+    await act(() => new Promise((r) => setTimeout(r, 1200))); // Glassworks' pm install
+    expect(screen.getByRole('heading').textContent).toBe('Updating Glassworks.');
+    expect(screen.getByRole('status').textContent).toBe('Install Glassworks. Android installs it and optimises it for this panel. The app on the panel closes and restarts during this. That\'s expected.');
     expect([...document.querySelectorAll('.join li')].map((li) => li.firstChild?.textContent)).not.toContain('Install the on-screen keyboard'); // not asked for
     await act(() => going);
     s.close();
