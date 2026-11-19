@@ -27,9 +27,15 @@ internal class Microphone(
     private val onOpenFailed: () -> Unit = { onError("Cannot open the microphone (RECORD_AUDIO granted? mic busy?)") },
     /** A read failed with this code. It opens the microphone again 1 s later. */
     private val onReadFailed: (Int) -> Unit = { onError("Microphone read error $it") },
+    /** Makes a recorder for an audio source with this buffer size in bytes. Tests count the calls. */
+    private val newRecorder: (source: Int, bufBytes: Int) -> AudioRecord = ::recorder,
 ) {
     companion object {
         const val RATE = 16_000
+
+        @SuppressLint("MissingPermission") // loop() checks [allowed] first.
+        private fun recorder(source: Int, bufBytes: Int) =
+            AudioRecord(source, RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufBytes)
     }
 
     /** Linear gain applied to every sample; may be changed while running. */
@@ -52,13 +58,12 @@ internal class Microphone(
         thread = null
     }
 
-    @SuppressLint("MissingPermission") // loop() checks [allowed] first.
     private fun open(): AudioRecord? {
         val minBuf = AudioRecord.getMinBufferSize(RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
         val bufBytes = maxOf(minBuf * 2, frameSamples * 2 * 8)
         for (source in intArrayOf(MediaRecorder.AudioSource.VOICE_RECOGNITION, MediaRecorder.AudioSource.MIC)) {
             val rec = try {
-                AudioRecord(source, RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufBytes)
+                newRecorder(source, bufBytes)
             } catch (e: Exception) {
                 VoiceLog.w("AudioRecord(source=$source) failed", e)
                 continue
