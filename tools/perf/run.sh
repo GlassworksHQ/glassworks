@@ -23,12 +23,16 @@
 #   - Force-stops the app for each cold start (KEYCODE_WAKEUP first, so the screen is on); the app
 #     comes back on the saved dashboard. If the run stops early or the last cold start fails, the
 #     exit trap restarts the app.
-#   Read-only otherwise: getprop, /proc, dumpsys meminfo and SurfaceFlinger, logcat.
+#   - On Android 6 only (no `logcat -v monotonic`): five `ClarityClock` lines in the device's log per runner
+#     step, to tie logcat's wall clock to the monotonic one (docs/perf.md, "Other Glassworks apps, and Android 6").
+#   Read-only otherwise: getprop, /proc, dumpsys meminfo, SurfaceFlinger and activity recents (the app's
+#   activity), logcat.
 #   On this computer: a Python venv for the fake's WebRTC peer (aiortc, from webrtc-requirements.txt,
 #   locked with hashes) in ~/.cache/glassworks-perf, and two `adb reverse` ports (--port and the
 #   WebRTC relay's, --port + 1), removed on exit.
 #
 # Usage: tools/perf/run.sh --frame aqara-s1-plus [--name "Aqara S1 Plus"] [--serial S] [--runs 3] [--out DIR]
+#          [--package sh.edm.s1kiosk] [--activity A]   # the app; its activity is read from the device unless given
 #          --restore-dashboard URL|auto [--pane-ram assist=on,sendspin=on,mic=on]
 #          [--skip-synthetic] [--skip-reference] [--skip-real-use] [--taps 10] [--quick] [--apk FILE]...
 #          [--webrtc-transport auto|adb|lan-turn|lan-udp]   # the camera video's path; auto (default) asks the panel
@@ -41,7 +45,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ADB="${ADB:-adb}"
-FRAME="" NAME="" RUNS=3 OUT="" PORT=8089 TURN_PORT="" WEBRTC_TRANSPORT=auto PACKAGE=sh.edm.s1kiosk TAPS=10 QUICK=0
+FRAME="" NAME="" RUNS=3 OUT="" PORT=8089 TURN_PORT="" WEBRTC_TRANSPORT=auto PACKAGE=sh.edm.s1kiosk ACTIVITY="" TAPS=10 QUICK=0
 SYNTH=1 REF=1 REAL=1 IDLE_ONLY="" MAX_TEMP_C=50 APKS=() RESTORE="" PANE_RAM=""
 # Waits, in seconds. Only the off-device test (test/test_runner.py) shortens them.
 IDLE_SETTLE="${GW_PERF_IDLE_SETTLE:-30}" IDLE_WINDOW="${GW_PERF_IDLE_WINDOW:-15}"
@@ -57,6 +61,7 @@ while [ $# -gt 0 ]; do
     --out) OUT="$2"; shift 2 ;;
     --port) PORT="$2"; shift 2 ;;
     --package) PACKAGE="$2"; shift 2 ;;
+    --activity) ACTIVITY="$2"; shift 2 ;;
     --taps) TAPS="$2"; shift 2 ;;
     --quick) QUICK=1; shift ;;
     --skip-synthetic) SYNTH=0; shift ;;
@@ -79,7 +84,7 @@ OUT="${OUT:-perf-$FRAME-$(date +%Y%m%d-%H%M%S)}"
 mkdir -p "$OUT"
 export ADB
 
-run() { python3 "$HERE/perfrun.py" "$@" --package "$PACKAGE" --frame "$FRAME" --out "$OUT"; }
+run() { python3 "$HERE/perfrun.py" "$@" --package "$PACKAGE" ${ACTIVITY:+--activity "$ACTIVITY"} --frame "$FRAME" --out "$OUT"; }
 sh_dev() { "$ADB" shell "$@" | tr -d '\r'; }
 log() { echo "[$(date +%H:%M:%S)] $*" >&2; }
 
@@ -113,6 +118,12 @@ wait_cool() {
 # GW_PERF_TIME_SCALE (clock.py) is for the off-device tests: refused on a real device here, before
 # anything else on it is touched. Without it, this asks the device nothing.
 python3 "$HERE/clock.py" --check || exit 2
+# The activity that takes the kiosk's extras (perfrun.py Device.resolve_activity): read once from the
+# device, unless --activity names it. The S1's is .MainActivity, the generic app's dev.glassworks.MainActivity.
+if [ -z "$ACTIVITY" ]; then
+  COMPONENT=$(run activity) || exit 2
+  ACTIVITY=${COMPONENT#*/}
+fi
 # The kiosk's test hold keeps the screen on for the run (#240). An app without it ignores the extra,
 # and its screen would sleep partway: no fallback.
 release_hold() { run hold --off >/dev/null 2>&1 || true; }
@@ -168,19 +179,19 @@ point_back() {
         fi
       else
         log "COULD NOT put the panes back: $(printf '%s' "$out" | tail -n 1)"
-        log "send it yourself: adb shell am start -n $PACKAGE/.MainActivity --es url '$RESTORE' $(printf '%s' "$set" | sed 's/\([a-z_]*\)=\([a-z]*\)/--ez \1 \2/g; s/,/ /g')"
+        log "send it yourself: adb shell am start -n $PACKAGE/$ACTIVITY --es url '$RESTORE' $(printf '%s' "$set" | sed 's/\([a-z_]*\)=\([a-z]*\)/--ez \1 \2/g; s/,/ /g')"
       fi
       return 0
     fi
     # -W: wait until the kiosk has the intent. am exits 0 even when it fails, so read its answer.
-    out=$(sh_dev am start -W -n "$PACKAGE/.MainActivity" --es url "'$RESTORE'" 2>&1) || out="$out (adb failed)"
+    out=$(sh_dev am start -W -n "$PACKAGE/$ACTIVITY" --es url "'$RESTORE'" 2>&1) || out="$out (adb failed)"
     if [[ $'\n'$out == *$'\nStatus: ok'* ]]; then
       SWITCHED=0
       # Let the kiosk save the setting and load the dashboard before anything else restarts it.
       sleep "$SWITCH_SETTLE"
     else
       log "COULD NOT point the kiosk back: $(printf '%s' "$out" | tr '\n' ' ')"
-      log "send it yourself: adb shell am start -n $PACKAGE/.MainActivity --es url '$RESTORE'"
+      log "send it yourself: adb shell am start -n $PACKAGE/$ACTIVITY --es url '$RESTORE'"
     fi
   fi
 }
@@ -194,7 +205,7 @@ cleanup() {
   if [ "$DASHBOARD_OK" != 1 ] && restored; then
     log "restoring the dashboard (restart the app)"
     sh_dev am force-stop "$PACKAGE" || true
-    sh_dev am start -n "$PACKAGE/.MainActivity" >/dev/null || true
+    sh_dev am start -n "$PACKAGE/$ACTIVITY" >/dev/null || true
   fi
   [ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2>/dev/null || true
   "$ADB" reverse --remove "tcp:$PORT" 2>/dev/null || true
@@ -311,11 +322,21 @@ if [ "$SYNTH" = 1 ]; then
     log "synthetic run $k/$RUNS"
     DASHBOARD_OK=0
     thermal "synthetic-$k"
-    run synthetic --run "$k" --url "$url" --nonce "$nonce"
+    status=0
+    run synthetic --run "$k" --url "$url" --nonce "$nonce" || status=$?
+    if [ "$status" = 4 ]; then
+      # perfrun.py LOCKDOWN_EXIT: the legacy engine loads only its dashboard's origin (#198).
+      log "the app's lockdown refused the animation test page (legacy engine): skipping it (detail, not graded)"
+      SYNTH=0
+      break
+    fi
+    [ "$status" = 0 ] || exit "$status"
     sleep "$RUN_GAP"
   done
-  log "memory on the test page after the ladder"
-  run idle --label after-synthetic --run 1 --settle 5 --window "$IDLE_WINDOW"
+  if [ "$SYNTH" = 1 ]; then
+    log "memory on the test page after the ladder"
+    run idle --label after-synthetic --run 1 --settle 5 --window "$IDLE_WINDOW"
+  fi
 fi
 
 if [ "$REF" = 1 ]; then
@@ -328,7 +349,7 @@ if [ "$REF" = 1 ]; then
   log "pointing the kiosk at the reference dashboard for the graded runs (it goes back to $RESTORE after)"
   DASHBOARD_OK=0
   SWITCHED=1
-  sh_dev am start -n "$PACKAGE/.MainActivity" --es url "'http://127.0.0.1:$PORT/clarity-ref/start'" >/dev/null
+  sh_dev am start -n "$PACKAGE/$ACTIVITY" --es url "'http://127.0.0.1:$PORT/clarity-ref/start'" >/dev/null
   sleep "$SWITCH_SETTLE"
   for k in $(seq 1 "$RUNS"); do
     log "graded run $k/$RUNS: restart to the reference dashboard, then the four reference dashboards"
