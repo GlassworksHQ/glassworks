@@ -526,4 +526,86 @@ class ScreenPolicyTest {
             screen.stop()
         }
     }
+
+    private fun dashboardLog() = ShadowLog.getLogsForTag("Test.Screen").map { it.msg }.filter { it.startsWith("test dashboard") }
+
+    /** Clarity's own dashboard rides on the test hold: only a loopback address, and only while a hold is on. */
+    @Test fun aTestDashboardNeedsAHoldAndAnAddressOnThisDevice() {
+        ShadowLog.clear()
+        val screen = policy()
+        screen.start(context)
+        val changes = mutableListOf<String?>()
+        screen.onTestDashboard = { changes += it }
+        screen.setTestDashboard(context, "http://127.0.0.1:8089/clarity-ref/start")
+        assertEquals("no hold", null, screen.testDashboard)
+        screen.applyTestHoldExtra(context, Intent().putExtra("test_hold", true).putExtra("test_dashboard", "http://192.0.2.10:8123/lovelace/0"))
+        assertEquals("not on this device", null, screen.testDashboard)
+        val both = Intent().putExtra("test_hold", true).putExtra("test_dashboard", "http://127.0.0.1:8089/clarity-ref/start")
+        screen.applyTestHoldExtra(context, both)
+        assertEquals("http://127.0.0.1:8089/clarity-ref/start", screen.testDashboard)
+        assertFalse("removed once applied", both.hasExtra("test_dashboard"))
+        screen.applyTestHoldExtra(context, Intent().putExtra("test_dashboard", "http://localhost:8089/x"))
+        screen.applyTestHoldExtra(context, Intent().putExtra("test_dashboard", ""))
+        assertEquals(null, screen.testDashboard)
+        assertEquals(listOf("http://127.0.0.1:8089/clarity-ref/start", "http://localhost:8089/x", null), changes)
+        assertEquals(
+            listOf(
+                "test dashboard refused: no test hold", "test dashboard refused: only http on 127.0.0.1 or localhost",
+                "test dashboard on: http://127.0.0.1:8089", "test dashboard on: http://localhost:8089", "test dashboard off (cleared)",
+            ),
+            dashboardLog(),
+        )
+        assertTrue("the hold goes on", screen.testHeld)
+        screen.stop()
+    }
+
+    /** Each graded restart force-stops the app: the new process comes back to the test's dashboard, until the hold ends. */
+    @Test fun aTestDashboardOutlivesARestartAndEndsWithTheHold() {
+        val before = policy()
+        before.start(context)
+        before.testHold(context, 600)
+        before.setTestDashboard(context, "http://127.0.0.1:8089/clarity-ref/start")
+        before.testHold(context, 900)
+        assertEquals("a renewed hold keeps it", "http://127.0.0.1:8089/clarity-ref/start", TestHold.dashboard(context))
+        kill(before)
+        ShadowLog.clear()
+
+        val after = policy()
+        after.start(context)
+        val changes = mutableListOf<String?>()
+        after.onTestDashboard = { changes += it }
+        assertEquals("http://127.0.0.1:8089/clarity-ref/start", after.testDashboard)
+        assertEquals(listOf("test dashboard resumed: http://127.0.0.1:8089"), dashboardLog())
+        after.applyTestHoldExtra(context, Intent().putExtra("test_hold", false))
+        assertEquals(null, after.testDashboard)
+        assertEquals("back to the saved dashboard", listOf<String?>(null), changes)
+        assertEquals(null, TestHold.dashboard(context))
+        after.stop()
+    }
+
+    /** A runner that died leaves nothing behind: the dashboard ends when the hold expires. */
+    @Test fun aTestDashboardEndsWhenTheHoldExpires() {
+        val screen = policy()
+        screen.start(context)
+        screen.testHold(context, 60)
+        screen.setTestDashboard(context, "http://127.0.0.1:8089/clarity-ref/start")
+        val changes = mutableListOf<String?>()
+        screen.onTestDashboard = { changes += it }
+        advance(61_000)
+        assertFalse(screen.testHeld)
+        assertEquals(null, screen.testDashboard)
+        assertEquals(listOf<String?>(null), changes)
+        assertFalse(holdFile.exists())
+        screen.stop()
+    }
+
+    @Test fun onlyLoopbackHttpIsATestDashboard() {
+        for (ok in listOf("http://127.0.0.1:8089/clarity-ref/start", "http://localhost:8089/", "https://127.0.0.1:8443/x", "http://[::1]:8089/")) {
+            assertTrue(ok, TestHoldFile.isTestDashboard(ok))
+        }
+        for (no in listOf("http://192.0.2.10:8123/", "http://homeassistant.local:8123", "file:///sdcard/x.html", "http://127.0.0.1.example/",
+                          "javascript:alert(1)", "", "http://127.0.0.1:8089/a b")) {
+            assertFalse(no, TestHoldFile.isTestDashboard(no))
+        }
+    }
 }

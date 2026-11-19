@@ -118,15 +118,49 @@ def test_hold(cmd):
         save("awake_at.json", C.now())       # the idle timeout counts from the end
         save("kiosk_awake_at.json", C.now())
         said = "test hold off (ended)"
+        if state("test_dash.json"):          # the test dashboard ends with the hold
+            save("test_dash.json", None)
+            save("hold_log.json", state("hold_log.json", []) + [[now(), said], [now(), "test dashboard off (ended)"]])
+            return
+    else:
+        return
+    save("hold_log.json", state("hold_log.json", []) + [[now(), said]])
+
+
+def test_dashboard(value):
+    """The kiosk's test dashboard (ScreenPolicy.testDashboard): a loopback page shown instead of the saved dashboard
+    while the hold lasts, through restarts, logged as the kiosk logs it. "" ends it. FAKE_NO_TEST_DASHBOARD: a
+    kiosk without it, which ignores the extra."""
+    if os.environ.get("FAKE_NO_TEST_DASHBOARD"):
+        return
+    save("test_dashes_set.json", state("test_dashes_set.json", []) + [value])
+    if value and not held():
+        said = "test dashboard refused: no test hold"
+    elif value:
+        save("test_dash.json", value)
+        said = "test dashboard on: " + re.match(r"(\w+://[^/]+)", value).group(1)
+    elif state("test_dash.json"):
+        save("test_dash.json", None)
+        said = "test dashboard off (cleared)"
     else:
         return
     save("hold_log.json", state("hold_log.json", []) + [[now(), said]])
 
 
 def shell(cmd):
-    if cmd.startswith("am start") and "--ez test_hold " in cmd:
-        test_hold(cmd)
-        return "Starting: Intent\nStatus: ok\nComplete\n" if " -W " in cmd else "Starting: Intent\n"
+    td = re.search(r"--es test_dashboard '([^']*)'", cmd) if cmd.startswith("am start") else None
+    if td and (os.environ.get("FAKE_RESTORE_FAILS") and not td.group(1)
+               or os.environ.get("FAKE_REF_URL_FAILS") and td.group(1)):
+        # The kiosk didn't take it (am exits 0 all the same): nothing changes.
+        save("restore_refused.json", state("restore_refused.json", 0) + 1)
+        return f"Starting: Intent {{ cmp={PKG}/{ACTIVITY} }}\nError: Activity not started, unable to resolve Intent\n"
+    if cmd.startswith("am start") and ("--ez test_hold " in cmd or td):
+        if "--ez test_hold " in cmd:
+            test_hold(cmd)
+        if td:
+            test_dashboard(td.group(1))
+        if not re.search(r"--ez (?!test_hold )", cmd):
+            return "Starting: Intent\nStatus: ok\nComplete\n" if " -W " in cmd else "Starting: Intent\n"
     if os.environ.get("FAKE_SCREEN_SLEEP_S") and ("KEYCODE_WAKEUP" in cmd
                                                    or cmd.startswith(("input swipe", "input tap"))):
         save("awake_at.json", C.now())       # what keeps the fake screen on (a wake, a touch)
@@ -164,16 +198,15 @@ def shell(cmd):
         return ""
     if cmd.startswith("am start"):
         u = re.search(r"--es url '([^']+)'", cmd)
-        if u and (os.environ.get("FAKE_RESTORE_FAILS") and "127.0.0.1" not in u.group(1)
-                  or os.environ.get("FAKE_REF_URL_FAILS") and "127.0.0.1" in u.group(1)):
-            # The kiosk didn't take the restore (am exits 0 all the same): nothing is saved.
-            save("restore_refused.json", state("restore_refused.json", 0) + 1)
-            return f"Starting: Intent {{ cmp={PKG}/{ACTIVITY} }}\nError: Activity not started, unable to resolve Intent\n"
         if u:
             # Like the kiosk: `url` saves the dashboard (a URL or "auto") and loads it.
             save("saved_url.json", u.group(1))
             save("urls_set.json", state("urls_set.json", []) + [u.group(1)])
-        ez = re.findall(r"--ez (\w+) (true|false)", cmd)
+            signed_in = os.environ.get("FAKE_SIGNED_IN")
+            if signed_in and not u.group(1).startswith(signed_in):
+                # #496: the sign-in is for another address now; the kiosk asks to sign in again.
+                save("signin_moved.json", True)
+        ez = [e for e in re.findall(r"--ez (\w+) (true|false)", cmd) if e[0] != "test_hold"]
         if ez:
             # Like the kiosk: each `--ez` saves a setting (voice_enabled, sendspin_enabled, restart).
             # FAKE_VOICE_LOST: as the S1 app 0.4.3, which saves voice_enabled asynchronously and exits
@@ -660,7 +693,15 @@ def dashboard():
     save("session_up.json", True)
     a = now()
     paint(a + 0.2, a + 1.2)  # the screen paints whether or not anyone reads logcat
-    saved = state("saved_url.json") or os.environ.get("FAKE_SAVED_URL")
+    saved = (state("test_dash.json") if held() else None) or state("saved_url.json") or os.environ.get("FAKE_SAVED_URL")
+    if state("signin_moved.json"):
+        # #496: Home Assistant moved: the setup screen's Sign in step covers the kiosk, and HA's login page loads.
+        line("Glassworks", "Home Assistant is at another address than the sign-in's: asking to sign in again, no token sent")
+        line("GeckoSession", f"handleMessage GeckoView:PageStart uri={saved}")
+        line("GeckoSession", "handleMessage GeckoView:PageStop uri=null")
+        line("GeckoSession", "handleMessage GeckoView:PageStart uri=http://127.0.0.1/auth/authorize?response_type=code")
+        line("GeckoSession", "handleMessage GeckoView:PageStop uri=null")
+        return
     if saved and "/clarity-" in saved and not os.environ.get("FAKE_RESTART_PAGE_LOST"):
         # Protocol 4: the kiosk was pointed at a reference dashboard; it comes back to it, and the
         # harness (no nonce: restart mode) says when it was usable, then done.
