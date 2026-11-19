@@ -15,6 +15,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   another: it changes only what you tick, and greys out what the other panel's version doesn't have.
   Administrators only. Each panel checks the sign-in with Home Assistant itself, so panels never trust
   each other. Every panel needs this version for the page to reach it.
+- **Kiln's Done says whether the S1's updates install by themselves.** After an install or a setup, Kiln reads the
+  panel back and shows a *Silent updates* block: *On* when the boot image has its root update service, or *A tap
+  each* with how to add it when it doesn't. The lululemon Mirror's test install shows the same block, read from
+  whether Glassworks went in as a system app.
 - **Setup says when updates would ask for a tap.** On a new setup of an S1 whose boot image has no update
   service, a *Silent updates* step follows Panes: Kiln adds the service from a computer, with a QR code to it.
   It's never required: Continue moves on. Panels that are already set up don't see it, and an S1 with the

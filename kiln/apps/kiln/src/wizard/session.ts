@@ -5,7 +5,7 @@ import type { AdbKey, PanelShell } from '@glassworks/adb';
 import type { Fastboot } from '@glassworks/fastboot';
 import type { FelDevice } from '@glassworks/fel';
 import {
-  IMPROV_SOCKET, ImprovSerialClient, PKG, kioskVersion, State as ImprovState, describeSwitch, panelWifi, unprovision,
+  IMPROV_SOCKET, ImprovSerialClient, PKG, kioskVersion, State as ImprovState, describeSwitch, panelWifi, readRootUpdates, unprovision,
   type AppPhase, type AssetName, type Provisioned, type SetUpOptions,
 } from '@glassworks/aqara-s1-plus-installer';
 import {
@@ -15,6 +15,7 @@ import {
 import { openSignInWindow, SETUP_SOCKET, SetupChannel } from '@glassworks/setup-channel';
 import type { FrameUi } from '../frames/aqara-s1-plus';
 import { ChannelSetup, type SetupSteps } from '../setup/channelSetup';
+import { s1Silent } from '../components/SilentUpdates';
 import { explain } from './explain';
 import { AskBridge, flowUi } from './flowUi';
 import { initial, reduce, type Action, type AppSettings, type Flow, type Setup, type WizardState } from './state';
@@ -479,7 +480,19 @@ export class Session implements SetupSteps {
         },
       },
     });
+    void this.readUpdates();
     void this.handOff(ip);
+  }
+
+  /** Done's Silent updates block (issue 422): the root update service read back from the panel, whatever route led to Done. */
+  private async readUpdates(): Promise<void> {
+    const p = this.panel;
+    if (!p) return;
+    const u = await readRootUpdates(p, this.lid());
+    this.ui.note(u.state === 'unknown' ? `silent updates: not read back (${u.detail})` : `silent updates: root update service ${u.state === 'on' ? 'in place' : 'missing'}`);
+    const d = this.s.done;
+    if (!d || this.closed || this.s.screen !== 'done') return;
+    this.dispatch({ type: 'done', done: { ...d, updates: s1Silent(u) } });
   }
 
   /**
