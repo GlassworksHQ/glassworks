@@ -24,6 +24,15 @@ const nets = (...ssids: string[]) => ssids.map((ssid, i) => ({ ssid, rssi: -50 -
 const checked = () => screen.getAllByRole('radio').find((r) => r.getAttribute('data-state') === 'checked')?.textContent;
 
 describe('the set-up forms', () => {
+  it('Installing: an APK the screen has no row for marks none, and the screen stays up', () => {
+    const s = demoSession(s1Demo, 'connect');
+    render(<Wizard session={s} frame={s1PlusUi} base="/aqara-s1-plus" />);
+    act(() => s.store.dispatch({ type: 'setup', setup: { phase: 'settings', update: false, installing: [{ step: 'apk', apk: 'a-new-apk', stage: 'install' }] } }));
+    expect(screen.getByRole('heading', { name: /Installing/ })).toBeTruthy();
+    expect(document.querySelectorAll('ol.join li.cur, ol.join li.done')).toHaveLength(0);
+    s.close();
+  });
+
   it('Wi-Fi: a pick that a rescan no longer lists is replaced', () => {
     const s = demoSession(s1Demo, 'connect');
     render(<Wizard session={s} frame={s1PlusUi} base="/aqara-s1-plus" />);

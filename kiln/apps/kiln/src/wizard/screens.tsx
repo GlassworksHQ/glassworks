@@ -171,7 +171,7 @@ function Installing({ frame, setup }: { frame: KilnFrame; setup: Extract<Setup, 
   const cur = now ? ROWS.findIndex((r) => r.id === rowOf(now)) : 0;
   // the keyboard row while it is still to come, if asked for; one passed without an install is left out
   const rows = ROWS.filter((r, i) => r.id !== 'keyboard' || reached.has('keyboard') || (setup.chosen?.keyboard !== false && i > cur));
-  const at = rows.findIndex((r) => r.id === ROWS[cur]!.id);
+  const at = rows.findIndex((r) => r.id === ROWS[cur]?.id);
   const { sub, note } = now ? nowSays(now, setup.update) : {};
   // the list changes only its marks, which a live region doesn't read: say the step in words
   const says = [rows[at]?.text(frame.app), sub, note].filter(Boolean).join('. ').replace(/\.\./g, '.');

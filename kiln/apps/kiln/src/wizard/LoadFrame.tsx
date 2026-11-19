@@ -7,9 +7,13 @@ import { FrameWizard } from './FrameWizard';
 
 const loads = new Map<string, Promise<DemoFrame>>();
 
+/** One load per frame; a load that failed (a chunk the network dropped) leaves, so the next visit tries again. */
 function load(id: string): Promise<DemoFrame> {
   let p = loads.get(id);
-  if (!p) loads.set(id, (p = KILN[id]!()));
+  if (!p) {
+    p = KILN[id]!().catch((e: unknown) => { loads.delete(id); throw e; });
+    loads.set(id, p);
+  }
   return p;
 }
 
