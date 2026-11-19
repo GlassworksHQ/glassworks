@@ -118,10 +118,18 @@ class ManageOneSignInEverywhereTest {
         val b = f.Browser()
         b.cookies[ManageServer.SESSION] = f.sessions.create(null, SignedInWith.PANEL_CODE, "Safari on Mac", false, f.haBase).first
         val csrf = b.csrf()
-        f.duringRefresh = { f.duringRefresh = null; keep(b, csrf = csrf) }
-        val r = keep(b, csrf = csrf)
-        assertFalse("the kept one is this very sign-in: the tab must not revoke it", JSONObject(r.text()).optBoolean("already"))
-        assertFalse(JSONObject(keep(b, csrf = csrf).text()).optBoolean("already"))
+        // Kept, and not "revoke yours": a 200 with ok, and no already.
+        fun keptAsIs(r: dev.glassworks.web.HttpResponse, what: String) {
+            assertEquals(what, 200, r.status)
+            val j = JSONObject(r.text())
+            assertTrue(what, j.optBoolean("ok"))
+            assertFalse("$what: the kept one is this very sign-in, the tab must not revoke it", j.optBoolean("already"))
+        }
+        var nested: dev.glassworks.web.HttpResponse? = null
+        f.duringRefresh = { f.duringRefresh = null; nested = keep(b, csrf = csrf) }
+        keptAsIs(keep(b, csrf = csrf), "the request that waited on HA")
+        keptAsIs(nested!!, "the one that landed meanwhile")
+        keptAsIs(keep(b, csrf = csrf), "the same one again later")
     }
 
     @Test fun onlyThisPanelsOwnSignedInPageCanHandItOver() {
