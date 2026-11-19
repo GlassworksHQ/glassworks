@@ -81,7 +81,7 @@ the FEL install uses? And what does it take to make that safe enough?
 | Step | What the writer does | Evidence |
 |---|---|---|
 | Trigger | The radio bundle's `s1kiosk_radio.sh` starts `bootwriter/glassworks_bootwriter.sh` when this boot runs no loader. An app update from the update card and one from Kiln over USB both install that bundle. No other path | shell tests ("a bundle's helper starts the writer") |
-| Magisk | The app's `MagiskFetch` downloads the pinned APK only while the record says `need-magisk`, and deletes it once the loader is in | `BootWriterTest` |
+| Magisk | The app's `MagiskFetch` downloads the pinned APK only while the record says `need-magisk`, and deletes it once the loader is in. The writer waits for it in the same run, with no deadline (a sleeping writer costs nothing; a helper restart starts the next one) | `BootWriterTest`, shell tests |
 | Checks | 256 MiB free on `/data`; two byte-identical exports; a Magisk image (`cpio test` = 1) with the 0.4.3 services; the patch's kernel, dtb and header equal the panel's | shell tests |
 | Backup | The first export, `$DIR/boot-writer/backup.img` (root 0600), kept for good | shell tests |
 | Write | `dd` with `conv=fsync`, caches dropped, read back from the device; a mismatch writes the backup back and reads that back; no restart | shell tests, including a forced mismatch |

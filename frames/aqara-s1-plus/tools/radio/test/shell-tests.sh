@@ -1721,6 +1721,13 @@ check "...one run waits for it, saying need-magisk meanwhile" test "$(bwpub)" = 
 cp "$BW/magisk.apk" "$APP/files/boot-writer/magisk.apk"; chown 10050:10050 "$APP/files/boot-writer/magisk.apk"
 wait "$BWP"
 check "...and goes on as soon as the app's download is there, in the same run" test "$(bwpub)" = restarting
+bw_reset; rm -f "$APP/files/boot-writer/magisk.apk"
+bwrun GWB_MAGISK_WAIT= GWB_MAGISK_POLL=0.1 & BWP=$!
+sleep 3   # 30 polls: as long as the test can afford to stand for hours
+check "...with no deadline (the default) it is still waiting, long after it asked" test "$(bwpub)" = need-magisk -a -n "$(kill -0 $BWP 2>/dev/null && echo y)"
+cp "$BW/magisk.apk" "$APP/files/boot-writer/magisk.apk"; chown 10050:10050 "$APP/files/boot-writer/magisk.apk"
+wait "$BWP"
+check "...and an APK that arrives that late still goes through, in that run" test "$(bwpub)" = restarting
 
 bw_reset; echo 1 > /t/dd-write-flip; bwrun
 check "a readback that differs after the write: the backup goes back, checked, no restart" \

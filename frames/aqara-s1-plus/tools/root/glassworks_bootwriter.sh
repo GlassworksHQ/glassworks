@@ -32,7 +32,7 @@ APP_DATA=${GWB_APP_DATA:-/data/data/sh.edm.s1kiosk}
 PUB=${GWB_PUB:-/data/glassworks-pub}
 DROP_CACHES=${GWB_DROP_CACHES:-/proc/sys/vm/drop_caches}
 NEED_KB=${GWB_NEED_KB:-262144}                # 256 MiB: backup, a second export, the APK and the work dir
-MAGISK_WAIT=${GWB_MAGISK_WAIT:-1800}          # how long one run waits for the app's download (s); the next start waits again
+MAGISK_WAIT=${GWB_MAGISK_WAIT:-}              # seconds one run waits for the app's download; empty = as long as it takes
 MAGISK_POLL=${GWB_MAGISK_POLL:-30}
 BUNDLE_V=${GWB_BUNDLE_VERSION:-0}
 APP_MAGISK=boot-writer/magisk.apk             # app -> writer, relative to the app's files/
@@ -120,11 +120,13 @@ rm -rf "$W"; mkdir -p "$W/x" "$W/p" && chmod 700 "$W" || fail "cannot make $W"
 uid_=$(stat -c %u "$APP_DATA" 2>/dev/null)
 case "$uid_" in ''|*[!0-9]*) fail "the app isn't installed" ;; esac
 # The app downloads it when the record says need-magisk (MagiskFetch); this run waits for it, holding the lock
-end_=$(( $(date +%s) + MAGISK_WAIT )); asked_=""
+# No deadline by default: a download that takes hours (a network outage) still lands in this run. A sleeping writer
+# costs nothing, and a helper restart (which ends it) starts the next one.
+end_=""; [ -n "$MAGISK_WAIT" ] && end_=$(( $(date +%s) + MAGISK_WAIT )); asked_=""
 until "$BOOTFILES/s1kiosk_verify" --copy "$APP_DATA" "files/$APP_MAGISK" "$uid_" "$MAGISK_SIZE" "$W/magisk.apk" >/dev/null 2>&1 &&
     [ "$(sha "$W/magisk.apk")" = "$MAGISK_SHA256" ]; do
   rm -f "$W/magisk.apk"
-  [ "$(date +%s)" -lt "$end_" ] || wait_ need-magisk "waiting for the app to download the official Magisk APK"
+  [ -z "$end_" ] || [ "$(date +%s)" -lt "$end_" ] || wait_ need-magisk "waiting for the app to download the official Magisk APK"
   [ -n "$asked_" ] || { pub need-magisk "waiting for the app to download the official Magisk APK"; asked_=1; }
   sleep "$MAGISK_POLL"
 done
