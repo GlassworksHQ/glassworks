@@ -228,6 +228,9 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   back to Stable never installs an older version: the panel waits for a stable release newer than the one it runs.
 
 ### Changed
+- **Live changes show sooner on Wi-Fi.** While the screen is on and the dashboard is in front, the panel keeps its
+  Wi-Fi awake, so a light you switch or a sensor that changes shows on the dashboard without waiting for the radio
+  to wake. It lets the Wi-Fi sleep again when the screen goes off.
 - **A room's "lights off" no longer turns the panel's screen off.** The screen is still a light with the same
   entity id, but Home Assistant now lists it under the device's Configuration. Actions aimed at an area, floor or
   device skip it, so a presence automation's "room empty, lights off" and a Good Night script leave the panel

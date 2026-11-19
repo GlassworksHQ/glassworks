@@ -72,6 +72,15 @@ class PlatformTest {
     }
 
     @Test
+    @Suppress("DEPRECATION")
+    fun `the live-update Wi-Fi lock - high-perf below Android 10, low-latency from it`() {
+        for (level in 21..40) {
+            val mode = if (level >= 29) android.net.wifi.WifiManager.WIFI_MODE_FULL_LOW_LATENCY else android.net.wifi.WifiManager.WIFI_MODE_FULL_HIGH_PERF
+            assertEquals("API $level", mode, PlatformApi(level).wifiLatencyLockMode)
+        }
+    }
+
+    @Test
     fun `each query flips at its boundary and nowhere else`() {
         for ((name, firstLevel, query) in queries) {
             for (level in 21..40) {

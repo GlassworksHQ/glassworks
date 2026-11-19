@@ -253,7 +253,8 @@ python3 tools/gecko-eval/gecko_eval.py 'JSON.stringify({w: innerWidth, h: innerH
 Gecko's prefs are written to `files/geckoview-config.yaml` at startup and logged under the
 `Glassworks` tag. Sign-in and HA discovery log under `Glassworks.Auth` / `Glassworks.Discovery`, the Manage page under `Glassworks.Manage` ([docs/manage.md](../../../docs/manage.md); its own log keeps the `Glassworks…` lines for 7 days in `files/manage/log/`), the Music Assistant
 player under `Glassworks.Sendspin` (with a `sync:` line every 10 s while playing). The Wi-Fi scans the app
-starts while the screen is off log under `Glassworks.Wifi`, the setup hotspot (#197) under `Glassworks.Hotspot`
+starts while the screen is off log under `Glassworks.Wifi`, and so does the Wi-Fi lock for live updates, held while
+the screen is on and the dashboard is in front (`glassworks:live-updates` in `dumpsys wifi`, #644); the setup hotspot (#197) under `Glassworks.Hotspot`
 (never its name or key). The secret store logs under `Glassworks.Secrets`
 when the Keystore isn't there or a secret no longer opens ([docs/secrets.md](../../../docs/secrets.md)).
 None of them log tokens or keys. Page

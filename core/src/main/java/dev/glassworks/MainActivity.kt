@@ -22,6 +22,7 @@ import android.widget.Toast
 import dev.glassworks.engine.Page
 import dev.glassworks.engine.PageHost
 import dev.glassworks.engine.PagePort
+import dev.glassworks.net.LiveUpdatesWifiLock
 import dev.glassworks.pane.applyFrom
 import dev.glassworks.pane.intentExtras
 import dev.glassworks.pane.permissionsToAsk
@@ -277,6 +278,8 @@ open class MainActivity : Activity() {
             overlays.forEach { it.screenChanged() }
         }
         glassworks.screen.onTestDashboard = { onTestDashboard() }
+        wifiLock = LiveUpdatesWifiLock(this)
+        glassworks.screen.addListener(updateWifiLock)
         glassworks.commandSink = { applyIntent(it, fromNewIntent = true) }
         startSession()
         intent?.let { i -> handler.post { applySetupPreview(i) } }
@@ -917,6 +920,18 @@ open class MainActivity : Activity() {
         if (hasFocus) hideSystemUi()
     }
 
+    override fun onStart() {
+        super.onStart()
+        started = true
+        updateWifiLock()
+    }
+
+    override fun onStop() {
+        started = false
+        updateWifiLock()
+        super.onStop()
+    }
+
     override fun onResume() {
         super.onResume()
         resumed = true
@@ -1065,6 +1080,11 @@ open class MainActivity : Activity() {
 
     /** In front of the person: only then may Android's dialog show. */
     private var resumed = false
+
+    /** Started: on the screen, maybe under another app's sheet. The Wi-Fi lock for live updates follows it (#644). */
+    private var started = false
+    private lateinit var wifiLock: LiveUpdatesWifiLock
+    private val updateWifiLock = { wifiLock.update(started, glassworks.screen.screenOn) }
 
     /** Answered in this activity's life: a refusal isn't asked again until the next start. Android kills the app on a revoke. */
     private val answeredPermissions = HashSet<String>()
@@ -1326,6 +1346,8 @@ open class MainActivity : Activity() {
         glassworks.screen.onBrightness = null
         glassworks.screen.onStateChanged = null
         glassworks.screen.onTestDashboard = null
+        glassworks.screen.removeListener(updateWifiLock)
+        wifiLock.update(inFront = false, screenOn = false)
         glassworks.screen.stayOn(NOT_READY, false)
         glassworks.commandSink = null
         handler.removeCallbacksAndMessages(null)

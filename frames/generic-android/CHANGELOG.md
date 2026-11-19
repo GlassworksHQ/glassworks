@@ -23,6 +23,11 @@ line of each version is what Home Assistant shows on the update card. A change o
   they're stable, which may have bugs; Home Assistant's update card says when the update it offers is a beta. Going
   back to Stable never installs an older version: the panel waits for a stable release newer than the one it runs.
 
+### Changed
+- **Live changes show sooner on Wi-Fi.** While the screen is on and the dashboard is in front, the panel keeps its
+  Wi-Fi awake, so a light you switch or a sensor that changes shows on the dashboard without waiting for the radio
+  to wake. It lets the Wi-Fi sleep again when the screen goes off.
+
 ### Fixed
 - **Wi-Fi setup over Bluetooth works on the lululemon Mirror.** On a panel with no touchscreen, nobody could press
   Allow, so Home Assistant and phones could never send it Wi-Fi over Bluetooth. Now, when it starts with no network,

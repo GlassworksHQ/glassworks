@@ -149,6 +149,15 @@ open class PlatformApi(
      */
     val hasDockPowerSource: Boolean get() = apiLevel >= 33
 
+    /**
+     * The Wi-Fi lock that keeps the radio out of power save, so a change from Home Assistant isn't held for the next
+     * beacon (#644). From Android 10, `WIFI_MODE_FULL_LOW_LATENCY`, which Android applies only while the screen is on
+     * and the app is in front. Below it, `WIFI_MODE_FULL_HIGH_PERF`, which Android applies whenever it is held.
+     */
+    @Suppress("DEPRECATION") // WIFI_MODE_FULL_HIGH_PERF: the only such lock below Android 10
+    val wifiLatencyLockMode: Int get() =
+        if (apiLevel >= 29) WifiManager.WIFI_MODE_FULL_LOW_LATENCY else WifiManager.WIFI_MODE_FULL_HIGH_PERF
+
     /** `ActivityManager.getHistoricalProcessExitReasons` exists (Android 11). Below it, the reason a process ended is not kept. */
     val hasApplicationExitInfo: Boolean get() = apiLevel >= 30
 
