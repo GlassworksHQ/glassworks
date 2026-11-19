@@ -11,7 +11,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: ReactNode }) => <a href={href} {...p}>{children}</a> }));
 
-import { AUTH_MS, FIRST_START_AUTH_MS, FlashSession, type ImageMaker } from '../src/mirror/flash';
+import { AUTH_MS, BOARD_MS, FIRST_START_AUTH_MS, FlashSession, type ImageMaker } from '../src/mirror/flash';
 import { Flash } from '../src/mirror/MirrorWizard';
 import { MirrorSession } from '../src/mirror/session';
 
@@ -26,7 +26,7 @@ afterEach(() => cleanup());
 /** What @yume-chan/adb throws when the Mirror refuses the key and the public-key fallback has nobody to approve it. */
 const REFUSED = 'No authenticator can handle the request';
 
-function setup(adb: { request: () => Promise<PanelShell>; reopen?: (o?: { authMs?: number }) => Promise<PanelShell>; tries?: number; picked?: () => boolean; windowMs?: number }) {
+function setup(adb: { request: () => Promise<PanelShell>; reopen?: (o?: { authMs?: number }) => Promise<PanelShell>; tries?: number; picked?: () => boolean; windowMs?: number; fastboot?: () => Promise<FastbootLike> }) {
   const images: ImageMaker = {
     async fetch(_, onProgress) { onProgress(1); },
     async download() {},
@@ -44,7 +44,7 @@ function setup(adb: { request: () => Promise<PanelShell>; reopen?: (o?: { authMs
   };
   const mirror = new MirrorSession({ connect: async () => { throw new Error('unused'); } }, true);
   const f = new FlashSession({
-    images, refract: 'https://proxy.test', requestFastboot: async () => fb, requestAdb: adb.request,
+    images, refract: 'https://proxy.test', requestFastboot: adb.fastboot ?? (async () => fb), requestAdb: adb.request,
     ...(adb.reopen ? { reopenAdb: adb.reopen } : {}), ...(adb.tries !== undefined ? { adbTries: adb.tries } : {}), ...(adb.picked ? { adbPicked: adb.picked } : {}), ...(adb.windowMs !== undefined ? { adbWindowMs: adb.windowMs } : {}),
     adbKey: () => 'QAAA= kiln@glassworks', apk: () => mirror.apkBytes(), sleep: async () => {},
   });
@@ -274,11 +274,59 @@ describe('restarting into fastboot over adb: no button to hold', () => {
     expect(f.state).toMatchObject({ connecting: false, restarted: true });
   });
 
+  it('a restart left by a link, then fastboot connecting: the old restart failing leaves the connect alone', async () => {
+    const asks: { fail: (e: Error) => void }[] = [];
+    let fbGive!: (fb: FastbootLike) => void;
+    const { f } = setup({ request: () => new Promise<PanelShell>((_, fail) => { asks.push({ fail }); }), fastboot: () => new Promise((r) => { fbGive = r; }) });
+    f.state = { ...f.state, screen: 'fastboot' };
+    const restarting = f.restartToFastboot();
+    f.followLink('?image=glass-panes'); // leaves the restart out, clears connecting
+    f.state = { ...f.state, screen: 'fastboot' };
+    const connecting = f.connectFastboot();
+    expect(f.state.connecting).toBe(true);
+    asks[0]!.fail(new Error('USB transfer failed'));
+    await restarting;
+    expect(f.state).toMatchObject({ connecting: true }); // still the fastboot connect's
+    expect(f.state.connectError).toBeUndefined();
+    fbGive({ async getvar() { throw new Error('FAIL'); }, async partitionSize() { return 0; }, async flashBlob() {}, async reboot() {} });
+    await connecting;
+    expect(f.state.connecting).toBe(false);
+  });
+
+  it('a Mirror that lets Kiln in, then doesn\'t answer the board read, ends in an error and lets go: Restart works again', async () => {
+    vi.useFakeTimers();
+    try {
+      const close = vi.fn(async () => {});
+      const rebootToBootloader = vi.fn(async () => {});
+      const { f } = setup({ request: async () => ({ run: () => new Promise(() => {}), push: async () => {}, rebootToBootloader, close }) });
+      f.state = { ...f.state, screen: 'fastboot' };
+      const restarting = f.restartToFastboot();
+      await vi.advanceTimersByTimeAsync(BOARD_MS);
+      await restarting;
+      expect(rebootToBootloader).not.toHaveBeenCalled();
+      expect(close).toHaveBeenCalled();
+      expect(f.state.connecting).toBe(false);
+      expect(f.state.connectError).toMatch(/didn't answer `getprop ro.board.platform` in 15 s/);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('a Mirror that won\'t let this browser in says so and points to the steps by hand', async () => {
     const { f } = setup({ request: async () => { throw new AdbAuthTimeout(); } });
     await f.restartToFastboot();
     expect(f.state).toMatchObject({ restarted: false, connecting: false });
     expect(f.state.connectError).toMatch(/didn't let this browser in over adb.*Put it in fastboot by hand, below/);
+  });
+});
+
+describe('a Wi-Fi switch-on that stopped (a community image)', () => {
+  it('says nothing about fastboot: the Mirror runs Android', async () => {
+    const { f, mirror } = setup({ request: async () => new FirstBootMirror() });
+    f.state = { ...f.state, screen: 'error', error: 'USB transfer failed', work: { step: 'wifi-on', x: 0 }, files: f.state.files.map((x) => ({ ...x, state: 'ok' as const })) };
+    render(<Flash flash={f} mirror={mirror} />);
+    expect(screen.queryByRole('button', { name: 'Connect fastboot again' })).toBeNull();
+    expect(screen.queryByText(/still in fastboot/)).toBeNull();
   });
 });
 

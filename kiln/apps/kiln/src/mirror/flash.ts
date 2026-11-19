@@ -13,7 +13,7 @@ import { AdbAuthTimeout, AdbBusy, pemToPkcs8, type PanelShell } from '@glasswork
 import { apiKeyFingerprint, apiKeySocketUp, kioskVersion, readApiKey } from '@glassworks/app-adb';
 import { imageFromLink, plan, wifiStep, type ImageFile, type ImageRecipe, type PlannedStep } from '@glassworks/kiln-core';
 import {
-  GLASSWORKS, GLASS_PANES_USERDATA, MIRROR_IMAGES, ProxyError, USERDATA_BYTES, WrongImage, checkFastboot, firstBoot, makeOnlyHome, wifiOn,
+  GLASSWORKS, GLASS_PANES_USERDATA, MIRROR_IMAGES, ProxyError, USERDATA_BYTES, WrongImage, checkFastboot, firstBoot, makeOnlyHome, wifiOn, within,
   type FastbootLike, type FastbootReport, type FirstBoot, type PrepareStep,
 } from '@glassworks/lululemon-mirror-installer';
 
@@ -187,9 +187,12 @@ export const FIRST_START_AUTH_MS = 60_000;
 /** The person went on to fastboot by hand while the keep step's read ran. */
 class Skipped extends Error {}
 
+/** How long the board read may take: a Mirror that lets Kiln in, then stops answering, ends in an error, not a wait. */
+export const BOARD_MS = 15_000;
+
 /** The Mirror's SoC, read over adb before Kiln reads from it or restarts it: anything else isn't a Mirror. */
 async function checkIsMirror(p: PanelShell): Promise<void> {
-  const board = (await p.run('getprop ro.board.platform')).out.trim();
+  const board = (await within(p, 'getprop ro.board.platform', BOARD_MS)).out.trim();
   if (board !== 'msm8916') throw new Error(`This isn't the Mirror (board ${board || 'unknown'}, needs msm8916). Nothing was changed.`);
 }
 
@@ -228,8 +231,8 @@ export class FlashSession {
   private held = false;
   /** Screen changes so far: a restart asked for on one visit to the fastboot screen doesn't run on a later one. */
   private visits = 0;
-  /** Restarts asked for so far: only the latest may change the state. */
-  private restarts = 0;
+  /** Connections asked for so far (a restart, a key read, fastboot, adb): a restart changes the state only while it is the latest. */
+  private connects = 0;
   private set(patch: Partial<FlashState>) {
     if (patch.screen !== undefined && patch.screen !== this.state.screen) this.visits++;
     this.state = { ...this.state, ...patch };
@@ -448,6 +451,7 @@ export class FlashSession {
     const req = this.d.requestAdb({ authMs: AUTH_MS });
     const gen = this.read.gen + 1;
     this.read = { gen };
+    this.connects++;
     this.set({ connecting: true, connectError: undefined, key: { state: 'reading', at: 0 } });
     let p: PanelShell;
     try {
@@ -518,6 +522,7 @@ export class FlashSession {
     const k = this.state.key;
     const p = this.running;
     if (k?.state !== 'unreachable' || !p) { this.skipKeep(); return; }
+    this.connects++;
     this.set({ connecting: true, connectError: undefined });
     try {
       await this.restart(p);
@@ -539,9 +544,9 @@ export class FlashSession {
     this.set({ connecting: true, connectError: undefined, restarted: false });
     // this restart counts only while it is the latest one and its visit to the screen lasts: an older one, or one whose
     // screen was left (Back, maybe Continue back to it), lets go of its connection and changes nothing
-    const restart = ++this.restarts;
+    const restart = ++this.connects;
     const visit = this.visits;
-    const latest = () => restart === this.restarts;
+    const latest = () => restart === this.connects;
     const mine = () => latest() && visit === this.visits;
     let p: PanelShell | undefined;
     try {
@@ -579,6 +584,7 @@ export class FlashSession {
   async connectFastboot(): Promise<void> {
     const req = this.d.requestFastboot();
     const sel = this.selected;
+    this.connects++; // an older restart still out must not clear this one's state
     this.set({ connecting: true, connectError: undefined });
     try {
       const fb = await req;
@@ -752,6 +758,7 @@ export class FlashSession {
     if (this.state.connecting) return;
     // every try has a deadline: the first FIRST_START_AUTH_MS, each retry at most AUTH_MS (reopenAdb)
     const req = this.d.requestAdb({ authMs: FIRST_START_AUTH_MS });
+    this.connects++;
     this.set({ connecting: true, connectError: undefined, adbWaiting: false });
     const sleep = this.d.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
     let p: PanelShell | undefined;
@@ -804,6 +811,7 @@ export class FlashSession {
 
   private async connectWifiOn(): Promise<void> {
     const req = this.imageConnect ? this.imageConnect() : Promise.reject(new Error('Kiln has no key for this image here. Turn Wi-Fi on in the Mirror\'s Settings once instead.'));
+    this.connects++;
     this.set({ connecting: true, connectError: undefined });
     let p: PanelShell;
     try { p = await req; } catch (e) { this.set({ connecting: false, connectError: (e as Error).message }); return; }
