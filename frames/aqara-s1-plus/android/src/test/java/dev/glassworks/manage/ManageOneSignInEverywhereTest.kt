@@ -98,7 +98,7 @@ class ManageOneSignInEverywhereTest {
         assertTrue("and named an administrator", f.userChecks.isNotEmpty())
         assertTrue(f.server.keepsHaSignIn(sessionId()))
         assertTrue(b.get(ManagePages.PANELS).text().contains("data-ha-signin=\"1\""))
-        assertEquals("once kept, kept", true, JSONObject(keep(b).text()).optBoolean("already"))
+        assertEquals("another sign-in, once one is kept: revoke yours", true, JSONObject(keep(b, refresh = "ANOTHER").text()).optBoolean("already"))
         b.post("/manage/signout", mapOf("csrf" to b.csrf()))
         assertEquals("sign-out revokes it as any kept sign-in", listOf("TAB-REFRESH"), f.revoked)
     }
@@ -112,6 +112,16 @@ class ManageOneSignInEverywhereTest {
         val r = keep(b, csrf = csrf)
         assertEquals(200, r.status)
         assertTrue("this tab's token isn't the kept one: it revokes its own", JSONObject(r.text()).optBoolean("already"))
+    }
+
+    @Test fun theSameSignInSentTwiceIsntRevoked() {
+        val b = f.Browser()
+        b.cookies[ManageServer.SESSION] = f.sessions.create(null, SignedInWith.PANEL_CODE, "Safari on Mac", false, f.haBase).first
+        val csrf = b.csrf()
+        f.duringRefresh = { f.duringRefresh = null; keep(b, csrf = csrf) }
+        val r = keep(b, csrf = csrf)
+        assertFalse("the kept one is this very sign-in: the tab must not revoke it", JSONObject(r.text()).optBoolean("already"))
+        assertFalse(JSONObject(keep(b, csrf = csrf).text()).optBoolean("already"))
     }
 
     @Test fun onlyThisPanelsOwnSignedInPageCanHandItOver() {

@@ -439,7 +439,9 @@ class ManageServer(
         val refresh = req.form["refresh"].orEmpty()
         if (refresh.isEmpty() || refresh.length > 4096) return json(400, JSONObject().put("problem", "No sign-in to keep."))
         val ha = haBase()?.trim()?.trimEnd('/')?.takeIf { signIn.isLocal(it) } ?: return json(404, JSONObject().put("problem", ManageApi.NO_HA))
-        if (kept.containsKey(s.id)) return json(200, JSONObject().put("ok", true).put("already", true))
+        // The same sign-in kept already (a second request with it) is plain success; another one means "revoke yours".
+        val same = { k: HaSignIn.Kept? -> k != null && !k.longLived && k.refreshToken == refresh }
+        kept[s.id]?.let { return json(200, JSONObject().put("ok", true).also { o -> if (!same(it)) o.put("already", true) }) }
         val host = req.headers["host"] ?: return json(400, JSONObject().put("problem", "No sign-in to keep."))
         val clientId = "http://$host/"
         if (!haCalls.tryAcquire()) return json(503, JSONObject().put("problem", BUSY))
@@ -451,7 +453,9 @@ class ManageServer(
             if (user?.isAdmin != true) return json(403, JSONObject().put("problem", "Only Home Assistant administrators manage panels."))
             if (s.id !in sessions.liveIds()) return json(401, JSONObject().put("problem", MANAGE_ENDED))
             // Another tab of this session kept its own first: this one isn't kept, so that tab revokes it (CodeRabbit on #534).
-            if (kept.putIfAbsent(s.id, HaSignIn.Kept(ha, clientId, refresh)) != null) return json(200, JSONObject().put("ok", true).put("already", true))
+            kept.putIfAbsent(s.id, HaSignIn.Kept(ha, clientId, refresh))?.let { other ->
+                return json(200, JSONObject().put("ok", true).also { o -> if (!same(other)) o.put("already", true) })
+            }
             if (stopping) drain()
             event("${user.name}'s Home Assistant sign-in from All panels is kept for this browser (${s.browser})")
             return json(200, JSONObject().put("ok", true))
