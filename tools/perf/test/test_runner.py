@@ -1515,6 +1515,23 @@ class Android6(unittest.TestCase):
         self.assertLess(abs(note["drift_ms"]), 100)
 
 
+class PaneRamTestDashboard(unittest.TestCase):
+    def test_a_kiosk_that_ignores_the_test_dashboard_takes_no_pane_sample(self):
+        """CodeRabbit on #623: am says "Status: ok" to a kiosk that ignores the extra, and the pane samples would be of
+        its own dashboard. --pane-ram checks the kiosk's log first, as the graded part does."""
+        tmp = tempfile.mkdtemp()
+        env, state = fake_env(tmp, FAKE_NO_TEST_DASHBOARD="1")
+        out = os.path.join(tmp, "out")
+        p = subprocess.run([RUN, "--frame", "aqara-s1-plus", "--runs", "1", "--out", out, "--port", port(77),
+                            "--skip-synthetic", "--skip-reference", "--skip-real-use",
+                            "--pane-ram", "assist=on,sendspin=on,mic=on,wall-base=on,time-zone=on,diagnostics=on"],
+                           env=env, capture_output=True, text=True, timeout=120)
+        self.assertEqual(p.returncode, 2, p.stderr[-2000:])
+        self.assertIn("didn't take Clarity's test dashboard", p.stderr)
+        self.assertFalse(os.path.exists(os.path.join(state, "intents.json")))       # no pane switched
+        self.assertEqual([f for f in os.listdir(out) if f.startswith("idle-")], [])
+
+
 class Android6ClockStep(unittest.TestCase):
     def test_a_wall_clock_step_during_a_graded_run_fails_it(self):
         """CodeRabbit on #619: on Android 6 the logcat lines carry the wall clock; a step of it moves the windows away
@@ -1644,7 +1661,8 @@ class PaneRam(unittest.TestCase):
         self.assertEqual(self.read("settings.json"), {"voice_enabled": "true", "sendspin_enabled": "false", "mic_muted": "false",
                                                       "wall_base_enabled": "true", "time_zone_enabled": "true", "diagnostics_enabled": "true"})   # as given
         self.assertFalse(os.path.exists(os.path.join(self.state, "saved_url.json")))          # never the saved dashboard
-        self.assertEqual(self.read("test_dashes_set.json"), [f"http://127.0.0.1:{port(91)}/clarity-ref/typical"] * 18 + [""])
+        # Checked once before the samples, then with each state's intent (18), and cleared after.
+        self.assertEqual(self.read("test_dashes_set.json"), [f"http://127.0.0.1:{port(91)}/clarity-ref/typical"] * 19 + [""])
 
     def test_the_warm_up_cycle_is_sampled_but_not_reported(self):
         """#186: s1p3's first sample had the GPU process 15 MB low. Cycle 0 runs every state and keeps

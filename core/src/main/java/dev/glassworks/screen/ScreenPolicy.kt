@@ -274,7 +274,11 @@ class ScreenPolicy(
     fun setTestDashboard(context: Context, url: String) {
         val want = url.trim().ifEmpty { null }
         when {
-            want == testDashboard -> return
+            // Said again, so a runner that asks twice reads the same answer (perfrun.py testdash).
+            want == testDashboard -> {
+                if (want != null) Log.i(logTag, "test dashboard on: ${origin(want)} (already)")
+                return
+            }
             want != null && !TestHoldFile.isTestDashboard(want) -> {
                 Log.w(logTag, "test dashboard refused: only http on 127.0.0.1 or localhost")
                 return

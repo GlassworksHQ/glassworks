@@ -369,8 +369,14 @@ if [ -n "$PANE_RAM" ]; then
   # starts from a fresh process. perfrun.py panes reads the kiosk's log to check what it runs. A sample that
   # ran something else, or saw the screen go off, is left out of the report (docs/perf.md).
   log "RAM per pane: every pane off, then each on by itself, $((RUNS + 1)) cycles, the first a warm-up (they go back to $PANE_RAM after)"
-  DASHBOARD_OK=0
   SWITCHED=1
+  # Checked once in the kiosk's log: am says "Status: ok" to a kiosk that ignores the extra, and the
+  # samples would then be of its own dashboard. Each state's intent below sends it again, unchanged.
+  run testdash --url "http://127.0.0.1:$PORT/clarity-ref/typical" >/dev/null || {
+    echo "$PACKAGE didn't take Clarity's test dashboard (--es test_dashboard): install an app built from main after it came in (docs/perf.md)" >&2
+    exit 2
+  }
+  DASHBOARD_OK=0
   PANES_SWITCHED=1
   # Cycle 0 is a warm-up, not recorded: its files go to warmup/, which the report doesn't read. In
   # s1p1 and s1p3 the first sample had the GPU process 15 MB under every later one (#186).

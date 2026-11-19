@@ -137,8 +137,9 @@ def test_dashboard(value):
     if value and not held():
         said = "test dashboard refused: no test hold"
     elif value:
+        again = state("test_dash.json") == value
         save("test_dash.json", value)
-        said = "test dashboard on: " + re.match(r"(\w+://[^/]+)", value).group(1)
+        said = "test dashboard on: " + re.match(r"(\w+://[^/]+)", value).group(1) + (" (already)" if again else "")
     elif state("test_dash.json"):
         save("test_dash.json", None)
         said = "test dashboard off (cleared)"
@@ -149,8 +150,9 @@ def test_dashboard(value):
 
 def shell(cmd):
     td = re.search(r"--es test_dashboard '([^']*)'", cmd) if cmd.startswith("am start") else None
+    # FAKE_REF_URL_FAILS: a per-state --pane-ram intent (the test dashboard with pane extras) isn't taken.
     if td and (os.environ.get("FAKE_RESTORE_FAILS") and not td.group(1)
-               or os.environ.get("FAKE_REF_URL_FAILS") and td.group(1)):
+               or os.environ.get("FAKE_REF_URL_FAILS") and td.group(1) and re.search(r"--ez (?!test_hold )", cmd)):
         # The kiosk didn't take it (am exits 0 all the same): nothing changes.
         save("restore_refused.json", state("restore_refused.json", 0) + 1)
         return f"Starting: Intent {{ cmp={PKG}/{ACTIVITY} }}\nError: Activity not started, unable to resolve Intent\n"

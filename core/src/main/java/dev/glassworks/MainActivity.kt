@@ -1280,6 +1280,7 @@ open class MainActivity : Activity() {
         glassworks.screen.onKeepScreenOn = null
         glassworks.screen.onBrightness = null
         glassworks.screen.onStateChanged = null
+        glassworks.screen.onTestDashboard = null
         glassworks.screen.stayOn(NOT_READY, false)
         glassworks.commandSink = null
         handler.removeCallbacksAndMessages(null)

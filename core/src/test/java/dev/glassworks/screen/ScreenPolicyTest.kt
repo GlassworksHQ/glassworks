@@ -545,13 +545,16 @@ class ScreenPolicyTest {
         assertEquals("http://127.0.0.1:8089/clarity-ref/start", screen.testDashboard)
         assertFalse("removed once applied", both.hasExtra("test_dashboard"))
         screen.applyTestHoldExtra(context, Intent().putExtra("test_dashboard", "http://localhost:8089/x"))
+        screen.applyTestHoldExtra(context, Intent().putExtra("test_dashboard", "http://localhost:8089/x"))
+        screen.applyTestHoldExtra(context, Intent().putExtra("test_dashboard", ""))
         screen.applyTestHoldExtra(context, Intent().putExtra("test_dashboard", ""))
         assertEquals(null, screen.testDashboard)
         assertEquals(listOf("http://127.0.0.1:8089/clarity-ref/start", "http://localhost:8089/x", null), changes)
         assertEquals(
             listOf(
                 "test dashboard refused: no test hold", "test dashboard refused: only http on 127.0.0.1 or localhost",
-                "test dashboard on: http://127.0.0.1:8089", "test dashboard on: http://localhost:8089", "test dashboard off (cleared)",
+                "test dashboard on: http://127.0.0.1:8089", "test dashboard on: http://localhost:8089",
+                "test dashboard on: http://localhost:8089 (already)", "test dashboard off (cleared)",
             ),
             dashboardLog(),
         )
