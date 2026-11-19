@@ -34,6 +34,8 @@ function abortable(source: { size: number; stream(): ReadableStream<Uint8Array> 
   return {
     size: source.size,
     stream(): ReadableStream<Uint8Array> {
+      // cancelled before it began (e.g. while its file was opening): don't open the source, which would start fetching
+      if (signal.aborted) return new ReadableStream<Uint8Array>({ start(c) { c.error(new Cancelled('stopped: another image was picked')); } });
       const r = source.stream().getReader();
       return new ReadableStream<Uint8Array>({
         async pull(c) {
@@ -145,5 +147,22 @@ export function imageJobs(open: (name: string) => Promise<JobHandle>, removeAll:
     },
     /** Tests only. */
     isLoaded: () => !!loaded,
+  };
+}
+
+/**
+ * The worker's order: one operation at a time, in the order the page sent them, all on the one
+ * `kiln-mirror` folder, so a discard ends before the next download creates its file there. A discard
+ * first stops the download in flight, and those still queued, so it doesn't wait for a gigabyte
+ * nobody wants any more: each request keeps the signal current when it arrived. Returns when that
+ * operation has run.
+ */
+export function jobQueue<M extends { op: string }>(jobs: { cancel(): void; signal(): AbortSignal }, run: (m: M, signal: AbortSignal) => Promise<void>) {
+  let queue = Promise.resolve();
+  return (m: M): Promise<void> => {
+    if (m.op === 'discard') jobs.cancel();
+    const signal = jobs.signal();
+    queue = queue.then(() => run(m, signal));
+    return queue;
   };
 }
