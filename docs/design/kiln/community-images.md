@@ -55,7 +55,9 @@ width in both themes, are in the PR and on #579, not in the repo.
    mean status only, and ember marks the picked card, as on the panel picker.
 3. **Every screen of a community install says whose it is.** A line above the heading: "Glass
    Panes, by git-nimrod. Kiln installs it; it isn't Glassworks." The confirm screen adds who to ask
-   for help. The credit uses the frame's `credits` entry, as the current Mirror screens do.
+   for help. The credit uses the frame's `credits` entry, as the current Mirror screens do. Each
+   screen links each address once: the credit line links the author and the project, and the
+   ownership line and the support text are plain text (maintainer, 2026-11-19).
 4. **The download starts on Continue.** The choice is the click, and the download screen has no
    second one. The two files download one after the other, each with its progress and its hash
    check. A file that doesn't match is deleted, and the screen says nothing was written.

@@ -31,12 +31,12 @@ const panesCredit = () => FRAMES.find((x) => x.id === 'lululemon-mirror')?.credi
 
 const Out = ({ l }: { l: { name: string; href: string } }) => <a className="link" href={l.href} target="_blank" rel="noopener">{l.name}</a>;
 
-/** Whose software this screen installs: on every screen of a community install, above the heading. */
+/** Whose software this screen installs: on every screen of a community install, above the heading. Plain text: the credit line links them. */
 function Whose({ o }: { o: ImageOption }) {
   return (
     <div className={c.whose}>
       <span className="pill soon">Community image</span>
-      <span className="small"><b className={c.fg}>{o.name}</b>, by <Out l={o.by} />. Kiln installs it; it isn&apos;t Glassworks.</span>
+      <span className="small"><b className={c.fg}>{o.name}</b>, by {o.by.name}. Kiln installs it; it isn&apos;t Glassworks.</span>
     </div>
   );
 }
@@ -53,7 +53,7 @@ function Card({ o }: { o: ImageOption }) {
       <dl className={c.facts}>
         <dt>By</dt><dd>{o.by.name}</dd>
         <dt>Licence</dt><dd>{o.licence}</dd>
-        <dt>Support</dt><dd>{o.support.name}{o.community ? ', not Glassworks' : ''}</dd>
+        <dt>Support</dt><dd>{o.community ? 'Its own project, not Glassworks' : o.support.name}</dd>
         <dt>Project</dt><dd><a className="link" href={o.project.href} target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()}>{o.project.name}</a></dd>
       </dl>
     </RadioGroup.Item>
@@ -227,7 +227,7 @@ function DoneCommunity({ o, back }: { o: ImageOption; back: () => void }) {
         <div className="well">
           <div className="grow">
             <span className="small">Support</span>
-            <span>{o.name} is made by <Out l={o.by} />. Ask on <Out l={o.support} />, not on Glassworks&apos;.</span>
+            <span>Questions about {o.name} go to its own project on GitHub, not to Glassworks.</span>
           </div>
         </div>
       </div>

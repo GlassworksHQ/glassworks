@@ -78,4 +78,12 @@ describe('the image choice mockups', () => {
     expect(screen.getByRole('heading').textContent).toBe('What goes on the Mirror?');
     expect(screen.getAllByRole('radio').map((r) => r.getAttribute('aria-label'))).toEqual(['Glassworks']);
   });
+
+  it.each(['image-choose-panes', 'image-link', 'image-download', 'image-confirm', 'image-done'] as const)('%s links each GitHub address once', async (d) => {
+    render(<ImageChoiceDemo name={d} search="" />);
+    await act(async () => {});
+    const hrefs = [...document.querySelectorAll('.card a[href^="https://github.com/"]')].map((a) => a.getAttribute('href'));
+    expect(hrefs.length).toBeGreaterThan(0);
+    expect(hrefs).toEqual([...new Set(hrefs)]);
+  });
 });
