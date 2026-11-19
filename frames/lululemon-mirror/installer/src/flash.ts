@@ -262,7 +262,7 @@ export async function firstBoot(p: PanelShell, o: { haUrl?: string; locale?: str
     r.step('Home Assistant API key: the one from before the flash');
     apiKey = await handOverApiKey(p, o.apiKey, sleep);
     r.detail(apiKey ? 'handed over: Home Assistant reconnects with no re-authentication'
-      : `${ours.name} didn't take it: after 15 minutes it starts without one, and Home Assistant asks to re-authenticate once`);
+      : `${ours.name} didn't take it, so Home Assistant may ask to re-authenticate once. If ${ours.name} has no key, it starts without one after 15 minutes`);
   }
 
   r.step(`Make ${ours.name} the only home screen`);
