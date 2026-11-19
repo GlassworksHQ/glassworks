@@ -140,12 +140,14 @@ jobs:
         with:
           persist-credentials: false
 
-      # Same toolchain as release.yml.
+      # Same toolchain as release.yml. setup-gradle restores Gradle's caches, the build cache among them, from
+      # what runs on main saved (a PR only reads them), so a PR rebuilds and retests only what it changed: every
+      # test declares the repo files it reads (build-logic, readsRepoFiles).
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: temurin
           java-version: '21'
-          cache: gradle
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
 
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
         with:
@@ -159,8 +161,9 @@ jobs:
         with:
           node-version: '24'
 
+      # --parallel: the modules' test tasks side by side on the runner's 4 cores (no test shares a port or a file).
       - name: Unit tests
-        run: ./gradlew --no-daemon test
+        run: ./gradlew --no-daemon --parallel test
 
       - name: Release build (unsigned)
         if: needs.changes.result != 'success' || needs.changes.outputs.app_apk != 'false'
@@ -206,6 +209,12 @@ jobs:
             grep -q '<testsuite [^>]* skipped="0"' "$report" || { echo "::error::$report: a test skipped"; exit 1; }
           done
 
+      # So a failed run can't save a remembered "missing" artifact into the cache (docs/ci.md, Caches).
+      - name: Forget Gradle's dependency metadata after a failure
+        if: failure()
+        run: rm -rf ~/.gradle/caches/modules-2/metadata-*
+
+
   libs-api23:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.libs_api23 != 'false') }}
@@ -219,7 +228,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-          cache: gradle
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
         with:
           packages: platform-tools
@@ -247,6 +256,12 @@ jobs:
   # 23 for this run only (tools/legacy/api23-lint.gradle) and fails on a call tools/legacy/api23-baseline.txt doesn't
   # list. The libraries are minSdk 23 already (libs-api23); this covers the core, the pane API, the panes and the
   # legacy engine. docs/research/legacy-engine.md has the table.
+
+      # So a failed run can't save a remembered "missing" artifact into the cache (docs/ci.md, Caches).
+      - name: Forget Gradle's dependency metadata after a failure
+        if: failure()
+        run: rm -rf ~/.gradle/caches/modules-2/metadata-*
+
   api23:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.api23 != 'false') }}
@@ -261,7 +276,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-          cache: gradle
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
         with:
           packages: platform-tools
@@ -279,6 +294,12 @@ jobs:
         # INSTALL_PACKAGES, REBOOT and WRITE_SECURE_SETTINGS on purpose (tools:ignore="ProtectedPermissions").
         run: ./gradlew --no-daemon :generic-android:lintDebug
 
+      # So a failed run can't save a remembered "missing" artifact into the cache (docs/ci.md, Caches).
+      - name: Forget Gradle's dependency metadata after a failure
+        if: failure()
+        run: rm -rf ~/.gradle/caches/modules-2/metadata-*
+
+
   libs-publish:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.libs_publish != 'false') }}
@@ -293,7 +314,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-          cache: gradle
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
         with:
           packages: platform-tools
@@ -323,6 +344,12 @@ jobs:
   # Python, must fire in its own word only and score within 0.01 of pymicro-wakeword. It skips without
   # MWW_PYTHON, so this job fails if it skipped. The models come from raw.githubusercontent.com at
   # the commit WakeWords.kt pins, checked against its SHA-256s, and are cached by that commit.
+
+      # So a failed run can't save a remembered "missing" artifact into the cache (docs/ci.md, Caches).
+      - name: Forget Gradle's dependency metadata after a failure
+        if: failure()
+        run: rm -rf ~/.gradle/caches/modules-2/metadata-*
+
   wake-word:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.wake_word != 'false') }}
@@ -338,7 +365,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-          cache: gradle
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
 
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
         with:
@@ -382,6 +409,12 @@ jobs:
           report=libs/voice/build/test-results/testDebugUnitTest/TEST-dev.glassworks.voice.MicroWakeWordClipTest.xml
           [ -z "$failed" ] || { cat "$report"; exit 1; }
           grep -q '<testsuite [^>]* skipped="0"' "$report" || { echo "::error::$report: the test skipped"; exit 1; }
+
+      # So a failed run can't save a remembered "missing" artifact into the cache (docs/ci.md, Caches).
+      - name: Forget Gradle's dependency metadata after a failure
+        if: failure()
+        run: rm -rf ~/.gradle/caches/modules-2/metadata-*
+
 
   web:
     needs: changes
@@ -556,7 +589,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-          cache: gradle
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
 
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
         with:
@@ -664,6 +697,12 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+      # So a failed run can't save a remembered "missing" artifact into the cache (docs/ci.md, Caches).
+      - name: Forget Gradle's dependency metadata after a failure
+        if: failure()
+        run: rm -rf ~/.gradle/caches/modules-2/metadata-*
+
+
   size-generic:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.size_generic != 'false') }}
@@ -679,7 +718,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-          cache: gradle
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
 
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
         with:
@@ -711,6 +750,9 @@ jobs:
             grep -q "^uses-permission: name='android.permission.$perm'" <<< "$badging" || { echo "::error::the legacy APK doesn't ask for $perm"; exit 1; }
           done
           unzip -l "$apk" | grep -q "lib/arm64-v8a/libxul.so" || { echo "::error::the legacy APK has no arm64-v8a GeckoView"; exit 1; }
+          # No crash helper process: the Mirror's lowmemorykiller killed and restarted it every minute (engine-gecko-legacy's manifest).
+          manifest="$("$aapt2" dump xmltree --file AndroidManifest.xml "$apk")"
+          if grep -q "org.mozilla.gecko.crashhelper.CrashHelper" <<< "$manifest"; then echo "::error::the legacy APK still declares GeckoView's crash helper service"; exit 1; fi
           # Its icons load on Android 6: the Mirror's first start crashed on one that didn't (#198).
           python3 tools/legacy/apk-icons.py --aapt2 "$aapt2" "$apk" drawable/ic_notification
           echo "Legacy APK (arm64-v8a): $(stat -c %s "$apk") bytes" >> "$GITHUB_STEP_SUMMARY"
@@ -737,6 +779,12 @@ jobs:
         if: always()
         run: |
           [ -f "$RUNNER_TEMP/generic/size.md" ] && cat "$RUNNER_TEMP/generic/size.md" >> "$GITHUB_STEP_SUMMARY" || true
+
+      # So a failed run can't save a remembered "missing" artifact into the cache (docs/ci.md, Caches).
+      - name: Forget Gradle's dependency metadata after a failure
+        if: failure()
+        run: rm -rf ~/.gradle/caches/modules-2/metadata-*
+
 
   branding:
     needs: changes

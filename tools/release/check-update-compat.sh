@@ -37,12 +37,12 @@ apk="${1:?$usage}"
 [ -f "$apk" ] || { echo "no such APK: $apk" >&2; exit 2; }
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-# Both generic builds run S1 Kiosk's classes under their old names (#504 keeps them), plus the launcher alias.
+# Both generic builds run the core's classes under their own names since #527, plus the launcher alias.
 GENERIC_COMPONENTS=(
-  sh.edm.s1kiosk.AdminReceiver
-  sh.edm.s1kiosk.MainActivity
-  sh.edm.s1kiosk.improv.ImprovActivity
-  sh.edm.s1kiosk.BootReceiver
+  dev.glassworks.AdminReceiver
+  dev.glassworks.MainActivity
+  dev.glassworks.provisioning.ImprovActivity
+  dev.glassworks.BootReceiver
   dev.glassworks.generic.Launcher
 )
 case "$app" in

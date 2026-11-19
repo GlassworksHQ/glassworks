@@ -151,7 +151,9 @@ export async function runInstall(o: InstallOptions, d: RunDeps): Promise<Install
         try {
           // the Wi-Fi is saved in the new userdata too: Android joins it on the first boot with nothing tapped
           await buildImages(loaded!, { apk: o.apk, app: ours, bootAnimation: o.bootAnimation, settingsOverlay: o.settingsOverlay, adbKey: o.adbKey, userdataBytes, fill: o.fill, ...(o.wifi ? { wifi: o.wifi } : {}) },
-            { system: sys.write, userdata: ud.write }, (step, x) => { if (x === 1) d.log(`    ${step} done`); });
+            { system: sys.write, userdata: ud.write }, (step, x) => { if (x === 1) d.log(`    ${step} done`); },
+            // image.ts's own lines: the APK's libraries, the unused apps left out, build.prop, services.jar
+            (line) => d.log(`    ${line}`));
         } finally { sys.close(); ud.close(); }
         d.log(`    ${sysOut}, ${udOut}`);
       }],

@@ -59,14 +59,62 @@ class SilentUpdatesStepTest {
         return screen to Card().also { screen.bind(it, entered = true) }
     }
 
-    @Test fun itShowsOnlyWhereThePersonCanChangeSomething() {
-        val nothingToDo = listOf(
-            SilentUpdates.RootService, SilentUpdates.SystemApp, SilentUpdates.DeviceOwner, SilentUpdates.SelfUpdate,
-            SilentUpdates.NoRootService, SilentUpdates.TargetTooLow("17", 35, 34), null,
-        )
+    /** One rule (the maintainer, 2026-11-18): the step shows whenever updates ask for a tap and there's a fix. */
+    @Test fun itShowsWheneverTheAnswerHasAFix() {
+        val nothingToDo = listOf(SilentUpdates.RootService, SilentUpdates.SystemApp, SilentUpdates.DeviceOwner, SilentUpdates.SelfUpdate)
         for (s in nothingToDo) assertTrue("done for $s", Rig(s).step.done())
-        assertFalse(Rig(SilentUpdates.UnknownAppsOff).step.done())
-        assertFalse(Rig(SilentUpdates.OldAndroid("9")).step.done())
+        val fixable = listOf(
+            SilentUpdates.UnknownAppsOff, SilentUpdates.OldAndroid("9"), SilentUpdates.NoRootService, SilentUpdates.TargetTooLow("17", 35, 34),
+        )
+        for (s in fixable) {
+            assertFalse("shown for $s", Rig(s).step.done())
+            assertTrue("has a fix: $s", s.fix != null)
+        }
+    }
+
+    @Test fun withoutTouchItNeverHoldsSetupButTheChannelCanStillAnswerIt() {
+        var answered = false
+        val noTouch = SilentUpdatesStep({ SilentUpdates.OldAndroid("6.0.1") }, { answered }, { answered = true }, touch = { false })
+        assertTrue("nobody can tap Continue there", noTouch.done())
+        assertEquals("device_owner", noTouch.channelState()!!.getString("offer"))
+        assertNull(noTouch.ops.getValue("answer").run(JSONObject()))
+        assertTrue(answered)
+        assertFalse("with touch it asks", SilentUpdatesStep({ SilentUpdates.OldAndroid("6.0.1") }, { false }, {}, touch = { true }).done())
+    }
+
+    /** Not read yet: setup waits on it, and nothing can answer it before its first offer could show (#513). */
+    @Test fun anUnknownAnswerHoldsSetupAndCantBeAnsweredYet() {
+        val r = Rig(null)
+        assertFalse(r.step.done())
+        assertEquals(SilentUpdatesStep.NOT_READ, r.step.ops.getValue("answer").run(JSONObject()))
+        assertFalse(r.answered)
+        val (_, card) = bound(r)
+        assertEquals(SilentUpdatesStep.CHECKING_TITLE, card.title)
+        r.answer = SilentUpdates.SelfUpdate
+        assertTrue("known, nothing to offer, and the checking card latched nothing", r.step.done())
+        assertNull("known: the answer op records it, as setup's end does", r.step.ops.getValue("answer").run(JSONObject()))
+        assertTrue(r.answered)
+    }
+
+    @Test fun aLowTargetSaysWhatElseANewerReleaseNeeds() {
+        val off = SilentUpdatesStep.targetBody(SilentUpdates.TargetTooLow("17", 35, 34, unknownApps = false))
+        assertTrue(off, "API 35 or higher" in off && "Install unknown apps" in off)
+        assertFalse(SilentUpdatesStep.targetBody(SilentUpdates.TargetTooLow("17", 35, 34, unknownApps = true)).contains("Install unknown apps"))
+    }
+
+    @Test fun aDoneStepOpenedFromTheRailStaysDone() {
+        val r = Rig(SilentUpdates.SelfUpdate)
+        bound(r)
+        assertTrue(r.step.done())
+    }
+
+    @Test fun anOldBootImagePointsAtKiln() {
+        val (_, card) = bound(Rig(SilentUpdates.NoRootService))
+        assertEquals(SilentUpdatesStep.OWNER_TITLE, card.title)
+        assertEquals(SilentUpdatesStep.BOOT_IMAGE_BODY, card.body)
+        assertEquals(SilentUpdatesStep.KILN, card.qr)
+        assertEquals("boot_image", SilentUpdatesStep.offer(SilentUpdates.NoRootService)?.wire)
+        assertEquals("device_owner", SilentUpdatesStep.offer(SilentUpdates.TargetTooLow("17", 35, 34))?.wire)
     }
 
     @Test fun makingItsScreenDoesntShowIt() {

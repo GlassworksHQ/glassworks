@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 aguilaair
-package sh.edm.s1kiosk;
+package dev.glassworks.mirror.probe;
 
 import android.app.Activity;
 import android.content.Context;
@@ -41,7 +41,7 @@ public class MainActivity extends Activity {
         scroll.setBackgroundColor(Color.BLACK);
         scroll.addView(text);
         setContentView(scroll);
-        // creates /sdcard/Android/data/sh.edm.s1kiosk/files, the fallback place for the update APK
+        // creates /sdcard/Android/data/dev.glassworks.mirror.probe/files, the fallback place for the update APK
         getExternalFilesDir(null);
     }
 

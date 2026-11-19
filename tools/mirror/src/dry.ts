@@ -7,10 +7,11 @@ import { createHash } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { PanelShell } from '@glassworks/adb';
+import { zipEntry } from '@glassworks/app-adb';
 import { Disk, MemoryStore, mkfs, writeSparse } from '@glassworks/ext4';
 import { Fastboot } from '@glassworks/fastboot';
 import { FakeLk } from '@glassworks/fastboot/fake-lk';
-import { GLASS_PANES, SYSTEM_BYTES, USERDATA_BYTES } from '@glassworks/lululemon-mirror-installer';
+import { GLASS_PANES, SYSTEM_BYTES, USERDATA_BYTES, apkLibs } from '@glassworks/lululemon-mirror-installer';
 import type { MirrorApp } from '@glassworks/lululemon-mirror-installer';
 import { FakeMirror, FirstBootMirror, fakeServicesJar } from '@glassworks/lululemon-mirror-installer/fakes';
 import type { RunDeps, Want } from './run';
@@ -20,8 +21,20 @@ const MiB = 1024 * 1024;
 export const DRY_USERDATA = 64 * MiB;
 
 /**
+ * The bytes the patch adds to the dry run's system image for `apk`: the APK itself, and every native
+ * library image.ts unpacks out of it (Android 6 doesn't read them from the APK, so they land
+ * uncompressed next to it). `extra`: the boot animation and the settings overlay, when there are.
+ */
+export async function dryRoom(apk: Uint8Array, extra = 0): Promise<number> {
+  const libs = apkLibs(apk);
+  let room = apk.length + extra;
+  for (const n of libs?.names ?? []) room += (await zipEntry(apk, n))?.length ?? 0;
+  return room;
+}
+
+/**
  * A small system.img made like the Glass Panes one: its fingerprint in /build.prop, Launcher3 in
- * /priv-app, and a services.jar that trusts the Glass Panes project key. `room`: bytes the patch will add (the APK, the boot animation).
+ * /priv-app, and a services.jar that trusts the Glass Panes project key. `room`: bytes the patch will add (the APK, its libraries, the boot animation, the settings overlay).
  */
 export async function dryImage(work: string, room = 0): Promise<{ path: string; want: Want; bytes: number }> {
   const blocks = Math.ceil((32 * MiB + room * 1.5) / 4096);

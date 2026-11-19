@@ -10,7 +10,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** [GenericAndroid.KNOWN] holds Kiln's models that have a frame, each standing as its frame.json's `display`. */
+/** [GenericAndroid.KNOWN] holds Kiln's models that have a frame, each standing as its frame.json's `display` and docking as its `dock`. */
 class GenericAndroidKnownTest {
     private val kilnModels: Map<String, String> = Regex("""code: /\^([^/$]+)\$/,[^\n]*\bframe: '([a-z0-9-]+)'""")
         .findAll(RepoFiles.file("frames/generic-android/installer/src/devices.ts").readText())
@@ -25,7 +25,23 @@ class GenericAndroidKnownTest {
         for ((model, frame) in kilnModels) {
             val d = JSONObject(RepoFiles.file("frames/$frame/design/frame.json").readText()).getJSONObject("display")
             val stands = if (d.getInt("height") > d.getInt("width")) Orientation.PORTRAIT else Orientation.LANDSCAPE
-            assertEquals("$model ($frame)", stands, GenericAndroid.KNOWN[model])
+            assertEquals("$model ($frame)", stands, GenericAndroid.KNOWN[model]?.orientation)
         }
+    }
+
+    @Test fun eachDocksAsItsFrameJsonSays() {
+        for ((model, frame) in kilnModels) {
+            val docks = JSONObject(RepoFiles.file("frames/$frame/design/frame.json").readText()).optBoolean("dock", false)
+            assertEquals("$model ($frame)", docks, GenericAndroid.KNOWN[model]?.docks)
+        }
+        assertTrue("the Pixel Tablet's frame says it docks", GenericAndroid.KNOWN.getValue("Pixel Tablet").docks)
+    }
+
+    /** Either the frame or Google's dock manager makes a device dock; any other may, once it has. */
+    @Test fun aDeviceDocksWhenItsFrameOrItsDockManagerSaysSo() {
+        assertEquals(Dock.YES, GenericAndroid.dockOf(frameDocks = true, dockManager = false))
+        assertEquals(Dock.YES, GenericAndroid.dockOf(frameDocks = false, dockManager = true))
+        assertEquals(Dock.YES, GenericAndroid.dockOf(frameDocks = true, dockManager = true))
+        assertEquals(Dock.IF_SEEN, GenericAndroid.dockOf(frameDocks = false, dockManager = false))
     }
 }

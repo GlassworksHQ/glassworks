@@ -19,7 +19,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import sh.edm.s1kiosk.KioskService
+import dev.glassworks.KioskService
 
 /**
  * The app's icons as Android 8+ draws them, for the PR's screenshots (-Ps1MockupDir=<dir>): the launcher icon (the

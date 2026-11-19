@@ -38,8 +38,8 @@ A pattern matches a path and everything under it. `*` stays within one folder, `
 | Job or step | Runs when a PR changes |
 |---|---|
 | every job | `.github/workflows`, `.github/actions`, `tools/ci`, `settings.gradle.kts`, `build.gradle.kts`, `gradle.properties`, `gradlew`, `gradlew.bat`, `gradle`, `frames/*/design/frame.json`, `package.json`, `package-lock.json` |
-| app: every module's unit tests | `libs`, `core`, `pane-api`, `engines`, `panes`, `testing`, `build-logic`, `frames/*/android`, `frames/*/panes`, `THIRD-PARTY-NOTICES.md`, `LICENSE`, `LICENSES`, `CHANGELOG.md`, `README.md`, `docs/**/*.md`, `frames/*/README.md`, `frames/**/blueprints/*.yaml`, `tools/release/frame-abis.sh`, `tools/release/check-update-compat.sh`, `tools/voice/fetch-models.sh`, `kiln/packages/brand/src/tokens.css`, `kiln/packages/setup-channel/test/s1-kiosk-transcript.json`, `branding/glass-tile/bootanimation.zip`, `frames/aqara-s1-plus/tools/bracket/base_emulator.py`, `frames/aqara-s1-plus/tools/debloat/debloat.sh`, `frames/generic-android/installer/src/devices.ts`, `**/sh/edm/**` |
-| app: release build, update check | `libs`, `core`, `pane-api`, `engines`, `panes`, `testing`, `build-logic`, `frames/*/android`, `frames/*/panes`, `THIRD-PARTY-NOTICES.md`, `LICENSE`, `LICENSES`, `tools/release/check-update-compat.sh` |
+| app: every module's unit tests | `libs`, `core`, `pane-api`, `engines`, `panes`, `testing`, `build-logic`, `frames/*/android`, `frames/*/panes`, `THIRD-PARTY-NOTICES.md`, `LICENSE`, `LICENSES`, `CHANGELOG.md`, `README.md`, `docs/**/*.md`, `frames/*/README.md`, `frames/**/blueprints/*.yaml`, `tools/release/frame-abis.sh`, `tools/release/check-update-compat.sh`, `tools/voice/fetch-models.sh`, `kiln/packages/brand/src/tokens.css`, `kiln/packages/setup-channel/test/s1-kiosk-transcript.json`, `branding/glass-tile/bootanimation.zip`, `frames/aqara-s1-plus/tools/bracket/base_emulator.py`, `frames/aqara-s1-plus/tools/debloat/debloat.sh`, `frames/generic-android/installer/src/devices.ts`, `**/sh/edm/**`, `frames/aqara-s1-plus/tools/radio/hotspot-name` |
+| app: release build, update check | `libs`, `core`, `pane-api`, `engines`, `panes`, `testing`, `build-logic`, `frames/*/android`, `frames/*/panes`, `THIRD-PARTY-NOTICES.md`, `LICENSE`, `LICENSES`, `tools/release/check-update-compat.sh`, `frames/aqara-s1-plus/tools/radio/hotspot-name` |
 | app: aioesphomeapi tests | `libs`, `build-logic` |
 | libs-api23 | `libs`, `build-logic` |
 | api23 | `libs`, `core`, `pane-api`, `engines`, `panes`, `testing`, `build-logic`, `frames/*/android`, `frames/*/panes`, `tools/legacy` |
@@ -76,6 +76,23 @@ A new push to a PR cancels that PR's older run (`concurrency` with the PR's numb
 the nightly run and a manual run each get a group of their own (`github.run_id`), so nothing cancels or
 holds them. `core-emulators.yml` does the same. The test builds (`test-build.yml`,
 `generic-test-build.yml`) cancel per branch. Releases and the libraries' release never cancel.
+
+## Caches
+
+Every Gradle job restores Gradle's home through `gradle/actions/setup-gradle`. Runs on `main` (each push and
+the nightly run) save it, and PRs only read it, so a PR rebuilds and retests only what it changed.
+
+setup-gradle saves Gradle's home even when the job fails. On 2026-11-18 that kept `api23` red for every PR.
+From 18:32, main's `api23` couldn't resolve `groovy-3.0.22.jar` (and `app`, once, `tensorflow-lite-2.16.1.aar`),
+though Maven Central served both. Most likely the repository missed once and Gradle recorded the artifact as
+missing in its dependency metadata (inferred, not seen). Each later `api23` run restored that record, failed
+without asking again, and saved it again. So every Gradle job ends with a step that runs only on
+failure and deletes `~/.gradle/caches/modules-2/metadata-*`. The next run resolves its dependencies afresh,
+and the downloaded files stay. `tools/ci/test/test_changes.py` checks that each Gradle job ends with it.
+
+To clear a bad entry by hand, delete that job's `gradle-home-v2|Linux-X64|<job>[…]` entries on `main`
+(`gh cache list --ref refs/heads/main`, then `gh cache delete <id>`). The next run starts from another
+job's entry and saves a clean one.
 
 ## Adding a job or a path
 

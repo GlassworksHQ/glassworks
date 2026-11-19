@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 aguilaair
-package sh.edm.s1kiosk;
+package dev.glassworks.mirror.probe;
 
 import android.app.Activity;
 import android.app.PendingIntent;
@@ -22,7 +22,7 @@ import java.lang.reflect.InvocationTargetException;
 
 /**
  * The actions, started over adb only (the manifest makes callers hold WRITE_SECURE_SETTINGS):
- * am start -n sh.edm.s1kiosk/.ProbeAction --es action update|settings|reboot|allow-adb-key [--es apk <path>]
+ * am start -n dev.glassworks.mirror.probe/.ProbeAction --es action update|settings|reboot|allow-adb-key [--es apk <path>]
  * [--es key <adb public key line>].
  * Each one logs a single RESULT line, the update's from InstallResult once Android answers.
  */

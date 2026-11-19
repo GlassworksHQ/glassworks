@@ -150,6 +150,7 @@ open the entity, and turn on *Enabled*.
 |---|---|---|---|---|---|
 | Presence | `presence` | core | none | on | Automations |
 | Illuminance | `illuminance` | core | none | on | Automations |
+| Docked | `docked` | core | none | on | Automations: what the panel does on and off its dock. Only on a device that docks ([Docked](#docked)) |
 | Screen | `screen` | core | none | on | Dashboards and automations |
 | Speaker | `speaker` | core | none | on | Dashboards, Music Assistant, announcements |
 | Reload dashboard | `reload_dashboard` | core | none | on | Used often |
@@ -253,6 +254,7 @@ So on a panel HA already has:
 | switch `Auto brightness` | `auto_brightness` | light-sensor brightness curve. Only with a light sensor ([by frame](#screen-entities-by-frame)) |
 | binary_sensor `Presence` (occupancy) | `presence` | the frame's presence sensor "near": the VI5300 ToF on the S1, a proximity sensor elsewhere. A camera's is `camera_presence` |
 | sensor `Illuminance` (lx) | `illuminance` | the light sensor: the MK6212 on the S1 |
+| binary_sensor `Docked` (plug) | `docked` | on while the device sits on its dock, off once it's lifted off; only on a device that docks ([Docked](#docked)) |
 | select `Screen mode` | `screen_mode` | `presence` / `always`. `always` until someone picks one (#522) |
 | number `Idle timeout` (s) | `idle_timeout` | screen off after idle (0 = never). Above 0 it also sets `Screen mode` to `presence`, as the panel's own *Turn off when idle* does. The panel has no night timeout of its own: an automation changes this one, such as the [Panel night mode](blueprints.md) blueprint |
 | number `Max auto brightness` (%, 5–100, step 5) | `max_brightness` | the most *Auto brightness* reaches (100 by default). Lower it at night to keep the screen dim when the room's lights are on. A held screen (a high or critical notification) ignores it. A fixed brightness from the `Screen` light doesn't follow it |
@@ -333,6 +335,49 @@ defaults, as before. The Mirror and Pixel Tablet columns come from the frames' h
 
 Plus `Block Aqara cloud` and `Aqara cloud daemon` ([below](#aqara-cloud)), the wall base entities, and the entities HA adds itself for a voice device: `assist_satellite.<device>_assist_satellite`,
 *Assist pipeline* and *Wake word* selects (two of each), *Finished speaking detection*.
+
+### Docked
+
+A tablet on a dock is a wall panel; lifted off, it's a tablet in someone's hands. *Docked* tells Home
+Assistant which, so an automation can, say, show another dashboard or stop announcements while it's off
+its dock. It is a binary sensor with the `plug` device class (HA shows *Plugged in* and *Unplugged*),
+no category, and on by default, because people automate on it ([Categories and defaults](#categories-and-defaults)).
+
+**On** when either says so (`dev.glassworks.dock.Docked.of`):
+
+1. The battery charges from a dock: the sticky `ACTION_BATTERY_CHANGED`'s `EXTRA_PLUGGED` is
+   `BATTERY_PLUGGED_DOCK`. Android 13 and later only; below it no value means a dock. A Pixel Tablet on its
+   charging speaker dock says this (`dumpsys battery`: `Dock powered: true`, read on one 2026-11-17).
+2. The sticky `ACTION_DOCK_EVENT`'s `EXTRA_DOCK_STATE` is any dock (desk, car, low-end or high-end desk),
+   not `EXTRA_DOCK_STATE_UNDOCKED`. The Pixel Tablet sends it too: `EXTRA_DOCK_STATE` 4
+   (`EXTRA_DOCK_STATE_HE_DESK`) on its dock and 0 off it (read on one, 2026-11-18).
+
+It follows both broadcasts as they come (`DockWatcher`), while the app runs. Nothing polls, and nothing
+wakes the device: Android delivers them to the app's registered receiver. On the Pixel Tablet (generic app
+0.1.1, 2026-11-18) the sensor went off 0.9 s after Android's dock broadcast when the tablet was lifted, and on
+again 0.8 s after it when it was put back.
+
+**On the panel and the Manage page too.** Where Home Assistant has the sensor, the frame's Device page (the
+panel's settings, *Pixel Tablet*, and the same page on the Manage page) ends with a status row: *Docked · On
+its dock*, or *Not docked*. It isn't a setting. The panel's menu reads it again every couple of seconds; the
+Manage page has no scripts, so a page with this row reloads itself every 3 seconds, never under an open dialog,
+and says so with a **Pause** link (`?live=off`), since a reload restarts a screen reader (`DockRow`,
+`ManagePages.LIVE_RELOAD_S`). Home Assistant gets no state for the sensor until the app's first read of the
+broadcasts, not a guessed *off*.
+
+**Only where it means something.** Home Assistant gets the entity when any of these holds
+(`Docked.hasEntity`, `GenericAndroid.dockOf`):
+
+| Rule | Who it covers |
+|---|---|
+| The frame says the device docks: `"dock": true` in its `frame.json` ([frames/README.md](../frames/README.md)), and `GenericAndroid.KNOWN` by model | The Pixel Tablet (`google-pixel-tablet`) |
+| Google's dock manager, `com.google.android.apps.nest.dockmanager.app`, is installed (the app's manifest lists it under `<queries>`) | Google's tablets with a dock, under another model name |
+| The device has reported a dock at least once. The app keeps that (`dock_seen`), so the entity stays after a restart, off its dock too | Other brands' docks |
+
+Otherwise there's no entity, so an ordinary tablet's device page doesn't show one that is always off. The
+S1 frame never has it and listens for no dock. A device that gets it from the third rule gets it the
+moment it first docks: the panel lists its entities again and HA adds *Docked*, and the Device page gets its
+row.
 
 ### Panes on and off
 
@@ -529,14 +574,14 @@ the stream). Its component and the main activity's differ per app:
 | App | Camera settings | Main activity |
 |---|---|---|
 | Glassworks on the Aqara S1 Plus | `sh.edm.s1kiosk/.CameraAdbActivity` | `sh.edm.s1kiosk/.MainActivity` |
-| Glassworks for generic Android | `dev.glassworks.generic_android/sh.edm.s1kiosk.CameraAdbActivity` | `dev.glassworks.generic_android/sh.edm.s1kiosk.MainActivity` |
-| Its legacy build (Android 6-7, the lululemon Mirror) | `dev.glassworks.generic_android.legacy/sh.edm.s1kiosk.CameraAdbActivity` | `dev.glassworks.generic_android.legacy/sh.edm.s1kiosk.MainActivity` |
+| Glassworks for generic Android | `dev.glassworks.generic_android/dev.glassworks.camera.CameraAdbActivity` | `dev.glassworks.generic_android/dev.glassworks.MainActivity` |
+| Its legacy build (Android 6-7, the lululemon Mirror) | `dev.glassworks.generic_android.legacy/dev.glassworks.camera.CameraAdbActivity` | `dev.glassworks.generic_android.legacy/dev.glassworks.MainActivity` |
 
 For example, on the S1: `adb shell am start -n sh.edm.s1kiosk/.CameraAdbActivity --es camera_use snapshots --ez onvif_stream true`.
 `--es camera_stream_sign_in 'user:password'` sets the stream's sign-in, and an empty value clears
 it, which closes the stream until a sign-in is set again. The pane's on/off is the
 usual `--ez camera_enabled true` on the main activity, for example
-`adb shell am start -n dev.glassworks.generic_android.legacy/sh.edm.s1kiosk.MainActivity --ez camera_enabled true` on the Mirror.
+`adb shell am start -n dev.glassworks.generic_android.legacy/dev.glassworks.MainActivity --ez camera_enabled true` on the Mirror.
 
 ### App updates
 

@@ -22,6 +22,41 @@ let work: string;
 beforeEach(() => { work = mkdtempSync(join(tmpdir(), 'gw-mirror-test-')); });
 afterEach(() => rmSync(work, { recursive: true, force: true }));
 
+/**
+ * A zip of stored files, except `deflated`, which goes compressed: an APK whose .so is far bigger than
+ * the file. (app-adb's `zip` fake stores every entry, so the APK's length would give the library's.)
+ */
+async function zipDeflating(files: [string, Uint8Array][], deflated: string): Promise<Uint8Array> {
+  const enc = new TextEncoder();
+  const locals: Uint8Array[] = [], centrals: Uint8Array[] = [];
+  let off = 0;
+  for (const [name, data] of files) {
+    const n = enc.encode(name), compressed = name === deflated;
+    const body = compressed
+      ? new Uint8Array(await new Response(new Blob([data as Uint8Array<ArrayBuffer>]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer())
+      : data;
+    const method = compressed ? 8 : 0;
+    const local = new Uint8Array(30 + n.length + body.length), central = new Uint8Array(46 + n.length);
+    const lv = new DataView(local.buffer), cv = new DataView(central.buffer);
+    lv.setUint32(0, 0x04034b50, true); lv.setUint16(4, 20, true); lv.setUint16(8, method, true);
+    lv.setUint32(18, body.length, true); lv.setUint32(22, data.length, true); lv.setUint16(26, n.length, true);
+    local.set(n, 30); local.set(body, 30 + n.length);
+    cv.setUint32(0, 0x02014b50, true); cv.setUint16(4, 20, true); cv.setUint16(6, 20, true); cv.setUint16(10, method, true);
+    cv.setUint32(20, body.length, true); cv.setUint32(24, data.length, true); cv.setUint16(28, n.length, true); cv.setUint32(42, off, true);
+    central.set(n, 46);
+    locals.push(local); centrals.push(central); off += local.length;
+  }
+  const cdSize = centrals.reduce((x, c) => x + c.length, 0);
+  const end = new Uint8Array(22);
+  const ev = new DataView(end.buffer);
+  ev.setUint32(0, 0x06054b50, true); ev.setUint16(8, files.length, true); ev.setUint16(10, files.length, true);
+  ev.setUint32(12, cdSize, true); ev.setUint32(16, off, true);
+  const out = new Uint8Array(off + cdSize + 22);
+  let at = 0;
+  for (const b of [...locals, ...centrals, end]) { out.set(b, at); at += b.length; }
+  return out;
+}
+
 async function install(o: { hideFails?: boolean; confirm?: (q: string) => boolean; stockAtStart?: boolean; adbKey?: string } = {}) {
   const img = await dryImage(work, APK.length);
   const lines: string[] = [];
@@ -40,6 +75,8 @@ describe('the headless install on a fake Mirror', () => {
     expect(d.state()).toBe('glassworks');
     expect(r.firstBoot?.home.result).toBe('set');
     expect(r.firstBoot?.hidden).toEqual(['com.android.launcher3']);
+    // image.ts's own lines come through step 6 now (#557): the libraries, the unused apps, build.prop
+    expect(lines).toContain('    1 native library for arm64-v8a in /priv-app/Glassworks/lib/arm64');
     expect(d.after.cmds).toContain('pm hide com.android.launcher3');
     expect(d.after.cmds.some((c) => c.includes('homeassistant.local'))).toBe(true);
     expect(d.before.cmds.every((c) => c.startsWith('getprop '))).toBe(true); // read-only on the stock side
@@ -124,7 +161,7 @@ describe('the headless install on a fake Mirror', () => {
     expect(d.lk.commands).toEqual([]);
   });
 
-  it('refuses S1 Kiosk\'s id, or an APK without a privileged permission, before the Mirror is touched', async () => {
+  it('refuses the S1 app\'s id, or an APK without a privileged permission, before the Mirror is touched', async () => {
     const img = await dryImage(work);
     for (const [apk, why] of [[fakeApk('sh.edm.s1kiosk', { minSdk: 23 }), /is sh\.edm\.s1kiosk, not Glassworks/], [fakeMirrorApk({ without: ['android.permission.REBOOT'] }), /doesn't ask for REBOOT/]] as const) {
       const d = dryDevices(img.bytes, () => {});
@@ -248,4 +285,24 @@ describe('flash-node.ts --dry-run', () => {
     await expect(cli(['--way-back', '--work', work], () => {})).rejects.toBeInstanceOf(UsageError);
     await expect(cli(['--image', 'x.img', '--work', work], () => {})).rejects.toThrow(/--apk/);
   }, 60_000);
+
+  // #557: the fake image was sized by the APK's own bytes, so a real APK failed at step 6: image.ts
+  // unpacks lib/<abi>/*.so into the image, and libxul.so is 147 MB where the APK holds 62 MB
+  it('makes room for the libraries it unpacks out of the APK, and prints the patch\'s own lines', async () => {
+    // a 40 MiB library that deflates to a few KiB: the APK fits in the 32 MiB base image, the library can't
+    const base = fakeMirrorApk();
+    const apk = await zipDeflating([
+      ['AndroidManifest.xml', (await zipEntry(base, 'AndroidManifest.xml'))!],
+      ['classes.dex', (await zipEntry(base, 'classes.dex'))!],
+      ['lib/arm64-v8a/libxul.so', new Uint8Array(40 * 1024 * 1024)],
+    ], 'lib/arm64-v8a/libxul.so');
+    expect(apk.length).toBeLessThan(1 * 1024 * 1024);
+    const file = join(work, 'glassworks.apk');
+    writeFileSync(file, apk);
+    const out: string[] = [];
+    expect(await cli(['--dry-run', '--yes', '--apk', file, '--no-boot-animation', '--work', work], (l) => out.push(l))).toBe(0);
+    const text = out.join('\n');
+    expect(text).not.toMatch(/no room for/);
+    expect(text).toMatch(/1 native library for arm64-v8a in \/priv-app\/Glassworks\/lib\/arm64/);
+  }, 120_000);
 });

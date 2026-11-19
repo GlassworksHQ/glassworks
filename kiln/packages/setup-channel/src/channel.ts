@@ -61,6 +61,11 @@ export interface SetupState {
   ip?: string;
   /** The panel is on a network (Wi-Fi or Ethernet). Absent from apps before the setup hotspot (#197). */
   online?: boolean;
+  /**
+   * Setup's Silent updates step (#422), from apps that have it, once the app has read the answer. `offer` is what the
+   * step offers (`allow`, `device_owner`, `boot_image`), or null with nothing to do.
+   */
+  silent_updates?: { silent: boolean; reason: string; offer: 'allow' | 'device_owner' | 'boot_image' | null; answered: boolean };
   ha: {
     /** Address the app found on the network by itself (mDNS), if any. */
     discovered?: string;
@@ -164,6 +169,8 @@ export class SetupChannel {
   // TODO(#166): once a release has radio.thread_join, use it in Kiln's Thread step instead of sending the
   // person to Home Assistant: start it, then follow state.radio.threadJoin. Older apps answer "Unknown request".
   joinThread(): Promise<SetupState> { return this.request('radio.thread_join'); }
+  /** Answers setup's Silent updates step, as Not now does (apps with #422). Refused while the app hasn't read the answer. */
+  answerSilentUpdates(): Promise<SetupState> { return this.request('silent_updates.answer'); }
   /** Over USB: lets a browser pair over the LAN again after Home Assistant adopted the panel (apps with #34). */
   armPairing(): Promise<SetupState> { return this.request('pairing.arm'); }
   /** The networks the panel sees now, strongest first: a fresh scan, up to about 15 s (apps with #197). */
