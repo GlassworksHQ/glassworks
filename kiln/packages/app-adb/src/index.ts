@@ -141,7 +141,9 @@ export async function sendWifi(p: PanelShell, ssid: string, password: string, sl
     if (Date.now() > until) return false;
     await sleep(1500);
   }
-  const c = new ImprovSerialClient(await p.openStream(IMPROV_SOCKET), { deviceLabel: 'device' });
+  let stream: Awaited<ReturnType<NonNullable<PanelShell['openStream']>>>;
+  try { stream = await p.openStream(IMPROV_SOCKET); } catch { return false; } // the socket refused: not joined, as below
+  const c = new ImprovSerialClient(stream, { deviceLabel: 'device' });
   try {
     await c.requestState(5000);
     await c.provision(ssid, password);
@@ -179,11 +181,7 @@ async function keyRequest(p: PanelShell, line: string, timeoutMs = 10_000): Prom
 }
 
 /** Whether the app listens on its hand-over socket now (an app older than #574 never does). */
-export async function handoverUp(p: PanelShell): Promise<boolean> {
-  return keySocketUp(p);
-}
-
-async function keySocketUp(p: PanelShell): Promise<boolean> {
+export async function apiKeySocketUp(p: PanelShell): Promise<boolean> {
   return Number.parseInt((await p.run(`grep -c ' @glassworks_api_key$' /proc/net/unix`)).out.trim(), 10) > 0;
 }
 
@@ -196,7 +194,7 @@ export interface Carries { apiKey: boolean; signIn: boolean }
  */
 export async function handoverCarries(p: PanelShell, replyMs = 10_000): Promise<Carries> {
   const none = { apiKey: false, signIn: false };
-  if (!p.openStream || !(await keySocketUp(p))) return none;
+  if (!p.openStream || !(await apiKeySocketUp(p))) return none;
   try {
     const r = await keyRequest(p, 'carries', replyMs);
     if (r === 'refused unknown request') return { apiKey: true, signIn: false };
@@ -212,8 +210,13 @@ export async function handoverCarries(p: PanelShell, replyMs = 10_000): Promise<
  * there is nothing to carry; throws when the app holds one it can't read now. The reply's first word only goes into
  * an error: never anything that could hold the secret.
  */
-async function readSecret(p: PanelShell, request: string, word: string, pattern: RegExp, what: string, replyMs: number): Promise<string | undefined> {
-  if (!p.openStream || !(await keySocketUp(p))) return undefined;
+async function readSecret(p: PanelShell, request: string, word: string, pattern: RegExp, what: string, replyMs: number,
+  o: { socket?: 'required' } = {}): Promise<string | undefined> {
+  if (!p.openStream || !(await apiKeySocketUp(p))) {
+    // a caller that saw the socket listen: one gone now is an app that restarted or stopped, not an app with no secret
+    if (o.socket === 'required') throw new Error(`the app's hand-over socket closed before Kiln could read ${what === 'an API key' ? 'the key' : 'the sign-in'}`);
+    return undefined;
+  }
   const r = await keyRequest(p, request, replyMs);
   if (r === 'none') return undefined;
   const m = new RegExp(`^${word} (${pattern.source})$`).exec(r);
@@ -228,8 +231,8 @@ async function readSecret(p: PanelShell, request: string, word: string, pattern:
  * no key. Throws when the app has a key but it can't be read now (its key store is down, or the socket didn't answer):
  * a flash then would lose it. It is a secret: never put it in a log line, an error or a command line.
  */
-export async function readApiKey(p: PanelShell, replyMs = 10_000): Promise<string | undefined> {
-  return readSecret(p, 'get', 'key', /[A-Za-z0-9+/]{43}=/, 'an API key', replyMs);
+export async function readApiKey(p: PanelShell, replyMs = 10_000, o: { socket?: 'required' } = {}): Promise<string | undefined> {
+  return readSecret(p, 'get', 'key', /[A-Za-z0-9+/]{43}=/, 'an API key', replyMs, o);
 }
 
 /**
@@ -257,7 +260,7 @@ async function handOver(p: PanelShell, line: string, sleep: (ms: number) => Prom
   const until = Date.now() + waitMs;
   for (;;) {
     try {
-      if (await keySocketUp(p)) {
+      if (await apiKeySocketUp(p)) {
         const r = await keyRequest(p, line, replyMs);
         if (r === 'ok') return true;
         if (r.startsWith('refused ') && !PASSING.test(r)) return false; // a different value, or no sign-in: final

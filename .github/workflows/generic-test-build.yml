@@ -108,9 +108,9 @@ jobs:
             ../tools/release/check-update-compat.sh --app "$app" --signed "$apk"
             badging="$("$aapt2" dump badging "$apk")"
             case "$apk" in
-              glassworks-generic-legacy-test-*) id=dev.glassworks.generic_android.legacy min=23
+              glassworks-generic-legacy-test-*) id=dev.glassworks.generic_android.legacy min=23 settings=yes
                 unzip -l "$apk" | grep -q "lib/arm64-v8a/libxul.so" || { echo "::error::$apk has no arm64-v8a GeckoView"; exit 1; } ;;
-              *) id=dev.glassworks.generic_android min=26 ;;
+              *) id=dev.glassworks.generic_android min=26 settings=no ;;
             esac
             grep -q "^package: name='$id'" <<< "$badging" || { echo "::error::$apk is not $id"; exit 1; }
             grep -q "^minSdkVersion:'$min'" <<< "$badging" || { echo "::error::$apk: minSdk is not $min"; exit 1; }
@@ -118,6 +118,9 @@ jobs:
             for perm in INSTALL_PACKAGES REBOOT WRITE_SECURE_SETTINGS; do
               grep -q "^uses-permission: name='android.permission.$perm'" <<< "$badging" || { echo "::error::$apk doesn't ask for $perm"; exit 1; }
             done
+            # WRITE_SETTINGS: the setup hotspot's setWifiApEnabled on Android 6-7, so the legacy build alone asks for it.
+            asks=no; grep -q "^uses-permission: name='android.permission.WRITE_SETTINGS'" <<< "$badging" && asks=yes
+            [ "$asks" = "$settings" ] || { echo "::error::$apk: asks for WRITE_SETTINGS: $asks, should: $settings"; exit 1; }
             # versionCode = major*10000 + minor*100 + patch, so 0.1.1 installs over 0.1.0 in place.
             IFS=. read -r major minor patch <<< "$(sed -E 's/^glassworks-generic-(legacy-)?test-([0-9.]+)-.*/\2/' <<< "$apk")"
             grep -q "versionCode='$((major * 10000 + minor * 100 + patch))'" <<< "$badging" || { echo "::error::$apk: unexpected versionCode"; exit 1; }

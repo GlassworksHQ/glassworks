@@ -43,7 +43,7 @@ import java.util.concurrent.Executors
 import android.os.SystemClock
 import org.robolectric.shadows.ShadowSystemClock
 import java.time.Duration
-import dev.glassworks.s1.settings.BluetoothProxyPage
+import dev.glassworks.bluetoothproxy.BluetoothProxyPage
 
 /**
  * The S1's panes running with illustrative values, and the settings model the panel's menu and the Manage

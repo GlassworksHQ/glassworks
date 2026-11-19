@@ -21,7 +21,7 @@
 // The Wi-Fi password, the sign-in and the key never go into a command line, a log line or an error message.
 import type { PanelShell } from '@glassworks/adb';
 import {
-  ACT, ADMIN, PKG, type Carries, apiKeyFingerprint, dropAdmin, handOverApiKey, handOverSignIn, handoverCarries, handoverUp, readApiKey, readSignIn,
+  ACT, ADMIN, PKG, type Carries, apiKeyFingerprint, dropAdmin, handOverApiKey, handOverSignIn, apiKeySocketUp, handoverCarries, readApiKey, readSignIn,
 } from '@glassworks/app-adb';
 import { IMPROV_SOCKET, ImprovSerialClient } from './improv';
 import switchScript from '../../tools/install/glassworks-switch.sh?raw';
@@ -266,7 +266,7 @@ export async function readSecrets(p: PanelShell, carries: Carries, log: SwitchLo
   sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)), waitMs = 15_000): Promise<{ signIn: Carried; apiKey: Carried; secrets: CarriedSecrets }> {
   const up = async () => {
     for (let tries = Math.max(1, Math.ceil(waitMs / 1500)); ; tries--) {
-      if (await handoverUp(p)) return true;
+      if (await apiKeySocketUp(p)) return true;
       if (tries <= 1) return false;
       await sleep(1500);
     }

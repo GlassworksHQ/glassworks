@@ -13,6 +13,8 @@ key, and an update of that app keeps them while it is signed with the same key. 
 `WRITE_SECURE_SETTINGS` granted, a silent update with all three kept, a secure setting written, and a
 reboot back into the app. Such an app can approve the computer that is asking, for that one
 connection: [below](#can-a-privileged-app-approve-an-adb-key) (verified on the unit 2026-11-16).
+Its setup hotspot needs `WRITE_SETTINGS`, which an update can add:
+[below](#can-the-app-open-the-setup-hotspot-write_settings) (read 2026-11-19).
 
 Device: lululemon Mirror (MSM8916), community image Glass Panes `mirror-android-1` (Android 6.0.1,
 `MMB29M`, `userdebug`, `test-keys`). Source: AOSP tag `android-6.0.1_r81`
@@ -214,6 +216,54 @@ A Mirror gets it only from a flash with such a build: an update can never add a 
 The other ideas in #556 aren't needed for this. Kiln checking the join on the first boot would still need a way to
 replace the network. Writing the network through Improv only would leave a first boot with no Wi-Fi until the app
 starts.
+
+## Can the app open the setup hotspot? (`WRITE_SETTINGS`)
+
+**Status: read (2026-11-19), untested on the unit.** On 2026-11-19 the setup screen on the Mirror said "This device
+doesn't let apps open a Wi-Fi hotspot." The app's Granted permissions had `CHANGE_WIFI_STATE` and
+`CHANGE_NETWORK_STATE`, and logcat had nothing: the app caught the exception and dropped it. The cause is a
+permission the app didn't ask for. Android 6 and 7 check `WRITE_SETTINGS` before they start a hotspot, not
+`CHANGE_NETWORK_STATE`, as our code's comments said until then.
+
+Read at `android-6.0.1_r81`, and in the Glass Panes `mirror-android-1` image (its `framework.jar`, `wifi-service.jar`,
+`services.jar` and `framework-res.apk`, decompiled with jadx; the code matches AOSP in every step below):
+
+| # | Where | What it says |
+|---|---|---|
+| 1 | `WifiServiceImpl.setWifiApEnabled` (`frameworks/opt/net/wifi`, `WifiServiceImpl.java:633`) | Checks `CHANGE_WIFI_STATE`, then `ConnectivityManager.enforceTetherChangePermission`, then the `no_config_tethering` user restriction. Each refusal is a `SecurityException` |
+| 2 | `ConnectivityManager.enforceTetherChangePermission` (`frameworks/base`, `ConnectivityManager.java:1582`) | With a carrier's provisioning app (`config_mobile_hotspot_provision_app` has 2 entries), the caller needs `CONNECTIVITY_INTERNAL`. Without one, `Settings.checkAndNoteWriteSettingsOperation`. At `android-7.1.2_r39` (`:1860`) the same, with `TETHER_PRIVILEGED` for the carrier case |
+| 3 | The image's `framework-res.apk` | `config_mobile_hotspot_provision_app` is empty, with no per-carrier value. The `QtiTetherService` priv-app is on the image, but nothing names it. So the Mirror takes the `WRITE_SETTINGS` branch |
+| 4 | `Settings.isCallingPackageAllowedToPerformAppOpsProtectedOperation` (`Settings.java:8415`) | The app-op `OP_WRITE_SETTINGS` (23). Its default is `MODE_DEFAULT` (`AppOpsManager.java:792`, and the image's table), and in that mode a granted `WRITE_SETTINGS` permission passes. Otherwise it throws "… was not granted this permission: android.permission.WRITE_SETTINGS." |
+| 5 | `core/res/AndroidManifest.xml:1596`, and the image (`protectionLevel` `0x4c2`) | `WRITE_SETTINGS` is `signature\|preinstalled\|appop\|pre23` |
+| 6 | `PackageManagerService.grantSignaturePermission` (`:8623`, the `preinstalled` check at `:8691`) | `preinstalled` grants it to any app with `FLAG_SYSTEM`. An updated system app keeps that flag, so an update gets it even if the `/system` copy never asked. This differs from `privileged` (read 3 above): no new flash needed |
+| 7 | `WifiManager.setWifiApEnabled` (the image's `framework.jar`) | Returns true unless the binder call fails (`RemoteException`). A refusal is the `SecurityException` from 1, never `false` |
+
+The fix (in the release after 0.2.0): the legacy build's manifest asks for `WRITE_SETTINGS`, and the app logs a refusal's
+exception class and message under `Glassworks.Hotspot`. The Android 8+ build doesn't ask: its local-only hotspot
+doesn't need it, and on a tablet it would only add a "Modify system settings" switch. The test-build and release
+workflows check both.
+
+### What the hotspot does to the Mirror's Wi-Fi, and how it comes back
+
+Read in `WifiController` (`android-6.0.1_r81` and the image's `wifi-service.jar`, the same):
+
+1. Start, with the Wi-Fi client on (`StaEnabledState`, `WifiController.java:518`): the controller saves
+   `wifi_saved_state=1`, turns the client off, then starts the AP. The "Wi-Fi on" setting (`wifi_on`) is not
+   changed, so a reboot brings the client back whatever happens.
+2. Stop (`ApEnabledState`, `:635`): the controller stops the AP and, because `wifi_saved_state` is 1, turns the
+   client back on itself.
+3. The app's own undo (`HiddenApHotspot.restore`) asks for the stop, puts back the old hotspot settings, and then
+   turns Wi-Fi on if it was on before. On a normal stop that last call reaches the controller after the stop
+   (both are messages on the controller's one queue), so it finds the client already on its way back and does
+   nothing. When the AP failed to start (`CMD_AP_START_FAILURE`, `:658`), the controller doesn't turn the client
+   back on, and the app's call is what does.
+
+So a refusal changes nothing, a stop gives the client back twice over, and a failed start gives it back through the
+app. One case is left: the app dies while the AP is on. Its 15-minute limit lived in the dead process, so Android
+keeps the AP on and the client off. A restarted app is offline, so it starts its own hotspot 3 minutes later. That
+start finds the AP already up: `ApEnabledState` ignores a second start, so the AP keeps the old run's network and
+key while the screen shows the new ones (read, untested). That run's stop, 15 minutes later, ends the AP and brings
+the client back. If the app doesn't come back, only a restart of the Mirror ends the AP.
 
 ## Can a privileged app approve an adb key?
 
