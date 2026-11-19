@@ -56,19 +56,21 @@ keytool -list -v -keystore ~/secure/s1kiosk-release.jks -alias s1kiosk | grep SH
 
 ## 3. Add the four secrets to GitHub (once)
 
-Repository secrets, with the [GitHub CLI](https://cli.github.com/). These commands read the values
+Secrets of the **`release-signing` environment** (since 2026-11-12), not repository secrets: only
+`main`, `test-build/**` and the `v*` and `aqara-s1-plus-v*` tags may run its jobs. Set them with the
+[GitHub CLI](https://cli.github.com/). These commands read the values
 from the file or from a prompt, so nothing ends up in your shell history:
 
 ```sh
 cd ~/secure
 # The keystore, base64-encoded, from the file:
-base64 < s1kiosk-release.jks | gh secret set S1_KEYSTORE_B64 --repo GlassworksHQ/glassworks
+base64 < s1kiosk-release.jks | gh secret set S1_KEYSTORE_B64 --env release-signing --repo GlassworksHQ/glassworks
 # Passwords: gh prompts for them ("Paste your secret"); the same password twice for PKCS12.
-gh secret set S1_KEYSTORE_PASSWORD --repo GlassworksHQ/glassworks
-gh secret set S1_KEY_PASSWORD --repo GlassworksHQ/glassworks
+gh secret set S1_KEYSTORE_PASSWORD --env release-signing --repo GlassworksHQ/glassworks
+gh secret set S1_KEY_PASSWORD --env release-signing --repo GlassworksHQ/glassworks
 # The alias is not secret:
-gh secret set S1_KEY_ALIAS --repo GlassworksHQ/glassworks --body s1kiosk
-gh secret list --repo GlassworksHQ/glassworks
+gh secret set S1_KEY_ALIAS --env release-signing --repo GlassworksHQ/glassworks --body s1kiosk
+gh secret list --env release-signing --repo GlassworksHQ/glassworks
 ```
 
 The workflow uses only these four secrets, the radio bundle key below, the optional `VERCEL_DEPLOY_HOOK`
@@ -95,12 +97,11 @@ gh secret set S1_RADIO_BUNDLE_KEY --env radio-signing --repo GlassworksHQ/glassw
 ```
 
 - Only the workflow's `sign-bundle` job names that environment. It signs only tags whose commit is on
-  `main` (`git merge-base --is-ancestor`), runs no third-party action (GitHub's own checkout and
+  `main`, or on `release/<version>` for a patch release of an older version ([below](#patch-releases)) (`git merge-base --is-ancestor`), runs no third-party action (GitHub's own checkout and
   download-artifact, pinned by commit SHA), and takes nothing from the unprivileged `inputs` job
   without checking it: the Silicon Labs runtime against the committed
   [`tools/radio/sisdk-runtime.sha256`](../tools/radio/sisdk-runtime.sha256), otbr-agent/ot-ctl against
-  `web/assets.lock.json`, the helper from the checkout. No required reviewer is set on the environment
-  (one releaser); adding one later only needs the environment setting.
+  `web/assets.lock.json`, the helper from the checkout. The environment has a required reviewer (the maintainer), so every signing waits for an approval.
 - Keep no repository-level `S1_RADIO_BUNDLE_KEY`: other jobs would then see it.
 
 - Back it up like the APK key. **Losing it** means no more radio bundle updates until panels get a boot
@@ -184,6 +185,15 @@ it up*, or `adb install -r`, see [install.md](install.md#updating)); from then o
 The hosted web installer installs the latest release it saw when it was last built
 (`web/scripts/stage-assets.mjs`). The workflow's last step asks Vercel to rebuild it through the
 `VERCEL_DEPLOY_HOOK` secret; without that secret it only warns, and you redeploy the installer by hand.
+
+### Patch releases
+
+A fix for panels on an older version, while `main` has moved on, is released from a branch: 0.4.4
+was `release/0.4.4`, cut from `v0.4.3` with the fixes backported. Add its CHANGELOG section on the
+branch, then tag the branch's head (`git tag -a v0.4.4 -m "S1 Kiosk 0.4.4" release/0.4.4`). The
+workflow runs from the tag, so the branch carries its own `release.yml`. The `sign-bundle` job
+accepts a commit on `release/<version>`, and the `radio-signing` environment's required reviewer
+approves it. The release goes out with `--latest`, so panels on older versions are offered it.
 
 ## Building a signed APK locally
 

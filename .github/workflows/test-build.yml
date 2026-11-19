@@ -44,6 +44,8 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    # The APK key's secrets live in this environment since 2026-11-12 (docs/releasing.md), not the repository.
+    environment: release-signing
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:

@@ -10,7 +10,7 @@
 #   inputs       builds the Silicon Labs runtime (no secrets); its output must match the committed
 #                tools/radio/sisdk-runtime.sha256
 #   sign-bundle  the only job that can read S1_RADIO_BUNDLE_KEY (an environment secret of the
-#                `radio-signing` environment). Signs only commits on main, takes nothing from the other
+#                `radio-signing` environment). Signs only commits on main or release/<version>, takes nothing from the other
 #                job without checking it against committed hashes, runs no third-party action
 #   release      builds and publishes the APK with the signed bundle (APK key; no bundle key)
 # Every action is pinned by commit SHA (the tag in the comment is what it was at the time).
@@ -78,11 +78,17 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Only commits on main
+      - name: Only commits on main or on this version's release branch
+        # A patch release of an older version (0.4.4 on 0.4.3) is tagged on release/<version>, not main.
+        # The environment's required reviewer approves every run of this job.
+        env:
+          VERSION: ${{ needs.inputs.outputs.version }}
         run: |
           git fetch --no-tags origin main
+          git fetch --no-tags origin "refs/heads/release/$VERSION:refs/remotes/origin/release/$VERSION" 2>/dev/null || true
           git merge-base --is-ancestor HEAD origin/main ||
-            { echo "::error::$GITHUB_REF_NAME ($GITHUB_SHA) is not on main: refusing to sign a radio bundle"; exit 1; }
+            { git rev-parse -q --verify "origin/release/$VERSION" >/dev/null && git merge-base --is-ancestor HEAD "origin/release/$VERSION"; } ||
+            { echo "::error::$GITHUB_REF_NAME ($GITHUB_SHA) is not on main or release/$VERSION: refusing to sign a radio bundle"; exit 1; }
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -148,6 +154,8 @@ jobs:
     needs: [inputs, sign-bundle]
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    # The APK key's secrets live in this environment since 2026-11-12 (docs/releasing.md), not the repository.
+    environment: release-signing
     permissions:
       contents: write # create the release and upload its assets (GITHUB_TOKEN only)
     env:
@@ -228,7 +236,9 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" \
             "dist/s1-kiosk-$VERSION.apk" "dist/s1-kiosk-$VERSION.apk.sha256" \
-            --verify-tag --title "S1 Kiosk $VERSION" --notes-file "$RUNNER_TEMP/notes.md"
+            --verify-tag --latest --title "S1 Kiosk $VERSION" --notes-file "$RUNNER_TEMP/notes.md"
+          # --latest: apps up to 0.4.3 only read releases/latest, so an S1 release must always be the
+          # one marked latest. Releases of other frames and libraries in this repo use --latest=false.
 
       - name: Rebuild the web installer
         # The installer (https://s1.edm.sh, Vercel) picks the latest release at build time.
