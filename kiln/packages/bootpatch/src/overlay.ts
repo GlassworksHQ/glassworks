@@ -22,6 +22,9 @@ export interface S1OverlayInputs {
   bundleSh: Uint8Array;       // frames/aqara-s1-plus/tools/root/s1kiosk_bundle.sh
   verify: Uint8Array;         // frames/aqara-s1-plus/tools/root/out/s1kiosk_verify (frames/aqara-s1-plus/tools/root/build-verify.sh)
   bundlePub: Uint8Array;      // frames/aqara-s1-plus/tools/root/s1kiosk_bundle.pub (radio bundle signing key, public half)
+  magiskEnvRc: Uint8Array;    // frames/aqara-s1-plus/tools/root/s1kiosk_magiskenv.rc
+  /** lib/armeabi-v7a/libbusybox.so from the Magisk APK (`magiskBusybox(magiskApk)`): Magisk loads no module without it. */
+  magiskBusybox: Uint8Array;
   /** Boot animation (all entries STORED) + frames/aqara-s1-plus/tools/root/s1kiosk_branding.rc; omit both for stock. */
   branding?: { rc: Uint8Array; bootAnimation: Uint8Array };
 }
@@ -35,6 +38,7 @@ export function s1Overlay(i: S1OverlayInputs): OverlayFile[] {
   if (!/^[0-9a-f]{64}$/m.test(new TextDecoder().decode(i.bundlePub)))
     throw new Error('bundlePub is not a 32-byte hex public key');
   if (!i.verify.length) throw new Error('empty s1kiosk_verify');
+  if (!i.magiskBusybox.length) throw new Error('empty Magisk busybox');
   const files: OverlayFile[] = [
     { path: 'overlay.d/s1kiosk_radio.rc', mode: 0o644, data: i.radioRc },
     { path: 'overlay.d/sbin/s1kiosk_radio.sh', mode: 0o700, data: i.radioSh },
@@ -51,6 +55,8 @@ export function s1Overlay(i: S1OverlayInputs): OverlayFile[] {
     { path: 'overlay.d/sbin/s1kiosk_bundle.sh', mode: 0o700, data: i.bundleSh },
     { path: 'overlay.d/sbin/s1kiosk_verify', mode: 0o700, data: i.verify },
     { path: 'overlay.d/sbin/s1kiosk_bundle.pub', mode: 0o644, data: i.bundlePub },
+    { path: 'overlay.d/s1kiosk_magiskenv.rc', mode: 0o644, data: i.magiskEnvRc },
+    { path: 'overlay.d/sbin/magisk-busybox', mode: 0o700, data: i.magiskBusybox },
   ];
   if (i.branding) {
     if (!i.branding.bootAnimation.length) throw new Error('empty boot animation');

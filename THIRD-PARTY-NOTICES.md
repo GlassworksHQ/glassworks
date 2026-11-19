@@ -358,8 +358,10 @@ The Ed25519 checker for radio bundles. Release `installer-files-3`, sha256 `6aa0
 
 - Licence: GPL-3.0-only. Copyright John Wu (topjohnwu) and contributors.
 - The official release APK, unmodified (sha256 `89cefac0…c6e7`), served by the installer. The
-  installer also writes three libraries from it into the panel's boot image: `libmagiskinit.so`,
-  `libmagisk.so` and `libinit-ld.so`.
+  installer also writes four libraries from it into the panel's boot image: `libmagiskinit.so`,
+  `libmagisk.so`, `libinit-ld.so` and `libbusybox.so` (BusyBox 1.36.1, GPL-2.0-only, Magisk's build of
+  https://github.com/topjohnwu/ndk-busybox, branch `android-ndk-1.36.1`). At boot the panel copies BusyBox to
+  `/data/adb/magisk`, where Magisk needs it.
 - Corresponding source: tag `v31.1` of https://github.com/topjohnwu/Magisk
   (https://github.com/topjohnwu/Magisk/releases/tag/v31.1).
 
@@ -582,6 +584,7 @@ renders above:
 |---|---|---|---|
 | U-Boot | GPL-2.0-or-later | installer | Upstream `934995f642a21ca7f35fa9aed5f061394fcba243` plus [`tools/fel/uboot/`](https://github.com/GlassworksHQ/glassworks/tree/8b2bf488fed3c7ba8343a32c67c9651066479128/tools/fel/uboot) at `8b2bf488fed3c7ba8343a32c67c9651066479128` (section 3) |
 | Magisk | GPL-3.0-only | installer, panel boot image | https://github.com/topjohnwu/Magisk/tree/v31.1 |
+| BusyBox 1.36.1, inside the Magisk APK | GPL-2.0-only | installer, panel boot image | https://github.com/topjohnwu/ndk-busybox/tree/android-ndk-1.36.1 (built by Magisk's build as `busybox-1.36.1.1.zip`) |
 | GeckoView | MPL-2.0 (some parts LGPL-2.1-or-later) | APK | https://hg.mozilla.org/releases/mozilla-release/rev/7b34a03a910d0385299f4a9f27aa585a786862d8 |
 | GeckoView 144 | MPL-2.0 (some parts LGPL-2.1-or-later) | the generic app's legacy APK (#198) | https://hg.mozilla.org/releases/mozilla-release/rev/5f480a9ab713ba79e5a14face39aacb038c36f30 |
 | desugar_jdk_libs 2.1.5 | GPL-2.0-only WITH Classpath-exception-2.0 | the generic app's legacy APK (#198), the legacy engine's debug test APK | https://github.com/google/desugar_jdk_libs (release 2.1.5) |
