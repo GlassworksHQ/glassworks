@@ -73,7 +73,9 @@ class S1Device(
 
     /** The frame loader in boot (#139): what the boot writer's record says, with whether this boot ran the loader. */
     private fun loader(): String =
-        cached("loader") { BootWriter.rowText(record(), props.get(BootWriter.LOADER_PROP).isNotBlank()) } ?: "Checking"
+        cached("loader") {
+            BootWriter.rowText(record(), props.get(BootWriter.LOADER_PROP).isNotBlank(), BootWriter.helperCanWrite(props.get(BootWriter.HELPER_PROP)))
+        } ?: "Checking"
 
     /** What the wall base pane says of the daemon (`aqara_cloud`), else init's word for it. */
     private fun daemon(running: (String) -> Pane?): String =

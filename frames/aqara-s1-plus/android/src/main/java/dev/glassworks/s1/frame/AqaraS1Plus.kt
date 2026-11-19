@@ -77,7 +77,7 @@ class AqaraS1Plus(private val aqaraCloud: AqaraCloud = AqaraCloud()) : Frame {
      */
     override val frameRelease: FrameRelease by lazy {
         val stamp = FrameRelease.stamp(board, DeviceFrame::systemProperty)
-        FrameRelease(board, stamp, install = if (stamp != null) null else NEEDS_LOADER)
+        FrameRelease(board, stamp, install = if (stamp != null) null else needsLoader(DeviceFrame.systemProperty(BootWriter.HELPER_PROP)))
     }
 
     /**
@@ -119,9 +119,13 @@ class AqaraS1Plus(private val aqaraCloud: AqaraCloud = AqaraCloud()) : Frame {
         /** What the settings menu calls the S1's own settings app (com.lumi.settings). */
         const val SETTINGS_TITLE = "Aqara's own settings"
 
-        /** How a panel without the loader gets a frame update (#139). */
-        const val NEEDS_LOADER = "It comes with the next app update, which puts the frame loader into the boot image over the air " +
+        /** How a panel without the loader gets a frame update (#139): over the air with our root helper, else Kiln. */
+        const val NEEDS_LOADER = "The app's radio bundle puts the frame loader into the boot image over the air " +
             "(the Device page shows how far it got). Later frame updates install over the air"
+        const val NEEDS_LOADER_KILN = "To install it: update the panel once with Kiln, at ${FrameRelease.KILN}. Later frame updates install over the air"
+
+        /** [NEEDS_LOADER] on a boot image whose root helper can run the boot writer ([BootWriter.helperCanWrite]), else Kiln. */
+        fun needsLoader(helperVersion: String): String = if (BootWriter.helperCanWrite(helperVersion)) NEEDS_LOADER else NEEDS_LOADER_KILN
 
         /**
          * `Build.HARDWARE` on the S1's A133 (read 2026-11-14), the S1 frame's only check. Its other build

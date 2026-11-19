@@ -1645,7 +1645,7 @@ bw_reset() { # a 0.4.3 panel: this image in boot, the app's Magisk download in p
 }
 bwrun() { # env...: one writer run, as the bundle's helper starts it
   env GWB_FILES="$BW/files" GWB_RADIO="$BW" GWB_BOOTFILES="$TB" GWB_BOOTDEV="$BDEV" GWB_DROP_CACHES="$T/drop_caches" \
-    GWB_MAGISK_SHA256="$MAPK_SHA" GWB_MAGISK_SIZE="$MAPK_SIZE" GWB_NEED_KB=1024 GWB_BUNDLE_VERSION=40400 \
+    GWB_MAGISK_SHA256="$MAPK_SHA" GWB_MAGISK_SIZE="$MAPK_SIZE" GWB_NEED_KB=1024 GWB_BUNDLE_VERSION=40400 GWB_MAGISK_WAIT=0 \
     GWB_REBOOT="$T/bin/fake-reboot" "$@" /system/bin/sh "$BW/files/glassworks_bootwriter.sh" >/dev/null 2>&1
 }
 bwpub() { cut -d' ' -f1 /data/glassworks-pub/boot-writer 2>/dev/null; }
@@ -1714,9 +1714,13 @@ check "no Magisk APK yet: asks the app for it (need-magisk), nothing read or wri
   test "$(bwpub)/$(ls "$BWD/backup.img" 2>/dev/null)" = need-magisk/ -a -n "$(same_boot && echo y)"
 printf 'not magisk' > "$APP/files/boot-writer/magisk.apk"; chown 10050 "$APP/files/boot-writer/magisk.apk"; bwrun
 check "...one of another size or hash: still need-magisk" test "$(bwpub)" = need-magisk
+rm -f "$APP/files/boot-writer/magisk.apk"
+bwrun GWB_MAGISK_WAIT=60 GWB_MAGISK_POLL=0.2 & BWP=$!
+i=0; until [ "$(bwpub)" = need-magisk ] || [ $i -ge 100 ]; do sleep 0.1; i=$((i + 1)); done
+check "...one run waits for it, saying need-magisk meanwhile" test "$(bwpub)" = need-magisk
 cp "$BW/magisk.apk" "$APP/files/boot-writer/magisk.apk"; chown 10050:10050 "$APP/files/boot-writer/magisk.apk"
-bwrun
-check "...the real one: on it goes" test "$(bwpub)" = restarting
+wait "$BWP"
+check "...and goes on as soon as the app's download is there, in the same run" test "$(bwpub)" = restarting
 
 bw_reset; echo 1 > /t/dd-write-flip; bwrun
 check "a readback that differs after the write: the backup goes back, checked, no restart" \
@@ -1737,6 +1741,26 @@ check "...and the switch is used up" test ! -e "$BWD/force-readback-mismatch"
 bw_reset; mkdir -p "$BWD"; touch "$BWD/force-readback-mismatch"; chown 10050 "$BWD/force-readback-mismatch"; bwrun
 check "...one the app could have made doesn't count" test "$(bwpub)" = restarting
 
+# A checkpoint /data won't take (full after the space check): no write without "written", no restart without
+# "restarting". A mv that refuses the state file whose first word is in /t/state-refuse.
+w "$T/bin/mv" <<'MV'
+#!/bin/sh
+for a in "$@"; do case "$a" in */boot-writer/state.tmp)
+  [ -f /t/state-refuse ] && [ "$(cut -d' ' -f1 "$a")" = "$(cat /t/state-refuse)" ] && exit 1 ;; esac; done
+exec /bin/mv "$@"
+MV
+bw_reset; echo written > /t/state-refuse; bwrun; rm -f /t/state-refuse
+check "the 'written' checkpoint can't be recorded: nothing written, no restart, said so" \
+  test "$(bwpub)/$(ls /t/reboots 2>/dev/null)/$(cut -d' ' -f1 "$BWD/state")" = waiting//prepared -a -n "$(same_boot && echo y)"
+bwrun
+check "...the next start resumes from prepared and goes through" test "$(bwpub)/$(wc -l < /t/reboots)" = restarting/1
+bw_reset; echo restarting > /t/state-refuse; bwrun; rm -f /t/state-refuse
+check "the 'restarting' checkpoint can't be recorded: written and read back, but no restart" \
+  test "$(bwpub)/$(ls /t/reboots 2>/dev/null)/$(cut -d' ' -f1 "$BWD/state")" = error//written
+bwrun
+check "...the next start only restarts" test "$(bwpub)/$(wc -l < /t/reboots)" = restarting/1
+/bin/rm -f "$T/bin/mv"
+
 # Cut short (power, a helper restart): each state resumes, nothing twice
 bw_reset; bwrun GWB_REBOOT=true; new=$(sha256sum "$BDEV" | cut -d' ' -f1)
 cp "$T/boot-before.img" "$BDEV"; set -- $(cat "$BWD/state"); echo "prepared $2 $3 $4" > "$BWD/state"; bwrun
@@ -1750,10 +1774,16 @@ bw_reset; bwrun GWB_REBOOT=true; set -- $(cat "$BWD/state"); cp "$T/boot-before.
 bwrun
 check "cut just before the write began (state written, boot = backup): written now, restarted once" \
   test "$(bwpub)/$(wc -l < /t/reboots)/$(sha256sum "$BDEV" | cut -d' ' -f1)" = "restarting/1/$new"
-bw_reset; mkdir -p "$BWD/run.lock"; echo $$ > "$BWD/run.lock/pid"; bwrun
-check "another writer running (its lock, its pid alive): this one leaves" test ! -e /data/glassworks-pub/boot-writer -a -n "$(same_boot && echo y)"
-echo 999999 > "$BWD/run.lock/pid"; bwrun
-check "...a lock whose writer is gone is taken over" test "$(bwpub)" = restarting
+owner() { st=$(cat "/proc/$1/stat"); st=${st##*) }; set -- "$1" $st; echo "$(cat /proc/sys/kernel/random/boot_id) $1 ${21}"; }
+bw_reset; mkdir -p "$BWD/run.lock"; owner $$ > "$BWD/run.lock/owner"; bwrun
+check "another writer running (its lock: this boot, its pid, its start time): this one leaves" \
+  test ! -e /data/glassworks-pub/boot-writer -a -n "$(same_boot && echo y)"
+set -- $(owner $$); echo "$1 $2 $(( $3 + 1 ))" > "$BWD/run.lock/owner"; bwrun
+check "...a lock whose pid now belongs to another process (start time differs) is taken over" test "$(bwpub)" = restarting
+bw_reset; mkdir -p "$BWD/run.lock"; set -- $(owner $$); echo "00000000-0000-0000-0000-000000000000 $2 $3" > "$BWD/run.lock/owner"; bwrun
+check "...so is one from an earlier boot" test "$(bwpub)" = restarting
+bw_reset; mkdir -p "$BWD/run.lock"; echo "x 999999 1" > "$BWD/run.lock/owner"; bwrun
+check "...and one whose writer is gone" test "$(bwpub)" = restarting
 
 # The radio helper of a bundle that carries the writer starts it (the hook in s1kiosk_radio.sh), the boot copy doesn't
 reset_radio; mkdir -p /data/s1kiosk/radio/bundle/current/bootwriter

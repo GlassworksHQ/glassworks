@@ -32,6 +32,8 @@ APP_DATA=${GWB_APP_DATA:-/data/data/sh.edm.s1kiosk}
 PUB=${GWB_PUB:-/data/glassworks-pub}
 DROP_CACHES=${GWB_DROP_CACHES:-/proc/sys/vm/drop_caches}
 NEED_KB=${GWB_NEED_KB:-262144}                # 256 MiB: backup, a second export, the APK and the work dir
+MAGISK_WAIT=${GWB_MAGISK_WAIT:-1800}          # how long one run waits for the app's download (s); the next start waits again
+MAGISK_POLL=${GWB_MAGISK_POLL:-30}
 BUNDLE_V=${GWB_BUNDLE_VERSION:-0}
 APP_MAGISK=boot-writer/magisk.apk             # app -> writer, relative to the app's files/
 MAGISK_SHA256=${GWB_MAGISK_SHA256:-89cefac0a318afa39fb3880c45c87b036c05bc1ebf02a7a715b7f8d7c26ac6e7}  # v31.1 = kiln/assets.lock.json
@@ -66,7 +68,8 @@ write_boot() { # image: the whole partition, flushed
 mode_now() { getprop persist.s1kiosk.radio_mode; }
 restart() { # once: the state says so first, so a second start never restarts again
   set -- $(cat "$D/state")
-  state_set restarting "$2" "$3" "$4" "$5"
+  # Not recorded, no restart: the state stays "written", and the next start restarts from there
+  state_set restarting "$2" "$3" "$4" "$5" || fail "cannot record the state before the restart: not restarting now"
   pub restarting "the loader is written and checked; restarting once"
   ${GWB_REBOOT:-setprop sys.powerctl reboot,glassworks-loader}
   exit 0
@@ -74,13 +77,19 @@ restart() { # once: the state says so first, so a second start never restarts ag
 
 [ -n "$(getprop ro.glassworks.frame.id)" ] && exit 0   # this boot runs the loader: nothing to do here
 { mkdir -p "$D" && chown root:root "$D" && chmod 700 "$D"; } || exit 1   # root only, whoever made it
-# One writer at a time: every helper start starts one. A lock whose writer is gone (killed) is taken over.
+# One writer at a time: every helper start starts one. A lock is its writer's "<boot id> <pid> <start time>": one from
+# an earlier boot, or whose pid now belongs to another process (a reused pid), is stale and taken over.
+ident() { # pid -> "<boot id> <pid> <start time in ticks>" (field 22 of /proc/<pid>/stat, counted after the comm)
+  st_=$(cat "/proc/$1/stat" 2>/dev/null) || return 1
+  st_=${st_##*) }; set -- "$1" $st_
+  echo "$(cat /proc/sys/kernel/random/boot_id 2>/dev/null) $1 ${21:-}"
+}
 if ! mkdir "$D/run.lock" 2>/dev/null; then
-  p_=$(cat "$D/run.lock/pid" 2>/dev/null)
-  [ -n "$p_" ] && kill -0 "$p_" 2>/dev/null && exit 0
+  set -- $(cat "$D/run.lock/owner" 2>/dev/null)
+  [ -n "${2:-}" ] && [ "$(ident "$2")" = "$*" ] && exit 0
   rm -rf "$D/run.lock"; mkdir "$D/run.lock" 2>/dev/null || exit 0
 fi
-echo $$ > "$D/run.lock/pid"; trap 'rm -rf "$D/run.lock"' EXIT
+ident $$ > "$D/run.lock/owner"; trap 'rm -rf "$D/run.lock"' EXIT
 SIZE=$(part_size)
 case "$SIZE" in ''|*[!0-9]*) fail "cannot read the size of $DEV" ;; esac
 
@@ -110,9 +119,15 @@ case "$free_" in ''|*[!0-9]*) wait_ checking "cannot read the free space on /dat
 rm -rf "$W"; mkdir -p "$W/x" "$W/p" && chmod 700 "$W" || fail "cannot make $W"
 uid_=$(stat -c %u "$APP_DATA" 2>/dev/null)
 case "$uid_" in ''|*[!0-9]*) fail "the app isn't installed" ;; esac
-"$BOOTFILES/s1kiosk_verify" --copy "$APP_DATA" "files/$APP_MAGISK" "$uid_" "$MAGISK_SIZE" "$W/magisk.apk" >/dev/null 2>&1 ||
-  wait_ need-magisk "waiting for the app to download the official Magisk APK"
-[ "$(sha "$W/magisk.apk")" = "$MAGISK_SHA256" ] || { rm -f "$W/magisk.apk"; wait_ need-magisk "the Magisk APK has the wrong SHA-256"; }
+# The app downloads it when the record says need-magisk (MagiskFetch); this run waits for it, holding the lock
+end_=$(( $(date +%s) + MAGISK_WAIT )); asked_=""
+until "$BOOTFILES/s1kiosk_verify" --copy "$APP_DATA" "files/$APP_MAGISK" "$uid_" "$MAGISK_SIZE" "$W/magisk.apk" >/dev/null 2>&1 &&
+    [ "$(sha "$W/magisk.apk")" = "$MAGISK_SHA256" ]; do
+  rm -f "$W/magisk.apk"
+  [ "$(date +%s)" -lt "$end_" ] || wait_ need-magisk "waiting for the app to download the official Magisk APK"
+  [ -n "$asked_" ] || { pub need-magisk "waiting for the app to download the official Magisk APK"; asked_=1; }
+  sleep "$MAGISK_POLL"
+done
 ( cd "$W/x" && unzip -o -q "$W/magisk.apk" assets/boot_patch.sh assets/util_functions.sh \
     "lib/$ABI/libmagiskboot.so" "lib/$ABI/libmagiskinit.so" "lib/$ABI/libmagisk.so" "lib/$ABI/libinit-ld.so" \
     "lib/$ABI/libbusybox.so" ) >/dev/null 2>&1 || fail "cannot unpack the Magisk APK"
@@ -206,14 +221,15 @@ cmp -s "$W/cur/header.cmp" "$W/new/header.cmp" || refuse "the patched image's he
   >/dev/null 2>&1 || refuse "the patched image doesn't hold the loader in place of the 0.4.3 services"
 NSHA=$(sha "$NEW")
 MODE0=$(mode_now)
-state_set prepared "$SHA" "$NSHA" "$BUNDLE_V"
+state_set prepared "$SHA" "$NSHA" "$BUNDLE_V" || wait_ waiting "cannot record the state on /data: nothing written"
 
 # --- 6. the write ------------------------------------------------------------------------------------------
 # init kills a service's whole process group, by cgroup, when it restarts it (any app may ask, SELinux being
 # permissive). Out of that group, a helper restart during the write can't cut it short. Best effort.
 [ -w /acct/cgroup.procs ] && echo $$ > /acct/cgroup.procs 2>/dev/null
 pub checking "writing boot"
-state_set written "$SHA" "$NSHA" "$BUNDLE_V" "${MODE0:--}"
+# Recorded before the write, or no write: a cut write must find "written" at the next start
+state_set written "$SHA" "$NSHA" "$BUNDLE_V" "${MODE0:--}" || wait_ waiting "cannot record the state on /data: nothing written"
 if ! write_boot "$NEW"; then got_=""; else got_=$(readback); fi
 # Root-made test switch for the panel run (docs/research/s1-boot-writer.md): treat this readback as a mismatch
 if [ -f "$D/force-readback-mismatch" ] && [ ! -L "$D/force-readback-mismatch" ] &&

@@ -32,6 +32,11 @@ object BootWriter {
     const val APK_PATH = "boot-writer/magisk.apk"
     const val TITLE = "Frame loader"
     const val LOADER_PROP = "ro.glassworks.frame.id"
+    /** The 0.4.3 boot image's root helper contract: the writer runs from its radio bundle, so it needs v4 or later. */
+    const val HELPER_PROP = "sys.s1kiosk.radio.version"
+
+    /** Whether this boot image's root helper can run the boot writer: a patched 0.4.3 image (helper v4) can, stock can't. */
+    fun helperCanWrite(version: String): Boolean = (version.trim().toIntOrNull() ?: 0) >= 4
 
     data class Record(val state: String, val epoch: Long, val detail: String)
 
@@ -44,10 +49,10 @@ object BootWriter {
     fun read(file: File = File(RECORD)): Record? = runCatching { parse(file.readLines().firstOrNull()) }.getOrNull()
 
     /**
-     * The Device page's row. [loaderRuns]: this boot ran the loader (its frame id is set). [date]: an epoch in the panel's
-     * own words.
+     * The Device page's row. [loaderRuns]: this boot ran the loader (its frame id is set). [helper]: the boot image's root
+     * helper can run the writer ([helperCanWrite]); without it only Kiln can. [date]: an epoch in the panel's own words.
      */
-    fun rowText(record: Record?, loaderRuns: Boolean, date: (Long) -> String = ::dateOf): String {
+    fun rowText(record: Record?, loaderRuns: Boolean, helper: Boolean = true, date: (Long) -> String = ::dateOf): String {
         val d = record?.detail.orEmpty()
         return when (record?.state) {
             "ok" -> "Yes: installed over the air on ${date(record.epoch)}"
@@ -57,9 +62,16 @@ object BootWriter {
             "need-magisk" -> "Installing: downloading Magisk's tools (the official release)"
             "checking", "waiting" -> "Installing: $d"
             "refused", "restored" -> "Not installed: $d"
-            else -> if (loaderRuns) "Yes" else "Not yet: the next app update installs it"
+            else -> when {
+                loaderRuns -> "Yes"
+                helper -> "Not yet: the app's radio bundle installs it"
+                else -> NO_HELPER
+            }
         }
     }
+
+    /** A boot image without our root helper (stock): no over-the-air route, Kiln's install is the way. */
+    val NO_HELPER = "No: this boot image has no root helper. To install it: update the panel once with Kiln, at ${dev.glassworks.frame.FrameRelease.KILN}"
 
     private fun dateOf(epoch: Long): String = DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(epoch * 1000))
 

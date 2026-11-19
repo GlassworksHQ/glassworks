@@ -37,7 +37,11 @@ class BootWriterTest {
         assertEquals("Yes: installed over the air on 19 Nov 2026", row("ok 1 the frame loader is in boot", runs = true))
         assertEquals("Yes", row("installed 1 boot already has the frame loader"))
         assertEquals("Yes", row(null, runs = true))
-        assertEquals("Not yet: the next app update installs it", row(null))
+        assertEquals("Not yet: the app's radio bundle installs it", row(null))
+        assertEquals("a stock boot image (no root helper): Kiln, not an app update",
+            BootWriter.NO_HELPER, BootWriter.rowText(null, loaderRuns = false, helper = false) { "" })
+        assertTrue(BootWriter.helperCanWrite("4")); assertTrue(BootWriter.helperCanWrite("5\n"))
+        assertFalse(BootWriter.helperCanWrite("")); assertFalse(BootWriter.helperCanWrite("3")); assertFalse(BootWriter.helperCanWrite("x"))
         assertEquals("Installing: downloading Magisk's tools (the official release)", row("need-magisk 1 waiting for the app"))
         assertEquals("Installing: patching a copy of boot", row("checking 1 patching a copy of boot"))
         assertEquals("Installing: restarting once to finish", row("restarting 1 the loader is written"))
@@ -45,6 +49,12 @@ class BootWriterTest {
         assertEquals("Not installed: boot read back wrong; the backup is back", row("restored 1 boot read back wrong; the backup is back"))
         assertEquals("Error: recover with FEL", row("error 1 recover with FEL"))
         assertEquals("Yes, but the check after the restart failed: x", row("error 1 x", runs = true))
+    }
+
+    @Test fun theFrameUpdateCardSaysKilnOnlyWithoutTheRootHelper() {
+        assertEquals(AqaraS1Plus.NEEDS_LOADER, AqaraS1Plus.needsLoader("4"))
+        assertEquals(AqaraS1Plus.NEEDS_LOADER_KILN, AqaraS1Plus.needsLoader(""))
+        assertTrue(AqaraS1Plus.NEEDS_LOADER_KILN.contains("Kiln"))
     }
 
     /** One pin, three places: this app, the writer that checks it, and Kiln's asset lock. */
