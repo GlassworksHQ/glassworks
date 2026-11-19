@@ -27,6 +27,9 @@ export interface PanelShell {
  * The device took the connection but didn't let this key in within the time given: it may be waiting
  * for someone to allow the key on its screen, or it trusts another computer's key only.
  */
+/** How long a timed-out connect waits for the device's release before it rejects anyway. */
+const RELEASE_MS = 1000;
+
 /** Another program (the computer's own adb) holds the device's adb interface: asking again won't help until it lets go. */
 export class AdbBusy extends Error {
   constructor() { super('another program holds the panel\'s adb connection: run "adb kill-server" on this computer and try again'); this.name = 'AdbBusy'; }
@@ -73,7 +76,8 @@ export class Panel implements PanelShell {
         const known = await within(manager.getDevices());
         d = known.find((x) => x.raw === device) ?? (device.serialNumber ? known.find((x) => x.serial === device.serialNumber) : undefined);
       }
-      if (!d) throw new Error('no panel selected');
+      // a device given but not in the list is off USB for now (restarting), not a list closed with nothing picked
+      if (!d) throw new Error(device ? 'the device isn\'t on USB right now (it may be restarting)' : 'no panel selected');
       const claiming = d.connect();
       let connection;
       try {
@@ -91,7 +95,10 @@ export class Panel implements PanelShell {
       } catch (e) {
         // refused (adbd up before it reads its keys, or not this browser's key) or too late: let go, so a later try can claim it
         if (e instanceof AdbAuthTimeout) auth.then((t) => t.close(), () => {}); // a key allowed after all: let go of it
-        await d.raw.close().catch(() => {});
+        // let go before throwing, so a later try can claim it, but give the release at most RELEASE_MS (WebUSB's close
+        // has no deadline): connect rejects within authMs plus RELEASE_MS at the latest
+        const release = d.raw.close().catch(() => {});
+        await Promise.race([release, new Promise((r) => setTimeout(r, RELEASE_MS))]);
         throw e;
       }
     } finally {
