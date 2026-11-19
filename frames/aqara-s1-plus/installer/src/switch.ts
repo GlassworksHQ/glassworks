@@ -355,6 +355,17 @@ const lastLine = (s: string) => s.trim().split(/\r?\n/).pop() || 'no detail';
 export async function switchSigningKey(p: PanelShell, apk: Uint8Array, plan: SwitchPlan, log: SwitchLog,
   sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms))): Promise<SwitchOutcome> {
   const out: SwitchOutcome = { dataKept: false, signIn: 'lost', apiKey: 'lost', wifi: wifiAtRisk(plan.wifi) ? 'lost' : 'kept', ssid: plan.wifi.ssid, notes: [], guarded: false };
+  try {
+    return await switchSteps(p, apk, plan, log, sleep, out);
+  } catch (e) {
+    // Any failure, not only the ones the steps handle: provision never gets `out` to open the port later (#628 review).
+    await openApiPort(p, out, log).catch(() => {});
+    throw e;
+  }
+}
+
+async function switchSteps(p: PanelShell, apk: Uint8Array, plan: SwitchPlan, log: SwitchLog,
+  sleep: (ms: number) => Promise<void>, out: SwitchOutcome): Promise<SwitchOutcome> {
   const su = (cmd: string) => p.run(`su -c 'sh ${SWITCH_SH} ${cmd}'`);
   /** The APKs; the helper stays until openApiPort, after the hand-over. */
   const cleanup = async () => { await p.run(`rm -f ${OLD_APK} ${NEW_APK}`); };

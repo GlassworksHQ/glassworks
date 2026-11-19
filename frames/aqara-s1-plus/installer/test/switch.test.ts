@@ -373,6 +373,15 @@ describe('switching a development build to this one', () => {
     expect(p.cmds.at(-1)).toBe('rm -f /data/local/tmp/glassworks-old.apk /data/local/tmp/glassworks-switch.sh');
   });
 
+  it('a failure in the middle of the switch still opens the API port (#628 review)', async () => {
+    const p = new SwitchPanel();
+    const run = p.run.bind(p);
+    p.run = async (cmd) => { if (cmd === 'pm uninstall sh.edm.s1kiosk') { p.cmds.push(cmd); throw new Error('USB transfer failed'); } return run(cmd); };
+    await expect(provision(p, { kioskApk: new Uint8Array([1]), confirmSwitch: async () => true }, () => {}, noSleep)).rejects.toThrow(/USB transfer failed/);
+    expect(p.guarded).toBe(false);
+    expect(p.cmds.at(-1)).toBe('rm -f /data/local/tmp/glassworks-switch.sh');
+  });
+
   it('a step after the switch that fails still opens the API port (#626)', async () => {
     const p = new SwitchPanel();
     const run = p.run.bind(p);
