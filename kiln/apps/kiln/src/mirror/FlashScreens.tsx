@@ -292,15 +292,17 @@ export function FlashError({ f, s }: P) {
       {f.recipe.community && <Whose r={f.recipe} />}
       <h2 id="h">The install stopped.</h2>
       <pre className="raw">{s.error}</pre>
-      {s.work && s.work.step !== 'first-boot' && s.work.step !== 'restart' && <p className="small">The Mirror is still in fastboot: leave it on and plugged in. Connect fastboot again and install again{f.recipe.community ? '' : ', or install the Glass Panes image from this page'}: no button to hold.</p>}
+      {s.work && !['first-boot', 'hand-back', 'restart'].includes(s.work.step) && <p className="small">The Mirror is still in fastboot: leave it on and plugged in. {s.files.every((x) => x.state === 'ok') ? 'Connect fastboot again' : 'Download the files again, then connect fastboot'} and install again{f.recipe.community ? '' : ', or install the Glass Panes image from this page'}: no button to hold.</p>}
       {s.flashFailed && !f.recipe.community && !s.noFill && (
         <p className="small">If the bootloader refused a FILL chunk (a sparse image&apos;s run of zeros), try again without FILL: Kiln builds the zeros as plain blocks, about 200 MB more to send.</p>
       )}
       <div className="foot">
         <Log s={s} />
         <span className="links">
-          {s.work?.step === 'first-boot' && <button type="button" className="btn ghost" onClick={() => f.finishFirstStart()}>Try the first start again</button>}
-          {s.work && s.work.step !== 'first-boot' && s.work.step !== 'restart' && <button type="button" className="btn ghost" onClick={() => f.reconnectFastboot()}>Connect fastboot again</button>}
+          {/* the first start, or its key hand-back (PR 603): the Mirror runs Android, so adb again, never fastboot */}
+          {(s.work?.step === 'first-boot' || s.work?.step === 'hand-back') && <button type="button" className="btn ghost" onClick={() => f.finishFirstStart()}>Try the first start again</button>}
+          {/* a write or a build that stopped: the Mirror is still in fastboot. Files that no longer check out download again first */}
+          {s.work && !['first-boot', 'hand-back', 'restart'].includes(s.work.step) && s.files.every((x) => x.state === 'ok') && <button type="button" className="btn ghost" onClick={() => f.reconnectFastboot()}>Connect fastboot again</button>}
           {s.flashFailed && !f.recipe.community && !s.noFill && <button type="button" className="btn ghost" onClick={() => f.retryWithoutFill()}>Try again without FILL</button>}
           <button type="button" className="btn ghost" onClick={() => f.retry()}>Back to the download</button>
         </span>

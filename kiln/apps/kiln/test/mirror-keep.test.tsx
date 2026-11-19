@@ -48,6 +48,13 @@ describe('keeping the Mirror in Home Assistant over a reflash', () => {
     expect(embers()).toEqual(['Connect']);
   });
 
+  it('after the keep step restarted the Mirror, "Fastboot by hand" lands on Connect, not another restart', async () => {
+    const d = await keepDemo('flash-keep-held', true);
+    expect(d.flash.state.restarted).toBe(true);
+    d.flash.skipKeep();
+    expect(d.flash.state).toMatchObject({ screen: 'fastboot', restarted: true });
+  });
+
   it('the hand-back row shows only with a key held', async () => {
     await show(await keepDemo('flash-keep-working', true));
     expect(screen.getByText('Give Glassworks Home Assistant’s key back')).toBeTruthy();

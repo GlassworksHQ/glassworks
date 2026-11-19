@@ -100,10 +100,10 @@ function realSessions(on: boolean, from: ApkFrom = 'local'): { mirror: MirrorSes
       return keys.connectWith(async (k) => Panel.connect(k, (adbDevice = await Panel.pick()), o))();
     },
     adbPicked: () => !!adbDevice,
-    reopenAdb: async () => {
+    reopenAdb: async (o) => {
       const k = keys.key();
       if (!k || !adbDevice) throw new Error('no panel selected');
-      return Panel.connect(k, adbDevice, { authMs: AUTH_MS });
+      return Panel.connect(k, adbDevice, { authMs: o?.authMs ?? AUTH_MS });
     },
     adbKey: () => keys.key()?.publicKey,
     flashedHere: FLASHED_HERE,
