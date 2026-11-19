@@ -49,6 +49,8 @@ export interface FlashDeps {
    * browser's key (adbd answers before it reads the adb_keys in the new userdata), so Kiln asks again.
    */
   reopenAdb?(): Promise<PanelShell>;
+  /** Whether the last requestAdb picked a device: one that failed before the list (no key yet, no WebUSB) isn't retried. */
+  adbPicked?(): boolean;
   /** How many times Kiln asks again, 5 s apart (default 60: five minutes of the first start). */
   adbTries?: number;
   /** This browser's adb public key line, once loaded. */
@@ -404,7 +406,7 @@ export class FlashSession {
     let p: PanelShell | undefined;
     let last: unknown;
     try { p = await req; } catch (e) { last = e; }
-    const tries = this.d.reopenAdb && !nothingPicked(last) ? this.d.adbTries ?? 60 : 0;
+    const tries = this.d.reopenAdb && !nothingPicked(last) && (this.d.adbPicked?.() ?? true) ? this.d.adbTries ?? 60 : 0;
     for (let i = 0; !p && i < tries; i++) {
       this.log('', `The Mirror didn't let this browser in yet (${(last as Error).message}): it is still starting. Asking again in 5 s.`);
       this.set({ adbWaiting: true });

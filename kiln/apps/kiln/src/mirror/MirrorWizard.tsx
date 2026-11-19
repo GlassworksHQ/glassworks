@@ -75,7 +75,11 @@ function realSessions(on: boolean, from: ApkFrom = 'local'): { mirror: MirrorSes
     // ?image=<id>: a community image's install, with no choice first (issue 579)
     search: location.search,
     requestFastboot: () => Fastboot.request([MIRROR_FASTBOOT]),
-    requestAdb: keys.connectWith(async (k) => Panel.connect(k, (adbDevice = await Panel.pick()))),
+    requestAdb: () => {
+      adbDevice = undefined; // a click that fails before the list (the key still loading) picks nothing
+      return keys.connectWith(async (k) => Panel.connect(k, (adbDevice = await Panel.pick())))();
+    },
+    adbPicked: () => !!adbDevice,
     reopenAdb: async () => {
       const k = keys.key();
       if (!k || !adbDevice) throw new Error('no panel selected');
