@@ -156,7 +156,7 @@ describe('the image worker\'s jobs', () => {
     const run = async (m: { op: string; n: number }, signal: AbortSignal) => {
       order.push(`start ${m.op} ${m.n}`);
       if (m.op === 'download') {
-        if (signal.aborted) { order.push(`cancelled ${m.n}`); return; }
+        if (signal.aborted) { order.push(`cancelled ${m.n} before it began`); return; }
         await Promise.race([gate, new Promise<void>((r) => signal.addEventListener('abort', () => r(), { once: true }))]);
         order.push(signal.aborted ? `cancelled ${m.n}` : `done ${m.n}`);
       } else {
@@ -165,13 +165,17 @@ describe('the image worker\'s jobs', () => {
       }
     };
     const receive = jobQueue(jobs, run);
-    void receive({ op: 'download', n: 1 }); // running
+    void receive({ op: 'download', n: 1 });
+    // download 1 is running, waiting on the network, before anything else arrives
+    for (let i = 0; i < 20 && !order.includes('start download 1'); i++) await new Promise((r) => setTimeout(r, 0));
+    expect(order).toEqual(['start download 1']);
     void receive({ op: 'download', n: 2 }); // queued behind it
     void receive({ op: 'discard', n: 3 });  // stops both
     const last = receive({ op: 'download', n: 4 }); // sent after the discard: runs, after it
     await new Promise((r) => setTimeout(r, 0));
     release();
     await last;
-    expect(order).toEqual(['start download 1', 'cancelled 1', 'start download 2', 'cancelled 2', 'start discard 3', 'end discard 3', 'start download 4', 'done 4']);
+    // 1 was running and stops mid-wait; 2 was queued and stops before it begins; the discard ends before 4 starts
+    expect(order).toEqual(['start download 1', 'cancelled 1', 'start download 2', 'cancelled 2 before it began', 'start discard 3', 'end discard 3', 'start download 4', 'done 4']);
   });
 });
