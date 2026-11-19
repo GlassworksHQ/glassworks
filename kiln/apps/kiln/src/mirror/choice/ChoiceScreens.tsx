@@ -210,7 +210,7 @@ export function WayBack({ f, other }: { f: FlashSession; other: ImageRecipe }) {
     <div className="well">
       <div className="grow">
         <span className="small">The way back</span>
-        <span>{other.community ? `For ${other.name} instead` : `To go back to ${other.name}`}, put the Mirror in fastboot and pick {other.name} on this page. It replaces {now.community ? `${now.name} and its data` : 'Glassworks and its settings'}.</span>
+        <span>{other.community ? `For ${other.name} instead` : `To go back to ${other.name}`}, pick {other.name} here{now.community ? ' and put the Mirror in fastboot' : ': Kiln restarts the Mirror into fastboot over USB, with no button to hold'}. It replaces {now.community ? `${now.name} and its data` : 'Glassworks and its settings'}.</span>
       </div>
       <button type="button" className="btn ghost" onClick={() => f.wayBack(other.id)}>{other.community ? `Install ${other.name} instead` : `Install ${other.name}`}</button>
     </div>

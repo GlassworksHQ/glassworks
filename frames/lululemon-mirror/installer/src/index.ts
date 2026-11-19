@@ -17,4 +17,4 @@ export { APP_DIRS, GLASSWORKS, MIRROR_PROBE, PRIVILEGED, type MirrorApp } from '
 export { describeMirrorUpdates, parseMirrorUpdates, readMirrorUpdates, type MirrorUpdates } from './updates';
 export { GLASSWORKS_IMAGE, GLASS_PANES_IMAGE, GLASS_PANES_KEY, MIRROR_ACCESS, MIRROR_IMAGES } from './choices';
 export { WIFI_CONF, WIFI_TEMPLATE, saveWifi } from './image';
-export { userdataWithWifi, wifiOn, wifiTemplate } from './wifi';
+export { userdataWithWifi, wifiOn, wifiTemplate, within } from './wifi';

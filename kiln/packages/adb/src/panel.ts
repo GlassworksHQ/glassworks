@@ -30,6 +30,9 @@ export interface PanelShell {
 /** How long a timed-out connect waits for the device's release before it rejects anyway. */
 const RELEASE_MS = 1000;
 
+/** How long a restart into the bootloader waits for adb's reply before it counts as done. */
+const REBOOT_MS = 5000;
+
 /** Another program (the computer's own adb) holds the device's adb interface: asking again won't help until it lets go. */
 export class AdbBusy extends Error {
   constructor() { super('another program holds the panel\'s adb connection: run "adb kill-server" on this computer and try again'); this.name = 'AdbBusy'; }
@@ -144,11 +147,13 @@ export class Panel implements PanelShell {
 
   /** adb's `reboot:bootloader`. The device drops the connection as it restarts, so a lost reply counts as done. */
   async rebootToBootloader(): Promise<void> {
-    await this.adb.power.bootloader().catch(() => {});
-    await this.adb.close().catch(() => {});
+    // a reply that never comes counts as done too (the device may be gone already), after REBOOT_MS
+    await Promise.race([this.adb.power.bootloader().catch(() => {}), new Promise((r) => setTimeout(r, REBOOT_MS))]);
+    await Promise.race([this.adb.close().catch(() => {}), new Promise((r) => setTimeout(r, RELEASE_MS))]);
   }
 
+  /** Lets go of the connection; WebUSB's close has no deadline, so it waits at most RELEASE_MS. */
   async close(): Promise<void> {
-    await this.adb.close();
+    await Promise.race([this.adb.close(), new Promise((r) => setTimeout(r, RELEASE_MS))]);
   }
 }

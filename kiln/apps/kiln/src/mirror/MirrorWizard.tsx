@@ -369,7 +369,6 @@ export function Flash({ flash, mirror, toApp }: { flash: FlashSession; mirror: M
     <Shell steps={flashRail(s)} level={flashLevel(s, flash.recipe.community)} error={s.screen === 'error'} chip={chip}>
       <FlashScreens f={flash} s={s} m={mirror} ms={ms} />
       {toApp && s.screen === 'image' && <p className="small">Already runs the Glass Panes image? <button type="button" className="link" onClick={toApp}>Add the app only, over adb</button></p>}
-      {s.screen === 'fastboot' && !flash.recipe.community && !s.key && <p className="small">Glassworks already runs on this Mirror? <button type="button" className="link" onClick={() => flash.toKeep()}>Keep its Home Assistant device first</button></p>}
     </Shell>
   );
 }

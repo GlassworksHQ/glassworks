@@ -2,7 +2,7 @@
 // The Mirror's Glassworks install over fastboot: the image in one click, the stock warning before any
 // write, the order of the writes, the first start over adb, the credit to Glass Panes, and a download
 // Refract can't serve shown as Kiln's bug. The choice and Glass Panes: image-choice.test.tsx.
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { GLASSWORKS } from '@glassworks/lululemon-mirror-installer';
 import { ProxyError, SYSTEM_BYTES, USERDATA_BYTES, WrongImage, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
 import { FirstBootMirror, fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
@@ -216,10 +216,14 @@ describe('installing Glassworks over fastboot', () => {
     expect(screen.queryByText('Glassworks isn\'t the only home screen yet.')).toBeNull();
   });
 
-  it('the fastboot card plays the Mirror\'s recovery steps and names the button to hold (#521)', async () => {
+  it('the fastboot card plays the Mirror\'s recovery steps and names the button to hold (#521), under "by hand" only', async () => {
     const { flash, mirror } = await flashDemo('flash-fastboot', true);
     expect(flash.state.screen).toBe('fastboot');
     render(<Flash flash={flash} mirror={mirror} />);
+    // the button inside the case is never the first way: it is the fallback for a Mirror Kiln can't reach over adb
+    expect(screen.queryByText(/hold VOL−/)).toBeNull();
+    expect(embers()).toEqual(['Restart into fastboot']);
+    fireEvent.click(screen.getByRole('button', { name: /Mirror still on lululemon.s software\? Fastboot by hand/ }));
     expect(screen.getByRole('img', { name: /lululemon Studio Mirror in recovery mode: Unscrew the stand and the back, Lift off the back, Plug in the power cord, Plug in the micro-USB, Hold VOL−, Switch the power on\. VOL− \(SW3\)/ })).toBeTruthy();
     expect(screen.getByText(/hold VOL− \(SW3\): of its two buttons side by side, the one nearer the top end's edge/)).toBeTruthy();
     expect(screen.getByText(/Keep holding while you switch the Mirror on/)).toBeTruthy();
@@ -250,7 +254,13 @@ describe('installing Glassworks over fastboot', () => {
     const { flash } = await flashDemo('flash-error', true);
     expect(flash.state).toMatchObject({ screen: 'error', error: expect.stringMatching(/FAILed/) });
     render(<Flash flash={flash} mirror={new MirrorSession({ connect: async () => { throw new Error('x'); } }, true)} />);
-    expect(screen.getByText(/put it in fastboot again/)).toBeTruthy();
+    expect(screen.getByText(/The Mirror is still in fastboot: leave it on and plugged in\. Connect fastboot again/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Connect fastboot again' }));
+    expect(flash.state).toMatchObject({ screen: 'fastboot', restarted: true }); // no restart needed: Connect is the ember
+    expect(embers()).toEqual(['Connect']);
+    flash.state = { ...flash.state, screen: 'error', flashFailed: true };
+    flash.retryWithoutFill(); // the same: still in fastboot
+    expect(flash.state).toMatchObject({ screen: 'fastboot', restarted: true, noFill: true });
   });
 
   it('a wrong file says what happened, and that it is Kiln\'s bug', async () => {
