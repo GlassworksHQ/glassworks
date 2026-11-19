@@ -52,6 +52,17 @@ describe("the latest release", () => {
     expect(latestRelease(changelog("0.6.0", "0.5.0"), drafted).tag).toBe("aqara-s1-plus-v0.5.0");
   });
 
+  it("takes the newest S1 release when no changelog version has one", () => {
+    // 0.6.0 is out, but this changelog has an unreleased 0.7.0 and an older 0.5.0 the list no longer reaches
+    const out = [rel("aqara-s1-plus-v0.6.0", "2026-12-10T08:00:00Z"), ...list.filter((r) => !r.tag_name.startsWith("aqara-s1-plus-v0.5"))];
+    expect(latestRelease(changelog("0.7.0", "0.5.0"), out)).toEqual({
+      version: "0.6.0",
+      date: "2026-12-10",
+      tag: "aqara-s1-plus-v0.6.0",
+      href: `${REPO}/releases/tag/aqara-s1-plus-v0.6.0`,
+    });
+  });
+
   it("links the releases page when the list doesn't reach any S1 release", () => {
     // newer releases of other lines filled GitHub's first page
     const others = list.filter((r) => !r.tag_name.startsWith("aqara-s1-plus-v") && !/^v/.test(r.tag_name));
