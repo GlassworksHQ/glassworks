@@ -1,7 +1,7 @@
 // The radio step (simulated panel: setRadio answers after 1.5 s).
 import { describe, expect, it, vi } from 'vitest';
 import type { SetupState } from '@glassworks/setup-channel';
-import { demoFrame as s1Demo } from '../src/app/aqara-s1-plus/frame';
+import { demoFrame as s1Demo } from './s1-frame';
 import { demoSession } from '../src/wizard/demo';
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));

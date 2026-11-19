@@ -14,7 +14,7 @@ import { openSignInWindow, SETUP_SOCKET, SetupChannel } from '@glassworks/setup-
 import { ChannelSetup, type SetupSteps } from '../setup/channelSetup';
 import { explain } from './explain';
 import { AskBridge, flowUi } from './flowUi';
-import type { AppPhase, AppResult, AppSettings, KilnFrame } from './frame';
+import type { AppPhase, AppResult, AppSettings, KilnFrame } from '@glassworks/kiln-core';
 import { initial, reduce, type Action, type Flow, type Setup, type WizardState } from './state';
 
 /** A tiny store: the session writes, React reads with useSyncExternalStore. */

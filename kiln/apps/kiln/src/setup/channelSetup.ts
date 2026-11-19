@@ -265,7 +265,7 @@ export class ChannelSetup {
         if (here) here();
         else {
           // The panel's own page (above) signs in on its own address and needs no `signinUrl`, which the panel leaves
-          // out when it has no Wi-Fi IPv4 address (the Mirror). Kiln's window needs it: it is Kiln's only way there.
+          // out when it has no Wi-Fi IPv4 address. Kiln's window needs it: it is Kiln's only way there.
           if (!st.ha.signinUrl) throw new Error('the panel has no sign-in page yet (is it on Wi-Fi?)');
           const to = kilnSignInUrl(st.ha.signinUrl);
           const w = tab ?? window.open(to, '_blank');
@@ -348,7 +348,7 @@ export class ChannelSetup {
     }
     if (stale()) return;
     this.ip = st.ip ?? this.ip; // also when setup starts here (#/radio): Done's hand-off needs it
-    // A frame without a radio (any Android device, the Mirror) has no radio step: straight to Done.
+    // A frame without a radio (any Android device) has no radio step: straight to Done.
     if (!st.radio) { await this.d.done(); return; }
     this.d.show({
       phase: 'radio', radio: st.radio,

@@ -5,6 +5,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { ships, type FrameDesign } from '@glassworks/frame-card';
 import { describe, expect, it } from 'vitest';
+import { ENGINE, INSTALLERS } from '@glassworks/frames/catalog';
 import { FRAMES } from '../../src/frames/catalog';
 import { installers, type InstallerData } from './harness';
 import { DRIVERS, MARKS } from './suite';
@@ -68,8 +69,10 @@ describe('the gate', () => {
 
 describe('every Kiln page has a contract', () => {
   const data = installers();
-  // a route is a folder with an App Router page in it (page.tsx), not any folder
-  const pages = readdirSync(APP).filter((n) => statSync(join(APP, n)).isDirectory() && existsSync(join(APP, n, 'page.tsx'))).map((n) => `/${n}`);
+  // a route is a folder with an App Router page in it (page.tsx), not any folder; [frame] is every route of a frame on
+  // the shared wizard (the registry's ENGINE)
+  const folders = readdirSync(APP).filter((n) => statSync(join(APP, n)).isDirectory() && existsSync(join(APP, n, 'page.tsx')));
+  const pages = folders.flatMap((n) => (n === '[frame]' ? ENGINE.map((id) => INSTALLERS[id]!.route) : [`/${n}`]));
 
   it('each frame page is the route of an installer.json, and each route has a page', () => {
     const routes = [...data.values()].map((d) => d.route).sort();

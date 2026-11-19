@@ -104,7 +104,7 @@ A frame's own page can draw the mockup alone, on a taller stage for a portrait f
 because only the caller's bundler knows the file's URL. Import the file and pass its URL as `screen`
 to `FrameCardBody` or `DeviceModel`. Without `screen`, the card draws the example dashboard as before.
 An image import is `{ src }` under Next.js and a plain string under Vite (and so in Vitest), so take
-the URL from either. Kiln does it in `kiln/apps/kiln/src/frames/catalog.ts`:
+the URL from either. Kiln does it in the frames registry's catalog (`packages/frames/src/catalog.ts`):
 
 ```tsx
 import s1Render from '…/frames/aqara-s1-plus/design/render.webp';

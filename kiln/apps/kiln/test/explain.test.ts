@@ -99,7 +99,7 @@ describe('a failure, in words', () => {
 
 describe('a failure during a write, through the session', () => {
   it('says the software may have been written once flashing began, before any write is verified', async () => {
-    const [{ demoSession }, { demoFrame }] = await Promise.all([import('../src/wizard/demo'), import('../src/app/aqara-s1-plus/frame')]);
+    const [{ demoSession }, { demoFrame }] = await Promise.all([import('../src/wizard/demo'), import('./s1-frame')]);
     const s = demoSession(demoFrame, 'connect');
     s.store.dispatch({ type: 'start', flow: 'install', now: 0 });
     s.store.dispatch({ type: 'progress', p: { overall: 0.62, phase: 'flash', phasePct: 0.1, title: 'Turning off verified boot', sub: 'Writing vbmeta' } });

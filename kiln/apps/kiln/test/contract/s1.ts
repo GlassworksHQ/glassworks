@@ -10,7 +10,7 @@ import { s1Plus, type AssetName, type Provisioned, type SetUpOptions } from '@gl
 import type { Fastboot } from '@glassworks/fastboot';
 import type { FelDevice } from '@glassworks/fel';
 import { Assets, toHex, type BackupFile, type BackupMeta, type Recipe } from '@glassworks/kiln-core';
-import { frame as s1PlusUi, demoFrame as s1Demo } from '../../src/app/aqara-s1-plus/frame';
+import { frame as s1PlusUi, demoFrame as s1Demo } from '../s1-frame';
 import { demoBootImage, simulatedPanel } from '../../src/wizard/demo';
 import { Session } from '../../src/wizard/session';
 import type { Step } from '../../src/wizard/routes';

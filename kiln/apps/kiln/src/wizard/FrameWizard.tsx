@@ -6,7 +6,7 @@ import { Assets, BackupStore, webUsbDevices } from '@glassworks/kiln-core';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { DEMOS, demoSession, enterDemo, type Demo } from './demo';
-import type { DemoFrame, KilnFrame } from './frame';
+import type { DemoFrame, KilnFrame } from '@glassworks/kiln-core';
 import { registry, type Entry } from './registry';
 import { Session } from './session';
 import { useRouteSync } from './useRouteSync';

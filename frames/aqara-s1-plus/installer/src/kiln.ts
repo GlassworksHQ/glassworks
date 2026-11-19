@@ -1,8 +1,14 @@
-// The S1's real install as Kiln's shared wizard runs it (#621): its recipe (recipe.ts) and the few steps only code can
-// say. Its words are in ../../design/installer.json `words`; Kiln's route for the S1 puts the two together
-// (kiln/apps/kiln/src/wizard/frame.ts). The simulated device for ?demo=… and tests is separate: sim.ts.
+// The S1 for Kiln (#621): its real install as the shared engine runs it. The words and drawings are its design data
+// (../../design), the steps only code can say are below, and its recipe is recipe.ts. Kiln reads it through the frames
+// registry (packages/frames). The simulated device for ?demo=… and tests is separate: sim.ts.
 import type { PanelShell } from '@glassworks/adb';
 import { S1_KIOSK } from '@glassworks/app-adb';
+import { frameWords, type KilnFrame, type RecoveryData } from '@glassworks/kiln-core';
+import photo from '../../../../docs/img/fel-button.jpg';
+import design from '../../design/frame.json';
+import installer from '../../design/installer.json';
+import recovery from '../../design/recovery.json';
+import { credits } from './credits';
 import { unprovision, type AppPhase } from './provision';
 import { s1Plus, type SetUpOptions } from './recipe';
 import { describeSwitch, panelWifi } from './switch';
@@ -11,7 +17,7 @@ import { readRootUpdates, type RootUpdates } from './updates';
 /** Every state readRootUpdates gives; a new one fails the typecheck here until it is added. */
 const UPDATE_STATES: Record<RootUpdates['state'], true> = { on: true, missing: true, unknown: true };
 
-export const kiln = {
+const code = {
   recipe: s1Plus,
   appId: S1_KIOSK,
   appOptions: (s: { locale?: string; timezone?: string; clock24: boolean; keyboard: boolean }, confirm: (q: string) => boolean, onPhase: (p: AppPhase) => void): SetUpOptions => ({
@@ -28,4 +34,14 @@ export const kiln = {
   },
   updateStates: Object.keys(UPDATE_STATES),
   giveBack: (p: PanelShell, on: (step: string, detail?: string) => void) => unprovision(p, on),
+};
+
+export const kilnFrame: KilnFrame = {
+  id: design.id,
+  ...frameWords(installer.words, code.updateStates),
+  recovery: recovery as RecoveryData,
+  // Next gives a static image as { src, width, height }; Vite (the tests) as its URL
+  photo: photo as unknown as KilnFrame['photo'],
+  credits,
+  ...code,
 };

@@ -5,7 +5,7 @@ import { Fastboot } from '@glassworks/fastboot';
 import { FelDevice } from '@glassworks/fel';
 import { FakeBrom, FakeUboot, makeSpl } from '@glassworks/fel/fakes';
 import type { BackupMeta } from '@glassworks/kiln-core';
-import { frame as s1PlusUi } from '../src/app/aqara-s1-plus/frame';
+import { frame as s1PlusUi } from './s1-frame';
 import { demoBootImage } from '../src/wizard/demo';
 import { AskBridge, flowUi } from '../src/wizard/flowUi';
 import { Session } from '../src/wizard/session';

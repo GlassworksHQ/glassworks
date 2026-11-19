@@ -1,6 +1,10 @@
 {
   "$comment": "Kiln's install for this frame, as data. Format: docs/design/kiln/frames-as-data.md. A draft (#621): the contract (kiln/apps/kiln/test/contract) reads route, touch and each step's id, writes, reboots, downloads and taps; the engine reads the rest from phase 2.",
   "route": "/android",
+  "releases": [
+    { "line": "generic-android", "tag": "^generic-android-v(\\d+\\.\\d+\\.\\d+)$", "assets": ["glassworks-generic-android-{abi}-{version}.apk"], "why": "Glassworks for generic Android (Android 8+): docs/releasing.md; one APK per frame.json abi, as generic-release.yml names them" },
+    { "line": "generic-android-legacy", "tag": "^generic-android-legacy-v(\\d+\\.\\d+\\.\\d+)$", "assets": ["glassworks-generic-android-legacy-{abi}-{version}.apk"], "why": "Its legacy build, for Android 6 and 7" }
+  ],
   "touch": true,
   "flows": {
     "install": {

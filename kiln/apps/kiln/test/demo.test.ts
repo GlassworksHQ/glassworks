@@ -2,7 +2,7 @@
 // screen can be seen without hardware.
 import { isMagiskPatched } from '@glassworks/bootpatch';
 import { describe, expect, it } from 'vitest';
-import { demoFrame as s1Demo } from '../src/app/aqara-s1-plus/frame';
+import { demoFrame as s1Demo } from './s1-frame';
 import { demoBootImage, demoSession } from '../src/wizard/demo';
 
 const until = async (f: () => boolean, ms = 30_000) => {

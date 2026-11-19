@@ -5,39 +5,10 @@
 // adds its own transitions (light over the board, a spotlight on the button, then on the port).
 // Buttons, the plug and the switch are drawn to the device's scale. On a big device that makes them
 // small, so the camera goes in close for them, and pulls back between two close-ups far apart.
+import type { Mm, RecoveryData, Rect, Screw, Shown } from '@glassworks/kiln-core';
 import { MATERIAL as M } from './materials';
 
-type Mm = [number, number];
-interface Rect { kind: string; at: Mm; size: Mm }
-/** `[x, y]` on the back, or `[x, y, z]` in a side face the drawing shows (`x = w` or `y = h`), `z` mm down from the back. */
-export type Screw = [x: number, y: number, z?: number];
-/** A side face the drawing shows: `right` is `x = w`, `bottom` is `y = h`. */
-type Shown = 'right' | 'bottom';
-
-export interface RecoveryData {
-  frame: string;
-  name: string;
-  body: { w: number; h: number; thickness: number; radius?: number };
-  cover?: { screws: Screw[]; features: Rect[] };
-  /**
-   * A stand fixed to a side face by the side screws in that face. It comes off once they're out.
-   * `depth`: a bar on that face, mm out from it, if it has one. `tube`: a U of tube from that face (or the
-   * bar's ends), `inset` mm in from the corners and `z` mm down from the back, out to `reach` mm from the
-   * face, its corners bent to `bend` mm; `closed` adds the tube's top bar along the face, which its screws
-   * go through.
-   */
-  stand?: { edge: Shown; depth?: number; tube?: { reach: number; inset: number; z: number; diameter: number; bend: number; closed?: boolean } };
-  board?: (Rect | { kind: 'window'; at: Mm; r: number } | { kind: 'button'; at: Mm })[];
-  button?: { at: Mm; what: string };
-  port?: { edge: 'top' | 'bottom' | 'left' | 'right'; at: number; kind: string };
-  /** A power socket under the back at `at`, its cord running out toward a side face. The `cord` move plugs it in. */
-  cord?: { at: Mm; toward: Shown; kind: string };
-  /** A power switch in a side face, `at` mm along it. The `power` move flips it on. */
-  power?: { edge: Shown; at: number; kind: string };
-  steps: ('screws' | 'cover' | 'cord' | 'hold' | 'plug' | 'power')[];
-  ready?: { seconds: number; says: string };
-  labels?: Partial<Record<string, string>>;
-}
+export type { RecoveryData, Screw } from '@glassworks/kiln-core';
 
 export const LABELS: Record<string, string> = { screws: 'Take out the screws', cover: 'Remove the back cover', hold: 'Hold the button', plug: 'Plug in the USB cable', cord: 'Plug in the power cord', power: 'Switch the power on' };
 
@@ -45,7 +16,7 @@ const C = Math.cos(Math.PI / 6);
 const SN = 0.5;
 const S = 0.78;
 const VB = { w: 640, h: 400 };
-/** Pixels per mm at and above which parts draw at full size; the S1 draws at 2.36, about real size. */
+/** Pixels per mm at and above which parts draw at full size; a panel-sized frame draws at about 2.4, about real size. */
 const FULL = 2.3;
 
 const clamp = (v: number) => Math.max(0, Math.min(1, v));
@@ -108,8 +79,8 @@ export function timeline(f: RecoveryData): Timeline {
   const pan = () => (far ? 1.5 : 0.8);
   // The move that switches the device on: the later of plug and power.
   const powers = f.steps.filter((st) => st === 'plug' || st === 'power').pop();
-  // A short wait plays faster, as the S1's always has; a longer hold plays in real time, so the
-  // animation never says "let go" before the device is ready (the Mirror's 5 s).
+  // A short wait plays faster, as a quick button always has; a longer hold plays in real time, so the
+  // animation never says "let go" before the device is ready (a 5 s hold).
   const seconds = f.ready?.seconds ?? 2;
   const wait = seconds <= 2 ? seconds * 0.4 + 0.2 : seconds;
   let t = 0.3;
@@ -362,7 +333,7 @@ export function mount(svg: SVGSVGElement, f: RecoveryData, onBeat?: (i: number) 
   let lastBeat = -2;
 
   // The camera: where it starts, then each move to a close-up, in order. Full-size parts zoom a little
-  // around what they look at (the S1); small ones zoom in to full size and put it in the middle.
+  // around what they look at (a panel); small ones zoom in to full size and put it in the middle.
   const CEN: Mm = [VB.w / 2, VB.h / 2];
   const zoom = 1 / g;
   const closeUp = (p: Mm, z: number, r: number): Cam => (g < 1 ? { f: p, a: CEN, z: z * zoom, r: r * g, dim: 1 } : { f: p, a: p, z, r, dim: 1 });

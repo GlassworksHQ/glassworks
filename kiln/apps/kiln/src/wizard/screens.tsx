@@ -11,7 +11,7 @@ import { SilentUpdates } from '../components/SilentUpdates';
 import { LastRun } from '../components/LastRun';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Recovery } from '../recovery/Recovery';
-import type { AppPhase, KilnFrame } from './frame';
+import type { AppPhase, KilnFrame } from '@glassworks/kiln-core';
 import type { Session } from './session';
 import { HomeAssistant, Radio, RadioNext, Wifi } from '../setup/steps';
 import { eta, milestones, type Setup, type WizardState } from './state';
@@ -147,7 +147,7 @@ const ROWS: { id: Row; text: (app: string) => string }[] = [
   { id: 'prefs', text: () => 'Apply your time zone, language and clock' },
   { id: 'start', text: () => 'First start' },
 ];
-const rowOf = (p: AppPhase): Row => (p.step === 'apk' ? p.apk : p.step);
+const rowOf = (p: AppPhase): Row => (p.step === 'apk' ? (p.apk as Row) : p.step);
 
 /**
  * `update`: the app was on the panel already. Then `pm install -r` stops it while it runs, it comes
@@ -171,7 +171,7 @@ function Installing({ frame, setup }: { frame: KilnFrame; setup: Extract<Setup, 
   const cur = now ? ROWS.findIndex((r) => r.id === rowOf(now)) : 0;
   // the keyboard row while it is still to come, if asked for; one passed without an install is left out
   const rows = ROWS.filter((r, i) => r.id !== 'keyboard' || reached.has('keyboard') || (setup.chosen?.keyboard !== false && i > cur));
-  const at = rows.findIndex((r) => r.id === ROWS[cur]!.id);
+  const at = rows.findIndex((r) => r.id === ROWS[cur]?.id);
   const { sub, note } = now ? nowSays(now, setup.update) : {};
   // the list changes only its marks, which a live region doesn't read: say the step in words
   const says = [rows[at]?.text(frame.app), sub, note].filter(Boolean).join('. ').replace(/\.\./g, '.');

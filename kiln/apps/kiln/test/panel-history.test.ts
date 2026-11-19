@@ -3,7 +3,7 @@
 // (a new session, S1's renew), or a reload (a new page: only sessionStorage is left). Only a run that
 // reaches Done clears it.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { demoFrame } from '../src/app/aqara-s1-plus/frame';
+import { demoFrame } from './s1-frame';
 import { demoSession } from '../src/wizard/demo';
 import { registry } from '../src/wizard/registry';
 import type { Session } from '../src/wizard/session';

@@ -2,7 +2,7 @@
 // fails before writing says "this attempt wrote nothing; an earlier try did" and keeps Undo, in the
 // install and the undo flow alike, until a run reaches Done.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { demoFrame as s1Demo } from '../src/app/aqara-s1-plus/frame';
+import { demoFrame as s1Demo } from './s1-frame';
 import { demoSession } from '../src/wizard/demo';
 import type { Session } from '../src/wizard/session';
 import type { Flow } from '../src/wizard/state';
