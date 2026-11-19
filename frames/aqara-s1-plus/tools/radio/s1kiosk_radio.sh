@@ -848,7 +848,8 @@ HN_PKG=sh.edm.s1kiosk.overlay.hotspotname
 HN_MODS=${S1R_MODULES:-/data/adb/modules}
 # Magisk mounts modules only once its own setup is in /data/adb/magisk: without busybox there, post-fs-data stops
 # with "Magisk environment incomplete, abort" before any module (Magisk v31.1 native/src/core/bootstages.rs:76-79,
-# :132-134). The Magisk app puts it there; our installers don't (panel run, 2026-11-19).
+# :132-134). The Magisk app puts it there; our boot image does since #615 (s1kiosk_magiskenv.rc). A panel installed
+# before that still lacks it until its next install with Kiln.
 HN_MAGISK_BB=${S1R_MAGISK_BB:-/data/adb/magisk/busybox}
 # Staged in the helper's own root-only dir, never in $HN_MODS: Magisk loads every directory there at boot, dot-names
 # included, so a stage a stopped helper left would load. Same /data filesystem, so the final mv is a rename.
