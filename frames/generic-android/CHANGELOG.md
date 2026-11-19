@@ -11,6 +11,13 @@ line of each version is what Home Assistant shows on the update card. A change o
 
 ## [Unreleased]
 
+### Fixed
+- **Wi-Fi setup over Bluetooth works on the lululemon Mirror.** On a panel with no touchscreen, nobody could press
+  Allow, so Home Assistant and phones could never send it Wi-Fi over Bluetooth. Now, when it starts with no network,
+  Bluetooth setup is open by itself for 5 minutes, and the setup screen says to send the Wi-Fi from Home Assistant or
+  improv-wifi.com on a phone, with the time left. Where the camera sees presence, walking up to the panel opens it
+  again. It never opens while the panel is online. After the 5 minutes, setup moves on to the panel's own Wi-Fi.
+
 ## [0.2.0] - 2026-11-19
 
 **The first release of Glassworks for Android tablets and panels, with Assist, Sendspin and the camera pane.**

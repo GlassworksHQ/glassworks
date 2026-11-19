@@ -302,10 +302,17 @@ class KioskPrefs(
         get() = sp.getBoolean("improv_auto", true)
         set(v) = sp.edit().putBoolean("improv_auto", v).apply()
 
-    /** Also accept a proximity approach (VI5300 far -> near) as the Improv authorization. */
+    /**
+     * Also accept an approach (the screen's presence going far to near: the S1's VI5300, or the camera's presence on a
+     * device without a sensor) as the Improv authorization. Read [improvProximityAuthChosen]: unset, the frame decides.
+     */
     var improvProximityAuth: Boolean
         get() = sp.getBoolean("improv_proximity_auth", false)
         set(v) = sp.edit().putBoolean("improv_proximity_auth", v).apply()
+
+    /** [improvProximityAuth] once it was set (`--ez improv_proximity_auth`), else null (on without touch, ImprovSelfAuth). */
+    val improvProximityAuthChosen: Boolean?
+        get() = if (sp.contains("improv_proximity_auth")) improvProximityAuth else null
 
     /**
      * What the web engine starts with that the dashboard address can change: the secure-context hosts, and the
