@@ -11,7 +11,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: ReactNode }) => <a href={href} {...p}>{children}</a> }));
 
-import { AUTH_MS, BOARD_MS, FIRST_START_AUTH_MS, FlashSession, type ImageMaker } from '../src/mirror/flash';
+import { AUTH_MS, READ_MS, FIRST_START_AUTH_MS, FlashSession, type ImageMaker } from '../src/mirror/flash';
 import { Flash } from '../src/mirror/MirrorWizard';
 import { MirrorSession } from '../src/mirror/session';
 
@@ -301,7 +301,7 @@ describe('restarting into fastboot over adb: no button to hold', () => {
       const { f } = setup({ request: async () => ({ run: () => new Promise(() => {}), push: async () => {}, rebootToBootloader, close }) });
       f.state = { ...f.state, screen: 'fastboot' };
       const restarting = f.restartToFastboot();
-      await vi.advanceTimersByTimeAsync(BOARD_MS);
+      await vi.advanceTimersByTimeAsync(READ_MS);
       await restarting;
       expect(rebootToBootloader).not.toHaveBeenCalled();
       expect(close).toHaveBeenCalled();

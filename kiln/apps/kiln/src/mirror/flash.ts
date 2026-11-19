@@ -187,12 +187,21 @@ export const FIRST_START_AUTH_MS = 60_000;
 /** The person went on to fastboot by hand while the keep step's read ran. */
 class Skipped extends Error {}
 
-/** How long the board read may take: a Mirror that lets Kiln in, then stops answering, ends in an error, not a wait. */
-export const BOARD_MS = 15_000;
+/** How long one read over adb may take: a Mirror that lets Kiln in, then stops answering, ends in an error, not a wait. */
+export const READ_MS = 15_000;
+
+/** `p` with each shell command bounded by READ_MS (the frame's stall watchdog), for reads that pass no signal of their own. */
+function bounded(p: PanelShell): PanelShell {
+  return {
+    run: (cmd, signal) => (signal ? p.run(cmd, signal) : within(p, cmd, READ_MS)),
+    push: (path, data, mode) => p.push(path, data, mode),
+    ...(p.openStream ? { openStream: (service: string) => p.openStream!(service) } : {}),
+  };
+}
 
 /** The Mirror's SoC, read over adb before Kiln reads from it or restarts it: anything else isn't a Mirror. */
 async function checkIsMirror(p: PanelShell): Promise<void> {
-  const board = (await within(p, 'getprop ro.board.platform', BOARD_MS)).out.trim();
+  const board = (await bounded(p).run('getprop ro.board.platform')).out.trim();
   if (board !== 'msm8916') throw new Error(`This isn't the Mirror (board ${board || 'unknown'}, needs msm8916). Nothing was changed.`);
 }
 
@@ -472,16 +481,17 @@ export class FlashSession {
     const sleep = this.d.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
     /** after each wait on the Mirror: stop if the person went on to fastboot by hand meanwhile */
     const live = () => { if (gen !== this.read.gen) throw new Skipped(); };
+    const r = bounded(p); // every read below ends in an error if the Mirror stops answering; the catch lets go of p
     try {
       this.log('Reading Home Assistant\'s key from Glassworks');
-      await checkIsMirror(p);
+      await checkIsMirror(r);
       live();
-      const app = await kioskVersion(p, undefined, GLASSWORKS);
+      const app = await kioskVersion(r, undefined, GLASSWORKS);
       live();
       this.log('', app ? `${GLASSWORKS.name} ${app.name ?? app.code}` : `no ${GLASSWORKS.name} on the Mirror`);
       // the app opens its socket as it starts: a Mirror still starting gets a little time, an app older than issue 574 never opens it
-      let up = !!app && !!p.openStream && await apiKeySocketUp(p);
-      for (let i = 0; app && p.openStream && !up && i < 10; i++) { await sleep(2000); live(); up = await apiKeySocketUp(p); }
+      let up = !!app && !!p.openStream && await apiKeySocketUp(r);
+      for (let i = 0; app && p.openStream && !up && i < 10; i++) { await sleep(2000); live(); up = await apiKeySocketUp(r); }
       live();
       if (app && !up) {
         this.log('', 'no API key socket: an app from before the hand-over (issue 574)');
@@ -493,7 +503,7 @@ export class FlashSession {
       this.set({ key: { state: 'reading', at: 1 } });
       // read as late as the app still runs, so a key HA changed meanwhile is the one carried
       // the socket listened just now: one gone by the read is an app that restarted, so stop rather than carry nothing
-      const key = up ? await readApiKey(p, undefined, { socket: 'required' }) : undefined;
+      const key = up ? await readApiKey(r, undefined, { socket: 'required' }) : undefined;
       const fingerprint = key ? await apiKeyFingerprint(key) : undefined;
       live(); // before it saves anything: a read skipped meanwhile must not write into the next one's record
       if (key && fingerprint) this.read.got = { key, fingerprint };
