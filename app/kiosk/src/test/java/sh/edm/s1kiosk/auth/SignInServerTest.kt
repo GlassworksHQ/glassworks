@@ -17,12 +17,14 @@ import java.util.Collections
 
 /**
  * The /signin → HA → /callback flow over real sockets against a fake Home Assistant that mimics
- * components/auth/__init__.py TokenView (form-encoded POST, single-use codes bound to client_id).
+ * components/auth/__init__.py TokenView (form-encoded POST, single-use codes bound to client_id, and,
+ * like HA 2026.10+, bound to the PKCE code_challenge the authorize request carried).
  */
 class SignInServerTest {
     private lateinit var ha: HttpServer
     private lateinit var haBase: String
     private val codes = Collections.synchronizedMap(HashMap<String, String>()) // code -> client_id
+    private val challenges = Collections.synchronizedMap(HashMap<String, String>()) // code -> S256 challenge
     private val tokenRequests = Collections.synchronizedList(ArrayList<Map<String, String>>())
     private lateinit var server: SignInServer
     private var signedIn: Pair<StoredAuth, TokenResult.Ok>? = null
@@ -39,8 +41,16 @@ class SignInServerTest {
                 ex.requestMethod != "POST" || ct != "application/x-www-form-urlencoded" -> 400 to """{"error":"invalid_request"}"""
                 form["grant_type"] == "authorization_code" -> {
                     val cid = codes.remove(form["code"])
-                    if (cid == null || cid != form["client_id"]) 400 to """{"error":"invalid_request","error_description":"Invalid code"}"""
-                    else 200 to """{"access_token":"AT","token_type":"Bearer","refresh_token":"RT","expires_in":1800,"ha_auth_provider":"homeassistant"}"""
+                    val challenge = challenges.remove(form["code"])
+                    val verifier = form["code_verifier"]
+                    when {
+                        cid == null || cid != form["client_id"] -> 400 to """{"error":"invalid_request","error_description":"Invalid code"}"""
+                        challenge != null && verifier == null ->
+                            400 to """{"error":"invalid_request","error_description":"Code verifier required"}"""
+                        challenge != null && OAuth.codeChallenge(verifier!!) != challenge ->
+                            400 to """{"error":"invalid_grant","error_description":"Invalid code verifier"}"""
+                        else -> 200 to """{"access_token":"AT","token_type":"Bearer","refresh_token":"RT","expires_in":1800,"ha_auth_provider":"homeassistant"}"""
+                    }
                 }
                 form["grant_type"] == "refresh_token" ->
                     if (form["refresh_token"] == "RT" && form["client_id"] == signedIn?.first?.clientId)
@@ -64,6 +74,12 @@ class SignInServerTest {
     fun tearDown() {
         server.stop()
         ha.stop(0)
+    }
+
+    /** HA issues [code] after the user signs in; it is bound to the authorize request's client_id and challenge. */
+    private fun issueCode(code: String, authorize: Map<String, String>) {
+        codes[code] = authorize["client_id"]!!
+        authorize["code_challenge"]?.let { challenges[code] = it }
     }
 
     private fun get(path: String, host: String? = null): Triple<Int, String?, String> {
@@ -92,7 +108,7 @@ class SignInServerTest {
 
         // The user signs in on the phone; HA stores a code for this client_id and the frontend
         // redirects to <redirect_uri>?code=..&state=.. (data/auth.ts redirectWithAuthCode).
-        codes["c0de"] = q["client_id"]!!
+        issueCode("c0de", q)
         val (cb, _, body) = get("/callback?code=c0de&state=${OAuth.enc(state)}&storeToken=true")
         assertEquals(200, cb)
         assertTrue(body.contains("Panel signed in"))
@@ -103,7 +119,12 @@ class SignInServerTest {
         assertEquals(haBase, auth.haBase)
         assertEquals("AT", ok.accessToken)
         val req = tokenRequests.single()
-        assertEquals(mapOf("grant_type" to "authorization_code", "code" to "c0de", "client_id" to "http://$panel/"), req)
+        assertEquals("S256", q["code_challenge_method"])
+        assertEquals(43, q["code_challenge"]!!.length)
+        assertEquals(mapOf("grant_type" to "authorization_code", "code" to "c0de", "client_id" to "http://$panel/"),
+            req - "code_verifier")
+        assertEquals("the verifier hashes to the challenge from the redirect", q["code_challenge"], OAuth.codeChallenge(req["code_verifier"]!!))
+        assertTrue("the verifier never goes to the phone", !location.contains(req["code_verifier"]!!))
         assertTrue("the page never shows tokens", !body.contains("RT") && !body.contains("\"AT\""))
 
         // Reusing the state fails gracefully.
@@ -114,6 +135,34 @@ class SignInServerTest {
         // Refresh with the stored token and client_id.
         val r = HaTokenClient(UrlConnectionPoster()).refresh(auth) as TokenResult.Ok
         assertEquals("AT2", r.accessToken)
+    }
+
+    @Test
+    fun stolenCodeIsUselessWithoutTheVerifier() {
+        val (_, location, _) = get("/signin")
+        val q = OAuth.parseQuery(URI(location!!).rawQuery)
+        val http = HaTokenClient(UrlConnectionPoster())
+
+        // Someone who read the callback URL has the code and the client_id, but not the verifier.
+        issueCode("stolen1", q)
+        val wrong = http.exchangeCode(haBase, q["client_id"]!!, "stolen1", OAuth.newCodeVerifier()) as TokenResult.Error
+        assertEquals("invalid_grant", wrong.code)
+        assertEquals("Invalid code verifier", wrong.description)
+
+        issueCode("stolen2", q)
+        val form = OAuth.form("grant_type" to "authorization_code", "code" to "stolen2", "client_id" to q["client_id"]!!)
+        val (status, body) = UrlConnectionPoster().postForm("$haBase/auth/token", form)
+        val none = TokenResult.parse(status, body) as TokenResult.Error
+        assertEquals("invalid_request", none.code)
+        assertEquals("Code verifier required", none.description)
+
+        // A code issued for another sign-in's challenge fails at the panel's callback: no sign-in.
+        val other = OAuth.codeChallenge(OAuth.newCodeVerifier())
+        issueCode("stolen3", q + ("code_challenge" to other))
+        val (cb, _, page) = get("/callback?code=stolen3&state=${OAuth.enc(q["state"]!!)}")
+        assertEquals(502, cb)
+        assertTrue(page, page.contains("refused the sign-in (invalid_grant)"))
+        assertNull(signedIn)
     }
 
     @Test
@@ -172,7 +221,7 @@ class SignInServerTest {
     @Test
     fun tokenRequestIsFormEncoded() {
         JSONObject() // org.json available in tests
-        val r = HaTokenClient(UrlConnectionPoster()).exchangeCode(haBase, "http://x/", "nope")
+        val r = HaTokenClient(UrlConnectionPoster()).exchangeCode(haBase, "http://x/", "nope", OAuth.newCodeVerifier())
         assertTrue((r as TokenResult.Error).isInvalidCode)
     }
 }
