@@ -3,6 +3,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { registry, failureLog } from '../src/wizard/registry';
 import { status } from '../src/wizard/routes';
+import { demoFrame as s1Demo } from '../src/app/aqara-s1-plus/frame';
 import { demoSession } from '../src/wizard/demo';
 import { Store } from '../src/wizard/session';
 import { explain } from '../src/wizard/explain';
@@ -14,7 +15,7 @@ afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); registry.clear(); }
 describe('Session.close', () => {
   it('stops the Home Assistant poll and closes the setup channel and the panel', async () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] }); // the poll's clock; the simulated panel's replies stay real
-    const s = demoSession('home-assistant');
+    const s = demoSession(s1Demo, 'home-assistant');
     await s.route('home-assistant');
     expect(s.store.state.setup.phase).toBe('ha');
     const internals = s as unknown as { steps: { request: () => Promise<unknown>; channel: { close(): Promise<void> } }; panel: { close?: () => Promise<void> } };
@@ -33,17 +34,17 @@ describe('Session.close', () => {
   });
 
   it('is called when a new session replaces the current one', () => {
-    const one = demoSession('connect');
+    const one = demoSession(s1Demo, 'connect');
     const close = vi.spyOn(one, 'close');
     registry.set({ base: '/aqara-s1-plus', name: 'Aqara S1 Plus', session: one });
     registry.set({ base: '/aqara-s1-plus', name: 'Aqara S1 Plus', session: one });
     expect(close).not.toHaveBeenCalled();
-    registry.set({ base: '/aqara-s1-plus', name: 'Aqara S1 Plus', session: demoSession('connect') });
+    registry.set({ base: '/aqara-s1-plus', name: 'Aqara S1 Plus', session: demoSession(s1Demo, 'connect') });
     expect(close).toHaveBeenCalledTimes(1);
   });
 
   it('reports a sign-in window the browser blocked, instead of waiting on it', async () => {
-    const s = demoSession('home-assistant');
+    const s = demoSession(s1Demo, 'home-assistant');
     await s.route('home-assistant');
     (s as unknown as { d: { openTab: () => null } }).d.openTab = () => null;
     vi.stubGlobal('window', { open: () => null }); // the pop-up blocker said no, twice
@@ -54,7 +55,7 @@ describe('Session.close', () => {
   });
 
   it('counts a sign-in waiting on its tab as running', async () => {
-    const s = demoSession('home-assistant');
+    const s = demoSession(s1Demo, 'home-assistant');
     await s.route('home-assistant');
     expect(status(s.store.state)).toBe('idle');
     (s as unknown as { d: { openTab: () => null } }).d.openTab = () => null;

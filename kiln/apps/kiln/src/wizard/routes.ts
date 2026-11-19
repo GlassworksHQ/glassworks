@@ -1,4 +1,4 @@
-// The wizard's routes under a frame (/aqara-s1-plus/…), one per rail step and mode. The session's
+// The wizard's routes under a frame (its installer.json route, then /install, /set-up/wifi, …), one per rail step and mode. The session's
 // state is the truth: the URL follows it, and a URL the user goes to (a link, Back, typing it) may
 // only start what that route's own screen starts. A route never starts or repeats a flow.
 import type { WizardState } from './state';
@@ -134,7 +134,7 @@ export function onState(s: WizardState, step: Step | undefined): Decision {
   return { kind: forward ? 'push' : 'replace', step: to };
 }
 
-/** s1.edm.sh's (and frames/aqara-s1-plus/docs/install.md's) hash links, and this app's older ones, to routes. */
+/** The first installer page's hash links (the ones its install guide still has), and this app's older ones, to routes. */
 export const OLD_HASH: Record<string, Step> = {
   install: 'start',
   undo: 'undo',
