@@ -14,7 +14,8 @@ const pristine = (state: object) => JSON.stringify({ ...state, log: [] });
 function world(k: Knobs): World {
   const writes: Write[] = [];
   const fired = { refused: 0, dropped: false, stalled: false, reloaded: false };
-  const w: World = { writes, fired, reloadNow: false, load: async () => load() };
+  const partial = new Set<string>();
+  const w: World = { writes, partial, fired, reloadNow: false, load: async () => load() };
   const reloadAt = <T>(step: string): Promise<T> | undefined => {
     if (k.reloadIn !== step || fired.reloaded) return undefined;
     fired.reloaded = true;
@@ -31,9 +32,11 @@ function world(k: Knobs): World {
       async run(cmd) {
         if (dead) throw new Error(UNPLUGGED);
         if (/^pm install/.test(cmd)) {
-          if (k.dropUsbIn === 'install' && !fired.dropped) { fired.dropped = true; dead = true; throw new Error(UNPLUGGED); }
+          // the APK is pushed to the tablet; the cable goes as pm installs it
+          if (k.dropUsbIn === 'install' && !fired.dropped) { fired.dropped = true; dead = true; partial.add('app'); throw new Error(UNPLUGGED); }
           writes.push({ what: 'install the app', step: 'install' });
           const out = await tablet.run(cmd);
+          partial.delete('app');
           return reloadAt<{ out: string; code: number }>('install') ?? out;
         }
         return tablet.run(cmd);

@@ -22,6 +22,7 @@ export function gate(frames: Pick<FrameDesign, 'id' | 'status' | 'kiln'>[], data
   for (const f of frames.filter(isPublic)) {
     const d = data.get(f.id);
     if (!d) { out.push(`${f.id} is public in Kiln but has no design/installer.json`); continue; }
+    if (f.kiln !== d.route) { out.push(`${f.id} is public in Kiln at ${f.kiln}, but its installer.json route is ${d.route}`); continue; }
     for (const flow of Object.keys(d.flows)) {
       const driver = drivers.find((x) => x.frame === f.id && x.flow === flow);
       if (!driver) { out.push(`${f.id} is public in Kiln but its ${flow} flow has no contract driver`); continue; }
@@ -52,6 +53,10 @@ describe('the gate', () => {
     ]);
     expect(gate([{ id: 'new-frame', status: 'beta', kiln: '/new-frame' }], installers(), DRIVERS, MARKS))
       .toEqual(['new-frame is public in Kiln but has no design/installer.json']);
+    // a public route that isn't the one its contract covers
+    const s1 = FRAMES.find((f) => f.id === 'aqara-s1-plus')!;
+    expect(gate([{ ...s1, kiln: '/lululemon-mirror' }], installers(), DRIVERS, MARKS))
+      .toEqual(['aqara-s1-plus is public in Kiln at /lululemon-mirror, but its installer.json route is /aqara-s1-plus']);
   });
 });
 

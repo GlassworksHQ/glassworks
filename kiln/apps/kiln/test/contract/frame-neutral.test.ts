@@ -90,7 +90,7 @@ describe('Kiln names no frame', () => {
   });
 
   it('no allowlist entry without a hit: the list only shrinks', () => {
-    const stale = [...ENTRIES, ...NOT_FRAMES].flatMap((e) => e.terms.filter((t) => ![...found.values()].some((h) => covers(e, h.file, t))).map((t) => `${e.path} [${t}]`));
+    const stale = [...ENTRIES, ...NOT_FRAMES].flatMap((e) => e.terms.filter((t) => ![...found.values()].some((h) => h.term === t && covers(e, h.file, t))).map((t) => `${e.path} [${t}]`));
     expect(stale, 'nothing names this any more: delete it from frame-neutral-allowlist.json').toEqual([]);
   });
 

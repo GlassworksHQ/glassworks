@@ -12,12 +12,12 @@ import { DRIVERS, MARKS, cases, mark, type Case } from './suite';
 
 vi.spyOn(console, 'error').mockImplementation(() => {});
 
-interface Result { stops: Stop[]; writes: Write[]; fired: World['fired']; wroteBeforeReload?: boolean; remembered?: boolean; landed?: string }
+interface Result { stops: Stop[]; writes: Write[]; fired: World['fired']; partial: () => string[]; wroteBeforeReload?: boolean; remembered?: boolean; landed?: string }
 
 async function run(d: Driver, c: Case): Promise<Result> {
   const w = d.world(c.knobs);
   let page = await w.load();
-  const r: Result = { stops: [], writes: w.writes, fired: w.fired };
+  const r: Result = { stops: [], writes: w.writes, fired: w.fired, partial: () => [...w.partial] };
   try {
     let stop = await drive(w, page);
     r.stops.push(stop);
@@ -54,6 +54,7 @@ function reachedDone(r: Result) {
   const last = r.stops.at(-1)!;
   expect(last, 'the run ends on Done').toMatchObject({ end: 'done' });
   expect(last.goal, 'Done with the device set up (the app in, and the home screen)').toBe(true);
+  expect(r.partial(), 'no partition left partly written').toEqual([]);
 }
 
 /** Throws if a step that had finished before `step` wrote again. */
@@ -77,7 +78,8 @@ async function contract(d: Driver, c: Case) {
     case 'usb-drop': {
       expect(r.stops[0]!.end, 'an error screen, not a hang or a silent Done').toBe('error');
       const at = steps.indexOf(c.step!);
-      expect(steps.indexOf(r.landed!), `Try again lands on ${c.step}'s screen or the one before it, not on ${r.landed}`).toBeGreaterThanOrEqual(at - 1);
+      // the step that stopped, or the one before it that enters its transport: never an earlier input screen, never past it
+      expect(steps.slice(Math.max(0, at - 1), at + 1), `Try again lands on ${c.step}'s screen or the one before it, not on ${r.landed}`).toContain(r.landed);
       reachedDone(r);
       await noFinishedStepRedone(d, c.step!, r);
       return;

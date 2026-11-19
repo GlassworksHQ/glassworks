@@ -18,7 +18,8 @@ const pristine = (state: object) => JSON.stringify({ ...state, log: [] });
 function flashWorld(k: Knobs): World {
   const writes: Write[] = [];
   const fired = { refused: 0, dropped: false, stalled: false, reloaded: false };
-  const w: World = { writes, fired, reloadNow: false, load: async () => load() };
+  const partial = new Set<string>();
+  const w: World = { writes, partial, fired, reloadNow: false, load: async () => load() };
   const reloadAt = <T>(step: string): Promise<T> | undefined => {
     if (k.reloadIn !== step || fired.reloaded) return undefined;
     fired.reloaded = true;
@@ -58,9 +59,13 @@ function flashWorld(k: Knobs): World {
       throw new Error('FAIL');
     },
     partitionSize: async (n) => (n === 'system' ? SYSTEM_BYTES : USERDATA_BYTES),
-    async flashBlob(p) {
-      if (k.dropUsbIn === 'install' && !fired.dropped) { fired.dropped = true; throw new Error(UNPLUGGED); }
+    async flashBlob(p, _blob, onProgress) {
+      onProgress?.(0.5);
+      // half of system is on the Mirror when the cable goes
+      if (k.dropUsbIn === 'install' && !fired.dropped) { fired.dropped = true; partial.add(p); throw new Error(UNPLUGGED); }
       if (p === 'userdata') { const r = reloadAt<void>('install'); if (r) return r; }
+      onProgress?.(1);
+      partial.delete(p);
       writes.push({ what: `flash ${p}`, step: 'install' });
     },
     reboot: async () => { mode = 'booted'; },
@@ -129,15 +134,17 @@ function flashWorld(k: Knobs): World {
 }
 
 /** adb to the Mirror through one USB link: a pulled cable kills the link, and the browser hands out a new one. */
-function link(m: FakeMirror, k: Knobs, fired: World['fired'], writes: Write[], reloadAt: <T>(s: string) => Promise<T> | undefined): PanelShell {
+function link(m: FakeMirror, k: Knobs, fired: World['fired'], writes: Write[], partial: Set<string>, reloadAt: <T>(s: string) => Promise<T> | undefined): PanelShell {
   let dead = false;
   return {
     async run(cmd) {
       if (dead) throw new Error(UNPLUGGED);
       if (/^pm install/.test(cmd)) {
-        if (k.dropUsbIn === 'install' && !fired.dropped) { fired.dropped = true; dead = true; throw new Error(UNPLUGGED); }
+        // the APK is pushed to the Mirror; the cable goes as pm installs it
+        if (k.dropUsbIn === 'install' && !fired.dropped) { fired.dropped = true; dead = true; partial.add('app'); throw new Error(UNPLUGGED); }
         writes.push({ what: 'install the app', step: 'install' });
         const out = await m.run(cmd);
+        partial.delete('app');
         const r = reloadAt<{ out: string; code: number }>('install');
         return r ?? out;
       }
@@ -150,7 +157,8 @@ function link(m: FakeMirror, k: Knobs, fired: World['fired'], writes: Write[], r
 function appWorld(k: Knobs): World {
   const writes: Write[] = [];
   const fired = { refused: 0, dropped: false, stalled: false, reloaded: false };
-  const w: World = { writes, fired, reloadNow: false, load: async () => load() };
+  const partial = new Set<string>();
+  const w: World = { writes, partial, fired, reloadNow: false, load: async () => load() };
   const reloadAt = <T>(step: string): Promise<T> | undefined => {
     if (k.reloadIn !== step || fired.reloaded) return undefined;
     fired.reloaded = true;
@@ -166,7 +174,7 @@ function appWorld(k: Knobs): World {
       const r = reloadAt<PanelShell>('connect');
       if (r) return r;
       if (fired.refused < (k.refuseAuth ?? 0)) { fired.refused++; throw new Error(REFUSED); }
-      return link(mirror, k, fired, writes, reloadAt);
+      return link(mirror, k, fired, writes, partial, reloadAt);
     },
     sleep: fastSleep,
     homeTimeoutMs: 300,

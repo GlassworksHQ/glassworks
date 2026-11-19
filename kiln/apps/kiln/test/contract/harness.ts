@@ -46,7 +46,7 @@ export function flowData(frame: string, flow: string): InstallerData['flows'][st
 export interface Knobs {
   /** At the flow's first adb connection after a restart (or its first, if none restarts), adb refuses this many times. */
   refuseAuth?: number;
-  /** USB drops once in the middle of this step's first write. */
+  /** USB drops once in the middle of this step's first write, leaving it partly written. */
   dropUsbIn?: string;
   /** The page reloads in the middle of this step. */
   reloadIn?: string;
@@ -83,6 +83,8 @@ export interface World {
   /** A page load: a new session over the same device and browser storage. */
   load(): Promise<Page>;
   writes: Write[];
+  /** Partitions (or packages) a dropped write left partly written, until a later write completes them. */
+  partial: Set<string>;
   /** Set by the fake when the flow reached the reload point (the device call there never answers). */
   reloadNow: boolean;
   /** Which injections fired, for the harness checks. */

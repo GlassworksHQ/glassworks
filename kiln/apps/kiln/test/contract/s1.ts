@@ -23,7 +23,8 @@ const BLOBS: Partial<Record<AssetName, Uint8Array>> = {
 function world(k: Knobs): World {
   const writes: Write[] = [];
   const fired = { refused: 0, dropped: false, stalled: false, reloaded: false };
-  const w: World = { writes, fired, reloadNow: false, load: () => load() };
+  const partial = new Set<string>();
+  const w: World = { writes, partial, fired, reloadNow: false, load: () => load() };
   /** the reload point of `step` was reached: the page goes away, and this call never answers */
   const reloadAt = <T>(step: string): Promise<T> | undefined => {
     if (k.reloadIn !== step || fired.reloaded) return undefined;
@@ -55,11 +56,21 @@ function world(k: Knobs): World {
       if (p === 'boot') {
         const r = reloadAt<void>('install');
         if (r) return r;
-        if (k.dropUsbIn === 'install' && !fired.dropped) { fired.dropped = true; mode = 'off'; throw new Error(UNPLUGGED); }
+        if (k.dropUsbIn === 'install' && !fired.dropped) {
+          // half the new boot is on the panel when the cable goes
+          const half = d.length >> 1;
+          parts.set(p, Uint8Array.from([...d.subarray(0, half), ...parts.get(p)!.subarray(half)]));
+          partial.add(p);
+          on?.('write', half, d.length);
+          fired.dropped = true;
+          mode = 'off';
+          throw new Error(UNPLUGGED);
+        }
       }
       on?.('write', d.length, d.length);
       on?.('verify', d.length, d.length);
       parts.set(p, d.slice());
+      partial.delete(p);
       writes.push({ what: `flash ${p}`, step: 'install' });
     },
     reboot: async () => { mode = 'android'; },

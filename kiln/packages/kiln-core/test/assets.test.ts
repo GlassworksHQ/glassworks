@@ -22,11 +22,11 @@ function body(chunks: Uint8Array[], stall: boolean): ReadableStream<Uint8Array> 
   });
 }
 
-/** fetch for the manifest and the blob; `blob` decides how the blob arrives. */
-function fakeFetch(blob: (signal?: AbortSignal | null) => Promise<Response>): { f: typeof fetch; signals: (AbortSignal | null | undefined)[] } {
+/** fetch for the manifest and the blob; `blob` decides how the blob arrives, `list` how the manifest does. */
+function fakeFetch(blob: (signal?: AbortSignal | null) => Promise<Response>, list?: () => Promise<Response>): { f: typeof fetch; signals: (AbortSignal | null | undefined)[] } {
   const signals: (AbortSignal | null | undefined)[] = [];
   const f = (async (url: string, init?: RequestInit) => {
-    if (url.endsWith('manifest.json')) return new Response(JSON.stringify(await manifest()));
+    if (url.endsWith('manifest.json')) return list ? list() : new Response(JSON.stringify(await manifest()));
     signals.push(init?.signal);
     return blob(init?.signal);
   }) as typeof fetch;
@@ -50,6 +50,23 @@ describe('Assets', () => {
   it('fails a request that never answers', async () => {
     const { f } = fakeFetch(() => new Promise(() => {}));
     await expect(new Assets('/a/', f, { stallMs: 50 }).get('blob')).rejects.toThrow(/could not download blob: nothing arrived/);
+  });
+
+  it('fails a manifest that never answers, or stops halfway, and reads it again next time', async () => {
+    const text = new TextEncoder().encode(JSON.stringify(await manifest()));
+    let tries = 0;
+    const list = async () => {
+      tries++;
+      if (tries === 1) return new Promise<Response>(() => {});
+      if (tries === 2) return new Response(body([text.slice(0, 5)], true));
+      return new Response(text);
+    };
+    const { f } = fakeFetch(async () => new Response(body([BLOB], false)), list);
+    const a = new Assets('/a/', f, { stallMs: 50 });
+    await expect(a.has('blob')).rejects.toThrow(/could not download manifest.json: nothing arrived/);
+    await expect(a.get('blob')).rejects.toThrow(/could not download manifest.json: nothing arrived/);
+    expect(await a.get('blob')).toEqual(BLOB);
+    expect(tries).toBe(3);
   });
 
   it('downloads again after a stall: the failed try is not cached', async () => {
