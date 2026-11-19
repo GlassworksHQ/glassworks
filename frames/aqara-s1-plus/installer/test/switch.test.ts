@@ -62,6 +62,13 @@ class SwitchPanel implements PanelShell {
   adminAsked = false;
   disabled = false;
   backup = false;
+  /** The installed build has empty data: a fresh install, before a restore. */
+  fresh = false;
+  /**
+   * Commands before which Android had started the app with empty data while the switch held its real data: it
+   * starts an enabled HOME app at once, and then serves an unkeyed, provisionable ESPHome API (#626).
+   */
+  ranUnkeyed: string[] = [];
   restoredInto?: 'debug' | 'release';
   /** The last restore's argument: `handover` when the installer marked a hand-over to come (#608). */
   restoreArg?: string;
@@ -103,6 +110,18 @@ class SwitchPanel implements PanelShell {
 
   async run(cmd: string) {
     this.cmds.push(cmd);
+    if (this.installed !== 'none' && !this.disabled && this.fresh && this.backup) this.ranUnkeyed.push(cmd);
+    // one shell line, `a && b`: no adb round trip between a and b
+    let out = '';
+    for (const part of cmd.split(' && ')) {
+      const r = await this.exec(part);
+      out += r.out;
+      if (r.code !== 0) return { out, code: r.code };
+    }
+    return { out, code: 0 };
+  }
+
+  async exec(cmd: string) {
     const ok = (out = '') => ({ out, code: 0 });
     if (cmd === 'getprop ro.product.model') return ok('Aqara S1 Plus\n');
     if (cmd === 'getprop ro.build.version.sdk') return ok('29\n');
@@ -112,11 +131,12 @@ class SwitchPanel implements PanelShell {
       if (!this.newInstallWorks) return { out: 'Failure [INSTALL_FAILED_INSUFFICIENT_STORAGE]\n', code: 1 };
       this.installed = 'release';
       this.disabled = false;
+      this.fresh = true;
       this.handover = this.socketFor('release');
       return ok('Success\n');
     }
     if (cmd === 'pm install -r -g /data/local/tmp/glassworks-old.apk') {
-      this.installed = 'debug'; this.disabled = false; this.handover = this.socketFor('debug'); return ok('Success\n');
+      this.installed = 'debug'; this.disabled = false; this.fresh = true; this.handover = this.socketFor('debug'); return ok('Success\n');
     }
     const sock = this.handover?.shell(cmd);
     if (sock) return sock;
@@ -161,6 +181,7 @@ class SwitchPanel implements PanelShell {
         if (!this.restoreWorks) return { out: 'glassworks-switch: could not restore the app\'s data\n', code: 1 };
         this.restoredInto = this.installed;
         this.restoreArg = args[1];
+        this.fresh = false;
         // the copied data: the sign-in and the key, sealed with the key Android deleted with the old app
         if (this.handover) Object.assign(this.handover, { key: this.held.key, signIn: this.held.signIn, lost: true, signInHere: true });
         return ok('restored for uid 10072\n');
@@ -284,6 +305,8 @@ describe('switching a development build to this one', () => {
     expect(p.restoredInto).toBe('release');
     expect(p.disabled).toBe(false);
     expect(p.backup).toBe(false); // discarded after the restore
+    // installed and turned off in one shell line, so it never runs on empty data before the restore (#626)
+    expect(p.ranUnkeyed).toEqual([]);
 
     // the password, the sign-in and the key: never in a command, a step or a detail
     for (const s of [...p.cmds, ...text]) for (const secret of ['fixture', TOKEN, KEY, atob(TOKEN)]) expect(s).not.toContain(secret);
@@ -304,8 +327,9 @@ describe('switching a development build to this one', () => {
     expect(su('backup')).toBeGreaterThan(su('wifi-psk 1'));
     expect(i('pm uninstall sh.edm.s1kiosk')).toBeGreaterThan(su('backup'));
     expect(i('pm uninstall sh.edm.s1kiosk')).toBeGreaterThan(p.cmds.indexOf('am start -n sh.edm.s1kiosk/.MainActivity --ez remove_admin true'));
-    expect(p.cmds.lastIndexOf('pm install -r -g /data/local/tmp/glassworks.apk')).toBeGreaterThan(i('pm uninstall sh.edm.s1kiosk'));
-    expect(su('restore handover')).toBeGreaterThan(p.cmds.lastIndexOf('pm install -r -g /data/local/tmp/glassworks.apk'));
+    const held = 'pm install -r -g /data/local/tmp/glassworks.apk && pm disable-user --user 0 sh.edm.s1kiosk';
+    expect(i(held)).toBeGreaterThan(i('pm uninstall sh.edm.s1kiosk'));
+    expect(su('restore handover')).toBeGreaterThan(i(held));
     // then the usual install steps: permissions, admin, HOME, start, and only then Wi-Fi
     expect(i('dpm set-active-admin sh.edm.s1kiosk/.AdminReceiver')).toBeGreaterThan(su('restore handover'));
     expect(i('cmd package set-home-activity sh.edm.s1kiosk/.MainActivity')).toBeGreaterThan(su('restore handover'));
@@ -332,6 +356,22 @@ describe('switching a development build to this one', () => {
     expect(p.pushed.has('/data/local/tmp/glassworks-switch.sh')).toBe(false);
     expect(p.streams).toBe(0);
     expect(p.installed).toBe('release');
+    // no data comes after the install, so nothing holds the new build off
+    expect(p.cmds).toContain('pm install -r -g /data/local/tmp/glassworks.apk');
+    expect(p.cmds.some((c) => c.includes(' && '))).toBe(false);
+  });
+
+  it('a restore that throws still turns the new build back on (#626)', async () => {
+    const p = new SwitchPanel();
+    const exec = p.exec.bind(p);
+    p.exec = async (cmd) => {
+      if (cmd.includes('glassworks-switch.sh restore')) throw new Error('USB transfer failed');
+      return exec(cmd);
+    };
+    await expect(provision(p, { kioskApk: new Uint8Array([1]), debloat: false, confirmSwitch: async () => true }, () => {}, noSleep))
+      .rejects.toThrow(/USB transfer failed/);
+    expect(p.installed).toBe('release');
+    expect(p.disabled).toBe(false);
   });
 
   it('a network the app did not save is left alone', async () => {
@@ -359,6 +399,7 @@ describe('switching a development build to this one', () => {
       .rejects.toThrow(/previous build is back with its data\.$/);
     expect(p.installed).toBe('debug');
     expect(p.restoredInto).toBe('debug');
+    expect(p.ranUnkeyed).toEqual([]); // the old build too is off until its data is back (#626)
     // it lost its Keystore key too: it gets its sign-in and key back (#584)
     expectHandedBack(p.handover);
     expect(p.cmds).toContain('am start -n sh.edm.s1kiosk/.MainActivity');
@@ -470,7 +511,7 @@ describe('switching a development build to this one', () => {
     const p = new SwitchPanel();
     p.newInstallWorks = false;
     const run = p.run.bind(p);
-    p.run = async (cmd) => (cmd === 'pm install -r -g /data/local/tmp/glassworks-old.apk' ? (p.cmds.push(cmd), { out: 'Failure [INSTALL_FAILED_INTERNAL_ERROR]\n', code: 1 }) : run(cmd));
+    p.run = async (cmd) => (cmd.startsWith('pm install -r -g /data/local/tmp/glassworks-old.apk') ? (p.cmds.push(cmd), { out: 'Failure [INSTALL_FAILED_INTERNAL_ERROR]\n', code: 1 }) : run(cmd));
     await expect(provision(p, { kioskApk: new Uint8Array([1]), confirmSwitch: async () => true }, () => {}, noSleep))
       .rejects.toThrow(/neither would the previous one\. Run the installer again\. Its data is kept on the panel in \/data\/s1kiosk\/switch/);
     expect(p.backup).toBe(true);

@@ -487,6 +487,11 @@ plan without changing anything.
   save, for example one set up in Aqara's settings, is not affected.
 - While the app is copied it is disabled, so it can't start as the home screen meanwhile. Disabling
   doesn't touch its Wi-Fi.
+- With root, the new build is also disabled from its install until its data is back: the same shell
+  line on the panel installs it and turns it off. Otherwise Android starts it as the home screen at
+  once, with empty data, and for about a second it served an ESPHome API with no key yet (seen on the
+  S1 on 2026-11-19, #626). The same holds for the previous build when a failed install puts it back.
+  If the run stops in between, the CLI turns Glassworks back on before it exits.
 - If the new version won't install, the previous one is put back (with its data, given root). If
   its data won't go back in, the installer says so and keeps the copy on the panel in
   `/data/s1kiosk/switch` (root only).
