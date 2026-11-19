@@ -6,6 +6,9 @@ What it touches on the device:
   device     read-only (getprop, /proc, dumpsys, wm size).
   Every step on Android 6 (no `logcat -v monotonic`) writes five `ClarityClock` lines to the device's log, twice
   in steps that record the clock's drift (Device.wall_clock).
+  testdash   `am start --es test_dashboard <url>` with the hold: the kiosk shows that loopback page instead of its
+             saved dashboard while the hold lasts (graded part, --pane-ram); `--off` (`''`) ends it. No setting
+             and no sign-in changes. Then reads logcat for the kiosk's answer.
   hold       `am start --ez test_hold true --ei test_hold_s <s>`, the kiosk's test hold (#240): the
              screen on (no setting changes), through restarts of the app, until it expires or
              `hold --off` (`--ez test_hold false`). Then reads logcat for the kiosk's answer.
@@ -316,20 +319,21 @@ def expected_state(want, voice_now):
 def cmd_panes(dev, a):
     """Set the panes the kiosk runs, then check from its log that it runs them (#158's s1v7: every
     switch was lost). The settings applied live (the other panes' switches, the microphone mute, the
-    dashboard URL) go first, in an intent that doesn't restart the app, and are saved while the runner
+    test dashboard to measure on, --url) go first, in an intent that doesn't restart the app, and are saved while the runner
     waits; then voice_enabled and a restart, so each sample starts from a fresh process (a kiosk
     before #67 restarts for voice_enabled alone). Up to --tries times. Prints the result as JSON; exit
     0 when everything but voice_enabled took (voice_applied says whether that did too), else 1."""
     want = parse_set(a.set)
     live = " ".join(f"--ez {k} {'true' if v else 'false'}" for k, v in want.items() if k != "voice_enabled")
-    url = f"--es url '{a.url}'" if a.url else ""
+    # The page to measure on, as the kiosk's test dashboard ("" ends it): never its saved dashboard.
+    url = f"{HOLD_ON} --es {TEST_DASHBOARD_EXTRA} '{a.url}'" if a.url is not None else ""
     res = {"want": want, "attempts": 0, "state": None, "ok": False, "voice_applied": None,
-           "url_taken": None if not a.url else False}
+           "url_taken": None if a.url is None else False}
     for attempt in range(1, a.tries + 1):
         res["attempts"] = attempt
         if live or url:
             out = dev.sh(f"am start -W -n {dev.component} {url} {live}".strip(), timeout=60)
-            if a.url:
+            if a.url is not None:
                 # am exits 0 even when the kiosk didn't take the intent: read its answer (as run.sh does).
                 res["url_taken"] = any(l.strip() == "Status: ok" for l in out.splitlines())
             C.sleep(PANES_SAVE_S)
@@ -367,26 +371,64 @@ def cmd_hold(dev, a):
     if a.off:
         dev.sh(f"am start -n {dev.component} --ez test_hold false")
         return
-    end = C.now() + a.timeout
+    said = kiosk_says(dev, f"am start -W -n {dev.component} {HOLD_ON}", TEST_HOLD_RE, a.timeout)
+    if not said:
+        sys.exit(1)
+    print(json.dumps({"hold_s": TEST_HOLD_S, "said": said}))
 
-    def sh(cmd):
-        """adb within what is left of --timeout: a stalled adb fails the check instead of outlasting it."""
-        try:
-            return dev.sh(cmd, timeout=max(1.0, C.real(end - C.now())))
-        except subprocess.TimeoutExpired:
-            sys.exit(1)
+
+# The kiosk's test dashboard: a loopback page it shows instead of its saved dashboard while the test hold
+# lasts (ScreenPolicy.testDashboard). The saved dashboard and the sign-in stay as they are: pointing the saved
+# dashboard at the fake Home Assistant moved the panel's Home Assistant address, and since #496 a panel then asks
+# to sign in again (the Pixel Tablet, 2026-11-18). It survives a restart of the app and ends with the hold.
+TEST_DASHBOARD_EXTRA = "test_dashboard"
+
+
+def origin(url):
+    u = urllib.parse.urlsplit(url)
+    return f"{u.scheme}://{u.netloc}"
+
+
+def cmd_testdash(dev, a):
+    """Show --url instead of the kiosk's saved dashboard for the test hold, checked: exit 0 once the kiosk's log
+    says so, 1 if it says nothing within --timeout (an app without the extra ignores it). --off ends it: exit 0
+    once `am` says the kiosk took the intent (clearing one that already ended changes nothing, and says nothing)."""
+    if a.off:
+        out = dev.sh(f"am start -W -n {dev.component} --es {TEST_DASHBOARD_EXTRA} ''", timeout=a.timeout)
+        sys.exit(0 if any(l.strip() == "Status: ok" for l in out.splitlines()) else 1)
+    said = kiosk_says(dev, f"am start -W -n {dev.component} {HOLD_ON} --es {TEST_DASHBOARD_EXTRA} '{a.url}'",
+                      re.compile(re.escape(f"test dashboard on: {origin(a.url)}")), a.timeout)
+    if not said:
+        sys.exit(1)
+    print(json.dumps({"said": said}))
+
+
+def kiosk_says(dev, cmd, pattern, timeout):
+    """Sends `cmd`, then reads the kiosk's log until a line after it matches `pattern`: that line's message,
+    or None within `timeout` seconds."""
+    end = C.now() + timeout
+
+    def sh(c):
+        """adb within what is left of `timeout`: a stalled adb fails the check instead of outlasting it."""
+        return dev.sh(c, timeout=max(1.0, C.real(end - C.now())))
 
     fmt = dev.clock.fmt
-    mark = last_mono(dev, sh(f"logcat -d -v {fmt} -t 1"))
-    sh(f"am start -W -n {dev.component} {HOLD_ON}")
+    try:
+        mark = last_mono(dev, sh(f"logcat -d -v {fmt} -t 1"))
+        sh(cmd)
+    except subprocess.TimeoutExpired:
+        return None
     while True:
-        for line in sh(f"logcat -d -v {fmt}").splitlines():
+        try:
+            lines = sh(f"logcat -d -v {fmt}").splitlines()
+        except subprocess.TimeoutExpired:
+            return None
+        for line in lines:
             rec = dev.parse(line)
-            if rec and (mark is None or rec["mono"] > mark) and TEST_HOLD_RE.search(rec["msg"]):
-                print(json.dumps({"hold_s": TEST_HOLD_S, "said": rec["msg"]}))
-                return
+            if rec and (mark is None or rec["mono"] > mark) and pattern.search(rec["msg"]):
+                return rec["msg"]
         if C.now() >= end:
-            sys.exit(1)
+            return None
         C.sleep(1)
 
 
@@ -800,8 +842,8 @@ def cmd_coldstart(dev, a):
         return False
 
     def handle_restart(pl, rec):
-        """The kiosk's own page after the restart: the reference dashboard it was pointed at (run.sh
-        --restore-dashboard), with no nonce. Its `refdash` holds the restart's usable time; its `done`
+        """The kiosk's own page after the restart: the reference dashboard it shows as its test dashboard
+        (run.sh, perfrun.py testdash), with no nonce. Its `refdash` holds the restart's usable time; its `done`
         lets the graded pages open."""
         t = pl.get("t")
         pl["mono"] = rec["mono"]
@@ -1185,8 +1227,8 @@ def memory_sample(dev, radio, summaries=True):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=["activity", "device", "hold", "synthetic", "refstart", "coldstart", "idle", "panes"])
-    ap.add_argument("--off", action="store_true", help="hold: end the test hold")
+    ap.add_argument("cmd", choices=["activity", "device", "hold", "testdash", "synthetic", "refstart", "coldstart", "idle", "panes"])
+    ap.add_argument("--off", action="store_true", help="hold: end the test hold; testdash: end the test dashboard")
     ap.add_argument("--set", help="panes: the kiosk's pane extras, extra=true|false,...")
     ap.add_argument("--tries", type=int, default=3, help="panes: attempts")
     ap.add_argument("--serial", default=os.environ.get("ANDROID_SERIAL"))
@@ -1218,11 +1260,11 @@ def main():
     a = ap.parse_args()
     if a.timeout is None:
         # refstart: room for views that time out (VIEW_DEADLINE_S each) and the restarts after them.
-        a.timeout = {"hold": 15, "coldstart": 120, "refstart": 1800}.get(a.cmd, 1200)
+        a.timeout = {"hold": 15, "testdash": 15, "coldstart": 120, "refstart": 1800}.get(a.cmd, 1200)
     os.makedirs(a.out, exist_ok=True)
     dev = Device(a.serial, a.package, a.activity)
     C.check_device(lambda name: dev.sh(f"getprop {name}"))
-    {"activity": cmd_activity, "device": cmd_device, "hold": cmd_hold, "synthetic": cmd_synthetic, "refstart": cmd_coldstart, "coldstart": cmd_coldstart,
+    {"activity": cmd_activity, "device": cmd_device, "hold": cmd_hold, "testdash": cmd_testdash, "synthetic": cmd_synthetic, "refstart": cmd_coldstart, "coldstart": cmd_coldstart,
      "idle": cmd_idle, "panes": cmd_panes}[a.cmd](dev, a)
 
 
