@@ -102,6 +102,8 @@ export function FlashImage({ f, s, m, ms }: P) {
         <span className="links"><button type="button" className="link" onClick={() => f.backToChoice()}>Back</button></span>
         <DownloadButton f={f} s={s} label="Download the system image" />
       </div>
+      {/* the flashed Mirror is fine and keeps this browser's key: only the first start over adb is left (Mirror run, 2026-11-19) */}
+      <p className="small">Flashed this Mirror already, and its first start didn&apos;t finish? <button type="button" className="link" disabled={!!f.inputsBlocked()} onClick={() => f.finishFirstStart()}>Finish its first start</button>, with Home Assistant and the Wi-Fi above.</p>
     </section>
   );
 }
@@ -183,7 +185,9 @@ export function FlashWorking({ f, s }: P) {
       {f.recipe.community && <Whose r={f.recipe} />}
       <h2 id="h" className="huge">Keep it plugged in.</h2>
       <ol className="join">
-        {rows.map((r, i) => <li key={r.id} className={i < at ? 'done' : i === at ? 'cur' : ''}>{r.text}{i === at && x > 0 && x < 1 && <span className="sub-step">{Math.floor(x * 100)}%</span>}</li>)}
+        {rows.map((r, i) => <li key={r.id} className={i < at ? 'done' : i === at ? 'cur' : ''}>{r.text}{i === at && x > 0 && x < 1 && <span className="sub-step">{Math.floor(x * 100)}%</span>}
+          {/* the image is small to send; the Mirror then writes an empty filesystem's 212 MiB, with nothing to report (Mirror run, 2026-11-19) */}
+          {i === at && r.id === 'flash-userdata' && <span className="sub-step">This part takes a minute or two, and the bar hardly moves.</span>}</li>)}
       </ol>
       <div className="bar" role="progressbar" aria-label={rows[at]?.text} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.floor(((at + x) / rows.length) * 100)}>
         <i style={{ width: `${Math.max(2, ((at + x) / rows.length) * 100)}%` }} />
@@ -198,8 +202,9 @@ export function FlashAdb({ f, s }: P) {
     <section className="card" aria-labelledby="h">
       <span className="turn-label"><span className="pulse" />Your turn</span>
       <h2 id="h">One last click.</h2>
-      <p className="lede">The Mirror is starting Glassworks. Its first start takes a few minutes. Click Connect and pick the Mirror in the browser&apos;s list: it knows this browser&apos;s key, so it doesn&apos;t ask on its screen.</p>
-      {s.connecting && <p className="status work" role="status">Pick the Mirror in the browser&apos;s list…</p>}
+      <p className="lede">The Mirror is starting Glassworks for the first time. Its glass stays dark for a few minutes while it does: that&apos;s expected, so leave it plugged in. Click Connect and pick the Mirror in the browser&apos;s list now: Kiln waits until it&apos;s ready, and it knows this browser&apos;s key, so it doesn&apos;t ask on its screen.</p>
+      {s.connecting && !s.adbWaiting && <p className="status work" role="status">Pick the Mirror in the browser&apos;s list…</p>}
+      {s.adbWaiting && <p className="status work" role="status">The Mirror is still starting. Kiln asks again every few seconds…</p>}
       {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
       <div className="foot">
         <Log s={s} />
@@ -270,6 +275,7 @@ export function FlashError({ f, s }: P) {
       <div className="foot">
         <Log s={s} />
         <span className="links">
+          {s.work?.step === 'first-boot' && <button type="button" className="btn ghost" onClick={() => f.finishFirstStart()}>Try the first start again</button>}
           {s.flashFailed && !f.recipe.community && !s.noFill && <button type="button" className="btn ghost" onClick={() => f.retryWithoutFill()}>Try again without FILL</button>}
           <button type="button" className="btn ghost" onClick={() => f.retry()}>Back to the download</button>
         </span>
