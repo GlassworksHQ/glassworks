@@ -129,7 +129,10 @@ explain_switch() { # [if]: --dry-run, before Android said anything (the keys may
   else echo "  Glassworks on the panel is signed with a different key than $(basename "$APK")."; fi
   echo "  Android can't update it in place: it has to be removed and installed again."
   if [[ $HAS_ROOT -eq 1 ]]; then
-    echo "  adb has root on this panel, so the app's settings, sign-in and keys are kept."
+    echo "  adb has root on this panel, so the app's settings are kept. Its Home Assistant sign-in and"
+    echo "  encryption key are not: Android deletes the app's Keystore keys when it removes the old app,"
+    echo "  and those secrets are sealed with them. Sign in again; Home Assistant may ask to confirm the"
+    echo "  panel's encryption key."
     if [[ $WIFI_OWNER == kiosk ]]; then echo "  Android would forget $(net_name) with the old app; it is sent to the new app afterwards."
     elif wifi_at_risk; then echo "  Android may forget $(net_name) with the old app; it is sent to the new app afterwards."; fi
   else
@@ -465,7 +468,9 @@ Done.
 - Undo everything: $0 --undo
 EOF
 if [[ $SWITCHED -eq 1 ]]; then
-  if [[ $DATA_KEPT -eq 1 ]]; then echo "- Switched builds: the app's settings were kept."
+  if [[ $DATA_KEPT -eq 1 ]]; then
+    echo "- Switched builds: the app's settings were kept, but not its Home Assistant sign-in or encryption key"
+    echo "  (Android deleted the old app's Keystore keys). Sign in again; Home Assistant may ask to confirm the key."
   else echo "- Switched builds: the app's settings were reset (sign in again; Home Assistant may ask to set the panel up again)."; fi
 fi
 if [[ $WIFI_LOST -eq 1 ]]; then
