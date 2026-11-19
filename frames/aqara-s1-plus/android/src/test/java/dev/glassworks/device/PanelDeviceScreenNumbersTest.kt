@@ -18,9 +18,9 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.SensorEventBuilder
 import org.robolectric.shadows.ShadowSensor
-import sh.edm.s1kiosk.KioskApp
+import dev.glassworks.s1.KioskApp
 import dev.glassworks.KioskPrefs
-import sh.edm.s1kiosk.frame.AqaraS1Plus
+import dev.glassworks.s1.frame.AqaraS1Plus
 
 /**
  * The two numbers Home Assistant's night mode sets (#473), driven through their entities as HA does: Idle timeout

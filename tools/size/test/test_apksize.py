@@ -32,8 +32,8 @@ C d 1	1	500	dev.glassworks.VoiceOverlay$Ring
 C d 1	1	500	dev.glassworks.speaker.SendspinPane
 C d 1	1	1000	org.bouncycastle.crypto.Digest
 C d 1	1	1000	org.tensorflow.lite.Interpreter
-C d 1	1	500	sh.edm.s1kiosk.frame.TimeZonePane
-C d 1	1	500	sh.edm.s1kiosk.frame.AqaraS1Plus
+C d 1	1	500	dev.glassworks.s1.frame.TimeZonePane
+C d 1	1	500	dev.glassworks.s1.frame.AqaraS1Plus
 """
 
 
@@ -79,8 +79,8 @@ class Owners(unittest.TestCase):
         self.assertEqual(r["core"]["dex"], 2_000 + 1_000)            # MainActivity, AqaraS1Plus
 
     def test_a_prefix_needs_a_package_or_class_boundary(self):
-        self.assertEqual(A.owner_of_class("sh.edm.s1kiosk.frame.TimeZonePane$1", PARTS), ("pane", "time-zone"))
-        self.assertEqual(A.owner_of_class("sh.edm.s1kiosk.frame.TimeZonePanel", PARTS), ("core", None))
+        self.assertEqual(A.owner_of_class("dev.glassworks.s1.frame.TimeZonePane$1", PARTS), ("pane", "time-zone"))
+        self.assertEqual(A.owner_of_class("dev.glassworks.s1.frame.TimeZonePanel", PARTS), ("core", None))
         self.assertEqual(A.owner_of_class("org.mozillax.Foo", PARTS), ("core", None))
 
     def test_the_longest_prefix_wins(self):
@@ -98,7 +98,7 @@ class Owners(unittest.TestCase):
         for name in ("dev.glassworks.VoiceOverlay", "dev.glassworks.VoiceOverlay$show$1",
                      "dev.glassworks.voice.VoiceAssistantController", "dev.glassworks.voice.WakeWordCatalog"):
             self.assertEqual(A.owner_of_class(name, PARTS), ("pane", "assist"), name)
-        self.assertEqual(A.owner_of_class("sh.edm.s1kiosk.frame.TimeZoneKeeper", PARTS), ("pane", "time-zone"))
+        self.assertEqual(A.owner_of_class("dev.glassworks.s1.frame.TimeZoneKeeper", PARTS), ("pane", "time-zone"))
         self.assertEqual(A.owner_of_class("dev.glassworks.device.PanelDevice", PARTS), ("core", None))
 
     def test_the_voice_package_is_split_between_the_assist_pane_and_the_core(self):

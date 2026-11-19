@@ -17,7 +17,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowLog
 import dev.glassworks.KioskPrefs
-import sh.edm.s1kiosk.PanePrefs
+import dev.glassworks.s1.PanePrefs
 import dev.glassworks.auth.HaSocket
 import dev.glassworks.auth.HaThreadClient
 import dev.glassworks.auth.HaTokenClient

@@ -75,7 +75,7 @@ interface ManageHost {
     val name: String
 
     /**
-     * The device's model as the panel gives it to Home Assistant ("Panel Hub S1 Plus (S1 Kiosk)"), for a page on
+     * The device's model as the panel gives it to Home Assistant ("Panel Hub S1 Plus (Glassworks)"), for a page on
      * another panel to match against Home Assistant's device registry before it sends a token ([ManageApi.HELLO]).
      * Cheap. "" when the app doesn't say.
      */

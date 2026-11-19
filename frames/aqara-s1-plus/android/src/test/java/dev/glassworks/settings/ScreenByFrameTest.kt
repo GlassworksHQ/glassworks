@@ -1,6 +1,6 @@
 package dev.glassworks.settings
 
-import sh.edm.s1kiosk.frame.TestFrames
+import dev.glassworks.s1.frame.TestFrames
 import android.app.Application
 import android.app.KeyguardManager
 import android.content.pm.ActivityInfo
@@ -29,13 +29,13 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowSensor
-import sh.edm.s1kiosk.KioskApp
+import dev.glassworks.s1.KioskApp
 import dev.glassworks.KioskPrefs
 import dev.glassworks.auth.HaTokenClient
 import dev.glassworks.auth.HttpPoster
 import dev.glassworks.auth.SignInServer
-import sh.edm.s1kiosk.frame.AqaraS1Plus
-import sh.edm.s1kiosk.manage.S1Manage
+import dev.glassworks.s1.frame.AqaraS1Plus
+import dev.glassworks.s1.manage.S1Manage
 
 /**
  * The Screen page shows only what the frame can back (#471), on the panel's settings and on the Manage page,

@@ -37,7 +37,7 @@ Found with `dumpsys sensorservice`, `/sys/class/input/*` and `/sys/bus/i2c/drive
 
 ## How Glassworks uses them
 
-See `dev/glassworks/screen/ScreenPolicy.kt` (the policy) and `sh/edm/s1kiosk/frame/S1Sensors.kt`
+See `dev/glassworks/screen/ScreenPolicy.kt` (the policy) and `dev/glassworks/s1/frame/S1Sensors.kt`
 (the VI5300 range table and the light sensor):
 
 - **Wake on approach**, and the screen stays on while someone is near.

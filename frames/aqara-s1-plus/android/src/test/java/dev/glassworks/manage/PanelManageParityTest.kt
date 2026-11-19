@@ -18,20 +18,20 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import sh.edm.s1kiosk.KioskApp
+import dev.glassworks.s1.KioskApp
 import dev.glassworks.KioskPrefs
 import dev.glassworks.auth.HaTokenClient
 import dev.glassworks.auth.HttpPoster
 import dev.glassworks.auth.SignInServer
-import sh.edm.s1kiosk.frame.AqaraS1Plus
-import sh.edm.s1kiosk.frame.TimeZoneDefinition
+import dev.glassworks.s1.frame.AqaraS1Plus
+import dev.glassworks.s1.frame.TimeZoneDefinition
 import dev.glassworks.radio.ui.RadioViewWords
 import dev.glassworks.settings.KioskSettingsOverlay
 import dev.glassworks.settings.PaneFixtures
 import dev.glassworks.settings.S1Settings
 import dev.glassworks.ui.Mockup
 import java.net.URLEncoder
-import sh.edm.s1kiosk.manage.S1Manage
+import dev.glassworks.s1.manage.S1Manage
 
 /**
  * #242: the panel and the Manage page show the same settings, editable on both, from one model. Walks every

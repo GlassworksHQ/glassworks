@@ -6,7 +6,7 @@
      2026-11-15 on an API 23 emulator), so on a Mirror it would crash at every boot (BootReceiver) and as a HOME
      choice. Making the app itself run on API 23-25 is a later part of #198. Until then the APK's only entry is the
      engine check (EngineCheckActivity), and the disabled components can be turned on to try them:
-     adb shell pm enable sh.edm.s1kiosk.legacy/sh.edm.s1kiosk.MainActivity -->
+     adb shell pm enable dev.glassworks.s1.legacy/sh.edm.s1kiosk.MainActivity -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
@@ -18,7 +18,7 @@
 
         <activity android:name="sh.edm.s1kiosk.MainActivity" android:enabled="false" tools:replace="android:enabled" />
         <receiver android:name="sh.edm.s1kiosk.BootReceiver" android:enabled="false" tools:replace="android:enabled" />
-        <service android:name="sh.edm.s1kiosk.KioskService" android:enabled="false" tools:replace="android:enabled" />
+        <service android:name="dev.glassworks.KioskService" android:enabled="false" tools:replace="android:enabled" />
 
         <!-- The engine and its lockdown alone, without the S1 app's MainActivity (EngineCheckActivity.kt). -->
         <activity

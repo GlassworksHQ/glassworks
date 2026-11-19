@@ -13,8 +13,8 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowLog
 import org.robolectric.shadows.ShadowPowerManager
-import sh.edm.s1kiosk.KioskApp
-import sh.edm.s1kiosk.frame.AqaraS1Plus
+import dev.glassworks.s1.KioskApp
+import dev.glassworks.s1.frame.AqaraS1Plus
 
 /** Log filters and `dumpsys power` readers know the screen's logcat and wake-lock tags: both stay as they were. */
 @RunWith(RobolectricTestRunner::class)

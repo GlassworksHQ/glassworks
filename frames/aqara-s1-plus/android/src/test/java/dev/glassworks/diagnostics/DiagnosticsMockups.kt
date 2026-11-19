@@ -21,7 +21,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import sh.edm.s1kiosk.PanePrefs
+import dev.glassworks.s1.PanePrefs
 
 /**
  * The generic app's Diagnostics page in portrait at 1080x1920 (the lululemon Mirror's glass, a tablet stood up), on

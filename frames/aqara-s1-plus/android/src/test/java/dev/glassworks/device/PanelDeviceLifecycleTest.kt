@@ -1,8 +1,8 @@
 package dev.glassworks.device
 
 import dev.glassworks.platform.AppBuild
-import sh.edm.s1kiosk.KioskApp
-import sh.edm.s1kiosk.frame.AqaraS1Plus
+import dev.glassworks.s1.KioskApp
+import dev.glassworks.s1.frame.AqaraS1Plus
 import android.app.Application
 import org.junit.Assert.assertTrue
 import org.junit.Test

@@ -11,21 +11,21 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import sh.edm.s1kiosk.KioskApp
+import dev.glassworks.s1.KioskApp
 import dev.glassworks.KioskPrefs
-import sh.edm.s1kiosk.PanePrefs
+import dev.glassworks.s1.PanePrefs
 import dev.glassworks.auth.HaTokenClient
 import dev.glassworks.auth.HttpPoster
 import dev.glassworks.auth.SignInServer
-import sh.edm.s1kiosk.base.BaseBackend
+import dev.glassworks.s1.base.BaseBackend
 import dev.glassworks.device.ManualExecutor
 import dev.glassworks.device.PanelDevice
 import dev.glassworks.device.RecordingMdns
-import sh.edm.s1kiosk.frame.AqaraS1Plus
+import dev.glassworks.s1.frame.AqaraS1Plus
 import dev.glassworks.speaker.SendspinPrefs
 import dev.glassworks.assist.VoicePrefs
 import java.net.InetAddress
-import sh.edm.s1kiosk.manage.S1Manage
+import dev.glassworks.s1.manage.S1Manage
 
 /** The Manage page answers to the panel's ESPHome name as `.local` (#260), and not to another panel's. */
 @RunWith(RobolectricTestRunner::class)
