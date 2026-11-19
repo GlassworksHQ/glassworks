@@ -81,6 +81,8 @@ export class MirrorSession {
   private picks = 0;
   /** The release route, while the APK comes from the release (switchApk changes it). */
   private release?: typeof fetch;
+  /** Source changes so far: a release download started before the latest one no longer counts. */
+  private sources = 0;
 
   constructor(private readonly d: MirrorDeps, on: boolean) {
     this.release = d.release;
@@ -96,6 +98,7 @@ export class MirrorSession {
   switchApk(from: ApkFrom, get: typeof fetch): void {
     if (from === this.from || this.state.screen === 'working') return;
     this.release = from === 'release' ? get : undefined;
+    this.sources++;
     this.apk = undefined;
     this.picks++;
     this.set({ apk: undefined, release: this.release ? { state: 'waiting' } : undefined });
@@ -141,13 +144,14 @@ export class MirrorSession {
     const r = this.state.release;
     const get = this.release;
     if (!get || !r || !['waiting', 'none', 'error'].includes(r.state)) return;
-    const current = () => this.release === get; // switchApk since: this download no longer counts
+    const source = this.sources;
+    const current = () => this.sources === source;
     try {
       const { bytes, ready } = await releaseApk(get, (release) => { if (current()) this.set({ release }); });
       if (!current()) return;
       this.log(`${ready.name} from ${ready.tag}: SHA-256 ${ready.sha256}, as the release publishes it`);
       await this.pickApk(ready.name, bytes);
-      this.set({ release: ready });
+      if (current()) this.set({ release: ready });
     } catch (e) {
       if (!current()) return;
       const why = (e as Error).message;

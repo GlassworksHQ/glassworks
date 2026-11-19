@@ -235,4 +235,34 @@ describe('the page', () => {
     expect(s.apkBytes()).toBeUndefined();
     expect(s.installBlocked()).toBe('This device doesn\'t pass the checks.');
   });
+
+  it('release, file, release again: only the latest release download counts', async () => {
+    const gates: (() => void)[] = [];
+    const route = fakeReleaseRoute('out', APK);
+    const gated = (async (u: RequestInfo | URL) => { if (String(u).endsWith('latest')) await new Promise<void>((r) => gates.push(r)); return route(u); }) as typeof fetch;
+    const s = session(gated);
+    const first = s.loadRelease();
+    s.switchApk('local', gated);
+    s.switchApk('release', gated);
+    const second = s.loadRelease();
+    await until(() => gates.length === 2);
+    gates[1]!();
+    await second;
+    const ready = s.state.release;
+    expect(ready?.state).toBe('ready');
+    gates[0]!();
+    await first;
+    expect(s.state.release).toBe(ready);
+    expect(s.state.log.filter((l) => l.includes('as the release publishes it'))).toHaveLength(1);
+  });
+
+  it('a switch to the file while the release\'s APK is being checked leaves no "ready" behind', async () => {
+    const s = session('out');
+    const pick = s.pickApk.bind(s);
+    vi.spyOn(s, 'pickApk').mockImplementation(async (name, data) => { const p = pick(name, data); s.switchApk('local', fakeReleaseRoute('out', APK)); await p; });
+    await s.loadRelease();
+    expect(s.state.release).toBeUndefined();
+    expect(s.from).toBe('local');
+    expect(s.apkBytes()).toBeUndefined();
+  });
 });
