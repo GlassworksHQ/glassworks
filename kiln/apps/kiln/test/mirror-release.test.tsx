@@ -298,6 +298,23 @@ describe('the page', () => {
     expect(document.querySelector('input[type=file]')).toBeNull();
   });
 
+  it('the app-only path takes ?apk=release on a kept session whose fastboot install is done', async () => {
+    vi.stubGlobal('fetch', fakeReleaseRoute('out', APK));
+    history.replaceState(null, '', '/lululemon-mirror?apk=local');
+    render(<MirrorWizard />);
+    await screen.findByText('What goes on the Mirror?');
+    const first = kept();
+    await act(() => first.sessions.mirror.pickApk('local.apk', APK));
+    first.sessions.flash.state = { ...first.sessions.flash.state, screen: 'done' };
+    cleanup();
+    history.replaceState(null, '', '/lululemon-mirror?apk=release&mode=app');
+    render(<MirrorWizard />);
+    expect(kept()).toBe(first);
+    expect(first.sessions.mirror.from).toBe('release');
+    await screen.findByText('Glassworks 0.2.0');
+    expect(document.querySelector('input[type=file]')).toBeNull();
+  });
+
   it('a session past its download keeps the APK it has', async () => {
     vi.stubGlobal('fetch', fakeReleaseRoute('out', APK));
     history.replaceState(null, '', '/lululemon-mirror?apk=local');
