@@ -5,7 +5,8 @@ lululemon Mirror's Android 6 instead (checked against an API 23 emulator, 2026-1
 is no `nproc`; SurfaceFlinger names the app's layer plain `SurfaceView`; `dumpsys meminfo` writes "kB"; and the
 kiosk is the generic app, whose activity is dev.glassworks.MainActivity behind a launcher alias. FAKE_SF_WRAPPED:
 SurfaceFlinger lists layers as Android 17 does (`RequestedLayerState{…}`, the view's hash); FAKE_SF_UNNAMED: in a way the
-runner can't read.
+runner can't read; FAKE_SF_HISTORY: how many frames `--latency` keeps (127, the S1's); FAKE_SF_SLOW_LIST: seconds
+`--list` takes.
 
 State lives in $FAKE_ADB_STATE (a directory): the nonce of the page the runner opened, the taps it
 sent, and the time ranges in which the fake screen paints. logcat, SurfaceFlinger and the fake page
@@ -27,6 +28,8 @@ PKG = "sh.edm.s1kiosk"
 PERIOD_NS = 16_666_666
 ANDROID6 = bool(os.environ.get("FAKE_ANDROID6"))
 ACTIVITY = "dev.glassworks.MainActivity" if ANDROID6 else ".MainActivity"
+# The frames `--latency` keeps: the S1's 127, or FAKE_SF_HISTORY (the Pixel Tablet's Android 17 keeps about 59, #643).
+SF_HISTORY = int(os.environ.get("FAKE_SF_HISTORY") or 127)
 # FAKE_SF_WRAPPED's SurfaceView: the view's hash, and the BLAST layer's whole name, the only one --latency takes.
 SF_HASH, SF_ACT = "f5fea55", f"{PKG}/{PKG}.MainActivity"
 SF_BLAST = f"{SF_HASH} SurfaceView[{SF_ACT}](BLAST)#163"
@@ -228,6 +231,10 @@ def shell(cmd):
         if m and os.environ.get("FAKE_LOCKDOWN") and "127.0.0.1" in m.group(1):
             # The legacy engine's lockdown (#198): only the dashboard's origin loads.
             save("lockdown.json", True)
+        elif m and state("session_up.json", True) and "/sfcheck.html" in m.group(1):
+            # The SurfaceFlinger check's page draws every frame (#643): 4 s here, ended before the next page
+            # (a real one draws for 20 s at most, and the next page replaces it).
+            paint(now(), now() + 4)
         elif m and state("session_up.json", True):
             nonce = re.search(r"nonce=(\w+)", m.group(1))
             if nonce:
@@ -290,6 +297,8 @@ def shell(cmd):
                 "3: wlan0    inet 192.0.2.10/24 brd 192.0.2.255 scope global wlan0\\       valid_lft forever preferred_lft forever\n")
     if cmd.startswith("dumpsys SurfaceFlinger --list") and ANDROID6:
         return f"DimLayer\ncom.android.systemui.ImageWallpaper\nSurfaceView\n{PKG}/{ACTIVITY}\nStatusBar\nNavigationBar\n"
+    if cmd.startswith("dumpsys SurfaceFlinger --list") and os.environ.get("FAKE_SF_SLOW_LIST"):
+        time.sleep(float(os.environ["FAKE_SF_SLOW_LIST"]))    # a listing that takes this long (real seconds, #643)
     if cmd.startswith("dumpsys SurfaceFlinger --list") and os.environ.get("FAKE_SF_WRAPPED"):
         # Android 17 (as an API 37 emulator listed it, 2026-11-19): each layer in RequestedLayerState{…}, the
         # SurfaceView's name after the view's hash; the frames on its (BLAST) child, none on its parent.
@@ -317,7 +326,7 @@ def shell(cmd):
             while x <= min(int(b * 1e9), t):
                 frames.append(x)
                 x += PERIOD_NS
-        rows = [f"{f - 1000}\t{f}\t{f - 2000}" for f in frames[-127:]]
+        rows = [f"{f - 1000}\t{f}\t{f - 2000}" for f in frames[-SF_HISTORY:]]
         return "\n".join([str(PERIOD_NS)] + rows + ["0\t0\t0"]) + "\n"
     if cmd.startswith("dumpsys package"):
         return "    versionCode=403 minSdk=26 targetSdk=34\n    versionName=0.4.3\n"
@@ -456,8 +465,14 @@ def page_log(obj, split=True, record=True, at=None):
     if os.environ.get("FAKE_DROP_SCROLL_STEP") and obj.get("t") == "step" and obj.get("stage") == "scroll" \
             and obj.get("n") == 0:
         lines = []
+    # A page's window, marked in commands.log around its measure and step lines (#643): the tests count the
+    # SurfaceFlinger reads inside it.
+    if obj.get("t") == "measure":
+        mark(f"window open {obj.get('stage')} {obj.get('n')}")
     for l in lines:
         line(PAGE_TAG, l, at=at)
+    if obj.get("t") == "step":
+        mark(f"window closed {obj.get('stage')} {obj.get('n')}")
 
 
 def line(tag, msg, pid=4242, at=None):

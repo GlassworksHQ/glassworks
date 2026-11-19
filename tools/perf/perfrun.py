@@ -12,6 +12,7 @@ What it touches on the device:
   hold       `am start --ez test_hold true --ei test_hold_s <s>`, the kiosk's test hold (#240): the
              screen on (no setting changes), through restarts of the app, until it expires or
              `hold --off` (`--ez test_hold false`). Then reads logcat for the kiosk's answer.
+  sfcheck    As synthetic, with page/sfcheck.html (it draws for 20 s, then stops); then reads SurfaceFlinger only.
   synthetic  `am start` the app if it isn't running, then the test hold, then `am start --es open
              <page>` (one-off navigation; the saved dashboard URL is not changed), and `input tap` on
              the test page's tap target when --taps > 0.
@@ -52,6 +53,8 @@ class Device:
         self._clock = None
         self.nudges = []                  # wake keys sent and maybe not yet through adb (nudge, nudged)
         self.sf_warned = False            # said once that SurfaceFlinger listed no layer of the app's (sf)
+        self.sf_name = None               # the layer sf() last read its frames from
+        self.sf_period = None             # and its refresh period
 
     def sh(self, cmd, timeout=60):
         r = subprocess.run(self.adb + ["shell", cmd], capture_output=True, text=True, timeout=timeout)
@@ -163,14 +166,31 @@ class Device:
             print(f"warning: SurfaceFlinger listed a window of {self.package} but no SurfaceView this runner can read. "
                   "If a page was open, its windows have no frames (rAF only; open, restart and live updates n/a). "
                   "Its lines for the app:\n  " + "\n  ".join(mine), file=sys.stderr)
-        best = (None, [])
+        best, self.sf_name = (None, []), None
         for name in sorted(names, key=P.layer_number, reverse=True):
             period, presents = P.parse_sf_latency(self.sh(f"dumpsys SurfaceFlinger --latency '{name}'"))
             if period and max(presents, default=0) > max(best[1], default=0):
-                best = (period, presents)
+                best, self.sf_name = (period, presents), name
             elif period and best[0] is None:
-                best = (period, presents)
+                best, self.sf_name = (period, presents), name
+        self.sf_period = best[0]
         return best
+
+    def sf_relist(self):
+        """The poll rhythm's listing read (#643): `--list`, then `--latency` of the app's newest layer that has
+        frames (the newest first: after a restart the new layer has the higher #id). Two calls, where sf() reads
+        every layer listed. (period_ms, present times ns); sets sf_name."""
+        names = P.surfaceview_layers(self.sh("dumpsys SurfaceFlinger --list"), self.package)
+        for name in sorted(names, key=P.layer_number, reverse=True):
+            period, ts = P.parse_sf_latency(self.sh(f"dumpsys SurfaceFlinger --latency '{name}'"))
+            if ts:
+                self.sf_name, self.sf_period = name, period
+                return period, ts
+        return self.sf_period, []
+
+    def sf_layer(self, name):
+        """One `--latency` read of a layer sf() picked: its present times, ns (SfReads, during a window)."""
+        return P.parse_sf_latency(self.sh(f"dumpsys SurfaceFlinger --latency '{name}'"))[1]
 
     def pids(self, names):
         """name -> pid for the app's processes and any process named in `names`."""
@@ -181,6 +201,68 @@ class Device:
         """Online CPUs: nproc, or (Android 6 has none) the cpuN lines of /proc/stat, which count the same."""
         out = self.sh("nproc 2>/dev/null || grep -c '^cpu[0-9]' /proc/stat").strip()
         return int(out or 0)
+
+
+# Seconds between SurfaceFlinger reads during a window (#643), from run.sh's preflight (cmd_sfcheck): 0 reads
+# once after each window, as on the S1; more on a device whose history is shorter than a window.
+SF_POLL_S = float(os.environ.get("GW_PERF_SF_POLL") or 0)
+
+
+# At the poll rhythm, a listing read (Device.sf_relist) every this many reads; the known layer alone in between.
+# A new layer (after a restart) is then read within three reads and one listing read's time: 0.9 s plus at most half
+# the history on the tablet (sf_plan holds a listing read to half of it).
+SF_RELIST = 3
+
+
+def sf_poll_read(dev, k):
+    """The k-th read at the poll rhythm (#643): (period_ms, present times ns). One `--latency` of the layer last
+    picked, as the window reads; a listing read (Device.sf_relist, two calls) every SF_RELIST reads, or when that
+    layer answers nothing (gone); Device.sf before any layer is known. The check times both kinds (sf_history)."""
+    if dev.sf_name is None:
+        return dev.sf()
+    if k % SF_RELIST == 0:
+        return dev.sf_relist()
+    ts = dev.sf_layer(dev.sf_name)
+    return (dev.sf_period, ts) if ts else dev.sf_relist()
+
+
+class SfReads:
+    """SurfaceFlinger's history read during one window, every SF_POLL_S seconds (Clarity's clock, as the frames),
+    from the layer sf() last picked. Nothing at all when SF_POLL_S is 0: one read after the window, as before.
+    stop() gives the reads, oldest first; the read after the window (sf()) goes last (perflib.sf_window)."""
+
+    def __init__(self, dev, poll_s=None):
+        self.dev, self.poll_s = dev, SF_POLL_S if poll_s is None else poll_s
+        self.reads, self.done, self.thread = [], threading.Event(), None
+        if self.poll_s > 0:
+            if self.dev.sf_name is None:
+                self.dev.sf()
+            self.thread = threading.Thread(target=self.run, daemon=True)
+            self.thread.start()
+
+    def run(self):
+        # A read every poll_s from the last one's start: a slow read (wireless adb: up to 1.9 s once on the
+        # tablet, run 3) is followed at once, not poll_s later.
+        name, due = self.dev.sf_name, C.mono()
+        while name and not self.done.is_set():
+            self.reads.append(self.dev.sf_layer(name))
+            due += self.poll_s
+            self.done.wait(C.real(max(0.0, due - C.mono())))
+
+    def stop(self):
+        self.done.set()
+        if self.thread:
+            self.thread.join(timeout=30)
+        return self.reads
+
+    def window(self, start_s, end_s):
+        """The window's `sf` record: these reads and one more just now (Device.sf)."""
+        reads = self.stop()
+        period, last = self.dev.sf()
+        rec = P.sf_window(period, reads + [last], start_s, end_s)
+        if self.poll_s > 0:
+            rec["reads"] = len(reads) + 1        # detail (#643); not there when one read is all
+        return rec
 
 
 def write_json(path, obj):
@@ -243,7 +325,7 @@ def cmd_synthetic(dev, a):
     lc = dev.logcat()
     dev.sh(f"am start -n {dev.component} --es open '{a.url}'")
     deadline = C.now() + a.timeout
-    measure_mono = None
+    measure_mono, reads = None, None
     status = "timeout"
     seen = threading.Event()
     timer = threading.Timer(C.real(a.timeout), lc.terminate)
@@ -269,15 +351,17 @@ def cmd_synthetic(dev, a):
             t = pl.get("t")
             if t == "measure":
                 measure_mono = rec["mono"]
+                if reads:
+                    reads.stop()
+                reads = SfReads(dev)
             elif t == "step" and measure_mono is not None:
-                period, presents = dev.sf()
-                # oldest_ms: how far back SurfaceFlinger's history reached when it was read. If that is
-                # before the window, every frame of the window is in it, and gaps are real.
+                # oldest_ms: how far back SurfaceFlinger's history reached when it was read (with the reads
+                # during the window, #643, joined). If that is before the window, every frame of the window
+                # is in it, and gaps are real.
                 # The page's own window length: the step line itself lands a little after the window.
                 end_mono = measure_mono + pl["window_ms"] / 1000 if pl.get("window_ms") else rec["mono"]
-                pl["sf"] = {"period_ms": period, "window_ms": [measure_mono * 1000, end_mono * 1000],
-                            "oldest_ms": min(presents) / 1e6 if presents else None,
-                            "presents_ms": P.presents_in(presents, measure_mono, end_mono)}
+                pl["sf"] = (reads or SfReads(dev, 0)).window(measure_mono, end_mono)
+                reads = None
             f.write(json.dumps(pl) + "\n")
             f.flush()
             print(f"  {t} {pl.get('stage', '')} {pl.get('n', '')}".rstrip(), file=sys.stderr)
@@ -289,6 +373,8 @@ def cmd_synthetic(dev, a):
     timer.cancel()
     no_page.cancel()
     lc.terminate()
+    if reads:
+        reads.stop()
     if status == "lockdown":
         print(f"synthetic run {a.run}: the app's lockdown refused the test page", file=sys.stderr)
         sys.exit(LOCKDOWN_EXIT)
@@ -296,6 +382,107 @@ def cmd_synthetic(dev, a):
         status = "the test page sent nothing in 90 s (is the app in front, and adb reverse up?)"
     if status != "done":
         sys.exit(f"synthetic run {a.run}: {status}")
+
+
+# ---- sfcheck: how SurfaceFlinger's history is read on this device (#643)
+
+# Reads in a row, each with new frames and the same number of them: the history is full, and its span is how far
+# one read reaches back.
+SFCHECK_FULL_READS = 3
+SFCHECK_GAP_S = 0.3        # between the check's reads
+SFCHECK_LIST_READS = 5     # listing reads (Device.sf_relist) timed after them
+
+
+def sf_history(dev, timeout, stop=None):
+    """Reads the app's layer (dev.sf picks it) every SFCHECK_GAP_S until its history is full while new frames
+    come, or holds enough frames for one read to cover a window, or `timeout` s pass, or `stop` is set.
+    -> (layer name or None, refresh period ms, the most frames the history held, full reads in a row,
+    each read's time in ms, each listing read's time in ms)."""
+    deadline = C.mono() + timeout
+    name, period, last, full, frames, times = None, None, None, 0, 0, []
+    while C.mono() < deadline and not (stop and stop.is_set()):
+        if name is None:
+            period, _ = dev.sf()
+            name = dev.sf_name
+            if name is None:
+                C.sleep(SFCHECK_GAP_S)
+                continue
+        t0 = C.mono()
+        ts = dev.sf_layer(name)
+        times.append((C.mono() - t0) * 1000)
+        if ts and last and ts[-1] > last[-1]:            # new frames: the page draws
+            # Full: no more frames than the most so far, read after read, while new ones come. Until then the
+            # history still holds frames from before the page (an idle screen's, seconds apart), so its span
+            # says nothing; its size does. (Rows never presented aren't counted, so a full history's count can
+            # dip by one or two: an API 37 emulator's did, 2026-11-19.)
+            full = full + 1 if len(ts) <= frames else 0
+            frames = max(frames, len(ts))
+            if full >= SFCHECK_FULL_READS or frames * period >= P.SF_ONE_READ_MS:
+                break
+        last = ts or last
+        C.sleep(SFCHECK_GAP_S)
+    # The poll rhythm's listing reads, timed too: sf_plan holds them to half the history as well.
+    lists = []
+    for _ in range(SFCHECK_LIST_READS if name else 0):
+        t0 = C.mono()
+        dev.sf_relist()
+        lists.append((C.mono() - t0) * 1000)
+    return name, period, frames, full, times, lists
+
+
+def cmd_sfcheck(dev, a):
+    """The preflight run.sh runs before a run: opens a page that draws every frame (page/sfcheck.html) and reads
+    the app's SurfaceFlinger layer until its history is full, timing each read. sfcheck.json gets the numbers
+    and perflib.sf_plan's decision; stdout the seconds between reads during a window (0: one read after it).
+    Exits 2, before a run is spent, when the layer can't be read or its history is too short to cover a window
+    even read often."""
+    out = {"reach_ms": None, "frames": None, "full": None, "read_ms": None, "list_ms": None, "reads": 0, "poll_s": None,
+           "why": None}
+    path = os.path.join(a.out, "sfcheck.json")
+    if dev.package not in dev.pids(()):
+        dev.sh(f"am start -n {dev.component}")
+        C.sleep(20)
+    dev.hold()
+    lc = dev.logcat()
+    refused = threading.Event()
+
+    def watch():
+        for line in lc.stdout:
+            rec = dev.parse(line)
+            if rec and LOCKDOWN_RE.search(rec["msg"]):
+                refused.set()
+                return
+    threading.Thread(target=watch, daemon=True).start()
+    dev.sh(f"am start -n {dev.component} --es open '{a.url}'")
+    name, period, frames, full, times, lists = sf_history(dev, a.timeout, refused)
+    lc.terminate()
+    out["reads"] = len(times)
+    out["read_ms"] = round(P.nearest_rank(sorted(times), 0.95), 1) if times else None
+    out["list_ms"] = round(P.nearest_rank(sorted(lists), 0.95), 1) if lists else None
+    if refused.is_set():
+        # The legacy engine's lockdown (#198) loads only its dashboard's origin: no check, one read as before.
+        out.update(poll_s=0, why="the app's lockdown refused the check page; reading once after each window")
+    elif name is None:
+        out["why"] = f"SurfaceFlinger lists no SurfaceView of {dev.package} this runner can read (sf_layers.py, the debugging helper, prints its lines)"
+    elif not frames:
+        out["why"] = "the check page drew no new frames on the app's layer (is it on screen, and adb reverse up?)"
+    elif full < SFCHECK_FULL_READS and frames * period < P.SF_ONE_READ_MS:
+        out["why"] = (f"SurfaceFlinger's history never filled in {a.timeout:.0f} s ({frames} frames): the check page "
+                      "didn't draw every frame (is it on screen?)")
+    else:
+        # How far back one read reaches when every frame is drawn, as in a swipe: the frames it keeps, a refresh
+        # apart (a page that draws less often reaches further).
+        # full: the whole history; else enough frames for one read and it stopped there (reach is at least this).
+        out.update(reach_ms=round(frames * period, 1), frames=frames, full=full >= SFCHECK_FULL_READS)
+        out["poll_s"], out["why"] = P.sf_plan(out["reach_ms"], out["read_ms"] or 0, out["list_ms"])
+    write_json(path, out)
+    if out["poll_s"] is None:
+        print(f"SurfaceFlinger check failed: {out['why']} (sfcheck.json)", file=sys.stderr)
+        sys.exit(2)
+    how = "one read after each window" if out["poll_s"] == 0 else f"a read every {out['poll_s']:g} s during each window"
+    print(f"SurfaceFlinger: one read reaches back {out['reach_ms']} ms ({out['frames']} frames), a read takes "
+          f"{out['read_ms']} ms ({out['list_ms']} ms with the listing): {how}" if out["reach_ms"] is not None else f"SurfaceFlinger: {out['why']}", file=sys.stderr)
+    print(out["poll_s"])
 
 
 def parse_set(spec):
@@ -611,6 +798,20 @@ def cmd_coldstart(dev, a):
     stop, paused = threading.Event(), threading.Event()
 
     def poll():
+        if SF_POLL_S:
+            # As often as the window reads go (#643), from one read's start to the next: a shorter history than
+            # a second loses the frames the open and the restart are timed to.
+            due, k = C.mono(), 0
+            while not stop.is_set():
+                if not paused.is_set():
+                    p, ts = sf_poll_read(dev, k)
+                    k += 1
+                    if p:
+                        period[0] = p
+                        presents.update(ts)
+                due += SF_POLL_S
+                stop.wait(C.real(max(0.0, due - C.mono())))
+            return
         while not stop.is_set():
             if not paused.is_set():
                 p, ts = dev.sf()
@@ -682,7 +883,7 @@ def cmd_coldstart(dev, a):
            "between": [], "bad_page_lines": 0, "protocol_restart": ref, "memory": [], "error": None,
            "fallback": {}}
     page_lines = P.PageLines()
-    st = {"engine_at": None, "own_stop_at": 0.0, "current": None, "measure_mono": None, "break_after": None,
+    st = {"engine_at": None, "own_stop_at": 0.0, "current": None, "measure_mono": None, "sf_reads": None, "break_after": None,
           "opened": 0, "next_at": None, "gestures": []}
     # The threads start once `res` and `st` exist: they write to both at once (#250's verifier).
     poller = threading.Thread(target=poll, daemon=True)
@@ -776,12 +977,17 @@ def cmd_coldstart(dev, a):
             pass
 
     def read_sf(pl, rec):
-        """SurfaceFlinger's history just after a window, cut to the window the page logged."""
-        p, ts = dev.sf()
+        """SurfaceFlinger's history just after a window (and during it, #643), cut to the window the page logged."""
         m0 = st["measure_mono"]
         end_mono = m0 + pl["window_ms"] / 1000 if pl.get("window_ms") else rec["mono"]
-        pl["sf"] = {"period_ms": p, "window_ms": [m0 * 1000, end_mono * 1000],
-                    "oldest_ms": min(ts) / 1e6 if ts else None, "presents_ms": P.presents_in(ts, m0, end_mono)}
+        reads, st["sf_reads"] = st["sf_reads"] or SfReads(dev, 0), None
+        pl["sf"] = reads.window(m0, end_mono)
+
+    def window_open():
+        """A page's measure line: its window has started (reads during it, #643, when SF_POLL_S is set)."""
+        if st["sf_reads"]:
+            st["sf_reads"].stop()
+        st["sf_reads"] = SfReads(dev)
 
     def handle(rec):
         """One logcat line. Returns True when the run is over (done or failed)."""
@@ -885,10 +1091,13 @@ def cmd_coldstart(dev, a):
             entry["drawn"] = pl
         elif t == "warmup":
             entry["live_mono"] = rec["mono"]
-            paused.set()  # no dumpsys while frames are measured, taps are timed or the page scrolls
+            # No dumpsys while frames are measured, taps are timed or the page scrolls; but the window's own
+            # SurfaceFlinger reads where its history is shorter than a window (SfReads, #643).
+            paused.set()
             st["live"] = True
         elif t == "measure":
             st["measure_mono"] = rec["mono"]
+            window_open()
             if pl.get("stage") == "updates":
                 entry["measure"] = pl
         elif t == "step" and st["measure_mono"] is not None:
@@ -926,6 +1135,9 @@ def cmd_coldstart(dev, a):
             entry["settle_first"] = pl
         elif t in ("done", "error"):
             st["live"] = st["view_open"] = False
+            if st["sf_reads"]:
+                st["sf_reads"].stop()              # a window that never got its step line
+                st["sf_reads"] = None
             # Stop the view's stream at the fake (protocol 8: the page asks too, but doesn't wait on a
             # busy main thread for the answer); a stop for this view's nonce only.
             threading.Thread(target=still, args=(pl.get("nonce") or st["current"][1],), daemon=True).start()
@@ -1185,9 +1397,17 @@ def cmd_idle(dev, a):
     newest_before = max(history, default=0)
     presents = set()
     t_end = C.now() + a.window
+    due, k = C.mono(), 0
     while C.now() < t_end:
-        C.sleep(1.5)
-        p, ts = dev.sf()
+        if SF_POLL_S:
+            # As often as the window reads go where the history is shorter (#643), from one read's start to the next.
+            due += SF_POLL_S
+            C.sleep(max(0.0, due - C.mono()))
+            p, ts = sf_poll_read(dev, k)
+            k += 1
+        else:
+            C.sleep(1.5)
+            p, ts = dev.sf()
         period = p or period
         presents.update(t for t in ts if t > newest_before)
     after = cpu_snapshot(dev, pids)
@@ -1238,7 +1458,7 @@ def memory_sample(dev, radio, summaries=True):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("cmd", choices=["activity", "device", "hold", "testdash", "synthetic", "refstart", "coldstart", "idle", "panes"])
+    ap.add_argument("cmd", choices=["activity", "device", "hold", "testdash", "sfcheck", "synthetic", "refstart", "coldstart", "idle", "panes"])
     ap.add_argument("--off", action="store_true", help="hold: end the test hold; testdash: end the test dashboard")
     ap.add_argument("--set", help="panes: the kiosk's pane extras, extra=true|false,...")
     ap.add_argument("--tries", type=int, default=3, help="panes: attempts")
@@ -1271,11 +1491,12 @@ def main():
     a = ap.parse_args()
     if a.timeout is None:
         # refstart: room for views that time out (VIEW_DEADLINE_S each) and the restarts after them.
-        a.timeout = {"hold": 15, "testdash": 15, "coldstart": 120, "refstart": 1800}.get(a.cmd, 1200)
+        a.timeout = {"hold": 15, "testdash": 15, "sfcheck": 30, "coldstart": 120, "refstart": 1800}.get(a.cmd, 1200)
     os.makedirs(a.out, exist_ok=True)
     dev = Device(a.serial, a.package, a.activity)
     C.check_device(lambda name: dev.sh(f"getprop {name}"))
-    {"activity": cmd_activity, "device": cmd_device, "hold": cmd_hold, "testdash": cmd_testdash, "synthetic": cmd_synthetic, "refstart": cmd_coldstart, "coldstart": cmd_coldstart,
+    {"activity": cmd_activity, "device": cmd_device, "hold": cmd_hold, "testdash": cmd_testdash, "sfcheck": cmd_sfcheck,
+     "synthetic": cmd_synthetic, "refstart": cmd_coldstart, "coldstart": cmd_coldstart,
      "idle": cmd_idle, "panes": cmd_panes}[a.cmd](dev, a)
 
 
