@@ -1630,12 +1630,23 @@ def build(run_dir, apks=(), budgets=None):
     return rep
 
 
+def censoring_band(runs):
+    """How many stored runs' views have a live-update p95 in (fluid's bar, NO_FRAME_MS): only there can a change no
+    frame showed, counted under a shorter cutoff than NO_FRAME_MS, decide a level (below fluid's bar it passes
+    either way; from NO_FRAME_MS up, every censored value under either cutoff is past every bar)."""
+    lo = UPDATE_MS["fluid"]
+    return sum(1 for r in runs for t in (r.get("tiers") or {}).values()
+               if lo < ((t.get("updates_run") or {}).get("latency_p95_ms") or 0) < NO_FRAME_MS)
+
+
 def regrade_report(rep):
     """A report.json graded again under this rubric from what it stored, for a run whose raw files are gone (the S1's
     published report): its graded runs (graded.reference.per_run, reference_run's records as measured) go through
     grade_part as build()'s do, their pages' versions read again (page_version: the earlier v3's pages are v1's).
     Everything measured stays as it was; the grade, the graded summary, the version and the notes are this
-    rubric's. The camera video's path and the test network are the stored ones."""
+    rubric's. The camera video's path and the test network are the stored ones. One thing it can't redo: the
+    censoring of changes no frame showed (NO_FRAME_MS), which report.json keeps only as latencies; a run where that
+    could decide a level is flagged (censoring_band), and only the raw files settle it."""
     out = copy.deepcopy(rep)
     old = (out.get("graded") or {}).get("reference") or {}
     refs = old.get("per_run") or []
@@ -1647,6 +1658,17 @@ def regrade_report(rep):
                   measured_on=out.get("measured_on"))
     graded, grade, _, _ = grade_part(device, refs, out.get("runs_attempted") or len(refs), out.get("fake_ha"),
                                      lambda ref: out.get("webrtc_transport"), lambda ref, t: out.get("test_network"))
+    ref = graded["reference"]
+    band = censoring_band(refs)
+    if band:
+        # Stored latencies can't be censored again (the changes aren't in report.json): a run whose p95 lies past
+        # fluid's bar and under NO_FRAME_MS may hold a change no frame showed that the earlier, shorter cutoff
+        # counted and this one skips. Only the raw files tell (CodeRabbit on #656).
+        grade["provisional"] = True
+        grade.setdefault("provisional_reasons", []).append(
+            f"{band} stored run(s) with a live-update p95 between {UPDATE_MS['fluid']:.0f} and {NO_FRAME_MS:.0f} ms may hold "
+            "a change no frame showed, counted under an earlier cutoff: grade it again from the raw files")
+        grade["headline"] = headline(device.get("frame_name") or device["frame"], grade, ref)
     ref = graded["reference"]
     out.update(graded=graded, grade=grade,
                protocol_version=(ref["protocols"][0] if ref and len(ref["protocols"]) == 1 else None),

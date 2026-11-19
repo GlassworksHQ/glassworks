@@ -2482,6 +2482,24 @@ class Regrade(unittest.TestCase):
         with open(os.path.join(self.dir, "report.json"), encoding="utf-8") as f:
             self.assertIn(G.FIRST_V1, " ".join(json.load(f)["grade"]["provisional_reasons"]))
 
+    def test_a_stored_p95_where_the_cutoff_could_decide_is_flagged(self):
+        """CodeRabbit on #656: a change no frame showed 250 to 300 ms before the window's end counted under the earlier
+        250 ms cutoff and is skipped under 300 ms. A raw rebuild re-censors it; report.json keeps only latencies, so a
+        run whose stored p95 lies in (250, 300) ms is flagged, and one outside it isn't."""
+        rep = R.build(self.dir)
+        self.assertEqual(R.censoring_band(rep["graded"]["reference"]["per_run"]), 0)
+        self.assertNotIn("earlier cutoff", " ".join(R.regrade_report(rep)["grade"].get("provisional_reasons") or []))
+        old = json.loads(json.dumps(rep))
+        run = old["graded"]["reference"]["per_run"][0]["tiers"]["typical"]
+        run["updates_run"] = dict(run["updates_run"], latency_p95_ms=260.0)
+        again = R.regrade_report(old)
+        self.assertTrue(again["grade"]["provisional"])
+        self.assertIn("1 stored run(s) with a live-update p95 between 250 and 300 ms may hold a change no frame showed",
+                      " ".join(again["grade"]["provisional_reasons"]))
+        for p95 in (250.0, 300.0, 1500.0):                              # outside the band: no doubt either way
+            run["updates_run"] = dict(run["updates_run"], latency_p95_ms=p95)
+            self.assertEqual(R.censoring_band(old["graded"]["reference"]["per_run"]), 0, p95)
+
     def test_dry_run_writes_nothing(self):
         before = sorted(os.listdir(self.dir))
         p = self.regrade(self.dir, "--dry-run")
