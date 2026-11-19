@@ -16,7 +16,8 @@ line of each version is what Home Assistant shows on the update card. A change o
   Allow, so Home Assistant and phones could never send it Wi-Fi over Bluetooth. Now, when it starts with no network,
   Bluetooth setup is open by itself for 5 minutes, and the setup screen says to send the Wi-Fi from Home Assistant or
   improv-wifi.com on a phone, with the time left. Where the camera sees presence, walking up to the panel opens it
-  again. It never opens while the panel is online. After the 5 minutes, setup moves on to the panel's own Wi-Fi.
+  again. It never opens while the panel is online. After the 5 minutes the panel opens its own setup Wi-Fi, if it
+  can, and otherwise the setup screen says how to set it up from a computer.
 
 ## [0.2.0] - 2026-11-19
 
