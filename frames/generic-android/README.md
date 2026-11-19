@@ -52,9 +52,12 @@ been checked on a device yet (#23). The S1 app also runs as this frame on any de
 (`Build.HARDWARE` other than `sun50iw10p1`). Either app names itself after the device and runs the panes the
 device's features allow.
 
-The app is the Glassworks core with a fixed set of panes: Assist (with its timers), Sendspin and the camera
-(#117). A pane the device has no hardware for (no microphone, no speaker, no camera) is hidden: it isn't in the
-settings, on the Manage page, in setup or in Home Assistant. The camera pane is off until someone turns it on, as
+The app is the Glassworks core with a fixed set of panes: Assist (with its timers), Sendspin, notifications, the
+Bluetooth proxy, the camera (#117) and diagnostics. A pane the device has no hardware for (no microphone, no speaker,
+no Bluetooth LE, no camera) is hidden: it isn't in the settings, on the Manage page, in setup or in Home Assistant.
+The Bluetooth proxy has no root helper here to read the adapter's address, so Home Assistant keys it on the panel's
+ESPHome MAC. On a screen without touch, a high or critical notification with neither a `timeout` nor a `tag` closes
+after 2 minutes, as a view does: nothing else could close it. The camera pane is off until someone turns it on, as
 in the S1 app; then it wakes the screen when someone walks up, on a device without a proximity sensor of its own.
 On a screen without touch (the lululemon Mirror) its setup step never waits: the use stays Presence only, and
 Kiln grants the camera. On a camera without 1280x720 (Android 6-7's) its stream runs at a size the camera lists, or
@@ -70,7 +73,7 @@ out (turn the lock off in Android's settings, or keep the screen on).
 |---|---|---|
 | applicationId | `sh.edm.s1kiosk` | `dev.glassworks.generic_android` |
 | Home Assistant's model | "Pixel Tablet (Glassworks)" | "Pixel Tablet (Glassworks)" |
-| Panes | All of the S1 app's panes the device can run | Assist, Timers, Sendspin, Camera |
+| Panes | All of the S1 app's panes the device can run | Assist, Timers, Sendspin, Notifications, Bluetooth proxy, Camera, Diagnostics |
 | Presence and light | None | Android's proximity and light sensors |
 
 Settings that the S1 app takes as intent extras (`--es url …`, `--es api_key …`, the panes' switches) reach
@@ -312,10 +315,10 @@ own run: uninstall one before installing a newer build (once; that wipes the app
 | Sendspin | Depends on the device | Needs a speaker. |
 | Zigbee and Thread radio | No | No supported radio. |
 | Time zone | No | Worked out: only on the S1 (`aqara-s1-plus`). |
-| Diagnostics | Alpha | Worked out: needs no special hardware. Both builds have it. No CPU temperature: no frame here names a thermal zone. Not yet checked on a device. |
-| Bluetooth proxy | Depends on the device | Worked out: needs Bluetooth LE. |
-| Notifications | Planned | Worked out: needs no special hardware. |
-| Camera | Depends on the device | Worked out: needs a camera. |
+| Diagnostics | Alpha | Needs no special hardware. Both builds have it, with no CPU temperature: no frame here names a thermal zone. |
+| Bluetooth proxy | Depends on the device | Needs Bluetooth LE. Both builds have it. |
+| Notifications | Alpha | Needs no special hardware. Both builds have it. |
+| Camera | Depends on the device | Needs a camera. Both builds have it. |
 | Wall base | No | S1 only. |
 
 "Worked out" means `frame.json` doesn't rate the pane; its support comes from what the pane needs and what the frame has ([how](../README.md#the-panes-a-frame-runs)).

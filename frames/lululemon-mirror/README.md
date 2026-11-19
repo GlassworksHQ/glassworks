@@ -116,15 +116,15 @@ The boot logo before Android starts stays lululemon's: it lives in the signed bo
 
 | Pane | Support | Note |
 |---|---|---|
-| Assist | Planned | It has a microphone. |
-| Timers | Planned | Needs Assist. |
-| Sendspin | Planned | It has stereo speakers. |
+| Assist | Alpha | It has a microphone. In the legacy build. |
+| Timers | Alpha | Needs Assist. |
+| Sendspin | Alpha | It has stereo speakers. In the legacy build. |
 | Zigbee and Thread radio | No | No Zigbee or Thread radio. |
 | Time zone | No | Worked out: only on the S1 (`aqara-s1-plus`). |
-| Diagnostics | Planned | Worked out: needs no special hardware. The legacy build has the pane, with no CPU temperature. Not yet run on a Mirror. |
-| Bluetooth proxy | Planned | Worked out: has Bluetooth LE (its WCN3660B, read from a teardown). |
-| Notifications | Planned | Worked out: needs no special hardware. |
-| Camera | Planned | Worked out: has a camera (5 MP, front). The legacy build has the pane: presence wakes the screen when someone walks up, and no image leaves the Mirror in Presence only. Off until turned on (`camera_pane` in Home Assistant); Kiln grants the camera. Not yet run on a Mirror. |
+| Diagnostics | Alpha | In the legacy build, with no CPU temperature. Not yet run on a Mirror. |
+| Bluetooth proxy | Alpha | It has Bluetooth LE (its WCN3660B, read from a teardown). In the legacy build. It scans only once the location permission is granted, which Kiln doesn't do yet. Not yet run on a Mirror. |
+| Notifications | Alpha | In the legacy build. No touch, so an urgent one with no tag or timeout closes after 2 minutes. Not yet run on a Mirror. |
+| Camera | Alpha | It has a camera (5 MP, front). In the legacy build: presence wakes the screen when someone walks up, and no image leaves the Mirror in Presence only. Off until turned on (`camera_pane` in Home Assistant); Kiln grants the camera. Not yet run on a Mirror. |
 | Wall base | No | S1 only. |
 
 "Worked out" means `frame.json` doesn't rate the pane; its support comes from what the pane needs and what the frame has ([how](../README.md#the-panes-a-frame-runs)).

@@ -139,7 +139,9 @@ data:
   With a `url`, the alert gets an **Open the view** button, which opens it full screen. That matches
   the phone, where `url` opens when you tap the notification.
 - **A screen without touch** (the lululemon Mirror) has no button. The view moves on when its time runs
-  out, or when Home Assistant clears it. A view with no `timeout` closes after 2 minutes there.
+  out, or when Home Assistant clears it. A view with no `timeout` closes after 2 minutes there. So does a
+  high or critical notification with neither a `timeout` nor a `tag`, since nothing could close it. Give
+  it a `tag` to keep it up until Home Assistant clears it.
 - Do not disturb holds a view like any other notification: it goes to the list, and opens from there.
 
 ## When someone presses a button

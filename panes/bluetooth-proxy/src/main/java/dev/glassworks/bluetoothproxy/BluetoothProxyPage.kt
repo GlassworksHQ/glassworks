@@ -1,4 +1,8 @@
-package dev.glassworks.s1.settings
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+package dev.glassworks.bluetoothproxy
 
 import android.content.Context
 import android.content.Intent
@@ -14,14 +18,11 @@ import android.view.Gravity
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
-import dev.glassworks.bluetoothproxy.BluetoothProxyModel
-import dev.glassworks.bluetoothproxy.ProxyPhase
 import dev.glassworks.bluetoothproxy.ProxyPhase.BLUETOOTH_OFF
 import dev.glassworks.bluetoothproxy.ProxyPhase.LOCATION_OFF
 import dev.glassworks.bluetoothproxy.ProxyPhase.NO_BLE
 import dev.glassworks.bluetoothproxy.ProxyPhase.OFF
 import dev.glassworks.bluetoothproxy.ProxyPhase.RETRYING
-import dev.glassworks.bluetoothproxy.ProxyPage
 import dev.glassworks.pane.IN_HOME_ASSISTANT
 import dev.glassworks.pane.SettingsItem
 import dev.glassworks.ui.Glass

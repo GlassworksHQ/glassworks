@@ -31,7 +31,7 @@ import dev.glassworks.setup.SetupOverlay
 import dev.glassworks.setup.SetupPane
 import dev.glassworks.setup.WifiSetupStatus
 import dev.glassworks.ui.Mockup
-import dev.glassworks.s1.settings.BluetoothProxyPage
+import dev.glassworks.bluetoothproxy.BluetoothProxyPage
 
 /**
  * The Bluetooth proxy pane (#121) as approved: its page in every state, the menu with it off (folded
