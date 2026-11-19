@@ -23,9 +23,10 @@ export interface RecoveryData {
    * A stand fixed to a side face by the side screws in that face. It comes off once they're out.
    * `depth`: a bar on that face, mm out from it, if it has one. `tube`: a U of tube from that face (or the
    * bar's ends), `inset` mm in from the corners and `z` mm down from the back, out to `reach` mm from the
-   * face, its corners bent to `bend` mm.
+   * face, its corners bent to `bend` mm; `closed` adds the tube's top bar along the face, which its screws
+   * go through.
    */
-  stand?: { edge: Shown; depth?: number; tube?: { reach: number; inset: number; z: number; diameter: number; bend: number } };
+  stand?: { edge: Shown; depth?: number; tube?: { reach: number; inset: number; z: number; diameter: number; bend: number; closed?: boolean } };
   board?: (Rect | { kind: 'window'; at: Mm; r: number } | { kind: 'button'; at: Mm })[];
   button?: { at: Mm; what: string };
   port?: { edge: 'top' | 'bottom' | 'left' | 'right'; at: number; kind: string };
@@ -269,7 +270,8 @@ export function mount(svg: SVGSVGElement, f: RecoveryData, onBeat?: (i: number) 
   const standRect = st ? (st.edge === 'right' ? `x="${Wu}" y="0" width="${Du}" height="${Hu}"` : `x="0" y="${Hu}" width="${Wu}" height="${Du}"`) : '';
   // Its tube, as a line through points on screen: out along the face's normal, across along the face.
   const tube = st?.tube ? (() => {
-    const { reach, inset, z, diameter, bend } = st.tube!;
+    const { reach, inset, z, diameter, bend, closed } = st.tube!;
+    const top = (st.depth ?? 0) + (closed ? diameter / 2 : 0);
     const across = st.edge === 'right' ? H : W;
     const at = (o: number, a: number): Mm => {
       const [x, y] = st.edge === 'right' ? P(Wu + u(o), u(a)) : P(u(a), Hu + u(o));
@@ -280,10 +282,10 @@ export function mount(svg: SVGSVGElement, f: RecoveryData, onBeat?: (i: number) 
       return at(co + bend * Math.cos(th), ca + bend * Math.sin(th));
     });
     const pts = [
-      at(st.depth ?? 0, inset), ...arc(reach - bend, inset + bend, -Math.PI / 2, 0),
-      ...arc(reach - bend, across - inset - bend, 0, Math.PI / 2), at(st.depth ?? 0, across - inset),
+      at(top, inset), ...arc(reach - bend, inset + bend, -Math.PI / 2, 0),
+      ...arc(reach - bend, across - inset - bend, 0, Math.PI / 2), at(top, across - inset),
     ];
-    const d = 'M' + pts.map(([x, y]) => `${x.toFixed(2)} ${y.toFixed(2)}`).join('L');
+    const d = 'M' + pts.map(([x, y]) => `${x.toFixed(2)} ${y.toFixed(2)}`).join('L') + (closed ? 'Z' : '');
     const wd = u(diameter) * s;
     return `<path d="${d}" fill="none" stroke="${M.tube}" stroke-width="${wd}" stroke-linejoin="round" stroke-linecap="round"/>
       <path d="${d}" fill="none" style="stroke:var(--s-fg)" stroke-opacity=".22" stroke-width="${wd * 0.3}" transform="translate(0 ${-wd * 0.25})" stroke-linejoin="round"/>`;

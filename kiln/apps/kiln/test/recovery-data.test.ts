@@ -161,7 +161,10 @@ it('the Mirror\'s stand tube is the one its 3D model draws (frame.json)', () => 
   expect(model.body.width / 2 - Math.max(...ends.map((e) => Math.abs(e[0]!)))).toBeCloseTo(tube.inset, 0);
   expect(ends[0]![2]! + model.body.depth / 2).toBeCloseTo(tube.z, 0);
   expect(model.parts.every((p) => p.kind === 'tube' && p.diameter === tube.diameter)).toBe(true);
-  expect(f.stand!.depth, 'no bar: the tube goes straight into the Mirror').toBeUndefined();
+  expect(f.stand!.depth, 'no block: the tube goes straight onto the Mirror').toBeUndefined();
+  // Its top bar, the same tube, lies along the bottom edge; the 4 screws go through it (maintainer, 2026-11-18).
+  expect(tube.closed).toBe(true);
+  expect(f.cover!.screws.slice(0, 4).every((s) => s[2] === tube.z), 'the screws at the tube\'s height').toBe(true);
 });
 
 it('says ready after the later of plug and power, whichever order a frame has them in', () => {
