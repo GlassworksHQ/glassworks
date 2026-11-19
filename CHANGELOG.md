@@ -661,8 +661,9 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 ### Security
 - **Sign-in for the Thread join: someone on your network who reads its code can no longer use it.** The
   administrator sign-in for the Thread join now uses PKCE too, like the dashboard's QR-code sign-in since
-  0.4.4. Needs Home Assistant 2026.10 or later to take effect. A sign-in that was halfway through when the
-  update arrived needs a new scan.
+  0.4.4. Needs Home Assistant 2026.10 or later to take effect. It doesn't cover the panel's own requests to a
+  Home Assistant on plain `http://`, which anyone on that network can read. A sign-in that was halfway through
+  when the update arrived needs a new scan.
 
 ## [0.4.4] - 2026-11-19
 
