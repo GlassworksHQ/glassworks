@@ -13,7 +13,7 @@ import { AdbAuthTimeout, type PanelShell } from '@glassworks/adb';
 import { apiKeyFingerprint, apiKeySocketUp, kioskVersion, readApiKey } from '@glassworks/app-adb';
 import { imageFromLink, plan, writtenAsIs, type ImageFile, type ImageRecipe, type PlannedStep } from '@glassworks/kiln-core';
 import {
-  GLASSWORKS, MIRROR_IMAGES, ProxyError, WrongImage, checkFastboot, firstBoot, makeOnlyHome,
+  GLASSWORKS, GLASS_PANES_USERDATA, MIRROR_IMAGES, ProxyError, USERDATA_BYTES, WrongImage, checkFastboot, firstBoot, makeOnlyHome,
   type FastbootLike, type FastbootReport, type FirstBoot, type PrepareStep,
 } from '@glassworks/lululemon-mirror-installer';
 
@@ -156,6 +156,8 @@ export class FlashSession {
   private panel?: PanelShell;
   private made: Record<string, Blob> = {};
   private runs = 0;
+  /** Bumped when the picked image or the way to it changes: a fastboot check started before then is ignored. */
+  private selected = 0;
   /** Home Assistant's ESPHome key from before the flash (issue 580). A secret: never in the state, the log or an error */
   private apiKey?: string;
   /** an old app's Mirror, connected, for its restart into fastboot */
@@ -194,6 +196,7 @@ export class FlashSession {
   pick(id: string) {
     const r = this.recipeOf(id);
     if (!r || this.state.screen !== 'choose' || r.id === this.state.picked) return;
+    this.selected++;
     void this.forget();
     this.set({ picked: r.id, files: waiting(r) });
   }
@@ -212,6 +215,7 @@ export class FlashSession {
 
   /** "Install Glassworks instead", from a community image's screens: its own screen, nothing downloaded for it yet. */
   toGlassworks() {
+    this.selected++;
     const g = this.recipes[0]!;
     void this.forget();
     this.set({ picked: g.id, files: waiting(g), screen: 'image', link: false, fastboot: undefined, understood: false, error: undefined });
@@ -219,6 +223,7 @@ export class FlashSession {
 
   /** Back to the choice from an image's first screen. */
   backToChoice() {
+    this.selected++;
     this.set({ screen: 'choose', link: false, fastboot: undefined, understood: false, connectError: undefined });
   }
 
@@ -232,8 +237,11 @@ export class FlashSession {
     const from = this.state.picked;
     this.panel = undefined;
     this.made = {};
+    this.selected++;
+    // a fresh install: an earlier one's key outcome (handed, refused, none…) goes; a key still held for a hand-back stays
+    const key = this.state.key?.state === 'held' ? this.state.key : undefined;
     this.set({ screen: 'choose', picked: r.id, from, open: r.community, link: false, files: waiting(r), fastboot: undefined, understood: false,
-      work: undefined, firstBoot: undefined, error: undefined, flashFailed: false, noFill: false });
+      work: undefined, firstBoot: undefined, key, error: undefined, flashFailed: false, noFill: false });
   }
 
   /**
@@ -253,6 +261,7 @@ export class FlashSession {
   followLink(search: string) {
     const linked = imageFromLink(this.recipes, search);
     if (!linked || this.state.screen === 'working' || this.state.screen === 'adb' || (this.state.link && this.state.picked === linked.id)) return;
+    this.selected++; // a link that changes the install: a fastboot check from before it is ignored
     if (linked.id !== this.state.picked) void this.forget();
     this.set({ screen: 'download', picked: linked.id, open: true, link: true, from: undefined,
       files: linked.id === this.state.picked ? this.state.files : waiting(linked), fastboot: undefined, understood: false, error: undefined });
@@ -448,14 +457,25 @@ export class FlashSession {
   /** Inside the click: the browser's device list opens first, then Kiln's checks read the Mirror's fastboot (read-only). */
   async connectFastboot(): Promise<void> {
     const req = this.d.requestFastboot();
+    const sel = this.selected;
     this.set({ connecting: true, connectError: undefined });
     try {
-      this.fb = await req;
-      const fastboot = await checkFastboot(this.fb);
+      const fb = await req;
+      const fastboot = await checkFastboot(fb);
+      // another image was picked (or a link opened) while this ran: its checks belong to that install, not this one
+      if (sel !== this.selected) return;
+      this.fb = fb;
+      const r = this.recipe;
+      // a community image's userdata goes on as published, at its own size: the partition must hold it (Glassworks builds one to fit)
+      if (r.community && writtenAsIs(r).some((f) => f.name === GLASS_PANES_USERDATA.name) && fastboot.userdataBytes < USERDATA_BYTES) {
+        fastboot.checks.push({ what: `Userdata partition for ${r.name}`, found: `${fastboot.userdataBytes} bytes`, ok: false, need: `at least ${USERDATA_BYTES} bytes, the size its userdata image expands to` });
+        fastboot.ok = false;
+      }
       for (const c of fastboot.checks) this.log('', `${c.ok ? 'ok ' : 'NO '} ${c.what}: ${c.found}`);
       fastboot.info.forEach((i) => this.log('', i));
       this.set({ connecting: false, fastboot, screen: fastboot.ok ? 'confirm' : 'fastboot' });
     } catch (e) {
+      if (sel !== this.selected) return;
       this.set({ connecting: false, connectError: (e as Error).message });
     }
   }
@@ -484,6 +504,19 @@ export class FlashSession {
       // the Mirror's LK can't read anything back: Kiln's backup step is the record of what it writes
       this.log('Backup: none possible, the Mirror\'s bootloader can\'t read anything back. What Kiln writes:');
       for (const f of writtenAsIs(r)) this.log('', `${f.name}: SHA-256 ${f.sha256}, as ${r.name}'s release publishes it`);
+      // every published file this install writes, opened and checked now, before the first write; those very Blobs go to
+      // fastboot, so a file another tab changed can't leave one partition written and the other not
+      const verified: Record<string, Blob> = {};
+      reading = true;
+      for (const x of steps) {
+        const want = x.do === 'flash' ? r.files.find((f) => f.name === x.file) : undefined;
+        if (!want || verified[want.name]) continue;
+        const blob = await this.d.images.file(want.name);
+        this.log('', `${want.name}: checking it again before writing`);
+        await this.d.images.check(blob, want, () => {});
+        verified[want.name] = blob;
+      }
+      reading = false;
       for (const step of steps) {
         if (step.do === 'patch') {
           const adbKey = this.d.adbKey();
@@ -503,17 +536,8 @@ export class FlashSession {
           this.log('', `Kiln built: ${step.makes.join(', ')}`);
         } else if (step.do === 'flash') {
           const id = `flash-${step.partition}` as WorkStep;
-          let blob = this.made[step.file];
-          if (!blob) {
-            // a downloaded file, checked again as the very Blob fastboot will send: nothing else can have changed it
-            const want = r.files.find((f) => f.name === step.file)!;
-            reading = true;
-            blob = await this.d.images.file(step.file);
-            this.log('', `${step.file}: checking it again before writing`);
-            work(id, 0);
-            await this.d.images.check(blob, want, () => {});
-            reading = false;
-          }
+          const blob = this.made[step.file] ?? verified[step.file];
+          if (!blob) throw new Error(`Kiln has no checked ${step.file} to write. Nothing more was written.`);
           this.log(`Flashing ${step.partition}${r.community ? ` with ${step.file} as published` : s.noFill ? ' (zeros as RAW, no FILL chunks)' : ''}`);
           this.set({ flashFailed: true }); // until the restart: a failure from here is the bootloader's
           work(id, 0);
@@ -526,9 +550,10 @@ export class FlashSession {
           this.fb = undefined;
           this.made = {};
           if (!r.community) this.d.flashedHere?.set(); // this browser's key is in the Glassworks it wrote: the keep step can read it next time
-          await this.d.images.discard();
-          // nothing kept any more: another install downloads again
+          // nothing kept any more: another install downloads again. The Mirror is restarting into what was written, so a
+          // storage error here is only logged: it mustn't turn a finished install into an error
           this.set({ files: waiting(r) });
+          await this.d.images.discard().catch((e: Error) => this.log('', `deleting the downloads failed: ${e.message}`));
         }
       }
       this.set({ screen: steps.some((x) => x.do === 'first-start') ? 'adb' : 'done' });

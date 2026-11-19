@@ -326,4 +326,13 @@ describe('the keep step, on the real session (#580)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
     expect(read).toHaveBeenCalledOnce();
   });
+
+  it('the way back to a fresh install clears an earlier key outcome, so the keep step and Done start over (#579)', async () => {
+    const d = await keepDemo('flash-done-kept', true);
+    expect(d.flash.state.key?.state).toBe('handed');
+    d.flash.wayBack('glass-panes');
+    expect(d.flash.state.key).toBeUndefined();
+    d.flash.wayBack('glassworks');
+    expect(d.flash.state.key).toBeUndefined();
+  });
 });

@@ -178,4 +178,20 @@ describe('the image worker\'s jobs', () => {
     // 1 was running and stops mid-wait; 2 was queued and stops before it begins; the discard ends before 4 starts
     expect(order).toEqual(['start download 1', 'cancelled 1', 'start download 2', 'cancelled 2 before it began', 'start discard 3', 'end discard 3', 'start download 4', 'done 4']);
   });
+
+  it('a failed write cancels that download\'s own request; a handle that won\'t empty is closed', async () => {
+    const want = { name: 'system.img', url: 'https://example.com/system.img', refract: 'x/system.img', size: 100, sha256: 'a'.repeat(64) };
+    let cancelled = 0;
+    const net = (async () => new Response(new ReadableStream({ pull(c) { c.enqueue(new Uint8Array(10)); }, cancel() { cancelled++; } }), { status: 200, headers: { 'content-length': '100' } })) as unknown as typeof fetch;
+    class Full extends MemHandle { override write() { return 0; } }
+    const full = new Full();
+    const jobs = imageJobs(async () => full, async () => {});
+    await expect(jobs.download('https://refract.test/x', want, () => {}, net)).rejects.toThrow(/stored 0 of 10 bytes/);
+    expect(cancelled).toBe(1);
+    expect(full.closed).toBe(true);
+    class Stuck extends MemHandle { override truncate() { throw new Error('NoModificationAllowedError'); } }
+    const stuck = new Stuck();
+    await expect(imageJobs(async () => stuck, async () => {}).download('https://refract.test/x', want, () => {}, net)).rejects.toThrow(/NoModificationAllowed/);
+    expect(stuck.closed).toBe(true);
+  });
 });
