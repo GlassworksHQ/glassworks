@@ -79,12 +79,27 @@ export class MirrorSession {
   private panel?: PanelShell;
   /** Picks so far: a slower read of an earlier file never replaces a later one. */
   private picks = 0;
+  /** The release route, while the APK comes from the release (switchApk changes it). */
+  private release?: typeof fetch;
 
   constructor(private readonly d: MirrorDeps, on: boolean) {
+    this.release = d.release;
     this.state = { screen: on ? 'pick' : 'off', haUrl: '', phases: [], log: [], ...(d.release ? { release: { state: 'waiting' } } : {}) };
   }
 
-  get from(): ApkFrom { return this.d.release ? 'release' : 'local'; }
+  get from(): ApkFrom { return this.release ? 'release' : 'local'; }
+
+  /**
+   * `?apk=release` or `?apk=local` on a kept session that isn't installing: the APK comes from there now, and one
+   * picked or downloaded before is dropped. The session itself stays, with the image worker its FlashSession holds.
+   */
+  switchApk(from: ApkFrom, get: typeof fetch): void {
+    if (from === this.from || this.state.screen === 'working') return;
+    this.release = from === 'release' ? get : undefined;
+    this.apk = undefined;
+    this.picks++;
+    this.set({ apk: undefined, release: this.release ? { state: 'waiting' } : undefined });
+  }
 
   subscribe = (l: () => void) => { this.listeners.add(l); return () => { this.listeners.delete(l); }; };
   get = () => this.state;
@@ -124,13 +139,17 @@ export class MirrorSession {
    */
   async loadRelease(): Promise<void> {
     const r = this.state.release;
-    if (!this.d.release || !r || !['waiting', 'none', 'error'].includes(r.state)) return;
+    const get = this.release;
+    if (!get || !r || !['waiting', 'none', 'error'].includes(r.state)) return;
+    const current = () => this.release === get; // switchApk since: this download no longer counts
     try {
-      const { bytes, ready } = await releaseApk(this.d.release, (release) => this.set({ release }));
+      const { bytes, ready } = await releaseApk(get, (release) => { if (current()) this.set({ release }); });
+      if (!current()) return;
       this.log(`${ready.name} from ${ready.tag}: SHA-256 ${ready.sha256}, as the release publishes it`);
       await this.pickApk(ready.name, bytes);
       this.set({ release: ready });
     } catch (e) {
+      if (!current()) return;
       const why = (e as Error).message;
       if (!(e instanceof NoRelease)) this.log(`The release's APK: ${why}`);
       this.set({ release: e instanceof NoRelease ? { state: 'none' } : { state: 'error', why } });
@@ -191,7 +210,7 @@ export class MirrorSession {
   installBlocked(): string | undefined {
     const s = this.state;
     if (!s.report?.ok) return 'This device doesn\'t pass the checks.';
-    if (s.apk?.error && !this.d.release) return `Pick another file: ${s.apk.error}.`;
+    if (s.apk?.error && !this.release) return `Pick another file: ${s.apk.error}.`;
     if (!this.apk) return this.releaseBlocked() ?? 'Pick the APK file first.';
     if (s.haUrl && !/^https?:\/\/[^\s/]+/.test(s.haUrl)) return 'Home Assistant\'s address starts with http:// or https://.';
     return undefined;

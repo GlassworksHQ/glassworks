@@ -34,12 +34,8 @@ export class MirrorActivity implements Activity {
   }
 }
 
-/**
- * The kept Mirror sessions, or new ones (`make`) kept from now on. An idle session whose APK came from elsewhere
- * (`?apk=local` then `?apk=release`) is replaced; a running one is kept, so the way back still finds it.
- */
-export function keptMirror(make: () => { mirror: MirrorSession; flash: FlashSession }, flashMode: boolean, from?: MirrorSession['from']): MirrorActivity {
+/** The kept Mirror sessions, or new ones (`make`) kept from now on. */
+export function keptMirror(make: () => { mirror: MirrorSession; flash: FlashSession }, flashMode: boolean): MirrorActivity {
   const kept = registry.activity(MIRROR_BASE);
-  if (kept instanceof MirrorActivity && (!from || kept.sessions.mirror.from === from || kept.running())) return kept;
-  return registry.keep(new MirrorActivity(make(), flashMode));
+  return kept instanceof MirrorActivity ? kept : registry.keep(new MirrorActivity(make(), flashMode));
 }

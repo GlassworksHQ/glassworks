@@ -47,6 +47,9 @@ export function keyedConnect(loadKey: () => Promise<AdbKey>, connect: (key: AdbK
   return adbKeyHolder(loadKey).connectWith(connect);
 }
 
+/** Kiln's release route, from the page (a bare `fetch` held by an object is an illegal invocation). */
+const releaseRoute = (...a: Parameters<typeof fetch>) => fetch(...a);
+
 /** The page's two paths on one adb key: the app over adb (MirrorSession), or Glassworks over fastboot (FlashSession). */
 function realSessions(on: boolean, from: ApkFrom = 'local'): { mirror: MirrorSession; flash: FlashSession } {
   if (!on) {
@@ -56,7 +59,7 @@ function realSessions(on: boolean, from: ApkFrom = 'local'): { mirror: MirrorSes
   const keys = adbKeyHolder(loadOrCreateAdbKey);
   const mirror = new MirrorSession({
     connect: keys.connectWith((k) => Panel.connect(k)),
-    ...(from === 'release' ? { release: (...a: Parameters<typeof fetch>) => fetch(...a) } : {}),
+    ...(from === 'release' ? { release: releaseRoute } : {}),
   }, true);
   const assets = new Assets<'mirror-bootanimation' | 'mirror-settings-overlay'>('/assets/');
   const flash = new FlashSession({
@@ -303,11 +306,13 @@ export function MirrorWizard() {
     // the sessions live in Kiln's registry, not in this component: a running install outlives the picker
     const earlier = registry.activity(MIRROR_BASE);
     if (!m.on && !earlier) return { m, flashFirst, real: realSessions(false) };
-    const kept = keptMirror(() => realSessions(true, m.apk), flashFirst, m.apk);
+    const kept = keptMirror(() => realSessions(true, m.apk), flashFirst);
     // back to a running install (or from a link without ?apk=…): as it was; otherwise the address's path
     if (kept === earlier && m.on && !kept.running()) {
       kept.flashMode = flashFirst;
       kept.sessions.flash.followLink(location.search); // ?image=<id> on a kept, idle session
+      // ?apk=… on it: the APK from there, unless the fastboot path is already past its download
+      if (m.apk && ['choose', 'image', 'download'].includes(kept.sessions.flash.state.screen)) kept.sessions.mirror.switchApk(m.apk, releaseRoute);
     }
     return { m, flashFirst: kept.flashMode, real: kept.sessions, kept };
   });

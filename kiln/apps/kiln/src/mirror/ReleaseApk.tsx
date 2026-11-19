@@ -13,7 +13,8 @@ export function TestOnly() {
 }
 
 export function ReleaseApk({ m, ms }: { m: MirrorSession; ms: MirrorState }) {
-  useEffect(() => { void m.loadRelease(); }, [m]);
+  const waiting = ms.release?.state === 'waiting';
+  useEffect(() => { if (waiting) void m.loadRelease(); }, [m, waiting]);
   const r = ms.release;
   if (!r) return null;
   const again = <button type="button" className="link" onClick={() => void m.loadRelease()}>Try again</button>;
