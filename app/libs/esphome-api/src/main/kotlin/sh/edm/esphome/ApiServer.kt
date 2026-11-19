@@ -95,8 +95,10 @@ interface VoiceAssistantHandler {
 }
 
 /**
- * ESPHome native API server (TCP, default port 6053). One reader thread per connection; writes are
- * serialized per connection. Message handling follows esphome `api_connection.cpp`: Hello,
+ * ESPHome native API server (TCP, default port 6053). Each connection has a reader thread and a
+ * writer thread with its own queue ([MAX_QUEUED_BYTES]), so a client that stops reading holds up only
+ * itself: its states wait as the newest per entity, and once its other messages fill the queue it is
+ * dropped. Message handling follows esphome `api_connection.cpp`: Hello,
  * DeviceInfo, DeviceCapabilities, ListEntities, SubscribeStates, commands, Ping, Disconnect and the
  * voice assistant messages. Unknown messages are ignored, as ESPHome does.
  *
@@ -133,6 +135,11 @@ class ApiServer(
         const val UNRESPONSIVE_MS = 150_000L // ESPHome: KEEPALIVE_TIMEOUT_MS * 5 / 2
         /** ESPHome activates a newly saved PSK 100 ms after answering (api_server.cpp update_noise_psk_). */
         const val KEY_ACTIVATION_DELAY_MS = 100L
+        /**
+         * Messages other than states that may wait for one client before it is dropped. Room for the
+         * voice pre-roll (2 s of 16 kHz audio, 64 KiB) and several seconds of audio after it.
+         */
+        internal const val MAX_QUEUED_BYTES = 512 * 1024
     }
 
     @Volatile var voice: VoiceAssistantHandler? = null
@@ -171,6 +178,8 @@ class ApiServer(
     /** [KEEPALIVE_MS] / [UNRESPONSIVE_MS]; shorter in tests. Set before [start]. */
     @Volatile var keepaliveMs = KEEPALIVE_MS
     @Volatile var unresponsiveMs = UNRESPONSIVE_MS
+    /** Makes the listening socket; a test passes one whose sockets it can hold mid-write. Set before [start]. */
+    @Volatile internal var newServerSocket: () -> ServerSocket = { ServerSocket() }
     private var keepaliveTimer: java.util.concurrent.ScheduledExecutorService? = null
     @Volatile private var voiceConn: Connection? = null
 
@@ -220,7 +229,7 @@ class ApiServer(
 
     @Throws(IOException::class)
     fun start() {
-        val ss = ServerSocket()
+        val ss = newServerSocket()
         ss.reuseAddress = true
         ss.bind(InetSocketAddress(port))
         serverSocket = ss
@@ -286,7 +295,9 @@ class ApiServer(
                         c.close()
                     }
                 } else if (idle > keepaliveMs) {
-                    c.pingSent = c.send(listOf(Frame(Msg.PING_REQUEST, ByteArray(0))))
+                    // Set first: the writer may send the ping, and the reader handle its answer, before send() returns.
+                    c.pingSent = true
+                    if (!c.send(listOf(Frame(Msg.PING_REQUEST, ByteArray(0))))) c.pingSent = false
                 }
             } catch (t: Throwable) { EspHomeLog.w("keepalive failed", t) }
         }
@@ -318,18 +329,18 @@ class ApiServer(
     fun publishStates() {
         // Sent under the lock so a connection that is subscribing can't get updates out of order.
         synchronized(stateLock) {
-            val changed = ArrayList<Frame>()
+            val changed = ArrayList<Pair<Int, Frame>>()
             for (e in entities) {
                 if (e is EventEntity) continue
                 val st = safeState(e) ?: continue
                 val prev = lastStates[e.key]
                 if (prev == null || !prev.contentEquals(st)) {
                     lastStates[e.key] = st
-                    changed += Frame(e.stateType, st)
+                    changed += e.key to Frame(e.stateType, st)
                 }
             }
             if (changed.isEmpty()) return
-            for (c in connections) if (c.subscribedStates) c.send(changed)
+            for (c in connections) if (c.subscribedStates) c.sendStates(changed)
         }
     }
 
@@ -347,7 +358,7 @@ class ApiServer(
     }
 
     private inner class Connection(val id: Int, private val socket: Socket) {
-        private val writeLock = Any()
+        private val outbox = Outbox(MAX_QUEUED_BYTES)
         private lateinit var transport: FrameTransport
         @Volatile var subscribedStates = false
         @Volatile var isOpen = true
@@ -358,7 +369,7 @@ class ApiServer(
         /** Set when the key changed: only the disconnect handshake is processed from now on. */
         @Volatile private var retired = false
         private val remote = socket.remoteSocketAddress?.toString() ?: "?"
-        /** Handshake done: the keepalive applies from now on. */
+        /** Handshake done and the writer running: messages can be sent, and the keepalive applies. */
         @Volatile var ready = false
         /** When the last frame arrived from the client; [pingSent]: we pinged since then. */
         @Volatile var lastRead = 0L
@@ -396,6 +407,7 @@ class ApiServer(
                     return
                 }
                 authenticated = k != null && active != null && transport is NoiseTransport
+                Thread(::writeLoop, "esphome-write-$id").apply { isDaemon = true; start() }
                 lastRead = System.currentTimeMillis(); ready = true
                 while (isOpen) {
                     val f = transport.read() ?: break
@@ -416,19 +428,48 @@ class ApiServer(
             }
         }
 
-        fun send(frames: List<Frame>): Boolean {
-            if (!isOpen || !::transport.isInitialized) return false
-            return try {
-                synchronized(writeLock) { transport.write(frames) }
-                true
+        private fun writeLoop() {
+            try {
+                while (true) {
+                    transport.write(outbox.take() ?: return)
+                    outbox.written()
+                }
             } catch (e: IOException) {
-                EspHomeLog.w("[$id] write failed: ${e.message}")
+                if (isOpen) EspHomeLog.w("[$id] write failed: ${e.message}")
                 close()
-                false
+            } catch (e: Exception) {
+                EspHomeLog.w("[$id] writer error", e)
+                close()
             }
         }
 
+        /**
+         * Queues [frames] for the writer; with [wait], returns once they are written (only on this
+         * connection's own threads). False if the connection is closed, or was full and is now closed.
+         */
+        fun send(frames: List<Frame>, wait: Boolean = false): Boolean {
+            if (!isOpen || !ready) return false
+            if (if (wait) outbox.offerAndWait(frames) else outbox.offer(frames)) return true
+            if (isOpen) {
+                EspHomeLog.w("[$id] $remote is not reading: ${MAX_QUEUED_BYTES / 1024} KiB waiting to be sent; closing")
+                close()
+            }
+            return false
+        }
+
+        /** (entity key, state) pairs; each replaces that entity's state if one is still waiting. */
+        fun sendStates(states: List<Pair<Int, Frame>>) {
+            if (!isOpen || !ready) return
+            for ((key, f) in states) outbox.offerState(key, f)
+        }
+
         private fun reply(type: Int, w: ProtoWriter = ProtoWriter()) = send(listOf(Frame(type, w.toByteArray())))
+
+        /** Answers, and closes once the answer is written (the client waits for it before it closes). */
+        private fun replyAndClose(type: Int) {
+            send(listOf(Frame(type, ByteArray(0))), wait = true)
+            close()
+        }
 
         /** Server-initiated disconnect (entity set changed): ask, then close after the ack or 2 s. */
         fun requestDisconnect() {
@@ -459,6 +500,7 @@ class ApiServer(
         fun close() {
             if (!isOpen) return
             isOpen = false
+            outbox.close()
             try { socket.close() } catch (_: IOException) {}
             connections -= this
             if (voiceConn === this) {
@@ -472,7 +514,7 @@ class ApiServer(
             val m = ProtoMessage(f.data)
             if (retired) {
                 when (f.type) {
-                    Msg.DISCONNECT_REQUEST -> { reply(Msg.DISCONNECT_RESPONSE); close() }
+                    Msg.DISCONNECT_REQUEST -> replyAndClose(Msg.DISCONNECT_RESPONSE)
                     Msg.DISCONNECT_RESPONSE -> close()
                 }
                 return
@@ -492,7 +534,7 @@ class ApiServer(
                     )
                 }
                 Msg.AUTHENTICATION_REQUEST -> Unit // password auth was removed in ESPHome 2026.1; no reply
-                Msg.DISCONNECT_REQUEST -> { reply(Msg.DISCONNECT_RESPONSE); close() }
+                Msg.DISCONNECT_REQUEST -> replyAndClose(Msg.DISCONNECT_RESPONSE)
                 Msg.DISCONNECT_RESPONSE -> close()
                 Msg.PING_REQUEST -> reply(Msg.PING_RESPONSE)
                 Msg.NOISE_ENCRYPTION_SET_KEY_REQUEST -> {
@@ -501,7 +543,8 @@ class ApiServer(
                     val r = k?.handleSetKey(m.bytes(1)) ?: SetKeyResult(false, false, "encryption not supported")
                     val how = if (transport is NoiseTransport) "Noise" else "plaintext (deprecated by ESPHome)"
                     EspHomeLog.i("[$id] NoiseEncryptionSetKeyRequest over $how: ${r.message}")
-                    reply(Msg.NOISE_ENCRYPTION_SET_KEY_RESPONSE, ProtoWriter().bool(1, r.success))
+                    // Written before the key activates: activation closes every connection and drops what still waits.
+                    send(listOf(Frame(Msg.NOISE_ENCRYPTION_SET_KEY_RESPONSE, ProtoWriter().bool(1, r.success).toByteArray())), wait = true)
                     if (r.activate) scheduleActivation()
                 }
                 Msg.PING_RESPONSE, Msg.GET_TIME_RESPONSE -> Unit
@@ -525,7 +568,7 @@ class ApiServer(
                     } else if (e.authOnly && !authenticated) {
                         EspHomeLog.w("[$id] command for ${e.objectId} refused: only from an authenticated (encrypted, provisioned) connection")
                         // the client may already show the new value: send it the unchanged state back
-                        safeState(e)?.let { st -> if (subscribedStates) send(listOf(Frame(e.stateType, st))) }
+                        safeState(e)?.let { st -> if (subscribedStates) sendStates(listOf(e.key to Frame(e.stateType, st))) }
                     } else {
                         EspHomeLog.i("[$id] command for ${e.objectId}")
                         try { e.command(m) } catch (t: Throwable) { EspHomeLog.w("command ${e.objectId} failed", t) }
@@ -572,11 +615,11 @@ class ApiServer(
                 lastStates[e.key] = st
                 if (prev != null && !prev.contentEquals(st)) {
                     connections.filter { it !== this && it.subscribedStates }
-                        .forEach { it.send(listOf(Frame(e.stateType, st))) }
+                        .forEach { it.sendStates(listOf(e.key to Frame(e.stateType, st))) }
                 }
-                Frame(e.stateType, st)
+                e.key to Frame(e.stateType, st)
             }
-            send(frames)
+            sendStates(frames)
             subscribedStates = true
         }
 
