@@ -87,7 +87,7 @@ open class AppManage(
     private val host = Host()
 
     /** The panes' Blueprints cards; the Manage page links them in a new tab. */
-    private val blueprints = PanelBlueprints.forPanel(app, runtime.build, prefs)
+    private val blueprints = PanelBlueprints.forPanel(app, runtime, prefs)
 
     val server = ManageServer(
         host = host,

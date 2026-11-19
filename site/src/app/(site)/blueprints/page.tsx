@@ -82,7 +82,7 @@ export default async function BlueprintsPage() {
         })
       )}
 
-      {core.length + groups.length > 0 && (
+      {ref && core.length + groups.length > 0 && (
         <p className={s.fine}>From {releaseName(ref)}: the same files a panel on that version offers. MIT, like the rest of the repository.</p>
       )}
     </>

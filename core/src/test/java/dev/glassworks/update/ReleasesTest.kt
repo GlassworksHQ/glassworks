@@ -1,5 +1,7 @@
 package dev.glassworks.update
 
+import dev.glassworks.pane.BlueprintLinks
+import dev.glassworks.platform.AppBuild
 import dev.glassworks.testing.RepoFiles
 import org.json.JSONArray
 import org.json.JSONObject
@@ -261,6 +263,34 @@ class ReleasesTest {
     @Test fun theLegacyLinesIdIsItsOwn() {
         assertEquals("glassworks-generic-android-legacy", ReleaseLine.GENERIC_ANDROID_LEGACY.id)
         assertEquals("glassworks-generic-android", ReleaseLine.GENERIC_ANDROID.id)
+    }
+
+    /** Each line's tag for a version is one its own update check reads as that version, and no other line's. */
+    @Test fun eachLineTagsAVersionWithItsOwnPrefix() {
+        assertEquals("aqara-s1-plus-v0.5.0", ReleaseLine.AQARA_S1_PLUS.tag("0.5.0"))
+        assertEquals("generic-android-v0.5.0", ReleaseLine.GENERIC_ANDROID.tag("0.5.0"))
+        assertEquals("generic-android-legacy-v0.5.0", ReleaseLine.GENERIC_ANDROID_LEGACY.tag("0.5.0"))
+        val lines = listOf(ReleaseLine.AQARA_S1_PLUS, ReleaseLine.GENERIC_ANDROID, ReleaseLine.GENERIC_ANDROID_LEGACY)
+        for (line in lines) {
+            assertEquals(line.id, AppVersion.parse("0.5.0"), line.tagVersion(line.tag("0.5.0")))
+            for (other in lines - line) assertNull("${other.id} reads ${line.tag("0.5.0")}", other.tagVersion(line.tag("0.5.0")))
+        }
+    }
+
+    /**
+     * A release's blueprint links point at its own line's tag (#592): `v0.4.4` was the last plain S1 tag, and
+     * a link to a tag that doesn't exist fails in Home Assistant's import dialog. A test build keeps its commit
+     * and a development build follows main, on every line.
+     */
+    @Test fun eachLinesBlueprintsComeFromItsOwnReleaseTag() {
+        val release = AppBuild("0.5.0", 500, debug = false)
+        assertEquals("aqara-s1-plus-v0.5.0", BlueprintLinks.ref(release, ReleaseLine.AQARA_S1_PLUS::tag))
+        assertEquals("generic-android-v0.5.0", BlueprintLinks.ref(release, ReleaseLine.GENERIC_ANDROID::tag))
+        assertEquals("generic-android-legacy-v0.5.0", BlueprintLinks.ref(release, ReleaseLine.GENERIC_ANDROID_LEGACY::tag))
+        for (line in listOf(ReleaseLine.AQARA_S1_PLUS, ReleaseLine.GENERIC_ANDROID, ReleaseLine.GENERIC_ANDROID_LEGACY)) {
+            assertEquals("28c157d", BlueprintLinks.ref(release.copy(testBuild = "28c157d"), line::tag))
+            assertEquals("main", BlueprintLinks.ref(AppBuild("0.1.0", 1, debug = true), line::tag))
+        }
     }
 
     /**
