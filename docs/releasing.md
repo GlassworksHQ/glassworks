@@ -435,9 +435,10 @@ the releases that exist by then, so two tags of one line pushed together can't p
 `gh release create`, so a release never has half its ABIs. Installed copies see it within 24 hours, or at once
 through `homeassistant.update_entity` on the app's update entity.
 
-Not part of it yet: Kiln still installs the generic app and the Mirror's build from a test build's APK
-(`?apk=local`), and its release route serves the S1 app only (`kiln/apps/kiln/src/app/api/release/[frame]/route.ts`),
-so the workflow doesn't rebuild the installer.
+Kiln reads these releases at run time, so the workflow doesn't rebuild the installer. Its release route
+(`kiln/apps/kiln/src/app/api/release/[frame]/route.ts`) serves each line's APKs and their `.sha256`. The Mirror's page
+and `/android`, behind `?apk=release`, install the newest release of their line (`generic-android-legacy-v*` and
+`generic-android-v*`), its arm64-v8a APK, checked against that `.sha256`.
 
 ## Frame releases
 

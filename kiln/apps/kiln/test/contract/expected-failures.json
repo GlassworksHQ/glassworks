@@ -1,7 +1,6 @@
 {
   "$comment": "Contract cases a flow fails on main, by driver id and case id, each with the issue that fixes it. contract.test.ts runs these as it.fails: fix one and its test turns red until the line here goes. gate.test.ts refuses a public frame with any line here. This file only shrinks (#621).",
   "lululemon-mirror": {
-    "auth-refused-while-booting": "#621: FlashSession.connectAdb stops at the first refusal and leaves the error on the adb screen",
     "usb-drop": "#621: Try again (Back to the files) goes back to the image step, two steps before the write that stopped",
     "reload@install": "#621: FlashSession keeps nothing across a page load, so the new page doesn't know the Mirror was being written",
     "reload@first-boot": "#621: after a reload the page starts again at the image, knowing nothing, so finishing means flashing again",
@@ -9,8 +8,7 @@
   },
   "lululemon-mirror/app": {
     "auth-refused-while-booting": "#621: MirrorSession.connect stops at the first refusal",
-    "reload@install": "#621: MirrorSession keeps nothing across a page load, so the new page doesn't know the app was going in",
-    "no-touch": "#621: installMirror waits for a tap on Android's chooser, and the Mirror has no touchscreen"
+    "reload@install": "#621: MirrorSession keeps nothing across a page load, so the new page doesn't know the app was going in"
   },
   "generic-android": {
     "auth-refused-while-booting": "#621: AndroidSession.connect stops at the first refusal",

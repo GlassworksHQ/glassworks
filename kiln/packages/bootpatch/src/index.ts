@@ -5,7 +5,7 @@
 // Kiln's boot image patcher: the Magisk patch of frames/aqara-s1-plus/tools/root/patch-boot-magisk.sh,
 // byte for byte, plus the partition edits around it (vbmeta flags, boot logo).
 
-import { extractMagiskPayload, type MagiskBinaries } from './apk';
+import { extractMagiskBusybox, extractMagiskPayload, type MagiskBinaries } from './apk';
 import { loadCompressor } from './compress';
 import { type OverlayFile, type PatchImageInput, type PatchResult, openBoot, patchWith, ramdiskState } from './patch';
 
@@ -35,6 +35,11 @@ export async function patchBoot(input: PatchInput): Promise<PatchResult> {
   const { magiskinit, magisk, initLd } = await extractMagiskPayload(input.magiskApk, comp);
   const binaries: MagiskBinaries = { magiskinit, magisk, initLd };
   return patchWith({ boot: input.boot, magisk: binaries, overlay: input.overlay, preinitDevice: input.preinitDevice }, comp);
+}
+
+/** Magisk's own busybox from the Magisk APK (the same one `patchBoot` takes), for s1Overlay's `magiskBusybox`. */
+export async function magiskBusybox(magiskApk: Uint8Array): Promise<Uint8Array> {
+  return extractMagiskBusybox(magiskApk, await loadCompressor());
 }
 
 /** True when the image's ramdisk has been patched by Magisk. */

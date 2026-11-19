@@ -669,6 +669,18 @@ out=$("$REPO/frames/aqara-s1-plus/tools/install.sh" --undo --dry-run </dev/null 
 check "dry run: shows the disable" has "$out" "+ adb shell pm disable-user --user 0 sh.edm.s1kiosk"
 check "dry run: changes nothing" test "$(cat "$T/installed") $(cat "$T/disabled")" = "debug 0"
 
+echo "== fel-install.sh step 9: waits on the device that came back, with others on the same adb server"
+# The two helpers, out of the script, against a fake adb whose device list is $T/adbdev.
+sed -n '/^adb_serials() {/p; /^pick_adb_serial() {/,/^}/p' "$REPO/frames/aqara-s1-plus/tools/install/fel-install.sh" > "$T/pick.sh"
+printf '#!/usr/bin/env bash\necho "List of devices attached"; cat "%s" 2>/dev/null\n' "$T/adbdev" > "$T/adb-list"; chmod 755 "$T/adb-list"
+pick() { printf "$2" > "$T/adbdev"; ADB="$T/adb-list" bash -c '. "$1"; pick_adb_serial "$2"' _ "$T/pick.sh" "$1"; }
+check "the Mirror was there during fastboot, the S1 came back: the S1" test "$(pick MIRROR1 'MIRROR1\tdevice\nS1PANEL\tdevice\n')" = S1PANEL
+check "...also while it is still unauthorized" test "$(pick MIRROR1 'MIRROR1\tdevice\nS1PANEL\tunauthorized\n')" = S1PANEL
+check "...not yet back: nothing (keep waiting), never the Mirror" test -z "$(pick MIRROR1 'MIRROR1\tdevice\n')"
+check "alone on adb: the one device" test "$(pick '' 'S1PANEL\tdevice\n')" = S1PANEL
+check "two new devices: nothing, it can't tell" test -z "$(pick MIRROR1 'MIRROR1\tdevice\nA\tdevice\nB\tdevice\n')"
+check "nothing during fastboot, two now: nothing" test -z "$(pick '' 'A\tdevice\nB\tdevice\n')"
+
 echo "== fel-install.sh --undo: refuses an incomplete backup, restores a complete one"
 # Stub tools: nothing reaches FEL or a real fastboot. The fake fastboot is our U-Boot, already up,
 # with partitions in $T/emmc: flash writes one, and fb-read-partition.sh's oem run + get_staged read

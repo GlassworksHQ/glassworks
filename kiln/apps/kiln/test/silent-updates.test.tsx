@@ -105,7 +105,7 @@ describe('the Mirror', () => {
   });
 
   it('a read that fails says Not confirmed, and undo shows no block', async () => {
-    const m = new FakeMirror({ picks: (c) => c.find((x) => x === GLASSWORKS.home) });
+    const m = new FakeMirror();
     const run = m.run.bind(m);
     let installed = false;
     m.run = async (cmd: string) => {

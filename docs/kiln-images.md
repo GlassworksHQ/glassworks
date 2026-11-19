@@ -166,5 +166,5 @@ https://kiln.glassworks.dev/lululemon-mirror?image=glass-panes
 
 Put it in your README. Every safety step stays: nothing downloads before the person clicks, and
 "Install Glassworks instead" is in the foot. An unknown id, or `glassworks`, opens the normal page.
-While the Mirror's page is test only, add `apk=local`:
-`https://kiln.glassworks.dev/lululemon-mirror?apk=local&image=glass-panes`.
+While the Mirror's page is test only, add `apk=release` (or `apk=local`):
+`https://kiln.glassworks.dev/lululemon-mirror?apk=release&image=glass-panes`.

@@ -468,6 +468,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   it straight away. The *Thread join* sensor says how it went. Pasting the dataset still works.
 
 ### Fixed
+- **Magisk modules load on the S1.** Magisk on our panels never loaded a module: it needs its own busybox in place
+  first, which the Magisk app puts there, and our installers didn't. The S1's boot image now carries Magisk's busybox,
+  from the same official Magisk download, and puts it in place at boot. Nothing changes on screen yet; the setup
+  hotspot's Glassworks name (#430) needs it. Comes with a new install from Kiln (the boot image).
 - **Kiln no longer waits for ever on a download that stopped.** If one of the installer's files stops arriving
   for 30 seconds, Kiln stops with an error and *Try again*, instead of a progress bar that never moves.
 - **With Screen mode set to always, walking up no longer turns on a screen you turned off.** If you turn the screen

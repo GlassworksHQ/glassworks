@@ -8,6 +8,7 @@ import type { ImageRecipe } from '@glassworks/kiln-core';
 import { fmtSize } from '@glassworks/kiln-core';
 import * as RadioGroup from '@radix-ui/react-radio-group';
 import type { FileCheck, FlashSession, FlashState } from '../flash';
+import { TestOnly } from '../ReleaseApk';
 import c from './choice.module.css';
 
 type P = { f: FlashSession; s: FlashState };
@@ -57,7 +58,7 @@ export function Choose({ f, s }: P) {
   const others = f.recipes.filter((x) => x.community).length;
   return (
     <section className="card" aria-labelledby="h">
-      <div className="row"><span className="pill soon">Test only</span></div>
+      <TestOnly />
       <h2 id="h">What goes on the Mirror?</h2>
       <p className="lede">{s.open ? 'Glassworks, or a community image as its project publishes it. Kiln downloads either one, checks it, and writes it over USB.' : 'Kiln downloads Glassworks, checks it, and writes it over USB.'}</p>
       {from && (
@@ -209,7 +210,7 @@ export function WayBack({ f, other }: { f: FlashSession; other: ImageRecipe }) {
     <div className="well">
       <div className="grow">
         <span className="small">The way back</span>
-        <span>{other.community ? `For ${other.name} instead` : `To go back to ${other.name}`}, put the Mirror in fastboot and pick {other.name} on this page. It replaces {now.community ? `${now.name} and its data` : 'Glassworks and its settings'}.</span>
+        <span>{other.community ? `For ${other.name} instead` : `To go back to ${other.name}`}, pick {other.name} here{now.community ? ' and put the Mirror in fastboot' : ': Kiln restarts the Mirror into fastboot over USB, with no button to hold'}. It replaces {now.community ? `${now.name} and its data` : 'Glassworks and its settings'}.</span>
       </div>
       <button type="button" className="btn ghost" onClick={() => f.wayBack(other.id)}>{other.community ? `Install ${other.name} instead` : `Install ${other.name}`}</button>
     </div>

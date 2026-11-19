@@ -13,7 +13,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: ReactNode }) => <a href={href} {...p}>{children}</a> }));
 
-import { AUTH_MS, FlashSession, type ImageMaker } from '../src/mirror/flash';
+import { AUTH_MS, FlashSession, READ_MS, type ImageMaker } from '../src/mirror/flash';
 import { flashDemo } from '../src/mirror/flashDemo';
 import { DEMO_KEY, KEEP_DEMOS, keepDemo } from '../src/mirror/keepDemo';
 import { Flash, leaveWarning } from '../src/mirror/MirrorWizard';
@@ -37,13 +37,22 @@ describe('keeping the Mirror in Home Assistant over a reflash', () => {
     expect(embers().length).toBeLessThanOrEqual(1);
   });
 
-  it('the fastboot screen links to the step; it only reads before the restart', async () => {
-    await show(await flashDemo('flash-fastboot', true));
-    expect(screen.getByText('Keep its Home Assistant device first')).toBeTruthy();
+  it('the fastboot screen\'s Restart into fastboot is the step for Glassworks; it only reads before the restart', async () => {
+    const d = await flashDemo('flash-fastboot', true);
+    await show(d);
+    fireEvent.click(screen.getByRole('button', { name: 'Restart into fastboot' }));
+    expect(d.flash.state.screen).toBe('keep');
     cleanup();
     await show(await keepDemo('flash-keep', true));
     expect(screen.getByText(/Nothing is written yet/)).toBeTruthy();
     expect(embers()).toEqual(['Connect']);
+  });
+
+  it('after the keep step restarted the Mirror, "Fastboot by hand" lands on Connect, not another restart', async () => {
+    const d = await keepDemo('flash-keep-held', true);
+    expect(d.flash.state.restarted).toBe(true);
+    d.flash.skipKeep();
+    expect(d.flash.state).toMatchObject({ screen: 'fastboot', restarted: true });
   });
 
   it('the hand-back row shows only with a key held', async () => {
@@ -92,7 +101,7 @@ async function ready(o: { before?: () => Promise<PanelShell>; after?: FirstBootM
   const mirror = new MirrorSession({ connect: async () => { throw new Error('unused'); } }, true);
   const f = new FlashSession({
     images, refract: 'https://proxy.test', requestFastboot: async () => fb,
-    requestAdb: async (r) => { asked.push(r?.authMs); return r?.authMs !== undefined ? (o.before ?? (async () => { throw new Error('unused'); }))() : after; },
+    requestAdb: async (r) => { asked.push(r?.authMs); return r?.authMs === AUTH_MS ? (o.before ?? (async () => { throw new Error('unused'); }))() : after; },
     adbKey: () => 'QAAA= kiln@test', apk: () => mirror.apkBytes(), sleep: async () => {},
     flashedHere: { get: () => flashed, set: () => { flashed = true; } },
     holdingKey: (on) => holding.push(on),
@@ -283,6 +292,29 @@ describe('the keep step, on the real session (#580)', () => {
     expect(r.reboots).toEqual([]);
     expect(f.state.key).toBeUndefined();
     expect(f.state.connectError).toMatch(/socket closed/);
+  });
+
+  it('a Mirror that stops answering the app\'s version read ends in an error, with no restart, and lets go', async () => {
+    vi.useFakeTimers();
+    try {
+      const rebootToBootloader = vi.fn(async () => {});
+      const close = vi.fn(async () => {});
+      const hung: PanelShell = {
+        run: (cmd) => (cmd === 'getprop ro.board.platform' ? Promise.resolve({ out: 'msm8916\n', code: 0 }) : new Promise(() => {})),
+        push: async () => {}, rebootToBootloader, close,
+      };
+      const { f } = await ready({ before: async () => hung });
+      f.toKeep();
+      const reading = f.readKey();
+      await vi.advanceTimersByTimeAsync(READ_MS);
+      await reading;
+      expect(rebootToBootloader).not.toHaveBeenCalled();
+      expect(close).toHaveBeenCalled();
+      expect(f.state.key).toBeUndefined();
+      expect(f.state.connectError).toMatch(/didn't answer `dumpsys package .+` in 15 s/);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('another device isn\'t read', async () => {
