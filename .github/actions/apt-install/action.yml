@@ -3,8 +3,8 @@
 # On 2026-11-18 and 19, `apt-get update && apt-get install ffmpeg` took 0.3 to 26 minutes (median 10 in perf-webrtc,
 # which then hit its 30-minute limit), and failed twice on a mirror's 503. The cache is named by the runner image and
 # the packages, so its files are the versions that image's package lists name: with it, nothing is downloaded and
-# there's no `apt-get update`. Runs that aren't for a pull request save it (main's pushes, the nightly run); a pull
-# request only reads it, as with Gradle's caches.
+# there's no `apt-get update`. Without that image's own entry, another image's files go first. Runs that aren't
+# for a pull request save it (main's pushes, the nightly run); a pull request only reads it, as with Gradle's caches.
 name: apt-get install, cached
 description: Installs Ubuntu packages from a cache of their .deb files, named by the runner image
 inputs:
@@ -20,16 +20,21 @@ runs:
       env:
         PACKAGES: ${{ inputs.packages }}
       run: |
-        # ImageOS and ImageVersion are set on GitHub's hosted runners (ubuntu24, 20261109.1, …).
+        # ImageOS and ImageVersion are set on GitHub's hosted runners (ubuntu24, 20261116.133.1, …). Several image
+        # versions serve at once (two in one run on 2026-11-19), so a run takes another version's files when its own
+        # aren't saved: apt then fetches only what differs.
         # shellcheck disable=SC2086 # a list of packages
         names=$(printf '%s\n' $PACKAGES | sort -u | paste -sd+ -)
-        echo "key=apt-${ImageOS:-image}-${ImageVersion:-unknown}-${RUNNER_ARCH}-${names}" >> "$GITHUB_OUTPUT"
+        prefix="apt-${ImageOS:-image}-${RUNNER_ARCH}-${names}-"
+        echo "prefix=$prefix" >> "$GITHUB_OUTPUT"
+        echo "key=$prefix${ImageVersion:-unknown}" >> "$GITHUB_OUTPUT"
 
     - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       id: restore
       with:
         path: ~/.cache/apt-archives
         key: ${{ steps.key.outputs.key }}
+        restore-keys: ${{ steps.key.outputs.prefix }}
 
     - name: apt-get install
       shell: bash

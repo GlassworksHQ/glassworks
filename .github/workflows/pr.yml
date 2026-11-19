@@ -44,8 +44,8 @@
 #            id, minSdk, the system permissions and its icons on API 23 (tools/legacy/apk-icons.py)
 #            checked; no budget yet. Every APK also goes through tools/release/check-update-compat.sh --app (it still updates
 #            installed copies in place)
-#   branding rebuilds the S1's boot animation and splash (branding/boot/generate.py) in a pinned
-#            Python image and fails if the committed files differ
+#   branding rebuilds the S1's and the Mirror's boot animation and splash (branding/boot/generate.py) in a
+#            pinned Python image, one frame per runner, and fails if the committed files differ
 #   site     glassworks.dev (site/): lint, typecheck, the static build, and the SEO check on the built
 #            site (every page in the sitemap with a title, description, canonical and preview image).
 #            The build also checks the frames' data, banners and Clarity grades
@@ -877,33 +877,35 @@ jobs:
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.branding != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    # One frame per runner (#536): one after the other they took 2.5 and 5.5 minutes, and side by side on one
+    # runner 4.3 and 7.2 (the generator uses every core).
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - frame: aqara-s1-plus
+            out: branding/glass-tile
+          - frame: lululemon-mirror
+            out: branding/lululemon-mirror
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
 
       # The versions are the ones in branding/boot/README.md; the outputs are byte-identical on
-      # macOS arm64 and in this image (checked 2026-11-13). The two frames render side by side (2.5 and 5.5 minutes
-      # one after the other, #536), after the pinned font is fetched once: both would write its file in /tmp.
-      - name: Rebuild the S1's and the Mirror's boot branding
+      # macOS arm64 and in this image (checked 2026-11-13).
+      - name: Rebuild the boot branding (${{ matrix.frame }})
+        env:
+          FRAME: ${{ matrix.frame }}
+          OUT: ${{ matrix.out }}
         run: |
-          docker run --rm -v "$PWD":/w -w /w \
+          docker run --rm -v "$PWD":/w -w /w -e FRAME -e OUT \
             python:3.11-slim@sha256:07d4824036af339fa1b6ef769cc99d9c10a141769538b52b3b597c84f7a7b535 sh -euc '
               apt-get -qq update && apt-get -qq install -y --no-install-recommends curl ca-certificates >/dev/null
               pip -q install --root-user-action=ignore pillow==13.0.0 numpy==2.4.6 uharfbuzz==0.57.0 pyoxipng==9.1.1
-              python - <<"PY"
-          import sys
-          sys.path.insert(0, "branding/boot")
-          import formats
-          formats.font_file("inter")
-          PY
-              python branding/boot/generate.py --frame aqara-s1-plus --out branding/glass-tile > /tmp/s1.log 2>&1 & s1=$!
-              python branding/boot/generate.py --frame lululemon-mirror --out branding/lululemon-mirror > /tmp/mirror.log 2>&1 & mirror=$!
-              r=0
-              wait "$s1" || r=1; cat /tmp/s1.log
-              wait "$mirror" || r=1; cat /tmp/mirror.log
-              exit "$r"'
+              python branding/boot/generate.py --frame "$FRAME" --out "$OUT"'
 
+      # The whole of branding/, not only this frame's folder: the generator must write nothing else.
       - name: The committed files are what the generator writes
         run: |
           sudo chown -R "$(id -u):$(id -g)" branding
