@@ -5,10 +5,12 @@ evidence: read
 
 # Frame updates on the S1: the loader, signed bundles, and a reflash without opening the panel
 
-**Status (2026-11-18): read and designed, untested on a panel.** The stock firmware answers both open
-questions in #139 on paper: `/data` is not encrypted, and the stock U-Boot has a fastboot `boot`
-command. The no-opening reflash has a likely route, with two premises from the issue corrected below.
-Every panel test is written out in [Panel tests](#panel-tests) and has not run yet.
+**Status (2026-11-19): partly verified.** On paper, the stock firmware answers both open questions in
+#139: `/data` is not encrypted, and the stock U-Boot has a fastboot `boot` command. On the dev panel,
+`adb reboot bootloader` reaches the stock fastboot with no button (attempt 7). But the stock `boot`
+runs only a legacy uImage, not an Android boot image (attempt 8), so the RAM test in the no-opening
+route needs a wrapped image or another plan. Panel tests T0, T1 and T5 have run. T3 is pending, with
+[`fastboot-usb.py`](../tools/fel/fastboot-usb.py) in place of the `fastboot` CLI.
 
 Device: Aqara S1 Plus, firmware 4.5.80. Sources: the stock `boot`, `misc` and boot package
 backups and Aqara's 4.5.80 OTA package, all outside the repo; AOSP `android-10.0.0_r41`; this repo at
@@ -58,7 +60,7 @@ Every S1 in the field needs one more Kiln update to get the loader. Before build
    ```
    - The stock fastboot has `download`, `flash`, `erase`, `getvar`, `oem`, `flashing`, `continue`,
      the reboots, and a **`boot` handler** ("Booting kernel..", "FAILinvalid boot image"). So a RAM
-     test with `fastboot boot` is in the binary.
+     test with `fastboot boot` is in the binary. Attempt 8 narrows it: it runs only a legacy uImage.
    - It has **no `upload`**. That is our patch 0002 in the FEL U-Boot. So stock fastboot can't read a
      partition back, and neither the backup nor the read-back of a write can happen over it.
    - `FAILability is 0` sits next to `frp` and "GMS,fastboot unlock limited used": it is the
@@ -120,6 +122,87 @@ Every S1 in the field needs one more Kiln update to get the loader. Before build
    `vbmeta` flags. `com.lumi.ota` stays disabled ([debloat.md](debloat.md)). That is the S1's
    vendor-updater decision.
 
+7. **Stock fastboot from a Mac** (2026-11-19, verified by the root on the dev panel; #139's comments).
+   - `adb reboot bootloader` reaches the stock fastboot with no button. It enumerates as `1f3a:1010`,
+     interface `ff/42/03`, two bulk endpoints, once macOS's "Allow accessory to connect?" is
+     approved. Every bootloader start is a new accessory, so it asks every time.
+   - The device comes up with **no active configuration**, so `fastboot devices` doesn't list it.
+     After pyusb sent `set_configuration()`, it did.
+   - Over pyusb: `version` 0.5, `max-download-size` 0x02000000 (32 MiB), `secure` yes.
+     `version-bootloader`, `unlocked` and `slot-count` answer "not supported". **`product` answers
+     the panel's serial.**
+   - After that pyusb session, the platform `fastboot getvar` calls came back empty.
+   - `fastboot boot boot-ram.img` (exactly 32 MiB) printed `Sending 'boot.img' (32768 KB)` and
+     never finished in 120 s. Nothing was written.
+
+8. **Why, from the stock fastboot's source** (2026-11-19, read). The stock U-Boot is Allwinner's
+   BSP U-Boot 2018 with its own fastboot gadget (`drivers/sunxi_usb/usb_fastboot.c`,
+   `usb_base_platform.c`, `usbc_dev.c`). The copy read is in `CrealityTech/sonic_pad_os` at
+   `7f37a7fbf`, under `lichee/brandy-2.0/u-boot-2018`, from a T800 board (the A133 family). It is
+   the panel's code: `strings` over the panel's boot package shows the same strings in the same
+   order, offsets 521389–522129 (`Starting download of %d BYTES`, `FAILdownload: data > buffer`,
+   `DATA%08x`, `start addr %s`, `Booting kernel..`, `Image has cmdline:`,
+   `ERROR : bootting failed`, `Booting raw image..`, `do_go fail`, `FAILinvalid boot image`,
+   `0.5`, `Android Fastboot`, `20080411`). The code itself wasn't disassembled.
+   - **`product` is the serial.** `sunxi_fastboot_init` copies the env's `snum` into
+     `sunxi_usb_fastboot_dev[2]` (line 1517), which is the product string. `getvar:product` returns
+     that same string. The USB product descriptor carries it too. `serialno` is the fixed `20080411`.
+   - **`secure: yes` means nothing.** `__get_var` (line 1078) answers `yes` for every board. The real
+     gate is `sunxi_fastboot_status()`, and it guards `getvar`, `download`, `boot`, `flash` and
+     `erase` alike. `getvar` answered, so none of them is refused on this panel. That makes stock
+     `flash` and `erase` live, and `oem`, `flashing` and `reboot-fastboot` (which writes `misc`)
+     aren't gated at all.
+   - **`download` needs the exact byte count.** `__try_to_download` (line 957) refuses only sizes
+     above 32 MiB, so exactly 32 MiB is accepted: no off-by-one. The bulk OUT endpoint (512-byte
+     packets) is read packet by packet in the interrupt handler (`eprx_recv_op`), and the transfer
+     ends only when the write pointer **equals** the buffer start plus the size. One lost packet,
+     or extra bytes, means OKAY never comes. Any host transfer size works.
+   - **A zero-length packet after the data is a hazard, but the CLI doesn't send one.** If it
+     arrives after the transfer has ended, the gadget takes it as an empty command and answers
+     `FAIL`, which the host then reads as the reply to its next command. macOS fastboot's ZLP code
+     is `#if 0` in AOSP (`usb_osx.cpp`), and it applies only to protocol 01 anyway. libusb and WebUSB
+     don't add one.
+   - **The likely cause of the hang: a data-toggle mismatch.** `SET_CONFIGURATION` resets both bulk
+     endpoints, and each reset clears the data toggle (`USBC_Dev_ConfigEp`). `CLEAR_FEATURE` isn't
+     handled: it is commented out in `sunxi_fastboot_standard_req_op`. macOS fastboot calls
+     `ClearPipeStallBothEnds` on both pipes when it opens a device (AOSP `usb_osx.cpp`). That
+     resets the host's toggles, but not the device's. After the pyusb session left the device's
+     toggles at an odd count, the device took the CLI's next packet for a retry, acknowledged it and
+     threw it away. A lost command hangs the CLI. A lost data packet leaves `download` 512 bytes
+     short. This is inferred: no USB capture was taken.
+   - **Stock `boot` won't boot an Android image.** `__boot` (line 1000) sends no reply. It waits
+     1 s, then looks for a legacy uImage header (`0x27051956`) at a fixed offset of 2048 in the
+     buffer. If one is there, it runs `bootm` on it, with the boot image header's command line as
+     the whole `bootargs`. If not, it prints "Booting raw image..", "do_go fail" and returns to the
+     command loop, still in fastboot. The panel's `boot` holds an arm64 `Image` at 2048 (its
+     `ARMd` magic, read 2026-11-19 from the plan B backup), so T3 as written won't boot. Expect no
+     reply, with the panel still answering `getvar`.
+   - **Kiln.** `Fastboot.bootBlob` waits up to 120 s for the `boot` reply and then fails, and
+     `WebUsbBulk.open` selects configuration 1 only when none is active. Both are fine for the first
+     session after a bootloader start. Neither is changed here.
+
+   **Tool.** [`fastboot-usb.py`](../tools/fel/fastboot-usb.py) talks to the stock fastboot over pyusb.
+   It sends `SET_CONFIGURATION` every run, so both toggles start at zero. It never clears a halt,
+   sends no ZLP, and checks the `DATA` size. It redacts `product` and `serialno`. After `boot` it
+   asks `getvar:version` once, to tell "came back without booting" from "USB dropped". It sends
+   only `getvar`, `download`, `boot` and a plain `reboot` (the stock handler restarts the board and
+   writes nothing), and refuses everything else before the wire, `reboot-fastboot` included: that
+   one writes `misc`. Its tests
+   (`tools/fel/test/`) run it against a fake of this state machine.
+
+   **What could make T3 work (untested).** Wrap the kernel as a legacy multi-file uImage (kernel,
+   ramdisk, optionally the dtb) at offset 2048, behind an Android header page. Then stock `boot`
+   would run `bootm` on it. Two limits from the source:
+   - The download buffer is at `0x41000000` (`SDRAM_OFFSET(1000000)`). U-Boot's `bootm` refuses a
+     legacy multi image whose kernel load range overlaps the image, so the 20.5 MB kernel can't load
+     at `0x40080000`. It needs a 2 MiB-aligned base above the buffer, plus `text_offset` 0x80000.
+   - A non-empty header command line replaces `bootargs` entirely, so it has to carry what the
+     env's `setargs_*` adds (`partitions=`, `snum`, MACs). Those values are device-unique: build
+     the image on the host from `/proc/cmdline`, and never commit or paste it.
+
+   If the maintainer prefers, `flash` without a RAM test is the other way. A read-back can then
+   happen only from Android, after the panel boots the new image.
+
 ## Result
 
 ### The open questions in #139
@@ -128,7 +211,7 @@ Every S1 in the field needs one more Kiln update to get the loader. Before build
 |---|---|---|
 | Is `/data` readable at `post-fs-data`? | Yes: plain f2fs, mounted in `on fs`, no encryption | Read: vendor fstab (attempt 1). The panel check is `ro.crypto.state` |
 | Fixed service slots or a generic runner? | Fixed, named slots, each run through the loader. Plus two spare slots for services that don't exist yet | Design below |
-| No-opening route | Route 1 (stock fastboot's `boot`, then `flash`) is in the binary. The way into fastboot and its lock gate are untested | Attempts 2–4; panel tests T1–T4 |
+| No-opening route | `adb reboot bootloader` reaches stock fastboot, and its gate lets `download`, `boot` and `flash` through. Stock `boot` only runs a legacy uImage, so the RAM test needs a wrapped image | Attempts 2–4, 7, 8; panel tests T1 (verified), T3 pending |
 | Root writes `boot` from Android | Not on field panels: adb has no root. Only on panels with adb root (the dev panel) | Attempt 5 |
 
 ### The loader
@@ -221,8 +304,9 @@ stopping after step 3 leaves the panel working as before.
    release the app ships both bundles: the radio bundle for 0.4.3 boot images and the frame bundle
    for loader images.
 2. **Patch** that image with the loader. The patch is the same as from the FEL path, byte for byte.
-3. **`adb reboot bootloader`** (no root needed), then on the stock U-Boot's fastboot: `getvar product`,
-   then **`fastboot boot` the new image, in RAM**. Kiln waits for adb, then checks the loader:
+3. **`adb reboot bootloader`** (no root needed), then on the stock U-Boot's fastboot: `getvar product`
+   (it answers the serial: never log it), then **`fastboot boot` the new image, in RAM**. Attempt 8:
+   stock `boot` runs only a legacy uImage, so this step needs the image wrapped as one (untested). Kiln waits for adb, then checks the loader:
    `ro.glassworks.frame.version`, the slots running, the bundle state, and the radio mode carried over.
 4. **Write.** Back to fastboot (`adb reboot bootloader`), `fastboot flash boot`, then `fastboot boot`
    the same image once more. From that system, the loader's `boot` export reads the partition back
@@ -256,8 +340,12 @@ All host-side and read-only. The images are local backups, never in the repo.
 
 ## Panel tests
 
-None of these has run yet. The results go here, with dates. Each writes only bytes the panel already
-has. They need a panel with adb root (a dev boot image) for the backup and for T5. The root's run
+T0, T1 and T5 ran on 2026-11-19 (attempt 7 and #139's comments). T1 passed once macOS allowed the
+accessory, T5 passed, and T2 wasn't needed. Run T3 with `fastboot-usb.py`, not the `fastboot` CLI
+(attempt 8). T4 needs `fastboot flash`, which the tool refuses on purpose, so T4 stays pending until
+a write procedure for the stock fastboot is written and reviewed. The results go here, with dates.
+Each test writes only bytes the panel already has, except T2: it writes `bootloader` into `misc`
+bytes 0–31, then puts the backup's bytes back. They need a panel with adb root (a dev boot image) for the backup and for T5. The root's run
 sheet with the same steps is outside the repo.
 
 | Test | What it settles | Writes |
@@ -297,8 +385,9 @@ boot from flash doesn't. `vbmeta` has flags 3, so the changed header boots.
    `cat /dev/block/by-name/boot | head -c 8` as adb's shell (expect permission denied), and the keys
    of `/proc/cmdline` (`tr ' ' '\n' | cut -d= -f1`). The full line holds the serial and MAC addresses:
    keep it out of notes.
-2. **T1**: `adb reboot bootloader`, then `fastboot devices` for a minute. Record the USB vendor and
-   product IDs and `fastboot getvar product|version|max-download-size|secure|unlocked`. If Android
+2. **T1**: `adb reboot bootloader`, approve the Mac's accessory prompt, then `fastboot-usb.py getvar`
+   (not the CLI: attempt 8). Record the USB vendor and product IDs and the getvars. `product` is the
+   panel's serial: the tool prints it as `<redacted>`, and the note records it that way. If Android
    boots instead, nothing was written: go to T2.
 3. **T2** (only if T1 failed): `su -c 'printf bootloader | dd of=/dev/block/by-name/misc bs=32 count=1 conv=notrunc,sync'`,
    then `adb reboot`. Afterwards (from Android, or from T3's RAM system if U-Boot keeps landing in
@@ -306,11 +395,17 @@ boot from flash doesn't. `vbmeta` has flags 3, so the changed header boots.
    `adb push misc32.bin /data/local/tmp/`, then as root
    `dd if=/data/local/tmp/misc32.bin of=/dev/block/by-name/misc bs=32 count=1 conv=notrunc`, and compare
    the first 2048 bytes with the backup.
-4. **T3**: in fastboot, `fastboot boot boot-ram.img`. Wait for `sys.boot_completed`, check
+4. **T3**: in fastboot, `fastboot-usb.py boot boot-ram.img`. **Expected with this image: no boot.**
+   `boot-ram.img` is an Android image with a raw arm64 kernel at offset 2048, and stock `boot` runs
+   only a legacy uImage there (attempt 8). The tool then exits 2 ("did not boot"), and the panel stays
+   in fastboot. That confirms attempt 8. Leave with `fastboot-usb.py reboot`, or power-cycle; nothing
+   was written. A T3 pass needs a uImage-wrapped RAM image, which is untested and not built yet. Only if
+   a boot does start (the tool exits 0, "USB dropped"): wait for `sys.boot_completed`, check
    `ro.boot.gw139=ram`, root, the radio helper, Wi-Fi, and compare the `/proc/cmdline` keys with T0's.
    If nothing comes up within 4 minutes, power-cycle: the panel boots from flash, unchanged.
-5. **T4** (only if T3 passed): back in fastboot, `fastboot flash boot boot.img`, then `fastboot boot
-   boot-ram.img`, and in that RAM system `su -c 'sha256sum /dev/block/by-name/boot'` must equal the
+5. **T4** (only if T3 passed; pending, see above): back in fastboot, `fastboot flash boot boot.img`,
+   then a RAM boot of the uImage-wrapped image that passed T3 (not `boot-ram.img`, which stock `boot`
+   doesn't start). In that RAM system, `su -c 'sha256sum /dev/block/by-name/boot'` must equal the
    backup. Then `adb reboot`. On a mismatch, don't boot from flash: rewrite from the RAM system with T5's
    commands, or use the FEL recovery.
 6. **T5**: `adb push boot.img /data/local/tmp/`, then as root
@@ -326,7 +421,9 @@ bytes with `SHA256SUMS`, and `fastboot reboot`.
 
 ## Open questions
 
-- Which T1–T5 pass. Until then the whole no-opening route is untested.
-- Does `fastboot boot` give Android the env's arguments (`partitions=`, `snum`, MACs)? T3 shows it.
+- Whether T3 confirms attempt 8 (no reply to `boot`, still in fastboot), and whether a uImage-wrapped
+  image boots from stock `boot`. Until then, the RAM test in the no-opening route is untested.
+- Does `fastboot boot` give Android the env's arguments (`partitions=`, `snum`, MACs)? From the
+  source, no: a non-empty header command line replaces `bootargs` (attempt 8).
 - How long does the full bundle check take at `post-fs-data` on the panel? About 40 MB is hashed
   (otbr, the Zigbee runtime and the boot animation). The loader PR measures it.
