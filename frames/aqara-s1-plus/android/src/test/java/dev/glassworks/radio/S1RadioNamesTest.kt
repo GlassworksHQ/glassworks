@@ -2,6 +2,7 @@ package dev.glassworks.radio
 
 import dev.glassworks.s1.radio.AqaraRadio
 import dev.glassworks.s1.radio.RadioHelper
+import dev.glassworks.frame.FrameRelease
 import dev.glassworks.frame.RadioFile
 import dev.glassworks.frame.RadioSetting
 import dev.glassworks.frame.RadioStatus
@@ -21,7 +22,8 @@ class S1RadioNamesTest {
         val ops = ArrayList<String>()
         override fun get(name: String) = (p[name] ?: "").also { ops += "get $name" }
         override fun set(name: String, value: String) { ops += "set $name=$value"; p[name] = value }
-        override fun peek(name: String) = (p[name] ?: "").also { ops += "peek $name" }
+        // The agent reads the frame id once, to pick its names; the calls under test are the rest.
+        override fun peek(name: String) = (p[name] ?: "").also { if (name != FrameRelease.ID_PROP) ops += "peek $name" }
         override fun sleep(ms: Long) {}
     }
 

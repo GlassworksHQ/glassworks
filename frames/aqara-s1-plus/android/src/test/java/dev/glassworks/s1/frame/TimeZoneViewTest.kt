@@ -37,7 +37,7 @@ class TimeZoneViewTest {
     private fun page(queued: MutableList<Runnable>): TimeZoneView {
         TimeZone.setDefault(TimeZone.getTimeZone("Europe/Madrid"))
         val props = object : SysProps {
-            val p = mutableMapOf(S1TimeZone.PROP to "Europe/Madrid", S1TimeZone.PROP_STATUS to "ok Europe/Madrid")
+            val p = mutableMapOf(S1Names.OLD.timeZone to "Europe/Madrid", S1Names.OLD.timeZoneStatus to "ok Europe/Madrid")
             override fun get(name: String) = p[name].orEmpty()
             override fun set(name: String, value: String) { p[name] = value }
         }

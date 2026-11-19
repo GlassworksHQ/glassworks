@@ -26,9 +26,9 @@ class TimeZoneKeeperTest {
         assertNotNull(k.set("Europe/Berlin; reboot"))
         assertNotNull(k.set("Mars/Olympus_Mons"))
         assertNotNull(k.set(""))
-        assertEquals(null, props.p[S1TimeZone.PROP])
+        assertEquals(null, props.p[S1Names.OLD.timeZone])
         assertNull(k.set(" America/Argentina/Buenos_Aires "))
-        assertEquals("America/Argentina/Buenos_Aires", props.p[S1TimeZone.PROP])
+        assertEquals("America/Argentina/Buenos_Aires", props.p[S1Names.OLD.timeZone])
         assertEquals("America/Argentina/Buenos_Aires", k.text())
         assertTrue(changes > 0)
     }
@@ -39,13 +39,13 @@ class TimeZoneKeeperTest {
         val k = TimeZoneKeeper(S1TimeZone(props), zones = { zones }, inline = true, log = {})
         k.refresh()
         assertEquals("now Antarctica/Casey: waiting for the root helper", k.statusText())
-        props.p[S1TimeZone.PROP_STATUS] = "none: no time zone chosen (Time zone in Home Assistant, or the installer)"
+        props.p[S1Names.OLD.timeZoneStatus] = "none: no time zone chosen (Time zone in Home Assistant, or the installer)"
         k.refresh()
         assertTrue(k.statusText(), k.statusText().startsWith("now Antarctica/Casey: no zone chosen"))
-        props.p[S1TimeZone.PROP_STATUS] = "ok Europe/Berlin"
+        props.p[S1Names.OLD.timeZoneStatus] = "ok Europe/Berlin"
         k.refresh()
         assertEquals("Europe/Berlin: kept by the panel's root helper", k.statusText())
-        props.p[S1TimeZone.PROP_STATUS] = "error Mars/X: Android did not accept it (now GMT)"
+        props.p[S1Names.OLD.timeZoneStatus] = "error Mars/X: Android did not accept it (now GMT)"
         k.refresh()
         assertTrue(k.statusText(), k.statusText().endsWith("Mars/X: Android did not accept it (now GMT)"))
     }
@@ -85,6 +85,6 @@ class TimeZoneKeeperTest {
         k.stop()
         k.release()
         Thread.sleep(500)
-        assertEquals("the helper keeps no zone", TimeZoneKeeper.OFF, props.p[S1TimeZone.PROP])
+        assertEquals("the helper keeps no zone", TimeZoneKeeper.OFF, props.p[S1Names.OLD.timeZone])
     }
 }

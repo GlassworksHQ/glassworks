@@ -6,13 +6,13 @@ import android.os.SystemClock
 import dev.glassworks.frame.AgentCapability
 import dev.glassworks.frame.FrameRelease
 import dev.glassworks.frame.GenericAndroid
+import dev.glassworks.frame.RadioSetting
 import dev.glassworks.pane.Pane
 import dev.glassworks.pane.SettingsItem
 import dev.glassworks.pane.SettingsSection
 import dev.glassworks.update.SilentUpdates
 import dev.glassworks.update.UpdateChannelRow
 import dev.glassworks.s1.PanePrefs
-import dev.glassworks.s1.radio.RadioHelper
 import dev.glassworks.radio.RadioMode
 import dev.glassworks.radio.ShellProps
 import dev.glassworks.radio.SysProps
@@ -76,7 +76,7 @@ class S1Device(
     /** The radio pane's `Radio mode`, else the mode the root helper was asked for. */
     private fun radioMode(running: (String) -> Pane?): String =
         running("radio")?.entities()?.firstOrNull { it.objectId == "radio_mode" }?.shownState()?.takeIf { it.isNotBlank() }
-            ?: cached("radio") { props.get(RadioHelper.PROP_MODE) }?.let { RadioMode.fromId(it)?.label ?: RadioMode.OFF.label } ?: "Unknown"
+            ?: cached("radio") { S1Agent(props).radio.setting(RadioSetting.MODE) }?.let { RadioMode.fromId(it)?.label ?: RadioMode.OFF.label } ?: "Unknown"
 
     /** The app can see Aqara's apps (Android 10 lets it); on another firmware none is there and the row is left out. */
     private fun appsReadable(context: Context): Boolean = AQARA_APPS.keys.any { state(context, it) != null }
