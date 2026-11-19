@@ -41,7 +41,7 @@ APK_INPUTS = ('THIRD-PARTY-NOTICES.md', 'LICENSE', 'LICENSES')
 TEST_INPUTS = APK_INPUTS + (
     'CHANGELOG.md', 'README.md', 'docs/**/*.md', 'frames/*/README.md', 'frames/**/blueprints/*.yaml',
     'tools/release/frame-abis.sh', 'tools/release/check-update-compat.sh', 'tools/voice/fetch-models.sh',
-    'kiln/packages/brand/src/tokens.css', 'kiln/packages/setup-channel/test/s1-kiosk-transcript.json',
+    'kiln/packages/brand/src/tokens.css', 'kiln/packages/setup-channel/test/aqara-s1-plus-transcript.json',
     'branding/glass-tile/bootanimation.zip', 'frames/aqara-s1-plus/tools/bracket/base_emulator.py',
     'frames/aqara-s1-plus/tools/debloat/debloat.sh', 'frames/generic-android/installer/src/devices.ts',
     '**/sh/edm/**',

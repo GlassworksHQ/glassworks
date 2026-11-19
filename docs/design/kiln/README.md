@@ -54,19 +54,23 @@ draws the device at the brand's 30° angle and animates the steps. Adding a fram
 it, not drawing an animation. This section moves into the generated `frame.json` once #35 lands.
 
 Kiln reads the S1's data from [`frames/aqara-s1-plus/design/recovery.json`](../../../frames/aqara-s1-plus/design/recovery.json),
-which is the canonical copy. [`recovery/aqara-s1-plus.json`](recovery/aqara-s1-plus.json) is this
+which is the canonical copy, and the Mirror's from
+[`frames/lululemon-mirror/design/recovery.json`](../../../frames/lululemon-mirror/design/recovery.json).
+The same test checks every frame's file: known fields and moves, everything on the device, and a
+drawing with no `NaN` at any moment. [`recovery/aqara-s1-plus.json`](recovery/aqara-s1-plus.json) is this
 prototype's input and adds only `photo`. Kiln's tests fail if the two differ otherwise
 (`kiln/apps/kiln/test/recovery-data.test.ts`).
 
 | Field | Meaning |
 |---|---|
 | `body` | `w`, `h`, `thickness`, `radius` in mm |
-| `cover.screws` | Screw centres, `[x, y]` mm, in the order they come out |
+| `cover.screws` | Screw centres, `[x, y]` mm, in the order they come out. A screw in a side face is `[x, y, z]`: on the face at `x = w` or `y = h` (the two the drawing shows), `z` mm down from the back |
 | `cover.features` | What the back looks like: `ribs`, `plate`, `hole`, `clip` rectangles (`at`, `size`) |
-| `board` | What's under the cover: `speaker`, `shield`, `chip` rectangles, `window` circles |
+| `board` | What's under the cover: `speaker`, `shield`, `chip` rectangles, `window` circles, and `button` (`at` only): a button next to the one to hold, drawn plain |
 | `button` | The button to hold: `at` in mm, and `what` (a sentence for the photo's caption) |
 | `port` | `edge` (`top`, `bottom`, `left`, `right`), `at` (mm along that edge), `kind` |
 | `steps` | Moves, in order: `screws`, `cover`, `hold`, `plug` |
+| `labels` | Optional. A step chip's words in place of the default, by move (the Mirror's `hold` is "Hold VOL−") |
 | `ready` | `seconds` until recovery mode, and what the label `says` |
 | `photo` | A real photo behind "Show me a photo" |
 

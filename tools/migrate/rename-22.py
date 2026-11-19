@@ -101,7 +101,7 @@ CHECK_UNCHANGED = [
     "frames/aqara-s1-plus/tools/install",
     "frames/aqara-s1-plus/tools/install.sh",
     "kiln/packages/app-adb/src",
-    "kiln/packages/setup-channel/test/s1-kiosk-transcript.json",
+    "kiln/packages/setup-channel/test/aqara-s1-plus-transcript.json",
     "tools/perf/run.sh", "tools/perf/perfrun.py", "tools/perf/perflib.py",
 ]
 

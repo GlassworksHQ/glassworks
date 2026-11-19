@@ -81,6 +81,11 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   and off, the overlay, the device admin) and checks each one, makes it the home screen and opens its setup page.
   A tablet that refuses a step is told plainly, and undo removes the app. The APK is a test build you pick on the
   computer until Glassworks for Android has a release.
+- **Get Glassworks on a tablet from the tablet itself.** Open `kiln.glassworks.dev/android/tablet` in the tablet's
+  browser. Kiln says what the tablet is, even in Chrome's desktop mode, and offers Glassworks as a download: the
+  build for its Android version, through Kiln's own address. It then says what the app's setup asks, and how to
+  finish with Kiln over USB for the one setting that needs a computer. Until Glassworks for Android has a release,
+  the page says it isn't out yet.
 - **Know when the tablet is on its dock.** A Pixel Tablet now has a *Docked* sensor in Home Assistant: on
   while it sits on its dock, off when you lift it off. Automate on it, for example to
   show another dashboard while someone holds the tablet. The tablet's page in the panel's settings, and on the

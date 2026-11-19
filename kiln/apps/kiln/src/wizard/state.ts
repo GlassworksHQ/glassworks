@@ -21,7 +21,7 @@ export interface Network { ssid: string; rssi: number; secure: boolean }
 /** The app's settings as the person chose them: kept, so going back to the step shows them again. */
 export interface AppSettings { locale?: string; timezone?: string; clock24: boolean; keyboard: boolean }
 
-/** What the setup step shows, one phase at a time (S1 Kiosk over adb). */
+/** What the setup step shows, one phase at a time (Glassworks over adb). */
 export type Setup =
   | { phase: 'waiting'; note: string }
   /** `installing`: the app is going in; provision's AppPhases so far, the last one now */

@@ -125,7 +125,7 @@ hostname.
 - From the Mac (bleak 3.1 + py-improv-ble-client 2.0.1): found as "MagicPad S1 Plus" (the BT
   adapter name, unchanged) with RSSI around -50, `device_filter()` = True (HA would discover it),
   MTU 517, capabilities 7, `need_authorization` True, identify OK (screen wakes, card pulses, 3 beeps),
-  device info `S1 Kiosk, 0.1.0, Aqara Panel Hub S1 Plus/sun50iw10p1, Glassworks Panel` (the name is the
+  device info `Glassworks, 0.1.0, Aqara Panel Hub S1 Plus/sun50iw10p1, Glassworks Panel` (the name is the
   friendly name since #266, "Aqara S1 Plus" on the S1), hostname RPC →
   error 0x02. Scan returned 0 networks because the app doesn't hold the location permission yet
   (see below). After `--ez improv false` nothing advertises the Improv service.
@@ -243,7 +243,7 @@ progress, e.g. "Turning Wi-Fi on…" or "Waiting for Wi-Fi…", then connected o
 Assistant address; every pane's setup step (`PaneDefinition.setupSteps`, the radio's is in
 `radio/RadioDefinition.kt`) adds its part of the state under its id and its own requests as
 `<step id>.<op>`. `SetupChannelStepsTest` finishes every step with requests alone and pins the
-replies Kiln gets (`kiln/packages/setup-channel/test/s1-kiosk-transcript.json`). One JSON object per
+replies Kiln gets (`kiln/packages/setup-channel/test/aqara-s1-plus-transcript.json`). One JSON object per
 line, both ways:
 - `{"id":1,"op":"state"}` → `{"id":1,"ok":true,"state":…}`. The state is channel.ts's `SetupState`:
   `ip` (wlan0 IPv4), `ha.discovered` (the HA address the app found itself: `ha_url_source` `mdns` or

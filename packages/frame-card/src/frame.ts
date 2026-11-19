@@ -71,7 +71,7 @@ export interface FrameDesign {
   /** the device can sit on a dock (the Pixel Tablet): the app gives Home Assistant its Docked sensor from the start (docs/esphome.md#docked) */
   dock?: boolean;
   /**
-   * The app Kiln installs on this frame, when it isn't S1 Kiosk: its package (`id`), the activity adb
+   * The app Kiln installs on this frame, when it isn't Glassworks: its package (`id`), the activity adb
    * starts it with (whose extras it trusts from adb), the activity its HOME filter is on (an alias),
    * and its device admin. Class names are full, as in the app's manifest.
    */
