@@ -71,7 +71,7 @@ describe('the switch', () => {
 
 describe('the test install', () => {
   it('reads the Mirror, installs, and undoes back to the home app it had', async () => {
-    const m = new FakeMirror();
+    const m = new FakeMirror({ kiosk: 'app' }); // the community kiosk with its device admin off, so Android hides it
     const s = new MirrorSession({ connect: async () => m, sleep: async () => {} }, true);
     await s.connect();
     expect(s.state.screen).toBe('checks');
@@ -250,11 +250,11 @@ describe('every demo screen', () => {
     }
   });
 
-  it('Done says it is the only home screen, upright; when Android opened its list instead, it says what to do over adb', async () => {
+  it('Done says it is the only home screen, upright; with a device admin\'s home app Android won\'t hide, it says to install over fastboot', async () => {
     render(<Screens session={await mirrorDemo('done', true)} />);
     await screen.findByText('It is the only home screen, upright, so it opens when the Mirror starts.');
     cleanup();
     render(<Screens session={await mirrorDemo('done-unconfirmed', true)} />);
-    await screen.findByText(/^Android opened its list of home apps for the home screen, and com\.android\.launcher3, com\.nimrod\.mirrorkiosk is still a home app\. Read the Mirror again, then Update/);
+    await screen.findByText(/^com\.nimrod\.mirrorkiosk is a device administrator on this Mirror, so Android won.t hide it.*Install Glassworks over fastboot instead/);
   });
 });

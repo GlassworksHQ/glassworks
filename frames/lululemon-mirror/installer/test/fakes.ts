@@ -122,6 +122,9 @@ export interface FakeMirrorOptions {
   keepsAdmin?: boolean;
   /** `pm hide` answers false: the other home app stays, so HOME opens Android's chooser */
   hideFails?: boolean;
+  /** the community kiosk: `admin` (as Glass Panes' userdata has it, its device admin on, the default), `app` (admin off),
+   * or `none` (a Mirror Kiln flashed: a fresh userdata has no kiosk) */
+  kiosk?: 'admin' | 'app' | 'none';
   /** the display doesn't follow user_rotation */
   rotationStuck?: boolean;
   /** each command takes this long (the demo) */
@@ -171,7 +174,7 @@ export class FakeMirror implements PanelShell {
   userRotation = 0;
   accelerometer = 1;
   installed?: number;
-  admins = new Set<string>(['com.nimrod.mirrorkiosk/.AdminReceiver']);
+  admins = new Set<string>();
 
   /** our app: its package, the HOME component Android records (an alias), its admin */
   readonly app: MirrorApp;
@@ -189,13 +192,19 @@ export class FakeMirror implements PanelShell {
   constructor(readonly o: FakeMirrorOptions = {}) {
     this.app = o.app ?? GLASSWORKS;
     this.installed = o.installed;
-    this.preferred = { comp: o.installed ? this.app.home : MIRROR_KIOSK, from: this.homes() };
+    if ((o.kiosk ?? 'admin') === 'admin') this.admins.add('com.nimrod.mirrorkiosk/.AdminReceiver');
+    this.preferred = { comp: o.installed ? this.app.home : o.kiosk === 'none' ? LAUNCHER3 : MIRROR_KIOSK, from: this.homes() };
     if (o.installed && this.app.admin) this.admins.add(this.app.admin);
   }
 
-  /** The home apps Android offers: the image's two and ours, less the hidden ones. */
+  /** The home apps on the Mirror: the kiosk (unless Kiln flashed it), the image's launcher, and ours. */
+  present(): string[] {
+    return [...(this.o.kiosk === 'none' ? [] : [MIRROR_KIOSK]), LAUNCHER3, ...(this.installed ? [this.app.home] : [])];
+  }
+
+  /** The home apps Android offers: those less the hidden ones. */
   homes(): string[] {
-    return [MIRROR_KIOSK, LAUNCHER3, ...(this.installed ? [this.app.home] : [])].filter((c) => !this.hidden.has(c.split('/')[0]!));
+    return this.present().filter((c) => !this.hidden.has(c.split('/')[0]!));
   }
 
   /** `comp` picked with Always (as the Mirror had it before Kiln, with a mouse). */
@@ -241,12 +250,13 @@ export class FakeMirror implements PanelShell {
     if (set) { if (set[1] === 'user_rotation') this.userRotation = Number(set[2]); else this.accelerometer = Number(set[2]); return ok(); }
     if (cmd === 'dumpsys window windows') return ok(`  mRotation=${o.rotationStuck || this.accelerometer !== 0 ? 0 : this.userRotation}\n`);
     if ((m = /^pm (hide|unhide) (\S+)$/.exec(cmd))) {
-      if (m[1] === 'hide' && o.hideFails) return ok(`Package ${m[2]} new hidden state: false\n`);
+      // Android 6 won't hide a package with an active device admin
+      if (m[1] === 'hide' && (o.hideFails || [...this.admins].some((a) => a.startsWith(`${m![2]}/`)))) return ok(`Package ${m[2]} new hidden state: false\n`);
       if (m[1] === 'hide') this.hidden.add(m[2]!); else this.hidden.delete(m[2]!);
       return ok(`Package ${m[2]} new hidden state: ${m[1] === 'hide'}\n`);
     }
     if ((m = /^pm list packages (\S+)$/.exec(cmd))) {
-      const present = [MIRROR_KIOSK, LAUNCHER3, ...(this.installed ? [this.app.home] : [])].map((c) => c.split('/')[0]!);
+      const present = this.present().map((c) => c.split('/')[0]!);
       return ok(present.includes(m[1]!) && !this.hidden.has(m[1]!) ? `package:${m[1]}\n` : '');
     }
     if (cmd === `am start -a android.intent.action.MAIN -c android.intent.category.HOME ${PKG}`) {
