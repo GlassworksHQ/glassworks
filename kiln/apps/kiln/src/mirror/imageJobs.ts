@@ -8,6 +8,20 @@ import {
   GLASS_PANES, WrongImage, buildImages, checkDownload, loadSystem, resumableBody, type Loaded, type PrepareStep,
 } from '@glassworks/lululemon-mirror-installer';
 
+/**
+ * Each page's own storage folder, so another Kiln tab can't change a file between its check and its
+ * write. The worker holds a Web Lock named after it for as long as it lives.
+ */
+export const DIR_PREFIX = 'kiln-mirror';
+export const sessionDir = (id: string) => `${DIR_PREFIX}-${id}`;
+/**
+ * The folders to delete when a worker starts: Kiln's (the old shared one, or a page's) whose lock no
+ * page holds or waits for, so a closed tab's downloads don't stay behind. Never its own.
+ */
+export function staleDirs(names: readonly string[], locked: readonly string[], own: string): string[] {
+  return names.filter((n) => (n === DIR_PREFIX || n.startsWith(`${DIR_PREFIX}-`)) && n !== own && !locked.includes(n));
+}
+
 /** Where download() keeps a file, apart from the images Kiln builds. */
 export const downloaded = (name: string) => `download-${name}`;
 

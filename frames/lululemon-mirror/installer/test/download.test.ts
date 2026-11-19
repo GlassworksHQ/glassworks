@@ -111,4 +111,21 @@ describe('the image from the release proxy', () => {
     const f = (async () => new Response('down', { status: 503 })) as typeof fetch;
     await expect(loadSystem(resumableBody(URL, 1000, { fetch: f, sleep: noSleep }), new MemoryStore(), () => {}, { name: 'system.img', size: 1000, sha256: '0' })).rejects.toBeInstanceOf(ProxyError);
   });
+
+  it('a cancelled stream fetches nothing more: a read it cut short isn\'t a dropped connection (PR 596 review)', async () => {
+    let fetches = 0;
+    // the first chunk arrives, then the network waits; cancelling settles that read with done
+    const f = (async () => {
+      fetches++;
+      return new Response(new ReadableStream({ start(c) { c.enqueue(new Uint8Array(10)); } }), { status: 200, headers: { 'content-length': '100' } });
+    }) as unknown as typeof fetch;
+    const r = resumableBody(URL, 100, { fetch: f, sleep: async () => {} }).stream().getReader();
+    expect((await r.read()).value?.length).toBe(10);
+    const pending = r.read(); // waits on the network
+    await new Promise((res) => setTimeout(res, 0));
+    await r.cancel();
+    expect((await pending).done).toBe(true);
+    for (let i = 0; i < 5; i++) await new Promise((res) => setTimeout(res, 0));
+    expect(fetches).toBe(1);
+  });
 });

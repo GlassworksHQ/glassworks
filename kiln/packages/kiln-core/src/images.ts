@@ -144,6 +144,8 @@ export function validateImage(r: ImageRecipe, frame: FrameAccess): string[] {
       case 'patch':
         if (r.community) bad.push(`${at(i)}: a community image goes on as its project publishes it, with no patch`);
         if (!checked.has(s.file)) bad.push(`${at(i)}: patch needs ${s.file} downloaded first`);
+        // Kiln runs it after its checks and the warning (it uses what fastboot reports), so before fastboot it would be skipped
+        if (!fastboot || restarted) bad.push(`${at(i)}: patch comes after fastboot and before restart`);
         if (!Array.isArray(s.makes) || !s.makes.length) bad.push(`${at(i)}: patch must say what it makes`);
         for (const m of s.makes ?? []) made.add(m);
         break;

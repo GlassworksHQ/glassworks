@@ -5,7 +5,7 @@ import { fakeAdbKey, fakeMirrorApk, fakeServicesJar } from '@glassworks/lululemo
 import { describe, expect, it } from 'vitest';
 import { Disk, MemoryStore, mkfs, writeSparse } from '@glassworks/ext4';
 import { GLASS_PANES } from '@glassworks/lululemon-mirror-installer';
-import { Cancelled, imageJobs, jobQueue, type JobHandle } from '../src/mirror/imageJobs';
+import { Cancelled, imageJobs, jobQueue, sessionDir, staleDirs, type JobHandle } from '../src/mirror/imageJobs';
 
 /** A file in memory, shaped like OPFS's FileSystemSyncAccessHandle. */
 class MemHandle implements JobHandle {
@@ -193,5 +193,12 @@ describe('the image worker\'s jobs', () => {
     const stuck = new Stuck();
     await expect(imageJobs(async () => stuck, async () => {}).download('https://refract.test/x', want, () => {}, net)).rejects.toThrow(/NoModificationAllowed/);
     expect(stuck.closed).toBe(true);
+  });
+
+  it('each page has its own folder; a worker sweeps Kiln folders no live page holds, never its own or another app\'s', () => {
+    const own = sessionDir('b');
+    expect(own).toBe('kiln-mirror-b');
+    const names = ['kiln-mirror', 'kiln-mirror-a', own, 'kiln-mirror-c', 'other-app', 'kiln-mirrorish'];
+    expect(staleDirs(names, ['kiln-mirror-c'], own)).toEqual(['kiln-mirror', 'kiln-mirror-a']);
   });
 });
