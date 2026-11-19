@@ -679,14 +679,15 @@ class SurfaceFlingerHistory(unittest.TestCase):
         tmp = tempfile.mkdtemp()
         p, c = refstart(tmp)
         self.assertEqual(p.returncode, 0, p.stderr[-1500:])
-        # Every read is Device.sf()'s: a --list, then --latency of its one layer. A read during a window (SfReads)
-        # is a --latency alone.
+        # Every read is Device.sf()'s: a --list, then --latency of the fake S1's one layer. A read during a window
+        # (SfReads) or at the poll rhythm is a --latency alone, so --latency would outnumber --list. (Counted, not
+        # paired: the frame log's thread and a window's read can list at the same time and interleave.)
         with open(os.path.join(tmp, "state", "commands.log")) as f:
-            log = f.read().splitlines()
-        sf = [l for l in log if "dumpsys SurfaceFlinger" in l]
-        self.assertTrue(sf)
-        self.assertEqual([b for a, b in zip(sf, sf[1:]) if "--latency" in b and "--list" not in a], [])
-        self.assertEqual(sum("--latency" in l for l in sf), sum("--list" in l for l in sf))
+            sf = [l for l in f.read().splitlines() if "dumpsys SurfaceFlinger" in l]
+        lists, reads = sum("--list" in l for l in sf), sum("--latency" in l for l in sf)
+        self.assertGreater(reads, 0)
+        self.assertLessEqual(reads, lists)
+        self.assertGreaterEqual(reads, lists - 1)        # the frame log's thread may stop between its two calls
         for t, e in c["tiers"].items():
             for sw in e["swipes"]:
                 self.assertEqual(list(sw["sf"]), ["period_ms", "window_ms", "oldest_ms", "presents_ms"], t)  # no "reads"
