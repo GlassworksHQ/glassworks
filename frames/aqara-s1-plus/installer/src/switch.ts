@@ -414,7 +414,10 @@ export async function switchSigningKey(p: PanelShell, apk: Uint8Array, plan: Swi
   log('removed the old build');
 
   // 6. Install the new one; on failure put the old one back (with its data, given root).
-  //    Its data goes in while it is disabled (it would start as HOME at once otherwise).
+  //    With root its data comes next, so the same shell line on the panel disables it: Android starts an enabled HOME
+  //    app at once, and with empty data it serves an unkeyed, provisionable ESPHome API until the restore (#626).
+  //    restoreInto enables it again, whatever the restore does.
+  const hold = root ? ` && pm disable-user --user 0 ${PKG}` : '';
   const restoreInto = async (): Promise<{ out: string; code: number }> => {
     await p.run(`pm disable-user --user 0 ${PKG}`);
     // With a hand-over to come, the restore marks it, so the app keeps the copied secrets locked until then (#608).
@@ -422,9 +425,9 @@ export async function switchSigningKey(p: PanelShell, apk: Uint8Array, plan: Swi
     try { return await su(handover ? 'restore handover' : 'restore'); } finally { await p.run(`pm enable ${PKG}`); }
   };
   await p.push(NEW_APK, apk, 0o644);
-  const inst = (await p.run(`pm install -r -g ${NEW_APK}`)).out;
+  const inst = (await p.run(`pm install -r -g ${NEW_APK}${hold}`)).out;
   if (!/Success/.test(inst)) {
-    const back = /Success/.test((await p.run(`pm install -r -g ${OLD_APK}`)).out);
+    const back = /Success/.test((await p.run(`pm install -r -g ${OLD_APK}${hold}`)).out);
     const restored = back && root ? await restoreInto() : undefined;
     if (back) await undo();
     // The copy is the only one left until a restore worked: keep it otherwise.

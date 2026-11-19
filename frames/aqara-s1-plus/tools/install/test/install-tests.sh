@@ -74,7 +74,18 @@ fresh_data() {
   rm -rf "$S/panel/ce" "$S/panel/de"; mkdir -p "$S/panel/ce/cache" "$S/panel/ce/code_cache" "$S/panel/de"
   ln -s "/data/app/sh.edm.s1kiosk-$2/lib/arm" "$S/panel/ce/lib"; echo "$1" > "$S/uid"; echo fresh > "$S/panel/ce/fresh"
 }
-echo "$*" >> "$S/adb.log"
+# The run stops after <command> (Ctrl-C, a cable pulled): SIGTERM to the install.sh whose pid the test wrote.
+stop_after() { # <command>
+  case "$1" in "$(st stop-after)"*) [ -n "$(st stop-after)" ] && [ -n "$(st main.pid)" ] && kill -TERM "$(st main.pid)" ;; esac
+  return 0
+}
+if [ -z "${S1_PART:-}" ]; then
+  echo "$*" >> "$S/adb.log"
+  # Between two adb commands, Android starts an enabled HOME app at once. One that has empty data while the
+  # switch still holds the real data serves an unkeyed, provisionable ESPHome API (#626).
+  [ "$(st installed)" != none ] && [ -n "$(st installed)" ] && [ "$(st disabled)" != 1 ] && [ -f "$S/panel/ce/fresh" ] &&
+    [ -f "$S/panel/work/complete" ] && echo "before: $*" >> "$S/unkeyed"
+fi
 case "$1" in
   get-state) echo device; exit 0 ;;
   push) cp "$2" "$S/panel/$(basename "$3")"; exit 0 ;;
@@ -88,10 +99,21 @@ case "$1" in
     [ "$(st new-install)" = fail ] && { echo "Failure [INSTALL_FAILED_INSUFFICIENT_STORAGE]"; exit 1; }
     [ "$(st installed)" = none ] && fresh_data 10072 release
     put installed release; put disabled 0; echo "Performing Streamed Install"; echo Success; exit 0 ;;
-  shell) shift; cat > /dev/null ;; # like adb: `adb shell` forwards (and so drains) stdin
+  shell) shift; [ -n "${S1_PART:-}" ] || cat > /dev/null ;; # like adb: `adb shell` forwards (and so drains) stdin
   *) exit 0 ;;
 esac
 cmd="$*"
+# One shell line of a && b runs on the panel with no adb round trip between a and b.
+case "$cmd" in
+  *" && "*)
+    rest=$cmd
+    while :; do
+      part=${rest%%" && "*}
+      S1_PART=1 "$0" shell "$part" </dev/null || exit $?
+      [ "$part" = "$rest" ] && { stop_after "$cmd"; exit 0; }
+      rest=${rest#*" && "}
+    done ;;
+esac
 case "$cmd" in
   "getprop ro.product.model") echo "Aqara S1 Plus" ;;
   "getprop ro.build.version.sdk") echo 29 ;;
@@ -117,6 +139,11 @@ case "$cmd" in
   "pm uninstall sh.edm.s1kiosk")
     if [ "$(st admin)" = 1 ] || [ "$(st uninstall)" = fail ] || [ "$(st installed)" = none ]; then echo "Failure [DELETE_FAILED_DEVICE_POLICY_MANAGER]"; exit 1; fi
     put installed none; rm -rf "$S/panel/ce" "$S/panel/de" "$S"/app.*; echo Success ;;
+  "pm install -r -g /data/local/tmp/glassworks.apk")
+    [ -f "$S/panel/glassworks.apk" ] || { echo "Failure [INSTALL_FAILED_INVALID_URI]"; exit 1; }
+    [ "$(st new-install)" = fail ] && { echo "Failure [INSTALL_FAILED_INSUFFICIENT_STORAGE]"; exit 1; }
+    [ "$(st installed)" = none ] || { echo "TEST: the pushed APK installed over an installed app" >> "$S/violations"; }
+    fresh_data 10072 release; put installed release; put disabled 0; echo Success ;;
   "pm install -r -g /data/local/tmp/glassworks-old.apk")
     [ "$(st old-install)" = fail ] && { echo "Failure [INSTALL_FAILED_INTERNAL_ERROR]"; exit 1; }
     fresh_data 10073 debug; rm -f "$S"/app.*; put installed debug; put disabled 0; echo Success ;;
@@ -192,7 +219,7 @@ APK="$T/kiosk-release.apk"; echo apk > "$APK"
 
 # A debug build with its data, as HOME + device admin, on Wi-Fi it saved.
 panel() { # [wifi fixture]
-  rm -rf "$T/panel" "$T"/{adb.log,root-cmds,root.log,violations,improv.got,installed,disabled,root,admin,home,new-install,uninstall,restore,disable,old-install,list,chooser,handover.log,old-carries,down-after-admin,socket-down,handover.passing,downgrade} "$T"/app.* "$T"/copy.*
+  rm -rf "$T/panel" "$T"/{adb.log,root-cmds,root.log,violations,unkeyed,stop-after,main.pid,improv.got,installed,disabled,root,admin,home,new-install,uninstall,restore,disable,old-install,list,chooser,handover.log,old-carries,down-after-admin,socket-down,handover.passing,downgrade} "$T"/app.* "$T"/copy.*
   mkdir -p "$T/panel"
   cp "$FIX/WifiConfigStore.xml" "$T/WifiConfigStore.xml"
   fresh_data 10071 debug
@@ -340,18 +367,19 @@ check "the Wi-Fi went to the new app" test "$(cat "$T/improv.got" 2>/dev/null)" 
 check "the password is in no output" hasnt "$out" "fixture"
 check "the password is in no adb command" hasnt "$log" "fixture"
 check "backup and restore with the app disabled" test ! -e "$T/violations"
+check "the new app never ran on empty data before the restore (#626)" test ! -s "$T/unkeyed"
 check "data carried into the new install" bash -c '[ -f "$1/shared_prefs/kiosk.xml" ] && [ ! -e "$1/fresh" ]' _ "$T/panel/ce"
 check "ends enabled, release, admin" test "$(cat "$T/installed") $(cat "$T/disabled") $(cat "$T/admin")" = "release 0 1"
 check "copy discarded" test ! -e "$T/panel/work"
 check "Wi-Fi read before the uninstall" before "$log" "wifi-psk 1" "shell pm uninstall"
 check "admin dropped before disabling" before "$log" "remove_admin true" "pm disable-user --user 0 sh.edm.s1kiosk"
 check "backup before the uninstall" before "$log" "glassworks-switch.sh backup" "shell pm uninstall"
-check "restore after the new install" before "$(sed -n '/pm uninstall/,$p' <<<"$log")" "install -r -g $APK" "glassworks-switch.sh restore"
+check "restore after the new install" before "$(sed -n '/pm uninstall/,$p' <<<"$log")" "pm install -r -g /data/local/tmp/glassworks.apk && pm disable-user --user 0 sh.edm.s1kiosk" "glassworks-switch.sh restore"
 check "Wi-Fi sent after the kiosk is started" before "$(sed -n '/pm uninstall/,$p' <<<"$log")" "am start -n sh.edm.s1kiosk/.MainActivity" "forward tcp:0 localabstract:s1kiosk_improv"
 check "secrets read before the app is stopped" before "$log" "forward tcp:0 localabstract:glassworks_api_key" "pm disable-user --user 0 sh.edm.s1kiosk"
 check "...and after the admin is dropped, as late as can be" before "$(sed -n '/remove_admin true/,$p' <<<"$log")" "remove_admin true" "forward tcp:0 localabstract:glassworks_api_key"
 check "...handed back after the kiosk is started, before the Wi-Fi" before "$(sed -n '/am start -n sh.edm.s1kiosk\/.MainActivity$/,$p' <<<"$log")" "forward tcp:0 localabstract:glassworks_api_key" "forward tcp:0 localabstract:s1kiosk_improv"
-check "temporary files removed" has "$log" "shell rm -f /data/local/tmp/glassworks-old.apk /data/local/tmp/glassworks-switch.sh"
+check "temporary files removed" has "$log" "shell rm -f /data/local/tmp/glassworks-old.apk /data/local/tmp/glassworks.apk /data/local/tmp/glassworks-switch.sh"
 check "no 'forgot its Wi-Fi' note" hasnt "$out" "forgot its Wi-Fi"
 
 echo "== install.sh: without root"
@@ -361,7 +389,8 @@ log=$(cat "$T/adb.log")
 check "exit 0" test $rc -eq 0
 check "says it starts fresh" has "$out" "the app starts fresh"
 check "no root commands" hasnt "$log" "su -c 'sh"
-check "no root script pushed" hasnt "$log" "push "
+check "no root script pushed" hasnt "$log" "install/glassworks-switch.sh /data/local/tmp/"
+check "the new build not held off: no data comes after it" has "$log" "shell pm install -r -g /data/local/tmp/glassworks.apk"$'\n'
 check "no password to send (no terminal to ask)" test ! -e "$T/improv.got"
 check "says how to send the Wi-Fi again" has "$out" "forgot its Wi-Fi \"Home & Garden\""
 check "settings reset, said so" has "$out" "settings were reset"
@@ -417,6 +446,16 @@ check "the new app still gets the sign-in and key" handed_back
 check "...says so" has "$out" "Stopping early: handing the sign-in and encryption key to the new app first"
 check "...after starting it" before "$(sed -n '/pm uninstall/,$p' "$T/adb.log")" "shell am start -n sh.edm.s1kiosk/.MainActivity" "forward tcp:0 localabstract:glassworks_api_key"
 
+echo "== install.sh: the run stops after the new build is in, before its data (#626)"
+panel; printf 'pm install -r -g /data/local/tmp/glassworks.apk' > "$T/stop-after"
+"$REPO/frames/aqara-s1-plus/tools/install.sh" --apk "$APK" --no-models --no-debloat --switch </dev/null > "$T/out" 2>&1 &
+printf '%s' $! > "$T/main.pid"; wait $!; rc=$?; out=$(cat "$T/out")
+check "stops" test $rc -ne 0
+check "turns Glassworks back on" test "$(cat "$T/installed") $(cat "$T/disabled")" = "release 0"
+check "...says so" has "$out" "Stopping early: turning Glassworks back on"
+check "...and no restore ran" hasnt "$(cat "$T/root-cmds")" "restore"
+check "the copy stays" test -f "$T/panel/work/complete"
+
 echo "== install.sh: the data won't go into the new build (#584)"
 panel; printf fail > "$T/restore"
 out=$(inst --switch); rc=$?
@@ -455,6 +494,7 @@ check "...and its sign-in and key, handed back to it (#584)" handed_back
 check "...after starting it" before "$(sed -n '/pm install -r -g \/data\/local\/tmp\/glassworks-old.apk/,$p' "$T/adb.log")" "shell am start -n sh.edm.s1kiosk/.MainActivity" "forward tcp:0 localabstract:glassworks_api_key"
 check "old build back, enabled, admin, data restored" bash -c '[ "$(cat "$1/installed") $(cat "$1/disabled") $(cat "$1/admin")" = "debug 0 1" ] && [ -f "$1/panel/ce/shared_prefs/kiosk.xml" ]' _ "$T"
 check "copy discarded" test ! -e "$T/panel/work"
+check "the old build never ran on empty data before the restore (#626)" test ! -s "$T/unkeyed"
 
 echo "== install.sh: the new build won't install, and the old one's data won't go back in"
 panel; printf fail > "$T/new-install"; printf fail > "$T/restore"
