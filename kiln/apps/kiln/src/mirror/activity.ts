@@ -1,6 +1,6 @@
 // The Mirror's sessions in Kiln's registry (wizard/registry.ts), as the S1's session is: they outlive
 // a trip to the picker, the picker offers the way back while they work, and LeaveGuard asks before
-// the page is left or reloaded while they write. Demos and the page without ?apk=local aren't kept.
+// the page is left or reloaded while they write. Demos and the locked page aren't kept.
 import { registry, type Activity } from '../wizard/registry';
 import type { FlashSession } from './flash';
 import type { MirrorSession } from './session';
@@ -22,8 +22,9 @@ export class MirrorActivity implements Activity {
   /** Back to it while it works, or while the flashed Mirror waits for its first boot (the adb screen). */
   running(): string | undefined {
     const f = this.sessions.flash.state.screen;
-    if (f === 'working' || f === 'adb') return `${MIRROR_BASE}?apk=local`;
-    if (this.sessions.mirror.state.screen === 'working') return `${MIRROR_BASE}?apk=local&mode=app`;
+    const apk = `?apk=${this.sessions.mirror.from}`;
+    if (f === 'working' || f === 'adb') return `${MIRROR_BASE}${apk}`;
+    if (this.sessions.mirror.state.screen === 'working') return `${MIRROR_BASE}${apk}&mode=app`;
     return undefined;
   }
 
@@ -33,8 +34,12 @@ export class MirrorActivity implements Activity {
   }
 }
 
-/** The kept Mirror sessions, or new ones (`make`) kept from now on. */
-export function keptMirror(make: () => { mirror: MirrorSession; flash: FlashSession }, flashMode: boolean): MirrorActivity {
+/**
+ * The kept Mirror sessions, or new ones (`make`) kept from now on. An idle session whose APK came from elsewhere
+ * (`?apk=local` then `?apk=release`) is replaced; a running one is kept, so the way back still finds it.
+ */
+export function keptMirror(make: () => { mirror: MirrorSession; flash: FlashSession }, flashMode: boolean, from?: MirrorSession['from']): MirrorActivity {
   const kept = registry.activity(MIRROR_BASE);
-  return kept instanceof MirrorActivity ? kept : registry.keep(new MirrorActivity(make(), flashMode));
+  if (kept instanceof MirrorActivity && (!from || kept.sessions.mirror.from === from || kept.running())) return kept;
+  return registry.keep(new MirrorActivity(make(), flashMode));
 }

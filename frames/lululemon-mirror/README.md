@@ -97,7 +97,7 @@ The Clarity badge shows its Clarity grade ([docs/perf.md](../../docs/perf.md)) o
 
 ## Install
 
-Not available yet. **Test only, today**, at `/lululemon-mirror?apk=local` in Kiln ([its recipe](installer)). The fastboot path has run end to end on a real Mirror from the command line, with `tools/mirror/flash-node.ts`, which runs the same steps without a browser ([image-patch.md](research/image-patch.md#the-first-real-flash-2026-11-16-verified-by-the-root)). In that run the home-screen step failed: its test APK had no home screen. The legacy build has been the home screen since (2026-11-17, #443). It hasn't run from Kiln's page yet.
+Not available yet. **Test only, today**, in Kiln ([its recipe](installer)): `/lululemon-mirror?apk=release` installs Glassworks from its newest `generic-android-legacy-v*` release (the arm64-v8a APK, checked against the release's `.sha256`), and `/lululemon-mirror?apk=local` from an APK file on the computer. Without either, the page says the Mirror doesn't install from Kiln yet. It opens to everyone when this frame's `design/frame.json` has `status` `alpha` and `kiln` `/lululemon-mirror`; then the release is the default. The fastboot path has run end to end on a real Mirror from the command line, with `tools/mirror/flash-node.ts`, which runs the same steps without a browser ([image-patch.md](research/image-patch.md#the-first-real-flash-2026-11-16-verified-by-the-root)). In that run the home-screen step failed: its test APK had no home screen. The legacy build has been the home screen since (2026-11-17, #443). It hasn't run from Kiln's page yet.
 
 **Over fastboot, from lululemon's software or the community image (#40):**
 

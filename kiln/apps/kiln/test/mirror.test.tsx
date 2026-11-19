@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// /lululemon-mirror: off for everyone without ?apk=local, a test install with it, and every demo
+// /lululemon-mirror: off for everyone without ?apk=local (or ?apk=release, test/mirror-release.test.tsx), a test install with it, and every demo
 // screen on the real recipe behind a simulated Mirror.
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { GLASSWORKS } from '@glassworks/lululemon-mirror-installer';
@@ -31,10 +31,11 @@ const until = async (f: () => boolean, ms = 10_000) => {
 const embers = () => [...document.querySelectorAll('.btn.ember')].map((b) => b.textContent);
 
 describe('the switch', () => {
-  it('is off without ?apk=local, and demos only where demos run', () => {
+  it('is off without ?apk=local or ?apk=release, and demos only where demos run', () => {
     expect(mirrorMode('', true, MIRROR_DEMOS)).toEqual({ on: false });
-    expect(mirrorMode('?apk=release', true, MIRROR_DEMOS)).toEqual({ on: false });
-    expect(mirrorMode('?apk=local', false, MIRROR_DEMOS)).toEqual({ on: true });
+    expect(mirrorMode('?apk=other', true, MIRROR_DEMOS)).toEqual({ on: false });
+    expect(mirrorMode('?apk=release', false, MIRROR_DEMOS)).toEqual({ on: true, apk: 'release' });
+    expect(mirrorMode('?apk=local', false, MIRROR_DEMOS)).toEqual({ on: true, apk: 'local' });
     expect(mirrorMode('?demo=checks', true, MIRROR_DEMOS)).toEqual({ on: true, demo: 'checks' });
     expect(mirrorMode('?demo=checks', false, MIRROR_DEMOS)).toEqual({ on: false }); // a production build
     expect(mirrorMode('?demo=nope', true, MIRROR_DEMOS)).toEqual({ on: false });

@@ -8,6 +8,7 @@ import type { ImageRecipe } from '@glassworks/kiln-core';
 import { fmtSize } from '@glassworks/kiln-core';
 import * as RadioGroup from '@radix-ui/react-radio-group';
 import type { FileCheck, FlashSession, FlashState } from '../flash';
+import { TestOnly } from '../ReleaseApk';
 import c from './choice.module.css';
 
 type P = { f: FlashSession; s: FlashState };
@@ -54,7 +55,7 @@ export function Choose({ f, s }: P) {
   const others = f.recipes.filter((x) => x.community).length;
   return (
     <section className="card" aria-labelledby="h">
-      <div className="row"><span className="pill soon">Test only</span></div>
+      <TestOnly />
       <h2 id="h">What goes on the Mirror?</h2>
       <p className="lede">{s.open ? 'Glassworks, or a community image as its project publishes it. Kiln downloads either one, checks it, and writes it over USB.' : 'Kiln downloads Glassworks, checks it, and writes it over USB.'}</p>
       {from && (

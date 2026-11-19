@@ -1,6 +1,7 @@
 'use client';
-// /lululemon-mirror: the Mirror's test install. Off unless the address has ?apk=local (or a demo):
-// the Mirror is under development, and the only APK for it is a test build picked from this computer.
+// /lululemon-mirror: the Mirror's install. Locked to the public (Off) until frame.json makes the Mirror
+// installable (MIRROR_OPEN); until then ?apk=release (the newest Mirror release) and ?apk=local (a file from this
+// computer) are test links, or a demo.
 // The screens follow Kiln's (docs/design/kiln): one idea each, one ember button, the log one click away.
 import { Panel, loadOrCreateAdbKey, type AdbKey, type PanelShell } from '@glassworks/adb';
 import { Assets, fmtSize } from '@glassworks/kiln-core';
@@ -21,7 +22,8 @@ import { FlashScreens, flashLevel, flashRail } from './FlashScreens';
 import { workerImages } from './images';
 import { registry } from '../wizard/registry';
 import { MIRROR_BASE, keptMirror } from './activity';
-import { MirrorSession, mirrorMode, type MirrorState } from './session';
+import { ReleaseApk, TestOnly } from './ReleaseApk';
+import { MirrorSession, mirrorMode, type ApkFrom, type MirrorState } from './session';
 
 /** Demos run in `next dev` and in a build made with NEXT_PUBLIC_KILN_DEMO=1, as the S1's do. */
 const DEMO_ON = process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_KILN_DEMO === '1';
@@ -46,13 +48,16 @@ export function keyedConnect(loadKey: () => Promise<AdbKey>, connect: (key: AdbK
 }
 
 /** The page's two paths on one adb key: the app over adb (MirrorSession), or Glassworks over fastboot (FlashSession). */
-function realSessions(on: boolean): { mirror: MirrorSession; flash: FlashSession } {
+function realSessions(on: boolean, from: ApkFrom = 'local'): { mirror: MirrorSession; flash: FlashSession } {
   if (!on) {
     const mirror = new MirrorSession({ connect: () => Promise.reject(new Error('off')) }, false);
     return { mirror, flash: new FlashSession({ images: workerImages(), requestFastboot: () => Promise.reject(new Error('off')), requestAdb: () => Promise.reject(new Error('off')), adbKey: () => undefined, apk: () => undefined }) };
   }
   const keys = adbKeyHolder(loadOrCreateAdbKey);
-  const mirror = new MirrorSession({ connect: keys.connectWith((k) => Panel.connect(k)) }, true);
+  const mirror = new MirrorSession({
+    connect: keys.connectWith((k) => Panel.connect(k)),
+    ...(from === 'release' ? { release: (...a: Parameters<typeof fetch>) => fetch(...a) } : {}),
+  }, true);
   const assets = new Assets<'mirror-bootanimation' | 'mirror-settings-overlay'>('/assets/');
   const flash = new FlashSession({
     // branding/lululemon-mirror/bootanimation.zip, staged with Kiln's other assets and checked by SHA-256
@@ -68,6 +73,7 @@ function realSessions(on: boolean): { mirror: MirrorSession; flash: FlashSession
     requestAdb: keys.connectWith((k) => Panel.connect(k)),
     adbKey: () => keys.key()?.publicKey,
     apk: () => mirror.apkBytes(),
+    apkBlocked: () => mirror.releaseBlocked(),
   });
   return { mirror, flash };
 }
@@ -87,10 +93,6 @@ function level(s: MirrorState): number {
   if (s.screen === 'done') return 4;
   if (s.screen === 'working') return s.phases.some((p) => p.step === 'grant' || p.step === 'remove') ? 3 : 2;
   return s.screen === 'checks' ? 1 : 0;
-}
-
-function TestOnly() {
-  return <span className="pill soon">Test only</span>;
 }
 
 function Log({ s }: { s: MirrorState }) {
@@ -122,16 +124,19 @@ function Off() {
 function Inputs({ s, session }: { s: MirrorState; session: MirrorSession }) {
   return (
     <>
+      {s.release && <ReleaseApk m={session} ms={s} />}
       <div className="fields">
-        <label className="field"><span>APK file</span>
-          <input className="input" type="file" accept=".apk,application/vnd.android.package-archive"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) void session.pickApk(f.name, f.arrayBuffer().then((b) => new Uint8Array(b))); }} />
-        </label>
+        {!s.release && (
+          <label className="field"><span>APK file</span>
+            <input className="input" type="file" accept=".apk,application/vnd.android.package-archive"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) void session.pickApk(f.name, f.arrayBuffer().then((b) => new Uint8Array(b))); }} />
+          </label>
+        )}
         <label className="field"><span>Home Assistant (optional)</span>
           <input className="input" type="url" placeholder="http://homeassistant.local:8123" value={s.haUrl} onChange={(e) => session.setHaUrl(e.target.value.trim())} />
         </label>
       </div>
-      {s.apk && (
+      {s.apk && (!s.release || s.apk.error) && (
         <div className="well">
           <div className="grow">
             <b>{s.apk.name}</b>
@@ -147,9 +152,14 @@ function Inputs({ s, session }: { s: MirrorState; session: MirrorSession }) {
 function Pick({ s, session }: { s: MirrorState; session: MirrorSession }) {
   return (
     <section className="card" aria-labelledby="h">
-      <div className="row"><TestOnly /></div>
-      <h2 id="h">Install a test build on the Mirror.</h2>
-      <p className="lede">Kiln installs an APK file from this computer: the legacy build of Glassworks for generic Android, for Android 6. Only for testing. Nothing else on the Mirror changes.</p>
+      <TestOnly />
+      {s.release ? <>
+        <h2 id="h">Install Glassworks on the Mirror.</h2>
+        <p className="lede">Kiln downloads Glassworks from its newest release, the legacy build for Android 6, checks it, and installs it over USB. Nothing else on the Mirror changes.</p>
+      </> : <>
+        <h2 id="h">Install a test build on the Mirror.</h2>
+        <p className="lede">Kiln installs an APK file from this computer: the legacy build of Glassworks for generic Android, for Android 6. Only for testing. Nothing else on the Mirror changes.</p>
+      </>}
       <Inputs s={s} session={session} />
       <BuiltOn credits={stepCredits('lululemon-mirror', credits)} />
       <p className="small">On the Mirror, USB debugging is on. Plug it into this computer, click Connect and pick it in the browser&apos;s list. Then the Mirror asks to allow USB debugging for this browser: choose <b>Allow</b>. It has no touchscreen, so use a USB mouse.</p>
@@ -168,7 +178,7 @@ function Checks({ s, session }: { s: MirrorState; session: MirrorSession }) {
   const blocked = session.installBlocked();
   return (
     <section className="card" aria-labelledby="h">
-      <div className="row"><TestOnly /></div>
+      <TestOnly />
       <h2 id="h">{r.ok ? 'This is your Mirror.' : 'Kiln can\'t install on this device.'}</h2>
       <ol className="join">
         {r.checks.map((c) => (
@@ -282,7 +292,7 @@ const DEMOS = [...MIRROR_DEMOS, ...FLASH_DEMOS];
 const isFlashDemo = (d: string) => d.startsWith('flash-') || d.startsWith('image-');
 
 /**
- * With ?apk=local: Glassworks over fastboot (the default), or the app alone over adb on a Mirror that
+ * With ?apk=release or ?apk=local: Glassworks over fastboot (the default), or the app alone over adb on a Mirror that
  * already runs the community image (`&mode=app`). Each screen links to the other.
  */
 export function MirrorWizard() {
@@ -293,8 +303,8 @@ export function MirrorWizard() {
     // the sessions live in Kiln's registry, not in this component: a running install outlives the picker
     const earlier = registry.activity(MIRROR_BASE);
     if (!m.on && !earlier) return { m, flashFirst, real: realSessions(false) };
-    const kept = keptMirror(() => realSessions(true), flashFirst);
-    // back to a running install (or from a link without ?apk=local): as it was; otherwise the address's path
+    const kept = keptMirror(() => realSessions(true, m.apk), flashFirst, m.apk);
+    // back to a running install (or from a link without ?apk=…): as it was; otherwise the address's path
     if (kept === earlier && m.on && !kept.running()) {
       kept.flashMode = flashFirst;
       kept.sessions.flash.followLink(location.search); // ?image=<id> on a kept, idle session

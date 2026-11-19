@@ -5,9 +5,10 @@
 import { ProxyError, SYSTEM_BYTES, USERDATA_BYTES, WrongImage, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
 import { FirstBootMirror, fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
 import { FlashSession, type ImageMaker } from './flash';
+import { fakeReleaseRoute, type FakeRelease } from './releaseDemo';
 import { MirrorSession } from './session';
 
-export const FLASH_DEMOS = ['flash-image', 'flash-downloading', 'flash-download-error', 'flash-download-bad', 'flash-ready', 'flash-wifi-short', 'flash-fastboot', 'flash-fastboot-wrong', 'flash-confirm',
+export const FLASH_DEMOS = ['flash-image', 'flash-release', 'flash-release-downloading', 'flash-release-none', 'flash-release-bad', 'flash-downloading', 'flash-download-error', 'flash-download-bad', 'flash-ready', 'flash-wifi-short', 'flash-fastboot', 'flash-fastboot-wrong', 'flash-confirm',
   'flash-working', 'flash-adb', 'flash-done', 'flash-done-chooser', 'flash-done-no-home', 'flash-error', 'flash-run',
   'image-choose', 'image-choose-open', 'image-choose-panes', 'image-link', 'image-download', 'image-download-done', 'image-download-error', 'image-download-bad',
   'image-fastboot', 'image-confirm', 'image-writing', 'image-done', 'image-error', 'image-back-glassworks', 'image-back-panes'] as const;
@@ -54,7 +55,11 @@ export async function flashDemo(name: FlashDemo, fast = false): Promise<{ flash:
     },
     async reboot() {},
   });
-  const mirror = new MirrorSession({ connect: async () => { throw new Error('not in this demo'); } }, true);
+  // flash-release…: the APK from a stand-in release (?apk=release), as the image screen shows it
+  const release = name.startsWith('flash-release')
+    ? fakeReleaseRoute(({ 'flash-release': 'out', 'flash-release-downloading': 'stuck', 'flash-release-none': 'none', 'flash-release-bad': 'bad' } as Record<string, FakeRelease>)[name]!, fakeMirrorApk(), tick)
+    : undefined;
+  const mirror = new MirrorSession({ connect: async () => { throw new Error('not in this demo'); }, ...(release ? { release } : {}) }, true);
   const flash = new FlashSession({
     images,
     refract: 'https://refract.glassworks.dev',
@@ -63,6 +68,7 @@ export async function flashDemo(name: FlashDemo, fast = false): Promise<{ flash:
     requestAdb: async () => { const m = new FirstBootMirror(); m.hideFails = name === 'flash-done-chooser'; m.noHome = name === 'flash-done-no-home'; return m; },
     adbKey: () => 'QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= kiln@glassworks',
     apk: () => mirror.apkBytes(),
+    apkBlocked: () => mirror.releaseBlocked(),
     sleep: (ms) => tick(ms / 20),
   });
   const done = { flash, mirror };
@@ -72,7 +78,7 @@ export async function flashDemo(name: FlashDemo, fast = false): Promise<{ flash:
   if (name.startsWith('image-')) return glassPanes(name, done);
 
   flash.choose(); // Glassworks, picked
-  if (name === 'flash-image' || name === 'flash-run') return done;
+  if (name === 'flash-image' || name === 'flash-run' || release) return done;
   if (name === 'flash-downloading') { void flash.download(); return done; }
   await flash.download(); // through Refract
   if (name === 'flash-download-error' || name === 'flash-download-bad') return done;

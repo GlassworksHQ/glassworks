@@ -4,9 +4,10 @@
 import { GLASSWORKS } from '@glassworks/lululemon-mirror-installer';
 import { FakeMirror, MIRROR_KIOSK, fakeMirrorApk, type FakeMirrorOptions } from '@glassworks/lululemon-mirror-installer/fakes';
 import { fakeApk } from '@glassworks/app-adb/fakes';
+import { fakeReleaseRoute } from './releaseDemo';
 import { MirrorSession } from './session';
 
-export const MIRROR_DEMOS = ['run', 'pick', 'pick-wrong', 'checks', 'checks-fail', 'installing', 'home', 'home-clear', 'done', 'done-unconfirmed', 'undo-done', 'undo-pending', 'error'] as const;
+export const MIRROR_DEMOS = ['run', 'pick', 'pick-release', 'pick-wrong', 'checks', 'checks-fail', 'installing', 'home', 'home-clear', 'done', 'done-unconfirmed', 'undo-done', 'undo-pending', 'error'] as const;
 export type MirrorDemo = (typeof MIRROR_DEMOS)[number];
 
 /** the home component Android records for Glassworks: its Launcher alias */
@@ -22,8 +23,10 @@ export async function mirrorDemo(name: MirrorDemo, fast = false): Promise<Mirror
   if (name === 'home-clear') o.installed = 500;
   if (name === 'error') o.installFails = 'Failure [INSTALL_FAILED_OLDER_SDK]';
   const mirror = new FakeMirror(o);
-  const s = new MirrorSession({ connect: async () => mirror, ...(fast ? { sleep: (ms: number) => new Promise<void>((r) => setTimeout(r, ms / 100)) } : {}), homeTimeoutMs: name === 'done-unconfirmed' || name === 'undo-pending' ? 0 : 10 * 60_000 }, true);
+  const release = name === 'pick-release' ? { release: fakeReleaseRoute('out', APK, (ms) => new Promise((r) => setTimeout(r, fast ? 0 : ms))) } : {};
+  const s = new MirrorSession({ connect: async () => mirror, ...release, ...(fast ? { sleep: (ms: number) => new Promise<void>((r) => setTimeout(r, ms / 100)) } : {}), homeTimeoutMs: name === 'done-unconfirmed' || name === 'undo-pending' ? 0 : 10 * 60_000 }, true);
   if (name === 'pick-wrong') { await s.pickApk('mirror-kiosk-v0.12.0.apk', fakeApk('com.nimrod.mirrorkiosk')); return s; }
+  if (name === 'pick-release') return s; // the screen downloads it
   if (name !== 'run') await s.pickApk('generic-android-legacy.apk', APK);
   if (name === 'run' || name === 'pick') return s;
   if (name === 'undo-done' || name === 'undo-pending') mirror.files.set('/data/local/tmp/glassworks-previous-home', `${MIRROR_KIOSK}\n`);

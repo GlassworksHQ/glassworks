@@ -15,6 +15,7 @@ import recovery from '../../../../../frames/lululemon-mirror/design/recovery.jso
 import type { RailMark, RailStep } from '../wizard/state';
 import type { FlashSession, FlashState, WorkStep } from './flash';
 import { Choose, ConfirmCommunity, DoneCommunity, Download, DownloadButton, FileRow, WayBack, Whose } from './choice/ChoiceScreens';
+import { ReleaseApk, TestOnly } from './ReleaseApk';
 import type { MirrorSession, MirrorState } from './session';
 import { SilentUpdates, mirrorSilent } from '../components/SilentUpdates';
 
@@ -72,16 +73,19 @@ export function FlashImage({ f, s, m, ms }: P) {
   const ready = s.files.every((x) => x.state === 'ok');
   return (
     <section className="card" aria-labelledby="h">
-      <div className="row"><span className="pill soon">Test only</span></div>
+      <TestOnly />
       <h2 id="h">Install Glassworks on the Mirror.</h2>
       <p className="lede">Kiln adds Glassworks to the Mirror&apos;s community Android image in this browser, then writes it over USB. It downloads the image from the Glass Panes release and checks it as it arrives.</p>
       {s.files.map((x) => <FileRow key={x.name} f={f} file={x} />)}
       <ImageCredit />
+      {ms.release && <ReleaseApk m={m} ms={ms} />}
       <div className="fields">
-        <label className="field"><span>Glassworks APK (legacy build, test only)</span>
-          <input className="input" type="file" accept=".apk,application/vnd.android.package-archive"
-            onChange={(e) => { const x = e.target.files?.[0]; if (x) void m.pickApk(x.name, x.arrayBuffer().then((b) => new Uint8Array(b))); }} />
-        </label>
+        {!ms.release && (
+          <label className="field"><span>Glassworks APK (legacy build, test only)</span>
+            <input className="input" type="file" accept=".apk,application/vnd.android.package-archive"
+              onChange={(e) => { const x = e.target.files?.[0]; if (x) void m.pickApk(x.name, x.arrayBuffer().then((b) => new Uint8Array(b))); }} />
+          </label>
+        )}
         <label className="field"><span>Home Assistant (optional)</span>
           <input className="input" type="url" placeholder="http://homeassistant.local:8123" value={s.haUrl} onChange={(e) => f.setHaUrl(e.target.value.trim())} />
         </label>
@@ -92,7 +96,7 @@ export function FlashImage({ f, s, m, ms }: P) {
           <input className="input" type="password" autoComplete="off" value={s.wifi.password} onChange={(e) => f.setWifi({ password: e.target.value })} />
         </label>
       </div>
-      {ms.apk && <p className={`small${ms.apk.error ? ' status err' : ''}`}>{ms.apk.name}: {ms.apk.error ?? `${ms.apk.package}, ${fmtSize(ms.apk.size)}`}</p>}
+      {ms.apk && (!ms.release || ms.apk.error) && <p className={`small${ms.apk.error ? ' status err' : ''}`}>{ms.apk.name}: {ms.apk.error ?? `${ms.apk.package}, ${fmtSize(ms.apk.size)}`}</p>}
       {blocked && ready && <p className="status err" role="alert">{blocked}</p>}
       <div className="foot">
         <span className="links"><button type="button" className="link" onClick={() => f.backToChoice()}>Back</button></span>

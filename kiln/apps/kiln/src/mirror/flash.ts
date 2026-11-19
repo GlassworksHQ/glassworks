@@ -6,7 +6,7 @@
 // serve is Kiln's bug: the screen says so, with Try again and Report this, and never asks the person
 // to download a file. Glassworks is built from the checked image in a worker (images.ts) and finishes
 // over adb with this browser's key; a community image goes on as its release has it.
-// Test only, behind ?apk=local, like the rest of the Mirror's page.
+// Behind ?apk=release or ?apk=local, like the rest of the Mirror's page, until MIRROR_OPEN (session.ts).
 import type { PanelShell } from '@glassworks/adb';
 import { imageFromLink, plan, writtenAsIs, type ImageFile, type ImageRecipe, type PlannedStep } from '@glassworks/kiln-core';
 import {
@@ -46,8 +46,10 @@ export interface FlashDeps {
   requestAdb(): Promise<PanelShell>;
   /** This browser's adb public key line, once loaded. */
   adbKey(): string | undefined;
-  /** The app's APK (Glassworks' legacy build, the test-only local file), checked by the page. */
+  /** The app's APK (Glassworks' legacy build, from its release or a local file), checked by the page. */
   apk(): Uint8Array | undefined;
+  /** Why there is no APK yet when it comes from the release (MirrorSession.releaseBlocked). */
+  apkBlocked?(): string | undefined;
   /** The boot animation, when Kiln has one staged. */
   bootAnimation?(): Promise<Uint8Array | undefined>;
   /** GlassworksSettings.apk (frames/lululemon-mirror/overlay), when Kiln has it staged: a first boot with nothing to tap. */
@@ -247,7 +249,7 @@ export class FlashSession {
     const left = s.files.find((f) => f.state !== 'ok');
     if (left) return `Download ${left.name} first.`;
     if (this.recipe.community) return undefined;
-    if (!this.d.apk()) return 'Pick the Glassworks APK file first.';
+    if (!this.d.apk()) return this.d.apkBlocked?.() ?? 'Pick the Glassworks APK file first.';
     if (s.haUrl && !/^https?:\/\/[^\s/]+/.test(s.haUrl)) return 'Home Assistant\'s address starts with http:// or https://.';
     if (!s.wifi.ssid !== !s.wifi.password && !s.wifi.ssid) return 'Give the Wi-Fi network\'s name too.';
     // the password is saved as WPA's PSK in the new userdata: refused here, before the build (wpaSupplicantConf)

@@ -34,6 +34,27 @@ describe('the release route', () => {
     expect(new Uint8Array(await r.arrayBuffer())).toEqual(new Uint8Array([0x50, 0x4b, 3, 4]));
   });
 
+  it.each([
+    ['generic-android-legacy', 'generic-android-legacy-v0.2.0', 'glassworks-generic-android-legacy-arm64-v8a-0.2.0.apk'],
+    ['generic-android-legacy', 'generic-android-legacy-v0.2.0', 'glassworks-generic-android-legacy-armeabi-v7a-0.2.0.apk'],
+    ['aqara-s1-plus', 'v0.4.3', 's1-kiosk-0.4.3.apk'],
+  ])('streams the .sha256 beside %s\'s %s %s, as text', async (frame, tag, apkName) => {
+    const fetch = vi.fn(async () => new Response(`${'ab'.repeat(32)}  ${apkName}\n`));
+    vi.stubGlobal('fetch', fetch);
+    const r = await get(frame, `tag=${tag}&name=${apkName}.sha256`);
+    expect(fetch).toHaveBeenCalledExactlyOnceWith(`https://github.com/GlassworksHQ/glassworks/releases/download/${tag}/${apkName}.sha256`, { redirect: 'follow' });
+    expect(r.status).toBe(200);
+    expect(r.headers.get('content-type')).toBe('text/plain; charset=utf-8');
+    expect(await r.text()).toBe(`${'ab'.repeat(32)}  ${apkName}\n`);
+  });
+
+  it.each([
+    ['the S1\'s tag', 'tag=v0.2.0&name=glassworks-generic-android-legacy-arm64-v8a-0.2.0.apk.sha256'],
+    ['generic Android\'s tag', 'tag=generic-android-v0.2.0&name=glassworks-generic-android-legacy-arm64-v8a-0.2.0.apk.sha256'],
+    ['another version\'s .sha256', 'tag=generic-android-legacy-v0.2.0&name=glassworks-generic-android-legacy-arm64-v8a-0.2.1.apk.sha256'],
+    ['an ABI the line doesn\'t build', 'tag=generic-android-legacy-v0.2.0&name=glassworks-generic-android-legacy-x86_64-0.2.0.apk.sha256'],
+  ])('refuses the Mirror\'s line %s with 400', (_, q) => refusedBefore(get('generic-android-legacy', q), 400));
+
   it('says so when GitHub fails', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response('no', { status: 404 })));
     expect((await get('aqara-s1-plus', 'tag=v0.4.3&name=s1-kiosk-0.4.3.apk')).status).toBe(502);
@@ -50,7 +71,9 @@ describe('the release route', () => {
   ])('refuses the frame %j with 404', (frame) => refusedBefore(get(frame, 'tag=v0.4.3&name=s1-kiosk-0.4.3.apk'), 404));
 
   it.each([
-    ['another file of the release', 'tag=v0.4.3&name=s1-kiosk-0.4.3.apk.sha256'],
+    ['another file of the release', 'tag=v0.4.3&name=SHA256SUMS'],
+    ['a .sha256 of no APK the line serves', 'tag=v0.4.3&name=s1-kiosk-0.4.4.apk.sha256'],
+    ['a .sha256 beside no APK', 'tag=v0.4.3&name=s1-kiosk-0.4.3.sha256'],
     ['another ABI', 'tag=v0.4.3&name=s1-kiosk-arm64-v8a-0.4.3.apk'],
     ['any name', 'tag=v0.4.3&name=evil.apk'],
     ['another version\'s APK', 'tag=v0.4.3&name=s1-kiosk-0.4.4.apk'],
