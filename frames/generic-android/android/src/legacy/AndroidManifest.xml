@@ -13,5 +13,5 @@
          (frames/lululemon-mirror/research/privileged-app.md). -->
     <uses-permission android:name="android.permission.WRITE_SETTINGS" />
 
-    <uses-sdk tools:overrideLibrary="dev.glassworks.core,dev.glassworks.paneapi,dev.glassworks.panes.assist,dev.glassworks.panes.timers,dev.glassworks.panes.sendspin,dev.glassworks.panes.camera,dev.glassworks.panes.diagnostics" />
+    <uses-sdk tools:overrideLibrary="dev.glassworks.core,dev.glassworks.paneapi,dev.glassworks.panes.assist,dev.glassworks.panes.timers,dev.glassworks.panes.sendspin,dev.glassworks.panes.notifications,dev.glassworks.panes.bluetoothproxy,dev.glassworks.panes.camera,dev.glassworks.panes.diagnostics" />
 </manifest>
