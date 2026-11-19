@@ -221,13 +221,31 @@ runner uses. What the runner does instead:
 | `date +%N`, `nproc` | No nanoseconds (`1795071980.N`); no `nproc` | Counts the `cpuN` lines of `/proc/stat`, the same online CPUs as `nproc` |
 | `ps -A -o PID,NAME` | Ignores the options: its own columns (`USER PID PPID VSIZE RSS WCHAN PC S NAME`) | Reads the PID column by its header and the name last |
 | `pidof <package>` | Lists every process | Not used: the runner reads `ps` |
-| SurfaceFlinger's layer | Plain `SurfaceView`, without the app (Android 10: `SurfaceView - <pkg>/<activity>`, Android 12+: `SurfaceView[<pkg>/<activity>]`) | Takes plain `SurfaceView` while the app has a window listed: a kiosk is the only app on screen |
+| SurfaceFlinger's layer | Plain `SurfaceView`, without the app (Android 10: `SurfaceView - <pkg>/<activity>`, Android 12+: `SurfaceView[<pkg>/<activity>]`, Android 15+: below) | Takes plain `SurfaceView` while the app has a window listed: a kiosk is the only app on screen |
 | `dumpsys meminfo` | `65128 kB: name` instead of `65,128K: name`; the legacy engine's content process is `:tab32` | Reads both; `:tab<n>` is a tab process |
 | `toybox nc` (camera video over the LAN) | No `nc` in toybox | The camera video goes over adb (`lanprobe.py` already falls back) |
 | `cmd` | Not there | Not used |
 
 `screencap`, `wm size`, `input tap`/`swipe` with a duration, `am start -W`, `am force-stop`, `stat -c`,
 `logcat -T`, `adb reverse` and `dumpsys SurfaceFlinger --latency` work as on Android 10.
+
+**Android 15 and later name layers differently** (checked on API 35 and API 37 arm64 emulators,
+2026-11-19). The Pixel Tablet's first graded run on Android 17 had no frames from SurfaceFlinger, so
+open, restart and live updates were n/a on every view, and scrolling rested on rAF alone.
+`dumpsys SurfaceFlinger --list` wraps each line as `RequestedLayerState{<name> parentId=… z=…}`. On
+Android 17 a SurfaceView's name also starts with the view's hash:
+
+| Android | The app's frames in `--list` |
+|---|---|
+| 10 (the S1) | `SurfaceView - <pkg>/<activity>#0` |
+| 12 to 14 | `SurfaceView[<pkg>/<activity>](BLAST)#163` |
+| 15, 16 | `RequestedLayerState{SurfaceView[<pkg>/<activity>](BLAST)#169 parentId=168}` |
+| 17 | `RequestedLayerState{f5fea55 SurfaceView[<pkg>/<activity>](BLAST)#163 parentId=162}` |
+
+`--latency` takes only the whole name, hash and `#<id>` included. Any other form gets the refresh
+period alone, as an unknown name does. The runner reads the name out of the wrapper and passes it on
+whole. The `(BLAST)` layer has the frames; its parent has none. When the runner finds a window of
+the app but no SurfaceView it can name, it prints a warning in the run's log.
 
 **The clock on Android 6.** SurfaceFlinger's frame times are on the monotonic clock (`CLOCK_MONOTONIC`), and the
 runner cuts them to the windows the page logs. Android 6's logcat stamps lines only with the wall clock. So the
