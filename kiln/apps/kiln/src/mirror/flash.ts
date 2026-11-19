@@ -43,8 +43,25 @@ export interface FlashDeps {
   sleep?: (ms: number) => Promise<void>;
 }
 
-export type FlashScreen = 'image' | 'fastboot' | 'confirm' | 'working' | 'adb' | 'done' | 'back' | 'error';
-export type WorkStep = PrepareStep | 'flash-system' | 'flash-userdata' | 'restart' | 'first-boot';
+export type FlashScreen = 'image' | 'keep' | 'fastboot' | 'confirm' | 'working' | 'adb' | 'done' | 'back' | 'error';
+export type WorkStep = PrepareStep | 'flash-system' | 'flash-userdata' | 'restart' | 'first-boot' | 'hand-back';
+
+/**
+ * Home Assistant's ESPHome key across a reflash (#580, design only so far): read from the running app
+ * before the flash, given back at the first start. The key itself never goes in the state, only its
+ * 4-hex fingerprint; the session holds it in memory until the hand-back.
+ */
+export type KeyStep =
+  | { state: 'reading' }
+  /** read, and the Mirror is restarting into fastboot */
+  | { state: 'held'; fingerprint: string }
+  /** the app answered with no key: Home Assistant hasn't added this Mirror, so there's nothing to keep */
+  | { state: 'none' }
+  /** no adb (another browser installed it, or it doesn't start), or an app from before the hand-over */
+  | { state: 'unreachable'; why: 'no-adb' | 'old-app'; app?: string }
+  /** after the first start */
+  | { state: 'handed'; fingerprint: string }
+  | { state: 'refused'; fingerprint: string };
 
 export interface FileCheck { name: string; size: number; state: 'downloading' | 'checking' | 'ok' | 'bad'; progress: number; error?: string }
 
@@ -64,6 +81,7 @@ export interface FlashState {
   understood: boolean;
   work?: { step: WorkStep; x: number };
   firstBoot?: FirstBoot;
+  key?: KeyStep;
   /** build zeros as RAW blocks: the retry for a bootloader that refused a FILL chunk */
   noFill?: boolean;
   /** the HOME fix on Done is running */
@@ -175,6 +193,12 @@ export class FlashSession {
   }
 
   toFastboot() { if (!this.blocked()) this.set({ screen: 'fastboot', connectError: undefined }); }
+
+  /** The step before the flash, for a Mirror that runs Glassworks (#580). Reading the key isn't built yet. */
+  toKeep() { if (!this.blocked()) this.set({ screen: 'keep', key: undefined, connectError: undefined }); }
+
+  /** Going on without the key: fastboot by hand. */
+  skipKeep() { this.set({ screen: 'fastboot', key: this.state.key?.state === 'unreachable' ? this.state.key : undefined, connectError: undefined }); }
 
   /** Inside the click: the browser's device list opens first, then Kiln reads the Mirror's fastboot (read-only). */
   async connectFastboot(): Promise<void> {

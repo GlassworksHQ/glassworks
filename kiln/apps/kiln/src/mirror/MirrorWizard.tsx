@@ -17,6 +17,7 @@ import { IMAGE_PROXY, MIRROR_FASTBOOT } from '@glassworks/lululemon-mirror-insta
 import { MIRROR_DEMOS, mirrorDemo, type MirrorDemo } from './demo';
 import { FlashSession } from './flash';
 import { FLASH_DEMOS, flashDemo, type FlashDemo } from './flashDemo';
+import { KEEP_DEMOS, keepDemo, type KeepDemo } from './keepDemo';
 import { FlashScreens, flashLevel, flashRail } from './FlashScreens';
 import { workerImages } from './images';
 import { registry } from '../wizard/registry';
@@ -275,7 +276,7 @@ function Failed({ s, session }: { s: MirrorState; session: MirrorSession }) {
   );
 }
 
-const DEMOS = [...MIRROR_DEMOS, ...FLASH_DEMOS];
+const DEMOS = [...MIRROR_DEMOS, ...FLASH_DEMOS, ...KEEP_DEMOS];
 
 /**
  * With ?apk=local: Glassworks over fastboot (the default), or the app alone over adb on a Mirror that
@@ -300,7 +301,8 @@ export function MirrorWizard() {
   useEffect(() => {
     const d = start.m.demo;
     if (!d) return;
-    if (d.startsWith('flash-')) void flashDemo(d as FlashDemo).then(setDemo);
+    if ((KEEP_DEMOS as readonly string[]).includes(d)) void keepDemo(d as KeepDemo).then(setDemo);
+    else if (d.startsWith('flash-')) void flashDemo(d as FlashDemo).then(setDemo);
     else void mirrorDemo(d as MirrorDemo).then((mirror) => setDemo({ mirror }));
   }, [start]);
   const live = start.real ?? demo;
@@ -318,6 +320,7 @@ export function Flash({ flash, mirror, toApp }: { flash: FlashSession; mirror: M
     <Shell steps={flashRail(s)} level={flashLevel(s)} error={s.screen === 'error'} chip={chip}>
       <FlashScreens f={flash} s={s} m={mirror} ms={ms} />
       {toApp && s.screen === 'image' && <p className="small">Already runs the Glass Panes image? <button type="button" className="link" onClick={toApp}>Add the app only, over adb</button></p>}
+      {s.screen === 'fastboot' && !s.back && !s.key && <p className="small">Glassworks already runs on this Mirror? <button type="button" className="link" onClick={() => flash.toKeep()}>Keep its Home Assistant device first</button></p>}
     </Shell>
   );
 }
