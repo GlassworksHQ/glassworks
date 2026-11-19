@@ -104,6 +104,7 @@ function load(): Source[] {
   }
   add({ file: "kiln/apps/kiln/README.md", url: "/docs/kiln", section: "build", label: "Kiln" });
   add({ file: "docs/design/kiln/README.md", url: "/docs/kiln/design", section: "build", label: "Kiln's design" });
+  add({ file: "docs/kiln-images.md", url: "/docs/kiln/images", section: "build", label: "Adding an image to Kiln" });
 
   const project: [string, string][] = [
     ["perf", "Clarity, the performance grade"],

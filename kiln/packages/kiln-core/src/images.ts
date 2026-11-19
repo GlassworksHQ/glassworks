@@ -39,7 +39,21 @@ export type ImageStep =
   /** Restarts the device into what was written. */
   | { do: 'restart' }
   /** Kiln's first start over adb with this browser's key. Only an image that trusts that key: Glassworks. */
-  | { do: 'first-start' };
+  | { do: 'first-start' }
+  /**
+   * The person's Wi-Fi network, saved in a copy of a checked userdata image (`file`), named `makes`.
+   * It writes one file and nothing else: `/misc/wifi/wpa_supplicant.conf`, which is the template from
+   * the checked system image (`template`'s `/etc/wifi/wpa_supplicant.conf`), then the network with its
+   * PSK, never the password. Optional: when the person gives no network, `makes` is `file` as checked.
+   * Writes nothing to the device.
+   */
+  | { do: 'wifi'; file: string; template: string; makes: string }
+  /**
+   * After the restart, over adb with the image's own published key (`key`, a checked download, used for
+   * this one session and never stored), runs `svc wifi enable` and nothing else, so a saved network
+   * joins without anyone opening Settings. Only after a `wifi` step, and only when a network was saved.
+   */
+  | { do: 'wifi-on'; key: string };
 
 export type StepKind = ImageStep['do'];
 
@@ -51,6 +65,8 @@ export const STEP_LIBRARY: Readonly<Record<StepKind, { fields: readonly string[]
   flash: { fields: ['partition', 'file'], writes: true, device: true },
   restart: { fields: [], writes: false, device: true },
   'first-start': { fields: [], writes: false, device: true },
+  wifi: { fields: ['file', 'template', 'makes'], writes: false, device: false },
+  'wifi-on': { fields: ['key'], writes: false, device: true },
 };
 
 /**
@@ -123,7 +139,7 @@ export function validateImage(r: ImageRecipe, frame: FrameAccess): string[] {
   const checked = new Set<string>();
   const made = new Set<string>();
   const downloaded = new Set<string>();
-  let device = false, fastboot = false, restarted = false, writes = 0;
+  let device = false, fastboot = false, restarted = false, writes = 0, wifi = false, wifiOn = false;
   (r.steps ?? []).forEach((s, i) => {
     const kind = (s as { do?: string }).do ?? '';
     if ((SAFETY_STEPS as readonly string[]).includes(kind)) { bad.push(`${at(i)}: "${kind}" is Kiln's own safety step; a recipe can't list it`); return; }
@@ -166,6 +182,23 @@ export function validateImage(r: ImageRecipe, frame: FrameAccess): string[] {
       case 'first-start':
         if (r.community) bad.push(`${at(i)}: Kiln's first start needs an image that trusts this browser's key: only Glassworks`);
         if (!restarted) bad.push(`${at(i)}: first-start comes after restart`);
+        break;
+      case 'wifi':
+        if (wifi) bad.push(`${at(i)}: the Wi-Fi is saved once`);
+        wifi = true;
+        // Kiln runs it after its checks and the warning, before the writes: between fastboot and restart
+        if (!fastboot || restarted) bad.push(`${at(i)}: wifi comes after fastboot and before restart`);
+        if (!checked.has(s.file)) bad.push(`${at(i)}: wifi needs ${s.file} downloaded first`);
+        if (!checked.has(s.template)) bad.push(`${at(i)}: wifi needs ${s.template} downloaded first`);
+        if (typeof s.makes !== 'string' || !s.makes.trim() || files.has(s.makes) || made.has(s.makes)) bad.push(`${at(i)}: wifi must name a new file it makes`);
+        else made.add(s.makes);
+        break;
+      case 'wifi-on':
+        if (wifiOn) bad.push(`${at(i)}: Wi-Fi is switched on once`);
+        wifiOn = true;
+        if (!wifi) bad.push(`${at(i)}: wifi-on needs a wifi step first: there is no network to join otherwise`);
+        if (!restarted) bad.push(`${at(i)}: wifi-on comes after restart`);
+        if (!checked.has(s.key)) bad.push(`${at(i)}: wifi-on's key must be a checked download`);
         break;
     }
   });
@@ -213,4 +246,9 @@ export function imageFromLink<R extends ImageRecipe>(images: readonly R[], searc
 export function writtenAsIs(r: ImageRecipe): ImageFile[] {
   const names = new Set(r.steps.flatMap((s) => (s.do === 'flash' ? [s.file] : [])));
   return r.files.filter((f) => names.has(f.name));
+}
+
+/** The `wifi` step that makes `name`, when there is one: its source file is what gets written when no network is saved. */
+export function wifiStep(r: ImageRecipe, name: string): Extract<ImageStep, { do: 'wifi' }> | undefined {
+  return r.steps.find((s): s is Extract<ImageStep, { do: 'wifi' }> => s.do === 'wifi' && s.makes === name);
 }

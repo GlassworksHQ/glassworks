@@ -2,7 +2,7 @@
 // and write a Disk back out as one, a chunk at a time. Format: a 28-byte file header, then chunks,
 // each a 12-byte header and its data: RAW (blocks), FILL (a 4-byte pattern), DONT_CARE (nothing),
 // CRC32 (4 bytes, skipped).
-import { Disk } from './disk';
+import { Disk, type Store } from './disk';
 
 export const SPARSE_MAGIC = 0xed26ff3a;
 const FILE_HDR = 28;
@@ -209,4 +209,77 @@ export async function writeSparse(disk: Disk, sink: (b: Uint8Array) => Promise<v
     }
     o.onProgress?.(r.from + r.count);
   }
+}
+
+/** Something with random reads: a File or Blob (page or worker), or a test's bytes. */
+export interface RandomReadable { size: number; slice(start: number, end: number): { arrayBuffer(): Promise<ArrayBuffer> } }
+
+type Piece = { block: number; count: number } & ({ kind: 'raw'; at: number } | { kind: 'fill'; value: number } | { kind: 'zero' });
+
+/**
+ * A sparse image read where it lies, without expanding it: the chunk headers are read once (a few
+ * hundred 12-byte reads), then each read takes only the blocks it asks for. For reading a file or two
+ * out of a large image (a system image of 850 MB sparse, 1.3 GB expanded, in about 0.2 s). Read-only: a
+ * write throws. DONT_CARE blocks read as zeros.
+ */
+export async function sparseStore(file: RandomReadable): Promise<{ header: SparseHeader; store: Store }> {
+  const bytes = async (from: number, n: number) => new Uint8Array(await file.slice(from, from + n).arrayBuffer());
+  const header = parseSparseHeader(await bytes(0, FILE_HDR));
+  if (!header) throw new Error('this is not an Android sparse image');
+  const hdrSize = new DataView((await bytes(8, 2)).buffer).getUint16(0, true);
+  const chunkHdr = new DataView((await bytes(10, 2)).buffer).getUint16(0, true);
+  const bs = header.blockSize;
+  const runs: Piece[] = [];
+  let at = hdrSize, block = 0;
+  for (let c = 0; c < header.chunks; c++) {
+    const h = await bytes(at, chunkHdr);
+    if (h.length < CHUNK_HDR) throw new Error(`the sparse image ends after ${c} of ${header.chunks} chunks (cut short?)`);
+    const dv = new DataView(h.buffer, h.byteOffset, h.length);
+    const type = dv.getUint16(0, true), count = dv.getUint32(4, true), total = dv.getUint32(8, true);
+    if (block + count > header.blocks) throw new Error(`sparse chunk ${c} runs past the image's ${header.blocks} blocks`);
+    const data = at + chunkHdr;
+    if (type === Chunk.Raw) {
+      if (total !== chunkHdr + count * bs) throw new Error(`sparse chunk ${c} has the wrong size`);
+      if (data + count * bs > file.size) throw new Error(`the sparse image ends inside chunk ${c} (cut short?)`);
+      runs.push({ block, count, kind: 'raw', at: data });
+    } else if (type === Chunk.Fill) {
+      if (total !== chunkHdr + 4) throw new Error(`sparse chunk ${c} has the wrong size`);
+      const value = new DataView((await bytes(data, 4)).buffer).getUint32(0, true);
+      runs.push(value === 0 ? { block, count, kind: 'zero' } : { block, count, kind: 'fill', value });
+    } else if (type === Chunk.DontCare) {
+      if (total !== chunkHdr) throw new Error(`sparse chunk ${c} has the wrong size`);
+      runs.push({ block, count, kind: 'zero' });
+    } else if (type !== Chunk.Crc32) {
+      throw new Error(`sparse chunk ${c} has an unknown type 0x${type.toString(16)}`);
+    }
+    if (type !== Chunk.Crc32) block += count;
+    at += total;
+  }
+  if (block !== header.blocks) throw new Error(`the sparse chunks cover ${block} of ${header.blocks} blocks`);
+  const find = (b: number) => { // the run holding block b: binary search over the ordered runs
+    let lo = 0, hi = runs.length - 1;
+    while (lo <= hi) { const m = (lo + hi) >> 1, r = runs[m]!; if (b < r.block) hi = m - 1; else if (b >= r.block + r.count) lo = m + 1; else return r; }
+    throw new Error(`block ${b} is in no sparse chunk`);
+  };
+  const store: Store = {
+    async read(offset, length) {
+      const out = new Uint8Array(length);
+      let pos = offset;
+      while (pos < offset + length) {
+        const r = find(Math.floor(pos / bs));
+        const runEnd = (r.block + r.count) * bs;
+        const n = Math.min(offset + length, runEnd) - pos;
+        const into = pos - offset;
+        if (r.kind === 'raw') out.set(await bytes(r.at + (pos - r.block * bs), n), into);
+        else if (r.kind === 'fill') {
+          const pat = new Uint8Array(4); new DataView(pat.buffer).setUint32(0, r.value, true);
+          for (let i = 0; i < n; i++) out[into + i] = pat[(pos + i) % 4]!;
+        }
+        pos += n;
+      }
+      return out;
+    },
+    async write() { throw new Error('this sparse image is read-only'); },
+  };
+  return { header, store };
 }

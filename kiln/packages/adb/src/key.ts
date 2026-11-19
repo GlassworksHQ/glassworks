@@ -80,12 +80,28 @@ export async function loadOrCreateAdbKey(storage: KeyStorage = new IndexedDbKeyS
     pkcs8 = await generatePkcs8();
     await storage.save(pkcs8);
   }
-  const key: AdbPrivateKey = { buffer: pkcs8, name: KEY_NAME };
+  return adbKeyFromPkcs8(pkcs8);
+}
+
+/**
+ * The AdbKey for a PKCS#8 private key, in memory only. For this browser's key (loadOrCreateAdbKey),
+ * and for a key a project publishes for its own images, which a device on that image trusts (a
+ * community image's project key): that one is never saved, so it is never offered to another device.
+ */
+export function adbKeyFromPkcs8(pkcs8: Uint8Array, name: string = KEY_NAME): AdbKey {
+  const key: AdbPrivateKey = { buffer: pkcs8, name };
   return {
-    publicKey: `${base64(adbGeneratePublicKey(pkcs8))} ${KEY_NAME}`,
+    publicKey: `${base64(adbGeneratePublicKey(pkcs8))} ${name}`,
     store: {
-      generateKey: () => key, // never needed: the panel already trusts this key
+      generateKey: () => key, // never needed: the device already trusts this key
       iterateKeys: () => [key],
     },
   };
+}
+
+/** adb's own key file (`adbkey`: a PEM `PRIVATE KEY`, PKCS#8) as its DER bytes. Anything else is refused. */
+export function pemToPkcs8(pem: string): Uint8Array {
+  const m = /-----BEGIN PRIVATE KEY-----([\s\S]+?)-----END PRIVATE KEY-----/.exec(pem);
+  if (!m) throw new Error('this isn\'t an adb key file (a PKCS#8 PRIVATE KEY)');
+  return Uint8Array.from(atob(m[1]!.replace(/\s+/g, '')), (c) => c.charCodeAt(0));
 }

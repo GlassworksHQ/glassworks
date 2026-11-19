@@ -9,11 +9,11 @@
 // Test only, behind ?apk=local, like the rest of the Mirror's page.
 // A Mirror that runs Glassworks already can go through `keep` first (issue 580): Kiln reads Home Assistant's ESPHome key
 // from the running app over adb and gives it back at the first start, as tools/mirror's flash-node does (PR 575).
-import { AdbAuthTimeout, type PanelShell } from '@glassworks/adb';
+import { AdbAuthTimeout, pemToPkcs8, type PanelShell } from '@glassworks/adb';
 import { apiKeyFingerprint, apiKeySocketUp, kioskVersion, readApiKey } from '@glassworks/app-adb';
-import { imageFromLink, plan, writtenAsIs, type ImageFile, type ImageRecipe, type PlannedStep } from '@glassworks/kiln-core';
+import { imageFromLink, plan, wifiStep, type ImageFile, type ImageRecipe, type PlannedStep } from '@glassworks/kiln-core';
 import {
-  GLASSWORKS, GLASS_PANES_USERDATA, MIRROR_IMAGES, ProxyError, USERDATA_BYTES, WrongImage, checkFastboot, firstBoot, makeOnlyHome,
+  GLASSWORKS, GLASS_PANES_USERDATA, MIRROR_IMAGES, ProxyError, USERDATA_BYTES, WrongImage, checkFastboot, firstBoot, makeOnlyHome, wifiOn,
   type FastbootLike, type FastbootReport, type FirstBoot, type PrepareStep,
 } from '@glassworks/lululemon-mirror-installer';
 
@@ -33,6 +33,11 @@ export interface ImageMaker {
     /** ro.glassworks.api_key.handover=1: the app waits for the key Kiln holds (issue 574). The flag only: the key never goes to the worker */
     apiKeyHandover?: boolean },
     onProgress: (step: PrepareStep, x: number) => void): Promise<{ system: Blob; userdata: Blob }>;
+  /**
+   * A community image's `wifi` step: a copy of the stored `userdata` with the network saved in it (one
+   * file, from `system`'s own template), checked against its pin as it is read. Returns the copy.
+   */
+  wifi(o: { userdata: ImageFile; system: ImageFile; makes: string; wifi: { ssid: string; password: string } }, onProgress: (x: number) => void): Promise<Blob>;
   /** Deletes what it kept (the downloads, the built copies). */
   discard(): Promise<void>;
 }
@@ -63,7 +68,12 @@ export interface FlashDeps {
    * The session outlives its screen (Kiln's registry), so this follows the session, not the screen.
    */
   holdingKey?(on: boolean): void;
-
+  /**
+   * Prepares a connection with another key (PKCS#8): a community image's own published key, for its
+   * `wifi-on` step. Called when the key is read; the connector it returns opens the browser's device
+   * list inside the Connect click. Used for that one connection; never stored.
+   */
+  adbWithKey?(pkcs8: Uint8Array): () => Promise<PanelShell>;
   /** This browser's adb public key line, once loaded. */
   adbKey(): string | undefined;
   /** The app's APK (Glassworks' legacy build, the test-only local file), checked by the page. */
@@ -77,7 +87,7 @@ export interface FlashDeps {
 
 /** `image`: Glassworks' download and settings; `download`: a community image's. */
 export type FlashScreen = 'choose' | 'image' | 'download' | 'keep' | 'fastboot' | 'confirm' | 'working' | 'adb' | 'done' | 'error';
-export type WorkStep = PrepareStep | 'flash-system' | 'flash-userdata' | 'restart' | 'first-boot' | 'hand-back';
+export type WorkStep = PrepareStep | 'wifi' | 'flash-system' | 'flash-userdata' | 'restart' | 'first-boot' | 'hand-back' | 'wifi-on';
 /**
  * Home Assistant's ESPHome key across a reflash (issue 580): read from the running app before the flash, given back at the
  * first start. The key itself never goes in the state or the log, only its 4-hex fingerprint; the session holds it in
@@ -127,12 +137,16 @@ export interface FlashState {
   work?: { step: WorkStep; x: number };
   firstBoot?: FirstBoot;
   key?: KeyStep;
+  /** A community image's Wi-Fi: `saved` once the network is in its userdata, then `on` or `unconfirmed` after wifi-on. */
+  communityWifi?: 'saved' | 'on' | 'unconfirmed';
   /** build zeros as RAW blocks: the retry for a bootloader that refused a FILL chunk */
   noFill?: boolean;
   /** the HOME fix on Done is running */
   fixing?: boolean;
   /** the error came while writing: offer the retry without FILL */
   flashFailed?: boolean;
+  /** the error came at a community image's wifi-on, after it was installed: offer Connect again, not a reinstall */
+  wifiOnFailed?: boolean;
   error?: string;
   log: string[];
 }
@@ -156,6 +170,8 @@ export class FlashSession {
   private panel?: PanelShell;
   private made: Record<string, Blob> = {};
   private runs = 0;
+  /** A connector with a community image's published adb key, checked, held in memory for its wifi-on step only. */
+  private imageConnect?: () => Promise<PanelShell>;
   /** Bumped when the picked image or the way to it changes: a fastboot check started before then is ignored. */
   private selected = 0;
   /** Home Assistant's ESPHome key from before the flash (issue 580). A secret: never in the state, the log or an error */
@@ -240,7 +256,7 @@ export class FlashSession {
     this.selected++;
     // a fresh install: an earlier one's key outcome (handed, refused, none…) goes; a key still held for a hand-back stays
     const key = this.state.key?.state === 'held' ? this.state.key : undefined;
-    this.set({ screen: 'choose', picked: r.id, from, open: r.community, link: false, files: waiting(r), fastboot: undefined, understood: false,
+    this.set({ screen: 'choose', picked: r.id, from, open: r.community, link: false, files: waiting(r), fastboot: undefined, understood: false, communityWifi: undefined,
       work: undefined, firstBoot: undefined, key, error: undefined, flashFailed: false, noFill: false });
   }
 
@@ -319,16 +335,27 @@ export class FlashSession {
     const s = this.state;
     const left = s.files.find((f) => f.state !== 'ok');
     if (left) return `Download ${left.name} first.`;
-    if (this.recipe.community) return undefined;
+    if (this.recipe.community) return this.recipe.steps.some((x) => x.do === 'wifi') ? this.wifiBlocked() : undefined;
     if (!this.d.apk()) return 'Pick the Glassworks APK file first.';
     if (s.haUrl && !/^https?:\/\/[^\s/]+/.test(s.haUrl)) return 'Home Assistant\'s address starts with http:// or https://.';
-    if (!s.wifi.ssid !== !s.wifi.password && !s.wifi.ssid) return 'Give the Wi-Fi network\'s name too.';
-    // the password is saved as WPA's PSK in the new userdata: refused here, before the build (wpaSupplicantConf)
-    if (s.wifi.ssid && new TextEncoder().encode(s.wifi.ssid).length > 32) return 'A Wi-Fi network\'s name is at most 32 bytes.';
-    if (s.wifi.ssid && s.wifi.password && !/^[\x20-\x7e]{8,63}$/.test(s.wifi.password) && !/^[0-9a-fA-F]{64}$/.test(s.wifi.password)) {
+    return this.wifiBlocked();
+  }
+
+  /** The network as wpa_supplicant can save it, or why not: refused here, before anything is built (wpaSupplicantConf). */
+  private wifiBlocked(): string | undefined {
+    const { ssid, password } = this.state.wifi;
+    if (!ssid !== !password && !ssid) return 'Give the Wi-Fi network\'s name too.';
+    // the password is saved as WPA's PSK in userdata
+    if (ssid && new TextEncoder().encode(ssid).length > 32) return 'A Wi-Fi network\'s name is at most 32 bytes.';
+    if (ssid && password && !/^[\x20-\x7e]{8,63}$/.test(password) && !/^[0-9a-fA-F]{64}$/.test(password)) {
       return 'The Wi-Fi password must be 8 to 63 characters (letters, digits, symbols), or empty for an open network.';
     }
     return undefined;
+  }
+
+  /** The planned steps that will actually run: a community image's Wi-Fi steps only when the person gave a network. */
+  private runningSteps(steps: PlannedStep[]): PlannedStep[] {
+    return this.recipe.community && !this.state.wifi.ssid ? steps.filter((x) => x.do !== 'wifi' && x.do !== 'wifi-on') : steps;
   }
 
   /** Continue: fastboot, or the keep step first in a browser that has flashed a Mirror before (it alone gets in over adb). */
@@ -475,7 +502,9 @@ export class FlashSession {
       this.fb = fb;
       const r = this.recipe;
       // a community image's userdata goes on as published, at its own size: the partition must hold it (Glassworks builds one to fit)
-      if (r.community && writtenAsIs(r).some((f) => f.name === GLASS_PANES_USERDATA.name) && fastboot.userdataBytes < USERDATA_BYTES) {
+      // (with the network saved, the copy Kiln makes is the same size, so the same holds)
+      const publishedUserdata = r.steps.some((x) => x.do === 'flash' && x.partition === 'userdata' && (wifiStep(r, x.file)?.file ?? x.file) === GLASS_PANES_USERDATA.name);
+      if (r.community && publishedUserdata && fastboot.userdataBytes < USERDATA_BYTES) {
         fastboot.checks.push({ what: `Userdata partition for ${r.name}`, found: `${fastboot.userdataBytes} bytes`, ok: false, need: `at least ${USERDATA_BYTES} bytes, the size its userdata image expands to` });
         fastboot.ok = false;
       }
@@ -491,7 +520,7 @@ export class FlashSession {
   /** The planned steps from the first write on: what flash() runs, and what the install screen lists. */
   writes(): PlannedStep[] {
     const all = plan(this.recipe);
-    return all.slice(all.findIndex((s) => s.do === 'confirm') + 1);
+    return this.runningSteps(all.slice(all.findIndex((s) => s.do === 'confirm') + 1));
   }
 
   /**
@@ -506,23 +535,37 @@ export class FlashSession {
     const steps = this.writes();
     const work = (step: WorkStep, x: number) => this.set({ work: { step, x } });
     const first = steps.find((x) => x.do !== 'backup');
-    this.set({ screen: 'working', error: undefined, flashFailed: false, work: { step: first?.do === 'patch' ? 'patch' : first?.do === 'flash' ? `flash-${first.partition}` as WorkStep : 'restart', x: 0 } });
+    this.set({ screen: 'working', error: undefined, flashFailed: false, communityWifi: undefined, work: { step: first?.do === 'patch' ? 'patch' : first?.do === 'flash' ? `flash-${first.partition}` as WorkStep : 'restart', x: 0 } });
+    // what an earlier attempt made (Glassworks' images, a userdata with a network) is made again by its
+    // own step, or not at all: a retry with the network cleared must write userdata as published
+    this.made = {};
     let building = false, reading = false;
+    const network = s.wifi.ssid ? { ssid: s.wifi.ssid, password: s.wifi.password } : undefined;
     try {
       // the Mirror's LK can't read anything back: Kiln's backup step is the record of what it writes
       this.log('Backup: none possible, the Mirror\'s bootloader can\'t read anything back. What Kiln writes:');
-      for (const f of writtenAsIs(r)) this.log('', `${f.name}: SHA-256 ${f.sha256}, as ${r.name}'s release publishes it`);
+      for (const x of steps) {
+        if (x.do !== 'flash') continue;
+        const ws = wifiStep(r, x.file);
+        const src = r.files.find((f) => f.name === (ws?.file ?? x.file));
+        if (!src) continue; // built by Kiln (Glassworks' patch)
+        this.log('', ws && network ? `${src.name}: SHA-256 ${src.sha256} as published, with the Wi-Fi network saved in it` : `${src.name}: SHA-256 ${src.sha256}, as ${r.name}'s release publishes it`);
+      }
       // every published file this install writes, opened and checked now, before the first write; those very Blobs go to
-      // fastboot, so a file another tab changed can't leave one partition written and the other not
+      // fastboot, so a file another tab changed can't leave one partition written and the other not. A userdata with the
+      // network saved is made later by the wifi step, which hashes its source as it reads it.
       const verified: Record<string, Blob> = {};
       reading = true;
       for (const x of steps) {
-        const want = x.do === 'flash' ? r.files.find((f) => f.name === x.file) : undefined;
-        if (!want || verified[want.name]) continue;
+        if (x.do !== 'flash' || verified[x.file]) continue;
+        const ws = wifiStep(r, x.file);
+        if (ws && network) continue;
+        const want = r.files.find((f) => f.name === (ws?.file ?? x.file));
+        if (!want) continue; // built by Kiln (Glassworks' patch)
         const blob = await this.d.images.file(want.name);
         this.log('', `${want.name}: checking it again before writing`);
         await this.d.images.check(blob, want, () => {});
-        verified[want.name] = blob;
+        verified[x.file] = blob;
       }
       reading = false;
       for (const step of steps) {
@@ -542,11 +585,27 @@ export class FlashSession {
           }, (step, x) => work(step, x));
           building = false;
           this.log('', `Kiln built: ${step.makes.join(', ')}`);
+        } else if (step.do === 'wifi') {
+          if (!network) continue; // not planned without one (writes()): userdata goes on as published
+          const key = steps.find((x): x is Extract<PlannedStep, { do: 'wifi-on' }> => x.do === 'wifi-on');
+          reading = true;
+          if (key) {
+            // the image's published key, checked now: the restart deletes the downloads, and it is needed after it
+            this.imageConnect = this.d.adbWithKey?.(await readImageKey(this.d.images, r.files.find((f) => f.name === key.key)!));
+          }
+          this.log('Saving the Wi-Fi network you entered'); // never its name: logs end up in failure reports (CLAUDE.md rule 2)
+          work('wifi', 0);
+          const file = (n: string) => r.files.find((f) => f.name === n)!;
+          this.made[step.makes] = await this.d.images.wifi({ userdata: file(step.file), system: file(step.template), makes: step.makes, wifi: network }, (x) => work('wifi', x));
+          reading = false;
+          this.set({ communityWifi: 'saved' });
+          this.log('', `${step.file} with the network saved in /misc/wifi/wpa_supplicant.conf, and nothing else changed`);
         } else if (step.do === 'flash') {
           const id = `flash-${step.partition}` as WorkStep;
           const blob = this.made[step.file] ?? verified[step.file];
           if (!blob) throw new Error(`Kiln has no checked ${step.file} to write. Nothing more was written.`);
-          this.log(`Flashing ${step.partition}${r.community ? ` with ${step.file} as published` : s.noFill ? ' (zeros as RAW, no FILL chunks)' : ''}`);
+          const asIs = r.community && !this.made[step.file];
+          this.log(`Flashing ${step.partition}${asIs ? ` with ${wifiStep(r, step.file)?.file ?? step.file} as published` : r.community ? ` with ${step.file}, built by Kiln from a checked download` : s.noFill ? ' (zeros as RAW, no FILL chunks)' : ''}`);
           this.set({ flashFailed: true }); // until the restart: a failure from here is the bootloader's
           work(id, 0);
           await fb.flashBlob(step.partition, blob, (x) => work(id, x));
@@ -564,7 +623,7 @@ export class FlashSession {
           await this.d.images.discard().catch((e: Error) => this.log('', `deleting the downloads failed: ${e.message}`));
         }
       }
-      this.set({ screen: steps.some((x) => x.do === 'first-start') ? 'adb' : 'done' });
+      this.set({ screen: steps.some((x) => x.do === 'first-start' || x.do === 'wifi-on') ? 'adb' : 'done' });
     } catch (e) {
       this.log('Stopped', (e as Error).message);
       // a failed build dropped the fetched image (it may be patched halfway), and a stored file that is gone or
@@ -573,8 +632,13 @@ export class FlashSession {
     }
   }
 
-  /** After the restart, inside the click: adb with this browser's key, then Kiln's first start (Glassworks). */
+  /**
+   * After the restart, inside the click: adb with this browser's key, then Kiln's first start
+   * (Glassworks); or, for a community image's wifi-on, with the image's own published key, then
+   * `svc wifi enable` and nothing else.
+   */
   async connectAdb(): Promise<void> {
+    if (this.recipe.community) return this.connectWifiOn();
     const req = this.d.requestAdb();
     this.set({ connecting: true, connectError: undefined });
     let p: PanelShell;
@@ -606,9 +670,30 @@ export class FlashSession {
     }
   }
 
+  private async connectWifiOn(): Promise<void> {
+    const req = this.imageConnect ? this.imageConnect() : Promise.reject(new Error('Kiln has no key for this image here. Turn Wi-Fi on in the Mirror\'s Settings once instead.'));
+    this.set({ connecting: true, connectError: undefined });
+    let p: PanelShell;
+    try { p = await req; } catch (e) { this.set({ connecting: false, connectError: (e as Error).message }); return; }
+    this.set({ connecting: false, screen: 'working', wifiOnFailed: false, error: undefined, work: { step: 'wifi-on', x: 0 } });
+    try {
+      this.log('Switching Wi-Fi on, with the image\'s own published key: svc wifi enable');
+      const on = await wifiOn(p, this.d.sleep);
+      this.imageConnect = undefined; // one connection only
+      this.log('', on ? 'Android says Wi-Fi is on' : 'Android didn\'t confirm Wi-Fi is on');
+      this.set({ screen: 'done', communityWifi: on ? 'on' : 'unconfirmed', work: { step: 'wifi-on', x: 1 } });
+    } catch (e) {
+      this.log('Stopped', (e as Error).message);
+      this.set({ screen: 'error', error: (e as Error).message, wifiOnFailed: true }); // installed already: Connect again, not a reinstall
+    } finally {
+      // WebUSB holds the device until the connection is released: a retry opens a fresh one
+      await (p as PanelShell & { close?(): Promise<void> }).close?.().catch(() => {});
+    }
+  }
+
   /** From an error: back to the image's first screen, keeping what checked out (a fetched image builds again). */
   retry() {
-    this.set({ screen: this.recipe.community ? 'download' : 'image', error: undefined, work: undefined, fastboot: undefined, understood: false, flashFailed: false });
+    this.set({ wifiOnFailed: false, screen: this.recipe.community ? 'download' : 'image', error: undefined, work: undefined, fastboot: undefined, understood: false, flashFailed: false });
   }
 
   /**
@@ -630,4 +715,26 @@ export class FlashSession {
       this.set({ fixing: false });
     }
   }
+}
+
+/** A small Blob's text, through FileReader (in every browser, and in jsdom for the tests). */
+function blobText(b: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result));
+    r.onerror = () => reject(r.error ?? new Error('Kiln couldn\'t read the image\'s key'));
+    r.readAsText(b);
+  });
+}
+
+/**
+ * A recipe's published adb key (Glass Panes' project key), read from storage and checked against its
+ * pin as the very Blob it reads, as PKCS#8 bytes: the one key loader for every step that uses it
+ * (wifi-on here; restarting a Glass Panes Mirror into fastboot next). Held in memory by the caller,
+ * never stored. Throws WrongImage when it isn't the pinned key.
+ */
+export async function readImageKey(images: Pick<ImageMaker, 'file' | 'check'>, want: ImageFile): Promise<Uint8Array> {
+  const blob = await images.file(want.name);
+  await images.check(blob, want, () => {});
+  return pemToPkcs8(await blobText(blob));
 }

@@ -2,17 +2,25 @@
 // else, to Kiln. GitHub's release file host sends no Access-Control-Allow-Origin, so a page can't
 // read those bytes itself. This Worker stores nothing: no Cache API, no KV or R2, and the subrequest
 // skips Cloudflare's cache. Kiln still checks each file's SHA-256.
+//
+// It also serves a few small files from a project's repository at a pinned commit (`commit` and
+// `path` instead of `tag` and `name`), such as the Glass Panes image's published adb key (#579). Those
+// are at most 64 KiB: Refract reads one whole, checks its size and SHA-256 against the allowlist, and
+// sends it only if both match.
 import allowlist from '../allowlist.json';
 
-interface Asset {
+interface Common {
   owner: string;
   repo: string;
-  tag: string;
-  name: string;
   size: number;
   sha256: string;
   credit: { name: string; url: string; project: string };
 }
+/** A release asset, streamed. */
+interface Release extends Common { tag: string; name: string }
+/** A file in the repository at a pinned commit (40 hex digits), at most REPO_FILE_MAX bytes, checked whole. */
+interface RepoFile extends Common { commit: string; path: string }
+type Asset = Release | RepoFile;
 
 interface RateLimit {
   limit(options: { key: string }): Promise<{ success: boolean }>;
@@ -31,8 +39,14 @@ interface Env {
 
 const BASE = 'https://refract.glassworks.dev';
 const ASSETS: Readonly<Record<string, Asset>> = allowlist;
+/** The largest repository file Refract serves: it reads the whole file to check it. */
+const REPO_FILE_MAX = 64 * 1024;
+const COMMIT = /^[0-9a-f]{40}$/;
+const isRepoFile = (a: Asset): a is RepoFile => 'commit' in a;
 /** Where GitHub's release downloads redirect to. A redirect anywhere else is refused. */
 const UPSTREAM_HOSTS = new Set(['github.com', 'release-assets.githubusercontent.com', 'objects.githubusercontent.com']);
+/** Where a repository file comes from. It answers directly; a redirect is refused. */
+const RAW_HOST = 'raw.githubusercontent.com';
 /** Requests to GitHub per download: the releases URL and up to three redirects. */
 const MAX_HOPS = 4;
 
@@ -40,7 +54,10 @@ const SINGLE_RANGE = /^bytes=(?:(\d+)-\d*|-\d+)$/;
 const CONTENT_RANGE = /^bytes (\d+)-(\d+)\/(\d+)$/;
 const ETAG = /^(W\/)?"[^"]*"$/;
 
-const source = (a: Asset) => `https://github.com/${a.owner}/${a.repo}/releases/download/${a.tag}/${a.name}`;
+const source = (a: Asset) => (isRepoFile(a)
+  ? `https://${RAW_HOST}/${a.owner}/${a.repo}/${a.commit}/${a.path}`
+  : `https://github.com/${a.owner}/${a.repo}/releases/download/${a.tag}/${a.name}`);
+const fileName = (a: Asset) => (isRepoFile(a) ? a.path.split('/').pop()! : a.name);
 
 class Upstream extends Error {}
 
@@ -68,11 +85,45 @@ export default {
     if (id === '') return index(headers);
     const asset = Object.hasOwn(ASSETS, id) ? ASSETS[id] : undefined;
     if (!asset) return text(404, 'not on the allowlist', headers);
-    return proxy(req, env, asset, headers);
+    return isRepoFile(asset) ? repoFile(req, env, asset, headers) : proxy(req, env, asset, headers);
   },
 };
 
-async function proxy(req: Request, env: Env, asset: Asset, headers: Headers): Promise<Response> {
+/**
+ * A small file at a pinned commit: read whole from raw.githubusercontent.com, checked against the
+ * allowlist's size and SHA-256, then sent whole (a Range is ignored, as HTTP allows). Counts as a
+ * full download for the rate limit.
+ */
+async function repoFile(req: Request, env: Env, asset: RepoFile, headers: Headers): Promise<Response> {
+  if (!COMMIT.test(asset.commit) || asset.size > REPO_FILE_MAX) return text(500, 'this allowlist entry isn\'t a pinned small file', headers);
+  const ip = req.headers.get('CF-Connecting-IP') ?? 'unknown';
+  if (req.method === 'GET' && !(await env.FULL_DOWNLOADS.limit({ key: ip })).success) return tooMany(false, headers);
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), Number(env.UPSTREAM_TIMEOUT_MS) || 30_000);
+  let body: Uint8Array<ArrayBuffer>;
+  try {
+    const up = await fetch(source(asset), {
+      headers: { 'User-Agent': 'glassworks-refract (+https://github.com/GlassworksHQ/glassworks)', 'Accept-Encoding': 'identity' },
+      redirect: 'manual', cache: 'no-store', signal: abort.signal,
+    });
+    clearTimeout(timer); // the timeout is for the headers: the body may take as long as it needs
+    if (up.status !== 200) { await up.body?.cancel(); return text(502, `GitHub answered ${up.status}`, headers); }
+    body = new Uint8Array(await up.arrayBuffer());
+  } catch {
+    return text(502, abort.signal.aborted ? 'GitHub didn\'t answer in time' : 'GitHub could not be reached', headers);
+  } finally {
+    clearTimeout(timer);
+  }
+  const sha = [...new Uint8Array(await crypto.subtle.digest('SHA-256', body))].map((b) => b.toString(16).padStart(2, '0')).join('');
+  if (body.length !== asset.size || sha !== asset.sha256) return text(502, `the file changed: GitHub sends ${body.length} bytes with another SHA-256 than the allowlist pins`, headers);
+  headers.set('Content-Type', 'application/octet-stream');
+  headers.set('Content-Disposition', `attachment; filename="${fileName(asset)}"`);
+  headers.set('Content-Length', String(body.length));
+  headers.set('Link', `<${asset.credit.url}>; rel="author", <${source(asset)}>; rel="canonical"`);
+  return new Response(req.method === 'HEAD' ? null : body, { status: 200, headers });
+}
+
+async function proxy(req: Request, env: Env, asset: Release, headers: Headers): Promise<Response> {
   // Range and If-Range mean something only on GET (RFC 9110 §14.2); HEAD describes the whole file.
   const range = req.method === 'GET' ? req.headers.get('Range') : null;
   const m = range === null ? null : SINGLE_RANGE.exec(range);
@@ -136,7 +187,7 @@ async function proxy(req: Request, env: Env, asset: Asset, headers: Headers): Pr
   }
 
   headers.set('Content-Type', 'application/octet-stream');
-  headers.set('Content-Disposition', `attachment; filename="${asset.name}"`);
+  headers.set('Content-Disposition', `attachment; filename="${fileName(asset)}"`);
   headers.set('Accept-Ranges', 'bytes');
   headers.set('Link', `<${asset.credit.url}>; rel="author", <${source(asset)}>; rel="canonical"`);
   for (const h of ['Content-Length', 'Content-Range', 'ETag', 'Last-Modified']) {

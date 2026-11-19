@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { Disk, MemoryStore, Sha256, hex, parseSparseHeader, readSparse, sparseSize, writeSparse } from '../src';
+import { Disk, Ext4, MemoryStore, Sha256, hex, mkfs, parseSparseHeader, readSparse, sparseSize, sparseStore, writeSparse } from '../src';
 
 const BS = 4096;
 
@@ -112,5 +112,51 @@ describe('sparse images', () => {
       for (let o = 0; o < n; o += 37) h.update(b.subarray(o, o + 37));
       expect(hex(h.digest())).toBe(createHash('sha256').update(b).digest('hex'));
     }
+  });
+
+  it('sparseStore reads blocks where they lie: the same bytes as an expanded copy, at any offset, touching only what it asks for', async () => {
+    const a = await sample();
+    const bytes = await toBytes(a);
+    let touched = 0;
+    const file = { size: bytes.length, slice: (s: number, e: number) => { touched += e - s; return new Blob([bytes.subarray(s, e) as BlobPart]); } };
+    const { header, store } = await sparseStore(file);
+    expect(header).toEqual({ blockSize: BS, blocks: 64, chunks: 7 });
+    touched = 0;
+    const want = Buffer.from(await a.read(0, 64));
+    for (const [off, len] of [[0, 64 * BS], [BS - 3, 9], [2 * BS + 17, 7 * BS], [20 * BS, BS], [39 * BS + 100, 3 * BS]] as const) {
+      expect(Buffer.from(await store.read(off, len))).toEqual(want.subarray(off, off + len));
+    }
+    await expect(store.write(0, new Uint8Array(BS))).rejects.toThrow(/read-only/);
+    // a FILL with a pattern and a CRC32 chunk, as libsparse writes them
+    const hdr = (type: number, blocks: number, total: number) => { const b = Buffer.alloc(12); b.writeUInt16LE(type, 0); b.writeUInt32LE(blocks, 4); b.writeUInt32LE(total, 8); return b; };
+    const f = Buffer.alloc(28);
+    f.writeUInt32LE(0xed26ff3a, 0); f.writeUInt16LE(1, 4); f.writeUInt16LE(28, 8); f.writeUInt16LE(12, 10); f.writeUInt32LE(BS, 12); f.writeUInt32LE(3, 16); f.writeUInt32LE(3, 20);
+    const pat = Buffer.alloc(4); pat.writeUInt32LE(0xdeadbeef, 0);
+    const lib = Buffer.concat([f, hdr(0xcac2, 2, 16), pat, hdr(0xcac4, 0, 16), Buffer.alloc(4), hdr(0xcac3, 1, 12)]);
+    const ls = (await sparseStore({ size: lib.length, slice: (s: number, e: number) => new Blob([lib.subarray(s, e) as BlobPart]) })).store;
+    const got = await ls.read(BS * 2 - 4, 8);
+    expect(new DataView(got.buffer).getUint32(0, true)).toBe(0xdeadbeef);
+    expect([...got.subarray(4)]).toEqual([0, 0, 0, 0]); // DONT_CARE reads as zeros
+  });
+
+  it('sparseStore lets ext4 read one file out of a sparse image without expanding it', async () => {
+    const d = new Disk(new MemoryStore(), BS, 4096, { zeroed: true });
+    const fs = await mkfs(d, { time: 1, journalBlocks: 0 });
+    const attrs = { mode: 0o755, uid: 0, gid: 0, label: 'u:object_r:system_file:s0', time: 1 };
+    await fs.mkdir('/etc', attrs);
+    await fs.mkdir('/etc/wifi', attrs);
+    await fs.writeFile('/etc/wifi/wpa_supplicant.conf', new TextEncoder().encode('update_config=1\nap_scan=1\n'), { ...attrs, mode: 0o644 });
+    await fs.flush();
+    const bytes = await toBytes(d);
+    const { header, store } = await sparseStore({ size: bytes.length, slice: (s: number, e: number) => new Blob([bytes.subarray(s, e) as BlobPart]) });
+    const ro = await Ext4.open(new Disk(store, header.blockSize, header.blocks));
+    expect(new TextDecoder().decode(await ro.readFile('/etc/wifi/wpa_supplicant.conf'))).toBe('update_config=1\nap_scan=1\n');
+  });
+
+  it('sparseStore refuses a file that isn\'t sparse, or is cut short', async () => {
+    const a = await toBytes(await sample());
+    const blob = (b: Uint8Array) => ({ size: b.length, slice: (s: number, e: number) => new Blob([b.subarray(s, e) as BlobPart]) });
+    await expect(sparseStore(blob(new Uint8Array(64)))).rejects.toThrow(/not an Android sparse image/);
+    await expect(sparseStore(blob(a.subarray(0, a.length - 100)))).rejects.toThrow(/cut short/);
   });
 });

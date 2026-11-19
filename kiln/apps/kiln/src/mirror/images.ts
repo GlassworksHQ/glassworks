@@ -2,7 +2,7 @@
 // OPFS files' Blobs, read from disk as fastboot sends them.
 import { ProxyError, WrongImage } from '@glassworks/lululemon-mirror-installer';
 import type { ImageMaker } from './flash';
-import { downloaded, sessionDir } from './imageJobs';
+import { downloaded, madeFile, sessionDir } from './imageJobs';
 
 type Out = { id: number; progress?: number; step?: string; done?: boolean; error?: string; wrong?: boolean; proxy?: boolean };
 
@@ -33,6 +33,10 @@ export function workerImages(): ImageMaker {
     download: (url, want, onProgress) => call({ op: 'download', url, file: want }, (_, x) => onProgress(x)),
     file: (name) => file(downloaded(name)),
     check: (blob, want, onProgress) => call({ op: 'check', file: blob, want }, (_, x) => onProgress(x)),
+    async wifi(o, onProgress) {
+      await call({ op: 'wifi', ...o }, (_, x) => onProgress(x));
+      return file(madeFile(o.makes));
+    },
     async build(o, onProgress) {
       await call({ op: 'build', ...o }, (step, x) => onProgress(step as Parameters<typeof onProgress>[0], x));
       return { system: await file('system.sparse'), userdata: await file('userdata.sparse') };
