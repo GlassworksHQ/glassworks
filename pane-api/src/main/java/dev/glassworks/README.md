@@ -569,8 +569,10 @@ The S1 needs no root for it: the local-only hotspot is open to any app in the fo
 kiosk's foreground service counts. The hidden API changes two things on the device, and
 `HiddenApHotspot` puts both back whenever the hotspot ends: the device's saved hotspot settings, and
 the Wi-Fi client that Android turns off to start the AP. On most devices, the S1 among them, the Wi-Fi
-client is off while the hotspot runs. A captive portal that opens the page by itself needs root, and
-comes later.
+client is off while the hotspot runs. A captive portal needs root, so only a frame with root can have one:
+on the S1 (`hotspotPortal`), a phone that joins shows its Wi-Fi sign-in prompt, which opens the setup page. The
+address on the screen stays the way in when no prompt comes up, and on every other frame (`hotspotPortal` is false
+by default).
 
 `HotspotPermission` decides what the setup screen shows before it asks: the reason first, then
 Android's dialog, and where to allow it once Android won't ask again.
@@ -589,6 +591,7 @@ A frame (`dev.glassworks.frame.Frame`) is what the core asks the device:
 | `wifiSettingsIntents()` | Where to choose a Wi-Fi network, best first. The default is Android's Wi-Fi panel and settings. |
 | `paneDefinitions(context)` | The definitions of the frame's panes: their setup steps, settings sections and adb extras. |
 | `panes(ctx, device)` | The panes only this device has. The app builds them with its own, once per device run, and the device runs them like any other. |
+| `hotspotPortal` | Whether something with root sends the setup hotspot's DNS (udp 53) and web (tcp 80) to the app's portal (udp 8053, tcp 8098), so a phone that joins opens the setup page by itself (#197). True on the S1, whose radio helper does it. False (the default): no portal. |
 | `rootUpdates` | The frame's way to install app updates without Android's confirmation (the S1's root update service). Null (the default) means PackageInstaller. |
 | `frameRelease` | The frame's own version and releases (#139, `FrameRelease`): its id, the version the device carries in `ro.glassworks.frame.id` and `ro.glassworks.frame.version`, and how an update installs. The core adds a *Frame version* row to the Device page and a *Frame update* entity for it. Null (the default) means neither: a device its vendor updates. The S1 and the Mirror have one. |
 | `shortName` | A short name for the panel on its own pages (the S1's `S1 Plus`). Null (the default) means its friendly name. |

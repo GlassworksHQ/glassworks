@@ -29,7 +29,11 @@ class PrTypes(unittest.TestCase):
         self.assertEqual(running('frames/aqara-s1-plus/tools/root/s1kiosk_root.sh'), {'root', 'web', 'site'})
 
     def test_the_radio_also_runs_the_s1_size_check_which_bundles_it(self):
-        self.assertEqual(running('frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh'), {'root', 'size', 'web', 'site'})
+        self.assertEqual(running('frames/aqara-s1-plus/tools/radio/firmware/x.gbl'), {'root', 'size', 'web', 'site'})
+
+    def test_the_radio_helper_also_runs_the_unit_tests_that_pin_its_ports(self):
+        # CaptivePortalTest (#197): the app's portal ports are the helper's PORTAL_DNS and PORTAL_HTTP.
+        self.assertEqual(running('frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh'), {'app', 'root', 'size', 'web', 'site'})
 
     def test_a_frame_module_runs_the_android_jobs(self):
         self.assertTrue({'app', 'app_apk', 'api23', 'size'} <= running('frames/aqara-s1-plus/android/src/main/java/a/B.kt'))

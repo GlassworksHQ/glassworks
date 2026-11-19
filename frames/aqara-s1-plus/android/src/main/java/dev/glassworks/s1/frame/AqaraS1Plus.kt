@@ -68,6 +68,9 @@ class AqaraS1Plus(private val aqaraCloud: AqaraCloud = AqaraCloud()) : Frame {
 
     override val rootUpdates: RootUpdates = RootUpdateInstaller()
 
+    /** The radio helper sends the setup hotspot's DNS and port 80 to the app's portal while it runs (#197). */
+    override val hotspotPortal = true
+
     /**
      * The S1 frame's version (#139), which the loader in its boot image sets at boot. A panel without the loader has
      * none and needs one Kiln update for it; after that, frame updates come over the air in signed bundles.

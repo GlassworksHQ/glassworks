@@ -4,7 +4,8 @@
 #   s1kiosk_verify + make-bundle.py, s1kiosk_bundle.sh (install, --check, every refusal),
 #   the helper's loader (bundle helper, fallback, quick-exit marking, dev override),
 #   the helper v4 (off, firmware flashing + rollback + request guards, GBL checks, Zigbee stack),
-#   s1kiosk_update.sh (incl. a framework restart mid-install) and netwatch's ActivityManager check (#248).
+#   s1kiosk_update.sh (incl. a framework restart mid-install), netwatch's ActivityManager check (#248)
+#   and the setup hotspot's portal rules (#197).
 set -uo pipefail
 R=/repo; T=/t; TB=/tb
 PASS=0; FAILS=0
@@ -835,6 +836,223 @@ touch "$T/settings-fail"; LOOPS=1 helper S1R_PUB="$BTP"
 check "a lookup that prints an address and then fails: nothing written" test ! -e "$BTP/bluetooth-address"
 rm -f "$T/settings-fail"
 rm -rf "$BTP" "$T/not-ours" "$T/settings.secure.bluetooth_address"
+
+# ------------------------------------------------------------------------- setup hotspot portal
+# #197: while hostapd runs and the kiosk (uid 10050) has its DNS (udp:8053) and redirect (tcp:8098)
+# sockets on one address of a Wi-Fi interface, the helper sends the hotspot's udp:53 and tcp:80 there
+# (nat PREROUTING -> S1PORTAL), and takes it all away as soon as one of those stops. A fake iptables
+# keeps the nat and filter tables in /t/ipt so the rules can be read back. Addresses: the AP 192.168.43.1
+# (012BA8C0, little-endian), the AP's IPv6 2001:db8::1, a home network 192.0.2.10.
+echo "--- setup hotspot portal (#197)"
+reset_radio; mkdir -p /data/s1kiosk/radio "$T/net" "$T/ipt" "$T/hostapd"; echo "RADIO_ALLOW=any" > /data/s1kiosk/radio/radio.conf
+# an unrelated filter rule in each family, which nothing in this section may touch
+FILTER='-A INPUT -p tcp -m tcp --dport 22 -j ACCEPT'
+printf '%s\n' "$FILTER" > "$T/ipt/4-filter"; printf '%s\n' "$FILTER" > "$T/ipt/6-filter"
+echo off > "$T/props/persist.s1kiosk.radio_mode"
+cat > "$T/ipt.py" <<'PY'
+import os, sys
+name = sys.argv[1]; fam = '6' if name.startswith('ip6') else '4'
+args = sys.argv[2:]
+if '-w' in args: i = args.index('-w'); del args[i:i + 2]
+table = 'filter'
+if '-t' in args: i = args.index('-t'); table = args[i + 1]; del args[i:i + 2]
+def path(t): return '/t/ipt/%s-%s' % (fam, t)
+def load(t):
+    chains, rules = ['PREROUTING'] if t == 'nat' else ['INPUT'], []
+    if os.path.exists(path(t)):
+        for l in open(path(t)).read().splitlines():
+            if l.startswith(':'): chains.append(l[1:])
+            elif l: rules.append(l)
+    return chains, rules
+def store(t, chains, rules):
+    builtin = ['PREROUTING', 'INPUT']
+    open(path(t), 'w').write(''.join(':%s\n' % c for c in chains if c not in builtin) + ''.join(r + '\n' for r in rules))
+def spec(r): return r.split(' ', 2)  # ['-A', chain, rest]
+if name.endswith('-save'):
+    # /t/ipt-save-fail: how many reads of the nat table fail next (a table that can't be read for a moment)
+    # /t/ipt-nat-unreadable: every read of the nat table fails while it exists
+    if table == 'nat' and os.path.exists('/t/ipt-nat-unreadable'):
+        open('/t/ipt-nat-fails', 'a').write(name + '\n'); sys.exit(1)
+    if table == 'nat' and os.path.exists('/t/ipt-save-fail'):
+        n = int(open('/t/ipt-save-fail').read() or 0)
+        if n > 0:
+            open('/t/ipt-save-fail', 'w').write(str(n - 1)); sys.exit(1)
+    chains, rules = load(table); print('*' + table)
+    for c in chains: print(':%s %s [0:0]' % (c, 'ACCEPT' if c in ('PREROUTING', 'INPUT') else '-'))
+    for r in rules: print(r)
+    print('COMMIT'); sys.exit(0)
+if name.endswith('-restore'):
+    open('/t/ipt/restores', 'a').write(name + '\n')
+    if os.path.exists('/t/ipt-refuse') and fam in open('/t/ipt-refuse').read(): sys.exit(1)
+    t = None
+    for l in sys.stdin.read().splitlines():
+        if l.startswith('*'): t = l[1:]; chains, rules = load(t)
+        elif l.startswith(':'):
+            c = l[1:].split()[0]
+            if c not in chains: chains.append(c)
+            rules = [r for r in rules if spec(r)[1] != c]
+        elif l.startswith('-A '): rules.append(l)
+        elif l == 'COMMIT': store(t, chains, rules)
+    sys.exit(0)
+chains, rules = load(table); op, c, rest = args[0], args[1], ' '.join(args[2:])
+if op == '-I':
+    n, rest = (int(args[2]), ' '.join(args[3:])) if len(args) > 2 and args[2].isdigit() else (1, rest)
+    if c not in chains: sys.exit(1)
+    idx = [k for k, r in enumerate(rules) if spec(r)[1] == c]
+    rules.insert(idx[n - 1] if len(idx) >= n else len(rules), '-A %s %s' % (c, rest))
+elif op == '-A': rules.append('-A %s %s' % (c, rest))
+elif op == '-D':
+    r = '-A %s %s' % (c, rest)
+    if r not in rules: sys.exit(1)
+    rules.remove(r)
+elif op == '-F':
+    if c not in chains: sys.exit(1)
+    rules = [r for r in rules if spec(r)[1] != c]
+elif op == '-X':
+    if c not in chains or any(spec(r)[1] == c or r.endswith('-j ' + c) for r in rules): sys.exit(1)
+    chains.remove(c)
+store(table, chains, rules)
+PY
+for b in iptables ip6tables iptables-restore ip6tables-restore iptables-save ip6tables-save; do
+  printf '#!/bin/sh\nexec python3 /t/ipt.py %s "$@"\n' "$b" > "$T/bin/$b"; chmod 755 "$T/bin/$b"
+done
+# `ip -4 -o addr show` from /t/ip-addr4
+w "$T/bin/ip" <<'EOF'
+#!/bin/sh
+case "$*" in *"rule del"*) exit 1 ;; "-4 -o addr show") cat /t/ip-addr4 2>/dev/null ;; esac; exit 0
+EOF
+cp "$(command -v sleep)" "$T/hostapd/hostapd"
+hostapd_on() { "$T/hostapd/hostapd" 1000 & HOSTAPD=$!; sleep 0.2; }
+hostapd_off() { kill "$HOSTAPD" 2>/dev/null; wait "$HOSTAPD" 2>/dev/null; }
+socks() { # file lines...: "<local hex>:<port hex> <state> <uid>"
+  f=$1; shift
+  { echo "$HDR6"; i=0; for l in "$@"; do set -- $l
+      printf '%4d: %s 00000000000000000000000000000000:0000 %s 00000000:00000000 00:00000000 00000000 %5d        0 %d 2 00000000 0\n' $i "$1" "$2" "$3" $((30000 + i)); i=$((i + 1)); done; } > "$T/net/$f"
+}
+AP4=0000000000000000FFFF0000012BA8C0; AP6=B80D0120000000000000000001000000
+ap_up() { # the kiosk's sockets as Android's dual-stack Java sockets show them
+  socks udp6 "$AP4:1F75 07 10050" "$AP6:1F75 07 10050"; socks tcp6 "$AP4:1FA2 0A 10050"; : > "$T/net/udp"; : > "$T/net/tcp"
+  echo "23: wlan0    inet 192.168.43.1/24 brd 192.168.43.255 scope global wlan0\       valid_lft forever preferred_lft forever" > "$T/ip-addr4"
+}
+# ipt_idle: until no fake iptables call is running (a helper's loop it killed on exit may have one in flight)
+ipt_idle() { i=0; while pgrep -f /t/ipt.py >/dev/null && [ $i -lt 100 ]; do sleep 0.1; i=$((i + 1)); done; }
+portal() { LOOPS=1 helper S1R_PROC_NET="$T/net"; ipt_idle; }
+nat() { cat "$T/ipt/$1-nat" 2>/dev/null; }
+RULE4_DNS='-A S1PORTAL -s 192.168.43.1/24 -d 192.168.43.1/32 -i wlan0 -p udp -m udp --dport 53 -j DNAT --to-destination 192.168.43.1:8053'
+RULE4_WEB='-A S1PORTAL -s 192.168.43.1/24 -d 192.168.43.1/32 -i wlan0 -p tcp -m tcp --dport 80 -j DNAT --to-destination 192.168.43.1:8098'
+RULE6_DNS='-A S1PORTAL -d 2001:db8:0:0:0:0:0:1/128 -i wlan0 -p udp -m udp --dport 53 -j DNAT --to-destination [2001:db8:0:0:0:0:0:1]:8053'
+
+ap_up; portal
+check "no hostapd: no rules" test -z "$(nat 4 | grep S1PORTAL)" -a "$(prop sys.s1kiosk.portal.status)" = off
+hostapd_on; portal
+check "hotspot up, the kiosk's sockets on its address: DNS and web sent to them (IPv4)" \
+  test "$(nat 4 | grep '^-A S1PORTAL')" = "$(printf '%s\n%s' "$RULE4_DNS" "$RULE4_WEB")"
+check "...DNS to the AP's IPv6 address too" test "$(nat 6 | grep '^-A S1PORTAL')" = "$RULE6_DNS"
+check "...one jump from PREROUTING in each" test "$(nat 4 | grep -c '^-A PREROUTING -j S1PORTAL$')$(nat 6 | grep -c '^-A PREROUTING -j S1PORTAL$')" = 11
+check "...and the status says on which interface" test "$(prop sys.s1kiosk.portal.status)" = "on wlan0"
+check "...never with an address in the log" test -z "$(grep -e 192.168 -e 2001: "$T/log")"
+: > "$T/setprop.log"; rm -f "$T/ipt/restores"; LOOPS=3 helper S1R_PROC_NET="$T/net" S1R_PORTAL_SLEEP=0.3; ipt_idle
+check "a new helper keeps rules already in place: not rebuilt, one jump, the status written once" \
+  test "$(cat "$T/ipt/restores" 2>/dev/null | wc -l)/$(nat 4 | grep -c '^-A PREROUTING -j S1PORTAL$')/$(grep -c '^sys.s1kiosk.portal.status=' "$T/setprop.log")" = 0/1/1
+# ip6tables-save prints the address short; a rule in that form is the same rule, not a stale one
+sed -i 's/2001:db8:0:0:0:0:0:1/2001:db8::1/g' "$T/ipt/6-nat"; rm -f "$T/ipt/restores"; portal
+check "an IPv6 rule as ip6tables-save prints it (2001:db8::1) is kept, not rebuilt" \
+  test ! -s "$T/ipt/restores" -a "$(prop sys.s1kiosk.portal.status)" = "on wlan0"
+socks udp6 "$AP4:1F75 07 10050" "B80D0120000000000000000002000000:1F75 07 10050"; portal
+check "the hotspot's IPv6 address moved (IPv4 the same): the IPv6 rule follows it" \
+  test "$(nat 6 | grep -c 'to-destination \[2001:db8:0:0:0:0:0:2\]:8053$')/$(nat 6 | grep -c '2001:db8::1\|0:0:0:0:0:1\]')" = 1/0
+ap_up; portal
+# first_check: until the helper started in the background has done its first check (its status line)
+# logged <pattern>: waits (60 s at most, an emulated ARM under load is slow) until setprop.log has a line for it
+logged() { i=0; until grep -q "$1" "$T/setprop.log" || [ $i -ge 600 ]; do sleep 0.1; i=$((i + 1)); done; }
+first_check() { logged '^sys.s1kiosk.portal.status='; }
+# bg_until <test...>: waits (60 s at most, an emulated ARM under load is slow) until it holds, then stops the helper
+# helpers_gone: after a pkill, until no helper and no fake iptables call of one is left (one already running would
+# still write its table after the test has moved on)
+helpers_gone() { pkill -f s1kiosk_radio.sh; wait "$H" 2>/dev/null; i=0; while pgrep -f '/t/ipt.py|s1kiosk_radio.sh' >/dev/null && [ $i -lt 100 ]; do sleep 0.1; i=$((i + 1)); done; }
+bg_until() { i=0; until "$@" || [ $i -ge 600 ]; do sleep 0.1; i=$((i + 1)); done; helpers_gone; }
+jumps4() { test "$(nat 4 | grep -c '^-A PREROUTING -j S1PORTAL$')" = 1; }
+rules4() { test -n "$(nat 4 | grep '^-A S1PORTAL')"; }
+: > "$T/setprop.log"; LOOPS=100000 helper S1R_PROC_NET="$T/net" S1R_PORTAL_SLEEP=0.2 S1R_SLEEP=0.1 &
+H=$!; first_check; sed -i '/^-A PREROUTING -j S1PORTAL$/d' "$T/ipt/4-nat"; bg_until jumps4
+check "a jump lost while it runs (netd restarted) is put back by the loop" test "$(nat 4 | grep -c '^-A PREROUTING -j S1PORTAL$')" = 1
+socks tcp6; portal
+check "the redirect's socket gone: everything removed, both families" \
+  test -z "$(nat 4 | grep S1PORTAL)$(nat 6 | grep S1PORTAL)" -a "$(prop sys.s1kiosk.portal.status)" = off
+ap_up; portal; hostapd_off; portal
+check "hostapd gone (the hotspot stopped): removed" test -z "$(nat 4 | grep S1PORTAL)$(nat 6 | grep S1PORTAL)"
+ap_up; hostapd_on; portal; hostapd_off; touch /t/ipt-nat-unreadable; : > "$T/setprop.log"
+LOOPS=100000 helper S1R_PROC_NET="$T/net" S1R_PORTAL_SLEEP=0.2 S1R_SLEEP=0.1 &
+H=$!; logged '^sys.s1kiosk.portal.status=error'
+check "a rule table that can't be read at the hotspot's end: not called off" \
+  sh -c "grep -q '^sys.s1kiosk.portal.status=error' '$T/setprop.log' && ! grep -q '^sys.s1kiosk.portal.status=off' '$T/setprop.log'"
+gone() { test -z "$(nat 4 | grep S1PORTAL)$(nat 6 | grep S1PORTAL)" && test "$(prop sys.s1kiosk.portal.status)" = off; }
+rm -f /t/ipt-nat-unreadable; bg_until gone
+check "...and the next check removes the rules, then says off" gone
+# The helper itself dies (killed, as init does on a restart) while the hotspot is up: the loop that outlives it
+# takes the rules away, and tries again when a table can't be read the first time.
+ap_up; hostapd_on; portal; : > "$T/setprop.log"
+LOOPS=100000 helper S1R_PROC_NET="$T/net" S1R_PORTAL_SLEEP=0.2 S1R_SLEEP=0.1 &
+H=$!; first_check; P=$(pgrep -P "$H" -f s1kiosk_radio.sh | head -1)   # the helper itself, not its loops
+# its two loops (time zone, portal) are its sh children; wait until both are there, then pause them
+i=0; until [ "$(pgrep -P "$P" -f s1kiosk_radio.sh | wc -l)" -ge 2 ] || [ $i -ge 600 ]; do sleep 0.1; i=$((i + 1)); done
+L=$(pgrep -P "$P" -f s1kiosk_radio.sh | tr '\n' ' ')
+check "(the helper's loops are up)" test "$(echo $L | wc -w)" -ge 2
+kill -STOP $L; kill -9 "$P"
+i=0; while kill -0 "$P" 2>/dev/null && [ $i -lt 100 ]; do sleep 0.1; i=$((i + 1)); done   # until its parent reaps it
+check "(the helper is killed)" sh -c "! kill -0 $P 2>/dev/null"
+: > /t/ipt-nat-fails; touch /t/ipt-nat-unreadable; kill -CONT $L
+# Unreadable until the leftover loop has failed 8 reads (several cleanup tries) or has ended: a loop that tried
+# once and gave up is gone by then, with the rules still there.
+i=0; until [ "$(wc -l < /t/ipt-nat-fails)" -ge 8 ] || [ -z "$(pgrep -f s1kiosk_radio.sh)" ] || [ $i -ge 600 ]; do
+  sleep 0.1; i=$((i + 1)); done
+check "(the leftover loop's cleanup reads fail)" test -s /t/ipt-nat-fails
+rm -f /t/ipt-nat-unreadable
+i=0; until test -z "$(nat 4 | grep S1PORTAL)$(nat 6 | grep S1PORTAL)" || [ $i -ge 600 ]; do sleep 0.1; i=$((i + 1)); done
+check "the helper killed, a table unreadable at first: the leftover loop still removes the rules, both families" \
+  test -z "$(nat 4 | grep S1PORTAL)$(nat 6 | grep S1PORTAL)"
+i=0; while pgrep -f s1kiosk_radio.sh >/dev/null && [ $i -lt 100 ]; do sleep 0.1; i=$((i + 1)); done
+check "...and then it ends too" test -z "$(pgrep -f s1kiosk_radio.sh)"
+helpers_gone; hostapd_off
+hostapd_on
+socks udp6 "$AP4:1F75 07 10077" "$AP6:1F75 07 10077"; portal
+check "the sockets of another app: no rules" test -z "$(nat 4 | grep S1PORTAL)"
+socks udp6 "0000000000000000FFFF000000000000:1F75 07 10050"; socks tcp6 "00000000000000000000000000000000:1FA2 0A 10050"; portal
+check "the kiosk on every address (not the hotspot's): no rules" test -z "$(nat 4 | grep S1PORTAL)"
+ap_up; socks udp6 "$AP4:1F75 07 10050" "00000000000000000000000000000000:1F75 07 10050"; portal
+check "an IPv6 DNS socket on every address ([::]): IPv4 rules only" test -n "$(nat 4 | grep '^-A S1PORTAL')" -a -z "$(nat 6 | grep '^-A S1PORTAL')"
+ap_up; echo "5: eth0    inet 192.168.43.1/24 brd 192.168.43.255 scope global eth0" > "$T/ip-addr4"; portal
+check "the address on a wired interface: no rules" test -z "$(nat 4 | grep S1PORTAL)"
+ap_up; echo "23: wlan0    inet 192.0.2.10/24 brd 192.0.2.255 scope global wlan0" > "$T/ip-addr4"; portal
+check "the address not on any interface: no rules" test -z "$(nat 4 | grep S1PORTAL)"
+ap_up; socks udp "012BA8C0:1F75 07 10050"; socks udp6 "0000000000000000FFFF00000A0200C0:1F75 07 10050"; portal
+check "DNS on two addresses: no rules (which one is the hotspot's?)" test -z "$(nat 4 | grep S1PORTAL)"
+ap_up; socks udp6 "$AP4:1F75 07 10050"; portal
+check "no IPv6 socket: IPv4 only" test -n "$(nat 4 | grep '^-A S1PORTAL')" -a -z "$(nat 6 | grep '^-A S1PORTAL')"
+ap_up; socks udp "012BA8C0:1F75 07 10050"; socks udp6; socks tcp "012BA8C0:1FA2 0A 10050"; socks tcp6; portal
+check "plain IPv4 sockets (udp, tcp) count too" test "$(nat 4 | grep -c '^-A S1PORTAL')" = 2
+ap_up; portal; hostapd_off; : > "$T/setprop.log"; LOOPS=100000 helper S1R_PROC_NET="$T/net" S1R_PORTAL_SLEEP=0.2 S1R_SLEEP=0.1 &
+# the whole portal: both families' rules, one jump each, and the status
+portal_up() {
+  test "$(prop sys.s1kiosk.portal.status)" = "on wlan0" && jumps4 && test "$(nat 4 | grep -c '^-A S1PORTAL')" = 2 &&
+    test "$(nat 6 | grep -c '^-A S1PORTAL')" = 1 && test "$(nat 6 | grep -c '^-A PREROUTING -j S1PORTAL$')" = 1
+}
+H=$!; first_check; hostapd_on; bg_until portal_up
+check "the loop between the helper's passes: up again within seconds, the whole of it" portal_up
+ap_up; portal; echo 6 > /t/ipt-refuse; rm -f "$T/ipt/6-nat"; portal
+check "ip6tables refuses after the IPv4 rules went in: nothing left half-done (no chain, no jump), and an error" \
+  test -z "$(nat 4 | grep S1PORTAL)$(nat 6 | grep S1PORTAL)" -a "$(prop sys.s1kiosk.portal.status)" = "error: iptables refused the rules"
+rm -f /t/ipt-refuse; portal
+check "...and on once it takes them" test "$(prop sys.s1kiosk.portal.status)" = "on wlan0"
+hostapd_off; ap_up; portal
+check "a new helper removes what an old one left" test -z "$(nat 4 | grep S1PORTAL)$(nat 6 | grep S1PORTAL)"
+check "...the filter tables untouched" test "$(cat "$T/ipt/4-filter")" = "$FILTER" -a "$(cat "$T/ipt/6-filter")" = "$FILTER"
+for b in iptables ip6tables iptables-restore ip6tables-restore iptables-save ip6tables-save; do printf '#!/bin/sh\nexit 0\n' | w "$T/bin/$b"; done
+w "$T/bin/ip" <<'EOF'
+#!/bin/sh
+case "$*" in *"rule del"*) exit 1 ;; esac; exit 0
+EOF
+rm -rf "$T/net" "$T/ipt" "$T/ip-addr4"; rm -f /data/s1kiosk/radio/radio.conf
 
 echo
 echo "shell tests: $PASS passed, $FAILS failed"
