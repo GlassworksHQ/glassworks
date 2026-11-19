@@ -744,8 +744,11 @@ open class MainActivity : Activity() {
     /**
      * The code from Home Assistant's login page on the panel becomes the panel's sign-in, stored as the QR code's is.
      * HaAuth's listener then loads the dashboard. If it fails, the Sign-in step comes back over a new login page.
+     * Called from [PageHost.redirect], whose `about:blank` the engine queues on the main looper once it returns. The
+     * worker starts from a later message, so its outcome always lands after that load and the dashboard is last.
      */
-    private fun finishPanelSignIn(url: String) {
+    private fun finishPanelSignIn(url: String) = handler.post {
+        if (isDestroyed) return@post
         loadingOverlay.show(LoadingOverlay.State.Connecting(LoadingOverlay.CONNECTING, prefs.shownHost(url)))
         Thread({
             val failed = when (val o = panelSignIn.finish(url)) {
