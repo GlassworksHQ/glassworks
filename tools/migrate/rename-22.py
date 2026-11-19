@@ -359,6 +359,13 @@ def main():
                 keep_names.add(s.fq(d))
     # Code a previous run (or #22 and #527 on main) already moved: a rebased branch may still name it the old way.
     old_of = {new: OLD + (f".{sub}" if sub else "") for sub, new in [*PACKAGES.items(), *S1_PACKAGES.items()]}
+    # Packages under a mapped S1 package (dev.glassworks.s1.settings.network) map back the same way (s1_target).
+    for s in sources:
+        if s.sub is None and s.pkg not in old_of and s.pkg.startswith(S1_NAMESPACE + "."):
+            for sub, new in sorted(S1_PACKAGES.items(), key=lambda kv: -len(kv[1])):
+                if sub and s.pkg.startswith(new + "."):
+                    old_of[s.pkg] = f"{OLD}.{sub}{s.pkg[len(new):]}"
+                    break
     for s in sources:
         if s.sub is None and s.pkg in old_of and not s.test:
             for d in s.decls:
