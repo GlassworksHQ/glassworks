@@ -181,7 +181,7 @@ the next one. "Verified" means tested on a real panel in a real home.
 | Device | Status |
 |---|---|
 | **Aqara Panel Hub S1 Plus, MP-K03D** (wall-mounted; EU, UK, AU and other regions) | ✅ Tested on firmware 4.5.80 |
-| S1 Plus for China, JYMKP01LM (86-box) | ❓ Untested. The installer refuses it if the layout doesn't match. |
+| **S1 Plus for China, JYMKP01LM** (86-box) | ✅ Reported working by a user: two panels running S1 Kiosk 0.4.3, installed with Kiln ([#503](https://github.com/GlassworksHQ/glassworks/issues/503), 2026-11-17). Not tested by us; firmware version not reported. The installer still refuses a panel whose layout doesn't match. |
 | S1 Plus Desktop, MP-K05D | ❓ Untested |
 | Other Aqara panels and hubs | ❌ Not supported |
 
