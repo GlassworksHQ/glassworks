@@ -16,7 +16,7 @@ import type { RailMark, RailStep } from '../wizard/state';
 import { Fastboot } from '@glassworks/fastboot';
 import { IMAGE_PROXY, MIRROR_FASTBOOT } from '@glassworks/lululemon-mirror-installer';
 import { MIRROR_DEMOS, mirrorDemo, type MirrorDemo } from './demo';
-import { FlashSession } from './flash';
+import { AUTH_MS, FlashSession } from './flash';
 import { FLASH_DEMOS, flashDemo, type FlashDemo } from './flashDemo';
 import { KEEP_DEMOS, keepDemo, type KeepDemo } from './keepDemo';
 import { FlashScreens, flashLevel, flashRail } from './FlashScreens';
@@ -103,7 +103,7 @@ function realSessions(on: boolean, from: ApkFrom = 'local'): { mirror: MirrorSes
     reopenAdb: async () => {
       const k = keys.key();
       if (!k || !adbDevice) throw new Error('no panel selected');
-      return Panel.connect(k, adbDevice);
+      return Panel.connect(k, adbDevice, { authMs: AUTH_MS });
     },
     adbKey: () => keys.key()?.publicKey,
     flashedHere: FLASHED_HERE,

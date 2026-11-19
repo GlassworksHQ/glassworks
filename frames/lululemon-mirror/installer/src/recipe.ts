@@ -277,12 +277,14 @@ export async function undoMirror(p: PanelShell, o: HomeWait = {}): Promise<Remov
     r.step(`${ours.name} is not on the Mirror`);
   }
 
-  // the home app the Mirror had comes back by unhiding it, with no chooser to answer; without a record, what Kiln hid
+  // the home app the Mirror had comes back by unhiding it, with no chooser to answer. Without a record of it, one of
+  // those Kiln hid (the kiosk first, then the image's launcher): two visible home apps would be a chooser nobody can tap
   phase({ step: 'home' });
   r.step('Give the home screen back');
   const hidden = await recordedHidden(r);
   const before = previousHome?.split('/')[0];
-  const back = before ? [before] : hidden;
+  const one = [...COMMUNITY_HOMES, ...OTHER_HOMES].find((x) => hidden.includes(x)) ?? hidden[0];
+  const back = before ? [before] : one ? [one] : [];
   for (const pkg of back) r.detail(`${pkg}: ${(await r.try(`pm unhide ${pkg}`)).trim() || 'no answer'}`);
   // visible again, as pm lists it: a package whose unhide didn't take stays in the record for the next undo
   const visible: string[] = [];

@@ -5,7 +5,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { GLASSWORKS, SYSTEM_BYTES, USERDATA_BYTES, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
 import { FirstBootMirror, fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
-import { AdbAuthTimeout, type PanelShell } from '@glassworks/adb';
+import { AdbAuthTimeout, AdbBusy, type PanelShell } from '@glassworks/adb';
 import type { ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -97,6 +97,17 @@ describe('connecting while the Mirror is still starting', () => {
     expect(reopen).not.toHaveBeenCalled();
     expect(f.state).toMatchObject({ connecting: false, adbWaiting: false, connectError: KEY });
   });
+
+  it('a device another program holds isn\'t retried as "still starting": its own advice, at once', async () => {
+    const reopen = vi.fn();
+    const { f, mirror } = setup({ request: async () => { throw new AdbBusy(); }, reopen });
+    await flashed(f, mirror);
+    await f.connectAdb();
+    expect(reopen).not.toHaveBeenCalled();
+    expect(f.state).toMatchObject({ connecting: false, adbWaiting: false });
+    expect(f.state.connectError).toMatch(/another program holds the panel's adb connection: run "adb kill-server"/);
+  });
+
 
   it('a closed list is not retried', async () => {
     const reopen = vi.fn();
