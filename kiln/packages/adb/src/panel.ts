@@ -27,6 +27,11 @@ export interface PanelShell {
  * The device took the connection but didn't let this key in within the time given: it may be waiting
  * for someone to allow the key on its screen, or it trusts another computer's key only.
  */
+/** Another program (the computer's own adb) holds the device's adb interface: asking again won't help until it lets go. */
+export class AdbBusy extends Error {
+  constructor() { super('another program holds the panel\'s adb connection: run "adb kill-server" on this computer and try again'); this.name = 'AdbBusy'; }
+}
+
 export class AdbAuthTimeout extends Error {
   constructor() { super('the device didn\'t let this browser\'s adb key in'); this.name = 'AdbAuthTimeout'; }
 }
@@ -66,9 +71,7 @@ export class Panel implements PanelShell {
     try {
       connection = await d.connect();
     } catch (e) {
-      if (e instanceof AdbDaemonWebUsbDevice.DeviceBusyError) {
-        throw new Error('another program holds the panel\'s adb connection: run "adb kill-server" on this computer and try again');
-      }
+      if (e instanceof AdbDaemonWebUsbDevice.DeviceBusyError) throw new AdbBusy();
       throw e;
     }
     const auth = AdbDaemonTransport.authenticate({

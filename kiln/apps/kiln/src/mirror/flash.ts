@@ -9,7 +9,7 @@
 // Behind ?apk=release or ?apk=local, like the rest of the Mirror's page, until MIRROR_OPEN (session.ts).
 // A Mirror that runs Glassworks already can go through `keep` first (issue 580): Kiln reads Home Assistant's ESPHome key
 // from the running app over adb and gives it back at the first start, as tools/mirror's flash-node does (PR 575).
-import { AdbAuthTimeout, type PanelShell } from '@glassworks/adb';
+import { AdbAuthTimeout, AdbBusy, type PanelShell } from '@glassworks/adb';
 import { apiKeyFingerprint, apiKeySocketUp, kioskVersion, readApiKey } from '@glassworks/app-adb';
 import { imageFromLink, plan, writtenAsIs, type ImageFile, type ImageRecipe, type PlannedStep } from '@glassworks/kiln-core';
 import {
@@ -55,7 +55,8 @@ export interface FlashDeps {
   requestAdb(o?: { authMs?: number }): Promise<PanelShell>;
   /**
    * adb again on the device requestAdb picked, with no list: while the Mirror is still starting it refuses this
-   * browser's key (adbd answers before it reads the adb_keys in the new userdata), so Kiln asks again.
+   * browser's key (adbd answers before it reads the adb_keys in the new userdata), so Kiln asks again. Each call gives
+   * up after AUTH_MS, closing the device, so a key left pending can't hold the loop.
    */
   reopenAdb?(): Promise<PanelShell>;
   /** Whether the last requestAdb picked a device: one that failed before the list (no key yet, no WebUSB) isn't retried. */
@@ -625,23 +626,26 @@ export class FlashSession {
    */
   async connectAdb(): Promise<void> {
     if (this.state.connecting) return;
+    // the first try waits as long as the Mirror takes (requestAdb without authMs); each retry has AUTH_MS (reopenAdb)
     const req = this.d.requestAdb();
     this.set({ connecting: true, connectError: undefined, adbWaiting: false });
     const sleep = this.d.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
     let p: PanelShell | undefined;
     let last: unknown;
     try { p = await req; } catch (e) { last = e; }
-    const tries = this.d.reopenAdb && !nothingPicked(last) && (this.d.adbPicked?.() ?? true) ? this.d.adbTries ?? 60 : 0;
+    // a closed list, or a device another program holds (the computer's adb): asking again changes nothing
+    const tries = this.d.reopenAdb && !nothingPicked(last) && !(last instanceof AdbBusy) && (this.d.adbPicked?.() ?? true) ? this.d.adbTries ?? 60 : 0;
     for (let i = 0; !p && i < tries; i++) {
       this.log('', `The Mirror didn't let this browser in yet (${(last as Error).message}): it is still starting. Asking again in 5 s.`);
       this.set({ adbWaiting: true });
       await sleep(5000);
       try { p = await this.d.reopenAdb!(); } catch (e) { last = e; }
+      if (last instanceof AdbBusy) break;
     }
     if (!p) {
       const why = (last as Error).message;
       this.set({ connecting: false, adbWaiting: false, connectError: nothingPicked(last) ? 'Nothing was picked. Click Connect and pick the Mirror (Android) in the browser\'s list.'
-        : tries ? `The Mirror didn't let this browser in through its first start (${why}). It knows only the key of the browser that installed it: use that browser, then Connect again.` : why });
+        : tries && !(last instanceof AdbBusy) ? `The Mirror didn't let this browser in through its first start (${why}). It knows only the key of the browser that installed it: use that browser, then Connect again.` : why });
       return;
     }
     this.panel = p;
