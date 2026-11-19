@@ -6,5 +6,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- The setup hotspot on Android 6-7: the hidden setWifiApEnabled checks WRITE_SETTINGS (the app-op, or this
+         permission). A system app gets it at install, and an update too ("preinstalled"), so the Mirror needs no
+         new flash. Elsewhere the user allows it as "Modify system settings". Android 8+ uses the local-only
+         hotspot, which doesn't need it, so the generic build doesn't ask
+         (frames/lululemon-mirror/research/privileged-app.md). -->
+    <uses-permission android:name="android.permission.WRITE_SETTINGS" />
+
     <uses-sdk tools:overrideLibrary="dev.glassworks.core,dev.glassworks.paneapi,dev.glassworks.panes.assist,dev.glassworks.panes.timers,dev.glassworks.panes.sendspin,dev.glassworks.panes.camera,dev.glassworks.panes.diagnostics" />
 </manifest>

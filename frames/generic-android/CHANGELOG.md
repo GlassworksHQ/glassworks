@@ -18,6 +18,9 @@ line of each version is what Home Assistant shows on the update card. A change o
   improv-wifi.com on a phone, with the time left. Where the camera sees presence, walking up to the panel opens it
   again. It never opens while the panel is online. After the 5 minutes the panel opens its own setup Wi-Fi, if it
   can, and otherwise the setup screen says how to set it up from a computer.
+- **The setup Wi-Fi opens on the lululemon Mirror.** The legacy build's setup screen said "This device doesn't let apps
+  open a Wi-Fi hotspot." on the Mirror. Android 6 and 7 want one more permission for it, which the legacy build now
+  asks for. An update is enough: no new flash. If Android still refuses, the reason is in the log.
 
 ## [0.2.0] - 2026-11-19
 
