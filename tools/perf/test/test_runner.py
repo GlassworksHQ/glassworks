@@ -1486,8 +1486,8 @@ class Android6ClockStep(unittest.TestCase):
         tmp = tempfile.mkdtemp()
         p, r = refstart(tmp, FAKE_ANDROID6="1", FAKE_CLOCK_STEP_S="2")
         self.assertNotEqual(p.returncode, 0)
-        self.assertIn("wall clock moved +2000", r["error"])
-        self.assertGreater(r["logcat_clock"]["drift_ms"], 1900)
+        self.assertRegex(r["error"], r"wall clock moved \+(19|20)\d\d\.\d ms")
+        self.assertLess(abs(r["logcat_clock"]["drift_ms"] - 2000), 100)
 
 
 class Android6Refusals(unittest.TestCase):
