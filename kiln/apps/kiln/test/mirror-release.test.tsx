@@ -5,7 +5,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { GLASSWORKS } from '@glassworks/lululemon-mirror-installer';
 import { fakeApk } from '@glassworks/app-adb/fakes';
 import { fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
-import type { ReactNode } from 'react';
+import { StrictMode, type ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: ReactNode }) => <a href={href} {...p}>{children}</a> }));
@@ -108,6 +108,47 @@ describe('the release\'s APK', () => {
     await noSum.loadRelease();
     expect(noSum.state.release).toEqual({ state: 'error', why: `Kiln couldn't read ${DEMO_APK}.sha256 from ${DEMO_TAG} (its release route answered 502)` });
   });
+
+  /** A request that never answers, until its signal aborts (the real fetch rejects then). */
+  const silent = (init?: RequestInit) => new Promise<Response>((_, reject) => init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError'))));
+
+  it('a .sha256 that never answers ends in Try again, not a row stuck on "Looking" (Mirror run, 2026-11-19)', async () => {
+    const route = fakeReleaseRoute('out', APK);
+    let hang = true;
+    const s = new MirrorSession({
+      connect: async () => { throw new Error('unused'); },
+      release: (async (u: RequestInfo | URL, init?: RequestInit) => (hang && String(u).endsWith('.sha256') ? silent(init) : route(u))) as typeof fetch,
+      releaseStallMs: 50,
+    }, true);
+    await s.loadRelease();
+    expect(s.state.release).toEqual({ state: 'error', why: 'Kiln\'s release route stopped answering for 0.05 s' });
+    expect(s.releaseBlocked()).toBe('Kiln couldn\'t get Glassworks from its release. Try again.');
+    hang = false;
+    await s.loadRelease(); // Try again
+    expect(s.state.release?.state).toBe('ready');
+  });
+
+  it('an APK download that stops part way ends in Try again too', async () => {
+    const route = fakeReleaseRoute('stuck', APK);
+    const s = new MirrorSession({
+      connect: async () => { throw new Error('unused'); },
+      release: (async (u: RequestInfo | URL, init?: RequestInit) => {
+        const res = await route(u);
+        if (!String(u).endsWith(DEMO_APK)) return res;
+        const reader = res.body!.getReader();
+        // the stand-in route stalls after three chunks; the real fetch's body errors when its signal aborts
+        const body = new ReadableStream<Uint8Array>({
+          start(c) { init?.signal?.addEventListener('abort', () => c.error(new DOMException('aborted', 'AbortError'))); },
+          async pull(c) { const { done, value } = await reader.read(); if (done) c.close(); else c.enqueue(value); },
+        });
+        return new Response(body, { headers: res.headers });
+      }) as typeof fetch,
+      releaseStallMs: 50,
+    }, true);
+    await s.loadRelease();
+    expect(s.state.release).toEqual({ state: 'error', why: 'Kiln\'s release route stopped answering for 0.05 s' });
+    expect(s.apkBytes()).toBeUndefined();
+  });
 });
 
 describe('the page', () => {
@@ -169,9 +210,42 @@ describe('the page', () => {
     history.replaceState(null, '', '/lululemon-mirror');
     render(<MirrorWizard />);
     await screen.findByText(/doesn.t install from Kiln yet/);
+    expect(screen.getByText(/^Its installer is still being tested\./)).toBeTruthy(); // a release exists now: not "no release yet"
     expect(document.querySelector('input[type=file]')).toBeNull();
     expect(embers()).toEqual([]);
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('labels the Wi-Fi password as needed only for a network that has one', async () => {
+    vi.stubGlobal('fetch', fakeReleaseRoute('out', APK));
+    history.replaceState(null, '', '/lululemon-mirror?apk=release');
+    await toImage();
+    expect(screen.getByText('Wi-Fi network (optional)')).toBeTruthy();
+    expect(screen.getByText('Wi-Fi password (if it has one)')).toBeTruthy();
+  });
+
+  it('release, file, release again on the kept session while the first lookup is still out (StrictMode, as next dev runs it)', async () => {
+    const gates: (() => void)[] = [];
+    const route = fakeReleaseRoute('out', APK);
+    vi.stubGlobal('fetch', (async (u: RequestInfo | URL) => { if (String(u).endsWith('/latest')) await new Promise<void>((r) => gates.push(r)); return route(u); }) as typeof fetch);
+    const page = async (q: string) => {
+      cleanup();
+      history.replaceState(null, '', `/lululemon-mirror?apk=${q}`);
+      render(<StrictMode><MirrorWizard /></StrictMode>);
+      await until(() => !!screen.queryByText('What goes on the Mirror?') || !!screen.queryByText('Install Glassworks on the Mirror.'));
+      if (!screen.queryByText('Install Glassworks on the Mirror.')) fireEvent.click(screen.getByRole('button', { name: 'Continue with Glassworks' }));
+      await screen.findByText('Install Glassworks on the Mirror.');
+    };
+    await page('release');
+    await until(() => gates.length === 1 && !!screen.queryByText('Looking for its newest release…'));
+    await page('local');
+    expect(document.querySelector('input[type=file]')).not.toBeNull();
+    await page('release');
+    await until(() => gates.length === 2);
+    gates[0]!(); // the first lookup answers late: it no longer counts
+    gates[1]!();
+    await until(() => !!screen.queryByText('Glassworks 0.2.0'));
+    expect(kept().sessions.mirror.state.release?.state).toBe('ready');
   });
 
   type Kept = { sessions: { mirror: MirrorSession; flash: { state: { screen: string } } }; running(): string | undefined };

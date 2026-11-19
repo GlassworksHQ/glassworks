@@ -127,6 +127,7 @@ describe('the page', () => {
     history.replaceState(null, '', '/android');
     render(<AndroidWizard />);
     await screen.findByText(/doesn.t install on Android devices yet/);
+    expect(screen.getByText(/^Its installer is still being tested\./)).toBeTruthy(); // generic-android-v0.2.0 exists: not "no release yet"
     expect(document.querySelector('input[type=file]')).toBeNull();
     expect(fetch).not.toHaveBeenCalled();
   });

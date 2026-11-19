@@ -94,7 +94,7 @@ function Off() {
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">Kiln doesn&apos;t install on Android devices yet.</h2>
-      <p className="lede">Glassworks for Android has no release yet. Follow it on GitHub, or pick another panel.</p>
+      <p className="lede">Its installer is still being tested. Follow it on GitHub, or pick another panel.</p>
       <div className="foot">
         <a className="link" href="https://github.com/GlassworksHQ/glassworks/issues/403">Follow it on GitHub</a>
         <Link className="btn ghost" href="/">Pick a panel</Link>
@@ -117,7 +117,7 @@ function ApkField({ s, session }: { s: AndroidState; session: AndroidSession }) 
   return (
     <div className="well">
       <div className="grow">
-        <span className="row"><span className="pill soon">Test only</span><span className="small">Glassworks for Android has no release yet: pick a test build.</span></span>
+        <span className="row"><span className="pill soon">Test only</span><span className="small">Pick a test build's APK.</span></span>
         <label className="field"><span>APK file</span>
           <input className="input" type="file" accept=".apk,application/vnd.android.package-archive"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) void session.pickApk(f.name, f.arrayBuffer().then((b) => new Uint8Array(b))); }} />
