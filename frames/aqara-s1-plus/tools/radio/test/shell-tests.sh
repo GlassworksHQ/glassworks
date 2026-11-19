@@ -5,7 +5,7 @@
 #   the helper's loader (bundle helper, fallback, quick-exit marking, dev override),
 #   the helper v4 (off, firmware flashing + rollback + request guards, GBL checks, Zigbee stack),
 #   s1kiosk_update.sh (incl. a framework restart mid-install), netwatch's ActivityManager check (#248)
-#   and the setup hotspot's portal rules (#197).
+#   and the setup hotspot's portal rules and name module (#197).
 set -uo pipefail
 R=/repo; T=/t; TB=/tb
 PASS=0; FAILS=0
@@ -1053,6 +1053,136 @@ w "$T/bin/ip" <<'EOF'
 case "$*" in *"rule del"*) exit 1 ;; esac; exit 0
 EOF
 rm -rf "$T/net" "$T/ipt" "$T/ip-addr4"; rm -f /data/s1kiosk/radio/radio.conf
+
+# ------------------------------------------------------------------------------ setup hotspot name
+# #197: with hotspot-name.apk in the running radio bundle, the helper puts it on /product through a Magisk module
+# (Android applies it from the next restart); without it, or with persist.s1kiosk.hotspot_name=android, it removes
+# the module. A fake `cmd overlay list` says whether Android applies the overlay now.
+echo "--- setup hotspot name (#197)"
+reset_radio; mkdir -p /data/s1kiosk/radio "$T/rb" "$T/modules"; echo "RADIO_ALLOW=any" > /data/s1kiosk/radio/radio.conf
+echo off > "$T/props/persist.s1kiosk.radio_mode"
+w "$T/bin/cmd" <<'EOF'
+#!/bin/sh
+[ "$1 $2 $3" = "overlay list sh.edm.s1kiosk.overlay.hotspotname" ] || exit 1
+[ -f /t/cmd-fail ] && exit 20   # the overlay service not answering
+[ -f /t/cmd-hang ] && exec sleep 1000   # ...or never answering
+[ -f /t/overlay-on ] && echo "[x] sh.edm.s1kiosk.overlay.hotspotname"; exit 0
+EOF
+printf 'overlay-v1' > "$T/rb/hotspot-name.apk"
+MOD="$T/modules/s1kiosk_hotspot_name"; APKP="$MOD/system/product/overlay/S1HotspotName/S1HotspotName.apk"
+mkdir -p "$T/magisk" && : > "$T/magisk/busybox"   # Magisk's own setup, as the Magisk app leaves it
+name() { LOOPS=1 helper S1R_NO_OVERRIDE=1 S1R_RBUNDLE="$T/rb" S1R_MODULES="$T/modules" S1R_MAGISK_BB="$T/magisk/busybox" "$@"; prop sys.s1kiosk.hotspot_name.status; }
+st=$(umask 077; name)   # as init runs services: what root writes is private unless the helper says otherwise
+check "the overlay in the bundle: a Magisk module puts it on /product" test "$(cat "$APKP")" = overlay-v1
+check "...with its module.prop" grep -qx "id=s1kiosk_hotspot_name" "$MOD/module.prop"
+check "...root-owned, readable by Android (system_server), not writable by others" \
+  test "$(stat -c %a:%u "$APKP")/$(stat -c %a "$MOD")/$(stat -c %a "${APKP%/*}")/$(stat -c %a "$MOD/module.prop")" = "644:0/755/755/644"
+check "...and Glassworks from the next restart" test "$st" = "glassworks after a restart"
+st=$(name S1R_MAGISK_BB="$T/magisk/none")
+check "Magisk without its setup (no busybox in /data/adb/magisk): said so, no promise of a restart" \
+  test "$st" = "android: Magisk loads no modules here (no $T/magisk/none)"
+check "...and the module stays in place for when it has one" test "$(cat "$APKP")" = overlay-v1
+touch /t/overlay-on; t0=$(stat -c %Y "$APKP"); sleep 1.1
+st=$(name)
+check "after the restart Android applies it: glassworks" test "$st" = glassworks
+check "...and the module isn't written again" test "$(stat -c %Y "$APKP")" = "$t0"
+printf 'overlay-v2' > "$T/rb/hotspot-name.apk"; name >/dev/null
+check "a new overlay in a newer bundle replaces it" test "$(cat "$APKP")" = overlay-v2 -a ! -e /data/s1kiosk/radio/hotspot-name-module.new
+printf android > "$T/props/persist.s1kiosk.hotspot_name"; st=$(name)
+check "persist.s1kiosk.hotspot_name=android: the module goes" test ! -e "$MOD"
+check "...and Android's name from the next restart" test "$st" = "android after a restart"
+rm -f /t/overlay-on; st=$(name)
+check "...then android" test "$st" = android
+rm -f "$T/props/persist.s1kiosk.hotspot_name"; name >/dev/null
+check "(the module is back)" test -e "$MOD"
+rm -f "$T/rb/hotspot-name.apk"; name >/dev/null
+check "a bundle without the overlay removes the module" test ! -e "$MOD"
+printf 'overlay-v1' > "$T/rb/hotspot-name.apk"; name >/dev/null
+check "(the module is back)" test -e "$MOD"
+name S1R_RBUNDLE= >/dev/null
+check "the boot image's helper (no bundle) gives Android's name back" test ! -e "$MOD"
+printf 'overlay-dev' > /data/s1kiosk/radio/hotspot-name.apk; name S1R_RBUNDLE= S1R_DEV=1 >/dev/null
+check "with dev-override, a developer's copy in the state dir" test "$(cat "$APKP")" = overlay-dev
+check "...nothing staged where Magisk loads modules: one module dir there, ours" test "$(ls -A "$T/modules")" = s1kiosk_hotspot_name
+# where the copy is staged: a cp that logs its arguments and does the copy
+w "$T/bin/cp" <<'EOF'
+#!/bin/sh
+echo "$@" >> /t/cp.log; exec /bin/cp "$@"
+EOF
+: > /t/cp.log; printf 'overlay-v3' > "$T/rb/hotspot-name.apk"; name >/dev/null; /bin/rm -f "$T/bin/cp"
+check "the module is staged outside Magisk's dir, never in it" \
+  test -n "$(grep hotspot-name.apk /t/cp.log)" -a -z "$(grep "$T/modules" /t/cp.log)" -a "$(cat "$APKP")" = overlay-v3
+# A helper stopped after staging: its stage, complete, is outside Magisk's dir, and the next start clears it
+mkdir -p /data/s1kiosk/radio/hotspot-name-module.new/system && cp "$MOD/module.prop" /data/s1kiosk/radio/hotspot-name-module.new/
+printf android > "$T/props/persist.s1kiosk.hotspot_name"; name >/dev/null; rm -f "$T/props/persist.s1kiosk.hotspot_name"
+check "a stage an interrupted run left, then the undo: no module and no stage anywhere" \
+  test -z "$(ls -A "$T/modules")" -a ! -e /data/s1kiosk/radio/hotspot-name-module.new
+# A /data that refuses a removal (read-only, full): a fake rm fails for the path in /t/rm-fail.
+w "$T/bin/rm" <<'EOF'
+#!/bin/sh
+for a in "$@"; do case "$a" in -*) ;; *) [ -f /t/rm-fail ] && [ "$a" = "$(cat /t/rm-fail)" ] && { echo "rm: $a: Read-only file system" >&2; exit 1; } ;; esac; done
+exec /bin/rm "$@"
+EOF
+w "$T/bin/mv" <<'EOF'
+#!/bin/sh
+src=""; for a in "$@"; do case "$a" in -*) ;; *) [ -n "$src" ] || src=$a ;; esac; done
+[ -f /t/mv-fail ] && [ "$src" = "$(cat /t/mv-fail)" ] && { echo "mv: $src: Read-only file system" >&2; exit 1; }
+exec /bin/mv "$@"
+EOF
+rm -f /data/s1kiosk/radio/hotspot-name.apk; printf 'overlay-v1' > "$T/rb/hotspot-name.apk"; name >/dev/null
+check "(the module is in place)" test "$(cat "$APKP")" = overlay-v1
+printf '%s' /data/s1kiosk/radio/hotspot-name.apk.new > /t/mv-fail; printf 'overlay-v2' > "$T/rb/hotspot-name.apk"; st=$(name)
+check "the new overlay can't be renamed in: an error, the working one untouched, nothing half-made" \
+  test "$st" = "error: could not put the module in place" -a "$(cat "$APKP")" = overlay-v1 \
+    -a ! -e /data/s1kiosk/radio/hotspot-name.apk.new
+/bin/rm -f /t/mv-fail "$T/bin/mv"
+# a permission step that fails: the stage never replaces the module
+w "$T/bin/chown" <<'EOF'
+#!/bin/sh
+[ -f /t/chown-fail ] && exit 1; exec /bin/chown "$@"
+EOF
+touch /t/chown-fail; st=$(name)
+check "a failed chown: an error, the working module unchanged" \
+  test "$st" = "error: could not write the module" -a "$(cat "$APKP")" = overlay-v1 -a ! -e /data/s1kiosk/radio/hotspot-name.apk.new
+/bin/rm -f /t/chown-fail "$T/bin/chown"; name >/dev/null
+check "(then it goes in)" test "$(cat "$APKP")" = overlay-v2
+# switched off in Magisk: no promise of a name the next boot won't bring
+touch "$MOD/disable"; st=$(name)
+check "the module disabled in Magisk: said so, not \"after a restart\"" test "$st" = "android: the module is disabled in Magisk"
+touch /t/overlay-on; st=$(name); rm -f /t/overlay-on
+check "...but still mounted this boot: Android's name from the next restart" test "$st" = "android after a restart"
+ino=$(stat -c %i "$MOD"); printf 'overlay-v4' > "$T/rb/hotspot-name.apk"; name >/dev/null
+check "a new overlay replacing a disabled module keeps it disabled" test "$(cat "$APKP")" = overlay-v4 -a -e "$MOD/disable"
+check "...the module's own dir never moves: only the APK is renamed in" test "$(stat -c %i "$MOD")" = "$ino"
+rm -f "$MOD/disable"
+# what an interrupted run left: a new overlay not yet renamed in, and a stage with a disable mark of its own
+printf junk > /data/s1kiosk/radio/hotspot-name.apk.new
+mkdir -p /data/s1kiosk/radio/hotspot-name-module.new && : > /data/s1kiosk/radio/hotspot-name-module.new/disable
+printf 'overlay-v5' > "$T/rb/hotspot-name.apk"; name >/dev/null
+check "an earlier run's leftovers are cleared first, and nothing of them gets into the module" \
+  test "$(cat "$APKP")" = overlay-v5 -a ! -e "$MOD/disable" -a ! -e /data/s1kiosk/radio/hotspot-name.apk.new \
+    -a ! -e /data/s1kiosk/radio/hotspot-name-module.new
+# the overlay service not answering: an error, not "android"
+touch /t/cmd-fail; st=$(name); rm -f /t/cmd-fail
+check "Android's overlay query fails: an error, not a guess" test "$st" = "error: Android didn't say whether the overlay is on"
+# never answering: an outer deadline (a watchdog ends the hang after 120 s) so a helper without its own bound is
+# caught as slow, not left hanging the suite
+touch /t/cmd-hang; : > "$T/setprop.log"; ( sleep 120; pkill -f "sleep 1000" ) & W=$!
+t0=$(date +%s); st=$(name S1R_HN_TIMEOUT=2); t1=$(date +%s)
+kill "$W" 2>/dev/null; rm -f /t/cmd-hang; pkill -f "sleep 1000" 2>/dev/null
+check "a query that never returns: bounded, an error, and the helper goes on to its radio loop" \
+  test "$st" = "error: Android didn't say whether the overlay is on" -a $((t1 - t0)) -lt 90 \
+    -a -n "$(grep '^sys.s1kiosk.radio.status=ok off' "$T/setprop.log")"
+printf '%s' "$MOD" > /t/rm-fail
+printf android > "$T/props/persist.s1kiosk.hotspot_name"; st=$(name)
+check "the undo can't remove it: an error, not \"android after a restart\"" test "$st" = "error: could not remove the module" -a -e "$MOD"
+/bin/rm -f /t/rm-fail "$T/bin/rm"; name >/dev/null
+check "...and once /data takes it, the next start does the undo" test ! -e "$MOD"
+rm -f "$T/props/persist.s1kiosk.hotspot_name"
+rm -f /data/s1kiosk/radio/hotspot-name.apk; rm -rf "$T/modules"
+st=$(name)
+check "no Magisk modules dir: an error, and nothing made" test "$st" = "error: no Magisk modules dir" -a ! -e "$T/modules"
+printf '#!/bin/sh\nexit 1\n' | w "$T/bin/cmd"; rm -rf "$T/rb" "$T/modules" /t/overlay-on; rm -f /data/s1kiosk/radio/radio.conf
 
 echo
 echo "shell tests: $PASS passed, $FAILS failed"

@@ -593,6 +593,14 @@ jobs:
       - name: Radio bundle, as the release builds it
         run: SISDK_DIR="$HOME/sisdk-cache" tools/size/radio-bundle.sh "$GITHUB_WORKSPACE" "$RUNNER_TEMP/bundle-head"
 
+      # The S1's setup hotspot name (#197): the overlay in that bundle names the hotspot Glassworks, statically.
+      - name: Hotspot name overlay in the bundle
+        run: |
+          apk="$RUNNER_TEMP/bundle-head/radio-bundle/hotspot-name.apk"
+          aapt2="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)/aapt2"
+          "$aapt2" dump resources "$apk" | grep -A1 'string/wifi_localhotspot_configure_ssid_default' | grep -q '"Glassworks"'
+          "$aapt2" dump badging "$apk" | grep -q "overlay: targetPackage='android' priority='1' isStatic='true'"
+
       - name: ABIs, one APK each as the release builds them (every frame's abis, tools/release/frame-abis.sh)
         run: |
           abis="$(tools/release/frame-abis.sh)"

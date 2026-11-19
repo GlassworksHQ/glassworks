@@ -82,6 +82,9 @@
 # the kiosk's own responders, so a phone that joins opens the setup page by itself (see "the setup
 # hotspot's captive portal" below). Status: sys.s1kiosk.portal.status. Runs in every mode.
 #
+# Setup hotspot name (#197): with the overlay in the radio bundle, a Magisk module puts it on /product, so Android
+# names the setup hotspot Glassworks_NNNN from the next restart. Status: sys.s1kiosk.hotspot_name.status.
+#
 # Developer override: with a root-made $DIR/dev-override file, a root-owned $DIR/s1kiosk_radio.sh runs
 # instead of everything else, and binaries in $DIR win. (Before v4 those were honoured without the
 # marker; a leftover copy would otherwise shadow every update.)
@@ -823,6 +826,109 @@ portal_start() { # one check now (it also removes an earlier run's rules), then 
   PORTAL_PID=$!
 }
 portal_stop() { alive "$PORTAL_PID" && kill "$PORTAL_PID"; PORTAL_PID=""; }
+
+# --- the setup hotspot's name (#197) ------------------------------------------------------------
+# Android 10 names its local-only hotspot "<framework string>_<1000..9999>", the string being "AndroidShare"
+# (WifiApConfigStore.generateLocalOnlyHotspotConfig), and gives apps no way to change it. A resource overlay of that
+# string makes it "Glassworks_NNNN". Android 10 applies an overlay of framework-res only when it is preinstalled
+# (framework-res declares no overlayable, and the S1's is signed with Aqara's key: docs/research/
+# setup-hotspot-portal-and-name.md), so it goes on /product through a Magisk module, which Magisk mounts at boot:
+#   $HN_MOD/module.prop
+#   $HN_MOD/$HN_PATH      the overlay, hotspot-name.apk from the signed radio bundle (tools/radio/hotspot-name/),
+#                         or with dev-override a root-made $DIR/hotspot-name.apk
+# Once per helper start: with the overlay in the running bundle, the module is put in place (or replaced when the
+# bundle's overlay differs); without it, or with persist.s1kiosk.hotspot_name=android (the undo; any app may set it,
+# which can only give Android's name back), the module is removed. Either takes effect at the next restart.
+# Nothing else is touched: no file of Android's, no setting. Status: sys.s1kiosk.hotspot_name.status =
+#   glassworks | android | "glassworks after a restart" | "android after a restart"
+#   | "android: the module is disabled in Magisk" | "android: Magisk loads no modules here (no .../busybox)"
+#   | "error: ..."
+HN_APK=hotspot-name.apk
+HN_PKG=sh.edm.s1kiosk.overlay.hotspotname
+HN_MODS=${S1R_MODULES:-/data/adb/modules}
+# Magisk mounts modules only once its own setup is in /data/adb/magisk: without busybox there, post-fs-data stops
+# with "Magisk environment incomplete, abort" before any module (Magisk v31.1 native/src/core/bootstages.rs:76-79,
+# :132-134). The Magisk app puts it there; our installers don't (panel run, 2026-11-19).
+HN_MAGISK_BB=${S1R_MAGISK_BB:-/data/adb/magisk/busybox}
+# Staged in the helper's own root-only dir, never in $HN_MODS: Magisk loads every directory there at boot, dot-names
+# included, so a stage a stopped helper left would load. Same /data filesystem, so the final mv is a rename.
+HN_STAGE=$DIR/hotspot-name-module.new
+HN_NEWAPK=$DIR/hotspot-name.apk.new   # a new overlay for an installed module, renamed into it when complete
+HN_MOD=$HN_MODS/s1kiosk_hotspot_name
+HN_PATH=system/product/overlay/S1HotspotName/S1HotspotName.apk
+HN_PROP=persist.s1kiosk.hotspot_name
+HN_STATUS=sys.s1kiosk.hotspot_name.status
+
+hn_say() { setp $HN_STATUS "$1"; say "hotspot name: $1"; }
+hn_apply() {
+  # where binaries come from (bin): a developer's copy with dev-override, else the signed radio bundle
+  # what an interrupted run left (a stage, a new overlay not yet renamed in): gone before anything is staged again,
+  # so nothing of an abandoned run (a disable mark in a stage) can end up in the module
+  rm -rf "$HN_STAGE" "$HN_NEWAPK"
+  if [ -e "$HN_STAGE" ] || [ -e "$HN_NEWAPK" ]; then hn_say "error: could not clear an earlier run's stage"; return 0; fi
+  src_=""
+  if [ -n "$DEV" ] && [ -f "$DIR/$HN_APK" ]; then src_=$DIR/$HN_APK
+  elif [ -n "$RBUNDLE" ] && [ -f "$RBUNDLE/$HN_APK" ]; then src_=$RBUNDLE/$HN_APK; fi
+  if [ "$(getprop $HN_PROP)" = android ] || [ -z "$src_" ]; then
+    want_=android
+    if [ -e "$HN_MOD" ]; then
+      # a /data that refuses (read-only, full) is said as it is: no "after a restart" for a module still there
+      if ! rm -rf "$HN_MOD" || [ -e "$HN_MOD" ]; then hn_say "error: could not remove the module"; return 0; fi
+      say "hotspot name: module removed (Android's name from the next restart)"
+    fi
+  else
+    want_=glassworks
+    if ! cmp -s "$src_" "$HN_MOD/$HN_PATH"; then
+      [ -d "$HN_MODS" ] || { hn_say "error: no Magisk modules dir"; return 0; }
+      # Every step checked: a file with the wrong owner or modes never goes in (later starts compare only the bytes,
+      # so they wouldn't fix it).
+      if [ -d "$HN_MOD/${HN_PATH%/*}" ]; then
+        # An installed module: only its APK changes, by a rename (same /data). Its dir, module.prop and the operator's
+        # disable switch in Magisk stay where they are, and Magisk finds the old APK or the new one, whole.
+        a_=$HN_NEWAPK
+        if ! { cp "$src_" "$a_" && chown root:root "$a_" && chmod 644 "$a_"; }; then
+          rm -f "$a_"; hn_say "error: could not write the module"; return 0
+        fi
+        chcon u:object_r:system_file:s0 "$a_" 2>/dev/null
+        if ! mv "$a_" "$HN_MOD/$HN_PATH"; then rm -f "$a_"; hn_say "error: could not put the module in place"; return 0; fi
+        say "hotspot name: new overlay in the module (from the next restart)"
+      else
+        # A first install, or a module without its APK's dir: the whole module, staged under $DIR and renamed in.
+        t_=$HN_STAGE
+        if mkdir -p "$t_/${HN_PATH%/*}" && cp "$src_" "$t_/$HN_PATH" &&
+           printf '%s\n' "id=s1kiosk_hotspot_name" "name=Glassworks setup hotspot name" "version=1" "versionCode=1" \
+             "author=Glassworks" "description=Names the S1's setup hotspot Glassworks_NNNN (installed by the radio helper)" \
+             > "$t_/module.prop" &&
+           { [ ! -e "$HN_MOD/disable" ] || : > "$t_/disable"; } &&   # the operator's off switch in Magisk stays
+           chown -R root:root "$t_" && find "$t_" -type d -exec chmod 755 {} + && find "$t_" -type f -exec chmod 644 {} +; then
+          chcon -R u:object_r:system_file:s0 "$t_" 2>/dev/null
+          # a module without its APK has nothing to keep: it goes, so the stage doesn't land inside it
+          if { [ -e "$HN_MOD" ] && ! rm -rf "$HN_MOD"; } || [ -e "$HN_MOD" ] || ! mv "$t_" "$HN_MOD"; then
+            rm -rf "$t_"; hn_say "error: could not put the module in place"; return 0
+          fi
+          say "hotspot name: module in place (Glassworks from the next restart)"
+        else
+          rm -rf "$t_"; hn_say "error: could not write the module"; return 0
+        fi
+      fi
+    fi
+  fi
+  # Switched off in Magisk (its "disable" file): Magisk won't mount it at the next boot, so Android's name from then
+  # on; a module still mounted this boot keeps Glassworks until that restart
+  off_=""; if [ "$want_" = glassworks ] && [ -e "$HN_MOD/disable" ]; then want_=android; off_=1; fi
+  # Magisk without its setup mounts no module at all: the module waits in place, and the status says why
+  noenv_=""; if [ "$want_" = glassworks ] && [ ! -f "$HN_MAGISK_BB" ]; then want_=android; noenv_=1; fi
+  # Bounded, and a query that fails is said as such: a framework that doesn't answer isn't "android", and mustn't
+  # hold up the radio work after this
+  if ! o_=$(timeout ${S1R_HN_TIMEOUT:-20} cmd overlay list $HN_PKG 2>/dev/null); then
+    hn_say "error: Android didn't say whether the overlay is on"; return 0
+  fi
+  case "$o_" in *"[x] $HN_PKG"*) live_=glassworks ;; *) live_=android ;; esac
+  if [ "$want_" != "$live_" ]; then hn_say "$want_ after a restart"
+  elif [ -n "$off_" ]; then hn_say "android: the module is disabled in Magisk"
+  elif [ -n "$noenv_" ]; then hn_say "android: Magisk loads no modules here (no $HN_MAGISK_BB)"
+  else hn_say "$want_"; fi
+}
 loops_stop() { tz_stop; portal_stop; }
 
 # --- our processes ---------------------------------------------------------------------------
@@ -1414,6 +1520,7 @@ status applying
 zstate
 fw_init
 portal_start
+hn_apply
 [ -n "$S1R_ONCE" ] && LOOPS=$S1R_ONCE   # tests: run this many loops, then exit
 
 while true; do
