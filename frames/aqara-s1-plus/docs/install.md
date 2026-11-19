@@ -444,7 +444,12 @@ plan without changing anything.
   Keystore: the Home Assistant sign-in, the ESPHome encryption key, the camera stream password and the
   Music Assistant (Sendspin) pairing. Android deletes an app's Keystore keys when it uninstalls the
   app, so the copied data still holds those secrets, but nothing can open them. The new install
-  drops them on its first start and asks for them again.
+  drops them on its first start. What each one needs then
+  ([docs/secrets.md](../../../docs/secrets.md#what-is-sealed) has the full list):
+  - the Home Assistant sign-in: the panel shows its QR code; sign in again;
+  - the encryption key: Home Assistant gives the panel a key again, and may ask you to confirm it;
+  - the camera stream password: nothing asks for it. Set a new one on the Camera page;
+  - Music Assistant (Sendspin): the panel makes a new identity, so pair it with Music Assistant again.
 - **Root** here means that adb's shell can run `su`. That is only the case with a development boot
   image (`DEV_SU_HOURS`) or a Magisk policy for the adb shell, see
   [frames/aqara-s1-plus/research/root.md](../research/root.md#persistent-root-magisk--the-s1-kiosk-root-helper). A normal
