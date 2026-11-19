@@ -66,6 +66,18 @@ S1_PACKAGES = {
     "settings": "dev.glassworks.s1.settings",
 }
 S1_NAMESPACE = "dev.glassworks.s1"
+
+
+def s1_target(sub):
+    """Where an S1 subpackage goes: its own entry, or under its longest mapped parent (frame.wifi -> s1.frame.wifi)."""
+    if sub in S1_PACKAGES:
+        return S1_PACKAGES[sub]
+    parts = sub.split(".")
+    for k in range(len(parts) - 1, 0, -1):
+        parent = ".".join(parts[:k])
+        if parent in S1_PACKAGES:
+            return S1_PACKAGES[parent] + "." + ".".join(parts[k:])
+    return None
 # The S1 app's subclasses that keep their old names (#527): Android, Kiln, install.sh, the root helper and
 # check-update-compat.sh hold these. Its other components are declared under their dev.glassworks names.
 S1_SHIMS = {f"{OLD}.MainActivity", f"{OLD}.AdminReceiver", f"{OLD}.BootReceiver", f"{OLD}.improv.ImprovActivity",
@@ -264,9 +276,9 @@ def decide(sources):
     def base_rule(s):
         if s.module in SHIM_MODULES and s.fq(s.stem) in COMPONENTS:
             return s.pkg  # an app's subclass at the old name (write_shims), not the component's code
-        if s.module in S1_MODULES or s.module == S1_APP or s.sub in ("base", "frame"):
-            if s.sub in S1_PACKAGES:
-                return S1_PACKAGES[s.sub]
+        if s.module in S1_MODULES or s.module == S1_APP or s.sub.split(".")[0] in ("base", "frame"):
+            if s1_target(s.sub):
+                return s1_target(s.sub)
             # A test of a core class that sits in the S1 app's tests (sh.edm.s1kiosk.camera, say) goes with the core.
         if s.sub not in PACKAGES:
             return s.pkg
@@ -630,8 +642,8 @@ def s1_frame_setup():
         if fq.startswith(OLD + "."):
             rest = fq[len(OLD) + 1:]
             sub, _, cls = rest.rpartition(".")
-            if sub in S1_PACKAGES:
-                return f'{attr}{q}{S1_PACKAGES[sub]}.{cls}{q}'
+            if s1_target(sub):
+                return f'{attr}{q}{s1_target(sub)}.{cls}{q}'
             if sub in PACKAGES:  # a core class an S1 branch added under the old package goes with the core (base_rule)
                 return f'{attr}{q}{PACKAGES[sub]}.{cls}{q}'
         return m.group(0)
