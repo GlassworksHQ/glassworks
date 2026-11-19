@@ -8,7 +8,7 @@ import dev.glassworks.pane.BlueprintAccess
 import dev.glassworks.pane.BlueprintLinks
 import dev.glassworks.pane.SettingsItem
 import dev.glassworks.pane.blueprintCard
-import dev.glassworks.platform.AppBuild
+import dev.glassworks.Glassworks
 import dev.glassworks.KioskPrefs
 import dev.glassworks.auth.FrontendUrls
 import dev.glassworks.auth.HaAuth
@@ -81,13 +81,13 @@ class PanelBlueprints(
         const val NOT_SIGNED_IN = "The panel isn't signed in to Home Assistant, so it can't open the import."
         const val OTHER_HA = "The panel is signed in to another Home Assistant than its dashboard's."
 
-        /** The panel's: its catalog asset, the app's version, the dashboard's address and [HaAuth]'s sign-in. */
-        fun forPanel(context: Context, build: AppBuild, prefs: KioskPrefs): PanelBlueprints {
+        /** The panel's: its catalog asset, the app's version on its release line, the dashboard's address and [HaAuth]'s sign-in. */
+        fun forPanel(context: Context, glassworks: Glassworks, prefs: KioskPrefs): PanelBlueprints {
             val app = context.applicationContext
             val client = HaBlueprintClient { url -> WsHaSocket.connect(url) }
             return PanelBlueprints(
                 catalog = { app.assets.open(Blueprint.ASSET).use { Blueprint.parse(it.readBytes().toString(Charsets.UTF_8)) } },
-                ref = BlueprintLinks.ref(build),
+                ref = BlueprintLinks.ref(glassworks.build, glassworks.releases::tag),
                 haBase = { prefs.haBase },
                 context = { prefs.haBase to (if (HaAuth.signedIn) HaAuth.signedInBase else null) },
                 check = check@{

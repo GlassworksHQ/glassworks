@@ -220,11 +220,17 @@ first ABI, `armeabi-v7a`:
 under its own tag prefix, and this app's is `aqara-s1-plus-` (the board id it reports, since other S1
 models may get their own frame). From 0.4.4 the app accepts both `v1.2.3` and
 `aqara-s1-plus-v1.2.3` and picks its own newest release from the list, whatever else was released
-after it. Apps up to **0.4.3** only read `releases/latest` and only understand `v1.2.3`, so:
+after it. Apps up to **0.4.3** only read `releases/latest` and only understand `v1.2.3`.
 
-- keep tagging S1 releases `v1.2.3` until the repo is renamed and other frames start releasing;
-- an S1 release is always published with `--latest` (the workflow does this), and every other frame's
-  or library's release with `--latest=false`, so `releases/latest` stays an S1 release for old panels.
+- `v0.4.4` is the last plain tag. Tag every S1 release after it `aqara-s1-plus-v1.2.3` (maintainer,
+  2026-11-19). A panel on 0.4.3 or older is offered 0.4.4 only while that is `releases/latest`.
+  After the next release it sees no update, and needs Kiln or `adb install -r`.
+- The app's blueprint links point at its own release's tag, which `ReleaseLine.tag` builds
+  (`aqara-s1-plus-v1.2.3` on the S1). A release tagged any other way gets links to files that aren't
+  there ([Blueprints](blueprints.md#which-version-you-get)). The generic app and its legacy build do
+  the same with their own tags.
+- An S1 release is always published with `--latest` (the workflow does this), and every other frame's
+  or library's release with `--latest=false`, so `releases/latest` stays an S1 release.
 
 First add a `## [1.0.0] - <date>` section to [CHANGELOG.md](../CHANGELOG.md) (move the
 *Unreleased* entries into it). Its first line is what Home Assistant shows on the update card, so make
@@ -232,8 +238,8 @@ it a one-sentence summary. The release fails early if the section is missing.
 
 ```sh
 git switch main && git pull
-git tag -a v1.0.0 -m "Glassworks 1.0.0"
-git push origin v1.0.0
+git tag -a aqara-s1-plus-v1.0.0 -m "Glassworks 1.0.0"
+git push origin aqara-s1-plus-v1.0.0
 gh run watch --repo GlassworksHQ/glassworks   # or the Actions tab
 ```
 

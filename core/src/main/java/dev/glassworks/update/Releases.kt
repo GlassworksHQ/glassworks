@@ -67,6 +67,9 @@ class ReleaseLine(
     fun tagVersion(tag: String): AppVersion? =
         if (plainTags || tag.startsWith(tagPrefix)) AppVersion.parse(tag.removePrefix(tagPrefix)) else null
 
+    /** This app's tag for [version] ("0.5.0" → `aqara-s1-plus-v0.5.0`), the one a release of it gets now. */
+    fun tag(version: String) = "${tagPrefix}v$version"
+
     fun apkName(abi: ApkAbi, v: AppVersion) = "${stem(abi)}-$v.apk"
     fun shaName(abi: ApkAbi, v: AppVersion) = "${apkName(abi, v)}.sha256"
 
