@@ -202,7 +202,8 @@ export function FlashFastboot({ f, s }: P) {
       <h2 id="h">Put the Mirror in fastboot.</h2>
       <Recovery data={RECOVERY} />
       <ol className="join">
-        <li>Switch the Mirror off with the rocker switch in its bottom edge, and lay it face down. Take out the 4 screws in the bottom edge that hold the stand, and take the stand off. Then take out the 12 screws in the back, and lift the back off.</li>
+        <li>Switch the Mirror off with the rocker switch in its bottom edge, unplug its power cord, and lay it face down. Take out the 4 screws in the bottom edge that hold the stand, and take the stand off. Then take out the 14 screws in the back, 2 of them either side of the recess by the feet, and lift the back off.</li>
+        <li>Plug the power cord back into its socket in that recess. Leave the switch off.</li>
         <li>Plug the micro-USB port, in the top end&apos;s corner, into this computer.</li>
         <li>On the small green board at the top end, hold VOL&minus; (SW3): of its two buttons side by side, the one nearer the top end&apos;s edge.</li>
         <li>Keep holding while you switch the Mirror on, and for about 5 seconds more. Its screen stays black: that&apos;s fastboot.</li>

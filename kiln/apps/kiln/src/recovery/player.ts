@@ -21,22 +21,24 @@ export interface RecoveryData {
   cover?: { screws: Screw[]; features: Rect[] };
   /**
    * A stand fixed to a side face by the side screws in that face. It comes off once they're out.
-   * `depth`: its bar on that face, mm out from it. `tube`: a U of tube from the bar's two ends, `inset` mm
-   * in from the corners and `z` mm down from the back, out to `reach` mm from the face, its corners bent
-   * to `bend` mm.
+   * `depth`: a bar on that face, mm out from it, if it has one. `tube`: a U of tube from that face (or the
+   * bar's ends), `inset` mm in from the corners and `z` mm down from the back, out to `reach` mm from the
+   * face, its corners bent to `bend` mm.
    */
-  stand?: { edge: Shown; depth: number; tube?: { reach: number; inset: number; z: number; diameter: number; bend: number } };
+  stand?: { edge: Shown; depth?: number; tube?: { reach: number; inset: number; z: number; diameter: number; bend: number } };
   board?: (Rect | { kind: 'window'; at: Mm; r: number } | { kind: 'button'; at: Mm })[];
   button?: { at: Mm; what: string };
   port?: { edge: 'top' | 'bottom' | 'left' | 'right'; at: number; kind: string };
+  /** A power socket under the back at `at`, its cord running out toward a side face. The `cord` move plugs it in. */
+  cord?: { at: Mm; toward: Shown; kind: string };
   /** A power switch in a side face, `at` mm along it. The `power` move flips it on. */
   power?: { edge: Shown; at: number; kind: string };
-  steps: ('screws' | 'cover' | 'hold' | 'plug' | 'power')[];
+  steps: ('screws' | 'cover' | 'cord' | 'hold' | 'plug' | 'power')[];
   ready?: { seconds: number; says: string };
   labels?: Partial<Record<string, string>>;
 }
 
-export const LABELS: Record<string, string> = { screws: 'Take out the screws', cover: 'Remove the back cover', hold: 'Hold the button', plug: 'Plug in the USB cable', power: 'Switch the power on' };
+export const LABELS: Record<string, string> = { screws: 'Take out the screws', cover: 'Remove the back cover', hold: 'Hold the button', plug: 'Plug in the USB cable', cord: 'Plug in the power cord', power: 'Switch the power on' };
 
 const C = Math.cos(Math.PI / 6);
 const SN = 0.5;
@@ -51,10 +53,31 @@ const ease = (x: number) => x * x * (3 - 2 * x);
 const outBack = (x: number) => 1 + 2.5 * Math.pow(x - 1, 3) + 1.5 * Math.pow(x - 1, 2);
 const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
 
+/**
+ * The camera between two views (middle `c`, width `w`) at `e` (0 to 1): van Wijk and Nuij's smooth
+ * zoom-and-pan path, which zooms out just enough to keep a long move readable.
+ */
+function zoomPath(a: { c: Mm; w: number }, b: { c: Mm; w: number }, e: number): { c: Mm; w: number } {
+  const rho = Math.SQRT2;
+  const dx = b.c[0] - a.c[0], dy = b.c[1] - a.c[1];
+  const d2 = dx * dx + dy * dy, d = Math.sqrt(d2);
+  if (d < 1e-6) {
+    const S = Math.log(b.w / a.w) / rho;
+    return { c: [a.c[0] + dx * e, a.c[1] + dy * e], w: a.w * Math.exp(rho * e * S) };
+  }
+  const b0 = (b.w * b.w - a.w * a.w + rho ** 4 * d2) / (2 * a.w * rho * rho * d);
+  const b1 = (b.w * b.w - a.w * a.w - rho ** 4 * d2) / (2 * b.w * rho * rho * d);
+  const r0 = Math.log(Math.sqrt(b0 * b0 + 1) - b0), r1 = Math.log(Math.sqrt(b1 * b1 + 1) - b1);
+  const S = (r1 - r0) / rho, sv = e * S;
+  const coshr0 = Math.cosh(r0);
+  const u = (a.w / (rho * rho)) * (coshr0 * Math.tanh(rho * sv + r0) - Math.sinh(r0));
+  return { c: [a.c[0] + (dx * u) / d, a.c[1] + (dy * u) / d], w: (a.w * coshr0) / Math.cosh(rho * sv + r0) };
+}
+
 /** The drawing's scale, `k` px per mm, and `g`, how much smaller than full size parts are drawn. */
 function fit(f: RecoveryData) {
   const st = f.stand;
-  const out = st ? Math.max(st.depth, st.tube?.reach ?? 0) : 0;
+  const out = st ? Math.max(st.depth ?? 0, st.tube?.reach ?? 0) : 0;
   const w = f.body.w + (st?.edge === 'right' ? out : 0), h = f.body.h + (st?.edge === 'bottom' ? out : 0);
   const k = Math.min(520 / w, 300 / h);
   return { k, g: Math.min(1, (k * S) / FULL) };
@@ -69,6 +92,7 @@ interface Timeline {
   screws?: { starts: number[]; dur: number };
   stand?: Span;
   cover?: Span; reveal?: Span; focus?: Span; hold?: Span; toPort?: Span; plug?: Span; click?: Span;
+  toCord?: Span; cordIn?: Span; cordClick?: Span;
   toSwitch?: Span; flip?: Span; back?: Span;
   ready?: { start: number };
   out: number;
@@ -79,8 +103,8 @@ interface Timeline {
 export function timeline(f: RecoveryData): Timeline {
   const tl: Timeline = { beats: [], out: 0, T: 0 };
   const far = fit(f).g < 1;
-  let close = false; // the camera is in close on something
-  const pan = () => (far && close ? 1.4 : 0.8);
+  // On a big device the camera travels further, so its moves take longer.
+  const pan = () => (far ? 1.5 : 0.8);
   const powers = f.steps.includes('power') ? 'power' : 'plug';
   // A short wait plays faster, as the S1's always has; a longer hold plays in real time, so the
   // animation never says "let go" before the device is ready (the Mirror's 5 s).
@@ -109,22 +133,25 @@ export function timeline(f: RecoveryData): Timeline {
       tl.focus = { start: t, end: t + d };
       tl.hold = { start: t + d - 0.2, end: 0 };
       t += d + 1.8;
-      close = true;
+    } else if (step === 'cord') {
+      const d = pan();
+      tl.toCord = { start: t, end: t + d };
+      tl.cordIn = { start: t + d, end: t + d + 0.7 };
+      tl.cordClick = { start: t + d + 0.65, end: t + d + 1.2 };
+      t += d + 1.2;
     } else if (step === 'plug') {
       const d = pan();
       tl.toPort = { start: t, end: t + d };
       tl.plug = { start: t + d, end: t + d + 0.7 };
       tl.click = { start: t + d + 0.65, end: t + d + 1.2 };
       t += d + 0.7;
-      close = true;
     } else if (step === 'power') {
       const d = pan();
       tl.toSwitch = { start: t, end: t + d };
       tl.flip = { start: t + d, end: t + d + 0.5 };
       t += d + 0.5;
-      close = true;
       // Back to the button that's still held, while the device starts.
-      if (far && f.button) tl.back = { start: t + 0.4, end: t + 1.8 };
+      if (far && f.button) tl.back = { start: t + 0.3, end: t + 0.3 + d };
     }
     if (step === powers) {
       tl.ready = { start: t + wait };
@@ -151,8 +178,8 @@ export function mount(svg: SVGSVGElement, f: RecoveryData, onBeat?: (i: number) 
   const u = (mm: number) => mm * k;
   const Wu = u(W), Hu = u(H);
   const st = f.stand;
-  const Du = st ? u(st.depth) : 0;
-  const Ou = st ? u(Math.max(st.depth, st.tube?.reach ?? 0)) : 0;
+  const Du = st ? u(st.depth ?? 0) : 0;
+  const Ou = st ? u(Math.max(st.depth ?? 0, st.tube?.reach ?? 0)) : 0;
   const Wx = Wu + (st?.edge === 'right' ? Ou : 0), Hx = Hu + (st?.edge === 'bottom' ? Ou : 0);
   const depth = f.body.thickness * k * s * 0.4;
   const proj0 = (x: number, y: number) => [C * s * (x - y), SN * s * (x + y)] as const;
@@ -209,19 +236,32 @@ export function mount(svg: SVGSVGElement, f: RecoveryData, onBeat?: (i: number) 
     if (c.kind === 'hole') return `<ellipse cx="${u(c.at[0])}" cy="${u(c.at[1])}" rx="${u(c.size[0]) / 2}" ry="${u(c.size[1]) / 2}" fill="${M.hole}" ${edge}/>`;
     if (c.kind === 'clip') return rect(c, `fill="${M.clip}"`);
     if (c.kind === 'grille') return rect(c, `fill="url(#kr-grille)" ${edge}`);
-    if (c.kind === 'recess') return rect(c, `fill="${M.dark}" style="stroke:var(--s-fg)" stroke-opacity=".2"`);
-    return '';
+    return ''; // a recess is the body's: drawn under the cover, through a hole in it
   }).join('');
+  const recesses = (f.cover?.features ?? []).filter((c) => c.kind === 'recess');
+  const recessArt = recesses.map((c) => rect(c, `fill="${M.dark}" style="stroke:var(--s-fg)" stroke-opacity=".2"`)).join('');
+  const coverHoles = recesses.length
+    ? `<mask id="kr-holes" maskUnits="userSpaceOnUse" x="${-Wu}" y="${-Hu}" width="${3 * Wu}" height="${3 * Hu}"><rect x="${-Wu}" y="${-Hu}" width="${3 * Wu}" height="${3 * Hu}" fill="white"/>${recesses.map((c) => rect(c, 'fill="black"')).join('')}</mask>`
+    : '';
 
-  const plug = PORT
-    ? `<g transform="translate(${PORT.at[0]} ${PORT.at[1]}) rotate(${PORT.angle})${g < 1 ? ` scale(${g})` : ''}"><clipPath id="kr-out"><rect x="0" y="-60" width="400" height="120"/></clipPath>
-       <path id="kr-guide" d="M8 0H8" style="stroke:var(--ember-a)" stroke-opacity=".55" stroke-width="1" stroke-dasharray="4 4" fill="none"/>
-       <g clip-path="url(#kr-out)"><g id="kr-plug">
+  // A plug on its cable, pointing in along +x of its own frame; `id` names its parts (the USB's has none).
+  const plugArt = (id: string, [x, y]: Mm, angle: number, scale: number, flip = false) => `<g transform="translate(${x} ${y}) rotate(${angle})${scale !== 1 || flip ? ` scale(${scale}${flip ? ` ${-scale}` : ''})` : ''}"><clipPath id="kr-out${id}"><rect x="0" y="-60" width="400" height="120"/></clipPath>
+       <path id="kr-guide${id}" d="M8 0H8" style="stroke:var(--ember-a)" stroke-opacity=".55" stroke-width="1" stroke-dasharray="4 4" fill="none"/>
+       <g clip-path="url(#kr-out${id})"><g id="kr-plug${id}">
          <path d="M42 0 C 87 0, 112 26, 182 40" stroke="${M.cable}" stroke-width="9" fill="none" stroke-linecap="round"/>
          <path d="M30 -4.5 L42 -3.6 L42 3.6 L30 4.5 Z" fill="${M.boot}"/>
          <rect x="-10" y="-3.2" width="11" height="6.4" rx="1.6" fill="${M.pins}"/>
          <rect x="0" y="-6.5" width="31" height="13" rx="3.5" fill="url(#kr-plugG)" style="stroke:var(--s-fg)" stroke-opacity=".25" stroke-width=".6"/>
-       </g></g></g>`
+       </g></g></g>`;
+  const plug = PORT ? plugArt('', PORT.at, PORT.angle, g < 1 ? g : 1) : '';
+  // The power cord: its socket on the body under the back, the cord lying toward its face. A mains plug
+  // is about twice a USB plug. Its cable bends the other way to the USB's, clear of a switch beside it.
+  const CORD = f.cord ? (P(u(f.cord.at[0]), u(f.cord.at[1]))) : null;
+  const cordArt = CORD && f.cord
+    ? `<g transform="${MX}"><rect x="${u(f.cord.at[0]) - u(6)}" y="${u(f.cord.at[1]) - u(10)}" width="${u(12)}" height="${u(20)}" rx="${u(2)}" fill="${M.clip}" style="stroke:var(--s-fg)" stroke-opacity=".3"/></g>
+  ${plugArt('C', CORD, f.cord.toward === 'right' ? 30 : 150, 2 * g, true)}
+  <ellipse id="kr-cordGlow" cx="${CORD[0]}" cy="${CORD[1]}" rx="${24 * g}" ry="${14 * g}" fill="none" style="stroke:var(--ember-b)" stroke-width="${1.6 * g}" opacity="0"/>
+  <ellipse id="kr-cordClick" cx="${CORD[0]}" cy="${CORD[1]}" rx="${14 * g}" ry="${8 * g}" fill="none" style="stroke:var(--ember-a)" stroke-width="${1.5 * g}" opacity="0"/>`
     : '';
   const sideHalo = ([X, Y]: Mm) => `<circle class="kr-halo" cx="${X}" cy="${Y}" r="9" fill="none" style="stroke:var(--ember-b)" stroke-width="1.5"/>`;
   // The stand: a block on its face, as deep as the body, drawn like the body (top, and its side below).
@@ -239,17 +279,20 @@ export function mount(svg: SVGSVGElement, f: RecoveryData, onBeat?: (i: number) 
       return at(co + bend * Math.cos(th), ca + bend * Math.sin(th));
     });
     const pts = [
-      at(st.depth, inset), ...arc(reach - bend, inset + bend, -Math.PI / 2, 0),
-      ...arc(reach - bend, across - inset - bend, 0, Math.PI / 2), at(st.depth, across - inset),
+      at(st.depth ?? 0, inset), ...arc(reach - bend, inset + bend, -Math.PI / 2, 0),
+      ...arc(reach - bend, across - inset - bend, 0, Math.PI / 2), at(st.depth ?? 0, across - inset),
     ];
     const d = 'M' + pts.map(([x, y]) => `${x.toFixed(2)} ${y.toFixed(2)}`).join('L');
     const wd = u(diameter) * s;
     return `<path d="${d}" fill="none" stroke="${M.tube}" stroke-width="${wd}" stroke-linejoin="round" stroke-linecap="round"/>
       <path d="${d}" fill="none" style="stroke:var(--s-fg)" stroke-opacity=".22" stroke-width="${wd * 0.3}" transform="translate(0 ${-wd * 0.25})" stroke-linejoin="round"/>`;
   })() : '';
+  const bar = st?.depth
+    ? `<g transform="translate(0 ${depth})"><g transform="${MX}"><rect ${standRect} rx="${R}" fill="${M.caseSide}" style="stroke:var(--s-fg)" stroke-opacity=".16"/></g></g>
+       <g transform="${MX}"><rect ${standRect} rx="${R}" fill="${M.stand}" style="stroke:var(--s-fg)" stroke-opacity=".3"/></g>`
+    : '';
   const stand = st
-    ? `<g id="kr-stand"><g transform="translate(0 ${depth})"><g transform="${MX}"><rect ${standRect} rx="${R}" fill="${M.caseSide}" style="stroke:var(--s-fg)" stroke-opacity=".16"/></g></g>
-       <g transform="${MX}"><rect ${standRect} rx="${R}" fill="${M.stand}" style="stroke:var(--s-fg)" stroke-opacity=".3"/></g>${tube}
+    ? `<g id="kr-stand">${bar}${tube}
        ${SCREWS.filter((x) => x.stand).map((x) => sideHalo(x.at)).join('')}</g>`
     : '';
   // A rocker switch in its face, drawn in mm on the face's own axes; its raised half moves when it flips.
@@ -287,16 +330,17 @@ export function mount(svg: SVGSVGElement, f: RecoveryData, onBeat?: (i: number) 
     <rect x="${u(3)}" y="${u(3)}" width="${Wu - u(6)}" height="${Hu - u(6)}" rx="${R * 0.6}" fill="${M.boardBed}" style="stroke:var(--s-fg)" stroke-opacity=".08"/>
     <g clip-path="url(#kr-board)">${board}<rect id="kr-sweep" x="-200" y="-60" width="160" height="${Hu + 120}" fill="url(#kr-sweepG)" transform="rotate(20 ${Wu / 2} ${Hu / 2})"/></g>
     ${BTN ? `${[0, 1, 2].map((i) => `<circle id="kr-r${i}" cx="${BTN[0]}" cy="${BTN[1]}" r="${10 * g}" fill="none" style="stroke:var(--ember-b)" stroke-width="${2 * g}"/>`).join('')}
-    ${cap(BTN, 'id="kr-btn"')}` : ''}
+    ${cap(BTN, 'id="kr-btn"')}` : ''}${recessArt}
   </g>
+  ${cordArt}
   ${switchArt}
   ${PORT ? `<ellipse id="kr-portGlow" cx="${PORT.top[0]}" cy="${PORT.top[1]}" rx="${16 * g}" ry="${9 * g}" fill="none" style="stroke:var(--ember-b)" stroke-width="${1.6 * g}"/>
   <ellipse id="kr-click" cx="${PORT.top[0]}" cy="${PORT.top[1]}" rx="${9 * g}" ry="${5 * g}" fill="none" style="stroke:var(--ember-a)" stroke-width="${1.5 * g}"/>` : ''}
   ${SW ? `<ellipse id="kr-swGlow" cx="${SW[0]}" cy="${SW[1]}" rx="${16 * g}" ry="${9 * g}" fill="none" style="stroke:var(--ember-b)" stroke-width="${1.6 * g}" opacity="0"/>
   <ellipse id="kr-swClick" cx="${SW[0]}" cy="${SW[1]}" rx="${9 * g}" ry="${5 * g}" fill="none" style="stroke:var(--ember-a)" stroke-width="${1.5 * g}" opacity="0"/>` : ''}
   ${PORT && PORT.visible ? plug : ''}
-  ${f.cover ? `<g id="kr-cover"><g transform="${MX}">
-    <rect width="${Wu}" height="${Hu}" rx="${R}" fill="url(#kr-case)" style="stroke:var(--s-fg)" stroke-opacity=".28"/>${coverArt}
+  ${f.cover ? `<g id="kr-cover"><g transform="${MX}">${coverHoles}
+    <rect width="${Wu}" height="${Hu}" rx="${R}" fill="url(#kr-case)" style="stroke:var(--s-fg)" stroke-opacity=".28"${coverHoles ? ' mask="url(#kr-holes)"' : ''}/>${coverArt}
     ${SCREWS.map(({ back }) => back ? `<circle class="kr-halo" cx="${back[0]}" cy="${back[1]}" r="12" fill="none" style="stroke:var(--ember-b)" stroke-width="1.5"/>` : '').join('')}
   </g></g>
   ${stand}
@@ -322,19 +366,26 @@ export function mount(svg: SVGSVGElement, f: RecoveryData, onBeat?: (i: number) 
   const cam0: Cam = { f: [bx, by], a: [bx, by], z: 1, r: 700, dim: 0 };
   const moves: { span: Span; to: Cam }[] = [];
   if (tl.focus) moves.push({ span: tl.focus, to: closeUp([bx, by], 1.16, 90) });
+  if (tl.toCord && CORD) moves.push({ span: tl.toCord, to: closeUp(CORD, 1.1, 190) });
   if (tl.toPort && PORT) moves.push({ span: tl.toPort, to: closeUp(g < 1 || !BTN ? PORT.top : [(bx + PORT.top[0]) / 2, (by + PORT.top[1]) / 2], 1.1, 190) });
   if (tl.toSwitch && SW) moves.push({ span: tl.toSwitch, to: closeUp(SW, 1.1, 150) });
   if (tl.back) moves.push({ span: tl.back, to: closeUp([bx, by], 1.16, 90) });
   moves.sort((a, b) => a.span.start - b.span.start);
   const last = moves.length ? moves[moves.length - 1]!.to : cam0;
   moves.push({ span: { start: tl.out - 0.8, end: tl.out }, to: { ...last, a: last.f, z: 1, dim: 0 } });
+  // What a camera shows: the middle of the view (pre-zoom) and how wide it is.
+  const view = (c: Cam) => ({ c: [c.f[0] + (CEN[0] - c.a[0]) / c.z, c.f[1] + (CEN[1] - c.a[1]) / c.z] as Mm, w: VB.w / c.z });
   const mix = (c: Cam, d: Cam, e: number): Cam => {
-    // Between two close-ups far apart, pull back halfway, so the move reads as a move.
-    const pull = g < 1 && c.z > 1 && d.z > 1 ? 1 - (1 - 1.4 / ((c.z + d.z) / 2)) * Math.sin(Math.PI * e) : 1;
-    return {
-      f: [lerp(c.f[0], d.f[0], e), lerp(c.f[1], d.f[1], e)], a: [lerp(c.a[0], d.a[0], e), lerp(c.a[1], d.a[1], e)],
-      z: lerp(c.z, d.z, e) * pull, r: lerp(c.r, d.r, e), dim: lerp(c.dim, d.dim, e),
-    };
+    if (g === 1) {
+      return {
+        f: [lerp(c.f[0], d.f[0], e), lerp(c.f[1], d.f[1], e)], a: [lerp(c.a[0], d.a[0], e), lerp(c.a[1], d.a[1], e)],
+        z: lerp(c.z, d.z, e), r: lerp(c.r, d.r, e), dim: lerp(c.dim, d.dim, e),
+      };
+    }
+    // Close-ups far apart: zoom out and back in along the path that keeps the motion on screen
+    // smooth (van Wijk and Nuij, "Smooth and efficient zooming and panning", 2003; d3's interpolateZoom).
+    const v = zoomPath(view(c), view(d), e);
+    return { f: v.c, a: CEN, z: VB.w / v.w, r: lerp(c.r, d.r, e), dim: lerp(c.dim, d.dim, e) };
   };
   const camera = (t: number) => moves.reduce((c, m) => mix(c, m.to, ease(seg(t, m.span.start, m.span.end))), cam0);
 
@@ -376,23 +427,24 @@ export function mount(svg: SVGSVGElement, f: RecoveryData, onBeat?: (i: number) 
       set('r' + i, 'opacity', holding ? (0.9 * (1 - ph)).toFixed(3) : 0);
     });
     ($('btn') as SVGElement | null)?.style.setProperty('fill', holding ? 'var(--ember-b)' : M.button);
-    const tp = tl.toPort ?? never;
-    if (PORT && tl.plug && tl.click) {
+    // A plug: its guide line while the camera gets there, the glow on its socket, sliding in, the click.
+    const plugIn = (id: string, glow: string, click: string, [cx, cy]: Mm, tp: Span, pl: Span, cl: Span) => {
       const gd = ease(seg(t, tp.start + 0.1, tp.end));
-      set('guide', 'd', `M8 0H${(8 + 122 * gd).toFixed(1)}`);
-      const pl = tl.plug;
-      set('guide', 'opacity', t > tp.start && t < pl.start + 0.5 ? 1 - seg(t, pl.start + 0.2, pl.start + 0.5) : 0);
-      set('portGlow', 'opacity', t > tp.start + 0.1 && t < pl.start + 0.55 ? (0.35 + 0.6 * (Math.sin((t - tp.start) * 7) + 1) / 2).toFixed(3) : 0);
+      set('guide' + id, 'd', `M8 0H${(8 + 122 * gd).toFixed(1)}`);
+      set('guide' + id, 'opacity', t > tp.start && t < pl.start + 0.5 ? 1 - seg(t, pl.start + 0.2, pl.start + 0.5) : 0);
+      set(glow, 'opacity', t > tp.start + 0.1 && t < pl.start + 0.55 ? (0.35 + 0.6 * (Math.sin((t - tp.start) * 7) + 1) / 2).toFixed(3) : 0);
       const pp = seg(t, pl.start, pl.end);
       const d = t < pl.start - 0.3 ? 170 : t < pl.start ? lerp(170, 120, ease(seg(t, pl.start - 0.3, pl.start))) : 120 * (1 - outBack(pp));
-      set('plug', 'transform', `translate(${d.toFixed(2)} 0)`);
+      set('plug' + id, 'transform', `translate(${d.toFixed(2)} 0)`);
       const out = ease(seg(t, tl.out - 0.8, tl.out));
-      set('plug', 'opacity', (t > pl.start - 0.3 && t < tl.T ? ease(seg(t, pl.start - 0.3, pl.start + 0.3)) * (1 - out) : 0).toFixed(3));
-      const kc = seg(t, tl.click.start, tl.click.end);
-      const [cx, cy] = PORT.top, scl = 1 + 2.4 * kc;
-      set('click', 'transform', `translate(${cx} ${cy}) scale(${scl}) translate(${-cx} ${-cy})`);
-      set('click', 'opacity', t > tl.click.start && t < tl.click.end ? (1 - kc).toFixed(3) : 0);
-    }
+      set('plug' + id, 'opacity', (t > pl.start - 0.3 && t < tl.T ? ease(seg(t, pl.start - 0.3, pl.start + 0.3)) * (1 - out) : 0).toFixed(3));
+      const kc = seg(t, cl.start, cl.end);
+      const scl = 1 + 2.4 * kc;
+      set(click, 'transform', `translate(${cx} ${cy}) scale(${scl}) translate(${-cx} ${-cy})`);
+      set(click, 'opacity', t > cl.start && t < cl.end ? (1 - kc).toFixed(3) : 0);
+    };
+    if (PORT && tl.plug && tl.click) plugIn('', 'portGlow', 'click', PORT.top, tl.toPort ?? never, tl.plug, tl.click);
+    if (CORD && tl.toCord && tl.cordIn && tl.cordClick) plugIn('C', 'cordGlow', 'cordClick', CORD, tl.toCord, tl.cordIn, tl.cordClick);
     if (SW && tl.toSwitch && tl.flip) {
       const ts = tl.toSwitch, fl = tl.flip;
       set('swGlow', 'opacity', t > ts.start + 0.1 && t < fl.start + 0.1 ? (0.35 + 0.6 * (Math.sin((t - ts.start) * 7) + 1) / 2).toFixed(3) : 0);

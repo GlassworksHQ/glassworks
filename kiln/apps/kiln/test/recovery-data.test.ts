@@ -14,9 +14,9 @@ const frames = readdirSync(repo('frames'), { withFileTypes: true }).filter((d) =
 const withRecovery = frames.filter((id) => existsSync(join(repo('frames'), id, 'design', 'recovery.json')));
 const data = (id: string) => read(`frames/${id}/design/recovery.json`) as unknown as RecoveryData;
 
-const KEYS = ['frame', 'name', 'body', 'cover', 'stand', 'board', 'button', 'port', 'power', 'steps', 'labels', 'ready'];
-const MOVES = ['screws', 'cover', 'hold', 'plug', 'power'] as const;
-const STEP_NEEDS = { screws: 'cover', cover: 'cover', hold: 'button', plug: 'port', power: 'power' } as const;
+const KEYS = ['frame', 'name', 'body', 'cover', 'stand', 'board', 'button', 'port', 'cord', 'power', 'steps', 'labels', 'ready'];
+const MOVES = ['screws', 'cover', 'cord', 'hold', 'plug', 'power'] as const;
+const STEP_NEEDS = { screws: 'cover', cover: 'cover', hold: 'button', plug: 'port', cord: 'cord', power: 'power' } as const;
 
 it('the design copy of the S1 recovery data equals the frame\'s, photo aside', () => {
   const { photo, ...design } = read('docs/design/kiln/recovery/aqara-s1-plus.json');
@@ -25,7 +25,7 @@ it('the design copy of the S1 recovery data equals the frame\'s, photo aside', (
 });
 
 it('the recovery steps read as instructions (#141: "Back off" read as "back off!")', () => {
-  expect(LABELS).toEqual({ screws: 'Take out the screws', cover: 'Remove the back cover', hold: 'Hold the button', plug: 'Plug in the USB cable', power: 'Switch the power on' });
+  expect(LABELS).toEqual({ screws: 'Take out the screws', cover: 'Remove the back cover', hold: 'Hold the button', plug: 'Plug in the USB cable', cord: 'Plug in the power cord', power: 'Switch the power on' });
 });
 
 it('the S1 and the Mirror have recovery data, and each frame.json names its file', () => {
@@ -76,9 +76,14 @@ describe.each(withRecovery)('%s recovery.json', (id) => {
     // A stand and a switch sit in a side face the drawing shows; a stand comes off with that face's screws.
     if (f.stand) {
       expect(['right', 'bottom']).toContain(f.stand.edge);
-      expect(f.stand.depth).toBeGreaterThan(0);
+      expect(f.stand.depth !== undefined || f.stand.tube !== undefined, 'a bar, a tube or both').toBe(true);
+      if (f.stand.depth !== undefined) expect(f.stand.depth).toBeGreaterThan(0);
       const inFace = (f.cover?.screws ?? []).filter(([x, y, z]) => z !== undefined && (f.stand!.edge === 'right' ? x === w : y === h));
       expect(inFace.length, 'the stand\'s screws').toBeGreaterThan(0);
+    }
+    if (f.cord) {
+      expect(inside(f.cord.at), 'the power socket').toBe(true);
+      expect(['right', 'bottom']).toContain(f.cord.toward);
     }
     if (f.power) {
       expect(['right', 'bottom']).toContain(f.power.edge);
@@ -116,11 +121,19 @@ it('the Mirror: the stand\'s 4 screws first, then the back\'s 12; USB in, VOL−
   const screws = f.cover!.screws;
   expect(f.stand?.edge, 'one stand along the feet\'s edge').toBe('right');
   expect(screws.slice(0, 4).every((s) => s.length === 3 && s[0] === w), 'four in the feet\'s edge, first').toBe(true);
-  expect(screws.slice(4).filter((s) => s.length === 2)).toHaveLength(12);
+  // The back's 12, then 2 more, one each side of the recess by the feet (maintainer, 2026-11-18).
+  expect(screws.slice(4).filter((s) => s.length === 2)).toHaveLength(14);
+  const recess = f.cover!.features.find((c) => c.kind === 'recess')!;
+  const inRecess = ([x, y]: Screw) => x > recess.at[0] && x < recess.at[0] + recess.size[0] && y > recess.at[1] && y < recess.at[1] + recess.size[1];
+  const [l, r] = screws.slice(-2) as [Screw, Screw];
+  for (const [x] of [l, r]) expect(x > recess.at[0] && x < recess.at[0] + recess.size[0], 'beside the recess, along it').toBe(true);
+  expect(l[1] < recess.at[1] && r[1] > recess.at[1] + recess.size[1], 'one each side, outside it').toBe(true);
+  // The power cord goes back in, in that recess, once the back is off.
+  expect(inRecess(f.cord!.at as Screw)).toBe(true);
   // One piece, with the two speaker grilles and the recess for the power cord near the feet.
   expect(f.cover!.features.map((c) => c.kind)).toEqual(['grille', 'grille', 'recess']);
   expect(f.cover!.features.every((c) => c.at[0] > w / 2), 'near the feet').toBe(true);
-  expect(f.steps).toEqual(['screws', 'cover', 'plug', 'hold', 'power']);
+  expect(f.steps).toEqual(['screws', 'cover', 'cord', 'plug', 'hold', 'power']);
   // Side by side along the length; VOL− is the one nearer the top end's edge (x = 0).
   const others = (f.board ?? []).filter((b) => b.kind === 'button');
   expect(others).toHaveLength(1);
@@ -148,5 +161,5 @@ it('the Mirror\'s stand tube is the one its 3D model draws (frame.json)', () => 
   expect(model.body.width / 2 - Math.max(...ends.map((e) => Math.abs(e[0]!)))).toBeCloseTo(tube.inset, 0);
   expect(ends[0]![2]! + model.body.depth / 2).toBeCloseTo(tube.z, 0);
   expect(model.parts.every((p) => p.kind === 'tube' && p.diameter === tube.diameter)).toBe(true);
-  expect(f.stand!.depth, 'its bar is as deep as the Mirror').toBe(model.body.depth);
+  expect(f.stand!.depth, 'no bar: the tube goes straight into the Mirror').toBeUndefined();
 });

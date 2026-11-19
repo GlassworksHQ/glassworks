@@ -65,13 +65,14 @@ prototype's input and adds only `photo`. Kiln's tests fail if the two differ oth
 |---|---|
 | `body` | `w`, `h`, `thickness`, `radius` in mm |
 | `cover.screws` | Screw centres, `[x, y]` mm, in the order they come out. A screw in a side face is `[x, y, z]`: on the face at `x = w` or `y = h` (the two the drawing shows), `z` mm down from the back |
-| `cover.features` | What the back looks like: `ribs`, `plate`, `hole`, `clip`, `grille` (a speaker's holes), `recess` rectangles (`at`, `size`) |
-| `stand` | Optional. A stand fixed to a side face the drawing shows: `edge` (`right` is `x = w`, `bottom` is `y = h`) and `depth`, mm out from that face, for its bar. The side screws in that face hold it, and it comes off once they're out. Optional `tube`: a U of tube from the bar's ends, `inset` mm in from the corners and `z` mm down from the back, out to `reach` mm, `diameter` thick, its corners bent to `bend` mm (the Mirror's matches its 3D model in `frame.json`) |
+| `cover.features` | What the back looks like: `ribs`, `plate`, `hole`, `clip`, `grille` (a speaker's holes), `recess` rectangles (`at`, `size`). A `recess` is the body's: the back has a hole there, and it stays when the back lifts off |
+| `stand` | Optional. A stand fixed to a side face the drawing shows: `edge` (`right` is `x = w`, `bottom` is `y = h`) and, for a bar, `depth`: mm out from that face. The side screws in that face hold it, and it comes off once they're out. Optional `tube`: a U of tube from that face (or the bar's ends), `inset` mm in from the corners and `z` mm down from the back, out to `reach` mm, `diameter` thick, its corners bent to `bend` mm (the Mirror's matches its 3D model in `frame.json`) |
 | `board` | What's under the cover: `speaker`, `shield`, `chip` rectangles, `window` circles, and `button` (`at` only): a button next to the one to hold, drawn plain |
 | `button` | The button to hold: `at` in mm, and `what` (a sentence for the photo's caption) |
 | `port` | `edge` (`top`, `bottom`, `left`, `right`), `at` (mm along that edge), `kind` |
+| `cord` | Optional. A power socket under the back: `at` in mm, `toward` (`right` or `bottom`), the face its cord runs out of, and `kind`. The `cord` move plugs it in |
 | `power` | Optional. A power switch in a side face the drawing shows: `edge` (`right` or `bottom`), `at` (mm along it), `kind` |
-| `steps` | Moves, in order: `screws`, `cover`, `hold`, `plug`, `power`. The last of `plug` and `power` is the one that switches the device on; `ready` counts from it |
+| `steps` | Moves, in order: `screws`, `cover`, `cord`, `hold`, `plug`, `power`. The last of `plug` and `power` is the one that switches the device on; `ready` counts from it |
 | `labels` | Optional. A step chip's words in place of the default, by move (the Mirror's `hold` is "Hold VOL−") |
 | `ready` | `seconds` until recovery mode, and what the label `says` |
 | `photo` | A real photo behind "Show me a photo" |

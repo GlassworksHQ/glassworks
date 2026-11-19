@@ -192,9 +192,10 @@ describe('installing Glassworks over fastboot', () => {
     const { flash, mirror } = await flashDemo('flash-fastboot', true);
     expect(flash.state.screen).toBe('fastboot');
     render(<Flash flash={flash} mirror={mirror} />);
-    expect(screen.getByRole('img', { name: /lululemon Studio Mirror in recovery mode: Unscrew the stand and the back, Lift off the back, Plug in the micro-USB, Hold VOL−, Switch the power on\. VOL− \(SW3\)/ })).toBeTruthy();
+    expect(screen.getByRole('img', { name: /lululemon Studio Mirror in recovery mode: Unscrew the stand and the back, Lift off the back, Plug in the power cord, Plug in the micro-USB, Hold VOL−, Switch the power on\. VOL− \(SW3\)/ })).toBeTruthy();
     expect(screen.getByText(/hold VOL− \(SW3\): of its two buttons side by side, the one nearer the top end's edge/)).toBeTruthy();
     expect(screen.getByText(/Keep holding while you switch the Mirror on/)).toBeTruthy();
+    expect(screen.getByText(/Plug the power cord back into its socket in that recess/)).toBeTruthy();
     expect(screen.getByText(/Both buttons together start a Qualcomm mode Kiln can't use/)).toBeTruthy();
   });
 
