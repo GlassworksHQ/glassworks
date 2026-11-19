@@ -1,6 +1,6 @@
 package dev.glassworks.notifications
 
-import sh.edm.s1kiosk.frame.TestFrames
+import dev.glassworks.s1.frame.TestFrames
 import android.app.Application
 import android.content.Context
 import android.graphics.Bitmap
@@ -39,7 +39,7 @@ import org.robolectric.annotation.GraphicsMode
 import dev.glassworks.KioskPrefs
 import dev.glassworks.manage.ManageFixture
 import dev.glassworks.manage.paneRow
-import sh.edm.s1kiosk.PanePrefs
+import dev.glassworks.s1.PanePrefs
 import dev.glassworks.radio.FixedReadout
 import dev.glassworks.radio.RadioMode
 import dev.glassworks.radio.radioDefinition

@@ -12,10 +12,10 @@ import dev.glassworks.pane.settingsOrder
 import dev.glassworks.diagnostics.DiagnosticsDefinition
 import dev.glassworks.screen.ScreenHardware
 import dev.glassworks.KioskPrefs
-import sh.edm.s1kiosk.PanePrefs
-import sh.edm.s1kiosk.base.WallBaseDefinition
-import sh.edm.s1kiosk.frame.AqaraS1Plus
-import sh.edm.s1kiosk.frame.TimeZoneDefinition
+import dev.glassworks.s1.PanePrefs
+import dev.glassworks.s1.base.WallBaseDefinition
+import dev.glassworks.s1.frame.AqaraS1Plus
+import dev.glassworks.s1.frame.TimeZoneDefinition
 import dev.glassworks.radio.RadioDefinition
 
 /**

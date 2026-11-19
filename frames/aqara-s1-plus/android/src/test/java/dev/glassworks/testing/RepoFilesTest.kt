@@ -52,7 +52,7 @@ class RepoFilesTest {
             "panes/assist/src/main/java/dev/glassworks/assist/pane.json",
             "frames/aqara-s1-plus/android/src/main/java/dev/glassworks/MainActivity.kt",
             "frames/aqara-s1-plus/android/src/test/resources/prefs.golden.txt",
-            "frames/aqara-s1-plus/panes/wall-base/src/main/java/sh/edm/s1kiosk/base/WallBasePane.kt",
+            "frames/aqara-s1-plus/panes/wall-base/src/main/java/dev/glassworks/s1/base/WallBasePane.kt",
             "frames/aqara-s1-plus/installer/src/index.ts", "frames/aqara-s1-plus/design/frame.json",
             "libs/improv/src/main/java/dev/glassworks/improv/Compat.kt", "libs/esphome-api/src/main/kotlin/dev/glassworks/esphome/Api.kt",
             "core/build/tmp/src/main/java/Stale.kt", "kiln/node_modules/x/src/main/java/Y.kt",

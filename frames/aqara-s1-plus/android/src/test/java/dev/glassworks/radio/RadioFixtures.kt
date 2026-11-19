@@ -3,7 +3,7 @@ package dev.glassworks.radio
 import android.content.Context
 import dev.glassworks.Glassworks
 import dev.glassworks.KioskPrefs
-import sh.edm.s1kiosk.PanePrefs
+import dev.glassworks.s1.PanePrefs
 import dev.glassworks.radio.ui.RadioFollowUp
 import dev.glassworks.setup.SetupState
 

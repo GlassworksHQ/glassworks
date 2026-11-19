@@ -14,8 +14,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import java.io.File
-import sh.edm.s1kiosk.KioskApp
-import sh.edm.s1kiosk.PanePrefs
+import dev.glassworks.s1.KioskApp
+import dev.glassworks.s1.PanePrefs
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = KioskApp::class)
@@ -43,7 +43,7 @@ class CameraAdbActivityTest {
 
     @Test fun onlyAdbMayStartIt() {
         val manifest = File(RepoFiles.s1App, "src/main/AndroidManifest.xml").readText()
-        val decl = Regex("""<activity[^>]*android:name="\.CameraAdbActivity"[^>]*/>""").find(manifest)!!.value
+        val decl = Regex("""<activity[^>]*android:name="dev\.glassworks\.camera\.CameraAdbActivity"[^>]*/>""").find(manifest)!!.value
         assertTrue(decl, decl.contains("""android:permission="android.permission.WRITE_SECURE_SETTINGS""""))
     }
 }

@@ -75,7 +75,7 @@ build if one is missing here.
   Copyright: Oracle and/or its affiliates, and Google LLC. Upstream and source: https://github.com/google/desugar_jdk_libs
   (release 2.1.5). Allowed by the maintainer on 2026-11-16 as the one exception to the repo's no-GPL rule
   (`AGENTS.md`, rule 4), in two apps: this legacy APK, and the legacy engine's debug test app
-  (`sh.edm.s1kiosk.legacy`, never released; test builds on branches named `legacy` upload it). Only those two
+  (`dev.glassworks.s1.legacy`, never released; test builds on branches named `legacy` upload it). Only those two
   ship its classes. The current generic builds (minSdk 26) set desugaring up too, because AGP turns it on per
   module, but none of its classes go into their APKs. The S1 app doesn't use it.
 - **AndroidX and kotlinx.coroutines at GeckoView 144's versions**, which it resolves to in place of the current

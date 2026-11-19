@@ -13,7 +13,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import dev.glassworks.KioskPrefs
-import sh.edm.s1kiosk.PanePrefs
+import dev.glassworks.s1.PanePrefs
 import dev.glassworks.radio.ui.RadioFollowUp
 
 /** Init without a root helper unless asked: `ctl.start/stop` flip init.svc.*, `ctl.restart` is recorded, other props are stored. */

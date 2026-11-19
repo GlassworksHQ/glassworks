@@ -12,11 +12,11 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowLooper
-import sh.edm.s1kiosk.KioskApp
-import sh.edm.s1kiosk.PanePrefs
-import sh.edm.s1kiosk.base.BaseBackend
-import sh.edm.s1kiosk.frame.AqaraCloud
-import sh.edm.s1kiosk.frame.AqaraS1Plus
+import dev.glassworks.s1.KioskApp
+import dev.glassworks.s1.PanePrefs
+import dev.glassworks.s1.base.BaseBackend
+import dev.glassworks.s1.frame.AqaraCloud
+import dev.glassworks.s1.frame.AqaraS1Plus
 import java.net.InetAddress
 
 /**
