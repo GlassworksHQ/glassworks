@@ -143,7 +143,13 @@ class UpdateModel(val currentVersion: String, val title: String = TITLE) {
     @Synchronized fun view(): UpdateStateData {
         val o = offer
         val available = updateAvailable
-        val top = status.ifEmpty { if (available && phase == Phase.IDLE) installNote else "" }
+        val top = listOf(
+            if (available && o!!.prerelease) BETA_NOTE else "",
+            status.ifEmpty { if (available && phase == Phase.IDLE) installNote else "" },
+        ).filter { it.isNotEmpty() }.joinToString("\n")
+        // An offer lower than this app (a beta installed, then Stable: #605) is no update: Home Assistant shows the
+        // installed version as the latest, not a lower one.
+        val shown = o?.takeIf { current == null || it.version >= current }
         return UpdateStateData(
             missingState = !checked,
             inProgress = phase != Phase.IDLE,
@@ -153,10 +159,10 @@ class UpdateModel(val currentVersion: String, val title: String = TITLE) {
             // Until a check succeeded: latest = installed. Home Assistant (2026.11, esphome/update.py)
             // ignores missing_state for update entities, and an empty latest_version can't be compared,
             // which HA's UpdateEntity.has_update counts as "update available": ON with a blank version.
-            latestVersion = if (!checked) currentVersion else o?.version?.toString() ?: currentVersion,
+            latestVersion = if (!checked) currentVersion else shown?.version?.toString() ?: currentVersion,
             title = title,
             releaseSummary = Releases.summary(if (available) o!!.notes else "", top),
-            releaseUrl = o?.releaseUrl.orEmpty(),
+            releaseUrl = shown?.releaseUrl.orEmpty(),
         )
     }
 
@@ -168,7 +174,7 @@ class UpdateModel(val currentVersion: String, val title: String = TITLE) {
             phase != Phase.IDLE -> status
             statusKind == StatusKind.INSTALL_ERROR || statusKind == StatusKind.CHECK_ERROR -> status
             !checked -> status.ifEmpty { "not checked yet" }
-            updateAvailable -> "${o!!.version} available" + if (status.isNotEmpty()) " ($status)" else ""
+            updateAvailable -> "${o!!.version}${if (o.prerelease) " beta" else ""} available" + if (status.isNotEmpty()) " ($status)" else ""
             else -> "up to date ($currentVersion)" + if (status.isNotEmpty()) "; $status" else ""
         }.take(MAX_STATUS)
     }
@@ -193,6 +199,8 @@ class UpdateModel(val currentVersion: String, val title: String = TITLE) {
 
     companion object {
         const val TITLE = dev.glassworks.platform.AppBuild.PRODUCT
+        /** On top of the update card when the update offered is a beta (#605). */
+        const val BETA_NOTE = "Beta: a new version before it's stable. It may have bugs."
         const val DOWNLOAD_TIMEOUT_MS = 30 * 60_000L
         const val INSTALL_TIMEOUT_MS = 10 * 60_000L
         /** HA keeps text sensor states to 255 characters. */

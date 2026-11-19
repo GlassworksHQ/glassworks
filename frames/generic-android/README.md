@@ -180,6 +180,10 @@ repo's GitHub releases (`ReleaseLine` in `core/.../update/Releases.kt`):
 
 So no app ever offers itself another's APK.
 
+The Device page's *Update channel* row (and the Manage page's) picks Stable, the default, or Beta, which also takes
+the line's GitHub pre-releases (#605, [releasing.md](../../docs/releasing.md#betas)). Going back to Stable never
+offers a lower version: the app waits for a stable release higher than the one it runs.
+
 The check reads the repo's 100 newest releases (`Releases.LIST_URL`, `per_page=100`, GitHub's largest page),
 all apps and libraries together, and takes the newest of its own among them. So if more than 100 releases of
 other parts come out after this app's newest one, the app sees no update until its next release: every app
