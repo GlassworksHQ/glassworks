@@ -251,13 +251,41 @@ async function open(p) {
     // The panel's own answer, as it gave it: no second request to it (CodeRabbit on #534).
     return problem && (problem.panel || problem.transient) ? panelProblem(problem) : start();
   }
+  const fields = { token: access, next: '/', from: location.host };
+  // The form goes into the new tab's own page and is sent from there: iOS Safari can lose the link from this tab to a
+  // window it opened by name, and the tab stays on about:blank (2026-11-19 panel run, once). about:blank shares this
+  // page's origin, so this tab can write it. If it can't, the named target as before.
+  if (tab && postIn(tab.document, p.origin, fields)) return;
   const f = h('form', { method: 'post', action: p.origin + '/manage/ha/token', target: tab ? name : '_self' },
-    h('input', { type: 'hidden', name: 'token', value: access }), h('input', { type: 'hidden', name: 'next', value: '/' }),
-    // For the other panel's Log: Safari posts this from a new tab with `Origin: null` (2026-11-18 panel run).
-    h('input', { type: 'hidden', name: 'from', value: location.host }));
+    ...Object.entries(fields).map(([k, v]) => h('input', { type: 'hidden', name: k, value: v })));
   document.body.append(f);
   f.submit();
   f.remove();
+}
+
+/**
+ * The handoff form, built in [doc] (the reserved tab's about:blank) and sent from there; false when [doc] can't be
+ * written. The token is a form field, never in a URL. `from` names this page for the other panel's Log: Safari posts
+ * from a new tab with `Origin: null` (2026-11-18 panel run).
+ */
+function postIn(doc, origin, fields) {
+  try {
+    const f = doc.createElement('form');
+    f.method = 'post';
+    f.action = origin + '/manage/ha/token';
+    for (const [k, v] of Object.entries(fields)) {
+      const i = doc.createElement('input');
+      i.type = 'hidden';
+      i.name = k;
+      i.value = v;
+      f.append(i);
+    }
+    (doc.body || doc.documentElement).append(f);
+    f.submit();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function drawList(user) {

@@ -80,6 +80,8 @@ const requests = [];
 let challenge = null;
 /** Whether a copy ever sent a panel's own Home Assistant address (the 2026-11-18 panel run's blocker). */
 let haAddressSent = false;
+/** Whether any request carried an access token in its URL (it must only ever be a header or a form field). */
+let tokenInUrl = false;
 /** Handoffs a panel received: which panel, and the page it says it came from. */
 const handoffs = [];
 /** How long the fake Home Assistant takes to answer a token request, and the status it answers a renewal with. */
@@ -127,6 +129,7 @@ async function handle(req, res) {
   if (req.headers.authorization) tokenTo.add(u.host);
   contacted.add(u.host);
   requests.push(req.method + ' ' + u.host + u.pathname);
+  if (/fake-access/.test(decodeURIComponent(u.search))) tokenInUrl = true;
   if (u.host === HA) {
     if (u.pathname === '/auth/authorize') {
       assert.equal(u.searchParams.get('code_challenge_method'), 'S256');
@@ -317,11 +320,14 @@ try {
   await expire();
   tokenDelayMs = 6_000;
   const tabsBefore = (await call('Target.getTargets')).targetInfos.filter((t) => t.type === 'page').length;
+  // Counts forms this tab sends itself: the handoff is sent from the new tab's own page instead (iOS Safari, 2026-11-19).
+  await js("{ window.gwOwnPosts = 0; const send = HTMLFormElement.prototype.submit; HTMLFormElement.prototype.submit = function () { window.gwOwnPosts++; return send.call(this); }; }");
   await js("[...document.querySelectorAll('#gw-list .row')].find((r) => r.textContent.includes('Bedroom')).querySelector('button.pill').click()", true);
   for (let i = 0; i < 120 && !handoffs.length; i++) await sleep(100);
   tokenDelayMs = 0;
   assert.deepEqual(handoffs, [{ host: 'bedroom-panel.local:8099', from: 'kitchen-panel.local:8099', token: true }], 'one handoff, from this page');
   assert.equal((await call('Target.getTargets')).targetInfos.filter((t) => t.type === 'page').length, tabsBefore + 1, 'in a new tab');
+  assert.equal(await js('window.gwOwnPosts'), 0, "sent from the new tab's own page, not targeted from this one");
   // Home Assistant doesn't answer the tab's own renewal: the tab keeps its sign-in and says Try again (CodeRabbit on #534).
   await expire();
   renewStatus = 503;
@@ -551,6 +557,7 @@ try {
   for (const s of stalled.splice(0)) send(s.res, 404, 'Not found.', 'text/plain');
   assert.ok(!contacted.has('203.0.113.7:8099'), 'a panel off the local network got no request at all');
   assert.ok(!haAddressSent, "no copy sent a panel's own Home Assistant address");
+  assert.ok(!tokenInUrl, 'no access token in any URL');
   console.log('ok: CSP served and nothing refused; PKCE verified; the token went to', [...tokenTo].sort().join(', ') + '; nothing went to 203.0.113.7');
 } finally {
   cdp.close();
