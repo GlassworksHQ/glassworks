@@ -39,13 +39,27 @@ describe('the latest release of a line', () => {
     expect(fetch).toHaveBeenCalledExactlyOnceWith('https://api.github.com/repos/GlassworksHQ/glassworks/releases?per_page=100&page=1', expect.anything());
   });
 
-  it('reads further pages until one holds a release of the line, and no further', async () => {
-    const others = Array.from({ length: 100 }, (_, i) => r(`v0.${i}.0`, [`s1-kiosk-0.${i}.0.apk`]));
-    const pages = [others, [r('generic-android-v1.0.0', apks('generic-android', '1.0.0')), ...others.slice(1)], others];
+  it('reads every page up to a short one, so a higher version on a later page wins', async () => {
+    const others = Array.from({ length: 99 }, (_, i) => r(`v0.${i}.0`, [`s1-kiosk-0.${i}.0.apk`]));
+    const pages = [
+      [r('generic-android-v1.0.1', apks('generic-android', '1.0.1')), ...others],
+      [r('generic-android-v1.1.0', apks('generic-android', '1.1.0')), ...others],
+      [r('generic-android-v1.0.0', apks('generic-android', '1.0.0'))],
+    ];
     const fetch = vi.fn(async (url: string) => Response.json(pages[Number(new URL(url).searchParams.get('page')) - 1]));
     vi.stubGlobal('fetch', fetch);
-    expect((await (await latest('generic-android')).json()).release?.tag).toBe('generic-android-v1.0.0');
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect((await (await latest('generic-android')).json()).release?.tag).toBe('generic-android-v1.1.0');
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('fails rather than say "not released" when the releases outrun the page cap', async () => {
+    const full = Array.from({ length: 100 }, (_, i) => r(`v0.${i}.0`, [`s1-kiosk-0.${i}.0.apk`]));
+    const fetch = vi.fn(async () => Response.json(full));
+    vi.stubGlobal('fetch', fetch);
+    const res = await latest('generic-android');
+    expect(res.status).toBe(502);
+    expect(await res.text()).toBe('more than 1000 releases to read');
+    expect(fetch).toHaveBeenCalledTimes(10);
   });
 
   it('stops at a short page', async () => {
