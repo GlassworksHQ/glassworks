@@ -34,6 +34,9 @@ import dev.glassworks.setup.LanSetup
 import dev.glassworks.setup.SetupHotspot
 import dev.glassworks.auth.FrontendUrls
 import dev.glassworks.auth.HaAuth
+import dev.glassworks.auth.HaTokenClient
+import dev.glassworks.auth.PanelSignIn
+import dev.glassworks.auth.UrlConnectionPoster
 import dev.glassworks.frame.Input
 import dev.glassworks.frame.Orientation
 import dev.glassworks.frame.openSystemSettings
@@ -92,6 +95,9 @@ open class MainActivity : Activity() {
     /** "Sign in on this panel instead" was chosen: don't cover HA's login page again (this process). */
     private var usePanelLogin = false
 
+    /** That sign-in: Home Assistant's login page on the panel, for a refresh token of the panel's own (#633). */
+    private val panelSignIn by lazy { PanelSignIn(HaTokenClient(UrlConnectionPoster())) }
+
     /** Signed out on this panel (HA button / frontend logout) and not signed in again (this process). */
     private var signedOutHere = false
 
@@ -114,7 +120,7 @@ open class MainActivity : Activity() {
         // A test's dashboard stays on screen: the page follows the sign-in once the test ends (onTestDashboard).
         val testing = glassworks.screen.testDashboard != null
         if (signedIn) {
-            Log.i(TAG, "Signed in with the QR code; loading the dashboard with external auth")
+            Log.i(TAG, "Signed in; loading the dashboard with external auth")
             usePanelLogin = false
             signedOutHere = false
             if (setupPreview) closeSetupPreview()
@@ -729,11 +735,45 @@ open class MainActivity : Activity() {
         if (setupPreview) closeSetupPreview()
         usePanelLogin = true
         setupOverlay.hide()
-        // Show HA's own login page (or the dashboard if the GeckoView session is still logged in).
-        if (!HaAuth.signedIn && !FrontendUrls.isAuthorizePage(currentUrl, prefs.haBase)) {
-            prefs.url.takeIf { it.isNotEmpty() }?.let { page?.load(it) }
-        }
+        // HA's login page for the panel's own sign-in, also when the page still has a session of its own: that session
+        // isn't the panel's sign-in, and the next start would ask again (#633).
+        if (!HaAuth.signedIn) prefs.haBase?.let { page?.load(panelSignIn.start(it)) }
         refreshSetup()
+    }
+
+    /**
+     * The code from Home Assistant's login page on the panel becomes the panel's sign-in, stored as the QR code's is.
+     * HaAuth's listener then loads the dashboard. If it fails, the Sign-in step comes back over a new login page.
+     * Called from [PageHost.redirect], whose `about:blank` the engine queues on the main looper once it returns. The
+     * worker starts from a later message, so its outcome always lands after that load and the dashboard is last.
+     */
+    private fun finishPanelSignIn(url: String) = handler.post {
+        if (isDestroyed) return@post
+        loadingOverlay.show(LoadingOverlay.State.Connecting(LoadingOverlay.CONNECTING, prefs.shownHost(url)))
+        Thread({
+            val failed = when (val o = panelSignIn.finish(url)) {
+                is PanelSignIn.Outcome.Failed -> o.reason
+                is PanelSignIn.Outcome.SignedIn -> try {
+                    prefs.auth = o.auth
+                    null
+                } catch (e: SignInNotStored) {
+                    e.message
+                }
+            }
+            if (failed == null) {
+                Log.i(TAG, "Signed in on this panel (refresh token stored)")
+                // Drops any access token cached for an earlier sign-in, and tells every screen.
+                HaAuth.signInCarriedOver()
+                return@Thread
+            }
+            Log.w(TAG, "Sign-in on this panel failed: $failed")
+            handler.post {
+                if (isDestroyed) return@post
+                usePanelLogin = false
+                prefs.haBase?.let { page?.load(panelSignIn.start(it)) }
+                refreshSetup()
+            }
+        }, "panel-signin").apply { isDaemon = true }.start()
     }
 
     private fun onManualHaUrl(raw: String) {
@@ -1110,6 +1150,11 @@ open class MainActivity : Activity() {
         // Once signed in, every top-level HA page gets external_auth=1, so the content script
         // installs window.externalApp before the frontend starts (also after reloads and redirects).
         override fun redirect(url: String): String? {
+            // Home Assistant sending the panel's own sign-in back: the app takes the code, the page never loads it.
+            if (panelSignIn.isCallback(url, prefs.haBase)) {
+                finishPanelSignIn(url)
+                return "about:blank"
+            }
             if (!HaAuth.signedIn) return null
             val base = HaAuth.signedInBase
             return when {

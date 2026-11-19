@@ -466,6 +466,11 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   it straight away. The *Thread join* sensor says how it went. Pasting the dataset still works.
 
 ### Fixed
+- **Signing in on the panel's own screen now keeps the sign-in.** *Sign in on this panel instead* shows Home
+  Assistant's login page on the panel, also when the panel's browser was still signed in, and the sign-in is stored
+  as the QR code's is. Before, the dashboard could open through the browser's old session with nothing stored, so
+  the *Signed in* sensor stayed `no` and the panel asked to sign in again after its next start. If Home Assistant
+  refuses the sign-in, the Sign-in step comes back.
 - **Magisk modules load on the S1.** Magisk on our panels never loaded a module: it needs its own busybox in place
   first, which the Magisk app puts there, and our installers didn't. The S1's boot image now carries Magisk's busybox,
   from the same official Magisk download, and puts it in place at boot. Nothing changes on screen yet; the setup

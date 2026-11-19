@@ -258,12 +258,16 @@ class GeckoBehaviourPinTest {
     }
 
     @Test
-    fun `the page location decides whether the panel login loads the dashboard`() = harness().use { h ->
+    fun `the panel login loads Home Assistant's login page for the panel's own sign-in wherever the page is`() = harness().use { h ->
+        // #633: from the dashboard (a session the page had) it loaded the dashboard, and nothing was stored.
         val setup = h.rootChildren().filterIsInstance<dev.glassworks.setup.SetupOverlay>().single()
-        h.navigation.onLocationChange(h.session, "$base/auth/authorize?client_id=x", mutableListOf(), false)
-        assertEquals(emptyList<String>(), h.eventsDuring { setup.onUsePanel!!.invoke() })
-        h.navigation.onLocationChange(h.session, dash, mutableListOf(), false)
-        assertEquals(listOf("s1.load $dash"), h.eventsDuring { setup.onUsePanel!!.invoke() })
+        val login = "s1.load $base/auth/authorize?response_type=code&client_id=" + java.net.URLEncoder.encode("$base/glassworks/", "UTF-8")
+        for (at in listOf("$base/auth/authorize?client_id=x", dash)) {
+            h.navigation.onLocationChange(h.session, at, mutableListOf(), false)
+            val loads = h.eventsDuring { setup.onUsePanel!!.invoke() }
+            assertEquals(at, 1, loads.size)
+            assertTrue(loads.single(), loads.single().startsWith(login))
+        }
     }
 
     // ---- page start/stop, first paint

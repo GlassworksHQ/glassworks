@@ -563,7 +563,12 @@ Assistant."), with the way to change it second ("Use another network", "Add it b
 2. **Sign in** (under Home Assistant): "Scan to sign in.", the QR code, and "Sign in on this panel
    instead" (or "Find Home Assistant." with a URL field when HA wasn't found). It is answered by a refresh
    token, or once the dashboard loads while a later step still waits (a panel signed in with a cookie
-   session). Without touch it shows the setup page's QR code until Home Assistant has added the panel,
+   session). "Sign in on this panel instead" is the same sign-in on the panel's screen (#633,
+   `auth/PanelSignIn.kt`): the page loads HA's `/auth/authorize` with the client_id `<HA>/glassworks/` and the
+   redirect_uri `<HA>/glassworks/callback`, both on HA's own origin, so the legacy engine loads it and HA shows its
+   plain login page. The app takes the redirect back before the page loads it, trades the code (with PKCE) and stores
+   the refresh token as the QR code's callback does. A session the page already had never counts: the login page
+   shows anyway. If the trade fails, the Sign-in step comes back over a new login page. Without touch it shows the setup page's QR code until Home Assistant has added the panel,
    then the sign-in's own. If Home Assistant added the panel first, Add it is green and Sign in current.
 3. **Add it** (under Home Assistant): done once an ESPHome client whose Hello says "Home Assistant"
    **subscribes to states**. HA's config flow only probes DeviceInfo during discovery, so a plain
