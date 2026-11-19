@@ -184,6 +184,19 @@ class KioskPrefs(
 
     val hasAuth: Boolean get() = authSp.contains("refresh_token")
 
+    /** The refresh token as it reads now, for the installer's hand-over ([dev.glassworks.device.SecretHandover], #584). */
+    fun refreshTokenSecret(): SecretPrefs.Secret = authSp.secret("refresh_token")
+
+    /**
+     * The refresh token an installer carried across a reinstall (#584), into the sign-in its data copy holds: the
+     * Home Assistant address and client id are plain settings, so they came across, and only the sealed token didn't.
+     * Null when there is no such sign-in here (the data didn't come across). See [SecretPrefs.carryOver].
+     */
+    fun carryOverRefreshToken(token: String): SecretPrefs.CarryOver? {
+        if (authSp.getString("ha_base", null) == null || authSp.getString("client_id", null) == null) return null
+        return authSp.carryOver("refresh_token", token)
+    }
+
     /**
      * Page zoom as a CSS device-pixel ratio override (Gecko pref `layout.css.devPixelsPerPx`).
      * 0 = automatic (use the display density, 1.5 on the S1 Plus). Never change `wm density`
@@ -288,6 +301,17 @@ class KioskPrefs(
             SecretPrefs.Secret.Absent -> StoredKey.Absent
             SecretPrefs.Secret.Unavailable -> StoredKey.Unreadable
         }
+    }
+
+    /**
+     * The API key an installer hands over ([dev.glassworks.device.SecretHandover]): into an empty store (a reflash,
+     * #574), or over one sealed with a key this app no longer has (a reinstall that kept the data, #584). Never over a
+     * key in use. See [SecretPrefs.carryOver].
+     */
+    fun carryOverApiKey(key: ByteArray): SecretPrefs.CarryOver = when {
+        // Encryption off: whatever api_key holds (an `api_key` extra without `api_encryption`) isn't a key in use.
+        !apiEncryption -> if (noiseKeyStore.save(key)) SecretPrefs.CarryOver.STORED else SecretPrefs.CarryOver.NOT_STORED
+        else -> sp.carryOver("api_key", Base64.encodeToString(key, Base64.NO_WRAP)) { it.putBoolean("api_encryption", true) }
     }
 
     /** Stable MAC reported to Home Assistant (its config entry is keyed by it). */
