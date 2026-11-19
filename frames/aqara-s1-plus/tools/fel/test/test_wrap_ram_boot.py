@@ -70,6 +70,24 @@ class WrapRamBootTest(unittest.TestCase):
         with self.assertRaisesRegex(wrap.WrapError, "differ"):
             wrap.check(canary, boot)
 
+    def test_stop_os_is_the_canary_with_ih_os_openbsd(self):
+        boot = boot_img()
+        canary, stop = wrap.build(boot, CMDLINE, canary=True), wrap.build(boot, CMDLINE, stop_os=True)
+        words = range(0, len(canary) - 3, 4)
+        diff = [i for i in words if canary[i:i + 4] != stop[i:i + 4]]
+        self.assertEqual(diff, [0x804, 0x81C], "only the header CRC and the os/arch/type/comp word")
+        self.assertEqual(tuple(stop[0x81C:0x820]), (1, 2, 14, 0))
+        summary = wrap.check(stop, boot, canary=True)
+        self.assertIn("canary", summary)
+        self.assertIn("stop: ih_os OpenBSD", summary)
+        self.assertNotIn("stop", wrap.check(canary, boot, canary=True))
+        no_spin = bytearray(stop)
+        no_spin[0x80000:0x80004] = kernel()[:4]
+        hdr = bytearray(wrap.uimage_header(bytes(no_spin[0x840:]), 0x80000 - 0x840, wrap.IH_OS_OPENBSD))
+        no_spin[0x800:0x840] = hdr
+        with self.assertRaisesRegex(wrap.WrapError, "without the canary"):
+            wrap.check(bytes(no_spin))
+
     def test_refuses_what_would_not_boot(self):
         cases = {
             "initrd already set": (boot_img(), CMDLINE + " initrd=0x1,0x2"),

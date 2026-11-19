@@ -11,8 +11,10 @@ evidence: read
 runs only a legacy uImage, not an Android boot image (attempt 8), so the RAM test in the no-opening
 route needs a wrapped image (attempt 10). Panel tests T0, T1, T3 and T5 have run. T3 with the
 wrapped image (attempt 11) took the download and the `boot`, and then the board reset into its flash
-boot within seconds. A canary image (attempt 12, plan E) is next, to tell a U-Boot or ATF reset from
-one in the kernel. All of it goes through [`fastboot-usb.py`](../tools/fel/fastboot-usb.py), not the
+boot within seconds. The canary of plan E (attempt 12) reset the same way. That places the reset
+before our code runs, in the stock U-Boot or ATF, only if no watchdog is armed at the handoff, and
+that premise is unread (the SCP firmware and boot0). Attempt 13 reads the U-Boot path: no step read
+so far explains the reset, and plan F splits it at LOADOS. All of it goes through [`fastboot-usb.py`](../tools/fel/fastboot-usb.py), not the
 `fastboot` CLI.
 
 Device: Aqara S1 Plus, firmware 4.5.80. Sources: the stock `boot`, `misc` and boot package
@@ -318,12 +320,85 @@ Every S1 in the field needs one more Kiln update to get the loader. Before build
     - **The next variant: a canary, not a new header.** `wrap-ram-boot.py --canary` builds the same
       image with one change: the kernel's first instruction is an AArch64 `b .` (`0x14000000`).
       Everything U-Boot reads (header, command line, sizes) is the same as in plan D, apart from the
-      two CRCs. If the board still resets, the reset comes before our code runs (U-Boot or ATF).
+      two CRCs. If the board still resets, the reset comes before our code runs (U-Boot or ATF), unless
+      a watchdog armed at the handoff fires while the canary spins (see the result below).
       If it stays in place for minutes with the fastboot screen frozen and USB enumerated but silent
       (the tool's "no reply ... USB is still up"), the handoff works and the reset in plan D came from
       the kernel. Untested. Prediction: it stays in place (a guess; about 60 %). U-Boot's path is the
       one a normal boot takes, apart from the image format, and the image passed every check the
       code makes.
+    - **Result (E1, 2026-11-19, verified by the root):** the canary reset like plan D. The board
+      was back in its flash boot within seconds, with `ro.boot.gw139` empty and pstore empty. The
+      prediction was wrong. **This places the reset before our first instruction (in the stock
+      U-Boot or ATF) only if no watchdog is armed at the handoff.** A watchdog that fires while the
+      canary spins would look the same. What is known (attempt 13): the stock U-Boot touches the SoC
+      watchdog only in `reset_cpu`. ATF's `RUNNSOS` arms none (read). The panel sat about 15 s idle
+      in fastboot before `boot` without a reset, so a watchdog already running would need a longer
+      period (verified, E1 timeline). The SCP firmware, which references the R_WDOG at `0x07020400`,
+      and boot0 are **unread**. Until they are, "before our code runs" is the likely reading, not a
+      settled one.
+
+13. **Where the stock `bootm` path can reset, read for this image** (2026-11-19, read: the same
+    U-Boot disassembly as attempt 10, plus the boot package's `monitor` item (ATF) at file offset
+    0xa8800, linked at `0x48000000`, read with `llvm-objdump --triple=aarch64`, and the stock `env`
+    backup). Host only. The extraction is attempt 10's. The ATF item is cut out the same way, at
+    the offset and size its table entry gives. Addresses are U-Boot (`0x4A…`) or ATF (`0x48…`)
+    addresses. Delete the extracted files afterwards: they are Aqara's code.
+
+    **The flash boot takes the same code.** The stock env has
+    `boot_normal=sunxi_flash read 45000000 boot;bootm 45000000`. A normal boot runs `do_bootm` on
+    the Android image, and fastboot `boot` runs it on our uImage. The two paths split only where
+    the code branches on the format. Each step below is marked with how sure it is.
+
+    | Step | What it does with our image | How sure |
+    |---|---|---|
+    | `update_bootargs` (`0x4A0051F8`), called from every `do_bootm` (`0x4A006DFC`) | `strcpy`s `bootargs` into a 2048-byte stack buffer and appends the sunxi keys (`androidboot.mode`, `serialno`, `hardware`, `boot_type`, `trustchain`, `gpt=1`, `uboot_message`, `disp_reserve`, `bootreason`). Only the three MAC keys are skipped when present. Ours already holds all of them, so they appear twice: 1234 + 292 bytes, 1527 with the NUL. That fits, so there's **no stack overflow**. The kernel would see each key twice | read; lengths measured on the backup |
+    | Android pre-step in `do_bootm` | `ramdisk_size` (our `ih_load`) is 0: it moves 0 bytes (`memmove` with length 0 is a no-op, `0x4A058CEA`) and sets `initrd_start`/`initrd_end` to 0 | read |
+    | `do_bootm_states(0x70f)`: no RAMDISK or FDT state | `bootm_find_images` (`0x4A00CEEC`) only takes `gd->fdt_blob` and its size. `bootm_decomp_image` (`0x4A00CF18`) skips the copy and the size check when `load == image_start`. `CONFIG_SYS_BOOTM_LEN` is 32 MiB. The overlap check is skipped for an uncompressed in-place image. **No decompression or overlap reset** | read |
+    | `image_setup_libfdt` (`0x4A0104BC`) | `fdt_chosen`, the arch and board fixups. Every failure here prints and ends in `hang()` (`0x4A058338`, a `b .`), which **does not reset** | read |
+    | DTO merge in `boot_jump_linux` (`0x4A0014A6`) | It runs when the first word of a 10-entry index table (`0x4A098D24`, in BSS) isn't `0xf5f5f5f5`. Only `android_image_get_kernel` (`0x4A01009C`) fills that table, from the Android header's `androidboot.dtbo_idx=0,1,2`. Our path never calls it, so the table keeps its start-up value (0, or `0x17` if BSS isn't cleared). The merge then applies overlay 0 and stops at the next index, with "merge fdt fail". The flash boot applies 0, 1 and 2. Both outcomes print and go on, so this is **not a reset**, but plan D's kernel would get the wrong DT | read; how libfdt fails on the second apply is from its source of that era, untested |
+    | AArch64 or AArch32 | `0x4A002354` tests a byte that boot0 sets in U-Boot's head (`+0x4e9`), not the image's arch. Both paths take the `smc` | read |
+    | ATF `RUNNSOS` (`0x8000ff04` → `0x4800170C` → `0x480013C4`) | Fills the non-secure entry (EL1h, all exceptions masked, `x0` = DT), clears two words at `0x08110000`, turns off the EL1 MMU and caches, and exits. **It checks nothing about the entry or the DT**, so it behaves the same for both images | read |
+
+    **How this U-Boot resets.** Only `reset_cpu` (`0x4A0019B4`) does. It arms the SoC watchdog at
+    `0x030090A0` (config 1, mode 1, about 0.5 s) and spins. It is reached from `do_reset`, which
+    is called by `panic()` (the abort handlers' "Resetting CPU ..." goes through `panic`), and by
+    `do_bootm_states` when a step returns -1. That covers one more case: `boot_selected_os`
+    (`0x4A00D7BC`) returns -1 whenever `boot_jump_linux` comes back. Nothing else in U-Boot touches
+    a watchdog. A `hang()` spins with interrupts off, so it would look like E1's expected spin, not
+    like a reset.
+
+    **E0's `bootreason=button` says nothing.** U-Boot builds that key from a PMIC power-on code in
+    `gd` (`0x4A006C40`, table: button, irq, usb, battery, unknow). A watchdog reset doesn't power-cycle
+    the PMIC, so the latched code stays at its last cold start (read).
+
+    **What's left.** No step read so far makes our image fault where the flash boot doesn't. If the
+    reset is in U-Boot (E1's premise: no watchdog armed at the handoff, see attempt 12), it is an abort in code not read in full (`fdt_chosen` and the sunxi board fixups, the
+    overlay apply, the steps before LOADOS), or `boot_jump_linux` returning. The steps up to LOADOS
+    and the steps after it can be told apart without a debugger:
+
+    - **Plan F, step F1: `wrap-ram-boot.py --stop-os`.** This is E1's canary with one more change:
+      `ih_os` = 1 (OpenBSD). The stock `boot_os` table (`0x4A0601D0`) has no entry for 1. So
+      `do_bootm_states` runs everything through LOADOS (update_bootargs, the pre-step, FINDOS with
+      both CRCs, the in-place load), then prints "booting os ... is not supported", turns interrupts
+      back on and returns 1, not -1: no reset. Fastboot keeps running. Against the E1 image only the
+      header CRC (0x804–0x807) and byte 0x81c differ (`cmp` on the backup).
+      - **The tool exits 2** (U-Boot answers `getvar` again): everything through LOADOS is fine.
+        The reset is in PREP (`image_setup_libfdt`) or in GO (the DTO merge, the PMIC hook at
+        `0x4A0027B0`, `cleanup_before_linux`, the `smc`). The next step is reading those, host only.
+      - **It resets like E1**: the reset comes before PREP, in `do_bootm`'s first steps or in
+        FINDOS/LOADOS. Read `0x4A0067DC` (called at the end of update_bootargs) and the LOADOS
+        cache flush next.
+      - **What F1 can't settle:** it never jumps, so it can't tell a watchdog at the handoff from a
+        U-Boot reset after LOADOS. If F1 exits 2, the open premise above (a watchdog
+        armed at the handoff) still has to be ruled out before PREP and GO are blamed. Reading the
+        SCP firmware's R_WDOG use is the host-only way to do that.
+      - Prediction: exit 2 (a guess, about 65 %). The steps up to LOADOS read clean, and most
+        image-specific work (the DT, the merge) comes later.
+    - **For any later real boot (not a cause of the reset):** strip the keys update_bootargs adds
+      from the command line before wrapping, and carry `androidboot.dtbo_idx` in a way the legacy
+      path honours. As read, it doesn't parse that key at all, so the DT overlays are wrong on this
+      path whatever we pass. Untested.
 
 ## Result
 
@@ -333,7 +408,7 @@ Every S1 in the field needs one more Kiln update to get the loader. Before build
 |---|---|---|
 | Is `/data` readable at `post-fs-data`? | Yes: plain f2fs, mounted in `on fs`, no encryption | Read: vendor fstab (attempt 1). The panel check is `ro.crypto.state` |
 | Fixed service slots or a generic runner? | Fixed, named slots, each run through the loader. Plus two spare slots for services that don't exist yet | Design below |
-| No-opening route | `adb reboot bootloader` reaches stock fastboot, and its gate lets `download`, `boot` and `flash` through. Stock `boot` only runs a legacy uImage, so the RAM test needs a wrapped image | Attempts 2–4, 7–12; panel tests T1, T3 unwrapped and T3 wrapped (verified: reset into flash), canary pending |
+| No-opening route | `adb reboot bootloader` reaches stock fastboot, and its gate lets `download`, `boot` and `flash` through. Stock `boot` only runs a legacy uImage, so the RAM test needs a wrapped image | Attempts 2–4, 7–13; panel tests T1, T3 unwrapped, T3 wrapped and the canary (verified: both reset into flash; before our code runs if no watchdog is armed at the handoff, unread), plan F pending |
 | Root writes `boot` from Android | Not on field panels: adb has no root. Only on panels with adb root (the dev panel) | Attempt 5 |
 
 ### The loader
@@ -528,8 +603,8 @@ boot from flash doesn't. `vbmeta` has flags 3, so the changed header boots.
    in fastboot. That confirms attempt 8 (it did, attempt 9). Leave with `fastboot-usb.py reboot`, or
    power-cycle; nothing was written. A T3 pass needs the wrapped image (attempt 10). It ran on
    2026-11-19 (attempt 11): `boot` gave a USB I/O error, and the board reset into its flash boot
-   within about 6 s, with `ro.boot.gw139` empty. So it doesn't pass yet. Run the canary of attempt 12
-   (plan E) before you repeat it. To repeat it, build it on the host:
+   within about 6 s, with `ro.boot.gw139` empty. So it doesn't pass yet. The canary of attempt 12
+   (plan E) reset the same way. Run plan F (attempt 13, `--stop-os`) before you repeat it. To repeat it, build it on the host:
    `wrap-ram-boot.py "$B/boot.img" "$B/cmdline-flash.txt" "$B/boot-ram-uimage.img"`. Once Android is
    up again, go back to fastboot (`adb reboot bootloader`, then approve the Mac's accessory prompt),
    and run `fastboot-usb.py boot "$B/boot-ram-uimage.img"`. Only if a boot does start (the tool exits
@@ -554,9 +629,11 @@ bytes with `SHA256SUMS`, and `fastboot reboot`.
 
 ## Open questions
 
-- What resets the board after the wrapped image's `boot` (attempts 11 and 12): `bootreason`, then
-  the canary of plan E. Until a RAM boot of Android works, the
-  RAM test in the no-opening route is untested.
+- What resets the board after the wrapped image's `boot` (attempts 11–13): before our code runs
+  (E1), unless a watchdog is armed at the handoff (unread: the SCP firmware and boot0). Plan F tells the steps through LOADOS from the ones after. Until a RAM boot of
+  Android works, the RAM test in the no-opening route is untested.
+- The legacy `bootm` path doesn't read `androidboot.dtbo_idx` (attempt 13), so a RAM boot through it
+  gets the wrong DT overlays. How to give the kernel the right DT on this path is open.
 - Does `fastboot boot` give Android the env's arguments (`partitions=`, `snum`, MACs)? From the
   source, no: a non-empty header command line replaces `bootargs` (attempt 8).
 - How long does the full bundle check take at `post-fs-data` on the panel? About 40 MB is hashed
