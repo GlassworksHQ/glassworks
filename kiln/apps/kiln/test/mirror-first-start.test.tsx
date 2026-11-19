@@ -26,7 +26,7 @@ afterEach(() => cleanup());
 /** What @yume-chan/adb throws when the Mirror refuses the key and the public-key fallback has nobody to approve it. */
 const REFUSED = 'No authenticator can handle the request';
 
-function setup(adb: { request: () => Promise<PanelShell>; reopen?: () => Promise<PanelShell>; tries?: number }) {
+function setup(adb: { request: () => Promise<PanelShell>; reopen?: () => Promise<PanelShell>; tries?: number; picked?: () => boolean }) {
   const images: ImageMaker = {
     async fetch(_, onProgress) { onProgress(1); },
     async download() {},
@@ -44,7 +44,7 @@ function setup(adb: { request: () => Promise<PanelShell>; reopen?: () => Promise
   const mirror = new MirrorSession({ connect: async () => { throw new Error('unused'); } }, true);
   const f = new FlashSession({
     images, refract: 'https://proxy.test', requestFastboot: async () => fb, requestAdb: adb.request,
-    ...(adb.reopen ? { reopenAdb: adb.reopen } : {}), ...(adb.tries !== undefined ? { adbTries: adb.tries } : {}),
+    ...(adb.reopen ? { reopenAdb: adb.reopen } : {}), ...(adb.tries !== undefined ? { adbTries: adb.tries } : {}), ...(adb.picked ? { adbPicked: adb.picked } : {}),
     adbKey: () => 'QAAA= kiln@glassworks', apk: () => mirror.apkBytes(), sleep: async () => {},
   });
   f.choose();
@@ -86,6 +86,16 @@ describe('connecting while the Mirror is still starting', () => {
     expect(f.state.connectError).toBe(`The Mirror didn't let this browser in through its first start (${REFUSED}). It knows only the key of the browser that installed it: use that browser, then Connect again.`);
     render(<Flash flash={f} mirror={mirror} />);
     expect((screen.getByRole('button', { name: 'Connect' }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('a click before the list opened (this browser\'s key still loading) isn\'t retried: Connect works again at once', async () => {
+    const reopen = vi.fn();
+    const KEY = 'Kiln was still making its key for this browser. Click Connect again.';
+    const { f, mirror } = setup({ request: async () => { throw new Error(KEY); }, reopen, picked: () => false });
+    await flashed(f, mirror);
+    await f.connectAdb();
+    expect(reopen).not.toHaveBeenCalled();
+    expect(f.state).toMatchObject({ connecting: false, adbWaiting: false, connectError: KEY });
   });
 
   it('a closed list is not retried', async () => {
