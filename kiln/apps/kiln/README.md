@@ -104,7 +104,7 @@ know, and the screens say Kiln can't tell instead.
 | `src/components/Credit.tsx` | The outside work an install stands on, from the frame's `credits` ([frames/README.md](../../../frames/README.md#credits)): `Credit` next to the step that uses it (`built="image"`: "This image is built by git-nimrod as part of Glass Panes."), `BuiltOn` on the start page and the done screen, `stepCredits()` to pick them from a recipe's `credits` |
 | `src/frames/aqara-s1-plus.ts` | What the screens say for the S1: the USB names to pick, help links, the radio's next steps |
 | `src/mirror/` | The Mirror's test page (`MirrorWizard.tsx`). Its fastboot install: `flash.ts` (the session, no React), `FlashScreens.tsx`, `imageWorker.ts` and `images.ts` (the images on OPFS in a worker), `flashDemo.ts`. Its adb-only path: `session.ts`, `demo.ts`. On `@glassworks/lululemon-mirror-installer` |
-| `src/recovery/player.ts` | The recovery-mode player, drawing a frame's data. The S1's is `frames/aqara-s1-plus/design/recovery.json` (canonical); `docs/design/kiln/recovery/` keeps the prototype's copy, and a test keeps them equal |
+| `src/recovery/player.ts` | The recovery-mode player, drawing a frame's data. The S1's is `frames/aqara-s1-plus/design/recovery.json` (canonical); `docs/design/kiln/recovery/` keeps the prototype's copy, and a test keeps them equal. The Mirror's is `frames/lululemon-mirror/design/recovery.json`. `src/recovery/Recovery.tsx` shows it with its step chips, on the S1's Connect and the Mirror's fastboot card |
 
 Rules that tests guard:
 
