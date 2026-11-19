@@ -110,7 +110,7 @@ Not available yet. **Test only, today**, in Kiln ([its recipe](installer)): `/lu
 
 The boot logo before Android starts stays lululemon's: it lives in the signed bootloader, which nothing here can change.
 
-**Over adb, onto a Mirror that already runs the community image (`&mode=app`):** Kiln installs the legacy build of Glassworks from an APK file on your computer. It changes nothing else on the Mirror. Making Glassworks the home screen needs a choice on the Mirror, in Android's list of home screens: Glassworks, then Always ([home-app.md](research/home-app.md)). On an update where another app is still kept as the home screen, Kiln opens that app's settings first: choose Clear defaults. Undo removes the app and shows the same list again: choose the home app you had before, then Always. The Mirror has no touchscreen, so use a USB mouse (or scrcpy). None of this has run on a real Mirror yet, undo included.
+**Over adb, onto a Mirror that already runs the community image (`&mode=app`):** Kiln installs the legacy build of Glassworks from an APK file on your computer. Nothing asks for a tap on the Mirror, which has no touchscreen (Mirror run, 2026-11-19). As the fastboot path's first start does, Kiln turns the screen upright, then makes Glassworks the only home screen: it hides the image's launcher and the home app Glassworks replaces (`pm hide`), records which on the Mirror, and checks what HOME opens ([home-app.md](research/home-app.md)). Undo removes the app and unhides the home app the Mirror had, then checks HOME again. Untested on a real Mirror, undo included.
 
 ## Panes
 
@@ -136,7 +136,7 @@ What we found on this device, and how ([all notes](../../docs/research/README.md
 - [mirror-android.md](research/mirror-android.md): Can the lululemon Mirror run Android 8+ for the current GeckoView? The signed boot image blocks it; the kexec idea, the paths, blobs and read-only probes (desk research, #39)
 - [revisions.md](research/revisions.md): Which Mirror revisions are a target: the later NXP i.MX8 revisions, and why screen size doesn't identify it (read, no hardware)
 - [mirror-abis.md](research/mirror-abis.md): Which ABIs the Mirror's userspace runs: 64-bit in the community image, stock untested (#98)
-- [home-app.md](research/home-app.md): How adb without root makes the app the home screen on Android 6: no `cmd`, so Android's chooser and an Always tap (read-only, 2026-11-15)
+- [home-app.md](research/home-app.md): How adb without root makes the app the home screen on Android 6: no `cmd`; first Android's chooser and an Always tap (read-only, 2026-11-15), since 2026-11-19 `pm hide` on the other home apps, as the first start does
 - [image-patch.md](research/image-patch.md): What Kiln changes in the community system image and what a fresh userdata needs for Kiln's own adb key; flashed on a real Mirror once (2026-11-16): boots, takes the adb key; the boot animation rendered sideways (hwrotation doesn't turn it) and the test APK has no home screen (#40)
 - [first-boot.md](research/first-boot.md): A first boot with nothing to tap: Wi-Fi on with the network saved, no screen timeout, no lock screen, no auto-rotate; read from AOSP 6.0.1 and the image, verified on the unit 2026-11-16 (#29)
 - [community-image-terms.md](research/community-image-terms.md): May Kiln download and modify the community system image? No licence for its vendor binaries, no CORS; open (#40)

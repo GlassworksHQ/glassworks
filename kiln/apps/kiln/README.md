@@ -140,9 +140,9 @@ the list is in [docs/design/kiln/community-images.md](../../../docs/design/kiln/
 `flash-download-error`, `flash-download-bad`, `flash-ready`, `flash-fastboot`, `flash-fastboot-wrong`, `flash-confirm` (the stock warning),
 `flash-working`, `flash-adb`, `flash-done`, `flash-done-chooser` (another launcher survived), `flash-error` (a refused write, with the retry without FILL). The adb-only path: `?demo=run`
 clicks through a simulated Mirror (`src/mirror/demo.ts`); `pick`, `pick-wrong` (an APK that isn't Glassworks),
-`checks`, `checks-fail`, `installing`, `home` (waiting for the person's choice on the Mirror), `home-clear`
-(another app's defaults to clear first), `done`, `done-unconfirmed`, `undo-done`, `undo-pending` (undo again to
-finish) and `error` jump to one screen. They work in `next dev`,
+`checks`, `checks-fail`, `installing`, `done`, `done-unconfirmed` (a launcher `pm hide` couldn't hide, so HOME opened
+Android's list), `undo-done`, `undo-pending` (undo again to finish) and `error` jump to one screen. None waits on a tap
+on the Mirror: it has no touchscreen. They work in `next dev`,
 or in a build made with `NEXT_PUBLIC_KILN_DEMO=1`.
 
 ## The panel's setup page

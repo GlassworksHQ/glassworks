@@ -52,7 +52,6 @@ export interface MirrorDeps {
    */
   connect(): Promise<PanelShell>;
   sleep?: (ms: number) => Promise<void>;
-  homeTimeoutMs?: number;
   /** The APK from the newest Mirror release, through Kiln's release route; without it, a file the tester picks. */
   release?: typeof fetch;
   /** How long the release route may stay silent (release.ts RELEASE_STALL_MS); tests make it short. */
@@ -227,7 +226,7 @@ export class MirrorSession {
     await this.work('install', async (onPhase) => ({
       flow: 'install',
       installed: await installMirror(this.panel!, {
-        apk: this.apk!, haUrl: this.state.haUrl || undefined, onStep: this.log, onPhase, sleep: this.d.sleep, homeTimeoutMs: this.d.homeTimeoutMs,
+        apk: this.apk!, haUrl: this.state.haUrl || undefined, onStep: this.log, onPhase, sleep: this.d.sleep,
       }),
     }));
   }
@@ -235,7 +234,7 @@ export class MirrorSession {
   async undo(): Promise<void> {
     await this.work('undo', async (onPhase) => ({
       flow: 'undo',
-      removed: await undoMirror(this.panel!, { onStep: this.log, onPhase, sleep: this.d.sleep, homeTimeoutMs: this.d.homeTimeoutMs }),
+      removed: await undoMirror(this.panel!, { onStep: this.log, onPhase, sleep: this.d.sleep }),
     }));
   }
 

@@ -104,3 +104,14 @@ Read-only. With several devices on one adb server, address the Mirror by serial 
   per #29, so who taps it, and how? (scrcpy, or a USB mouse.) The real Kiln run answers it.
 - Does the community kiosk keep running (boot receiver, foreground service) once it isn't home?
 - Android 7 (API 24–25) has `cmd package set-home-activity` and may skip the chooser; untested.
+
+## Since 2026-11-19: no chooser, `pm hide` (read, untested on the unit)
+
+The maintainer's run of Kiln's app-only path on #607 (2026-11-19) stopped on "Choose Glassworks, then Always": the
+Mirror has no touchscreen, so nobody can answer the chooser. The app-only install now does what the fastboot path's
+first start does (`flash.ts` `makeOnlyHome`, image-patch.md): it hides the image's launcher and the home app it
+replaces with `pm hide` (adb's shell holds MANAGE_USERS on Android 6), so Glassworks is the only home app and Android
+opens it with no chooser, and it records the hidden packages in `/data/local/tmp/glassworks-hidden-homes`. Undo
+unhides the home app the Mirror had (`/data/local/tmp/glassworks-previous-home`) and checks what HOME opens. The
+image's own launcher stays hidden, so undo leaves no chooser either. Neither has run on a real Mirror yet; the next
+Mirror run checks both.
