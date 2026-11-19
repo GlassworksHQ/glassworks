@@ -476,6 +476,24 @@ gh release create frames/lululemon-mirror/v1.0.0 --repo GlassworksHQ/glassworks 
 Panels see it within 24 hours, or at once through `homeassistant.update_entity` on the Frame update entity. No
 frame release exists before 1.0.0, so until then every device shows its frame version and no update.
 
+## Discord
+
+Every published release is posted to the Glassworks Discord server by
+`.github/workflows/discord-releases.yml` (`tools/ci/discord_release.py`). Nothing to do when you release.
+
+| Tags | Channel | Secret |
+|---|---|---|
+| `libs/*` | `#ecosystem-updates` | `DISCORD_ECOSYSTEM_WEBHOOK` |
+| Everything else: `v*`, `generic-android-*`, `frames/*` | `#glassworks-releases` | `DISCORD_RELEASES_WEBHOOK` |
+
+- It runs after the Release, Generic release and Library release workflows succeed on a tag push, and when a
+  person publishes a release (a frame release, a library's draft). Drafts and pre-releases are skipped.
+- The post is the release's title, its notes up to 1,500 characters, and a link to the rest. It never pings anyone.
+- Each secret is a webhook URL of one channel (Channel settings, Integrations, Webhooks). The URL lets anyone
+  post to that channel: keep it in the repo's Actions secrets only. If one leaks, delete the webhook, make a new
+  one and run `gh secret set DISCORD_RELEASES_WEBHOOK -R GlassworksHQ/glassworks` with the new URL.
+- With no secret set, the job prints "not posted" and passes.
+
 ## Raising targetSdk
 
 `targetSdk` is in `frames/aqara-s1-plus/android/build.gradle.kts`, and only there. It opts the app
