@@ -168,7 +168,8 @@ export class FlashSession {
   private listeners = new Set<() => void>();
   private fb?: FastbootLike;
   private panel?: PanelShell;
-  private made: Record<string, Blob> = {};
+  /** What Kiln made (no prototype: a recipe's names never meet Object's own) */
+  private made: Record<string, Blob> = Object.create(null);
   private runs = 0;
   /** A connector with a community image's published adb key, checked, held in memory for its wifi-on step only. */
   private imageConnect?: () => Promise<PanelShell>;
@@ -252,7 +253,7 @@ export class FlashSession {
     if (!r) return;
     const from = this.state.picked;
     this.panel = undefined;
-    this.made = {};
+    this.made = Object.create(null);
     this.selected++;
     // a fresh install: an earlier one's key outcome (handed, refused, none…) goes; a key still held for a hand-back stays
     const key = this.state.key?.state === 'held' ? this.state.key : undefined;
@@ -266,7 +267,7 @@ export class FlashSession {
    */
   private async forget() {
     this.runs++;
-    this.made = {};
+    this.made = Object.create(null);
     if (this.state.files.some((f) => f.state !== 'waiting')) await this.d.images.discard().catch(() => {});
   }
 
@@ -538,7 +539,7 @@ export class FlashSession {
     this.set({ screen: 'working', error: undefined, flashFailed: false, communityWifi: undefined, work: { step: first?.do === 'patch' ? 'patch' : first?.do === 'flash' ? `flash-${first.partition}` as WorkStep : 'restart', x: 0 } });
     // what an earlier attempt made (Glassworks' images, a userdata with a network) is made again by its
     // own step, or not at all: a retry with the network cleared must write userdata as published
-    this.made = {};
+    this.made = Object.create(null);
     let building = false, reading = false;
     const network = s.wifi.ssid ? { ssid: s.wifi.ssid, password: s.wifi.password } : undefined;
     try {
@@ -554,7 +555,7 @@ export class FlashSession {
       // every published file this install writes, opened and checked now, before the first write; those very Blobs go to
       // fastboot, so a file another tab changed can't leave one partition written and the other not. A userdata with the
       // network saved is made later by the wifi step, which hashes its source as it reads it.
-      const verified: Record<string, Blob> = {};
+      const verified: Record<string, Blob> = Object.create(null);
       reading = true;
       for (const x of steps) {
         if (x.do !== 'flash' || verified[x.file]) continue;
@@ -577,12 +578,12 @@ export class FlashSession {
           // the Wi-Fi goes into the new userdata (saved for Android, its password only as WPA's PSK), so the
           // Mirror joins on its first boot with nothing tapped; sending it to the app after the boot stays a fallback
           const wifi = s.wifi.ssid ? { ssid: s.wifi.ssid, password: s.wifi.password } : undefined;
-          this.made = await this.d.images.build({
+          this.made = Object.assign(Object.create(null) as Record<string, Blob>, await this.d.images.build({
             apk: this.d.apk()!, bootAnimation: await this.d.bootAnimation?.(), settingsOverlay: await this.d.settingsOverlay?.(),
             adbKey, userdataBytes: s.fastboot.userdataBytes, fill: !s.noFill, ...(s.fastboot.deviceMac ? { deviceMac: s.fastboot.deviceMac } : {}), ...(wifi ? { wifi } : {}),
             // the flag only: the key stays in this tab until the first start
             ...(this.apiKey ? { apiKeyHandover: true } : {}),
-          }, (step, x) => work(step, x));
+          }, (step, x) => work(step, x)));
           building = false;
           this.log('', `Kiln built: ${step.makes.join(', ')}`);
         } else if (step.do === 'wifi') {
@@ -615,7 +616,7 @@ export class FlashSession {
           this.log('Restarting the Mirror');
           await fb.reboot();
           this.fb = undefined;
-          this.made = {};
+          this.made = Object.create(null);
           if (!r.community) this.d.flashedHere?.set(); // this browser's key is in the Glassworks it wrote: the keep step can read it next time
           // nothing kept any more: another install downloads again. The Mirror is restarting into what was written, so a
           // storage error here is only logged: it mustn't turn a finished install into an error

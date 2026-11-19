@@ -159,4 +159,14 @@ describe('sparse images', () => {
     await expect(sparseStore(blob(new Uint8Array(64)))).rejects.toThrow(/not an Android sparse image/);
     await expect(sparseStore(blob(a.subarray(0, a.length - 100)))).rejects.toThrow(/cut short/);
   });
+
+  it('sparseStore refuses a CRC32 chunk of the wrong size or cut short, and takes a whole one', async () => {
+    const hdr = (type: number, blocks: number, total: number) => { const b = Buffer.alloc(12); b.writeUInt16LE(type, 0); b.writeUInt32LE(blocks, 4); b.writeUInt32LE(total, 8); return b; };
+    const head = (chunks: number) => { const f = Buffer.alloc(28); f.writeUInt32LE(0xed26ff3a, 0); f.writeUInt16LE(1, 4); f.writeUInt16LE(28, 8); f.writeUInt16LE(12, 10); f.writeUInt32LE(BS, 12); f.writeUInt32LE(1, 16); f.writeUInt32LE(chunks, 20); return f; };
+    const open = (b: Uint8Array) => sparseStore({ size: b.length, slice: (s: number, e: number) => new Blob([b.subarray(s, e) as BlobPart]) });
+    const raw = Buffer.concat([hdr(0xcac1, 1, 12 + BS), Buffer.alloc(BS, 7)]);
+    await expect(open(Buffer.concat([head(2), raw, hdr(0xcac4, 0, 16), Buffer.alloc(4)]))).resolves.toBeDefined();
+    await expect(open(Buffer.concat([head(2), raw, hdr(0xcac4, 0, 16)]))).rejects.toThrow(/cut short/);
+    await expect(open(Buffer.concat([head(2), raw, hdr(0xcac4, 0, 20), Buffer.alloc(8)]))).rejects.toThrow(/wrong size/);
+  });
 });

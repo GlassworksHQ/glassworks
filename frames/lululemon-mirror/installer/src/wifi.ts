@@ -49,15 +49,32 @@ export async function userdataWithWifi(source: { stream(): ReadableStream<Uint8A
  * switch was asked for (AOSP 6.0.1 WifiServiceImpl.dump). That one command is all it runs that
  * changes anything. `true` once Android says Wi-Fi is enabled, `false` after `confirmTries` seconds.
  */
-export async function wifiOn(p: PanelShell, sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)), tries = 180, confirmTries = 60): Promise<boolean> {
-  for (let i = 0; (await p.run('getprop sys.boot_completed')).out.trim() !== '1'; i++) {
+export async function wifiOn(p: PanelShell, sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)), tries = 180, confirmTries = 60,
+  callMs = 30_000): Promise<boolean> {
+  const run = (cmd: string) => within(p, cmd, callMs);
+  for (let i = 0; (await run('getprop sys.boot_completed')).out.trim() !== '1'; i++) {
     if (i >= tries) throw new Error('the Mirror didn\'t finish starting in 6 minutes');
     await sleep(2000);
   }
-  await p.run('svc wifi enable');
+  await run('svc wifi enable');
   for (let i = 0; i < confirmTries; i++) {
-    if (/^Wi-Fi is enabled$/m.test((await p.run('dumpsys wifi')).out)) return true;
+    if (/^Wi-Fi is enabled$/m.test((await run('dumpsys wifi')).out)) return true;
     await sleep(1000);
   }
   return false;
+}
+
+/**
+ * One adb command with a stall watchdog: a Mirror that stops answering ends in an error after `ms`, not a
+ * wait forever (Kiln's engine contract). The command's stream is closed through the signal.
+ */
+async function within(p: PanelShell, cmd: string, ms: number): Promise<{ out: string; code: number }> {
+  const c = new AbortController();
+  const stalled = new Promise<never>((_, reject) => c.signal.addEventListener('abort', () => reject(c.signal.reason), { once: true }));
+  const t = setTimeout(() => c.abort(new Error(`the Mirror didn't answer \`${cmd}\` in ${Math.round(ms / 1000)} s`)), ms);
+  try {
+    return await Promise.race([p.run(cmd, c.signal), stalled]);
+  } finally {
+    clearTimeout(t);
+  }
 }

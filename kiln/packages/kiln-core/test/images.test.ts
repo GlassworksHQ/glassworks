@@ -186,3 +186,17 @@ describe('the Wi-Fi steps', () => {
     expect(validateImage(withWifi(), { ...FRAME, steps: FRAME.steps.filter((s) => s !== 'wifi-on') })).toContain('step 9: this frame can\'t run "wifi-on"');
   });
 });
+
+describe('names a step makes', () => {
+  it('are plain file names, never one of Object\'s own (constructor, toString…)', () => {
+    const steps = (makes: string) => [
+      { do: 'download', file: 'system.img' }, { do: 'download', file: 'userdata.img' }, { do: 'fastboot' },
+      { do: 'wifi', file: 'userdata.img', template: 'system.img', makes },
+      { do: 'flash', partition: 'system', file: 'system.img' }, { do: 'flash', partition: 'userdata', file: makes }, { do: 'restart' },
+    ] as ImageStep[];
+    expect(validateImage(community({ steps: steps('userdata+wifi') }), FRAME)).toEqual([]);
+    for (const bad of ['constructor', 'toString', '__proto__', '../x', 'a b', '']) {
+      expect(validateImage(community({ steps: steps(bad) }), FRAME), bad).toContain('step 4: wifi must name a new file it makes');
+    }
+  });
+});

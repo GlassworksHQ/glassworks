@@ -107,6 +107,8 @@ export interface FrameAccess { steps: readonly StepKind[]; partitions: readonly 
 
 const ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const SHA256 = /^[0-9a-f]{64}$/;
+/** A file name a step may make: plain characters, and never one of Object's own names (`constructor`, `toString`…). */
+const FILE_NAME = { test: (n: string) => /^[A-Za-z0-9][A-Za-z0-9._+-]{0,63}$/.test(n) && !(n in Object.prototype) };
 const https = (u: unknown) => { try { return typeof u === 'string' && new URL(u).protocol === 'https:'; } catch { return false; } };
 
 /**
@@ -190,7 +192,7 @@ export function validateImage(r: ImageRecipe, frame: FrameAccess): string[] {
         if (!fastboot || restarted) bad.push(`${at(i)}: wifi comes after fastboot and before restart`);
         if (!checked.has(s.file)) bad.push(`${at(i)}: wifi needs ${s.file} downloaded first`);
         if (!checked.has(s.template)) bad.push(`${at(i)}: wifi needs ${s.template} downloaded first`);
-        if (typeof s.makes !== 'string' || !s.makes.trim() || files.has(s.makes) || made.has(s.makes)) bad.push(`${at(i)}: wifi must name a new file it makes`);
+        if (typeof s.makes !== 'string' || !FILE_NAME.test(s.makes) || files.has(s.makes) || made.has(s.makes)) bad.push(`${at(i)}: wifi must name a new file it makes`);
         else made.add(s.makes);
         break;
       case 'wifi-on':

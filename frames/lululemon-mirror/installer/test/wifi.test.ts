@@ -125,4 +125,15 @@ describe('Wi-Fi on, after the first start', () => {
     const p = { async run(c: string) { return { out: c === 'getprop sys.boot_completed' ? '1' : c === 'dumpsys wifi' ? 'Wi-Fi is disabled\n' : c.startsWith('settings') ? '1' : '', code: 0 }; }, async push() {} };
     expect(await wifiOn(p, async () => {}, 180, 5)).toBe(false);
   });
+
+  it('a Mirror that stops answering ends in an error, not a wait forever (a stall watchdog on each command)', async () => {
+    let signalled = false;
+    const p = { async run(c: string, signal?: AbortSignal) {
+      if (c === 'getprop sys.boot_completed') return { out: '1', code: 0 };
+      signal?.addEventListener('abort', () => { signalled = true; });
+      return new Promise<{ out: string; code: number }>(() => {}); // svc wifi enable never answers
+    }, async push() {} };
+    await expect(wifiOn(p, async () => {}, 180, 60, 50)).rejects.toThrow(/didn't answer `svc wifi enable` in 0 s/);
+    expect(signalled).toBe(true); // the command's stream is closed through its signal
+  });
 });

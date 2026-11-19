@@ -249,7 +249,11 @@ export async function sparseStore(file: RandomReadable): Promise<{ header: Spars
     } else if (type === Chunk.DontCare) {
       if (total !== chunkHdr) throw new Error(`sparse chunk ${c} has the wrong size`);
       runs.push({ block, count, kind: 'zero' });
-    } else if (type !== Chunk.Crc32) {
+    } else if (type === Chunk.Crc32) {
+      // as readSparse: its 4-byte payload, there in full (it isn't checked: the caller hashes what it needs)
+      if (total !== chunkHdr + 4) throw new Error(`sparse chunk ${c} has the wrong size`);
+      if (data + 4 > file.size) throw new Error(`the sparse image ends inside chunk ${c} (cut short?)`);
+    } else {
       throw new Error(`sparse chunk ${c} has an unknown type 0x${type.toString(16)}`);
     }
     if (type !== Chunk.Crc32) block += count;
