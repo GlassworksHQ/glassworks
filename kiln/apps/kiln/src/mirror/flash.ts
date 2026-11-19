@@ -203,7 +203,10 @@ export class FlashSession {
   subscribe = (l: () => void) => { this.listeners.add(l); return () => { this.listeners.delete(l); }; };
   get = () => this.state;
   private held = false;
+  /** Screen changes so far: a restart asked for on one visit to the fastboot screen doesn't run on a later one. */
+  private visits = 0;
   private set(patch: Partial<FlashState>) {
+    if (patch.screen !== undefined && patch.screen !== this.state.screen) this.visits++;
     this.state = { ...this.state, ...patch };
     const held = this.holdsKey();
     if (held !== this.held) { this.held = held; this.d.holdingKey?.(held); }
@@ -499,10 +502,11 @@ export class FlashSession {
     if (this.state.connecting) return;
     const req = this.d.requestAdb({ authMs: AUTH_MS });
     this.set({ connecting: true, connectError: undefined, restarted: false });
+    const visit = this.visits;
     try {
       const p = await req;
-      // left the screen meanwhile (Back): this restart no longer belongs to anything on it
-      if (this.state.screen !== 'fastboot') { await p.close?.().catch(() => {}); this.set({ connecting: false }); return; }
+      // left the screen meanwhile (Back, maybe Continue back to it): this restart belongs to a visit that is over
+      if (this.visits !== visit) { await p.close?.().catch(() => {}); this.set({ connecting: false }); return; }
       await this.restart(p);
       this.set({ connecting: false, restarted: true });
     } catch (e) {

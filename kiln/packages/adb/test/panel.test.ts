@@ -41,4 +41,21 @@ describe('Panel.connect with authMs', () => {
     expect(raw.close).toHaveBeenCalled();
     expect(Date.now() - started).toBeLessThan(2500);
   });
+
+  it('a restart into the bootloader with no reply counts as done after a few seconds', async () => {
+    vi.useFakeTimers();
+    try {
+      const adb = { power: { bootloader: () => never<void>() }, close: () => never<void>() };
+      const panel = Object.assign(Object.create(Panel.prototype), { adb }) as { rebootToBootloader(): Promise<void> };
+      let done = false;
+      const restart = panel.rebootToBootloader().then(() => { done = true; });
+      await vi.advanceTimersByTimeAsync(4000);
+      expect(done).toBe(false);
+      await vi.advanceTimersByTimeAsync(2500);
+      await restart;
+      expect(done).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

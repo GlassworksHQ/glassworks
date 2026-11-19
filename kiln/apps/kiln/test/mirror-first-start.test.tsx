@@ -217,6 +217,24 @@ describe('restarting into fastboot over adb: no button to hold', () => {
     expect(f.state).toMatchObject({ connecting: false, restarted: false });
   });
 
+  it('Back, then Continue to fastboot again, before the restart\'s request comes: the old request doesn\'t restart', async () => {
+    const rebootToBootloader = vi.fn(async () => {});
+    const close = vi.fn(async () => {});
+    let give!: (p: PanelShell) => void;
+    const { f, mirror } = setup({ request: () => new Promise<PanelShell>((r) => { give = r; }) });
+    await f.download();
+    await mirror.pickApk('kiosk.apk', fakeMirrorApk());
+    f.toFastboot();
+    const restarting = f.restartToFastboot();
+    f.retry(); // Back
+    f.toFastboot(); // Continue: the fastboot screen again
+    give({ run: async () => ({ out: '', code: 0 }), push: async () => {}, rebootToBootloader, close });
+    await restarting;
+    expect(f.state.screen).toBe('fastboot');
+    expect(rebootToBootloader).not.toHaveBeenCalled();
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
   it('Connect fastboot again with files Kiln dropped goes back to the download first', async () => {
     const { f } = setup({ request: async () => new FirstBootMirror() });
     f.state = { ...f.state, screen: 'error', work: { step: 'patch', x: 0.5 }, files: f.state.files.map((x) => ({ ...x, state: 'waiting' as const })) };
