@@ -5,6 +5,7 @@ import type { AskKind, BackupMeta, PartState, Phase, Progress } from '@glasswork
 import type { AppPhase } from '@glassworks/aqara-s1-plus-installer';
 import type { SetupState } from '@glassworks/setup-channel';
 import { SET_UP } from './routes';
+import type { SilentWords } from '../components/SilentUpdates';
 
 export type Flow = 'install' | 'undo';
 /**
@@ -21,7 +22,7 @@ export interface Network { ssid: string; rssi: number; secure: boolean }
 /** The app's settings as the person chose them: kept, so going back to the step shows them again. */
 export interface AppSettings { locale?: string; timezone?: string; clock24: boolean; keyboard: boolean }
 
-/** What the setup step shows, one phase at a time (S1 Kiosk over adb). */
+/** What the setup step shows, one phase at a time (Glassworks over adb). */
 export type Setup =
   | { phase: 'waiting'; note: string }
   /** `installing`: the app is going in; provision's AppPhases so far, the last one now */
@@ -102,6 +103,8 @@ export interface DoneState {
   /** The panel's own setup page (`http://<panel>:8099/setup`, #34), when the app on it has one: Kiln hands off to it. */
   setupPage?: string;
   backup?: { name: string; info: string; hint: string; error?: string };
+  /** Whether the app's updates install by themselves, as read back from the device (issue 422). */
+  updates?: SilentWords;
 }
 
 /** A backup a run in this tab saved: what Done offers. The serial stays in IndexedDB only. */

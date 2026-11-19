@@ -15,7 +15,7 @@ and glassworks.dev read them from here.
 | Frame | Status | Installer | Design |
 |---|---|---|---|
 | [`aqara-s1-plus`](aqara-s1-plus) | Beta | yes | `frame.json`, `recovery.json` |
-| [`lululemon-mirror`](lululemon-mirror) | Under development | test only: over fastboot with the community image, or adb onto it (`/lululemon-mirror?apk=local`) | `frame.json` only (no recovery drawing yet) |
+| [`lululemon-mirror`](lululemon-mirror) | Under development | test only: over fastboot with the community image, or adb onto it (`/lululemon-mirror?apk=local`) | `frame.json`, `recovery.json` |
 | [`generic-android`](generic-android) | Under development | headless recipe, no screen yet (#403) | `frame.json` only. Any Android device as an app, no root. It has no `display`: there is no one screen size |
 | [`google-pixel-tablet`](google-pixel-tablet) | Planned | none of its own: it installs as `generic-android` | `frame.json` only. A tested device: the generic app as it is |
 
@@ -63,7 +63,7 @@ describes the device's look in millimetres"). Kiln's picker reads it, and glassw
 | `abis` | The ABIs the device's userspace runs, preferred first, as Android names them (`armeabi-v7a`, `arm64-v8a`, `x86`, `x86_64`). The app's release builds one APK for every ABI some frame lists (below) |
 | `display` | `{ width, height }`: the screen in pixels, upright, as people see it (the Mirror: 1080x1920). On a panel that stands turned, the boot animation plays in the panel's own framebuffer instead: say so with `boot.rotate`, not here. With `name`, it is all the [boot generator](../branding/boot/README.md) needs |
 | `dock` | Optional. `true` when the device sits on a dock (the Pixel Tablet's charging speaker dock): the app gives Home Assistant its *Docked* sensor from the start ([docs/esphome.md](../docs/esphome.md#docked)). The app's `GenericAndroid.KNOWN` follows it, and `GenericAndroidKnownTest` checks that it does. Leave it out otherwise |
-| `app` | Optional, for a frame whose Kiln recipe installs another app than S1 Kiosk: `id` (the package), `activity` (what adb starts it with, the one that trusts adb's extras), `home` (the activity or alias its MAIN+HOME+DEFAULT filter is on) and `admin` (its device admin receiver), full class names. The Mirror installs the legacy build of Glassworks for generic Android |
+| `app` | Optional, for a frame whose Kiln recipe installs another app than the S1 app: `id` (the package), `activity` (what adb starts it with, the one that trusts adb's extras), `home` (the activity or alias its MAIN+HOME+DEFAULT filter is on) and `admin` (its device admin receiver), full class names. The Mirror installs the legacy build of Glassworks for generic Android |
 | `boot` | Optional. The boot branding's limits: `androidApi` (the API level; 25+ gets trimmed frames), `splash` (the bootloader splash format, `allwinner-boot-resource`), `zipBudget` (the largest `bootanimation.zip`, bytes), `rotate` (90 or 270: frames turned counter-clockwise into a panel that stands turned, as the Mirror's does) |
 | `specs` | Hardware rows: `{ label, value }`. Labels: `Size`, `SoC`, `Android`, `Screen`, `Radio`, `Presence`, `Audio`, `Extras`, `Mount`, `Root` |
 | `panes` | The panes it rates, by pane id: `{ support, note? }`. Support is a status or `depends`, `unknown`, `no`. The ids are the app's (the pane catalog, below); `base`, the wall base's old id, still works. A pane it doesn't rate is worked out from `provides`, with the reason |

@@ -1,4 +1,4 @@
-// S1 Kiosk over adb, the steps that are the same on every frame: install the APK, grant what adb's
+// Glassworks over adb, the steps that are the same on every frame: install the APK, grant what adb's
 // shell can grant, start the app with the Home Assistant URL, read its version, and take back its
 // device admin before it is removed. Each frame's recipe adds its own steps around these
 // (frames/<id>/installer). The same "try" (never fails) vs "run" (must succeed) split as
@@ -12,7 +12,7 @@ export const ACT = `${PKG}/.MainActivity`;
 export const ADMIN = `${PKG}/.AdminReceiver`;
 /**
  * Which app the steps below act on: its package, the activity adb starts it with (and whose extras
- * it trusts from adb), and its device admin if it has one. S1 Kiosk by default, so the S1's commands
+ * it trusts from adb), and its device admin if it has one. Glassworks by default, so the S1's commands
  * stay as pinned (frames/aqara-s1-plus/installer/test/adb-commands-pin.test.ts). Another frame names
  * its own app, e.g. the Mirror's legacy build of Glassworks for generic Android.
  */
@@ -74,7 +74,7 @@ export class Steps {
 }
 
 /**
- * S1 Kiosk's version on the device, from `dumpsys package` (read-only); undefined when it isn't
+ * Glassworks' version on the device, from `dumpsys package` (read-only); undefined when it isn't
  * installed. `signal` cancels the read.
  */
 export async function kioskVersion(p: PanelShell, signal?: AbortSignal, app: AppId = S1_KIOSK): Promise<{ name?: string; code: number } | undefined> {

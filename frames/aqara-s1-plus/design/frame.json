@@ -7,7 +7,7 @@
   "summary": "The reference frame. Every pane runs on it, including the Zigbee/Thread radio and the wall base.",
   "tagline": "A133 wall panel, rooted. The reference frame.",
   "project": {
-    "name": "S1 Unleashed",
+    "name": "Glassworks",
     "href": "https://github.com/GlassworksHQ/glassworks"
   },
   "kiln": "/aqara-s1-plus",

@@ -516,7 +516,7 @@ To read the decoders yourself (read-only):
 `GeckoMediaManager` logs when GeckoView's media process stops (`Media service has been unbound`),
 which frees its decoders.
 
-**First panel run: smoke-cam1** (#182 at 59ffd21, S1 Kiosk 0.4.3, `thread_router`, 2026-11-13,
+**First panel run: smoke-cam1** (#182 at 59ffd21, the S1 app 0.4.3, `thread_router`, 2026-11-13,
 03:44 to 03:49 by the panel's clock; **1 run, not calibrated**). The run exited 0, the restore
 worked, and the fake knew every camera command (7 `camera/capabilities` and 7 `camera/stream` calls, none unknown or failed; its
 live changes at most 23 ms late).
@@ -547,7 +547,7 @@ What the panel's logcat says about heavy (read 2026-11-13, read-only):
    candidates were the engine's few connections per host, `adb reverse`, and heavy's blocked main
    thread, on which hls.js runs. s1cam3 answers it (below): the main thread.
 
-**Three runs: s1cam3** (#182 at cbc2be6, S1 Kiosk 0.4.3, `thread_router`, 2026-11-13, about 05:45 to
+**Three runs: s1cam3** (#182 at cbc2be6, the S1 app 0.4.3, `thread_router`, 2026-11-13, about 05:45 to
 06:40; **3 of 3 runs, verified, not calibrated**). Clarity D, not provisional. The run exited 0 and
 the restore worked. The fake knew every command (none unknown or failed), and sent each live change
 at most 192 ms late, under the 200 ms limit.
@@ -1534,7 +1534,7 @@ Assistant:
   (`panes_state`). The report counts only samples that ran what their label says, gives how many it
   left out (`excluded`), and has no number for a pane with none left (`error`). Samples from before
   this check say `verified: false`.
-- **Assist off by its mute.** S1 Kiosk 0.4.3 and earlier save `voice_enabled` asynchronously and
+- **Assist off by its mute.** the S1 app 0.4.3 and earlier save `voice_enabled` asynchronously and
   then exit at once to restart, so the write is lost and voice stays on. In s1v7 (131f6da,
   2026-11-13) every switch was lost: the "panes off" samples ran Assist and Sendspin, and Assist read
   −0.4% of a core against
@@ -1934,7 +1934,7 @@ rules the site shows it as "Re-measure" until a v3 run is published (see [Publis
 results](#published-results)). That run is the root's next night-window run on the panel, and its
 result replaces the published one only when the maintainer says so.
 
-**Clarity v2: D** (s1rtc10, 2de8ac20, 3 of 3 runs, protocol 2, rubric 2, the S1 Kiosk build before
+**Clarity v2: D** (s1rtc10, 2de8ac20, 3 of 3 runs, protocol 2, rubric 2, the S1 app build before
 its first release (`pre-v1`), camera video over the LAN (`lan-udp`), measured 2026-11-15 UTC; not
 provisional): "a good wall panel for light dashboards. Held back by typical dashboards: the main
 thread is blocked for 2.9 s after the view is drawn." Typical without its camera (`typical-nocam`) opens in 1.2 s
@@ -1946,12 +1946,12 @@ summary [clarity.json](../frames/aqara-s1-plus/clarity/clarity.json). The S1's C
 (s1rtc9, also a D) was held when rubric 2 was decided, and never published. The results below
 are earlier versions' (see [Versions](#versions)) and not comparable with it.
 
-**Protocol 5: D** (s1cam3, cbc2be6, 3 of 3 runs, rubric v6, S1 Kiosk 0.4.3, `thread_router`,
+**Protocol 5: D** (s1cam3, cbc2be6, 3 of 3 runs, rubric v6, the S1 app 0.4.3, `thread_router`,
 2026-11-13; not provisional): protocol 4's views with live camera streams. Typical's 720p stream
 plays in full (first frame 4.2 s), and heavy's four starve (35% shown) on a saturated main thread.
 The details are in [Live camera streams](#live-camera-streams-174-protocol-5).
 
-**Protocol 4: D** (s1v7, 131f6da, 3 of 3 runs, rubric v5, S1 Kiosk 0.4.3, the radio in
+**Protocol 4: D** (s1v7, 131f6da, 3 of 3 runs, rubric v5, the S1 app 0.4.3, the radio in
 `thread_router`, 2026-11-13; not provisional). "A good wall panel for light dashboards. Held back by
 typical dashboards: scrolling averages 35.1 fps (p95 83 ms); the view takes 4.8 s to open." The
 verifier recomputed the D by hand, with `grade.py` and with `grade.ts`.
@@ -1970,7 +1970,7 @@ The panel ran with the wake word using about 37% of a core
 (#181) needs a re-measure. s1v7's pane numbers are not valid (see [RAM](#ram)); s1p1 and s1p3 below
 are.
 
-**RAM per pane** (s1p1 and s1p3, 248ce09, 2026-11-13, S1 Kiosk 0.4.3, the radio in
+**RAM per pane** (s1p1 and s1p3, 248ce09, 2026-11-13, the S1 app 0.4.3, the radio in
 `thread_router`; verified: every sample's kiosk log showed what its label says, none left out, and
 the panel was put back each time). In both runs the kiosk kept `voice_enabled` (the 0.4.3 bug
 above), so Assist is off by its microphone mute: its running cost, not the model it loads.
@@ -1996,7 +1996,7 @@ were dropped instead of counted (its changes reached the page in bursts, with fr
 to 649 ms), and its fake HA log was never written (`run.sh` didn't pass `--log`), so its "no
 unknown commands" couldn't have seen one. All three are fixed above.
 
-**Protocol 3, superseded: A** (s1v6, 3 of 3 runs, rubric v5, S1 Kiosk 0.4.3, measured 2026-11-13
+**Protocol 3, superseded: A** (s1v6, 3 of 3 runs, rubric v5, the S1 app 0.4.3, measured 2026-11-13
 UTC, the page order turning each run, nothing missing, no gaps). Protocol 3's pages were an imitation
 of HA's cards and its restart ended at engine ready, so this letter doesn't carry over (see
 [Not tuned to any frame](#not-tuned-to-any-frame)):
@@ -2048,7 +2048,7 @@ What the earlier runs on the S1 (2026-11-12, kiosk 0.4.3, GeckoView 159, Android
   first-paint settle rule, light opens in 1754 ms, and heavy in 2137 ms instead of 1357 ms: the old
   rule had let heavy settle at its load event, before its first paint was on screen. Protocol 1's
   warm-up, turning order and shared first screen answer the rest.
-- **s1v5** (d00fb81, protocol 1, 3 runs, S1 Kiosk 0.4.3, orders rotated). Under rubric v4 it graded
+- **s1v5** (d00fb81, protocol 1, 3 runs, the S1 app 0.4.3, orders rotated). Under rubric v4 it graded
   E. Re-graded offline under v5 (the raw data has what change to screen needs: when each change
   applied, the rAF frames and SurfaceFlinger's presents), it gives **C, provisional** (protocol 1
   pages):

@@ -59,7 +59,7 @@ describe('install', () => {
     const p = new FakeMirror({ picks: () => OURS, pickAfter: 2 });
     const phases: MirrorPhase[] = [];
     const res = await installMirror(p, { apk, haUrl: 'http://homeassistant.local:8123', sleep: noSleep, onPhase: (ph) => phases.push(ph) });
-    expect(res).toEqual({ app: { name: '0.5.0-legacy', code: 600 }, home: 'set', previousHome: MIRROR_KIOSK });
+    expect(res).toEqual({ app: { name: '0.5.0-legacy', code: 600 }, home: 'set', previousHome: MIRROR_KIOSK, updates: { state: 'normal-app', privileged: false } });
     expect(phases).toEqual([{ step: 'apk', stage: 'copy' }, { step: 'apk', stage: 'install' }, { step: 'grant' }, { step: 'start' }, { step: 'home', pick: 'Glassworks' }]);
     const at = (c: string) => { const i = p.cmds.findIndex((x) => x.startsWith(c)); expect(i, c).toBeGreaterThanOrEqual(0); return i; };
     const order = ['push /data/local/tmp/mirror-app.apk', 'pm install -r -g /data/local/tmp/mirror-app.apk', `echo '${MIRROR_KIOSK}' > ${PREVIOUS_HOME}`,

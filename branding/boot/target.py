@@ -22,8 +22,9 @@ A target comes from a frame's design data (`frames/<id>/design/frame.json`):
                  turned screen Android's UI uses. `display` is the screen as people see it; each frame
                  is drawn upright at that size, then turned this many degrees counter-clockwise into
                  the panel's framebuffer (desc.txt gets the panel's size). The Mirror needs it: its
-                 1920x1080 panel stands portrait, and ro.sf.hwrotation turns Android's UI but not the
-                 boot animation (seen on the unit, 2026-11-16).
+                 1920x1080 panel stands portrait because Kiln's first boot locks its Android there
+                 (user_rotation=3, auto-rotate off), which turns the UI but not the boot animation
+                 (seen on the unit, 2026-11-16).
 """
 import json
 import os

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Off-device tests of frames/aqara-s1-plus/tools/install.sh's signing-key switch and Wi-Fi-keeping --undo, of the panel
-# side (frames/aqara-s1-plus/tools/install/s1kiosk-switch.sh) and of frames/aqara-s1-plus/tools/install/improv-send.py. A fake `adb` simulates
+# side (frames/aqara-s1-plus/tools/install/glassworks-switch.sh) and of frames/aqara-s1-plus/tools/install/improv-send.py. A fake `adb` simulates
 # the panel (PackageManager, device admin, root, dumpsys wifi, Improv); nothing talks to a real one.
 # Runs on the host (macOS or Linux, bash + python3), in a few seconds:
 #
@@ -31,7 +31,7 @@ trap 'rm -rf "$T"' EXIT
 mkdir -p "$T/bin" "$T/pbin"
 w() { cat > "$1"; chmod 755 "$1"; }
 
-# ---- the panel's own commands, for s1kiosk-switch.sh (run on this computer against $T/panel) ----
+# ---- the panel's own commands, for glassworks-switch.sh (run on this computer against $T/panel) ----
 w "$T/pbin/stat" <<'EOF'
 #!/bin/sh
 # stat -c %u <path>: the app's uid for its data dirs
@@ -89,7 +89,9 @@ cmd="$*"
 case "$cmd" in
   "getprop ro.product.model") echo "Aqara S1 Plus" ;;
   "getprop ro.build.version.sdk") echo 29 ;;
-  "pm list packages sh.edm.s1kiosk") [ "$(st installed)" != none ] && echo "package:sh.edm.s1kiosk" ;;
+  "pm list packages sh.edm.s1kiosk")
+    [ "$(st list)" = fail ] && { echo "cmd: Failure calling service package"; exit 1; }
+    [ "$(st installed)" != none ] && echo "package:sh.edm.s1kiosk" ;;
   "dumpsys package sh.edm.s1kiosk")
     if [ "$(st installed)" = release ]; then printf '    versionName=0.4.1\n    pkgFlags=[ HAS_CODE ALLOW_CLEAR_USER_DATA ]\n'
     else printf '    versionName=0.1.0\n    pkgFlags=[ DEBUGGABLE HAS_CODE ALLOW_CLEAR_USER_DATA ]\n'; fi ;;
@@ -97,27 +99,37 @@ case "$cmd" in
   "dumpsys wifi") cat "$(st wifi-dump)" ;;
   "ip -4 -o addr show wlan0") echo "3: wlan0    inet 192.0.2.50/24 brd 192.0.2.255 scope global wlan0" ;;
   "pm path sh.edm.s1kiosk") echo "package:/data/app/sh.edm.s1kiosk-Abc==/base.apk" ;;
-  "cp /data/app/sh.edm.s1kiosk-Abc==/base.apk /data/local/tmp/s1kiosk-old.apk") : ;;
+  "cp /data/app/sh.edm.s1kiosk-Abc==/base.apk /data/local/tmp/glassworks-old.apk") : ;;
   *"--ez remove_admin true") put admin 0 ;;
   "dumpsys device_policy") [ "$(st admin)" = 1 ] && echo "Admin sh.edm.s1kiosk/.AdminReceiver" || echo "no admins" ;;
   "dpm set-active-admin sh.edm.s1kiosk/.AdminReceiver") put admin 1 ;;
-  "pm disable-user --user 0 sh.edm.s1kiosk") put disabled 1 ;;
+  "pm disable-user --user 0 sh.edm.s1kiosk")
+    [ "$(st disable)" = fail ] && { echo "Error: java.lang.SecurityException"; exit 255; }
+    [ "$(st installed)" = none ] && { echo "Error: java.lang.IllegalArgumentException: Unknown package: sh.edm.s1kiosk"; exit 255; }
+    put disabled 1 ;;
   "pm enable sh.edm.s1kiosk") put disabled 0 ;;
   "pm uninstall sh.edm.s1kiosk")
-    if [ "$(st admin)" = 1 ] || [ "$(st uninstall)" = fail ]; then echo "Failure [DELETE_FAILED_DEVICE_POLICY_MANAGER]"; exit 1; fi
+    if [ "$(st admin)" = 1 ] || [ "$(st uninstall)" = fail ] || [ "$(st installed)" = none ]; then echo "Failure [DELETE_FAILED_DEVICE_POLICY_MANAGER]"; exit 1; fi
     put installed none; rm -rf "$S/panel/ce" "$S/panel/de"; echo Success ;;
-  "pm install -r -g /data/local/tmp/s1kiosk-old.apk") fresh_data 10073 debug; put installed debug; put disabled 0; echo Success ;;
+  "pm install -r -g /data/local/tmp/glassworks-old.apk")
+    [ "$(st old-install)" = fail ] && { echo "Failure [INSTALL_FAILED_INTERNAL_ERROR]"; exit 1; }
+    fresh_data 10073 debug; put installed debug; put disabled 0; echo Success ;;
   "grep -c ' @s1kiosk_improv\$' /proc/net/unix") echo 1 ;;
   "cmd package set-home-activity com.aqara.inhome.launcher/.MainActivity") put home aqara ;;
-  "cmd package resolve-activity"*) [ "$(st home)" = aqara ] && echo "com.aqara.inhome.launcher/.MainActivity" || echo "sh.edm.s1kiosk/.MainActivity" ;;
-  "su -c 'sh /data/local/tmp/s1kiosk-switch.sh "*"'")
+  "cmd package resolve-activity"*)
+    # chooser: Glassworks still a HOME app next to Aqara's launcher (seen on the S1, 2026-11-19)
+    if [ "$(st chooser)" = 1 ]; then echo "android/com.android.internal.app.ResolverActivity"
+    elif [ "$(st home)" = aqara ]; then echo "com.aqara.inhome.launcher/.MainActivity"
+    else echo "sh.edm.s1kiosk/.MainActivity"; fi ;;
+  "su -c 'sh /data/local/tmp/glassworks-switch.sh "*"'")
     [ "$(st root)" = 1 ] || { echo "Permission denied"; exit 1; }
-    a=${cmd#su -c \'sh /data/local/tmp/s1kiosk-switch.sh }; a=${a%\'}
+    a=${cmd#su -c \'sh /data/local/tmp/glassworks-switch.sh }; a=${a%\'}
     case "$a" in backup|restore) [ "$(st disabled)" = 1 ] || { echo "TEST: $a while the app is enabled" >> "$S/violations"; } ;; esac
     echo "$a" >> "$S/root-cmds"
+    [ "$a" = restore ] && [ "$(st restore)" = fail ] && { echo "glassworks-switch: could not restore the app's data"; exit 1; }
     # shellcheck disable=SC2086
     PATH="$S/pbin:$PATH" S1_CE="$S/panel/ce" S1_DE="$S/panel/de" S1_WORK="$S/panel/work" \
-      S1_WIFI_STORES="$S/WifiConfigStore.xml" sh "$S/panel/s1kiosk-switch.sh" $a
+      S1_WIFI_STORES="$S/WifiConfigStore.xml" sh "$S/panel/glassworks-switch.sh" $a
     exit $? ;;
   *) : ;;
 esac
@@ -135,7 +147,7 @@ APK="$T/kiosk-release.apk"; echo apk > "$APK"
 
 # A debug build with its data, as HOME + device admin, on Wi-Fi it saved.
 panel() { # [wifi fixture]
-  rm -rf "$T/panel" "$T"/{adb.log,root-cmds,root.log,violations,improv.got,installed,disabled,root,admin,home,new-install,uninstall}
+  rm -rf "$T/panel" "$T"/{adb.log,root-cmds,root.log,violations,improv.got,installed,disabled,root,admin,home,new-install,uninstall,restore,disable,old-install,list,chooser}
   mkdir -p "$T/panel"
   cp "$FIX/WifiConfigStore.xml" "$T/WifiConfigStore.xml"
   fresh_data 10071 debug
@@ -146,12 +158,14 @@ panel() { # [wifi fixture]
   printf debug > "$T/installed"; printf 0 > "$T/disabled"; printf 1 > "$T/root"; printf 1 > "$T/admin"
   printf '%s' "$FIX/${1:-dumpsys-wifi-kiosk.txt}" > "$T/wifi-dump"
 }
+# Online, but dumpsys doesn't say who saved the network.
+unknown_wifi() { panel; printf 'Wi-Fi is enabled\n' > "$T/wifi-unknown.txt"; printf '%s' "$T/wifi-unknown.txt" > "$T/wifi-dump"; }
 inst() { "$REPO/frames/aqara-s1-plus/tools/install.sh" --apk "$APK" --no-models --no-debloat "$@" </dev/null 2>&1; }
 
-echo "== s1kiosk-switch.sh (panel side)"
+echo "== glassworks-switch.sh (panel side)"
 panel
-SW="$REPO/frames/aqara-s1-plus/tools/install/s1kiosk-switch.sh"
-cp "$SW" "$T/panel/s1kiosk-switch.sh"
+SW="$REPO/frames/aqara-s1-plus/tools/install/glassworks-switch.sh"
+cp "$SW" "$T/panel/glassworks-switch.sh"
 out=$(S1_WIFI_STORES="$FIX/WifiConfigStore.xml" sh "$SW" wifi-list)
 check "wifi-list: only kiosk-saved networks, no secrets" test "$out" = $'1 psk &quot;Home &amp; Garden&quot;\n2 open &quot;Cafe&quot;'
 check "wifi-psk 1: that network's stored key" test "$(S1_WIFI_STORES="$FIX/WifiConfigStore.xml" sh "$SW" wifi-psk 1)" = '&quot;fixture &lt;not&gt; &quot;real&quot; &amp; fake&quot;'
@@ -174,7 +188,7 @@ printf none > "$T/installed"
 mkdir -p "$T/panel/work"; touch "$T/panel/work/complete"
 check "restore refuses when PackageManager disagrees" bash -c '! "$@" restore 2>/dev/null' _ env PATH="$T/pbin:$PATH" S1_CE="$T/panel/ce" S1_WORK="$T/panel/work" sh "$SW"
 
-echo "== improv-send.py against a fake S1 Kiosk"
+echo "== improv-send.py against a fake Glassworks"
 python3 - "$REPO/frames/aqara-s1-plus/tools/install/improv-send.py" <<'EOF' && ok "improv-send: sends ssid + password, exit 0; wrong password exit 3; never prints it" || no "improv-send"
 import os, socket, subprocess, sys, threading
 sys.path.insert(0, os.path.dirname(sys.argv[1]))
@@ -229,10 +243,10 @@ check "ends enabled, release, admin" test "$(cat "$T/installed") $(cat "$T/disab
 check "copy discarded" test ! -e "$T/panel/work"
 check "Wi-Fi read before the uninstall" before "$log" "wifi-psk 1" "shell pm uninstall"
 check "admin dropped before disabling" before "$log" "remove_admin true" "pm disable-user --user 0 sh.edm.s1kiosk"
-check "backup before the uninstall" before "$log" "s1kiosk-switch.sh backup" "shell pm uninstall"
-check "restore after the new install" before "$(sed -n '/pm uninstall/,$p' <<<"$log")" "install -r -g $APK" "s1kiosk-switch.sh restore"
+check "backup before the uninstall" before "$log" "glassworks-switch.sh backup" "shell pm uninstall"
+check "restore after the new install" before "$(sed -n '/pm uninstall/,$p' <<<"$log")" "install -r -g $APK" "glassworks-switch.sh restore"
 check "Wi-Fi sent after the kiosk is started" before "$(sed -n '/pm uninstall/,$p' <<<"$log")" "am start -n sh.edm.s1kiosk/.MainActivity" "forward tcp:0 localabstract:s1kiosk_improv"
-check "temporary files removed" has "$log" "shell rm -f /data/local/tmp/s1kiosk-old.apk /data/local/tmp/s1kiosk-switch.sh"
+check "temporary files removed" has "$log" "shell rm -f /data/local/tmp/glassworks-old.apk /data/local/tmp/glassworks-switch.sh"
 check "no 'forgot its Wi-Fi' note" hasnt "$out" "forgot its Wi-Fi"
 
 echo "== install.sh: without root"
@@ -248,10 +262,10 @@ check "says how to send the Wi-Fi again" has "$out" "forgot its Wi-Fi \"Home & G
 check "settings reset, said so" has "$out" "settings were reset"
 check "ends enabled, release" test "$(cat "$T/installed") $(cat "$T/disabled")" = "release 0"
 
-echo "== install.sh: a network S1 Kiosk didn't save"
+echo "== install.sh: a network Glassworks didn't save"
 panel dumpsys-wifi-other.txt
 out=$(inst --switch)
-check "says it stays" has "$out" "wasn't saved by S1 Kiosk and stays"
+check "says it stays" has "$out" "wasn't saved by Glassworks and stays"
 check "reads no Wi-Fi details" hasnt "$(cat "$T/root-cmds")" "wifi-"
 check "nothing to send" test ! -e "$T/improv.got"
 
@@ -271,6 +285,24 @@ check "says the old build is back with its data" has "$out" "previous build is b
 check "old build back, enabled, admin, data restored" bash -c '[ "$(cat "$1/installed") $(cat "$1/disabled") $(cat "$1/admin")" = "debug 0 1" ] && [ -f "$1/panel/ce/shared_prefs/kiosk.xml" ]' _ "$T"
 check "copy discarded" test ! -e "$T/panel/work"
 
+echo "== install.sh: the new build won't install, and the old one's data won't go back in"
+panel; printf fail > "$T/new-install"; printf fail > "$T/restore"
+out=$(inst --switch); rc=$?
+check "fails" test $rc -ne 0
+check "says the old build is back without its data" has "$out" "previous build is back, but its data is not (glassworks-switch: could not restore the app's data)"
+check "...not that the data is back" hasnt "$out" "with its data"
+check "says where the copy is" has "$out" "Its data is kept on the panel in /data/s1kiosk/switch (root only)"
+check "copy kept" test -f "$T/panel/work/complete"
+check "no discard" hasnt "$(cat "$T/root-cmds")" "discard"
+check "old build back, enabled, admin" test "$(cat "$T/installed") $(cat "$T/disabled") $(cat "$T/admin")" = "debug 0 1"
+
+echo "== install.sh: neither build installs"
+panel; printf fail > "$T/new-install"; printf fail > "$T/old-install"
+out=$(inst --switch); rc=$?
+check "fails" test $rc -ne 0
+check "says neither installed, and where the copy is" has "$out" "Its data is kept on the panel in /data/s1kiosk/switch (root only)"
+check "copy kept" test -f "$T/panel/work/complete"
+
 echo "== install.sh: Android won't remove the old build"
 panel; printf fail > "$T/uninstall"
 out=$(inst --switch); rc=$?
@@ -282,18 +314,27 @@ panel
 out=$(inst --dry-run); rc=$?
 log=$(cat "$T/adb.log")
 check "exit 0" test $rc -eq 0
-check "prints the plan" has "$out" "(as root) /data/local/tmp/s1kiosk-switch.sh backup"
+check "prints the plan" has "$out" "(as root) /data/local/tmp/glassworks-switch.sh backup"
 check "prints the Wi-Fi re-send" has "$out" "Wi-Fi \"Home & Garden\" to the new app over Improv"
 check "changes nothing" test "$(cat "$T/installed") $(cat "$T/disabled") $(cat "$T/admin")" = "debug 0 1"
-for c in "install " "push " "pm uninstall" "pm disable-user" "s1kiosk-switch.sh" "forward "; do
+for c in "install " "push " "pm uninstall" "pm disable-user" "glassworks-switch.sh" "forward "; do
   check "dry run: no '$c'" hasnt "$log" "$c"
 done
+
+echo "== install.sh --dry-run: a network the installer can't place"
+unknown_wifi; printf 0 > "$T/root"
+out=$(inst --dry-run)
+check "doesn't say Glassworks saved it" hasnt "$out" "which Glassworks saved"
+check "says the panel may lose its Wi-Fi" has "$out" "can't tell who saved its Wi-Fi network, so the panel may lose its Wi-Fi"
+unknown_wifi
+out=$(inst --dry-run)
+check "with root: may forget, not would" has "$out" "Android may forget its Wi-Fi network with the old app"
 
 echo "== install.sh --dry-run on a release build (the keys may well match)"
 panel; printf release > "$T/installed"
 out=$(inst --dry-run); rc=$?
 check "exit 0" test $rc -eq 0
-check "the switch is only a possibility" has "$out" "If the keys differ (S1 Kiosk on the panel signed with another key than"
+check "the switch is only a possibility" has "$out" "If the keys differ (Glassworks on the panel signed with another key than"
 check "...never stated as a fact" hasnt "$out" "is signed with a different key"
 check "...nor a development build" hasnt "$out" "development build"
 
@@ -307,7 +348,7 @@ echo "== install.sh: a normal update is unchanged"
 panel; printf release > "$T/installed"
 out=$(inst); rc=$?
 check "exit 0" test $rc -eq 0
-check "no switch" hasnt "$out" "Switch S1 Kiosk"
+check "no switch" hasnt "$out" "Switch Glassworks"
 check "no uninstall" hasnt "$(cat "$T/adb.log")" "pm uninstall"
 
 echo "== install.sh --undo keeps the panel on its Wi-Fi"
@@ -320,7 +361,49 @@ check "says why" has "$out" "it saved the panel's Wi-Fi \"Home & Garden\""
 panel dumpsys-wifi-other.txt
 out=$("$REPO/frames/aqara-s1-plus/tools/install.sh" --undo </dev/null 2>&1)
 check "someone else's network: uninstalls" has "$(cat "$T/adb.log")" "shell pm uninstall sh.edm.s1kiosk"
-check "and says it is removed" has "$out" "S1 Kiosk is removed"
+check "and says it is removed" has "$out" "Glassworks is removed"
+panel dumpsys-wifi-other.txt; printf fail > "$T/uninstall"
+out=$("$REPO/frames/aqara-s1-plus/tools/install.sh" --undo </dev/null 2>&1); rc=$?
+check "uninstall refused: exit 0, says it is disabled instead" bash -c '[ "$1" -eq 0 ] && grep -q "would not remove Glassworks, so it is disabled instead" <<<"$2"' _ $rc "$out"
+check "...not that it is removed" hasnt "$out" "Glassworks is removed"
+panel dumpsys-wifi-other.txt; printf fail > "$T/uninstall"; printf fail > "$T/disable"
+out=$("$REPO/frames/aqara-s1-plus/tools/install.sh" --undo </dev/null 2>&1); rc=$?
+check "uninstall and disable refused: fails" test $rc -ne 0
+check "...says Aqara's apps are back but Glassworks is not disabled" has "$out" "Aqara's apps are back, but Android would not disable Glassworks"
+check "...not that it is removed" hasnt "$out" "Glassworks is removed"
+panel; printf fail > "$T/disable"
+out=$("$REPO/frames/aqara-s1-plus/tools/install.sh" --undo </dev/null 2>&1); rc=$?
+check "Glassworks' Wi-Fi, disable refused: fails" test $rc -ne 0
+check "...says so" has "$out" "Android would not disable Glassworks"
+check "...not that it is disabled" hasnt "$out" "Glassworks is disabled"
+check "...still restarts Aqara's radio services" has "$(cat "$T/adb.log")" "setprop ctl.start ha_master"
+check "...still checks HOME" has "$(cat "$T/adb.log")" "cmd package resolve-activity"
+for fix in dumpsys-wifi-other.txt dumpsys-wifi-kiosk.txt; do
+  panel "$fix"; printf fail > "$T/uninstall"; printf fail > "$T/disable"; printf 1 > "$T/chooser"
+  out=$("$REPO/frames/aqara-s1-plus/tools/install.sh" --undo </dev/null 2>&1); rc=$?
+  check "disable refused, HOME on the chooser ($fix): fails" test $rc -ne 0
+  check "...says Glassworks is still on" has "$out" "Aqara's apps are back, but Android would not disable Glassworks"
+  check "...not the HOME error" hasnt "$out" "the home screen is still"
+  check "...doesn't open the chooser" hasnt "$(cat "$T/adb.log")" "am start -a android.intent.action.MAIN"
+done
+panel; printf 1 > "$T/chooser"
+out=$("$REPO/frames/aqara-s1-plus/tools/install.sh" --undo </dev/null 2>&1); rc=$?
+check "HOME on the chooser with Glassworks disabled: still the HOME error" bash -c '[ "$1" -ne 0 ] && grep -q "the home screen is still android/com.android.internal.app.ResolverActivity" <<<"$2"' _ $rc "$out"
+for fix in dumpsys-wifi-other.txt dumpsys-wifi-kiosk.txt; do
+  panel "$fix"; printf none > "$T/installed"
+  out=$("$REPO/frames/aqara-s1-plus/tools/install.sh" --undo </dev/null 2>&1); rc=$?
+  check "retry after an undo that removed Glassworks ($fix): exit 0, says removed" bash -c '[ "$1" -eq 0 ] && grep -q "Glassworks is removed" <<<"$2"' _ $rc "$out"
+done
+for fix in dumpsys-wifi-other.txt dumpsys-wifi-kiosk.txt; do
+  panel "$fix"; printf none > "$T/installed"; printf fail > "$T/list"
+  out=$("$REPO/frames/aqara-s1-plus/tools/install.sh" --undo </dev/null 2>&1); rc=$?
+  check "...a listing that fails is not taken as removed ($fix)" bash -c '[ "$1" -ne 0 ] && ! grep -q "Glassworks is removed" <<<"$2"' _ $rc "$out"
+done
+unknown_wifi
+out=$("$REPO/frames/aqara-s1-plus/tools/install.sh" --undo </dev/null 2>&1)
+check "can't tell who saved the network: disables" has "$(cat "$T/adb.log")" "shell pm disable-user --user 0 sh.edm.s1kiosk"
+check "...and doesn't say Glassworks saved it" hasnt "$out" "it saved the panel's Wi-Fi"
+check "...says it can't tell" has "$out" "can't tell who saved the panel's Wi-Fi"
 panel
 out=$("$REPO/frames/aqara-s1-plus/tools/install.sh" --undo --dry-run </dev/null 2>&1)
 check "dry run: shows the disable" has "$out" "+ adb shell pm disable-user --user 0 sh.edm.s1kiosk"

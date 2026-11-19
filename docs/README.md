@@ -1,4 +1,4 @@
-# S1 Unleashed docs
+# Glassworks docs
 
 Start with **[Glassworks Principles](principles.md)**: what Glassworks is, what it isn't, and the
 rules every part follows.

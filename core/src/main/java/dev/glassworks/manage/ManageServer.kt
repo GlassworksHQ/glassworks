@@ -53,9 +53,11 @@ class ManageServer(
     private val pages: ManagePages = ManagePages(),
     private val event: (String) -> Unit = {},
     /** How long a settings change may take before the page answers "still applying" (the radio's off waits on the radio). */
-    private val saveWaitMs: Long = 20_000,
+    private val saveWaitMs: Long = SAVE_WAIT_MS,
     /** A monotonic clock in ms for the questions' expiry: a wall clock that jumps (NTP, a time zone) mustn't stretch or cut it. */
     private val monoMs: () -> Long = { System.nanoTime() / 1_000_000 },
+    /** All panels' scripts by file name ([ManagePages.PANELS_SCRIPT]), or null when this build has none (#466). */
+    private val scripts: (String) -> ByteArray? = { null },
 ) {
     private val random = SecureRandom()
 
@@ -108,6 +110,7 @@ class ManageServer(
         // Called from a page on another panel, with a Home Assistant token rather than this page's cookie (#466).
         if (req.path.startsWith(ManageApi.PREFIX)) return api.handle(req)
         if (req.path == HANDOFF) return if (req.method == "POST") handoff(req) else HttpResponse.seeOther("/")
+        if (req.path.startsWith(SCRIPTS)) return script(req.path.removePrefix(SCRIPTS))
         if (req.method != "GET" && req.method != "HEAD" && req.method != "POST") return HttpResponse.text(405, "Not allowed.")
         if (req.method == "POST" && !sameOrigin(req)) return HttpResponse.text(403, "This form didn't come from the panel's own page.")
         val session = sessions.lookup(req.cookies[SESSION], haBase())
@@ -228,6 +231,28 @@ class ManageServer(
             extra = mapOf("Set-Cookie" to sessionCookie(token, false)))
     }
 
+    /**
+     * All panels (#466). Its script talks to this panel's Home Assistant and to the other panels' Manage
+     * pages (any host, on [PORT]), and posts the handoff to them: the CSP allows those and nothing else.
+     */
+    private fun panels(status: PanelStatus, viewer: ManagePages.Viewer, session: String): HttpResponse {
+        val local = haBase()?.trim()?.trimEnd('/')?.takeIf { signIn.isLocal(it) }
+        // A CSP host-source can't be an IPv6 literal (CSP's host grammar has none), so the page couldn't reach it: say so
+        // instead of offering a page that can't work (CodeRabbit on #488).
+        val v6 = local != null && (runCatching { URI(local).host }.getOrNull()?.startsWith("[") == true)
+        val ha = local?.takeIf { !v6 }
+        val haOrigin = ha?.let(::origin)?.let { o -> " $o " + o.replaceFirst("http", "ws") }.orEmpty()
+        val csp = "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; frame-ancestors 'none'; " +
+            "connect-src 'self' http://*:$PORT$haOrigin; form-action 'self' http://*:$PORT"
+        return HttpResponse.html(200, pages.panels(status, viewer, ha, session, if (v6) IPV6_HA else null), PageShell.securityHeaders() + mapOf("Content-Security-Policy" to csp))
+    }
+
+    /** [ManagePages.PANELS_SCRIPT] and what it imports: GET, no session (they hold nothing but code). */
+    private fun script(name: String): HttpResponse {
+        val bytes = name.takeIf { it in SCRIPT_FILES }?.let(scripts) ?: return HttpResponse.text(404, "Not found.")
+        return HttpResponse(200, mapOf("Content-Type" to "text/javascript; charset=utf-8", "Cache-Control" to "no-cache", "X-Content-Type-Options" to "nosniff"), bytes)
+    }
+
     /** `/manage/code`, POST: show a code on the panel, or check the one typed. */
     private fun codeSignIn(req: HttpRequest): HttpResponse {
         val next = safeNext(req.form["next"])
@@ -302,6 +327,7 @@ class ManageServer(
             path == "/log/diagnostics.txt" -> diagnostics()
             path == "/security" -> html(200, pages.security(status, viewer, sessions.list(haBase()), s.id, notice(req.query["done"])))
             path == "/about" -> html(200, pages.about(status, viewer))
+            path == ManagePages.PANELS -> panels(status, viewer, s.id)
             path == "/confirm/reboot" -> html(200, rebootDialog(status, viewer, null))
             else -> {
                 val edit = req.query["edit"]?.let { ManagePages.Dialog.Edit(it) }
@@ -563,6 +589,20 @@ class ManageServer(
         const val HANDOFFS_PER_WINDOW = 5
         const val HANDOFF_WINDOW_MS = 10_000L
         const val HANDOFF_PAUSE = "This address started several sign-ins in a short time. Try again in a few seconds."
+
+        /** How long a settings change may take before the answer is "still applying"; All panels' writes wait longer (#466). */
+        const val SAVE_WAIT_MS = 20_000L
+
+        /** All panels' line when the panel's Home Assistant address is an IPv6 literal, which its CSP can't name. */
+        const val IPV6_HA = "All panels can't use a Home Assistant address written as an IPv6 address: the page's security policy can't name one. " +
+            "Use Home Assistant's name or IPv4 address in this panel's settings (Home Assistant & dashboard)."
+
+        /** Every panel's Manage page is on this port; All panels finds the others by it (#466). */
+        const val PORT = 8099
+
+        /** All panels' scripts, served from the panel's assets (`manage/`). */
+        const val SCRIPTS = "/manage/js/"
+        val SCRIPT_FILES = setOf("panels.js", "panels-core.js", "panels-boot.js")
 
         /** Where a page on another panel signs this browser in with its Home Assistant token (#466). */
         const val HANDOFF = "/manage/ha/token"

@@ -18,7 +18,7 @@ we build, what we don't, and the questions a new feature has to pass. New panes 
 ## Issues
 
 Pick a template: **Bug**, **Hardware report** (a model, firmware or base we haven't tested), or
-**Feature request**. Include the S1 Kiosk version and Aqara firmware, and strip tokens, Wi-Fi
+**Feature request**. Include the Glassworks version and Aqara firmware, and strip tokens, Wi-Fi
 passwords and Thread datasets from logs.
 
 ## Pull requests

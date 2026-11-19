@@ -189,6 +189,32 @@ Kiln flashes into `system` must already ask for every privileged permission a la
 need, because an update signed with our key can't add one (row 3). Kiln refuses an APK that doesn't
 ask for all three.
 
+## Can a privileged app replace a saved Wi-Fi network? (#556)
+
+**Status: read (2026-11-18), untested on the unit.** On the Mirror flash of 2026-11-18, the network Kiln saved in
+userdata's `wpa_supplicant.conf` had a mistyped password. wpa_supplicant logged `WRONG_KEY` every 15 s. The right
+password sent through the app's Improv socket failed: `addNetwork` returned -1. The network wasn't the app's, and
+Android 6 lets only its creator change it, unless the caller holds `OVERRIDE_WIFI_CONFIG`.
+
+Read at `android-6.0.1_r81` (`frameworks/opt/net/wifi` unless noted):
+
+| # | File and line | What it says |
+|---|---|---|
+| 1 | `frameworks/base/core/res/AndroidManifest.xml:988` | `OVERRIDE_WIFI_CONFIG` is `signature\|privileged`: the `/system/priv-app` copy gets it if it asks, as with `INSTALL_PACKAGES` above |
+| 2 | `WifiStateMachine.java:493`–`505`, `7270`–`7281` | `CMD_ADD_OR_UPDATE_NETWORK` (`WifiManager.addNetwork`, `updateNetwork`) calls `recordUidIfAuthorized`. For a network that is already saved (the same SSID and key type), it asks `canModifyNetwork`, and on false logs "Not authorized to update network" and fails: the -1 the app saw |
+| 3 | `WifiConfigStore.java:4122`–`4166`, `4193`–`4201` | `canModifyNetwork`: true for a device owner; else, for a network no device owner created, `isCreator \|\| checkConfigOverridePermission(uid)`, which is `OVERRIDE_WIFI_CONFIG` |
+| 4 | `WifiStateMachine.java:7310`–`7318` | `CMD_REMOVE_NETWORK` asks the same `canModifyNetwork` |
+| 5 | `WifiStateMachine.java:7327`–`7355`, `WifiConfigStore.java:1632`–`1664` | `CMD_ENABLE_NETWORK` asks nothing of the caller, and `enableNetworkWithoutBroadcast` sets the network back to `ENABLED` |
+
+So with `OVERRIDE_WIFI_CONFIG`, the app's existing path (`addNetwork` for the same SSID updates the saved network,
+then `enableNetwork(netId, true)` and `reconnect`) replaces the password Kiln wrote. No new code: Improv over adb
+(`sendWifi` in `@glassworks/app-adb`) or over Bluetooth does it. The permission is in the app's manifest from #556 on.
+A Mirror gets it only from a flash with such a build: an update can never add a privileged permission (read 3 above).
+
+The other ideas in #556 aren't needed for this. Kiln checking the join on the first boot would still need a way to
+replace the network. Writing the network through Improv only would leave a first boot with no Wi-Fi until the app
+starts.
+
 ## Can a privileged app approve an adb key?
 
 **Status (2026-11-16): verified on the unit.** The approval works for the computer that is asking, and

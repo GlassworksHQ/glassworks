@@ -206,6 +206,15 @@ describe('installing Glassworks over fastboot', () => {
     expect(screen.queryByText('Glassworks isn\'t the only home screen yet.')).toBeNull();
   });
 
+  it('the fastboot card plays the Mirror\'s recovery steps and names the button to hold (#521)', async () => {
+    const { flash, mirror } = await flashDemo('flash-fastboot', true);
+    expect(flash.state.screen).toBe('fastboot');
+    render(<Flash flash={flash} mirror={mirror} />);
+    expect(screen.getByRole('img', { name: /lululemon Studio Mirror in recovery mode: Take out the screws, Lift off the back, Hold VOL−, Plug in USB, then power\. VOL− \(SW3\)/ })).toBeTruthy();
+    expect(screen.getByText(/hold VOL−, the one nearer the frame's edge \(SW3\)/)).toBeTruthy();
+    expect(screen.getByText(/Both buttons together start a Qualcomm mode Kiln can't use/)).toBeTruthy();
+  });
+
   it('asks for the fastboot device inside the click, before anything is awaited', () => {
     const { f, requestFastboot } = setup();
     void f.connectFastboot();

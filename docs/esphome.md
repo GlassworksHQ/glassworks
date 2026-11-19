@@ -848,6 +848,84 @@ cancelling or adding time is done by voice ("pause the pasta timer"). Code: `Tim
   running. A tap anywhere dismisses it and stops the remaining chimes; otherwise it closes 60 s after
   the last timer finished. It shows even when the timers were hidden.
 
+### Announce on every panel
+
+"Dinner's ready" on every panel at once, from a dashboard or an automation. No pane: each panel is an
+Assist satellite with announcements (`ANNOUNCE` in [Device identity](#device-identity)), so Home
+Assistant's `assist_satellite.announce` does it. It is text to speech, not your own voice; live calls
+between panels are #116, parked after v1.
+
+1. Make a **Text** helper named *Announcement* (Settings → Devices & services → Helpers), so
+   `input_text.announcement`.
+2. Make a script. In the script editor, **Edit in YAML**, and list your panels' Assist satellites
+   (each panel's device page shows its own):
+
+   ```yaml
+   alias: Announce on every panel
+   mode: queued
+   fields:
+     message:
+       name: Message
+       description: What the panels say. Leave it out to say the Announcement helper's text.
+       selector:
+         text:
+   sequence:
+     - action: assist_satellite.announce
+       target:
+         entity_id:
+           - assist_satellite.kitchen_panel_assist_satellite
+           - assist_satellite.hall_panel_assist_satellite
+       data:
+         message: "{{ message | default(states('input_text.announcement'), true) }}"
+   ```
+
+3. On a dashboard, put the helper in an entities card and add a button that runs the script:
+
+   ```yaml
+   type: button
+   name: Announce
+   icon: mdi:bullhorn
+   tap_action:
+     action: perform-action
+     perform_action: script.announce_on_every_panel
+   ```
+
+4. From an automation, pass the text: `action: script.announce_on_every_panel` with
+   `data: {message: "Dinner's ready"}`.
+
+The script reads the helper when its run starts. A press while the panels are still speaking waits
+its turn, and then says what the helper holds at that moment, not when you pressed.
+
+What each panel does: Home Assistant's chime, then the message in the voice of that panel's Assist
+pipeline (`preannounce: false` drops the chime). The screen wakes, and with *Voice overlay* on, the
+overlay shows the message. Music on the speaker pauses and Music Assistant's player goes quiet; both
+come back afterwards. The *Speaker* volume applies, so a muted panel stays silent. Home Assistant
+announces on all the panels at once and the action ends when the last one has finished.
+
+- **A panel with Voice off** has no Assist satellite, and an offline panel's is unavailable. Home
+  Assistant skips both and logs a warning. To reach a panel with Voice off, add a step that speaks
+  on its speaker. It plays as an announcement (music pauses and resumes), with no chime and nothing
+  on the screen:
+
+  ```yaml
+  - action: tts.speak
+    target:
+      entity_id: tts.piper  # your TTS engine
+    data:
+      media_player_entity_id: media_player.office_panel_speaker
+      message: "{{ message | default(states('input_text.announcement'), true) }}"
+  ```
+
+  This step doesn't wait for the speaker to finish, so `mode: queued` doesn't protect it. A new
+  announcement on that speaker replaces the one playing (`ExoAudioPlayer.play`), so a second run
+  straight after can cut the first one off.
+- **A panel that is still announcing** refuses a second one (`SatelliteBusyError`). `mode: queued`
+  keeps the script's own runs from overlapping.
+
+Read on 2026-11-18 from the app (`VoiceAssistantController.onAnnounce`, `PanelDevice.announce`) and
+Home Assistant 2026.11.0 (`assist_satellite/entity.py`, `esphome/assist_satellite.py`,
+`tts/entity.py`, `helpers/service.py`). Untested: not yet run on panels.
+
 ### openWakeWord parameters (legacy)
 
 Kept for one release as the fallback. The code is a port of `AudioFeatures` (`openwakeword/utils.py`) and `Model.predict`

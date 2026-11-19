@@ -1,10 +1,10 @@
-// The S1 Kiosk app's real replies to what Kiln sends (the app's SetupChannelStepsTest pins them in
-// s1-kiosk-transcript.json), played back through this package's client. If the app's side of the
+// The Glassworks app's real replies to what Kiln sends (the app's SetupChannelStepsTest pins them in
+// aqara-s1-plus-transcript.json), played back through this package's client. If the app's side of the
 // protocol changes, that test fails; if what this client needs from the replies changes, this one does.
 import { describe, expect, it } from 'vitest';
 import type { ByteStream } from 'improv-serial';
 import { SetupChannel } from '../src/channel';
-import transcript from './s1-kiosk-transcript.json';
+import transcript from './aqara-s1-plus-transcript.json';
 
 type Entry = { request: { id: number; op: string } & Record<string, unknown>; reply: Record<string, unknown> };
 
@@ -27,7 +27,7 @@ function recordedApp(entries: Entry[]): ByteStream & { sent: object[] } {
   return self;
 }
 
-describe('the S1 Kiosk app, as recorded', () => {
+describe('the Glassworks app, as recorded', () => {
   it("answers Kiln's setup flow the way the client expects", async () => {
     const app = recordedApp(transcript as Entry[]);
     const c = new SetupChannel(app);

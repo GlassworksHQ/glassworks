@@ -45,10 +45,12 @@ class NotificationsDefinition(
                 SettingsItem.Switch(
                     "Do not disturb", "Holds everything but critical in the list, silent", { prefs.doNotDisturb },
                 ) { on, done -> prefs.doNotDisturb = on; done(null) },
-                SettingsItem.Link("Notifications on the panel", listLine(s)) { hub.openList() },
+                SettingsItem.Link("Notifications on the panel", listLine(s), twin = ::listed) { hub.openList() },
             )),
             SettingsItem.Group("Try it", listOf(
-                SettingsItem.Link("Send a test notification", "A normal one, with a chime and one button") { hub.sendTest() },
+                SettingsItem.Action("Send a test notification", { "A normal one, with a chime and one button" }, "Send") { done ->
+                    done(if (hub.sendTest()) null else NOT_RUNNING)
+                },
             )),
             inHomeAssistant(),
         )
@@ -75,12 +77,35 @@ class NotificationsDefinition(
         return parts.joinToString(" · ")
     }
 
+    /** The list the panel opens, read-only, for the Manage page (#518): each one's words as its row in the list says them. */
+    private fun listed(): List<SettingsItem> {
+        val s = hub.state
+        if (s.list.isEmpty()) return listOf(SettingsItem.Note { NOTHING })
+        return s.list.map { e ->
+            val n = e.notification
+            val line = listOfNotNull(
+                n.message.takeIf { n.title.isNotEmpty() && it.isNotEmpty() },
+                "Critical".takeIf { n.priority == Priority.CRITICAL },
+                (if (s.doNotDisturb) "Held · Do not disturb" else "Held").takeIf { e.held && n.url == null },
+                ago(now() - e.postedAt),
+            ).joinToString(" · ")
+            SettingsItem.Info({ n.title.ifEmpty { n.message } }, { line })
+        } + SettingsItem.Note { KEPT }
+    }
+
     private fun listLine(s: NotificationsHub.State) = if (s.list.isEmpty()) "None now" else "${s.list.size} · open the list"
 
     companion object {
         /** What being off means: the action stays, and says so (#67 keeps an off pane's entities). */
         const val OFF_NOTE =
             "Notifications are off. The panel's notify action stays in Home Assistant and answers “Notifications are off on this panel” until you turn them on."
+
+        /** The list's words when it is empty, and under it (the panel's sheet and the Manage page). */
+        const val NOTHING = "Nothing on the panel."
+        const val KEPT = "Kept until the panel restarts. Home Assistant can send them again."
+
+        /** Why a test didn't show: the pane is on but not running (starting, or stopping meanwhile). */
+        const val NOT_RUNNING = "Notifications aren't running on the panel yet. Try again in a moment."
 
         /**
          * What Home Assistant calls the action of the device named [nodeName]: `esphome.`, the node name
