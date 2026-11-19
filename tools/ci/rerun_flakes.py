@@ -55,6 +55,14 @@ OTHER_FAILURE = [
 # A Gradle test that failed, and the line under it with the cause: only Robolectric's fetch counts as a download.
 TEST_FAILED = re.compile(r'^\S[^\n]* > [^\n]* FAILED\n([^\n]*)', re.M)
 
+# GitHub's job log: each step starts with "##[group]Run …" and the script it runs, up to "##[endgroup]"; the step that
+# failed ends with "##[error]Process completed with exit code N." Only that step's output counts.
+STEP = re.compile(r'^##\[group\]Run ', re.M)
+END_OF_HEADER = re.compile(r'^##\[endgroup\]', re.M)
+STEP_FAILED = re.compile(r'^##\[error\]Process completed with exit code \d+', re.M)
+# Steps that retry themselves (pr.yml's site build, .github/actions/apt-install): only their last try counts.
+OWN_RETRY = re.compile(r"Building once more\.|Not from the image's package lists alone; updating them\.")
+
 # A mirror's address in apt's or curl's output ("[IP: 192.0.2.7 80]", "http://192.0.2.7/"): kept out of the summary.
 IPV4 = re.compile(r'(?<=IP: )\d{1,3}(?:\.\d{1,3}){3}|(?<=://)\d{1,3}(?:\.\d{1,3}){3}')
 TIMESTAMP = re.compile(r'^\d{4}-\d\d-\d\dT[\d:.]+Z ', re.M)
@@ -66,10 +74,26 @@ def clean(log):
     return TIMESTAMP.sub('', ANSI.sub('', log))
 
 
+def failing_step(text):
+    """The output of the step that failed, after its own last retry; None when the log shows no failed step."""
+    failed = STEP_FAILED.search(text)
+    if not failed:
+        return None
+    starts = [m.start() for m in STEP.finditer(text, 0, failed.start())]
+    start = starts[-1] if starts else 0
+    header = END_OF_HEADER.search(text, start, failed.start())
+    out = text[header.end() if header else start:failed.start()]
+    retries = list(OWN_RETRY.finditer(out))
+    return out[retries[-1].end():] if retries else out
+
+
 def download_failure(log):
     """What the log says failed to download ('<kind>: <line>'), or None when it shows no download failure or also shows
-    any other failure (a test, a compile error, a build script error)."""
-    text = clean(log)
+    any other failure (a test, a compile error, a build script error). Only the failed step's output counts, from after
+    its own last retry: a download that an earlier step got past, or a first try the step retried, says nothing."""
+    text = failing_step(clean(log))
+    if text is None:
+        return None
     if any(p.search(text) for p in OTHER_FAILURE):
         return None
     if any('MavenArtifactFetcher' not in m.group(1) for m in TEST_FAILED.finditer(text)):

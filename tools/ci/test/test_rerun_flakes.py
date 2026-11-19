@@ -17,6 +17,19 @@ def log(*lines):
     return ''.join(T + line + '\n' for line in lines)
 
 
+def job(*bodies, step='./gradlew --no-daemon --parallel test', before=''):
+    """A job's log as GitHub serves it: a step that passed, then the step that failed with `bodies` as its output."""
+    return (log('##[group]Run actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09', '##[endgroup]', 'Syncing repository')
+            + before
+            + log(f'##[group]Run {step}', step, 'shell: /usr/bin/bash -e {0}', '##[endgroup]')
+            + ''.join(bodies)
+            + log('##[error]Process completed with exit code 1.', 'Post job cleanup.'))
+
+
+def df(*bodies, **kw):
+    return rf.download_failure(job(*bodies, **kw))
+
+
 # From real failed jobs on this repo (2026-11-18 and 19), cut to the lines that matter. The mirror's address is RFC 5737's.
 PORTAL_404 = log(
     'FAILURE: Build failed with an exception.',
@@ -76,23 +89,23 @@ class DownloadFailure(unittest.TestCase):
             ('Gradle GET 502', GRADLE_GET, 'Gradle: a request failed'),
         ]:
             with self.subTest(name):
-                reason = rf.download_failure(text)
+                reason = df(text)
                 self.assertIsNotNone(reason)
                 self.assertTrue(reason.startswith(kind + ': '), reason)
 
     def test_the_line_it_names_is_the_one_that_matched(self):
-        self.assertEqual(rf.download_failure(PORTAL_404),
+        self.assertEqual(df(PORTAL_404),
                          'Gradle: a dependency not found: Could not find org.jetbrains.kotlin:kotlin-stdlib:2.4.10.')
 
     def test_a_mirrors_address_stays_out_of_the_summary(self):
-        reason = rf.download_failure(APT_503)
+        reason = df(APT_503)
         self.assertNotIn('192.0.2.7', reason)
         self.assertIn('[IP: <ip> 80]', reason)
 
     def test_could_not_find_method_is_never_a_download(self):
-        self.assertIsNone(rf.download_failure(NO_SUCH_METHOD))
+        self.assertIsNone(df(NO_SUCH_METHOD))
         # Not even next to a download line: the build script is broken either way.
-        self.assertIsNone(rf.download_failure(METHOD_NEXT_TO_DOWNLOAD))
+        self.assertIsNone(df(METHOD_NEXT_TO_DOWNLOAD))
 
     def test_a_download_next_to_another_failure_is_not_one(self):
         for name, text in [('portal 404 and a test', PORTAL_404 + TEST_FAILURE),
@@ -100,37 +113,62 @@ class DownloadFailure(unittest.TestCase):
                            ('apt and Clarity', APT_503 + CLARITY_FAILURE),
                            ('a dropped connection and a compile error', SITE_PRERENDER + COMPILE_ERROR)]:
             with self.subTest(name):
-                self.assertIsNone(rf.download_failure(text))
+                self.assertIsNone(df(text))
 
     def test_robolectric_counts_only_when_every_failed_test_says_its_fetch(self):
         two = ROBOLECTRIC + log('SystemLocaleApi23SetTest > classMethod FAILED', '    java.lang.AssertionError at MavenArtifactFetcher.java:130')
-        self.assertIsNotNone(rf.download_failure(two))
-        self.assertIsNone(rf.download_failure(ROBOLECTRIC + log('CantRunTest > shows FAILED', '    java.lang.AssertionError at CantRunTest.kt:40')))
+        self.assertIsNotNone(df(two))
+        self.assertIsNone(df(ROBOLECTRIC + log('CantRunTest > shows FAILED', '    java.lang.AssertionError at CantRunTest.kt:40')))
+
+    def test_only_the_last_try_of_a_step_that_retries_itself_counts(self):
+        # pr.yml's site build: a fetch failed, it built once more, and that failed on something else (CodeRabbit, #632).
+        retry = log("##[warning]The site build lost a connection to GitHub's API (fetch failed). Building once more.")
+        missing = log("Module not found: Can't resolve './missing'", 'Build failed because of webpack errors')
+        self.assertIsNone(df(SITE_PRERENDER, retry, missing, step='npm run build -w site'))
+        # Its second try failed on a fetch too: that's a download.
+        self.assertIsNotNone(df(SITE_PRERENDER, retry, SITE_PRERENDER, step='npm run build -w site'))
+        # apt-install's fallback: the update that followed failed on something else.
+        update = log("Not from the image's package lists alone; updating them.", "E: Package 'ffmpeg' has no installation candidate")
+        self.assertIsNone(df(APT_503, update, step='bash apt-install'))
+
+    def test_only_the_step_that_failed_counts(self):
+        # An earlier step got past a download (and printed it); the step that failed failed on something else.
+        earlier = log('##[group]Run npm ci', 'npm ci', '##[endgroup]', 'npm warn ECONNRESET, retrying',
+                      '      > Could not find org.jetbrains.kotlin:kotlin-stdlib:2.4.10.')
+        self.assertIsNone(df(log("Module not found: Can't resolve './missing'"), before=earlier))
+        self.assertIsNotNone(df(PORTAL_404, before=earlier))
+
+    def test_the_steps_own_script_isnt_its_output(self):
+        # GitHub prints the script at the top of the step; its words aren't what happened.
+        self.assertIsNone(df(log('Module not found'), step="grep -q 'fetch failed' \"$log\" ECONNRESET"))
+
+    def test_a_log_without_a_failed_step_never_reruns(self):
+        self.assertIsNone(rf.download_failure(PORTAL_404))
 
     def test_other_failures_are_not_downloads(self):
         for name, text in [('test', TEST_FAILURE), ('compile', COMPILE_ERROR), ('Clarity', CLARITY_FAILURE), ('empty', '')]:
             with self.subTest(name):
-                self.assertIsNone(rf.download_failure(text))
+                self.assertIsNone(df(text))
 
     def test_colours_and_timestamps_dont_hide_a_match(self):
         coloured = '\x1b[36;1m' + PORTAL_404 + '\x1b[0m'
-        self.assertIsNotNone(rf.download_failure(coloured))
+        self.assertIsNotNone(df(coloured))
 
 
 class Decide(unittest.TestCase):
     def test_every_failed_job_on_a_download_reruns(self):
-        rerun, line = rf.decide([('app', PORTAL_404), ('site', SITE_PRERENDER)])
+        rerun, line = rf.decide([('app', job(PORTAL_404)), ('site', job(SITE_PRERENDER))])
         self.assertTrue(rerun)
         self.assertIn('`app` (Gradle: a dependency not found', line)
         self.assertIn('`site` (Node: a connection dropped', line)
 
     def test_one_real_failure_keeps_the_whole_run_red(self):
-        rerun, line = rf.decide([('app', ROBOLECTRIC), ('scripts', CLARITY_FAILURE)])
+        rerun, line = rf.decide([('app', job(ROBOLECTRIC)), ('scripts', job(CLARITY_FAILURE))])
         self.assertFalse(rerun)
         self.assertIn('`scripts` failed on something other than a download', line)
 
     def test_a_job_without_a_log_doesnt_rerun(self):
-        rerun, line = rf.decide([('app', PORTAL_404), ('root', None)])
+        rerun, line = rf.decide([('app', job(PORTAL_404)), ('root', None)])
         self.assertEqual((rerun, line), (False, 'no log for `root`'))
 
     def test_no_failed_job_no_rerun(self):
@@ -149,7 +187,7 @@ class FakeGh:
         if args[0] == 'run':
             return ''
         if url.endswith('/logs'):
-            return self.logs[url.split('/')[-2]]
+            return job(self.logs[url.split('/')[-2]])
         if '/jobs' in url:
             return json.dumps([{'jobs': [{'id': int(i), 'name': f'job{i}', 'conclusion': 'failure'} for i in self.logs]}])
         if '/pulls/' in url:
