@@ -25,7 +25,7 @@ CMDLINE = "console=ttyS0,115200 root=/dev/mmcblk0p4 init=/init snum=FAKESERIAL00
 
 def kernel(image_size=0x200000, flags=0xA, size=0x100000):
     k = bytearray(size)
-    struct.pack_into("<IIQQQ", k, 0, 0x14000000, 0, 0x80000, image_size, flags)
+    struct.pack_into("<IIQQQ", k, 0, 0x14358000, 0, 0x80000, image_size, flags)
     k[0x38:0x3C] = b"ARMd"
     return bytes(k)
 
@@ -57,6 +57,18 @@ class WrapRamBootTest(unittest.TestCase):
         self.assertIn(" androidboot.gw139=ram initrd=0x41300000,0x1000", line)
         self.assertEqual(img[0x300000:0x301000], b"\x1f\x8b" + b"r" * 4094)
         self.assertEqual(fbu.boot_image_note(img), "legacy uImage at offset 2048: stock `boot` runs bootm on it")
+
+    def test_canary_differs_from_the_plain_image_only_in_the_first_instruction(self):
+        boot = boot_img()
+        plain, canary = wrap.build(boot, CMDLINE), wrap.build(boot, CMDLINE, canary=True)
+        words = range(0, len(plain) - 3, 4)
+        diff = [i for i in words if plain[i:i + 4] != canary[i:i + 4] and not 0x800 <= i < 0x840]
+        self.assertEqual(diff, [0x80000])
+        self.assertEqual(struct.unpack_from("<I", canary, 0x80000)[0], 0x14000000)
+        self.assertIn("canary", wrap.check(canary, boot, canary=True))
+        self.assertNotIn("canary", wrap.check(plain, boot))
+        with self.assertRaisesRegex(wrap.WrapError, "differ"):
+            wrap.check(canary, boot)
 
     def test_refuses_what_would_not_boot(self):
         cases = {

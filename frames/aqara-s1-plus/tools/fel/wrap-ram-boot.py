@@ -6,6 +6,9 @@ panel's full kernel command line (serial, MACs, vbmeta digest), so keep it with 
 the repo, and never paste it. Only the root RAM-boots it, with fastboot-usb.py.
 
     wrap-ram-boot.py BOOT_IMG CMDLINE_FILE OUT      build OUT, then check it
+    wrap-ram-boot.py --canary BOOT_IMG CMDLINE_FILE OUT
+                                                    the same, with the kernel's first instruction
+                                                    replaced by an AArch64 `b .` (plan E)
     wrap-ram-boot.py --check OUT                    check an image built earlier
 
 BOOT_IMG is the panel's own `boot` (Android header v2, page 2048). CMDLINE_FILE is /proc/cmdline from
@@ -36,6 +39,7 @@ KERNEL_PHYS = 0x41080000      # 2 MiB aligned base 0x41000000 + text_offset 0x80
 RAMDISK_ALIGN = 0x100000
 PAGE0_MAGIC = b"GW139RAM"     # not ANDROID!: this file must never be mistaken for a boot partition
 MARKER = "androidboot.gw139=ram"
+CANARY = 0x14000000           # AArch64 `b .`: the CPU spins at the entry point, nothing else runs
 
 
 class WrapError(Exception):
@@ -76,7 +80,7 @@ def uimage_header(data, ep):
     return hdr[:4] + struct.pack(">I", hcrc) + hdr[8:]
 
 
-def build(boot, cmdline):
+def build(boot, cmdline, canary=False):
     kernel, ramdisk = android_parts(boot)
     image_size = arm64_layout(kernel)
     cmdline = cmdline.strip()
@@ -96,6 +100,8 @@ def build(boot, cmdline):
     out[CMDLINE:CMDLINE + len(line)] = line
     k = KERNEL_PHYS - BUF
     out[k:k + len(kernel)] = kernel
+    if canary:
+        out[k:k + 4] = struct.pack("<I", CANARY)
     r = rd_phys - BUF
     out[r:r + len(ramdisk)] = ramdisk
     data_start = UIMG + 64
@@ -103,7 +109,7 @@ def build(boot, cmdline):
     return bytes(out)
 
 
-def check(img, boot=None):
+def check(img, boot=None, canary=False):
     """Re-reads the image the way the stock U-Boot and the kernel will. Returns a summary without the command line."""
     if not UIMG + 64 < len(img) <= MAX:
         raise WrapError(f"size {len(img)} is outside 2112..{MAX}")
@@ -144,13 +150,16 @@ def check(img, boot=None):
             problems.append("ramdisk overlaps the kernel's image_size or runs past the end")
         if boot is not None:
             kernel, ramdisk = android_parts(boot)
+            if canary:
+                kernel = struct.pack("<I", CANARY) + kernel[4:]
             k = KERNEL_PHYS - BUF
             if img[k:k + len(kernel)] != kernel or img[rd_phys - BUF:rd_phys - BUF + rd_len] != ramdisk:
                 problems.append("kernel or ramdisk bytes differ from BOOT_IMG")
     if problems:
         raise WrapError("; ".join(problems))
+    spin = struct.unpack_from("<I", img, entry - BUF)[0] == CANARY
     return (f"ok: {len(img)} bytes, kernel at {KERNEL_PHYS:#x}, {initrd[0].split(',')[0]}, "
-            f"command line {len(line)} bytes (not shown)")
+            f"command line {len(line)} bytes (not shown)" + (", canary: `b .` at the entry" if spin else ""))
 
 
 def main(argv):
@@ -158,15 +167,17 @@ def main(argv):
         if len(argv) == 3 and argv[1] == "--check":
             print(check(open(argv[2], "rb").read()))
             return 0
-        if len(argv) != 4:
+        canary = argv[1:2] == ["--canary"]
+        args = argv[2:] if canary else argv[1:]
+        if len(args) != 3:
             sys.stderr.write(__doc__.split("\n\n")[2] + "\n")
             return 1
-        boot = open(argv[1], "rb").read()
-        img = build(boot, open(argv[2], encoding="ascii").read())
-        print(check(img, boot))
-        with open(argv[3], "wb") as f:
+        boot = open(args[0], "rb").read()
+        img = build(boot, open(args[1], encoding="ascii").read(), canary)
+        print(check(img, boot, canary))
+        with open(args[2], "wb") as f:
             f.write(img)
-        print(f"wrote {argv[3]}")
+        print(f"wrote {args[2]}")
         return 0
     except (WrapError, OSError, UnicodeDecodeError) as e:
         print(f"error: {e}", file=sys.stderr)
