@@ -11,7 +11,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import sh.edm.s1kiosk.frame.TimeZoneView
+import dev.glassworks.s1.frame.TimeZoneView
 import dev.glassworks.ui.Mockup
 
 /**

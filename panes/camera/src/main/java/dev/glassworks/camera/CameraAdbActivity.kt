@@ -10,7 +10,7 @@ import dev.glassworks.glassworks
 /**
  * The camera pane's settings from adb (#117), until the Manage page edits settings (#178 phase 2):
  *
- *   adb shell am start -n sh.edm.s1kiosk/.CameraAdbActivity --es camera_use snapshots --ez onvif_stream true \
+ *   adb shell am start -n sh.edm.s1kiosk/dev.glassworks.camera.CameraAdbActivity --es camera_use snapshots --ez onvif_stream true \
  *       --ez camera_privacy false --ei camera_sensitivity 6 --es camera_stream_sign_in 'user:password'
  *
  * `camera_use` is `presence` or `snapshots`; an empty sign-in clears it. Protected by

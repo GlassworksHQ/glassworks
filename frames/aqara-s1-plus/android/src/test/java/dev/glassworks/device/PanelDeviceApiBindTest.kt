@@ -13,8 +13,8 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import dev.glassworks.esphome.ApiServer
 import dev.glassworks.esphome.Msg
-import sh.edm.s1kiosk.KioskApp
-import sh.edm.s1kiosk.frame.AqaraS1Plus
+import dev.glassworks.s1.KioskApp
+import dev.glassworks.s1.frame.AqaraS1Plus
 import java.io.IOException
 import java.net.ConnectException
 import java.net.Inet4Address

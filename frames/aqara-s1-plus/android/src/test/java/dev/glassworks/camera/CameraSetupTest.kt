@@ -70,7 +70,7 @@ class CameraSetupTest {
         assertEquals("Camera", r.def.setupChoice?.title)
         assertEquals(listOf("camera"), r.def.setupSteps.map { it.id })
         // The S1 has no camera: the app wraps the camera in CantRun (#23), which offers no card and no step.
-        val s1 = dev.glassworks.pane.CantRun.unless(CameraDefinition(file), sh.edm.s1kiosk.frame.AqaraS1Plus().provides)
+        val s1 = dev.glassworks.pane.CantRun.unless(CameraDefinition(file), dev.glassworks.s1.frame.AqaraS1Plus().provides)
         assertNull(s1.setupChoice)
         assertTrue(s1.setupSteps.isEmpty())
     }

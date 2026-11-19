@@ -12,9 +12,9 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import sh.edm.s1kiosk.base.BaseLink
-import sh.edm.s1kiosk.base.BaseRes
-import sh.edm.s1kiosk.base.WallBasePage
+import dev.glassworks.s1.base.BaseLink
+import dev.glassworks.s1.base.BaseRes
+import dev.glassworks.s1.base.WallBasePage
 import dev.glassworks.settings.PaneFixtures
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit

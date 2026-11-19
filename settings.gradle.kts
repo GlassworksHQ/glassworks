@@ -51,7 +51,7 @@ project(":glassworks-core").projectDir = file("core")
 include(":engine-gecko")
 project(":engine-gecko").projectDir = file("engines/engine-gecko")
 // The frozen GeckoView for Android 6-7, locked to the panel's Home Assistant (#198), and the S1 app built on it as
-// a debug-only test APK (sh.edm.s1kiosk.legacy) until the generic-android frame (#23) replaces it.
+// a debug-only test APK (dev.glassworks.s1.legacy) until the generic-android frame (#23) replaces it.
 include(":engine-gecko-legacy")
 project(":engine-gecko-legacy").projectDir = file("engines/engine-gecko-legacy")
 include(":kiosk-legacy")

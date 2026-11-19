@@ -15,7 +15,7 @@ import org.junit.Test
  */
 class ManageModelPinTest {
     @Test fun theManagePageNamesTheModelThePanelGivesHomeAssistant() {
-        assertEquals("Panel Hub S1 Plus (S1 Kiosk)", AppManage.deviceModel("Panel Hub S1 Plus", "S1 Kiosk"))
+        assertEquals("Panel Hub S1 Plus (Glassworks)", AppManage.deviceModel("Panel Hub S1 Plus", "Glassworks"))
         val device = RepoFiles.source("dev/glassworks/device/PanelDevice.kt").readText()
         assertTrue("PanelDevice's model changed: change AppManage.deviceModel with it",
             device.contains("model = \"\${frame.hardware.model} (\${runtime.build.product})\","))

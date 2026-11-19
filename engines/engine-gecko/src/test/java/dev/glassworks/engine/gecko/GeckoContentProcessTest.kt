@@ -24,11 +24,11 @@ class GeckoContentProcessTest {
             "sh.edm.s1kiosk:crashhelper_disable_art_image_" to false,
             "sh.edm.s1kiosk:sandboxed_tab_disable_art_image_38" to true,
             "sh.edm.s1kiosk:sandboxed_tab_disable_art_image_0" to true,
-            "sh.edm.s1kiosk.legacy:tab7" to true,
-            "sh.edm.s1kiosk.legacy:tab0" to true,
-            "sh.edm.s1kiosk.legacy:gpu" to false,
-            "sh.edm.s1kiosk.legacy:crashhelper" to false,
-            "sh.edm.s1kiosk.legacy:tablet" to false,
+            "dev.glassworks.s1.legacy:tab7" to true,
+            "dev.glassworks.s1.legacy:tab0" to true,
+            "dev.glassworks.s1.legacy:gpu" to false,
+            "dev.glassworks.s1.legacy:crashhelper" to false,
+            "dev.glassworks.s1.legacy:tablet" to false,
         )
         assertEquals(names, names.keys.associateWith(engine::isContentProcess))
     }
