@@ -55,7 +55,7 @@ current Home Assistant frontend. GeckoView ships its own up-to-date engine insid
 - **Sign in with your phone**: if HA shows its login page, the panel covers it with a QR code for
   `http://<panel-ip>:8099/signin`. Signing in on the phone gives the panel a refresh token (HA OAuth /
   IndieAuth), and the dashboard then runs with HA's external auth (`external_auth=1`, like the
-  Companion app). "Sign in on this panel instead" keeps HA's normal login page. See
+  Companion app). "Sign in on this panel instead" shows HA's login page on the panel for the same sign-in. See
   [docs/onboarding.md](../../../docs/onboarding.md).
 - **Microphone/camera work over plain `http://`.** The dashboard host is added to
   Gecko's `dom.securecontext.allowlist`, so `window.isSecureContext` is true and
