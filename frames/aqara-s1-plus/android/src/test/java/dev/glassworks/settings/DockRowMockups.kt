@@ -29,8 +29,8 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowBuild
-import sh.edm.s1kiosk.KioskApp
-import sh.edm.s1kiosk.manage.S1Manage
+import dev.glassworks.s1.KioskApp
+import dev.glassworks.s1.manage.S1Manage
 
 /**
  * The Pixel Tablet's Device page with its dock row (maintainer, 2026-11-18), on the panel at the tablet's 1280x800

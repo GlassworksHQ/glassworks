@@ -1,4 +1,4 @@
-package sh.edm.s1kiosk
+package dev.glassworks.s1
 
 import android.app.Application
 import dev.glassworks.KioskPrefs
@@ -12,7 +12,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import sh.edm.s1kiosk.frame.AqaraS1Plus
+import dev.glassworks.s1.frame.AqaraS1Plus
 
 /**
  * The device's own setup steps (#422's Silent updates): after the panes' steps, also on the setup channel, and never
