@@ -227,14 +227,17 @@ def shell(cmd):
             keep = {k: v for k, v in ez if k != "restart" and not (k == "voice_enabled" and os.environ.get("FAKE_VOICE_LOST"))}
             save("settings.json", dict(state("settings.json", {}), **keep))
         m = re.search(r"--es open '([^']+)'", cmd)
+        check = state("sfcheck_paint.json")
+        if check and check[1] > now() and not (m and "/sfcheck.html" in m.group(1)):
+            save("sfcheck_paint.json", [check[0], now()])     # the next intent replaces the check's page: it stops
         # Like the S1 kiosk (#103's pins): `open` is dropped until GeckoView's session is up.
         if m and os.environ.get("FAKE_LOCKDOWN") and "127.0.0.1" in m.group(1):
             # The legacy engine's lockdown (#198): only the dashboard's origin loads.
             save("lockdown.json", True)
         elif m and state("session_up.json", True) and "/sfcheck.html" in m.group(1):
-            # The SurfaceFlinger check's page draws every frame (#643): 4 s here, ended before the next page
-            # (a real one draws for 20 s at most, and the next page replaces it).
-            paint(now(), now() + 4)
+            # The SurfaceFlinger check's page draws every frame (#643), as a real one does: for 20 s, or until the next
+            # intent replaces it (above), however long a busy test machine takes to read it.
+            save("sfcheck_paint.json", [now(), now() + 20])
         elif m and state("session_up.json", True):
             nonce = re.search(r"nonce=(\w+)", m.group(1))
             if nonce:
@@ -321,11 +324,12 @@ def shell(cmd):
             return f"{PERIOD_NS}\n"                   # any other form of the name: the period alone
     if cmd.startswith("dumpsys SurfaceFlinger --latency"):
         t, frames = int(now() * 1e9), []
-        for a, b in state("paint.json", []):
+        for a, b in state("paint.json", []) + ([state("sfcheck_paint.json")] if state("sfcheck_paint.json") else []):
             x = int(a * 1e9)
             while x <= min(int(b * 1e9), t):
                 frames.append(x)
                 x += PERIOD_NS
+        frames = sorted(set(frames))                          # the check's range and the pages' interleave in time
         rows = [f"{f - 1000}\t{f}\t{f - 2000}" for f in frames[-SF_HISTORY:]]
         return "\n".join([str(PERIOD_NS)] + rows + ["0\t0\t0"]) + "\n"
     if cmd.startswith("dumpsys package"):

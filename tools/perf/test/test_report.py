@@ -2006,6 +2006,22 @@ class SentToScreen(unittest.TestCase):
         a = R.arrivals(self.step([[100.0, 110.0, 0, 0, 120.0], [1000.0, None, 0, 0, None]]))
         self.assertEqual((a["sent"], a["arrived"], a["wait_max_ms"]), (2, 1, 10.0))
 
+    def test_a_change_no_frame_showed_never_passes_fluid(self):
+        """CodeRabbit on #656: a change with no frame by the window's end counts as the time to the window's end, a lower
+        bound. It must land past fluid's bar (250 ms, inclusive), never at it: NO_FRAME_MS is that bar plus 50 ms."""
+        fluid = {lv["level"]: lv for lv in G.UPDATE_LEVELS}["fluid"]["latency_p95_max_ms"]
+        self.assertEqual((fluid, R.NO_FRAME_MS), (250, 300))
+        # Sent 250 ms and 300 ms before the window's end (page t 3750 and 3700), never read: the first is too close to
+        # tell and isn't counted; the second counts as 300 ms, over fluid. Each with a shown change at 30 ms.
+        shown = [100.0, 110.0, 0, 0, 120.0]
+        lat, _ = R.change_to_screen(self.step([shown, [3750.0, None, 0, 0, None]]), self.page)
+        self.assertEqual((lat["n"], lat["skipped"]), (1, 1))
+        lat, _ = R.change_to_screen(self.step([shown, [3700.0, None, 0, 0, None]]), self.page)
+        self.assertEqual((lat["n"], lat["max_ms"], lat["p95_ms"]), (2, 300.0, 300.0))
+        self.assertEqual(G.update_level({"latency_n": 2, "latency_p95_ms": lat["p95_ms"], "frames": None}), G.BELOW)
+        # A change a frame showed at exactly 250 ms still passes fluid.
+        self.assertEqual(G.update_level({"latency_n": 2, "latency_p95_ms": 250.0, "frames": None}), "fluid")
+
     def test_it_is_never_skipped_for_updates_that_didnt_arrive(self):
         """smoke9's heavy: "only 17 of 20 state updates ran" made the page n/a. In protocol 4 the
         schedule says what was sent; the rest is the panel's to answer for."""
@@ -2452,6 +2468,19 @@ class Regrade(unittest.TestCase):
         with open(os.path.join(d, "clarity.json")) as f:
             g = G.grade_summary(json.load(f))
         self.assertEqual((g["status"], g["grade"]), ("graded", "D"))              # the S1 stays D, on blocking
+
+    def test_a_refused_summary_leaves_no_stale_one(self):
+        """CodeRabbit on #656: when the summary is refused now (the first v1's run is re-measure), the old summary
+        beside it goes, so the folder never holds a new report with an earlier grade."""
+        with open(os.path.join(self.dir, "device.json")) as f:
+            self.write("device.json", dict(json.load(f), measured_on="2026-11-14"))
+        self.write("summary.json", {"clarity": 1, "stale": True})
+        p = self.regrade(self.dir)
+        self.assertEqual(p.returncode, 1, p.stdout)
+        self.assertIn("summary not written", p.stdout)
+        self.assertFalse(os.path.exists(os.path.join(self.dir, "summary.json")))
+        with open(os.path.join(self.dir, "report.json"), encoding="utf-8") as f:
+            self.assertIn(G.FIRST_V1, " ".join(json.load(f)["grade"]["provisional_reasons"]))
 
     def test_dry_run_writes_nothing(self):
         before = sorted(os.listdir(self.dir))

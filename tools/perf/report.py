@@ -238,9 +238,10 @@ def change_frames(step, period=None):
 
 
 # A change with no frame on screen by the window's end, and at least this long before it, counts as
-# late as the window can show: from the change to the window's end (so at least this, past the
-# fluid bar). That is conservative: the change may show later still.
-NO_FRAME_MS = 250
+# late as the window can show: from the change to the window's end. That is conservative: the change
+# may show later still. So it must be past the fluid bar, never at it: fluid's limit (250 ms in Clarity v1)
+# plus 50 ms, as it was before (200 + 50). An unshown change can then pass no level.
+NO_FRAME_MS = max(lv["latency_p95_max_ms"] for lv in G.UPDATE_LEVELS) + 50
 # SurfaceFlinger's present times and the page's frame times are on clocks tied by the page's log
 # line; allow this much for that and for vsync jitter when finding the first frame that can show it.
 PRESENT_SLACK_MS = 3

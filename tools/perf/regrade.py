@@ -16,7 +16,7 @@ of other versions, or the first v1's (2026-11-14), come out "re-measure".
 
 Then the summary: clarity.json when the directory has one (a frame's published folder: its report URL is kept),
 else summary.json. As summary.py, it refuses incomplete or not comparable measurements unless --allow-provisional;
-the report is written either way.
+the report is written either way, and a summary it refuses is removed, so no summary is left with the earlier grade.
 
   tools/perf/regrade.py <run-dir> [--allow-provisional] [--dry-run]
 
@@ -52,7 +52,7 @@ def regrade(run_dir):
 
 
 def write_json(path, obj):
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         json.dump(obj, f, indent=1)
         f.write("\n")
 
@@ -82,9 +82,14 @@ def main():
         print(f"  summary not written: {e}")
     if a.dry_run:
         return 0
+    md = R.markdown(rep)
+    # The report and its summary must agree: a summary refused now goes, rather than stay with the old grade.
+    if summary is None and os.path.exists(summary_path):
+        os.remove(summary_path)
+        print(f"  removed the old {os.path.basename(summary_path)}: it had the earlier grade")
     write_json(os.path.join(a.run_dir, "report.json"), rep)
-    with open(os.path.join(a.run_dir, "report.md"), "w") as f:
-        f.write(R.markdown(rep))
+    with open(os.path.join(a.run_dir, "report.md"), "w", encoding="utf-8") as f:
+        f.write(md)
     if summary is not None:
         write_json(summary_path, summary)
         print(f"  wrote report.json, report.md and {os.path.basename(summary_path)}")

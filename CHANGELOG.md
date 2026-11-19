@@ -231,8 +231,9 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 - **Clarity v1: live updates are good within 150 ms, fluid within 250 ms.** Clarity, the performance grade on
   glassworks.dev, starts again at v1, the version Glassworks 1.0.0 ships with. A light someone else switches, or an
   automation, now counts as quick when 95% of its changes show within 150 ms (was 100 ms), and fluid within 250 ms
-  (was 200 ms). 100 ms stays the bar for your own taps. Every other bar is the same. Results from the earlier
-  Clarity versions show "re-measure" until graded again; the S1's is, and stays D.
+  (was 200 ms). 100 ms stays the bar for your own taps. Every other bar is the same. A result of the earlier
+  Clarity v3 measured what v1 measures: it shows "re-measure" until it is graded again, and the S1's has been (it
+  stays D). Results of earlier versions (the first v1 of 2026-11-14, or v2) need a new run.
 - **A room's "lights off" no longer turns the panel's screen off.** The screen is still a light with the same
   entity id, but Home Assistant now lists it under the device's Configuration. Actions aimed at an area, floor or
   device skip it, so a presence automation's "room empty, lights off" and a Good Night script leave the panel
