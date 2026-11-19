@@ -273,7 +273,7 @@ So on a panel HA already has:
 |---|---|
 | Entities that were on | Stay on, with the same entity id, area and name |
 | Entities you turned off | Stay off |
-| Category | Follows the panel: *Base protection* moves to the device page's *Diagnostic* section. No other category changes |
+| Category | Follows the panel: *Base protection* moves to the device page's *Diagnostic* section, and *Screen* to *Configuration* ([the screen is a config light](#the-screen-is-a-config-light)). No other category changes |
 | Entities that appear later (a new pane, a wall base mounted after the update) | Get the new default when HA first sees them |
 | Removing the panel from HA and adding it back | Each entity gets back the state it had, while HA still remembers the deleted entities |
 
