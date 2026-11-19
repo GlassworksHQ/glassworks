@@ -109,10 +109,8 @@ async function scenarios(): Promise<Record<string, string[]>> {
 
   /** A development build with root, device owner and admin, on the Wi-Fi it saved; `newWorks`: the release installs. */
   const rootPanel = (newWorks: boolean) => new Recorder((cmd, n) => {
-    // the switch's installs: one shell line with the disable that holds the app off until its data is back (#626)
-    if (cmd === 'pm install -r -g /data/local/tmp/glassworks.apk') return { out: MISMATCH, code: 1 };
-    if (cmd.startsWith('pm install -r -g /data/local/tmp/glassworks.apk && ')) return newWorks ? { out: 'Success\n', code: 0 } : { out: 'Failure [INSTALL_FAILED_INSUFFICIENT_STORAGE]\n', code: 1 };
-    if (cmd.startsWith('pm install -r -g /data/local/tmp/glassworks-old.apk')) return { out: 'Success\n', code: 0 };
+    if (cmd === 'pm install -r -g /data/local/tmp/glassworks.apk') return n === 1 ? { out: MISMATCH, code: 1 } : newWorks ? { out: 'Success\n', code: 0 } : { out: 'Failure [INSTALL_FAILED_INSUFFICIENT_STORAGE]\n', code: 1 };
+    if (cmd === 'pm install -r -g /data/local/tmp/glassworks-old.apk') return { out: 'Success\n', code: 0 };
     if (cmd === 'dumpsys package sh.edm.s1kiosk') return { out: '    versionName=0.1.0\n    pkgFlags=[ DEBUGGABLE HAS_CODE ]\n', code: 0 };
     if (cmd.startsWith('timeout 15 su')) return { out: '0\n', code: 0 };
     if (cmd === 'dumpsys wifi') return { out: WIFI_KIOSK, code: 0 };

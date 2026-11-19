@@ -62,12 +62,13 @@ sh_() { run adb shell "$@"; }
 # never echoed, never in a command line (it reaches improv-send.py on stdin), never in a file.
 SW_SH=/data/local/tmp/glassworks-switch.sh
 OLD_APK=/data/local/tmp/glassworks-old.apk
-NEW_APK=/data/local/tmp/glassworks.apk
 SW_DATA=/data/s1kiosk/switch # where glassworks-switch.sh keeps the app's data between backup and restore
 IMPROV_SEND=${S1_IMPROV_SEND:-$HERE/install/improv-send.py}
 WIFI_OWNER=none WIFI_SSID="" HAS_ROOT=0 DEBUG_BUILD=0 INSTALLED_VER="" SWITCHED=0 DATA_KEPT=0 WIFI_LOST=0
 WIFI_PSK="" HAVE_PSK=0 APP_AFTER_UNDO=removed
-SW_HELD=0 # the switch has Glassworks disabled: whatever stops the run, it is enabled again (carry_on_exit)
+# The switch has Glassworks disabled (SW_HELD), or port 6053 blocked (SW_GUARD, #626). Whatever stops the run, the app
+# is enabled and the port opened again (carry_on_exit).
+SW_HELD=0 SW_GUARD=0
 # Sealed secrets (#584): Android deletes the app's Keystore key with the old app, so the copied data can't open its
 # Home Assistant sign-in or ESPHome API key. With root they are read from the running app over its adb-only hand-over
 # socket into these variables (base64, never printed, never in a command line: they reach handover.py on stdin), and
@@ -267,7 +268,7 @@ explain_switch() { # [if]: --dry-run, before Android said anything (the keys may
 # Uninstall the installed Glassworks and install $APK, carrying its data over when adb has root.
 # The usual steps (permissions, admin, HOME) follow in the main script.
 switch_key() {
-  local path out list n kind raw i k v ans owner=0 rout lost hold
+  local path out list n kind raw i k v ans owner=0 rout lost
   step "Switch Glassworks to this build"
   probe_switch
   explain_switch
@@ -290,6 +291,14 @@ switch_key() {
       adb shell rm -f "$OLD_APK" || true
       echo "ERROR: could not copy the switch helper to the panel. Nothing was changed." >&2; exit 1
     fi
+    # 1b. the API port closed until the new build has its data and key. Android starts each build it installs as HOME
+    #     at once, before `pm install` returns, and with empty data it serves an API with no key (#626).
+    if ! out=$(su_ guard 2>&1); then
+      adb shell rm -f "$OLD_APK" "$SW_SH" || true
+      echo "ERROR: could not block the ESPHome API port for the switch ($(tr -d '\r' <<<"$out" | tail -1)). Nothing was changed." >&2; exit 1
+    fi
+    SW_GUARD=1
+    echo "  ESPHome API port 6053 blocked until the switch is done"
     # 2. the Wi-Fi details of the current network (or the only kiosk-saved one), into memory
     if wifi_at_risk; then
       list=$(su_ wifi-list | tr -d '\r') || list=""
@@ -324,7 +333,7 @@ switch_key() {
   SW_HELD=1
   if [[ $HAS_ROOT -eq 1 ]]; then
     if ! out=$(su_ backup 2>&1); then
-      su_ discard >/dev/null 2>&1 || true; switch_undo; adb shell rm -f "$OLD_APK" "$NEW_APK" "$SW_SH" || true
+      su_ discard >/dev/null 2>&1 || true; switch_undo; adb shell rm -f "$OLD_APK" || true; switch_done
       WIFI_PSK=""; forget_secrets
       echo "ERROR: could not keep Glassworks' data: $(tr -d '\r' <<<"$out" | tail -1). Nothing was changed." >&2; exit 1
     fi
@@ -335,27 +344,17 @@ switch_key() {
   if ! grep -q Success <<<"$out"; then
     switch_undo
     if [[ $HAS_ROOT -eq 1 ]]; then su_ discard >/dev/null 2>&1 || true; fi
-    adb shell rm -f "$OLD_APK" "$NEW_APK" "$SW_SH" || true
+    adb shell rm -f "$OLD_APK" || true; switch_done
     WIFI_PSK=""; forget_secrets
     echo "ERROR: Android would not remove the installed Glassworks ($out). It is unchanged." >&2; exit 1
   fi
   echo "  removed the old build"
-  # 6. install the new one; on failure put the old one back (with its data, given root). With root its data
-  #    comes next, so the same shell line on the panel disables it: Android starts an enabled HOME app at once,
-  #    and with empty data it serves an unkeyed, provisionable ESPHome API until the restore (#626).
-  #    restore_into enables it again.
-  hold=""
-  if [[ $HAS_ROOT -eq 1 ]]; then hold=" && pm disable-user --user 0 $PKG"; fi
-  # a failed push must not install an APK an earlier, stopped run left there
-  if adb push "$APK" "$NEW_APK" >/dev/null; then
-    out=$(adb shell "pm install -r -g $NEW_APK$hold" 2>&1 | tr -d '\r') || true
-  else
-    out="could not copy the APK to the panel" # no file name: one named Success.apk would pass for an install
-  fi
+  # 6. install the new one; on failure put the old one back (with its data, given root)
+  out=$(adb install -r -g "$APK" 2>&1) || true
   if ! grep -q Success <<<"$out"; then
     sed 's/^/  /' <<<"$out"
     # The data copy is the only one left until a restore worked: keep it otherwise, and say where.
-    if adb shell "pm install -r -g $OLD_APK$hold" | grep -q Success; then
+    if adb shell pm install -r -g "$OLD_APK" | grep -q Success; then
       if [[ $HAS_ROOT -eq 0 ]]; then
         switch_undo
         echo "ERROR: the new Glassworks would not install. The previous build is back." >&2
@@ -375,7 +374,7 @@ switch_key() {
       echo "ERROR: the new Glassworks would not install, and neither would the previous one. Run $0 again." >&2
       if [[ $HAS_ROOT -eq 1 ]]; then echo "  Its data is kept on the panel in $SW_DATA (root only)." >&2; fi
     fi
-    adb shell rm -f "$OLD_APK" "$NEW_APK" "$SW_SH" || true
+    adb shell rm -f "$OLD_APK" || true; switch_done
     WIFI_PSK=""; forget_secrets; exit 1
   fi
   echo "  installed the new build"
@@ -391,7 +390,7 @@ switch_key() {
   if [[ $owner -eq 1 ]] && ! adb shell dpm set-device-owner "$PKG/.AdminReceiver" >/dev/null 2>&1; then
     echo "  NOTE: Glassworks was device owner and could not be made device owner again; it works without."
   fi
-  adb shell rm -f "$OLD_APK" "$NEW_APK" "$SW_SH" || true
+  adb shell rm -f "$OLD_APK" || true # the helper stays for switch_done, after the hand-over
   SWITCHED=1
   if wifi_at_risk; then WIFI_LOST=1; fi
 }
@@ -401,6 +400,16 @@ switch_undo() {
   SW_HELD=0
   adb shell dpm set-active-admin "$PKG/.AdminReceiver" >/dev/null 2>&1 || true
   if [[ ${owner:-0} -eq 1 ]]; then adb shell dpm set-device-owner "$PKG/.AdminReceiver" >/dev/null 2>&1 || true; fi
+}
+# The end of a switch with root, once the new (or old) build has its data and key: port 6053 open again, the helper
+# gone. A rule left behind goes with the next reboot.
+switch_done() {
+  if [[ $SW_GUARD -eq 1 ]]; then
+    SW_GUARD=0
+    if su_ unguard </dev/null >/dev/null 2>&1; then echo "  ESPHome API port 6053 open again"
+    else echo "  WARNING: could not open port 6053 again; Home Assistant can't reach the panel until it restarts"; fi
+  fi
+  adb shell rm -f "$SW_SH" </dev/null >/dev/null 2>&1 || true
 }
 # The kept data into whichever build is installed now, with it disabled (as HOME it would start).
 restore_into() {
@@ -446,6 +455,7 @@ carry_on_exit() {
     adb shell am start -n "$ACT" </dev/null >/dev/null 2>&1
     hand_back >&2
   fi
+  if [[ $SW_GUARD -eq 1 ]]; then switch_done >&2; fi
   forget_secrets
   exit $rc
 }
@@ -547,20 +557,17 @@ if [[ $DRY -eq 1 ]]; then
       if [[ $CARRY_KEY -eq 1 || $CARRY_SIGNIN -eq 1 ]]; then
         echo "  + the app's hand-over socket: $([[ $CARRY_SIGNIN -eq 1 ]] && echo 'Home Assistant sign-in and ')encryption key, into memory only"
       fi
+      echo "  + (as root) $SW_SH guard                  # drop TCP 6053 (the ESPHome API) until the switch is done"
       echo "  + (as root) $SW_SH backup                 # app data -> /data/s1kiosk/switch"
     fi
     echo "  + adb shell am start -n $ACT --ez remove_admin true"
     echo "  + adb shell pm uninstall $PKG"
-    if [[ $HAS_ROOT -eq 1 ]]; then
-      echo "  + adb push $APK $NEW_APK; adb shell 'pm install -r -g $NEW_APK && pm disable-user --user 0 $PKG'"
-      echo "      # off until its data is back; on failure the same for $OLD_APK, + restore"
-    else
-      echo "  + adb push $APK $NEW_APK; adb shell pm install -r -g $NEW_APK      # on failure: pm install -r -g $OLD_APK"
-    fi
+    echo "  + adb install -r -g $APK      # on failure: pm install -r -g $OLD_APK$([[ $HAS_ROOT -eq 1 ]] && echo ' + restore')"
     if [[ $HAS_ROOT -eq 1 ]]; then echo "  + (as root) $SW_SH restore; $SW_SH discard"; fi
     if [[ $HAS_ROOT -eq 1 && ( $CARRY_KEY -eq 1 || $CARRY_SIGNIN -eq 1 ) ]]; then
       echo "  + after starting the kiosk: the sign-in and key to the new app over its hand-over socket (frames/aqara-s1-plus/tools/install/handover.py)"
     fi
+    if [[ $HAS_ROOT -eq 1 ]]; then echo "  + (as root) $SW_SH unguard                # port 6053 open again"; fi
     if wifi_at_risk; then echo "  + after starting the kiosk: Wi-Fi $(net_name) to the new app over Improv (frames/aqara-s1-plus/tools/install/improv-send.py)"; fi
   fi
 else
@@ -640,6 +647,7 @@ if [[ $SWITCHED -eq 1 && ( $KEY_STATE == carry || $SIGNIN_STATE == carry ) ]]; t
   step "Sign-in and encryption key to the new app"
   hand_back
 fi
+if [[ $SW_GUARD -eq 1 ]]; then switch_done; fi
 forget_secrets
 if [[ $SWITCHED -eq 1 && $HAVE_PSK -eq 1 ]]; then resend_wifi; fi
 WIFI_PSK=""

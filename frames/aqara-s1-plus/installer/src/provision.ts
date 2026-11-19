@@ -5,7 +5,7 @@
 import type { PanelShell } from '@glassworks/adb';
 import { ACT, PKG, Steps, deviceInfo, dropAdmin, grantPermissions, q, startApp, type StepFn } from '@glassworks/app-adb';
 import {
-  type Carried, type SwitchOutcome, type SwitchPlan, handBackSecrets, isDowngrade, isKeyMismatch, panelWifi, planSwitch, resendWifi, switchSigningKey, wifiAtRisk,
+  type Carried, type SwitchOutcome, type SwitchPlan, handBackSecrets, isDowngrade, isKeyMismatch, openApiPort, panelWifi, planSwitch, resendWifi, switchSigningKey, wifiAtRisk,
 } from './switch';
 
 export { PKG, deviceInfo, kioskVersion, q, type StepFn } from '@glassworks/app-adb';
@@ -164,6 +164,7 @@ export async function provision(p: PanelShell, opts: ProvisionOptions, onStep: S
       await r.try(`am start -n ${ACT}`);
       await handBackSecrets(p, sw, (d) => r.detail(d), sleep).catch(() => {});
     }
+    if (sw) await openApiPort(p, sw, (d) => r.detail(d)).catch(() => {});
     throw e;
   }
 }
@@ -231,6 +232,7 @@ async function afterInstall(p: PanelShell, r: Steps, opts: ProvisionOptions, pha
       r.step('Sign-in and encryption key to the new app');
       carried = await handBackSecrets(p, sw, (d) => r.detail(d), sleep);
     }
+    await openApiPort(p, sw, (d) => r.detail(d));
     const settled = (c: Carried): SwitchResult['signIn'] => (c === 'carry' ? 'lost' : c);
     let wifi: SwitchResult['wifi'] = sw.wifi === 'resend' ? 'lost' : sw.wifi;
     if (sw.secret) {
