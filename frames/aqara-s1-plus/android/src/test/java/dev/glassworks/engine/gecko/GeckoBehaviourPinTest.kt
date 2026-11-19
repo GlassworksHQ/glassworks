@@ -18,13 +18,13 @@ import org.mozilla.geckoview.GeckoSessionSettings
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
-import sh.edm.s1kiosk.KioskApp
+import dev.glassworks.s1.KioskApp
 import dev.glassworks.KioskPrefs
 import dev.glassworks.dashboard.Dashboard
 import dev.glassworks.dashboard.Dashboards
 import dev.glassworks.glassworks
 import java.io.File
-import sh.edm.s1kiosk.BuildConfig
+import dev.glassworks.s1.BuildConfig
 
 /**
  * What the kiosk asks of GeckoView and does with what GeckoView reports, pinned on the code before
@@ -112,7 +112,7 @@ class GeckoBehaviourPinTest {
         assertEquals(f.absolutePath, rs.configFilePath)
         assertTrue(rs.consoleOutputEnabled)
         assertTrue(rs.aboutConfigEnabled)
-        assertEquals(sh.edm.s1kiosk.BuildConfig.DEBUG, rs.remoteDebuggingEnabled) // the default follows the build type
+        assertEquals(dev.glassworks.s1.BuildConfig.DEBUG, rs.remoteDebuggingEnabled) // the default follows the build type
     }
 
     @Test
@@ -258,12 +258,16 @@ class GeckoBehaviourPinTest {
     }
 
     @Test
-    fun `the page location decides whether the panel login loads the dashboard`() = harness().use { h ->
+    fun `the panel login loads Home Assistant's login page for the panel's own sign-in wherever the page is`() = harness().use { h ->
+        // #633: from the dashboard (a session the page had) it loaded the dashboard, and nothing was stored.
         val setup = h.rootChildren().filterIsInstance<dev.glassworks.setup.SetupOverlay>().single()
-        h.navigation.onLocationChange(h.session, "$base/auth/authorize?client_id=x", mutableListOf(), false)
-        assertEquals(emptyList<String>(), h.eventsDuring { setup.onUsePanel!!.invoke() })
-        h.navigation.onLocationChange(h.session, dash, mutableListOf(), false)
-        assertEquals(listOf("s1.load $dash"), h.eventsDuring { setup.onUsePanel!!.invoke() })
+        val login = "s1.load $base/auth/authorize?response_type=code&client_id=" + java.net.URLEncoder.encode("$base/glassworks/", "UTF-8")
+        for (at in listOf("$base/auth/authorize?client_id=x", dash)) {
+            h.navigation.onLocationChange(h.session, at, mutableListOf(), false)
+            val loads = h.eventsDuring { setup.onUsePanel!!.invoke() }
+            assertEquals(at, 1, loads.size)
+            assertTrue(loads.single(), loads.single().startsWith(login))
+        }
     }
 
     // ---- page start/stop, first paint

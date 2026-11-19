@@ -3,6 +3,7 @@ package dev.glassworks.setup
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import dev.glassworks.frame.Input
 import dev.glassworks.improv.ImprovState
 import dev.glassworks.setup.WifiStep.Action
 import dev.glassworks.setup.WifiStep.Phase
@@ -63,6 +64,23 @@ class WifiStepTest {
         assertEquals(listOf(Action.STOP), l.actions)
         val approve = WifiStep.improv(on.copy(state = ImprovState.AUTHORIZED, needsApproval = true))
         assertTrue(approve.detail.contains("notification"))
+    }
+
+    /** #611: without touch, open by itself, it says where to send the Wi-Fi from, with the countdown, and offers no button. */
+    @Test
+    fun withoutTouchItSaysWhatToDoOnAPhone() {
+        val l = WifiStep.improv(on.copy(state = ImprovState.AUTHORIZED, authLeftMs = 299_001), Input.NONE)
+        assertEquals(Phase.AUTHORIZED, l.phase)
+        assertEquals("Bluetooth setup · open for 5:00", l.label)
+        assertEquals("Send the Wi-Fi from a phone.", l.title)
+        assertEquals("Open Home Assistant or improv-wifi.com on your phone to send the Wi-Fi.", l.detail)
+        assertTrue(l.actions.isEmpty())
+        val failed = WifiStep.improv(on.copy(state = ImprovState.AUTHORIZED, ssid = "Home", failure = "wrong password"), Input.NONE)
+        assertEquals(Phase.FAILED, failed.phase)
+        assertEquals("Couldn't connect to Home", failed.title)
+        assertTrue(failed.actions.isEmpty())
+        assertEquals("a touchscreen keeps Allow's line", WifiStep.improv(on.copy(state = ImprovState.AUTHORIZED, authLeftMs = 1)),
+            WifiStep.improv(on.copy(state = ImprovState.AUTHORIZED, authLeftMs = 1), Input.TOUCH))
     }
 
     @Test

@@ -160,3 +160,65 @@ export function fakeApk(pkg = 'sh.edm.s1kiosk', o: { utf8?: boolean; libs?: Reco
   // extraEntries goes in verbatim, so a test can repeat a name (a zip may list the same path twice)
   return zip([['AndroidManifest.xml', axml(pkg, !!o.utf8, o)], ['classes.dex', new TextEncoder().encode('dex\n035\0')], ...libs, ...(o.extraEntries ?? [])]);
 }
+
+/**
+ * The app's secret hand-over socket (core SecretHandover, `@glassworks_api_key`), simulated for a PanelShell fake:
+ * answer `run` with `shell(cmd)` first and `openStream` with `open`. `key` and `signIn` (base64) are what the app
+ * holds; `verbs` records the requests' first words only, never a secret.
+ */
+export class FakeKeySocket {
+  verbs: string[] = [];
+  /** the next `drop` requests get no reply (a lost answer), though a `set` still stores its value */
+  drop = 0;
+  /** what a `get` answers for a value it holds: `unreadable` for a key store that is down */
+  unreadable = false;
+  /** the held key was sealed with a key the app no longer has (its data copied across a switch): a set replaces it */
+  keyLost = false;
+  /** the same for the held sign-in */
+  signInLost = false;
+  /** both lost: the app's data copied across a switch */
+  set lost(v: boolean) { this.keyLost = v; this.signInLost = v; }
+  /** the next `passing` sets get a refusal that may pass (the key store down for a moment) */
+  passing = 0;
+  /** the app has a sign-in (Home Assistant address and client id) to carry a token into */
+  signInHere = true;
+  /** an app from #574 (2026-11-18), before #584: it knows only `get` and `set` */
+  keyOnly = false;
+  signIn?: string;
+  constructor(public key?: string, public listening = true) {}
+  shell(cmd: string): { out: string; code: number } | undefined {
+    return cmd === `grep -c ' @glassworks_api_key$' /proc/net/unix` ? { out: `${this.listening ? 1 : 0}\n`, code: this.listening ? 0 : 1 } : undefined;
+  }
+  #get(v: string | undefined, lost: boolean, word: string): string {
+    return v ? (this.unreadable || lost ? 'unreadable' : `${word} ${v}`) : 'none';
+  }
+  #set(held: string | undefined, lost: boolean, arg: string | undefined, what: string, put: (v: string) => void): string {
+    if (!arg) return 'refused not base64';
+    if (this.passing > 0) { this.passing--; return 'refused the key store isn\'t available right now'; }
+    if (!held || held === arg || lost) { put(arg); return 'ok'; }
+    return `refused a different ${what} is set already`;
+  }
+  async open(service: string) {
+    if (service !== 'localabstract:glassworks_api_key' || !this.listening) throw new Error('connection refused');
+    let cb: (b: Uint8Array) => void = () => {};
+    return {
+      write: async (d: Uint8Array) => {
+        const [verb, arg] = new TextDecoder().decode(d).trim().split(' ');
+        this.verbs.push(verb!);
+        const known = this.keyOnly ? ['get', 'set'] : ['carries', 'get', 'set', 'get-signin', 'set-signin', 'done'];
+        const reply = !known.includes(verb!) ? 'refused unknown request'
+          : verb === 'carries' ? 'carries api_key signin'
+          : verb === 'done' ? 'ok'
+          : verb === 'get' ? this.#get(this.key, this.keyLost, 'key')
+          : verb === 'set' ? this.#set(this.key, this.keyLost, arg, 'key', (v) => { this.key = v; this.keyLost = false; })
+          : verb === 'get-signin' ? this.#get(this.signIn, this.signInLost, 'signin')
+          : !this.signInHere ? 'refused no sign-in here to carry it into'
+          : this.#set(this.signIn, this.signInLost, arg, 'sign-in', (v) => { this.signIn = v; this.signInLost = false; });
+        if (this.drop > 0) { this.drop--; return; }
+        queueMicrotask(() => cb(new TextEncoder().encode(`${reply}\n`)));
+      },
+      onData: (f: (b: Uint8Array) => void) => { cb = f; },
+      close: async () => {},
+    };
+  }
+}

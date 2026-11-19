@@ -70,12 +70,52 @@ Details and sources: [onboarding.md](onboarding.md#2-adoption--encryption-esphom
 | Field | Value |
 |---|---|
 | name / friendly name | `aqara-s1-plus-a1b2c3` / `Aqara S1 Plus`: what the device is, and the end of its MAC (see [Names](#names)). Before #260: `s1-panel` / `Glassworks Panel` |
-| MAC (unique id in HA) | the Wi-Fi MAC of `wlan0` if readable, else a locally administered MAC derived from the chip serial (SHA-256 of `ro.serialno`), else a random one; persisted in prefs (`device_mac`). The first two come out the same after a reinstall, so HA keeps the same device |
+| MAC (unique id in HA) | Kept in prefs (`device_mac`) once chosen. With none saved, the first of: `ro.glassworks.device.mac` (Kiln writes it into the Mirror's image, see [Identity across reinstalls](#identity-across-reinstalls)); the Wi-Fi MAC of `wlan0` if readable; a locally administered MAC derived from the chip serial (SHA-256 of `ro.serialno`); one derived from `ANDROID_ID`; else a random one |
 | manufacturer / model | The frame's: `Aqara` / `Panel Hub S1 Plus (Glassworks)` on the S1. Elsewhere the device's own (`Build.MANUFACTURER` / `Build.MODEL`): `Google` / `Pixel Tablet (Glassworks)`. Up to 0.4.3 the S1 app said `(S1 Kiosk)` |
 | esphome_version / compilation_time | `2026.10.2` / `Glassworks <app version>` (HA shows "2026.10.2 (Glassworks 0.1.0)") |
 | API version | 1.20 (as ESPHome 2026.10/11); `DeviceCapabilitiesRequest` is answered |
 | Sendspin | `DeviceCapabilitiesResponse.sendspin` = `{feature_flags: PAIRING_TOKEN, client_id}`; `SendspinPairingTokenRequest` (159) → `SendspinPairingTokenResponse` (160), token only over Noise with a key ([sendspin.md](sendspin.md#esphome-hand-off-how-ha-gives-ma-the-token)) |
 | voice_assistant_feature_flags | 61 = VOICE_ASSISTANT 1 + API_AUDIO 4 + TIMERS 8 + ANNOUNCE 16 + START_CONVERSATION 32 (0 when `voice_enabled` is false). Voice turned on or off while the panel runs changes it, and the panel asks Home Assistant to reconnect so it reads it again (#67) |
+
+
+### Identity across reinstalls
+
+Home Assistant keys the device and every entity's unique id by the MAC above. A new MAC means a new device in HA,
+and its entities get new ids. Where each frame stands (#523):
+
+| Frame | After a reinstall or reflash | Why |
+|---|---|---|
+| S1 | Same device | An update installs in place and keeps the saved MAC. With the app's data wiped, `wlan0` is readable on its Android 10, so it comes out the same |
+| Mirror (Kiln or `tools/mirror/flash-node.ts`) | Same device, from the first flash that writes `ro.glassworks.device.mac` | A flash writes a fresh userdata, which wipes the app's data. Kiln derives the MAC from the serial its bootloader reports (`fastboot getvar serialno`), with the app's own formula, and writes it into `build.prop`. The Mirror's current MAC isn't the one derived from its serial (checked 2026-11-18), so the first flash with this moves it to a new device once |
+| Generic app, Android 6 to 7 | Same device | `ro.serialno` is readable |
+| Generic app, Android 8 and later | Same device, unless the device is factory reset or the APK's signing key changes | `ANDROID_ID`, which Android keeps for the same app signing key until a factory reset. `wlan0` and `ro.serialno` are hidden from apps there. An install from before this change may have saved a random MAC: an update keeps it, but the first reinstall after it moves to the `ANDROID_ID` one, a new device once |
+
+The API key ([Encryption](#encryption-automatic)) lives in the app's data too, so a reflash wipes it, while Home
+Assistant's entry keeps it. A fresh app that answers with no key makes HA open a re-authentication
+(`reauth_encryption_removed_confirm`), and the entities stay unavailable until someone confirms it (seen on the Mirror
+2026-11-18). So the Mirror's flashes carry the key over (#574; Kiln's page since #580):
+
+1. Just before it restarts the Mirror into fastboot, it reads the key from the running app over adb, on the app's
+   socket `@glassworks_api_key` (`SecretHandover`: adb only, uid 0 or 2000; never on the LAN). It prints the key's
+   4-hex fingerprint, never the key. If the app has a key but can't hand it over now, the flash stops there, with
+   nothing written.
+2. It writes `ro.glassworks.api_key.handover=1` into the image's `build.prop`: a flag, not the key, since every app
+   can read `build.prop`.
+3. On that flag, the fresh app keeps its API server shut and unannounced until a key comes, for up to 15 minutes. HA
+   only gets "connection refused" and retries, which opens no re-authentication.
+4. At the first boot, right after it starts the app, the flash hands the key back on the same socket, and tries again
+   while the socket fails or doesn't answer. `set` only fills an empty key store: it never replaces a key in use. The app starts its API server with the key, and HA reconnects.
+
+What each installer can reach before the flash:
+
+| Installer | Before the flash | Carries the key |
+|---|---|---|
+| `tools/mirror/flash-node.ts` | adb to the running app (the Mirror on our image lets the flash's adb key in) | Yes, from an app with #574. An older app has no socket: HA asks once more |
+| Kiln's page | adb to the running app over WebUSB, in its keep step before fastboot (#580). The Mirror lets in only the browser that last installed Glassworks on it, so Kiln opens that step by itself in that browser; elsewhere it is a link under the fastboot steps | Yes, from an app with #574: the same steps as flash-node, and Kiln restarts the Mirror into fastboot itself. The key stays in the tab's memory until the first start. Another browser, a Mirror that doesn't start, or an older app: no flag, and HA asks once (Kiln's Done says what to click) |
+| The S1 | Not reflashed: updates install in place and keep the key. A signing-key switch (a development build to a release) uninstalls the app, and with it the key's Keystore key | On a switch with root, from an app that answers the hand-over socket: Kiln and `install.sh` read the key from the running app and hand it to the new one, with the Home Assistant sign-in from an app that lists `signin` in its `carries` (#584). The new app's API stays locked until then, so HA asks nothing. An app from #574 hands over the key only. An older app has no socket: neither comes across, the installer says so, and the new app's API stays locked until a new key is set (HA asks once) |
+
+If the hand-over fails, the app starts without a key after the 15 minutes, as before, and HA asks once. A key derived
+from the serial, like the MAC, would need no hand-over, but anyone who knows the serial could compute it.
 
 ## Entities
 
@@ -150,7 +190,8 @@ open the entity, and turn on *Enabled*.
 |---|---|---|---|---|---|
 | Presence | `presence` | core | none | on | Automations |
 | Illuminance | `illuminance` | core | none | on | Automations |
-| Screen | `screen` | core | none | on | Dashboards and automations |
+| Docked | `docked` | core | none | on | Automations: what the panel does on and off its dock. Only on a device that docks ([Docked](#docked)) |
+| Screen | `screen` | core | config | on | Dashboards and automations, by its entity id. Config keeps it out of a room's "lights off" ([below](#the-screen-is-a-config-light)) |
 | Speaker | `speaker` | core | none | on | Dashboards, Music Assistant, announcements |
 | Reload dashboard | `reload_dashboard` | core | none | on | Used often |
 | Restart app | `restart_app` | core | config | on | Used often |
@@ -214,6 +255,25 @@ open the entity, and turn on *Enabled*.
 | Base relay N, Base button N, Base power, Base energy | `base_relay_N`, `base_button_N`, `base_power`, `base_energy` | wall base | none | on | The reason to mount a base |
 | Base protection | `base_protection` | wall base | diagnostic | on | Overheat and overload; people automate on it. It had no category before #132 |
 
+#### The screen is a config light
+
+Most people don't count their wall panel as one of the room's lights. Up to #591 the screen had no
+category, so every "lights off" aimed at the panel's area turned the screen off too: a presence
+automation's "room empty", a Good Night script, Assist's "turn off the bedroom lights". Home Assistant
+leaves an entity with a category out of a target it reaches through an area, floor, device or a labelled
+device or area, and doesn't show it to Assist unless someone exposes it (`helpers/target.py` 2026.11.0:227). So the screen is `config`, and it keeps its object id, key and entity id.
+
+| | Before #591 | Now |
+|---|---|---|
+| `light.turn_off` with an `area_id`, `floor_id` or `device_id`, or a `label_id` on the panel's device or area | Turns the screen off | Skips it |
+| `light.turn_off` with the screen's `entity_id`, or a `label_id` put on the screen entity itself; a dashboard card | Turns it off | Turns it off |
+| Assist, a panel HA adds from now on | Sees it | Doesn't see it until someone exposes it |
+| Assist, a panel HA already has | Sees it | Still sees it: HA saved the choice when it first saw the entity. Turn off **Expose** once in **Settings → Voice assistants → Expose** |
+
+HA's registry takes the category only when it adds the panel's entities again: after a restart of HA or a
+**Reload** of the ESPHome entry (Settings → Devices & services → ESPHome → the panel → ⋮ → Reload). The app
+update's reconnect alone isn't enough (verified on the S1, 2026-11-19, HA 2026.11).
+
 HA adds its own voice entities (*Assist satellite*, *Assist pipeline*, *Wake word*, *Finished speaking
 detection*). The panel doesn't send those, so their defaults are HA's.
 
@@ -241,7 +301,7 @@ So on a panel HA already has:
 |---|---|
 | Entities that were on | Stay on, with the same entity id, area and name |
 | Entities you turned off | Stay off |
-| Category | Follows the panel: *Base protection* moves to the device page's *Diagnostic* section. No other category changes |
+| Category | Follows the panel: *Base protection* moves to the device page's *Diagnostic* section, and *Screen* to *Configuration* ([the screen is a config light](#the-screen-is-a-config-light)). No other category changes |
 | Entities that appear later (a new pane, a wall base mounted after the update) | Get the new default when HA first sees them |
 | Removing the panel from HA and adding it back | Each entity gets back the state it had, while HA still remembers the deleted entities |
 
@@ -253,7 +313,8 @@ So on a panel HA already has:
 | switch `Auto brightness` | `auto_brightness` | light-sensor brightness curve. Only with a light sensor ([by frame](#screen-entities-by-frame)) |
 | binary_sensor `Presence` (occupancy) | `presence` | the frame's presence sensor "near": the VI5300 ToF on the S1, a proximity sensor elsewhere. A camera's is `camera_presence` |
 | sensor `Illuminance` (lx) | `illuminance` | the light sensor: the MK6212 on the S1 |
-| select `Screen mode` | `screen_mode` | `presence` / `always`. `always` until someone picks one (#522) |
+| binary_sensor `Docked` (plug) | `docked` | on while the device sits on its dock, off once it's lifted off; only on a device that docks ([Docked](#docked)) |
+| select `Screen mode` | `screen_mode` | `presence` / `always`. `always` until someone picks one (#522). `presence`: walking up wakes the screen, and it turns off after the idle timeout. `always`: it never turns off by itself, and walking up never turns it on, so a screen Home Assistant turned off stays off (#601). `presence` still reports in both |
 | number `Idle timeout` (s) | `idle_timeout` | screen off after idle (0 = never). Above 0 it also sets `Screen mode` to `presence`, as the panel's own *Turn off when idle* does. The panel has no night timeout of its own: an automation changes this one, such as the [Panel night mode](blueprints.md) blueprint |
 | number `Max auto brightness` (%, 5–100, step 5) | `max_brightness` | the most *Auto brightness* reaches (100 by default). Lower it at night to keep the screen dim when the room's lights are on. A held screen (a high or critical notification) ignores it. A fixed brightness from the `Screen` light doesn't follow it |
 | number `Presence range` (m, 0–2.5, step 0.1) | `presence_range` | VI5300 threshold (needs `WRITE_SECURE_SETTINGS`); 0 = firmware default |
@@ -333,6 +394,49 @@ defaults, as before. The Mirror and Pixel Tablet columns come from the frames' h
 
 Plus `Block Aqara cloud` and `Aqara cloud daemon` ([below](#aqara-cloud)), the wall base entities, and the entities HA adds itself for a voice device: `assist_satellite.<device>_assist_satellite`,
 *Assist pipeline* and *Wake word* selects (two of each), *Finished speaking detection*.
+
+### Docked
+
+A tablet on a dock is a wall panel; lifted off, it's a tablet in someone's hands. *Docked* tells Home
+Assistant which, so an automation can, say, show another dashboard or stop announcements while it's off
+its dock. It is a binary sensor with the `plug` device class (HA shows *Plugged in* and *Unplugged*),
+no category, and on by default, because people automate on it ([Categories and defaults](#categories-and-defaults)).
+
+**On** when either says so (`dev.glassworks.dock.Docked.of`):
+
+1. The battery charges from a dock: the sticky `ACTION_BATTERY_CHANGED`'s `EXTRA_PLUGGED` is
+   `BATTERY_PLUGGED_DOCK`. Android 13 and later only; below it no value means a dock. A Pixel Tablet on its
+   charging speaker dock says this (`dumpsys battery`: `Dock powered: true`, read on one 2026-11-17).
+2. The sticky `ACTION_DOCK_EVENT`'s `EXTRA_DOCK_STATE` is any dock (desk, car, low-end or high-end desk),
+   not `EXTRA_DOCK_STATE_UNDOCKED`. The Pixel Tablet sends it too: `EXTRA_DOCK_STATE` 4
+   (`EXTRA_DOCK_STATE_HE_DESK`) on its dock and 0 off it (read on one, 2026-11-18).
+
+It follows both broadcasts as they come (`DockWatcher`), while the app runs. Nothing polls, and nothing
+wakes the device: Android delivers them to the app's registered receiver. On the Pixel Tablet (generic app
+0.1.1, 2026-11-18) the sensor went off 0.9 s after Android's dock broadcast when the tablet was lifted, and on
+again 0.8 s after it when it was put back.
+
+**On the panel and the Manage page too.** Where Home Assistant has the sensor, the frame's Device page (the
+panel's settings, *Pixel Tablet*, and the same page on the Manage page) ends with a status row: *Docked · On
+its dock*, or *Not docked*. It isn't a setting. The panel's menu reads it again every couple of seconds; the
+Manage page has no scripts, so a page with this row reloads itself every 3 seconds, never under an open dialog,
+and says so with a **Pause** link (`?live=off`), since a reload restarts a screen reader (`DockRow`,
+`ManagePages.LIVE_RELOAD_S`). Home Assistant gets no state for the sensor until the app's first read of the
+broadcasts, not a guessed *off*.
+
+**Only where it means something.** Home Assistant gets the entity when any of these holds
+(`Docked.hasEntity`, `GenericAndroid.dockOf`):
+
+| Rule | Who it covers |
+|---|---|
+| The frame says the device docks: `"dock": true` in its `frame.json` ([frames/README.md](../frames/README.md)), and `GenericAndroid.KNOWN` by model | The Pixel Tablet (`google-pixel-tablet`) |
+| Google's dock manager, `com.google.android.apps.nest.dockmanager.app`, is installed (the app's manifest lists it under `<queries>`) | Google's tablets with a dock, under another model name |
+| The device has reported a dock at least once. The app keeps that (`dock_seen`), so the entity stays after a restart, off its dock too | Other brands' docks |
+
+Otherwise there's no entity, so an ordinary tablet's device page doesn't show one that is always off. The
+S1 frame never has it and listens for no dock. A device that gets it from the third rule gets it the
+moment it first docks: the panel lists its entities again and HA adds *Docked*, and the Device page gets its
+row.
 
 ### Panes on and off
 
@@ -528,15 +632,15 @@ the stream). Its component and the main activity's differ per app:
 
 | App | Camera settings | Main activity |
 |---|---|---|
-| Glassworks on the Aqara S1 Plus | `sh.edm.s1kiosk/.CameraAdbActivity` | `sh.edm.s1kiosk/.MainActivity` |
-| Glassworks for generic Android | `dev.glassworks.generic_android/sh.edm.s1kiosk.CameraAdbActivity` | `dev.glassworks.generic_android/sh.edm.s1kiosk.MainActivity` |
-| Its legacy build (Android 6-7, the lululemon Mirror) | `dev.glassworks.generic_android.legacy/sh.edm.s1kiosk.CameraAdbActivity` | `dev.glassworks.generic_android.legacy/sh.edm.s1kiosk.MainActivity` |
+| Glassworks on the Aqara S1 Plus | `sh.edm.s1kiosk/dev.glassworks.camera.CameraAdbActivity` | `sh.edm.s1kiosk/.MainActivity` |
+| Glassworks for generic Android | `dev.glassworks.generic_android/dev.glassworks.camera.CameraAdbActivity` | `dev.glassworks.generic_android/dev.glassworks.MainActivity` |
+| Its legacy build (Android 6-7, the lululemon Mirror) | `dev.glassworks.generic_android.legacy/dev.glassworks.camera.CameraAdbActivity` | `dev.glassworks.generic_android.legacy/dev.glassworks.MainActivity` |
 
-For example, on the S1: `adb shell am start -n sh.edm.s1kiosk/.CameraAdbActivity --es camera_use snapshots --ez onvif_stream true`.
+For example, on the S1: `adb shell am start -n sh.edm.s1kiosk/dev.glassworks.camera.CameraAdbActivity --es camera_use snapshots --ez onvif_stream true`.
 `--es camera_stream_sign_in 'user:password'` sets the stream's sign-in, and an empty value clears
 it, which closes the stream until a sign-in is set again. The pane's on/off is the
 usual `--ez camera_enabled true` on the main activity, for example
-`adb shell am start -n dev.glassworks.generic_android.legacy/sh.edm.s1kiosk.MainActivity --ez camera_enabled true` on the Mirror.
+`adb shell am start -n dev.glassworks.generic_android.legacy/dev.glassworks.MainActivity --ez camera_enabled true` on the Mirror.
 
 ### App updates
 
@@ -561,7 +665,13 @@ usual `--ez camera_enabled true` on the main activity, for example
     (`UnknownHostException`, no route, timeouts; not TLS or HTTP errors) is retried 10 s after Wi-Fi
     is back (available or validated; callbacks debounced, at most one such retry per 30 s) instead of
     after its backoff.
-  - Ignored: drafts, pre-releases (GitHub's flag or a `-rc` tag), and releases without both
+  - **Update channel** (#605): the Device page's *Update channel* row, on the panel and on the Manage page.
+    Stable, the default, skips GitHub pre-releases without reporting them. Beta takes them too, and offers the
+    highest version of both. A lower version is never offered: back on Stable after a beta, `latest_version`
+    stays the installed version until a stable release is higher. When the offer is a beta, `Beta: …` goes on
+    top of the summary. It is not an entity: someone picks it once, on the panel or the Manage page, and no
+    automation would change it ([principles](principles.md#entities)).
+  - Ignored: drafts, pre-releases on Stable (GitHub's flag), `-rc` tags on both channels, and releases without both
     the APK for one of the device's ABIs and its `.sha256`. The S1 (`armeabi-v7a`) takes
     `s1-kiosk-<version>.apk`; an `arm64-v8a` device takes `s1-kiosk-arm64-v8a-<version>.apk`
     ([releasing.md](releasing.md#abis)). Assets must download from github.com over HTTPS.
@@ -789,6 +899,84 @@ cancelling or adding time is done by voice ("pause the pasta timer"). Code: `Tim
   timer's name and length ("2 timers done" when several finish together) and the timers still
   running. A tap anywhere dismisses it and stops the remaining chimes; otherwise it closes 60 s after
   the last timer finished. It shows even when the timers were hidden.
+
+### Announce on every panel
+
+"Dinner's ready" on every panel at once, from a dashboard or an automation. No pane: each panel is an
+Assist satellite with announcements (`ANNOUNCE` in [Device identity](#device-identity)), so Home
+Assistant's `assist_satellite.announce` does it. It is text to speech, not your own voice; live calls
+between panels are #116, parked after v1.
+
+1. Make a **Text** helper named *Announcement* (Settings → Devices & services → Helpers), so
+   `input_text.announcement`.
+2. Make a script. In the script editor, **Edit in YAML**, and list your panels' Assist satellites
+   (each panel's device page shows its own):
+
+   ```yaml
+   alias: Announce on every panel
+   mode: queued
+   fields:
+     message:
+       name: Message
+       description: What the panels say. Leave it out to say the Announcement helper's text.
+       selector:
+         text:
+   sequence:
+     - action: assist_satellite.announce
+       target:
+         entity_id:
+           - assist_satellite.kitchen_panel_assist_satellite
+           - assist_satellite.hall_panel_assist_satellite
+       data:
+         message: "{{ message | default(states('input_text.announcement'), true) }}"
+   ```
+
+3. On a dashboard, put the helper in an entities card and add a button that runs the script:
+
+   ```yaml
+   type: button
+   name: Announce
+   icon: mdi:bullhorn
+   tap_action:
+     action: perform-action
+     perform_action: script.announce_on_every_panel
+   ```
+
+4. From an automation, pass the text: `action: script.announce_on_every_panel` with
+   `data: {message: "Dinner's ready"}`.
+
+The script reads the helper when its run starts. A press while the panels are still speaking waits
+its turn, and then says what the helper holds at that moment, not when you pressed.
+
+What each panel does: Home Assistant's chime, then the message in the voice of that panel's Assist
+pipeline (`preannounce: false` drops the chime). The screen wakes, and with *Voice overlay* on, the
+overlay shows the message. Music on the speaker pauses and Music Assistant's player goes quiet; both
+come back afterwards. The *Speaker* volume applies, so a muted panel stays silent. Home Assistant
+announces on all the panels at once and the action ends when the last one has finished.
+
+- **A panel with Voice off** has no Assist satellite, and an offline panel's is unavailable. Home
+  Assistant skips both and logs a warning. To reach a panel with Voice off, add a step that speaks
+  on its speaker. It plays as an announcement (music pauses and resumes), with no chime and nothing
+  on the screen:
+
+  ```yaml
+  - action: tts.speak
+    target:
+      entity_id: tts.piper  # your TTS engine
+    data:
+      media_player_entity_id: media_player.office_panel_speaker
+      message: "{{ message | default(states('input_text.announcement'), true) }}"
+  ```
+
+  This step doesn't wait for the speaker to finish, so `mode: queued` doesn't protect it. A new
+  announcement on that speaker replaces the one playing (`ExoAudioPlayer.play`), so a second run
+  straight after can cut the first one off.
+- **A panel that is still announcing** refuses a second one (`SatelliteBusyError`). `mode: queued`
+  keeps the script's own runs from overlapping.
+
+Read on 2026-11-18 from the app (`VoiceAssistantController.onAnnounce`, `PanelDevice.announce`) and
+Home Assistant 2026.11.0 (`assist_satellite/entity.py`, `esphome/assist_satellite.py`,
+`tts/entity.py`, `helpers/service.py`). Untested: not yet run on panels.
 
 ### openWakeWord parameters (legacy)
 

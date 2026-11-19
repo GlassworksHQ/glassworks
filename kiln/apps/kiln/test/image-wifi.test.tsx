@@ -1,0 +1,288 @@
+// @vitest-environment jsdom
+// Glass Panes' Wi-Fi from Kiln (maintainer, 2026-11-19): an optional network, saved in a copy of the
+// checked userdata (one file), and after the first start Wi-Fi switched on over adb with the image's
+// own published key, which Kiln checks, holds for that one connection and never stores. No network:
+// the image goes on exactly as published, and the key is never used.
+import { act, cleanup, render, screen } from '@testing-library/react';
+import { GLASS_PANES_USERDATA, SYSTEM_BYTES, USERDATA_BYTES, WrongImage, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
+import type { ReactNode } from 'react';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+
+vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: ReactNode }) => <a href={href} {...p}>{children}</a> }));
+
+import { pemToPkcs8 } from '@glassworks/adb';
+import { FlashSession, readImageKey, type ImageMaker } from '../src/mirror/flash';
+import { flashDemo, type FlashDemo } from '../src/mirror/flashDemo';
+import { Flash } from '../src/mirror/MirrorWizard';
+import { MirrorSession } from '../src/mirror/session';
+
+beforeAll(() => {
+  Object.defineProperty(navigator, 'usb', { configurable: true, value: {} });
+  Object.defineProperty(window, 'isSecureContext', { configurable: true, value: true });
+  window.matchMedia = ((q: string) => ({ matches: false, media: q, addEventListener() {}, removeEventListener() {} })) as never;
+  globalThis.ResizeObserver = class { observe() {} disconnect() {} } as never;
+});
+afterEach(() => cleanup());
+
+/** A made-up PKCS#8 PEM: base64 of the bytes 1..6. */
+const PEM = '-----BEGIN PRIVATE KEY-----\nAQIDBAUG\n-----END PRIVATE KEY-----\n';
+const NET = { ssid: 'Home Net', password: 'not-a-real-password' };
+const tag = (b: Blob) => (b as Blob & { tag?: string }).tag;
+
+function setup(o: { keyChanged?: boolean; wifiOn?: 'enabled' | 'disabled'; adbFails?: number; userdataWriteFails?: boolean; failConnect?: number; userdataBytes?: number } = {}) {
+  const calls: string[] = [];
+  const keys: Uint8Array[] = [];
+  let adbFails = o.adbFails ?? 0;
+  let userdataWriteFails = !!o.userdataWriteFails;
+  let connects = 0;
+  const images: ImageMaker = {
+    async fetch() {},
+    async download(url) { calls.push(`download ${url.split('/').pop()}`); },
+    async file(name) {
+      calls.push(`file ${name}`);
+      return Object.assign(new Blob([name === 'adbkey' ? PEM : name]), { tag: name });
+    },
+    async check(blob, want) {
+      calls.push(`check ${tag(blob)}`);
+      if (o.keyChanged && want.name === 'adbkey') throw new WrongImage('its SHA-256 differs from the one Kiln pins');
+    },
+    async build() { throw new Error('not for Glass Panes'); },
+    async wifi(w) { calls.push(`wifi ${w.userdata.name} from ${w.system.name} -> ${w.makes}`); expect(w.wifi).toEqual(NET); return Object.assign(new Blob(['W']), { tag: w.makes }); },
+    async discard() { calls.push('discard'); },
+  };
+  const fb: FastbootLike = {
+    async getvar(n) { if (n === 'max-download-size') return '0x10000000'; throw new Error('FAIL'); },
+    async partitionSize(n) { return n === 'system' ? SYSTEM_BYTES : (o.userdataBytes ?? USERDATA_BYTES); },
+    async flashBlob(p, blob) {
+      if (p === 'userdata' && userdataWriteFails) { userdataWriteFails = false; throw new Error('flash:userdata: FAILed (remote: write failed)'); }
+      calls.push(`flash ${p} ${tag(blob)}`);
+    },
+    async reboot() { calls.push('reboot'); },
+  };
+  const shell = {
+    async close() { calls.push('adb closed'); },
+    async run(c: string) {
+      calls.push(`adb ${c}`);
+      if (c === 'svc wifi enable' && adbFails > 0) { adbFails--; throw new Error('the connection to the Mirror closed'); }
+      return { out: c === 'getprop sys.boot_completed' ? '1' : c === 'dumpsys wifi' ? `Wi-Fi is ${o.wifiOn ?? 'enabled'}\n` : '', code: 0 };
+    },
+    async push() { throw new Error('nothing is pushed'); },
+  };
+  const f = new FlashSession({
+    images, refract: 'https://refract.test', search: '?image=glass-panes', requestFastboot: async () => fb,
+    requestAdb: async () => { throw new Error('Glass Panes doesn\'t trust this browser\'s key'); },
+    adbWithKey: (k: Uint8Array) => { keys.push(k); return async () => {
+      if (++connects === o.failConnect) throw new Error('No device selected.');
+      calls.push('connect with the image\'s key'); return shell;
+    }; },
+    adbKey: () => 'QAAA= kiln@glassworks', apk: () => undefined, sleep: async () => {},
+  });
+  return { f, calls, keys };
+}
+
+const install = async (f: FlashSession) => { await f.download(); f.toFastboot(); await f.connectFastboot(); f.understand(true); await f.flash(); };
+
+describe('with a Wi-Fi network', () => {
+  it('saves it in a copy of the checked userdata, writes that, then switches Wi-Fi on with the image\'s own key', async () => {
+    const { f, calls, keys } = setup();
+    f.setWifi(NET);
+    await install(f);
+    expect(f.state.screen).toBe('adb');
+    await f.connectAdb();
+    expect(calls).toEqual([
+      'download system.img', 'download userdata.sparse', 'download adbkey',
+      // after Kiln's checks and the warning: every published file it writes checked before the first write
+      'file system.img', 'check system.img',
+      // the key checked and held now (the restart deletes the downloads)
+      'file adbkey', 'check adbkey',
+      'wifi userdata.sparse from system.img -> userdata+wifi', // which hashes userdata.sparse as it reads it
+      'flash system system.img',
+      'flash userdata userdata+wifi',
+      'reboot', 'discard',
+      'connect with the image\'s key',
+      'adb getprop sys.boot_completed', 'adb svc wifi enable', 'adb dumpsys wifi', 'adb closed',
+    ]);
+    expect(keys).toEqual([pemToPkcs8(PEM)]);
+    expect([...keys[0]!]).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(f.state).toMatchObject({ screen: 'done', communityWifi: 'on' });
+  });
+
+  it('never logs the network or its password', async () => {
+    const { f } = setup();
+    f.setWifi(NET);
+    await install(f);
+    await f.connectAdb();
+    const log = f.state.log.join('\n');
+    expect(log).toContain('Saving the Wi-Fi network you entered');
+    expect(log).toContain(`userdata.sparse: SHA-256 ${GLASS_PANES_USERDATA.sha256} as published, with the Wi-Fi network saved in it`);
+    expect(log).not.toContain('Home Net');
+    expect(log).not.toContain('not-a-real-password');
+  });
+
+  it('uses the key for one connection only: a second Connect has none', async () => {
+    const { f } = setup();
+    f.setWifi(NET);
+    await install(f);
+    await f.connectAdb();
+    f.state = { ...f.state, screen: 'adb' };
+    await f.connectAdb();
+    expect(f.state.connectError).toMatch(/no key for this image/);
+  });
+
+  it('a key that doesn\'t match its pin stops the install before anything is written', async () => {
+    const { f, calls } = setup({ keyChanged: true });
+    f.setWifi(NET);
+    await install(f);
+    expect(f.state.screen).toBe('error');
+    expect(calls.filter((c) => c.startsWith('flash') || c.startsWith('wifi'))).toEqual([]);
+    expect(f.state.files.every((x) => x.state === 'waiting')).toBe(true); // download again
+  });
+
+  it('when Android doesn\'t confirm Wi-Fi on, Done says to switch it on once', async () => {
+    const { f } = setup({ wifiOn: 'disabled' });
+    f.setWifi(NET);
+    await install(f);
+    await f.connectAdb();
+    expect(f.state.communityWifi).toBe('unconfirmed');
+  });
+
+  it('a retry after a refused write, with the network cleared, writes userdata as published, not the earlier copy', async () => {
+    const { f, calls } = setup({ userdataWriteFails: true });
+    f.setWifi(NET);
+    await install(f);
+    expect(f.state.screen).toBe('error');
+    f.retry();
+    f.setWifi({ ssid: '', password: '' });
+    calls.length = 0;
+    f.toFastboot(); await f.connectFastboot(); f.understand(true); await f.flash();
+    expect(calls.filter((c) => c.startsWith('flash') || c.startsWith('wifi'))).toEqual(['flash system system.img', 'flash userdata userdata.sparse']);
+    expect(f.state.screen).toBe('done');
+  });
+
+  it('a failed Wi-Fi-on after the install offers Connect again with the same key, not a reinstall', async () => {
+    const { f, calls, keys } = setup({ adbFails: 1 });
+    f.setWifi(NET);
+    await install(f);
+    await f.connectAdb();
+    expect(f.state).toMatchObject({ screen: 'error', wifiOnFailed: true });
+    render(<Flash flash={f} mirror={new MirrorSession({ connect: async () => { throw new Error('x'); } }, true)} />);
+    expect(screen.getByRole('button', { name: 'Connect again' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Back to the download' })).toBeNull();
+    cleanup();
+    await f.connectAdb();
+    expect(f.state).toMatchObject({ screen: 'done', communityWifi: 'on', wifiOnFailed: false });
+    expect(keys).toHaveLength(1); // the key was read once, before the restart
+    expect(calls.filter((c) => c === 'adb svc wifi enable')).toHaveLength(2);
+    expect(calls.filter((c) => c === 'adb closed')).toHaveLength(2); // each attempt releases the Mirror
+  });
+
+  it('a Connect again that is refused says why, on the error screen, and stays offered', async () => {
+    const { f } = setup({ adbFails: 1, failConnect: 2 }); // wifi-on fails, then the retry's connection is refused
+    f.setWifi(NET);
+    await install(f);
+    await f.connectAdb();
+    expect(f.state).toMatchObject({ screen: 'error', wifiOnFailed: true });
+    await f.connectAdb(); // Connect again: the browser's list is closed with nothing picked
+    expect(f.state).toMatchObject({ screen: 'error', wifiOnFailed: true, connectError: 'No device selected.' });
+    render(<Flash flash={f} mirror={new MirrorSession({ connect: async () => { throw new Error('x'); } }, true)} />);
+    expect(screen.getByText('No device selected.').getAttribute('role')).toBe('alert');
+    expect(screen.getByRole('button', { name: 'Connect again' })).toBeTruthy();
+    cleanup();
+    await f.connectAdb(); // and a third try works
+    expect(f.state).toMatchObject({ screen: 'done', communityWifi: 'on' });
+  });
+
+  it('a userdata partition too small for Glass Panes\' userdata stops at fastboot with a network saved too', async () => {
+    const { f, calls } = setup({ userdataBytes: 4 * 1024 ** 3 });
+    f.setWifi(NET);
+    await f.download(); f.toFastboot(); await f.connectFastboot();
+    expect(f.state.screen).toBe('fastboot');
+    expect(f.state.fastboot?.checks.at(-1)).toMatchObject({ what: 'Userdata partition for Glass Panes', ok: false });
+    f.understand(true); await f.flash();
+    expect(calls.filter((c) => c.startsWith('flash') || c.startsWith('wifi'))).toEqual([]);
+  });
+
+  it('refuses a password WPA can\'t take before fastboot', () => {
+    const { f } = setup();
+    f.state = { ...f.state, files: f.state.files.map((x) => ({ ...x, state: 'ok' as const })) };
+    f.setWifi({ ssid: 'Home Net', password: 'short' });
+    expect(f.blocked()).toMatch(/8 to 63 characters/);
+    f.toFastboot();
+    expect(f.state.screen).toBe('download');
+    f.setWifi({ password: '' }); // an open network
+    expect(f.blocked()).toBeUndefined();
+  });
+});
+
+describe('without a network', () => {
+  it('goes on exactly as published: no wifi step, no key used, Done with no Connect', async () => {
+    const { f, calls, keys } = setup();
+    await install(f);
+    expect(calls).toEqual([
+      'download system.img', 'download userdata.sparse', 'download adbkey',
+      'file system.img', 'check system.img', 'file userdata.sparse', 'check userdata.sparse',
+      'flash system system.img', 'flash userdata userdata.sparse',
+      'reboot', 'discard',
+    ]);
+    expect(keys).toEqual([]);
+    expect(f.state).toMatchObject({ screen: 'done', communityWifi: undefined });
+  });
+});
+
+describe('the screens', () => {
+  const show = async (d: FlashDemo) => {
+    const { flash, mirror } = await flashDemo(d, true);
+    render(<Flash flash={flash} mirror={mirror} />);
+    await act(async () => {});
+    return flash;
+  };
+
+  it('the download screen offers an optional network, and says only its key is saved', async () => {
+    await show('image-wifi');
+    expect(screen.getByText('Wi-Fi (optional)')).toBeTruthy();
+    expect(screen.getByText(/Only the network's key is saved, never the password/)).toBeTruthy();
+    expect((screen.getByLabelText('Wi-Fi network') as HTMLInputElement).value).toBe('Home Net');
+  });
+
+  it('the install lists saving the network and switching Wi-Fi on', async () => {
+    await show('image-wifi-writing');
+    expect([...document.querySelectorAll('ol.join li')].map((li) => li.textContent?.replace(/\d+%$/, ''))).toEqual([
+      'Save your Wi-Fi network in its userdata', 'Flash system', 'Flash userdata', 'Restart the Mirror', 'After its first start: switch Wi-Fi on',
+    ]);
+  });
+
+  it('One last click says whose key Kiln uses, and what it does with it', async () => {
+    await show('image-adb');
+    expect(screen.getByText(/Kiln connects with Glass Panes’ own published key, which the image trusts.*It switches Wi-Fi on, and that's all it does\./)).toBeTruthy();
+  });
+
+  it('Done says Wi-Fi is on, or how to switch it on once', async () => {
+    await show('image-done-wifi');
+    expect(screen.getByText(/Wi-Fi is on, and the Mirror joins your network by itself/)).toBeTruthy();
+    cleanup();
+    await show('image-done-wifi-unconfirmed');
+    expect(screen.getByText(/Android didn't confirm Wi-Fi is on\. Your network is saved: switch Wi-Fi on once in Glass Panes’ Settings/)).toBeTruthy();
+  });
+});
+
+describe('readImageKey, the one loader for a recipe\'s published key', () => {
+  it('checks the very Blob it reads against the pin, then gives the PKCS#8 bytes', async () => {
+    const seen: string[] = [];
+    const images = { async file(n: string) { seen.push(`file ${n}`); return Object.assign(new Blob([PEM]), { tag: n }); }, async check(b: Blob) { seen.push(`check ${tag(b)}`); } };
+    const want = { name: 'adbkey', url: 'https://example.com/adbkey', refract: 'x/adbkey', size: PEM.length, sha256: 'a'.repeat(64) };
+    expect([...await readImageKey(images, want)]).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(seen).toEqual(['file adbkey', 'check adbkey']);
+    await expect(readImageKey({ ...images, async check() { throw new WrongImage('not the pinned key'); } }, want)).rejects.toBeInstanceOf(WrongImage);
+  });
+});
+
+it('the session works without a key route: Done tells the person to switch Wi-Fi on once', async () => {
+  const mirror = new MirrorSession({ connect: async () => { throw new Error('x'); } }, true);
+  void mirror;
+  const { f } = setup();
+  f.setWifi(NET);
+  await install(f);
+  (f as unknown as { imageConnect?: unknown }).imageConnect = undefined;
+  await f.connectAdb();
+  expect(f.state.connectError).toMatch(/Turn Wi-Fi on in the Mirror's Settings once instead/);
+});

@@ -102,6 +102,16 @@ class ScreenBehaviourPinTest {
         assertFalse(h.wokeScreen)
     }
 
+    @Test fun approachDoesNotWakeInAlwaysMode() {
+        // #601: "always" is what the wake switch sets when off. Presence is still reported.
+        prefs.screenMode = "always"
+        h.start(screenOn = false)
+        h.proximity(1f)
+        assertTrue(h.near)
+        assertEquals(1, h.changes)
+        assertFalse(h.wokeScreen)
+    }
+
     @Test fun approachWithTheScreenOnTakesNoWakeLock() {
         h.start()
         h.proximity(1f)

@@ -247,9 +247,9 @@ class HttpServer(
         private const val BUSY_QUEUED = 8
 
         private val REASONS = mapOf(
-            101 to "Switching Protocols", 200 to "OK", 302 to "Found", 303 to "See Other", 400 to "Bad Request", 401 to "Unauthorized", 403 to "Forbidden",
+            101 to "Switching Protocols", 200 to "OK", 202 to "Accepted", 204 to "No Content", 302 to "Found", 303 to "See Other", 400 to "Bad Request", 401 to "Unauthorized", 403 to "Forbidden",
             404 to "Not Found", 405 to "Method Not Allowed", 409 to "Conflict", 413 to "Payload Too Large",
-            429 to "Too Many Requests", 500 to "Internal Server Error", 502 to "Bad Gateway", 503 to "Service Unavailable",
+            422 to "Unprocessable Content", 429 to "Too Many Requests", 500 to "Internal Server Error", 502 to "Bad Gateway", 503 to "Service Unavailable",
         )
 
         fun reason(status: Int) = REASONS[status] ?: "Status"

@@ -61,6 +61,22 @@ interface Glassworks {
     fun setupPanes(context: Context): List<SetupPane>
 
     /**
+     * The device's own setup steps, after Panes, each a rail row of its own (#422's Silent updates). Made once. None by
+     * default.
+     */
+    fun deviceSetupSteps(context: Context): List<SetupStep> = emptyList()
+
+    /**
+     * Setup is over, on the panel or from a browser over the network: each of the device's own steps counts as
+     * answered, also one that setup skipped because there was nothing to ask. A grant lost later then never brings the
+     * setup screen back over a working panel, and a browser's Done never leaves the panel waiting on one (CodeRabbit
+     * on #524). The Device page still shows what each step would ask.
+     */
+    fun settleDeviceSteps(context: Context) {
+        deviceSetupSteps(context).forEach { step -> step.ops["answer"]?.run(org.json.JSONObject()) }
+    }
+
+    /**
      * Whether camera frames are leaving the panel now (a still to Home Assistant, a stream), for the
      * privacy indicator (#117). Set by the camera pane; [onCameraLeaving] hears each change.
      */
@@ -77,6 +93,12 @@ interface Glassworks {
 
     /** Home Assistant is connected and listening to the panel's states now; false while the device isn't running. */
     fun homeAssistantConnected(): Boolean
+
+    /**
+     * Whether the device sits on its dock now, or null where it has no Docked sensor (docs/esphome.md#docked: the
+     * frame never docks, or might and hasn't yet) or while the device isn't running. The Device page's dock row reads it.
+     */
+    fun docked(): Boolean? = null
 
     /** Set while KioskService runs; the sign-in screen uses it for manual HA URL entry. */
     var discovery: HaDiscovery?

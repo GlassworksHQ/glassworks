@@ -7,37 +7,17 @@ import * as RadioGroup from '@radix-ui/react-radio-group';
 import { fmtSize } from '@glassworks/kiln-core';
 import Link from 'next/link';
 import { BuiltOn, stepCredits } from '../components/Credit';
+import { SilentUpdates } from '../components/SilentUpdates';
 import { LastRun } from '../components/LastRun';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FrameUi } from '../frames/aqara-s1-plus';
-import { LABELS, mount } from '../recovery/player';
+import { Recovery } from '../recovery/Recovery';
 import type { Session } from './session';
 import type { AppPhase } from '@glassworks/aqara-s1-plus-installer';
 import { HomeAssistant, Radio, RadioNext, Wifi } from '../setup/steps';
 import { eta, milestones, type Setup, type WizardState } from './state';
 
 type P = { s: WizardState; session: Session; frame: FrameUi };
-
-function Recovery({ frame }: { frame: FrameUi }) {
-  const svg = useRef<SVGSVGElement>(null);
-  const [beat, setBeat] = useState(-1);
-  useEffect(() => {
-    const p = mount(svg.current!, frame.recovery, setBeat);
-    p.play();
-    return () => p.stop();
-  }, [frame]);
-  const r = frame.recovery;
-  return (
-    <>
-      <div className="recview">
-        <svg ref={svg} role="img" aria-label={`How to put the ${r.name} in recovery mode: ${r.steps.map((x) => LABELS[x]).join(', ')}. ${r.button?.what ?? ''}`} />
-      </div>
-      <ol className="beats" aria-hidden="true">
-        {r.steps.map((st, i) => <li key={st} className={i === beat ? 'on' : beat > i ? 'past' : ''}>{i + 1} · {r.labels?.[st] ?? LABELS[st]}</li>)}
-      </ol>
-    </>
-  );
-}
 
 function os(): 'win' | 'linux' | 'other' {
   const ua = navigator.userAgent;
@@ -50,7 +30,7 @@ export function Connect({ s, session, frame }: P) {
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h" className="huge">Hold the button. Plug it in.</h2>
-      <Recovery frame={frame} />
+      <Recovery data={frame.recovery} />
       <p className="small">Then click Connect and pick <code>{frame.felPick}</code>.{s.flow === 'undo' ? ' Nothing is written until your backup checks out.' : s.changed === 'unknown' ? ' Kiln can\'t tell if an earlier try in this browser tab changed the panel.' : s.changed ? ' An earlier try already changed the panel.' : ' Nothing is written yet.'}</p>
       {driver && <p className="small">{driver} <a className="link" href={frame.help.drivers} target="_blank" rel="noopener">How</a></p>}
       <LastRun />
@@ -157,7 +137,7 @@ const LOCALES = ['en-US', 'en-GB', 'en-AU', 'en-CA', 'de-DE', 'fr-FR', 'fr-CA', 
 /**
  * The app going in, as the panel reports it (provision's AppPhase): one row per APK the recipe
  * installs, with its copy and its `pm install`, and the steps between. Android stops and restarts
- * S1 Kiosk while it installs and optimises it, and again on its first start: say so, so a restarting
+ * Glassworks while it installs and optimises it, and again on its first start: say so, so a restarting
  * panel reads as progress.
  */
 type Row = 'kiosk' | 'home' | 'keyboard' | 'prefs' | 'start';
@@ -304,6 +284,7 @@ export function Done({ s, session, frame }: P) {
       <span className="okmark" aria-hidden="true">✓</span>
       <h2 id="h">{d.title}</h2>
       <p className="lede">{d.body}</p>
+      {d.updates && <SilentUpdates words={d.updates} />}
       {d.backup && (
         <div className="well">
           <span className="grow"><span>{d.backup.hint}</span><span className="small">{d.backup.name} · {d.backup.info}</span><span className="small">The latest backup made in this browser tab.</span></span>

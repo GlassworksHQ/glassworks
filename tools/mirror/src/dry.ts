@@ -7,10 +7,12 @@ import { createHash } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { PanelShell } from '@glassworks/adb';
+import { zipEntry } from '@glassworks/app-adb';
+import { FakeKeySocket } from '@glassworks/app-adb/fakes';
 import { Disk, MemoryStore, mkfs, writeSparse } from '@glassworks/ext4';
 import { Fastboot } from '@glassworks/fastboot';
 import { FakeLk } from '@glassworks/fastboot/fake-lk';
-import { GLASS_PANES, SYSTEM_BYTES, USERDATA_BYTES } from '@glassworks/lululemon-mirror-installer';
+import { GLASS_PANES, SYSTEM_BYTES, USERDATA_BYTES, apkLibs } from '@glassworks/lululemon-mirror-installer';
 import type { MirrorApp } from '@glassworks/lululemon-mirror-installer';
 import { FakeMirror, FirstBootMirror, fakeServicesJar } from '@glassworks/lululemon-mirror-installer/fakes';
 import type { RunDeps, Want } from './run';
@@ -20,8 +22,20 @@ const MiB = 1024 * 1024;
 export const DRY_USERDATA = 64 * MiB;
 
 /**
+ * The bytes the patch adds to the dry run's system image for `apk`: the APK itself, and every native
+ * library image.ts unpacks out of it (Android 6 doesn't read them from the APK, so they land
+ * uncompressed next to it). `extra`: the boot animation and the settings overlay, when there are.
+ */
+export async function dryRoom(apk: Uint8Array, extra = 0): Promise<number> {
+  const libs = apkLibs(apk);
+  let room = apk.length + extra;
+  for (const n of libs?.names ?? []) room += (await zipEntry(apk, n))?.length ?? 0;
+  return room;
+}
+
+/**
  * A small system.img made like the Glass Panes one: its fingerprint in /build.prop, Launcher3 in
- * /priv-app, and a services.jar that trusts the Glass Panes project key. `room`: bytes the patch will add (the APK, the boot animation).
+ * /priv-app, and a services.jar that trusts the Glass Panes project key. `room`: bytes the patch will add (the APK, its libraries, the boot animation, the settings overlay).
  */
 export async function dryImage(work: string, room = 0): Promise<{ path: string; want: Want; bytes: number }> {
   const blocks = Math.ceil((32 * MiB + room * 1.5) / 4096);
@@ -45,6 +59,9 @@ export async function dryImage(work: string, room = 0): Promise<{ path: string; 
   return { path, want: { name: 'system.img', size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }, bytes: blocks * 4096 };
 }
 
+/** A made-up serial for the dry LK (PanelDevice's DeviceMacPinTest uses the same one). */
+export const DRY_SERIAL = '0123456789abcdef';
+
 /**
  * FakeLk plus the variables the Mirror's checks read. Both partitions report the Mirror's sizes, so
  * checkFastboot's real checks run, but hold only what the dry run writes: the dry image, and a
@@ -60,7 +77,7 @@ export class DryLk extends FakeLk {
     const cmd = data.length <= 64 ? new TextDecoder().decode(data) : '';
     const answer = cmd === 'getvar:partition-size:system' ? `0x${SYSTEM_BYTES.toString(16)}`
       : cmd === 'getvar:partition-size:userdata' ? `0x${USERDATA_BYTES.toString(16)}`
-        : cmd === 'getvar:product' ? 'MSM8916' : cmd === 'reboot' ? '' : undefined;
+        : cmd === 'getvar:product' ? 'MSM8916' : cmd === 'getvar:serialno' ? DRY_SERIAL : cmd === 'reboot' ? '' : undefined;
     if (answer === undefined) return super.out(data);
     this.commands.push(cmd);
     this.replies.push(new TextEncoder().encode(`OKAY${answer}`));
@@ -70,10 +87,13 @@ export class DryLk extends FakeLk {
 export interface Dry { deps: RunDeps; lk: DryLk; before: FakeMirror; after: FirstBootMirror; state: () => 'android' | 'fastboot' | 'glassworks' }
 
 /** Fake devices for runInstall/runWayBack. `stockAtStart: false` starts in fastboot already; `app` is the app the APK is (Glassworks by default). */
-export function dryDevices(systemBytes: number, log: (l: string) => void, o: { stockAtStart?: boolean; hideFails?: boolean; maxDownloadReply?: string; app?: MirrorApp } = {}): Dry {
+export function dryDevices(systemBytes: number, log: (l: string) => void, o: { stockAtStart?: boolean; hideFails?: boolean; maxDownloadReply?: string; app?: MirrorApp;
+  /** a reflash (#574): Glassworks runs before the flash and holds this ESPHome API key; the fresh app's socket starts empty */
+  apiKey?: string } = {}): Dry {
   const lk = new DryLk(systemBytes, o.maxDownloadReply);
   const before = new FakeMirror({ app: o.app });
   const after = new FirstBootMirror(undefined, true, o.app);
+  if (o.apiKey) { before.withKeySocket(new FakeKeySocket(o.apiKey)); after.withKeySocket(); }
   after.hideFails = !!o.hideFails;
   let state: 'android' | 'fastboot' | 'glassworks' = o.stockAtStart === false ? 'fastboot' : 'android';
   const fb = new Fastboot(lk);

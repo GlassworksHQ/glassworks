@@ -107,6 +107,11 @@ Since helper v4, binaries and a newer helper come from a **signed radio bundle**
   `s1kiosk_verify` (static ARM Ed25519 checker) and `s1kiosk_bundle.pub` (the project's public key).
   After this boot image, helper fixes, new radio stacks and radio firmware images come with app
   updates; see [Radio bundle service](#radio-bundle-service).
+- **Extra in the boot image: Magisk's own setup.** `magisk-busybox` (`lib/armeabi-v7a/libbusybox.so` from the same
+  Magisk APK) and three lines that copy it: `s1kiosk_magiskenv.rc` before the frame loader, the start of
+  `glassworks.rc`'s `post-fs-data` with it. At `post-fs-data`, just before Magisk's own step,
+  init copies it to `/data/adb/magisk/busybox`. Without it Magisk loads no module
+  ([magisk-modules.md](../../../docs/research/magisk-modules.md)).
 
 **Undo:** `frames/aqara-s1-plus/tools/install/fel-install.sh --undo <backup-dir>`.
 - It verifies the backup against its `SHA256SUMS` and refuses a `boot.img` that is already

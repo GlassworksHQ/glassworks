@@ -24,12 +24,22 @@ import java.util.concurrent.ConcurrentHashMap
  *   was never sealed: an edit that would store one fails whole (fail closed, maintainer 2026-11-15).
  * - **No key store at all** ([SecretStore.present] false, never on Android 6+): secrets are stored as
  *   they were before the secret store.
+ * - **Carried over a reinstall** ([carryOver]): an installer that copied the app's data across an uninstall
+ *   hands each secret back in the clear, and it replaces the value sealed with the key Android deleted (#584).
+ *   While that hand-over is due ([handoverPending]), a value that no longer opens is kept and reads as
+ *   [Secret.Unavailable], not removed: the app may make its new key (any first secret it stores) before the
+ *   installer's hand-over comes, and the value must stay locked, not absent, until then (the S1 run of 2026-11-19).
+ *
+ * Every object over the same file shares one lock ([lockFor]), so a value one of them removes as lost can't undo
+ * one another just stored.
  */
 class SecretPrefs(
     private val raw: SharedPreferences,
     private val file: String,
     private val secrets: Set<String>,
     private val store: SecretStore,
+    /** An installer copied this data across a reinstall and will hand the secrets back soon ([SecretFiles.handoverPending]). */
+    private val handoverPending: () -> Boolean = { false },
     private val warn: (String) -> Unit = { Log.w(SecretStore.TAG, it) },
 ) : SharedPreferences {
     /**
@@ -39,9 +49,10 @@ class SecretPrefs(
     private val opened = ConcurrentHashMap<String, Pair<String, String>>()
     private val warned: MutableSet<Warning> = ConcurrentHashMap.newKeySet()
     private val listeners = HashMap<SharedPreferences.OnSharedPreferenceChangeListener, SharedPreferences.OnSharedPreferenceChangeListener>()
+    private val lock: Any = lockFor(raw)
 
     /** Each is logged once per file object, so a long outage doesn't fill the log. */
-    private enum class Warning { LOST, CANT_READ, CANT_SEAL, NOT_SEALED, KEPT_SEALED, NOT_SAVED }
+    private enum class Warning { LOST, KEPT_FOR_HANDOVER, CANT_READ, CANT_SEAL, NOT_SEALED, KEPT_SEALED, NOT_SAVED }
 
     /** A secret as it reads now ([secret]). */
     sealed interface Secret {
@@ -78,8 +89,16 @@ class SecretPrefs(
         return when (val o = store.open(stored, scope(key))) {
             is SecretStore.Opened.Value -> Secret.Value(o.text).also { opened[key] = stored to o.text }
             SecretStore.Opened.Lost -> {
+                if (handoverPending()) {
+                    warnOnce(Warning.KEPT_FOR_HANDOVER, "$file/$key was sealed with another key; it is kept, locked, until the installer hands it over")
+                    return Secret.Unavailable
+                }
+                val changed = synchronized(lock) {
+                    (raw.all[key] != stored).also { if (!it) commit(raw.edit().remove(key), "removing $key") }
+                }
+                // Stored again meanwhile (a carry-over, a new sign-in): that value is the one to read.
+                if (changed) return read(key, stored(key))
                 warnOnce(Warning.LOST, "$file/$key was sealed with a key this panel no longer has; it is removed and needs setting again")
-                synchronized(this) { if (raw.all[key] == stored) commit(raw.edit().remove(key), "removing $key") }
                 Secret.Absent
             }
             SecretStore.Opened.Unavailable -> {
@@ -117,6 +136,49 @@ class SecretPrefs(
             else -> (read(k, v) as? Secret.Value)?.let { k to it.text }
         }
     }.toMap()
+
+    /** What [carryOver] did. */
+    enum class CarryOver {
+        /** Stored: nothing was there, or a value sealed with a key this app no longer has. */
+        STORED,
+        /** The same value was there already (a hand-over tried again); stored again. */
+        SAME,
+        /** Another value is stored and opens: it is in use, so it stays. */
+        DIFFERENT,
+        /** The key store can't seal or open now (an outage): nothing changed. */
+        UNAVAILABLE,
+        /** The file couldn't be written. */
+        NOT_STORED,
+    }
+
+    /**
+     * Stores [value] as the secret [key], with [extra]'s other settings in the same commit, unless another value is
+     * in use. Made for an installer that copies the app's data across an uninstall (#584): Android deleted the old
+     * install's Keystore key with it, so the copied secrets can never open, and the installer hands their values back
+     * in the clear. Replaces a stored value only when it fails to open with the key the new value is sealed with,
+     * which is the case for a value sealed by an earlier install. Never replaces a value that opens to something
+     * else, or one the key store can't open now. Sealing first makes the key when the app has none yet, as any first
+     * secret does.
+     */
+    fun carryOver(key: String, value: String, extra: (SharedPreferences.Editor) -> Unit = {}): CarryOver {
+        require(key in secrets) { "$file/$key isn't a secret" }
+        return synchronized(lock) {
+            val sealed = store.seal(value, scope(key))
+            if (sealed == null && store.present()) return@synchronized CarryOver.UNAVAILABLE
+            val result = when (val now = stored(key)) {
+                null -> CarryOver.STORED
+                else -> when (val o = if (SecretStore.isSealed(now)) store.open(now, scope(key)) else SecretStore.Opened.Value(now)) {
+                    is SecretStore.Opened.Value -> if (o.text == value) CarryOver.SAME else return@synchronized CarryOver.DIFFERENT
+                    SecretStore.Opened.Lost -> CarryOver.STORED
+                    SecretStore.Opened.Unavailable -> return@synchronized CarryOver.UNAVAILABLE
+                }
+            }
+            val e = edit()
+            e.putString(key, value)
+            extra(e)
+            if (e.commit()) result else CarryOver.NOT_STORED
+        }
+    }
 
     override fun getStringSet(key: String, defValues: Set<String>?): Set<String>? = raw.getStringSet(key, defValues)
     override fun getInt(key: String, defValue: Int) = raw.getInt(key, defValue)
@@ -190,7 +252,18 @@ class SecretPrefs(
         }
 
         // Under the same lock as removing a lost value in read(), so neither undoes a value the other wrote.
-        override fun commit(): Boolean = synchronized(this@SecretPrefs) { allowed() && e.commit() }
-        override fun apply() = synchronized(this@SecretPrefs) { if (allowed()) e.apply() }
+        override fun commit(): Boolean = synchronized(lock) { allowed() && e.commit() }
+        override fun apply() = synchronized(lock) { if (allowed()) e.apply() }
+    }
+
+    companion object {
+        /**
+         * One lock per settings file: Android gives every object that opens a file the same SharedPreferences, so
+         * keying by it covers each SecretPrefs over that file. Not the SharedPreferences itself: Android's own
+         * writer locks it on some versions while a commit waits.
+         */
+        private val locks = java.util.WeakHashMap<SharedPreferences, Any>()
+
+        private fun lockFor(raw: SharedPreferences): Any = synchronized(locks) { locks.getOrPut(raw) { Any() } }
     }
 }

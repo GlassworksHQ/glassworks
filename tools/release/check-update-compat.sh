@@ -3,10 +3,10 @@
 # device-admin rights and the names the root helper and the installers rely on. Run on every PR
 # (unsigned build) and on releases and test builds (signed, with --signed).
 #
-#   tools/release/check-update-compat.sh <apk>                  S1 Kiosk, identifiers only
+#   tools/release/check-update-compat.sh <apk>                  the S1 app, identifiers only
 #   tools/release/check-update-compat.sh --signed <apk>         also the release signing certificate
 #   tools/release/check-update-compat.sh --app <app> [--signed] <apk>
-#       <app>: s1-kiosk (the default), generic-android or generic-android-legacy (Glassworks for
+#       <app>: aqara-s1-plus (the default), generic-android or generic-android-legacy (Glassworks for
 #       generic Android and its legacy build, #23 and #198; their own key, generic-release-cert.sha256)
 #
 # What breaks updates in place, and is checked here:
@@ -24,8 +24,8 @@
 # (or $ANDROID_SDK_ROOT, or ~/Library/Android/sdk).
 set -euo pipefail
 
-usage="usage: check-update-compat.sh [--app s1-kiosk|generic-android|generic-android-legacy] [--signed] <apk>"
-signed=false app=s1-kiosk
+usage="usage: check-update-compat.sh [--app aqara-s1-plus|generic-android|generic-android-legacy] [--signed] <apk>"
+signed=false app=aqara-s1-plus
 while [ $# -gt 1 ]; do
   case "$1" in
     --signed) signed=true; shift ;;
@@ -37,16 +37,16 @@ apk="${1:?$usage}"
 [ -f "$apk" ] || { echo "no such APK: $apk" >&2; exit 2; }
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-# Both generic builds run S1 Kiosk's classes under their old names (#504 keeps them), plus the launcher alias.
+# Both generic builds run the core's classes under their own names since #527, plus the launcher alias.
 GENERIC_COMPONENTS=(
-  sh.edm.s1kiosk.AdminReceiver
-  sh.edm.s1kiosk.MainActivity
-  sh.edm.s1kiosk.improv.ImprovActivity
-  sh.edm.s1kiosk.BootReceiver
+  dev.glassworks.AdminReceiver
+  dev.glassworks.MainActivity
+  dev.glassworks.provisioning.ImprovActivity
+  dev.glassworks.BootReceiver
   dev.glassworks.generic.Launcher
 )
 case "$app" in
-  s1-kiosk)
+  aqara-s1-plus)
     PKG=sh.edm.s1kiosk CERT_FILE=release-cert.sha256
     COMPONENTS=(
       "$PKG.AdminReceiver"

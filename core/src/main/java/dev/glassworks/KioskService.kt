@@ -19,6 +19,10 @@ import dev.glassworks.platform.HotspotFailure
 import dev.glassworks.platform.WifiRadio
 import dev.glassworks.platform.NetworkUp
 import dev.glassworks.platform.Platform
+import dev.glassworks.setup.CaptivePortal
+import dev.glassworks.setup.LanSetup
+import dev.glassworks.setup.PortalAddresses
+import dev.glassworks.setup.PortalHotspot
 import dev.glassworks.setup.SetupHotspot
 import dev.glassworks.settings.SettingsMenu
 import android.os.IBinder
@@ -26,12 +30,16 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import dev.glassworks.auth.HaAuth
+import dev.glassworks.auth.OAuth
 import dev.glassworks.auth.UrlConnectionPoster
 import dev.glassworks.frame.systemSettings
 import dev.glassworks.discovery.HaDiscovery
 import dev.glassworks.device.PanelDevice
 import dev.glassworks.provisioning.ImprovController
+import dev.glassworks.provisioning.ImprovSelfAuth
 import dev.glassworks.provisioning.ImprovSerialServer
+import dev.glassworks.device.SecretHandoverServer
+import dev.glassworks.improv.AdbSocketServer
 import dev.glassworks.manage.CodeOverlay
 import dev.glassworks.setup.SetupChannelServer
 
@@ -47,6 +55,8 @@ open class KioskService : Service() {
     private val runtime get() = glassworksRuntime
     private var device: PanelDevice? = null
     private var discovery: HaDiscovery? = null
+    /** The ESPHome API key's hand-over over adb, for a reflash (#574). */
+    private var secretHandover: AdbSocketServer? = null
     private var frameWork: ServiceWork? = null
     private var codeOverlay: CodeOverlay? = null
     private lateinit var foreground: KioskForeground
@@ -105,6 +115,7 @@ open class KioskService : Service() {
         // The web installer, over adb (docs/onboarding.md): Wi-Fi via Improv Serial, then HA + radio.
         ImprovSerialServer.start(glassworks.frame, glassworks.build)
         SetupChannelServer.start(this, glassworks)
+        secretHandover = SecretHandoverServer.create(this).also { it.start() }
         startSetupHotspot()
         Log.i("Glassworks", "KioskService started")
     }
@@ -115,14 +126,23 @@ open class KioskService : Service() {
      * service counts, screen off included. Any network coming or going is a change for the rule.
      */
     private fun startSetupHotspot() {
+        val schedule: (Long, () -> Unit) -> () -> Unit = { delay, run -> val r = Runnable(run); main.postDelayed(r, delay); { main.removeCallbacks(r) } }
+        // On a frame whose root sends the hotspot's DNS and port 80 to the app, a phone opens the setup page by itself.
+        val hotspot = Hotspot.of(this, main).let { h ->
+            if (!glassworks.frame.hotspotPortal) h
+            else PortalHotspot(h, CaptivePortal({ ap -> "http://$ap:${OAuth.SIGNIN_PORT}${LanSetup.PAGE}" }, log = { Log.i(HOTSPOT_TAG, it) }), schedule,
+                addresses = { PortalAddresses.now(this) }, log = { Log.i(HOTSPOT_TAG, it) })
+        }
         val hs = SetupHotspot(
-            hotspot = Hotspot.of(this, main),
+            hotspot = hotspot,
             connected = { NetworkUp.now(this) },
             clock = SystemClock::elapsedRealtime,
-            schedule = { delay, run -> val r = Runnable(run); main.postDelayed(r, delay); { main.removeCallbacks(r) } },
+            schedule = schedule,
             // The screen follows at once (a phone joined: the setup page's QR), not on its 2 s tick.
             onChange = { dev.glassworks.setup.SetupSignals.changed() },
             log = { Log.i(HOTSPOT_TAG, it) },
+            // Without touch, after Bluetooth setup's own 5 minutes (#611).
+            graceMs = ImprovSelfAuth.hotspotGraceMs(glassworks.frame.input, KioskPrefs(this).improvAuto, ImprovController.BOOT_GRACE_MS),
             blocked = { if (WifiRadio.lockedOff(this)) HotspotFailure.WIFI_OFF else null },
             // A fresh scan first (up to 15 s): the radio can't scan once it is the access point.
             beforeStart = { start ->
@@ -150,6 +170,8 @@ open class KioskService : Service() {
         glassworks.setupHotspot = null
         glassworks.voiceCancel = null
         SetupChannelServer.stop()
+        secretHandover?.stop()
+        secretHandover = null
         ImprovSerialServer.stop()
         ImprovController.shutdown()
         runtime.device = null

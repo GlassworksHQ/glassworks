@@ -1,0 +1,9 @@
+/* issue 422: Done's Silent updates block on every frame, the grants row's look with a line that says what it means.
+   Its own file, so the app's setup page (lan/, built from globals.css) doesn't carry it. */
+.su { display: grid; gap: 6px; border: 1px solid var(--edge); border-radius: 12px; padding: 11px 14px; }
+.su .spread > span { font-size: 14px; }
+.su i { font-style: normal; font-size: 13px; }
+.su .y { color: var(--ok-ink); }
+.su .n { color: var(--faint); }
+.su .w { color: var(--turn-ink); }
+.su .small { line-height: 1.45; }

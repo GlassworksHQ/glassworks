@@ -302,6 +302,26 @@ class VoiceReadinessTest {
     private val failures = CopyOnWriteArrayList<Throwable>()
 
     @Test
+    fun withoutThePermissionItNeverOpensTheMicrophone() {
+        // #583: on Android 6 a recorder made without RECORD_AUDIO crashed the app in native code.
+        val reads = java.util.concurrent.atomic.AtomicInteger()
+        ShadowAudioRecord.setSource(object : ShadowAudioRecord.AudioRecordSource {
+            override fun readInShortArray(audioData: ShortArray, offsetInShorts: Int, sizeInShorts: Int, isBlocking: Boolean): Int {
+                reads.incrementAndGet()
+                return try { Thread.sleep(10); sizeInShorts } catch (_: InterruptedException) { 0 }
+            }
+        })
+        shadowOf(app).denyPermissions(Manifest.permission.RECORD_AUDIO)
+        val e = engine { Quiet }
+        eventually("ready") { e.readiness == VoiceReadiness.Ready }
+        e.setMuted(false)
+        eventually("not allowed") { e.readiness == VoiceReadiness.MicrophoneNotAllowed }
+        Thread.sleep(200)
+        assertEquals("no read from a microphone it may not use", 0, reads.get())
+        assertEquals(VoiceReadiness.MicrophoneNotAllowed, states.last())
+    }
+
+    @Test
     fun aMicrophoneThatWontOpenSaysWhetherItIsAllowed() {
         val e = engine { Quiet }
         eventually("ready") { e.readiness == VoiceReadiness.Ready }

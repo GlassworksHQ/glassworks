@@ -23,7 +23,7 @@ import kotlin.math.log10
 /**
  * When the screen is on and how bright it is, from the frame's [presence] and [light] sources.
  *
- *  - Approaching the panel wakes the screen, and it stays on while someone is near.
+ *  - Approaching the panel wakes the screen ([ScreenSettings.approachWakes]), and it stays on while someone is near.
  *  - After `idleOffSec` with nobody near and no touch, the screen turns off.
  *  - Brightness follows ambient light (log curve), up to `maxBrightness`.
  *  - Nothing here knows the time of day (#473): Home Assistant changes the idle timeout and the
@@ -69,6 +69,8 @@ class ScreenPolicy(
         const val TEST_HOLD_MAX_S = 3600
         const val TEST_HOLD_EXTRA = "test_hold"
         const val TEST_HOLD_S_EXTRA = "test_hold_s"
+        /** A loopback dashboard for the test hold ([testDashboard]); "" ends it. */
+        const val TEST_DASHBOARD_EXTRA = "test_dashboard"
 
         /** The most automatic brightness may reach: [max], or full while something [held] the screen. */
         fun brightnessCap(held: Boolean, max: Float): Float = if (held) 1f else max
@@ -101,16 +103,25 @@ class ScreenPolicy(
 
     /** A [testHold] is on. Main thread. */
     var testHeld = false; private set
+
+    /**
+     * The dashboard a test shows for its hold instead of the saved one: Clarity's fake Home Assistant, on a
+     * loopback address. Clarity used to point the saved dashboard there, which moved the panel's Home Assistant
+     * address, and since #496 a moved address asks to sign in again (the Pixel Tablet's run, 2026-11-18). Null
+     * without one, and always after the hold ends. It changes no setting and no sign-in; it lives with the hold,
+     * in memory and in [TestHoldFile]. Main thread.
+     */
+    var testDashboard: String? = null; private set
+
+    /** Called with the new [testDashboard] (null: back to the saved dashboard) when it changes. Main thread. */
+    var onTestDashboard: ((String?) -> Unit)? = null
     /** When it ends, on [SystemClock.elapsedRealtime], which counts deep sleep too. */
     private var testHoldUntil = 0L
     /** Keeps the hold through a restart of the app; set once a context is known. */
     private var testHoldFile: TestHoldFile? = null
 
     private fun testHoldFile(c: Context): TestHoldFile =
-        testHoldFile ?: TestHoldFile(File(c.applicationContext.noBackupFilesDir, "test_hold")).also { testHoldFile = it }
-
-    /** Which boot this is: a hold saved in another boot is not this one's. Android 7 added the count (-1 before). */
-    private fun boot(c: Context): Long = android.provider.Settings.Global.getInt(c.contentResolver, "boot_count", -1).toLong()
+        testHoldFile ?: TestHold.file(c).also { testHoldFile = it }
 
     /** Activity hooks: keep-screen-on flag and window brightness (0..1, or -1 = system). */
     var onKeepScreenOn: ((Boolean) -> Unit)? = null
@@ -161,11 +172,7 @@ class ScreenPolicy(
         handler.post(tick)
         // A test restarted the app inside its hold: the new process holds the screen from its start,
         // before the kiosk's idle timeout can turn it off.
-        if (!testHeld) testHoldFile(ctx).read(SystemClock.elapsedRealtime(), boot(ctx), TEST_HOLD_MAX_S * 1000L)?.let { end ->
-            testHeld = true
-            testHoldUntil = end
-            Log.i(logTag, "test hold resumed for ${(end - SystemClock.elapsedRealtime() + 999) / 1000} s")
-        }
+        resumeTestHold(ctx)
         // A test hold from before start() (the intent that launched the activity) hasn't woken it yet.
         if (testHeld) wake(TEST_HOLD)
     }
@@ -256,18 +263,72 @@ class ScreenPolicy(
         Log.i(logTag, "test hold ${if (testHeld) "renewed" else "on"} for $s s")
         testHeld = true
         testHoldUntil = SystemClock.elapsedRealtime() + s * 1000L
-        file.write(testHoldUntil, boot(context))
+        file.write(testHoldUntil, TestHold.boot(context), testDashboard)
         if (started) wake(TEST_HOLD)
     }
 
     /**
+     * Shows [url] instead of the saved dashboard for the rest of the test hold ([testDashboard]), or ends that
+     * when [url] is blank. Refused, with a log line, for an address off this device or without a hold.
+     */
+    fun setTestDashboard(context: Context, url: String) {
+        val want = url.trim().ifEmpty { null }
+        when {
+            // Said again, so a runner that asks twice reads the same answer (perfrun.py testdash).
+            want == testDashboard -> {
+                if (want != null) Log.i(logTag, "test dashboard on: ${origin(want)} (already)")
+                return
+            }
+            want != null && !TestHoldFile.isTestDashboard(want) -> {
+                Log.w(logTag, "test dashboard refused: only http on 127.0.0.1 or localhost")
+                return
+            }
+            want != null && !testHeld -> {
+                Log.w(logTag, "test dashboard refused: no test hold")
+                return
+            }
+        }
+        testDashboard = want
+        if (testHeld) testHoldFile(context).write(testHoldUntil, TestHold.boot(context), want)
+        Log.i(logTag, if (want != null) "test dashboard on: ${origin(want)}" else "test dashboard off (cleared)")
+        onTestDashboard?.invoke(want)
+    }
+
+    /**
+     * The hold a test left in [TestHoldFile] when it restarted the app. Read at [start], and before an intent's extras
+     * apply: the intent that launches the app comes before [start], and must see the hold it changes (a cold launch
+     * with `test_dashboard ''` would otherwise clear nothing, and the hold's dashboard would come back at [start]).
+     */
+    private fun resumeTestHold(c: Context) {
+        if (testHeld) return
+        val saved = testHoldFile(c).read(SystemClock.elapsedRealtime(), TestHold.boot(c), TEST_HOLD_MAX_S * 1000L) ?: return
+        testHeld = true
+        testHoldUntil = saved.end
+        testDashboard = saved.dashboard
+        Log.i(logTag, "test hold resumed for ${(saved.end - SystemClock.elapsedRealtime() + 999) / 1000} s")
+        saved.dashboard?.let { Log.i(logTag, "test dashboard resumed: ${origin(it)}") }
+    }
+
+    /** scheme://host:port, for the log. */
+    private fun origin(url: String): String =
+        runCatching { java.net.URI(url).let { "${it.scheme}://${it.authority}" } }.getOrDefault("?")
+
+    /**
      * An intent's [TEST_HOLD_EXTRA]: `true` holds for [TEST_HOLD_S_EXTRA] seconds (1800 without it),
-     * `false` ends it. Removed once applied, so a recreated activity doesn't apply it again.
+     * `false` ends it; then its [TEST_DASHBOARD_EXTRA] ([setTestDashboard]). Removed once applied, so a
+     * recreated activity doesn't apply them again.
      */
     fun applyTestHoldExtra(context: Context, intent: Intent) {
-        if (!intent.hasExtra(TEST_HOLD_EXTRA)) return
-        testHold(context, if (intent.getBooleanExtra(TEST_HOLD_EXTRA, false)) intent.getIntExtra(TEST_HOLD_S_EXTRA, 1800) else 0)
-        intent.removeExtra(TEST_HOLD_EXTRA)
+        if (intent.hasExtra(TEST_HOLD_EXTRA) || intent.hasExtra(TEST_DASHBOARD_EXTRA)) resumeTestHold(context)
+        if (intent.hasExtra(TEST_HOLD_EXTRA)) {
+            testHold(context, if (intent.getBooleanExtra(TEST_HOLD_EXTRA, false)) intent.getIntExtra(TEST_HOLD_S_EXTRA, 1800) else 0)
+            intent.removeExtra(TEST_HOLD_EXTRA)
+        }
+        // After the hold, so one intent can start both.
+        intent.getStringExtra(TEST_DASHBOARD_EXTRA)?.let {
+            intent.removeExtra(TEST_DASHBOARD_EXTRA)
+            setTestDashboard(context, it)
+        }
     }
 
     /** The idle timeout counts from now, so the screen doesn't go dark at once. */
@@ -276,6 +337,11 @@ class ScreenPolicy(
         testHeld = false
         Log.i(logTag, "test hold off ($why)")
         lastActivity = SystemClock.elapsedRealtime()
+        if (testDashboard != null) {
+            testDashboard = null
+            Log.i(logTag, "test dashboard off ($why)")
+            onTestDashboard?.invoke(null)
+        }
     }
 
     /**
@@ -373,7 +439,8 @@ class ScreenPolicy(
         Log.i(logTag, "presence ${if (near) "NEAR" else "far"} (raw=$raw)")
         if (near) {
             lastActivity = SystemClock.elapsedRealtime()
-            if (!screenOn && prefs.wakeOnApproach) wake("approach")
+            // Presence is still reported in "always" (the binary_sensor); only the wake waits for the mode (#601).
+            if (!screenOn && prefs.approachWakes) wake("approach")
         }
         notifyChanged()
     }

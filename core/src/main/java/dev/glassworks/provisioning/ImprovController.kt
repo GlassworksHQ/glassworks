@@ -20,6 +20,7 @@ import android.os.SystemClock
 import android.util.Log
 import dev.glassworks.KioskPrefs
 import dev.glassworks.auth.OAuth
+import dev.glassworks.frame.Input
 import dev.glassworks.glassworks
 import dev.glassworks.setup.ImprovFacts
 import dev.glassworks.setup.InstallerWifi
@@ -34,7 +35,8 @@ import java.lang.ref.WeakReference
  *    (boot), unless `improv_auto` is off;
  *  - on demand: `--ez improv true` (ImprovActivity / KioskService intent) or the ESPHome button.
  * Starts in AUTHORIZATION_REQUIRED; tapping "Allow" on the on-screen card (or, optionally, a
- * proximity approach) authorizes for [ImprovSession.DEFAULT_AUTH_TIMEOUT_MS].
+ * proximity approach) authorizes for 2 minutes. On a screen that takes no tap it starts authorized for 5 minutes
+ * instead, but only while the panel has no network, and an approach opens that window again ([ImprovSelfAuth], #611).
  *
  * Where "Allow" is shown: while the setup screen is up ([inlineHost] says so), Improv is part of its
  * Wi-Fi step ([setupFacts] → setup/WifiStep) and the [ImprovOverlay] window stays hidden. Otherwise
@@ -58,6 +60,8 @@ object ImprovController {
     const val BOOT_GRACE_MS = 30_000L
     /** Keep advertising PROVISIONED this long so clients see it (ESPHome STOP_ADVERTISING_DELAY). */
     const val STOP_DELAY_MS = 10_000L
+    /** The log's name for [ImprovSelfAuth]'s authorization. */
+    private const val NO_TOUCH_WINDOW = "no-touch window (5 min)"
 
     private val main = Handler(Looper.getMainLooper())
     private lateinit var app: Context
@@ -185,7 +189,7 @@ object ImprovController {
      * Intent extras (adb: `am start -n sh.edm.s1kiosk/.improv.ImprovActivity --ez improv true`):
      *   --ez improv true|false            start / stop provisioning mode
      *   --ez improv_auto true|false       auto-start when there's no network after boot (default true)
-     *   --ez improv_proximity_auth true   also authorize on a proximity approach (default false)
+     *   --ez improv_proximity_auth true   also authorize on a proximity approach (default: on without touch)
      *   --ez release_device_owner true    clearDeviceOwnerApp() (escape hatch)
      */
     fun handleIntent(i: Intent?) {
@@ -204,19 +208,21 @@ object ImprovController {
     fun start(why: String, isAuto: Boolean) {
         if (!initialized) return
         val now = SystemClock.elapsedRealtime()
+        val selfAuth = ImprovSelfAuth.atStart(input, hasNetwork())
         if (active) {
             windowEndsAt = now + WINDOW_MS
             Log.i(TAG, "already running; window extended ($why)")
+            if (selfAuth && session?.state == ImprovState.AUTHORIZATION_REQUIRED) authorize(NO_TOUCH_WINDOW)
             refreshOverlay()
             return
         }
         val server = ble ?: ImprovBleServer(app, main, bleListener).also { ble = it }
-        val s = ImprovSession(effects)
+        val s = ImprovSelfAuth.session(effects, input)
         session = s
         reason = why; auto = isAuto; failure = null; progress = null; provisionedUrl = null; connectingSsid = ""; joinPath.sessionStarted()
         startError = null; advertising = false; clients.clear()
         windowEndsAt = now + WINDOW_MS
-        s.start(requireAuthorization = true, now = now)
+        s.start(requireAuthorization = !selfAuth, now = now)
         if (!server.start(s.state, s.capabilities)) {
             session = null
             overlay.hide()
@@ -229,6 +235,7 @@ object ImprovController {
         if (isAuto) watchNetwork()
         status = "starting ($why)"
         Log.i(TAG, "Improv started: $why; window ${WINDOW_MS / 60000} min; ${wifi.status()}")
+        if (selfAuth) Log.i(TAG, "authorized by $NO_TOUCH_WINDOW")
         app.glassworks.screen.wake("improv")
         refreshOverlay()
         main.removeCallbacks(tick)
@@ -523,11 +530,31 @@ object ImprovController {
 
     private val proximityListener: () -> Unit = {
         val n = app.glassworks.screen.near
-        if (n && !lastNear && prefs.improvProximityAuth && session?.state == ImprovState.AUTHORIZATION_REQUIRED) {
-            authorize("proximity")
-        }
-        lastNear = n
+        val was = lastNear
+        lastNear = n // first: a start wakes the screen, which calls this again
+        if (n && !was) onApproach()
     }
+
+    /**
+     * Someone walked up (the screen's presence went near). Where approach authorization is on, it authorizes a waiting
+     * session. Without touch it also starts Improv again once its window has closed, still only while offline
+     * ([ImprovSelfAuth.onApproach]), and the session's 10 minutes last at least as long as the authorization.
+     */
+    private fun onApproach() {
+        val proximityAuth = ImprovSelfAuth.proximityAuth(input, prefs.improvProximityAuthChosen)
+        if (!ImprovSelfAuth.onApproach(input, hasNetwork(), proximityAuth)) return
+        val s = session
+        when {
+            s?.state == ImprovState.AUTHORIZATION_REQUIRED -> {
+                authorize(if (input == Input.NONE) "approach, $NO_TOUCH_WINDOW" else "proximity")
+                if (input == Input.NONE) windowEndsAt = maxOf(windowEndsAt, s.authorizedUntil)
+            }
+            s == null && input == Input.NONE && prefs.improvAuto -> start("approach with no network", isAuto = true)
+        }
+    }
+
+    /** Whether the screen takes a tap: without one nobody can press Allow ([ImprovSelfAuth]). */
+    private val input: Input get() = app.glassworks.frame.input
 
     private val activityTracker = object : Application.ActivityLifecycleCallbacks {
         override fun onActivityResumed(a: Activity) { resumed = WeakReference(a) }
@@ -552,7 +579,12 @@ object ImprovController {
         val s = session ?: return overlay.hide()
         if (inline()) return overlay.hide()
         val m = when (s.state) {
-            ImprovState.AUTHORIZATION_REQUIRED -> ImprovOverlay.Model(
+            // Without touch nothing here can allow it while online (ImprovSelfAuth): no buttons, and the way that works.
+            ImprovState.AUTHORIZATION_REQUIRED -> if (input == Input.NONE) ImprovOverlay.Model(
+                label = "Wi-Fi setup · Bluetooth",
+                title = "Bluetooth setup can't be allowed here",
+                body = "This panel has no touchscreen. Change its Wi-Fi with Kiln on a computer, over USB.",
+            ) else ImprovOverlay.Model(
                 label = "Wi-Fi setup · Bluetooth",
                 title = "Allow Wi-Fi setup over Bluetooth?",
                 body = (if (auto) "This panel has no network. " else "") +
@@ -570,7 +602,7 @@ object ImprovController {
                     body = if (fail != null) WifiStep.failureText(fail) else
                         "Open the “Improv via BLE” discovery for this panel in Home Assistant and enter your Wi-Fi." +
                             if (!wifi.legacyApiAllowed) " You'll then be asked to approve the network in a notification." else "",
-                    secondary = "Stop" to { stop("stopped on panel") },
+                    secondary = ("Stop" to { stop("stopped on panel") }).takeIf { input == Input.TOUCH },
                     accent = if (fail != null) ImprovOverlay.ROSE else ImprovOverlay.SKY,
                 )
             }
@@ -585,7 +617,7 @@ object ImprovController {
                 val c = joinPath.card(provisionedUrl)
                 ImprovOverlay.Model(
                     label = c.label, title = c.title, body = c.body,
-                    primary = "Done" to { overlay.hide() },
+                    primary = ("Done" to { overlay.hide() }).takeIf { input == Input.TOUCH },
                     accent = ImprovOverlay.GREEN,
                     mark = c.mark,
                 )

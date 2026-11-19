@@ -1,7 +1,8 @@
 # Third-party notices
 
-S1 Unleashed's own code is MIT ([LICENSE](LICENSE)). This file lists the third-party code that the
-project distributes: in the S1 Kiosk APK (with the signed radio bundle that release APKs carry), and in
+Glassworks' own code is MIT ([LICENSE](LICENSE)), except the Glassworks core, which is MPL-2.0
+([its README](pane-api/src/main/java/dev/glassworks/README.md#licence)). This file lists the third-party code that the
+project distributes: in the S1 app's APK (with the signed radio bundle that release APKs carry), and in
 the files the web installer at https://s1.edm.sh serves. For each part it gives the version, the licence
 (as an SPDX identifier), where it comes from and where its source is. The libraries published to Maven
 Central (`dev.glassworks:*`, [docs/releasing.md](docs/releasing.md#libraries)) contain only this
@@ -24,7 +25,7 @@ missing from section 1.
 
 ## Contents
 
-1. [S1 Kiosk APK](#1-s1-kiosk-apk)
+1. [The S1 app APK](#1-the-s1-app-apk)
 2. [Radio bundle (inside release APKs)](#2-radio-bundle-inside-release-apks)
 3. [Web installer downloads](#3-web-installer-downloads)
 4. [The web installer page itself](#4-the-web-installer-page-itself)
@@ -35,7 +36,7 @@ missing from section 1.
 
 ---
 
-## 1. S1 Kiosk APK
+## 1. The S1 app APK
 
 `sh.edm.s1kiosk`, built from [`frames/aqara-s1-plus/android`](frames/aqara-s1-plus/android) by
 `.github/workflows/release.yml`. These are the libraries in the APK: the release runtime classpath
@@ -74,9 +75,9 @@ build if one is missing here.
   Copyright: Oracle and/or its affiliates, and Google LLC. Upstream and source: https://github.com/google/desugar_jdk_libs
   (release 2.1.5). Allowed by the maintainer on 2026-11-16 as the one exception to the repo's no-GPL rule
   (`AGENTS.md`, rule 4), in two apps: this legacy APK, and the legacy engine's debug test app
-  (`sh.edm.s1kiosk.legacy`, never released; test builds on branches named `legacy` upload it). Only those two
+  (`dev.glassworks.s1.legacy`, never released; test builds on branches named `legacy` upload it). Only those two
   ship its classes. The current generic builds (minSdk 26) set desugaring up too, because AGP turns it on per
-  module, but none of its classes go into their APKs. S1 Kiosk doesn't use it.
+  module, but none of its classes go into their APKs. The S1 app doesn't use it.
 - **AndroidX and kotlinx.coroutines at GeckoView 144's versions**, which it resolves to in place of the current
   build's (all Apache-2.0; copyright, upstream and source as for the current versions under Kotlin and AndroidX):
   - `androidx.annotation:annotation-experimental:1.5.1`
@@ -357,8 +358,10 @@ The Ed25519 checker for radio bundles. Release `installer-files-3`, sha256 `6aa0
 
 - Licence: GPL-3.0-only. Copyright John Wu (topjohnwu) and contributors.
 - The official release APK, unmodified (sha256 `89cefac0…c6e7`), served by the installer. The
-  installer also writes three libraries from it into the panel's boot image: `libmagiskinit.so`,
-  `libmagisk.so` and `libinit-ld.so`.
+  installer also writes four libraries from it into the panel's boot image: `libmagiskinit.so`,
+  `libmagisk.so`, `libinit-ld.so` and `libbusybox.so` (BusyBox 1.36.1, GPL-2.0-only, Magisk's build of
+  https://github.com/topjohnwu/ndk-busybox, branch `android-ndk-1.36.1`). At boot the panel copies BusyBox to
+  `/data/adb/magisk`, where Magisk needs it.
 - Corresponding source: tag `v31.1` of https://github.com/topjohnwu/Magisk
   (https://github.com/topjohnwu/Magisk/releases/tag/v31.1).
 
@@ -377,8 +380,9 @@ All MIT, from this repository:
 - `frames/aqara-s1-plus/tools/root/glassworks_bundle.pub`.
 - The boot branding in `branding/glass-tile/` (`bootanimation.zip`, `bootlogo.bmp`). It shows text set
   in Inter (SIL OFL 1.1, fetched at build time). These downloads carry only images made with the font;
-  the font itself ships in the S1 Kiosk APK (section 1, "Assets in the APK").
-- The S1 Kiosk APK (sections 1 and 2).
+  the font itself ships in the S1 app's APK (section 1, "Assets in the APK").
+- The S1 app's APK (sections 1 and 2), except the Glassworks core inside it, which is MPL-2.0
+  ([its README](pane-api/src/main/java/dev/glassworks/README.md#licence)).
 - The Mirror's settings overlay, `frames/lululemon-mirror/overlay/GlassworksSettings.apk` (resource
   values only, built by its `build.sh`). It is signed with AOSP's public test key
   (`build/target/product/security/testkey`, android-6.0.1_r81, Apache-2.0, Copyright The Android Open
@@ -582,6 +586,7 @@ renders above:
 |---|---|---|---|
 | U-Boot | GPL-2.0-or-later | installer | Upstream `934995f642a21ca7f35fa9aed5f061394fcba243` plus [`tools/fel/uboot/`](https://github.com/GlassworksHQ/glassworks/tree/8b2bf488fed3c7ba8343a32c67c9651066479128/tools/fel/uboot) at `8b2bf488fed3c7ba8343a32c67c9651066479128` (section 3) |
 | Magisk | GPL-3.0-only | installer, panel boot image | https://github.com/topjohnwu/Magisk/tree/v31.1 |
+| BusyBox 1.36.1, inside the Magisk APK | GPL-2.0-only | installer, panel boot image | https://github.com/topjohnwu/ndk-busybox/tree/android-ndk-1.36.1 (built by Magisk's build as `busybox-1.36.1.1.zip`) |
 | GeckoView | MPL-2.0 (some parts LGPL-2.1-or-later) | APK | https://hg.mozilla.org/releases/mozilla-release/rev/7b34a03a910d0385299f4a9f27aa585a786862d8 |
 | GeckoView 144 | MPL-2.0 (some parts LGPL-2.1-or-later) | the generic app's legacy APK (#198) | https://hg.mozilla.org/releases/mozilla-release/rev/5f480a9ab713ba79e5a14face39aacb038c36f30 |
 | desugar_jdk_libs 2.1.5 | GPL-2.0-only WITH Classpath-exception-2.0 | the generic app's legacy APK (#198), the legacy engine's debug test APK | https://github.com/google/desugar_jdk_libs (release 2.1.5) |

@@ -6,6 +6,8 @@ import android.os.Handler
 import android.os.Looper
 import dev.glassworks.manage.ManagePage
 import dev.glassworks.KioskPrefs
+import dev.glassworks.manage.orWithout
+import dev.glassworks.web.HttpResponse
 import dev.glassworks.web.HttpServer
 import dev.glassworks.glassworks
 import dev.glassworks.frame.nodeName
@@ -116,8 +118,19 @@ object HaAuth {
         init(context)
         if (server != null) return
         val signIn = SignInServer(OAuth.SIGNIN_PORT, { prefs.haBase }, tokens, ::onSignedIn, thread = threadJoin)
-        val m = manage ?: context.glassworks.managePage(context, signIn, tokens, prefs).also { manage = it; it.startLog() }
-        val s = m.http(OAuth.SIGNIN_PORT)
+        // A Manage page that can't load (a class Android 6 refuses, #435) leaves the QR pages up, and the app with them.
+        val m = manage ?: orWithout("The Manage page", { AuthLog.w(it) }) {
+            val page = context.glassworks.managePage(context, signIn, tokens, prefs)
+            try {
+                page.startLog()
+            } catch (e: Throwable) {
+                // What did start stops, and a later start builds the page again rather than reuse this one.
+                runCatching { page.stopLog() }
+                throw e
+            }
+            page
+        }?.also { manage = it }
+        val s = m?.http(OAuth.SIGNIN_PORT) ?: qrOnly(signIn)
         // Setup over the LAN (#34) shares the port: the setup channel's own loop, gated by pairing with the panel's code.
         val frame = context.glassworks.frame
         val lan = LanSetup(
@@ -128,7 +141,7 @@ object HaAuth {
             // The setup hotspot's key shows only on the panel's screen, so anyone on it can see the screen (#197).
             pairingOpen = { prefs.lanPairingOpen || context.glassworks.setupHotspot?.isOn == true },
             event = { msg -> android.util.Log.i(LAN_TAG, msg) },
-            onDone = { main.post { context.glassworks.setupHotspot?.cancel() } },
+            onDone = { main.post { context.glassworks.setupHotspot?.cancel(); context.glassworks.settleDeviceSteps(context) } },
             // A phone on the setup hotspot: the screen then shows the setup page's address (#460).
             phoneJoin = dev.glassworks.setup.PhoneJoin(
                 hotspot = { context.glassworks.setupHotspot },
@@ -153,6 +166,12 @@ object HaAuth {
         }
     }
 
+    /** The web server with only the QR-code pages, for when the Manage page can't load. */
+    internal fun qrOnly(signIn: SignInServer): HttpServer = HttpServer(OAuth.SIGNIN_PORT, { req ->
+        val r = signIn.handle(SignInServer.Request(req.method, req.path, req.query, req.headers))
+        HttpResponse(r.status, r.headers, r.body)
+    })
+
     @Synchronized
     fun stopServer() {
         server?.stop()
@@ -165,6 +184,16 @@ object HaAuth {
         prefs.auth = auth
         cache.put(first.accessToken, first.expiresIn)
         AuthLog.i("Refresh token stored for ${auth.haBase}")
+        notifyChanged()
+    }
+
+    /**
+     * An installer carried the sign-in over a reinstall into the stored settings (SecretHandover, #584): forget any
+     * cached token and tell the screens, which showed the sign-in QR code until now.
+     */
+    fun signInCarriedOver() {
+        cache.clear()
+        AuthLog.i("Sign-in carried over by the installer${signedInBase?.let { " for $it" } ?: ""}")
         notifyChanged()
     }
 

@@ -34,6 +34,9 @@ import dev.glassworks.setup.LanSetup
 import dev.glassworks.setup.SetupHotspot
 import dev.glassworks.auth.FrontendUrls
 import dev.glassworks.auth.HaAuth
+import dev.glassworks.auth.HaTokenClient
+import dev.glassworks.auth.PanelSignIn
+import dev.glassworks.auth.UrlConnectionPoster
 import dev.glassworks.frame.Input
 import dev.glassworks.frame.Orientation
 import dev.glassworks.frame.openSystemSettings
@@ -86,9 +89,14 @@ open class MainActivity : Activity() {
     /** The panes on setup's Panes step, each with its steps (only usable ones). */
     private val setupPanes by lazy { glassworks.setupPanes(this) }
     private val paneSteps by lazy { setupPanes.flatMap { it.steps } }
+    /** The device's own steps, after Panes (#422's Silent updates). */
+    private val deviceSteps by lazy { glassworks.deviceSetupSteps(this) }
 
     /** "Sign in on this panel instead" was chosen: don't cover HA's login page again (this process). */
     private var usePanelLogin = false
+
+    /** That sign-in: Home Assistant's login page on the panel, for a refresh token of the panel's own (#633). */
+    private val panelSignIn by lazy { PanelSignIn(HaTokenClient(UrlConnectionPoster())) }
 
     /** Signed out on this panel (HA button / frontend logout) and not signed in again (this process). */
     private var signedOutHere = false
@@ -109,17 +117,19 @@ open class MainActivity : Activity() {
     }
 
     private val authListener: (Boolean) -> Unit = { signedIn ->
+        // A test's dashboard stays on screen: the page follows the sign-in once the test ends (onTestDashboard).
+        val testing = glassworks.screen.testDashboard != null
         if (signedIn) {
-            Log.i(TAG, "Signed in with the QR code; loading the dashboard with external auth")
+            Log.i(TAG, "Signed in; loading the dashboard with external auth")
             usePanelLogin = false
             signedOutHere = false
             if (setupPreview) closeSetupPreview()
-            loadDashboard()
+            if (!testing) loadDashboard()
         } else {
             Log.i(TAG, "Signed out; showing the sign-in screen")
             usePanelLogin = false
             signedOutHere = true
-            prefs.url.takeIf { it.isNotEmpty() }?.let { page?.load(it) }
+            if (!testing) prefs.url.takeIf { it.isNotEmpty() }?.let { page?.load(it) }
         }
         refreshSetup()
     }
@@ -208,7 +218,7 @@ open class MainActivity : Activity() {
         }
         loadingOverlay = LoadingOverlay(this, glassworks.frame.bootRest).apply { onAction = ::openWifiSettings }
         overlays = runtime.app.overlays(runtime, overlayHost)
-        setupOverlay = SetupOverlay(this, glassworks.frame, setupPanes).apply {
+        setupOverlay = SetupOverlay(this, glassworks.frame, setupPanes, deviceSteps).apply {
             onUsePanel = ::onUsePanelLogin
             onManualUrl = ::onManualHaUrl
             onChooseNetwork = { if (!setupPreview) glassworks.setupHotspot?.configured(); openWifiSettings() }
@@ -266,6 +276,7 @@ open class MainActivity : Activity() {
             pushState()
             overlays.forEach { it.screenChanged() }
         }
+        glassworks.screen.onTestDashboard = { onTestDashboard() }
         glassworks.commandSink = { applyIntent(it, fromNewIntent = true) }
         startSession()
         intent?.let { i -> handler.post { applySetupPreview(i) } }
@@ -290,6 +301,12 @@ open class MainActivity : Activity() {
      * yet (setting "auto", HA not found) → the "Where is Home Assistant?" screen.
      */
     private fun loadDashboard() {
+        glassworks.screen.testDashboard?.let { test ->
+            Log.i(TAG, "Showing the test's dashboard (its hold); the saved dashboard and the sign-in stay as they are")
+            dashboardLoadAt = SystemClock.elapsedRealtime()
+            page?.load(test)
+            return
+        }
         val url = prefs.url
         if (url.isEmpty()) {
             Log.i(TAG, "No dashboard URL yet (auto, Home Assistant not found)")
@@ -311,6 +328,25 @@ open class MainActivity : Activity() {
     }
 
     private var dashboardLoadAt = 0L
+
+    /** What the web engine should start with now: the test's dashboard while it has one (KioskPrefs.engineStart). */
+    private fun engineStartWanted(): List<String> =
+        KioskPrefs.engineStart(prefs.secureHosts(), glassworks.screen.testDashboard ?: prefs.url)
+
+    /**
+     * A test's dashboard began or ended (ScreenPolicy.testDashboard). The legacy engine holds pages to the origin it
+     * started with (#198), so a new origin restarts the app; otherwise the page loads it now.
+     */
+    private fun onTestDashboard() {
+        if (page == null || isFinishing || isDestroyed) return
+        val started = glassworks.engine.started
+        if (runtime.engine.lockedDown && engineStartWanted() != KioskPrefs.engineStart(started?.secureHosts.orEmpty(), started?.dashboard)) {
+            restartProcess()
+            return
+        }
+        loadDashboard()
+        refreshSetup()
+    }
 
     /** The last [KioskPrefs.dashboardRoute] [loadDashboard] logged: a line when it changes, not every retry. */
     private var loggedRoute: LocalRoute? = null
@@ -388,6 +424,7 @@ open class MainActivity : Activity() {
             usePanelLogin = usePanelLogin,
             showing = setupOverlay.isShowing && !setupPreview,
             paneSteps = steps,
+            ownSteps = deviceSteps.map { PaneStepFacts(it.id, it.done(), it.reason) },
             panesChosen = setupOverlay.panesChosen,
             dashboardLoaded = currentUrl.let { u -> u != null && FrontendUrls.sameOrigin(u, prefs.haBase) && !FrontendUrls.isAuthorizePage(u, prefs.haBase) },
             improv = ImprovController.setupFacts,
@@ -406,6 +443,11 @@ open class MainActivity : Activity() {
     /** Re-evaluates the setup screen; cheap, called on every relevant change and every 2 s. */
     private fun refreshSetup() {
         if (!::setupOverlay.isInitialized) return
+        if (glassworks.screen.testDashboard != null && !setupPreview) {
+            // The test's dashboard isn't the panel's Home Assistant: no setup step applies to it, and nothing covers it.
+            if (setupOverlay.isShowing) setupOverlay.hide()
+            return
+        }
         // Panes applying or refused: keep it up until Continue works (a pane's step can look done mid-way).
         // Panes holds while it applies or after a refusal, but never over a lost Wi-Fi: that step comes
         // first, and Panes again once the panel is back on.
@@ -433,6 +475,7 @@ open class MainActivity : Activity() {
             setupOverlay.render(setupModel(d, d.step, d.done, preview = false))
         } else if (setupOverlay.isShowing && setupOverlay.model?.step != SetupFlow.DONE) {
             Log.i(TAG, "Setup complete; loading the dashboard")
+            glassworks.settleDeviceSteps(this)
             glassworks.setupHotspot?.cancel() // setup is over: its hotspot too (#197)
             hotspotAsked = false
             setupOverlay.finish { loadDashboardIfNeeded() }
@@ -457,7 +500,7 @@ open class MainActivity : Activity() {
     }
 
     /** Every step a preview can show: all the panes' steps, as if every pane were on. */
-    private fun previewFlow() = SetupFlow.ids(setupPanes.isNotEmpty(), paneSteps.map { it.id })
+    private fun previewFlow() = SetupFlow.ids(setupPanes.isNotEmpty(), paneSteps.map { it.id }, deviceSteps.map { it.id })
 
     private fun setupModel(d: dev.glassworks.setup.SetupDecision, step: String, done: Set<String>, preview: Boolean) =
         SetupOverlay.Model(
@@ -526,10 +569,13 @@ open class MainActivity : Activity() {
         if (!onDashboard && !justLoaded) loadDashboard()
     }
 
-    /** `--ez show_setup true [--es setup_step wifi|ha|panes|signin|done]`, `--ez show_signin true` (= signin). */
+    /**
+     * `--ez show_setup true [--es setup_step <id>]` (a core step, wifi|signin|ha|panes|done, a pane's step such as `radio`,
+     * or a device step such as `silent_updates`), `--ez show_signin true` (= signin).
+     */
     private fun applySetupPreview(intent: Intent) {
         val asked = intent.getStringExtra("setup_step")
-        val step = SetupFlow.parse(asked, setupPanes.isNotEmpty(), paneSteps.map { it.id })
+        val step = SetupFlow.parse(asked, setupPanes.isNotEmpty(), paneSteps.map { it.id }, deviceSteps.map { it.id })
         if (asked != null && step == null) Log.e(TAG, "setup_step '$asked' is not a step: ${previewFlow()}")
         when {
             intent.getBooleanExtra("show_signin", false) -> startSetupPreview(SetupFlow.SIGNIN)
@@ -689,11 +735,45 @@ open class MainActivity : Activity() {
         if (setupPreview) closeSetupPreview()
         usePanelLogin = true
         setupOverlay.hide()
-        // Show HA's own login page (or the dashboard if the GeckoView session is still logged in).
-        if (!HaAuth.signedIn && !FrontendUrls.isAuthorizePage(currentUrl, prefs.haBase)) {
-            prefs.url.takeIf { it.isNotEmpty() }?.let { page?.load(it) }
-        }
+        // HA's login page for the panel's own sign-in, also when the page still has a session of its own: that session
+        // isn't the panel's sign-in, and the next start would ask again (#633).
+        if (!HaAuth.signedIn) prefs.haBase?.let { page?.load(panelSignIn.start(it)) }
         refreshSetup()
+    }
+
+    /**
+     * The code from Home Assistant's login page on the panel becomes the panel's sign-in, stored as the QR code's is.
+     * HaAuth's listener then loads the dashboard. If it fails, the Sign-in step comes back over a new login page.
+     * Called from [PageHost.redirect], whose `about:blank` the engine queues on the main looper once it returns. The
+     * worker starts from a later message, so its outcome always lands after that load and the dashboard is last.
+     */
+    private fun finishPanelSignIn(url: String) = handler.post {
+        if (isDestroyed) return@post
+        loadingOverlay.show(LoadingOverlay.State.Connecting(LoadingOverlay.CONNECTING, prefs.shownHost(url)))
+        Thread({
+            val failed = when (val o = panelSignIn.finish(url)) {
+                is PanelSignIn.Outcome.Failed -> o.reason
+                is PanelSignIn.Outcome.SignedIn -> try {
+                    prefs.auth = o.auth
+                    null
+                } catch (e: SignInNotStored) {
+                    e.message
+                }
+            }
+            if (failed == null) {
+                Log.i(TAG, "Signed in on this panel (refresh token stored)")
+                // Drops any access token cached for an earlier sign-in, and tells every screen.
+                HaAuth.signInCarriedOver()
+                return@Thread
+            }
+            Log.w(TAG, "Sign-in on this panel failed: $failed")
+            handler.post {
+                if (isDestroyed) return@post
+                usePanelLogin = false
+                prefs.haBase?.let { page?.load(panelSignIn.start(it)) }
+                refreshSetup()
+            }
+        }, "panel-signin").apply { isDaemon = true }.start()
     }
 
     private fun onManualHaUrl(raw: String) {
@@ -723,9 +803,9 @@ open class MainActivity : Activity() {
         val setting = if (prefs.isAutoUrl) KioskPrefs.AUTO else LocalName.forLog(prefs.urlSetting)
         Log.i(TAG, "Home Assistant at ${LocalName.forLog(url)} (dashboard setting: $setting)")
         refreshSetup()
-        if (!prefs.loadsFoundAddress) return
+        if (!prefs.loadsFoundAddress || glassworks.screen.testDashboard != null) return
         val started = glassworks.engine.started
-        if (prefs.engineStart() != KioskPrefs.engineStart(started?.secureHosts.orEmpty(), started?.dashboard)) {
+        if (engineStartWanted() != KioskPrefs.engineStart(started?.secureHosts.orEmpty(), started?.dashboard)) {
             // The HA host must be in dom.securecontext.allowlist (mic), which Gecko reads at startup, and the legacy
             // engine holds every page to the dashboard's origin, which it takes once (#198).
             restartProcess()
@@ -737,6 +817,8 @@ open class MainActivity : Activity() {
     // ---- intents (see app/README.md):
     //   --es url <url>          set + persist the dashboard URL
     //   --es open <url>         navigate once, without persisting
+    //   --ez test_hold true [--ei test_hold_s 1800] [--es test_dashboard http://127.0.0.1:<port>/…]
+    //                           a test's hold (ScreenPolicy.testHold), and its own dashboard while it lasts
     //   --ef zoom 1.25          CSS px ratio (0 = auto); restarts the process
     //   --es secure_hosts a,b   extra secure-context hosts; restarts the process
     //   --ez remote_debug true  Gecko remote debugging; restarts the process (ignored on the legacy engine, #29)
@@ -919,7 +1001,7 @@ open class MainActivity : Activity() {
         S1Settings.model(glassworks, prefs, panes, deviceSettings, fullScreen = ::pushConfig, blueprints = { id -> blueprints.item(id, ::openBlueprintLink) }, context = this)
 
     /** The panes' Blueprints cards: the list, and what the panel's sign-in may do with them (checked off the main thread). */
-    private val blueprints by lazy { PanelBlueprints.forPanel(this, glassworks.build, prefs) }
+    private val blueprints by lazy { PanelBlueprints.forPanel(this, glassworks, prefs) }
 
     /**
      * A Blueprints card's button: Home Assistant's own page (its import dialog, filled in, or its blueprint
@@ -1068,6 +1150,11 @@ open class MainActivity : Activity() {
         // Once signed in, every top-level HA page gets external_auth=1, so the content script
         // installs window.externalApp before the frontend starts (also after reloads and redirects).
         override fun redirect(url: String): String? {
+            // Home Assistant sending the panel's own sign-in back: the app takes the code, the page never loads it.
+            if (panelSignIn.isCallback(url, prefs.haBase)) {
+                finishPanelSignIn(url)
+                return "about:blank"
+            }
             if (!HaAuth.signedIn) return null
             val base = HaAuth.signedInBase
             return when {
@@ -1238,6 +1325,7 @@ open class MainActivity : Activity() {
         glassworks.screen.onKeepScreenOn = null
         glassworks.screen.onBrightness = null
         glassworks.screen.onStateChanged = null
+        glassworks.screen.onTestDashboard = null
         glassworks.screen.stayOn(NOT_READY, false)
         glassworks.commandSink = null
         handler.removeCallbacksAndMessages(null)

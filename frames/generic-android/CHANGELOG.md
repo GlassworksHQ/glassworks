@@ -2,7 +2,7 @@
 
 What changed in each release of Glassworks for generic Android (`dev.glassworks.generic_android`, Android 8 and
 newer) and its legacy build (`dev.glassworks.generic_android.legacy`, Android 6 and 7, the lululemon Mirror
-included), for people running one. S1 Kiosk's changes are in the repo's [CHANGELOG.md](../../CHANGELOG.md).
+included), for people running one. The S1 app's changes are in the repo's [CHANGELOG.md](../../CHANGELOG.md).
 
 Both builds share this file and one version sequence. A version's section is the release notes of
 `generic-android-v<version>` and of `generic-android-legacy-v<version>`, whichever of the two is tagged
@@ -11,9 +11,43 @@ line of each version is what Home Assistant shows on the update card. A change o
 
 ## [Unreleased]
 
+### Added
+- **Notifications and the Bluetooth proxy, in both builds.** Home Assistant can show notifications on the panel
+  with the panel's notify action, and a device with Bluetooth LE can relay nearby BLE sensors to Home Assistant.
+  Both are off until you turn them on, in the panel's settings, on the Manage page or from Home Assistant. A device
+  without Bluetooth LE doesn't show the proxy anywhere. On a screen without touch, such as the lululemon Mirror, a
+  high or critical notification with no `tag` and no `timeout` closes after 2 minutes, since nothing else could
+  close it. On the Mirror the proxy scans only once the app has the location permission, which Kiln doesn't grant yet.
+- **Pick an update channel: Stable or Beta.** The device page in the panel's settings and on the Manage page has an
+  *Update channel* row. Stable, the default, gets releases as before. Beta also gets betas, new versions before
+  they're stable, which may have bugs; Home Assistant's update card says when the update it offers is a beta. Going
+  back to Stable never installs an older version: the panel waits for a stable release newer than the one it runs.
+
+### Fixed
+- **Wi-Fi setup over Bluetooth works on the lululemon Mirror.** On a panel with no touchscreen, nobody could press
+  Allow, so Home Assistant and phones could never send it Wi-Fi over Bluetooth. Now, when it starts with no network,
+  Bluetooth setup is open by itself for 5 minutes, and the setup screen says to send the Wi-Fi from Home Assistant or
+  improv-wifi.com on a phone, with the time left. Where the camera sees presence, walking up to the panel opens it
+  again. It never opens while the panel is online. After the 5 minutes the panel opens its own setup Wi-Fi, if it
+  can, and otherwise the setup screen says how to set it up from a computer.
+- **The setup Wi-Fi opens on the lululemon Mirror.** The legacy build's setup screen said "This device doesn't let apps
+  open a Wi-Fi hotspot." on the Mirror. Android 6 and 7 want one more permission for it, which the legacy build now
+  asks for. An update is enough: no new flash. If Android still refuses, the reason is in the log.
+
+## [0.2.0] - 2026-11-19
+
 **The first release of Glassworks for Android tablets and panels, with Assist, Sendspin and the camera pane.**
 
+Experimental: run on a lululemon Mirror and a Pixel Tablet so far, not yet on other devices.
+
 ### Added
+- **Allow a new computer over USB on a panel with no touchscreen.** On the lululemon Mirror (the legacy build), the Manage
+  page's **Security** section shows a computer that asks for USB debugging, with its fingerprint, and
+  **Allow this computer**. Allowed computers are listed with **Remove**, and the panel lets each one in
+  every time it connects. Only a Home Assistant administrator can allow or remove one, and the Log
+  records each, with the fingerprint. Android's own "Allow USB debugging?" no longer stays over the dashboard on
+  a screen without touch: the Security page is where you answer it. Needs a fresh flash with Kiln: an update
+  over an older install doesn't get the two permissions it needs.
 - **The lululemon Mirror shows its frame version.** Its device page in the settings and on the Manage page has a
   *Frame version* row: the version of the Mirror's image, the Glass Panes release plus what Kiln adds. A Mirror flashed
   before Kiln wrote it shows *Before 1.0.0* and its Glass Panes image. A *Frame update* entity in Home Assistant
@@ -25,6 +59,15 @@ line of each version is what Home Assistant shows on the update card. A change o
   camera. It names itself after the device. Android 8 and newer.
 - **A legacy build for Android 6 and 7.** The same app on an older browser engine (GeckoView 144), which opens
   only your Home Assistant. It is its own app with its own updates, and the build the lululemon Mirror runs.
+- **Know when a tablet is on its dock.** A Pixel Tablet has a *Docked* sensor in Home Assistant, on while it
+  sits on its dock and off when you lift it off, and its page in the settings and on the Manage page says
+  *Docked* or *Not docked*. Another tablet gets both once it has been on a dock; ordinary tablets have neither.
+- **Setup offers silent updates when it can.** On a new setup, a *Silent updates* step follows Panes when
+  updates would ask for a tap and something can change that. On Android 12 or newer it opens Android's "Install
+  unknown apps" page for Glassworks. On Android 6 to 11, and on newer Android while this release targets an older
+  API than Android wants for silent updates, it says a device owner skips the tap, with a QR code to Kiln. It's
+  never required: Continue or Not now moves on. A device already set up doesn't see it, and one whose updates
+  already install by themselves (the Mirror, a device owner) skips it.
 - **Updates from Home Assistant.** Each build offers only its own releases on its update entity. On Android 12
   and newer with "Install unknown apps" allowed, as device owner, or as a system app (the Mirror), an update
   installs without a tap. The *Silent updates* sensor says which applies.
@@ -32,3 +75,25 @@ line of each version is what Home Assistant shows on the update card. A change o
   a time in **Settings → Screen → Turn off when idle**. On a device with a PIN, pattern or password, the Screen
   settings and the Manage page say in amber that someone has to unlock it after the screen turns off, and how to
   avoid that: turn the lock off in Android's settings, or keep the screen on.
+
+### Fixed
+- **The camera recovers by itself when it stops sending frames.** If the camera opens but sends no picture for
+  5 seconds, the camera pane now closes it and opens it again, at once the first time and then less and less often
+  while it stays silent. Before, presence and the stream stayed dead until something else reopened the camera, such
+  as turning *Camera privacy* on and off. This was seen on the lululemon Mirror's first open after a flash.
+- **With Screen mode set to always, walking up no longer turns on a screen you turned off.** If you turn the screen
+  off from Home Assistant, it stays off when someone comes close, whether the panel senses them with its own sensor
+  or with the camera pane. *Presence* in Home Assistant still turns on. In the presence mode, walking up still wakes
+  the screen, as before.
+- **A wrong Wi-Fi password on the lululemon Mirror no longer needs a reflash.** Send the right password with Improv,
+  over USB from a computer or over Bluetooth, and the Mirror replaces the network Kiln saved and joins. Before, Android
+  refused, and only a second flash fixed it. Comes with the next flash: the copy Kiln writes into the Mirror's image must
+  have it. Legacy build only.
+- **The Mirror uses less memory, and its drawing no longer dies when the screen turns off.** The legacy build
+  draws in the app's own process instead of a separate GPU process, which Android killed whenever the screen went
+  off or a system dialog came up. It also no longer runs GeckoView's crash helper, which did nothing for the app
+  and was restarted about once a minute. Legacy build only. Not yet run on a real Mirror.
+- **No crash when the app may not use the microphone.** Without the Microphone permission, voice no longer tries to
+  open the microphone, which on Android 6 could crash the app. The Assist page on the device and on the Manage page
+  says *Voice isn't allowed to use the microphone*, and Home Assistant's *Voice status* reads *Microphone not
+  allowed*. Once the permission is given, voice starts listening within a few seconds. Both builds.

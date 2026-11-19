@@ -1,8 +1,8 @@
-# Agent guide: S1 Unleashed
+# Agent guide: Glassworks
 
-S1 Unleashed turns the Aqara Panel Hub S1 Plus (Allwinner A133, Android 10, 32-bit userspace) into an
-open Home Assistant wall panel. It is also the reference device ("frame") for **Glassworks**, a
-device-neutral open panel core that is being pulled out of this repo step by step.
+Glassworks is a device-neutral, open Home Assistant panel core. Its reference device ("frame") is the
+Aqara Panel Hub S1 Plus (Allwinner A133, Android 10, 32-bit userspace), which it turns into an open
+wall panel. The repo was S1 Unleashed until #527.
 
 This file applies to the whole repo. Each area has its own file with the details:
 [`frames/aqara-s1-plus/android/AGENTS.md`](frames/aqara-s1-plus/android/AGENTS.md) (the kiosk app),
@@ -17,13 +17,13 @@ Breaking into hardware has its own playbook: [`docs/research/bringup.md`](docs/r
 |---|---|---|
 | `settings.gradle.kts` | The Gradle root is the repo root. This file maps every module to its folder | Kotlin |
 | `build-logic/` | What every module builds with: `glassworks.android` (compileSdk, minSdk 26, JDK 17, the `testing/kotlin` tests) and `glassworks.jvm` (JDK 17). A module's build file keeps its namespace, dependencies and what differs | Kotlin |
-| `frames/aqara-s1-plus/android` | S1 Kiosk (`:kiosk`), the GeckoView kiosk app (`sh.edm.s1kiosk`, never rename it) | Kotlin, Android |
+| `frames/aqara-s1-plus/android` | The S1 app (`:kiosk`), the GeckoView kiosk app: code in `dev.glassworks.s1`, app id `sh.edm.s1kiosk` (never change it) | Kotlin, Android |
 | `frames/generic-android/android` | Glassworks for generic Android (`:generic-android`, `dev.glassworks.generic_android`): the core as an app for any Android 8+ device, no root | Kotlin, Android |
 | `core/`, `pane-api/` | The Glassworks core (`dev.glassworks.*`) and the pane API every pane builds on | Kotlin, Android |
 | `engines/engine-gecko` | The GeckoView engine and the kiosk's web extension | Kotlin, JavaScript |
 | `panes/<id>` | One module per pane (`:pane-<id>`): assist, camera, diagnostics, notifications, sendspin, timers, bluetooth-proxy. A frame's own panes sit in `frames/<id>/panes/` | Kotlin, Android |
 | `libs/*` | Libraries split out of the app: `esphome-api` (JVM), `esphome-api-android`, `improv`, `bluetooth-proxy`, `sendspin`, `voice` | Kotlin |
-| `kiln/` | Kiln, the WebUSB installer (FEL → fastboot → boot patch → adb), served at s1.edm.sh. The page in `src/`, protocol modules in `packages/`, the Next.js app in `apps/kiln` | TypeScript, Vite, Next.js, Rust→WASM |
+| `kiln/` | Kiln, the WebUSB installer (FEL → fastboot → boot patch → adb), served at s1.edm.sh. The page in `src/`, protocol modules in `packages/`, the Next.js app in `apps/kiln`. One engine for every frame: a frame is declared in `frames/<id>/`, never coded into Kiln ([kiln/AGENTS.md](kiln/AGENTS.md#one-engine-frames-as-data)) | TypeScript, Vite, Next.js, Rust→WASM |
 | `frames/<id>/` | Everything about one frame: its README, its Kiln recipe (`installer/`), its design data (`design/frame.json`, `recovery.json`) and its research notes (`research/`) | TypeScript, JSON, Markdown |
 | `packages/` | Packages Kiln and glassworks.dev share: `frame-card`, the frame card and 3D device mockup | TypeScript, React |
 | `site/` | glassworks.dev, the project site: landing page, `/frames`, `/panes`, `/brand` and the brand generator. Reads `frames/`, `packages/frame-card` and Clarity's grade from this repo at build time | TypeScript, Next.js |
@@ -75,7 +75,7 @@ in HA. If a request goes against it, say so and point at the page instead of bui
    hash, never vendored. Licences of new dependencies go in `THIRD-PARTY-NOTICES.md` and `LICENSES/`.
    One exception is decided (maintainer, 2026-11-16): `desugar_jdk_libs` (GPL-2.0 with the Classpath exception)
    in the generic app's legacy APK, for Android 6–7, and in the legacy engine's debug test app
-   (`sh.edm.s1kiosk.legacy`). Any other GPL code in an APK needs the maintainer's call.
+   (`dev.glassworks.s1.legacy`). Any other GPL code in an APK needs the maintainer's call.
 5. **Changes to the boot patch, the root helper, the radio or anything in `frames/aqara-s1-plus/tools/root` need a real
    panel before merge.** Say so in the PR. Off-device tests alone are not enough there.
 6. **Updates must keep installing in place.** Don't change `applicationId`, the signing setup or
@@ -88,7 +88,7 @@ in HA. If a request goes against it, say so and point at the page instead of bui
 
 - Small PRs against `main`, filled in from `.github/pull_request_template.md`: **What and why**,
   **Tested on**, **Checklist**, **Screenshots**.
-- **Tested on** says exactly what ran: a real panel (model, S1 Kiosk version or test build branch,
+- **Tested on** says exactly what ran: a real panel (model, the S1 app version or test build branch,
   HA version), the installer in which browser, or unit tests only. List what you did on the panel,
   step by step, as in #52.
 - **Screenshots are required for every UI change.** That covers the app (setup screen, settings
@@ -103,7 +103,7 @@ in HA. If a request goes against it, say so and point at the page instead of bui
   - *Before* comes from `main`, at the same state and size as *after*.
   - Upload them to the PR body (GitHub user attachments). Don't commit PR screenshots to the repo;
     only images that docs use go in `docs/img/` (as `.webp`).
-- **Changelog.** Add a line under **[Unreleased]** in `CHANGELOG.md` (S1 Kiosk's) or
+- **Changelog.** Add a line under **[Unreleased]** in `CHANGELOG.md` (the S1 app's) or
   `frames/generic-android/CHANGELOG.md` (the generic app and its legacy build; both, if both change) when someone running a panel
   or using the installer would notice the change: a feature, fixed behaviour, a new entity, a
   changed default, a new requirement. Internal refactors, CI and docs-only changes usually don't
@@ -165,7 +165,7 @@ header from the example in the table, then change the name, the tagline and the 
 | A library: something another project could use on its own (`libs/*`, `packages/*`, or such a package in `kiln/packages/`) | `banner-library-<name>`, centred title and tagline, then the MIT, status and roadmap badges | [improv](libs/improv/README.md) |
 | The Glassworks core or a pane | `banner-core` or `banner-pane`, title and tagline, then the part badge, licence, status and roadmap badges | [core](pane-api/src/main/java/dev/glassworks/README.md) |
 | Kiln | `banner-kiln`, title and tagline, then the Kiln, MIT, status and roadmap badges | [Kiln](kiln/apps/kiln/README.md) |
-| An app or product built on the core | Title and tagline, then Built on Glassworks, MIT, status and roadmap badges. No banner | [S1 Kiosk](frames/aqara-s1-plus/android/README.md) |
+| An app or product built on the core | Title and tagline, then Built on Glassworks, MIT, status and roadmap badges. No banner | [the S1 app](frames/aqara-s1-plus/android/README.md) |
 | A frame (`frames/<id>/README.md`) | `banner-frame-<id>`, centred title and tagline, then Built on Glassworks, the Kiln badge if Kiln installs it, the status, roadmap and Clarity badges | [aqara-s1-plus](frames/aqara-s1-plus/README.md) |
 | Kiln's internals and design work | The Kiln badge alone | [docs/design/kiln](docs/design/kiln/README.md) |
 | A Glassworks spec in `docs/` that every frame follows (e.g. the perf grade) | The core badge alone, under the title | [principles.md](docs/principles.md) (its part badges) |
@@ -192,8 +192,10 @@ and S1's own branding stay plain. The S1's own detail (status, install, radio, F
 
 **Frame** = a device definition (the S1 is `aqara-s1-plus`). **Pane** = a plugin (radio, wall base,
 voice, Sendspin), which declares the hardware it `requires`. **Kiln** = the installer (`kiln/` plus
-`frames/aqara-s1-plus/tools/install.sh`). New Kotlin packages for the core go under `dev.glassworks.*`. The S1 app keeps
-`sh.edm.s1kiosk`, because the boot helpers hardcode it. The core's Android components (`MainActivity`, `AdminReceiver`, `BootReceiver`,
-`KioskService`, `ImprovActivity`, `UpdateInstallReceiver`, `CameraAdbActivity`) live in `dev.glassworks.*`; each app
-declares one-line subclasses at the `sh.edm.s1kiosk.*` names its installed apps know and hands them to the core
-(`AppComponents`). Nothing else goes under `sh/edm` outside the S1 frame (`OldPackageGuardTest`).
+`frames/aqara-s1-plus/tools/install.sh`). All Kotlin goes under `dev.glassworks.*`: the core, the panes, and each app's own code (the S1's in
+`dev.glassworks.s1`, the generic app's in `dev.glassworks.generic`). The S1 app keeps its id, `sh.edm.s1kiosk`, because
+updates install in place and the boot helpers hardcode it. The core's Android components (`MainActivity`, `AdminReceiver`,
+`BootReceiver`, `KioskService`, `ImprovActivity`, `UpdateInstallReceiver`, `CameraAdbActivity`) live in `dev.glassworks.*`.
+The S1 app declares one-line subclasses at five `sh.edm.s1kiosk.*` names that Android, the field and the root side hold
+(MainActivity, AdminReceiver, BootReceiver, `improv.ImprovActivity`, `update.UpdateInstallReceiver`) and hands them to
+the core (`AppComponents`). Nothing else goes under `sh/edm` (`OldPackageGuardTest`, #527).

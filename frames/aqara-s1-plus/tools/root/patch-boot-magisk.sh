@@ -20,9 +20,11 @@
 #   overlay.d/sbin/glassworks_firstboot.sh, glassworks_netwatch.sh, glassworks_update.sh
 #   overlay.d/sbin/glassworks_bootanimation.zip   (BOOT_ANIMATION=<zip>, default branding/glass-tile; none = stock)
 #                                        the loader bind-mounts it over /system/media/bootanimation.zip
+#   overlay.d/sbin/magisk-busybox        Magisk's own busybox (lib/armeabi-v7a/libbusybox.so from the same Magisk APK);
+#                                        glassworks.rc copies it to /data/adb/magisk, without which Magisk loads no module
 # Nothing is flashed here; see frames/aqara-s1-plus/research/root.md.
 #
-# Magisk is GPLv3 and is not redistributed by this repo: the official release is downloaded and its
+# Magisk is GPLv3 (the busybox inside it GPLv2) and is not redistributed by this repo: the official release is downloaded and its
 # SHA-256 checked against the digest GitHub publishes for the asset.
 set -euo pipefail
 MAGISK_TAG=${MAGISK_TAG:-v31.1}
@@ -53,6 +55,7 @@ mkdir "$W/p"
 cp "$W/x/assets/boot_patch.sh" "$W/x/assets/util_functions.sh" "$W/p/"
 cp "$W/x/lib/arm64-v8a/libmagiskboot.so" "$W/p/magiskboot"           # runs on the host
 for b in magiskinit magisk init-ld; do cp "$W/x/lib/$PAYLOAD_ABI/lib$b.so" "$W/p/$b"; done  # go in the image
+cp "$W/x/lib/$PAYLOAD_ABI/libbusybox.so" "$W/p/magisk-busybox"
 cp "$HERE/glassworks.rc" "$HERE/glassworks_loader.sh" "$HERE/glassworks_bundle.pub" "$W/p/"
 cp "$HERE/out/s1kiosk_verify" "$W/p/glassworks_verify"   # the pinned release binary keeps its old file name
 cp "$RADIO/glassworks_radio.sh" "$RADIO/out/otbr-agent" "$RADIO/out/ot-ctl" "$W/p/"
@@ -117,11 +120,14 @@ docker run --rm --platform linux/arm64 -e PREINITDEVICE="$PREINITDEVICE" -e BRAN
     "add 0700 overlay.d/sbin/ot-ctl ot-ctl" \
     "add 0700 overlay.d/sbin/glassworks_firstboot.sh glassworks_firstboot.sh" \
     "add 0700 overlay.d/sbin/glassworks_netwatch.sh glassworks_netwatch.sh" \
-    "add 0700 overlay.d/sbin/glassworks_update.sh glassworks_update.sh"
+    "add 0700 overlay.d/sbin/glassworks_update.sh glassworks_update.sh" \
+    "add 0700 overlay.d/sbin/magisk-busybox magisk-busybox"
   [ -z "$BRANDING_CPIO" ] || eval "./magiskboot cpio ramdisk.cpio $BRANDING_CPIO"
   [ -z "$DEV_CPIO" ] || eval "./magiskboot cpio ramdisk.cpio $DEV_CPIO"
   ./magiskboot cpio ramdisk.cpio "extract .backup/.magisk magisk.cfg"
-  chmod 644 magisk.cfg   # extracted with the cpio mode (000); root may not override it on a shared mount
+  # From an already-patched input the entry extracts without read permission; through some Docker hosts' mounts
+  # (macOS) root can't override that, and set -e would stop here. The config is only printed: the image is unchanged.
+  chmod u+r magisk.cfg
   echo "--- Magisk config:"; cat magisk.cfg
   echo "--- overlay.d:"; ./magiskboot cpio ramdisk.cpio "ls -r overlay.d"
   ./magiskboot repack new-boot.img s1-boot.img'

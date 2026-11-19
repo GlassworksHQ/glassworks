@@ -41,6 +41,7 @@ read its shell, which is ours. You may also read Magisk's published documentatio
 | `interface PatchImageInput` | `{ boot: Uint8Array; magisk: MagiskBinaries; overlay: OverlayFile[]; preinitDevice?: string }`. `preinitDevice` defaults to `'cache'` |
 | `interface PatchResult` | `{ image: Uint8Array; wasMagisk: boolean; magiskConfig: string; log: string[] }`. `log` lines are free text in your words |
 | `interface OverlayFile` | `{ path: string; mode: number; data: Uint8Array }` |
+| `magiskBusybox(magiskApk: Uint8Array): Promise<Uint8Array>` | `lib/armeabi-v7a/libbusybox.so` out of the APK, for `s1Overlay`'s `magiskBusybox` (`extractMagiskBusybox` in `apk.ts`). A zip read; it doesn't change the patch |
 | re-exports | `vbmetaFlags`, `withVbmetaFlags` (`vbmeta.ts`), `readBootlogo`, `replaceBootlogo` (`bootlogo.ts`), `s1Overlay`, `type S1OverlayInputs` (`overlay.ts`), `loadCompressor` (`compress.ts`), `zipEntries`, `type ZipEntry`, `type MagiskBinaries` (`apk.ts`) |
 
 `MagiskBinaries` is `{ magiskinit, magisk, initLd }`: the three `armeabi-v7a` libraries from the APK

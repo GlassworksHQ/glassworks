@@ -6,6 +6,7 @@ import { closeSync, createReadStream, openAsBlob, openSync, readSync, writeSync 
 import { Readable } from 'node:stream';
 import { join } from 'node:path';
 import type { PanelShell } from '@glassworks/adb';
+import { apiKeyFingerprint, readApiKey } from '@glassworks/app-adb';
 import type { Store } from '@glassworks/ext4';
 import {
   GLASS_PANES, GLASS_PANES_KEY_FINGERPRINT, GLASS_PANES_USERDATA, GLASSWORKS, adbFingerprint, adbKeyLines, buildImages, checkDownload, checkMirrorApk, checkFastboot, firstBoot, loadSystem, makeOnlyHome, resumableBody,
@@ -36,12 +37,23 @@ export interface RunDeps {
 
 export interface Want { name: string; size: number; sha256: string }
 
-export interface InstallOptions {
+/** What the steps after the flash need: all of it, or the whole run for a Mirror already on the image (--first-boot). */
+export interface FirstBootOptions {
+  /** which app the APK is: Glassworks' legacy build by default (frame.json `app`), MIRROR_PROBE for the probe */
+  app?: MirrorApp;
+  haUrl?: string;
+  /** given to the app at the first boot; the image may have the network saved already */
+  wifi?: { ssid: string; password: string };
+  /** where the unpacked image and the built images go (about 2.5 GB for the real one) */
+  work: string;
+  /** where the screenshot goes (default: the work folder) */
+  screenshot?: string;
+}
+
+export interface InstallOptions extends FirstBootOptions {
   /** system.img: a local file, or a URL (Refract) */
   image: { path: string } | { url: string };
   apk: Uint8Array;
-  /** which app the APK is: Glassworks' legacy build by default (frame.json `app`), MIRROR_PROBE for the probe */
-  app?: MirrorApp;
   /**
    * The adb key line(s), e.g. the host's ~/.android/adbkey.pub. The first is the one the patched
    * services.jar lets in without asking; all go in the new userdata's adb_keys, which this image's adbd
@@ -51,18 +63,12 @@ export interface InstallOptions {
   bootAnimation?: Uint8Array;
   /** GlassworksSettings.apk: Wi-Fi on, no screen timeout, no lock screen, no auto-rotate on the first boot */
   settingsOverlay?: Uint8Array;
-  haUrl?: string;
-  wifi?: { ssid: string; password: string };
-  /** where the unpacked image and the built images go (about 2.5 GB for the real one) */
-  work: string;
   /** zeros as RAW blocks, for an LK that refuses FILL */
   fill?: boolean;
   /** the dry run's small image, instead of the Glass Panes one */
   want?: Want;
   /** the dry run's small userdata, instead of the partition's size */
   userdataBytes?: number;
-  /** where the screenshot goes (default: the work folder) */
-  screenshot?: string;
 }
 
 class Stopped extends Error {}
@@ -87,7 +93,9 @@ const pct = (log: (l: string) => void, what: string) => {
 };
 
 /** Runs the steps in order, each announced and confirmed. */
-async function steps(d: RunDeps, list: [string, () => Promise<void>][]): Promise<void> {
+type Step = [string, () => Promise<void>];
+
+async function steps(d: RunDeps, list: Step[]): Promise<void> {
   for (const [i, [name, run]] of list.entries()) {
     d.log(`\n[${i + 1}/${list.length}] ${name}`);
     if (!(await d.confirm(`${name}: go on?`))) throw new Stopped(`stopped before: ${name}`);
@@ -97,18 +105,25 @@ async function steps(d: RunDeps, list: [string, () => Promise<void>][]): Promise
 
 export interface InstallResult { firstBoot?: FirstBoot; screenshot?: string }
 
-export async function runInstall(o: InstallOptions, d: RunDeps): Promise<InstallResult> {
+/**
+ * The install. Given FirstBootOptions alone (no APK), only the steps after the flash, for a Mirror already on the
+ * image whose run stopped before its first boot (--first-boot): firstBoot checks the fingerprint and the app first.
+ */
+export async function runInstall(o: InstallOptions | FirstBootOptions, d: RunDeps): Promise<InstallResult> {
   const ours = o.app ?? GLASSWORKS;
   const sleep = d.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
-  const want = o.want ?? GLASS_PANES.system;
+  const want = ('want' in o && o.want) || GLASS_PANES.system;
   const res: InstallResult = {};
   let fb: FastbootLike | undefined;
   let userdataBytes = 0;
+  let deviceMac: string | undefined;
+  /** the ESPHome API key the running app holds, carried over the flash (#574). A secret: only its fingerprint is printed */
+  let apiKey: string | undefined;
   let loaded: Awaited<ReturnType<typeof loadSystem>> | undefined;
   let rawFd: number | undefined;
   const raw = join(o.work, 'system.raw'), sysOut = join(o.work, 'system.sparse'), udOut = join(o.work, 'userdata.sparse');
   try {
-    await steps(d, [
+    const flash: Step[] = 'apk' in o ? [
       ['Checks (read-only)', async () => {
         // the APK first: one the Mirror can't run as its home screen stops here, before anything is read or written
         const apk = await checkMirrorApk(o.apk, ours);
@@ -134,8 +149,22 @@ export async function runInstall(o: InstallOptions, d: RunDeps): Promise<Install
         d.log(`    SHA-256 ${loaded.sha256}: as published`);
       }],
       ['Reboot the Mirror into fastboot', async () => {
-        if (await d.adb()) await d.rebootToBootloader();
-        else d.log('    no adb: assuming it is in fastboot already');
+        const p = await d.adb();
+        if (!p) {
+          d.log('    no adb: assuming it is in fastboot already');
+          d.log('    Home Assistant API key: none to carry (no adb before the flash): Home Assistant may ask to re-authenticate once');
+          return;
+        }
+        // A reflash wipes the key Home Assistant provisioned: read it now, as late as the app still runs, so a key HA
+        // changed meanwhile is the one carried. A key the app has but can't hand over stops the run: flashing would lose it.
+        try {
+          apiKey = await readApiKey(p);
+        } catch (e) {
+          throw new Error(`couldn't read the Home Assistant API key from the app: ${(e as Error).message}. Nothing was written to the Mirror. Run it again.`);
+        }
+        d.log(apiKey ? `    Home Assistant API key: carried over the flash (fingerprint ${await apiKeyFingerprint(apiKey)})`
+          : '    Home Assistant API key: none to carry (no app of ours with a key, or one older than #574): Home Assistant may ask to re-authenticate once');
+        await d.rebootToBootloader();
       }],
       ['Fastboot checks (read-only)', async () => {
         fb = await d.fastboot();
@@ -144,30 +173,36 @@ export async function runInstall(o: InstallOptions, d: RunDeps): Promise<Install
         r.info.forEach((i) => d.log(`    ${i}`));
         if (!r.ok) throw new Error('the fastboot checks failed. Nothing was written.');
         userdataBytes = o.userdataBytes ?? r.userdataBytes;
+        deviceMac = r.deviceMac;
       }],
       [`Build the images (${ours.name}, boot animation, services.jar trusting the adb key; a fresh userdata)`, async () => {
         // patched in place: a build that fails ends the run, and the next run loads and checks the file again
         const sys = fileSink(sysOut), ud = fileSink(udOut);
         try {
           // the Wi-Fi is saved in the new userdata too: Android joins it on the first boot with nothing tapped
-          await buildImages(loaded!, { apk: o.apk, app: ours, bootAnimation: o.bootAnimation, settingsOverlay: o.settingsOverlay, adbKey: o.adbKey, userdataBytes, fill: o.fill, ...(o.wifi ? { wifi: o.wifi } : {}) },
-            { system: sys.write, userdata: ud.write }, (step, x) => { if (x === 1) d.log(`    ${step} done`); });
+          await buildImages(loaded!, { apk: o.apk, app: ours, bootAnimation: o.bootAnimation, settingsOverlay: o.settingsOverlay, adbKey: o.adbKey, userdataBytes, fill: o.fill, ...(deviceMac ? { deviceMac } : {}), ...(apiKey ? { apiKeyHandover: true } : {}), ...(o.wifi ? { wifi: o.wifi } : {}) },
+            { system: sys.write, userdata: ud.write }, (step, x) => { if (x === 1) d.log(`    ${step} done`); },
+            // image.ts's own lines: the APK's libraries, the unused apps left out, build.prop, services.jar
+            (line) => d.log(`    ${line}`));
         } finally { sys.close(); ud.close(); }
         d.log(`    ${sysOut}, ${udOut}`);
       }],
       ['Flash system (WRITES the Mirror)', async () => { await fb!.flashBlob('system', await openAsBlob(sysOut), pct(d.log, 'system')); }],
       ['Flash userdata (WRITES the Mirror)', async () => { await fb!.flashBlob('userdata', await openAsBlob(udOut), pct(d.log, 'userdata')); }],
       ['Reboot', async () => { await fb!.reboot(); }],
+    ] : [];
+    await steps(d, [
+      ...flash,
       ['Wait for adb (first start takes a few minutes)', async () => {
         const p = await d.waitForAdb();
         for (let i = 0; (await p.run('getprop sys.boot_completed')).out.trim() !== '1'; i++) {
-          if (i > 180) throw new Error('the Mirror didn\'t finish starting in 6 minutes');
+          if (i > 180) throw new Error('the Mirror didn\'t finish starting in 6 minutes. Once it has, run only the first boot with --first-boot');
           await sleep(2000);
         }
       }],
       ['First boot: permissions, portrait, Home Assistant, Wi-Fi, the only home screen', async () => {
         const p = await d.waitForAdb();
-        res.firstBoot = await firstBoot(p, { haUrl: o.haUrl, wifi: o.wifi, app: ours, onStep: (s, x) => d.log(s ? `    ${s}` : `      ${x}`), sleep });
+        res.firstBoot = await firstBoot(p, { haUrl: o.haUrl, wifi: o.wifi, app: ours, ...(apiKey ? { apiKey } : {}), onStep: (s, x) => d.log(s ? `    ${s}` : `      ${x}`), sleep });
       }],
       ['HOME check', async () => {
         let home = res.firstBoot!.home;

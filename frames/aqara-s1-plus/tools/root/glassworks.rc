@@ -4,10 +4,23 @@
 # init only reads .rc files at boot, so these slots are fixed; svc1 and svc2 are spare slots for
 # services a later bundle brings.
 
-# Once per boot, before the boot animation and the app: load a staged bundle, check the bundle, set
-# ro.glassworks.frame.id and ro.glassworks.frame.version, mount the boot animation. `exec` blocks init
-# until it is done.
+# Magisk's own setup, which the Magisk app would make and our installers don't: busybox in
+# /data/adb/magisk (overlay.d/sbin/magisk-busybox, lib/armeabi-v7a/libbusybox.so from the same official
+# Magisk APK). Without it Magisk's post-fs-data stops with "Magisk environment incomplete, abort" and
+# loads no module (docs/research/magisk-modules.md). Magisk adds its own `on post-fs-data` after every
+# overlay.d .rc, and init runs one trigger's actions in the order it read them, so these lines run
+# before Magisk checks. Only init built-ins, first, so nothing here waits on the loader. Each boot
+# writes the file again, so a damaged copy heals. /data/adb itself is never made here (a new top-level
+# /data directory gets an encryption policy): Magisk makes it at the end of the first boot, so on that
+# boot mkdir and copy just fail (logged by init, harmless) and the next boot has the file.
+#
+# Then, once per boot, before the boot animation and the app: load a staged bundle, check the bundle,
+# set ro.glassworks.frame.id and ro.glassworks.frame.version, mount the boot animation. `exec` blocks
+# init until it is done.
 on post-fs-data
+    mkdir /data/adb/magisk 0755 root root
+    copy ${MAGISKTMP}/magisk-busybox /data/adb/magisk/busybox
+    chmod 0755 /data/adb/magisk/busybox
     exec u:r:su:s0 root root -- /system/bin/sh ${MAGISKTMP}/glassworks_loader.sh boot
 
 # The radio helper (docs/radio.md). Never exits. The app changes the mode with

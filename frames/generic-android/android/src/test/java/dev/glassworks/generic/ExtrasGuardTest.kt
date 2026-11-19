@@ -13,7 +13,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import dev.glassworks.KioskPrefs
-import sh.edm.s1kiosk.MainActivity
+import dev.glassworks.MainActivity
 import dev.glassworks.engine.gecko.GeckoPinHarness
 import dev.glassworks.engine.gecko.GeckoShadows
 

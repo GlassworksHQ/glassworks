@@ -44,13 +44,19 @@ import dev.glassworks.frame.friendlyName
 class UpdateManager(
     context: Context,
     private val runtime: Glassworks,
+    /** The update channel the person picked (#605), read at every check; [onChannelChanged] when it changes. */
+    private val channel: () -> UpdateChannel = channelOf(context),
     private val onChange: () -> Unit,
 ) {
     private val ctx = context.applicationContext
     /** The S1 boot image's root update service; null on a frame without one, which installs with PackageInstaller. */
     private val root = runtime.frame.rootUpdates
-    /** Whether [root] is in this boot image; null until [start] reads it (a getprop) on the update thread. */
-    @Volatile private var rootService: SilentUpdates.Root? = null
+    /**
+     * Whether [root] is in this boot image; null until [start] reads it (a getprop) on the update thread. Setup's Silent
+     * updates step reads it to answer on the main thread without a getprop.
+     */
+    @Volatile var rootService: SilentUpdates.Root? = null
+        private set
 
     /**
      * Whether updates install with nobody at the screen, and why (#422): Home Assistant's *Silent updates*. Read at
@@ -64,11 +70,14 @@ class UpdateManager(
     val model = UpdateModel(runtime.build.versionName, runtime.build.product)
     /** The Frame update entity's model (#139), checked with the app's releases; null on a frame with no releases of its own. */
     val frame: FrameUpdateModel? = runtime.frame.frameRelease?.let { FrameUpdateModel(it, "${runtime.frame.friendlyName()} frame") }
-    /** The frame's newest release in the last release list, kept for a 304 like [cachedOffer]. */
+    /** The frame's newest release in the last release list, kept for a 304 like [cachedList]. */
     private var cachedFrameOffer: FrameOffer? = null
     private val schedule = CheckSchedule()
     private var etag: String? = null
-    private var cachedOffer: UpdateOffer? = null
+    /** The last release list, so a 304 or a new [channel] picks again without asking GitHub (#605). */
+    private var cachedList: List<GithubRelease> = emptyList()
+    /** Whether a check has succeeded, so [onChannelChanged] has a list to pick from. */
+    private var listed = false
     private var lastCheckProblem: String? = null
     private var netCallback: ConnectivityManager.NetworkCallback? = null
     @Volatile private var stopped = false
@@ -124,6 +133,26 @@ class UpdateManager(
     }
 
     fun statusText(): String = model.statusText()
+
+    /**
+     * The update channel changed (#605): pick again from the last release list, so Home Assistant's update entity
+     * follows at once. Before the first check there is nothing to pick from, and the next check reads it.
+     */
+    fun onChannelChanged() = exec.execute {
+        if (!listed) return@execute
+        val pick = pick(cachedList)
+        model.onChecked(pick)
+        Log.i(TAG, "update channel ${channel().id}: latest ${pick?.version ?: "none"}, installed ${runtime.build.versionName}" +
+            if (model.updateAvailable) " -> update available" else "")
+        onChange()
+    }
+
+    /** This app's newest release in [list] on the [channel]; logs why a newer one wasn't usable. */
+    private fun pick(list: List<GithubRelease>): UpdateOffer? {
+        val p = Releases.newest(list, Platform.supportedAbis, runtime.releases, channel())
+        p.problem?.let { problem("newest release not usable: $it") }
+        return p.offer
+    }
 
     /** Reads [silentUpdates] again and sets the note under an offered update from it. True when the answer changed. */
     private fun refreshSilent(): Boolean {
@@ -203,7 +232,7 @@ class UpdateManager(
         when (result) {
             is CheckResult.Found -> {
                 schedule.onSuccess(now)
-                cachedOffer = result.offer
+                listed = true
                 model.onChecked(result.offer)
                 frame?.onChecked(cachedFrameOffer)
                 problemCleared()
@@ -223,7 +252,7 @@ class UpdateManager(
     }
 
     private sealed class CheckResult {
-        /** [offer] null: the repo has no usable release (none published, a draft/pre-release, odd assets). */
+        /** [offer] null: the repo has no usable release on this channel (none published, a draft, odd assets). */
         class Found(val offer: UpdateOffer?) : CheckResult()
         class Failed(val reason: String, val retryAfterMs: Long? = null, val network: Boolean = false) : CheckResult()
     }
@@ -239,28 +268,32 @@ class UpdateManager(
                 return CheckResult.Failed("GitHub rate limit (HTTP $code)", it)
             }
             return when (code) {
-                HttpURLConnection.HTTP_NOT_MODIFIED -> CheckResult.Found(cachedOffer)
-                HttpURLConnection.HTTP_NOT_FOUND -> { etag = null; cachedFrameOffer = null; CheckResult.Found(null) } // no release yet
-                HttpURLConnection.HTTP_OK -> {
-                    val body = readCapped(c.inputStream, MAX_JSON_BYTES).toString(Charsets.UTF_8)
-                    val list = try {
-                        Releases.parseList(body)
-                    } catch (e: ReleaseFormatException) {
-                        problem("release list not usable: ${e.message}")
-                        emptyList()
-                    }
-                    val pick = Releases.newest(list, Platform.supportedAbis, runtime.releases)
-                    pick.problem?.let { problem("newest release not usable: $it") }
-                    val offer = pick.offer
-                    cachedFrameOffer = runtime.frame.frameRelease?.let { FrameOffer.newest(list, it.id) }
-                    etag = c.getHeaderField("ETag")
-                    CheckResult.Found(offer)
-                }
+                // Picked again: the channel may have changed since.
+                HttpURLConnection.HTTP_NOT_MODIFIED -> CheckResult.Found(pick(cachedList))
+                HttpURLConnection.HTTP_NOT_FOUND -> { etag = null; cachedList = emptyList(); cachedFrameOffer = null; CheckResult.Found(null) } // no release yet
+                HttpURLConnection.HTTP_OK -> listed(readCapped(c.inputStream, MAX_JSON_BYTES).toString(Charsets.UTF_8), c.getHeaderField("ETag"))
                 else -> CheckResult.Failed("HTTP $code")
             }
         } finally {
             c.disconnect()
         }
+    }
+
+    /**
+     * A 200's release list: kept with its [newEtag] for later 304s and channel changes. A list that doesn't parse is a
+     * failed check, which keeps neither, so the next check asks GitHub again instead of getting a 304 for it.
+     */
+    private fun listed(body: String, newEtag: String?): CheckResult {
+        val list = try {
+            Releases.parseList(body)
+        } catch (e: ReleaseFormatException) {
+            return CheckResult.Failed("release list not usable: ${e.message}")
+        }
+        cachedList = list
+        val offer = pick(list)
+        cachedFrameOffer = runtime.frame.frameRelease?.let { FrameOffer.newest(list, it.id) }
+        etag = newEtag
+        return CheckResult.Found(offer)
     }
 
     private fun problem(msg: String) {
@@ -510,6 +543,12 @@ class UpdateManager(
 
     companion object {
         const val TAG = "Glassworks.Update"
+
+        /** The channel saved in [KioskPrefs], read once per check (the prefs file is opened once, on first use). */
+        private fun channelOf(context: Context): () -> UpdateChannel {
+            val prefs by lazy { dev.glassworks.KioskPrefs(context.applicationContext) }
+            return { prefs.updateChannel }
+        }
         /** `UpdateCommand` (aioesphomeapi api.proto). */
         const val CMD_INSTALL = 1
         const val CMD_CHECK = 2

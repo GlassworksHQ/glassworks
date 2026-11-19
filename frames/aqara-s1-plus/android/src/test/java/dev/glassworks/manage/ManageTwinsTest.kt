@@ -68,7 +68,21 @@ class ManageTwinsTest {
         assertTrue(page.contains("Kept by the panel") && page.contains("The panel puts it back."))
         assertTrue("the action is a form with its button", page.contains("name=\"key\" value=\"Home Assistant's time zone\"") &&
             page.contains("name=\"value\" value=\"run\">Use it</button>"))
-        assertTrue("a native view with no twin still says so", signedIn().get("/radio").text().contains(ManagePages.ON_THE_PANEL))
+        val none = signedIn().get("/radio").text()
+        assertFalse("#518: no generic row for a native view without a twin", none.contains(ManagePages.ON_THE_PANEL) || none.contains("own settings"))
+    }
+
+    /** #518: what a link opens on the panel (the notifications there), read-only under its title; another app says "On the panel". */
+    @Test fun aLinksTwinDrawsUnderItsTitleAndAnotherAppIsOnThePanel() {
+        val listed = SettingsSection("notes", "Notes", listOf(
+            SettingsItem.Link("Notifications on the panel", "1 · open the list", twin = { listOf(SettingsItem.Info({ "Door" }, { "Someone is there · now" })) }) {},
+            SettingsItem.Link("Licences", "") {},
+        ))
+        f.statusFn = { f.status.copy(panes = listOf(paneRow("notes", listed)), sections = listOf(listed)) }
+        val page = signedIn().get("/notes").text()
+        assertTrue(page.contains("""<div class="grp"><div class="gl">Notifications on the panel</div><div class="row static"><div><b>Door</b><span>Someone is there · now</span></div></div></div>"""))
+        assertFalse("the panel's own words for the link stay there", page.contains("open the list"))
+        assertTrue(page.contains("<b>Licences</b></div><em>${ManagePages.ON_THE_PANEL}</em>"))
     }
 
     @Test fun aLongChoiceIsOneGroupedListWithTheZoneSelected() {

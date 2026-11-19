@@ -6,9 +6,8 @@
 #   app      every module's JVM unit tests, an unsigned release build, and
 #            tools/release/check-update-compat.sh (the APK still updates panels in place). When the
 #            libraries change, also the ESPHome keepalive test against the real aioesphomeapi client
-#   libs-api23  the libraries' lint (NewApi) and their androidTest checks on an API 23 emulator:
-#            esphome-api, esphome-api-android and improv run on Android 6 (#151); bluetooth-proxy and
-#            sendspin are linted only (an emulator has no Bluetooth to scan with, nor a Sendspin server)
+#   libs-api23  the libraries' lint (NewApi at minSdk 23, #151). Their androidTest checks on an API 23 emulator
+#            run in core-emulators.yml, on main and nightly only, like every emulator test (docs/ci.md)
 #   api23    the legacy build's floor (#198): lint's NewApi over the core, the pane API, the panes and the
 #            legacy engine at minSdk 23, and over the generic app's legacy build (tools/legacy/api23-report.py),
 #            failing on a call above API 23 that tools/legacy/api23-baseline.txt doesn't list. Then the generic
@@ -30,22 +29,23 @@
 #            Markdown uses is live (a 404 fails; an unreachable site only warns)
 #   perf-webrtc  Clarity's WebRTC camera (#202): the fake's peer and TURN relay under the hash-locked
 #            venv, HA's real frontend (the pinned build, 117 MB) playing it in the runner's Chrome, and
-#            the relay in the runner's Firefox (Gecko, the panel's engine)
-#   root     the root side (radio helper, bundle checks, s1kiosk_verify) in a 32-bit ARM container
-#            under QEMU
+#            the relay in the runner's Firefox (Gecko, the panel's engine). In two halves on two runners:
+#            relay (the peer, the relay, Chrome and Firefox) and dialogs (HA's more-info dialogs)
+#   root     the root side (radio helper, bundle checks, s1kiosk_verify) in a 32-bit ARM container, on an
+#            Arm runner (under QEMU only when its CPU can't run 32-bit ARM)
 #   size     builds the release APKs (one per frame ABI) of this branch and of its base, splits them into the
 #            engine, the core, each pane and the shared libraries (tools/size/apksize.py), shows the
 #            change and fails over the frame's size budget (frames/<id>/budgets.json). The report is
 #            the job summary, and size-comment.yml posts it on the PR (docs/size.md)
 #   size-generic  the same check for Glassworks for generic Android (#23, frames/generic-android): its
-#            release APK for each ABI of its frame.json against frames/generic-android/budgets.json. This
-#            branch only, no change column, so it costs two builds (about 4 minutes); the report is the
-#            job summary. Then its legacy build (#198, arm64-v8a) builds, with its id, minSdk, the
-#            system permissions and its icons on API 23 (tools/legacy/apk-icons.py) checked; no budget
-#            yet. Every APK also goes through tools/release/check-update-compat.sh --app (it still updates
+#            release APK for each ABI of its frame.json, of this branch and of its base, against
+#            frames/generic-android/budgets.json. The report is the job summary, and size-comment.yml
+#            adds it to the PR's size comment. Then its legacy build (#198, arm64-v8a) builds, with its
+#            id, minSdk, the system permissions and its icons on API 23 (tools/legacy/apk-icons.py)
+#            checked; no budget yet. Every APK also goes through tools/release/check-update-compat.sh --app (it still updates
 #            installed copies in place)
-#   branding rebuilds the S1's boot animation and splash (branding/boot/generate.py) in a pinned
-#            Python image and fails if the committed files differ
+#   branding rebuilds the S1's and the Mirror's boot animation and splash (branding/boot/generate.py) in a
+#            pinned Python image, one frame per runner, and fails if the committed files differ
 #   site     glassworks.dev (site/): lint, typecheck, the static build, and the SEO check on the built
 #            site (every page in the sitemap with a title, description, canonical and preview image).
 #            The build also checks the frames' data, banners and Clarity grades
@@ -64,9 +64,10 @@ permissions:
   contents: read
 
 # A new push to a PR cancels the PR's older run. Every other run has a group of its own, so a push to main
-# is never cancelled, nor held behind the next one.
+# is never cancelled, nor held behind the next one. So does a rerun (attempt 2 on, by hand or by
+# rerun-download-flakes.yml): rerunning an older commit's jobs must not cancel the newer commit's run.
 concurrency:
-  group: pr-${{ github.event.pull_request.number || github.run_id }}
+  group: pr-${{ github.event.pull_request.number || github.run_id }}${{ github.run_attempt != '1' && format('-rerun-{0}', github.run_id) || '' }}
   cancel-in-progress: true
 
 jobs:
@@ -140,12 +141,14 @@ jobs:
         with:
           persist-credentials: false
 
-      # Same toolchain as release.yml.
+      # Same toolchain as release.yml. setup-gradle restores Gradle's caches, the build cache among them, from
+      # what runs on main saved (a PR only reads them), so a PR rebuilds and retests only what it changed: every
+      # test declares the repo files it reads (build-logic, readsRepoFiles).
       - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
         with:
           distribution: temurin
           java-version: '21'
-          cache: gradle
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
 
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
         with:
@@ -159,8 +162,42 @@ jobs:
         with:
           node-version: '24'
 
+      # Robolectric fetches its Android jars (android-all-instrumented, one per SDK a test runs on) from Maven Central
+      # while the tests run, outside Gradle's caches. A failed fetch fails the whole test class: 6 of the 13 red app
+      # runs on 2026-11-18 and 19. Named by Robolectric's version; runs that aren't for a PR save what they fetched.
+      - name: Robolectric's version
+        id: robolectric
+        run: |
+          v=$(git grep -h -oE 'org\.robolectric:robolectric:[0-9][0-9A-Za-z.-]*' -- '*.gradle.kts' | cut -d: -f3 | sort -u | paste -sd+ -)
+          echo "version=${v:-none}" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        id: robolectric-jars
+        with:
+          path: ~/.m2/repository/org/robolectric
+          key: robolectric-${{ steps.robolectric.outputs.version }}-${{ github.run_id }}
+          restore-keys: robolectric-${{ steps.robolectric.outputs.version }}-
+
+      # --parallel: the modules' test tasks side by side on the runner's 4 cores (no test shares a port or a file).
       - name: Unit tests
-        run: ./gradlew --no-daemon test
+        run: ./gradlew --no-daemon --parallel test
+
+      # Saved only when the tests fetched a jar the restored copy didn't have, and never by a PR.
+      - name: Robolectric's jars, what changed
+        id: robolectric-new
+        env:
+          RESTORED: ${{ steps.robolectric-jars.outputs.cache-matched-key }}
+          VERSION: ${{ steps.robolectric.outputs.version }}
+        run: |
+          dir=~/.m2/repository/org/robolectric
+          [ -d "$dir" ] || { echo "No $dir: the tests fetched nothing there."; exit 0; }
+          du -sh "$dir"
+          key="robolectric-$VERSION-$(cd "$dir" && find . -name '*.jar' | sort | sha256sum | cut -c1-16)"
+          if [ "$key" = "$RESTORED" ]; then echo "The same jars as $RESTORED."; else echo "New: $key (restored: ${RESTORED:-none})."; echo "key=$key" >> "$GITHUB_OUTPUT"; fi
+      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        if: steps.robolectric-new.outputs.key != '' && github.event_name != 'pull_request'
+        with:
+          path: ~/.m2/repository/org/robolectric
+          key: ${{ steps.robolectric-new.outputs.key }}
 
       - name: Release build (unsigned)
         if: needs.changes.result != 'success' || needs.changes.outputs.app_apk != 'false'
@@ -206,6 +243,12 @@ jobs:
             grep -q '<testsuite [^>]* skipped="0"' "$report" || { echo "::error::$report: a test skipped"; exit 1; }
           done
 
+      # So a failed run can't save a remembered "missing" artifact into the cache (docs/ci.md, Caches).
+      - name: Forget Gradle's dependency metadata after a failure
+        if: failure()
+        run: rm -rf ~/.gradle/caches/modules-2/metadata-*
+
+
   libs-api23:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.libs_api23 != 'false') }}
@@ -219,7 +262,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-          cache: gradle
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
         with:
           packages: platform-tools
@@ -227,21 +270,11 @@ jobs:
         run: sdkmanager --install "platforms;android-37.2"
       - name: Lint (NewApi at minSdk 23)
         run: ./gradlew --no-daemon :esphome-api-android:lintDebug :improv:lintDebug :bluetooth-proxy:lintDebug :sendspin:lintDebug :voice:lintDebug
-      - name: Build the androidTest APKs
-        run: ./gradlew --no-daemon :esphome-api-android:assembleDebugAndroidTest :improv:assembleDebugAndroidTest
-      - name: Enable KVM
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-      - name: androidTest on an API 23 emulator
-        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
-        with:
-          api-level: 23
-          arch: x86_64
-          target: default
-          disable-animations: true
-          script: ./gradlew --no-daemon :esphome-api-android:connectedDebugAndroidTest :improv:connectedDebugAndroidTest
+
+      # So a failed run can't save a remembered "missing" artifact into the cache (docs/ci.md, Caches).
+      - name: Forget Gradle's dependency metadata after a failure
+        if: failure()
+        run: rm -rf ~/.gradle/caches/modules-2/metadata-*
 
   # The legacy build's floor (#198): no new call above API 23 in the Glassworks modules. The report lowers minSdk to
   # 23 for this run only (tools/legacy/api23-lint.gradle) and fails on a call tools/legacy/api23-baseline.txt doesn't
@@ -261,7 +294,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-          cache: gradle
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
         with:
           packages: platform-tools
@@ -279,6 +312,12 @@ jobs:
         # INSTALL_PACKAGES, REBOOT and WRITE_SECURE_SETTINGS on purpose (tools:ignore="ProtectedPermissions").
         run: ./gradlew --no-daemon :generic-android:lintDebug
 
+      # So a failed run can't save a remembered "missing" artifact into the cache (docs/ci.md, Caches).
+      - name: Forget Gradle's dependency metadata after a failure
+        if: failure()
+        run: rm -rf ~/.gradle/caches/modules-2/metadata-*
+
+
   libs-publish:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.libs_publish != 'false') }}
@@ -293,7 +332,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-          cache: gradle
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
         with:
           packages: platform-tools
@@ -323,6 +362,12 @@ jobs:
   # Python, must fire in its own word only and score within 0.01 of pymicro-wakeword. It skips without
   # MWW_PYTHON, so this job fails if it skipped. The models come from raw.githubusercontent.com at
   # the commit WakeWords.kt pins, checked against its SHA-256s, and are cached by that commit.
+
+      # So a failed run can't save a remembered "missing" artifact into the cache (docs/ci.md, Caches).
+      - name: Forget Gradle's dependency metadata after a failure
+        if: failure()
+        run: rm -rf ~/.gradle/caches/modules-2/metadata-*
+
   wake-word:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.wake_word != 'false') }}
@@ -338,7 +383,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-          cache: gradle
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
 
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
         with:
@@ -382,6 +427,12 @@ jobs:
           report=libs/voice/build/test-results/testDebugUnitTest/TEST-dev.glassworks.voice.MicroWakeWordClipTest.xml
           [ -z "$failed" ] || { cat "$report"; exit 1; }
           grep -q '<testsuite [^>]* skipped="0"' "$report" || { echo "::error::$report: the test skipped"; exit 1; }
+
+      # So a failed run can't save a remembered "missing" artifact into the cache (docs/ci.md, Caches).
+      - name: Forget Gradle's dependency metadata after a failure
+        if: failure()
+        run: rm -rf ~/.gradle/caches/modules-2/metadata-*
+
 
   web:
     needs: changes
@@ -461,10 +512,13 @@ jobs:
         if: needs.changes.result != 'success' || needs.changes.outputs.perf != 'false'
         with:
           node-version: '24'
-      # Clarity's camera streams are made with ffmpeg; a test checks it makes the same bytes twice.
+      # Clarity's camera streams are made with ffmpeg; a test checks it makes the same bytes twice. From the cache
+      # of Ubuntu's packages (docs/ci.md, Caches): a plain apt-get took up to 26 minutes.
       - name: ffmpeg
         if: needs.changes.result != 'success' || needs.changes.outputs.perf != 'false'
-        run: sudo apt-get -qq update && sudo apt-get -qq install -y --no-install-recommends ffmpeg > /dev/null
+        uses: ./.github/actions/apt-install
+        with:
+          packages: ffmpeg
       # Clarity's tests in two sets (#268, tools/perf/test/parallel.py): the fast one first (seconds),
       # then the runner end to end against the fake panel, and the fakes, several at once.
       - name: Perf test rubric, report, grade and page statistics (fast set)
@@ -472,15 +526,21 @@ jobs:
         run: |
           python3 tools/perf/test/parallel.py --set fast
           node --test tools/perf/test/page.test.mjs tools/perf/test/grade.test.mjs tools/perf/test/browserguard.test.mjs
+      - name: The Manage page's All panels script (#466)
+        run: node --test core/src/test/js/*.test.mjs
       - name: Perf test runner and fakes, end to end (slow set)
         if: needs.changes.result != 'success' || needs.changes.outputs.perf != 'false'
         run: python3 tools/perf/test/parallel.py --set slow
       - name: APK size tool
         run: python3 -m unittest discover -s tools/size/test -v
+      - name: Release scripts and the publish steps' beta path (#605)
+        run: python3 -m unittest discover -s tools/release/test -v
       - name: API 23 report tool
         run: python3 -m unittest discover -s tools/legacy/test -v
       - name: Boot generator targets and layout
         run: python3 -m unittest discover -s branding/boot/test -v
+      - name: The S1's stock fastboot tools (fastboot-usb.py, wrap-ram-boot.py)
+        run: python3 -m unittest discover -s frames/aqara-s1-plus/tools/fel/test -v
       - name: Docs links
         run: python3 tools/check-doc-links.py
       # Here, in a required check: a map that pr.yml or docs/ci.md no longer follows fails the PR.
@@ -496,6 +556,12 @@ jobs:
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.perf_webrtc != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    # Two halves of about five minutes each, on two runners (#536): one after the other they took ten.
+    # tools/ci/test/test_changes.py checks that every one of these test files is in a half.
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [relay, dialogs]
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -504,31 +570,54 @@ jobs:
         with:
           node-version: '24'
       - name: ffmpeg
-        run: sudo apt-get -qq update && sudo apt-get -qq install -y --no-install-recommends ffmpeg > /dev/null
+        uses: ./.github/actions/apt-install
+        with:
+          packages: ffmpeg
       # GW_PERF_E2E=1: these fail here instead of skipping. One browser at a time (free ports).
-      - name: Perf test WebRTC camera, end to end
+      - name: Perf test WebRTC camera, end to end (${{ matrix.part }})
         env:
           GW_PERF_E2E: "1"
+          PART: ${{ matrix.part }}
         run: |
           PY=$(python3 tools/perf/webrtcenv.py)
-          "$PY" -m unittest discover -s tools/perf/test -p test_webrtc.py -v
-          GW_PERF_FAKE_PYTHON="$PY" node --test tools/perf/test/webrtc.e2e.test.mjs
-          # Clarity v3 (#211): HA's more-info dialogs in HA's real frontend, at the S1's viewport.
-          GW_PERF_FAKE_PYTHON="$PY" node --test tools/perf/test/dialog.e2e.test.mjs
-          # Gecko (the panel's engine) is stricter about TURN than Chrome: the runner's Firefox.
-          GW_PERF_FAKE_PYTHON="$PY" node --test tools/perf/test/webrtc.gecko.test.mjs
+          case "$PART" in
+            relay)
+              "$PY" -m unittest discover -s tools/perf/test -p test_webrtc.py -v
+              GW_PERF_FAKE_PYTHON="$PY" node --test tools/perf/test/webrtc.e2e.test.mjs
+              # Gecko (the panel's engine) is stricter about TURN than Chrome: the runner's Firefox.
+              GW_PERF_FAKE_PYTHON="$PY" node --test tools/perf/test/webrtc.gecko.test.mjs
+              ;;
+            dialogs)
+              # Clarity v3 (#211): HA's more-info dialogs in HA's real frontend, at the S1's viewport.
+              GW_PERF_FAKE_PYTHON="$PY" node --test tools/perf/test/dialog.e2e.test.mjs
+              ;;
+            *) echo "::error::no such part: $PART"; exit 1 ;;
+          esac
 
   root:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.root != 'false') }}
-    runs-on: ubuntu-24.04
+    # An Arm runner: the 32-bit ARM containers run on its CPU when it can, not under QEMU on x86 (about 20 minutes, #536).
+    runs-on: ubuntu-24.04-arm
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
 
+      # The image build-verify.sh builds in. armv8l: the CPU runs it (AArch32); armv7l: QEMU does.
+      - name: Does this CPU run 32-bit ARM?
+        id: arm32
+        run: |
+          image=arm32v7/alpine:3.20@sha256:9c6dfd553de893ca76841b515e379350d234939c92d47f817069cb56221c3feb
+          if machine=$(docker run --rm --platform linux/arm/v7 "$image" uname -m); then
+            echo "Runs 32-bit ARM containers as $machine."; echo native=true >> "$GITHUB_OUTPUT"
+          else
+            echo "Can't run 32-bit ARM by itself; QEMU next."; echo native=false >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        if: steps.arm32.outputs.native != 'true'
         with:
           platforms: arm
 
@@ -554,7 +643,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-          cache: gradle
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
 
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
         with:
@@ -574,6 +663,14 @@ jobs:
 
       - name: Radio bundle, as the release builds it
         run: SISDK_DIR="$HOME/sisdk-cache" tools/size/radio-bundle.sh "$GITHUB_WORKSPACE" "$RUNNER_TEMP/bundle-head"
+
+      # The S1's setup hotspot name (#197): the overlay in that bundle names the hotspot Glassworks, statically.
+      - name: Hotspot name overlay in the bundle
+        run: |
+          apk="$RUNNER_TEMP/bundle-head/radio-bundle/hotspot-name.apk"
+          aapt2="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)/aapt2"
+          "$aapt2" dump resources "$apk" | grep -A1 'string/wifi_localhotspot_configure_ssid_default' | grep -q '"Glassworks"'
+          "$aapt2" dump badging "$apk" | grep -q "overlay: targetPackage='android' priority='1' isStatic='true'"
 
       - name: ABIs, one APK each as the release builds them (every frame's abis, tools/release/frame-abis.sh)
         run: |
@@ -662,6 +759,12 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+      # So a failed run can't save a remembered "missing" artifact into the cache (docs/ci.md, Caches).
+      - name: Forget Gradle's dependency metadata after a failure
+        if: failure()
+        run: rm -rf ~/.gradle/caches/modules-2/metadata-*
+
+
   size-generic:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.size_generic != 'false') }}
@@ -677,7 +780,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-          cache: gradle
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
 
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
         with:
@@ -689,10 +792,36 @@ jobs:
       - name: Release APKs, one per ABI of the frame
         run: |
           mkdir -p "$RUNNER_TEMP/generic"
+          aapt2="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)/aapt2"
           for a in $(jq -r '.abis[]' frames/generic-android/design/frame.json); do
             ./gradlew --no-daemon :generic-android:assembleRelease -Ps1Abi="$a"
             cp frames/generic-android/android/build/outputs/apk/release/generic-android-release-unsigned.apk "$RUNNER_TEMP/generic/$a.apk"
             tools/release/check-update-compat.sh --app generic-android "$RUNNER_TEMP/generic/$a.apk"
+            # Only the legacy build's hotspot needs it (setWifiApEnabled); on Android 8+ it would be a user grant for nothing.
+            badging="$("$aapt2" dump badging "$RUNNER_TEMP/generic/$a.apk")"
+            if grep -q "^uses-permission: name='android.permission.WRITE_SETTINGS'" <<< "$badging"; then
+              echo "::error::the Android 8+ APK ($a) asks for WRITE_SETTINGS"; exit 1
+            fi
+          done
+
+      # The base, as the size job builds it: for the change column. An ABI the base doesn't build has none.
+      - name: Release APKs of the base
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/generic-base"; missing="$RUNNER_TEMP/generic-base/missing"; : > "$missing"
+          abis="$(jq -r '.abis[]' frames/generic-android/design/frame.json)"
+          if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            for a in $abis; do echo "$a=no-base-commit"; done > "$missing"; exit 0
+          fi
+          git worktree add -q "$RUNNER_TEMP/generic-base/src" "$BASE"
+          cd "$RUNNER_TEMP/generic-base/src"
+          for a in $abis; do
+            if ./gradlew --no-daemon :generic-android:assembleRelease -Ps1Abi="$a"; then
+              cp frames/generic-android/android/build/outputs/apk/release/generic-android-release-unsigned.apk "$RUNNER_TEMP/generic-base/$a.apk"
+            else
+              echo "The base didn't build for $a; no change column for it."; echo "$a=base-build-failed" >> "$missing"
+            fi
           done
 
       - name: The legacy build (#198)
@@ -705,28 +834,29 @@ jobs:
           badging="$("$aapt2" dump badging "$apk")"
           grep -q "^package: name='dev.glassworks.generic_android.legacy'" <<< "$badging" || { echo "::error::the legacy APK isn't dev.glassworks.generic_android.legacy"; exit 1; }
           grep -q "^minSdkVersion:'23'" <<< "$badging" || { echo "::error::the legacy APK's minSdk isn't 23"; exit 1; }
-          for perm in INSTALL_PACKAGES REBOOT WRITE_SECURE_SETTINGS; do
+          # WRITE_SETTINGS: the setup hotspot's setWifiApEnabled on Android 6-7.
+          for perm in INSTALL_PACKAGES REBOOT WRITE_SECURE_SETTINGS WRITE_SETTINGS; do
             grep -q "^uses-permission: name='android.permission.$perm'" <<< "$badging" || { echo "::error::the legacy APK doesn't ask for $perm"; exit 1; }
           done
           unzip -l "$apk" | grep -q "lib/arm64-v8a/libxul.so" || { echo "::error::the legacy APK has no arm64-v8a GeckoView"; exit 1; }
+          # No crash helper process: the Mirror's lowmemorykiller killed and restarted it every minute (engine-gecko-legacy's manifest).
+          manifest="$("$aapt2" dump xmltree --file AndroidManifest.xml "$apk")"
+          if grep -q "org.mozilla.gecko.crashhelper.CrashHelper" <<< "$manifest"; then echo "::error::the legacy APK still declares GeckoView's crash helper service"; exit 1; fi
           # Its icons load on Android 6: the Mirror's first start crashed on one that didn't (#198).
           python3 tools/legacy/apk-icons.py --aapt2 "$aapt2" "$apk" drawable/ic_notification
           echo "Legacy APK (arm64-v8a): $(stat -c %s "$apk") bytes" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Size and budget
-        env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+      - name: Size, change and budget
         run: |
           args=""
           for apk in "$RUNNER_TEMP"/generic/*.apk; do
             a="$(basename "$apk" .apk)"
-            args="$args --apk $a=$apk --base-missing $a=not-built"
+            args="$args --apk $a=$apk"
+            [ -f "$RUNNER_TEMP/generic-base/$a.apk" ] && args="$args --base-apk $a=$RUNNER_TEMP/generic-base/$a.apk"
           done
-          # No base APK is built, but the base's budgets still show a budget change (as the S1's job does).
-          base_budgets="$RUNNER_TEMP/generic/base-budgets.json"
-          if [ -n "$BASE" ] && git show "$BASE:frames/generic-android/budgets.json" > "$base_budgets" 2>/dev/null; then
-            args="$args --base-budgets $base_budgets"
-          fi
+          while IFS= read -r m; do [ -n "$m" ] && args="$args --base-missing $m"; done < "$RUNNER_TEMP/generic-base/missing"
+          base_budgets="$RUNNER_TEMP/generic-base/src/frames/generic-android/budgets.json"
+          [ -f "$base_budgets" ] && args="$args --base-budgets $base_budgets"
           # shellcheck disable=SC2086 # $args is a list of options
           python3 tools/size/apksize.py report --frame generic-android $args \
             --json "$RUNNER_TEMP/generic/size.json" --md "$RUNNER_TEMP/generic/size.md"
@@ -736,11 +866,36 @@ jobs:
         run: |
           [ -f "$RUNNER_TEMP/generic/size.md" ] && cat "$RUNNER_TEMP/generic/size.md" >> "$GITHUB_STEP_SUMMARY" || true
 
+      # For size-comment.yml, next to the size job's apk-size (which says which PR).
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always() && github.event_name == 'pull_request'
+        with:
+          name: apk-size-generic
+          path: ${{ runner.temp }}/generic/size.json
+          retention-days: 7
+          if-no-files-found: ignore
+
+      # So a failed run can't save a remembered "missing" artifact into the cache (docs/ci.md, Caches).
+      - name: Forget Gradle's dependency metadata after a failure
+        if: failure()
+        run: rm -rf ~/.gradle/caches/modules-2/metadata-*
+
+
   branding:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.branding != 'false') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    # One frame per runner (#536): one after the other they took 2.5 and 5.5 minutes, and side by side on one
+    # runner 4.3 and 7.2 (the generator uses every core).
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - frame: aqara-s1-plus
+            out: branding/glass-tile
+          - frame: lululemon-mirror
+            out: branding/lululemon-mirror
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -748,15 +903,18 @@ jobs:
 
       # The versions are the ones in branding/boot/README.md; the outputs are byte-identical on
       # macOS arm64 and in this image (checked 2026-11-13).
-      - name: Rebuild the S1's and the Mirror's boot branding
+      - name: Rebuild the boot branding (${{ matrix.frame }})
+        env:
+          FRAME: ${{ matrix.frame }}
+          OUT: ${{ matrix.out }}
         run: |
-          docker run --rm -v "$PWD":/w -w /w \
+          docker run --rm -v "$PWD":/w -w /w -e FRAME -e OUT \
             python:3.11-slim@sha256:07d4824036af339fa1b6ef769cc99d9c10a141769538b52b3b597c84f7a7b535 sh -euc '
               apt-get -qq update && apt-get -qq install -y --no-install-recommends curl ca-certificates >/dev/null
               pip -q install --root-user-action=ignore pillow==13.0.0 numpy==2.4.6 uharfbuzz==0.57.0 pyoxipng==9.1.1
-              python branding/boot/generate.py --frame aqara-s1-plus --out branding/glass-tile
-              python branding/boot/generate.py --frame lululemon-mirror --out branding/lululemon-mirror'
+              python branding/boot/generate.py --frame "$FRAME" --out "$OUT"'
 
+      # The whole of branding/, not only this frame's folder: the generator must write nothing else.
       - name: The committed files are what the generator writes
         run: |
           sudo chown -R "$(id -u):$(id -g)" branding
@@ -785,8 +943,20 @@ jobs:
         run: npm run lint -w site
       - name: Typecheck
         run: npm run typecheck -w site
+      # Prerendering /blueprints reads GitHub's API, and a dropped connection there ("fetch failed: other side closed")
+      # failed about one site run in seven on 2026-11-18 and 19. Then it builds once more; any other failure fails.
       - name: Builds as Vercel builds it
-        run: npm run build -w site
+        run: |
+          set -o pipefail
+          log="$RUNNER_TEMP/site-build.log"
+          if npm run build -w site 2>&1 | tee "$log"; then exit 0; fi
+          grep -q 'fetch failed' "$log" || exit 1
+          echo "::warning::The site build lost a connection to GitHub's API (fetch failed). Building once more."
+          npm run build -w site
+        env:
+          # The blueprints and the latest release read GitHub's Releases API. Unauthenticated, a shared runner
+          # IP runs out of its 60 calls an hour (HTTP 403). The workflow's read-only token gets the higher limit.
+          GITHUB_TOKEN: ${{ github.token }}
       - name: Each docs route carries the Markdown and images it renders
         run: npm run check:trace -w site
       - name: SEO check (sitemap, titles, descriptions, canonicals, preview images)

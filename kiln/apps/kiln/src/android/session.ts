@@ -4,16 +4,28 @@
 // connects over adb (Allow on the device); reads it (planInstall, nothing written); then installs and
 // grants, reading each grant back (installGeneric). Undo removes the app (undoGeneric).
 //
-// The APK is a file picked on this computer, behind ?apk=local, until Glassworks for generic Android has
-// a release Kiln can fetch (issue 403 waits on PR 388's allowlist).
+// The APK: with ?apk=release, the newest generic-android-v* release's arm64-v8a APK, checked against its .sha256
+// (release/apk.ts, as the Mirror's page does); with ?apk=local, a file picked on this computer. Without either the
+// page stays locked until generic-android's frame.json makes it installable (ANDROID_OPEN).
 import type { PanelShell } from '@glassworks/adb';
 import { apkPackage } from '@glassworks/app-adb';
 import {
   APPS, OwnFrameRefused, Refused, identifyPicked, identifyUsb, installGeneric, planInstall, undoGeneric,
   type BrandId, type OwnFrame, type GenericApp, type GenericInstalled, type GenericPhase, type Grant, type Identified, type Plan, type SilentUpdatesResult,
 } from '@glassworks/generic-android-installer';
+import frame from '../../../../../frames/generic-android/design/frame.json';
+import { NoRelease, apkMode, installable, releaseApk, type ApkFrom, type ReleaseApk, type ReleaseLine } from '../release/apk';
 
-/** Device (find, named, brand), Connect (debug, allow), Install (working), Done; `off` without ?apk=local. */
+/**
+ * Glassworks for generic Android (Android 8+), never its legacy build; arm64-v8a, the ABI of the Pixel Tablet and
+ * most tablets on 8+. The recipe refuses a device that can't run it (planInstall) before anything is written.
+ */
+export const ANDROID_APK: ReleaseLine = { line: 'generic-android', abi: 'arm64-v8a' };
+
+/** The page is everyone's once generic-android's frame.json makes it installable (release/apk.ts `installable`). */
+export const ANDROID_OPEN = installable(frame);
+
+/** Device (find, named, brand), Connect (debug, allow), Install (working), Done; `off` without ?apk=…. */
 export type AndroidScreen = 'off' | 'find' | 'named' | 'brand' | 'debug' | 'allow' | 'working' | 'done' | 'error';
 
 export type Flow = 'install' | 'undo';
@@ -30,6 +42,8 @@ export interface AndroidState {
   screen: AndroidScreen;
   flow: Flow;
   apk?: PickedApk;
+  /** With the APK from the release: where its download is. */
+  release?: ReleaseApk;
   /** what Kiln can say about the device: from USB, the person's pick, then adb's read */
   identified?: Identified;
   /** the USB product name, when it said something */
@@ -67,15 +81,12 @@ export interface AndroidDeps {
   sleep?: (ms: number) => Promise<void>;
   homeTimeoutMs?: number;
   setupTries?: number;
+  /** The APK from the newest generic-android release, through Kiln's release route; without it, a file the tester picks. */
+  release?: typeof fetch;
 }
 
-/** Whether the page is on, from its query: `?apk=local`, or a demo where demos run. */
-export function androidMode(search: string, demosOn: boolean, demos: readonly string[]): { on: boolean; demo?: string } {
-  const q = new URLSearchParams(search);
-  const demo = q.get('demo');
-  if (demosOn && demo && demos.includes(demo)) return { on: true, demo };
-  return { on: q.get('apk') === 'local' };
-}
+/** Whether the page is on and where its APK comes from (release/apk.ts `apkMode`). */
+export const androidMode = (search: string, demosOn: boolean, demos: readonly string[], open = ANDROID_OPEN) => apkMode(search, demosOn, demos, open);
 
 const hex = (b: ArrayBuffer) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, '0')).join('');
 const cancelled = (e: unknown) => (e as { name?: string } | undefined)?.name === 'NotFoundError';
@@ -93,8 +104,10 @@ export class AndroidSession {
   private picks = 0;
 
   constructor(private readonly d: AndroidDeps, on: boolean) {
-    this.state = { screen: on ? 'find' : 'off', flow: 'install', phases: [], log: [] };
+    this.state = { screen: on ? 'find' : 'off', flow: 'install', phases: [], log: [], ...(d.release ? { release: { state: 'waiting' } } : {}) };
   }
+
+  get from(): ApkFrom { return this.d.release ? 'release' : 'local'; }
 
   subscribe = (l: () => void) => { this.listeners.add(l); return () => { this.listeners.delete(l); }; };
   get = () => this.state;
@@ -123,12 +136,37 @@ export class AndroidSession {
     this.set({ apk: { name, size: bytes.length, sha256, package: pkg, ...(error ? { error } : {}) } });
   }
 
+  /**
+   * The newest generic-android release's APK, checked against its .sha256, then as a picked file is. Starts once, when
+   * the first screen shows; again only after no release or an error (Try again).
+   */
+  async loadRelease(): Promise<void> {
+    const r = this.state.release;
+    if (!this.d.release || !r || !['waiting', 'none', 'error'].includes(r.state)) return;
+    try {
+      const { bytes, ready } = await releaseApk(ANDROID_APK, this.d.release, (release) => this.set({ release }));
+      this.log(`${ready.name} from ${ready.tag}: SHA-256 ${ready.sha256}, as the release publishes it`);
+      await this.pickApk(ready.name, bytes);
+      // an APK the checks refuse is an error of the release, so Try again can fetch a fixed one
+      const refused = this.state.apk?.error;
+      this.set({ release: refused ? { state: 'error', why: `Kiln can't install it: ${refused}` } : ready });
+    } catch (e) {
+      const why = (e as Error).message;
+      if (!(e instanceof NoRelease)) this.log(`The release's APK: ${why}`);
+      this.set({ release: e instanceof NoRelease ? { state: 'none' } : { state: 'error', why } });
+    }
+  }
+
   /** Why the person can't go on from the device screen yet, or undefined. */
   blocked(): string | undefined {
     if (this.state.flow === 'undo') return undefined;
-    if (this.state.apk?.error) return `Pick another file: ${this.state.apk.error}.`;
-    if (!this.apk) return 'Pick the APK file first.';
-    return undefined;
+    const r = this.state.release;
+    if (this.state.apk?.error) return r ? `The release's APK can't go on the tablet: ${this.state.apk.error}.` : `Pick another file: ${this.state.apk.error}.`;
+    if (this.apk) return undefined;
+    if (!r) return 'Pick the APK file first.';
+    if (r.state === 'none') return 'There is no release of Glassworks for Android yet.';
+    if (r.state === 'error') return 'Kiln couldn\'t get Glassworks from its release. Try again.';
+    return 'Kiln is still downloading Glassworks.';
   }
 
   /** Must run inside the click: the browser's list opens before the first await. */

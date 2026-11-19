@@ -30,7 +30,28 @@ data class UpdateOffer(
     val releaseUrl: String,
     val apk: ReleaseAsset,
     val sha256: ReleaseAsset,
+    /** A beta: a GitHub pre-release, which only [UpdateChannel.BETA] takes (#605). */
+    val prerelease: Boolean = false,
 )
+
+/**
+ * Which of this app's releases a device takes (#605). A beta is an ordinary higher version published as a GitHub
+ * pre-release; promoting it to stable un-marks the pre-release on the same release, with the same APK.
+ */
+enum class UpdateChannel(val id: String, val label: String) {
+    /** Releases only, as every app took before #605. The default. */
+    STABLE("stable", "Stable"),
+    /** Releases and pre-releases of this app's line, whichever version is highest. */
+    BETA("beta", "Beta");
+
+    /** Whether this channel takes [r]: Stable never takes a pre-release. */
+    fun takes(r: GithubRelease): Boolean = this == BETA || !r.prerelease
+
+    companion object {
+        /** The channel saved as [id]; Stable for none or an unknown one. */
+        fun of(id: String?): UpdateChannel = entries.firstOrNull { it.id == id } ?: STABLE
+    }
+}
 
 /**
  * The ABIs this app is built for, each with its release APK's name stem: every ABI a frame runs
@@ -66,6 +87,9 @@ class ReleaseLine(
     /** The version in one of this app's tags; null for any other tag. */
     fun tagVersion(tag: String): AppVersion? =
         if (plainTags || tag.startsWith(tagPrefix)) AppVersion.parse(tag.removePrefix(tagPrefix)) else null
+
+    /** This app's tag for [version] ("0.5.0" → `aqara-s1-plus-v0.5.0`), the one a release of it gets now. */
+    fun tag(version: String) = "${tagPrefix}v$version"
 
     fun apkName(abi: ApkAbi, v: AppVersion) = "${stem(abi)}-$v.apk"
     fun shaName(abi: ApkAbi, v: AppVersion) = "${apkName(abi, v)}.sha256"
@@ -160,18 +184,24 @@ object Releases {
     }
 
     /**
-     * The newest installable release of this app in [releases]. Other frames' and libraries' releases
-     * (another tag prefix) are skipped silently. If a newer release of this app was refused (draft,
-     * pre-release, odd assets), the newest acceptable one is still offered, and [ReleasePick.problem]
-     * says what was wrong with the newer one. No release of this app at all: no offer, no problem.
+     * The newest installable release of this app in [releases] on [channel]. Other frames' and libraries' releases
+     * (another tag prefix) are skipped silently, and so are pre-releases on [UpdateChannel.STABLE]: that channel
+     * doesn't take them, so a published beta is no problem there (#605). If a newer release of this app was refused
+     * (draft, SemVer pre-release tag, odd assets), the newest acceptable one is still offered, and
+     * [ReleasePick.problem] says what was wrong with the newer one. No release of this app at all: no offer, no
+     * problem. The offer may be lower than the version installed (a beta, then Stable): [UpdateModel] offers
+     * nothing lower.
      */
-    fun newest(releases: List<GithubRelease>, deviceAbis: List<String>, line: ReleaseLine): ReleasePick {
+    fun newest(
+        releases: List<GithubRelease>, deviceAbis: List<String>, line: ReleaseLine, channel: UpdateChannel = UpdateChannel.STABLE,
+    ): ReleasePick {
         var best: UpdateOffer? = null
         var refused: Pair<AppVersion, String>? = null
         for (r in releases) {
             val v = line.tagVersion(r.tag) ?: continue
+            if (!channel.takes(r)) continue
             try {
-                val o = offer(r, deviceAbis, line)
+                val o = offer(r, deviceAbis, line, channel)
                 if (best == null || o.version > best.version) best = o
             } catch (e: ReleaseFormatException) {
                 if (refused == null || v > refused.first) refused = v to e.message.orEmpty()
@@ -184,14 +214,15 @@ object Releases {
 
     /**
      * The installable offer in [r], or a [ReleaseFormatException] saying why there is none: drafts,
-     * pre-releases (GitHub flag or a SemVer pre-release tag), a tag that isn't one of this app's
+     * GitHub pre-releases unless [channel] takes them (Beta, #605), SemVer pre-release tags on any channel (they
+     * have no versionCode), a tag that isn't one of this app's
      * ([tagVersion]), no APK and `.sha256` pair for any of [deviceAbis] (`Build.SUPPORTED_ABIS`,
      * preferred first; an ABI with half its pair is skipped for the next one), or
      * missing/odd assets. Download URLs must be HTTPS release downloads on github.com for this tag.
      */
-    fun offer(r: GithubRelease, deviceAbis: List<String>, line: ReleaseLine): UpdateOffer {
+    fun offer(r: GithubRelease, deviceAbis: List<String>, line: ReleaseLine, channel: UpdateChannel = UpdateChannel.STABLE): UpdateOffer {
         if (r.draft) throw ReleaseFormatException("release ${r.tag} is a draft")
-        if (r.prerelease) throw ReleaseFormatException("release ${r.tag} is a pre-release")
+        if (!channel.takes(r)) throw ReleaseFormatException("release ${r.tag} is a pre-release")
         val v = line.tagVersion(r.tag) ?: throw ReleaseFormatException("tag '${r.tag.take(40)}' is not a version of this app")
         if (v.isPreRelease) throw ReleaseFormatException("release ${r.tag} is a pre-release")
         if (v.versionCode == null) throw ReleaseFormatException("version $v is out of range")
@@ -209,7 +240,7 @@ object Releases {
         val sha = asset(line.shaName(abi, v))
         if (apk.size > MAX_APK_BYTES) throw ReleaseFormatException("${apk.name} is too large (${apk.size} bytes)")
         if (apk.size == 0L) throw ReleaseFormatException("${apk.name} is empty")
-        return UpdateOffer(v, r.tag, r.body, r.htmlUrl.takeIf(::isHttps).orEmpty(), apk, sha)
+        return UpdateOffer(v, r.tag, r.body, r.htmlUrl.takeIf(::isHttps).orEmpty(), apk, sha, prerelease = r.prerelease)
     }
 
     /** `https://github.com/<owner>/<repo>/releases/download/<tag>/<name>` (owner/repo may differ after a rename). */

@@ -1,6 +1,6 @@
 package dev.glassworks.camera
 
-import sh.edm.s1kiosk.frame.TestFrames
+import dev.glassworks.s1.frame.TestFrames
 import android.app.Application
 import android.view.View
 import android.view.ViewGroup
@@ -18,7 +18,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import sh.edm.s1kiosk.PanePrefs
+import dev.glassworks.s1.PanePrefs
 import dev.glassworks.setup.ImprovFacts
 import dev.glassworks.setup.SetupFlow
 import dev.glassworks.setup.SetupOverlay

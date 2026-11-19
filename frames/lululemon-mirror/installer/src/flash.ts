@@ -3,13 +3,14 @@
 // own key, which the patched services.jar lets in without asking. The Mirror's LK has no read-back and no `fastboot boot`, so there is no backup of
 // lululemon's software: the screens say so before anything is written (#40).
 import type { PanelShell } from '@glassworks/adb';
-import { Steps, grantPermissions, kioskVersion, sendWifi, startApp, type StepFn } from '@glassworks/app-adb';
+import { Steps, grantPermissions, handOverApiKey, kioskVersion, sendWifi, startApp, type StepFn } from '@glassworks/app-adb';
 import { GLASSWORKS, type MirrorApp } from './app';
 import { Disk, Ext4, MemoryStore, Sha256, hex, readSparse, writeSparse, type Store } from '@glassworks/ext4';
 import { ProxyError } from './download';
-import { GLASS_PANES, buildUserdata, patchSystem, type SystemPatch } from './image';
+import { GLASS_PANES, buildUserdata, macFromSerial, patchSystem, type SystemPatch } from './image';
 import { adbKeyLines } from './services';
 import type { Check } from './recipe';
+import { describeMirrorUpdates, readMirrorUpdates, type MirrorUpdates } from './updates';
 
 /** The Mirror's LK in fastboot, as the Glass Panes install guide reads it on a Mac (not yet seen by Kiln). */
 export const MIRROR_FASTBOOT: USBDeviceFilter = { vendorId: 0x18d1, productId: 0xd00d };
@@ -30,7 +31,9 @@ export interface FastbootLike {
   reboot(): Promise<void>;
 }
 
-export interface FastbootReport { checks: Check[]; ok: boolean; userdataBytes: number; info: string[] }
+export interface FastbootReport { checks: Check[]; ok: boolean; userdataBytes: number; info: string[];
+  /** The Mirror's id in Home Assistant, from its serial: the same on every reflash (#523). None when LK gives no serial. */
+  deviceMac?: string }
 
 const optional = async (fb: FastbootLike, name: string) => { try { return await fb.getvar(name); } catch { return undefined; } };
 
@@ -53,8 +56,10 @@ export async function checkFastboot(fb: FastbootLike): Promise<FastbootReport> {
     { what: 'Userdata partition', found: mb(userdata), ok: !!userdata && userdata >= 1024 ** 3 && userdata % 4096 === 0, need: 'at least 1 GiB, whole 4 KiB blocks' },
     { what: 'Download size', found: mb(maxBytes), ok: !!maxBytes && maxBytes >= 4096, need: 'max-download-size reported in hex (0x…), at least one 4 KiB block' },
   ];
-  const info = [`product ${product ?? 'not reported'}`, `max-download-size ${max ?? 'not reported'}`, `secure ${secure ?? 'not reported'}`];
-  return { checks, ok: checks.every((c) => c.ok), userdataBytes: userdata ?? 0, info };
+  const deviceMac = await macFromSerial(await optional(fb, 'serialno'));
+  const info = [`product ${product ?? 'not reported'}`, `max-download-size ${max ?? 'not reported'}`, `secure ${secure ?? 'not reported'}`,
+    deviceMac ? 'Home Assistant id: from the serial, the same on every reflash' : 'Home Assistant id: no serial reported, so the app picks a new one'];
+  return { checks, ok: checks.every((c) => c.ok), userdataBytes: userdata ?? 0, info, ...(deviceMac ? { deviceMac } : {}) };
 }
 
 /** Writes both images, system first, then restarts the Mirror. `onProgress(part, 0..1)`. */
@@ -100,17 +105,19 @@ export async function loadSystem(file: { size: number; stream(): ReadableStream<
  * The two images Kiln flashes, written as sparse images to the sinks: the loaded system image with
  * the app (Glassworks), services.jar trusting `adbKey`'s first line, and the rest (patchSystem), and a
  * fresh userdata the partition's size with `adbKey` in adb_keys (buildUserdata).
+ * `log`: patchSystem's own lines (the app's libraries, the unused apps left out, build.prop, services.jar).
+ * `fill: false`: zeros go as RAW blocks, not FILL chunks, for a bootloader that refuses FILL.
  */
-/** `fill: false`: zeros go as RAW blocks, not FILL chunks, for a bootloader that refuses FILL. */
 export async function buildImages(loaded: Loaded, o: SystemPatch & { adbKey: string; userdataBytes: number; fill?: boolean;
   /** saved in userdata's wpa_supplicant.conf, so Android joins it on the first boot with nothing tapped */
   wifi?: { ssid: string; password: string } },
   sinks: { system: (b: Uint8Array) => Promise<void> | void; userdata: (b: Uint8Array) => Promise<void> | void },
-  onProgress: (step: PrepareStep, x: number) => void = () => {}): Promise<void> {
+  onProgress: (step: PrepareStep, x: number) => void = () => {},
+  log: (line: string) => void = () => {}): Promise<void> {
   adbKeyLines(o.adbKey); // every line, before the system image is touched
   onProgress('patch', 0);
   const sys = await Ext4.open(loaded.disk);
-  await patchSystem(sys, o);
+  await patchSystem(sys, o, log);
   // the image's own template: the saved network goes after its lines, as the Wi-Fi HAL would copy it
   const template = o.wifi ? new TextDecoder().decode(await sys.readFile('/etc/wifi/wpa_supplicant.conf')) : '';
   onProgress('patch', 1);
@@ -130,6 +137,10 @@ export const OTHER_HOMES = ['com.android.launcher3', 'com.cyanogenmod.trebuchet'
  * hidden: the image's launcher stays the home screen.
  */
 export interface FirstBoot { app: { name?: string; code: number }; hidden: string[]; home: HomeCheck; wifi?: boolean;
+  /** whether its updates install by themselves: the image's copy in /system/priv-app, read back */
+  updates: MirrorUpdates;
+  /** with `apiKey`: whether the fresh app took the key it had before the flash (#574) */
+  apiKey?: boolean;
   /** the display rotation Android reports after the rotation step: always MIRROR_ROTATION */
   rotation: number }
 
@@ -177,10 +188,12 @@ export async function focusedActivity(p: PanelShell): Promise<string | undefined
 
 /**
  * Hides the image's other launchers (pm hide: adb's shell has MANAGE_USERS on Android 6), asks for
- * HOME, and checks what Android opened. Running it again is the fix when a launcher survived.
+ * HOME, and checks what Android opened. Running it again is the fix when a launcher survived. `others`:
+ * the home apps to hide, the image's launchers by default (the app-only install adds the one it replaces).
+ * `beforeHide`: called with each package before its `pm hide`, so a record of it survives an interrupted run.
  */
 export async function makeOnlyHome(p: PanelShell, onStep: StepFn = () => {}, sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
-  app: MirrorApp = GLASSWORKS): Promise<{ hidden: string[]; home: HomeCheck }> {
+  app: MirrorApp = GLASSWORKS, others: readonly string[] = OTHER_HOMES, beforeHide: (pkg: string) => Promise<void> = async () => {}): Promise<{ hidden: string[]; home: HomeCheck }> {
   const PKG = app.package;
   const r = new Steps(p, onStep);
   const installed = async (pkg: string) => (await r.try(`pm list packages ${pkg}`)).split(/\r?\n/).some((l) => l.trim() === `package:${pkg}`);
@@ -190,19 +203,20 @@ export async function makeOnlyHome(p: PanelShell, onStep: StepFn = () => {}, sle
   const own = await r.try(`am start -a android.intent.action.MAIN -c android.intent.category.HOME ${PKG}`);
   if (/unable to resolve/i.test(own)) {
     const left: string[] = [];
-    for (const pkg of OTHER_HOMES) if (await installed(pkg)) left.push(pkg);
+    for (const pkg of others) if (await installed(pkg)) left.push(pkg);
     r.detail(`${PKG} has no home screen: nothing hidden, ${left.join(', ') || 'the image\'s launcher'} stays`);
     return { hidden: [], home: { result: 'none', left } };
   }
   const hidden: string[] = [];
-  for (const pkg of OTHER_HOMES) {
+  for (const pkg of others) {
     if (!(await installed(pkg))) continue;
+    await beforeHide(pkg);
     const out = await r.try(`pm hide ${pkg}`);
     if (/true/.test(out)) hidden.push(pkg);
     r.detail(`${pkg}: ${out.trim() || 'no answer'}`);
   }
   const left: string[] = [];
-  for (const pkg of OTHER_HOMES) if (await installed(pkg)) left.push(pkg); // a hidden app isn't listed
+  for (const pkg of others) if (await installed(pkg)) left.push(pkg); // a hidden app isn't listed
   await r.try('am start -a android.intent.action.MAIN -c android.intent.category.HOME');
   let focused: string | undefined;
   for (let i = 0; i < 10; i++) {
@@ -221,7 +235,9 @@ export async function makeOnlyHome(p: PanelShell, onStep: StepFn = () => {}, sle
  * Assistant's address, hides the other launchers, and gives it the Wi-Fi.
  */
 export async function firstBoot(p: PanelShell, o: { haUrl?: string; locale?: string; wifi?: { ssid: string; password: string }; onStep?: StepFn;
-  sleep?: (ms: number) => Promise<void>; app?: MirrorApp }): Promise<FirstBoot> {
+  sleep?: (ms: number) => Promise<void>; app?: MirrorApp;
+  /** the ESPHome API key read before the flash (readApiKey), for an image built with `apiKeyHandover` (#574). A secret: never logged */
+  apiKey?: string }): Promise<FirstBoot> {
   const ours = o.app ?? GLASSWORKS;
   const r = new Steps(p, o.onStep);
   const sleep = o.sleep ?? ((ms: number) => new Promise<void>((res) => setTimeout(res, ms)));
@@ -232,6 +248,8 @@ export async function firstBoot(p: PanelShell, o: { haUrl?: string; locale?: str
   if (!app) throw new Error(`${ours.name} (${ours.package}) isn't on the Mirror after the install`);
   r.detail(`${ours.name} ${app.name ?? app.code}`);
   await grantPermissions(r, ours);
+  const updates = await readMirrorUpdates(p, ours);
+  r.detail(describeMirrorUpdates(updates));
 
   // before the app starts, so it opens in portrait (it follows the system's rotation, #434)
   r.step('Turn the screen upright (portrait)');
@@ -240,6 +258,15 @@ export async function firstBoot(p: PanelShell, o: { haUrl?: string; locale?: str
   // through its main activity, whose extras it trusts from adb (#364): the HOME alias drops them
   r.step(`Start ${ours.name}`);
   await startApp(r, o, ours);
+
+  // right after the start: the app keeps its API server shut until the key comes, and Home Assistant waits for it
+  let apiKey: boolean | undefined;
+  if (o.apiKey) {
+    r.step('Home Assistant API key: the one from before the flash');
+    apiKey = await handOverApiKey(p, o.apiKey, sleep);
+    r.detail(apiKey ? 'handed over: Home Assistant reconnects with no re-authentication'
+      : `${ours.name} didn't take it, so Home Assistant may ask to re-authenticate once. If ${ours.name} has no key, it starts without one after 15 minutes`);
+  }
 
   r.step(`Make ${ours.name} the only home screen`);
   const { hidden, home } = await makeOnlyHome(p, o.onStep, sleep, ours);
@@ -250,10 +277,10 @@ export async function firstBoot(p: PanelShell, o: { haUrl?: string; locale?: str
     wifi = await sendWifi(p, o.wifi.ssid, o.wifi.password, sleep);
     r.detail(wifi ? 'joined' : `${ours.name} didn't confirm it joined (the image's saved network still applies)`);
   }
-  return { app, hidden, home, rotation, ...(wifi !== undefined ? { wifi } : {}) };
+  return { app, hidden, home, rotation, updates, ...(wifi !== undefined ? { wifi } : {}), ...(apiKey !== undefined ? { apiKey } : {}) };
 }
 
-/** The way back: the plain Glass Panes images, as downloaded, checked against the release's hashes. */
+/** Glass Panes' userdata, as its release publishes it: Kiln's Glass Panes install (choices.ts) and the CLI's way back. */
 export const GLASS_PANES_USERDATA = {
   name: 'userdata.sparse',
   url: 'https://github.com/git-nimrod/glass-panes/releases/download/mirror-android-2/userdata.sparse',
@@ -261,7 +288,7 @@ export const GLASS_PANES_USERDATA = {
   sha256: '74b1f57ac20ce7c56065083a2bc3ddd283493be29d851fd04efc156ec96cf908',
 } as const;
 
-/** Checks a downloaded file against its published size and SHA-256, streaming. */
+/** Checks a downloaded file against its published size and SHA-256, streaming (the CLI, tools/mirror). */
 export async function checkDownload(file: Blob, want: { name: string; size: number; sha256: string }, onProgress: (x: number) => void = () => {}): Promise<void> {
   const again = `Download ${want.name} again from the Glass Panes release.`;
   if (file.size !== want.size) throw new WrongImage(`This file is ${file.size.toLocaleString('en')} bytes, not ${want.size.toLocaleString('en')}: it isn't ${want.name}, or the download stopped early. ${again}`);

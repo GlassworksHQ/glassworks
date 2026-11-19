@@ -76,6 +76,8 @@ class SetupOverlay(
      * None: no Panes group.
      */
     private val setupPanes: List<SetupPane> = emptyList(),
+    /** The device's own steps (#422's Silent updates): each a row of its own after Panes (Glassworks.deviceSetupSteps). */
+    private val ownSteps: List<SetupStep> = emptyList(),
 ) : FrameLayout(context) {
 
     private val haName = frame.friendlyName()
@@ -154,8 +156,10 @@ class SetupOverlay(
     private var qrFor: String? = null
     private val main = Handler(Looper.getMainLooper())
 
-    /** Each pane's steps, by id, and which pane (its index in [choices]) they belong to. */
-    private val stepsById = setupPanes.flatMapIndexed { i, p -> p.steps.map { it.id to (i to it) } }.toMap()
+    /** Each pane's steps, by id, and which pane (its index in [choices]) they belong to; the device's own, [OWN]. */
+    private val stepsById = (setupPanes.flatMapIndexed { i, p -> p.steps.map { it.id to (i to it) } } + ownSteps.map { it.id to (OWN to it) }).toMap()
+
+    private val ownIds = ownSteps.map { it.id }
 
     /**
      * The step on screen when it isn't the current one: one picked on the rail or reached with Continue
@@ -164,8 +168,11 @@ class SetupOverlay(
     private var viewing: String? = null
 
     /** Every step in order, with the steps of the panes that are on ([wanted]). */
-    private fun flow(): List<String> =
-        SetupFlow.ids(choices.isNotEmpty(), stepsById.filter { (_, v) -> model?.preview == true || wanted(v.first) }.keys.toList())
+    private fun flow(): List<String> = SetupFlow.ids(
+        choices.isNotEmpty(),
+        stepsById.filter { (_, v) -> v.first != OWN && (model?.preview == true || wanted(v.first)) }.keys.toList(),
+        ownIds,
+    )
 
     // ---- left: the brand, the steps, the stack
     private val railRows = GroupedRail(context).apply { onTap = { id -> open(id) } }
@@ -553,7 +560,7 @@ class SetupOverlay(
     /** The step [id] of a pane belongs to a pane that is on: as chosen on the Panes step, else as it runs. */
     fun wanted(id: String): Boolean = stepsById[id]?.let { wanted(it.first) } ?: true
 
-    private fun wanted(pane: Int): Boolean = panes.wanted(pane)
+    private fun wanted(pane: Int): Boolean = pane == OWN || panes.wanted(pane)
 
     /** Every couple of seconds while the app runs: the panes' steps follow their state. */
     fun tick() {
@@ -610,7 +617,7 @@ class SetupOverlay(
         railRows.bind(
             flow.map { id ->
                 GroupedRail.Row(
-                    id, title(id), SetupFlow.group(id),
+                    id, title(id), SetupFlow.group(id, ownIds),
                     mark = when { id == shown || id == m.step -> GroupedRail.Mark.CURRENT; id in m.done -> GroupedRail.Mark.DONE; else -> GroupedRail.Mark.PENDING },
                     // Without touch (Input.NONE) nothing on this screen takes a tap, the rail included.
                     enabled = input == Input.TOUCH && (m.preview || id == m.step || id in m.done),
@@ -658,7 +665,7 @@ class SetupOverlay(
         if (shown == null) return
         // A step that is done says so, also as a preview's current step (reopened on a set-up panel).
         val done = shown in m.done
-        cardLabel.text = SetupFlow.group(shown)?.let { grp -> "${GROUPS.getValue(grp)} · ${title(shown)}" } ?: title(shown)
+        cardLabel.text = SetupFlow.group(shown, ownIds)?.let { grp -> "${GROUPS.getValue(grp)} · ${title(shown)}" } ?: title(shown)
         if (input == Input.NONE) {
             // Nothing here takes a tap: the steps happen on a computer, or on a phone for Sign in. Before Home Assistant
             // added the panel, Sign in is the setup page's, which also finds Home Assistant.
@@ -987,6 +994,14 @@ class SetupOverlay(
     private fun bindFromComputer(m: Model): View? {
         // No Wi-Fi works and the panel opens its own: a phone joins it first (#197).
         m.hotspot?.takeIf { it.title != null && !m.wifi.online }?.let { return bindHotspotCard(it) }
+        // Bluetooth setup open by itself for its first minutes (#611): a phone or Home Assistant sends the Wi-Fi.
+        if (!m.wifi.online && m.improv.phase in NO_TOUCH_IMPROV) {
+            cardLabel.text = m.improv.label
+            cardTitle.text = m.improv.title
+            cardBody.text = m.improv.detail
+            status.visibility = View.GONE // nor the hotspot's line from before: the join turns Wi-Fi on itself
+            return null
+        }
         val ip = m.panelIp
         if (ip == null) {
             cardTitle.text = "Waiting for Wi-Fi."
@@ -1327,6 +1342,9 @@ class SetupOverlay(
     companion object {
         private val GROUPS = mapOf(SetupFlow.HA to "Home Assistant", SetupFlow.PANES to "Panes")
 
+        /** Without touch, Bluetooth setup fills the Wi-Fi card while it takes Wi-Fi: open by itself, a retry, a join. */
+        private val NO_TOUCH_IMPROV = setOf(WifiStep.Phase.AUTHORIZED, WifiStep.Phase.FAILED, WifiStep.Phase.CONNECTING)
+
         /**
          * The card's spacing (#63): the gap between its heading and the step's view, and between the
          * Panes list and its buttons; and the gap between two pane cards.
@@ -1344,6 +1362,9 @@ class SetupOverlay(
 
         /** The Bluetooth tile narrower than this (a phone's card) puts its button under its words (#468). */
         const val NARROW_TILE_DP = 360f
+
+        /** [stepsById]'s pane index for the device's own steps: always wanted. */
+        private const val OWN = -1
 
         /** Continue on Panes waits this long for every card in all (the radio's Off waits for its helper). */
         const val BUDGET_MS = 30_000L

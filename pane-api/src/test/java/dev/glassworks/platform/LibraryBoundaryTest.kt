@@ -37,7 +37,7 @@ class LibraryBoundaryTest {
     }
 
     @Test fun `a library's sources never name the app's packages`() {
-        val qualified = Regex("""\bsh\.edm\.[a-z0-9_.]*[a-z0-9_]|\bdev\.glassworks\.(pane|platform|frame|secrets)\b""")
+        val qualified = Regex("""\bsh\.edm\.[a-z0-9_.]*[a-z0-9_]|\bdev\.glassworks\.(pane|platform|frame|secrets|s1|generic)\b""")
         val bad = RepoFiles.code(atLeast = 40, inModules = RepoFiles.libraries).flatMap { f ->
             f.readLines().withIndex().filter { (_, line) ->
                 val code = line.substringBefore("//").trim()

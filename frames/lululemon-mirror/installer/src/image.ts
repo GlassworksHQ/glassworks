@@ -1,7 +1,8 @@
 // The Mirror's images, made in the person's browser (#40, option A). `system` is the Glass Panes
 // community image the person downloaded themselves. Kiln checks its SHA-256 and adds the legacy build of
 // Glassworks as a privileged system app and the Glassworks boot animation (the screen's rotation is
-// set on the first boot: flash.ts setPortrait). The
+// set on the first boot: flash.ts setPortrait), and leaves out the image's apps a Mirror never uses
+// (unused.ts). The
 // Mirror has no touchscreen to answer "Allow USB debugging?", and the image lets one key in without
 // asking (services.ts): Kiln makes that this browser's key instead of the published Glass Panes one.
 // `userdata` is new and empty. Nothing here is downloaded from or uploaded to anyone: the person's
@@ -11,6 +12,7 @@ import { ManifestError, apkHome, apkInfo, apkPermissions, zipEntry, zipNames, ty
 import { APP_DIRS, GLASSWORKS, PRIVILEGED, type MirrorApp } from './app';
 import { mkfs, type Attrs, type Disk, type Ext4 } from '@glassworks/ext4';
 import { SERVICES_JAR, adbKeyLines, trustAdbKey } from './services';
+import { UNUSED_APPS } from './unused';
 
 /** The Glass Panes release the person downloads `system.img` from, and what Kiln expects of it. */
 export const GLASS_PANES = {
@@ -26,6 +28,14 @@ export const GLASS_PANES = {
   /** Its build.prop's fingerprint: read from the image on 2026-11-16 (image 1's was …/11041605:…). */
   fingerprint: 'Android/msm8916_64/msm8916_64:6.0.1/MMB29M/11120023:userdebug/test-keys',
 } as const;
+
+/**
+ * The Mirror frame's version (#139): Kiln writes it into build.prop with the frame's id, and the app shows it and
+ * compares it with the newest `frames/lululemon-mirror/v<version>` release (docs/releasing.md, "Frame releases").
+ * Bump it with every change to what lands on a Mirror, and release that version. 1.0.0 comes out with Glassworks
+ * 1.0.0; until then Kiln writes a pre-release of it, which counts as older than 1.0.0.
+ */
+export const MIRROR_FRAME = { id: 'lululemon-mirror', version: '1.0.0-dev' } as const;
 
 export const LABELS = {
   system: 'u:object_r:system_file:s0',
@@ -43,6 +53,22 @@ const MIRROR_API = 23;
 
 /** APK ABI folder → the folder Android 6's package manager looks in for a bundled app's libraries. */
 const LIB_DIRS: [string, string][] = [['arm64-v8a', 'arm64'], ['armeabi-v7a', 'arm']];
+
+/**
+ * The APK's own native libraries that patchSystem unpacks into the image: the zip names under
+ * lib/<abi>/*.so for the first of the Mirror's two ABIs that has any (arm64-v8a, then armeabi-v7a),
+ * and the folder Android 6 reads them from. Android 6 doesn't unpack a bundled app's libraries from
+ * its APK: they sit next to it, uncompressed. Undefined when the APK has none.
+ */
+export function apkLibs(apk: Uint8Array): { abi: string; dir: string; names: string[] } | undefined {
+  const all = zipNames(apk);
+  for (const [abi, dir] of LIB_DIRS) {
+    // an empty lib/<abi>/ folder doesn't count
+    const names = all.filter((n) => n.startsWith(`lib/${abi}/`) && n.endsWith('.so') && !n.slice(`lib/${abi}/`.length).includes('/'));
+    if (names.length) return { abi, dir, names };
+  }
+  return undefined;
+}
 
 export interface SystemPatch {
   /**
@@ -62,6 +88,13 @@ export interface SystemPatch {
    * first boot is the image's own.
    */
   settingsOverlay?: Uint8Array;
+  /** The device's MAC, written as DEVICE_MAC_PROP (from checkFastboot's `deviceMac`); none: the app picks its own. */
+  deviceMac?: string;
+  /**
+   * The installer read the app's ESPHome API key before the flash and hands it over at the first boot (#574): written
+   * as API_KEY_HANDOVER_PROP=1, so the fresh app opens no API server until the key comes. Never the key itself.
+   */
+  apiKeyHandover?: boolean;
   /** Seconds since 1970 for new files; default now. */
   time?: number;
 }
@@ -75,6 +108,32 @@ export const SETTINGS_OVERLAY = {
   path: '/vendor/overlay/GlassworksSettings.apk',
   sha256: '4a8796d33b41da6a7ad44c065d57a5bfcad860794006d52b9977ff19f5f1c342',
 } as const;
+
+/**
+ * The build.prop key the app takes its Home Assistant identity from when its data is new (PanelDevice.IMAGE_MAC_PROP).
+ * A reflash wipes the app's data; with this the Mirror stays the same device in Home Assistant (#523).
+ */
+export const DEVICE_MAC_PROP = 'ro.glassworks.device.mac';
+
+/**
+ * The build.prop key that tells the app the installer hands its ESPHome API key over at the first boot
+ * (PanelDevice.API_KEY_HANDOVER_PROP, #574). Only a flag: the key never goes in build.prop, which every app can read.
+ */
+export const API_KEY_HANDOVER_PROP = 'ro.glassworks.api_key.handover';
+
+const MAC = /^([0-9A-F]{2}:){5}[0-9A-F]{2}$/;
+
+/**
+ * The device's MAC for its chip serial, as the app derives it (PanelDevice.macFromSerial): SHA-256 of the salted
+ * serial, its first 6 bytes, made unicast and locally administered. Undefined for a serial that isn't one.
+ */
+export async function macFromSerial(serial: string | undefined): Promise<string | undefined> {
+  const s = serial?.trim() ?? '';
+  if (s.length < 8 || s === 'unknown') return undefined;
+  const b = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`s1kiosk-device-mac:${s}`))).slice(0, 6);
+  b[0] = (b[0]! & 0xfc) | 0x02;
+  return [...b].map((x) => x.toString(16).padStart(2, '0').toUpperCase()).join(':');
+}
 
 const dirAttrs = (time: number): Attrs => ({ mode: 0o755, uid: AID.root, gid: AID.root, label: LABELS.system, time });
 const fileAttrs = (time: number): Attrs => ({ mode: 0o644, uid: AID.root, gid: AID.root, label: LABELS.system, time });
@@ -136,20 +195,18 @@ export async function patchSystem(fs: Ext4, o: SystemPatch, log: (line: string) 
     const got = [...new Uint8Array(await crypto.subtle.digest('SHA-256', o.settingsOverlay as Uint8Array<ArrayBuffer>))].map((b) => b.toString(16).padStart(2, '0')).join('');
     if (got !== SETTINGS_OVERLAY.sha256) throw new Error(`the settings overlay isn't the one Kiln builds (SHA-256 ${got}). Nothing was changed.`);
   }
+  if (o.deviceMac !== undefined && !MAC.test(o.deviceMac)) throw new Error('the device id isn\'t a MAC (AA:BB:CC:DD:EE:FF). Nothing was changed.');
   const app = o.app ?? GLASSWORKS;
   await checkMirrorApk(o.apk, app);
-  const names = zipNames(o.apk);
-  // the ABI with real libraries (lib/<abi>/<name>.so), as apkInfo reads them: an empty lib/<abi>/ folder doesn't count
-  const soIn = (a: string) => names.filter((n) => n.startsWith(`lib/${a}/`) && n.endsWith('.so') && !n.slice(`lib/${a}/`.length).includes('/'));
-  const abi = LIB_DIRS.find(([a]) => soIn(a).length > 0);
-  const libs = abi ? soIn(abi[0]) : [];
+  // the ABI with real libraries (lib/<abi>/<name>.so), as apkInfo reads them
+  const native = apkLibs(o.apk);
   // read every library before the first write: one Kiln can't unpack must leave the image as it was
   const payloads: [string, Uint8Array][] = [];
   const seen = new Set<string>();
-  for (const n of libs) {
+  for (const n of native?.names ?? []) {
     const dest = n.split('/').pop()!;
     // two entries for the same lib/<abi>/<name>.so would write one then fail on the second: refuse before any write
-    if (seen.has(dest)) throw new Error(`this APK lists ${abi![0]}/${dest} more than once. Nothing was changed.`);
+    if (seen.has(dest)) throw new Error(`this APK lists ${native!.abi}/${dest} more than once. Nothing was changed.`);
     seen.add(dest);
     const data = await zipEntry(o.apk, n).catch((e: Error) => { throw new Error(`${e.message}. Nothing was changed.`); });
     if (!data) throw new Error(`this APK lists ${n} but Kiln can't read it. Nothing was changed.`);
@@ -164,11 +221,16 @@ export async function patchSystem(fs: Ext4, o: SystemPatch, log: (line: string) 
   await fs.writeFile(`${app.dir}/${app.file}`, o.apk, fileAttrs(time));
   log(`${app.dir}/${app.file} (${o.apk.length} bytes)`);
   // Android 6 doesn't unpack a bundled app's libraries from its APK: they sit next to it, by ABI
-  if (abi && libs.length) {
-    await fs.mkdirs(`${app.dir}/lib/${abi[1]}`, dirAttrs(time));
-    for (const [name, data] of payloads) await fs.writeFile(`${app.dir}/lib/${abi[1]}/${name}`, data, fileAttrs(time));
-    log(`${libs.length} native librar${libs.length === 1 ? 'y' : 'ies'} for ${abi[0]} in ${app.dir}/lib/${abi[1]}`);
+  if (native) {
+    await fs.mkdirs(`${app.dir}/lib/${native.dir}`, dirAttrs(time));
+    for (const [name, data] of payloads) await fs.writeFile(`${app.dir}/lib/${native.dir}/${name}`, data, fileAttrs(time));
+    log(`${native.names.length} native librar${native.names.length === 1 ? 'y' : 'ies'} for ${native.abi} in ${app.dir}/lib/${native.dir}`);
   }
+
+  // apps a Mirror never uses: they restart after every lowmemorykiller kill. A second run finds them gone.
+  const left: string[] = [];
+  for (const u of UNUSED_APPS) if (await fs.exists(u.dir)) { await fs.remove(u.dir, { recursive: true, time }); left.push(u.package); }
+  if (left.length) log(`left out ${left.length} unused apps: ${left.join(', ')}`);
 
   if (o.bootAnimation) {
     if (await fs.exists('/media/bootanimation.zip')) await fs.remove('/media/bootanimation.zip', { time });
@@ -183,12 +245,20 @@ export async function patchSystem(fs: Ext4, o: SystemPatch, log: (line: string) 
     log(SETTINGS_OVERLAY.path);
   }
 
+  let next = setProp(setProp(prop, 'ro.glassworks.frame.id', MIRROR_FRAME.id), 'ro.glassworks.frame.version', MIRROR_FRAME.version);
+  const set = [`ro.glassworks.frame.version=${MIRROR_FRAME.version}`];
+  // the value is device-unique: the log names the key only. Without one, an earlier build's goes: after a failed
+  // flash Kiln patches the same image again, maybe for another Mirror.
+  if (o.deviceMac) { next = setProp(next, DEVICE_MAC_PROP, o.deviceMac); set.push(DEVICE_MAC_PROP); }
+  else next = next.split('\n').filter((l) => !l.startsWith(`${DEVICE_MAC_PROP}=`)).join('\n');
+  // the same for the key's flag: a rebuild that carries no key must not make the app wait for one
+  if (o.apiKeyHandover) { next = setProp(next, API_KEY_HANDOVER_PROP, '1'); set.push(`${API_KEY_HANDOVER_PROP}=1`); }
+  else next = next.split('\n').filter((l) => !l.startsWith(`${API_KEY_HANDOVER_PROP}=`)).join('\n');
+
   // No swipe lock screen, with the overlay: the two make the first boot with nothing to tap, and
   // without the overlay the first boot is the image's own. SettingsProvider's DatabaseHelper and
   // LockSettingsService both read it when they make a fresh userdata's settings (AOSP 6.0.1; the
   // image's services and SettingsProvider dex have the string, read 2026-11-16).
-  let next = prop;
-  const set: string[] = [];
   if (o.settingsOverlay) { next = setProp(next, 'ro.lockscreen.disable.default', 'true'); set.push('ro.lockscreen.disable.default=true'); }
   if (next !== prop) { await fs.replaceFile('/build.prop', new TextEncoder().encode(next), time); log(`build.prop: ${set.join(', ')}`); }
   if (services) { await fs.replaceFile(SERVICES_JAR, services, time); log(`${SERVICES_JAR}: lets in this adb key without asking, not the Glass Panes project key`); }
@@ -216,15 +286,30 @@ export async function buildUserdata(disk: Disk, o: { adbKey: string; time?: numb
   await fs.mkdir('/misc', { mode: 0o1771, uid: AID.system, gid: AID.misc, label: LABELS.data, time });
   await fs.mkdir('/misc/adb', { mode: 0o2750, uid: AID.system, gid: AID.shell, label: LABELS.adbKeys, time });
   await fs.writeFile('/misc/adb/adb_keys', new TextEncoder().encode(`${keys.join('\n')}\n`), { mode: 0o640, uid: AID.system, gid: AID.shell, label: LABELS.adbKeys, time });
-  if (o.wifi) {
-    // init.rc: mkdir /data/misc/wifi 0770 wifi wifi; the Wi-Fi HAL uses an existing wpa_supplicant.conf
-    // as it is (copying the template only when there is none), system:wifi 0660 (AOSP 6.0.1 wifi.c)
-    await fs.mkdir('/misc/wifi', { mode: 0o770, uid: AID.wifi, gid: AID.wifi, label: LABELS.wifi, time });
-    await fs.writeFile('/misc/wifi/wpa_supplicant.conf', new TextEncoder().encode(await wpaSupplicantConf(o.wifi.template, o.wifi)),
-      { mode: 0o660, uid: AID.system, gid: AID.wifi, label: LABELS.wifi, time });
-  }
+  if (o.wifi) await saveWifi(fs, o.wifi.template, o.wifi, time);
   await fs.flush();
   return fs;
+}
+
+/** Where userdata keeps the saved networks; Android mounts it as /data/misc/wifi/wpa_supplicant.conf. */
+export const WIFI_CONF = '/misc/wifi/wpa_supplicant.conf';
+/** The image's template, which the Wi-Fi HAL copies when userdata has none (AOSP 6.0.1 wifi.c). */
+export const WIFI_TEMPLATE = '/etc/wifi/wpa_supplicant.conf';
+
+/**
+ * Saves one network in a userdata filesystem, a fresh one or the image's own: makes `/misc/wifi` if it
+ * isn't there and writes `/misc/wifi/wpa_supplicant.conf` (the template, then the network: wpaSupplicantConf),
+ * replacing one that was. It writes nothing else. `/misc` must be there already, as init.rc makes it.
+ * init.rc: mkdir /data/misc/wifi 0770 wifi wifi; the Wi-Fi HAL uses an existing wpa_supplicant.conf
+ * as it is (copying the template only when there is none), system:wifi 0660 (AOSP 6.0.1 wifi.c).
+ * The caller flushes.
+ */
+export async function saveWifi(fs: Ext4, template: string, wifi: { ssid: string; password: string }, time = Math.floor(Date.now() / 1000)): Promise<void> {
+  const conf = new TextEncoder().encode(await wpaSupplicantConf(template, wifi)); // refuses a bad network before any write
+  if (!(await fs.exists('/misc'))) throw new Error('this userdata has no /misc, so it isn\'t an Android 6 userdata Kiln knows. Nothing was changed.');
+  if (!(await fs.exists('/misc/wifi'))) await fs.mkdir('/misc/wifi', { mode: 0o770, uid: AID.wifi, gid: AID.wifi, label: LABELS.wifi, time });
+  if (await fs.exists(WIFI_CONF)) await fs.remove(WIFI_CONF);
+  await fs.writeFile(WIFI_CONF, conf, { mode: 0o660, uid: AID.system, gid: AID.wifi, label: LABELS.wifi, time });
 }
 
 /**

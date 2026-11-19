@@ -124,9 +124,9 @@ class GenericAppTest {
             assertEquals(category, listOf(GenericParts.LAUNCHER), found.map { it.activityInfo.name })
         }
         val info = pm.getPackageInfo(app.packageName, PackageManager.GET_SERVICES or PackageManager.GET_RECEIVERS or PackageManager.GET_ACTIVITIES)
-        assertTrue(info.services.orEmpty().any { it.name == "sh.edm.s1kiosk.KioskService" })
-        assertTrue(info.receivers.orEmpty().map { it.name }.containsAll(listOf("sh.edm.s1kiosk.BootReceiver", "sh.edm.s1kiosk.update.UpdateInstallReceiver")))
-        val main = info.activities.orEmpty().single { it.name == "sh.edm.s1kiosk.MainActivity" }
+        assertTrue(info.services.orEmpty().any { it.name == "dev.glassworks.KioskService" })
+        assertTrue(info.receivers.orEmpty().map { it.name }.containsAll(listOf("dev.glassworks.BootReceiver", "dev.glassworks.update.UpdateInstallReceiver")))
+        val main = info.activities.orEmpty().single { it.name == "dev.glassworks.MainActivity" }
         assertEquals("other apps can't start it with settings in its extras", "android.permission.WRITE_SECURE_SETTINGS", main.permission)
     }
 
@@ -137,7 +137,7 @@ class GenericAppTest {
         val viaLauncher = start(GenericParts.LAUNCHER)
         assertTrue("dropped", dev.glassworks.MainActivity.screenExtras(viaLauncher, parts::trustsExtras))
         assertNull(viaLauncher.extras)
-        val direct = start("sh.edm.s1kiosk.MainActivity")
+        val direct = start("dev.glassworks.MainActivity")
         assertFalse("kept", dev.glassworks.MainActivity.screenExtras(direct, parts::trustsExtras))
         assertEquals("http://192.0.2.66/", direct.getStringExtra("url"))
     }
@@ -176,13 +176,24 @@ class GenericAppTest {
     }
 
     /**
+     * #556: the /system copy asks to change networks it didn't save, so Improv can replace the one Kiln wrote into the
+     * Mirror's image when its password is wrong. An update can never add the permission.
+     */
+    @Test fun everyBuildAsksToReplaceASavedNetwork() {
+        val requested = app.packageManager.getPackageInfo(app.packageName, PackageManager.GET_PERMISSIONS).requestedPermissions.orEmpty().toList()
+        assertTrue("android.permission.OVERRIDE_WIFI_CONFIG" in requested)
+    }
+
+    /**
      * #198: on the Mirror, Kiln flashes the app into /system/priv-app, where Android 6 grants these. An update
      * gets only the privileged permissions its /system copy asked for, so every build asks for them. And Kiln
      * makes it the Mirror's home screen only with MAIN, HOME and DEFAULT in one intent filter (#385).
      */
     @Test fun everyBuildAsksForThePrivilegedPermissionsAndHasOneHomeFilter() {
         val requested = app.packageManager.getPackageInfo(app.packageName, PackageManager.GET_PERMISSIONS).requestedPermissions.orEmpty().toList()
-        for (p in listOf("android.permission.INSTALL_PACKAGES", "android.permission.REBOOT", "android.permission.WRITE_SECURE_SETTINGS")) {
+        // #435: MANAGE_USB and READ_LOGS let the Manage page allow a new computer over adb.
+        for (p in listOf("android.permission.INSTALL_PACKAGES", "android.permission.REBOOT", "android.permission.WRITE_SECURE_SETTINGS",
+                "android.permission.MANAGE_USB", "android.permission.READ_LOGS")) {
             assertTrue(p, p in requested)
         }
         val manifest = javax.xml.parsers.DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
@@ -225,21 +236,35 @@ class GenericAppTest {
     @Test fun aTabletRunsTheBaseSetAndAnnouncesItselfAsGlassworks() {
         val runtime = runtime()
         val definitions = runtime.paneDefinitions(app)
-        assertEquals(listOf("assist", "sendspin", "camera", "diagnostics"), definitions.map { it.id })
+        assertEquals(listOf("assist", "sendspin", "notifications", "bluetooth-proxy", "camera", "diagnostics"), definitions.map { it.id })
         assertTrue(definitions.none { it is CantRun })
 
         val (id, device) = run(runtime)
         assertEquals("Pixel Tablet (Glassworks)", id.model)
         assertEquals("Glassworks 1.0.0", id.compilationTime)
-        assertEquals(listOf("sendspin", "assist", "timers", "camera", "diagnostics"), device.paneList().map { it.id })
+        assertEquals(listOf("sendspin", "assist", "timers", "notifications", "bluetooth-proxy", "camera", "diagnostics"), device.paneList().map { it.id })
         assertTrue("its camera's entities", device.entityList().map { it.objectId }.containsAll(listOf("camera", "camera_presence", "camera_privacy", "camera_pane")))
         assertFalse("nothing of the S1", device.entityList().any { it.objectId.startsWith("radio_") || it.objectId.startsWith("base_") })
+    }
+
+    /** The Pixel Tablet docks (its frame.json's `dock`): this app gives Home Assistant its Docked sensor; another tablet has none until it docks (DockedEntityTest). */
+    @Test fun aPixelTabletHasTheDockedSensor() {
+        val (_, device) = run(runtime())
+        val docked = device.entityList().single { it.objectId == "docked" }
+        assertEquals("Docked", docked.name)
+        assertFalse("on by default", docked.disabledByDefault)
+    }
+
+    @Test fun anOrdinaryTabletHasNoDockedSensor() {
+        ShadowBuild.setModel("Lenovo TB-X606F")
+        val (_, device) = run(runtime())
+        assertTrue(device.entityList().none { it.objectId == "docked" })
     }
 
     @Test fun aPaneTheDeviceCantRunIsHiddenEverywhere() {
         features(PackageManager.FEATURE_AUDIO_OUTPUT, PackageManager.FEATURE_CAMERA_ANY) // a speaker and a camera, no microphone
         val runtime = runtime()
-        assertEquals(listOf("assist"), runtime.paneDefinitions(app).filterIsInstance<CantRun>().map { it.id })
+        assertEquals(listOf("assist", "bluetooth-proxy"), runtime.paneDefinitions(app).filterIsInstance<CantRun>().map { it.id })
 
         val menu = S1Settings.model(runtime, KioskPrefs(app), runtime.paneDefinitions(app), deviceSettings = false, fullScreen = {}, context = app)
         assertFalse("not in the settings", menu.sections.any { it.id == "assist" })
@@ -255,7 +280,7 @@ class GenericAppTest {
 
         val (id, device) = run(runtime)
         assertEquals("no voice features in Home Assistant", 0, id.voiceFeatures)
-        assertEquals("timers ride with Assist", listOf("sendspin", "camera", "diagnostics"), device.paneList().map { it.id })
+        assertEquals("timers ride with Assist", listOf("sendspin", "notifications", "camera", "diagnostics"), device.paneList().map { it.id })
         assertFalse(device.entityList().any { it.objectId == "mute_microphone" })
     }
 
@@ -269,19 +294,65 @@ class GenericAppTest {
         assertFalse("no step in setup", runtime.setupSteps(app).any { it.id == "camera" })
 
         val (_, device) = run(runtime)
-        assertEquals(listOf("sendspin", "assist", "timers", "diagnostics"), device.paneList().map { it.id })
+        assertEquals(listOf("sendspin", "assist", "timers", "notifications", "bluetooth-proxy", "diagnostics"), device.paneList().map { it.id })
         val ids = device.entityList().map { it.objectId }
         assertEquals("no camera entity in Home Assistant", emptyList<String>(), ids.filter { it.startsWith("camera") || it == "onvif_stream" })
         assertTrue("the core's entities are there", "app_version" in ids)
     }
 
-    @Test fun aDeviceWithNoneOfThatHardwareRunsOnlyDiagnosticsAndTheCore() {
+    @Test fun aDeviceWithNoneOfThatHardwareRunsOnlyThePanesThatNeedNothingAndTheCore() {
         features()
         val runtime = runtime()
-        assertEquals(listOf("assist", "sendspin", "camera"), runtime.paneDefinitions(app).filterIsInstance<CantRun>().map { it.id })
+        assertEquals(listOf("assist", "sendspin", "bluetooth-proxy", "camera"), runtime.paneDefinitions(app).filterIsInstance<CantRun>().map { it.id })
         val (_, device) = run(runtime)
-        assertEquals(listOf("diagnostics"), device.paneList().map { it.id })
+        assertEquals(listOf("notifications", "diagnostics"), device.paneList().map { it.id })
         assertTrue("the core's entities are there", device.entityList().any { it.objectId == "app_version" })
+    }
+
+    /**
+     * The S1 app's notifications and Bluetooth proxy, here too: each a page in the panel's settings and the same
+     * section on Manage (Manage/panel parity), a card in setup, and its switch in Home Assistant. The proxy's page on
+     * Manage is the panel page's typed twin (ProxyPage.twin), not a bare line.
+     */
+    @Test fun notificationsAndTheBluetoothProxyAreOnThePanelOnManageAndInHomeAssistant() {
+        val runtime = runtime()
+        val menu = S1Settings.model(runtime, KioskPrefs(app), runtime.paneDefinitions(app), deviceSettings = false, fullScreen = {}, context = app)
+        val status = manage(runtime).status()
+        for (id in listOf("notifications", "bluetooth-proxy")) {
+            assertTrue("$id in the rail", id in menu.panes)
+            assertTrue("$id on the panel", menu.sections.any { it.id == id })
+            assertTrue("$id on Manage's pane list", status.panes.any { it.id == id })
+            assertTrue("$id's page on Manage", status.sections.any { it.id == id })
+        }
+        // On, the proxy's page is the panel's own view (BluetoothProxyPage); Manage shows its typed twin.
+        GenericParts().paneFile(app, "bluetooth-proxy").edit().putBoolean("bluetooth_proxy_enabled", true).commit()
+        val proxy = manage(runtime).status().sections.single { it.id == "bluetooth-proxy" }.items
+            .filterIsInstance<dev.glassworks.pane.SettingsItem.Native>().single()
+        assertEquals("Devices and Allow", proxy.title)
+        val twin = dev.glassworks.pane.SettingsChange.twinOf(proxy)
+        assertTrue("Manage shows the proxy's page: ${twin.map { it::class.simpleName }}", twin.size >= 2)
+
+        val setup = runtime.setupPanes(app).map { it.choice.title }
+        assertTrue(setup.toString(), "Notifications" in setup && "Bluetooth proxy" in setup)
+
+        val (_, device) = run(runtime)
+        val ids = device.entityList().map { it.objectId }
+        assertTrue("their switches in Home Assistant: $ids", ids.containsAll(listOf("notifications", "bluetooth_proxy")))
+    }
+
+    /** No Bluetooth LE: the proxy is CantRun, so it is nowhere, as the camera without a camera. */
+    @Test fun aDeviceWithoutBluetoothLeHasNoProxyAnywhere() {
+        features(PackageManager.FEATURE_MICROPHONE, PackageManager.FEATURE_AUDIO_OUTPUT, PackageManager.FEATURE_CAMERA_ANY)
+        val runtime = runtime()
+        assertEquals(listOf("bluetooth-proxy"), runtime.paneDefinitions(app).filterIsInstance<CantRun>().map { it.id })
+        val menu = S1Settings.model(runtime, KioskPrefs(app), runtime.paneDefinitions(app), deviceSettings = false, fullScreen = {}, context = app)
+        assertFalse("not in the settings", menu.sections.any { it.id == "bluetooth-proxy" })
+        assertFalse("not on Manage", manage(runtime).status().let { st -> st.panes.any { it.id == "bluetooth-proxy" } || st.sections.any { it.id == "bluetooth-proxy" } })
+        assertFalse("no card in setup", runtime.setupPanes(app).any { it.choice.title == "Bluetooth proxy" })
+
+        val (_, device) = run(runtime)
+        assertEquals(listOf("sendspin", "assist", "timers", "notifications", "camera", "diagnostics"), device.paneList().map { it.id })
+        assertFalse("no proxy entity in Home Assistant", device.entityList().any { it.objectId.startsWith("bluetooth") })
     }
 
     /**

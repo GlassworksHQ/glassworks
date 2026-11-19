@@ -51,7 +51,7 @@ registerHooks({
   },
 });
 const pkg = resolve(opt.package ?? join(REPO, 'kiln/packages/bootpatch'));
-const { patchBoot } = await import(pathToFileURL(join(pkg, 'src/index.ts')).href);
+const { magiskBusybox, patchBoot } = await import(pathToFileURL(join(pkg, 'src/index.ts')).href);
 
 const read = (p) => new Uint8Array(readFileSync(p));
 const sha256 = (d) => createHash('sha256').update(d).digest('hex');
@@ -92,6 +92,7 @@ const overlay = s1Overlay({
   adbKeys: adbKey === 'none' ? new Uint8Array(0) : read(adbKey),
   radioSh: from('glassworks_radio.sh'), otbrAgent: from('otbr-agent'), otCtl: from('ot-ctl'),
   firstbootSh: from('glassworks_firstboot.sh'), netwatchSh: from('glassworks_netwatch.sh'), updateSh: from('glassworks_update.sh'),
+  magiskBusybox: await magiskBusybox(apk),
   bootAnimation: opt['no-anim'] ? undefined : from('glassworks_bootanimation.zip'),
 });
 

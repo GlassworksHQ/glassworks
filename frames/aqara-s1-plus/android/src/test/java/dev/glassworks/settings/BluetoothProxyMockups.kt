@@ -1,6 +1,6 @@
 package dev.glassworks.settings
 
-import sh.edm.s1kiosk.frame.TestFrames
+import dev.glassworks.s1.frame.TestFrames
 import android.app.Application
 import android.view.ViewGroup
 import dev.glassworks.bluetoothproxy.BluetoothProxyDefinition
@@ -23,7 +23,7 @@ import dev.glassworks.esphome.bluetoothproxy.ProxyStatus
 import dev.glassworks.esphome.bluetoothproxy.ScanFailure
 import dev.glassworks.esphome.bluetoothproxy.ScanPower
 import dev.glassworks.KioskPrefs
-import sh.edm.s1kiosk.PanePrefs
+import dev.glassworks.s1.PanePrefs
 import dev.glassworks.radio.FixedReadout
 import dev.glassworks.radio.radioDefinition
 import dev.glassworks.setup.SetupFlow
@@ -31,7 +31,7 @@ import dev.glassworks.setup.SetupOverlay
 import dev.glassworks.setup.SetupPane
 import dev.glassworks.setup.WifiSetupStatus
 import dev.glassworks.ui.Mockup
-import sh.edm.s1kiosk.settings.BluetoothProxyPage
+import dev.glassworks.bluetoothproxy.BluetoothProxyPage
 
 /**
  * The Bluetooth proxy pane (#121) as approved: its page in every state, the menu with it off (folded

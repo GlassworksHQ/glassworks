@@ -52,7 +52,7 @@ radio_mode|1412608654|SelectEntity|Radio mode|mdi:zigbee||CONFIG|authOnly=false|
 radio_status|-1722532205|TextSensorEntity|Radio status|mdi:radio-tower||DIAGNOSTIC|authOnly=false|options=|eventTypes=
 reload_dashboard|-266218945|ButtonEntity|Reload dashboard|mdi:refresh||NONE|authOnly=false|options=|eventTypes=
 restart_app|-559280840|ButtonEntity|Restart app|mdi:restart|restart|CONFIG|authOnly=false|options=|eventTypes=
-screen|1438993425|BrightnessLightEntity|Screen|mdi:tablet-dashboard||NONE|authOnly=false|options=|eventTypes=
+screen|1438993425|BrightnessLightEntity|Screen|mdi:tablet-dashboard||CONFIG|authOnly=false|options=|eventTypes=
 screen_mode|462157713|SelectEntity|Screen mode|mdi:monitor-eye||CONFIG|authOnly=false|options=presence,always|eventTypes=
 sendspin|733565411|SwitchEntity|Music Assistant player (Sendspin)|mdi:speaker-wireless||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
 sendspin_status|-669526114|TextSensorEntity|Music Assistant player status|mdi:speaker-wireless||DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
@@ -138,7 +138,7 @@ radio_mode|1412608654|SelectEntity|Radio mode|mdi:zigbee||CONFIG|authOnly=false|
 radio_status|-1722532205|TextSensorEntity|Radio status|mdi:radio-tower||DIAGNOSTIC|authOnly=false|options=|eventTypes=
 reload_dashboard|-266218945|ButtonEntity|Reload dashboard|mdi:refresh||NONE|authOnly=false|options=|eventTypes=
 restart_app|-559280840|ButtonEntity|Restart app|mdi:restart|restart|CONFIG|authOnly=false|options=|eventTypes=
-screen|1438993425|BrightnessLightEntity|Screen|mdi:tablet-dashboard||NONE|authOnly=false|options=|eventTypes=
+screen|1438993425|BrightnessLightEntity|Screen|mdi:tablet-dashboard||CONFIG|authOnly=false|options=|eventTypes=
 screen_mode|462157713|SelectEntity|Screen mode|mdi:monitor-eye||CONFIG|authOnly=false|options=presence,always|eventTypes=
 sendspin|733565411|SwitchEntity|Music Assistant player (Sendspin)|mdi:speaker-wireless||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
 sendspin_status|-669526114|TextSensorEntity|Music Assistant player status|mdi:speaker-wireless||DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
@@ -226,7 +226,7 @@ radio_mode|1412608654|SelectEntity|Radio mode|mdi:zigbee||CONFIG|authOnly=false|
 radio_status|-1722532205|TextSensorEntity|Radio status|mdi:radio-tower||DIAGNOSTIC|authOnly=false|options=|eventTypes=
 reload_dashboard|-266218945|ButtonEntity|Reload dashboard|mdi:refresh||NONE|authOnly=false|options=|eventTypes=
 restart_app|-559280840|ButtonEntity|Restart app|mdi:restart|restart|CONFIG|authOnly=false|options=|eventTypes=
-screen|1438993425|BrightnessLightEntity|Screen|mdi:tablet-dashboard||NONE|authOnly=false|options=|eventTypes=
+screen|1438993425|BrightnessLightEntity|Screen|mdi:tablet-dashboard||CONFIG|authOnly=false|options=|eventTypes=
 screen_mode|462157713|SelectEntity|Screen mode|mdi:monitor-eye||CONFIG|authOnly=false|options=presence,always|eventTypes=
 sendspin|733565411|SwitchEntity|Music Assistant player (Sendspin)|mdi:speaker-wireless||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
 sendspin_status|-669526114|TextSensorEntity|Music Assistant player status|mdi:speaker-wireless||DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
@@ -305,7 +305,7 @@ radio_mode|1412608654|SelectEntity|Radio mode|mdi:zigbee||CONFIG|authOnly=false|
 radio_status|-1722532205|TextSensorEntity|Radio status|mdi:radio-tower||DIAGNOSTIC|authOnly=false|options=|eventTypes=
 reload_dashboard|-266218945|ButtonEntity|Reload dashboard|mdi:refresh||NONE|authOnly=false|options=|eventTypes=
 restart_app|-559280840|ButtonEntity|Restart app|mdi:restart|restart|CONFIG|authOnly=false|options=|eventTypes=
-screen|1438993425|BrightnessLightEntity|Screen|mdi:tablet-dashboard||NONE|authOnly=false|options=|eventTypes=
+screen|1438993425|BrightnessLightEntity|Screen|mdi:tablet-dashboard||CONFIG|authOnly=false|options=|eventTypes=
 screen_mode|462157713|SelectEntity|Screen mode|mdi:monitor-eye||CONFIG|authOnly=false|options=presence,always|eventTypes=
 sendspin|733565411|SwitchEntity|Music Assistant player (Sendspin)|mdi:speaker-wireless||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
 sendspin_status|-669526114|TextSensorEntity|Music Assistant player status|mdi:speaker-wireless||DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault
@@ -384,7 +384,7 @@ radio_mode|1412608654|SelectEntity|Radio mode|mdi:zigbee||CONFIG|authOnly=false|
 radio_status|-1722532205|TextSensorEntity|Radio status|mdi:radio-tower||DIAGNOSTIC|authOnly=false|options=|eventTypes=
 reload_dashboard|-266218945|ButtonEntity|Reload dashboard|mdi:refresh||NONE|authOnly=false|options=|eventTypes=
 restart_app|-559280840|ButtonEntity|Restart app|mdi:restart|restart|CONFIG|authOnly=false|options=|eventTypes=
-screen|1438993425|BrightnessLightEntity|Screen|mdi:tablet-dashboard||NONE|authOnly=false|options=|eventTypes=
+screen|1438993425|BrightnessLightEntity|Screen|mdi:tablet-dashboard||CONFIG|authOnly=false|options=|eventTypes=
 screen_mode|462157713|SelectEntity|Screen mode|mdi:monitor-eye||CONFIG|authOnly=false|options=presence,always|eventTypes=
 sendspin|733565411|SwitchEntity|Music Assistant player (Sendspin)|mdi:speaker-wireless||CONFIG|authOnly=true|options=|eventTypes=|disabledByDefault
 sendspin_status|-669526114|TextSensorEntity|Music Assistant player status|mdi:speaker-wireless||DIAGNOSTIC|authOnly=false|options=|eventTypes=|disabledByDefault

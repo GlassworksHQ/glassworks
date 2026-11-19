@@ -10,6 +10,10 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
+import android.provider.Settings
+import dev.glassworks.dock.DockWatcher
+import dev.glassworks.dock.Docked
+import dev.glassworks.frame.Dock
 import dev.glassworks.frame.Frame
 import dev.glassworks.frame.friendlyName
 import dev.glassworks.frame.nodeName
@@ -90,8 +94,60 @@ class PanelDevice(
          * The MAC for a chip [serial]. The salt is the device's identity, not branding: a new one gives every panel a new
          * MAC and HA a new device, so it keeps the old app's name (#527).
          */
-        internal fun macFromSerial(serial: String): ByteArray = java.security.MessageDigest.getInstance("SHA-256")
-            .digest("s1kiosk-device-mac:$serial".toByteArray()).copyOf(6).also {
+        internal fun macFromSerial(serial: String): ByteArray = localMac("s1kiosk-device-mac:$serial")
+
+        /**
+         * The device's MAC that Kiln writes into the image's build.prop on a frame it flashes (the Mirror), so a
+         * reflash, which wipes the app's data, keeps the same device in Home Assistant (#523).
+         */
+        const val IMAGE_MAC_PROP = "ro.glassworks.device.mac"
+
+        /**
+         * The Home Assistant device identity, and where it came from. It must survive a reinstall or a reflash, or HA
+         * sees a new device with new entity ids. The first that exists wins: the [saved] one; the one the image
+         * carries ([image], [IMAGE_MAC_PROP]); the Wi-Fi MAC; one derived from the chip's [serial]; one derived from
+         * [androidId], which Android keeps across a reinstall of the same signed app; else [random].
+         */
+        internal fun pickMac(saved: String, image: String, wlan0: ByteArray?, serial: String, androidId: String?,
+                             random: () -> ByteArray): Pair<String, String> {
+            if (MAC_RE.matches(saved)) return saved to "saved"
+            if (MAC_RE.matches(image)) return image to "build.prop"
+            val (bytes, source) = when {
+                wlan0 != null && wlan0.size == 6 && wlan0.any { it != 0.toByte() } &&
+                    !(wlan0[0] == 2.toByte() && wlan0.drop(1).all { it == 0.toByte() }) -> wlan0 to "wlan0"
+                serial.length >= 8 && serial != "unknown" -> macFromSerial(serial) to "serial"
+                !androidId.isNullOrEmpty() -> localMac("glassworks-device-mac:android_id:$androidId") to "android_id"
+                else -> random().copyOf(6).also { it[0] = ((it[0].toInt() and 0xFC) or 0x02).toByte() } to "random"
+            }
+            return bytes.joinToString(":") { "%02X".format(it.toInt() and 0xFF) } to source
+        }
+
+        /**
+         * The line [stableMac] logs on every start: the identity and where it came from. Kept data says whether
+         * build.prop carries the same one, so a reflash can be checked from any start's log, not only the first (#574).
+         */
+        internal fun macLine(mac: String, source: String, image: String): String = "Device MAC $mac (" + when {
+            source != "saved" || !MAC_RE.matches(image) -> source
+            image == mac -> "saved, the same as build.prop"
+            else -> "saved; build.prop has another, the saved one wins"
+        } + ")"
+
+        /**
+         * Set to `1` in build.prop by an installer that carries the API key over a reflash ([SecretHandover], #574):
+         * the fresh app then keeps its API server shut until the key comes, so Home Assistant, which still holds that
+         * key, never meets a device without one and opens no re-authentication.
+         */
+        const val API_KEY_HANDOVER_PROP = "ro.glassworks.api_key.handover"
+
+        /** How long the API server waits for a carried key before it starts without one (provisionable, as before). */
+        const val API_KEY_WAIT_MS = 15 * 60_000L
+
+        /** Whether the API server still waits for the key [API_KEY_HANDOVER_PROP] promises, [waitedMs] after it began. */
+        internal fun waitsForKey(handover: String, hasKey: Boolean, waitedMs: Long): Boolean =
+            handover == "1" && !hasKey && waitedMs < API_KEY_WAIT_MS
+
+        private fun localMac(seed: String): ByteArray = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(seed.toByteArray()).copyOf(6).also {
                 it[0] = ((it[0].toInt() and 0xFC) or 0x02).toByte() // unicast, locally administered
             }
 
@@ -124,7 +180,8 @@ class PanelDevice(
     /** Guards [stopped] and the hand-over of [server] between [startServer] and [stop]. */
     private val lifecycle = Any()
     private var stopped = false
-    private val noiseKeys = NoiseKeys(prefs.noiseKeyStore)
+    /** The server's keys: read again when the server starts, and followed when the stored key changes (#608). */
+    private val serverKeys = ServerKeys(prefs.noiseKeyStore)
     /** Read by the API server on its connection threads; replaced when voice is turned on or off. */
     @Volatile private lateinit var identity: DeviceIdentity
 
@@ -141,7 +198,7 @@ class PanelDevice(
      * App updates from GitHub Releases (docs/releasing.md); the "App update" entity. runCatching:
      * the update thread may still report while [stop] has already shut [exec] down.
      */
-    private val updates = UpdateManager(ctx, runtime, onChange = { runCatching { exec.execute { server?.publishStates() } } })
+    private val updates = UpdateManager(ctx, runtime, channel = { prefs.updateChannel }, onChange = { runCatching { exec.execute { server?.publishStates() } } })
     @Volatile private var announcing = false
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
@@ -152,6 +209,15 @@ class PanelDevice(
     private val screenListener: () -> Unit = { exec.execute { server?.publishStates() } }
     private val authListener: (Boolean) -> Unit = { exec.execute { server?.publishStates() } }
     private val dashboardsListener: (List<Dashboard>) -> Unit = { exec.execute { checkDashboards() } }
+
+    /** Whether the device sits on a dock; none on a frame that never docks ([Dock.NO]). Started and stopped on the main thread. */
+    private val dockWatcher: DockWatcher? =
+        if (frame.dock == Dock.NO) null else DockWatcher(ctx) { docked -> runCatching { exec.execute { onDock(docked) } } }
+    /**
+     * The *Docked* sensor, in the list while [Docked.hasEntity] says so. Its state is missing (Home Assistant: unknown)
+     * until the watcher's first read on the main thread, which can come after Home Assistant subscribes.
+     */
+    private val dockedEntity = BinarySensorEntity("docked", "Docked", deviceClass = "plug", get = { dockWatcher?.docked })
 
     // "Dashboard" select (docs/onboarding.md step 5): built from [appliedDashboards]; a changed
     // option list rebuilds the entity set (debounced, like the wall base) so HA re-lists it.
@@ -179,6 +245,7 @@ class PanelDevice(
             try { hook() } catch (e: Exception) { EspHomeLog.w("A pane's stop hook failed: $e") }
         }
         host?.let { it.cancelVoice = null; it.onVoicePlaying = null }
+        dockWatcher?.let { w -> if (Looper.myLooper() == Looper.getMainLooper()) w.stop() else main.post { w.stop() } }
         exec.shutdownNow()
         mdns.stop()
         synchronized(lifecycle) { server.also { server = null } }?.stop()
@@ -231,14 +298,17 @@ class PanelDevice(
         for ((pane, s) in switches) EspHomeLog.i("Pane $pane ${if (s.on) "on" else "off"}")
         panes.forEachPane("start") { pane -> unlessStopped { if (isOn(pane)) { pane.start(); started += pane.id } } }
         if (!unlessStopped { updates.start() }) return
-        startServer()
+        startServerWhenKeyed(SystemClock.elapsedRealtime())
         unlessStopped {
             prefs.registerListener(prefListener)
+            // A key stored after the server started and before the listener above: no event came for it.
+            exec.execute { onApiKeyPrefChanged() }
             screen.addListener(screenListener)
             HaAuth.addListener(authListener)
             Dashboards.addListener(dashboardsListener)
             exec.scheduleWithFixedDelay({ checkDashboards() }, 2, 2, TimeUnit.SECONDS)
             exec.scheduleWithFixedDelay({ server?.publishStates() }, 5, 5, TimeUnit.SECONDS)
+            dockWatcher?.let { w -> ui { if (unlessStopped {}) w.start() } }
         }
         // A switch changed after its pane started and before the listener above: no event came for it. And
         // each pane that is off hears its own switch once, so it puts back what it undoes outside the app
@@ -285,7 +355,29 @@ class PanelDevice(
     // ------------------------------------------------------------------ dashboard select
 
     private fun assemble(): List<ApiEntity> =
-        EntityRegistry(panes).assemble(coreEntities + dashboardSelect(dashboardRebuild.applied()))
+        EntityRegistry(panes).assemble(coreEntities + listOfNotNull(dockedEntity.takeIf { hasDockedEntity() }) + dashboardSelect(dashboardRebuild.applied()))
+
+    private fun hasDockedEntity() = Docked.hasEntity(frame.dock, prefs.dockSeen)
+
+    /** On its dock now, or null where Home Assistant has no Docked sensor ([Docked.hasEntity]) or before the first read. Any thread. */
+    fun docked(): Boolean? = if (hasDockedEntity()) dockWatcher?.docked else null
+
+    /**
+     * esphome-main, from [dockWatcher]. The first dock a device reports is kept ([KioskPrefs.dockSeen]); on a device
+     * that might dock ([Dock.IF_SEEN]) that adds the sensor, and Home Assistant lists the entities again.
+     */
+    private fun onDock(docked: Boolean) {
+        if (docked && !prefs.dockSeen) {
+            val had = hasDockedEntity()
+            prefs.dockSeen = true
+            if (!had && hasDockedEntity()) {
+                EspHomeLog.i("First dock seen: adding the Docked sensor")
+                rebuildEntities()
+                return
+            }
+        }
+        server?.publishStates()
+    }
 
     private fun currentDashboardOption(list: List<Dashboard>) =
         DashboardOptions.currentOption(prefs.urlSetting, prefs.settingBase, list)
@@ -337,8 +429,31 @@ class PanelDevice(
         prefs.dashboardsJson = DashboardOptions.toJson(list)
     }
 
+    /**
+     * Starts the API server, unless the image says the installer hands over the key and it hasn't come yet
+     * ([waitsForKey]): then nothing listens or announces, and Home Assistant only retries, until the key comes or
+     * [API_KEY_WAIT_MS] has passed. esphome-main.
+     */
+    private fun startServerWhenKeyed(since: Long) {
+        if (synchronized(lifecycle) { stopped }) return
+        val handover = systemProperty(API_KEY_HANDOVER_PROP)
+        val waited = SystemClock.elapsedRealtime() - since
+        if (waitsForKey(handover, prefs.apiEncryption, waited)) {
+            if (waited == 0L) EspHomeLog.i("API server waits for the key the installer hands over (up to ${API_KEY_WAIT_MS / 60_000} min)")
+            exec.schedule({ startServerWhenKeyed(since) }, 1, TimeUnit.SECONDS)
+            return
+        }
+        if (handover == "1") {
+            // startServer reads the store again, so a key handed over since this object was made is the one it uses.
+            EspHomeLog.i(if (prefs.apiEncryption) "API key handed over: starting the API server with it"
+                else "No API key handed over in ${API_KEY_WAIT_MS / 60_000} min: starting without one, Home Assistant may ask to re-authenticate")
+        }
+        startServer()
+    }
+
     private fun startServer() {
-        val s = ApiServer(apiPort, { identity }, entities, noiseKeys, apiBindAddress)
+        // The store as it is now, not as it was when this object was made: a switch's hand-over may have come since.
+        val s = ApiServer(apiPort, { identity }, entities, serverKeys.forStart(), apiBindAddress)
         panes.forEachPane("bind") { it.bind(s) }
         s.onCommand = { exec.execute { s.publishStates() } }
         s.onClientHello = { info, addr ->
@@ -384,11 +499,8 @@ class PanelDevice(
     /** Key changed in the panel settings (adb extras): apply it unless it is the one HA just provisioned. */
     private fun onApiKeyPrefChanged() {
         val k = prefs.effectiveApiKey()
-        val latest = noiseKeys.latest
-        val same = if (k == null || latest == null) k == null && latest == null else k.contentEquals(latest)
-        if (same) return
+        if (!serverKeys.follow(k, server)) return
         EspHomeLog.i(if (k == null) "API key removed in the panel settings" else "API key set in the panel settings (fingerprint ${NoiseKeys.fingerprint(k)})")
-        server?.replaceKey(k)
     }
 
     private fun emit(event: PanelEvent) = panes.forEachPane("onEvent") { it.onEvent(event) }
@@ -507,8 +619,9 @@ class PanelDevice(
 
     private fun buildEntities(): List<ApiEntity> = listOf(
         // --- screen & sensors
+        // CONFIG (#591): Home Assistant then leaves the screen out of a room's "lights off" and out of Assist.
         BrightnessLightEntity(
-            "screen", "Screen", "mdi:tablet-dashboard",
+            "screen", "Screen", "mdi:tablet-dashboard", EntityCategory.CONFIG,
             get = { screen.screenOn to currentBrightness() },
             set = { on, b ->
                 ui {
@@ -708,30 +821,20 @@ class PanelDevice(
     // ------------------------------------------------------------------ helpers
 
     /**
-     * The Home Assistant device identity (ESPHome "MAC"). Must survive a reinstall or factory reset, or
-     * HA sees a new device (merge prompt, duplicate entities). Order: the saved value; the Wi-Fi MAC
-     * if readable; else one derived from the chip's serial (ro.serialno, from the SoC's SID), so it no
-     * longer depends on Wi-Fi being up at first start (factory-fresh panels boot with Wi-Fi off).
-     * Random only if neither exists.
+     * The Home Assistant device identity (ESPHome "MAC"), from [pickMac]. Kept in prefs once chosen, so it never
+     * changes while the app's data lives. Logged on every start with its source ([macLine]): before #574 only the start
+     * that chose it logged it, so a log that began after that start had no `Device MAC` line.
      */
+    @SuppressLint("HardwareIds") // the Wi-Fi MAC and ANDROID_ID are what keep the identity across reinstalls
     private fun stableMac(): String {
-        prefs.deviceMac.takeIf { MAC_RE.matches(it) }?.let { return it }
         val hw = try { NetworkInterface.getByName("wlan0")?.hardwareAddress } catch (_: Exception) { null }
-        val usable = hw?.takeIf { a ->
-            a.size == 6 && a.any { it != 0.toByte() } && !(a[0] == 2.toByte() && a.drop(1).all { it == 0.toByte() })
+        val androidId = try { Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ANDROID_ID) } catch (_: Exception) { null }
+        val image = systemProperty(IMAGE_MAC_PROP)
+        val (mac, source) = pickMac(prefs.deviceMac, image, hw, systemProperty("ro.serialno"), androidId) {
+            ByteArray(6).also { SecureRandom().nextBytes(it) }
         }
-        val serial = systemProperty("ro.serialno").takeIf { it.length >= 8 && it != "unknown" }
-        val (bytes, source) = when {
-            usable != null -> usable to "wlan0"
-            serial != null -> macFromSerial(serial) to "serial"
-            else -> ByteArray(6).also {
-                SecureRandom().nextBytes(it)
-                it[0] = ((it[0].toInt() and 0xFC) or 0x02).toByte()
-            } to "random"
-        }
-        val mac = bytes.joinToString(":") { "%02X".format(it.toInt() and 0xFF) }
-        prefs.deviceMac = mac
-        EspHomeLog.i("Device MAC $mac ($source)")
+        if (source != "saved") prefs.deviceMac = mac
+        EspHomeLog.i(macLine(mac, source, image))
         return mac
     }
 

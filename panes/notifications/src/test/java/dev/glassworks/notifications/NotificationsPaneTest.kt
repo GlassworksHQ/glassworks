@@ -8,6 +8,8 @@ import android.app.Application
 import android.content.Context
 import dev.glassworks.pane.PaneContext
 import dev.glassworks.pane.PanelEvent
+import dev.glassworks.pane.SettingsChange
+import dev.glassworks.pane.SettingsItem
 import dev.glassworks.platform.AppBuild
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -187,6 +189,28 @@ class NotificationsPaneTest {
         pane.start()
         assertTrue(hub.sendTest())
         assertEquals(NotificationsHub.TEST_TITLE, hub.state.cards.single().notification.title)
+    }
+
+    /** #518: the page's test is a button (the Manage page runs it too), and the list it shows is the link's twin. */
+    @Test
+    fun theTestFromTheSettingsPageAndTheListItShowsIn() {
+        val d = NotificationsDefinition(app.getSharedPreferences("notifications-test", Context.MODE_PRIVATE), hub, { null }, now = { t })
+        d.switch.on = true
+        fun groups() = d.settings().single().items.filterIsInstance<SettingsItem.Group>()
+        val send = groups().first { it.title == "Try it" }.items.single() as SettingsItem.Action
+        assertEquals("Send" to "A normal one, with a chime and one button", send.label to send.detail())
+        val said = mutableListOf<String?>()
+        send.run { said += it }
+        assertEquals("on, not running yet: says so", listOf<String?>(NotificationsDefinition.NOT_RUNNING), said)
+        pane.start()
+        send.run { said += it }
+        assertEquals(null, said.last())
+        assertEquals(NotificationsHub.TEST_TITLE, hub.state.cards.single().notification.title)
+
+        val link = groups().first { it.title == "Interruptions" }.items.filterIsInstance<SettingsItem.Link>().single()
+        val listed = SettingsChange.twinOf(link).filterIsInstance<SettingsItem.Info>().map { it.title() to it.detail() }
+        assertEquals(listOf(NotificationsHub.TEST_TITLE to "${NotificationsHub.TEST_MESSAGE} · now"), listed)
+        assertTrue("nothing to change in it", SettingsChange.changeable(d.settings().single()).none { it.first.startsWith("Interruptions/${link.title}/") })
     }
 
     /** CodeRabbit on #228: "alert" on a normal one plays once and isn't cut off. */

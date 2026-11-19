@@ -60,7 +60,7 @@ A new library in `libs/` or a new pane needs a branded README header: see
   `Engine` and `Page` (`glassworks.engine`). `EngineConfinementTest` fails the build otherwise.
 - Device-specific code (sensors, `/dev/ttyS3`, the radio, Aqara binder calls) belongs behind a seam
   that another frame could replace. Don't spread S1 paths through generic code. The S1's own parts
-  live in `sh.edm.s1kiosk.frame`, reached through `glassworks.frame` (`AqaraS1Plus`).
+  live in `dev.glassworks.s1.frame`, reached through `glassworks.frame` (`AqaraS1Plus`).
 - Logs use the `Glassworks…` tags listed in the README. **Never log** tokens, API keys, the Noise key, Wi-Fi
   passwords or Thread datasets, not even at debug level.
 - New user-visible strings follow the existing tone: short, plain, no exclamation marks.
@@ -71,7 +71,7 @@ Every UI change needs screenshots in the PR, before and after (see [`AGENTS.md`]
 
 - **On the panel:** `adb shell input keyevent KEYCODE_WAKEUP`, put the screen in the state, then
   `adb exec-out screencap -p > after.png`. The intent extras help you get there:
-  `--ez show_setup true --es setup_step wifi|ha|signin|panes|done` (a pane's step id, e.g. `radio`,
+  `--ez show_setup true --es setup_step wifi|ha|signin|panes|silent_updates|done` (a pane's step id, e.g. `radio`,
   opens that pane's step), `--ez show_signin true`, `--ez settings true`.
 - **Without a panel:** the Robolectric mockups render the real views at the panel's size with the
   Inter font: `./gradlew :kiosk:testDebugUnitTest --tests '*Mockups*' -Ps1MockupDir=/tmp/shots`.

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PanelShell } from '@glassworks/adb';
-import { ManifestError, Steps, apkHome, apkInfo, apkPermissions, axmlTree, dropAdmin, grantPermissions, kioskVersion, q, startApp, zipEntry } from '../src';
-import { HOME_ACTIVITY, app, fakeApk, filter, zip, type FakeEl } from './fakes';
+import { ManifestError, Steps, apiKeyFingerprint, apiKeySocketUp, apkHome, apkInfo, apkPermissions, axmlTree, dropAdmin, grantPermissions, handOverApiKey, handOverDone, handOverSignIn, handoverCarries, kioskVersion, q, readApiKey, readSignIn, sendWifi, startApp, zipEntry } from '../src';
+import { FakeKeySocket, HOME_ACTIVITY, app, fakeApk, filter, zip, type FakeEl } from './fakes';
 
 class Shell implements PanelShell {
   cmds: string[] = [];
@@ -10,7 +10,7 @@ class Shell implements PanelShell {
   async push(path: string) { this.cmds.push(`push ${path}`); }
 }
 
-describe('S1 Kiosk over adb', () => {
+describe('Glassworks over adb', () => {
   it('starts the app with the URL and language quoted, or with neither', async () => {
     const s = new Shell();
     await startApp(new Steps(s), { haUrl: `http://ha.local:8123/it's`, locale: 'en-GB' });
@@ -47,8 +47,8 @@ describe('S1 Kiosk over adb', () => {
   });
 
   it('doesn\'t wait on another app\'s admin whose package starts with this one\'s', async () => {
-    const app = { package: 'dev.glassworks.generic_android', activity: 'dev.glassworks.generic_android/sh.edm.s1kiosk.MainActivity' };
-    const s = new Shell((c) => ({ out: c === 'dumpsys device_policy' ? '    dev.glassworks.generic_android.legacy/sh.edm.s1kiosk.AdminReceiver:\n' : '', code: 0 }));
+    const app = { package: 'dev.glassworks.generic_android', activity: 'dev.glassworks.generic_android/dev.glassworks.MainActivity' };
+    const s = new Shell((c) => ({ out: c === 'dumpsys device_policy' ? '    dev.glassworks.generic_android.legacy/dev.glassworks.AdminReceiver:\n' : '', code: 0 }));
     expect(await dropAdmin(s, async () => {}, app)).toBe(true);
     expect(s.cmds.filter((c) => c === 'dumpsys device_policy')).toHaveLength(1);
   });
@@ -215,5 +215,185 @@ describe('the APK\'s home screen (the Mirror\'s first flash had none, 2026-11-16
     const tree = axmlTree((await zipEntry(apk, 'AndroidManifest.xml'))!);
     expect(tree.map((e) => e.name)).toEqual(['manifest']);
     expect(tree[0]!.children.map((e) => e.name)).toEqual(['uses-sdk', 'application']);
+  });
+});
+
+describe('the ESPHome API key across a reflash (#574)', () => {
+  // made up: base64 of 32 bytes 1..32, never a real key
+  const KEY = btoa(String.fromCharCode(...Array.from({ length: 32 }, (_, i) => i + 1)));
+  const shell = (s: FakeKeySocket, ran: string[] = []): PanelShell => ({
+    async run(cmd) { ran.push(cmd); return s.shell(cmd) ?? { out: '', code: 0 }; },
+    async push() {},
+    openStream: (svc) => s.open(svc),
+  });
+
+  it('reads the key from the running app, and hands it to the fresh one', async () => {
+    const before = new FakeKeySocket(KEY), ran: string[] = [];
+    const key = await readApiKey(shell(before, ran));
+    expect(key).toBe(KEY);
+    const after = new FakeKeySocket();
+    expect(await handOverApiKey(shell(after, ran), key!, async () => {})).toBe(true);
+    expect(after.key).toBe(KEY);
+    // only through the socket: never on a command line
+    expect(ran.join('\n')).not.toContain(KEY);
+  });
+
+  it('has nothing to carry from an app with no key or one too old to hand it over', async () => {
+    expect(await readApiKey(shell(new FakeKeySocket()))).toBeUndefined();
+    const old = new FakeKeySocket(KEY, false);
+    expect(await readApiKey(shell(old))).toBeUndefined();
+    expect(old.verbs).toEqual([]);
+  });
+
+  it('gives up when the fresh app never listens, and says no when it refuses', async () => {
+    const down = new FakeKeySocket(undefined, false);
+    expect(await handOverApiKey(shell(down), KEY, async () => {}, 0)).toBe(false);
+    expect(down.verbs).toEqual([]);
+    expect(await handOverApiKey(shell(new FakeKeySocket(btoa('x'.repeat(32)))), KEY, async () => {})).toBe(false);
+  });
+
+  it('tries again when an answer is lost, and gets ok for the key the app already stored (#575 review)', async () => {
+    const s = new FakeKeySocket();
+    s.drop = 1;
+    expect(await handOverApiKey(shell(s), KEY, async () => {}, 60_000, 5)).toBe(true);
+    expect(s.key).toBe(KEY);
+    expect(s.verbs).toEqual(['set', 'set']);
+  });
+
+  it('returns false, never throws, when the app never answers (#575 review)', async () => {
+    const s = new FakeKeySocket();
+    s.drop = 1_000;
+    let slept = 0;
+    expect(await handOverApiKey(shell(s), KEY, async () => { slept++; }, 0, 5)).toBe(false);
+    expect(slept).toBeLessThanOrEqual(1);
+  });
+
+  it('throws when the app has a key it can\'t hand over now, so a flash doesn\'t lose it (#575 review)', async () => {
+    const down = new FakeKeySocket(KEY);
+    down.unreadable = true;
+    await expect(readApiKey(shell(down))).rejects.toThrow(/can't read it right now/);
+    const mute = new FakeKeySocket(KEY);
+    mute.drop = 1;
+    await expect(readApiKey(shell(mute), 5)).rejects.toThrow(/didn't answer/);
+  });
+
+  it('stops, rather than carry nothing, when a socket the caller saw listen is gone (PR 603 review)', async () => {
+    const gone = new FakeKeySocket(KEY, false);
+    await expect(readApiKey(shell(gone), 5, { socket: 'required' })).rejects.toThrow(/socket closed/);
+    expect(await readApiKey(shell(gone), 5)).toBeUndefined();
+  });
+
+  it('tells an app that listens on the key socket from one older than #574 (Kiln\'s keep step, #580)', async () => {
+    expect(await apiKeySocketUp(shell(new FakeKeySocket()))).toBe(true);
+    expect(await apiKeySocketUp(shell(new FakeKeySocket(KEY, false)))).toBe(false);
+  });
+
+  it('fingerprints a key as the app logs it', async () => {
+    // NoiseKeys.fingerprint: SHA-256's first two bytes, in hex
+    expect(await apiKeyFingerprint(KEY)).toMatch(/^[0-9a-f]{4}$/);
+    expect(await apiKeyFingerprint(KEY)).not.toBe(await apiKeyFingerprint(btoa('x'.repeat(32))));
+  });
+});
+
+describe('the Home Assistant sign-in across a signing-key switch (#584)', () => {
+  // made up: never a real key or token
+  const KEY = btoa(String.fromCharCode(...Array.from({ length: 32 }, (_, i) => i + 1)));
+  const TOKEN = btoa('made-up-refresh-token-0123456789abcdef');
+  const shell = (s: FakeKeySocket, ran: string[] = []): PanelShell => ({
+    async run(cmd) { ran.push(cmd); return s.shell(cmd) ?? { out: '', code: 0 }; },
+    async push() {},
+    openStream: (svc) => s.open(svc),
+  });
+
+  it('asks what the app carries, without a secret in the answer', async () => {
+    expect(await handoverCarries(shell(new FakeKeySocket(KEY)))).toEqual({ apiKey: true, signIn: true });
+    const keyOnly = new FakeKeySocket(KEY);
+    keyOnly.keyOnly = true;
+    expect(await handoverCarries(shell(keyOnly))).toEqual({ apiKey: true, signIn: false });
+    expect(await handoverCarries(shell(new FakeKeySocket(KEY, false)))).toEqual({ apiKey: false, signIn: false });
+    const mute = new FakeKeySocket(KEY);
+    mute.drop = 1;
+    expect(await handoverCarries(shell(mute), 5)).toEqual({ apiKey: false, signIn: false });
+  });
+
+  it('reads the sign-in and the key from the old app, and hands both to the switched one', async () => {
+    const before = new FakeKeySocket(KEY), ran: string[] = [];
+    before.signIn = TOKEN;
+    const signIn = await readSignIn(shell(before, ran));
+    const key = await readApiKey(shell(before, ran));
+    expect(signIn).toBe(TOKEN);
+    // the switched app: its copied data holds both, sealed with the key Android deleted
+    const after = new FakeKeySocket(btoa('o'.repeat(32)));
+    after.signIn = btoa('made-up-old-token');
+    after.lost = true;
+    expect(await handOverApiKey(shell(after, ran), key!, async () => {})).toBe(true);
+    expect(await handOverSignIn(shell(after, ran), signIn!, async () => {})).toBe(true);
+    expect(after.key).toBe(KEY);
+    expect(after.signIn).toBe(TOKEN);
+    // only through the socket: never on a command line
+    expect(ran.join('\n')).not.toContain(TOKEN);
+    expect(ran.join('\n')).not.toContain(KEY);
+  });
+
+  it('has no sign-in to carry from an app that isn\'t signed in, and says so for one that can\'t read it', async () => {
+    expect(await readSignIn(shell(new FakeKeySocket(KEY)))).toBeUndefined();
+    const down = new FakeKeySocket(KEY);
+    down.signIn = TOKEN;
+    down.unreadable = true;
+    await expect(readSignIn(shell(down))).rejects.toThrow(/has a sign-in but can't read it right now/);
+    const keyOnly = new FakeKeySocket(KEY);
+    keyOnly.keyOnly = true;
+    await expect(readSignIn(shell(keyOnly))).rejects.toThrow(/unexpected answer \(refused\)/);
+  });
+
+  it('takes no for an answer when the switched app has no sign-in to carry it into', async () => {
+    const fresh = new FakeKeySocket();
+    fresh.signInHere = false;
+    expect(await handOverSignIn(shell(fresh), TOKEN, async () => {})).toBe(false);
+    expect(fresh.verbs).toEqual(['set-signin']);
+    expect(fresh.signIn).toBeUndefined();
+  });
+
+  it('tries again while the app\'s key store is down for a moment, and stops at a final refusal (#608 review)', async () => {
+    const s = new FakeKeySocket();
+    s.passing = 2;
+    expect(await handOverSignIn(shell(s), TOKEN, async () => {}, 60_000, 5)).toBe(true);
+    expect(s.verbs).toEqual(['set-signin', 'set-signin', 'set-signin']);
+    const inUse = new FakeKeySocket();
+    inUse.signIn = btoa('made-up-other');
+    expect(await handOverSignIn(shell(inUse), TOKEN, async () => {}, 60_000, 5)).toBe(false);
+    expect(inUse.verbs).toEqual(['set-signin']);
+    // the key store never comes back: false once the wait is over, never thrown
+    const down = new FakeKeySocket();
+    down.passing = 1_000;
+    expect(await handOverApiKey(shell(down), KEY, async () => {}, 0, 5)).toBe(false);
+  });
+
+  it('says the hand-over is done, once, and never throws (#608 panel run)', async () => {
+    const s = new FakeKeySocket();
+    expect(await handOverDone(shell(s))).toBe(true);
+    expect(s.verbs).toEqual(['done']);
+    const keyOnly = new FakeKeySocket();
+    keyOnly.keyOnly = true;
+    expect(await handOverDone(shell(keyOnly))).toBe(false);
+    expect(await handOverDone(shell(new FakeKeySocket(undefined, false)))).toBe(false);
+    const mute = new FakeKeySocket();
+    mute.drop = 1;
+    expect(await handOverDone(shell(mute), 5)).toBe(false);
+  });
+
+  it('fingerprints a sign-in as the app logs it', async () => {
+    expect(await apiKeyFingerprint(TOKEN)).toMatch(/^[0-9a-f]{4}$/);
+  });
+});
+
+describe('Wi-Fi over the app\'s Improv socket', () => {
+  it('says not joined, never throws, when the socket refuses the connection', async () => {
+    const p: PanelShell = {
+      async run() { return { out: '1\n', code: 0 }; },
+      async push() {},
+      openStream: async () => { throw new Error('connection refused'); },
+    };
+    expect(await sendWifi(p, 'Home Net', 'not-a-real-password', async () => {}, 0)).toBe(false);
   });
 });

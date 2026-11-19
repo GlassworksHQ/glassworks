@@ -229,6 +229,7 @@
       }
     ]
   },
+  "recovery": "recovery.json",
   "render": "render.webp",
   "display": {
     "width": 1080,
@@ -241,9 +242,9 @@
   "abis": ["arm64-v8a", "armeabi-v7a"],
   "app": {
     "id": "dev.glassworks.generic_android.legacy",
-    "activity": "sh.edm.s1kiosk.MainActivity",
+    "activity": "dev.glassworks.MainActivity",
     "home": "dev.glassworks.generic.Launcher",
-    "admin": "sh.edm.s1kiosk.AdminReceiver"
+    "admin": "dev.glassworks.AdminReceiver"
   },
   "specs": [
     {
@@ -278,16 +279,32 @@
   "provides": ["microphone", "speaker", "bluetooth-le", "camera"],
   "panes": {
     "assist": {
-      "support": "planned",
-      "note": "It has a microphone."
+      "support": "alpha",
+      "note": "It has a microphone. In the legacy build."
     },
     "timers": {
-      "support": "planned",
+      "support": "alpha",
       "note": "Needs Assist."
     },
     "sendspin": {
-      "support": "planned",
-      "note": "It has stereo speakers."
+      "support": "alpha",
+      "note": "It has stereo speakers. In the legacy build."
+    },
+    "notifications": {
+      "support": "alpha",
+      "note": "In the legacy build. No touch, so an urgent one with no tag or timeout closes after 2 minutes. Not yet run on a Mirror."
+    },
+    "bluetooth-proxy": {
+      "support": "alpha",
+      "note": "It has Bluetooth LE (its WCN3660B, read from a teardown). In the legacy build. It scans only once the location permission is granted, which Kiln doesn't do yet. Not yet run on a Mirror."
+    },
+    "camera": {
+      "support": "alpha",
+      "note": "It has a camera (5 MP, front). In the legacy build: presence wakes the screen when someone walks up, and no image leaves the Mirror in Presence only. Off until turned on; Kiln grants the camera. Not yet run on a Mirror."
+    },
+    "diagnostics": {
+      "support": "alpha",
+      "note": "In the legacy build, with no CPU temperature. Not yet run on a Mirror."
     },
     "radio": {
       "support": "no",

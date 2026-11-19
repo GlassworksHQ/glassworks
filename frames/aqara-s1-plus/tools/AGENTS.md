@@ -9,6 +9,8 @@ before you change the boot path. The tools every frame shares are in [`tools/`](
 | Path | What | Notes |
 |---|---|---|
 | `fel/` | `build-uboot.sh`, `fel-boot.sh`, the board defconfig and DTS, patches against mainline U-Boot | RAM only: nothing is written to eMMC |
+| `fel/fastboot-usb.py` | The stock U-Boot's fastboot (`1f3a:1010`) over pyusb: `getvar`, a RAM `boot` and a plain `reboot`, nothing else (#139) | Refuses flash, erase, oem and the rest. Tests: `fel/test/` |
+| `fel/wrap-ram-boot.py` | Host only: wraps the panel's `boot` as a uImage the stock fastboot `boot` can run from RAM (#139, plans D–F: `--canary` spins at the entry, `--stop-os` stops bootm after LOADOS) | Its output holds the panel's command line: keep it with the backup. Tests: `fel/test/` |
 | `fel/uboot/patches/0001` | A133 DDR4 controller setup matching boot0 (MR0 is the actual fix) | MR0 was sent upstream on 2026-11-11; drop that hunk once it lands |
 | `fel/uboot/patches/0002` | fastboot `upload`, for reading partitions back (`fastboot get_staged`) | |
 | `install/` | `fel-install.sh` (FEL → backup → patch → flash → verify), `fb-read-partition.sh`, the `--undo` path; `install-churn.py`: one row per kiosk install or force-stop from a saved logcat (#248) | Has off-device tests in `install/test/`; `install-churn.py` reads a file only |
@@ -47,6 +49,11 @@ before you change the boot path. The tools every frame shares are in [`tools/`](
 - `build-uboot.sh` builds in an arm64 Ubuntu container, because U-Boot's host tools don't build
   cleanly on macOS.
 - Unplug and replug without the button to get back to Android.
+- **The stock U-Boot's fastboot** (reached with `adb reboot bootloader`) is Allwinner's BSP one, not
+  ours: use `fel/fastboot-usb.py`, not the `fastboot` CLI. On macOS the CLI clears the bulk pipes,
+  which the stock U-Boot ignores, so the two sides lose data-toggle sync and a `download` can hang.
+  Its `product` answer is the panel's serial. Details in
+  [`frame-loader.md`](../research/frame-loader.md#what-we-tried).
 
 ## Testing on the panel
 

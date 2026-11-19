@@ -63,6 +63,15 @@ interface Frame {
     val rootUpdates: RootUpdates? get() = null
 
     /**
+     * Whether something on the device with root sends the setup hotspot's DNS (udp 53) and web (tcp 80) traffic to the
+     * app's portal (udp 8053 and tcp 8098, on the hotspot's own addresses), so a phone that joins opens the setup page
+     * by itself (#197). The S1's radio helper does. False: the app runs no portal, and the phone opens the address the
+     * screen shows. An opt-in, not a check: true starts the app's portal listeners, and on a device whose root side
+     * doesn't forward to them (an S1 with an older radio helper) they listen unused and the address stays the way in.
+     */
+    val hotspotPortal: Boolean get() = false
+
+    /**
      * The frame's own version and releases (#139), or null on a device its vendor updates (any generic Android device):
      * then it has no Frame version row and no Frame update entity.
      */
@@ -87,6 +96,12 @@ interface Frame {
      * Android's auto-rotate or the person's choice says. Read when the activity starts.
      */
     val orientation: Orientation get() = Orientation.LANDSCAPE
+
+    /**
+     * Whether the device can sit on a dock, and so whether Home Assistant gets the *Docked* sensor
+     * (`dev.glassworks.dock.Docked`). [Dock.NO] by default: a panel on a wall has none.
+     */
+    val dock: Dock get() = Dock.NO
 
     /**
      * Work the frame runs while the app's service runs, or null for none (the S1's: Wi-Fi scans while the
@@ -146,6 +161,18 @@ enum class NamedBy { FRAME, MODEL }
 
 /** Whether a frame's screen takes a tap ([Frame.input]). */
 enum class Input { TOUCH, NONE }
+
+/** Whether a frame's device can dock ([Frame.dock]). */
+enum class Dock {
+    /** It never docks (the S1): no *Docked* sensor, and nothing listens for a dock. */
+    NO,
+
+    /** It might (any Android device): the sensor comes once the device has reported a dock, and stays. */
+    IF_SEEN,
+
+    /** It does (a Pixel Tablet): the sensor is there from the start. */
+    YES,
+}
 
 /** How a frame's screen stands ([Frame.orientation]). [ANY]: as the device stands, which Android decides. */
 enum class Orientation { LANDSCAPE, PORTRAIT, ANY }

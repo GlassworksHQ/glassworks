@@ -9,9 +9,9 @@ const SELF = relative(ROOT, __filename);
 
 /** Each pattern with names it must catch, one per alternative, so a weakened pattern fails a test. */
 const FRAME_NAMES: [what: string, pattern: RegExp, catches: string[]][] = [
-  ['the S1 (s1Overlay, s1kiosk, s1-backup, S1 Plus)', /\bs1/i, ['s1Overlay', 's1-backup', 'S1 Plus']],
+  ['the S1 (s1Overlay, s1-backup, S1 Plus)', /\bs1/i, ['s1Overlay', 's1-backup', 'S1 Plus']],
   ['Aqara and its packages', /aqara|inhome|com\.lumi|baidu/i, ['Aqara', 'inhome', 'com.lumi.ota', 'com.baidu.input_auto']],
-  ['the S1 Kiosk app id', /sh\.edm|kiosk/i, ['sh.edm.s1kiosk', 'sh.edm.panel', 'kiosk-apk']],
+  ['the S1 app id', /sh\.edm|kiosk/i, ['sh.edm.s1kiosk', 'sh.edm.panel', 'kiosk-apk']],
   ['the S1 chip, board and USB ids', /a133|sunxi|allwinner|r818|quad-core|1f3a|efe8/i,
     ['A133', 'sunxi', 'Allwinner', 'R818', 'QUAD-CORE', '0x1f3a', '0xefe8']],
   ['the S1 partitions and their sizes', /vbmeta_system|vbmeta_vendor|dtbo|0x0*2000000\b|0x0*60000000\b|\b33554432\b|\b1610612736\b/i,

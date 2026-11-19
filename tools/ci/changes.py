@@ -41,9 +41,10 @@ APK_INPUTS = ('THIRD-PARTY-NOTICES.md', 'LICENSE', 'LICENSES')
 TEST_INPUTS = APK_INPUTS + (
     'CHANGELOG.md', 'README.md', 'docs/**/*.md', 'frames/*/README.md', 'frames/**/blueprints/*.yaml',
     'tools/release/frame-abis.sh', 'tools/release/check-update-compat.sh', 'tools/voice/fetch-models.sh',
-    'kiln/packages/brand/src/tokens.css', 'kiln/packages/setup-channel/test/s1-kiosk-transcript.json',
+    'kiln/packages/brand/src/tokens.css', 'kiln/packages/setup-channel/test/aqara-s1-plus-transcript.json',
     'branding/glass-tile/bootanimation.zip', 'frames/aqara-s1-plus/tools/bracket/base_emulator.py',
     'frames/aqara-s1-plus/tools/debloat/debloat.sh', 'frames/generic-android/installer/src/devices.ts',
+    'frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh',  # CaptivePortalTest: the portal's ports are the helper's
     '**/sh/edm/**',
 )
 
@@ -51,6 +52,8 @@ TEST_INPUTS = APK_INPUTS + (
 PERF = ('tools/perf', 'frames/*/budgets.json', 'frames/*/clarity')
 
 LIBS = ('libs', 'build-logic')
+
+HOTSPOT_NAME = 'frames/aqara-s1-plus/tools/radio/hotspot-name'
 
 
 @dataclass(frozen=True)
@@ -64,10 +67,12 @@ class Rule:
 
 # Keys are pr.yml's job ids with `_` for `-`, or a step group inside a job (app_apk, esphome, perf).
 RULES = {
-    'app': Rule('app: every module\'s unit tests', when=ANDROID + TEST_INPUTS),
-    'app_apk': Rule('app: release build, update check', when=ANDROID + APK_INPUTS + ('tools/release/check-update-compat.sh',)),
+    # hotspot-name: the S1's setup hotspot overlay, which app builds beside the release APK (#430).
+    'app': Rule('app: every module\'s unit tests', when=ANDROID + TEST_INPUTS + (HOTSPOT_NAME,)),
+    'app_apk': Rule('app: release build, update check', when=ANDROID + APK_INPUTS + (
+        'tools/release/check-update-compat.sh', HOTSPOT_NAME)),
     'esphome': Rule('app: aioesphomeapi tests', when=LIBS),
-    'libs_api23': Rule('libs-api23', when=LIBS),
+    'libs_api23': Rule('libs-api23: lint at minSdk 23', when=LIBS),
     'api23': Rule('api23', when=ANDROID + ('tools/legacy',)),
     'libs_publish': Rule('libs-publish', when=LIBS + (
         'LICENSE', 'LICENSES', 'THIRD-PARTY-NOTICES.md', 'tools/release/check-lib-artifact.sh',

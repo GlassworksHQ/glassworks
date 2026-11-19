@@ -44,9 +44,11 @@ files change.
 2. **No data is written by hand in `site/`.** Frames come from `../frames/<id>/design/frame.json`,
    panes from `@glassworks/frame-card` (each pane's `pane.json`), Clarity's grade from
    `../frames/<id>/clarity/clarity.json` with `../tools/perf/grade.ts` and its rubric, the latest
-   release from `../CHANGELOG.md`. Blueprints are the app's own list (its `blueprints.json` asset),
-   read from GitHub at the latest release tag when the site is built (`src/lib/blueprints.ts`), so the
-   build needs github.com; `BLUEPRINTS_REF=<tag or commit>` builds from another ref. The docs are the
+   release from `../CHANGELOG.md` (its newest version that GitHub has released, linked at that
+   release's tag: `src/lib/release.ts`). Blueprints are the app's own list (its `blueprints.json` asset),
+   read from GitHub at the newest app release that has it, on any frame's line, when the site is built
+   (`src/lib/blueprints.ts`). So the build needs github.com and one Releases API call, which the latest release shares (it sends
+   `GITHUB_TOKEN` when that is set); `BLUEPRINTS_REF=<tag or commit>` builds from another ref. The docs are the
    repo's own Markdown: `src/lib/docs/sources.ts` maps each file to its URL and nav group, and the site
    never keeps a copy. A doc's text changes in
    the Markdown, on GitHub; a new doc gets a line in `sources.ts`. A data change

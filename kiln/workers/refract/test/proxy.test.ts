@@ -14,10 +14,14 @@ const config = JSON.parse(readFileSync(join(dir, 'wrangler.json'), 'utf8'));
 const KILN = 'https://kiln.glassworks.dev';
 const IMG = 'glass-panes/mirror-android-2/system.img';
 const SUMS = 'glass-panes/mirror-android-2/SHA256SUMS';
+const USERDATA = 'glass-panes/mirror-android-2/userdata.sparse';
+const KEY = 'glass-panes/project-key/adbkey';
 const SUMS_TEXT =
   'bdb6b8445296666162256affa968d590075f56a8ad2229930f8502b9703e35c1  system.img\n' +
   '74b1f57ac20ce7c56065083a2bc3ddd283493be29d851fd04efc156ec96cf908  userdata.sparse\n';
 const ETAG = '"0xFAKE"';
+/** Stands in for the published key: the test pins these bytes' hash in a copy of the allowlist entry. */
+const KEY_BYTES = new TextEncoder().encode('-----BEGIN PRIVATE KEY-----\nnot a real key\n-----END PRIVATE KEY-----\n');
 const TIMEOUT_MS = 300;
 const limit = (name: string): number => config.ratelimits.find((r: { name: string }) => r.name === name).simple.limit;
 const FULL = limit('FULL_DOWNLOADS');
@@ -47,11 +51,15 @@ let honoursIfRange: boolean;
 let releases: (req: MfRequest) => MfResponse | Promise<MfResponse> | undefined;
 const seen: MfRequest[] = [];
 
+/** What raw.githubusercontent.com sends for a repository file: the bytes, or a test's own answer. */
+let raw: (req: MfRequest) => MfResponse;
+
 async function github(req: MfRequest): Promise<MfResponse> {
   seen.push(req);
   const url = new URL(req.url);
   const hit = await releases(req);
   if (hit) return hit;
+  if (url.host === 'raw.githubusercontent.com') return raw(req);
   if (url.host === 'github.com') {
     const name = url.pathname.split('/').pop()!;
     return new MfResponse(null, { status: 302, headers: { Location: `https://release-assets.githubusercontent.com/fake/${name}?sig=x` } });
@@ -99,6 +107,7 @@ beforeEach(() => {
   files = { 'system.img': pattern, SHA256SUMS: sums };
   honoursIfRange = true;
   releases = () => undefined;
+  raw = () => new MfResponse(KEY_BYTES, { headers: { 'Content-Length': String(KEY_BYTES.length), 'Content-Type': 'text/plain; charset=utf-8' } });
   seen.length = 0;
 });
 
@@ -121,11 +130,14 @@ describe('the allowlist', () => {
     expect(seen[0]!.url).toBe('https://github.com/git-nimrod/glass-panes/releases/download/mirror-android-2/SHA256SUMS');
   });
 
-  it("pins the image to the release's own SHA256SUMS", () => {
+  it("pins both images to the release's own SHA256SUMS", () => {
     expect(SUMS_TEXT).toContain(`${allowlist[IMG].sha256}  system.img`);
+    // Kiln's Glass Panes install (#579) downloads userdata.sparse too
+    expect(SUMS_TEXT).toContain(`${allowlist[USERDATA].sha256}  userdata.sparse`);
+    expect(allowlist[USERDATA].size).toBe(154944572);
   });
 
-  it.each(['nope', 'glass-panes/mirror-android-1/system.img', 'glass-panes/mirror-android-2/userdata.sparse', 'https://example.com/x', '__proto__', 'toString', `${IMG}/`, IMG.toUpperCase()])(
+  it.each(['nope', 'glass-panes/mirror-android-1/system.img', 'glass-panes/mirror-android-2/boot.img', 'https://example.com/x', '__proto__', 'toString', `${IMG}/`, IMG.toUpperCase()])(
     'answers 404 to %s and never asks GitHub',
     async (path) => {
       const res = await get(path);
@@ -502,5 +514,74 @@ describe('credit', () => {
     const res = await get('', { method: 'HEAD' });
     expect(res.status).toBe(200);
     expect((await res.arrayBuffer()).byteLength).toBe(0);
+  });
+});
+
+describe('a file from a repository at a pinned commit', () => {
+  // the Worker under test pins the real key's size and hash; this one pins KEY_BYTES' instead
+  const pinned = { ...allowlist[KEY], size: KEY_BYTES.length, sha256: createHash('sha256').update(KEY_BYTES).digest('hex') };
+  let fake: Miniflare;
+  beforeAll(async () => {
+    const out = await build({
+      entryPoints: [join(dir, config.main)], bundle: true, format: 'esm', write: false,
+      plugins: [{ name: 'allowlist', setup(b) { b.onLoad({ filter: /allowlist\.json$/ }, () => ({ loader: 'json', contents: JSON.stringify({ ...allowlist, [KEY]: pinned }) })); } }],
+    });
+    fake = new Miniflare({ modules: true, script: out.outputFiles[0]!.text, compatibilityDate: config.compatibility_date,
+      bindings: { ...config.vars, UPSTREAM_TIMEOUT_MS: String(TIMEOUT_MS) },
+      ratelimits: Object.fromEntries((config.ratelimits as { name: string; namespace_id: string; simple: { limit: number; period: 10 | 60 } }[]).map((r) => [r.name, { namespace_id: r.namespace_id, simple: r.simple }])),
+      outboundService: github });
+    await fake.ready;
+  }, 60_000);
+  afterAll(() => fake?.dispose());
+
+  it('the allowlist pins it at a full commit, small, with its hash', () => {
+    expect(allowlist[KEY]).toMatchObject({ owner: 'git-nimrod', repo: 'glass-panes', commit: expect.stringMatching(/^[0-9a-f]{40}$/), path: 'mirror-app/android/project-key/adbkey', size: 1704 });
+    expect(allowlist[KEY].sha256).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('sends it whole once its size and SHA-256 match, from raw.githubusercontent.com at the commit, a Range ignored', async () => {
+    const res = await get(KEY, { headers: { Range: 'bytes=5-' } }, fake);
+    expect(res.status).toBe(200);
+    expect(new Uint8Array(await res.arrayBuffer())).toEqual(KEY_BYTES);
+    expect(res.headers.get('Content-Length')).toBe(String(KEY_BYTES.length));
+    expect(res.headers.get('Content-Disposition')).toBe('attachment; filename="adbkey"');
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBe(KILN);
+    expect(res.headers.get('Cache-Control')).toBe('no-store');
+    expect(seen.map((r) => r.url)).toEqual([`https://raw.githubusercontent.com/git-nimrod/glass-panes/${pinned.commit}/${pinned.path}`]);
+    expect(seen[0]!.headers.get('Range')).toBeNull();
+  });
+
+  it('refuses a file that changed, a redirect, and a GitHub error, with nothing sent', async () => {
+    raw = () => new MfResponse('-----BEGIN PRIVATE KEY-----\nswapped\n', { headers: { 'Content-Length': '35' } });
+    let res = await get(KEY, {}, fake);
+    expect(res.status).toBe(502);
+    expect(await res.text()).toMatch(/the file changed/);
+    raw = () => new MfResponse(null, { status: 302, headers: { Location: 'https://example.com/adbkey' } });
+    res = await get(KEY, {}, fake);
+    expect(res.status).toBe(502);
+    expect(seen.some((r) => new URL(r.url).host === 'example.com')).toBe(false);
+    raw = () => new MfResponse('nope', { status: 404 });
+    expect((await get(KEY, {}, fake)).status).toBe(502);
+  });
+
+  it('a body that arrives after the header timeout is still sent: the timeout is for the headers only', async () => {
+    // the first half at once, so the headers go out in time; the rest after twice the header timeout
+    const half = KEY_BYTES.length >> 1;
+    let step = 0;
+    raw = () => new MfResponse(new ReadableStream({
+      async pull(c) {
+        if (step === 0) c.enqueue(KEY_BYTES.subarray(0, half));
+        else if (step === 1) { await new Promise((r) => setTimeout(r, TIMEOUT_MS * 2)); c.enqueue(KEY_BYTES.subarray(half)); } else c.close();
+        step++;
+      },
+    }, { highWaterMark: 0 }), { headers: { 'Content-Length': String(KEY_BYTES.length) } });
+    const res = await get(KEY, {}, fake);
+    expect(res.status).toBe(200);
+    expect(new Uint8Array(await res.arrayBuffer())).toEqual(KEY_BYTES);
+  });
+
+  it('is listed at / with its source at the commit', async () => {
+    const index = (await (await fake.dispatchFetch('http://localhost:8787/')).json()) as { assets: { id: string; source: string }[] };
+    expect(index.assets.find((a) => a.id === KEY)?.source).toBe(`https://raw.githubusercontent.com/git-nimrod/glass-panes/${pinned.commit}/mirror-app/android/project-key/adbkey`);
   });
 });

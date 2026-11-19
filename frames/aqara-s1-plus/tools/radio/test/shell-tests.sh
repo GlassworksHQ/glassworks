@@ -6,7 +6,8 @@
 #   glassworks_loader.sh (frame bundles: install, boot, slots, fallback, quick-exit marking, refusals),
 #   the radio helper glassworks_radio.sh (off, firmware flashing + rollback + request guards, GBL
 #   checks, Zigbee stack, the old setting names), glassworks_update.sh (incl. a framework restart
-#   mid-install) and glassworks_netwatch.sh's ActivityManager check (#248).
+#   mid-install), glassworks_netwatch.sh's ActivityManager check (#248), the setup hotspot's portal rules and
+#   name module (#197), and glassworks.rc's Magisk setup (static checks).
 set -uo pipefail
 R=/repo; T=/t; TB=/tb
 PASS=0; FAILS=0
@@ -870,6 +871,22 @@ check "framework restarted, package not committed: an error that says so" has "$
 check "...cut to what a property holds" test "$(prop sys.glassworks.update.status | wc -c)" -le 91
 rm -f "$T/pm-mode"; pkill -x system_server
 
+# ------------------------------------------------------------------ Magisk's setup (boot image)
+# glassworks.rc's post-fs-data copies Magisk's busybox in init, before Magisk's own step (docs/research/magisk-modules.md).
+# init can't run here, so these pin what keeps it safe; the panel run checks that it works.
+echo "--- glassworks.rc: Magisk's setup"
+RC="$R/frames/aqara-s1-plus/tools/root/glassworks.rc"
+# the post-fs-data action's commands, comments and blank lines left out
+body=$(awk '/^on post-fs-data$/ { on = 1; next } /^(on|service) / { on = 0 } on && !/^[[:space:]]*(#|$)/' "$RC")
+check "magiskenv: one post-fs-data action" test "$(grep -c '^on post-fs-data$' "$RC")" = 1
+check "...Magisk's setup first, init built-ins only, then the loader's exec" \
+  test "$(printf '%s\n' "$body" | awk '{print $1}' | tr '\n' ' ')" = "mkdir copy chmod exec "
+check "...never makes a top-level /data directory (init would give it an encryption policy, or boot into recovery)" \
+  sh -c '! printf "%s\n" "$1" | grep -Eq "^[[:space:]]*mkdir[[:space:]]+/data/[^/[:space:]]+/?([[:space:]]|$)"' _ "$body"
+check "...copies the boot image's busybox to where Magisk checks, executable" sh -c 'printf "%s\n" "$1" | grep -qx "    copy \${MAGISKTMP}/magisk-busybox /data/adb/magisk/busybox" && printf "%s\n" "$1" | grep -qx "    chmod 0755 /data/adb/magisk/busybox"' _ "$body"
+check "patch-boot-magisk.sh puts the busybox in the ramdisk, from the Magisk APK" sh -c 'grep -q "\"add 0700 overlay.d/sbin/magisk-busybox magisk-busybox\"" "$1" && grep -q "libbusybox.so\" \"\$W/p/magisk-busybox\"" "$1"' _ "$R/frames/aqara-s1-plus/tools/root/patch-boot-magisk.sh"
+check "...and Kiln's overlay the same path and mode" sh -c 'grep -q "path: .overlay.d/sbin/magisk-busybox., mode: 0o700" "$1"' _ "$R/kiln/packages/bootpatch/src/overlay.ts"
+
 # --------------------------------------------------------------- ActivityManager watchdog (#248)
 echo "--- glassworks_netwatch.sh: ActivityManager"
 cp "$R/frames/aqara-s1-plus/tools/root/glassworks_netwatch.sh" "$TB/"
@@ -1090,6 +1107,362 @@ touch "$T/settings-fail"; LOOPS=1 helper GWR_PUB="$BTP"
 check "a lookup that prints an address and then fails: nothing written" test ! -e "$BTP/bluetooth-address"
 rm -f "$T/settings-fail"
 rm -rf "$BTP" "$T/not-ours" "$T/settings.secure.bluetooth_address"
+
+# ------------------------------------------------------------------------- setup hotspot portal
+# #197: while hostapd runs and the kiosk (uid 10050) has its DNS (udp:8053) and redirect (tcp:8098)
+# sockets on one address of a Wi-Fi interface, the helper sends the hotspot's udp:53 and tcp:80 there
+# (nat PREROUTING -> GWPORTAL), and takes it all away as soon as one of those stops. A fake iptables
+# keeps the nat and filter tables in /t/ipt so the rules can be read back. Addresses: the AP 192.168.43.1
+# (012BA8C0, little-endian), the AP's IPv6 2001:db8::1, a home network 192.0.2.10.
+echo "--- setup hotspot portal (#197)"
+reset_radio; mkdir -p /data/s1kiosk/radio "$T/net" "$T/ipt" "$T/hostapd"; echo "RADIO_ALLOW=any" > /data/s1kiosk/radio/radio.conf
+# an unrelated filter rule in each family, which nothing in this section may touch
+FILTER='-A INPUT -p tcp -m tcp --dport 22 -j ACCEPT'
+printf '%s\n' "$FILTER" > "$T/ipt/4-filter"; printf '%s\n' "$FILTER" > "$T/ipt/6-filter"
+echo off > "$T/props/persist.glassworks.radio_mode"
+cat > "$T/ipt.py" <<'PY'
+import os, sys
+name = sys.argv[1]; fam = '6' if name.startswith('ip6') else '4'
+args = sys.argv[2:]
+if '-w' in args: i = args.index('-w'); del args[i:i + 2]
+table = 'filter'
+if '-t' in args: i = args.index('-t'); table = args[i + 1]; del args[i:i + 2]
+def path(t): return '/t/ipt/%s-%s' % (fam, t)
+def load(t):
+    chains, rules = ['PREROUTING'] if t == 'nat' else ['INPUT'], []
+    if os.path.exists(path(t)):
+        for l in open(path(t)).read().splitlines():
+            if l.startswith(':'): chains.append(l[1:])
+            elif l: rules.append(l)
+    return chains, rules
+def store(t, chains, rules):
+    builtin = ['PREROUTING', 'INPUT']
+    open(path(t), 'w').write(''.join(':%s\n' % c for c in chains if c not in builtin) + ''.join(r + '\n' for r in rules))
+def spec(r): return r.split(' ', 2)  # ['-A', chain, rest]
+if name.endswith('-save'):
+    # /t/ipt-save-fail: how many reads of the nat table fail next (a table that can't be read for a moment)
+    # /t/ipt-nat-unreadable: every read of the nat table fails while it exists
+    if table == 'nat' and os.path.exists('/t/ipt-nat-unreadable'):
+        open('/t/ipt-nat-fails', 'a').write(name + '\n'); sys.exit(1)
+    if table == 'nat' and os.path.exists('/t/ipt-save-fail'):
+        n = int(open('/t/ipt-save-fail').read() or 0)
+        if n > 0:
+            open('/t/ipt-save-fail', 'w').write(str(n - 1)); sys.exit(1)
+    chains, rules = load(table); print('*' + table)
+    for c in chains: print(':%s %s [0:0]' % (c, 'ACCEPT' if c in ('PREROUTING', 'INPUT') else '-'))
+    for r in rules: print(r)
+    print('COMMIT'); sys.exit(0)
+if name.endswith('-restore'):
+    open('/t/ipt/restores', 'a').write(name + '\n')
+    if os.path.exists('/t/ipt-refuse') and fam in open('/t/ipt-refuse').read(): sys.exit(1)
+    t = None
+    for l in sys.stdin.read().splitlines():
+        if l.startswith('*'): t = l[1:]; chains, rules = load(t)
+        elif l.startswith(':'):
+            c = l[1:].split()[0]
+            if c not in chains: chains.append(c)
+            rules = [r for r in rules if spec(r)[1] != c]
+        elif l.startswith('-A '): rules.append(l)
+        elif l == 'COMMIT': store(t, chains, rules)
+    sys.exit(0)
+chains, rules = load(table); op, c, rest = args[0], args[1], ' '.join(args[2:])
+if op == '-I':
+    n, rest = (int(args[2]), ' '.join(args[3:])) if len(args) > 2 and args[2].isdigit() else (1, rest)
+    if c not in chains: sys.exit(1)
+    idx = [k for k, r in enumerate(rules) if spec(r)[1] == c]
+    rules.insert(idx[n - 1] if len(idx) >= n else len(rules), '-A %s %s' % (c, rest))
+elif op == '-A': rules.append('-A %s %s' % (c, rest))
+elif op == '-D':
+    r = '-A %s %s' % (c, rest)
+    if r not in rules: sys.exit(1)
+    rules.remove(r)
+elif op == '-F':
+    if c not in chains: sys.exit(1)
+    rules = [r for r in rules if spec(r)[1] != c]
+elif op == '-X':
+    if c not in chains or any(spec(r)[1] == c or r.endswith('-j ' + c) for r in rules): sys.exit(1)
+    chains.remove(c)
+store(table, chains, rules)
+PY
+for b in iptables ip6tables iptables-restore ip6tables-restore iptables-save ip6tables-save; do
+  printf '#!/bin/sh\nexec python3 /t/ipt.py %s "$@"\n' "$b" > "$T/bin/$b"; chmod 755 "$T/bin/$b"
+done
+# `ip -4 -o addr show` from /t/ip-addr4
+w "$T/bin/ip" <<'EOF'
+#!/bin/sh
+case "$*" in *"rule del"*) exit 1 ;; "-4 -o addr show") cat /t/ip-addr4 2>/dev/null ;; esac; exit 0
+EOF
+cp "$(command -v sleep)" "$T/hostapd/hostapd"
+hostapd_on() { "$T/hostapd/hostapd" 1000 & HOSTAPD=$!; sleep 0.2; }
+hostapd_off() { kill "$HOSTAPD" 2>/dev/null; wait "$HOSTAPD" 2>/dev/null; }
+socks() { # file lines...: "<local hex>:<port hex> <state> <uid>"
+  f=$1; shift
+  { echo "$HDR6"; i=0; for l in "$@"; do set -- $l
+      printf '%4d: %s 00000000000000000000000000000000:0000 %s 00000000:00000000 00:00000000 00000000 %5d        0 %d 2 00000000 0\n' $i "$1" "$2" "$3" $((30000 + i)); i=$((i + 1)); done; } > "$T/net/$f"
+}
+AP4=0000000000000000FFFF0000012BA8C0; AP6=B80D0120000000000000000001000000
+ap_up() { # the kiosk's sockets as Android's dual-stack Java sockets show them
+  socks udp6 "$AP4:1F75 07 10050" "$AP6:1F75 07 10050"; socks tcp6 "$AP4:1FA2 0A 10050"; : > "$T/net/udp"; : > "$T/net/tcp"
+  echo "23: wlan0    inet 192.168.43.1/24 brd 192.168.43.255 scope global wlan0\       valid_lft forever preferred_lft forever" > "$T/ip-addr4"
+}
+# ipt_idle: until no fake iptables call is running (a helper's loop it killed on exit may have one in flight)
+ipt_idle() { i=0; while pgrep -f /t/ipt.py >/dev/null && [ $i -lt 100 ]; do sleep 0.1; i=$((i + 1)); done; }
+portal() { LOOPS=1 helper GWR_PROC_NET="$T/net"; ipt_idle; }
+nat() { cat "$T/ipt/$1-nat" 2>/dev/null; }
+RULE4_DNS='-A GWPORTAL -s 192.168.43.1/24 -d 192.168.43.1/32 -i wlan0 -p udp -m udp --dport 53 -j DNAT --to-destination 192.168.43.1:8053'
+RULE4_WEB='-A GWPORTAL -s 192.168.43.1/24 -d 192.168.43.1/32 -i wlan0 -p tcp -m tcp --dport 80 -j DNAT --to-destination 192.168.43.1:8098'
+RULE6_DNS='-A GWPORTAL -d 2001:db8:0:0:0:0:0:1/128 -i wlan0 -p udp -m udp --dport 53 -j DNAT --to-destination [2001:db8:0:0:0:0:0:1]:8053'
+
+ap_up; portal
+check "no hostapd: no rules" test -z "$(nat 4 | grep GWPORTAL)" -a "$(prop sys.glassworks.portal.status)" = off
+hostapd_on; portal
+check "hotspot up, the kiosk's sockets on its address: DNS and web sent to them (IPv4)" \
+  test "$(nat 4 | grep '^-A GWPORTAL')" = "$(printf '%s\n%s' "$RULE4_DNS" "$RULE4_WEB")"
+check "...DNS to the AP's IPv6 address too" test "$(nat 6 | grep '^-A GWPORTAL')" = "$RULE6_DNS"
+check "...one jump from PREROUTING in each" test "$(nat 4 | grep -c '^-A PREROUTING -j GWPORTAL$')$(nat 6 | grep -c '^-A PREROUTING -j GWPORTAL$')" = 11
+check "...and the status says on which interface" test "$(prop sys.glassworks.portal.status)" = "on wlan0"
+check "...never with an address in the log" test -z "$(grep -e 192.168 -e 2001: "$T/log")"
+: > "$T/setprop.log"; rm -f "$T/ipt/restores"; LOOPS=3 helper GWR_PROC_NET="$T/net" GWR_PORTAL_SLEEP=0.3; ipt_idle
+check "a new helper keeps rules already in place: not rebuilt, one jump, the status written once" \
+  test "$(cat "$T/ipt/restores" 2>/dev/null | wc -l)/$(nat 4 | grep -c '^-A PREROUTING -j GWPORTAL$')/$(grep -c '^sys.glassworks.portal.status=' "$T/setprop.log")" = 0/1/1
+# ip6tables-save prints the address short; a rule in that form is the same rule, not a stale one
+sed -i 's/2001:db8:0:0:0:0:0:1/2001:db8::1/g' "$T/ipt/6-nat"; rm -f "$T/ipt/restores"; portal
+check "an IPv6 rule as ip6tables-save prints it (2001:db8::1) is kept, not rebuilt" \
+  test ! -s "$T/ipt/restores" -a "$(prop sys.glassworks.portal.status)" = "on wlan0"
+socks udp6 "$AP4:1F75 07 10050" "B80D0120000000000000000002000000:1F75 07 10050"; portal
+check "the hotspot's IPv6 address moved (IPv4 the same): the IPv6 rule follows it" \
+  test "$(nat 6 | grep -c 'to-destination \[2001:db8:0:0:0:0:0:2\]:8053$')/$(nat 6 | grep -c '2001:db8::1\|0:0:0:0:0:1\]')" = 1/0
+ap_up; portal
+# first_check: until the helper started in the background has done its first check (its status line)
+# logged <pattern>: waits (60 s at most, an emulated ARM under load is slow) until setprop.log has a line for it
+logged() { i=0; until grep -q "$1" "$T/setprop.log" || [ $i -ge 600 ]; do sleep 0.1; i=$((i + 1)); done; }
+first_check() { logged '^sys.glassworks.portal.status='; }
+# bg_until <test...>: waits (60 s at most, an emulated ARM under load is slow) until it holds, then stops the helper
+# helpers_gone: after a pkill, until no helper and no fake iptables call of one is left (one already running would
+# still write its table after the test has moved on)
+helpers_gone() { pkill -f glassworks_radio.sh; wait "$H" 2>/dev/null; i=0; while pgrep -f '/t/ipt.py|glassworks_radio.sh' >/dev/null && [ $i -lt 100 ]; do sleep 0.1; i=$((i + 1)); done; }
+bg_until() { i=0; until "$@" || [ $i -ge 600 ]; do sleep 0.1; i=$((i + 1)); done; helpers_gone; }
+jumps4() { test "$(nat 4 | grep -c '^-A PREROUTING -j GWPORTAL$')" = 1; }
+rules4() { test -n "$(nat 4 | grep '^-A GWPORTAL')"; }
+: > "$T/setprop.log"; LOOPS=100000 helper GWR_PROC_NET="$T/net" GWR_PORTAL_SLEEP=0.2 GWR_SLEEP=0.1 &
+H=$!; first_check; sed -i '/^-A PREROUTING -j GWPORTAL$/d' "$T/ipt/4-nat"; bg_until jumps4
+check "a jump lost while it runs (netd restarted) is put back by the loop" test "$(nat 4 | grep -c '^-A PREROUTING -j GWPORTAL$')" = 1
+socks tcp6; portal
+check "the redirect's socket gone: everything removed, both families" \
+  test -z "$(nat 4 | grep GWPORTAL)$(nat 6 | grep GWPORTAL)" -a "$(prop sys.glassworks.portal.status)" = off
+ap_up; portal; hostapd_off; portal
+check "hostapd gone (the hotspot stopped): removed" test -z "$(nat 4 | grep GWPORTAL)$(nat 6 | grep GWPORTAL)"
+ap_up; hostapd_on; portal; hostapd_off; touch /t/ipt-nat-unreadable; : > "$T/setprop.log"
+LOOPS=100000 helper GWR_PROC_NET="$T/net" GWR_PORTAL_SLEEP=0.2 GWR_SLEEP=0.1 &
+H=$!; logged '^sys.glassworks.portal.status=error'
+check "a rule table that can't be read at the hotspot's end: not called off" \
+  sh -c "grep -q '^sys.glassworks.portal.status=error' '$T/setprop.log' && ! grep -q '^sys.glassworks.portal.status=off' '$T/setprop.log'"
+gone() { test -z "$(nat 4 | grep GWPORTAL)$(nat 6 | grep GWPORTAL)" && test "$(prop sys.glassworks.portal.status)" = off; }
+rm -f /t/ipt-nat-unreadable; bg_until gone
+check "...and the next check removes the rules, then says off" gone
+# The helper itself dies (killed, as init does on a restart) while the hotspot is up: the loop that outlives it
+# takes the rules away, and tries again when a table can't be read the first time.
+ap_up; hostapd_on; portal; : > "$T/setprop.log"
+LOOPS=100000 helper GWR_PROC_NET="$T/net" GWR_PORTAL_SLEEP=0.2 GWR_SLEEP=0.1 &
+H=$!; first_check; P=$(pgrep -P "$H" -f glassworks_radio.sh | head -1)   # the helper itself, not its loops
+# its two loops (time zone, portal) are its sh children; wait until both are there, then pause them
+i=0; until [ "$(pgrep -P "$P" -f glassworks_radio.sh | wc -l)" -ge 2 ] || [ $i -ge 600 ]; do sleep 0.1; i=$((i + 1)); done
+L=$(pgrep -P "$P" -f glassworks_radio.sh | tr '\n' ' ')
+check "(the helper's loops are up)" test "$(echo $L | wc -w)" -ge 2
+kill -STOP $L; kill -9 "$P"
+i=0; while kill -0 "$P" 2>/dev/null && [ $i -lt 100 ]; do sleep 0.1; i=$((i + 1)); done   # until its parent reaps it
+check "(the helper is killed)" sh -c "! kill -0 $P 2>/dev/null"
+: > /t/ipt-nat-fails; touch /t/ipt-nat-unreadable; kill -CONT $L
+# Unreadable until the leftover loop has failed 8 reads (several cleanup tries) or has ended: a loop that tried
+# once and gave up is gone by then, with the rules still there.
+i=0; until [ "$(wc -l < /t/ipt-nat-fails)" -ge 8 ] || [ -z "$(pgrep -f glassworks_radio.sh)" ] || [ $i -ge 600 ]; do
+  sleep 0.1; i=$((i + 1)); done
+check "(the leftover loop's cleanup reads fail)" test -s /t/ipt-nat-fails
+rm -f /t/ipt-nat-unreadable
+i=0; until test -z "$(nat 4 | grep GWPORTAL)$(nat 6 | grep GWPORTAL)" || [ $i -ge 600 ]; do sleep 0.1; i=$((i + 1)); done
+check "the helper killed, a table unreadable at first: the leftover loop still removes the rules, both families" \
+  test -z "$(nat 4 | grep GWPORTAL)$(nat 6 | grep GWPORTAL)"
+i=0; while pgrep -f glassworks_radio.sh >/dev/null && [ $i -lt 100 ]; do sleep 0.1; i=$((i + 1)); done
+check "...and then it ends too" test -z "$(pgrep -f glassworks_radio.sh)"
+helpers_gone; hostapd_off
+hostapd_on
+socks udp6 "$AP4:1F75 07 10077" "$AP6:1F75 07 10077"; portal
+check "the sockets of another app: no rules" test -z "$(nat 4 | grep GWPORTAL)"
+socks udp6 "0000000000000000FFFF000000000000:1F75 07 10050"; socks tcp6 "00000000000000000000000000000000:1FA2 0A 10050"; portal
+check "the kiosk on every address (not the hotspot's): no rules" test -z "$(nat 4 | grep GWPORTAL)"
+ap_up; socks udp6 "$AP4:1F75 07 10050" "00000000000000000000000000000000:1F75 07 10050"; portal
+check "an IPv6 DNS socket on every address ([::]): IPv4 rules only" test -n "$(nat 4 | grep '^-A GWPORTAL')" -a -z "$(nat 6 | grep '^-A GWPORTAL')"
+ap_up; echo "5: eth0    inet 192.168.43.1/24 brd 192.168.43.255 scope global eth0" > "$T/ip-addr4"; portal
+check "the address on a wired interface: no rules" test -z "$(nat 4 | grep GWPORTAL)"
+ap_up; echo "23: wlan0    inet 192.0.2.10/24 brd 192.0.2.255 scope global wlan0" > "$T/ip-addr4"; portal
+check "the address not on any interface: no rules" test -z "$(nat 4 | grep GWPORTAL)"
+ap_up; socks udp "012BA8C0:1F75 07 10050"; socks udp6 "0000000000000000FFFF00000A0200C0:1F75 07 10050"; portal
+check "DNS on two addresses: no rules (which one is the hotspot's?)" test -z "$(nat 4 | grep GWPORTAL)"
+ap_up; socks udp6 "$AP4:1F75 07 10050"; portal
+check "no IPv6 socket: IPv4 only" test -n "$(nat 4 | grep '^-A GWPORTAL')" -a -z "$(nat 6 | grep '^-A GWPORTAL')"
+ap_up; socks udp "012BA8C0:1F75 07 10050"; socks udp6; socks tcp "012BA8C0:1FA2 0A 10050"; socks tcp6; portal
+check "plain IPv4 sockets (udp, tcp) count too" test "$(nat 4 | grep -c '^-A GWPORTAL')" = 2
+ap_up; portal; hostapd_off; : > "$T/setprop.log"; LOOPS=100000 helper GWR_PROC_NET="$T/net" GWR_PORTAL_SLEEP=0.2 GWR_SLEEP=0.1 &
+# the whole portal: both families' rules, one jump each, and the status
+portal_up() {
+  test "$(prop sys.glassworks.portal.status)" = "on wlan0" && jumps4 && test "$(nat 4 | grep -c '^-A GWPORTAL')" = 2 &&
+    test "$(nat 6 | grep -c '^-A GWPORTAL')" = 1 && test "$(nat 6 | grep -c '^-A PREROUTING -j GWPORTAL$')" = 1
+}
+H=$!; first_check; hostapd_on; bg_until portal_up
+check "the loop between the helper's passes: up again within seconds, the whole of it" portal_up
+ap_up; portal; echo 6 > /t/ipt-refuse; rm -f "$T/ipt/6-nat"; portal
+check "ip6tables refuses after the IPv4 rules went in: nothing left half-done (no chain, no jump), and an error" \
+  test -z "$(nat 4 | grep GWPORTAL)$(nat 6 | grep GWPORTAL)" -a "$(prop sys.glassworks.portal.status)" = "error: iptables refused the rules"
+rm -f /t/ipt-refuse; portal
+check "...and on once it takes them" test "$(prop sys.glassworks.portal.status)" = "on wlan0"
+hostapd_off; ap_up; portal
+check "a new helper removes what an old one left" test -z "$(nat 4 | grep GWPORTAL)$(nat 6 | grep GWPORTAL)"
+check "...the filter tables untouched" test "$(cat "$T/ipt/4-filter")" = "$FILTER" -a "$(cat "$T/ipt/6-filter")" = "$FILTER"
+for b in iptables ip6tables iptables-restore ip6tables-restore iptables-save ip6tables-save; do printf '#!/bin/sh\nexit 0\n' | w "$T/bin/$b"; done
+w "$T/bin/ip" <<'EOF'
+#!/bin/sh
+case "$*" in *"rule del"*) exit 1 ;; esac; exit 0
+EOF
+rm -rf "$T/net" "$T/ipt" "$T/ip-addr4"; rm -f /data/s1kiosk/radio/radio.conf
+
+# ------------------------------------------------------------------------------ setup hotspot name
+# #197: with hotspot-name.apk in the running radio bundle, the helper puts it on /product through a Magisk module
+# (Android applies it from the next restart); without it, or with persist.glassworks.hotspot_name=android, it removes
+# the module. A fake `cmd overlay list` says whether Android applies the overlay now.
+echo "--- setup hotspot name (#197)"
+reset_radio; mkdir -p /data/s1kiosk/radio "$T/rb" "$T/modules"; echo "RADIO_ALLOW=any" > /data/s1kiosk/radio/radio.conf
+echo off > "$T/props/persist.glassworks.radio_mode"
+w "$T/bin/cmd" <<'EOF'
+#!/bin/sh
+[ "$1 $2 $3" = "overlay list sh.edm.s1kiosk.overlay.hotspotname" ] || exit 1
+[ -f /t/cmd-fail ] && exit 20   # the overlay service not answering
+[ -f /t/cmd-hang ] && exec sleep 1000   # ...or never answering
+# /t/overlay-on: Android applies it (its record, and the APK mounted, which name() points the helper at);
+# /t/overlay-stale: only Android's record, which outlives the APK on Android 10
+{ [ -f /t/overlay-on ] || [ -f /t/overlay-stale ]; } && echo "[x] sh.edm.s1kiosk.overlay.hotspotname"; exit 0
+EOF
+printf 'overlay-v1' > "$T/rb/hotspot-name.apk"
+MOD="$T/modules/s1kiosk_hotspot_name"; APKP="$MOD/system/product/overlay/S1HotspotName/S1HotspotName.apk"
+mkdir -p "$T/magisk" && : > "$T/magisk/busybox"   # Magisk's own setup, as the Magisk app leaves it
+name() { LOOPS=1 helper GW_BUNDLE="$T/rb" GWR_MODULES="$T/modules" GWR_MAGISK_BB="$T/magisk/busybox" GWR_HN_LIVE=/t/overlay-on "$@"; prop sys.glassworks.hotspot_name.status; }
+st=$(umask 077; name)   # as init runs services: what root writes is private unless the helper says otherwise
+check "the overlay in the bundle: a Magisk module puts it on /product" test "$(cat "$APKP")" = overlay-v1
+check "...with its module.prop" grep -qx "id=s1kiosk_hotspot_name" "$MOD/module.prop"
+check "...root-owned, readable by Android (system_server), not writable by others" \
+  test "$(stat -c %a:%u "$APKP")/$(stat -c %a "$MOD")/$(stat -c %a "${APKP%/*}")/$(stat -c %a "$MOD/module.prop")" = "644:0/755/755/644"
+check "...and Glassworks from the next restart" test "$st" = "glassworks after a restart"
+st=$(name GWR_MAGISK_BB="$T/magisk/none")
+check "Magisk without its setup (no busybox in /data/adb/magisk): said so, no promise of a restart" \
+  test "$st" = "android: Magisk loads no modules here (no $T/magisk/none)"
+check "...and the module stays in place for when it has one" test "$(cat "$APKP")" = overlay-v1
+touch /t/overlay-on; t0=$(stat -c %Y "$APKP"); sleep 1.1
+st=$(name)
+check "after the restart Android applies it: glassworks" test "$st" = glassworks
+check "...and the module isn't written again" test "$(stat -c %Y "$APKP")" = "$t0"
+printf 'overlay-v2' > "$T/rb/hotspot-name.apk"; name >/dev/null
+check "a new overlay in a newer bundle replaces it" test "$(cat "$APKP")" = overlay-v2 -a ! -e /data/s1kiosk/radio/hotspot-name-module.new
+printf android > "$T/props/persist.glassworks.hotspot_name"; st=$(name)
+check "persist.glassworks.hotspot_name=android: the module goes" test ! -e "$MOD"
+check "...and Android's name from the next restart" test "$st" = "android after a restart"
+rm -f /t/overlay-on; touch /t/overlay-stale; st=$(name)
+check "...then android, though Android 10 keeps its [x] record of the overlay with the APK gone" test "$st" = android
+rm -f /t/overlay-stale
+rm -f "$T/props/persist.glassworks.hotspot_name"; name >/dev/null
+check "(the module is back)" test -e "$MOD"
+# TODO(#528): the old name, which a 0.4.3 app sets, until the old names go
+printf android > "$T/props/persist.s1kiosk.hotspot_name"; st=$(name)
+check "the old name persist.s1kiosk.hotspot_name=android: moved to the new one, and the module goes" \
+  test ! -e "$MOD" -a "$(prop persist.glassworks.hotspot_name)" = android
+rm -f "$T/props/persist.s1kiosk.hotspot_name"; name >/dev/null
+check "...and its undo follows too: the module is back" test -e "$MOD" -a -z "$(prop persist.glassworks.hotspot_name)"
+rm -f "$T/rb/hotspot-name.apk"; name >/dev/null
+check "a bundle without the overlay removes the module" test ! -e "$MOD"
+printf 'overlay-v1' > "$T/rb/hotspot-name.apk"; name >/dev/null
+check "(the module is back)" test -e "$MOD"
+name GW_BUNDLE= >/dev/null
+check "the boot image's helper (no bundle) gives Android's name back" test ! -e "$MOD"
+printf 'overlay-dev' > /data/s1kiosk/radio/hotspot-name.apk; name GW_BUNDLE= GW_DEV=1 >/dev/null
+check "with dev-override, a developer's copy in the state dir" test "$(cat "$APKP")" = overlay-dev
+check "...nothing staged where Magisk loads modules: one module dir there, ours" test "$(ls -A "$T/modules")" = s1kiosk_hotspot_name
+# where the copy is staged: a cp that logs its arguments and does the copy
+w "$T/bin/cp" <<'EOF'
+#!/bin/sh
+echo "$@" >> /t/cp.log; exec /bin/cp "$@"
+EOF
+: > /t/cp.log; printf 'overlay-v3' > "$T/rb/hotspot-name.apk"; name >/dev/null; /bin/rm -f "$T/bin/cp"
+check "the module is staged outside Magisk's dir, never in it" \
+  test -n "$(grep hotspot-name.apk /t/cp.log)" -a -z "$(grep "$T/modules" /t/cp.log)" -a "$(cat "$APKP")" = overlay-v3
+# A helper stopped after staging: its stage, complete, is outside Magisk's dir, and the next start clears it
+mkdir -p /data/s1kiosk/radio/hotspot-name-module.new/system && cp "$MOD/module.prop" /data/s1kiosk/radio/hotspot-name-module.new/
+printf android > "$T/props/persist.glassworks.hotspot_name"; name >/dev/null; rm -f "$T/props/persist.glassworks.hotspot_name"
+check "a stage an interrupted run left, then the undo: no module and no stage anywhere" \
+  test -z "$(ls -A "$T/modules")" -a ! -e /data/s1kiosk/radio/hotspot-name-module.new
+# A /data that refuses a removal (read-only, full): a fake rm fails for the path in /t/rm-fail.
+w "$T/bin/rm" <<'EOF'
+#!/bin/sh
+for a in "$@"; do case "$a" in -*) ;; *) [ -f /t/rm-fail ] && [ "$a" = "$(cat /t/rm-fail)" ] && { echo "rm: $a: Read-only file system" >&2; exit 1; } ;; esac; done
+exec /bin/rm "$@"
+EOF
+w "$T/bin/mv" <<'EOF'
+#!/bin/sh
+src=""; for a in "$@"; do case "$a" in -*) ;; *) [ -n "$src" ] || src=$a ;; esac; done
+[ -f /t/mv-fail ] && [ "$src" = "$(cat /t/mv-fail)" ] && { echo "mv: $src: Read-only file system" >&2; exit 1; }
+exec /bin/mv "$@"
+EOF
+rm -f /data/s1kiosk/radio/hotspot-name.apk; printf 'overlay-v1' > "$T/rb/hotspot-name.apk"; name >/dev/null
+check "(the module is in place)" test "$(cat "$APKP")" = overlay-v1
+printf '%s' /data/s1kiosk/radio/hotspot-name.apk.new > /t/mv-fail; printf 'overlay-v2' > "$T/rb/hotspot-name.apk"; st=$(name)
+check "the new overlay can't be renamed in: an error, the working one untouched, nothing half-made" \
+  test "$st" = "error: could not put the module in place" -a "$(cat "$APKP")" = overlay-v1 \
+    -a ! -e /data/s1kiosk/radio/hotspot-name.apk.new
+/bin/rm -f /t/mv-fail "$T/bin/mv"
+# a permission step that fails: the stage never replaces the module
+w "$T/bin/chown" <<'EOF'
+#!/bin/sh
+[ -f /t/chown-fail ] && exit 1; exec /bin/chown "$@"
+EOF
+touch /t/chown-fail; st=$(name)
+check "a failed chown: an error, the working module unchanged" \
+  test "$st" = "error: could not write the module" -a "$(cat "$APKP")" = overlay-v1 -a ! -e /data/s1kiosk/radio/hotspot-name.apk.new
+/bin/rm -f /t/chown-fail "$T/bin/chown"; name >/dev/null
+check "(then it goes in)" test "$(cat "$APKP")" = overlay-v2
+# switched off in Magisk: no promise of a name the next boot won't bring
+touch "$MOD/disable"; st=$(name)
+check "the module disabled in Magisk: said so, not \"after a restart\"" test "$st" = "android: the module is disabled in Magisk"
+touch /t/overlay-on; st=$(name); rm -f /t/overlay-on
+check "...but still mounted this boot: Android's name from the next restart" test "$st" = "android after a restart"
+ino=$(stat -c %i "$MOD"); printf 'overlay-v4' > "$T/rb/hotspot-name.apk"; name >/dev/null
+check "a new overlay replacing a disabled module keeps it disabled" test "$(cat "$APKP")" = overlay-v4 -a -e "$MOD/disable"
+check "...the module's own dir never moves: only the APK is renamed in" test "$(stat -c %i "$MOD")" = "$ino"
+rm -f "$MOD/disable"
+# what an interrupted run left: a new overlay not yet renamed in, and a stage with a disable mark of its own
+printf junk > /data/s1kiosk/radio/hotspot-name.apk.new
+mkdir -p /data/s1kiosk/radio/hotspot-name-module.new && : > /data/s1kiosk/radio/hotspot-name-module.new/disable
+printf 'overlay-v5' > "$T/rb/hotspot-name.apk"; name >/dev/null
+check "an earlier run's leftovers are cleared first, and nothing of them gets into the module" \
+  test "$(cat "$APKP")" = overlay-v5 -a ! -e "$MOD/disable" -a ! -e /data/s1kiosk/radio/hotspot-name.apk.new \
+    -a ! -e /data/s1kiosk/radio/hotspot-name-module.new
+# the overlay service not answering: an error, not "android"
+touch /t/cmd-fail; st=$(name); rm -f /t/cmd-fail
+check "Android's overlay query fails: an error, not a guess" test "$st" = "error: Android didn't say whether the overlay is on"
+# never answering: an outer deadline (a watchdog ends the hang after 120 s) so a helper without its own bound is
+# caught as slow, not left hanging the suite
+touch /t/cmd-hang; : > "$T/setprop.log"; ( sleep 120; pkill -f "sleep 1000" ) & W=$!
+t0=$(date +%s); st=$(name GWR_HN_TIMEOUT=2); t1=$(date +%s)
+kill "$W" 2>/dev/null; rm -f /t/cmd-hang; pkill -f "sleep 1000" 2>/dev/null
+check "a query that never returns: bounded, an error, and the helper goes on to its radio loop" \
+  test "$st" = "error: Android didn't say whether the overlay is on" -a $((t1 - t0)) -lt 90 \
+    -a -n "$(grep '^sys.glassworks.radio.status=ok off' "$T/setprop.log")"
+printf '%s' "$MOD" > /t/rm-fail
+printf android > "$T/props/persist.glassworks.hotspot_name"; st=$(name)
+check "the undo can't remove it: an error, not \"android after a restart\"" test "$st" = "error: could not remove the module" -a -e "$MOD"
+/bin/rm -f /t/rm-fail "$T/bin/rm"; name >/dev/null
+check "...and once /data takes it, the next start does the undo" test ! -e "$MOD"
+rm -f "$T/props/persist.glassworks.hotspot_name"
+rm -f /data/s1kiosk/radio/hotspot-name.apk; rm -rf "$T/modules"
+st=$(name)
+check "no Magisk modules dir: an error, and nothing made" test "$st" = "error: no Magisk modules dir" -a ! -e "$T/modules"
+printf '#!/bin/sh\nexit 1\n' | w "$T/bin/cmd"; rm -rf "$T/rb" "$T/modules" /t/overlay-on /t/overlay-stale; rm -f /data/s1kiosk/radio/radio.conf
 
 echo
 echo "shell tests: $PASS passed, $FAILS failed"

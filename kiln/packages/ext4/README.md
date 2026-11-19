@@ -24,7 +24,7 @@ image can reuse it (option C in #40).
 | File | What |
 |---|---|
 | `src/disk.ts` | `Disk`: an image as blocks, on a `Store` (OPFS through `syncHandleStore`, or `MemoryStore`). It keeps a map of the blocks that hold data ("care") and those known to be zeros |
-| `src/sparse.ts` | `readSparse` streams a sparse image into a new `Disk`, a piece at a time, and can hash every byte on the way (`onBytes`). `writeSparse` streams a `Disk` back out: care blocks as RAW (split at 16 MiB) or FILL 0, the rest as DONT_CARE |
+| `src/sparse.ts` | `readSparse` streams a sparse image into a new `Disk`, a piece at a time, and can hash every byte on the way (`onBytes`). `writeSparse` streams a `Disk` back out: care blocks as RAW (split at 16 MiB) or FILL 0, the rest as DONT_CARE. `sparseStore` reads a sparse file where it lies, read-only: its chunk headers once, then only the blocks asked for, to read a file or two out of a large image without expanding it |
 | `src/ext4.ts` | `Ext4`: open, read (`stat`, `readdir`, `readFile`, `label`), change (`mkdir`, `mkdirs`, `writeFile`, `replaceFile`, `remove`, `setLabel`), then `flush` |
 | `src/mkfs.ts` | `mkfs`: an empty ext4 with lost+found and a journal, every metadata block written |
 | `src/sha256.ts` | SHA-256 over a stream. WebCrypto hashes only a whole buffer |
@@ -35,8 +35,8 @@ import { Disk, Ext4, readSparse, syncHandleStore, writeSparse } from '@glasswork
 
 const { disk } = await readSparse(file.stream(), (h) => new Disk(syncHandleStore(handle), h.blockSize, h.blocks), { onBytes: (b) => sha.update(b) });
 const fs = await Ext4.open(disk);
-await fs.mkdir('/priv-app/S1Kiosk', { mode: 0o755, uid: 0, gid: 0, label: 'u:object_r:system_file:s0' });
-await fs.writeFile('/priv-app/S1Kiosk/S1Kiosk.apk', apk, { mode: 0o644, uid: 0, gid: 0, label: 'u:object_r:system_file:s0' });
+await fs.mkdir('/priv-app/Glassworks', { mode: 0o755, uid: 0, gid: 0, label: 'u:object_r:system_file:s0' });
+await fs.writeFile('/priv-app/Glassworks/Glassworks.apk', apk, { mode: 0o644, uid: 0, gid: 0, label: 'u:object_r:system_file:s0' });
 await fs.flush();
 await writeSparse(disk, (piece) => out.write(piece));
 ```

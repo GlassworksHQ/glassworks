@@ -81,6 +81,13 @@
 # Who is connected (#217): in the coordinator modes, sys.s1kiosk.radio.peer = "none" | "<address> <epoch
 # first seen>", the EZSP bridge's client from /proc/net/tcp and tcp6 (see peer_report); "" in other modes.
 #
+# Setup hotspot portal (#197): while the kiosk's setup hotspot is up, the hotspot's DNS and port 80 go to
+# the kiosk's own responders, so a phone that joins opens the setup page by itself (see "the setup
+# hotspot's captive portal" below). Status: sys.s1kiosk.portal.status. Runs in every mode.
+#
+# Setup hotspot name (#197): with the overlay in the radio bundle, a Magisk module puts it on /product, so Android
+# names the setup hotspot Glassworks_NNNN from the next restart. Status: sys.s1kiosk.hotspot_name.status.
+#
 # Developer override: with a root-made $DIR/dev-override file, a root-owned $DIR/s1kiosk_radio.sh runs
 # instead of everything else, and binaries in $DIR win. (Before v4 those were honoured without the
 # marker; a leftover copy would otherwise shadow every update.)
@@ -637,6 +644,303 @@ peer_report() { # every loop
   peer_show "$PEER_VALUE"
 }
 
+# --- the setup hotspot's captive portal (#197) -------------------------------------------------
+# A phone that joins the panel's setup hotspot should open the setup page by itself, as on hotel Wi-Fi.
+# Phones show that page when their connectivity check (iOS: http://captive.apple.com/hotspot-detect.html,
+# Android: http://connectivitycheck.gstatic.com/generate_204) gets a redirect. Android 10's local-only
+# hotspot hands out the AP's address as DNS (DHCP, and RDNSS in the RA), served by netd's dnsmasq with no
+# upstream: nothing resolves, so no phone ever sees a portal (docs/research/setup-hotspot-portal-and-name.md).
+# The app answers instead, but it can't bind ports below 1024. While the hotspot is up it runs a DNS
+# responder on udp:$PORTAL_DNS (every name -> the AP) and a redirect to its setup page on tcp:$PORTAL_HTTP,
+# bound to the AP's own addresses only. This loop sends the hotspot's udp:53 and tcp:80 to them (nat
+# PREROUTING, chain $PORTAL_CHAIN).
+# The rules exist only while all of these hold, checked every $PORTAL_EVERY s, and go within that time
+# once one stops: hostapd runs (Android 10 runs it only for an AP), the kiosk's uid owns a udp socket on
+# :$PORTAL_DNS and a listening tcp socket on :$PORTAL_HTTP bound to one IPv4 address, and that address is on a
+# Wi-Fi interface. They match only packets that come in on that interface, from its subnet, addressed
+# to the panel's own address there, so nothing on any other network can match them. No input but the
+# kernel's socket tables; another app can at most point the hotspot's DNS at the kiosk's own sockets.
+# IPv6: when the kiosk also has a udp socket on :$PORTAL_DNS at one IPv6 address, udp:53 to that address
+# goes there too (the RA's RDNSS). Status: sys.s1kiosk.portal.status = "off" | "on <iface>" | "error: ...".
+# The loop runs in every radio mode (also after "giving up") and starts with the helper, which first
+# removes whatever an earlier run left.
+PORTAL_DNS=8053
+PORTAL_HTTP=8098
+PORTAL_CHAIN=S1PORTAL
+PORTAL_PROP=sys.s1kiosk.portal.status
+PORTAL_EVERY=${S1R_PORTAL_SLEEP:-2}
+PORTAL_STATE=""; PORTAL_SHOWN=""; PORTAL_PID=""
+
+# The kiosk's sockets on one address: family proto port [state] -> each address (4: dotted, 6: hex).
+# Android's Java sockets are dual-stack, so a bind to an IPv4 address shows in udp6/tcp6 as IPv4-mapped.
+portal_addrs() {
+  pp_=$(printf '%04X' "$3")
+  for f_ in "$PROC_NET/$2" "$PROC_NET/${2}6"; do
+    [ -r "$f_" ] || continue
+    while read -r sl_ loc_ rem_ st_ q_ t_ r_ uid_ rest_; do
+      [ "$uid_" = "$APP_UID" ] && [ "${loc_##*:}" = "$pp_" ] || continue
+      [ -z "$4" ] || [ "$st_" = "$4" ] || continue
+      a_=${loc_%:*}
+      # 4: a wildcard bind comes out as 0.0.0.0, which no interface has, so portal_wanted drops it
+      case "$1:${#a_}:$a_" in
+        4:8:*) hex_ip4 "$a_" ;;
+        4:32:0000000000000000[Ff][Ff][Ff][Ff]0000*) hex_ip4 "${a_#????????????????????????}" ;;
+        6:32:0000000000000000[Ff][Ff][Ff][Ff]0000*|6:32:[Ff][Ee]80*) ;;
+        6:32:*[!0]*) echo "$a_" ;;
+      esac
+    done < "$f_"
+  done
+}
+
+# What the rules should be now: "<iface> <v4 address> <v4 prefix> [<v6 address>]", or nothing.
+portal_wanted() {
+  [ -n "$(pidof hostapd 2>/dev/null)" ] || return 0
+  [ -n "$APP_UID" ] || APP_UID=$(stat -c %u "$APP_DATA" 2>/dev/null)
+  case "$APP_UID" in ''|*[!0-9]*) return 0 ;; esac
+  [ "$APP_UID" -ge 10000 ] || return 0
+  set -- $(portal_addrs 4 udp $PORTAL_DNS); [ $# = 1 ] || return 0; a4_=$1
+  set -- $(portal_addrs 4 tcp $PORTAL_HTTP 0A); [ "$*" = "$a4_" ] || return 0
+  # "23: wlan0    inet 192.168.43.1/24 brd ... scope global wlan0"
+  set -- $(ip -4 -o addr show 2>/dev/null | while read -r n_ i_ f_ c_ rest_; do
+    [ "$f_" = inet ] && [ "${c_%/*}" = "$a4_" ] && echo "$i_ ${c_#*/}"
+  done)
+  case "$1" in wlan[0-9]*|ap[0-9]*|swlan[0-9]*|softap[0-9]*) ;; *) return 0 ;; esac   # also: no interface has it
+  case "$2" in ''|*[!0-9]*) return 0 ;; esac
+  [ "$2" -ge 16 ] && [ "$2" -le 30 ] || return 0
+  w_="$1 $a4_ $2"
+  set -- $(portal_addrs 6 udp $PORTAL_DNS)
+  [ $# = 1 ] && w_="$w_ $(hex_ip6 "$1")"
+  echo "$w_"
+}
+
+# the rules' lines in iptables-save's order: family iface v4 prefix [v6]
+ip6_canon() { # an IPv6 address, short (2001:db8::1) or full -> 8 groups, lower case, no leading zeros (as hex_ip6)
+  c_=$(printf '%s' "${1%%/*}" | tr 'A-F' 'a-f')
+  case "$c_" in *::*) l6_=${c_%%::*}; r6_=${c_#*::} ;; *) l6_=$c_; r6_=- ;; esac
+  o6_=""; n6_=0; ro6_=""
+  for g_ in $(printf '%s' "$l6_" | tr ':' ' '); do o6_="$o6_:$(printf '%x' $((16#$g_)))"; n6_=$((n6_ + 1)); done
+  if [ "$r6_" != - ]; then
+    for g_ in $(printf '%s' "$r6_" | tr ':' ' '); do ro6_="$ro6_:$(printf '%x' $((16#$g_)))"; n6_=$((n6_ + 1)); done
+    while [ "$n6_" -lt 8 ]; do o6_="$o6_:0"; n6_=$((n6_ + 1)); done
+  fi
+  echo "${o6_#:}$ro6_"
+}
+portal_rules() {
+  if [ "$1" = 4 ]; then
+    echo "-A $PORTAL_CHAIN -s $3/$4 -d $3/32 -i $2 -p udp -m udp --dport 53 -j DNAT --to-destination $3:$PORTAL_DNS"
+    echo "-A $PORTAL_CHAIN -s $3/$4 -d $3/32 -i $2 -p tcp -m tcp --dport 80 -j DNAT --to-destination $3:$PORTAL_HTTP"
+  elif [ -n "$5" ]; then
+    echo "-A $PORTAL_CHAIN -d $5/128 -i $2 -p udp -m udp --dport 53 -j DNAT --to-destination [$5]:$PORTAL_DNS"
+  fi
+}
+portal_save() { if [ "$1" = 6 ]; then ip6tables-save -t nat; else iptables-save -t nat; fi; }
+
+# The rules for family $1 are in place for "$2": as many DNAT rules as wanted, each to the right address
+# and port on the right interface, and exactly one jump.
+portal_ok() {
+  s_=$(portal_save $1) || return 1
+  set -- $1 $2
+  n_=$(portal_rules "$@" | grep -c .)
+  [ "$(printf '%s\n' "$s_" | grep -c "^-A $PORTAL_CHAIN ")" = "$n_" ] || return 1
+  if [ "$1" = 4 ]; then
+    for p_ in $PORTAL_DNS $PORTAL_HTTP; do
+      printf '%s\n' "$s_" | grep -q "^-A $PORTAL_CHAIN .*-i $2 .*--to-destination $3:$p_\$" || return 1
+    done
+  elif [ -n "$5" ]; then
+    # ip6tables-save shortens the address (2001:db8::20): the -d match and the target are compared with the
+    # kiosk's socket address in one form, so a rule for an address the hotspot no longer has is rebuilt
+    l_=$(printf '%s\n' "$s_" | grep "^-A $PORTAL_CHAIN .*-i $2 .*--to-destination \[[0-9a-fA-F:]*\]:$PORTAL_DNS\$") || return 1
+    d_=$(printf '%s\n' "$l_" | sed -n 's/.* -d \([0-9a-fA-F:]*\)\/128 .*/\1/p')
+    t_=$(printf '%s\n' "$l_" | sed -n 's/.*--to-destination \[\([0-9a-fA-F:]*\)\]:.*/\1/p')
+    w6_=$(ip6_canon "$5")
+    [ -n "$d_" ] && [ "$(ip6_canon "$d_")" = "$w6_" ] && [ "$(ip6_canon "$t_")" = "$w6_" ] || return 1
+  fi
+  [ "$(printf '%s\n' "$s_" | grep -c "^-A PREROUTING .*-j $PORTAL_CHAIN\$")" = 1 ]
+}
+
+portal_clear() { # removes everything of ours, both families (one read each when there is nothing). 1 when a
+  # table couldn't be read, or our chain is still there afterwards: the caller tries again on its next check
+  r_=0
+  for f_ in 4 6; do
+    s_=$(portal_save $f_ 2>/dev/null) || { r_=1; continue; }
+    case "$s_" in *"$PORTAL_CHAIN"*) ;; *) continue ;; esac
+    printf '%s\n' "$s_" | grep "^-A PREROUTING .*-j $PORTAL_CHAIN\$" | while read -r l_; do
+      # shellcheck disable=SC2086
+      ipt $f_ -t nat -D ${l_#-A } 2>/dev/null
+    done
+    ipt $f_ -t nat -F $PORTAL_CHAIN 2>/dev/null; ipt $f_ -t nat -X $PORTAL_CHAIN 2>/dev/null
+    s_=$(portal_save $f_ 2>/dev/null) || { r_=1; continue; }
+    case "$s_" in *"$PORTAL_CHAIN"*) r_=1 ;; esac
+  done
+  return $r_
+}
+
+portal_set() { # family "<iface> <v4> <prefix> [<v6>]": the chain's contents (atomic), then one jump
+  f_=$1; set -- $1 $2
+  {
+    echo "*nat"
+    echo ":$PORTAL_CHAIN - [0:0]"
+    portal_rules "$@"
+    echo "COMMIT"
+  } | if [ "$f_" = 6 ]; then ip6tables-restore -w 5 --noflush; else iptables-restore -w 5 --noflush; fi || return 1
+  [ "$(portal_save $f_ | grep -c "^-A PREROUTING .*-j $PORTAL_CHAIN\$")" = 1 ] && return 0
+  portal_save $f_ | grep "^-A PREROUTING .*-j $PORTAL_CHAIN\$" | while read -r l_; do
+    # shellcheck disable=SC2086
+    ipt $f_ -t nat -D ${l_#-A }
+  done
+  ipt $f_ -t nat -I PREROUTING 1 -j $PORTAL_CHAIN
+}
+
+portal_say() { [ "$1" = "$PORTAL_SHOWN" ] && return 0; PORTAL_SHOWN=$1; setp $PORTAL_PROP "$1"; say "setup hotspot portal: $1"; }
+portal_check() {
+  w_=$(portal_wanted)
+  if [ -z "$w_" ]; then
+    [ "$PORTAL_STATE" = off ] && return 0
+    # "off" only once both tables are seen clear; until then every check tries again
+    if portal_clear; then PORTAL_STATE=off; portal_say off; else portal_say "error: the rules could not be removed yet"; fi
+    return 0
+  fi
+  if portal_ok 4 "$w_" && portal_ok 6 "$w_"; then
+    # in place (also a new helper finding its predecessor's): kept as they are, no gap for the phones
+    PORTAL_STATE=$w_; portal_say "on ${w_%% *}"
+  else
+    portal_clear
+    if portal_set 4 "$w_" && portal_set 6 "$w_" && portal_ok 4 "$w_" && portal_ok 6 "$w_"; then
+      PORTAL_STATE=$w_; portal_say "on ${w_%% *}"
+    else
+      portal_clear; PORTAL_STATE=off; portal_say "error: iptables refused the rules"
+    fi
+  fi
+}
+portal_start() { # one check now (it also removes an earlier run's rules), then the loop
+  portal_check
+  parent_=$$
+  ( while :; do
+      sleep "$PORTAL_EVERY"
+      if ! kill -0 "$parent_" 2>/dev/null; then
+        # The helper is gone (init restarts it, and its first check clears too). Take the rules away now, and
+        # if a table can't be read, try again for a minute: cleanup only, never portal_check, which could put
+        # rules back. Bounded, so a loop that outlived its helper doesn't stay.
+        i_=0; until portal_clear || [ $i_ -ge 30 ]; do sleep "$PORTAL_EVERY"; i_=$((i_ + 1)); done
+        exit 0
+      fi
+      portal_check
+    done ) &
+  PORTAL_PID=$!
+}
+portal_stop() { alive "$PORTAL_PID" && kill "$PORTAL_PID"; PORTAL_PID=""; }
+
+# --- the setup hotspot's name (#197) ------------------------------------------------------------
+# Android 10 names its local-only hotspot "<framework string>_<1000..9999>", the string being "AndroidShare"
+# (WifiApConfigStore.generateLocalOnlyHotspotConfig), and gives apps no way to change it. A resource overlay of that
+# string makes it "Glassworks_NNNN". Android 10 applies an overlay of framework-res only when it is preinstalled
+# (framework-res declares no overlayable, and the S1's is signed with Aqara's key: docs/research/
+# setup-hotspot-portal-and-name.md), so it goes on /product through a Magisk module, which Magisk mounts at boot:
+#   $HN_MOD/module.prop
+#   $HN_MOD/$HN_PATH      the overlay, hotspot-name.apk from the signed radio bundle (tools/radio/hotspot-name/),
+#                         or with dev-override a root-made $DIR/hotspot-name.apk
+# Once per helper start: with the overlay in the running bundle, the module is put in place (or replaced when the
+# bundle's overlay differs); without it, or with persist.s1kiosk.hotspot_name=android (the undo; any app may set it,
+# which can only give Android's name back), the module is removed. Either takes effect at the next restart.
+# Nothing else is touched: no file of Android's, no setting. Status: sys.s1kiosk.hotspot_name.status =
+#   glassworks | android | "glassworks after a restart" | "android after a restart"
+#   | "android: the module is disabled in Magisk" | "android: Magisk loads no modules here (no .../busybox)"
+#   | "error: ..."
+HN_APK=hotspot-name.apk
+HN_PKG=sh.edm.s1kiosk.overlay.hotspotname
+HN_MODS=${S1R_MODULES:-/data/adb/modules}
+# Magisk mounts modules only once its own setup is in /data/adb/magisk: without busybox there, post-fs-data stops
+# with "Magisk environment incomplete, abort" before any module (Magisk v31.1 native/src/core/bootstages.rs:76-79,
+# :132-134). The Magisk app puts it there; our boot image does since #615 (s1kiosk_magiskenv.rc). A panel installed
+# before that still lacks it until its next install with Kiln.
+HN_MAGISK_BB=${S1R_MAGISK_BB:-/data/adb/magisk/busybox}
+# Staged in the helper's own root-only dir, never in $HN_MODS: Magisk loads every directory there at boot, dot-names
+# included, so a stage a stopped helper left would load. Same /data filesystem, so the final mv is a rename.
+HN_STAGE=$DIR/hotspot-name-module.new
+HN_NEWAPK=$DIR/hotspot-name.apk.new   # a new overlay for an installed module, renamed into it when complete
+HN_MOD=$HN_MODS/s1kiosk_hotspot_name
+HN_PATH=system/product/overlay/S1HotspotName/S1HotspotName.apk
+HN_PROP=persist.s1kiosk.hotspot_name
+HN_STATUS=sys.s1kiosk.hotspot_name.status
+# Where Magisk mounts the overlay while it is on: AssetManager loads framework overlays from the APKs it finds there
+HN_LIVE=${S1R_HN_LIVE:-/product/${HN_PATH#system/product/}}
+
+hn_say() { setp $HN_STATUS "$1"; say "hotspot name: $1"; }
+hn_apply() {
+  # where binaries come from (bin): a developer's copy with dev-override, else the signed radio bundle
+  # what an interrupted run left (a stage, a new overlay not yet renamed in): gone before anything is staged again,
+  # so nothing of an abandoned run (a disable mark in a stage) can end up in the module
+  rm -rf "$HN_STAGE" "$HN_NEWAPK"
+  if [ -e "$HN_STAGE" ] || [ -e "$HN_NEWAPK" ]; then hn_say "error: could not clear an earlier run's stage"; return 0; fi
+  src_=""
+  if [ -n "$DEV" ] && [ -f "$DIR/$HN_APK" ]; then src_=$DIR/$HN_APK
+  elif [ -n "$RBUNDLE" ] && [ -f "$RBUNDLE/$HN_APK" ]; then src_=$RBUNDLE/$HN_APK; fi
+  if [ "$(getprop $HN_PROP)" = android ] || [ -z "$src_" ]; then
+    want_=android
+    if [ -e "$HN_MOD" ]; then
+      # a /data that refuses (read-only, full) is said as it is: no "after a restart" for a module still there
+      if ! rm -rf "$HN_MOD" || [ -e "$HN_MOD" ]; then hn_say "error: could not remove the module"; return 0; fi
+      say "hotspot name: module removed (Android's name from the next restart)"
+    fi
+  else
+    want_=glassworks
+    if ! cmp -s "$src_" "$HN_MOD/$HN_PATH"; then
+      [ -d "$HN_MODS" ] || { hn_say "error: no Magisk modules dir"; return 0; }
+      # Every step checked: a file with the wrong owner or modes never goes in (later starts compare only the bytes,
+      # so they wouldn't fix it).
+      if [ -d "$HN_MOD/${HN_PATH%/*}" ]; then
+        # An installed module: only its APK changes, by a rename (same /data). Its dir, module.prop and the operator's
+        # disable switch in Magisk stay where they are, and Magisk finds the old APK or the new one, whole.
+        a_=$HN_NEWAPK
+        if ! { cp "$src_" "$a_" && chown root:root "$a_" && chmod 644 "$a_"; }; then
+          rm -f "$a_"; hn_say "error: could not write the module"; return 0
+        fi
+        chcon u:object_r:system_file:s0 "$a_" 2>/dev/null
+        if ! mv "$a_" "$HN_MOD/$HN_PATH"; then rm -f "$a_"; hn_say "error: could not put the module in place"; return 0; fi
+        say "hotspot name: new overlay in the module (from the next restart)"
+      else
+        # A first install, or a module without its APK's dir: the whole module, staged under $DIR and renamed in.
+        t_=$HN_STAGE
+        if mkdir -p "$t_/${HN_PATH%/*}" && cp "$src_" "$t_/$HN_PATH" &&
+           printf '%s\n' "id=s1kiosk_hotspot_name" "name=Glassworks setup hotspot name" "version=1" "versionCode=1" \
+             "author=Glassworks" "description=Names the S1's setup hotspot Glassworks_NNNN (installed by the radio helper)" \
+             > "$t_/module.prop" &&
+           { [ ! -e "$HN_MOD/disable" ] || : > "$t_/disable"; } &&   # the operator's off switch in Magisk stays
+           chown -R root:root "$t_" && find "$t_" -type d -exec chmod 755 {} + && find "$t_" -type f -exec chmod 644 {} +; then
+          chcon -R u:object_r:system_file:s0 "$t_" 2>/dev/null
+          # a module without its APK has nothing to keep: it goes, so the stage doesn't land inside it
+          if { [ -e "$HN_MOD" ] && ! rm -rf "$HN_MOD"; } || [ -e "$HN_MOD" ] || ! mv "$t_" "$HN_MOD"; then
+            rm -rf "$t_"; hn_say "error: could not put the module in place"; return 0
+          fi
+          say "hotspot name: module in place (Glassworks from the next restart)"
+        else
+          rm -rf "$t_"; hn_say "error: could not write the module"; return 0
+        fi
+      fi
+    fi
+  fi
+  # Switched off in Magisk (its "disable" file): Magisk won't mount it at the next boot, so Android's name from then
+  # on; a module still mounted this boot keeps Glassworks until that restart
+  off_=""; if [ "$want_" = glassworks ] && [ -e "$HN_MOD/disable" ]; then want_=android; off_=1; fi
+  # Magisk without its setup mounts no module at all: the module waits in place, and the status says why
+  noenv_=""; if [ "$want_" = glassworks ] && [ ! -f "$HN_MAGISK_BB" ]; then want_=android; noenv_=1; fi
+  # Bounded, and a query that fails is said as such: a framework that doesn't answer isn't "android", and mustn't
+  # hold up the radio work after this
+  if ! o_=$(timeout ${S1R_HN_TIMEOUT:-20} cmd overlay list $HN_PKG 2>/dev/null); then
+    hn_say "error: Android didn't say whether the overlay is on"; return 0
+  fi
+  # Android 10 never forgets a static overlay of framework-res whose APK went away: its boot-time cleanup skips
+  # those (OverlayManagerSettings.getOverlaysForUser), so after the undo `cmd overlay list` keeps saying [x] for good.
+  # The framework loads them from the APKs present at boot, so it's live only with the APK mounted too
+  # (verified on Android 10, 2026-11-19: docs/research/setup-hotspot-portal-and-name.md).
+  case "$o_" in *"[x] $HN_PKG"*) if [ -f "$HN_LIVE" ]; then live_=glassworks; else live_=android; fi ;; *) live_=android ;; esac
+  if [ "$want_" != "$live_" ]; then hn_say "$want_ after a restart"
+  elif [ -n "$off_" ]; then hn_say "android: the module is disabled in Magisk"
+  elif [ -n "$noenv_" ]; then hn_say "android: Magisk loads no modules here (no $HN_MAGISK_BB)"
+  else hn_say "$want_"; fi
+}
+loops_stop() { tz_stop; portal_stop; }
+
 # --- our processes ---------------------------------------------------------------------------
 BRIDGE_PID=""; BRIDGE_RANGE=""; OTBR_PID=""; JOINED=""; FAILS=0
 ZB_PID=""; ZB_SERVED=""; ZB_DEATHS=0
@@ -1059,7 +1363,7 @@ fw_do() { # id sha-prefix: the whole explicit operation; the helper restarts aft
   fi
   # Start over cleanly (children are gone; the loop state belongs to the old services).
   say "firmware: restarting the helper"
-  tz_stop
+  loops_stop
   exec /system/bin/sh "$0"
 }
 
@@ -1095,7 +1399,7 @@ fw_recover() {
       echo "stock $FW_APP $FW_SPINEL" > "$FW_DIR/current"
       fwdone "error $i_: the flash was interrupted; restored stock (APP $FW_APP)"
       say "firmware: restarting the helper"
-      tz_stop
+      loops_stop
       exec /system/bin/sh "$0"
     fi
   fi
@@ -1225,6 +1529,8 @@ bt_publish() {
 status applying
 zstate
 fw_init
+portal_start
+hn_apply
 [ -n "$S1R_ONCE" ] && LOOPS=$S1R_ONCE   # tests: run this many loops, then exit
 
 while true; do
@@ -1237,7 +1543,7 @@ while true; do
     # radio without a trusted application after an interrupted flash: everything stays off
     WANT=""; enforce; br_net_off; fw_off
     status error "radio firmware missing after an interrupted flash: flash Aqara stock"
-    if [ -n "$LOOPS" ]; then LOOPS=$((LOOPS - 1)); [ $LOOPS -le 0 ] && { tz_stop; exit 0; }; fi
+    if [ -n "$LOOPS" ]; then LOOPS=$((LOOPS - 1)); [ $LOOPS -le 0 ] && { loops_stop; exit 0; }; fi
     sleep ${S1R_SLEEP:-3}; continue
   fi
   # Re-enforce every 3 s, in every mode incl. off: Aqara's boot sequence (zigbee_cpcd_factory ->
@@ -1262,6 +1568,6 @@ while true; do
     status error "services not in wanted state:$bad"
   fi
   if [ $FAILS -gt 20 ]; then status error "giving up after repeated failures"; exec sleep 2147483647; fi
-  if [ -n "$LOOPS" ]; then LOOPS=$((LOOPS - 1)); [ $LOOPS -le 0 ] && { tz_stop; exit 0; }; fi
+  if [ -n "$LOOPS" ]; then LOOPS=$((LOOPS - 1)); [ $LOOPS -le 0 ] && { loops_stop; exit 0; }; fi
   sleep ${S1R_SLEEP:-3}
 done

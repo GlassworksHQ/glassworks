@@ -11,10 +11,14 @@
 #   sisdk/                   frames/aqara-s1-plus/tools/radio/build-sisdk-runtime.sh's output, checked against
 #                            frames/aqara-s1-plus/tools/radio/sisdk-runtime.sha256 (SISDK_DIR: a copy to reuse, such as
 #                            CI's cache; it is checked the same way and rebuilt if it doesn't match)
+#   hotspot-name.apk         frames/aqara-s1-plus/tools/radio/hotspot-name/build.sh's output (the Android SDK's
+#                            build-tools; skipped for a base commit from before it existed)
 # Signed with a throwaway Ed25519 key made here, not the release key: the signature is 64 bytes
-# whichever key makes it, so the APK's bundle is the shipped one but for manifest.sig and the
-# manifest's version line. No secret is read. BUILD ONLY: never talks to a device. Needs docker
-# (for the sisdk build), python3 and openssl.
+# whichever key makes it, so the APK's bundle is the shipped one but for manifest.sig, the
+# manifest's version line and hotspot-name.apk: build.sh signs the overlay with a key made for each
+# build, so its bytes, and its sha256 in the manifest, differ from the release's (its size within a few
+# bytes). No secret is read. BUILD ONLY: never talks to a device. Needs docker
+# (for the sisdk build), python3, openssl and, for the hotspot name overlay, the Android SDK.
 #
 # Keep it in step with release.yml: tools/size/test/test_apksize.py checks that both bundle the same
 # files.
@@ -71,11 +75,18 @@ for a in json.load(open(lock))["assets"]:
     print(a["name"], len(data), h)
 PY
 
+hotspot=()
+if [ -x "$RADIO/hotspot-name/build.sh" ]; then
+  "$RADIO/hotspot-name/build.sh" "$W/hotspot-name"
+  hotspot=(--file "hotspot-name.apk=$W/hotspot-name/hotspot-name.apk:0644")
+fi
+
 openssl genpkey -algorithm ed25519 -out "$W/throwaway.pem" 2>/dev/null
 rm -rf "$OUT/radio-bundle"
 python3 "$RADIO/make-bundle.py" --version 1 --force --key "$W/throwaway.pem" --out "$OUT" \
   --file s1kiosk_radio.sh="$RADIO/s1kiosk_radio.sh":0700 \
   --file "otbr-agent=$W/radio-in/otbr-agent:0700" \
   --file "ot-ctl=$W/radio-in/ot-ctl:0700" \
+  ${hotspot[@]+"${hotspot[@]}"} \
   --dir "sisdk=$SISDK"
 du -sh "$OUT/radio-bundle"

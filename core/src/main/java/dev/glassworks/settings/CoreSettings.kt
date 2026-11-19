@@ -54,6 +54,8 @@ class CoreSettings(
                 "Home Assistant", "Found automatically", TextKind.ADDRESS,
                 value = { prefs.urlSetting.takeIf { it != KioskPrefs.AUTO }.orEmpty() },
                 shown = { it.ifBlank { found() } }, restartsApp = true,
+                // The panel's own connection: copying another panel's would sign this one's dashboard out (#466 panel run).
+                perPanel = true,
             ) { prefs.urlSetting = it.ifBlank { KioskPrefs.AUTO } },
             account()?.let { SettingsItem.Info(title = { ACCOUNT_TITLE }, detail = { account().orEmpty() }) },
             switch("Full screen", "Hide Home Assistant's header and sidebar", { prefs.hideHeader }) {
@@ -105,8 +107,9 @@ class CoreSettings(
 
     // 0.4.3's "Screen follows presence" (#63's design names it this): on, the screen wakes when
     // someone comes close and goes off when idle; off, it stays on. On means both: the screen mode
-    // (HA's `Screen mode` select) and waking on approach (`wake_on_approach`, no other control).
-    private fun wake(detail: String) = switch(WAKE_TITLE, detail, { prefs.screenMode == "presence" && prefs.wakeOnApproach }) {
+    // (HA's `Screen mode` select) and waking on approach (`wake_on_approach`, no other control). It reads what
+    // ScreenPolicy wakes on (#601), on the panel and on the Manage page.
+    private fun wake(detail: String) = switch(WAKE_TITLE, detail, { prefs.approachWakes }) {
         prefs.screenMode = if (it) "presence" else "always"
         if (it) prefs.wakeOnApproach = true
     }
@@ -176,8 +179,8 @@ class CoreSettings(
 
     private fun text(
         title: String, hint: String, kind: TextKind, value: () -> String,
-        shown: (String) -> String = { it }, restartsApp: Boolean = false, save: (String) -> Unit,
-    ) = SettingsItem.Text(title, hint, kind, value, shown = shown, restartsApp = restartsApp, save = { v, done -> save(v.trim()); done(null) })
+        shown: (String) -> String = { it }, restartsApp: Boolean = false, perPanel: Boolean = false, save: (String) -> Unit,
+    ) = SettingsItem.Text(title, hint, kind, value, shown = shown, restartsApp = restartsApp, perPanel = perPanel, save = { v, done -> save(v.trim()); done(null) })
 
     private fun switch(title: String, detail: String, value: () -> Boolean, save: (Boolean) -> Unit) =
         SettingsItem.Switch(title, detail, value) { v, done -> save(v); done(null) }

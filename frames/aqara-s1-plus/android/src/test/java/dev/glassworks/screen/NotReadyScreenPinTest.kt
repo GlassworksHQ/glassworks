@@ -14,7 +14,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowBuild
 import org.robolectric.shadows.ShadowSensor
-import sh.edm.s1kiosk.KioskApp
+import dev.glassworks.s1.KioskApp
 import dev.glassworks.glassworksRuntime
 import dev.glassworks.engine.gecko.GeckoPinHarness
 import dev.glassworks.engine.gecko.GeckoShadows

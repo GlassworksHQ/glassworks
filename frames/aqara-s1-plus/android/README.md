@@ -55,7 +55,7 @@ current Home Assistant frontend. GeckoView ships its own up-to-date engine insid
 - **Sign in with your phone**: if HA shows its login page, the panel covers it with a QR code for
   `http://<panel-ip>:8099/signin`. Signing in on the phone gives the panel a refresh token (HA OAuth /
   IndieAuth), and the dashboard then runs with HA's external auth (`external_auth=1`, like the
-  Companion app). "Sign in on this panel instead" keeps HA's normal login page. See
+  Companion app). "Sign in on this panel instead" shows HA's login page on the panel for the same sign-in. See
   [docs/onboarding.md](../../../docs/onboarding.md).
 - **Microphone/camera work over plain `http://`.** The dashboard host is added to
   Gecko's `dom.securecontext.allowlist`, so `window.isSecureContext` is true and
@@ -159,7 +159,7 @@ followed by `adb uninstall sh.edm.s1kiosk` (an active device admin can't be unin
 A="adb shell am start -n sh.edm.s1kiosk/.MainActivity"
 $A --es url http://homeassistant.local:8123/my-dashboard   # set + persist the URL ("auto" = discover HA)
 $A --ez show_setup true    # preview the setup screen at its live step (changes nothing)
-$A --ez show_setup true --es setup_step wifi   # ... or a given step: wifi|ha|signin|panes|radio|done
+$A --ez show_setup true --es setup_step wifi   # ... or a given step: wifi|ha|signin|panes|radio|silent_updates|done
 $A --ez show_setup false   # close the preview
 $A --ez show_signin true   # preview the QR sign-in step (doesn't touch the session)
 $A --es open http://192.168.1.100:8123/profile/general      # navigate once (not persisted)
@@ -174,6 +174,7 @@ $A --ei idle_off_sec 120    # screen off after 120 s idle (0 = never)
 $A --ef presence_range_m 1.0   # VI5300 range (needs WRITE_SECURE_SETTINGS)
 $A --es screen off         # or on
 $A --ez test_hold true --ei test_hold_s 1800   # screen on past the idle timeout for 1800 s (at most 3600), brightness unchanged; no setting changes; outlives an app restart, not a reboot; test_hold false ends it (Clarity, #240)
+$A --ez test_hold true --es test_dashboard 'http://127.0.0.1:8089/clarity-ref/start'   # with a test hold only: shows that page (127.0.0.1 or localhost only) instead of the saved dashboard until the hold ends or test_dashboard ''; the dashboard setting and the sign-in don't change; outlives an app restart (Clarity's graded part, docs/perf.md)
 $A --ez restart true       # restart the app process
 $A --es wake_model okay_nabu --ef wake_threshold 0.9 --ef mic_gain 2.0 --ez mic_muted false  # wake word id (an old *.tflite name maps to its microWakeWord model); the threshold of that word
 $A --es api_key $(openssl rand -base64 32) --ez api_encryption true   # manual ESPHome API key (HA normally provisions one)
@@ -204,7 +205,7 @@ size until reboot. Use `zoom` instead.
 I="adb shell am start -n sh.edm.s1kiosk/.improv.ImprovActivity"
 $I --ez improv true        # start provisioning mode (10 min); false = stop
 $I --ez improv_auto false  # don't auto-start when there's no network after boot (default true)
-$I --ez improv_proximity_auth true   # also authorize by approaching the panel (default false)
+$I --ez improv_proximity_auth true   # also authorize by approaching the panel (default false; on without touch)
 $I --ez release_device_owner true    # escape hatch: clearDeviceOwnerApp()
 adb logcat -s Glassworks.Improv          # BLE support report at startup, states, RPCs
 ```
@@ -214,7 +215,7 @@ closing, its plan, frames leaving the panel, and the stream's clients. Never the
 
 ```sh
 adb logcat -s Glassworks.Camera
-adb shell am start -n sh.edm.s1kiosk/.CameraAdbActivity --es camera_use snapshots --ez onvif_stream true \
+adb shell am start -n sh.edm.s1kiosk/dev.glassworks.camera.CameraAdbActivity --es camera_use snapshots --ez onvif_stream true \
     --es camera_stream_sign_in 'viewer:a-long-password'   # adb only: camera settings and the stream's sign-in
 ```
 

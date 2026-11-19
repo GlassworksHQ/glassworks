@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ListCard, Tile, Tiles, manage as m } from "@/components/Manage";
 import { FrameGrid } from "@/components/FrameGrid";
 import { PaneRows } from "@/components/PaneRows";
-import { frames } from "@/lib/frames";
+import { frames, heroPanel } from "@/lib/frames";
 import { release } from "@/lib/release";
 import { panes, stageCounts } from "@/lib/site";
 import { JsonLd } from "@/components/JsonLd";
@@ -21,20 +21,21 @@ export const metadata = pageMetadata({
 });
 
 export default async function Home() {
-  const [post] = await getPosts();
+  const [[post], latest] = await Promise.all([getPosts(), release()]);
   const app = frames.find((f) => f.project)?.project?.name ?? "Glassworks";
   return (
     <>
       <JsonLd nodes={[organizationLd(), websiteLd(), softwareLd(SITE_DESCRIPTION)]} />
       <StackStory
-        release={{ name: app, version: release.version, href: release.href }}
+        release={{ name: app, version: latest.version, href: latest.href }}
         post={post?.fresh ? { title: post.title, href: post.url } : undefined}
+        panel={heroPanel()}
       />
 
       <Tiles>
         <Tile href="/frames" label="Frames" value={frames.length} sub={stageCounts(frames)} />
         <Tile href="/panes" label="Panes" value={panes.length} sub={stageCounts(panes)} />
-        <Tile href={release.href} label="Latest release" value={release.version} sub={`${app} · ${release.date}`} />
+        <Tile href={latest.href} label="Latest release" value={latest.version} sub={`${app} · ${latest.date}`} />
         <Tile href="/docs/principles" label="Docs" value="Principles" sub="What it is and isn't" />
       </Tiles>
 

@@ -76,6 +76,10 @@ class ManagePageMockups {
         save("07b-reboot-code", b.get("/confirm/reboot"))
         save("08-about", b.get("/about"))
         save("09-wall-base", b.get("/wall-base"))
+        // #466: All panels as the server draws it; panels-shots.mjs runs its script against fakes.
+        val panels = b.get("/panels")
+        save("13-all-panels", panels)
+        File(System.getProperty("s1.mockupDir")!!, "manage/13-all-panels.csp").writeText(panels.headers.getValue("Content-Security-Policy"))
         // The QR flow and back: the done page offers Manage; signed in, every QR page's header leads back.
         save("10-qr-done", anon.get("/callback"))
         save("10b-qr-done-signed-in", b.get("/callback"))
@@ -105,5 +109,33 @@ class ManagePageMockups {
         save("11-overview-panes-on-off", b.get("/"))
         save("11b-pane-off", b.get("/sendspin"))
         save("11c-pane-switch-only", b.get("/time-zone"))
+
+        // #435: "Allow a new computer", on a panel whose app may answer adb (the Mirror's). Made-up keys.
+        fun key(seed: Int, name: String): dev.glassworks.manage.AdbKey {
+            val bytes = kotlin.random.Random(seed).nextBytes(524).also { it[0] = 64; it[1] = 0; it[2] = 0; it[3] = 0 }
+            return dev.glassworks.manage.AdbKey.parse(java.util.Base64.getEncoder().encodeToString(bytes) + " " + name)!!
+        }
+        val computers = dev.glassworks.manage.AdbComputers(File(f.dir, "adb-computers.json"), allow = { null }, event = {}, clock = { t })
+        val u = ManageFixture(usb = dev.glassworks.manage.ManageUsbDebugging(computers, dev.glassworks.manage.ManagePages(clock = { t })::time, {}))
+        u.now = t
+        val listed = key(7, "sam@desktop")
+        computers.asked(listed)
+        computers.allowAsking(listed.fingerprint, remember = true, who = "Alex")
+        computers.asked(key(8, "alex@laptop"))
+        val ub = u.Browser().apply { signInWithHa() }
+        save("13-security-allow-computer", ub.get("/security"))
+        save("13b-security-changed", ub.get("/security?usb=changed"))
+        val uc = u.Browser().apply {
+            get("/")
+            post("/manage/code", mapOf("next" to "/"))
+            post("/manage/code", mapOf("next" to "/", "code" to u.shown.last()!!.code))
+        }
+        save("13c-security-code-sign-in", uc.get("/security"))
+        ub.post(dev.glassworks.manage.ManageUsbDebugging.ALLOW, mapOf("csrf" to ub.csrf(), "fingerprint" to key(8, "alex@laptop").fingerprint, "remember" to "1"))
+        save("13d-security-allowed", ub.get("/security?usb=allowed"))
+        // Android refused: the computer still asks. Another computer waits, or none does.
+        computers.asked(key(9, "jo@laptop"))
+        save("13e-security-refused", ub.get("/security?usb=refused"))
+        save("13f-security-not-waiting", ub.get("/security?usb=notwaiting"))
     }
 }

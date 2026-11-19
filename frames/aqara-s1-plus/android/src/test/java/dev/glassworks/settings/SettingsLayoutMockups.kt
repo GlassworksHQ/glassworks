@@ -20,9 +20,9 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowBuild
-import sh.edm.s1kiosk.KioskApp
+import dev.glassworks.s1.KioskApp
 import dev.glassworks.KioskPrefs
-import sh.edm.s1kiosk.frame.AqaraS1Plus
+import dev.glassworks.s1.frame.AqaraS1Plus
 import dev.glassworks.radio.FixedReadout
 import dev.glassworks.radio.radioDefinition
 import dev.glassworks.ui.Mockup
@@ -37,7 +37,7 @@ import dev.glassworks.ui.Mockup
 @Config(sdk = [34], application = Application::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class SettingsLayoutMockups {
-    private val S1DeviceApps = sh.edm.s1kiosk.frame.S1Device.AQARA_APPS.keys
+    private val S1DeviceApps = dev.glassworks.s1.frame.S1Device.AQARA_APPS.keys
     private val app = RuntimeEnvironment.getApplication()
     private val panes = PaneFixtures(app)
 
@@ -66,7 +66,7 @@ class SettingsLayoutMockups {
         val byId = running.associateBy { it.id }
         fun model() = MenuFixture.model(app, radio, status = "screen on · presence near · voice=idle", panes = defs, running = { byId[it] }).let { m ->
             // The frame's Device page, after Screen, as S1Settings puts it.
-            val device = if (frame is AqaraS1Plus) sh.edm.s1kiosk.frame.S1Device(sh.edm.s1kiosk.frame.AqaraCloud(run = { "stopped" }), props, reader = { it.run() }).section(app, frame.frameRelease) { byId[it] }
+            val device = if (frame is AqaraS1Plus) dev.glassworks.s1.frame.S1Device(dev.glassworks.s1.frame.AqaraCloud(run = { "stopped" }), props, reader = { it.run() }).section(app, frame.frameRelease) { byId[it] }
                 else frame.deviceSection(app) { byId[it] }
             device?.let { lastDevice = it; lastFrame = frameName }
             val at = m.sections.indexOfFirst { it.id == "screen" } + 1
@@ -100,6 +100,16 @@ class SettingsLayoutMockups {
         java.io.File(Mockup.dir!!, "$name-manage.html").writeBytes(b.get("/device").body)
     }
 
+    /** #605: the Manage page's question before Beta, as HTML. */
+    private fun manageAskBeta(name: String) {
+        val device = lastDevice ?: return
+        val f = ManageFixture()
+        f.statusFn = { f.status.copy(frame = lastFrame, sections = listOf(device)) }
+        val b = f.Browser().also { it.signInWithHa() }
+        val form = mapOf("csrf" to b.csrf(), "section" to "device", "key" to dev.glassworks.update.UpdateChannelRow.TITLE, "value" to "beta")
+        java.io.File(Mockup.dir!!, "$name-manage.html").writeBytes(b.post("/settings", form).body)
+    }
+
     private fun shots(prefix: String, w: Int, h: Int, open: () -> KioskSettingsOverlay) {
         fun shot(name: String, id: String?, then: (KioskSettingsOverlay) -> Unit = {}) {
             val o = open()
@@ -121,6 +131,15 @@ class SettingsLayoutMockups {
         if (lastDevice?.items?.any { it is dev.glassworks.pane.SettingsItem.Info && it.title() == "Frame version" } == true) {
             shot("08b-device-frame-version", "device") { Mockup.idle(); it.previewScrollTo(Mockup.label(it, "Frame version"), alignBottom = true) }
         }
+        // #605: the Update channel row, its choices, and the row on Beta.
+        val channel = dev.glassworks.update.UpdateChannelRow.TITLE
+        shot("08c-device-update-channel", "device") { Mockup.idle(); it.previewScrollTo(Mockup.label(it, channel), alignBottom = true) }
+        shot("08d-update-channel-pick", "device") { it.previewEdit(channel) }
+        manageAskBeta("$prefix-08d-update-channel-ask-beta")
+        KioskPrefs(app).updateChannel = dev.glassworks.update.UpdateChannel.BETA
+        shot("08e-update-channel-beta", "device") { Mockup.idle(); it.previewScrollTo(Mockup.label(it, channel), alignBottom = true) }
+        manageDevice("$prefix-08e-update-channel-beta")
+        KioskPrefs(app).updateChannel = dev.glassworks.update.UpdateChannel.STABLE
     }
 
     @Test
@@ -166,7 +185,7 @@ class SettingsLayoutMockups {
     fun mirror() {
         assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", Mockup.dir != null)
         app.applicationInfo.targetSdkVersion = 35
-        val o = menu(sh.edm.s1kiosk.frame.TestFrames.mirror(app), "lululemon Studio Mirror", listOf(panes.voice()), setOf("diagnostics"), "1.1 of 2 GB")
+        val o = menu(dev.glassworks.s1.frame.TestFrames.mirror(app), "lululemon Studio Mirror", listOf(panes.voice()), setOf("diagnostics"), "1.1 of 2 GB")
         o.previewSection("device")
         Mockup.idle()
         Mockup.save("layout-mirror-08-device", o, Mockup.H, Mockup.W)

@@ -1,4 +1,4 @@
-# S1 Unleashed docs
+# Glassworks docs
 
 Start with **[Glassworks Principles](principles.md)**: what Glassworks is, what it isn't, and the
 rules every part follows.
@@ -8,6 +8,7 @@ rules every part follows.
 | Guide | What it covers |
 |---|---|
 | [onboarding.md](onboarding.md) | Design notes for the first boot: Wi-Fi (Improv), adding it to Home Assistant, QR sign-in, dashboard picker (the steps themselves are in install.md) |
+| [kiln-images.md](kiln-images.md) | Adding a community image to Kiln: the recipe format, the step library, Kiln's safety steps, the review an image needs, and its `?image=` link |
 | [manage.md](manage.md) | The Manage page at `http://<panel>:8099/`: signing in through Home Assistant or with the code on the panel, the log, diagnostics, and how it keeps you safe |
 | [esphome.md](esphome.md) | The panel as an ESPHome device: every entity, the voice assistant, encryption, app updates |
 | [notifications.md](notifications.md) | Notifications from Home Assistant: the `notify` action and its fields, button presses, priorities, Do not disturb, the doorbell blueprint |

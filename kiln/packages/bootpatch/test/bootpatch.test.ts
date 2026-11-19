@@ -14,7 +14,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { type Compressor, loadCompressor } from '../src/compress';
 import { crc32 } from '../src/apk';
 import {
-  type OverlayFile, isMagiskPatched, patchBoot, replaceBootlogo, s1Overlay, vbmetaFlags, withVbmetaFlags,
+  type OverlayFile, isMagiskPatched, magiskBusybox, patchBoot, replaceBootlogo, s1Overlay, vbmetaFlags, withVbmetaFlags,
 } from '../src/index';
 
 const GOLDEN = process.env.S1_WEB_GOLDEN ?? join(homedir(), 'src/aqara-panel-backups/web-golden');
@@ -93,10 +93,10 @@ describe('s1Overlay (unit)', () => {
   };
   const base = { rc: enc.encode('a'), loaderSh: enc.encode('b'), radioSh: enc.encode('c'), otbrAgent: enc.encode('d'),
     otCtl: enc.encode('e'), firstbootSh: enc.encode('f'), netwatchSh: enc.encode('g'), updateSh: enc.encode('h'),
-    verify: enc.encode('m'), bundlePub: enc.encode(`${'ab'.repeat(32)}\n`) };
+    verify: enc.encode('m'), bundlePub: enc.encode(`${'ab'.repeat(32)}\n`), magiskBusybox: enc.encode('o') };
   it('refuses a key that is not an adb public key, accepts none', () => {
     expect(() => s1Overlay({ ...base, adbKeys: enc.encode('ssh-rsa AAAA') })).toThrow(/QAAAA/);
-    expect(s1Overlay({ ...base, adbKeys: new Uint8Array(0) })).toHaveLength(11);
+    expect(s1Overlay({ ...base, adbKeys: new Uint8Array(0) })).toHaveLength(12);
   });
   it('puts every file under its Glassworks name, in patch-boot-magisk.sh\'s order', () => {
     const files = s1Overlay({ ...base, adbKeys: new Uint8Array(0), bootAnimation: storedZip() });
@@ -104,7 +104,7 @@ describe('s1Overlay (unit)', () => {
       '644 overlay.d/glassworks.rc', '700 overlay.d/sbin/glassworks_loader.sh', '700 overlay.d/sbin/glassworks_verify',
       '644 overlay.d/sbin/glassworks_bundle.pub', '600 overlay.d/sbin/glassworks_adb_keys', '700 overlay.d/sbin/glassworks_radio.sh',
       '700 overlay.d/sbin/otbr-agent', '700 overlay.d/sbin/ot-ctl', '700 overlay.d/sbin/glassworks_firstboot.sh',
-      '700 overlay.d/sbin/glassworks_netwatch.sh', '700 overlay.d/sbin/glassworks_update.sh',
+      '700 overlay.d/sbin/glassworks_netwatch.sh', '700 overlay.d/sbin/glassworks_update.sh', '700 overlay.d/sbin/magisk-busybox',
       '644 overlay.d/sbin/glassworks_bootanimation.zip',
     ]);
     expect(files.some((f) => f.path.includes('s1kiosk'))).toBe(false);
@@ -112,6 +112,11 @@ describe('s1Overlay (unit)', () => {
   it('refuses a radio bundle key that is not 32 hex bytes, and an empty verifier', () => {
     expect(() => s1Overlay({ ...base, adbKeys: new Uint8Array(0), bundlePub: enc.encode('abc') })).toThrow(/public key/);
     expect(() => s1Overlay({ ...base, adbKeys: new Uint8Array(0), verify: new Uint8Array(0) })).toThrow(/verifier/);
+  });
+  it('carries Magisk\'s busybox for its own setup (root only), and refuses an empty one', () => {
+    const files = s1Overlay({ ...base, adbKeys: new Uint8Array(0) });
+    expect(files.find((f) => f.path === 'overlay.d/sbin/magisk-busybox')).toMatchObject({ mode: 0o700, data: enc.encode('o') });
+    expect(() => s1Overlay({ ...base, adbKeys: new Uint8Array(0), magiskBusybox: new Uint8Array(0) })).toThrow(/busybox/);
   });
 });
 
@@ -136,6 +141,7 @@ describe.skipIf(!HAVE_GOLDEN)('golden: patchBoot == frames/aqara-s1-plus/tools/r
     adbKeys: opts.key === false ? new Uint8Array(0) : g('fixtures/test_adbkey.pub'),
     radioSh: ov('glassworks_radio.sh'), otbrAgent: ov('otbr-agent'), otCtl: ov('ot-ctl'),
     firstbootSh: ov('glassworks_firstboot.sh'), netwatchSh: ov('glassworks_netwatch.sh'), updateSh: ov('glassworks_update.sh'),
+    magiskBusybox: busybox,
     bootAnimation: opts.anim === false ? undefined : ov('glassworks_bootanimation.zip'),
   });
   /** The config the CLI printed ("--- Magisk config:" in out/<case>.log). */
@@ -144,7 +150,8 @@ describe.skipIf(!HAVE_GOLDEN)('golden: patchBoot == frames/aqara-s1-plus/tools/r
     return log.split('--- Magisk config:\n')[1]!.split('--- overlay.d:')[0]!;
   };
   let apk: Uint8Array;
-  beforeAll(() => { apk = g('fixtures/Magisk-v31.1.apk'); });
+  let busybox: Uint8Array;
+  beforeAll(async () => { apk = g('fixtures/Magisk-v31.1.apk'); busybox = await magiskBusybox(apk); });
 
   const cases: { name: string; input: string; wasMagisk: boolean; key?: boolean; anim?: boolean; preinit?: string }[] = [
     { name: 'stock-4.5.80', input: 'in/boot-4.5.80.img', wasMagisk: false },

@@ -3,7 +3,7 @@
 // has no `cmd`, its shell can't disable apps, and it keeps the home app the way Android 6 does: an
 // "Always" pick holds until the set of home apps changes, and the next HOME then shows the chooser.
 import type { PanelShell } from '@glassworks/adb';
-import { fakeApk, filter, type FakeEl } from '@glassworks/app-adb/fakes';
+import { FakeKeySocket, fakeApk, filter, type FakeEl } from '@glassworks/app-adb/fakes';
 import { GLASSWORKS, PRIVILEGED, type MirrorApp } from '../src/app';
 import { GLASS_PANES_KEY_FINGERPRINT } from '../src/services';
 
@@ -84,7 +84,7 @@ const FINGERPRINT = 'Android/msm8916_64/msm8916_64:6.0.1/MMB29M/11120023:userdeb
 
 /**
  * A stand-in for the legacy build of Glassworks for generic Android (#408), as its manifest is: the
- * package, the privileged permissions, MainActivity (sh.edm.s1kiosk.MainActivity) behind
+ * package, the privileged permissions, MainActivity (dev.glassworks.MainActivity) behind
  * WRITE_SECURE_SETTINGS, and the Launcher alias with MAIN+HOME+DEFAULT. Each option breaks one thing.
  */
 export function fakeMirrorApk(o: {
@@ -99,8 +99,8 @@ export function fakeMirrorApk(o: {
   const aliasFilters = home === 'none' ? [filter(['MAIN'], ['LAUNCHER'])]
     : [filter(['MAIN'], ['LAUNCHER']), filter(['MAIN'], home === 'no-default' ? ['HOME'] : ['HOME', 'DEFAULT'])];
   const tree: FakeEl[] = [...perms, { el: 'application', children: [
-    { el: 'activity', attrs: { name: 'sh.edm.s1kiosk.MainActivity', permission: 'android.permission.WRITE_SECURE_SETTINGS', exported: true } },
-    { el: 'activity-alias', attrs: { name: 'dev.glassworks.generic.Launcher', targetActivity: 'sh.edm.s1kiosk.MainActivity', exported: true }, children: aliasFilters },
+    { el: 'activity', attrs: { name: 'dev.glassworks.MainActivity', permission: 'android.permission.WRITE_SECURE_SETTINGS', exported: true } },
+    { el: 'activity-alias', attrs: { name: 'dev.glassworks.generic.Launcher', targetActivity: 'dev.glassworks.MainActivity', exported: true }, children: aliasFilters },
   ] }];
   return fakeApk(o.package ?? GLASSWORKS.package, { minSdk: o.minSdk ?? 23, home: tree, ...(o.libs ? { libs: o.libs } : {}) });
 }
@@ -118,47 +118,107 @@ export interface FakeMirrorOptions {
   app?: MirrorApp;
   /** pm install's answer, when it isn't Success */
   installFails?: string;
-  /** In the chooser, the person taps this after `pickAfter` reads of the preferred home; undefined: never */
-  picks?: (choices: string[]) => string | undefined;
-  pickAfter?: number;
   /** the app keeps its device admin when asked to drop it */
   keepsAdmin?: boolean;
-  /** with an app's settings open, the person taps Clear defaults */
-  clearsDefaults?: boolean;
+  /** `pm hide` answers false: the other home app stays, so HOME opens Android's chooser */
+  hideFails?: boolean;
+  /** the community kiosk: `admin` (as Glass Panes' userdata has it, its device admin on, the default), `app` (admin off),
+   * or `none` (a Mirror Kiln flashed: a fresh userdata has no kiosk) */
+  kiosk?: 'admin' | 'app' | 'none';
+  /** the display doesn't follow user_rotation */
+  rotationStuck?: boolean;
   /** each command takes this long (the demo) */
   delayMs?: number;
+  /** our app is the image's privileged copy (Kiln's fastboot install), so an adb install updates it */
+  privileged?: boolean;
 }
 
+/**
+ * Android 6's `dumpsys package <pkg>` for our app, trimmed: a normal app in /data, or the image's copy in
+ * /system/priv-app (PackageManagerService grants it INSTALL_PACKAGES, frames/lululemon-mirror/research/privileged-app.md).
+ * `granted`: false for a privileged copy Android didn't grant it to.
+ */
+export function packageDump(pkg: string, code: number, o: { privileged?: boolean; granted?: boolean } = {}): string {
+  const priv = !!o.privileged;
+  return [
+    'Packages:',
+    `  Package [${pkg}] (1a2b3c):`,
+    '    userId=10062',
+    `    codePath=${priv ? '/system/priv-app/Glassworks' : `/data/app/${pkg}-1`}`,
+    `    versionCode=${code} minSdk=23 targetSdk=23`,
+    '    versionName=0.5.0-legacy',
+    `    flags=[ ${priv ? 'SYSTEM ' : ''}HAS_CODE ALLOW_CLEAR_USER_DATA ALLOW_BACKUP ]`,
+    ...(priv ? ['    privateFlags=[ PRIVILEGED ]'] : []),
+    `    pkgFlags=[ ${priv ? 'SYSTEM ' : ''}HAS_CODE ALLOW_CLEAR_USER_DATA ALLOW_BACKUP ]`,
+    '    install permissions:',
+    ...(priv && o.granted !== false ? ['      android.permission.INSTALL_PACKAGES: granted=true', '      android.permission.REBOOT: granted=true'] : []),
+    '      android.permission.INTERNET: granted=true',
+    '    User 0: installed=true hidden=false stopped=false notLaunched=false enabled=0',
+    '',
+  ].join('\n');
+}
+
+/**
+ * The Mirror on the community image over adb, for the app-only install and undo. It has no touchscreen: nothing here
+ * taps Android's chooser. HOME opens the one home app left, the "Always" pick among the same apps, or the chooser.
+ */
 export class FakeMirror implements PanelShell {
   cmds: string[] = [];
   files = new Map<string, string>();
   /** the "Always" home and the home apps it was picked from */
   preferred?: { comp: string; from: string[] };
-  chooser?: string[];
-  /** the package whose Settings page is open */
-  settings?: string;
+  /** packages hidden with pm hide */
+  hidden = new Set<string>();
+  /** the activity in front, as dumpsys activity prints it */
+  focused?: string;
+  userRotation = 0;
+  accelerometer = 1;
   installed?: number;
-  admins = new Set<string>(['com.nimrod.mirrorkiosk/.AdminReceiver']);
-  private reads = 0;
+  admins = new Set<string>();
 
   /** our app: its package, the HOME component Android records (an alias), its admin */
   readonly app: MirrorApp;
 
+  /** our app's API key socket (#574), with `openStream` to it; none: no app of ours that has one */
+  keys?: FakeKeySocket;
+  openStream?: PanelShell['openStream'];
+  /** Our app listens on its API key socket, holding `key`. */
+  withKeySocket(keys = new FakeKeySocket()): this {
+    this.keys = keys;
+    this.openStream = (svc) => keys.open(svc);
+    return this;
+  }
+
   constructor(readonly o: FakeMirrorOptions = {}) {
     this.app = o.app ?? GLASSWORKS;
     this.installed = o.installed;
-    this.preferred = { comp: o.installed ? this.app.home : MIRROR_KIOSK, from: this.homes() };
+    if ((o.kiosk ?? 'admin') === 'admin') this.admins.add('com.nimrod.mirrorkiosk/.AdminReceiver');
+    this.preferred = { comp: o.installed ? this.app.home : o.kiosk === 'none' ? LAUNCHER3 : MIRROR_KIOSK, from: this.homes() };
     if (o.installed && this.app.admin) this.admins.add(this.app.admin);
   }
 
-  homes(): string[] {
-    return [MIRROR_KIOSK, LAUNCHER3, ...(this.installed ? [this.app.home] : [])];
+  /** The home apps on the Mirror: the kiosk (unless Kiln flashed it), the image's launcher, and ours. */
+  present(): string[] {
+    return [...(this.o.kiosk === 'none' ? [] : [MIRROR_KIOSK]), LAUNCHER3, ...(this.installed ? [this.app.home] : [])];
   }
 
-  /** The person taps `comp`, then Always. */
+  /** The home apps Android offers: those less the hidden ones. */
+  homes(): string[] {
+    return this.present().filter((c) => !this.hidden.has(c.split('/')[0]!));
+  }
+
+  /** `comp` picked with Always (as the Mirror had it before Kiln, with a mouse). */
   pick(comp: string) {
     this.preferred = { comp, from: this.homes() };
-    this.chooser = undefined;
+  }
+
+  /** What HOME opens now. */
+  private home(): string {
+    const homes = this.homes();
+    if (homes.length === 1) return homes[0]!;
+    if (this.preferred && this.preferred.from.join() === homes.join()) return this.preferred.comp;
+    this.preferred = undefined;
+    return 'android/com.android.internal.app.ResolverActivity';
   }
 
   async push(path: string) { this.cmds.push(`push ${path}`); await this.wait(); }
@@ -167,6 +227,8 @@ export class FakeMirror implements PanelShell {
 
   async run(cmd: string): Promise<{ out: string; code: number }> {
     this.cmds.push(cmd);
+    const key = this.keys?.shell(cmd);
+    if (key) return key;
     await this.wait();
     const ok = (out = '') => ({ out, code: 0 });
     const o = this.o;
@@ -181,9 +243,28 @@ export class FakeMirror implements PanelShell {
     if (cmd.startsWith('cmd ')) return { out: '/system/bin/sh: cmd: not found\n', code: 127 };
     const PKG = this.app.package;
     if (cmd === `dumpsys package ${PKG}`) {
-      return ok(this.installed ? `Packages:\n  Package [${PKG}] (1a2b3c):\n    versionCode=${this.installed} minSdk=23 targetSdk=23\n    versionName=0.5.0-legacy\n` : '');
+      return ok(this.installed ? packageDump(PKG, this.installed, { privileged: o.privileged }) : '');
     }
-    if (cmd === 'dumpsys package preferred-activities') { this.reads++; this.maybePick(); return ok(this.preferredDump()); }
+    if (cmd === 'dumpsys package preferred-activities') return ok(this.preferredDump());
+    const set = /^settings put system (user_rotation|accelerometer_rotation) (\d)$/.exec(cmd);
+    if (set) { if (set[1] === 'user_rotation') this.userRotation = Number(set[2]); else this.accelerometer = Number(set[2]); return ok(); }
+    if (cmd === 'dumpsys window windows') return ok(`  mRotation=${o.rotationStuck || this.accelerometer !== 0 ? 0 : this.userRotation}\n`);
+    if ((m = /^pm (hide|unhide) (\S+)$/.exec(cmd))) {
+      // Android 6 won't hide a package with an active device admin
+      if (m[1] === 'hide' && (o.hideFails || [...this.admins].some((a) => a.startsWith(`${m![2]}/`)))) return ok(`Package ${m[2]} new hidden state: false\n`);
+      if (m[1] === 'hide') this.hidden.add(m[2]!); else this.hidden.delete(m[2]!);
+      return ok(`Package ${m[2]} new hidden state: ${m[1] === 'hide'}\n`);
+    }
+    if ((m = /^pm list packages (\S+)$/.exec(cmd))) {
+      const present = this.present().map((c) => c.split('/')[0]!);
+      return ok(present.includes(m[1]!) && !this.hidden.has(m[1]!) ? `package:${m[1]}\n` : '');
+    }
+    if (cmd === `am start -a android.intent.action.MAIN -c android.intent.category.HOME ${PKG}`) {
+      if (!this.installed) return ok('Error: Activity not started, unable to resolve Intent\n');
+      this.focused = this.app.home;
+      return ok('Starting: Intent { act=android.intent.action.MAIN cat=[android.intent.category.HOME] }\n');
+    }
+    if (cmd === 'dumpsys activity activities') return ok(this.focused ? `  mFocusedActivity: ActivityRecord{1a2b3c u0 ${this.focused} t7}\n` : '');
     if ((m = /^pm install -r (-g )?(\S+)$/.exec(cmd))) {
       if (o.installFails) return ok(`\tpkg: ${m[2]}\n${o.installFails}\n`);
       this.installed = 600;
@@ -200,11 +281,9 @@ export class FakeMirror implements PanelShell {
       return ok('Success\n');
     }
     if (cmd === 'am start -a android.intent.action.MAIN -c android.intent.category.HOME') {
-      const homes = this.homes();
-      if (!this.preferred || this.preferred.from.join() !== homes.join()) { this.preferred = undefined; this.chooser = homes; this.reads = 0; }
+      this.focused = this.home();
       return ok('Starting: Intent { act=android.intent.action.MAIN cat=[android.intent.category.HOME] }\n');
     }
-    if ((m = /^am start -a android\.settings\.APPLICATION_DETAILS_SETTINGS -d package:(\S+)$/.exec(cmd))) { this.settings = m[1]; return ok(); }
     if ((m = /^cat (\S+) 2>\/dev\/null$/.exec(cmd))) {
       const f = this.files.get(m[1]!);
       return f === undefined ? { out: '', code: 1 } : ok(f);
@@ -212,13 +291,6 @@ export class FakeMirror implements PanelShell {
     if ((m = /^echo '([^']*)' > (\S+)$/.exec(cmd))) { this.files.set(m[2]!, `${m[1]}\n`); return ok(); }
     if ((m = /^rm -f (\S+)$/.exec(cmd))) { this.files.delete(m[1]!); return ok(); }
     return ok();
-  }
-
-  private maybePick() {
-    if (this.o.clearsDefaults && this.settings && this.preferred?.comp.startsWith(`${this.settings}/`)) { this.preferred = undefined; this.settings = undefined; return; }
-    if (!this.chooser || !this.o.picks || this.reads < (this.o.pickAfter ?? 1)) return;
-    const comp = this.o.picks(this.chooser);
-    if (comp) this.pick(comp);
   }
 
   /** Android 6's `dumpsys package preferred-activities`, trimmed to the shape it has around HOME. */
@@ -264,11 +336,24 @@ export class FirstBootMirror implements PanelShell {
   accelerometer = 1;
   /** the display doesn't follow user_rotation (the timeout case) */
   rotationStuck = false;
+  /** Android didn't grant the image's copy INSTALL_PACKAGES */
+  notGranted = false;
   /** `installed`: our app is there; `ours`: which app (Glassworks by default) */
+  /** the app's API key socket (#574), with `openStream` to it; none: an app older than #574 */
+  keys?: FakeKeySocket;
+  openStream?: PanelShell['openStream'];
   constructor(private readonly fp: string = FINGERPRINT, private readonly installed = true, readonly ours: MirrorApp = GLASSWORKS) {}
+  /** The fresh app's API key socket: listening, with no key yet. */
+  withKeySocket(keys = new FakeKeySocket()): this {
+    this.keys = keys;
+    this.openStream = (svc) => keys.open(svc);
+    return this;
+  }
   async run(cmd: string) {
     this.cmds.push(cmd);
     const ok = (out = '') => ({ out, code: 0 });
+    const key = this.keys?.shell(cmd);
+    if (key) return key;
     if (cmd === 'getprop sys.boot_completed') return ok('1\n');
     if (cmd === 'getprop ro.build.fingerprint') return ok(`${this.fp}\n`);
     const set = /^settings put system (user_rotation|accelerometer_rotation) (\d)$/.exec(cmd);
@@ -283,7 +368,7 @@ export class FirstBootMirror implements PanelShell {
         `    mConfiguration={1.0 ?mcc?mnc en_US ldltr sw1080dp w${w}dp h${h - 48}dp 240dpi xlrg ${rot % 2 ? 'port' : 'land'} finger -keyb/v/h -nav/h s.4}`,
         '    mHasSurface=true mShownFrame=[0.0,0.0][1080.0,1920.0] isReadyForDisplay()=true',
         '',
-        '  mCurrentFocus=Window{9a3e21c u0 dev.glassworks.generic_android.legacy/sh.edm.s1kiosk.MainActivity}',
+        '  mCurrentFocus=Window{9a3e21c u0 dev.glassworks.generic_android.legacy/dev.glassworks.MainActivity}',
         '  mInTouchMode=true mLayoutSeq=58',
         `  mScreenRect=[0,0][${w},${h}]`,
         '  mDisplayFrozen=false windows=0 client=false apps=0  waitingForConfig=false',
@@ -293,7 +378,7 @@ export class FirstBootMirror implements PanelShell {
     }
     if (cmd === 'dumpsys window') return ok('WINDOW MANAGER LAST ANR (dumpsys window lastanr)\n  <no ANR has occurred since boot>\n'); // Android 6 prints mRotation here only with dumpAll
     const pkg = this.ours.package;
-    if (cmd === `dumpsys package ${pkg}`) return ok(this.installed ? '    versionCode=600 minSdk=23\n    versionName=0.5.0-legacy\n' : '');
+    if (cmd === `dumpsys package ${pkg}`) return ok(this.installed ? packageDump(pkg, 600, { privileged: true, granted: !this.notGranted }) : '');
     if (cmd === 'pm list packages com.android.launcher3') return ok(this.hidden.has('com.android.launcher3') ? '' : 'package:com.android.launcher3\n');
     if (cmd.startsWith('pm list packages')) return ok('');
     if (cmd === `am start -a android.intent.action.MAIN -c android.intent.category.HOME ${pkg}`) {

@@ -33,7 +33,7 @@ describe('provision (install.sh port)', () => {
       onPhase: (ph) => { phases.push(name(ph)); p.cmds.push(`# ${name(ph)}`); } });
     expect(phases).toEqual(['kiosk copy', 'kiosk install', 'home', 'keyboard copy', 'keyboard install', 'prefs', 'start']);
     const at = (c: string) => { const i = p.cmds.findIndex((x) => x.startsWith(c)); expect(i, c).toBeGreaterThanOrEqual(0); return i; };
-    const order = ['# kiosk copy', 'push /data/local/tmp/s1kiosk.apk', '# kiosk install', 'pm install -r -g /data/local/tmp/s1kiosk.apk',
+    const order = ['# kiosk copy', 'push /data/local/tmp/glassworks.apk', '# kiosk install', 'pm install -r -g /data/local/tmp/glassworks.apk',
       '# home', 'pm grant', 'cmd package set-home-activity', 'pm disable-user --user 0 com.lumi.ota',
       '# keyboard copy', 'push /data/local/tmp/keyboard.apk', '# keyboard install', 'pm install -r /data/local/tmp/keyboard.apk',
       '# prefs', 'service call alarm', '# start', 'am start -n sh.edm.s1kiosk/.MainActivity'].map(at);
@@ -42,7 +42,7 @@ describe('provision (install.sh port)', () => {
     expect(p.cmds.filter((c) => c.startsWith('pm install')).length).toBe(phases.filter((x) => x.endsWith(' install')).length);
   });
 
-  it('reads S1 Kiosk\'s version, or none when it isn\'t installed', async () => {
+  it('reads Glassworks\' version, or none when it isn\'t installed', async () => {
     const shell = (out: string) => ({ run: async () => ({ out, code: 0 }), push: async () => {} });
     expect(await kioskVersion(shell('Packages:\n  Package [sh.edm.s1kiosk] (1a2b):\n    versionCode=403 minSdk=29 targetSdk=29\n    versionName=0.4.3\n'))).toEqual({ name: '0.4.3', code: 403 });
     expect(await kioskVersion(shell('Unable to find package: sh.edm.s1kiosk\n'))).toBeUndefined();
@@ -68,7 +68,7 @@ describe('provision (install.sh port)', () => {
       'Disable Aqara DND screen-off (the kiosk handles night mode)', 'De-bloat (reversible pm disable-user)',
       'Keyboard', 'Time zone America/Los_Angeles', 'Start the kiosk',
     ]);
-    expect(p.cmds).toContain('pm install -r -g /data/local/tmp/s1kiosk.apk');
+    expect(p.cmds).toContain('pm install -r -g /data/local/tmp/glassworks.apk');
     expect(p.cmds).not.toContain('pm disable-user --user 0 com.aqara.inhome.vassistant');
     expect(p.cmds).toContain('pm disable-user --user 0 com.lumi.ota');
     // the launcher only after the kiosk is HOME
@@ -78,7 +78,7 @@ describe('provision (install.sh port)', () => {
     expect(p.cmds).toContain(`service call alarm 3 s16 'America/Los_Angeles'`);
     expect(p.cmds).toContain(`setprop persist.s1kiosk.timezone 'America/Los_Angeles'`);
     expect(p.cmds.at(-2)).toBe(`am start -n sh.edm.s1kiosk/.MainActivity --es url 'http://ha.local:8123/panel'`);
-    expect(p.cmds).toContain('rm -f /data/local/tmp/s1kiosk.apk');
+    expect(p.cmds).toContain('rm -f /data/local/tmp/glassworks.apk');
   });
 
   it('a failed grant is fine (try), a failed HOME switch is not (run)', async () => {
@@ -120,7 +120,7 @@ describe('provision (install.sh port)', () => {
 
 });
 
-/** A panel with S1 Kiosk installed as HOME and device admin (the app drops admin a moment after asked). */
+/** A panel with Glassworks installed as HOME and device admin (the app drops admin a moment after asked). */
 class UndoPanel implements PanelShell {
   cmds: string[] = [];
   adminPolls = 0;

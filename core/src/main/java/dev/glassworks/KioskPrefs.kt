@@ -5,7 +5,6 @@ import android.content.SharedPreferences
 import android.net.Uri
 import android.util.Base64
 import dev.glassworks.screen.ScreenSettings
-import dev.glassworks.esphome.NoiseKeyStore
 import dev.glassworks.esphome.ReadableNoiseKeyStore
 import dev.glassworks.esphome.StoredKey
 import dev.glassworks.platform.Platform
@@ -129,10 +128,33 @@ class KioskPrefs(
         get() = sp.getBoolean(KEY_WIFI_SEEN, false)
         set(v) = sp.edit().putBoolean(KEY_WIFI_SEEN, v).apply()
 
+    /** The device has reported a dock at least once: Home Assistant keeps its *Docked* sensor from then on (dev.glassworks.dock.Docked). */
+    var dockSeen: Boolean
+        get() = sp.getBoolean("dock_seen", false)
+        set(v) = sp.edit().putBoolean("dock_seen", v).apply()
+
     /** "Skip" on the setup screen's Add-to-Home-Assistant step. */
     var haSetupSkipped: Boolean
         get() = sp.getBoolean("setup_ha_skipped", false)
         set(v) = sp.edit().putBoolean("setup_ha_skipped", v).apply()
+
+    /** Setup's Silent updates step was answered: Continue or Not now, or the panel was set up before the step (#422). */
+    var silentUpdatesAnswered: Boolean
+        get() = sp.getBoolean("setup_silent_updates_answered", false)
+        set(v) = sp.edit().putBoolean("setup_silent_updates_answered", v).apply()
+
+    /**
+     * Which releases the app updates to (#605): Stable, the default, or Beta, which also takes pre-releases. The update
+     * check reads it every time; the Device page's *Update channel* row and the Manage page set it.
+     */
+    var updateChannel: dev.glassworks.update.UpdateChannel
+        get() = dev.glassworks.update.UpdateChannel.of(sp.getString(KEY_UPDATE_CHANNEL, null))
+        set(v) { sp.edit().putString(KEY_UPDATE_CHANNEL, v.id).apply() }
+
+    /** The device's own setup steps had their once-per-install check (GlassworksRuntime.deviceSetupSteps). */
+    var deviceStepsMigrated: Boolean
+        get() = sp.getBoolean("setup_device_steps_migrated", false)
+        set(v) = sp.edit().putBoolean("setup_device_steps_migrated", v).apply()
 
     /** Lovelace dashboards the "Dashboard" select was last built from (`[{url_path,title}]`). */
     var dashboardsJson: String
@@ -161,6 +183,19 @@ class KioskPrefs(
         }
 
     val hasAuth: Boolean get() = authSp.contains("refresh_token")
+
+    /** The refresh token as it reads now, for the installer's hand-over ([dev.glassworks.device.SecretHandover], #584). */
+    fun refreshTokenSecret(): SecretPrefs.Secret = authSp.secret("refresh_token")
+
+    /**
+     * The refresh token an installer carried across a reinstall (#584), into the sign-in its data copy holds: the
+     * Home Assistant address and client id are plain settings, so they came across, and only the sealed token didn't.
+     * Null when there is no such sign-in here (the data didn't come across). See [SecretPrefs.carryOver].
+     */
+    fun carryOverRefreshToken(token: String): SecretPrefs.CarryOver? {
+        if (authSp.getString("ha_base", null) == null || authSp.getString("client_id", null) == null) return null
+        return authSp.carryOver("refresh_token", token)
+    }
 
     /**
      * Page zoom as a CSS device-pixel ratio override (Gecko pref `layout.css.devPixelsPerPx`).
@@ -253,7 +288,7 @@ class KioskPrefs(
     fun effectiveApiKey(): ByteArray? = if (apiEncryption) decodeApiKey(apiKey) else null
 
     /** Persists the key HA provisions over the API (synchronously, like ESPHome's pref sync). */
-    val noiseKeyStore: NoiseKeyStore = object : ReadableNoiseKeyStore {
+    val noiseKeyStore: ReadableNoiseKeyStore = object : ReadableNoiseKeyStore {
         override fun load(): ByteArray? = effectiveApiKey()
         // Both writes in one edit: when the key isn't stored (the key store is down), neither is
         // api_encryption, and save() says false, so Home Assistant hears the key wasn't set.
@@ -266,6 +301,17 @@ class KioskPrefs(
             SecretPrefs.Secret.Absent -> StoredKey.Absent
             SecretPrefs.Secret.Unavailable -> StoredKey.Unreadable
         }
+    }
+
+    /**
+     * The API key an installer hands over ([dev.glassworks.device.SecretHandover]): into an empty store (a reflash,
+     * #574), or over one sealed with a key this app no longer has (a reinstall that kept the data, #584). Never over a
+     * key in use. See [SecretPrefs.carryOver].
+     */
+    fun carryOverApiKey(key: ByteArray): SecretPrefs.CarryOver = when {
+        // Encryption off: whatever api_key holds (an `api_key` extra without `api_encryption`) isn't a key in use.
+        !apiEncryption -> if (noiseKeyStore.save(key)) SecretPrefs.CarryOver.STORED else SecretPrefs.CarryOver.NOT_STORED
+        else -> sp.carryOver("api_key", Base64.encodeToString(key, Base64.NO_WRAP)) { it.putBoolean("api_encryption", true) }
     }
 
     /** Stable MAC reported to Home Assistant (its config entry is keyed by it). */
@@ -288,10 +334,17 @@ class KioskPrefs(
         get() = sp.getBoolean("improv_auto", true)
         set(v) = sp.edit().putBoolean("improv_auto", v).apply()
 
-    /** Also accept a proximity approach (VI5300 far -> near) as the Improv authorization. */
+    /**
+     * Also accept an approach (the screen's presence going far to near: the S1's VI5300, or the camera's presence on a
+     * device without a sensor) as the Improv authorization. Read [improvProximityAuthChosen]: unset, the frame decides.
+     */
     var improvProximityAuth: Boolean
         get() = sp.getBoolean("improv_proximity_auth", false)
         set(v) = sp.edit().putBoolean("improv_proximity_auth", v).apply()
+
+    /** [improvProximityAuth] once it was set (`--ez improv_proximity_auth`), else null (on without touch, ImprovSelfAuth). */
+    val improvProximityAuthChosen: Boolean?
+        get() = if (sp.contains("improv_proximity_auth")) improvProximityAuth else null
 
     /**
      * What the web engine starts with that the dashboard address can change: the secure-context hosts, and the
@@ -327,6 +380,7 @@ class KioskPrefs(
         }
 
         const val KEY_URL = "url"
+        const val KEY_UPDATE_CHANNEL = "update_channel"
         const val KEY_HA_SEEN = "ha_seen"
         const val KEY_WIFI_SEEN = "wifi_seen"
         private const val KEY_ZOOM = "zoom"

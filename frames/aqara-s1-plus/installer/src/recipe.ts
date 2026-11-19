@@ -1,7 +1,7 @@
 // The Aqara Panel Hub S1 Plus for Kiln: frames/aqara-s1-plus/tools/install/fel-install.sh's device-specific steps. FEL on
 // the A133 boots our U-Boot from RAM, fastboot shows the S1 Plus layout, the patched boot carries the
 // root helper, radio and update services, and provisioning is frames/aqara-s1-plus/tools/install.sh (provision.ts).
-import { isMagiskPatched, patchBoot, replaceBootlogo, s1Overlay, vbmetaFlags, withVbmetaFlags } from '@glassworks/bootpatch';
+import { isMagiskPatched, magiskBusybox, patchBoot, replaceBootlogo, s1Overlay, vbmetaFlags, withVbmetaFlags } from '@glassworks/bootpatch';
 import { bootUboot, checkChip } from '@glassworks/fel';
 import type { FlashStep, Recipe } from '@glassworks/kiln-core';
 import { provision, type Provisioned, type ProvisionOptions } from './provision';
@@ -57,6 +57,7 @@ export const s1Plus: Recipe<AssetName, SetUpOptions, Provisioned> = {
         a('firstboot-sh'), a('netwatch-sh'), a('update-sh')]);
     const overlay = s1Overlay({
       rc, loaderSh, verify, bundlePub, radioSh, otbrAgent, otCtl, firstbootSh, netwatchSh, updateSh,
+      magiskBusybox: await magiskBusybox(magiskApk),
       adbKeys: new TextEncoder().encode(`${adbPublicKey}\n`),
       bootAnimation: branding ? await a('bootanimation') : undefined,
     });

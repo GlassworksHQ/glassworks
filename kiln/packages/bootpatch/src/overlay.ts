@@ -18,6 +18,8 @@ export interface S1OverlayInputs {
   firstbootSh: Uint8Array;    // frames/aqara-s1-plus/tools/root/glassworks_firstboot.sh
   netwatchSh: Uint8Array;     // frames/aqara-s1-plus/tools/root/glassworks_netwatch.sh
   updateSh: Uint8Array;       // frames/aqara-s1-plus/tools/root/glassworks_update.sh
+  /** lib/armeabi-v7a/libbusybox.so from the Magisk APK (`magiskBusybox(magiskApk)`): Magisk loads no module without it. */
+  magiskBusybox: Uint8Array;
   /** Boot animation (all entries STORED), mounted by the loader; omit for stock. */
   bootAnimation?: Uint8Array;
 }
@@ -31,6 +33,7 @@ export function s1Overlay(i: S1OverlayInputs): OverlayFile[] {
   if (!/^[0-9a-f]{64}$/m.test(new TextDecoder().decode(i.bundlePub)))
     throw new Error('bundlePub is not a 32-byte hex public key');
   if (!i.verify.length) throw new Error('empty verifier');
+  if (!i.magiskBusybox.length) throw new Error('empty Magisk busybox');
   const files: OverlayFile[] = [
     { path: 'overlay.d/glassworks.rc', mode: 0o644, data: i.rc },
     { path: 'overlay.d/sbin/glassworks_loader.sh', mode: 0o700, data: i.loaderSh },
@@ -43,6 +46,7 @@ export function s1Overlay(i: S1OverlayInputs): OverlayFile[] {
     { path: 'overlay.d/sbin/glassworks_firstboot.sh', mode: 0o700, data: i.firstbootSh },
     { path: 'overlay.d/sbin/glassworks_netwatch.sh', mode: 0o700, data: i.netwatchSh },
     { path: 'overlay.d/sbin/glassworks_update.sh', mode: 0o700, data: i.updateSh },
+    { path: 'overlay.d/sbin/magisk-busybox', mode: 0o700, data: i.magiskBusybox },
   ];
   if (i.bootAnimation) {
     if (!i.bootAnimation.length) throw new Error('empty boot animation');

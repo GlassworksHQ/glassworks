@@ -36,7 +36,7 @@ async function show(which: Demo, then?: (s: Session) => Promise<void>) {
 describe('one ember action per screen', () => {
   it.each<[Demo, string]>([
     ['connect', 'Connect'],
-    ['app', 'Install S1 Kiosk'],
+    ['app', 'Install Glassworks'],
     ['app-update', 'Update and continue'],
     ['radio-thread-old', 'Finish'],
     ['wifi', 'Continue'],

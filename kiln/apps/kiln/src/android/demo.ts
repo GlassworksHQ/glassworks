@@ -2,10 +2,11 @@
 // so each screen can be seen and captured without one. `run` waits for clicks like the real page; the
 // other names go to one screen. Addresses are RFC 5737 (192.0.2.x).
 import { FakeAndroid, fakeGenericApk, type FakeAndroidOptions } from '@glassworks/generic-android-installer/fakes';
+import { fakeReleaseRoute, type FakeRelease } from '../release/demo';
 import { AndroidSession, type UsbFacts } from './session';
 
 export const ANDROID_DEMOS = [
-  'run', 'find', 'undo-find', 'named', 'brand', 'debug', 'debug-generic', 'allow', 'installing', 'vendor', 'done', 'done-untested', 'done-old', 'done-refused', 'done-lock', 'undo-done', 'error', 'own-frame',
+  'run', 'find', 'find-release', 'find-release-none', 'find-release-bad', 'undo-find', 'named', 'brand', 'debug', 'debug-generic', 'allow', 'installing', 'vendor', 'done', 'done-untested', 'done-old', 'done-refused', 'done-lock', 'undo-done', 'error', 'own-frame',
 ] as const;
 export type AndroidDemo = (typeof ANDROID_DEMOS)[number];
 
@@ -41,15 +42,20 @@ export async function androidDemo(name: AndroidDemo, fast = false): Promise<Andr
   if (name === 'error') o.installFails = 'Failure [INSTALL_FAILED_USER_RESTRICTED: Install canceled by user]';
   const hold = name === 'installing' ? /^cmd package set-home-activity / : /^$/;
   const device = new Held(o, hold, fast ? 0 : 60);
+  const abi = name === 'own-frame' ? 'armeabi-v7a' : 'arm64-v8a';
+  const apk = fakeGenericApk({ app: device.app, abis: [abi] });
+  // find-release…: the APK from a stand-in generic-android release (?apk=release); the first screen downloads it
+  const kind = ({ 'find-release': 'out', 'find-release-none': 'none', 'find-release-bad': 'bad' } as Partial<Record<AndroidDemo, FakeRelease>>)[name];
   const s = new AndroidSession({
     findUsb: async () => (untested ? NO_NAME : PIXEL),
     connect: () => (name === 'allow' ? new Promise(() => {}) : Promise.resolve(device)),
     sleep: (ms) => new Promise((r) => setTimeout(r, fast ? 0 : Math.min(ms, 400))),
     homeTimeoutMs: 10 * 60_000,
     setupTries: 2,
+    ...(kind ? { release: fakeReleaseRoute(kind, apk, (ms) => new Promise((r) => setTimeout(r, fast ? 0 : ms)), 'generic-android') } : {}),
   }, true);
-  const abi = name === 'own-frame' ? 'armeabi-v7a' : 'arm64-v8a';
-  await s.pickApk(`glassworks-generic-android-${abi}-test.apk`, fakeGenericApk({ app: device.app, abis: [abi] }));
+  if (kind) return s;
+  await s.pickApk(`glassworks-generic-android-${abi}-test.apk`, apk);
   if (name === 'run' || name === 'find') return s;
   if (name === 'undo-done' || name === 'undo-find') s.setFlow('undo');
   if (name === 'undo-find') return s;

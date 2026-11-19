@@ -1,36 +1,32 @@
-# The Glassworks core on Android emulators at API 23, 26, 29 and 34 (#23, #198): the conformance test
-# (core/src/androidTest, CoreConformanceTest) boots the core with a fake frame, a fake engine and one pane,
-# and checks what any frame relies on: the app owns the runtime, a pane the frame can't run is hidden, secrets
-# survive in Android's Keystore, the screen follows the frame's sensors, and the ESPHome device serves Home
-# Assistant with the frame's panes. API 23 is the legacy build's floor (#198): that job builds the test APK at
-# minSdk 23 with core library desugaring, as the legacy build runs the core (tools/legacy/api23-emulator.gradle, a
-# Gradle init script). pr.yml's libs-api23 runs the libraries there.
+# Every emulator test, on pushes to main, once a night and by hand, never on pull requests (#536; the maintainer's
+# call, 2026-11-19). A pull request's run waited mostly for runners, and these jobs took five of them for ten
+# minutes each. A red run on main or the nightly opens an issue labelled `area: ci` (the report job), and the next
+# green run closes it. docs/ci.md, "Emulator tests".
 #
-# Cost: four jobs in parallel, each about 10 minutes (the androidTest APK build, an emulator boot, under a
-# minute of tests). Only when Android code or this file changes, on pull requests and on pushes to main. No secrets; GeckoView isn't in it (the
-# runners' emulators are x86_64, and no frame builds an x86 GeckoView), so the engine is a fake.
-name: Core on emulators
+#   conformance  the Glassworks core on Android emulators at API 23, 26, 29 and 34 (#23, #198): the conformance
+#            test (core/src/androidTest, CoreConformanceTest) boots the core with a fake frame, a fake engine and
+#            one pane, and checks what any frame relies on: the app owns the runtime, a pane the frame can't run is
+#            hidden, secrets survive in Android's Keystore, the screen follows the frame's sensors, and the ESPHome
+#            device serves Home Assistant with the frame's panes. API 23 is the legacy build's floor (#198): that
+#            job builds the test APK at minSdk 23 with core library desugaring, as the legacy build runs the core
+#            (tools/legacy/api23-emulator.gradle, a Gradle init script)
+#   libs-api23  the libraries' androidTest checks on an API 23 emulator: esphome-api-android and improv run on
+#            Android 6 (#151). Their lint (NewApi at minSdk 23) stays on every PR, in pr.yml's libs-api23
+#   legacy-verify  the generic app's legacy APK (the Mirror's, R8 and all) installed on an API 23 emulator: it fails
+#            when Android 6's verifier rejects a Glassworks class (tools/legacy/verify-api23.sh). The conformance
+#            test's APK can't show this: R8 shapes the release's dex, and on the Mirror a class it built crashed the app
+#            at every start (#435). Before a Mirror flash, run the script on the build you flash
+#   report   opens, updates or closes the issue for a red main
+#
+# Cost: six jobs in parallel, each about 10 minutes (the androidTest APK build, an emulator boot, under a minute
+# of tests). On main only when Android code or this file changes; the nightly run and a manual run always. No
+# secrets; GeckoView isn't in it (the runners' emulators are x86_64, and no frame builds an x86 GeckoView), so
+# the engine is a fake.
+name: Emulator tests
 
 on:
-  pull_request:
-    paths:
-      - 'core/**'
-      - 'pane-api/**'
-      - 'libs/**'
-      - 'panes/**'
-      - 'engines/**'
-      - 'frames/*/android/**'
-      - 'frames/*/panes/**'
-      - 'testing/**'
-      - 'build-logic/**'
-      - '*.gradle.kts'
-      - 'gradle/**'
-      - 'gradle.properties'
-      - 'tools/legacy/api23-emulator.gradle'
-      - '.github/workflows/core-emulators.yml'
   push:
     branches: [main]
-    # The same paths as pull_request's.
     paths:
       - 'core/**'
       - 'pane-api/**'
@@ -45,15 +41,15 @@ on:
       - 'gradle/**'
       - 'gradle.properties'
       - 'tools/legacy/api23-emulator.gradle'
+      - 'tools/legacy/verify-api23.sh'
       - '.github/workflows/core-emulators.yml'
+  # pr.yml's nightly time: the same net under the paths above.
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: read
-
-# A new push to a PR cancels the PR's older run; a push to main gets a group of its own, so it is never cancelled.
-concurrency:
-  group: core-emulators-${{ github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: true
 
 jobs:
   conformance:
@@ -85,7 +81,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-          cache: gradle
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
 
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
         with:
@@ -121,3 +117,165 @@ jobs:
           path: core/build/reports/androidTests/connected/
           retention-days: 7
           if-no-files-found: ignore
+
+      # So a failed run can't save a remembered "missing" artifact into the cache (docs/ci.md, Caches).
+      - name: Forget Gradle's dependency metadata after a failure
+        if: failure()
+        run: rm -rf ~/.gradle/caches/modules-2/metadata-*
+
+
+  libs-api23:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
+        with:
+          packages: platform-tools
+      - name: Android SDK platform
+        run: sdkmanager --install "platforms;android-37.2"
+      - name: Build the androidTest APKs
+        run: ./gradlew --no-daemon :esphome-api-android:assembleDebugAndroidTest :improv:assembleDebugAndroidTest
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: androidTest on an API 23 emulator
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 23
+          arch: x86_64
+          target: default
+          disable-animations: true
+          script: ./gradlew --no-daemon :esphome-api-android:connectedDebugAndroidTest :improv:connectedDebugAndroidTest
+
+      # So a failed run can't save a remembered "missing" artifact into the cache (docs/ci.md, Caches).
+      - name: Forget Gradle's dependency metadata after a failure
+        if: failure()
+        run: rm -rf ~/.gradle/caches/modules-2/metadata-*
+
+  # A red main must be seen. One open issue, by its title and the `area: ci` label: every failure on main opens it or
+  # adds the run to it, and a green run on main's newest commit closes it. Only for main: a manual run on another
+  # branch reports nothing, and a cancelled run says nothing either way. No concurrency group: GitHub keeps one
+  # waiting job per group and drops the rest, which could lose a failure. Reporters run side by side instead, so each
+  # step is safe to repeat: two that both open an issue keep the older one and close the other, a failure ends with
+  # its issue open (reopening it if a green run closed it meanwhile), and a close checks main's newest commit first.
+  legacy-verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    name: legacy APK verifies on API 23
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
+        with:
+          packages: platform-tools
+
+      - name: Android SDK platform
+        run: sdkmanager --install "platforms;android-37.2"
+
+      # The Mirror's build, as the Generic test build makes it (arm64-v8a). The check drops its native libraries, so it
+      # installs on the x86_64 emulator; the dex is the same for every ABI.
+      - name: The legacy APK
+        run: ./gradlew --no-daemon :generic-android:assembleLegacy -Ps1Abi=arm64-v8a -PlegacyAbi=arm64-v8a
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Every Glassworks class passes Android 6's verifier
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 23
+          arch: x86_64
+          target: default
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: tools/legacy/verify-api23.sh frames/generic-android/android/build/outputs/apk/legacy/generic-android-legacy-unsigned.apk emulator-5554
+
+      # So a failed run can't save a remembered "missing" artifact into the cache (docs/ci.md, Caches).
+      - name: Forget Gradle's dependency metadata after a failure
+        if: failure()
+        run: rm -rf ~/.gradle/caches/modules-2/metadata-*
+
+  report:
+    needs: [conformance, libs-api23, legacy-verify]
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Open, update or close the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RESULTS: ${{ needs.conformance.result }} ${{ needs.libs-api23.result }} ${{ needs.legacy-verify.result }}
+          RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EVENT: ${{ github.event_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          title='Emulator tests fail on main'
+          # A plain list, not a search: a search can miss an issue opened seconds ago. Oldest first.
+          open_issues() {
+            gh issue list --state open --label 'area: ci' --limit 200 --json number,title \
+              --jq "[.[] | select(.title == \"$title\") | .number] | sort | .[]"
+          }
+          main_head() { gh api "repos/$GH_REPO/commits/main" --jq .sha; }
+          # A run on an older commit than main's newest says so in what it writes.
+          head=$(main_head)
+          on=" ($EVENT, $SHA)"
+          [ "$head" = "$SHA" ] || on=" ($EVENT, $SHA; main is at $head now, and its own run reports on it)"
+          case " $RESULTS " in
+            *' failure '*)
+              body="The emulator tests failed on main: $RUN$on. Open the run for the job that failed."
+              issues=$(open_issues)
+              if [ -n "$issues" ]; then
+                keep=$(echo "$issues" | head -n 1)
+                gh issue comment "$keep" --body "$body"
+              else
+                gh issue create --title "$title" --label 'area: ci' \
+                  --body "$body This issue closes itself on the next green run (.github/workflows/core-emulators.yml, docs/ci.md)."
+                # Another reporter may have opened one at the same time: keep the oldest, close the rest.
+                issues=$(open_issues)
+                keep=$(echo "$issues" | head -n 1)
+                for n in $(echo "$issues" | tail -n +2); do
+                  gh issue close "$n" --reason 'not planned' --comment "Same as #$keep: $RUN" || true
+                done
+              fi
+              # A green reporter may have closed it between our list and our comment: a failure leaves it open.
+              if [ "$(gh issue view "$keep" --json state --jq .state)" != OPEN ]; then
+                gh issue reopen "$keep" --comment "Reopened: $RUN failed after this issue closed."
+              fi ;;
+            ' success success success ')
+              issues=$(open_issues)
+              [ -n "$issues" ] || echo 'Green, and no open issue.'
+              for n in $issues; do
+                # main is read again just before each close: a newer commit's run reports on it instead.
+                now=$(main_head)
+                if [ "$now" != "$SHA" ]; then
+                  echo "Green on $SHA, but main is at $now now: its run reports."
+                  break
+                fi
+                gh issue close "$n" --comment "Green again: $RUN$on." || true
+              done ;;
+            *) echo "Nothing to report: $RESULTS" ;;
+          esac

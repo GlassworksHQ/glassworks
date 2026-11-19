@@ -108,12 +108,49 @@ class NotificationCenterTest {
         c.handle("m", "garage", """{"url":"/garage/0","timeout":30}""")
         assertEquals("its own timeout stays", 30, timeout("garage"))
         c.handle("m", "washer", "")
-        c.handle("m", "fire", """{"priority":"critical","url":"/fire/0"}""")
-        assertNull("a card gets none", timeout("washer"))
-        assertNull("nor the alert stage", timeout("fire"))
+        c.handle("m", "fire", """{"priority":"critical","url":"/fire/0","tag":"fire"}""")
+        assertNull("a normal card gets none: it folds by itself", timeout("washer"))
+        assertNull("nor a tagged alert stage: Home Assistant clears it", timeout("fire"))
         touch = true
         c.handle("m", "hall", """{"url":"/hall/0"}""")
         assertNull("with touch: none", timeout("hall"))
+    }
+
+    /**
+     * A high or critical card doesn't fold away. On a screen that takes no tap (the lululemon Mirror), one with no tag
+     * could never be closed, by a person or by Home Assistant: it gets the same 2 minutes. With a tag, or its own
+     * timeout, it is left as sent.
+     */
+    @Test
+    fun withoutTouchAnUntaggedUrgentCardGetsTwoMinutes() {
+        var touch = false
+        val store = NotificationStore({ t })
+        val c = NotificationCenter(
+            store, out, { reports += it }, { dnd }, { "http://homeassistant.local:8123" }, { t },
+            { delay, action -> timers += delay to action; CompletableFuture<Unit>() as Future<*> }, touch = { touch },
+        )
+        fun timeout(title: String) = store.list().first { it.notification.title == title }.notification.timeoutS
+        c.handle("m", "leak", """{"priority":"high"}""")
+        c.handle("m", "smoke", """{"priority":"critical"}""")
+        assertEquals(ViewQueue.NO_TOUCH_VIEW_S, timeout("leak"))
+        assertEquals(ViewQueue.NO_TOUCH_VIEW_S, timeout("smoke"))
+        c.handle("m", "alarm", """{"priority":"critical","tag":"alarm"}""")
+        c.handle("m", "door", """{"priority":"high","timeout":600}""")
+        c.handle("m", "low", """{"priority":"low"}""")
+        assertNull("tagged: Home Assistant clears it", timeout("alarm"))
+        assertEquals("its own timeout stays", 600, timeout("door"))
+        assertNull("a low card folds by itself", timeout("low"))
+
+        // The 2 minutes run out: the card closes, and nothing is left on the screen.
+        t += 120_000L
+        timers.last().second()
+        assertTrue(store.list().none { it.notification.title == "leak" || it.notification.title == "smoke" })
+        c.handle("clear_notification", "", """{"tag":"alarm"}""")
+        assertTrue("Home Assistant cleared the tagged one", store.list().none { it.notification.title == "alarm" })
+
+        touch = true
+        c.handle("m", "gas", """{"priority":"critical"}""")
+        assertNull("with touch: none", timeout("gas"))
     }
 
     @Test

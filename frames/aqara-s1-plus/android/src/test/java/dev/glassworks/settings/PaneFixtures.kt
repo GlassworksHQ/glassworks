@@ -11,18 +11,18 @@ import dev.glassworks.pane.PaneContext
 import dev.glassworks.platform.AppBuild
 import dev.glassworks.esphome.DeviceIdentity
 import dev.glassworks.esphome.TextSensorEntity
-import sh.edm.s1kiosk.KioskApp
+import dev.glassworks.s1.KioskApp
 import dev.glassworks.KioskPrefs
-import sh.edm.s1kiosk.PanePrefs
-import sh.edm.s1kiosk.base.BaseBackend
-import sh.edm.s1kiosk.base.BaseRes
-import sh.edm.s1kiosk.base.WallBase
-import sh.edm.s1kiosk.base.WallBasePane
-import sh.edm.s1kiosk.frame.AqaraCloud
-import sh.edm.s1kiosk.frame.AqaraS1Plus
-import sh.edm.s1kiosk.frame.TimeZoneKeeper
-import sh.edm.s1kiosk.frame.TimeZonePane
-import sh.edm.s1kiosk.frame.TimeZonePrefs
+import dev.glassworks.s1.PanePrefs
+import dev.glassworks.s1.base.BaseBackend
+import dev.glassworks.s1.base.BaseRes
+import dev.glassworks.s1.base.WallBase
+import dev.glassworks.s1.base.WallBasePane
+import dev.glassworks.s1.frame.AqaraCloud
+import dev.glassworks.s1.frame.AqaraS1Plus
+import dev.glassworks.s1.frame.TimeZoneKeeper
+import dev.glassworks.s1.frame.TimeZonePane
+import dev.glassworks.s1.frame.TimeZonePrefs
 import dev.glassworks.radio.SysProps
 import dev.glassworks.pane.PanelEvent
 import dev.glassworks.pane.PanelTimer
@@ -43,7 +43,7 @@ import java.util.concurrent.Executors
 import android.os.SystemClock
 import org.robolectric.shadows.ShadowSystemClock
 import java.time.Duration
-import sh.edm.s1kiosk.settings.BluetoothProxyPage
+import dev.glassworks.bluetoothproxy.BluetoothProxyPage
 
 /**
  * The S1's panes running with illustrative values, and the settings model the panel's menu and the Manage
@@ -136,7 +136,7 @@ class PaneFixtures(private val app: Application) {
     fun wallBase(
         attached: Boolean = true,
         /** The base's link: none by default; a test passes one that records relay writes. */
-        newLink: ((WallBase.Config, java.util.concurrent.ScheduledExecutorService, sh.edm.s1kiosk.base.BaseLink.Listener) -> sh.edm.s1kiosk.base.BaseLink)? = null,
+        newLink: ((WallBase.Config, java.util.concurrent.ScheduledExecutorService, dev.glassworks.s1.base.BaseLink.Listener) -> dev.glassworks.s1.base.BaseLink)? = null,
     ): WallBasePane {
         PanePrefs(app).wallBase.layout = ""
         val device = Executors.newSingleThreadScheduledExecutor().also { held += it }
