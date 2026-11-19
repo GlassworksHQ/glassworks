@@ -107,8 +107,9 @@ class CoreSettings(
 
     // 0.4.3's "Screen follows presence" (#63's design names it this): on, the screen wakes when
     // someone comes close and goes off when idle; off, it stays on. On means both: the screen mode
-    // (HA's `Screen mode` select) and waking on approach (`wake_on_approach`, no other control).
-    private fun wake(detail: String) = switch(WAKE_TITLE, detail, { prefs.screenMode == "presence" && prefs.wakeOnApproach }) {
+    // (HA's `Screen mode` select) and waking on approach (`wake_on_approach`, no other control). It reads what
+    // ScreenPolicy wakes on (#601), on the panel and on the Manage page.
+    private fun wake(detail: String) = switch(WAKE_TITLE, detail, { prefs.approachWakes }) {
         prefs.screenMode = if (it) "presence" else "always"
         if (it) prefs.wakeOnApproach = true
     }

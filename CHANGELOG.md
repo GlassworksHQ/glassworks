@@ -453,6 +453,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   it straight away. The *Thread join* sensor says how it went. Pasting the dataset still works.
 
 ### Fixed
+- **With Screen mode set to always, walking up no longer turns on a screen you turned off.** If you turn the screen
+  off from Home Assistant, it stays off when someone comes close, whether the panel senses them with its own sensor
+  or with the camera pane. *Presence* in Home Assistant still turns on. In the presence mode, walking up still wakes
+  the screen, as before.
 - **Undo and a failed switch say what really happened.** When the installer gives the panel back to
   Aqara's apps, it now says whether Glassworks was removed, turned off, or is still on because Android
   refused to turn it off. Before, it could say Glassworks was gone when it wasn't. When a switch to a

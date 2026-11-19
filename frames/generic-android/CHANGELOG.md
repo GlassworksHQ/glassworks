@@ -50,6 +50,10 @@ line of each version is what Home Assistant shows on the update card. A change o
   avoid that: turn the lock off in Android's settings, or keep the screen on.
 
 ### Fixed
+- **With Screen mode set to always, walking up no longer turns on a screen you turned off.** If you turn the screen
+  off from Home Assistant, it stays off when someone comes close, whether the panel senses them with its own sensor
+  or with the camera pane. *Presence* in Home Assistant still turns on. In the presence mode, walking up still wakes
+  the screen, as before.
 - **A wrong Wi-Fi password on the lululemon Mirror no longer needs a reflash.** Send the right password with Improv,
   over USB from a computer or over Bluetooth, and the Mirror replaces the network Kiln saved and joins. Before, Android
   refused, and only a second flash fixed it. Comes with the next flash: the copy Kiln writes into the Mirror's image must
