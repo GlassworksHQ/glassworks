@@ -105,7 +105,8 @@ export function timeline(f: RecoveryData): Timeline {
   const far = fit(f).g < 1;
   // On a big device the camera travels further, so its moves take longer.
   const pan = () => (far ? 1.5 : 0.8);
-  const powers = f.steps.includes('power') ? 'power' : 'plug';
+  // The move that switches the device on: the later of plug and power.
+  const powers = f.steps.filter((st) => st === 'plug' || st === 'power').pop();
   // A short wait plays faster, as the S1's always has; a longer hold plays in real time, so the
   // animation never says "let go" before the device is ready (the Mirror's 5 s).
   const seconds = f.ready?.seconds ?? 2;
@@ -456,9 +457,11 @@ export function mount(svg: SVGSVGElement, f: RecoveryData, onBeat?: (i: number) 
       set('swClick', 'transform', `translate(${cx} ${cy}) scale(${scl}) translate(${-cx} ${-cy})`);
       set('swClick', 'opacity', t > fl.start + 0.1 && t < fl.end ? (1 - kc).toFixed(3) : 0);
     }
+    // Beside the button; kept in view while the camera is on something else far away (the switch).
     const lx = ax + (bx - fx) * z + 46, ly = ay + (by - fy) * z - 56;
-    set('hold', 'transform', `translate(${lx} ${ly})`);
-    set('ready', 'transform', `translate(${lx} ${ly})`);
+    const inView = (x: number, y: number, w: number) => `translate(${Math.min(Math.max(x, 8), VB.w - w - 8)} ${Math.min(Math.max(y, 24), VB.h - 24)})`;
+    set('hold', 'transform', inView(lx, ly, 132));
+    set('ready', 'transform', inView(lx, ly, 36 + 6.6 * says.length));
     set('hold', 'opacity', holding ? 1 : 0);
     set('ready', 'opacity', tl.ready && t >= tl.ready.start && t < tl.out - 0.2 ? 1 : 0);
     set('all', 'opacity', (t < 0.4 ? seg(t, 0, 0.4) : 1 - seg(t, tl.out, tl.T)).toFixed(3));

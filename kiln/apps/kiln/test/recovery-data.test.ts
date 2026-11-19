@@ -163,3 +163,23 @@ it('the Mirror\'s stand tube is the one its 3D model draws (frame.json)', () => 
   expect(model.parts.every((p) => p.kind === 'tube' && p.diameter === tube.diameter)).toBe(true);
   expect(f.stand!.depth, 'no bar: the tube goes straight into the Mirror').toBeUndefined();
 });
+
+it('says ready after the later of plug and power, whichever order a frame has them in', () => {
+  const f = data('lululemon-mirror');
+  const plugLast = timeline({ ...f, steps: ['screws', 'cover', 'cord', 'hold', 'power', 'plug'] });
+  expect(plugLast.ready!.start).toBeGreaterThanOrEqual(plugLast.plug!.end + f.ready!.seconds - 1e-9);
+  expect(plugLast.hold!.end).toBe(plugLast.ready!.start);
+  const powerLast = timeline(f);
+  expect(powerLast.ready!.start).toBeGreaterThanOrEqual(powerLast.flip!.end + f.ready!.seconds - 1e-9);
+});
+
+it('keeps "Keep holding" in view while the camera is on the Mirror\'s switch, far from the button', () => {
+  const f = data('lululemon-mirror');
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  const p = mount(svg, f);
+  const tl = timeline(f);
+  p.draw(tl.flip!.end - 0.05);
+  expect(svg.querySelector('#kr-hold')!.getAttribute('opacity')).toBe('1');
+  const [x, y] = svg.querySelector('#kr-hold')!.getAttribute('transform')!.match(/-?[\d.]+/g)!.map(Number);
+  expect(x! >= 0 && x! + 132 <= 640 && y! - 16 >= 0 && y! + 16 <= 400, `at ${x}, ${y}`).toBe(true);
+});
