@@ -164,6 +164,15 @@ the current SSID also need the location permission:
 granted by `adb install -g`, or self-granted when device owner). Details, sources and limits:
 [docs/onboarding.md](../docs/onboarding.md).
 
+**Wi-Fi with the screen off** (from 0.4.4, #3). The S1's Wi-Fi chip has no PNO scans, so Android 10
+doesn't reconnect a dropped Wi-Fi until the screen wakes. The app scans itself while the screen is
+off and Wi-Fi is not connected: 10 s after the drop, then after 40 s, 60 s and every 120 s, never
+less than 40 s apart. A connect that keeps trying for 60 s counts as not connected. It needs the
+location permission and location on, and the kiosk's service runs with `microphone|location`,
+because Android 10 counts a foreground service as foreground for location only with that type.
+Log tag `S1Kiosk.Wifi`. Verified on main 2026-11-12 (dd6401a): with the screen asleep, `svc wifi
+disable`/`enable` reconnected 21 s after the enable.
+
 ## Debugging
 
 Debug builds enable Gecko remote debugging. [`tools/gecko-eval`](../tools/gecko-eval/gecko_eval.py)

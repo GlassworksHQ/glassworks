@@ -1,5 +1,6 @@
 package sh.edm.s1kiosk
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -7,6 +8,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import sh.edm.s1kiosk.settings.SettingsMenu
 import android.os.IBinder
@@ -23,6 +25,7 @@ import sh.edm.s1kiosk.radio.RadioController
 import sh.edm.s1kiosk.setup.SetupChannelServer
 import sh.edm.s1kiosk.voice.VoiceEvent
 import sh.edm.s1kiosk.voice.VoiceUi
+import sh.edm.s1kiosk.wifi.ScreenOffWifiScanner
 
 /**
  * Long-lived foreground service that owns the sensor/screen policy and the ESPHome device
@@ -34,12 +37,22 @@ class KioskService : Service() {
     private val main = Handler(Looper.getMainLooper())
     private var device: PanelDevice? = null
     private var discovery: HaDiscovery? = null
+    private var wifiScanner: ScreenOffWifiScanner? = null
 
     override fun onCreate() {
         super.onCreate()
         KioskPrefs(this).migrateRadioStep() // before discovery can save an HA URL in this process
-        startForeground(NOTIFICATION_ID, buildNotification())
+        val notification = buildNotification()
+        val location = listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+            .any { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
+        val types = KioskForeground.start(location) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) startForeground(NOTIFICATION_ID, notification, it)
+            else startForeground(NOTIFICATION_ID, notification)
+        }
+        Log.i("S1Kiosk", "foreground service types $types (location ${if (types and KioskForeground.LOCATION != 0) "on" else "off"})")
         ScreenController.start(this)
+        // The S1's Wi-Fi chip has no PNO scans, so the app scans while the screen is off (#3).
+        wifiScanner = ScreenOffWifiScanner(this).also { it.start() }
         voiceState = if (KioskPrefs(this).voiceEnabled) "idle" else "off"
         voiceUi = VoiceUi(voiceState)
         voiceCancel = { device?.cancelVoice() }
@@ -85,6 +98,8 @@ class KioskService : Service() {
         discoveryRef = null
         radioRef = null
         HaAuth.stopServer()
+        wifiScanner?.stop()
+        wifiScanner = null
         super.onDestroy()
     }
 
