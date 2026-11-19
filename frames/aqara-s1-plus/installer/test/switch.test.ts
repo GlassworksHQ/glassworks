@@ -53,6 +53,7 @@ class SwitchPanel implements PanelShell {
   installed: 'debug' | 'release' | 'none' = 'debug';
   root = true;
   newInstallWorks = true;
+  restoreWorks = true;
   wifiDump = fixture('dumpsys-wifi-kiosk.txt');
   adminAsked = false;
   disabled = false;
@@ -74,7 +75,12 @@ class SwitchPanel implements PanelShell {
       return ok('Success\n');
     }
     if (cmd === 'pm install -r -g /data/local/tmp/glassworks-old.apk') { this.installed = 'debug'; this.disabled = false; return ok('Success\n'); }
-    if (cmd === 'pm disable-user --user 0 sh.edm.s1kiosk') { this.disabled = true; return ok(); }
+    if (cmd === 'pm disable-user --user 0 sh.edm.s1kiosk') {
+      if (this.installed === 'none') return { out: 'Error: java.lang.IllegalArgumentException: Unknown package: sh.edm.s1kiosk\n', code: 255 };
+      this.disabled = true;
+      return ok();
+    }
+    if (cmd === 'pm list packages sh.edm.s1kiosk') return ok(this.installed === 'none' ? '' : 'package:sh.edm.s1kiosk\n');
     if (cmd === 'pm enable sh.edm.s1kiosk') { this.disabled = false; return ok(); }
     if (cmd === 'dumpsys package sh.edm.s1kiosk') return ok('Packages:\n  Package [sh.edm.s1kiosk] (1a2b):\n    versionName=0.1.0\n    pkgFlags=[ DEBUGGABLE HAS_CODE ALLOW_CLEAR_USER_DATA ]\n');
     if (cmd === `timeout 15 su -c 'id -u' 2>/dev/null`) return this.root ? ok('0\n') : { out: '', code: 1 };
@@ -105,6 +111,7 @@ class SwitchPanel implements PanelShell {
         expect(this.backup).toBe(true);
         if (this.installed === 'none') return { out: 'glassworks-switch: not installed\n', code: 1 };
         expect(this.disabled).toBe(true); // or it would start as HOME while its data is replaced
+        if (!this.restoreWorks) return { out: 'glassworks-switch: could not restore the app\'s data\n', code: 1 };
         this.restoredInto = this.installed;
         return ok('restored for uid 10072\n');
       }
@@ -154,6 +161,15 @@ describe('Wi-Fi owner and store parsing', () => {
     expect(noRoot).toMatch(/starts fresh/);
     expect(noRoot).toMatch(/forgets "Home"[\s\S]*asks for its password again/);
     expect(describeSwitch({ ...plan, wifi: { owner: 'other', ssid: 'Home' } })).toMatch(/wasn't saved by Glassworks and stays/);
+  });
+
+  it('says Glassworks saved the network only when dumpsys says so', () => {
+    const plan: SwitchPlan = { installedVersion: '0.1.0', debugBuild: true, root: false, wifi: { owner: 'unknown', ssid: 'Home' } };
+    const noRoot = describeSwitch(plan);
+    expect(noRoot).not.toMatch(/Glassworks saved/);
+    expect(noRoot).toMatch(/can't tell who saved "Home", so the panel may lose its Wi-Fi[\s\S]*asks for its password again/);
+    expect(describeSwitch({ ...plan, root: true })).toMatch(/Android may forget "Home" with the old app/);
+    expect(describeSwitch({ ...plan, root: true, wifi: { owner: 'kiosk', ssid: 'Home' } })).toMatch(/Android would forget "Home"/);
   });
 });
 
@@ -237,6 +253,28 @@ describe('switching a development build to this one', () => {
     expect(p.wifiSent).toEqual([]); // the old app still has its network
   });
 
+  it('if the old build comes back but its data won\'t go in, says so and keeps the copy', async () => {
+    const p = new SwitchPanel();
+    p.newInstallWorks = false;
+    p.restoreWorks = false;
+    await expect(provision(p, { kioskApk: new Uint8Array([1]), confirmSwitch: async () => true }, () => {}, noSleep))
+      .rejects.toThrow(/previous build is back, but its data is not \(glassworks-switch: could not restore the app's data\)\. Its data is kept on the panel in \/data\/s1kiosk\/switch/);
+    expect(p.installed).toBe('debug');
+    expect(p.disabled).toBe(false);
+    expect(p.backup).toBe(true);
+    expect(p.cmds.some((c) => c.endsWith('glassworks-switch.sh discard\''))).toBe(false);
+  });
+
+  it('if neither build installs, the data copy is kept', async () => {
+    const p = new SwitchPanel();
+    p.newInstallWorks = false;
+    const run = p.run.bind(p);
+    p.run = async (cmd) => (cmd === 'pm install -r -g /data/local/tmp/glassworks-old.apk' ? (p.cmds.push(cmd), { out: 'Failure [INSTALL_FAILED_INTERNAL_ERROR]\n', code: 1 }) : run(cmd));
+    await expect(provision(p, { kioskApk: new Uint8Array([1]), confirmSwitch: async () => true }, () => {}, noSleep))
+      .rejects.toThrow(/neither would the previous one\. Run the installer again\. Its data is kept on the panel in \/data\/s1kiosk\/switch/);
+    expect(p.backup).toBe(true);
+  });
+
   it('an ordinary install failure is not mistaken for a key mismatch', async () => {
     const p = new SwitchPanel();
     p.installed = 'none';
@@ -263,8 +301,14 @@ describe('switching a development build to this one', () => {
 describe('undo keeps the panel on its Wi-Fi', () => {
   class UndoWifiPanel extends SwitchPanel {
     home = 'sh.edm.s1kiosk/.MainActivity';
+    /** Glassworks stays a HOME app (it wasn't disabled): Android shows the chooser. */
+    chooser = false;
     override async run(cmd: string) {
-      if (cmd.startsWith('cmd package set-home-activity com.aqara')) { this.cmds.push(cmd); this.home = 'com.aqara.inhome.launcher/.MainActivity'; return { out: '', code: 0 }; }
+      if (cmd.startsWith('cmd package set-home-activity com.aqara')) {
+        this.cmds.push(cmd);
+        this.home = this.chooser ? 'android/com.android.internal.app.ResolverActivity' : 'com.aqara.inhome.launcher/.MainActivity';
+        return { out: '', code: 0 };
+      }
       if (cmd.startsWith('cmd package resolve-activity')) { this.cmds.push(cmd); return { out: `${this.home}\n`, code: 0 }; }
       return super.run(cmd);
     }
@@ -273,16 +317,87 @@ describe('undo keeps the panel on its Wi-Fi', () => {
   it('disables Glassworks instead of uninstalling it when it saved the network', async () => {
     const p = new UndoWifiPanel();
     const text: string[] = [];
-    await unprovision(p, (s, d) => text.push(s || d || ''), noSleep);
+    const result = await unprovision(p, (s, d) => text.push(s || d || ''), noSleep);
     expect(p.cmds).toContain('pm disable-user --user 0 sh.edm.s1kiosk');
     expect(p.cmds).not.toContain('pm uninstall sh.edm.s1kiosk');
     expect(text.some((t) => /disabled: it saved the panel's Wi-Fi \(Home & Garden\)/.test(t))).toBe(true);
+    expect(result).toEqual({ app: 'disabled', note: 'Glassworks is installed but turned off, so the panel keeps its Wi-Fi.' });
+  });
+
+  it('says so when Android won\'t disable it, though HOME is Aqara\'s again', async () => {
+    const p = new UndoWifiPanel();
+    const run = p.run.bind(p);
+    p.run = async (cmd) => (cmd === 'pm disable-user --user 0 sh.edm.s1kiosk' ? (p.cmds.push(cmd), { out: 'Error: java.lang.SecurityException\n', code: 255 }) : run(cmd));
+    const text: string[] = [];
+    const result = await unprovision(p, (s, d) => text.push(s || d || ''), noSleep);
+    expect(p.home).toBe('com.aqara.inhome.launcher/.MainActivity');
+    expect(result.app).toBe('running');
+    expect(result.note).toMatch(/would not turn Glassworks off/);
+    expect(text).toContain('could not disable Glassworks (Error: java.lang.SecurityException)');
+    expect(text.some((t) => /kept Glassworks installed but disabled/.test(t))).toBe(false);
+  });
+
+  it('says so when Android won\'t uninstall it or disable it', async () => {
+    const p = new UndoWifiPanel();
+    p.wifiDump = fixture('dumpsys-wifi-other.txt');
+    const run = p.run.bind(p);
+    p.run = async (cmd) => (cmd === 'pm uninstall sh.edm.s1kiosk' || cmd === 'pm disable-user --user 0 sh.edm.s1kiosk'
+      ? (p.cmds.push(cmd), { out: 'Failure\n', code: 1 }) : run(cmd));
+    const text: string[] = [];
+    expect((await unprovision(p, (s, d) => text.push(s || d || ''), noSleep)).app).toBe('running');
+    expect(text.some((t) => /disabled it instead/.test(t))).toBe(false);
+  });
+
+  it('a retry after an undo that removed Glassworks says it is removed, on either Wi-Fi path', async () => {
+    for (const dump of [fixture('dumpsys-wifi-other.txt'), fixture('dumpsys-wifi-kiosk.txt')]) {
+      const p = new UndoWifiPanel();
+      p.installed = 'none';
+      p.wifiDump = dump;
+      expect(await unprovision(p, () => {}, noSleep)).toEqual({ app: 'removed', note: 'Glassworks is removed.' });
+    }
+  });
+
+  it('Glassworks still on leaves HOME on the chooser: says Glassworks is still on, not the HOME error', async () => {
+    for (const dump of [fixture('dumpsys-wifi-kiosk.txt'), fixture('dumpsys-wifi-other.txt')]) {
+      const p = new UndoWifiPanel();
+      p.chooser = true;
+      p.wifiDump = dump;
+      const run = p.run.bind(p);
+      p.run = async (cmd) => (cmd === 'pm uninstall sh.edm.s1kiosk' || cmd === 'pm disable-user --user 0 sh.edm.s1kiosk'
+        ? (p.cmds.push(cmd), { out: 'Failure\n', code: 1 }) : run(cmd));
+      const result = await unprovision(p, () => {}, noSleep);
+      expect(result.app).toBe('running');
+      expect(result.note).toMatch(/ask which home screen to use/);
+      expect(p.cmds).not.toContain('am start -a android.intent.action.MAIN -c android.intent.category.HOME');
+    }
+  });
+
+  it('HOME on the chooser with Glassworks off is still an error', async () => {
+    const p = new UndoWifiPanel();
+    p.chooser = true;
+    await expect(unprovision(p, () => {}, noSleep)).rejects.toThrow(/home screen is still android\/com\.android\.internal\.app\.ResolverActivity/);
+  });
+
+  it('a package listing that fails is not taken as removed', async () => {
+    const p = new UndoWifiPanel();
+    p.installed = 'none';
+    const run = p.run.bind(p);
+    p.run = async (cmd) => (cmd === 'pm list packages sh.edm.s1kiosk' ? (p.cmds.push(cmd), { out: 'cmd: Failure calling service package\n', code: 1 }) : run(cmd));
+    expect((await unprovision(p, () => {}, noSleep)).app).toBe('running');
+  });
+
+  it('uninstall refused, disable works: says it is turned off instead', async () => {
+    const p = new UndoWifiPanel();
+    p.wifiDump = fixture('dumpsys-wifi-other.txt');
+    const run = p.run.bind(p);
+    p.run = async (cmd) => (cmd === 'pm uninstall sh.edm.s1kiosk' ? (p.cmds.push(cmd), { out: 'Failure\n', code: 1 }) : run(cmd));
+    expect(await unprovision(p, () => {}, noSleep)).toEqual({ app: 'disabled', note: 'Android would not remove Glassworks, so it is turned off instead.' });
   });
 
   it('uninstalls it when the network is someone else\'s', async () => {
     const p = new UndoWifiPanel();
     p.wifiDump = fixture('dumpsys-wifi-other.txt');
-    await unprovision(p, () => {}, noSleep);
+    expect(await unprovision(p, () => {}, noSleep)).toEqual({ app: 'removed', note: 'Glassworks is removed.' });
     expect(p.cmds).toContain('pm uninstall sh.edm.s1kiosk');
     expect(p.cmds).not.toContain('pm disable-user --user 0 sh.edm.s1kiosk');
   });
@@ -290,7 +405,9 @@ describe('undo keeps the panel on its Wi-Fi', () => {
   it('can\'t tell whose network it is but the panel is online: keeps it (disables)', async () => {
     const p = new UndoWifiPanel();
     p.wifiDump = 'Wi-Fi is enabled\n';
-    await unprovision(p, () => {}, noSleep);
+    const text: string[] = [];
+    await unprovision(p, (s, d) => text.push(s || d || ''), noSleep);
+    expect(text.some((t) => /disabled: the installer can't tell who saved the panel's Wi-Fi/.test(t))).toBe(true);
     expect(p.cmds).toContain('pm disable-user --user 0 sh.edm.s1kiosk');
     expect(p.cmds).not.toContain('pm uninstall sh.edm.s1kiosk');
   });

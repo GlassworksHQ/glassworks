@@ -8,7 +8,7 @@
              "libplugin-container.so"],
   "assets": ["assets/omni.ja"]
  },
- "core_assets": ["assets/extension/", "assets/dexopt/", "assets/licenses/", "assets/blueprints.json", "assets/setup/"],
+ "core_assets": ["assets/extension/", "assets/dexopt/", "assets/licenses/", "assets/blueprints.json", "assets/setup/", "assets/manage/"],
  "libraries": {
   "bouncycastle": {"dex": ["org.bouncycastle."], "files": ["org/bouncycastle/"], "used_by": ["core", "sendspin"],
                    "_why": "libs/esphome-api (Noise) brings it; Sendspin's encryption uses it too"},

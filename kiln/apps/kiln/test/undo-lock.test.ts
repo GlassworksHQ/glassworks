@@ -3,12 +3,15 @@
 // was still pending can't switch it. And the give-back counts as changing the panel.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const apps = vi.hoisted(() => ({ unprovision: async () => {} }));
+const apps = vi.hoisted(() => {
+  const removed = { app: 'removed', note: 'Glassworks is removed.' } as const;
+  return { removed, unprovision: async (): Promise<typeof removed> => removed };
+});
 vi.mock('@glassworks/aqara-s1-plus-installer', async (orig) => ({
   ...(await orig<typeof import('@glassworks/aqara-s1-plus-installer')>()),
   unprovision: () => apps.unprovision(), // the apps come back (its steps have their own tests)
 }));
-afterEach(() => { apps.unprovision = async () => {}; });
+afterEach(() => { apps.unprovision = async () => apps.removed; });
 vi.spyOn(console, 'error').mockImplementation(() => {});
 
 import type { PanelShell } from '@glassworks/adb';

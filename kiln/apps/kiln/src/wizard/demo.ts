@@ -16,7 +16,7 @@ import { explain } from './explain';
 import { Session, type SessionDeps } from './session';
 
 export const DEMOS = ['run', 'selftest', 'connect', 'ask-fastboot', 'install', 'ask-adb', 'app', 'app-update', 'app-installing', 'app-keyboard', 'wifi', 'wifi-new', 'wifi-fail', 'home-assistant', 'radio', 'radio-next', 'radio-thread', 'radio-thread-old',
-  'done', 'undo', 'undo-refused', 'undo-refused-splash', 'undo-apps-back', 'undo-unreadable', 'undo-connect', 'restore', 'undo-done', 'error', 'error-written'] as const;
+  'done', 'undo', 'undo-refused', 'undo-refused-splash', 'undo-apps-back', 'undo-still-on', 'undo-unreadable', 'undo-connect', 'restore', 'undo-done', 'error', 'error-written'] as const;
 export type Demo = (typeof DEMOS)[number];
 
 const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -328,7 +328,11 @@ export async function enterDemo(session: Session, which: Demo): Promise<void> {
       return;
     case 'undo-apps-back': // "Keep its settings" after the apps are back: the backup is the one they were checked against
       await session.openUndo();
-      dispatch({ type: 'undo', patch: { depth: 'keep', appsBack: true, locked: true, note: { kind: 'ok', title: 'Aqara\'s apps are back.', sub: 'Next, put the original software back: Continue, then recovery mode.' } } });
+      dispatch({ type: 'undo', patch: { depth: 'keep', appsBack: true, locked: true, note: { kind: 'ok', title: 'Aqara\'s apps are back.', sub: 'Glassworks is removed. Next, put the original software back: Continue, then recovery mode.' } } });
+      return;
+    case 'undo-still-on': // the apps are back, but Android would not remove or disable Glassworks
+      await session.openUndo();
+      dispatch({ type: 'undo', patch: { depth: 'keep', note: { kind: 'err', title: 'Aqara\'s apps are back, but Glassworks is still on.', sub: `Android would not turn Glassworks off. It is still installed, so the panel may start it again or ask which home screen to use. Try again, or choose "${s1PlusUi.undo.factory.title}".` } } });
       return;
     case 'undo-unreadable': // this browser has a backup, but IndexedDB fails to read it
       await session.openUndo();
