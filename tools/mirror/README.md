@@ -40,6 +40,14 @@ Each step is printed and waits for `y`. `--yes` answers every question.
     screen of its own, nothing was hidden: the image's launcher stays, and the run exits 1.
 13. Screenshot.
 
+### After an interrupted install
+
+If the run stops after step 9 (a power cut while it waits for adb, a lost cable), both images are
+on the Mirror already. `--first-boot` runs only steps 10 to 13 against it, and writes no partition.
+The first boot still checks the image's fingerprint and that the app is there. It needs no `--image`
+or `--apk`. `--wifi-ssid` and `--wifi-pass-file` are optional, since the image may have the network
+saved already. Pass the same `--probe` and `--ha-url` as the install.
+
 ## Use
 
 From the repo root, after `npm install`. tsx isn't in the repo's lockfile (vite 8 lists it as an
@@ -49,6 +57,7 @@ optional peer, and that breaks `npm ci`'s lockfile check), so npx fetches the pi
 npx -y tsx@4.23.15 tools/mirror/flash-node.ts --dry-run          # every step on a fake Mirror, no device touched
 npx -y tsx@4.23.15 tools/mirror/flash-node.ts --image ~/Downloads/system.img --apk generic-android-legacy.apk \
   --ha-url http://homeassistant.local:8123
+npx -y tsx@4.23.15 tools/mirror/flash-node.ts --first-boot --ha-url http://homeassistant.local:8123  # steps 10 to 13 only
 npx -y tsx@4.23.15 tools/mirror/flash-node.ts --way-back --image system.img --userdata userdata.sparse
 npx -y tsx@4.23.15 tools/mirror/flash-node.ts --help
 ```
@@ -85,3 +94,16 @@ Back with the normal server, the Mirror shows as `unauthorized`.
 The tests (`npm test -w @glassworks/mirror-root-run`) run the install and the way back on the fake
 Mirror: `@glassworks/fastboot`'s `Fastboot` on `FakeLk`, the installer's adb fakes, and e2fsck on
 what lands on the fake partitions.
+
+## Vendor files for option C
+
+Two read-only scripts for #334 ([option-c.md](../../frames/lululemon-mirror/research/option-c.md)):
+
+- `vendor-files.py` reads an unpacked system image (and, if given, the unit's policy dump) and writes
+  the list of vendor files an image needs, with each file's SHA-256, SELinux label and whether adb's
+  shell may read it. It touches no device, and it deletes its scratch folder.
+  The list in the repo is
+  [`option-c-vendor-files.tsv`](../../frames/lululemon-mirror/research/option-c-vendor-files.tsv).
+- `vendor-pull-check.sh -s <serial> <list.tsv> [part ...]` reads each file of the list off a running
+  Mirror as adb's shell and compares its hash. Nothing is written on the Mirror or kept on the
+  computer but the hash. Only the root runs it, through the adb server already bound to the Mirror.

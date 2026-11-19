@@ -15,8 +15,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import sh.edm.s1kiosk.KioskApp
-import sh.edm.s1kiosk.frame.AqaraS1Plus
+import dev.glassworks.s1.KioskApp
+import dev.glassworks.s1.frame.AqaraS1Plus
 import java.io.File
 import java.lang.reflect.Modifier
 import java.util.jar.JarFile

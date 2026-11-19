@@ -15,6 +15,9 @@ Android Keystore and never leaves it. Status: **unit-tested; not yet checked on 
 | Sendspin pairing key | `sendspin.xml` | `pairing_psk` | Pair again |
 | Sendspin pairings (each server's key) | `sendspin.xml` | `records` | Pair again |
 
+The ESPHome API key leaves the app in one place: adb can read it, and give it to an app with no key, on the app's
+socket `@glassworks_api_key` (adb only, never the LAN), so a reflash keeps it ([esphome.md](esphome.md#identity-across-reinstalls), #574).
+
 The files and keys are the same as before; only the stored text changes. A sealed value starts with
 `gw-secret-v1:`. The file and key it is stored under are part of what the seal checks, so a value
 copied to another key doesn't open.

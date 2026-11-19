@@ -24,6 +24,8 @@ class ManageFixture(
     saveWaitMs: Long = 20_000,
     /** The QR pages; by default a stub that names the path. */
     private val qrPages: ((HttpRequest) -> HttpResponse)? = null,
+    /** "Allow a new computer" (#435), on a panel whose app may answer adb; none by default. */
+    usb: ManageUsbDebugging? = null,
 ) {
     val dir: File = Files.createTempDirectory("manage").toFile()
     var now = 1_763_000_000_000L
@@ -119,7 +121,7 @@ class ManageFixture(
 
     val host = object : ManageHost {
         override val name = "Glassworks Panel"
-        override val model = "Panel Hub S1 Plus (S1 Kiosk)"
+        override val model = "Panel Hub S1 Plus (Glassworks)"
         override fun status() = statusFn?.invoke() ?: status
         override fun onMain(f: () -> Unit) { onMainCalls++; f() }
         override val actions = this@ManageFixture.actions
@@ -135,6 +137,8 @@ class ManageFixture(
         ownHosts = { setOf("192.0.2.40", "glassworks-panel.local", "fd00::40", "127.0.0.1") },
         saveWaitMs = saveWaitMs,
         monoMs = { monoMs },
+        scripts = { name -> dev.glassworks.testing.RepoFiles.file("core/src/main/assets/manage/$name").readBytes() },
+        usb = usb,
     )
 
     init {

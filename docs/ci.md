@@ -2,7 +2,7 @@
 
 `.github/workflows/pr.yml` checks every pull request, every push to `main` and, once a night, the whole
 repo. It needs no secrets, so it runs the same on forks. This page says which jobs run for which change,
-and why.
+and why. The emulator tests run apart from it, on `main` and nightly only ([Emulator tests](#emulator-tests)).
 
 ## Only what a change needs
 
@@ -38,10 +38,10 @@ A pattern matches a path and everything under it. `*` stays within one folder, `
 | Job or step | Runs when a PR changes |
 |---|---|
 | every job | `.github/workflows`, `.github/actions`, `tools/ci`, `settings.gradle.kts`, `build.gradle.kts`, `gradle.properties`, `gradlew`, `gradlew.bat`, `gradle`, `frames/*/design/frame.json`, `package.json`, `package-lock.json` |
-| app: every module's unit tests | `libs`, `core`, `pane-api`, `engines`, `panes`, `testing`, `build-logic`, `frames/*/android`, `frames/*/panes`, `THIRD-PARTY-NOTICES.md`, `LICENSE`, `LICENSES`, `CHANGELOG.md`, `README.md`, `docs/**/*.md`, `frames/*/README.md`, `frames/**/blueprints/*.yaml`, `tools/release/frame-abis.sh`, `tools/release/check-update-compat.sh`, `tools/voice/fetch-models.sh`, `kiln/packages/brand/src/tokens.css`, `kiln/packages/setup-channel/test/s1-kiosk-transcript.json`, `branding/glass-tile/bootanimation.zip`, `frames/aqara-s1-plus/tools/bracket/base_emulator.py`, `frames/aqara-s1-plus/tools/debloat/debloat.sh`, `frames/generic-android/installer/src/devices.ts`, `**/sh/edm/**`, `frames/aqara-s1-plus/tools/radio/hotspot-name` |
+| app: every module's unit tests | `libs`, `core`, `pane-api`, `engines`, `panes`, `testing`, `build-logic`, `frames/*/android`, `frames/*/panes`, `THIRD-PARTY-NOTICES.md`, `LICENSE`, `LICENSES`, `CHANGELOG.md`, `README.md`, `docs/**/*.md`, `frames/*/README.md`, `frames/**/blueprints/*.yaml`, `tools/release/frame-abis.sh`, `tools/release/check-update-compat.sh`, `tools/voice/fetch-models.sh`, `kiln/packages/brand/src/tokens.css`, `kiln/packages/setup-channel/test/aqara-s1-plus-transcript.json`, `branding/glass-tile/bootanimation.zip`, `frames/aqara-s1-plus/tools/bracket/base_emulator.py`, `frames/aqara-s1-plus/tools/debloat/debloat.sh`, `frames/generic-android/installer/src/devices.ts`, `frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh`, `**/sh/edm/**`, `frames/aqara-s1-plus/tools/radio/hotspot-name` |
 | app: release build, update check | `libs`, `core`, `pane-api`, `engines`, `panes`, `testing`, `build-logic`, `frames/*/android`, `frames/*/panes`, `THIRD-PARTY-NOTICES.md`, `LICENSE`, `LICENSES`, `tools/release/check-update-compat.sh`, `frames/aqara-s1-plus/tools/radio/hotspot-name` |
 | app: aioesphomeapi tests | `libs`, `build-logic` |
-| libs-api23 | `libs`, `build-logic` |
+| libs-api23: lint at minSdk 23 | `libs`, `build-logic` |
 | api23 | `libs`, `core`, `pane-api`, `engines`, `panes`, `testing`, `build-logic`, `frames/*/android`, `frames/*/panes`, `tools/legacy` |
 | libs-publish | `libs`, `build-logic`, `LICENSE`, `LICENSES`, `THIRD-PARTY-NOTICES.md`, `tools/release/check-lib-artifact.sh`, `tools/release/lib-consumer-check.sh` |
 | wake-word | `libs`, `build-logic`, `tools/voice` |
@@ -70,11 +70,41 @@ Some rows need explaining.
   them, and `web` runs for anything else.
 - **size-generic** builds from no S1 module, so an S1-only change skips it.
 
+## Emulator tests
+
+`.github/workflows/core-emulators.yml` holds every test that boots an Android emulator. The maintainer moved
+them off pull requests on 2026-11-19 (#536): five jobs of about 10 minutes each took runners from every
+Android PR in a shared pool (see above).
+
+| Job | What | Runs |
+|---|---|---|
+| `conformance (API 23, 26, 29, 34)` | The core's conformance test (`core/src/androidTest`) | push to `main` when Android code changes, nightly at 03:17 UTC (`pr.yml`'s time), by hand |
+| `libs-api23` | `esphome-api-android` and `improv` androidTest on Android 6 | the same |
+| `legacy-verify` | The generic app's legacy APK (the Mirror's) installed on Android 6: fails when its verifier rejects a Glassworks class (`tools/legacy/verify-api23.sh`, #435). Before a Mirror flash, run the script on the build you flash | the same |
+| `report` | Opens, updates or closes the red-main issue | after those two, on `main` only |
+
+A PR still gets the fast checks for the same code: the unit tests (`app`), lint's NewApi at minSdk 23
+(`pr.yml`'s `libs-api23` and `api23`). None of the emulator jobs is a required check, so a PR never waits
+for them.
+
+A red emulator run on `main` (push, nightly or manual) opens one issue, **Emulator tests fail on main**,
+labelled `area: ci`, with a link to the run. Each later red run adds a comment to that issue. The next green
+run on `main`'s newest commit closes it (runs overlap, and an older commit's green run doesn't speak for a newer
+one; it can wait for the nightly). Reporters run side by side, with no concurrency group: GitHub keeps only one
+waiting job per group and drops the others, which could lose a failure. When two red runs both open an issue,
+they keep the older one and close the other. A failure ends with its issue open, reopening it if a green run
+closed it meanwhile, and a green run reads `main`'s newest commit again just before each close. A cancelled run, or a manual run on another branch, reports nothing. To check a branch
+before you merge, run the workflow on it by hand (Actions, Emulator tests, Run workflow) or with
+`gh workflow run core-emulators.yml --ref <branch>`.
+
+`tools/ci/test/test_changes.py` pins this: the workflow's triggers, no emulator in any other workflow, and
+the report job after every job.
+
 ## Cancelled runs
 
 A new push to a PR cancels that PR's older run (`concurrency` with the PR's number). A push to `main`,
 the nightly run and a manual run each get a group of their own (`github.run_id`), so nothing cancels or
-holds them. `core-emulators.yml` does the same. The test builds (`test-build.yml`,
+holds them. `core-emulators.yml` runs on no PR, so it has no group: every run finishes. The test builds (`test-build.yml`,
 `generic-test-build.yml`) cancel per branch. Releases and the libraries' release never cancel.
 
 ## Caches

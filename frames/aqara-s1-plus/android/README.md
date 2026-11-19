@@ -214,7 +214,7 @@ closing, its plan, frames leaving the panel, and the stream's clients. Never the
 
 ```sh
 adb logcat -s Glassworks.Camera
-adb shell am start -n sh.edm.s1kiosk/.CameraAdbActivity --es camera_use snapshots --ez onvif_stream true \
+adb shell am start -n sh.edm.s1kiosk/dev.glassworks.camera.CameraAdbActivity --es camera_use snapshots --ez onvif_stream true \
     --es camera_stream_sign_in 'viewer:a-long-password'   # adb only: camera settings and the stream's sign-in
 ```
 

@@ -2,6 +2,7 @@ package dev.glassworks.setup
 
 import android.app.Application
 import dev.glassworks.pane.PaneChoice
+import dev.glassworks.s1.frame.TestFrames
 import dev.glassworks.ui.Mockup
 import dev.glassworks.update.SilentUpdates
 import dev.glassworks.update.SilentUpdatesStep
@@ -12,7 +13,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import sh.edm.s1kiosk.frame.TestFrames
 
 /**
  * Setup's This device step (#403) on the real setup screen, a rail row of its own after Panes, before Silent updates:

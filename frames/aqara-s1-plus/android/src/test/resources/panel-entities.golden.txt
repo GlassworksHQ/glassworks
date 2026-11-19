@@ -45,7 +45,7 @@ radio_mode|1412608654|SelectEntity|Radio mode|mdi:zigbee||CONFIG|authOnly=false|
 radio_status|-1722532205|TextSensorEntity|Radio status|mdi:radio-tower||DIAGNOSTIC|authOnly=false|options=
 reload_dashboard|-266218945|ButtonEntity|Reload dashboard|mdi:refresh||NONE|authOnly=false|options=
 restart_app|-559280840|ButtonEntity|Restart app|mdi:restart|restart|CONFIG|authOnly=false|options=
-screen|1438993425|BrightnessLightEntity|Screen|mdi:tablet-dashboard||NONE|authOnly=false|options=
+screen|1438993425|BrightnessLightEntity|Screen|mdi:tablet-dashboard||CONFIG|authOnly=false|options=
 screen_mode|462157713|SelectEntity|Screen mode|mdi:monitor-eye||CONFIG|authOnly=false|options=presence,always
 sendspin|733565411|SwitchEntity|Music Assistant player (Sendspin)|mdi:speaker-wireless||CONFIG|authOnly=true|options=|disabledByDefault
 sendspin_status|-669526114|TextSensorEntity|Music Assistant player status|mdi:speaker-wireless||DIAGNOSTIC|authOnly=false|options=|disabledByDefault

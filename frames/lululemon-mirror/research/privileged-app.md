@@ -189,6 +189,32 @@ Kiln flashes into `system` must already ask for every privileged permission a la
 need, because an update signed with our key can't add one (row 3). Kiln refuses an APK that doesn't
 ask for all three.
 
+## Can a privileged app replace a saved Wi-Fi network? (#556)
+
+**Status: read (2026-11-18), untested on the unit.** On the Mirror flash of 2026-11-18, the network Kiln saved in
+userdata's `wpa_supplicant.conf` had a mistyped password. wpa_supplicant logged `WRONG_KEY` every 15 s. The right
+password sent through the app's Improv socket failed: `addNetwork` returned -1. The network wasn't the app's, and
+Android 6 lets only its creator change it, unless the caller holds `OVERRIDE_WIFI_CONFIG`.
+
+Read at `android-6.0.1_r81` (`frameworks/opt/net/wifi` unless noted):
+
+| # | File and line | What it says |
+|---|---|---|
+| 1 | `frameworks/base/core/res/AndroidManifest.xml:988` | `OVERRIDE_WIFI_CONFIG` is `signature\|privileged`: the `/system/priv-app` copy gets it if it asks, as with `INSTALL_PACKAGES` above |
+| 2 | `WifiStateMachine.java:493`–`505`, `7270`–`7281` | `CMD_ADD_OR_UPDATE_NETWORK` (`WifiManager.addNetwork`, `updateNetwork`) calls `recordUidIfAuthorized`. For a network that is already saved (the same SSID and key type), it asks `canModifyNetwork`, and on false logs "Not authorized to update network" and fails: the -1 the app saw |
+| 3 | `WifiConfigStore.java:4122`–`4166`, `4193`–`4201` | `canModifyNetwork`: true for a device owner; else, for a network no device owner created, `isCreator \|\| checkConfigOverridePermission(uid)`, which is `OVERRIDE_WIFI_CONFIG` |
+| 4 | `WifiStateMachine.java:7310`–`7318` | `CMD_REMOVE_NETWORK` asks the same `canModifyNetwork` |
+| 5 | `WifiStateMachine.java:7327`–`7355`, `WifiConfigStore.java:1632`–`1664` | `CMD_ENABLE_NETWORK` asks nothing of the caller, and `enableNetworkWithoutBroadcast` sets the network back to `ENABLED` |
+
+So with `OVERRIDE_WIFI_CONFIG`, the app's existing path (`addNetwork` for the same SSID updates the saved network,
+then `enableNetwork(netId, true)` and `reconnect`) replaces the password Kiln wrote. No new code: Improv over adb
+(`sendWifi` in `@glassworks/app-adb`) or over Bluetooth does it. The permission is in the app's manifest from #556 on.
+A Mirror gets it only from a flash with such a build: an update can never add a privileged permission (read 3 above).
+
+The other ideas in #556 aren't needed for this. Kiln checking the join on the first boot would still need a way to
+replace the network. Writing the network through Improv only would leave a first boot with no Wi-Fi until the app
+starts.
+
 ## Can a privileged app approve an adb key?
 
 **Status (2026-11-16): verified on the unit.** The approval works for the computer that is asking, and
@@ -250,6 +276,64 @@ What it means for Glassworks: an "Allow a new computer" page could let a compute
 connection. A lasting one needs the key where this image looks, which is `services.jar`'s constant
 (what Kiln's flash now writes), or a fix in adbd.
 
+### How the app sees who asks (#435, read 2026-11-17)
+
+The app keeps its own list and approves a listed computer each time it connects (the plan in #435).
+The root checked the plan on the unit on 2026-11-17 (verified, recorded in a comment on #435, Glass Panes
+image 2 with the probe as a priv-app holding `MANAGE_USB`). A shell loop on the Mirror played the app: each
+second it checked whether `UsbDebuggingActivity` had focus and whether `dumpsys usb`'s "Last key received"
+was the listed fingerprint, and then ran the probe's `allow-adb-key` with that key. A second adb server on
+the computer, with only a throwaway key, connected four times, with a server restart between each:
+
+| Connection | Result |
+|---|---|
+| 1 | `device` after 4 s, shell ran |
+| 2, 3, 4 | `device` after 3 s each, shell ran |
+
+The app itself, with the system log below in place of the shell loop, is **untested** on the unit. It needs the asking computer's **full key**: Android
+checks the fingerprint, but `allowUsbDebugging` takes the key. `dumpsys usb` gives only the fingerprint.
+Read at `android-6.0.1_r81`, `services/usb/java/com/android/server/usb/UsbDebuggingManager.java`:
+
+| Line | What it says | What the app does with it |
+|---|---|---|
+| 138 | `Slog.d(TAG, "Received public key: " + key)`, once per computer asking, before `MESSAGE_ADB_CONFIRM` | Reads the system log (`READ_LOGS`, `signature\|privileged\|development`): each line is a new request with the full key. No polling |
+| 139–141, 279 | The log line is written first, then the confirm message is queued on the handler that sets `mFingerprints` | An approval sent as soon as the line is read can reach the handler before that message and be refused. The app sends a listed computer's approval once more after a refusal, then shows it as asking |
+| 240–243 | A key that isn't the one asking: logs `Fingerprints do not match. Got <fp>, expected <fp>` and does nothing. A match logs nothing | Allow waits 3 s for that line: only without it does the page say the computer is in and save it to the list |
+| 246 | `writeKey` only when `alwaysAllow` is set | The app passes `false`: `adb_keys` doesn't grow, and Remove takes a computer out for good |
+| 458 | `dump` prints "Last key received" as the fingerprint only | Not used: it can't supply the key, and it doesn't change when the same computer asks again |
+
+### Android's own question stays on the glass (#435, verified 2026-11-18)
+
+The root's Mirror run (2026-11-18) passed every step, but SystemUI's "Allow USB debugging?"
+(`com.android.systemui/.usb.UsbDebuggingActivity`) stayed focused over the dashboard after Allow, and came back each
+time an unknown or removed key asked. On a screen with no touch nobody can dismiss it. It finishes itself only when
+the computer is unplugged.
+
+On an Android 6 arm64 emulator (2026-11-18, the app as a priv-app with `MANAGE_USB` and `READ_LOGS`, the AVD set to
+`hw.screen=no-touch` so the frame's input is `NONE`; the dialog started as root with `am start -n
+com.android.systemui/.usb.UsbDebuggingActivity --es key … --es fingerprints …`):
+
+| What | Result |
+|---|---|
+| `am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS` | The dialog stays focused: it doesn't listen for it |
+| A HOME intent for the app (`setPackage`) | Covers the dialog, but starts a second dashboard in a new task (the `Launcher` alias) |
+| The app's own task to the front (`ActivityManager.getAppTasks()`, `AppTask.moveToFront()`, no permission) | Glassworks' running `MainActivity` back in front, the dialog's task behind it (`dumpsys activity`: t10 over t9 and t11) |
+| ActivityManager's `START u0 {… cmp=com.android.systemui/.usb.UsbDebuggingActivity …}` on the system log | The app sees it (its reader adds `ActivityManager:I`) and covers 1.9 to 3.2 s later on the emulator |
+| The cover on the app's main thread | Up to 20 s late while the dashboard starts; it now runs on its own thread |
+
+So on a frame whose input is `NONE` the app puts its own task back over the dialog when the dialog starts, and after
+it lets a computer in. A frame with touch keeps Android's dialog. The Security page is where the question is
+answered.
+
+**Any app can write these lines.** Logging under the `UsbDebuggingManager` tag needs no permission, so another
+app on the panel can forge a request or a refusal. That can only mislead the card: a forged request shows a
+computer that isn't asking, and Android refuses its approval because the fingerprint isn't the one it waits on
+(lines 240–243). A forged refusal makes Allow report a failure. Neither lets a computer in.
+
+**Untested on the unit:** that the Glass Panes image's `services.jar` still logs line 138 (its
+`handleMessage` was changed, [image-patch.md](image-patch.md#what-the-image-does); `listenToSocket` wasn't
+read), and that the `/system` copy gets `READ_LOGS`. The panel plan for #435 checks both first.
+
 ## How to reproduce
 
 Off-device: fetch the files above at `android-6.0.1_r81` from android.googlesource.com
@@ -264,5 +348,6 @@ APK back, flash again with the APK the unit had, or the way back. Neither brings
 
 - ~~All of the above, on the unit: the probe's steps 1 to 5.~~ Done, 2026-11-16: all passed.
 - ~~The adb key approval above, on the unit: the probe's step 6.~~ Done, 2026-11-16: works for one connection, doesn't last.
+- Whether this image logs "Received public key" (above, #435's panel run).
 - Whether CAF's package manager in this image differs from AOSP's in these paths.
 - Whether the Mirror's vendor SELinux policy lets `untrusted_app` read `/data/local/tmp` (read 7).

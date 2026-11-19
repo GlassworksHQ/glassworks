@@ -15,6 +15,7 @@ import * as RadioGroup from '@radix-ui/react-radio-group';
 import Link from 'next/link';
 import { Fragment, useEffect, useState, useSyncExternalStore } from 'react';
 import { Shell, useBrowserChip } from '../components/Shell';
+import { SilentUpdates, type SilentWords } from '../components/SilentUpdates';
 import { FRAMES, MEASURED, RENDERS } from '../frames/catalog';
 import { adbKeyHolder } from '../mirror/MirrorWizard';
 import type { RailMark, RailStep } from '../wizard/state';
@@ -322,7 +323,7 @@ function GrantList({ grants, updates }: { grants: Grant[]; updates?: SilentUpdat
  * Done's Silent updates block (issue 422, the maintainer, 2026-11-18): in place of the grants list's row, what Kiln did and
  * what it means, with a word in the grants list's colours. Null where this build doesn't ask.
  */
-export function silentBlock(u: SilentUpdatesResult, release: string): { word: string; tone: 'y' | 'n' | 'w'; line: string } | null {
+export function silentBlock(u: SilentUpdatesResult, release: string): SilentWords | null {
   switch (u.state) {
     case 'allowed':
       return { word: 'On', tone: 'y', line: 'Updates from Home Assistant install with nobody at the tablet. Kiln allowed “Install unknown apps” for Glassworks only. Undo takes it back.' };
@@ -337,17 +338,6 @@ export function silentBlock(u: SilentUpdatesResult, release: string): { word: st
     case 'not-asked':
       return null;
   }
-}
-
-function SilentBlock({ updates, release }: { updates: SilentUpdatesResult; release: string }) {
-  const b = silentBlock(updates, release);
-  if (!b) return null;
-  return (
-    <div className="su" role="group" aria-label="Silent updates">
-      <div className="spread"><span>Silent updates</span><i className={b.tone}>{b.word}</i></div>
-      <span className="small">{b.line}</span>
-    </div>
-  );
 }
 
 /** What didn't apply, said once, with what it means. [updates]: left out where Done's block says it. */
@@ -446,7 +436,7 @@ function Done({ s, session }: { s: AndroidState; session: AndroidSession }) {
           <span className="small">Nobody has run Glassworks on this model yet. <a className="link" href={`https://github.com/GlassworksHQ/glassworks/issues/new?title=${encodeURIComponent(`Tested: ${name}`)}`}>Tell us how it goes</a></span>
         </div>
       )}
-      <SilentBlock updates={installed.silentUpdates} release={s.plan!.device.release || androidName(s.plan!.device.sdk)} />
+      <SilentUpdates words={silentBlock(installed.silentUpdates, s.plan!.device.release || androidName(s.plan!.device.sdk))} />
       <ScreenLockBlock lock={installed.screenLock} />
       <Refusals grants={installed.grants} />
       {page ? <>

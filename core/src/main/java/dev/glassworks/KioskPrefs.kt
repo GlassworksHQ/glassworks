@@ -5,7 +5,6 @@ import android.content.SharedPreferences
 import android.net.Uri
 import android.util.Base64
 import dev.glassworks.screen.ScreenSettings
-import dev.glassworks.esphome.NoiseKeyStore
 import dev.glassworks.esphome.ReadableNoiseKeyStore
 import dev.glassworks.esphome.StoredKey
 import dev.glassworks.platform.Platform
@@ -268,7 +267,7 @@ class KioskPrefs(
     fun effectiveApiKey(): ByteArray? = if (apiEncryption) decodeApiKey(apiKey) else null
 
     /** Persists the key HA provisions over the API (synchronously, like ESPHome's pref sync). */
-    val noiseKeyStore: NoiseKeyStore = object : ReadableNoiseKeyStore {
+    val noiseKeyStore: ReadableNoiseKeyStore = object : ReadableNoiseKeyStore {
         override fun load(): ByteArray? = effectiveApiKey()
         // Both writes in one edit: when the key isn't stored (the key store is down), neither is
         // api_encryption, and save() says false, so Home Assistant hears the key wasn't set.

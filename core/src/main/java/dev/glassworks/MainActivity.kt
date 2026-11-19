@@ -926,7 +926,7 @@ open class MainActivity : Activity() {
         S1Settings.model(glassworks, prefs, panes, deviceSettings, fullScreen = ::pushConfig, blueprints = { id -> blueprints.item(id, ::openBlueprintLink) }, context = this)
 
     /** The panes' Blueprints cards: the list, and what the panel's sign-in may do with them (checked off the main thread). */
-    private val blueprints by lazy { PanelBlueprints.forPanel(this, glassworks.build, prefs) }
+    private val blueprints by lazy { PanelBlueprints.forPanel(this, glassworks, prefs) }
 
     /**
      * A Blueprints card's button: Home Assistant's own page (its import dialog, filled in, or its blueprint

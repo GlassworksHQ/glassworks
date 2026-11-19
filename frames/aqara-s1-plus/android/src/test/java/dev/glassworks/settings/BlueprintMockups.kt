@@ -23,9 +23,9 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowBuild
-import sh.edm.s1kiosk.KioskApp
+import dev.glassworks.s1.KioskApp
 import dev.glassworks.KioskPrefs
-import sh.edm.s1kiosk.frame.AqaraS1Plus
+import dev.glassworks.s1.frame.AqaraS1Plus
 import dev.glassworks.radio.FixedReadout
 import dev.glassworks.radio.radioDefinition
 import dev.glassworks.ui.Mockup

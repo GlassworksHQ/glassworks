@@ -192,7 +192,7 @@ first ABI, `armeabi-v7a`:
 | ABI | Release asset | Radio bundle | Who runs it |
 |---|---|---|---|
 | `armeabi-v7a` | `s1-kiosk-<version>.apk` | yes | the S1 (32-bit userspace), other 32-bit devices |
-| `arm64-v8a` | `s1-kiosk-arm64-v8a-<version>.apk` | no (the bundle is the S1's root side) | arm64 tablets (generic-android), the arm64 emulator. Not the Mirror (Android 6): S1 Kiosk needs API 26, so Kiln installs the legacy build of Glassworks for generic Android there (#198, #411) |
+| `arm64-v8a` | `s1-kiosk-arm64-v8a-<version>.apk` | no (the bundle is the S1's root side) | arm64 tablets (generic-android), the arm64 emulator. Not the Mirror (Android 6): The S1 app needs API 26, so Kiln installs the legacy build of Glassworks for generic Android there (#198, #411) |
 
 - **Every ABI's APK has the same versionCode**, `major*10000 + minor*100 + patch`. Store schemes put
   the ABI in the versionCode because a store must choose between APKs. Here the app chooses: it
@@ -220,11 +220,17 @@ first ABI, `armeabi-v7a`:
 under its own tag prefix, and this app's is `aqara-s1-plus-` (the board id it reports, since other S1
 models may get their own frame). From 0.4.4 the app accepts both `v1.2.3` and
 `aqara-s1-plus-v1.2.3` and picks its own newest release from the list, whatever else was released
-after it. Apps up to **0.4.3** only read `releases/latest` and only understand `v1.2.3`, so:
+after it. Apps up to **0.4.3** only read `releases/latest` and only understand `v1.2.3`.
 
-- keep tagging S1 releases `v1.2.3` until the repo is renamed and other frames start releasing;
-- an S1 release is always published with `--latest` (the workflow does this), and every other frame's
-  or library's release with `--latest=false`, so `releases/latest` stays an S1 release for old panels.
+- `v0.4.4` is the last plain tag. Tag every S1 release after it `aqara-s1-plus-v1.2.3` (maintainer,
+  2026-11-19). A panel on 0.4.3 or older is offered 0.4.4 only while that is `releases/latest`.
+  After the next release it sees no update, and needs Kiln or `adb install -r`.
+- The app's blueprint links point at its own release's tag, which `ReleaseLine.tag` builds
+  (`aqara-s1-plus-v1.2.3` on the S1). A release tagged any other way gets links to files that aren't
+  there ([Blueprints](blueprints.md#which-version-you-get)). The generic app and its legacy build do
+  the same with their own tags.
+- An S1 release is always published with `--latest` (the workflow does this), and every other frame's
+  or library's release with `--latest=false`, so `releases/latest` stays an S1 release.
 
 First add a `## [1.0.0] - <date>` section to [CHANGELOG.md](../CHANGELOG.md) (move the
 *Unreleased* entries into it). Its first line is what Home Assistant shows on the update card, so make
@@ -232,8 +238,8 @@ it a one-sentence summary. The release fails early if the section is missing.
 
 ```sh
 git switch main && git pull
-git tag -a v1.0.0 -m "S1 Kiosk 1.0.0"
-git push origin v1.0.0
+git tag -a aqara-s1-plus-v1.0.0 -m "Glassworks 1.0.0"
+git push origin aqara-s1-plus-v1.0.0
 gh run watch --repo GlassworksHQ/glassworks   # or the Actions tab
 ```
 
@@ -292,25 +298,25 @@ reads (`ReleaseLine` in `core/.../update/Releases.kt`). So no app ever offers it
 | Its legacy build (Android 6-7, the Mirror) | `dev.glassworks.generic_android.legacy` | `generic-android-legacy-v1.2.3` | `glassworks-generic-android-legacy-<abi>-1.2.3.apk` and its `.sha256` |
 
 [`generic-release.yml`](../.github/workflows/generic-release.yml) builds them. Both are signed with Glassworks'
-own key, never S1 Kiosk's ([frames/generic-android/README.md](../frames/generic-android/README.md#signing)),
+own key, never the S1 app's ([frames/generic-android/README.md](../frames/generic-android/README.md#signing)),
 whose certificate is in [`tools/release/generic-release-cert.sha256`](../tools/release/generic-release-cert.sha256).
-S1 Kiosk's `release.yml` never sees these tags, and these releases are published with `--latest=false`, so
-`releases/latest` stays S1 Kiosk's.
+The S1 app's `release.yml` never sees these tags, and these releases are published with `--latest=false`, so
+`releases/latest` stays the S1 app's.
 
 **Release notes.** Both builds share [`frames/generic-android/CHANGELOG.md`](../frames/generic-android/CHANGELOG.md)
 and one version sequence: the section `## [1.2.3] - <date>` is the notes of `generic-android-v1.2.3` and of
-`generic-android-legacy-v1.2.3`, whichever of the two you tag. The repo's `CHANGELOG.md` stays S1 Kiosk's. A change
+`generic-android-legacy-v1.2.3`, whichever of the two you tag. The repo's `CHANGELOG.md` stays the S1 app's. A change
 that people running both apps would notice, a core change for example, gets a line in each file. Its first line is
-the update card's text in Home Assistant, as for S1 Kiosk.
+the update card's text in Home Assistant, as for the S1 app.
 
-**Versions.** `MAJOR.MINOR.PATCH`, versionCode `major*10000 + minor*100 + patch`, as for S1 Kiosk. The workflow
+**Versions.** `MAJOR.MINOR.PATCH`, versionCode `major*10000 + minor*100 + patch`, as for the S1 app. The workflow
 refuses a version that isn't higher than the line's last release. Start at **0.2.0**: test builds are 0.1.0 and
 0.1.1, and a device on test build 0.1.1 is offered only a higher version (and `adb install -r` refuses a lower
 versionCode).
 
 ### Before the first generic tag (once, admin)
 
-The tags need the same protection as S1 Kiosk's: only admins create them (the ruleset), and only they reach the key
+The tags need the same protection as the S1 app's: only admins create them (the ruleset), and only they reach the key
 (the environment). Ruleset first, so the environment never lets in a tag that anyone with write access could push. The
 block stops at the first error, and adds the environment's tags only after it has read both back from the ruleset:
 
@@ -384,7 +390,7 @@ the releases that exist by then, so two tags of one line pushed together can't p
 through `homeassistant.update_entity` on the app's update entity.
 
 Not part of it yet: Kiln still installs the generic app and the Mirror's build from a test build's APK
-(`?apk=local`), and its release route serves S1 Kiosk only (`kiln/apps/kiln/src/app/api/release/[frame]/route.ts`),
+(`?apk=local`), and its release route serves the S1 app only (`kiln/apps/kiln/src/app/api/release/[frame]/route.ts`),
 so the workflow doesn't rebuild the installer.
 
 ## Frame releases
@@ -401,10 +407,10 @@ compares it with the frame's newest release ([esphome.md](esphome.md#frame-updat
 | lululemon Mirror | `frames/lululemon-mirror/v1.2.3` | Kiln, in `build.prop`, when it flashes the Mirror |
 
 The tag is `frames/<frame id>/v<version>`, the frame's folder in this repo, like a library's `libs/<name>/v<version>`.
-Nothing else matches it: S1 Kiosk's `v*` and `aqara-s1-plus-v*`, the generic app's `generic-android-*`, Kiln's
+Nothing else matches it: the S1 app's `v*` and `aqara-s1-plus-v*`, the generic app's `generic-android-*`, Kiln's
 release route and `stage-assets.mjs` all skip it, and `FrameUpdateTest` checks that the app's own update check does.
 
-- **Publish it with `--latest=false`**, like every release that isn't S1 Kiosk's: panels on 0.4.3 read only
+- **Publish it with `--latest=false`**, like every release that isn't the S1 app's: panels on 0.4.3 read only
   `releases/latest`.
 - **No pre-releases.** The check skips drafts, GitHub pre-releases and SemVer pre-release tags (`v1.1.0-rc.1`).
 - **The notes are the update card.** Home Assistant shows how to install it first, then the notes' first

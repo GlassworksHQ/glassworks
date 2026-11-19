@@ -11,7 +11,7 @@ android {
     namespace = "dev.glassworks.improv"
     defaultConfig {
         minSdk = 23
-        // The androidTest checks run on an API 23 emulator in CI (pr.yml, libs-api23).
+        // The androidTest checks run on an API 23 emulator in CI (core-emulators.yml, libs-api23).
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 }

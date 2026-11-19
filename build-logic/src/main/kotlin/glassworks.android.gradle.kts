@@ -55,6 +55,9 @@ fun Test.readsRepoFiles(repo: File) {
         .withPropertyName("frameAbis").withPathSensitivity(PathSensitivity.RELATIVE)
     inputs.file(File(repo, "tools/voice/fetch-models.sh")).withPropertyName("fetchModels")
         .withPathSensitivity(PathSensitivity.NONE)
+    // CaptivePortalTest: the app's portal ports are the S1 radio helper's (#197).
+    inputs.file(File(repo, "frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh")).withPropertyName("radioHelper")
+        .withPathSensitivity(PathSensitivity.NONE)
     val roots = listOf("libs", "core", "pane-api", "engines", "panes", "frames") // RepoFiles.SEARCH, by top folder
     inputs.files(roots.map { dir ->
         fileTree(File(repo, dir)) {
@@ -74,7 +77,7 @@ fun Test.readsRepoFiles(repo: File) {
         .withPropertyName("frameAppTests").withPathSensitivity(PathSensitivity.RELATIVE)
     val files = listOf(
         "CHANGELOG.md", "README.md", "THIRD-PARTY-NOTICES.md", "kiln/packages/brand/src/tokens.css",
-        "kiln/packages/setup-channel/test/s1-kiosk-transcript.json", "branding/glass-tile/bootanimation.zip",
+        "kiln/packages/setup-channel/test/aqara-s1-plus-transcript.json", "branding/glass-tile/bootanimation.zip",
         "frames/aqara-s1-plus/tools/bracket/base_emulator.py", "build.gradle.kts",
         "build-logic/src/main/kotlin/glassworks.android.gradle.kts", // LegacyTestAppManifestTest: the default minSdk
         "frames/generic-android/installer/src/devices.ts", // GenericAndroidKnownTest: Kiln's models with a frame

@@ -13,7 +13,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
-import sh.edm.s1kiosk.R
+import dev.glassworks.s1.R
 
 /** The presence range's slider (#63): by touch, by keys and through accessibility (CodeRabbit on #163). */
 @RunWith(RobolectricTestRunner::class)

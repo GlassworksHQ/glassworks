@@ -39,8 +39,8 @@ describe.skipIf(!haveTools)('ext4, judged by e2fsprogs', () => {
       const disk = await load(img);
       const fs = await Ext4.open(disk);
       const apk = new Uint8Array(randomBytes(3_000_123));
-      await fs.mkdir('/priv-app/S1Kiosk', DIR);
-      await fs.writeFile('/priv-app/S1Kiosk/S1Kiosk.apk', apk, SYSTEM);
+      await fs.mkdir('/priv-app/Glassworks', DIR);
+      await fs.writeFile('/priv-app/Glassworks/Glassworks.apk', apk, SYSTEM);
       await fs.remove('/priv-app/Old', { recursive: true, time: T });
       const prop = new TextDecoder().decode(await fs.readFile('/build.prop'));
       await fs.replaceFile('/build.prop', new TextEncoder().encode(`${prop}ro.sf.hwrotation=270\n`), T);
@@ -52,14 +52,14 @@ describe.skipIf(!haveTools)('ext4, judged by e2fsprogs', () => {
       const r = fsck(img);
       expect(r.out).toMatch(/clean|\d+\/\d+ files/);
       expect(clean(r), r.out).toBe(true);
-      expect(Buffer.from(debugfsCat(img, '/priv-app/S1Kiosk/S1Kiosk.apk'))).toEqual(Buffer.from(apk));
+      expect(Buffer.from(debugfsCat(img, '/priv-app/Glassworks/Glassworks.apk'))).toEqual(Buffer.from(apk));
       expect(new TextDecoder().decode(debugfsCat(img, '/build.prop'))).toMatch(/hwrotation=270\n$/);
       expect(debugfs(img, 'ls /priv-app')).not.toMatch(/\bOld\b/);
-      const st = debugfs(img, 'stat /priv-app/S1Kiosk/S1Kiosk.apk');
+      const st = debugfs(img, 'stat /priv-app/Glassworks/Glassworks.apk');
       expect(st).toMatch(/Mode:\s+0644/);
       expect(st).toMatch(/User:\s+0\s+Group:\s+0/);
-      expect(debugfs(img, 'ea_get /priv-app/S1Kiosk/S1Kiosk.apk security.selinux')).toContain('u:object_r:system_file:s0');
-      expect(debugfs(img, 'stat /priv-app/S1Kiosk')).toMatch(/Mode:\s+0755/);
+      expect(debugfs(img, 'ea_get /priv-app/Glassworks/Glassworks.apk security.selinux')).toContain('u:object_r:system_file:s0');
+      expect(debugfs(img, 'stat /priv-app/Glassworks')).toMatch(/Mode:\s+0755/);
       // read back through this package too
       const again = await Ext4.open(await load(img));
       expect(await again.label('/media/bootanimation.zip')).toBe('u:object_r:system_file:s0');

@@ -1,4 +1,4 @@
-// S1 Kiosk over adb, the steps that are the same on every frame: install the APK, grant what adb's
+// Glassworks over adb, the steps that are the same on every frame: install the APK, grant what adb's
 // shell can grant, start the app with the Home Assistant URL, read its version, and take back its
 // device admin before it is removed. Each frame's recipe adds its own steps around these
 // (frames/<id>/installer). The same "try" (never fails) vs "run" (must succeed) split as
@@ -12,7 +12,7 @@ export const ACT = `${PKG}/.MainActivity`;
 export const ADMIN = `${PKG}/.AdminReceiver`;
 /**
  * Which app the steps below act on: its package, the activity adb starts it with (and whose extras
- * it trusts from adb), and its device admin if it has one. S1 Kiosk by default, so the S1's commands
+ * it trusts from adb), and its device admin if it has one. Glassworks by default, so the S1's commands
  * stay as pinned (frames/aqara-s1-plus/installer/test/adb-commands-pin.test.ts). Another frame names
  * its own app, e.g. the Mirror's legacy build of Glassworks for generic Android.
  */
@@ -74,7 +74,7 @@ export class Steps {
 }
 
 /**
- * S1 Kiosk's version on the device, from `dumpsys package` (read-only); undefined when it isn't
+ * Glassworks' version on the device, from `dumpsys package` (read-only); undefined when it isn't
  * installed. `signal` cancels the read.
  */
 export async function kioskVersion(p: PanelShell, signal?: AbortSignal, app: AppId = S1_KIOSK): Promise<{ name?: string; code: number } | undefined> {
@@ -151,4 +151,76 @@ export async function sendWifi(p: PanelShell, ssid: string, password: string, sl
   } finally {
     await c.close().catch(() => {});
   }
+}
+
+/** The app's ESPHome API key hand-over (core ApiKeyHandoverServer.SOCKET): adb only, never the LAN (#574). */
+export const API_KEY_SOCKET = 'localabstract:glassworks_api_key';
+
+/** One request line, one reply line, over a fresh connection to the hand-over socket. */
+async function keyRequest(p: PanelShell, line: string, timeoutMs = 10_000): Promise<string> {
+  const s = await p.openStream!(API_KEY_SOCKET);
+  try {
+    return await new Promise<string>((resolve, reject) => {
+      let got = '';
+      const t = setTimeout(() => reject(new Error('the app didn\'t answer on its API key socket')), timeoutMs);
+      s.onData((b) => {
+        got += new TextDecoder().decode(b);
+        const i = got.indexOf('\n');
+        if (i >= 0) { clearTimeout(t); resolve(got.slice(0, i).trim()); }
+      });
+      s.write(new TextEncoder().encode(`${line}\n`)).catch((e) => { clearTimeout(t); reject(e); });
+    });
+  } finally {
+    await s.close().catch(() => {});
+  }
+}
+
+/** Whether the app listens on its API key socket now (an app older than #574 never does). */
+async function keySocketUp(p: PanelShell): Promise<boolean> {
+  return Number.parseInt((await p.run(`grep -c ' @glassworks_api_key$' /proc/net/unix`)).out.trim(), 10) > 0;
+}
+
+/**
+ * The ESPHome API key Home Assistant provisioned, as base64 text, read from the running app before a reflash wipes
+ * it. Undefined when there is nothing to carry: no app of ours listens (none, or one older than #574), or the app has
+ * no key. Throws when the app has a key but it can't be read now (its key store is down, or the socket didn't answer):
+ * a flash then would lose it. It is a secret: never put it in a log line, an error or a command line.
+ */
+export async function readApiKey(p: PanelShell, replyMs = 10_000): Promise<string | undefined> {
+  if (!p.openStream || !(await keySocketUp(p))) return undefined;
+  const r = await keyRequest(p, 'get', replyMs);
+  if (r === 'none') return undefined;
+  const m = /^key ([A-Za-z0-9+/]{43}=)$/.exec(r);
+  if (m) return m[1];
+  // the reply's first word only: never anything that could hold key material
+  throw new Error(r === 'unreadable' ? 'the app has an API key but can\'t read it right now (its key store is down)'
+    : `the app's API key socket gave an unexpected answer (${r.split(' ')[0] || 'empty'})`);
+}
+
+/**
+ * Hands `key` (from readApiKey) to the freshly flashed app, once its socket listens (it starts with the app). True
+ * when the app took it. A connection that fails or doesn't answer is tried again until `waitMs` has passed: the app
+ * may have stored the key before its reply was lost, and then a retry gets `ok` for the same key. False when it never
+ * took it, so the first boot goes on. The key goes only into the socket, never a command line or a log.
+ */
+export async function handOverApiKey(p: PanelShell, key: string, sleep: (ms: number) => Promise<void>, waitMs = 90_000, replyMs = 10_000): Promise<boolean> {
+  if (!p.openStream) return false;
+  const until = Date.now() + waitMs;
+  for (;;) {
+    try {
+      if (await keySocketUp(p)) {
+        const r = await keyRequest(p, `set ${key}`, replyMs);
+        if (r === 'ok') return true;
+        if (r.startsWith('refused ')) return false; // a different key, or one it can't store: trying again won't help
+      }
+    } catch { /* the socket failed or didn't answer: try again */ }
+    if (Date.now() > until) return false;
+    await sleep(1500);
+  }
+}
+
+/** A key's fingerprint as the app logs it (NoiseKeys.fingerprint): the first 2 bytes of its SHA-256, in hex. Reveals nothing. */
+export async function apiKeyFingerprint(key: string): Promise<string> {
+  const raw = Uint8Array.from(atob(key), (c) => c.charCodeAt(0));
+  return [...new Uint8Array(await crypto.subtle.digest('SHA-256', raw)).slice(0, 2)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }

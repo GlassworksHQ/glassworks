@@ -19,7 +19,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import sh.edm.s1kiosk.PanePrefs
+import dev.glassworks.s1.PanePrefs
 import dev.glassworks.radio.FixedReadout
 import dev.glassworks.radio.radioDefinition
 import dev.glassworks.settings.KioskSettingsOverlay

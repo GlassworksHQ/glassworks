@@ -275,7 +275,7 @@ class ManageApiTest {
         assertEquals("*", r.headers["Access-Control-Allow-Origin"])
         val j = json(r)
         assertTrue(j.getBoolean("glassworks"))
-        assertEquals("Panel Hub S1 Plus (S1 Kiosk)", j.getString("model"))
+        assertEquals("Panel Hub S1 Plus (Glassworks)", j.getString("model"))
         assertEquals(setOf("api", "glassworks", "model"), j.keys().asSequence().toSet())
         assertTrue(f.userChecks.isEmpty())
     }

@@ -2,9 +2,9 @@ package dev.glassworks.device
 
 import dev.glassworks.platform.AppBuild
 import dev.glassworks.testing.RepoFiles
-import sh.edm.s1kiosk.KioskApp
-import sh.edm.s1kiosk.PanePrefs
-import sh.edm.s1kiosk.frame.AqaraS1Plus
+import dev.glassworks.s1.KioskApp
+import dev.glassworks.s1.PanePrefs
+import dev.glassworks.s1.frame.AqaraS1Plus
 import android.app.Application
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -15,8 +15,8 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import dev.glassworks.esphome.ApiEntity
 import dev.glassworks.esphome.DeviceIdentity
-import sh.edm.s1kiosk.base.BaseBackend
-import sh.edm.s1kiosk.base.WallBasePane
+import dev.glassworks.s1.base.BaseBackend
+import dev.glassworks.s1.base.WallBasePane
 import java.io.File
 
 /**

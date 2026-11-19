@@ -48,14 +48,14 @@ A Glassworks **frame**: the device definition for the Generic Android. Its data 
 [`android/`](android)), for Android 8.0 or newer (`minSdk` 26; Android 6 and 7 get the separate legacy build,
 #198). It has run on a Pixel Tablet (Android 17, 2026-11-16, #364): the dashboard, Home Assistant adoption as its
 own device, the hidden panes and an update in place. The wake word, Music Assistant and the light sensor haven't
-been checked on a device yet (#23). S1 Kiosk also runs as this frame on any device that isn't an Aqara S1
+been checked on a device yet (#23). The S1 app also runs as this frame on any device that isn't an Aqara S1
 (`Build.HARDWARE` other than `sun50iw10p1`). Either app names itself after the device and runs the panes the
 device's features allow.
 
 The app is the Glassworks core with a fixed set of panes: Assist (with its timers), Sendspin and the camera
 (#117). A pane the device has no hardware for (no microphone, no speaker, no camera) is hidden: it isn't in the
 settings, on the Manage page, in setup or in Home Assistant. The camera pane is off until someone turns it on, as
-in S1 Kiosk; then it wakes the screen when someone walks up, on a device without a proximity sensor of its own.
+in the S1 app; then it wakes the screen when someone walks up, on a device without a proximity sensor of its own.
 On a screen without touch (the lululemon Mirror) its setup step never waits: the use stays Presence only, and
 Kiln grants the camera. On a camera without 1280x720 (Android 6-7's) its stream runs at a size the camera lists, or
 stays off with the reason on the Camera page; presence works either way. The screen follows Android's standard proximity sensor (near means under
@@ -66,14 +66,14 @@ Turn off when idle** or turns on waking (#522). On a device with a PIN, pattern 
 screen goes off, and someone has to unlock it: the Screen settings and the Manage page say so in amber, with the way
 out (turn the lock off in Android's settings, or keep the screen on).
 
-| | S1 Kiosk on a tablet | Glassworks for generic Android |
+| | The S1 app on a tablet | Glassworks for generic Android |
 |---|---|---|
 | applicationId | `sh.edm.s1kiosk` | `dev.glassworks.generic_android` |
-| Home Assistant's model | "Pixel Tablet (S1 Kiosk)" | "Pixel Tablet (Glassworks)" |
-| Panes | All of S1 Kiosk's the device can run | Assist, Timers, Sendspin, Camera |
+| Home Assistant's model | "Pixel Tablet (Glassworks)" | "Pixel Tablet (Glassworks)" |
+| Panes | All of the S1 app's panes the device can run | Assist, Timers, Sendspin, Camera |
 | Presence and light | None | Android's proximity and light sensors |
 
-Settings that S1 Kiosk takes as intent extras (`--es url …`, `--es api_key …`, the panes' switches) reach
+Settings that the S1 app takes as intent extras (`--es url …`, `--es api_key …`, the panes' switches) reach
 this app only from adb: `adb shell am start -n dev.glassworks.generic_android/dev.glassworks.MainActivity --es …`.
 Starting that activity takes `WRITE_SECURE_SETTINGS`, which adb's shell has and other apps can't get. The
 launcher and the home screen use an alias whose extras the app drops, so another app on the device can't
@@ -195,7 +195,7 @@ repo's GitHub releases (`ReleaseLine` in `core/.../update/Releases.kt`):
 |---|---|---|
 | Glassworks for generic Android | `generic-android-v1.2.3` | `glassworks-generic-android-arm64-v8a-1.2.3.apk`, `glassworks-generic-android-armeabi-v7a-1.2.3.apk` |
 | Its legacy build (Android 6-7) | `generic-android-legacy-v1.2.3` | `glassworks-generic-android-legacy-arm64-v8a-1.2.3.apk`, `…-armeabi-v7a-…` |
-| S1 Kiosk | `aqara-s1-plus-v1.2.3` or `v1.2.3` | `s1-kiosk-1.2.3.apk`, `s1-kiosk-arm64-v8a-1.2.3.apk` |
+| The S1 app | `aqara-s1-plus-v1.2.3` or `v1.2.3` | `s1-kiosk-1.2.3.apk`, `s1-kiosk-arm64-v8a-1.2.3.apk` |
 
 So no app ever offers itself another's APK.
 
@@ -295,9 +295,9 @@ recipe installs the legacy id and refuses `sh.edm.s1kiosk` (#411).
 
 ## Signing
 
-The app has its own release key, never S1 Kiosk's: Android updates an app only with an APK signed by the same
+The app has its own release key, never the S1 app's: Android updates an app only with an APK signed by the same
 key, so this key is what lets every later version install in place over the one before. The build reads it
-from the environment only, as S1 Kiosk's reads its `S1_*` variables:
+from the environment only, as the S1 app's reads its `S1_*` variables:
 
 | Variable | What |
 |---|---|

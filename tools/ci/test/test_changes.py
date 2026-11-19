@@ -29,7 +29,11 @@ class PrTypes(unittest.TestCase):
         self.assertEqual(running('frames/aqara-s1-plus/tools/root/s1kiosk_root.sh'), {'root', 'web', 'site'})
 
     def test_the_radio_also_runs_the_s1_size_check_which_bundles_it(self):
-        self.assertEqual(running('frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh'), {'root', 'size', 'web', 'site'})
+        self.assertEqual(running('frames/aqara-s1-plus/tools/radio/firmware/x.gbl'), {'root', 'size', 'web', 'site'})
+
+    def test_the_radio_helper_also_runs_the_unit_tests_that_pin_its_ports(self):
+        # CaptivePortalTest (#197): the app's portal ports are the helper's PORTAL_DNS and PORTAL_HTTP.
+        self.assertEqual(running('frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh'), {'app', 'root', 'size', 'web', 'site'})
 
     def test_a_frame_module_runs_the_android_jobs(self):
         self.assertTrue({'app', 'app_apk', 'api23', 'size'} <= running('frames/aqara-s1-plus/android/src/main/java/a/B.kt'))
@@ -161,7 +165,40 @@ class GradleJobsForgetMisses(unittest.TestCase):
             gradle = [j for j in jobs if 'gradle/actions/setup-gradle@' in j]
             self.assertTrue(gradle, name)
             for job in gradle:
-                self.assertTrue(job.rstrip('\n').endswith(last.rstrip('\n')), job[:200])
+                # A comment above the next job belongs to it, not to this one.
+                body = re.sub(r'(\n *#[^\n]*|\n *)+\Z', '', job)
+                self.assertTrue(body.endswith(last.rstrip('\n')), job[:200])
+
+
+class EmulatorsRunOnMainAndNightly(unittest.TestCase):
+    """The maintainer's call (2026-11-19, #536): emulator tests run on main, nightly and by hand, never on a PR."""
+    workflows = ROOT / '.github/workflows'
+    yml = (workflows / 'core-emulators.yml').read_text()
+    on = yml.split('\non:\n', 1)[1].split('\npermissions:\n', 1)[0]
+    parts = re.split(r'^  ([a-z0-9-]+):\n', yml.split('\njobs:\n', 1)[1], flags=re.M)
+    jobs = dict(zip(parts[1::2], parts[2::2]))
+
+    def test_its_triggers_are_main_the_nightly_and_a_manual_run(self):
+        self.assertEqual(re.findall(r'^  ([a-z_]+):', self.on, re.M), ['push', 'schedule', 'workflow_dispatch'])
+        self.assertIn('  push:\n    branches: [main]\n', self.on)
+        nightly = re.findall(r"cron: '([^']+)'", (self.workflows / 'pr.yml').read_text())
+        self.assertEqual(re.findall(r"cron: '([^']+)'", self.on), nightly)
+
+    def test_no_other_workflow_runs_an_emulator(self):
+        for f in sorted(self.workflows.glob('*.yml')):
+            if f.name != 'core-emulators.yml':
+                self.assertNotIn('android-emulator-runner', f.read_text(), f.name)
+
+    def test_a_red_main_opens_an_issue_after_every_job(self):
+        report = self.jobs['report']
+        needs = re.search(r'^    needs: \[(.*)\]$', report, re.M).group(1).split(', ')
+        self.assertEqual(sorted(needs), sorted(j for j in self.jobs if j != 'report'))
+        self.assertIn("    if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}\n", report)
+        self.assertIn('      issues: write\n', report)
+        # A concurrency group keeps one waiting job and drops the rest, which could lose a failure (CodeRabbit, #581).
+        self.assertNotIn('concurrency:', report)
+        for call in ('gh issue create', "--label 'area: ci'", 'gh issue comment', 'gh issue close'):
+            self.assertIn(call, report)
 
 
 class DocsCarryTheTable(unittest.TestCase):

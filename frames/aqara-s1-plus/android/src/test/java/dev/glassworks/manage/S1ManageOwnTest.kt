@@ -9,14 +9,14 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import sh.edm.s1kiosk.KioskApp
+import dev.glassworks.s1.KioskApp
 import dev.glassworks.KioskPrefs
 import dev.glassworks.auth.HaTokenClient
 import dev.glassworks.auth.HttpPoster
 import dev.glassworks.auth.SignInServer
 import dev.glassworks.auth.ThreadJoin
-import sh.edm.s1kiosk.frame.AqaraS1Plus
-import sh.edm.s1kiosk.manage.S1Manage
+import dev.glassworks.s1.frame.AqaraS1Plus
+import dev.glassworks.s1.manage.S1Manage
 
 /**
  * #23: the Manage page is the core's AppManage, which every app serves. What only the S1 has stays the S1's

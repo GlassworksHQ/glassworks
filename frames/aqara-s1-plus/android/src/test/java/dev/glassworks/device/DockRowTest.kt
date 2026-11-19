@@ -31,11 +31,11 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowBuild
-import sh.edm.s1kiosk.KioskApp
-import sh.edm.s1kiosk.PanePrefs
-import sh.edm.s1kiosk.base.BaseBackend
-import sh.edm.s1kiosk.frame.AqaraS1Plus
-import sh.edm.s1kiosk.manage.S1Manage
+import dev.glassworks.s1.KioskApp
+import dev.glassworks.s1.PanePrefs
+import dev.glassworks.s1.base.BaseBackend
+import dev.glassworks.s1.frame.AqaraS1Plus
+import dev.glassworks.s1.manage.S1Manage
 
 /**
  * The Device page's dock row (maintainer, 2026-11-18): *Docked · On its dock* or *Not docked*, live, on the panel's
@@ -117,7 +117,12 @@ class DockRowTest {
         val browser = manage(runtime)
         val docked = browser.get("/device").text()
         assertTrue(docked, docked.contains("<b>Docked</b>") && docked.contains("On its dock"))
-        assertTrue("it has no scripts, so it reloads itself", docked.contains("""<meta http-equiv="refresh" content="3;url=/device">"""))
+        val meta = """<meta http-equiv="refresh" content="3;url=/device">"""
+        assertTrue("it has no scripts, so it reloads itself", docked.contains(meta))
+        // In the head, outside the stylesheet: a refresh tag inside <style> is only text and never reloads.
+        val at = docked.indexOf(meta)
+        assertTrue("the reload is in the head", at < docked.indexOf("</head>"))
+        assertFalse("the reload isn't inside the stylesheet", docked.lastIndexOf("<style", at) > docked.lastIndexOf("</style>", at))
         battery(0)
         val lifted = browser.get("/device").text()
         assertTrue(lifted, lifted.contains("<b>Not docked</b>") && !lifted.contains("On its dock"))

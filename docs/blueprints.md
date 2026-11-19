@@ -92,10 +92,15 @@ who you are there. Manage keeps no Home Assistant token for it.
 
 ## Which version you get
 
-The buttons point at the file on GitHub at the app's own version: the release tag (`v0.5.0`) on a
-release, the commit on a test build, `main` on a development build. A blueprint fits the panel version
-that offers it. A fix to a blueprint reaches you with the next release: add it again then, and Home
-Assistant asks before it replaces the one you have.
+The buttons point at the file on GitHub at the app's own version: on a release, the tag of that app's
+release (`aqara-s1-plus-v0.5.0` on the S1, `generic-android-v0.5.0` for the generic app,
+`generic-android-legacy-v0.5.0` for its legacy build); on a test build, its commit; on a development build,
+`main`. A blueprint fits the panel version that offers it. A fix to a blueprint reaches you with the next
+release: add it again then, and Home Assistant asks before it replaces the one you have.
+
+The site's [blueprints page](https://www.glassworks.dev/blueprints) lists them from the newest app release
+of any frame that has them, and names that release. It still reads the S1's old plain tags (`v0.4.4`).
+Until a release carries them, it says there are none yet. The first ones come with the release after 0.4.4.
 
 ## For pane authors
 

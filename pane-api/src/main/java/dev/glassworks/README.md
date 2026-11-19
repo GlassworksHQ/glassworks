@@ -144,11 +144,14 @@ The ESPHome device is an API, not the settings screen. Keep the list a person se
 
 | Kind | Category | Enabled by default | Example |
 |---|---|---|---|
-| Something people put on a dashboard or automate on | none | Yes | Presence, screen on/off, the media player |
+| Something people put on a dashboard or automate on | none | Yes | Presence, the media player |
 | A setting someone would change from HA | `CONFIG` | Only the common ones | Night mode, wake word, do not disturb |
 | Health and versions | `DIAGNOSTIC` | No, except the few people check | Wi-Fi signal, CPU, radio firmware |
 
 - A pane adds at most a handful of uncategorised entities.
+- **A light that is the panel itself gets `CONFIG`**, though people put it on dashboards. Home Assistant leaves
+  an entity with a category out of area, floor and device targets (and labels on a device or area) and out of
+  Assist, so a room's "lights off" doesn't blank the panel. The screen is one (#591).
 - **Enabled by default only if people reach for it day to day.** "Restart app" is on: people use
   it. "Radio mode" is off: you set it once. Everything else gets `disabledByDefault = true`. HA
   creates it and leaves it off, so it doesn't show on the device's cards. Anyone can turn it on from the device page, and
@@ -225,7 +228,7 @@ reacts to `TimersChanged` and `TimerFinished`. The voice assistant
 app a `DeviceHost`: the pane context, the device's thread, the speaker's players and chime player, the
 panel's address, and hooks for its stop and for cancelling a voice run. The app builds its panes from it in
 the order they start and list their entities, the frame's own panes included (the S1's:
-[`S1Panes.kt`](../../../../../../frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/S1Panes.kt)). The device drops
+[`S1Panes.kt`](../../../../../../frames/aqara-s1-plus/android/src/main/java/dev/glassworks/s1/S1Panes.kt)). The device drops
 the ones the frame can't run (`CantRun`), then starts, stops and lists the rest. A pane that needs
 something from the device takes it in its constructor; it never reaches for the device itself.
 
@@ -270,7 +273,7 @@ not an IANA id). The time zone pane offers it on its page.
 ### Entities that change, and events
 
 A pane's entity list may change while the panel runs. The wall base
-([`WallBasePane.kt`](../../../../../../frames/aqara-s1-plus/panes/wall-base/src/main/java/sh/edm/s1kiosk/base/WallBasePane.kt)) adds relays, buttons and power
+([`WallBasePane.kt`](../../../../../../frames/aqara-s1-plus/panes/wall-base/src/main/java/dev/glassworks/s1/base/WallBasePane.kt)) adds relays, buttons and power
 sensors when a switch base is mounted. The pane then calls `ctx.entitiesChanged()`. The core builds
 the device's list again from its own entities and every pane's `entities()`, and gives it to Home
 Assistant, which reconnects and lists the entities again. `entities()` must return the new list from
@@ -298,7 +301,7 @@ private val prefs = SendspinPrefs(ctx.prefs(id))
 
 The frame decides which file holds a namespace. A namespace is the owner of a set of keys, not a
 file or a key prefix. On the S1 every pane's settings stay in `kiosk.xml`, under the key names they
-had before panes ([`PanePrefs.PANE_FILES`](../../../../../../frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/PanePrefs.kt)), because panels
+had before panes ([`PanePrefs.PANE_FILES`](../../../../../../frames/aqara-s1-plus/android/src/main/java/dev/glassworks/s1/PanePrefs.kt)), because panels
 update in place and no stored value may move. `PrefsPinTest` pins every file, key, type and default.
 `ctx.prefs` refuses a namespace the frame does not know.
 
@@ -362,7 +365,9 @@ steps but no card, with an error in the log: the person could never turn it on o
 (entities as Home Assistant shows them). A slider, a duration (picked from its choices, with units), a
 choice and a daily window are never typed (#63 round 2), so a browser can draw the same controls.
 A `Link` with a `section` opens that section's page instead of something outside the menu (the S1's
-Device page opens the Radio pane this way), on the panel and the Manage page alike.
+Device page opens the Radio pane this way), on the panel and the Manage page alike. A `Link` that opens
+something of the pane's own on the panel gives a `twin` (#518): what it opens, as typed items, which the
+Manage page draws under the link's title (the notifications on the panel, read-only).
 `Info`, `Status`, `Tiles`, `States` and a `Slider` not being dragged are read again every couple of
 seconds while the page is open. If the page itself changes (a base mounted, the pane turned off from
 Home Assistant, the device started), the menu draws it again from the definitions. A `Switch` can ask first (`confirm` gives a `Confirm`: the question, what it costs,
@@ -381,8 +386,8 @@ at ("Needs Presence + camera." at the camera's use), and the Manage page links t
 to it. `Native` is a view only the panel draws,
 where its own layout is nicer than rows (the time zone's picker). Give it a `twin` (#269): the same
 rows and actions as typed items, which every other surface draws instead, so the Manage page has the
-same features. Never put a secret in a twin: it goes to a browser and the diagnostics. A native view
-with no twin says "On the panel" on the Manage page, and `PanelManageParityTest` lists the ones left.
+same features. Never put a secret in a twin: it goes to a browser and the diagnostics. Every native view
+has one: `PanelManageParityTest` fails on a view without it (#518).
 
 **One way to change a setting (#242).** The panel's menu and the Manage page change an item through
 `SettingsChange.change(item, raw, done)`: it checks the value as the panel's control limits it (a
@@ -513,8 +518,9 @@ main thread on Android), so a change from the browser takes the panel's own path
 asks first on the panel asks here too, and the change runs only with that dialog's answer: a one-shot
 token for the same session and change, good for five minutes and dropped when that session signs out (#269). Either sign-in may change any item, a pane's `master`
 included (maintainer, 2026-11-15: the sign-in is the only extra layer). An `Action` is a button that
-posts `run`; one with a `confirm` asks first. A `Native` draws its `twin`'s rows (#269), or says "On the
-panel" when it has none, as a `Link` to something outside the menu does. A pane's row (`manage.paneRow`) takes its name and on/off from its section: the title,
+posts `run`; one with a `confirm` asks first. A `Native` draws its `twin`'s rows (#269), and a `Link`
+its `twin` under its title (#518). Only a `Link` to another app (Android's or Aqara's settings, the
+licences) says "On the panel". A pane's row (`manage.paneRow`) takes its name and on/off from its section: the title,
 `unavailable` for Can't run, the `master` switch (#67) for Off; its chip is `chipWord` and
 `chipTone`, as on the rail. Off panes fold under "Off · N" in the nav, as in the rail.
 `PanelManageParityTest` walks every item the menu draws and fails when one is missing on the Manage
@@ -563,8 +569,10 @@ The S1 needs no root for it: the local-only hotspot is open to any app in the fo
 kiosk's foreground service counts. The hidden API changes two things on the device, and
 `HiddenApHotspot` puts both back whenever the hotspot ends: the device's saved hotspot settings, and
 the Wi-Fi client that Android turns off to start the AP. On most devices, the S1 among them, the Wi-Fi
-client is off while the hotspot runs. A captive portal that opens the page by itself needs root, and
-comes later.
+client is off while the hotspot runs. A captive portal needs root, so only a frame with root can have one:
+on the S1 (`hotspotPortal`), a phone that joins shows its Wi-Fi sign-in prompt, which opens the setup page. The
+address on the screen stays the way in when no prompt comes up, and on every other frame (`hotspotPortal` is false
+by default).
 
 `HotspotPermission` decides what the setup screen shows before it asks: the reason first, then
 Android's dialog, and where to allow it once Android won't ask again.
@@ -583,6 +591,7 @@ A frame (`dev.glassworks.frame.Frame`) is what the core asks the device:
 | `wifiSettingsIntents()` | Where to choose a Wi-Fi network, best first. The default is Android's Wi-Fi panel and settings. |
 | `paneDefinitions(context)` | The definitions of the frame's panes: their setup steps, settings sections and adb extras. |
 | `panes(ctx, device)` | The panes only this device has. The app builds them with its own, once per device run, and the device runs them like any other. |
+| `hotspotPortal` | Whether something with root sends the setup hotspot's DNS (udp 53) and web (tcp 80) to the app's portal (udp 8053, tcp 8098), so a phone that joins opens the setup page by itself (#197). True on the S1, whose radio helper does it. False (the default): no portal. |
 | `rootUpdates` | The frame's way to install app updates without Android's confirmation (the S1's root update service). Null (the default) means PackageInstaller. |
 | `frameRelease` | The frame's own version and releases (#139, `FrameRelease`): its id, the version the device carries in `ro.glassworks.frame.id` and `ro.glassworks.frame.version`, and how an update installs. The core adds a *Frame version* row to the Device page and a *Frame update* entity for it. Null (the default) means neither: a device its vendor updates. The S1 and the Mirror have one. |
 | `shortName` | A short name for the panel on its own pages (the S1's `S1 Plus`). Null (the default) means its friendly name. |
@@ -594,7 +603,7 @@ A frame (`dev.glassworks.frame.Frame`) is what the core asks the device:
 The app makes one frame at start, and `GlassworksRuntime` holds it. The device shell
 (`PanelDevice`) reads only these members; `PanelDeviceFrameTest` fails if it reaches past them.
 
-The S1's frame is [`AqaraS1Plus`](../../../../../../frames/aqara-s1-plus/android/src/main/java/sh/edm/s1kiosk/frame/AqaraS1Plus.kt) (`aqara-s1-plus`). Its
+The S1's frame is [`AqaraS1Plus`](../../../../../../frames/aqara-s1-plus/android/src/main/java/dev/glassworks/s1/frame/AqaraS1Plus.kt) (`aqara-s1-plus`). Its
 presence source is the VI5300 time-of-flight sensor, with Lumi's `proximity_threshold` range table,
 and its light source is the MK6212 sensor. Its panes are the wall base (with Aqara's cloud daemon,
 which holds the wall base UART) and the time zone. It also holds the root update service (`rootUpdates`) and
