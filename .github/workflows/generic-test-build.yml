@@ -80,11 +80,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           INPUT_VERSION: ${{ inputs.version }}
         run: |
-          latest() {   # the newest release of one line (tag <prefix>X.Y.Z), over every page of releases; 0.1.0 without one
+          # Every release tag, over every page; a failed lookup stops the run (it must not read as "no release").
+          tags=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq '.[] | select((.draft or .prerelease) | not) | .tag_name') \
+            || { echo "::error::couldn't list the releases"; exit 1; }
+          latest() {   # the newest release of one line (tag <prefix>X.Y.Z), or 0.1.0 when it has none
             local t
-            t=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-              --jq '.[] | select((.draft or .prerelease) | not) | .tag_name' \
-              | grep -E "^$1[0-9]+[.][0-9]+[.][0-9]+$" | head -n 1 || true)
+            t=$(grep -E "^$1[0-9]+[.][0-9]+[.][0-9]+$" <<< "$tags" | head -n 1 || true)
             echo "${t#"$1"}" | sed 's/^$/0.1.0/'
           }
           next() {     # the next version, carrying a patch or minor of 99 over (versionCode = major*10000 + minor*100 + patch)
