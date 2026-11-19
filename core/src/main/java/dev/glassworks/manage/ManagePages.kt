@@ -108,7 +108,7 @@ ${foot(viewer)}"""
     }
 
     /** The page: the nav, the phone's header, [main], and [overlay] over it all (a dialog). */
-    private fun frame(s: PanelStatus, current: String, title: String, viewer: Viewer, main: String, notice: String? = null, overlay: String = "", css: String = "", head: String = ""): String {
+    private fun frame(s: PanelStatus, current: String, title: String, viewer: Viewer, main: String, notice: String? = null, overlay: String = "", head: String = "", css: String = ""): String {
         val n = nav(s, current, viewer)
         val note = notice?.let { """<div class="notice" role="status"><i class="dot ok"></i>${esc(it)}</div>""" }.orEmpty()
         // Under a dialog the page is inert: Tab stays in the dialog, as in the panel's sheet.

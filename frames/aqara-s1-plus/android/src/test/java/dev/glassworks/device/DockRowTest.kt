@@ -117,7 +117,12 @@ class DockRowTest {
         val browser = manage(runtime)
         val docked = browser.get("/device").text()
         assertTrue(docked, docked.contains("<b>Docked</b>") && docked.contains("On its dock"))
-        assertTrue("it has no scripts, so it reloads itself", docked.contains("""<meta http-equiv="refresh" content="3;url=/device">"""))
+        val meta = """<meta http-equiv="refresh" content="3;url=/device">"""
+        assertTrue("it has no scripts, so it reloads itself", docked.contains(meta))
+        // In the head, outside the stylesheet: a refresh tag inside <style> is only text and never reloads.
+        val at = docked.indexOf(meta)
+        assertTrue("the reload is in the head", at < docked.indexOf("</head>"))
+        assertFalse("the reload isn't inside the stylesheet", docked.lastIndexOf("<style", at) > docked.lastIndexOf("</style>", at))
         battery(0)
         val lifted = browser.get("/device").text()
         assertTrue(lifted, lifted.contains("<b>Not docked</b>") && !lifted.contains("On its dock"))
