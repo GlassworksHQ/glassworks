@@ -231,7 +231,8 @@ export interface UndoResult {
  * install.sh --undo: Aqara's apps, launcher, DND, keyboard and radio/cloud services back, and Glassworks
  * removed or disabled. The kiosk is a device admin, and Android refuses to disable or uninstall an active admin,
  * so it first asks the app to drop that and waits until it has. Ends by checking that HOME really is
- * Aqara's launcher again, and throws if not (rather than claiming success with the kiosk on screen).
+ * Aqara's launcher again, and throws if not (rather than claiming success with the kiosk on screen),
+ * unless Glassworks could not be turned off: then it is still a HOME app, and the result says so.
  * HOME being Aqara's says nothing about Glassworks, so the result says what happened to it.
  */
 export async function unprovision(p: PanelShell, onStep: StepFn = () => {},
@@ -267,7 +268,7 @@ export async function unprovision(p: PanelShell, onStep: StepFn = () => {},
     const l = await p.run(`pm list packages ${PKG}`);
     return l.code === 0 && !l.out.split(/\r?\n/).some((x) => x.trim() === `package:${PKG}`)
       ? removed
-      : { app: 'running', note: 'Android would not turn Glassworks off, so it is still installed and may start again.' };
+      : { app: 'running', note: 'Android would not turn Glassworks off. It is still installed, so the panel may start it again or ask which home screen to use.' };
   };
   let result: UndoResult;
   if (wifiAtRisk(wifi)) {
@@ -293,9 +294,12 @@ export async function unprovision(p: PanelShell, onStep: StepFn = () => {},
 
   r.step('Checking the panel opens Aqara\'s home screen');
   const home = (await r.try(HOME_QUERY)).trim().split(/\r?\n/).pop() ?? '';
-  if (!home.startsWith(`${LAUNCHER}/`)) {
-    throw new Error(`the panel's home screen is still ${home || 'unknown'}, not Aqara's launcher`);
+  if (home.startsWith(`${LAUNCHER}/`)) {
+    await r.try('am start -a android.intent.action.MAIN -c android.intent.category.HOME');
+    return result;
   }
-  await r.try('am start -a android.intent.action.MAIN -c android.intent.category.HOME');
-  return result;
+  // Glassworks still enabled is still a HOME app, so HOME is the chooser (or Glassworks): the result
+  // says that, not the HOME error.
+  if (result.app === 'running') return result;
+  throw new Error(`the panel's home screen is still ${home || 'unknown'}, not Aqara's launcher`);
 }

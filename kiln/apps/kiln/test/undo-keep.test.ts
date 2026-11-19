@@ -56,7 +56,8 @@ describe('Undo, keeping the settings', () => {
   it('says Glassworks is still on when Android won\'t remove or disable it, and doesn\'t move on', async () => {
     const { session, panel } = await setup({ boot: demoBootImage(), vbmeta: new Uint8Array(4096), bootloader: new Uint8Array(4096) });
     panel.run.mockImplementation(async (cmd: string) => (
-      cmd.startsWith('cmd package resolve-activity') ? { out: 'com.aqara.inhome.launcher/.MainActivity\n', code: 0 }
+      // still enabled, Glassworks is still a HOME app: Android shows the chooser (seen on the S1, 2026-11-19)
+      cmd.startsWith('cmd package resolve-activity') ? { out: 'android/com.android.internal.app.ResolverActivity\n', code: 0 }
       : cmd === 'pm uninstall sh.edm.s1kiosk' ? { out: 'Failure [DELETE_FAILED_INTERNAL_ERROR]\n', code: 1 }
       : cmd === 'pm disable-user --user 0 sh.edm.s1kiosk' ? { out: 'Error: java.lang.SecurityException\n', code: 255 }
       : cmd === 'pm list packages sh.edm.s1kiosk' ? { out: 'package:sh.edm.s1kiosk\n', code: 0 }

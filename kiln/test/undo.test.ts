@@ -46,7 +46,7 @@ describe('what the give-back says', () => {
     const off = appsBackNote({ app: 'disabled', note: 'Glassworks is installed but turned off, so the panel keeps its Wi-Fi.' });
     expect(off).toMatchObject({ done: true, kind: 'ok', title: 'Aqara\'s apps are back' });
     expect(off.sub).toMatch(/^Glassworks is installed but turned off/);
-    const on = appsBackNote({ app: 'running', note: 'Android would not turn Glassworks off, so it is still installed and may start again.' });
+    const on = appsBackNote({ app: 'running', note: 'Android would not turn Glassworks off. It is still installed, so the panel may start it again or ask which home screen to use.' });
     expect(on).toMatchObject({ done: false, kind: 'err', title: 'Aqara\'s apps are back, but Glassworks is still on' });
     expect(on.sub).toMatch(/would not turn Glassworks off[\s\S]*Try again/);
   });

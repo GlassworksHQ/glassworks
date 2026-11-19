@@ -116,7 +116,11 @@ case "$cmd" in
     fresh_data 10073 debug; put installed debug; put disabled 0; echo Success ;;
   "grep -c ' @s1kiosk_improv\$' /proc/net/unix") echo 1 ;;
   "cmd package set-home-activity com.aqara.inhome.launcher/.MainActivity") put home aqara ;;
-  "cmd package resolve-activity"*) [ "$(st home)" = aqara ] && echo "com.aqara.inhome.launcher/.MainActivity" || echo "sh.edm.s1kiosk/.MainActivity" ;;
+  "cmd package resolve-activity"*)
+    # chooser: Glassworks still a HOME app next to Aqara's launcher (seen on the S1, 2026-11-19)
+    if [ "$(st chooser)" = 1 ]; then echo "android/com.android.internal.app.ResolverActivity"
+    elif [ "$(st home)" = aqara ]; then echo "com.aqara.inhome.launcher/.MainActivity"
+    else echo "sh.edm.s1kiosk/.MainActivity"; fi ;;
   "su -c 'sh /data/local/tmp/glassworks-switch.sh "*"'")
     [ "$(st root)" = 1 ] || { echo "Permission denied"; exit 1; }
     a=${cmd#su -c \'sh /data/local/tmp/glassworks-switch.sh }; a=${a%\'}
@@ -143,7 +147,7 @@ APK="$T/kiosk-release.apk"; echo apk > "$APK"
 
 # A debug build with its data, as HOME + device admin, on Wi-Fi it saved.
 panel() { # [wifi fixture]
-  rm -rf "$T/panel" "$T"/{adb.log,root-cmds,root.log,violations,improv.got,installed,disabled,root,admin,home,new-install,uninstall,restore,disable,old-install,list}
+  rm -rf "$T/panel" "$T"/{adb.log,root-cmds,root.log,violations,improv.got,installed,disabled,root,admin,home,new-install,uninstall,restore,disable,old-install,list,chooser}
   mkdir -p "$T/panel"
   cp "$FIX/WifiConfigStore.xml" "$T/WifiConfigStore.xml"
   fresh_data 10071 debug
@@ -374,6 +378,17 @@ check "...says so" has "$out" "Android would not disable Glassworks"
 check "...not that it is disabled" hasnt "$out" "Glassworks is disabled"
 check "...still restarts Aqara's radio services" has "$(cat "$T/adb.log")" "setprop ctl.start ha_master"
 check "...still checks HOME" has "$(cat "$T/adb.log")" "cmd package resolve-activity"
+for fix in dumpsys-wifi-other.txt dumpsys-wifi-kiosk.txt; do
+  panel "$fix"; printf fail > "$T/uninstall"; printf fail > "$T/disable"; printf 1 > "$T/chooser"
+  out=$("$REPO/frames/aqara-s1-plus/tools/install.sh" --undo </dev/null 2>&1); rc=$?
+  check "disable refused, HOME on the chooser ($fix): fails" test $rc -ne 0
+  check "...says Glassworks is still on" has "$out" "Aqara's apps are back, but Android would not disable Glassworks"
+  check "...not the HOME error" hasnt "$out" "the home screen is still"
+  check "...doesn't open the chooser" hasnt "$(cat "$T/adb.log")" "am start -a android.intent.action.MAIN"
+done
+panel; printf 1 > "$T/chooser"
+out=$("$REPO/frames/aqara-s1-plus/tools/install.sh" --undo </dev/null 2>&1); rc=$?
+check "HOME on the chooser with Glassworks disabled: still the HOME error" bash -c '[ "$1" -ne 0 ] && grep -q "the home screen is still android/com.android.internal.app.ResolverActivity" <<<"$2"' _ $rc "$out"
 for fix in dumpsys-wifi-other.txt dumpsys-wifi-kiosk.txt; do
   panel "$fix"; printf none > "$T/installed"
   out=$("$REPO/frames/aqara-s1-plus/tools/install.sh" --undo </dev/null 2>&1); rc=$?

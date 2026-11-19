@@ -301,8 +301,14 @@ describe('switching a development build to this one', () => {
 describe('undo keeps the panel on its Wi-Fi', () => {
   class UndoWifiPanel extends SwitchPanel {
     home = 'sh.edm.s1kiosk/.MainActivity';
+    /** Glassworks stays a HOME app (it wasn't disabled): Android shows the chooser. */
+    chooser = false;
     override async run(cmd: string) {
-      if (cmd.startsWith('cmd package set-home-activity com.aqara')) { this.cmds.push(cmd); this.home = 'com.aqara.inhome.launcher/.MainActivity'; return { out: '', code: 0 }; }
+      if (cmd.startsWith('cmd package set-home-activity com.aqara')) {
+        this.cmds.push(cmd);
+        this.home = this.chooser ? 'android/com.android.internal.app.ResolverActivity' : 'com.aqara.inhome.launcher/.MainActivity';
+        return { out: '', code: 0 };
+      }
       if (cmd.startsWith('cmd package resolve-activity')) { this.cmds.push(cmd); return { out: `${this.home}\n`, code: 0 }; }
       return super.run(cmd);
     }
@@ -349,6 +355,27 @@ describe('undo keeps the panel on its Wi-Fi', () => {
       p.wifiDump = dump;
       expect(await unprovision(p, () => {}, noSleep)).toEqual({ app: 'removed', note: 'Glassworks is removed.' });
     }
+  });
+
+  it('Glassworks still on leaves HOME on the chooser: says Glassworks is still on, not the HOME error', async () => {
+    for (const dump of [fixture('dumpsys-wifi-kiosk.txt'), fixture('dumpsys-wifi-other.txt')]) {
+      const p = new UndoWifiPanel();
+      p.chooser = true;
+      p.wifiDump = dump;
+      const run = p.run.bind(p);
+      p.run = async (cmd) => (cmd === 'pm uninstall sh.edm.s1kiosk' || cmd === 'pm disable-user --user 0 sh.edm.s1kiosk'
+        ? (p.cmds.push(cmd), { out: 'Failure\n', code: 1 }) : run(cmd));
+      const result = await unprovision(p, () => {}, noSleep);
+      expect(result.app).toBe('running');
+      expect(result.note).toMatch(/ask which home screen to use/);
+      expect(p.cmds).not.toContain('am start -a android.intent.action.MAIN -c android.intent.category.HOME');
+    }
+  });
+
+  it('HOME on the chooser with Glassworks off is still an error', async () => {
+    const p = new UndoWifiPanel();
+    p.chooser = true;
+    await expect(unprovision(p, () => {}, noSleep)).rejects.toThrow(/home screen is still android\/com\.android\.internal\.app\.ResolverActivity/);
   });
 
   it('a package listing that fails is not taken as removed', async () => {

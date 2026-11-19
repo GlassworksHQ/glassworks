@@ -603,7 +603,7 @@ class Installer {
       void this.openUndo().then(() => {
         document.querySelector<HTMLInputElement>('input[name=how][value=keep]')!.checked = true;
         this.renderUndoOrder();
-        const n = appsBackNote({ app: 'running', note: 'Android would not turn Glassworks off, so it is still installed and may start again.' });
+        const n = appsBackNote({ app: 'running', note: 'Android would not turn Glassworks off. It is still installed, so the panel may start it again or ask which home screen to use.' });
         this.undoNote(n.kind, n.title, n.sub);
       });
     }

@@ -332,7 +332,7 @@ export async function enterDemo(session: Session, which: Demo): Promise<void> {
       return;
     case 'undo-still-on': // the apps are back, but Android would not remove or disable Glassworks
       await session.openUndo();
-      dispatch({ type: 'undo', patch: { depth: 'keep', note: { kind: 'err', title: 'Aqara\'s apps are back, but Glassworks is still on.', sub: `Android would not turn Glassworks off, so it is still installed and may start again. Try again, or choose "${s1PlusUi.undo.factory.title}".` } } });
+      dispatch({ type: 'undo', patch: { depth: 'keep', note: { kind: 'err', title: 'Aqara\'s apps are back, but Glassworks is still on.', sub: `Android would not turn Glassworks off. It is still installed, so the panel may start it again or ask which home screen to use. Try again, or choose "${s1PlusUi.undo.factory.title}".` } } });
       return;
     case 'undo-unreadable': // this browser has a backup, but IndexedDB fails to read it
       await session.openUndo();

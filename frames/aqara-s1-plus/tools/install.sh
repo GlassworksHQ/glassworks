@@ -344,10 +344,11 @@ if [[ $UNDO -eq 1 ]]; then
   if [[ $DRY -eq 0 ]]; then
     HOME_ACT=$(adb shell cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.HOME | tr -d '\r' | tail -1)
     case "$HOME_ACT" in
-      com.aqara.inhome.launcher/*) ;;
-      *) echo "ERROR: the home screen is still $HOME_ACT, not Aqara's launcher" >&2; exit 1 ;;
+      com.aqara.inhome.launcher/*) adb shell am start -a android.intent.action.MAIN -c android.intent.category.HOME >/dev/null ;;
+      # Glassworks still enabled is still a HOME app, so HOME is the chooser (or Glassworks): the
+      # failed message below says that, not this one.
+      *) if [[ $APP_AFTER_UNDO != failed ]]; then echo "ERROR: the home screen is still $HOME_ACT, not Aqara's launcher" >&2; exit 1; fi ;;
     esac
-    adb shell am start -a android.intent.action.MAIN -c android.intent.category.HOME >/dev/null
   fi
   case $APP_AFTER_UNDO in
     removed) echo "Done. Aqara's apps are back and Glassworks is removed (reinstall: $0 --url ...)." ;;
@@ -358,8 +359,8 @@ if [[ $UNDO -eq 1 ]]; then
       echo "Done. Aqara's apps are back. Android would not remove Glassworks, so it is disabled instead."
       echo "To remove Glassworks completely, see frames/aqara-s1-plus/docs/install.md#undo. Reinstall: $0 --url ..." ;;
     failed)
-      echo "ERROR: Aqara's apps are back, but Android would not disable Glassworks: it is still installed and" >&2
-      echo "  may start again. Run $0 --undo again." >&2
+      echo "ERROR: Aqara's apps are back, but Android would not disable Glassworks. It is still installed, so the" >&2
+      echo "  panel may start it again or ask which home screen to use. Run $0 --undo again." >&2
       exit 1 ;;
   esac
   exit 0
