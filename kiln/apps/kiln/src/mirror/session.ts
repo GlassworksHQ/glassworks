@@ -55,6 +55,8 @@ export interface MirrorDeps {
   homeTimeoutMs?: number;
   /** The APK from the newest Mirror release, through Kiln's release route; without it, a file the tester picks. */
   release?: typeof fetch;
+  /** How long the release route may stay silent (release.ts RELEASE_STALL_MS); tests make it short. */
+  releaseStallMs?: number;
 }
 
 /**
@@ -147,7 +149,7 @@ export class MirrorSession {
     const source = this.sources;
     const current = () => this.sources === source;
     try {
-      const { bytes, ready } = await releaseApk(get, (release) => { if (current()) this.set({ release }); });
+      const { bytes, ready } = await releaseApk(get, (release) => { if (current()) this.set({ release }); }, this.d.releaseStallMs);
       if (!current()) return;
       this.log(`${ready.name} from ${ready.tag}: SHA-256 ${ready.sha256}, as the release publishes it`);
       await this.pickApk(ready.name, bytes);

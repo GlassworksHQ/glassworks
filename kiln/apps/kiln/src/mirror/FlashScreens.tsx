@@ -92,7 +92,7 @@ export function FlashImage({ f, s, m, ms }: P) {
         <label className="field"><span>Wi-Fi network (optional)</span>
           <input className="input" autoComplete="off" value={s.wifi.ssid} onChange={(e) => f.setWifi({ ssid: e.target.value })} />
         </label>
-        <label className="field"><span>Wi-Fi password</span>
+        <label className="field"><span>Wi-Fi password (if it has one)</span>
           <input className="input" type="password" autoComplete="off" value={s.wifi.password} onChange={(e) => f.setWifi({ password: e.target.value })} />
         </label>
       </div>

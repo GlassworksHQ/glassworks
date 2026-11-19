@@ -114,7 +114,7 @@ function Off() {
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">The Mirror doesn&apos;t install from Kiln yet.</h2>
-      <p className="lede">It is under development, with no release yet. Follow it on GitHub, or pick another panel.</p>
+      <p className="lede">Its installer is still being tested. Follow it on GitHub, or pick another panel.</p>
       <div className="foot">
         <a className="link" href="https://github.com/GlassworksHQ/glassworks/tree/main/frames/lululemon-mirror">The Mirror on GitHub</a>
         <Link className="btn ghost" href="/">Pick a panel</Link>
