@@ -59,8 +59,12 @@ the module, whose `init`:
   (`README.md:60-64`).
 
 Persistence is the init `on boot` trigger itself, so it depends on nothing else — not Wi-Fi, not the
-app, not the state of `/data` (`README.md:63-64`). It writes **only `system`**; boot, recovery,
-aboot and modem are untouched (`README.md:24`, `README.md:121`).
+app, not the state of `/data` (`README.md:63-64`). The **flash** writes **only `system`**; boot,
+recovery, aboot and modem are untouched (`README.md:24`, `README.md:121`). At runtime the module
+does then write into `/data`: it copies the adb key to `/data/misc/adb/adb_keys` and creates the
+`/data/local/rootd` daemon dir (`mod/mirror_root.c:36-67`). A `system` reflash restores the boot and
+app surfaces but does not undo those `userdata` files, which a fresh `userdata` (or deleting them)
+clears.
 
 The hard part — making a module the loader accepts — is solved by recovering the ABI from the
 vendor's own files (`docs/ABI.md`):
@@ -168,14 +172,18 @@ Only partly, and the differences are the interesting part:
   build `IFC-6309-2.0-MIR/673`). We run the **Glass Panes `mirror-android-2`** system under stock
   signed boot `IFC-6309-2.0-MIR.S22Q401` ([image-patch.md](image-patch.md)) — a different boot build.
 - Its key method **works because stock 1.16.0 adbd reads `/data/misc/adb/adb_keys`** — normal AOSP
-  `android-6.0.1_r81` behaviour (`README.md:331-333`). **Our image's adbd ignores that file**
-  entirely and defers all auth to the framework's one hardcoded fingerprint
-  ([adbd-keys.md](adbd-keys.md)). So planting a key in `userdata` authenticates on jstriblet's stock
-  unit but is **inert on our image** — exactly what we verified on 2026-11-16.
+  `android-6.0.1_r81` behaviour (`README.md:331-333`). On **our** image, planting a key in `userdata`
+  is **inert**: we verified on 2026-11-16 that such a key stays `unauthorized` and only the
+  framework's one hardcoded fingerprint authenticates ([adbd-keys.md](adbd-keys.md)). The
+  *observation* is verified; the *cause* is a hypothesis — [adbd-keys.md](adbd-keys.md)'s
+  best-supported reading is that this adbd doesn't verify against the file and defers to the
+  framework, but a malformed combined key file is narrowed, not ruled out, since the file's bytes
+  were not read. Either way the key plant does not authenticate on our image.
 
 This is a useful cross-check for [adbd-keys.md](adbd-keys.md): on at least one **stock** firmware
 (1.16.0, boot `/673`) adbd behaves like stock AOSP and honours `adb_keys`. It does not contradict our
-"the Glass Panes image's adbd ignores the file" finding — different boot build, and no Glass Panes
+observation that a key planted on the Glass Panes image stays `unauthorized` (adbd-keys.md's
+best-supported reading: that adbd defers to the framework) — different boot build, and no Glass Panes
 `services.jar` in the picture — but it narrows where the deviation lives (the specific stock boot
 build we run under, or something the Glass Panes system does, still not separated).
 
@@ -209,7 +217,8 @@ builder, and on **our** image the key plant is inert). Keep from it:
 2. **Fact** — stock 1.16.0 adbd reads `adb_keys` normally (a cross-check for
    [adbd-keys.md](adbd-keys.md); consistent, different boot build).
 3. **Idea** — a persistent **TCP adb listener** as a headless-recovery path (see #435/#486/#577
-   below). **Untested on our image**, because our adbd defers auth to `services.jar`, so whether a
+   below). **Untested on our image**, because our adbd most likely defers auth to `services.jar`
+   (adbd-keys.md's best-supported reading), so whether a
    TCP transport is auto-approved for the owner fingerprint at all is unknown.
 
 ## How each bears on the open issues
@@ -234,9 +243,24 @@ Both repos were read, not run. To repeat the reading, clone each into its **own 
 Compare against our verified notes: [mirror-root.md](mirror-root.md) §4 and §7,
 [adbd-keys.md](adbd-keys.md), [option-c.md](option-c.md), [image-patch.md](image-patch.md).
 
-A short read-only panel check that would settle whether `shihanqu`'s exact mechanism (a free
-`adsprpc.ko` slot that `init` tries to load on boot) exists on **our** image is in the root's panel
-plan (`~/.t3/glassworks-m1/573/panel-plan.md`). Nothing in this note needs a device.
+A short **read-only** panel check (for the root — only the root drives the Mirror) would settle
+whether `shihanqu`'s exact mechanism — a free `adsprpc.ko` slot that `init` loads on boot — exists on
+**our** image. All of it is `ls`/`cat`/`dmesg`/`getprop`, no writes, no serial printed
+(`S=$(cat /tmp/mirror-serial)`):
+
+```sh
+# Is the adsprpc.ko slot free, and does init try (and fail) to load it on boot?
+adb -s "$S" shell ls -l /system/lib/modules/adsprpc.ko     # expect "No such file" if free
+adb -s "$S" shell 'dmesg | grep -iE "adsprpc|insmod"'      # a failed-insmod line = the init trigger exists
+adb -s "$S" shell cat /proc/modules                        # expect wlan, not adsprpc
+# Does our image ship /system/xbin/su (shihanqu needs it)?
+adb -s "$S" shell ls -l /system/xbin/su                    # mode if readable, else Permission denied
+# Confirm the kernel identity for a vermagic-adapted module (already known: -gf46dad5260f, module_layout 0xa5b7f7dd)
+adb -s "$S" shell cat /proc/version
+```
+
+The fuller version, with the pass/fail reading for each, is in the root's trail
+(`~/.t3/glassworks-m1/573/panel-plan.md`). Nothing in this note needs a device.
 
 ## Open questions
 
