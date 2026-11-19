@@ -22,6 +22,25 @@ export function staleDirs(names: readonly string[], locked: readonly string[], o
   return names.filter((n) => (n === DIR_PREFIX || n.startsWith(`${DIR_PREFIX}-`)) && n !== own && !locked.includes(n));
 }
 
+/** The part of the Web Locks API the sweep uses (navigator.locks in a worker; a fake in the tests). */
+export interface Locks {
+  request(name: string, cb: () => Promise<void>): Promise<void>;
+  request(name: string, o: { ifAvailable: true }, cb: (lock: unknown) => Promise<void>): Promise<void>;
+}
+
+/**
+ * Claims this page's folder, then sweeps: waits until it holds its own folder's lock (it creates no
+ * file before), then takes each other Kiln folder's lock if it is free, and deletes that folder only
+ * while holding it. A folder whose page is alive (its lock held) is never deleted, however the starts
+ * of two pages interleave. Resolves once the sweep is done; the own lock stays held until the worker ends.
+ */
+export async function claimAndSweep(locks: Locks, own: string, list: () => Promise<string[]>, remove: (name: string) => Promise<void>): Promise<void> {
+  await new Promise<void>((held) => { void locks.request(own, () => { held(); return new Promise<void>(() => {}); }); });
+  for (const n of staleDirs(await list(), [], own)) {
+    await locks.request(n, { ifAvailable: true }, async (lock) => { if (lock) await remove(n).catch(() => {}); });
+  }
+}
+
 /** Where download() keeps a file, apart from the images Kiln builds. */
 export const downloaded = (name: string) => `download-${name}`;
 

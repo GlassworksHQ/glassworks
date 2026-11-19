@@ -6,7 +6,7 @@
 // file only carries messages.
 import type { ImageFile } from '@glassworks/kiln-core';
 import { ProxyError, WrongImage } from '@glassworks/lululemon-mirror-installer';
-import { imageJobs, jobQueue, sessionDir, staleDirs, type BuildOptions, type JobHandle } from './imageJobs';
+import { claimAndSweep, imageJobs, jobQueue, sessionDir, type BuildOptions, type JobHandle, type Locks } from './imageJobs';
 
 type In = { id: number; op: 'fetch'; url: string } | { id: number; op: 'download'; url: string; file: ImageFile } | ({ id: number; op: 'build' } & BuildOptions)
   | { id: number; op: 'check'; file: Blob; want: ImageFile } | { id: number; op: 'discard' };
@@ -14,17 +14,19 @@ type In = { id: number; op: 'fetch'; url: string } | { id: number; op: 'download
 const DIR = (self as unknown as { name?: string }).name || sessionDir(crypto.randomUUID());
 const root = () => navigator.storage.getDirectory();
 
-/** This page's lock on its folder, held until the worker ends; then the closed tab's folders that are left get swept. */
+/**
+ * This page's lock on its folder, held until the worker ends, before any file is made; then closed tabs'
+ * folders get swept, each only under its own lock (claimAndSweep). Every job waits for this.
+ */
 const ready = (async () => {
-  const locks = (navigator as Navigator & { locks?: LockManager }).locks;
+  const locks = (navigator as Navigator & { locks?: Locks }).locks;
   if (!locks) return;
-  void locks.request(DIR, () => new Promise<void>(() => {}));
   try {
-    const q = await locks.query();
-    const locked = [...(q.held ?? []), ...(q.pending ?? [])].map((l) => l.name ?? '');
-    const names: string[] = [];
-    for await (const name of (await root() as unknown as { keys(): AsyncIterable<string> }).keys()) names.push(name);
-    for (const n of staleDirs(names, locked, DIR)) await (await root()).removeEntry(n, { recursive: true }).catch(() => {});
+    await claimAndSweep(locks, DIR, async () => {
+      const names: string[] = [];
+      for await (const name of (await root() as unknown as { keys(): AsyncIterable<string> }).keys()) names.push(name);
+      return names;
+    }, async (name) => { await (await root()).removeEntry(name, { recursive: true }); });
   } catch { /* a sweep that fails leaves storage as it was */ }
 })();
 const jobs = imageJobs(

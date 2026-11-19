@@ -5,7 +5,7 @@ import { fakeAdbKey, fakeMirrorApk, fakeServicesJar } from '@glassworks/lululemo
 import { describe, expect, it } from 'vitest';
 import { Disk, MemoryStore, mkfs, writeSparse } from '@glassworks/ext4';
 import { GLASS_PANES } from '@glassworks/lululemon-mirror-installer';
-import { Cancelled, imageJobs, jobQueue, sessionDir, staleDirs, type JobHandle } from '../src/mirror/imageJobs';
+import { Cancelled, claimAndSweep, imageJobs, jobQueue, sessionDir, staleDirs, type JobHandle, type Locks } from '../src/mirror/imageJobs';
 
 /** A file in memory, shaped like OPFS's FileSystemSyncAccessHandle. */
 class MemHandle implements JobHandle {
@@ -200,5 +200,36 @@ describe('the image worker\'s jobs', () => {
     expect(own).toBe('kiln-mirror-b');
     const names = ['kiln-mirror', 'kiln-mirror-a', own, 'kiln-mirror-c', 'other-app', 'kiln-mirrorish'];
     expect(staleDirs(names, ['kiln-mirror-c'], own)).toEqual(['kiln-mirror', 'kiln-mirror-a']);
+  });
+
+  it('the sweep deletes a folder only under its own lock: a page that starts mid-sweep keeps its folder (PR 596 review)', async () => {
+    /** A Web Locks stand-in: names held, and requests waiting for them. */
+    const held = new Set<string>();
+    const waiting = new Map<string, (() => void)[]>();
+    const locks: Locks = {
+      async request(name: string, a: unknown, b?: unknown): Promise<void> {
+        const ifAvailable = typeof a === 'object';
+        const cb = (ifAvailable ? b : a) as (lock?: unknown) => Promise<void>;
+        if (held.has(name)) {
+          if (ifAvailable) return cb(null);
+          await new Promise<void>((r) => { waiting.set(name, [...(waiting.get(name) ?? []), r]); });
+        }
+        held.add(name);
+        try { await cb({ name }); } finally { held.delete(name); waiting.get(name)?.shift()?.(); }
+      },
+    } as Locks;
+    const removed: string[] = [];
+    // page A lists the folders, then pauses before deleting; page B starts in between and claims its own folder
+    let resumeA!: () => void;
+    const listA = async () => { const names = ['kiln-mirror', 'kiln-mirror-old', 'kiln-mirror-b']; await new Promise<void>((r) => { resumeA = r; }); return names; };
+    const a = claimAndSweep(locks, 'kiln-mirror-a', listA, async (n) => { removed.push(n); });
+    await new Promise((r) => setTimeout(r, 0));
+    const b = claimAndSweep(locks, 'kiln-mirror-b', async () => ['kiln-mirror-a', 'kiln-mirror-b'], async (n) => { removed.push(`b:${n}`); });
+    await b; // B holds its own lock, and leaves A's folder (A holds it)
+    expect(held.has('kiln-mirror-b')).toBe(true);
+    resumeA();
+    await a;
+    expect(removed).toEqual(['kiln-mirror', 'kiln-mirror-old']); // never B's live folder, never A's own
+    expect(held.has('kiln-mirror-a') && held.has('kiln-mirror-b')).toBe(true);
   });
 });
