@@ -652,7 +652,8 @@ def s1_full_names(manifest):
 
     def full(m):
         attr, q, name = m.group(1), m.group(2), m.group(3)
-        fq = OLD + name if name.startswith(".") else name
+        # Android resolves ".X" and a bare "X" (no dot) against the namespace.
+        fq = OLD + name if name.startswith(".") else name if "." in name else f"{OLD}.{name}"
         if fq in S1_SHIMS or fq == S1_ALIAS:
             return f'{attr}{q}{fq}{q}'
         if fq in COMPONENTS:
@@ -666,7 +667,7 @@ def s1_full_names(manifest):
                 return f'{attr}{q}{PACKAGES[sub]}.{cls}{q}'
         return m.group(0)
     # Class names only: the component tags' own name and targetActivity, never an <action> or <meta-data> name.
-    name = re.compile(r'(android:(?:name|targetActivity|backupAgent)\s*=\s*)(["\'])(\.[\w.]+|sh\.edm\.s1kiosk\.[\w.]+)\2')
+    name = re.compile(r'(android:(?:name|targetActivity|backupAgent)\s*=\s*)(["\'])(\.[\w.]+|sh\.edm\.s1kiosk\.[\w.]+|\w+)\2')
     tag = re.compile(r'<(?:application|activity|activity-alias|service|receiver|provider)\b[^>]*>')
     new = tag.sub(lambda t: name.sub(full, t.group(0)), text)
     new = new.replace(f'android:taskAffinity="{OLD}.', f'android:taskAffinity="{S1_NAMESPACE}.')
