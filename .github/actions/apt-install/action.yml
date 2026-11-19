@@ -2,9 +2,10 @@
 #
 # On 2026-11-18 and 19, `apt-get update && apt-get install ffmpeg` took 0.3 to 26 minutes (median 10 in perf-webrtc,
 # which then hit its 30-minute limit), and failed twice on a mirror's 503. The cache is named by the runner image and
-# the packages, so its files are the versions that image's package lists name: with it, nothing is downloaded and
-# there's no `apt-get update`. Without that image's own entry, another image's files go first. Runs that aren't
-# for a pull request save it (main's pushes, the nightly run); a pull request only reads it, as with Gradle's caches.
+# the packages. Its files are installed by path, so nothing is downloaded and there's no `apt-get update`, even
+# when the image's lists name older versions. Without that image's own entry, another image's files go first.
+# Runs that aren't for a pull request save it (main's pushes, the nightly run); a pull request only reads it, as
+# with Gradle's caches.
 name: apt-get install, cached
 description: Installs Ubuntu packages from a cache of their .deb files, named by the runner image
 inputs:
@@ -44,24 +45,35 @@ runs:
         set -euo pipefail
         d="$HOME/.cache/apt-archives"
         mkdir -p "$d/partial"
-        before=$(find "$d" -maxdepth 1 -name '*.deb' | wc -l)
+        cached=("$d"/*.deb); [ -e "${cached[0]}" ] || cached=()
         # man-db rebuilds its index after each install, which can take minutes here; nothing on a runner reads it.
         sudo rm -f /var/lib/man-db/auto-update
         apt=(sudo env DEBIAN_FRONTEND=noninteractive NEEDRESTART_SUSPEND=1 apt-get -qq
              -o Dir::Cache::Archives="$d" -o APT::Sandbox::User=root -o Acquire::Retries=3)
-        # The image's own package lists first: they name the files the cache holds. When they no longer match the
-        # mirror (or the package is new), update them and try again.
+        # 1. The cached files by path: apt takes them whatever version this image's lists name (a run that had to
+        #    update its lists saved newer ones). 2. The image's own lists, without an update. 3. Updated lists.
         # shellcheck disable=SC2086 # a list of packages
-        if ! "${apt[@]}" install -y --no-install-recommends $PACKAGES > /dev/null; then
+        if [ "${#cached[@]}" -gt 0 ] && "${apt[@]}" install -y --no-install-recommends $PACKAGES "${cached[@]}" > /dev/null; then
+          how="the cached files"
+        elif "${apt[@]}" install -y --no-install-recommends $PACKAGES > /dev/null; then
+          how="the image's package lists"
+        else
           echo "Not from the image's package lists alone; updating them."
           "${apt[@]}" update
           # shellcheck disable=SC2086
           "${apt[@]}" install -y --no-install-recommends $PACKAGES > /dev/null
+          how="updated package lists"
         fi
         sudo chown -R "$(id -u):$(id -g)" "$d"
         rm -rf "$d/partial" "$d/lock"
-        after=$(find "$d" -maxdepth 1 -name '*.deb' | wc -l)
-        echo "$PACKAGES: $before .deb files from the cache, $((after - before)) downloaded."
+        # Keep only the files of what is installed now, at that version: the next save holds exactly this set.
+        kept=0
+        for f in "$d"/*.deb; do
+          [ -e "$f" ] || continue
+          name=$(dpkg-deb -f "$f" Package); version=$(dpkg-deb -f "$f" Version)
+          if [ "$(dpkg-query -W -f='${Version}' "$name" 2>/dev/null || true)" = "$version" ]; then kept=$((kept + 1)); else rm -f "$f"; fi
+        done
+        echo "$PACKAGES: installed from $how; ${#cached[@]} .deb files restored, $kept kept for the cache."
 
     - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       if: steps.restore.outputs.cache-hit != 'true' && github.event_name != 'pull_request'
