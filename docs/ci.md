@@ -104,7 +104,8 @@ the report job after every job.
 
 A new push to a PR cancels that PR's older run (`concurrency` with the PR's number). A push to `main`,
 the nightly run and a manual run each get a group of their own (`github.run_id`), so nothing cancels or
-holds them. `core-emulators.yml` runs on no PR, so it has no group: every run finishes. The test builds (`test-build.yml`,
+holds them. So does a rerun (attempt 2 on, by hand or by [Reruns](#reruns)): rerunning an older commit's jobs
+must not cancel the newer commit's run in the PR's group. A new push doesn't cancel a rerun either. `core-emulators.yml` runs on no PR, so it has no group: every run finishes. The test builds (`test-build.yml`,
 `generic-test-build.yml`) cancel per branch. Releases and the libraries' release never cancel.
 
 ## Caches
@@ -148,9 +149,49 @@ What else cut a job's time (#536, measured on the runs of 2026-11-18 and 19):
 **The site's prerender.** `/blueprints` reads GitHub's API while the site builds, and a dropped connection
 (`fetch failed`) failed about one `site` run in seven. The build runs once more after that error only (it did on #630's first run, and passed).
 
-Not fixed yet: Gradle's own downloads. 5 of those 13 red `app` runs were `build-logic`'s classpath answered "not
-found" by the plugin portal (kotlin-stdlib). Asking Maven Central first didn't help: on #630's first run Central
-answered "not found" for `error_prone_annotations-2.27.0.jar` in three jobs at once, though it has the file.
+## Reruns
+
+A download that fails on one runner tends to keep failing there. On #631's runs (2026-11-19) the plugin portal and
+Maven Central both answered "not found" (HTTP 404) for files they have, three times in a row, 45 seconds apart, so a
+retry inside the job didn't help. A rerun on a fresh runner passed every time: 5 of 5 portal failures on 2026-11-18
+and 19, which were 5 of the 13 red `app` attempts.
+
+So `.github/workflows/rerun-download-flakes.yml` follows `PR checks`. When a run's first attempt fails, it reads each
+failed job's log with `tools/ci/rerun_flakes.py`: only the output of the steps that failed (each up to GitHub's
+`##[error]Process completed with exit code …`), and in a step that retries itself (the site's build, apt-install), only
+its last try. Every failed step must show a download failure and nothing else, and when Gradle says what went wrong,
+each of its `* What went wrong:` blocks must be a download, or a test task's failing tests that all failed on
+Robolectric's fetch. If every failed job passes that, it reruns the failed jobs once (`gh run rerun --failed`). It writes one line in its job summary and posts nothing on the PR.
+
+| A download failure | What the log says |
+|---|---|
+| Gradle, a dependency | `Could not find org.jetbrains.kotlin:kotlin-stdlib:2.4.10.` |
+| Gradle, a file | `Could not find okio-jvm-3.15.0.jar (com.squareup.okio:okio-jvm:3.15.0)` |
+| Gradle, a plugin | `Plugin [id: 'org.gradle.kotlin.kotlin-dsl', version: '6.7.6'] was not found in any of the following sources` |
+| Gradle, a request | `Could not GET 'https://…'`, `Received status code 502 from server` |
+| Robolectric's jars | `java.lang.AssertionError at MavenArtifactFetcher.java:130` |
+| apt | `Failed to fetch … 503  Service Unavailable`, `Unable to fetch some archives` |
+| A dropped connection | `TypeError: fetch failed` with `other side closed`, `ECONNRESET`, `ETIMEDOUT`, `EAI_AGAIN` |
+
+It doesn't rerun:
+
+- a run whose failed jobs include one that failed on anything else (a test, a compile error, Clarity), or a job
+  whose log shows such a failure next to a download one. A Gradle test that failed counts as a download only when
+  the line under it is Robolectric's fetch;
+- a log with `Could not find method …`, a build script error, even next to a download line;
+- a download line in an earlier step that passed, or in a try that the step itself retried;
+- a job without a log or without a failed step, a second attempt, a fork's run, or a PR's run when the PR has a newer commit (it looks again
+  just before the rerun, after reading the logs);
+- a cancelled run.
+
+Like `size-comment.yml`, it runs from the default branch after the PR's run, checks out the default branch only for the
+script, and reads only the run's jobs and logs. Its token may only rerun runs and read (`actions: write`,
+`contents: read`). `tools/ci/test/test_rerun_flakes.py` tests the patterns against lines from real failed jobs, and the
+workflow's trigger, conditions and permissions.
+
+To see what it would have decided on a past run: `tools/ci/rerun_flakes.py --repo GlassworksHQ/glassworks --run <id>
+--dry-run --any-attempt`. Replayed on 12 red runs from 2026-11-18 and 19, it would have rerun the 9 that failed on
+downloads only, and none of the 3 with a real failure.
 
 ## Adding a job or a path
 
