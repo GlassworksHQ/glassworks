@@ -41,4 +41,12 @@ class PickMacTest {
         val (mac, source) = pick(androidId = "", random = { byteArrayOf(0xFF.toByte(), 1, 2, 3, 4, 5) })
         assertEquals("FE:01:02:03:04:05" to "random", mac to source)
     }
+
+    /** #574: every start logs the identity and its source; before, only the start that chose it did. */
+    @Test fun everyStartSaysWhereTheMacCameFrom() {
+        assertEquals("Device MAC 06:00:00:00:00:01 (build.prop)", PanelDevice.macLine("06:00:00:00:00:01", "build.prop", "06:00:00:00:00:01"))
+        assertEquals("Device MAC 06:00:00:00:00:01 (saved, the same as build.prop)", PanelDevice.macLine("06:00:00:00:00:01", "saved", "06:00:00:00:00:01"))
+        assertEquals("Device MAC 02:00:00:A1:B2:C3 (saved; build.prop has another, the saved one wins)", PanelDevice.macLine("02:00:00:A1:B2:C3", "saved", "06:00:00:00:00:01"))
+        assertEquals("Device MAC 02:00:00:A1:B2:C3 (saved)", PanelDevice.macLine("02:00:00:A1:B2:C3", "saved", ""))
+    }
 }

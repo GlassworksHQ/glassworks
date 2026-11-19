@@ -8,6 +8,7 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { PanelShell } from '@glassworks/adb';
 import { zipEntry } from '@glassworks/app-adb';
+import { FakeKeySocket } from '@glassworks/app-adb/fakes';
 import { Disk, MemoryStore, mkfs, writeSparse } from '@glassworks/ext4';
 import { Fastboot } from '@glassworks/fastboot';
 import { FakeLk } from '@glassworks/fastboot/fake-lk';
@@ -86,10 +87,13 @@ export class DryLk extends FakeLk {
 export interface Dry { deps: RunDeps; lk: DryLk; before: FakeMirror; after: FirstBootMirror; state: () => 'android' | 'fastboot' | 'glassworks' }
 
 /** Fake devices for runInstall/runWayBack. `stockAtStart: false` starts in fastboot already; `app` is the app the APK is (Glassworks by default). */
-export function dryDevices(systemBytes: number, log: (l: string) => void, o: { stockAtStart?: boolean; hideFails?: boolean; maxDownloadReply?: string; app?: MirrorApp } = {}): Dry {
+export function dryDevices(systemBytes: number, log: (l: string) => void, o: { stockAtStart?: boolean; hideFails?: boolean; maxDownloadReply?: string; app?: MirrorApp;
+  /** a reflash (#574): Glassworks runs before the flash and holds this ESPHome API key; the fresh app's socket starts empty */
+  apiKey?: string } = {}): Dry {
   const lk = new DryLk(systemBytes, o.maxDownloadReply);
   const before = new FakeMirror({ app: o.app });
   const after = new FirstBootMirror(undefined, true, o.app);
+  if (o.apiKey) { before.withKeySocket(new FakeKeySocket(o.apiKey)); after.withKeySocket(); }
   after.hideFails = !!o.hideFails;
   let state: 'android' | 'fastboot' | 'glassworks' = o.stockAtStart === false ? 'fastboot' : 'android';
   const fb = new Fastboot(lk);

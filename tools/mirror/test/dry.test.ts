@@ -60,7 +60,7 @@ async function zipDeflating(files: [string, Uint8Array][], deflated: string): Pr
   return out;
 }
 
-async function install(o: { hideFails?: boolean; confirm?: (q: string) => boolean; stockAtStart?: boolean; adbKey?: string } = {}) {
+async function install(o: { hideFails?: boolean; confirm?: (q: string) => boolean; stockAtStart?: boolean; adbKey?: string; apiKey?: string } = {}) {
   const img = await dryImage(work, APK.length);
   const lines: string[] = [];
   const d = dryDevices(img.bytes, (l) => lines.push(l), o);
@@ -95,6 +95,35 @@ describe('the headless install on a fake Mirror', () => {
     // #523: the Mirror's id from its serial goes into build.prop, so a reflash keeps its Home Assistant device
     expect(new TextDecoder().decode(debugfsCat(sys, '/build.prop'))).toContain(`\nro.glassworks.device.mac=${DRY_MAC}\n`);
     expect(lines.join('\n')).not.toContain(DRY_MAC);
+  }, 60_000);
+
+  it('a reflash carries the ESPHome API key: read before, flagged in build.prop, handed over at the first boot, never printed (#574)', async () => {
+    const API_KEY = btoa(String.fromCharCode(...Array.from({ length: 32 }, (_, i) => 3 * i + 7))); // made up
+    const { d, lines, run } = await install({ apiKey: API_KEY });
+    const r = await run;
+    expect(r.firstBoot?.apiKey).toBe(true);
+    expect(d.before.keys!.verbs).toEqual(['get']);
+    expect(d.after.keys!.key).toBe(API_KEY);
+    expect(lines.join('\n')).toMatch(/Home Assistant API key: carried over the flash \(fingerprint [0-9a-f]{4}\)/);
+    expect(lines.join('\n')).not.toContain(API_KEY);
+    expect([...d.before.cmds, ...d.after.cmds].join('\n')).not.toContain(API_KEY);
+    if (!haveTools) return;
+    const sys = join(work, 'flashed-system.raw');
+    writeFileSync(sys, d.lk.parts.get('system')!);
+    const prop = new TextDecoder().decode(debugfsCat(sys, '/build.prop'));
+    expect(prop).toContain('\nro.glassworks.api_key.handover=1\n');
+    expect(prop).not.toContain(API_KEY);
+  }, 60_000);
+
+  it('without a key to carry, says so and flags nothing', async () => {
+    const { d, lines, run } = await install();
+    const r = await run;
+    expect(r.firstBoot?.apiKey).toBeUndefined();
+    expect(lines.join('\n')).toContain('Home Assistant API key: none to carry');
+    if (!haveTools) return;
+    const sys = join(work, 'flashed-system.raw');
+    writeFileSync(sys, d.lk.parts.get('system')!);
+    expect(new TextDecoder().decode(debugfsCat(sys, '/build.prop'))).not.toContain('api_key');
   }, 60_000);
 
   it('takes repeated --adb-key: every line in adb_keys, only the first trusted in services.jar (#426 review)', async () => {

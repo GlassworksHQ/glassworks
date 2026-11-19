@@ -160,3 +160,32 @@ export function fakeApk(pkg = 'sh.edm.s1kiosk', o: { utf8?: boolean; libs?: Reco
   // extraEntries goes in verbatim, so a test can repeat a name (a zip may list the same path twice)
   return zip([['AndroidManifest.xml', axml(pkg, !!o.utf8, o)], ['classes.dex', new TextEncoder().encode('dex\n035\0')], ...libs, ...(o.extraEntries ?? [])]);
 }
+
+/**
+ * The app's ESPHome API key socket (core ApiKeyHandover), simulated for a PanelShell fake: answer `run` with
+ * `shell(cmd)` first and `openStream` with `open`. `key` is what the app holds; `verbs` records the requests'
+ * first words only, never a key.
+ */
+export class FakeKeySocket {
+  verbs: string[] = [];
+  constructor(public key?: string, public listening = true) {}
+  shell(cmd: string): { out: string; code: number } | undefined {
+    return cmd === `grep -c ' @glassworks_api_key$' /proc/net/unix` ? { out: `${this.listening ? 1 : 0}\n`, code: this.listening ? 0 : 1 } : undefined;
+  }
+  async open(service: string) {
+    if (service !== 'localabstract:glassworks_api_key' || !this.listening) throw new Error('connection refused');
+    let cb: (b: Uint8Array) => void = () => {};
+    return {
+      write: async (d: Uint8Array) => {
+        const [verb, arg] = new TextDecoder().decode(d).trim().split(' ');
+        this.verbs.push(verb!);
+        const reply = verb === 'get' ? (this.key ? `key ${this.key}` : 'none')
+          : verb === 'set' && arg ? (!this.key || this.key === arg ? ((this.key = arg), 'ok') : 'refused a different key is set already')
+          : 'refused unknown request';
+        queueMicrotask(() => cb(new TextEncoder().encode(`${reply}\n`)));
+      },
+      onData: (f: (b: Uint8Array) => void) => { cb = f; },
+      close: async () => {},
+    };
+  }
+}

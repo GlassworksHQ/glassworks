@@ -90,6 +90,11 @@ export interface SystemPatch {
   settingsOverlay?: Uint8Array;
   /** The device's MAC, written as DEVICE_MAC_PROP (from checkFastboot's `deviceMac`); none: the app picks its own. */
   deviceMac?: string;
+  /**
+   * The installer read the app's ESPHome API key before the flash and hands it over at the first boot (#574): written
+   * as API_KEY_HANDOVER_PROP=1, so the fresh app opens no API server until the key comes. Never the key itself.
+   */
+  apiKeyHandover?: boolean;
   /** Seconds since 1970 for new files; default now. */
   time?: number;
 }
@@ -109,6 +114,12 @@ export const SETTINGS_OVERLAY = {
  * A reflash wipes the app's data; with this the Mirror stays the same device in Home Assistant (#523).
  */
 export const DEVICE_MAC_PROP = 'ro.glassworks.device.mac';
+
+/**
+ * The build.prop key that tells the app the installer hands its ESPHome API key over at the first boot
+ * (PanelDevice.API_KEY_HANDOVER_PROP, #574). Only a flag: the key never goes in build.prop, which every app can read.
+ */
+export const API_KEY_HANDOVER_PROP = 'ro.glassworks.api_key.handover';
 
 const MAC = /^([0-9A-F]{2}:){5}[0-9A-F]{2}$/;
 
@@ -240,6 +251,9 @@ export async function patchSystem(fs: Ext4, o: SystemPatch, log: (line: string) 
   // flash Kiln patches the same image again, maybe for another Mirror.
   if (o.deviceMac) { next = setProp(next, DEVICE_MAC_PROP, o.deviceMac); set.push(DEVICE_MAC_PROP); }
   else next = next.split('\n').filter((l) => !l.startsWith(`${DEVICE_MAC_PROP}=`)).join('\n');
+  // the same for the key's flag: a rebuild that carries no key must not make the app wait for one
+  if (o.apiKeyHandover) { next = setProp(next, API_KEY_HANDOVER_PROP, '1'); set.push(`${API_KEY_HANDOVER_PROP}=1`); }
+  else next = next.split('\n').filter((l) => !l.startsWith(`${API_KEY_HANDOVER_PROP}=`)).join('\n');
 
   // No swipe lock screen, with the overlay: the two make the first boot with nothing to tap, and
   // without the overlay the first boot is the image's own. SettingsProvider's DatabaseHelper and

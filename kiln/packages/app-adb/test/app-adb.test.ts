@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { PanelShell } from '@glassworks/adb';
-import { ManifestError, Steps, apkHome, apkInfo, apkPermissions, axmlTree, dropAdmin, grantPermissions, kioskVersion, q, startApp, zipEntry } from '../src';
-import { HOME_ACTIVITY, app, fakeApk, filter, zip, type FakeEl } from './fakes';
+import { ManifestError, Steps, apiKeyFingerprint, apkHome, apkInfo, apkPermissions, axmlTree, dropAdmin, grantPermissions, handOverApiKey, kioskVersion, q, readApiKey, startApp, zipEntry } from '../src';
+import { FakeKeySocket, HOME_ACTIVITY, app, fakeApk, filter, zip, type FakeEl } from './fakes';
 
 class Shell implements PanelShell {
   cmds: string[] = [];
@@ -215,5 +215,46 @@ describe('the APK\'s home screen (the Mirror\'s first flash had none, 2026-11-16
     const tree = axmlTree((await zipEntry(apk, 'AndroidManifest.xml'))!);
     expect(tree.map((e) => e.name)).toEqual(['manifest']);
     expect(tree[0]!.children.map((e) => e.name)).toEqual(['uses-sdk', 'application']);
+  });
+});
+
+describe('the ESPHome API key across a reflash (#574)', () => {
+  // made up: base64 of 32 bytes 1..32, never a real key
+  const KEY = btoa(String.fromCharCode(...Array.from({ length: 32 }, (_, i) => i + 1)));
+  const shell = (s: FakeKeySocket, ran: string[] = []): PanelShell => ({
+    async run(cmd) { ran.push(cmd); return s.shell(cmd) ?? { out: '', code: 0 }; },
+    async push() {},
+    openStream: (svc) => s.open(svc),
+  });
+
+  it('reads the key from the running app, and hands it to the fresh one', async () => {
+    const before = new FakeKeySocket(KEY), ran: string[] = [];
+    const key = await readApiKey(shell(before, ran));
+    expect(key).toBe(KEY);
+    const after = new FakeKeySocket();
+    expect(await handOverApiKey(shell(after, ran), key!, async () => {})).toBe(true);
+    expect(after.key).toBe(KEY);
+    // only through the socket: never on a command line
+    expect(ran.join('\n')).not.toContain(KEY);
+  });
+
+  it('has nothing to carry from an app with no key or one too old to hand it over', async () => {
+    expect(await readApiKey(shell(new FakeKeySocket()))).toBeUndefined();
+    const old = new FakeKeySocket(KEY, false);
+    expect(await readApiKey(shell(old))).toBeUndefined();
+    expect(old.verbs).toEqual([]);
+  });
+
+  it('gives up when the fresh app never listens, and says no when it refuses', async () => {
+    const down = new FakeKeySocket(undefined, false);
+    expect(await handOverApiKey(shell(down), KEY, async () => {}, 0)).toBe(false);
+    expect(down.verbs).toEqual([]);
+    expect(await handOverApiKey(shell(new FakeKeySocket(btoa('x'.repeat(32)))), KEY, async () => {})).toBe(false);
+  });
+
+  it('fingerprints a key as the app logs it', async () => {
+    // NoiseKeys.fingerprint: SHA-256's first two bytes, in hex
+    expect(await apiKeyFingerprint(KEY)).toMatch(/^[0-9a-f]{4}$/);
+    expect(await apiKeyFingerprint(KEY)).not.toBe(await apiKeyFingerprint(btoa('x'.repeat(32))));
   });
 });

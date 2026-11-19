@@ -6,6 +6,7 @@ import { closeSync, createReadStream, openAsBlob, openSync, readSync, writeSync 
 import { Readable } from 'node:stream';
 import { join } from 'node:path';
 import type { PanelShell } from '@glassworks/adb';
+import { apiKeyFingerprint, readApiKey } from '@glassworks/app-adb';
 import type { Store } from '@glassworks/ext4';
 import {
   GLASS_PANES, GLASS_PANES_KEY_FINGERPRINT, GLASS_PANES_USERDATA, GLASSWORKS, adbFingerprint, adbKeyLines, buildImages, checkDownload, checkMirrorApk, checkFastboot, firstBoot, loadSystem, makeOnlyHome, resumableBody,
@@ -105,6 +106,8 @@ export async function runInstall(o: InstallOptions, d: RunDeps): Promise<Install
   let fb: FastbootLike | undefined;
   let userdataBytes = 0;
   let deviceMac: string | undefined;
+  /** the ESPHome API key the running app holds, carried over the flash (#574). A secret: only its fingerprint is printed */
+  let apiKey: string | undefined;
   let loaded: Awaited<ReturnType<typeof loadSystem>> | undefined;
   let rawFd: number | undefined;
   const raw = join(o.work, 'system.raw'), sysOut = join(o.work, 'system.sparse'), udOut = join(o.work, 'userdata.sparse');
@@ -124,6 +127,10 @@ export async function runInstall(o: InstallOptions, d: RunDeps): Promise<Install
         const board = await prop('ro.board.platform'), fp = await prop('ro.build.fingerprint');
         d.log(`    board ${board}, Android ${await prop('ro.build.version.release')}, ${fp === GLASS_PANES.fingerprint ? 'the Glass Panes image' : `not the Glass Panes image (${fp})`}`);
         if (board !== 'msm8916') throw new Error(`this isn't the original Mirror (board ${board || 'unknown'}, needs msm8916). Nothing was changed.`);
+        // a reflash wipes the key Home Assistant provisioned: read it now, hand it to the fresh app at the first boot
+        apiKey = await readApiKey(p).catch(() => undefined);
+        d.log(apiKey ? `    Home Assistant API key: carried over the flash (fingerprint ${await apiKeyFingerprint(apiKey)})`
+          : '    Home Assistant API key: none to carry (no app of ours with a key, or one older than #574): Home Assistant may ask to re-authenticate once');
       }],
       ['The warning', async () => { for (const l of STOCK_WARNING) d.log(`    ${l}`); }],
       ['Load and check system.img', async () => {
@@ -152,7 +159,7 @@ export async function runInstall(o: InstallOptions, d: RunDeps): Promise<Install
         const sys = fileSink(sysOut), ud = fileSink(udOut);
         try {
           // the Wi-Fi is saved in the new userdata too: Android joins it on the first boot with nothing tapped
-          await buildImages(loaded!, { apk: o.apk, app: ours, bootAnimation: o.bootAnimation, settingsOverlay: o.settingsOverlay, adbKey: o.adbKey, userdataBytes, fill: o.fill, ...(deviceMac ? { deviceMac } : {}), ...(o.wifi ? { wifi: o.wifi } : {}) },
+          await buildImages(loaded!, { apk: o.apk, app: ours, bootAnimation: o.bootAnimation, settingsOverlay: o.settingsOverlay, adbKey: o.adbKey, userdataBytes, fill: o.fill, ...(deviceMac ? { deviceMac } : {}), ...(apiKey ? { apiKeyHandover: true } : {}), ...(o.wifi ? { wifi: o.wifi } : {}) },
             { system: sys.write, userdata: ud.write }, (step, x) => { if (x === 1) d.log(`    ${step} done`); },
             // image.ts's own lines: the APK's libraries, the unused apps left out, build.prop, services.jar
             (line) => d.log(`    ${line}`));
@@ -171,7 +178,7 @@ export async function runInstall(o: InstallOptions, d: RunDeps): Promise<Install
       }],
       ['First boot: permissions, portrait, Home Assistant, Wi-Fi, the only home screen', async () => {
         const p = await d.waitForAdb();
-        res.firstBoot = await firstBoot(p, { haUrl: o.haUrl, wifi: o.wifi, app: ours, onStep: (s, x) => d.log(s ? `    ${s}` : `      ${x}`), sleep });
+        res.firstBoot = await firstBoot(p, { haUrl: o.haUrl, wifi: o.wifi, app: ours, ...(apiKey ? { apiKey } : {}), onStep: (s, x) => d.log(s ? `    ${s}` : `      ${x}`), sleep });
       }],
       ['HOME check', async () => {
         let home = res.firstBoot!.home;
