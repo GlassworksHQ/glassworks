@@ -83,8 +83,6 @@ class PanelDevice(
         // Keep the library's logs under the tag the docs use (`adb logcat -s S1ESPHome`).
         init { EspHomeLog.tag = "S1ESPHome" }
 
-        const val NAME = "s1-panel"
-        const val FRIENDLY_NAME = "S1 Panel"
         /** Reported ESPHome version (recent, so HA doesn't treat the device as outdated). */
         const val ESPHOME_VERSION = "2026.10.2"
         /** Same flags as an ESPHome voice_assistant with a media player (Voice PE): no SPEAKER. */
@@ -98,7 +96,7 @@ class PanelDevice(
     private val main = Handler(Looper.getMainLooper())
     private val exec: ScheduledExecutorService =
         Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "esphome-main").apply { isDaemon = true } }
-    private val mdns = EspHomeMdns(ctx, board = "aqara-s1-plus")
+    private val mdns = EspHomeMdns(ctx, board = DeviceName.BOARD)
     private val voiceEnabled = prefs.voiceEnabled
 
     private var server: ApiServer? = null
@@ -194,10 +192,12 @@ class PanelDevice(
     // ------------------------------------------------------------------ setup
 
     private fun startInternal() {
+        val mac = stableMac()
+        // stableMac() only returns AA:BB:CC:DD:EE:FF, so the fallback never runs.
         identity = DeviceIdentity(
-            name = NAME,
-            friendlyName = FRIENDLY_NAME,
-            macAddress = stableMac(),
+            name = DeviceName.node(mac) ?: DeviceName.BOARD,
+            friendlyName = DeviceName.FRIENDLY,
+            macAddress = mac,
             esphomeVersion = ESPHOME_VERSION,
             compilationTime = "S1 Kiosk ${BuildConfig.VERSION_NAME}",
             manufacturer = "Aqara",

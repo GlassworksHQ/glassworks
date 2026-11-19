@@ -27,8 +27,9 @@ keeps working while the screen is off. Logs: `adb logcat -s S1ESPHome S1Voice`.
    against a pinned SHA-256, into `/sdcard/Android/data/sh.edm.s1kiosk/files/models/`. `tools/install.sh`
    also pushes them over adb (`tools/voice/fetch-models.sh`, which downloads and checks the same files;
    `--no-models` skips it). Without models the API still works; the engine retries loading every 30 s.
-2. **Discovery**: the panel advertises `s1-panel._esphomelib._tcp` over mDNS. If mDNS reaches HA,
-   **Settings → Devices & services** shows a discovered **ESPHome** device "S1 Panel". Click
+2. **Discovery**: the panel advertises `aqara-s1-plus-a1b2c3._esphomelib._tcp` over mDNS (its own
+   [name](#names)). If mDNS reaches HA, **Settings → Devices & services** shows a discovered
+   **ESPHome** device "Aqara S1 Plus". Click
    **Add**.
 3. **Manual**: **Settings → Devices & services → Add integration → ESPHome**, host = the panel's
    IP, port `6053`.
@@ -57,7 +58,7 @@ Details and sources: [onboarding.md](onboarding.md#2-adoption--encryption-esphom
 
 | Field | Value |
 |---|---|
-| name / friendly name | `s1-panel` / `S1 Panel` |
+| name / friendly name | `aqara-s1-plus-a1b2c3` / `Aqara S1 Plus`: the frame and the end of its MAC (see [Names](#names)). Up to 0.4.3: `s1-panel` / `S1 Panel` |
 | MAC (unique id in HA) | the Wi-Fi MAC of `wlan0` if readable, else a locally administered MAC derived from the chip serial (SHA-256 of `ro.serialno`), else a random one; persisted in prefs (`device_mac`). The first two come out the same after a reinstall, so HA keeps the same device |
 | manufacturer / model | `Aqara` / `Panel Hub S1 Plus (S1 Kiosk)` |
 | esphome_version / compilation_time | `2026.10.2` / `S1 Kiosk <app version>` (HA shows "2026.10.2 (S1 Kiosk 0.1.0)") |
@@ -69,7 +70,29 @@ Details and sources: [onboarding.md](onboarding.md#2-adoption--encryption-esphom
 
 HA names entities `<friendly name> <entity name>`, so with "S1 Panel" they become
 `light.s1_panel_screen` and so on. The `object_id` is the ESPHome-style snake_case name, the key
-is FNV-1a of the `object_id` (stable).
+is FNV-1a of the `object_id` (stable). The entity ids in this page are those of a panel added before
+0.4.4; a panel added later has `aqara_s1_plus_*` ([Names](#names)).
+
+### Names
+
+From 0.4.4 each panel is its own ESPHome node (#260, #503). The node name is `aqara-s1-plus-` and the
+last three bytes of the MAC the panel reports ([Device identity](#device-identity)), as ESPHome's
+`name_add_mac_suffix` does: `aqara-s1-plus-a1b2c3`. The friendly name is "Aqara S1 Plus". So a second
+panel never meets HA's "Name conflict" dialog. The MAC is kept in prefs (`device_mac`), so the name
+is the same on every start and after an update. The code is `sh.edm.s1kiosk.esphome.DeviceName`.
+
+**After updating** a panel that HA already has (read 2026-11-14 from home-assistant/core 2026.11.0,
+`esphome/manager.py` and `esphome/config_flow.py`, and aioesphomeapi 46.25.0; see the 0.4.4 panel run):
+
+| | What HA does |
+|---|---|
+| Config entry | Keeps working, with no repair and nothing to re-add. Its unique id is the MAC, which doesn't change. On the next connection HA sees the MAC match and writes the new node name into the entry's `device_name` |
+| Discovery | The new mDNS name carries the same MAC, so the zeroconf flow finds the entry by MAC and ends as "already configured". No new device shows up |
+| Device name | Becomes "Aqara S1 Plus" on the next connection, unless you renamed the device in HA |
+| Config entry title | Stays "S1 Panel". HA doesn't retitle an entry |
+| Entity ids | Unchanged (`light.s1_panel_screen`, …). An entity id is made once, and the unique id (`<mac>/<device_id>/<domain>/<entity name>`) holds no device name |
+| Entities that appear later | HA 2025.12 and later: from the device's name as HA shows it, so `aqara_s1_plus_*` next to the old ones |
+| Reconnects | Until HA reloads the entry (an HA restart, or **Reload** on the entry), it still listens for the old name's mDNS record. A panel that restarts is found on the retry timer (at most 60 s) instead of at once |
 
 | Entity | object_id | What it does |
 |---|---|---|
@@ -318,7 +341,7 @@ with the Python TFLite runtime that the patched model gives bit-identical output
   Noise client gets `0x00 "Bad indicator byte"` back (aioesphomeapi reports "device is using
   plaintext").
 - **Noise**: frames are `0x01` + 16-bit length. ClientHello (empty) → ServerHello
-  `01 "s1-panel" 00 <mac hex> 00` → NNpsk0 handshake with prologue `"NoiseAPIInit" 00 00`
+  `01 "<node name>" 00 <mac hex> 00` → NNpsk0 handshake with prologue `"NoiseAPIInit" 00 00`
   (ESPHome appends the ClientHello's length and contents). A wrong key gets
   `01 "Handshake MAC failure"` (HA shows "invalid encryption key"); a plaintext client gets a Noise
   reject frame (HA shows "requires encryption"). X25519 and ChaCha20-Poly1305 come from BouncyCastle
@@ -408,7 +431,7 @@ ESPHOME_PYTHON=/tmp/esphome-venv/bin/python OWW_MODELS_DIR=/tmp/oww-models ./gra
   `media_player.play_media` plays and reports playing → idle. **Not yet verified:** real-speech
   wake word accuracy / mic gain, mDNS discovery on a flat network. Music Assistant playback has
   since been measured on the panel ([sendspin.md](sendspin.md#measured-on-the-panel)).
-- The mDNS SRV target is the Android hostname, not `s1-panel.local`; HA uses the IP it discovered and
+- The mDNS SRV target is the Android hostname, not `<node name>.local`; HA uses the IP it discovered and
   replaces the name with `DeviceInfoResponse.name` once connected.
 - No `SPEAKER` flag: TTS is fetched by URL, not streamed as PCM over the API.
 - One wake word at a time (`max_active_wake_words = 1`); HA's custom (microWakeWord) wake words

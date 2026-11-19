@@ -384,7 +384,7 @@ class SetupOverlay(context: Context) : FrameLayout(context) {
                     primary.setOnClickListener { submit() }
                 } else {
                     cardTitle.text = "Add the panel to Home Assistant"
-                    cardBody.text = "In Home Assistant: Settings → Devices & services → S1 Panel discovered → Add."
+                    cardBody.text = "In Home Assistant: Settings → Devices & services → ${sh.edm.s1kiosk.esphome.DeviceName.FRIENDLY} discovered → Add."
                     tiles.visibility = View.VISIBLE
                     // Manual add: Add integration → ESPHome → host + port.
                     tileA.bind("Manual add · ESPHome", "${m.panelIp ?: "<panel IP>"} · port 6053")
