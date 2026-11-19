@@ -3,7 +3,7 @@ import Link from "next/link";
 import { ListCard, Tile, Tiles, manage as m } from "@/components/Manage";
 import { FrameGrid } from "@/components/FrameGrid";
 import { PaneRows } from "@/components/PaneRows";
-import { frames } from "@/lib/frames";
+import { frames, heroPanel } from "@/lib/frames";
 import { release } from "@/lib/release";
 import { panes, stageCounts } from "@/lib/site";
 import { JsonLd } from "@/components/JsonLd";
@@ -29,6 +29,7 @@ export default async function Home() {
       <StackStory
         release={{ name: app, version: release.version, href: release.href }}
         post={post?.fresh ? { title: post.title, href: post.url } : undefined}
+        panel={heroPanel()}
       />
 
       <Tiles>

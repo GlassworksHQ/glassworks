@@ -1,14 +1,19 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { HeroPanel } from "@/lib/frames";
 import { ENTRIES, KILN_STEPS, LAYERS, type Layer } from "./Stack";
+import { HeroModel } from "./FrameCard";
+import { KilnGlyph } from "./Glyphs";
 import { links } from "@/lib/site";
 import s from "./StackStory.module.css";
 
 /*
- * The hero and "How it's built" as one scroll. The stack starts assembled,
- * like a finished panel. Scrolling explodes it, then walks down the layers one
- * at a time, top to bottom, ending on Kiln and the wires out to the house.
+ * The hero and "How it's built" as one scroll. It opens on a real panel: the
+ * reference frame's model with its dashboard render (the same image as Kiln's
+ * card) and a button to install it. Scrolling swaps the panel for the stack,
+ * assembled, then explodes it and walks down the layers one at a time, top to
+ * bottom, ending on Kiln and the wires out to the house.
  *
  * Everything is driven by one number, p (0 → 1 through the section), eased
  * toward the scroll position each frame.
@@ -116,7 +121,7 @@ export type StoryRelease = { name: string; version: string; href: string };
 /** A post from the last 30 days, for the hero's "New" pill. */
 export type StoryPost = { title: string; href: string };
 
-export function StackStory({ release, post }: { release: StoryRelease; post?: StoryPost }) {
+export function StackStory({ release, post, panel }: { release: StoryRelease; post?: StoryPost; panel?: HeroPanel }) {
   const ref = useRef<HTMLElement>(null);
   const [p, setP] = useState(0);
 
@@ -166,6 +171,9 @@ export function StackStory({ release, post }: { release: StoryRelease; post?: St
   const gap = lerp(16, 60, e);
   const scale = lerp(1.32, 1, e);
   const heroO = 1 - ease(0.04, 0.16, p);
+  // the panel gives way to the stack before the stack explodes
+  const panelO = panel ? 1 - ease(0.015, 0.07, p) : 0;
+  const stackO = panel ? ease(0.03, 0.08, p) : 1;
   const storyO = ease(0.2, 0.3, p);
   const lightO = ease(0.24, 0.34, p);
   const housesO = ease(0.9, 0.97, p);
@@ -250,11 +258,14 @@ export function StackStory({ release, post }: { release: StoryRelease; post?: St
               Zigbee/Thread, or one you write.
             </p>
             <div className={s.ctas}>
-              <a className={s.primary} href={links.org}>
+              {panel && (
+                <a className={s.install} href={panel.href}>
+                  <KilnGlyph />
+                  Install on {panel.frame.name}
+                </a>
+              )}
+              <a className={panel ? s.secondary : s.primary} href={links.org}>
                 Follow on GitHub
-              </a>
-              <a className={s.secondary} href={links.s1}>
-                See the Aqara S1 Plus
               </a>
             </div>
             <span className={s.scrollHint} aria-hidden="true">
@@ -296,7 +307,19 @@ export function StackStory({ release, post }: { release: StoryRelease; post?: St
         </div>
 
         <div className={s.stage}>
-          <div className={s.float} style={{ animationPlayState: p > 0.02 ? "paused" : "running" }}>
+          {panel && (
+            <figure
+              className={s.panel}
+              style={{ opacity: panelO, transform: `scale(${lerp(0.9, 1, panelO)})`, visibility: panelO > 0 ? undefined : "hidden" }}
+              inert={panelO < 0.5}
+            >
+              <HeroModel f={panel.frame} />
+              <figcaption className={s.caption}>
+                <a href={panel.page}>{panel.frame.name}</a> · a made-up home
+              </figcaption>
+            </figure>
+          )}
+          <div className={s.float} style={{ opacity: stackO, animationPlayState: p > 0.02 ? "paused" : "running" }}>
           <svg
             viewBox={`${vbX} 0 ${vbW} ${VB_H}`}
             role="img"
