@@ -215,7 +215,8 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   alone. So does Assist's "turn off the bedroom lights" on a panel Home Assistant adds from now on. On a panel it
   already has, Assist still sees the screen until you turn off its **Expose** toggle once in **Settings → Voice
   assistants → Expose**. Dashboards, automations and scripts that name the screen entity still work, and so does a
-  label you put on the screen itself.
+  label you put on the screen itself. Home Assistant picks this up after a restart, or a **Reload** of the panel's
+  ESPHome entry, once the update is in.
 - **S1 Kiosk is now Glassworks.** The panel's app shows as Glassworks, with the Glassworks icon, in the launcher,
   in Android's Settings → Apps, in About and in its notification. In Home Assistant the device's model reads
   *Panel Hub S1 Plus (Glassworks)* and the update card is called *Glassworks*. The rename keeps the device, its entities and

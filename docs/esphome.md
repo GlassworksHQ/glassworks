@@ -243,8 +243,9 @@ device or area, and doesn't show it to Assist unless someone exposes it (`helper
 | Assist, a panel HA adds from now on | Sees it | Doesn't see it until someone exposes it |
 | Assist, a panel HA already has | Sees it | Still sees it: HA saved the choice when it first saw the entity. Turn off **Expose** once in **Settings → Voice assistants → Expose** |
 
-HA's registry may take the category only when it adds the panel's entities again, after a restart of HA or a
-**Reload** of the ESPHome entry, rather than on the app update's reconnect (untested; the #591 panel run checks it).
+HA's registry takes the category only when it adds the panel's entities again: after a restart of HA or a
+**Reload** of the ESPHome entry (Settings → Devices & services → ESPHome → the panel → ⋮ → Reload). The app
+update's reconnect alone isn't enough (verified on the S1, 2026-11-19, HA 2026.11).
 
 HA adds its own voice entities (*Assist satellite*, *Assist pipeline*, *Wake word*, *Finished speaking
 detection*). The panel doesn't send those, so their defaults are HA's.
