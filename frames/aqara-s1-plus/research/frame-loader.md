@@ -11,10 +11,10 @@ evidence: read
 runs only a legacy uImage, not an Android boot image (attempt 8), so the RAM test in the no-opening
 route needs a wrapped image (attempt 10). Panel tests T0, T1, T3 and T5 have run. T3 with the
 wrapped image (attempt 11) took the download and the `boot`, and then the board reset into its flash
-boot within seconds. The canary of plan E (attempt 12) reset the same way, so the reset comes
-before our code runs, in the stock U-Boot or ATF. Attempt 13 reads that path: no step read so far
-explains it, and plan F splits it at LOADOS. That rests on one unread premise: no watchdog armed at
-the handoff (the SCP firmware and boot0 aren't read). All of it goes through [`fastboot-usb.py`](../tools/fel/fastboot-usb.py), not the
+boot within seconds. The canary of plan E (attempt 12) reset the same way. That places the reset
+before our code runs, in the stock U-Boot or ATF, only if no watchdog is armed at the handoff, and
+that premise is unread (the SCP firmware and boot0). Attempt 13 reads the U-Boot path: no step read
+so far explains the reset, and plan F splits it at LOADOS. All of it goes through [`fastboot-usb.py`](../tools/fel/fastboot-usb.py), not the
 `fastboot` CLI.
 
 Device: Aqara S1 Plus, firmware 4.5.80. Sources: the stock `boot`, `misc` and boot package
@@ -320,7 +320,8 @@ Every S1 in the field needs one more Kiln update to get the loader. Before build
     - **The next variant: a canary, not a new header.** `wrap-ram-boot.py --canary` builds the same
       image with one change: the kernel's first instruction is an AArch64 `b .` (`0x14000000`).
       Everything U-Boot reads (header, command line, sizes) is the same as in plan D, apart from the
-      two CRCs. If the board still resets, the reset comes before our code runs (U-Boot or ATF).
+      two CRCs. If the board still resets, the reset comes before our code runs (U-Boot or ATF), unless
+      a watchdog armed at the handoff fires while the canary spins (see the result below).
       If it stays in place for minutes with the fastboot screen frozen and USB enumerated but silent
       (the tool's "no reply ... USB is still up"), the handoff works and the reset in plan D came from
       the kernel. Untested. Prediction: it stays in place (a guess; about 60 %). U-Boot's path is the
@@ -407,7 +408,7 @@ Every S1 in the field needs one more Kiln update to get the loader. Before build
 |---|---|---|
 | Is `/data` readable at `post-fs-data`? | Yes: plain f2fs, mounted in `on fs`, no encryption | Read: vendor fstab (attempt 1). The panel check is `ro.crypto.state` |
 | Fixed service slots or a generic runner? | Fixed, named slots, each run through the loader. Plus two spare slots for services that don't exist yet | Design below |
-| No-opening route | `adb reboot bootloader` reaches stock fastboot, and its gate lets `download`, `boot` and `flash` through. Stock `boot` only runs a legacy uImage, so the RAM test needs a wrapped image | Attempts 2–4, 7–13; panel tests T1, T3 unwrapped, T3 wrapped and the canary (verified: both reset into flash before our code runs), plan F pending |
+| No-opening route | `adb reboot bootloader` reaches stock fastboot, and its gate lets `download`, `boot` and `flash` through. Stock `boot` only runs a legacy uImage, so the RAM test needs a wrapped image | Attempts 2–4, 7–13; panel tests T1, T3 unwrapped, T3 wrapped and the canary (verified: both reset into flash; before our code runs if no watchdog is armed at the handoff, unread), plan F pending |
 | Root writes `boot` from Android | Not on field panels: adb has no root. Only on panels with adb root (the dev panel) | Attempt 5 |
 
 ### The loader
