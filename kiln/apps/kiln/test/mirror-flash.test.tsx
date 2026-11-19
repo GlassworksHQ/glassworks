@@ -257,6 +257,9 @@ describe('installing Glassworks over fastboot', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Connect fastboot again' }));
     expect(flash.state).toMatchObject({ screen: 'fastboot', restarted: true }); // no restart needed: Connect is the ember
     expect(embers()).toEqual(['Connect']);
+    flash.state = { ...flash.state, screen: 'error', flashFailed: true };
+    flash.retryWithoutFill(); // the same: still in fastboot
+    expect(flash.state).toMatchObject({ screen: 'fastboot', restarted: true, noFill: true });
   });
 
   it('a wrong file says what happened, and that it is Kiln\'s bug', async () => {

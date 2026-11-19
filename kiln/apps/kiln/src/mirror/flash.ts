@@ -705,7 +705,7 @@ export class FlashSession {
    * After a write the bootloader refused: build again with zeros as RAW blocks instead of FILL
    * chunks (whether the Mirror's LK takes FILL is the open question), then fastboot again.
    */
-  retryWithoutFill() { this.set({ noFill: true, screen: 'fastboot', error: undefined, work: undefined, fastboot: undefined, understood: false, flashFailed: false }); }
+  retryWithoutFill() { this.set({ noFill: true, screen: 'fastboot', error: undefined, work: undefined, fastboot: undefined, understood: false, flashFailed: false, restarted: true }); }
 
   /** Done, with another launcher still a home app: hide it again and check HOME (the Mirror can't answer a chooser). */
   async fixHome(): Promise<void> {
