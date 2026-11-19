@@ -1,0 +1,154 @@
+"""tools/ci/rerun_flakes.py: which red runs get their failed jobs rerun, and the workflow that runs it (docs/ci.md, Reruns)."""
+import importlib.util
+import re
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[3]
+spec = importlib.util.spec_from_file_location('rerun_flakes', ROOT / 'tools/ci/rerun_flakes.py')
+rf = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(rf)
+
+T = '2026-11-19T13:41:58.1234567Z '  # how each line of a job's log starts
+
+
+def log(*lines):
+    return ''.join(T + line + '\n' for line in lines)
+
+
+# From real failed jobs on this repo (2026-11-18 and 19), cut to the lines that matter. The mirror's address is RFC 5737's.
+PORTAL_404 = log(
+    'FAILURE: Build failed with an exception.',
+    "Error resolving plugin [id: 'com.android.application', version: '9.3.3', apply: false]",
+    "   > Could not resolve all artifacts for configuration 'classpath'.",
+    '      > Could not find org.jetbrains.kotlin:kotlin-stdlib:2.4.10.',
+    '        Searched in the following locations:',
+    '          - https://plugins.gradle.org/m2/org/jetbrains/kotlin/kotlin-stdlib/2.4.10/kotlin-stdlib-2.4.10.pom')
+CENTRAL_JAR_404 = log(
+    "    > Could not resolve all artifacts for configuration 'classpath'.",
+    '       > Could not find error_prone_annotations-2.27.0.jar (com.google.errorprone:error_prone_annotations:2.27.0).',
+    '         Searched in the following locations:',
+    '             https://repo.maven.apache.org/maven2/com/google/errorprone/error_prone_annotations/2.27.0/error_prone_annotations-2.27.0.jar')
+PLUGIN_NOT_FOUND = log(
+    "Plugin [id: 'org.gradle.kotlin.kotlin-dsl', version: '6.7.6'] was not found in any of the following sources:",
+    "- Plugin Repositories (could not resolve plugin artifact 'org.gradle.kotlin.kotlin-dsl:org.gradle.kotlin.kotlin-dsl.gradle.plugin:6.7.6')")
+ROBOLECTRIC = log(
+    'WallBaseHandOverTest > classMethod FAILED',
+    '    java.lang.AssertionError at MavenArtifactFetcher.java:130',
+    '        Caused by: java.util.concurrent.ExecutionException at AbstractFuture.java:168',
+    '            Caused by: java.io.FileNotFoundException at HttpURLConnection.java:2030',
+    '> Task :aqara-s1-plus-wall-base:testDebugUnitTest FAILED')
+APT_503 = log(
+    'W: Failed to fetch mirror+file:/etc/apt/apt-mirrors.txt/dists/noble/InRelease  503  Service Unavailable [IP: 192.0.2.7 80]',
+    'E: Unable to fetch some archives, maybe run apt-get update or try with --fix-missing?')
+SITE_PRERENDER = log(
+    ' ⨯ [TypeError: fetch failed] {',
+    '   [cause]: Error [SocketError]: other side closed',
+    'Error occurred prerendering page "/blueprints". Read more: https://nextjs.org/docs/messages/prerender-error')
+GRADLE_GET = log("   > Could not GET 'https://dl.google.com/dl/android/maven2/com/android/tools/build/gradle/9.3.3/gradle-9.3.3.pom'.",
+                 '      > Received status code 502 from server: Bad Gateway')
+
+# What must never rerun.
+NO_SUCH_METHOD = log(
+    "* What went wrong:",
+    "A problem occurred evaluating project ':core'.",
+    "> Could not find method implementation() for arguments [org.robolectric:robolectric:4.17] on object of type "
+    "org.gradle.api.internal.artifacts.dsl.dependencies.DefaultDependencyHandler.")
+METHOD_NEXT_TO_DOWNLOAD = NO_SUCH_METHOD + PORTAL_404
+TEST_FAILURE = log(
+    'UartBaseLinkEmulatorTest > driverAgainstEmulator FAILED',
+    '    java.lang.AssertionError at UartBaseLinkEmulatorTest.kt:88',
+    '42 tests completed, 1 failed')
+COMPILE_ERROR = log("e: file:///home/runner/work/glassworks/glassworks/core/src/main/java/dev/glassworks/Foo.kt:3:5 Unresolved reference 'bar'.")
+CLARITY_FAILURE = log('FAIL: test_runner (test_runner.SlowSet.test_view_open)', 'AssertionError: 2.9 != 2.4')
+
+
+class DownloadFailure(unittest.TestCase):
+    def test_each_real_download_failure_is_one(self):
+        for name, text, kind in [
+            ('portal 404', PORTAL_404, 'Gradle: a dependency not found'),
+            ('Central jar 404', CENTRAL_JAR_404, 'Gradle: a file not found'),
+            ('plugin not found', PLUGIN_NOT_FOUND, 'Gradle: a plugin not found'),
+            ('Robolectric', ROBOLECTRIC, 'Robolectric: a jar fetch failed'),
+            ('apt 503', APT_503, 'apt: a mirror failed'),
+            ('site prerender', SITE_PRERENDER, 'Node: a connection dropped'),
+            ('Gradle GET 502', GRADLE_GET, 'Gradle: a request failed'),
+        ]:
+            with self.subTest(name):
+                reason = rf.download_failure(text)
+                self.assertIsNotNone(reason)
+                self.assertTrue(reason.startswith(kind + ': '), reason)
+
+    def test_the_line_it_names_is_the_one_that_matched(self):
+        self.assertEqual(rf.download_failure(PORTAL_404),
+                         'Gradle: a dependency not found: Could not find org.jetbrains.kotlin:kotlin-stdlib:2.4.10.')
+
+    def test_a_mirrors_address_stays_out_of_the_summary(self):
+        reason = rf.download_failure(APT_503)
+        self.assertNotIn('192.0.2.7', reason)
+        self.assertIn('[IP: <ip> 80]', reason)
+
+    def test_could_not_find_method_is_never_a_download(self):
+        self.assertIsNone(rf.download_failure(NO_SUCH_METHOD))
+        # Not even next to a download line: the build script is broken either way.
+        self.assertIsNone(rf.download_failure(METHOD_NEXT_TO_DOWNLOAD))
+
+    def test_other_failures_are_not_downloads(self):
+        for name, text in [('test', TEST_FAILURE), ('compile', COMPILE_ERROR), ('Clarity', CLARITY_FAILURE), ('empty', '')]:
+            with self.subTest(name):
+                self.assertIsNone(rf.download_failure(text))
+
+    def test_colours_and_timestamps_dont_hide_a_match(self):
+        coloured = '\x1b[36;1m' + PORTAL_404 + '\x1b[0m'
+        self.assertIsNotNone(rf.download_failure(coloured))
+
+
+class Decide(unittest.TestCase):
+    def test_every_failed_job_on_a_download_reruns(self):
+        rerun, line = rf.decide([('app', PORTAL_404), ('site', SITE_PRERENDER)])
+        self.assertTrue(rerun)
+        self.assertIn('`app` (Gradle: a dependency not found', line)
+        self.assertIn('`site` (Node: a connection dropped', line)
+
+    def test_one_real_failure_keeps_the_whole_run_red(self):
+        rerun, line = rf.decide([('app', ROBOLECTRIC), ('scripts', CLARITY_FAILURE)])
+        self.assertFalse(rerun)
+        self.assertIn('`scripts` failed on something other than a download', line)
+
+    def test_a_job_without_a_log_doesnt_rerun(self):
+        rerun, line = rf.decide([('app', PORTAL_404), ('root', None)])
+        self.assertEqual((rerun, line), (False, 'no log for `root`'))
+
+    def test_no_failed_job_no_rerun(self):
+        self.assertEqual(rf.decide([]), (False, 'no failed job'))
+
+
+class TheWorkflow(unittest.TestCase):
+    yml = (ROOT / '.github/workflows/rerun-download-flakes.yml').read_text()
+
+    def test_it_follows_pr_checks_first_failed_attempts_from_this_repo_only(self):
+        self.assertIn('  workflow_run:\n    workflows: ["PR checks"]\n    types: [completed]\n', self.yml)
+        job_if = re.search(r'^    if: (.*(?:\n      .*)*)', self.yml, re.M).group(1)
+        for condition in ("github.event.workflow_run.conclusion == 'failure'",
+                          'github.event.workflow_run.run_attempt == 1',
+                          'github.event.workflow_run.head_repository.full_name == github.repository'):
+            self.assertIn(condition, job_if)
+
+    def test_it_may_only_rerun_and_read(self):
+        perms = self.yml.split('\npermissions:\n', 1)[1].split('\n\n', 1)[0]
+        self.assertEqual(sorted(re.findall(r'^  ([a-z-]+): (\w+)$', perms, re.M)), [('actions', 'write'), ('contents', 'read')])
+        self.assertNotIn('pull-requests', self.yml)
+        self.assertNotIn('gh pr comment', self.yml)
+        self.assertNotIn('issues/', self.yml)
+
+    def test_it_never_checks_out_the_runs_code(self):
+        self.assertNotIn('head_sha', self.yml.split('steps:', 1)[1].split('run:', 1)[0])
+        self.assertNotIn('ref:', self.yml)
+        self.assertIn('persist-credentials: false', self.yml)
+
+    def test_it_says_what_it_did_in_the_job_summary(self):
+        self.assertIn('--summary "$GITHUB_STEP_SUMMARY"', self.yml)
+
+
+if __name__ == '__main__':
+    unittest.main()
