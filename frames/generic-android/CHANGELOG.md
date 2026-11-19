@@ -14,6 +14,13 @@ line of each version is what Home Assistant shows on the update card. A change o
 **The first release of Glassworks for Android tablets and panels, with Assist, Sendspin and the camera pane.**
 
 ### Added
+- **Allow a new computer over USB on a panel with no touchscreen.** On the lululemon Mirror (the legacy build), the Manage
+  page's **Security** section shows a computer that asks for USB debugging, with its fingerprint, and
+  **Allow this computer**. Allowed computers are listed with **Remove**, and the panel lets each one in
+  every time it connects. Only a Home Assistant administrator can allow or remove one, and the Log
+  records each, with the fingerprint. Android's own "Allow USB debugging?" no longer stays over the dashboard on
+  a screen without touch: the Security page is where you answer it. Needs a fresh flash with Kiln: an update
+  over an older install doesn't get the two permissions it needs.
 - **The lululemon Mirror shows its frame version.** Its device page in the settings and on the Manage page has a
   *Frame version* row: the version of the Mirror's image, the Glass Panes release plus what Kiln adds. A Mirror flashed
   before Kiln wrote it shows *Before 1.0.0* and its Glass Panes image. A *Frame update* entity in Home Assistant
@@ -47,6 +54,10 @@ line of each version is what Home Assistant shows on the update card. A change o
   5 seconds, the camera pane now closes it and opens it again, at once the first time and then less and less often
   while it stays silent. Before, presence and the stream stayed dead until something else reopened the camera, such
   as turning *Camera privacy* on and off. This was seen on the lululemon Mirror's first open after a flash.
+- **With Screen mode set to always, walking up no longer turns on a screen you turned off.** If you turn the screen
+  off from Home Assistant, it stays off when someone comes close, whether the panel senses them with its own sensor
+  or with the camera pane. *Presence* in Home Assistant still turns on. In the presence mode, walking up still wakes
+  the screen, as before.
 - **A wrong Wi-Fi password on the lululemon Mirror no longer needs a reflash.** Send the right password with Improv,
   over USB from a computer or over Bluetooth, and the Mirror replaces the network Kiln saved and joins. Before, Android
   refused, and only a second flash fixed it. Comes with the next flash: the copy Kiln writes into the Mirror's image must

@@ -620,8 +620,9 @@ class PanelDevice(
 
     private fun buildEntities(): List<ApiEntity> = listOf(
         // --- screen & sensors
+        // CONFIG (#591): Home Assistant then leaves the screen out of a room's "lights off" and out of Assist.
         BrightnessLightEntity(
-            "screen", "Screen", "mdi:tablet-dashboard",
+            "screen", "Screen", "mdi:tablet-dashboard", EntityCategory.CONFIG,
             get = { screen.screenOn to currentBrightness() },
             set = { on, b ->
                 ui {

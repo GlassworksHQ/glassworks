@@ -408,15 +408,20 @@ public class UpdateEntity(
  * @param objectId See [ApiEntity.objectId].
  * @param name See [ApiEntity.name].
  * @param icon See [ApiEntity.icon].
+ * @param category See [ApiEntity.category]. Home Assistant leaves a light with a category out of area,
+ *   floor and device targets (a room's "lights off"), and labels on a device or area, but not a label on
+ *   the light itself. Assist doesn't see it unless someone exposes it.
+ * @param disabledByDefault See [ApiEntity.disabledByDefault].
  * @param get On or off, and the brightness from 0 to 1.
  * @param set Called with the new on/off state and brightness (0 to 1); null for either one that
  *   didn't change.
  */
 public class BrightnessLightEntity(
-    objectId: String, name: String, icon: String = "",
+    objectId: String, name: String, icon: String = "", category: EntityCategory = EntityCategory.NONE,
+    disabledByDefault: Boolean = false,
     private val get: () -> Pair<Boolean, Float>,
     private val set: (Boolean?, Float?) -> Unit,
-) : ApiEntity(objectId, name, icon) {
+) : ApiEntity(objectId, name, icon, category, disabledByDefault) {
     override val listType: Int = Msg.LIST_ENTITIES_LIGHT
     override val stateType: Int = Msg.LIGHT_STATE
     override val commandType: Int = Msg.LIGHT_COMMAND

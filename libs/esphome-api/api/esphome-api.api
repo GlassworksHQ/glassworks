@@ -173,8 +173,8 @@ public final class dev/glassworks/esphome/BluetoothProxyHandler$DefaultImpls {
 
 public final class dev/glassworks/esphome/BrightnessLightEntity : dev/glassworks/esphome/ApiEntity {
 	public static final field COLOR_MODE_BRIGHTNESS I
-	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function2;)V
-	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function2;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
+	public fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/glassworks/esphome/EntityCategory;ZLkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function2;)V
+	public synthetic fun <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ldev/glassworks/esphome/EntityCategory;ZLkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function2;ILkotlin/jvm/internal/DefaultConstructorMarker;)V
 	public fun command (Ldev/glassworks/esphome/ProtoMessage;)V
 	public fun getCommandType ()I
 	public fun getListType ()I

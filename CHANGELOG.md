@@ -69,6 +69,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   panel's Wi-Fi turned off it doesn't open, since the panel couldn't turn Wi-Fi on to join: the screen says
   so, with **Turn on Wi-Fi**. On Android 13 and newer the panel asks for Android's *Nearby devices*
   permission first, and says why.
+- **On the S1, joining the panel's own Wi-Fi brings up its setup page.** As with a hotel's Wi-Fi, an iPhone
+  shows the panel's setup page as soon as it joins, with no address to type, and so does an Android 11 or newer
+  phone that joined from its Wi-Fi settings. Android 10 shows a "Sign in to Wi-Fi network" notification to tap.
+  Comes with the radio bundle.
 - **See how complete Glassworks is on each device.** Every frame's page on glassworks.dev has a
   checklist under its Clarity grade: install, silent updates, hardware, kiosk, setup, recovery, branding
   and proof, each ticked or not with a short reason, and one word above it: Full, Good or Basic. Only the
@@ -209,6 +213,14 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   setting if it was already on. Other devices don't show the chip.
 
 ### Changed
+- **A room's "lights off" no longer turns the panel's screen off.** The screen is still a light with the same
+  entity id, but Home Assistant now lists it under the device's Configuration. Actions aimed at an area, floor or
+  device skip it, so a presence automation's "room empty, lights off" and a Good Night script leave the panel
+  alone. So does Assist's "turn off the bedroom lights" on a panel Home Assistant adds from now on. On a panel it
+  already has, Assist still sees the screen until you turn off its **Expose** toggle once in **Settings → Voice
+  assistants → Expose**. Dashboards, automations and scripts that name the screen entity still work, and so does a
+  label you put on the screen itself. Home Assistant picks this up after a restart, or a **Reload** of the panel's
+  ESPHome entry, once the update is in.
 - **S1 Kiosk is now Glassworks.** The panel's app shows as Glassworks, with the Glassworks icon, in the launcher,
   in Android's Settings → Apps, in About and in its notification. In Home Assistant the device's model reads
   *Panel Hub S1 Plus (Glassworks)* and the update card is called *Glassworks*. The rename keeps the device, its entities and
@@ -441,6 +453,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   it straight away. The *Thread join* sensor says how it went. Pasting the dataset still works.
 
 ### Fixed
+- **With Screen mode set to always, walking up no longer turns on a screen you turned off.** If you turn the screen
+  off from Home Assistant, it stays off when someone comes close, whether the panel senses them with its own sensor
+  or with the camera pane. *Presence* in Home Assistant still turns on. In the presence mode, walking up still wakes
+  the screen, as before.
 - **Undo and a failed switch say what really happened.** When the installer gives the panel back to
   Aqara's apps, it now says whether Glassworks was removed, turned off, or is still on because Android
   refused to turn it off. Before, it could say Glassworks was gone when it wasn't. When a switch to a

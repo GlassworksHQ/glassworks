@@ -26,6 +26,11 @@ publish the matching section below as the release notes.
 - **`BluetoothProxyHandler.onRefused` now gets the refused client's `client_info`.** A device can then
   say "Home Assistant needs the key" only when it was Home Assistant, not a keyless script on the LAN.
   Implementations of `onRefused()` need the new parameter, so the next release is 0.2.0 (#246).
+- **`BrightnessLightEntity` takes `category` and `disabledByDefault`,** as the other entity types do,
+  and sends them in the list response (fields 15 and 13). A light with a category stays out of Home
+  Assistant's area, floor and device targets (and labels on a device or area, not on the light itself) and out
+  of Assist. The two parameters come after `icon`, so a
+  call that passes `get` and `set` by position needs them named (#591).
 
 ### Fixed
 - **Home Assistant finds the Bluetooth proxy's flags where API 1.15 and later put them.** With

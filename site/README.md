@@ -71,7 +71,7 @@ src/lib/site.ts        links and panes
 src/lib/frames.ts      the frame catalog: every ../frames/<id>/design/frame.json in this repo
 src/lib/frameText.ts   the site's words for that data: install ratings, pane support
 src/lib/clarity.ts     each frame's Clarity grade, worked out from its clarity.json at build time
-src/lib/release.ts     the latest app release, from ../CHANGELOG.md
+src/lib/release.ts     the latest app release, from ../CHANGELOG.md, at its tag on GitHub
 src/lib/docs/          the docs: sources.ts (repo file → URL and nav group), render.ts (Markdown → HTML, GitHub's rules), index.ts (renders all, checks every link)
                        research.ts: the research notes by frame and topic (front matter words in notes.ts, summaries from docs/research/README.md)
 src/app/docs/          /docs, each doc page, the panes and libraries indexes; the docs' own sidebar

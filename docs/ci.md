@@ -38,7 +38,7 @@ A pattern matches a path and everything under it. `*` stays within one folder, `
 | Job or step | Runs when a PR changes |
 |---|---|
 | every job | `.github/workflows`, `.github/actions`, `tools/ci`, `settings.gradle.kts`, `build.gradle.kts`, `gradle.properties`, `gradlew`, `gradlew.bat`, `gradle`, `frames/*/design/frame.json`, `package.json`, `package-lock.json` |
-| app: every module's unit tests | `libs`, `core`, `pane-api`, `engines`, `panes`, `testing`, `build-logic`, `frames/*/android`, `frames/*/panes`, `THIRD-PARTY-NOTICES.md`, `LICENSE`, `LICENSES`, `CHANGELOG.md`, `README.md`, `docs/**/*.md`, `frames/*/README.md`, `frames/**/blueprints/*.yaml`, `tools/release/frame-abis.sh`, `tools/release/check-update-compat.sh`, `tools/voice/fetch-models.sh`, `kiln/packages/brand/src/tokens.css`, `kiln/packages/setup-channel/test/aqara-s1-plus-transcript.json`, `branding/glass-tile/bootanimation.zip`, `frames/aqara-s1-plus/tools/bracket/base_emulator.py`, `frames/aqara-s1-plus/tools/debloat/debloat.sh`, `frames/generic-android/installer/src/devices.ts`, `**/sh/edm/**`, `frames/aqara-s1-plus/tools/radio/hotspot-name` |
+| app: every module's unit tests | `libs`, `core`, `pane-api`, `engines`, `panes`, `testing`, `build-logic`, `frames/*/android`, `frames/*/panes`, `THIRD-PARTY-NOTICES.md`, `LICENSE`, `LICENSES`, `CHANGELOG.md`, `README.md`, `docs/**/*.md`, `frames/*/README.md`, `frames/**/blueprints/*.yaml`, `tools/release/frame-abis.sh`, `tools/release/check-update-compat.sh`, `tools/voice/fetch-models.sh`, `kiln/packages/brand/src/tokens.css`, `kiln/packages/setup-channel/test/aqara-s1-plus-transcript.json`, `branding/glass-tile/bootanimation.zip`, `frames/aqara-s1-plus/tools/bracket/base_emulator.py`, `frames/aqara-s1-plus/tools/debloat/debloat.sh`, `frames/generic-android/installer/src/devices.ts`, `frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh`, `**/sh/edm/**`, `frames/aqara-s1-plus/tools/radio/hotspot-name` |
 | app: release build, update check | `libs`, `core`, `pane-api`, `engines`, `panes`, `testing`, `build-logic`, `frames/*/android`, `frames/*/panes`, `THIRD-PARTY-NOTICES.md`, `LICENSE`, `LICENSES`, `tools/release/check-update-compat.sh`, `frames/aqara-s1-plus/tools/radio/hotspot-name` |
 | app: aioesphomeapi tests | `libs`, `build-logic` |
 | libs-api23: lint at minSdk 23 | `libs`, `build-logic` |
@@ -80,6 +80,7 @@ Android PR in a shared pool (see above).
 |---|---|---|
 | `conformance (API 23, 26, 29, 34)` | The core's conformance test (`core/src/androidTest`) | push to `main` when Android code changes, nightly at 03:17 UTC (`pr.yml`'s time), by hand |
 | `libs-api23` | `esphome-api-android` and `improv` androidTest on Android 6 | the same |
+| `legacy-verify` | The generic app's legacy APK (the Mirror's) installed on Android 6: fails when its verifier rejects a Glassworks class (`tools/legacy/verify-api23.sh`, #435). Before a Mirror flash, run the script on the build you flash | the same |
 | `report` | Opens, updates or closes the red-main issue | after those two, on `main` only |
 
 A PR still gets the fast checks for the same code: the unit tests (`app`), lint's NewApi at minSdk 23
