@@ -27,8 +27,9 @@ export type ImageStep =
   /** Downloads one file through Refract and checks its size and SHA-256. Writes nothing to the device. */
   | { do: 'download'; file: string }
   /**
-   * Kiln's own change to a downloaded image (on the Mirror: Glassworks added, a fresh userdata with this
-   * browser's key, sized from what fastboot reports). Only Glassworks. Writes nothing to the device.
+   * Kiln's own change to a downloaded image: the frame's patch, which adds Glassworks (and, for a frame
+   * that needs one, a fresh userdata with this browser's key, sized from what fastboot reports). Only
+   * Glassworks. Writes nothing to the device.
    */
   | { do: 'patch'; file: string; makes: readonly string[] }
   /** The person puts the device in fastboot and Kiln connects. Read-only. */
