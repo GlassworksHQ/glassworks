@@ -19,8 +19,8 @@ import java.util.concurrent.ScheduledExecutorService
 
 /**
  * The Bluetooth proxy pane's definition, for the whole process: its on/off (off by default, #67),
- * its setup card (none without Bluetooth LE) and its settings page. The page itself is the frame's
- * to draw: [page] builds it from this definition. Without one, the page is a line of text.
+ * its setup card (none without Bluetooth LE) and its settings page. [page] builds the page from this
+ * definition: both apps give it [BluetoothProxyPage]. Without one, the page is a line of text.
  */
 class BluetoothProxyDefinition(
     private val file: SharedPreferences,

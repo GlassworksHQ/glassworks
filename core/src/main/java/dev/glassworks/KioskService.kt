@@ -36,6 +36,7 @@ import dev.glassworks.frame.systemSettings
 import dev.glassworks.discovery.HaDiscovery
 import dev.glassworks.device.PanelDevice
 import dev.glassworks.provisioning.ImprovController
+import dev.glassworks.provisioning.ImprovSelfAuth
 import dev.glassworks.provisioning.ImprovSerialServer
 import dev.glassworks.device.ApiKeyHandoverServer
 import dev.glassworks.improv.AdbSocketServer
@@ -140,6 +141,8 @@ open class KioskService : Service() {
             // The screen follows at once (a phone joined: the setup page's QR), not on its 2 s tick.
             onChange = { dev.glassworks.setup.SetupSignals.changed() },
             log = { Log.i(HOTSPOT_TAG, it) },
+            // Without touch, after Bluetooth setup's own 5 minutes (#611).
+            graceMs = ImprovSelfAuth.hotspotGraceMs(glassworks.frame.input, KioskPrefs(this).improvAuto, ImprovController.BOOT_GRACE_MS),
             blocked = { if (WifiRadio.lockedOff(this)) HotspotFailure.WIFI_OFF else null },
             // A fresh scan first (up to 15 s): the radio can't scan once it is the access point.
             beforeStart = { start ->

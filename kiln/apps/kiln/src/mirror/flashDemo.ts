@@ -3,14 +3,15 @@
 // stand-in reports progress); the fastboot and first-boot answers are the recipe's fakes.
 import { GLASS_PANES, GLASS_PANES_USERDATA, ProxyError, SYSTEM_BYTES, USERDATA_BYTES, WrongImage, checkDownload, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
 import { FirstBootMirror, fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
-import { FlashSession, type ImageMaker } from './flash';
+import { FlashSession, type FlashDeps, type ImageMaker } from './flash';
 import { MirrorSession } from './session';
 
 export const FLASH_DEMOS = ['flash-image', 'flash-downloading', 'flash-proxy-failed', 'flash-checking', 'flash-wrong', 'flash-ready', 'flash-wifi-short', 'flash-fastboot', 'flash-fastboot-wrong', 'flash-confirm',
   'flash-working', 'flash-adb', 'flash-done', 'flash-done-chooser', 'flash-done-no-home', 'flash-error', 'flash-back', 'flash-run'] as const;
 export type FlashDemo = (typeof FLASH_DEMOS)[number];
 
-export async function flashDemo(name: FlashDemo, fast = false): Promise<{ flash: FlashSession; mirror: MirrorSession }> {
+/** `deps`: what another demo changes in the simulated Mirror (keepDemo.ts: the app's key before and after the flash). */
+export async function flashDemo(name: FlashDemo, fast = false, deps: Partial<FlashDeps> = {}): Promise<{ flash: FlashSession; mirror: MirrorSession }> {
   const tick = (ms: number) => new Promise<void>((r) => setTimeout(r, fast ? 0 : ms));
   const images: ImageMaker = {
     async load(file, onProgress) {
@@ -53,6 +54,7 @@ export async function flashDemo(name: FlashDemo, fast = false): Promise<{ flash:
     adbKey: () => 'QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= kiln@glassworks',
     apk: () => mirror.apkBytes(),
     sleep: (ms) => tick(ms / 20),
+    ...deps,
   });
   const image = Object.assign(new Blob([new Uint8Array(name === 'flash-wrong' ? 1234 : 16)]), { name: 'system.img' });
   if (name === 'flash-image' || name === 'flash-run') return { flash, mirror };

@@ -9,6 +9,7 @@ import dev.glassworks.pane.Pane
 import dev.glassworks.pane.SettingsItem
 import dev.glassworks.pane.SettingsSection
 import dev.glassworks.update.SilentUpdates
+import dev.glassworks.update.UpdateChannelRow
 import dev.glassworks.s1.PanePrefs
 import dev.glassworks.radio.RadioHelper
 import dev.glassworks.radio.RadioMode
@@ -57,6 +58,7 @@ class S1Device(
             appsReadable(context).takeIf { it }?.let { SettingsItem.Info({ APPS_TITLE }, { apps(context) }) },
             SettingsItem.Link(RADIO_TITLE, radioMode(running), section = "radio"),
             GenericAndroid.silentUpdatesItem { rootService()?.let { SilentUpdates.read(context, it) } },
+            UpdateChannelRow.item(context),
             release?.let { GenericAndroid.frameVersionItem(context, it) },
         ))
     }

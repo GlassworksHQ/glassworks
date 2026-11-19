@@ -64,6 +64,8 @@ wall, and Glassworks hands them to Home Assistant, simply.**
    that device's frame.
 9. **Never brick, always a way back.** Read first, write second. Back up, verify, and offer an undo
    for every change to a device.
+   Kiln is one engine: frames are declared, not coded into it, and no frame is less forgiving than
+   the S1 ([frames as data](design/kiln/frames-as-data.md)).
 10. **Simple beats complete.** One feature done well beats ten settings. If a setting exists only
     because we couldn't decide, decide.
 

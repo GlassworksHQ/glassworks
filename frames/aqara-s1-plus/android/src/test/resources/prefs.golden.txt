@@ -61,6 +61,7 @@ kiosk|speaker_muted|Boolean|false
 kiosk|speaker_volume|Float|1.0
 kiosk|time_zone_enabled|Boolean|true
 kiosk|time_zone_kept|String|""
+kiosk|update_channel|String|null
 kiosk|url|String|null
 kiosk|voice_enabled|Boolean|true
 kiosk|voice_overlay|Boolean|true

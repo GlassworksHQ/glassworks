@@ -15,12 +15,13 @@ import type { RailMark, RailStep } from '../wizard/state';
 import type { FileCheck, FlashSession, FlashState, WorkStep } from './flash';
 import type { MirrorSession, MirrorState } from './session';
 import { SilentUpdates, mirrorSilent } from '../components/SilentUpdates';
+import { FlashKeep, KeyOutcome, keyHeld } from './KeepScreens';
 
 type P = { f: FlashSession; s: FlashState; m: MirrorSession; ms: MirrorState };
 
 export function flashRail(s: FlashState): RailStep[] {
   const names = ['Mirror', 'Image', 'Fastboot', 'Install', 'Done'];
-  const at = { image: 1, back: 1, fastboot: 2, confirm: 2, working: 3, adb: 3, error: 3, done: 5 }[s.screen];
+  const at = { image: 1, back: 1, keep: 2, fastboot: 2, confirm: 2, working: 3, adb: 3, error: 3, done: 5 }[s.screen];
   return names.map((name, i): RailStep => {
     const mark: RailMark = i < at ? 'done' : i > at ? 'todo' : s.screen === 'error' ? 'bad' : s.screen === 'adb' ? 'turn' : 'now';
     return { name, mark };
@@ -255,10 +256,11 @@ const ROWS: { id: WorkStep; text: string; back?: boolean }[] = [
   { id: 'flash-userdata', text: 'Flash userdata', back: true },
   { id: 'restart', text: 'Restart the Mirror', back: true },
   { id: 'first-boot', text: 'First start: Home Assistant, Wi-Fi, home screen' },
+  { id: 'hand-back', text: 'Give Glassworks Home Assistant’s key back' },
 ];
 
 export function FlashWorking({ s }: P) {
-  const rows = ROWS.filter((r) => !s.back || r.back);
+  const rows = ROWS.filter((r) => (!s.back || r.back) && (r.id !== 'hand-back' || keyHeld(s.key)));
   const at = Math.max(0, rows.findIndex((r) => r.id === s.work?.step));
   const x = s.work?.x ?? 0;
   return (
@@ -280,7 +282,7 @@ export function FlashAdb({ f, s }: P) {
     <section className="card" aria-labelledby="h">
       <span className="turn-label"><span className="pulse" />Your turn</span>
       <h2 id="h">One last click.</h2>
-      <p className="lede">The Mirror is starting Glassworks. Its first start takes a few minutes. Click Connect and pick the Mirror in the browser&apos;s list: it knows this browser&apos;s key, so it doesn&apos;t ask on its screen.</p>
+      <p className="lede">The Mirror is starting Glassworks. Its first start takes a few minutes. Click Connect and pick the Mirror in the browser&apos;s list: it knows this browser&apos;s key, so it doesn&apos;t ask on its screen.{keyHeld(s.key) && ' Then Kiln gives Glassworks Home Assistant’s key back.'}</p>
       {s.connecting && <p className="status work" role="status">Pick the Mirror in the browser&apos;s list…</p>}
       {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
       <div className="foot">
@@ -330,6 +332,7 @@ export function FlashDone({ f, s }: P) {
       )}
       {s.back && <p className="lede">It starts like a new Glass Panes Mirror: set it up as its install guide says.</p>}
       {!s.back && fb && <SilentUpdates words={mirrorSilent(fb.updates)} />}
+      {!s.back && fb && <KeyOutcome k={s.key} />}
       <BuiltOn credits={glassPanes()} />
       {REVERSIBLE && <p className="small">{REVERSIBLE}.</p>}
       <p className="small">The way back is the Glass Panes image: open this page with the Mirror in fastboot and choose Way back.</p>
@@ -362,6 +365,7 @@ export function FlashScreens(p: P) {
   const { s } = p;
   return s.screen === 'image' ? <FlashImage {...p} />
     : s.screen === 'back' ? <FlashBack {...p} />
+    : s.screen === 'keep' ? <FlashKeep {...p} />
     : s.screen === 'fastboot' ? <FlashFastboot {...p} />
     : s.screen === 'confirm' ? <FlashConfirm {...p} />
     : s.screen === 'working' ? <FlashWorking {...p} />

@@ -68,7 +68,7 @@ class NotificationCenter(
     private val haBase: () -> String?,
     private val now: () -> Long,
     private val schedule: (delayMs: Long, action: () -> Unit) -> Future<*>,
-    /** Whether the screen takes a tap. Without, a view with no `timeout` gets [ViewQueue.NO_TOUCH_VIEW_S] (#230). */
+    /** Whether the screen takes a tap. Without, what nothing else would close gets a timeout ([noTouchTimeout]). */
     private val touch: () -> Boolean = { true },
 ) {
     private val lock = Any()
@@ -91,8 +91,7 @@ class NotificationCenter(
             is NotifyCommand.Clear -> if (store.clear(c.tag) != null) changed()
             is NotifyCommand.Post -> {
                 val n = c.notification
-                val view = n.url != null && n.priority != Priority.CRITICAL
-                val p = store.post(if (view && n.timeoutS == null && !touch()) n.copy(timeoutS = ViewQueue.NO_TOUCH_VIEW_S) else n, doNotDisturb())
+                val p = store.post(if (!touch() && noTouchTimeout(n)) n.copy(timeoutS = ViewQueue.NO_TOUCH_VIEW_S) else n, doNotDisturb())
                 val d = p.entry.delivery
                 // Dropped at once to stay under the store's limit: it isn't on the panel, so it makes no noise.
                 val kept = p.entry !in p.dropped
@@ -106,6 +105,18 @@ class NotificationCenter(
                 }
             }
         }
+    }
+
+    /**
+     * Whether [n], on a screen that takes no tap, gets [ViewQueue.NO_TOUCH_VIEW_S] because nothing else would close
+     * it: a view with no `timeout` (#230), and a high or critical card with neither a `timeout` nor a `tag` (they
+     * don't fold away, and without a tag Home Assistant can't clear them). A tagged one stays until Home Assistant
+     * clears it, so an alarm doesn't go quiet on a timer of ours. Low and normal cards fold by themselves.
+     */
+    private fun noTouchTimeout(n: Notification): Boolean {
+        if (n.timeoutS != null) return false
+        val view = n.url != null && n.priority != Priority.CRITICAL
+        return view || (n.tag == null && (n.priority == Priority.HIGH || n.priority == Priority.CRITICAL))
     }
 
     /** A button on a card or the page. Reports it to Home Assistant, and closes it unless it is sticky. */
