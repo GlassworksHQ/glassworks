@@ -858,6 +858,8 @@ HN_MOD=$HN_MODS/s1kiosk_hotspot_name
 HN_PATH=system/product/overlay/S1HotspotName/S1HotspotName.apk
 HN_PROP=persist.s1kiosk.hotspot_name
 HN_STATUS=sys.s1kiosk.hotspot_name.status
+# Where Magisk mounts the overlay while it is on: AssetManager loads framework overlays from the APKs it finds there
+HN_LIVE=${S1R_HN_LIVE:-/product/${HN_PATH#system/product/}}
 
 hn_say() { setp $HN_STATUS "$1"; say "hotspot name: $1"; }
 hn_apply() {
@@ -923,7 +925,11 @@ hn_apply() {
   if ! o_=$(timeout ${S1R_HN_TIMEOUT:-20} cmd overlay list $HN_PKG 2>/dev/null); then
     hn_say "error: Android didn't say whether the overlay is on"; return 0
   fi
-  case "$o_" in *"[x] $HN_PKG"*) live_=glassworks ;; *) live_=android ;; esac
+  # Android 10 never forgets a static overlay of framework-res whose APK went away: its boot-time cleanup skips
+  # those (OverlayManagerSettings.getOverlaysForUser), so after the undo `cmd overlay list` keeps saying [x] for good.
+  # The framework loads them from the APKs present at boot, so it's live only with the APK mounted too
+  # (verified on Android 10, 2026-11-19: docs/research/setup-hotspot-portal-and-name.md).
+  case "$o_" in *"[x] $HN_PKG"*) if [ -f "$HN_LIVE" ]; then live_=glassworks; else live_=android; fi ;; *) live_=android ;; esac
   if [ "$want_" != "$live_" ]; then hn_say "$want_ after a restart"
   elif [ -n "$off_" ]; then hn_say "android: the module is disabled in Magisk"
   elif [ -n "$noenv_" ]; then hn_say "android: Magisk loads no modules here (no $HN_MAGISK_BB)"

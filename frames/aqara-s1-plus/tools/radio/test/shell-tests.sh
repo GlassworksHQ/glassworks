@@ -1066,12 +1066,14 @@ w "$T/bin/cmd" <<'EOF'
 [ "$1 $2 $3" = "overlay list sh.edm.s1kiosk.overlay.hotspotname" ] || exit 1
 [ -f /t/cmd-fail ] && exit 20   # the overlay service not answering
 [ -f /t/cmd-hang ] && exec sleep 1000   # ...or never answering
-[ -f /t/overlay-on ] && echo "[x] sh.edm.s1kiosk.overlay.hotspotname"; exit 0
+# /t/overlay-on: Android applies it (its record, and the APK mounted, which name() points the helper at);
+# /t/overlay-stale: only Android's record, which outlives the APK on Android 10
+{ [ -f /t/overlay-on ] || [ -f /t/overlay-stale ]; } && echo "[x] sh.edm.s1kiosk.overlay.hotspotname"; exit 0
 EOF
 printf 'overlay-v1' > "$T/rb/hotspot-name.apk"
 MOD="$T/modules/s1kiosk_hotspot_name"; APKP="$MOD/system/product/overlay/S1HotspotName/S1HotspotName.apk"
 mkdir -p "$T/magisk" && : > "$T/magisk/busybox"   # Magisk's own setup, as the Magisk app leaves it
-name() { LOOPS=1 helper S1R_NO_OVERRIDE=1 S1R_RBUNDLE="$T/rb" S1R_MODULES="$T/modules" S1R_MAGISK_BB="$T/magisk/busybox" "$@"; prop sys.s1kiosk.hotspot_name.status; }
+name() { LOOPS=1 helper S1R_NO_OVERRIDE=1 S1R_RBUNDLE="$T/rb" S1R_MODULES="$T/modules" S1R_MAGISK_BB="$T/magisk/busybox" S1R_HN_LIVE=/t/overlay-on "$@"; prop sys.s1kiosk.hotspot_name.status; }
 st=$(umask 077; name)   # as init runs services: what root writes is private unless the helper says otherwise
 check "the overlay in the bundle: a Magisk module puts it on /product" test "$(cat "$APKP")" = overlay-v1
 check "...with its module.prop" grep -qx "id=s1kiosk_hotspot_name" "$MOD/module.prop"
@@ -1091,8 +1093,9 @@ check "a new overlay in a newer bundle replaces it" test "$(cat "$APKP")" = over
 printf android > "$T/props/persist.s1kiosk.hotspot_name"; st=$(name)
 check "persist.s1kiosk.hotspot_name=android: the module goes" test ! -e "$MOD"
 check "...and Android's name from the next restart" test "$st" = "android after a restart"
-rm -f /t/overlay-on; st=$(name)
-check "...then android" test "$st" = android
+rm -f /t/overlay-on; touch /t/overlay-stale; st=$(name)
+check "...then android, though Android 10 keeps its [x] record of the overlay with the APK gone" test "$st" = android
+rm -f /t/overlay-stale
 rm -f "$T/props/persist.s1kiosk.hotspot_name"; name >/dev/null
 check "(the module is back)" test -e "$MOD"
 rm -f "$T/rb/hotspot-name.apk"; name >/dev/null
@@ -1182,7 +1185,7 @@ rm -f "$T/props/persist.s1kiosk.hotspot_name"
 rm -f /data/s1kiosk/radio/hotspot-name.apk; rm -rf "$T/modules"
 st=$(name)
 check "no Magisk modules dir: an error, and nothing made" test "$st" = "error: no Magisk modules dir" -a ! -e "$T/modules"
-printf '#!/bin/sh\nexit 1\n' | w "$T/bin/cmd"; rm -rf "$T/rb" "$T/modules" /t/overlay-on; rm -f /data/s1kiosk/radio/radio.conf
+printf '#!/bin/sh\nexit 1\n' | w "$T/bin/cmd"; rm -rf "$T/rb" "$T/modules" /t/overlay-on /t/overlay-stale; rm -f /data/s1kiosk/radio/radio.conf
 
 echo
 echo "shell tests: $PASS passed, $FAILS failed"

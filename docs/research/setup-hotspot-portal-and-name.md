@@ -1,6 +1,7 @@
 # Setup hotspot: can it pop up the setup page, and can it be called Glassworks?
 
-**Status (2026-11-16): partly working. The S1's portal and name are built (#428, #430) and not yet run on a panel.** The setup hotspot (#197) works on
+**Status (2026-11-19): the S1's portal works (#428, iPhone run). Its name works on a panel with Magisk's setup (#430
+with #615); the live hotspot with a phone is still to run.** Earlier (2026-11-16): partly working. The setup hotspot (#197) works on
 the S1: an iPhone joined from the QR code and reached the setup page by its address. Two things the maintainer
 wants don't work yet:
 
@@ -163,12 +164,45 @@ today.
   That goes with the Mirror's image work (#198, #40). Its client addresses come from Android 6's tethering
   (`dnsmasq` there, **read**), so the redirect is the same idea.
 
+### S1: the name on a panel (2026-11-19)
+
+- **The module mounts and the overlay is on** (**verified**, the root's run of #430 with #615's boot image on the dev
+  S1): `s1kiosk_hotspot_name: loading module files`, `/product/overlay/S1HotspotName/S1HotspotName.apk` mounted,
+  `cmd overlay list` `[x]`, status `glassworks`. Without #615 Magisk loads no module at all
+  (`magisk-modules.md`, in #615).
+- **The undo leaves Android's record behind.** After the module is gone and a restart, `cmd overlay list
+  sh.edm.s1kiosk.overlay.hotspotname` still says `[x]`, and `/data/system/overlays.xml` keeps a `state="6"`
+  (`STATE_ENABLED_STATIC`) item pointing at the missing APK (**verified** on the S1, and on a stock Android 10 emulator,
+  `system-images;android-29;google_apis;arm64-v8a`, across two restarts).
+  - Why (**read**, AOSP `android10-release`): `OverlayManagerService` cleans up overlays whose package went away in
+    `updateOverlaysForUser` at every boot, but it lists them with `OverlayManagerSettings.getOverlaysForUser`, which
+    skips static overlays that target `android` ("loaded from AssetManager, and so they should be ignored",
+    `OverlayManagerSettings.java:193-201`). Ours is one, so its record is never removed. `cmd overlay list <pkg>`
+    falls back to `getOverlayInfo` for a package that targets nothing (`OverlayManagerShellCommand.java:124-136`),
+    which still finds it.
+  - It's inert (**verified** on the emulator): with the APK in place, `Resources.getSystem()` gives `Glassworks` for
+    `wifi_localhotspot_configure_ssid_default`; with it removed and a restart, `AndroidShare`, while the record still
+    says `[x]`. The probe is a 10-line class run with `app_process` (below).
+  - So the helper no longer takes `[x]` alone as "on": the overlay counts as live only with its APK mounted at
+    `/product/overlay/S1HotspotName/`. Without that, the status after an undo would have stayed
+    `android after a restart` for good.
+- **Taking the panel offline for a test, with Wi-Fi on and the home network kept** (**verified** on the Android 10
+  emulator, 2026-11-19). The setup screen offers *Set up from a phone* only while the panel has no network, and
+  says "Turn on Wi-Fi first" with Wi-Fi off; `wpa_cli disconnect` and `disable_network` are undone by Android within
+  seconds (**verified** on the S1). WifiManager's own `disableNetwork` isn't: as adb's shell user (no root),
+  `service call wifi 19 i32 <netId> s16 com.android.shell` marks the saved network `DISABLED_BY_WIFI_MANAGER` and
+  the panel stays off it (3 minutes watched); `service call wifi 18 i32 <netId> i32 0 s16 com.android.shell`
+  (`enableNetwork`) then `service call wifi 23 s16 com.android.shell` (`reconnect`) bring it back in seconds. The
+  numbers are the methods' order in Android 10's `IWifiManager.aidl` (`getWifiEnabledState` is 27, which answers `3`
+  with Wi-Fi on: a check that a build kept the order). As root (`uid 0`) the same calls return false: the package
+  name must be the caller's.
+
 ## Result
 
 | | S1 | Generic | Mirror |
 |---|---|---|---|
 | Captive portal | Root redirect plus a DNS responder in the app: built in #428, needs a panel run | Not possible | With its image |
-| `Glassworks` name | `Glassworks_NNNN` through a preinstalled resource overlay: built in #430, needs a panel run | Not possible (Android 16's public call keeps only band and channel for an app) | Done (`Glassworks-XXXX`) |
+| `Glassworks` name | `Glassworks_NNNN` through a preinstalled resource overlay (#430), with Magisk's setup in the boot image (#615): on and mounted on the S1; the live hotspot with a phone still to run | Not possible (Android 16's public call keeps only band and channel for an app) | Done (`Glassworks-XXXX`) |
 
 ## How to reproduce
 
@@ -184,6 +218,19 @@ adb shell 'grep -i ":0035 " /proc/net/udp /proc/net/udp6'        # sockets on po
 
 Then join from a phone with mobile data on, and note whether a sign-in sheet comes up. Nothing here writes to the
 panel. Don't copy the network's name or key into notes: they are on the panel's screen.
+
+The framework-string probe (host: `javac --release 8 -cp <sdk>/platforms/android-35/android.jar` and `d8 --min-api 29`;
+panel or emulator: `CLASSPATH=/data/local/tmp/resprobe.dex app_process /system/bin ResProbe`), read only:
+
+```java
+public class ResProbe {
+  public static void main(String[] a) {
+    android.content.res.Resources r = android.content.res.Resources.getSystem();
+    int id = r.getIdentifier("wifi_localhotspot_configure_ssid_default", "string", "android");
+    System.out.println("id=0x" + Integer.toHexString(id) + " value=" + (id == 0 ? "?" : r.getString(id)));
+  }
+}
+```
 
 ## Open questions
 
