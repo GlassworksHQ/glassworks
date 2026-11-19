@@ -11,7 +11,7 @@ import { Disk, Ext4, MemoryStore, Sha256, hex, readSparse, writeSparse, type Sto
 import { clean, cleanup, debugfs, debugfsCat, dump, fsck, haveTools, load, mke2fs, scratch } from '@glassworks/ext4/testing';
 import { axmlAttribute, zipEntry } from '@glassworks/app-adb';
 import { GLASS_PANES, GLASS_PANES_KEY_FINGERPRINT, GLASSWORKS, KEPT_APPS, UNUSED_APPS, MIRROR_PROBE, PRIVILEGED, SETTINGS_OVERLAY, adbFingerprint, adbKeyLines, buildUserdata, checkMirrorApk, patchSystem, setProp, wpaPsk, wpaSupplicantConf } from '../src';
-import { DEVICE_MAC_PROP, MIRROR_FRAME } from '../src/image';
+import { API_KEY_HANDOVER_PROP, DEVICE_MAC_PROP, MIRROR_FRAME } from '../src/image';
 import { fakeAdbKey, fakeServicesJar } from './fakes';
 import { DEXDUMP, disassemble } from './dexdump';
 
@@ -267,6 +267,26 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
     const prop = new TextDecoder().decode(debugfsCat(img, '/build.prop'));
     expect(prop).not.toContain(DEVICE_MAC_PROP);
     expect(prop).toContain(`\nro.glassworks.frame.version=${MIRROR_FRAME.version}\n`);
+  });
+
+  it('flags a carried API key in build.prop, never the key, and a rebuild without one drops the flag (#574)', async () => {
+    const img = join(dir, 'apikey.img');
+    mke2fs(img, 64, MAKE_EXT4FS, systemTree());
+    const disk = await load(img);
+    const log: string[] = [];
+    await patchSystem(await Ext4.open(disk), { adbKey: KEY, apk: APK, deviceMac: MAC, apiKeyHandover: true, time: T }, (l) => log.push(l));
+    await patchSystem(await Ext4.open(disk), { adbKey: KEY, apk: APK, deviceMac: MAC, apiKeyHandover: true, time: T }); // again: once
+    await dump(disk, img);
+    expect(fsck(img).code).toBe(0);
+    let prop = new TextDecoder().decode(debugfsCat(img, '/build.prop'));
+    expect(prop.match(/^ro\.glassworks\.api_key\.[a-z]+=.*$/gm)).toEqual([`${API_KEY_HANDOVER_PROP}=1`]);
+    expect(log).toContain(`build.prop: ro.glassworks.frame.version=${MIRROR_FRAME.version}, ${DEVICE_MAC_PROP}, ${API_KEY_HANDOVER_PROP}=1`);
+
+    await patchSystem(await Ext4.open(disk), { adbKey: KEY, apk: APK, deviceMac: MAC, time: T });
+    await dump(disk, img);
+    prop = new TextDecoder().decode(debugfsCat(img, '/build.prop'));
+    expect(prop).not.toContain(API_KEY_HANDOVER_PROP);
+    expect(prop).toContain(`\n${DEVICE_MAC_PROP}=${MAC}\n`);
   });
 
   it('takes the ABI that has libraries, not an empty lib/<abi>/ folder before it (#354 review)', async () => {

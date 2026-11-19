@@ -3,7 +3,7 @@
 // has no `cmd`, its shell can't disable apps, and it keeps the home app the way Android 6 does: an
 // "Always" pick holds until the set of home apps changes, and the next HOME then shows the chooser.
 import type { PanelShell } from '@glassworks/adb';
-import { fakeApk, filter, type FakeEl } from '@glassworks/app-adb/fakes';
+import { FakeKeySocket, fakeApk, filter, type FakeEl } from '@glassworks/app-adb/fakes';
 import { GLASSWORKS, PRIVILEGED, type MirrorApp } from '../src/app';
 import { GLASS_PANES_KEY_FINGERPRINT } from '../src/services';
 
@@ -171,6 +171,16 @@ export class FakeMirror implements PanelShell {
   /** our app: its package, the HOME component Android records (an alias), its admin */
   readonly app: MirrorApp;
 
+  /** our app's API key socket (#574), with `openStream` to it; none: no app of ours that has one */
+  keys?: FakeKeySocket;
+  openStream?: PanelShell['openStream'];
+  /** Our app listens on its API key socket, holding `key`. */
+  withKeySocket(keys = new FakeKeySocket()): this {
+    this.keys = keys;
+    this.openStream = (svc) => keys.open(svc);
+    return this;
+  }
+
   constructor(readonly o: FakeMirrorOptions = {}) {
     this.app = o.app ?? GLASSWORKS;
     this.installed = o.installed;
@@ -194,6 +204,8 @@ export class FakeMirror implements PanelShell {
 
   async run(cmd: string): Promise<{ out: string; code: number }> {
     this.cmds.push(cmd);
+    const key = this.keys?.shell(cmd);
+    if (key) return key;
     await this.wait();
     const ok = (out = '') => ({ out, code: 0 });
     const o = this.o;
@@ -294,10 +306,21 @@ export class FirstBootMirror implements PanelShell {
   /** Android didn't grant the image's copy INSTALL_PACKAGES */
   notGranted = false;
   /** `installed`: our app is there; `ours`: which app (Glassworks by default) */
+  /** the app's API key socket (#574), with `openStream` to it; none: an app older than #574 */
+  keys?: FakeKeySocket;
+  openStream?: PanelShell['openStream'];
   constructor(private readonly fp: string = FINGERPRINT, private readonly installed = true, readonly ours: MirrorApp = GLASSWORKS) {}
+  /** The fresh app's API key socket: listening, with no key yet. */
+  withKeySocket(keys = new FakeKeySocket()): this {
+    this.keys = keys;
+    this.openStream = (svc) => keys.open(svc);
+    return this;
+  }
   async run(cmd: string) {
     this.cmds.push(cmd);
     const ok = (out = '') => ({ out, code: 0 });
+    const key = this.keys?.shell(cmd);
+    if (key) return key;
     if (cmd === 'getprop sys.boot_completed') return ok('1\n');
     if (cmd === 'getprop ro.build.fingerprint') return ok(`${this.fp}\n`);
     const set = /^settings put system (user_rotation|accelerometer_rotation) (\d)$/.exec(cmd);

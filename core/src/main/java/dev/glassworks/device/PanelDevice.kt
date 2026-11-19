@@ -122,6 +122,30 @@ class PanelDevice(
             return bytes.joinToString(":") { "%02X".format(it.toInt() and 0xFF) } to source
         }
 
+        /**
+         * The line [stableMac] logs on every start: the identity and where it came from. Kept data says whether
+         * build.prop carries the same one, so a reflash can be checked from any start's log, not only the first (#574).
+         */
+        internal fun macLine(mac: String, source: String, image: String): String = "Device MAC $mac (" + when {
+            source != "saved" || !MAC_RE.matches(image) -> source
+            image == mac -> "saved, the same as build.prop"
+            else -> "saved; build.prop has another, the saved one wins"
+        } + ")"
+
+        /**
+         * Set to `1` in build.prop by an installer that carries the API key over a reflash ([ApiKeyHandover], #574):
+         * the fresh app then keeps its API server shut until the key comes, so Home Assistant, which still holds that
+         * key, never meets a device without one and opens no re-authentication.
+         */
+        const val API_KEY_HANDOVER_PROP = "ro.glassworks.api_key.handover"
+
+        /** How long the API server waits for a carried key before it starts without one (provisionable, as before). */
+        const val API_KEY_WAIT_MS = 15 * 60_000L
+
+        /** Whether the API server still waits for the key [API_KEY_HANDOVER_PROP] promises, [waitedMs] after it began. */
+        internal fun waitsForKey(handover: String, hasKey: Boolean, waitedMs: Long): Boolean =
+            handover == "1" && !hasKey && waitedMs < API_KEY_WAIT_MS
+
         private fun localMac(seed: String): ByteArray = java.security.MessageDigest.getInstance("SHA-256")
             .digest(seed.toByteArray()).copyOf(6).also {
                 it[0] = ((it[0].toInt() and 0xFC) or 0x02).toByte() // unicast, locally administered
@@ -156,7 +180,8 @@ class PanelDevice(
     /** Guards [stopped] and the hand-over of [server] between [startServer] and [stop]. */
     private val lifecycle = Any()
     private var stopped = false
-    private val noiseKeys = NoiseKeys(prefs.noiseKeyStore)
+    /** Read again when a key handed over at first boot ends the wait ([startServerWhenKeyed]). */
+    @Volatile private var noiseKeys = NoiseKeys(prefs.noiseKeyStore)
     /** Read by the API server on its connection threads; replaced when voice is turned on or off. */
     @Volatile private lateinit var identity: DeviceIdentity
 
@@ -273,7 +298,7 @@ class PanelDevice(
         for ((pane, s) in switches) EspHomeLog.i("Pane $pane ${if (s.on) "on" else "off"}")
         panes.forEachPane("start") { pane -> unlessStopped { if (isOn(pane)) { pane.start(); started += pane.id } } }
         if (!unlessStopped { updates.start() }) return
-        startServer()
+        startServerWhenKeyed(SystemClock.elapsedRealtime())
         unlessStopped {
             prefs.registerListener(prefListener)
             screen.addListener(screenListener)
@@ -400,6 +425,29 @@ class PanelDevice(
     private fun adoptDashboards(list: List<Dashboard>) {
         appliedDashboards = list
         prefs.dashboardsJson = DashboardOptions.toJson(list)
+    }
+
+    /**
+     * Starts the API server, unless the image says the installer hands over the key and it hasn't come yet
+     * ([waitsForKey]): then nothing listens or announces, and Home Assistant only retries, until the key comes or
+     * [API_KEY_WAIT_MS] has passed. esphome-main.
+     */
+    private fun startServerWhenKeyed(since: Long) {
+        if (synchronized(lifecycle) { stopped }) return
+        val handover = systemProperty(API_KEY_HANDOVER_PROP)
+        val waited = SystemClock.elapsedRealtime() - since
+        if (waitsForKey(handover, prefs.apiEncryption, waited)) {
+            if (waited == 0L) EspHomeLog.i("API server waits for the key the installer hands over (up to ${API_KEY_WAIT_MS / 60_000} min)")
+            exec.schedule({ startServerWhenKeyed(since) }, 1, TimeUnit.SECONDS)
+            return
+        }
+        if (handover == "1") {
+            // A key handed over since this object was made: read the store again.
+            noiseKeys = NoiseKeys(prefs.noiseKeyStore)
+            EspHomeLog.i(if (prefs.apiEncryption) "API key handed over: starting the API server with it"
+                else "No API key handed over in ${API_KEY_WAIT_MS / 60_000} min: starting without one, Home Assistant may ask to re-authenticate")
+        }
+        startServer()
     }
 
     private fun startServer() {
@@ -774,18 +822,19 @@ class PanelDevice(
 
     /**
      * The Home Assistant device identity (ESPHome "MAC"), from [pickMac]. Kept in prefs once chosen, so it never
-     * changes while the app's data lives.
+     * changes while the app's data lives. Logged on every start with its source ([macLine]): before #574 only the start
+     * that chose it logged it, so a log that began after that start had no `Device MAC` line.
      */
     @SuppressLint("HardwareIds") // the Wi-Fi MAC and ANDROID_ID are what keep the identity across reinstalls
     private fun stableMac(): String {
         val hw = try { NetworkInterface.getByName("wlan0")?.hardwareAddress } catch (_: Exception) { null }
         val androidId = try { Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ANDROID_ID) } catch (_: Exception) { null }
-        val (mac, source) = pickMac(prefs.deviceMac, systemProperty(IMAGE_MAC_PROP), hw, systemProperty("ro.serialno"), androidId) {
+        val image = systemProperty(IMAGE_MAC_PROP)
+        val (mac, source) = pickMac(prefs.deviceMac, image, hw, systemProperty("ro.serialno"), androidId) {
             ByteArray(6).also { SecureRandom().nextBytes(it) }
         }
-        if (source == "saved") return mac
-        prefs.deviceMac = mac
-        EspHomeLog.i("Device MAC $mac ($source)")
+        if (source != "saved") prefs.deviceMac = mac
+        EspHomeLog.i(macLine(mac, source, image))
         return mac
     }
 

@@ -6,6 +6,7 @@ import { closeSync, createReadStream, openAsBlob, openSync, readSync, writeSync 
 import { Readable } from 'node:stream';
 import { join } from 'node:path';
 import type { PanelShell } from '@glassworks/adb';
+import { apiKeyFingerprint, readApiKey } from '@glassworks/app-adb';
 import type { Store } from '@glassworks/ext4';
 import {
   GLASS_PANES, GLASS_PANES_KEY_FINGERPRINT, GLASS_PANES_USERDATA, GLASSWORKS, adbFingerprint, adbKeyLines, buildImages, checkDownload, checkMirrorApk, checkFastboot, firstBoot, loadSystem, makeOnlyHome, resumableBody,
@@ -116,6 +117,8 @@ export async function runInstall(o: InstallOptions | FirstBootOptions, d: RunDep
   let fb: FastbootLike | undefined;
   let userdataBytes = 0;
   let deviceMac: string | undefined;
+  /** the ESPHome API key the running app holds, carried over the flash (#574). A secret: only its fingerprint is printed */
+  let apiKey: string | undefined;
   let loaded: Awaited<ReturnType<typeof loadSystem>> | undefined;
   let rawFd: number | undefined;
   const raw = join(o.work, 'system.raw'), sysOut = join(o.work, 'system.sparse'), udOut = join(o.work, 'userdata.sparse');
@@ -146,8 +149,22 @@ export async function runInstall(o: InstallOptions | FirstBootOptions, d: RunDep
         d.log(`    SHA-256 ${loaded.sha256}: as published`);
       }],
       ['Reboot the Mirror into fastboot', async () => {
-        if (await d.adb()) await d.rebootToBootloader();
-        else d.log('    no adb: assuming it is in fastboot already');
+        const p = await d.adb();
+        if (!p) {
+          d.log('    no adb: assuming it is in fastboot already');
+          d.log('    Home Assistant API key: none to carry (no adb before the flash): Home Assistant may ask to re-authenticate once');
+          return;
+        }
+        // A reflash wipes the key Home Assistant provisioned: read it now, as late as the app still runs, so a key HA
+        // changed meanwhile is the one carried. A key the app has but can't hand over stops the run: flashing would lose it.
+        try {
+          apiKey = await readApiKey(p);
+        } catch (e) {
+          throw new Error(`couldn't read the Home Assistant API key from the app: ${(e as Error).message}. Nothing was written to the Mirror. Run it again.`);
+        }
+        d.log(apiKey ? `    Home Assistant API key: carried over the flash (fingerprint ${await apiKeyFingerprint(apiKey)})`
+          : '    Home Assistant API key: none to carry (no app of ours with a key, or one older than #574): Home Assistant may ask to re-authenticate once');
+        await d.rebootToBootloader();
       }],
       ['Fastboot checks (read-only)', async () => {
         fb = await d.fastboot();
@@ -163,7 +180,7 @@ export async function runInstall(o: InstallOptions | FirstBootOptions, d: RunDep
         const sys = fileSink(sysOut), ud = fileSink(udOut);
         try {
           // the Wi-Fi is saved in the new userdata too: Android joins it on the first boot with nothing tapped
-          await buildImages(loaded!, { apk: o.apk, app: ours, bootAnimation: o.bootAnimation, settingsOverlay: o.settingsOverlay, adbKey: o.adbKey, userdataBytes, fill: o.fill, ...(deviceMac ? { deviceMac } : {}), ...(o.wifi ? { wifi: o.wifi } : {}) },
+          await buildImages(loaded!, { apk: o.apk, app: ours, bootAnimation: o.bootAnimation, settingsOverlay: o.settingsOverlay, adbKey: o.adbKey, userdataBytes, fill: o.fill, ...(deviceMac ? { deviceMac } : {}), ...(apiKey ? { apiKeyHandover: true } : {}), ...(o.wifi ? { wifi: o.wifi } : {}) },
             { system: sys.write, userdata: ud.write }, (step, x) => { if (x === 1) d.log(`    ${step} done`); },
             // image.ts's own lines: the APK's libraries, the unused apps left out, build.prop, services.jar
             (line) => d.log(`    ${line}`));
@@ -185,7 +202,7 @@ export async function runInstall(o: InstallOptions | FirstBootOptions, d: RunDep
       }],
       ['First boot: permissions, portrait, Home Assistant, Wi-Fi, the only home screen', async () => {
         const p = await d.waitForAdb();
-        res.firstBoot = await firstBoot(p, { haUrl: o.haUrl, wifi: o.wifi, app: ours, onStep: (s, x) => d.log(s ? `    ${s}` : `      ${x}`), sleep });
+        res.firstBoot = await firstBoot(p, { haUrl: o.haUrl, wifi: o.wifi, app: ours, ...(apiKey ? { apiKey } : {}), onStep: (s, x) => d.log(s ? `    ${s}` : `      ${x}`), sleep });
       }],
       ['HOME check', async () => {
         let home = res.firstBoot!.home;
