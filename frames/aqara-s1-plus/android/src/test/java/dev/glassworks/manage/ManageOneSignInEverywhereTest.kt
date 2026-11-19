@@ -103,6 +103,17 @@ class ManageOneSignInEverywhereTest {
         assertEquals("sign-out revokes it as any kept sign-in", listOf("TAB-REFRESH"), f.revoked)
     }
 
+    @Test fun aSecondTabThatLosesTheRaceIsToldItsNotKept() {
+        val b = f.Browser()
+        b.cookies[ManageServer.SESSION] = f.sessions.create(null, SignedInWith.PANEL_CODE, "Safari on Mac", false, f.haBase).first
+        val csrf = b.csrf()
+        // The other tab's keep lands while this one waits on Home Assistant.
+        f.duringRefresh = { f.duringRefresh = null; keep(b, refresh = "OTHER-TAB-REFRESH", csrf = csrf) }
+        val r = keep(b, csrf = csrf)
+        assertEquals(200, r.status)
+        assertTrue("this tab's token isn't the kept one: it revokes its own", JSONObject(r.text()).optBoolean("already"))
+    }
+
     @Test fun onlyThisPanelsOwnSignedInPageCanHandItOver() {
         val b = f.Browser()
         b.cookies[ManageServer.SESSION] = f.sessions.create(null, SignedInWith.PANEL_CODE, "Safari on Mac", false, f.haBase).first

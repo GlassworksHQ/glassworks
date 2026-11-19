@@ -445,9 +445,12 @@ async function start() {
   // copy, so this one sign-in also serves other tabs and the panels this browser opens (2026-11-19 panel run).
   const own = stored();
   if (!haSignIn && own && !own.viaPanel && own.refresh) {
-    const kept = await panelKeep(csrf, own.refresh);
+    let kept = await panelKeep(csrf, own.refresh);
     if (mine !== generation) return;
-    if (kept === 'already') await revokeAt(ha, own.refresh);
+    // The panel keeps another already: this tab's own goes, but only once HA confirms it; else the tab keeps it and the
+    // next load tries again (CodeRabbit on #534).
+    if (kept === 'already' && !(await revokeAt(ha, own.refresh))) kept = false;
+    if (mine !== generation) return;
     if (kept) {
       keep(KEY, null);
       haSignIn = true;

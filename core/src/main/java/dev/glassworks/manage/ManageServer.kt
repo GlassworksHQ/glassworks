@@ -450,7 +450,8 @@ class ManageServer(
             val user = signIn.gateway.currentUser(ha, t.accessToken)
             if (user?.isAdmin != true) return json(403, JSONObject().put("problem", "Only Home Assistant administrators manage panels."))
             if (s.id !in sessions.liveIds()) return json(401, JSONObject().put("problem", MANAGE_ENDED))
-            kept.putIfAbsent(s.id, HaSignIn.Kept(ha, clientId, refresh))
+            // Another tab of this session kept its own first: this one isn't kept, so that tab revokes it (CodeRabbit on #534).
+            if (kept.putIfAbsent(s.id, HaSignIn.Kept(ha, clientId, refresh)) != null) return json(200, JSONObject().put("ok", true).put("already", true))
             if (stopping) drain()
             event("${user.name}'s Home Assistant sign-in from All panels is kept for this browser (${s.browser})")
             return json(200, JSONObject().put("ok", true))
