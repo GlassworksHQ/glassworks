@@ -4,7 +4,7 @@
 // LeaveGuard's (root layout), so they hold on every route.
 import { useEffect, useSyncExternalStore } from 'react';
 import { Shell, useBrowserChip } from '../components/Shell';
-import type { KilnFrame } from './frame';
+import type { KilnFrame } from '@glassworks/kiln-core';
 import { Browser, Connect, Done, Failure, Firing, SetUp, Undo, YourTurn } from './screens';
 import type { Session } from './session';
 import { ROUTES, status } from './routes';

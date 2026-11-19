@@ -1,6 +1,10 @@
 {
   "$comment": "Kiln's install for this frame, as data. Format: docs/design/kiln/frames-as-data.md. A draft (#621): the contract (kiln/apps/kiln/test/contract) reads route, touch and each step's id, writes, reboots, downloads and taps; the engine reads the rest from phase 2. `words`: what Kiln's screens say for this frame (the shared wizard reads them, #621).",
   "route": "/aqara-s1-plus",
+  "releases": [
+    { "line": "aqara-s1-plus", "tag": "^(?:aqara-s1-plus-)?v(\\d+\\.\\d+\\.\\d+)$", "assets": ["s1-kiosk-{version}.apk"], "why": "Glassworks: vX.Y.Z (every release so far) or aqara-s1-plus-vX.Y.Z, and the S1's armeabi-v7a APK" }
+  ],
+  "legacy": { "hashLinks": true, "releaseAsset": "aqara-s1-plus", "why": "s1.edm.sh, the first installer page, was the S1's: its hash links (/#/wifi) and its release route before #28 (/api/release-asset) lead here" },
   "touch": true,
   "flows": {
     "install": {

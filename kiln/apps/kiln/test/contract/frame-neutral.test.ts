@@ -6,7 +6,7 @@
 // outside it fails, and so does an entry with no hit left (delete the entry in the PR that removes the last hit).
 // `notFrames` holds words that only look like a frame's name (SHA-256's S1), under the same no-stale rule.
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, relative, sep } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import allowlist from './frame-neutral-allowlist.json';
 import { REPO } from './harness';
@@ -100,5 +100,54 @@ describe('Kiln names no frame', () => {
     const paths = [...ENTRIES, ...NOT_FRAMES].map((e) => e.path);
     expect(paths.filter((p, i) => paths.indexOf(p) !== i)).toEqual([]);
     expect(ENTRIES.filter((e) => !e.terms.every((t) => NAMES.some(([n]) => n === t))).map((e) => e.path)).toEqual([]);
+  });
+});
+
+/** Each frame's installer package, by its npm name (frames/<id>/installer/package.json). */
+const INSTALLER_PACKAGES = readdirSync(join(REPO, 'frames')).flatMap((id) => {
+  try { return [(JSON.parse(readFileSync(join(REPO, 'frames', id, 'installer', 'package.json'), 'utf8')) as { name: string }).name]; } catch { return []; }
+});
+
+/** Every import in Kiln's sources that reaches a frame other than through the registry (@glassworks/frames). */
+export function frameImports(): { file: string; spec: string }[] {
+  const out: { file: string; spec: string }[] = [];
+  for (const root of ROOTS) {
+    for (const abs of files(join(REPO, root))) {
+      if (!/\.(ts|tsx|mts|js|mjs)$/.test(abs)) continue;
+      const file = relative(REPO, abs).split(sep).join('/');
+      for (const m of readFileSync(abs, 'utf8').matchAll(/(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g)) {
+        const spec = m[1]!;
+        const pkg = INSTALLER_PACKAGES.find((n) => spec === n || spec.startsWith(`${n}/`));
+        const intoFrames = spec.startsWith('.') && relative(join(REPO, 'frames'), resolve(dirname(abs), spec)).split(sep)[0] !== '..';
+        if (pkg || intoFrames) out.push({ file, spec });
+      }
+    }
+  }
+  return out;
+}
+
+interface ImportEntry { path: string; why: string }
+const IMPORTS = (allowlist as unknown as { imports: ImportEntry[] }).imports;
+const importCovered = (e: ImportEntry, file: string) => (e.path.endsWith('/') ? file.startsWith(e.path) : file === e.path);
+
+describe('Kiln reaches frames only through the registry', () => {
+  const found = frameImports();
+
+  it('knows each frame\'s installer package', () => {
+    expect(INSTALLER_PACKAGES).toContain('@glassworks/aqara-s1-plus-installer');
+  });
+
+  it('catches an import of a frame\'s package and a path into frames/', () => {
+    expect(found.some((h) => h.spec === '@glassworks/lululemon-mirror-installer')).toBe(true);
+    expect(found.some((h) => h.spec.includes('frames/lululemon-mirror/design/'))).toBe(true);
+  });
+
+  it('no frame import outside the allowlist: import @glassworks/frames instead', () => {
+    expect(found.filter((h) => !IMPORTS.some((e) => importCovered(e, h.file))).map((h) => `${h.file} ${h.spec}`)).toEqual([]);
+  });
+
+  it('no import allowlist entry without an import: the list only shrinks', () => {
+    expect(IMPORTS.filter((e) => !found.some((h) => importCovered(e, h.file))).map((e) => e.path)).toEqual([]);
+    expect(IMPORTS.filter((e) => !/#\d+/.test(e.why)).map((e) => e.path)).toEqual([]);
   });
 });

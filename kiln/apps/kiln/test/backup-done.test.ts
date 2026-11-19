@@ -3,7 +3,7 @@
 // installed, a new one (set-up entered again after leaving, S1's renew), or one after a reload. The
 // backup is the person's only copy outside this browser.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { demoFrame as s1Demo } from '../src/app/aqara-s1-plus/frame';
+import { demoFrame as s1Demo } from './s1-frame';
 import { demoSession } from '../src/wizard/demo';
 import { registry } from '../src/wizard/registry';
 import type { Session } from '../src/wizard/session';

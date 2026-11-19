@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // ?demo=selftest ends in PASS or FAIL, also when the staged manifest can't be read.
 import { afterEach, expect, it, vi } from 'vitest';
-import { demoFrame as s1Demo } from '../src/app/aqara-s1-plus/frame';
+import { demoFrame as s1Demo } from './s1-frame';
 import { demoSession, enterDemo } from '../src/wizard/demo';
 
 afterEach(() => vi.unstubAllGlobals());

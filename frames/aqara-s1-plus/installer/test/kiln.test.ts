@@ -1,6 +1,6 @@
 // The S1's code for Kiln's shared wizard (src/kiln.ts): what it asks and reads the same way the wizard did when it held them.
 import { describe, expect, it, vi } from 'vitest';
-import { describeSwitch, kiln, type SwitchPlan } from '../src/index';
+import { describeSwitch, kilnFrame as kiln, type SwitchPlan } from '../src/index';
 
 const plan: SwitchPlan = { installedVersion: '0.1.0', debugBuild: true, root: true, carries: { apiKey: false, signIn: false }, wifi: { owner: 'kiosk', ssid: 'Home' } };
 
@@ -10,7 +10,7 @@ describe('the S1 for Kiln', () => {
     const onPhase = vi.fn();
     const o = kiln.appOptions({ locale: 'en-GB', timezone: 'Europe/London', clock24: true, keyboard: false }, ask, onPhase);
     expect(o).toMatchObject({ locale: 'en-GB', timezone: 'Europe/London', clock24: true, keyboard: false, onPhase });
-    await expect(o.confirmSwitch!(plan)).resolves.toBe(false);
+    await expect((o as { confirmSwitch(p: SwitchPlan): Promise<boolean> }).confirmSwitch(plan)).resolves.toBe(false);
     expect(ask).toHaveBeenCalledWith(`${describeSwitch(plan)}\n\nSwitch now?`);
   });
 

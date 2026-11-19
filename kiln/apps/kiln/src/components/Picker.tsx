@@ -7,6 +7,7 @@ import * as RadioGroup from '@radix-ui/react-radio-group';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useSyncExternalStore } from 'react';
+import { INSTALLERS } from '@glassworks/frames/catalog';
 import { FRAMES } from '../frames/catalog';
 import { registry } from '../wizard/registry';
 import { ROUTES, canonical, fromHash, status } from '../wizard/routes';
@@ -16,11 +17,11 @@ import { LastRun } from './LastRun';
 import { Shell, useBrowserChip } from './Shell';
 
 const INSTALLABLE = FRAMES.filter((f) => ships(f.status) && f.kiln);
-/** s1.edm.sh's old links (/#/wifi, …) belong to the S1, the only frame that had them. */
-const OLD_LINKS_FRAME = '/aqara-s1-plus';
+/** The first installer page's old links (/#/wifi, …) belong to the frame it was for (installer.json `legacy.hashLinks`). */
+const OLD_LINKS_FRAME = Object.values(INSTALLERS).find((i) => i.legacy?.hashLinks)?.route;
 
 const NONE: readonly never[] = [];
-/** `href` is a route of the frame at `base` (/lululemon-mirror?apk=local is the Mirror's). */
+/** `href` is a route of the frame at `base`, its query string included (`<base>?apk=local`). */
 const isUnder = (href: string, base: string) => href === base || href.startsWith(`${base}/`) || href.startsWith(`${base}?`);
 
 function useRunning(): { href: string; name: string } | undefined {
@@ -48,7 +49,7 @@ export function Picker() {
   const frame = FRAMES.find((f) => f.id === picked)?.kiln ?? '';
   useEffect(() => {
     const old = fromHash(location.hash);
-    if (old) router.replace(OLD_LINKS_FRAME + ROUTES[old]);
+    if (old && OLD_LINKS_FRAME) router.replace(OLD_LINKS_FRAME + ROUTES[old]);
   }, [router]);
   const steps = STEPS.install.map((name, i) => ({ name, mark: i === 0 ? 'now' as const : 'todo' as const }));
   return (
