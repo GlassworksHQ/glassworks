@@ -162,7 +162,7 @@ Whether those copies are the same bytes is **untested**.
 |---|---|---|
 | Option A (Kiln's patched image) | Yes, Kiln's own key (verified 2026-11-17, #443) | 128 of the 141 files. Not the 13 daemons: their labels allow only `init`, `debuggerd`, `mdtpdaemon` and the daemon (read, the unit's policy) |
 | Plain Glass Panes image | Yes, the published project key | The same 128 (read). Kiln shouldn't use that key, so option A comes first |
-| Stock lululemon software | **Probably none.** The stock ramdisk sets `persist.sys.usb.config=none`, and the Mirror has no touchscreen to allow a computer. One project reports authorised adb on `IFC-6309-2.0-MIR/329` units; the maintainer doesn't expect it ([#40](https://github.com/GlassworksHQ/glassworks/issues/40)) | Untested. The policy is in the signed boot, the same on both, so the same 13 daemons would be unreadable there too (read) |
+| Stock lululemon software | **Maybe, with work.** The stock ramdisk sets `persist.sys.usb.config=none`, and the Mirror has no touchscreen to allow a computer, so a bare adb connection gives nothing. But two community reports now show authorised adb on stock by planting a key (and, for network adb, a TCP port) in a fresh `userdata`: a USB report on `IFC-6309-2.0-MIR/329`, and a network-adb report on **one** `1.16.0` unit ([community-root-and-network-adb.md](community-root-and-network-adb.md); `1.2x+` reportedly breaks it). The maintainer doesn't expect it to generalise ([#40](https://github.com/GlassworksHQ/glassworks/issues/40)) | **Untested by us, and uncertain for stock.** The 13-daemon result is read from the **dev unit's** policy and the Glass Panes `file_contexts`. The reported stock units run a **different boot build**, whose policy and vendor-file labels we have not read, so whether a stock `shell` can read the 13 daemons is **not established** — likely the same (the policy is in the signed boot), but unverified until a stock unit's labels are checked |
 
 So:
 
@@ -301,7 +301,13 @@ on the computer.
   in? Nobody has built the community's manifest with an empty vendor tree.
 - Hard rule 4, the GPL programs in any AOSP image: the maintainer's call.
 - Can a stock Mirror give adb at all? If it can, its own vendor files (lululemon's build, never read
-  by anyone we know) would be the cleanest source. Needs a stock unit, which we don't have.
+  by anyone we know) would be the cleanest source. Needs a stock unit, which we don't have. One
+  community report now answers this for a single unit: authorised **network** adb on a stock Mirror
+  at firmware 1.16.0, by planting a key and a TCP port in a fresh userdata (1.2x+ reportedly breaks
+  it) — [community-root-and-network-adb.md](community-root-and-network-adb.md). Untested by us; and
+  whether a stock `shell` could read the 13 daemons is **not established** (the stock build's policy
+  and labels were never read — likely the same, since the policy is in the signed boot, but
+  unverified).
 - Does Android 6 keep userdata across a change of platform key, or must the move wipe it?
 
 ## The plan, in PR-sized pieces
