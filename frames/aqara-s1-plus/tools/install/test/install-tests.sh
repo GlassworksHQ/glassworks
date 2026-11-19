@@ -237,6 +237,13 @@ check "restore: no hand-over marker unless asked" test ! -e "$T/panel/ce/files/s
 check "restore: owned by the new uid, labels restored" bash -c 'grep -q "chown -R 10072:10072 .*/ce/shared_prefs" "$1" && grep -q "restorecon -R .*/ce" "$1"' _ "$T/root.log"
 out=$(env_sw restore handover 2>&1)
 check "restore handover: restored, and the hand-over marked for the app (#608)" bash -c '[ -f "$1/files/secrets-handover" ] && [ ! -s "$1/files/secrets-handover" ] && grep -q "chown 10072:10072 .*/ce/files/secrets-handover" "$2"' _ "$T/panel/ce" "$T/root.log"
+echo keep > "$T/system-file"
+ln -sf "$T/system-file" "$T/panel/work/ce/files/secrets-handover" 2>/dev/null || { mkdir -p "$T/panel/work/ce/files"; ln -sf "$T/system-file" "$T/panel/work/ce/files/secrets-handover"; }
+out=$(env_sw restore handover 2>&1)
+check "restore handover: a copied marker that is a link is replaced, its target untouched (#608 review)" bash -c '[ "$(cat "$1")" = keep ] && [ -f "$2" ] && [ ! -L "$2" ] && ! grep -q "chown .*system-file" "$3"' _ "$T/system-file" "$T/panel/ce/files/secrets-handover" "$T/root.log"
+rm -f "$T/panel/work/ce/files/secrets-handover"; mv "$T/panel/work/ce/files" "$T/panel/work/ce-files-real"; mkdir -p "$T/elsewhere"; ln -s "$T/elsewhere" "$T/panel/work/ce/files"
+check "restore handover: files/ as a link is refused, nothing written through it" bash -c '! "$@" restore handover 2>/dev/null && [ ! -e "$0/secrets-handover" ]' "$T/elsewhere" env PATH="$T/pbin:$PATH" S1_CE="$T/panel/ce" S1_DE="$T/panel/de" S1_WORK="$T/panel/work" sh "$SW"
+rm -f "$T/panel/work/ce/files"; mv "$T/panel/work/ce-files-real" "$T/panel/work/ce/files"
 check "restore refuses another word" bash -c '! "$@" restore whatever 2>/dev/null' _ env PATH="$T/pbin:$PATH" S1_CE="$T/panel/ce" S1_DE="$T/panel/de" S1_WORK="$T/panel/work" sh "$SW"
 env_sw discard
 check "discard: the copy is gone" test ! -e "$T/panel/work"

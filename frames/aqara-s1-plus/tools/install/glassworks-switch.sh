@@ -108,9 +108,16 @@ case "${1:-}" in
     case "${2:-}" in
       '') ;;
       handover)
-        mkdir -p "$CE/files" && chown "$uid:$uid" "$CE/files" && : > "$CE/files/secrets-handover" &&
-          chown "$uid:$uid" "$CE/files/secrets-handover" || fail "could not mark the hand-over"
-        restorecon -R "$CE/files" 2>/dev/null || true
+        # Never through a link: the copied data is the old app's, and it could have left files/ or the marker as a
+        # symbolic link to a system file, which root would then truncate and chown (CWE-61, #608 review).
+        m="$CE/files/secrets-handover"
+        [ ! -L "$CE/files" ] || fail "$CE/files is a symbolic link: no hand-over marked"
+        mkdir -p "$CE/files" && [ -d "$CE/files" ] && [ ! -L "$CE/files" ] && chown "$uid:$uid" "$CE/files" ||
+          fail "could not make $CE/files"
+        rm -f "$m" # a link is removed, not followed
+        [ ! -e "$m" ] && [ ! -L "$m" ] || fail "could not clear $m"
+        : > "$m" && [ -f "$m" ] && [ ! -L "$m" ] && chown "$uid:$uid" "$m" || fail "could not mark the hand-over"
+        restorecon "$m" 2>/dev/null || true
         ;;
       *) fail "usage: restore [handover]" ;;
     esac
