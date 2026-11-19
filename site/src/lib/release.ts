@@ -10,11 +10,19 @@ import { links } from "./site";
  * release's own tag. The S1's line tags it `aqara-s1-plus-v1.2.3`; releases up to 0.4.4 have a plain `v1.2.3`.
  * A version whose section is in but isn't released yet (the release PR merged, its tag not pushed) is skipped.
  * The releases list is the one the blueprints read (blueprints.ts), so the build still asks GitHub once.
- * The build fails when no version has a release.
+ * It is GitHub's newest 100 releases, like the app's update check. If newer releases of other lines ever push
+ * every S1 release off it, the newest version links the releases page instead: the build still works, and a
+ * version that old has long been released. The build fails only when the changelog has no version.
  */
 const CHANGELOG = path.join(process.cwd(), "../CHANGELOG.md");
 
-export type Release = { version: string; date: string; tag: string; href: string };
+export type Release = {
+  version: string;
+  date: string;
+  /** the release's tag; null when the list doesn't reach it, and [href] is the releases page */
+  tag: string | null;
+  href: string;
+};
 
 /** The S1 app's latest release in [changelog] that [list] has published, at its tag. */
 export function latestRelease(changelog: string, list: GithubRelease[]): Release {
@@ -29,7 +37,8 @@ export function latestRelease(changelog: string, list: GithubRelease[]): Release
     const tag = tags.get(version!);
     if (tag) return { version: version!, date: date!, tag, href: `${links.s1}/releases/tag/${tag}` };
   }
-  throw new Error(`${CHANGELOG}: no version has a published ${S1} release among GitHub's newest releases`);
+  const [, version, date] = headings[0]!;
+  return { version: version!, date: date!, tag: null, href: `${links.s1}/releases` };
 }
 
 export async function release(): Promise<Release> {
