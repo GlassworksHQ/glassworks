@@ -94,6 +94,8 @@ export interface ImageRecipe {
   summary: string;
   /** Where questions about it go. A community image's own project. */
   support: ImageLink;
+  /** Whose its vendor files are, when they aren't its maker's: said on its download screen. */
+  vendor?: string;
   /** The release the files come from (a community image). */
   release?: ImageLink;
   /** After Done: where the person carries on (a community image's install guide). */

@@ -107,6 +107,17 @@ on the shared wizard (the catalog's `ENGINE`), titled from its `words.name`. Rel
 `installer.json` `releases`, and the first installer page's links from `legacy`.
 `frame-neutral.test.ts` checks both halves: no frame name in Kiln's sources, and no import of a
 frame's package or a path into `frames/` except through the registry. Its allowlists only shrink.
+**A frame installed by image and adb** (the Mirror) declares a `DeviceFrame` (kiln-core `device.ts`)
+instead of the wizard's `KilnFrame`. Its data is its `installer.json` `device`: what it is called
+(`short`, `the`), its board, the APK's release line, its timings, the assets its image adds, the
+browser storage it keeps, every word only it says, the rows its app install shows, and its Silent
+updates words. Its code, in its installer package, is `appFlow` (check the APK, read the device,
+install, undo) and `imageFlow` (its image recipes, its fastboot checks, the first start, the
+only-home-screen step, Wi-Fi on, and its image builder in a worker). The engine's device flows
+(`apps/kiln/src/device`) run every step and every screen for any frame of that kind. `installer.json`
+`page` (`wizard` or `device`) says which page a frame gets; the registry's loader gives the same
+`kind`, and only a wizard frame has the step routes (`/install`, `/set-up/wifi`, …).
+
 The radio's next steps (`setup/radioPlan.ts`) are the radio pane's, not a frame's: the panel's own
 setup page shows them on any frame whose app reports a radio.
 
@@ -183,7 +194,12 @@ in `kiln/AGENTS.md`, `docs/principles.md` and the root `AGENTS.md`. Files that o
    transport the S1 declares (`connect`'s `transport`).
 2. Move the Mirror onto the shared engine, then Android, one frame per PR. Delete their own sessions
    (`mirror/session.ts`, `mirror/flash.ts`, `android/session.ts`) and screens. Each move deletes
-   that frame's lines in `expected-failures.json`, and its driver becomes the shared one.
+   that frame's lines in `expected-failures.json`, and its driver becomes the shared one. The
+   Mirror's move came in two parts. First the frames registry and one `[frame]` route (#652). Then
+   the Mirror as a `DeviceFrame` on the engine's device flows, with no Mirror code left in Kiln.
+   Both left its behaviour as it was, demo states byte-identical. So its expected failures stay
+   until the flows themselves get the S1's forgiveness: resume after a reload, waiting through a
+   refused auth, a stall watchdog on the image download.
 3. Enter fastboot over adb (`adb reboot bootloader`) where a frame declares its button unreachable.
    Add contract cases for it, for the way back on every writing screen, and for errors that say
    whether anything was written (engine rules 5 to 7 have no case yet).

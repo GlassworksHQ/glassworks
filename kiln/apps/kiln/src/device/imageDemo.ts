@@ -1,0 +1,151 @@
+// Development and preview only (<route>?demo=flash-… and ?demo=image-…): the image over fastboot against a device
+// frame's simulated device (its `kilnSim`), so each screen can be seen and captured without one. The images aren't
+// built or downloaded (a stand-in reports progress); the fastboot and first-start answers are the frame's fakes.
+// `flash-…`: Glassworks; `image-…`: the choice and the frame's community image (issue 579).
+import { ProxyError, WrongImage, type DeviceEntry, type ImageMaker } from '@glassworks/kiln-core';
+import { ImageSession, type ImageDeps } from './imageSession';
+import { fakeReleaseRoute, type FakeRelease } from '../release/demo';
+import { AppSession, releaseLine } from './appSession';
+
+export const IMAGE_DEMOS = ['flash-image', 'flash-release', 'flash-release-downloading', 'flash-release-none', 'flash-release-bad', 'flash-downloading', 'flash-download-error', 'flash-download-bad', 'flash-ready', 'flash-wifi-short', 'flash-fastboot', 'flash-fastboot-wrong', 'flash-confirm',
+  'flash-working', 'flash-adb', 'flash-adb-wait', 'flash-done', 'flash-done-chooser', 'flash-done-no-home', 'flash-error', 'flash-run',
+  'image-choose', 'image-choose-open', 'image-choose-panes', 'image-link', 'image-download', 'image-download-done', 'image-download-error', 'image-download-bad',
+  'image-fastboot', 'image-confirm', 'image-writing', 'image-done', 'image-error', 'image-back-glassworks', 'image-back-panes',
+  'image-wifi', 'image-wifi-writing', 'image-adb', 'image-done-wifi', 'image-done-wifi-unconfirmed'] as const;
+export type ImageDemo = (typeof IMAGE_DEMOS)[number];
+
+const REFRACT_DOWN = 'the download proxy answered 502: GitHub answered 503';
+
+/** `deps`: what another demo changes on the simulated device (keepDemo.ts: the app's key before and after the flash). */
+export async function imageDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim'>, name: ImageDemo, fast = false, deps: Partial<ImageDeps> = {}): Promise<{ image: ImageSession; app: AppSession }> {
+  const tick = (ms: number) => new Promise<void>((r) => setTimeout(r, fast ? 0 : ms));
+  // the frame's community image: its id, its files in download order, and the published key its wifi-on step uses
+  const community = frame.imageFlow.recipes.find((x) => x.community)!;
+  const [firstFile, secondFile] = community.files;
+  const keyFile = community.steps.find((x) => x.do === 'wifi-on')?.key;
+  let failures = 1; // a failed download fails once: Try again works
+  const images: ImageMaker = {
+    async fetch(_, onProgress) {
+      if (name === 'flash-downloading') { onProgress(0.42); return new Promise(() => {}); }
+      if (name === 'flash-download-error' && failures-- > 0) { onProgress(0.31); await tick(200); throw new ProxyError(REFRACT_DOWN); }
+      if (name === 'flash-download-bad' && failures-- > 0) { for (let i = 1; i <= 10; i++) { await tick(60); onProgress(i / 10); } throw new WrongImage('its SHA-256 differs from the release'); }
+      for (let i = 1; i <= 10; i++) { await tick(120); onProgress(i / 10); }
+    },
+    async download(_, want, onProgress) {
+      if (name === 'image-download') { onProgress(0.42); return new Promise(() => {}); }
+      if (name === 'image-download-error' && want.name === firstFile?.name && failures-- > 0) { onProgress(0.31); await tick(200); throw new ProxyError(REFRACT_DOWN); }
+      for (let i = 1; i <= 10; i++) { await tick(120); onProgress(i / 10); }
+      if (name === 'image-download-bad' && want.name === secondFile?.name && failures-- > 0) throw new WrongImage('its SHA-256 differs from the release');
+    },
+    // the demo's stand-in for the image's published key: a PEM that parses, not a real key
+    async file(n) { return n === keyFile ? new Blob(['-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----\n']) : new Blob([new Uint8Array(16)]); },
+    async check() {},
+    async wifi(_, onProgress) {
+      if (name === 'image-wifi-writing') { onProgress(0.55); return new Promise(() => {}); }
+      for (let i = 1; i <= 5; i++) { await tick(150); onProgress(i / 5); }
+      return new Blob([new Uint8Array(16)]);
+    },
+    async build(_, onProgress) {
+      for (const step of ['patch', 'system', 'userdata'] as const) {
+        for (let i = 1; i <= 5; i++) {
+          if (name === 'flash-working' && step === 'system' && i === 3) { await tick(300); onProgress(step, 0.4); return new Promise(() => {}); } // stays here, painted twice
+          await tick(150); onProgress(step, i / 5);
+        }
+      }
+      return { system: new Blob([new Uint8Array(16)]), userdata: new Blob([new Uint8Array(16)]) };
+    },
+    async discard() {},
+  };
+  const fastboot = (system: number) => sim.fastboot(system, { fails: name === 'flash-error' || name === 'image-error', stuck: name === 'image-writing', tick });
+  // flash-release…: the APK from a stand-in release (?apk=release), as the image screen shows it
+  const release = name.startsWith('flash-release')
+    ? fakeReleaseRoute(({ 'flash-release': 'out', 'flash-release-downloading': 'stuck', 'flash-release-none': 'none', 'flash-release-bad': 'bad' } as Record<string, FakeRelease>)[name]!, sim.apk(), tick, releaseLine(frame).line)
+    : undefined;
+  const app = new AppSession({ frame, connect: async () => { throw new Error('not in this demo'); }, ...(release ? { release } : {}) }, true);
+  const image = new ImageSession({
+    frame,
+    images,
+    refract: 'https://refract.glassworks.dev',
+    search: name === 'image-link' ? `?image=${community.id}` : '',
+    requestFastboot: async () => fastboot(name === 'flash-fastboot-wrong' ? sim.wrongSystemBytes : sim.systemBytes),
+    // flash-adb-wait: the device refuses this browser's key while it starts, and Kiln asks again
+    ...(name === 'flash-adb-wait' ? { reopenAdb: async () => { throw new Error('No authenticator can handle the request'); } } : {}),
+    requestAdb: async () => {
+      if (name === 'flash-adb-wait') throw new Error('No authenticator can handle the request');
+      return sim.firstStart({ hideFails: name === 'flash-done-chooser', noHome: name === 'flash-done-no-home' });
+    },
+    // the image's own key: an adb shell that has started, takes svc wifi enable and reports Wi-Fi on (or not)
+    adbWithKey: () => async () => ({
+      async run(c: string) { return { out: c === 'getprop sys.boot_completed' ? '1' : c === 'dumpsys wifi' ? `Wi-Fi is ${name === 'image-done-wifi-unconfirmed' ? 'disabled' : 'enabled'}\n` : '', code: 0 }; },
+      async push() { throw new Error('not in this demo'); },
+    }),
+    adbKey: () => 'QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= kiln@glassworks',
+    apk: () => app.apkBytes(),
+    apkBlocked: () => app.releaseBlocked(),
+    sleep: (ms) => tick(ms / 20),
+    ...deps,
+  });
+  const done = { image, app };
+  if (name === 'image-choose' || name === 'image-link') return done;
+  if (name === 'image-choose-open') { image.showCommunity(true); return done; }
+  if (name === 'image-choose-panes') { image.showCommunity(true); image.pick(community.id); return done; }
+  if (name.startsWith('image-')) return withCommunity(name, done, sim, community.id, frame.imageFlow.recipes[0]!.id);
+
+  image.choose(); // Glassworks, picked
+  if (name === 'flash-image' || name === 'flash-run' || release) return done;
+  if (name === 'flash-downloading') { void image.download(); return done; }
+  await image.download(); // through Kiln's download route
+  if (name === 'flash-download-error' || name === 'flash-download-bad') return done;
+  await app.pickApk(sim.apkName, sim.apk());
+  image.setHaUrl('http://homeassistant.local:8123');
+  image.setWifi({ ssid: 'Home Net', password: 'not-a-real-password' });
+  if (name === 'flash-ready') return done;
+  // a password WPA can't take: refused before fastboot, since the image saves it as the network's PSK
+  if (name === 'flash-wifi-short') { image.setWifi({ password: 'short' }); return done; }
+  image.toFastboot();
+  if (name === 'flash-fastboot') return done;
+  await image.connectFastboot();
+  if (name === 'flash-fastboot-wrong' || name === 'flash-confirm') return done;
+  image.understand(true);
+  const flashing = image.flash();
+  if (name === 'flash-working') return done;
+  await flashing;
+  if (name === 'flash-adb' || name === 'flash-error') return done;
+  if (name === 'flash-adb-wait') { void image.connectAdb(); return done; }
+  await image.connectAdb();
+  return done;
+}
+
+/** The community image, picked on the choice: its download, fastboot, warning, writes and Done, and both ways back. */
+async function withCommunity(name: ImageDemo, d: { image: ImageSession; app: AppSession }, sim: DeviceEntry['sim'], id: string, glassworks: string) {
+  const { image } = d;
+  if (name === 'image-back-panes') { // Glassworks' Done, then its way back
+    image.choose();
+    await image.download();
+    await d.app.pickApk(sim.apkName, sim.apk());
+    image.toFastboot(); await image.connectFastboot(); image.understand(true); await image.flash(); await image.connectAdb();
+    image.wayBack(id);
+    return d;
+  }
+  image.showCommunity(true);
+  image.pick(id);
+  image.choose();
+  if (name === 'image-download') { void image.download(); return d; }
+  await image.download();
+  const withWifi = name.startsWith('image-wifi') || name === 'image-adb' || name.startsWith('image-done-wifi');
+  if (withWifi) image.setWifi({ ssid: 'Home Net', password: 'not-a-real-password' }); // a made-up network (CLAUDE.md rule 2)
+  if (name === 'image-wifi') return d;
+  if (['image-download-done', 'image-download-error', 'image-download-bad'].includes(name)) return d;
+  image.toFastboot();
+  if (name === 'image-fastboot') return d;
+  await image.connectFastboot();
+  if (name === 'image-confirm') return d;
+  image.understand(true);
+  const writing = image.flash();
+  if (name === 'image-writing' || name === 'image-wifi-writing') { await new Promise((r) => setTimeout(r, 0)); return d; }
+  await writing;
+  if (name === 'image-adb') return d;
+  if (name.startsWith('image-done-wifi')) { await image.connectAdb(); return d; }
+  if (name === 'image-back-glassworks') image.wayBack(glassworks);
+  return d;
+}

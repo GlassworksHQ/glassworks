@@ -13,13 +13,14 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: ReactNode }) => <a href={href} {...p}>{children}</a> }));
 
 import { frame as s1PlusUi, demoFrame as s1Demo } from './s1-frame';
-import { flashDemo } from '../src/mirror/flashDemo';
-import { mirrorDemo } from '../src/mirror/demo';
-import { Flash, Screens } from '../src/mirror/MirrorWizard';
-import { MirrorSession } from '../src/mirror/session';
+import { imageDemo } from '../src/device/imageDemo';
+import { appDemo } from '../src/device/demo';
+import { ImageFlow, AppFlow } from '../src/device/DevicePage';
+import { AppSession } from '../src/device/appSession';
 import { demoSession, enterDemo } from '../src/wizard/demo';
 import type { Session } from '../src/wizard/session';
 import { Wizard } from '../src/wizard/Wizard';
+import { mirrorEntry, mirrorFrame } from './mirror-frame';
 
 beforeAll(() => {
   Object.defineProperty(navigator, 'usb', { configurable: true, value: {} });
@@ -84,23 +85,23 @@ describe('the S1', () => {
 
 describe('the Mirror', () => {
   it('Done after the fastboot install: On, read back from the image\'s privileged copy', async () => {
-    const { flash, mirror } = await flashDemo('flash-done', true);
-    render(<Flash flash={flash} mirror={mirror} />);
+    const { image: flash, app: mirror } = await imageDemo(mirrorEntry, 'flash-done', true);
+    render(<ImageFlow image={flash} app={mirror} />);
     expect(block()).toBe('Silent updatesOnUpdates from Home Assistant install with nobody at the Mirror. Glassworks is a system app in the Mirror\'s image, and Android lets it install its own updates.');
   });
 
   it('Done after the app alone over adb: a normal app, so a click each, and what makes it silent', async () => {
-    render(<Screens session={await mirrorDemo('done', true)} />);
+    render(<AppFlow session={await appDemo(mirrorEntry, 'done', true)} />);
     expect(block()).toBe('Silent updatesA click eachGlassworks went in as a normal app, so Android asks before each update, and the Mirror has no touchscreen to answer it. A USB mouse can. Kiln\'s install over fastboot makes it a system app whose updates install by themselves.');
   });
 
   it('Done after an adb update of the image\'s copy: On', async () => {
     const m = new FakeMirror({ installed: 500, privileged: true });
-    const s = new MirrorSession({ connect: async () => m, sleep: async () => {} }, true);
+    const s = new AppSession({ frame: mirrorFrame, connect: async () => m, sleep: async () => {} }, true);
     await s.connect();
     await s.pickApk('generic-android-legacy.apk', fakeMirrorApk());
     await s.install();
-    render(<Screens session={s} />);
+    render(<AppFlow session={s} />);
     expect(screen.getByRole('group', { name: 'Silent updates' }).textContent).toMatch(/^Silent updatesOn/);
   });
 
@@ -113,14 +114,14 @@ describe('the Mirror', () => {
       if (installed && cmd === `dumpsys package ${GLASSWORKS.package}` && m.cmds.includes(`dpm set-active-admin ${GLASSWORKS.admin}`)) throw new Error('USB transfer failed');
       return run(cmd);
     };
-    const s = new MirrorSession({ connect: async () => m, sleep: async () => {} }, true);
+    const s = new AppSession({ frame: mirrorFrame, connect: async () => m, sleep: async () => {} }, true);
     await s.connect();
     await s.pickApk('generic-android-legacy.apk', fakeMirrorApk());
     await s.install();
-    render(<Screens session={s} />);
+    render(<AppFlow session={s} />);
     expect(block()).toBe('Silent updatesNot confirmedKiln couldn\'t read Glassworks back from Android. Glassworks\' Device page on the Mirror says which it is.');
     cleanup();
-    render(<Screens session={await mirrorDemo('undo-done', true)} />);
+    render(<AppFlow session={await appDemo(mirrorEntry, 'undo-done', true)} />);
     expect(block()).toBeUndefined();
   });
 });
