@@ -169,7 +169,7 @@ today.
 - **The module mounts and the overlay is on** (**verified**, the root's run of #430 with #615's boot image on the dev
   S1): `s1kiosk_hotspot_name: loading module files`, `/product/overlay/S1HotspotName/S1HotspotName.apk` mounted,
   `cmd overlay list` `[x]`, status `glassworks`. Without #615 Magisk loads no module at all
-  (`magisk-modules.md`, in #615).
+  ([magisk-modules.md](magisk-modules.md)).
 - **The undo leaves Android's record behind.** After the module is gone and a restart, `cmd overlay list
   sh.edm.s1kiosk.overlay.hotspotname` still says `[x]`, and `/data/system/overlays.xml` keeps a `state="6"`
   (`STATE_ENABLED_STATIC`) item pointing at the missing APK (**verified** on the S1, and on a stock Android 10 emulator,
