@@ -103,8 +103,10 @@ What changes on a panel with (b):
   The volume-down key also triggers safe mode (`native/src/core/utils.cpp:87-111`); the S1 has no volume keys.
 - **Scripts.** `/data/adb/post-fs-data.d` and `service.d` now run. Ours are empty.
 - **Undo.** Flashing the stock `boot` back (Kiln's restore, `fel-install.sh --undo`) removes Magisk; the file in
-  `/data/adb/magisk` stays and nothing reads it. `rm /data/adb/magisk/busybox` as root takes Magisk back to loading
-  no modules (from the next boot, until the boot image puts it back).
+  `/data/adb/magisk` stays and nothing reads it. With this boot image, removing `/data/adb/magisk/busybox` does
+  nothing: init copies it back on the next boot, before Magisk checks. To stop one module, leave a `disable` file in
+  its directory (what Magisk's app does), or, for #430's, set the name back to Android. To stop every module, go
+  back to a boot image without `s1kiosk_magiskenv.rc`, then remove the file.
 
 ## How to reproduce
 
