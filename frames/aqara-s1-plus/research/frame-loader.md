@@ -393,11 +393,16 @@ boot from flash doesn't. `vbmeta` has flags 3, so the changed header boots.
    `adb push misc32.bin /data/local/tmp/`, then as root
    `dd if=/data/local/tmp/misc32.bin of=/dev/block/by-name/misc bs=32 count=1 conv=notrunc`, and compare
    the first 2048 bytes with the backup.
-4. **T3**: in fastboot, `fastboot boot boot-ram.img`. Wait for `sys.boot_completed`, check
+4. **T3**: in fastboot, `fastboot-usb.py boot boot-ram.img`. **Expected with this image: no boot.**
+   `boot-ram.img` is an Android image with a raw arm64 kernel at offset 2048, and stock `boot` runs
+   only a legacy uImage there (attempt 8). The tool then exits 2 ("did not boot"), and the panel stays
+   in fastboot. That confirms attempt 8. Leave with `fastboot-usb.py reboot`, or power-cycle; nothing
+   was written. A T3 pass needs a uImage-wrapped RAM image, which is untested and not built yet. Only if
+   a boot does start (the tool exits 0, "USB dropped"): wait for `sys.boot_completed`, check
    `ro.boot.gw139=ram`, root, the radio helper, Wi-Fi, and compare the `/proc/cmdline` keys with T0's.
    If nothing comes up within 4 minutes, power-cycle: the panel boots from flash, unchanged.
-5. **T4** (only if T3 passed): back in fastboot, `fastboot flash boot boot.img`, then `fastboot boot
-   boot-ram.img`, and in that RAM system `su -c 'sha256sum /dev/block/by-name/boot'` must equal the
+5. **T4** (only if T3 passed; pending, see above): back in fastboot, `fastboot flash boot boot.img`,
+   then a RAM boot of `boot-ram.img`, and in that RAM system `su -c 'sha256sum /dev/block/by-name/boot'` must equal the
    backup. Then `adb reboot`. On a mismatch, don't boot from flash: rewrite from the RAM system with T5's
    commands, or use the FEL recovery.
 6. **T5**: `adb push boot.img /data/local/tmp/`, then as root
