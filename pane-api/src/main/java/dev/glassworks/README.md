@@ -563,7 +563,7 @@ minutes; the setup screen can ask for the hotspot at once.
 | Android | Frames | How | Network | Permission |
 |---|---|---|---|---|
 | 8 and newer | S1 (Android 10), tablets | `startLocalOnlyHotspot`, a public API (`LocalOnlyHotspot`) | Android's name (`AndroidShare_<n>`) and random WPA2 key | Fine location and location on (8 to 12), `NEARBY_WIFI_DEVICES` (13 and newer) |
-| 6 and 7 | Mirror, API 23–25 tablets | The hidden `setWifiApEnabled`, by reflection (`HiddenApHotspot`) | `Glassworks-XXXX` and a random key | `CHANGE_WIFI_STATE`, `CHANGE_NETWORK_STATE` (install-time) |
+| 6 and 7 | Mirror, API 23–25 tablets | The hidden `setWifiApEnabled`, by reflection (`HiddenApHotspot`) | `Glassworks-XXXX` and a random key | `CHANGE_WIFI_STATE` and `WRITE_SETTINGS`: a system app such as the Mirror's gets it at install, any other app needs "Modify system settings" allowed |
 
 The S1 needs no root for it: the local-only hotspot is open to any app in the foreground, and the
 kiosk's foreground service counts. The hidden API changes two things on the device, and
