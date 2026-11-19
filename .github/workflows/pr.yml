@@ -155,6 +155,7 @@ jobs:
 
       - name: Android SDK platform
         run: sdkmanager --install "platforms;android-37.2"
+      - uses: ./.github/actions/gradle-resolve
 
       # ContentScriptReadyTest runs the web extension's content.js under node; on CI it fails without it.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -267,6 +268,7 @@ jobs:
           packages: platform-tools
       - name: Android SDK platform
         run: sdkmanager --install "platforms;android-37.2"
+      - uses: ./.github/actions/gradle-resolve
       - name: Lint (NewApi at minSdk 23)
         run: ./gradlew --no-daemon :esphome-api-android:lintDebug :improv:lintDebug :bluetooth-proxy:lintDebug :sendspin:lintDebug :voice:lintDebug
 
@@ -299,6 +301,7 @@ jobs:
           packages: platform-tools
       - name: Android SDK platform
         run: sdkmanager --install "platforms;android-37.2"
+      - uses: ./.github/actions/gradle-resolve
       - name: No new call above API 23
         run: |
           python3 tools/legacy/api23-report.py --check tools/legacy/api23-baseline.txt
@@ -338,6 +341,7 @@ jobs:
       # 23: lib-consumer-check.sh builds an app at compileSdk 23, the AARs' minCompileSdk.
       - name: Android SDK platforms
         run: sdkmanager --install "platforms;android-37.2" "platforms;android-23"
+      - uses: ./.github/actions/gradle-resolve
 
       # Fails when a library's public API changed and libs/<name>/api/<name>.api didn't: run
       # ./gradlew apiDump and commit the dump (docs/releasing.md "The public API").
@@ -390,6 +394,7 @@ jobs:
 
       - name: Android SDK platform
         run: sdkmanager --install "platforms;android-37.2"
+      - uses: ./.github/actions/gradle-resolve
 
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
@@ -650,6 +655,7 @@ jobs:
 
       - name: Android SDK platform
         run: sdkmanager --install "platforms;android-37.2"
+      - uses: ./.github/actions/gradle-resolve
 
       # The release's armeabi-v7a APK carries the signed radio bundle (release.yml), so this one does
       # too: the same files, signed with a throwaway key (tools/size/radio-bundle.sh, docs/size.md).
@@ -779,6 +785,7 @@ jobs:
 
       - name: Android SDK platform
         run: sdkmanager --install "platforms;android-37.2"
+      - uses: ./.github/actions/gradle-resolve
 
       - name: Release APKs, one per ABI of the frame
         run: |

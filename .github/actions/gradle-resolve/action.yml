@@ -1,0 +1,10 @@
+# Configures the Gradle build once before a job's own Gradle steps, and tries again when a download fails (resolve.sh,
+# docs/ci.md). Every Gradle job in pr.yml runs it after its Android SDK step (tools/ci/test/test_changes.py checks).
+name: Gradle, configured
+description: Runs ./gradlew help, again after a failed download, so later steps find the build's plugins in Gradle's cache
+runs:
+  using: composite
+  steps:
+    - name: Configure the build (again after a failed download)
+      shell: bash
+      run: bash "$GITHUB_ACTION_PATH/resolve.sh"

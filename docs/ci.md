@@ -148,9 +148,21 @@ What else cut a job's time (#536, measured on the runs of 2026-11-18 and 19):
 **The site's prerender.** `/blueprints` reads GitHub's API while the site builds, and a dropped connection
 (`fetch failed`) failed about one `site` run in seven. The build runs once more after that error only (it did on #630's first run, and passed).
 
-Not fixed yet: Gradle's own downloads. 5 of those 13 red `app` runs were `build-logic`'s classpath answered "not
-found" by the plugin portal (kotlin-stdlib). Asking Maven Central first didn't help: on #630's first run Central
-answered "not found" for `error_prone_annotations-2.27.0.jar` in three jobs at once, though it has the file.
+### Gradle downloads
+
+5 of those 13 red `app` runs failed while Gradle configured the build: the plugin portal answered "not found" (HTTP
+404) for kotlin-stdlib 2.4.10 on `build-logic`'s classpath, and a rerun passed. Asking Maven Central first didn't help:
+on #630's first run Central answered "not found" for `error_prone_annotations-2.27.0.jar` in three jobs at once,
+though it has the file. Gradle's own retries (`org.gradle.internal.repository.max.retries`, the HTTP timeouts) cover
+timeouts and 5xx answers only, not a 404, and Gradle records a 404 as a missing module in its metadata, so a plain
+second try can fail on that record.
+
+So every Gradle job runs `.github/actions/gradle-resolve` after its Android SDK step, before its own Gradle steps. It
+configures the build once (`./gradlew help`), which fetches the plugins and `build-logic`'s classpath into Gradle's
+cache. When that fails on a download ("Could not find", "Could not resolve", …) it deletes Gradle's dependency
+metadata, as the jobs' last step does after a failure, waits 15 then 30 seconds, and tries again, three times in all.
+Any other failure fails at once. Downloads later in a job (a test's or lint's dependencies) aren't retried.
+`tools/ci/test/test_gradle_resolve.py` runs the script against a fake `gradlew` and checks that every Gradle job runs it.
 
 ## Adding a job or a path
 
