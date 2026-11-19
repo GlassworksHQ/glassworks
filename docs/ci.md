@@ -124,6 +124,34 @@ To clear a bad entry by hand, delete that job's `gradle-home-v2|Linux-X64|<job>[
 (`gh cache list --ref refs/heads/main`, then `gh cache delete <id>`). The next run starts from another
 job's entry and saves a clean one.
 
+Two more caches follow the same rule: runs that aren't for a pull request (each push to `main`, the nightly
+run, a manual run) save them, and a PR only reads them.
+
+| Cache | What | Named by | Why |
+|---|---|---|---|
+| `apt-<image>-<arch>-<packages>-<version>` | The `.deb` files of Ubuntu packages a job installs (`ffmpeg` in `scripts` and `perf-webrtc`), through `.github/actions/apt-install` | The runner image (`ImageOS`, then `ImageVersion`) and the packages. Several image versions serve at once, so without its own version's entry a run restores another's, and apt fetches only what differs | On 2026-11-18 and 19 `apt-get update && apt-get install ffmpeg` took 0.3 to 26 minutes (median 10 in `perf-webrtc`, which then hit its 30-minute limit) and failed twice on a mirror's 503. From the cache there's no `apt-get update` and no download: the files are installed by path, whatever versions the image's lists name. When that fails (another image's files), it tries the image's lists, then updated lists. The cache keeps only the files of the versions installed. It also skips man-db's index rebuild |
+| `robolectric-<version>-<jars>` | Robolectric's Android jars (`~/.m2/repository/org/robolectric`), in `app` | Robolectric's version, then the jars it holds; a run restores the newest for its version | Robolectric fetches them from Maven Central while the tests run, outside Gradle's caches, and a failed fetch fails the whole test class: 6 of the 13 red `app` runs on 2026-11-18 and 19 |
+
+Clarity's own cache (`~/.cache/glassworks-perf`) isn't kept between runs: its tests make the camera streams
+there, and a restored copy would change what they check.
+
+## Faster jobs
+
+What else cut a job's time (#536, measured on the runs of 2026-11-18 and 19):
+
+| Job | Before | Now |
+|---|---|---|
+| `root` | The 32-bit ARM containers under QEMU on x86: 17 minutes (median), the longest job | On an Arm runner (`ubuntu-24.04-arm`), whose CPU runs them itself: 6 minutes on #630's first run. Its first step runs the image's `uname -m`, and QEMU is set up only when that fails |
+| `perf-webrtc` | Four end-to-end files one after the other, 9.5 minutes | Two halves on two runners, `perf-webrtc (relay)` (the peer, the relay, Chrome and Firefox; 4.6 minutes) and `perf-webrtc (dialogs)` (HA's more-info dialogs; 5.7). `tools/ci/test/test_changes.py` fails when a WebRTC or dialog test file is in neither |
+| `branding` | The S1's frames, then the Mirror's: 2.5 and 5.5 minutes | One frame per runner, `branding (aqara-s1-plus)` and `branding (lululemon-mirror)`. Side by side on one runner they took 4.3 and 7.2 minutes: the generator already uses every core |
+
+**The site's prerender.** `/blueprints` reads GitHub's API while the site builds, and a dropped connection
+(`fetch failed`) failed about one `site` run in seven. The build runs once more after that error only (it did on #630's first run, and passed).
+
+Not fixed yet: Gradle's own downloads. 5 of those 13 red `app` runs were `build-logic`'s classpath answered "not
+found" by the plugin portal (kotlin-stdlib). Asking Maven Central first didn't help: on #630's first run Central
+answered "not found" for `error_prone_annotations-2.27.0.jar` in three jobs at once, though it has the file.
+
 ## Adding a job or a path
 
 1. Add the job to `pr.yml` with `needs: changes` and
