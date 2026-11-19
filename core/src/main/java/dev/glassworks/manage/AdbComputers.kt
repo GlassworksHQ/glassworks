@@ -220,8 +220,9 @@ class AdbComputers(
             // Only the request Allow was for: the same computer asking again meanwhile is a new question.
             if (last === asked) last = asked?.copy(answered = true)
             letIn()
+            // Android logs nothing when it takes an approval: all the app saw is that it didn't refuse this one.
             if (!remember) {
-                event("$who allowed ${label(key)} over USB, for this connection")
+                event("$who allowed ${label(key)} over USB, for this connection; Android didn't refuse it")
                 return Allowed.ONCE
             }
             // Already listed (its automatic approval failed): the list stays as it is.
@@ -235,7 +236,16 @@ class AdbComputers(
                 event("$who allowed ${label(key)} over USB, for this connection: the allowed list couldn't be saved")
                 return Allowed.NOT_REMEMBERED
             }
-            event("$who allowed ${label(key)} over USB, from now on")
+            event("$who allowed ${label(key)} over USB, from now on; Android didn't refuse it")
+            // The same computer asked again while Allow waited (a reconnect): that question came before it was listed,
+            // so nothing answered it. It's listed now.
+            last?.takeIf { it !== asked && it.key == key && !it.answered }?.let { newer ->
+                val problem = allow(key)
+                last = newer.copy(answered = problem == null)
+                if (problem == null) letIn()
+                event(if (problem == null) "Asked Android to let in ${label(key)} over USB: it's on the allowed list"
+                    else "Couldn't let in ${label(key)} over USB: $problem")
+            }
             return Allowed.FROM_NOW_ON
         }
     }
