@@ -22,6 +22,7 @@ import { workerImages } from './images';
 import { registry } from '../wizard/registry';
 import { MIRROR_BASE, keptMirror } from './activity';
 import { MirrorSession, mirrorMode, type MirrorState } from './session';
+import { IMAGE_DEMOS, ImageChoiceDemo, type ImageDemo } from './choice/ChoiceScreens';
 
 /** Demos run in `next dev` and in a build made with NEXT_PUBLIC_KILN_DEMO=1, as the S1's do. */
 const DEMO_ON = process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_KILN_DEMO === '1';
@@ -275,7 +276,7 @@ function Failed({ s, session }: { s: MirrorState; session: MirrorSession }) {
   );
 }
 
-const DEMOS = [...MIRROR_DEMOS, ...FLASH_DEMOS];
+const DEMOS = [...MIRROR_DEMOS, ...FLASH_DEMOS, ...IMAGE_DEMOS];
 
 /**
  * With ?apk=local: Glassworks over fastboot (the default), or the app alone over adb on a Mirror that
@@ -299,10 +300,11 @@ export function MirrorWizard() {
   const setFlashMode = (on: boolean) => { if (start.kept) start.kept.flashMode = on; setMode(on); };
   useEffect(() => {
     const d = start.m.demo;
-    if (!d) return;
+    if (!d || d.startsWith('image-')) return;
     if (d.startsWith('flash-')) void flashDemo(d as FlashDemo).then(setDemo);
     else void mirrorDemo(d as MirrorDemo).then((mirror) => setDemo({ mirror }));
   }, [start]);
+  if (start.m.demo?.startsWith('image-')) return <ImageChoiceDemo name={start.m.demo as ImageDemo} />;
   const live = start.real ?? demo;
   if (!live) return null;
   if (live.mirror.state.screen !== 'off' && flashMode && live.flash) return <Flash flash={live.flash} mirror={live.mirror} toApp={() => setFlashMode(false)} />;

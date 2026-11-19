@@ -15,6 +15,7 @@ in `kiln/`. It's the reference for building Kiln's UI, and for the per-frame rec
 | File | What |
 |---|---|
 | [sketch.html](sketch.html) | The Kiln screens: panel, connect, your turn, install, Wi-Fi, Home Assistant, done, undo, error |
+| [community-images.md](community-images.md) | Community images (#579): the choice on a frame's page, the community install, its Done and the way back. Mockups for approval |
 | [recovery/player.js](recovery/player.js) | The recovery-mode player: draws any frame's device and animates its steps from data |
 | [recovery/aqara-s1-plus.json](recovery/aqara-s1-plus.json) | The S1 Plus's recovery data |
 | [recovery/index.html](recovery/index.html) | Preview: plays `?frame=<id>` from `<id>.json` in that folder |
