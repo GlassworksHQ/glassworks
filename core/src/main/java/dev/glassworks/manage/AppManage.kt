@@ -202,7 +202,7 @@ open class AppManage(
     }
 
     override fun stop() {
-        tail.stop()
+        stopLog() // the log tail and the USB debugging listener (#435), as before one sign-in (CodeRabbit on #534)
         server.stop()
     }
 
