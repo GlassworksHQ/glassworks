@@ -453,6 +453,8 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   it straight away. The *Thread join* sensor says how it went. Pasting the dataset still works.
 
 ### Fixed
+- **Kiln no longer waits for ever on a download that stopped.** If one of the installer's files stops arriving
+  for 30 seconds, Kiln stops with an error and *Try again*, instead of a progress bar that never moves.
 - **With Screen mode set to always, walking up no longer turns on a screen you turned off.** If you turn the screen
   off from Home Assistant, it stays off when someone comes close, whether the panel senses them with its own sensor
   or with the camera pane. *Presence* in Home Assistant still turns on. In the presence mode, walking up still wakes
