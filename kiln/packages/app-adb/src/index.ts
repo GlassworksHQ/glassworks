@@ -188,8 +188,12 @@ export async function apiKeySocketUp(p: PanelShell): Promise<boolean> {
  * no key. Throws when the app has a key but it can't be read now (its key store is down, or the socket didn't answer):
  * a flash then would lose it. It is a secret: never put it in a log line, an error or a command line.
  */
-export async function readApiKey(p: PanelShell, replyMs = 10_000): Promise<string | undefined> {
-  if (!p.openStream || !(await apiKeySocketUp(p))) return undefined;
+export async function readApiKey(p: PanelShell, replyMs = 10_000, o: { socket?: 'required' } = {}): Promise<string | undefined> {
+  if (!p.openStream || !(await apiKeySocketUp(p))) {
+    // a caller that saw the socket listen: one gone now is an app that restarted or stopped, not an app with no key
+    if (o.socket === 'required') throw new Error('the app\'s API key socket closed before Kiln could read the key');
+    return undefined;
+  }
   const r = await keyRequest(p, 'get', replyMs);
   if (r === 'none') return undefined;
   const m = /^key ([A-Za-z0-9+/]{43}=)$/.exec(r);

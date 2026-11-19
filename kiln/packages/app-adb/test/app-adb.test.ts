@@ -277,6 +277,12 @@ describe('the ESPHome API key across a reflash (#574)', () => {
     await expect(readApiKey(shell(mute), 5)).rejects.toThrow(/didn't answer/);
   });
 
+  it('stops, rather than carry nothing, when a socket the caller saw listen is gone (PR 603 review)', async () => {
+    const gone = new FakeKeySocket(KEY, false);
+    await expect(readApiKey(shell(gone), 5, { socket: 'required' })).rejects.toThrow(/socket closed/);
+    expect(await readApiKey(shell(gone), 5)).toBeUndefined();
+  });
+
   it('tells an app that listens on the key socket from one older than #574 (Kiln\'s keep step, #580)', async () => {
     expect(await apiKeySocketUp(shell(new FakeKeySocket()))).toBe(true);
     expect(await apiKeySocketUp(shell(new FakeKeySocket(KEY, false)))).toBe(false);

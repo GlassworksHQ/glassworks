@@ -121,6 +121,9 @@ export interface FlashState {
  */
 export const AUTH_MS = 20_000;
 
+/** The person went on to fastboot by hand while the keep step's read ran. */
+class Skipped extends Error {}
+
 export class FlashSession {
   state: FlashState = { screen: 'image', back: false, haUrl: '', wifi: { ssid: '', password: '' }, understood: false, log: [] };
   private listeners = new Set<() => void>();
@@ -131,6 +134,8 @@ export class FlashSession {
   private apiKey?: string;
   /** an old app's Mirror, connected, for its restart into fastboot */
   private running?: PanelShell;
+  /** The keep step's read in progress: skipKeep bumps `gen`, and the read then lets go of `p` and changes nothing */
+  private read: { gen: number; p?: PanelShell; got?: { key: string; fingerprint: string } } = { gen: 0 };
   private picks = 0;
 
   constructor(private readonly d: FlashDeps) {}
@@ -243,10 +248,18 @@ export class FlashSession {
 
   /** Going on with fastboot by hand: a key read already stays, to give back after the flash; Done says what HA does. */
   skipKeep() {
-    const k = this.state.key;
+    let k = this.state.key;
+    // a read still running stops: its connection goes, and whatever it does next is dropped (PR 603 review)
+    const { got, p } = this.read;
+    this.read = { gen: this.read.gen + 1 };
+    void p?.close?.().catch(() => {});
     void this.running?.close?.().catch(() => {});
     this.running = undefined;
-    this.set({ screen: 'fastboot', key: k && k.state !== 'reading' ? k : undefined, connectError: undefined });
+    if (k?.state === 'reading') {
+      // a key it read already stays, to give back after the flash
+      if (got) { this.apiKey = got.key; k = { state: 'held', fingerprint: got.fingerprint }; } else k = undefined;
+    }
+    this.set({ screen: 'fastboot', key: k, connecting: false, connectError: undefined });
   }
 
   /** Whether the tab holds a key that would be lost if it closed now (the page warns before it leaves). */
@@ -259,11 +272,14 @@ export class FlashSession {
    */
   async readKey(): Promise<void> {
     const req = this.d.requestAdb({ authMs: AUTH_MS });
+    const gen = this.read.gen + 1;
+    this.read = { gen };
     this.set({ connecting: true, connectError: undefined, key: { state: 'reading', at: 0 } });
     let p: PanelShell;
     try {
       p = await req;
     } catch (e) {
+      if (gen !== this.read.gen) return; // skipped meanwhile
       if (e instanceof AdbAuthTimeout) {
         this.log('', 'adb: the Mirror didn\'t let this browser\'s key in');
         this.set({ connecting: false, key: { state: 'unreachable', why: 'no-adb' } });
@@ -272,33 +288,48 @@ export class FlashSession {
       }
       return;
     }
+    if (gen !== this.read.gen) { await p.close?.().catch(() => {}); return; }
+    this.read.p = p;
     this.set({ connecting: false });
     const sleep = this.d.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+    /** after each wait on the Mirror: stop if the person went on to fastboot by hand meanwhile */
+    const live = () => { if (gen !== this.read.gen) throw new Skipped(); };
     try {
       this.log('Reading Home Assistant\'s key from Glassworks');
       const board = (await p.run('getprop ro.board.platform')).out.trim();
+      live();
       if (board !== 'msm8916') throw new Error(`This isn't the Mirror (board ${board || 'unknown'}, needs msm8916). Nothing was changed.`);
       const app = await kioskVersion(p, undefined, GLASSWORKS);
+      live();
       this.log('', app ? `${GLASSWORKS.name} ${app.name ?? app.code}` : `no ${GLASSWORKS.name} on the Mirror`);
       // the app opens its socket as it starts: a Mirror still starting gets a little time, an app older than issue 574 never opens it
       let up = !!app && !!p.openStream && await apiKeySocketUp(p);
-      for (let i = 0; app && p.openStream && !up && i < 10; i++) { await sleep(2000); up = await apiKeySocketUp(p); }
+      for (let i = 0; app && p.openStream && !up && i < 10; i++) { await sleep(2000); live(); up = await apiKeySocketUp(p); }
+      live();
       if (app && !up) {
         this.log('', 'no API key socket: an app from before the hand-over (issue 574)');
         this.running = p;
+        this.read = { gen };
         this.set({ key: { state: 'unreachable', why: 'old-app', app: app.name ?? String(app.code) } });
         return;
       }
       this.set({ key: { state: 'reading', at: 1 } });
       // read as late as the app still runs, so a key HA changed meanwhile is the one carried
-      const key = up ? await readApiKey(p) : undefined;
+      // the socket listened just now: one gone by the read is an app that restarted, so stop rather than carry nothing
+      const key = up ? await readApiKey(p, undefined, { socket: 'required' }) : undefined;
       const fingerprint = key ? await apiKeyFingerprint(key) : undefined;
+      if (key && fingerprint) this.read.got = { key, fingerprint };
+      live();
       this.log('', fingerprint ? `Home Assistant API key read, fingerprint ${fingerprint}, held in this tab only` : 'no Home Assistant API key to keep');
       this.set({ key: { state: 'reading', at: 2 } });
       await this.restart(p);
+      live();
+      this.read = { gen };
       this.apiKey = key;
       this.set({ key: fingerprint ? { state: 'held', fingerprint } : { state: 'none' } });
     } catch (e) {
+      if (e instanceof Skipped) { await p.close?.().catch(() => {}); return; }
+      this.read = { gen };
       // the reply's first word at most (readApiKey): no key material in the message
       this.log('Stopped', (e as Error).message);
       // let go of the connection, so Try again starts a clean one on the same device

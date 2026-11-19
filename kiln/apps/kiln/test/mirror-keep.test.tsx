@@ -209,6 +209,61 @@ describe('the keep step, on the real session (#580)', () => {
     expect(r.closed).toEqual([1]);
   });
 
+  it('going to fastboot by hand during the read stops it: no restart, the connection let go (PR 603 review)', async () => {
+    const r = running({ key: KEY });
+    let release!: () => void;
+    const gate = new Promise<void>((res) => { release = res; });
+    const run = r.m.run.bind(r.m);
+    let waiting = false;
+    r.m.run = async (cmd: string) => { if (cmd === 'getprop ro.board.platform') { waiting = true; await gate; } return run(cmd); };
+    const { f } = await ready({ before: async () => r.m });
+    f.toKeep();
+    const reading = f.readKey();
+    await vi.waitFor(() => expect(waiting).toBe(true));
+    f.skipKeep();
+    expect(r.closed).toEqual([1]);
+    expect(f.state).toMatchObject({ screen: 'fastboot', key: undefined });
+    release();
+    await reading;
+    expect(r.keys.verbs).toEqual([]);
+    expect(r.reboots).toEqual([]);
+    expect(f.state).toMatchObject({ screen: 'fastboot', key: undefined });
+    expect(f.holdsKey()).toBe(false);
+  });
+
+  it('a key read before the skip stays, to give back after the flash (PR 603 review)', async () => {
+    const r = running({ key: KEY });
+    let release!: () => void;
+    const gate = new Promise<void>((res) => { release = res; });
+    r.m.rebootToBootloader = async () => { await gate; r.reboots.push('bootloader'); };
+    const { f, built, after } = await ready({ before: async () => r.m });
+    f.toKeep();
+    const reading = f.readKey();
+    await vi.waitFor(() => expect(f.state.key).toEqual({ state: 'reading', at: 2 }));
+    f.skipKeep();
+    expect(f.state.key).toMatchObject({ state: 'held' });
+    expect(f.holdsKey()).toBe(true);
+    release();
+    await reading;
+    expect(f.state).toMatchObject({ screen: 'fastboot', key: { state: 'held' } });
+    await through(f);
+    expect(built[0]?.apiKeyHandover).toBe(true);
+    expect(after.keys?.key).toBe(KEY);
+  });
+
+  it('a socket that goes away between the check and the read stops before the restart (PR 603 review)', async () => {
+    const r = running({ key: KEY });
+    const shell = r.keys.shell.bind(r.keys);
+    let checks = 0;
+    r.keys.shell = (cmd: string) => { const a = shell(cmd); if (a) { checks++; if (checks === 1) r.keys.listening = false; } return a; };
+    const { f } = await ready({ before: async () => r.m });
+    f.toKeep();
+    await f.readKey();
+    expect(r.reboots).toEqual([]);
+    expect(f.state.key).toBeUndefined();
+    expect(f.state.connectError).toMatch(/socket closed/);
+  });
+
   it('another device isn\'t read', async () => {
     const r = running({ key: KEY, board: 'sun50iw10' });
     const { f } = await ready({ before: async () => r.m });
