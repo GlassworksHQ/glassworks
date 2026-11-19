@@ -36,7 +36,6 @@ function flashWorld(k: Knobs): World {
     return body(IMAGE);
   }) as unknown as typeof fetch;
   const images: ImageMaker = {
-    load: async () => {},
     async fetch(url, onProgress) {
       const reader = resumableBody(url, IMAGE.length, { fetch: net, sleep: fastSleep }).stream().getReader();
       let got = 0;
@@ -48,6 +47,9 @@ function flashWorld(k: Knobs): World {
       }
     },
     build: async (_o, onProgress) => { onProgress('patch', 1); return { system: new Blob(['SS']), userdata: new Blob(['U']) }; },
+    // a community image's files (#579): this flow is Glassworks, which writes only what it builds
+    download: async () => {},
+    file: async (n) => new Blob([n]),
     check: async () => {},
     discard: async () => {},
   };
@@ -79,7 +81,7 @@ function flashWorld(k: Knobs): World {
   };
   const deps: FlashDeps = {
     images,
-    imageUrl: 'https://proxy.test/glass-panes/system.img',
+    refract: 'https://proxy.test',
     // VOL- under the back cover: the physical step this flow asks for, so the person does it when asked
     requestFastboot: async () => { mode = 'fastboot'; return fastboot(); },
     async requestAdb() {
@@ -102,10 +104,15 @@ function flashWorld(k: Knobs): World {
       look(): Look {
         const s = f.state;
         switch (s.screen) {
-          case 'image':
-            if (s.proxyFailed) return { end: 'error' };
-            if (s.image?.state === 'ok') return f.blocked() ? { end: 'error' } : clicks.act('continue', () => f.toFastboot());
-            return s.image ? 'wait' : clicks.act('download', () => f.downloadImage());
+          case 'choose': // Glassworks, first and picked (#579)
+            return clicks.act('choose', () => f.choose());
+          case 'image': {
+            // a download Refract can't serve is Kiln's bug: Try again, then the error the person reports (#579)
+            const files = s.files;
+            if (files.some((x) => x.state === 'error' || x.state === 'bad')) return clicks.has('download') ? { end: 'error' } : clicks.act('download', () => f.download());
+            if (files.every((x) => x.state === 'ok')) return f.blocked() ? { end: 'error' } : clicks.act('continue', () => f.toFastboot());
+            return files.some((x) => x.state === 'downloading') ? 'wait' : clicks.act('download', () => f.download());
+          }
           case 'fastboot':
             if (s.fastboot && !s.fastboot.ok) return { end: 'error' };
             if (s.connectError && clicks.has('fastboot')) return { end: 'error' };
@@ -125,12 +132,12 @@ function flashWorld(k: Knobs): World {
       },
       step() {
         const s = f.state;
-        if (s.screen === 'image' || s.screen === 'back') return 'image';
+        if (s.screen === 'choose' || s.screen === 'image') return 'image';
         if (s.screen === 'fastboot') return 'fastboot';
         if (s.screen === 'adb' || s.work?.step === 'first-boot') return 'first-boot';
         return 'install';
       },
-      // the error screen's "Back to the files" (FlashScreens FlashError)
+      // the error screen's "Back to the download" (FlashScreens FlashError)
       async retry() { clicks.reset(); f.retry(); },
       remembers: () => pristine(f.state) !== pristine(new FlashSession(deps).state),
       snapshot: () => JSON.stringify({ ...f.state, log: f.state.log.length }),

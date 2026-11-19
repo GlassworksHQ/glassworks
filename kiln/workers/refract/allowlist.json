@@ -8,6 +8,15 @@
     "sha256": "bdb6b8445296666162256affa968d590075f56a8ad2229930f8502b9703e35c1",
     "credit": { "name": "git-nimrod", "url": "https://github.com/git-nimrod/glass-panes", "project": "Glass Panes" }
   },
+  "glass-panes/mirror-android-2/userdata.sparse": {
+    "owner": "git-nimrod",
+    "repo": "glass-panes",
+    "tag": "mirror-android-2",
+    "name": "userdata.sparse",
+    "size": 154944572,
+    "sha256": "74b1f57ac20ce7c56065083a2bc3ddd283493be29d851fd04efc156ec96cf908",
+    "credit": { "name": "git-nimrod", "url": "https://github.com/git-nimrod/glass-panes", "project": "Glass Panes" }
+  },
   "glass-panes/mirror-android-2/SHA256SUMS": {
     "owner": "git-nimrod",
     "repo": "glass-panes",

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // /lululemon-mirror: off for everyone without ?apk=local, a test install with it, and every demo
 // screen on the real recipe behind a simulated Mirror.
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { GLASSWORKS } from '@glassworks/lululemon-mirror-installer';
 import { fakeApk } from '@glassworks/app-adb/fakes';
 import { FakeMirror, MIRROR_KIOSK, fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
@@ -47,11 +47,14 @@ describe('the switch', () => {
     expect(embers()).toEqual([]);
   });
 
-  it('with it, Kiln installs Glassworks over fastboot by default', async () => {
+  it('with it, Kiln installs Glassworks over fastboot by default: first and picked on the choice (#579)', async () => {
     history.replaceState(null, '', '/lululemon-mirror?apk=local');
     render(<MirrorWizard />);
-    await screen.findByText('Install Glassworks on the Mirror.');
+    await screen.findByText('What goes on the Mirror?');
     expect(screen.getByText('Test only')).toBeTruthy();
+    expect(embers()).toEqual(['Continue with Glassworks']);
+    fireEvent.click(screen.getByRole('button', { name: 'Continue with Glassworks' }));
+    await screen.findByText('Install Glassworks on the Mirror.');
     expect(embers()).toEqual(['Download the system image']);
   });
 

@@ -5,7 +5,7 @@
 // hand-back row shows only with a key held, and Done says what Home Assistant does.
 import { AdbAuthTimeout, type PanelShell } from '@glassworks/adb';
 import { FakeKeySocket } from '@glassworks/app-adb/fakes';
-import { GLASS_PANES, GLASS_PANES_USERDATA, SYSTEM_BYTES, USERDATA_BYTES, checkDownload, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
+import { SYSTEM_BYTES, USERDATA_BYTES, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
 import { FakeMirror, FirstBootMirror, fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
@@ -78,9 +78,8 @@ async function ready(o: { before?: () => Promise<PanelShell>; after?: FirstBootM
   const holding: boolean[] = [];
   const built: Parameters<ImageMaker['build']>[0][] = [];
   const images: ImageMaker = {
-    async load() {}, async fetch(_, p) { p(1); }, async discard() {},
+    async fetch(_, p) { p(1); }, async download(_, __, p) { p(1); }, async file(n) { return new Blob([n]); }, async check() {}, async discard() {},
     async build(b, p) { built.push(b); p('patch', 1); return { system: new Blob(['S']), userdata: new Blob(['U']) }; },
-    check: (file, which, p) => checkDownload(file, which === 'system' ? GLASS_PANES.system : GLASS_PANES_USERDATA, p),
   };
   const fb: FastbootLike = {
     async getvar(n) { if (n === 'max-download-size') return '0x10000000'; throw new Error('FAIL'); },
@@ -92,13 +91,14 @@ async function ready(o: { before?: () => Promise<PanelShell>; after?: FirstBootM
   let flashed = !!o.flashed;
   const mirror = new MirrorSession({ connect: async () => { throw new Error('unused'); } }, true);
   const f = new FlashSession({
-    images, imageUrl: 'https://proxy.test/system.img', requestFastboot: async () => fb,
+    images, refract: 'https://proxy.test', requestFastboot: async () => fb,
     requestAdb: async (r) => { asked.push(r?.authMs); return r?.authMs !== undefined ? (o.before ?? (async () => { throw new Error('unused'); }))() : after; },
     adbKey: () => 'QAAA= kiln@test', apk: () => mirror.apkBytes(), sleep: async () => {},
     flashedHere: { get: () => flashed, set: () => { flashed = true; } },
     holdingKey: (on) => holding.push(on),
   });
-  await f.downloadImage();
+  f.choose(); // Glassworks, first and picked (#579)
+  await f.download();
   await mirror.pickApk('kiosk.apk', fakeMirrorApk());
   return { f, built, after, asked, holding, flashedHere: () => flashed };
 }
@@ -325,5 +325,32 @@ describe('the keep step, on the real session (#580)', () => {
     await act(async () => {});
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
     expect(read).toHaveBeenCalledOnce();
+  });
+
+  it('the way back to a fresh install clears an earlier key outcome, so the keep step and Done start over (#579)', async () => {
+    const d = await keepDemo('flash-done-kept', true);
+    expect(d.flash.state.key?.state).toBe('handed');
+    d.flash.wayBack('glass-panes');
+    expect(d.flash.state.key).toBeUndefined();
+    d.flash.wayBack('glassworks');
+    expect(d.flash.state.key).toBeUndefined();
+  });
+
+  it('an image link while the key is being read stops the read: no restart, no key stored, nothing left reading (#596)', async () => {
+    let answer!: (p: PanelShell) => void;
+    const before = () => new Promise<PanelShell>((r) => { answer = r; });
+    const { f } = await ready({ before, flashed: true });
+    f.toFastboot();
+    expect(f.state.screen).toBe('keep');
+    const reading = f.readKey(); // the browser's list is open: the read waits for the Mirror
+    expect(f.state.key).toEqual({ state: 'reading', at: 0 });
+    f.followLink('?image=glass-panes');
+    const r = running({ key: DEMO_KEY });
+    answer(r.m);
+    await reading;
+    expect(f.state).toMatchObject({ screen: 'download', picked: 'glass-panes', key: undefined, connecting: false });
+    expect(r.reboots).toEqual([]); // no restart into fastboot
+    expect(r.closed).toHaveLength(1); // the connection it got is let go
+    expect(f.holdsKey()).toBe(false);
   });
 });

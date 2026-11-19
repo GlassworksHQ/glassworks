@@ -277,7 +277,7 @@ export async function firstBoot(p: PanelShell, o: { haUrl?: string; locale?: str
   return { app, hidden, home, rotation, updates, ...(wifi !== undefined ? { wifi } : {}), ...(apiKey !== undefined ? { apiKey } : {}) };
 }
 
-/** The way back: the plain Glass Panes images, as downloaded, checked against the release's hashes. */
+/** Glass Panes' userdata, as its release publishes it: Kiln's Glass Panes install (choices.ts) and the CLI's way back. */
 export const GLASS_PANES_USERDATA = {
   name: 'userdata.sparse',
   url: 'https://github.com/git-nimrod/glass-panes/releases/download/mirror-android-2/userdata.sparse',
@@ -285,7 +285,7 @@ export const GLASS_PANES_USERDATA = {
   sha256: '74b1f57ac20ce7c56065083a2bc3ddd283493be29d851fd04efc156ec96cf908',
 } as const;
 
-/** Checks a downloaded file against its published size and SHA-256, streaming. */
+/** Checks a downloaded file against its published size and SHA-256, streaming (the CLI, tools/mirror). */
 export async function checkDownload(file: Blob, want: { name: string; size: number; sha256: string }, onProgress: (x: number) => void = () => {}): Promise<void> {
   const again = `Download ${want.name} again from the Glass Panes release.`;
   if (file.size !== want.size) throw new WrongImage(`This file is ${file.size.toLocaleString('en')} bytes, not ${want.size.toLocaleString('en')}: it isn't ${want.name}, or the download stopped early. ${again}`);
