@@ -11,6 +11,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 spec = importlib.util.spec_from_file_location("fastboot_usb", os.path.join(HERE, "..", "fastboot-usb.py"))
 fb = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(fb)
+fb.SETTLE_S = 0
 
 FAKE_SERIAL = "S1FAKESERIAL0000"
 LIMIT = 32 * 1024 * 1024
@@ -19,7 +20,8 @@ LIMIT = 32 * 1024 * 1024
 class StockUBoot:
     """Packet-level fake: exact byte count for download, no reply to boot, snum in `product`."""
 
-    def __init__(self, drop_packet=None, boot_reply=None, hang_after_boot=False):
+    def __init__(self, drop_packet=None, boot_reply=None, hang_after_boot=False, eio_after_boot=False,
+                 eio_keeps_device=False):
         self.replies, self.commands, self.data_writes = [], [], []
         self.want = None
         self.got = self.packets = 0
@@ -28,6 +30,9 @@ class StockUBoot:
         self.is_present = True
         self.boot_reply = boot_reply
         self.hang_after_boot = hang_after_boot
+        self.eio_after_boot = eio_after_boot
+        self.eio_keeps_device = eio_keeps_device
+        self.eio = False
         self.hung = False
 
     def write(self, data, timeout_ms):
@@ -66,6 +71,8 @@ class StockUBoot:
                 self.replies.append(self.boot_reply)
             elif self.hang_after_boot:
                 self.hung = True
+            elif self.eio_after_boot:
+                self.eio = True
             elif len(self.buffer) > 2048 and struct.unpack_from(">I", self.buffer, 2048)[0] == 0x27051956:
                 self.is_present = False
         else:
@@ -74,6 +81,9 @@ class StockUBoot:
     def read(self, size, timeout_ms):
         if not self.is_present:
             raise fb.Gone("gone")
+        if self.eio:
+            self.eio, self.is_present = False, self.eio_keeps_device
+            raise fb.UsbIo("USB I/O error ([Errno 5] Input/Output Error)")
         if not self.replies or self.hung:
             raise fb.Timeout("timeout")
         return self.replies.pop(0)
@@ -94,9 +104,12 @@ def android_image(size, kernel=b"ARMd"):
 
 def run_main(dev, *args):
     out = io.StringIO()
-    fb.PyUsb = lambda wait_s: dev
-    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
-        code = fb.main(["fastboot-usb.py", *args])
+    real, fb.PyUsb = fb.PyUsb, lambda wait_s: dev
+    try:
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+            code = fb.main(["fastboot-usb.py", *args])
+    finally:
+        fb.PyUsb = real
     return code, out.getvalue()
 
 
@@ -178,6 +191,47 @@ class FastbootUsbTest(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn("without a reply", out)
         self.assertEqual(dev.commands[-2:], ["boot", "getvar:version"])
+
+    def test_io_error_on_the_boot_reply_reads_as_usb_dropped(self):
+        with tempfile.NamedTemporaryFile(suffix=".img") as img:
+            img.write(android_image(8 * 1024 * 1024, kernel=b"uImage"))
+            img.flush()
+            dev = StockUBoot(eio_after_boot=True)
+            code, out = run_main(dev, "boot", img.name)
+        self.assertEqual(code, 0)
+        self.assertIn("USB dropped", out)
+        self.assertIn("ro.boot.gw139", out)
+        self.assertEqual(dev.commands[-1], "boot")
+
+    def test_io_error_with_u_boot_still_answering_is_not_a_drop(self):
+        with tempfile.NamedTemporaryFile(suffix=".img") as img:
+            img.write(android_image(8 * 1024 * 1024))
+            img.flush()
+            dev = StockUBoot(eio_after_boot=True, eio_keeps_device=True)
+            code, out = run_main(dev, "boot", img.name)
+        self.assertEqual(code, 2)
+        self.assertNotIn("USB dropped", out)
+        self.assertEqual(dev.commands[-2:], ["boot", "getvar:version"])
+
+    def test_pyusb_errno_5_becomes_usb_io_and_19_gone(self):
+        import types
+
+        class USBError(Exception):
+            def __init__(self, msg, errno):
+                super().__init__(msg)
+                self.errno = errno
+
+        core = types.SimpleNamespace(USBTimeoutError=type("USBTimeoutError", (USBError,), {}), USBError=USBError)
+        t = fb.PyUsb.__new__(fb.PyUsb)
+        t.usb = types.SimpleNamespace(core=core)
+
+        def raise_(errno):
+            raise USBError(f"[Errno {errno}] x", errno)
+
+        with self.assertRaises(fb.UsbIo):
+            t._io(raise_, 5)
+        with self.assertRaises(fb.Gone):
+            t._io(raise_, 19)
 
     def test_boot_fail_reply_is_an_error(self):
         with tempfile.NamedTemporaryFile(suffix=".img") as img:
