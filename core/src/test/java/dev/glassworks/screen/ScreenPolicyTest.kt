@@ -583,6 +583,29 @@ class ScreenPolicyTest {
         after.stop()
     }
 
+    /**
+     * The emulator run of 2026-11-19: the runner's clear reached a kiosk that had just been force-stopped, so the intent
+     * launched it, and it applied the extra before [ScreenPolicy.start] read the hold's file: nothing to clear, and the
+     * dashboard came back at start.
+     */
+    @Test fun aColdLaunchThatEndsTheTestDashboardEndsIt() {
+        val before = policy()
+        before.start(context)
+        before.testHold(context, 600)
+        before.setTestDashboard(context, "http://127.0.0.1:8089/clarity-ref/start")
+        kill(before)
+        ShadowLog.clear()
+
+        val after = policy()
+        after.applyTestHoldExtra(context, Intent().putExtra("test_dashboard", ""))
+        after.start(context)
+        assertEquals(null, after.testDashboard)
+        assertTrue("the hold goes on", after.testHeld)
+        assertEquals(listOf("test dashboard resumed: http://127.0.0.1:8089", "test dashboard off (cleared)"), dashboardLog())
+        assertEquals(null, TestHold.dashboard(context))
+        after.stop()
+    }
+
     /** A runner that died leaves nothing behind: the dashboard ends when the hold expires. */
     @Test fun aTestDashboardEndsWhenTheHoldExpires() {
         val screen = policy()

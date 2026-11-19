@@ -172,13 +172,7 @@ class ScreenPolicy(
         handler.post(tick)
         // A test restarted the app inside its hold: the new process holds the screen from its start,
         // before the kiosk's idle timeout can turn it off.
-        if (!testHeld) testHoldFile(ctx).read(SystemClock.elapsedRealtime(), TestHold.boot(ctx), TEST_HOLD_MAX_S * 1000L)?.let { saved ->
-            testHeld = true
-            testHoldUntil = saved.end
-            testDashboard = saved.dashboard
-            Log.i(logTag, "test hold resumed for ${(saved.end - SystemClock.elapsedRealtime() + 999) / 1000} s")
-            saved.dashboard?.let { Log.i(logTag, "test dashboard resumed: ${origin(it)}") }
-        }
+        resumeTestHold(ctx)
         // A test hold from before start() (the intent that launched the activity) hasn't woken it yet.
         if (testHeld) wake(TEST_HOLD)
     }
@@ -296,6 +290,21 @@ class ScreenPolicy(
         onTestDashboard?.invoke(want)
     }
 
+    /**
+     * The hold a test left in [TestHoldFile] when it restarted the app. Read at [start], and before an intent's extras
+     * apply: the intent that launches the app comes before [start], and must see the hold it changes (a cold launch
+     * with `test_dashboard ''` would otherwise clear nothing, and the hold's dashboard would come back at [start]).
+     */
+    private fun resumeTestHold(c: Context) {
+        if (testHeld) return
+        val saved = testHoldFile(c).read(SystemClock.elapsedRealtime(), TestHold.boot(c), TEST_HOLD_MAX_S * 1000L) ?: return
+        testHeld = true
+        testHoldUntil = saved.end
+        testDashboard = saved.dashboard
+        Log.i(logTag, "test hold resumed for ${(saved.end - SystemClock.elapsedRealtime() + 999) / 1000} s")
+        saved.dashboard?.let { Log.i(logTag, "test dashboard resumed: ${origin(it)}") }
+    }
+
     /** scheme://host:port, for the log. */
     private fun origin(url: String): String =
         runCatching { java.net.URI(url).let { "${it.scheme}://${it.authority}" } }.getOrDefault("?")
@@ -306,6 +315,7 @@ class ScreenPolicy(
      * recreated activity doesn't apply them again.
      */
     fun applyTestHoldExtra(context: Context, intent: Intent) {
+        if (intent.hasExtra(TEST_HOLD_EXTRA) || intent.hasExtra(TEST_DASHBOARD_EXTRA)) resumeTestHold(context)
         if (intent.hasExtra(TEST_HOLD_EXTRA)) {
             testHold(context, if (intent.getBooleanExtra(TEST_HOLD_EXTRA, false)) intent.getIntExtra(TEST_HOLD_S_EXTRA, 1800) else 0)
             intent.removeExtra(TEST_HOLD_EXTRA)
