@@ -391,9 +391,9 @@ L boot
 check "...and loads" test "$(prop ro.glassworks.frame.version)" = 2.0.0
 L run agent
 check "a bundle script that keeps exiting is marked bad, for its version" test "$(cat /data/glassworks/bundle/bad-agent)" = 2.0.0
-check "...and the boot copy takes over" test "$(prop test.agent)" = "boot (bundle 2.0.0: its radio script kept exiting)||$TBL"
+check "...and the boot copy takes over" test "$(prop test.agent)" = "boot (bundle 2.0.0: its agent script kept exiting)||$TBL"
 rm -f "$T/props/test.agent"; GW_LOADER_ONCE=1 L run agent
-check "...also on the next start" test "$(prop test.agent)" = "boot (bundle 2.0.0: its radio script kept exiting)||$TBL"
+check "...also on the next start" test "$(prop test.agent)" = "boot (bundle 2.0.0: its agent script kept exiting)||$TBL"
 s=$(install_frame); check "the same bundle with a slot marked bad installs again" has "$s" "staged"
 L boot; check "...and loading it clears the mark" test ! -e /data/glassworks/bundle/bad-agent
 
@@ -469,7 +469,7 @@ check "move-in and rollback both fail: old and the staged bundle survive" test -
 rm -f "$T/mv-fail"; L boot
 check "...the next boot restores and promotes" test "$(prop ro.glassworks.frame.version)" = 2.0.7 -a ! -e "$B/old" -a ! -e "$B/next"
 
-mkdir -p /data/glassworks/dev; printf '#!/bin/sh\nsetprop test.agent "dev|${GW_SOURCE}|${GW_DEV}"\n' > /data/glassworks/dev/radio.sh
+mkdir -p /data/glassworks/dev; printf '#!/bin/sh\nsetprop test.agent "dev|${GW_SOURCE}|${GW_DEV}"\n' > /data/glassworks/dev/agent.sh
 rm -f "$T/props/test.agent"; GW_LOADER_ONCE=1 L run agent
 check "a developer script without the marker is ignored: the bundle's runs" test "$(prop test.agent)" = "bundle-script|bundle 2.0.7|/data/glassworks/bundle/current"
 touch /data/glassworks/dev/override
