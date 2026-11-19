@@ -80,22 +80,27 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           INPUT_VERSION: ${{ inputs.version }}
         run: |
-          latest() {   # the newest release of one line (tag <prefix>X.Y.Z), or 0.1.0 without one
+          latest() {   # the newest release of one line (tag <prefix>X.Y.Z), over every page of releases; 0.1.0 without one
             local t
-            t=$(gh release list --repo "$GITHUB_REPOSITORY" --limit 50 --exclude-drafts --exclude-pre-releases \
-              --json tagName -q '.[].tagName' | grep -E "^$1[0-9]+[.][0-9]+[.][0-9]+$" | head -n 1)
+            t=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+              --jq '.[] | select((.draft or .prerelease) | not) | .tag_name' \
+              | grep -E "^$1[0-9]+[.][0-9]+[.][0-9]+$" | head -n 1 || true)
             echo "${t#"$1"}" | sed 's/^$/0.1.0/'
           }
-          next() { IFS=. read -r a b c <<< "$1"; echo "$a.$b.$((c + 1))"; }
+          next() {     # the next version, carrying a patch or minor of 99 over (versionCode = major*10000 + minor*100 + patch)
+            IFS=. read -r a b c <<< "$1"
+            if [ "$c" -lt 99 ]; then echo "$a.$b.$((c + 1))"; elif [ "$b" -lt 99 ]; then echo "$a.$((b + 1)).0"; else echo "$((a + 1)).0.0"; fi
+          }
+          valid() { [[ "$1" =~ ^(0|[1-9][0-9]{0,3})\.(0|[1-9][0-9]?)\.(0|[1-9][0-9]?)$ ]]; }
           v="${INPUT_VERSION:-$(latest generic-android-v)}"
           l="${INPUT_VERSION:-$(latest generic-android-legacy-v)}"
-          for x in "$v" "$l"; do
-            if ! [[ "$x" =~ ^(0|[1-9][0-9]{0,3})\.(0|[1-9][0-9]?)\.(0|[1-9][0-9]?)$ ]]; then
-              echo "::error::version '$x' is not MAJOR.MINOR.PATCH (minor/patch < 100)"; exit 1
-            fi
+          nv=""; nl=""
+          valid "$v" && nv=$(next "$v"); valid "$l" && nl=$(next "$l")
+          for x in "$v" "$nv" "$l" "$nl"; do
+            valid "$x" || { echo "::error::version '$x' is not MAJOR.MINOR.PATCH (major < 10000, minor/patch < 100), or has no successor"; exit 1; }
           done
-          { echo "VERSION=$v"; echo "NEXT_VERSION=$(next "$v")"; echo "LEGACY_VERSION=$l"; echo "LEGACY_NEXT=$(next "$l")"; } >> "$GITHUB_ENV"
-          echo "Generic $v (and $(next "$v")), legacy $l (and $(next "$l"))" >> "$GITHUB_STEP_SUMMARY"
+          { echo "VERSION=$v"; echo "NEXT_VERSION=$nv"; echo "LEGACY_VERSION=$l"; echo "LEGACY_NEXT=$nl"; } >> "$GITHUB_ENV"
+          echo "Generic $v (and $nv), legacy $l (and $nl)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Build, one APK per ABI and version
         env:
