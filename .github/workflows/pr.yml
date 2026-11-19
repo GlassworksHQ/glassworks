@@ -717,10 +717,16 @@ jobs:
       - name: Release APKs, one per ABI of the frame
         run: |
           mkdir -p "$RUNNER_TEMP/generic"
+          aapt2="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)/aapt2"
           for a in $(jq -r '.abis[]' frames/generic-android/design/frame.json); do
             ./gradlew --no-daemon :generic-android:assembleRelease -Ps1Abi="$a"
             cp frames/generic-android/android/build/outputs/apk/release/generic-android-release-unsigned.apk "$RUNNER_TEMP/generic/$a.apk"
             tools/release/check-update-compat.sh --app generic-android "$RUNNER_TEMP/generic/$a.apk"
+            # Only the legacy build's hotspot needs it (setWifiApEnabled); on Android 8+ it would be a user grant for nothing.
+            badging="$("$aapt2" dump badging "$RUNNER_TEMP/generic/$a.apk")"
+            if grep -q "^uses-permission: name='android.permission.WRITE_SETTINGS'" <<< "$badging"; then
+              echo "::error::the Android 8+ APK ($a) asks for WRITE_SETTINGS"; exit 1
+            fi
           done
 
       # The base, as the size job builds it: for the change column. An ABI the base doesn't build has none.
@@ -753,7 +759,8 @@ jobs:
           badging="$("$aapt2" dump badging "$apk")"
           grep -q "^package: name='dev.glassworks.generic_android.legacy'" <<< "$badging" || { echo "::error::the legacy APK isn't dev.glassworks.generic_android.legacy"; exit 1; }
           grep -q "^minSdkVersion:'23'" <<< "$badging" || { echo "::error::the legacy APK's minSdk isn't 23"; exit 1; }
-          for perm in INSTALL_PACKAGES REBOOT WRITE_SECURE_SETTINGS; do
+          # WRITE_SETTINGS: the setup hotspot's setWifiApEnabled on Android 6-7.
+          for perm in INSTALL_PACKAGES REBOOT WRITE_SECURE_SETTINGS WRITE_SETTINGS; do
             grep -q "^uses-permission: name='android.permission.$perm'" <<< "$badging" || { echo "::error::the legacy APK doesn't ask for $perm"; exit 1; }
           done
           unzip -l "$apk" | grep -q "lib/arm64-v8a/libxul.so" || { echo "::error::the legacy APK has no arm64-v8a GeckoView"; exit 1; }
