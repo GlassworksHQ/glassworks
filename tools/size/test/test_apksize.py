@@ -443,7 +443,7 @@ class Cli(unittest.TestCase):
         with open(os.path.join(os.path.dirname(HERE), "radio-bundle.sh")) as f:
             mine = f.read()
         self.assertEqual(bundled(mine), bundled(release))
-        self.assertEqual(bundled(mine), ["ot-ctl", "otbr-agent", "s1kiosk_radio.sh", "sisdk"])
+        self.assertEqual(bundled(mine), ["hotspot-name.apk", "ot-ctl", "otbr-agent", "s1kiosk_radio.sh", "sisdk"])
 
 
 if __name__ == "__main__":

@@ -139,6 +139,19 @@ jobs:
               print(a['name'], len(data), h)
           PY
 
+      # The S1's setup hotspot name (#197): a one-string resource overlay, built here from the committed sources
+      # with the runner's Android SDK (a key made for this build signs it; the bundle's signature is what counts).
+      - name: Hotspot name overlay
+        run: |
+          # This job has no setup-android: the runner image's SDK builds the overlay. Say so plainly if it's gone.
+          [ -n "${ANDROID_HOME:-}" ] && [ -d "$ANDROID_HOME" ] ||
+            { echo "::error::ANDROID_HOME is not set or missing: the runner image's Android SDK builds the hotspot name overlay"; exit 1; }
+          ls "$ANDROID_HOME"/build-tools/*/aapt2 "$ANDROID_HOME"/build-tools/*/apksigner >/dev/null 2>&1 ||
+            { echo "::error::no build-tools with aapt2 and apksigner under $ANDROID_HOME"; exit 1; }
+          ls "$ANDROID_HOME"/platforms/android-*/android.jar >/dev/null 2>&1 ||
+            { echo "::error::no platform android.jar under $ANDROID_HOME"; exit 1; }
+          frames/aqara-s1-plus/tools/radio/hotspot-name/build.sh "$RUNNER_TEMP/hotspot-name"
+
       - name: Sign the radio bundle
         env:
           VERSION: ${{ needs.inputs.outputs.version }}
@@ -155,6 +168,7 @@ jobs:
             --file s1kiosk_radio.sh=frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh:0700 \
             --file "otbr-agent=$RUNNER_TEMP/radio-in/otbr-agent:0700" \
             --file "ot-ctl=$RUNNER_TEMP/radio-in/ot-ctl:0700" \
+            --file "hotspot-name.apk=$RUNNER_TEMP/hotspot-name/hotspot-name.apk:0644" \
             --dir "sisdk=$RUNNER_TEMP/sisdk"
 
       - name: Remove the key

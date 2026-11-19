@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The S1's setup hotspot name (#197): a static resource overlay of one framework string, so Android 10's
+     local-only hotspot is called Glassworks_NNNN instead of AndroidShare_NNNN. Android 10 applies an overlay of
+     framework-res only when it is preinstalled (framework-res declares no overlayable), so the radio helper puts
+     it on /product through a Magisk module (frames/aqara-s1-plus/docs/radio.md). No code, no permissions. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="sh.edm.s1kiosk.overlay.hotspotname">
+    <overlay android:targetPackage="android" android:isStatic="true" android:priority="1" />
+    <application android:hasCode="false" android:label="Glassworks hotspot name" />
+</manifest>
