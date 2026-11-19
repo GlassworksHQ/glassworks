@@ -135,6 +135,7 @@ class ManageFixture(
         ownHosts = { setOf("192.0.2.40", "glassworks-panel.local", "fd00::40", "127.0.0.1") },
         saveWaitMs = saveWaitMs,
         monoMs = { monoMs },
+        scripts = { name -> dev.glassworks.testing.RepoFiles.file("core/src/main/assets/manage/$name").readBytes() },
     )
 
     init {

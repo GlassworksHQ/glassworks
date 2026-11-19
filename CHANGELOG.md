@@ -9,6 +9,12 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 ## [Unreleased]
 
 ### Added
+- **Set up every panel from one Manage page.** *All panels*, in the Manage page's menu, signs in to
+  Home Assistant and lists the house's panels with their area and version. A panel that's down shows as
+  down. *Manage* opens another panel's page, already signed in, and *Copy settings* makes one panel like
+  another: it changes only what you tick, and greys out what the other panel's version doesn't have.
+  Administrators only. Each panel checks the sign-in with Home Assistant itself, so panels never trust
+  each other. Every panel needs this version for the page to reach it.
 - **Setup says when updates would ask for a tap.** On a new setup of an S1 whose boot image has no update
   service, a *Silent updates* step follows Panes: Kiln adds the service from a computer, with a QR code to it.
   It's never required: Continue moves on. Panels that are already set up don't see it, and an S1 with the

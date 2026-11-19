@@ -29,7 +29,8 @@ import java.util.TimeZone
 
 /**
  * The Manage page's HTML (#33's approved design), on the shell the QR pages use ([PageShell]). No
- * scripts: the nav folds into a `<details>` menu on a phone, filters are links, actions are forms.
+ * scripts: the nav folds into a `<details>` menu on a phone, filters are links, actions are forms. All panels
+ * ([panels]) is the one exception: its list and copy come from other panels, in the browser (#466).
  * Everything from outside (names, log lines, settings values) is escaped here.
  */
 class ManagePages(private val zone: TimeZone = TimeZone.getDefault(), private val clock: () -> Long = System::currentTimeMillis) {
@@ -92,7 +93,7 @@ ${if (problem != null) """<p class="err">${esc(problem)}</p>""" else ""}
         val panes = n.panes.joinToString("") { pane(it) } + if (n.off.isEmpty()) "" else
             """<details class="off"${if (n.off.any { "/" + it.id == current }) " open" else ""}><summary>Off · ${n.off.size}</summary>${n.off.joinToString("") { pane(it) }}</details>"""
         return """<div class="brand">${PageShell.mark(Look.DONE, "bm")}<div><b>${esc(s.name)}</b><small>${esc(if (s.name == "Glassworks Panel") s.frame else "Glassworks Panel · ${s.frame}")}</small></div></div>
-<nav>${item("/", "Overview")}""" +
+<nav>${item("/", "Overview")}${item(PANELS, "All panels")}""" +
             (if (n.panel.isNotEmpty()) """<h3>Panel</h3>${n.panel.joinToString("") { item("/" + it.id, it.title) }}""" else "") +
             (if (n.panes.isNotEmpty() || n.off.isNotEmpty()) "<h3>Panes</h3>$panes" else "") +
             """<h3>System</h3>${n.system.joinToString("") { item("/" + it.id, it.title) }}</nav>
@@ -107,7 +108,7 @@ ${foot(viewer)}"""
     }
 
     /** The page: the nav, the phone's header, [main], and [overlay] over it all (a dialog). */
-    private fun frame(s: PanelStatus, current: String, title: String, viewer: Viewer, main: String, notice: String? = null, overlay: String = "", head: String = ""): String {
+    private fun frame(s: PanelStatus, current: String, title: String, viewer: Viewer, main: String, notice: String? = null, overlay: String = "", head: String = "", css: String = ""): String {
         val n = nav(s, current, viewer)
         val note = notice?.let { """<div class="notice" role="status"><i class="dot ok"></i>${esc(it)}</div>""" }.orEmpty()
         // Under a dialog the page is inert: Tab stays in the dialog, as in the panel's sheet.
@@ -115,7 +116,7 @@ ${foot(viewer)}"""
         val body = """<aside class="side"$inert>$n</aside>
 <header class="top"$inert>${PageShell.mark(Look.DONE, "m")}<span>${esc(if (current == "/") s.name else title)}</span><details class="menu"><summary aria-label="Menu"><span></span><span></span></summary><div class="drop">$n</div></details></header>
 <main class="main"$inert>$note$main</main>$overlay"""
-        return PageShell.document("$title · ${s.name}", MANAGE_CSS + DIALOG_CSS, body, head = head)
+        return PageShell.document("$title · ${s.name}", MANAGE_CSS + DIALOG_CSS + css, body, head = head)
     }
 
     private fun csrf(v: Viewer) = """<input type="hidden" name="csrf" value="${esc(v.csrf)}">"""
@@ -465,6 +466,26 @@ ${ownCard(v, s, "log")}<section class="card logs">$rows</section>"""
         return frame(s, "/about", "About", v, main)
     }
 
+    /**
+     * All panels (#466): every panel in Home Assistant, each with Manage, and Copy settings. The browser fills
+     * both in ([PANELS_SCRIPT]) with its own Home Assistant sign-in at [ha], this panel's local Home Assistant
+     * address; null when it has none, and the page says so. [session]: this browser's Manage session's public id: the
+     * tab keeps its Home Assistant sign-in for that session only, so a later sign-in here can't use it.
+     */
+    fun panels(s: PanelStatus, v: Viewer, ha: String?, session: String, noHa: String? = null): String {
+        val first = when {
+            ha != null -> FINDING
+            noHa != null -> noHa
+            else -> "This panel has no Home Assistant on your network to find the others with."
+        }
+        val main = """<h1 class="ph">All panels</h1><p class="sub">Every panel in Home Assistant. Open one, or copy settings from one to another.</p>
+<div id="gw-panels" data-ha="${esc(ha.orEmpty())}" data-session="${esc(session)}"><section class="card list" id="gw-list"><div class="lh"><b>Panels in Home Assistant</b></div>
+<div class="row static note"><span>${esc(first)}</span></div></section><section class="card list" id="gw-copy" hidden></section></div>
+${if (ha == null) "" else """<noscript><style>#gw-list .note{display:none}</style><section class="card list"><div class="row static note"><span>${esc(NEEDS_SCRIPT)}</span></div></section></noscript>"""}
+${if (ha == null) "" else """<script src="$PANELS_BOOT" async></script><script type="module" src="$PANELS_SCRIPT"></script>"""}"""
+        return frame(s, PANELS, "All panels", v, main, css = PANELS_CSS)
+    }
+
     fun notFound(s: PanelStatus, v: Viewer): String =
         frame(s, "", "Not found", v, """<h1 class="ph">Not found</h1><p class="sub">This panel has no such page. <a href="/">Back to the overview</a>.</p>""")
 
@@ -497,6 +518,26 @@ ${ownCard(v, s, "log")}<section class="card logs">$rows</section>"""
     companion object {
         /** Sections drawn on a page of their own under "System" in the nav, not under "Panel". */
         val OWN_PAGES = mapOf("log" to "Log", "security" to "Security", "about" to "About")
+
+        /** All panels (#466), after the Overview in the nav. */
+        const val PANELS = "/panels"
+        const val PANELS_SCRIPT = "/manage/js/panels.js"
+        /** Says so if [PANELS_SCRIPT] can't start, rather than "Finding your panels…" for good. */
+        const val PANELS_BOOT = "/manage/js/panels-boot.js"
+
+        /** All panels while its script starts (a slow panel or phone can take seconds), and without scripts (#466 run). */
+        const val FINDING = "Finding your panels…"
+        const val NEEDS_SCRIPT = "This page needs JavaScript to ask Home Assistant and the other panels."
+
+        /** All panels' own: the copy card's pickers and rows. */
+        val PANELS_CSS = """
+.lh .lk{background:none;border:0;padding:0;font:inherit;color:var(--muted);text-decoration:underline;text-underline-offset:3px;cursor:pointer}.lh .lk:hover{color:var(--fg)}.row .pill{white-space:nowrap}.pill.sm:disabled{opacity:.45;cursor:not-allowed}
+.cph{display:flex;align-items:flex-end;gap:16px;padding:16px 0;border-bottom:1px solid var(--edge)}.cph label{flex:1;display:flex;flex-direction:column;gap:6px;color:var(--muted);font-size:14px}
+.cph .arrow{color:var(--faint);font-size:22px;padding-bottom:12px}.cph select.fld{font-size:16px;padding:11px 14px}
+label.row.cp{cursor:pointer}.row.cp input{width:20px;height:20px;accent-color:var(--sky);flex:none}.row.cp.bad span{color:var(--rose)}
+.cpa{margin:14px 0;padding:14px 18px;border-radius:16px;border:1px solid rgba(251,113,133,.45)}.cpa b{font-weight:500}.cpa p{color:var(--muted);margin:6px 0;font-size:15px}
+.cpf{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 0 12px;color:var(--muted);font-size:15px}
+@media (max-width:900px){.cph{flex-direction:column;align-items:stretch}.cph .arrow{display:none}.cpf{flex-direction:column;align-items:stretch}}"""
 
         /** The sidebar's foot for a browser signed in with the code the panel showed. */
         /** How often a page with a live row ([DockRow]) reloads, in seconds: about as often as the panel's menu reads it (2 s). */
