@@ -340,8 +340,10 @@ All host-side and read-only. The images are local backups, never in the repo.
 ## Panel tests
 
 T0, T1 and T5 ran on 2026-11-19 (attempt 7 and #139's comments). T1 passed once macOS allowed the
-accessory, T5 passed, and T2 wasn't needed. Run T3 and T4 with `fastboot-usb.py`, not the `fastboot`
-CLI (attempt 8). The results go here, with dates. Each writes only bytes the panel already
+accessory, T5 passed, and T2 wasn't needed. Run T3 with `fastboot-usb.py`, not the `fastboot` CLI
+(attempt 8). T4 needs `fastboot flash`, which the tool refuses on purpose, so
+T4 stays pending until a write procedure for the stock fastboot is written and reviewed. The results
+go here, with dates. Each writes only bytes the panel already
 has. They need a panel with adb root (a dev boot image) for the backup and for T5. The root's run
 sheet with the same steps is outside the repo.
 

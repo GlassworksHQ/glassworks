@@ -25,11 +25,11 @@ Why not the platform `fastboot` CLI (read from the BSP U-Boot 2018 source, drive
   hang it. A zero-length packet after the data can arrive as an empty command, answered with FAIL.
 - `product` returns the panel's serial (`snum` is copied into the product string), so this tool
   redacts `product` and `serialno`.
-- `boot` sends no OKAY. It boots only a legacy uImage at offset 2048. Anything else prints
-  "Booting raw image..", "do_go fail" and returns to the command loop.
+- `boot` sends no reply at all, not even its own FAIL. It boots only a legacy uImage at offset 2048.
+  Anything else prints "Booting raw image..", "do_go fail" and returns to the command loop.
 
 Exit status: 0 done (for `boot`: USB dropped, so the kernel is starting), 2 U-Boot came back from
-`boot` without booting, 1 anything else.
+`boot` without booting, 1 anything else (for `boot`: no answer and USB still up, so unknown).
 """
 import os
 import struct
@@ -152,8 +152,10 @@ class Fastboot:
         try:
             self.getvar("version")
         except Timeout:
-            self.log("boot: U-Boot doesn't answer and USB is still up. Watch the screen and wait for adb.")
-            return True
+            raise FastbootError(
+                "boot: no reply, and U-Boot doesn't answer getvar, but USB is still up. Watch the "
+                "screen and wait for adb; with no Android in 4 minutes, power-cycle (nothing was written)."
+            ) from None
         except Gone:
             return True
         return False
@@ -227,7 +229,7 @@ class PyUsb:
 def boot_image_note(data):
     """What the stock `boot` will do with this image, from its bytes (it checks offset 2048 only)."""
     if len(data) <= STOCK_PAGE:
-        return f"the image is {len(data)} bytes; stock `boot` answers FAILinvalid boot image"
+        return f"the image is {len(data)} bytes; expect stock `boot` to refuse it without a reply"
     if struct.unpack_from(">I", data, STOCK_PAGE)[0] == UIMAGE_MAGIC:
         return "legacy uImage at offset 2048: stock `boot` runs bootm on it"
     kind = "a raw arm64 Image" if data[STOCK_PAGE + 0x38:STOCK_PAGE + 0x3C] == b"ARMd" else "no uImage"

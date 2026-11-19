@@ -19,13 +19,16 @@ LIMIT = 32 * 1024 * 1024
 class StockUBoot:
     """Packet-level fake: exact byte count for download, no reply to boot, snum in `product`."""
 
-    def __init__(self, drop_packet=None):
+    def __init__(self, drop_packet=None, boot_reply=None, hang_after_boot=False):
         self.replies, self.commands, self.data_writes = [], [], []
         self.want = None
         self.got = self.packets = 0
         self.drop_packet = drop_packet
         self.buffer = bytearray()
         self.is_present = True
+        self.boot_reply = boot_reply
+        self.hang_after_boot = hang_after_boot
+        self.hung = False
 
     def write(self, data, timeout_ms):
         data = bytes(data)
@@ -58,9 +61,12 @@ class StockUBoot:
             self.replies.append(b"OKAY")
             self.rebooted = True
         elif cmd == "boot":
-            if len(self.buffer) <= 2048:
-                self.replies.append(b"FAILinvalid boot image")
-            elif struct.unpack_from(">I", self.buffer, 2048)[0] == 0x27051956:
+            # __boot formats "FAILinvalid boot image" into a local buffer and never sends it.
+            if self.boot_reply:
+                self.replies.append(self.boot_reply)
+            elif self.hang_after_boot:
+                self.hung = True
+            elif len(self.buffer) > 2048 and struct.unpack_from(">I", self.buffer, 2048)[0] == 0x27051956:
                 self.is_present = False
         else:
             self.replies.append(b"FAIL")
@@ -68,7 +74,7 @@ class StockUBoot:
     def read(self, size, timeout_ms):
         if not self.is_present:
             raise fb.Gone("gone")
-        if not self.replies:
+        if not self.replies or self.hung:
             raise fb.Timeout("timeout")
         return self.replies.pop(0)
 
@@ -163,13 +169,32 @@ class FastbootUsbTest(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertEqual(dev.commands, ["reboot"])
 
-    def test_boot_refused_with_fail_is_an_error(self):
+    def test_a_short_image_is_refused_silently_and_reported_as_not_booted(self):
         with tempfile.NamedTemporaryFile(suffix=".img") as img:
             img.write(b"ANDROID!" + b"\0" * 100)
             img.flush()
-            code, out = run_main(StockUBoot(), "boot", img.name)
+            dev = StockUBoot()
+            code, out = run_main(dev, "boot", img.name)
+        self.assertEqual(code, 2)
+        self.assertIn("without a reply", out)
+        self.assertEqual(dev.commands[-2:], ["boot", "getvar:version"])
+
+    def test_boot_fail_reply_is_an_error(self):
+        with tempfile.NamedTemporaryFile(suffix=".img") as img:
+            img.write(android_image(8 * 1024 * 1024))
+            img.flush()
+            code, out = run_main(StockUBoot(boot_reply=b"FAIL:secure mode,fastboot limited used"), "boot", img.name)
         self.assertEqual(code, 1)
-        self.assertIn("FAIL invalid boot image", out)
+        self.assertIn("FAIL :secure mode", out)
+
+    def test_no_answer_with_usb_still_up_is_not_reported_as_booted(self):
+        with tempfile.NamedTemporaryFile(suffix=".img") as img:
+            img.write(android_image(8 * 1024 * 1024))
+            img.flush()
+            code, out = run_main(StockUBoot(hang_after_boot=True), "boot", img.name)
+        self.assertEqual(code, 1)
+        self.assertNotIn("USB dropped", out)
+        self.assertIn("USB is still up", out)
 
 
 if __name__ == "__main__":
