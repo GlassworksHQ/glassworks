@@ -255,7 +255,7 @@ async function open(p) {
   // The form goes into the new tab's own page and is sent from there: iOS Safari can lose the link from this tab to a
   // window it opened by name, and the tab stays on about:blank (2026-11-19 panel run, once). about:blank shares this
   // page's origin, so this tab can write it. If it can't, the named target as before.
-  if (tab && postIn(tab.document, p.origin, fields)) return;
+  if (tab && postIn(tab, p.origin, fields)) return;
   const f = h('form', { method: 'post', action: p.origin + '/manage/ha/token', target: tab ? name : '_self' },
     ...Object.entries(fields).map(([k, v]) => h('input', { type: 'hidden', name: k, value: v })));
   document.body.append(f);
@@ -264,12 +264,13 @@ async function open(p) {
 }
 
 /**
- * The handoff form, built in [doc] (the reserved tab's about:blank) and sent from there; false when [doc] can't be
- * written. The token is a form field, never in a URL. `from` names this page for the other panel's Log: Safari posts
+ * The handoff form, built in [tab]'s page (the reserved about:blank) and sent from there; false when that page can't be
+ * written, for one: reading the document of a tab sent to another site meanwhile throws, so that's inside the try too. The token is a form field, never in a URL. `from` names this page for the other panel's Log: Safari posts
  * from a new tab with `Origin: null` (2026-11-18 panel run).
  */
-function postIn(doc, origin, fields) {
+function postIn(tab, origin, fields) {
   try {
+    const doc = tab.document;
     const f = doc.createElement('form');
     f.method = 'post';
     f.action = origin + '/manage/ha/token';
