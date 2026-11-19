@@ -81,11 +81,120 @@ class Parsers(unittest.TestCase):
     def test_logcat_monotonic_and_ttid(self):
         rec = P.parse_logcat_line("  4945.980  1918  1990 I ActivityTaskManager: Displayed sh.edm.s1kiosk/.MainActivity: +1s714ms")
         self.assertEqual(rec["mono"], 4945.98)
-        self.assertEqual(P.parse_displayed(rec["msg"], "sh.edm.s1kiosk/.MainActivity"), 1714)
-        self.assertEqual(P.parse_displayed("Displayed sh.edm.s1kiosk/.MainActivity: +812ms", "sh.edm.s1kiosk/.MainActivity"), 812)
-        self.assertIsNone(P.parse_displayed("Displayed other/.Main: +812ms", "sh.edm.s1kiosk/.MainActivity"))
+        self.assertEqual(P.parse_displayed(rec["msg"], "sh.edm.s1kiosk"), 1714)
+        self.assertEqual(P.parse_displayed("Displayed sh.edm.s1kiosk/.MainActivity: +812ms", "sh.edm.s1kiosk"), 812)
+        self.assertIsNone(P.parse_displayed("Displayed other/.Main: +812ms", "sh.edm.s1kiosk"))
+        self.assertIsNone(P.parse_displayed("Displayed sh.edm.s1kiosk.other/.Main: +812ms", "sh.edm.s1kiosk"))
+        # A home app relaunched by the system is displayed under its launcher alias (the generic app's).
+        self.assertEqual(P.parse_displayed("Displayed dev.glassworks.generic_android/dev.glassworks.generic.Launcher: +1s127ms",
+                                           "dev.glassworks.generic_android"), 1127)
         rec = P.parse_logcat_line('  12.5  4242  4250 I GeckoConsole: GWPERF {"t":"done","run":1}')
         self.assertEqual(P.gwperf_payload(rec["msg"]), {"t": "done", "run": 1})
+
+    def test_android6_meminfo_writes_kb_and_the_legacy_content_process_is_a_tab(self):
+        # The API 23 emulator, 2026-11-18: no thousands separator, " kB", and GeckoView 144's content process :tab32.
+        rows = P.parse_meminfo_by_process("Total PSS by process:\n    65128 kB: system (pid 1218)\n"
+                                          "   187001 kB: dev.glassworks.generic_android.legacy (pid 2689 / activities)\n"
+                                          "    90210 kB: dev.glassworks.generic_android.legacy:tab32 (pid 2761)\n\n")
+        self.assertEqual(rows[1:], [("dev.glassworks.generic_android.legacy", 2689, 187001),
+                                    ("dev.glassworks.generic_android.legacy:tab32", 2761, 90210)])
+        self.assertEqual([P.process_role(n, "dev.glassworks.generic_android.legacy") for n, _, _ in rows], [None, "main", "tab"])
+        self.assertEqual(P.process_role("x:tabby", "x"), "tabby")
+
+    def test_ps_in_both_formats(self):
+        self.assertEqual(P.parse_ps("  PID NAME\n4242 sh.edm.s1kiosk\n 4301 sh.edm.s1kiosk:sandboxed_tab_disable_art_image_24\n"),
+                         [(4242, "sh.edm.s1kiosk"), (4301, "sh.edm.s1kiosk:sandboxed_tab_disable_art_image_24")])
+        # Android 6's toolbox ps ignores -A -o PID,NAME (the API 23 emulator, 2026-11-18).
+        old = ("USER      PID   PPID  VSIZE  RSS   WCHAN              PC  NAME\n"
+               "root      1     0     4264   1304  SyS_epoll_ 00004acfc4 S /init\n"
+               "u0_a55    2689  1203  1534180 201496 SyS_epoll_ 7f9e3c1a4c S dev.glassworks.generic_android.legacy\n"
+               "root      2     0     0      0       kthreadd 0000000000 S kthreadd\n")
+        self.assertEqual(P.parse_ps(old), [(1, "/init"), (2689, "dev.glassworks.generic_android.legacy"), (2, "kthreadd")])
+        self.assertEqual(P.parse_ps(""), [])
+
+
+def clock_samples(nonce, pairs):
+    """perfrun's Device.wall_clock output and logcat's marker lines, for pairs of (before, wall stamp, after)."""
+    sandwich = "".join(f"CLOCKPAIR {i} now at {int(b * 1e9)} nsecs now at {int(a * 1e9)} nsecs\n"
+                       for i, (b, _, a) in enumerate(pairs, 1)) + "2026\n"
+    marks = "--------- beginning of main\n" + "".join(
+        f"{w}  5151  5151 I ClarityClock: {nonce} {i}\n" for i, (_, w, _) in enumerate(pairs, 1))
+    return sandwich, marks
+
+
+class SurfaceViewLayers(unittest.TestCase):
+    def test_each_androids_naming(self):
+        pkg = "dev.glassworks.generic_android"
+        s1 = "Display Root#0\nSurfaceView - sh.edm.s1kiosk/sh.edm.s1kiosk.MainActivity#0\n" \
+             "Background for -SurfaceView - sh.edm.s1kiosk/sh.edm.s1kiosk.MainActivity#0\n"
+        self.assertEqual(P.surfaceview_layers(s1, "sh.edm.s1kiosk"), ["SurfaceView - sh.edm.s1kiosk/sh.edm.s1kiosk.MainActivity#0"])
+        s = (f"SurfaceView[{pkg}/dev.glassworks.MainActivity]#1052\nSurfaceView[{pkg}/dev.glassworks.MainActivity](BLAST)#1053\n"
+             f"Background for SurfaceView[{pkg}/dev.glassworks.MainActivity]#1054\nSurfaceView[com.other/.Main]#9\n")
+        self.assertEqual(P.surfaceview_layers(s, pkg), [f"SurfaceView[{pkg}/dev.glassworks.MainActivity]#1052",
+                                                        f"SurfaceView[{pkg}/dev.glassworks.MainActivity](BLAST)#1053"])
+        m = f"DimLayer\ncom.android.systemui.ImageWallpaper\nSurfaceView\n{pkg}.legacy/dev.glassworks.MainActivity\nStatusBar\n"
+        self.assertEqual(P.surfaceview_layers(m, pkg + ".legacy"), ["SurfaceView"])
+        # Plain SurfaceView with another app on screen: not ours.
+        self.assertEqual(P.surfaceview_layers("SurfaceView\ncom.android.launcher3/com.android.launcher3.Launcher\n", pkg), [])
+
+
+class ScreenSize(unittest.TestCase):
+    def test_the_size_taps_use_is_the_turned_one(self):
+        # The Pixel Tablet in landscape: wm size is the panel's own, portrait.
+        self.assertEqual(P.current_size("Display: mDisplayId=0\n  init=1600x2560 320dpi cur=2560x1600 app=2560x1600 rng=1600x1480-2560x2440\n"),
+                         (2560, 1600))
+        self.assertEqual(P.current_size("  init=1080x1920 160dpi cur=1080x1920 app=1080x1872 rng=1080x1008-1872x1872\n"), (1080, 1920))
+        self.assertIsNone(P.current_size(""))
+        self.assertEqual(P.wm_size("Physical size: 1600x2560\nOverride size: 1200x1920\n"), (1200, 1920))
+        self.assertIsNone(P.wm_size(""))
+
+
+class LogClock(unittest.TestCase):
+    """Android 6's logcat has no -v monotonic: its µs wall-clock stamps go onto the device's monotonic clock."""
+
+    def test_monotonic_is_the_parser_it_was(self):
+        line = "  4945.980  1918  1990 I ActivityTaskManager: Displayed sh.edm.s1kiosk/.MainActivity: +1s714ms"
+        self.assertEqual(P.LogClock().parse(line), P.parse_logcat_line(line))
+        self.assertIsNone(P.LogClock().parse("11-18 23:06:20.726229  1656  1656 D Tag: message"))
+
+    def test_the_tightest_pair_sets_the_offset_and_its_error(self):
+        # Monotonic 100.000 s is wall 11-18 23:06:20.000000; pair 2 is the tightest (2 ms wide).
+        sandwich, marks = clock_samples("ab12", [(99.990, "11-18 23:06:20.000000", 100.020),
+                                                 (100.199, "11-18 23:06:20.200000", 100.201),
+                                                 (100.390, "11-18 23:06:20.400000", 100.420)])
+        clock = P.wall_offset(sandwich, marks, "ab12", 2026)
+        self.assertEqual((clock.fmt, clock.err_ms), ("usec", 1.0))
+        rec = clock.parse("11-18 23:06:21.500250  2689  2689 I Glassworks.Screen: test hold on for 1800 s")
+        self.assertAlmostEqual(rec["mono"], 101.50025, places=5)
+        self.assertEqual((rec["pid"], rec["level"], rec["tag"], rec["msg"]),
+                         (2689, "I", "Glassworks.Screen", "test hold on for 1800 s"))
+        # GeckoView's console lines carry ": " in their message: only the first splits the tag off.
+        rec = clock.parse('11-18 23:06:21.000000  2761  2790 I GeckoConsole: GWPERF {"t":"done","run":1}')
+        self.assertEqual(P.gwperf_payload(rec["msg"]), {"t": "done", "run": 1})
+
+    def test_only_this_runs_marks_count(self):
+        sandwich, marks = clock_samples("ab12", [(10.0, "11-18 23:06:20.000000", 10.004)])
+        stale = "11-18 22:00:00.000000  5151  5151 I ClarityClock: ffff 1\n"
+        clock = P.wall_offset(sandwich, stale + marks, "ab12", 2026)
+        self.assertEqual(clock.err_ms, 2.0)
+        # The marker's stamp goes at the pair's middle: 10.002 s.
+        self.assertAlmostEqual(clock.parse("11-18 23:06:20.000000  1  1 I x: y")["mono"], 10.002, places=5)
+        self.assertIsNone(P.wall_offset(sandwich, stale, "ab12", 2026))
+        self.assertIsNone(P.wall_offset("", marks, "ab12", 2026))         # /proc/timer_list unreadable
+
+    def test_a_wall_clock_step_during_a_run_is_caught(self):
+        self.assertFalse(P.clock_stepped(None))                                   # monotonic logcat
+        # The emulator's (2026-11-18): within both errors and the tolerance.
+        self.assertFalse(P.clock_stepped({"format": "usec", "offset_err_ms": 0.763, "end_err_ms": 1.896, "drift_ms": -0.132}))
+        self.assertFalse(P.clock_stepped({"format": "usec", "offset_err_ms": 1.0, "end_err_ms": 1.0, "drift_ms": 6.9}))
+        self.assertTrue(P.clock_stepped({"format": "usec", "offset_err_ms": 1.0, "end_err_ms": 1.0, "drift_ms": 7.1}))
+        self.assertTrue(P.clock_stepped({"format": "usec", "offset_err_ms": 1.0, "end_err_ms": 1.0, "drift_ms": -3600000.0}))
+
+    def test_a_run_over_new_year_stays_in_order(self):
+        sandwich, marks = clock_samples("ab12", [(499.999, "12-31 23:59:59.000000", 500.001)])
+        clock = P.wall_offset(sandwich, marks, "ab12", 2026)
+        self.assertAlmostEqual(clock.parse("01-01 00:00:01.000000  1  1 I x: y")["mono"], 502.0, places=5)
+        self.assertAlmostEqual(clock.parse("12-31 23:59:58.000000  1  1 I x: y")["mono"], 499.0, places=5)
 
     def test_pid_stat_with_spaces_in_comm(self):
         line = "4242 (Gecko Main) S 1 1 0 0 -1 1 2 3 4 5 470 15 1 1 10 -10"

@@ -20,6 +20,12 @@ line of each version is what Home Assistant shows on the update card. A change o
   close it. On the Mirror the proxy scans only once the app has the location permission, which Kiln doesn't grant yet.
 
 ### Fixed
+- **Wi-Fi setup over Bluetooth works on the lululemon Mirror.** On a panel with no touchscreen, nobody could press
+  Allow, so Home Assistant and phones could never send it Wi-Fi over Bluetooth. Now, when it starts with no network,
+  Bluetooth setup is open by itself for 5 minutes, and the setup screen says to send the Wi-Fi from Home Assistant or
+  improv-wifi.com on a phone, with the time left. Where the camera sees presence, walking up to the panel opens it
+  again. It never opens while the panel is online. After the 5 minutes the panel opens its own setup Wi-Fi, if it
+  can, and otherwise the setup screen says how to set it up from a computer.
 - **The setup Wi-Fi opens on the lululemon Mirror.** The legacy build's setup screen said "This device doesn't let apps
   open a Wi-Fi hotspot." on the Mirror. Android 6 and 7 want one more permission for it, which the legacy build now
   asks for. An update is enough: no new flash. If Android still refuses, the reason is in the log.

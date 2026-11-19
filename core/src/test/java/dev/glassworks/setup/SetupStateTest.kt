@@ -439,4 +439,15 @@ class SetupStateTest {
         // Online, the rule says nothing.
         assertFalse(SetupState.decide(deskPanel(10 * min, haSeen = true, apiKey = true, hello = true).copy(input = Input.NONE)).show)
     }
+
+    @Test
+    fun withoutTouchTheWifiStepShowsBluetoothOpenByItself() {
+        // #611: the Mirror, Improv authorized by itself with no network. The step's line has no Allow nor Stop.
+        val open = ImprovFacts(running = true, advertising = true, state = dev.glassworks.improv.ImprovState.AUTHORIZED, authLeftMs = 299_001)
+        val mirror = fresh.copy(online = false, offlineForMs = 60_000, neverSetUp = true, input = Input.NONE, improv = open)
+        val d = SetupState.decide(mirror)
+        assertEquals("Send the Wi-Fi from a phone.", d.improv.title)
+        assertTrue(d.improv.actions.isEmpty())
+        assertEquals("a touchscreen keeps Stop", listOf(WifiStep.Action.STOP), SetupState.decide(mirror.copy(input = Input.TOUCH)).improv.actions)
+    }
 }
