@@ -77,7 +77,8 @@ class ApiKeyHandoverTest {
         val inside = java.util.concurrent.CountDownLatch(2)
         val s = object : ReadableNoiseKeyStore {
             @Volatile var held: StoredKey = StoredKey.Absent
-            override fun read(): StoredKey { inside.countDown(); inside.await(1, java.util.concurrent.TimeUnit.SECONDS); return held }
+            // the value as the read began: two reads that overlap without the lock both see the empty store
+            override fun read(): StoredKey { val seen = held; inside.countDown(); inside.await(1, java.util.concurrent.TimeUnit.SECONDS); return seen }
             override fun load(): ByteArray? = null
             override fun save(key: ByteArray?): Boolean { held = StoredKey.Present(key!!); return true }
         }
