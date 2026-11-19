@@ -1,0 +1,463 @@
+part	path	bytes	sha256	label	shell	why
+gpu-display	/system/bin/mm-pp-daemon	141704	adcebee9520c930e1b3c1bcc9616dd0818f2c5b62c55083bea9834e4187c98dc	mm-pp-daemon_exec	no	vendor: Adreno GLES (hwcomposer dlopens libEGL_adreno), libskia links libqc-opt, memalloc dlopens libadreno_utils
+gpu-display	/system/etc/firmware/a300_pfp.fw	1156	b6e66400d46d52dc343d370b94362d564a765994bda47dc026961dd47a9ca7a9	system_file	yes	vendor: loaded by the part above
+gpu-display	/system/etc/firmware/a300_pm4.fw	9220	f78c57e879e96a2c0ceeea31dbd30f7f1d4526f9c876e80481c654f08daaecd3	system_file	yes	vendor: loaded by the part above
+gpu-display	/system/etc/firmware/a330_pfp.fw	2212	e4ee76b287961f56e6a606ed5baf7127d9fd9a0d421b516af32fa655f1fdb5de	system_file	yes	vendor: loaded by the part above
+gpu-display	/system/etc/firmware/a330_pm4.fw	9220	2057bff39ad2ab0b4d4ad755c52bf9d0c139293aa823bde992094ce27304b000	system_file	yes	vendor: loaded by the part above
+gpu-display	/system/vendor/lib/egl/eglsubAndroid.so	38468	3d4a4e886a7fef2a6595ffeb4a3da83aa6feddd8b6001c2be7889369ee8ecc81	system_file	yes	vendor: Adreno GLES (hwcomposer dlopens libEGL_adreno), libskia links libqc-opt, memalloc dlopens libadreno_utils
+gpu-display	/system/vendor/lib/egl/libEGL_adreno.so	34372	7be0e610270f14bddef4fd476682131953992ed09252ea578dd1e08d655bc65d	system_file	yes	vendor: Adreno GLES (hwcomposer dlopens libEGL_adreno), libskia links libqc-opt, memalloc dlopens libadreno_utils
+gpu-display	/system/vendor/lib/egl/libGLESv1_CM_adreno.so	30280	d7abd8f997e306e7c07e69f3810e9054b9d191f54bb420bd1d6ddb4da3f559b2	system_file	yes	vendor: Adreno GLES (hwcomposer dlopens libEGL_adreno), libskia links libqc-opt, memalloc dlopens libadreno_utils
+gpu-display	/system/vendor/lib/egl/libGLESv2_adreno.so	46660	2f40997f8cf744d48d3320abbf3a41b5007584ec7eeffccf5a7edc6aa6f52cfd	system_file	yes	vendor: Adreno GLES (hwcomposer dlopens libEGL_adreno), libskia links libqc-opt, memalloc dlopens libadreno_utils
+gpu-display	/system/vendor/lib/egl/libq3dtools_adreno.so	411652	3b90513a29aa854781cbb0d1ccae7c037c28854e0265c2cb37736df0ad33b622	system_file	yes	vendor: Adreno GLES (hwcomposer dlopens libEGL_adreno), libskia links libqc-opt, memalloc dlopens libadreno_utils
+gpu-display	/system/vendor/lib/libC2D2.so	116544	e0db9c41958a0d1b52018306f0b75b40447f568052fc40fd2ade8fd6fedf3a00	system_file	yes	vendor: Adreno GLES (hwcomposer dlopens libEGL_adreno), libskia links libqc-opt, memalloc dlopens libadreno_utils
+gpu-display	/system/vendor/lib/libCB.so	1079964	0350eb9e726af1992a4f458e1220f652553164965d69b5e07ce8fc39e382c07f	system_file	yes	vendor: loaded by the part above
+gpu-display	/system/vendor/lib/libRSDriver_adreno.so	194176	023106dde970431d07c098fe0287c109d484959274ee729ee1cdea67b4aa90c6	system_file	yes	vendor: Adreno GLES (hwcomposer dlopens libEGL_adreno), libskia links libqc-opt, memalloc dlopens libadreno_utils
+gpu-display	/system/vendor/lib/libadreno_utils.so	26184	1916bab6dfa516178bb929adca86ad62440305c8000ad914dba32ff7cee1c4cd	system_file	yes	vendor: Adreno GLES (hwcomposer dlopens libEGL_adreno), libskia links libqc-opt, memalloc dlopens libadreno_utils
+gpu-display	/system/vendor/lib/libdiag.so	81312	64492fc159c248e9d160cb40508aca465dc93d5b1f9480bb30533bf5ea18c857	system_file	yes	vendor: loaded by the part above
+gpu-display	/system/vendor/lib/libgsl.so	244176	a5e3bd4a6262ef98ff79f538c23c417a40c9efc5b15dba81f3ed385b4abfe30c	system_file	yes	vendor: loaded by the part above
+gpu-display	/system/vendor/lib/libmm-abl-oem.so	13892	3f05d60e4d55d1bc09b77c330e745231e293e18f8d926ae62ec6c8cfddb71242	system_file	yes	vendor: loaded by the part above
+gpu-display	/system/vendor/lib/libmm-abl.so	141496	c37144b8ef8d05114bc25b9380c3e1ac3dfc540b7ebdd2d0173369ac46f80230	system_file	yes	vendor: loaded by the part above
+gpu-display	/system/vendor/lib/libmm-qdcm.so	75384	609e0798226a9850324c05ae80fef065bc948b8cc49ed4db5d153bd20e173e40	system_file	yes	vendor: Adreno GLES (hwcomposer dlopens libEGL_adreno), libskia links libqc-opt, memalloc dlopens libadreno_utils
+gpu-display	/system/vendor/lib/libqc-opt.so	227084	bec288b96b7af9cb16d103e43629429920fa4c5c4ee372445c606e9a017a399d	system_file	yes	vendor: Adreno GLES (hwcomposer dlopens libEGL_adreno), libskia links libqc-opt, memalloc dlopens libadreno_utils
+gpu-display	/system/vendor/lib/librs_adreno.so	251608	c66580c6068911b2afbbdc37009bcb591e238d3fb96d870f24a929b790977836	system_file	yes	vendor: loaded by the part above
+gpu-display	/system/vendor/lib/libscale.so	26228	0414e4b3b7725ccb8f4f8c686fa414c31f20d96e7e25e6b0249ac7633cf7427f	system_file	yes	vendor: Adreno GLES (hwcomposer dlopens libEGL_adreno), libskia links libqc-opt, memalloc dlopens libadreno_utils
+gpu-display	/system/vendor/lib64/egl/eglsubAndroid.so	46912	957a7a243497e7b411be0e4a02c5febc31fd81d5b19e81b966c6850b0ded2769	system_file	yes	vendor: Adreno GLES (hwcomposer dlopens libEGL_adreno), libskia links libqc-opt, memalloc dlopens libadreno_utils
+gpu-display	/system/vendor/lib64/egl/libEGL_adreno.so	55104	9e19b7c221b30bfbc7cac44e9510014e525828ef8e51657720061018deb09225	system_file	yes	vendor: Adreno GLES (hwcomposer dlopens libEGL_adreno), libskia links libqc-opt, memalloc dlopens libadreno_utils
+gpu-display	/system/vendor/lib64/egl/libGLESv1_CM_adreno.so	38576	9e4794f6e4361cebbed2f537538c94c6e84bf3f14ebcb726997459fcbc092636	system_file	yes	vendor: Adreno GLES (hwcomposer dlopens libEGL_adreno), libskia links libqc-opt, memalloc dlopens libadreno_utils
+gpu-display	/system/vendor/lib64/egl/libGLESv2_adreno.so	71336	81367604a9decf00144ad3b44d3b88ec61afd6ee24d0d291b3b3723157d4f097	system_file	yes	vendor: Adreno GLES (hwcomposer dlopens libEGL_adreno), libskia links libqc-opt, memalloc dlopens libadreno_utils
+gpu-display	/system/vendor/lib64/egl/libq3dtools_adreno.so	678128	c9ca385af9d0b9a6b130f91bf07352bb7e8a0503203d6d86df6272d8fa6eeb86	system_file	yes	vendor: Adreno GLES (hwcomposer dlopens libEGL_adreno), libskia links libqc-opt, memalloc dlopens libadreno_utils
+gpu-display	/system/vendor/lib64/libC2D2.so	161824	006e2725682c02270a01581ea13eaa7358df22440203cc2f8c98d392fadf9e1c	system_file	yes	vendor: Adreno GLES (hwcomposer dlopens libEGL_adreno), libskia links libqc-opt, memalloc dlopens libadreno_utils
+gpu-display	/system/vendor/lib64/libCB.so	1320464	e7f25d388e3b189e986556f42772b9e8c3460e0d6297c3c7106c6d838edd70ef	system_file	yes	vendor: loaded by the part above
+gpu-display	/system/vendor/lib64/libRSDriver_adreno.so	259928	7e7187dac2e7a828872084c787b130b85a6f337fd4ed265f363334661d900619	system_file	yes	vendor: Adreno GLES (hwcomposer dlopens libEGL_adreno), libskia links libqc-opt, memalloc dlopens libadreno_utils
+gpu-display	/system/vendor/lib64/libadreno_utils.so	26360	bb1d83df88d0ba2dcefcd3ecc2d1bfa76d85a99dacfa1cb5ed3d1b2bbeb65566	system_file	yes	vendor: Adreno GLES (hwcomposer dlopens libEGL_adreno), libskia links libqc-opt, memalloc dlopens libadreno_utils
+gpu-display	/system/vendor/lib64/libdiag.so	106408	46216e122cf646651e05bb6e0737d03386c8bffe09fe7aba3e67a5f079a0cf64	system_file	yes	vendor: loaded by the part above
+gpu-display	/system/vendor/lib64/libdisp-aba.so	96824	230c1a6014256e0a8ab148557c917c20c984c643e9b3c651ee7e2047eb230138	system_file	yes	vendor: loaded by the part above
+gpu-display	/system/vendor/lib64/libgsl.so	289840	94355f0f4eb83c2b25100320c3a758dda1f6821fb67fe6e413a5f66db7316ab4	system_file	yes	vendor: loaded by the part above
+gpu-display	/system/vendor/lib64/libmm-abl-oem.so	5800	226776fe18e46f25222461d0ce546b0d236c47be67dae28cd47af117a042d5b6	system_file	yes	vendor: loaded by the part above
+gpu-display	/system/vendor/lib64/libmm-abl.so	174512	94973139fd9f7aabc49bf102f0a9cbc90b90fa2ae17c62401522c60e396f3d60	system_file	yes	vendor: loaded by the part above
+gpu-display	/system/vendor/lib64/libmm-qdcm.so	91960	fe7792df50f1643ed431d9bbef1778eeff09be2f2bf238d456c87cf691e4c0a9	system_file	yes	vendor: Adreno GLES (hwcomposer dlopens libEGL_adreno), libskia links libqc-opt, memalloc dlopens libadreno_utils
+gpu-display	/system/vendor/lib64/libqc-opt.so	243736	a0cd61493eabc9983f4184f1dffcf193b9a104cf2c4db6b57f2113681e218b62	system_file	yes	vendor: Adreno GLES (hwcomposer dlopens libEGL_adreno), libskia links libqc-opt, memalloc dlopens libadreno_utils
+gpu-display	/system/vendor/lib64/librs_adreno.so	301024	3b1286e465418dd55bd8fad66ccf856b805a4450ab3de7ed9f7b22ab97d091a2	system_file	yes	vendor: loaded by the part above
+gpu-display	/system/vendor/lib64/libscale.so	22328	62070aea55fbfad9fcfb8d7e133796c6248f32d91625509e75a8d1289b558921	system_file	yes	vendor: Adreno GLES (hwcomposer dlopens libEGL_adreno), libskia links libqc-opt, memalloc dlopens libadreno_utils
+platform	/system/bin/irsc_util	10184	13fac94a5b467d6ed89791fb4ac7e4463fe3ad69187274e014d09b297132b0f1	irsc_util_exec	no	vendor: daemons init starts on a Qualcomm build, and the hardware keystore (keystore.qcom dlopens libQSEEComAPI)
+platform	/system/bin/msm_irqbalance	26576	03f7c64b8a13f4f64a3e8a80377162b5d0f3ae6e441093c008a7ccea7974aafa	msm_irqbalanced_exec	no	vendor: daemons init starts on a Qualcomm build, and the hardware keystore (keystore.qcom dlopens libQSEEComAPI)
+platform	/system/bin/pm-service	43512	1f551a0061ed4cfbf8f6d0d58d305b016edc1c5b699e93564e2cdffed7097e19	per_mgr_exec	no	vendor: daemons init starts on a Qualcomm build, and the hardware keystore (keystore.qcom dlopens libQSEEComAPI)
+platform	/system/bin/qcom-system-daemon	34864	cb2e6a4e7550c405bbf9b944e9535ed7f68901bef7d54ee81d3f18df1faccbcb	qcomsysd_exec	no	vendor: daemons init starts on a Qualcomm build, and the hardware keystore (keystore.qcom dlopens libQSEEComAPI)
+platform	/system/bin/qmuxd	148696	9a2ae61b3df5b1e01408c3289e8c00312a696af0e686e25017727bfa34262e2b	qmuxd_exec	no	vendor: daemons init starts on a Qualcomm build, and the hardware keystore (keystore.qcom dlopens libQSEEComAPI)
+platform	/system/bin/qseecomd	14672	386d8108d3ffafee06e11f5adbd4d47cc63d97474c04cca4c161ae65007c90d3	tee_exec	no	vendor: daemons init starts on a Qualcomm build, and the hardware keystore (keystore.qcom dlopens libQSEEComAPI)
+platform	/system/bin/rmt_storage	31648	36a416c5af027d1545a9c8ecfe113890c107dde1e4ea37a5774d9cca9533eda4	rmt_storage_exec	no	vendor: daemons init starts on a Qualcomm build, and the hardware keystore (keystore.qcom dlopens libQSEEComAPI)
+platform	/system/bin/tftp_server	84320	f090276d2d7b6a453deab55721ae21fe0b8831331776dc43c5d3bcdfa4f07d33	rfs_access_exec	no	vendor: daemons init starts on a Qualcomm build, and the hardware keystore (keystore.qcom dlopens libQSEEComAPI)
+platform	/system/bin/time_daemon	26672	958e9343618c9a75e802d4752cc4e5c873c42dcc187357ecd858a5956ec8eb50	time_daemon_exec	no	vendor: daemons init starts on a Qualcomm build, and the hardware keystore (keystore.qcom dlopens libQSEEComAPI)
+platform	/system/vendor/bin/thermal-engine	1178696	e74b85c38fe77a3c2df04f21b31bfb197a104c3b83bcabf4db8b1f04b61c48d1	thermal-engine_exec	no	vendor: daemons init starts on a Qualcomm build, and the hardware keystore (keystore.qcom dlopens libQSEEComAPI)
+platform	/system/vendor/lib/libQSEEComAPI.so	30276	4dcecbd288efaa355987acf98877fe279b2aae71e3395d76ddeae47ee75a2a4d	system_file	yes	vendor: daemons init starts on a Qualcomm build, and the hardware keystore (keystore.qcom dlopens libQSEEComAPI)
+platform	/system/vendor/lib64/hw/gatekeeper.msm8916.so	14328	38f4546c8baa44f374f8181ba6db167e1b9790f05204e3773e8122d089215024	system_file	yes	vendor: daemons init starts on a Qualcomm build, and the hardware keystore (keystore.qcom dlopens libQSEEComAPI)
+platform	/system/vendor/lib64/hw/keystore.msm8916.so	38976	a06cb15a66fb0c7e3a41de2ba953e47727e20aaada015b27269d77b8847b3856	system_file	yes	vendor: daemons init starts on a Qualcomm build, and the hardware keystore (keystore.qcom dlopens libQSEEComAPI)
+platform	/system/vendor/lib64/libQSEEComAPI.so	26352	5a1c3c6acde98b46c096b67d5496cd37fcb956e09a084aac8e2b1d4329e12fa4	system_file	yes	vendor: daemons init starts on a Qualcomm build, and the hardware keystore (keystore.qcom dlopens libQSEEComAPI)
+platform	/system/vendor/lib64/libconfigdb.so	22080	34625cb86c5d65c7d2ff98c1cefe9f1de6d94d4114276cd6d0a8298a3442e207	system_file	yes	vendor: loaded by the part above
+platform	/system/vendor/lib64/libdrmfs.so	18152	3633ab0919f1bbfd36b3d755b6058140b1f30b22075bfb0be65218a26f4827ed	system_file	yes	vendor: loaded by the part above
+platform	/system/vendor/lib64/libdsutils.so	71240	c6679f0520cd4b8eae46922eed11ec03b795b91da47e5902376c2a5d602de10b	system_file	yes	vendor: loaded by the part above
+platform	/system/vendor/lib64/libidl.so	18152	24d4b3ff35539587ab81ac8a1bb03ceeadb881d03fa972d545c1316448881704	system_file	yes	vendor: loaded by the part above
+platform	/system/vendor/lib64/libmdmdetect.so	14104	e41f13044596f95b0432324326e08b1db1ed42f9dd9a7613282ca204c4f16167	system_file	yes	vendor: loaded by the part above
+platform	/system/vendor/lib64/libperipheral_client.so	67472	a27f360c89e89248525ac3fb9806d2ae4d786073dede32bf6774b769f3c02e1e	system_file	yes	vendor: loaded by the part above
+platform	/system/vendor/lib64/libqmi.so	296832	ab660f000aa8160605beb84901873ec57407e32ce639349a45e0e34cf47cabac	system_file	yes	vendor: loaded by the part above
+platform	/system/vendor/lib64/libqmi_cci.so	51096	cf5f9c71501a21da1e0a2158e68167529246259de6667fc16b70b2c582b46a5d	system_file	yes	vendor: loaded by the part above
+platform	/system/vendor/lib64/libqmi_client_qmux.so	67400	2497878f5515c3db4cf92218ebb8ea011516d6696821ed4042de5392af7d5f3b	system_file	yes	vendor: loaded by the part above
+platform	/system/vendor/lib64/libqmi_common_so.so	5824	f7b079e3da8c52df26ca5f5504ca1dcc6ae8cabd4a0686d3be1d4b2323729237	system_file	yes	vendor: loaded by the part above
+platform	/system/vendor/lib64/libqmi_csi.so	30600	ed7046612d8f8248843942b39c04afe7e0b75dd18c0ee5094658271acd768ce1	system_file	yes	vendor: loaded by the part above
+platform	/system/vendor/lib64/libqmi_encdec.so	18160	172d6a44106b74abd35be0d99c4bea66173bb6b0ae23dc8d6c042dadb33c4c9a	system_file	yes	vendor: loaded by the part above
+platform	/system/vendor/lib64/libqmiservices.so	201808	e016dc70e6abed67bdf0a4d9a3ac5f3371882d47533abd5fb36bc5471924c289	system_file	yes	vendor: loaded by the part above
+platform	/system/vendor/lib64/libsmemlog.so	5616	71bf7f5d21ea5497d4c76f5e4d5fdac6ecec1156b4982efe3cb9a42829890b5a	system_file	yes	vendor: loaded by the part above
+platform	/system/vendor/lib64/libsubsystem_control.so	10168	1c1373320b70da63c5f9348af2af2c0e1f542041e3c18dcb7f679b4341cfc55f	system_file	yes	vendor: loaded by the part above
+platform	/system/vendor/lib64/libthermalioctl.so	9976	6a69c0a297036e25ad95f1facb9900b76fde80a8681626d270df12785827ee0c	system_file	yes	vendor: loaded by the part above
+platform	/system/vendor/lib64/libxml.so	34416	f2abbceced1d554be97ea6b7eddcd7f57887bdb2b05c78475dd87b59ba979fd1	system_file	yes	vendor: loaded by the part above
+wifi-bt	/system/bin/btnvtool	10408	7a60cab7d5c1fd49e06795def9f2359b4251259336c15adf421c4f8713758feb	system_file	yes	vendor: wpa_supplicant and wcnss_service link the QMI libraries; pronto_wlan.ko is the Wi-Fi driver (built from source, Dual BSD/GPL)
+wifi-bt	/system/bin/cnss-daemon	22744	a4de5355d8ac58ff30e0f617f3eef2f0b8ef79970b9721a957ae8ae52de21b3a	wcnss_service_exec	no	vendor: wpa_supplicant and wcnss_service link the QMI libraries; pronto_wlan.ko is the Wi-Fi driver (built from source, Dual BSD/GPL)
+wifi-bt	/system/bin/hci_qcomm_init	150712	77c81f90f67665b18f8a92f1e9498a978ab5c345f77bdd0f6f1898cdf60db331	system_file	yes	vendor: wpa_supplicant and wcnss_service link the QMI libraries; pronto_wlan.ko is the Wi-Fi driver (built from source, Dual BSD/GPL)
+wifi-bt	/system/bin/wcnss_service	18384	88fed15015dee9e5ec58424d90b701a2544b8fe65439d4869b021fea3d6f6ae3	wcnss_service_exec	no	built: wpa_supplicant and wcnss_service link the QMI libraries; pronto_wlan.ko is the Wi-Fi driver (built from source, Dual BSD/GPL)
+wifi-bt	/system/lib/modules/pronto/pronto_wlan.ko	70046360	284fcf7bf9107706b944e0cc6c672bb92f5a3a7f09ad15e7e416611138103163	system_file	yes	built: wpa_supplicant and wcnss_service link the QMI libraries; pronto_wlan.ko is the Wi-Fi driver (built from source, Dual BSD/GPL)
+wifi-bt	/system/vendor/lib/libbtnv.so	13920	34f79a7a163d9449fa7e577239d08e8b7c5287d43e220b0c0bc7dd0bcc0ae4a0	system_file	yes	vendor: wpa_supplicant and wcnss_service link the QMI libraries; pronto_wlan.ko is the Wi-Fi driver (built from source, Dual BSD/GPL)
+wifi-bt	/system/vendor/lib/libdsutils.so	71252	d2cbbf361d73de7c53664282cf5e3a9bbf18849d67626c66822fcd7305a4f97f	system_file	yes	vendor: loaded by the part above
+wifi-bt	/system/vendor/lib/libidl.so	22076	fe25f03905e9f080bf4793cb00f5e0ab98aea66767ad70ec596ed9f8a4904a97	system_file	yes	vendor: wpa_supplicant and wcnss_service link the QMI libraries; pronto_wlan.ko is the Wi-Fi driver (built from source, Dual BSD/GPL)
+wifi-bt	/system/vendor/lib/libqcci_legacy.so	22084	7439aefd06f7f16b50c4f0c2559e3033faef5e51115a23fb5220494511c67502	system_file	yes	vendor: wpa_supplicant and wcnss_service link the QMI libraries; pronto_wlan.ko is the Wi-Fi driver (built from source, Dual BSD/GPL)
+wifi-bt	/system/vendor/lib/libqmi.so	190120	3003c33d36a3e09f3904f94d767ccdb335d32f291afaaf4161e6e8df07734be1	system_file	yes	vendor: wpa_supplicant and wcnss_service link the QMI libraries; pronto_wlan.ko is the Wi-Fi driver (built from source, Dual BSD/GPL)
+wifi-bt	/system/vendor/lib/libqmi_cci.so	42664	63fdd3697be281c1ac0d0fc916ac6681b8dd28a6b59beca8dd25ff95714b8841	system_file	yes	vendor: wpa_supplicant and wcnss_service link the QMI libraries; pronto_wlan.ko is the Wi-Fi driver (built from source, Dual BSD/GPL)
+wifi-bt	/system/vendor/lib/libqmi_client_qmux.so	54864	c3cc3b825f386c88d3afb43c8d238e069f666958579605d41da68e1d8b34bc38	system_file	yes	vendor: wpa_supplicant and wcnss_service link the QMI libraries; pronto_wlan.ko is the Wi-Fi driver (built from source, Dual BSD/GPL)
+wifi-bt	/system/vendor/lib/libqmi_encdec.so	22084	03d919b29cd656d930acbd450ae15936be51631a9d83283d0990a139ff0bca1e	system_file	yes	vendor: loaded by the part above
+wifi-bt	/system/vendor/lib/libqmiservices.so	110080	e585abadd5354d148af62b65e570011ce31d8cd523f196dbb889712df0be062e	system_file	yes	vendor: wpa_supplicant and wcnss_service link the QMI libraries; pronto_wlan.ko is the Wi-Fi driver (built from source, Dual BSD/GPL)
+wifi-bt	/system/vendor/lib/libsmemlog.so	5248	c08c5e4b8b7ee3d56d563678ec0c244d33e879b2756c29c26aea74d382979f8c	system_file	yes	vendor: loaded by the part above
+wifi-bt	/system/vendor/lib64/libbtnv.so	10000	43d10ea23624480c62d95eaf1a0104b0422961776103e08ff3bd3718dd5cff6f	system_file	yes	vendor: wpa_supplicant and wcnss_service link the QMI libraries; pronto_wlan.ko is the Wi-Fi driver (built from source, Dual BSD/GPL)
+wifi-bt	/system/vendor/lib64/libqcci_legacy.so	18240	8067eba481445f3e5115b1c334819e63184fb8a6f33b4bb7629a9cd2a1ebf5fb	system_file	yes	vendor: wpa_supplicant and wcnss_service link the QMI libraries; pronto_wlan.ko is the Wi-Fi driver (built from source, Dual BSD/GPL)
+audio	/system/etc/acdbdata/MTP/MTP_Bluetooth_cal.acdb	42477	b8e72563758ec383a10f8b2c08a00daa2c712813d4765337338b8f20ab929694	system_file	yes	vendor: loaded by the part above
+audio	/system/etc/acdbdata/MTP/MTP_General_cal.acdb	13027	8dfe3bf3bb47d9829fd6a7585b469f8c8d3e6bfff9f0d9d671712efd9ee48435	system_file	yes	vendor: loaded by the part above
+audio	/system/etc/acdbdata/MTP/MTP_Global_cal.acdb	2410	a8ea0c411ae45dd0fa06bf76c181c8c25e03c909f7739b6da885e8ff0e3f80cc	system_file	yes	vendor: loaded by the part above
+audio	/system/etc/acdbdata/MTP/MTP_Handset_cal.acdb	164071	a85f90b81ac38ccb812ebe1b5d0b2c99e361a80079b8e3f4296f205a22175b78	system_file	yes	vendor: loaded by the part above
+audio	/system/etc/acdbdata/MTP/MTP_Hdmi_cal.acdb	1323	e8f9c4d876b5c98659b1ee4bbbc9a7bbdaac7e8f01c94f927ede128558abb92a	system_file	yes	vendor: loaded by the part above
+audio	/system/etc/acdbdata/MTP/MTP_Headset_cal.acdb	75293	365f6b86c9d6471a8096322103b92830d0965262fcc81c2276590f7fe5b05ff1	system_file	yes	vendor: loaded by the part above
+audio	/system/etc/acdbdata/MTP/MTP_Speaker_cal.acdb	181733	5b869b352d032146fb76318a51fe98d335fc32391d16a2d50d458a96cfaba4b6	system_file	yes	vendor: loaded by the part above
+audio	/system/etc/acdbdata/MTP/msm8939-tapan-snd-card/MTP_WCD9306_Bluetooth_cal.acdb	42475	07f1883d9626428ce73f356c4472c244bf642ffae95950a49016eb1ee40c7000	system_file	yes	vendor: loaded by the part above
+audio	/system/etc/acdbdata/MTP/msm8939-tapan-snd-card/MTP_WCD9306_General_cal.acdb	13028	b87df08c797da23f48c97421fad7b7b41536261e46fd02affa1c8db5a746bff7	system_file	yes	vendor: loaded by the part above
+audio	/system/etc/acdbdata/MTP/msm8939-tapan-snd-card/MTP_WCD9306_Global_cal.acdb	2410	590463b33c2e5927f35f3cf13bcf927f9cb147999f9566c9bbe413936ed93c93	system_file	yes	vendor: loaded by the part above
+audio	/system/etc/acdbdata/MTP/msm8939-tapan-snd-card/MTP_WCD9306_Handset_cal.acdb	187641	37c71e37c5ed3386bbf2604290f1232e59290f026f45af1c1115258cce9525d5	system_file	yes	vendor: loaded by the part above
+audio	/system/etc/acdbdata/MTP/msm8939-tapan-snd-card/MTP_WCD9306_Hdmi_cal.acdb	1324	6218f46764e68456c2cac8ea305df5faced391e354dca56d425bfde2c9afa8ad	system_file	yes	vendor: loaded by the part above
+audio	/system/etc/acdbdata/MTP/msm8939-tapan-snd-card/MTP_WCD9306_Headset_cal.acdb	76070	0a2bace90cfd82041e81b9d3fcf7d74d2857a7fa7df95044028ca9758562d699	system_file	yes	vendor: loaded by the part above
+audio	/system/etc/acdbdata/MTP/msm8939-tapan-snd-card/MTP_WCD9306_Speaker_cal.acdb	181734	8bc2ad4320cb91647d7761d5f778e9ebc635eedff5fdca95175cffad5391adf5	system_file	yes	vendor: loaded by the part above
+audio	/system/etc/acdbdata/QRD/QRD_Bluetooth_cal.acdb	70798	470685a1c1ba160b123ed3bedb433c6a8c9a261f82cf70fa7a83ec688560373c	system_file	yes	vendor: loaded by the part above
+audio	/system/etc/acdbdata/QRD/QRD_General_cal.acdb	13500	72547ac1e92e295ccf31d9a1d526355dc95a62fd51fb06b58217fa80816a1f75	system_file	yes	vendor: loaded by the part above
+audio	/system/etc/acdbdata/QRD/QRD_Global_cal.acdb	2913	4d064e4f18c849318d13557fb550878189b7cbcda691c0b05ec87948a268223b	system_file	yes	vendor: loaded by the part above
+audio	/system/etc/acdbdata/QRD/QRD_Handset_cal.acdb	315844	105cd17bf7cc7529715d89b235323750de2b94738c2f1a828d69e69ac40bdb0e	system_file	yes	vendor: loaded by the part above
+audio	/system/etc/acdbdata/QRD/QRD_Hdmi_cal.acdb	1452	ef8a9ba5bca1b83038ef6a6ad92b78cbc1017bc91defc0b22aa30bedd2002b74	system_file	yes	vendor: loaded by the part above
+audio	/system/etc/acdbdata/QRD/QRD_Headset_cal.acdb	154106	720cb8e32567d419ef8ac74e99898cf055b58ec245aa33c2f5416e5214e16624	system_file	yes	vendor: loaded by the part above
+audio	/system/etc/acdbdata/QRD/QRD_Speaker_cal.acdb	342520	9398c59db29403a00baad578b4aeb1245b668ef061b6c71523dfea99304f41d6	system_file	yes	vendor: loaded by the part above
+audio	/system/vendor/lib/libacdb-fts.so	17984	2f62acecb86a95660c78d9af010262f4372e9aac33cf06ed9fc42f27bc54bf92	system_file	yes	vendor: loaded by the part above
+audio	/system/vendor/lib/libacdbloader.so	60132	a34e69dcbc8669fc34dd9217fce10ad43b26226011a409c35f02b726a853974e	system_file	yes	vendor: audio.primary dlopens libacdbloader (calibration); libaudioflinger links libsrsprocessing
+audio	/system/vendor/lib/libacdbrtac.so	22080	b9d88f63b6d77f57b245ebe86717cb002a878c5108d0521c8555c8777ef7939b	system_file	yes	vendor: loaded by the part above
+audio	/system/vendor/lib/libadiertac.so	22492	2829412e6fef8386c30853dc70aec41bedbaad7d2120effd98d08f46ad01cce6	system_file	yes	vendor: loaded by the part above
+audio	/system/vendor/lib/libaudcal.so	120444	7e148b439bc49f0ec90551feb3dd0d1f73cf26f93f95874ae873bd30e267eb31	system_file	yes	vendor: loaded by the part above
+audio	/system/vendor/lib/libhwdaphal.so	18016	2d4ca1bdd6c62c3b4a6b98a40dee4955a24256015e78912e289a2a39ebce737e	system_file	yes	vendor: audio.primary dlopens libacdbloader (calibration); libaudioflinger links libsrsprocessing
+audio	/system/vendor/lib/libqct_resampler.so	76668	7e491f2dbffcfb2b2b9e02e73f69b660252b5190e7d81dfe98e2edf2d4b48677	system_file	yes	vendor: audio.primary dlopens libacdbloader (calibration); libaudioflinger links libsrsprocessing
+audio	/system/vendor/lib/libsrsprocessing.so	539464	ce3b915b0272b87c0358717fef752923d68f581dc65b73d9673f4a71d6c11764	system_file	yes	vendor: audio.primary dlopens libacdbloader (calibration); libaudioflinger links libsrsprocessing
+audio	/system/vendor/lib/libsurround_proc.so	31768	83db3ad0cb2697a11d687613e493eb763c9cf3ec2d252080145c8c56be60cdac	system_file	yes	vendor: audio.primary dlopens libacdbloader (calibration); libaudioflinger links libsrsprocessing
+audio	/system/vendor/lib64/libacdb-fts.so	9968	14b33bb96a22d7b2ce11f979042d6145c8fbfd2631abcf4b7a2fee7b3a4651e3	system_file	yes	vendor: loaded by the part above
+audio	/system/vendor/lib64/libacdbloader.so	64992	becd4d9fad7c5d4562b0164a76e491febce145c910f593567c9f80b672f6bac1	system_file	yes	vendor: audio.primary dlopens libacdbloader (calibration); libaudioflinger links libsrsprocessing
+audio	/system/vendor/lib64/libacdbrtac.so	22256	f84d5b12ff9875c887b2618d0b724929163b88983aa8c12b100cfa080938185d	system_file	yes	vendor: loaded by the part above
+audio	/system/vendor/lib64/libadiertac.so	14488	a63930a22ab0525702a03cf74143721f7003b510e07f1376db0af1650d21bb79	system_file	yes	vendor: loaded by the part above
+audio	/system/vendor/lib64/libaudcal.so	157504	2271cdf5b314a758bb177eb2e9eb70c6b551fd6b8dfbd78111e3f390349bb6d3	system_file	yes	vendor: loaded by the part above
+audio	/system/vendor/lib64/libhwdaphal.so	14104	09699dae68cf69b47d697ecc84c1f156522e07f121a3bb396966cc6789b4a81a	system_file	yes	vendor: audio.primary dlopens libacdbloader (calibration); libaudioflinger links libsrsprocessing
+video	/system/etc/firmware/venus.b00	212	3fc987dc5eebc72b78baea5c7041e73a69b83515083a9a21e324a5b5303bea97	system_file	yes	vendor: loaded by the part above
+video	/system/etc/firmware/venus.b01	6600	79683f6b2689e2c67f1d08eba047c6c254e0fed36d2ae9ae178b24f57f9f9095	system_file	yes	vendor: loaded by the part above
+video	/system/etc/firmware/venus.b02	978288	3561cebc7708d8778d55abfd6b60ddfeab2816727c6b6f964e748662e393b953	system_file	yes	vendor: loaded by the part above
+video	/system/etc/firmware/venus.b03	5568	6278515e5a7d29865d077d29166f93c74cfafd3b1cc1bb4e6ff37e0a11fe2bf8	system_file	yes	vendor: loaded by the part above
+video	/system/etc/firmware/venus.b04	32	43b09596e1496809aaa964b34c146580f0566c86bc9d7218a1288fd15fb93424	system_file	yes	vendor: loaded by the part above
+video	/system/etc/firmware/venus.mbn	996176	1bc52bcbfef07ab9f75257293cf1ece7c74b68e7dd4d67187d6ddfb12857e39f	system_file	yes	vendor: loaded by the part above
+video	/system/etc/firmware/venus.mdt	6812	36f5cf9770bdefb7b93a0ae80eb78329c8733512db3da90e39d6cb35b81f2d22	system_file	yes	vendor: loaded by the part above
+video	/system/vendor/lib/libHevcSwDecoder.so	335192	626c3de553895194ac64a21747c0ed0e4eeeee3bb1a9346bc113c22491dd1bc4	system_file	yes	vendor: Venus firmware is not in /firmware/image on the unit (mirror-root.md), so it comes from system
+video	/system/vendor/lib/libOmxAacDec.so	54940	72f60155366e925baad59ac130e2b882e1d2c0df41f805626f9108898410b46a	system_file	yes	vendor: Venus firmware is not in /firmware/image on the unit (mirror-root.md), so it comes from system
+video	/system/vendor/lib/libavenhancements.so	272380	27b3aab69eac14b47dab4f700ac9352adb4d283e3e2199a482e7fe1835b80773	system_file	yes	vendor: Venus firmware is not in /firmware/image on the unit (mirror-root.md), so it comes from system
+video	/system/vendor/lib/libmmosal.so	30276	4ad0cdf5709ed038be7c421e51381f274d23caf1a775da9b24b9900365d0da99	system_file	yes	vendor: loaded by the part above
+video	/system/vendor/lib/libtime_genoff.so	17988	bce840f65788234149131f05ba776923462865e4fa84279c9d5497e6ebafb019	system_file	yes	vendor: loaded by the part above
+video	/system/vendor/lib64/libHevcSwDecoder.so	491560	4ddca93606cc6dbb2a26f1466a05a377fb7dad17c1d6c0180862fe07221d13a3	system_file	yes	vendor: Venus firmware is not in /firmware/image on the unit (mirror-root.md), so it comes from system
+video	/system/vendor/lib64/libOmxAacDec.so	63328	a650254febd753b7a65eddab08781c1ad8c7a90f790ae0fd218c249c753b44ad	system_file	yes	vendor: Venus firmware is not in /firmware/image on the unit (mirror-root.md), so it comes from system
+video	/system/vendor/lib64/libavenhancements.so	383424	f35943a82c8b34110d5df2d72f9bdcff0f8a6c7dafb14f2cf76e78e8e971087c	system_file	yes	vendor: Venus firmware is not in /firmware/image on the unit (mirror-root.md), so it comes from system
+video	/system/vendor/lib64/libmmosal.so	34584	2229fef35b644aad51b2ef50286998f8ac8c4e81d06514d83c9561de8e23ed50	system_file	yes	vendor: loaded by the part above
+video	/system/vendor/lib64/libtime_genoff.so	9968	3a2d515b8bc071835218a6d0e61bd50bacaddc46bb1755bfb52881cd5f22593f	system_file	yes	vendor: loaded by the part above
+camera	/system/bin/mm-qcamera-daemon	27345	55d9b6c1519679f322d7474132a6257e9da34efcc5ad7c08077cf3e2304aa7de	mm-qcamerad_exec	no	vendor: only for the camera pane: mm-camera daemon, its modules and tuning
+camera	/system/etc/firmware/cpp_firmware_v1_1_1.fw	16128	09fd81eb95b3187b731c201f99c5b6176df01e6d459c78fbe7bf4f0ef480e578	system_file	yes	vendor: loaded by the part above
+camera	/system/etc/firmware/cpp_firmware_v1_1_6.fw	16384	2533f6819be2ee4ba61ed4e1e8cbf76be93ae9f06d98a5a259fcc6165da47782	system_file	yes	vendor: loaded by the part above
+camera	/system/etc/firmware/cpp_firmware_v1_2_0.fw	16384	6f28bbb64cf8441fc33ee41ffb035f781488fd523b641d237cdaf840769b0689	system_file	yes	vendor: loaded by the part above
+camera	/system/etc/firmware/cpp_firmware_v1_4_0.fw	16384	17446858b9adad536f3da2d0130182708624b87fa0915b9ab719c313865a5674	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libadsprpc.so	50820	c0e45aac14cad40d91746539ad1f453d65d036590d977e241888f1f86127b95c	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_S5K4E1_13P1BA_common.so	55956	6ea7c00f2b5915a4ee868d2d6fc73e94b1dd4d7e1c52bc4d8d302e1f447ca034	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_S5K4E1_13P1BA_default_video.so	35208	0bb3fa6629d0e1b9f35e6b1f48312c92b8a6aea1a2cd9e4f558f04ebee6e5f5f	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_S5K4E1_13P1BA_hfr_120fps.so	35208	79d54895fa23229a17639c83402414b5df7851ac06f9742a13592c5bbbf04518	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_S5K4E1_13P1BA_hfr_60fps.so	35204	b7d8edfe2067ace5bf4ff493687140c53fad59092661d89084c4f52f037ab229	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_S5K4E1_13P1BA_hfr_90fps.so	35204	a85ed76acc05e14543abe948a760ee20fc72c879bcc03729c605bb42cb32e3d8	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_S5K4E1_13P1BA_liveshot.so	35204	3da1b8d935981468cceeaef3ea8e3460e444d9be1b64e39e244cab4898da97c1	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_S5K4E1_13P1BA_preview.so	35204	1d26bde68416ba66282f4b59702d77fb6e750681ceb978f4fb780ac9c32b9024	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_S5K4E1_13P1BA_snapshot.so	35204	f23b2f01add85ed0d3fc9ded1ee79ee39cf982c00f29188d903e9eaddd0acd99	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_S5K4E1_13P1BA_video_hd.so	35204	d9ac67dd5e188815a0e34998cc3bc7e005c8be1f78a4dcb7e21174b4c8a8edc8	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_S5K4E1_13P1BA_zsl.so	35200	f2c578e814634970a2d7baec86ef976b5c1a0341ec073311858a1ebd9400ad75	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_SKUAA_ST_gc0339_common.so	55956	0eac3cf6bde9b3394582d0ec8d6fa9a861e5dfd7f70972fe613b21212ef65f74	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_SKUAA_ST_gc0339_default_video.so	35212	db0cdc6869ecead0ad69b303c23c822e060f28b47353923e7fa1fbb30c3dcb44	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_SKUAA_ST_gc0339_preview.so	35204	6eda254b64ceb0f0088119671c859dce616432b1c7f31fe6d45117863ddb525c	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_SKUAB_ST_s5k4e1_common.so	55956	12b213c26839e2b764b05182e7e0c5a973d3d2e31353944c1c6c082e41b5f149	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_SKUAB_ST_s5k4e1_default_video.so	35212	53373552e09d778d0072328b9560c4cdf47f4b83439da6c0379d2d44132280d4	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_SKUAB_ST_s5k4e1_hfr_120fps.so	35208	d77605ade87c56fe67fb5c45a088392faf9e9c9c19fb2d8b6d776f0b772a3669	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_SKUAB_ST_s5k4e1_hfr_60fps.so	35208	b47a153df5349629dc63e6108a7bd25479f51ef0b20b40e69a87ef57d570d65d	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_SKUAB_ST_s5k4e1_hfr_90fps.so	35208	d3f6b8dfcf13d769e13d9dac9af8b6dd28669777c0e382b439b51fbd77f210e2	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_SKUAB_ST_s5k4e1_liveshot.so	35208	7e18d23214317ef78a2c915317fb1329e0b7c2f35bbf391ea56ddabca5445365	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_SKUAB_ST_s5k4e1_preview.so	35204	e36e992162c9493355b7600c2b4f1aa9bc5b6d2ad16984b0ab37875adf9a9cc0	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_SKUAB_ST_s5k4e1_snapshot.so	35208	8b045162273766c1c5c409754fbd58cdb9285e4174f977cbe819105e218d5488	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_SKUAB_ST_s5k4e1_video_hd.so	35208	3c7443682258733698a0658a0666d832a55a1c8a3e08b43a27bd3de2146d6f1a	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_SKUAB_ST_s5k4e1_zsl.so	35200	5c487e1f9d6e8f0130604ef457de702dbec0750f0d3a7705b1261ab5c5a9b095	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_imx132_common.so	55948	d0a5a7f5314c0b6d9b141f96707a5bc38cb787305c053c58aa40d055c00db532	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_imx132_default_video.so	35204	cbc130669d4d3a19c4773eac06576d9c62c890051c163c2675f13329623d0210	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_imx132_liveshot.so	35196	d00709b3d1fbbb10cdccc7db6e419e5e399ee778a4f8967363e6fe7183597cbe	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_imx132_preview.so	35196	5a756f2bfce0210868a2b069963a2985bcf1252410d8e541d1999062f51c9e12	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_imx132_snapshot.so	35196	e913071ce9ef75cb79c5be7b4a29573940e704275c833413903b5a84f726a942	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_imx134_common.so	55948	7fc36f3be72095091e800a69a96563927a6de3f609d51e51e6a8d10ed3901bba	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_imx134_default_video.so	35204	18d04671c0194b885e69894b2eb0c802bff07006e6832e7633de2afead167241	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_imx134_hfr_120.so	35196	315066a5b96b535c547255c7e3547c70636e12bbc2bdf7d98b8272cf5ab64d59	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_imx134_hfr_60.so	35196	811c01c0e040793dd5cc85eb8813bb46d12b8badf52e9baf25b0b78f002d65ab	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_imx134_preview.so	35196	484682bb76a5d6b3aebda4ac543d590d794fe2cf0f54ccd029c0ec1323cf115d	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_imx134_snapshot.so	35196	2a4a8d1fdbe1a656a7ff393e0b637cb1a4540a660c3a96b1d2c743bec66a80e7	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_imx135_common.so	55948	dd88236e3abc62a9bb1b68951ecc2411b2de2bc811d53a59ceb92f93f0dae6c6	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_imx135_default_video.so	35204	6b1548f3e3a58e9a012cab815fbc22ba06932f2dafca19111c7d4cbe5ecf4808	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_imx135_hfr_120.so	35196	df5683eb67953480006e302bdf362fe027fc65bbc270406c989a373bfab05a36	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_imx135_hfr_60.so	35196	6a73cbf6e11b67c541fc5e045e08982321f3a3a39694a132397892574b545c95	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_imx135_hfr_90.so	35196	afc61f493e3291999778043f5d2fe883551b13267aa619147ff17188d6f5216c	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_imx135_liveshot.so	35196	160c9e7a6f5a318f84a05c723dac6cbfedc72cd206f5851857b257ac2e2b8679	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_imx135_preview.so	35196	c811fd57f825b29aaea3ba69730938bc2d55732cf7137f8a7dd1c6a404219993	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_imx135_snapshot.so	35196	2446e27e38a3ba0d19d4bffa6e138ed37644dc73e827b172b3f7c8f1f245246d	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_imx135_video_hd.so	35196	68164509ec17c38ae2bde86bb5bacb8c7b1509e76dcf3dc0488e1a1a4d86ea51	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_imx214_common.so	55948	b2ff1f19bf63bb53de238615577fcd81313ac73aaad5acc7fcd5b9e258e32906	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_imx214_default_video.so	35204	e8f0c62eb3a62c37ab64ae0c38c3dc58a13de9ddbf57ac117a352db7990e2354	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_imx214_hfr_120fps.so	35200	bc3ef3d557c477e9e5cb27b84a138b7605d9db6beedf5a43a06fee7fa568c474	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_imx214_hfr_60fps.so	35200	d6054dbb24f32a4c7a94dae7b2ce2fd379e6fbc4631a3f5702357f9654c80082	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_imx214_hfr_90fps.so	35200	927ee1a7b2c207d3ac26430d67bb6ffe472ae42db072c94c9c942b7107e1d1d4	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_imx214_liveshot.so	35196	5f9bc2971f2b27e3605a09c2c11f43091a545c05b63d35dc394a76e969c699e1	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_imx214_preview.so	35196	8b3b99e57ca2d78d950097be92a6f8c4245315f709056d3e16f22f1ee91fc109	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_imx214_snapshot.so	35196	b480dcfc7866b99ba1d1c98f2f7af60d7bf88dca80ecc032dd8ff75fc53c0d38	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_imx214_snapshot_hdr.so	35200	1047b376639b3d0dd1ceddfcf7ed2c54455c7f6ec9e54c33bf34d92621e667e6	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_imx214_video_1080p.so	35200	edb9c487fc524f51cc9df7f2bd4944a777218d104efea108ca5f577ac22bac00	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_imx214_video_hdr.so	35200	20ce4dc6d9908dcd9e6b287856151501c3a12d56afcd9b12b3bbfd73a724eeae	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov13850_common.so	55948	28afec9bbbf8fdf1756ce891d38a8c896372ed1d21f11e185862ff0cab90fc31	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov13850_default_video.so	35204	dedd54b35554b14abbe2ba6a566d611809e98d3143f8357d9b762ad74d68e26f	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov13850_hfr_120fps.so	35200	5c3f0d0695fd57d70ba8ebd320d0d007e2fb54d6f07e5b1d7ccbcd676dd22220	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov13850_hfr_60fps.so	35200	2823af58704582e188d037d77a4e1e278b45c6f8a0b56a632ce9cae126e5319e	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov13850_hfr_90fps.so	35200	e0f50003b9be22ba5e5749c3d2a8d6e5837dd130f777a815f0bbd92a19af512c	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov13850_preview.so	35196	885a0250045b9b1b0351e774570e97a3e73633ae96dfea28ee7b5115195f94f8	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov13850_q13v06k_common.so	55956	e784044a6c51dfbe11bc6b1505f3e7dfe1ea60efa872036801862098b990d0b7	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov13850_q13v06k_default_video.so	35212	7998f60c25fc8a8d37fe0464ee7d7344f10e145a0dcfafb388e096eba6f1cf98	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov13850_q13v06k_hfr_120fps.so	35208	5baa57e0fbee2798ce82dcbdc8b90fe18bfc74c3f83c1451310634969f414c55	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov13850_q13v06k_hfr_60fps.so	35208	54ee3b7bc7a81ef502be928f0aa9053d5b885e335c7b0c2ee4bfbc39031474d7	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov13850_q13v06k_hfr_90fps.so	35208	cb4148c4023be99e94abc15e57138d7b146ab16f5123394c39669496a5d2fd31	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov13850_q13v06k_preview.so	35204	fc18aea740f92984d40d57470304f4c97a9094c1e460055b84cb2b0d716d89a0	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov13850_q13v06k_snapshot.so	35208	d521fe91c22c52c838cc81ddeb98b6f9465c500713eddb6e6014cc34af2a9f4b	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov13850_snapshot.so	35200	189df8f80f11c4f4d7d6a7b3be0b868f35575fa92782c910bdbedd2e0dfc1b1a	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov16825_common.so	55948	53e2c3d56f24cfe18435c8abc0fb123211446809c2d50419c8f9714a2c2a08fa	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov16825_default_video.so	35204	91298180860e5c6c8264787c3c83a5ea54c12900fdb5524660162b22adcbe34a	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov16825_preview.so	35196	5d31c259e848e8d1c7691f32e52e583a4f03745e70fbba2cbb57a821af7322c4	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov16825_snapshot.so	35200	908503ed6a1a013619c6693674817c2dc4e79ce19a6a48369ee8334ccc3f5a3f	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov2680_5987fhq_common.so	55956	98734d1139d7221d5f79e0f7be1a6b0ffb3d89db9bfc1ee68669f80634737629	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov2680_5987fhq_common_v32.so	55960	bc8ab5af4ab555c12fc2974600cf386b999112bb345d1496ad5837419e3f5fd9	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov2680_5987fhq_default_video.so	35212	c3c86b3a9864e62351f71656070783bdee52d298cf582bfe2557d92083cd2a5a	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov2680_5987fhq_default_video_v32.so	35216	045f2d98fa9f9ce6b3ada6da8c1ff74e0d6259255924092e9e3e05c6ca455136	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov2680_5987fhq_preview.so	35204	b50a77927d97271b90dd1ac9c6bd309af95d8cd04204bed7f56190660874cf1b	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov2680_5987fhq_preview_v32.so	35208	25175ed2bf2107371d71f24b51f643b5ea10a9f603904466c4c593612245866a	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov2680_5987fhq_snapshot.so	35204	946d4ab518228dacbcde7942c997f662587b15669925f861bf61a76d16e245a6	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov2680_5987fhq_snapshot_v32.so	35208	d43148efd669c28ba01f00655230ded7efccc560c03572a600318164178dd46e	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov2680_cht852b_common.so	55956	dccca36bf6117c15d5f8d1011c63239403f68e94b11548157f6ee4d67d874527	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov2680_cht852b_default_video.so	35212	61265ca055437f063fa4b8c352d84fcce272eb253c803b3e3d510886dc1e2c96	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov2680_cht852b_preview.so	35204	2e7d6defabada912a8f9880790eb17cc6e869e99070283af1ad0e6058ae39458	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov2680_cht852b_snapshot.so	35204	fa0808f58f2720b43c1e161b3b0277b63854fc82fd9e8aae7819686d73f93eb2	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov2680_common.so	55948	77ef234b7c578c24a71cda4db845692d9ba8920d8677cee7019479d9fa77ef8b	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov2680_default_video.so	35204	d98b2b8a17bf2912746829dc000f948cb8311585fbef068ff65e6ff769f8915c	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov2680_preview.so	35196	fe96e6be63696ea6f17113ada26882ee8d562ae9f1a573f9d5b1acb6b0dce82f	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov2680_snapshot.so	35196	52721b5b395b588410ea78f15387aaef3052c572815727a4b9ae5e7e4bdafe4b	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov2720_common.so	55948	1c09aa9e83cdb80fba1950267f46d5340459cbe59e7194cda1224fcc778e2eaa	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov2720_default_video.so	35204	303a9061ef8f41b4591e4aef0c92c9ff4d4cf7bad3885737b4fc295a76af82a1	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov2720_hfr.so	35192	9c825c06064a9d3bc2685c45882021d5e8f8bd08f2edffc97f9870356d3ef94e	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov2720_liveshot.so	35196	218449ea5f2f87a3ca5ea34093222a937807fa7ad3f48f0ce3deccbd7ad71790	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov2720_preview.so	35196	39b918b327f91cb530a6feee9b5c4d8cad535e8ead7ca17b40ed888497d16ce2	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov2720_zsl.so	35192	5756b5692bf5511df2e8360d2b5f5798d3ce43fa599a43595d5be68b328ccf2a	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5648_oty5f03_common.so	55956	f22f517af47591b6480bd2063c67b8ca53f98aefa396f9261663ea71c76e49d8	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5648_oty5f03_default_video.so	35212	699f5743daf69467d31bc00fc645b0feaed3fea93855fadfd1d2bb4befbe74c3	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5648_oty5f03_preview.so	35204	513ac8c7badb12eb26784e6599757e93f624d0358a07a2a94057be4297a58230	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5648_oty5f03_snapshot.so	35204	4baae674011c7f2b8b9195e2d3bf0d35dd400ecec81bf6d254a9bfc5824cb5ee	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5648_oty5f03_zsl.so	35200	e523b00c1b193ef3d0238603fe7ada9df1509fa1bca3fc2627749b85ae9a7831	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5648_p5v18g_common.so	55956	6b9cf4bd1eaf32fda3924b2a6cf16c848d69d4202f25821d0382600ecc38a53b	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5648_p5v18g_default_video.so	35208	7cde1dbe46b8bf70fdef2e63ebbfc7ad836edec9a689ca60096fff664791b90a	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5648_p5v18g_default_video_hd.so	35212	f6961e5cecaeff80532ab2c5badaa3df70493a2e0d7e0a1b109c2f1e170555a9	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5648_p5v18g_preview.so	35204	032505d3b191ab83eee649294abcbd5bde85073aea10c14ed4ff029b65e36108	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5648_p5v18g_snapshot.so	35204	d57c9939eb18d8e16b9b3718e79f68f04d6d991d9c54450a76a0dbc62788474b	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5648_p5v18g_zsl.so	35200	f3eb09112895dbdb6a0db9511d74732e4b68c23ac089c28280e9a61274cfd2b8	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5648_q5v22e_common.so	55956	3c6864f30b563562aa5d0b71a09d6addb04476aa0a0ab799524eb5614e20d3da	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5648_q5v22e_default_video.so	35208	dd481e0457cc967bc4d386a5e9624c2fcec74cf751836e9da7eefbecc5c02a4d	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5648_q5v22e_default_video_hd.so	35212	a9d25c60ec4913f1cefd460dd5f7663edca0e7a2f9137a32235eeb6c0cb2310f	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5648_q5v22e_preview.so	35204	d05092e8ef23c1bc280c95424da971bf5de53df5c8672512dc11bfe4ab20e6e4	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5648_q5v22e_snapshot.so	35204	f3c43e8a9a2dcef28a2e2440f55579fd9cce42f9dce2f41151507f3c1d82c495	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5648_q5v22e_zsl.so	35200	cd4724e6d0babaf0b7016347ea9561331c5039eb039fb77841969b1381951a2f	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5670_30010a3_common.so	55956	cc8635420667031ebacba2d15f02f806a9b987cd811c069b258f59117b0be993	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5670_30010a3_default_video.so	35212	88e0ab6599c489928038eb6b9efb7a4e3007b2cf6dcf7e5057cd9d30fffc341f	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5670_30010a3_hfr_120fps.so	35208	87a5807562695ce2334b0676a8cedcf2e950797197010bf46a78da373dbc3f1e	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5670_30010a3_hfr_60fps.so	35208	b5cf3f243b889b60e23f46910495b8c4a54124b4709c23451e1e8b4626af33b2	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5670_30010a3_hfr_90fps.so	35208	9d9457acae06dfdc0c408ef25723aeed9d24aa51223683a1e3aaee2e9f131ebe	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5670_30010a3_liveshot.so	35204	2ab53916495f4ef187695320abcb19d67923de58092dd874dde90d4b345390e1	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5670_30010a3_preview.so	35204	1c2df32371a198a3a79fa7b48c9dac73868a7b37df1b696b7ec04784d24f0cdb	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5670_30010a3_snapshot.so	35204	bbc689171b150c66c9a37fb5f57814fb795228968a303ba77117870887f3e9cc	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5670_30010a3_video_hd.so	35204	37b424ca8685204bc575a4fd9e6487e518dd66ea890671abd3b6d94adbe2f6c3	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5670_30010a3_zsl.so	35200	a70c932bafac9643430bc2a8c79720d02dbb5921e42f1cbf10548bebcadf7e4d	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5670_q5v41b_common.so	55956	d26e973fcdccd48ae7d13aa4c33a961129d4e4b2a2526a0cf16c59f46cfa07b8	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5670_q5v41b_default_video.so	35208	f4462218ff2b453fe17020fe36a597bab4e2356f046b88ff25c354ed28fb815e	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5670_q5v41b_hfr_120fps.so	35208	9d1bb51e26157919d991141324489f75596c0871cb915e5bbf7e69827d9b4fbb	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5670_q5v41b_hfr_60fps.so	35204	3cb6861049786e32e7a11271264f5e6da8c4f3238d594a5233d7190e0b935ae0	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5670_q5v41b_hfr_90fps.so	35204	e573e47745d21aa663116cc5873e975a9a870d3860957bc62f32cfa989de15fa	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5670_q5v41b_liveshot.so	35204	2724c405a7a0d0baaf4d4bfd36a10a36e734fe8ded0ffcb0c2e88e9309e82fc0	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5670_q5v41b_preview.so	35204	629ca13291095f716559142ead66a4a3f75d5f2206032e0114addf748336f9fc	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5670_q5v41b_snapshot.so	35204	7bfaf5f0576e524677a83546b18b04c8e9c12451ba8dd03085c7af8ecac9a136	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5670_q5v41b_video_hd.so	35204	92a22e9b3802ae766e1bedae88d2480dd7743075a0c4d03eca02e3f733e9f731	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5670_q5v41b_zsl.so	35200	de091947258907bf8d31301204d0cd7772656c0fff14089df72bef5eaa5cc061	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5670_qc700_common.so	55952	07bc730c25924c2c0af682247d4bee26decac3445ce916b2add6328667b36bb8	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5670_qc700_default_video.so	35208	8ccf27b102919b6c9e18a714a1aa106ce411ff0d6a811a9ead82d26e7691ba1d	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5670_qc700_hfr_120fps.so	35204	57ec933e2ca9b49b1871d9de538fa3d7825d533960c0fcb9a0028fd13df174eb	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5670_qc700_hfr_60fps.so	35204	de788dcb1a5f448f4745b5e77e59a97e82aae2ab3a5f546cb035a3b8bff8a4a5	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5670_qc700_hfr_90fps.so	35204	5eb57afb60be0d6075ba27d4b77dc6544ca6004409a9a80981ab14743f7602ef	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5670_qc700_liveshot.so	35204	8added0178917e2aa597b0044b100ac31313faaeac4be5411ed2859d23c59ae5	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5670_qc700_preview.so	35204	8eaace249d88e1c0696eaf6992d601135d5f19719f472a814ec5e23354e88910	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5670_qc700_snapshot.so	35204	3eb8b1590a410330147de08c7565464a4565c872a5b7ad25fc93616435430c11	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5670_qc700_video_hd.so	35204	71f641acce8b6d860cea0cda03ec105876506bcf2baa15282f558ccd0538ec65	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov5670_qc700_zsl.so	35200	e6dfbcaed2f8ccf58ef59dd37e51a7a173477a8266684d8739faabe5265549a8	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8825_common.so	55948	e5a4fe59374ed0104a05a618e2382d8a0cb4dffaa9dff860ab3c6ab38409de3f	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8825_default_video.so	35204	2a830d67a7f96ba445a58544d9f8bf7537971f496a44b19c852f99ecf332a61e	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8825_hfr_120fps.so	35200	7930c188c8d340471135d8bf0efd7df2417a1326f1d9f65152dcde430f7cf7c9	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8825_hfr_60fps.so	35200	93a4928e6eb334e29869918fecfed6efcca6e1578c2399cda9870f92d77c2857	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8825_hfr_90fps.so	35200	baecb2808ed0a22f93c9d146ea865571ddd054b7316e6e52b4cb22a0202457d3	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8825_liveshot.so	35196	e1b82fd788e0eb88240c916fe8b62a7b313bde5f595c5f84849703dd18a8065e	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8825_liveshot_hd.so	35200	af8fb9dafc99730d426d1951621fbc98ff686b8c333079d0a5cbe3248bf9ca6b	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8825_preview.so	35196	b0ee83bfefca7e96eae6f87ba350736aeded05b6ae1be8a0b688a0d24c500b1e	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8825_preview_hd.so	35200	678beb6d86a46dcb7097f414fabc906aa78ded69250efa47192aab2f6ce5fa7f	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8825_snapshot.so	35196	a731960a06e48fbeb534f53ee54eba37b686cc7cad057e4cf65a89f0afe4e93f	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8825_snapshot_hd.so	35200	71a831af02d1ea844daad641eb9e0ae4eec037a3c4388f53b92ed8832fc81ba0	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8825_video_hd.so	35196	4de4aaabd484561f542b8672bcce486701ab360a943debd5be9405e2861a926d	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8825_zsl.so	35192	1095c6b81100a4e31be3a6805a3d46d5c16ed7d1863eee4a9ca53eb38b5cf030	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8858_common.so	55948	76ee0c11fa43dfb84aabef1182dae5bf3c9e7a9e02d61102463bbd50453064f8	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8858_default_video.so	35204	6806826c6b6bdab1cb631da74db70b9dd48aa8f774ffbed401407596ef7c845b	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8858_hfr_120fps.so	35200	31fa0e5d1cb21ce0d53889c72de5e3fce2b1b4c35230809ff3b4a155c05c6e50	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8858_hfr_60fps.so	35200	1e6f6fa251d2b876cc84666dd5b7de8bc2a1470dc1472a132c7dadf3a699978f	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8858_hfr_90fps.so	35200	31f757e812d4c2737156ffa8672a55f676e8863e5b20ac3305c2872f33f0d268	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8858_liveshot.so	35196	c56fd07d4283bfa0ff11933cebfd4033ce5467c21ea44f27130ebdc9b31b3d87	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8858_preview.so	35196	713665073671bc380f8b4821ca75ba7ece7e28b5ca4a9f0dfc5a6269461bfc6a	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8858_q8v19w_common.so	55956	871764776df0966951dcf2c083915c0829d49e528a38936cca78996ec363d801	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8858_q8v19w_default_video.so	35208	7f2d5666dafc28fcca030d012b38995869bf356bc59c14dcbf1700804e109a14	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8858_q8v19w_hfr_120fps.so	35208	9c2fd3242a1724bb595aa838586902fb9a9c63cc77284329c299c26c1bfed9cb	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8858_q8v19w_hfr_60fps.so	35204	e3138b472f8631a59321c133ece9dc24335be51b66c99d85dca845276d59d691	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8858_q8v19w_hfr_90fps.so	35204	8eb9e062763c6cda61af38732f7497e58b4887ef4594147a4dd0342653b6e795	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8858_q8v19w_liveshot.so	35204	09edbf909504ae0bda20fbdaee12344922401a8f8998897f87731b06ba251201	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8858_q8v19w_preview.so	35204	8bed388c59b78a60fe287e1cbc194f95a405d16cfe78c4bb33c31ca9ad8222ba	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8858_q8v19w_snapshot.so	35204	aa5f6d553da1206fd335ed51acc7f9ab0bf3e166d02d284d57c17cb378c11df3	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8858_q8v19w_video_nonHD.so	35208	3837ed28af90bc8c09592b864d5195691f099209a90a60453415fe3acba19a42	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8858_q8v19w_zsl.so	35200	6f99e348360c51be22206cf9606b0f037df40118c79e1ba418259116fc68035c	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8858_q8v19w_zsl_30.so	35204	4d3978804c6f7fea63c0caae7679cf9538bea7d0ffe662fad2a902f934017750	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8858_snapshot.so	35196	87dff913e89552b4916ca3bc79e96b7d2619276ea37c4d3d61468c0a469c035c	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8865_q8v18a_common.so	55956	aa74159b20dde38b22f5310dc5ee05b646024c2eba3e15f436a3a3c258f7795d	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8865_q8v18a_default_video.so	35208	4315479029830d648b49559c585efd1614ade21db48e91fe942faf9bccf914ce	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8865_q8v18a_hfr_120fps.so	35208	575c79a952d458611d40c704b18526547c3615326c9a0aec84df145835d0fdc8	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8865_q8v18a_hfr_60fps.so	35204	fadf808ccd6f033a6ae76cf1a220f2883cf7a289639a373558471e46a3e501d4	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8865_q8v18a_hfr_90fps.so	35204	aeb7b1b2710338d2195dd0af8cf70e13fca2f6faea14e08ee77b59f10dbacea4	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8865_q8v18a_liveshot.so	35204	bd0f40f9aee9725253e4b6acbd53ccf10831195b860ee6e01328f0545000f617	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8865_q8v18a_preview.so	35204	f2873d816054d276f31b622c834011eb32bb1de706d6e00efb338c2e23871fff	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8865_q8v18a_snapshot.so	35204	7a9d1b60aa2bb59eb3c5ffd235d4730db8dbe3c73621eea015e0583ddc65faad	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8865_q8v18a_video_hd.so	35204	1a37d99fa776a281ec4db0d5bf7bac163877a9cd63f78e264bf7810b88e3aea3	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov8865_q8v18a_zsl.so	35200	b9fa048dab73a5e4da3e3d45fc92e98758e486abc966d624c8199fc18b517d46	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov9724_common.so	55948	0b9dc8264702daa2bbf532b69e1a68db6e3b3fb1a34b5d366b19e2a35f1e1540	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov9724_default_video.so	35204	defdd0fc2d3d4b3eb82d8c7a799e46b9686a5a34e717ad635bedd34246af4b76	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov9724_liveshot.so	35196	b89873e1989c11da51226aa0ce60a1e6ba57904b3477e90f059e1394e5ff01ad	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_ov9724_preview.so	35196	dc77eea31b0a676264885992ab03ff841aa8f142dfa3582110de2b298f4734c0	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_s5k3l1yx_common.so	55948	8415a8930adbe00387556f502622cb6cd0395a07e0b7e77fa07f984a7f62a641	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_s5k3l1yx_default_video.so	35204	7de834e2a9d988cde6fd9d880f69882e4902dbda12bc59a16770ce50f8e13ca2	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_s5k3l1yx_hfr_120fps.so	35200	26836257fb7fdd36ad8f0f1430a98f823d26a33a4b981dda9d96d53eb91aaefa	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_s5k3l1yx_hfr_60fps.so	35200	459021343cd4e516c93ae53b7a94038789f09c1976f7f3635f7455ef6894ca75	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_s5k3l1yx_hfr_90fps.so	35200	896d29596e6decf5af8f985a87ae16ba93141656ee84a1b9779100d16a13c314	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_s5k3l1yx_liveshot.so	35200	114786e0afa0959166dbcdbccb46dae1c034678a64ed2621cac60f7080789281	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_s5k3l1yx_preview.so	35200	47a6c8cef4d7c1dc362d9c72a85c2600ef290de4a3df93719bfe73b130f9cfa9	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_s5k3l1yx_snapshot.so	35200	3daf3f2fedbcae13468223c6f4988dc7ba1ab318cb2b8e02cc12fd75e7ba607d	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_s5k3l1yx_video_hd.so	35200	c420dbbcbba9b205f39f7151fd55f7ca7a7aae8e4edb42d2ac93a9bfbd6ea749	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_s5k3l1yx_zsl.so	35196	a70ea5cc1b6ed39827a91a8da07e6262ed3a101af2daadb76dfa6cd554b83e80	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_s5k3m2xm_common.so	55948	05d060bae17fab7b52b6e88df759c0cf9cd011af0c2f20412874eabfc0a48905	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_s5k3m2xm_default_video.so	35204	6746cfe2a3098908bc6fa4e0f8836a249d3e0d841d00fbdde854cd9469fa7aa0	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_s5k3m2xm_hfr_120.so	35200	f62dd99e67cf4700f781a631dfcbda0e7432de98a13e946c27124263036f6601	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_s5k3m2xm_hfr_60.so	35196	1586c7bf4d5ac70f95f131700d884716a48f22629b05c43356c61f1c26622339	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_s5k3m2xm_hfr_90.so	35196	22c0d929c2055ffb836dca3c113e70d674d56279ac47c25aa0e5fac745c1dc59	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_s5k3m2xm_liveshot.so	35200	dddcca41e38fa28b55afe7d011bb1316ec1e98773ce00c3c4af92a54da5b0137	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_s5k3m2xm_preview.so	35200	38032e58c974f42db919e33fc616fc43605e8eb9b2f958473bcaf6f4874a8fdf	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_s5k3m2xm_snapshot.so	35200	5f3b46bb50a8ba9089f9ec5cc717c4f3f77d82c122d8a69b43356b165045d33d	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_skuab_shinetech_gc0339_common.so	55964	bb6749f8e9fcd67c367e8c0d2e130b06fd90f3a75525b8c5599b83e05ce6cbf1	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_skuab_shinetech_gc0339_default_video.so	35220	149d2fc46035ba0eac91296e3f969c2fd286ab25bc5c2b9195c93d8965fe0624	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_skuab_shinetech_gc0339_liveshot.so	35212	a4f3551c1424ecaacf4cc58f0d988b4328e5dad5cca2e6e60c0ac82a448b21be	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_skuab_shinetech_gc0339_preview.so	35212	6011a9be6be51c174c4cf5cca20b5f6bdb3b10a902971a5d94156d3bbe424c82	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_skuab_shinetech_gc0339_snapshot.so	35212	a7240a82bd74b297d932e00bb33115cb3641e16200331b5f7086e5655f67be57	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_skuab_shinetech_gc0339_zsl.so	35208	bc882c2784f3b4c56d6e89a608750ee0e30919fa1c2ebb300150fd4998ec8679	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_skuf_ov12830_p12v01c_common.so	55960	73f22eab81cab8cb8e41f9c7c3ba3235a0be643da72811983b413b7c1b655e15	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_skuf_ov12830_p12v01c_default_video.so	35216	45599555927e217f7b9d36425536bcc48ee29525e09d57fa6599a61ecef0fc32	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_skuf_ov12830_p12v01c_hfr_120fps.so	35212	8167aa9c6f5124d76427b7a22aef9f5364ff7158d191dd17c09c707abc400c3a	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_skuf_ov12830_p12v01c_hfr_60fps.so	35212	988f7aac490500226b393c898f331bca67ff1a271e3d7b8fae91544e7bb14e00	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_skuf_ov12830_p12v01c_hfr_90fps.so	35212	fcea3be38f189c3dac945b5e0878fc814126d5b28249119ff4fe3e3a40184022	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_skuf_ov12830_p12v01c_preview.so	35212	7acc9fcb9fa79a78d913f1c0d926939b62fed67ea91e744a3dfcf84faf17bf7b	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_skuf_ov12830_p12v01c_snapshot.so	35212	9cf32476c0e5abc88edf359b11acea912d3aabaa64021b256f755ed40a4bb5d9	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_skuf_ov12830_p12v01c_video_hd.so	35212	de55865719d87d2cea8a987ab442939bad41e6076cc1814d17cd2413ff340675	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_skuf_ov12830_p12v01c_zsl.so	35208	47b3434a5159ea912e6977d881d227dd168ab5124427a12b462d5e92cd62c6ef	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_skuf_ov5648_p5v23c_common.so	55960	45dec0be6db30ffe6973a57db27ea518d4313f18c475c09379f532806b61ac0a	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_skuf_ov5648_p5v23c_default_video.so	35216	a8fd2a372daa551cbd0b77e2a4b5798fe1fddd978e32a705b259102b60b16406	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_skuf_ov5648_p5v23c_preview.so	35208	76fd39933d475b64e259710e73a3bd77e9e810e985f0615b337f1b29e91473ab	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libchromatix_skuf_ov5648_p5v23c_snapshot.so	35208	f896453aec7a2ab7629a6bf82135676c53c11806149abf8f0ec9d51b1c773804	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libfastcvopt.so	2823828	86e9639638e1f432e7518a61ef578763e51632cfe8982076112937ebf10a133d	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera2_c2d_module.so	58580	1849b9ef4d7161ce52f6c29da8f7721876f54c6241ceb637a6c497dd31986932	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera2_cpp_module.so	103616	395b74bd284f93bef3f053f0fc2ffa36a7d428d0ffcab374904c705abc01fee9	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera2_frame_algorithm.so	18000	299ee611e6c9345c9516a8f13b01a3af91bc2c2670c84cce875db74048503b82	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera2_iface_modules.so	33988	cf607fb9bc5cac6a5a8cb1f5f6d591d545d616a74e0e3138ae952407b7e84b9d	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera2_imglib_modules.so	206564	7d8c9cbfdaf81451c519e37f77135b903864e1d24cd0a54b8fafe6217e7b9d1a	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera2_is.so	46660	af4e0ffbc5ef775170f7c472510498eeddd710b8024e1996c341f264f2c0b823	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera2_isp_modules.so	628992	1cb537414a38ec87d93e86532c4e6f40dbad6f2eeaaf5abfd890cb648bc066db	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera2_pproc_modules.so	42180	1e98763427b8f09b22473dae37336cfcc0e989a67ab4907c3ac8a397244f16a3	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera2_q3a_core.so	306888	88c43fd57f5342735612cf694dd0738f79089ca9eca899372833bd25c021d2fc	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera2_sensor_modules.so	183544	2dfe67d7997c3caf462217be90f29258f59f1d90a81fe8a16e77228fba046f8b	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera2_stats_algorithm.so	273720	700d5dd6d3ea2b2faef49a8b2a3e9c265063f03c40d4eb3a350fcbcf441867ee	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera2_stats_modules.so	177892	f853eb124517c5772bdabeb1769e7cffc1dd3b4a7e91cea2afb0b30fe967dde3	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera2_vpe_module.so	43200	c3cad8dbbd48827f7695b07d95bf7ad7666d07da28c6fc76e66fb133e33688ce	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera2_wnr_module.so	5212	8c97401ca48e8bdfbb2d7a21bcb453e815e0c0ddf766fe8d6149c8719cd3dbe3	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_S5K4E1_13P1BA.so	18172	74d2bf747ff66543023d43c17c1949da8d213df82e22af59ea1239835ce659e5	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_SKUAA_ST_gc0339.so	17428	a82745b79792ddaf739ea81537b7004817b955a28c1d8b8fac74e818c93ded85	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_SKUAB_ST_s5k4e1.so	18316	5a9ed182b5af94b0d63e0057153d3453969e008a66c1bcda0f67f75e7f034926	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_dw9761b_eeprom.so	22128	64bbbbb2f3839fef09c1e6858a18192f97f4f1fb4406702363520532de2d27a6	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_faceproc.so	1234160	8190545a0b6a13821fdb4d73402a9c0fc30d33b384009d21efb5b4e89defba90	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_gc0310.so	14652	8951fa6bc12e4e32d22cf5c683198ac6e79e3713d9e736c69d201f21bf40fffd	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_hdr_gb_lib.so	112508	871cf20738b27fc4d8d62feb67a490b503f49255be5f5e1fdfe1abf887fcd880	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_hdr_lib.so	50956	17335e960e5bbd64d1dd7df616d57a0b623cd073cd9f7d2c35e2ea556098d59f	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_hi256.so	14704	f23f60d41b04ea5aac60605ff040c498df35b29e34e7811046745854fb4f02a0	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_imglib.so	125392	fc895af83af7eaa66e28331fd9934e3f1918c636603b1906acba0fe8116ebeb3	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_imx132.so	18448	0c78c77f3742c809c4208638a7ec6e4e8e071c7d94a62f8143b3578fb2284a5b	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_imx134.so	21296	735ec64917c0da2ddcd068d86546cb7a0631bfa5669b6875b0f8d6ddcfa6ae71	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_imx135.so	27072	9f1559386a22bf97437f0523b39684f7ef6e06a5bd654c57502802c3a3dc0ef8	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_imx214.so	27760	aff9fd7db4adbb8d6b7922d599363c1e0037f8f6190288bd401a9a8faa1ec408	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_mt9m114.so	14652	5278cacd404842aa3989ca23a3b7818951780372a31d51c4fa562e39141c2489	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_ofilm_oty5f03_eeprom.so	18036	58be1fe8fca2e70a8f3a7758490e2d22ef081baf8f8426054bd7979d05261344	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_ov13850.so	21664	28f819a3222e95193257faf2520d9b47aee14ea6a59d18c24b9659229720d34c	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_ov13850_q13v06k.so	21660	3d03f0cc8c9453b5b9cc4ac0d800fad4e0a5dfae4daa8102d03c1d2a2869d815	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_ov16825.so	20812	d156d8c4e4fce6307063c5df085f6af20879df23a3c175e0b646087c68377c4c	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_ov2680.so	17924	355f7ddc64e8c3c99a78b89a11c76c112612a0a6fa65853cf6e6328c779f1293	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_ov2680_5987fhq.so	17940	8c137a56f68dc1038ffe76442ff5519627bd7d9b26a51ff161379e66771bf1fa	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_ov2680_cht852b.so	17940	adea5889ec75c9cd5df702fa1d84b0f9f5133de857c8923199e58ba8ed232969	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_ov2720.so	20144	77c4711384b01b1dbf749a8ed00d2c7a2a0a3ec9555e6e9f8ed44b4969165299	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_ov5645.so	14736	f4937e62c599091d0f332b912b694db985b77658dd4f33bf42734e84081c926c	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_ov5648_oty5f03.so	19108	af44267939d201b8a93bfa96134ca28021f967e7ff0c12bfef7bdea7d872abe0	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_ov5648_p5v18g.so	19100	473335f3b96e38691a11a436d7f7967e17aa690ade3c0f46f05eaf1f95321161	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_ov5648_q5v22e.so	18988	d3b1295ea385bff1e6dc0166ebf486080e9aae3663be3a53062d4b1aa125995a	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_ov5670_30010a3.so	20380	7b2555b6e34b8869149a25934f1c1a260922940e11c525b62be8f3cca0781ba5	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_ov5670_q5v41b.so	20672	4cd7a2daf4e1215f20e27bf07880fa8ab29b21850575ccfddcb5a31be3255786	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_ov5670_qc700.so	19720	3f46602048f542ec9a013cf6f9ccf75c45a55956df161b3afb654f4845753286	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_ov7695.so	14660	b65e1c542214ed1f4db1424d9fa28928f3c13c0382f7004e8ba3738c040327ee	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_ov8825.so	22908	3212df58df76c2fe5e118d86a77aff7dff48b805d5424f0d287af7a6523351c9	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_ov8858.so	23988	eb9fa3c4b1dbbecb853f44e46ed40e7ee5a4664b76b38315a33ba91ed94e212c	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_ov8858_q8v19w.so	34264	42f67d9bb7b8c25a93fd770bd595d9a3512a873f93c837bf3509b01dd5c3a3a2	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_ov8858_q8v19w_30.so	34264	ae0a695598964eb0f5eaaf8e60d8dacb4d7f3bec5a7ee9f9b8b4fa9b029953a8	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_ov8865_q8v18a.so	26068	b3a76d029a9c819e88893859cb2608daca1543c82627ddadcb363653087a2b81	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_ov9724.so	17236	63e5b8806551d4a5d7235818bc50ef62cf9feea32c0fe109e24c327d2eadf452	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_pdaf.so	55376	f82537857103c3c454951ae54e3a2f8941f3449bd529181253b5d25f70237bf3	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_pdafcamif.so	39000	3f53cb8e19dc21fcc593b7d8db4db20be4d75036c964ee0a9566be6a4bd6aebc	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_s5k3l1yx.so	20264	831cb9d8df87096cda25fc172649248405a10cd4fd9cddfed1503ddf16b7c329	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_s5k3m2xm.so	24672	01cd929ffcbceca4f782cf408f2feb6bcb54032c0ae19bee39481aab9401e51f	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_skuab_shinetech_gc0339.so	17436	c1c7b9aa8bc6a921ceeb59563dd06511656b34fe8f058298a11c3c6aff728176	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_skuf_ov12830_p12v01c.so	20336	f962d48ad85d88c8a6db7d6ece62f5dd318627c4bff3609bf98658850397ea81	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_skuf_ov5648_p5v23c.so	19108	4cbfc0842bf8c61eb4695b018afea79ff7dc3f1a9391d366c59580ae7e9ac723	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_sonyimx135_eeprom.so	22132	d99dfe766c8af1fdc93e87bddaf611c6a8aa45109c7ca0b8603e847beb683d95	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_sp1628.so	14652	4930a6b8da9e9b9ee9301fd0ec84a472d38705593ac495b0ea5db3fed50949b7	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_sunny_ov8858_q8v19w_eeprom.so	18044	d6c340c213d91bbddfc54345faf6349686be27c8d1952e062b6d9f2311bdd61c	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_sunny_p12v01m_eeprom.so	18036	df0741e57f964ee88118e22bcf5370ff38e6b5ff56af7e0382e327486f8fe298	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_sunny_p5v23c_eeprom.so	18036	a506454e28bfb4faf1ac153a870ce8285288021f8baa55807afcaa01d7420531	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_sunny_q13v04b_eeprom.so	18036	d60b8cd5e1aa8e2bb8852fd7ec3857a2f2c2e3f8aee631b1c79b82b173197eae	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_sunny_q13v06k_eeprom.so	18036	9ce70860f83e2820962f993c1658f3b616104720f501dcda97914583925b35a9	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_sunny_q5v22e_eeprom.so	13940	7291f4d32c2c9cac6b42e7ba91d70c901e0805354b82197852deeef038f73649	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_sunny_q5v41b_eeprom.so	18036	8f70b931cffa9276179aec1cb99d61b9b114b984d3d9ca0a370864149d02043e	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_sunny_q8v18a_eeprom.so	18036	e7ce99b396005b26eb232c07d1582af95d06db1344217cb312f0cc4ca310da66	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_sunrise_pc0fe_eeprom.so	18036	e21b03ca5049d7f3fe84e9ea5e6283e7a100709a7b8d1c30b9180dae00aee8ea	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_tintless_algo.so	26192	0636931a84df5b6e598dcdc65076ddd2106a10e5208ce026f4e953fc209e5e93	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_tintless_bg_pca_algo.so	22100	51cb271655023a57559b98cb42d296479f4307f1e755db6f58b41cfdc13e7a73	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_truly_cm7700_eeprom.so	18036	bb686a6805e979ceaafb144d57fcdc8022f44d0fa995257dd06bd9b08b3b94a7	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmcamera_wavelet_lib.so	46680	96af2fc6c1dd336abcd9e7fee8d53cfdd7ad34e7456f4c81e1fdee73dab64db7	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmjpeg.so	145724	c5c09ff3005cca3f034f505f7466b9065603d5cae3d5ddf1b187b30c4efd6890	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libmmqjpeg_codec.so	161404	3d87605487189ae40647989200fdfc8f14d8fe15ac413b2eb93414943562889a	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/liboemcamera.so	63040	47c96d2a4b631d1c8a17fe6f81d1854e3cd7bc81c469dce6443099e2ff839bee	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib/libqomx_jpegdec.so	63100	4f95442ecb0f428f0db7403b1d2bc2572faac5c3df1f8850f0c343f86d2ba0e8	system_file	yes	vendor: only for the camera pane: mm-camera daemon, its modules and tuning
+camera	/system/vendor/lib/libqomx_jpegenc.so	112252	417c4a58847d152626cca98bef0f2e2513f79562f25041d7228e19bb55d846f0	system_file	yes	vendor: only for the camera pane: mm-camera daemon, its modules and tuning
+camera	/system/vendor/lib/libthermalclient.so	26460	ebed9b6035aeee02c4e405e6cf9124449e56f6840fe414c87ead52e56bfce624	system_file	yes	vendor: only for the camera pane: mm-camera daemon, its modules and tuning
+camera	/system/vendor/lib/libts_detected_face_hal.so	735744	d55138bedead0b7741f87a55e3480fb5e77a81c9f44f02e1156f30442a720a50	system_file	yes	vendor: only for the camera pane: mm-camera daemon, its modules and tuning
+camera	/system/vendor/lib/libts_face_beautify_hal.so	144176	c93802cc7ee9558160501881a1cc95cb98ac216049783160a52cd0c2fa6395a8	system_file	yes	vendor: only for the camera pane: mm-camera daemon, its modules and tuning
+camera	/system/vendor/lib64/libmmcamera2_frame_algorithm.so	18176	4600f05313c53dde27dc5d0d45d65933d7fa9a8b4f024d3f5795a6e762d8dd18	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib64/libmmcamera2_q3a_core.so	384896	45bd237862cff253edfe0a3e72133ab6d40b97a71f7828a3bf168bfcb7aa964b	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib64/libmmcamera2_stats_algorithm.so	100952	efef287b410dcf176d8f4439705c328ba9cee456e4c4e9c168dc6eeb47e5b301	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib64/libmmcamera_imx214.so	22256	17744a66a716befa443b944c80657ef6c9472c4c542f7c4e068b831bd42a3957	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib64/libmmcamera_ov16825.so	19216	746196cf219916d8a30ef5bd19d733805b01e463d3a8e138dfde52190fbf46e8	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib64/libmmcamera_ov7695.so	6904	60c6351ed4f222da78145bd5a9729dff70f5536d810dfcac45cccb6f60d4adc0	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib64/libmmcamera_ov8858.so	22496	3276907dc541850606d1a6cee2ec3c5fe930c9b2b6d45a2f660cde37bd7e5443	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib64/libmmcamera_ov8858_q8v19w.so	32792	15c8e290fd0d018fbfbe801ee36e69358d9255096471186538df02926606ec98	system_file	yes	vendor: loaded by the part above
+camera	/system/vendor/lib64/libthermalclient.so	22712	2d3b8c089ebc964960f5db525924129a9b8afb09615049e3734dec446c0ad23b	system_file	yes	vendor: only for the camera pane: mm-camera daemon, its modules and tuning

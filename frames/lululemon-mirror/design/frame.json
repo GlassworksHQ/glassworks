@@ -229,6 +229,7 @@
       }
     ]
   },
+  "recovery": "recovery.json",
   "render": "render.webp",
   "display": {
     "width": 1080,
