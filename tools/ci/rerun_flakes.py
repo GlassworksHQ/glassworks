@@ -60,6 +60,8 @@ TEST_FAILED = re.compile(r'^\S[^\n]* > [^\n]* FAILED\n([^\n]*)', re.M)
 STEP = re.compile(r'^##\[group\]Run ', re.M)
 END_OF_HEADER = re.compile(r'^##\[endgroup\]', re.M)
 STEP_FAILED = re.compile(r'^##\[error\]Process completed with exit code \d+', re.M)
+# Gradle's account of one failure; the next "* Try:" ends it.
+GRADLE_FAILURE = re.compile(r'^\* What went wrong:$', re.M)
 # Steps that retry themselves (pr.yml's site build, .github/actions/apt-install): only their last try counts.
 OWN_RETRY = re.compile(r"Building once more\.|Not from the image's package lists alone; updating them\.")
 
@@ -74,30 +76,35 @@ def clean(log):
     return TIMESTAMP.sub('', ANSI.sub('', log))
 
 
-def failing_step(text):
-    """The output of the step that failed, after its own last retry; None when the log shows no failed step."""
-    failed = STEP_FAILED.search(text)
-    if not failed:
-        return None
-    starts = [m.start() for m in STEP.finditer(text, 0, failed.start())]
-    start = starts[-1] if starts else 0
-    header = END_OF_HEADER.search(text, start, failed.start())
-    out = text[header.end() if header else start:failed.start()]
-    retries = list(OWN_RETRY.finditer(out))
-    return out[retries[-1].end():] if retries else out
+def failed_steps(text):
+    """The output of each step that failed, after its own last retry. Usually one; more when a step continues on error or
+    a later step runs on failure."""
+    outs, start_from = [], 0
+    for failed in STEP_FAILED.finditer(text):
+        starts = [m.start() for m in STEP.finditer(text, start_from, failed.start())]
+        start = starts[-1] if starts else start_from
+        header = END_OF_HEADER.search(text, start, failed.start())
+        out = text[header.end() if header else start:failed.start()]
+        retries = list(OWN_RETRY.finditer(out))
+        outs.append(out[retries[-1].end():] if retries else out)
+        start_from = failed.end()
+    return outs
 
 
-def download_failure(log):
-    """What the log says failed to download ('<kind>: <line>'), or None when it shows no download failure or also shows
-    any other failure (a test, a compile error, a build script error). Only the failed step's output counts, from after
-    its own last retry: a download that an earlier step got past, or a first try the step retried, says nothing."""
-    text = failing_step(clean(log))
-    if text is None:
-        return None
+def step_download_failure(text):
+    """'<kind>: <line>' when this failed step failed on a download and on nothing else, else None."""
     if any(p.search(text) for p in OTHER_FAILURE):
         return None
     if any('MavenArtifactFetcher' not in m.group(1) for m in TEST_FAILED.finditer(text)):
         return None
+    # Gradle says what went wrong once per failure (several with --continue or parallel tasks). Each must be a download,
+    # or a test task's "There were failing tests", whose tests the line above has judged.
+    for block in GRADLE_FAILURE.split(text)[1:]:
+        block = block.split('* Try:', 1)[0]
+        if 'There were failing tests' in block:
+            continue
+        if not any(pattern.search(block) for _, pattern in DOWNLOAD):
+            return None
     for kind, pattern in DOWNLOAD:
         m = pattern.search(text)
         if m:
@@ -106,6 +113,18 @@ def download_failure(log):
             line = text[start:end if end >= 0 else len(text)]
             return f"{kind}: {IPV4.sub('<ip>', line.strip(' >'))[:160]}"
     return None
+
+
+def download_failure(log):
+    """What the log says failed to download ('<kind>: <line>'), or None unless every step that failed failed on a
+    download and on nothing else (a test, a compile error, another Gradle task, a build script error). Only the failed
+    steps' output counts, from after a step's own last retry: a download that an earlier step got past, or a first try
+    the step retried, says nothing. A log without a failed step never reruns."""
+    steps = failed_steps(clean(log))
+    reasons = [step_download_failure(out) for out in steps]
+    if not reasons or None in reasons:
+        return None
+    return reasons[0]
 
 
 def decide(failed):

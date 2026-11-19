@@ -157,10 +157,11 @@ retry inside the job didn't help. A rerun on a fresh runner passed every time: 5
 and 19, which were 5 of the 13 red `app` attempts.
 
 So `.github/workflows/rerun-download-flakes.yml` follows `PR checks`. When a run's first attempt fails, it reads each
-failed job's log with `tools/ci/rerun_flakes.py`: only the output of the step that failed (up to GitHub's
+failed job's log with `tools/ci/rerun_flakes.py`: only the output of the steps that failed (each up to GitHub's
 `##[error]Process completed with exit code …`), and in a step that retries itself (the site's build, apt-install), only
-its last try. If every failed job's step shows a download failure, it reruns the failed jobs once
-(`gh run rerun --failed`). It writes one line in its job summary and posts nothing on the PR.
+its last try. Every failed step must show a download failure and nothing else, and when Gradle says what went wrong,
+each of its `* What went wrong:` blocks must be a download, or a test task's failing tests that all failed on
+Robolectric's fetch. If every failed job passes that, it reruns the failed jobs once (`gh run rerun --failed`). It writes one line in its job summary and posts nothing on the PR.
 
 | A download failure | What the log says |
 |---|---|

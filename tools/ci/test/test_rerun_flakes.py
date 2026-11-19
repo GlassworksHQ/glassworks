@@ -131,6 +131,33 @@ class DownloadFailure(unittest.TestCase):
         update = log("Not from the image's package lists alone; updating them.", "E: Package 'ffmpeg' has no installation candidate")
         self.assertIsNone(df(APT_503, update, step='bash apt-install'))
 
+    def test_every_gradle_failure_in_the_step_must_be_a_download(self):
+        # Gradle's tail after a Robolectric fetch: the test task failed on failing tests, all of them the fetch.
+        tail = log('FAILURE: Build failed with an exception.', '* What went wrong:',
+                   "Execution failed for task ':aqara-s1-plus-wall-base:testDebugUnitTest'.",
+                   '> There were failing tests. See the report at: file:///home/runner/work/x/build/reports/tests/index.html',
+                   '* Try:', '> Run with --stacktrace option to get the stack trace.')
+        self.assertIsNotNone(df(ROBOLECTRIC, tail))
+        # Parallel tasks: the fetch, and another task that failed on its own (CodeRabbit, #632).
+        other = log('> Task :core:processResources FAILED', 'FAILURE: Build completed with 2 failures.',
+                    '1: Task failed with an exception.', '* What went wrong:',
+                    "Execution failed for task ':aqara-s1-plus-wall-base:testDebugUnitTest'.", '> There were failing tests.',
+                    '* Try:', '> Run with --stacktrace option to get the stack trace.',
+                    '2: Task failed with an exception.', '* What went wrong:',
+                    "Execution failed for task ':core:processResources'.",
+                    '> Entry config.json is a duplicate but no duplicate handling strategy has been set.',
+                    '* Try:', '> Run with --stacktrace option to get the stack trace.')
+        self.assertIsNone(df(ROBOLECTRIC, other))
+        # A configuration failure on a 404, as Gradle reports it.
+        self.assertIsNotNone(df(log('* What went wrong:'), PORTAL_404, log('* Try:')))
+
+    def test_every_failed_step_must_be_a_download(self):
+        # A step that continues on error failed on a download; a later step failed on a test (CodeRabbit, #632).
+        second = log('##[group]Run ./gradlew --no-daemon test', '##[endgroup]') + TEST_FAILURE
+        first_failed = PORTAL_404 + log('##[error]Process completed with exit code 1.')
+        self.assertIsNone(df(first_failed, second))
+        self.assertIsNotNone(df(first_failed, log('##[group]Run ./gradlew lint', '##[endgroup]'), CENTRAL_JAR_404))
+
     def test_only_the_step_that_failed_counts(self):
         # An earlier step got past a download (and printed it); the step that failed failed on something else.
         earlier = log('##[group]Run npm ci', 'npm ci', '##[endgroup]', 'npm warn ECONNRESET, retrying',
