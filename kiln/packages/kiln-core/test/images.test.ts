@@ -1,9 +1,9 @@
 // Image recipes are data from pull requests: Kiln refuses an unknown step, a file without its hash,
 // a write before every file is checked, and any attempt to name, skip or move Kiln's safety steps.
 import { describe, expect, it } from 'vitest';
-import { SAFETY_STEPS, assertImages, imageFromLink, plan, validateImage, writtenAsIs, type FrameAccess, type ImageRecipe, type ImageStep } from '../src/images';
+import { SAFETY_STEPS, assertImages, imageFromLink, plan, validateImage, wifiStep, writtenAsIs, type FrameAccess, type ImageRecipe, type ImageStep } from '../src/images';
 
-const FRAME: FrameAccess = { steps: ['download', 'patch', 'fastboot', 'flash', 'restart', 'first-start'], partitions: ['system', 'userdata'] };
+const FRAME: FrameAccess = { steps: ['download', 'patch', 'fastboot', 'flash', 'restart', 'first-start', 'wifi', 'wifi-on'], partitions: ['system', 'userdata'] };
 const H = 'a'.repeat(64);
 const link = (name: string) => ({ name, href: `https://example.com/${name}` });
 const file = (name: string) => ({ name, url: `https://example.com/r/${name}`, refract: `demo/r1/${name}`, size: 4096, sha256: H });
@@ -136,5 +136,67 @@ describe('?image=<id>', () => {
     expect(imageFromLink(images, '')).toBeUndefined();
     expect(imageFromLink(images, '?image=nope')).toBeUndefined();
     expect(imageFromLink(images, '?image=glassworks')).toBeUndefined();
+  });
+});
+
+describe('the Wi-Fi steps', () => {
+  /** A community image that saves the person's network and switches Wi-Fi on with its own published key. */
+  const withWifi = (o: Partial<ImageRecipe> = {}): ImageRecipe => community({
+    files: [file('system.img'), file('userdata.img'), file('adbkey')],
+    steps: [
+      { do: 'download', file: 'system.img' }, { do: 'download', file: 'userdata.img' }, { do: 'download', file: 'adbkey' }, { do: 'fastboot' },
+      { do: 'wifi', file: 'userdata.img', template: 'system.img', makes: 'userdata+wifi' },
+      { do: 'flash', partition: 'system', file: 'system.img' }, { do: 'flash', partition: 'userdata', file: 'userdata+wifi' },
+      { do: 'restart' }, { do: 'wifi-on', key: 'adbkey' },
+    ],
+    ...o,
+  });
+
+  it('a community image may save the network and switch Wi-Fi on, inside Kiln\'s safety steps', () => {
+    expect(validateImage(withWifi(), FRAME)).toEqual([]);
+    expect(plan(withWifi()).map((s) => s.do)).toEqual(['download', 'download', 'download', 'fastboot', 'checks', 'backup', 'confirm',
+      'wifi', 'flash', 'flash', 'restart', 'wifi-on', 'way-back']);
+    expect(wifiStep(withWifi(), 'userdata+wifi')?.file).toBe('userdata.img');
+    expect(wifiStep(withWifi(), 'userdata.img')).toBeUndefined();
+  });
+
+  it('wifi takes only checked files and names one new file; no extra fields, so it can\'t be told to write anything else', () => {
+    const steps = withWifi().steps;
+    const at = (i: number, step: unknown) => withWifi({ steps: steps.map((s, k) => (k === i ? step : s)) as ImageStep[] });
+    expect(validateImage(at(4, { do: 'wifi', file: 'userdata.img', template: 'system.img', makes: 'userdata+wifi', path: '/system/build.prop' }), FRAME))
+      .toContain('step 5: "wifi" takes no path');
+    expect(validateImage(at(4, { do: 'wifi', file: 'nope.img', template: 'system.img', makes: 'userdata+wifi' }), FRAME)).toContain('step 5: wifi needs nope.img downloaded first');
+    expect(validateImage(at(4, { do: 'wifi', file: 'userdata.img', template: 'system.img', makes: 'userdata.img' }), FRAME)).toContain('step 5: wifi must name a new file it makes');
+    expect(validateImage(at(4, { do: 'wifi', file: 'userdata.img', template: 'system.img', makes: '' }), FRAME)).toContain('step 5: wifi must name a new file it makes');
+    // before fastboot it would run before Kiln's warning, where the install skips it: refused
+    const early = withWifi({ steps: [steps[0]!, steps[1]!, steps[2]!, steps[4]!, steps[3]!, ...steps.slice(5)] });
+    expect(validateImage(early, FRAME)).toContain('step 4: wifi comes after fastboot and before restart');
+  });
+
+  it('wifi-on only after the restart, only after a wifi step, only with a checked key, and takes no command', () => {
+    const steps = withWifi().steps;
+    expect(validateImage(withWifi({ steps: [...steps.slice(0, 7), { do: 'wifi-on', key: 'adbkey' }, steps[7]!] }), FRAME)).toContain('step 8: wifi-on comes after restart');
+    expect(validateImage(withWifi({ steps: [...steps.slice(0, 8), { do: 'wifi-on', key: 'other' }] }), FRAME)).toContain('step 9: wifi-on\'s key must be a checked download');
+    expect(validateImage(withWifi({ steps: [...steps.slice(0, 8), { do: 'wifi-on', key: 'adbkey', cmd: 'reboot' } as unknown as ImageStep] }), FRAME)).toContain('step 9: "wifi-on" takes no cmd');
+    const noWifi = withWifi({ steps: [...steps.slice(0, 4), { do: 'flash', partition: 'system', file: 'system.img' }, { do: 'flash', partition: 'userdata', file: 'userdata.img' }, { do: 'restart' }, { do: 'wifi-on', key: 'adbkey' }] });
+    expect(validateImage(noWifi, FRAME)).toContain('step 8: wifi-on needs a wifi step first: there is no network to join otherwise');
+  });
+
+  it('a frame that doesn\'t run them refuses them', () => {
+    expect(validateImage(withWifi(), { ...FRAME, steps: FRAME.steps.filter((s) => s !== 'wifi-on') })).toContain('step 9: this frame can\'t run "wifi-on"');
+  });
+});
+
+describe('names a step makes', () => {
+  it('are plain file names, never one of Object\'s own (constructor, toString…)', () => {
+    const steps = (makes: string) => [
+      { do: 'download', file: 'system.img' }, { do: 'download', file: 'userdata.img' }, { do: 'fastboot' },
+      { do: 'wifi', file: 'userdata.img', template: 'system.img', makes },
+      { do: 'flash', partition: 'system', file: 'system.img' }, { do: 'flash', partition: 'userdata', file: makes }, { do: 'restart' },
+    ] as ImageStep[];
+    expect(validateImage(community({ steps: steps('userdata+wifi') }), FRAME)).toEqual([]);
+    for (const bad of ['constructor', 'toString', '__proto__', '../x', 'a b', '']) {
+      expect(validateImage(community({ steps: steps(bad) }), FRAME), bad).toContain('step 4: wifi must name a new file it makes');
+    }
   });
 });

@@ -135,7 +135,8 @@ InstallFlow. Other `?demo=` names jump to one screen (`src/wizard/demo.ts`), for
 Home Assistant, and on 0.4.3, which can't), and `done-old-boot` (Done on a boot image without the root update service,
 so its Silent updates block says each update asks for a tap). The Mirror's test page has its own. The choice and Glass Panes: `?demo=image-choose` (the page's first screen), `image-choose-open`, `image-choose-panes`, `image-link`
 (`?image=glass-panes`), `image-download`, `image-download-done`, `image-download-error` (Refract couldn't serve it), `image-download-bad` (a wrong SHA-256),
-`image-fastboot`, `image-confirm`, `image-writing`, `image-done`, `image-error`, `image-back-glassworks` and `image-back-panes` (the two ways back;
+`image-fastboot`, `image-confirm`, `image-writing`, `image-done`, `image-error`, `image-wifi` (a network to save), `image-wifi-writing`, `image-adb` (Wi-Fi on with Glass Panes' own key),
+`image-done-wifi`, `image-done-wifi-unconfirmed`, `image-back-glassworks` and `image-back-panes` (the two ways back;
 the list is in [docs/design/kiln/community-images.md](../../../docs/design/kiln/community-images.md)). Glassworks over fastboot: `?demo=flash-image`, `flash-downloading`,
 `flash-download-error`, `flash-download-bad`, `flash-ready`, `flash-fastboot`, `flash-fastboot-wrong`, `flash-confirm` (the stock warning),
 `flash-working`, `flash-adb`, `flash-done`, `flash-done-chooser` (another launcher survived), `flash-error` (a refused write, with the retry without FILL). The adb-only path: `?demo=run`
