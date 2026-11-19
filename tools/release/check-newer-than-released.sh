@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Fails unless <version> is higher than the last GitHub release of one release line (tags <line>-vX.Y.Z; the S1 app's
 # line, aqara-s1-plus, also its plain vX.Y.Z tags). An installed app only offers a newer version, and Android refuses
-# a lower versionCode. Read-only: lists the repo's releases with gh (GH_TOKEN, any read token). release.yml runs it
-# before the build; generic-release.yml before the build, and again in its publish job, which runs one at a time per
-# line, so two tags of one line can't publish out of order.
+# a lower versionCode. Read-only: lists the repo's releases with gh (GH_TOKEN, any read token). Both release workflows
+# run it before the build, and again just before they publish, one run at a time per line, so two tags of one line
+# can't publish out of order.
 #   tools/release/check-newer-than-released.sh generic-android 1.2.3 [owner/repo]
 set -euo pipefail
 line="${1:?release line, e.g. generic-android}" version="${2:?version, e.g. 1.2.3}"

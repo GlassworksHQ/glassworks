@@ -178,7 +178,8 @@ class PublishStepTest(Scratch):
 
     def s1(self, channel):
         w, rt = self.workdir(["s1-kiosk-0.6.0.apk", "s1-kiosk-arm64-v8a-0.6.0.apk"])
-        env = self.env(GITHUB_REF_NAME="aqara-s1-plus-v0.6.0", VERSION="0.6.0", CHANNEL=channel, RUNNER_TEMP=str(rt), GH_TOKEN="x")
+        env = self.env(GITHUB_REF_NAME="aqara-s1-plus-v0.6.0", VERSION="0.6.0", CHANNEL=channel, RUNNER_TEMP=str(rt), GH_TOKEN="x",
+                       FAKE_TAGS="aqara-s1-plus-v0.5.0 v0.4.4")
         r = run(["bash", "-e", "-c", step_script("release.yml", "Publish the GitHub Release")], cwd=w, env=env)
         self.assertEqual(0, r.returncode, r.stdout + r.stderr)
         return next(c for c in self.gh_calls() if c.startswith("release create"))
@@ -194,6 +195,18 @@ class PublishStepTest(Scratch):
         self.assertIn("--prerelease", c)
         self.assertIn("--latest=false", c)
         self.assertIn("Glassworks for generic Android 0.3.0 beta", c)
+
+    def test_the_s1_publish_checks_the_version_again_under_one_lock(self):
+        # A beta 0.7.0 published while the stable 0.6.0 was building: the stable must not go out (#605 review).
+        w, rt = self.workdir(["s1-kiosk-0.6.0.apk"])
+        env = self.env(GITHUB_REF_NAME="aqara-s1-plus-v0.6.0", VERSION="0.6.0", CHANNEL="stable", RUNNER_TEMP=str(rt),
+                       GH_TOKEN="x", FAKE_TAGS="aqara-s1-plus-v0.7.0 v0.4.4")
+        r = run(["bash", "-e", "-c", step_script("release.yml", "Publish the GitHub Release")], cwd=w, env=env)
+        self.assertNotEqual(0, r.returncode)
+        self.assertFalse(any(c.startswith("release create") for c in self.gh_calls()))
+        text = (ROOT / ".github/workflows/release.yml").read_text()
+        job = text.split("\n  release:\n", 1)[1]
+        self.assertIn("group: release-publish-aqara-s1-plus", job.split("steps:", 1)[0])
 
     def test_an_s1_stable_is_latest(self):
         c = self.s1("stable")

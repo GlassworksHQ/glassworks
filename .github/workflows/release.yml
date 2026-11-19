@@ -175,6 +175,11 @@ jobs:
     # and release tags can reach it, never a workflow on some other branch (docs/releasing.md).
     environment: release-signing
     timeout-minutes: 60   # two APK builds
+    # One S1 release at a time, whatever its tag (v*, aqara-s1-plus-v*, stable or beta): each checks its version again
+    # just before it publishes, so two tags pushed together can't publish out of order (#605).
+    concurrency:
+      group: release-publish-aqara-s1-plus
+      cancel-in-progress: false
     permissions:
       contents: write # create the release and upload its assets (GITHUB_TOKEN only)
     env:
@@ -280,6 +285,8 @@ jobs:
           # --latest: apps up to 0.4.3 only read releases/latest, so an S1 release must always be the
           # one marked latest. Releases of other frames and libraries in this repo use --latest=false.
           # A beta (#605) is a pre-release and never latest: releases/latest stays the S1 app's stable.
+          # Checked again here, under the job's lock: another S1 tag may have published since the inputs job.
+          tools/release/check-newer-than-released.sh aqara-s1-plus "$VERSION"
           if [ "$CHANNEL" = beta ]; then flags=(--prerelease --latest=false); title="Glassworks for the Aqara S1 Plus $VERSION beta"
           else flags=(--latest); title="Glassworks for the Aqara S1 Plus $VERSION"; fi
           gh release create "$GITHUB_REF_NAME" dist/*.apk dist/*.apk.sha256 \
