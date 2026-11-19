@@ -5,7 +5,7 @@ import { fakeAdbKey, fakeMirrorApk, fakeServicesJar } from '@glassworks/lululemo
 import { describe, expect, it } from 'vitest';
 import { Disk, MemoryStore, mkfs, writeSparse } from '@glassworks/ext4';
 import { GLASS_PANES } from '@glassworks/lululemon-mirror-installer';
-import { imageJobs, type JobHandle } from '../src/mirror/imageJobs';
+import { Cancelled, imageJobs, type JobHandle } from '../src/mirror/imageJobs';
 
 /** A file in memory, shaped like OPFS's FileSystemSyncAccessHandle. */
 class MemHandle implements JobHandle {
@@ -86,5 +86,32 @@ describe('the image worker\'s jobs', () => {
     const other = bytes.slice(); other[5] = other[5]! ^ 1;
     await expect(jobs.download('https://refract.test/x', want, () => {}, serve(other))).rejects.toThrow(/not the [0-9a-f]{64} the release publishes/);
     expect(files.get('download-userdata.sparse')!.buf.length).toBe(0);
+  });
+
+  it('refuses a short write, emptying the file, and cancel() stops a download in flight', async () => {
+    const bytes: Uint8Array<ArrayBuffer> = new Uint8Array(10_000).map((_, i) => i % 251);
+    const want = { name: 'system.img', url: 'https://example.com/system.img', refract: 'x/system.img', size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') };
+    const serve = (async () => new Response(bytes, { status: 200, headers: { 'content-length': String(bytes.length) } })) as unknown as typeof fetch;
+    class Short extends MemHandle { override write(b: Uint8Array, o: { at: number }) { return super.write(b.subarray(0, b.length - 1), o); } }
+    const short = new Short();
+    const jobs = imageJobs(async () => short, async () => {});
+    await expect(jobs.download('https://refract.test/x', want, () => {}, serve)).rejects.toThrow(/stored \d+ of \d+ bytes/);
+    expect(short.buf.length).toBe(0);
+    const h = new MemHandle();
+    const later = imageJobs(async () => h, async () => {});
+    let first = true;
+    const run = later.download('https://refract.test/x', want, () => { if (first) { first = false; later.cancel(); } }, serve);
+    await expect(run).rejects.toBeInstanceOf(Cancelled);
+    expect(h.buf.length).toBe(0);
+    await later.download('https://refract.test/x', want, () => {}, serve); // a new controller: the next one runs
+    expect(h.buf).toEqual(bytes);
+  });
+
+  it('checks the very Blob about to be flashed against its pin', async () => {
+    const jobs = imageJobs(async () => new MemHandle(), async () => {});
+    const b = new Uint8Array([1, 2, 3]);
+    const want = { name: 'u', url: 'https://e.com/u', refract: 'x/u', size: 3, sha256: createHash('sha256').update(b).digest('hex') };
+    await jobs.check(new Blob([b]), want, () => {});
+    await expect(jobs.check(new Blob([new Uint8Array([1, 2, 4])]), want, () => {})).rejects.toThrow(/not the published/);
   });
 });

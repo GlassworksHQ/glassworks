@@ -80,7 +80,7 @@ bootloader, `boot` or the modem).
 |---|---|---|
 | `download` | `file` | Downloads the file through Refract and checks its size and SHA-256 as it arrives. A file that doesn't match is emptied, and the screen shows it as Kiln's bug, with *Try again* and *Report this* |
 | `fastboot` | | Shows the frame's own steps to put the device in fastboot, then connects. Read-only |
-| `flash` | `partition`, `file` | Writes a checked file to the partition |
+| `flash` | `partition`, `file` | Checks the stored file's size and SHA-256 again, as the very copy it sends, then writes it to the partition |
 | `restart` | | Restarts the device into what was written |
 | `patch` | `file`, `makes` | Kiln's own change to a downloaded image. Glassworks only |
 | `first-start` | | Kiln's first start over adb with the browser's key. Glassworks only |

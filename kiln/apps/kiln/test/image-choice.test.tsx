@@ -4,7 +4,7 @@
 // the warning and its writes in the recipe's order; a download Kiln can't serve shown as Kiln's bug
 // with Try again and Report this; ?image=<id> straight into an image's install; both ways back; and
 // the round-three tone on every screen.
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { GLASS_PANES, GLASS_PANES_USERDATA, ProxyError, SYSTEM_BYTES, USERDATA_BYTES, WrongImage, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
 import { FirstBootMirror } from '@glassworks/lululemon-mirror-installer/fakes';
 import type { ReactNode } from 'react';
@@ -45,7 +45,7 @@ async function show(d: FlashDemo) {
 }
 
 /** A session on fakes that records what reaches Refract, the worker and the Mirror, in order. */
-function setup(o: { search?: string; fail?: 'route' | 'hash' | 'flash' } = {}) {
+function setup(o: { search?: string; fail?: 'route' | 'hash' | 'flash' | 'changed' } = {}) {
   const calls: string[] = [];
   let fail = o.fail;
   const images: ImageMaker = {
@@ -58,6 +58,10 @@ function setup(o: { search?: string; fail?: 'route' | 'hash' | 'flash' } = {}) {
       expect(want.sha256).toMatch(/^[0-9a-f]{64}$/);
     },
     async file(name) { calls.push(`file ${name}`); return Object.assign(new Blob([name]), { tag: name }); },
+    async check(blob, want) {
+      calls.push(`check ${(blob as Blob & { tag?: string }).tag} ${want.sha256.slice(0, 8)}`);
+      if (fail === 'changed' && want.name === 'userdata.sparse') { fail = undefined; throw new WrongImage('its SHA-256 is 00…, not the release\'s'); }
+    },
     async build() { calls.push('build'); return { system: new Blob(['S']), userdata: new Blob(['U']) }; },
     async discard() { calls.push('discard'); },
   };
@@ -129,9 +133,12 @@ describe('Glass Panes', () => {
       'download https://refract.test/glass-panes/mirror-android-2/system.img',
       'download https://refract.test/glass-panes/mirror-android-2/userdata.sparse',
       'read system size', 'read userdata size',
-      'file system.img', 'flash system system.img', 'file userdata.sparse', 'flash userdata userdata.sparse', 'reboot', 'discard',
+      // each file checked again, as the very Blob fastboot sends, right before it is written
+      'file system.img', 'check system.img bdb6b844', 'flash system system.img',
+      'file userdata.sparse', 'check userdata.sparse 74b1f57a', 'flash userdata userdata.sparse', 'reboot', 'discard',
     ]);
     expect(f.state.screen).toBe('done'); // no first start over adb: it doesn't trust Kiln's key
+    expect(f.state.files.every((x) => x.state === 'waiting')).toBe(true); // discarded: another install downloads again
     // the backup step: the Mirror can't be read back, so the log keeps each written file's hash
     expect(f.state.log.join('\n')).toContain(`system.img: SHA-256 ${GLASS_PANES.system.sha256}`);
     expect(f.state.log.join('\n')).toContain(`userdata.sparse: SHA-256 ${GLASS_PANES_USERDATA.sha256}`);
@@ -148,6 +155,18 @@ describe('Glass Panes', () => {
     await f.download();
     expect(f.state.files.map((x) => x.state)).toEqual(['ok', 'ok']);
     expect(calls.filter((c) => c.endsWith('system.img'))).toHaveLength(1); // not downloaded twice
+  });
+
+  it('a stored file that no longer checks out right before its write is not written, and must be downloaded again', async () => {
+    const { f, calls } = setup({ fail: 'changed' });
+    f.showCommunity(true); f.pick('glass-panes'); f.choose();
+    await f.download(); f.toFastboot(); await f.connectFastboot(); f.understand(true); await f.flash();
+    expect(f.state.screen).toBe('error');
+    expect(calls.filter((c) => c.startsWith('flash'))).toEqual(['flash system system.img']);
+    expect(calls).not.toContain('reboot');
+    f.retry();
+    expect(f.state.files.map((x) => x.state)).toEqual(['waiting', 'waiting']);
+    expect(f.blocked()).toMatch(/Download system\.img first/);
   });
 
   it('a failed write: back to the download with the files kept, then fastboot again', async () => {
@@ -176,8 +195,7 @@ describe('Glass Panes', () => {
     expect(embers()).toEqual(['Try again']);
     expect(document.querySelector('input[type="file"]')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
-    await act(async () => {});
-    expect(flash.state.files.some((x) => x.state === 'error' || x.state === 'bad')).toBe(false);
+    await waitFor(() => expect(flash.state.files.every((x) => x.state === 'ok')).toBe(true));
   });
 
   it.each(['image-link', 'image-download', 'image-confirm'] as const)('%s offers Install Glassworks instead, which drops what was downloaded', async (d) => {
@@ -226,6 +244,20 @@ describe('?image=<id>', () => {
   it.each(['', '?image=', '?image=nope', '?image=glassworks', '?image=Glass-Panes'])('%s opens the normal page', (q) => {
     const { f } = setup({ search: q });
     expect(f.state).toMatchObject({ screen: 'choose', picked: 'glassworks', link: false, open: false });
+  });
+
+  it('opens on a kept, idle session too; a session that is writing stays as it is', async () => {
+    const { f } = setup();
+    f.followLink('?image=glass-panes');
+    expect(f.state).toMatchObject({ screen: 'download', picked: 'glass-panes', link: true });
+    f.followLink('?image=nope');
+    expect(f.state.picked).toBe('glass-panes');
+    const busy = setup();
+    busy.f.choose(); await busy.f.download();
+    busy.f.toFastboot(); await busy.f.connectFastboot(); busy.f.understand(true);
+    busy.f.state = { ...busy.f.state, screen: 'adb' };
+    busy.f.followLink('?image=glass-panes');
+    expect(busy.f.state).toMatchObject({ screen: 'adb', picked: 'glassworks' });
   });
 
   it('works on the page itself, as a community project would link to it', async () => {

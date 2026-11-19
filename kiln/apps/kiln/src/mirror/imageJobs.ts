@@ -5,7 +5,7 @@
 import type { ImageFile } from '@glassworks/kiln-core';
 import { Sha256, hex, syncHandleStore, type SyncHandle } from '@glassworks/ext4';
 import {
-  GLASS_PANES, WrongImage, buildImages, loadSystem, resumableBody, type Loaded, type PrepareStep,
+  GLASS_PANES, WrongImage, buildImages, checkDownload, loadSystem, resumableBody, type Loaded, type PrepareStep,
 } from '@glassworks/lululemon-mirror-installer';
 
 /** Where download() keeps a file, apart from the images Kiln builds. */
@@ -18,9 +18,31 @@ export interface BuildOptions {
   deviceMac?: string; wifi?: { ssid: string; password: string };
 }
 
+/** cancel() stopped a download or fetch: the person picked another image, or left. */
+export class Cancelled extends Error {}
+
+/** `source`'s stream, ending in Cancelled as soon as `signal` aborts. */
+function abortable(source: { size: number; stream(): ReadableStream<Uint8Array> }, signal: AbortSignal) {
+  return {
+    size: source.size,
+    stream(): ReadableStream<Uint8Array> {
+      const r = source.stream().getReader();
+      return new ReadableStream<Uint8Array>({
+        async pull(c) {
+          if (signal.aborted) { void r.cancel(); c.error(new Cancelled('stopped: another image was picked')); return; }
+          const { done, value } = await r.read();
+          if (done) c.close(); else c.enqueue(value);
+        },
+        cancel() { void r.cancel(); },
+      });
+    },
+  };
+}
+
 export function imageJobs(open: (name: string) => Promise<JobHandle>, removeAll: () => Promise<void>,
   want: { name: string; size: number; sha256: string } = GLASS_PANES.system) {
   let loaded: Loaded | undefined;
+  let abort = new AbortController();
   const handles = new Map<string, JobHandle>();
   const fresh = async (name: string) => {
     handles.get(name)?.close();
@@ -37,7 +59,9 @@ export function imageJobs(open: (name: string) => Promise<JobHandle>, removeAll:
   return {
     /** From a Blob instead of Refract: the tests' way in. */
     load: (file: Blob, onProgress: (x: number) => void) => loadFrom(file, onProgress),
-    fetch: (url: string, onProgress: (x: number) => void) => loadFrom(resumableBody(url, want.size), onProgress),
+    fetch: (url: string, onProgress: (x: number) => void, f?: typeof fetch) => loadFrom(abortable(resumableBody(url, want.size, f ? { fetch: f } : {}), abort.signal), onProgress),
+    /** Stops a download or fetch in flight. The worker calls it as a discard arrives, before the discard waits its turn. */
+    cancel() { abort.abort(); abort = new AbortController(); },
     /**
      * A file as its release publishes it, from Refract into storage, hashed as it is written. One
      * that isn't the release's (another SHA-256) is emptied before the error, so nothing of it is kept.
@@ -48,11 +72,13 @@ export function imageJobs(open: (name: string) => Promise<JobHandle>, removeAll:
       const sha = new Sha256();
       let at = 0;
       try {
-        const r = resumableBody(url, file.size, f ? { fetch: f } : {}).stream().getReader();
+        const r = abortable(resumableBody(url, file.size, f ? { fetch: f } : {}), abort.signal).stream().getReader();
         for (;;) {
           const { done, value } = await r.read();
           if (done) break;
-          h.write(value, { at });
+          // a sync access handle may write less than asked without throwing (File System standard)
+          const wrote = h.write(value, { at });
+          if (wrote !== value.length) throw new Error(`the browser stored ${wrote} of ${value.length} bytes at ${at} (is its storage full?)`);
           sha.update(value);
           at += value.length;
           onProgress(at / file.size);
@@ -86,6 +112,11 @@ export function imageJobs(open: (name: string) => Promise<JobHandle>, removeAll:
         close('userdata.sparse');
       }
     },
+    /**
+     * The exact Blob about to be flashed, against its pinned size and SHA-256. The Blob is a snapshot:
+     * if the stored file changes after it was taken, reading it fails, so what passes is what gets written.
+     */
+    check: (file: Blob, want: ImageFile, onProgress: (x: number) => void) => checkDownload(file, want, onProgress),
     async discard(): Promise<void> {
       loaded = undefined;
       for (const name of [...handles.keys()]) close(name);

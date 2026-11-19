@@ -30,6 +30,7 @@ export function workerImages(): ImageMaker {
     fetch: (url, onProgress) => call({ op: 'fetch', url }, (_, x) => onProgress(x)),
     download: (url, want, onProgress) => call({ op: 'download', url, file: want }, (_, x) => onProgress(x)),
     file: (name) => file(downloaded(name)),
+    check: (blob, want, onProgress) => call({ op: 'check', file: blob, want }, (_, x) => onProgress(x)),
     async build(o, onProgress) {
       await call({ op: 'build', ...o }, (step, x) => onProgress(step as Parameters<typeof onProgress>[0], x));
       return { system: await file('system.sparse'), userdata: await file('userdata.sparse') };

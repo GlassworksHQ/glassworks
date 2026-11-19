@@ -295,7 +295,10 @@ export function MirrorWizard() {
     if (!m.on && !earlier) return { m, flashFirst, real: realSessions(false) };
     const kept = keptMirror(() => realSessions(true), flashFirst);
     // back to a running install (or from a link without ?apk=local): as it was; otherwise the address's path
-    if (kept === earlier && m.on && !kept.running()) kept.flashMode = flashFirst;
+    if (kept === earlier && m.on && !kept.running()) {
+      kept.flashMode = flashFirst;
+      kept.sessions.flash.followLink(location.search); // ?image=<id> on a kept, idle session
+    }
     return { m, flashFirst: kept.flashMode, real: kept.sessions, kept };
   });
   const [demo, setDemo] = useState<{ mirror: MirrorSession; flash?: FlashSession }>();

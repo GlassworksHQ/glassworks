@@ -32,6 +32,7 @@ export async function flashDemo(name: FlashDemo, fast = false): Promise<{ flash:
       if (name === 'image-download-bad' && want.name === 'userdata.sparse' && failures-- > 0) throw new WrongImage('its SHA-256 differs from the release');
     },
     async file() { return new Blob([new Uint8Array(16)]); },
+    async check() {},
     async build(_, onProgress) {
       for (const step of ['patch', 'system', 'userdata'] as const) {
         for (let i = 1; i <= 5; i++) {

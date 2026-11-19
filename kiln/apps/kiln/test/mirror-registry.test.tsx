@@ -40,7 +40,7 @@ async function midFlash() {
   let release!: () => void;
   const gate = new Promise<void>((r) => { release = r; });
   const images: ImageMaker = {
-    async fetch(_u, p) { p(1); }, async download(_u, _f, p) { p(1); }, async file(n) { return new Blob([n]); },
+    async fetch(_u, p) { p(1); }, async download(_u, _f, p) { p(1); }, async file(n) { return new Blob([n]); }, async check() {},
     async build() { return { system: new Blob(['S']), userdata: new Blob(['U']) }; },
     async discard() {},
   };

@@ -20,8 +20,10 @@ export interface ImageMaker {
   fetch(url: string, onProgress: (x: number) => void): Promise<void>;
   /** A file written as published, from Refract into the worker's storage, checked as it arrives; a file that isn't the release's is deleted. */
   download(url: string, want: ImageFile, onProgress: (x: number) => void): Promise<void>;
-  /** A file download() kept, as fastboot sends it. */
+  /** A file download() kept, as fastboot sends it: a snapshot that fails to read if the stored file changes. */
   file(name: string): Promise<Blob>;
+  /** That Blob against its pinned size and SHA-256, right before it is flashed. Throws WrongImage. */
+  check(blob: Blob, want: ImageFile, onProgress: (x: number) => void): Promise<void>;
   /** Builds both images from the fetched one; can run again (after a failed flash) until discard(). */
   build(o: { apk: Uint8Array; bootAnimation?: Uint8Array; settingsOverlay?: Uint8Array; adbKey: string; userdataBytes: number; fill?: boolean;
     deviceMac?: string; wifi?: { ssid: string; password: string } },
@@ -171,11 +173,26 @@ export class FlashSession {
       work: undefined, firstBoot: undefined, error: undefined, flashFailed: false, noFill: false });
   }
 
-  /** Drops what an earlier pick downloaded: the worker keeps one image's files at a time. */
+  /**
+   * Drops what an earlier pick downloaded: the worker keeps one image's files at a time. The worker
+   * stops a download in flight and runs the discard before anything sent after it.
+   */
   private async forget() {
     this.runs++;
     this.made = {};
     if (this.state.files.some((f) => f.state !== 'waiting')) await this.d.images.discard().catch(() => {});
+  }
+
+  /**
+   * `?image=<id>` on a page whose kept session is idle: open that image's install, as a new session
+   * would. A session that is writing, or waiting for the first start, stays as it is.
+   */
+  followLink(search: string) {
+    const linked = imageFromLink(this.recipes, search);
+    if (!linked || this.state.screen === 'working' || this.state.screen === 'adb' || (this.state.link && this.state.picked === linked.id)) return;
+    if (linked.id !== this.state.picked) void this.forget();
+    this.set({ screen: 'download', picked: linked.id, open: true, link: true, from: undefined,
+      files: linked.id === this.state.picked ? this.state.files : waiting(linked), fastboot: undefined, understood: false, error: undefined });
   }
 
   /**
@@ -298,8 +315,16 @@ export class FlashSession {
           building = false;
           this.log('', `Kiln built: ${step.makes.join(', ')}`);
         } else if (step.do === 'flash') {
-          const blob = this.made[step.file] ?? await this.d.images.file(step.file);
           const id = `flash-${step.partition}` as WorkStep;
+          let blob = this.made[step.file];
+          if (!blob) {
+            // a downloaded file, checked again as the very Blob fastboot will send: nothing else can have changed it
+            const want = r.files.find((f) => f.name === step.file)!;
+            blob = await this.d.images.file(step.file);
+            this.log('', `${step.file}: checking it again before writing`);
+            work(id, 0);
+            await this.d.images.check(blob, want, () => {});
+          }
           this.log(`Flashing ${step.partition}${r.community ? ` with ${step.file} as published` : s.noFill ? ' (zeros as RAW, no FILL chunks)' : ''}`);
           this.set({ flashFailed: true }); // until the restart: a failure from here is the bootloader's
           work(id, 0);
@@ -312,13 +337,16 @@ export class FlashSession {
           this.fb = undefined;
           this.made = {};
           await this.d.images.discard();
+          // nothing kept any more: another install downloads again
+          this.set({ files: waiting(r) });
         }
       }
       this.set({ screen: steps.some((x) => x.do === 'first-start') ? 'adb' : 'done' });
     } catch (e) {
       this.log('Stopped', (e as Error).message);
-      // a failed build dropped the fetched image (it may be patched halfway): download it again
-      this.set({ screen: 'error', error: (e as Error).message, ...(building ? { files: waiting(r) } : {}) });
+      // a failed build dropped the fetched image (it may be patched halfway), and a stored file that no longer
+      // checks out can't be written: either way, download again
+      this.set({ screen: 'error', error: (e as Error).message, ...(building || e instanceof WrongImage ? { files: waiting(r) } : {}) });
     }
   }
 
