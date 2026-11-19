@@ -16,11 +16,11 @@
 #   --no-models         don't download/push the wake word models (the panel fetches them itself)
 #   --no-debloat        keep the Aqara apps enabled (the kiosk still becomes HOME)
 #   --keep-dnd          keep Aqara's 22:00-07:00 Do-Not-Disturb screen-off
-#   --switch            if S1 Kiosk on the panel has another signing key (a debug build) and Android
+#   --switch            if Glassworks on the panel has another signing key (a debug build) and Android
 #                       refuses the APK: switch without asking (default: explain and ask). See
 #                       frames/aqara-s1-plus/docs/install.md#switching-a-development-build-to-a-release
 #   --undo              revert: re-enable Aqara apps + launcher, restore DND and the IME, remove
-#                       S1 Kiosk (or disable it, if it saved the panel's Wi-Fi), start Aqara's radio
+#                       Glassworks (or disable it, if it saved the panel's Wi-Fi), start Aqara's radio
 #                       services again, check HOME is Aqara's
 #   --dry-run           print the commands instead of running them (only reads the panel's state)
 set -euo pipefail
@@ -57,14 +57,15 @@ try() { if [[ $DRY -eq 1 ]]; then echo "  + $* || true"; else "$@" || true; fi; 
 sh_() { run adb shell "$@"; }
 
 # ---- Wi-Fi ownership and the signing-key switch (frames/aqara-s1-plus/docs/install.md; frames/aqara-s1-plus/installer/src/switch.ts) ----
-# Android 10 forgets every Wi-Fi network an app saved when that app is uninstalled, and S1 Kiosk
+# Android 10 forgets every Wi-Fi network an app saved when that app is uninstalled, and Glassworks
 # saves the panel's Wi-Fi itself (Improv). The Wi-Fi password is only ever held in a shell variable:
 # never echoed, never in a command line (it reaches improv-send.py on stdin), never in a file.
-SW_SH=/data/local/tmp/s1kiosk-switch.sh
-OLD_APK=/data/local/tmp/s1kiosk-old.apk
+SW_SH=/data/local/tmp/glassworks-switch.sh
+OLD_APK=/data/local/tmp/glassworks-old.apk
+SW_DATA=/data/s1kiosk/switch # where glassworks-switch.sh keeps the app's data between backup and restore
 IMPROV_SEND=${S1_IMPROV_SEND:-$HERE/install/improv-send.py}
 WIFI_OWNER=none WIFI_SSID="" HAS_ROOT=0 DEBUG_BUILD=0 INSTALLED_VER="" SWITCHED=0 DATA_KEPT=0 WIFI_LOST=0
-WIFI_PSK="" HAVE_PSK=0 KEPT=0
+WIFI_PSK="" HAVE_PSK=0 APP_AFTER_UNDO=removed
 
 # `dumpsys wifi` on stdin -> "<kiosk|other|unknown|none><TAB><ssid>": the current network id from
 # "mWifiInfo ... Net ID: n", then that network's "ID: n SSID: "x" ..." entry and its " cname=<pkg>".
@@ -98,6 +99,8 @@ panel_wifi() {
   if [[ $WIFI_OWNER == unknown ]] && ! adb shell ip -4 -o addr show wlan0 2>/dev/null | grep -q 'inet '; then WIFI_OWNER=none; fi
   return 0
 }
+# Glassworks is gone, by a package listing that worked (a failed listing says nothing).
+absent() { local l; l=$(adb shell pm list packages "$PKG") || return 1; ! tr -d '\r' <<<"$l" | grep -qx "package:$PKG"; }
 wifi_at_risk() { [[ $WIFI_OWNER == kiosk || $WIFI_OWNER == unknown ]]; }
 net_name() { if [[ -n $WIFI_SSID ]]; then printf '"%s"' "$WIFI_SSID"; else printf 'its Wi-Fi network'; fi; }
 is_key_mismatch() { grep -qiE 'INSTALL_FAILED_UPDATE_INCOMPATIBLE|signatures do not match' <<<"$1"; }
@@ -121,27 +124,32 @@ probe_switch() {
   panel_wifi
 }
 explain_switch() { # [if]: --dry-run, before Android said anything (the keys may well match)
-  if [[ $DEBUG_BUILD -eq 1 ]]; then echo "  S1 Kiosk on the panel is a development build${INSTALLED_VER:+ ($INSTALLED_VER)}."
-  elif [[ ${1:-} == if ]]; then echo "  If the keys differ (S1 Kiosk on the panel signed with another key than $(basename "$APK")),"
-  else echo "  S1 Kiosk on the panel is signed with a different key than $(basename "$APK")."; fi
+  if [[ $DEBUG_BUILD -eq 1 ]]; then echo "  Glassworks on the panel is a development build${INSTALLED_VER:+ ($INSTALLED_VER)}."
+  elif [[ ${1:-} == if ]]; then echo "  If the keys differ (Glassworks on the panel signed with another key than $(basename "$APK")),"
+  else echo "  Glassworks on the panel is signed with a different key than $(basename "$APK")."; fi
   echo "  Android can't update it in place: it has to be removed and installed again."
   if [[ $HAS_ROOT -eq 1 ]]; then
-    echo "  adb has root on this panel, so the app's settings, sign-in and keys are kept."
-    if wifi_at_risk; then echo "  Android would forget $(net_name) with the old app; it is sent to the new app afterwards."; fi
+    echo "  adb has root on this panel, so the app's settings are kept. Its Home Assistant sign-in and"
+    echo "  encryption key are not: Android deletes the app's Keystore keys when it removes the old app,"
+    echo "  and those secrets are sealed with them. Sign in again; Home Assistant may ask to confirm the"
+    echo "  panel's encryption key."
+    if [[ $WIFI_OWNER == kiosk ]]; then echo "  Android would forget $(net_name) with the old app; it is sent to the new app afterwards."
+    elif wifi_at_risk; then echo "  Android may forget $(net_name) with the old app; it is sent to the new app afterwards."; fi
   else
     echo "  adb has no root on this panel, so the app starts fresh: its settings, Home Assistant sign-in"
     echo "  and pairing key are reset (Home Assistant may ask to set the panel up again)."
-    if wifi_at_risk; then echo "  Android also forgets $(net_name), which S1 Kiosk saved: type its password when asked, or send it again afterwards."; fi
+    if [[ $WIFI_OWNER == kiosk ]]; then echo "  Android also forgets $(net_name), which Glassworks saved: type its password when asked, or send it again afterwards."
+    elif wifi_at_risk; then echo "  The installer can't tell who saved $(net_name), so the panel may lose its Wi-Fi: type its password when asked, or send it again afterwards."; fi
   fi
-  if [[ $WIFI_OWNER == other ]]; then echo "  The panel's Wi-Fi $(net_name) wasn't saved by S1 Kiosk and stays."; fi
+  if [[ $WIFI_OWNER == other ]]; then echo "  The panel's Wi-Fi $(net_name) wasn't saved by Glassworks and stays."; fi
   echo "  If installing the new build fails, the old one is put back."
 }
 
-# Uninstall the installed S1 Kiosk and install $APK, carrying its data over when adb has root.
+# Uninstall the installed Glassworks and install $APK, carrying its data over when adb has root.
 # The usual steps (permissions, admin, HOME) follow in the main script.
 switch_key() {
-  local path out list n kind raw i k v ans owner=0
-  step "Switch S1 Kiosk to this build"
+  local path out list n kind raw i k v ans owner=0 rout
+  step "Switch Glassworks to this build"
   probe_switch
   explain_switch
   if [[ $SWITCH_OK -eq 0 ]]; then
@@ -156,10 +164,10 @@ switch_key() {
   # 1. the installed APK, to fall back on
   path=$(adb shell pm path "$PKG" | tr -d '\r' | sed -n 's/^package://p' | head -1)
   if [[ -z $path ]] || ! adb shell cp "$path" "$OLD_APK"; then
-    echo "ERROR: could not keep a copy of the installed S1 Kiosk to fall back on. Nothing was changed." >&2; exit 1
+    echo "ERROR: could not keep a copy of the installed Glassworks to fall back on. Nothing was changed." >&2; exit 1
   fi
   if [[ $HAS_ROOT -eq 1 ]]; then
-    if ! adb push "$HERE/install/s1kiosk-switch.sh" "$SW_SH" >/dev/null; then
+    if ! adb push "$HERE/install/glassworks-switch.sh" "$SW_SH" >/dev/null; then
       adb shell rm -f "$OLD_APK" || true
       echo "ERROR: could not copy the switch helper to the panel. Nothing was changed." >&2; exit 1
     fi
@@ -195,7 +203,7 @@ switch_key() {
     if ! out=$(su_ backup 2>&1); then
       su_ discard >/dev/null 2>&1 || true; switch_undo; adb shell rm -f "$OLD_APK" "$SW_SH" || true
       WIFI_PSK=""
-      echo "ERROR: could not keep S1 Kiosk's data: $(tr -d '\r' <<<"$out" | tail -1). Nothing was changed." >&2; exit 1
+      echo "ERROR: could not keep Glassworks' data: $(tr -d '\r' <<<"$out" | tail -1). Nothing was changed." >&2; exit 1
     fi
     echo "  app data kept: $(tr -d '\r' <<<"$out" | tail -1)"
   fi
@@ -206,21 +214,30 @@ switch_key() {
     if [[ $HAS_ROOT -eq 1 ]]; then su_ discard >/dev/null 2>&1 || true; fi
     adb shell rm -f "$OLD_APK" "$SW_SH" || true
     WIFI_PSK=""
-    echo "ERROR: Android would not remove the installed S1 Kiosk ($out). It is unchanged." >&2; exit 1
+    echo "ERROR: Android would not remove the installed Glassworks ($out). It is unchanged." >&2; exit 1
   fi
   echo "  removed the old build"
   # 6. install the new one; on failure put the old one back (with its data, given root)
   out=$(adb install -r -g "$APK" 2>&1) || true
   if ! grep -q Success <<<"$out"; then
     sed 's/^/  /' <<<"$out"
+    # The data copy is the only one left until a restore worked: keep it otherwise, and say where.
     if adb shell pm install -r -g "$OLD_APK" | grep -q Success; then
-      if [[ $HAS_ROOT -eq 1 ]]; then restore_into >/dev/null 2>&1 || true; fi
-      switch_undo
-      echo "ERROR: the new S1 Kiosk would not install. The previous build is back$([[ $HAS_ROOT -eq 1 ]] && echo ' with its data')." >&2
+      if [[ $HAS_ROOT -eq 0 ]]; then
+        switch_undo
+        echo "ERROR: the new Glassworks would not install. The previous build is back." >&2
+      elif rout=$(restore_into 2>&1); then
+        switch_undo; su_ discard >/dev/null 2>&1 || true
+        echo "ERROR: the new Glassworks would not install. The previous build is back with its data." >&2
+      else
+        switch_undo
+        echo "ERROR: the new Glassworks would not install. The previous build is back, but its data is not ($(tr -d '\r' <<<"$rout" | tail -1))." >&2
+        echo "  Its data is kept on the panel in $SW_DATA (root only)." >&2
+      fi
     else
-      echo "ERROR: the new S1 Kiosk would not install, and neither would the previous one. Run $0 again." >&2
+      echo "ERROR: the new Glassworks would not install, and neither would the previous one. Run $0 again." >&2
+      if [[ $HAS_ROOT -eq 1 ]]; then echo "  Its data is kept on the panel in $SW_DATA (root only)." >&2; fi
     fi
-    if [[ $HAS_ROOT -eq 1 ]]; then su_ discard >/dev/null 2>&1 || true; fi
     adb shell rm -f "$OLD_APK" "$SW_SH" || true
     WIFI_PSK=""; exit 1
   fi
@@ -228,10 +245,10 @@ switch_key() {
   # 7. the data back in, owned by the new uid, labels restored
   if [[ $HAS_ROOT -eq 1 ]]; then
     if out=$(restore_into 2>&1); then DATA_KEPT=1; su_ discard >/dev/null 2>&1 || true; echo "  app data restored"
-    else echo "  WARNING: could not restore the app's data ($(tr -d '\r' <<<"$out" | tail -1)); it starts fresh. The copy stays in /data/s1kiosk/switch (root only)."; fi
+    else echo "  WARNING: could not restore the app's data ($(tr -d '\r' <<<"$out" | tail -1)); it starts fresh. The copy stays in $SW_DATA (root only)."; fi
   fi
   if [[ $owner -eq 1 ]] && ! adb shell dpm set-device-owner "$PKG/.AdminReceiver" >/dev/null 2>&1; then
-    echo "  NOTE: S1 Kiosk was device owner and could not be made device owner again; it works without."
+    echo "  NOTE: Glassworks was device owner and could not be made device owner again; it works without."
   fi
   adb shell rm -f "$OLD_APK" "$SW_SH" || true
   SWITCHED=1
@@ -295,18 +312,31 @@ if [[ $UNDO -eq 1 ]]; then
   # Remove the kiosk (it restarts itself as a foreground service, so stopping it is not enough);
   # fall back to disabling it. Reinstall with this script.
   try adb shell am force-stop "$PKG"
-  # Uninstalling makes Android 10 forget the Wi-Fi networks S1 Kiosk saved, which would take the panel
-  # off its network. Then S1 Kiosk is disabled instead (reversible: pm enable), and the network stays.
+  # Uninstalling makes Android 10 forget the Wi-Fi networks Glassworks saved, which would take the panel
+  # off its network. Then Glassworks is disabled instead (reversible: pm enable), and the network stays.
+  # APP_AFTER_UNDO comes from each step's exit status: removed, kept (disabled for its Wi-Fi),
+  # disabled (Android would not uninstall it) or failed (it would not disable either).
   panel_wifi
   if wifi_at_risk; then
-    KEPT=1
-    run adb shell pm disable-user --user 0 "$PKG"
-    echo "  kept S1 Kiosk installed but disabled: it saved the panel's Wi-Fi $(net_name), and Android"
-    echo "  forgets that network when S1 Kiosk is uninstalled"
+    if [[ $DRY -eq 1 ]]; then echo "  + adb shell pm disable-user --user 0 $PKG"; APP_AFTER_UNDO=kept
+    elif adb shell pm disable-user --user 0 "$PKG" >/dev/null; then APP_AFTER_UNDO=kept
+    else APP_AFTER_UNDO=failed; fi
+    if [[ $APP_AFTER_UNDO == failed ]] && absent; then APP_AFTER_UNDO=removed; fi
+    if [[ $APP_AFTER_UNDO == kept ]]; then
+      if [[ $WIFI_OWNER == kiosk ]]; then
+        echo "  kept Glassworks installed but disabled: it saved the panel's Wi-Fi $(net_name), and Android"
+        echo "  forgets that network when Glassworks is uninstalled"
+      else
+        echo "  kept Glassworks installed but disabled: the installer can't tell who saved the panel's Wi-Fi"
+        echo "  $(net_name), and if Glassworks did, Android forgets it when Glassworks is uninstalled"
+      fi
+    fi
   elif [[ $DRY -eq 1 ]]; then
     echo "  + adb shell pm uninstall $PKG || adb shell pm disable-user --user 0 $PKG"
   elif ! adb shell pm uninstall "$PKG" | grep -q Success; then
-    try adb shell pm disable-user --user 0 "$PKG"
+    if adb shell pm disable-user --user 0 "$PKG" >/dev/null; then APP_AFTER_UNDO=disabled
+    elif ! absent; then APP_AFTER_UNDO=failed
+    fi # pm refuses both for a package that isn't there: an earlier --undo that stopped at the HOME check removed it
   fi
   # Radio (frames/aqara-s1-plus/docs/radio.md): the app kept Aqara's radio services stopped ("Off" mode) and blocked
   # ha_master, Aqara's cloud link. Start them in provider-first order; they are init services, so a
@@ -317,17 +347,25 @@ if [[ $UNDO -eq 1 ]]; then
   if [[ $DRY -eq 0 ]]; then
     HOME_ACT=$(adb shell cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.HOME | tr -d '\r' | tail -1)
     case "$HOME_ACT" in
-      com.aqara.inhome.launcher/*) ;;
-      *) echo "ERROR: the home screen is still $HOME_ACT, not Aqara's launcher" >&2; exit 1 ;;
+      com.aqara.inhome.launcher/*) adb shell am start -a android.intent.action.MAIN -c android.intent.category.HOME >/dev/null ;;
+      # Glassworks still enabled is still a HOME app, so HOME is the chooser (or Glassworks): the
+      # failed message below says that, not this one.
+      *) if [[ $APP_AFTER_UNDO != failed ]]; then echo "ERROR: the home screen is still $HOME_ACT, not Aqara's launcher" >&2; exit 1; fi ;;
     esac
-    adb shell am start -a android.intent.action.MAIN -c android.intent.category.HOME >/dev/null
   fi
-  if [[ $KEPT -eq 1 ]]; then
-    echo "Done. Aqara's apps are back and S1 Kiosk is disabled, so the panel stays on its Wi-Fi."
-    echo "To remove S1 Kiosk completely, see frames/aqara-s1-plus/docs/install.md#undo. Reinstall: $0 --url ..."
-  else
-    echo "Done. Aqara's apps are back and S1 Kiosk is removed (reinstall: $0 --url ...)."
-  fi
+  case $APP_AFTER_UNDO in
+    removed) echo "Done. Aqara's apps are back and Glassworks is removed (reinstall: $0 --url ...)." ;;
+    kept)
+      echo "Done. Aqara's apps are back and Glassworks is disabled, so the panel stays on its Wi-Fi."
+      echo "To remove Glassworks completely, see frames/aqara-s1-plus/docs/install.md#undo. Reinstall: $0 --url ..." ;;
+    disabled)
+      echo "Done. Aqara's apps are back. Android would not remove Glassworks, so it is disabled instead."
+      echo "To remove Glassworks completely, see frames/aqara-s1-plus/docs/install.md#undo. Reinstall: $0 --url ..." ;;
+    failed)
+      echo "ERROR: Aqara's apps are back, but Android would not disable Glassworks. It is still installed, so the" >&2
+      echo "  panel may start it again or ask which home screen to use. Run $0 --undo again." >&2
+      exit 1 ;;
+  esac
   exit 0
 fi
 
@@ -337,7 +375,7 @@ if [[ $DRY -eq 1 ]]; then
   echo "  + adb install -r -g $APK"
   if adb shell pm list packages "$PKG" | tr -d '\r' | grep -qx "package:$PKG"; then
     probe_switch
-    echo "  If Android refuses it because the installed S1 Kiosk has another signing key, the switch"
+    echo "  If Android refuses it because the installed Glassworks has another signing key, the switch"
     echo "  would (after you confirm, or with --switch):"
     explain_switch if
     echo "  + adb shell cp <installed APK> $OLD_APK      # to fall back on"
@@ -430,12 +468,14 @@ Done.
 - Undo everything: $0 --undo
 EOF
 if [[ $SWITCHED -eq 1 ]]; then
-  if [[ $DATA_KEPT -eq 1 ]]; then echo "- Switched builds: the app's settings were kept."
+  if [[ $DATA_KEPT -eq 1 ]]; then
+    echo "- Switched builds: the app's settings were kept, but not its Home Assistant sign-in or encryption key"
+    echo "  (Android deleted the old app's Keystore keys). Sign in again; Home Assistant may ask to confirm the key."
   else echo "- Switched builds: the app's settings were reset (sign in again; Home Assistant may ask to set the panel up again)."; fi
 fi
 if [[ $WIFI_LOST -eq 1 ]]; then
   cat <<EOF
-- The panel forgot its Wi-Fi $(net_name) with the old build. Send it again: the web installer's
+- The panel $([[ $WIFI_OWNER == kiosk ]] && echo forgot || echo 'may have forgotten') its Wi-Fi $(net_name) with the old build. Send it again: the web installer's
   #/wifi page over USB, or Improv over Bluetooth (the panel's setup screen, or Home Assistant).
 EOF
 fi

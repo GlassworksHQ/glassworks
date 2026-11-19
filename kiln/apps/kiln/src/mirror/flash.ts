@@ -16,7 +16,7 @@ export interface ImageMaker {
   fetch(url: string, onProgress: (x: number) => void): Promise<void>;
   /** Builds both images from the loaded one; can run again (after a failed flash) until discard(). */
   build(o: { apk: Uint8Array; bootAnimation?: Uint8Array; settingsOverlay?: Uint8Array; adbKey: string; userdataBytes: number; fill?: boolean;
-    wifi?: { ssid: string; password: string } },
+    deviceMac?: string; wifi?: { ssid: string; password: string } },
     onProgress: (step: PrepareStep, x: number) => void): Promise<{ system: Blob; userdata: Blob }>;
   /** The way back: a downloaded Glass Panes file against its published size and SHA-256, off the page's thread. */
   check(file: Blob, which: 'system' | 'userdata', onProgress: (x: number) => void): Promise<void>;
@@ -213,7 +213,7 @@ export class FlashSession {
         const wifi = s.wifi.ssid ? { ssid: s.wifi.ssid, password: s.wifi.password } : undefined;
         images = await this.d.images.build({
           apk: this.d.apk()!, bootAnimation: await this.d.bootAnimation?.(), settingsOverlay: await this.d.settingsOverlay?.(),
-          adbKey, userdataBytes: s.fastboot.userdataBytes, fill: !s.noFill, ...(wifi ? { wifi } : {}),
+          adbKey, userdataBytes: s.fastboot.userdataBytes, fill: !s.noFill, ...(s.fastboot.deviceMac ? { deviceMac: s.fastboot.deviceMac } : {}), ...(wifi ? { wifi } : {}),
         }, (step, x) => work(step, x));
         building = false;
       }

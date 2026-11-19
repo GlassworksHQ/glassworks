@@ -35,9 +35,9 @@ Found with `dumpsys sensorservice`, `/sys/class/input/*` and `/sys/bus/i2c/drive
 > On a desk (or with the back cover open) something is almost always within 1.5 m, so the
 > sensor reads "near" permanently. For a wall mount, about 1.0–1.5 m works. Test on the wall.
 
-## How the S1 Kiosk uses them
+## How Glassworks uses them
 
-See `dev/glassworks/screen/ScreenPolicy.kt` (the policy) and `sh/edm/s1kiosk/frame/S1Sensors.kt`
+See `dev/glassworks/screen/ScreenPolicy.kt` (the policy) and `dev/glassworks/s1/frame/S1Sensors.kt`
 (the VI5300 range table and the light sensor):
 
 - **Wake on approach**, and the screen stays on while someone is near.

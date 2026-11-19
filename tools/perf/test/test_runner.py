@@ -1578,7 +1578,7 @@ class PaneRamRuns(unittest.TestCase):
             self.assertEqual(json.load(f), RESTORE)
 
     def test_a_kiosk_that_loses_voice_enabled_is_measured_by_its_mute_and_says_so(self):
-        """S1 Kiosk 0.4.3 saves voice_enabled asynchronously and exits to restart: the write is lost
+        """The S1 app 0.4.3 saves voice_enabled asynchronously and exits to restart: the write is lost
         (s1v7). Assist is then off by its microphone mute, which stops the wake word: its running
         cost, labelled as such; the runner tries voice_enabled twice and goes on."""
         tmp = tempfile.mkdtemp()

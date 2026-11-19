@@ -204,8 +204,8 @@ jobs:
         run: |
           [ -n "$S1_KEYSTORE_B64" ] || { echo "::error::secret S1_KEYSTORE_B64 is not set (docs/releasing.md)"; exit 1; }
           umask 077
-          printf '%s' "$S1_KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/s1kiosk-release.jks"
-          echo "S1_KEYSTORE_FILE=$RUNNER_TEMP/s1kiosk-release.jks" >> "$GITHUB_ENV"
+          printf '%s' "$S1_KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/glassworks-s1-release.jks"
+          echo "S1_KEYSTORE_FILE=$RUNNER_TEMP/glassworks-s1-release.jks" >> "$GITHUB_ENV"
 
       - name: Build the release APKs, one per ABI
         env:
@@ -258,7 +258,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" dist/*.apk dist/*.apk.sha256 \
-            --verify-tag --latest --title "S1 Kiosk $VERSION" --notes-file "$RUNNER_TEMP/notes.md"
+            --verify-tag --latest --title "Glassworks for the Aqara S1 Plus $VERSION" --notes-file "$RUNNER_TEMP/notes.md"
           # --latest: apps up to 0.4.3 only read releases/latest, so an S1 release must always be the
           # one marked latest. Releases of other frames and libraries in this repo use --latest=false.
 
@@ -272,4 +272,4 @@ jobs:
 
       - name: Remove the keystore
         if: always()
-        run: rm -f "$RUNNER_TEMP/s1kiosk-release.jks"
+        run: rm -f "$RUNNER_TEMP/glassworks-s1-release.jks"

@@ -9,7 +9,8 @@ compares them with the base branch's APKs, checks the frame's size budget (frame
   tools/size/apksize.py report --frame aqara-s1-plus --apk armeabi-v7a=head-v7.apk --apk arm64-v8a=head-64.apk \\
       [--base-apk armeabi-v7a=base-v7.apk ...] [--base-budgets base/frames/aqara-s1-plus/budgets.json] \\
       --json size.json --md size.md
-  tools/size/apksize.py render size.json      # the markdown again, from the numbers alone (the PR comment)
+  tools/size/apksize.py render size.json [generic.json ...]   # the PR comment, from the numbers alone: one
+      # section per report (the S1's, then Glassworks for generic Android's), under one marker
 
 Exit status: 0; 1 when an APK or a pane is over its budget or the assets lint fails (the report is
 written either way); 2 on bad input (a bad argument, a missing budgets file, an APK whose native
@@ -34,7 +35,7 @@ KINDS = ("dex", "native", "assets", "other")
 BASE_MISSING = {"no-base-commit": "there is no base commit", "base-build-failed": "the base didn't build",
                 "not-built": "this check builds no base"}
 # The comment's limits: a report can't make it long, whatever it holds.
-MAX_ROWS, MAX_FINDINGS = 40, 20
+MAX_ROWS, MAX_FINDINGS, MAX_REPORTS = 40, 20, 4
 
 
 def die(msg):
@@ -349,9 +350,28 @@ def findings(items):
     return out
 
 
-def markdown(rep):
-    validate(rep)
-    out = [MARKER, f"### APK size: `{rep['frame']}`", ""]
+def markdown(*reps):
+    """The comment: the marker once, a section per report (one per frame, in the order given), the
+    footer once."""
+    if not 0 < len(reps) <= MAX_REPORTS:
+        raise ValueError(f"give 1 to {MAX_REPORTS} reports")
+    for rep in reps:
+        validate(rep)
+    frames = [rep["frame"] for rep in reps]
+    if len(set(frames)) != len(frames):
+        raise ValueError("a frame appears twice")
+    out = [MARKER]
+    for i, rep in enumerate(reps):
+        out += ([""] if i else []) + section(rep)
+    out += ["", "Sizes are bytes as stored in the APK; the dex files are shared out by apkanalyzer's per-class "
+                "sizes. A pane's row has its own code and the libraries only it uses. "
+                "[How this is measured](https://github.com/GlassworksHQ/glassworks/blob/main/docs/size.md)."]
+    return "\n".join(out) + "\n"
+
+
+def section(rep):
+    """One validated report's lines: its frame's heading, budget, and a table per ABI."""
+    out = [f"### APK size: `{rep['frame']}`", ""]
     b = rep.get("budget") or {}
     caps = b.get("apk_max_bytes") if isinstance(b.get("apk_max_bytes"), dict) else {}
     if b.get("changes"):
@@ -380,10 +400,7 @@ def markdown(rep):
                        f"| **{mb(r['total'])}** | {ch} |")
         for key in sorted(set(base or {}) - set(a["rows"])):
             out.append(f"| {label(key)} | | | | | gone | {signed(-base[key]['total'])} |")
-    out += ["", "Sizes are bytes as stored in the APK; the dex files are shared out by apkanalyzer's per-class "
-                "sizes. A pane's row has its own code and the libraries only it uses. "
-                "[How this is measured](https://github.com/GlassworksHQ/glassworks/blob/main/docs/size.md)."]
-    return "\n".join(out) + "\n"
+    return out
 
 
 def parse_pairs(pairs, what, values=None):
@@ -412,11 +429,11 @@ def main():
     r.add_argument("--json", required=True)
     r.add_argument("--md", required=True)
     v = sub.add_parser("render")
-    v.add_argument("json")
+    v.add_argument("json", nargs="+", help="one report per frame; a section each, in this order")
     a = ap.parse_args()
     if a.cmd == "render":
         try:
-            sys.stdout.write(markdown(read_json(a.json)))
+            sys.stdout.write(markdown(*(read_json(p) for p in a.json)))
         except (ValueError, KeyError, TypeError, AttributeError) as e:
             die(f"not rendered: {e}")
         return

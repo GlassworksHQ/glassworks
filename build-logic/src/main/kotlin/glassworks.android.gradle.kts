@@ -77,7 +77,7 @@ fun Test.readsRepoFiles(repo: File) {
         .withPropertyName("frameAppTests").withPathSensitivity(PathSensitivity.RELATIVE)
     val files = listOf(
         "CHANGELOG.md", "README.md", "THIRD-PARTY-NOTICES.md", "kiln/packages/brand/src/tokens.css",
-        "kiln/packages/setup-channel/test/s1-kiosk-transcript.json", "branding/glass-tile/bootanimation.zip",
+        "kiln/packages/setup-channel/test/aqara-s1-plus-transcript.json", "branding/glass-tile/bootanimation.zip",
         "frames/aqara-s1-plus/tools/bracket/base_emulator.py", "build.gradle.kts",
         "build-logic/src/main/kotlin/glassworks.android.gradle.kts", // LegacyTestAppManifestTest: the default minSdk
         "frames/generic-android/installer/src/devices.ts", // GenericAndroidKnownTest: Kiln's models with a frame

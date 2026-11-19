@@ -84,7 +84,7 @@ const FINGERPRINT = 'Android/msm8916_64/msm8916_64:6.0.1/MMB29M/11120023:userdeb
 
 /**
  * A stand-in for the legacy build of Glassworks for generic Android (#408), as its manifest is: the
- * package, the privileged permissions, MainActivity (sh.edm.s1kiosk.MainActivity) behind
+ * package, the privileged permissions, MainActivity (dev.glassworks.MainActivity) behind
  * WRITE_SECURE_SETTINGS, and the Launcher alias with MAIN+HOME+DEFAULT. Each option breaks one thing.
  */
 export function fakeMirrorApk(o: {
@@ -99,8 +99,8 @@ export function fakeMirrorApk(o: {
   const aliasFilters = home === 'none' ? [filter(['MAIN'], ['LAUNCHER'])]
     : [filter(['MAIN'], ['LAUNCHER']), filter(['MAIN'], home === 'no-default' ? ['HOME'] : ['HOME', 'DEFAULT'])];
   const tree: FakeEl[] = [...perms, { el: 'application', children: [
-    { el: 'activity', attrs: { name: 'sh.edm.s1kiosk.MainActivity', permission: 'android.permission.WRITE_SECURE_SETTINGS', exported: true } },
-    { el: 'activity-alias', attrs: { name: 'dev.glassworks.generic.Launcher', targetActivity: 'sh.edm.s1kiosk.MainActivity', exported: true }, children: aliasFilters },
+    { el: 'activity', attrs: { name: 'dev.glassworks.MainActivity', permission: 'android.permission.WRITE_SECURE_SETTINGS', exported: true } },
+    { el: 'activity-alias', attrs: { name: 'dev.glassworks.generic.Launcher', targetActivity: 'dev.glassworks.MainActivity', exported: true }, children: aliasFilters },
   ] }];
   return fakeApk(o.package ?? GLASSWORKS.package, { minSdk: o.minSdk ?? 23, home: tree, ...(o.libs ? { libs: o.libs } : {}) });
 }
@@ -127,6 +127,33 @@ export interface FakeMirrorOptions {
   clearsDefaults?: boolean;
   /** each command takes this long (the demo) */
   delayMs?: number;
+  /** our app is the image's privileged copy (Kiln's fastboot install), so an adb install updates it */
+  privileged?: boolean;
+}
+
+/**
+ * Android 6's `dumpsys package <pkg>` for our app, trimmed: a normal app in /data, or the image's copy in
+ * /system/priv-app (PackageManagerService grants it INSTALL_PACKAGES, frames/lululemon-mirror/research/privileged-app.md).
+ * `granted`: false for a privileged copy Android didn't grant it to.
+ */
+export function packageDump(pkg: string, code: number, o: { privileged?: boolean; granted?: boolean } = {}): string {
+  const priv = !!o.privileged;
+  return [
+    'Packages:',
+    `  Package [${pkg}] (1a2b3c):`,
+    '    userId=10062',
+    `    codePath=${priv ? '/system/priv-app/Glassworks' : `/data/app/${pkg}-1`}`,
+    `    versionCode=${code} minSdk=23 targetSdk=23`,
+    '    versionName=0.5.0-legacy',
+    `    flags=[ ${priv ? 'SYSTEM ' : ''}HAS_CODE ALLOW_CLEAR_USER_DATA ALLOW_BACKUP ]`,
+    ...(priv ? ['    privateFlags=[ PRIVILEGED ]'] : []),
+    `    pkgFlags=[ ${priv ? 'SYSTEM ' : ''}HAS_CODE ALLOW_CLEAR_USER_DATA ALLOW_BACKUP ]`,
+    '    install permissions:',
+    ...(priv && o.granted !== false ? ['      android.permission.INSTALL_PACKAGES: granted=true', '      android.permission.REBOOT: granted=true'] : []),
+    '      android.permission.INTERNET: granted=true',
+    '    User 0: installed=true hidden=false stopped=false notLaunched=false enabled=0',
+    '',
+  ].join('\n');
 }
 
 export class FakeMirror implements PanelShell {
@@ -181,7 +208,7 @@ export class FakeMirror implements PanelShell {
     if (cmd.startsWith('cmd ')) return { out: '/system/bin/sh: cmd: not found\n', code: 127 };
     const PKG = this.app.package;
     if (cmd === `dumpsys package ${PKG}`) {
-      return ok(this.installed ? `Packages:\n  Package [${PKG}] (1a2b3c):\n    versionCode=${this.installed} minSdk=23 targetSdk=23\n    versionName=0.5.0-legacy\n` : '');
+      return ok(this.installed ? packageDump(PKG, this.installed, { privileged: o.privileged }) : '');
     }
     if (cmd === 'dumpsys package preferred-activities') { this.reads++; this.maybePick(); return ok(this.preferredDump()); }
     if ((m = /^pm install -r (-g )?(\S+)$/.exec(cmd))) {
@@ -264,6 +291,8 @@ export class FirstBootMirror implements PanelShell {
   accelerometer = 1;
   /** the display doesn't follow user_rotation (the timeout case) */
   rotationStuck = false;
+  /** Android didn't grant the image's copy INSTALL_PACKAGES */
+  notGranted = false;
   /** `installed`: our app is there; `ours`: which app (Glassworks by default) */
   constructor(private readonly fp: string = FINGERPRINT, private readonly installed = true, readonly ours: MirrorApp = GLASSWORKS) {}
   async run(cmd: string) {
@@ -283,7 +312,7 @@ export class FirstBootMirror implements PanelShell {
         `    mConfiguration={1.0 ?mcc?mnc en_US ldltr sw1080dp w${w}dp h${h - 48}dp 240dpi xlrg ${rot % 2 ? 'port' : 'land'} finger -keyb/v/h -nav/h s.4}`,
         '    mHasSurface=true mShownFrame=[0.0,0.0][1080.0,1920.0] isReadyForDisplay()=true',
         '',
-        '  mCurrentFocus=Window{9a3e21c u0 dev.glassworks.generic_android.legacy/sh.edm.s1kiosk.MainActivity}',
+        '  mCurrentFocus=Window{9a3e21c u0 dev.glassworks.generic_android.legacy/dev.glassworks.MainActivity}',
         '  mInTouchMode=true mLayoutSeq=58',
         `  mScreenRect=[0,0][${w},${h}]`,
         '  mDisplayFrozen=false windows=0 client=false apps=0  waitingForConfig=false',
@@ -293,7 +322,7 @@ export class FirstBootMirror implements PanelShell {
     }
     if (cmd === 'dumpsys window') return ok('WINDOW MANAGER LAST ANR (dumpsys window lastanr)\n  <no ANR has occurred since boot>\n'); // Android 6 prints mRotation here only with dumpAll
     const pkg = this.ours.package;
-    if (cmd === `dumpsys package ${pkg}`) return ok(this.installed ? '    versionCode=600 minSdk=23\n    versionName=0.5.0-legacy\n' : '');
+    if (cmd === `dumpsys package ${pkg}`) return ok(this.installed ? packageDump(pkg, 600, { privileged: true, granted: !this.notGranted }) : '');
     if (cmd === 'pm list packages com.android.launcher3') return ok(this.hidden.has('com.android.launcher3') ? '' : 'package:com.android.launcher3\n');
     if (cmd.startsWith('pm list packages')) return ok('');
     if (cmd === `am start -a android.intent.action.MAIN -c android.intent.category.HOME ${pkg}`) {

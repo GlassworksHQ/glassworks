@@ -18,10 +18,10 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import dev.glassworks.GlassworksRuntime
-import sh.edm.s1kiosk.KioskApp
+import dev.glassworks.s1.KioskApp
 import dev.glassworks.KioskPrefs
-import sh.edm.s1kiosk.PanePrefs
-import sh.edm.s1kiosk.frame.AqaraS1Plus
+import dev.glassworks.s1.PanePrefs
+import dev.glassworks.s1.frame.AqaraS1Plus
 import dev.glassworks.radio.RadioController
 import dev.glassworks.radio.TestInit
 import java.io.File
@@ -31,7 +31,7 @@ import dev.glassworks.radio.runningRadio
  * Setup without the screen: every pane step the S1 has (its real definitions, with a radio controller
  * on a fake init) is finished with setup channel requests alone, and the requests Kiln sends
  * (kiln/apps/kiln/src/wizard/session.ts through kiln/packages/setup-channel) still get the replies
- * channel.ts expects. The replies are pinned in kiln/packages/setup-channel/test/s1-kiosk-transcript.json,
+ * channel.ts expects. The replies are pinned in kiln/packages/setup-channel/test/aqara-s1-plus-transcript.json,
  * which setup-channel's own tests replay through channel.ts. Regenerate it with -Ps1RegenGolden=true.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -162,7 +162,7 @@ class SetupChannelStepsTest {
         else -> a == b
     }
 
-    private fun transcriptFile(): File = File(RepoFiles.root, "kiln/packages/setup-channel/test/s1-kiosk-transcript.json")
+    private fun transcriptFile(): File = File(RepoFiles.root, "kiln/packages/setup-channel/test/aqara-s1-plus-transcript.json")
 
     private companion object {
         const val IP = "192.0.2.10"

@@ -1,0 +1,32 @@
+{
+  "frame": "lululemon-mirror",
+  "name": "lululemon Studio Mirror",
+  "body": { "w": 1336, "h": 536, "thickness": 43, "radius": 3 },
+  "cover": {
+    "screws": [
+      [1336, 60, 6], [1336, 200, 6], [1336, 336, 6], [1336, 476, 6],
+      [20, 20], [20, 516],
+      [230, 60], [230, 200], [230, 336], [230, 476],
+      [1040, 20], [1240, 20], [1290, 20],
+      [1040, 516], [1240, 516], [1290, 516],
+      [1240, 231], [1240, 305]
+    ],
+    "features": [
+      { "kind": "grille", "at": [1131, 70], "size": [155, 155] },
+      { "kind": "grille", "at": [1131, 311], "size": [155, 155] },
+      { "kind": "recess", "at": [1180, 238], "size": [120, 60] }
+    ]
+  },
+  "stand": { "edge": "right", "tube": { "reach": 220, "inset": 6, "z": 6, "diameter": 9, "bend": 34, "closed": true } },
+  "board": [
+    { "kind": "chip", "at": [40, 400], "size": [110, 128] },
+    { "kind": "button", "at": [101, 505] }
+  ],
+  "button": { "at": [95, 505], "what": "VOL− (SW3): of the two buttons side by side on the small green board at the top end, the one nearer the top end's edge" },
+  "port": { "edge": "left", "at": 30, "kind": "micro-usb" },
+  "cord": { "at": [1215, 268], "toward": "right", "kind": "power" },
+  "power": { "edge": "right", "at": 268, "kind": "rocker" },
+  "steps": ["screws", "cover", "cord", "plug", "hold", "power"],
+  "labels": { "screws": "Unscrew the stand and the back", "cover": "Lift off the back", "plug": "Plug in the micro-USB", "hold": "Hold VOL−" },
+  "ready": { "seconds": 5, "says": "In fastboot. Let go." }
+}

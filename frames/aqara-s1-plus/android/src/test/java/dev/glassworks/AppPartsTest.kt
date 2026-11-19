@@ -26,11 +26,11 @@ import org.robolectric.annotation.Config
 import dev.glassworks.auth.HaTokenClient
 import dev.glassworks.auth.SignInServer
 import dev.glassworks.device.DeviceHost
-import sh.edm.s1kiosk.frame.AqaraS1Plus
+import dev.glassworks.s1.frame.AqaraS1Plus
 import dev.glassworks.assist.VoicePrefs
-import sh.edm.s1kiosk.KioskApp
-import sh.edm.s1kiosk.PanePrefs
-import sh.edm.s1kiosk.S1Panes
+import dev.glassworks.s1.KioskApp
+import dev.glassworks.s1.PanePrefs
+import dev.glassworks.s1.S1Panes
 
 /** The runtime runs the panes its app gives it ([AppParts]), and asks the app for its activity and pane files. */
 @RunWith(RobolectricTestRunner::class)

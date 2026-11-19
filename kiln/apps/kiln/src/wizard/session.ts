@@ -5,7 +5,7 @@ import type { AdbKey, PanelShell } from '@glassworks/adb';
 import type { Fastboot } from '@glassworks/fastboot';
 import type { FelDevice } from '@glassworks/fel';
 import {
-  IMPROV_SOCKET, ImprovSerialClient, PKG, kioskVersion, State as ImprovState, describeSwitch, panelWifi, unprovision,
+  IMPROV_SOCKET, ImprovSerialClient, PKG, kioskVersion, State as ImprovState, describeSwitch, panelWifi, readRootUpdates, unprovision,
   type AppPhase, type AssetName, type Provisioned, type SetUpOptions,
 } from '@glassworks/aqara-s1-plus-installer';
 import {
@@ -15,6 +15,7 @@ import {
 import { openSignInWindow, SETUP_SOCKET, SetupChannel } from '@glassworks/setup-channel';
 import type { FrameUi } from '../frames/aqara-s1-plus';
 import { ChannelSetup, type SetupSteps } from '../setup/channelSetup';
+import { s1Silent } from '../components/SilentUpdates';
 import { explain } from './explain';
 import { AskBridge, flowUi } from './flowUi';
 import { initial, reduce, type Action, type AppSettings, type Flow, type Setup, type WizardState } from './state';
@@ -117,7 +118,7 @@ export class Session implements SetupSteps {
       here: () => !this.closed && this.s.screen === 'setup',
       done: () => this.finish(),
       unreachable: (e) => this.fail(3, e ?? new Error(`${this.d.frame.app} isn't answering. Is it installed and running?`), true),
-      // which S1 Kiosk is on the panel decides how a Thread router gets its network (read-only)
+      // which Glassworks is on the panel decides how a Thread router gets its network (read-only)
       app: async () => {
         const v = await kioskVersion(this.panel!, this.lid());
         return { version: v?.name, code: v?.code };
@@ -236,7 +237,7 @@ export class Session implements SetupSteps {
         title: 'The original software is back.',
         body: this.s.undo.depth === 'keep'
           ? 'It is restarting with Aqara\'s software and apps. Your settings and Wi-Fi are as they were.'
-          : `One last step, on the panel: swipe down, tap Settings on the ${this.d.frame.app} notification, then Advanced settings → Factory reset.`,
+          : `One last step, on the panel: swipe down, tap Settings on the app's notification, then Advanced settings → Factory reset.`,
       },
     });
   }
@@ -479,7 +480,19 @@ export class Session implements SetupSteps {
         },
       },
     });
+    void this.readUpdates();
     void this.handOff(ip);
+  }
+
+  /** Done's Silent updates block (issue 422): the root update service read back from the panel, whatever route led to Done. */
+  private async readUpdates(): Promise<void> {
+    const p = this.panel;
+    if (!p) return;
+    const u = await readRootUpdates(p, this.lid());
+    this.ui.note(u.state === 'unknown' ? `silent updates: not read back (${u.detail})` : `silent updates: root update service ${u.state === 'on' ? 'in place' : 'missing'}`);
+    const d = this.s.done;
+    if (!d || this.closed || this.s.screen !== 'done') return;
+    this.dispatch({ type: 'done', done: { ...d, updates: s1Silent(u) } });
   }
 
   /**
@@ -610,15 +623,16 @@ export class Session implements SetupSteps {
   }
 
   /**
-   * Giving the panel back to Aqara's apps removes or disables S1 Kiosk, so it only happens for a
+   * Giving the panel back to Aqara's apps removes or disables Glassworks, so it only happens for a
    * backup undo can restore (kiln-core's checkRestorable, the check the restore itself runs). A backup
    * that can't be restored stops here, with nothing on the panel changed.
    */
   private async giveBack(picked: Promise<PanelShell>, files: ReadonlyMap<string, Uint8Array>) {
     const busy = (sub: string) => this.dispatch({ type: 'undo', patch: { note: { kind: 'busy', title: 'Giving the panel back to Aqara\'s apps', sub } } });
     busy(`In the browser's list, pick ${this.d.frame.asks.connect.pick}.`);
+    let panel: PanelShell | undefined;
     try {
-      const panel = await picked;
+      panel = await picked;
       try {
         await checkRestorable(this.d.recipe.backup, files);
       } catch (e) {
@@ -634,11 +648,19 @@ export class Session implements SetupSteps {
         return;
       }
       this.dispatch({ type: 'changed', by: 'apps' }); // before it starts: a give-back that stops partway has changed the panel too
-      await unprovision(panel, (s, d) => busy(s || d || ''));
-      this.dispatch({ type: 'undo', patch: { appsBack: true, locked: true, note: { kind: 'ok', title: 'Aqara\'s apps are back.', sub: 'Next, put the original software back: Continue, then recovery mode.' } } });
+      const r = await unprovision(panel, (s, d) => busy(s || d || ''));
+      // Still on: the apps are back against this backup (locked), but the step isn't done.
+      if (r.app === 'running') {
+        this.dispatch({ type: 'undo', patch: { locked: true, note: { kind: 'err', title: 'Aqara\'s apps are back, but Glassworks is still on.', sub: `${r.note} Try again, or choose "${this.d.frame.undo.factory.title}".` } } });
+        return;
+      }
+      this.dispatch({ type: 'undo', patch: { appsBack: true, locked: true, note: { kind: 'ok', title: 'Aqara\'s apps are back.', sub: `${r.note} Next, put the original software back: Continue, then recovery mode.` } } });
     } catch (e) {
       const msg = notPicked(e) ? 'Nothing was picked.' : (e as Error).message;
       this.dispatch({ type: 'undo', patch: { note: { kind: 'err', title: 'Couldn\'t reach the panel over adb.', sub: `${msg} Is it running and plugged in?` } } });
+    } finally {
+      // each give-back picks the panel again: let go of this one's USB first
+      await (panel as { close?: () => Promise<void> } | undefined)?.close?.().catch(() => {});
     }
   }
 }

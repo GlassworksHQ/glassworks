@@ -10,18 +10,18 @@ import { Fastboot } from '@glassworks/fastboot';
 import { GLASSWORKS, IMAGE_PROXY, MIRROR_FASTBOOT, MIRROR_PROBE, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
 import { fakeAdbKey, fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
 import { hostAdb, readSerial } from './adb';
-import { DRY_USERDATA, dryDevices, dryImage } from './dry';
-import { runInstall, runWayBack, type RunDeps } from './run';
+import { DRY_USERDATA, dryDevices, dryImage, dryRoom } from './dry';
+import { runInstall, runWayBack, type InstallResult, type RunDeps } from './run';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
-export const HELP = `usage: flash-node.ts [--dry-run] [--yes] (install | --way-back)
+export const HELP = `usage: flash-node.ts [--dry-run] [--yes] (install | --first-boot | --way-back)
 
 install (WRITES system and userdata):
   --image <system.img>     the Glass Panes system.img (checked by size and SHA-256)
   --refract                download it through Refract instead (${IMAGE_PROXY.base})
   --apk <file>             the legacy build of Glassworks for generic Android
                            (dev.glassworks.generic_android.legacy: minSdk 23, arm64-v8a or armeabi-v7a)
-  --probe                  the APK is the Mirror probe (tools/mirror/probe-app, sh.edm.s1kiosk) instead
+  --probe                  the APK is the Mirror probe (tools/mirror/probe-app, dev.glassworks.mirror.probe) instead
   --adb-key <file>         the adb public key the Mirror lets in without asking (services.jar),
                            default ~/.android/adbkey.pub. adb's server must hold its private half:
                            for another key, see "A throwaway key" in tools/mirror/README.md. Repeat
@@ -34,6 +34,11 @@ install (WRITES system and userdata):
                            GlassworksSettings.apk and ro.lockscreen.disable.default (Wi-Fi on, no screen
                            timeout, no lock screen, no auto-rotate)
   --screenshot <png>       default: ./mirror-after.png
+first boot only (writes no partition), for a Mirror already on the image whose install stopped after the flash:
+  --first-boot             the install's last steps: wait for adb, the first boot (it checks the image's
+                           fingerprint and that the app is there), the HOME check, the screenshot. Takes
+                           --probe, --ha-url, --wifi-ssid with --wifi-pass-file (optional: the image may have
+                           the network saved already) and --screenshot; needs no --image or --apk
 way back (WRITES system and userdata):
   --way-back --image <system.img> --userdata <userdata.sparse>
 both:
@@ -51,7 +56,7 @@ function parse(argv: string[]) {
   return parseArgs({
     args: argv,
     options: {
-      'dry-run': { type: 'boolean' }, yes: { type: 'boolean' }, 'way-back': { type: 'boolean' }, help: { type: 'boolean' },
+      'dry-run': { type: 'boolean' }, yes: { type: 'boolean' }, 'way-back': { type: 'boolean' }, 'first-boot': { type: 'boolean' }, help: { type: 'boolean' },
       image: { type: 'string' }, refract: { type: 'boolean' }, apk: { type: 'string' }, probe: { type: 'boolean' }, 'adb-key': { type: 'string', multiple: true },
       'ha-url': { type: 'string' }, 'wifi-ssid': { type: 'string' }, 'wifi-pass-file': { type: 'string' },
       'boot-animation': { type: 'string' }, 'no-boot-animation': { type: 'boolean' }, 'no-settings-overlay': { type: 'boolean' }, 'no-fill': { type: 'boolean' },
@@ -117,8 +122,8 @@ async function realDevices(a: Args, log: (l: string) => void, confirm: RunDeps['
       }
       // unauthorized is normal for a while after each start: the framework lets the key in once it runs
       throw new Error(s === 'unauthorized'
-        ? 'the Mirror stayed unauthorized for 6 minutes: adb\'s server isn\'t answering with the key the image lets in (the first --adb-key). Restart the server with that key (tools/mirror/README.md, "A throwaway key"), then run `adb devices` again: no reflash needed'
-        : 'the Mirror didn\'t come up on adb in 6 minutes. If `adb devices` shows another serial, put that in the serial file and rerun from --way-back or the first boot');
+        ? 'the Mirror stayed unauthorized for 6 minutes: adb\'s server isn\'t answering with the key the image lets in (the first --adb-key). Restart the server with that key (tools/mirror/README.md, "A throwaway key"), then run only the first boot with --first-boot: no reflash needed'
+        : 'the Mirror didn\'t come up on adb in 6 minutes. Once `adb devices` lists it (another serial goes in the serial file), run only the first boot with --first-boot. If it doesn\'t start at all, put the plain image back with --way-back');
     },
     async screenshot(file) { writeFileSync(file, await adb.adb(['exec-out', 'screencap', '-p'], { encoding: 'buffer' })); },
   };
@@ -140,16 +145,25 @@ function adbKeys(a: Args, log: (l: string) => void): string {
   return lines.join('\n');
 }
 
+/** The last line, and the exit code: 0 when HOME opens our app. */
+function done(r: InstallResult, name: string, log: (l: string) => void): number {
+  const fb = r.firstBoot;
+  log(`\nDone: ${name} ${fb?.app.name ?? fb?.app.code}, home ${fb?.home.result}${fb?.wifi === undefined ? '' : `, Wi-Fi ${fb.wifi ? 'joined' : 'not confirmed'}`}, rotation ${fb?.rotation ?? 'unset'}${r.screenshot ? `, screenshot ${r.screenshot}` : ''}.`);
+  return fb?.home.result === 'set' ? 0 : 1;
+}
+
 /**
- * flash-node.ts's body: runs the install, the way back or a dry run from `argv`. Returns the exit
+ * flash-node.ts's body: runs the install, the first boot alone, the way back or a dry run from `argv`. Returns the exit
  * code: 0 done, 1 done but HOME isn't our app. Throws UsageError for a wrong argument.
  */
 export async function cli(argv: string[], log: (l: string) => void = (l) => console.log(l)): Promise<number> {
   const a = parse(argv);
   if (a.help) { log(HELP); return 0; }
   const dry = !!a['dry-run'];
+  if (a['first-boot'] && a['way-back']) fail('--first-boot and --way-back: pick one');
   const work = a.work ?? mkdtempSync(join(tmpdir(), 'gw-mirror-'));
-  log(dry ? 'DRY RUN: a fake Mirror; no device is touched.' : 'This WRITES the Mirror\'s system and userdata partitions.');
+  log(dry ? 'DRY RUN: a fake Mirror; no device is touched.'
+    : a['first-boot'] ? 'The first boot only, over adb: no partition is written.' : 'This WRITES the Mirror\'s system and userdata partitions.');
   try {
     if (a['way-back']) {
       if (dry) {
@@ -168,15 +182,30 @@ export async function cli(argv: string[], log: (l: string) => void = (l) => cons
     }
 
     const app = a.probe ? MIRROR_PROBE : GLASSWORKS;
+    const wifi = a['wifi-ssid'] ? { ssid: a['wifi-ssid'], password: a['wifi-pass-file'] ? readFileSync(a['wifi-pass-file'], 'utf8').replace(/\r?\n$/, '') : fail('--wifi-ssid needs --wifi-pass-file') } : undefined;
+    if (a['first-boot']) {
+      const o = { app, haUrl: a['ha-url'], wifi, work };
+      if (dry) {
+        // the fake Mirror runs the image already: adb from the start
+        const d = dryDevices(0, log, { app });
+        d.deps.waitForAdb = async () => d.after;
+        const r = await runInstall({ ...o, screenshot: join(work, 'after.png') }, d.deps);
+        log(`\nDry run: adb ran ${d.after.cmds.length} commands on the first boot; LK got ${d.lk.commands.length}.`);
+        return done(r, app.name, log);
+      }
+      const devices = await realDevices(a, log, await confirmer(!!a.yes));
+      return done(await runInstall({ ...o, screenshot: a.screenshot ?? resolve('mirror-after.png') }, devices), app.name, log);
+    }
     const apk = a.apk ? new Uint8Array(readFileSync(a.apk)) : dry ? fakeMirrorApk({ package: app.package, libs: { 'arm64-v8a': { 'libdry.so': new Uint8Array(16) } } }) : fail(`--apk <${a.probe ? 'the probe\'s APK' : 'Glassworks legacy APK'}> is needed`);
     const animPath = a['boot-animation'] ?? join(REPO, 'branding/lululemon-mirror/bootanimation.zip');
     const bootAnimation = a['no-boot-animation'] ? undefined : new Uint8Array(readFileSync(animPath));
-    const wifi = a['wifi-ssid'] ? { ssid: a['wifi-ssid'], password: a['wifi-pass-file'] ? readFileSync(a['wifi-pass-file'], 'utf8').replace(/\r?\n$/, '') : fail('--wifi-ssid needs --wifi-pass-file') } : undefined;
     const settingsOverlay = a['no-settings-overlay'] ? undefined : new Uint8Array(readFileSync(join(REPO, 'frames/lululemon-mirror/overlay/GlassworksSettings.apk')));
     const common = { apk, app, bootAnimation, settingsOverlay, haUrl: a['ha-url'], wifi, work, fill: !a['no-fill'] };
     let r;
     if (dry) {
-      const img = await dryImage(work, apk.length + (bootAnimation?.length ?? 0));
+      // the fake image needs room for what the patch writes: the APK, the libraries it unpacks, the
+      // boot animation and the settings overlay (#557)
+      const img = await dryImage(work, await dryRoom(apk, (bootAnimation?.length ?? 0) + (settingsOverlay?.length ?? 0)));
       const d = dryDevices(img.bytes, log, { app });
       r = await runInstall({ ...common, image: { path: img.path }, want: img.want, userdataBytes: DRY_USERDATA, adbKey: fakeAdbKey(1, 'dry@run'), screenshot: join(work, 'after.png') }, d.deps);
       log(`\nDry run: LK got ${d.lk.commands.filter((c) => c.startsWith('flash:')).join(', ')}, then reboot; adb ran ${d.after.cmds.length} commands on the first boot.`);
@@ -185,9 +214,7 @@ export async function cli(argv: string[], log: (l: string) => void = (l) => cons
       const image = a.image ? { path: a.image } : { url: `${IMAGE_PROXY.base}/${IMAGE_PROXY.systemImg}` };
       r = await runInstall({ ...common, image, adbKey: adbKeys(a, log), screenshot: a.screenshot ?? resolve('mirror-after.png') }, await realDevices(a, log, await confirmer(!!a.yes)));
     }
-    const fb = r.firstBoot;
-    log(`\nDone: ${app.name} ${fb?.app.name ?? fb?.app.code}, home ${fb?.home.result}${fb?.wifi === undefined ? '' : `, Wi-Fi ${fb.wifi ? 'joined' : 'not confirmed'}`}, rotation ${fb?.rotation ?? 'unset'}${r.screenshot ? `, screenshot ${r.screenshot}` : ''}.`);
-    return fb?.home.result === 'set' ? 0 : 1;
+    return done(r, app.name, log);
   } finally {
     if (a.keep || a.work) log(`work folder kept: ${work}`);
     else rmSync(work, { recursive: true, force: true });

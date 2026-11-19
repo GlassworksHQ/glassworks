@@ -129,10 +129,25 @@ class KioskPrefs(
         get() = sp.getBoolean(KEY_WIFI_SEEN, false)
         set(v) = sp.edit().putBoolean(KEY_WIFI_SEEN, v).apply()
 
+    /** The device has reported a dock at least once: Home Assistant keeps its *Docked* sensor from then on (dev.glassworks.dock.Docked). */
+    var dockSeen: Boolean
+        get() = sp.getBoolean("dock_seen", false)
+        set(v) = sp.edit().putBoolean("dock_seen", v).apply()
+
     /** "Skip" on the setup screen's Add-to-Home-Assistant step. */
     var haSetupSkipped: Boolean
         get() = sp.getBoolean("setup_ha_skipped", false)
         set(v) = sp.edit().putBoolean("setup_ha_skipped", v).apply()
+
+    /** Setup's Silent updates step was answered: Continue or Not now, or the panel was set up before the step (#422). */
+    var silentUpdatesAnswered: Boolean
+        get() = sp.getBoolean("setup_silent_updates_answered", false)
+        set(v) = sp.edit().putBoolean("setup_silent_updates_answered", v).apply()
+
+    /** The device's own setup steps had their once-per-install check (GlassworksRuntime.deviceSetupSteps). */
+    var deviceStepsMigrated: Boolean
+        get() = sp.getBoolean("setup_device_steps_migrated", false)
+        set(v) = sp.edit().putBoolean("setup_device_steps_migrated", v).apply()
 
     /** Lovelace dashboards the "Dashboard" select was last built from (`[{url_path,title}]`). */
     var dashboardsJson: String

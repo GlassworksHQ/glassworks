@@ -21,6 +21,7 @@ kiosk|camera_use|String|null
 kiosk|dashboards|String|""
 kiosk|device_mac|String|""
 kiosk|diagnostics_enabled|Boolean|true
+kiosk|dock_seen|Boolean|false
 kiosk|ha_seen|Boolean|false
 kiosk|ha_url|String|""
 kiosk|ha_url_source|String|""
@@ -51,9 +52,11 @@ kiosk|sendspin_enabled|Boolean|true
 kiosk|sendspin_flac|Boolean|true
 kiosk|sendspin_server|String|"auto"
 kiosk|sendspin_unpaired_access|Boolean|false
+kiosk|setup_device_steps_migrated|Boolean|false
 kiosk|setup_ha_skipped|Boolean|false
 kiosk|setup_radio_done|Boolean|false
 kiosk|setup_radio_migrated|Boolean|false
+kiosk|setup_silent_updates_answered|Boolean|false
 kiosk|speaker_muted|Boolean|false
 kiosk|speaker_volume|Float|1.0
 kiosk|time_zone_enabled|Boolean|true

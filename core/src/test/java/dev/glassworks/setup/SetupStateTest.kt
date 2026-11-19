@@ -270,6 +270,41 @@ class SetupStateTest {
         assertEquals(listOf(null, "ha", "ha", "panes", "panes", null), SetupFlow.ids(true, steps).map(SetupFlow::group))
     }
 
+    /** The device's own steps (#422) follow Panes, each a rail row of its own, not under Panes. */
+    @Test fun theDevicesOwnStepsFollowPanesOnRowsOfTheirOwn() {
+        val own = listOf("silent_updates")
+        val ids = SetupFlow.ids(true, listOf("radio"), own)
+        assertEquals(listOf("wifi", "signin", "ha", "panes", "radio", "silent_updates", "done"), ids)
+        assertEquals(listOf(null, "ha", "ha", "panes", "panes", null, null), ids.map { SetupFlow.group(it, own) })
+        assertEquals(listOf("wifi", "signin", "ha", "silent_updates", "done"), SetupFlow.ids(false, own = own))
+        assertEquals("silent_updates", SetupFlow.parse("silent_updates", true, listOf("radio"), own))
+    }
+
+    @Test fun theDevicesOwnStepComesAfterEveryPaneStepAndKeepsTheScreenUp() {
+        val silent = PaneStepFacts("silent_updates", false, "updates ask for a tap, and the person can change that")
+        val i = fresh.copy(haKnown = true, haSeen = true, signedIn = true, ownSteps = listOf(silent))
+        // Panes and the radio first: the device's step never jumps ahead of them, nor holds Panes.
+        assertEquals(SetupFlow.PANES, SetupState.decide(i).step)
+        val chosen = i.copy(panesChosen = true)
+        assertEquals("radio", SetupState.decide(chosen).step)
+        var d = SetupState.decide(chosen.copy(paneSteps = radio(true)))
+        assertEquals("silent_updates", d.step)
+        assertEquals(listOf(silent.reason), d.reasons)
+        assertTrue(d.show)
+        // A pane turned off on Panes doesn't skip it either.
+        assertEquals("silent_updates", SetupState.decide(chosen.copy(paneSteps = radio(false).map { it.copy(wanted = false) })).step)
+        // Answered: done, and Done is next.
+        d = SetupState.decide(chosen.copy(paneSteps = radio(true), ownSteps = listOf(silent.copy(done = true)), showing = true))
+        assertEquals(SetupFlow.DONE, d.step)
+        assertTrue("silent_updates" in d.done)
+        // Not over Home Assistant's login page while the person signs in there ("Sign in on this panel instead").
+        val panelLogin = chosen.copy(signedIn = false, usePanelLogin = true, dashboardLoaded = false, paneSteps = radio(true))
+        assertFalse(silent.reason in SetupState.decide(panelLogin).reasons)
+        assertTrue(silent.reason in SetupState.decide(panelLogin.copy(dashboardLoaded = true)).reasons)
+        // A frame with no panes at all: straight after Sign in.
+        assertEquals("silent_updates", SetupState.decide(i.copy(paneSteps = emptyList())).step)
+    }
+
     @Test
     fun paneStepsComeUnderPanesAfterSignin() {
         val two = listOf(PaneStepFacts("radio", false, "radio mode not chosen"), PaneStepFacts("camera", false, "camera not set up"))

@@ -152,7 +152,7 @@ class KioskForegroundTest {
     /** Android 10 throws when startForeground passes a type the manifest does not declare. */
     @Test fun theManifestDeclaresEveryTypeTheServiceStartsWith() {
         val manifest = File(RepoFiles.s1App, "src/main/AndroidManifest.xml").readText()
-        val declared = Regex("""android:name="\.KioskService"[^>]*android:foregroundServiceType="([^"]+)"""")
+        val declared = Regex("""android:name="dev\.glassworks\.KioskService"[^>]*android:foregroundServiceType="([^"]+)"""")
             .find(manifest)!!.groupValues[1].split("|").toSet()
         assertEquals(setOf("microphone", "location", "connectedDevice", "camera"), declared)
         for (p in listOf("FOREGROUND_SERVICE_MICROPHONE", "FOREGROUND_SERVICE_LOCATION", "FOREGROUND_SERVICE_CONNECTED_DEVICE", "FOREGROUND_SERVICE_CAMERA", "CHANGE_WIFI_STATE")) {

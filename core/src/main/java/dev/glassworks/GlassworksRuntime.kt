@@ -5,6 +5,7 @@ import android.content.Intent
 import android.util.Log
 import dev.glassworks.engine.Engine
 import dev.glassworks.frame.Frame
+import dev.glassworks.frame.Input
 import dev.glassworks.manage.ManagePage
 import dev.glassworks.manage.PanelCode
 import dev.glassworks.pane.CantRun
@@ -22,7 +23,10 @@ import dev.glassworks.device.DeviceHost
 import dev.glassworks.device.PanelDevice
 import dev.glassworks.setup.SetupFlow
 import dev.glassworks.setup.SetupPane
+import dev.glassworks.setup.SetupState
 import dev.glassworks.update.ReleaseLine
+import dev.glassworks.update.SilentUpdates
+import dev.glassworks.update.SilentUpdatesStep
 import dev.glassworks.update.UpdateManager
 import dev.glassworks.assist.OrbBakes
 
@@ -71,17 +75,47 @@ class GlassworksRuntime(
     override fun paneDefinitions(context: Context): List<PaneDefinition> = synchronized(this) {
         definitions ?: run {
             val ctx = context.applicationContext
+            migrateDeviceSteps(KioskPrefs(ctx))
             app.paneDefinitions(ctx, this, paneFrame.paneDefinitions(ctx)).map { CantRun.unless(it, frame.provides) }
         }.also { definitions = it }
     }
 
     /**
-     * The panes' setup steps, in order, for the setup screen and the setup channel. The only place that
-     * reads PaneDefinition.setupSteps (FramePanesTest checks). A step setup can't take
+     * The panes' setup steps, in order, then the device's own ([deviceSetupSteps]), for the setup screen and the setup
+     * channel. The only place that reads PaneDefinition.setupSteps (FramePanesTest checks). A step setup can't take
      * (SetupFlow.usable: a clashing id or request name) is left out with an error in the log, so a bad
      * pane never stops the app from starting.
      */
-    override fun setupSteps(context: Context): List<SetupStep> = setupPanes(context).flatMap { it.steps }
+    override fun setupSteps(context: Context): List<SetupStep> = setupPanes(context).flatMap { it.steps } + deviceSetupSteps(context)
+
+    private var deviceSteps: List<SetupStep>? = null
+
+    /** The frame's screen takes a tap: read once, when setup first asks (a binder call). */
+    private val touch by lazy { frame.input == Input.TOUCH }
+
+    /**
+     * Silent updates (#422): shown during setup whenever updates ask for a tap and there's a way to change that. The
+     * answer is read on every ask, at most once a second, once [UpdateManager] has read the frame's root update service.
+     */
+    override fun deviceSetupSteps(context: Context): List<SetupStep> = synchronized(this) {
+        deviceSteps ?: run {
+            val ctx = context.applicationContext
+            val prefs = KioskPrefs(ctx)
+            val silent = SilentUpdates.Fresh { updates?.rootService?.let { SilentUpdates.read(ctx, it) } }
+            listOf(SilentUpdatesStep(silent, { prefs.silentUpdatesAnswered }, { prefs.silentUpdatesAnswered = true }, { touch }))
+        }.also { deviceSteps = it }
+    }
+
+    /**
+     * Once per install of a build with the device's own steps: a panel that was set up before never sees them, as with
+     * the radio's step. Runs with the pane definitions, which the app makes before discovery can save a Home Assistant
+     * URL in this process.
+     */
+    private fun migrateDeviceSteps(prefs: KioskPrefs) {
+        if (prefs.deviceStepsMigrated) return
+        if (SetupState.setUpBefore(prefs.haBase != null, prefs.haSeen, prefs.apiEncryption, prefs.haSetupSkipped)) prefs.silentUpdatesAnswered = true
+        prefs.deviceStepsMigrated = true
+    }
 
     /**
      * The panes on setup's Panes step, in definition order: each card with its pane's usable steps
@@ -91,7 +125,8 @@ class GlassworksRuntime(
      */
     override fun setupPanes(context: Context): List<SetupPane> {
         val definitions = paneDefinitions(context)
-        val kept = SetupFlow.usable(definitions.flatMap { it.setupSteps }) { Log.e(TAG, it) }.toSet()
+        // The device's own steps go first, so a pane's step can't take their id or request names (CodeRabbit on #513).
+        val kept = SetupFlow.usable(deviceSetupSteps(context) + definitions.flatMap { it.setupSteps }) { Log.e(TAG, it) }.toSet()
         return definitions.mapNotNull { d ->
             val steps = d.setupSteps.filter { it in kept }
             val card = d.setupChoice
@@ -119,6 +154,8 @@ class GlassworksRuntime(
     @Volatile var device: PanelDevice? = null
 
     override fun homeAssistantConnected(): Boolean = device?.homeAssistantConnected() == true
+
+    override fun docked(): Boolean? = device?.docked()
 
     override val panelCode = PanelCode()
 

@@ -1,6 +1,6 @@
 package dev.glassworks.setup
 
-import sh.edm.s1kiosk.frame.TestFrames
+import dev.glassworks.s1.frame.TestFrames
 import android.app.Application
 import android.os.Looper
 import android.view.ViewGroup

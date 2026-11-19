@@ -10,6 +10,8 @@ export const MATERIAL = {
   rib: '#22252d',
   ribLine: '#2c2f38',
   plate: '#262932',
+  stand: '#3b3f4a',
+  tube: '#4b4f58',
   hole: '#1e2028',
   clip: '#0b0c10',
   buttonCap: '#9a9ca3',

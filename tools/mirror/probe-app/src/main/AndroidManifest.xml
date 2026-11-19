@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- SPDX-License-Identifier: MIT. Copyright (c) 2026 aguilaair.
-     The Mirror probe (#29): does a /system/priv-app app get Android 6's privileged permissions?
-     It borrows S1 Kiosk's package and MainActivity names because the Mirror pipeline accepts only those. -->
+     The Mirror probe (#29): does a /system/priv-app app get Android 6's privileged permissions? -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!-- signature|privileged on Android 6: granted only to a privileged system app (or a platform-signed one). -->
