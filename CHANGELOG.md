@@ -211,6 +211,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   is frozen and gets no security fixes, so it loads only your Home Assistant, and remote debugging is off.
   Remote debugging now stays off there for real: the adb extra that turns it on is ignored, and so is the
   setting if it was already on. Other devices don't show the chip.
+- **Pick an update channel: Stable or Beta.** The device page in the panel's settings and on the Manage page has an
+  *Update channel* row. Stable, the default, gets releases as before. Beta also gets betas, new versions before
+  they're stable, which may have bugs; Home Assistant's update card says when the update it offers is a beta. Going
+  back to Stable never installs an older version: the panel waits for a stable release newer than the one it runs.
 
 ### Changed
 - **A room's "lights off" no longer turns the panel's screen off.** The screen is still a light with the same

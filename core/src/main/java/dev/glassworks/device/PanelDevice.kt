@@ -198,7 +198,7 @@ class PanelDevice(
      * App updates from GitHub Releases (docs/releasing.md); the "App update" entity. runCatching:
      * the update thread may still report while [stop] has already shut [exec] down.
      */
-    private val updates = UpdateManager(ctx, runtime, onChange = { runCatching { exec.execute { server?.publishStates() } } })
+    private val updates = UpdateManager(ctx, runtime, channel = { prefs.updateChannel }, onChange = { runCatching { exec.execute { server?.publishStates() } } })
     @Volatile private var announcing = false
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null

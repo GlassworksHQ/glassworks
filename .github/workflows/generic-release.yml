@@ -2,6 +2,8 @@
 # (docs/releasing.md, "Glassworks for generic Android and its legacy build"):
 #   git tag -a generic-android-v1.2.3 -m "Glassworks for generic Android 1.2.3"        && git push origin generic-android-v1.2.3
 #   git tag -a generic-android-legacy-v1.2.3 -m "Glassworks for generic Android 1.2.3, legacy build" && git push origin generic-android-legacy-v1.2.3
+# A beta (#605): the same tag with the line "Channel: beta" in its message (-m "Channel: beta"), published as a
+# GitHub pre-release that only apps on the Beta update channel take (tools/release/tag-channel.sh).
 # Each tag is one release line, the one the app's update check reads (core/.../update/Releases.kt, ReleaseLine):
 #   generic-android-v*         dev.glassworks.generic_android         glassworks-generic-android-<abi>-<version>.apk
 #   generic-android-legacy-v*  dev.glassworks.generic_android.legacy  glassworks-generic-android-legacy-<abi>-<version>.apk
@@ -45,6 +47,7 @@ jobs:
       line: ${{ steps.line.outputs.line }}
       version: ${{ steps.line.outputs.version }}
       title: ${{ steps.line.outputs.title }}
+      channel: ${{ steps.channel.outputs.channel }}
       changelog-version: ${{ steps.notes.outputs.version }}
     env:
       TAG: ${{ inputs.tag || github.ref_name }}
@@ -68,7 +71,7 @@ jobs:
           esac
           v="${TAG#"$line"-v}"
           # Same rule as frames/generic-android/android/build.gradle.kts: MAJOR.MINOR.PATCH, minor and patch below
-          # 100. No pre-release tags: the app ignores them.
+          # 100. No SemVer pre-release tags (-rc.1): they have no versionCode. A beta is a plain version (Channel: beta).
           if ! [[ "$v" =~ ^(0|[1-9][0-9]{0,3})\.(0|[1-9][0-9]?)\.(0|[1-9][0-9]?)$ ]]; then
             echo "::error::tag $TAG is not $line-vMAJOR.MINOR.PATCH (minor/patch < 100)"; exit 1
           fi
@@ -78,7 +81,20 @@ jobs:
           { echo "tag=$TAG"; echo "line=$line"; echo "version=$v"; echo "title=$title $v"; } >> "$GITHUB_OUTPUT"
           echo "$TAG: $id $v (versionCode $((major * 10000 + minor * 100 + patch)))"
 
-      - name: Higher than this line's last release
+      - name: Channel from the tag's message (stable, or beta)
+        id: channel
+        run: |
+          # actions/checkout can leave a lightweight copy of an annotated tag: fetch the tag itself. A dry run's tag
+          # may not exist yet: stable then, and the build is the same either way.
+          git fetch --no-tags --force origin "+refs/tags/$TAG:refs/tags/$TAG" 2>/dev/null ||
+            [ "$DRY_RUN" = true ] || { echo "::error::cannot fetch tag $TAG"; exit 1; }
+          opts=(); [ "$DRY_RUN" = true ] && opts=(--missing-ok)
+          channel="$(tools/release/tag-channel.sh "${opts[@]}" "$TAG")"
+          echo "channel=$channel" >> "$GITHUB_OUTPUT"
+          echo "CHANNEL=$channel" >> "$GITHUB_ENV"
+          echo "$TAG: $channel"
+
+      - name: Higher than this line's last release or beta
         # Fails fast, before the build; publish checks again, one run per line at a time.
         env:
           GH_TOKEN: ${{ github.token }}
@@ -174,7 +190,7 @@ jobs:
           [ "${#apks[@]}" = "$(jq -r '.abis | length' ../frames/generic-android/design/frame.json)" ] ||
             { echo "::error::not one APK per ABI"; exit 1; }
           {
-            echo "### $TAG$([ "$DRY_RUN" = true ] && echo ' (dry run: nothing published)')"
+            echo "### $TAG ($CHANNEL)$([ "$DRY_RUN" = true ] && echo ' (dry run: nothing published)')"
             for f in *; do echo "- \`$f\` ($(stat -c %s "$f") bytes)"; done
             echo; echo "Notes:"; echo; cat "$RUNNER_TEMP/notes.md"
           } >> "$GITHUB_STEP_SUMMARY"
@@ -217,10 +233,13 @@ jobs:
           CHANGELOG_VERSION: ${{ needs.build.outputs.changelog-version }}
           LINE: ${{ needs.build.outputs.line }}
           VERSION: ${{ needs.build.outputs.version }}
+          CHANNEL: ${{ needs.build.outputs.channel }}
         run: |
           tools/release/check-newer-than-released.sh "$LINE" "$VERSION"
           tools/release/changelog-section.sh "$CHANGELOG_VERSION" frames/generic-android/CHANGELOG.md > "$RUNNER_TEMP/notes.md"
           # One create with every asset, so a release never has half of its ABIs (docs/releasing.md "ABIs").
           # --latest=false: releases/latest must stay the S1 app's (panels up to 0.4.3 read only that).
+          # A beta (#605) is a pre-release: only apps on the Beta update channel take it.
+          flags=(); [ "$CHANNEL" = beta ] && { flags=(--prerelease); TITLE="$TITLE beta"; }
           gh release create "$TAG" dist/*.apk dist/*.apk.sha256 \
-            --verify-tag --latest=false --title "$TITLE" --notes-file "$RUNNER_TEMP/notes.md"
+            --verify-tag --latest=false "${flags[@]}" --title "$TITLE" --notes-file "$RUNNER_TEMP/notes.md"
