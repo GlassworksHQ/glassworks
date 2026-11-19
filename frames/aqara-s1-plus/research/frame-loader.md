@@ -385,8 +385,9 @@ boot from flash doesn't. `vbmeta` has flags 3, so the changed header boots.
    `cat /dev/block/by-name/boot | head -c 8` as adb's shell (expect permission denied), and the keys
    of `/proc/cmdline` (`tr ' ' '\n' | cut -d= -f1`). The full line holds the serial and MAC addresses:
    keep it out of notes.
-2. **T1**: `adb reboot bootloader`, then `fastboot devices` for a minute. Record the USB vendor and
-   product IDs and `fastboot getvar product|version|max-download-size|secure|unlocked`. If Android
+2. **T1**: `adb reboot bootloader`, approve the Mac's accessory prompt, then `fastboot-usb.py getvar`
+   (not the CLI: attempt 8). Record the USB vendor and product IDs and the getvars. `product` is the
+   panel's serial: the tool prints it as `<redacted>`, and the note records it that way. If Android
    boots instead, nothing was written: go to T2.
 3. **T2** (only if T1 failed): `su -c 'printf bootloader | dd of=/dev/block/by-name/misc bs=32 count=1 conv=notrunc,sync'`,
    then `adb reboot`. Afterwards (from Android, or from T3's RAM system if U-Boot keeps landing in
@@ -403,7 +404,8 @@ boot from flash doesn't. `vbmeta` has flags 3, so the changed header boots.
    `ro.boot.gw139=ram`, root, the radio helper, Wi-Fi, and compare the `/proc/cmdline` keys with T0's.
    If nothing comes up within 4 minutes, power-cycle: the panel boots from flash, unchanged.
 5. **T4** (only if T3 passed; pending, see above): back in fastboot, `fastboot flash boot boot.img`,
-   then a RAM boot of `boot-ram.img`, and in that RAM system `su -c 'sha256sum /dev/block/by-name/boot'` must equal the
+   then a RAM boot of the uImage-wrapped image that passed T3 (not `boot-ram.img`, which stock `boot`
+   doesn't start). In that RAM system, `su -c 'sha256sum /dev/block/by-name/boot'` must equal the
    backup. Then `adb reboot`. On a mismatch, don't boot from flash: rewrite from the RAM system with T5's
    commands, or use the FEL recovery.
 6. **T5**: `adb push boot.img /data/local/tmp/`, then as root
