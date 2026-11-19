@@ -75,7 +75,7 @@ step has its own address, so you can bookmark or reload one:
 |---|---|
 | `/` | Pick your panel |
 | `/aqara-s1-plus` | A full install: starts at Connect, with the panel in FEL mode |
-| `/aqara-s1-plus/set-up` | **Finish setting up** an installed panel: connects to it over USB (no FEL, nothing reflashed), updates S1 Kiosk with your settings, then Wi-Fi, Home Assistant and radio |
+| `/aqara-s1-plus/set-up` | **Finish setting up** an installed panel: connects to it over USB (no FEL, nothing reflashed), updates Glassworks with your settings, then Wi-Fi, Home Assistant and radio |
 | `/aqara-s1-plus/set-up/wifi` | Just the Wi-Fi step, on an installed panel |
 | `/aqara-s1-plus/set-up/home-assistant` | Just the Home Assistant step |
 | `/aqara-s1-plus/set-up/radio` | Just the Zigbee/Thread radio role |
@@ -143,21 +143,21 @@ If you close the browser's list without picking, the sheet says so. Click the bu
 
 ### 4 · Set up
 
-S1 Kiosk goes on the panel and becomes its home screen. Then Wi-Fi, Home Assistant and the radio,
+Glassworks goes on the panel and becomes its home screen. Then Wi-Fi, Home Assistant and the radio,
 from the same page. The rail shows these four as **App, Wi-Fi, Home Assistant, Radio**, and you
 can go back to any of them.
 
 **App.** Language, time zone, 12- or 24-hour clock, and an on-screen keyboard (Simple Keyboard,
-Apache-2.0) instead of Aqara's. They start as this computer's. Click **Install S1 Kiosk**. It takes
+Apache-2.0) instead of Aqara's. They start as this computer's. Click **Install Glassworks**. It takes
 about a minute.
 
 <table>
 <tr>
-<td width="50%"><img src="../../../docs/img/kiln/app.webp" alt="A few settings: Language American English (en-US), Time zone America/New York, 12-hour or 24-hour, On-screen keyboard checked. About a minute. Button: Install S1 Kiosk."></td>
-<td width="50%"><img src="../../../docs/img/kiln/app-installing.webp" alt="Installing S1 Kiosk. Keep it plugged in. Steps: install S1 Kiosk (Android installs it and optimises it for this panel), make it the panel's home screen, install the on-screen keyboard, apply your time zone, language and clock, first start."></td>
+<td width="50%"><img src="../../../docs/img/kiln/app.webp" alt="A few settings: Language American English (en-US), Time zone America/New York, 12-hour or 24-hour, On-screen keyboard checked. About a minute. Button: Install Glassworks."></td>
+<td width="50%"><img src="../../../docs/img/kiln/app-installing.webp" alt="Installing Glassworks. Keep it plugged in. Steps: install Glassworks (Android installs it and optimises it for this panel), make it the panel's home screen, install the on-screen keyboard, apply your time zone, language and clock, first start."></td>
 </tr>
 <tr>
-<td><em>The settings. On an installed panel the heading says <b>Update S1 Kiosk</b>.</em></td>
+<td><em>The settings. On an installed panel the heading says <b>Update Glassworks</b>.</em></td>
 <td><em>The app going in. On an update, the app on the panel closes and restarts during this. That's expected.</em></td>
 </tr>
 </table>
@@ -277,7 +277,7 @@ file** for the `.zip`.*
      Everything is removed.
    - **Keep its settings**: first, with the panel running and plugged in, **Give back Aqara's
      apps** brings back Aqara's apps, launcher, keyboard, Do Not Disturb and radio services over
-     USB, and takes S1 Kiosk off (pick `QUAD-CORE R818 EVB2` in the list). Wi-Fi and the rest
+     USB, and takes Glassworks off (pick `QUAD-CORE R818 EVB2` in the list). Wi-Fi and the rest
      stay. Then the original software goes back too.
 2. **Check the backup.** Kiln checks it before anything changes on the panel. It refuses a backup
    that can't undo the install, and then changes nothing: see [which backup](#which-backup) below.
@@ -289,7 +289,7 @@ file** for the `.zip`.*
 <table>
 <tr>
 <td width="50%"><img src="../../../docs/img/kiln/restore.webp" alt="Restore: Keep it plugged in. Putting the original software back, 45 percent. Found your S1 Plus, started the installer in its memory, putting the original software back. Each part is checked after it is written."></td>
-<td width="50%"><img src="../../../docs/img/kiln/undo-done.webp" alt="The original software is back. One last step, on the panel: swipe down, tap Settings on the S1 Kiosk notification, then Advanced settings, Factory reset. Button: Back to Kiln."></td>
+<td width="50%"><img src="../../../docs/img/kiln/undo-done.webp" alt="The original software is back. One last step, on the panel: swipe down, tap Settings on the app's notification, then Advanced settings, Factory reset. Button: Back to Kiln."></td>
 </tr>
 <tr>
 <td><em>Restore. Keep it plugged in.</em></td>
@@ -298,19 +298,21 @@ file** for the `.zip`.*
 </table>
 
 5. **Factory reset the panel**, if you chose *As it came from Aqara*. On the panel, swipe down from
-   the top, tap *Settings* on the S1 Kiosk notification, then *Advanced settings → Factory reset*.
+   the top, tap *Settings* on the app's notification (*Glassworks*, or *S1 Kiosk* up to 0.4.3), then *Advanced settings → Factory reset*.
    A factory reset alone doesn't restore the software, so restore first. With *Keep its settings*
    the panel restarts with Aqara's software and apps, and your settings and Wi-Fi as they were.
 
 From the CLI: `frames/aqara-s1-plus/tools/install/fel-install.sh --undo ~/s1-backup` restores the software, and
 `frames/aqara-s1-plus/tools/install.sh --undo` over adb gives Aqara's apps back. It re-enables Aqara's apps and
-launcher, restores Do Not Disturb and the keyboard, removes S1 Kiosk, and starts Aqara's radio
+launcher, restores Do Not Disturb and the keyboard, removes Glassworks, and starts Aqara's radio
 services again. Run on its own, without the restore, it keeps your Wi-Fi and settings and the
-patched `boot`, but drops the kiosk.
+patched `boot`, but drops the kiosk. Its last line says what happened to Glassworks: removed,
+disabled, or still installed when Android would not disable it either. Then it exits with an error;
+run it again.
 
-If S1 Kiosk saved the panel's Wi-Fi (it does when you set Wi-Fi up through it), it is **disabled
-rather than removed**. Android 10 forgets the networks an app saved when that app is uninstalled,
-which would take the panel off its network. A disabled S1 Kiosk doesn't run and isn't the home
+If Glassworks saved the panel's Wi-Fi (it does when you set Wi-Fi up through it), or the installer
+can't tell who saved it, it is **disabled rather than removed**. Android 10 forgets the networks an app saved when that app is uninstalled,
+which would take the panel off its network. A disabled Glassworks doesn't run and isn't the home
 screen; `adb shell pm enable sh.edm.s1kiosk` brings it back. To remove it completely anyway, run
 `adb uninstall sh.edm.s1kiosk`, then join the Wi-Fi again in Aqara's own settings.
 
@@ -365,7 +367,7 @@ NO_BL31=1 frames/aqara-s1-plus/tools/fel/fel-boot.sh &&            # our U-Boot 
 
 ## Updating
 
-**S1 Kiosk updates through Home Assistant.** A new release shows up under *Settings → Updates* as
+**Glassworks updates through Home Assistant.** A new release shows up under *Settings → Updates* as
 the panel's **App update**. Press **Install**; the panel downloads it, checks its checksum and
 signing key, installs it and restarts the app. There's nothing to confirm on the panel (on boot
 software from before the first releases, Android asks on the panel's screen). Details:
@@ -373,7 +375,7 @@ software from before the first releases, Android asks on the panel's screen). De
 
 - **On v0.4.0 or older, update by hand once.** Those versions can't install an update from Home
   Assistant: it always fails with "the APK is not signed". Plug the panel in, open Kiln, choose
-  **Finish setting up** (`/aqara-s1-plus/set-up`) and let it update S1 Kiosk. Or download the APK
+  **Finish setting up** (`/aqara-s1-plus/set-up`) and let it update Glassworks. Or download the APK
   from the [latest release](https://github.com/GlassworksHQ/glassworks/releases/latest) and run
   `adb install -r s1-kiosk-<version>.apk`. From v0.4.1 on, updates from Home Assistant work.
 - **The boot software** (the patched `boot` with the root helper) is not updated by the app. Since
@@ -398,7 +400,7 @@ UBOOT_SRC=~/src/u-boot BL31=<bl31.bin> frames/aqara-s1-plus/tools/fel/build-uboo
 # 1. FEL → boot U-Boot from RAM → back up → patch → vbmeta → splash → flash → verify → adb
 frames/aqara-s1-plus/tools/install/fel-install.sh ~/s1-backup
 
-# 2. Install and configure S1 Kiosk over adb
+# 2. Install and configure Glassworks over adb
 frames/aqara-s1-plus/tools/install.sh --url http://homeassistant.local:8123 \
     --timezone America/Los_Angeles --locale en-US \
     --keyboard rkr.simplekeyboard.inputmethod_149.apk     # optional, from F-Droid
@@ -417,13 +419,13 @@ How each step works, and why: [frames/aqara-s1-plus/research/root.md](../researc
 
 ## Switching a development build to a release
 
-A panel set up with the command line usually runs a **development build** of S1 Kiosk
+A panel set up with the command line usually runs a **development build** of Glassworks
 (`assembleDebug`, signed with your computer's debug key). Releases are signed with the project's
 key, and Android won't update an app to one signed with a different key. So the switch removes
 the app and installs the release. On its own, that has two side effects:
 
 - the app's data goes: its settings, the Home Assistant sign-in and the pairing key;
-- Android 10 also forgets every Wi-Fi network the app saved. S1 Kiosk saves the panel's Wi-Fi itself
+- Android 10 also forgets every Wi-Fi network the app saved. Glassworks saves the panel's Wi-Fi itself
   (Improv), so the panel would drop off the network.
 
 Both installers handle this. Install as usual (Kiln's **Finish setting up**, or `frames/aqara-s1-plus/tools/install.sh
@@ -434,18 +436,34 @@ plan without changing anything.
 
 | | adb has root | adb has no root (a normal install) |
 |---|---|---|
-| App settings, sign-in, pairing key | Kept: copied out before the removal, then copied back to the new install | **Reset**: sign in again, and set the panel's options again (dashboard, screen and voice settings, for example). Home Assistant may ask to add the panel again, and Music Assistant shows it as a new player |
+| App settings | Kept: copied out before the removal, then copied back to the new install | **Reset**: set the panel's options again (dashboard, screen and voice settings, for example). Home Assistant may ask to add the panel again, and Music Assistant shows it as a new player |
+| Home Assistant sign-in, encryption key and other sealed secrets | **Lost**: sign in again. Home Assistant may ask to confirm the panel's encryption key | **Reset**: sign in again |
 | Wi-Fi | Read from Android's Wi-Fi store into Kiln's or the CLI's memory, then sent to the new app over USB | Kiln: the Wi-Fi step asks for the password. CLI: asks in the terminal (Enter skips) |
 
+- **Why the sign-in goes even with root.** The app seals its secrets with a key in the Android
+  Keystore: the Home Assistant sign-in, the ESPHome encryption key, the camera stream password and the
+  Music Assistant (Sendspin) pairing. Android deletes an app's Keystore keys when it uninstalls the
+  app, so the copied data still holds those secrets, but nothing can open them. The new install has
+  no key at first: the old values read as not set, and stay in place. The first secret it stores
+  again, usually the Home Assistant sign-in, makes a new key. From then on each old value fails to
+  open and is removed when it is next read. What each one needs
+  ([docs/secrets.md](../../../docs/secrets.md#what-is-sealed) has the full list):
+  - the Home Assistant sign-in: the panel shows its QR code; sign in again;
+  - the encryption key: Home Assistant gives the panel a key again, and may ask you to confirm it;
+  - the camera stream password: nothing asks for it. Set a new one on the Camera page;
+  - Music Assistant (Sendspin): the panel uses a stand-in identity until the new key exists, then
+    makes a new one, so pair it with Music Assistant again.
 - **Root** here means that adb's shell can run `su`. That is only the case with a development boot
   image (`DEV_SU_HOURS`) or a Magisk policy for the adb shell, see
   [frames/aqara-s1-plus/research/root.md](../research/root.md#persistent-root-magisk--the-s1-kiosk-root-helper). A normal
   install doesn't give adb root. The installer checks with `su -c id`.
-- The Wi-Fi password is never written to a file, a log or the screen. A network that S1 Kiosk didn't
+- The Wi-Fi password is never written to a file, a log or the screen. A network that Glassworks didn't
   save, for example one set up in Aqara's settings, is not affected.
 - While the app is copied it is disabled, so it can't start as the home screen meanwhile. Disabling
   doesn't touch its Wi-Fi.
-- If the new version won't install, the previous one is put back (with its data, given root).
+- If the new version won't install, the previous one is put back (with its data, given root). If
+  its data won't go back in, the installer says so and keeps the copy on the panel in
+  `/data/s1kiosk/switch` (root only).
 - The panel stays reachable over the USB cable throughout. If it ends up without Wi-Fi anyway, send
   it again: Kiln's `/aqara-s1-plus/set-up/wifi`, or Improv over Bluetooth from the panel's setup
   screen or Home Assistant.

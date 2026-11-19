@@ -31,7 +31,7 @@ val signingEnv = listOf("S1_KEYSTORE_FILE", "S1_KEYSTORE_PASSWORD", "S1_KEY_ALIA
 val haveReleaseKey = signingEnv.values.all { it != null }
 
 android {
-    namespace = "sh.edm.s1kiosk"
+    namespace = "dev.glassworks.s1"
     defaultConfig {
         applicationId = "sh.edm.s1kiosk"
         // Opts into newer Android rules on newer devices only; minSdk decides who can install it.

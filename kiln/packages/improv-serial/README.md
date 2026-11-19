@@ -42,7 +42,7 @@ UART through Web Serial, a socket, a test double). An optional adapter connects 
 cable, with no Bluetooth and no app on a phone.
 
 The Android side is `ImprovAdbServer` in the [improv](../../../libs/improv/README.md) Kotlin
-library. Both were extracted from S1 Unleashed, whose web installer uses this package to set up
+library. Both were extracted from Glassworks, whose web installer uses this package to set up
 the panel's Wi-Fi. MIT licensed.
 
 ## Use

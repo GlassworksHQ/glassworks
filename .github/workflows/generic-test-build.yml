@@ -1,5 +1,5 @@
 # Test build of Glassworks for generic Android (#23, frames/generic-android/android), on the same branches as
-# S1 Kiosk's test build (test-build.yml):
+# The S1 app's test build (test-build.yml):
 #
 #   git push origin HEAD:test-build/<name>
 #   gh run download <run-id> -n glassworks-generic-test-<sha>
@@ -8,7 +8,7 @@
 #   glassworks-generic-legacy-test-0.1.0-arm64-v8a-<sha>.apk             (the legacy build, Android 6-7: the Mirror)
 #
 # What it is:
-#   - The release variant, applicationId dev.glassworks.generic_android. It never installs over S1 Kiosk.
+#   - The release variant, applicationId dev.glassworks.generic_android. It never installs over the S1 app.
 #   - The legacy build too (#198): dev.glassworks.generic_android.legacy, minSdk 23, GeckoView 144, 0.1.0 and 0.1.1
 #     for arm64-v8a (the Mirror's ABI), with the same key. Its APK carries desugar_jdk_libs code (GPL-2.0 with
 #     the Classpath exception), which the maintainer allowed on 2026-11-16 (AGENTS.md, rule 4).

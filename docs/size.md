@@ -83,8 +83,10 @@ without the bundle, 97.84 MB, which is not what ships; v0.4.3's released APK was
 Glassworks for generic Android (#23) has its own budgets, in `frames/generic-android/budgets.json`,
 by the same rules: its 2026-11-15 release build plus about 2.5% (100.82 MB `arm64-v8a`, so 103.40 MB;
 97.88 MB `armeabi-v7a`, so 100.40 MB), and each of its three panes about twice its own size. CI's
-`size-generic` job checks them on every pull request that changes what goes into that APK. It builds this branch only, so its report has no
-change column ("this check builds no base"). Its per-pane RAM budgets wait for a measured run on a
+`size-generic` job checks them on every pull request that changes what goes into that APK. Like the
+`size` job, it builds the base commit's APKs too, for the change column, and its report goes into the
+same PR comment, under the S1's. The legacy build (#198) has no budget yet, so it isn't in the
+comment; the job summary gives its size. Its per-pane RAM budgets wait for a measured run on a
 tablet; the file's `_todo_ram` says what to add.
 
 The release build has R8 off (`frames/aqara-s1-plus/android/build.gradle.kts`, `isMinifyEnabled = false`), so the dex is
@@ -110,6 +112,9 @@ The `size` job in `.github/workflows/pr.yml` measures what ships:
    missing budgets file, an APK whose native libraries aren't its ABI's, or apkanalyzer failing;
 5. puts the report in the job summary, and keeps its numbers as the `apk-size` artifact.
 
+The `size-generic` job does steps 2 to 5 for Glassworks for generic Android, without the radio
+bundle, and keeps its numbers as the `apk-size-generic` artifact.
+
 **The comment's headline.** When the pull request raises a budget, or adds one the base didn't
 have, the comment opens with "This PR raises the size budget." and lists each change, before the
 budget check: that is the decision a reviewer is asked to make. A lowered or removed budget (for an
@@ -117,8 +122,9 @@ ABI's APK, or a pane's, including a pane the PR drops) opens with "This PR chang
 
 **The PR comment.** `.github/workflows/size-comment.yml` posts the report on the pull request, one
 comment updated in place. It runs after PR checks, from the default branch, with permission to
-comment, and never runs the pull request's code: it reads only the artifact's numbers, renders them
-with the default branch's `apksize.py render`, and
+comment, and never runs the pull request's code: it reads only the artifacts' numbers, renders them
+with the default branch's `apksize.py render` (the S1's report, then generic Android's, one section
+each), and
 comments only on the pull request whose head is the commit that run built. That is the
 `workflow_run` pattern, so it works for pull requests from forks, whose own runs get no write token.
 `pull_request_target` would give the pull request's code a write token, and a job summary alone isn't
@@ -127,12 +133,14 @@ branch, so the comment starts once this is merged; until then the job summary ha
 skips when a pull request changes nothing that goes into the APKs ([ci.md](ci.md)). Then the `changes` job
 uploads `apk-size` with the pull request's number alone, marked skipped, and an earlier size comment
 is replaced with a note that the size wasn't measured (only while the pull request's head is still that
-commit; a comment is never added for it). Forks included.
+commit; a comment is never added for it). When only `size-generic` runs (a change to what only its
+job checks, such as `tools/legacy/apk-icons.py`), the comment has generic Android's section alone.
+Forks included.
 
 **What `render` accepts.** The report comes from the pull request's own code, so the renderer treats
 it as untrusted. It refuses a report whose ABIs, row names, frame or `base_missing` aren't the known
 ids and words, whose sizes aren't whole numbers, or whose `rows` aren't objects of rows, and one with
-more than 40 rows for an ABI. The findings (failures, budget changes, notes) are plain text: any
+more than 40 rows for an ABI. It takes at most 4 reports, each for a different frame. The findings (failures, budget changes, notes) are plain text: any
 character outside letters, digits and simple punctuation becomes `?`, anything with `://` becomes
 "(link removed)", each is cut at 300 characters, and each list stops after 20 with "and N more".
 

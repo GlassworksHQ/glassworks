@@ -6,7 +6,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 import dev.glassworks.device.PanelDevice
-import sh.edm.s1kiosk.manage.S1Manage
+import dev.glassworks.s1.manage.S1Manage
 
 /** Which of the app's logcat lines reach the Manage page's log, and under what name. */
 class ManageLogSourceTest {

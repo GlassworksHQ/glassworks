@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Glassworks for generic Android (#23). The shell's components are the core's (package sh.edm.s1kiosk, kept
-     for the S1); this app names them in full. The S1 app's manifest (frames/aqara-s1-plus/android) has the
+<!-- Glassworks for generic Android (#23). The shell's components are the core's classes, under
+     their own names (dev.glassworks.*, #527). The S1 app's manifest (frames/aqara-s1-plus/android) has the
      reasons for each permission. Left out here: Aqara's packages and the S1's direct-boot splash. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
@@ -42,6 +42,10 @@
     <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <!-- A privileged app's too (#556): lets Improv replace a network the app didn't save, such as the one Kiln writes
+         into the Mirror's image. Without it Android 6 refuses addNetwork for that network, so a wrong password
+         there could only be fixed by flashing again (WifiConfigStore.canModifyNetwork, AOSP 6.0.1). -->
+    <uses-permission android:name="android.permission.OVERRIDE_WIFI_CONFIG" tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <!-- The setup hotspot (#197): from Android 13 a local-only hotspot needs "Nearby devices", asked for on the
@@ -79,7 +83,7 @@
              need none. Launchers and the home screen start it through the alias below, whose extras the
              app drops (AppParts.trustsExtras). -->
         <activity
-            android:name="sh.edm.s1kiosk.MainActivity"
+            android:name="dev.glassworks.MainActivity"
             android:exported="true"
             android:permission="android.permission.WRITE_SECURE_SETTINGS"
             android:launchMode="singleTask"
@@ -90,7 +94,7 @@
         <!-- The launcher's and home screen's way in: no permission, no settings from extras. -->
         <activity-alias
             android:name="dev.glassworks.generic.Launcher"
-            android:targetActivity="sh.edm.s1kiosk.MainActivity"
+            android:targetActivity="dev.glassworks.MainActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -105,12 +109,12 @@
         </activity-alias>
 
         <service
-            android:name="sh.edm.s1kiosk.KioskService"
+            android:name="dev.glassworks.KioskService"
             android:exported="false"
             android:foregroundServiceType="microphone|location|connectedDevice|camera" />
 
         <receiver
-            android:name="sh.edm.s1kiosk.AdminReceiver"
+            android:name="dev.glassworks.AdminReceiver"
             android:exported="true"
             android:permission="android.permission.BIND_DEVICE_ADMIN">
             <meta-data
@@ -122,7 +126,7 @@
         </receiver>
 
         <activity
-            android:name="sh.edm.s1kiosk.improv.ImprovActivity"
+            android:name="dev.glassworks.provisioning.ImprovActivity"
             android:exported="true"
             android:permission="android.permission.WRITE_SECURE_SETTINGS"
             android:excludeFromRecents="true"
@@ -132,7 +136,7 @@
         <!-- The camera pane's settings from adb (CameraAdbActivity). WRITE_SECURE_SETTINGS: adb shell holds it, normal
              apps can't. -->
         <activity
-            android:name="sh.edm.s1kiosk.CameraAdbActivity"
+            android:name="dev.glassworks.camera.CameraAdbActivity"
             android:exported="true"
             android:permission="android.permission.WRITE_SECURE_SETTINGS"
             android:excludeFromRecents="true"
@@ -140,11 +144,11 @@
             android:theme="@android:style/Theme.NoDisplay" />
 
         <receiver
-            android:name="sh.edm.s1kiosk.update.UpdateInstallReceiver"
+            android:name="dev.glassworks.update.UpdateInstallReceiver"
             android:exported="false" />
 
         <receiver
-            android:name="sh.edm.s1kiosk.BootReceiver"
+            android:name="dev.glassworks.BootReceiver"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- No crash helper process. GeckoView 144 binds org.mozilla.gecko.crashhelper.CrashHelper at every start, in its
+     own process, though without a crash handler (we set none) it turns Gecko's crash reporting off: the process does
+     nothing for us. On the Mirror it was the lowmemorykiller's first victim, killed and restarted about once a minute
+     (frames/lululemon-mirror/research/mirror-memory.md). Without the service the bind fails quietly and Gecko runs as before. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <application>
+        <service android:name="org.mozilla.gecko.crashhelper.CrashHelper" tools:node="remove" />
+    </application>
+</manifest>

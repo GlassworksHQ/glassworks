@@ -24,6 +24,10 @@ lightly tested end to end. Nothing below is implemented unless marked ✅.
    and pushes the encryption key itself. If HA added it before the sign-in, the panel shows Add it as done.
 4. **Choose the panes**: voice, music and the Zigbee / Thread radio. A pane that is on then asks what
    it needs (the radio: its mode, then what to do in HA).
+   **Silent updates** follows, only when updates ask for a tap and there's a way to change that: an S1
+   whose boot image has no update service (Kiln adds it), or a tablet where Android needs "Install unknown
+   apps" allowed or a device owner (#422). Never required: Continue or Not now answers it. A panel that was
+   set up before this step existed never sees it.
 5. **Pick a dashboard** from a dropdown on the panel's device page in HA (defaults to your default
    dashboard). HA adds that dropdown turned off: turn on **Dashboard** first
    ([how](esphome.md#categories-and-defaults)).
@@ -121,7 +125,7 @@ hostname.
 - From the Mac (bleak 3.1 + py-improv-ble-client 2.0.1): found as "MagicPad S1 Plus" (the BT
   adapter name, unchanged) with RSSI around -50, `device_filter()` = True (HA would discover it),
   MTU 517, capabilities 7, `need_authorization` True, identify OK (screen wakes, card pulses, 3 beeps),
-  device info `S1 Kiosk, 0.1.0, Aqara Panel Hub S1 Plus/sun50iw10p1, Glassworks Panel` (the name is the
+  device info `Glassworks, 0.1.0, Aqara Panel Hub S1 Plus/sun50iw10p1, Glassworks Panel` (the name is the
   friendly name since #266, "Aqara S1 Plus" on the S1), hostname RPC →
   error 0x02. Scan returned 0 networks because the app doesn't hold the location permission yet
   (see below). After `--ez improv false` nothing advertises the Improv service.
@@ -239,7 +243,7 @@ progress, e.g. "Turning Wi-Fi on…" or "Waiting for Wi-Fi…", then connected o
 Assistant address; every pane's setup step (`PaneDefinition.setupSteps`, the radio's is in
 `radio/RadioDefinition.kt`) adds its part of the state under its id and its own requests as
 `<step id>.<op>`. `SetupChannelStepsTest` finishes every step with requests alone and pins the
-replies Kiln gets (`kiln/packages/setup-channel/test/s1-kiosk-transcript.json`). One JSON object per
+replies Kiln gets (`kiln/packages/setup-channel/test/aqara-s1-plus-transcript.json`). One JSON object per
 line, both ways:
 - `{"id":1,"op":"state"}` → `{"id":1,"ok":true,"state":…}`. The state is channel.ts's `SetupState`:
   `ip` (wlan0 IPv4), `ha.discovered` (the HA address the app found itself: `ha_url_source` `mdns` or
@@ -518,9 +522,9 @@ Laid out for 960×480 dp. On a screen taller than wide (`onMeasure`, #415) it st
 rail above the card, without the stack art, and the QR code under the card's text at full size.
 
 The rail (`ui/GroupedRail.kt`, #63 round 2) groups the steps: Wi-Fi, **Home Assistant** (Sign in, Add
-it), **Panes** (Choose, then each pane's own steps while that pane is on), Done. A group shows its rows
-while one of them is current and folds to one row otherwise. The order is Wi-Fi → Home Assistant →
-Panes → Done (`SetupFlow.ids`): nothing a pane asks needs to come before signing in, and the radio's
+it), **Panes** (Choose, then each pane's own steps while that pane is on), the device's own steps (Silent
+updates, each a row of its own), Done. A group shows its rows while one of them is current and folds to one row
+otherwise. The order is Wi-Fi → Home Assistant → Panes → Silent updates → Done (`SetupFlow.ids`): nothing a pane asks needs to come before signing in, and the radio's
 Thread router can then join Home Assistant's Thread network from its own step. Tapping a row opens
 it: in a live setup only a step that is done or current, in a preview any step. A step that is done
 says so and leads with **Continue** ("Connected to <SSID>.", "Signed in.", "Added to Home
@@ -579,7 +583,13 @@ Assistant."), with the way to change it second ("Use another network", "Add it b
    web installer over the setup channel). A panel set up before the radio step existed has it marked
    done once at the first start of the new build (`RadioDefinition`'s one-time check: a known HA,
    `ha_seen`, an API key, a skipped HA step or a stored radio mode), so it never sees it.
-5. **Done**: the lit stack on its own, "You're all set." and "Opening your dashboard…". The dashboard
+5. **Silent updates** (`SilentUpdatesStep`, #422), only when updates ask for a tap and there's a way to change
+   that, and only on a screen that takes a tap: Android 12+ with "Install unknown apps" off opens Android's page for
+   it; Android 6 to 11, or a release that targets too low an API, says a device owner skips the tap (QR code to
+   Kiln); an S1 whose boot image has no update service says Kiln adds one. Continue or Not now answers it
+   (`setup_silent_updates_answered`), and so does `silent_updates.answer` over the setup channel. A panel set up
+   before the step existed has it marked answered once, at the first start of the new build.
+6. **Done**: the lit stack on its own, "You're all set." and "Opening your dashboard…". The dashboard
    loads (unless it's already showing), then the screen fades out.
 
 **When it shows** (`SetupState.decide`). Only strong evidence counts, so it never covers a panel
@@ -596,15 +606,19 @@ session without a refresh token):
 - no refresh token *and* the GeckoView actually reached HA's `/auth/authorize` (or the user signed
   out on the panel), unless "Sign in on this panel instead" was chosen;
 - online, HA step done, the panes not chosen yet or a chosen pane's step not answered (so it comes back
-  after a reboot).
+  after a reboot);
+- online, HA step done, every pane's step answered, and the Silent updates step pending: something to offer, on a
+  screen that takes a tap, not answered yet (step 5 above). Until the app has read whether updates are silent (a
+  moment after it starts), the step shows *Checking updates* and setup waits for that first answer; with nothing to
+  offer it then moves on by itself.
 
-The current step is the first one not done (Wi-Fi → Sign in → Add it → Panes → each pane's steps). Once shown, the screen stays
+The current step is the first one not done (Wi-Fi → Sign in → Add it → Panes → each pane's steps → Silent updates). Once shown, the screen stays
 until all steps are done, so it doesn't flicker between steps. It is re-evaluated on connectivity,
 sign-in, HA connection and page changes, and every 2 s. The trigger is logged (`Glassworks`:
 "Setup screen: <reasons> (step …)").
 
 Preview without changing state: `--ez show_setup true` (live step), `--es setup_step
-wifi|ha|signin|panes|radio|done` (a given step; a pane's step id opens that step), `--ez show_setup false` to close.
+wifi|ha|signin|panes|radio|silent_updates|done` (a given step; a pane's or the device's step id opens that step), `--ez show_setup false` to close.
 In preview, Skip, the manual URL and Continue save nothing, and "Preview · Close" is shown. `--ez show_signin true` = the Sign-in step.
 
 ## Build order

@@ -59,7 +59,7 @@ describe('install', () => {
     const p = new FakeMirror({ picks: () => OURS, pickAfter: 2 });
     const phases: MirrorPhase[] = [];
     const res = await installMirror(p, { apk, haUrl: 'http://homeassistant.local:8123', sleep: noSleep, onPhase: (ph) => phases.push(ph) });
-    expect(res).toEqual({ app: { name: '0.5.0-legacy', code: 600 }, home: 'set', previousHome: MIRROR_KIOSK });
+    expect(res).toEqual({ app: { name: '0.5.0-legacy', code: 600 }, home: 'set', previousHome: MIRROR_KIOSK, updates: { state: 'normal-app', privileged: false } });
     expect(phases).toEqual([{ step: 'apk', stage: 'copy' }, { step: 'apk', stage: 'install' }, { step: 'grant' }, { step: 'start' }, { step: 'home', pick: 'Glassworks' }]);
     const at = (c: string) => { const i = p.cmds.findIndex((x) => x.startsWith(c)); expect(i, c).toBeGreaterThanOrEqual(0); return i; };
     const order = ['push /data/local/tmp/mirror-app.apk', 'pm install -r -g /data/local/tmp/mirror-app.apk', `echo '${MIRROR_KIOSK}' > ${PREVIOUS_HOME}`,
@@ -98,7 +98,7 @@ describe('install', () => {
     await expect(installMirror(p, { apk: fakeApk('com.nimrod.mirrorkiosk'), sleep: noSleep })).rejects.toThrow(/is com\.nimrod\.mirrorkiosk, not Glassworks \(dev\.glassworks\.generic_android\.legacy\).*Nothing was changed/);
     await expect(installMirror(p, { apk: new TextEncoder().encode('not an apk'), sleep: noSleep })).rejects.toThrow(/isn't an APK/);
     await expect(installMirror(p, { apk: fakeMirrorApk({ home: 'none' }), sleep: noSleep })).rejects.toThrow(/can't be the Mirror's home screen/);
-    // the old S1 Kiosk id is no longer the Mirror's app
+    // the S1 app's id is not the Mirror's app
     await expect(installMirror(p, { apk: fakeApk('sh.edm.s1kiosk'), sleep: noSleep })).rejects.toThrow(/is sh\.edm\.s1kiosk, not Glassworks/);
     expect(p.cmds.filter((c) => WRITES.test(c))).toEqual([]);
   });

@@ -19,7 +19,7 @@ import org.robolectric.annotation.Config
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
-import sh.edm.s1kiosk.KioskApp
+import dev.glassworks.s1.KioskApp
 
 /**
  * Which way an update installs, from the frame's [RootUpdates] (Frame.rootUpdates): the S1's root update

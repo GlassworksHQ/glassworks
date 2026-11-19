@@ -73,8 +73,8 @@ export function unprovision(panel: PanelShell, onStep?): Promise<void>;         
 ```
 The recipe's `switch.ts`: when Android refuses the APK over another signing key (a debug build), `provision`
 asks `opts.confirmSwitch(plan)` and then uninstalls + installs, carrying the app's data and Wi-Fi over
-with adb root (panel side: `frames/aqara-s1-plus/tools/install/s1kiosk-switch.sh`, same as install.sh). `unprovision` disables
-instead of uninstalling when S1 Kiosk saved the panel's Wi-Fi (Android forgets it with the app).
+with adb root (panel side: `frames/aqara-s1-plus/tools/install/glassworks-switch.sh`, same as install.sh). `unprovision` disables
+instead of uninstalling when Glassworks saved the panel's Wi-Fi (Android forgets it with the app).
 Wake-word models are not pushed from the browser (CC BY-NC-SA, and GitHub sends no CORS headers);
 the kiosk app fetches them on the panel.
 
@@ -118,7 +118,7 @@ of every write, and boot last. Whatever the recipe says, it refuses:
 - on undo, a backup that lacks any `restore` part, whose boot `isPatched`, or where a part the plan
   can tell (`backup.ours`, the S1: its splash) is already ours (`checkRestorable`, which throws
   `BackupRefused`). The page's "keep the panel's settings" undo calls it before it gives the
-  apps back (`src/app/undo.ts`), since that removes S1 Kiosk.
+  apps back (`src/app/undo.ts`), since that removes Glassworks.
 
 kiln-core doesn't depend on bootpatch: what "patched" means is the recipe's. USB comes in through
 `Devices`. The S1's end-to-end test is `kiln/test/flow.test.ts`: the S1 recipe on simulated hardware

@@ -112,14 +112,14 @@ describe('refusals: nothing changes on the device', () => {
 
   it('below Android 6', () => refuses({ sdk: 22, release: '5.1.1' }, apkFor(23), /needs Android 6 \(API 23\) or newer.*Android 5\.1\.1 \(API 22\)/));
   it('an APK that isn\'t Glassworks', () => refuses({}, fakeApk('com.example.other', { minSdk: 23 }), /This APK is com\.example\.other, not Glassworks: pick Glassworks \(dev\.glassworks\.generic_android\)/));
-  it('S1 Kiosk\'s APK', () => refuses({}, fakeApk('sh.edm.s1kiosk', { minSdk: 29 }), /This APK is sh\.edm\.s1kiosk, not Glassworks/));
+  it('the S1 app\'s APK', () => refuses({}, fakeApk('sh.edm.s1kiosk', { minSdk: 29 }), /This APK is sh\.edm\.s1kiosk, not Glassworks/));
   it('the legacy build on Android 10', () => refuses({ sdk: 29, release: '10' }, apkFor(23, ['arm64-v8a']), /legacy build\), for Android 6\.0 to 7\.1.*Android 10: pick Glassworks \(dev\.glassworks\.generic_android\)/));
   it('Glassworks on Android 7', () => refuses({ sdk: 25, release: '7.1.1' }, apkFor(34, ['armeabi-v7a']), /for Android 8\.0 and newer.*Android 7\.1: pick Glassworks \(legacy build\)/));
   it('an APK for another processor', () => refuses({ sdk: 34, abilist: 'x86_64,x86' }, apkFor(34, ['arm64-v8a']), /code for arm64-v8a, and this device runs x86_64, x86: pick the APK for x86_64/));
   it('a 64-bit APK on a 32-bit device', () => refuses({ sdk: 25, release: '7.1.1', abilist: 'armeabi-v7a,armeabi' }, apkFor(25, ['arm64-v8a']), /code for arm64-v8a/));
   it('an APK whose minSdk is above the device\'s', () => refuses({ sdk: 26, release: '8.0.0' }, fakeGenericApk({ minSdk: 28 }), /needs Android API 28, and this device runs API 26/));
   it('a file that isn\'t an APK', () => refuses({}, new TextEncoder().encode('not a zip'), /isn't an APK/));
-  it('an S1, by its hardware: its own install, never the generic app over S1 Kiosk', async () => {
+  it('an S1, by its hardware: its own install, never the generic app over the S1 app', async () => {
     // the S1's build properties as read 2026-11-14 (AqaraS1Plus.kt): Allwinner's SDK defaults, so only ro.hardware names it
     const s1 = { sdk: 29, release: '10', abilist: 'armeabi-v7a,armeabi', manufacturer: 'Allwinner', model: 'QUAD-CORE R818 EVB2', hardware: 'sun50iw10p1' };
     await refuses(s1, apkFor(29, ['armeabi-v7a']), /This is an Aqara S1 Plus, which has its own install in Kiln \(\/aqara-s1-plus\)/);

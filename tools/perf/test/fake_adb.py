@@ -146,7 +146,7 @@ def shell(cmd):
         ez = re.findall(r"--ez (\w+) (true|false)", cmd)
         if ez:
             # Like the kiosk: each `--ez` saves a setting (voice_enabled, sendspin_enabled, restart).
-            # FAKE_VOICE_LOST: as S1 Kiosk 0.4.3, which saves voice_enabled asynchronously and exits
+            # FAKE_VOICE_LOST: as the S1 app 0.4.3, which saves voice_enabled asynchronously and exits
             # to restart at once, so the write is lost.
             save("intents.json", state("intents.json", []) + [dict(ez)])
             if ("restart", "true") in ez and os.environ.get("FAKE_HOLD_DIES"):

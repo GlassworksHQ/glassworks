@@ -27,18 +27,18 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import sh.edm.s1kiosk.KioskApp
+import dev.glassworks.s1.KioskApp
 import dev.glassworks.KioskPrefs
 import dev.glassworks.auth.HaTokenClient
 import dev.glassworks.auth.HttpPoster
 import dev.glassworks.auth.SignInServer
-import sh.edm.s1kiosk.frame.AqaraS1Plus
+import dev.glassworks.s1.frame.AqaraS1Plus
 import dev.glassworks.settings.KioskSettingsOverlay
 import dev.glassworks.settings.PaneFixtures
 import dev.glassworks.settings.S1Settings
 import dev.glassworks.ui.Glass
 import dev.glassworks.ui.Mockup
-import sh.edm.s1kiosk.manage.S1Manage
+import dev.glassworks.s1.manage.S1Manage
 
 /**
  * #261: a pane page's "In Home Assistant" list on a panel Home Assistant never added says so once, with no

@@ -35,8 +35,8 @@ import { Disk, Ext4, readSparse, syncHandleStore, writeSparse } from '@glasswork
 
 const { disk } = await readSparse(file.stream(), (h) => new Disk(syncHandleStore(handle), h.blockSize, h.blocks), { onBytes: (b) => sha.update(b) });
 const fs = await Ext4.open(disk);
-await fs.mkdir('/priv-app/S1Kiosk', { mode: 0o755, uid: 0, gid: 0, label: 'u:object_r:system_file:s0' });
-await fs.writeFile('/priv-app/S1Kiosk/S1Kiosk.apk', apk, { mode: 0o644, uid: 0, gid: 0, label: 'u:object_r:system_file:s0' });
+await fs.mkdir('/priv-app/Glassworks', { mode: 0o755, uid: 0, gid: 0, label: 'u:object_r:system_file:s0' });
+await fs.writeFile('/priv-app/Glassworks/Glassworks.apk', apk, { mode: 0o644, uid: 0, gid: 0, label: 'u:object_r:system_file:s0' });
 await fs.flush();
 await writeSparse(disk, (piece) => out.write(piece));
 ```

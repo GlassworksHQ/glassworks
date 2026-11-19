@@ -25,7 +25,7 @@ afterEach(() => cleanup());
 
 const embers = () => [...document.querySelectorAll('.btn.ember')].map((b) => b.textContent);
 
-function setup(o: { system?: number; flashFails?: number; buildFails?: boolean; proxy?: 'ok' | 'down'; settingsOverlay?: Uint8Array } = {}) {
+function setup(o: { system?: number; flashFails?: number; buildFails?: boolean; proxy?: 'ok' | 'down'; settingsOverlay?: Uint8Array; serial?: string } = {}) {
   let fails = o.flashFails ?? 0;
   const calls: string[] = [];
   const built: Parameters<ImageMaker['build']>[0][] = [];
@@ -41,7 +41,7 @@ function setup(o: { system?: number; flashFails?: number; buildFails?: boolean; 
     async discard() { calls.push('discard'); },
   };
   const fb: FastbootLike = {
-    async getvar(n) { if (n === 'max-download-size') return '0x10000000'; throw new Error('FAIL'); },
+    async getvar(n) { if (n === 'max-download-size') return '0x10000000'; if (n === 'serialno' && o.serial) return o.serial; throw new Error('FAIL'); },
     async partitionSize(n) { return n === 'system' ? (o.system ?? SYSTEM_BYTES) : USERDATA_BYTES; },
     async flashBlob(p, blob) { if (fails > 0) { fails--; throw new Error('flash:system: FAILUnkown chunk type'); } calls.push(`flash ${p} ${blob.size}`); },
     async reboot() { calls.push('reboot'); },
@@ -57,6 +57,24 @@ function setup(o: { system?: number; flashFails?: number; buildFails?: boolean; 
 const image = () => Object.assign(new Blob(['x']), { name: 'system.img' });
 
 describe('installing Glassworks over fastboot', () => {
+  it('writes the Mirror\'s id from its serial into the image, so a reflash keeps its Home Assistant device (#523)', async () => {
+    const flashed = async (serial?: string) => {
+      const { f, mirror, built } = setup({ serial });
+      await f.downloadImage();
+      await mirror.pickApk('kiosk.apk', fakeMirrorApk());
+      f.toFastboot();
+      await f.connectFastboot();
+      f.understand(true);
+      await f.flash();
+      return { built, log: f.state.log.join('\n') };
+    };
+    // made up; core's DeviceMacPinTest derives the same bytes from it
+    const withSerial = await flashed('0123456789abcdef');
+    expect(withSerial.built[0]?.deviceMac).toBe('E6:79:E6:E0:96:A3');
+    expect(withSerial.log).not.toContain('E6:79');
+    expect((await flashed()).built[0]?.deviceMac).toBeUndefined();
+  });
+
   it('needs the image checked and Glassworks picked before fastboot, then writes only after "I understand"', async () => {
     const { f, mirror, calls, adb } = setup();
     expect(f.blocked()).toMatch(/system\.img/);
@@ -186,6 +204,17 @@ describe('installing Glassworks over fastboot', () => {
     expect(screen.getByText(/stays the Mirror's home screen, and the Mirror still starts to it/)).toBeTruthy();
     expect(screen.queryByText('Hide the other launcher again')).toBeNull();
     expect(screen.queryByText('Glassworks isn\'t the only home screen yet.')).toBeNull();
+  });
+
+  it('the fastboot card plays the Mirror\'s recovery steps and names the button to hold (#521)', async () => {
+    const { flash, mirror } = await flashDemo('flash-fastboot', true);
+    expect(flash.state.screen).toBe('fastboot');
+    render(<Flash flash={flash} mirror={mirror} />);
+    expect(screen.getByRole('img', { name: /lululemon Studio Mirror in recovery mode: Unscrew the stand and the back, Lift off the back, Plug in the power cord, Plug in the micro-USB, Hold VOL−, Switch the power on\. VOL− \(SW3\)/ })).toBeTruthy();
+    expect(screen.getByText(/hold VOL− \(SW3\): of its two buttons side by side, the one nearer the top end's edge/)).toBeTruthy();
+    expect(screen.getByText(/Keep holding while you switch the Mirror on/)).toBeTruthy();
+    expect(screen.getByText(/Plug the power cord back into its socket in that recess/)).toBeTruthy();
+    expect(screen.getByText(/Both buttons together start a Qualcomm mode Kiln can't use/)).toBeTruthy();
   });
 
   it('asks for the fastboot device inside the click, before anything is awaited', () => {

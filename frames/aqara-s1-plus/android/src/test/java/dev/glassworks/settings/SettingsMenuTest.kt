@@ -15,7 +15,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import dev.glassworks.KioskPrefs
-import sh.edm.s1kiosk.frame.AqaraS1Plus
+import dev.glassworks.s1.frame.AqaraS1Plus
 import dev.glassworks.radio.FixedReadout
 import dev.glassworks.radio.HelperFacts
 import dev.glassworks.radio.RadioDefinition

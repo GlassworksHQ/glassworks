@@ -222,7 +222,7 @@ def parse_set(spec):
 
 def expected_state(want, voice_now):
     """What pane_state should read for `want`. The microphone is open only with voice on and not
-    muted; when the kiosk didn't apply voice_enabled (S1 Kiosk 0.4.3 saves it asynchronously, then
+    muted; when the kiosk didn't apply voice_enabled (the S1 app 0.4.3 saves it asynchronously, then
     exits to restart, so the write is lost), that is judged with the voice it really runs. Another
     pane's switch `<id>_enabled` shows as `pane:<id>` (#67: wall_base_enabled, pane:wall-base)."""
     voice = want.get("voice_enabled", voice_now)

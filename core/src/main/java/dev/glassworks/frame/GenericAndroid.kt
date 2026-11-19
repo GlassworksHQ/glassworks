@@ -6,6 +6,7 @@ package dev.glassworks.frame
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.hardware.input.InputManager
 import android.os.Build
 import android.provider.Settings
@@ -56,7 +57,13 @@ class GenericAndroid(
      * its screen is portrait at rotation 0). Any other turns as Android says: Kiln's first boot locks the lululemon
      * Mirror's Android in portrait (`user_rotation=3`, auto-rotate off), and a tablet follows auto-rotate or the person's choice.
      */
-    override val orientation: Orientation get() = KNOWN[Platform.model] ?: Orientation.ANY
+    override val orientation: Orientation get() = KNOWN[Platform.model]?.orientation ?: Orientation.ANY
+
+    /**
+     * [Dock.YES] for a device whose frame docks ([KNOWN]) or that has Google's dock manager ([DOCK_MANAGER], listed in
+     * the manifest's `<queries>`); [Dock.IF_SEEN] for any other, which gets the sensor once it reports a dock.
+     */
+    override val dock: Dock by lazy { dockOf(KNOWN[Platform.model]?.docks == true, installed(context.packageManager, DOCK_MANAGER)) }
 
     /**
      * [Input.NONE] when Android lists input devices and none is a touchscreen (the Mirror's, #198): setup then works
@@ -83,12 +90,22 @@ class GenericAndroid(
 
     companion object {
         /**
-         * The devices with a frame, by `Build.MODEL` matched whole (as Kiln's `devices.ts` MODELS), and how each stands:
-         * its frame.json's `display`. `GenericAndroidKnownTest` checks both.
+         * The devices with a frame, by `Build.MODEL` matched whole (as Kiln's `devices.ts` MODELS): how each stands (its
+         * frame.json's `display`) and whether it docks (its `dock`). `GenericAndroidKnownTest` checks all three.
          */
-        val KNOWN: Map<String, Orientation> = mapOf(
-            "Pixel Tablet" to Orientation.LANDSCAPE, // google-pixel-tablet
+        val KNOWN: Map<String, Known> = mapOf(
+            "Pixel Tablet" to Known(Orientation.LANDSCAPE, docks = true), // google-pixel-tablet
         )
+
+        /** Google's dock manager, on the Pixel Tablet and its charging speaker dock (read on one, 2026-11-17). */
+        const val DOCK_MANAGER = "com.google.android.apps.nest.dockmanager.app"
+
+        /** [Dock.YES] when the frame says it docks ([frameDocks]) or a dock manager is installed ([dockManager]); else [Dock.IF_SEEN]. */
+        fun dockOf(frameDocks: Boolean, dockManager: Boolean): Dock = if (frameDocks || dockManager) Dock.YES else Dock.IF_SEEN
+
+        /** Whether [pm] has [pkg]. From Android 11 the app sees only the packages its manifest's `<queries>` names. */
+        @Suppress("DEPRECATION") // the flags overload that replaces it needs Android 13
+        fun installed(pm: PackageManager, pkg: String): Boolean = runCatching { pm.getPackageInfo(pkg, 0) }.isSuccess
 
         /** [Input.NONE] when there are input devices ([ids]) and none [isTouchscreen]; else [Input.TOUCH]. */
         fun inputOf(ids: IntArray, isTouchscreen: (Int) -> Boolean): Input =
@@ -126,3 +143,6 @@ class GenericAndroid(
         }
     }
 }
+
+/** What the app knows of a device with a frame ([GenericAndroid.KNOWN]): how it stands, and whether it docks. */
+class Known(val orientation: Orientation, val docks: Boolean)

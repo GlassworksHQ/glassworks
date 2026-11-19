@@ -1,8 +1,9 @@
 # The APK size comment on a pull request (docs/size.md).
 #
 # PR checks' `size` job builds the PR's code without any write access (a fork's PR included) and
-# leaves its numbers as the `apk-size` artifact. This workflow runs afterwards from the default
-# branch, with permission to comment, and never runs the PR's code: it reads only the numbers,
+# leaves its numbers as the `apk-size` artifact, and `size-generic` leaves Glassworks for generic
+# Android's as `apk-size-generic`: one comment, the S1's section first. This workflow runs afterwards
+# from the default branch, with permission to comment, and never runs the PR's code: it reads only the numbers,
 # renders them with the default branch's own tools/size/apksize.py (which accepts ids and numbers
 # only), and comments only on the PR whose head is the commit that run built. One comment per PR,
 # updated in place. (pull_request_target would give the PR's code a write token; a job summary alone
@@ -43,6 +44,8 @@ jobs:
         run: |
           gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n apk-size -D "$RUNNER_TEMP/in" \
             || echo "No apk-size artifact in run $RUN_ID (the size job didn't get that far)."
+          gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n apk-size-generic -D "$RUNNER_TEMP/in/generic" \
+            || echo "No apk-size-generic artifact in run $RUN_ID (size-generic skipped or didn't get that far)."
 
       - name: Comment
         env:
@@ -56,7 +59,10 @@ jobs:
           # pr.json alone, marked skipped (pr.yml's changes job): this PR no longer changes anything that goes
           # into the APKs, so an earlier comment's numbers are stale. It only replaces a comment, never adds one.
           skipped=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("skipped") is True)' "$in/pr.json")
-          if [ ! -f "$in/size.json" ] && [ "$skipped" != True ]; then echo "Nothing to post."; exit 0; fi
+          # The reports there are, the S1's first.
+          reports=()
+          for f in "$in/size.json" "$in/generic/size.json"; do if [ -f "$f" ]; then reports+=("$f"); fi; done
+          if [ "${#reports[@]}" -eq 0 ] && [ "$skipped" != True ]; then echo "Nothing to post."; exit 0; fi
           # Only on the PR that commit is the head of: an artifact can't steer the comment elsewhere.
           head=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$pr" -q .head.sha)
           if [ "$head" != "$HEAD_SHA" ]; then
@@ -67,8 +73,8 @@ jobs:
           ids=$(gh api "repos/$GITHUB_REPOSITORY/issues/$pr/comments" --paginate \
             -q '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith("<!-- glassworks-apk-size -->"))) | .id')
           id=$(printf '%s\n' "$ids" | head -n 1)
-          if [ -f "$in/size.json" ]; then
-            python3 tools/size/apksize.py render "$in/size.json" > "$RUNNER_TEMP/body.md"
+          if [ "${#reports[@]}" -gt 0 ]; then
+            python3 tools/size/apksize.py render "${reports[@]}" > "$RUNNER_TEMP/body.md"
           else
             [ -n "$id" ] || { echo "No size comment on PR #$pr to mark."; exit 0; }
             printf '<!-- glassworks-apk-size -->\n**APK size:** not measured at %s. This PR no longer changes anything that goes into the APKs ([docs/ci.md](https://github.com/%s/blob/main/docs/ci.md)).\n' \
