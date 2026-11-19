@@ -5,7 +5,7 @@
 import type { PanelShell } from '@glassworks/adb';
 import { ACT, PKG, Steps, deviceInfo, dropAdmin, grantPermissions, q, startApp, type StepFn } from '@glassworks/app-adb';
 import {
-  type Carried, type SwitchOutcome, type SwitchPlan, handBackSecrets, isKeyMismatch, panelWifi, planSwitch, resendWifi, switchSigningKey, wifiAtRisk,
+  type Carried, type SwitchOutcome, type SwitchPlan, handBackSecrets, isDowngrade, isKeyMismatch, panelWifi, planSwitch, resendWifi, switchSigningKey, wifiAtRisk,
 } from './switch';
 
 export { PKG, deviceInfo, kioskVersion, q, type StepFn } from '@glassworks/app-adb';
@@ -143,6 +143,9 @@ export async function provision(p: PanelShell, opts: ProvisionOptions, onStep: S
   let sw: SwitchOutcome | undefined;
   const pmOut = await r.tryInstall('glassworks', opts.kioskApk, true, () => phase({ step: 'apk', apk: 'kiosk', stage: 'install' }));
   if (!/Success/.test(pmOut)) {
+    if (isDowngrade(pmOut)) {
+      throw new Error('Glassworks on the panel is a newer version than this one, and Android won\'t install an older version over a newer one. Nothing was changed.');
+    }
     if (!isKeyMismatch(pmOut)) throw new Error(`installing Glassworks failed: ${pmOut.trim()}`);
     const plan = await planSwitch(p);
     r.detail(`installed Glassworks has another signing key${plan.debugBuild ? ' (development build)' : ''}; root: ${plan.root ? 'yes' : 'no'}; Wi-Fi saved by Glassworks: ${plan.wifi.owner === 'kiosk' ? 'yes' : plan.wifi.owner === 'unknown' ? 'maybe' : 'no'}`);

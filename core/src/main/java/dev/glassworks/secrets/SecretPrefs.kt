@@ -26,6 +26,9 @@ import java.util.concurrent.ConcurrentHashMap
  *   they were before the secret store.
  * - **Carried over a reinstall** ([carryOver]): an installer that copied the app's data across an uninstall
  *   hands each secret back in the clear, and it replaces the value sealed with the key Android deleted (#584).
+ *   While that hand-over is due ([handoverPending]), a value that no longer opens is kept and reads as
+ *   [Secret.Unavailable], not removed: the app may make its new key (any first secret it stores) before the
+ *   installer's hand-over comes, and the value must stay locked, not absent, until then (the S1 run of 2026-11-19).
  *
  * Every object over the same file shares one lock ([lockFor]), so a value one of them removes as lost can't undo
  * one another just stored.
@@ -35,6 +38,8 @@ class SecretPrefs(
     private val file: String,
     private val secrets: Set<String>,
     private val store: SecretStore,
+    /** An installer copied this data across a reinstall and will hand the secrets back soon ([SecretFiles.handoverPending]). */
+    private val handoverPending: () -> Boolean = { false },
     private val warn: (String) -> Unit = { Log.w(SecretStore.TAG, it) },
 ) : SharedPreferences {
     /**
@@ -47,7 +52,7 @@ class SecretPrefs(
     private val lock: Any = lockFor(raw)
 
     /** Each is logged once per file object, so a long outage doesn't fill the log. */
-    private enum class Warning { LOST, CANT_READ, CANT_SEAL, NOT_SEALED, KEPT_SEALED, NOT_SAVED }
+    private enum class Warning { LOST, KEPT_FOR_HANDOVER, CANT_READ, CANT_SEAL, NOT_SEALED, KEPT_SEALED, NOT_SAVED }
 
     /** A secret as it reads now ([secret]). */
     sealed interface Secret {
@@ -84,6 +89,10 @@ class SecretPrefs(
         return when (val o = store.open(stored, scope(key))) {
             is SecretStore.Opened.Value -> Secret.Value(o.text).also { opened[key] = stored to o.text }
             SecretStore.Opened.Lost -> {
+                if (handoverPending()) {
+                    warnOnce(Warning.KEPT_FOR_HANDOVER, "$file/$key was sealed with another key; it is kept, locked, until the installer hands it over")
+                    return Secret.Unavailable
+                }
                 val changed = synchronized(lock) {
                     (raw.all[key] != stored).also { if (!it) commit(raw.edit().remove(key), "removing $key") }
                 }

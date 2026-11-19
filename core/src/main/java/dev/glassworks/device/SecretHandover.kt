@@ -8,6 +8,7 @@ import android.content.Context
 import android.util.Base64
 import android.util.Log
 import dev.glassworks.KioskPrefs
+import dev.glassworks.SecretFiles
 import dev.glassworks.auth.HaAuth
 import dev.glassworks.esphome.NoiseKeys
 import dev.glassworks.esphome.StoredKey
@@ -35,7 +36,11 @@ import java.io.OutputStream
  * set <base64>         → ok | refused <why>
  * get-signin           → signin <base64 of the token> | none | unreadable
  * set-signin <base64>  → ok | refused <why>
+ * done                 → ok                       (the installer has handed over all it will: see below)
  * ```
+ * While a switch's hand-over is due (its marker, [dev.glassworks.SecretFiles.handoverPending]), a copied secret that no
+ * longer opens stays locked instead of being removed, so the API server stays shut and nothing reads as "no key". `done`
+ * ends that: what wasn't handed over is lost, as after any reinstall.
  * A `set` never replaces a value in use: only an empty one, the same one (a retried hand-over), or one sealed with a
  * key this app no longer has. Two `set`s at once can't both fill it. The API key's store is the one Home Assistant's
  * provisioning ([NoiseKeys]) writes; HA can't write it while the hand-over can (a reflash keeps the server shut until
@@ -51,6 +56,8 @@ class SecretHandover(
     private val log: (String) -> Unit = {},
     /** A sign-in was carried over: the screens should show the dashboard now. */
     private val onSignIn: () -> Unit = {},
+    /** The installer is done: end the wait for its hand-over. */
+    private val onDone: () -> Unit = {},
 ) {
     /** One request line → the reply line (without "\n"). */
     fun handle(line: String): String {
@@ -74,6 +81,7 @@ class SecretHandover(
                 SecretPrefs.Secret.Unavailable -> "unreadable"
             }
             "set-signin" -> setSignIn(arg)
+            "done" -> { onDone(); log("The installer's hand-over is done"); "ok" }
             else -> "refused unknown request"
         }
     }
@@ -164,6 +172,7 @@ object SecretHandoverServer {
             decode = { runCatching { Base64.decode(it, Base64.DEFAULT) }.getOrNull() },
             log = { Log.i(TAG, it) },
             onSignIn = { HaAuth.init(context); HaAuth.signInCarriedOver() },
+            onDone = { SecretFiles.endHandover(context.applicationContext.filesDir) },
         )
         return AdbSocketServer(SOCKET, TAG) { input, output -> handover.serve(input, output) }
     }

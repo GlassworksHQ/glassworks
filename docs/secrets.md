@@ -21,7 +21,8 @@ to a new app. A Mirror reflash carries the key that way ([esphome.md](esphome.md
 and the S1's signing-key switch carries both
 ([install.md](../frames/aqara-s1-plus/docs/install.md#switching-a-development-build-to-a-release), #584). The
 app takes a value back only where none is stored, or over one sealed with a key it no longer has; never over one it
-can read. It takes a refresh token only into a sign-in its data already holds. It logs a 4-hex fingerprint, never the
+can read. Until the switch's hand-over is done (its marker `files/secrets-handover`, at most 15 minutes), a value
+sealed with a key the app no longer has stays locked, not removed, so nothing reads as "no key" in the meantime. It takes a refresh token only into a sign-in its data already holds. It logs a 4-hex fingerprint, never the
 value. Whoever has adb on the panel can read both; with adb they could already drive the signed-in dashboard.
 
 The files and keys are the same as before; only the stored text changes. A sealed value starts with

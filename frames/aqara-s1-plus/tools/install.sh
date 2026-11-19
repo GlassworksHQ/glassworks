@@ -114,6 +114,8 @@ absent() { local l; l=$(adb shell pm list packages "$PKG") || return 1; ! tr -d 
 wifi_at_risk() { [[ $WIFI_OWNER == kiosk || $WIFI_OWNER == unknown ]]; }
 net_name() { if [[ -n $WIFI_SSID ]]; then printf '"%s"' "$WIFI_SSID"; else printf 'its Wi-Fi network'; fi; }
 is_key_mismatch() { grep -qiE 'INSTALL_FAILED_UPDATE_INCOMPATIBLE|signatures do not match' <<<"$1"; }
+# Android checks the version before the signing key: an older build is refused before any switch could start.
+is_downgrade() { grep -q 'INSTALL_FAILED_VERSION_DOWNGRADE' <<<"$1"; }
 has_root() { [[ "$(adb shell "timeout 15 su -c 'id -u' 2>/dev/null" | tr -d '\r' | tail -1)" == 0 ]]; }
 su_() { adb shell "su -c 'sh $SW_SH $*'"; }
 # Request lines on stdin -> reply lines on stdout, over the app's hand-over socket (adb forward; adb only). Fails when
@@ -230,6 +232,9 @@ hand_back() {
     else SIGNIN_STATE=lost; echo "  Home Assistant sign-in: the app did not take it (${r:-no answer}); sign in again"; fi
   fi
   forget_secrets
+  # the app kept what its old key sealed locked for this hand-over (the restore's marker): end that now
+  r=$(printf 'done\n' | handover_req 2>/dev/null) || r=""
+  if [[ $r != ok ]]; then echo "  The app did not hear the hand-over is done; it stops waiting for it within 15 minutes"; fi
 }
 # The sealed secrets the switch lost, as words for a message ("Home Assistant sign-in and encryption key"), or empty.
 lost_secrets() {
@@ -386,7 +391,8 @@ switch_undo() {
 restore_into() {
   local rc=0
   adb shell pm disable-user --user 0 "$PKG" >/dev/null || true
-  su_ restore || rc=$?
+  # with a hand-over to come, the restore marks it: the app keeps the copied secrets locked until then (#608)
+  if [[ $KEY_STATE == carry || $SIGNIN_STATE == carry ]]; then su_ restore handover || rc=$?; else su_ restore || rc=$?; fi
   adb shell pm enable "$PKG" >/dev/null || true
   return $rc
 }
@@ -537,6 +543,14 @@ else
   out=$(adb install -r -g "$APK" 2>&1) || true
   sed 's/^/  /' <<<"$out"
   if ! grep -q Success <<<"$out"; then
+    if is_downgrade "$out"; then
+      d=$(adb shell dumpsys package "$PKG" | tr -d '\r')
+      v=$(sed -n 's/^ *versionName=\([^ ]*\).*/\1/p' <<<"$d" | head -1); c=$(sed -n 's/^ *versionCode=\([0-9]*\).*/\1/p' <<<"$d" | head -1)
+      echo "ERROR: $(basename "$APK") is an older version than the Glassworks on the panel${v:+ ($v, versionCode ${c:-?})}, and" >&2
+      echo "  Android won't install an older version over a newer one. Nothing was changed. A development build" >&2
+      echo "  takes the panel's version with ./gradlew :kiosk:assembleDebug -Ps1Version=${v:-<version>}." >&2
+      exit 1
+    fi
     is_key_mismatch "$out" || { echo "ERROR: installing $APK failed" >&2; exit 1; }
     switch_key
   fi

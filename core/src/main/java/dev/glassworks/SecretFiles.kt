@@ -1,6 +1,7 @@
 package dev.glassworks
 
 import android.content.Context
+import java.io.File
 import dev.glassworks.secrets.SecretPrefs
 import dev.glassworks.secrets.SecretStore
 
@@ -19,8 +20,35 @@ object SecretFiles {
     )
 
     /** The file [name] with its secrets sealed by [store]. Only for a file in [SECRETS]. */
-    fun open(context: Context, name: String, store: SecretStore): SecretPrefs = SecretPrefs(
-        context.getSharedPreferences(name, Context.MODE_PRIVATE), name,
-        SECRETS[name] ?: throw IllegalArgumentException("'$name' holds no secrets"), store,
-    )
+    fun open(context: Context, name: String, store: SecretStore): SecretPrefs {
+        val files = context.applicationContext.filesDir
+        return SecretPrefs(
+            context.getSharedPreferences(name, Context.MODE_PRIVATE), name,
+            SECRETS[name] ?: throw IllegalArgumentException("'$name' holds no secrets"), store,
+            handoverPending = { handoverPending(files) },
+        )
+    }
+
+    /**
+     * The marker a signing-key switch writes into the app's copied data when it will hand the secrets back
+     * (`glassworks-switch.sh restore handover`, #584): `files/secrets-handover`, owned by the app. The installer's
+     * `done` on the hand-over socket removes it ([endHandover]).
+     */
+    const val HANDOVER_MARKER = "secrets-handover"
+
+    /** How long a marker counts after it was written: the installer hands over within a minute or two of the restore. */
+    const val HANDOVER_WAIT_MS = 15 * 60_000L
+
+    /** An installer will hand the secrets back: its marker is there and younger than [HANDOVER_WAIT_MS]. */
+    fun handoverPending(filesDir: File, now: Long = System.currentTimeMillis()): Boolean {
+        val f = File(filesDir, HANDOVER_MARKER)
+        val age = now - f.lastModified()
+        return f.isFile && age in 0 until HANDOVER_WAIT_MS
+    }
+
+    /** The installer is done handing over (or gave up): secrets that still don't open are lost, as after any reinstall. */
+    fun endHandover(filesDir: File): Boolean {
+        val f = File(filesDir, HANDOVER_MARKER)
+        return !f.exists() || f.delete()
+    }
 }

@@ -21,7 +21,7 @@
 // The Wi-Fi password, the sign-in and the key never go into a command line, a log line or an error message.
 import type { PanelShell } from '@glassworks/adb';
 import {
-  ACT, ADMIN, PKG, type Carries, apiKeyFingerprint, dropAdmin, handOverApiKey, handOverSignIn, apiKeySocketUp, handoverCarries, readApiKey, readSignIn,
+  ACT, ADMIN, PKG, type Carries, apiKeyFingerprint, apiKeySocketUp, dropAdmin, handOverApiKey, handOverDone, handOverSignIn, handoverCarries, readApiKey, readSignIn,
 } from '@glassworks/app-adb';
 import { IMPROV_SOCKET, ImprovSerialClient } from './improv';
 import switchScript from '../../tools/install/glassworks-switch.sh?raw';
@@ -40,6 +40,11 @@ export interface PanelWifi { owner: WifiOwner; ssid?: string }
 /** Android refused `pm install -r` because the APK's signing key differs from the installed app's. */
 export function isKeyMismatch(pmOut: string): boolean {
   return /INSTALL_FAILED_UPDATE_INCOMPATIBLE|signatures do not match/i.test(pmOut);
+}
+
+/** Android refused `pm install -r` because the APK is an older version than the installed app's (checked before the key). */
+export function isDowngrade(pmOut: string): boolean {
+  return /INSTALL_FAILED_VERSION_DOWNGRADE/.test(pmOut);
 }
 
 /**
@@ -297,6 +302,7 @@ export async function handBackSecrets(p: PanelShell, sw: { signIn: Carried; apiK
   sleep: (ms: number) => Promise<void>, waitMs = 90_000): Promise<{ signIn: Carried; apiKey: Carried }> {
   const s = sw.secrets;
   const out = { signIn: sw.signIn, apiKey: sw.apiKey };
+  const carrying = out.signIn === 'carry' || out.apiKey === 'carry';
   try {
     if (out.apiKey === 'carry') {
       out.apiKey = s?.apiKey !== undefined && await handOverApiKey(p, s.apiKey, sleep, waitMs) ? 'kept' : 'lost';
@@ -308,6 +314,8 @@ export async function handBackSecrets(p: PanelShell, sw: { signIn: Carried; apiK
     }
   } finally {
     s?.forget();
+    // The app kept what its old key sealed locked for this hand-over (the restore's marker): end that now.
+    if (carrying && !(await handOverDone(p))) log('The app did not hear the hand-over is done; it stops waiting for it within 15 minutes');
   }
   return out;
 }
@@ -409,7 +417,9 @@ export async function switchSigningKey(p: PanelShell, apk: Uint8Array, plan: Swi
   //    Its data goes in while it is disabled (it would start as HOME at once otherwise).
   const restoreInto = async (): Promise<{ out: string; code: number }> => {
     await p.run(`pm disable-user --user 0 ${PKG}`);
-    try { return await su('restore'); } finally { await p.run(`pm enable ${PKG}`); }
+    // With a hand-over to come, the restore marks it, so the app keeps the copied secrets locked until then (#608).
+    const handover = out.signIn === 'carry' || out.apiKey === 'carry';
+    try { return await su(handover ? 'restore handover' : 'restore'); } finally { await p.run(`pm enable ${PKG}`); }
   };
   await p.push(NEW_APK, apk, 0o644);
   const inst = (await p.run(`pm install -r -g ${NEW_APK}`)).out;

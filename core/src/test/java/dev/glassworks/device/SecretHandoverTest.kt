@@ -186,6 +186,13 @@ class SecretHandoverTest {
         assertTrue("a fingerprint instead", logged.all { Regex("fingerprint [0-9a-f]{4}").containsMatchIn(it) })
     }
 
+    @Test fun doneEndsTheWaitForTheHandOver() {
+        var done = 0
+        val h = SecretHandover(Store(), ::enc, { runCatching { Base64.getDecoder().decode(it) }.getOrNull() }, onDone = { done++ })
+        assertEquals("ok", h.handle("done"))
+        assertEquals(1, done)
+    }
+
     @Test fun servesOneReplyPerLine() {
         val out = ByteArrayOutputStream()
         handover(Store()).serve(ByteArrayInputStream("set $b64\n\nget\nset-signin $tokenB64\nget-signin\n".toByteArray()), out)

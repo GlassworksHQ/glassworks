@@ -63,6 +63,10 @@ class SwitchPanel implements PanelShell {
   disabled = false;
   backup = false;
   restoredInto?: 'debug' | 'release';
+  /** The last restore's argument: `handover` when the installer marked a hand-over to come (#608). */
+  restoreArg?: string;
+  /** The APK is older than the installed app: Android refuses it before it compares keys. */
+  downgrade = false;
   wifiSent: { ssid: string; psk: string }[] = [];
   streams = 0;
   /** Every hand-over socket this panel had, oldest first. */
@@ -103,6 +107,7 @@ class SwitchPanel implements PanelShell {
     if (cmd === 'getprop ro.product.model') return ok('Aqara S1 Plus\n');
     if (cmd === 'getprop ro.build.version.sdk') return ok('29\n');
     if (cmd === 'pm install -r -g /data/local/tmp/glassworks.apk') {
+      if (this.downgrade && this.installed !== 'none') return { out: 'Failure [INSTALL_FAILED_VERSION_DOWNGRADE]\n', code: 1 };
       if (this.installed === 'debug') return { out: MISMATCH, code: 1 };
       if (!this.newInstallWorks) return { out: 'Failure [INSTALL_FAILED_INSUFFICIENT_STORAGE]\n', code: 1 };
       this.installed = 'release';
@@ -155,6 +160,7 @@ class SwitchPanel implements PanelShell {
         expect(this.disabled).toBe(true); // or it would start as HOME while its data is replaced
         if (!this.restoreWorks) return { out: 'glassworks-switch: could not restore the app\'s data\n', code: 1 };
         this.restoredInto = this.installed;
+        this.restoreArg = args[1];
         // the copied data: the sign-in and the key, sealed with the key Android deleted with the old app
         if (this.handover) Object.assign(this.handover, { key: this.held.key, signIn: this.held.signIn, lost: true, signInHere: true });
         return ok('restored for uid 10072\n');
@@ -288,7 +294,9 @@ describe('switching a development build to this one', () => {
     expect(text).toContain('Encryption key: handed to the app');
     const [old, fresh] = p.sockets;
     expect(old!.verbs).toEqual(['carries', 'get-signin', 'get']);
-    expect(fresh!.verbs).toEqual(['set', 'set-signin']);
+    expect(fresh!.verbs).toEqual(['set', 'set-signin', 'done']);
+    // the restore marked the hand-over, so the new app keeps the copied secrets locked until then (#608)
+    expect(p.restoreArg).toBe('handover');
 
     const i = (c: string) => p.cmds.indexOf(c);
     const su = (c: string) => i(`su -c 'sh /data/local/tmp/glassworks-switch.sh ${c}'`);
@@ -297,10 +305,10 @@ describe('switching a development build to this one', () => {
     expect(i('pm uninstall sh.edm.s1kiosk')).toBeGreaterThan(su('backup'));
     expect(i('pm uninstall sh.edm.s1kiosk')).toBeGreaterThan(p.cmds.indexOf('am start -n sh.edm.s1kiosk/.MainActivity --ez remove_admin true'));
     expect(p.cmds.lastIndexOf('pm install -r -g /data/local/tmp/glassworks.apk')).toBeGreaterThan(i('pm uninstall sh.edm.s1kiosk'));
-    expect(su('restore')).toBeGreaterThan(p.cmds.lastIndexOf('pm install -r -g /data/local/tmp/glassworks.apk'));
+    expect(su('restore handover')).toBeGreaterThan(p.cmds.lastIndexOf('pm install -r -g /data/local/tmp/glassworks.apk'));
     // then the usual install steps: permissions, admin, HOME, start, and only then Wi-Fi
-    expect(i('dpm set-active-admin sh.edm.s1kiosk/.AdminReceiver')).toBeGreaterThan(su('restore'));
-    expect(i('cmd package set-home-activity sh.edm.s1kiosk/.MainActivity')).toBeGreaterThan(su('restore'));
+    expect(i('dpm set-active-admin sh.edm.s1kiosk/.AdminReceiver')).toBeGreaterThan(su('restore handover'));
+    expect(i('cmd package set-home-activity sh.edm.s1kiosk/.MainActivity')).toBeGreaterThan(su('restore handover'));
     expect(p.cmds.indexOf(`grep -c ' @s1kiosk_improv$' /proc/net/unix`)).toBeGreaterThan(i('am start -n sh.edm.s1kiosk/.MainActivity'));
     // the secrets are read while the old app runs, before it is stopped, and handed over once the new one starts
     const sock = `grep -c ' @glassworks_api_key$' /proc/net/unix`;
@@ -372,7 +380,7 @@ describe('switching a development build to this one', () => {
     expect(text).toContain('Home Assistant sign-in: this build of the app can\'t hand it over; sign in again afterwards');
     expect(old.verbs).toEqual(['carries', 'get']);
     expect(p.handover).toMatchObject({ key: KEY });
-    expect(p.handover!.verbs).toEqual(['set']);
+    expect(p.handover!.verbs).toEqual(['set', 'done']);
   });
 
   it('from an app with no hand-over at all: carries nothing, as before #584', async () => {
@@ -383,6 +391,7 @@ describe('switching a development build to this one', () => {
     expect(res.switched).toMatchObject({ dataKept: true, signIn: 'lost', apiKey: 'lost' });
     expect(text).not.toContain('Sign-in and encryption key to the new app');
     expect(p.handover!.verbs).toEqual([]);
+    expect(p.restoreArg).toBeUndefined(); // nothing to wait for: no marker
   });
 
   it('an app that isn\'t signed in: nothing to carry, nothing to say', async () => {
@@ -390,7 +399,7 @@ describe('switching a development build to this one', () => {
     p.oldApp('both', { key: KEY });
     const res = await provision(p, { kioskApk: new Uint8Array([1]), debloat: false, confirmSwitch: async () => true }, () => {}, noSleep);
     expect(res.switched).toMatchObject({ dataKept: true, signIn: 'none', apiKey: 'kept' });
-    expect(p.handover!.verbs).toEqual(['set']);
+    expect(p.handover!.verbs).toEqual(['set', 'done']);
   });
 
   it('an app that can\'t read its sign-in now: the switch goes on and says to sign in again', async () => {
@@ -465,6 +474,15 @@ describe('switching a development build to this one', () => {
     await expect(provision(p, { kioskApk: new Uint8Array([1]), confirmSwitch: async () => true }, () => {}, noSleep))
       .rejects.toThrow(/neither would the previous one\. Run the installer again\. Its data is kept on the panel in \/data\/s1kiosk\/switch/);
     expect(p.backup).toBe(true);
+  });
+
+  it('an older build says so, before any switch, with nothing changed (#608 panel run)', async () => {
+    const p = new SwitchPanel();
+    p.downgrade = true;
+    await expect(provision(p, { kioskApk: new Uint8Array([1]), confirmSwitch: async () => true }, () => {}, noSleep))
+      .rejects.toThrow(/newer version than this one[\s\S]*Nothing was changed/);
+    expect(p.cmds.some((c) => c.startsWith('pm uninstall') || c.startsWith('su '))).toBe(false);
+    expect(p.installed).toBe('debug');
   });
 
   it('an ordinary install failure is not mistaken for a key mismatch', async () => {

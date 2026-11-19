@@ -471,7 +471,8 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   even said the sign-in was kept. The camera's stream password and the Music Assistant pairing are still not
   carried, and the installer says so. A switch from a build without this change still loses the sign-in (and,
   before the Mirror key hand-over, the key), and the plan and the Done line say to sign in again. This is in Kiln
-  and in the command line installer, and needs this app version on the panel before the switch.
+  and in the command line installer, and needs this app version on the panel before the switch. A build older than
+  the panel's is now refused with a clear message instead of a plain install failure.
 - **A Mirror reflash keeps its Home Assistant device.** Kiln and the headless flash give the Mirror an id from its
   serial number and keep it in the image, so a later reflash comes back as the same device with the same entity
   ids. The first flash with this still shows up as a new device once. On other Android devices, an app reinstall

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PanelShell } from '@glassworks/adb';
-import { ManifestError, Steps, apiKeyFingerprint, apiKeySocketUp, apkHome, apkInfo, apkPermissions, axmlTree, dropAdmin, grantPermissions, handOverApiKey, handOverSignIn, handoverCarries, kioskVersion, q, readApiKey, readSignIn, sendWifi, startApp, zipEntry } from '../src';
+import { ManifestError, Steps, apiKeyFingerprint, apiKeySocketUp, apkHome, apkInfo, apkPermissions, axmlTree, dropAdmin, grantPermissions, handOverApiKey, handOverDone, handOverSignIn, handoverCarries, kioskVersion, q, readApiKey, readSignIn, sendWifi, startApp, zipEntry } from '../src';
 import { FakeKeySocket, HOME_ACTIVITY, app, fakeApk, filter, zip, type FakeEl } from './fakes';
 
 class Shell implements PanelShell {
@@ -367,6 +367,19 @@ describe('the Home Assistant sign-in across a signing-key switch (#584)', () => 
     const down = new FakeKeySocket();
     down.passing = 1_000;
     expect(await handOverApiKey(shell(down), KEY, async () => {}, 0, 5)).toBe(false);
+  });
+
+  it('says the hand-over is done, once, and never throws (#608 panel run)', async () => {
+    const s = new FakeKeySocket();
+    expect(await handOverDone(shell(s))).toBe(true);
+    expect(s.verbs).toEqual(['done']);
+    const keyOnly = new FakeKeySocket();
+    keyOnly.keyOnly = true;
+    expect(await handOverDone(shell(keyOnly))).toBe(false);
+    expect(await handOverDone(shell(new FakeKeySocket(undefined, false)))).toBe(false);
+    const mute = new FakeKeySocket();
+    mute.drop = 1;
+    expect(await handOverDone(shell(mute), 5)).toBe(false);
   });
 
   it('fingerprints a sign-in as the app logs it', async () => {

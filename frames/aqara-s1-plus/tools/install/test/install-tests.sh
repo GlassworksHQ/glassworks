@@ -80,6 +80,8 @@ case "$1" in
   push) cp "$2" "$S/panel/$(basename "$3")"; exit 0 ;;
   forward) [ "$2" = tcp:0 ] && echo 41234; exit 0 ;;
   install)
+    # Android checks the version before the signing key
+    [ "$(st downgrade)" = 1 ] && [ "$(st installed)" != none ] && { echo "adb: failed to install x.apk: Failure [INSTALL_FAILED_VERSION_DOWNGRADE]"; exit 1; }
     case "$(st installed)" in
       debug) echo "adb: failed to install x.apk: Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE: Package sh.edm.s1kiosk signatures do not match previously installed version; ignoring!]"; exit 1 ;;
     esac
@@ -132,12 +134,12 @@ case "$cmd" in
   "su -c 'sh /data/local/tmp/glassworks-switch.sh "*"'")
     [ "$(st root)" = 1 ] || { echo "Permission denied"; exit 1; }
     a=${cmd#su -c \'sh /data/local/tmp/glassworks-switch.sh }; a=${a%\'}
-    case "$a" in backup|restore) [ "$(st disabled)" = 1 ] || { echo "TEST: $a while the app is enabled" >> "$S/violations"; } ;; esac
+    case "${a%% *}" in backup|restore) [ "$(st disabled)" = 1 ] || { echo "TEST: $a while the app is enabled" >> "$S/violations"; } ;; esac
     echo "$a" >> "$S/root-cmds"
-    [ "$a" = restore ] && [ "$(st restore)" = fail ] && { echo "glassworks-switch: could not restore the app's data"; exit 1; }
+    [ "${a%% *}" = restore ] && [ "$(st restore)" = fail ] && { echo "glassworks-switch: could not restore the app's data"; exit 1; }
     # the app's sealed secrets go with its data: copied by backup, back by restore, sealed with a key that is gone
     [ "$a" = backup ] && for f in key signin; do [ -f "$S/app.$f" ] && cp "$S/app.$f" "$S/copy.$f"; done
-    if [ "$a" = restore ]; then for f in key signin; do [ -f "$S/copy.$f" ] && cp "$S/copy.$f" "$S/app.$f"; done; put app.key.lost 1; put app.signin.lost 1; put app.signinhere 1; fi
+    if [ "${a%% *}" = restore ]; then for f in key signin; do [ -f "$S/copy.$f" ] && cp "$S/copy.$f" "$S/app.$f"; done; put app.key.lost 1; put app.signin.lost 1; put app.signinhere 1; fi
     # shellcheck disable=SC2086
     PATH="$S/pbin:$PATH" S1_CE="$S/panel/ce" S1_DE="$S/panel/de" S1_WORK="$S/panel/work" \
       S1_WIFI_STORES="$S/WifiConfigStore.xml" sh "$S/panel/glassworks-switch.sh" $a
@@ -169,9 +171,10 @@ carries = st("old-carries", "both") if st("installed") == "debug" else "both"
 for line in sys.stdin.read().splitlines():
     verb, _, arg = line.strip().partition(" ")
     open(os.path.join(S, "handover.log"), "a").write(verb + "\n")
-    known = ["get", "set"] if carries == "key" else ["carries", "get", "set", "get-signin", "set-signin"]
+    known = ["get", "set"] if carries == "key" else ["carries", "get", "set", "get-signin", "set-signin", "done"]
     if verb not in known: r = "refused unknown request"
     elif verb == "carries": r = "carries api_key signin"
+    elif verb == "done": r = "ok"
     elif verb in ("get", "get-signin"):
         f = "app.key" if verb == "get" else "app.signin"; v = st(f); lost = st(f + ".lost") == "1"
         r = "none" if not v else "unreadable" if lost or st("app.unreadable") == "1" else ("key " if verb == "get" else "signin ") + v
@@ -189,7 +192,7 @@ APK="$T/kiosk-release.apk"; echo apk > "$APK"
 
 # A debug build with its data, as HOME + device admin, on Wi-Fi it saved.
 panel() { # [wifi fixture]
-  rm -rf "$T/panel" "$T"/{adb.log,root-cmds,root.log,violations,improv.got,installed,disabled,root,admin,home,new-install,uninstall,restore,disable,old-install,list,chooser,handover.log,old-carries,down-after-admin,socket-down,handover.passing} "$T"/app.* "$T"/copy.*
+  rm -rf "$T/panel" "$T"/{adb.log,root-cmds,root.log,violations,improv.got,installed,disabled,root,admin,home,new-install,uninstall,restore,disable,old-install,list,chooser,handover.log,old-carries,down-after-admin,socket-down,handover.passing,downgrade} "$T"/app.* "$T"/copy.*
   mkdir -p "$T/panel"
   cp "$FIX/WifiConfigStore.xml" "$T/WifiConfigStore.xml"
   fresh_data 10071 debug
@@ -230,7 +233,11 @@ out=$(env_sw restore 2>&1)
 check "restore: into the new uid" has "$out" "restored for uid 10072"
 check "restore: data back, the fresh install's files gone" bash -c '[ -f "$1/shared_prefs/kiosk.xml" ] && [ -f "$1/files/mozilla/prefs.js" ] && [ ! -e "$1/fresh" ] && [ -f "$2/de.txt" ]' _ "$T/panel/ce" "$T/panel/de"
 check "restore: lib still points at the new install" test "$(readlink "$T/panel/ce/lib")" = /data/app/sh.edm.s1kiosk-release/lib/arm
+check "restore: no hand-over marker unless asked" test ! -e "$T/panel/ce/files/secrets-handover"
 check "restore: owned by the new uid, labels restored" bash -c 'grep -q "chown -R 10072:10072 .*/ce/shared_prefs" "$1" && grep -q "restorecon -R .*/ce" "$1"' _ "$T/root.log"
+out=$(env_sw restore handover 2>&1)
+check "restore handover: restored, and the hand-over marked for the app (#608)" bash -c '[ -f "$1/files/secrets-handover" ] && [ ! -s "$1/files/secrets-handover" ] && grep -q "chown 10072:10072 .*/ce/files/secrets-handover" "$2"' _ "$T/panel/ce" "$T/root.log"
+check "restore refuses another word" bash -c '! "$@" restore whatever 2>/dev/null' _ env PATH="$T/pbin:$PATH" S1_CE="$T/panel/ce" S1_DE="$T/panel/de" S1_WORK="$T/panel/work" sh "$SW"
 env_sw discard
 check "discard: the copy is gone" test ! -e "$T/panel/work"
 check "restore without a copy fails" bash -c '! "$@" restore 2>/dev/null' _ env PATH="$T/pbin:$PATH" S1_CE="$T/panel/ce" S1_WORK="$T/panel/work" sh "$SW"
@@ -316,7 +323,8 @@ check "...but not the camera password or the Music Assistant pairing" has "$out"
 check "Done: settings, sign-in and key kept" has "$out" "Switched builds: the app's settings, Home Assistant sign-in and encryption key were kept."
 check "...so it doesn't say to log in" hasnt "$out" "Log in to Home Assistant on the panel once"
 check "the new app has the sign-in and key" handed_back
-check "read from the old app, handed to the new one, nothing else" test "$(tr '\n' ' ' < "$T/handover.log")" = "carries get-signin get set set-signin "
+check "read from the old app, handed to the new one, then done" test "$(tr '\n' ' ' < "$T/handover.log")" = "carries get-signin get set set-signin done "
+check "the restore marked the hand-over (#608)" grep -qx "restore handover" "$T/root-cmds"
 check "the sign-in and key are in no output" bash -c '! grep -qF -e "$2" -e "$3" <<<"$1"' _ "$out" "$TOKEN" "$KEY"
 check "...and in no adb command" bash -c '! grep -qF -e "$2" -e "$3" <<<"$1"' _ "$log" "$TOKEN" "$KEY"
 check "...only their fingerprints" has "$out" "Home Assistant sign-in: read from the running app (fingerprint f00d)"
@@ -359,7 +367,7 @@ out=$(inst --switch); rc=$?
 check "exit 0" test $rc -eq 0
 check "the plan: the key is kept, the sign-in isn't" has "$out" "and so is its encryption key: the"
 check "...sign in again" has "$out" "Its Home Assistant sign-in"$'\n'"  is not: this build of the app can't hand it over"
-check "only the key read and handed over" test "$(tr '\n' ' ' < "$T/handover.log")" = "carries get set "
+check "only the key read and handed over" test "$(tr '\n' ' ' < "$T/handover.log")" = "carries get set done "
 check "Done: sign in again, the key kept" has "$out" "settings were kept, but not its Home Assistant sign-in"
 check "...says to sign in, not to confirm the key" bash -c 'grep -q "Sign in again\.$" <<<"$1" && ! grep -q "confirm the key" <<<"$1"' _ "$out"
 
@@ -371,6 +379,7 @@ check "the plan says both are lost, as #588 did" has "$out" "Its Home Assistant 
 check "Done: sign in again, may confirm the key" has "$out" "settings were kept, but not its Home Assistant sign-in and encryption key"
 check "...and says what to do" has "$out" "Sign in again. Home Assistant may ask to confirm the key."
 check "no request to the app" bash -c '! grep -qv carries "$1" 2>/dev/null' _ "$T/handover.log"
+check "...and no hand-over marked" grep -qx "restore" "$T/root-cmds"
 
 echo "== install.sh: an app that can't read its sign-in now (#584)"
 panel; printf 1 > "$T/app.unreadable"
@@ -406,6 +415,14 @@ panel; printf fail > "$T/restore"
 out=$(inst --switch); rc=$?
 check "hands nothing to the fresh app" test "$(tr '\n' ' ' < "$T/handover.log")" = "carries get-signin get "
 check "says the settings were reset" has "$out" "settings were reset"
+
+echo "== install.sh: an older build than the panel's (#608 panel run)"
+panel; printf 1 > "$T/downgrade"
+out=$(inst --switch); rc=$?
+check "stops" test $rc -ne 0
+check "says it's older, and how to build it" has "$out" "is an older version than the Glassworks on the panel (0.1.0"
+check "...with the panel's version" has "$out" "-Ps1Version=0.1.0"
+check "...nothing changed" bash -c '[ "$(cat "$1/installed") $(cat "$1/disabled")" = "debug 0" ] && ! grep -q "pm uninstall" "$1/adb.log"' _ "$T"
 
 echo "== install.sh: a network Glassworks didn't save"
 panel dumpsys-wifi-other.txt

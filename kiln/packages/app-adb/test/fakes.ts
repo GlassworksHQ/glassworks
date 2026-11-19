@@ -205,9 +205,10 @@ export class FakeKeySocket {
       write: async (d: Uint8Array) => {
         const [verb, arg] = new TextDecoder().decode(d).trim().split(' ');
         this.verbs.push(verb!);
-        const known = this.keyOnly ? ['get', 'set'] : ['carries', 'get', 'set', 'get-signin', 'set-signin'];
+        const known = this.keyOnly ? ['get', 'set'] : ['carries', 'get', 'set', 'get-signin', 'set-signin', 'done'];
         const reply = !known.includes(verb!) ? 'refused unknown request'
           : verb === 'carries' ? 'carries api_key signin'
+          : verb === 'done' ? 'ok'
           : verb === 'get' ? this.#get(this.key, this.keyLost, 'key')
           : verb === 'set' ? this.#set(this.key, this.keyLost, arg, 'key', (v) => { this.key = v; this.keyLost = false; })
           : verb === 'get-signin' ? this.#get(this.signIn, this.signInLost, 'signin')

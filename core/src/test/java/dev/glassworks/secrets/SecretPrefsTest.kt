@@ -246,5 +246,26 @@ class SecretPrefsTest {
         assertTrue("and not called lost", warnings.isEmpty())
     }
 
+    @Test fun whileAHandOverIsDueALostValueStaysLocked() {
+        // Run B of the S1 run on 2026-11-19 (#608): the new app made its key (a pane's first secret) before the
+        // installer's hand-over came. The copied values then failed to open; they must stay locked, not be removed.
+        prefs().edit().putString("token", "made-up-old").putString("psk", "made-up-psk").commit()
+        var due = true
+        val p = SecretPrefs(raw, "secrets-test", secrets, fresh, { due }) { warnings += it }
+        p.edit().putString("other", "plain").commit()
+        assertTrue("a first secret makes the new key", SecretPrefs(raw, "secrets-test", setOf("first"), fresh).edit().putString("first", "x").commit())
+        assertEquals(SecretPrefs.Secret.Unavailable, p.secret("token"))
+        assertFalse(p.canRead("token"))
+        assertTrue("kept for the hand-over", raw.contains("token") && raw.contains("psk"))
+        assertFalse("never said lost meanwhile", warnings.any { "no longer has" in it })
+        assertEquals(SecretPrefs.CarryOver.STORED, p.carryOver("token", "made-up-old"))
+        assertEquals("made-up-old", p.getString("token", null))
+        // the installer is done: what wasn't handed over is lost, as after any reinstall
+        due = false
+        assertNull(p.getString("psk", null))
+        assertFalse(raw.contains("psk"))
+        assertFalse("never the value", warnings.any { "made-up" in it })
+    }
+
     private fun aesKey(): SecretKey = KeyGenerator.getInstance("AES").apply { init(256) }.generateKey()
 }

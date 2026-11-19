@@ -290,6 +290,19 @@ export async function handOverSignIn(p: PanelShell, signIn: string, sleep: (ms: 
 }
 
 /**
+ * Tells the app the installer has handed over all it will (#608): it stops keeping the secrets its old Keystore key
+ * sealed locked for the hand-over, and drops the ones nobody handed over. One try, never throws: without it the wait
+ * ends by itself after 15 minutes. False when the app didn't say ok (an app from before this, or no answer).
+ */
+export async function handOverDone(p: PanelShell, replyMs = 10_000): Promise<boolean> {
+  try {
+    return !!p.openStream && (await apiKeySocketUp(p)) && (await keyRequest(p, 'done', replyMs)) === 'ok';
+  } catch {
+    return false;
+  }
+}
+
+/**
  * A secret's fingerprint as the app logs it (NoiseKeys.fingerprint): the first 2 bytes of the SHA-256 of its bytes
  * (`b64` decoded), in hex. Reveals nothing. For the API key and the sign-in alike.
  */
