@@ -2,10 +2,12 @@ package dev.glassworks.s1.frame
 
 import android.app.Application
 import dev.glassworks.frame.AgentCapability.APP_UPDATES
+import dev.glassworks.frame.AgentCapability.FRAME_BUNDLE
 import dev.glassworks.frame.AgentCapability.RADIO_FIREWALL
 import dev.glassworks.frame.AgentCapability.RADIO_FIRMWARE
 import dev.glassworks.frame.AgentCapability.RADIO_MODE
 import dev.glassworks.frame.AgentCapability.TIME_ZONE
+import dev.glassworks.radio.RadioBundle
 import dev.glassworks.radio.RadioController
 import dev.glassworks.radio.RadioFirmware
 import dev.glassworks.radio.RadioHelper
@@ -61,6 +63,16 @@ class S1AgentTest {
             assertEquals(at, RadioFirmware(props, null).supported(), agent.offers(RADIO_FIRMWARE))
             assertEquals(at, radio.helperV4(), agent.offers(TIME_ZONE))
         }
+    }
+
+    /** An undo restores the boot image and keeps /data, so the bundle's state file outlives the loader. */
+    @Test fun theBundleNeedsThisBootsLoaderMarkerAsWellAsTheFile() {
+        val ok = RadioBundle.Installed("ok", 5, 5)
+        val props = Props()
+        assertFalse("the file alone", S1Agent(props, bundle = { ok }).offers(FRAME_BUNDLE))
+        props.p[RadioHelper.PROP_BUNDLE_LOADER] = "1"
+        assertFalse("the marker alone", S1Agent(props, bundle = { null }).offers(FRAME_BUNDLE))
+        assertTrue("both", S1Agent(props, bundle = { ok }).offers(FRAME_BUNDLE))
     }
 
     @Test fun noHelperNoVersion() {

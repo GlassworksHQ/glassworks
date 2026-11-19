@@ -31,7 +31,7 @@ import java.io.FileNotFoundException
  */
 class S1Agent(
     private val props: SysProps = ShellProps,
-    /** The radio bundle's state, from the root-owned file ([RadioBundle.installed]). */
+    /** The radio bundle's state, from the root-owned file ([RadioBundle.installed]). The radio pane still installs on the file alone. */
     private val bundle: () -> RadioBundle.Installed? = RadioBundle(props, NoBundle, null)::installed,
     private val bluetoothFile: File = File(BLUETOOTH_ADDRESS_FILE),
     override val appUpdates: RootUpdateInstaller = RootUpdateInstaller(props),
@@ -46,7 +46,8 @@ class S1Agent(
         RADIO_MODE -> version() != null
         RADIO_FIREWALL -> (version() ?: 0) >= RadioHelper.FIREWALL_VERSION
         RADIO_FIRMWARE, TIME_ZONE -> (version() ?: 0) >= RadioHelper.BUNDLE_VERSION
-        FRAME_BUNDLE -> bundle() != null
+        // This boot's marker as well as the file: an undo keeps /data, and with it the file (docs/frame-agent.md#discovery).
+        FRAME_BUNDLE -> props.get(RadioHelper.PROP_BUNDLE_LOADER).trim() == "1" && bundle() != null
         APP_UPDATES -> props.get(UpdateHelper.PROP_VERSION).trim().toIntOrNull()?.let { it >= 1 } == true
         HOTSPOT_PORTAL -> props.get(PORTAL_STATUS).isNotEmpty()
         HOTSPOT_NAME -> props.get(HOTSPOT_NAME_STATUS).isNotEmpty()

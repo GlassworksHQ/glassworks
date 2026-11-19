@@ -35,6 +35,7 @@ class S1AgentContractTest : FrameAgentContract("aqara-s1-plus") {
             p[RadioHelper.PROP_SVC_STATE] = "running"
             p[RadioHelper.PROP_VERSION] = "${RadioHelper.VERSION}"
             p[UpdateHelper.PROP_VERSION] = "${UpdateHelper.VERSION}"
+            p[RadioHelper.PROP_BUNDLE_LOADER] = "1"
             p[S1Agent.PORTAL_STATUS] = "off"
             p[S1Agent.HOTSPOT_NAME_STATUS] = "glassworks"
         }
@@ -45,9 +46,11 @@ class S1AgentContractTest : FrameAgentContract("aqara-s1-plus") {
             APP_UPDATES -> p.remove(UpdateHelper.PROP_VERSION)
             HOTSPOT_PORTAL -> p.remove(S1Agent.PORTAL_STATUS)
             HOTSPOT_NAME -> p.remove(S1Agent.HOTSPOT_NAME_STATUS)
-            FRAME_BUNDLE, BLUETOOTH_ADDRESS, LOADER_INSTALL, null -> Unit
+            // An undo: the boot image's marker is gone, the state file stays in /data.
+            FRAME_BUNDLE -> p.remove(RadioHelper.PROP_BUNDLE_LOADER)
+            BLUETOOTH_ADDRESS, LOADER_INSTALL, null -> Unit
         }
-        val bundle = RadioBundle.Installed("ok", 5, 5).takeIf { !none && without != FRAME_BUNDLE }
+        val bundle = RadioBundle.Installed("ok", 5, 5).takeIf { !none }
         val bt = File(Files.createTempDirectory("s1-agent").toFile(), "bluetooth-address")
         if (!none && without != BLUETOOTH_ADDRESS) bt.writeText("00:00:5E:00:53:01\n")
         val props = object : SysProps {
