@@ -206,7 +206,32 @@ Every S1 in the field needs one more Kiln update to get the loader. Before build
 
 10. **The stock U-Boot's own code, and a RAM image it can boot** (2026-11-19, read: disassembly of
     the panel's boot package backup, U-Boot item at file offset 0x800, linked at `0x4A000000`,
-    Thumb-2; `llvm-objdump --triple=thumbv7`). Code addresses below are U-Boot addresses.
+    Thumb-2; `llvm-objdump --triple=thumbv7`). Code addresses below are U-Boot addresses. The
+    commands, host only, on a backup outside the repo:
+    ```sh
+    P=<backup dir>/bootloader/boot_package.bin       # the stock boot package, eMMC sector 32800
+    python3 -I - "$P" <<'EOF'                         # item table: 0x170-byte entries from 0x40
+    import struct, sys
+    b = open(sys.argv[1], 'rb').read()
+    for i in range(4):
+        o = 0x40 + i * 0x170
+        off, size = struct.unpack_from('<2I', b, o + 64)
+        print(b[o:o + 64].split(b'\0')[0], hex(off), size, hex(struct.unpack_from('<I', b, off)[0]))
+    EOF
+    dd if="$P" of=/tmp/uboot.bin bs=2048 skip=1 count=336   # the u-boot item: offset 0x800, 688128 bytes
+    O=/opt/homebrew/opt/llvm/bin
+    $O/llvm-objcopy -I binary -O elf32-littlearm /tmp/uboot.bin /tmp/uboot.elf
+    $O/llvm-objdump -D --triple=thumbv7-none-eabi --start-address=0x4bcb8 --stop-address=0x4bd34 /tmp/uboot.elf
+    ```
+    `llvm-objdump` prints offsets in `uboot.bin`. A U-Boot address is `0x4A000000` plus that offset.
+    Each function was found from a string it prints: the string's U-Boot address shows up as a
+    little-endian word in the literal pool right after the function.
+    ```sh
+    python3 -I -c 'import re, struct, sys; u = open(sys.argv[1], "rb").read(); a = 0x4A000000 + u.find(sys.argv[2].encode()); print([hex(m.start()) for m in re.finditer(re.escape(struct.pack("<I", a)), u)])' /tmp/uboot.bin 'recv addr 0x%lx'
+    ```
+    The ranges read, as offsets: `sunxi_fastboot_init` 0x4bcb8–0x4bd34, `boot` 0x4c6ec–0x4c75e,
+    `do_bootm` 0x6ce0–0x6d8e, its verify step 0x6520–0x671a, `android_image_get_ramdisk` 0x102a4.
+    Delete `/tmp/uboot.*` afterwards: they are Aqara's code.
     - **U-Boot is 32-bit.** The `u-boot` item starts with an ARM branch (`0xea00018e`), and the
       `monitor` item (ATF) with an AArch64 one (`0x1400003e`). U-Boot starts the 64-bit kernel through
       ATF (`ARM_SVC_RUNNSOS`).
@@ -426,8 +451,10 @@ boot from flash doesn't. `vbmeta` has flags 3, so the changed header boots.
 
 1. **T0** (read-only): `getprop ro.crypto.state` (expect `unencrypted`), `ls -lL /dev/block/by-name/boot`,
    `cat /dev/block/by-name/boot | head -c 8` as adb's shell (expect permission denied), and the keys
-   of `/proc/cmdline` (`tr ' ' '\n' | cut -d= -f1`). The full line holds the serial and MAC addresses:
-   keep it out of notes.
+   of `/proc/cmdline` (`tr ' ' '\n' | cut -d= -f1`). Save the full line, read as root, to
+   `$B/cmdline-flash.txt` with the backup (T3's wrapped image needs it):
+   `adb shell su -c 'cat /proc/cmdline' > "$B/cmdline-flash.txt"`. It holds the serial and MAC
+   addresses: keep it in `$B`, out of the repo and out of notes.
 2. **T1**: `adb reboot bootloader`, approve the Mac's accessory prompt, then `fastboot-usb.py getvar`
    (not the CLI: attempt 8). Record the USB vendor and product IDs and the getvars. `product` is the
    panel's serial: the tool prints it as `<redacted>`, and the note records it that way. If Android
@@ -438,13 +465,15 @@ boot from flash doesn't. `vbmeta` has flags 3, so the changed header boots.
    `adb push misc32.bin /data/local/tmp/`, then as root
    `dd if=/data/local/tmp/misc32.bin of=/dev/block/by-name/misc bs=32 count=1 conv=notrunc`, and compare
    the first 2048 bytes with the backup.
-4. **T3**: in fastboot, `fastboot-usb.py boot boot-ram.img`. **Expected with this image: no boot.**
+4. **T3**: in fastboot, `fastboot-usb.py boot "$B/boot-ram.img"`. **Expected with this image: no boot.**
    `boot-ram.img` is an Android image with a raw arm64 kernel at offset 2048, and stock `boot` runs
    only a legacy uImage there (attempt 8). The tool then exits 2 ("did not boot"), and the panel stays
    in fastboot. That confirms attempt 8 (it did, attempt 9). Leave with `fastboot-usb.py reboot`, or
-   power-cycle; nothing was written. A T3 pass needs the wrapped image:
-   `wrap-ram-boot.py boot.img cmdline-flash.txt boot-ram-uimage.img` (attempt 10; untested on a
-   panel), then `fastboot-usb.py boot boot-ram-uimage.img`. Only if a boot does start (the tool exits
+   power-cycle; nothing was written. A T3 pass needs the wrapped image (attempt 10; untested on a
+   panel). Build it on the host:
+   `wrap-ram-boot.py "$B/boot.img" "$B/cmdline-flash.txt" "$B/boot-ram-uimage.img"`. Once Android is
+   up again, go back to fastboot (`adb reboot bootloader`, then approve the Mac's accessory prompt),
+   and run `fastboot-usb.py boot "$B/boot-ram-uimage.img"`. Only if a boot does start (the tool exits
    0, "USB dropped"): wait for `sys.boot_completed`, check
    `ro.boot.gw139=ram`, root, the radio helper, Wi-Fi, and compare the `/proc/cmdline` keys with T0's.
    If nothing comes up within 4 minutes, power-cycle: the panel boots from flash, unchanged.

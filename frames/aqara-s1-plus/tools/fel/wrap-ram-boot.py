@@ -138,7 +138,9 @@ def check(img, boot=None):
     else:
         rd_phys, rd_len = (int(x, 16) for x in initrd[0][7:].split(","))
         image_size = struct.unpack_from("<Q", img, entry - BUF + 16)[0]
-        if rd_phys < entry + image_size or rd_phys - BUF + rd_len > len(img):
+        if rd_len == 0:
+            problems.append("initrd= gives an empty ramdisk")
+        elif rd_phys < entry + image_size or rd_phys - BUF + rd_len > len(img):
             problems.append("ramdisk overlaps the kernel's image_size or runs past the end")
         if boot is not None:
             kernel, ramdisk = android_parts(boot)

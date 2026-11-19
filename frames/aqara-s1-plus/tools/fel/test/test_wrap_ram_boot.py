@@ -80,6 +80,10 @@ class WrapRamBootTest(unittest.TestCase):
         bad_load[0x813] = 1
         with self.assertRaisesRegex(wrap.WrapError, "ih_load"):
             wrap.check(bytes(bad_load))
+        empty = bytes(img).replace(b"initrd=0x41300000,0x1000", b"initrd=0x41300000,0x0000")
+        self.assertNotEqual(empty, bytes(img))
+        with self.assertRaisesRegex(wrap.WrapError, "empty ramdisk"):
+            wrap.check(empty)
 
     def test_never_prints_the_command_line(self):
         with tempfile.TemporaryDirectory() as d:
