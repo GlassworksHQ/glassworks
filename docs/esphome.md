@@ -90,6 +90,33 @@ and its entities get new ids. Where each frame stands (#523):
 | Generic app, Android 6 to 7 | Same device | `ro.serialno` is readable |
 | Generic app, Android 8 and later | Same device, unless the device is factory reset or the APK's signing key changes | `ANDROID_ID`, which Android keeps for the same app signing key until a factory reset. `wlan0` and `ro.serialno` are hidden from apps there. An install from before this change may have saved a random MAC: an update keeps it, but the first reinstall after it moves to the `ANDROID_ID` one, a new device once |
 
+The API key ([Encryption](#encryption-automatic)) lives in the app's data too, so a reflash wipes it, while Home
+Assistant's entry keeps it. A fresh app that answers with no key makes HA open a re-authentication
+(`reauth_encryption_removed_confirm`), and the entities stay unavailable until someone confirms it (seen on the Mirror
+2026-11-18). So the headless Mirror flash carries the key over (#574):
+
+1. Just before it restarts the Mirror into fastboot, it reads the key from the running app over adb, on the app's
+   socket `@glassworks_api_key` (`ApiKeyHandover`: adb only, uid 0 or 2000; never on the LAN). It prints the key's
+   4-hex fingerprint, never the key. If the app has a key but can't hand it over now, the flash stops there, with
+   nothing written.
+2. It writes `ro.glassworks.api_key.handover=1` into the image's `build.prop`: a flag, not the key, since every app
+   can read `build.prop`.
+3. On that flag, the fresh app keeps its API server shut and unannounced until a key comes, for up to 15 minutes. HA
+   only gets "connection refused" and retries, which opens no re-authentication.
+4. At the first boot, right after it starts the app, the flash hands the key back on the same socket, and tries again
+   while the socket fails or doesn't answer. `set` only fills an empty key store: it never replaces a key in use. The app starts its API server with the key, and HA reconnects.
+
+What each installer can reach before the flash:
+
+| Installer | Before the flash | Carries the key |
+|---|---|---|
+| `tools/mirror/flash-node.ts` | adb to the running app (the Mirror on our image lets the flash's adb key in) | Yes, from an app with #574. An older app has no socket: HA asks once more |
+| Kiln's page | Only fastboot: its Mirror flow starts at the button inside the Mirror's back, with no adb step before it | Not yet. It writes no flag, so the app starts as before and HA asks once |
+| The S1 | Not reflashed: updates install in place and keep the key | Not needed |
+
+If the hand-over fails, the app starts without a key after the 15 minutes, as before, and HA asks once. A key derived
+from the serial, like the MAC, would need no hand-over, but anyone who knows the serial could compute it.
+
 ## Entities
 
 HA names entities `<friendly name> <entity name>`, so they show as "Aqara S1 Plus Screen" and so

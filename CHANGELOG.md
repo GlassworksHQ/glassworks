@@ -452,6 +452,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   ids. The first flash with this still shows up as a new device once. On other Android devices, an app reinstall
   now keeps the device where Android allows it. There too, the first reinstall after this update can show up as a
   new device once.
+- **A Mirror reflash with the headless flash needs no click in Home Assistant.** The flash reads the key Home
+  Assistant set on the Mirror before it wipes it, and gives it back to the app on the first boot, so Home
+  Assistant reconnects by itself instead of asking to re-authenticate. The Mirror needs an app with this change
+  before the flash. Kiln's page can't carry the key yet: after a reflash with Kiln, Home Assistant still asks once.
 - **Assist's reply stays on a narrow screen.** On the Mirror, which stands portrait, the reply ran off
   both edges of the screen on one line. It now wraps inside the screen and gets smaller for a long
   reply, with room for up to five lines before it is cut short. The S1 and landscape tablets look as before.

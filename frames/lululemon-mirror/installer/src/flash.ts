@@ -3,7 +3,7 @@
 // own key, which the patched services.jar lets in without asking. The Mirror's LK has no read-back and no `fastboot boot`, so there is no backup of
 // lululemon's software: the screens say so before anything is written (#40).
 import type { PanelShell } from '@glassworks/adb';
-import { Steps, grantPermissions, kioskVersion, sendWifi, startApp, type StepFn } from '@glassworks/app-adb';
+import { Steps, grantPermissions, handOverApiKey, kioskVersion, sendWifi, startApp, type StepFn } from '@glassworks/app-adb';
 import { GLASSWORKS, type MirrorApp } from './app';
 import { Disk, Ext4, MemoryStore, Sha256, hex, readSparse, writeSparse, type Store } from '@glassworks/ext4';
 import { ProxyError } from './download';
@@ -139,6 +139,8 @@ export const OTHER_HOMES = ['com.android.launcher3', 'com.cyanogenmod.trebuchet'
 export interface FirstBoot { app: { name?: string; code: number }; hidden: string[]; home: HomeCheck; wifi?: boolean;
   /** whether its updates install by themselves: the image's copy in /system/priv-app, read back */
   updates: MirrorUpdates;
+  /** with `apiKey`: whether the fresh app took the key it had before the flash (#574) */
+  apiKey?: boolean;
   /** the display rotation Android reports after the rotation step: always MIRROR_ROTATION */
   rotation: number }
 
@@ -230,7 +232,9 @@ export async function makeOnlyHome(p: PanelShell, onStep: StepFn = () => {}, sle
  * Assistant's address, hides the other launchers, and gives it the Wi-Fi.
  */
 export async function firstBoot(p: PanelShell, o: { haUrl?: string; locale?: string; wifi?: { ssid: string; password: string }; onStep?: StepFn;
-  sleep?: (ms: number) => Promise<void>; app?: MirrorApp }): Promise<FirstBoot> {
+  sleep?: (ms: number) => Promise<void>; app?: MirrorApp;
+  /** the ESPHome API key read before the flash (readApiKey), for an image built with `apiKeyHandover` (#574). A secret: never logged */
+  apiKey?: string }): Promise<FirstBoot> {
   const ours = o.app ?? GLASSWORKS;
   const r = new Steps(p, o.onStep);
   const sleep = o.sleep ?? ((ms: number) => new Promise<void>((res) => setTimeout(res, ms)));
@@ -252,6 +256,15 @@ export async function firstBoot(p: PanelShell, o: { haUrl?: string; locale?: str
   r.step(`Start ${ours.name}`);
   await startApp(r, o, ours);
 
+  // right after the start: the app keeps its API server shut until the key comes, and Home Assistant waits for it
+  let apiKey: boolean | undefined;
+  if (o.apiKey) {
+    r.step('Home Assistant API key: the one from before the flash');
+    apiKey = await handOverApiKey(p, o.apiKey, sleep);
+    r.detail(apiKey ? 'handed over: Home Assistant reconnects with no re-authentication'
+      : `${ours.name} didn't take it: after 15 minutes it starts without one, and Home Assistant asks to re-authenticate once`);
+  }
+
   r.step(`Make ${ours.name} the only home screen`);
   const { hidden, home } = await makeOnlyHome(p, o.onStep, sleep, ours);
 
@@ -261,7 +274,7 @@ export async function firstBoot(p: PanelShell, o: { haUrl?: string; locale?: str
     wifi = await sendWifi(p, o.wifi.ssid, o.wifi.password, sleep);
     r.detail(wifi ? 'joined' : `${ours.name} didn't confirm it joined (the image's saved network still applies)`);
   }
-  return { app, hidden, home, rotation, updates, ...(wifi !== undefined ? { wifi } : {}) };
+  return { app, hidden, home, rotation, updates, ...(wifi !== undefined ? { wifi } : {}), ...(apiKey !== undefined ? { apiKey } : {}) };
 }
 
 /** The way back: the plain Glass Panes images, as downloaded, checked against the release's hashes. */
