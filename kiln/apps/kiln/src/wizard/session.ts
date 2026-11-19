@@ -3,22 +3,19 @@
 // these methods. Port of kiln/src/app/ui.ts without the DOM.
 import type { AdbKey, PanelShell } from '@glassworks/adb';
 import type { Fastboot } from '@glassworks/fastboot';
+import { IMPROV_SOCKET, kioskVersion } from '@glassworks/app-adb';
 import type { FelDevice } from '@glassworks/fel';
-import {
-  IMPROV_SOCKET, ImprovSerialClient, PKG, kioskVersion, State as ImprovState, describeSwitch, panelWifi, readRootUpdates, unprovision,
-  type AppPhase, type AssetName, type Provisioned, type SetUpOptions,
-} from '@glassworks/aqara-s1-plus-installer';
+import { ImprovSerialClient, State as ImprovState } from 'improv-serial';
 import {
   BackupRefused, InstallFlow, backupZip, checkRestorable, fmtSize, readBackupZip, restoreFromBackup,
   type BackupFile, type BackupMeta, type BackupStore, type Devices, type Recipe,
 } from '@glassworks/kiln-core';
 import { openSignInWindow, SETUP_SOCKET, SetupChannel } from '@glassworks/setup-channel';
-import type { FrameUi } from '../frames/aqara-s1-plus';
 import { ChannelSetup, type SetupSteps } from '../setup/channelSetup';
-import { s1Silent } from '../components/SilentUpdates';
 import { explain } from './explain';
 import { AskBridge, flowUi } from './flowUi';
-import { initial, reduce, type Action, type AppSettings, type Flow, type Setup, type WizardState } from './state';
+import type { AppPhase, AppResult, AppSettings, KilnFrame } from './frame';
+import { initial, reduce, type Action, type Flow, type Setup, type WizardState } from './state';
 
 /** A tiny store: the session writes, React reads with useSyncExternalStore. */
 export class Store {
@@ -36,13 +33,13 @@ export class Store {
 }
 
 export interface SessionDeps {
-  recipe: Recipe<AssetName, SetUpOptions, Provisioned>;
-  frame: FrameUi;
+  recipe: Recipe<string, unknown, AppResult>;
+  frame: KilnFrame;
   devices: Devices;
   /** Must call navigator.usb.requestDevice() before its first await. */
   requestFel(): Promise<FelDevice>;
-  asset(name: AssetName, onProgress?: (done: number, total: number) => void): Promise<Uint8Array>;
-  hasAsset(name: AssetName): Promise<boolean>;
+  asset(name: string, onProgress?: (done: number, total: number) => void): Promise<Uint8Array>;
+  hasAsset(name: string): Promise<boolean>;
   backups: Pick<BackupStore, 'save' | 'original' | 'files'>;
   loadKey(): Promise<AdbKey>;
   sleep?: (ms: number) => Promise<void>;
@@ -63,7 +60,7 @@ export class Session implements SetupSteps {
   private readonly ui;
   private key?: AdbKey;
   private keyReady: Promise<AdbKey>;
-  private flow?: InstallFlow<AssetName, SetUpOptions, Provisioned>;
+  private flow?: InstallFlow<string, unknown, AppResult>;
   private result?: { meta: BackupMeta; files: BackupFile[] };
   private panel?: PanelShell;
   private improv?: ImprovSerialClient;
@@ -120,7 +117,7 @@ export class Session implements SetupSteps {
       unreachable: (e) => this.fail(3, e ?? new Error(`${this.d.frame.app} isn't answering. Is it installed and running?`), true),
       // which Glassworks is on the panel decides how a Thread router gets its network (read-only)
       app: async () => {
-        const v = await kioskVersion(this.panel!, this.lid());
+        const v = await kioskVersion(this.panel!, this.lid(), this.d.frame.appId);
         return { version: v?.name, code: v?.code };
       },
       openTab: (url) => (this.d.openTab ? this.d.openTab(url) : openSignInWindow()),
@@ -132,7 +129,7 @@ export class Session implements SetupSteps {
   private setupPhase(setup: Setup) { this.dispatch({ type: 'setup', setup }); }
 
   private getFlow(key: AdbKey) {
-    this.flow ??= new InstallFlow(this.d.recipe, {
+    this.flow ??= new InstallFlow<string, unknown, AppResult>(this.d.recipe, {
       asset: (n, p) => this.d.asset(n, p),
       hasAsset: (n) => this.d.hasAsset(n),
       backups: {
@@ -236,8 +233,8 @@ export class Session implements SetupSteps {
       type: 'done', done: {
         title: 'The original software is back.',
         body: this.s.undo.depth === 'keep'
-          ? 'It is restarting with Aqara\'s software and apps. Your settings and Wi-Fi are as they were.'
-          : `One last step, on the panel: swipe down, tap Settings on the app's notification, then Advanced settings → Factory reset.`,
+          ? this.d.frame.undo.keep.restored
+          : this.d.frame.undo.factory.restored,
       },
     });
   }
@@ -288,7 +285,7 @@ export class Session implements SetupSteps {
    * (read-only). No answer counts as a first install.
    */
   private async appInstalled(): Promise<boolean> {
-    this.hasApp ||= (await this.panel!.run(`pm path ${PKG}`, this.lid()).catch(() => ({ out: '' }))).out.includes('package:');
+    this.hasApp ||= (await this.panel!.run(`pm path ${this.d.frame.appId.package}`, this.lid()).catch(() => ({ out: '' }))).out.includes('package:');
     return this.hasApp;
   }
 
@@ -309,12 +306,7 @@ export class Session implements SetupSteps {
       // an update replaces a running app, which Android restarts; a first install has none running
       update = await this.appInstalled();
       at();
-      const res = await this.getFlow(await this.keyReady).setUpApp(this.panel!, {
-        timezone: opts.timezone, locale: opts.locale, clock24: opts.clock24, keyboard: opts.keyboard,
-        // A development build on the panel: Android needs it removed first. Ask, saying what is kept.
-        confirmSwitch: async (plan) => (this.d.confirm ?? window.confirm)(`${describeSwitch(plan)}\n\nSwitch now?`),
-        onPhase: at,
-      });
+      const res = await this.getFlow(await this.keyReady).setUpApp(this.panel!, this.d.frame.appOptions(opts, (q) => (this.d.confirm ?? window.confirm)(q), at));
       this.hasApp = true;
       const sw = res.switched;
       this.ip = res.ip;
@@ -352,7 +344,7 @@ export class Session implements SetupSteps {
     if (!open || !(await this.waitForSocket(IMPROV_SOCKET))) return undefined;
     for (let i = 0; i < 5; i++) {
       try {
-        const c = new ImprovSerialClient(await open(IMPROV_SOCKET));
+        const c = new ImprovSerialClient(await open(IMPROV_SOCKET), { deviceLabel: 'panel' });
         await c.requestState(5000);
         return c;
       } catch (e) {
@@ -389,7 +381,7 @@ export class Session implements SetupSteps {
     if (!st?.ip) return undefined;
     this.ip = st.ip;
     // read-only and only for the name: a panel slow to answer doesn't hold up the step
-    const named = await panelWifi(this.panel!, this.lid()).catch(() => undefined);
+    const named = await this.d.frame.wifiName(this.panel!, this.lid()).catch(() => undefined);
     const ssid = named?.ssid ?? this.wifiSsid;
     if (ssid) this.wifiSsid = ssid;
     return { ip: st.ip, ssid };
@@ -488,11 +480,11 @@ export class Session implements SetupSteps {
   private async readUpdates(): Promise<void> {
     const p = this.panel;
     if (!p) return;
-    const u = await readRootUpdates(p, this.lid());
-    this.ui.note(u.state === 'unknown' ? `silent updates: not read back (${u.detail})` : `silent updates: root update service ${u.state === 'on' ? 'in place' : 'missing'}`);
+    const u = await this.d.frame.updates(p, this.lid());
+    this.ui.note(u.log);
     const d = this.s.done;
     if (!d || this.closed || this.s.screen !== 'done') return;
-    this.dispatch({ type: 'done', done: { ...d, updates: s1Silent(u) } });
+    this.dispatch({ type: 'done', done: { ...d, updates: this.d.frame.silent[u.state] } });
   }
 
   /**
@@ -603,7 +595,7 @@ export class Session implements SetupSteps {
   }
 
   /**
-   * Continue: "keep its settings" first gives the panel back to Aqara's apps over adb (the picker
+   * Continue: "keep its settings" first gives the panel back to its own apps over adb (the picker
    * opens inside this click), then both depths go to recovery mode.
    */
   undoContinue(): Promise<void> {
@@ -623,12 +615,13 @@ export class Session implements SetupSteps {
   }
 
   /**
-   * Giving the panel back to Aqara's apps removes or disables Glassworks, so it only happens for a
+   * Giving the panel back to its own apps removes or disables Glassworks, so it only happens for a
    * backup undo can restore (kiln-core's checkRestorable, the check the restore itself runs). A backup
    * that can't be restored stops here, with nothing on the panel changed.
    */
   private async giveBack(picked: Promise<PanelShell>, files: ReadonlyMap<string, Uint8Array>) {
-    const busy = (sub: string) => this.dispatch({ type: 'undo', patch: { note: { kind: 'busy', title: 'Giving the panel back to Aqara\'s apps', sub } } });
+    const keep = this.d.frame.undo.keep;
+    const busy = (sub: string) => this.dispatch({ type: 'undo', patch: { note: { kind: 'busy', title: keep.giving, sub } } });
     busy(`In the browser's list, pick ${this.d.frame.asks.connect.pick}.`);
     let panel: PanelShell | undefined;
     try {
@@ -648,13 +641,13 @@ export class Session implements SetupSteps {
         return;
       }
       this.dispatch({ type: 'changed', by: 'apps' }); // before it starts: a give-back that stops partway has changed the panel too
-      const r = await unprovision(panel, (s, d) => busy(s || d || ''));
+      const r = await this.d.frame.giveBack(panel, (s, d) => busy(s || d || ''));
       // Still on: the apps are back against this backup (locked), but the step isn't done.
       if (r.app === 'running') {
-        this.dispatch({ type: 'undo', patch: { locked: true, note: { kind: 'err', title: 'Aqara\'s apps are back, but Glassworks is still on.', sub: `${r.note} Try again, or choose "${this.d.frame.undo.factory.title}".` } } });
+        this.dispatch({ type: 'undo', patch: { locked: true, note: { kind: 'err', title: keep.stillOn, sub: `${r.note} Try again, or choose "${this.d.frame.undo.factory.title}".` } } });
         return;
       }
-      this.dispatch({ type: 'undo', patch: { appsBack: true, locked: true, note: { kind: 'ok', title: 'Aqara\'s apps are back.', sub: `${r.note} Next, put the original software back: Continue, then recovery mode.` } } });
+      this.dispatch({ type: 'undo', patch: { appsBack: true, locked: true, note: { kind: 'ok', title: keep.back, sub: `${r.note} Next, put the original software back: Continue, then recovery mode.` } } });
     } catch (e) {
       const msg = notPicked(e) ? 'Nothing was picked.' : (e as Error).message;
       this.dispatch({ type: 'undo', patch: { note: { kind: 'err', title: 'Couldn\'t reach the panel over adb.', sub: `${msg} Is it running and plugged in?` } } });

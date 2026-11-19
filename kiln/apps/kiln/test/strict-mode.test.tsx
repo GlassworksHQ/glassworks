@@ -20,8 +20,8 @@ const settle = () => act(() => new Promise((r) => setTimeout(r, 50)));
 
 describe('under StrictMode', () => {
   it('the S1 page loads its adb key once', async () => {
-    const { S1 } = await import('../src/wizard/S1');
-    render(<StrictMode><S1 /></StrictMode>);
+    const [{ FrameWizard }, { frame, BASE }] = await Promise.all([import('../src/wizard/FrameWizard'), import('../src/app/aqara-s1-plus/frame')]);
+    render(<StrictMode><FrameWizard frame={frame} base={BASE} /></StrictMode>);
     await settle();
     expect(loadKey).toHaveBeenCalledTimes(1);
   });

@@ -81,7 +81,8 @@ class Runner(unittest.TestCase):
         env = dict(os.environ, ADB=adb, FAKE_ADB_STATE=state, GW_PERF_IDLE_SETTLE="0", GW_PERF_IDLE_WINDOW="2",
                    GW_PERF_COLD_SETTLE="0", GW_PERF_RUN_GAP="0", GW_PERF_BETWEEN_QUIET="0.5", GW_PERF_FRONTEND=STUB_FRONTEND,
                    GW_PERF_SWITCH_SETTLE="0", FAKE_HA_URL=f"http://127.0.0.1:{port(89)}", GW_PERF_CAMERA=STUB_CAMERA,
-                   GW_PERF_FAKE_PYTHON=sys.executable, GW_PERF_TIME_SCALE=TIME_SCALE)
+                   GW_PERF_FAKE_PYTHON=sys.executable, GW_PERF_TIME_SCALE=TIME_SCALE,
+                   GW_PERF_PING=os.path.join(HERE, "fake_ping.py"), GW_PERF_GATEWAY="192.0.2.1")
         env.pop("ANDROID_SERIAL", None)
         cls.state = state
         cls.out = os.path.join(cls.tmp, "out")
@@ -96,6 +97,15 @@ class Runner(unittest.TestCase):
 
     def test_run_succeeds(self):
         self.assertEqual(self.proc.returncode, 0, self.proc.stderr[-3000:])
+
+    def test_the_test_computers_network_is_in_the_report(self):
+        """#649: netcheck.py before the graded part; the fake S1 on USB with a quiet fake link: recorded, not provisional."""
+        n = self.rep["test_network"]
+        self.assertEqual((n["quiet"], n["adb_over_network"], n["gateway"]["received"]), (True, False, 40))
+        self.assertIsNone(n["limited"])
+        with open(os.path.join(self.out, "netcheck.json")) as f:
+            self.assertNotIn("192.0.2", f.read())
+        self.assertIn("this computer's network", self.proc.stderr)
 
     def test_report_has_every_part(self):
         r = self.rep
@@ -295,7 +305,8 @@ def fake_env(tmp, **extra):
     extra.setdefault("FAKE_HA_URL", HA.url if HA else "")
     env = dict(os.environ, ADB=adb, FAKE_ADB_STATE=state, GW_PERF_IDLE_SETTLE="0", GW_PERF_IDLE_WINDOW="1",
                GW_PERF_FRONTEND=STUB_FRONTEND, GW_PERF_CAMERA=STUB_CAMERA, GW_PERF_SWITCH_SETTLE="0", GW_PERF_PANES_SAVE_S="0",
-               GW_PERF_FAKE_PYTHON=sys.executable, GW_PERF_TIME_SCALE=TIME_SCALE)
+               GW_PERF_FAKE_PYTHON=sys.executable, GW_PERF_TIME_SCALE=TIME_SCALE,
+               GW_PERF_PING=os.path.join(HERE, "fake_ping.py"), GW_PERF_GATEWAY="192.0.2.1")
     env.update(extra)
     env.pop("ANDROID_SERIAL", None)
     return env, state
@@ -600,6 +611,45 @@ class FakeSplitsLikeThePage(unittest.TestCase):
         # Equal today also when the fake writes the number itself; it must read it from the pages.
         with open(os.path.join(HERE, "fake_adb.py")) as f:
             self.assertEqual(re.findall(r"PROTOCOL\s*=\s*\d|[\"']protocol[\"']\s*:\s*\d", f.read()), [])
+
+
+class SurfaceFlingerNames(unittest.TestCase):
+    """The Pixel Tablet's Android 17 run (2026-11-19): SurfaceFlinger listed every layer as
+    `RequestedLayerState{…}`, the SurfaceView's after the view's hash; the runner named none, and open, restart and live updates were n/a on
+    every view. The runner reads that listing, and says so when it can't read one."""
+
+    def build(self, tmp):
+        with open(os.path.join(tmp, "device.json"), "w") as f:
+            json.dump({"frame": "f", "mem_total_kb": 1, "display": {"density": "240"}, "app": {"package": "sh.edm.s1kiosk"}}, f)
+        return report.build(tmp)
+
+    def test_android_15_and_later_layers_give_frames(self):
+        tmp = tempfile.mkdtemp()
+        p, c = refstart(tmp, FAKE_SF_WRAPPED="1")
+        self.assertEqual(p.returncode, 0, p.stderr[-1500:])
+        self.assertNotIn("SurfaceView this runner can read", p.stderr)
+        self.assertTrue(c["presents_mono_ms"])
+        with open(os.path.join(tmp, "state", "commands.log")) as f:
+            latency = {c for c in f.read().splitlines() if "--latency" in c}
+        # By the whole name, the view's hash and #<id> included (the fake, as API 37, answers no other); the
+        # BLAST child (the frames) and its parent (none) are both asked, and the newest frame wins.
+        self.assertTrue(any("--latency 'f5fea55 SurfaceView[sh.edm.s1kiosk/sh.edm.s1kiosk.MainActivity](BLAST)#163'" in c
+                            for c in latency), latency)
+        run = self.build(tmp)["graded"]["reference"]["per_run"][0]
+        self.assertIsNone(run["start_error"])
+        self.assertGreater(run["start_ms"], 0)
+        for t, r in run["tiers"].items():
+            self.assertIsNotNone(r.get("load_ms"), (t, r.get("load_error")))
+            self.assertIsNotNone(r.get("latency"), (t, r.get("updates_error")))
+            self.assertIs(r["sf_valid"], True, t)               # scrolling from frames on screen, not rAF only
+
+    def test_a_listing_it_cant_read_is_said_once(self):
+        tmp = tempfile.mkdtemp()
+        p, c = refstart(tmp, FAKE_SF_UNNAMED="1")
+        self.assertEqual(p.returncode, 0, p.stderr[-1500:])
+        self.assertEqual(p.stderr.count("SurfaceView this runner can read"), 1, p.stderr[-1500:])
+        self.assertIn("SomeNewLayer<sh.edm.s1kiosk/", p.stderr)
+        self.assertEqual(c["presents_mono_ms"], [])
 
 
 class LongLines(unittest.TestCase):

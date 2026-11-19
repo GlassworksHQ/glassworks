@@ -1,19 +1,17 @@
-// Development and preview only (?demo=…): a simulated S1 Plus, so every screen can be seen and
-// captured without a panel. `?demo=run` drives the whole flow through the real InstallFlow and Session
-// with a fake device behind them; the other names jump straight to one state.
+// Development and preview only (?demo=…): a simulated device running Glassworks, so every screen can be seen and
+// captured without a panel. What only the frame knows of it (its faked recipe, getprops, log) comes beside the frame
+// as a DemoFrame's `sim`, from its installer's sim.ts; the frame Kiln installs never has it. `?demo=run` drives the
+// whole flow through the real InstallFlow and Session with a fake device behind them; the other names jump straight
+// to one state.
 import type { PanelShell } from '@glassworks/adb';
-import {
-  PacketReader, PacketType, Rpc, State as ImprovState, UPDATE_SERVICE_PROP, frame, parseResult, readRootUpdates, s1Plus, strings,
-  type AppPhase, type AssetName, type ByteStream, type Provisioned, type SetUpOptions,
-} from '@glassworks/aqara-s1-plus-installer';
 import type { Fastboot } from '@glassworks/fastboot';
 import type { FelDevice } from '@glassworks/fel';
 import { isMagiskPatched, loadCompressor } from '@glassworks/bootpatch';
-import { Assets, checkRestorable, fmtSize, type BackupFile, type BackupMeta, type Recipe } from '@glassworks/kiln-core';
+import { Assets, checkRestorable, fmtSize, type BackupFile, type BackupMeta } from '@glassworks/kiln-core';
 import { SETUP_SOCKET, type SetupState } from '@glassworks/setup-channel';
-import { s1Silent } from '../components/SilentUpdates';
-import { s1PlusUi } from '../frames/aqara-s1-plus';
+import { PacketReader, PacketType, Rpc, State as ImprovState, frame as packet, parseResult, strings, type ByteStream } from 'improv-serial';
 import { explain } from './explain';
+import type { AppPhase, DemoFrame } from './frame';
 import { Session, type SessionDeps } from './session';
 
 export const DEMOS = ['run', 'selftest', 'connect', 'ask-fastboot', 'install', 'ask-adb', 'app', 'app-update', 'app-installing', 'app-keyboard', 'wifi', 'wifi-new', 'wifi-fail', 'home-assistant', 'radio', 'radio-next', 'radio-thread', 'radio-thread-old',
@@ -26,12 +24,12 @@ const IP = '192.0.2.50';
 /** Whether the simulated panel is on Wi-Fi: its app's setup state and Android's `dumpsys wifi` read it. */
 interface Net { online: boolean }
 
-/** `dumpsys wifi` on a panel on the made-up "Home Net", in Android 10's shape (switch.ts parseWifiOwner). */
-const DUMPSYS_WIFI = [
+/** `dumpsys wifi` on a panel on the made-up "Home Net", in Android 10's shape, the network added by `pkg`. */
+const dumpsysWifi = (pkg: string) => [
   'mWifiInfo SSID: Home Net, BSSID: 02:00:00:00:00:01, Supplicant state: COMPLETED, RSSI: -48, Net ID: 0, score: 60',
   'Configured networks Begin ----',
   '* ID: 0 SSID: "Home Net" PROVIDER-NAME: null BSSID: null FQDN: null PRIO: 0 HIDDEN: false',
-  ' cuid=10071 cname=sh.edm.s1kiosk luid=10071',
+  ` cuid=10071 cname=${pkg} luid=10071`,
   'Configured networks End ----',
 ].join('\n');
 
@@ -77,7 +75,7 @@ function setupStream(net: Net): ByteStream {
 function improvStream(fail: boolean, net: Net): ByteStream {
   const reader = new PacketReader();
   let cb: (c: Uint8Array) => void = () => {};
-  const send = (t: number, d: Uint8Array, ms = 0) => setTimeout(() => cb(frame(t, d)), ms);
+  const send = (t: number, d: Uint8Array, ms = 0) => setTimeout(() => cb(packet(t, d)), ms);
   const result = (cmd: number, ss: string[], ms = 0) => {
     const b = strings(...ss);
     send(PacketType.RpcResult, Uint8Array.of(cmd, b.length, ...b), ms);
@@ -105,15 +103,20 @@ function improvStream(fail: boolean, net: Net): ByteStream {
   };
 }
 
-/** `online`: on Wi-Fi already, as a panel set up with Aqara's app is. */
-/** `app`: Glassworks' version on the panel (`dumpsys package`), or null when it isn't installed. `rootUpdates`: its boot image has the update service. */
-export function simulatedPanel(wifiFails = false, online = true, app: { name: string; code: number } | null = { name: '0.5.0', code: 500 }, rootUpdates = true): PanelShell {
+/** `online`: on Wi-Fi already, as a device set up with its own apps is. */
+/**
+ * `app`: Glassworks' version on the device (`dumpsys package`), or null when it isn't installed. `current`: its
+ * software is current, so it answers the frame's `sim.props`.
+ */
+export function simulatedPanel({ frame, sim }: DemoFrame, wifiFails = false, online = true, app: { name: string; code: number } | null = { name: '0.5.0', code: 500 }, current = true): PanelShell {
   const net: Net = { online };
+  const pkg = frame.appId.package;
+  const prop = (cmd: string) => (current ? sim.props[cmd.replace(/^getprop /, '')] : undefined);
   const out = (cmd: string) => cmd === 'getprop sys.boot_completed' || cmd.startsWith('grep -c') ? '1\n'
-    : cmd === `getprop ${UPDATE_SERVICE_PROP}` && rootUpdates ? '1\n'
-    : cmd === 'pm path sh.edm.s1kiosk' && app ? 'package:/data/app/sh.edm.s1kiosk-1/base.apk\n'
-    : cmd === 'dumpsys package sh.edm.s1kiosk' && app ? `    versionCode=${app.code} minSdk=26 targetSdk=34\n    versionName=${app.name}\n`
-    : cmd === 'dumpsys wifi' && net.online ? DUMPSYS_WIFI
+    : cmd.startsWith('getprop ') && prop(cmd) ? `${prop(cmd)}\n`
+    : cmd === `pm path ${pkg}` && app ? `package:/data/app/${pkg}-1/base.apk\n`
+    : cmd === `dumpsys package ${pkg}` && app ? `    versionCode=${app.code} minSdk=26 targetSdk=34\n    versionName=${app.name}\n`
+    : cmd === 'dumpsys wifi' && net.online ? dumpsysWifi(pkg)
     : cmd.startsWith('ip -4') && net.online ? `3: wlan0    inet ${IP}/24 brd 192.0.2.255 scope global wlan0\n` : '';
   return {
     run: async (cmd) => ({ out: out(cmd), code: 0 }),
@@ -145,8 +148,8 @@ export function demoBootImage(size = 1 << 20): Uint8Array {
 }
 
 /** U-Boot's fastboot on the simulated panel: the recipe's partitions, scaled down so the demo is quick. */
-function fakeFastboot(): Fastboot {
-  const sizes = new Map<string, number>(s1Plus.backup.parts.map((p) => [p, p === 'boot' ? 1 << 20 : 256 << 10]));
+function fakeFastboot(parts: readonly string[]): Fastboot {
+  const sizes = new Map<string, number>(parts.map((p) => [p, p === 'boot' ? 1 << 20 : 256 << 10]));
   const data = new Map<string, Uint8Array>([['boot', demoBootImage()]]);
   const chunked = async (n: number, on?: (d: number, t: number) => void) => {
     for (let i = 1; i <= 8; i++) { await wait(60); on?.((n * i) / 8, n); }
@@ -170,51 +173,19 @@ function fakeFastboot(): Fastboot {
   return fb as unknown as Fastboot;
 }
 
-/** The S1 recipe's shape with the hardware steps simulated. */
-const demoRecipe: Recipe<AssetName, SetUpOptions, Provisioned> = {
-  ...s1Plus,
-  fel: {
-    checkChip: async () => { await wait(500); return 'SoC 0x1855 (A133), secure boot off (simulated)'; },
-    loader: [],
-    boot: async (_fel, _loader, on) => { for (let i = 1; i <= 10; i++) { await wait(120); on(i / 10); } },
-  },
-  checkLayout: async () => 'partition layout OK (simulated S1 Plus)',
-  patchBoot: async ({ backup, log }) => {
-    await wait(900);
-    log('- simulated patch');
-    const image = backup.get('boot')!.slice();
-    image[image.length - 1]! ^= 1; // kiln-core refuses a stock boot handed back unchanged
-    return image;
-  },
-  writesBeforeBoot: async ({ backup, log }) => { log('vbmeta flags: 0'); return [{ part: 'vbmeta', data: backup.get('vbmeta')!, what: 'Turning off verified boot' }]; },
-  setUp: async (_panel, opts, { step }) => {
-    // provision's phases, in its order, without the panel's real durations
-    const phases: [AppPhase, string, number][] = [
-      [{ step: 'apk', apk: 'kiosk', stage: 'copy' }, 'Install kiosk app', 600], [{ step: 'apk', apk: 'kiosk', stage: 'install' }, '', 2500],
-      [{ step: 'home' }, 'Permissions', 600],
-      ...(opts.keyboard !== false ? [[{ step: 'apk', apk: 'keyboard', stage: 'copy' }, 'Keyboard', 200], [{ step: 'apk', apk: 'keyboard', stage: 'install' }, '', 600]] as [AppPhase, string, number][] : []),
-      [{ step: 'prefs' }, '', 300], [{ step: 'start' }, 'Start the kiosk', 400],
-    ];
-    for (const [phase, s, ms] of phases) {
-      opts.onPhase?.(phase);
-      if (s) step(s);
-      await wait(ms);
-    }
-    return { ip: IP };
-  },
-};
-
 /** A session on the simulated panel. */
-export function demoSession(which: Demo): Session {
+export function demoSession(d: DemoFrame, which: Demo): Session {
+  const { frame, sim } = d;
+  const parts = frame.recipe.backup.parts;
   const saved: { meta: BackupMeta; files: BackupFile[] }[] = [];
   // run and the app's first-install states start without Glassworks on the panel; radio-thread-old has 0.4.3
   const app = ['run', 'app', 'app-installing', 'app-keyboard'].includes(which) ? null
     : which === 'radio-thread-old' ? { name: '0.4.3', code: 403 } : { name: '0.5.0', code: 500 };
-  const panel = simulatedPanel(which === 'wifi-fail', which !== 'wifi-fail' && which !== 'wifi-new', app);
+  const panel = simulatedPanel(d, which === 'wifi-fail', which !== 'wifi-fail' && which !== 'wifi-new', app);
   let adbAllowed = which !== 'run'; // the static states start on an installed panel
   const deps: SessionDeps = {
-    recipe: demoRecipe,
-    frame: s1PlusUi,
+    recipe: sim.recipe,
+    frame,
     simulated: true,
     sleep: (ms) => wait(Math.min(ms, 800)),
     // error-written: "Try again", then Connect, is a picker closed with nothing picked
@@ -227,17 +198,17 @@ export function demoSession(which: Demo): Session {
     backups: {
       save: async (meta, files) => { saved.push({ meta, files }); },
       original: async () => saved[0]?.meta ?? (which.startsWith('undo')
-        ? { id: 's1-backup-20261112-090000', created: '', bootWasPatched: false, files: s1Plus.backup.parts.map((part) => ({ part, size: 4096, sha256: '' })) }
+        ? { id: `${frame.recipe.backup.idPrefix}-20261112-090000`, created: '', bootWasPatched: false, files: parts.map((part) => ({ part, size: 4096, sha256: '' })) }
         : undefined),
       files: async () => {
         if (which === 'undo-unreadable') throw new DOMException('The operation failed for reasons unrelated to the database itself.', 'UnknownError');
-        return saved[0]?.files ?? s1Plus.backup.parts.map((part) => ({ part, data: new Uint8Array(4096), sha256: '', crc: 0 }));
+        return saved[0]?.files ?? parts.map((part) => ({ part, data: new Uint8Array(4096), sha256: '', crc: 0 }));
       },
     },
     loadKey: async () => ({ publicKey: 'QAAAAdemo kiln@demo' }) as never,
     devices: {
       knownFastboot: async () => undefined,
-      requestFastboot: async () => fakeFastboot(),
+      requestFastboot: async () => fakeFastboot(parts),
       knownAdb: async () => (adbAllowed ? panel : undefined),
       requestAdb: async () => { adbAllowed = true; return panel; },
     },
@@ -249,8 +220,15 @@ export function demoSession(which: Demo): Session {
 }
 
 /** Jumps a fresh demo session to one state. `run` starts the live flow from Connect. */
-export async function enterDemo(session: Session, which: Demo): Promise<void> {
+export async function enterDemo(session: Session, d: DemoFrame, which: Demo): Promise<void> {
   const { dispatch } = session.store;
+  const { frame, sim } = d;
+  const plan = frame.recipe.backup;
+  /** what the real check says of `files` against `p`, worded as the give-back shows it */
+  const refused = async (p: typeof plan, files: Map<string, Uint8Array>) => {
+    const why = await checkRestorable(p, files).then(() => '', (e: Error) => e.message);
+    dispatch({ type: 'undo', patch: { depth: 'keep', note: { kind: 'err', title: 'This backup can\'t undo the install.', sub: `${why.charAt(0).toUpperCase()}${why.slice(1)}. This step changed nothing on the panel.`, link: { href: frame.help.undo, text: 'Undo by hand' } } } });
+  };
   const never = new AbortController().signal;
   const progress = (overall: number, phase: 'boot' | 'backup' | 'patch' | 'flash' | 'verify', title: string, sub: string) =>
     dispatch({ type: 'progress', p: { overall, phase, phasePct: 0, title, sub } });
@@ -270,10 +248,10 @@ export async function enterDemo(session: Session, which: Demo): Promise<void> {
       return;
     case 'install':
       install();
-      for (const [i, part] of s1Plus.backup.parts.entries()) {
+      for (const [i, part] of plan.parts.entries()) {
         dispatch({ type: 'partition', part, state: 'done', info: { size: part === 'boot' ? 32 << 20 : 1 << 20, sha256: `${(0x3a7f + i * 977).toString(16)}…${(0x91c2 - i * 313).toString(16)}` } });
       }
-      for (const l of ['SoC 0x1855 (A133), secure boot off', 'U-Boot started from RAM; waiting for its fastboot', 'partition layout OK (S1 Plus)', 'boot read twice, hashes match', 'backup s1-backup-20261112-101500 stored in this browser', 'patched boot 4c1e…a0b7 (from 3a7f…91c2)', 'vbmeta flags: 3']) {
+      for (const l of sim.installLog) {
         dispatch({ type: 'log', line: `10:15:00 ${l}` });
       }
       progress(0.68, 'flash', 'Writing the new software', 'Writing boot');
@@ -318,34 +296,34 @@ export async function enterDemo(session: Session, which: Demo): Promise<void> {
     case 'done-old-boot': // set up on a panel whose boot image is from before the root update service
       dispatch({ type: 'done', done: {
         title: 'Done.', body: 'The panel is on Home Net. Home Assistant finds it by itself as an ESPHome device.',
-        backup: { name: 's1-backup-20261112-101500.zip', info: '9 partitions · 52 MiB', hint: 'Original software, backed up. Keep it: it\'s also kept in this browser.' },
+        backup: { name: `${plan.idPrefix}-20261112-101500.zip`, info: sim.backupInfo, hint: 'Original software, backed up. Keep it: it\'s also kept in this browser.' },
         setupPage: `http://${IP}:8099/setup`,
-        updates: s1Silent(await readRootUpdates(simulatedPanel(false, true, undefined, which === 'done'))),
+        updates: frame.silent[(await frame.updates(simulatedPanel(d, false, true, undefined, which === 'done'))).state],
       } });
       return;
     case 'undo':
       await session.openUndo();
       return;
-    case 'undo-refused': // what "Give back Aqara's apps" shows for a backup undo can't restore
+    case 'undo-refused': // what the give-back shows for a backup undo can't restore: one with only boot
       await session.openUndo();
-      dispatch({ type: 'undo', patch: { depth: 'keep', note: { kind: 'err', title: 'This backup can\'t undo the install.', sub: 'This backup has no vbmeta or bootloader. This step changed nothing on the panel.', link: { href: s1PlusUi.help.undo, text: 'Undo by hand' } } } });
+      await refused(plan, new Map([['boot', new Uint8Array(16)]]));
       return;
     case 'undo-apps-back': // "Keep its settings" after the apps are back: the backup is the one they were checked against
       await session.openUndo();
-      dispatch({ type: 'undo', patch: { depth: 'keep', appsBack: true, locked: true, note: { kind: 'ok', title: 'Aqara\'s apps are back.', sub: 'Glassworks is removed. Next, put the original software back: Continue, then recovery mode.' } } });
+      dispatch({ type: 'undo', patch: { depth: 'keep', appsBack: true, locked: true, note: { kind: 'ok', title: frame.undo.keep.back, sub: 'Glassworks is removed. Next, put the original software back: Continue, then recovery mode.' } } });
       return;
     case 'undo-still-on': // the apps are back, but Android would not remove or disable Glassworks
       await session.openUndo();
-      dispatch({ type: 'undo', patch: { depth: 'keep', note: { kind: 'err', title: 'Aqara\'s apps are back, but Glassworks is still on.', sub: `Android would not turn Glassworks off. It is still installed, so the panel may start it again or ask which home screen to use. Try again, or choose "${s1PlusUi.undo.factory.title}".` } } });
+      dispatch({ type: 'undo', patch: { depth: 'keep', note: { kind: 'err', title: frame.undo.keep.stillOn, sub: `Android would not turn Glassworks off. It is still installed, so the panel may start it again or ask which home screen to use. Try again, or choose "${frame.undo.factory.title}".` } } });
       return;
     case 'undo-unreadable': // this browser has a backup, but IndexedDB fails to read it
       await session.openUndo();
       return;
-    case 'undo-refused-splash': { // the same for a backup whose splash is already ours (issue 106), worded by the real check
+    case 'undo-refused-splash': { // the same for a backup whose first own part (a splash, issue 106) is already ours
       await session.openUndo();
-      const plan = { ...s1Plus.backup, isPatched: async () => false, ours: { bootloader: { ...s1Plus.backup.ours!.bootloader!, is: async () => true } } };
-      const why = await checkRestorable(plan, new Map(plan.restore.map((p) => [p, new Uint8Array(16)]))).then(() => '', (e: Error) => e.message);
-      dispatch({ type: 'undo', patch: { depth: 'keep', note: { kind: 'err', title: 'This backup can\'t undo the install.', sub: `${why.charAt(0).toUpperCase()}${why.slice(1)}. This step changed nothing on the panel.`, link: { href: s1PlusUi.help.undo, text: 'Undo by hand' } } } });
+      const [part, ours] = Object.entries(plan.ours ?? {})[0]!;
+      const theirs = { ...plan, isPatched: async () => false, ours: { [part]: { ...ours, is: async () => true } } };
+      await refused(theirs, new Map(plan.restore.map((p) => [p, new Uint8Array(16)])));
       return;
     }
     case 'undo-connect':
@@ -375,7 +353,7 @@ export async function enterDemo(session: Session, which: Demo): Promise<void> {
 /**
  * ?demo=selftest: what #27 asks of the bundler, checked in the built page. bootpatch.wasm loads from
  * where Next put it, and every staged blob downloads and passes its SHA-256 (the APK through
- * /api/release/aqara-s1-plus). Results go to the technical log; the page title ends in PASS or FAIL.
+ * /api/release/<frame>). Results go to the technical log; the page title ends in PASS or FAIL.
  */
 async function selfTest(session: Session) {
   const { dispatch } = session.store;
@@ -390,7 +368,7 @@ async function selfTest(session: Session) {
     say('bootpatch.wasm loaded; gzip round trip OK');
     say(`isMagiskPatched(demo boot) = ${await isMagiskPatched(demoBootImage())}`);
   } catch (e) { ok = false; say(`FAIL wasm: ${(e as Error).message}`); }
-  const assets = new Assets<AssetName>('/assets/');
+  const assets = new Assets<string>('/assets/');
   let list: Awaited<ReturnType<typeof assets.getManifest>>['assets'] = [];
   try {
     list = (await assets.getManifest()).assets;

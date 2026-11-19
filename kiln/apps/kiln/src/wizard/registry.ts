@@ -4,7 +4,7 @@ import type { Session } from './session';
 import type { Changed, Failure, SavedBackup, WizardState } from './state';
 
 export interface Entry {
-  /** the frame's route base, e.g. /aqara-s1-plus */
+  /** the frame's route base, its installer.json `route` */
   base: string;
   name: string;
   session: Session;
@@ -84,9 +84,9 @@ function rememberBackup(base: string, b: SavedBackup) {
 }
 
 /**
- * A frame whose session isn't this wizard's InstallFlow (the Mirror's, src/mirror): what the picker
- * and LeaveGuard need of it. It is kept beside `current`, one per frame base, so it outlives route
- * changes too, and an S1 session and a Mirror session never close each other.
+ * A frame whose session isn't this wizard's InstallFlow (a page with its own session, until issue 621 moves
+ * it onto this one): what the picker and LeaveGuard need of it. It is kept beside `current`, one per
+ * frame base, so it outlives route changes too, and two frames' sessions never close each other.
  */
 export interface Activity {
   base: string;

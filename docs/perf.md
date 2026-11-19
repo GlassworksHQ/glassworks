@@ -109,6 +109,40 @@ The output directory holds the raw files, `report.json` and `report.md`. A full 
 empty directory; `--idle-only` adds samples to an existing one. `python3
 tools/perf/report.py <dir>` rebuilds the report from the raw files at any time, without the device.
 
+### The test computer's network
+
+The fake Home Assistant runs on your computer. Put that computer where a real Home Assistant server would be: on a
+wired link, or a quiet one. Its stalls otherwise land in the panel's numbers, wherever the test's traffic crosses
+its link:
+
+- **The live updates**, when adb reaches the panel over the network (wireless debugging). The fake's stream goes
+  through `adb reverse`, which then rides this computer's Wi-Fi. Over USB it doesn't.
+- **The cameras' video**, when it goes over the LAN (`lan-udp` or `lan-turn`, below), on any panel.
+
+Before the graded part, `run.sh` runs `tools/perf/netcheck.py` (#649). It sends 40 pings to this computer's
+default gateway and 40 to the panel, at the same time (8 s), and writes the numbers to `netcheck.json`. No
+address is recorded. If this computer's own pings to its gateway go over 20 ms, at p95 or at most, and that link
+carried graded traffic, the run warns and the report is provisional ("the test computer's network"). The
+numbers are in `report.json` (`test_network`) and on one line of `report.md` either way.
+
+Measured 2026-11-19, the Pixel Tablet's run 3:
+
+| From → to | min | max |
+|---|---|---|
+| A Mac on Wi-Fi (the fake's computer) → its gateway | 2.3 ms | 68 to 84 ms |
+| The tablet → the same gateway | 2.3 ms | 9.7 ms |
+| The Mac → the tablet | | 93 to 97 ms |
+
+The live changes then waited 65 to 91 ms (p95) to reach the page. That was the Mac's link, not the tablet's: a
+low-latency Wi-Fi lock on the tablet (#646) changed nothing. On a Mac, Wi-Fi stalls like this usually come from
+AWDL (AirDrop, Sidecar), which takes the radio off its channel now and then. For a run, use a wired link, or turn
+AWDL off with `sudo ifconfig awdl0 down` and back on with `sudo ifconfig awdl0 up` after. AirDrop or Sidecar may
+turn it back on by themselves.
+
+The S1's published grade (2026-11-17) ran over USB adb, so its live updates didn't cross the Mac's link: their
+arrival waits were 32 to 56 ms (p95) on light and typical. Its cameras went over the LAN, so their numbers may
+include the Mac's link. They don't decide its D: that's typical without a camera, blocked 2.7 s after it's drawn.
+
 ### What it changes on the device
 
 - **The test dashboard, for the graded part (and `--pane-ram`) only.** The kiosk shows the start
@@ -221,13 +255,31 @@ runner uses. What the runner does instead:
 | `date +%N`, `nproc` | No nanoseconds (`1795071980.N`); no `nproc` | Counts the `cpuN` lines of `/proc/stat`, the same online CPUs as `nproc` |
 | `ps -A -o PID,NAME` | Ignores the options: its own columns (`USER PID PPID VSIZE RSS WCHAN PC S NAME`) | Reads the PID column by its header and the name last |
 | `pidof <package>` | Lists every process | Not used: the runner reads `ps` |
-| SurfaceFlinger's layer | Plain `SurfaceView`, without the app (Android 10: `SurfaceView - <pkg>/<activity>`, Android 12+: `SurfaceView[<pkg>/<activity>]`) | Takes plain `SurfaceView` while the app has a window listed: a kiosk is the only app on screen |
+| SurfaceFlinger's layer | Plain `SurfaceView`, without the app (Android 10: `SurfaceView - <pkg>/<activity>`, Android 12+: `SurfaceView[<pkg>/<activity>]`, Android 15+: below) | Takes plain `SurfaceView` while the app has a window listed: a kiosk is the only app on screen |
 | `dumpsys meminfo` | `65128 kB: name` instead of `65,128K: name`; the legacy engine's content process is `:tab32` | Reads both; `:tab<n>` is a tab process |
 | `toybox nc` (camera video over the LAN) | No `nc` in toybox | The camera video goes over adb (`lanprobe.py` already falls back) |
 | `cmd` | Not there | Not used |
 
 `screencap`, `wm size`, `input tap`/`swipe` with a duration, `am start -W`, `am force-stop`, `stat -c`,
 `logcat -T`, `adb reverse` and `dumpsys SurfaceFlinger --latency` work as on Android 10.
+
+**Android 15 and later name layers differently** (checked on API 35 and API 37 arm64 emulators,
+2026-11-19). The Pixel Tablet's first graded run on Android 17 had no frames from SurfaceFlinger, so
+open, restart and live updates were n/a on every view, and scrolling rested on rAF alone.
+`dumpsys SurfaceFlinger --list` wraps each line as `RequestedLayerState{<name> parentId=… z=…}`. On
+Android 17 a SurfaceView's name also starts with the view's hash:
+
+| Android | The app's frames in `--list` |
+|---|---|
+| 10 (the S1) | `SurfaceView - <pkg>/<activity>#0` |
+| 12 to 14 | `SurfaceView[<pkg>/<activity>](BLAST)#163` |
+| 15, 16 | `RequestedLayerState{SurfaceView[<pkg>/<activity>](BLAST)#169 parentId=168}` |
+| 17 | `RequestedLayerState{f5fea55 SurfaceView[<pkg>/<activity>](BLAST)#163 parentId=162}` |
+
+`--latency` takes only the whole name, hash and `#<id>` included. Any other form gets the refresh
+period alone, as an unknown name does. The runner reads the name out of the wrapper and passes it on
+whole. The `(BLAST)` layer has the frames; its parent has none. When the runner finds a window of
+the app but no SurfaceView it can name, it prints a warning in the run's log.
 
 **The clock on Android 6.** SurfaceFlinger's frame times are on the monotonic clock (`CLOCK_MONOTONIC`), and the
 runner cuts them to the windows the page logs. Android 6's logcat stamps lines only with the wall clock. So the

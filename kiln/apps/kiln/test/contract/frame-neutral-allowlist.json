@@ -83,20 +83,10 @@
     {
       "path": "kiln/apps/kiln/src/components/SilentUpdates.tsx",
       "terms": [
-        "aqara",
         "lululemon",
-        "mirror",
-        "s1"
+        "mirror"
       ],
       "why": "#621 phase 2: shared components name frames as examples or carry a frame's words; those come from the frame"
-    },
-    {
-      "path": "kiln/apps/kiln/src/frames/aqara-s1-plus.ts",
-      "terms": [
-        "aqara",
-        "s1"
-      ],
-      "why": "#621 phase 2: the S1's copy moves to frames/aqara-s1-plus"
     },
     {
       "path": "kiln/apps/kiln/src/frames/catalog.ts",
@@ -124,79 +114,6 @@
         "mirror"
       ],
       "why": "#621 phase 2: a comment uses the Mirror as the example; say it of any frame"
-    },
-    {
-      "path": "kiln/apps/kiln/src/setup/radioPlan.ts",
-      "terms": [
-        "aqara",
-        "s1"
-      ],
-      "why": "#621 phase 2: the S1's radio plan moves to its frame"
-    },
-    {
-      "path": "kiln/apps/kiln/src/wizard/S1.tsx",
-      "terms": [
-        "aqara",
-        "s1"
-      ],
-      "why": "#621 phase 2, first: the shared wizard imports the S1's copy, radio plan and FEL; it becomes frame-neutral"
-    },
-    {
-      "path": "kiln/apps/kiln/src/wizard/Wizard.tsx",
-      "terms": [
-        "aqara",
-        "s1"
-      ],
-      "why": "#621 phase 2, first: the shared wizard imports the S1's copy, radio plan and FEL; it becomes frame-neutral"
-    },
-    {
-      "path": "kiln/apps/kiln/src/wizard/demo.ts",
-      "terms": [
-        "aqara",
-        "s1"
-      ],
-      "why": "#621 phase 2, first: the shared wizard imports the S1's copy, radio plan and FEL; it becomes frame-neutral"
-    },
-    {
-      "path": "kiln/apps/kiln/src/wizard/registry.ts",
-      "terms": [
-        "aqara",
-        "mirror",
-        "s1"
-      ],
-      "why": "#621 phase 2, first: the shared wizard imports the S1's copy, radio plan and FEL; it becomes frame-neutral"
-    },
-    {
-      "path": "kiln/apps/kiln/src/wizard/routes.ts",
-      "terms": [
-        "aqara",
-        "s1"
-      ],
-      "why": "#621 phase 2, first: the shared wizard imports the S1's copy, radio plan and FEL; it becomes frame-neutral"
-    },
-    {
-      "path": "kiln/apps/kiln/src/wizard/screens.tsx",
-      "terms": [
-        "aqara",
-        "s1"
-      ],
-      "why": "#621 phase 2, first: the shared wizard imports the S1's copy, radio plan and FEL; it becomes frame-neutral"
-    },
-    {
-      "path": "kiln/apps/kiln/src/wizard/session.ts",
-      "terms": [
-        "aqara",
-        "s1"
-      ],
-      "why": "#621 phase 2, first: the shared wizard imports the S1's copy, radio plan and FEL; it becomes frame-neutral"
-    },
-    {
-      "path": "kiln/apps/kiln/src/wizard/state.ts",
-      "terms": [
-        "aqara",
-        "s1"
-      ],
-      "why": "#621 phase 2, first: the shared wizard imports the S1's copy, radio plan and FEL; it becomes frame-neutral"
     },
     {
       "path": "kiln/packages/adb/src/key.ts",

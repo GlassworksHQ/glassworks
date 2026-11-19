@@ -81,7 +81,8 @@ describe('Kiln names no frame', () => {
   });
 
   it('reads Kiln\'s sources', () => {
-    expect([...found.values()].some((h) => h.file === 'kiln/apps/kiln/src/wizard/session.ts')).toBe(true);
+    // SHA-256's S1 (notFrames): a hit that stays when no frame is named any more
+    expect([...found.values()].some((h) => h.file === 'kiln/packages/ext4/src/sha256.ts')).toBe(true);
   });
 
   it('no frame name outside the allowlist: say it in frames/<id>/, not in Kiln', () => {
