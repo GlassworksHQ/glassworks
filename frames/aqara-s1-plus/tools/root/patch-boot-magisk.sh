@@ -125,8 +125,9 @@ docker run --rm --platform linux/arm64 -e PREINITDEVICE="$PREINITDEVICE" -e BRAN
   [ -z "$BRANDING_CPIO" ] || eval "./magiskboot cpio ramdisk.cpio $BRANDING_CPIO"
   [ -z "$DEV_CPIO" ] || eval "./magiskboot cpio ramdisk.cpio $DEV_CPIO"
   ./magiskboot cpio ramdisk.cpio "extract .backup/.magisk magisk.cfg"
-  # From an already-patched input the entry extracts without read permission; through some Docker hosts' mounts
-  # (macOS) root can't override that, and set -e would stop here. The config is only printed: the image is unchanged.
+  # From an already-patched input the entry extracts without read permission; through the mounts of some Docker
+  # hosts (macOS) root cannot override that, and set -e would stop here. The config is only printed: the image is
+  # unchanged. (No apostrophes in this block: it is one single-quoted sh -c argument.)
   chmod u+r magisk.cfg
   echo "--- Magisk config:"; cat magisk.cfg
   echo "--- overlay.d:"; ./magiskboot cpio ramdisk.cpio "ls -r overlay.d"
