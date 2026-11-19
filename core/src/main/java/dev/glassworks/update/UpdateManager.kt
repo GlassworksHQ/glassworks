@@ -271,25 +271,29 @@ class UpdateManager(
                 // Picked again: the channel may have changed since.
                 HttpURLConnection.HTTP_NOT_MODIFIED -> CheckResult.Found(pick(cachedList))
                 HttpURLConnection.HTTP_NOT_FOUND -> { etag = null; cachedList = emptyList(); cachedFrameOffer = null; CheckResult.Found(null) } // no release yet
-                HttpURLConnection.HTTP_OK -> {
-                    val body = readCapped(c.inputStream, MAX_JSON_BYTES).toString(Charsets.UTF_8)
-                    val list = try {
-                        Releases.parseList(body)
-                    } catch (e: ReleaseFormatException) {
-                        problem("release list not usable: ${e.message}")
-                        emptyList()
-                    }
-                    cachedList = list
-                    val offer = pick(list)
-                    cachedFrameOffer = runtime.frame.frameRelease?.let { FrameOffer.newest(list, it.id) }
-                    etag = c.getHeaderField("ETag")
-                    CheckResult.Found(offer)
-                }
+                HttpURLConnection.HTTP_OK -> listed(readCapped(c.inputStream, MAX_JSON_BYTES).toString(Charsets.UTF_8), c.getHeaderField("ETag"))
                 else -> CheckResult.Failed("HTTP $code")
             }
         } finally {
             c.disconnect()
         }
+    }
+
+    /**
+     * A 200's release list: kept with its [newEtag] for later 304s and channel changes. A list that doesn't parse is a
+     * failed check, which keeps neither, so the next check asks GitHub again instead of getting a 304 for it.
+     */
+    private fun listed(body: String, newEtag: String?): CheckResult {
+        val list = try {
+            Releases.parseList(body)
+        } catch (e: ReleaseFormatException) {
+            return CheckResult.Failed("release list not usable: ${e.message}")
+        }
+        cachedList = list
+        val offer = pick(list)
+        cachedFrameOffer = runtime.frame.frameRelease?.let { FrameOffer.newest(list, it.id) }
+        etag = newEtag
+        return CheckResult.Found(offer)
     }
 
     private fun problem(msg: String) {

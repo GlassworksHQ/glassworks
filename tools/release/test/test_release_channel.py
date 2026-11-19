@@ -103,6 +103,13 @@ class TagChannelTest(Scratch):
         self.tag("generic-android-v0.3.0", "Glassworks 0.3.0: beta testers asked for this")
         self.assertEqual("stable", self.channel("generic-android-v0.3.0").stdout.strip())
 
+    def test_a_channel_line_after_a_signature_block_doesnt_count(self):
+        # A signed tag's signature follows its message: nothing in or after it is the message.
+        self.tag("generic-android-v0.3.2", "Glassworks 0.3.2\n\n-----BEGIN PGP SIGNATURE-----\nabc\nChannel: beta\n-----END PGP SIGNATURE-----")
+        r = self.channel("generic-android-v0.3.2")
+        self.assertEqual(0, r.returncode, r.stderr)
+        self.assertEqual("stable", r.stdout.strip())
+
     def test_a_typo_fails_rather_than_publish_a_stable(self):
         self.tag("generic-android-v0.3.0", "Glassworks 0.3.0", "Channel: bet")
         r = self.channel("generic-android-v0.3.0")

@@ -142,6 +142,22 @@ class UpdateChannelTest {
         assertNull(m.model.beginInstall(0))
     }
 
+    /** #613 review: a 200 whose list doesn't parse is a failed check; it keeps neither the empty list nor the ETag. */
+    @Test fun anUnusableListIsAFailedCheckAndKeepsNoEtag() {
+        val m = checked("1.3.0", { UpdateChannel.STABLE }, LinkedBlockingQueue())
+        fun field(name: String) = UpdateManager::class.java.getDeclaredField(name).apply { isAccessible = true }
+        field("etag").set(m, "\"before\"")
+        val listed = UpdateManager::class.java.getDeclaredMethod("listed", String::class.java, String::class.java).apply { isAccessible = true }
+        val failed = listed.invoke(m, "{\"message\": \"not a list\"}", "\"new\"")
+        assertEquals("Failed", failed!!.javaClass.simpleName)
+        assertEquals("the ETag stays the last good list's", "\"before\"", field("etag").get(m))
+        assertEquals("the last good list stays", 2, (field("cachedList").get(m) as List<*>).size)
+
+        val found = listed.invoke(m, "[]", "\"empty\"")
+        assertEquals("Found", found!!.javaClass.simpleName)
+        assertEquals("\"empty\"", field("etag").get(m))
+    }
+
     @Test fun beforeTheFirstCheckAChangeWaitsForIt() {
         val changes = LinkedBlockingQueue<Unit>()
         val m = UpdateManager(app, KioskApp.runtime(GenericAndroid(app), AppBuild("1.3.0", 10300, debug = false)), { UpdateChannel.BETA }) { changes.add(Unit) }

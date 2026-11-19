@@ -356,7 +356,7 @@ that people running both apps would notice, a core change for example, gets a li
 the update card's text in Home Assistant, as for the S1 app.
 
 **Versions.** `MAJOR.MINOR.PATCH`, versionCode `major*10000 + minor*100 + patch`, as for the S1 app. The workflow
-refuses a version that isn't higher than the line's last release. Start at **0.2.0**: test builds are 0.1.0 and
+refuses a version that isn't higher than the line's last release or beta ([Betas](#betas)). Start at **0.2.0**: test builds are 0.1.0 and
 0.1.1, and a device on test build 0.1.1 is offered only a higher version (and `adb install -r` refuses a lower
 versionCode).
 
