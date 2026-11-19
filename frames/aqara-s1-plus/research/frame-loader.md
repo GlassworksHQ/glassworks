@@ -526,8 +526,10 @@ boot from flash doesn't. `vbmeta` has flags 3, so the changed header boots.
    `boot-ram.img` is an Android image with a raw arm64 kernel at offset 2048, and stock `boot` runs
    only a legacy uImage there (attempt 8). The tool then exits 2 ("did not boot"), and the panel stays
    in fastboot. That confirms attempt 8 (it did, attempt 9). Leave with `fastboot-usb.py reboot`, or
-   power-cycle; nothing was written. A T3 pass needs the wrapped image (attempt 10; untested on a
-   panel). Build it on the host:
+   power-cycle; nothing was written. A T3 pass needs the wrapped image (attempt 10). It ran on
+   2026-11-19 (attempt 11): `boot` gave a USB I/O error, and the board reset into its flash boot
+   within about 6 s, with `ro.boot.gw139` empty. So it doesn't pass yet. Run the canary of attempt 12
+   (plan E) before you repeat it. To repeat it, build it on the host:
    `wrap-ram-boot.py "$B/boot.img" "$B/cmdline-flash.txt" "$B/boot-ram-uimage.img"`. Once Android is
    up again, go back to fastboot (`adb reboot bootloader`, then approve the Mac's accessory prompt),
    and run `fastboot-usb.py boot "$B/boot-ram-uimage.img"`. Only if a boot does start (the tool exits
