@@ -497,12 +497,12 @@ check "old build back, enabled, admin, data restored" bash -c '[ "$(cat "$1/inst
 check "copy discarded" test ! -e "$T/panel/work"
 check "the old build never ran on empty data before the restore (#626)" test ! -s "$T/unkeyed"
 
-echo "== install.sh: the new APK won't copy to the panel, and an earlier run left one there (#628 review)"
-panel; printf fail > "$T/push"; echo stale > "$T/panel/glassworks.apk"
-out=$(inst --switch); rc=$?
+echo "== install.sh: the new APK (named Success.apk) won't copy, and an earlier run left one there (#628 review)"
+panel; printf fail > "$T/push"; echo stale > "$T/panel/glassworks.apk"; cp "$APK" "$T/Success.apk"
+out=$("$REPO/frames/aqara-s1-plus/tools/install.sh" --apk "$T/Success.apk" --no-models --no-debloat --switch </dev/null 2>&1); rc=$?
 check "fails" test $rc -ne 0
 check "installs no APK left on the panel" hasnt "$(cat "$T/adb.log")" "shell pm install -r -g /data/local/tmp/glassworks.apk"
-check "says why" has "$out" "could not copy kiosk-release.apk to the panel"
+check "says why" has "$out" "could not copy the APK to the panel"
 check "the old build is back with its data" bash -c '[ "$(cat "$1/installed") $(cat "$1/disabled")" = "debug 0" ] && [ -f "$1/panel/ce/shared_prefs/kiosk.xml" ]' _ "$T"
 
 echo "== install.sh: the new build won't install, and the old one's data won't go back in"

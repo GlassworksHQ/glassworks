@@ -350,7 +350,7 @@ switch_key() {
   if adb push "$APK" "$NEW_APK" >/dev/null; then
     out=$(adb shell "pm install -r -g $NEW_APK$hold" 2>&1 | tr -d '\r') || true
   else
-    out="could not copy $(basename "$APK") to the panel"
+    out="could not copy the APK to the panel" # no file name: one named Success.apk would pass for an install
   fi
   if ! grep -q Success <<<"$out"; then
     sed 's/^/  /' <<<"$out"
