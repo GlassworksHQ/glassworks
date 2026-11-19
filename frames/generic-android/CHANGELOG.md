@@ -11,6 +11,12 @@ line of each version is what Home Assistant shows on the update card. A change o
 
 ## [Unreleased]
 
+### Added
+- **Pick an update channel: Stable or Beta.** The device page in the panel's settings and on the Manage page has an
+  *Update channel* row. Stable, the default, gets releases as before. Beta also gets betas, new versions before
+  they're stable, which may have bugs; Home Assistant's update card says when the update it offers is a beta. Going
+  back to Stable never installs an older version: the panel waits for a stable release newer than the one it runs.
+
 ## [0.2.0] - 2026-11-19
 
 **The first release of Glassworks for Android tablets and panels, with Assist, Sendspin and the camera pane.**
@@ -52,10 +58,6 @@ Experimental: run on a lululemon Mirror and a Pixel Tablet so far, not yet on ot
   a time in **Settings → Screen → Turn off when idle**. On a device with a PIN, pattern or password, the Screen
   settings and the Manage page say in amber that someone has to unlock it after the screen turns off, and how to
   avoid that: turn the lock off in Android's settings, or keep the screen on.
-- **Pick an update channel: Stable or Beta.** The device page in the panel's settings and on the Manage page has an
-  *Update channel* row. Stable, the default, gets releases as before. Beta also gets betas, new versions before
-  they're stable, which may have bugs; Home Assistant's update card says when the update it offers is a beta. Going
-  back to Stable never installs an older version: the panel waits for a stable release newer than the one it runs.
 
 ### Fixed
 - **The camera recovers by itself when it stops sending frames.** If the camera opens but sends no picture for
