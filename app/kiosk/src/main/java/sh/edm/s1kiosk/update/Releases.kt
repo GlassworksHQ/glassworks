@@ -47,8 +47,11 @@ class ReleasePick(val offer: UpdateOffer?, val problem: String?)
  * the newest of its own ([newest]) instead of reading `releases/latest`.
  */
 object Releases {
-    /** owner/repo of the official releases. */
-    const val REPO = "aguilaair/aqara-s1-unleashed"
+    /**
+     * owner/repo of the official releases. Renamed to this on 2026-11-13; apps up to 0.4.3 still ask
+     * aguilaair/aqara-s1-unleashed through GitHub's redirect, so the old name must never be reused.
+     */
+    const val REPO = "GlassworksHQ/glassworks"
     /**
      * Recent releases, newest first: GitHub's largest page. It leaves room for other frames' and the
      * libraries' releases; if this app's newest release is older than the repo's 100 newest, no update
