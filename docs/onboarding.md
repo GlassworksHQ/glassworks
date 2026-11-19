@@ -77,8 +77,18 @@ manifest (permissions + `ImprovActivity`), and one ESPHome button in `PanelDevic
 **Authorization** (physical action): the overlay's **Allow** button. Allowed for **2 minutes**
 (spec suggests ~1 min; 2 gives time to type a password on a phone), restarted after a failed connect.
 **Not now** stops Improv. Optional alternative: a proximity far→near approach
-(`--ez improv_proximity_auth true`, off by default because on a desk the VI5300 reads "near"
-permanently and only fires on threshold crossings).
+(`--ez improv_proximity_auth true`, off by default on a touchscreen because on a desk the VI5300 reads
+"near" permanently and only fires on threshold crossings).
+
+**Without a touchscreen** (the frame's `Input.NONE`, the lululemon Mirror; #611) nobody can press Allow.
+There Improv starts **authorized for 5 minutes** when it starts with no network, and the setup screen says
+"Send the Wi-Fi from a phone" with the countdown. After the 5 minutes it asks for authorization again,
+and the setup hotspot opens if it can start (it waits for the window: 30 s + 5 min instead of 3 min). When it
+can't (Wi-Fi switched off, or a failed start), the Wi-Fi step says why and how to set the panel up from a
+computer. An approach opens the window again: approach authorization is on by default there, and on a
+device without a proximity sensor the camera pane's presence is the approach. Both only while the panel has **no network**: an online panel
+is never sent new Wi-Fi without a person. Once Wi-Fi joins, Improv ends as above. 5 minutes is the
+exposure of an ESPHome device, which asks for no authorization at all.
 
 **Capabilities** = `0x07`: identify, device info, scan Wi-Fi. Hostname (0x05) and device name
 (0x06) are answered with error 0x02 *unknown RPC*: Android 10 doesn't let an app set the DHCP
@@ -553,7 +563,12 @@ Assistant."), with the way to change it second ("Use another network", "Add it b
 2. **Sign in** (under Home Assistant): "Scan to sign in.", the QR code, and "Sign in on this panel
    instead" (or "Find Home Assistant." with a URL field when HA wasn't found). It is answered by a refresh
    token, or once the dashboard loads while a later step still waits (a panel signed in with a cookie
-   session). Without touch it shows the setup page's QR code until Home Assistant has added the panel,
+   session). "Sign in on this panel instead" is the same sign-in on the panel's screen (#633,
+   `auth/PanelSignIn.kt`): the page loads HA's `/auth/authorize` with the client_id `<HA>/glassworks/` and the
+   redirect_uri `<HA>/glassworks/callback`, both on HA's own origin, so the legacy engine loads it and HA shows its
+   plain login page. The app takes the redirect back before the page loads it, trades the code (with PKCE) and stores
+   the refresh token as the QR code's callback does. A session the page already had never counts: the login page
+   shows anyway. If the trade fails, the Sign-in step comes back over a new login page. Without touch it shows the setup page's QR code until Home Assistant has added the panel,
    then the sign-in's own. If Home Assistant added the panel first, Add it is green and Sign in current.
 3. **Add it** (under Home Assistant): done once an ESPHome client whose Hello says "Home Assistant"
    **subscribes to states**. HA's config flow only probes DeviceInfo during discovery, so a plain

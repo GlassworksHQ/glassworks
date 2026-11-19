@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-// /lululemon-mirror: off for everyone without ?apk=local, a test install with it, and every demo
+// /lululemon-mirror: off for everyone without ?apk=local (or ?apk=release, test/mirror-release.test.tsx), a test install with it, and every demo
 // screen on the real recipe behind a simulated Mirror.
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { GLASSWORKS } from '@glassworks/lululemon-mirror-installer';
 import { fakeApk } from '@glassworks/app-adb/fakes';
 import { FakeMirror, MIRROR_KIOSK, fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
@@ -31,10 +31,11 @@ const until = async (f: () => boolean, ms = 10_000) => {
 const embers = () => [...document.querySelectorAll('.btn.ember')].map((b) => b.textContent);
 
 describe('the switch', () => {
-  it('is off without ?apk=local, and demos only where demos run', () => {
+  it('is off without ?apk=local or ?apk=release, and demos only where demos run', () => {
     expect(mirrorMode('', true, MIRROR_DEMOS)).toEqual({ on: false });
-    expect(mirrorMode('?apk=release', true, MIRROR_DEMOS)).toEqual({ on: false });
-    expect(mirrorMode('?apk=local', false, MIRROR_DEMOS)).toEqual({ on: true });
+    expect(mirrorMode('?apk=other', true, MIRROR_DEMOS)).toEqual({ on: false });
+    expect(mirrorMode('?apk=release', false, MIRROR_DEMOS)).toEqual({ on: true, apk: 'release' });
+    expect(mirrorMode('?apk=local', false, MIRROR_DEMOS)).toEqual({ on: true, apk: 'local' });
     expect(mirrorMode('?demo=checks', true, MIRROR_DEMOS)).toEqual({ on: true, demo: 'checks' });
     expect(mirrorMode('?demo=checks', false, MIRROR_DEMOS)).toEqual({ on: false }); // a production build
     expect(mirrorMode('?demo=nope', true, MIRROR_DEMOS)).toEqual({ on: false });
@@ -47,11 +48,14 @@ describe('the switch', () => {
     expect(embers()).toEqual([]);
   });
 
-  it('with it, Kiln installs Glassworks over fastboot by default', async () => {
+  it('with it, Kiln installs Glassworks over fastboot by default: first and picked on the choice (#579)', async () => {
     history.replaceState(null, '', '/lululemon-mirror?apk=local');
     render(<MirrorWizard />);
-    await screen.findByText('Install Glassworks on the Mirror.');
+    await screen.findByText('What goes on the Mirror?');
     expect(screen.getByText('Test only')).toBeTruthy();
+    expect(embers()).toEqual(['Continue with Glassworks']);
+    fireEvent.click(screen.getByRole('button', { name: 'Continue with Glassworks' }));
+    await screen.findByText('Install Glassworks on the Mirror.');
     expect(embers()).toEqual(['Download the system image']);
   });
 
@@ -67,7 +71,7 @@ describe('the switch', () => {
 
 describe('the test install', () => {
   it('reads the Mirror, installs, and undoes back to the home app it had', async () => {
-    const m = new FakeMirror({ picks: (c) => c.find((x) => x.startsWith(`${GLASSWORKS.package}/`)) ?? c.find((x) => x === MIRROR_KIOSK) });
+    const m = new FakeMirror({ kiosk: 'app' }); // the community kiosk with its device admin off, so Android hides it
     const s = new MirrorSession({ connect: async () => m, sleep: async () => {} }, true);
     await s.connect();
     expect(s.state.screen).toBe('checks');
@@ -87,7 +91,7 @@ describe('the test install', () => {
     await s.undo();
     expect(s.state).toMatchObject({ screen: 'done', result: { flow: 'undo', removed: { removed: true, home: 'set' } } });
     expect(m.installed).toBeUndefined();
-    expect(m.preferred?.comp).toBe(MIRROR_KIOSK);
+    expect(m.focused).toBe(MIRROR_KIOSK);
   });
 
   it('the latest APK picked wins, however long the earlier one takes to read', async () => {
@@ -147,7 +151,7 @@ describe('the test install', () => {
   });
 
   it('reading the Mirror again when it went away goes back to Connect and says why', async () => {
-    const m = new FakeMirror({ picks: (c) => c[0], installed: 600 });
+    const m = new FakeMirror({ installed: 600 });
     const s = new MirrorSession({ connect: async () => m, sleep: async () => {} }, true);
     await s.connect();
     await s.undo();
@@ -157,7 +161,7 @@ describe('the test install', () => {
   });
 
   it('reading the Mirror again twice reads it once, and never lands on a running install', async () => {
-    const m = new FakeMirror({ picks: (c) => c.find((x) => x.startsWith(`${GLASSWORKS.package}/`)) });
+    const m = new FakeMirror();
     const s = new MirrorSession({ connect: async () => m, sleep: async () => {} }, true);
     await s.connect();
     await s.pickApk('kiosk.apk', fakeMirrorApk());
@@ -175,7 +179,7 @@ describe('the test install', () => {
 
   it('a slow read of the Mirror that ends after a whole install doesn\'t replace its Done, even when it fails', async () => {
     for (const fails of [false, true]) {
-      const m = new FakeMirror({ picks: (c) => c.find((x) => x.startsWith(`${GLASSWORKS.package}/`)) });
+      const m = new FakeMirror();
       const s = new MirrorSession({ connect: async () => m, sleep: async () => {} }, true);
       await s.connect();
       await s.pickApk('kiosk.apk', fakeMirrorApk());
@@ -237,14 +241,20 @@ describe('every demo screen', () => {
     expect(embers().length).toBeLessThanOrEqual(1);
   });
 
-  it('an update with another app kept as home asks for Clear defaults first', async () => {
-    render(<Screens session={await mirrorDemo('home-clear', true)} />);
-    await screen.findByText('Choose Clear defaults.');
+  it('no screen asks for a tap on the Mirror: it has no touchscreen (Mirror run, 2026-11-19)', async () => {
+    for (const d of MIRROR_DEMOS.filter((x) => x !== 'run')) {
+      render(<Screens session={await mirrorDemo(d as MirrorDemo, true)} />);
+      await until(() => !!document.querySelector('.card'));
+      expect(document.body.textContent, d).not.toMatch(/Your turn|then Always|Clear defaults/);
+      cleanup();
+    }
   });
 
-  it('home waits for the person\'s tap on the Mirror', async () => {
-    render(<Screens session={await mirrorDemo('home', true)} />);
-    await screen.findByText(/Your turn, on the Mirror/);
-    expect(screen.getByText(/then Always/).textContent).toBe('Choose Glassworks, then Always.');
+  it('Done says it is the only home screen, upright; with a device admin\'s home app Android won\'t hide, it says to install over fastboot', async () => {
+    render(<Screens session={await mirrorDemo('done', true)} />);
+    await screen.findByText('It is the only home screen, upright, so it opens when the Mirror starts.');
+    cleanup();
+    render(<Screens session={await mirrorDemo('done-unconfirmed', true)} />);
+    await screen.findByText(/^com\.nimrod\.mirrorkiosk is a device administrator on this Mirror, so Android won.t hide it.*Install Glassworks over fastboot instead/);
   });
 });

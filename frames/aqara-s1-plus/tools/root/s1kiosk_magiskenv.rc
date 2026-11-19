@@ -1,0 +1,19 @@
+# Magisk's own setup, which the Magisk app would make and our installers don't: busybox in /data/adb/magisk.
+# Injected by Magisk as overlay.d/s1kiosk_magiskenv.rc; the binary is lib/armeabi-v7a/libbusybox.so from the same
+# official Magisk APK the installer patches with (overlay.d/sbin/magisk-busybox -> ${MAGISKTMP}).
+#
+# Without it, Magisk's post-fs-data stops with "Magisk environment incomplete, abort" and loads no module at all
+# (Magisk v31.1 native/src/core/bootstages.rs:76-79, :132-134; docs/research/magisk-modules.md).
+#
+# Magisk adds its own `on post-fs-data` after every overlay.d .rc (native/src/init/rootdir.cpp:96-104), and init runs
+# the actions of one trigger in the order it read them, so these lines run just before Magisk checks. Only init's
+# built-in commands: no process that could hang the boot. Each boot writes the file again, so a damaged copy heals.
+#
+# /data/adb itself is never made here: init gives a new top-level /data directory an encryption policy, and fails into
+# recovery if it can't. Magisk makes /data/adb at the end of the first boot, so on that boot mkdir and copy just fail
+# (logged by init, harmless) and the next boot has the file. A second-level directory gets no policy (Android 10
+# libfscrypt/fscrypt_init_extensions.cpp:72-78).
+on post-fs-data
+    mkdir /data/adb/magisk 0755 root root
+    copy ${MAGISKTMP}/magisk-busybox /data/adb/magisk/busybox
+    chmod 0755 /data/adb/magisk/busybox

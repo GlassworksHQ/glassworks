@@ -36,7 +36,7 @@ import dev.glassworks.notifications.NotificationOverlay
 import dev.glassworks.radio.RadioDefinition
 import dev.glassworks.speaker.SendspinDefinition
 import dev.glassworks.speaker.SendspinPane
-import dev.glassworks.s1.settings.BluetoothProxyPage
+import dev.glassworks.bluetoothproxy.BluetoothProxyPage
 import dev.glassworks.setup.SetupState
 import dev.glassworks.timers.TimersPane
 import dev.glassworks.assist.AssistDefinition

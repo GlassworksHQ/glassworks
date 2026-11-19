@@ -286,15 +286,30 @@ export async function buildUserdata(disk: Disk, o: { adbKey: string; time?: numb
   await fs.mkdir('/misc', { mode: 0o1771, uid: AID.system, gid: AID.misc, label: LABELS.data, time });
   await fs.mkdir('/misc/adb', { mode: 0o2750, uid: AID.system, gid: AID.shell, label: LABELS.adbKeys, time });
   await fs.writeFile('/misc/adb/adb_keys', new TextEncoder().encode(`${keys.join('\n')}\n`), { mode: 0o640, uid: AID.system, gid: AID.shell, label: LABELS.adbKeys, time });
-  if (o.wifi) {
-    // init.rc: mkdir /data/misc/wifi 0770 wifi wifi; the Wi-Fi HAL uses an existing wpa_supplicant.conf
-    // as it is (copying the template only when there is none), system:wifi 0660 (AOSP 6.0.1 wifi.c)
-    await fs.mkdir('/misc/wifi', { mode: 0o770, uid: AID.wifi, gid: AID.wifi, label: LABELS.wifi, time });
-    await fs.writeFile('/misc/wifi/wpa_supplicant.conf', new TextEncoder().encode(await wpaSupplicantConf(o.wifi.template, o.wifi)),
-      { mode: 0o660, uid: AID.system, gid: AID.wifi, label: LABELS.wifi, time });
-  }
+  if (o.wifi) await saveWifi(fs, o.wifi.template, o.wifi, time);
   await fs.flush();
   return fs;
+}
+
+/** Where userdata keeps the saved networks; Android mounts it as /data/misc/wifi/wpa_supplicant.conf. */
+export const WIFI_CONF = '/misc/wifi/wpa_supplicant.conf';
+/** The image's template, which the Wi-Fi HAL copies when userdata has none (AOSP 6.0.1 wifi.c). */
+export const WIFI_TEMPLATE = '/etc/wifi/wpa_supplicant.conf';
+
+/**
+ * Saves one network in a userdata filesystem, a fresh one or the image's own: makes `/misc/wifi` if it
+ * isn't there and writes `/misc/wifi/wpa_supplicant.conf` (the template, then the network: wpaSupplicantConf),
+ * replacing one that was. It writes nothing else. `/misc` must be there already, as init.rc makes it.
+ * init.rc: mkdir /data/misc/wifi 0770 wifi wifi; the Wi-Fi HAL uses an existing wpa_supplicant.conf
+ * as it is (copying the template only when there is none), system:wifi 0660 (AOSP 6.0.1 wifi.c).
+ * The caller flushes.
+ */
+export async function saveWifi(fs: Ext4, template: string, wifi: { ssid: string; password: string }, time = Math.floor(Date.now() / 1000)): Promise<void> {
+  const conf = new TextEncoder().encode(await wpaSupplicantConf(template, wifi)); // refuses a bad network before any write
+  if (!(await fs.exists('/misc'))) throw new Error('this userdata has no /misc, so it isn\'t an Android 6 userdata Kiln knows. Nothing was changed.');
+  if (!(await fs.exists('/misc/wifi'))) await fs.mkdir('/misc/wifi', { mode: 0o770, uid: AID.wifi, gid: AID.wifi, label: LABELS.wifi, time });
+  if (await fs.exists(WIFI_CONF)) await fs.remove(WIFI_CONF);
+  await fs.writeFile(WIFI_CONF, conf, { mode: 0o660, uid: AID.system, gid: AID.wifi, label: LABELS.wifi, time });
 }
 
 /**

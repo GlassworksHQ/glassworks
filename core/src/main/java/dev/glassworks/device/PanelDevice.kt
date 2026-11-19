@@ -133,7 +133,7 @@ class PanelDevice(
         } + ")"
 
         /**
-         * Set to `1` in build.prop by an installer that carries the API key over a reflash ([ApiKeyHandover], #574):
+         * Set to `1` in build.prop by an installer that carries the API key over a reflash ([SecretHandover], #574):
          * the fresh app then keeps its API server shut until the key comes, so Home Assistant, which still holds that
          * key, never meets a device without one and opens no re-authentication.
          */
@@ -180,8 +180,8 @@ class PanelDevice(
     /** Guards [stopped] and the hand-over of [server] between [startServer] and [stop]. */
     private val lifecycle = Any()
     private var stopped = false
-    /** Read again when a key handed over at first boot ends the wait ([startServerWhenKeyed]). */
-    @Volatile private var noiseKeys = NoiseKeys(prefs.noiseKeyStore)
+    /** The server's keys: read again when the server starts, and followed when the stored key changes (#608). */
+    private val serverKeys = ServerKeys(prefs.noiseKeyStore)
     /** Read by the API server on its connection threads; replaced when voice is turned on or off. */
     @Volatile private lateinit var identity: DeviceIdentity
 
@@ -198,7 +198,7 @@ class PanelDevice(
      * App updates from GitHub Releases (docs/releasing.md); the "App update" entity. runCatching:
      * the update thread may still report while [stop] has already shut [exec] down.
      */
-    private val updates = UpdateManager(ctx, runtime, onChange = { runCatching { exec.execute { server?.publishStates() } } })
+    private val updates = UpdateManager(ctx, runtime, channel = { prefs.updateChannel }, onChange = { runCatching { exec.execute { server?.publishStates() } } })
     @Volatile private var announcing = false
     private var wakeLock: PowerManager.WakeLock? = null
     private var wifiLock: WifiManager.WifiLock? = null
@@ -301,6 +301,8 @@ class PanelDevice(
         startServerWhenKeyed(SystemClock.elapsedRealtime())
         unlessStopped {
             prefs.registerListener(prefListener)
+            // A key stored after the server started and before the listener above: no event came for it.
+            exec.execute { onApiKeyPrefChanged() }
             screen.addListener(screenListener)
             HaAuth.addListener(authListener)
             Dashboards.addListener(dashboardsListener)
@@ -442,8 +444,7 @@ class PanelDevice(
             return
         }
         if (handover == "1") {
-            // A key handed over since this object was made: read the store again.
-            noiseKeys = NoiseKeys(prefs.noiseKeyStore)
+            // startServer reads the store again, so a key handed over since this object was made is the one it uses.
             EspHomeLog.i(if (prefs.apiEncryption) "API key handed over: starting the API server with it"
                 else "No API key handed over in ${API_KEY_WAIT_MS / 60_000} min: starting without one, Home Assistant may ask to re-authenticate")
         }
@@ -451,7 +452,8 @@ class PanelDevice(
     }
 
     private fun startServer() {
-        val s = ApiServer(apiPort, { identity }, entities, noiseKeys, apiBindAddress)
+        // The store as it is now, not as it was when this object was made: a switch's hand-over may have come since.
+        val s = ApiServer(apiPort, { identity }, entities, serverKeys.forStart(), apiBindAddress)
         panes.forEachPane("bind") { it.bind(s) }
         s.onCommand = { exec.execute { s.publishStates() } }
         s.onClientHello = { info, addr ->
@@ -497,11 +499,8 @@ class PanelDevice(
     /** Key changed in the panel settings (adb extras): apply it unless it is the one HA just provisioned. */
     private fun onApiKeyPrefChanged() {
         val k = prefs.effectiveApiKey()
-        val latest = noiseKeys.latest
-        val same = if (k == null || latest == null) k == null && latest == null else k.contentEquals(latest)
-        if (same) return
+        if (!serverKeys.follow(k, server)) return
         EspHomeLog.i(if (k == null) "API key removed in the panel settings" else "API key set in the panel settings (fingerprint ${NoiseKeys.fingerprint(k)})")
-        server?.replaceKey(k)
     }
 
     private fun emit(event: PanelEvent) = panes.forEachPane("onEvent") { it.onEvent(event) }

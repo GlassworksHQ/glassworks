@@ -1534,6 +1534,11 @@ def build(run_dir, apks=(), budgets=None):
         else:
             reasons.append(f"the pages ran protocol {', '.join(G.protocol_name(p) for p in ref['protocols'])}; "
                            f"this rubric is for protocol {G.PROTOCOL_VERSION}")
+    transport = webrtc_transport(run_dir, graded.get("reference"))
+    net = test_network(run_dir, ref, transport)
+    if net and net["limited"]:
+        # The test rig's network, not the frame's (#649): a real Home Assistant sits on a wired or quiet link.
+        reasons.append(net["limited"])
     vp_state, vp_reason = viewport_check(ref, device) if ref else ("unknown", None)
     grade["viewport"] = {"state": vp_state, "reason": vp_reason}
     if vp_state == "refused":
@@ -1583,7 +1588,8 @@ def build(run_dir, apks=(), budgets=None):
         "apk": apk_sizes(apks),
         "ram": reference_ram(ref_idles, raw_refs, package, budgets, device.get("mem_total_kb")),
         "fake_ha": fake_log,
-        "webrtc_transport": webrtc_transport(run_dir, graded.get("reference")),
+        "webrtc_transport": transport,
+        "test_network": net,
         "grade": grade,
         "graded": graded,
         "detail": detail,
@@ -1610,6 +1616,43 @@ def webrtc_transport(run_dir, ref):
                       "four streams; heavy's camera result may be the link's, not the panel's"
                       if t.get("transport") == "adb" and heavy_cams else None)
     return out
+
+
+def test_network(run_dir, ref, transport):
+    """The test computer's own network (#649), from netcheck.py's netcheck.json: its pings to its gateway and to
+    the panel, its link, and which graded traffic crossed it: the live updates when adb reaches the panel over the
+    network (the fake's stream goes through `adb reverse`), the cameras when their video went over the LAN.
+    `limited` (a reason for "provisional") when its own link wasn't quiet and carried some. None without the file
+    (runs before #649) or without the reference part."""
+    path = os.path.join(run_dir, "netcheck.json")
+    if not ref or not os.path.exists(path):
+        return None
+    with open(path) as f:
+        n = json.load(f)
+    out = {k: n.get(k) for k in ("gateway", "panel", "link", "adb_over_network", "quiet", "tail_ms")}
+    cams = any((t or {}).get("camera_runs") for t in (ref.get("tiers") or {}).values())
+    out["carried"] = (["live updates"] if n.get("adb_over_network") else []) + (
+        ["camera video"] if cams and (transport or {}).get("transport") in ("lan-udp", "lan-turn") else [])
+    g = n.get("gateway") or {}
+    out["limited"] = (f"the test computer's network: its own link to its gateway reached p95 {g.get('p95_ms')} ms, "
+                      f"max {g.get('max_ms')} ms (over {n.get('tail_ms')} ms) and carried the {' and the '.join(out['carried'])}; "
+                      "measure again with that computer on a wired or quiet link"
+                      if n.get("quiet") is False and out["carried"] else None)
+    return out
+
+
+def network_line(rep):
+    """report.md, beside the camera video's path: the test computer's own network (#649)."""
+    n = rep.get("test_network")
+    if not n:
+        return []
+    fmt = lambda s: f"p95 {s['p95_ms']} ms, max {s['max_ms']} ms" if s else "no answer"  # noqa: E731
+    line = (f"The test computer's network ({n['link'] or 'link unknown'}): to its gateway {fmt(n['gateway'])}; "
+            f"to the panel {fmt(n['panel'])}. It carried "
+            + (f"the {' and the '.join(n['carried'])}." if n["carried"] else "no graded traffic (adb over USB, video over adb)."))
+    if n.get("limited"):
+        line += f" **Limited by the test:** {n['limited']}."
+    return [line]
 
 
 TRANSPORT_WORDS = {"lan-udp": "over the LAN (UDP), as in a real home", "lan-turn": "over the LAN (TCP, through the test's relay)",
@@ -1939,6 +1982,7 @@ def markdown(rep):
             out.append(f"The fake Home Assistant sent a live change {detail_late:.0f} ms late during a view that isn't "
                        "graded (an HLS copy or a warm-up; detail: this computer was busy then).")
         out += transport_line(rep)
+        out += network_line(rep)
         out += camera_detail(ref)
         out += dialog_detail(ref)
         for t, s_ in ref["tiers"].items():

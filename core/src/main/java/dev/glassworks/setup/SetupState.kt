@@ -129,7 +129,7 @@ data class SetupInputs(
     val haHelloThisProcess: Boolean,
     /** Time since the app process started. */
     val uptimeMs: Long,
-    /** A refresh token from the QR sign-in is stored, for the dashboard's Home Assistant. */
+    /** A refresh token is stored (the QR code's sign-in or the panel's own), for the dashboard's Home Assistant. */
     val signedIn: Boolean,
     /** The GeckoView is on HA's `/auth/authorize` page. */
     val onAuthPage: Boolean,
@@ -248,7 +248,7 @@ object SetupState {
         // steps (e.g. Wi-Fi joined, HA not discovered yet). It can't start on its own though.
         val show = reasons.isNotEmpty() || (i.showing && step != SetupFlow.DONE)
         val paneDone = (i.paneSteps + i.ownSteps).filter { it.done }.map { it.id }.toSet()
-        return SetupDecision(show, step, wifiDone, haDone, signinDone, reasons, WifiStep.improv(i.improv), panesDone, paneDone)
+        return SetupDecision(show, step, wifiDone, haDone, signinDone, reasons, WifiStep.improv(i.improv, i.input), panesDone, paneDone)
     }
 
     /**

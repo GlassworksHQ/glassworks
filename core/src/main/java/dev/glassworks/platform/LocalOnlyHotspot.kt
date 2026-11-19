@@ -12,7 +12,7 @@ import android.provider.Settings
 
 /**
  * The setup hotspot on Android 8 and newer: `WifiManager.startLocalOnlyHotspot`, a public API for any app.
- * Android names the network (`AndroidShare_<n>` on the S1's Android 10) and picks a random WPA2 key; the
+ * Android names the network (`AndroidShare_<n>` on Android 10, `Glassworks_<n>` on an S1 with its name overlay) and picks a random WPA2 key; the
  * panel shows both as a QR code. It shares no internet, and changes no setting: closing the reservation
  * ([stop]) or the app's process dying ends it.
  *

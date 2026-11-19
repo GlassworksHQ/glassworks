@@ -1,0 +1,86 @@
+// Panel.connect with authMs: one deadline covers every wait after the browser's list (finding the device again,
+// claiming it, the key), so a stalled USB call can't hold a caller that asks again (review on PR 607).
+import { describe, expect, it, vi } from 'vitest';
+
+const never = <T>() => new Promise<T>(() => {});
+const devices: { getDevices: () => Promise<unknown[]> } = { getDevices: async () => [] };
+vi.mock('@yume-chan/adb-daemon-webusb', () => ({
+  AdbDaemonWebUsbDeviceManager: { get BROWSER() { return devices; } },
+  AdbDaemonWebUsbDevice: { DeviceBusyError: class extends Error {} },
+}));
+
+const { AdbAuthTimeout, Panel } = await import('../src/panel');
+const key = { store: {} } as never;
+
+describe('Panel.connect with authMs', () => {
+  it('gives up when finding the device again stalls', async () => {
+    devices.getDevices = () => never();
+    await expect(Panel.connect(key, {} as USBDevice, { authMs: 20 })).rejects.toBeInstanceOf(AdbAuthTimeout);
+  });
+
+  it('gives up when claiming the device stalls, and lets go of it if the claim comes late', async () => {
+    const raw = { close: vi.fn(async () => {}) };
+    let claimed!: (c: unknown) => void;
+    devices.getDevices = async () => [{ raw, serial: 'x', connect: () => new Promise((r) => { claimed = r; }) }];
+    await expect(Panel.connect(key, raw as unknown as USBDevice, { authMs: 20 })).rejects.toBeInstanceOf(AdbAuthTimeout);
+    claimed({});
+    await new Promise((r) => setTimeout(r, 0));
+    expect(raw.close).toHaveBeenCalled();
+  });
+
+  it('a device given but not in the list is off USB for now, not a list closed with nothing picked', async () => {
+    devices.getDevices = async () => [];
+    await expect(Panel.connect(key, {} as USBDevice, { authMs: 1000 })).rejects.toThrow(/isn't on USB right now/);
+  });
+
+  it('a release that stalls after a failed connect is cut at the deadline, and still rejects', async () => {
+    const raw = { close: vi.fn(() => never<void>()) };
+    devices.getDevices = async () => [{ raw, serial: 'x', connect: async () => ({}) }]; // a connection adb can't use
+    const started = Date.now();
+    await expect(Panel.connect(key, raw as unknown as USBDevice, { authMs: 300 })).rejects.toBeTruthy();
+    expect(raw.close).toHaveBeenCalled();
+    expect(Date.now() - started).toBeLessThan(550);
+  });
+
+  it('on a key that never comes, rejects with AdbAuthTimeout within authMs even when the release stalls', async () => {
+    const raw = { close: vi.fn(() => never<void>()) };
+    // a connection that takes adb's first packet and never answers: the key never comes
+    const connection = { readable: new ReadableStream({}), writable: new WritableStream({}) };
+    devices.getDevices = async () => [{ raw, serial: 'x', connect: async () => connection }];
+    const started = Date.now();
+    await expect(Panel.connect(key, raw as unknown as USBDevice, { authMs: 200 })).rejects.toBeInstanceOf(AdbAuthTimeout);
+    expect(raw.close).toHaveBeenCalled();
+    expect(Date.now() - started).toBeLessThan(450);
+  });
+
+  it('a restart into the bootloader with no reply counts as done after a few seconds', async () => {
+    vi.useFakeTimers();
+    try {
+      const adb = { power: { bootloader: () => never<void>() }, close: () => never<void>() };
+      const panel = Object.assign(Object.create(Panel.prototype), { adb }) as { rebootToBootloader(): Promise<void> };
+      let done = false;
+      const restart = panel.rebootToBootloader().then(() => { done = true; });
+      await vi.advanceTimersByTimeAsync(4000);
+      expect(done).toBe(false);
+      await vi.advanceTimersByTimeAsync(2500);
+      await restart;
+      expect(done).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('close lets go within a second even when the release never settles', async () => {
+    vi.useFakeTimers();
+    try {
+      const panel = Object.assign(Object.create(Panel.prototype), { adb: { close: () => never<void>() } }) as { close(): Promise<void> };
+      let done = false;
+      const closing = panel.close().then(() => { done = true; });
+      await vi.advanceTimersByTimeAsync(1100);
+      await closing;
+      expect(done).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

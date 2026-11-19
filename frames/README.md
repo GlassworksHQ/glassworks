@@ -10,6 +10,7 @@ and glassworks.dev read them from here.
 | `<id>/installer/` | Kiln's recipe for the device (`@glassworks/<id>-installer`), an npm workspace of the repo root. Only frames that install from Kiln have one |
 | `<id>/design/frame.json` | What the device looks like and what the catalog says about it. Every frame has one |
 | `<id>/research/` | Its research notes (the index of every note: [docs/research](../docs/research/README.md)) |
+| `<id>/design/installer.json` | Its install in Kiln, as data: route, touch, each flow's steps and transports, downloads, taps, way back (format: [frames as data](../docs/design/kiln/frames-as-data.md)). Every frame with a Kiln page has one |
 | `<id>/design/recovery.json` | The steps into recovery mode, as drawing data (format: [docs/design/kiln](../docs/design/kiln/README.md#the-recovery-section)) |
 
 | Frame | Status | Installer | Design |
@@ -68,6 +69,7 @@ describes the device's look in millimetres"). Kiln's picker reads it, and glassw
 | `specs` | Hardware rows: `{ label, value }`. Labels: `Size`, `SoC`, `Android`, `Screen`, `Radio`, `Presence`, `Audio`, `Extras`, `Mount`, `Root` |
 | `panes` | The panes it rates, by pane id: `{ support, note? }`. Support is a status or `depends`, `unknown`, `no`. The ids are the app's (the pane catalog, below); `base`, the wall base's old id, still works. A pane it doesn't rate is worked out from `provides`, with the reason |
 | `provides` | Optional. The hardware it has, in the pane catalog's words: `microphone`, `speaker`, `silabs-radio`, `s1-wall-base`, `bluetooth-le`, `camera`. Leave it out when it varies by device (Generic Android); a pane that needs hardware then reads `depends` |
+| `agent` | Optional. The frame's agent, the service outside the app that does what needs root: `{ "capabilities": [...] }`, in the spec's words (`radio-mode`, `time-zone`, …, [docs/frame-agent.md](../docs/frame-agent.md#capabilities)). Leave it out for a frame without one. Not on a tested device. `agentProblems()` checks it, and the app's agent contract test checks that the frame's code declares the same list |
 | `install` | `{ how, href? }`: one sentence on how it installs. `href` is only for a frame that installs from somewhere other than Kiln; a frame with `kiln` has none (the S1 installs from Kiln) |
 | `ratings` | The nine install ratings, each `{ value, detail?, label? }` (`label`: the card's tag in the frame's own words, e.g. the Mirror's reversibility): `difficulty`, `reversible`, `modifiesAndroid`, `root`, `opensDevice`, `vendorApps`, `wipes`, `backup`, `updates` |
 | `ratingsNote`, `notice` | Optional. A sentence of context; something a buyer must know |

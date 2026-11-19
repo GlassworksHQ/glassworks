@@ -2,14 +2,17 @@
 // OPFS files' Blobs, read from disk as fastboot sends them.
 import { ProxyError, WrongImage } from '@glassworks/lululemon-mirror-installer';
 import type { ImageMaker } from './flash';
+import { downloaded, madeFile, sessionDir } from './imageJobs';
 
 type Out = { id: number; progress?: number; step?: string; done?: boolean; error?: string; wrong?: boolean; proxy?: boolean };
 
 export function workerImages(): ImageMaker {
   let worker: Worker | undefined;
+  /** This page's own storage folder: the worker's name, so another tab never shares its files */
+  const dir = sessionDir(crypto.randomUUID());
   let next = 0;
   const call = (msg: object, onProgress: (step: string | undefined, x: number) => void = () => {}) => new Promise<void>((resolve, reject) => {
-    worker ??= new Worker(new URL('./imageWorker.ts', import.meta.url), { type: 'module' });
+    worker ??= new Worker(new URL('./imageWorker.ts', import.meta.url), { type: 'module', name: dir });
     const id = ++next;
     const w = worker;
     const on = (e: MessageEvent<Out>) => {
@@ -24,11 +27,16 @@ export function workerImages(): ImageMaker {
     w.addEventListener('message', on);
     w.postMessage({ ...msg, id });
   });
-  const file = async (name: string) => (await (await (await navigator.storage.getDirectory()).getDirectoryHandle('kiln-mirror')).getFileHandle(name)).getFile();
+  const file = async (name: string) => (await (await (await navigator.storage.getDirectory()).getDirectoryHandle(dir)).getFileHandle(name)).getFile();
   return {
-    load: (f, onProgress) => call({ op: 'load', file: f }, (_, x) => onProgress(x)),
     fetch: (url, onProgress) => call({ op: 'fetch', url }, (_, x) => onProgress(x)),
-    check: (file, which, onProgress) => call({ op: 'check', file, which }, (_, x) => onProgress(x)),
+    download: (url, want, onProgress) => call({ op: 'download', url, file: want }, (_, x) => onProgress(x)),
+    file: (name) => file(downloaded(name)),
+    check: (blob, want, onProgress) => call({ op: 'check', file: blob, want }, (_, x) => onProgress(x)),
+    async wifi(o, onProgress) {
+      await call({ op: 'wifi', ...o }, (_, x) => onProgress(x));
+      return file(madeFile(o.makes));
+    },
     async build(o, onProgress) {
       await call({ op: 'build', ...o }, (step, x) => onProgress(step as Parameters<typeof onProgress>[0], x));
       return { system: await file('system.sparse'), userdata: await file('userdata.sparse') };

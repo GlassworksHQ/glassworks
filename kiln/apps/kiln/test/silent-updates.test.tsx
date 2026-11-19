@@ -12,7 +12,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: ReactNode }) => <a href={href} {...p}>{children}</a> }));
 
-import { s1PlusUi } from '../src/frames/aqara-s1-plus';
+import { frame as s1PlusUi, demoFrame as s1Demo } from '../src/app/aqara-s1-plus/frame';
 import { flashDemo } from '../src/mirror/flashDemo';
 import { mirrorDemo } from '../src/mirror/demo';
 import { Flash, Screens } from '../src/mirror/MirrorWizard';
@@ -38,10 +38,10 @@ const until = async (what: string, f: () => boolean) => {
 
 describe('the S1', () => {
   const s1 = async (demo: 'done' | 'done-old-boot') => {
-    const s = demoSession(demo);
+    const s = demoSession(s1Demo, demo);
     sessions.push(s);
     render(<Wizard session={s} frame={s1PlusUi} base="/aqara-s1-plus" />);
-    await act(() => enterDemo(s, demo));
+    await act(() => enterDemo(s, s1Demo, demo));
   };
 
   it('Done: On when the boot image has the root update service', async () => {
@@ -58,7 +58,7 @@ describe('the S1', () => {
 
   /** A set-up session on the simulated panel reaches Done; `prop` is what the panel answers for the update service's prop. */
   const finish = async (prop: PanelShell['run']) => {
-    const s = demoSession('app');
+    const s = demoSession(s1Demo, 'app');
     sessions.push(s);
     await s.connectPanel();
     const panel = (s as unknown as { panel: PanelShell }).panel;
@@ -105,7 +105,7 @@ describe('the Mirror', () => {
   });
 
   it('a read that fails says Not confirmed, and undo shows no block', async () => {
-    const m = new FakeMirror({ picks: (c) => c.find((x) => x === GLASSWORKS.home) });
+    const m = new FakeMirror();
     const run = m.run.bind(m);
     let installed = false;
     m.run = async (cmd: string) => {

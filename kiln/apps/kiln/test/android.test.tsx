@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// /android (#403): off without ?apk=local, and every demo screen on the real generic recipe behind a
+// /android (#403): off without ?apk=local (or ?apk=release, test/android-release.test.tsx), and every demo screen on the real generic recipe behind a
 // simulated device, as the approved mockup draws them.
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { fakeApk } from '@glassworks/app-adb/fakes';
@@ -43,7 +43,7 @@ async function show(name: AndroidDemo, ready: string | RegExp) {
 describe('the switch', () => {
   it('is off without ?apk=local, and demos only where demos run', () => {
     expect(androidMode('', true, ANDROID_DEMOS)).toEqual({ on: false });
-    expect(androidMode('?apk=local', false, ANDROID_DEMOS)).toEqual({ on: true });
+    expect(androidMode('?apk=local', false, ANDROID_DEMOS)).toEqual({ on: true, apk: 'local' });
     expect(androidMode('?demo=done', true, ANDROID_DEMOS)).toEqual({ on: true, demo: 'done' });
     expect(androidMode('?demo=done', false, ANDROID_DEMOS)).toEqual({ on: false });
   });

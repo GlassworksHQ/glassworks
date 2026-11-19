@@ -1,0 +1,85 @@
+{
+  "$comment": "Kiln's install for this frame, as data. Format: docs/design/kiln/frames-as-data.md. A draft (#621): the contract (kiln/apps/kiln/test/contract) reads route, touch and each step's id, writes, reboots, downloads and taps; the engine reads the rest from phase 2. `words`: what Kiln's screens say for this frame (the shared wizard reads them, #621).",
+  "route": "/aqara-s1-plus",
+  "touch": true,
+  "flows": {
+    "install": {
+      "steps": [
+        { "id": "connect", "transport": "fel", "enter": { "how": "button", "reachable": false, "why": "Stock software has no adb: FEL is the only way in. The button is under the back cover (recovery.json)." }, "checks": ["chip"], "downloads": ["uboot-spl", "uboot"] },
+        { "id": "install", "transport": "fastboot", "enter": { "how": "loader" }, "checks": ["layout", "boot-read-twice"], "backup": true, "writes": true, "reboots": true, "downloads": ["magisk", "bootlogo", "bootanimation"] },
+        { "id": "first-boot", "transport": "adb", "enter": { "how": "boot", "key": "boot-image" } },
+        { "id": "app", "transport": "adb", "writes": true, "inputs": ["locale", "timezone", "clock", "keyboard"], "downloads": ["kiosk-apk", "keyboard-apk"] }
+      ],
+      "then": "set-up"
+    }
+  },
+  "wayBack": { "how": "restore-backup", "depths": ["factory", "keep"] },
+  "words": {
+    "name": "Aqara S1 Plus",
+    "short": "S1 Plus",
+    "app": "Glassworks",
+    "photoAlt": "The S1 Plus board with the back cover off. The recovery button is circled: right of the shield's notch, below the round sensor window.",
+    "asks": {
+      "fastboot": {
+        "title": "One click to continue.",
+        "body": "The panel restarted into the installer. Nothing has been written yet.",
+        "pick": "USB download gadget"
+      },
+      "adb": {
+        "title": "One last click.",
+        "body": "The panel is starting its new software. Leave its screen alone meanwhile.",
+        "pick": "QUAD-CORE R818 EVB2"
+      },
+      "connect": {
+        "title": "Connect to your panel.",
+        "body": "It should be running Glassworks and plugged in to this computer. Nothing is reflashed.",
+        "pick": "QUAD-CORE R818 EVB2"
+      }
+    },
+    "felPick": "USB Device (1f3a:efe8)",
+    "drivers": {
+      "win": "Windows needs a driver once: in Zadig, give USB Device (1f3a:efe8) the WinUSB driver.",
+      "linux": "Linux needs a udev rule once for 1f3a:efe8 and 1f3a:1010."
+    },
+    "help": {
+      "recovery": "https://github.com/GlassworksHQ/glassworks/blob/main/frames/aqara-s1-plus/docs/install.md#troubleshooting",
+      "undo": "https://github.com/GlassworksHQ/glassworks/blob/main/frames/aqara-s1-plus/docs/install.md#undo",
+      "undoCli": "frames/aqara-s1-plus/tools/install/fel-install.sh --undo ~/s1-backup",
+      "drivers": "https://github.com/GlassworksHQ/glassworks/blob/main/frames/aqara-s1-plus/docs/install.md#1--check-this-browser",
+      "learn": "https://github.com/GlassworksHQ/glassworks/blob/main/frames/aqara-s1-plus/docs/install.md"
+    },
+    "undo": {
+      "factory": {
+        "title": "As it came from Aqara",
+        "detail": "The original software, then a factory reset on the panel. Everything is removed.",
+        "restored": "One last step, on the panel: swipe down, tap Settings on the app's notification, then Advanced settings → Factory reset."
+      },
+      "keep": {
+        "title": "Keep its settings",
+        "detail": "Aqara's apps come back first, over USB with the panel running. Wi-Fi and the rest stay.",
+        "button": "Give back Aqara’s apps",
+        "giving": "Giving the panel back to Aqara's apps",
+        "back": "Aqara's apps are back.",
+        "stillOn": "Aqara's apps are back, but Glassworks is still on.",
+        "restored": "It is restarting with Aqara's software and apps. Your settings and Wi-Fi are as they were."
+      }
+    },
+    "silent": {
+      "on": {
+        "word": "On",
+        "tone": "y",
+        "line": "Updates from Home Assistant install with nobody at the panel. The root update service in its boot image installs them."
+      },
+      "missing": {
+        "word": "A tap each",
+        "tone": "n",
+        "line": "This panel's boot image has no root update service, so each update waits for a tap on the panel. Updates still come from Home Assistant. Install again with Kiln to add it."
+      },
+      "unknown": {
+        "word": "Not confirmed",
+        "tone": "n",
+        "line": "Kiln couldn't read the root update service back. Glassworks' Device page on the panel says which it is."
+      }
+    }
+  }
+}

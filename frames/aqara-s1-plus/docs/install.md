@@ -437,22 +437,48 @@ plan without changing anything.
 | | adb has root | adb has no root (a normal install) |
 |---|---|---|
 | App settings | Kept: copied out before the removal, then copied back to the new install | **Reset**: set the panel's options again (dashboard, screen and voice settings, for example). Home Assistant may ask to add the panel again, and Music Assistant shows it as a new player |
-| Home Assistant sign-in, encryption key and other sealed secrets | **Lost**: sign in again. Home Assistant may ask to confirm the panel's encryption key | **Reset**: sign in again |
+| Home Assistant sign-in and encryption key | **Kept**: read from the running app into Kiln's or the CLI's memory, then handed to the new app over USB. From a build without the hand-over: **lost**, sign in again, and Home Assistant may ask to confirm the panel's encryption key | **Reset**: sign in again |
+| Camera stream password, Music Assistant (Sendspin) pairing | **Lost**: set and pair them again | **Reset** |
 | Wi-Fi | Read from Android's Wi-Fi store into Kiln's or the CLI's memory, then sent to the new app over USB | Kiln: the Wi-Fi step asks for the password. CLI: asks in the terminal (Enter skips) |
 
-- **Why the sign-in goes even with root.** The app seals its secrets with a key in the Android
+- **Why the sealed secrets need carrying.** The app seals its secrets with a key in the Android
   Keystore: the Home Assistant sign-in, the ESPHome encryption key, the camera stream password and the
   Music Assistant (Sendspin) pairing. Android deletes an app's Keystore keys when it uninstalls the
-  app, so the copied data still holds those secrets, but nothing can open them. The new install has
-  no key at first: the old values read as not set, and stay in place. The first secret it stores
-  again, usually the Home Assistant sign-in, makes a new key. From then on each old value fails to
-  open and is removed when it is next read. What each one needs
-  ([docs/secrets.md](../../../docs/secrets.md#what-is-sealed) has the full list):
-  - the Home Assistant sign-in: the panel shows its QR code; sign in again;
-  - the encryption key: Home Assistant gives the panel a key again, and may ask you to confirm it;
+  app, so the copied data still holds those secrets, but nothing can open them (#584).
+- **How the sign-in and the key come across.** Before it stops the old app, the installer asks it for
+  its sign-in and key on its hand-over socket, `@glassworks_api_key`, which only adb can open (the one the
+  Mirror's reflash uses for its key, #574). They stay in Kiln's or the CLI's memory, never in a file, a
+  log or a command line: the installer prints a 4-hex fingerprint of each. The restore marks the hand-over
+  for the new app (`files/secrets-handover`, written by `glassworks-switch.sh restore handover`). The new app
+  starts with the copied data: it shows the sign-in QR code, and its ESPHome API stays locked, because a key
+  is stored that it can't read, so Home Assistant only gets "connection refused" and opens no
+  re-authentication. While the mark is there (up to 15 minutes), the copied secrets stay locked even after
+  the app makes its new Keystore key, which any first secret it stores does (seen on the S1 on 2026-11-19:
+  without the mark, the app dropped them as lost before the hand-over came, and its API started with no
+  key). Right after the installer starts it, it hands both back, then says `done`, which ends the wait. The app seals them with its new key over the
+  copied values, never over a value it can read, and only into the sign-in the copied data holds (its
+  Home Assistant address and client id). The dashboard opens, and Home Assistant reconnects within about
+  a minute: a key that comes before the API server starts is the one it starts with, and one that comes
+  after reaches the running server. A rollback to the old build does the same for the old build, with what was read from it: an old
+  build without the hand-over gave nothing, so after a rollback it is signed out too (its own Keystore key went with
+  the uninstall), and the installer says to sign in again.
+- **When.** The installer reads the two right before it stops the old app, after it drops its device admin, so a
+  sign-in finished while the installer runs is the one it carries. A socket that doesn't answer then (the app
+  restarting) is waited for, and counts as lost, never as "nothing to carry". The hand-back tries each for up to
+  90 seconds, also while the app's key store is down for a moment; a refusal for any other reason is final.
+- **What still goes** ([docs/secrets.md](../../../docs/secrets.md#what-is-sealed) has the full list).
+  The new install makes its key when the sign-in is handed over; from then on each old value it didn't
+  get fails to open and is removed when it is next read:
   - the camera stream password: nothing asks for it. Set a new one on the Camera page;
   - Music Assistant (Sendspin): the panel uses a stand-in identity until the new key exists, then
-    makes a new one, so pair it with Music Assistant again.
+    makes a new one, so pair it with Music Assistant again;
+  - from a build without the hand-over (before this change; one from #574 hands over the key alone),
+    the sign-in and key too: the panel shows its QR code, so sign in again; Home Assistant gives the
+    panel a key again, and may ask you to confirm it. The installer's plan says which, before you confirm.
+- **A development build has to be the panel's version or newer.** Android checks the version before the
+  signing key, so an older build is refused before any switch starts, with nothing changed, and the
+  installer says so. A plain `assembleDebug` is version 1: build it with
+  `./gradlew :kiosk:assembleDebug -Ps1Version=<the panel's version>`.
 - **Root** here means that adb's shell can run `su`. That is only the case with a development boot
   image (`DEV_SU_HOURS`) or a Magisk policy for the adb shell, see
   [frames/aqara-s1-plus/research/root.md](../research/root.md#persistent-root-magisk--the-s1-kiosk-root-helper). A normal
@@ -461,6 +487,15 @@ plan without changing anything.
   save, for example one set up in Aqara's settings, is not affected.
 - While the app is copied it is disabled, so it can't start as the home screen meanwhile. Disabling
   doesn't touch its Wi-Fi.
+- With root, the installer blocks incoming connections to port 6053, the app's ESPHome API, for the
+  whole switch: from before it changes anything until the new app has its data and key (after the
+  hand-over). Android starts each build it installs as the home screen at once, before the install
+  even returns, and with empty data that build serves an API with no key, which anyone on the network
+  could set (seen on the S1 on 2026-11-19, #626). The block is a firewall rule (`glassworks-switch.sh
+  guard`, IPv4 and IPv6) that isn't saved, so a restart clears it. The installer removes it on every
+  way out, with one exception: if the run is cut off (Ctrl-C, a lost connection) while the installed
+  build still has empty data, the port stays blocked and the installer says so. Home Assistant can't
+  use a build with no key anyway. Restart the panel to open the port.
 - If the new version won't install, the previous one is put back (with its data, given root). If
   its data won't go back in, the installer says so and keeps the copy on the panel in
   `/data/s1kiosk/switch` (root only).

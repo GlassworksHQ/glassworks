@@ -52,9 +52,12 @@ been checked on a device yet (#23). The S1 app also runs as this frame on any de
 (`Build.HARDWARE` other than `sun50iw10p1`). Either app names itself after the device and runs the panes the
 device's features allow.
 
-The app is the Glassworks core with a fixed set of panes: Assist (with its timers), Sendspin and the camera
-(#117). A pane the device has no hardware for (no microphone, no speaker, no camera) is hidden: it isn't in the
-settings, on the Manage page, in setup or in Home Assistant. The camera pane is off until someone turns it on, as
+The app is the Glassworks core with a fixed set of panes: Assist (with its timers), Sendspin, notifications, the
+Bluetooth proxy, the camera (#117) and diagnostics. A pane the device has no hardware for (no microphone, no speaker,
+no Bluetooth LE, no camera) is hidden: it isn't in the settings, on the Manage page, in setup or in Home Assistant.
+The Bluetooth proxy has no root helper here to read the adapter's address, so Home Assistant keys it on the panel's
+ESPHome MAC. On a screen without touch, a high or critical notification with neither a `timeout` nor a `tag` closes
+after 2 minutes, as a view does: nothing else could close it. The camera pane is off until someone turns it on, as
 in the S1 app; then it wakes the screen when someone walks up, on a device without a proximity sensor of its own.
 On a screen without touch (the lululemon Mirror) its setup step never waits: the use stays Presence only, and
 Kiln grants the camera. On a camera without 1280x720 (Android 6-7's) its stream runs at a size the camera lists, or
@@ -70,7 +73,7 @@ out (turn the lock off in Android's settings, or keep the screen on).
 |---|---|---|
 | applicationId | `sh.edm.s1kiosk` | `dev.glassworks.generic_android` |
 | Home Assistant's model | "Pixel Tablet (Glassworks)" | "Pixel Tablet (Glassworks)" |
-| Panes | All of the S1 app's panes the device can run | Assist, Timers, Sendspin, Camera |
+| Panes | All of the S1 app's panes the device can run | Assist, Timers, Sendspin, Notifications, Bluetooth proxy, Camera, Diagnostics |
 | Presence and light | None | Android's proximity and light sensors |
 
 Settings that the S1 app takes as intent extras (`--es url …`, `--es api_key …`, the panes' switches) reach
@@ -145,9 +148,13 @@ The Clarity badge shows its Clarity grade ([docs/perf.md](../../docs/perf.md)) o
 
 ## Install
 
-It installs as a normal app (an APK). There is no release yet, so Kiln installs it only as a test: open
-`kiln.glassworks.dev/android?apk=local` (or `/android?apk=local` on `npm run dev -w @glassworks/kiln-app`) in Chrome
-or Edge, pick a test build's APK, plug the tablet in with USB debugging still off, and follow the screens. Kiln names
+It installs as a normal app (an APK). Kiln installs it only as a test for now. Open
+`kiln.glassworks.dev/android?apk=release` (or `/android?apk=release` on `npm run dev -w @glassworks/kiln-app`) in Chrome
+or Edge: Kiln downloads the arm64-v8a APK of the newest `generic-android-v*` release and checks it against the
+release's `.sha256`. `?apk=local` takes a test build's APK from the computer instead. Then plug the tablet in with USB
+debugging still off, and follow the screens. Without either, the page says Kiln doesn't install on Android devices
+yet. It opens to everyone, with the release as the default, when this frame's `design/frame.json` has `status`
+`alpha` and `kiln` `/android`. Kiln names
 the tablet or asks for its brand, shows that brand's steps to turn on USB debugging, waits for Allow on the tablet,
 then installs. Undo is on the Done screen, and on the first screen for a later visit.
 
@@ -179,6 +186,10 @@ repo's GitHub releases (`ReleaseLine` in `core/.../update/Releases.kt`):
 | The S1 app | `aqara-s1-plus-v1.2.3` or `v1.2.3` | `s1-kiosk-1.2.3.apk`, `s1-kiosk-arm64-v8a-1.2.3.apk` |
 
 So no app ever offers itself another's APK.
+
+The Device page's *Update channel* row (and the Manage page's) picks Stable, the default, or Beta, which also takes
+the line's GitHub pre-releases (#605, [releasing.md](../../docs/releasing.md#betas)). Going back to Stable never
+offers a lower version: the app waits for a stable release higher than the one it runs.
 
 The check reads the repo's 100 newest releases (`Releases.LIST_URL`, `per_page=100`, GitHub's largest page),
 all apps and libraries together, and takes the newest of its own among them. So if more than 100 releases of
@@ -312,10 +323,10 @@ own run: uninstall one before installing a newer build (once; that wipes the app
 | Sendspin | Depends on the device | Needs a speaker. |
 | Zigbee and Thread radio | No | No supported radio. |
 | Time zone | No | Worked out: only on the S1 (`aqara-s1-plus`). |
-| Diagnostics | Alpha | Worked out: needs no special hardware. Both builds have it. No CPU temperature: no frame here names a thermal zone. Not yet checked on a device. |
-| Bluetooth proxy | Depends on the device | Worked out: needs Bluetooth LE. |
-| Notifications | Planned | Worked out: needs no special hardware. |
-| Camera | Depends on the device | Worked out: needs a camera. |
+| Diagnostics | Alpha | Needs no special hardware. Both builds have it, with no CPU temperature: no frame here names a thermal zone. |
+| Bluetooth proxy | Depends on the device | Needs Bluetooth LE. Both builds have it. |
+| Notifications | Alpha | Needs no special hardware. Both builds have it. |
+| Camera | Depends on the device | Needs a camera. Both builds have it. |
 | Wall base | No | S1 only. |
 
 "Worked out" means `frame.json` doesn't rate the pane; its support comes from what the pane needs and what the frame has ([how](../README.md#the-panes-a-frame-runs)).

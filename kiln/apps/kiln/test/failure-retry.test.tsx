@@ -8,7 +8,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: ReactNode }) => <a href={href} {...p}>{children}</a> }));
 
-import { s1PlusUi } from '../src/frames/aqara-s1-plus';
+import { frame as s1PlusUi, demoFrame as s1Demo } from '../src/app/aqara-s1-plus/frame';
 import { demoSession, enterDemo } from '../src/wizard/demo';
 import { Wizard } from '../src/wizard/Wizard';
 
@@ -23,9 +23,9 @@ afterEach(() => cleanup());
 
 describe('Try again after a failed write', () => {
   it('a device list closed on the retry asks for recovery mode, and keeps Undo', async () => {
-    const s = demoSession('error-written'); // its Connect is a picker closed with nothing picked
+    const s = demoSession(s1Demo, 'error-written'); // its Connect is a picker closed with nothing picked
     render(<Wizard session={s} frame={s1PlusUi} base="/aqara-s1-plus" />);
-    await act(() => enterDemo(s, 'error-written'));
+    await act(() => enterDemo(s, s1Demo, 'error-written'));
     expect(screen.getByRole('heading', { name: 'Something went wrong while writing.' })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));

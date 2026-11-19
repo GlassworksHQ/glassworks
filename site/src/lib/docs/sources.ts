@@ -90,6 +90,7 @@ function load(): Source[] {
     }
   }
   add({ file: "frames/README.md", url: "/docs/frames", section: "frames", label: "Writing a frame" });
+  add({ file: "docs/frame-agent.md", url: "/docs/frame-agent", section: "frames", label: "The frame agent" });
 
   add({ file: "docs/principles.md", url: "/docs/principles", section: "philosophy", label: "Principles" });
   add({ file: PANE_API, url: "/docs/what-makes-a-pane", section: "philosophy", cut: "What makes a pane", label: "What makes a pane" });
@@ -104,6 +105,7 @@ function load(): Source[] {
   }
   add({ file: "kiln/apps/kiln/README.md", url: "/docs/kiln", section: "build", label: "Kiln" });
   add({ file: "docs/design/kiln/README.md", url: "/docs/kiln/design", section: "build", label: "Kiln's design" });
+  add({ file: "docs/kiln-images.md", url: "/docs/kiln/images", section: "build", label: "Adding an image to Kiln" });
 
   const project: [string, string][] = [
     ["perf", "Clarity, the performance grade"],

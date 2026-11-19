@@ -141,7 +141,9 @@ export async function sendWifi(p: PanelShell, ssid: string, password: string, sl
     if (Date.now() > until) return false;
     await sleep(1500);
   }
-  const c = new ImprovSerialClient(await p.openStream(IMPROV_SOCKET), { deviceLabel: 'device' });
+  let stream: Awaited<ReturnType<NonNullable<PanelShell['openStream']>>>;
+  try { stream = await p.openStream(IMPROV_SOCKET); } catch { return false; } // the socket refused: not joined, as below
+  const c = new ImprovSerialClient(stream, { deviceLabel: 'device' });
   try {
     await c.requestState(5000);
     await c.provision(ssid, password);
@@ -153,7 +155,10 @@ export async function sendWifi(p: PanelShell, ssid: string, password: string, sl
   }
 }
 
-/** The app's ESPHome API key hand-over (core ApiKeyHandoverServer.SOCKET): adb only, never the LAN (#574). */
+/**
+ * The app's secret hand-over (core SecretHandoverServer.SOCKET): adb only, never the LAN. It carried the ESPHome API key
+ * over a reflash first (#574), and keeps that name; since #584 it carries the Home Assistant sign-in too.
+ */
 export const API_KEY_SOCKET = 'localabstract:glassworks_api_key';
 
 /** One request line, one reply line, over a fresh connection to the hand-over socket. */
@@ -162,7 +167,7 @@ async function keyRequest(p: PanelShell, line: string, timeoutMs = 10_000): Prom
   try {
     return await new Promise<string>((resolve, reject) => {
       let got = '';
-      const t = setTimeout(() => reject(new Error('the app didn\'t answer on its API key socket')), timeoutMs);
+      const t = setTimeout(() => reject(new Error('the app didn\'t answer on its hand-over socket')), timeoutMs);
       s.onData((b) => {
         got += new TextDecoder().decode(b);
         const i = got.indexOf('\n');
@@ -175,9 +180,49 @@ async function keyRequest(p: PanelShell, line: string, timeoutMs = 10_000): Prom
   }
 }
 
-/** Whether the app listens on its API key socket now (an app older than #574 never does). */
-async function keySocketUp(p: PanelShell): Promise<boolean> {
+/** Whether the app listens on its hand-over socket now (an app older than #574 never does). */
+export async function apiKeySocketUp(p: PanelShell): Promise<boolean> {
   return Number.parseInt((await p.run(`grep -c ' @glassworks_api_key$' /proc/net/unix`)).out.trim(), 10) > 0;
+}
+
+/** What the running app can hand over. */
+export interface Carries { apiKey: boolean; signIn: boolean }
+
+/**
+ * Asks the running app what it can hand over (`carries`, which answers with no secret). An app from #574, before
+ * #584, refuses the request but carries the API key; an older one has no socket and carries nothing.
+ */
+export async function handoverCarries(p: PanelShell, replyMs = 10_000): Promise<Carries> {
+  const none = { apiKey: false, signIn: false };
+  if (!p.openStream || !(await apiKeySocketUp(p))) return none;
+  try {
+    const r = await keyRequest(p, 'carries', replyMs);
+    if (r === 'refused unknown request') return { apiKey: true, signIn: false };
+    const words = r.startsWith('carries ') ? r.split(' ').slice(1) : [];
+    return { apiKey: words.includes('api_key'), signIn: words.includes('signin') };
+  } catch {
+    return none;
+  }
+}
+
+/**
+ * One secret from the running app, as base64 text: `request` asks, the reply is `<word> <base64>`. Undefined when
+ * there is nothing to carry; throws when the app holds one it can't read now. The reply's first word only goes into
+ * an error: never anything that could hold the secret.
+ */
+async function readSecret(p: PanelShell, request: string, word: string, pattern: RegExp, what: string, replyMs: number,
+  o: { socket?: 'required' } = {}): Promise<string | undefined> {
+  if (!p.openStream || !(await apiKeySocketUp(p))) {
+    // a caller that saw the socket listen: one gone now is an app that restarted or stopped, not an app with no secret
+    if (o.socket === 'required') throw new Error(`the app's hand-over socket closed before Kiln could read ${what === 'an API key' ? 'the key' : 'the sign-in'}`);
+    return undefined;
+  }
+  const r = await keyRequest(p, request, replyMs);
+  if (r === 'none') return undefined;
+  const m = new RegExp(`^${word} (${pattern.source})$`).exec(r);
+  if (m) return m[1];
+  throw new Error(r === 'unreadable' ? `the app has ${what} but can't read it right now (its key store is down)`
+    : `the app's hand-over socket gave an unexpected answer (${r.split(' ')[0] || 'empty'})`);
 }
 
 /**
@@ -186,32 +231,39 @@ async function keySocketUp(p: PanelShell): Promise<boolean> {
  * no key. Throws when the app has a key but it can't be read now (its key store is down, or the socket didn't answer):
  * a flash then would lose it. It is a secret: never put it in a log line, an error or a command line.
  */
-export async function readApiKey(p: PanelShell, replyMs = 10_000): Promise<string | undefined> {
-  if (!p.openStream || !(await keySocketUp(p))) return undefined;
-  const r = await keyRequest(p, 'get', replyMs);
-  if (r === 'none') return undefined;
-  const m = /^key ([A-Za-z0-9+/]{43}=)$/.exec(r);
-  if (m) return m[1];
-  // the reply's first word only: never anything that could hold key material
-  throw new Error(r === 'unreadable' ? 'the app has an API key but can\'t read it right now (its key store is down)'
-    : `the app's API key socket gave an unexpected answer (${r.split(' ')[0] || 'empty'})`);
+export async function readApiKey(p: PanelShell, replyMs = 10_000, o: { socket?: 'required' } = {}): Promise<string | undefined> {
+  return readSecret(p, 'get', 'key', /[A-Za-z0-9+/]{43}=/, 'an API key', replyMs, o);
 }
 
 /**
- * Hands `key` (from readApiKey) to the freshly flashed app, once its socket listens (it starts with the app). True
- * when the app took it. A connection that fails or doesn't answer is tried again until `waitMs` has passed: the app
- * may have stored the key before its reply was lost, and then a retry gets `ok` for the same key. False when it never
- * took it, so the first boot goes on. The key goes only into the socket, never a command line or a log.
+ * The Home Assistant sign-in (its refresh token, as base64 text), read from the running app before a signing-key
+ * switch uninstalls it (#584). Only from an app whose `carries` lists `signin`: an older one answers `get-signin` with
+ * a refusal, which throws here. Undefined when the app isn't signed in; throws when it can't read its sign-in now. It
+ * is a secret: never put it in a log line, an error or a command line.
  */
-export async function handOverApiKey(p: PanelShell, key: string, sleep: (ms: number) => Promise<void>, waitMs = 90_000, replyMs = 10_000): Promise<boolean> {
+export async function readSignIn(p: PanelShell, replyMs = 10_000): Promise<string | undefined> {
+  return readSecret(p, 'get-signin', 'signin', /[A-Za-z0-9+/]+={0,2}/, 'a sign-in', replyMs);
+}
+
+/**
+ * Refusals that may clear within the hand-back's wait: the key store was down, or the write failed. The others (a
+ * different value is set, no sign-in to carry it into, not a key) are final.
+ */
+const PASSING = /^refused (the key store isn't available right now|the .+ can't be stored right now)$/;
+
+/**
+ * Sends `line` until the app answers `ok` (true), refuses for good (false), or `waitMs` has passed (false). A
+ * refusal that may pass is tried again until then. Never throws.
+ */
+async function handOver(p: PanelShell, line: string, sleep: (ms: number) => Promise<void>, waitMs: number, replyMs: number): Promise<boolean> {
   if (!p.openStream) return false;
   const until = Date.now() + waitMs;
   for (;;) {
     try {
-      if (await keySocketUp(p)) {
-        const r = await keyRequest(p, `set ${key}`, replyMs);
+      if (await apiKeySocketUp(p)) {
+        const r = await keyRequest(p, line, replyMs);
         if (r === 'ok') return true;
-        if (r.startsWith('refused ')) return false; // a different key, or one it can't store: trying again won't help
+        if (r.startsWith('refused ') && !PASSING.test(r)) return false; // a different value, or no sign-in: final
       }
     } catch { /* the socket failed or didn't answer: try again */ }
     if (Date.now() > until) return false;
@@ -219,8 +271,42 @@ export async function handOverApiKey(p: PanelShell, key: string, sleep: (ms: num
   }
 }
 
-/** A key's fingerprint as the app logs it (NoiseKeys.fingerprint): the first 2 bytes of its SHA-256, in hex. Reveals nothing. */
-export async function apiKeyFingerprint(key: string): Promise<string> {
-  const raw = Uint8Array.from(atob(key), (c) => c.charCodeAt(0));
+/**
+ * Hands `key` (from readApiKey) to the freshly flashed or switched app, once its socket listens (it starts with the
+ * app). True when the app took it. A connection that fails or doesn't answer is tried again until `waitMs` has passed:
+ * the app may have stored the key before its reply was lost, and then a retry gets `ok` for the same key. False when
+ * it never took it. The key goes only into the socket, never a command line or a log.
+ */
+export async function handOverApiKey(p: PanelShell, key: string, sleep: (ms: number) => Promise<void>, waitMs = 90_000, replyMs = 10_000): Promise<boolean> {
+  return handOver(p, `set ${key}`, sleep, waitMs, replyMs);
+}
+
+/**
+ * Hands the sign-in (from readSignIn) to the switched app, as handOverApiKey does the key. The app takes it only into
+ * the sign-in its copied data holds, and shows the dashboard. The token goes only into the socket.
+ */
+export async function handOverSignIn(p: PanelShell, signIn: string, sleep: (ms: number) => Promise<void>, waitMs = 90_000, replyMs = 10_000): Promise<boolean> {
+  return handOver(p, `set-signin ${signIn}`, sleep, waitMs, replyMs);
+}
+
+/**
+ * Tells the app the installer has handed over all it will (#608): it stops keeping the secrets its old Keystore key
+ * sealed locked for the hand-over, and drops the ones nobody handed over. One try, never throws: without it the wait
+ * ends by itself after 15 minutes. False when the app didn't say ok (an app from before this, or no answer).
+ */
+export async function handOverDone(p: PanelShell, replyMs = 10_000): Promise<boolean> {
+  try {
+    return !!p.openStream && (await apiKeySocketUp(p)) && (await keyRequest(p, 'done', replyMs)) === 'ok';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A secret's fingerprint as the app logs it (NoiseKeys.fingerprint): the first 2 bytes of the SHA-256 of its bytes
+ * (`b64` decoded), in hex. Reveals nothing. For the API key and the sign-in alike.
+ */
+export async function apiKeyFingerprint(b64: string): Promise<string> {
+  const raw = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
   return [...new Uint8Array(await crypto.subtle.digest('SHA-256', raw)).slice(0, 2)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }

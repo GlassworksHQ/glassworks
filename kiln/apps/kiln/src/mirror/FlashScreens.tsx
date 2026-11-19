@@ -1,33 +1,40 @@
 'use client';
-// The Mirror's install over fastboot (FlashSession): the system image in two clicks, fastboot, the
-// stock warning, building and flashing, the first start, Done, and the way back. Same design as the
-// rest of Kiln (docs/design/kiln): one idea per screen, one ember button, the log one click away.
-import { GLASS_PANES, GLASS_PANES_USERDATA, credits } from '@glassworks/lululemon-mirror-installer';
+// The Mirror's install over fastboot (FlashSession): what goes on it (Glassworks or a community
+// image, choice/), the download, fastboot, the warning, building and flashing, the first start, and
+// Done with the way back. Same design as the rest of Kiln (docs/design/kiln): one idea per screen, one
+// ember button, the log one click away.
+import { credits } from '@glassworks/lululemon-mirror-installer';
 import { fmtSize } from '@glassworks/kiln-core';
 import * as Collapsible from '@radix-ui/react-collapsible';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { BuiltOn, Credit, stepCredits } from '../components/Credit';
 import { FRAMES } from '../frames/catalog';
 import { Recovery } from '../recovery/Recovery';
 import type { RecoveryData } from '../recovery/player';
 import recovery from '../../../../../frames/lululemon-mirror/design/recovery.json';
 import type { RailMark, RailStep } from '../wizard/state';
-import type { FileCheck, FlashSession, FlashState, WorkStep } from './flash';
+import type { FlashSession, FlashState, WorkStep } from './flash';
+import { Choose, ConfirmCommunity, DoneCommunity, Download, DownloadButton, FileRow, WayBack, Whose, possessive } from './choice/ChoiceScreens';
+import { ReleaseApk, TestOnly } from './ReleaseApk';
 import type { MirrorSession, MirrorState } from './session';
 import { SilentUpdates, mirrorSilent } from '../components/SilentUpdates';
+import { FlashKeep, KeyOutcome, keyHeld } from './KeepScreens';
 
 type P = { f: FlashSession; s: FlashState; m: MirrorSession; ms: MirrorState };
 
+/** Arriving by an image's link skips the choice, so its rail has no Choose step. */
 export function flashRail(s: FlashState): RailStep[] {
-  const names = ['Mirror', 'Image', 'Fastboot', 'Install', 'Done'];
-  const at = { image: 1, back: 1, fastboot: 2, confirm: 2, working: 3, adb: 3, error: 3, done: 5 }[s.screen];
+  const names = ['Mirror', 'Choose', 'Download', 'Fastboot', 'Install', 'Done'];
+  const at = { choose: 1, image: 2, download: 2, keep: 3, fastboot: 3, confirm: 3, working: 4, adb: 4, error: 4, done: 6 }[s.screen];
   return names.map((name, i): RailStep => {
     const mark: RailMark = i < at ? 'done' : i > at ? 'todo' : s.screen === 'error' ? 'bad' : s.screen === 'adb' ? 'turn' : 'now';
     return { name, mark };
-  });
+  }).filter((x) => !s.link || x.name !== 'Choose');
 }
 
-export function flashLevel(s: FlashState): number {
+/** The stack's layers are Glassworks' layers: it stays empty while a community image installs. */
+export function flashLevel(s: FlashState, community = false): number {
+  if (community) return 0;
   if (s.screen === 'done') return 4;
   if (s.screen === 'adb') return 3;
   if (s.screen === 'working') return s.work?.step.startsWith('flash') || s.work?.step === 'restart' ? 2 : 1;
@@ -61,136 +68,43 @@ function Log({ s }: { s: FlashState }) {
   );
 }
 
-/** Chrome and Edge open the picker in Downloads; elsewhere the plain file input. */
-async function openInDownloads(fallback: () => void): Promise<File | undefined> {
-  const w = window as unknown as { showOpenFilePicker?: (o: object) => Promise<{ getFile(): Promise<File> }[]> };
-  if (!w.showOpenFilePicker) { fallback(); return undefined; }
-  try {
-    const [h] = await w.showOpenFilePicker({ startIn: 'downloads', types: [{ description: 'Android image', accept: { 'application/octet-stream': ['.img', '.sparse'] } }] });
-    return h ? await h.getFile() : undefined;
-  } catch (e) {
-    if ((e as DOMException).name !== 'AbortError') fallback();
-    return undefined;
-  }
-}
-
-function FileStep({ n, title, check, select, want, children }: {
-  n: number; title: string; check?: FileCheck; select: (f: File) => void; want: { name: string; size: number }; children?: React.ReactNode;
-}) {
-  const input = useRef<HTMLInputElement>(null);
-  const pick = () => void openInDownloads(() => input.current?.click()).then((f) => f && select(f));
-  return (
-    <div className="well">
-      <div className="grow">
-        <span className="small">{n} · {title}</span>
-        {children}
-        <CheckLine check={check} />
-      </div>
-      <input ref={input} type="file" accept=".img,.sparse" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) select(f); e.target.value = ''; }} />
-      <button type="button" className="btn ghost" disabled={check?.state === 'checking' || check?.state === 'downloading'} onClick={pick}>Select the downloaded {want.name}</button>
-    </div>
-  );
-}
-
-function Download({ n, want }: { n: number; want: { name: string; url: string; size: number } }) {
-  return (
-    <div className="well">
-      <div className="grow">
-        <span className="small">{n} · Download {want.name}</span>
-        <span><code>{want.name}</code>, about {Math.round(want.size / 1e6)} MB, from the Glass Panes release on GitHub. Your browser saves it to Downloads.</span>
-      </div>
-      <a className="btn ghost" href={want.url} download={want.name} rel="noopener">Download {want.name}</a>
-    </div>
-  );
-}
-
-/** Progress, the result, or the error of a file being downloaded or checked. */
-function CheckLine({ check }: { check?: FileCheck }) {
-  if (!check) return null;
-  if (check.state === 'downloading' || check.state === 'checking') {
-    const what = check.state === 'downloading' ? `Downloading and checking ${check.name}` : `Checking ${check.name}`;
-    return (
-      <div style={{ display: 'grid', gap: 6 }} role="status">
-        <span className="small">{what} · {Math.floor(check.progress * 100)}%</span>
-        <div className="bar" role="progressbar" aria-label={what} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.floor(check.progress * 100)}><i style={{ width: `${Math.max(2, check.progress * 100)}%` }} /></div>
-      </div>
-    );
-  }
-  if (check.state === 'ok') return <span className="status ok">✓ {check.name} checks out ({fmtSize(check.size)}, SHA-256 as published).</span>;
-  return <span className="status err" role="alert">{check.error}</span>;
-}
-
+/** Glassworks: its image, downloaded and checked, and what Kiln builds into it. */
 export function FlashImage({ f, s, m, ms }: P) {
   const blocked = f.blocked();
-  const want = GLASS_PANES.system;
-  const busy = s.image?.state === 'downloading' || s.image?.state === 'checking';
-  const ready = s.image?.state === 'ok';
+  const ready = s.files.every((x) => x.state === 'ok');
   return (
     <section className="card" aria-labelledby="h">
-      <div className="row"><span className="pill soon">Test only</span></div>
+      <TestOnly />
       <h2 id="h">Install Glassworks on the Mirror.</h2>
-      <p className="lede">Kiln adds Glassworks to the Mirror&apos;s community Android image in this browser, then writes it over USB.</p>
-      <div className="well">
-        <div className="grow">
-          <span className="small">1 · The system image</span>
-          <span><code>{want.name}</code>, about {Math.round(want.size / 1e6)} MB, from the Glass Panes release. Kiln downloads it into this browser and checks it as it arrives.</span>
-          <CheckLine check={s.image} />
-        </div>
-      </div>
+      <p className="lede">Kiln adds Glassworks to the Mirror&apos;s community Android image in this browser, then writes it over USB. It downloads the image from the Glass Panes release and checks it as it arrives.</p>
+      {s.files.map((x) => <FileRow key={x.name} f={f} file={x} />)}
       <ImageCredit />
-      {s.proxyFailed && !ready && (
-        <>
-          <p className="status err" role="alert">Kiln couldn&apos;t download it directly: {s.proxyFailed}. Download it yourself, then select it.</p>
-          <Download n={2} want={want} />
-          <FileStep n={3} title="Select the downloaded image" check={s.image?.state === 'downloading' ? undefined : s.image} select={(file) => void f.selectImage(file)} want={want} />
-        </>
-      )}
+      {ms.release && <ReleaseApk m={m} ms={ms} />}
       <div className="fields">
-        <label className="field"><span>Glassworks APK (legacy build, test only)</span>
-          <input className="input" type="file" accept=".apk,application/vnd.android.package-archive"
-            onChange={(e) => { const x = e.target.files?.[0]; if (x) void m.pickApk(x.name, x.arrayBuffer().then((b) => new Uint8Array(b))); }} />
-        </label>
+        {!ms.release && (
+          <label className="field"><span>Glassworks APK (legacy build, test only)</span>
+            <input className="input" type="file" accept=".apk,application/vnd.android.package-archive"
+              onChange={(e) => { const x = e.target.files?.[0]; if (x) void m.pickApk(x.name, x.arrayBuffer().then((b) => new Uint8Array(b))); }} />
+          </label>
+        )}
         <label className="field"><span>Home Assistant (optional)</span>
           <input className="input" type="url" placeholder="http://homeassistant.local:8123" value={s.haUrl} onChange={(e) => f.setHaUrl(e.target.value.trim())} />
         </label>
         <label className="field"><span>Wi-Fi network (optional)</span>
           <input className="input" autoComplete="off" value={s.wifi.ssid} onChange={(e) => f.setWifi({ ssid: e.target.value })} />
         </label>
-        <label className="field"><span>Wi-Fi password</span>
+        <label className="field"><span>Wi-Fi password (if it has one)</span>
           <input className="input" type="password" autoComplete="off" value={s.wifi.password} onChange={(e) => f.setWifi({ password: e.target.value })} />
         </label>
       </div>
-      {ms.apk && <p className={`small${ms.apk.error ? ' status err' : ''}`}>{ms.apk.name}: {ms.apk.error ?? `${ms.apk.package}, ${fmtSize(ms.apk.size)}`}</p>}
+      {ms.apk && (!ms.release || ms.apk.error) && <p className={`small${ms.apk.error ? ' status err' : ''}`}>{ms.apk.name}: {ms.apk.error ?? `${ms.apk.package}, ${fmtSize(ms.apk.size)}`}</p>}
       {blocked && ready && <p className="status err" role="alert">{blocked}</p>}
       <div className="foot">
-        <span className="links">
-          <button type="button" className="link" onClick={() => f.wayBack(true)}>Way back: the Glass Panes image</button>
-        </span>
-        {ready || s.proxyFailed
-          ? <button type="button" className="btn ember" disabled={!!blocked} onClick={() => f.toFastboot()}>Continue</button>
-          : <button type="button" className="btn ember" disabled={busy} onClick={() => void f.downloadImage()}>Download the system image</button>}
+        <span className="links"><button type="button" className="link" onClick={() => f.backToChoice()}>Back</button></span>
+        <DownloadButton f={f} s={s} label="Download the system image" />
       </div>
-    </section>
-  );
-}
-
-export function FlashBack({ f, s }: P) {
-  const blocked = f.blocked();
-  return (
-    <section className="card" aria-labelledby="h">
-      <div className="row"><span className="pill soon">Test only</span></div>
-      <h2 id="h">Put the Glass Panes image back.</h2>
-      <p className="lede">The way back from Glassworks: the community image as its release has it, with a fresh start. It doesn&apos;t bring lululemon&apos;s software back.</p>
-      <Download n={1} want={GLASS_PANES.system} />
-      <FileStep n={2} title="Select the downloaded system.img" check={s.image} select={(file) => void f.selectImage(file)} want={GLASS_PANES.system} />
-      <FileStep n={3} title="Download and select userdata.sparse" check={s.userdataFile} select={(file) => void f.selectUserdata(file)} want={GLASS_PANES_USERDATA}>
-        <a className="link" href={GLASS_PANES_USERDATA.url} download={GLASS_PANES_USERDATA.name}>Download {GLASS_PANES_USERDATA.name}</a>
-      </FileStep>
-      <ImageCredit />
-      <div className="foot">
-        <span className="links"><button type="button" className="link" onClick={() => f.wayBack(false)}>Back to installing Glassworks</button></span>
-        <button type="button" className="btn ember" disabled={!!blocked} onClick={() => f.toFastboot()}>Continue</button>
-      </div>
+      {/* the flashed Mirror is fine and keeps this browser's key: only the first start over adb is left (Mirror run, 2026-11-19) */}
+      <p className="small">Flashed this Mirror already, and its first start didn&apos;t finish? <button type="button" className="link" disabled={!!f.inputsBlocked()} onClick={() => f.finishFirstStart()}>Finish its first start</button>, with Home Assistant and the Wi-Fi above.</p>
     </section>
   );
 }
@@ -199,7 +113,12 @@ export function FlashFastboot({ f, s }: P) {
   const r = s.fastboot;
   return (
     <section className="card" aria-labelledby="h">
+      {f.recipe.community && <Whose r={f.recipe} />}
       <h2 id="h">Put the Mirror in fastboot.</h2>
+      <p className="lede">{s.restarted
+        ? 'The Mirror is in fastboot, or restarting into it: its glass goes dark. Click Connect and pick it (Android) in the browser’s list. Kiln only reads it here.'
+        : 'A Mirror that runs Glassworks restarts into fastboot over USB, with no button to hold: plug it into this computer, click Restart into fastboot and pick it (Android) in the browser’s list.'}</p>
+      <ByHand>
       <Recovery data={RECOVERY} />
       <ol className="join">
         <li>Switch the Mirror off with the rocker switch in its bottom edge, unplug its power cord, and lay it face down. Take out the 4 screws in the bottom edge that hold the stand, and take the stand off. Then take out the 14 screws in the back, 2 of them either side of the recess by the feet, and lift the back off.</li>
@@ -210,6 +129,7 @@ export function FlashFastboot({ f, s }: P) {
       </ol>
       <p className="small">Hold only VOL&minus;. Both buttons together start a Qualcomm mode Kiln can&apos;t use, and VOL+ opens an update screen. Some Mirrors have a service hatch in the back that reaches the board: open that instead.</p>
       <p className="small">Then click Connect and pick the Mirror (<code>Android</code>) in the browser&apos;s list. Kiln only reads it here.</p>
+      </ByHand>
       {r && !r.ok && (
         <ol className="join">
           {r.checks.map((c) => <li key={c.what} className={c.ok ? 'done' : 'fail'}>{c.what}: {c.found}{!c.ok && <span className="sub-step">Needs {c.need}. Kiln stops here; nothing was written.</span>}</li>)}
@@ -219,17 +139,34 @@ export function FlashFastboot({ f, s }: P) {
       {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
       <div className="foot">
         <span className="links"><button type="button" className="link" onClick={() => f.retry()}>Back</button></span>
-        <button type="button" className="btn ember" disabled={s.connecting} onClick={() => void f.connectFastboot()}>Connect</button>
+        <span className="links">
+          {/* Glassworks goes through the keep step, which reads Home Assistant's key and then restarts the Mirror (PR 603) */}
+          {!s.restarted && <button type="button" className="btn ember" disabled={s.connecting} onClick={() => (f.recipe.community ? void f.restartToFastboot() : f.toKeep())}>Restart into fastboot</button>}
+          <button type="button" className={`btn ${s.restarted ? 'ember' : 'ghost'}`} disabled={s.connecting} onClick={() => void f.connectFastboot()}>Connect</button>
+        </span>
       </div>
     </section>
   );
 }
 
-export function FlashConfirm({ f, s }: P) {
+/** The way into fastboot that needs the case opened: only for a Mirror Kiln can't reach over adb (lululemon's software). */
+function ByHand({ children }: { children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Collapsible.Root open={open} onOpenChange={setOpen} className="tech">
+      <Collapsible.Trigger className="link">{open ? 'Hide the steps by hand' : 'Mirror still on lululemon’s software? Fastboot by hand'}</Collapsible.Trigger>
+      <Collapsible.Content>{children}</Collapsible.Content>
+    </Collapsible.Root>
+  );
+}
+
+export function FlashConfirm(p: P) {
+  const { f, s } = p;
+  if (f.recipe.community) return <ConfirmCommunity f={f} s={s} reversible={REVERSIBLE} />;
   const r = s.fastboot!;
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h">{s.back ? 'Write the Glass Panes image?' : 'This replaces lululemon’s software for good.'}</h2>
+      <h2 id="h">This replaces lululemon’s software for good.</h2>
       <ol className="join">
         {r.checks.map((c) => <li key={c.what} className="done">{c.what}: {c.found}</li>)}
       </ol>
@@ -237,35 +174,45 @@ export function FlashConfirm({ f, s }: P) {
         Kiln can&apos;t back up the Mirror first: its bootloader can&apos;t read anything back. So lululemon&apos;s software can&apos;t be
         restored, by Kiln or anyone. The way back from here is the plain Glass Panes image. Everything on the Mirror is replaced.
       </p>
-      {REVERSIBLE && !s.back && <p className="small">{REVERSIBLE}.</p>}
+      {REVERSIBLE && <p className="small">{REVERSIBLE}.</p>}
       <label className="check"><input type="checkbox" checked={s.understood} onChange={(e) => f.understand(e.target.checked)} /> I understand lululemon&apos;s software can&apos;t be restored.</label>
       <div className="foot">
         <span className="links"><button type="button" className="link" onClick={() => f.retry()}>Back</button></span>
-        <button type="button" className="btn ember" disabled={!s.understood} onClick={() => void f.flash()}>{s.back ? 'Write it' : 'Install Glassworks'}</button>
+        <button type="button" className="btn ember" disabled={!s.understood} onClick={() => void f.flash()}>Install Glassworks</button>
       </div>
     </section>
   );
 }
 
-const ROWS: { id: WorkStep; text: string; back?: boolean }[] = [
-  { id: 'patch', text: 'Add Glassworks and the boot animation to the image' },
-  { id: 'system', text: 'Write the system image as fastboot sends it' },
-  { id: 'userdata', text: 'Make a fresh userdata with this browser’s key' },
-  { id: 'flash-system', text: 'Flash system', back: true },
-  { id: 'flash-userdata', text: 'Flash userdata', back: true },
-  { id: 'restart', text: 'Restart the Mirror', back: true },
-  { id: 'first-boot', text: 'First start: Home Assistant, Wi-Fi, home screen' },
-];
+/** The install screen's rows for each planned step from the warning on (FlashSession.writes()). */
+const ROWS: Record<string, { id: WorkStep; text: string }[]> = {
+  patch: [
+    { id: 'patch', text: 'Add Glassworks and the boot animation to the image' },
+    { id: 'system', text: 'Write the system image as fastboot sends it' },
+    { id: 'userdata', text: 'Make a fresh userdata with this browser’s key' },
+  ],
+  'flash-system': [{ id: 'flash-system', text: 'Flash system' }],
+  'flash-userdata': [{ id: 'flash-userdata', text: 'Flash userdata' }],
+  restart: [{ id: 'restart', text: 'Restart the Mirror' }],
+  'first-start': [{ id: 'first-boot', text: 'First start: Home Assistant, Wi-Fi, home screen' }],
+  wifi: [{ id: 'wifi', text: 'Save your Wi-Fi network in its userdata' }],
+  'wifi-on': [{ id: 'wifi-on', text: 'After its first start: switch Wi-Fi on' }],
+};
+/** Issue 580: the hand-back row joins Glassworks' first start, when the tab holds Home Assistant's key. */
+const HAND_BACK = { id: 'hand-back' as WorkStep, text: 'Give Glassworks Home Assistant’s key back' };
 
-export function FlashWorking({ s }: P) {
-  const rows = ROWS.filter((r) => !s.back || r.back);
+export function FlashWorking({ f, s }: P) {
+  const rows = f.writes().flatMap((x) => [...(ROWS[x.do === 'flash' ? `flash-${x.partition}` : x.do] ?? []), ...(x.do === 'first-start' && keyHeld(s.key) ? [HAND_BACK] : [])]);
   const at = Math.max(0, rows.findIndex((r) => r.id === s.work?.step));
   const x = s.work?.x ?? 0;
   return (
     <section className="card" aria-labelledby="h">
+      {f.recipe.community && <Whose r={f.recipe} />}
       <h2 id="h" className="huge">Keep it plugged in.</h2>
       <ol className="join">
-        {rows.map((r, i) => <li key={r.id} className={i < at ? 'done' : i === at ? 'cur' : ''}>{r.text}{i === at && x > 0 && x < 1 && <span className="sub-step">{Math.floor(x * 100)}%</span>}</li>)}
+        {rows.map((r, i) => <li key={r.id} className={i < at ? 'done' : i === at ? 'cur' : ''}>{r.text}{i === at && x > 0 && x < 1 && <span className="sub-step">{Math.floor(x * 100)}%</span>}
+          {/* the image is small to send; the Mirror then writes an empty filesystem's 212 MiB, with nothing to report (Mirror run, 2026-11-19) */}
+          {i === at && r.id === 'flash-userdata' && <span className="sub-step">This part takes a minute or two, and the bar hardly moves.</span>}</li>)}
       </ol>
       <div className="bar" role="progressbar" aria-label={rows[at]?.text} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.floor(((at + x) / rows.length) * 100)}>
         <i style={{ width: `${Math.max(2, ((at + x) / rows.length) * 100)}%` }} />
@@ -276,12 +223,17 @@ export function FlashWorking({ s }: P) {
 }
 
 export function FlashAdb({ f, s }: P) {
+  const r = f.recipe;
   return (
     <section className="card" aria-labelledby="h">
+      {r.community && <Whose r={r} />}
       <span className="turn-label"><span className="pulse" />Your turn</span>
       <h2 id="h">One last click.</h2>
-      <p className="lede">The Mirror is starting Glassworks. Its first start takes a few minutes. Click Connect and pick the Mirror in the browser&apos;s list: it knows this browser&apos;s key, so it doesn&apos;t ask on its screen.</p>
-      {s.connecting && <p className="status work" role="status">Pick the Mirror in the browser&apos;s list…</p>}
+      {r.community
+        ? <p className="lede">The Mirror is starting {r.name}. Its first start takes a few minutes. Click Connect and pick the Mirror in the browser&apos;s list. Kiln connects with {possessive(r.name)} own published key, which the image trusts, so nothing asks on its screen. It switches Wi-Fi on, and that&apos;s all it does.</p>
+        : <p className="lede">The Mirror is starting Glassworks for the first time. Its glass stays dark for a few minutes while it does: that&apos;s expected, so leave it plugged in. Click Connect and pick the Mirror in the browser&apos;s list now: Kiln waits until it&apos;s ready, and it knows this browser&apos;s key, so it doesn&apos;t ask on its screen.{keyHeld(s.key) && ' Then Kiln gives Glassworks Home Assistant’s key back.'}</p>}
+      {s.connecting && !s.adbWaiting && <p className="status work" role="status">Pick the Mirror in the browser&apos;s list…</p>}
+      {s.adbWaiting && <p className="status work" role="status">The Mirror is still starting. Kiln asks again every few seconds…</p>}
       {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
       <div className="foot">
         <Log s={s} />
@@ -292,13 +244,15 @@ export function FlashAdb({ f, s }: P) {
 }
 
 export function FlashDone({ f, s }: P) {
+  if (f.recipe.community) return <DoneCommunity f={f} log={<Log s={s} />} />;
   const fb = s.firstBoot;
-  const noHome = !s.back && fb?.home.result === 'none';
-  const stranded = !s.back && fb && fb.home.result !== 'set' && !noHome;
+  const noHome = fb?.home.result === 'none';
+  const stranded = fb && fb.home.result !== 'set' && !noHome;
+  const other = f.recipes.find((r) => r.community);
   return (
     <section className="card" aria-labelledby="h">
       <span className="okmark" aria-hidden="true">✓</span>
-      <h2 id="h">{s.back ? 'The Glass Panes image is back on the Mirror.' : 'Glassworks is on the Mirror.'}</h2>
+      <h2 id="h">Glassworks is on the Mirror.</h2>
       {stranded && (
         <div className="well" role="alert">
           <div className="grow">
@@ -322,17 +276,17 @@ export function FlashDone({ f, s }: P) {
           </div>
         </div>
       )}
-      {!s.back && fb && (
+      {fb && (
         <p className="lede">
           Glassworks {fb.app.name ?? fb.app.code} {stranded || noHome ? 'is installed' : 'is its home screen'}{fb.hidden.length ? ` (${fb.hidden.join(', ')} hidden)` : ''}.
           {fb.wifi === false && ' It didn’t confirm the Wi-Fi; the network saved in the image still applies.'}
         </p>
       )}
-      {s.back && <p className="lede">It starts like a new Glass Panes Mirror: set it up as its install guide says.</p>}
-      {!s.back && fb && <SilentUpdates words={mirrorSilent(fb.updates)} />}
+      {fb && <SilentUpdates words={mirrorSilent(fb.updates)} />}
+      {fb && <KeyOutcome k={s.key} />}
+      {other && <WayBack f={f} other={other} />}
       <BuiltOn credits={glassPanes()} />
       {REVERSIBLE && <p className="small">{REVERSIBLE}.</p>}
-      <p className="small">The way back is the Glass Panes image: open this page with the Mirror in fastboot and choose Way back.</p>
       <div className="foot"><Log s={s} /></div>
     </section>
   );
@@ -341,17 +295,26 @@ export function FlashDone({ f, s }: P) {
 export function FlashError({ f, s }: P) {
   return (
     <section className="card err" aria-labelledby="h">
+      {f.recipe.community && <Whose r={f.recipe} />}
       <h2 id="h">The install stopped.</h2>
       <pre className="raw">{s.error}</pre>
-      <p className="small">If it stopped while flashing, the Mirror may not start: put it in fastboot again and install again, or write the Glass Panes image (Way back).</p>
-      {s.flashFailed && !s.back && !s.noFill && (
+      {s.work && !['first-boot', 'hand-back', 'restart', 'wifi-on'].includes(s.work.step) && <p className="small">The Mirror is still in fastboot: leave it on and plugged in. {s.files.every((x) => x.state === 'ok') ? 'Connect fastboot again' : 'Download the files again, then connect fastboot'} and install again{f.recipe.community ? '' : ', or install the Glass Panes image from this page'}: no button to hold.</p>}
+      {s.flashFailed && !f.recipe.community && !s.noFill && (
         <p className="small">If the bootloader refused a FILL chunk (a sparse image&apos;s run of zeros), try again without FILL: Kiln builds the zeros as plain blocks, about 200 MB more to send.</p>
       )}
       <div className="foot">
         <Log s={s} />
         <span className="links">
-          {s.flashFailed && !s.back && !s.noFill && <button type="button" className="btn ghost" onClick={() => f.retryWithoutFill()}>Try again without FILL</button>}
-          <button type="button" className="btn ghost" onClick={() => f.retry()}>Back to the files</button>
+          {/* the first start, or its key hand-back (PR 603): the Mirror runs Android, so adb again, never fastboot */}
+          {(s.work?.step === 'first-boot' || s.work?.step === 'hand-back') && <button type="button" className="btn ghost" onClick={() => f.finishFirstStart()}>Try the first start again</button>}
+          {/* a write or a build that stopped: the Mirror is still in fastboot. Files that no longer check out download again first */}
+          {s.work && !['first-boot', 'hand-back', 'restart', 'wifi-on'].includes(s.work.step) && s.files.every((x) => x.state === 'ok') && <button type="button" className="btn ghost" onClick={() => f.reconnectFastboot()}>Connect fastboot again</button>}
+          {s.flashFailed && !f.recipe.community && !s.noFill && <button type="button" className="btn ghost" onClick={() => f.retryWithoutFill()}>Try again without FILL</button>}
+          {s.wifiOnFailed && s.connecting && <span className="status work" role="status">Pick the Mirror in the browser&apos;s list…</span>}
+          {s.wifiOnFailed && s.connectError && <span className="status err" role="alert">{s.connectError}</span>}
+          {s.wifiOnFailed
+            ? <button type="button" className="btn ghost" disabled={s.connecting} onClick={() => void f.connectAdb()}>Connect again</button>
+            : <button type="button" className="btn ghost" onClick={() => f.retry()}>Back to the download</button>}
         </span>
       </div>
     </section>
@@ -360,8 +323,10 @@ export function FlashError({ f, s }: P) {
 
 export function FlashScreens(p: P) {
   const { s } = p;
-  return s.screen === 'image' ? <FlashImage {...p} />
-    : s.screen === 'back' ? <FlashBack {...p} />
+  return s.screen === 'choose' ? <Choose f={p.f} s={s} />
+    : s.screen === 'image' ? <FlashImage {...p} />
+    : s.screen === 'download' ? <Download f={p.f} s={s} />
+    : s.screen === 'keep' ? <FlashKeep {...p} />
     : s.screen === 'fastboot' ? <FlashFastboot {...p} />
     : s.screen === 'confirm' ? <FlashConfirm {...p} />
     : s.screen === 'working' ? <FlashWorking {...p} />

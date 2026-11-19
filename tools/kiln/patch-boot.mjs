@@ -51,7 +51,7 @@ registerHooks({
   },
 });
 const pkg = resolve(opt.package ?? join(REPO, 'kiln/packages/bootpatch'));
-const { patchBoot, s1Overlay } = await import(pathToFileURL(join(pkg, 'src/index.ts')).href);
+const { magiskBusybox, patchBoot, s1Overlay } = await import(pathToFileURL(join(pkg, 'src/index.ts')).href);
 
 const read = (p) => new Uint8Array(readFileSync(p));
 const sha256 = (d) => createHash('sha256').update(d).digest('hex');
@@ -93,6 +93,7 @@ const overlay = s1Overlay({
   updateRc: from('s1kiosk_update.rc'), updateSh: from('s1kiosk_update.sh'),
   bundleRc: from('s1kiosk_bundle.rc'), bundleSh: from('s1kiosk_bundle.sh'),
   verify: from('s1kiosk_verify'), bundlePub: from('s1kiosk_bundle.pub'),
+  magiskEnvRc: from('s1kiosk_magiskenv.rc'), magiskBusybox: await magiskBusybox(apk),
   branding: opt['no-anim'] ? undefined : { rc: from('s1kiosk_branding.rc'), bootAnimation: from('s1kiosk_bootanimation.zip') },
 });
 

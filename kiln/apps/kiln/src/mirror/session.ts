@@ -1,12 +1,22 @@
-// The Mirror's test install, outside React: an APK file from this computer, the Mirror over WebUSB
-// adb, its read-only checks, then install or undo (@glassworks/lululemon-mirror-installer). Test only:
-// it exists behind ?apk=local because there is no release of Glassworks' legacy build, and there
-// must not be one yet (issue 198). The release-asset route stays for releases only.
+// The Mirror's install, outside React: the APK (the newest Mirror release, or a file from this computer), the
+// Mirror over WebUSB adb, its read-only checks, then install or undo (@glassworks/lululemon-mirror-installer).
+// Locked to the public until the Mirror's frame.json makes it installable (MIRROR_OPEN): until then ?apk=release
+// and ?apk=local are test links.
 import type { PanelShell } from '@glassworks/adb';
 import { apkPackage } from '@glassworks/app-adb';
 import {
   checkMirror, checkMirrorApk, installMirror, undoMirror, type Installed, type MirrorPhase, type MirrorReport, type Removed,
 } from '@glassworks/lululemon-mirror-installer';
+import frame from '../../../../../frames/lululemon-mirror/design/frame.json';
+import { NoRelease, apkMode, installable, releaseApk, type ApkFrom, type ReleaseApk, type ReleaseLine } from '../release/apk';
+
+export type { ApkFrom };
+
+/** The Mirror installs Glassworks' legacy build, for Android 6; its CPU runs 64-bit apps (frame.json `abis`). */
+export const MIRROR_APK: ReleaseLine = { line: 'generic-android-legacy', abi: 'arm64-v8a' };
+
+/** The page is everyone's once the Mirror's frame.json makes it installable (release/apk.ts `installable`). */
+export const MIRROR_OPEN = installable(frame);
 
 export type MirrorScreen = 'off' | 'pick' | 'checks' | 'working' | 'done' | 'error';
 
@@ -18,6 +28,8 @@ export type Result = { flow: 'install'; installed: Installed } | { flow: 'undo';
 export interface MirrorState {
   screen: MirrorScreen;
   apk?: PickedApk;
+  /** With the APK from the release: where its download is. */
+  release?: ReleaseApk;
   haUrl: string;
   /** the browser's device list or the Mirror's "Allow USB debugging?" is open */
   connecting?: boolean;
@@ -38,16 +50,17 @@ export interface MirrorDeps {
    */
   connect(): Promise<PanelShell>;
   sleep?: (ms: number) => Promise<void>;
-  homeTimeoutMs?: number;
+  /** The APK from the newest Mirror release, through Kiln's release route; without it, a file the tester picks. */
+  release?: typeof fetch;
+  /** How long the release route may stay silent (release.ts RELEASE_STALL_MS); tests make it short. */
+  releaseStallMs?: number;
 }
 
-/** Whether the page is on, from its query: `?apk=local`, or a demo where demos run. */
-export function mirrorMode(search: string, demosOn: boolean, demos: readonly string[]): { on: boolean; demo?: string } {
-  const q = new URLSearchParams(search);
-  const demo = q.get('demo');
-  if (demosOn && demo && demos.includes(demo)) return { on: true, demo };
-  return { on: q.get('apk') === 'local' };
-}
+/**
+ * Whether the page is on and where its APK comes from: `?apk=release` or `?apk=local`, the release for everyone
+ * once the Mirror is `open`, or a demo where demos run.
+ */
+export const mirrorMode = (search: string, demosOn: boolean, demos: readonly string[], open = MIRROR_OPEN) => apkMode(search, demosOn, demos, open);
 
 const hex = (b: ArrayBuffer) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, '0')).join('');
 
@@ -58,9 +71,29 @@ export class MirrorSession {
   private panel?: PanelShell;
   /** Picks so far: a slower read of an earlier file never replaces a later one. */
   private picks = 0;
+  /** The release route, while the APK comes from the release (switchApk changes it). */
+  private release?: typeof fetch;
+  /** Source changes so far: a release download started before the latest one no longer counts. */
+  private sources = 0;
 
   constructor(private readonly d: MirrorDeps, on: boolean) {
-    this.state = { screen: on ? 'pick' : 'off', haUrl: '', phases: [], log: [] };
+    this.release = d.release;
+    this.state = { screen: on ? 'pick' : 'off', haUrl: '', phases: [], log: [], ...(d.release ? { release: { state: 'waiting' } } : {}) };
+  }
+
+  get from(): ApkFrom { return this.release ? 'release' : 'local'; }
+
+  /**
+   * `?apk=release` or `?apk=local` on a kept session that isn't installing: the APK comes from there now, and one
+   * picked or downloaded before is dropped. The session itself stays, with the image worker its FlashSession holds.
+   */
+  switchApk(from: ApkFrom, get: typeof fetch): void {
+    if (from === this.from || this.state.screen === 'working') return;
+    this.release = from === 'release' ? get : undefined;
+    this.sources++;
+    this.apk = undefined;
+    this.picks++;
+    this.set({ apk: undefined, release: this.release ? { state: 'waiting' } : undefined });
   }
 
   subscribe = (l: () => void) => { this.listeners.add(l); return () => { this.listeners.delete(l); }; };
@@ -93,6 +126,43 @@ export class MirrorSession {
     if (pick !== this.picks) return;
     this.apk = error ? undefined : bytes;
     this.set({ apk: { name, size: bytes.length, sha256, package: pkg, ...(error ? { error } : {}) } });
+  }
+
+  /**
+   * The newest Mirror release's APK, checked against its .sha256, then as a picked file is. Starts once, when a
+   * screen first needs it; again only after no release or an error (Try again).
+   */
+  async loadRelease(): Promise<void> {
+    const r = this.state.release;
+    const get = this.release;
+    if (!get || !r || !['waiting', 'none', 'error'].includes(r.state)) return;
+    const source = this.sources;
+    const current = () => this.sources === source;
+    try {
+      const { bytes, ready } = await releaseApk(MIRROR_APK, get, (release) => { if (current()) this.set({ release }); }, this.d.releaseStallMs);
+      if (!current()) return;
+      this.log(`${ready.name} from ${ready.tag}: SHA-256 ${ready.sha256}, as the release publishes it`);
+      await this.pickApk(ready.name, bytes);
+      // an APK the checks refuse is an error of the release, so Try again can fetch a fixed one
+      const refused = this.state.apk?.error;
+      if (current()) this.set({ release: refused ? { state: 'error', why: `Kiln can't install it: ${refused}` } : ready });
+    } catch (e) {
+      if (!current()) return;
+      const why = (e as Error).message;
+      if (!(e instanceof NoRelease)) this.log(`The release's APK: ${why}`);
+      this.set({ release: e instanceof NoRelease ? { state: 'none' } : { state: 'error', why } });
+    }
+  }
+
+  /** Why the release's APK can't go on yet, or undefined when it can (or the APK is a picked file). */
+  releaseBlocked(): string | undefined {
+    const r = this.state.release;
+    if (!r) return undefined;
+    if (this.state.apk?.error) return `The release's APK can't go on the Mirror: ${this.state.apk.error}.`;
+    if (r.state === 'ready') return undefined;
+    if (r.state === 'none') return 'There is no release of Glassworks for the Mirror yet.';
+    if (r.state === 'error') return 'Kiln couldn\'t get Glassworks from its release. Try again.';
+    return 'Kiln is still downloading Glassworks.';
   }
 
   setHaUrl(haUrl: string) { this.set({ haUrl }); }
@@ -139,8 +209,8 @@ export class MirrorSession {
   installBlocked(): string | undefined {
     const s = this.state;
     if (!s.report?.ok) return 'This device doesn\'t pass the checks.';
-    if (s.apk?.error) return `Pick another file: ${s.apk.error}.`;
-    if (!this.apk) return 'Pick the APK file first.';
+    if (s.apk?.error && !this.release) return `Pick another file: ${s.apk.error}.`;
+    if (!this.apk) return this.releaseBlocked() ?? 'Pick the APK file first.';
     if (s.haUrl && !/^https?:\/\/[^\s/]+/.test(s.haUrl)) return 'Home Assistant\'s address starts with http:// or https://.';
     return undefined;
   }
@@ -150,7 +220,7 @@ export class MirrorSession {
     await this.work('install', async (onPhase) => ({
       flow: 'install',
       installed: await installMirror(this.panel!, {
-        apk: this.apk!, haUrl: this.state.haUrl || undefined, onStep: this.log, onPhase, sleep: this.d.sleep, homeTimeoutMs: this.d.homeTimeoutMs,
+        apk: this.apk!, haUrl: this.state.haUrl || undefined, onStep: this.log, onPhase, sleep: this.d.sleep,
       }),
     }));
   }
@@ -158,7 +228,7 @@ export class MirrorSession {
   async undo(): Promise<void> {
     await this.work('undo', async (onPhase) => ({
       flow: 'undo',
-      removed: await undoMirror(this.panel!, { onStep: this.log, onPhase, sleep: this.d.sleep, homeTimeoutMs: this.d.homeTimeoutMs }),
+      removed: await undoMirror(this.panel!, { onStep: this.log, onPhase, sleep: this.d.sleep }),
     }));
   }
 

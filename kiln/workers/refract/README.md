@@ -37,11 +37,16 @@ The ids today:
 | id | Source | Size |
 |---|---|---|
 | `glass-panes/mirror-android-2/system.img` | [git-nimrod/glass-panes `mirror-android-2`](https://github.com/git-nimrod/glass-panes/releases/tag/mirror-android-2) | 850,905,808 bytes |
+| `glass-panes/mirror-android-2/userdata.sparse` | the same release | 154,944,572 bytes |
+| `glass-panes/project-key/adbkey` | [the Glass Panes repository](https://github.com/git-nimrod/glass-panes/tree/8ea31141cecc9d3e42ceb72ec08f92bd8ed38801/mirror-app/android/project-key) at commit `8ea31141`: the project adb key its images trust, published on purpose | 1,704 bytes |
 | `glass-panes/mirror-android-2/SHA256SUMS` | the same release | 159 bytes |
 
 So Kiln downloads the Mirror's image from
 `https://refract.glassworks.dev/glass-panes/mirror-android-2/system.img` (image 1's ids left the
-allowlist on 2026-11-16, when Kiln moved to image 2).
+allowlist on 2026-11-16, when Kiln moved to image 2). Kiln's Glass Panes install (#579) downloads
+`userdata.sparse` too: Kiln writes both as published, the way back from Glassworks. Each id matches a
+file in an image recipe (`frames/<id>/installer`), and the frame's tests check the size and SHA-256
+are the same in both ([docs/kiln-images.md](../../../docs/kiln-images.md)).
 
 Each file answer carries:
 
@@ -49,6 +54,26 @@ Each file answer carries:
 - `Content-Disposition: attachment; filename="<name>"`.
 - `Link: <project>; rel="author", <GitHub URL>; rel="canonical"`: who made it and where it comes from.
 - `Cache-Control: no-store`.
+
+## Files from a repository
+
+A few small files aren't release assets but live in a project's repository: Glass Panes' published
+adb key, which Kiln uses for one `svc wifi enable` after its first start (#579 follow-up,
+maintainer 2026-11-19). An allowlist entry for one has `commit` (all 40 hex digits, never a branch)
+and `path` instead of `tag` and `name`:
+
+```json
+"glass-panes/project-key/adbkey": {
+  "owner": "git-nimrod", "repo": "glass-panes",
+  "commit": "8ea31141cecc9d3e42ceb72ec08f92bd8ed38801", "path": "mirror-app/android/project-key/adbkey",
+  "size": 1704, "sha256": "89908fe2…38da2d", "credit": { … }
+}
+```
+
+Refract fetches it from `raw.githubusercontent.com/<owner>/<repo>/<commit>/<path>`, refusing any
+redirect. These files are at most 64 KiB, so Refract reads one whole and checks its size and SHA-256
+itself. If either differs, it answers 502 and sends nothing. A `Range` is ignored, as HTTP allows:
+the file is sent whole. It counts as a full download for the rate limit.
 
 ## What it checks
 
@@ -68,8 +93,9 @@ Each file answer carries:
 - **Not the hash.** Refract streams; it never reads the whole file. Kiln checks the SHA-256 itself.
 
 When GitHub answers anything but 200, 206 or 416, or can't be reached, Refract answers 502 with a
-one-line reason. Kiln then falls back to download-and-select: the person downloads the file from
-the release and picks it.
+one-line reason. Kiln shows that as its own bug, with *Try again* and *Report this* (a prefilled
+issue). There is no download-and-select: the person never fetches a file by hand (maintainer,
+2026-11-19, #579).
 
 ## Rate limits
 
@@ -99,7 +125,8 @@ behind one address (a carrier-grade NAT, a shared office) share the limits, so *
   `cf.cacheLevel: "bypass"`, so the file never lands in Cloudflare's cache either. A test checks
   this on both hops of GitHub's redirect.
 - Every answer says `Cache-Control: no-store`, so browsers and other caches don't keep it.
-- Bytes go from GitHub to the person as they arrive. Refract never holds a whole file.
+- Bytes go from GitHub to the person as they arrive. Refract never holds a whole release file. A
+  repository file (at most 64 KiB) is held in memory while it's checked, then sent and dropped.
 - It logs nothing itself. Cloudflare still counts requests in its analytics, as for any Worker. The
   rate limiters keep a per-address counter for a minute.
 
@@ -196,7 +223,8 @@ in about 15 s with the right SHA-256, `Cache-Control: no-store` and no `cf-cache
 The maintainer decided on 2026-11-15 that Kiln downloads the Mirror's community image through
 Refract, knowingly accepting that our Worker transmits the files. The image's release grants no
 licence for its Qualcomm and Quectel vendor binaries. Refract streams them and stores nothing,
-credits Glass Panes on every answer and at `/`, and Kiln keeps download-and-select as the fallback.
+credits Glass Panes on every answer and at `/`. Kiln kept download-and-select as a fallback until
+2026-11-19, when the maintainer dropped it (#579): a download Refract can't serve is Kiln's bug.
 The reasoning and the earlier decision are in
 `frames/lululemon-mirror/research/community-image-terms.md`.
 

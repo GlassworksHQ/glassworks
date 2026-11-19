@@ -3,6 +3,7 @@
 // installed, a new one (set-up entered again after leaving, S1's renew), or one after a reload. The
 // backup is the person's only copy outside this browser.
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { demoFrame as s1Demo } from '../src/app/aqara-s1-plus/frame';
 import { demoSession } from '../src/wizard/demo';
 import { registry } from '../src/wizard/registry';
 import type { Session } from '../src/wizard/session';
@@ -38,7 +39,7 @@ const downloads = (s: Session) => {
 
 describe('Done\'s backup download', () => {
   it('is offered by the session that installed', async () => {
-    const one = demoSession('run');
+    const one = demoSession(s1Demo, 'run');
     sessions.push(one);
     registry.set(entry(one));
     const id = await install(one);
@@ -50,12 +51,12 @@ describe('Done\'s backup download', () => {
   }, 30_000);
 
   it('is offered after set-up in a new session, and after a reload', async () => {
-    const one = demoSession('run');
+    const one = demoSession(s1Demo, 'run');
     sessions.push(one);
     registry.set(entry(one));
     const id = await install(one);
 
-    const two = demoSession('app'); // set-up entered again: S1's renew makes a new session
+    const two = demoSession(s1Demo, 'app'); // set-up entered again: S1's renew makes a new session
     sessions.push(two);
     registry.set(entry(two));
     await two.route('resume');
@@ -68,7 +69,7 @@ describe('Done\'s backup download', () => {
     vi.resetModules(); // a reload: new modules, the same tab's sessionStorage
     const again = await import('../src/wizard/registry');
     const demo = await import('../src/wizard/demo');
-    const three = demo.demoSession('app');
+    const three = demo.demoSession(s1Demo, 'app');
     sessions.push(three);
     again.registry.set(entry(three));
     three.finish();
@@ -77,7 +78,7 @@ describe('Done\'s backup download', () => {
   }, 30_000);
 
   it('is not offered when no run in this tab made a backup', () => {
-    const s = demoSession('app');
+    const s = demoSession(s1Demo, 'app');
     sessions.push(s);
     registry.set(entry(s));
     s.finish();
@@ -85,7 +86,7 @@ describe('Done\'s backup download', () => {
   });
 
   it('a download that fails after leaving Done doesn\'t bring Done back', async () => {
-    const s = demoSession('app');
+    const s = demoSession(s1Demo, 'app');
     sessions.push(s);
     registry.set(entry(s));
     s.store.dispatch({ type: 'backup', backup: { id: 's1-backup-20261112-101500', created: '', bootWasPatched: false, files: [{ part: 'boot', size: 1, sha256: '' }] } });
@@ -100,7 +101,7 @@ describe('Done\'s backup download', () => {
   });
 
   it('a download that fails on Done says so there', async () => {
-    const s = demoSession('app');
+    const s = demoSession(s1Demo, 'app');
     sessions.push(s);
     registry.set(entry(s));
     s.store.dispatch({ type: 'backup', backup: { id: 's1-backup-20261112-101500', created: '', bootWasPatched: false, files: [{ part: 'boot', size: 1, sha256: '' }] } });

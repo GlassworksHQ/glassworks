@@ -59,18 +59,17 @@ keeps the screen on for the run (#240; see [What it changes on the device](#what
 ## Run it
 
 You need adb, Python 3.11 or later, ffmpeg with libx264 (for the camera streams; it runs only on your
-computer) and the kiosk installed on the device, built from `main` after #240 (it has the test
-hold; the runner refuses an app without it). The first run makes a Python venv for the fake's
+computer) and the kiosk installed on the device, built from `main` after the test dashboard came in (the
+test hold of #240 and its dashboard, `test_dashboard`; the runner refuses an app without either). The first run makes a Python venv for the fake's
 WebRTC camera (aiortc, about 93 MB on macOS (measured 2026-11-14), from `tools/perf/webrtc-requirements.txt`, every wheel's hash
 checked) in `~/.cache/glassworks-perf`. The computer needs an IPv4 address that isn't loopback (any
 network interface that is up; the camera's packets never leave the computer). Let the device idle for 10 minutes
 first, with the screen on, at normal room temperature, and the kiosk's zoom at its default ("auto").
-Note the dashboard the kiosk shows now (its URL setting, or `auto`): the graded part points the
-kiosk at the fake Home Assistant and needs to know what to put back.
+The run changes none of the kiosk's settings and not its sign-in to Home Assistant (see
+[What it changes on the device](#what-it-changes-on-the-device)).
 
 ```sh
-tools/perf/run.sh --frame aqara-s1-plus --name "Aqara S1 Plus" --runs 3 \
-  --restore-dashboard http://homeassistant.local:8123/lovelace/0 --out perf-s1
+tools/perf/run.sh --frame aqara-s1-plus --name "Aqara S1 Plus" --runs 3 --out perf-s1
 ```
 
 | Option | Default | What |
@@ -78,8 +77,9 @@ tools/perf/run.sh --frame aqara-s1-plus --name "Aqara S1 Plus" --runs 3 \
 | `--frame` | (required) | The frame id that goes in the report |
 | `--name` | the frame id | The frame's name in the report's headline |
 | `--serial` | `$ANDROID_SERIAL` | Which device |
+| `--package` | `sh.edm.s1kiosk` | The Glassworks app to measure: `dev.glassworks.generic_android` for the generic app, `dev.glassworks.generic_android.legacy` for its legacy build (the Mirror) |
+| `--activity` | read from the device | The app's activity that takes Clarity's extras. The runner reads it from the app's task (see [Other Glassworks apps, and Android 6](#other-glassworks-apps-and-android-6)); give it only if the app hasn't run since the device booted |
 | `--runs` | 3 | Repeats of each part. The report gives the median and range |
-| `--restore-dashboard` | (required for the grade) | The kiosk's dashboard setting now: a URL, or `auto`. The graded part puts it back when it ends and on any exit. The runner can't read it (it never reads app data), so you give it. It can't be the fake Home Assistant's address |
 | `--pane-ram` | | Also measure each switchable pane's RAM, with the panes' settings now, which it puts back: `assist=on,sendspin=on,wall-base=on,time-zone=on,diagnostics=on,mic=on` (`mic` is Assist's microphone: on unless muted). It runs one warm-up cycle first, not recorded. See [RAM](#ram) |
 | `--taps` | 10 | Taps on each reference dashboard's toggle. 0 skips them: tap isn't measured, which fails every level, so the grade is E, provisional |
 | `--skip-synthetic`, `--skip-reference`, `--skip-real-use` | | Skip the animation test page (detail), the reference dashboards (the grade), or the real-use part. Skipping the reference dashboards gives no grade (refused, not an E) |
@@ -109,17 +109,59 @@ The output directory holds the raw files, `report.json` and `report.md`. A full 
 empty directory; `--idle-only` adds samples to an existing one. `python3
 tools/perf/report.py <dir>` rebuilds the report from the raw files at any time, without the device.
 
+### The test computer's network
+
+The fake Home Assistant runs on your computer. Put that computer where a real Home Assistant server would be: on a
+wired link, or a quiet one. Its stalls otherwise land in the panel's numbers, wherever the test's traffic crosses
+its link:
+
+- **The live updates**, when adb reaches the panel over the network (wireless debugging). The fake's stream goes
+  through `adb reverse`, which then rides this computer's Wi-Fi. Over USB it doesn't.
+- **The cameras' video**, when it goes over the LAN (`lan-udp` or `lan-turn`, below), on any panel.
+
+Before the graded part, `run.sh` runs `tools/perf/netcheck.py` (#649). It sends 40 pings to this computer's
+default gateway and 40 to the panel, at the same time (8 s), and writes the numbers to `netcheck.json`. No
+address is recorded. If this computer's own pings to its gateway go over 20 ms, at p95 or at most, and that link
+carried graded traffic, the run warns and the report is provisional ("the test computer's network"). The
+numbers are in `report.json` (`test_network`) and on one line of `report.md` either way.
+
+Measured 2026-11-19, the Pixel Tablet's run 3:
+
+| From → to | min | max |
+|---|---|---|
+| A Mac on Wi-Fi (the fake's computer) → its gateway | 2.3 ms | 68 to 84 ms |
+| The tablet → the same gateway | 2.3 ms | 9.7 ms |
+| The Mac → the tablet | | 93 to 97 ms |
+
+The live changes then waited 65 to 91 ms (p95) to reach the page. That was the Mac's link, not the tablet's: a
+low-latency Wi-Fi lock on the tablet (#646) changed nothing. On a Mac, Wi-Fi stalls like this usually come from
+AWDL (AirDrop, Sidecar), which takes the radio off its channel now and then. For a run, use a wired link, or turn
+AWDL off with `sudo ifconfig awdl0 down` and back on with `sudo ifconfig awdl0 up` after. AirDrop or Sidecar may
+turn it back on by themselves.
+
+The S1's published grade (2026-11-17) ran over USB adb, so its live updates didn't cross the Mac's link: their
+arrival waits were 32 to 56 ms (p95) on light and typical. Its cameras went over the LAN, so their numbers may
+include the Mac's link. They don't decide its D: that's typical without a camera, blocked 2.7 s after it's drawn.
+
 ### What it changes on the device
 
-- **The dashboard setting, for the graded part only.** The kiosk is pointed at the start view of
-  the fake Home Assistant's reference dashboard with its own `--es url` extra (the saved
-  dashboard), so a restart comes back to a reference dashboard as it comes back to yours. When the
-  graded part ends, and on any exit the shell can catch, it is pointed back at
-  `--restore-dashboard` with `am start -W`, and the runner reads the answer: `am` exits 0 even when
-  the kiosk didn't take the intent. If it didn't, the runner tries once more, then exits with
-  status 3 and logs the command to send yourself. A run killed with `SIGKILL` can't put it back
-  either; send `--es url <your dashboard>` yourself. The fake's sign-in is stored for its own
-  address (`127.0.0.1:8089`) only, so your Home Assistant's sign-in is untouched.
+- **The test dashboard, for the graded part (and `--pane-ram`) only.** The kiosk shows the start
+  view of the fake Home Assistant's reference dashboard instead of its own, with the test hold's
+  `--es test_dashboard <url>`, so a restart comes back to a reference dashboard as it comes back to
+  yours. The kiosk's dashboard setting and its sign-in to Home Assistant don't change. The kiosk
+  takes only a page on this device (`127.0.0.1` or `localhost`), and only while a test hold is on; it
+  keeps it through restarts with the hold (`no_backup/test_hold`), and says so in its log
+  (`test dashboard on: http://127.0.0.1:8089`), which the runner checks. When the graded part ends, and
+  on any exit the shell can catch, the runner ends it (`--es test_dashboard ''`, with `am start -W`)
+  and reads the answer: `am` exits 0 even when the kiosk didn't take the intent. If it didn't, the
+  runner tries once more, then exits with status 3 and logs the command to send yourself. The hold's
+  end ends it too, so a run killed with `SIGKILL` leaves the fake on screen for at most the rest of
+  the hold (30 minutes). The legacy engine (#198), which holds pages to one origin, restarts the app
+  when the test dashboard starts and ends. The fake's sign-in is stored in the page for its own address
+  (`127.0.0.1:8089`) only. Before this, the runner set the kiosk's saved dashboard (`--es url`) and put
+  it back after: that moved the panel's Home Assistant address, and since #496 a panel whose Home
+  Assistant moved asks to sign in again. On the Pixel Tablet (2026-11-18) the graded runs failed on
+  the sign-in screen, and the panel still asked after the run.
 - **The pages.** The frontend loads once per graded run, when the kiosk comes back after the
   restart. The four reference views then open **inside** it: the runner hands each one to the fake
   Home Assistant (`/clarity/open`), and the harness, already running in the frontend, picks it up
@@ -174,7 +216,7 @@ tools/perf/report.py <dir>` rebuilds the report from the raw files at any time, 
 - **Taps and swipes**, only on the reference pages and only when the page asks: each page logs
   where its "Living room" toggle is (`input tap`) and where to swipe (`input swipe`), tagged with
   that page load's nonce. A request with another page's nonce is ignored. Before anything reaches
-  `adb shell`, the runner checks the request: whole pixels inside the screen (`wm size`), 1 to 50
+  `adb shell`, the runner checks the request: whole pixels inside the screen as it is turned, 1 to 50
   taps (and no more than `--taps`), a swipe of 50 to 2000 ms. A bad request isn't sent; that page
   gets an error and isn't graded. A gesture is sent only while its page is still the current one,
   and the next page opens only after the last page's gestures are done. Nothing else is touched.
@@ -183,8 +225,96 @@ tools/perf/report.py <dir>` rebuilds the report from the raw files at any time, 
   the system at once (0.2 s on the S1). Otherwise the runner starts it with `am start -W` after 3 s.
   If the run stops early, or the last restart doesn't reach the dashboard, the exit trap restarts
   the app. While the app restarts, Home Assistant sees the panel go offline for a few seconds.
+- **On Android 6 only, five lines in the device's log** per runner step, ten in the steps that record the
+  clock's drift (`ClarityClock: <nonce> <n>`):
+  how the runner ties logcat's wall clock to the monotonic one (see
+  [Other Glassworks apps, and Android 6](#other-glassworks-apps-and-android-6)).
 - Everything else is read-only: `getprop`, `/proc`, `dumpsys meminfo`, `dumpsys SurfaceFlinger
-  --latency`, logcat.
+  --latency`, `dumpsys activity recents` (the app's activity), logcat.
+
+### Other Glassworks apps, and Android 6
+
+Clarity runs on any Glassworks app: the S1's (`sh.edm.s1kiosk`), the generic app
+(`dev.glassworks.generic_android`) and its legacy build (`dev.glassworks.generic_android.legacy`, the
+lululemon Mirror's Android 6). Give the app with `--package`.
+
+**The activity.** Clarity's extras go to the activity the kiosk runs in. The runner reads it from the app's
+most recent task (`realActivity=` in `dumpsys activity recents`, the same on Android 6 to 17): `.MainActivity`
+on the S1, `dev.glassworks.MainActivity` on the generic app. It doesn't take the app's launcher entry
+(`cmd package resolve-activity`, or `pm dump` on Android 6, which has no `cmd`): on the generic app that is an
+alias, `dev.glassworks.generic.Launcher`, and the app drops extras that come through it. A task stays listed
+after the app stops, until the device reboots. If the app hasn't run since then, the runner says so and asks for
+`--activity`.
+
+**Android 6** (checked on an API 23 arm64 emulator, 2026-11-18; the Mirror runs 6.0.1) lacks some of what the
+runner uses. What the runner does instead:
+
+| What | Android 6 | The runner |
+|---|---|---|
+| `logcat -v monotonic` | "Invalid parameter monotonic to -v" | Asks once per runner step. Without it: `-v usec`, the wall clock to the µs, tied to the monotonic clock (below) |
+| `date +%N`, `nproc` | No nanoseconds (`1795071980.N`); no `nproc` | Counts the `cpuN` lines of `/proc/stat`, the same online CPUs as `nproc` |
+| `ps -A -o PID,NAME` | Ignores the options: its own columns (`USER PID PPID VSIZE RSS WCHAN PC S NAME`) | Reads the PID column by its header and the name last |
+| `pidof <package>` | Lists every process | Not used: the runner reads `ps` |
+| SurfaceFlinger's layer | Plain `SurfaceView`, without the app (Android 10: `SurfaceView - <pkg>/<activity>`, Android 12+: `SurfaceView[<pkg>/<activity>]`, Android 15+: below) | Takes plain `SurfaceView` while the app has a window listed: a kiosk is the only app on screen |
+| `dumpsys meminfo` | `65128 kB: name` instead of `65,128K: name`; the legacy engine's content process is `:tab32` | Reads both; `:tab<n>` is a tab process |
+| `toybox nc` (camera video over the LAN) | No `nc` in toybox | The camera video goes over adb (`lanprobe.py` already falls back) |
+| `cmd` | Not there | Not used |
+
+`screencap`, `wm size`, `input tap`/`swipe` with a duration, `am start -W`, `am force-stop`, `stat -c`,
+`logcat -T`, `adb reverse` and `dumpsys SurfaceFlinger --latency` work as on Android 10.
+
+**Android 15 and later name layers differently** (checked on API 35 and API 37 arm64 emulators,
+2026-11-19). The Pixel Tablet's first graded run on Android 17 had no frames from SurfaceFlinger, so
+open, restart and live updates were n/a on every view, and scrolling rested on rAF alone.
+`dumpsys SurfaceFlinger --list` wraps each line as `RequestedLayerState{<name> parentId=… z=…}`. On
+Android 17 a SurfaceView's name also starts with the view's hash:
+
+| Android | The app's frames in `--list` |
+|---|---|
+| 10 (the S1) | `SurfaceView - <pkg>/<activity>#0` |
+| 12 to 14 | `SurfaceView[<pkg>/<activity>](BLAST)#163` |
+| 15, 16 | `RequestedLayerState{SurfaceView[<pkg>/<activity>](BLAST)#169 parentId=168}` |
+| 17 | `RequestedLayerState{f5fea55 SurfaceView[<pkg>/<activity>](BLAST)#163 parentId=162}` |
+
+`--latency` takes only the whole name, hash and `#<id>` included. Any other form gets the refresh
+period alone, as an unknown name does. The runner reads the name out of the wrapper and passes it on
+whole. The `(BLAST)` layer has the frames; its parent has none. When the runner finds a window of
+the app but no SurfaceView it can name, it prints a warning in the run's log.
+
+**The clock on Android 6.** SurfaceFlinger's frame times are on the monotonic clock (`CLOCK_MONOTONIC`), and the
+runner cuts them to the windows the page logs. Android 6's logcat stamps lines only with the wall clock. So the
+runner measures the offset once per runner step: five times, it reads the monotonic clock from
+`/proc/timer_list` (`now at <ns> nsecs`, read by the shell itself, no process started), writes a log line
+(`log -t ClarityClock`), and reads the clock again. The line's stamp lies between the two reads, so the tightest
+of the five pairs gives the offset to within half its width. The run's files on Android 6 carry it in
+`logcat_clock` (refstart, coldstart and idle samples): `offset_err_ms`, and `drift_ms`, how far the offset
+moved by the end of that step. A wall-clock change during a step (a network-time step, daylight saving) moves
+every later line by that much, and shows in `drift_ms`. A restart run (graded, or real use) whose offset
+moved by more than both calibrations' errors plus 5 ms fails, as one with the screen off does: its windows no
+longer line up with SurfaceFlinger's frames. The check compares the offset at the step's start and end only,
+so a step that goes back before the end isn't caught. Measured on the API 23 emulator (2026-11-18), in a `--quick` run: the offset's error was 0.76 to 1.9 ms
+in every step, and it moved by 0.35 ms at most within one. Where logcat has `-v monotonic` (Android 7 and later, the S1, the tablet) nothing changes: the
+runner reads it as before.
+
+**The legacy engine's lockdown** (#198) loads pages only from the dashboard's origin, which it takes when its
+process starts. The animation test page opens on the fake Home Assistant's origin with `--es open`, so the
+legacy engine refuses it ("Lockdown: refused page from 127.0.0.1"). The runner sees that line, skips the
+animation test page (detail, not graded) and goes on.
+
+**No touchscreen.** `input tap` and `input swipe` inject touch events whether or not the device has a
+touchscreen. The API 23 emulator was set up without one (`hw.screen=no-touch`, which Android reports as
+`-touch`), with the Mirror's legacy build of the app (0.2.0). There (2026-11-18) the taps reached the page:
+the first two views counted all their taps by the page's own `pointerdown`, and Event Timing measured them. But
+no swipe scrolled the page, on any view, while the same `input swipe` scrolled Android's own Settings list. So
+on a frame without a touchscreen, the legacy engine takes injected taps but doesn't scroll for injected swipes,
+and the scroll task isn't measured there: the grade comes out provisional. How the rubric treats a frame without
+touch is an open question; nothing in the rubric changed for it.
+
+**Portrait.** The pages place their taps and swipes from the page's own size (`innerWidth`, `innerHeight`,
+`devicePixelRatio`): the swipe runs down the middle from 85 % to 15 % of the height. Nothing assumes landscape.
+The runner checks each request against the screen's current size, turned as it is shown (`cur=` in
+`dumpsys window displays`), which is what `input tap` takes. `wm size` gives the panel's own size, unturned: the
+Pixel Tablet's `1600x2560` while it shows 2560 × 1600, against which a tap right of x 1600 would be refused.
 
 ## The reference dashboards
 
@@ -1090,7 +1220,7 @@ gets an error, which the frontend handles as it would from HA, and the fake logs
 | Open the view | From the navigation to the view (HA's `navigate()`, as a view tab calls it, in the frontend that is already loaded) to the view's head and every card on its first screen **drawn**, on screen (rubric 2; rubric 1 ran to usable: drawn and the main thread free; see [Open the view](#open-the-view-a-navigation-in-the-loaded-frontend) and [Usable](#usable)). The times come from the page's own clock, tied to logcat's by its log line. If the view never says it was usable, or no frame reached the screen after it, it is "not measured", never 0. (Protocols 1 to 3, and protocol 4 as first written, loaded the whole page for each dashboard) | Each view; SurfaceFlinger |
 | Blocking after the open | Rubric 2: from the first screen drawn to usable (the main thread free for 500 ms), each animation frame's time past 50 ms, added up: Total Blocking Time measured on frames ([Usable](#usable)). A view that never became usable within the runner's deadline blocks for all of it | Each view's page |
 | More-info dialog | Rubric 3: from the event a tile's tap fires to the dialog settled (its show animation finished and, for the sensor, its history graph drawn), the slowest of a light's, a thermostat's and a sensor's; per run, then the median level. A dialog that never opened or settled within 20 s fails the run, and so does a view that didn't get to them. The open animation's frames decide only premium ([The more-info dialog](#the-more-info-dialog-clarity-v3-211)) | Each view's page |
-| Restart | From the app's process start (`Start proc` in logcat) to the reference dashboard's start view being **usable**, as for open the view: the kiosk comes back to it by itself, because the graded part points its dashboard setting there. This is HA's cold load: the app, the websocket, the registries, every card type's code and the first view. Once per run, for the whole frame. The engine being ready (GeckoView's own first page, `about:blank`) is reported, not graded (`engine_ready_ms`). See [Restart: back to a usable dashboard](#restart-back-to-a-usable-dashboard) | logcat; the restart page |
+| Restart | From the app's process start (`Start proc` in logcat) to the reference dashboard's start view being **usable**, as for open the view: the kiosk comes back to it by itself, because the graded part shows it as the kiosk's test dashboard, which outlives the restart. This is HA's cold load: the app, the websocket, the registries, every card type's code and the first view. Once per run, for the whole frame. The engine being ready (GeckoView's own first page, `about:blank`) is reported, not graded (`engine_ready_ms`). See [Restart: back to a usable dashboard](#restart-back-to-a-usable-dashboard) | logcat; the restart page |
 
 Each graded run is one restart back to the start view, then the four reference views in the run's
 order (`tiers.json` `ORDER`: light, typical-nocam, typical, heavy; run k starts k − 1 views in).
@@ -1389,10 +1519,14 @@ GeckoView's session is up, the kiosk ignores `open` (#103's pins; seen on the S1
 up, the request races the kiosk's own dashboard load. So protocols 1 to 3 ended the restart at
 **engine ready**, GeckoView's own first page (`about:blank`).
 
-Protocol 4 changes the kiosk's dashboard setting instead, for the graded part only (a user decision,
-2026-11-13: "I'm okay with it changing for the test and then it changing back"). The kiosk points at
+Protocol 4 changes the dashboard the kiosk shows instead, for the graded part only (a user decision,
+2026-11-13: "I'm okay with it changing for the test and then it changing back"). The kiosk shows
 the start view of the fake Home Assistant's reference dashboard, so after the force-stop it comes
-back to it by itself, by the same path that brings it back to yours. The restart ends when that dashboard is usable, as
+back to it by itself, by the same path that brings it back to yours (its start loads the dashboard).
+Until 2026-11-19 that was the kiosk's dashboard setting; since then it is the test hold's own test
+dashboard, which leaves the setting and the sign-in alone (see
+[What it changes on the device](#what-it-changes-on-the-device)). The page loads at the same point of
+the start either way, so the measurement didn't change. The restart ends when that dashboard is usable, as
 defined for open the view. Its start, the process start, is stamped on the device in logcat, and its
 end is on the page's clock, tied to logcat's by the page's log line, so the harness's adb round trips
 aren't in it. Engine ready is still reported (`engine_ready_ms`).

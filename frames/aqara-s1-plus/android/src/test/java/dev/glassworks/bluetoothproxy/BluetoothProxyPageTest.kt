@@ -1,4 +1,4 @@
-package dev.glassworks.s1.settings
+package dev.glassworks.bluetoothproxy
 
 import android.app.Application
 import android.view.View

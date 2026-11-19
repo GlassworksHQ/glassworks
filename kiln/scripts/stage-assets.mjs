@@ -51,6 +51,7 @@ const assets = [
   { name: 'bundle-rc', file: repo('frames/aqara-s1-plus/tools/root/s1kiosk_bundle.rc'), license: 'MIT', source: SRC },
   { name: 'bundle-sh', file: repo('frames/aqara-s1-plus/tools/root/s1kiosk_bundle.sh'), license: 'MIT', source: SRC },
   { name: 'bundle-pub', file: repo('frames/aqara-s1-plus/tools/root/s1kiosk_bundle.pub'), license: 'MIT', source: SRC },
+  { name: 'magiskenv-rc', file: repo('frames/aqara-s1-plus/tools/root/s1kiosk_magiskenv.rc'), license: 'MIT', source: SRC },
   { name: 'verify', file: repo('frames/aqara-s1-plus/tools/root/out/s1kiosk_verify'), license: 'MIT AND BSD-2-Clause', source: `${SRC}/tree/main/frames/aqara-s1-plus/tools/root (s1kiosk_verify.c + Monocypher 4.0.3 + musl, frames/aqara-s1-plus/tools/root/build-verify.sh)` },
   { name: 'branding-rc', file: repo('frames/aqara-s1-plus/tools/root/s1kiosk_branding.rc'), license: 'MIT', source: SRC },
   { name: 'bootanimation', file: repo('branding/glass-tile/bootanimation.zip'), license: 'MIT', source: `${SRC}/tree/main/branding/glass-tile` },

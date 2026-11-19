@@ -10,14 +10,13 @@ import { BuiltOn, stepCredits } from '../components/Credit';
 import { SilentUpdates } from '../components/SilentUpdates';
 import { LastRun } from '../components/LastRun';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { FrameUi } from '../frames/aqara-s1-plus';
 import { Recovery } from '../recovery/Recovery';
+import type { AppPhase, KilnFrame } from './frame';
 import type { Session } from './session';
-import type { AppPhase } from '@glassworks/aqara-s1-plus-installer';
 import { HomeAssistant, Radio, RadioNext, Wifi } from '../setup/steps';
 import { eta, milestones, type Setup, type WizardState } from './state';
 
-type P = { s: WizardState; session: Session; frame: FrameUi };
+type P = { s: WizardState; session: Session; frame: KilnFrame };
 
 function os(): 'win' | 'linux' | 'other' {
   const ua = navigator.userAgent;
@@ -152,7 +151,7 @@ const rowOf = (p: AppPhase): Row => (p.step === 'apk' ? p.apk : p.step);
 
 /**
  * `update`: the app was on the panel already. Then `pm install -r` stops it while it runs, it comes
- * back, and the end of dex2oat restarts it again (frames/aqara-s1-plus/research/web-installer.md §7.1). A first
+ * back, and the end of dex2oat restarts it again (web-installer.md §7.1 in the frame's research). A first
  * install has no app running, so nothing there is said to restart.
  */
 function nowSays(p: AppPhase, update: boolean): { sub?: string; note?: string } {
@@ -165,7 +164,7 @@ function nowSays(p: AppPhase, update: boolean): { sub?: string; note?: string } 
   return {};
 }
 
-function Installing({ frame, setup }: { frame: FrameUi; setup: Extract<Setup, { phase: 'settings' }> }) {
+function Installing({ frame, setup }: { frame: KilnFrame; setup: Extract<Setup, { phase: 'settings' }> }) {
   const seen = setup.installing ?? [];
   const now = seen.at(-1);
   const reached = new Set(seen.map(rowOf));

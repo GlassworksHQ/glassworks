@@ -32,6 +32,8 @@ class ScreenPolicyTest {
     private class Settings(
         autoBrightness: Boolean = true,
         manualBrightness: Float = -1f,
+        override val screenMode: String = "presence",
+        override val wakeOnApproach: Boolean = true,
     ) : ScreenSettings {
         /** The saved settings the policy wrote. */
         val writes = mutableListOf<String>()
@@ -39,9 +41,7 @@ class ScreenPolicyTest {
             set(v) { writes += "autoBrightness"; field = v }
         override var manualBrightness = manualBrightness
             set(v) { writes += "manualBrightness"; field = v }
-        override val screenMode = "presence"
         override var idleOffSec = 120
-        override val wakeOnApproach = true
         override val presenceRangeM = 0f
         override val minBrightness = 0.1f
         override var maxBrightness = 1f
@@ -80,6 +80,54 @@ class ScreenPolicyTest {
     }
 
     private fun testHoldLog() = ShadowLog.getLogsForTag("Test.Screen").map { it.msg }.filter { it.startsWith("test hold") }
+
+    /**
+     * Someone walks up to a screen that is off, with [settings]. Returns whether it woke, and checks that presence is
+     * reported either way: `near`, and a change for the listeners that send the `presence` binary_sensor.
+     */
+    private fun approachToAScreenThatIsOff(settings: Settings): Boolean {
+        ShadowLog.clear()
+        val presence = FakeSource()
+        val screen = policy(presence = presence, settings = settings)
+        screen.start(context)
+        screen.sleep("home assistant")
+        shadowOf(context.getSystemService(PowerManager::class.java)).setIsInteractive(false)
+        context.sendBroadcast(Intent(Intent.ACTION_SCREEN_OFF))
+        advance(10)
+        assertFalse(screen.screenOn)
+        var changes = 0
+        screen.addListener { changes++ }
+
+        presence.presence!!(true, 1f)
+
+        assertTrue("presence is near", screen.near)
+        assertEquals("presence is reported", 1, changes)
+        val woke = ShadowLog.getLogsForTag("Test.Screen").any { it.msg == "wake (approach)" }
+        screen.stop()
+        return woke
+    }
+
+    /** #601: the Mirror's camera turned on a screen Home Assistant had turned off, in "always". */
+    @Test fun alwaysDoesNotWakeOnApproachAndStillReportsPresence() {
+        assertFalse(approachToAScreenThatIsOff(Settings(screenMode = "always")))
+    }
+
+    @Test fun presenceWakesOnApproach() {
+        assertTrue(approachToAScreenThatIsOff(Settings(screenMode = "presence")))
+    }
+
+    @Test fun wakeOnApproachOffDoesNotWakeInEitherMode() {
+        assertFalse(approachToAScreenThatIsOff(Settings(screenMode = "presence", wakeOnApproach = false)))
+        assertFalse(approachToAScreenThatIsOff(Settings(screenMode = "always", wakeOnApproach = false)))
+    }
+
+    /** The settings' wake switch reads the same condition the policy wakes on. */
+    @Test fun approachWakesOnlyInPresenceWithWakeOnApproach() {
+        assertTrue(Settings(screenMode = "presence", wakeOnApproach = true).approachWakes)
+        assertFalse(Settings(screenMode = "presence", wakeOnApproach = false).approachWakes)
+        assertFalse(Settings(screenMode = "always", wakeOnApproach = true).approachWakes)
+        assertFalse(Settings(screenMode = "always", wakeOnApproach = false).approachWakes)
+    }
 
     /** The runtime builds the policy long before the activity starts it; the idle countdown starts at start(). */
     @Test fun theIdleCountdownStartsAtStartNotWhenThePolicyWasBuilt() {
@@ -476,6 +524,114 @@ class ScreenPolicyTest {
             assertFalse(saved, screen.testHeld)
             assertFalse(saved, holdFile.exists())
             screen.stop()
+        }
+    }
+
+    private fun dashboardLog() = ShadowLog.getLogsForTag("Test.Screen").map { it.msg }.filter { it.startsWith("test dashboard") }
+
+    /** Clarity's own dashboard rides on the test hold: only a loopback address, and only while a hold is on. */
+    @Test fun aTestDashboardNeedsAHoldAndAnAddressOnThisDevice() {
+        ShadowLog.clear()
+        val screen = policy()
+        screen.start(context)
+        val changes = mutableListOf<String?>()
+        screen.onTestDashboard = { changes += it }
+        screen.setTestDashboard(context, "http://127.0.0.1:8089/clarity-ref/start")
+        assertEquals("no hold", null, screen.testDashboard)
+        screen.applyTestHoldExtra(context, Intent().putExtra("test_hold", true).putExtra("test_dashboard", "http://192.0.2.10:8123/lovelace/0"))
+        assertEquals("not on this device", null, screen.testDashboard)
+        val both = Intent().putExtra("test_hold", true).putExtra("test_dashboard", "http://127.0.0.1:8089/clarity-ref/start")
+        screen.applyTestHoldExtra(context, both)
+        assertEquals("http://127.0.0.1:8089/clarity-ref/start", screen.testDashboard)
+        assertFalse("removed once applied", both.hasExtra("test_dashboard"))
+        screen.applyTestHoldExtra(context, Intent().putExtra("test_dashboard", "http://localhost:8089/x"))
+        screen.applyTestHoldExtra(context, Intent().putExtra("test_dashboard", "http://localhost:8089/x"))
+        screen.applyTestHoldExtra(context, Intent().putExtra("test_dashboard", ""))
+        screen.applyTestHoldExtra(context, Intent().putExtra("test_dashboard", ""))
+        assertEquals(null, screen.testDashboard)
+        assertEquals(listOf("http://127.0.0.1:8089/clarity-ref/start", "http://localhost:8089/x", null), changes)
+        assertEquals(
+            listOf(
+                "test dashboard refused: no test hold", "test dashboard refused: only http on 127.0.0.1 or localhost",
+                "test dashboard on: http://127.0.0.1:8089", "test dashboard on: http://localhost:8089",
+                "test dashboard on: http://localhost:8089 (already)", "test dashboard off (cleared)",
+            ),
+            dashboardLog(),
+        )
+        assertTrue("the hold goes on", screen.testHeld)
+        screen.stop()
+    }
+
+    /** Each graded restart force-stops the app: the new process comes back to the test's dashboard, until the hold ends. */
+    @Test fun aTestDashboardOutlivesARestartAndEndsWithTheHold() {
+        val before = policy()
+        before.start(context)
+        before.testHold(context, 600)
+        before.setTestDashboard(context, "http://127.0.0.1:8089/clarity-ref/start")
+        before.testHold(context, 900)
+        assertEquals("a renewed hold keeps it", "http://127.0.0.1:8089/clarity-ref/start", TestHold.dashboard(context))
+        kill(before)
+        ShadowLog.clear()
+
+        val after = policy()
+        after.start(context)
+        val changes = mutableListOf<String?>()
+        after.onTestDashboard = { changes += it }
+        assertEquals("http://127.0.0.1:8089/clarity-ref/start", after.testDashboard)
+        assertEquals(listOf("test dashboard resumed: http://127.0.0.1:8089"), dashboardLog())
+        after.applyTestHoldExtra(context, Intent().putExtra("test_hold", false))
+        assertEquals(null, after.testDashboard)
+        assertEquals("back to the saved dashboard", listOf<String?>(null), changes)
+        assertEquals(null, TestHold.dashboard(context))
+        after.stop()
+    }
+
+    /**
+     * The emulator run of 2026-11-19: the runner's clear reached a kiosk that had just been force-stopped, so the intent
+     * launched it, and it applied the extra before [ScreenPolicy.start] read the hold's file: nothing to clear, and the
+     * dashboard came back at start.
+     */
+    @Test fun aColdLaunchThatEndsTheTestDashboardEndsIt() {
+        val before = policy()
+        before.start(context)
+        before.testHold(context, 600)
+        before.setTestDashboard(context, "http://127.0.0.1:8089/clarity-ref/start")
+        kill(before)
+        ShadowLog.clear()
+
+        val after = policy()
+        after.applyTestHoldExtra(context, Intent().putExtra("test_dashboard", ""))
+        after.start(context)
+        assertEquals(null, after.testDashboard)
+        assertTrue("the hold goes on", after.testHeld)
+        assertEquals(listOf("test dashboard resumed: http://127.0.0.1:8089", "test dashboard off (cleared)"), dashboardLog())
+        assertEquals(null, TestHold.dashboard(context))
+        after.stop()
+    }
+
+    /** A runner that died leaves nothing behind: the dashboard ends when the hold expires. */
+    @Test fun aTestDashboardEndsWhenTheHoldExpires() {
+        val screen = policy()
+        screen.start(context)
+        screen.testHold(context, 60)
+        screen.setTestDashboard(context, "http://127.0.0.1:8089/clarity-ref/start")
+        val changes = mutableListOf<String?>()
+        screen.onTestDashboard = { changes += it }
+        advance(61_000)
+        assertFalse(screen.testHeld)
+        assertEquals(null, screen.testDashboard)
+        assertEquals(listOf<String?>(null), changes)
+        assertFalse(holdFile.exists())
+        screen.stop()
+    }
+
+    @Test fun onlyLoopbackHttpIsATestDashboard() {
+        for (ok in listOf("http://127.0.0.1:8089/clarity-ref/start", "http://localhost:8089/", "https://127.0.0.1:8443/x", "http://[::1]:8089/")) {
+            assertTrue(ok, TestHoldFile.isTestDashboard(ok))
+        }
+        for (no in listOf("http://192.0.2.10:8123/", "http://homeassistant.local:8123", "file:///sdcard/x.html", "http://127.0.0.1.example/",
+                          "javascript:alert(1)", "", "http://127.0.0.1:8089/a b")) {
+            assertFalse(no, TestHoldFile.isTestDashboard(no))
         }
     }
 }

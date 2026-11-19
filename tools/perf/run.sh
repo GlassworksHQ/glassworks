@@ -2,9 +2,10 @@
 # Clarity, the Glassworks perf test: grade a frame (MIT). Docs: docs/perf.md.
 #
 # What it touches on the device:
-#   - Points the kiosk's dashboard setting (`--es url`) at the fake Home Assistant's reference
-#     dashboard for the graded part (and --pane-ram), and back at --restore-dashboard after it and
-#     on any exit.
+#   - Shows the fake Home Assistant's reference dashboard as the kiosk's test dashboard for the graded part
+#     (and --pane-ram): `--es test_dashboard <url>` with the test hold. The kiosk shows it instead of its own
+#     dashboard until `--es test_dashboard ''` after the part, on any exit, or when the hold ends. Its
+#     dashboard setting and its sign-in to Home Assistant don't change.
 #   - Opens the test page and the reference dashboards with the kiosk's one-off `--es open` extra.
 #     The pages are served by the fake Home Assistant on this machine over `adb reverse`.
 #   - With --pane-ram only: turns the switchable panes off and on with the kiosk's own extras
@@ -23,13 +24,18 @@
 #   - Force-stops the app for each cold start (KEYCODE_WAKEUP first, so the screen is on); the app
 #     comes back on the saved dashboard. If the run stops early or the last cold start fails, the
 #     exit trap restarts the app.
-#   Read-only otherwise: getprop, /proc, dumpsys meminfo and SurfaceFlinger, logcat.
-#   On this computer: a Python venv for the fake's WebRTC peer (aiortc, from webrtc-requirements.txt,
+#   - On Android 6 only (no `logcat -v monotonic`): five `ClarityClock` lines in the device's log per runner
+#     step, to tie logcat's wall clock to the monotonic one (docs/perf.md, "Other Glassworks apps, and Android 6").
+#   Read-only otherwise: getprop, /proc, dumpsys meminfo, SurfaceFlinger and activity recents (the app's
+#   activity), logcat.
+#   On this computer: 40 pings to its default gateway and 40 to the panel before the graded part (netcheck.py,
+#   #649: a stalling link of this computer's makes the report provisional); a Python venv for the fake's WebRTC peer (aiortc, from webrtc-requirements.txt,
 #   locked with hashes) in ~/.cache/glassworks-perf, and two `adb reverse` ports (--port and the
 #   WebRTC relay's, --port + 1), removed on exit.
 #
 # Usage: tools/perf/run.sh --frame aqara-s1-plus [--name "Aqara S1 Plus"] [--serial S] [--runs 3] [--out DIR]
-#          --restore-dashboard URL|auto [--pane-ram assist=on,sendspin=on,mic=on]
+#          [--package sh.edm.s1kiosk] [--activity A]   # the app; its activity is read from the device unless given
+#          [--pane-ram assist=on,sendspin=on,mic=on]
 #          [--skip-synthetic] [--skip-reference] [--skip-real-use] [--taps 10] [--quick] [--apk FILE]...
 #          [--webrtc-transport auto|adb|lan-turn|lan-udp]   # the camera video's path; auto (default) asks the panel
 #
@@ -41,8 +47,8 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ADB="${ADB:-adb}"
-FRAME="" NAME="" RUNS=3 OUT="" PORT=8089 TURN_PORT="" WEBRTC_TRANSPORT=auto PACKAGE=sh.edm.s1kiosk TAPS=10 QUICK=0
-SYNTH=1 REF=1 REAL=1 IDLE_ONLY="" MAX_TEMP_C=50 APKS=() RESTORE="" PANE_RAM=""
+FRAME="" NAME="" RUNS=3 OUT="" PORT=8089 TURN_PORT="" WEBRTC_TRANSPORT=auto PACKAGE=sh.edm.s1kiosk ACTIVITY="" TAPS=10 QUICK=0
+SYNTH=1 REF=1 REAL=1 IDLE_ONLY="" MAX_TEMP_C=50 APKS=() PANE_RAM=""
 # Waits, in seconds. Only the off-device test (test/test_runner.py) shortens them.
 IDLE_SETTLE="${GW_PERF_IDLE_SETTLE:-30}" IDLE_WINDOW="${GW_PERF_IDLE_WINDOW:-15}"
 COLD_SETTLE="${GW_PERF_COLD_SETTLE:-3}" COLD_TIMEOUT="${GW_PERF_COLD_TIMEOUT:-120}" RUN_GAP="${GW_PERF_RUN_GAP:-10}"
@@ -57,6 +63,7 @@ while [ $# -gt 0 ]; do
     --out) OUT="$2"; shift 2 ;;
     --port) PORT="$2"; shift 2 ;;
     --package) PACKAGE="$2"; shift 2 ;;
+    --activity) ACTIVITY="$2"; shift 2 ;;
     --taps) TAPS="$2"; shift 2 ;;
     --quick) QUICK=1; shift ;;
     --skip-synthetic) SYNTH=0; shift ;;
@@ -65,7 +72,6 @@ while [ $# -gt 0 ]; do
     --idle-only) IDLE_ONLY="$2"; shift 2 ;;
     --max-start-temp) MAX_TEMP_C="$2"; shift 2 ;;
     --apk) APKS+=(--apk "$2"); shift 2 ;;
-    --restore-dashboard) RESTORE="$2"; shift 2 ;;
     --pane-ram) PANE_RAM="$2"; shift 2 ;;
     --webrtc-transport) WEBRTC_TRANSPORT="$2"; shift 2 ;;
     -h|--help) sed -n '2,/^set -e/p' "$0" | grep '^#' | sed 's/^# \{0,1\}//'; exit 0 ;;
@@ -79,7 +85,7 @@ OUT="${OUT:-perf-$FRAME-$(date +%Y%m%d-%H%M%S)}"
 mkdir -p "$OUT"
 export ADB
 
-run() { python3 "$HERE/perfrun.py" "$@" --package "$PACKAGE" --frame "$FRAME" --out "$OUT"; }
+run() { python3 "$HERE/perfrun.py" "$@" --package "$PACKAGE" ${ACTIVITY:+--activity "$ACTIVITY"} --frame "$FRAME" --out "$OUT"; }
 sh_dev() { "$ADB" shell "$@" | tr -d '\r'; }
 log() { echo "[$(date +%H:%M:%S)] $*" >&2; }
 
@@ -113,6 +119,12 @@ wait_cool() {
 # GW_PERF_TIME_SCALE (clock.py) is for the off-device tests: refused on a real device here, before
 # anything else on it is touched. Without it, this asks the device nothing.
 python3 "$HERE/clock.py" --check || exit 2
+# The activity that takes the kiosk's extras (perfrun.py Device.resolve_activity): read once from the
+# device, unless --activity names it. The S1's is .MainActivity, the generic app's dev.glassworks.MainActivity.
+if [ -z "$ACTIVITY" ]; then
+  COMPONENT=$(run activity) || exit 2
+  ACTIVITY=${COMPONENT#*/}
+fi
 # The kiosk's test hold keeps the screen on for the run (#240). An app without it ignores the extra,
 # and its screen would sleep partway: no fallback.
 release_hold() { run hold --off >/dev/null 2>&1 || true; }
@@ -144,11 +156,12 @@ done
 # dashboard sets it again. On exit, the app is restarted unless it is set; that is harmless if the
 # dashboard was up after all.
 SERVER_PID="" DASHBOARD_OK=1 SWITCHED=0 PANES_SWITCHED=0 PANES=""
-# Protocol 4: the graded part points the kiosk at the reference dashboard's start view on the fake
-# Home Assistant (its saved dashboard, `--es url`), so a restart comes back to it; it points it back
-# at RESTORE after, and here on any exit (exit status 3 if that failed). --pane-ram also turns the panes off
-# and on; perfrun.py panes puts them back with the dashboard and checks the kiosk's log that they took.
-# The runner can't read either setting itself (it never reads app data).
+# Protocol 4: the graded part shows the reference dashboard's start view on the fake Home Assistant as the
+# kiosk's test dashboard (perfrun.py testdash), so a restart comes back to it. Not its saved dashboard: that
+# moved the panel's Home Assistant address, and since #496 the panel then asks to sign in again. The test
+# dashboard ends after the part, and here on any exit (exit status 3 if that failed); the hold's end ends
+# it too. --pane-ram also turns the panes off and on; perfrun.py panes puts them back and checks the
+# kiosk's log that they took. The runner can't read the pane settings itself (it never reads app data).
 pane_set() { # the pane extras (extra=true|false,...) for: one pane on by itself (its id), "none", or "restore"
   awk -v s="$1" '$1 == "STATE" && $2 == s { print $3 }' <<< "$PANES"
 }
@@ -156,31 +169,30 @@ point_back() {
   local out set=""
   [ "$PANES_SWITCHED" = 1 ] && set=$(pane_set restore)
   if [ "$SWITCHED" = 1 ] || [ "$PANES_SWITCHED" = 1 ]; then
-    log "pointing the kiosk back at its dashboard ($RESTORE)${set:+ and its panes ($PANE_RAM)}"
-    DASHBOARD_OK=0
+    log "back to the kiosk's own dashboard${set:+ and its panes ($PANE_RAM)}"
     if [ -n "$set" ]; then
+      DASHBOARD_OK=0
       # The panes and the dashboard together, checked in the kiosk's log (perfrun.py panes): the
       # live settings first, then voice_enabled and a restart. Retried if one didn't take.
-      if out=$(run panes --set "$set" --url "$RESTORE" --settle "$SWITCH_SETTLE" --tries 3 2>&1); then
+      if out=$(run panes --set "$set" --url '' --settle "$SWITCH_SETTLE" --tries 3 2>&1); then
         SWITCHED=0 PANES_SWITCHED=0
         if printf '%s\n' "$out" | tail -n 1 | grep -q '"voice_applied": false'; then
           log "voice_enabled didn't take (this kiosk saves it asynchronously before it restarts); it is as it was"
         fi
       else
         log "COULD NOT put the panes back: $(printf '%s' "$out" | tail -n 1)"
-        log "send it yourself: adb shell am start -n $PACKAGE/.MainActivity --es url '$RESTORE' $(printf '%s' "$set" | sed 's/\([a-z_]*\)=\([a-z]*\)/--ez \1 \2/g; s/,/ /g')"
+        log "send it yourself: adb shell am start -n $PACKAGE/$ACTIVITY --es test_dashboard \"''\" $(printf '%s' "$set" | sed 's/\([a-z_]*\)=\([a-z]*\)/--ez \1 \2/g; s/,/ /g')"
       fi
       return 0
     fi
-    # -W: wait until the kiosk has the intent. am exits 0 even when it fails, so read its answer.
-    out=$(sh_dev am start -W -n "$PACKAGE/.MainActivity" --es url "'$RESTORE'" 2>&1) || out="$out (adb failed)"
-    if [[ $'\n'$out == *$'\nStatus: ok'* ]]; then
+    # perfrun.py testdash --off reads am's answer: am exits 0 even when the kiosk didn't take the intent.
+    if run testdash --off; then
       SWITCHED=0
-      # Let the kiosk save the setting and load the dashboard before anything else restarts it.
+      # Let the kiosk load its dashboard (the legacy engine restarts for it) before anything else restarts it.
       sleep "$SWITCH_SETTLE"
     else
-      log "COULD NOT point the kiosk back: $(printf '%s' "$out" | tr '\n' ' ')"
-      log "send it yourself: adb shell am start -n $PACKAGE/.MainActivity --es url '$RESTORE'"
+      log "COULD NOT end the test dashboard"
+      log "send it yourself: adb shell am start -n $PACKAGE/$ACTIVITY --es test_dashboard \"''\""
     fi
   fi
 }
@@ -194,7 +206,7 @@ cleanup() {
   if [ "$DASHBOARD_OK" != 1 ] && restored; then
     log "restoring the dashboard (restart the app)"
     sh_dev am force-stop "$PACKAGE" || true
-    sh_dev am start -n "$PACKAGE/.MainActivity" >/dev/null || true
+    sh_dev am start -n "$PACKAGE/$ACTIVITY" >/dev/null || true
   fi
   [ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2>/dev/null || true
   "$ADB" reverse --remove "tcp:$PORT" 2>/dev/null || true
@@ -241,16 +253,6 @@ PY
 ) || exit 2
 fi
 
-if [ "$REF" = 1 ] || [ -n "$PANE_RAM" ]; then
-  # The graded part changes the kiosk's saved dashboard for its duration, so it must know what to put
-  # back: the panel's dashboard URL, or "auto" if it finds HA itself. See docs/perf.md, "Run it".
-  case "$RESTORE" in
-    "") echo "the graded part and --pane-ram need --restore-dashboard <url|auto>: the dashboard the kiosk shows now" >&2; exit 2 ;;
-    *127.0.0.1:"$PORT"*) echo "--restore-dashboard is the fake Home Assistant; give the panel's own dashboard" >&2; exit 2 ;;
-    *"'"*|*'"'*|*' '*) echo "--restore-dashboard can't hold quotes or spaces" >&2; exit 2 ;;
-  esac
-fi
-
 run device ${NAME:+--name "$NAME"}
 thermal start
 VSYNC=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["display"]["vsync_ms"] or 16.667)' "$OUT/device.json")
@@ -284,6 +286,11 @@ if [ "$SYNTH" = 1 ] || [ "$REF" = 1 ] || [ -n "$PANE_RAM" ]; then
   elif [ "$WEBRTC_TRANSPORT" = auto ]; then
     WEBRTC_TRANSPORT=adb
   fi
+  if [ "$REF" = 1 ]; then
+    # This computer's own network (#649): 40 pings to its gateway and to the panel. A stalling link (macOS Wi-Fi)
+    # adds to the live updates and cameras where they cross it; the report is then provisional. Never fails the run.
+    python3 "$HERE/netcheck.py" --out "$OUT" || log "the network check failed (netcheck.py); the report won't have it"
+  fi
   # Something else on the ports (an earlier run's fake left behind) would answer for ours.
   if curl -s -o /dev/null --connect-timeout 1 --max-time 3 "http://127.0.0.1:$PORT/manifest.json"; then
     echo "port $PORT is already in use (an earlier run's fake Home Assistant?); stop it or use --port" >&2
@@ -311,24 +318,37 @@ if [ "$SYNTH" = 1 ]; then
     log "synthetic run $k/$RUNS"
     DASHBOARD_OK=0
     thermal "synthetic-$k"
-    run synthetic --run "$k" --url "$url" --nonce "$nonce"
+    status=0
+    run synthetic --run "$k" --url "$url" --nonce "$nonce" || status=$?
+    if [ "$status" = 4 ]; then
+      # perfrun.py LOCKDOWN_EXIT: the legacy engine loads only its dashboard's origin (#198).
+      log "the app's lockdown refused the animation test page (legacy engine): skipping it (detail, not graded)"
+      SYNTH=0
+      break
+    fi
+    [ "$status" = 0 ] || exit "$status"
     sleep "$RUN_GAP"
   done
-  log "memory on the test page after the ladder"
-  run idle --label after-synthetic --run 1 --settle 5 --window "$IDLE_WINDOW"
+  if [ "$SYNTH" = 1 ]; then
+    log "memory on the test page after the ladder"
+    run idle --label after-synthetic --run 1 --settle 5 --window "$IDLE_WINDOW"
+  fi
 fi
 
 if [ "$REF" = 1 ]; then
   FALLBACK=$(python3 -c 'import json,sys; print(",".join(json.load(open(sys.argv[1])).get("FALLBACK", {})))' "$HERE/page/tiers.json")
   # How many graded runs were attempted, so a run that left no file still counts against the grade.
   printf '{"runs": %d}\n' "$RUNS" > "$OUT/plan.json"
-  # The graded part. The kiosk is pointed at the reference dashboard's start view; each run
-  # force-stops it, times the restart to that view being usable, then opens the four reference
+  # The graded part. The kiosk shows the reference dashboard's start view as its test dashboard; each
+  # run force-stops it, times the restart to that view being usable, then opens the four reference
   # views in turn within the loaded frontend (the order turns each run).
-  log "pointing the kiosk at the reference dashboard for the graded runs (it goes back to $RESTORE after)"
-  DASHBOARD_OK=0
+  log "showing the reference dashboard for the graded runs (the kiosk's own dashboard and sign-in stay as they are)"
   SWITCHED=1
-  sh_dev am start -n "$PACKAGE/.MainActivity" --es url "'http://127.0.0.1:$PORT/clarity-ref/start'" >/dev/null
+  run testdash --url "http://127.0.0.1:$PORT/clarity-ref/start" >/dev/null || {
+    echo "$PACKAGE didn't take Clarity's test dashboard (--es test_dashboard): install an app built from main after it came in (docs/perf.md)" >&2
+    exit 2
+  }
+  DASHBOARD_OK=0
   sleep "$SWITCH_SETTLE"
   for k in $(seq 1 "$RUNS"); do
     log "graded run $k/$RUNS: restart to the reference dashboard, then the four reference dashboards"
@@ -350,13 +370,19 @@ fi
 
 if [ -n "$PANE_RAM" ]; then
   # Each switchable pane on by itself against every pane off, on the typical reference dashboard.
-  # The first intent sets the live settings (the other panes' switches, the microphone mute) and points
-  # the kiosk at the dashboard; the second sets voice_enabled and restarts the app, so every sample
+  # The first intent sets the live settings (the other panes' switches, the microphone mute) and shows
+  # the dashboard as the kiosk's test dashboard; the second sets voice_enabled and restarts the app, so every sample
   # starts from a fresh process. perfrun.py panes reads the kiosk's log to check what it runs. A sample that
   # ran something else, or saw the screen go off, is left out of the report (docs/perf.md).
   log "RAM per pane: every pane off, then each on by itself, $((RUNS + 1)) cycles, the first a warm-up (they go back to $PANE_RAM after)"
-  DASHBOARD_OK=0
   SWITCHED=1
+  # Checked once in the kiosk's log: am says "Status: ok" to a kiosk that ignores the extra, and the
+  # samples would then be of its own dashboard. Each state's intent below sends it again, unchanged.
+  run testdash --url "http://127.0.0.1:$PORT/clarity-ref/typical" >/dev/null || {
+    echo "$PACKAGE didn't take Clarity's test dashboard (--es test_dashboard): install an app built from main after it came in (docs/perf.md)" >&2
+    exit 2
+  }
+  DASHBOARD_OK=0
   PANES_SWITCHED=1
   # Cycle 0 is a warm-up, not recorded: its files go to warmup/, which the report doesn't read. In
   # s1p1 and s1p3 the first sample had the GPU process 15 MB under every later one (#186).

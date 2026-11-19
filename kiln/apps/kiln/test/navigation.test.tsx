@@ -7,7 +7,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { s1Plus } from '@glassworks/aqara-s1-plus-installer';
 import { FelDevice } from '@glassworks/fel';
 import { FakeBrom, makeSpl } from '@glassworks/fel/fakes';
-import { s1PlusUi } from '../src/frames/aqara-s1-plus';
+import { frame as s1PlusUi, demoFrame as s1Demo } from '../src/app/aqara-s1-plus/frame';
 import { registry, type Entry } from '../src/wizard/registry';
 import { Session } from '../src/wizard/session';
 import { useRouteSync } from '../src/wizard/useRouteSync';
@@ -119,7 +119,7 @@ describe('navigation', () => {
   });
 
   it('Back in set-up returns to the step before, on the same session', async () => {
-    const one = { s: demoSession('app') };
+    const one = { s: demoSession(s1Demo, 'app') };
     const h = harness(one, `${BASE}/set-up/wifi`);
     await until(() => h.state().setup.phase === 'wifi' && h.state().busy === undefined);
     await act(() => one.s.click('ha', () => one.s.homeAssistant()));
@@ -137,7 +137,7 @@ describe('navigation', () => {
   });
 
   it('asks for a push once, even when the state changes again before the address bar follows', async () => {
-    const one = { s: demoSession('app') };
+    const one = { s: demoSession(s1Demo, 'app') };
     const h = harness(one, `${BASE}/set-up/wifi`, false, true);
     await until(() => h.state().setup.phase === 'wifi' && h.state().busy === undefined);
     await act(async () => {
