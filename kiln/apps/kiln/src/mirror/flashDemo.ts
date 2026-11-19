@@ -9,7 +9,7 @@ import { fakeReleaseRoute, type FakeRelease } from '../release/demo';
 import { MirrorSession } from './session';
 
 export const FLASH_DEMOS = ['flash-image', 'flash-release', 'flash-release-downloading', 'flash-release-none', 'flash-release-bad', 'flash-downloading', 'flash-download-error', 'flash-download-bad', 'flash-ready', 'flash-wifi-short', 'flash-fastboot', 'flash-fastboot-wrong', 'flash-confirm',
-  'flash-working', 'flash-adb', 'flash-done', 'flash-done-chooser', 'flash-done-no-home', 'flash-error', 'flash-run',
+  'flash-working', 'flash-adb', 'flash-adb-wait', 'flash-done', 'flash-done-chooser', 'flash-done-no-home', 'flash-error', 'flash-run',
   'image-choose', 'image-choose-open', 'image-choose-panes', 'image-link', 'image-download', 'image-download-done', 'image-download-error', 'image-download-bad',
   'image-fastboot', 'image-confirm', 'image-writing', 'image-done', 'image-error', 'image-back-glassworks', 'image-back-panes'] as const;
 export type FlashDemo = (typeof FLASH_DEMOS)[number];
@@ -65,7 +65,12 @@ export async function flashDemo(name: FlashDemo, fast = false): Promise<{ flash:
     refract: 'https://refract.glassworks.dev',
     search: name === 'image-link' ? '?image=glass-panes' : '',
     requestFastboot: async () => fastboot(name === 'flash-fastboot-wrong' ? 0x40000000 : SYSTEM_BYTES),
-    requestAdb: async () => { const m = new FirstBootMirror(); m.hideFails = name === 'flash-done-chooser'; m.noHome = name === 'flash-done-no-home'; return m; },
+    // flash-adb-wait: the Mirror refuses this browser's key while it starts, and Kiln asks again
+    ...(name === 'flash-adb-wait' ? { reopenAdb: async () => { throw new Error('No authenticator can handle the request'); } } : {}),
+    requestAdb: async () => {
+      if (name === 'flash-adb-wait') throw new Error('No authenticator can handle the request');
+      const m = new FirstBootMirror(); m.hideFails = name === 'flash-done-chooser'; m.noHome = name === 'flash-done-no-home'; return m;
+    },
     adbKey: () => 'QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= kiln@glassworks',
     apk: () => mirror.apkBytes(),
     apkBlocked: () => mirror.releaseBlocked(),
@@ -97,6 +102,7 @@ export async function flashDemo(name: FlashDemo, fast = false): Promise<{ flash:
   if (name === 'flash-working') return done;
   await flashing;
   if (name === 'flash-adb' || name === 'flash-error') return done;
+  if (name === 'flash-adb-wait') { void flash.connectAdb(); return done; }
   await flash.connectAdb();
   return done;
 }

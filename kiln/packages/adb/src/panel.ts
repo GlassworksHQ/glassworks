@@ -24,13 +24,26 @@ export class Panel implements PanelShell {
 
   get serial(): string { return this.adb.serial; }
 
-  /** Asks for the panel's adb interface (needs a user gesture), then authenticates with `key`. */
+  /** The browser's list of adb devices (needs a user gesture): the device picked, not yet connected. */
+  static async pick(): Promise<USBDevice> {
+    const manager = AdbDaemonWebUsbDeviceManager.BROWSER;
+    if (!manager) throw new Error('this browser has no WebUSB (use Chrome or Edge)');
+    const d = await manager.requestDevice();
+    if (!d) throw new Error('no panel selected');
+    return d.raw;
+  }
+
+  /**
+   * Asks for the panel's adb interface (needs a user gesture), then authenticates with `key`. With `device`, no
+   * list: that device, or the permitted one with its serial number when it came back after a restart.
+   */
   static async connect(key: AdbKey, device?: USBDevice): Promise<Panel> {
     const manager = AdbDaemonWebUsbDeviceManager.BROWSER;
     if (!manager) throw new Error('this browser has no WebUSB (use Chrome or Edge)');
     let d: AdbDaemonWebUsbDevice | undefined;
     if (device) {
-      d = (await manager.getDevices()).find((x) => x.raw === device);
+      const known = await manager.getDevices();
+      d = known.find((x) => x.raw === device) ?? (device.serialNumber ? known.find((x) => x.serial === device.serialNumber) : undefined);
     } else {
       d = await manager.requestDevice();
     }
@@ -44,9 +57,14 @@ export class Panel implements PanelShell {
       }
       throw e;
     }
-    const transport = await AdbDaemonTransport.authenticate({
-      serial: d.serial, connection, credentialStore: key.store,
-    });
+    let transport;
+    try {
+      transport = await AdbDaemonTransport.authenticate({ serial: d.serial, connection, credentialStore: key.store });
+    } catch (e) {
+      // refused (adbd up before it reads its keys, or not this browser's key): let go, so a later try can claim it
+      await d.raw.close().catch(() => {});
+      throw e;
+    }
     return new Panel(new Adb(transport));
   }
 

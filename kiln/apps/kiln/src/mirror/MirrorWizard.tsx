@@ -62,6 +62,8 @@ function realSessions(on: boolean, from: ApkFrom = 'local'): { mirror: MirrorSes
     ...(from === 'release' ? { release: releaseRoute } : {}),
   }, true);
   const assets = new Assets<'mirror-bootanimation' | 'mirror-settings-overlay'>('/assets/');
+  // the device picked for the first start's adb: asked again with no list while the Mirror is still starting
+  let adbDevice: USBDevice | undefined;
   const flash = new FlashSession({
     // branding/lululemon-mirror/bootanimation.zip, staged with Kiln's other assets and checked by SHA-256
     bootAnimation: async () => ((await assets.has('mirror-bootanimation')) ? assets.get('mirror-bootanimation') : undefined),
@@ -73,7 +75,12 @@ function realSessions(on: boolean, from: ApkFrom = 'local'): { mirror: MirrorSes
     // ?image=<id>: a community image's install, with no choice first (issue 579)
     search: location.search,
     requestFastboot: () => Fastboot.request([MIRROR_FASTBOOT]),
-    requestAdb: keys.connectWith((k) => Panel.connect(k)),
+    requestAdb: keys.connectWith(async (k) => Panel.connect(k, (adbDevice = await Panel.pick()))),
+    reopenAdb: async () => {
+      const k = keys.key();
+      if (!k || !adbDevice) throw new Error('no panel selected');
+      return Panel.connect(k, adbDevice);
+    },
     adbKey: () => keys.key()?.publicKey,
     apk: () => mirror.apkBytes(),
     apkBlocked: () => mirror.releaseBlocked(),
