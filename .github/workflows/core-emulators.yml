@@ -265,7 +265,7 @@ jobs:
               if [ "$(gh issue view "$keep" --json state --jq .state)" != OPEN ]; then
                 gh issue reopen "$keep" --comment "Reopened: $RUN failed after this issue closed."
               fi ;;
-            ' success success ')
+            ' success success success ')
               issues=$(open_issues)
               [ -n "$issues" ] || echo 'Green, and no open issue.'
               for n in $issues; do
