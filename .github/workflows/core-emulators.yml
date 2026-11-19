@@ -161,7 +161,8 @@ jobs:
   # adds the run to it, and a green run on main's newest commit closes it. Only for main: a manual run on another
   # branch reports nothing, and a cancelled run says nothing either way. No concurrency group: GitHub keeps one
   # waiting job per group and drops the rest, which could lose a failure. Reporters run side by side instead, so each
-  # step is safe to repeat: two that both open an issue keep the older one and close the other.
+  # step is safe to repeat: two that both open an issue keep the older one and close the other, a failure ends with
+  # its issue open (reopening it if a green run closed it meanwhile), and a close checks main's newest commit first.
   report:
     needs: [conformance, libs-api23]
     if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
@@ -185,8 +186,9 @@ jobs:
             gh issue list --state open --label 'area: ci' --limit 200 --json number,title \
               --jq "[.[] | select(.title == \"$title\") | .number] | sort | .[]"
           }
-          # main's newest commit: a run on an older one says so, and only a run on the newest one closes the issue.
-          head=$(gh api "repos/$GH_REPO/commits/main" --jq .sha)
+          main_head() { gh api "repos/$GH_REPO/commits/main" --jq .sha; }
+          # A run on an older commit than main's newest says so in what it writes.
+          head=$(main_head)
           on=" ($EVENT, $SHA)"
           [ "$head" = "$SHA" ] || on=" ($EVENT, $SHA; main is at $head now, and its own run reports on it)"
           case " $RESULTS " in
@@ -194,7 +196,8 @@ jobs:
               body="The emulator tests failed on main: $RUN$on. Open the run for the job that failed."
               issues=$(open_issues)
               if [ -n "$issues" ]; then
-                gh issue comment "$(echo "$issues" | head -n 1)" --body "$body"
+                keep=$(echo "$issues" | head -n 1)
+                gh issue comment "$keep" --body "$body"
               else
                 gh issue create --title "$title" --label 'area: ci' \
                   --body "$body This issue closes itself on the next green run (.github/workflows/core-emulators.yml, docs/ci.md)."
@@ -204,17 +207,22 @@ jobs:
                 for n in $(echo "$issues" | tail -n +2); do
                   gh issue close "$n" --reason 'not planned' --comment "Same as #$keep: $RUN" || true
                 done
+              fi
+              # A green reporter may have closed it between our list and our comment: a failure leaves it open.
+              if [ "$(gh issue view "$keep" --json state --jq .state)" != OPEN ]; then
+                gh issue reopen "$keep" --comment "Reopened: $RUN failed after this issue closed."
               fi ;;
             ' success success ')
               issues=$(open_issues)
-              if [ -z "$issues" ]; then
-                echo 'Green, and no open issue.'
-              elif [ "$head" != "$SHA" ]; then
-                echo "Green on $SHA, but main is at $head now: its run reports."
-              else
-                for n in $issues; do
-                  gh issue close "$n" --comment "Green again: $RUN$on." || true
-                done
-              fi ;;
+              [ -n "$issues" ] || echo 'Green, and no open issue.'
+              for n in $issues; do
+                # main is read again just before each close: a newer commit's run reports on it instead.
+                now=$(main_head)
+                if [ "$now" != "$SHA" ]; then
+                  echo "Green on $SHA, but main is at $now now: its run reports."
+                  break
+                fi
+                gh issue close "$n" --comment "Green again: $RUN$on." || true
+              done ;;
             *) echo "Nothing to report: $RESULTS" ;;
           esac
