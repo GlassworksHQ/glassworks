@@ -66,7 +66,8 @@ def stamp(at):
     """A logcat line's time: monotonic seconds, or on FAKE_ANDROID6 the wall clock as `-v usec` writes it."""
     if not ANDROID6:
         return f"{at:10.3f}"
-    w = at + WALL_SHIFT
+    # FAKE_CLOCK_STEP_S: the wall clock steps by that much when the first view opens (network time).
+    w = at + WALL_SHIFT + (float(os.environ["FAKE_CLOCK_STEP_S"]) if state("clock_stepped.json") else 0)
     return time.strftime("%m-%d %H:%M:%S", time.gmtime(w)) + f".{int(w % 1 * 1e6):06d}"
 
 
@@ -732,6 +733,8 @@ def take_commands(base):
             C.sleep(0.2)
             continue
         last = cmd["nonce"]
+        if os.environ.get("FAKE_CLOCK_STEP_S"):
+            save("clock_stepped.json", True)
         q = {k: v for k, v in cmd.items() if k != "view"}
         save("views.json", state("views.json", []) + [cmd])
         with open(os.path.join(STATE, "commands.log"), "a") as f:     # in order with the adb commands

@@ -1087,6 +1087,11 @@ def cmd_coldstart(dev, a):
     res["sf_period_ms"] = period[0]
     res["presents_mono_ms"] = sorted(t / 1e6 for t in presents)
     res.update(dev.clock_note())
+    if P.clock_stepped(res.get("logcat_clock")) and not res["error"]:
+        # Android 6: the wall clock moved during the run, and with it every logcat line after the move; the
+        # windows no longer line up with SurfaceFlinger's frames. The run fails, as one with the screen off does.
+        res["error"] = (f"the device's wall clock moved {res['logcat_clock']['drift_ms']:+.1f} ms during the run "
+                        "(Android 6's logcat stamps lines with it): its timings aren't trusted")
     write_json(os.path.join(a.out, f"{a.cmd}-{a.run}.json"), res)
     if res["error"]:
         sys.exit(f"{a.cmd} {a.run}: {res['error']}")

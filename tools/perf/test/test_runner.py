@@ -1479,6 +1479,17 @@ class Android6(unittest.TestCase):
         self.assertLess(abs(note["drift_ms"]), 100)
 
 
+class Android6ClockStep(unittest.TestCase):
+    def test_a_wall_clock_step_during_a_graded_run_fails_it(self):
+        """CodeRabbit on #619: on Android 6 the logcat lines carry the wall clock; a step of it moves the windows away
+        from SurfaceFlinger's frames. The run fails rather than grade frames it didn't measure."""
+        tmp = tempfile.mkdtemp()
+        p, r = refstart(tmp, FAKE_ANDROID6="1", FAKE_CLOCK_STEP_S="2")
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("wall clock moved +2000", r["error"])
+        self.assertGreater(r["logcat_clock"]["drift_ms"], 1900)
+
+
 class Android6Refusals(unittest.TestCase):
     def test_no_task_to_read_the_activity_from_is_refused_before_anything_changes(self):
         tmp = tempfile.mkdtemp()

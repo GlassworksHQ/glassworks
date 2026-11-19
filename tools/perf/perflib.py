@@ -193,6 +193,21 @@ class LogClock:
                 "tag": m.group(10).strip(), "msg": m.group(11)}
 
 
+# How far the wall-clock offset may move within one runner step beyond the two calibrations' own errors before
+# the step's timings stop being trusted: a step of the wall clock (network time, daylight saving) moves every
+# later logcat line, and its windows away from SurfaceFlinger's frames. The emulator's moved 0.35 ms at most
+# (2026-11-18).
+CLOCK_STEP_TOLERANCE_MS = 5.0
+
+
+def clock_stepped(note):
+    """True when a step's `logcat_clock` (perfrun.py Device.clock_note) says its offset moved more than both
+    calibrations' errors plus CLOCK_STEP_TOLERANCE_MS. Never on a monotonic logcat (no note)."""
+    if not note:
+        return False
+    return abs(note["drift_ms"]) > note["offset_err_ms"] + note["end_err_ms"] + CLOCK_STEP_TOLERANCE_MS
+
+
 def wall_offset(sandwich, marks, nonce, year):
     """The usec LogClock from paired samples: `sandwich` has one "CLOCKPAIR <i> now at <ns> nsecs now at <ns>
     nsecs" line per sample, CLOCK_MONOTONIC read from /proc/timer_list just before and just after a log line

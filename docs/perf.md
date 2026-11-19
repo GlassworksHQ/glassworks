@@ -231,7 +231,9 @@ runner measures the offset once per runner step: five times, it reads the monoto
 of the five pairs gives the offset to within half its width. The run's files on Android 6 carry it in
 `logcat_clock` (refstart, coldstart and idle samples): `offset_err_ms`, and `drift_ms`, how far the offset
 moved by the end of that step. A wall-clock change during a step (a network-time step, daylight saving) moves
-every later line by that much, and shows in `drift_ms`. Measured on the API 23 emulator (2026-11-18), in a `--quick` run: the offset's error was 0.76 to 1.9 ms
+every later line by that much, and shows in `drift_ms`. A restart run (graded, or real use) whose offset
+moved by more than both calibrations' errors plus 5 ms fails, as one with the screen off does: its windows no
+longer line up with SurfaceFlinger's frames. Measured on the API 23 emulator (2026-11-18), in a `--quick` run: the offset's error was 0.76 to 1.9 ms
 in every step, and it moved by 0.35 ms at most within one. Where logcat has `-v monotonic` (Android 7 and later, the S1, the tablet) nothing changes: the
 runner reads it as before.
 

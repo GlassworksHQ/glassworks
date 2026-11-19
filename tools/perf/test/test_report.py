@@ -182,6 +182,14 @@ class LogClock(unittest.TestCase):
         self.assertIsNone(P.wall_offset(sandwich, stale, "ab12", 2026))
         self.assertIsNone(P.wall_offset("", marks, "ab12", 2026))         # /proc/timer_list unreadable
 
+    def test_a_wall_clock_step_during_a_run_is_caught(self):
+        self.assertFalse(P.clock_stepped(None))                                   # monotonic logcat
+        # The emulator's (2026-11-18): within both errors and the tolerance.
+        self.assertFalse(P.clock_stepped({"format": "usec", "offset_err_ms": 0.763, "end_err_ms": 1.896, "drift_ms": -0.132}))
+        self.assertFalse(P.clock_stepped({"format": "usec", "offset_err_ms": 1.0, "end_err_ms": 1.0, "drift_ms": 6.9}))
+        self.assertTrue(P.clock_stepped({"format": "usec", "offset_err_ms": 1.0, "end_err_ms": 1.0, "drift_ms": 7.1}))
+        self.assertTrue(P.clock_stepped({"format": "usec", "offset_err_ms": 1.0, "end_err_ms": 1.0, "drift_ms": -3600000.0}))
+
     def test_a_run_over_new_year_stays_in_order(self):
         sandwich, marks = clock_samples("ab12", [(499.999, "12-31 23:59:59.000000", 500.001)])
         clock = P.wall_offset(sandwich, marks, "ab12", 2026)
