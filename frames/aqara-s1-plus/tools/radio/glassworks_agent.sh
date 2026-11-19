@@ -704,6 +704,14 @@ portal_rules() {
     echo "-A $PORTAL_CHAIN -d $5/128 -i $2 -p udp -m udp --dport 53 -j DNAT --to-destination [$5]:$PORTAL_DNS"
   fi
 }
+ip4_net() { # a.b.c.d prefix -> the network address (192.168.43.1 24 -> 192.168.43.0), as iptables-save prints -s
+  in_=$2; ir_=""
+  for io_ in $(printf '%s' "$1" | tr '.' ' '); do
+    if [ "$in_" -ge 8 ]; then im_=255; in_=$((in_ - 8)); elif [ "$in_" -gt 0 ]; then im_=$(( (255 << (8 - in_)) & 255 )); in_=0; else im_=0; fi
+    ir_="$ir_.$((io_ & im_))"
+  done
+  echo "${ir_#.}"
+}
 portal_save() { if [ "$1" = 6 ]; then ip6tables-save -t nat; else iptables-save -t nat; fi; }
 
 # The rules for family $1 are in place for "$2": as many DNAT rules as wanted, each to the right address
@@ -714,10 +722,11 @@ portal_ok() {
   n_=$(portal_rules "$@" | grep -c .)
   [ "$(printf '%s\n' "$s_" | grep -c "^-A $PORTAL_CHAIN ")" = "$n_" ] || return 1
   if [ "$1" = 4 ]; then
-    # the source match too: iptables-save prints it as the network (192.168.43.0/24), so the prefix is what
-    # tells a rule for the hotspot's subnet now from one for a narrower or wider one before
+    # the source match too: the hotspot's subnet now, as written ($3/$4) or as iptables-save prints it (the
+    # network, 192.168.43.0/24), so a rule for another subnet or prefix is rebuilt
+    net_=$(ip4_net "$3" "$4")
     for p_ in $PORTAL_DNS $PORTAL_HTTP; do
-      printf '%s\n' "$s_" | grep -q "^-A $PORTAL_CHAIN -s [0-9.]*/$4 -d $3/32 -i $2 .*--to-destination $3:$p_\$" || return 1
+      printf '%s\n' "$s_" | grep -qE "^-A $PORTAL_CHAIN -s ($3|$net_)/$4 -d $3/32 -i $2 .*--to-destination $3:$p_\$" || return 1
     done
   elif [ -n "$5" ]; then
     # ip6tables-save shortens the address (2001:db8::20): the -d match and the target are compared with the

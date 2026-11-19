@@ -1245,6 +1245,14 @@ echo "23: wlan0    inet 192.168.43.1/25 brd 192.168.43.127 scope global wlan0" >
 check "the hotspot's subnet changed (/24 to /25, same address): the IPv4 rules are rebuilt for it" \
   test -s "$T/ipt/restores" -a "$(nat 4 | grep -c '^-A GWPORTAL -s 192.168.43.1/25 ')" = 2 -a -z "$(nat 4 | grep '/24 ')"
 ap_up; portal
+# as iptables-save prints them, the source is the network: the same rules, kept
+sed -i 's|-s 192.168.43.1/24 |-s 192.168.43.0/24 |' "$T/ipt/4-nat"; rm -f "$T/ipt/restores"; portal
+check "the source as iptables-save prints it (192.168.43.0/24) is the same rule: kept, not rebuilt" \
+  test ! -s "$T/ipt/restores" -a "$(prop sys.glassworks.portal.status)" = "on wlan0"
+sed -i 's|-s 192.168.43.0/24 |-s 192.168.44.0/24 |' "$T/ipt/4-nat"; portal
+check "a source network that isn't the hotspot's (same prefix, address and interface): rebuilt" \
+  test -s "$T/ipt/restores" -a "$(nat 4 | grep -c '^-A GWPORTAL -s 192.168.43.1/24 ')" = 2 -a -z "$(nat 4 | grep '192.168.44')"
+ap_up; portal
 # first_check: until the helper started in the background has done its first check (its status line)
 # logged <pattern>: waits (60 s at most, an emulated ARM under load is slow) until setprop.log has a line for it
 logged() { i=0; until grep -q "$1" "$T/setprop.log" || [ $i -ge 600 ]; do sleep 0.1; i=$((i + 1)); done; }
