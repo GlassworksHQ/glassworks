@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PanelShell } from '@glassworks/adb';
-import { ManifestError, Steps, apiKeyFingerprint, apkHome, apkInfo, apkPermissions, axmlTree, dropAdmin, grantPermissions, handOverApiKey, kioskVersion, q, readApiKey, startApp, zipEntry } from '../src';
+import { ManifestError, Steps, apiKeyFingerprint, apiKeySocketUp, apkHome, apkInfo, apkPermissions, axmlTree, dropAdmin, grantPermissions, handOverApiKey, kioskVersion, q, readApiKey, sendWifi, startApp, zipEntry } from '../src';
 import { FakeKeySocket, HOME_ACTIVITY, app, fakeApk, filter, zip, type FakeEl } from './fakes';
 
 class Shell implements PanelShell {
@@ -277,9 +277,31 @@ describe('the ESPHome API key across a reflash (#574)', () => {
     await expect(readApiKey(shell(mute), 5)).rejects.toThrow(/didn't answer/);
   });
 
+  it('stops, rather than carry nothing, when a socket the caller saw listen is gone (PR 603 review)', async () => {
+    const gone = new FakeKeySocket(KEY, false);
+    await expect(readApiKey(shell(gone), 5, { socket: 'required' })).rejects.toThrow(/socket closed/);
+    expect(await readApiKey(shell(gone), 5)).toBeUndefined();
+  });
+
+  it('tells an app that listens on the key socket from one older than #574 (Kiln\'s keep step, #580)', async () => {
+    expect(await apiKeySocketUp(shell(new FakeKeySocket()))).toBe(true);
+    expect(await apiKeySocketUp(shell(new FakeKeySocket(KEY, false)))).toBe(false);
+  });
+
   it('fingerprints a key as the app logs it', async () => {
     // NoiseKeys.fingerprint: SHA-256's first two bytes, in hex
     expect(await apiKeyFingerprint(KEY)).toMatch(/^[0-9a-f]{4}$/);
     expect(await apiKeyFingerprint(KEY)).not.toBe(await apiKeyFingerprint(btoa('x'.repeat(32))));
+  });
+});
+
+describe('Wi-Fi over the app\'s Improv socket', () => {
+  it('says not joined, never throws, when the socket refuses the connection', async () => {
+    const p: PanelShell = {
+      async run() { return { out: '1\n', code: 0 }; },
+      async push() {},
+      openStream: async () => { throw new Error('connection refused'); },
+    };
+    expect(await sendWifi(p, 'Home Net', 'not-a-real-password', async () => {}, 0)).toBe(false);
   });
 });

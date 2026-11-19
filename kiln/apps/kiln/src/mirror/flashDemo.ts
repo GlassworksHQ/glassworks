@@ -4,7 +4,7 @@
 // answers are the recipe's fakes. `flash-…`: Glassworks; `image-…`: the choice and Glass Panes (issue 579).
 import { ProxyError, SYSTEM_BYTES, USERDATA_BYTES, WrongImage, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
 import { FirstBootMirror, fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
-import { FlashSession, type ImageMaker } from './flash';
+import { FlashSession, type FlashDeps, type ImageMaker } from './flash';
 import { MirrorSession } from './session';
 
 export const FLASH_DEMOS = ['flash-image', 'flash-downloading', 'flash-download-error', 'flash-download-bad', 'flash-ready', 'flash-wifi-short', 'flash-fastboot', 'flash-fastboot-wrong', 'flash-confirm',
@@ -15,7 +15,8 @@ export type FlashDemo = (typeof FLASH_DEMOS)[number];
 
 const REFRACT_DOWN = 'the download proxy answered 502: GitHub answered 503';
 
-export async function flashDemo(name: FlashDemo, fast = false): Promise<{ flash: FlashSession; mirror: MirrorSession }> {
+/** `deps`: what another demo changes in the simulated Mirror (keepDemo.ts: the app's key before and after the flash). */
+export async function flashDemo(name: FlashDemo, fast = false, deps: Partial<FlashDeps> = {}): Promise<{ flash: FlashSession; mirror: MirrorSession }> {
   const tick = (ms: number) => new Promise<void>((r) => setTimeout(r, fast ? 0 : ms));
   let failures = 1; // a failed download fails once: Try again works
   const images: ImageMaker = {
@@ -64,6 +65,7 @@ export async function flashDemo(name: FlashDemo, fast = false): Promise<{ flash:
     adbKey: () => 'QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= kiln@glassworks',
     apk: () => mirror.apkBytes(),
     sleep: (ms) => tick(ms / 20),
+    ...deps,
   });
   const done = { flash, mirror };
   if (name === 'image-choose' || name === 'image-link') return done;
