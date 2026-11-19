@@ -62,7 +62,7 @@ const assets = [
 ];
 
 // --remote (the Vercel build): the binaries come from pinned URLs (assets.lock.json) instead of this
-// computer, and the kiosk APK from the latest S1 Kiosk release, streamed by a release route:
+// computer, and the kiosk APK from the latest Glassworks release, streamed by a release route:
 // api/release-asset.ts on s1.edm.sh, or the one --release-route names (Kiln: /api/release/aqara-s1-plus).
 const REMOTE = process.argv.includes('--remote');
 const routeArg = process.argv.indexOf('--release-route');
@@ -77,14 +77,14 @@ async function download(url) {
   return Buffer.from(await r.arrayBuffer());
 }
 
-/** Latest published S1 Kiosk release (v*, not a pre-release): its APK's tag, name, size and SHA-256. */
+/** Latest published Glassworks release (v*, not a pre-release): its APK's tag, name, size and SHA-256. */
 async function latestKiosk() {
   const gh = { 'user-agent': 's1-unleashed-installer-build', accept: 'application/vnd.github+json',
     ...(process.env.GITHUB_TOKEN ? { authorization: `Bearer ${process.env.GITHUB_TOKEN}` } : {}) };
   const r = await fetch('https://api.github.com/repos/GlassworksHQ/glassworks/releases?per_page=30', { headers: gh });
   if (!r.ok) throw new Error(`GitHub releases: HTTP ${r.status}`);
   const rel = (await r.json()).find((x) => !x.draft && !x.prerelease && /^(aqara-s1-plus-)?v\d+\.\d+\.\d+$/.test(x.tag_name));
-  if (!rel) throw new Error('no S1 Kiosk release yet');
+  if (!rel) throw new Error('no Glassworks release yet');
   const v = rel.tag_name.replace(/^aqara-s1-plus-/, '').slice(1);
   const apk = rel.assets.find((x) => x.name === `s1-kiosk-${v}.apk`);
   const sum = rel.assets.find((x) => x.name === `s1-kiosk-${v}.apk.sha256`);

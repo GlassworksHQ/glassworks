@@ -9,6 +9,12 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 ## [Unreleased]
 
 ### Added
+- **Set up every panel from one Manage page.** *All panels*, in the Manage page's menu, signs in to
+  Home Assistant and lists the house's panels with their area and version. A panel that's down shows as
+  down. *Manage* opens another panel's page, already signed in, and *Copy settings* makes one panel like
+  another: it changes only what you tick, and greys out what the other panel's version doesn't have.
+  Administrators only. Each panel checks the sign-in with Home Assistant itself, so panels never trust
+  each other. Every panel needs this version for the page to reach it.
 - **Manage sends a test notification and shows the panel's notifications.** The Notifications page on the Manage
   page lists what is on the panel now, read-only, and has a *Send* button for the test notification. On the panel,
   *Send a test notification* is now a row with a *Send* button.
@@ -76,6 +82,11 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   and off, the overlay, the device admin) and checks each one, makes it the home screen and opens its setup page.
   A tablet that refuses a step is told plainly, and undo removes the app. The APK is a test build you pick on the
   computer until Glassworks for Android has a release.
+- **Get Glassworks on a tablet from the tablet itself.** Open `kiln.glassworks.dev/android/tablet` in the tablet's
+  browser. Kiln says what the tablet is, even in Chrome's desktop mode, and offers Glassworks as a download: the
+  build for its Android version, through Kiln's own address. It then says what the app's setup asks, and how to
+  finish with Kiln over USB for the one setting that needs a computer. Until Glassworks for Android has a release,
+  the page says it isn't out yet.
 - **Know when the tablet is on its dock.** A Pixel Tablet now has a *Docked* sensor in Home Assistant: on
   while it sits on its dock, off when you lift it off. Automate on it, for example to
   show another dashboard while someone holds the tablet. The tablet's page in the panel's settings, and on the

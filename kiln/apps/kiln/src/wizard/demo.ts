@@ -105,7 +105,7 @@ function improvStream(fail: boolean, net: Net): ByteStream {
 }
 
 /** `online`: on Wi-Fi already, as a panel set up with Aqara's app is. */
-/** `app`: S1 Kiosk's version on the panel (`dumpsys package`), or null when it isn't installed. */
+/** `app`: Glassworks' version on the panel (`dumpsys package`), or null when it isn't installed. */
 export function simulatedPanel(wifiFails = false, online = true, app: { name: string; code: number } | null = { name: '0.5.0', code: 500 }): PanelShell {
   const net: Net = { online };
   const out = (cmd: string) => cmd === 'getprop sys.boot_completed' || cmd.startsWith('grep -c') ? '1\n'
@@ -205,7 +205,7 @@ const demoRecipe: Recipe<AssetName, SetUpOptions, Provisioned> = {
 /** A session on the simulated panel. */
 export function demoSession(which: Demo): Session {
   const saved: { meta: BackupMeta; files: BackupFile[] }[] = [];
-  // run and the app's first-install states start without S1 Kiosk on the panel; radio-thread-old has 0.4.3
+  // run and the app's first-install states start without Glassworks on the panel; radio-thread-old has 0.4.3
   const app = ['run', 'app', 'app-installing', 'app-keyboard'].includes(which) ? null
     : which === 'radio-thread-old' ? { name: '0.4.3', code: 403 } : { name: '0.5.0', code: 500 };
   const panel = simulatedPanel(which === 'wifi-fail', which !== 'wifi-fail' && which !== 'wifi-new', app);
@@ -280,8 +280,8 @@ export async function enterDemo(session: Session, which: Demo): Promise<void> {
       dispatch({ type: 'setup', setup: { phase: 'waiting', note: 'The panel is starting its new software. The first start takes a minute or two.' } });
       void session.asks.open('adb', () => new Promise(() => {}), never);
       return;
-    case 'app': // a first install: the panel has no S1 Kiosk yet
-    case 'app-update': // S1 Kiosk is on the panel: installing replaces it
+    case 'app': // a first install: the panel has no Glassworks yet
+    case 'app-update': // Glassworks is on the panel: installing replaces it
       await session.route('resume');
       return;
     case 'app-installing': // Android installing and optimising the app
@@ -307,7 +307,7 @@ export async function enterDemo(session: Session, which: Demo): Promise<void> {
       await session.route('radio');
       await session.applyRadio('zigbee_tcp');
       return;
-    case 'radio-thread': // a Thread router, on an S1 Kiosk that gets the network from Home Assistant
+    case 'radio-thread': // a Thread router, on a Glassworks that gets the network from Home Assistant
     case 'radio-thread-old': // the same on 0.4.3, which can't
       await session.route('radio');
       await session.applyRadio('thread_router');
@@ -350,7 +350,7 @@ export async function enterDemo(session: Session, which: Demo): Promise<void> {
       return;
     case 'undo-done':
       dispatch({ type: 'start', flow: 'undo', now: Date.now() });
-      dispatch({ type: 'done', done: { title: 'The original software is back.', body: 'One last step, on the panel: swipe down, tap Settings on the S1 Kiosk notification, then Advanced settings → Factory reset.' } });
+      dispatch({ type: 'done', done: { title: 'The original software is back.', body: 'One last step, on the panel: swipe down, tap Settings on the app\'s notification, then Advanced settings → Factory reset.' } });
       return;
     case 'error':
       install();

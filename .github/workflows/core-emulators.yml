@@ -121,3 +121,9 @@ jobs:
           path: core/build/reports/androidTests/connected/
           retention-days: 7
           if-no-files-found: ignore
+
+      # So a failed run can't save a remembered "missing" artifact into the cache (docs/ci.md, Caches).
+      - name: Forget Gradle's dependency metadata after a failure
+        if: failure()
+        run: rm -rf ~/.gradle/caches/modules-2/metadata-*
+

@@ -38,11 +38,11 @@
 #            change and fails over the frame's size budget (frames/<id>/budgets.json). The report is
 #            the job summary, and size-comment.yml posts it on the PR (docs/size.md)
 #   size-generic  the same check for Glassworks for generic Android (#23, frames/generic-android): its
-#            release APK for each ABI of its frame.json against frames/generic-android/budgets.json. This
-#            branch only, no change column, so it costs two builds (about 4 minutes); the report is the
-#            job summary. Then its legacy build (#198, arm64-v8a) builds, with its id, minSdk, the
-#            system permissions and its icons on API 23 (tools/legacy/apk-icons.py) checked; no budget
-#            yet. Every APK also goes through tools/release/check-update-compat.sh --app (it still updates
+#            release APK for each ABI of its frame.json, of this branch and of its base, against
+#            frames/generic-android/budgets.json. The report is the job summary, and size-comment.yml
+#            adds it to the PR's size comment. Then its legacy build (#198, arm64-v8a) builds, with its
+#            id, minSdk, the system permissions and its icons on API 23 (tools/legacy/apk-icons.py)
+#            checked; no budget yet. Every APK also goes through tools/release/check-update-compat.sh --app (it still updates
 #            installed copies in place)
 #   branding rebuilds the S1's boot animation and splash (branding/boot/generate.py) in a pinned
 #            Python image and fails if the committed files differ
@@ -209,6 +209,12 @@ jobs:
             grep -q '<testsuite [^>]* skipped="0"' "$report" || { echo "::error::$report: a test skipped"; exit 1; }
           done
 
+      # So a failed run can't save a remembered "missing" artifact into the cache (docs/ci.md, Caches).
+      - name: Forget Gradle's dependency metadata after a failure
+        if: failure()
+        run: rm -rf ~/.gradle/caches/modules-2/metadata-*
+
+
   libs-api23:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.libs_api23 != 'false') }}
@@ -250,6 +256,12 @@ jobs:
   # 23 for this run only (tools/legacy/api23-lint.gradle) and fails on a call tools/legacy/api23-baseline.txt doesn't
   # list. The libraries are minSdk 23 already (libs-api23); this covers the core, the pane API, the panes and the
   # legacy engine. docs/research/legacy-engine.md has the table.
+
+      # So a failed run can't save a remembered "missing" artifact into the cache (docs/ci.md, Caches).
+      - name: Forget Gradle's dependency metadata after a failure
+        if: failure()
+        run: rm -rf ~/.gradle/caches/modules-2/metadata-*
+
   api23:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.api23 != 'false') }}
@@ -281,6 +293,12 @@ jobs:
         # Without the report's init script: every check, at its own minSdk. Its manifest asks for
         # INSTALL_PACKAGES, REBOOT and WRITE_SECURE_SETTINGS on purpose (tools:ignore="ProtectedPermissions").
         run: ./gradlew --no-daemon :generic-android:lintDebug
+
+      # So a failed run can't save a remembered "missing" artifact into the cache (docs/ci.md, Caches).
+      - name: Forget Gradle's dependency metadata after a failure
+        if: failure()
+        run: rm -rf ~/.gradle/caches/modules-2/metadata-*
+
 
   libs-publish:
     needs: changes
@@ -326,6 +344,12 @@ jobs:
   # Python, must fire in its own word only and score within 0.01 of pymicro-wakeword. It skips without
   # MWW_PYTHON, so this job fails if it skipped. The models come from raw.githubusercontent.com at
   # the commit WakeWords.kt pins, checked against its SHA-256s, and are cached by that commit.
+
+      # So a failed run can't save a remembered "missing" artifact into the cache (docs/ci.md, Caches).
+      - name: Forget Gradle's dependency metadata after a failure
+        if: failure()
+        run: rm -rf ~/.gradle/caches/modules-2/metadata-*
+
   wake-word:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.wake_word != 'false') }}
@@ -385,6 +409,12 @@ jobs:
           report=libs/voice/build/test-results/testDebugUnitTest/TEST-dev.glassworks.voice.MicroWakeWordClipTest.xml
           [ -z "$failed" ] || { cat "$report"; exit 1; }
           grep -q '<testsuite [^>]* skipped="0"' "$report" || { echo "::error::$report: the test skipped"; exit 1; }
+
+      # So a failed run can't save a remembered "missing" artifact into the cache (docs/ci.md, Caches).
+      - name: Forget Gradle's dependency metadata after a failure
+        if: failure()
+        run: rm -rf ~/.gradle/caches/modules-2/metadata-*
+
 
   web:
     needs: changes
@@ -475,6 +505,8 @@ jobs:
         run: |
           python3 tools/perf/test/parallel.py --set fast
           node --test tools/perf/test/page.test.mjs tools/perf/test/grade.test.mjs tools/perf/test/browserguard.test.mjs
+      - name: The Manage page's All panels script (#466)
+        run: node --test core/src/test/js/*.test.mjs
       - name: Perf test runner and fakes, end to end (slow set)
         if: needs.changes.result != 'success' || needs.changes.outputs.perf != 'false'
         run: python3 tools/perf/test/parallel.py --set slow
@@ -665,6 +697,12 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
+      # So a failed run can't save a remembered "missing" artifact into the cache (docs/ci.md, Caches).
+      - name: Forget Gradle's dependency metadata after a failure
+        if: failure()
+        run: rm -rf ~/.gradle/caches/modules-2/metadata-*
+
+
   size-generic:
     needs: changes
     if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.size_generic != 'false') }}
@@ -698,6 +736,26 @@ jobs:
             tools/release/check-update-compat.sh --app generic-android "$RUNNER_TEMP/generic/$a.apk"
           done
 
+      # The base, as the size job builds it: for the change column. An ABI the base doesn't build has none.
+      - name: Release APKs of the base
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/generic-base"; missing="$RUNNER_TEMP/generic-base/missing"; : > "$missing"
+          abis="$(jq -r '.abis[]' frames/generic-android/design/frame.json)"
+          if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            for a in $abis; do echo "$a=no-base-commit"; done > "$missing"; exit 0
+          fi
+          git worktree add -q "$RUNNER_TEMP/generic-base/src" "$BASE"
+          cd "$RUNNER_TEMP/generic-base/src"
+          for a in $abis; do
+            if ./gradlew --no-daemon :generic-android:assembleRelease -Ps1Abi="$a"; then
+              cp frames/generic-android/android/build/outputs/apk/release/generic-android-release-unsigned.apk "$RUNNER_TEMP/generic-base/$a.apk"
+            else
+              echo "The base didn't build for $a; no change column for it."; echo "$a=base-build-failed" >> "$missing"
+            fi
+          done
+
       - name: The legacy build (#198)
         # The Mirror's ABI. Its GeckoView follows -PlegacyAbi, the APK -Ps1Abi: the build checks they match.
         run: |
@@ -719,20 +777,17 @@ jobs:
           python3 tools/legacy/apk-icons.py --aapt2 "$aapt2" "$apk" drawable/ic_notification
           echo "Legacy APK (arm64-v8a): $(stat -c %s "$apk") bytes" >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Size and budget
-        env:
-          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+      - name: Size, change and budget
         run: |
           args=""
           for apk in "$RUNNER_TEMP"/generic/*.apk; do
             a="$(basename "$apk" .apk)"
-            args="$args --apk $a=$apk --base-missing $a=not-built"
+            args="$args --apk $a=$apk"
+            [ -f "$RUNNER_TEMP/generic-base/$a.apk" ] && args="$args --base-apk $a=$RUNNER_TEMP/generic-base/$a.apk"
           done
-          # No base APK is built, but the base's budgets still show a budget change (as the S1's job does).
-          base_budgets="$RUNNER_TEMP/generic/base-budgets.json"
-          if [ -n "$BASE" ] && git show "$BASE:frames/generic-android/budgets.json" > "$base_budgets" 2>/dev/null; then
-            args="$args --base-budgets $base_budgets"
-          fi
+          while IFS= read -r m; do [ -n "$m" ] && args="$args --base-missing $m"; done < "$RUNNER_TEMP/generic-base/missing"
+          base_budgets="$RUNNER_TEMP/generic-base/src/frames/generic-android/budgets.json"
+          [ -f "$base_budgets" ] && args="$args --base-budgets $base_budgets"
           # shellcheck disable=SC2086 # $args is a list of options
           python3 tools/size/apksize.py report --frame generic-android $args \
             --json "$RUNNER_TEMP/generic/size.json" --md "$RUNNER_TEMP/generic/size.md"
@@ -741,6 +796,21 @@ jobs:
         if: always()
         run: |
           [ -f "$RUNNER_TEMP/generic/size.md" ] && cat "$RUNNER_TEMP/generic/size.md" >> "$GITHUB_STEP_SUMMARY" || true
+
+      # For size-comment.yml, next to the size job's apk-size (which says which PR).
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always() && github.event_name == 'pull_request'
+        with:
+          name: apk-size-generic
+          path: ${{ runner.temp }}/generic/size.json
+          retention-days: 7
+          if-no-files-found: ignore
+
+      # So a failed run can't save a remembered "missing" artifact into the cache (docs/ci.md, Caches).
+      - name: Forget Gradle's dependency metadata after a failure
+        if: failure()
+        run: rm -rf ~/.gradle/caches/modules-2/metadata-*
+
 
   branding:
     needs: changes

@@ -82,3 +82,18 @@ export function installLink(f: FrameDesign): { href: string; kiln: boolean } | u
   // the parsed URL, so a value like "https:host" can never resolve against this site
   return f.install.href ? { href: new URL(f.install.href).href, kiln: false } : undefined;
 }
+
+/** The home page's hero panel: a frame, its Kiln page and its page here. */
+export type HeroPanel = { frame: FrameDesign; href: string; page: string };
+
+/**
+ * The frame the home page opens on: the first in catalog order (furthest along first) that has a
+ * render to show and installs from Kiln, so the hero's Install button always leads to Kiln.
+ */
+export function heroPanel(list: FrameDesign[] = frames): HeroPanel | undefined {
+  for (const f of list) {
+    const install = installLink(f);
+    if (f.render && install?.kiln) return { frame: f, href: install.href, page: `/frames/${f.id}` };
+  }
+  return undefined;
+}

@@ -85,3 +85,16 @@ Back with the normal server, the Mirror shows as `unauthorized`.
 The tests (`npm test -w @glassworks/mirror-root-run`) run the install and the way back on the fake
 Mirror: `@glassworks/fastboot`'s `Fastboot` on `FakeLk`, the installer's adb fakes, and e2fsck on
 what lands on the fake partitions.
+
+## Vendor files for option C
+
+Two read-only scripts for #334 ([option-c.md](../../frames/lululemon-mirror/research/option-c.md)):
+
+- `vendor-files.py` reads an unpacked system image (and, if given, the unit's policy dump) and writes
+  the list of vendor files an image needs, with each file's SHA-256, SELinux label and whether adb's
+  shell may read it. It touches no device, and it deletes its scratch folder.
+  The list in the repo is
+  [`option-c-vendor-files.tsv`](../../frames/lululemon-mirror/research/option-c-vendor-files.tsv).
+- `vendor-pull-check.sh -s <serial> <list.tsv> [part ...]` reads each file of the list off a running
+  Mirror as adb's shell and compares its hash. Nothing is written on the Mirror or kept on the
+  computer but the hash. Only the root runs it, through the adb server already bound to the Mirror.

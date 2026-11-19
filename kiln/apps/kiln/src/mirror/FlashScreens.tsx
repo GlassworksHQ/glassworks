@@ -8,6 +8,9 @@ import * as Collapsible from '@radix-ui/react-collapsible';
 import { useRef, useState } from 'react';
 import { BuiltOn, Credit, stepCredits } from '../components/Credit';
 import { FRAMES } from '../frames/catalog';
+import { Recovery } from '../recovery/Recovery';
+import type { RecoveryData } from '../recovery/player';
+import recovery from '../../../../../frames/lululemon-mirror/design/recovery.json';
 import type { RailMark, RailStep } from '../wizard/state';
 import type { FileCheck, FlashSession, FlashState, WorkStep } from './flash';
 import type { MirrorSession, MirrorState } from './session';
@@ -34,6 +37,8 @@ export function flashLevel(s: FlashState): number {
 const glassPanes = () => stepCredits('lululemon-mirror', credits, ['image']);
 /** The Mirror's reversibility, as frame.json labels it (issue 146). */
 const REVERSIBLE = FRAMES.find((x) => x.id === 'lululemon-mirror')?.ratings.reversible.label;
+/** The JSON import's inferred type is wider than RecoveryData; test/recovery-data.test.ts checks its shape. */
+const RECOVERY = recovery as unknown as RecoveryData;
 
 /** At the step that hands over the image: who built it, and whose its vendor files are. */
 function ImageCredit() {
@@ -194,11 +199,13 @@ export function FlashFastboot({ f, s }: P) {
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">Put the Mirror in fastboot.</h2>
+      <Recovery data={RECOVERY} />
       <ol className="join">
-        <li>Unplug the Mirror&apos;s power, and open its back.</li>
-        <li>Hold the button inside while you plug the power back in. Keep holding for about 5 seconds.</li>
-        <li>Plug its USB port into this computer. Its screen stays black: that&apos;s fastboot.</li>
+        <li>Unplug the Mirror&apos;s power and lay it face down. Take out the 4 screws in the bottom edge, by the feet, then the 12 in the back, and lift the back off.</li>
+        <li>On the small green board at the top end, hold VOL&minus;, the one nearer the frame&apos;s edge (SW3).</li>
+        <li>Keep holding while you plug its micro-USB port into this computer, then the power. Hold for about 5 seconds more. Its screen stays black: that&apos;s fastboot.</li>
       </ol>
+      <p className="small">Hold only VOL&minus;. Both buttons together start a Qualcomm mode Kiln can&apos;t use, and VOL+ opens an update screen. Some Mirrors have a service hatch in the back that reaches the board: open that instead.</p>
       <p className="small">Then click Connect and pick the Mirror (<code>Android</code>) in the browser&apos;s list. Kiln only reads it here.</p>
       {r && !r.ok && (
         <ol className="join">

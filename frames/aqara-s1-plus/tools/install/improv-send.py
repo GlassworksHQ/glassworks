@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sends Wi-Fi details to S1 Kiosk over Improv Serial, through an adb forward of its socket.
+"""Sends Wi-Fi details to Glassworks over Improv Serial, through an adb forward of its socket.
 
     adb forward tcp:0 localabstract:s1kiosk_improv            # prints the local port
     printf '%s\\0%s' "$ssid" "$password" | improv-send.py <port>
@@ -112,7 +112,7 @@ def main():
             break
         time.sleep(1.5)
     else:
-        print("improv-send: S1 Kiosk is not answering on its Improv socket", file=sys.stderr)
+        print("improv-send: Glassworks is not answering on its Improv socket", file=sys.stderr)
         return 1
     want = lambda p: (p[0] == RPC_RESULT and p[1][:1] == bytes([WIFI_SETTINGS])) or (p[0] == ERROR and p[1][:1] != b"\0")
     for attempt in range(3):
