@@ -5,7 +5,7 @@
 import { ProxyError, SYSTEM_BYTES, USERDATA_BYTES, WrongImage, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
 import { FirstBootMirror, fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
 import { FlashSession, type ImageMaker } from './flash';
-import { fakeReleaseRoute, type FakeRelease } from './releaseDemo';
+import { fakeReleaseRoute, type FakeRelease } from '../release/demo';
 import { MirrorSession } from './session';
 
 export const FLASH_DEMOS = ['flash-image', 'flash-release', 'flash-release-downloading', 'flash-release-none', 'flash-release-bad', 'flash-downloading', 'flash-download-error', 'flash-download-bad', 'flash-ready', 'flash-wifi-short', 'flash-fastboot', 'flash-fastboot-wrong', 'flash-confirm',

@@ -11,7 +11,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: ReactNode }) => <a href={href} {...p}>{children}</a> }));
 
 import { MirrorWizard } from '../src/mirror/MirrorWizard';
-import { DEMO_APK, DEMO_TAG, fakeReleaseRoute, type FakeRelease } from '../src/mirror/releaseDemo';
+import { DEMO_APK, DEMO_TAG, fakeReleaseRoute, type FakeRelease } from '../src/release/demo';
 import { MIRROR_OPEN, MirrorSession, mirrorMode } from '../src/mirror/session';
 import { registry } from '../src/wizard/registry';
 

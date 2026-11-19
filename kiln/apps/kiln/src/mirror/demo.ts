@@ -4,7 +4,7 @@
 import { GLASSWORKS } from '@glassworks/lululemon-mirror-installer';
 import { FakeMirror, MIRROR_KIOSK, fakeMirrorApk, type FakeMirrorOptions } from '@glassworks/lululemon-mirror-installer/fakes';
 import { fakeApk } from '@glassworks/app-adb/fakes';
-import { fakeReleaseRoute } from './releaseDemo';
+import { fakeReleaseRoute } from '../release/demo';
 import { MirrorSession } from './session';
 
 export const MIRROR_DEMOS = ['run', 'pick', 'pick-release', 'pick-wrong', 'checks', 'checks-fail', 'installing', 'home', 'home-clear', 'done', 'done-unconfirmed', 'undo-done', 'undo-pending', 'error'] as const;
