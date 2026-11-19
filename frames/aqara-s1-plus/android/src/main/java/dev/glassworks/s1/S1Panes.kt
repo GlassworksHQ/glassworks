@@ -87,6 +87,7 @@ class S1Panes : AppParts {
         val radio = RadioDefinition.app(
             panePrefs.radio,
             setUpBefore = { SetupState.setUpBefore(prefs.haBase != null, prefs.haSeen, prefs.apiEncryption, prefs.haSetupSkipped) },
+            agent = runtime.frame.agent,
         ) { prefs.haBase }
         val notify = NotificationsDefinition(
             panePrefs.paneFile("notifications"), notifications,

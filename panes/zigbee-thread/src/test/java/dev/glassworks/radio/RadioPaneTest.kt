@@ -30,7 +30,7 @@ import java.net.InetAddress
 private class HelperProps : SysProps {
     val props = HashMap<String, String>().apply {
         this[RadioHelper.PROP_SVC_STATE] = "running"
-        this[RadioHelper.PROP_VERSION] = RadioHelper.BUNDLE_VERSION.toString()
+        this[RadioHelper.PROP_VERSION] = RadioReports.BUNDLE_VERSION.toString()
     }
     override fun get(name: String) = props[name] ?: ""
     override fun set(name: String, value: String) { props[name] = value }
@@ -64,10 +64,10 @@ class RadioPaneTest {
             build = AppBuild("1.0.0", 10000, debug = false),
         )
         val controller = RadioController(
-            props, load = { stored }, store = { stored = it }, inline = true, log = {},
+            s1Agent(props), load = { stored }, store = { stored = it }, inline = true, log = {},
             filesDir = tmp.root, allow = allow, clock = { now }, onChange = { changed++ },
         )
-        RadioPane(ctx, running, panelIp = { null }, radio = controller)
+        RadioPane(ctx, running, panelIp = { null }, agent = s1Agent(props), radio = controller)
     }
 
     private fun entity(objectId: String): ApiEntity = pane.entities().first { it.objectId == objectId }

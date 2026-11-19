@@ -1,19 +1,24 @@
 package dev.glassworks.radio
 
+import dev.glassworks.frame.AgentCapability
+import dev.glassworks.frame.FrameAgent
+import dev.glassworks.frame.RadioFile
+import dev.glassworks.frame.RadioStatus
 import java.io.File
 
 /**
  * Radio (EFR32 RCP) firmware updates, helper v4 (frames/aqara-s1-plus/docs/radio.md "Radio firmware"). Never automatic:
  * the owner picks an image in the `Radio firmware image` select, which arms it for [ARM_MS], and then
  * presses `Flash radio firmware`. The app only writes a request naming the image and the start of its
- * SHA-256 ([RadioHelper.FW_REQUEST_FILE]); the root helper does everything else with Aqara's own cpcd
+ * SHA-256 ([RadioFile.FIRMWARE_REQUEST]); the root helper does everything else with Aqara's own cpcd
  * (stop the radio, flash, read the version back, roll back to Aqara's stock image on failure).
  *
  * Images: Aqara's stock image from /vendor/firmware (always offered when the helper finds it) and the
  * one a signed radio bundle may carry. This project ships no radio firmware.
  */
 class RadioFirmware(
-    private val props: SysProps,
+    /** The frame's agent: `radio-firmware` and the radio's requests ([FrameAgent.radio]). */
+    private val agent: FrameAgent,
     private val filesDir: File?,
     private val now: () -> Long = System::currentTimeMillis,
     private val log: (String) -> Unit = {},
@@ -25,10 +30,12 @@ class RadioFirmware(
     @Volatile private var armedAt = 0L
     @Volatile private var note: String? = null
 
-    fun helperVersion(): Int = props.get(RadioHelper.PROP_VERSION).trim().toIntOrNull() ?: 1
-    fun supported(): Boolean = props.get(RadioHelper.PROP_SVC_STATE).isNotEmpty() && helperVersion() >= RadioHelper.BUNDLE_VERSION
-    fun targets(): List<Target> = parseTargets(props.get(RadioHelper.PROP_FW_TARGETS))
-    fun status(): Status? = parseStatus(props.get(RadioHelper.PROP_FW))
+    private val radio = requireNotNull(agent.radio) { "radio firmware needs the frame agent's radio" }
+
+    fun helperVersion(): Int = radio.version()
+    fun supported(): Boolean = agent.offers(AgentCapability.RADIO_FIRMWARE)
+    fun targets(): List<Target> = parseTargets(radio.status(RadioStatus.FIRMWARE_TARGETS))
+    fun status(): Status? = parseStatus(radio.status(RadioStatus.FIRMWARE))
     fun flashing(): Boolean = status()?.state == "flashing"
 
     /** The select's state: the armed option while the arming window lasts, else [KEEP]. */
@@ -55,7 +62,7 @@ class RadioFirmware(
         if (why != null) { note = why; log("radio firmware: not flashing: $why"); return why }
         val t = target(selected())!!
         val dir = filesDir ?: return "no files dir".also { note = it }
-        val f = File(dir, RadioHelper.FW_REQUEST_FILE)
+        val f = File(dir, radio.file(RadioFile.FIRMWARE_REQUEST))
         return try {
             f.parentFile?.mkdirs()
             val tmp = File(f.parentFile, ".fw-request.tmp")
@@ -81,7 +88,7 @@ class RadioFirmware(
 
     /** Clears a request the helper never took (no v4 helper running, or older than the helper accepts). */
     fun cleanup() {
-        val f = filesDir?.let { File(it, RadioHelper.FW_REQUEST_FILE) } ?: return
+        val f = filesDir?.let { File(it, radio.file(RadioFile.FIRMWARE_REQUEST)) } ?: return
         if (f.exists() && now() - f.lastModified() > 3 * 60_000) f.delete()
     }
 
@@ -110,7 +117,7 @@ class RadioFirmware(
 
     private fun label(id: String) = if (id == "stock") "Aqara stock" else "bundle image $id"
 
-    private fun needsV4() = "need the root helper v${RadioHelper.BUNDLE_VERSION} (installed: v${helperVersion()}): " +
+    private fun needsV4() = "need the root helper v${RadioReports.BUNDLE_VERSION} (installed: v${helperVersion()}): " +
         "update the panel's boot image once with the web installer"
 
     companion object {

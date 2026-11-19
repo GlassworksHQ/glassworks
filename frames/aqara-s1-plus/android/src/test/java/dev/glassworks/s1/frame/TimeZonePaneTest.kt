@@ -27,8 +27,8 @@ class TimeZonePaneTest {
 
     private class Props : SysProps {
         val p = hashMapOf(
-            RadioHelper.PROP_VERSION to "4", TimeZoneKeeper.PROP to "Europe/Berlin",
-            "persist.sys.timezone" to "Europe/Berlin", TimeZoneKeeper.PROP_STATUS to "ok Europe/Berlin",
+            RadioHelper.PROP_VERSION to "4", S1TimeZone.PROP to "Europe/Berlin",
+            "persist.sys.timezone" to "Europe/Berlin", S1TimeZone.PROP_STATUS to "ok Europe/Berlin",
         )
         override fun get(name: String) = p[name] ?: ""
         override fun set(name: String, value: String) { p[name] = value }
@@ -36,24 +36,24 @@ class TimeZonePaneTest {
 
         /** One check of the root helper v4 (frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh tz_check), as it treats the property. */
         fun helper() {
-            val want = p[TimeZoneKeeper.PROP].orEmpty()
+            val want = p[S1TimeZone.PROP].orEmpty()
             val have = p["persist.sys.timezone"].orEmpty()
             val valid = { z: String -> z.isNotEmpty() && z.all { it.isLetterOrDigit() || it in "_+/-" } }
             when {
                 want.isEmpty() && valid(have) && have != "Antarctica/Casey" -> {
-                    p[TimeZoneKeeper.PROP] = have // "adopted $have as the zone to keep"
-                    p[TimeZoneKeeper.PROP_STATUS] = "ok $have"
+                    p[S1TimeZone.PROP] = have // "adopted $have as the zone to keep"
+                    p[S1TimeZone.PROP_STATUS] = "ok $have"
                 }
-                want.isEmpty() -> p[TimeZoneKeeper.PROP_STATUS] = "none: no time zone chosen"
-                !valid(want) -> p[TimeZoneKeeper.PROP_STATUS] = "error: '$want' is not a time zone id"
-                else -> { p["persist.sys.timezone"] = want; p[TimeZoneKeeper.PROP_STATUS] = "ok $want" }
+                want.isEmpty() -> p[S1TimeZone.PROP_STATUS] = "none: no time zone chosen"
+                !valid(want) -> p[S1TimeZone.PROP_STATUS] = "error: '$want' is not a time zone id"
+                else -> { p["persist.sys.timezone"] = want; p[S1TimeZone.PROP_STATUS] = "ok $want" }
             }
         }
     }
 
     private val props = Props()
     private val switch = TimeZoneDefinition(PanePrefs(app).paneFile("time-zone")).switch
-    private val keeper = TimeZoneKeeper(props, zones = { setOf("Europe/Berlin") }, inline = true, log = {})
+    private val keeper = TimeZoneKeeper(S1TimeZone(props), zones = { setOf("Europe/Berlin") }, inline = true, log = {})
     private val pane = TimeZonePane(
         PaneContext(
             app, PanePrefs(app)::paneFile,
@@ -83,7 +83,7 @@ class TimeZonePaneTest {
         assertEquals("CET-1CEST,M3.5.0,M10.5.0/3", pane.homeAssistantRule)
         assertEquals(null, pane.keep("Europe/Berlin"))
         assertEquals("Europe/Berlin", pane.kept)
-        assertEquals("Europe/Berlin", props.get(TimeZoneKeeper.PROP))
+        assertEquals("Europe/Berlin", props.get(S1TimeZone.PROP))
         assertEquals("'Mars/Olympus' is not a time zone this panel knows", pane.keep("Mars/Olympus"))
     }
 
@@ -95,8 +95,8 @@ class TimeZonePaneTest {
         pane.start()
         turn(false)
         repeat(3) { props.helper() }
-        assertEquals("the helper adopted no zone", TimeZoneKeeper.OFF, props.p[TimeZoneKeeper.PROP])
-        assertEquals("and keeps none", "error: '(off)' is not a time zone id", props.p[TimeZoneKeeper.PROP_STATUS])
+        assertEquals("the helper adopted no zone", TimeZoneKeeper.OFF, props.p[S1TimeZone.PROP])
+        assertEquals("and keeps none", "error: '(off)' is not a time zone id", props.p[S1TimeZone.PROP_STATUS])
     }
 
     /** The status says off only once the helper has let go; before that, that it waits. */
@@ -119,12 +119,12 @@ class TimeZonePaneTest {
     @Test fun offLetsGoOfTheZoneAndOnKeepsItAgain() {
         pane.start()
         turn(false)
-        assertEquals("the helper keeps no zone", TimeZoneKeeper.OFF, props.p[TimeZoneKeeper.PROP])
+        assertEquals("the helper keeps no zone", TimeZoneKeeper.OFF, props.p[S1TimeZone.PROP])
         turn(true)
-        assertEquals("the same zone again", "Europe/Berlin", props.p[TimeZoneKeeper.PROP])
+        assertEquals("the same zone again", "Europe/Berlin", props.p[S1TimeZone.PROP])
         turn(false)
         turn(true)
-        assertEquals("Europe/Berlin", props.p[TimeZoneKeeper.PROP])
+        assertEquals("Europe/Berlin", props.p[S1TimeZone.PROP])
     }
 
     /** #210 review: off, Home Assistant no longer reads the old zone as kept; on, it reads it again. */
@@ -143,16 +143,16 @@ class TimeZonePaneTest {
     @Test fun theAppStoppingKeepsTheZone() {
         pane.start()
         pane.stop()
-        assertEquals("Europe/Berlin", props.p[TimeZoneKeeper.PROP])
+        assertEquals("Europe/Berlin", props.p[S1TimeZone.PROP])
     }
 
     @Test fun offWithNoZoneChosenAdoptsNoneAndOnLeavesTheChoiceToTheHelper() {
-        props.p[TimeZoneKeeper.PROP] = ""
+        props.p[S1TimeZone.PROP] = ""
         pane.start()
         turn(false)
         props.helper()
-        assertEquals("off adopts nothing", TimeZoneKeeper.OFF, props.p[TimeZoneKeeper.PROP])
+        assertEquals("off adopts nothing", TimeZoneKeeper.OFF, props.p[S1TimeZone.PROP])
         turn(true)
-        assertEquals("on: no zone chosen, as before off", "", props.p[TimeZoneKeeper.PROP])
+        assertEquals("on: no zone chosen, as before off", "", props.p[S1TimeZone.PROP])
     }
 }

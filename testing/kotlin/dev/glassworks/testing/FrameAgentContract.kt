@@ -6,6 +6,9 @@ package dev.glassworks.testing
 
 import dev.glassworks.frame.AgentCapability
 import dev.glassworks.frame.FrameAgent
+import dev.glassworks.frame.RadioFile
+import dev.glassworks.frame.RadioSetting
+import dev.glassworks.frame.RadioStatus
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -65,6 +68,53 @@ abstract class FrameAgentContract(private val frameId: String) {
 
     @Test fun eachCapabilityGoesWithItsOwnDiscovery() {
         for (c in frameJson) assertFalse("$frameId: still offers $c without its discovery", without(c).offers(c))
+    }
+
+    private val radioCaps = setOf(AgentCapability.RADIO_MODE, AgentCapability.RADIO_FIREWALL, AgentCapability.RADIO_FIRMWARE)
+
+    @Test fun itsRadioTimeZoneAndBundleFollowWhatItDeclares() {
+        for ((side, agent) in sides()) {
+            assertEquals("$frameId ($side): radio only with a radio capability", (radioCaps intersect frameJson).isNotEmpty(), agent.radio != null)
+            assertEquals("$frameId ($side): timeZone only with time-zone", AgentCapability.TIME_ZONE in frameJson, agent.timeZone != null)
+            assertEquals("$frameId ($side): bundle only with frame-bundle", AgentCapability.FRAME_BUNDLE in frameJson, agent.bundle != null)
+        }
+    }
+
+    @Test fun withNoRootSideNothingIsReported() {
+        val agent = none()
+        agent.radio?.let { r ->
+            assertEquals("$frameId: the radio agent's state with no root side", "", r.state())
+            for (s in RadioStatus.entries) assertEquals("$frameId: $s with no root side", "", r.status(s))
+        }
+        agent.timeZone?.let { t ->
+            assertEquals("$frameId: the time zone status with no root side", "", t.status())
+            assertNull("$frameId: the time zone's version with no root side", t.version())
+        }
+        assertNull("$frameId: a bundle state with no root side", agent.bundle?.state())
+    }
+
+    @Test fun theNewestReportsItsRadioTimeZoneAndBundle() {
+        val agent = newest()
+        agent.radio?.let { assertTrue("$frameId: the radio agent runs on the newest root side", it.state().isNotEmpty()) }
+        agent.timeZone?.let { assertNotNull("$frameId: the time zone's version on the newest root side", it.version()) }
+        agent.bundle?.let { assertNotNull("$frameId: a bundle state on the newest root side", it.state()) }
+    }
+
+    /** Requests are desired state: what the app asks for reads back as asked, and asking again changes nothing. */
+    @Test fun requestsReadBackAsDesiredState() {
+        val agent = newest()
+        agent.radio?.let { r ->
+            for ((s, v) in listOf(RadioSetting.MODE to "off", RadioSetting.ZIGBEE_STACK to "aqara", RadioSetting.ALLOW to "192.0.2.10")) {
+                r.set(s, v); r.set(s, v)
+                assertEquals("$frameId: $s reads back", v, r.setting(s))
+            }
+            for (f in RadioFile.entries) assertTrue("$frameId: $f is a path in the app's files dir", r.file(f).isNotBlank() && !r.file(f).startsWith("/"))
+        }
+        agent.timeZone?.let { t ->
+            t.want("Etc/UTC"); t.want("Etc/UTC")
+            assertEquals("$frameId: the wanted zone reads back", "Etc/UTC", t.wanted())
+        }
+        agent.bundle?.let { assertTrue("$frameId: the bundle stages in the app's files dir", it.stageDir.isNotBlank() && !it.stageDir.startsWith("/")) }
     }
 
     @Test fun itsTransportsFollowWhatItDeclares() {
