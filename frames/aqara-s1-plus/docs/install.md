@@ -492,8 +492,10 @@ plan without changing anything.
   hand-over). Android starts each build it installs as the home screen at once, before the install
   even returns, and with empty data that build serves an API with no key, which anyone on the network
   could set (seen on the S1 on 2026-11-19, #626). The block is a firewall rule (`glassworks-switch.sh
-  guard`, IPv4 and IPv6) that isn't saved: the installer removes it on every way out, and a restart
-  clears it if a run is cut off.
+  guard`, IPv4 and IPv6) that isn't saved, so a restart clears it. The installer removes it on every
+  way out, with one exception: if the run is cut off (Ctrl-C, a lost connection) while the installed
+  build still has empty data, the port stays blocked and the installer says so. Home Assistant can't
+  use a build with no key anyway. Restart the panel to open the port.
 - If the new version won't install, the previous one is put back (with its data, given root). If
   its data won't go back in, the installer says so and keeps the copy on the panel in
   `/data/s1kiosk/switch` (root only).

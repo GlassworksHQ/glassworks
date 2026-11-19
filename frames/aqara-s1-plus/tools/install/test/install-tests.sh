@@ -175,6 +175,7 @@ case "$cmd" in
     exit $? ;;
   *) : ;;
 esac
+stop_here "shell $cmd"
 exit 0
 EOF
 # The new app's Improv over adb: records what it was sent (the password only as a hash).
@@ -551,9 +552,18 @@ panel; printf install > "$T/stop-after"
 printf '%s' $! > "$T/main.pid"; wait $!; rc=$?; out=$(cat "$T/out")
 check "stops" test $rc -ne 0
 check "no restore ran" hasnt "$(cat "$T/root-cmds")" "restore"
-check "port 6053 open again" port_open
-check "...said so" has "$out" "ESPHome API port 6053 open again"
+check "port 6053 stays blocked: the build has no data or key (#628 review)" bash -c 'grep -qx "INPUT -p tcp --dport 6053 -j DROP" "$1/fw.iptables" && grep -qx "INPUT -p tcp --dport 6053 -j DROP" "$1/fw.ip6tables"' _ "$T"
+check "...said so, with the way out" has "$out" "ESPHome API port 6053 stays blocked: Glassworks has no data or key yet. Restart the panel to open it."
+check "...and the helper is gone" bash -c 'tail -1 "$1/adb.log" | grep -qx "shell rm -f /data/local/tmp/glassworks-switch.sh"' _ "$T"
 check "Glassworks on, the copy kept" bash -c '[ "$(cat "$1/installed") $(cat "$1/disabled")" = "release 0" ] && [ -f "$1/panel/work/complete" ]' _ "$T"
+
+echo "== install.sh: the run stops while the new build is copied, before the uninstall (#626)"
+panel; printf 'shell pm uninstall sh.edm.s1kiosk' > "$T/stop-after"
+"$REPO/frames/aqara-s1-plus/tools/install.sh" --apk "$APK" --no-models --no-debloat --switch </dev/null > "$T/out" 2>&1 &
+printf '%s' $! > "$T/main.pid"; wait $!; rc=$?; out=$(cat "$T/out")
+check "stops" test $rc -ne 0
+check "no build with empty data: port 6053 open again" port_open
+check "...said so" has "$out" "ESPHome API port 6053 open again"
 
 echo "== install.sh --dry-run on a debug build"
 panel

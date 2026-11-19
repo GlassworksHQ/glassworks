@@ -382,6 +382,24 @@ describe('switching a development build to this one', () => {
     expect(p.cmds.at(-1)).toBe('rm -f /data/local/tmp/glassworks-switch.sh');
   });
 
+  it('a restore that throws leaves the port blocked while the build has no data or key (#628 review)', async () => {
+    for (const newInstallWorks of [true, false]) {
+      const p = new SwitchPanel();
+      p.newInstallWorks = newInstallWorks;
+      const run = p.run.bind(p);
+      p.run = async (cmd) => { if (/glassworks-switch\.sh restore/.test(cmd)) { p.cmds.push(cmd); throw new Error('USB transfer failed'); } return run(cmd); };
+      const text: string[] = [];
+      await expect(provision(p, { kioskApk: new Uint8Array([1]), confirmSwitch: async () => true }, (s, d) => text.push(s || d || ''), noSleep))
+        .rejects.toThrow(/USB transfer failed/);
+      expect(p.installed).toBe(newInstallWorks ? 'release' : 'debug');
+      expect(p.fresh).toBe(true);
+      expect(p.guarded).toBe(true);
+      expect(p.cmds).not.toContain("su -c 'sh /data/local/tmp/glassworks-switch.sh unguard'");
+      expect(p.cmds.at(-1)).toBe('rm -f /data/local/tmp/glassworks-switch.sh');
+      expect(text).toContain('ESPHome API port 6053 stays blocked: Glassworks has no data or key yet. Restart the panel to open it.');
+    }
+  });
+
   it('a step after the switch that fails still opens the API port (#626)', async () => {
     const p = new SwitchPanel();
     const run = p.run.bind(p);

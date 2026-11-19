@@ -67,8 +67,9 @@ IMPROV_SEND=${S1_IMPROV_SEND:-$HERE/install/improv-send.py}
 WIFI_OWNER=none WIFI_SSID="" HAS_ROOT=0 DEBUG_BUILD=0 INSTALLED_VER="" SWITCHED=0 DATA_KEPT=0 WIFI_LOST=0
 WIFI_PSK="" HAVE_PSK=0 APP_AFTER_UNDO=removed
 # The switch has Glassworks disabled (SW_HELD), or port 6053 blocked (SW_GUARD, #626). Whatever stops the run, the app
-# is enabled and the port opened again (carry_on_exit).
-SW_HELD=0 SW_GUARD=0
+# is enabled and the port opened again (carry_on_exit), unless the build installed now has empty data (SW_FRESH): it
+# serves an API anyone could provision, so then the port stays blocked until the panel restarts.
+SW_HELD=0 SW_GUARD=0 SW_FRESH=0
 # Sealed secrets (#584): Android deletes the app's Keystore key with the old app, so the copied data can't open its
 # Home Assistant sign-in or ESPHome API key. With root they are read from the running app over its adb-only hand-over
 # socket into these variables (base64, never printed, never in a command line: they reach handover.py on stdin), and
@@ -350,6 +351,7 @@ switch_key() {
   fi
   echo "  removed the old build"
   # 6. install the new one; on failure put the old one back (with its data, given root)
+  SW_FRESH=1 # from before the install: Android may have it running before `adb install` returns
   out=$(adb install -r -g "$APK" 2>&1) || true
   if ! grep -q Success <<<"$out"; then
     sed 's/^/  /' <<<"$out"
@@ -359,7 +361,7 @@ switch_key() {
         switch_undo
         echo "ERROR: the new Glassworks would not install. The previous build is back." >&2
       elif rout=$(restore_into 2>&1); then
-        switch_undo; su_ discard >/dev/null 2>&1 || true
+        SW_FRESH=0; switch_undo; su_ discard >/dev/null 2>&1 || true
         # The old build lost its Keystore key too: hand its sign-in and key back, as to a new one (#584).
         lost=""
         if [[ $KEY_STATE == carry || $SIGNIN_STATE == carry ]]; then adb shell am start -n "$ACT" >/dev/null || true; hand_back; fi
@@ -371,6 +373,7 @@ switch_key() {
         echo "  Its data is kept on the panel in $SW_DATA (root only)." >&2
       fi
     else
+      SW_FRESH=0
       echo "ERROR: the new Glassworks would not install, and neither would the previous one. Run $0 again." >&2
       if [[ $HAS_ROOT -eq 1 ]]; then echo "  Its data is kept on the panel in $SW_DATA (root only)." >&2; fi
     fi
@@ -380,7 +383,7 @@ switch_key() {
   echo "  installed the new build"
   # 7. the data back in, owned by the new uid, labels restored
   if [[ $HAS_ROOT -eq 1 ]]; then
-    if out=$(restore_into 2>&1); then DATA_KEPT=1; su_ discard >/dev/null 2>&1 || true; echo "  app data restored"
+    if out=$(restore_into 2>&1); then DATA_KEPT=1 SW_FRESH=0; su_ discard >/dev/null 2>&1 || true; echo "  app data restored"
     else
       forget_secrets; KEY_STATE=lost SIGNIN_STATE=lost # a fresh app has no sign-in to take them
       echo "  WARNING: could not restore the app's data ($(tr -d '\r' <<<"$out" | tail -1)); it starts fresh. The copy stays in $SW_DATA (root only)."
@@ -454,6 +457,11 @@ carry_on_exit() {
     echo "  Stopping early: handing the sign-in and encryption key to the new app first" >&2
     adb shell am start -n "$ACT" </dev/null >/dev/null 2>&1
     hand_back >&2
+  fi
+  if [[ $SW_GUARD -eq 1 && $SW_FRESH -eq 1 ]]; then
+    SW_GUARD=0
+    echo "  ESPHome API port 6053 stays blocked: Glassworks has no data or key yet. Restart the panel to open it." >&2
+    adb shell rm -f "$SW_SH" </dev/null >/dev/null 2>&1
   fi
   if [[ $SW_GUARD -eq 1 ]]; then switch_done >&2; fi
   forget_secrets

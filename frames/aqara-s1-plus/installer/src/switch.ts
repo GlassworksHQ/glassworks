@@ -355,17 +355,27 @@ const lastLine = (s: string) => s.trim().split(/\r?\n/).pop() || 'no detail';
 export async function switchSigningKey(p: PanelShell, apk: Uint8Array, plan: SwitchPlan, log: SwitchLog,
   sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms))): Promise<SwitchOutcome> {
   const out: SwitchOutcome = { dataKept: false, signIn: 'lost', apiKey: 'lost', wifi: wifiAtRisk(plan.wifi) ? 'lost' : 'kept', ssid: plan.wifi.ssid, notes: [], guarded: false };
+  /** The installed build has empty data: installed, and no restore into it has worked yet. */
+  const at = { fresh: false };
   try {
-    return await switchSteps(p, apk, plan, log, sleep, out);
+    return await switchSteps(p, apk, plan, log, sleep, out, at);
   } catch (e) {
     // Any failure, not only the ones the steps handle: provision never gets `out` to open the port later (#628 review).
-    await openApiPort(p, out, log).catch(() => {});
+    if (out.guarded && at.fresh) {
+      // Cut off with a build that has no data or key: it serves an API anyone could provision, so the port stays
+      // blocked. Home Assistant can't use a keyless build anyway, and a restart clears the rule (#628 review).
+      out.guarded = false;
+      log('ESPHome API port 6053 stays blocked: Glassworks has no data or key yet. Restart the panel to open it.');
+      await p.run(`rm -f ${SWITCH_SH}`).catch(() => {});
+    } else {
+      await openApiPort(p, out, log).catch(() => {});
+    }
     throw e;
   }
 }
 
 async function switchSteps(p: PanelShell, apk: Uint8Array, plan: SwitchPlan, log: SwitchLog,
-  sleep: (ms: number) => Promise<void>, out: SwitchOutcome): Promise<SwitchOutcome> {
+  sleep: (ms: number) => Promise<void>, out: SwitchOutcome, at: { fresh: boolean }): Promise<SwitchOutcome> {
   const su = (cmd: string) => p.run(`su -c 'sh ${SWITCH_SH} ${cmd}'`);
   /** The APKs; the helper stays until openApiPort, after the hand-over. */
   const cleanup = async () => { await p.run(`rm -f ${OLD_APK} ${NEW_APK}`); };
@@ -462,10 +472,13 @@ async function switchSteps(p: PanelShell, apk: Uint8Array, plan: SwitchPlan, log
     try { return await su(handover ? 'restore handover' : 'restore'); } finally { await p.run(`pm enable ${PKG}`); }
   };
   await p.push(NEW_APK, apk, 0o644);
+  at.fresh = true; // from before the install: Android may have it running before `pm install` returns
   const inst = (await p.run(`pm install -r -g ${NEW_APK}`)).out;
   if (!/Success/.test(inst)) {
     const back = /Success/.test((await p.run(`pm install -r -g ${OLD_APK}`)).out);
+    at.fresh = back;
     const restored = back && root ? await restoreInto() : undefined;
+    if (restored?.code === 0) at.fresh = false;
     if (back) await undo();
     // The copy is the only one left until a restore worked: keep it otherwise.
     if (restored?.code === 0) await su('discard');
@@ -493,7 +506,7 @@ async function switchSteps(p: PanelShell, apk: Uint8Array, plan: SwitchPlan, log
   // 7. The data back in, owned by the new uid, labels restored.
   if (root) {
     const r = await restoreInto();
-    if (r.code === 0) { out.dataKept = true; await su('discard'); log('app data restored'); }
+    if (r.code === 0) { out.dataKept = true; at.fresh = false; await su('discard'); log('app data restored'); }
     else {
       root = false;
       dropSecrets();
@@ -516,7 +529,6 @@ async function switchSteps(p: PanelShell, apk: Uint8Array, plan: SwitchPlan, log
       await handBackSecrets(p, out, log, sleep).catch(() => {});
     }
     dropSecrets();
-    await openApiPort(p, out, log).catch(() => {});
     throw e;
   }
   return out;
