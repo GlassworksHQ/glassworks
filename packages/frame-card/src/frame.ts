@@ -81,6 +81,8 @@ export interface FrameDesign {
   panes: Record<string, { support: Support; note?: string }>;
   /** the hardware it has, in panes.ts CAPABILITIES' words; leave it out when it varies by device */
   provides?: string[];
+  /** its frame agent, the root-side service the app asks for what it can't do itself (docs/frame-agent.md); leave it out for none */
+  agent?: { capabilities: AgentCapability[] };
   /** href: where it installs from, only for a frame without `kiln` */
   install: { how: string; href?: string };
   /** `label`: the card's tag in the frame's own words, instead of the value's default (e.g. reversible: partly). */
@@ -115,6 +117,38 @@ export interface FrameCredit {
   quote?: { text: string; href: string };
   /** name it on the frame's card: the work the device can't run without, such as its image */
   card?: boolean;
+}
+
+/**
+ * What a frame agent can do, in the words `agent.capabilities` uses (docs/frame-agent.md#capabilities). The app's
+ * `dev.glassworks.frame.AgentCapability` has the same words, and its contract test checks that it does.
+ */
+export const AGENT_CAPABILITIES = [
+  'radio-mode', 'radio-firewall', 'radio-firmware', 'frame-bundle', 'app-updates', 'time-zone',
+  'hotspot-portal', 'hotspot-name', 'bluetooth-address', 'loader-install',
+] as const;
+export type AgentCapability = (typeof AGENT_CAPABILITIES)[number];
+
+/**
+ * What's wrong with a frame's `agent`, one line per problem; empty when it's fine. A frame without one has none to
+ * check. A tested device runs its base's app as it is, so it has no agent of its own.
+ */
+export function agentProblems(f: Pick<FrameDesign, 'kind' | 'agent'>): string[] {
+  if (f.agent === undefined) return [];
+  if (f.kind === 'tested') return ["agent: a tested device has no code of its own; its base's agent is used"];
+  const a = f.agent as unknown;
+  if (a === null || typeof a !== 'object' || Array.isArray(a)) return ['agent: should be { "capabilities": [...] }'];
+  const extra = Object.keys(a).filter((k) => k !== 'capabilities');
+  const caps = (a as { capabilities?: unknown }).capabilities;
+  const out = extra.map((k) => `agent.${k}: not an agent field (docs/frame-agent.md#discovery)`);
+  if (!Array.isArray(caps) || !caps.length) return [...out, 'agent.capabilities: list what the agent does; leave `agent` out for none'];
+  const seen = new Set<unknown>();
+  for (const c of caps) {
+    if (!(AGENT_CAPABILITIES as readonly unknown[]).includes(c)) out.push(`agent.capabilities: "${String(c)}" isn't a capability (docs/frame-agent.md#capabilities)`);
+    else if (seen.has(c)) out.push(`agent.capabilities: "${c}" is listed twice`);
+    seen.add(c);
+  }
+  return out;
 }
 
 const KEBAB = /^[a-z0-9]+(-[a-z0-9]+)*$/;
@@ -168,7 +202,7 @@ export function kindProblems(f: Pick<FrameDesign, 'kind' | 'base' | 'kiln' | 'ap
 const FIELDS: Record<keyof FrameDesign, true> = {
   id: true, kind: true, base: true, name: true, brand: true, aka: true, status: true, summary: true, tagline: true, project: true,
   kiln: true, model: true, recovery: true, render: true, display: true, boot: true, abis: true, app: true, specs: true, panes: true,
-  provides: true, dock: true, install: true, ratings: true, ratingsNote: true, notice: true, legacy: true, unverified: true, credits: true, facts: true, run: true,
+  provides: true, agent: true, dock: true, install: true, ratings: true, ratingsNote: true, notice: true, legacy: true, unverified: true, credits: true, facts: true, run: true,
 };
 
 /**
