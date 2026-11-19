@@ -1,7 +1,7 @@
 // The Aqara Panel Hub S1 Plus for Kiln: frames/aqara-s1-plus/tools/install/fel-install.sh's device-specific steps. FEL on
 // the A133 boots our U-Boot from RAM, fastboot shows the S1 Plus layout, the patched boot carries the
 // root helper, radio and update services, and provisioning is frames/aqara-s1-plus/tools/install.sh (provision.ts).
-import { isMagiskPatched, patchBoot, replaceBootlogo, s1Overlay, vbmetaFlags, withVbmetaFlags } from '@glassworks/bootpatch';
+import { isMagiskPatched, magiskBusybox, patchBoot, replaceBootlogo, s1Overlay, vbmetaFlags, withVbmetaFlags } from '@glassworks/bootpatch';
 import { bootUboot, checkChip } from '@glassworks/fel';
 import type { FlashStep, Recipe } from '@glassworks/kiln-core';
 import { provision, type Provisioned, type ProvisionOptions } from './provision';
@@ -11,7 +11,7 @@ import { isOurSplash } from './splash';
 export type AssetName =
   | 'uboot-spl' | 'uboot' | 'magisk' | 'otbr-agent' | 'ot-ctl'
   | 'radio-rc' | 'radio-sh' | 'firstboot-rc' | 'firstboot-sh' | 'netwatch-rc' | 'netwatch-sh' | 'update-rc' | 'update-sh'
-  | 'bundle-rc' | 'bundle-sh' | 'verify' | 'bundle-pub'
+  | 'bundle-rc' | 'bundle-sh' | 'verify' | 'bundle-pub' | 'magiskenv-rc'
   | 'branding-rc' | 'bootanimation' | 'bootlogo' | 'kiosk-apk' | 'keyboard-apk';
 
 export type SetUpOptions = Omit<ProvisionOptions, 'kioskApk' | 'keyboardApk'> & { keyboard?: boolean };
@@ -54,12 +54,12 @@ export const s1Plus: Recipe<AssetName, SetUpOptions, Provisioned> = {
 
   async patchBoot({ backup, asset: a, adbPublicKey, branding, log }) {
     const [magiskApk, radioRc, radioSh, otbrAgent, otCtl, firstbootRc, firstbootSh, netwatchRc, netwatchSh, updateRc, updateSh,
-      bundleRc, bundleSh, verify, bundlePub] =
+      bundleRc, bundleSh, verify, bundlePub, magiskEnvRc] =
       await Promise.all([a('magisk'), a('radio-rc'), a('radio-sh'), a('otbr-agent'), a('ot-ctl'), a('firstboot-rc'), a('firstboot-sh'), a('netwatch-rc'), a('netwatch-sh'), a('update-rc'), a('update-sh'),
-        a('bundle-rc'), a('bundle-sh'), a('verify'), a('bundle-pub')]);
+        a('bundle-rc'), a('bundle-sh'), a('verify'), a('bundle-pub'), a('magiskenv-rc')]);
     const overlay = s1Overlay({
       radioRc, radioSh, otbrAgent, otCtl, firstbootRc, firstbootSh, netwatchRc, netwatchSh, updateRc, updateSh,
-      bundleRc, bundleSh, verify, bundlePub,
+      bundleRc, bundleSh, verify, bundlePub, magiskEnvRc, magiskBusybox: await magiskBusybox(magiskApk),
       adbKeys: new TextEncoder().encode(`${adbPublicKey}\n`),
       branding: branding ? { rc: await a('branding-rc'), bootAnimation: await a('bootanimation') } : undefined,
     });

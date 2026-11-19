@@ -453,6 +453,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   it straight away. The *Thread join* sensor says how it went. Pasting the dataset still works.
 
 ### Fixed
+- **Magisk modules load on the S1.** Magisk on our panels never loaded a module: it needs its own busybox in place
+  first, which the Magisk app puts there, and our installers didn't. The S1's boot image now carries Magisk's busybox,
+  from the same official Magisk download, and puts it in place at boot. Nothing changes on screen yet; the setup
+  hotspot's Glassworks name (#430) needs it. Comes with a new install from Kiln (the boot image).
 - **With Screen mode set to always, walking up no longer turns on a screen you turned off.** If you turn the screen
   off from Home Assistant, it stays off when someone comes close, whether the panel senses them with its own sensor
   or with the camera pane. *Presence* in Home Assistant still turns on. In the presence mode, walking up still wakes
