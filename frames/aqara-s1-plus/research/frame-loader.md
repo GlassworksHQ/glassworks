@@ -60,7 +60,7 @@ Every S1 in the field needs one more Kiln update to get the loader. Before build
    ```
    - The stock fastboot has `download`, `flash`, `erase`, `getvar`, `oem`, `flashing`, `continue`,
      the reboots, and a **`boot` handler** ("Booting kernel..", "FAILinvalid boot image"). So a RAM
-     test with `fastboot boot` is in the binary.
+     test with `fastboot boot` is in the binary. Attempt 8 narrows it: it runs only a legacy uImage.
    - It has **no `upload`**. That is our patch 0002 in the FEL U-Boot. So stock fastboot can't read a
      partition back, and neither the backup nor the read-back of a write can happen over it.
    - `FAILability is 0` sits next to `frp` and "GMS,fastboot unlock limited used": it is the
@@ -304,8 +304,9 @@ stopping after step 3 leaves the panel working as before.
    release the app ships both bundles: the radio bundle for 0.4.3 boot images and the frame bundle
    for loader images.
 2. **Patch** that image with the loader. The patch is the same as from the FEL path, byte for byte.
-3. **`adb reboot bootloader`** (no root needed), then on the stock U-Boot's fastboot: `getvar product`,
-   then **`fastboot boot` the new image, in RAM**. Kiln waits for adb, then checks the loader:
+3. **`adb reboot bootloader`** (no root needed), then on the stock U-Boot's fastboot: `getvar product`
+   (it answers the serial: never log it), then **`fastboot boot` the new image, in RAM**. Attempt 8:
+   stock `boot` runs only a legacy uImage, so this step needs the image wrapped as one (untested). Kiln waits for adb, then checks the loader:
    `ro.glassworks.frame.version`, the slots running, the bundle state, and the radio mode carried over.
 4. **Write.** Back to fastboot (`adb reboot bootloader`), `fastboot flash boot`, then `fastboot boot`
    the same image once more. From that system, the loader's `boot` export reads the partition back
