@@ -821,6 +821,10 @@ class SurfaceFlingerCheckInRunSh(unittest.TestCase):
         p, out, _ = self.run_sh("--sf-check-only", "--sf-poll", "0.2")
         self.assertEqual(p.returncode, 2)
         self.assertIn("--sf-check-only runs the check", p.stderr)
+        p, out, _ = self.run_sh("--sf-check-only", "--idle-only", "x")        # CodeRabbit on #648: no check would run
+        self.assertEqual(p.returncode, 2)
+        self.assertIn("--sf-check-only and --idle-only can't be combined", p.stderr)
+        self.assertFalse(os.path.exists(out))                                  # refused before anything ran
         p, _, _ = self.run_sh("--sf-poll", "often")
         self.assertEqual(p.returncode, 2)
         self.assertIn("--sf-poll is auto, 0 or seconds", p.stderr)

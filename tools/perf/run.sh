@@ -93,6 +93,7 @@ done
 [ "$RUNS" -ge 1 ] || { echo "--runs must be at least 1" >&2; exit 2; }
 # The check alone needs only the fake Home Assistant's pages: no cameras, no WebRTC peer, no LAN probe.
 [ "$SF_CHECK_ONLY" = 1 ] && { SYNTH=1 REF=0 REAL=0 PANE_RAM=""; }
+[ "$SF_CHECK_ONLY" = 1 ] && [ -n "$IDLE_ONLY" ] && { echo "--sf-check-only and --idle-only can't be combined: one runs the checks, the other one idle sample" >&2; exit 2; }
 [ "$SF_CHECK_ONLY" = 1 ] && [ "$SF_POLL" != auto ] && { echo "--sf-check-only runs the check: leave --sf-poll at auto" >&2; exit 2; }
 [ "$SF_POLL" = auto ] || [[ "$SF_POLL" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "--sf-poll is auto, 0 or seconds between reads" >&2; exit 2; }
 TURN_PORT=$((PORT + 1))
