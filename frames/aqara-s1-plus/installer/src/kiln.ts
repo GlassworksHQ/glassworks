@@ -6,7 +6,10 @@ import type { Recipe } from '@glassworks/kiln-core';
 import { unprovision, type AppPhase, type Provisioned } from './provision';
 import { s1Plus, type AssetName, type SetUpOptions } from './recipe';
 import { describeSwitch, panelWifi } from './switch';
-import { UPDATE_SERVICE_PROP, readRootUpdates } from './updates';
+import { UPDATE_SERVICE_PROP, readRootUpdates, type RootUpdates } from './updates';
+
+/** Every state readRootUpdates gives; a new one fails the typecheck here until it is added. */
+const UPDATE_STATES: Record<RootUpdates['state'], true> = { on: true, missing: true, unknown: true };
 
 const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -59,6 +62,7 @@ export const kiln = {
     const u = await readRootUpdates(p, signal);
     return { state: u.state, log: u.state === 'unknown' ? `silent updates: not read back (${u.detail})` : `silent updates: root update service ${u.state === 'on' ? 'in place' : 'missing'}` };
   },
+  updateStates: Object.keys(UPDATE_STATES),
   giveBack: (p: PanelShell, on: (step: string, detail?: string) => void) => unprovision(p, on),
   sim: {
     recipe: simRecipe,

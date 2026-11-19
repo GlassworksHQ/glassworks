@@ -52,8 +52,10 @@ export interface FrameCode {
   appOptions(s: AppSettings, confirm: (question: string) => boolean, onPhase: (p: AppPhase) => void): unknown;
   /** The Wi-Fi network the device is on, read-only. */
   wifiName(p: PanelShell, signal?: AbortSignal): Promise<{ ssid?: string }>;
-  /** Whether updates install with nobody at the device: a key of `words.silent`, and a line for the log. Read-only. */
+  /** Whether updates install with nobody at the device: one of `updateStates`, and a line for the log. Read-only. */
   updates(p: PanelShell, signal?: AbortSignal): Promise<{ state: string; log: string }>;
+  /** Every state `updates` can give: each needs its `words.silent`. */
+  updateStates: readonly string[];
   /** Undo's `keep` depth: the device's own apps back, ours removed or disabled. */
   giveBack(p: PanelShell, on: (step: string, detail?: string) => void): Promise<{ app: 'removed' | 'disabled' | 'running'; note: string }>;
   /** A simulated device for ?demo=… and the tests. */
@@ -81,8 +83,11 @@ export interface KilnFrame extends FrameWords, FrameCode {
 
 const TONES = new Set(['y', 'n', 'w']);
 
-/** installer.json's `words`, checked where they come in: a missing or misspelt one fails the build and the tests, not a screen. */
-export function frameWords(w: unknown): FrameWords {
+/**
+ * installer.json's `words`, checked where they come in: a missing or misspelt one fails the build and the tests, not a
+ * screen. `silent`: the states the frame's `updates` gives, each of which needs its words.
+ */
+export function frameWords(w: unknown, silent: readonly string[]): FrameWords {
   const need = (o: unknown, path: string, keys: string[]) => {
     for (const k of keys) {
       const v = (o as Record<string, unknown> | undefined)?.[k];
@@ -96,8 +101,8 @@ export function frameWords(w: unknown): FrameWords {
   need(o.help, 'help.', ['recovery', 'undo', 'undoCli', 'drivers', 'learn']);
   need(o.undo?.factory, 'undo.factory.', ['title', 'detail', 'restored']);
   need(o.undo?.keep, 'undo.keep.', ['title', 'detail', 'button', 'giving', 'back', 'stillOn', 'restored']);
-  if (!o.silent || !Object.keys(o.silent).length) throw new Error('installer.json words.silent: missing');
-  for (const [k, s] of Object.entries(o.silent)) {
+  for (const k of silent) if (!o.silent?.[k]) throw new Error(`installer.json words.silent.${k}: missing`);
+  for (const [k, s] of Object.entries(o.silent ?? {})) {
     need(s, `silent.${k}.`, ['word', 'line']);
     if (!TONES.has(s.tone)) throw new Error(`installer.json words.silent.${k}.tone: one of y, n, w`);
   }

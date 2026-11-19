@@ -9,7 +9,7 @@ import { frameWords, type KilnFrame } from '../../wizard/frame';
 
 export const frame: KilnFrame = {
   id: 'aqara-s1-plus',
-  ...frameWords(design.words),
+  ...frameWords(design.words, kiln.updateStates),
   recovery: recovery as RecoveryData,
   photo,
   credits,
