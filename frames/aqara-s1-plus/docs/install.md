@@ -443,13 +443,16 @@ plan without changing anything.
 - **Why the sign-in goes even with root.** The app seals its secrets with a key in the Android
   Keystore: the Home Assistant sign-in, the ESPHome encryption key, the camera stream password and the
   Music Assistant (Sendspin) pairing. Android deletes an app's Keystore keys when it uninstalls the
-  app, so the copied data still holds those secrets, but nothing can open them. The new install
-  drops them on its first start. What each one needs then
+  app, so the copied data still holds those secrets, but nothing can open them. The new install has
+  no key at first: the old values read as not set, and stay in place. The first secret it stores
+  again, usually the Home Assistant sign-in, makes a new key. From then on each old value fails to
+  open and is removed when it is next read. What each one needs
   ([docs/secrets.md](../../../docs/secrets.md#what-is-sealed) has the full list):
   - the Home Assistant sign-in: the panel shows its QR code; sign in again;
   - the encryption key: Home Assistant gives the panel a key again, and may ask you to confirm it;
   - the camera stream password: nothing asks for it. Set a new one on the Camera page;
-  - Music Assistant (Sendspin): the panel makes a new identity, so pair it with Music Assistant again.
+  - Music Assistant (Sendspin): the panel uses a stand-in identity until the new key exists, then
+    makes a new one, so pair it with Music Assistant again.
 - **Root** here means that adb's shell can run `su`. That is only the case with a development boot
   image (`DEV_SU_HOURS`) or a Magisk policy for the adb shell, see
   [frames/aqara-s1-plus/research/root.md](../research/root.md#persistent-root-magisk--the-s1-kiosk-root-helper). A normal
