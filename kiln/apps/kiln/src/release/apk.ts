@@ -63,8 +63,10 @@ async function body(res: Response, onGot: (got: number, size?: number) => void, 
     if (done) break;
     poke();
     parts.push(value);
+    const before = got;
     got += value.length;
-    onGot(got, size);
+    // a whole-percent step (or each MiB without a size): one screen update, not one per USB-sized chunk
+    if (size ? Math.floor((got * 100) / size) !== Math.floor((before * 100) / size) : got >> 20 !== before >> 20) onGot(got, size);
   }
   const out = new Uint8Array(got);
   let at = 0;

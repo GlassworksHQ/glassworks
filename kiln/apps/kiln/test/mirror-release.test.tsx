@@ -11,8 +11,9 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: ReactNode }) => <a href={href} {...p}>{children}</a> }));
 
 import { MirrorWizard } from '../src/mirror/MirrorWizard';
+import { releaseApk, type ReleaseApk } from '../src/release/apk';
 import { DEMO_APK, DEMO_TAG, fakeReleaseRoute, type FakeRelease } from '../src/release/demo';
-import { MIRROR_OPEN, MirrorSession, mirrorMode } from '../src/mirror/session';
+import { MIRROR_APK, MIRROR_OPEN, MirrorSession, mirrorMode } from '../src/mirror/session';
 import { registry } from '../src/wizard/registry';
 
 beforeAll(() => {
@@ -126,6 +127,22 @@ describe('the release\'s APK', () => {
     hang = false;
     await s.loadRelease(); // Try again
     expect(s.state.release?.state).toBe('ready');
+  });
+
+  it('updates the screen in whole-percent steps, not once per chunk', async () => {
+    const big = new Uint8Array(1_000_000);
+    const route = fakeReleaseRoute('out', big);
+    const chunked = (async (u: RequestInfo | URL) => {
+      if (!String(u).endsWith(DEMO_APK)) return route(u);
+      let at = 0;
+      const body = new ReadableStream<Uint8Array>({ pull(c) { if (at >= big.length) c.close(); else { c.enqueue(big.slice(at, at + 4000)); at += 4000; } } });
+      return new Response(body, { headers: { 'content-length': String(big.length) } });
+    }) as typeof fetch;
+    const states: ReleaseApk[] = [];
+    await releaseApk(MIRROR_APK, chunked, (x) => states.push(x));
+    const downloading = states.filter((x) => x.state === 'downloading');
+    expect(downloading.length).toBeLessThanOrEqual(101); // 250 chunks
+    expect(downloading.at(-1)).toMatchObject({ got: 1_000_000, size: 1_000_000 });
   });
 
   it('an APK download that stops part way ends in Try again too', async () => {
