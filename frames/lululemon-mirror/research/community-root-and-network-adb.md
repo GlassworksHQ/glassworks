@@ -64,10 +64,13 @@ the module, whose `init`:
 Persistence is the init `on boot` trigger itself, so it depends on nothing else — not Wi-Fi, not the
 app, not the state of `/data` (`README.md:63-64`). The **flash** writes **only `system`**; boot,
 recovery, aboot and modem are untouched (`README.md:24`, `README.md:121`). At runtime the module
-does then write into `/data`: it copies the adb key to `/data/misc/adb/adb_keys` and creates the
-`/data/local/rootd` daemon dir (`mod/mirror_root.c:36-67`). A `system` reflash restores the boot and
-app surfaces but does not undo those `userdata` files, which a fresh `userdata` (or deleting them)
-clears.
+does then write into `/data`: it **replaces** (`cp`, not append) `/data/misc/adb/adb_keys` with
+`/system/etc/adb_keys`, and creates the `/data/local/rootd` daemon dir (`mod/mirror_root.c:36-67`).
+A `system` reflash restores the boot and app surfaces but does not undo those `userdata` files, which
+a fresh `userdata` (or deleting them) clears — and because the key copy overwrites rather than
+appends, any keys already in `/data/misc/adb/adb_keys` are lost and not recovered by a reflash or by
+deleting the new file, so back that file up before the first boot of a modified image if it matters.
+(Our flow flashes a fresh `userdata`, so there is nothing there to lose.)
 
 The hard part — making a module the loader accepts — is solved by recovering the ABI from the
 vendor's own files (`docs/ABI.md`):
@@ -223,8 +226,14 @@ builder, and on **our** image the key plant is inert). Keep from it:
    [adbd-keys.md](adbd-keys.md); consistent, different boot build).
 3. **Idea** — a persistent **TCP adb listener** as a headless-recovery path (see #435/#486/#577
    below). **Untested on our image**, because our adbd most likely defers auth to `services.jar`
-   (adbd-keys.md's best-supported reading), so whether a
-   TCP transport is auto-approved for the owner fingerprint at all is unknown.
+   (adbd-keys.md's best-supported reading), so whether a TCP transport is auto-approved for the owner
+   fingerprint at all is unknown. A competing data point to keep in mind: `shihanqu`'s `docs/ADB.md`
+   reports that on *their* (stock-reading) adbd, **TCP has no framework-approval helper** — the
+   framework dialog is USB-only, so a TCP transport authenticates against the key file, which they
+   bind-mount over the ramdisk `/adb_keys` to make it count (`shihanqu/lululemon-mirror-root`
+   `docs/ADB.md`). Read, unverified, and on a different adbd than ours; it cuts against assuming our
+   image's framework-defer applies uniformly to TCP, and is one more reason our-image behaviour has
+   to be measured, not assumed.
 
 ## How each bears on the open issues
 
