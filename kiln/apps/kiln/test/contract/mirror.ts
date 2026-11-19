@@ -51,30 +51,37 @@ function flashWorld(k: Knobs): World {
     check: async () => {},
     discard: async () => {},
   };
-  const fb: FastbootLike = {
-    async getvar(n) {
-      const r = reloadAt<string>('fastboot');
-      if (r) return r;
-      if (n === 'max-download-size') return '0x10000000';
-      throw new Error('FAIL');
-    },
-    partitionSize: async (n) => (n === 'system' ? SYSTEM_BYTES : USERDATA_BYTES),
-    async flashBlob(p, _blob, onProgress) {
-      onProgress?.(0.5);
-      // half of system is on the Mirror when the cable goes
-      if (k.dropUsbIn === 'install' && !fired.dropped) { fired.dropped = true; partial.add(p); throw new Error(UNPLUGGED); }
-      if (p === 'userdata') { const r = reloadAt<void>('install'); if (r) return r; }
-      onProgress?.(1);
-      partial.delete(p);
-      writes.push({ what: `flash ${p}`, step: 'install' });
-    },
-    reboot: async () => { mode = 'booted'; },
+  /** The Mirror's fastboot, one USB link per connection: a link the cable dropped stays dead. */
+  const fastboot = (): FastbootLike => {
+    let dead = false;
+    const alive = () => { if (dead) throw new Error(UNPLUGGED); };
+    return {
+      async getvar(n) {
+        alive();
+        const r = reloadAt<string>('fastboot');
+        if (r) return r;
+        if (n === 'max-download-size') return '0x10000000';
+        throw new Error('FAIL');
+      },
+      partitionSize: async (n) => { alive(); return n === 'system' ? SYSTEM_BYTES : USERDATA_BYTES; },
+      async flashBlob(p, _blob, onProgress) {
+        alive();
+        onProgress?.(0.5);
+        // half of system is on the Mirror when the cable goes
+        if (k.dropUsbIn === 'install' && !fired.dropped) { fired.dropped = true; dead = true; partial.add(p); throw new Error(UNPLUGGED); }
+        if (p === 'userdata') { const r = reloadAt<void>('install'); if (r) return r; }
+        onProgress?.(1);
+        partial.delete(p);
+        writes.push({ what: `flash ${p}`, step: 'install' });
+      },
+      reboot: async () => { alive(); mode = 'booted'; },
+    };
   };
   const deps: FlashDeps = {
     images,
     imageUrl: 'https://proxy.test/glass-panes/system.img',
     // VOL- under the back cover: the physical step this flow asks for, so the person does it when asked
-    requestFastboot: async () => { mode = 'fastboot'; return fb; },
+    requestFastboot: async () => { mode = 'fastboot'; return fastboot(); },
     async requestAdb() {
       if (mode !== 'booted') throw new DOMException('No device selected.', 'NotFoundError');
       const r = reloadAt<PanelShell>('first-boot');

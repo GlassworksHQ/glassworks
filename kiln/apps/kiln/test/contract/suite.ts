@@ -15,16 +15,17 @@ export interface Case { id: string; kind: CaseKind; knobs: Knobs; what: string; 
 export function cases(d: Driver): Case[] {
   const f = flowData(d.frame, d.flow);
   const write = f.steps.find((s) => s.writes);
+  const download = f.steps.find((s) => s.downloads?.length);
   const out: Case[] = [
     { id: 'clean', kind: 'clean', knobs: {}, what: 'nothing goes wrong: it reaches Done' },
     { id: 'auth-refused-while-booting', kind: 'auth-refused-while-booting', knobs: { refuseAuth: 3 },
       what: 'adb refuses 3 times as the device comes up: it keeps asking and reaches Done, with no extra click' },
     ...(write ? [{ id: 'usb-drop', kind: 'usb-drop' as const, knobs: { dropUsbIn: write.id }, step: write.id,
-      what: `USB drops in ${write.id}'s first write: an error, Try again on that step's screen (or the one that enters its transport), then Done without redoing a finished step` }] : []),
+      what: `USB drops in ${write.id}'s first write: an error, Try again on that step's screen (or the one that enters its transport), then Done without redoing a finished step's writes` }] : []),
     ...f.steps.map((s): Case => ({ id: `reload@${s.id}`, kind: 'reload', knobs: { reloadIn: s.id }, step: s.id,
-      what: `the page reloads during ${s.id}: it knows a write may have happened, and reaches Done without redoing a finished step` })),
-    ...(f.steps.some((s) => s.downloads?.length) ? [{ id: 'stalled-download', kind: 'stalled-download' as const, knobs: { stall: true },
-      what: 'the first download stops sending: a watchdog ends it with an error, and Try again reaches Done' }] : []),
+      what: `the page reloads during ${s.id}: it knows a write may have happened, and reaches Done without redoing a finished step's writes` })),
+    ...(download ? [{ id: 'stalled-download', kind: 'stalled-download' as const, knobs: { stall: true }, step: download.id,
+      what: `the first download (in ${download.id}) stops sending: a watchdog ends it with an error, Try again on that step's screen (or the one before), then Done` }] : []),
     { id: 'no-touch', kind: 'no-touch', knobs: { noTouch: true },
       what: `nobody touches the device beyond the taps the flow declares (${f.steps.flatMap((s) => s.taps ?? []).join(', ') || 'none'}): it reaches Done` },
   ];

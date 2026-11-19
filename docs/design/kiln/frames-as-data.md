@@ -85,8 +85,9 @@ For every frame, with no flag to turn it off:
 
 1. **Retry from the step's own screen.** Try again lands on the step that stopped, or on the step
    that enters its transport when the device needs entering again. Never on an earlier input screen.
-2. **Resume after a reload or an error**, at any step, without redoing a step that finished. The tab
-   remembers that the device may have been changed (the S1's `registry.ts`, in sessionStorage).
+2. **Resume after a reload or an error**, at any step, without redoing a finished step's writes. A
+   read-only step may run again (a download, a loader in RAM). The tab remembers that the device may
+   have been changed (the S1's `registry.ts`, in sessionStorage).
 3. **Wait through a reboot.** After a restart, keep asking the device (refused auth, no device yet,
    `sys.boot_completed` still 0) instead of failing on the first refusal or timeout.
 4. **Stall watchdogs** on every network and USB wait. A download that stops sending ends with an
@@ -103,11 +104,11 @@ device, and checks it ends where the S1 does:
 
 | Case | The failure | Passes when |
 |---|---|---|
-| `clean` | none | it reaches Done with the device set up |
-| `auth-refused-while-booting` | adb refuses 3 times as the device comes up | it keeps asking and reaches Done, with no extra click |
-| `usb-drop` | USB drops in the first writing step | an error, Try again on that step's screen (or the one before), then Done without redoing a finished step |
-| `reload@<step>` | the page reloads during each step | it knows a write may have happened, and reaches Done without redoing a finished step |
-| `stalled-download` | the first download stops sending | a watchdog ends it with an error, and Try again reaches Done |
+| `clean` | none | it reaches Done with the device set up: the app in, and the home screen read back off the device |
+| `auth-refused-while-booting` | adb refuses 3 times as the device comes up | it keeps asking through all 3 and reaches Done, with no extra click |
+| `usb-drop` | USB drops halfway through the first writing step | an error, Try again on that step's screen (or the one before), then Done with nothing left partly written and no finished step's writes redone |
+| `reload@<step>` | the page reloads during each step | it knows a write may have happened, and reaches Done without redoing a finished step's writes |
+| `stalled-download` | the first download stops sending | a watchdog ends it with an error, Try again on that step's screen (or the one before), then Done |
 | `no-touch` | nobody taps the device beyond the declared taps | it reaches Done |
 
 The cases come from `installer.json`: a reload in each step, a drop in the first step that writes,

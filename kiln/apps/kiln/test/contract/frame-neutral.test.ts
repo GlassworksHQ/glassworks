@@ -6,15 +6,15 @@
 // outside it fails, and so does an entry with no hit left (delete the entry in the PR that removes the last hit).
 // `notFrames` holds words that only look like a frame's name (SHA-256's S1), under the same no-stale rule.
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import allowlist from './frame-neutral-allowlist.json';
 import { REPO } from './harness';
 
 /** Each frame name with samples it must catch, one per alternative, as kiln-core's test does. */
 export const NAMES: [term: string, pattern: RegExp, catches: string[]][] = [
-  // the word S1, and s1 starting a name (s1Plus, s1-backup, s1kiosk); not a variable like sha256's s1
-  ['s1', /\bS1(?!\d)|\bs1(?=[A-Z_-]|kiosk)/, ['S1 Plus', 'S1.tsx', 's1Plus', 's1-backup', 'aqara-s1-plus', 'sh.edm.s1kiosk', 's1_overlay']],
+  // the word S1 or s1, and s1 starting a name (s1Plus, s1-backup, s1kiosk); SHA-256's S1 and s1 are in notFrames
+  ['s1', /\bS1(?!\d)|\bs1\b|\bs1(?=[A-Z_-]|kiosk)/, ['S1 Plus', 'S1.tsx', 'Connect your s1', 's1Plus', 'aqara-s1-plus', 'sh.edm.s1kiosk', 's1_overlay']],
   ['aqara', /aqara/i, ['Aqara', 'aqara-s1-plus']],
   ['lululemon', /lululemon/i, ['lululemon Studio Mirror', 'lululemon-mirror']],
   // camelCase too (keptMirror, MIRROR_BASE); "mirrors", "mirrored" and "mirroring" are plain English
@@ -42,7 +42,7 @@ export function hits(): Map<string, { file: string; term: string; line: string }
   const out = new Map<string, { file: string; term: string; line: string }>();
   for (const root of ROOTS) {
     for (const abs of files(join(REPO, root))) {
-      const file = relative(REPO, abs);
+      const file = relative(REPO, abs).split(sep).join('/'); // forward slashes on every OS, as the allowlist has them
       if (/\.(webp|png|jpe?g|gif|wasm|woff2?|ico|zip|bin)$/i.test(file)) continue;
       const lines = [file, ...readFileSync(abs, 'utf8').split('\n')];
       for (const [term, pattern] of NAMES) {
@@ -67,7 +67,7 @@ describe('Kiln names no frame', () => {
     expect(pattern.test(s)).toBe(true);
   });
 
-  it.each(['const s1 = (a >>> 7)', 'it mirrors the CLI', 'mirrored', 'mirroring the log', 'genericity'])('and leaves plain code and English alone: %s', (s) => {
+  it.each(['const s10 = 1', 'xs1', 'it mirrors the CLI', 'mirrored', 'mirroring the log', 'genericity'])('and leaves plain code and English alone: %s', (s) => {
     expect(NAMES.filter(([, p]) => p.test(s)).map(([t]) => t)).toEqual([]);
   });
 

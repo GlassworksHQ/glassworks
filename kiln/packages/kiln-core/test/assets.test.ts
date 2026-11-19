@@ -69,6 +69,21 @@ describe('Assets', () => {
     expect(tries).toBe(3);
   });
 
+  it('keeps a slow manifest going while bytes arrive', async () => {
+    const text = new TextEncoder().encode(JSON.stringify(await manifest()));
+    let i = 0;
+    const step = Math.ceil(text.length / 6);
+    const slow = new ReadableStream<Uint8Array>({
+      async pull(c) {
+        if (i >= text.length) { c.close(); return; }
+        await new Promise((r) => setTimeout(r, 20)); // six gaps under the 50 ms stall time, 120 ms in all
+        c.enqueue(text.slice(i, i += step));
+      },
+    });
+    const { f } = fakeFetch(async () => new Response(body([BLOB], false)), async () => new Response(slow));
+    expect(await new Assets('/a/', f, { stallMs: 50 }).has('blob')).toBe(true);
+  });
+
   it('downloads again after a stall: the failed try is not cached', async () => {
     let tries = 0;
     const { f } = fakeFetch(async () => new Response(body([BLOB], ++tries === 1)) );

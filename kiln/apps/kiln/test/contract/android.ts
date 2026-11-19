@@ -6,7 +6,7 @@ import type { PanelShell } from '@glassworks/adb';
 import { FakeAndroid, fakeGenericApk } from '@glassworks/generic-android-installer/fakes';
 import { AndroidSession, type AndroidDeps, type Device } from '../../src/android/session';
 import {
-  Clicks, REFUSED, UNPLUGGED, fastSleep, never, type Driver, type Knobs, type Look, type Page, type World, type Write,
+  Clicks, REFUSED, UNPLUGGED, fastSleep, flowData, never, tick, type Driver, type Knobs, type Look, type Page, type World, type Write,
 } from './harness';
 
 const pristine = (state: object) => JSON.stringify({ ...state, log: [] });
@@ -23,6 +23,9 @@ function world(k: Knobs): World {
     return never<T>();
   };
   const tablet = new FakeAndroid({ sdk: 34 });
+  // the taps the person makes on the tablet: in a no-touch run, only those the flow declares
+  const taps = new Set(flowData('generic-android', 'install').steps.flatMap((s) => s.taps ?? []));
+  const tapped = (tap: string) => !k.noTouch || taps.has(tap);
   const apk = fakeGenericApk();
 
   /** One USB link to the tablet: a pulled cable kills it, and the browser hands out a new one. */
@@ -58,6 +61,8 @@ function world(k: Knobs): World {
       const r = reloadAt<Device>('connect');
       if (r) return r;
       if (fired.refused < (k.refuseAuth ?? 0)) { fired.refused++; throw new Error(REFUSED); }
+      // Allow on the tablet's screen: without that tap, adb never lets the browser in
+      if (!tapped('allow-usb-debugging')) return never<Device>();
       return link();
     },
     sleep: fastSleep,
@@ -97,7 +102,7 @@ function world(k: Knobs): World {
         return sc === 'find' || sc === 'named' || sc === 'brand' ? 'find' : sc === 'debug' || sc === 'allow' ? 'connect' : 'install';
       },
       // the error screen's Try again (AndroidWizard Stopped)
-      async retry() { clicks.reset(); await s.connect(); },
+      async retry() { clicks.reset(); void s.connect(); await tick(); },
       remembers: () => pristine(s.state) !== pristine(new AndroidSession(deps, true).state),
       snapshot: () => JSON.stringify({ ...s.state, log: s.state.log.length }),
       close: () => s.close(),

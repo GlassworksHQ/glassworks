@@ -68,7 +68,7 @@ export interface Page {
   look(): Look;
   /** The step whose screen this is (installer.json ids). */
   step(): string;
-  /** The error screen's way to try again; resolves once it has landed. */
+  /** The error screen's Try again: starts it, and resolves on the first screen it lands on (not when the flow ends). */
   retry(): Promise<void>;
   /** The page knows, after a reload, that an earlier page load may have changed the device. */
   remembers(): boolean;

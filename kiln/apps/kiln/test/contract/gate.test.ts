@@ -1,7 +1,7 @@
 // The gate (#621): a frame is public in Kiln only when its flows pass the whole forgiveness contract. Public is what
 // the picker offers (Picker.tsx: a shipping status and a `kiln` route in frame.json). Every Kiln page has a contract
 // too: a page with no installer.json, or a flow with no driver, fails here.
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { ships, type FrameDesign } from '@glassworks/frame-card';
 import { describe, expect, it } from 'vitest';
@@ -23,6 +23,7 @@ export function gate(frames: Pick<FrameDesign, 'id' | 'status' | 'kiln'>[], data
     const d = data.get(f.id);
     if (!d) { out.push(`${f.id} is public in Kiln but has no design/installer.json`); continue; }
     if (f.kiln !== d.route) { out.push(`${f.id} is public in Kiln at ${f.kiln}, but its installer.json route is ${d.route}`); continue; }
+    if (!Object.keys(d.flows).length) { out.push(`${f.id} is public in Kiln but its installer.json has no flows`); continue; }
     for (const flow of Object.keys(d.flows)) {
       const driver = drivers.find((x) => x.frame === f.id && x.flow === flow);
       if (!driver) { out.push(`${f.id} is public in Kiln but its ${flow} flow has no contract driver`); continue; }
@@ -45,12 +46,17 @@ describe('the gate', () => {
   });
 
   it('refuses a frame made public while it has expected failures, or without a contract', () => {
+    // fixed marks, so fixing a real one doesn't change this test
+    const marks = { 'lululemon-mirror': { 'usb-drop': '#1: example' }, 'lululemon-mirror/app': { 'no-touch': '#1: example' } };
     const mirror = FRAMES.find((f) => f.id === 'lululemon-mirror')!;
     const opened = [{ ...mirror, status: 'alpha' as const, kiln: '/lululemon-mirror' }];
-    expect(gate(opened, installers(), DRIVERS, MARKS)).toEqual([
-      expect.stringMatching(/^lululemon-mirror is public in Kiln but lululemon-mirror fails the contract: auth-refused-while-booting/),
-      expect.stringMatching(/^lululemon-mirror is public in Kiln but lululemon-mirror\/app fails the contract: /),
+    expect(gate(opened, installers(), DRIVERS, marks)).toEqual([
+      'lululemon-mirror is public in Kiln but lululemon-mirror fails the contract: usb-drop',
+      'lululemon-mirror is public in Kiln but lululemon-mirror/app fails the contract: no-touch',
     ]);
+    expect(gate(opened, installers(), DRIVERS, {})).toEqual([]);
+    const flowless = new Map(installers()).set('lululemon-mirror', { ...installers().get('lululemon-mirror')!, flows: {} });
+    expect(gate(opened, flowless, DRIVERS, {})).toEqual(['lululemon-mirror is public in Kiln but its installer.json has no flows']);
     expect(gate([{ id: 'new-frame', status: 'beta', kiln: '/new-frame' }], installers(), DRIVERS, MARKS))
       .toEqual(['new-frame is public in Kiln but has no design/installer.json']);
     // a public route that isn't the one its contract covers
@@ -62,7 +68,8 @@ describe('the gate', () => {
 
 describe('every Kiln page has a contract', () => {
   const data = installers();
-  const pages = readdirSync(APP).filter((n) => n !== 'api' && statSync(join(APP, n)).isDirectory()).map((n) => `/${n}`);
+  // a route is a folder with an App Router page in it (page.tsx), not any folder
+  const pages = readdirSync(APP).filter((n) => statSync(join(APP, n)).isDirectory() && existsSync(join(APP, n, 'page.tsx'))).map((n) => `/${n}`);
 
   it('each frame page is the route of an installer.json, and each route has a page', () => {
     const routes = [...data.values()].map((d) => d.route).sort();

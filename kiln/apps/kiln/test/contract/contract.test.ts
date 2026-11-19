@@ -57,12 +57,21 @@ function reachedDone(r: Result) {
   expect(r.partial(), 'no partition left partly written').toEqual([]);
 }
 
-/** Throws if a step that had finished before `step` wrote again. */
+/**
+ * Throws if a step that had finished before `step` wrote again. Writes, not steps: running a read-only step again
+ * (a download, a loader in RAM) is allowed, as the S1 boots FEL again after a drop.
+ */
 async function noFinishedStepRedone(d: Driver, step: string, r: Result) {
   const steps = flowData(d.frame, d.flow).steps.map((s) => s.id);
   const base = perStep((await result(d, cases(d)[0]!)).writes);
   const got = perStep(r.writes);
   for (const s of steps.slice(0, steps.indexOf(step))) expect(got.get(s) ?? 0, `writes in ${s}, a step that had finished`).toBe(base.get(s) ?? 0);
+}
+
+/** Try again lands on the step that stopped, or the one before it that enters its transport: never an earlier input screen, never past it. */
+function landsOn(steps: string[], step: string, landed: string | undefined) {
+  const at = steps.indexOf(step);
+  expect(steps.slice(Math.max(0, at - 1), at + 1), `Try again lands on ${step}'s screen or the one before it, not on ${landed}`).toContain(landed);
 }
 
 async function contract(d: Driver, c: Case) {
@@ -74,18 +83,17 @@ async function contract(d: Driver, c: Case) {
     case 'no-touch':
       reachedDone(r);
       expect(r.stops.length, 'no error screen on the way').toBe(1);
+      if (c.kind === 'auth-refused-while-booting') expect(r.fired.refused, 'every refusal was asked through').toBe(c.knobs.refuseAuth);
       return;
-    case 'usb-drop': {
+    case 'usb-drop':
       expect(r.stops[0]!.end, 'an error screen, not a hang or a silent Done').toBe('error');
-      const at = steps.indexOf(c.step!);
-      // the step that stopped, or the one before it that enters its transport: never an earlier input screen, never past it
-      expect(steps.slice(Math.max(0, at - 1), at + 1), `Try again lands on ${c.step}'s screen or the one before it, not on ${r.landed}`).toContain(r.landed);
+      landsOn(steps, c.step!, r.landed);
       reachedDone(r);
       await noFinishedStepRedone(d, c.step!, r);
       return;
-    }
     case 'stalled-download':
       expect(r.stops[0]!.end, 'the stall ends with an error the person can retry, not a page that waits for ever').toBe('error');
+      landsOn(steps, c.step!, r.landed);
       reachedDone(r);
       return;
     case 'reload':

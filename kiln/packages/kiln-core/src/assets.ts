@@ -36,6 +36,28 @@ function watchdog(ms: number, what: string) {
   };
 }
 
+/** A response's whole body, re-arming `w` on every chunk: what counts is the time since the last byte. */
+async function readAll(r: Response, w: ReturnType<typeof watchdog>): Promise<Uint8Array> {
+  if (!r.body) return new Uint8Array(await w.race(r.arrayBuffer()));
+  const reader = r.body.getReader();
+  const chunks: Uint8Array[] = [];
+  try {
+    for (;;) {
+      const { done, value } = await w.race(reader.read());
+      if (done) break;
+      if (value.length) w.arm();
+      chunks.push(value);
+    }
+  } catch (e) {
+    void reader.cancel().catch(() => {});
+    throw e;
+  }
+  const out = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
+  let at = 0;
+  for (const c of chunks) { out.set(c, at); at += c.length; }
+  return out;
+}
+
 export interface AssetEntry<A extends string = string> { name: A; path: string; sha256: string; size: number; license: string; source: string }
 export interface Manifest<A extends string = string> { generated: string; assets: AssetEntry<A>[] }
 
@@ -53,10 +75,11 @@ export class Assets<A extends string> {
     if (!this.manifest) {
       const w = watchdog(this.stallMs, 'manifest.json');
       w.arm();
-      const p = w.race(this.f(`${this.base}manifest.json`, { cache: 'no-cache', signal: w.signal }).then(async (r) => {
+      const p = (async () => {
+        const r = await w.race(this.f(`${this.base}manifest.json`, { cache: 'no-cache', signal: w.signal }));
         if (!r.ok) throw new Error(`installer files are missing (manifest.json: HTTP ${r.status})`);
-        return (await w.race(r.json())) as Manifest<A>;
-      })).finally(() => w.stop());
+        return JSON.parse(new TextDecoder().decode(await readAll(r, w))) as Manifest<A>;
+      })().finally(() => w.stop());
       p.catch(() => { if (this.manifest === p) this.manifest = undefined; });
       this.manifest = p;
     }
