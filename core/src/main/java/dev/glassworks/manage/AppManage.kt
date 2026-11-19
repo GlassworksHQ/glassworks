@@ -217,6 +217,7 @@ open class AppManage(
             is SettingsItem.Action -> listOf("${i.title}: ${v(i.detail)}")
             // A native view's typed twin, as the Manage page shows it; never a secret (SettingsItem.Native).
             is SettingsItem.Native -> itemLines(dev.glassworks.pane.SettingsChange.twinOf(i))
+            // Its twin too: what a link opens is the person's (the notifications' words), not the panel's state.
             is SettingsItem.Link -> emptyList()
         }
     }

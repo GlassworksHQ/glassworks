@@ -19,6 +19,9 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   panel back and shows a *Silent updates* block: *On* when the boot image has its root update service, or *A tap
   each* with how to add it when it doesn't. The lululemon Mirror's test install shows the same block, read from
   whether Glassworks went in as a system app.
+- **Manage sends a test notification and shows the panel's notifications.** The Notifications page on the Manage
+  page lists what is on the panel now, read-only, and has a *Send* button for the test notification. On the panel,
+  *Send a test notification* is now a row with a *Send* button.
 - **Setup says when updates would ask for a tap.** On a new setup of an S1 whose boot image has no update
   service, a *Silent updates* step follows Panes: Kiln adds the service from a computer, with a QR code to it.
   It's never required: Continue moves on. Panels that are already set up don't see it, and an S1 with the

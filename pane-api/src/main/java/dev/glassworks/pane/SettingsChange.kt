@@ -28,6 +28,7 @@ object SettingsChange {
                 i is SettingsItem.Group -> walk(i.items, prefix + i.title + "/")
                 // A native view's typed twin: its items as if they sat here (#269).
                 i is SettingsItem.Native -> walk(twinOf(i), prefix)
+                i is SettingsItem.Link -> walk(twinOf(i), prefix + i.title + "/")
                 canChange(i) -> listOf(prefix + titleOf(i) to i)
                 else -> emptyList()
             }
@@ -40,6 +41,9 @@ object SettingsChange {
 
     /** [n]'s typed twin as it is now, or none when reading it fails. */
     fun twinOf(n: SettingsItem.Native): List<SettingsItem> = runCatching { n.twin() }.getOrDefault(emptyList())
+
+    /** [l]'s typed twin as it is now, or none when reading it fails. */
+    fun twinOf(l: SettingsItem.Link): List<SettingsItem> = runCatching { l.twin() }.getOrDefault(emptyList())
 
     /** A kind of item a person changes (a Text only while [SettingsItem.Text.enabled]). */
     fun canChange(i: SettingsItem): Boolean = when (i) {

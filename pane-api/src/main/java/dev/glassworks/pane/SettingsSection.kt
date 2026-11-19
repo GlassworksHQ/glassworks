@@ -328,6 +328,12 @@ sealed interface SettingsItem {
         val title: String, val detail: String,
         /** The id of another section this row opens instead (the Device page's radio line opens the Radio pane). */
         val section: String? = null,
+        /**
+         * What [open] shows, as typed items read again with the page (#518: the notifications on the panel). A
+         * surface that can't open it (the Manage page) draws them under [title] instead; their keys start with
+         * [title], as a [Group]'s. Never a secret: it is a page in a browser.
+         */
+        val twin: () -> List<SettingsItem> = { emptyList() },
         val open: (Context) -> Unit = {},
     ) : SettingsItem
 
@@ -446,7 +452,7 @@ sealed interface SettingsItem {
      */
     class Native(
         val key: String,
-        /** What the view is, in words, for a surface that can't draw it and has no [twin] (the Manage page's "On the panel" row). */
+        /** What the view is, in words. */
         val title: String = "",
         val twin: () -> List<SettingsItem> = { emptyList() },
         val create: (NativeHost) -> NativeView,
