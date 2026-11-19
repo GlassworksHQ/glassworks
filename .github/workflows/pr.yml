@@ -846,6 +846,10 @@ jobs:
         run: npm run typecheck -w site
       - name: Builds as Vercel builds it
         run: npm run build -w site
+        env:
+          # The blueprints and the latest release read GitHub's Releases API. Unauthenticated, a shared runner
+          # IP runs out of its 60 calls an hour (HTTP 403). The workflow's read-only token gets the higher limit.
+          GITHUB_TOKEN: ${{ github.token }}
       - name: Each docs route carries the Markdown and images it renders
         run: npm run check:trace -w site
       - name: SEO check (sitemap, titles, descriptions, canonicals, preview images)
