@@ -12,6 +12,12 @@ line of each version is what Home Assistant shows on the update card. A change o
 ## [Unreleased]
 
 ### Added
+- **Notifications and the Bluetooth proxy, in both builds.** Home Assistant can show notifications on the panel
+  with the panel's notify action, and a device with Bluetooth LE can relay nearby BLE sensors to Home Assistant.
+  Both are off until you turn them on, in the panel's settings, on the Manage page or from Home Assistant. A device
+  without Bluetooth LE doesn't show the proxy anywhere. On a screen without touch, such as the lululemon Mirror, a
+  high or critical notification with no `tag` and no `timeout` closes after 2 minutes, since nothing else could
+  close it. On the Mirror the proxy scans only once the app has the location permission, which Kiln doesn't grant yet.
 - **Pick an update channel: Stable or Beta.** The device page in the panel's settings and on the Manage page has an
   *Update channel* row. Stable, the default, gets releases as before. Beta also gets betas, new versions before
   they're stable, which may have bugs; Home Assistant's update card says when the update it offers is a beta. Going

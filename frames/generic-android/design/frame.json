@@ -60,6 +60,22 @@
       "support": "depends",
       "note": "Needs a speaker."
     },
+    "notifications": {
+      "support": "alpha",
+      "note": "Needs no special hardware. Both builds have it."
+    },
+    "bluetooth-proxy": {
+      "support": "depends",
+      "note": "Needs Bluetooth LE. Both builds have it."
+    },
+    "camera": {
+      "support": "depends",
+      "note": "Needs a camera. Both builds have it."
+    },
+    "diagnostics": {
+      "support": "alpha",
+      "note": "Needs no special hardware. Both builds have it, with no CPU temperature: no frame here names a thermal zone."
+    },
     "radio": {
       "support": "no",
       "note": "No supported radio."
