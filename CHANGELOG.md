@@ -7,6 +7,41 @@ below as the release notes.
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-11-19
+
+**Each panel now has its own name in Home Assistant, so you can add a second panel without a name conflict.**
+
+### Fixed
+- **Each panel has its own name in Home Assistant, so a second one can be added.** Every panel used
+  to call itself `s1-panel`, and adding a second one made Home Assistant offer to replace the first.
+  Now the panel announces itself as "Aqara S1 Plus", with a node name such as `aqara-s1-plus-a1b2c3`
+  that ends in part of its MAC. A panel you already added stays in place with its device and all its
+  entity ids. Home Assistant shows "Aqara S1 Plus" after the update, unless you renamed it.
+- **Updates are found among the repo's other releases.** The panel now picks its own newest release
+  (tag `v1.2.3` or `aqara-s1-plus-v1.2.3`) instead of whatever release is newest in the repo, so
+  releases of other devices and libraries can't hide an update.
+- **Updates come from the project's new address.** The panel checks GlassworksHQ/glassworks
+  directly instead of going through GitHub's redirect from the old name.
+- **One stuck connection no longer freezes the panel's entities in Home Assistant.** If a client
+  stopped reading (a Home Assistant that hangs, or a connection that is half gone), states, replies
+  and keepalive pings for every other client waited behind it. Now only that client waits, until the
+  panel drops it.
+- **Wi-Fi reconnects while the screen is off.** If Wi-Fi dropped at night (a router restart, an
+  outage), the panel stayed offline until someone woke the screen. The app now asks for a scan 10 s
+  after Wi-Fi drops, then after 40 s, 60 s and every 120 s, while Wi-Fi is not connected and the
+  screen is off. It needs the location permission, which the installers grant, and location turned
+  on. The app's always-on service now also runs as a location service, because Android 10 only lets
+  an app use location with the screen off that way. The app reads no location.
+
+### Security
+- **Other apps can no longer change the panel's settings.** Until now any app on the panel could
+  open S1 Kiosk in a way that changed its settings, such as the dashboard's address, the API key or
+  remote debugging. Now only adb (Kiln, the command line), the boot image's root side and the panel
+  itself can. The launcher icon still opens the app, and the panel still starts it as its home screen.
+- **Sign-in: someone on your network who reads the sign-in code can no longer use it.** The
+  dashboard's QR-code sign-in now uses PKCE, so Home Assistant only hands out the panel's token to the
+  panel itself. Needs Home Assistant 2026.10 or later to take effect; older versions sign in as before.
+
 ## [0.4.3] - 2026-11-11
 
 **Pick the radio's role on the panel with role tiles and QR codes, voice timers you can move or hide, and a new typeface.**
