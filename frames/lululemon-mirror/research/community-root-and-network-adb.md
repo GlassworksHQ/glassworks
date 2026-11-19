@@ -5,8 +5,11 @@ evidence: read
 
 # Mirror community projects: a kernel-module root and a stock network-adb path
 
-**Status (2026-11-18): read, nothing run on a device.** Two public Mirror projects were read in full
-and compared with what we do. [`shihanqu/lululemon-mirror-root`](https://github.com/shihanqu/lululemon-mirror-root)
+**Status (2026-11-19): read, nothing run on a device; this stays research.** The maintainer decided
+on 2026-11-19 (on #573): **no publishing for now**, which covers a root kernel module (GPL, hard rule
+4) and an AOSP image alike — nothing we build from either project ships; the research continues. So
+everything below is a comparison and a knowledge store, not a plan to adopt. Two public Mirror
+projects were read in full and compared with what we do. [`shihanqu/lululemon-mirror-root`](https://github.com/shihanqu/lululemon-mirror-root)
 is the custom-kernel-module (`.ko`) root this project flagged as *open, untested* in
 [mirror-root.md](mirror-root.md) §4, now built and reported working on two units: it gives **full,
 unconfined root** (permissive SELinux, a root command daemon), where the root we verified
@@ -131,7 +134,7 @@ the two imports are primitive). **Untested** — nobody has built it for our ker
 | Concern | Finding |
 |---|---|
 | **Rule 1 — never brick, always a way back** | Fits as a *dev* technique. A module that fails to load can't brick: the boot chain is untouched and the failure is a missing feature, recovered by reflashing `system` (`README.md:169-172`). The way back is our Glass Panes image + patch, already on disk. **But** it disables SELinux and runs a daemon that executes anything in `/data/local/rootd/cmd` — "treat the device as fully compromised" (`README.md:160-162`). That is a security posture we would never ship to a user's Mirror; our own [mirror-root.md](mirror-root.md) §7 kept SELinux **enforcing** on purpose. |
-| **Rule 4 — no GPL payloads shipped by us** | The built module declares `license=GPL` and links `EXPORT_SYMBOL_GPL` kernel symbols (`mod/mirror_root.c:110`, `docs/ABI.md:91`). A Linux kernel module linking GPL-only symbols is a derivative of the GPL-2.0 kernel, whatever the repo's MIT source licence. So **we could not ship a prebuilt `mirror_root.ko`** — the same bar that keeps Magisk out of the tree. The *method and source* are fine to describe and reuse; a *binary we distribute* is not. (This is not new: any `.ko` on this kernel, ours included, has the same rule-4 shape — the project just makes it concrete.) |
+| **Rule 4 — no GPL payloads shipped by us** | The built module declares `license=GPL` and links `EXPORT_SYMBOL_GPL` kernel symbols (`mod/mirror_root.c:110`, `docs/ABI.md:91`). A Linux kernel module linking GPL-only symbols is a derivative of the GPL-2.0 kernel, whatever the repo's MIT source licence. So **we could not ship a prebuilt `mirror_root.ko`** — the same bar that keeps Magisk out of the tree. The *method and source* are fine to describe and reuse; a *binary we distribute* is not. (This is not new: any `.ko` on this kernel, ours included, has the same rule-4 shape — the project just makes it concrete.) The maintainer settled it on 2026-11-19 (#573): no publishing for now, so no root kernel module ships — rule 4 as written stands, with no exception for this. |
 | **Rule 3 — no vendor binaries** | The repo commits no vendor bytes; it reads `pronto_wlan.ko`'s DWARF for a struct layout and one CRC (names/offsets, not bytes), as we do. Fine. |
 | **Rule 5 — boot/root changes need a real panel** | Squarely applies. Nothing from this reaches a panel without a real-Mirror run, and only the root drives the Mirror. |
 
@@ -140,7 +143,9 @@ the two imports are primitive). **Untested** — nobody has built it for our ker
 Keep it as a **dev/research tool** for the day we need full root on the Mirror — reading the 13
 daemons for #334, or dumping `/sbin/adbd` for [adbd-keys.md](adbd-keys.md) — gated on the maintainer
 and a panel run, and never shipped to users (permissive SELinux + GPL binary). Do **not** adopt it
-into Kiln's install. [mirror-root.md](mirror-root.md) §4's open question is updated to point here.
+into Kiln's install. The maintainer's 2026-11-19 decision (no publishing for now, #573) settles the
+ship question regardless: no root kernel module goes out. [mirror-root.md](mirror-root.md) §4's open
+question is updated to point here.
 
 ## Project 2: `jstriblet/lululemon-mirror-network-adb` — adb over Ethernet on a stock Mirror
 
