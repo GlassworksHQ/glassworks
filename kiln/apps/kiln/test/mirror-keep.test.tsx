@@ -37,9 +37,11 @@ describe('keeping the Mirror in Home Assistant over a reflash', () => {
     expect(embers().length).toBeLessThanOrEqual(1);
   });
 
-  it('the fastboot screen links to the step; it only reads before the restart', async () => {
-    await show(await flashDemo('flash-fastboot', true));
-    expect(screen.getByText('Keep its Home Assistant device first')).toBeTruthy();
+  it('the fastboot screen\'s Restart into fastboot is the step for Glassworks; it only reads before the restart', async () => {
+    const d = await flashDemo('flash-fastboot', true);
+    await show(d);
+    fireEvent.click(screen.getByRole('button', { name: 'Restart into fastboot' }));
+    expect(d.flash.state.screen).toBe('keep');
     cleanup();
     await show(await keepDemo('flash-keep', true));
     expect(screen.getByText(/Nothing is written yet/)).toBeTruthy();

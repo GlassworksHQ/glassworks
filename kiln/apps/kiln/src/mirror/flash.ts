@@ -147,6 +147,8 @@ export interface FlashState {
   noFill?: boolean;
   /** the HOME fix on Done is running */
   fixing?: boolean;
+  /** the Mirror took the restart into fastboot over adb (restartToFastboot): Connect next */
+  restarted?: boolean;
   /** the error came while writing: offer the retry without FILL */
   flashFailed?: boolean;
   error?: string;
@@ -357,7 +359,7 @@ export class FlashSession {
   toFastboot() {
     if (this.blocked()) return;
     if (!this.recipe.community && !this.state.key && this.d.flashedHere?.get()) this.toKeep();
-    else this.set({ screen: 'fastboot', connectError: undefined });
+    else this.set({ screen: 'fastboot', connectError: undefined, restarted: false });
   }
 
   /** The step before the flash, for a Mirror that runs Glassworks (issue 580). A key read earlier stays until a new one is read. */
@@ -476,6 +478,30 @@ export class FlashSession {
     } catch (e) {
       this.set({ connecting: false, connectError: (e as Error).message });
     }
+  }
+
+  /**
+   * Inside the click, on the fastboot screen: a Mirror that lets this browser's key in over adb (it runs Glassworks from
+   * this browser) restarts into fastboot, with no button inside its case. Glassworks' own install goes through the keep
+   * step instead (toKeep), which reads Home Assistant's key first and then restarts the same way.
+   */
+  async restartToFastboot(): Promise<void> {
+    if (this.state.connecting) return;
+    const req = this.d.requestAdb({ authMs: AUTH_MS });
+    this.set({ connecting: true, connectError: undefined, restarted: false });
+    try {
+      await this.restart(await req);
+      this.set({ connecting: false, restarted: true });
+    } catch (e) {
+      this.set({ connecting: false, connectError: e instanceof AdbAuthTimeout
+        ? 'The Mirror didn\'t let this browser in over adb: it runs lululemon\'s software, or Glassworks from another browser. Put it in fastboot by hand, below.'
+        : (e as Error).message });
+    }
+  }
+
+  /** From an error while writing or building: the Mirror is still in fastboot, so back to Connect, with nothing to restart. */
+  reconnectFastboot() {
+    this.set({ screen: 'fastboot', error: undefined, work: undefined, fastboot: undefined, understood: false, flashFailed: false, restarted: true });
   }
 
   private async restart(p: PanelShell) {

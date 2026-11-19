@@ -5,7 +5,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { GLASSWORKS, SYSTEM_BYTES, USERDATA_BYTES, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
 import { FirstBootMirror, fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
-import type { PanelShell } from '@glassworks/adb';
+import { AdbAuthTimeout, type PanelShell } from '@glassworks/adb';
 import type { ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -148,6 +148,24 @@ describe('finishing a first start that didn\'t finish', () => {
     expect(close).toHaveBeenCalledTimes(1); // the stopped first start's connection, let go before Connect opens a new one
     await f.connectAdb();
     expect(f.state.screen).toBe('done');
+  });
+});
+
+describe('restarting into fastboot over adb: no button to hold', () => {
+  it('a Mirror that lets this browser in restarts into fastboot, and Connect comes next', async () => {
+    const rebootToBootloader = vi.fn(async () => {});
+    const { f } = setup({ request: async () => ({ run: async () => ({ out: '', code: 0 }), push: async () => {}, rebootToBootloader }) });
+    await f.restartToFastboot();
+    expect(rebootToBootloader).toHaveBeenCalledTimes(1);
+    expect(f.state).toMatchObject({ restarted: true, connecting: false });
+    expect(f.state.log).toContain('Restarting the Mirror into fastboot');
+  });
+
+  it('a Mirror that won\'t let this browser in says so and points to the steps by hand', async () => {
+    const { f } = setup({ request: async () => { throw new AdbAuthTimeout(); } });
+    await f.restartToFastboot();
+    expect(f.state).toMatchObject({ restarted: false, connecting: false });
+    expect(f.state.connectError).toMatch(/didn't let this browser in over adb.*Put it in fastboot by hand, below/);
   });
 });
 
