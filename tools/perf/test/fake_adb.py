@@ -285,6 +285,9 @@ def shell(cmd):
         save("asked.json", asked)
         save(f"{kind}s.json", state(f"{kind}s.json", 0) + 1)
         return ""
+    if cmd == "ip -4 -o addr show":
+        return ("1: lo    inet 127.0.0.1/8 scope host lo\\       valid_lft forever preferred_lft forever\n"
+                "3: wlan0    inet 192.0.2.10/24 brd 192.0.2.255 scope global wlan0\\       valid_lft forever preferred_lft forever\n")
     if cmd.startswith("dumpsys SurfaceFlinger --list") and ANDROID6:
         return f"DimLayer\ncom.android.systemui.ImageWallpaper\nSurfaceView\n{PKG}/{ACTIVITY}\nStatusBar\nNavigationBar\n"
     if cmd.startswith("dumpsys SurfaceFlinger --list") and os.environ.get("FAKE_SF_WRAPPED"):
@@ -871,6 +874,10 @@ def main():
         print("device")
     elif args[:1] == ["reverse"]:
         pass
+    elif args[:1] == ["devices"]:
+        # netcheck.py (#649): the S1 on USB, or FAKE_ADB_WIFI: a panel on wireless debugging (no usb: field).
+        how = "" if os.environ.get("FAKE_ADB_WIFI") else " usb:1-1"
+        print(f"List of devices attached\nFAKE0001               device{how} product:fake model:Fake device:fake transport_id:1")
     elif args[:1] == ["logcat"]:
         logcat(args[args.index("-v") + 1] if "-v" in args else "brief")
     elif args[:1] == ["shell"]:

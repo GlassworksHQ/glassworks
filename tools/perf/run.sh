@@ -28,7 +28,8 @@
 #     step, to tie logcat's wall clock to the monotonic one (docs/perf.md, "Other Glassworks apps, and Android 6").
 #   Read-only otherwise: getprop, /proc, dumpsys meminfo, SurfaceFlinger and activity recents (the app's
 #   activity), logcat.
-#   On this computer: a Python venv for the fake's WebRTC peer (aiortc, from webrtc-requirements.txt,
+#   On this computer: 40 pings to its default gateway and 40 to the panel before the graded part (netcheck.py,
+#   #649: a stalling link of this computer's makes the report provisional); a Python venv for the fake's WebRTC peer (aiortc, from webrtc-requirements.txt,
 #   locked with hashes) in ~/.cache/glassworks-perf, and two `adb reverse` ports (--port and the
 #   WebRTC relay's, --port + 1), removed on exit.
 #
@@ -284,6 +285,11 @@ if [ "$SYNTH" = 1 ] || [ "$REF" = 1 ] || [ -n "$PANE_RAM" ]; then
     log "camera video over $WEBRTC_TRANSPORT ($(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["reason"])' "$OUT/transport.json"))"
   elif [ "$WEBRTC_TRANSPORT" = auto ]; then
     WEBRTC_TRANSPORT=adb
+  fi
+  if [ "$REF" = 1 ]; then
+    # This computer's own network (#649): 40 pings to its gateway and to the panel. A stalling link (macOS Wi-Fi)
+    # adds to the live updates and cameras where they cross it; the report is then provisional. Never fails the run.
+    python3 "$HERE/netcheck.py" --out "$OUT" || log "the network check failed (netcheck.py); the report won't have it"
   fi
   # Something else on the ports (an earlier run's fake left behind) would answer for ours.
   if curl -s -o /dev/null --connect-timeout 1 --max-time 3 "http://127.0.0.1:$PORT/manifest.json"; then

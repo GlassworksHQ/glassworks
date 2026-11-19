@@ -81,7 +81,8 @@ class Runner(unittest.TestCase):
         env = dict(os.environ, ADB=adb, FAKE_ADB_STATE=state, GW_PERF_IDLE_SETTLE="0", GW_PERF_IDLE_WINDOW="2",
                    GW_PERF_COLD_SETTLE="0", GW_PERF_RUN_GAP="0", GW_PERF_BETWEEN_QUIET="0.5", GW_PERF_FRONTEND=STUB_FRONTEND,
                    GW_PERF_SWITCH_SETTLE="0", FAKE_HA_URL=f"http://127.0.0.1:{port(89)}", GW_PERF_CAMERA=STUB_CAMERA,
-                   GW_PERF_FAKE_PYTHON=sys.executable, GW_PERF_TIME_SCALE=TIME_SCALE)
+                   GW_PERF_FAKE_PYTHON=sys.executable, GW_PERF_TIME_SCALE=TIME_SCALE,
+                   GW_PERF_PING=os.path.join(HERE, "fake_ping.py"), GW_PERF_GATEWAY="192.0.2.1")
         env.pop("ANDROID_SERIAL", None)
         cls.state = state
         cls.out = os.path.join(cls.tmp, "out")
@@ -96,6 +97,15 @@ class Runner(unittest.TestCase):
 
     def test_run_succeeds(self):
         self.assertEqual(self.proc.returncode, 0, self.proc.stderr[-3000:])
+
+    def test_the_test_computers_network_is_in_the_report(self):
+        """#649: netcheck.py before the graded part; the fake S1 on USB with a quiet fake link: recorded, not provisional."""
+        n = self.rep["test_network"]
+        self.assertEqual((n["quiet"], n["adb_over_network"], n["gateway"]["received"]), (True, False, 40))
+        self.assertIsNone(n["limited"])
+        with open(os.path.join(self.out, "netcheck.json")) as f:
+            self.assertNotIn("192.0.2", f.read())
+        self.assertIn("this computer's network", self.proc.stderr)
 
     def test_report_has_every_part(self):
         r = self.rep
@@ -295,7 +305,8 @@ def fake_env(tmp, **extra):
     extra.setdefault("FAKE_HA_URL", HA.url if HA else "")
     env = dict(os.environ, ADB=adb, FAKE_ADB_STATE=state, GW_PERF_IDLE_SETTLE="0", GW_PERF_IDLE_WINDOW="1",
                GW_PERF_FRONTEND=STUB_FRONTEND, GW_PERF_CAMERA=STUB_CAMERA, GW_PERF_SWITCH_SETTLE="0", GW_PERF_PANES_SAVE_S="0",
-               GW_PERF_FAKE_PYTHON=sys.executable, GW_PERF_TIME_SCALE=TIME_SCALE)
+               GW_PERF_FAKE_PYTHON=sys.executable, GW_PERF_TIME_SCALE=TIME_SCALE,
+               GW_PERF_PING=os.path.join(HERE, "fake_ping.py"), GW_PERF_GATEWAY="192.0.2.1")
     env.update(extra)
     env.pop("ANDROID_SERIAL", None)
     return env, state
