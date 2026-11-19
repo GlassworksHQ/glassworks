@@ -499,7 +499,7 @@ jobs:
         run: python3 -m unittest discover -s tools/legacy/test -v
       - name: Boot generator targets and layout
         run: python3 -m unittest discover -s branding/boot/test -v
-      - name: The S1's stock fastboot tool (getvar, RAM boot, reboot)
+      - name: The S1's stock fastboot tools (fastboot-usb.py, wrap-ram-boot.py)
         run: python3 -m unittest discover -s frames/aqara-s1-plus/tools/fel/test -v
       - name: Docs links
         run: python3 tools/check-doc-links.py
