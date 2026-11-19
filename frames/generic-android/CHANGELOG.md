@@ -50,6 +50,10 @@ line of each version is what Home Assistant shows on the update card. A change o
   avoid that: turn the lock off in Android's settings, or keep the screen on.
 
 ### Fixed
+- **The camera recovers by itself when it stops sending frames.** If the camera opens but sends no picture for
+  5 seconds, the camera pane now closes it and opens it again, at once the first time and then less and less often
+  while it stays silent. Before, presence and the stream stayed dead until something else reopened the camera, such
+  as turning *Camera privacy* on and off. This was seen on the lululemon Mirror's first open after a flash.
 - **With Screen mode set to always, walking up no longer turns on a screen you turned off.** If you turn the screen
   off from Home Assistant, it stays off when someone comes close, whether the panel senses them with its own sensor
   or with the camera pane. *Presence* in Home Assistant still turns on. In the presence mode, walking up still wakes
