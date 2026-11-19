@@ -5,6 +5,8 @@ import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorManager
 import android.hardware.input.InputManager
+import dev.glassworks.esphome.ApiEntity
+import dev.glassworks.esphome.BrightnessLightEntity
 import dev.glassworks.esphome.DeviceIdentity
 import dev.glassworks.frame.Frame
 import dev.glassworks.frame.GenericAndroid
@@ -81,6 +83,18 @@ class FrameEntitiesTest {
         for (c in cases) assertEquals(c.name, c.screen, entityIds(c).filter { it in screenIds })
     }
 
+    /**
+     * #591: every frame's screen is a configuration light, so Home Assistant leaves it out of a room's "lights
+     * off" and out of Assist. Its object id, key and name never change: Home Assistant keys field panels'
+     * `light.<name>_screen` on them.
+     */
+    @Test fun everyFramesScreenIsAConfigLightWithTheSameIds() {
+        for (c in cases) {
+            val screen = entities(c).single { it is BrightnessLightEntity }
+            assertEquals(c.name, "screen|1438993425|Screen|CONFIG", "${screen.objectId}|${screen.key}|${screen.name}|${screen.category}")
+        }
+    }
+
     /** #139: the Frame update entity only on a frame with releases of its own. */
     @Test fun onlyTheS1AndTheMirrorHaveAFrameUpdate() {
         for (c in cases) assertEquals(c.name, c.name.startsWith("aqara-s1-plus") || c.name.startsWith("lululemon-mirror"), "frame_update" in entityIds(c))
@@ -119,7 +133,9 @@ class FrameEntitiesTest {
         PanePrefs(app).wallBase.backend = BaseBackend.LOCALSERVICE.pref
     }
 
-    private fun entityIds(c: Case): List<String> {
+    private fun entityIds(c: Case): List<String> = entities(c).map { it.objectId }
+
+    private fun entities(c: Case): List<ApiEntity> {
         reset()
         c.setup()
         val frame = c.frame()
@@ -134,7 +150,7 @@ class FrameEntitiesTest {
                     model = "Test", voiceFeatures = PanelDevice.VOICE_FEATURES,
                 ),
             )
-            return device.entityList().map { it.objectId }
+            return device.entityList()
         } finally {
             device.stop()
         }

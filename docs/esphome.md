@@ -164,7 +164,7 @@ open the entity, and turn on *Enabled*.
 | Presence | `presence` | core | none | on | Automations |
 | Illuminance | `illuminance` | core | none | on | Automations |
 | Docked | `docked` | core | none | on | Automations: what the panel does on and off its dock. Only on a device that docks ([Docked](#docked)) |
-| Screen | `screen` | core | none | on | Dashboards and automations |
+| Screen | `screen` | core | config | on | Dashboards and automations, by its entity id. Config keeps it out of a room's "lights off" ([below](#the-screen-is-a-config-light)) |
 | Speaker | `speaker` | core | none | on | Dashboards, Music Assistant, announcements |
 | Reload dashboard | `reload_dashboard` | core | none | on | Used often |
 | Restart app | `restart_app` | core | config | on | Used often |
@@ -227,6 +227,24 @@ open the entity, and turn on *Enabled*.
 | Base firmware | `base_firmware` | wall base | diagnostic | off | Troubleshooting |
 | Base relay N, Base button N, Base power, Base energy | `base_relay_N`, `base_button_N`, `base_power`, `base_energy` | wall base | none | on | The reason to mount a base |
 | Base protection | `base_protection` | wall base | diagnostic | on | Overheat and overload; people automate on it. It had no category before #132 |
+
+#### The screen is a config light
+
+Most people don't count their wall panel as one of the room's lights. Up to #591 the screen had no
+category, so every "lights off" aimed at the panel's area turned the screen off too: a presence
+automation's "room empty", a Good Night script, Assist's "turn off the bedroom lights". Home Assistant
+leaves an entity with a category out of area, floor, device and label targets, and doesn't show it to
+Assist unless someone exposes it. So the screen is `config`, and it keeps its object id, key and entity id.
+
+| | Before #591 | Now |
+|---|---|---|
+| `light.turn_off` with an `area_id`, `floor_id`, `device_id` or `label_id` | Turns the screen off | Skips it |
+| `light.turn_off` with the screen's `entity_id`; a dashboard card | Turns it off | Turns it off |
+| Assist, a panel HA adds from now on | Sees it | Doesn't see it until someone exposes it |
+| Assist, a panel HA already has | Sees it | Still sees it: HA saved the choice when it first saw the entity. Turn off **Expose** once in **Settings → Voice assistants → Expose** |
+
+HA's registry may take the category only when it adds the panel's entities again, after a restart of HA or a
+**Reload** of the ESPHome entry, rather than on the app update's reconnect (untested; the #591 panel run checks it).
 
 HA adds its own voice entities (*Assist satellite*, *Assist pipeline*, *Wake word*, *Finished speaking
 detection*). The panel doesn't send those, so their defaults are HA's.

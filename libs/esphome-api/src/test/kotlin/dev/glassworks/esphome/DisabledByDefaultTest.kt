@@ -26,6 +26,9 @@ class DisabledByDefaultTest {
         Case("text", 6, 7) { TextEntity("a", "A", category = EntityCategory.DIAGNOSTIC, disabledByDefault = it, get = { "x" }, set = {}) },
         Case("button", 6, 7) { ButtonEntity("a", "A", category = EntityCategory.DIAGNOSTIC, disabledByDefault = it, press = {}) },
         Case("event", 6, 7) { EventEntity("a", "A", category = EntityCategory.DIAGNOSTIC, disabledByDefault = it, eventTypes = listOf("x")) },
+        Case("light", 13, 15) {
+            BrightnessLightEntity("a", "A", category = EntityCategory.DIAGNOSTIC, disabledByDefault = it, get = { true to 1f }, set = { _, _ -> })
+        },
         Case("update", 6, 7) {
             UpdateEntity("a", "A", category = EntityCategory.DIAGNOSTIC, disabledByDefault = it, get = {
                 UpdateStateData(true, false, false, 0f, "", "", "", "", "")
