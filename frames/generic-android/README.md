@@ -148,9 +148,13 @@ The Clarity badge shows its Clarity grade ([docs/perf.md](../../docs/perf.md)) o
 
 ## Install
 
-It installs as a normal app (an APK). There is no release yet, so Kiln installs it only as a test: open
-`kiln.glassworks.dev/android?apk=local` (or `/android?apk=local` on `npm run dev -w @glassworks/kiln-app`) in Chrome
-or Edge, pick a test build's APK, plug the tablet in with USB debugging still off, and follow the screens. Kiln names
+It installs as a normal app (an APK). Kiln installs it only as a test for now. Open
+`kiln.glassworks.dev/android?apk=release` (or `/android?apk=release` on `npm run dev -w @glassworks/kiln-app`) in Chrome
+or Edge: Kiln downloads the arm64-v8a APK of the newest `generic-android-v*` release and checks it against the
+release's `.sha256`. `?apk=local` takes a test build's APK from the computer instead. Then plug the tablet in with USB
+debugging still off, and follow the screens. Without either, the page says Kiln doesn't install on Android devices
+yet. It opens to everyone, with the release as the default, when this frame's `design/frame.json` has `status`
+`alpha` and `kiln` `/android`. Kiln names
 the tablet or asks for its brand, shows that brand's steps to turn on USB debugging, waits for Allow on the tablet,
 then installs. Undo is on the Done screen, and on the first screen for a later visit.
 

@@ -1,0 +1,2 @@
+.fileHead { display: flex; align-items: baseline; gap: 10px; }
+.progress { display: grid; gap: 6px; }

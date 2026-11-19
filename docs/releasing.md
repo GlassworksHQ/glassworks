@@ -437,8 +437,8 @@ through `homeassistant.update_entity` on the app's update entity.
 
 Kiln reads these releases at run time, so the workflow doesn't rebuild the installer. Its release route
 (`kiln/apps/kiln/src/app/api/release/[frame]/route.ts`) serves each line's APKs and their `.sha256`. The Mirror's page
-behind `?apk=release` installs the newest legacy release's arm64-v8a APK and checks it against that `.sha256`; the
-generic app's `/android` still takes a test build's APK (`?apk=local`).
+and `/android`, behind `?apk=release`, install the newest release of their line (`generic-android-legacy-v*` and
+`generic-android-v*`), its arm64-v8a APK, checked against that `.sha256`.
 
 ## Frame releases
 

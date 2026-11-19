@@ -2,8 +2,8 @@
 // /android (issue 403): Glassworks on any Android 6+ device, over USB. The screens are the approved mockup's
 // (maintainer, 2026-11-17): the device named or its brand asked, the brand's steps to turn on USB
 // debugging, Allow on the device, the install with each grant read back, Done with the frame card or
-// "untested device". Off unless the address has ?apk=local (or a demo): the APK is a file from this
-// computer until Glassworks for Android has a release.
+// "untested device". Off unless the address has ?apk=release (the newest generic-android release) or ?apk=local (a
+// file from this computer), or a demo, until generic-android's frame.json makes it installable (ANDROID_OPEN).
 import { Panel, loadOrCreateAdbKey } from '@glassworks/adb';
 import { fmtSize } from '@glassworks/kiln-core';
 import { KIND_TEXT, STAGE_TEXT, type FrameDesign } from '@glassworks/frame-card';
@@ -13,23 +13,28 @@ import {
 import * as Collapsible from '@radix-ui/react-collapsible';
 import * as RadioGroup from '@radix-ui/react-radio-group';
 import Link from 'next/link';
-import { Fragment, useEffect, useState, useSyncExternalStore } from 'react';
+import { Fragment, useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { Shell, useBrowserChip } from '../components/Shell';
 import { SilentUpdates, type SilentWords } from '../components/SilentUpdates';
 import { FRAMES, MEASURED, RENDERS } from '../frames/catalog';
 import { adbKeyHolder } from '../mirror/MirrorWizard';
 import type { RailMark, RailStep } from '../wizard/state';
+import { ReleaseRow } from '../release/ReleaseRow';
 import { registry } from '../wizard/registry';
 import { ANDROID_BASE, keptAndroid } from './activity';
 import { ANDROID_DEMOS, androidDemo, type AndroidDemo } from './demo';
 import { ScreenLockBlock } from './ScreenLockBlock';
-import { AndroidSession, androidMode, type AndroidState } from './session';
+import { ANDROID_APK, ANDROID_OPEN, AndroidSession, androidMode, type AndroidState } from './session';
+import type { ApkFrom } from '../release/apk';
 import './android.css';
 
 const DEMO_ON = process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_KILN_DEMO === '1';
 const SITE = 'https://www.glassworks.dev/frames';
 
-function realSession(on: boolean): AndroidSession {
+/** Kiln's release route, from the page (a bare `fetch` held by an object is an illegal invocation). */
+const releaseRoute = (...a: Parameters<typeof fetch>) => fetch(...a);
+
+function realSession(on: boolean, from: ApkFrom = 'local'): AndroidSession {
   if (!on) return new AndroidSession({ findUsb: () => Promise.reject(new Error('off')), connect: () => Promise.reject(new Error('off')) }, false);
   const keys = adbKeyHolder(loadOrCreateAdbKey);
   return new AndroidSession({
@@ -39,6 +44,7 @@ function realSession(on: boolean): AndroidSession {
       return { vendorId: d.vendorId, ...(d.productName ? { productName: d.productName } : {}) };
     },
     connect: keys.connectWith((k) => Panel.connect(k)),
+    ...(from === 'release' ? { release: releaseRoute } : {}),
   }, true);
 }
 
@@ -88,7 +94,7 @@ function Off() {
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">Kiln doesn&apos;t install on Android devices yet.</h2>
-      <p className="lede">Glassworks for Android has no release yet. Follow it on GitHub, or pick another panel.</p>
+      <p className="lede">Its installer is still being tested. Follow it on GitHub, or pick another panel.</p>
       <div className="foot">
         <a className="link" href="https://github.com/GlassworksHQ/glassworks/issues/403">Follow it on GitHub</a>
         <Link className="btn ghost" href="/">Pick a panel</Link>
@@ -97,13 +103,21 @@ function Off() {
   );
 }
 
-/** Test only: the APK file from this computer. */
+/** The APK: the newest release's, checked, or (test only) a file from this computer. */
 function ApkField({ s, session }: { s: AndroidState; session: AndroidSession }) {
+  const load = useCallback(() => { void session.loadRelease(); }, [session]);
   if (s.flow === 'undo') return null;
+  if (s.release) return (
+    <>
+      {!ANDROID_OPEN && <span className="row"><span className="pill soon">Test only</span></span>}
+      <ReleaseRow r={s.release} line={ANDROID_APK.line} what="Glassworks for Android" device="the tablet" apkError={s.apk?.error} load={load} />
+      {s.apk?.error && <span className="status err" role="alert">{s.apk.error}.</span>}
+    </>
+  );
   return (
     <div className="well">
       <div className="grow">
-        <span className="row"><span className="pill soon">Test only</span><span className="small">Glassworks for Android has no release yet: pick a test build.</span></span>
+        <span className="row"><span className="pill soon">Test only</span><span className="small">Pick a test build's APK.</span></span>
         <label className="field"><span>APK file</span>
           <input className="input" type="file" accept=".apk,application/vnd.android.package-archive"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) void session.pickApk(f.name, f.arrayBuffer().then((b) => new Uint8Array(b))); }} />
@@ -128,7 +142,7 @@ function Find({ s, session }: { s: AndroidState; session: AndroidSession }) {
         ? 'Kiln takes Glassworks off the tablet over USB, as it put it on: turn on USB debugging, then tap Allow. Kiln reads the tablet first; nothing changes until then.'
         : 'Use its USB cable, with USB debugging still off. Kiln reads what the tablet is; nothing on it changes.'}</p>
       <ApkField s={s} session={session} />
-      {s.flow === 'install' && <p className="small">Android 6 or newer, over USB. {WHAT_KILN_DOES}</p>}
+      {s.flow === 'install' && <p className="small">{s.release ? 'Android 8' : 'Android 6'} or newer, over USB. {WHAT_KILN_DOES}</p>}
       {s.finding && <p className="status work" role="status">Pick the tablet in the browser&apos;s list…</p>}
       {s.findError && <p className="status err" role="alert">{s.findError}</p>}
       <div className="foot">
@@ -483,7 +497,7 @@ function Stopped({ s, session }: { s: AndroidState; session: AndroidSession }) {
       <div className="foot">
         <Log s={s} />
         <span className="row">
-          {s.flow === 'install' && !repick && <button type="button" className="link" onClick={() => setRepick(true)}>Pick another APK</button>}
+          {s.flow === 'install' && !s.release && !repick && <button type="button" className="link" onClick={() => setRepick(true)}>Pick another APK</button>}
           <button type="button" className="btn ember" disabled={!!blocked} onClick={() => void session.connect()}>Try again</button>
         </span>
       </div>
@@ -516,9 +530,9 @@ export function AndroidWizard() {
   const [start] = useState(() => {
     const m = androidMode(location.search, DEMO_ON, ANDROID_DEMOS);
     if (m.demo) return { demo: m.demo as AndroidDemo };
-    // a running install outlives the picker (wizard/registry.ts), so a link back without ?apk=local finds it
+    // a running install outlives the picker (wizard/registry.ts), so a link back without ?apk=… finds it
     if (!m.on && !registry.activity(ANDROID_BASE)) return { real: realSession(false) };
-    return { real: keptAndroid(() => realSession(true)).session };
+    return { real: keptAndroid(() => realSession(true, m.apk), m.apk).session };
   });
   const [demo, setDemo] = useState<AndroidSession>();
   useEffect(() => { if (start.demo) void androidDemo(start.demo).then(setDemo); }, [start]);

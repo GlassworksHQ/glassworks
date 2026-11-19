@@ -1,12 +1,35 @@
-// The Mirror's APK from its release: the newest generic-android-legacy-v* release (drafts, prereleases and other
-// lines' tags never count), its arm64-v8a APK, and that APK's .sha256, through Kiln's release route as the S1's APK
-// comes. Refract can't serve it: its allowlist pins each file's size and hash before the file exists, and a
-// Glassworks release isn't known until its tag is cut. Never releases/latest: that is the S1's.
-import { download, loadRelease } from '../android/tablet/model';
+// Glassworks' APK from its release, for a page that installs it: the newest release of the line the page names
+// (drafts, prereleases and other lines' tags never count), its APK for one ABI, and that APK's .sha256, through Kiln's
+// release route, as Kiln's other release APKs come. Refract can't serve it: its allowlist pins each file's size and
+// hash before the file exists, and a Glassworks release isn't known until its tag is cut. Never releases/latest: that
+// is another line's.
+import { ships, type Support } from '@glassworks/frame-card';
+import { download, loadRelease, type Abi, type Line } from '../android/tablet/model';
 
-export const MIRROR_LINE = 'generic-android-legacy';
-/** The Mirror's CPU runs 64-bit apps (frames/lululemon-mirror/design/frame.json `abis`). */
-export const MIRROR_ABI = 'arm64-v8a';
+/** Where a page's APK comes from: the newest release, or a file the tester picks. */
+export type ApkFrom = 'release' | 'local';
+
+/**
+ * A frame's page is everyone's, its APK from the release, once Kiln's picker lists the frame: frame.json's `status`
+ * alpha or later and its `kiln` route (components/Picker.tsx reads the same two fields).
+ */
+export const installable = (frame: { status: string }) => ships(frame.status as Support) && !!(frame as { kiln?: string }).kiln;
+
+/**
+ * Whether a page is on and where its APK comes from: `?apk=release` or `?apk=local` (the test links), the release for
+ * everyone once the page is `open`, or a demo where demos run.
+ */
+export function apkMode(search: string, demosOn: boolean, demos: readonly string[], open: boolean): { on: boolean; apk?: ApkFrom; demo?: string } {
+  const q = new URLSearchParams(search);
+  const demo = q.get('demo');
+  if (demosOn && demo && demos.includes(demo)) return { on: true, demo };
+  const apk = q.get('apk');
+  if (apk === 'release' || apk === 'local') return { on: true, apk };
+  return open ? { on: true, apk: 'release' } : { on: false };
+}
+
+/** Which APK a page installs: its release line, and the ABI it downloads. */
+export interface ReleaseLine { line: Line; abi: Abi }
 
 /** Where the release's APK is, from waiting for the first look to checked against its published SHA-256. */
 export type ReleaseApk =
@@ -17,12 +40,12 @@ export type ReleaseApk =
   | { state: 'none' }
   | { state: 'error'; why: string };
 
-/** No published generic-android-legacy-v* release has an arm64-v8a APK. */
+/** No published release of the line has an APK for the ABI. */
 export class NoRelease extends Error {}
 
 /**
  * How long the release route may stay silent, waiting for an answer or for the APK's next bytes, before Kiln gives
- * up with Try again. Without it a request that never answers left the row on "Looking…" (Mirror run, 2026-11-19).
+ * up with Try again. Without it a request that never answers left the row on "Looking…" (first real run, 2026-11-19, PR 607).
  */
 export const RELEASE_STALL_MS = 30_000;
 
@@ -52,17 +75,17 @@ async function body(res: Response, onGot: (got: number, size?: number) => void, 
 }
 
 /**
- * The newest Mirror release's APK, its bytes checked against the release's .sha256. Throws NoRelease before the
+ * The newest release's APK for `of`, its bytes checked against the release's .sha256. Throws NoRelease before the
  * first release, and an Error that says what went wrong otherwise, including when the route stays silent for
  * `stallMs`.
  */
-export async function releaseApk(get: typeof fetch, onState: (s: ReleaseApk) => void, stallMs = RELEASE_STALL_MS): Promise<{ bytes: Uint8Array; ready: Extract<ReleaseApk, { state: 'ready' }> }> {
+export async function releaseApk(of: ReleaseLine, get: typeof fetch, onState: (s: ReleaseApk) => void, stallMs = RELEASE_STALL_MS): Promise<{ bytes: Uint8Array; ready: Extract<ReleaseApk, { state: 'ready' }> }> {
   const abort = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const poke = () => { clearTimeout(timer); timer = setTimeout(() => abort.abort(), stallMs); };
   const timed = (async (url: string) => { poke(); const res = await get(url, { signal: abort.signal }); poke(); return res; }) as typeof fetch;
   try {
-    return await fetchApk(timed, onState, poke);
+    return await fetchApk(of, timed, onState, poke);
   } catch (e) {
     if (abort.signal.aborted) throw new Error(`Kiln's release route stopped answering for ${stallMs / 1000} s`);
     throw e;
@@ -71,11 +94,11 @@ export async function releaseApk(get: typeof fetch, onState: (s: ReleaseApk) => 
   }
 }
 
-async function fetchApk(get: typeof fetch, onState: (s: ReleaseApk) => void, poke: () => void) {
+async function fetchApk(of: ReleaseLine, get: typeof fetch, onState: (s: ReleaseApk) => void, poke: () => void) {
   onState({ state: 'looking' });
-  const r = await loadRelease(MIRROR_LINE, get);
+  const r = await loadRelease(of.line, get);
   if (r.state === 'error') throw new Error(`Kiln couldn't read the releases: ${r.why}`);
-  const apk = download(MIRROR_LINE, r, MIRROR_ABI);
+  const apk = download(of.line, r, of.abi);
   if (r.state !== 'out' || !apk) throw new NoRelease();
   const { tag } = r;
   const { version, name } = apk;

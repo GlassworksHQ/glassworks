@@ -4,21 +4,19 @@
 // and ?apk=local are test links.
 import type { PanelShell } from '@glassworks/adb';
 import { apkPackage } from '@glassworks/app-adb';
-import { ships, type Support } from '@glassworks/frame-card';
 import {
   checkMirror, checkMirrorApk, installMirror, undoMirror, type Installed, type MirrorPhase, type MirrorReport, type Removed,
 } from '@glassworks/lululemon-mirror-installer';
 import frame from '../../../../../frames/lululemon-mirror/design/frame.json';
-import { NoRelease, releaseApk, type ReleaseApk } from './release';
+import { NoRelease, apkMode, installable, releaseApk, type ApkFrom, type ReleaseApk, type ReleaseLine } from '../release/apk';
 
-/**
- * The page is everyone's, the APK from the release, once the Mirror is installable in Kiln's picker: frame.json's
- * `status` alpha or later and its `kiln` route (components/Picker.tsx reads the same two fields).
- */
-export const MIRROR_OPEN = ships(frame.status as Support) && !!(frame as { kiln?: string }).kiln;
+export type { ApkFrom };
 
-/** Where the APK comes from: the newest Mirror release, or a file the tester picks. */
-export type ApkFrom = 'release' | 'local';
+/** The Mirror installs Glassworks' legacy build, for Android 6; its CPU runs 64-bit apps (frame.json `abis`). */
+export const MIRROR_APK: ReleaseLine = { line: 'generic-android-legacy', abi: 'arm64-v8a' };
+
+/** The page is everyone's once the Mirror's frame.json makes it installable (release/apk.ts `installable`). */
+export const MIRROR_OPEN = installable(frame);
 
 export type MirrorScreen = 'off' | 'pick' | 'checks' | 'working' | 'done' | 'error';
 
@@ -62,14 +60,7 @@ export interface MirrorDeps {
  * Whether the page is on and where its APK comes from: `?apk=release` or `?apk=local`, the release for everyone
  * once the Mirror is `open`, or a demo where demos run.
  */
-export function mirrorMode(search: string, demosOn: boolean, demos: readonly string[], open = MIRROR_OPEN): { on: boolean; apk?: ApkFrom; demo?: string } {
-  const q = new URLSearchParams(search);
-  const demo = q.get('demo');
-  if (demosOn && demo && demos.includes(demo)) return { on: true, demo };
-  const apk = q.get('apk');
-  if (apk === 'release' || apk === 'local') return { on: true, apk };
-  return open ? { on: true, apk: 'release' } : { on: false };
-}
+export const mirrorMode = (search: string, demosOn: boolean, demos: readonly string[], open = MIRROR_OPEN) => apkMode(search, demosOn, demos, open);
 
 const hex = (b: ArrayBuffer) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, '0')).join('');
 
@@ -148,11 +139,13 @@ export class MirrorSession {
     const source = this.sources;
     const current = () => this.sources === source;
     try {
-      const { bytes, ready } = await releaseApk(get, (release) => { if (current()) this.set({ release }); }, this.d.releaseStallMs);
+      const { bytes, ready } = await releaseApk(MIRROR_APK, get, (release) => { if (current()) this.set({ release }); }, this.d.releaseStallMs);
       if (!current()) return;
       this.log(`${ready.name} from ${ready.tag}: SHA-256 ${ready.sha256}, as the release publishes it`);
       await this.pickApk(ready.name, bytes);
-      if (current()) this.set({ release: ready });
+      // an APK the checks refuse is an error of the release, so Try again can fetch a fixed one
+      const refused = this.state.apk?.error;
+      if (current()) this.set({ release: refused ? { state: 'error', why: `Kiln can't install it: ${refused}` } : ready });
     } catch (e) {
       if (!current()) return;
       const why = (e as Error).message;
@@ -165,7 +158,8 @@ export class MirrorSession {
   releaseBlocked(): string | undefined {
     const r = this.state.release;
     if (!r) return undefined;
-    if (r.state === 'ready') return this.state.apk?.error && `The release's APK can't go on the Mirror: ${this.state.apk.error}.`;
+    if (this.state.apk?.error) return `The release's APK can't go on the Mirror: ${this.state.apk.error}.`;
+    if (r.state === 'ready') return undefined;
     if (r.state === 'none') return 'There is no release of Glassworks for the Mirror yet.';
     if (r.state === 'error') return 'Kiln couldn\'t get Glassworks from its release. Try again.';
     return 'Kiln is still downloading Glassworks.';

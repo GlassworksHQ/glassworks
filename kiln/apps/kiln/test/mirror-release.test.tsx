@@ -11,9 +11,9 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: ReactNode }) => <a href={href} {...p}>{children}</a> }));
 
 import { MirrorWizard } from '../src/mirror/MirrorWizard';
-import { releaseApk, type ReleaseApk } from '../src/mirror/release';
-import { DEMO_APK, DEMO_TAG, fakeReleaseRoute, type FakeRelease } from '../src/mirror/releaseDemo';
-import { MIRROR_OPEN, MirrorSession, mirrorMode } from '../src/mirror/session';
+import { releaseApk, type ReleaseApk } from '../src/release/apk';
+import { demoRelease, fakeReleaseRoute as routeFor, type FakeRelease } from '../src/release/demo';
+import { MIRROR_APK, MIRROR_OPEN, MirrorSession, mirrorMode } from '../src/mirror/session';
 import { registry } from '../src/wizard/registry';
 
 beforeAll(() => {
@@ -24,6 +24,9 @@ beforeAll(() => {
 });
 afterEach(() => { cleanup(); registry.clear(); vi.unstubAllGlobals(); history.replaceState(null, '', '/'); });
 
+/** The Mirror's line: its stand-in release and the route that serves it. */
+const { tag: DEMO_TAG, apk: DEMO_APK } = demoRelease(MIRROR_APK.line);
+const fakeReleaseRoute = (kind: FakeRelease, apk: Uint8Array, tick: (ms: number) => Promise<void> = async () => {}) => routeFor(kind, apk, tick, MIRROR_APK.line);
 const APK = fakeMirrorApk();
 const session = (kind: FakeRelease | typeof fetch) =>
   new MirrorSession({ connect: async () => { throw new Error('unused'); }, release: typeof kind === 'function' ? kind : fakeReleaseRoute(kind, APK) }, true);
@@ -74,12 +77,18 @@ describe('the release\'s APK', () => {
     expect(s.state.log.at(-1)).toMatch(/^The release's APK: .* isn't the file/);
   });
 
-  it('a release APK that isn\'t the Mirror\'s app is refused before any write', async () => {
-    const s = new MirrorSession({ connect: async () => { throw new Error('unused'); }, release: fakeReleaseRoute('out', fakeApk('com.example.other')) }, true);
+  it('a release APK that isn\'t the Mirror\'s app is refused before any write, and Try again fetches the release again', async () => {
+    let apk = fakeApk('com.example.other');
+    const s = new MirrorSession({ connect: async () => { throw new Error('unused'); }, release: ((u: RequestInfo | URL) => fakeReleaseRoute('out', apk)(u)) as typeof fetch }, true);
     await s.loadRelease();
-    expect(s.state.release?.state).toBe('ready');
+    expect(s.state.release).toMatchObject({ state: 'error', why: expect.stringMatching(/^Kiln can't install it: /) });
     expect(s.apkBytes()).toBeUndefined();
     expect(s.releaseBlocked()).toMatch(/^The release's APK can't go on the Mirror: /);
+    apk = fakeMirrorApk(); // a fixed release
+    await s.loadRelease();
+    expect(s.state.release?.state).toBe('ready');
+    expect(s.apkBytes()).toBeDefined();
+    expect(s.releaseBlocked()).toBeUndefined();
   });
 
   it('no release is its own state, and Try again looks again', async () => {
@@ -139,7 +148,7 @@ describe('the release\'s APK', () => {
       return new Response(body, { headers: { 'content-length': String(big.length) } });
     }) as typeof fetch;
     const states: ReleaseApk[] = [];
-    await releaseApk(chunked, (x) => states.push(x));
+    await releaseApk(MIRROR_APK, chunked, (x) => states.push(x));
     const downloading = states.filter((x) => x.state === 'downloading');
     expect(downloading.length).toBeLessThanOrEqual(101); // 250 chunks
     expect(downloading.at(-1)).toMatchObject({ got: 1_000_000, size: 1_000_000 });
