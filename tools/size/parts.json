@@ -34,7 +34,7 @@
   "time-zone": {"dex": ["dev.glassworks.s1.frame.TimeZonePane", "dev.glassworks.s1.frame.TimeZoneKeeper"],
                 "_why": "TimeZoneKeeper is used only by TimeZonePane"},
   "diagnostics": {"dex": ["dev.glassworks.diagnostics."]},
-  "bluetooth-proxy": {"dex": ["dev.glassworks.bluetoothproxy.", "dev.glassworks.esphome.bluetoothproxy.", "dev.glassworks.s1.settings.BluetoothProxyPage"]},
+  "bluetooth-proxy": {"dex": ["dev.glassworks.bluetoothproxy.", "dev.glassworks.esphome.bluetoothproxy."]},
   "notifications": {"dex": ["dev.glassworks.notifications."], "_why": "the pane and its overlay"},
   "camera": {"dex": ["dev.glassworks.camera."],
              "_why": "the camera pane (#117); CameraAdbActivity sets its settings from adb (the app's subclass at its old name, #22); the cards and the privacy dot are used by nothing else"}

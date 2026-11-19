@@ -61,9 +61,9 @@ jobs:
           # = Releases.kt ReleaseLine.GENERIC_ANDROID and GENERIC_ANDROID_LEGACY: tag prefix, APK stem, package.
           case "$TAG" in
             generic-android-legacy-v*) line=generic-android-legacy task=assembleLegacy out=legacy/generic-android-legacy.apk
-              id=dev.glassworks.generic_android.legacy min=23 title="Glassworks for generic Android, legacy build" ;;
+              id=dev.glassworks.generic_android.legacy min=23 settings=yes title="Glassworks for generic Android, legacy build" ;;
             generic-android-v*) line=generic-android task=assembleRelease out=release/generic-android-release.apk
-              id=dev.glassworks.generic_android min=26 title="Glassworks for generic Android" ;;
+              id=dev.glassworks.generic_android min=26 settings=no title="Glassworks for generic Android" ;;
             *) echo "::error::tag '$TAG' is neither generic-android-vX.Y.Z nor generic-android-legacy-vX.Y.Z"; exit 1 ;;
           esac
           v="${TAG#"$line"-v}"
@@ -73,7 +73,7 @@ jobs:
             echo "::error::tag $TAG is not $line-vMAJOR.MINOR.PATCH (minor/patch < 100)"; exit 1
           fi
           IFS=. read -r major minor patch <<< "$v"
-          { echo "LINE=$line"; echo "TASK=$task"; echo "OUT=$out"; echo "PKG=$id"; echo "MIN_SDK=$min"
+          { echo "LINE=$line"; echo "TASK=$task"; echo "OUT=$out"; echo "PKG=$id"; echo "MIN_SDK=$min"; echo "ASKS_WRITE_SETTINGS=$settings"
             echo "VERSION=$v"; echo "VERSION_CODE=$((major * 10000 + minor * 100 + patch))"; } >> "$GITHUB_ENV"
           { echo "tag=$TAG"; echo "line=$line"; echo "version=$v"; echo "title=$title $v"; } >> "$GITHUB_OUTPUT"
           echo "$TAG: $id $v (versionCode $((major * 10000 + minor * 100 + patch)))"
@@ -165,6 +165,9 @@ jobs:
             for perm in INSTALL_PACKAGES REBOOT WRITE_SECURE_SETTINGS; do
               grep -q "^uses-permission: name='android.permission.$perm'" <<< "$badging" || { echo "::error::$apk doesn't ask for $perm"; exit 1; }
             done
+            # WRITE_SETTINGS: the setup hotspot's setWifiApEnabled on Android 6-7, so the legacy build alone asks for it.
+            asks=no; grep -q "^uses-permission: name='android.permission.WRITE_SETTINGS'" <<< "$badging" && asks=yes
+            [ "$asks" = "$ASKS_WRITE_SETTINGS" ] || { echo "::error::$apk: asks for WRITE_SETTINGS: $asks, should: $ASKS_WRITE_SETTINGS"; exit 1; }
             sha256sum "$apk" > "$apk.sha256" && cat "$apk.sha256"
           done
           apks=(./*.apk)

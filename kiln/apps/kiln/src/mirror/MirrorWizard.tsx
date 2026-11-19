@@ -18,6 +18,7 @@ import { IMAGE_PROXY, MIRROR_FASTBOOT } from '@glassworks/lululemon-mirror-insta
 import { MIRROR_DEMOS, mirrorDemo, type MirrorDemo } from './demo';
 import { FlashSession } from './flash';
 import { FLASH_DEMOS, flashDemo, type FlashDemo } from './flashDemo';
+import { KEEP_DEMOS, keepDemo, type KeepDemo } from './keepDemo';
 import { FlashScreens, flashLevel, flashRail } from './FlashScreens';
 import { workerImages } from './images';
 import { registry } from '../wizard/registry';
@@ -50,6 +51,25 @@ export function keyedConnect(loadKey: () => Promise<AdbKey>, connect: (key: AdbK
 /** Kiln's release route, from the page (a bare `fetch` held by an object is an illegal invocation). */
 const releaseRoute = (...a: Parameters<typeof fetch>) => fetch(...a);
 
+/**
+ * Whether this browser has flashed a Mirror (issue 580): a flag in its storage, never a key. Storage may be off (a private
+ * window): then the keep step is the link under the fastboot steps only.
+ */
+const FLASHED_HERE = {
+  get: () => { try { return localStorage.getItem('kiln.mirror.flashed') === '1'; } catch { return false; } },
+  set: () => { try { localStorage.setItem('kiln.mirror.flashed', '1'); } catch { /* storage off: the link stays the way in */ } },
+};
+
+/**
+ * Home Assistant's key lives in this tab only until the first start (issue 580): closing or reloading the tab loses it,
+ * so the browser asks first. On for as long as the session holds the key, whichever screen shows (the session outlives
+ * its screen in Kiln's registry).
+ */
+export function leaveWarning(target: Pick<Window, 'addEventListener' | 'removeEventListener'> = window): (on: boolean) => void {
+  const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+  return (on) => (on ? target.addEventListener('beforeunload', warn) : target.removeEventListener('beforeunload', warn));
+}
+
 /** The page's two paths on one adb key: the app over adb (MirrorSession), or Glassworks over fastboot (FlashSession). */
 function realSessions(on: boolean, from: ApkFrom = 'local'): { mirror: MirrorSession; flash: FlashSession } {
   if (!on) {
@@ -75,9 +95,9 @@ function realSessions(on: boolean, from: ApkFrom = 'local'): { mirror: MirrorSes
     // ?image=<id>: a community image's install, with no choice first (issue 579)
     search: location.search,
     requestFastboot: () => Fastboot.request([MIRROR_FASTBOOT]),
-    requestAdb: () => {
+    requestAdb: (o) => {
       adbDevice = undefined; // a click that fails before the list (the key still loading) picks nothing
-      return keys.connectWith(async (k) => Panel.connect(k, (adbDevice = await Panel.pick())))();
+      return keys.connectWith(async (k) => Panel.connect(k, (adbDevice = await Panel.pick()), o))();
     },
     adbPicked: () => !!adbDevice,
     reopenAdb: async () => {
@@ -86,6 +106,8 @@ function realSessions(on: boolean, from: ApkFrom = 'local'): { mirror: MirrorSes
       return Panel.connect(k, adbDevice);
     },
     adbKey: () => keys.key()?.publicKey,
+    flashedHere: FLASHED_HERE,
+    holdingKey: leaveWarning(),
     apk: () => mirror.apkBytes(),
     apkBlocked: () => mirror.releaseBlocked(),
   });
@@ -292,7 +314,7 @@ function Failed({ s, session }: { s: MirrorState; session: MirrorSession }) {
   );
 }
 
-const DEMOS = [...MIRROR_DEMOS, ...FLASH_DEMOS];
+const DEMOS = [...MIRROR_DEMOS, ...FLASH_DEMOS, ...KEEP_DEMOS];
 /** Glassworks over fastboot (`flash-…`) and the choice with Glass Panes (`image-…`) run on FlashSession. */
 const isFlashDemo = (d: string) => d.startsWith('flash-') || d.startsWith('image-');
 
@@ -324,7 +346,8 @@ export function MirrorWizard() {
   useEffect(() => {
     const d = start.m.demo;
     if (!d) return;
-    if (isFlashDemo(d)) void flashDemo(d as FlashDemo).then(setDemo);
+    if ((KEEP_DEMOS as readonly string[]).includes(d)) void keepDemo(d as KeepDemo).then(setDemo);
+    else if (isFlashDemo(d)) void flashDemo(d as FlashDemo).then(setDemo);
     else void mirrorDemo(d as MirrorDemo).then((mirror) => setDemo({ mirror }));
   }, [start]);
   const live = start.real ?? demo;
@@ -342,6 +365,7 @@ export function Flash({ flash, mirror, toApp }: { flash: FlashSession; mirror: M
     <Shell steps={flashRail(s)} level={flashLevel(s, flash.recipe.community)} error={s.screen === 'error'} chip={chip}>
       <FlashScreens f={flash} s={s} m={mirror} ms={ms} />
       {toApp && s.screen === 'image' && <p className="small">Already runs the Glass Panes image? <button type="button" className="link" onClick={toApp}>Add the app only, over adb</button></p>}
+      {s.screen === 'fastboot' && !flash.recipe.community && !s.key && <p className="small">Glassworks already runs on this Mirror? <button type="button" className="link" onClick={() => flash.toKeep()}>Keep its Home Assistant device first</button></p>}
     </Shell>
   );
 }

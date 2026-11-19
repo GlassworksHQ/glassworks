@@ -55,7 +55,7 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <!-- The setup hotspot (#197): from Android 13 a local-only hotspot needs "Nearby devices", asked for on the
          setup screen with its reason; it never finds where the panel is. Android 6-7 start the hotspot through
-         the hidden setWifiApEnabled, which wants CHANGE_NETWORK_STATE (install-time). -->
+         the hidden setWifiApEnabled, which wants WRITE_SETTINGS: the generic app's legacy build asks for it. -->
     <uses-permission
         android:name="android.permission.NEARBY_WIFI_DEVICES"
         android:usesPermissionFlags="neverForLocation"

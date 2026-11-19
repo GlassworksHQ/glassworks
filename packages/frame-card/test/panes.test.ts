@@ -146,8 +146,15 @@ describe('the real frames', () => {
       timers: ['beta', false], 'time-zone': ['beta', true], 'wall-base': ['alpha', false], 'bluetooth-proxy': ['alpha', true],
       camera: ['no', true],
     });
-    expect(support('lululemon-mirror')).toMatchObject({ diagnostics: ['planned', true], 'time-zone': ['no', true], 'wall-base': ['no', false], 'bluetooth-proxy': ['planned', true], camera: ['planned', true] });
-    expect(support('generic-android')).toMatchObject({ diagnostics: ['planned', true], 'time-zone': ['no', true], 'wall-base': ['no', false], 'bluetooth-proxy': ['depends', true], camera: ['depends', true] });
+    // the legacy build ships every pane the Mirror has the hardware for, so frame.json rates them (not "planned")
+    expect(support('lululemon-mirror')).toMatchObject({
+      assist: ['alpha', false], timers: ['alpha', false], sendspin: ['alpha', false], notifications: ['alpha', false],
+      diagnostics: ['alpha', false], 'time-zone': ['no', true], 'wall-base': ['no', false], 'bluetooth-proxy': ['alpha', false], camera: ['alpha', false],
+    });
+    expect(support('generic-android')).toMatchObject({
+      notifications: ['alpha', false], diagnostics: ['alpha', false], 'time-zone': ['no', true], 'wall-base': ['no', false],
+      'bluetooth-proxy': ['depends', false], camera: ['depends', false],
+    });
   });
 });
 
