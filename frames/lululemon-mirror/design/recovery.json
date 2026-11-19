@@ -11,17 +11,20 @@
       [1040, 516], [1240, 516], [1290, 516]
     ],
     "features": [
-      { "kind": "plate", "at": [215, 8], "size": [30, 520] },
-      { "kind": "plate", "at": [1020, 8], "size": [290, 520] }
+      { "kind": "grille", "at": [1131, 70], "size": [155, 155] },
+      { "kind": "grille", "at": [1131, 311], "size": [155, 155] },
+      { "kind": "recess", "at": [1180, 238], "size": [120, 60] }
     ]
   },
+  "stand": { "edge": "right", "depth": 43, "tube": { "reach": 220, "inset": 6, "z": 6, "diameter": 9, "bend": 34 } },
   "board": [
     { "kind": "chip", "at": [40, 400], "size": [110, 128] },
-    { "kind": "button", "at": [130, 450] }
+    { "kind": "button", "at": [101, 505] }
   ],
-  "button": { "at": [130, 500], "what": "VOL− (SW3): of the two buttons on the small green board at the top end, the one nearer the frame's edge" },
-  "port": { "edge": "left", "at": 268, "kind": "micro-usb" },
-  "steps": ["screws", "cover", "hold", "plug"],
-  "labels": { "cover": "Lift off the back", "hold": "Hold VOL−", "plug": "Plug in USB, then power" },
+  "button": { "at": [95, 505], "what": "VOL− (SW3): of the two buttons side by side on the small green board at the top end, the one nearer the top end's edge" },
+  "port": { "edge": "left", "at": 30, "kind": "micro-usb" },
+  "power": { "edge": "right", "at": 268, "kind": "rocker" },
+  "steps": ["screws", "cover", "plug", "hold", "power"],
+  "labels": { "screws": "Unscrew the stand and the back", "cover": "Lift off the back", "plug": "Plug in the micro-USB", "hold": "Hold VOL−" },
   "ready": { "seconds": 5, "says": "In fastboot. Let go." }
 }
