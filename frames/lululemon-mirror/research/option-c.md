@@ -301,7 +301,11 @@ on the computer.
   in? Nobody has built the community's manifest with an empty vendor tree.
 - Hard rule 4, the GPL programs in any AOSP image: the maintainer's call.
 - Can a stock Mirror give adb at all? If it can, its own vendor files (lululemon's build, never read
-  by anyone we know) would be the cleanest source. Needs a stock unit, which we don't have.
+  by anyone we know) would be the cleanest source. Needs a stock unit, which we don't have. One
+  community report now answers this for a single unit: authorised **network** adb on a stock Mirror
+  at firmware 1.16.0, by planting a key and a TCP port in a fresh userdata (1.2x+ reportedly breaks
+  it) — [community-root-and-network-adb.md](community-root-and-network-adb.md). Untested by us, and
+  it still can't read the 13 daemons (same signed-boot policy).
 - Does Android 6 keep userdata across a change of platform key, or must the move wipe it?
 
 ## The plan, in PR-sized pieces
