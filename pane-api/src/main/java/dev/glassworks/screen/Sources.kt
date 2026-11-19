@@ -51,6 +51,7 @@ interface ScreenSettings {
     val screenMode: String
     /** Seconds with nobody near and no touch before the screen turns off; 0 or less never. Home Assistant can change it. */
     val idleOffSec: Int
+    /** Read only through [approachWakes]: alone it doesn't say whether approaching wakes the screen. */
     val wakeOnApproach: Boolean
     /** Passed to [PresenceSource.setRange]. */
     val presenceRangeM: Float
@@ -60,4 +61,10 @@ interface ScreenSettings {
     val maxBrightness: Float
     /** 0..1 while [autoBrightness] is off. 0 or less means the system brightness. */
     var manualBrightness: Float
+
+    /**
+     * Whether someone approaching wakes the screen: the "presence" mode with [wakeOnApproach] on. "always" never wakes
+     * on approach, so a screen Home Assistant turned off stays off (#601). The settings' wake switch shows this too.
+     */
+    val approachWakes: Boolean get() = screenMode == "presence" && wakeOnApproach
 }
