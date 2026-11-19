@@ -742,6 +742,8 @@ class SurfaceFlingerHistory(unittest.TestCase):
         self.assertEqual((out["frames"], out["full"]), (100, True))
         self.assertAlmostEqual(out["reach_ms"], 1666.7, delta=0.1)       # 100 frames, a refresh apart
         self.assertEqual(out["poll_s"], P.SF_POLL_MAX_S)
+        self.assertGreater(out["list_ms"], 0)                           # the listing reads were timed too (CodeRabbit on #648)
+        self.assertLessEqual(max(out["read_ms"], out["list_ms"]), out["reach_ms"] / 2)
         self.assertEqual(float(p.stdout.strip()), out["poll_s"])
         self.assertIn("a read every 0.3 s", p.stderr)
 
@@ -753,6 +755,15 @@ class SurfaceFlingerHistory(unittest.TestCase):
         p, out = sfcheck(tempfile.mkdtemp(), FAKE_SF_UNNAMED="1")
         self.assertEqual(p.returncode, 2)
         self.assertIn("lists no SurfaceView of sh.edm.s1kiosk", out["why"])
+
+    def test_a_slow_listing_fails_the_check(self):
+        """CodeRabbit on #648: every third read at the poll rhythm lists the layers first; a listing slower than half
+        the history would leave gaps however quick the layer's own read is, so the check times it and stops."""
+        p, out = sfcheck(tempfile.mkdtemp(), FAKE_SF_HISTORY="100", FAKE_SF_SLOW_LIST="1.0", GW_PERF_TIME_SCALE="1")
+        self.assertEqual(p.returncode, 2, p.stderr[-800:])
+        self.assertGreater(out["list_ms"], 1000)
+        self.assertLess(out["read_ms"], out["reach_ms"] / 2)
+        self.assertIn("reads can't come often enough", out["why"])
 
     def test_a_lockdown_reads_once(self):
         p, out = sfcheck(tempfile.mkdtemp(), FAKE_LOCKDOWN="1")

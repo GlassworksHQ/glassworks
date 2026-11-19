@@ -176,6 +176,18 @@ class Device:
         self.sf_period = best[0]
         return best
 
+    def sf_relist(self):
+        """The poll rhythm's listing read (#643): `--list`, then `--latency` of the app's newest layer that has
+        frames (the newest first: after a restart the new layer has the higher #id). Two calls, where sf() reads
+        every layer listed. (period_ms, present times ns); sets sf_name."""
+        names = P.surfaceview_layers(self.sh("dumpsys SurfaceFlinger --list"), self.package)
+        for name in sorted(names, key=P.layer_number, reverse=True):
+            period, ts = P.parse_sf_latency(self.sh(f"dumpsys SurfaceFlinger --latency '{name}'"))
+            if ts:
+                self.sf_name, self.sf_period = name, period
+                return period, ts
+        return self.sf_period, []
+
     def sf_layer(self, name):
         """One `--latency` read of a layer sf() picked: its present times, ns (SfReads, during a window)."""
         return P.parse_sf_latency(self.sh(f"dumpsys SurfaceFlinger --latency '{name}'"))[1]
@@ -196,19 +208,22 @@ class Device:
 SF_POLL_S = float(os.environ.get("GW_PERF_SF_POLL") or 0)
 
 
-# At the poll rhythm, the full listing (Device.sf) every this many reads; the known layer alone in between. A new
-# layer (after a restart) is then found within three reads, 0.9 s on the tablet: inside its 0.98 s history.
+# At the poll rhythm, a listing read (Device.sf_relist) every this many reads; the known layer alone in between.
+# A new layer (after a restart) is then read within three reads and one listing read's time: 0.9 s plus at most half
+# the history on the tablet (sf_plan holds a listing read to half of it).
 SF_RELIST = 3
 
 
 def sf_poll_read(dev, k):
-    """The k-th read at the poll rhythm (#643): (period_ms, present times ns). One `--latency` of the layer sf() last
-    picked, as the window reads; the full listing every SF_RELIST reads, or when that layer is unknown or answers
-    nothing (gone)."""
-    if dev.sf_name is None or k % SF_RELIST == 0:
+    """The k-th read at the poll rhythm (#643): (period_ms, present times ns). One `--latency` of the layer last
+    picked, as the window reads; a listing read (Device.sf_relist, two calls) every SF_RELIST reads, or when that
+    layer answers nothing (gone); Device.sf before any layer is known. The check times both kinds (sf_history)."""
+    if dev.sf_name is None:
         return dev.sf()
+    if k % SF_RELIST == 0:
+        return dev.sf_relist()
     ts = dev.sf_layer(dev.sf_name)
-    return (dev.sf_period, ts) if ts else dev.sf()
+    return (dev.sf_period, ts) if ts else dev.sf_relist()
 
 
 class SfReads:
@@ -375,13 +390,14 @@ def cmd_synthetic(dev, a):
 # one read reaches back.
 SFCHECK_FULL_READS = 3
 SFCHECK_GAP_S = 0.3        # between the check's reads
+SFCHECK_LIST_READS = 5     # listing reads (Device.sf_relist) timed after them
 
 
 def sf_history(dev, timeout, stop=None):
     """Reads the app's layer (dev.sf picks it) every SFCHECK_GAP_S until its history is full while new frames
     come, or holds enough frames for one read to cover a window, or `timeout` s pass, or `stop` is set.
     -> (layer name or None, refresh period ms, the most frames the history held, full reads in a row,
-    each read's time in ms)."""
+    each read's time in ms, each listing read's time in ms)."""
     deadline = C.mono() + timeout
     name, period, last, full, frames, times = None, None, None, 0, 0, []
     while C.mono() < deadline and not (stop and stop.is_set()):
@@ -405,7 +421,13 @@ def sf_history(dev, timeout, stop=None):
                 break
         last = ts or last
         C.sleep(SFCHECK_GAP_S)
-    return name, period, frames, full, times
+    # The poll rhythm's listing reads, timed too: sf_plan holds them to half the history as well.
+    lists = []
+    for _ in range(SFCHECK_LIST_READS if name else 0):
+        t0 = C.mono()
+        dev.sf_relist()
+        lists.append((C.mono() - t0) * 1000)
+    return name, period, frames, full, times, lists
 
 
 def cmd_sfcheck(dev, a):
@@ -414,7 +436,8 @@ def cmd_sfcheck(dev, a):
     and perflib.sf_plan's decision; stdout the seconds between reads during a window (0: one read after it).
     Exits 2, before a run is spent, when the layer can't be read or its history is too short to cover a window
     even read often."""
-    out = {"reach_ms": None, "frames": None, "full": None, "read_ms": None, "reads": 0, "poll_s": None, "why": None}
+    out = {"reach_ms": None, "frames": None, "full": None, "read_ms": None, "list_ms": None, "reads": 0, "poll_s": None,
+           "why": None}
     path = os.path.join(a.out, "sfcheck.json")
     if dev.package not in dev.pids(()):
         dev.sh(f"am start -n {dev.component}")
@@ -431,10 +454,11 @@ def cmd_sfcheck(dev, a):
                 return
     threading.Thread(target=watch, daemon=True).start()
     dev.sh(f"am start -n {dev.component} --es open '{a.url}'")
-    name, period, frames, full, times = sf_history(dev, a.timeout, refused)
+    name, period, frames, full, times, lists = sf_history(dev, a.timeout, refused)
     lc.terminate()
     out["reads"] = len(times)
     out["read_ms"] = round(P.nearest_rank(sorted(times), 0.95), 1) if times else None
+    out["list_ms"] = round(P.nearest_rank(sorted(lists), 0.95), 1) if lists else None
     if refused.is_set():
         # The legacy engine's lockdown (#198) loads only its dashboard's origin: no check, one read as before.
         out.update(poll_s=0, why="the app's lockdown refused the check page; reading once after each window")
@@ -450,14 +474,14 @@ def cmd_sfcheck(dev, a):
         # apart (a page that draws less often reaches further).
         # full: the whole history; else enough frames for one read and it stopped there (reach is at least this).
         out.update(reach_ms=round(frames * period, 1), frames=frames, full=full >= SFCHECK_FULL_READS)
-        out["poll_s"], out["why"] = P.sf_plan(out["reach_ms"], out["read_ms"] or 0)
+        out["poll_s"], out["why"] = P.sf_plan(out["reach_ms"], out["read_ms"] or 0, out["list_ms"])
     write_json(path, out)
     if out["poll_s"] is None:
         print(f"SurfaceFlinger check failed: {out['why']} (sfcheck.json)", file=sys.stderr)
         sys.exit(2)
     how = "one read after each window" if out["poll_s"] == 0 else f"a read every {out['poll_s']:g} s during each window"
     print(f"SurfaceFlinger: one read reaches back {out['reach_ms']} ms ({out['frames']} frames), a read takes "
-          f"{out['read_ms']} ms: {how}" if out["reach_ms"] is not None else f"SurfaceFlinger: {out['why']}", file=sys.stderr)
+          f"{out['read_ms']} ms ({out['list_ms']} ms with the listing): {how}" if out["reach_ms"] is not None else f"SurfaceFlinger: {out['why']}", file=sys.stderr)
     print(out["poll_s"])
 
 

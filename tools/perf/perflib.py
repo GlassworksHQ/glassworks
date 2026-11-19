@@ -205,10 +205,11 @@ SF_ONE_READ_MS = 1800
 SF_POLL_MIN_S, SF_POLL_MAX_S = 0.05, 0.3
 
 
-def sf_plan(reach_ms, read_ms):
+def sf_plan(reach_ms, read_ms, list_ms=None):
     """How the runner reads SurfaceFlinger on this device, from the preflight's numbers: how far back one read
-    reaches while the page draws every frame, and how long one read takes from this computer (p95; the Pixel
-    Tablet's over wireless adb: 80 ms, p95 171 ms, run 3).
+    reaches while the page draws every frame; how long one read of the known layer takes from this computer (p95;
+    the Pixel Tablet's one adb shell call over wireless adb: 80 ms, p95 171 ms, run 3); and how long a read that
+    lists the layers first takes (perfrun.sf_poll_read's every third read: two calls).
     -> (poll_s, None): 0 to read once after each window (the S1's way), else seconds from one read's start to
     the next during it (perfrun.SfReads keeps that rhythm); or (None, why) when reads can't cover a window."""
     if reach_ms is None:
@@ -216,8 +217,9 @@ def sf_plan(reach_ms, read_ms):
     if reach_ms >= SF_ONE_READ_MS:
         return 0, None
     poll = min(SF_POLL_MAX_S, reach_ms / 2000)
-    if poll < SF_POLL_MIN_S or read_ms > reach_ms / 2:
-        return None, (f"SurfaceFlinger's history reaches back {reach_ms:.0f} ms and one read takes {read_ms:.0f} ms: "
+    slowest = max(read_ms, list_ms or 0)
+    if poll < SF_POLL_MIN_S or slowest > reach_ms / 2:
+        return None, (f"SurfaceFlinger's history reaches back {reach_ms:.0f} ms and one read takes {slowest:.0f} ms: "
                       f"reads can't come often enough to cover a window")
     return round(poll, 3), None
 

@@ -172,6 +172,10 @@ class SurfaceFlingerReads(unittest.TestCase):
         self.assertEqual(P.sf_plan(2116.7, 300), (0, None))        # the S1: 127 frames, one read after each window
         self.assertEqual(P.sf_plan(1800, 900), (0, None))
         self.assertEqual(P.sf_plan(966.7, 171), (P.SF_POLL_MAX_S, None))   # the Pixel Tablet: 59 frames, run 3's p95 read
+        self.assertEqual(P.sf_plan(983.3, 171, 342), (P.SF_POLL_MAX_S, None))   # and a listing read: two calls
+        poll, why = P.sf_plan(983.3, 171, 600)                           # a listing read slower than half the history
+        self.assertIsNone(poll)
+        self.assertIn("one read takes 600 ms", why)
         self.assertEqual(P.sf_plan(400, 90), (0.2, None))
         for reach, read in ((90, 10), (966.7, 500)):                      # reads too close, or one too slow
             poll, why = P.sf_plan(reach, read)

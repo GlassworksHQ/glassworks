@@ -5,7 +5,8 @@ lululemon Mirror's Android 6 instead (checked against an API 23 emulator, 2026-1
 is no `nproc`; SurfaceFlinger names the app's layer plain `SurfaceView`; `dumpsys meminfo` writes "kB"; and the
 kiosk is the generic app, whose activity is dev.glassworks.MainActivity behind a launcher alias. FAKE_SF_WRAPPED:
 SurfaceFlinger lists layers as Android 17 does (`RequestedLayerState{…}`, the view's hash); FAKE_SF_UNNAMED: in a way the
-runner can't read; FAKE_SF_HISTORY: how many frames `--latency` keeps (127, the S1's).
+runner can't read; FAKE_SF_HISTORY: how many frames `--latency` keeps (127, the S1's); FAKE_SF_SLOW_LIST: seconds
+`--list` takes.
 
 State lives in $FAKE_ADB_STATE (a directory): the nonce of the page the runner opened, the taps it
 sent, and the time ranges in which the fake screen paints. logcat, SurfaceFlinger and the fake page
@@ -293,6 +294,8 @@ def shell(cmd):
         return ""
     if cmd.startswith("dumpsys SurfaceFlinger --list") and ANDROID6:
         return f"DimLayer\ncom.android.systemui.ImageWallpaper\nSurfaceView\n{PKG}/{ACTIVITY}\nStatusBar\nNavigationBar\n"
+    if cmd.startswith("dumpsys SurfaceFlinger --list") and os.environ.get("FAKE_SF_SLOW_LIST"):
+        time.sleep(float(os.environ["FAKE_SF_SLOW_LIST"]))    # a listing that takes this long (real seconds, #643)
     if cmd.startswith("dumpsys SurfaceFlinger --list") and os.environ.get("FAKE_SF_WRAPPED"):
         # Android 17 (as an API 37 emulator listed it, 2026-11-19): each layer in RequestedLayerState{…}, the
         # SurfaceView's name after the view's hash; the frames on its (BLAST) child, none on its parent.

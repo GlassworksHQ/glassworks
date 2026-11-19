@@ -270,12 +270,15 @@ stops growing. Then it decides (`perflib.sf_plan`), and writes `sfcheck.json`:
 2. **A read every N seconds during each window** too, when it reaches less. N is half the reach, at most
    0.3 s (the tablet: 0.3 s). The reads keep that rhythm, so a slow read is followed at once. The
    frame log behind the restart and the open, and the idle sample, read at the same rhythm: the known
-   layer alone, with the full listing every third read. The
+   layer alone, with a listing read (`--list`, then the newest layer: two calls) every third read. The
+   check times both kinds of read, and each must take at most half the reach (the API 37 emulator:
+   294 and 374 ms p95 against 525). The
    runner joins the reads by present time (`perflib.stitch_reads`). A window counts as covered back to
    where the reads overlap without a gap, as one read covered it before. Each window's record then has
    `reads`, how many it took.
 3. **Stop**, exit 2, before anything is graded, when the app's layer can't be named, the page draws no
-   frames, or reads would have to come closer than 0.05 s, or take longer than half the reach.
+   frames, or reads would have to come closer than 0.05 s, or one read or listing read takes longer than
+   half the reach.
 
 The reads during a window are dumpsys calls on the device while it is measured: one every 0.3 s on
 the tablet. On the S1 there are none.
