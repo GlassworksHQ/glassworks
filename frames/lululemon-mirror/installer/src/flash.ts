@@ -188,10 +188,11 @@ export async function focusedActivity(p: PanelShell): Promise<string | undefined
 
 /**
  * Hides the image's other launchers (pm hide: adb's shell has MANAGE_USERS on Android 6), asks for
- * HOME, and checks what Android opened. Running it again is the fix when a launcher survived.
+ * HOME, and checks what Android opened. Running it again is the fix when a launcher survived. `others`:
+ * the home apps to hide, the image's launchers by default (the app-only install adds the one it replaces).
  */
 export async function makeOnlyHome(p: PanelShell, onStep: StepFn = () => {}, sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
-  app: MirrorApp = GLASSWORKS): Promise<{ hidden: string[]; home: HomeCheck }> {
+  app: MirrorApp = GLASSWORKS, others: readonly string[] = OTHER_HOMES): Promise<{ hidden: string[]; home: HomeCheck }> {
   const PKG = app.package;
   const r = new Steps(p, onStep);
   const installed = async (pkg: string) => (await r.try(`pm list packages ${pkg}`)).split(/\r?\n/).some((l) => l.trim() === `package:${pkg}`);
@@ -201,19 +202,19 @@ export async function makeOnlyHome(p: PanelShell, onStep: StepFn = () => {}, sle
   const own = await r.try(`am start -a android.intent.action.MAIN -c android.intent.category.HOME ${PKG}`);
   if (/unable to resolve/i.test(own)) {
     const left: string[] = [];
-    for (const pkg of OTHER_HOMES) if (await installed(pkg)) left.push(pkg);
+    for (const pkg of others) if (await installed(pkg)) left.push(pkg);
     r.detail(`${PKG} has no home screen: nothing hidden, ${left.join(', ') || 'the image\'s launcher'} stays`);
     return { hidden: [], home: { result: 'none', left } };
   }
   const hidden: string[] = [];
-  for (const pkg of OTHER_HOMES) {
+  for (const pkg of others) {
     if (!(await installed(pkg))) continue;
     const out = await r.try(`pm hide ${pkg}`);
     if (/true/.test(out)) hidden.push(pkg);
     r.detail(`${pkg}: ${out.trim() || 'no answer'}`);
   }
   const left: string[] = [];
-  for (const pkg of OTHER_HOMES) if (await installed(pkg)) left.push(pkg); // a hidden app isn't listed
+  for (const pkg of others) if (await installed(pkg)) left.push(pkg); // a hidden app isn't listed
   await r.try('am start -a android.intent.action.MAIN -c android.intent.category.HOME');
   let focused: string | undefined;
   for (let i = 0; i < 10; i++) {

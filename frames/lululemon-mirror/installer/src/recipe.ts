@@ -5,17 +5,22 @@
 // gives the home screen back.
 //
 // Android 6 has no `cmd`, so no `cmd package set-home-activity`, and its adb shell can't disable
-// another app. The person picks Glassworks and "Always" in Android's chooser on the Mirror, and Kiln
-// waits until Android records that choice (frames/lululemon-mirror/research/home-app.md).
+// another app. The Mirror has no touchscreen, so nothing may wait on a tap in Android's chooser: as the
+// flash path's first start does, Kiln turns the screen upright and hides the other home apps (pm hide), so
+// Glassworks is the only one, and checks what HOME opens (Mirror run, 2026-11-19). Undo unhides the one
+// the Mirror had.
 import type { PanelShell } from '@glassworks/adb';
 import { Steps, dropAdmin, grantPermissions, kioskVersion, q, startApp, type StepFn } from '@glassworks/app-adb';
 import { GLASSWORKS, type MirrorApp } from './app';
+import { OTHER_HOMES, focusedActivity, makeOnlyHome, setPortrait, type HomeCheck } from './flash';
 import { checkMirrorApk } from './image';
 import { describeMirrorUpdates, readMirrorUpdates, type MirrorUpdates } from './updates';
 
 const HOME_INTENT = 'am start -a android.intent.action.MAIN -c android.intent.category.HOME';
 /** The home app the Mirror had before ours, kept on the Mirror for undo. adb's shell owns /data/local/tmp. */
 export const PREVIOUS_HOME = '/data/local/tmp/glassworks-previous-home';
+/** The home apps Kiln hid so ours is the only one, space-separated, for undo. */
+export const HIDDEN_HOMES = '/data/local/tmp/glassworks-hidden-homes';
 /** The app's legacy APK, the space it needs to install and be optimised, and room to spare. */
 const MIN_FREE_MB = 500;
 const COMPONENT = /^[A-Za-z0-9_.]+\/[A-Za-z0-9_.$]+$/;
@@ -37,13 +42,13 @@ export interface MirrorReport {
   pendingHome?: string;
 }
 
-/** The parts of install and undo the screen follows, in order. `home`: waiting for the person's tap. */
+/** The parts of install and undo the screen follows, in order. None waits on the person: the Mirror has no touchscreen. */
 export type MirrorPhase =
   | { step: 'apk'; stage: 'copy' | 'install' }
   | { step: 'grant' }
+  | { step: 'portrait' }
   | { step: 'start' }
-  /** `clear`: Android keeps another app's "Always" pick, so its defaults are cleared in Settings first */
-  | { step: 'home'; pick: string; clear?: string }
+  | { step: 'home' }
   | { step: 'admin' }
   | { step: 'remove' };
 
@@ -51,8 +56,6 @@ export interface HomeWait {
   onStep?: StepFn;
   onPhase?: (phase: MirrorPhase) => void;
   sleep?: (ms: number) => Promise<void>;
-  /** How long to wait for the person's tap in Android's chooser; default 3 minutes. */
-  homeTimeoutMs?: number;
   /** Which app: Glassworks by default (frame.json `app`). */
   app?: MirrorApp;
 }
@@ -65,11 +68,14 @@ export interface MirrorOptions extends HomeWait {
 }
 
 /**
- * `home`: whether Android now opens the wanted app as the home screen; `unconfirmed` if the wait ran out.
+ * `home`: whether HOME now opens the wanted app (`set`), else `unconfirmed`, with what it opened in `homeCheck`.
+ * `hidden`: the home apps hidden for it. `rotation`: the display's, after the portrait step (always MIRROR_ROTATION).
  * `updates`: whether its updates install by themselves, read back (a normal app here, unless it updated the image's copy).
  */
-export interface Installed { app: AppVersion; home: 'set' | 'unconfirmed'; previousHome?: string; updates: MirrorUpdates }
-export interface Removed { removed: boolean; home: 'set' | 'unconfirmed'; previousHome?: string }
+export interface Installed { app: AppVersion; home: 'set' | 'unconfirmed'; homeCheck: HomeCheck; hidden: string[]; rotation: number;
+  previousHome?: string; updates: MirrorUpdates }
+/** `focused`: what HOME opened after the undo. */
+export interface Removed { removed: boolean; home: 'set' | 'unconfirmed'; previousHome?: string; focused?: string }
 
 const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -152,39 +158,13 @@ function installError(out: string, ours: MirrorApp): Error {
   return new Error(`installing ${ours.name} failed: ${why}`);
 }
 
-/**
- * Asks Android for the home screen, which shows its chooser when the home apps changed, and waits
- * until the person's pick is recorded: `want(home)` true. `pick` is what the screen asks them to tap.
- *
- * When the home apps didn't change (an update, with another app picked "Always" before), Android
- * keeps that pick and shows no chooser, and adb's shell can't clear another app's defaults. Then
- * that app's page in Settings is opened, the person taps Clear defaults, and the chooser follows.
- */
-async function waitForHome(p: PanelShell, r: Steps, pick: string, want: (home: string | undefined) => boolean, o: HomeWait): Promise<'set' | 'unconfirmed'> {
-  const sleep = o.sleep ?? defaultSleep;
-  const phase = o.onPhase ?? (() => {});
-  const before = await preferredHome(p);
-  if (want(before)) { r.detail('home screen already set'); return 'set'; }
-  phase({ step: 'home', pick });
-  await r.run(HOME_INTENT);
-  const until = Date.now() + (o.homeTimeoutMs ?? 180_000);
-  let stuck: string | undefined;
-  for (;;) {
-    const home = await preferredHome(p);
-    if (want(home)) { r.detail(`home screen: ${home}`); return 'set'; }
-    if (home && home === before && !stuck) {
-      stuck = home.split('/')[0]!;
-      r.detail(`Android keeps ${home} as the home screen: opening its settings to clear its defaults`);
-      phase({ step: 'home', pick, clear: stuck });
-      await r.try(`am start -a android.settings.APPLICATION_DETAILS_SETTINGS -d package:${stuck}`);
-    } else if (stuck && !home) {
-      stuck = undefined;
-      phase({ step: 'home', pick });
-      await r.run(HOME_INTENT);
-    }
-    if (Date.now() >= until) { r.detail(`home screen not confirmed (Android has ${home ?? 'none'})`); return 'unconfirmed'; }
-    await sleep(2000);
-  }
+async function recordedHidden(r: Steps): Promise<string[]> {
+  return (await r.try(`cat ${HIDDEN_HOMES} 2>/dev/null`)).split(/\s+/).filter((x) => /^[A-Za-z0-9_.]+$/.test(x));
+}
+
+/** Keeps `pkgs` in the record of hidden home apps (with the ones there), or deletes the record when none are left. */
+async function keepHidden(r: Steps, pkgs: string[]) {
+  await r.run(pkgs.length ? `echo ${q(pkgs.join(' '))} > ${HIDDEN_HOMES}` : `rm -f ${HIDDEN_HOMES}`);
 }
 
 async function recordedHome(r: Steps): Promise<string | undefined> {
@@ -203,6 +183,7 @@ export async function installMirror(p: PanelShell, o: MirrorOptions): Promise<In
   const isOurs = (h?: string) => !!h && h.startsWith(`${ours.package}/`);
   const r = new Steps(p, o.onStep);
   const phase = o.onPhase ?? (() => {});
+  const sleep = o.sleep ?? defaultSleep;
   r.step('Checking the Mirror');
   const report = await checkMirror(p, ours);
   for (const c of report.checks) r.detail(`${c.ok ? 'ok ' : 'NO '} ${c.what}: ${c.found}`);
@@ -235,13 +216,24 @@ export async function installMirror(p: PanelShell, o: MirrorOptions): Promise<In
   const updates = await readMirrorUpdates(p, ours);
   r.detail(describeMirrorUpdates(updates));
 
+  // before the app starts, so it opens in portrait (it follows the system's rotation, #434), as the first start does
+  phase({ step: 'portrait' });
+  r.step('Turn the screen upright (portrait)');
+  const rotation = await setPortrait(p, o.onStep, sleep);
+
   phase({ step: 'start' });
   r.step(`Start ${ours.name}`);
   await startApp(r, o, ours);
 
-  r.step(`Make ${ours.name} the home screen`);
-  const home = await waitForHome(p, r, ours.name, isOurs, o);
-  return { app, home, updates, ...(previousHome ? { previousHome } : {}) };
+  // the home app it replaces is hidden too: a second home app would leave Android's chooser on a glass nobody can tap
+  phase({ step: 'home' });
+  r.step(`Make ${ours.name} the only home screen`);
+  const replaced = previousHome?.split('/')[0];
+  const others = [...OTHER_HOMES, ...(replaced && replaced !== ours.package && !OTHER_HOMES.includes(replaced) ? [replaced] : [])];
+  const { hidden, home: homeCheck } = await makeOnlyHome(p, o.onStep, sleep, ours, others);
+  if (hidden.length) await keepHidden(r, [...new Set([...(await recordedHidden(r)), ...hidden])]);
+  const home = homeCheck.result === 'set' ? 'set' : 'unconfirmed';
+  return { app, home, homeCheck, hidden, rotation, updates, ...(previousHome ? { previousHome } : {}) };
 }
 
 /**
@@ -268,9 +260,26 @@ export async function undoMirror(p: PanelShell, o: HomeWait = {}): Promise<Remov
     r.step(`${ours.name} is not on the Mirror`);
   }
 
+  // the home app the Mirror had comes back by unhiding it, with no chooser to answer; without a record, what Kiln hid
+  phase({ step: 'home' });
   r.step('Give the home screen back');
-  const home = await waitForHome(p, r, previousHome ?? 'the app you had before',
-    (h) => (previousHome ? h === previousHome : !!h && !h.startsWith(`${ours.package}/`)), o);
-  if (home === 'set') await r.try(`rm -f ${PREVIOUS_HOME}`);
-  return { removed: !!installed, home, ...(previousHome ? { previousHome } : {}) };
+  const hidden = await recordedHidden(r);
+  const before = previousHome?.split('/')[0];
+  const back = before ? [before] : hidden;
+  for (const pkg of back) r.detail(`${pkg}: ${(await r.try(`pm unhide ${pkg}`)).trim() || 'no answer'}`);
+  await r.try(HOME_INTENT);
+  const want = (f?: string) => (before ? !!f?.startsWith(`${before}/`) : !!f && !f.startsWith(`${ours.package}/`) && !/ResolverActivity|ChooserActivity/.test(f));
+  let focused: string | undefined;
+  for (let i = 0; i < 10; i++) {
+    focused = await focusedActivity(p);
+    if (want(focused)) break;
+    await sleep(1000);
+  }
+  const home = want(focused) ? 'set' : 'unconfirmed';
+  r.detail(`home: ${focused ?? 'unknown'}`);
+  if (home === 'set') {
+    await r.try(`rm -f ${PREVIOUS_HOME}`);
+    await keepHidden(r, hidden.filter((x) => !back.includes(x)));
+  }
+  return { removed: !!installed, home, ...(previousHome ? { previousHome } : {}), ...(focused ? { focused } : {}) };
 }

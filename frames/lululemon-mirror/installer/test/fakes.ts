@@ -118,13 +118,12 @@ export interface FakeMirrorOptions {
   app?: MirrorApp;
   /** pm install's answer, when it isn't Success */
   installFails?: string;
-  /** In the chooser, the person taps this after `pickAfter` reads of the preferred home; undefined: never */
-  picks?: (choices: string[]) => string | undefined;
-  pickAfter?: number;
   /** the app keeps its device admin when asked to drop it */
   keepsAdmin?: boolean;
-  /** with an app's settings open, the person taps Clear defaults */
-  clearsDefaults?: boolean;
+  /** `pm hide` answers false: the other home app stays, so HOME opens Android's chooser */
+  hideFails?: boolean;
+  /** the display doesn't follow user_rotation */
+  rotationStuck?: boolean;
   /** each command takes this long (the demo) */
   delayMs?: number;
   /** our app is the image's privileged copy (Kiln's fastboot install), so an adb install updates it */
@@ -156,17 +155,23 @@ export function packageDump(pkg: string, code: number, o: { privileged?: boolean
   ].join('\n');
 }
 
+/**
+ * The Mirror on the community image over adb, for the app-only install and undo. It has no touchscreen: nothing here
+ * taps Android's chooser. HOME opens the one home app left, the "Always" pick among the same apps, or the chooser.
+ */
 export class FakeMirror implements PanelShell {
   cmds: string[] = [];
   files = new Map<string, string>();
   /** the "Always" home and the home apps it was picked from */
   preferred?: { comp: string; from: string[] };
-  chooser?: string[];
-  /** the package whose Settings page is open */
-  settings?: string;
+  /** packages hidden with pm hide */
+  hidden = new Set<string>();
+  /** the activity in front, as dumpsys activity prints it */
+  focused?: string;
+  userRotation = 0;
+  accelerometer = 1;
   installed?: number;
   admins = new Set<string>(['com.nimrod.mirrorkiosk/.AdminReceiver']);
-  private reads = 0;
 
   /** our app: its package, the HOME component Android records (an alias), its admin */
   readonly app: MirrorApp;
@@ -188,14 +193,23 @@ export class FakeMirror implements PanelShell {
     if (o.installed && this.app.admin) this.admins.add(this.app.admin);
   }
 
+  /** The home apps Android offers: the image's two and ours, less the hidden ones. */
   homes(): string[] {
-    return [MIRROR_KIOSK, LAUNCHER3, ...(this.installed ? [this.app.home] : [])];
+    return [MIRROR_KIOSK, LAUNCHER3, ...(this.installed ? [this.app.home] : [])].filter((c) => !this.hidden.has(c.split('/')[0]!));
   }
 
-  /** The person taps `comp`, then Always. */
+  /** `comp` picked with Always (as the Mirror had it before Kiln, with a mouse). */
   pick(comp: string) {
     this.preferred = { comp, from: this.homes() };
-    this.chooser = undefined;
+  }
+
+  /** What HOME opens now. */
+  private home(): string {
+    const homes = this.homes();
+    if (homes.length === 1) return homes[0]!;
+    if (this.preferred && this.preferred.from.join() === homes.join()) return this.preferred.comp;
+    this.preferred = undefined;
+    return 'android/com.android.internal.app.ResolverActivity';
   }
 
   async push(path: string) { this.cmds.push(`push ${path}`); await this.wait(); }
@@ -222,7 +236,25 @@ export class FakeMirror implements PanelShell {
     if (cmd === `dumpsys package ${PKG}`) {
       return ok(this.installed ? packageDump(PKG, this.installed, { privileged: o.privileged }) : '');
     }
-    if (cmd === 'dumpsys package preferred-activities') { this.reads++; this.maybePick(); return ok(this.preferredDump()); }
+    if (cmd === 'dumpsys package preferred-activities') return ok(this.preferredDump());
+    const set = /^settings put system (user_rotation|accelerometer_rotation) (\d)$/.exec(cmd);
+    if (set) { if (set[1] === 'user_rotation') this.userRotation = Number(set[2]); else this.accelerometer = Number(set[2]); return ok(); }
+    if (cmd === 'dumpsys window windows') return ok(`  mRotation=${o.rotationStuck || this.accelerometer !== 0 ? 0 : this.userRotation}\n`);
+    if ((m = /^pm (hide|unhide) (\S+)$/.exec(cmd))) {
+      if (m[1] === 'hide' && o.hideFails) return ok(`Package ${m[2]} new hidden state: false\n`);
+      if (m[1] === 'hide') this.hidden.add(m[2]!); else this.hidden.delete(m[2]!);
+      return ok(`Package ${m[2]} new hidden state: ${m[1] === 'hide'}\n`);
+    }
+    if ((m = /^pm list packages (\S+)$/.exec(cmd))) {
+      const present = [MIRROR_KIOSK, LAUNCHER3, ...(this.installed ? [this.app.home] : [])].map((c) => c.split('/')[0]!);
+      return ok(present.includes(m[1]!) && !this.hidden.has(m[1]!) ? `package:${m[1]}\n` : '');
+    }
+    if (cmd === `am start -a android.intent.action.MAIN -c android.intent.category.HOME ${PKG}`) {
+      if (!this.installed) return ok('Error: Activity not started, unable to resolve Intent\n');
+      this.focused = this.app.home;
+      return ok('Starting: Intent { act=android.intent.action.MAIN cat=[android.intent.category.HOME] }\n');
+    }
+    if (cmd === 'dumpsys activity activities') return ok(this.focused ? `  mFocusedActivity: ActivityRecord{1a2b3c u0 ${this.focused} t7}\n` : '');
     if ((m = /^pm install -r (-g )?(\S+)$/.exec(cmd))) {
       if (o.installFails) return ok(`\tpkg: ${m[2]}\n${o.installFails}\n`);
       this.installed = 600;
@@ -239,11 +271,9 @@ export class FakeMirror implements PanelShell {
       return ok('Success\n');
     }
     if (cmd === 'am start -a android.intent.action.MAIN -c android.intent.category.HOME') {
-      const homes = this.homes();
-      if (!this.preferred || this.preferred.from.join() !== homes.join()) { this.preferred = undefined; this.chooser = homes; this.reads = 0; }
+      this.focused = this.home();
       return ok('Starting: Intent { act=android.intent.action.MAIN cat=[android.intent.category.HOME] }\n');
     }
-    if ((m = /^am start -a android\.settings\.APPLICATION_DETAILS_SETTINGS -d package:(\S+)$/.exec(cmd))) { this.settings = m[1]; return ok(); }
     if ((m = /^cat (\S+) 2>\/dev\/null$/.exec(cmd))) {
       const f = this.files.get(m[1]!);
       return f === undefined ? { out: '', code: 1 } : ok(f);
@@ -251,13 +281,6 @@ export class FakeMirror implements PanelShell {
     if ((m = /^echo '([^']*)' > (\S+)$/.exec(cmd))) { this.files.set(m[2]!, `${m[1]}\n`); return ok(); }
     if ((m = /^rm -f (\S+)$/.exec(cmd))) { this.files.delete(m[1]!); return ok(); }
     return ok();
-  }
-
-  private maybePick() {
-    if (this.o.clearsDefaults && this.settings && this.preferred?.comp.startsWith(`${this.settings}/`)) { this.preferred = undefined; this.settings = undefined; return; }
-    if (!this.chooser || !this.o.picks || this.reads < (this.o.pickAfter ?? 1)) return;
-    const comp = this.o.picks(this.chooser);
-    if (comp) this.pick(comp);
   }
 
   /** Android 6's `dumpsys package preferred-activities`, trimmed to the shape it has around HOME. */

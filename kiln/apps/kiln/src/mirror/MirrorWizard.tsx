@@ -92,9 +92,8 @@ function realSessions(on: boolean, from: ApkFrom = 'local'): { mirror: MirrorSes
 function rail(s: MirrorState): RailStep[] {
   const names = ['Mirror', 'Connect', 'Check', s.flow === 'undo' ? 'Undo' : 'Install', 'Done'];
   const at = { off: 0, pick: 1, checks: 2, working: 3, done: 5, error: 3 }[s.screen];
-  const turn = s.screen === 'working' && s.phases.at(-1)?.step === 'home';
   return names.map((name, i): RailStep => {
-    const mark: RailMark = i < at ? 'done' : i > at ? 'todo' : s.screen === 'error' ? 'bad' : turn ? 'turn' : 'now';
+    const mark: RailMark = i < at ? 'done' : i > at ? 'todo' : s.screen === 'error' ? 'bad' : 'now';
     return { name, mark };
   });
 }
@@ -220,8 +219,9 @@ const INSTALL_ROWS: Row[] = [
   { id: 'copy', text: 'Copy the APK to the Mirror' },
   { id: 'install', text: 'Android installs it and optimises it' },
   { id: 'grant', text: 'Permissions' },
+  { id: 'portrait', text: 'Turn the screen upright' },
   { id: 'start', text: 'First start, with your Home Assistant' },
-  { id: 'home', text: 'Make it the home screen' },
+  { id: 'home', text: 'Make it the only home screen' },
 ];
 const UNDO_ROWS: Row[] = [
   { id: 'admin', text: 'Take back Glassworks\' device admin' },
@@ -234,8 +234,7 @@ function Working({ s }: { s: MirrorState }) {
   const rows = s.flow === 'undo' ? UNDO_ROWS : INSTALL_ROWS;
   const now = s.phases.at(-1);
   const at = now ? rows.findIndex((r) => r.id === rowOf(now)) : 0;
-  const pick = now?.step === 'home' ? now.pick : undefined;
-  const clear = now?.step === 'home' ? now.clear : undefined;
+  // the Mirror has no touchscreen: no step here waits on the person (Mirror run, 2026-11-19)
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">{s.flow === 'undo' ? 'Removing Glassworks.' : 'Installing Glassworks.'}</h2>
@@ -243,20 +242,7 @@ function Working({ s }: { s: MirrorState }) {
       <ol className="join">
         {rows.map((r, i) => <li key={r.id} className={i < at ? 'done' : i === at ? 'cur' : ''}>{r.text}</li>)}
       </ol>
-      {pick ? (
-        <div className="well" role="status">
-          <div className="grow">
-            <span className="turn-label"><span className="pulse" />Your turn, on the Mirror</span>
-            {clear ? <>
-              <b>Choose Clear defaults.</b>
-              <span className="small">Android keeps <code>{clear}</code> as the home screen, so Kiln opened its settings. After Clear defaults, Android shows its list of home screens: choose {pick.includes('/') ? <code>{pick.split('/')[0]}</code> : pick}, then Always.</span>
-            </> : <>
-              <b>Choose {pick.includes('/') ? <code>{pick.split('/')[0]}</code> : pick}, then Always.</b>
-              <span className="small">Android shows its list of home screens. Kiln carries on once it sees your choice.</span>
-            </>}
-          </div>
-        </div>
-      ) : <div className="bar wait"><i /></div>}
+      <div className="bar wait"><i /></div>
       <Log s={s} />
     </section>
   );
@@ -266,9 +252,12 @@ function Done({ s, session }: { s: MirrorState; session: MirrorSession }) {
   const r = s.result!;
   const home = r.flow === 'install' ? r.installed.home : r.removed.home;
   const title = r.flow === 'install' ? `Glassworks ${r.installed.app.name ?? ''} is on the Mirror.` : r.removed.removed ? 'Glassworks is off the Mirror.' : 'Glassworks wasn\'t on the Mirror.';
+  const opened = (f?: string) => (!f ? 'nothing Kiln could read' : /ResolverActivity|ChooserActivity/.test(f) ? 'its list of home apps' : f.split('/')[0]);
   const body = r.flow === 'install'
-    ? home === 'set' ? 'It is the home screen, so it opens when the Mirror starts.' : 'Kiln didn\'t see it picked as the home screen. If the Mirror shows a list of apps, choose Glassworks, then Always.'
-    : home === 'set' ? `The home screen is ${r.removed.previousHome ?? 'yours'} again.` : `If the Mirror shows a list of apps, choose ${r.removed.previousHome?.split('/')[0] ?? 'the one you had before'}, then Always. Undo again to check.`;
+    ? home === 'set' ? 'It is the only home screen, upright, so it opens when the Mirror starts.'
+      : `Android opened ${opened(r.installed.homeCheck.focused)} for the home screen${r.installed.homeCheck.left.length ? `, and ${r.installed.homeCheck.left.join(', ')} is still a home app` : ''}. Read the Mirror again, then Update: Kiln hides the other home apps again.`
+    : home === 'set' ? `The home screen is ${r.removed.previousHome?.split('/')[0] ?? 'yours'} again.`
+      : `Android opened ${opened(r.removed.focused)} for the home screen, not ${r.removed.previousHome?.split('/')[0] ?? 'the app you had before'}. Undo again: Kiln unhides it and checks once more.`;
   return (
     <section className="card" aria-labelledby="h">
       <span className="okmark" aria-hidden="true">✓</span>
@@ -355,7 +344,7 @@ export function Screens({ session, toFlash }: { session: MirrorSession; toFlash?
   const s = useSyncExternalStore(session.subscribe, session.get, session.get);
   const chip = useBrowserChip();
   useEffect(() => {
-    document.title = s.screen === 'working' && s.phases.at(-1)?.step === 'home' ? 'Your turn · lululemon Studio Mirror · Kiln' : 'lululemon Studio Mirror · Kiln';
+    document.title = 'lululemon Studio Mirror · Kiln';
   }, [s]);
   const p = { s, session };
   return (

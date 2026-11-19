@@ -1,5 +1,5 @@
 export {
-  PREVIOUS_HOME, checkMirror, installMirror, parseDfFreeMb, parsePreferredHome, preferredHome, undoMirror,
+  HIDDEN_HOMES, PREVIOUS_HOME, checkMirror, installMirror, parseDfFreeMb, parsePreferredHome, preferredHome, undoMirror,
   type AppVersion, type Check, type HomeWait, type Installed, type MirrorOptions, type MirrorPhase, type MirrorReport, type Removed,
 } from './recipe';
 export { API_KEY_HANDOVER_PROP, DEVICE_MAC_PROP, GLASS_PANES, LABELS, SETTINGS_OVERLAY, apkLibs, buildUserdata, checkMirrorApk, macFromSerial, patchSystem, setProp, wpaPsk, wpaSupplicantConf, type SystemPatch } from './image';

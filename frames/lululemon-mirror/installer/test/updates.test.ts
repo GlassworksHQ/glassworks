@@ -41,7 +41,7 @@ describe('silent updates on the Mirror, read back (#422)', () => {
   });
 
   it('the adb install reads it back: off for a first install, on when it updates the image\'s copy', async () => {
-    const first = await installMirror(new FakeMirror({ picks: (c) => c.find((x) => x === GLASSWORKS.home) }), { apk: fakeMirrorApk(), sleep: noSleep });
+    const first = await installMirror(new FakeMirror(), { apk: fakeMirrorApk(), sleep: noSleep });
     expect(first.updates).toEqual({ state: 'normal-app', privileged: false });
     const over = await installMirror(new FakeMirror({ installed: 500, privileged: true }), { apk: fakeMirrorApk(), sleep: noSleep });
     expect(over.updates).toEqual({ state: 'on', privileged: true });
