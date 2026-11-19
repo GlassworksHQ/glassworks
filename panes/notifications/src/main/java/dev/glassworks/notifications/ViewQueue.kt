@@ -46,7 +46,10 @@ class ViewQueue(ids: List<Long> = emptyList()) {
     fun next(): ViewQueue = ViewQueue(ids.drop(1))
 
     companion object {
-        /** Seconds a view with no `timeout` stays on a screen that takes no tap ([Input.NONE]): nothing else could close it. */
+        /**
+         * Seconds a view with no `timeout`, or an untagged high or critical card with none, stays on a screen that
+         * takes no tap ([Input.NONE]): nothing else could close it (NotificationCenter.noTouchTimeout).
+         */
         const val NO_TOUCH_VIEW_S = 120
     }
 }

@@ -1,5 +1,6 @@
 package dev.glassworks.setup
 
+import dev.glassworks.frame.Input
 import dev.glassworks.improv.ImprovState
 import dev.glassworks.improv.WifiProvisioner
 
@@ -59,7 +60,11 @@ object WifiStep {
         val actions: List<Action>,
     )
 
-    fun improv(f: ImprovFacts): ImprovLine {
+    /**
+     * The step's Improv line. [input]: without touch ([Input.NONE]) nobody can press Allow or Stop, so while it is
+     * authorized by itself (dev.glassworks.provisioning.ImprovSelfAuth) the line says what to do on a phone instead.
+     */
+    fun improv(f: ImprovFacts, input: Input = Input.TOUCH): ImprovLine {
         val label = "Bluetooth setup"
         if (!f.running) {
             val err = f.startError
@@ -93,15 +98,19 @@ object WifiStep {
             }
             ImprovState.AUTHORIZED -> {
                 val fail = f.failure
-                if (fail != null) ImprovLine(
+                if (input == Input.NONE) ImprovLine(
+                    if (fail != null) Phase.FAILED else Phase.AUTHORIZED, "$label · open for ${clock(f.authLeftMs)}",
+                    if (fail != null) "Couldn't connect to ${ssid ?: "the network"}" else "Send the Wi-Fi from a phone.",
+                    if (fail != null) failureText(fail) else NO_TOUCH_HOW + approval(f),
+                    if (fail != null) Tone.ROSE else Tone.AMBER, emptyList(),
+                ) else if (fail != null) ImprovLine(
                     Phase.FAILED, "$label · allowed for ${clock(f.authLeftMs)}",
                     "Couldn't connect to ${ssid ?: "the network"}",
                     failureText(fail),
                     Tone.ROSE, listOf(Action.STOP),
                 ) else ImprovLine(
                     Phase.AUTHORIZED, "$label · allowed for ${clock(f.authLeftMs)}", "Waiting for Wi-Fi details",
-                    "Enter your Wi-Fi in Home Assistant's “Improv via BLE” dialog." +
-                        if (f.needsApproval) " The panel will then ask you to approve the network in a notification." else "",
+                    "Enter your Wi-Fi in Home Assistant's “Improv via BLE” dialog." + approval(f),
                     Tone.AMBER, listOf(Action.STOP),
                 )
             }
@@ -116,6 +125,12 @@ object WifiStep {
             )
         }
     }
+
+    private fun approval(f: ImprovFacts) =
+        if (f.needsApproval) " The panel will then ask you to approve the network in a notification." else ""
+
+    /** Without touch, while it is open by itself: where to send the Wi-Fi from. */
+    private const val NO_TOUCH_HOW = "Open Home Assistant or improv-wifi.com on your phone to send the Wi-Fi."
 
     /** m:ss, rounded up (the overlay's countdown). */
     fun clock(ms: Long): String {

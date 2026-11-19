@@ -170,6 +170,78 @@ on the Mirror:
 
 If any step fails, write down what it showed. The way back is the plain Glass Panes image.
 
+## A community image's Wi-Fi (Glass Panes, 2026-11-19)
+
+The maintainer asked (2026-11-19) for Kiln to set up Glass Panes' Wi-Fi too. Glass Panes has no
+Improv, and its guide has you open Settings through scrcpy to switch Wi-Fi on and join
+(`docs/mirror-app/install-android-lululemon-studio.md` in git-nimrod/glass-panes, the steps after
+"5. Flash", read 2026-11-19).
+
+1. **Where its userdata keeps Wi-Fi** (read 2026-11-19, the published `userdata.sparse`, SHA-256
+   `74b1f57a…cf908` checked, with `@glassworks/ext4`, read-only). Its root has only `lost+found` and
+   `misc`. `/misc` is 01771 1000:9998 and holds only `adb`. There is **no `/misc/wifi`**, so the Wi-Fi
+   HAL copies the template at first start, as on Kiln's own userdata (point 5 above). Kiln writes
+   the same file in the same place: `/misc/wifi/wpa_supplicant.conf`, 0660 1000:1010,
+   `wifi_data_file`, in a `/misc/wifi` 0770 1010:1010.
+2. **The template, from its own `system.img`** (verified 2026-11-19). Kiln reads
+   `/etc/wifi/wpa_supplicant.conf` from the checked `system.img` where it lies (`sparseStore` in
+   `@glassworks/ext4`: the chunk headers once, then only the blocks ext4 asks for). It took 160 ms
+   for the 850 MB image on this Mac, and its lines are those of point 5. No bytes of it are in the repo.
+3. **The real file, through Kiln's code** (verified 2026-11-19 with a made-up network:
+   `frames/lululemon-mirror/installer/test/glass-panes-files.test.ts`, which runs only with
+   `GP_DIR` set to the downloaded files, since they can't be committed; the exact commands and what came back are under "How the Glass Panes
+   checks were run" below). `userdataWithWifi` took 5.3 s and grew the sparse file by 8 KiB.
+   `e2fsck -fn` on both, expanded: clean, 14 → 16 inodes and 37,828 → 37,830 blocks (the folder and
+   the file). The file had a 64-hex `psk=`, never the password.
+4. **Wi-Fi stays off without help.** The image's SettingsProvider has `def_wifi_on` false (point 4).
+   No *safe* userdata change can turn it on. A pre-made `settings_global.xml` (or `settings.db`) could
+   hold `wifi_on=1`, but SettingsProvider then skips building every other default
+   (`device_provisioned`, `user_setup_complete` and the rest), so it's ruled out for that reason
+   (point 1 of "What we tried"). No property seeds `wifi_on` (point 2). That leaves a `system` change
+   (an overlay, as Glassworks has) or a command after the first start. Changing Glass Panes' `system`
+   would break "as its project publishes it".
+5. **Wi-Fi on, with the image's own key.** Glass Panes publishes the private half of the one adb
+   key its images trust (`mirror-app/android/project-key/adbkey`, PKCS#8 PEM, 1,704 bytes, SHA-256
+   `89908fe2…38da2d` at commit `8ea31141`), and its guide has every user adopt it. The maintainer
+   decided on 2026-11-19 that Kiln may use it for one `svc wifi enable` after the first start. Kiln
+   fetches it through Refract (a pinned repository file), checks it, holds it in memory for that one
+   connection, and never stores it. **Untested on a Mirror**: that `svc wifi enable` from the shell
+   user switches Wi-Fi on here, and that the saved network then joins. Android 6 joined a pre-saved
+   network without `networkHistory.txt` on Glassworks' image (2026-11-16, below), which is the same
+   Android. The panel plan checks both.
+
+### How the Glass Panes checks were run (2026-11-19, on the maintainer's Mac, read-only)
+
+```sh
+mkdir -p /tmp/gp && cd /tmp/gp
+for f in system.img userdata.sparse; do
+  curl -sfL -o $f https://github.com/git-nimrod/glass-panes/releases/download/mirror-android-2/$f
+done
+shasum -a 256 system.img userdata.sparse
+# bdb6b8445296666162256affa968d590075f56a8ad2229930f8502b9703e35c1  system.img
+# 74b1f57ac20ce7c56065083a2bc3ddd283493be29d851fd04efc156ec96cf908  userdata.sparse
+
+# userdata's layout, the template, and the network saved (writes /tmp/gp/with-wifi.sparse only)
+cd <repo>/frames/lululemon-mirror/installer && GP_DIR=/tmp/gp npx vitest run test/glass-panes-files.test.ts
+#  ✓ the template comes out of system.img in place, and the network goes into userdata as one file
+#  (it asserts /misc holds adb and wifi, and the conf is 0660 1000:1010 wifi_data_file with a 64-hex
+#   psk and no password; a first run with timings showed 160 ms for the template, 5.3 s for the save)
+
+# the same, also expanding both to raw files (the test's expand(): readSparse, holes kept)
+GP_DIR=/tmp/gp GP_RAW=1 npx vitest run test/glass-panes-files.test.ts   # writes /tmp/gp/before.raw, after.raw
+# then, read-only:
+/opt/homebrew/opt/e2fsprogs/sbin/e2fsck -fn /tmp/gp/before.raw
+#  userdata: 14/341376 files (0.0% non-contiguous), 37828/1363149 blocks
+/opt/homebrew/opt/e2fsprogs/sbin/e2fsck -fn /tmp/gp/after.raw
+#  userdata: 16/341376 files (0.0% non-contiguous), 37830/1363149 blocks
+```
+
+On 2026-11-19 the expansion first ran from a scratch copy of the same `expand()`, then again through
+the committed `GP_RAW=1` path: the same two result lines both times. Both `e2fsck` runs went through
+passes 1 to 5 with nothing to fix. The first look at userdata's
+layout (`/` holds `lost+found` and `misc`; `/misc` is 01771 1000:9998 with only `adb`) came from
+`Ext4.readdir` and `stat` on the same file, which the test above now asserts.
+
 ## Open questions
 
 - ~~Whether the overlay applies to SettingsProvider, which runs in the system process.~~ Yes

@@ -1,5 +1,7 @@
 # Signed kiosk release on a version tag (docs/releasing.md):
-#   git tag v1.2.3 && git push origin v1.2.3
+#   git tag -a aqara-s1-plus-v1.2.3 -m "Glassworks 1.2.3" && git push origin aqara-s1-plus-v1.2.3
+# A beta (#605): the same tag with the line "Channel: beta" in its message (-m "Channel: beta"), published as a
+# GitHub pre-release that only panels on the Beta update channel take (tools/release/tag-channel.sh).
 # Builds :kiosk (frames/aqara-s1-plus/android) once per ABI with the release key (secrets of the `release-signing` environment),
 # names the APKs s1-kiosk-<version>.apk (armeabi-v7a, the S1's; never rename it) and
 # s1-kiosk-arm64-v8a-<version>.apk, writes a .sha256 for each and publishes all four on a GitHub
@@ -37,6 +39,7 @@ jobs:
     timeout-minutes: 45
     outputs:
       version: ${{ steps.version.outputs.version }}
+      channel: ${{ steps.channel.outputs.channel }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -48,11 +51,27 @@ jobs:
           v="${GITHUB_REF_NAME#aqara-s1-plus-}"
           v="${v#v}"
           # Same rule as frames/aqara-s1-plus/android/build.gradle.kts: MAJOR.MINOR.PATCH, minor and patch below 100.
-          # No pre-release tags: the app ignores them, so they would only confuse.
+          # No SemVer pre-release tags (v1.2.3-rc.1): they have no versionCode. A beta is a plain version (Channel: beta).
           if ! [[ "$v" =~ ^(0|[1-9][0-9]{0,3})\.(0|[1-9][0-9]?)\.(0|[1-9][0-9]?)$ ]]; then
             echo "::error::tag $GITHUB_REF_NAME is not [aqara-s1-plus-]vMAJOR.MINOR.PATCH (minor/patch < 100)"; exit 1
           fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - name: Channel from the tag's message (stable, or beta)
+        id: channel
+        run: |
+          # actions/checkout can leave a lightweight copy of an annotated tag: fetch the tag itself.
+          git fetch --no-tags --force origin "+refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
+          channel="$(tools/release/tag-channel.sh "$GITHUB_REF_NAME")"
+          echo "channel=$channel" >> "$GITHUB_OUTPUT"
+          echo "$GITHUB_REF_NAME: $channel"
+
+      - name: Higher than the S1 app's last release or beta
+        # A stable can't go out below a published beta: panels on Beta would never be offered it (#605).
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: tools/release/check-newer-than-released.sh aqara-s1-plus "$VERSION"
 
       - name: Release notes from CHANGELOG.md
         # Every release needs its section in CHANGELOG.md; checked before the slow build.
@@ -170,10 +189,16 @@ jobs:
     # and release tags can reach it, never a workflow on some other branch (docs/releasing.md).
     environment: release-signing
     timeout-minutes: 60   # two APK builds
+    # One S1 release at a time, whatever its tag (v*, aqara-s1-plus-v*, stable or beta): each checks its version again
+    # just before it publishes, so two tags pushed together can't publish out of order (#605).
+    concurrency:
+      group: release-publish-aqara-s1-plus
+      cancel-in-progress: false
     permissions:
       contents: write # create the release and upload its assets (GITHUB_TOKEN only)
     env:
       VERSION: ${{ needs.inputs.outputs.version }}
+      CHANNEL: ${{ needs.inputs.outputs.channel }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -271,13 +296,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/*.apk dist/*.apk.sha256 \
-            --verify-tag --latest --title "Glassworks for the Aqara S1 Plus $VERSION" --notes-file "$RUNNER_TEMP/notes.md"
           # --latest: apps up to 0.4.3 only read releases/latest, so an S1 release must always be the
           # one marked latest. Releases of other frames and libraries in this repo use --latest=false.
+          # A beta (#605) is a pre-release and never latest: releases/latest stays the S1 app's stable.
+          # Checked again here, under the job's lock: another S1 tag may have published since the inputs job.
+          tools/release/check-newer-than-released.sh aqara-s1-plus "$VERSION"
+          if [ "$CHANNEL" = beta ]; then flags=(--prerelease --latest=false); title="Glassworks for the Aqara S1 Plus $VERSION beta"
+          else flags=(--latest); title="Glassworks for the Aqara S1 Plus $VERSION"; fi
+          gh release create "$GITHUB_REF_NAME" dist/*.apk dist/*.apk.sha256 \
+            --verify-tag "${flags[@]}" --title "$title" --notes-file "$RUNNER_TEMP/notes.md"
 
       - name: Rebuild the web installer
-        # The installer (https://s1.edm.sh, Vercel) picks the latest release at build time.
+        # The installer (https://s1.edm.sh, Vercel) picks the latest release at build time. It skips pre-releases, so
+        # a beta changes nothing there; promoting it runs installer-deploy.yml (docs/releasing.md "Betas").
+        if: env.CHANNEL != 'beta'
         env:
           VERCEL_DEPLOY_HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
         run: |

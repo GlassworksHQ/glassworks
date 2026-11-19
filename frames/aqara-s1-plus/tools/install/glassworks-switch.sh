@@ -15,9 +15,17 @@
 #                  installer keeps it in memory and sends it to the new app over Improv.
 #   backup         copy the app's data (credential- and device-encrypted storage, without lib, cache,
 #                  code_cache) to a root-only directory. Run with the app stopped.
-#   restore        put that copy into the app installed now, owned by its uid, labels restored.
+#   restore [handover]
+#                  put that copy into the app installed now, owned by its uid, labels restored. With
+#                  `handover`, also the marker files/secrets-handover (empty, owned by the app): the installer
+#                  will hand the app's sign-in and API key back over adb, so until then (or 15 min) the app
+#                  keeps what its old Keystore key sealed locked instead of dropping it (#584, #608).
 #   discard        delete the copy.
 #   has-backup     exit 0 if a copy is there.
+#   guard          drop incoming TCP to 6053, the app's ESPHome API, over IPv4 and IPv6, until `unguard`. While the
+#                  switch runs, Android starts each freshly installed build as HOME at once, with empty data, and it
+#                  serves an API with no key that anyone could provision (#626). Not saved: a reboot clears it.
+#   unguard        remove that rule (every copy of it), and check it is gone.
 PKG=sh.edm.s1kiosk
 CE=${S1_CE:-/data/data/$PKG}
 DE=${S1_DE:-/data/user_de/0/$PKG}
@@ -25,6 +33,10 @@ WORK=${S1_WORK:-/data/s1kiosk/switch}
 STORES=${S1_WIFI_STORES:-/data/misc/wifi/WifiConfigStore.xml /data/misc_ce/0/wifi/WifiConfigStore.xml}
 
 fail() { echo "glassworks-switch: $*" >&2; exit 1; }
+
+API_RULE="INPUT -p tcp --dport 6053 -j DROP"
+# A line in logcat, so a panel run can see when the API port was closed and opened again.
+mark() { log -t glassworks-switch "$*" 2>/dev/null || true; }
 
 # Prints kiosk-saved networks from WifiConfigStore.xml (Android 10 writes one element per line).
 #   mode=list: "<n> <kind> <ssid>";  mode=psk: the PreSharedKey of network <want>.
@@ -101,9 +113,43 @@ case "${1:-}" in
     uid=$(uid_of) || exit 1
     copy_in "$WORK/ce" "$CE" "$uid"
     copy_in "$WORK/de" "$DE" "$uid"
+    case "${2:-}" in
+      '') ;;
+      handover)
+        # Never through a link: the copied data is the old app's, and it could have left files/ or the marker as a
+        # symbolic link to a system file, which root would then truncate and chown (CWE-61, #608 review).
+        m="$CE/files/secrets-handover"
+        [ ! -L "$CE/files" ] || fail "$CE/files is a symbolic link: no hand-over marked"
+        mkdir -p "$CE/files" && [ -d "$CE/files" ] && [ ! -L "$CE/files" ] && chown "$uid:$uid" "$CE/files" ||
+          fail "could not make $CE/files"
+        rm -f "$m" # a link is removed, not followed
+        [ ! -e "$m" ] && [ ! -L "$m" ] || fail "could not clear $m"
+        : > "$m" && [ -f "$m" ] && [ ! -L "$m" ] && chown "$uid:$uid" "$m" || fail "could not mark the hand-over"
+        restorecon "$m" 2>/dev/null || true
+        ;;
+      *) fail "usage: restore [handover]" ;;
+    esac
     echo "restored for uid $uid"
     ;;
   discard) rm -rf "$WORK" ;;
   has-backup) [ -f "$WORK/complete" ] ;;
-  *) fail "usage: $0 wifi-list | wifi-psk <n> | backup | restore | discard | has-backup" ;;
+  guard)
+    # -w: wait for the xtables lock, which netd holds now and then
+    # shellcheck disable=SC2086
+    for t in iptables ip6tables; do
+      $t -w -C $API_RULE 2>/dev/null || $t -w -I $API_RULE || { sh "$0" unguard >/dev/null 2>&1; fail "could not block port 6053 with $t"; }
+    done
+    mark "API port 6053 blocked for the switch"
+    echo "API port 6053 blocked"
+    ;;
+  unguard)
+    # shellcheck disable=SC2086
+    for t in iptables ip6tables; do
+      while $t -w -D $API_RULE 2>/dev/null; do :; done
+      ! $t -w -C $API_RULE 2>/dev/null || fail "could not remove the block on port 6053 ($t)"
+    done
+    mark "API port 6053 open again"
+    echo "API port 6053 open"
+    ;;
+  *) fail "usage: $0 wifi-list | wifi-psk <n> | backup | restore [handover] | discard | has-backup | guard | unguard" ;;
 esac

@@ -9,6 +9,15 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 ## [Unreleased]
 
 ### Added
+- **Kiln sets up Glass Panes' Wi-Fi.** When you install Glass Panes on the lululemon Mirror from Kiln (still test
+  only), you can give a Wi-Fi network. Kiln saves it in Glass Panes before it writes anything, then after the first
+  start switches Wi-Fi on, so the Mirror joins by itself and you don't open its Settings through scrcpy. Kiln keeps
+  only the network's key, never the password.
+- **Kiln can put Glass Panes back on the lululemon Mirror.** The Mirror's page in Kiln (still test only) now asks
+  what goes on the Mirror: Glassworks, first and picked, or a community image such as Glass Panes, shown under
+  *Show community images*. Kiln downloads every file itself and checks it before anything is written, with the
+  same checks and warning as Glassworks. If a download fails, Kiln says it's its own bug and offers *Try again*
+  and *Report this*: you never download a file by hand. Each Done screen has the way back to the other image.
 - **Set up every panel from one Manage page.** *All panels*, in the Manage page's menu, signs in to
   Home Assistant and lists the house's panels with their area and version. A panel that's down shows as
   down. *Manage* opens another panel's page, already signed in, and *Copy settings* makes one panel like
@@ -213,6 +222,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   is frozen and gets no security fixes, so it loads only your Home Assistant, and remote debugging is off.
   Remote debugging now stays off there for real: the adb extra that turns it on is ignored, and so is the
   setting if it was already on. Other devices don't show the chip.
+- **Pick an update channel: Stable or Beta.** The device page in the panel's settings and on the Manage page has an
+  *Update channel* row. Stable, the default, gets releases as before. Beta also gets betas, new versions before
+  they're stable, which may have bugs; Home Assistant's update card says when the update it offers is a beta. Going
+  back to Stable never installs an older version: the panel waits for a stable release newer than the one it runs.
 
 ### Changed
 - **A room's "lights off" no longer turns the panel's screen off.** The screen is still a light with the same
@@ -455,6 +468,8 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   it straight away. The *Thread join* sensor says how it went. Pasting the dataset still works.
 
 ### Fixed
+- **Kiln no longer waits for ever on a download that stopped.** If one of the installer's files stops arriving
+  for 30 seconds, Kiln stops with an error and *Try again*, instead of a progress bar that never moves.
 - **With Screen mode set to always, walking up no longer turns on a screen you turned off.** If you turn the screen
   off from Home Assistant, it stays off when someone comes close, whether the panel senses them with its own sensor
   or with the camera pane. *Presence* in Home Assistant still turns on. In the presence mode, walking up still wakes
@@ -465,11 +480,16 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   new build fails and the old build comes back, the installer says so if the app's data didn't come back
   with it, and keeps the copy on the panel instead of deleting it. It no longer says Glassworks saved the
   panel's Wi-Fi when it can't tell who did. This is in Kiln and in the command line installer.
-- **A switch says you sign in again, even with root.** Switching a development build to a release on a panel
-  where adb has root keeps the app's settings, but not its Home Assistant sign-in or encryption key: Android
-  deletes the old app's Keystore keys when it removes it, and those secrets are sealed with them. The
-  installer used to say the sign-in was kept. Now its plan and its Done line say to sign in again, and that
-  Home Assistant may ask to confirm the panel's encryption key. This is in Kiln and in the command line installer.
+- **Switching a development build to a release keeps you signed in to Home Assistant.** On a panel where adb has
+  root, the switch keeps the app's settings, and now its Home Assistant sign-in and encryption key too: the
+  installer reads them from the running app before it removes it, and gives them to the new one. The panel goes
+  straight back to its dashboard, and Home Assistant reconnects without asking to confirm the key. Before, the
+  sign-in and key were lost, because Android deletes the old app's Keystore keys, which seal them; the installer
+  even said the sign-in was kept. The camera's stream password and the Music Assistant pairing are still not
+  carried, and the installer says so. A switch from a build without this change still loses the sign-in (and,
+  before the Mirror key hand-over, the key), and the plan and the Done line say to sign in again. This is in Kiln
+  and in the command line installer, and needs this app version on the panel before the switch. A build older than
+  the panel's is now refused with a clear message instead of a plain install failure.
 - **A Mirror reflash keeps its Home Assistant device.** Kiln and the headless flash give the Mirror an id from its
   serial number and keep it in the image, so a later reflash comes back as the same device with the same entity
   ids. The first flash with this still shows up as a new device once. On other Android devices, an app reinstall
@@ -478,7 +498,15 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 - **A Mirror reflash with the headless flash needs no click in Home Assistant.** The flash reads the key Home
   Assistant set on the Mirror before it wipes it, and gives it back to the app on the first boot, so Home
   Assistant reconnects by itself instead of asking to re-authenticate. The Mirror needs an app with this change
-  before the flash. Kiln's page can't carry the key yet: after a reflash with Kiln, Home Assistant still asks once.
+  before the flash.
+- **A Mirror reflash with Kiln needs no click in Home Assistant either.** On a Mirror that already runs Glassworks,
+  Kiln has a step before fastboot: switch the Mirror on, click Connect, and Kiln reads the key Home Assistant set,
+  restarts the Mirror into fastboot itself, and gives the key back at the first start. No buttons to hold. The key
+  stays in the browser tab, never saved or shown, so keep the tab open until Done. Done says whether Home Assistant
+  kept the same device. Only the browser that last installed Glassworks on the Mirror gets in: from another one, the
+  reflash still works and Home Assistant asks once, and Kiln says what to click. The Mirror needs an app from this
+  release or later before the flash. This keeps the device from the second flash that gives the Mirror its id from its
+  serial: the first one still shows up as a new device once, as above. Not yet run on a real Mirror.
 - **Assist's reply stays on a narrow screen.** On the Mirror, which stands portrait, the reply ran off
   both edges of the screen on one line. It now wraps inside the screen and gets smaller for a long
   reply, with room for up to five lines before it is cut short. The S1 and landscape tablets look as before.
@@ -563,11 +591,6 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   The screen now stays on until setup is done and the dashboard has loaded, at its usual brightness.
   After that the idle timeout works as before. Panels with a presence sensor, such as the S1, are
   unchanged.
-- **Other apps can no longer change the panel's settings.** Until now any app on the panel could open
-  S1 Kiosk in a way that changed its settings, such as the dashboard's address, the API key or remote
-  debugging.
-  Now only adb (Kiln, the command line), the boot image's root side and the panel itself can. The
-  launcher icon still opens the app, and the panel still starts it as its home screen.
 - **Kiln's device cards stay still with reduced motion.** With "reduce motion" on in the operating
   system, a card no longer jumps up when you point at it or tab to it.
 - **The Overview's pane list reads cleanly.** On the Manage page, each status chip has its gap
@@ -580,11 +603,6 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   Home Assistant never added, it says so once, with where to add it (Settings → Devices & services),
   instead of "Unknown" on each row. When Home Assistant was added but isn't connected now, it says so
   and dims the last known states. On the panel and the Manage page.
-- **Each panel has its own name in Home Assistant, so a second one can be added.** Every panel used
-  to call itself `s1-panel`, and adding a second device made Home Assistant offer to replace the
-  first. Now the S1 announces itself as "Aqara S1 Plus", with a node name such as
-  `aqara-s1-plus-a1b2c3` that ends in part of its MAC. A panel you already added stays in place with
-  all its entity ids. Home Assistant shows "Aqara S1 Plus" after the update, unless you renamed it.
 - **The Manage page shows the right uptime, Wi-Fi and version.** "Up" next to the app's version is
   now how long the app has run, not the device. Wi-Fi reads "Connected" while it is, also on newer
   Android that hides the network's name from the app; Home Assistant's Wi-Fi signal and link speed
@@ -603,10 +621,6 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   the app at once, could bring the pane back on: the setting was saved after the app had gone.
   Zoom, secure hosts and remote debugging, which restart the app, could lose their change the same
   way. They are now saved before the app restarts.
-- **One stuck connection no longer freezes the panel's entities in Home Assistant.** If a client
-  stopped reading (a Home Assistant that hangs, or a connection that is half gone), states, action
-  replies and keepalive pings for every other client waited behind it, for minutes, until the panel
-  gave up on the stuck one. Now only that client waits, until the panel drops it.
 - **Keeping the radio Off in Kiln finishes the panel's radio step.** A fresh panel installed with
   Kiln no longer asks *Radio* again on its own screen when you left the radio Off. Choosing the mode
   the radio already runs doesn't restart it. Needs the S1 Kiosk release with this fix.
@@ -640,14 +654,6 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   system brightness after a restart until the light sensor reported a change, while Home Assistant
   already showed your saved brightness. In a dark, still room that could last a long time. The app
   now applies your saved brightness as soon as it starts.
-- **Wi-Fi reconnects while the screen is off.** If Wi-Fi dropped at night (a router restart, an
-  outage), the panel stayed offline until someone woke the screen, because its Wi-Fi chip can't scan
-  on its own with the screen off. The app now asks for a scan 10 s after Wi-Fi drops, then after
-  40 s, 60 s and every 120 s, while Wi-Fi is not connected and the screen is off. It needs the app's
-  location permission, which the installer grants, and location turned on. The app's always-on
-  service now also runs as a location service, because Android 10 only lets an app use location
-  with the screen off that way. The app reads no location. On the reference panel, Wi-Fi was back
-  about 20 s after it was turned off and on, with the screen still asleep.
 - **Android 14 and newer: the app no longer crashes on a fresh install.** Before the microphone
   permission was granted, the app's always-on service stopped at once and Android showed "S1 Kiosk
   keeps stopping". The service now starts without the microphone, and takes it as soon as you allow
@@ -661,11 +667,6 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   the rest and report success, leaving our splash on the panel. Now the web installer and
   `fel-install.sh --undo` both refuse it before writing anything, and the
   [install guide](frames/aqara-s1-plus/docs/install.md#undo) says how to put back boot and vbmeta by hand.
-- **Sign-in: someone on your network who reads the sign-in code can no longer use it.** Both sign-ins (the
-  dashboard QR code and the administrator sign-in for the Thread join) now use PKCE, so Home Assistant
-  only hands out the panel's token to the panel itself. Needs Home Assistant 2026.10 or later to take
-  effect; older versions sign in as before. A sign-in that was halfway through when the update
-  arrived needs a new scan.
 - **Sendspin: Music Assistant pairing was still offered after you switched Sendspin off.** Once the
   player had started, turning it off in Home Assistant still let the pairing request through. It now
   says Sendspin is disabled until you turn it back on.
@@ -684,11 +685,50 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   notification pictures and the Thread and blueprint calls.
 
 ### Changed
-- **Updates are found among the repo's other releases.** The panel now picks its own newest release
-  (tag `v1.2.3` or `aqara-s1-plus-v1.2.3`) instead of whatever release is newest, so releases of
-  other devices and libraries in the same repo can't hide an update.
 - **Thread border router docs:** the panel has to be on Home Assistant's network to be its border
   router, and has now been tested as a second border router next to an existing one.
+
+### Security
+- **Sign-in for the Thread join: someone on your network who reads its code can no longer use it.** The
+  administrator sign-in for the Thread join now uses PKCE too, like the dashboard's QR-code sign-in since
+  0.4.4. Needs Home Assistant 2026.10 or later to take effect. It doesn't cover the panel's own requests to a
+  Home Assistant on plain `http://`, which anyone on that network can read. A sign-in that was halfway through
+  when the update arrived needs a new scan.
+
+## [0.4.4] - 2026-11-19
+
+**Each panel now has its own name in Home Assistant, so you can add a second panel without a name conflict.**
+
+### Fixed
+- **Each panel has its own name in Home Assistant, so a second one can be added.** Every panel used
+  to call itself `s1-panel`, and adding a second one made Home Assistant offer to replace the first.
+  Now the panel announces itself as "Aqara S1 Plus", with a node name such as `aqara-s1-plus-a1b2c3`
+  that ends in part of its MAC. A panel you already added stays in place with its device and all its
+  entity ids. Home Assistant shows "Aqara S1 Plus" after the update, unless you renamed it.
+- **Updates are found among the repo's other releases.** The panel now picks its own newest release
+  (tag `v1.2.3` or `aqara-s1-plus-v1.2.3`) instead of whatever release is newest in the repo, so
+  releases of other devices and libraries can't hide an update.
+- **Updates come from the project's new address.** The panel checks GlassworksHQ/glassworks
+  directly instead of going through GitHub's redirect from the old name.
+- **One stuck connection no longer freezes the panel's entities in Home Assistant.** If a client
+  stopped reading (a Home Assistant that hangs, or a connection that is half gone), states, replies
+  and keepalive pings for every other client waited behind it. Now only that client waits, until the
+  panel drops it.
+- **Wi-Fi reconnects while the screen is off.** If Wi-Fi dropped at night (a router restart, an
+  outage), the panel stayed offline until someone woke the screen. The app now asks for a scan 10 s
+  after Wi-Fi drops, then after 40 s, 60 s and every 120 s, while Wi-Fi is not connected and the
+  screen is off. It needs the location permission, which the installers grant, and location turned
+  on. The app's always-on service now also runs as a location service, because Android 10 only lets
+  an app use location with the screen off that way. The app reads no location.
+
+### Security
+- **Other apps can no longer change the panel's settings.** Until now any app on the panel could
+  open S1 Kiosk in a way that changed its settings, such as the dashboard's address, the API key or
+  remote debugging. Now only adb (Kiln, the command line), the boot image's root side and the panel
+  itself can. The launcher icon still opens the app, and the panel still starts it as its home screen.
+- **Sign-in: someone on your network who reads the sign-in code can no longer use it.** The
+  dashboard's QR-code sign-in now uses PKCE, so Home Assistant only hands out the panel's token to the
+  panel itself. Needs Home Assistant 2026.10 or later to take effect; older versions sign in as before.
 
 ## [0.4.3] - 2026-11-11
 

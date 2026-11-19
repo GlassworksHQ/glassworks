@@ -188,6 +188,16 @@ object HaAuth {
     }
 
     /**
+     * An installer carried the sign-in over a reinstall into the stored settings (SecretHandover, #584): forget any
+     * cached token and tell the screens, which showed the sign-in QR code until now.
+     */
+    fun signInCarriedOver() {
+        cache.clear()
+        AuthLog.i("Sign-in carried over by the installer${signedInBase?.let { " for $it" } ?: ""}")
+        notifyChanged()
+    }
+
+    /**
      * Gets an access token (cached until 60 s before `expires_in`, or refreshed with
      * `grant_type=refresh_token`); [force] skips the cache. [done] runs on the auth thread.
      * An `invalid_grant` / `access_denied` reply (token revoked in HA) deletes the refresh token.
