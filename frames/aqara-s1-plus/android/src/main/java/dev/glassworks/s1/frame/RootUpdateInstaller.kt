@@ -10,15 +10,13 @@ import dev.glassworks.update.UpdateManager
 
 /**
  * Installs app updates through the root service in the S1's patched boot image ([UpdateHelper]),
- * silently. Boot images from before it have none ([present] is false), and the app falls back to
+ * silently. Boot images from before it have none ([S1Agent] doesn't offer `app-updates`), and the app falls back to
  * Android's PackageInstaller.
  */
 class RootUpdateInstaller(
     private val props: SysProps = ShellProps,
     private val now: () -> Long = SystemClock::elapsedRealtime,
 ) : RootUpdates {
-    override fun present(): Boolean = props.get(UpdateHelper.PROP_VERSION).trim().toIntOrNull()?.let { it >= 1 } == true
-
     /**
      * At start: why the install the service did while this process was replaced failed, or null.
      * Success shows as the new installed version, so it is only logged.
