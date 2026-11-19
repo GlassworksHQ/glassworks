@@ -124,6 +124,35 @@ To clear a bad entry by hand, delete that job's `gradle-home-v2|Linux-X64|<job>[
 (`gh cache list --ref refs/heads/main`, then `gh cache delete <id>`). The next run starts from another
 job's entry and saves a clean one.
 
+Two more caches follow the same rule: runs that aren't for a pull request (each push to `main`, the nightly
+run, a manual run) save them, and a PR only reads them.
+
+| Cache | What | Named by | Why |
+|---|---|---|---|
+| `apt-<image>-<version>-<arch>-<packages>` | The `.deb` files of Ubuntu packages a job installs (`ffmpeg` in `scripts` and `perf-webrtc`), through `.github/actions/apt-install` | The runner image (`ImageOS`, `ImageVersion`) and the packages | On 2026-11-18 and 19 `apt-get update && apt-get install ffmpeg` took 0.3 to 26 minutes (median 10 in `perf-webrtc`, which then hit its 30-minute limit) and failed twice on a mirror's 503. From the cache there's no `apt-get update` and no download: the image's own package lists name the files it holds. When they don't match (a new package, a newer image), it updates the lists and tries again. It also skips man-db's index rebuild |
+| `robolectric-<version>-<jars>` | Robolectric's Android jars (`~/.m2/repository/org/robolectric`), in `app` | Robolectric's version, then the jars it holds; a run restores the newest for its version | Robolectric fetches them from Maven Central while the tests run, outside Gradle's caches, and a failed fetch fails the whole test class: 6 of the 13 red `app` runs on 2026-11-18 and 19 |
+
+Clarity's own cache (`~/.cache/glassworks-perf`) isn't kept between runs: its tests make the camera streams
+there, and a restored copy would change what they check.
+
+## Faster jobs
+
+What else cut a job's time (#536, measured on the runs of 2026-11-18 and 19):
+
+| Job | Before | Now |
+|---|---|---|
+| `root` | The 32-bit ARM containers under QEMU on x86: about 20 minutes, the longest job | On an Arm runner (`ubuntu-24.04-arm`). Its first step runs the image's `uname -m`: `armv8l` means the CPU runs 32-bit ARM itself, and QEMU is set up only when it can't |
+| `perf-webrtc` | Four end-to-end files one after the other, about 10 minutes | Two halves on two runners, `perf-webrtc (relay)` (the peer, the relay, Chrome and Firefox) and `perf-webrtc (dialogs)` (HA's more-info dialogs). `tools/ci/test/test_changes.py` fails when a WebRTC or dialog test file is in neither |
+| `branding` | The S1's frames, then the Mirror's: 2.5 and 5.5 minutes | Side by side in the same container, after the pinned font is fetched once |
+
+Two flakes get a fix where they start:
+
+- **The plugin portal.** `build-logic` took `kotlin-dsl`'s own dependencies (kotlin-stdlib, the Kotlin Gradle
+  plugin) from the plugin portal alone, and it sometimes answered "not found" (5 of those 13 red `app` runs).
+  `build-logic/settings.gradle.kts` now asks Maven Central first.
+- **The site's prerender.** `/blueprints` reads GitHub's API while the site builds, and a dropped connection
+  (`fetch failed`) failed about one `site` run in seven. The build runs once more after that error only.
+
 ## Adding a job or a path
 
 1. Add the job to `pr.yml` with `needs: changes` and
