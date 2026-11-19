@@ -103,6 +103,15 @@ describe('install', () => {
     expect(p.files.get(HIDDEN_HOMES)).toBe('com.android.launcher3\n');
   });
 
+  it('with no home app Android kept as preferred, still hides the kiosk: any home app left visible is a chooser', async () => {
+    const p = new FakeMirror({ kiosk: 'app' });
+    p.preferred = undefined; // nothing picked "Always": no PREVIOUS_HOME to name the kiosk
+    const res = await installMirror(p, { apk, sleep: noSleep });
+    expect(res).toMatchObject({ home: 'set', hidden: ['com.android.launcher3', 'com.nimrod.mirrorkiosk'] });
+    expect(res.previousHome).toBeUndefined();
+    expect(p.files.get(HIDDEN_HOMES)).toBe('com.android.launcher3 com.nimrod.mirrorkiosk\n');
+  });
+
   it('records each home app before hiding it, so undo can unhide what an interrupted install hid', async () => {
     const p = new FakeMirror({ kiosk: 'app' });
     const run = p.run.bind(p);
@@ -218,5 +227,29 @@ describe('undo', () => {
     };
     expect(await undoMirror(p, { sleep: noSleep })).toMatchObject({ home: 'unconfirmed', focused: 'com.android.settings/.Settings' });
     expect(p.files.get(HIDDEN_HOMES)).toBe('com.nimrod.mirrorkiosk\n');
+  });
+
+  it('keeps a package whose unhide didn\'t take in the record, while the one that came back clears', async () => {
+    const p = new FakeMirror({ installed: 600, kiosk: 'app' });
+    for (const pkg of ['com.nimrod.mirrorkiosk', 'com.android.launcher3']) p.hidden.add(pkg);
+    p.files.set(HIDDEN_HOMES, 'com.nimrod.mirrorkiosk com.android.launcher3\n');
+    const run = p.run.bind(p);
+    p.run = async (cmd: string) => (cmd === 'pm unhide com.android.launcher3' ? { out: 'Package com.android.launcher3 new hidden state: true\n', code: 0 } : run(cmd));
+    expect(await undoMirror(p, { sleep: noSleep })).toMatchObject({ home: 'set', focused: MIRROR_KIOSK });
+    expect(p.files.get(HIDDEN_HOMES)).toBe('com.android.launcher3\n');
+  });
+
+  it('a HOME start that exits with an error isn\'t a home given back, whatever it prints', async () => {
+    const p = new FakeMirror({ installed: 600, kiosk: 'app' });
+    p.files.set(PREVIOUS_HOME, `${MIRROR_KIOSK}\n`);
+    p.hidden.add('com.nimrod.mirrorkiosk');
+    p.hidden.add('com.android.launcher3');
+    const run = p.run.bind(p);
+    p.run = async (cmd: string) => {
+      const r = await run(cmd);
+      return cmd === 'am start -a android.intent.action.MAIN -c android.intent.category.HOME' ? { ...r, code: 1 } : r;
+    };
+    expect(await undoMirror(p, { sleep: noSleep })).toMatchObject({ home: 'unconfirmed' });
+    expect(p.files.has(PREVIOUS_HOME)).toBe(true);
   });
 });

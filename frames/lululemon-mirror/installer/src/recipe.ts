@@ -21,6 +21,8 @@ const HOME_INTENT = 'am start -a android.intent.action.MAIN -c android.intent.ca
 export const PREVIOUS_HOME = '/data/local/tmp/glassworks-previous-home';
 /** The home apps Kiln hid so ours is the only one, space-separated, for undo. */
 export const HIDDEN_HOMES = '/data/local/tmp/glassworks-hidden-homes';
+/** Home apps a Mirror may have besides the image's launchers: the community kiosk, in userdata (image-patch.md). */
+const COMMUNITY_HOMES = ['com.nimrod.mirrorkiosk'];
 /** The app's legacy APK, the space it needs to install and be optimised, and room to spare. */
 const MIN_FREE_MB = 500;
 const COMPONENT = /^[A-Za-z0-9_.]+\/[A-Za-z0-9_.$]+$/;
@@ -237,8 +239,9 @@ export async function installMirror(p: PanelShell, o: MirrorOptions): Promise<In
   // the home app it replaces is hidden too: a second home app would leave Android's chooser on a glass nobody can tap
   phase({ step: 'home' });
   r.step(`Make ${ours.name} the only home screen`);
+  // the one it replaces, and the kiosk too when Android had no preferred home to say so: any home app left visible is a chooser
   const replaced = previousHome?.split('/')[0];
-  const candidates = [...OTHER_HOMES, ...(replaced && replaced !== ours.package && !OTHER_HOMES.includes(replaced) ? [replaced] : [])];
+  const candidates = [...new Set([...OTHER_HOMES, ...COMMUNITY_HOMES, ...(replaced ? [replaced] : [])])].filter((x) => x !== ours.package);
   const admins = await adminPackages(r);
   const adminHomes = candidates.filter((x) => admins.includes(x));
   for (const x of adminHomes) r.detail(`${x}: a device administrator, so Android won't hide it`);
@@ -281,9 +284,14 @@ export async function undoMirror(p: PanelShell, o: HomeWait = {}): Promise<Remov
   const before = previousHome?.split('/')[0];
   const back = before ? [before] : hidden;
   for (const pkg of back) r.detail(`${pkg}: ${(await r.try(`pm unhide ${pkg}`)).trim() || 'no answer'}`);
-  const launched = !/error/i.test(await r.try(HOME_INTENT));
+  // visible again, as pm lists it: a package whose unhide didn't take stays in the record for the next undo
+  const visible: string[] = [];
+  for (const pkg of back) if ((await r.try(`pm list packages ${pkg}`)).split(/\r?\n/).some((l) => l.trim() === `package:${pkg}`)) visible.push(pkg);
+  const start = await p.run(HOME_INTENT);
+  r.detail(start.out.trim());
+  const launched = start.code === 0 && !/error/i.test(start.out);
   // confirmed only by a home app undo gave back (or, with no record at all, one of the image's launchers): never Settings
-  const homesBack = before ? [before] : back.length ? back : OTHER_HOMES;
+  const homesBack = before ? [before] : back.length ? visible : OTHER_HOMES;
   const want = (f?: string) => launched && !!f && homesBack.some((pkg) => f.startsWith(`${pkg}/`));
   let focused: string | undefined;
   for (let i = 0; i < 10; i++) {
@@ -295,7 +303,7 @@ export async function undoMirror(p: PanelShell, o: HomeWait = {}): Promise<Remov
   r.detail(`home: ${focused ?? 'unknown'}`);
   if (home === 'set') {
     await r.try(`rm -f ${PREVIOUS_HOME}`);
-    await keepHidden(r, hidden.filter((x) => !back.includes(x)));
+    await keepHidden(r, hidden.filter((x) => !visible.includes(x)));
   }
   return { removed: !!installed, home, ...(previousHome ? { previousHome } : {}), ...(focused ? { focused } : {}) };
 }
