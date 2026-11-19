@@ -24,7 +24,12 @@ import perflib as P  # noqa: E402
 
 
 def sh(cmd):
-    return subprocess.run([os.environ.get("ADB", "adb"), "shell", cmd], capture_output=True, text=True, timeout=60).stdout
+    """The command's output on the device. A failed adb call (no device, a dropped link) stops here, so it can't
+    read as "no layer" or "no new frames"."""
+    r = subprocess.run([os.environ.get("ADB", "adb"), "shell", cmd], capture_output=True, text=True, timeout=60)
+    if r.returncode != 0:
+        sys.exit(f"adb shell {cmd.split(' --')[0]!r} failed (exit {r.returncode}): {r.stderr.strip()[-300:]}")
+    return r.stdout
 
 
 def main():
