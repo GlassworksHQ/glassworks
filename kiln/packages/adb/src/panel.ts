@@ -66,6 +66,7 @@ export class Panel implements PanelShell {
     // again, claiming it, the key), so a stalled USB call can't hold a caller that asks again
     const picked = device ? undefined : await manager.requestDevice();
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = o.authMs === undefined ? undefined : Date.now() + o.authMs;
     const late = o.authMs === undefined ? undefined
       : new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new AdbAuthTimeout()), o.authMs); });
     late?.catch(() => {});
@@ -95,10 +96,12 @@ export class Panel implements PanelShell {
       } catch (e) {
         // refused (adbd up before it reads its keys, or not this browser's key) or too late: let go, so a later try can claim it
         if (e instanceof AdbAuthTimeout) auth.then((t) => t.close(), () => {}); // a key allowed after all: let go of it
-        // let go before throwing, so a later try can claim it, but give the release at most RELEASE_MS (WebUSB's close
-        // has no deadline): connect rejects within authMs plus RELEASE_MS at the latest
+        // let go before throwing, so a later try can claim it. WebUSB's close has no deadline: with authMs the release gets
+        // only what is left of it (nothing after a timeout: it goes on in the background), so connect rejects within
+        // authMs; without, at most RELEASE_MS
         const release = d.raw.close().catch(() => {});
-        await Promise.race([release, new Promise((r) => setTimeout(r, RELEASE_MS))]);
+        const wait = deadline === undefined ? RELEASE_MS : Math.max(0, deadline - Date.now());
+        await Promise.race([release, new Promise((r) => setTimeout(r, wait))]);
         throw e;
       }
     } finally {

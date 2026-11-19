@@ -33,12 +33,23 @@ describe('Panel.connect with authMs', () => {
     await expect(Panel.connect(key, {} as USBDevice, { authMs: 1000 })).rejects.toThrow(/isn't on USB right now/);
   });
 
-  it('a release that stalls after a failed connect gives up after a second, and still rejects', async () => {
+  it('a release that stalls after a failed connect is cut at the deadline, and still rejects', async () => {
     const raw = { close: vi.fn(() => never<void>()) };
     devices.getDevices = async () => [{ raw, serial: 'x', connect: async () => ({}) }]; // a connection adb can't use
     const started = Date.now();
-    await expect(Panel.connect(key, raw as unknown as USBDevice, { authMs: 5000 })).rejects.toBeTruthy();
+    await expect(Panel.connect(key, raw as unknown as USBDevice, { authMs: 300 })).rejects.toBeTruthy();
     expect(raw.close).toHaveBeenCalled();
-    expect(Date.now() - started).toBeLessThan(2500);
+    expect(Date.now() - started).toBeLessThan(550);
+  });
+
+  it('on a key that never comes, rejects with AdbAuthTimeout within authMs even when the release stalls', async () => {
+    const raw = { close: vi.fn(() => never<void>()) };
+    // a connection that takes adb's first packet and never answers: the key never comes
+    const connection = { readable: new ReadableStream({}), writable: new WritableStream({}) };
+    devices.getDevices = async () => [{ raw, serial: 'x', connect: async () => connection }];
+    const started = Date.now();
+    await expect(Panel.connect(key, raw as unknown as USBDevice, { authMs: 200 })).rejects.toBeInstanceOf(AdbAuthTimeout);
+    expect(raw.close).toHaveBeenCalled();
+    expect(Date.now() - started).toBeLessThan(450);
   });
 });
