@@ -451,11 +451,22 @@ export async function switchSigningKey(p: PanelShell, apk: Uint8Array, plan: Swi
       out.notes.push(`could not restore the app's data (${lastLine(r.out)}); it starts fresh. The copy stays on the panel in ${SWITCH_DATA} (root only).`);
     }
   }
-  if (owner) {
-    const d = await p.run(`dpm set-device-owner ${ADMIN}`);
-    if (d.code !== 0) out.notes.push('Glassworks was device owner and could not be made device owner again; it works without (see ImprovActivity).');
+  try {
+    if (owner) {
+      const d = await p.run(`dpm set-device-owner ${ADMIN}`);
+      if (d.code !== 0) out.notes.push('Glassworks was device owner and could not be made device owner again; it works without (see ImprovActivity).');
+    }
+    await cleanup();
+  } catch (e) {
+    // The old app is gone and its copy discarded: the sign-in and key live only in `out` now, and provision never
+    // sees it when this throws. Give them to the new app before the error goes up (#608 review).
+    if (out.signIn === 'carry' || out.apiKey === 'carry') {
+      await p.run(`am start -n ${ACT}`).catch(() => {});
+      await handBackSecrets(p, out, log, sleep).catch(() => {});
+    }
+    dropSecrets();
+    throw e;
   }
-  await cleanup();
   return out;
 }
 

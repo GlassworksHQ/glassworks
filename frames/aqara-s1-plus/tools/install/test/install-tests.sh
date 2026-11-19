@@ -86,7 +86,7 @@ case "$1" in
     [ "$(st new-install)" = fail ] && { echo "Failure [INSTALL_FAILED_INSUFFICIENT_STORAGE]"; exit 1; }
     [ "$(st installed)" = none ] && fresh_data 10072 release
     put installed release; put disabled 0; echo "Performing Streamed Install"; echo Success; exit 0 ;;
-  shell) shift ;;
+  shell) shift; cat > /dev/null ;; # like adb: `adb shell` forwards (and so drains) stdin
   *) exit 0 ;;
 esac
 cmd="$*"
@@ -178,8 +178,8 @@ for line in sys.stdin.read().splitlines():
         r = "none" if not v else "unreadable" if lost or st("app.unreadable") == "1" else ("key " if verb == "get" else "signin ") + v
     else:
         f = "app.key" if verb == "set" else "app.signin"; held = "" if lost else st(f)
-        passing = int(st("app.passing", "0") or 0)
-        if passing > 0: put("app.passing", str(passing - 1)); r = "refused the key store isn't available right now"
+        passing = int(st("handover.passing", "0") or 0)
+        if passing > 0: put("handover.passing", str(passing - 1)); r = "refused the key store isn't available right now"
         elif verb == "set-signin" and st("app.signinhere") != "1": r = "refused no sign-in here to carry it into"
         elif not held or held == arg: put(f, arg); r = "ok"
         else: r = "refused a different value is set already"
@@ -190,7 +190,7 @@ APK="$T/kiosk-release.apk"; echo apk > "$APK"
 
 # A debug build with its data, as HOME + device admin, on Wi-Fi it saved.
 panel() { # [wifi fixture]
-  rm -rf "$T/panel" "$T"/{adb.log,root-cmds,root.log,violations,improv.got,installed,disabled,root,admin,home,new-install,uninstall,restore,disable,old-install,list,chooser,handover.log,old-carries,down-after-admin,socket-down} "$T"/app.* "$T"/copy.*
+  rm -rf "$T/panel" "$T"/{adb.log,root-cmds,root.log,violations,improv.got,installed,disabled,root,admin,home,new-install,uninstall,restore,disable,old-install,list,chooser,handover.log,old-carries,down-after-admin,socket-down,handover.passing} "$T"/app.* "$T"/copy.*
   mkdir -p "$T/panel"
   cp "$FIX/WifiConfigStore.xml" "$T/WifiConfigStore.xml"
   fresh_data 10071 debug
@@ -381,10 +381,19 @@ check "lost, never taken for none" has "$out" "Home Assistant sign-in: could not
 check "Done: sign in again" has "$out" "but not its Home Assistant sign-in and encryption key"
 
 echo "== install.sh: the new app's key store is down for a moment at the hand-back (#608 review)"
-panel; printf 2 > "$T/app.passing"
+panel; printf 2 > "$T/handover.passing"
 out=$(inst --switch); rc=$?
 check "tries again, and both are handed over" test "$(cat "$T/app.signin" 2>/dev/null) $(cat "$T/app.key" 2>/dev/null)" = "$TOKEN $KEY"
 check "...said so" has "$out" "Switched builds: the app's settings, Home Assistant sign-in and encryption key were kept."
+check "...after the refusals" test "$(grep -c '^set' "$T/handover.log")" -ge 4
+
+echo "== install.sh: a step after the switch stops the run (#608 review)"
+panel
+out=$(inst --switch --timezone 'not a zone!'); rc=$?
+check "stops" test $rc -ne 0
+check "the new app still gets the sign-in and key" test "$(cat "$T/app.signin" 2>/dev/null) $(cat "$T/app.key" 2>/dev/null)" = "$TOKEN $KEY"
+check "...says so" has "$out" "Stopping early: handing the sign-in and encryption key to the new app first"
+check "...after starting it" before "$(sed -n '/pm uninstall/,$p' "$T/adb.log")" "shell am start -n sh.edm.s1kiosk/.MainActivity" "forward tcp:0 localabstract:glassworks_api_key"
 
 echo "== install.sh: the data won't go into the new build (#584)"
 panel; printf fail > "$T/restore"

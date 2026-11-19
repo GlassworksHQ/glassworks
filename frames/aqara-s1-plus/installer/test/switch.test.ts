@@ -414,6 +414,20 @@ describe('switching a development build to this one', () => {
     expect(p.cmds).toContain('am start -n sh.edm.s1kiosk/.MainActivity');
   });
 
+  it('a failure at the end of the switch itself still hands the sign-in and key to the new app (#608 review)', async () => {
+    const p = new SwitchPanel();
+    const run = p.run.bind(p);
+    // the USB link drops as the switch cleans up, after the data went into the new build
+    p.run = async (cmd) => {
+      if (cmd.startsWith('rm -f') && p.restoredInto === 'release') { p.cmds.push(cmd); throw new Error('USB transfer failed'); }
+      return run(cmd);
+    };
+    await expect(provision(p, { kioskApk: new Uint8Array([1]), debloat: false, confirmSwitch: async () => true }, () => {}, noSleep))
+      .rejects.toThrow(/USB transfer failed/);
+    expect(p.handover).toMatchObject({ key: KEY, signIn: TOKEN });
+    expect(p.cmds).toContain('am start -n sh.edm.s1kiosk/.MainActivity');
+  });
+
   it('when the data won\'t go into the new build, hands nothing over (a fresh app has no sign-in to take it)', async () => {
     const p = new SwitchPanel();
     p.restoreWorks = false;

@@ -117,14 +117,15 @@ is_key_mismatch() { grep -qiE 'INSTALL_FAILED_UPDATE_INCOMPATIBLE|signatures do 
 has_root() { [[ "$(adb shell "timeout 15 su -c 'id -u' 2>/dev/null" | tr -d '\r' | tail -1)" == 0 ]]; }
 su_() { adb shell "su -c 'sh $SW_SH $*'"; }
 # Request lines on stdin -> reply lines on stdout, over the app's hand-over socket (adb forward; adb only). Fails when
-# the app doesn't listen or answer.
-handover_up() { [[ "$(adb shell "grep -c ' @glassworks_api_key\$' /proc/net/unix" | tr -d '\r')" -gt 0 ]] 2>/dev/null; }
+# the app doesn't listen or answer. The adb calls read /dev/null: `adb shell` forwards stdin, and would eat the request
+# meant for handover.py (#608 review).
+handover_up() { [[ "$(adb shell "grep -c ' @glassworks_api_key\$' /proc/net/unix" </dev/null | tr -d '\r')" -gt 0 ]] 2>/dev/null; }
 handover_req() { # [seconds to wait for each reply, 10 by default]
   local port rc=0
   handover_up && command -v python3 >/dev/null || return 1
-  port=$(adb forward tcp:0 localabstract:glassworks_api_key | tr -d '\r') && [[ $port =~ ^[0-9]+$ ]] || return 1
+  port=$(adb forward tcp:0 localabstract:glassworks_api_key </dev/null | tr -d '\r') && [[ $port =~ ^[0-9]+$ ]] || return 1
   python3 "$HANDOVER" "$port" "${1:-10}" || rc=$?
-  adb forward --remove "tcp:$port" >/dev/null 2>&1 || true
+  adb forward --remove "tcp:$port" </dev/null >/dev/null 2>&1 || true
   return $rc
 }
 fingerprint() { printf '%s' "$1" | python3 "$HANDOVER" --fingerprint 2>/dev/null || echo "?"; }
@@ -408,6 +409,22 @@ resend_wifi() {
   if [[ $rc -eq 0 ]]; then WIFI_LOST=0; elif [[ $rc -eq 3 ]]; then echo "  The panel could not join with that password."; fi
   return 0
 }
+
+# Once a switch has read the sign-in and key, the new app gets them whatever stops the run after it (a bad
+# --timezone, a failed step): they live only in this process, and the old app's copy can't be opened any more.
+carry_on_exit() {
+  local rc=$?
+  trap - EXIT
+  set +e
+  if [[ $SWITCHED -eq 1 && ( $KEY_STATE == carry || $SIGNIN_STATE == carry ) ]]; then
+    echo "  Stopping early: handing the sign-in and encryption key to the new app first" >&2
+    adb shell am start -n "$ACT" </dev/null >/dev/null 2>&1
+    hand_back >&2
+  fi
+  forget_secrets
+  exit $rc
+}
+trap carry_on_exit EXIT
 
 step "Device"
 adb get-state >/dev/null
