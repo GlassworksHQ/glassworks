@@ -21,6 +21,8 @@ import switchScript from '../../tools/install/glassworks-switch.sh?raw';
 
 export const SWITCH_SCRIPT: string = switchScript;
 export const SWITCH_SH = '/data/local/tmp/glassworks-switch.sh';
+/** Where glassworks-switch.sh keeps the app's data between backup and restore. */
+const SWITCH_DATA = '/data/s1kiosk/switch';
 export const OLD_APK = '/data/local/tmp/glassworks-old.apk';
 const NEW_APK = '/data/local/tmp/glassworks.apk';
 
@@ -165,10 +167,12 @@ export function describeSwitch(plan: SwitchPlan): string {
   const net = plan.wifi.ssid ? `"${plan.wifi.ssid}"` : 'its Wi-Fi network';
   if (plan.root) {
     lines.push('This panel gives the installer root, so the app\'s settings, sign-in and keys are kept.');
-    if (wifiAtRisk(plan.wifi)) lines.push(`Android would forget ${net} with the old app; the installer sends it to the new app, so the panel stays online.`);
+    if (wifiAtRisk(plan.wifi)) lines.push(`${plan.wifi.owner === 'kiosk' ? 'Android would forget' : 'Android may forget'} ${net} with the old app; the installer sends it to the new app, so the panel stays online.`);
   } else {
     lines.push('The installer has no root on this panel, so the app starts fresh: its settings, Home Assistant sign-in and pairing key are reset (Home Assistant may ask to set the panel up again).');
-    if (wifiAtRisk(plan.wifi)) lines.push(`Android also forgets ${net}, which Glassworks saved. The next step asks for its password again; the cable keeps the panel reachable meanwhile.`);
+    if (wifiAtRisk(plan.wifi)) {
+      lines.push(`${plan.wifi.owner === 'kiosk' ? `Android also forgets ${net}, which Glassworks saved.` : `The installer can't tell who saved ${net}, so the panel may lose its Wi-Fi.`} The next step asks for its password again; the cable keeps the panel reachable meanwhile.`);
+    }
   }
   if (!wifiAtRisk(plan.wifi) && plan.wifi.owner === 'other') lines.push(`The panel's Wi-Fi ${net} wasn't saved by Glassworks and stays.`);
   lines.push('', 'If installing the new version fails, the old one is put back.');
@@ -265,14 +269,18 @@ export async function switchSigningKey(p: PanelShell, apk: Uint8Array, plan: Swi
   const inst = (await p.run(`pm install -r -g ${NEW_APK}`)).out;
   if (!/Success/.test(inst)) {
     const back = /Success/.test((await p.run(`pm install -r -g ${OLD_APK}`)).out);
-    if (back && root) await restoreInto();
+    const restored = back && root ? await restoreInto() : undefined;
     if (back) await undo();
-    if (root) await su('discard');
+    // The copy is the only one left until a restore worked: keep it otherwise.
+    if (restored?.code === 0) await su('discard');
     await cleanup();
     out.secret?.forget();
-    throw new Error(back
-      ? `the new Glassworks would not install (${inst.trim()}). The previous build is back${root ? ' with its data' : ''}.`
-      : `the new Glassworks would not install (${inst.trim()}), and neither would the previous one. Run the installer again.`);
+    const why = `the new Glassworks would not install (${inst.trim()})`;
+    const kept = ` Its data is kept on the panel in ${SWITCH_DATA} (root only).`;
+    if (!back) throw new Error(`${why}, and neither would the previous one. Run the installer again.${root ? kept : ''}`);
+    if (!restored) throw new Error(`${why}. The previous build is back.`);
+    if (restored.code === 0) throw new Error(`${why}. The previous build is back with its data.`);
+    throw new Error(`${why}. The previous build is back, but its data is not (${lastLine(restored.out)}).${kept}`);
   }
   log('installed the new build');
 
@@ -282,7 +290,7 @@ export async function switchSigningKey(p: PanelShell, apk: Uint8Array, plan: Swi
     if (r.code === 0) { out.dataKept = true; await su('discard'); log('app data restored'); }
     else {
       root = false;
-      out.notes.push(`could not restore the app's data (${lastLine(r.out)}); it starts fresh. The copy stays on the panel in /data/s1kiosk/switch (root only).`);
+      out.notes.push(`could not restore the app's data (${lastLine(r.out)}); it starts fresh. The copy stays on the panel in ${SWITCH_DATA} (root only).`);
     }
   }
   if (owner) {

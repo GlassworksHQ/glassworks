@@ -306,10 +306,12 @@ From the CLI: `frames/aqara-s1-plus/tools/install/fel-install.sh --undo ~/s1-bac
 `frames/aqara-s1-plus/tools/install.sh --undo` over adb gives Aqara's apps back. It re-enables Aqara's apps and
 launcher, restores Do Not Disturb and the keyboard, removes S1 Kiosk, and starts Aqara's radio
 services again. Run on its own, without the restore, it keeps your Wi-Fi and settings and the
-patched `boot`, but drops the kiosk.
+patched `boot`, but drops the kiosk. Its last line says what happened to S1 Kiosk: removed,
+disabled, or still installed when Android would not disable it either. Then it exits with an error;
+run it again.
 
-If S1 Kiosk saved the panel's Wi-Fi (it does when you set Wi-Fi up through it), it is **disabled
-rather than removed**. Android 10 forgets the networks an app saved when that app is uninstalled,
+If S1 Kiosk saved the panel's Wi-Fi (it does when you set Wi-Fi up through it), or the installer
+can't tell who saved it, it is **disabled rather than removed**. Android 10 forgets the networks an app saved when that app is uninstalled,
 which would take the panel off its network. A disabled S1 Kiosk doesn't run and isn't the home
 screen; `adb shell pm enable sh.edm.s1kiosk` brings it back. To remove it completely anyway, run
 `adb uninstall sh.edm.s1kiosk`, then join the Wi-Fi again in Aqara's own settings.
@@ -445,7 +447,9 @@ plan without changing anything.
   save, for example one set up in Aqara's settings, is not affected.
 - While the app is copied it is disabled, so it can't start as the home screen meanwhile. Disabling
   doesn't touch its Wi-Fi.
-- If the new version won't install, the previous one is put back (with its data, given root).
+- If the new version won't install, the previous one is put back (with its data, given root). If
+  its data won't go back in, the installer says so and keeps the copy on the panel in
+  `/data/s1kiosk/switch` (root only).
 - The panel stays reachable over the USB cable throughout. If it ends up without Wi-Fi anyway, send
   it again: Kiln's `/aqara-s1-plus/set-up/wifi`, or Improv over Bluetooth from the panel's setup
   screen or Home Assistant.
