@@ -38,6 +38,7 @@ The ids today:
 |---|---|---|
 | `glass-panes/mirror-android-2/system.img` | [git-nimrod/glass-panes `mirror-android-2`](https://github.com/git-nimrod/glass-panes/releases/tag/mirror-android-2) | 850,905,808 bytes |
 | `glass-panes/mirror-android-2/userdata.sparse` | the same release | 154,944,572 bytes |
+| `glass-panes/project-key/adbkey` | [the Glass Panes repository](https://github.com/git-nimrod/glass-panes/tree/8ea31141cecc9d3e42ceb72ec08f92bd8ed38801/mirror-app/android/project-key) at commit `8ea31141`: the project adb key its images trust, published on purpose | 1,704 bytes |
 | `glass-panes/mirror-android-2/SHA256SUMS` | the same release | 159 bytes |
 
 So Kiln downloads the Mirror's image from
@@ -53,6 +54,26 @@ Each file answer carries:
 - `Content-Disposition: attachment; filename="<name>"`.
 - `Link: <project>; rel="author", <GitHub URL>; rel="canonical"`: who made it and where it comes from.
 - `Cache-Control: no-store`.
+
+## Files from a repository
+
+A few small files aren't release assets but live in a project's repository: Glass Panes' published
+adb key, which Kiln uses for one `svc wifi enable` after its first start (#579 follow-up,
+maintainer 2026-11-19). An allowlist entry for one has `commit` (all 40 hex digits, never a branch)
+and `path` instead of `tag` and `name`:
+
+```json
+"glass-panes/project-key/adbkey": {
+  "owner": "git-nimrod", "repo": "glass-panes",
+  "commit": "8ea31141cecc9d3e42ceb72ec08f92bd8ed38801", "path": "mirror-app/android/project-key/adbkey",
+  "size": 1704, "sha256": "89908fe2…38da2d", "credit": { … }
+}
+```
+
+Refract fetches it from `raw.githubusercontent.com/<owner>/<repo>/<commit>/<path>`, refusing any
+redirect. These files are at most 64 KiB, so Refract reads one whole and checks its size and SHA-256
+itself. If either differs, it answers 502 and sends nothing. A `Range` is ignored, as HTTP allows:
+the file is sent whole. It counts as a full download for the rate limit.
 
 ## What it checks
 
@@ -104,7 +125,8 @@ behind one address (a carrier-grade NAT, a shared office) share the limits, so *
   `cf.cacheLevel: "bypass"`, so the file never lands in Cloudflare's cache either. A test checks
   this on both hops of GitHub's redirect.
 - Every answer says `Cache-Control: no-store`, so browsers and other caches don't keep it.
-- Bytes go from GitHub to the person as they arrive. Refract never holds a whole file.
+- Bytes go from GitHub to the person as they arrive. Refract never holds a whole release file. A
+  repository file (at most 64 KiB) is held in memory while it's checked, then sent and dropped.
 - It logs nothing itself. Cloudflare still counts requests in its analytics, as for any Worker. The
   rate limiters keep a per-address counter for a minute.
 

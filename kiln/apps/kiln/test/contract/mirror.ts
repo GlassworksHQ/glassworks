@@ -50,6 +50,7 @@ function flashWorld(k: Knobs): World {
     // a community image's files (#579): this flow is Glassworks, which writes only what it builds
     download: async () => {},
     file: async (n) => new Blob([n]),
+    wifi: async () => { throw new Error('not for Glassworks'); },
     check: async () => {},
     discard: async () => {},
   };

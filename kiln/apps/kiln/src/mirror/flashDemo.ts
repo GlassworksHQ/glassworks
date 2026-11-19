@@ -10,7 +10,8 @@ import { MirrorSession } from './session';
 export const FLASH_DEMOS = ['flash-image', 'flash-downloading', 'flash-download-error', 'flash-download-bad', 'flash-ready', 'flash-wifi-short', 'flash-fastboot', 'flash-fastboot-wrong', 'flash-confirm',
   'flash-working', 'flash-adb', 'flash-done', 'flash-done-chooser', 'flash-done-no-home', 'flash-error', 'flash-run',
   'image-choose', 'image-choose-open', 'image-choose-panes', 'image-link', 'image-download', 'image-download-done', 'image-download-error', 'image-download-bad',
-  'image-fastboot', 'image-confirm', 'image-writing', 'image-done', 'image-error', 'image-back-glassworks', 'image-back-panes'] as const;
+  'image-fastboot', 'image-confirm', 'image-writing', 'image-done', 'image-error', 'image-back-glassworks', 'image-back-panes',
+  'image-wifi', 'image-wifi-writing', 'image-adb', 'image-done-wifi', 'image-done-wifi-unconfirmed'] as const;
 export type FlashDemo = (typeof FLASH_DEMOS)[number];
 
 const REFRACT_DOWN = 'the download proxy answered 502: GitHub answered 503';
@@ -32,8 +33,14 @@ export async function flashDemo(name: FlashDemo, fast = false, deps: Partial<Fla
       for (let i = 1; i <= 10; i++) { await tick(120); onProgress(i / 10); }
       if (name === 'image-download-bad' && want.name === 'userdata.sparse' && failures-- > 0) throw new WrongImage('its SHA-256 differs from the release');
     },
-    async file() { return new Blob([new Uint8Array(16)]); },
+    // the demo's stand-in for the image's published key: a PEM that parses, not a real key
+    async file(n) { return n === 'adbkey' ? new Blob(['-----BEGIN PRIVATE KEY-----\nAAAA\n-----END PRIVATE KEY-----\n']) : new Blob([new Uint8Array(16)]); },
     async check() {},
+    async wifi(_, onProgress) {
+      if (name === 'image-wifi-writing') { onProgress(0.55); return new Promise(() => {}); }
+      for (let i = 1; i <= 5; i++) { await tick(150); onProgress(i / 5); }
+      return new Blob([new Uint8Array(16)]);
+    },
     async build(_, onProgress) {
       for (const step of ['patch', 'system', 'userdata'] as const) {
         for (let i = 1; i <= 5; i++) {
@@ -62,6 +69,11 @@ export async function flashDemo(name: FlashDemo, fast = false, deps: Partial<Fla
     search: name === 'image-link' ? '?image=glass-panes' : '',
     requestFastboot: async () => fastboot(name === 'flash-fastboot-wrong' ? 0x40000000 : SYSTEM_BYTES),
     requestAdb: async () => { const m = new FirstBootMirror(); m.hideFails = name === 'flash-done-chooser'; m.noHome = name === 'flash-done-no-home'; return m; },
+    // the image's own key: an adb shell that has started, takes svc wifi enable and reports Wi-Fi on (or not)
+    adbWithKey: () => async () => ({
+      async run(c: string) { return { out: c === 'getprop sys.boot_completed' ? '1' : c === 'dumpsys wifi' ? `Wi-Fi is ${name === 'image-done-wifi-unconfirmed' ? 'disabled' : 'enabled'}\n` : '', code: 0 }; },
+      async push() { throw new Error('not in this demo'); },
+    }),
     adbKey: () => 'QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= kiln@glassworks',
     apk: () => mirror.apkBytes(),
     sleep: (ms) => tick(ms / 20),
@@ -113,6 +125,9 @@ async function glassPanes(name: FlashDemo, d: { flash: FlashSession; mirror: Mir
   flash.choose();
   if (name === 'image-download') { void flash.download(); return d; }
   await flash.download();
+  const withWifi = name.startsWith('image-wifi') || name === 'image-adb' || name.startsWith('image-done-wifi');
+  if (withWifi) flash.setWifi({ ssid: 'Home Net', password: 'not-a-real-password' }); // a made-up network (CLAUDE.md rule 2)
+  if (name === 'image-wifi') return d;
   if (['image-download-done', 'image-download-error', 'image-download-bad'].includes(name)) return d;
   flash.toFastboot();
   if (name === 'image-fastboot') return d;
@@ -120,8 +135,10 @@ async function glassPanes(name: FlashDemo, d: { flash: FlashSession; mirror: Mir
   if (name === 'image-confirm') return d;
   flash.understand(true);
   const writing = flash.flash();
-  if (name === 'image-writing') { await new Promise((r) => setTimeout(r, 0)); return d; }
+  if (name === 'image-writing' || name === 'image-wifi-writing') { await new Promise((r) => setTimeout(r, 0)); return d; }
   await writing;
+  if (name === 'image-adb') return d;
+  if (name.startsWith('image-done-wifi')) { await flash.connectAdb(); return d; }
   if (name === 'image-back-glassworks') flash.wayBack('glassworks');
   return d;
 }

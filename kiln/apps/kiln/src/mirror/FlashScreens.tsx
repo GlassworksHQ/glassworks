@@ -14,7 +14,7 @@ import type { RecoveryData } from '../recovery/player';
 import recovery from '../../../../../frames/lululemon-mirror/design/recovery.json';
 import type { RailMark, RailStep } from '../wizard/state';
 import type { FlashSession, FlashState, WorkStep } from './flash';
-import { Choose, ConfirmCommunity, DoneCommunity, Download, DownloadButton, FileRow, WayBack, Whose } from './choice/ChoiceScreens';
+import { Choose, ConfirmCommunity, DoneCommunity, Download, DownloadButton, FileRow, WayBack, Whose, possessive } from './choice/ChoiceScreens';
 import type { MirrorSession, MirrorState } from './session';
 import { SilentUpdates, mirrorSilent } from '../components/SilentUpdates';
 import { FlashKeep, KeyOutcome, keyHeld } from './KeepScreens';
@@ -169,6 +169,8 @@ const ROWS: Record<string, { id: WorkStep; text: string }[]> = {
   'flash-userdata': [{ id: 'flash-userdata', text: 'Flash userdata' }],
   restart: [{ id: 'restart', text: 'Restart the Mirror' }],
   'first-start': [{ id: 'first-boot', text: 'First start: Home Assistant, Wi-Fi, home screen' }],
+  wifi: [{ id: 'wifi', text: 'Save your Wi-Fi network in its userdata' }],
+  'wifi-on': [{ id: 'wifi-on', text: 'After its first start: switch Wi-Fi on' }],
 };
 /** Issue 580: the hand-back row joins Glassworks' first start, when the tab holds Home Assistant's key. */
 const HAND_BACK = { id: 'hand-back' as WorkStep, text: 'Give Glassworks Home Assistant’s key back' };
@@ -193,11 +195,15 @@ export function FlashWorking({ f, s }: P) {
 }
 
 export function FlashAdb({ f, s }: P) {
+  const r = f.recipe;
   return (
     <section className="card" aria-labelledby="h">
+      {r.community && <Whose r={r} />}
       <span className="turn-label"><span className="pulse" />Your turn</span>
       <h2 id="h">One last click.</h2>
-      <p className="lede">The Mirror is starting Glassworks. Its first start takes a few minutes. Click Connect and pick the Mirror in the browser&apos;s list: it knows this browser&apos;s key, so it doesn&apos;t ask on its screen.{keyHeld(s.key) && ' Then Kiln gives Glassworks Home Assistant’s key back.'}</p>
+      {r.community
+        ? <p className="lede">The Mirror is starting {r.name}. Its first start takes a few minutes. Click Connect and pick the Mirror in the browser&apos;s list. Kiln connects with {possessive(r.name)} own published key, which the image trusts, so nothing asks on its screen. It switches Wi-Fi on, and that&apos;s all it does.</p>
+        : <p className="lede">The Mirror is starting Glassworks. Its first start takes a few minutes. Click Connect and pick the Mirror in the browser&apos;s list: it knows this browser&apos;s key, so it doesn&apos;t ask on its screen.{keyHeld(s.key) && ' Then Kiln gives Glassworks Home Assistant’s key back.'}</p>}
       {s.connecting && <p className="status work" role="status">Pick the Mirror in the browser&apos;s list…</p>}
       {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
       <div className="foot">
@@ -271,7 +277,11 @@ export function FlashError({ f, s }: P) {
         <Log s={s} />
         <span className="links">
           {s.flashFailed && !f.recipe.community && !s.noFill && <button type="button" className="btn ghost" onClick={() => f.retryWithoutFill()}>Try again without FILL</button>}
-          <button type="button" className="btn ghost" onClick={() => f.retry()}>Back to the download</button>
+          {s.wifiOnFailed && s.connecting && <span className="status work" role="status">Pick the Mirror in the browser&apos;s list…</span>}
+          {s.wifiOnFailed && s.connectError && <span className="status err" role="alert">{s.connectError}</span>}
+          {s.wifiOnFailed
+            ? <button type="button" className="btn ghost" disabled={s.connecting} onClick={() => void f.connectAdb()}>Connect again</button>
+            : <button type="button" className="btn ghost" onClick={() => f.retry()}>Back to the download</button>}
         </span>
       </div>
     </section>

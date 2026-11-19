@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MemoryKeyStorage, loadOrCreateAdbKey } from '../src';
+import { MemoryKeyStorage, adbKeyFromPkcs8, loadOrCreateAdbKey, pemToPkcs8 } from '../src';
 
 describe('adb key', () => {
   it('is created once, kept, and its public key is an adb_keys line for the same modulus', async () => {
@@ -19,5 +19,18 @@ describe('adb key', () => {
     const jwk = await crypto.subtle.exportKey('jwk', key);
     const n = Uint8Array.from(atob(jwk.n!.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
     expect(Array.from(raw.subarray(8, 8 + 256)).reverse()).toEqual(Array.from(n));
+  });
+
+  it('a published key from its adbkey file: the same public key as the key itself, kept in memory only', async () => {
+    const storage = new MemoryKeyStorage();
+    await loadOrCreateAdbKey(storage);
+    const pkcs8 = (await storage.load())!;
+    let b = ''; for (const x of pkcs8) b += String.fromCharCode(x);
+    const pem = `-----BEGIN PRIVATE KEY-----\n${btoa(b).replace(/.{64}/g, '$&\n')}\n-----END PRIVATE KEY-----\n`;
+    expect(pemToPkcs8(pem)).toEqual(pkcs8);
+    const k = adbKeyFromPkcs8(pemToPkcs8(pem), 'kiln@published-key');
+    expect(k.publicKey.split(' ')[0]).toBe((await loadOrCreateAdbKey(storage)).publicKey.split(' ')[0]);
+    expect(k.publicKey.endsWith(' kiln@published-key')).toBe(true);
+    expect(() => pemToPkcs8('-----BEGIN RSA PRIVATE KEY-----\nAQID\n-----END RSA PRIVATE KEY-----')).toThrow(/isn't an adb key file/);
   });
 });

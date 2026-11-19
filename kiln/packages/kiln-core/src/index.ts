@@ -9,6 +9,6 @@ export {
 } from './flow';
 export type { BackupPlan, FlashStep, PatchContext, Recipe, SetUpContext, StepCredits } from './recipe';
 export {
-  SAFETY_STEPS, STEP_LIBRARY, assertImages, imageFromLink, plan, validateImage, writtenAsIs,
+  SAFETY_STEPS, STEP_LIBRARY, assertImages, imageFromLink, plan, validateImage, wifiStep, writtenAsIs,
   type FrameAccess, type ImageFile, type ImageLink, type ImageRecipe, type ImageStep, type PlannedStep, type SafetyStep, type StepKind,
 } from './images';
