@@ -14,6 +14,13 @@ line of each version is what Home Assistant shows on the update card. A change o
 **The first release of Glassworks for Android tablets and panels, with Assist, Sendspin and the camera pane.**
 
 ### Added
+- **Allow a new computer over USB on a panel with no touchscreen.** On the lululemon Mirror (the legacy build), the Manage
+  page's **Security** section shows a computer that asks for USB debugging, with its fingerprint, and
+  **Allow this computer**. Allowed computers are listed with **Remove**, and the panel lets each one in
+  every time it connects. Only a Home Assistant administrator can allow or remove one, and the Log
+  records each, with the fingerprint. Android's own "Allow USB debugging?" no longer stays over the dashboard on
+  a screen without touch: the Security page is where you answer it. Needs a fresh flash with Kiln: an update
+  over an older install doesn't get the two permissions it needs.
 - **The lululemon Mirror shows its frame version.** Its device page in the settings and on the Manage page has a
   *Frame version* row: the version of the Mirror's image, the Glass Panes release plus what Kiln adds. A Mirror flashed
   before Kiln wrote it shows *Before 1.0.0* and its Glass Panes image. A *Frame update* entity in Home Assistant

@@ -80,6 +80,7 @@ Android PR in a shared pool (see above).
 |---|---|---|
 | `conformance (API 23, 26, 29, 34)` | The core's conformance test (`core/src/androidTest`) | push to `main` when Android code changes, nightly at 03:17 UTC (`pr.yml`'s time), by hand |
 | `libs-api23` | `esphome-api-android` and `improv` androidTest on Android 6 | the same |
+| `legacy-verify` | The generic app's legacy APK (the Mirror's) installed on Android 6: fails when its verifier rejects a Glassworks class (`tools/legacy/verify-api23.sh`, #435). Before a Mirror flash, run the script on the build you flash | the same |
 | `report` | Opens, updates or closes the red-main issue | after those two, on `main` only |
 
 A PR still gets the fast checks for the same code: the unit tests (`app`), lint's NewApi at minSdk 23

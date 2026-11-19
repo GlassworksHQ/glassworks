@@ -449,7 +449,8 @@ ${ownCard(v, s, "log")}<section class="card logs">$rows</section>"""
         return frame(s, "/log", "Log", v, main)
     }
 
-    fun security(s: PanelStatus, v: Viewer, sessions: List<Session>, mine: String, notice: String?): String {
+    /** [more]: cards after the signed-in browsers' (a frame's own, such as "Allow a new computer"). */
+    fun security(s: PanelStatus, v: Viewer, sessions: List<Session>, mine: String, notice: String?, more: String = ""): String {
         val rows = sessions.joinToString("") { x ->
             val me = x.id == mine
             val detail = if (x.remember) "Remembered until ${day(x.expiresMs)}" else "Last used ${ago(x.lastUsedMs)}"
@@ -458,7 +459,7 @@ ${ownCard(v, s, "log")}<section class="card logs">$rows</section>"""
 <form method="post" action="/security/signout">${csrf(v)}<input type="hidden" name="id" value="${esc(x.id)}"><button class="pill" type="submit">Sign out</button></form></div>"""
         }
         val main = """<h1 class="ph">Security</h1><p class="sub">Who can manage this panel, and the actions that need you there.</p>
-<section class="card list"><div class="lh"><b>Signed-in browsers</b></div>$rows</section>"""
+<section class="card list"><div class="lh"><b>Signed-in browsers</b></div>$rows</section>$more"""
         return frame(s, "/security", "Security", v, main, notice)
     }
 

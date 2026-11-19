@@ -58,6 +58,8 @@ class ManageServer(
     private val monoMs: () -> Long = { System.nanoTime() / 1_000_000 },
     /** All panels' scripts by file name ([ManagePages.PANELS_SCRIPT]), or null when this build has none (#466). */
     private val scripts: (String) -> ByteArray? = { null },
+    /** "Allow a new computer" on the Security page, where the app can answer adb's question (#435); null elsewhere. */
+    private val usb: ManageUsbDebugging? = null,
 ) {
     private val random = SecureRandom()
 
@@ -325,7 +327,8 @@ class ManageServer(
                 html(200, pages.log(status, viewer, log.read(level, q), level, q))
             }
             path == "/log/diagnostics.txt" -> diagnostics()
-            path == "/security" -> html(200, pages.security(status, viewer, sessions.list(haBase()), s.id, notice(req.query["done"])))
+            path == "/security" -> html(200, pages.security(status, viewer, sessions.list(haBase()), s.id, notice(req.query["done"]),
+                more = usb?.cards(viewer, req.query["usb"]).orEmpty()))
             path == "/about" -> html(200, pages.about(status, viewer))
             path == ManagePages.PANELS -> panels(status, viewer, s.id)
             path == "/confirm/reboot" -> html(200, rebootDialog(status, viewer, null))
@@ -468,6 +471,8 @@ class ManageServer(
                 is PanelCode.Check.Locked -> html(429, rebootDialog(host.status(), viewer, lockedText()))
             }
             "/settings" -> changeSetting(req, s, viewer)
+            ManageUsbDebugging.ALLOW, ManageUsbDebugging.REMOVE ->
+                usb?.post(req.path, req.form, who(s), homeAssistant = s.with == SignedInWith.HOME_ASSISTANT) ?: HttpResponse.text(404, "Not found.")
             "/security/signout" -> {
                 val id = req.form["id"].orEmpty()
                 val target = sessions.list(haBase()).firstOrNull { it.id == id }
