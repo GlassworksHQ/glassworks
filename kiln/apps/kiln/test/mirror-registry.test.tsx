@@ -2,7 +2,7 @@
 // The Mirror's sessions in Kiln's registry, as the S1's is: they outlive a trip to the picker, the
 // picker leads back to a running install, and LeaveGuard asks before the page is left mid-flash.
 import { act, cleanup, render, screen } from '@testing-library/react';
-import { GLASS_PANES, SYSTEM_BYTES, USERDATA_BYTES, checkDownload, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
+import { SYSTEM_BYTES, USERDATA_BYTES, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
 import { FirstBootMirror, fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
 import type { ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -40,9 +40,8 @@ async function midFlash() {
   let release!: () => void;
   const gate = new Promise<void>((r) => { release = r; });
   const images: ImageMaker = {
-    async load() {}, async fetch(_u, p) { p(1); },
+    async fetch(_u, p) { p(1); }, async download(_u, _f, p) { p(1); }, async file(n) { return new Blob([n]); },
     async build() { return { system: new Blob(['S']), userdata: new Blob(['U']) }; },
-    check: (file, _w, p) => checkDownload(file, GLASS_PANES.system, p),
     async discard() {},
   };
   const fb: FastbootLike = {
@@ -52,9 +51,10 @@ async function midFlash() {
     async reboot() {},
   };
   const mirror = new MirrorSession({ connect: async () => { throw new Error('unused'); } }, true);
-  const flash = new FlashSession({ images, imageUrl: 'https://proxy.test/system.img', requestFastboot: async () => fb, requestAdb: async () => new FirstBootMirror(), adbKey: () => 'QAAA= kiln@glassworks', apk: () => mirror.apkBytes(), sleep: async () => {} });
+  const flash = new FlashSession({ images, refract: 'https://proxy.test', requestFastboot: async () => fb, requestAdb: async () => new FirstBootMirror(), adbKey: () => 'QAAA= kiln@glassworks', apk: () => mirror.apkBytes(), sleep: async () => {} });
   const kept = registry.keep(new MirrorActivity({ mirror, flash }, true));
-  await flash.downloadImage();
+  flash.choose();
+  await flash.download();
   await mirror.pickApk('kiosk.apk', fakeMirrorApk());
   flash.toFastboot();
   await flash.connectFastboot();
@@ -99,13 +99,13 @@ describe('the Mirror in Kiln\'s registry', () => {
   it('the page keeps its sessions across a trip to the picker', async () => {
     history.replaceState(null, '', `${MIRROR_BASE}?apk=local`);
     const first = render(<MirrorWizard />);
-    await screen.findByText('Install Glassworks on the Mirror.');
+    await screen.findByText('What goes on the Mirror?');
     const kept = registry.activity(MIRROR_BASE) as MirrorActivity;
     expect(kept).toBeInstanceOf(MirrorActivity);
     first.unmount(); // to the picker and back
     history.replaceState(null, '', MIRROR_BASE); // "Back to it" or Continue, without the switch
     render(<MirrorWizard />);
-    await screen.findByText('Install Glassworks on the Mirror.');
+    await screen.findByText('What goes on the Mirror?');
     expect(registry.activity(MIRROR_BASE)).toBe(kept);
   });
 

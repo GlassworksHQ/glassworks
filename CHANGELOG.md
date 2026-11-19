@@ -9,6 +9,11 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 ## [Unreleased]
 
 ### Added
+- **Kiln can put Glass Panes back on the lululemon Mirror.** The Mirror's page in Kiln (still test only) now asks
+  what goes on the Mirror: Glassworks, first and picked, or a community image such as Glass Panes, shown under
+  *Show community images*. Kiln downloads every file itself and checks it before anything is written, with the
+  same checks and warning as Glassworks. If a download fails, Kiln says it's its own bug and offers *Try again*
+  and *Report this*: you never download a file by hand. Each Done screen has the way back to the other image.
 - **Set up every panel from one Manage page.** *All panels*, in the Manage page's menu, signs in to
   Home Assistant and lists the house's panels with their area and version. A panel that's down shows as
   down. *Manage* opens another panel's page, already signed in, and *Copy settings* makes one panel like

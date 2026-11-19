@@ -61,7 +61,9 @@ function realSessions(on: boolean): { mirror: MirrorSession; flash: FlashSession
     settingsOverlay: async () => ((await assets.has('mirror-settings-overlay')) ? assets.get('mirror-settings-overlay') : undefined),
     images: workerImages(),
     // Refract, Kiln's release proxy (PR 347); NEXT_PUBLIC_KILN_PROXY at build time points it elsewhere, e.g. a local Worker
-    imageUrl: `${process.env.NEXT_PUBLIC_KILN_PROXY ?? IMAGE_PROXY.base}/${IMAGE_PROXY.systemImg}`,
+    refract: process.env.NEXT_PUBLIC_KILN_PROXY ?? IMAGE_PROXY.base,
+    // ?image=<id>: a community image's install, with no choice first (issue 579)
+    search: location.search,
     requestFastboot: () => Fastboot.request([MIRROR_FASTBOOT]),
     requestAdb: keys.connectWith((k) => Panel.connect(k)),
     adbKey: () => keys.key()?.publicKey,
@@ -276,6 +278,8 @@ function Failed({ s, session }: { s: MirrorState; session: MirrorSession }) {
 }
 
 const DEMOS = [...MIRROR_DEMOS, ...FLASH_DEMOS];
+/** Glassworks over fastboot (`flash-…`) and the choice with Glass Panes (`image-…`) run on FlashSession. */
+const isFlashDemo = (d: string) => d.startsWith('flash-') || d.startsWith('image-');
 
 /**
  * With ?apk=local: Glassworks over fastboot (the default), or the app alone over adb on a Mirror that
@@ -284,7 +288,7 @@ const DEMOS = [...MIRROR_DEMOS, ...FLASH_DEMOS];
 export function MirrorWizard() {
   const [start] = useState(() => {
     const m = mirrorMode(location.search, DEMO_ON, DEMOS);
-    const flashFirst = m.demo ? m.demo.startsWith('flash-') : new URLSearchParams(location.search).get('mode') !== 'app';
+    const flashFirst = m.demo ? isFlashDemo(m.demo) : new URLSearchParams(location.search).get('mode') !== 'app';
     if (m.demo) return { m, flashFirst };
     // the sessions live in Kiln's registry, not in this component: a running install outlives the picker
     const earlier = registry.activity(MIRROR_BASE);
@@ -300,7 +304,7 @@ export function MirrorWizard() {
   useEffect(() => {
     const d = start.m.demo;
     if (!d) return;
-    if (d.startsWith('flash-')) void flashDemo(d as FlashDemo).then(setDemo);
+    if (isFlashDemo(d)) void flashDemo(d as FlashDemo).then(setDemo);
     else void mirrorDemo(d as MirrorDemo).then((mirror) => setDemo({ mirror }));
   }, [start]);
   const live = start.real ?? demo;
@@ -315,7 +319,7 @@ export function Flash({ flash, mirror, toApp }: { flash: FlashSession; mirror: M
   const chip = useBrowserChip();
   useEffect(() => { document.title = s.screen === 'adb' ? 'Your turn · lululemon Studio Mirror · Kiln' : 'lululemon Studio Mirror · Kiln'; }, [s.screen]);
   return (
-    <Shell steps={flashRail(s)} level={flashLevel(s)} error={s.screen === 'error'} chip={chip}>
+    <Shell steps={flashRail(s)} level={flashLevel(s, flash.recipe.community)} error={s.screen === 'error'} chip={chip}>
       <FlashScreens f={flash} s={s} m={mirror} ms={ms} />
       {toApp && s.screen === 'image' && <p className="small">Already runs the Glass Panes image? <button type="button" className="link" onClick={toApp}>Add the app only, over adb</button></p>}
     </Shell>

@@ -1,28 +1,37 @@
-// Development and preview only (/lululemon-mirror?demo=flash-…): the fastboot install against a
-// simulated Mirror, so each screen can be seen and captured without one. The images aren't built (a
-// stand-in reports progress); the fastboot and first-boot answers are the recipe's fakes.
-import { GLASS_PANES, GLASS_PANES_USERDATA, ProxyError, SYSTEM_BYTES, USERDATA_BYTES, WrongImage, checkDownload, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
+// Development and preview only (/lululemon-mirror?demo=flash-… and ?demo=image-…): the fastboot
+// install against a simulated Mirror, so each screen can be seen and captured without one. The
+// images aren't built or downloaded (a stand-in reports progress); the fastboot and first-boot
+// answers are the recipe's fakes. `flash-…`: Glassworks; `image-…`: the choice and Glass Panes (issue 579).
+import { ProxyError, SYSTEM_BYTES, USERDATA_BYTES, WrongImage, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
 import { FirstBootMirror, fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
 import { FlashSession, type ImageMaker } from './flash';
 import { MirrorSession } from './session';
 
-export const FLASH_DEMOS = ['flash-image', 'flash-downloading', 'flash-proxy-failed', 'flash-checking', 'flash-wrong', 'flash-ready', 'flash-wifi-short', 'flash-fastboot', 'flash-fastboot-wrong', 'flash-confirm',
-  'flash-working', 'flash-adb', 'flash-done', 'flash-done-chooser', 'flash-done-no-home', 'flash-error', 'flash-back', 'flash-run'] as const;
+export const FLASH_DEMOS = ['flash-image', 'flash-downloading', 'flash-download-error', 'flash-download-bad', 'flash-ready', 'flash-wifi-short', 'flash-fastboot', 'flash-fastboot-wrong', 'flash-confirm',
+  'flash-working', 'flash-adb', 'flash-done', 'flash-done-chooser', 'flash-done-no-home', 'flash-error', 'flash-run',
+  'image-choose', 'image-choose-open', 'image-choose-panes', 'image-link', 'image-download', 'image-download-done', 'image-download-error', 'image-download-bad',
+  'image-fastboot', 'image-confirm', 'image-writing', 'image-done', 'image-error', 'image-back-glassworks', 'image-back-panes'] as const;
 export type FlashDemo = (typeof FLASH_DEMOS)[number];
+
+const REFRACT_DOWN = 'the download proxy answered 502: GitHub answered 503';
 
 export async function flashDemo(name: FlashDemo, fast = false): Promise<{ flash: FlashSession; mirror: MirrorSession }> {
   const tick = (ms: number) => new Promise<void>((r) => setTimeout(r, fast ? 0 : ms));
+  let failures = 1; // a failed download fails once: Try again works
   const images: ImageMaker = {
-    async load(file, onProgress) {
-      if (name === 'flash-checking') { onProgress(0.42); return new Promise(() => {}); }
-      for (let i = 1; i <= 10; i++) { await tick(120); onProgress(i / 10); }
-      if (file.size === 1234) throw new WrongImage('This file is 1,234 bytes; the Glass Panes system.img is 850,905,808. It\'s another file, or the download stopped early. Download system.img again from the Glass Panes release, then select the new file.');
-    },
     async fetch(_, onProgress) {
       if (name === 'flash-downloading') { onProgress(0.42); return new Promise(() => {}); }
-      if (['flash-proxy-failed', 'flash-checking', 'flash-wrong'].includes(name)) { await tick(200); throw new ProxyError('the download proxy answered 502: GitHub answered 503'); }
+      if (name === 'flash-download-error' && failures-- > 0) { onProgress(0.31); await tick(200); throw new ProxyError(REFRACT_DOWN); }
+      if (name === 'flash-download-bad' && failures-- > 0) { for (let i = 1; i <= 10; i++) { await tick(60); onProgress(i / 10); } throw new WrongImage('its SHA-256 differs from the release'); }
       for (let i = 1; i <= 10; i++) { await tick(120); onProgress(i / 10); }
     },
+    async download(_, want, onProgress) {
+      if (name === 'image-download') { onProgress(0.42); return new Promise(() => {}); }
+      if (name === 'image-download-error' && want.name === 'system.img' && failures-- > 0) { onProgress(0.31); await tick(200); throw new ProxyError(REFRACT_DOWN); }
+      for (let i = 1; i <= 10; i++) { await tick(120); onProgress(i / 10); }
+      if (name === 'image-download-bad' && want.name === 'userdata.sparse' && failures-- > 0) throw new WrongImage('its SHA-256 differs from the release');
+    },
+    async file() { return new Blob([new Uint8Array(16)]); },
     async build(_, onProgress) {
       for (const step of ['patch', 'system', 'userdata'] as const) {
         for (let i = 1; i <= 5; i++) {
@@ -32,14 +41,14 @@ export async function flashDemo(name: FlashDemo, fast = false): Promise<{ flash:
       }
       return { system: new Blob([new Uint8Array(16)]), userdata: new Blob([new Uint8Array(16)]) };
     },
-    check: (file, which, onProgress) => checkDownload(file, which === 'system' ? GLASS_PANES.system : GLASS_PANES_USERDATA, onProgress),
     async discard() {},
   };
   const fastboot = (system: number): FastbootLike => ({
     async getvar(n) { if (n === 'product') return 'MSM8916'; if (n === 'max-download-size') return '0x10000000'; throw new Error('FAIL'); },
     async partitionSize(n) { return n === 'system' ? system : USERDATA_BYTES; },
     async flashBlob(_, __, onProgress = () => {}) {
-      if (name === 'flash-error') throw new Error('flash:system: FAILed (remote: write failed)');
+      if (name === 'flash-error' || name === 'image-error') throw new Error('flash:system: FAILed (remote: write failed)');
+      if (name === 'image-writing') { onProgress(0.63); return new Promise(() => {}); }
       for (let i = 1; i <= 8; i++) { await tick(150); onProgress(i / 8); }
     },
     async reboot() {},
@@ -47,36 +56,69 @@ export async function flashDemo(name: FlashDemo, fast = false): Promise<{ flash:
   const mirror = new MirrorSession({ connect: async () => { throw new Error('not in this demo'); } }, true);
   const flash = new FlashSession({
     images,
-    imageUrl: 'https://refract.glassworks.dev/glass-panes/mirror-android-2/system.img',
+    refract: 'https://refract.glassworks.dev',
+    search: name === 'image-link' ? '?image=glass-panes' : '',
     requestFastboot: async () => fastboot(name === 'flash-fastboot-wrong' ? 0x40000000 : SYSTEM_BYTES),
     requestAdb: async () => { const m = new FirstBootMirror(); m.hideFails = name === 'flash-done-chooser'; m.noHome = name === 'flash-done-no-home'; return m; },
     adbKey: () => 'QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= kiln@glassworks',
     apk: () => mirror.apkBytes(),
     sleep: (ms) => tick(ms / 20),
   });
-  const image = Object.assign(new Blob([new Uint8Array(name === 'flash-wrong' ? 1234 : 16)]), { name: 'system.img' });
-  if (name === 'flash-image' || name === 'flash-run') return { flash, mirror };
-  if (name === 'flash-back') { flash.wayBack(true); return { flash, mirror }; }
-  if (name === 'flash-downloading') { void flash.downloadImage(); return { flash, mirror }; }
-  await flash.downloadImage(); // through the proxy; these three fall back to download-and-select
-  if (name === 'flash-proxy-failed') return { flash, mirror };
-  if (name === 'flash-checking') { void flash.selectImage(image); return { flash, mirror }; }
+  const done = { flash, mirror };
+  if (name === 'image-choose' || name === 'image-link') return done;
+  if (name === 'image-choose-open') { flash.showCommunity(true); return done; }
+  if (name === 'image-choose-panes') { flash.showCommunity(true); flash.pick('glass-panes'); return done; }
+  if (name.startsWith('image-')) return glassPanes(name, done);
+
+  flash.choose(); // Glassworks, picked
+  if (name === 'flash-image' || name === 'flash-run') return done;
+  if (name === 'flash-downloading') { void flash.download(); return done; }
+  await flash.download(); // through Refract
+  if (name === 'flash-download-error' || name === 'flash-download-bad') return done;
   await mirror.pickApk('generic-android-legacy.apk', fakeMirrorApk());
   flash.setHaUrl('http://homeassistant.local:8123');
   flash.setWifi({ ssid: 'Home Net', password: 'not-a-real-password' });
-  if (name === 'flash-wrong') { await flash.selectImage(image); return { flash, mirror }; }
-  if (name === 'flash-ready') return { flash, mirror };
+  if (name === 'flash-ready') return done;
   // a password WPA can't take: refused before fastboot, since the image saves it as the network's PSK
-  if (name === 'flash-wifi-short') { flash.setWifi({ password: 'short' }); return { flash, mirror }; }
+  if (name === 'flash-wifi-short') { flash.setWifi({ password: 'short' }); return done; }
   flash.toFastboot();
-  if (name === 'flash-fastboot') return { flash, mirror };
+  if (name === 'flash-fastboot') return done;
   await flash.connectFastboot();
-  if (name === 'flash-fastboot-wrong' || name === 'flash-confirm') return { flash, mirror };
+  if (name === 'flash-fastboot-wrong' || name === 'flash-confirm') return done;
   flash.understand(true);
   const flashing = flash.flash();
-  if (name === 'flash-working') return { flash, mirror };
+  if (name === 'flash-working') return done;
   await flashing;
-  if (name === 'flash-adb' || name === 'flash-error') return { flash, mirror };
+  if (name === 'flash-adb' || name === 'flash-error') return done;
   await flash.connectAdb();
-  return { flash, mirror };
+  return done;
+}
+
+/** Glass Panes, picked on the choice: its download, fastboot, warning, writes and Done, and both ways back. */
+async function glassPanes(name: FlashDemo, d: { flash: FlashSession; mirror: MirrorSession }) {
+  const { flash } = d;
+  if (name === 'image-back-panes') { // Glassworks' Done, then its way back
+    flash.choose();
+    await flash.download();
+    await d.mirror.pickApk('generic-android-legacy.apk', fakeMirrorApk());
+    flash.toFastboot(); await flash.connectFastboot(); flash.understand(true); await flash.flash(); await flash.connectAdb();
+    flash.wayBack('glass-panes');
+    return d;
+  }
+  flash.showCommunity(true);
+  flash.pick('glass-panes');
+  flash.choose();
+  if (name === 'image-download') { void flash.download(); return d; }
+  await flash.download();
+  if (['image-download-done', 'image-download-error', 'image-download-bad'].includes(name)) return d;
+  flash.toFastboot();
+  if (name === 'image-fastboot') return d;
+  await flash.connectFastboot();
+  if (name === 'image-confirm') return d;
+  flash.understand(true);
+  const writing = flash.flash();
+  if (name === 'image-writing') { await new Promise((r) => setTimeout(r, 0)); return d; }
+  await writing;
+  if (name === 'image-back-glassworks') flash.wayBack('glassworks');
+  return d;
 }

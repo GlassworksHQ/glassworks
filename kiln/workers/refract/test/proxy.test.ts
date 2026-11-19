@@ -14,6 +14,7 @@ const config = JSON.parse(readFileSync(join(dir, 'wrangler.json'), 'utf8'));
 const KILN = 'https://kiln.glassworks.dev';
 const IMG = 'glass-panes/mirror-android-2/system.img';
 const SUMS = 'glass-panes/mirror-android-2/SHA256SUMS';
+const USERDATA = 'glass-panes/mirror-android-2/userdata.sparse';
 const SUMS_TEXT =
   'bdb6b8445296666162256affa968d590075f56a8ad2229930f8502b9703e35c1  system.img\n' +
   '74b1f57ac20ce7c56065083a2bc3ddd283493be29d851fd04efc156ec96cf908  userdata.sparse\n';
@@ -121,11 +122,14 @@ describe('the allowlist', () => {
     expect(seen[0]!.url).toBe('https://github.com/git-nimrod/glass-panes/releases/download/mirror-android-2/SHA256SUMS');
   });
 
-  it("pins the image to the release's own SHA256SUMS", () => {
+  it("pins both images to the release's own SHA256SUMS", () => {
     expect(SUMS_TEXT).toContain(`${allowlist[IMG].sha256}  system.img`);
+    // Kiln's Glass Panes install (#579) downloads userdata.sparse too
+    expect(SUMS_TEXT).toContain(`${allowlist[USERDATA].sha256}  userdata.sparse`);
+    expect(allowlist[USERDATA].size).toBe(154944572);
   });
 
-  it.each(['nope', 'glass-panes/mirror-android-1/system.img', 'glass-panes/mirror-android-2/userdata.sparse', 'https://example.com/x', '__proto__', 'toString', `${IMG}/`, IMG.toUpperCase()])(
+  it.each(['nope', 'glass-panes/mirror-android-1/system.img', 'glass-panes/mirror-android-2/boot.img', 'https://example.com/x', '__proto__', 'toString', `${IMG}/`, IMG.toUpperCase()])(
     'answers 404 to %s and never asks GitHub',
     async (path) => {
       const res = await get(path);

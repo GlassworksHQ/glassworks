@@ -57,7 +57,7 @@ describe('the image worker\'s jobs', () => {
     await jobs.discard();
     expect(jobs.isLoaded()).toBe(false);
     expect(removed).toBe(1);
-    await expect(jobs.build(o, () => {})).rejects.toThrow(/select the system image first/);
+    await expect(jobs.build(o, () => {})).rejects.toThrow(/download the system image first/);
   });
 
   it('drops the image when a build fails, so the next one starts from the checked download', async () => {
@@ -69,6 +69,22 @@ describe('the image worker\'s jobs', () => {
     const o = { apk: fakeMirrorApk({ minSdk: 26 }), adbKey: fakeAdbKey(), userdataBytes: 64 * 1024 * 1024 };
     await expect(jobs.build(o, () => {})).rejects.toThrow(/needs Android API 26/);
     expect(jobs.isLoaded()).toBe(false);
-    await expect(jobs.build({ ...o, apk: fakeMirrorApk() }, () => {})).rejects.toThrow(/select the system image first/);
+    await expect(jobs.build({ ...o, apk: fakeMirrorApk() }, () => {})).rejects.toThrow(/download the system image first/);
+  });
+
+  it('downloads a community file as published, hashing as it writes; one that isn\'t the release\'s is emptied (#579)', async () => {
+    const bytes: Uint8Array<ArrayBuffer> = new Uint8Array(10_000).map((_, i) => i % 251);
+    const want = { name: 'userdata.sparse', url: 'https://example.com/userdata.sparse', refract: 'x/userdata.sparse', size: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') };
+    const serve = (b: Uint8Array<ArrayBuffer>) => (async () => new Response(b, { status: 200, headers: { 'content-length': String(b.length) } })) as unknown as typeof fetch;
+    const files = new Map<string, MemHandle>();
+    const jobs = imageJobs(async (name) => { const h = files.get(name) ?? new MemHandle(); files.set(name, h); return h; }, async () => {});
+    const seen: number[] = [];
+    await jobs.download('https://refract.test/x', want, (x) => seen.push(x), serve(bytes));
+    expect(files.get('download-userdata.sparse')!.buf).toEqual(bytes);
+    expect(files.get('download-userdata.sparse')!.closed).toBe(true);
+    expect(seen.at(-1)).toBe(1);
+    const other = bytes.slice(); other[5] = other[5]! ^ 1;
+    await expect(jobs.download('https://refract.test/x', want, () => {}, serve(other))).rejects.toThrow(/not the [0-9a-f]{64} the release publishes/);
+    expect(files.get('download-userdata.sparse')!.buf.length).toBe(0);
   });
 });

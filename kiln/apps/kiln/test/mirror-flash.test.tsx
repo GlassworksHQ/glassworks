@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
-// The Mirror's install over fastboot: the image in two clicks, the stock warning before any write,
-// the order of the writes, the first start over adb, the credit to Glass Panes, and the way back.
+// The Mirror's Glassworks install over fastboot: the image in one click, the stock warning before any
+// write, the order of the writes, the first start over adb, the credit to Glass Panes, and a download
+// Refract can't serve shown as Kiln's bug. The choice and Glass Panes: image-choice.test.tsx.
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { GLASSWORKS } from '@glassworks/lululemon-mirror-installer';
-import { GLASS_PANES, GLASS_PANES_USERDATA, ProxyError, SYSTEM_BYTES, USERDATA_BYTES, checkDownload, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
+import { ProxyError, SYSTEM_BYTES, USERDATA_BYTES, WrongImage, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
 import { FirstBootMirror, fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
 import type { ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -25,19 +26,20 @@ afterEach(() => cleanup());
 
 const embers = () => [...document.querySelectorAll('.btn.ember')].map((b) => b.textContent);
 
-function setup(o: { system?: number; flashFails?: number; buildFails?: boolean; proxy?: 'ok' | 'down'; settingsOverlay?: Uint8Array; serial?: string } = {}) {
+function setup(o: { system?: number; flashFails?: number; buildFails?: boolean; proxy?: 'ok' | 'down' | 'bad'; settingsOverlay?: Uint8Array; serial?: string; refract?: string | null } = {}) {
   let fails = o.flashFails ?? 0;
   const calls: string[] = [];
   const built: Parameters<ImageMaker['build']>[0][] = [];
   const images: ImageMaker = {
-    async load() { calls.push('load'); },
     async fetch(url, onProgress) {
       calls.push(`fetch ${url}`);
       if (o.proxy === 'down') throw new ProxyError('the download proxy answered 502: GitHub answered 503');
       onProgress(0.5); onProgress(1);
+      if (o.proxy === 'bad') throw new WrongImage('its SHA-256 differs from the release');
     },
+    async download(url) { calls.push(`download ${url}`); },
+    async file(name) { calls.push(`file ${name}`); return new Blob([name]); },
     async build(b, onProgress) { built.push(b); if (o.buildFails) throw new Error('No space left on the device'); calls.push(`build userdata=${b.userdataBytes} key=${b.adbKey.split(' ')[1]}${b.fill === false ? ' nofill' : ''}`); onProgress('patch', 1); return { system: new Blob(['SS']), userdata: new Blob(['U']) }; },
-    check: (file, which, onProgress) => { calls.push(`check ${which}`); return checkDownload(file, which === 'system' ? GLASS_PANES.system : GLASS_PANES_USERDATA, onProgress); },
     async discard() { calls.push('discard'); },
   };
   const fb: FastbootLike = {
@@ -49,18 +51,17 @@ function setup(o: { system?: number; flashFails?: number; buildFails?: boolean; 
   const mirror = new MirrorSession({ connect: async () => { throw new Error('unused'); } }, true);
   const adb = new FirstBootMirror();
   const requestFastboot = vi.fn(async () => fb);
-  const f = new FlashSession({ images, imageUrl: 'https://proxy.test/glass-panes/mirror-android-2/system.img', requestFastboot, requestAdb: async () => adb, adbKey: () => 'QAAA= kiln@glassworks', apk: () => mirror.apkBytes(), sleep: async () => {},
+  const f = new FlashSession({ images, ...(o.refract === null ? {} : { refract: o.refract ?? 'https://proxy.test' }), requestFastboot, requestAdb: async () => adb, adbKey: () => 'QAAA= kiln@glassworks', apk: () => mirror.apkBytes(), sleep: async () => {},
     ...(o.settingsOverlay ? { settingsOverlay: async () => o.settingsOverlay } : {}) });
+  f.choose(); // Glassworks, first and picked
   return { f, mirror, calls, adb, requestFastboot, built };
 }
-
-const image = () => Object.assign(new Blob(['x']), { name: 'system.img' });
 
 describe('installing Glassworks over fastboot', () => {
   it('writes the Mirror\'s id from its serial into the image, so a reflash keeps its Home Assistant device (#523)', async () => {
     const flashed = async (serial?: string) => {
       const { f, mirror, built } = setup({ serial });
-      await f.downloadImage();
+      await f.download();
       await mirror.pickApk('kiosk.apk', fakeMirrorApk());
       f.toFastboot();
       await f.connectFastboot();
@@ -77,10 +78,10 @@ describe('installing Glassworks over fastboot', () => {
 
   it('needs the image checked and Glassworks picked before fastboot, then writes only after "I understand"', async () => {
     const { f, mirror, calls, adb } = setup();
+    expect(f.state.screen).toBe('image');
     expect(f.blocked()).toMatch(/system\.img/);
-    await f.downloadImage(); // one button: through the proxy, checked as it arrives
-    expect(f.state.image).toMatchObject({ state: 'ok', progress: 1 });
-    expect(f.state.proxyFailed).toBeUndefined();
+    await f.download(); // one button: through the proxy, checked as it arrives
+    expect(f.state.files).toMatchObject([{ name: 'system.img', state: 'ok', progress: 1 }]);
     expect(f.blocked()).toMatch(/APK/);
     await mirror.pickApk('kiosk.apk', fakeMirrorApk());
     f.setHaUrl('http://homeassistant.local:8123');
@@ -103,7 +104,7 @@ describe('installing Glassworks over fastboot', () => {
   it('saves the Wi-Fi and the settings overlay into the images, and refuses a password WPA can\'t take before fastboot', async () => {
     const overlay = new Uint8Array([1, 2, 3]);
     const { f, mirror, built } = setup({ settingsOverlay: overlay });
-    await f.downloadImage();
+    await f.download();
     await mirror.pickApk('kiosk.apk', fakeMirrorApk());
     f.setWifi({ ssid: 'Home Net', password: 'short' });
     expect(f.blocked()).toMatch(/8 to 63 characters/);
@@ -129,44 +130,51 @@ describe('installing Glassworks over fastboot', () => {
     expect(screen.getByText(/The Wi-Fi password must be 8 to 63 characters/)).toBeTruthy();
   });
 
-  it('when the proxy can\'t serve the image, says why and falls back to download-and-select', async () => {
+  it('when Refract can\'t serve the image: Kiln\'s bug, with nothing to download by hand (#579)', async () => {
     const { f, calls } = setup({ proxy: 'down' });
-    await f.downloadImage();
-    expect(f.state).toMatchObject({ image: undefined, proxyFailed: expect.stringMatching(/answered 502: GitHub answered 503/) });
-    await f.selectImage(image());
-    expect(f.state.image?.state).toBe('ok');
-    expect(calls).toEqual(['fetch https://proxy.test/glass-panes/mirror-android-2/system.img', 'load']);
+    await f.download();
+    expect(f.state.files[0]).toMatchObject({ state: 'error', error: expect.stringMatching(/answered 502: GitHub answered 503/) });
+    expect(f.blocked()).toMatch(/Download system\.img first/);
+    await f.download(); // Try again: the same route
+    expect(calls).toEqual(['fetch https://proxy.test/glass-panes/mirror-android-2/system.img', 'fetch https://proxy.test/glass-panes/mirror-android-2/system.img']);
   });
 
-  it('without a proxy, it is download-and-select from the start', async () => {
-    const mirror = new MirrorSession({ connect: async () => { throw new Error('x'); } }, true);
-    const f = new FlashSession({ images: {} as never, requestFastboot: async () => ({}) as never, requestAdb: async () => ({}) as never, adbKey: () => undefined, apk: () => mirror.apkBytes() });
-    await f.downloadImage();
-    expect(f.state.proxyFailed).toMatch(/no download proxy/);
+  it('a file that isn\'t the release\'s is refused as Kiln\'s bug too', async () => {
+    const { f } = setup({ proxy: 'bad' });
+    await f.download();
+    expect(f.state.files[0]).toMatchObject({ state: 'bad' });
+    expect(f.blocked()).toMatch(/Download system\.img first/);
+  });
+
+  it('without Refract, every download fails as a bug to report', async () => {
+    const { f, calls } = setup({ refract: null });
+    await f.download();
+    expect(f.state.files[0]).toMatchObject({ state: 'error', error: expect.stringMatching(/no download route/) });
+    expect(calls).toEqual([]);
   });
 
   it('a USB drop while writing: back to the files, and installing again builds again from the loaded image', async () => {
     const { f, mirror, calls } = setup({ flashFails: 1 });
-    await f.downloadImage();
+    await f.download();
     await mirror.pickApk('kiosk.apk', fakeMirrorApk());
     const go = async () => { f.toFastboot(); await f.connectFastboot(); f.understand(true); await f.flash(); };
     await go();
     expect(f.state).toMatchObject({ screen: 'error', flashFailed: true });
     f.retry();
-    expect(f.state.image?.state).toBe('ok'); // nothing to select again
+    expect(f.state.files[0]?.state).toBe('ok'); // nothing to download again
     await go();
     expect(f.state.screen).toBe('adb');
     expect(calls.filter((c) => c.startsWith('build'))).toHaveLength(2);
     expect(calls.filter((c) => c.startsWith('fetch'))).toHaveLength(1);
   });
 
-  it('a failed build: back to the image, which must be selected or downloaded again (it may be patched halfway)', async () => {
+  it('a failed build: back to the image, which must be downloaded again (it may be patched halfway)', async () => {
     const { f, mirror, calls } = setup({ buildFails: true });
-    await f.downloadImage();
+    await f.download();
     await mirror.pickApk('kiosk.apk', fakeMirrorApk());
     f.toFastboot(); await f.connectFastboot(); f.understand(true); await f.flash();
     expect(f.state).toMatchObject({ screen: 'error', flashFailed: false });
-    expect(f.state.image).toBeUndefined();
+    expect(f.state.files[0]?.state).toBe('waiting');
     expect(calls.filter((c) => c.startsWith('flash'))).toHaveLength(0);
     f.retry();
     expect(f.state.screen).toBe('image');
@@ -174,7 +182,7 @@ describe('installing Glassworks over fastboot', () => {
 
   it('after a refused write, "Try again without FILL" builds the zeros as RAW blocks', async () => {
     const { f, mirror, calls } = setup({ flashFails: 1 });
-    await f.downloadImage();
+    await f.download();
     await mirror.pickApk('kiosk.apk', fakeMirrorApk());
     f.toFastboot(); await f.connectFastboot(); f.understand(true); await f.flash();
     render(<Flash flash={f} mirror={mirror} />);
@@ -225,7 +233,7 @@ describe('installing Glassworks over fastboot', () => {
 
   it('a Mirror whose system partition is smaller than the image stops at fastboot, with nothing written', async () => {
     const { f, mirror, calls } = setup({ system: 0x40000000 });
-    await f.selectImage(image());
+    await f.download();
     await mirror.pickApk('kiosk.apk', fakeMirrorApk());
     f.toFastboot();
     await f.connectFastboot();
@@ -243,22 +251,12 @@ describe('installing Glassworks over fastboot', () => {
     expect(screen.getByText(/put it in fastboot again/)).toBeTruthy();
   });
 
-  it('a wrong file says what\'s wrong and what to do', async () => {
-    const { flash } = await flashDemo('flash-wrong', true);
-    expect(flash.state.image).toMatchObject({ state: 'bad', error: expect.stringMatching(/download stopped early.*Download system\.img again/) });
-  });
-});
-
-describe('the way back', () => {
-  it('needs both Glass Panes files, each checked against the release\'s SHA-256', async () => {
-    const { f, calls } = setup();
-    f.wayBack(true);
-    await f.selectImage(image());
-    expect(f.state.image).toMatchObject({ state: 'bad', error: expect.stringMatching(/isn't system\.img, or the download stopped early/) });
-    await f.selectUserdata(Object.assign(new Blob(['y']), { name: 'userdata.sparse' }));
-    expect(f.state.userdataFile).toMatchObject({ state: 'bad' });
-    expect(calls).toEqual(['check system', 'check userdata']); // hashed in the worker, not on the page's thread
-    expect(f.blocked()).toMatch(/system\.img/);
+  it('a wrong file says what happened, and that it is Kiln\'s bug', async () => {
+    const { flash, mirror } = await flashDemo('flash-download-bad', true);
+    expect(flash.state.files[0]).toMatchObject({ state: 'bad' });
+    render(<Flash flash={flash} mirror={mirror} />);
+    expect(screen.getByText(/its SHA-256 differs\), so it deleted it\. Nothing was written to the Mirror\. This is a bug in Kiln, not something you did\./)).toBeTruthy();
+    expect(embers()).toEqual(['Try again']);
   });
 });
 
@@ -271,18 +269,21 @@ describe('every flash demo screen', () => {
     expect(embers().length).toBeLessThanOrEqual(1);
   });
 
-  it('one button downloads the image; the GitHub link and picker show only after the proxy failed', async () => {
+  it('one button downloads the image; a failure offers Try again and Report this, never a file to fetch by hand (#579)', async () => {
     const one = await flashDemo('flash-image', true);
     render(<Flash flash={one.flash} mirror={one.mirror} />);
     expect(embers()).toEqual(['Download the system image']);
-    expect(document.querySelector('a[href*="releases/download"]')).toBeNull();
-    expect(screen.queryByText('Select the downloaded system.img')).toBeNull();
     cleanup();
-    const failed = await flashDemo('flash-proxy-failed', true);
+    const failed = await flashDemo('flash-download-error', true);
     render(<Flash flash={failed.flash} mirror={failed.mirror} />);
-    expect(screen.getByText(/couldn't download it directly: the download proxy answered 502/)).toBeTruthy();
-    expect(screen.getByText('Download system.img').closest('a')!.getAttribute('href')).toBe('https://github.com/git-nimrod/glass-panes/releases/download/mirror-android-2/system.img');
-    expect(screen.getByText('Select the downloaded system.img')).toBeTruthy();
+    expect(screen.getByText(/Kiln couldn’t download it: the download proxy answered 502: GitHub answered 503\. Nothing was written to the Mirror\./)).toBeTruthy();
+    expect(embers()).toEqual(['Try again']);
+    const report = new URL(screen.getByText('Report this').closest('a')!.getAttribute('href')!);
+    expect(report.origin + report.pathname).toBe('https://github.com/GlassworksHQ/glassworks/issues/new');
+    expect(report.searchParams.get('body')).toMatch(/Image: glassworks\nFile: system\.img \(850905808 bytes\)\nWhat Kiln saw: the download proxy answered 502/);
+    expect(document.querySelector('a[href*="releases/download"]')).toBeNull();
+    expect(document.querySelector('input[type="file"][accept*=".img"]')).toBeNull();
+    expect(screen.queryByText(/yourself|Select the downloaded/)).toBeNull();
   });
 
   it('credits Glass Panes and its developer at the download (frame.json credits), and on Done', async () => {

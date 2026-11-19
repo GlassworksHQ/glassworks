@@ -2,6 +2,7 @@
 // OPFS files' Blobs, read from disk as fastboot sends them.
 import { ProxyError, WrongImage } from '@glassworks/lululemon-mirror-installer';
 import type { ImageMaker } from './flash';
+import { downloaded } from './imageJobs';
 
 type Out = { id: number; progress?: number; step?: string; done?: boolean; error?: string; wrong?: boolean; proxy?: boolean };
 
@@ -26,9 +27,9 @@ export function workerImages(): ImageMaker {
   });
   const file = async (name: string) => (await (await (await navigator.storage.getDirectory()).getDirectoryHandle('kiln-mirror')).getFileHandle(name)).getFile();
   return {
-    load: (f, onProgress) => call({ op: 'load', file: f }, (_, x) => onProgress(x)),
     fetch: (url, onProgress) => call({ op: 'fetch', url }, (_, x) => onProgress(x)),
-    check: (file, which, onProgress) => call({ op: 'check', file, which }, (_, x) => onProgress(x)),
+    download: (url, want, onProgress) => call({ op: 'download', url, file: want }, (_, x) => onProgress(x)),
+    file: (name) => file(downloaded(name)),
     async build(o, onProgress) {
       await call({ op: 'build', ...o }, (step, x) => onProgress(step as Parameters<typeof onProgress>[0], x));
       return { system: await file('system.sparse'), userdata: await file('userdata.sparse') };

@@ -1,5 +1,5 @@
 // The image from Kiln's release proxy, against a fake proxy: it resumes with Range where a connection
-// dropped, and refuses (so Kiln falls back to download-and-select) on a 5xx, a wrong size, or a
+// dropped, and refuses (so Kiln shows Try again and Report this) on a 5xx, a wrong size, or a
 // resume at the wrong place.
 import { createHash, randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';

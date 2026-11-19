@@ -37,11 +37,15 @@ The ids today:
 | id | Source | Size |
 |---|---|---|
 | `glass-panes/mirror-android-2/system.img` | [git-nimrod/glass-panes `mirror-android-2`](https://github.com/git-nimrod/glass-panes/releases/tag/mirror-android-2) | 850,905,808 bytes |
+| `glass-panes/mirror-android-2/userdata.sparse` | the same release | 154,944,572 bytes |
 | `glass-panes/mirror-android-2/SHA256SUMS` | the same release | 159 bytes |
 
 So Kiln downloads the Mirror's image from
 `https://refract.glassworks.dev/glass-panes/mirror-android-2/system.img` (image 1's ids left the
-allowlist on 2026-11-16, when Kiln moved to image 2).
+allowlist on 2026-11-16, when Kiln moved to image 2). Kiln's Glass Panes install (#579) downloads
+`userdata.sparse` too: Kiln writes both as published, the way back from Glassworks. Each id matches a
+file in an image recipe (`frames/<id>/installer`), and the frame's tests check the size and SHA-256
+are the same in both ([docs/kiln-images.md](../../../docs/kiln-images.md)).
 
 Each file answer carries:
 
@@ -68,8 +72,9 @@ Each file answer carries:
 - **Not the hash.** Refract streams; it never reads the whole file. Kiln checks the SHA-256 itself.
 
 When GitHub answers anything but 200, 206 or 416, or can't be reached, Refract answers 502 with a
-one-line reason. Kiln then falls back to download-and-select: the person downloads the file from
-the release and picks it.
+one-line reason. Kiln shows that as its own bug, with *Try again* and *Report this* (a prefilled
+issue). There is no download-and-select: the person never fetches a file by hand (maintainer,
+2026-11-19, #579).
 
 ## Rate limits
 
@@ -196,7 +201,8 @@ in about 15 s with the right SHA-256, `Cache-Control: no-store` and no `cf-cache
 The maintainer decided on 2026-11-15 that Kiln downloads the Mirror's community image through
 Refract, knowingly accepting that our Worker transmits the files. The image's release grants no
 licence for its Qualcomm and Quectel vendor binaries. Refract streams them and stores nothing,
-credits Glass Panes on every answer and at `/`, and Kiln keeps download-and-select as the fallback.
+credits Glass Panes on every answer and at `/`. Kiln kept download-and-select as a fallback until
+2026-11-19, when the maintainer dropped it (#579): a download Refract can't serve is Kiln's bug.
 The reasoning and the earlier decision are in
 `frames/lululemon-mirror/research/community-image-terms.md`.
 

@@ -3,8 +3,8 @@
 // 2026-11-15) into the image loader, as one stream.
 // A dropped connection resumes with Range where it stopped, so nothing is read twice. A 429 (Refract's
 // rate limit) waits as long as its Retry-After asks, up to a minute, then tries again. When the proxy
-// can't serve the file (a network error that keeps coming back, a 5xx, a wrong size), Kiln falls
-// back to the person downloading it from GitHub and selecting it.
+// can't serve the file (a network error that keeps coming back, a 5xx, a wrong size), Kiln shows it
+// as its own bug, with Try again and Report this: there is no download-and-select (#579).
 
 /** Where Refract answers, and the image's id in its allowlist. The tests point it at a fake. */
 export const IMAGE_PROXY = {
@@ -12,14 +12,14 @@ export const IMAGE_PROXY = {
   systemImg: 'glass-panes/mirror-android-2/system.img',
 } as const;
 
-/** The proxy couldn't give us the file: fall back to download-and-select. */
+/** The proxy couldn't give us the file: Kiln's bug, shown with Try again and Report this. */
 export class ProxyError extends Error {}
-/** An answer that retrying won't change (a refusal, a wrong size): fall back at once. */
+/** An answer that retrying won't change (a refusal, a wrong size): stop at once. */
 class Refused extends ProxyError {}
 /** 429, or 503 with Retry-After: Refract's rate limit. Wait as long as it asks, then try again. */
 class Busy extends ProxyError { constructor(m: string, readonly ms: number) { super(m); } }
 
-/** The longest Retry-After Kiln waits out; a longer one falls back to download-and-select. */
+/** The longest Retry-After Kiln waits out; a longer one stops the download, to try again later. */
 export const MAX_RETRY_AFTER_MS = 60_000;
 
 /** Retry-After as milliseconds: delta-seconds or an HTTP date (RFC 9110 10.2.3). */
