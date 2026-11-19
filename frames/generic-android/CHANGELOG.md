@@ -11,7 +11,11 @@ line of each version is what Home Assistant shows on the update card. A change o
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-19
+
 **The first release of Glassworks for Android tablets and panels, with Assist, Sendspin and the camera pane.**
+
+Experimental: run on a lululemon Mirror and a Pixel Tablet so far, not yet on other devices.
 
 ### Added
 - **Allow a new computer over USB on a panel with no touchscreen.** On the lululemon Mirror (the legacy build), the Manage
