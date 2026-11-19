@@ -4,12 +4,12 @@
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fakeApk } from '@glassworks/app-adb/fakes';
 import { zipEntry } from '@glassworks/app-adb';
 import { adbFingerprint } from '@glassworks/lululemon-mirror-installer';
 import { clean, debugfs, debugfsCat, fsck, haveTools } from '@glassworks/ext4/testing';
-import { FakeMirror, fakeAdbKey, fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
+import { FakeMirror, FirstBootMirror, fakeAdbKey, fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
 import { hostAdb } from '../src/adb';
 import { UsageError, cli } from '../src/cli';
 import { DRY_USERDATA, dryDevices, dryImage } from '../src/dry';
@@ -311,4 +311,90 @@ describe('flash-node.ts --dry-run', () => {
     expect(text).not.toMatch(/no room for/);
     expect(text).toMatch(/1 native library for arm64-v8a in \/priv-app\/Glassworks\/lib\/arm64/);
   }, 120_000);
+});
+
+describe('--first-boot: the install\'s last steps on a Mirror already on the image (#577)', () => {
+  it('waits for adb, runs the first boot, the HOME check and the screenshot, and sends LK nothing', async () => {
+    const lines: string[] = [];
+    const d = dryDevices(0, (l) => lines.push(l));
+    d.deps.waitForAdb = async () => d.after;
+    const r = await runInstall({ haUrl: 'http://homeassistant.local:8123', work }, d.deps);
+    expect(lines.filter((l) => /^\n\[\d+\/\d+\]/.test(l))).toEqual([
+      '\n[1/4] Wait for adb (first start takes a few minutes)',
+      '\n[2/4] First boot: permissions, portrait, Home Assistant, Wi-Fi, the only home screen',
+      '\n[3/4] HOME check',
+      '\n[4/4] Screenshot',
+    ]);
+    expect(d.lk.commands).toEqual([]);
+    expect(d.before.cmds).toEqual([]);
+    expect(r.firstBoot?.home.result).toBe('set');
+    expect(r.firstBoot?.rotation).toBe(3);
+    expect(d.after.cmds).toContain('pm hide com.android.launcher3');
+    expect(d.after.cmds.some((c) => c.includes('homeassistant.local'))).toBe(true);
+    expect(r.screenshot).toBe(join(work, 'after.png'));
+  });
+
+  it('stops at another image\'s fingerprint, or without the app, before it changes anything', async () => {
+    for (const [mirror, why] of [[new FirstBootMirror('other/image/fingerprint'), /runs other\/image\/fingerprint, not the image Kiln wrote/],
+      [new FirstBootMirror(undefined, false), /isn't on the Mirror after the install/]] as const) {
+      const d = dryDevices(0, () => {});
+      d.deps.waitForAdb = async () => mirror;
+      await expect(runInstall({ work }, d.deps)).rejects.toThrow(why);
+      expect(mirror.cmds.filter((c) => /^(settings put|pm (grant|hide)|am start|appops)/.test(c))).toEqual([]);
+    }
+  });
+
+  it('runs from its arguments without --image or --apk, and refuses --way-back with it', async () => {
+    const out: string[] = [];
+    expect(await cli(['--dry-run', '--yes', '--first-boot', '--work', work], (l) => out.push(l))).toBe(0);
+    const text = out.join('\n');
+    expect(text).toMatch(/LK got 0\./);
+    expect(text).toMatch(/Done: Glassworks 0\.5\.0-legacy, home set, rotation 3/);
+    expect(text).not.toMatch(/WRITES/);
+    await expect(cli(['--first-boot', '--way-back', '--work', work], () => {})).rejects.toThrow(/pick one/);
+  });
+
+  /** A host adb on a fake Mirror, as `adb -s <serial>` sees it: `devices` lists it as `state`; the shell answers getprop. */
+  function fakeHostAdb(state: string, fingerprint = 'other/image/fingerprint') {
+    const adb = join(work, 'adb'), calls = join(work, 'calls'), serial = join(work, 'serial');
+    writeFileSync(adb, `#!/bin/sh
+echo "$*" >> '${calls}'
+shift 2
+case "$1" in
+  devices) printf 'List of devices attached\\nFAKESERIAL123\\t${state}\\n' ;;
+  shell) case "$2" in *sys.boot_completed*) echo 1 ;; *ro.build.fingerprint*) echo '${fingerprint}' ;; esac; echo "__GWRC=0" ;;
+  *) exit 1 ;;
+esac
+`);
+    chmodSync(adb, 0o755);
+    writeFileSync(serial, 'FAKESERIAL123\n');
+    writeFileSync(calls, '');
+    vi.stubEnv('ADB', adb); // never the host's real adb: hostAdb runs $ADB
+    return { calls: () => readFileSync(calls, 'utf8'), args: ['--first-boot', '--yes', '--serial-file', serial, '--work', work] };
+  }
+  afterEach(() => { vi.unstubAllEnvs(); vi.useRealTimers(); });
+
+  it('a real run reads the serial file and goes over adb only: it stops at the fingerprint, having written nothing', async () => {
+    const host = fakeHostAdb('device');
+    const out: string[] = [];
+    await expect(cli(host.args, (l) => out.push(l))).rejects.toThrow(/runs other\/image\/fingerprint, not the image Kiln wrote/);
+    expect(out[0]).toBe('The first boot only, over adb: no partition is written.');
+    expect(host.calls()).toMatch(/shell getprop ro\.build\.fingerprint/);
+    expect(host.calls()).not.toMatch(/reboot|push|install|settings put|pm hide/);
+  });
+
+  it('when adb never comes, the error names --first-boot (no device, or unauthorized)', async () => {
+    const real = setTimeout;
+    for (const [state, why] of [['offline', /didn't come up on adb in 6 minutes\. Once `adb devices` lists it .*run only the first boot with --first-boot/],
+      ['unauthorized', /stayed unauthorized for 6 minutes: .*then run only the first boot with --first-boot: no reflash needed/]] as const) {
+      const host = fakeHostAdb(state);
+      vi.useFakeTimers({ toFake: ['setTimeout'] }); // the 6-minute wait, in fake time; adb is still a real process
+      let settled = false;
+      const run = cli(host.args, () => {}).finally(() => { settled = true; });
+      run.catch(() => {});
+      while (!settled) { await vi.advanceTimersByTimeAsync(2000); await new Promise((r) => real(r, 5)); }
+      await expect(run).rejects.toThrow(why);
+      vi.useRealTimers();
+    }
+  }, 60_000);
 });
