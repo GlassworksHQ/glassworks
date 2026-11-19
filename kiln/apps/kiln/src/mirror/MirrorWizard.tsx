@@ -337,8 +337,10 @@ export function MirrorWizard() {
     if (kept === earlier && m.on && !kept.running()) {
       kept.flashMode = flashFirst;
       kept.sessions.flash.followLink(location.search); // ?image=<id> on a kept, idle session
-      // ?apk=… on it: the APK from there, unless the fastboot path is already past its download
-      if (m.apk && ['choose', 'image', 'download'].includes(kept.sessions.flash.state.screen)) kept.sessions.mirror.switchApk(m.apk, releaseRoute);
+      // ?apk=… on it: the APK from there. The app-only path takes it unless an install runs (switchApk refuses then);
+      // the fastboot path only before its download is past, since a later step builds with the APK it has
+      const fastbootIdle = ['choose', 'image', 'download'].includes(kept.sessions.flash.state.screen);
+      if (m.apk && (!flashFirst || fastbootIdle)) kept.sessions.mirror.switchApk(m.apk, releaseRoute);
     }
     return { m, flashFirst: kept.flashMode, real: kept.sessions, kept };
   });
