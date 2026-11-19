@@ -192,8 +192,11 @@ for i in $(seq 1 90); do
   [ "$st" = device ] && adb_ shell true 2>/dev/null && break
   sleep 4
 done
+# No device chosen: never let the probe below run on whatever else is on adb (another panel, a phone)
+[ -n "$ADB_SERIAL" ] || die "the panel didn't come back on adb (or not as the only new device): check the panel screen
+       for a USB debugging prompt, then name it: ANDROID_SERIAL=<serial> adb shell getprop sys.boot_completed"
 adb_ shell 'echo "android up: $(getprop ro.build.version.release), boot_completed=$(getprop sys.boot_completed)"' ||
-  die "adb not authorized yet: check the panel screen for a USB debugging prompt$([ -n "$ADB_SERIAL" ] || echo ", or name the panel with ANDROID_SERIAL=<serial> if several devices share adb")"
+  die "adb not authorized yet: check the panel screen for a USB debugging prompt"
 echo
 echo "Done. Next: frames/aqara-s1-plus/tools/install.sh --url http://<home-assistant>:8123/<dashboard>"
 echo "Backup: $OUT (keep it: it is your undo)"
