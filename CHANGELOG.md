@@ -565,11 +565,6 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   The screen now stays on until setup is done and the dashboard has loaded, at its usual brightness.
   After that the idle timeout works as before. Panels with a presence sensor, such as the S1, are
   unchanged.
-- **Other apps can no longer change the panel's settings.** Until now any app on the panel could open
-  S1 Kiosk in a way that changed its settings, such as the dashboard's address, the API key or remote
-  debugging.
-  Now only adb (Kiln, the command line), the boot image's root side and the panel itself can. The
-  launcher icon still opens the app, and the panel still starts it as its home screen.
 - **Kiln's device cards stay still with reduced motion.** With "reduce motion" on in the operating
   system, a card no longer jumps up when you point at it or tab to it.
 - **The Overview's pane list reads cleanly.** On the Manage page, each status chip has its gap
@@ -582,11 +577,6 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   Home Assistant never added, it says so once, with where to add it (Settings → Devices & services),
   instead of "Unknown" on each row. When Home Assistant was added but isn't connected now, it says so
   and dims the last known states. On the panel and the Manage page.
-- **Each panel has its own name in Home Assistant, so a second one can be added.** Every panel used
-  to call itself `s1-panel`, and adding a second device made Home Assistant offer to replace the
-  first. Now the S1 announces itself as "Aqara S1 Plus", with a node name such as
-  `aqara-s1-plus-a1b2c3` that ends in part of its MAC. A panel you already added stays in place with
-  all its entity ids. Home Assistant shows "Aqara S1 Plus" after the update, unless you renamed it.
 - **The Manage page shows the right uptime, Wi-Fi and version.** "Up" next to the app's version is
   now how long the app has run, not the device. Wi-Fi reads "Connected" while it is, also on newer
   Android that hides the network's name from the app; Home Assistant's Wi-Fi signal and link speed
@@ -605,10 +595,6 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   the app at once, could bring the pane back on: the setting was saved after the app had gone.
   Zoom, secure hosts and remote debugging, which restart the app, could lose their change the same
   way. They are now saved before the app restarts.
-- **One stuck connection no longer freezes the panel's entities in Home Assistant.** If a client
-  stopped reading (a Home Assistant that hangs, or a connection that is half gone), states, action
-  replies and keepalive pings for every other client waited behind it, for minutes, until the panel
-  gave up on the stuck one. Now only that client waits, until the panel drops it.
 - **Keeping the radio Off in Kiln finishes the panel's radio step.** A fresh panel installed with
   Kiln no longer asks *Radio* again on its own screen when you left the radio Off. Choosing the mode
   the radio already runs doesn't restart it. Needs the S1 Kiosk release with this fix.
@@ -642,14 +628,6 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   system brightness after a restart until the light sensor reported a change, while Home Assistant
   already showed your saved brightness. In a dark, still room that could last a long time. The app
   now applies your saved brightness as soon as it starts.
-- **Wi-Fi reconnects while the screen is off.** If Wi-Fi dropped at night (a router restart, an
-  outage), the panel stayed offline until someone woke the screen, because its Wi-Fi chip can't scan
-  on its own with the screen off. The app now asks for a scan 10 s after Wi-Fi drops, then after
-  40 s, 60 s and every 120 s, while Wi-Fi is not connected and the screen is off. It needs the app's
-  location permission, which the installer grants, and location turned on. The app's always-on
-  service now also runs as a location service, because Android 10 only lets an app use location
-  with the screen off that way. The app reads no location. On the reference panel, Wi-Fi was back
-  about 20 s after it was turned off and on, with the screen still asleep.
 - **Android 14 and newer: the app no longer crashes on a fresh install.** Before the microphone
   permission was granted, the app's always-on service stopped at once and Android showed "S1 Kiosk
   keeps stopping". The service now starts without the microphone, and takes it as soon as you allow
@@ -663,11 +641,6 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   the rest and report success, leaving our splash on the panel. Now the web installer and
   `fel-install.sh --undo` both refuse it before writing anything, and the
   [install guide](frames/aqara-s1-plus/docs/install.md#undo) says how to put back boot and vbmeta by hand.
-- **Sign-in: someone on your network who reads the sign-in code can no longer use it.** Both sign-ins (the
-  dashboard QR code and the administrator sign-in for the Thread join) now use PKCE, so Home Assistant
-  only hands out the panel's token to the panel itself. Needs Home Assistant 2026.10 or later to take
-  effect; older versions sign in as before. A sign-in that was halfway through when the update
-  arrived needs a new scan.
 - **Sendspin: Music Assistant pairing was still offered after you switched Sendspin off.** Once the
   player had started, turning it off in Home Assistant still let the pairing request through. It now
   says Sendspin is disabled until you turn it back on.
@@ -686,11 +659,50 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   notification pictures and the Thread and blueprint calls.
 
 ### Changed
-- **Updates are found among the repo's other releases.** The panel now picks its own newest release
-  (tag `v1.2.3` or `aqara-s1-plus-v1.2.3`) instead of whatever release is newest, so releases of
-  other devices and libraries in the same repo can't hide an update.
 - **Thread border router docs:** the panel has to be on Home Assistant's network to be its border
   router, and has now been tested as a second border router next to an existing one.
+
+### Security
+- **Sign-in for the Thread join: someone on your network who reads its code can no longer use it.** The
+  administrator sign-in for the Thread join now uses PKCE too, like the dashboard's QR-code sign-in since
+  0.4.4. Needs Home Assistant 2026.10 or later to take effect. It doesn't cover the panel's own requests to a
+  Home Assistant on plain `http://`, which anyone on that network can read. A sign-in that was halfway through
+  when the update arrived needs a new scan.
+
+## [0.4.4] - 2026-11-19
+
+**Each panel now has its own name in Home Assistant, so you can add a second panel without a name conflict.**
+
+### Fixed
+- **Each panel has its own name in Home Assistant, so a second one can be added.** Every panel used
+  to call itself `s1-panel`, and adding a second one made Home Assistant offer to replace the first.
+  Now the panel announces itself as "Aqara S1 Plus", with a node name such as `aqara-s1-plus-a1b2c3`
+  that ends in part of its MAC. A panel you already added stays in place with its device and all its
+  entity ids. Home Assistant shows "Aqara S1 Plus" after the update, unless you renamed it.
+- **Updates are found among the repo's other releases.** The panel now picks its own newest release
+  (tag `v1.2.3` or `aqara-s1-plus-v1.2.3`) instead of whatever release is newest in the repo, so
+  releases of other devices and libraries can't hide an update.
+- **Updates come from the project's new address.** The panel checks GlassworksHQ/glassworks
+  directly instead of going through GitHub's redirect from the old name.
+- **One stuck connection no longer freezes the panel's entities in Home Assistant.** If a client
+  stopped reading (a Home Assistant that hangs, or a connection that is half gone), states, replies
+  and keepalive pings for every other client waited behind it. Now only that client waits, until the
+  panel drops it.
+- **Wi-Fi reconnects while the screen is off.** If Wi-Fi dropped at night (a router restart, an
+  outage), the panel stayed offline until someone woke the screen. The app now asks for a scan 10 s
+  after Wi-Fi drops, then after 40 s, 60 s and every 120 s, while Wi-Fi is not connected and the
+  screen is off. It needs the location permission, which the installers grant, and location turned
+  on. The app's always-on service now also runs as a location service, because Android 10 only lets
+  an app use location with the screen off that way. The app reads no location.
+
+### Security
+- **Other apps can no longer change the panel's settings.** Until now any app on the panel could
+  open S1 Kiosk in a way that changed its settings, such as the dashboard's address, the API key or
+  remote debugging. Now only adb (Kiln, the command line), the boot image's root side and the panel
+  itself can. The launcher icon still opens the app, and the panel still starts it as its home screen.
+- **Sign-in: someone on your network who reads the sign-in code can no longer use it.** The
+  dashboard's QR-code sign-in now uses PKCE, so Home Assistant only hands out the panel's token to the
+  panel itself. Needs Home Assistant 2026.10 or later to take effect; older versions sign in as before.
 
 ## [0.4.3] - 2026-11-11
 
