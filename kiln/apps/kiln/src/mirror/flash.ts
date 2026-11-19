@@ -49,8 +49,8 @@ export interface FlashDeps {
   requestFastboot(): Promise<FastbootLike>;
   /**
    * The browser's device list for the Mirror's adb, inside the click: after the first boot, and before the flash to
-   * read Home Assistant's key (issue 580). With `authMs` (the read before the flash), throws AdbAuthTimeout when the Mirror
-   * hasn't let this browser's key in by then; after the flash it waits as long as the Mirror takes.
+   * read Home Assistant's key (issue 580). Throws AdbAuthTimeout when the Mirror hasn't let this browser's key in within
+   * `authMs`: AUTH_MS for the read before the flash, FIRST_START_AUTH_MS for the first start's first try.
    */
   requestAdb(o?: { authMs?: number }): Promise<PanelShell>;
   /**
@@ -161,6 +161,12 @@ export interface FlashState {
  * key waits for a tap on a screen it can't take, so it never would.
  */
 export const AUTH_MS = 20_000;
+
+/**
+ * The first start's first try (after the browser's list): longer than AUTH_MS, since a Mirror that just restarted may
+ * take its time to answer, but never without end, so the retries can take over (review on PR 607).
+ */
+export const FIRST_START_AUTH_MS = 60_000;
 
 /** The person went on to fastboot by hand while the keep step's read ran. */
 class Skipped extends Error {}
@@ -628,15 +634,16 @@ export class FlashSession {
    */
   async connectAdb(): Promise<void> {
     if (this.state.connecting) return;
-    // the first try waits as long as the Mirror takes (requestAdb without authMs); each retry has AUTH_MS (reopenAdb)
-    const req = this.d.requestAdb();
+    // every try has a deadline: the first FIRST_START_AUTH_MS, each retry at most AUTH_MS (reopenAdb)
+    const req = this.d.requestAdb({ authMs: FIRST_START_AUTH_MS });
     this.set({ connecting: true, connectError: undefined, adbWaiting: false });
     const sleep = this.d.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
     let p: PanelShell | undefined;
     let last: unknown;
     try { p = await req; } catch (e) { last = e; }
-    // a closed list, or a device another program holds (the computer's adb): asking again changes nothing
-    const tries = this.d.reopenAdb && !nothingPicked(last) && !(last instanceof AdbBusy) && (this.d.adbPicked?.() ?? true) ? this.d.adbTries ?? 60 : 0;
+    // a list closed with nothing picked, or a device another program holds (the computer's adb): asking again changes nothing
+    const picked = this.d.adbPicked?.() ?? !nothingPicked(last);
+    const tries = this.d.reopenAdb && picked && !(last instanceof AdbBusy) ? this.d.adbTries ?? 60 : 0;
     const until = Date.now() + (this.d.adbWindowMs ?? 5 * 60_000);
     for (let i = 0; !p && i < tries && Date.now() < until; i++) {
       this.log('', `The Mirror didn't let this browser in yet (${(last as Error).message}): it is still starting. Asking again in 5 s.`);
@@ -649,7 +656,7 @@ export class FlashSession {
     }
     if (!p) {
       const why = (last as Error).message;
-      this.set({ connecting: false, adbWaiting: false, connectError: nothingPicked(last) ? 'Nothing was picked. Click Connect and pick the Mirror (Android) in the browser\'s list.'
+      this.set({ connecting: false, adbWaiting: false, connectError: !picked && nothingPicked(last) ? 'Nothing was picked. Click Connect and pick the Mirror (Android) in the browser\'s list.'
         : tries && !(last instanceof AdbBusy) ? `The Mirror didn't let this browser in through its first start (${why}). It knows only the key of the browser that installed it: use that browser, then Connect again.` : why });
       return;
     }
