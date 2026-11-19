@@ -1,5 +1,5 @@
 name: Hardware report
-description: You tried S1 Unleashed on a model, firmware or wall base we haven't tested. Reports that it worked help too.
+description: You tried Glassworks on a model, firmware or wall base we haven't tested. Reports that it worked help too.
 labels: ["hardware report"]
 body:
   - type: markdown
@@ -71,5 +71,5 @@ body:
   - type: input
     id: app_version
     attributes:
-      label: S1 Kiosk version
+      label: Glassworks version
       placeholder: 0.4.3

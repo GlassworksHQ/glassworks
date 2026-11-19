@@ -145,7 +145,7 @@ describe('first boot', () => {
     const p = new FirstBootMirror();
     const r = await firstBoot(p, { haUrl: 'http://homeassistant.local:8123', sleep: async () => {} });
     expect(r).toEqual({ app: { name: '0.5.0-legacy', code: 600 }, hidden: ['com.android.launcher3'], rotation: 3,
-      home: { result: 'set', focused: GLASSWORKS.activity, left: [] } });
+      home: { result: 'set', focused: GLASSWORKS.activity, left: [] }, updates: { state: 'on', privileged: true } });
     const at = (c: string) => p.cmds.findIndex((x) => x.startsWith(c));
     expect(at('pm grant')).toBeLessThan(at(`am start -n ${GLASSWORKS.activity} --es url 'http://homeassistant.local:8123'`));
     expect(at(`am start -n ${GLASSWORKS.activity} --es url`)).toBeLessThan(at('pm hide com.android.launcher3'));
@@ -166,6 +166,7 @@ describe('first boot', () => {
       `appops set ${pkg} SYSTEM_ALERT_WINDOW allow`,
       `pm grant ${pkg} android.permission.CHANGE_CONFIGURATION`,
       `dpm set-active-admin ${pkg}/dev.glassworks.AdminReceiver`,
+      `dumpsys package ${pkg}`,
       'settings put system accelerometer_rotation 0',
       'settings put system user_rotation 3',
       'dumpsys window windows',

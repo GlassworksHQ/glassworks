@@ -14,6 +14,7 @@ import recovery from '../../../../../frames/lululemon-mirror/design/recovery.jso
 import type { RailMark, RailStep } from '../wizard/state';
 import type { FileCheck, FlashSession, FlashState, WorkStep } from './flash';
 import type { MirrorSession, MirrorState } from './session';
+import { SilentUpdates, mirrorSilent } from '../components/SilentUpdates';
 
 type P = { f: FlashSession; s: FlashState; m: MirrorSession; ms: MirrorState };
 
@@ -326,6 +327,7 @@ export function FlashDone({ f, s }: P) {
         </p>
       )}
       {s.back && <p className="lede">It starts like a new Glass Panes Mirror: set it up as its install guide says.</p>}
+      {!s.back && fb && <SilentUpdates words={mirrorSilent(fb.updates)} />}
       <BuiltOn credits={glassPanes()} />
       {REVERSIBLE && <p className="small">{REVERSIBLE}.</p>}
       <p className="small">The way back is the Glass Panes image: open this page with the Mirror in fastboot and choose Way back.</p>

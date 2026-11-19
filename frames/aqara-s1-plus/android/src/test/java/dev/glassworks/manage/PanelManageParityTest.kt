@@ -48,12 +48,6 @@ class PanelManageParityTest {
     @After fun shutdown() = panes.shutdown()
 
     /**
-     * Views only the panel draws for now, by section: the Manage page says "On the panel" for them. A new
-     * native view fails the test until it is here, with its reason, or has a typed twin the page draws (#269).
-     */
-    private val panelOnly = emptyMap<String, String>()
-
-    /**
      * Words a twin says that its panel view says in its own way (#269), by section. Everything else in a twin
      * must be on the panel's view, and everything its view shows must be in the twin, so a row either side
      * drops fails here. The radio's view picks its role from tiles under a header; its twin is one Role row.
@@ -133,27 +127,24 @@ class PanelManageParityTest {
     }
 
     @Test fun everySettingOnThePanelIsOnTheManagePageAndChangesThere() {
-        val (natives, drawnOnlyThere) = parity(panes.all())
+        val natives = parity(panes.all())
         assertTrue("the panes with native views ran: $natives", natives.containsAll(listOf("radio", "time-zone", "wall-base", "bluetooth-proxy")))
         // The proxy's page was walked listening, in listen and connect: its tiles and both modes, not the no-BLE line.
         val proxyTwin = twinWords(SettingsChange.twinOf(panes.bluetoothProxyDefinition.settings().single().items.filterIsInstance<SettingsItem.Native>().single()))
         assertTrue("the Bluetooth proxy page listening with connections: $proxyTwin",
             proxyTwin.containsAll(listOf("Listening for Home Assistant", "Connections", "of 3", "Listen only", "Listen and connect")))
-        assertEquals("panelOnly lists exactly the views with no twin yet: it shrinks as twins land (#269)", panelOnly.keys, drawnOnlyThere)
     }
 
     /** #269: with no base mounted, the wall base page's "what a base adds" is on both too. */
     @Test fun withoutAWallBaseToo() {
-        val (natives, drawnOnlyThere) = parity(listOf(panes.wallBase(attached = false)))
+        val natives = parity(listOf(panes.wallBase(attached = false)))
         assertTrue(natives.toString(), "wall-base" in natives)
-        assertTrue(drawnOnlyThere.toString(), "wall-base" !in drawnOnlyThere)
     }
 
     /**
-     * Walks every section of the menu with [running] panes on both surfaces; the sections with a native view,
-     * and those whose native view the Manage page can only say is "On the panel".
+     * Walks every section of the menu with [running] panes on both surfaces; the sections with a native view.
      */
-    private fun parity(running: List<dev.glassworks.pane.Pane>): Pair<Set<String>, Set<String>> {
+    private fun parity(running: List<dev.glassworks.pane.Pane>): Set<String> {
         val model = panes.model(running)
         val o = Mockup.show(KioskSettingsOverlay(Mockup.activity()))
         o.reload = model
@@ -164,7 +155,6 @@ class PanelManageParityTest {
         f.statusFn = { model().let { m -> f.status.copy(panes = m.sections.filter { it.id in m.panes }.map { paneRow(it.id, it) }, sections = m.sections) } }
         val b = f.Browser().also { it.signInWithHa() }
         val natives = HashSet<String>()
-        val drawnOnlyThere = HashSet<String>()
         var changed = 0
 
         for (sec in model().sections) {
@@ -188,8 +178,9 @@ class PanelManageParityTest {
                     assertTrue("${sec.id}: the Manage page shows \"$w\"", page.contains(esc(w)))
                 }
                 if (item is SettingsItem.Native) natives += sec.id
-                if (item is SettingsItem.Native && SettingsChange.twinOf(item).isNotEmpty()) {
-                    assertTrue("${sec.id}: ${item.key} has a twin, so it isn't panel-only", sec.id !in panelOnly)
+                if (item is SettingsItem.Native) {
+                    // #518: the Manage page draws a view's twin, never a row that says it's on the panel.
+                    assertTrue("${sec.id}: ${item.key} has a twin the Manage page draws", SettingsChange.twinOf(item).isNotEmpty())
                     assertTrue("${sec.id}: its twin's rows, not \"On the panel\"", !page.contains(ManagePages.ON_THE_PANEL))
                     // And the other way (#269 verifier): every word the panel's view shows is in its twin, so a row
                     // the twin drops fails here.
@@ -197,11 +188,6 @@ class PanelManageParityTest {
                     val view = o.previewNative(item.key)?.view ?: error("${sec.id}: the panel drew no ${item.key}")
                     val missing = shownTexts(view).filter { it !in twin && !viewOwn(sec.id, it) }
                     assertTrue("${sec.id}: the panel's view shows $missing, so its twin must have them too ($twin)", missing.isEmpty())
-                } else if (item is SettingsItem.Native) {
-                    drawnOnlyThere += sec.id
-                    assertTrue("${sec.id}: a native view (${item.key}) the Manage page can't draw yet must be listed in panelOnly", sec.id in panelOnly)
-                    assertTrue("${sec.id}: the Manage page says it's on the panel", page.contains(ManagePages.ON_THE_PANEL))
-                    assertTrue("${sec.id}: ${item.key} names what it is", item.title.isNotEmpty() && page.contains(esc(item.title)))
                 }
                 val form = page.contains("name=\"key\" value=\"${esc(key)}\"")
                 val link = page.contains("$path?edit=${esc(URLEncoder.encode(key, "UTF-8"))}\"")
@@ -221,7 +207,7 @@ class PanelManageParityTest {
             }
         }
         assertEquals("every change ran on the panel's main thread", changed, f.onMainCalls)
-        return natives to drawnOnlyThere
+        return natives
     }
 
     /**

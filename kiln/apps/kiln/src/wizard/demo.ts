@@ -3,7 +3,7 @@
 // with a fake device behind them; the other names jump straight to one state.
 import type { PanelShell } from '@glassworks/adb';
 import {
-  PacketReader, PacketType, Rpc, State as ImprovState, frame, parseResult, s1Plus, strings,
+  PacketReader, PacketType, Rpc, State as ImprovState, UPDATE_SERVICE_PROP, frame, parseResult, readRootUpdates, s1Plus, strings,
   type AppPhase, type AssetName, type ByteStream, type Provisioned, type SetUpOptions,
 } from '@glassworks/aqara-s1-plus-installer';
 import type { Fastboot } from '@glassworks/fastboot';
@@ -11,12 +11,13 @@ import type { FelDevice } from '@glassworks/fel';
 import { isMagiskPatched, loadCompressor } from '@glassworks/bootpatch';
 import { Assets, checkRestorable, fmtSize, type BackupFile, type BackupMeta, type Recipe } from '@glassworks/kiln-core';
 import { SETUP_SOCKET, type SetupState } from '@glassworks/setup-channel';
+import { s1Silent } from '../components/SilentUpdates';
 import { s1PlusUi } from '../frames/aqara-s1-plus';
 import { explain } from './explain';
 import { Session, type SessionDeps } from './session';
 
 export const DEMOS = ['run', 'selftest', 'connect', 'ask-fastboot', 'install', 'ask-adb', 'app', 'app-update', 'app-installing', 'app-keyboard', 'wifi', 'wifi-new', 'wifi-fail', 'home-assistant', 'radio', 'radio-next', 'radio-thread', 'radio-thread-old',
-  'done', 'undo', 'undo-refused', 'undo-refused-splash', 'undo-apps-back', 'undo-unreadable', 'undo-connect', 'restore', 'undo-done', 'error', 'error-written'] as const;
+  'done', 'done-old-boot', 'undo', 'undo-refused', 'undo-refused-splash', 'undo-apps-back', 'undo-still-on', 'undo-unreadable', 'undo-connect', 'restore', 'undo-done', 'error', 'error-written'] as const;
 export type Demo = (typeof DEMOS)[number];
 
 const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -105,10 +106,11 @@ function improvStream(fail: boolean, net: Net): ByteStream {
 }
 
 /** `online`: on Wi-Fi already, as a panel set up with Aqara's app is. */
-/** `app`: Glassworks' version on the panel (`dumpsys package`), or null when it isn't installed. */
-export function simulatedPanel(wifiFails = false, online = true, app: { name: string; code: number } | null = { name: '0.5.0', code: 500 }): PanelShell {
+/** `app`: Glassworks' version on the panel (`dumpsys package`), or null when it isn't installed. `rootUpdates`: its boot image has the update service. */
+export function simulatedPanel(wifiFails = false, online = true, app: { name: string; code: number } | null = { name: '0.5.0', code: 500 }, rootUpdates = true): PanelShell {
   const net: Net = { online };
   const out = (cmd: string) => cmd === 'getprop sys.boot_completed' || cmd.startsWith('grep -c') ? '1\n'
+    : cmd === `getprop ${UPDATE_SERVICE_PROP}` && rootUpdates ? '1\n'
     : cmd === 'pm path sh.edm.s1kiosk' && app ? 'package:/data/app/sh.edm.s1kiosk-1/base.apk\n'
     : cmd === 'dumpsys package sh.edm.s1kiosk' && app ? `    versionCode=${app.code} minSdk=26 targetSdk=34\n    versionName=${app.name}\n`
     : cmd === 'dumpsys wifi' && net.online ? DUMPSYS_WIFI
@@ -313,10 +315,12 @@ export async function enterDemo(session: Session, which: Demo): Promise<void> {
       await session.applyRadio('thread_router');
       return;
     case 'done':
+    case 'done-old-boot': // set up on a panel whose boot image is from before the root update service
       dispatch({ type: 'done', done: {
         title: 'Done.', body: 'The panel is on Home Net. Home Assistant finds it by itself as an ESPHome device.',
         backup: { name: 's1-backup-20261112-101500.zip', info: '9 partitions · 52 MiB', hint: 'Original software, backed up. Keep it: it\'s also kept in this browser.' },
         setupPage: `http://${IP}:8099/setup`,
+        updates: s1Silent(await readRootUpdates(simulatedPanel(false, true, undefined, which === 'done'))),
       } });
       return;
     case 'undo':
@@ -328,7 +332,11 @@ export async function enterDemo(session: Session, which: Demo): Promise<void> {
       return;
     case 'undo-apps-back': // "Keep its settings" after the apps are back: the backup is the one they were checked against
       await session.openUndo();
-      dispatch({ type: 'undo', patch: { depth: 'keep', appsBack: true, locked: true, note: { kind: 'ok', title: 'Aqara\'s apps are back.', sub: 'Next, put the original software back: Continue, then recovery mode.' } } });
+      dispatch({ type: 'undo', patch: { depth: 'keep', appsBack: true, locked: true, note: { kind: 'ok', title: 'Aqara\'s apps are back.', sub: 'Glassworks is removed. Next, put the original software back: Continue, then recovery mode.' } } });
+      return;
+    case 'undo-still-on': // the apps are back, but Android would not remove or disable Glassworks
+      await session.openUndo();
+      dispatch({ type: 'undo', patch: { depth: 'keep', note: { kind: 'err', title: 'Aqara\'s apps are back, but Glassworks is still on.', sub: `Android would not turn Glassworks off. It is still installed, so the panel may start it again or ask which home screen to use. Try again, or choose "${s1PlusUi.undo.factory.title}".` } } });
       return;
     case 'undo-unreadable': // this browser has a backup, but IndexedDB fails to read it
       await session.openUndo();

@@ -6,6 +6,7 @@ package dev.glassworks.notifications
 
 import android.app.Application
 import android.content.Context
+import dev.glassworks.pane.SettingsChange
 import dev.glassworks.pane.SettingsItem
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -31,6 +32,7 @@ class NotificationsDefinitionTest {
             is SettingsItem.Info -> listOf("${i.title()}: ${i.detail()}")
             is SettingsItem.Link -> listOf("${i.title}: ${i.detail}")
             is SettingsItem.Switch -> listOf(i.title)
+            is SettingsItem.Action -> listOf("${i.title}: ${i.detail()}")
             else -> emptyList()
         }
     }
@@ -67,8 +69,29 @@ class NotificationsDefinitionTest {
         val t = texts(d.settings().single().items)
         assertEquals("2 on the panel · 1 held · last one 2 min ago", t.first())
         assertTrue("Notifications on the panel: 2 · open the list" in t)
+        assertTrue("Send a test notification: A normal one, with a chime and one button" in t)
         assertTrue("Do not disturb: Off" in t)
         assertTrue("Button taps: event esphome.notification_action" in t)
+    }
+
+    /** #518: the list the panel opens, as the link's twin for the Manage page, in the words of the list's rows. */
+    @Test
+    fun theListIsTheLinksTwin() {
+        d.switch.on = true
+        fun listed() = d.settings().single().items.filterIsInstance<SettingsItem.Group>().first().items
+            .filterIsInstance<SettingsItem.Link>().single().let(SettingsChange::twinOf)
+        assertEquals(listOf(NotificationsDefinition.NOTHING), texts(listed()))
+        hub.publish(NotificationsHub.State(doNotDisturb = true, list = listOf(
+            NotificationStore.Entry(1, Notification("Door", "Someone is at the door", priority = Priority.CRITICAL), 540_000, Delivery.of(Priority.CRITICAL, true)),
+            NotificationStore.Entry(2, Notification("", "Washer done"), 300_000, Delivery.of(Priority.NORMAL, true)),
+            NotificationStore.Entry(3, Notification("Camera", "", url = "/lovelace/door"), 0, Delivery.of(Priority.NORMAL, true)),
+        )))
+        assertEquals(listOf(
+            "Door: Someone is at the door · Critical · 1 min ago",
+            "Washer done: Held · Do not disturb · 5 min ago",
+            "Camera: 10 min ago",
+            NotificationsDefinition.KEPT,
+        ), texts(listed()))
     }
 
     @Test

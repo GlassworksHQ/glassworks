@@ -102,8 +102,8 @@ jobs:
         run: |
           [ -n "$S1_KEYSTORE_B64" ] || { echo "::error::secret S1_KEYSTORE_B64 is not set (docs/releasing.md)"; exit 1; }
           umask 077
-          printf '%s' "$S1_KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/s1kiosk-release.jks"
-          echo "S1_KEYSTORE_FILE=$RUNNER_TEMP/s1kiosk-release.jks" >> "$GITHUB_ENV"
+          printf '%s' "$S1_KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/glassworks-s1-release.jks"
+          echo "S1_KEYSTORE_FILE=$RUNNER_TEMP/glassworks-s1-release.jks" >> "$GITHUB_ENV"
 
       - name: Build the signed APKs, one per ABI
         env:
@@ -151,7 +151,7 @@ jobs:
 
       - name: Remove the keystore
         if: always()
-        run: rm -f "$RUNNER_TEMP/s1kiosk-release.jks"
+        run: rm -f "$RUNNER_TEMP/glassworks-s1-release.jks"
 
       - name: Name, verify and checksum
         run: |
