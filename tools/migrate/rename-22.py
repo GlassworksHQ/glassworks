@@ -110,6 +110,7 @@ class {name} : {new}()
 S1_MODULES = {"frames/aqara-s1-plus/panes/wall-base"}
 S1_APP = "frames/aqara-s1-plus/android"
 S1_GRADLE = {S1_APP + "/build.gradle.kts", "engines/engine-gecko-legacy/test-app/build.gradle.kts"}
+S1_LEGACY_MANIFEST = "engines/engine-gecko-legacy/test-app/src/debug/AndroidManifest.xml"
 # Text never rewritten: history, the probe's README (it borrowed sh.edm.s1kiosk before #527), this script.
 SKIP_TEXT = ("CHANGELOG.md", "tools/mirror/probe-app/", "tools/migrate/rename-22.py")
 # Research notes are dated evidence: their logs and tables stay as recorded, only their links follow the move.
@@ -637,6 +638,16 @@ def s1_frame_setup():
         path = f"{S1_APP}/src/main/java/{fq.replace('.', '/')}.kt"
         if fq not in S1_SHIMS and os.path.exists(path):
             git("rm", "-q", path)
+    # Both apps' namespaces change, so a relative name in either manifest would resolve somewhere else: name each
+    # component in full. The legacy check app's debug manifest sits over the S1 app's.
+    for m in (manifest, S1_LEGACY_MANIFEST):
+        if os.path.exists(m):
+            s1_full_names(m)
+
+
+def s1_full_names(manifest):
+    """Rewrites a manifest's component class names, relative ones resolved against OLD, to their full new names
+    (shims and the alias keep theirs). Idempotent."""
     text = open(manifest).read()
 
     def full(m):
