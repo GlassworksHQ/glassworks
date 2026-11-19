@@ -115,6 +115,15 @@ describe('the headless install on a fake Mirror', () => {
     expect(prop).not.toContain(API_KEY);
   }, 60_000);
 
+  it('stops before the reboot when the app has a key it can\'t hand over, so the flash doesn\'t lose it (#575 review)', async () => {
+    const API_KEY = btoa(String.fromCharCode(...Array.from({ length: 32 }, (_, i) => 5 * i + 1))); // made up
+    const { d, run } = await install({ apiKey: API_KEY });
+    d.before.keys!.unreadable = true;
+    await expect(run).rejects.toThrow(/couldn't read the Home Assistant API key.*Nothing was written/);
+    expect(d.state()).toBe('android');
+    expect(d.lk.commands.filter((c) => c.startsWith('flash:'))).toEqual([]);
+  }, 60_000);
+
   it('without a key to carry, says so and flags nothing', async () => {
     const { d, lines, run } = await install();
     const r = await run;

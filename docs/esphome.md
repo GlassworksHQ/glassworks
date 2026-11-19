@@ -95,14 +95,16 @@ Assistant's entry keeps it. A fresh app that answers with no key makes HA open a
 (`reauth_encryption_removed_confirm`), and the entities stay unavailable until someone confirms it (seen on the Mirror
 2026-11-18). So the headless Mirror flash carries the key over (#574):
 
-1. Before the flash, it reads the key from the running app over adb, on the app's socket `@glassworks_api_key`
-   (`ApiKeyHandover`: adb only, uid 0 or 2000; never on the LAN). It prints the key's 4-hex fingerprint, never the key.
+1. Just before it restarts the Mirror into fastboot, it reads the key from the running app over adb, on the app's
+   socket `@glassworks_api_key` (`ApiKeyHandover`: adb only, uid 0 or 2000; never on the LAN). It prints the key's
+   4-hex fingerprint, never the key. If the app has a key but can't hand it over now, the flash stops there, with
+   nothing written.
 2. It writes `ro.glassworks.api_key.handover=1` into the image's `build.prop`: a flag, not the key, since every app
    can read `build.prop`.
 3. On that flag, the fresh app keeps its API server shut and unannounced until a key comes, for up to 15 minutes. HA
    only gets "connection refused" and retries, which opens no re-authentication.
-4. At the first boot, right after it starts the app, the flash hands the key back on the same socket. `set` only fills
-   an empty key store: it never replaces a key in use. The app starts its API server with the key, and HA reconnects.
+4. At the first boot, right after it starts the app, the flash hands the key back on the same socket, and tries again
+   while the socket fails or doesn't answer. `set` only fills an empty key store: it never replaces a key in use. The app starts its API server with the key, and HA reconnects.
 
 What each installer can reach before the flash:
 

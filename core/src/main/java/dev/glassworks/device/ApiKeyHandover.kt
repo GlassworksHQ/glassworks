@@ -25,8 +25,10 @@ import java.io.OutputStream
  * get           → key <base64> | none | unreadable
  * set <base64>  → ok | refused <why>
  * ```
- * `set` only fills an empty store (or gives the key it holds): it never replaces a key Home Assistant uses now. The
- * key is never logged; [log] gets its fingerprint ([NoiseKeys.fingerprint]) at most.
+ * `set` only fills an empty store (or gives the key it holds): it never replaces a key Home Assistant uses now. Two
+ * `set`s at once can't both fill it. Home Assistant's own provisioning ([NoiseKeys]) writes the same store under its own
+ * lock; it can only run while the API server is up, and on a reflash the server waits for this `set` first. The key is
+ * never logged; [log] gets its fingerprint ([NoiseKeys.fingerprint]) at most.
  */
 class ApiKeyHandover(
     private val store: ReadableNoiseKeyStore,
@@ -49,9 +51,16 @@ class ApiKeyHandover(
         }
     }
 
+    /** Guards [set]'s read and save: each adb connection has its own thread, and two must not both fill the store. */
+    private val lock = Any()
+
     private fun set(text: String): String {
         val key = decode(text.trim())?.takeIf { it.size == 32 && it.any { b -> b != 0.toByte() } }
             ?: return "refused not base64 of 32 bytes, or all zeros"
+        return synchronized(lock) { fill(key) }
+    }
+
+    private fun fill(key: ByteArray): String {
         return when (val r = store.read()) {
             is StoredKey.Present ->
                 if (r.key.contentEquals(key)) "ok" else "refused a different key is set already"

@@ -168,6 +168,10 @@ export function fakeApk(pkg = 'sh.edm.s1kiosk', o: { utf8?: boolean; libs?: Reco
  */
 export class FakeKeySocket {
   verbs: string[] = [];
+  /** the next `drop` requests get no reply (a lost answer), though a `set` still stores its key */
+  drop = 0;
+  /** what `get` answers for a key it holds: `unreadable` for a key store that is down */
+  unreadable = false;
   constructor(public key?: string, public listening = true) {}
   shell(cmd: string): { out: string; code: number } | undefined {
     return cmd === `grep -c ' @glassworks_api_key$' /proc/net/unix` ? { out: `${this.listening ? 1 : 0}\n`, code: this.listening ? 0 : 1 } : undefined;
@@ -179,9 +183,10 @@ export class FakeKeySocket {
       write: async (d: Uint8Array) => {
         const [verb, arg] = new TextDecoder().decode(d).trim().split(' ');
         this.verbs.push(verb!);
-        const reply = verb === 'get' ? (this.key ? `key ${this.key}` : 'none')
+        const reply = verb === 'get' ? (this.key ? (this.unreadable ? 'unreadable' : `key ${this.key}`) : 'none')
           : verb === 'set' && arg ? (!this.key || this.key === arg ? ((this.key = arg), 'ok') : 'refused a different key is set already')
           : 'refused unknown request';
+        if (this.drop > 0) { this.drop--; return; }
         queueMicrotask(() => cb(new TextEncoder().encode(`${reply}\n`)));
       },
       onData: (f: (b: Uint8Array) => void) => { cb = f; },

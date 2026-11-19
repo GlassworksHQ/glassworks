@@ -252,6 +252,31 @@ describe('the ESPHome API key across a reflash (#574)', () => {
     expect(await handOverApiKey(shell(new FakeKeySocket(btoa('x'.repeat(32)))), KEY, async () => {})).toBe(false);
   });
 
+  it('tries again when an answer is lost, and gets ok for the key the app already stored (#575 review)', async () => {
+    const s = new FakeKeySocket();
+    s.drop = 1;
+    expect(await handOverApiKey(shell(s), KEY, async () => {}, 60_000, 5)).toBe(true);
+    expect(s.key).toBe(KEY);
+    expect(s.verbs).toEqual(['set', 'set']);
+  });
+
+  it('returns false, never throws, when the app never answers (#575 review)', async () => {
+    const s = new FakeKeySocket();
+    s.drop = 1_000;
+    let slept = 0;
+    expect(await handOverApiKey(shell(s), KEY, async () => { slept++; }, 0, 5)).toBe(false);
+    expect(slept).toBeLessThanOrEqual(1);
+  });
+
+  it('throws when the app has a key it can\'t hand over now, so a flash doesn\'t lose it (#575 review)', async () => {
+    const down = new FakeKeySocket(KEY);
+    down.unreadable = true;
+    await expect(readApiKey(shell(down))).rejects.toThrow(/can't read it right now/);
+    const mute = new FakeKeySocket(KEY);
+    mute.drop = 1;
+    await expect(readApiKey(shell(mute), 5)).rejects.toThrow(/didn't answer/);
+  });
+
   it('fingerprints a key as the app logs it', async () => {
     // NoiseKeys.fingerprint: SHA-256's first two bytes, in hex
     expect(await apiKeyFingerprint(KEY)).toMatch(/^[0-9a-f]{4}$/);

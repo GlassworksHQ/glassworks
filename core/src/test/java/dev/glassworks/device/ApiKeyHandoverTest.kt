@@ -72,6 +72,24 @@ class ApiKeyHandoverTest {
         assertTrue(h.handle("remove").startsWith("refused "))
     }
 
+    @Test fun twoSetsAtOnceCantBothFillTheStore() {
+        // the first read waits (up to 1 s) for the second set to arrive: without the lock both see an empty store
+        val inside = java.util.concurrent.CountDownLatch(2)
+        val s = object : ReadableNoiseKeyStore {
+            @Volatile var held: StoredKey = StoredKey.Absent
+            override fun read(): StoredKey { inside.countDown(); inside.await(1, java.util.concurrent.TimeUnit.SECONDS); return held }
+            override fun load(): ByteArray? = null
+            override fun save(key: ByteArray?): Boolean { held = StoredKey.Present(key!!); return true }
+        }
+        val h = ApiKeyHandover(s, { Base64.getEncoder().encodeToString(it) }, { runCatching { Base64.getDecoder().decode(it) }.getOrNull() })
+        val replies = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val threads = listOf(key, other).map { k -> Thread { replies += h.handle("set ${Base64.getEncoder().encodeToString(k)}") } }
+        threads.forEach { it.start() }
+        threads.forEach { it.join(5_000) }
+        assertEquals(1, replies.count { it == "ok" })
+        assertEquals(1, replies.count { it.startsWith("refused ") })
+    }
+
     @Test fun theKeyIsNeverLogged() {
         handover(Store(StoredKey.Present(key))).handle("get")
         handover(Store()).handle("set $b64")

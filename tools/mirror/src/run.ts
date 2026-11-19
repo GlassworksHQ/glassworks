@@ -127,10 +127,6 @@ export async function runInstall(o: InstallOptions, d: RunDeps): Promise<Install
         const board = await prop('ro.board.platform'), fp = await prop('ro.build.fingerprint');
         d.log(`    board ${board}, Android ${await prop('ro.build.version.release')}, ${fp === GLASS_PANES.fingerprint ? 'the Glass Panes image' : `not the Glass Panes image (${fp})`}`);
         if (board !== 'msm8916') throw new Error(`this isn't the original Mirror (board ${board || 'unknown'}, needs msm8916). Nothing was changed.`);
-        // a reflash wipes the key Home Assistant provisioned: read it now, hand it to the fresh app at the first boot
-        apiKey = await readApiKey(p).catch(() => undefined);
-        d.log(apiKey ? `    Home Assistant API key: carried over the flash (fingerprint ${await apiKeyFingerprint(apiKey)})`
-          : '    Home Assistant API key: none to carry (no app of ours with a key, or one older than #574): Home Assistant may ask to re-authenticate once');
       }],
       ['The warning', async () => { for (const l of STOCK_WARNING) d.log(`    ${l}`); }],
       ['Load and check system.img', async () => {
@@ -142,8 +138,22 @@ export async function runInstall(o: InstallOptions, d: RunDeps): Promise<Install
         d.log(`    SHA-256 ${loaded.sha256}: as published`);
       }],
       ['Reboot the Mirror into fastboot', async () => {
-        if (await d.adb()) await d.rebootToBootloader();
-        else d.log('    no adb: assuming it is in fastboot already');
+        const p = await d.adb();
+        if (!p) {
+          d.log('    no adb: assuming it is in fastboot already');
+          d.log('    Home Assistant API key: none to carry (no adb before the flash): Home Assistant may ask to re-authenticate once');
+          return;
+        }
+        // A reflash wipes the key Home Assistant provisioned: read it now, as late as the app still runs, so a key HA
+        // changed meanwhile is the one carried. A key the app has but can't hand over stops the run: flashing would lose it.
+        try {
+          apiKey = await readApiKey(p);
+        } catch (e) {
+          throw new Error(`couldn't read the Home Assistant API key from the app: ${(e as Error).message}. Nothing was written to the Mirror. Run it again.`);
+        }
+        d.log(apiKey ? `    Home Assistant API key: carried over the flash (fingerprint ${await apiKeyFingerprint(apiKey)})`
+          : '    Home Assistant API key: none to carry (no app of ours with a key, or one older than #574): Home Assistant may ask to re-authenticate once');
+        await d.rebootToBootloader();
       }],
       ['Fastboot checks (read-only)', async () => {
         fb = await d.fastboot();
