@@ -122,6 +122,64 @@ def clock_samples(nonce, pairs):
     return sandwich, marks
 
 
+def one_read_record(period, presents, m0, end_mono):
+    """The record a single read after a window gave before #643 (perfrun.py's read_sf and the synthetic step, as
+    they were), kept here word for word: the S1 path must still give exactly this."""
+    return {"period_ms": period, "window_ms": [m0 * 1000, end_mono * 1000],
+            "oldest_ms": min(presents) / 1e6 if presents else None, "presents_ms": P.presents_in(presents, m0, end_mono)}
+
+
+class SurfaceFlingerReads(unittest.TestCase):
+    """#643: reads during a window, joined by present time, and the preflight's plan."""
+    NS = 1_000_000
+
+    def frames(self, a_ms, b_ms):
+        return [int(t * self.NS) for t in range(a_ms, b_ms, 16)]
+
+    def test_one_read_gives_the_record_one_read_always_gave(self):
+        # The S1's way (SF_POLL_S 0): byte for byte, in JSON, over full, partial and empty histories.
+        cases = [(16.666, self.frames(10_000, 12_100), 10.5, 11.6), (16.666, self.frames(11_000, 11_200), 10.5, 11.6),
+                 (16.666, [], 10.5, 11.6), (None, [], 1.0, 2.0), (16.666, self.frames(10_000, 12_100), 12.2, 12.4)]
+        for period, ts, m0, end in cases:
+            self.assertEqual(json.dumps(P.sf_window(period, [ts], m0, end)), json.dumps(one_read_record(period, ts, m0, end)))
+
+    def test_overlapping_reads_reach_back_to_the_first(self):
+        # Three reads of a 1 s history during a 2.5 s window, 0.8 s apart: each overlaps the one before.
+        reads = [self.frames(9_200, 10_200), self.frames(10_000, 11_000), self.frames(10_800, 11_800)]
+        frames, oldest = P.stitch_reads(reads)
+        self.assertEqual(oldest, reads[0][0])
+        self.assertEqual(frames, sorted(set(reads[0] + reads[1] + reads[2])))
+        rec = P.sf_window(16.666, reads, 9.5, 11.7)
+        self.assertLess(rec["oldest_ms"], 9500)                  # the window is covered: report.py trusts its gaps
+        self.assertEqual(rec["presents_ms"][0], 9504.0)
+
+    def test_a_gap_between_reads_keeps_only_what_follows_it(self):
+        # The second read's oldest frame comes after the first's newest: frames between them may be lost.
+        reads = [self.frames(9_000, 9_500), self.frames(10_000, 11_000), self.frames(10_500, 11_500)]
+        _, oldest = P.stitch_reads(reads)
+        self.assertEqual(oldest, reads[1][0])
+
+    def test_a_still_screen_between_reads_is_no_gap(self):
+        same = self.frames(9_000, 9_500)
+        _, oldest = P.stitch_reads([same, same, same + self.frames(9_500, 9_600)])
+        self.assertEqual(oldest, same[0])
+
+    def test_no_frames_in_the_last_read(self):
+        self.assertEqual(P.stitch_reads([self.frames(9_000, 9_500), []]), (self.frames(9_000, 9_500), None))
+        self.assertEqual(P.stitch_reads([]), ([], None))
+
+    def test_the_plan(self):
+        self.assertEqual(P.sf_plan(2116.7, 300), (0, None))        # the S1: 127 frames, one read after each window
+        self.assertEqual(P.sf_plan(1800, 900), (0, None))
+        self.assertEqual(P.sf_plan(966.7, 171), (P.SF_POLL_MAX_S, None))   # the Pixel Tablet: 59 frames, run 3's p95 read
+        self.assertEqual(P.sf_plan(400, 90), (0.2, None))
+        for reach, read in ((90, 10), (966.7, 500)):                      # reads too close, or one too slow
+            poll, why = P.sf_plan(reach, read)
+            self.assertIsNone(poll)
+            self.assertIn(f"reaches back {reach:.0f} ms and one read takes {read:.0f} ms", why)
+        self.assertIsNone(P.sf_plan(None, 0)[0])
+
+
 class SurfaceViewLayers(unittest.TestCase):
     def test_each_androids_naming(self):
         pkg = "dev.glassworks.generic_android"
