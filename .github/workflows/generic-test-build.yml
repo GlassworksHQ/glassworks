@@ -1,22 +1,27 @@
 # Test build of Glassworks for generic Android (#23, frames/generic-android/android), on the same branches as
 # The S1 app's test build (test-build.yml):
 #
-#   git push origin HEAD:test-build/<name>
+#   git push origin HEAD:test-build/<name>          (or a manual run, with `version` to build as)
 #   gh run download <run-id> -n glassworks-generic-test-<sha>
-#   adb install -r glassworks-generic-test-0.1.0-arm64-v8a-<sha>.apk      (installs, or updates in place, data kept)
-#   adb install -r glassworks-generic-test-0.1.1-arm64-v8a-<sha>.apk      (a higher version, to try an update)
-#   glassworks-generic-legacy-test-0.1.0-arm64-v8a-<sha>.apk             (the legacy build, Android 6-7: the Mirror)
+#   adb install -r glassworks-generic-test-<V>-arm64-v8a-<sha>.apk        (installs, or updates in place, data kept)
+#   adb install -r glassworks-generic-test-<V+1>-arm64-v8a-<sha>.apk      (the next patch, to try an update)
+#   glassworks-generic-legacy-test-<L>-arm64-v8a-<sha>.apk               (the legacy build, Android 6-7: the Mirror)
+#
+# <V> is the `version` input, else the latest generic release (generic-android-vX.Y.Z), else 0.1.0; <L> the same
+# for the legacy line (generic-android-legacy-vX.Y.Z). Android refuses an APK below the installed versionCode,
+# and an equal one installs in place, so a test build of the latest release's version goes onto a panel that runs
+# it (a panel on 0.2.0, versionCode 200, takes a 0.2.0 test build) without an uninstall.
 #
 # What it is:
 #   - The release variant, applicationId dev.glassworks.generic_android. It never installs over the S1 app.
-#   - The legacy build too (#198): dev.glassworks.generic_android.legacy, minSdk 23, GeckoView 144, 0.1.0 and 0.1.1
+#   - The legacy build too (#198): dev.glassworks.generic_android.legacy, minSdk 23, GeckoView 144, <L> and <L+1>
 #     for arm64-v8a (the Mirror's ABI), with the same key. Its APK carries desugar_jdk_libs code (GPL-2.0 with
 #     the Classpath exception), which the maintainer allowed on 2026-11-16 (AGENTS.md, rule 4).
 #   - Signed with Glassworks' release key (`release-signing` environment, GENERIC_* secrets;
 #     frames/generic-android/README.md, "Signing"), so a test build updates any earlier test build or release in
 #     place, settings kept. Once only: a build from before 2026-11-17 was signed with a key made for its own run,
 #     so uninstall it first (that wipes the app's settings).
-#   - 0.1.0 for each ABI the frame runs, and 0.1.1 for arm64-v8a, so an update in place can be tried.
+#   - <V> for each ABI the frame runs, and <V+1> for arm64-v8a, so an update in place can be tried.
 #   - Kept for 3 days; the repo is public. Only pushes (write access) and manual runs trigger it, so pull requests
 #     from forks never get the key.
 name: Generic test build
@@ -25,6 +30,10 @@ on:
   push:
     branches: ['test-build/**']
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'MAJOR.MINOR.PATCH to build as (default: the latest generic release)'
+        required: false
 
 permissions:
   contents: read
@@ -66,6 +75,35 @@ jobs:
           echo "GENERIC_KEYSTORE_FILE=$RUNNER_TEMP/glassworks-release.jks" >> "$GITHUB_ENV"
           echo "SHORT_SHA=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
 
+      - name: Versions (input, then the latest release of each line)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          # Every release tag, over every page; a failed lookup stops the run (it must not read as "no release").
+          tags=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq '.[] | select((.draft or .prerelease) | not) | .tag_name') \
+            || { echo "::error::couldn't list the releases"; exit 1; }
+          latest() {   # the newest release of one line (tag <prefix>X.Y.Z), or 0.1.0 when it has none
+            local t
+            t=$(grep -E "^$1[0-9]+[.][0-9]+[.][0-9]+$" <<< "$tags" | head -n 1 || true)
+            echo "${t#"$1"}" | sed 's/^$/0.1.0/'
+          }
+          next() {     # the next version, carrying a patch or minor of 99 over (versionCode = major*10000 + minor*100 + patch)
+            IFS=. read -r a b c <<< "$1"
+            if [ "$c" -lt 99 ]; then echo "$a.$b.$((c + 1))"; elif [ "$b" -lt 99 ]; then echo "$a.$((b + 1)).0"; else echo "$((a + 1)).0.0"; fi
+          }
+          valid() { [[ "$1" =~ ^(0|[1-9][0-9]{0,3})\.(0|[1-9][0-9]?)\.(0|[1-9][0-9]?)$ ]]; }
+          v="${INPUT_VERSION:-$(latest generic-android-v)}"
+          l="${INPUT_VERSION:-$(latest generic-android-legacy-v)}"
+          nv=""; nl=""
+          valid "$v" && nv=$(next "$v"); valid "$l" && nl=$(next "$l")
+          for x in "$v" "$nv" "$l" "$nl"; do
+            valid "$x" || { echo "::error::version '$x' is not MAJOR.MINOR.PATCH (major < 10000, minor/patch < 100), or has no successor"; exit 1; }
+          done
+          { echo "VERSION=$v"; echo "NEXT_VERSION=$nv"; echo "LEGACY_VERSION=$l"; echo "LEGACY_NEXT=$nl"; } >> "$GITHUB_ENV"
+          echo "Generic $v (and $nv), legacy $l (and $nl)" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Build, one APK per ABI and version
         env:
           GENERIC_REQUIRE_RELEASE_SIGNING: 'true'
@@ -75,14 +113,14 @@ jobs:
         run: |
           mkdir -p generic-dist
           frame_abis="$(jq -r '.abis[]' frames/generic-android/design/frame.json)"
-          builds="$(for a in $frame_abis; do echo "0.1.0 $a"; done; echo "0.1.1 arm64-v8a")"
+          builds="$(for a in $frame_abis; do echo "$VERSION $a"; done; echo "$NEXT_VERSION arm64-v8a")"
           while read -r version a; do
             ./gradlew --no-daemon :generic-android:assembleRelease -Ps1Abi="$a" -PgenericVersion="$version" -Ps1TestBuild="$SHORT_SHA"
             cp frames/generic-android/android/build/outputs/apk/release/generic-android-release.apk \
               "generic-dist/glassworks-generic-test-$version-$a-$SHORT_SHA.apk"
           done <<< "$builds"
           # The legacy build (#198), for the Mirror's ABI. Its GeckoView follows -PlegacyAbi, the APK -Ps1Abi.
-          for version in 0.1.0 0.1.1; do
+          for version in "$LEGACY_VERSION" "$LEGACY_NEXT"; do
             ./gradlew --no-daemon :generic-android:assembleLegacy -Ps1Abi=arm64-v8a -PlegacyAbi=arm64-v8a \
               -PgenericVersion="$version" -Ps1TestBuild="$SHORT_SHA"
             cp frames/generic-android/android/build/outputs/apk/legacy/generic-android-legacy.apk \

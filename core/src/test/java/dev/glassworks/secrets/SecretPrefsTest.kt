@@ -177,5 +177,95 @@ class SecretPrefsTest {
     }
 
 
+    /**
+     * A signing-key switch (#584): the data is copied across an uninstall, which deleted the Keystore key, so the new
+     * install has none (its Keystore makes one when a secret is first sealed, as KeystoreKey.orNew does).
+     */
+    private var keystore: SecretKey? = null
+    private val fresh = SecretStore({ keystore ?: aesKey().also { keystore = it } }, { keystore })
+    private fun switched() = SecretPrefs(raw, "secrets-test", secrets, fresh) { warnings += it }
+
+    @Test fun aCarryOverReplacesWhatTheDeletedKeySealed() {
+        prefs().edit().putString("token", "made-up-old").putString("psk", "made-up-psk").commit()
+        val p = switched()
+        assertEquals("no key yet: the copied value stays", SecretPrefs.Secret.Unavailable, p.secret("token"))
+        assertTrue(raw.contains("token"))
+        assertEquals(SecretPrefs.CarryOver.STORED, p.carryOver("token", "made-up-old") { it.putBoolean("signed_in", true) })
+        assertEquals("made-up-old", p.getString("token", null))
+        assertEquals("made-up-old", switched().getString("token", null))
+        assertTrue("the extra settings in the same commit", raw.getBoolean("signed_in", false))
+        assertTrue(SecretStore.isSealed(stored("token")!!))
+        assertEquals("handed over again", SecretPrefs.CarryOver.SAME, p.carryOver("token", "made-up-old"))
+        // what wasn't carried can never open now: removed when read, so the panel asks for it again
+        assertNull(p.getString("psk", null))
+        assertFalse(raw.contains("psk"))
+        assertFalse("never the value", warnings.any { it.contains("made-up") })
+    }
+
+    @Test fun aCarryOverFillsAnEmptyValue() {
+        assertEquals(SecretPrefs.CarryOver.STORED, switched().carryOver("token", "made-up-token"))
+        assertEquals("made-up-token", switched().getString("token", null))
+    }
+
+    @Test fun aCarryOverNeverReplacesAValueInUse() {
+        val p = prefs()
+        p.edit().putString("token", "made-up-in-use").commit()
+        val before = stored("token")
+        assertEquals(SecretPrefs.CarryOver.DIFFERENT, p.carryOver("token", "made-up-other") { it.putBoolean("signed_in", true) })
+        assertEquals(before, stored("token"))
+        assertFalse("nothing else either", raw.contains("signed_in"))
+        assertEquals(SecretPrefs.CarryOver.SAME, p.carryOver("token", "made-up-in-use"))
+    }
+
+    @Test fun aCarryOverDuringAnOutageChangesNothing() {
+        prefs().edit().putString("token", "made-up-in-use").commit()
+        val before = stored("token")
+        key = null // the key store can't be reached: neither seal nor open
+        assertEquals(SecretPrefs.CarryOver.UNAVAILABLE, prefs().carryOver("token", "made-up-other"))
+        assertEquals(before, stored("token"))
+        // it can seal again but not open yet: a value that may open later stays too
+        val flaky = SecretStore({ first }, { null })
+        assertEquals(SecretPrefs.CarryOver.UNAVAILABLE, SecretPrefs(raw, "secrets-test", secrets, flaky).carryOver("token", "made-up-other"))
+        assertEquals(before, stored("token"))
+    }
+
+    @Test fun aReadThatMeetsACarryOverReadsTheCarriedValue() {
+        // Another object over the same file (each KioskPrefs has its own) reads while the carry-over writes. Its open
+        // fails with the new key, but the value was replaced before it could remove it: it reads the carried one.
+        prefs().edit().putString("token", "made-up-old").commit()
+        val writer = switched()
+        var carried = false
+        val readerStore = SecretStore({ keystore ?: aesKey().also { keystore = it } }, {
+            if (!carried) { carried = true; assertEquals(SecretPrefs.CarryOver.STORED, writer.carryOver("token", "made-up-old")) }
+            keystore
+        })
+        val reader = SecretPrefs(raw, "secrets-test", secrets, readerStore) { warnings += it }
+        assertEquals("made-up-old", reader.getString("token", null))
+        assertTrue(carried)
+        assertTrue("not removed", raw.contains("token"))
+        assertTrue("and not called lost", warnings.isEmpty())
+    }
+
+    @Test fun whileAHandOverIsDueALostValueStaysLocked() {
+        // Run B of the S1 run on 2026-11-19 (#608): the new app made its key (a pane's first secret) before the
+        // installer's hand-over came. The copied values then failed to open; they must stay locked, not be removed.
+        prefs().edit().putString("token", "made-up-old").putString("psk", "made-up-psk").commit()
+        var due = true
+        val p = SecretPrefs(raw, "secrets-test", secrets, fresh, { due }) { warnings += it }
+        p.edit().putString("other", "plain").commit()
+        assertTrue("a first secret makes the new key", SecretPrefs(raw, "secrets-test", setOf("first"), fresh).edit().putString("first", "x").commit())
+        assertEquals(SecretPrefs.Secret.Unavailable, p.secret("token"))
+        assertFalse(p.canRead("token"))
+        assertTrue("kept for the hand-over", raw.contains("token") && raw.contains("psk"))
+        assertFalse("never said lost meanwhile", warnings.any { "no longer has" in it })
+        assertEquals(SecretPrefs.CarryOver.STORED, p.carryOver("token", "made-up-old"))
+        assertEquals("made-up-old", p.getString("token", null))
+        // the installer is done: what wasn't handed over is lost, as after any reinstall
+        due = false
+        assertNull(p.getString("psk", null))
+        assertFalse(raw.contains("psk"))
+        assertFalse("never the value", warnings.any { "made-up" in it })
+    }
+
     private fun aesKey(): SecretKey = KeyGenerator.getInstance("AES").apply { init(256) }.generateKey()
 }

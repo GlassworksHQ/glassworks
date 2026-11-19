@@ -5,7 +5,7 @@
 import type { PanelShell } from '@glassworks/adb';
 import { ACT, PKG, Steps, deviceInfo, dropAdmin, grantPermissions, q, startApp, type StepFn } from '@glassworks/app-adb';
 import {
-  type SwitchOutcome, type SwitchPlan, isKeyMismatch, panelWifi, planSwitch, resendWifi, switchSigningKey, wifiAtRisk,
+  type Carried, type SwitchOutcome, type SwitchPlan, handBackSecrets, isDowngrade, isKeyMismatch, panelWifi, planSwitch, resendWifi, switchSigningKey, wifiAtRisk,
 } from './switch';
 
 export { PKG, deviceInfo, kioskVersion, q, type StepFn } from '@glassworks/app-adb';
@@ -74,6 +74,9 @@ export interface ProvisionOptions {
 /** What a signing-key switch did (provision's result, when there was one). */
 export interface SwitchResult {
   dataKept: boolean;
+  /** The HA sign-in and the API key (#584): kept (handed to the new app), lost, or none (there was none to carry). */
+  signIn: Exclude<Carried, 'carry'>;
+  apiKey: Exclude<Carried, 'carry'>;
   /** kept: never at risk; resent: sent to the new app; lost: the Wi-Fi step has to ask for it. */
   wifi: 'kept' | 'resent' | 'lost';
   ssid?: string;
@@ -140,6 +143,9 @@ export async function provision(p: PanelShell, opts: ProvisionOptions, onStep: S
   let sw: SwitchOutcome | undefined;
   const pmOut = await r.tryInstall('glassworks', opts.kioskApk, true, () => phase({ step: 'apk', apk: 'kiosk', stage: 'install' }));
   if (!/Success/.test(pmOut)) {
+    if (isDowngrade(pmOut)) {
+      throw new Error('Glassworks on the panel is a newer version than this one, and Android won\'t install an older version over a newer one. Nothing was changed.');
+    }
     if (!isKeyMismatch(pmOut)) throw new Error(`installing Glassworks failed: ${pmOut.trim()}`);
     const plan = await planSwitch(p);
     r.detail(`installed Glassworks has another signing key${plan.debugBuild ? ' (development build)' : ''}; root: ${plan.root ? 'yes' : 'no'}; Wi-Fi saved by Glassworks: ${plan.wifi.owner === 'kiosk' ? 'yes' : plan.wifi.owner === 'unknown' ? 'maybe' : 'no'}`);
@@ -149,6 +155,22 @@ export async function provision(p: PanelShell, opts: ProvisionOptions, onStep: S
     sw.notes.forEach((n) => r.detail(n));
   }
 
+  try {
+    return await afterInstall(p, r, opts, phase, sw, sleep);
+  } catch (e) {
+    // A step after the switch failed: the new app still needs the sign-in and key it was carrying, or they are gone.
+    if (sw && (sw.signIn === 'carry' || sw.apiKey === 'carry')) {
+      r.step('Sign-in and encryption key to the new app');
+      await r.try(`am start -n ${ACT}`);
+      await handBackSecrets(p, sw, (d) => r.detail(d), sleep).catch(() => {});
+    }
+    throw e;
+  }
+}
+
+/** Everything after the app is installed (or switched): permissions, HOME, preferences, the start, the hand-backs. */
+async function afterInstall(p: PanelShell, r: Steps, opts: ProvisionOptions, phase: (ph: AppPhase) => void,
+  sw: SwitchOutcome | undefined, sleep: (ms: number) => Promise<void>): Promise<Provisioned> {
   phase({ step: 'home' });
   await grantPermissions(r);
 
@@ -203,12 +225,19 @@ export async function provision(p: PanelShell, opts: ProvisionOptions, onStep: S
 
   let switched: SwitchResult | undefined;
   if (sw) {
+    // Before the Wi-Fi: joining a network can restart the app, and the sign-in shows the dashboard at once.
+    let carried = { signIn: sw.signIn, apiKey: sw.apiKey };
+    if (sw.signIn === 'carry' || sw.apiKey === 'carry') {
+      r.step('Sign-in and encryption key to the new app');
+      carried = await handBackSecrets(p, sw, (d) => r.detail(d), sleep);
+    }
+    const settled = (c: Carried): SwitchResult['signIn'] => (c === 'carry' ? 'lost' : c);
     let wifi: SwitchResult['wifi'] = sw.wifi === 'resend' ? 'lost' : sw.wifi;
     if (sw.secret) {
       r.step(`Wi-Fi ${sw.secret.ssid} to the new app`);
       if (await resendWifi(p, sw.secret, (d) => r.detail(d), sleep)) wifi = 'resent';
     }
-    switched = { dataKept: sw.dataKept, wifi, ssid: sw.ssid, notes: sw.notes };
+    switched = { dataKept: sw.dataKept, signIn: settled(carried.signIn), apiKey: settled(carried.apiKey), wifi, ssid: sw.ssid, notes: sw.notes };
   }
 
   // A factory-fresh panel has no Wi-Fi yet (no wlan0): not an error.

@@ -59,18 +59,17 @@ keeps the screen on for the run (#240; see [What it changes on the device](#what
 ## Run it
 
 You need adb, Python 3.11 or later, ffmpeg with libx264 (for the camera streams; it runs only on your
-computer) and the kiosk installed on the device, built from `main` after #240 (it has the test
-hold; the runner refuses an app without it). The first run makes a Python venv for the fake's
+computer) and the kiosk installed on the device, built from `main` after the test dashboard came in (the
+test hold of #240 and its dashboard, `test_dashboard`; the runner refuses an app without either). The first run makes a Python venv for the fake's
 WebRTC camera (aiortc, about 93 MB on macOS (measured 2026-11-14), from `tools/perf/webrtc-requirements.txt`, every wheel's hash
 checked) in `~/.cache/glassworks-perf`. The computer needs an IPv4 address that isn't loopback (any
 network interface that is up; the camera's packets never leave the computer). Let the device idle for 10 minutes
 first, with the screen on, at normal room temperature, and the kiosk's zoom at its default ("auto").
-Note the dashboard the kiosk shows now (its URL setting, or `auto`): the graded part points the
-kiosk at the fake Home Assistant and needs to know what to put back.
+The run changes none of the kiosk's settings and not its sign-in to Home Assistant (see
+[What it changes on the device](#what-it-changes-on-the-device)).
 
 ```sh
-tools/perf/run.sh --frame aqara-s1-plus --name "Aqara S1 Plus" --runs 3 \
-  --restore-dashboard http://homeassistant.local:8123/lovelace/0 --out perf-s1
+tools/perf/run.sh --frame aqara-s1-plus --name "Aqara S1 Plus" --runs 3 --out perf-s1
 ```
 
 | Option | Default | What |
@@ -81,7 +80,6 @@ tools/perf/run.sh --frame aqara-s1-plus --name "Aqara S1 Plus" --runs 3 \
 | `--package` | `sh.edm.s1kiosk` | The Glassworks app to measure: `dev.glassworks.generic_android` for the generic app, `dev.glassworks.generic_android.legacy` for its legacy build (the Mirror) |
 | `--activity` | read from the device | The app's activity that takes Clarity's extras. The runner reads it from the app's task (see [Other Glassworks apps, and Android 6](#other-glassworks-apps-and-android-6)); give it only if the app hasn't run since the device booted |
 | `--runs` | 3 | Repeats of each part. The report gives the median and range |
-| `--restore-dashboard` | (required for the grade) | The kiosk's dashboard setting now: a URL, or `auto`. The graded part puts it back when it ends and on any exit. The runner can't read it (it never reads app data), so you give it. It can't be the fake Home Assistant's address |
 | `--pane-ram` | | Also measure each switchable pane's RAM, with the panes' settings now, which it puts back: `assist=on,sendspin=on,wall-base=on,time-zone=on,diagnostics=on,mic=on` (`mic` is Assist's microphone: on unless muted). It runs one warm-up cycle first, not recorded. See [RAM](#ram) |
 | `--taps` | 10 | Taps on each reference dashboard's toggle. 0 skips them: tap isn't measured, which fails every level, so the grade is E, provisional |
 | `--skip-synthetic`, `--skip-reference`, `--skip-real-use` | | Skip the animation test page (detail), the reference dashboards (the grade), or the real-use part. Skipping the reference dashboards gives no grade (refused, not an E) |
@@ -113,15 +111,23 @@ tools/perf/report.py <dir>` rebuilds the report from the raw files at any time, 
 
 ### What it changes on the device
 
-- **The dashboard setting, for the graded part only.** The kiosk is pointed at the start view of
-  the fake Home Assistant's reference dashboard with its own `--es url` extra (the saved
-  dashboard), so a restart comes back to a reference dashboard as it comes back to yours. When the
-  graded part ends, and on any exit the shell can catch, it is pointed back at
-  `--restore-dashboard` with `am start -W`, and the runner reads the answer: `am` exits 0 even when
-  the kiosk didn't take the intent. If it didn't, the runner tries once more, then exits with
-  status 3 and logs the command to send yourself. A run killed with `SIGKILL` can't put it back
-  either; send `--es url <your dashboard>` yourself. The fake's sign-in is stored for its own
-  address (`127.0.0.1:8089`) only, so your Home Assistant's sign-in is untouched.
+- **The test dashboard, for the graded part (and `--pane-ram`) only.** The kiosk shows the start
+  view of the fake Home Assistant's reference dashboard instead of its own, with the test hold's
+  `--es test_dashboard <url>`, so a restart comes back to a reference dashboard as it comes back to
+  yours. The kiosk's dashboard setting and its sign-in to Home Assistant don't change. The kiosk
+  takes only a page on this device (`127.0.0.1` or `localhost`), and only while a test hold is on; it
+  keeps it through restarts with the hold (`no_backup/test_hold`), and says so in its log
+  (`test dashboard on: http://127.0.0.1:8089`), which the runner checks. When the graded part ends, and
+  on any exit the shell can catch, the runner ends it (`--es test_dashboard ''`, with `am start -W`)
+  and reads the answer: `am` exits 0 even when the kiosk didn't take the intent. If it didn't, the
+  runner tries once more, then exits with status 3 and logs the command to send yourself. The hold's
+  end ends it too, so a run killed with `SIGKILL` leaves the fake on screen for at most the rest of
+  the hold (30 minutes). The legacy engine (#198), which holds pages to one origin, restarts the app
+  when the test dashboard starts and ends. The fake's sign-in is stored in the page for its own address
+  (`127.0.0.1:8089`) only. Before this, the runner set the kiosk's saved dashboard (`--es url`) and put
+  it back after: that moved the panel's Home Assistant address, and since #496 a panel whose Home
+  Assistant moved asks to sign in again. On the Pixel Tablet (2026-11-18) the graded runs failed on
+  the sign-in screen, and the panel still asked after the run.
 - **The pages.** The frontend loads once per graded run, when the kiosk comes back after the
   restart. The four reference views then open **inside** it: the runner hands each one to the fake
   Home Assistant (`/clarity/open`), and the harness, already running in the frontend, picks it up
@@ -1162,7 +1168,7 @@ gets an error, which the frontend handles as it would from HA, and the fake logs
 | Open the view | From the navigation to the view (HA's `navigate()`, as a view tab calls it, in the frontend that is already loaded) to the view's head and every card on its first screen **drawn**, on screen (rubric 2; rubric 1 ran to usable: drawn and the main thread free; see [Open the view](#open-the-view-a-navigation-in-the-loaded-frontend) and [Usable](#usable)). The times come from the page's own clock, tied to logcat's by its log line. If the view never says it was usable, or no frame reached the screen after it, it is "not measured", never 0. (Protocols 1 to 3, and protocol 4 as first written, loaded the whole page for each dashboard) | Each view; SurfaceFlinger |
 | Blocking after the open | Rubric 2: from the first screen drawn to usable (the main thread free for 500 ms), each animation frame's time past 50 ms, added up: Total Blocking Time measured on frames ([Usable](#usable)). A view that never became usable within the runner's deadline blocks for all of it | Each view's page |
 | More-info dialog | Rubric 3: from the event a tile's tap fires to the dialog settled (its show animation finished and, for the sensor, its history graph drawn), the slowest of a light's, a thermostat's and a sensor's; per run, then the median level. A dialog that never opened or settled within 20 s fails the run, and so does a view that didn't get to them. The open animation's frames decide only premium ([The more-info dialog](#the-more-info-dialog-clarity-v3-211)) | Each view's page |
-| Restart | From the app's process start (`Start proc` in logcat) to the reference dashboard's start view being **usable**, as for open the view: the kiosk comes back to it by itself, because the graded part points its dashboard setting there. This is HA's cold load: the app, the websocket, the registries, every card type's code and the first view. Once per run, for the whole frame. The engine being ready (GeckoView's own first page, `about:blank`) is reported, not graded (`engine_ready_ms`). See [Restart: back to a usable dashboard](#restart-back-to-a-usable-dashboard) | logcat; the restart page |
+| Restart | From the app's process start (`Start proc` in logcat) to the reference dashboard's start view being **usable**, as for open the view: the kiosk comes back to it by itself, because the graded part shows it as the kiosk's test dashboard, which outlives the restart. This is HA's cold load: the app, the websocket, the registries, every card type's code and the first view. Once per run, for the whole frame. The engine being ready (GeckoView's own first page, `about:blank`) is reported, not graded (`engine_ready_ms`). See [Restart: back to a usable dashboard](#restart-back-to-a-usable-dashboard) | logcat; the restart page |
 
 Each graded run is one restart back to the start view, then the four reference views in the run's
 order (`tiers.json` `ORDER`: light, typical-nocam, typical, heavy; run k starts k − 1 views in).
@@ -1461,10 +1467,14 @@ GeckoView's session is up, the kiosk ignores `open` (#103's pins; seen on the S1
 up, the request races the kiosk's own dashboard load. So protocols 1 to 3 ended the restart at
 **engine ready**, GeckoView's own first page (`about:blank`).
 
-Protocol 4 changes the kiosk's dashboard setting instead, for the graded part only (a user decision,
-2026-11-13: "I'm okay with it changing for the test and then it changing back"). The kiosk points at
+Protocol 4 changes the dashboard the kiosk shows instead, for the graded part only (a user decision,
+2026-11-13: "I'm okay with it changing for the test and then it changing back"). The kiosk shows
 the start view of the fake Home Assistant's reference dashboard, so after the force-stop it comes
-back to it by itself, by the same path that brings it back to yours. The restart ends when that dashboard is usable, as
+back to it by itself, by the same path that brings it back to yours (its start loads the dashboard).
+Until 2026-11-19 that was the kiosk's dashboard setting; since then it is the test hold's own test
+dashboard, which leaves the setting and the sign-in alone (see
+[What it changes on the device](#what-it-changes-on-the-device)). The page loads at the same point of
+the start either way, so the measurement didn't change. The restart ends when that dashboard is usable, as
 defined for open the view. Its start, the process start, is stamped on the device in logcat, and its
 end is on the page's clock, tied to logcat's by the page's log line, so the harness's adb round trips
 aren't in it. Engine ready is still reported (`engine_ready_ms`).

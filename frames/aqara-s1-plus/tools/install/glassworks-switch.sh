@@ -15,7 +15,11 @@
 #                  installer keeps it in memory and sends it to the new app over Improv.
 #   backup         copy the app's data (credential- and device-encrypted storage, without lib, cache,
 #                  code_cache) to a root-only directory. Run with the app stopped.
-#   restore        put that copy into the app installed now, owned by its uid, labels restored.
+#   restore [handover]
+#                  put that copy into the app installed now, owned by its uid, labels restored. With
+#                  `handover`, also the marker files/secrets-handover (empty, owned by the app): the installer
+#                  will hand the app's sign-in and API key back over adb, so until then (or 15 min) the app
+#                  keeps what its old Keystore key sealed locked instead of dropping it (#584, #608).
 #   discard        delete the copy.
 #   has-backup     exit 0 if a copy is there.
 PKG=sh.edm.s1kiosk
@@ -101,9 +105,25 @@ case "${1:-}" in
     uid=$(uid_of) || exit 1
     copy_in "$WORK/ce" "$CE" "$uid"
     copy_in "$WORK/de" "$DE" "$uid"
+    case "${2:-}" in
+      '') ;;
+      handover)
+        # Never through a link: the copied data is the old app's, and it could have left files/ or the marker as a
+        # symbolic link to a system file, which root would then truncate and chown (CWE-61, #608 review).
+        m="$CE/files/secrets-handover"
+        [ ! -L "$CE/files" ] || fail "$CE/files is a symbolic link: no hand-over marked"
+        mkdir -p "$CE/files" && [ -d "$CE/files" ] && [ ! -L "$CE/files" ] && chown "$uid:$uid" "$CE/files" ||
+          fail "could not make $CE/files"
+        rm -f "$m" # a link is removed, not followed
+        [ ! -e "$m" ] && [ ! -L "$m" ] || fail "could not clear $m"
+        : > "$m" && [ -f "$m" ] && [ ! -L "$m" ] && chown "$uid:$uid" "$m" || fail "could not mark the hand-over"
+        restorecon "$m" 2>/dev/null || true
+        ;;
+      *) fail "usage: restore [handover]" ;;
+    esac
     echo "restored for uid $uid"
     ;;
   discard) rm -rf "$WORK" ;;
   has-backup) [ -f "$WORK/complete" ] ;;
-  *) fail "usage: $0 wifi-list | wifi-psk <n> | backup | restore | discard | has-backup" ;;
+  *) fail "usage: $0 wifi-list | wifi-psk <n> | backup | restore [handover] | discard | has-backup" ;;
 esac

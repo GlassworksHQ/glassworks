@@ -17,6 +17,7 @@ import dev.glassworks.generic_android.R
 import dev.glassworks.platform.AppBuild
 import dev.glassworks.screen.AmbientLight
 import dev.glassworks.screen.ProximityPresence
+import dev.glassworks.screen.TestHold
 import dev.glassworks.GlassworksApp
 import dev.glassworks.GlassworksRuntime
 import dev.glassworks.KioskPrefs
@@ -66,12 +67,15 @@ class GenericApp : Application(), GlassworksApp {
 
         /**
          * What the engine starts with, from the settings: read once, at the first open. The dashboard is the
-         * origin the legacy engine stays on (#198); the current engine doesn't read it. As the S1 app's (KioskApp),
-         * but the legacy build never turns on remote debugging (#29), even with the setting left on from before.
+         * origin the legacy engine stays on (#198), and a test's own dashboard while its hold lasts
+         * (ScreenPolicy.testDashboard, Clarity's fake Home Assistant); the current engine doesn't read it. As the S1
+         * app's (KioskApp), but the legacy build never turns on remote debugging (#29), even with the setting left on
+         * from before.
          */
         internal fun engineSettings(context: Context, build: AppBuild, applicationId: String = BuildConfig.APPLICATION_ID): EngineSettings =
             KioskPrefs(context).run {
-                EngineSettings(secureHosts(), zoom, remoteDebugging(build.debug) && !legacy(applicationId), dashboard = url.ifEmpty { null })
+                val test = if (legacy(applicationId)) TestHold.dashboard(context) else null
+                EngineSettings(secureHosts(), zoom, remoteDebugging(build.debug) && !legacy(applicationId), dashboard = test ?: url.ifEmpty { null })
             }
 
         /** GeckoView with the kiosk's helper extension: the same engine, extension and page API as the S1 app's. */
