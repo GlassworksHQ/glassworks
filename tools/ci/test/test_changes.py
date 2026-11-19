@@ -191,6 +191,7 @@ class EmulatorsRunOnMainAndNightly(unittest.TestCase):
         self.assertEqual(sorted(needs), sorted(j for j in self.jobs if j != 'report'))
         self.assertIn("    if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}\n", report)
         self.assertIn('      issues: write\n', report)
+        self.assertIn('    concurrency:\n      group: core-emulators-report\n      cancel-in-progress: false\n', report)
         for call in ('gh issue create', "--label 'area: ci'", 'gh issue comment', 'gh issue close'):
             self.assertIn(call, report)
 

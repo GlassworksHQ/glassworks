@@ -165,6 +165,11 @@ jobs:
     if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    # One reporter at a time, so two red runs can't both find no issue and open two. A running reporter is never
+    # cancelled; a newer one waiting replaces an older one waiting, and the newer run is the one that speaks for main.
+    concurrency:
+      group: core-emulators-report
+      cancel-in-progress: false
     permissions:
       issues: write
     steps:
