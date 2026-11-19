@@ -233,13 +233,13 @@ open the entity, and turn on *Enabled*.
 Most people don't count their wall panel as one of the room's lights. Up to #591 the screen had no
 category, so every "lights off" aimed at the panel's area turned the screen off too: a presence
 automation's "room empty", a Good Night script, Assist's "turn off the bedroom lights". Home Assistant
-leaves an entity with a category out of area, floor, device and label targets, and doesn't show it to
-Assist unless someone exposes it. So the screen is `config`, and it keeps its object id, key and entity id.
+leaves an entity with a category out of a target it reaches through an area, floor, device or a labelled
+device or area, and doesn't show it to Assist unless someone exposes it (`helpers/target.py` 2026.11.0:227). So the screen is `config`, and it keeps its object id, key and entity id.
 
 | | Before #591 | Now |
 |---|---|---|
-| `light.turn_off` with an `area_id`, `floor_id`, `device_id` or `label_id` | Turns the screen off | Skips it |
-| `light.turn_off` with the screen's `entity_id`; a dashboard card | Turns it off | Turns it off |
+| `light.turn_off` with an `area_id`, `floor_id` or `device_id`, or a `label_id` on the panel's device or area | Turns the screen off | Skips it |
+| `light.turn_off` with the screen's `entity_id`, or a `label_id` put on the screen entity itself; a dashboard card | Turns it off | Turns it off |
 | Assist, a panel HA adds from now on | Sees it | Doesn't see it until someone exposes it |
 | Assist, a panel HA already has | Sees it | Still sees it: HA saved the choice when it first saw the entity. Turn off **Expose** once in **Settings → Voice assistants → Expose** |
 

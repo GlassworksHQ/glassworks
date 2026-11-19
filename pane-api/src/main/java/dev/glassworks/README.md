@@ -150,8 +150,8 @@ The ESPHome device is an API, not the settings screen. Keep the list a person se
 
 - A pane adds at most a handful of uncategorised entities.
 - **A light that is the panel itself gets `CONFIG`**, though people put it on dashboards. Home Assistant leaves
-  an entity with a category out of area, floor, device and label targets and out of Assist, so a room's
-  "lights off" doesn't blank the panel. The screen is one (#591).
+  an entity with a category out of area, floor and device targets (and labels on a device or area) and out of
+  Assist, so a room's "lights off" doesn't blank the panel. The screen is one (#591).
 - **Enabled by default only if people reach for it day to day.** "Restart app" is on: people use
   it. "Radio mode" is off: you set it once. Everything else gets `disabledByDefault = true`. HA
   creates it and leaves it off, so it doesn't show on the device's cards. Anyone can turn it on from the device page, and

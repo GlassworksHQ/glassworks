@@ -409,7 +409,8 @@ public class UpdateEntity(
  * @param name See [ApiEntity.name].
  * @param icon See [ApiEntity.icon].
  * @param category See [ApiEntity.category]. Home Assistant leaves a light with a category out of area,
- *   floor, device and label targets (a room's "lights off") and out of Assist.
+ *   floor and device targets (a room's "lights off"), and labels on a device or area, but not a label on
+ *   the light itself. Assist doesn't see it unless someone exposes it.
  * @param disabledByDefault See [ApiEntity.disabledByDefault].
  * @param get On or off, and the brightness from 0 to 1.
  * @param set Called with the new on/off state and brightness (0 to 1); null for either one that
