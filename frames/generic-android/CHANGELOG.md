@@ -19,6 +19,11 @@ line of each version is what Home Assistant shows on the update card. A change o
   high or critical notification with no `tag` and no `timeout` closes after 2 minutes, since nothing else could
   close it. On the Mirror the proxy scans only once the app has the location permission, which Kiln doesn't grant yet.
 
+### Fixed
+- **The setup Wi-Fi opens on the lululemon Mirror.** The legacy build's setup screen said "This device doesn't let apps
+  open a Wi-Fi hotspot." on the Mirror. Android 6 and 7 want one more permission for it, which the legacy build now
+  asks for. An update is enough: no new flash. If Android still refuses, the reason is in the log.
+
 ## [0.2.0] - 2026-11-19
 
 **The first release of Glassworks for Android tablets and panels, with Assist, Sendspin and the camera pane.**
