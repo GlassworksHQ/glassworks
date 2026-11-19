@@ -660,10 +660,12 @@ bytes with `SHA256SUMS`, and `fastboot reboot`.
 
 - What resets the board after the wrapped image's `boot` (attempts 11–14): a U-Boot step before
   PREP (F1, verified), but no step read so far explains it.
-- What next for the RAM test (maintainer's call): keep reading the stock U-Boot (attempt 14 lists
-  what is left before PREP), or stop on this route and test the write path instead (T4: `flash`,
-  then a read-back from Android), which needs a reviewed write procedure. Plan F tells the steps through LOADOS from the ones after. Until a RAM boot of
-  Android works, the RAM test in the no-opening route is untested.
+- What next (maintainer's call): keep reading the stock U-Boot (attempt 14 lists what is left
+  before PREP), or drop the RAM test from the no-opening route. T4 as written needs a T3 pass,
+  because its read-back runs from a RAM-booted system. Without one, a stock `flash` could only be
+  read back from Android after a boot from that same flash. That isn't T4, and it would need its own
+  reviewed procedure. Until a RAM boot of Android works, the RAM test in the no-opening route is
+  untested.
 - The legacy `bootm` path doesn't read `androidboot.dtbo_idx` (attempt 13), so a RAM boot through it
   gets the wrong DT overlays. How to give the kernel the right DT on this path is open.
 - Does `fastboot boot` give Android the env's arguments (`partitions=`, `snum`, MACs)? From the
