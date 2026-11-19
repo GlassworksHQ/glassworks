@@ -6,10 +6,10 @@
 // serve is Kiln's bug: the screen says so, with Try again and Report this, and never asks the person
 // to download a file. Glassworks is built from the checked image in a worker (images.ts) and finishes
 // over adb with this browser's key; a community image goes on as its release has it.
-// Test only, behind ?apk=local, like the rest of the Mirror's page.
+// Behind ?apk=release or ?apk=local, like the rest of the Mirror's page, until MIRROR_OPEN (session.ts).
 // A Mirror that runs Glassworks already can go through `keep` first (issue 580): Kiln reads Home Assistant's ESPHome key
 // from the running app over adb and gives it back at the first start, as tools/mirror's flash-node does (PR 575).
-import { AdbAuthTimeout, pemToPkcs8, type PanelShell } from '@glassworks/adb';
+import { AdbAuthTimeout, AdbBusy, pemToPkcs8, type PanelShell } from '@glassworks/adb';
 import { apiKeyFingerprint, apiKeySocketUp, kioskVersion, readApiKey } from '@glassworks/app-adb';
 import { imageFromLink, plan, wifiStep, type ImageFile, type ImageRecipe, type PlannedStep } from '@glassworks/kiln-core';
 import {
@@ -54,10 +54,22 @@ export interface FlashDeps {
   requestFastboot(): Promise<FastbootLike>;
   /**
    * The browser's device list for the Mirror's adb, inside the click: after the first boot, and before the flash to
-   * read Home Assistant's key (issue 580). With `authMs` (the read before the flash), throws AdbAuthTimeout when the Mirror
-   * hasn't let this browser's key in by then; after the flash it waits as long as the Mirror takes.
+   * read Home Assistant's key (issue 580). Throws AdbAuthTimeout when the Mirror hasn't let this browser's key in within
+   * `authMs`: AUTH_MS for the read before the flash, FIRST_START_AUTH_MS for the first start's first try.
    */
   requestAdb(o?: { authMs?: number }): Promise<PanelShell>;
+  /**
+   * adb again on the device requestAdb picked, with no list: while the Mirror is still starting it refuses this
+   * browser's key (adbd answers before it reads the adb_keys in the new userdata), so Kiln asks again. Each call gives
+   * up after AUTH_MS, closing the device, so a key left pending can't hold the loop.
+   */
+  reopenAdb?(o?: { authMs?: number }): Promise<PanelShell>;
+  /** Whether the last requestAdb picked a device: one that failed before the list (no key yet, no WebUSB) isn't retried. */
+  adbPicked?(): boolean;
+  /** How many times Kiln asks again, 5 s apart (default 60). */
+  adbTries?: number;
+  /** How long Kiln keeps asking, from the first refusal (default five minutes of the first start); each try gets what's left. */
+  adbWindowMs?: number;
   /**
    * Whether this browser has flashed a Mirror before, kept across visits (no secret: a flag). Only that browser's key
    * gets in over adb, so Continue opens the keep step for it (issue 580). None: never.
@@ -76,14 +88,19 @@ export interface FlashDeps {
   adbWithKey?(pkcs8: Uint8Array): () => Promise<PanelShell>;
   /** This browser's adb public key line, once loaded. */
   adbKey(): string | undefined;
-  /** The app's APK (Glassworks' legacy build, the test-only local file), checked by the page. */
+  /** The app's APK (Glassworks' legacy build, from its release or a local file), checked by the page. */
   apk(): Uint8Array | undefined;
+  /** Why there is no APK yet when it comes from the release (MirrorSession.releaseBlocked). */
+  apkBlocked?(): string | undefined;
   /** The boot animation, when Kiln has one staged. */
   bootAnimation?(): Promise<Uint8Array | undefined>;
   /** GlassworksSettings.apk (frames/lululemon-mirror/overlay), when Kiln has it staged: a first boot with nothing to tap. */
   settingsOverlay?(): Promise<Uint8Array | undefined>;
   sleep?: (ms: number) => Promise<void>;
 }
+
+/** The browser's list was closed with nothing picked: nothing to ask again. */
+const nothingPicked = (e: unknown) => (e as { name?: string } | undefined)?.name === 'NotFoundError' || (e as Error | undefined)?.message === 'no panel selected';
 
 /** `image`: Glassworks' download and settings; `download`: a community image's. */
 export type FlashScreen = 'choose' | 'image' | 'download' | 'keep' | 'fastboot' | 'confirm' | 'working' | 'adb' | 'done' | 'error';
@@ -133,6 +150,8 @@ export interface FlashState {
   fastboot?: FastbootReport;
   connecting?: boolean;
   connectError?: string;
+  /** The Mirror refused this browser's key so far: it is still starting, and Kiln asks again. */
+  adbWaiting?: boolean;
   understood: boolean;
   work?: { step: WorkStep; x: number };
   firstBoot?: FirstBoot;
@@ -156,6 +175,12 @@ export interface FlashState {
  * key waits for a tap on a screen it can't take, so it never would.
  */
 export const AUTH_MS = 20_000;
+
+/**
+ * The first start's first try (after the browser's list): longer than AUTH_MS, since a Mirror that just restarted may
+ * take its time to answer, but never without end, so the retries can take over (review on PR 607).
+ */
+export const FIRST_START_AUTH_MS = 60_000;
 
 /** The person went on to fastboot by hand while the keep step's read ran. */
 class Skipped extends Error {}
@@ -337,7 +362,13 @@ export class FlashSession {
     const left = s.files.find((f) => f.state !== 'ok');
     if (left) return `Download ${left.name} first.`;
     if (this.recipe.community) return this.recipe.steps.some((x) => x.do === 'wifi') ? this.wifiBlocked() : undefined;
-    if (!this.d.apk()) return 'Pick the Glassworks APK file first.';
+    if (!this.d.apk()) return this.d.apkBlocked?.() ?? 'Pick the Glassworks APK file first.';
+    return this.inputsBlocked();
+  }
+
+  /** Why Home Assistant's address or the Wi-Fi can't be used, or undefined. */
+  inputsBlocked(): string | undefined {
+    const s = this.state;
     if (s.haUrl && !/^https?:\/\/[^\s/]+/.test(s.haUrl)) return 'Home Assistant\'s address starts with http:// or https://.';
     return this.wifiBlocked();
   }
@@ -535,6 +566,8 @@ export class FlashSession {
     const r = this.recipe;
     const steps = this.writes();
     const work = (step: WorkStep, x: number) => this.set({ work: { step, x } });
+    const now = () => performance.now();
+    const secs = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
     const first = steps.find((x) => x.do !== 'backup');
     this.set({ screen: 'working', error: undefined, flashFailed: false, communityWifi: undefined, work: { step: first?.do === 'patch' ? 'patch' : first?.do === 'flash' ? `flash-${first.partition}` as WorkStep : 'restart', x: 0 } });
     // what an earlier attempt made (Glassworks' images, a userdata with a network) is made again by its
@@ -575,6 +608,9 @@ export class FlashSession {
           if (!adbKey) throw new Error('Kiln has no adb key for this browser yet. Reload the page and try again.');
           this.log('Building the images');
           building = true;
+          // each build step's time, in the log: where the minutes go on a real Mirror
+          let at = { step: '', t: now() };
+          const built = (step: string) => { if (at.step && at.step !== step) this.log('', `${at.step}: built in ${secs(now() - at.t)}`); if (at.step !== step) at = { step, t: now() }; };
           // the Wi-Fi goes into the new userdata (saved for Android, its password only as WPA's PSK), so the
           // Mirror joins on its first boot with nothing tapped; sending it to the app after the boot stays a fallback
           const wifi = s.wifi.ssid ? { ssid: s.wifi.ssid, password: s.wifi.password } : undefined;
@@ -583,7 +619,8 @@ export class FlashSession {
             adbKey, userdataBytes: s.fastboot.userdataBytes, fill: !s.noFill, ...(s.fastboot.deviceMac ? { deviceMac: s.fastboot.deviceMac } : {}), ...(wifi ? { wifi } : {}),
             // the flag only: the key stays in this tab until the first start
             ...(this.apiKey ? { apiKeyHandover: true } : {}),
-          }, (step, x) => work(step, x)));
+          }, (step, x) => { built(step); work(step, x); }));
+          built('');
           building = false;
           this.log('', `Kiln built: ${step.makes.join(', ')}`);
         } else if (step.do === 'wifi') {
@@ -609,7 +646,12 @@ export class FlashSession {
           this.log(`Flashing ${step.partition}${asIs ? ` with ${wifiStep(r, step.file)?.file ?? step.file} as published` : r.community ? ` with ${step.file}, built by Kiln from a checked download` : s.noFill ? ' (zeros as RAW, no FILL chunks)' : ''}`);
           this.set({ flashFailed: true }); // until the restart: a failure from here is the bootloader's
           work(id, 0);
-          await fb.flashBlob(step.partition, blob, (x) => work(id, x));
+          // sending is the bar; after it the bootloader writes (and may erase) with nothing to report
+          const t0 = now();
+          let sent: number | undefined;
+          await fb.flashBlob(step.partition, blob, (x) => { if (x >= 1) sent ??= now(); work(id, x); });
+          const end = now();
+          this.log('', `${step.partition}: sent ${(blob.size / 2 ** 20).toFixed(1)} MiB in ${secs((sent ?? end) - t0)}, then the Mirror wrote it in ${secs(end - (sent ?? end))}`);
         } else if (step.do === 'restart') {
           this.set({ flashFailed: false });
           work('restart', 1);
@@ -634,20 +676,55 @@ export class FlashSession {
   }
 
   /**
-   * After the restart, inside the click: adb with this browser's key, then Kiln's first start
-   * (Glassworks); or, for a community image's wifi-on, with the image's own published key, then
-   * `svc wifi enable` and nothing else.
+   * A Mirror already flashed with Glassworks whose first start didn't finish (an error, or the page was reloaded):
+   * "One last click." again, with Home Assistant's address and the Wi-Fi as given on the image screen.
+   */
+  finishFirstStart() {
+    if (this.recipe.community || this.inputsBlocked() || this.state.screen === 'working') return;
+    // the connection of a first start that stopped: let go, so Connect opens one fresh (not awaited: Connect's list stays in its click)
+    const stale = this.panel;
+    this.panel = undefined;
+    void stale?.close?.().catch(() => {});
+    this.set({ screen: 'adb', error: undefined, connectError: undefined, adbWaiting: false, work: undefined, flashFailed: false });
+  }
+
+  /**
+   * After the restart, inside the click: adb with this browser's key, then Kiln's first start (Glassworks). A Mirror
+   * still starting refuses the key: Kiln asks again every 5 s through the first start, and says so if it never lets in.
+   * For a community image's wifi-on: the image's own published key, then `svc wifi enable` and nothing else.
    */
   async connectAdb(): Promise<void> {
     if (this.recipe.community) return this.connectWifiOn();
-    const req = this.d.requestAdb();
-    this.set({ connecting: true, connectError: undefined });
-    let p: PanelShell;
-    try { p = await req; } catch (e) { this.set({ connecting: false, connectError: (e as Error).message }); return; }
+    if (this.state.connecting) return;
+    // every try has a deadline: the first FIRST_START_AUTH_MS, each retry at most AUTH_MS (reopenAdb)
+    const req = this.d.requestAdb({ authMs: FIRST_START_AUTH_MS });
+    this.set({ connecting: true, connectError: undefined, adbWaiting: false });
+    const sleep = this.d.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+    let p: PanelShell | undefined;
+    let last: unknown;
+    try { p = await req; } catch (e) { last = e; }
+    // a list closed with nothing picked, or a device another program holds (the computer's adb): asking again changes nothing
+    const picked = this.d.adbPicked?.() ?? !nothingPicked(last);
+    const tries = this.d.reopenAdb && picked && !(last instanceof AdbBusy) ? this.d.adbTries ?? 60 : 0;
+    const until = Date.now() + (this.d.adbWindowMs ?? 5 * 60_000);
+    for (let i = 0; !p && i < tries && Date.now() < until; i++) {
+      this.log('', `The Mirror didn't let this browser in yet (${(last as Error).message}): it is still starting. Asking again in 5 s.`);
+      this.set({ adbWaiting: true });
+      await sleep(Math.min(5000, Math.max(0, until - Date.now())));
+      const left = until - Date.now();
+      if (left <= 0) break;
+      try { p = await this.d.reopenAdb!({ authMs: Math.min(AUTH_MS, left) }); } catch (e) { last = e; }
+      if (last instanceof AdbBusy) break;
+    }
+    if (!p) {
+      const why = (last as Error).message;
+      this.set({ connecting: false, adbWaiting: false, connectError: !picked && nothingPicked(last) ? 'Nothing was picked. Click Connect and pick the Mirror (Android) in the browser\'s list.'
+        : tries && !(last instanceof AdbBusy) ? `The Mirror didn't let this browser in through its first start (${why}). It knows only the key of the browser that installed it: use that browser, then Connect again.` : why });
+      return;
+    }
     this.panel = p;
-    this.set({ connecting: false, screen: 'working', work: { step: 'first-boot', x: 0 } });
+    this.set({ connecting: false, adbWaiting: false, screen: 'working', work: { step: 'first-boot', x: 0 } });
     try {
-      const sleep = this.d.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
       for (let i = 0; (await p.run('getprop sys.boot_completed')).out.trim() !== '1'; i++) {
         if (i > 180) throw new Error('the Mirror didn\'t finish starting in 6 minutes');
         await sleep(2000);

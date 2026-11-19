@@ -1,6 +1,7 @@
 'use client';
-// /lululemon-mirror: the Mirror's test install. Off unless the address has ?apk=local (or a demo):
-// the Mirror is under development, and the only APK for it is a test build picked from this computer.
+// /lululemon-mirror: the Mirror's install. Locked to the public (Off) until frame.json makes the Mirror
+// installable (MIRROR_OPEN); until then ?apk=release (the newest Mirror release) and ?apk=local (a file from this
+// computer) are test links, or a demo.
 // The screens follow Kiln's (docs/design/kiln): one idea each, one ember button, the log one click away.
 import { Panel, adbKeyFromPkcs8, loadOrCreateAdbKey, type AdbKey, type PanelShell } from '@glassworks/adb';
 import { Assets, fmtSize } from '@glassworks/kiln-core';
@@ -15,14 +16,15 @@ import type { RailMark, RailStep } from '../wizard/state';
 import { Fastboot } from '@glassworks/fastboot';
 import { IMAGE_PROXY, MIRROR_FASTBOOT } from '@glassworks/lululemon-mirror-installer';
 import { MIRROR_DEMOS, mirrorDemo, type MirrorDemo } from './demo';
-import { FlashSession } from './flash';
+import { AUTH_MS, FlashSession } from './flash';
 import { FLASH_DEMOS, flashDemo, type FlashDemo } from './flashDemo';
 import { KEEP_DEMOS, keepDemo, type KeepDemo } from './keepDemo';
 import { FlashScreens, flashLevel, flashRail } from './FlashScreens';
 import { workerImages } from './images';
 import { registry } from '../wizard/registry';
 import { MIRROR_BASE, keptMirror } from './activity';
-import { MirrorSession, mirrorMode, type MirrorState } from './session';
+import { ReleaseApk, TestOnly } from './ReleaseApk';
+import { MirrorSession, mirrorMode, type ApkFrom, type MirrorState } from './session';
 
 /** Demos run in `next dev` and in a build made with NEXT_PUBLIC_KILN_DEMO=1, as the S1's do. */
 const DEMO_ON = process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_KILN_DEMO === '1';
@@ -46,6 +48,9 @@ export function keyedConnect(loadKey: () => Promise<AdbKey>, connect: (key: AdbK
   return adbKeyHolder(loadKey).connectWith(connect);
 }
 
+/** Kiln's release route, from the page (a bare `fetch` held by an object is an illegal invocation). */
+const releaseRoute = (...a: Parameters<typeof fetch>) => fetch(...a);
+
 /**
  * Whether this browser has flashed a Mirror (issue 580): a flag in its storage, never a key. Storage may be off (a private
  * window): then the keep step is the link under the fastboot steps only.
@@ -66,14 +71,19 @@ export function leaveWarning(target: Pick<Window, 'addEventListener' | 'removeEv
 }
 
 /** The page's two paths on one adb key: the app over adb (MirrorSession), or Glassworks over fastboot (FlashSession). */
-function realSessions(on: boolean): { mirror: MirrorSession; flash: FlashSession } {
+function realSessions(on: boolean, from: ApkFrom = 'local'): { mirror: MirrorSession; flash: FlashSession } {
   if (!on) {
     const mirror = new MirrorSession({ connect: () => Promise.reject(new Error('off')) }, false);
     return { mirror, flash: new FlashSession({ images: workerImages(), requestFastboot: () => Promise.reject(new Error('off')), requestAdb: () => Promise.reject(new Error('off')), adbKey: () => undefined, apk: () => undefined }) };
   }
   const keys = adbKeyHolder(loadOrCreateAdbKey);
-  const mirror = new MirrorSession({ connect: keys.connectWith((k) => Panel.connect(k)) }, true);
+  const mirror = new MirrorSession({
+    connect: keys.connectWith((k) => Panel.connect(k)),
+    ...(from === 'release' ? { release: releaseRoute } : {}),
+  }, true);
   const assets = new Assets<'mirror-bootanimation' | 'mirror-settings-overlay'>('/assets/');
+  // the device picked for the first start's adb: asked again with no list while the Mirror is still starting
+  let adbDevice: USBDevice | undefined;
   const flash = new FlashSession({
     // branding/lululemon-mirror/bootanimation.zip, staged with Kiln's other assets and checked by SHA-256
     bootAnimation: async () => ((await assets.has('mirror-bootanimation')) ? assets.get('mirror-bootanimation') : undefined),
@@ -85,13 +95,23 @@ function realSessions(on: boolean): { mirror: MirrorSession; flash: FlashSession
     // ?image=<id>: a community image's install, with no choice first (issue 579)
     search: location.search,
     requestFastboot: () => Fastboot.request([MIRROR_FASTBOOT]),
-    requestAdb: (o) => keys.connectWith((k) => Panel.connect(k, undefined, o))(),
+    requestAdb: (o) => {
+      adbDevice = undefined; // a click that fails before the list (the key still loading) picks nothing
+      return keys.connectWith(async (k) => Panel.connect(k, (adbDevice = await Panel.pick()), o))();
+    },
+    adbPicked: () => !!adbDevice,
+    reopenAdb: async (o) => {
+      const k = keys.key();
+      if (!k || !adbDevice) throw new Error('no panel selected');
+      return Panel.connect(k, adbDevice, { authMs: o?.authMs ?? AUTH_MS });
+    },
     // a community image's own published key (Glass Panes' wifi-on step): in memory, for that one connection
     adbWithKey: (pkcs8) => adbKeyHolder(async () => adbKeyFromPkcs8(pkcs8, 'kiln@published-key')).connectWith((k) => Panel.connect(k)),
     adbKey: () => keys.key()?.publicKey,
     flashedHere: FLASHED_HERE,
     holdingKey: leaveWarning(),
     apk: () => mirror.apkBytes(),
+    apkBlocked: () => mirror.releaseBlocked(),
   });
   return { mirror, flash };
 }
@@ -100,9 +120,8 @@ function realSessions(on: boolean): { mirror: MirrorSession; flash: FlashSession
 function rail(s: MirrorState): RailStep[] {
   const names = ['Mirror', 'Connect', 'Check', s.flow === 'undo' ? 'Undo' : 'Install', 'Done'];
   const at = { off: 0, pick: 1, checks: 2, working: 3, done: 5, error: 3 }[s.screen];
-  const turn = s.screen === 'working' && s.phases.at(-1)?.step === 'home';
   return names.map((name, i): RailStep => {
-    const mark: RailMark = i < at ? 'done' : i > at ? 'todo' : s.screen === 'error' ? 'bad' : turn ? 'turn' : 'now';
+    const mark: RailMark = i < at ? 'done' : i > at ? 'todo' : s.screen === 'error' ? 'bad' : 'now';
     return { name, mark };
   });
 }
@@ -111,10 +130,6 @@ function level(s: MirrorState): number {
   if (s.screen === 'done') return 4;
   if (s.screen === 'working') return s.phases.some((p) => p.step === 'grant' || p.step === 'remove') ? 3 : 2;
   return s.screen === 'checks' ? 1 : 0;
-}
-
-function TestOnly() {
-  return <span className="pill soon">Test only</span>;
 }
 
 function Log({ s }: { s: MirrorState }) {
@@ -133,7 +148,7 @@ function Off() {
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">The Mirror doesn&apos;t install from Kiln yet.</h2>
-      <p className="lede">It is under development, with no release yet. Follow it on GitHub, or pick another panel.</p>
+      <p className="lede">Its installer is still being tested. Follow it on GitHub, or pick another panel.</p>
       <div className="foot">
         <a className="link" href="https://github.com/GlassworksHQ/glassworks/tree/main/frames/lululemon-mirror">The Mirror on GitHub</a>
         <Link className="btn ghost" href="/">Pick a panel</Link>
@@ -146,16 +161,19 @@ function Off() {
 function Inputs({ s, session }: { s: MirrorState; session: MirrorSession }) {
   return (
     <>
+      {s.release && <ReleaseApk m={session} ms={s} />}
       <div className="fields">
-        <label className="field"><span>APK file</span>
-          <input className="input" type="file" accept=".apk,application/vnd.android.package-archive"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) void session.pickApk(f.name, f.arrayBuffer().then((b) => new Uint8Array(b))); }} />
-        </label>
+        {!s.release && (
+          <label className="field"><span>APK file</span>
+            <input className="input" type="file" accept=".apk,application/vnd.android.package-archive"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) void session.pickApk(f.name, f.arrayBuffer().then((b) => new Uint8Array(b))); }} />
+          </label>
+        )}
         <label className="field"><span>Home Assistant (optional)</span>
           <input className="input" type="url" placeholder="http://homeassistant.local:8123" value={s.haUrl} onChange={(e) => session.setHaUrl(e.target.value.trim())} />
         </label>
       </div>
-      {s.apk && (
+      {s.apk && (!s.release || s.apk.error) && (
         <div className="well">
           <div className="grow">
             <b>{s.apk.name}</b>
@@ -171,9 +189,14 @@ function Inputs({ s, session }: { s: MirrorState; session: MirrorSession }) {
 function Pick({ s, session }: { s: MirrorState; session: MirrorSession }) {
   return (
     <section className="card" aria-labelledby="h">
-      <div className="row"><TestOnly /></div>
-      <h2 id="h">Install a test build on the Mirror.</h2>
-      <p className="lede">Kiln installs an APK file from this computer: the legacy build of Glassworks for generic Android, for Android 6. Only for testing. Nothing else on the Mirror changes.</p>
+      <TestOnly />
+      {s.release ? <>
+        <h2 id="h">Install Glassworks on the Mirror.</h2>
+        <p className="lede">Kiln downloads Glassworks from its newest release, the legacy build for Android 6, checks it, and installs it over USB. It also turns the screen upright and makes Glassworks the Mirror&apos;s only home screen.</p>
+      </> : <>
+        <h2 id="h">Install a test build on the Mirror.</h2>
+        <p className="lede">Kiln installs an APK file from this computer: the legacy build of Glassworks for generic Android, for Android 6. Only for testing. Kiln also turns the screen upright and makes Glassworks the Mirror&apos;s only home screen.</p>
+      </>}
       <Inputs s={s} session={session} />
       <BuiltOn credits={stepCredits('lululemon-mirror', credits)} />
       <p className="small">On the Mirror, USB debugging is on. Plug it into this computer, click Connect and pick it in the browser&apos;s list. Then the Mirror asks to allow USB debugging for this browser: choose <b>Allow</b>. It has no touchscreen, so use a USB mouse.</p>
@@ -192,7 +215,7 @@ function Checks({ s, session }: { s: MirrorState; session: MirrorSession }) {
   const blocked = session.installBlocked();
   return (
     <section className="card" aria-labelledby="h">
-      <div className="row"><TestOnly /></div>
+      <TestOnly />
       <h2 id="h">{r.ok ? 'This is your Mirror.' : 'Kiln can\'t install on this device.'}</h2>
       <ol className="join">
         {r.checks.map((c) => (
@@ -224,8 +247,9 @@ const INSTALL_ROWS: Row[] = [
   { id: 'copy', text: 'Copy the APK to the Mirror' },
   { id: 'install', text: 'Android installs it and optimises it' },
   { id: 'grant', text: 'Permissions' },
+  { id: 'portrait', text: 'Turn the screen upright' },
   { id: 'start', text: 'First start, with your Home Assistant' },
-  { id: 'home', text: 'Make it the home screen' },
+  { id: 'home', text: 'Make it the only home screen' },
 ];
 const UNDO_ROWS: Row[] = [
   { id: 'admin', text: 'Take back Glassworks\' device admin' },
@@ -238,8 +262,7 @@ function Working({ s }: { s: MirrorState }) {
   const rows = s.flow === 'undo' ? UNDO_ROWS : INSTALL_ROWS;
   const now = s.phases.at(-1);
   const at = now ? rows.findIndex((r) => r.id === rowOf(now)) : 0;
-  const pick = now?.step === 'home' ? now.pick : undefined;
-  const clear = now?.step === 'home' ? now.clear : undefined;
+  // the Mirror has no touchscreen: no step here waits on the person (Mirror run, 2026-11-19)
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">{s.flow === 'undo' ? 'Removing Glassworks.' : 'Installing Glassworks.'}</h2>
@@ -247,20 +270,7 @@ function Working({ s }: { s: MirrorState }) {
       <ol className="join">
         {rows.map((r, i) => <li key={r.id} className={i < at ? 'done' : i === at ? 'cur' : ''}>{r.text}</li>)}
       </ol>
-      {pick ? (
-        <div className="well" role="status">
-          <div className="grow">
-            <span className="turn-label"><span className="pulse" />Your turn, on the Mirror</span>
-            {clear ? <>
-              <b>Choose Clear defaults.</b>
-              <span className="small">Android keeps <code>{clear}</code> as the home screen, so Kiln opened its settings. After Clear defaults, Android shows its list of home screens: choose {pick.includes('/') ? <code>{pick.split('/')[0]}</code> : pick}, then Always.</span>
-            </> : <>
-              <b>Choose {pick.includes('/') ? <code>{pick.split('/')[0]}</code> : pick}, then Always.</b>
-              <span className="small">Android shows its list of home screens. Kiln carries on once it sees your choice.</span>
-            </>}
-          </div>
-        </div>
-      ) : <div className="bar wait"><i /></div>}
+      <div className="bar wait"><i /></div>
       <Log s={s} />
     </section>
   );
@@ -270,9 +280,14 @@ function Done({ s, session }: { s: MirrorState; session: MirrorSession }) {
   const r = s.result!;
   const home = r.flow === 'install' ? r.installed.home : r.removed.home;
   const title = r.flow === 'install' ? `Glassworks ${r.installed.app.name ?? ''} is on the Mirror.` : r.removed.removed ? 'Glassworks is off the Mirror.' : 'Glassworks wasn\'t on the Mirror.';
+  const opened = (f?: string) => (!f ? 'nothing Kiln could read' : /ResolverActivity|ChooserActivity/.test(f) ? 'its list of home apps' : f.split('/')[0]);
+  const admins = r.flow === 'install' ? r.installed.adminHomes : [];
   const body = r.flow === 'install'
-    ? home === 'set' ? 'It is the home screen, so it opens when the Mirror starts.' : 'Kiln didn\'t see it picked as the home screen. If the Mirror shows a list of apps, choose Glassworks, then Always.'
-    : home === 'set' ? `The home screen is ${r.removed.previousHome ?? 'yours'} again.` : `If the Mirror shows a list of apps, choose ${r.removed.previousHome?.split('/')[0] ?? 'the one you had before'}, then Always. Undo again to check.`;
+    ? home === 'set' ? 'It is the only home screen, upright, so it opens when the Mirror starts.'
+      : admins.length ? `${admins.join(', ')} is a device administrator on this Mirror, so Android won't hide it, and Glassworks can't be its only home screen over adb. Install Glassworks over fastboot instead: it starts from a fresh userdata, without it.`
+      : `Android opened ${opened(r.installed.homeCheck.focused)} for the home screen${r.installed.homeCheck.left.length ? `, and ${r.installed.homeCheck.left.join(', ')} is still a home app` : ''}. Read the Mirror again, then Update: Kiln hides the other home apps again.`
+    : home === 'set' ? `The home screen is ${r.removed.previousHome?.split('/')[0] ?? 'yours'} again.`
+      : `Android opened ${opened(r.removed.focused)} for the home screen, not ${r.removed.previousHome?.split('/')[0] ?? 'the app you had before'}. Undo again: Kiln unhides it and checks once more.`;
   return (
     <section className="card" aria-labelledby="h">
       <span className="okmark" aria-hidden="true">✓</span>
@@ -306,7 +321,7 @@ const DEMOS = [...MIRROR_DEMOS, ...FLASH_DEMOS, ...KEEP_DEMOS];
 const isFlashDemo = (d: string) => d.startsWith('flash-') || d.startsWith('image-');
 
 /**
- * With ?apk=local: Glassworks over fastboot (the default), or the app alone over adb on a Mirror that
+ * With ?apk=release or ?apk=local: Glassworks over fastboot (the default), or the app alone over adb on a Mirror that
  * already runs the community image (`&mode=app`). Each screen links to the other.
  */
 export function MirrorWizard() {
@@ -317,11 +332,15 @@ export function MirrorWizard() {
     // the sessions live in Kiln's registry, not in this component: a running install outlives the picker
     const earlier = registry.activity(MIRROR_BASE);
     if (!m.on && !earlier) return { m, flashFirst, real: realSessions(false) };
-    const kept = keptMirror(() => realSessions(true), flashFirst);
-    // back to a running install (or from a link without ?apk=local): as it was; otherwise the address's path
+    const kept = keptMirror(() => realSessions(true, m.apk), flashFirst);
+    // back to a running install (or from a link without ?apk=…): as it was; otherwise the address's path
     if (kept === earlier && m.on && !kept.running()) {
       kept.flashMode = flashFirst;
       kept.sessions.flash.followLink(location.search); // ?image=<id> on a kept, idle session
+      // ?apk=… on it: the APK from there. The app-only path takes it unless an install runs (switchApk refuses then);
+      // the fastboot path only before its download is past, since a later step builds with the APK it has
+      const fastbootIdle = ['choose', 'image', 'download'].includes(kept.sessions.flash.state.screen);
+      if (m.apk && (!flashFirst || fastbootIdle)) kept.sessions.mirror.switchApk(m.apk, releaseRoute);
     }
     return { m, flashFirst: kept.flashMode, real: kept.sessions, kept };
   });
@@ -359,7 +378,7 @@ export function Screens({ session, toFlash }: { session: MirrorSession; toFlash?
   const s = useSyncExternalStore(session.subscribe, session.get, session.get);
   const chip = useBrowserChip();
   useEffect(() => {
-    document.title = s.screen === 'working' && s.phases.at(-1)?.step === 'home' ? 'Your turn · lululemon Studio Mirror · Kiln' : 'lululemon Studio Mirror · Kiln';
+    document.title = 'lululemon Studio Mirror · Kiln';
   }, [s]);
   const p = { s, session };
   return (

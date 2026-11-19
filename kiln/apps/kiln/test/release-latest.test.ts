@@ -9,6 +9,7 @@ const latest = (frame: string) => GET(new Request(`https://kiln.example/api/rele
 const r = (tag: string, assets: string[], o: { draft?: boolean; prerelease?: boolean } = {}) => ({ tag_name: tag, draft: false, prerelease: false, ...o, assets: assets.map((name) => ({ name })) });
 const apks = (stem: string, v: string) => [`glassworks-${stem}-arm64-v8a-${v}.apk`, `glassworks-${stem}-armeabi-v7a-${v}.apk`];
 const GENERIC = RELEASES.get('generic-android')!;
+const LEGACY = RELEASES.get('generic-android-legacy')!;
 afterEach(() => vi.unstubAllGlobals());
 
 describe('the latest release of a line', () => {
@@ -21,6 +22,22 @@ describe('the latest release of a line', () => {
       r('generic-android-legacy-v3.0.0', apks('generic-android-legacy', '3.0.0')),
       r('v0.4.3', ['s1-kiosk-0.4.3.apk']),
     ])).toEqual({ tag: 'generic-android-v1.10.0', version: '1.10.0', assets: apks('generic-android', '1.10.0') });
+  });
+
+  it('the Mirror\'s line: the newest generic-android-legacy-v*, never the S1\'s or generic Android\'s', () => {
+    const legacy = (v: string) => apks('generic-android-legacy', v);
+    expect(latestOf(LEGACY, [
+      r('generic-android-legacy-v0.2.0', legacy('0.2.0')),
+      r('generic-android-legacy-v0.10.0', legacy('0.10.0')),
+      r('generic-android-legacy-v0.11.0', legacy('0.11.0'), { draft: true }),
+      r('generic-android-legacy-v0.12.0', legacy('0.12.0'), { prerelease: true }),
+      r('generic-android-v9.0.0', apks('generic-android', '9.0.0')),
+      r('generic-android-legacy-v9.0.0-rc1', legacy('9.0.0-rc1')),
+      r('aqara-s1-plus-v9.0.0', ['s1-kiosk-9.0.0.apk']),
+      r('v9.0.0', ['s1-kiosk-9.0.0.apk']),
+    ])).toEqual({ tag: 'generic-android-legacy-v0.10.0', version: '0.10.0', assets: legacy('0.10.0') });
+    expect(latestOf(LEGACY, [r('generic-android-v1.0.0', apks('generic-android', '1.0.0')), r('v0.4.4', ['s1-kiosk-0.4.4.apk'])])).toBeNull();
+    expect(latestOf(LEGACY, [r('generic-android-legacy-v0.2.0', legacy('0.2.0'), { draft: true })])).toBeNull();
   });
 
   it('only the files the line serves, and none is no release', () => {

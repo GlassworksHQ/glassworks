@@ -5,6 +5,7 @@ import { AdbAuthTimeout, type PanelShell } from '@glassworks/adb';
 import { FakeKeySocket } from '@glassworks/app-adb/fakes';
 import { FakeMirror, FirstBootMirror } from '@glassworks/lululemon-mirror-installer/fakes';
 import type { FlashSession } from './flash';
+import { AUTH_MS } from './flash';
 import { flashDemo } from './flashDemo';
 import type { MirrorSession } from './session';
 
@@ -33,9 +34,9 @@ export async function keepDemo(name: KeepDemo, fast = false): Promise<{ flash: F
   const d = await flashDemo('flash-ready', fast, {
     // a browser that has flashed a Mirror before: Continue opens the keep step
     flashedHere: { get: () => true, set: () => {} },
-    // with authMs: the read before the flash; without: after it
+    // AUTH_MS: the read before the flash; FIRST_START_AUTH_MS: the first start after it
     requestAdb: async (o) => {
-      if (o?.authMs === undefined) return firstStart(name);
+      if (o?.authMs !== AUTH_MS) return firstStart(name);
       if (name === 'flash-keep-unreachable' || name === 'flash-done-asks') throw new AdbAuthTimeout();
       return running(name);
     },

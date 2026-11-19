@@ -15,6 +15,7 @@ import recovery from '../../../../../frames/lululemon-mirror/design/recovery.jso
 import type { RailMark, RailStep } from '../wizard/state';
 import type { FlashSession, FlashState, WorkStep } from './flash';
 import { Choose, ConfirmCommunity, DoneCommunity, Download, DownloadButton, FileRow, WayBack, Whose, possessive } from './choice/ChoiceScreens';
+import { ReleaseApk, TestOnly } from './ReleaseApk';
 import type { MirrorSession, MirrorState } from './session';
 import { SilentUpdates, mirrorSilent } from '../components/SilentUpdates';
 import { FlashKeep, KeyOutcome, keyHeld } from './KeepScreens';
@@ -73,32 +74,37 @@ export function FlashImage({ f, s, m, ms }: P) {
   const ready = s.files.every((x) => x.state === 'ok');
   return (
     <section className="card" aria-labelledby="h">
-      <div className="row"><span className="pill soon">Test only</span></div>
+      <TestOnly />
       <h2 id="h">Install Glassworks on the Mirror.</h2>
       <p className="lede">Kiln adds Glassworks to the Mirror&apos;s community Android image in this browser, then writes it over USB. It downloads the image from the Glass Panes release and checks it as it arrives.</p>
       {s.files.map((x) => <FileRow key={x.name} f={f} file={x} />)}
       <ImageCredit />
+      {ms.release && <ReleaseApk m={m} ms={ms} />}
       <div className="fields">
-        <label className="field"><span>Glassworks APK (legacy build, test only)</span>
-          <input className="input" type="file" accept=".apk,application/vnd.android.package-archive"
-            onChange={(e) => { const x = e.target.files?.[0]; if (x) void m.pickApk(x.name, x.arrayBuffer().then((b) => new Uint8Array(b))); }} />
-        </label>
+        {!ms.release && (
+          <label className="field"><span>Glassworks APK (legacy build, test only)</span>
+            <input className="input" type="file" accept=".apk,application/vnd.android.package-archive"
+              onChange={(e) => { const x = e.target.files?.[0]; if (x) void m.pickApk(x.name, x.arrayBuffer().then((b) => new Uint8Array(b))); }} />
+          </label>
+        )}
         <label className="field"><span>Home Assistant (optional)</span>
           <input className="input" type="url" placeholder="http://homeassistant.local:8123" value={s.haUrl} onChange={(e) => f.setHaUrl(e.target.value.trim())} />
         </label>
         <label className="field"><span>Wi-Fi network (optional)</span>
           <input className="input" autoComplete="off" value={s.wifi.ssid} onChange={(e) => f.setWifi({ ssid: e.target.value })} />
         </label>
-        <label className="field"><span>Wi-Fi password</span>
+        <label className="field"><span>Wi-Fi password (if it has one)</span>
           <input className="input" type="password" autoComplete="off" value={s.wifi.password} onChange={(e) => f.setWifi({ password: e.target.value })} />
         </label>
       </div>
-      {ms.apk && <p className={`small${ms.apk.error ? ' status err' : ''}`}>{ms.apk.name}: {ms.apk.error ?? `${ms.apk.package}, ${fmtSize(ms.apk.size)}`}</p>}
+      {ms.apk && (!ms.release || ms.apk.error) && <p className={`small${ms.apk.error ? ' status err' : ''}`}>{ms.apk.name}: {ms.apk.error ?? `${ms.apk.package}, ${fmtSize(ms.apk.size)}`}</p>}
       {blocked && ready && <p className="status err" role="alert">{blocked}</p>}
       <div className="foot">
         <span className="links"><button type="button" className="link" onClick={() => f.backToChoice()}>Back</button></span>
         <DownloadButton f={f} s={s} label="Download the system image" />
       </div>
+      {/* the flashed Mirror is fine and keeps this browser's key: only the first start over adb is left (Mirror run, 2026-11-19) */}
+      <p className="small">Flashed this Mirror already, and its first start didn&apos;t finish? <button type="button" className="link" disabled={!!f.inputsBlocked()} onClick={() => f.finishFirstStart()}>Finish its first start</button>, with Home Assistant and the Wi-Fi above.</p>
     </section>
   );
 }
@@ -184,7 +190,9 @@ export function FlashWorking({ f, s }: P) {
       {f.recipe.community && <Whose r={f.recipe} />}
       <h2 id="h" className="huge">Keep it plugged in.</h2>
       <ol className="join">
-        {rows.map((r, i) => <li key={r.id} className={i < at ? 'done' : i === at ? 'cur' : ''}>{r.text}{i === at && x > 0 && x < 1 && <span className="sub-step">{Math.floor(x * 100)}%</span>}</li>)}
+        {rows.map((r, i) => <li key={r.id} className={i < at ? 'done' : i === at ? 'cur' : ''}>{r.text}{i === at && x > 0 && x < 1 && <span className="sub-step">{Math.floor(x * 100)}%</span>}
+          {/* the image is small to send; the Mirror then writes an empty filesystem's 212 MiB, with nothing to report (Mirror run, 2026-11-19) */}
+          {i === at && r.id === 'flash-userdata' && <span className="sub-step">This part takes a minute or two, and the bar hardly moves.</span>}</li>)}
       </ol>
       <div className="bar" role="progressbar" aria-label={rows[at]?.text} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.floor(((at + x) / rows.length) * 100)}>
         <i style={{ width: `${Math.max(2, ((at + x) / rows.length) * 100)}%` }} />
@@ -203,8 +211,9 @@ export function FlashAdb({ f, s }: P) {
       <h2 id="h">One last click.</h2>
       {r.community
         ? <p className="lede">The Mirror is starting {r.name}. Its first start takes a few minutes. Click Connect and pick the Mirror in the browser&apos;s list. Kiln connects with {possessive(r.name)} own published key, which the image trusts, so nothing asks on its screen. It switches Wi-Fi on, and that&apos;s all it does.</p>
-        : <p className="lede">The Mirror is starting Glassworks. Its first start takes a few minutes. Click Connect and pick the Mirror in the browser&apos;s list: it knows this browser&apos;s key, so it doesn&apos;t ask on its screen.{keyHeld(s.key) && ' Then Kiln gives Glassworks Home Assistant’s key back.'}</p>}
-      {s.connecting && <p className="status work" role="status">Pick the Mirror in the browser&apos;s list…</p>}
+        : <p className="lede">The Mirror is starting Glassworks for the first time. Its glass stays dark for a few minutes while it does: that&apos;s expected, so leave it plugged in. Click Connect and pick the Mirror in the browser&apos;s list now: Kiln waits until it&apos;s ready, and it knows this browser&apos;s key, so it doesn&apos;t ask on its screen.{keyHeld(s.key) && ' Then Kiln gives Glassworks Home Assistant’s key back.'}</p>}
+      {s.connecting && !s.adbWaiting && <p className="status work" role="status">Pick the Mirror in the browser&apos;s list…</p>}
+      {s.adbWaiting && <p className="status work" role="status">The Mirror is still starting. Kiln asks again every few seconds…</p>}
       {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
       <div className="foot">
         <Log s={s} />
@@ -276,6 +285,8 @@ export function FlashError({ f, s }: P) {
       <div className="foot">
         <Log s={s} />
         <span className="links">
+          {/* the first start, or its key hand-back (PR 603): the Mirror runs Android, so adb again, never fastboot */}
+          {(s.work?.step === 'first-boot' || s.work?.step === 'hand-back') && <button type="button" className="btn ghost" onClick={() => f.finishFirstStart()}>Try the first start again</button>}
           {s.flashFailed && !f.recipe.community && !s.noFill && <button type="button" className="btn ghost" onClick={() => f.retryWithoutFill()}>Try again without FILL</button>}
           {s.wifiOnFailed && s.connecting && <span className="status work" role="status">Pick the Mirror in the browser&apos;s list…</span>}
           {s.wifiOnFailed && s.connectError && <span className="status err" role="alert">{s.connectError}</span>}

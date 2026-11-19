@@ -5,10 +5,11 @@
 import { ProxyError, SYSTEM_BYTES, USERDATA_BYTES, WrongImage, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
 import { FirstBootMirror, fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
 import { FlashSession, type FlashDeps, type ImageMaker } from './flash';
+import { fakeReleaseRoute, type FakeRelease } from './releaseDemo';
 import { MirrorSession } from './session';
 
-export const FLASH_DEMOS = ['flash-image', 'flash-downloading', 'flash-download-error', 'flash-download-bad', 'flash-ready', 'flash-wifi-short', 'flash-fastboot', 'flash-fastboot-wrong', 'flash-confirm',
-  'flash-working', 'flash-adb', 'flash-done', 'flash-done-chooser', 'flash-done-no-home', 'flash-error', 'flash-run',
+export const FLASH_DEMOS = ['flash-image', 'flash-release', 'flash-release-downloading', 'flash-release-none', 'flash-release-bad', 'flash-downloading', 'flash-download-error', 'flash-download-bad', 'flash-ready', 'flash-wifi-short', 'flash-fastboot', 'flash-fastboot-wrong', 'flash-confirm',
+  'flash-working', 'flash-adb', 'flash-adb-wait', 'flash-done', 'flash-done-chooser', 'flash-done-no-home', 'flash-error', 'flash-run',
   'image-choose', 'image-choose-open', 'image-choose-panes', 'image-link', 'image-download', 'image-download-done', 'image-download-error', 'image-download-bad',
   'image-fastboot', 'image-confirm', 'image-writing', 'image-done', 'image-error', 'image-back-glassworks', 'image-back-panes',
   'image-wifi', 'image-wifi-writing', 'image-adb', 'image-done-wifi', 'image-done-wifi-unconfirmed'] as const;
@@ -62,13 +63,22 @@ export async function flashDemo(name: FlashDemo, fast = false, deps: Partial<Fla
     },
     async reboot() {},
   });
-  const mirror = new MirrorSession({ connect: async () => { throw new Error('not in this demo'); } }, true);
+  // flash-release…: the APK from a stand-in release (?apk=release), as the image screen shows it
+  const release = name.startsWith('flash-release')
+    ? fakeReleaseRoute(({ 'flash-release': 'out', 'flash-release-downloading': 'stuck', 'flash-release-none': 'none', 'flash-release-bad': 'bad' } as Record<string, FakeRelease>)[name]!, fakeMirrorApk(), tick)
+    : undefined;
+  const mirror = new MirrorSession({ connect: async () => { throw new Error('not in this demo'); }, ...(release ? { release } : {}) }, true);
   const flash = new FlashSession({
     images,
     refract: 'https://refract.glassworks.dev',
     search: name === 'image-link' ? '?image=glass-panes' : '',
     requestFastboot: async () => fastboot(name === 'flash-fastboot-wrong' ? 0x40000000 : SYSTEM_BYTES),
-    requestAdb: async () => { const m = new FirstBootMirror(); m.hideFails = name === 'flash-done-chooser'; m.noHome = name === 'flash-done-no-home'; return m; },
+    // flash-adb-wait: the Mirror refuses this browser's key while it starts, and Kiln asks again
+    ...(name === 'flash-adb-wait' ? { reopenAdb: async () => { throw new Error('No authenticator can handle the request'); } } : {}),
+    requestAdb: async () => {
+      if (name === 'flash-adb-wait') throw new Error('No authenticator can handle the request');
+      const m = new FirstBootMirror(); m.hideFails = name === 'flash-done-chooser'; m.noHome = name === 'flash-done-no-home'; return m;
+    },
     // the image's own key: an adb shell that has started, takes svc wifi enable and reports Wi-Fi on (or not)
     adbWithKey: () => async () => ({
       async run(c: string) { return { out: c === 'getprop sys.boot_completed' ? '1' : c === 'dumpsys wifi' ? `Wi-Fi is ${name === 'image-done-wifi-unconfirmed' ? 'disabled' : 'enabled'}\n` : '', code: 0 }; },
@@ -76,6 +86,7 @@ export async function flashDemo(name: FlashDemo, fast = false, deps: Partial<Fla
     }),
     adbKey: () => 'QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= kiln@glassworks',
     apk: () => mirror.apkBytes(),
+    apkBlocked: () => mirror.releaseBlocked(),
     sleep: (ms) => tick(ms / 20),
     ...deps,
   });
@@ -86,7 +97,7 @@ export async function flashDemo(name: FlashDemo, fast = false, deps: Partial<Fla
   if (name.startsWith('image-')) return glassPanes(name, done);
 
   flash.choose(); // Glassworks, picked
-  if (name === 'flash-image' || name === 'flash-run') return done;
+  if (name === 'flash-image' || name === 'flash-run' || release) return done;
   if (name === 'flash-downloading') { void flash.download(); return done; }
   await flash.download(); // through Refract
   if (name === 'flash-download-error' || name === 'flash-download-bad') return done;
@@ -105,6 +116,7 @@ export async function flashDemo(name: FlashDemo, fast = false, deps: Partial<Fla
   if (name === 'flash-working') return done;
   await flashing;
   if (name === 'flash-adb' || name === 'flash-error') return done;
+  if (name === 'flash-adb-wait') { void flash.connectAdb(); return done; }
   await flash.connectAdb();
   return done;
 }
