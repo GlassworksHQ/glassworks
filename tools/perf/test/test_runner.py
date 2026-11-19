@@ -1487,8 +1487,9 @@ class Android6ClockStep(unittest.TestCase):
         p, r = refstart(tmp, FAKE_ANDROID6="1", FAKE_CLOCK_STEP_S="2")
         self.assertNotEqual(p.returncode, 0)
         self.assertIn("the device's wall clock moved +", r["error"])
-        # 2 s, give or take the two calibrations' errors (1999.8 ms in CI, 2026-11-19).
-        self.assertAlmostEqual(r["logcat_clock"]["drift_ms"], 2000, delta=50)
+        # 2 s, give or take the two calibrations' errors (1999.8 ms in CI, 2026-11-19), and 5 ms of rounding slack.
+        c = r["logcat_clock"]
+        self.assertAlmostEqual(c["drift_ms"], 2000, delta=c["offset_err_ms"] + c["end_err_ms"] + 5)
 
 
 class Android6Refusals(unittest.TestCase):
