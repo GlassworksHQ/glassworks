@@ -5,7 +5,7 @@ import { HIDDEN_HOMES, PREVIOUS_HOME } from '@glassworks/lululemon-mirror-instal
 import { FakeMirror, MIRROR_KIOSK, fakeMirrorApk, type FakeMirrorOptions } from '@glassworks/lululemon-mirror-installer/fakes';
 import { fakeApk } from '@glassworks/app-adb/fakes';
 import { fakeReleaseRoute } from '../release/demo';
-import { MirrorSession } from './session';
+import { MIRROR_APK, MirrorSession } from './session';
 
 export const MIRROR_DEMOS = ['run', 'pick', 'pick-release', 'pick-wrong', 'checks', 'checks-fail', 'installing', 'done', 'done-unconfirmed', 'undo-done', 'undo-pending', 'error'] as const;
 export type MirrorDemo = (typeof MIRROR_DEMOS)[number];
@@ -21,7 +21,7 @@ export async function mirrorDemo(name: MirrorDemo, fast = false): Promise<Mirror
   if (name === 'undo-done' || name === 'undo-pending') o.installed = 600;
   if (name === 'error') o.installFails = 'Failure [INSTALL_FAILED_OLDER_SDK]';
   const mirror = new FakeMirror(o);
-  const release = name === 'pick-release' ? { release: fakeReleaseRoute('out', APK, (ms) => new Promise((r) => setTimeout(r, fast ? 0 : ms))) } : {};
+  const release = name === 'pick-release' ? { release: fakeReleaseRoute('out', APK, (ms) => new Promise((r) => setTimeout(r, fast ? 0 : ms)), MIRROR_APK.line) } : {};
   const s = new MirrorSession({ connect: async () => mirror, ...release, ...(fast ? { sleep: (ms: number) => new Promise<void>((r) => setTimeout(r, ms / 100)) } : {}) }, true);
   if (name === 'pick-wrong') { await s.pickApk('mirror-kiosk-v0.12.0.apk', fakeApk('com.nimrod.mirrorkiosk')); return s; }
   if (name === 'pick-release') return s; // the screen downloads it

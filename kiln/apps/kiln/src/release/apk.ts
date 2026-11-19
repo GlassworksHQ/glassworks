@@ -1,8 +1,8 @@
-// Glassworks' APK from its release, for a page that installs it (the Mirror's, /android): the newest release of a
-// line (`generic-android-legacy-v*` or `generic-android-v*`; drafts, prereleases and other lines' tags never count),
-// its APK for one ABI, and that APK's .sha256, through Kiln's release route as the S1's APK comes. Refract can't
-// serve it: its allowlist pins each file's size and hash before the file exists, and a Glassworks release isn't
-// known until its tag is cut. Never releases/latest: that is the S1's.
+// Glassworks' APK from its release, for a page that installs it: the newest release of the line the page names
+// (drafts, prereleases and other lines' tags never count), its APK for one ABI, and that APK's .sha256, through Kiln's
+// release route, as Kiln's other release APKs come. Refract can't serve it: its allowlist pins each file's size and
+// hash before the file exists, and a Glassworks release isn't known until its tag is cut. Never releases/latest: that
+// is another line's.
 import { ships, type Support } from '@glassworks/frame-card';
 import { download, loadRelease, type Abi, type Line } from '../android/tablet/model';
 
@@ -45,7 +45,7 @@ export class NoRelease extends Error {}
 
 /**
  * How long the release route may stay silent, waiting for an answer or for the APK's next bytes, before Kiln gives
- * up with Try again. Without it a request that never answers left the row on "Looking…" (Mirror run, 2026-11-19).
+ * up with Try again. Without it a request that never answers left the row on "Looking…" (first real run, 2026-11-19, PR 607).
  */
 export const RELEASE_STALL_MS = 30_000;
 

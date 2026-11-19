@@ -10,9 +10,9 @@ export interface ReleaseRowProps {
   r: ReleaseApk;
   /** the release line, as the no-release error names it */
   line: string;
-  /** what the page installs, as the row names it: "Glassworks for the Mirror" */
+  /** what the page installs, as the row names it: "Glassworks for <the device>" */
   what: string;
-  /** where nothing was written: "the Mirror", "the tablet" */
+  /** where nothing was written: "the <device>" */
   device: string;
   /** the downloaded APK failed the page's own checks: the row shows no tick */
   apkError?: string;

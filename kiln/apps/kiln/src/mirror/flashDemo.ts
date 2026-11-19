@@ -6,7 +6,7 @@ import { ProxyError, SYSTEM_BYTES, USERDATA_BYTES, WrongImage, type FastbootLike
 import { FirstBootMirror, fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
 import { FlashSession, type FlashDeps, type ImageMaker } from './flash';
 import { fakeReleaseRoute, type FakeRelease } from '../release/demo';
-import { MirrorSession } from './session';
+import { MIRROR_APK, MirrorSession } from './session';
 
 export const FLASH_DEMOS = ['flash-image', 'flash-release', 'flash-release-downloading', 'flash-release-none', 'flash-release-bad', 'flash-downloading', 'flash-download-error', 'flash-download-bad', 'flash-ready', 'flash-wifi-short', 'flash-fastboot', 'flash-fastboot-wrong', 'flash-confirm',
   'flash-working', 'flash-adb', 'flash-adb-wait', 'flash-done', 'flash-done-chooser', 'flash-done-no-home', 'flash-error', 'flash-run',
@@ -58,7 +58,7 @@ export async function flashDemo(name: FlashDemo, fast = false, deps: Partial<Fla
   });
   // flash-release…: the APK from a stand-in release (?apk=release), as the image screen shows it
   const release = name.startsWith('flash-release')
-    ? fakeReleaseRoute(({ 'flash-release': 'out', 'flash-release-downloading': 'stuck', 'flash-release-none': 'none', 'flash-release-bad': 'bad' } as Record<string, FakeRelease>)[name]!, fakeMirrorApk(), tick)
+    ? fakeReleaseRoute(({ 'flash-release': 'out', 'flash-release-downloading': 'stuck', 'flash-release-none': 'none', 'flash-release-bad': 'bad' } as Record<string, FakeRelease>)[name]!, fakeMirrorApk(), tick, MIRROR_APK.line)
     : undefined;
   const mirror = new MirrorSession({ connect: async () => { throw new Error('not in this demo'); }, ...(release ? { release } : {}) }, true);
   const flash = new FlashSession({

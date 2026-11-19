@@ -12,7 +12,7 @@ vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string
 
 import { MirrorWizard } from '../src/mirror/MirrorWizard';
 import { releaseApk, type ReleaseApk } from '../src/release/apk';
-import { DEMO_APK, DEMO_TAG, fakeReleaseRoute, type FakeRelease } from '../src/release/demo';
+import { demoRelease, fakeReleaseRoute as routeFor, type FakeRelease } from '../src/release/demo';
 import { MIRROR_APK, MIRROR_OPEN, MirrorSession, mirrorMode } from '../src/mirror/session';
 import { registry } from '../src/wizard/registry';
 
@@ -24,6 +24,9 @@ beforeAll(() => {
 });
 afterEach(() => { cleanup(); registry.clear(); vi.unstubAllGlobals(); history.replaceState(null, '', '/'); });
 
+/** The Mirror's line: its stand-in release and the route that serves it. */
+const { tag: DEMO_TAG, apk: DEMO_APK } = demoRelease(MIRROR_APK.line);
+const fakeReleaseRoute = (kind: FakeRelease, apk: Uint8Array, tick: (ms: number) => Promise<void> = async () => {}) => routeFor(kind, apk, tick, MIRROR_APK.line);
 const APK = fakeMirrorApk();
 const session = (kind: FakeRelease | typeof fetch) =>
   new MirrorSession({ connect: async () => { throw new Error('unused'); }, release: typeof kind === 'function' ? kind : fakeReleaseRoute(kind, APK) }, true);

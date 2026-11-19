@@ -8,13 +8,11 @@ export type FakeRelease = 'out' | 'none' | 'bad' | 'stuck';
 
 /** The stand-in release of `line`: its tag and its arm64-v8a APK. */
 export const demoRelease = (line: Line) => ({ tag: `${line}-v0.2.0`, apk: `glassworks-${line}-arm64-v8a-0.2.0.apk` });
-/** The Mirror's (generic-android-legacy). */
-export const { tag: DEMO_TAG, apk: DEMO_APK } = demoRelease('generic-android-legacy');
 
 const sha256 = async (b: Uint8Array) =>
   [...new Uint8Array(await crypto.subtle.digest('SHA-256', b as Uint8Array<ArrayBuffer>))].map((x) => x.toString(16).padStart(2, '0')).join('');
 
-export function fakeReleaseRoute(kind: FakeRelease, apk: Uint8Array, tick: (ms: number) => Promise<void> = async () => {}, line: Line = 'generic-android-legacy'): typeof fetch {
+export function fakeReleaseRoute(kind: FakeRelease, apk: Uint8Array, tick: (ms: number) => Promise<void>, line: Line): typeof fetch {
   const { tag: DEMO_TAG, apk: DEMO_APK } = demoRelease(line);
   return (async (input: RequestInfo | URL) => {
     const url = new URL(String(input), 'https://kiln.invalid');
