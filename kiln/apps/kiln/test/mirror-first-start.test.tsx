@@ -11,7 +11,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: ReactNode }) => <a href={href} {...p}>{children}</a> }));
 
-import { AUTH_MS, FlashSession, type ImageMaker } from '../src/mirror/flash';
+import { AUTH_MS, FIRST_START_AUTH_MS, FlashSession, type ImageMaker } from '../src/mirror/flash';
 import { Flash } from '../src/mirror/MirrorWizard';
 import { MirrorSession } from '../src/mirror/session';
 
@@ -124,6 +124,18 @@ describe('connecting while the Mirror is still starting', () => {
     expect(asked.every((ms) => ms !== undefined && ms > 0 && ms <= Math.min(AUTH_MS, 100))).toBe(true);
     expect(f.state).toMatchObject({ connecting: false, adbWaiting: false });
     expect(f.state.connectError).toMatch(/didn't let this browser in through its first start/);
+  });
+
+  it('a picked Mirror briefly off USB (restarting) is asked again, and the first try has its own deadline', async () => {
+    const adb = new FirstBootMirror();
+    const request = vi.fn(async (): Promise<PanelShell> => { throw new Error('the device isn\'t on USB right now (it may be restarting)'); });
+    const reopen = vi.fn(async () => adb as PanelShell);
+    const { f, mirror } = setup({ request, reopen, picked: () => true });
+    await flashed(f, mirror);
+    await f.connectAdb();
+    expect(request).toHaveBeenCalledWith({ authMs: FIRST_START_AUTH_MS });
+    expect(reopen).toHaveBeenCalledTimes(1);
+    expect(f.state.screen).toBe('done');
   });
 
   it('a closed list is not retried', async () => {

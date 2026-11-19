@@ -92,7 +92,7 @@ async function ready(o: { before?: () => Promise<PanelShell>; after?: FirstBootM
   const mirror = new MirrorSession({ connect: async () => { throw new Error('unused'); } }, true);
   const f = new FlashSession({
     images, refract: 'https://proxy.test', requestFastboot: async () => fb,
-    requestAdb: async (r) => { asked.push(r?.authMs); return r?.authMs !== undefined ? (o.before ?? (async () => { throw new Error('unused'); }))() : after; },
+    requestAdb: async (r) => { asked.push(r?.authMs); return r?.authMs === AUTH_MS ? (o.before ?? (async () => { throw new Error('unused'); }))() : after; },
     adbKey: () => 'QAAA= kiln@test', apk: () => mirror.apkBytes(), sleep: async () => {},
     flashedHere: { get: () => flashed, set: () => { flashed = true; } },
     holdingKey: (on) => holding.push(on),

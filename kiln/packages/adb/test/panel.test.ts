@@ -27,4 +27,18 @@ describe('Panel.connect with authMs', () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(raw.close).toHaveBeenCalled();
   });
+
+  it('a device given but not in the list is off USB for now, not a list closed with nothing picked', async () => {
+    devices.getDevices = async () => [];
+    await expect(Panel.connect(key, {} as USBDevice, { authMs: 1000 })).rejects.toThrow(/isn't on USB right now/);
+  });
+
+  it('a release that stalls after a failed connect gives up after a second, and still rejects', async () => {
+    const raw = { close: vi.fn(() => never<void>()) };
+    devices.getDevices = async () => [{ raw, serial: 'x', connect: async () => ({}) }]; // a connection adb can't use
+    const started = Date.now();
+    await expect(Panel.connect(key, raw as unknown as USBDevice, { authMs: 5000 })).rejects.toBeTruthy();
+    expect(raw.close).toHaveBeenCalled();
+    expect(Date.now() - started).toBeLessThan(2500);
+  });
 });
