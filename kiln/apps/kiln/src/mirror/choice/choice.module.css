@@ -1,5 +1,7 @@
 /* issue 579 mockups: the image cards and the owner line. Brand tokens only; ember marks the pick, as on the picker. */
 .cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.cards.one { grid-template-columns: minmax(0, 1fr); }
+.more { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
 .card {
   display: grid; gap: 10px; align-content: start; text-align: left; cursor: pointer;
   padding: 16px; border-radius: 16px; border: 1px solid var(--edge); background: var(--well); color: inherit; font: inherit;

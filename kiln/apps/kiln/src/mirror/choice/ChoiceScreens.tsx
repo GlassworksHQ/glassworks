@@ -11,19 +11,21 @@ import { Shell, useBrowserChip } from '../../components/Shell';
 import { FRAMES } from '../../frames/catalog';
 import type { RailStep } from '../../wizard/state';
 import { flashDemo } from '../flashDemo';
-import { OPTIONS, option, type ImageOption } from './options';
+import { OPTIONS, imageFromLink, option, type ImageOption } from './options';
 import c from './choice.module.css';
 
-export const IMAGE_DEMOS = ['image-choose', 'image-choose-panes', 'image-download', 'image-download-done', 'image-download-bad', 'image-confirm',
+export const IMAGE_DEMOS = ['image-choose', 'image-choose-open', 'image-choose-panes', 'image-link', 'image-download', 'image-download-done', 'image-download-bad', 'image-confirm',
   'image-writing', 'image-done', 'image-done-glassworks', 'image-back-glassworks', 'image-back-panes'] as const;
 export type ImageDemo = (typeof IMAGE_DEMOS)[number];
 
 type Screen = 'choose' | 'download' | 'confirm' | 'writing' | 'done';
-type FileState = { state: 'downloading' | 'waiting' | 'ok' | 'bad'; x: number };
+type FileState = { state: 'idle' | 'downloading' | 'waiting' | 'ok' | 'bad'; x: number };
 
 const RAIL = ['Mirror', 'Choose', 'Download', 'Fastboot', 'Install', 'Done'];
 const AT: Record<Screen, number> = { choose: 1, download: 2, confirm: 3, writing: 4, done: 6 };
-const rail = (screen: Screen): RailStep[] => RAIL.map((name, i) => ({ name, mark: i < AT[screen] ? 'done' : i > AT[screen] ? 'todo' : 'now' }));
+/** Arriving by an image's link skips the choice, so its rail has no Choose step. */
+const rail = (screen: Screen, link: boolean): RailStep[] => RAIL.map((name, i): RailStep => ({ name, mark: i < AT[screen] ? 'done' : i > AT[screen] ? 'todo' : 'now' }))
+  .filter((x) => !link || x.name !== 'Choose');
 const REVERSIBLE = FRAMES.find((x) => x.id === 'lululemon-mirror')?.ratings.reversible.label;
 const panesCredit = () => FRAMES.find((x) => x.id === 'lululemon-mirror')?.credits?.find((x) => x.id === 'glass-panes-image');
 
@@ -45,7 +47,7 @@ function Card({ o }: { o: ImageOption }) {
       <span className={c.head}>
         <span className="rd" aria-hidden="true" />
         <b className={c.name}>{o.name}</b>
-        <span className="pill soon">{o.community ? 'Community image' : 'Default'}</span>
+        <span className="pill soon">{o.community ? 'Community image' : 'Recommended'}</span>
       </span>
       <span className={c.summary}>{o.summary}</span>
       <dl className={c.facts}>
@@ -58,22 +60,31 @@ function Card({ o }: { o: ImageOption }) {
   );
 }
 
-function Choose({ picked, setPicked, from, next }: { picked: ImageOption['id']; setPicked: (id: ImageOption['id']) => void; from?: ImageOption; next: () => void }) {
+/** Community images stay hidden until asked for; hiding them again goes back to Glassworks. */
+function Choose({ picked, setPicked, from, open, setOpen, next }: {
+  picked: ImageOption['id']; setPicked: (id: ImageOption['id']) => void; from?: ImageOption; open: boolean; setOpen: (open: boolean) => void; next: () => void;
+}) {
   const o = option(picked);
+  const shown = OPTIONS.filter((x) => open || !x.community);
+  const others = OPTIONS.filter((x) => x.community).length;
+  const toggle = () => { if (open && o.community) setPicked('glassworks'); setOpen(!open); };
   return (
     <section className="card" aria-labelledby="h">
       <div className="row"><span className="pill soon">Test only</span></div>
       <h2 id="h">What goes on the Mirror?</h2>
-      <p className="lede">Glassworks, or a community image as its project publishes it. Kiln downloads either one, checks it, and writes it over USB.</p>
+      <p className="lede">{open ? 'Glassworks, or a community image as its project publishes it. Kiln downloads either one, checks it, and writes it over USB.' : 'Kiln downloads Glassworks, checks it, and writes it over USB.'}</p>
       {from && (
         <p className={`small ${c.from}`} role="status">
           The way back from {from.name}. {o.name} replaces it and everything on the Mirror; {from.name} stays a choice here.
         </p>
       )}
-      <RadioGroup.Root className={c.cards} value={picked} onValueChange={(v) => setPicked(v as ImageOption['id'])} aria-labelledby="h">
-        {OPTIONS.map((x) => <Card key={x.id} o={x} />)}
+      <RadioGroup.Root id="images" className={`${c.cards}${open ? '' : ` ${c.one}`}`} value={picked} onValueChange={(v) => setPicked(v as ImageOption['id'])} aria-labelledby="h">
+        {shown.map((x) => <Card key={x.id} o={x} />)}
       </RadioGroup.Root>
-      <p className="small">Both take the same steps: fastboot, Kiln&apos;s checks, and a warning before anything is written. To switch later, come back here and pick the other one.</p>
+      <p className={`small ${c.more}`}>
+        <button type="button" className="link" aria-expanded={open} aria-controls="images" onClick={toggle}>{open ? 'Hide community images' : `Show community images (${others})`}</button>
+        <span>{open ? 'Both take the same steps: fastboot, Kiln’s checks, and a warning before anything is written.' : 'Made by other projects, not Glassworks.'}</span>
+      </p>
       <div className="foot">
         <span className="small">Choosing writes nothing.</span>
         <button type="button" className="btn ember" onClick={next}>Continue with {o.name}</button>
@@ -94,6 +105,7 @@ function FileRow({ f, st }: { f: ImageOption['files'][number]; st: FileState }) 
             <div className="bar" role="progressbar" aria-label={`Downloading ${f.name}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}><i style={{ width: `${Math.max(2, pct)}%` }} /></div>
           </div>
         )}
+        {st.state === 'idle' && <span className="small">Not downloaded yet.</span>}
         {st.state === 'waiting' && <span className="small">Next, once {f.name === 'system.img' ? 'the image' : 'system.img'} is in.</span>}
         {st.state === 'ok' && <span className="status ok">✓ Checks out: SHA-256 as the release publishes it.</span>}
         {st.state === 'bad' && <span className="status err" role="alert">This isn&apos;t the file the release publishes (its SHA-256 differs). Kiln deleted it. Nothing was written to the Mirror.</span>}
@@ -103,20 +115,35 @@ function FileRow({ f, st }: { f: ImageOption['files'][number]; st: FileState }) 
   );
 }
 
-function Download({ o, files, back, next }: { o: ImageOption; files: FileState[]; back: () => void; next: () => void }) {
+/**
+ * The download. Arriving by the image's link (`link`) this is the first screen: nothing starts until
+ * the click, and the switch to Glassworks sits in the foot.
+ */
+function Download({ o, files, link, start, back, toGlassworks, next }: {
+  o: ImageOption; files: FileState[]; link: boolean; start: () => void; back: () => void; toGlassworks: () => void; next: () => void;
+}) {
   const ready = files.every((x) => x.state === 'ok');
+  const idle = files.every((x) => x.state === 'idle');
   const credit = panesCredit();
   return (
     <section className="card" aria-labelledby="h">
       <Whose o={o} />
-      <h2 id="h">Downloading {o.name}.</h2>
-      <p className="lede">From its own release on GitHub, into this browser. Kiln checks every file against the SHA-256 the release publishes before anything goes near the Mirror.</p>
+      <h2 id="h">{idle ? `Install ${o.name} on the Mirror.` : `Downloading ${o.name}.`}</h2>
+      <p className="lede">{idle
+        ? `Kiln downloads ${o.name} from its own release on GitHub, checks every file against the SHA-256 the release publishes, then takes you through fastboot, its checks and a warning before it writes anything.`
+        : 'From its own release on GitHub, into this browser. Kiln checks every file against the SHA-256 the release publishes before anything goes near the Mirror.'}</p>
       {o.files.map((f, i) => <FileRow key={f.name} f={f} st={files[i]!} />)}
       {credit && <Credit c={credit} built="image" />}
       <p className="small">Release <code>mirror-android-2</code>, through Refract, Kiln&apos;s download proxy, which passes it on and stores nothing. Its vendor files belong to Qualcomm and Quectel, not to Glassworks.</p>
       <div className="foot">
-        <span className="links"><button type="button" className="link" onClick={back}>Choose another image</button></span>
-        <button type="button" className="btn ember" disabled={!ready} onClick={next}>{files.some((x) => x.state === 'downloading' || x.state === 'waiting') ? 'Downloading…' : 'Continue'}</button>
+        <span className="links">
+          {link
+            ? <>Glassworks is recommended for the Mirror. <button type="button" className="link" onClick={toGlassworks}>Install Glassworks instead</button></>
+            : <button type="button" className="link" onClick={back}>Choose another image</button>}
+        </span>
+        {idle
+          ? <button type="button" className="btn ember" onClick={start}>Download {o.name}</button>
+          : <button type="button" className="btn ember" disabled={!ready} onClick={next}>{files.some((x) => x.state === 'downloading' || x.state === 'waiting') ? 'Downloading…' : 'Continue'}</button>}
       </div>
     </section>
   );
@@ -229,11 +256,15 @@ const FILES: Record<string, FileState[]> = {
   'image-download': [{ state: 'downloading', x: 0.42 }, { state: 'waiting', x: 0 }],
   'image-download-done': [{ state: 'ok', x: 1 }, { state: 'ok', x: 1 }],
   'image-download-bad': [{ state: 'ok', x: 1 }, { state: 'bad', x: 1 }],
+  'image-link': [{ state: 'idle', x: 0 }, { state: 'idle', x: 0 }],
 };
 
-const START: Record<ImageDemo, { screen: Screen; picked: ImageOption['id']; from?: ImageOption['id']; ours?: boolean }> = {
+type Start = { screen: Screen; picked: ImageOption['id']; open?: boolean; from?: ImageOption['id']; ours?: boolean; link?: boolean };
+const START: Record<ImageDemo, Start> = {
   'image-choose': { screen: 'choose', picked: 'glassworks' },
-  'image-choose-panes': { screen: 'choose', picked: 'glass-panes' },
+  'image-choose-open': { screen: 'choose', picked: 'glassworks', open: true },
+  'image-choose-panes': { screen: 'choose', picked: 'glass-panes', open: true },
+  'image-link': { screen: 'download', picked: 'glass-panes', link: true },
   'image-download': { screen: 'download', picked: 'glass-panes' },
   'image-download-done': { screen: 'download', picked: 'glass-panes' },
   'image-download-bad': { screen: 'download', picked: 'glass-panes' },
@@ -242,14 +273,25 @@ const START: Record<ImageDemo, { screen: Screen; picked: ImageOption['id']; from
   'image-done': { screen: 'done', picked: 'glass-panes' },
   'image-done-glassworks': { screen: 'done', picked: 'glassworks', ours: true },
   'image-back-glassworks': { screen: 'choose', picked: 'glassworks', from: 'glass-panes' },
-  'image-back-panes': { screen: 'choose', picked: 'glass-panes', from: 'glassworks' },
+  'image-back-panes': { screen: 'choose', picked: 'glass-panes', open: true, from: 'glassworks' },
 };
 
-export function ImageChoiceDemo({ name }: { name: ImageDemo }) {
-  const start = START[name];
+/** `image-link` stands for `/lululemon-mirror?image=glass-panes`; on the page's start, a real `?image=` does the same. */
+function startOf(name: ImageDemo, search: string): { start: Start; files: FileState[] } {
+  const linked = name === 'image-link' ? option('glass-panes') : name === 'image-choose' ? imageFromLink(search) : undefined;
+  if (linked) return { start: { screen: 'download', picked: linked.id, link: true }, files: linked.files.map(() => ({ state: 'idle', x: 0 })) };
+  return { start: START[name], files: FILES[name] ?? [{ state: 'ok', x: 1 }, { state: 'ok', x: 1 }] };
+}
+
+const glassworksFlow = () => location.assign('?demo=flash-image');
+
+export function ImageChoiceDemo({ name, search = location.search, toGlassworks = glassworksFlow }: { name: ImageDemo; search?: string; toGlassworks?: () => void }) {
+  const [{ start, files: firstFiles }] = useState(() => startOf(name, search));
+  const [files, setFiles] = useState(firstFiles);
   const [screen, setScreen] = useState<Screen>(start.screen);
   const [picked, setPicked] = useState(start.picked);
   const [from, setFrom] = useState(start.from);
+  const [open, setOpen] = useState(!!start.open);
   const [checks, setChecks] = useState<FastbootReport['checks']>([]);
   const chip = useBrowserChip();
   useEffect(() => {
@@ -258,11 +300,11 @@ export function ImageChoiceDemo({ name }: { name: ImageDemo }) {
   }, []);
   const o = option(picked);
   const ours = screen === 'done' && start.ours;
-  const backTo = (id: ImageOption['id']) => { setFrom(picked); setPicked(id); setScreen('choose'); };
+  const backTo = (id: ImageOption['id']) => { setFrom(picked); setPicked(id); setOpen(option(id).community); setScreen('choose'); };
   return (
-    <Shell steps={rail(screen)} level={ours ? 4 : 0} chip={chip}>
-      {screen === 'choose' ? <Choose picked={picked} setPicked={setPicked} from={from ? option(from) : undefined} next={() => (o.community ? setScreen('download') : location.assign('?demo=flash-image'))} />
-        : screen === 'download' ? <Download o={o} files={FILES[name] ?? [{ state: 'ok', x: 1 }, { state: 'ok', x: 1 }]} back={() => setScreen('choose')} next={() => setScreen('confirm')} />
+    <Shell steps={rail(screen, !!start.link)} level={ours ? 4 : 0} chip={chip}>
+      {screen === 'choose' ? <Choose picked={picked} setPicked={setPicked} from={from ? option(from) : undefined} open={open} setOpen={setOpen} next={() => (o.community ? setScreen('download') : toGlassworks())} />
+        : screen === 'download' ? <Download o={o} files={files} link={!!start.link} start={() => setFiles(FILES['image-download']!)} back={() => setScreen('choose')} toGlassworks={toGlassworks} next={() => setScreen('confirm')} />
         : screen === 'confirm' ? <Confirm o={o} checks={checks} back={() => setScreen('download')} next={() => setScreen('writing')} />
         : screen === 'writing' ? <Writing o={o} />
         : ours ? <DoneGlassworks back={() => backTo('glass-panes')} />

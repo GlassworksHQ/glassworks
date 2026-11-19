@@ -51,3 +51,9 @@ export const OPTIONS: readonly ImageOption[] = [
 ];
 
 export const option = (id: ImageOption['id']) => OPTIONS.find((o) => o.id === id)!;
+
+/** `?image=<id>` names a community image this frame offers; anything else (none, unknown, Glassworks) is the normal page. */
+export function imageFromLink(search: string): ImageOption | undefined {
+  const id = new URLSearchParams(search).get('image');
+  return OPTIONS.find((o) => o.community && o.id === id);
+}
