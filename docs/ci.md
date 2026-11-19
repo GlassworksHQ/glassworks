@@ -162,7 +162,10 @@ configures the build once (`./gradlew help`), which fetches the plugins and `bui
 cache. When that fails on a download ("Could not find", "Could not resolve", or a plugin "was not found in any of the
 following sources") it deletes Gradle's dependency
 metadata, as the jobs' last step does after a failure, waits 15 then 30 seconds, and tries again, three times in all.
-Any other failure fails at once. Downloads later in a job (a test's or lint's dependencies) aren't retried.
+Before the first retry it also puts `central-fallback.init.gradle` in `~/.gradle/init.d`: from then on each Gradle run
+in that job resolves plugins from the build's own repositories, then Maven Central. Retrying the portal alone wasn't
+enough: on #631's injected run it answered 404 for kotlin-stdlib three times in a row, 45 seconds apart, on one runner.
+A job whose first try passes runs exactly as before. Any other failure fails at once. Downloads later in a job (a test's or lint's dependencies) aren't retried.
 `tools/ci/test/test_gradle_resolve.py` runs the script against a fake `gradlew` and checks that every Gradle job runs it.
 
 ## Adding a job or a path

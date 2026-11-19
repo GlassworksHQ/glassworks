@@ -1,0 +1,15 @@
+// resolve.sh's retries only (docs/ci.md, Gradle downloads): every build in the composite resolves its plugins from the
+// repositories it names, then from Maven Central. build-logic names none, so it gets the plugin portal (Gradle's default)
+// and then Central. On 2026-11-19 the portal answered 404 for kotlin-stdlib 2.4.10 three times in a row, 45 s apart, on
+// one runner (#631's injected run); Central has the same files. The order stays the build's own: Central only after.
+settingsEvaluated { settings ->
+    def repos = settings.pluginManagement.repositories
+    if (repos.isEmpty()) {
+        repos.gradlePluginPortal()
+    }
+    def central = repos.any { it instanceof MavenArtifactRepository && it.url.toString().startsWith('https://repo.maven.apache.org/maven2') }
+    if (!central) {
+        repos.mavenCentral()
+    }
+    println "Plugin repositories of ${settings.rootProject.name}: ${repos*.name.join(', ')}"
+}

@@ -59,12 +59,15 @@ class Resolve(unittest.TestCase):
             calls = int((d / 'calls').read_text())
             metadata = (home / 'caches/modules-2/metadata-2.107').exists()
             files = (home / 'caches/modules-2/files-2.1').exists()
+            fallback = home / 'init.d/glassworks-central-fallback.init.gradle'
+            self.fallback = fallback.read_text() if fallback.exists() else None
             return r.returncode, r.stdout, calls, metadata, files
 
     def test_a_clean_build_configures_once_and_keeps_the_cache(self):
         code, out, calls, metadata, files = self.run_with([])
         self.assertEqual((code, calls, metadata, files), (0, 1, True, True))
         self.assertIn('Configured.', out)
+        self.assertIsNone(self.fallback, 'no Central fallback unless a download failed')
 
     def test_a_404_from_the_portal_drops_the_metadata_and_tries_again(self):
         code, out, calls, metadata, files = self.run_with([PORTAL_404])
@@ -74,6 +77,9 @@ class Resolve(unittest.TestCase):
         self.assertIn('Could not find org.jetbrains.kotlin:kotlin-stdlib:2.4.10.', out)
         self.assertIn('::warning::', out)
         self.assertIn('Configured on attempt 2 of 3.', out)
+        # The rest of the job's Gradle runs look in Central too, after the build's own repositories.
+        self.assertEqual(self.fallback, (SCRIPT.parent / 'central-fallback.init.gradle').read_text())
+        self.assertIn('repos.mavenCentral()', self.fallback)
 
     def test_a_plugin_the_portal_did_not_answer_for_is_a_download_too(self):
         code, out, calls, metadata, _ = self.run_with([PLUGIN_MISSING])
@@ -83,6 +89,7 @@ class Resolve(unittest.TestCase):
     def test_another_failure_fails_at_once_with_gradles_output(self):
         code, out, calls, metadata, _ = self.run_with([COMPILE_ERROR])
         self.assertEqual((code, calls, metadata), (1, 1, True))
+        self.assertIsNone(self.fallback)
         self.assertIn('Script compilation error', out)
         self.assertIn('::error::', out)
 
