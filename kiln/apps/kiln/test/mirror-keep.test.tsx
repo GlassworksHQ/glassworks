@@ -16,7 +16,7 @@ vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string
 import { AUTH_MS, FlashSession, type ImageMaker } from '../src/mirror/flash';
 import { flashDemo } from '../src/mirror/flashDemo';
 import { DEMO_KEY, KEEP_DEMOS, keepDemo } from '../src/mirror/keepDemo';
-import { Flash } from '../src/mirror/MirrorWizard';
+import { Flash, leaveWarning } from '../src/mirror/MirrorWizard';
 import { MirrorSession } from '../src/mirror/session';
 
 beforeAll(() => {
@@ -75,6 +75,7 @@ const KEY = DEMO_KEY;
 
 /** A session on fakes: the running Mirror before the flash (`before`), and the fresh one after it. */
 async function ready(o: { before?: () => Promise<PanelShell>; after?: FirstBootMirror; flashed?: boolean } = {}) {
+  const holding: boolean[] = [];
   const built: Parameters<ImageMaker['build']>[0][] = [];
   const images: ImageMaker = {
     async load() {}, async fetch(_, p) { p(1); }, async discard() {},
@@ -95,10 +96,11 @@ async function ready(o: { before?: () => Promise<PanelShell>; after?: FirstBootM
     requestAdb: async (r) => { asked.push(r?.authMs); return r?.authMs !== undefined ? (o.before ?? (async () => { throw new Error('unused'); }))() : after; },
     adbKey: () => 'QAAA= kiln@test', apk: () => mirror.apkBytes(), sleep: async () => {},
     flashedHere: { get: () => flashed, set: () => { flashed = true; } },
+    holdingKey: (on) => holding.push(on),
   });
   await f.downloadImage();
   await mirror.pickApk('kiosk.apk', fakeMirrorApk());
-  return { f, built, after, asked, flashedHere: () => flashed };
+  return { f, built, after, asked, holding, flashedHere: () => flashed };
 }
 
 /** Glassworks running on the Mirror, with the key socket holding `key` (none: an app from before #574). */
@@ -107,7 +109,8 @@ function running(o: { key?: string; socket?: boolean; board?: string } = {}) {
   const keys = new FakeKeySocket(o.key);
   if (o.socket !== false) m.withKeySocket(keys);
   const reboots: string[] = [];
-  return { m: Object.assign(m, { rebootToBootloader: async () => { reboots.push('bootloader'); } }), keys, reboots };
+  const closed: number[] = [];
+  return { m: Object.assign(m, { rebootToBootloader: async () => { reboots.push('bootloader'); }, close: async () => { closed.push(1); } }), keys, reboots, closed };
 }
 
 const through = async (f: FlashSession) => { await f.connectFastboot(); f.understand(true); await f.flash(); await f.connectAdb(); };
@@ -115,7 +118,7 @@ const through = async (f: FlashSession) => { await f.connectFastboot(); f.unders
 describe('the keep step, on the real session (#580)', () => {
   it('reads the key, restarts into fastboot, flags the image, and gives the key back: the same device', async () => {
     const r = running({ key: KEY });
-    const { f, built, after, asked } = await ready({ before: async () => r.m });
+    const { f, built, after, asked, holding } = await ready({ before: async () => r.m });
     f.toKeep();
     expect(f.state.screen).toBe('keep');
     await f.readKey();
@@ -124,6 +127,7 @@ describe('the keep step, on the real session (#580)', () => {
     expect(r.reboots).toEqual(['bootloader']);
     expect(f.state.key).toMatchObject({ state: 'held', fingerprint: expect.stringMatching(/^[0-9a-f]{4}$/) });
     expect(f.holdsKey()).toBe(true);
+    expect(holding).toEqual([true]);
     await through(f);
     // the image gets the flag, never the key; the fresh app gets the key over its socket
     expect(built[0]?.apiKeyHandover).toBe(true);
@@ -132,6 +136,7 @@ describe('the keep step, on the real session (#580)', () => {
     expect(f.state.screen).toBe('done');
     expect(f.state.key).toMatchObject({ state: 'handed' });
     expect(f.holdsKey()).toBe(false);
+    expect(holding).toEqual([true, false]);
     // nowhere in what the page keeps or shows: the state, the log, a command line
     expect(JSON.stringify(f.state)).not.toContain(KEY);
     expect([...r.m.cmds, ...after.cmds].join('\n')).not.toContain(KEY);
@@ -200,6 +205,8 @@ describe('the keep step, on the real session (#580)', () => {
     expect(f.state.screen).toBe('keep');
     expect(f.state.key).toBeUndefined();
     expect(f.state.connectError).toMatch(/Nothing was written/);
+    // the connection is let go, so Try again starts a clean one (#603 review)
+    expect(r.closed).toEqual([1]);
   });
 
   it('another device isn\'t read', async () => {
@@ -225,16 +232,13 @@ describe('the keep step, on the real session (#580)', () => {
     expect(again.f.state.screen).toBe('keep');
   });
 
-  it('the page asks before it closes while the tab holds the key, not after', async () => {
-    const d = await keepDemo('flash-keep-held', true);
-    render(<Flash flash={d.flash} mirror={d.mirror} />);
-    await act(async () => {});
+  it('the page asks before it closes while the session holds the key, whichever screen shows (#603 review)', () => {
+    const on = leaveWarning();
     const leave = () => { const e = new Event('beforeunload', { cancelable: true }); window.dispatchEvent(e); return e.defaultPrevented; };
+    expect(leave()).toBe(false);
+    on(true);
     expect(leave()).toBe(true);
-    cleanup();
-    const done = await keepDemo('flash-done-kept', true);
-    render(<Flash flash={done.flash} mirror={done.mirror} />);
-    await act(async () => {});
+    on(false);
     expect(leave()).toBe(false);
   });
 

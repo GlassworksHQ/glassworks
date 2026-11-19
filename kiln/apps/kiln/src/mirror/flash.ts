@@ -46,6 +46,11 @@ export interface FlashDeps {
    * gets in over adb, so Continue opens the keep step for it (issue 580). None: never.
    */
   flashedHere?: { get(): boolean; set(): void };
+  /**
+   * Told when the tab starts and stops holding Home Assistant's key (issue 580), so the page can ask before it closes.
+   * The session outlives its screen (Kiln's registry), so this follows the session, not the screen.
+   */
+  holdingKey?(on: boolean): void;
   /** This browser's adb public key line, once loaded. */
   adbKey(): string | undefined;
   /** The app's APK (Glassworks' legacy build, the test-only local file), checked by the page. */
@@ -132,7 +137,13 @@ export class FlashSession {
 
   subscribe = (l: () => void) => { this.listeners.add(l); return () => { this.listeners.delete(l); }; };
   get = () => this.state;
-  private set(patch: Partial<FlashState>) { this.state = { ...this.state, ...patch }; for (const l of this.listeners) l(); }
+  private held = false;
+  private set(patch: Partial<FlashState>) {
+    this.state = { ...this.state, ...patch };
+    const held = this.holdsKey();
+    if (held !== this.held) { this.held = held; this.d.holdingKey?.(held); }
+    for (const l of this.listeners) l();
+  }
   private log = (step: string, detail?: string) => this.set({ log: [...this.state.log, step || `  ${detail}`].slice(-400) });
 
   setHaUrl(haUrl: string) { this.set({ haUrl }); }
@@ -233,6 +244,7 @@ export class FlashSession {
   /** Going on with fastboot by hand: a key read already stays, to give back after the flash; Done says what HA does. */
   skipKeep() {
     const k = this.state.key;
+    void this.running?.close?.().catch(() => {});
     this.running = undefined;
     this.set({ screen: 'fastboot', key: k && k.state !== 'reading' ? k : undefined, connectError: undefined });
   }
@@ -289,6 +301,8 @@ export class FlashSession {
     } catch (e) {
       // the reply's first word at most (readApiKey): no key material in the message
       this.log('Stopped', (e as Error).message);
+      // let go of the connection, so Try again starts a clean one on the same device
+      await p.close?.().catch(() => {});
       this.set({ key: undefined, connectError: `Kiln couldn't read the key: ${(e as Error).message}. Nothing was written to the Mirror. Try again.` });
     }
   }

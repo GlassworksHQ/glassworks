@@ -19,6 +19,8 @@ export interface PanelShell {
   openStream?(service: string): Promise<ByteStream>;
   /** Restarts the device into its bootloader (adb's `reboot:bootloader` service, as `adb reboot bootloader`), if the transport can. */
   rebootToBootloader?(): Promise<void>;
+  /** Lets go of the connection, so the next connect to the same device starts clean. */
+  close?(): Promise<void>;
 }
 
 /**

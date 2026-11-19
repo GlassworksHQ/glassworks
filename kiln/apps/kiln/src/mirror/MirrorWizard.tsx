@@ -55,6 +55,16 @@ const FLASHED_HERE = {
   set: () => { try { localStorage.setItem('kiln.mirror.flashed', '1'); } catch { /* storage off: the link stays the way in */ } },
 };
 
+/**
+ * Home Assistant's key lives in this tab only until the first start (issue 580): closing or reloading the tab loses it,
+ * so the browser asks first. On for as long as the session holds the key, whichever screen shows (the session outlives
+ * its screen in Kiln's registry).
+ */
+export function leaveWarning(target: Pick<Window, 'addEventListener' | 'removeEventListener'> = window): (on: boolean) => void {
+  const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+  return (on) => (on ? target.addEventListener('beforeunload', warn) : target.removeEventListener('beforeunload', warn));
+}
+
 /** The page's two paths on one adb key: the app over adb (MirrorSession), or Glassworks over fastboot (FlashSession). */
 function realSessions(on: boolean): { mirror: MirrorSession; flash: FlashSession } {
   if (!on) {
@@ -76,6 +86,7 @@ function realSessions(on: boolean): { mirror: MirrorSession; flash: FlashSession
     requestAdb: (o) => keys.connectWith((k) => Panel.connect(k, undefined, o))(),
     adbKey: () => keys.key()?.publicKey,
     flashedHere: FLASHED_HERE,
+    holdingKey: leaveWarning(),
     apk: () => mirror.apkBytes(),
   });
   return { mirror, flash };
@@ -326,14 +337,6 @@ export function Flash({ flash, mirror, toApp }: { flash: FlashSession; mirror: M
   const ms = useSyncExternalStore(mirror.subscribe, mirror.get, mirror.get);
   const chip = useBrowserChip();
   useEffect(() => { document.title = s.screen === 'adb' ? 'Your turn · lululemon Studio Mirror · Kiln' : 'lululemon Studio Mirror · Kiln'; }, [s.screen]);
-  // Home Assistant's key lives in this tab only until the first start (issue 580): closing it loses the key, so the browser asks first
-  const holds = flash.holdsKey();
-  useEffect(() => {
-    if (!holds) return;
-    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
-    window.addEventListener('beforeunload', warn);
-    return () => window.removeEventListener('beforeunload', warn);
-  }, [holds]);
   return (
     <Shell steps={flashRail(s)} level={flashLevel(s)} error={s.screen === 'error'} chip={chip}>
       <FlashScreens f={flash} s={s} m={mirror} ms={ms} />

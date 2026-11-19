@@ -483,7 +483,8 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   stays in the browser tab, never saved or shown, so keep the tab open until Done. Done says whether Home Assistant
   kept the same device. Only the browser that last installed Glassworks on the Mirror gets in: from another one, the
   reflash still works and Home Assistant asks once, and Kiln says what to click. The Mirror needs an app from this
-  release or later before the flash. Not yet run on a real Mirror.
+  release or later before the flash. This keeps the device from the second flash that gives the Mirror its id from its
+  serial: the first one still shows up as a new device once, as above. Not yet run on a real Mirror.
 - **Assist's reply stays on a narrow screen.** On the Mirror, which stands portrait, the reply ran off
   both edges of the screen on one line. It now wraps inside the screen and gets smaller for a long
   reply, with room for up to five lines before it is cut short. The S1 and landscape tablets look as before.
