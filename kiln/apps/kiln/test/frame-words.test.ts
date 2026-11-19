@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { kiln } from '@glassworks/aqara-s1-plus-installer';
+import { demoFrame, frame } from '../src/app/aqara-s1-plus/frame';
 import { frameWords } from '../src/wizard/frame';
 import { REPO } from './contract/harness';
 
@@ -25,5 +26,12 @@ describe('installer.json words', () => {
     const { missing: __, ...noMissing } = w.silent;
     expect(() => frameWords({ ...w, silent: noMissing }, states)).toThrow('words.silent.missing: missing');
     expect(() => frameWords({ ...w, silent: { ...w.silent, on: { word: 'On', tone: 'green', line: 'x' } } }, states)).toThrow('words.silent.on.tone');
+  });
+
+  it('the frame Kiln installs carries no simulated device: only the demo frame beside it does', () => {
+    expect(frame).not.toHaveProperty('sim');
+    expect(kiln).not.toHaveProperty('sim');
+    expect(demoFrame.frame).toBe(frame);
+    expect(demoFrame.sim.recipe).not.toBe(frame.recipe);
   });
 });

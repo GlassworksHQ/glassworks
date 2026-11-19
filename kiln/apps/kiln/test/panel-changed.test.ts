@@ -2,7 +2,7 @@
 // fails before writing says "this attempt wrote nothing; an earlier try did" and keeps Undo, in the
 // install and the undo flow alike, until a run reaches Done.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { frame as s1PlusUi } from '../src/app/aqara-s1-plus/frame';
+import { demoFrame as s1Demo } from '../src/app/aqara-s1-plus/frame';
 import { demoSession } from '../src/wizard/demo';
 import type { Session } from '../src/wizard/session';
 import type { Flow } from '../src/wizard/state';
@@ -12,7 +12,7 @@ const open: Session[] = [];
 afterEach(() => { for (const s of open.splice(0)) s.close(); });
 
 function session() {
-  const s = demoSession(s1PlusUi, 'connect');
+  const s = demoSession(s1Demo, 'connect');
   open.push(s);
   const fail = (at: number, e: unknown) => (s as unknown as { fail(at: number, e: unknown): void }).fail(at, e);
   const d = s.store.dispatch;

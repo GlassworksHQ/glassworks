@@ -10,7 +10,7 @@ import { s1Plus, type AssetName, type Provisioned, type SetUpOptions } from '@gl
 import type { Fastboot } from '@glassworks/fastboot';
 import type { FelDevice } from '@glassworks/fel';
 import { Assets, toHex, type BackupFile, type BackupMeta, type Recipe } from '@glassworks/kiln-core';
-import { frame as s1PlusUi } from '../../src/app/aqara-s1-plus/frame';
+import { frame as s1PlusUi, demoFrame as s1Demo } from '../../src/app/aqara-s1-plus/frame';
 import { demoBootImage, simulatedPanel } from '../../src/wizard/demo';
 import { Session } from '../../src/wizard/session';
 import type { Step } from '../../src/wizard/routes';
@@ -43,7 +43,7 @@ function world(k: Knobs): World {
   let home: string | undefined;
   const parts = new Map<string, Uint8Array>(s1Plus.backup.parts.map((p) => [p, p === 'boot' ? demoBootImage(64 << 10) : new Uint8Array(4096)]));
   // Android on the panel: the demo's simulated panel, plus what the S1's real provisioning changes
-  const sim = simulatedPanel(s1PlusUi, false, true, null);
+  const sim = simulatedPanel(s1Demo, false, true, null);
   const shell: PanelShell = {
     ...sim,
     async run(cmd, signal) {

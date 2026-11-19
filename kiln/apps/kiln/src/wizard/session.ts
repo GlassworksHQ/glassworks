@@ -97,9 +97,6 @@ export class Session implements SetupSteps {
 
   get isClosed(): boolean { return this.closed; }
 
-  /** The frame this session installs. */
-  get frame(): KilnFrame { return this.d.frame; }
-
   /** A flow has begun on this session (FEL picked, or a panel connected): a new one gets a new session. */
   get started(): boolean { return this.began; }
 

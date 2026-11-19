@@ -8,3 +8,4 @@ export {
 } from './improv';
 export { UPDATE_SERVICE_PROP, readRootUpdates, type RootUpdates } from './updates';
 export { kiln } from './kiln';
+export { kilnSim } from './sim';

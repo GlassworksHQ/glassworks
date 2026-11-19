@@ -3,7 +3,7 @@
 // (a new session, S1's renew), or a reload (a new page: only sessionStorage is left). Only a run that
 // reaches Done clears it.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { frame } from '../src/app/aqara-s1-plus/frame';
+import { demoFrame } from '../src/app/aqara-s1-plus/frame';
 import { demoSession } from '../src/wizard/demo';
 import { registry } from '../src/wizard/registry';
 import type { Session } from '../src/wizard/session';
@@ -13,7 +13,7 @@ const sessions: Session[] = [];
 afterEach(() => { registry.clear(); sessionStorage.clear(); for (const s of sessions.splice(0)) s.close(); });
 
 const entry = (session: Session) => ({ base: '/aqara-s1-plus', name: 'Aqara S1 Plus', session });
-const fresh = (make = demoSession) => { const s = make(frame, 'connect'); sessions.push(s); return s; };
+const fresh = (make = demoSession) => { const s = make(demoFrame, 'connect'); sessions.push(s); return s; };
 const writeSome = (s: Session) => {
   s.store.dispatch({ type: 'start', flow: 'install', now: 0 });
   s.store.dispatch({ type: 'progress', p: { overall: 0.6, phase: 'flash', phasePct: 0.1, title: 'Writing', sub: '' } });

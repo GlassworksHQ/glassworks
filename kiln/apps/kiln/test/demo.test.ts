@@ -2,7 +2,7 @@
 // screen can be seen without hardware.
 import { isMagiskPatched } from '@glassworks/bootpatch';
 import { describe, expect, it } from 'vitest';
-import { frame as s1PlusUi } from '../src/app/aqara-s1-plus/frame';
+import { demoFrame as s1Demo } from '../src/app/aqara-s1-plus/frame';
 import { demoBootImage, demoSession } from '../src/wizard/demo';
 
 const until = async (f: () => boolean, ms = 30_000) => {
@@ -17,7 +17,7 @@ describe('the simulated panel', () => {
   });
 
   it('goes from Connect to Done through every step', async () => {
-    const s = demoSession(s1PlusUi, 'run');
+    const s = demoSession(s1Demo, 'run');
     const st = () => s.store.state;
     void s.connectFel();
     await until(() => st().ask?.kind === 'fastboot');

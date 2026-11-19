@@ -90,11 +90,16 @@ recovery drawing and photo, and `FrameCode`, the S1's `kiln` export in
 | `appId` | The app on the device | Glassworks' `sh.edm.s1kiosk` |
 | `appOptions` | The recipe's setUp options from the settings step | Asks before a signing-key switch |
 | `wifiName` | The network the device is on, read-only | `dumpsys wifi` |
-| `updates` | A key of `words.silent`, read-only | The boot image's root update service |
+| `updates`, `updateStates` | A key of `words.silent`, read-only, and every key it can give (each needs its words) | The boot image's root update service |
 | `giveBack` | Undo's "keep its settings": the device's own apps back | `unprovision` |
-| `sim` | The simulated device for `?demo=…` and the tests | The recipe with FEL, layout and patch faked |
 
-A frame's route folder (`apps/kiln/src/app/<id>/frame.ts`) puts the three together. That binding and
+**A frame's real install and its demo device are separate files.** `kiln.ts` is the real install: its recipe is
+`recipe.ts`, the steps the panel runs. `sim.ts` (`kilnSim`) is only for Kiln's `?demo=…` states and the tests: the
+recipe with FEL, the layout check and the patch faked, the getprops a current device answers, and the log lines a demo
+install shows. The frame Kiln installs (`KilnFrame`) never carries it. The demo path takes it beside the frame, as a
+`DemoFrame` (`{ frame, sim }`), and `FrameWizard` uses it only when demos are on.
+
+A frame's route folder (`apps/kiln/src/app/<id>/frame.ts`) puts the three together, and the demo frame beside them. That binding and
 the route folder itself are the last per-frame code in the app; one route for every frame replaces
 them later in phase 2. The radio's next steps (`setup/radioPlan.ts`) are the radio pane's, not a
 frame's: the panel's own setup page shows them on any frame whose app reports a radio.

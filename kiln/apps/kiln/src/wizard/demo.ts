@@ -1,6 +1,8 @@
-// Development and preview only (?demo=…): a simulated device running the frame's recipe and Glassworks, so every
-// screen can be seen and captured without a panel. What only the frame knows of it is the frame's (`sim`). `?demo=run` drives the whole flow through the real InstallFlow and Session
-// with a fake device behind them; the other names jump straight to one state.
+// Development and preview only (?demo=…): a simulated device running Glassworks, so every screen can be seen and
+// captured without a panel. What only the frame knows of it (its faked recipe, getprops, log) comes beside the frame
+// as a DemoFrame's `sim`, from its installer's sim.ts; the frame Kiln installs never has it. `?demo=run` drives the
+// whole flow through the real InstallFlow and Session with a fake device behind them; the other names jump straight
+// to one state.
 import type { PanelShell } from '@glassworks/adb';
 import type { Fastboot } from '@glassworks/fastboot';
 import type { FelDevice } from '@glassworks/fel';
@@ -9,7 +11,7 @@ import { Assets, checkRestorable, fmtSize, type BackupFile, type BackupMeta } fr
 import { SETUP_SOCKET, type SetupState } from '@glassworks/setup-channel';
 import { PacketReader, PacketType, Rpc, State as ImprovState, frame as packet, parseResult, strings, type ByteStream } from 'improv-serial';
 import { explain } from './explain';
-import type { AppPhase, KilnFrame } from './frame';
+import type { AppPhase, DemoFrame } from './frame';
 import { Session, type SessionDeps } from './session';
 
 export const DEMOS = ['run', 'selftest', 'connect', 'ask-fastboot', 'install', 'ask-adb', 'app', 'app-update', 'app-installing', 'app-keyboard', 'wifi', 'wifi-new', 'wifi-fail', 'home-assistant', 'radio', 'radio-next', 'radio-thread', 'radio-thread-old',
@@ -106,10 +108,10 @@ function improvStream(fail: boolean, net: Net): ByteStream {
  * `app`: Glassworks' version on the device (`dumpsys package`), or null when it isn't installed. `current`: its
  * software is current, so it answers the frame's `sim.props`.
  */
-export function simulatedPanel(f: Pick<KilnFrame, 'appId' | 'sim'>, wifiFails = false, online = true, app: { name: string; code: number } | null = { name: '0.5.0', code: 500 }, current = true): PanelShell {
+export function simulatedPanel({ frame, sim }: DemoFrame, wifiFails = false, online = true, app: { name: string; code: number } | null = { name: '0.5.0', code: 500 }, current = true): PanelShell {
   const net: Net = { online };
-  const pkg = f.appId.package;
-  const prop = (cmd: string) => (current ? f.sim.props[cmd.replace(/^getprop /, '')] : undefined);
+  const pkg = frame.appId.package;
+  const prop = (cmd: string) => (current ? sim.props[cmd.replace(/^getprop /, '')] : undefined);
   const out = (cmd: string) => cmd === 'getprop sys.boot_completed' || cmd.startsWith('grep -c') ? '1\n'
     : cmd.startsWith('getprop ') && prop(cmd) ? `${prop(cmd)}\n`
     : cmd === `pm path ${pkg}` && app ? `package:/data/app/${pkg}-1/base.apk\n`
@@ -172,16 +174,17 @@ function fakeFastboot(parts: readonly string[]): Fastboot {
 }
 
 /** A session on the simulated panel. */
-export function demoSession(frame: KilnFrame, which: Demo): Session {
+export function demoSession(d: DemoFrame, which: Demo): Session {
+  const { frame, sim } = d;
   const parts = frame.recipe.backup.parts;
   const saved: { meta: BackupMeta; files: BackupFile[] }[] = [];
   // run and the app's first-install states start without Glassworks on the panel; radio-thread-old has 0.4.3
   const app = ['run', 'app', 'app-installing', 'app-keyboard'].includes(which) ? null
     : which === 'radio-thread-old' ? { name: '0.4.3', code: 403 } : { name: '0.5.0', code: 500 };
-  const panel = simulatedPanel(frame, which === 'wifi-fail', which !== 'wifi-fail' && which !== 'wifi-new', app);
+  const panel = simulatedPanel(d, which === 'wifi-fail', which !== 'wifi-fail' && which !== 'wifi-new', app);
   let adbAllowed = which !== 'run'; // the static states start on an installed panel
   const deps: SessionDeps = {
-    recipe: frame.sim.recipe,
+    recipe: sim.recipe,
     frame,
     simulated: true,
     sleep: (ms) => wait(Math.min(ms, 800)),
@@ -217,9 +220,9 @@ export function demoSession(frame: KilnFrame, which: Demo): Session {
 }
 
 /** Jumps a fresh demo session to one state. `run` starts the live flow from Connect. */
-export async function enterDemo(session: Session, which: Demo): Promise<void> {
+export async function enterDemo(session: Session, d: DemoFrame, which: Demo): Promise<void> {
   const { dispatch } = session.store;
-  const { frame } = session;
+  const { frame, sim } = d;
   const plan = frame.recipe.backup;
   /** what the real check says of `files` against `p`, worded as the give-back shows it */
   const refused = async (p: typeof plan, files: Map<string, Uint8Array>) => {
@@ -248,7 +251,7 @@ export async function enterDemo(session: Session, which: Demo): Promise<void> {
       for (const [i, part] of plan.parts.entries()) {
         dispatch({ type: 'partition', part, state: 'done', info: { size: part === 'boot' ? 32 << 20 : 1 << 20, sha256: `${(0x3a7f + i * 977).toString(16)}…${(0x91c2 - i * 313).toString(16)}` } });
       }
-      for (const l of frame.sim.installLog) {
+      for (const l of sim.installLog) {
         dispatch({ type: 'log', line: `10:15:00 ${l}` });
       }
       progress(0.68, 'flash', 'Writing the new software', 'Writing boot');
@@ -293,9 +296,9 @@ export async function enterDemo(session: Session, which: Demo): Promise<void> {
     case 'done-old-boot': // set up on a panel whose boot image is from before the root update service
       dispatch({ type: 'done', done: {
         title: 'Done.', body: 'The panel is on Home Net. Home Assistant finds it by itself as an ESPHome device.',
-        backup: { name: `${plan.idPrefix}-20261112-101500.zip`, info: frame.sim.backupInfo, hint: 'Original software, backed up. Keep it: it\'s also kept in this browser.' },
+        backup: { name: `${plan.idPrefix}-20261112-101500.zip`, info: sim.backupInfo, hint: 'Original software, backed up. Keep it: it\'s also kept in this browser.' },
         setupPage: `http://${IP}:8099/setup`,
-        updates: frame.silent[(await frame.updates(simulatedPanel(frame, false, true, undefined, which === 'done'))).state],
+        updates: frame.silent[(await frame.updates(simulatedPanel(d, false, true, undefined, which === 'done'))).state],
       } });
       return;
     case 'undo':

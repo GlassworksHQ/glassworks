@@ -43,7 +43,7 @@ export interface AppSettings { locale?: string; timezone?: string; clock24: bool
 /** What the frame's setUp tells the wizard back. `switched.wifi` lost: the Wi-Fi step asks for it again. */
 export interface AppResult { ip?: string; switched?: { wifi: 'kept' | 'resent' | 'lost'; ssid?: string } }
 
-/** The steps only code can say, from the frame's installer package. */
+/** The steps of the frame's real install only code can say, from its installer package (kiln.ts). */
 export interface FrameCode {
   recipe: Recipe<string, unknown, AppResult>;
   /** The app on the device. */
@@ -58,11 +58,12 @@ export interface FrameCode {
   updateStates: readonly string[];
   /** Undo's `keep` depth: the device's own apps back, ours removed or disabled. */
   giveBack(p: PanelShell, on: (step: string, detail?: string) => void): Promise<{ app: 'removed' | 'disabled' | 'running'; note: string }>;
-  /** A simulated device for ?demo=… and the tests. */
-  sim: FrameSim;
 }
 
-/** What only the frame knows of its simulated device: the recipe with its hardware steps faked, and what it logs. */
+/**
+ * ?demo=… and tests only: what only the frame knows of its simulated device (its installer's sim.ts), the recipe with
+ * its hardware steps faked and what it logs. Never part of the frame Kiln installs; the demo path takes it beside it.
+ */
 export interface FrameSim {
   recipe: Recipe<string, unknown, AppResult>;
   /** getprop answers on a device whose software is current */
@@ -72,6 +73,9 @@ export interface FrameSim {
   /** Done's backup line, for ?demo=done */
   backupInfo: string;
 }
+
+/** A frame and its simulated device, for ?demo=… and tests. */
+export interface DemoFrame { frame: KilnFrame; sim: FrameSim }
 
 export interface KilnFrame extends FrameWords, FrameCode {
   id: string;

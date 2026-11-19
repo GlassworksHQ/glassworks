@@ -6,7 +6,7 @@ import { Assets, BackupStore, webUsbDevices } from '@glassworks/kiln-core';
 import { usePathname, useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from 'react';
 import { DEMOS, demoSession, enterDemo, type Demo } from './demo';
-import type { KilnFrame } from './frame';
+import type { DemoFrame, KilnFrame } from './frame';
 import { registry, type Entry } from './registry';
 import { Session } from './session';
 import { useRouteSync } from './useRouteSync';
@@ -32,10 +32,11 @@ function realSession(frame: KilnFrame): Session {
   });
 }
 
-function create(frame: KilnFrame, base: string, withDemo: boolean): Entry {
+/** `demoFrame`: the frame with its simulated device, used only for ?demo=… */
+function create(frame: KilnFrame, demoFrame: DemoFrame | undefined, base: string, withDemo: boolean): Entry {
   const d = withDemo ? new URLSearchParams(location.search).get('demo') : null;
-  const demo = DEMO_ON && DEMOS.includes(d as Demo) ? (d as Demo) : undefined;
-  return { base, name: frame.name, session: demo ? demoSession(frame, demo) : realSession(frame), demo };
+  const demo = DEMO_ON && demoFrame && DEMOS.includes(d as Demo) ? (d as Demo) : undefined;
+  return { base, name: frame.name, session: demo && demoFrame ? demoSession(demoFrame, demo) : realSession(frame), demo };
 }
 
 /**
@@ -44,11 +45,11 @@ function create(frame: KilnFrame, base: string, withDemo: boolean): Entry {
  * lead back to it. It is created once (StrictMode's double setup reuses it) and replaced only when
  * someone enters a route after the old session began a flow (routes.ts, `fresh`).
  */
-export function FrameWizard({ frame, base }: { frame: KilnFrame; base: string }) {
+export function FrameWizard({ frame, demo, base }: { frame: KilnFrame; demo?: DemoFrame; base: string }) {
   const current = useCallback((): Entry => {
     const e = registry.get();
-    return e?.base === base ? e : registry.set(create(frame, base, true));
-  }, [frame, base]);
+    return e?.base === base ? e : registry.set(create(frame, demo, base, true));
+  }, [frame, demo, base]);
   const entry = useSyncExternalStore(registry.subscribe, current, current);
   const router = useRouter();
   const path = usePathname();
@@ -56,10 +57,10 @@ export function FrameWizard({ frame, base }: { frame: KilnFrame; base: string })
     replace: (url: string) => router.replace(url, { scroll: false }),
     push: (url: string) => router.push(url, { scroll: false }),
   }), [router]);
-  const renew = useCallback(() => registry.set(create(frame, base, false)), [frame, base]);
+  const renew = useCallback(() => registry.set(create(frame, demo, base, false)), [frame, demo, base]);
   useRouteSync(entry, path, nav, renew);
   useEffect(() => {
-    if (entry.demo && !entry.demoEntered) { entry.demoEntered = true; void enterDemo(entry.session, entry.demo as Demo); }
-  }, [entry]);
+    if (entry.demo && demo && !entry.demoEntered) { entry.demoEntered = true; void enterDemo(entry.session, demo, entry.demo as Demo); }
+  }, [entry, demo]);
   return <Wizard session={entry.session} frame={frame} base={base} />;
 }
