@@ -11,8 +11,19 @@ with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "page", "rubr
     RUBRIC = json.load(_f)
 
 RUBRIC_VERSION = RUBRIC["version"]
-# Clarity's version (v1 from 2026-11-14). A report or summary without it is pre-release: re-measure.
+# Clarity's version: v1, the one Glassworks 1.0.0 ships with (2026-11-19). A report or summary without it is
+# pre-release, and one of another version is graded by its own rules: re-measure.
 CLARITY = RUBRIC["clarity"]
+# The numbers started again on 2026-11-19, as on 2026-11-14: the first v1's summaries also say 1. A v1 measured
+# before this day (UTC, measured_on) is theirs (rubric.json clarity_measured_since).
+CLARITY_SINCE = RUBRIC["clarity_measured_since"]
+FIRST_V1 = "measured with the first Clarity v1 (2026-11-14), before the version started again at 1"
+
+
+def first_v1(measured_on):
+    """A v1 measured before CLARITY_SINCE is the first v1's. Every run records its day (device.json, since #89), the
+    first v1's included; one without a day isn't judged by it."""
+    return bool(measured_on) and measured_on < CLARITY_SINCE
 PRE_RELEASE = "measured with a pre-release version of Clarity"
 NAME = RUBRIC["name"]          # "Clarity": the test's name, kept in rubric.json only
 GOOD, NI, POOR = "good", "needs-improvement", "poor"
@@ -30,8 +41,9 @@ TASKS = list(RULES["tasks"])
 # Scroll has its own levels, judged per run (rubric v5): premium is the 60 fps rule (frames band
 # good), good is an average of >= 50 fps with p95 <= 50 ms, fluid >= 30 fps with p95 <= 67 ms.
 SCROLL_LEVELS = RULES["scroll_levels"]
-# Live updates too (rubric v5): good when 95% of changes reach the screen within 100 ms, fluid within
-# 200 ms; premium adds the 60 fps bar on the frames that had a change to draw.
+# Live updates too: good when 95% of changes reach the screen within 150 ms, fluid within 250 ms; premium adds
+# the 60 fps bar on the frames that had a change to draw. Not tap's 100 ms: a live change answers no one's
+# touch on the panel (Clarity v1, docs/perf.md "Why live updates aren't held to 100 ms").
 UPDATE_LEVELS = RULES["update_levels"]
 BELOW = RULES["below"]
 CAMERA_LEVELS = RULES["camera_levels"]
@@ -309,6 +321,8 @@ def grade_summary(summary):
                if summary.get("clarity") is None else
                f"measured with Clarity v{summary['clarity']}; these rules are Clarity v{CLARITY}'s: re-measure")
         return {"status": "re-measure", "grade": None, "meaning": None, "why": why}
+    if first_v1(summary.get("measured_on")):
+        return {"status": "re-measure", "grade": None, "meaning": None, "why": f"{FIRST_V1}: re-measure"}
     if summary.get("protocol_version") != PROTOCOL_VERSION:
         return {"status": "re-measure", "grade": None, "meaning": None,
                 "why": f"measured with protocol {protocol_name(summary.get('protocol_version'))}, "

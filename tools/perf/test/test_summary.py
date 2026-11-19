@@ -37,7 +37,7 @@ def fixture(variant):
     b = T.Build()
     b.setUp()
     with open(os.path.join(b.dir, "device.json")) as f:
-        b.write("device.json", dict(json.load(f), measured_on="2026-11-12"))
+        b.write("device.json", dict(json.load(f), measured_on="2026-11-20"))
     for k in (1, 2, 3):
         run = T.refstart(k, [120, 180, 150][k - 1])
         if variant == "A":
@@ -111,7 +111,7 @@ class Export(unittest.TestCase):
         self.assertEqual(s["schema"], "glassworks.perf-summary/3")
         self.assertEqual(s["test"], "Clarity")                     # the name, from rubric.json
         self.assertEqual((s["protocol_version"], s["report_schema"]), (G.PROTOCOL_VERSION, "glassworks.perf/4"))
-        self.assertEqual(s["measured_on"], "2026-11-12")
+        self.assertEqual(s["measured_on"], "2026-11-20")
         self.assertEqual(s["frame"], {"id": "test-frame", "name": "test-frame"})
         self.assertEqual(s["app_version"], "0.4.3")
         self.assertEqual(s["viewport"], {"css": [960, 480], "dpr": 1.5, "default_dpr": 1.5})
@@ -340,16 +340,23 @@ class Parity(unittest.TestCase):
         self.assertEqual((G.grade_summary(s)["status"], ts_grades([s])[0]["status"]), ("re-measure", "re-measure"))
         self.assertEqual((self.sums["B"]["clarity"], self.sums["B"]["protocol_version"]), (G.CLARITY, G.PROTOCOL_VERSION))
 
-    def test_an_earlier_clarity_summary_is_re_measured_under_v3_rules_in_both(self):
-        """Rubric 2 (#264's verifier), and rubric 3 (#211): a v1 or v2 summary is never graded by v3's
-        rules, in either grader, and says which Clarity it came from."""
-        self.assertEqual(G.CLARITY, 3)
-        for v in (1, 2):
+    def test_an_earlier_clarity_summary_is_re_measured_in_both(self):
+        """Clarity v1 (2026-11-19) starts the numbers again at 1: a summary of the earlier v2 or v3 is never graded by
+        v1's rules, in either grader, and says which Clarity it came from; one of the first v1 (it also said 1,
+        measured 2026-11-14) says that. A v1 summary measured from clarity_measured_since on is graded."""
+        self.assertEqual((G.CLARITY, G.PROTOCOL_VERSION, G.CLARITY_SINCE), (1, 1, "2026-11-16"))
+        for v in (2, 3):
             s = dict(self.sums["B"], clarity=v, protocol_version=v)
             ts, py = ts_grades([s])[0], G.grade_summary(s)
             for g in (py, ts):
                 self.assertEqual((g["status"], g["grade"]), ("re-measure", None))
-                self.assertEqual(g["why"], f"measured with Clarity v{v}; these rules are Clarity v3's: re-measure")
+                self.assertEqual(g["why"], f"measured with Clarity v{v}; these rules are Clarity v1's: re-measure")
+        for day, status in (("2026-11-14", "re-measure"), ("2026-11-15", "re-measure"), ("2026-11-16", "graded"), (None, "graded")):
+            s = dict(self.sums["B"], measured_on=day)
+            ts, py = ts_grades([s])[0], G.grade_summary(s)
+            self.assertEqual((py["status"], ts["status"]), (status, status), day)
+            if status == "re-measure":
+                self.assertEqual((py["why"], ts["why"]), (f"{G.FIRST_V1}: re-measure",) * 2)
 
     def test_graded_medians_go_out_unrounded(self):
         """#264's CodeRabbit (/3): a blocking median of 600.4 ms is poor; rounded to 600 it would read

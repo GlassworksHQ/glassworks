@@ -419,8 +419,8 @@ class FakeHA(unittest.TestCase):
         self.assertNotIn("{{", html)
         status, _, js, cache = self.http("GET", m.group(1))
         self.assertIn("window.GW_CLARITY = ", js.decode())
-        self.assertIn('"PROTOCOL": 3', js.decode())
-        self.assertIn('"CLARITY": 3', js.decode())
+        self.assertIn('"PROTOCOL": 1', js.decode())        # Clarity v1 (2026-11-19): the numbers started again
+        self.assertIn('"CLARITY": 1', js.decode())
         self.assertIn('"DIALOG": {', js.decode())          # Clarity v3 (#211): the more-info dialogs
         self.assertIn('"HEAD_CARDS": 10', js.decode())
 

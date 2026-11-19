@@ -474,10 +474,10 @@ Each view runs in phases, one log line per event:
 5. **Scroll.** 6 swipes while the updates still run. Before each, the view jumps back to its top and
    waits 0.5 s still; each swipe is then the same flick down the view, from 85% to 15% of the
    screen's height in 300 ms. The fling is included.
-6. **More-info dialogs** (Clarity v3, #211). Back at the view's top, while the updates still run, HA's
+6. **More-info dialogs** (#211). Back at the view's top, while the updates still run, HA's
    more-info dialog of a light, a thermostat and a sensor with its history graph, one after the
    other: each opened as a tile's tap opens it, timed until it has settled, read for 1 s, closed again
-   and followed until HA says it closed. See [The more-info dialog](#the-more-info-dialog-clarity-v3-211).
+   and followed until HA says it closed. See [The more-info dialog](#the-more-info-dialog-211).
    On the S1 they add about 10 to 15 s to each view (an estimate from the waits, not yet timed on a
    panel).
 
@@ -529,7 +529,7 @@ Usable is when HA has drawn the view and would answer a touch at once. Two parts
 On the screen, usable is the first frame SurfaceFlinger presented that can carry the drawn frame (one
 refresh after it, less 3 ms for the clock mapping), and never before the main thread was free.
 
-**What rubric 2 grades from this** (Clarity v2). *Open the view* is the navigation to part 1, the
+**What the grade takes from this.** *Open the view* is the navigation to part 1, the
 first screen drawn, on screen: the paint LCP itself times. Part 2 is graded as its own task,
 *blocking*: from the draw to usable, each animation frame's time past 50 ms, added up
 (`stats.js` `frameBlocking`, recorded as `usable.blocking_ms`). That is Lighthouse's Total Blocking
@@ -1092,10 +1092,10 @@ Its HLS copy: 318 ms, 99.4%. One fix came from this check: aiortc asks a public 
 default and held each answer 5 s waiting for it, so the peer has no ICE servers. Not yet run on a
 panel: the S1's first smoke (above) failed on the loopback relay; see the panel plan in #202's PR.
 
-#### The more-info dialog (Clarity v3, #211)
+#### The more-info dialog (#211)
 
 Tapping a tile opens HA's more-info dialog: its controls, its history graph and its attributes. On a
-slow panel that is one of the delays people feel most, so since Clarity v3 every view opens three of
+slow panel that is one of the delays people feel most, so every view opens three of
 them after its swipes (`tiers.json` `DIALOG`): a light's (`light.clarity_2`, its brightness controls),
 a thermostat's (`climate.clarity_0`, its temperature control) and a temperature sensor's
 (`sensor.clarity_10`, its history graph over the last 24 hours). None of them is an entity the live
@@ -1255,7 +1255,7 @@ gets an error, which the frontend handles as it would from HA, and the fake logs
 | Live updates | **Change to screen**: per change, from when the fake sent it (from the stream's schedule; see [Change to screen](#change-to-screen)) to the first frame on screen that can show it. The harness notes when each change reached the page (before HA's own listener), when HA changed the card, and the next animation frame (the frame the change is drawn in); that frame can reach the screen one refresh later at the earliest, so the first SurfaceFlinger present after that is taken (frames presented sooner were already on their way). A change with no frame by the window's end counts as the time from it to the window's end, which is conservative: it may show later still (one less than 250 ms from the end isn't counted). A change that never reached the page in the window counts the same way. One SurfaceFlinger's history doesn't reach isn't counted, and if fewer than half are counted the run isn't. The two clocks are tied by the page's log line to within a few ms, so a value can be a refresh off; the bars are 100 and 200 ms. Each run's level is from the p95 over the window's changes; the page takes the median level. **Frame pacing** over the frames that had a change to draw (a rAF interval counts when it overlaps a change, from when it was due to when it ran plus its transition) decides only the premium level (A+) and is reported. A **live check** at the window's start logs whether the toggle and everything that changes are on screen, and the change log proves the updates ran. If something was off screen or there were no targets, the updates aren't graded (and, if off screen, the taps neither). Since protocol 4 the change log is the fake's schedule, so updates that didn't arrive are never a reason to skip the window: they count | Each view; SurfaceFlinger |
 | Open the view | From the navigation to the view (HA's `navigate()`, as a view tab calls it, in the frontend that is already loaded) to the view's head and every card on its first screen **drawn**, on screen (rubric 2; rubric 1 ran to usable: drawn and the main thread free; see [Open the view](#open-the-view-a-navigation-in-the-loaded-frontend) and [Usable](#usable)). The times come from the page's own clock, tied to logcat's by its log line. If the view never says it was usable, or no frame reached the screen after it, it is "not measured", never 0. (Protocols 1 to 3, and protocol 4 as first written, loaded the whole page for each dashboard) | Each view; SurfaceFlinger |
 | Blocking after the open | Rubric 2: from the first screen drawn to usable (the main thread free for 500 ms), each animation frame's time past 50 ms, added up: Total Blocking Time measured on frames ([Usable](#usable)). A view that never became usable within the runner's deadline blocks for all of it | Each view's page |
-| More-info dialog | Rubric 3: from the event a tile's tap fires to the dialog settled (its show animation finished and, for the sensor, its history graph drawn), the slowest of a light's, a thermostat's and a sensor's; per run, then the median level. A dialog that never opened or settled within 20 s fails the run, and so does a view that didn't get to them. The open animation's frames decide only premium ([The more-info dialog](#the-more-info-dialog-clarity-v3-211)) | Each view's page |
+| More-info dialog | Rubric 3: from the event a tile's tap fires to the dialog settled (its show animation finished and, for the sensor, its history graph drawn), the slowest of a light's, a thermostat's and a sensor's; per run, then the median level. A dialog that never opened or settled within 20 s fails the run, and so does a view that didn't get to them. The open animation's frames decide only premium ([The more-info dialog](#the-more-info-dialog-211)) | Each view's page |
 | Restart | From the app's process start (`Start proc` in logcat) to the reference dashboard's start view being **usable**, as for open the view: the kiosk comes back to it by itself, because the graded part shows it as the kiosk's test dashboard, which outlives the restart. This is HA's cold load: the app, the websocket, the registries, every card type's code and the first view. Once per run, for the whole frame. The engine being ready (GeckoView's own first page, `about:blank`) is reported, not graded (`engine_ready_ms`). See [Restart: back to a usable dashboard](#restart-back-to-a-usable-dashboard) | logcat; the restart page |
 
 Each graded run is one restart back to the start view, then the four reference views in the run's
@@ -1354,14 +1354,33 @@ the two middles for an even count):
 | Task | Premium | Good | Fluid |
 |---|---|---|---|
 | Scroll | the 60 fps rule: frames band good (p95 ≤ 17.17 ms, ≤ 5% late, nothing frozen) | average ≥ 50 fps over the swipes, and p95 ≤ 50 ms | average ≥ 30 fps, and p95 ≤ 67 ms |
-| Live updates | good, and the frames that had a change to draw hold the 60 fps bar | 95% of changes on screen within 100 ms | within 200 ms |
+| Live updates | good, and the frames that had a change to draw hold the 60 fps bar | 95% of changes on screen within 150 ms | within 250 ms |
 | Tap | INP good (≤ 200 ms) | INP good | INP good |
 | Open the view (the first screen drawn) | ≤ 2.5 s, or up to 4 s | the same | the same |
-| Blocking after it (rubric 2) | ≤ 200 ms, or up to 600 ms | the same | the same |
+| Blocking after it | ≤ 200 ms, or up to 600 ms | the same | the same |
 | Cameras (typical and heavy only; over WebRTC since protocol 6) | as good | first frame within 2 s, at least 95% of frames shown, no gap over 500 ms | first frame within 4 s, at least 85% shown, stalls under 1 s in all |
-| More-info dialog (rubric 3) | good, and the open animation's frames hold the 60 fps bar | the slowest dialog settled within 1 s | within 2 s |
+| More-info dialog | good, and the open animation's frames hold the 60 fps bar | the slowest dialog settled within 1 s | within 2 s |
 
-**The more-info dialog's bars** (rubric 3, #211, project choices with their sources, set before any
+**Why live updates aren't held to 100 ms** (Clarity v1, the maintainer, 2026-11-19). 100 ms is the limit
+for a response to your own action: you touch, and something must answer within it to feel immediate
+([RAIL](https://web.dev/articles/rail): "complete a transition initiated by user input within 100 ms").
+That is what the tap measures, and its bar stays (the Pixel Tablet: 32 ms). A live update isn't a
+response to you. It is a light someone else switched, or an automation. Its physical device usually
+takes longer than 100 ms to change, so a 100 ms bar at p95 judges a gap nobody can see. So:
+
+- **Good:** 95% of live changes on screen within 150 ms of Home Assistant sending them.
+- **Fluid:** within 250 ms.
+- **Premium:** unchanged: good, and the frames that had a change to draw hold 60 fps.
+
+Every other bar is unchanged: tap, scroll, opening the view, the blocking after it (heavy's 0.6 s
+too), cameras and more-info dialogs.
+
+The evidence: the Pixel Tablet's quick run on 2026-11-19, with the test computer wired, showed
+change to screen at a median of 62 to 73 ms and a p95 of 110 to 142 ms per view. Of that, 60 to 91 ms
+is the change waiting for Home Assistant's frontend on the tablet's main thread before it is read
+(the run's arrival waits): the browser's work, not the screen's. The bar applies to every frame.
+
+**The more-info dialog's bars** (#211, project choices with their sources, set before any
 frame had a dialog result). Good is 1 s: [RAIL](https://web.dev/articles/rail), "beyond 1000
 milliseconds (1 second), users lose focus on the task they are performing". Fluid is 2 s, RAIL's goal
 for a later load ("under 2 seconds"): the dialog fetches its history and builds its content, as a
@@ -1369,7 +1388,7 @@ small load does. HA's own animation is the floor: 300 ms for the S1's bottom she
 centred dialog (both settled within 0.4 s in Chrome on a Mac). Premium asks the open animation's frames
 for the 60 fps bar (frames band good), as live updates' premium asks it of theirs; the frames grade
 nothing else, because they are the main thread's ([The more-info
-dialog](#the-more-info-dialog-clarity-v3-211)). The close is reported, not graded: it fetches and
+dialog](#the-more-info-dialog-211)). The close is reported, not graded: it fetches and
 builds nothing, and its 300 ms is HA's hide animation.
 
 Below fluid, a measured scroll, live-update, camera or more-info level is `slow`. Over WebRTC (graded) a
@@ -1597,7 +1616,7 @@ run, and the grade is provisional.
 - **Screen brightness** doesn't change the work the app does. Over a long run it can add heat.
 - The reference dashboards use HA's default card types. Custom cards, cameras and maps are heavier
   than the heavy page.
-- The tap test taps one toggle. Since Clarity v3 the more-info dialog is graded too, from the event
+- The tap test taps one toggle. The more-info dialog is graded too, from the event
   the tap fires: three dialogs of HA's own, not a custom card's.
 - The device's busy share at idle includes the runner's own `dumpsys` calls. While a page goes
   live, is tapped or scrolls, the runner doesn't call `dumpsys`.
@@ -1916,18 +1935,37 @@ busy main thread delays less than its timers; the taps wait 5 s each; and the ru
 deadline covers only a view that never became usable ("A view the panel can't finish"). Rubric
 v10 and v11 (2026-11-13) split typical into typical without and with its camera and made each letter
 add one page. Since Clarity v1 the numbers start again (below): protocol 2 and rubric 2 are Clarity
-v2's (the blocking time), protocol 3 and rubric 3 Clarity v3's (the more-info dialog). Within protocol 3
-(#643, 2026-11-19): where SurfaceFlinger's history is shorter than a window, the runner reads it during
+v2's (the blocking time), protocol 3 and rubric 3 Clarity v3's (the more-info dialog), and since
+2026-11-19 they start again once more: Clarity v1, protocol 1 and rubric 1 (below). Within the earlier
+v3's protocol 3, which is v1's protocol 1 (#643, 2026-11-19): where SurfaceFlinger's history is shorter than a window, the runner reads it during
 the window too. That isn't a new protocol: what is measured, the frames on screen in the window, is the
 same. Where one read covered a window (the S1), nothing changes, record for record. Where it didn't,
 the old result rested on rAF and said so (provisional), so no stored grade changes meaning.
 
 ### Versions
 
-**Clarity v3 (#211): protocol 3, rubric 3.** Opening HA's more-info dialog is a graded task (the
+**Clarity v1, the version Glassworks 1.0.0 ships with (the maintainer, 2026-11-19): protocol 1, rubric 1.**
+It measures what the earlier v3 measured (below), and moves one bar: live updates are good within
+150 ms and fluid within 250 ms ([Why live updates aren't held to 100 ms](#the-grade)). The numbers
+start again at 1, as they did on 2026-11-14, so everything below this entry is history:
+
+- Each page line, report and summary says `clarity: 1`, protocol 1 and rubric 1.
+- **The earlier v3's runs are v1's.** Their pages (`clarity: 3`, protocol 3) measured exactly what
+  protocol 1 measures, so report.py reads them as v1 (`SAME_AS_V1`). A stored v3 report or summary
+  says "re-measure" until it is graded again, with `tools/perf/regrade.py <run-dir>`: from the raw files
+  when the folder has them, else from its `report.json`. The S1's published result was graded again so
+  (it stays D).
+- **The first v1 (2026-11-14) also said `clarity: 1`, protocol 1.** A v1 report or summary measured
+  before `clarity_measured_since` (rubric.json, 2026-11-16 UTC) is that one's: report.py makes it
+  provisional and `gradeSummary` returns "re-measure" ("measured with the first Clarity v1
+  (2026-11-14), before the version started again at 1"). Every run records its UTC day (`measured_on`);
+  the first v1 ran on 2026-11-14 only, the earlier v3 from 2026-11-17.
+- The earlier v2's results (`clarity: 2`) and pre-release ones (no `clarity`) are re-measure, as before.
+
+**Clarity v3 (#211): protocol 3, rubric 3** (history: now v1's protocol 1). Opening HA's more-info dialog is a graded task (the
 maintainer's decision, 2026-11-13: add it). Protocol 3 opens a light's, a thermostat's and a sensor's
 dialog on each view after its swipes and times each to settled, with the frames of its open animation
-([The more-info dialog](#the-more-info-dialog-clarity-v3-211)); rubric 3 grades the slowest of them
+([The more-info dialog](#the-more-info-dialog-211)); rubric 3 grades the slowest of them
 (good within 1 s, fluid within 2 s, premium with the open animation at 60 fps) in every level, as
 every other task. Nothing else moved: no threshold, no level or letter rule of the other tasks, and the
 views, the swipes, the updates and the taps run as in protocol 2, the dialogs coming after them. The
@@ -1937,7 +1975,7 @@ rubric 3: `gradeSummary` returns `re-measure` ("measured with Clarity v2; these 
 and report.py makes it provisional. The bars were set from their sources before any frame had a
 dialog result; a v3 run of the S1 is still to come.
 
-**Clarity v2 (2026-11-14): protocol 2, rubric 2.** Rubric 1 graded "open the view" (the navigation
+**Clarity v2 (2026-11-14): protocol 2, rubric 2** (history). Rubric 1 graded "open the view" (the navigation
 to *usable*: the first screen drawn **and** the main thread free) against LCP's bands. LCP is a
 paint metric, so applying its 2.5 s and 4 s to drawn-and-free was stricter than the standard it
 cites: on s1rtc9's typical-nocam the first screen was drawn after a median of 953 ms, but long
@@ -1949,7 +1987,7 @@ from the draw to usable (`usable.blocking_ms`), which protocol 1 didn't, so a v1
 can't be graded by rubric 2: `gradeSummary` returns `re-measure` ("measured with Clarity v1; these
 rules are Clarity v2's"), and report.py makes it provisional.
 
-**Clarity v1 is the first release (2026-11-14): protocol 1, rubric 1.** Nobody outside the project
+**The first Clarity v1 (2026-11-14): protocol 1, rubric 1** (history; the numbers started again on 2026-11-19). Nobody outside the project
 had used Clarity, so the maintainer reset the numbers. Every protocol and rubric number in this page's
 history (protocols 1 to 8, rubrics 1 to 11, before 2026-11-14) is **pre-release**, and its results
 aren't comparable with v1's.
@@ -1965,7 +2003,7 @@ aren't comparable with v1's.
   no earlier protocol 8 line has),
   so its report.json is rebuilt as v1 without re-measuring: `tools/perf/report.py <run-dir>`, then
   `tools/perf/summary.py <run-dir>/report.json <out>`.
-- A later version will raise `clarity` with a change that makes earlier results incomparable, and
+- A later version raises `clarity` with a change that makes earlier results incomparable, and
   `protocol_version` and the rubric's `version` with each change to the measurement or the rules.
 
 ### Published results
@@ -1978,6 +2016,11 @@ files and never edited by hand:
 | `report.md` | The report, as report.md is for any run (the site links to it on GitHub) |
 | `report.json` | The full report (`glassworks.perf/4`) |
 | `clarity.json` | The summary (`glassworks.perf-summary/3`), which the site grades with `grade.ts`; its `report` is report.md's GitHub URL |
+
+**Grading a run again** under the rules now in `rubric.json` (a new rubric, or the version starting
+again): `tools/perf/regrade.py <run-dir>` rewrites its report.json, report.md and summary (clarity.json in a
+published folder, else summary.json). From the raw files when the folder has them, else from the
+report.json alone; touches no device. `--dry-run` only says what the grade would be.
 
 ```sh
 python3 tools/perf/report.py <run-dir> --keep-apk --out frames/<id>/clarity --app-version <label>
@@ -2093,7 +2136,7 @@ The runner and the harness talk through the fake Home Assistant, never through a
 
 | Request | From | What |
 |---|---|---|
-| `/clarity/open?view=&nonce=&run=&vsync=&taps=[&swipes=&dialogs=&warmup=]` | the runner | Open this view next. Checked: a known view, a hex nonce, numbers only; else 400. `dialogs` (Clarity v3): how many of the more-info dialogs to open, all when absent; the runner sends 0 for the HLS copies and a warm-up view |
+| `/clarity/open?view=&nonce=&run=&vsync=&taps=[&swipes=&dialogs=&warmup=]` | the runner | Open this view next. Checked: a known view, a hex nonce, numbers only; else 400. `dialogs`: how many of the more-info dialogs to open, all when absent; the runner sends 0 for the HLS copies and a warm-up view |
 | `/clarity/next?after=<nonce>` | the harness | Waits up to 20 s for a command other than `after` (the last one this page ran); 200 with it, or 204. The command stays until its view's stream stops, so a long poll left behind by a page that died (a force-stopped frontend's) can't use it up |
 | `/clarity/live`, `/clarity/still` | the harness | Start the stream (200 `{"gen": n}`, its generation), or stop it, end the view's command and reset the home |
 | `/clarity/cancel` | the runner | Before each restart: no command, no stream and no changed state is left from a view that was cut short |
@@ -2103,10 +2146,16 @@ Frame statistics are defined once, in `tools/perf/page/stats.js` and `tools/perf
 
 ## Example: Aqara S1 Plus
 
-**Clarity v3: not yet measured.** The S1's published result below is Clarity v2's, so under v3's
-rules the site shows it as "Re-measure" until a v3 run is published (see [Published
-results](#published-results)). That run is the root's next night-window run on the panel, and its
-result replaces the published one only when the maintainer says so.
+**Clarity v1: D** (s1v3c, measured 2026-11-17 UTC with the earlier v3's protocol 3, 3 of 3 runs, not
+provisional; graded again under v1 on 2026-11-19 with `tools/perf/regrade.py frames/aqara-s1-plus/clarity`):
+"a good wall panel for light dashboards. Held back by typical dashboards without a camera: the main
+thread is blocked for 2.7 s after the view is drawn." Under v1's live-update bar typical with and
+without its camera went from fluid to good on live updates; heavy stays slow (1.5 s to show a change).
+The letter didn't move: blocking holds it. The published report is
+[frames/aqara-s1-plus/clarity/report.md](../frames/aqara-s1-plus/clarity/report.md), and its summary
+[clarity.json](../frames/aqara-s1-plus/clarity/clarity.json).
+
+History, under the earlier versions:
 
 **Clarity v2: D** (s1rtc10, 2de8ac20, 3 of 3 runs, protocol 2, rubric 2, the S1 app build before
 its first release (`pre-v1`), camera video over the LAN (`lan-udp`), measured 2026-11-15 UTC; not
@@ -2285,7 +2334,7 @@ process prints its whole output. One test or class alone: `cd tools/perf/test &&
 test_runner.Restart`.
 
 `dialog.e2e.test.mjs` runs HA's real frontend in headless Chrome at the S1's viewport and has the
-harness open the more-info dialogs, as [The more-info dialog](#the-more-info-dialog-clarity-v3-211)
+harness open the more-info dialogs, as [The more-info dialog](#the-more-info-dialog-211)
 says: each must open, settle and close, as a bottom sheet there, with and without reduced motion, and
 as a centred dialog at a desktop's viewport; and the fake must know every command they send.
 

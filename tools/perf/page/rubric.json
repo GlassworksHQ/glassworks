@@ -2,11 +2,13 @@
  "_comment": "The perf rubric: the bands' thresholds and the letter rules. The single source for tools/perf/grade.py, tools/perf/grade.ts (the site computes the letter from a summary with it) and the test page (perf.js, to stop the ladder). docs/perf.md cites each source. Change on purpose, with the docs and the tests (test/grade-cases.json).",
  "name": "Clarity",
  "_name": "The perf test's name, as in \"Clarity A\" or \"a frame's Clarity grade\" (the maintainer, 2026-11-13). The report headline, the summary and grade.ts take it from here, so a rename is one change. File paths keep tools/perf and docs/perf.md.",
- "clarity": 3,
- "_clarity": "Clarity's version: v3 from rubric 3 (#211: opening HA's more-info dialog is a graded task). Clarity v2 (protocol 2, rubric 2, 2026-11-14) didn't measure it, and Clarity v1 (protocol 1, rubric 1, 2026-11-14) was the first release; a v1 or v2 report or summary is graded only by its own version's rules: re-measure under these. One without `clarity` was measured with a pre-release version (protocols 1 to 8, rubrics 1 to 11, before 2026-11-14): re-measure. Pre-release protocol 8 was v1's release candidate (#205, s1rtc5), so report.py reads its lines as v1.",
- "version": 3,
- "protocol_version": 3,
- "_protocol": "The measurement protocol these rules apply to (tools/perf/page/tiers.json PROTOCOL): the pages, the swipes, the update rate, the windows and how the runner reads them. A summary from another protocol can't be graded with this file: re-measure. Protocol 3 (Clarity v3, #211) is protocol 2 plus HA's more-info dialog on each view: a light's, a thermostat's and a sensor's with its history graph (tiers.json DIALOG), opened as a tile's tap opens it and closed again, timed to settled (its show animation finished and its graph drawn), with the frames of its open animation. Protocol 2 (Clarity v2, 2026-11-14) is protocol 1 plus the blocking time: the animation frames from each view's first screen drawn to usable. Protocol 1 (Clarity v1, 2026-11-14): Home Assistant's real frontend on a fake HA; a restart, then light, typical without its camera, typical with it, and heavy, each opened in the loaded frontend; live updates, taps and swipes on each; live cameras played over WebRTC, as HA with go2rtc does (over the LAN when the panel can reach the computer, else through adb reverse, and the run records which), graded on the receiver's own counts over a fixed 30 s window, with HLS copies as detail; each task its own budget. Its history (pre-release protocols 1 to 8 and rubrics 1 to 11, #158, #174, #202, #205) is in docs/perf.md, \"Versions\".",
+ "clarity": 1,
+ "_clarity": "Clarity's version: v1, the version that ships with Glassworks 1.0.0 (the maintainer, 2026-11-19): measured with protocol 1 and graded with rubric 1. A report or summary of any other version is graded only by its own rules: re-measure under these. One without `clarity` was measured with a pre-release version: re-measure. The numbers start again from 1, as they did on 2026-11-14 (#205), so the earlier versions that said 1 to 3 are history (docs/perf.md, \"Versions\"). Their pages differ only where noted: the earlier v3's pages (protocol 3) measured exactly what protocol 1 measures now, so report.py reads them as v1 (a run of theirs graded again from its raw files or its report.json gets a v1 grade); the first v1's pages (2026-11-14) also said `clarity: 1` and protocol 1, so a v1 measured before clarity_measured_since is theirs: re-measure.",
+ "clarity_measured_since": "2026-11-16",
+ "_clarity_measured_since": "The first day (UTC, a report's measured_on) a v1 report or summary can be from. The first v1 (protocol 1, rubric 1) ran on 2026-11-14 only (UTC 2026-11-14 to 15); the earlier v3, whose pages this v1 reads as its own, from 2026-11-17 UTC.",
+ "version": 1,
+ "protocol_version": 1,
+ "_protocol": "The measurement protocol these rules apply to (tools/perf/page/tiers.json PROTOCOL): the pages, the swipes, the update rate, the windows and how the runner reads them. A summary from another protocol can't be graded with this file: re-measure. Protocol 1 (Clarity v1): Home Assistant's real frontend on a fake HA; a restart, then light, typical without its camera, typical with it, and heavy, each opened in the loaded frontend; live updates, taps and swipes on each; the blocking time from each view's first screen drawn to usable; HA's more-info dialog on each view (a light's, a thermostat's and a sensor's with its history graph, tiers.json DIALOG), timed to settled; live cameras played over WebRTC, as HA with go2rtc does (over the LAN when the panel can reach the computer, else through adb reverse, and the run records which), graded on the receiver's own counts over a fixed 30 s window, with HLS copies as detail; each task its own budget. Its history (the earlier protocols, #158, #174, #202, #205, #264, #410) is in docs/perf.md, \"Versions\".",
  "one_frame_ms": 16.667,
  "vsync_slack_ms": 0.5,
  "metrics": {
@@ -92,7 +94,7 @@
   "update_levels": [
    {
     "level": "premium",
-    "latency_p95_max_ms": 100,
+    "latency_p95_max_ms": 150,
     "frames_band": [
      "good"
     ],
@@ -100,13 +102,13 @@
    },
    {
     "level": "good",
-    "latency_p95_max_ms": 100,
-    "_comment": "p95 of change to screen (a change reaches the page -> the first frame on screen that shows it) <= 100 ms"
+    "latency_p95_max_ms": 150,
+    "_comment": "p95 of change to screen (from when Home Assistant sent the change to the first frame on screen that shows it) <= 150 ms. Not tap's 100 ms: that is the limit for a response to your own action, and a live change answers no one's touch on the panel (Clarity v1, 2026-11-19; docs/perf.md, \"Why live updates aren't held to 100 ms\")"
    },
    {
     "level": "fluid",
-    "latency_p95_max_ms": 200,
-    "_comment": "p95 of change to screen <= 200 ms"
+    "latency_p95_max_ms": 250,
+    "_comment": "p95 of change to screen <= 250 ms"
    }
   ],
   "camera_pages": [

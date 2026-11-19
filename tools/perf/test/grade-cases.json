@@ -1,6 +1,6 @@
 {
  "_comment": "Shared grade cases (MIT): every scroll level, live-update level, page level and letter boundary from test_grade.py, with the answer. grade.py (test_grade.py) and grade.ts (grade.test.mjs) must both give it. Regenerate only on purpose, with the rubric and the docs.",
- "rubric_version": 3,
+ "rubric_version": 1,
  "bands": [
   {
    "metric": "frame_p95_ms",
@@ -340,11 +340,11 @@
  ],
  "update_levels": [
   {
-   "name": "100 ms and the change frames at 60 fps",
+   "name": "150 ms and the change frames at 60 fps",
    "run": {
     "latency_n": 26,
-    "latency_median_ms": 50.0,
-    "latency_p95_ms": 100.0,
+    "latency_median_ms": 75.0,
+    "latency_p95_ms": 150.0,
     "frames": {
      "n": 200,
      "fps": 59.0,
@@ -356,7 +356,55 @@
    "level": "premium"
   },
   {
-   "name": "100 ms, change frames at 40 fps: pacing doesn't grade",
+   "name": "150 ms, change frames at 40 fps: pacing doesn't grade",
+   "run": {
+    "latency_n": 26,
+    "latency_median_ms": 75.0,
+    "latency_p95_ms": 150.0,
+    "frames": {
+     "n": 200,
+     "fps": 40.0,
+     "p95_ms": 50.0,
+     "jank_pct": 40,
+     "frozen_pct": 0.0
+    }
+   },
+   "level": "good"
+  },
+  {
+   "name": "just over 150 ms",
+   "run": {
+    "latency_n": 26,
+    "latency_median_ms": 75.05,
+    "latency_p95_ms": 150.1,
+    "frames": {
+     "n": 200,
+     "fps": 59.0,
+     "p95_ms": 16.67,
+     "jank_pct": 2,
+     "frozen_pct": 0.0
+    }
+   },
+   "level": "fluid"
+  },
+  {
+   "name": "151 ms",
+   "run": {
+    "latency_n": 26,
+    "latency_median_ms": 75.5,
+    "latency_p95_ms": 151.0,
+    "frames": {
+     "n": 200,
+     "fps": 59.0,
+     "p95_ms": 16.67,
+     "jank_pct": 2,
+     "frozen_pct": 0.0
+    }
+   },
+   "level": "fluid"
+  },
+  {
+   "name": "100 ms: tap's bar, not live updates' (Clarity v1)",
    "run": {
     "latency_n": 26,
     "latency_median_ms": 50.0,
@@ -372,27 +420,11 @@
    "level": "good"
   },
   {
-   "name": "just over 100 ms",
+   "name": "250 ms",
    "run": {
     "latency_n": 26,
-    "latency_median_ms": 50.05,
-    "latency_p95_ms": 100.1,
-    "frames": {
-     "n": 200,
-     "fps": 59.0,
-     "p95_ms": 16.67,
-     "jank_pct": 2,
-     "frozen_pct": 0.0
-    }
-   },
-   "level": "fluid"
-  },
-  {
-   "name": "200 ms",
-   "run": {
-    "latency_n": 26,
-    "latency_median_ms": 100.0,
-    "latency_p95_ms": 200.0,
+    "latency_median_ms": 125.0,
+    "latency_p95_ms": 250.0,
     "frames": {
      "n": 200,
      "fps": 40.0,
@@ -404,11 +436,27 @@
    "level": "fluid"
   },
   {
-   "name": "just over 200 ms",
+   "name": "just over 250 ms",
    "run": {
     "latency_n": 26,
-    "latency_median_ms": 100.05,
-    "latency_p95_ms": 200.1,
+    "latency_median_ms": 125.05,
+    "latency_p95_ms": 250.1,
+    "frames": {
+     "n": 200,
+     "fps": 59.0,
+     "p95_ms": 16.67,
+     "jank_pct": 2,
+     "frozen_pct": 0.0
+    }
+   },
+   "level": "slow"
+  },
+  {
+   "name": "251 ms",
+   "run": {
+    "latency_n": 26,
+    "latency_median_ms": 125.5,
+    "latency_p95_ms": 251.0,
     "frames": {
      "n": 200,
      "fps": 59.0,
@@ -1246,7 +1294,7 @@
    }
   },
   {
-   "name": "page level: live updates good (within 100 ms), pacing not 60 fps",
+   "name": "page level: live updates good (within 150 ms), pacing not 60 fps",
    "tiers": {
     "light": {
      "inp_ms": 100,
@@ -1350,7 +1398,7 @@
    }
   },
   {
-   "name": "page level: live updates fluid (within 200 ms)",
+   "name": "page level: live updates fluid (within 250 ms)",
    "tiers": {
     "light": {
      "inp_ms": 100,

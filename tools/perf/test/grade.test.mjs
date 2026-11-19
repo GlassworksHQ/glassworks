@@ -41,12 +41,19 @@ test("another protocol is re-measured, not graded", () => {
   assert.equal(g.grade, null);
 });
 
-test("a Clarity v2 summary is re-measured under v3's rules, and says so", () => {
-  assert.equal(rubric.clarity, 3);
-  for (const v of [1, 2]) {
-    const g = G.gradeSummary({ clarity: v, protocol_version: v, pages: {} }, rubric);
+test("an earlier Clarity's summary, or the first v1's, is re-measured under v1's rules, and says so", () => {
+  assert.deepEqual([rubric.clarity, rubric.protocol_version, rubric.version], [1, 1, 1]);
+  for (const v of [2, 3]) {
+    const g = G.gradeSummary({ clarity: v, protocol_version: v, measured_on: "2026-11-17", pages: {} }, rubric);
     assert.deepEqual([g.status, g.grade], ["re-measure", null]);
-    assert.equal(g.why, `measured with Clarity v${v}; these rules are Clarity v3's: re-measure`);
+    assert.equal(g.why, `measured with Clarity v${v}; these rules are Clarity v1's: re-measure`);
+  }
+  // The numbers started again at 1 (2026-11-19): the first v1 (2026-11-14) also said 1.
+  const first = G.gradeSummary({ clarity: 1, protocol_version: 1, measured_on: "2026-11-14", pages: {} }, rubric);
+  assert.deepEqual([first.status, first.why],
+    ["re-measure", "measured with the first Clarity v1 (2026-11-14), before the version started again at 1: re-measure"]);
+  for (const day of [rubric.clarity_measured_since, "2026-11-20", undefined]) {
+    assert.equal(G.gradeSummary({ clarity: 1, protocol_version: 1, measured_on: day, pages: {} }, rubric).status, "graded", String(day));
   }
 });
 

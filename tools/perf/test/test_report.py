@@ -1,5 +1,6 @@
 """Parsers and report assembly on made-up device output (formats copied from Android 10)."""
 import json
+import shutil
 import os
 import subprocess
 import sys
@@ -795,7 +796,7 @@ class DialogRuns(unittest.TestCase):
                          "the view didn't get to its more-info dialogs in 1 of 1 run(s)")
         self.assertEqual(R.task_phrase("dialog", {"dialog_runs": [ok, {"timed_out": True}]}),
                          "a more-info dialog didn't open fully in 1 of 2 run(s)")
-        self.assertEqual(R.dialog_cell({}, {}), "n/a (before Clarity v3)")
+        self.assertEqual(R.dialog_cell({}, {}), "n/a (not measured by this version)")
 
     def test_a_view_left_for_the_start_view_is_said_and_graded_as_measured(self):
         """#410 (s1v3a): HA held heavy's thermostat and sensor dialogs past the view; the page left it for
@@ -1461,15 +1462,15 @@ class Build(unittest.TestCase):
                                         "on large dashboards: scrolling averages 54.5 fps (p95 33 ms).")
 
     def test_the_measured_update_level_reaches_the_grade(self):
-        """Typical's changes take about 150 ms to show: its live updates are fluid, so typical is
+        """Typical's changes take about 200 ms to show: over good's 150 ms, so its live updates are fluid, typical is
         fluid and the letter drops from B to C."""
         for k in (1, 2, 3):
             run = refstart(k, 100)
-            run["tiers"]["typical"]["step"] = updates_step(NAV["typical"], present_after=150.0)
+            run["tiers"]["typical"]["step"] = updates_step(NAV["typical"], present_after=200.0)
             self.write(f"refstart-{k}.json", run)
         g = R.build(self.dir)["grade"]
         self.assertEqual((g["bands"]["typical"]["updates"], g["levels"]["typical"], g["grade"]), ("fluid", "fluid", "C"))
-        self.assertIn("a change takes 150 ms to show (p95)", g["headline"])
+        self.assertIn("a change takes 200 ms to show (p95)", g["headline"])
 
     def test_each_page_is_reported_at_each_place_in_the_order(self):
         for k in (1, 2, 3):
@@ -1714,7 +1715,11 @@ class Build(unittest.TestCase):
         self.assertNotIn("Every task holds", g["headline"])
         self.assertIn("Provisional", g["headline"])
 
-    def build_with(self, **page):
+    def build_with(self, measured_on=None, **page):
+        if measured_on:
+            with open(os.path.join(self.dir, "device.json")) as f:
+                dev = json.load(f)
+            self.write("device.json", dict(dev, measured_on=measured_on))
         for k in (1, 2, 3):
             run = refstart(k, 100)
             for t in run["tiers"].values():
@@ -1748,8 +1753,13 @@ class Build(unittest.TestCase):
         self.assertEqual(R.page_version({"protocol": 8}), (8, None))
         self.assertEqual(R.page_version({"protocol": 1, "clarity": 1}), (1, 1))
         self.assertEqual(R.page_version({"protocol": 1}), (1, None))          # pre-release protocol 1
+        # The earlier v3's pages measured what v1 measures now (2026-11-19): read as v1. The earlier v2's didn't.
+        self.assertEqual(R.page_version({"protocol": 3, "clarity": 3}), (1, 1))
+        self.assertEqual(R.page_version({"protocol": 2, "clarity": 2}), (2, 2))
         self.assertTrue(R.is_current({"protocols": [G.PROTOCOL_VERSION], "clarity": [G.CLARITY]}))
-        self.assertFalse(R.is_current({"protocols": [1], "clarity": [1]}))                      # v1 under rubric 2
+        self.assertTrue(R.is_current({"protocols": [1], "clarity": [1]}, "2026-11-20"))
+        self.assertFalse(R.is_current({"protocols": [1], "clarity": [1]}, "2026-11-14"))        # the first v1
+        self.assertFalse(R.is_current({"protocols": [2], "clarity": [2]}, "2026-11-20"))        # the earlier v2
         self.assertFalse(R.is_current({"protocols": [G.PROTOCOL_VERSION], "clarity": [None]}))
         rep = self.build_with(protocol=8, clarity=None)                       # the fixture's lines have no busy_ms
         self.assertIsNone(rep["clarity"])
@@ -1761,25 +1771,46 @@ class Build(unittest.TestCase):
                       rep["grade"]["provisional_reasons"])
         self.assertEqual(rep["clarity"], G.CLARITY)          # as the pages recorded it; the protocol says the rest
 
-    def test_a_v1_run_rebuilt_keeps_its_clarity(self):
-        """#264's CodeRabbit: a marked v1 run rebuilt by v2's code says clarity 1, not null, and is
-        re-measured (never graded by v2's rules), in the report and in both graders from its summary."""
-        rep = self.build_with(protocol=1, clarity=1)
+    def test_the_first_v1s_run_is_re_measured(self):
+        """The numbers started again at 1 on 2026-11-19, as on 2026-11-14: a run of the first v1 (its pages said
+        `clarity: 1`, protocol 1, measured 2026-11-14) says so, in the report and in both graders from its summary."""
+        rep = self.build_with(measured_on="2026-11-14", protocol=1, clarity=1)
         self.assertEqual((rep["clarity"], rep["protocol_version"]), (1, 1))
-        why = f"measured with Clarity v1; these rules are Clarity v{G.CLARITY}'s: re-measure"
+        why = f"{G.FIRST_V1}: re-measure"
+        self.assertIn(why, rep["grade"]["provisional_reasons"])
+        self.assertIn("Re-measure to publish", rep["grade"]["headline"])
+        s = S.summarise(rep, allow_provisional=True)
+        self.assertEqual((s["clarity"], s["protocol_version"], s["measured_on"]), (1, 1, "2026-11-14"))
+        for g in (G.grade_summary(s), self.ts_mod().ts_grades([s])[0]):
+            self.assertEqual((g["status"], g["grade"], g["why"]), ("re-measure", None, why))
+
+    def test_the_earlier_v2s_run_is_re_measured(self):
+        rep = self.build_with(measured_on="2026-11-15", protocol=2, clarity=2)
+        why = f"measured with Clarity v2; these rules are Clarity v{G.CLARITY}'s: re-measure"
         self.assertIn(why, rep["grade"]["provisional_reasons"])
         s = S.summarise(rep, allow_provisional=True)
-        self.assertEqual((s["clarity"], s["protocol_version"]), (1, 1))
+        for g in (G.grade_summary(s), self.ts_mod().ts_grades([s])[0]):
+            self.assertEqual((g["status"], g["grade"], g["why"]), ("re-measure", None, why))
+
+    def test_the_earlier_v3s_run_is_v1(self):
+        """Its pages (protocol 3, clarity 3) measured what v1 measures: rebuilt, the run is v1's and graded by v1."""
+        rep = self.build_with(measured_on="2026-11-19", protocol=3, clarity=3)
+        self.assertEqual((rep["clarity"], rep["protocol_version"]), (1, 1))
+        self.assertNotIn("Re-measure", rep["grade"]["headline"])
+        s = S.summarise(rep, allow_provisional=True)
+        self.assertEqual(G.grade_summary(s)["status"], "graded")
+
+    @staticmethod
+    def ts_mod():
         import importlib.util
         spec = importlib.util.spec_from_file_location("gw_test_summary", os.path.join(os.path.dirname(os.path.abspath(__file__)), "test_summary.py"))
-        ts_mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(ts_mod)
-        for g in (G.grade_summary(s), ts_mod.ts_grades([s])[0]):
-            self.assertEqual((g["status"], g["grade"], g["why"]), ("re-measure", None, why))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
 
     def test_this_clarity_is_this_clarity(self):
         self.assertEqual((self.rep["clarity"], self.rep["protocol_version"]), (G.CLARITY, G.PROTOCOL_VERSION))
-        self.assertEqual((G.CLARITY, G.PROTOCOL_VERSION), (3, 3))     # Clarity v3 (#211): the more-info dialog
+        self.assertEqual((G.CLARITY, G.PROTOCOL_VERSION, G.RUBRIC_VERSION), (1, 1, 1))   # Clarity v1, Glassworks 1.0.0
 
     def test_js_band_is_reported_but_not_graded(self):
         self.assertEqual(self.rep["detail"]["synthetic"]["js_burst_ms"]["median"], 10.0)
@@ -2352,6 +2383,82 @@ class TestNetwork(unittest.TestCase):
     def test_runs_before_the_check(self):
         self.assertIsNone(self.rep["test_network"])
         self.assertNotIn("The test computer's network", R.markdown(self.rep))
+
+
+class Regrade(unittest.TestCase):
+    """regrade.py (Clarity v1, 2026-11-19): a run's report and summary again under the rubric now, from its raw files
+    or from its report.json alone; the earlier v3's runs come out v1."""
+    setUp, write = Build.setUp, Build.write
+    PERF = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    def regrade(self, folder, *extra):
+        return subprocess.run([sys.executable, os.path.join(self.PERF, "regrade.py"), folder, *extra],
+                              capture_output=True, text=True, timeout=120)
+
+    def v3_pages(self):
+        """The fixture's pages as the earlier v3's harness logged them (run 4 on the tablet, 2026-11-19)."""
+        for k in (1, 2, 3):
+            with open(os.path.join(self.dir, f"refstart-{k}.json")) as f:
+                run = json.load(f)
+            for t in run["tiers"].values():
+                t["page"].update(protocol=3, clarity=3)
+            self.write(f"refstart-{k}.json", run)
+        with open(os.path.join(self.dir, "device.json")) as f:
+            self.write("device.json", dict(json.load(f), measured_on="2026-11-19"))
+
+    def test_a_v3_run_from_its_raw_files(self):
+        self.v3_pages()
+        p = self.regrade(self.dir)
+        self.assertEqual(p.returncode, 0, p.stderr + p.stdout)
+        with open(os.path.join(self.dir, "report.json")) as f:
+            rep = json.load(f)
+        self.assertEqual((rep["clarity"], rep["protocol_version"]), (1, 1))
+        self.assertNotIn("Re-measure", rep["grade"]["headline"])
+        with open(os.path.join(self.dir, "summary.json")) as f:
+            summ = json.load(f)
+        self.assertEqual((summ["clarity"], G.grade_summary(summ)["status"]), (1, "graded"))
+        self.assertEqual(G.grade_summary(summ)["grade"], rep["grade"]["grade"])
+        with open(os.path.join(self.dir, "report.md")) as f:
+            md = f.read()
+        self.assertIn("95% of live changes show within 150 ms", md)
+        self.assertIn("changes within 250 ms", md)
+        self.assertIn("graded again from its raw files under Clarity v1", p.stdout)
+
+    def test_a_report_json_alone_is_the_raw_files_grade(self):
+        """With the raw files gone, report.json's stored runs grade as the raw files do: the same graded summary and
+        grade, byte for byte."""
+        self.v3_pages()
+        from_raw = R.build(self.dir)
+        old = json.loads(json.dumps(from_raw))
+        for r in old["graded"]["reference"]["per_run"]:            # as a v3 report stored them
+            for t in r["tiers"].values():
+                t["protocol"], t["clarity"] = 3, 3
+        old.update(clarity=3, protocol_version=3)
+        again = R.regrade_report(old)
+        for key in ("graded", "grade", "clarity", "protocol_version", "notes"):
+            self.assertEqual(json.dumps(again[key], sort_keys=True), json.dumps(json.loads(json.dumps(from_raw[key])), sort_keys=True), key)
+
+    def test_a_published_folder_from_its_report_json(self):
+        src = os.path.join(os.path.dirname(os.path.dirname(self.PERF)), "frames", "aqara-s1-plus", "clarity")
+        d = tempfile.mkdtemp()
+        for name in ("report.json", "report.md", "clarity.json"):
+            shutil.copy(os.path.join(src, name), d)
+        p = self.regrade(d)
+        self.assertEqual(p.returncode, 0, p.stderr + p.stdout)
+        self.assertIn("graded again from its report.json", p.stdout)
+        for name in ("report.json", "report.md", "clarity.json"):              # the committed folder is regrade.py's output
+            with open(os.path.join(src, name)) as a, open(os.path.join(d, name)) as b:
+                self.assertEqual(a.read(), b.read(), name)
+        with open(os.path.join(d, "clarity.json")) as f:
+            g = G.grade_summary(json.load(f))
+        self.assertEqual((g["status"], g["grade"]), ("graded", "D"))              # the S1 stays D, on blocking
+
+    def test_dry_run_writes_nothing(self):
+        before = sorted(os.listdir(self.dir))
+        p = self.regrade(self.dir, "--dry-run")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(sorted(os.listdir(self.dir)), before)
+        self.assertIn("now:", p.stdout)
 
 
 if __name__ == "__main__":
