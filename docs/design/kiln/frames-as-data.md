@@ -79,9 +79,9 @@ interface FrameSteps {
 `writesBeforeBoot`, `setUp`). The Mirror's image building (`image.ts`, `buildImages`) and Android's
 `installGeneric` become `build` and `setUp`. Code never decides order, retries, waits or screens.
 
-Since phase 2's first step, the shared wizard reads a frame only through `KilnFrame`
-(`apps/kiln/src/wizard/frame.ts`): the `words` above, checked where they come in (`frameWords`), its
-recovery drawing and photo, and `FrameCode`, the S1's `kiln` export in
+Since phase 2's first step, the shared wizard reads a frame only through `KilnFrame` (kiln-core's
+`frame.ts`): the `words` above, checked where they come in (`frameWords`), its recovery drawing and
+photo, and `FrameCode`. Each frame's installer package exports its whole `kilnFrame`, the S1's in
 `frames/aqara-s1-plus/installer/src/kiln.ts`:
 
 | `FrameCode` | What it says | The S1's |
@@ -99,10 +99,16 @@ recipe with FEL, the layout check and the patch faked, the getprops a current de
 install shows. The frame Kiln installs (`KilnFrame`) never carries it. The demo path takes it beside the frame, as a
 `DemoFrame` (`{ frame, sim }`), and `FrameWizard` uses it only when demos are on.
 
-A frame's route folder (`apps/kiln/src/app/<id>/frame.ts`) puts the three together, and the demo frame beside them. That binding and
-the route folder itself are the last per-frame code in the app; one route for every frame replaces
-them later in phase 2. The radio's next steps (`setup/radioPlan.ts`) are the radio pane's, not a
-frame's: the panel's own setup page shows them on any frame whose app reports a radio.
+**The frames registry** (`packages/frames`, `@glassworks/frames`) is the one place that names frames,
+and the only way Kiln reaches one. `catalog` is each frame's design data (frame.json, installer.json,
+its render), light enough for the picker, the routes and the release route. `kiln` loads each engine
+frame's `kilnFrame` and `kilnSim` on demand. One route, `apps/kiln/src/app/[frame]`, serves every frame
+on the shared wizard (the catalog's `ENGINE`), titled from its `words.name`. Release lines come from
+`installer.json` `releases`, and the first installer page's links from `legacy`.
+`frame-neutral.test.ts` checks both halves: no frame name in Kiln's sources, and no import of a
+frame's package or a path into `frames/` except through the registry. Its allowlists only shrink.
+The radio's next steps (`setup/radioPlan.ts`) are the radio pane's, not a frame's: the panel's own
+setup page shows them on any frame whose app reports a radio.
 
 ## What the engine owns
 

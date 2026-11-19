@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { s1Plus } from '@glassworks/aqara-s1-plus-installer';
 import { backupFile, backupZip, readBackupZip, type BackupMeta } from '@glassworks/kiln-core';
-import { frame as s1PlusUi } from '../src/app/aqara-s1-plus/frame';
+import { frame as s1PlusUi } from './s1-frame';
 import { Session } from '../src/wizard/session';
 import { initial } from '../src/wizard/state';
 

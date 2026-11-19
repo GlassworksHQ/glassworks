@@ -1,6 +1,7 @@
 // The release lines Kiln's release route serves (/api/release/<line>, [frame]/route.ts), and what it lists as their
-// latest ([frame]/latest/route.ts). Only these lines pass, and for each only its own tags and asset names.
-import generic from '../../../../../../../frames/generic-android/design/frame.json';
+// latest ([frame]/latest/route.ts): each frame's installer.json `releases`, from the frames registry. Only these lines
+// pass, and for each only its own tags and asset names.
+import { ABIS, INSTALLERS } from '@glassworks/frames/catalog';
 
 export const REPO = 'GlassworksHQ/glassworks';
 
@@ -10,13 +11,12 @@ export interface ReleaseLine {
   assets: (version: string) => readonly string[];
 }
 
-/** One APK per ABI in the generic frame's design data, named as generic-release.yml names them. */
-const perAbi = (stem: string) => (v: string) => generic.abis.map((abi) => `glassworks-${stem}-${abi}-${v}.apk`);
+/** `{abi}`: one name per ABI in the frame's design data; `{version}`: the tag's. */
+const names = (id: string, assets: readonly string[]) => (v: string) =>
+  assets.flatMap((a) => (a.includes('{abi}') ? (ABIS[id] ?? []).map((abi) => a.replace('{abi}', abi)) : [a])).map((a) => a.replace('{version}', v));
 
-export const RELEASES = new Map<string, ReleaseLine>([
-  // Glassworks: `vX.Y.Z` (every release so far) or `aqara-s1-plus-vX.Y.Z`, and the S1's armeabi-v7a APK.
-  ['aqara-s1-plus', { tag: /^(?:aqara-s1-plus-)?v(\d+\.\d+\.\d+)$/, assets: (v) => [`s1-kiosk-${v}.apk`] }],
-  // Glassworks for generic Android (Android 8+) and its legacy build (6 and 7): docs/releasing.md.
-  ['generic-android', { tag: /^generic-android-v(\d+\.\d+\.\d+)$/, assets: perAbi('generic-android') }],
-  ['generic-android-legacy', { tag: /^generic-android-legacy-v(\d+\.\d+\.\d+)$/, assets: perAbi('generic-android-legacy') }],
-]);
+export const RELEASES = new Map<string, ReleaseLine>(Object.entries(INSTALLERS).flatMap(([id, i]) =>
+  (i.releases ?? []).map((r) => [r.line, { tag: new RegExp(r.tag), assets: names(id, r.assets) }] as const)));
+
+/** The line the first installer page's release route served, before #28 (installer.json `legacy.releaseAsset`). */
+export const LEGACY_LINE = Object.values(INSTALLERS).find((i) => i.legacy?.releaseAsset)?.legacy?.releaseAsset;

@@ -12,3 +12,8 @@ export {
   SAFETY_STEPS, STEP_LIBRARY, assertImages, imageFromLink, plan, validateImage, wifiStep, writtenAsIs,
   type FrameAccess, type ImageFile, type ImageLink, type ImageRecipe, type ImageStep, type PlannedStep, type SafetyStep, type StepKind,
 } from './images';
+export {
+  frameWords,
+  type AppPhase, type AppResult, type AppSettings, type AskCopy, type DemoFrame, type FrameCode, type FrameSim, type FrameWords, type KilnFrame, type SilentWords,
+} from './frame';
+export type { Mm, RecoveryData, Rect, Screw, Shown } from './recovery';

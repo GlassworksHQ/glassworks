@@ -4,7 +4,9 @@
 import type { MirrorUpdates } from '@glassworks/lululemon-mirror-installer';
 import './SilentUpdates.css';
 
-export interface SilentWords { word: string; tone: 'y' | 'n' | 'w'; line: string }
+import type { SilentWords } from '@glassworks/kiln-core';
+
+export type { SilentWords };
 
 export function SilentUpdates({ words }: { words: SilentWords | null }) {
   if (!words) return null;

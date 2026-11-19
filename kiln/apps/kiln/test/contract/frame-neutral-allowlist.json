@@ -1,5 +1,5 @@
 {
-  "$comment": "Frame names Kiln's app and packages have today, each with the issue that removes it (frame-neutral.test.ts). This list only shrinks: the check fails on a hit outside it, and on an entry with no hit left. A path ending in / covers its folder (only for code phase 2 deletes whole). notFrames: words that only look like a frame's name; they need no issue, but go when the word does.",
+  "$comment": "Frame names Kiln's app and packages have today, each with the issue that removes it (frame-neutral.test.ts). This list only shrinks: the check fails on a hit outside it, and on an entry with no hit left. A path ending in / covers its folder (only for code phase 2 deletes whole). imports: files that still import a frame's package or a path into frames/ other than through the registry (@glassworks/frames), each with the issue that removes it; shrink-only too. notFrames: words that only look like a frame's name; they need no issue, but go when the word does.",
   "entries": [
     {
       "path": "kiln/apps/kiln/src/mirror/",
@@ -10,7 +10,7 @@
         "mirror",
         "s1"
       ],
-      "why": "#621 phase 2: the Mirror's own sessions and screens, open in #596, #603, #607; they go when the Mirror moves onto the shared engine"
+      "why": "#621 step 2b: the Mirror's own sessions and screens; they become the engine's flows, with the Mirror's words, steps and code in frames/lululemon-mirror"
     },
     {
       "path": "kiln/apps/kiln/src/android/",
@@ -21,15 +21,7 @@
         "pixel-tablet",
         "s1"
       ],
-      "why": "#621 phase 2: /android's own session and screens, open in #617; they go when Android moves onto the shared engine"
-    },
-    {
-      "path": "kiln/apps/kiln/src/app/aqara-s1-plus/",
-      "terms": [
-        "aqara",
-        "s1"
-      ],
-      "why": "#621 phase 2: one route tree per frame; the engine serves every frame's routes from its installer.json route"
+      "why": "#621 step 3, after #524: /android's own session and screens; they go when Android moves onto the shared engine"
     },
     {
       "path": "kiln/apps/kiln/src/app/lululemon-mirror/",
@@ -37,48 +29,7 @@
         "lululemon",
         "mirror"
       ],
-      "why": "#621 phase 2: one route tree per frame; the engine serves every frame's routes from its installer.json route"
-    },
-    {
-      "path": "kiln/apps/kiln/src/app/api/release-asset/route.ts",
-      "terms": [
-        "aqara",
-        "s1"
-      ],
-      "why": "#621 phase 2: release lines per frame come from each frame's data"
-    },
-    {
-      "path": "kiln/apps/kiln/src/app/api/release/lines.ts",
-      "terms": [
-        "aqara",
-        "generic-android",
-        "s1"
-      ],
-      "why": "#621 phase 2: release lines per frame come from each frame's data"
-    },
-    {
-      "path": "kiln/apps/kiln/src/components/Credit.tsx",
-      "terms": [
-        "glass-panes"
-      ],
-      "why": "#621 phase 2: shared components name frames as examples or carry a frame's words; those come from the frame"
-    },
-    {
-      "path": "kiln/apps/kiln/src/components/LeaveGuard.tsx",
-      "terms": [
-        "s1"
-      ],
-      "why": "#621 phase 2: shared components name frames as examples or carry a frame's words; those come from the frame"
-    },
-    {
-      "path": "kiln/apps/kiln/src/components/Picker.tsx",
-      "terms": [
-        "aqara",
-        "lululemon",
-        "mirror",
-        "s1"
-      ],
-      "why": "#621 phase 2: shared components name frames as examples or carry a frame's words; those come from the frame"
+      "why": "#621 step 2b: the Mirror's route folder; the shared [frame] route serves it once the Mirror is on the engine"
     },
     {
       "path": "kiln/apps/kiln/src/components/SilentUpdates.tsx",
@@ -86,34 +37,7 @@
         "lululemon",
         "mirror"
       ],
-      "why": "#621 phase 2: shared components name frames as examples or carry a frame's words; those come from the frame"
-    },
-    {
-      "path": "kiln/apps/kiln/src/frames/catalog.ts",
-      "terms": [
-        "aqara",
-        "generic-android",
-        "lululemon",
-        "mirror",
-        "pixel-tablet",
-        "s1"
-      ],
-      "why": "#621 phase 2: the catalog lists frames/*/design by import; it reads them without naming each"
-    },
-    {
-      "path": "kiln/apps/kiln/src/recovery/player.ts",
-      "terms": [
-        "mirror",
-        "s1"
-      ],
-      "why": "#621 phase 2: comments use the S1 and the Mirror as examples; say it of any frame"
-    },
-    {
-      "path": "kiln/apps/kiln/src/setup/channelSetup.ts",
-      "terms": [
-        "mirror"
-      ],
-      "why": "#621 phase 2: a comment uses the Mirror as the example; say it of any frame"
+      "why": "#621 step 2b: mirrorSilent, the Mirror's Silent updates words; they move to its installer.json words.silent"
     },
     {
       "path": "kiln/packages/adb/src/key.ts",
@@ -240,6 +164,20 @@
         "s1"
       ],
       "why": "SHA-256's \u03a31 (S1 in FIPS 180-4's names), not the frame"
+    }
+  ],
+  "imports": [
+    {
+      "path": "kiln/apps/kiln/src/mirror/",
+      "why": "#621 step 2b: the Mirror's own flows and screens; they become the engine's, with its words, steps and code in frames/lululemon-mirror"
+    },
+    {
+      "path": "kiln/apps/kiln/src/android/",
+      "why": "#621 step 3, after #524: /android's own session and screens"
+    },
+    {
+      "path": "kiln/apps/kiln/src/components/SilentUpdates.tsx",
+      "why": "#621 step 2b: mirrorSilent's words move to the Mirror's installer.json words.silent"
     }
   ]
 }

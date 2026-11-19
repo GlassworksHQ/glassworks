@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { registry, failureLog } from '../src/wizard/registry';
 import { status } from '../src/wizard/routes';
-import { demoFrame as s1Demo } from '../src/app/aqara-s1-plus/frame';
+import { demoFrame as s1Demo } from './s1-frame';
 import { demoSession } from '../src/wizard/demo';
 import { Store } from '../src/wizard/session';
 import { explain } from '../src/wizard/explain';

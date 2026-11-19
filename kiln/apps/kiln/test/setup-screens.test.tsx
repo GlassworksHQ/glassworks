@@ -8,7 +8,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: ReactNode }) => <a href={href} {...p}>{children}</a> }));
 
-import { frame as s1PlusUi, demoFrame as s1Demo } from '../src/app/aqara-s1-plus/frame';
+import { frame as s1PlusUi, demoFrame as s1Demo } from './s1-frame';
 import { demoSession } from '../src/wizard/demo';
 import { Wizard } from '../src/wizard/Wizard';
 
@@ -24,6 +24,15 @@ const nets = (...ssids: string[]) => ssids.map((ssid, i) => ({ ssid, rssi: -50 -
 const checked = () => screen.getAllByRole('radio').find((r) => r.getAttribute('data-state') === 'checked')?.textContent;
 
 describe('the set-up forms', () => {
+  it('Installing: an APK the screen has no row for marks none, and the screen stays up', () => {
+    const s = demoSession(s1Demo, 'connect');
+    render(<Wizard session={s} frame={s1PlusUi} base="/aqara-s1-plus" />);
+    act(() => s.store.dispatch({ type: 'setup', setup: { phase: 'settings', update: false, installing: [{ step: 'apk', apk: 'a-new-apk', stage: 'install' }] } }));
+    expect(screen.getByRole('heading', { name: /Installing/ })).toBeTruthy();
+    expect(document.querySelectorAll('ol.join li.cur, ol.join li.done')).toHaveLength(0);
+    s.close();
+  });
+
   it('Wi-Fi: a pick that a rescan no longer lists is replaced', () => {
     const s = demoSession(s1Demo, 'connect');
     render(<Wizard session={s} frame={s1PlusUi} base="/aqara-s1-plus" />);

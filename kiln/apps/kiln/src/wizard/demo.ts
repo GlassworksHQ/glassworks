@@ -11,7 +11,7 @@ import { Assets, checkRestorable, fmtSize, type BackupFile, type BackupMeta } fr
 import { SETUP_SOCKET, type SetupState } from '@glassworks/setup-channel';
 import { PacketReader, PacketType, Rpc, State as ImprovState, frame as packet, parseResult, strings, type ByteStream } from 'improv-serial';
 import { explain } from './explain';
-import type { AppPhase, DemoFrame } from './frame';
+import type { AppPhase, DemoFrame } from '@glassworks/kiln-core';
 import { Session, type SessionDeps } from './session';
 
 export const DEMOS = ['run', 'selftest', 'connect', 'ask-fastboot', 'install', 'ask-adb', 'app', 'app-update', 'app-installing', 'app-keyboard', 'wifi', 'wifi-new', 'wifi-fail', 'home-assistant', 'radio', 'radio-next', 'radio-thread', 'radio-thread-old',

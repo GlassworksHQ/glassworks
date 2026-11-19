@@ -5,7 +5,7 @@ import type { AskKind, BackupMeta, PartState, Phase, Progress } from '@glasswork
 import type { SetupState } from '@glassworks/setup-channel';
 import { SET_UP } from './routes';
 import type { SilentWords } from '../components/SilentUpdates';
-import type { AppPhase, AppSettings } from './frame';
+import type { AppPhase, AppSettings } from '@glassworks/kiln-core';
 
 export type Flow = 'install' | 'undo';
 /**

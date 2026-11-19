@@ -7,7 +7,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { s1Plus } from '@glassworks/aqara-s1-plus-installer';
 import { FelDevice } from '@glassworks/fel';
 import { FakeBrom, makeSpl } from '@glassworks/fel/fakes';
-import { frame as s1PlusUi, demoFrame as s1Demo } from '../src/app/aqara-s1-plus/frame';
+import { frame as s1PlusUi, demoFrame as s1Demo } from './s1-frame';
 import { registry, type Entry } from '../src/wizard/registry';
 import { Session } from '../src/wizard/session';
 import { useRouteSync } from '../src/wizard/useRouteSync';
