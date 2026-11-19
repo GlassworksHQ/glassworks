@@ -25,11 +25,11 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowBuild
 import dev.glassworks.GlassworksRuntime
-import sh.edm.s1kiosk.KioskApp
+import dev.glassworks.s1.KioskApp
 import dev.glassworks.KioskPrefs
-import sh.edm.s1kiosk.PanePrefs
-import sh.edm.s1kiosk.base.BaseBackend
-import sh.edm.s1kiosk.frame.AqaraS1Plus
+import dev.glassworks.s1.PanePrefs
+import dev.glassworks.s1.base.BaseBackend
+import dev.glassworks.s1.frame.AqaraS1Plus
 
 /**
  * The *Docked* sensor is only where it means something (docs/esphome.md#docked): a frame that docks or a device with

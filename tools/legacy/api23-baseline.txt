@@ -66,9 +66,9 @@ dev/glassworks/SystemLocale.kt|android.os.LocaleList()
 dev/glassworks/auth/OAuth.kt|java.util.Base64#getUrlEncoder
 dev/glassworks/auth/OAuth.kt|java.util.Base64.Encoder#encodeToString
 dev/glassworks/auth/OAuth.kt|java.util.Base64.Encoder#withoutPadding
-sh/edm/s1kiosk/base/LocalServiceLink.kt|java.lang.Process#waitFor
-sh/edm/s1kiosk/base/UartBaseLink.kt|java.lang.Process#waitFor
-sh/edm/s1kiosk/frame/AqaraCloud.kt|java.lang.Process#waitFor
+dev/glassworks/s1/base/LocalServiceLink.kt|java.lang.Process#waitFor
+dev/glassworks/s1/base/UartBaseLink.kt|java.lang.Process#waitFor
+dev/glassworks/s1/frame/AqaraCloud.kt|java.lang.Process#waitFor
 dev/glassworks/manage/AppManage.kt|android.app.admin.DevicePolicyManager#reboot
 dev/glassworks/radio/RadioController.kt|java.lang.Process#waitFor
 dev/glassworks/radio/ui/RadioSectionView.kt|android.view.View#setImportantForAutofill

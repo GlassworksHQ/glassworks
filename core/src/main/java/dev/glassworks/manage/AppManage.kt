@@ -329,7 +329,7 @@ open class AppManage(
     companion object {
         const val TAG = "Glassworks.Manage"
 
-        /** "Panel Hub S1 Plus (S1 Kiosk)": the device's model as Home Assistant shows it. */
+        /** "Panel Hub S1 Plus (Glassworks)": the device's model as Home Assistant shows it. */
         fun deviceModel(model: String, product: String) = "$model ($product)"
 
         /** How long a restart or reboot waits, so the page that started it reaches the browser first. */

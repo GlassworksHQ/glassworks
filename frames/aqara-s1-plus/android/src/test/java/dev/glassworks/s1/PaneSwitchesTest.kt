@@ -1,0 +1,93 @@
+package dev.glassworks.s1
+
+import android.app.Application
+import dev.glassworks.pane.NOT_RUNNING
+import dev.glassworks.pane.SettingsItem
+import dev.glassworks.pane.paneSections
+import dev.glassworks.platform.AppBuild
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.annotation.Config
+import dev.glassworks.s1.frame.AqaraS1Plus
+import dev.glassworks.glassworks
+
+/** #67 on the S1: every pane has an on/off, in the settings, on setup's Panes step (design 05) and in Home Assistant. */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34], application = Application::class)
+class PaneSwitchesTest {
+    private val app = RuntimeEnvironment.getApplication()
+    private val definitions = KioskApp.runtime(AqaraS1Plus(), build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(app)
+
+    @Test fun withoutBluetoothLeTheBluetoothProxyHasNoCard() {
+        org.robolectric.Shadows.shadowOf(app.packageManager).setSystemFeature(android.content.pm.PackageManager.FEATURE_BLUETOOTH_LE, false)
+        assertEquals(null, definitions.single { it.id == "bluetooth-proxy" }.setupChoice)
+    }
+
+    @Test fun everyPaneSectionHasItsOnOffAtTheTop() {
+        val sections = paneSections(definitions)
+        // The S1 has no camera: no camera section (#23).
+        assertEquals(listOf("assist", "sendspin", "notifications", "radio", "bluetooth-proxy", "wall-base", "time-zone", "diagnostics"), sections.map { it.id })
+        assertEquals(listOf("Voice", "Music", "Notifications", "Zigbee / Thread radio", "Bluetooth proxy", "Wall base", "Time zone", "Diagnostics"), sections.map { it.master?.title })
+        // No device runs here: a page that shows the running pane says so (#212); the radio, the Bluetooth proxy
+        // and notifications (off by default, so its page is its off note) have their own.
+        val waiting = sections.filter { s -> s.items.singleOrNull().let { it is SettingsItem.Note && it.text() == NOT_RUNNING } }
+        assertEquals(listOf("assist", "sendspin", "wall-base", "time-zone", "diagnostics"), waiting.map { it.id })
+    }
+
+    @Test fun theS1sCameraIsHidden() {
+        // No camera in the S1's hardware: CantRun, as every pane that lacks its own (#23): no page, no on/off, no entity.
+        val camera = definitions.single { it.id == "camera" }
+        assertTrue(camera is dev.glassworks.pane.CantRun)
+        assertEquals(null, camera.switch)
+        assertTrue(paneSections(definitions).none { it.id == "camera" })
+    }
+
+    @Test fun withACameraTheOffPageSaysTheCameraStaysClosed() {
+        val withCamera = dev.glassworks.camera.CameraDefinition(PanePrefs(app).paneFile("camera"))
+        val page = paneSections(listOf(withCamera)).single()
+        assertEquals(listOf(dev.glassworks.camera.CameraDefinition.OFF_NOTE), page.items.map { (it as SettingsItem.Note).text() })
+    }
+
+    @Test fun setupsPanesStepHasTheCardsOfTheDesign() {
+        // A panel with Bluetooth LE, as the S1: without it the Bluetooth proxy has no card.
+        org.robolectric.Shadows.shadowOf(app.packageManager).setSystemFeature(android.content.pm.PackageManager.FEATURE_BLUETOOTH_LE, true)
+        assertEquals(
+            listOf(
+                "Voice" to "Assist and timers", "Music" to "A Sendspin speaker", "Notifications" to "On-screen alerts",
+                "Zigbee / Thread radio" to "For your devices", "Bluetooth proxy" to "For BLE sensors", "Wall base" to "The S1's wired base",
+            ),
+            definitions.mapNotNull { it.setupChoice }.map { it.title to it.detail },
+        )
+    }
+
+    /** Ids are permanent in Home Assistant. Only `sendspin` existed, and keeps its name. Each is off in HA until turned on there (#132, #208). */
+    @Test fun eachSwitchIsAConfigEntityHomeAssistantKeeps() {
+        val s = definitions.mapNotNull { it.switch }.map { it.entity() }
+        assertEquals(listOf("voice", "sendspin", "notifications", "bluetooth_proxy", "wall_base", "keep_time_zone", "diagnostics"), s.map { it.objectId })
+        assertEquals("Music Assistant player (Sendspin)", s[1].name)
+        assertEquals(List(7) { true }, s.map { it.disabledByDefault })
+        assertEquals(setOf(dev.glassworks.esphome.EntityCategory.CONFIG), s.map { it.category }.toSet())
+        // #210 verifier: turned on, a pane opens the microphone or a port; a keyless LAN client may not.
+        assertEquals("only an authenticated connection changes a pane's on/off", List(7) { true }, s.map { it.authOnly })
+    }
+
+    /** The device info's voice features follow the voice pane's switch, which says so: the shell names no pane. */
+    @Test fun onlyTheVoicePaneSetsTheVoiceFeatures() {
+        assertEquals(listOf("assist"), definitions.filter { it.switch?.voiceAssistant == true }.map { it.id })
+    }
+
+    /** Notifications (#118, Principle 7) and the Bluetooth proxy (it starts the radio scanning, #121) are off until turned on. */
+    @Test fun everyPaneButNotificationsAndTheBluetoothProxyIsOnUntilTurnedOff() {
+        assertEquals(
+            listOf(
+                "assist" to true, "sendspin" to true, "notifications" to false, "bluetooth-proxy" to false,
+                "wall-base" to true, "time-zone" to true, "diagnostics" to true,
+            ),
+            definitions.mapNotNull { d -> d.switch?.let { d.id to it.on } },
+        )
+    }
+}

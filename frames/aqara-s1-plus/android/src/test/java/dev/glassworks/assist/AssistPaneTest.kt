@@ -28,7 +28,7 @@ import dev.glassworks.esphome.ProtoMessage
 import dev.glassworks.esphome.ProtoWriter
 import dev.glassworks.esphome.TimerEventType
 import dev.glassworks.esphome.WakeWordInfo
-import sh.edm.s1kiosk.PanePrefs
+import dev.glassworks.s1.PanePrefs
 import dev.glassworks.device.UrlPlayer
 import dev.glassworks.voice.VoiceAssistantController
 

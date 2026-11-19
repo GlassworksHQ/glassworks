@@ -17,7 +17,7 @@ Breaking into hardware has its own playbook: [`docs/research/bringup.md`](docs/r
 |---|---|---|
 | `settings.gradle.kts` | The Gradle root is the repo root. This file maps every module to its folder | Kotlin |
 | `build-logic/` | What every module builds with: `glassworks.android` (compileSdk, minSdk 26, JDK 17, the `testing/kotlin` tests) and `glassworks.jvm` (JDK 17). A module's build file keeps its namespace, dependencies and what differs | Kotlin |
-| `frames/aqara-s1-plus/android` | The S1 app (`:kiosk`), the GeckoView kiosk app (`sh.edm.s1kiosk`, never rename it) | Kotlin, Android |
+| `frames/aqara-s1-plus/android` | The S1 app (`:kiosk`), the GeckoView kiosk app: code in `dev.glassworks.s1`, app id `sh.edm.s1kiosk` (never change it) | Kotlin, Android |
 | `frames/generic-android/android` | Glassworks for generic Android (`:generic-android`, `dev.glassworks.generic_android`): the core as an app for any Android 8+ device, no root | Kotlin, Android |
 | `core/`, `pane-api/` | The Glassworks core (`dev.glassworks.*`) and the pane API every pane builds on | Kotlin, Android |
 | `engines/engine-gecko` | The GeckoView engine and the kiosk's web extension | Kotlin, JavaScript |
@@ -75,7 +75,7 @@ in HA. If a request goes against it, say so and point at the page instead of bui
    hash, never vendored. Licences of new dependencies go in `THIRD-PARTY-NOTICES.md` and `LICENSES/`.
    One exception is decided (maintainer, 2026-11-16): `desugar_jdk_libs` (GPL-2.0 with the Classpath exception)
    in the generic app's legacy APK, for Android 6–7, and in the legacy engine's debug test app
-   (`sh.edm.s1kiosk.legacy`). Any other GPL code in an APK needs the maintainer's call.
+   (`dev.glassworks.s1.legacy`). Any other GPL code in an APK needs the maintainer's call.
 5. **Changes to the boot patch, the root helper, the radio or anything in `frames/aqara-s1-plus/tools/root` need a real
    panel before merge.** Say so in the PR. Off-device tests alone are not enough there.
 6. **Updates must keep installing in place.** Don't change `applicationId`, the signing setup or
@@ -192,8 +192,10 @@ and S1's own branding stay plain. The S1's own detail (status, install, radio, F
 
 **Frame** = a device definition (the S1 is `aqara-s1-plus`). **Pane** = a plugin (radio, wall base,
 voice, Sendspin), which declares the hardware it `requires`. **Kiln** = the installer (`kiln/` plus
-`frames/aqara-s1-plus/tools/install.sh`). New Kotlin packages for the core go under `dev.glassworks.*`. The S1 app keeps
-`sh.edm.s1kiosk`, because the boot helpers hardcode it. The core's Android components (`MainActivity`, `AdminReceiver`, `BootReceiver`,
-`KioskService`, `ImprovActivity`, `UpdateInstallReceiver`, `CameraAdbActivity`) live in `dev.glassworks.*`. The S1 app
-declares one-line subclasses at the `sh.edm.s1kiosk.*` names its installed apps know and hands them to the core
-(`AppComponents`); the generic app names the core's classes directly (#527). Nothing else goes under `sh/edm` outside the S1 frame (`OldPackageGuardTest`).
+`frames/aqara-s1-plus/tools/install.sh`). All Kotlin goes under `dev.glassworks.*`: the core, the panes, and each app's own code (the S1's in
+`dev.glassworks.s1`, the generic app's in `dev.glassworks.generic`). The S1 app keeps its id, `sh.edm.s1kiosk`, because
+updates install in place and the boot helpers hardcode it. The core's Android components (`MainActivity`, `AdminReceiver`,
+`BootReceiver`, `KioskService`, `ImprovActivity`, `UpdateInstallReceiver`, `CameraAdbActivity`) live in `dev.glassworks.*`.
+The S1 app declares one-line subclasses at five `sh.edm.s1kiosk.*` names that Android, the field and the root side hold
+(MainActivity, AdminReceiver, BootReceiver, `improv.ImprovActivity`, `update.UpdateInstallReceiver`) and hands them to
+the core (`AppComponents`). Nothing else goes under `sh/edm` (`OldPackageGuardTest`, #527).

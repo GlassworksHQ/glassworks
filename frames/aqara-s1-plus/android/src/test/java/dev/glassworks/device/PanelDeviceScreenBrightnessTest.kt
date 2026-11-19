@@ -14,8 +14,8 @@ import dev.glassworks.esphome.ApiEntity
 import dev.glassworks.esphome.DeviceIdentity
 import dev.glassworks.esphome.ProtoMessage
 import dev.glassworks.esphome.ProtoWriter
-import sh.edm.s1kiosk.KioskApp
-import sh.edm.s1kiosk.frame.AqaraS1Plus
+import dev.glassworks.s1.KioskApp
+import dev.glassworks.s1.frame.AqaraS1Plus
 
 /** What the Screen light reports to Home Assistant, driven through its entities as HA does (#129). */
 @RunWith(RobolectricTestRunner::class)

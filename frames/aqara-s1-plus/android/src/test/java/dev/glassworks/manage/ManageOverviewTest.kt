@@ -24,14 +24,14 @@ import org.robolectric.shadows.ShadowNetworkInfo
 import org.robolectric.shadows.ShadowSystemClock
 import org.robolectric.shadows.ShadowWifiInfo
 import org.robolectric.util.ReflectionHelpers
-import sh.edm.s1kiosk.KioskApp
+import dev.glassworks.s1.KioskApp
 import dev.glassworks.KioskPrefs
 import dev.glassworks.auth.HaTokenClient
 import dev.glassworks.auth.HttpPoster
 import dev.glassworks.auth.SignInServer
-import sh.edm.s1kiosk.frame.AqaraS1Plus
+import dev.glassworks.s1.frame.AqaraS1Plus
 import java.time.Duration
-import sh.edm.s1kiosk.manage.S1Manage
+import dev.glassworks.s1.manage.S1Manage
 
 /** #263: the Manage overview's uptime is the app's, and its Wi-Fi tile says Connected while Wi-Fi is up. */
 @RunWith(RobolectricTestRunner::class)

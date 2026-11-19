@@ -16,10 +16,10 @@ import dev.glassworks.esphome.EspHomeLog
 import dev.glassworks.esphome.Msg
 import dev.glassworks.esphome.ProtoMessage
 import dev.glassworks.esphome.ProtoWriter
-import sh.edm.s1kiosk.KioskApp
-import sh.edm.s1kiosk.PanePrefs
-import sh.edm.s1kiosk.base.BaseBackend
-import sh.edm.s1kiosk.frame.AqaraS1Plus
+import dev.glassworks.s1.KioskApp
+import dev.glassworks.s1.PanePrefs
+import dev.glassworks.s1.base.BaseBackend
+import dev.glassworks.s1.frame.AqaraS1Plus
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.net.InetAddress

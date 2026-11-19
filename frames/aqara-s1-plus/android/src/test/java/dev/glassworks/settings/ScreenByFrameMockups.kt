@@ -1,6 +1,6 @@
 package dev.glassworks.settings
 
-import sh.edm.s1kiosk.frame.TestFrames
+import dev.glassworks.s1.frame.TestFrames
 import android.app.Application
 import android.app.KeyguardManager
 import android.content.pm.ActivityInfo
@@ -31,13 +31,13 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowBuild
 import org.robolectric.shadows.ShadowSensor
-import sh.edm.s1kiosk.KioskApp
+import dev.glassworks.s1.KioskApp
 import dev.glassworks.KioskPrefs
 import dev.glassworks.auth.HaTokenClient
 import dev.glassworks.auth.HttpPoster
 import dev.glassworks.auth.SignInServer
-import sh.edm.s1kiosk.frame.AqaraS1Plus
-import sh.edm.s1kiosk.manage.S1Manage
+import dev.glassworks.s1.frame.AqaraS1Plus
+import dev.glassworks.s1.manage.S1Manage
 import dev.glassworks.ui.Mockup
 import java.io.File
 

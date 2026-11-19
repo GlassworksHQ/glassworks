@@ -23,10 +23,10 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowInputDevice
 import org.robolectric.shadows.ShadowSensor
-import sh.edm.s1kiosk.KioskApp
-import sh.edm.s1kiosk.PanePrefs
-import sh.edm.s1kiosk.base.BaseBackend
-import sh.edm.s1kiosk.frame.AqaraS1Plus
+import dev.glassworks.s1.KioskApp
+import dev.glassworks.s1.PanePrefs
+import dev.glassworks.s1.base.BaseBackend
+import dev.glassworks.s1.frame.AqaraS1Plus
 
 /**
  * #476: Home Assistant gets the screen entities a device can back, from the same facts as its Screen settings
@@ -72,7 +72,7 @@ class FrameEntitiesTest {
             listOf("screen", "auto_brightness", "illuminance", "screen_mode", "idle_timeout", "max_brightness", "camera_presence"),
         ) { sensor(Sensor.TYPE_LIGHT); camera() },
         Case(
-            "lululemon-mirror: a camera, no sensors, no touch", { generic(sh.edm.s1kiosk.frame.TestFrames.MIRROR_PROPS) },
+            "lululemon-mirror: a camera, no sensors, no touch", { generic(dev.glassworks.s1.frame.TestFrames.MIRROR_PROPS) },
             listOf("screen", "screen_mode", "idle_timeout", "camera_presence"),
         ) { camera(); keysOnly() },
     )

@@ -9,7 +9,7 @@ import android.widget.TextView
 import dev.glassworks.frame.Frame
 import dev.glassworks.frame.Input
 import org.robolectric.RuntimeEnvironment
-import sh.edm.s1kiosk.frame.TestFrames
+import dev.glassworks.s1.frame.TestFrames
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
