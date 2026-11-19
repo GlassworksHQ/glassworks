@@ -147,7 +147,9 @@ export class AndroidSession {
       const { bytes, ready } = await releaseApk(ANDROID_APK, this.d.release, (release) => this.set({ release }));
       this.log(`${ready.name} from ${ready.tag}: SHA-256 ${ready.sha256}, as the release publishes it`);
       await this.pickApk(ready.name, bytes);
-      this.set({ release: ready });
+      // an APK the checks refuse is an error of the release, so Try again can fetch a fixed one
+      const refused = this.state.apk?.error;
+      this.set({ release: refused ? { state: 'error', why: `Kiln can't install it: ${refused}` } : ready });
     } catch (e) {
       const why = (e as Error).message;
       if (!(e instanceof NoRelease)) this.log(`The release's APK: ${why}`);

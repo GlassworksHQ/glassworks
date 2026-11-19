@@ -143,7 +143,9 @@ export class MirrorSession {
       if (!current()) return;
       this.log(`${ready.name} from ${ready.tag}: SHA-256 ${ready.sha256}, as the release publishes it`);
       await this.pickApk(ready.name, bytes);
-      if (current()) this.set({ release: ready });
+      // an APK the checks refuse is an error of the release, so Try again can fetch a fixed one
+      const refused = this.state.apk?.error;
+      if (current()) this.set({ release: refused ? { state: 'error', why: `Kiln can't install it: ${refused}` } : ready });
     } catch (e) {
       if (!current()) return;
       const why = (e as Error).message;
@@ -156,7 +158,8 @@ export class MirrorSession {
   releaseBlocked(): string | undefined {
     const r = this.state.release;
     if (!r) return undefined;
-    if (r.state === 'ready') return this.state.apk?.error && `The release's APK can't go on the Mirror: ${this.state.apk.error}.`;
+    if (this.state.apk?.error) return `The release's APK can't go on the Mirror: ${this.state.apk.error}.`;
+    if (r.state === 'ready') return undefined;
     if (r.state === 'none') return 'There is no release of Glassworks for the Mirror yet.';
     if (r.state === 'error') return 'Kiln couldn\'t get Glassworks from its release. Try again.';
     return 'Kiln is still downloading Glassworks.';

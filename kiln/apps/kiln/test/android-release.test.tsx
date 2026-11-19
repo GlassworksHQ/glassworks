@@ -73,6 +73,18 @@ describe('the release\'s APK', () => {
     expect(s.blocked()).toBe('Kiln couldn\'t get Glassworks from its release. Try again.');
   });
 
+  it('a release APK the checks refuse is an error with Try again: a fixed release then goes through', async () => {
+    let apk = fakeGenericApk({ package: 'com.example.other', abis: ['arm64-v8a'] });
+    const s = session(((u: RequestInfo | URL) => fakeReleaseRoute('out', apk, async () => {}, 'generic-android')(u)) as typeof fetch);
+    await s.loadRelease();
+    expect(s.state.release).toMatchObject({ state: 'error', why: expect.stringMatching(/^Kiln can't install it: /) });
+    expect(s.blocked()).toMatch(/^The release's APK can't go on the tablet: /);
+    apk = APK; // a fixed release
+    await s.loadRelease();
+    expect(s.state.release).toMatchObject({ state: 'ready', tag: TAG });
+    expect(s.blocked()).toBeUndefined();
+  });
+
   it('no release is its own state', async () => {
     const s = session(route('none'));
     await s.loadRelease();

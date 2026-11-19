@@ -77,12 +77,18 @@ describe('the release\'s APK', () => {
     expect(s.state.log.at(-1)).toMatch(/^The release's APK: .* isn't the file/);
   });
 
-  it('a release APK that isn\'t the Mirror\'s app is refused before any write', async () => {
-    const s = new MirrorSession({ connect: async () => { throw new Error('unused'); }, release: fakeReleaseRoute('out', fakeApk('com.example.other')) }, true);
+  it('a release APK that isn\'t the Mirror\'s app is refused before any write, and Try again fetches the release again', async () => {
+    let apk = fakeApk('com.example.other');
+    const s = new MirrorSession({ connect: async () => { throw new Error('unused'); }, release: ((u: RequestInfo | URL) => fakeReleaseRoute('out', apk)(u)) as typeof fetch }, true);
     await s.loadRelease();
-    expect(s.state.release?.state).toBe('ready');
+    expect(s.state.release).toMatchObject({ state: 'error', why: expect.stringMatching(/^Kiln can't install it: /) });
     expect(s.apkBytes()).toBeUndefined();
     expect(s.releaseBlocked()).toMatch(/^The release's APK can't go on the Mirror: /);
+    apk = fakeMirrorApk(); // a fixed release
+    await s.loadRelease();
+    expect(s.state.release?.state).toBe('ready');
+    expect(s.apkBytes()).toBeDefined();
+    expect(s.releaseBlocked()).toBeUndefined();
   });
 
   it('no release is its own state, and Try again looks again', async () => {
