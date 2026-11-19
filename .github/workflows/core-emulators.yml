@@ -157,19 +157,16 @@ jobs:
         if: failure()
         run: rm -rf ~/.gradle/caches/modules-2/metadata-*
 
-  # A red main must be seen. One open issue, by its title and the `area: ci` label: a failure opens it or adds the
-  # run to it, and the next green run on main's newest commit closes it. Only for main: a manual run on another
-  # branch reports nothing, and a cancelled run says nothing either way.
+  # A red main must be seen. One open issue, by its title and the `area: ci` label: every failure on main opens it or
+  # adds the run to it, and a green run on main's newest commit closes it. Only for main: a manual run on another
+  # branch reports nothing, and a cancelled run says nothing either way. No concurrency group: GitHub keeps one
+  # waiting job per group and drops the rest, which could lose a failure. Reporters run side by side instead, so each
+  # step is safe to repeat: two that both open an issue keep the older one and close the other.
   report:
     needs: [conformance, libs-api23]
     if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
-    # One reporter at a time, so two red runs can't both find no issue and open two. A running reporter is never
-    # cancelled; a newer one waiting replaces an older one waiting, and the newer run is the one that speaks for main.
-    concurrency:
-      group: core-emulators-report
-      cancel-in-progress: false
     permissions:
       issues: write
     steps:
@@ -183,26 +180,41 @@ jobs:
           SHA: ${{ github.sha }}
         run: |
           title='Emulator tests fail on main'
-          issue=$(gh issue list --state open --label 'area: ci' --search "in:title \"$title\"" --json number,title \
-            --jq "[.[] | select(.title == \"$title\")][0].number // empty")
+          # A plain list, not a search: a search can miss an issue opened seconds ago. Oldest first.
+          open_issues() {
+            gh issue list --state open --label 'area: ci' --limit 200 --json number,title \
+              --jq "[.[] | select(.title == \"$title\") | .number] | sort | .[]"
+          }
+          # main's newest commit: a run on an older one says so, and only a run on the newest one closes the issue.
+          head=$(gh api "repos/$GH_REPO/commits/main" --jq .sha)
+          on=" ($EVENT, $SHA)"
+          [ "$head" = "$SHA" ] || on=" ($EVENT, $SHA; main is at $head now, and its own run reports on it)"
           case " $RESULTS " in
             *' failure '*)
-              body="The emulator tests failed on main: $RUN ($EVENT, $SHA). Open the run for the job that failed."
-              if [ -n "$issue" ]; then
-                gh issue comment "$issue" --body "$body"
+              body="The emulator tests failed on main: $RUN$on. Open the run for the job that failed."
+              issues=$(open_issues)
+              if [ -n "$issues" ]; then
+                gh issue comment "$(echo "$issues" | head -n 1)" --body "$body"
               else
                 gh issue create --title "$title" --label 'area: ci' \
                   --body "$body This issue closes itself on the next green run (.github/workflows/core-emulators.yml, docs/ci.md)."
+                # Another reporter may have opened one at the same time: keep the oldest, close the rest.
+                issues=$(open_issues)
+                keep=$(echo "$issues" | head -n 1)
+                for n in $(echo "$issues" | tail -n +2); do
+                  gh issue close "$n" --reason 'not planned' --comment "Same as #$keep: $RUN" || true
+                done
               fi ;;
             ' success success ')
-              # Runs on main overlap: a green run on an older commit leaves the issue to the newer commit's run.
-              head=$(gh api "repos/$GH_REPO/commits/main" --jq .sha)
-              if [ -z "$issue" ]; then
+              issues=$(open_issues)
+              if [ -z "$issues" ]; then
                 echo 'Green, and no open issue.'
               elif [ "$head" != "$SHA" ]; then
                 echo "Green on $SHA, but main is at $head now: its run reports."
               else
-                gh issue close "$issue" --comment "Green again: $RUN ($EVENT, $SHA)."
+                for n in $issues; do
+                  gh issue close "$n" --comment "Green again: $RUN$on." || true
+                done
               fi ;;
             *) echo "Nothing to report: $RESULTS" ;;
           esac

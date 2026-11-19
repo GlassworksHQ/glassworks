@@ -89,7 +89,9 @@ for them.
 A red emulator run on `main` (push, nightly or manual) opens one issue, **Emulator tests fail on main**,
 labelled `area: ci`, with a link to the run. Each later red run adds a comment to that issue. The next green
 run on `main`'s newest commit closes it (runs overlap, and an older commit's green run doesn't speak for a newer
-one; it can wait for the nightly). A cancelled run, or a manual run on another branch, reports nothing. To check a branch
+one; it can wait for the nightly). Reporters run side by side, with no concurrency group: GitHub keeps only one
+waiting job per group and drops the others, which could lose a failure. When two red runs both open an issue,
+they keep the older one and close the other. A cancelled run, or a manual run on another branch, reports nothing. To check a branch
 before you merge, run the workflow on it by hand (Actions, Emulator tests, Run workflow) or with
 `gh workflow run core-emulators.yml --ref <branch>`.
 
