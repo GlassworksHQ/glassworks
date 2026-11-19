@@ -88,7 +88,8 @@ if [ -z "${S1_PART:-}" ]; then
 fi
 case "$1" in
   get-state) echo device; exit 0 ;;
-  push) cp "$2" "$S/panel/$(basename "$3")"; exit 0 ;;
+  push) [ "$(st push)" = fail ] && [ "$(basename "$3")" = glassworks.apk ] && { echo "adb: error: failed to copy"; exit 1; }
+    cp "$2" "$S/panel/$(basename "$3")"; exit 0 ;;
   forward) [ "$2" = tcp:0 ] && echo 41234; exit 0 ;;
   install)
     # Android checks the version before the signing key
@@ -219,7 +220,7 @@ APK="$T/kiosk-release.apk"; echo apk > "$APK"
 
 # A debug build with its data, as HOME + device admin, on Wi-Fi it saved.
 panel() { # [wifi fixture]
-  rm -rf "$T/panel" "$T"/{adb.log,root-cmds,root.log,violations,unkeyed,stop-after,main.pid,improv.got,installed,disabled,root,admin,home,new-install,uninstall,restore,disable,old-install,list,chooser,handover.log,old-carries,down-after-admin,socket-down,handover.passing,downgrade} "$T"/app.* "$T"/copy.*
+  rm -rf "$T/panel" "$T"/{adb.log,root-cmds,root.log,violations,unkeyed,stop-after,main.pid,push,improv.got,installed,disabled,root,admin,home,new-install,uninstall,restore,disable,old-install,list,chooser,handover.log,old-carries,down-after-admin,socket-down,handover.passing,downgrade} "$T"/app.* "$T"/copy.*
   mkdir -p "$T/panel"
   cp "$FIX/WifiConfigStore.xml" "$T/WifiConfigStore.xml"
   fresh_data 10071 debug
@@ -495,6 +496,14 @@ check "...after starting it" before "$(sed -n '/pm install -r -g \/data\/local\/
 check "old build back, enabled, admin, data restored" bash -c '[ "$(cat "$1/installed") $(cat "$1/disabled") $(cat "$1/admin")" = "debug 0 1" ] && [ -f "$1/panel/ce/shared_prefs/kiosk.xml" ]' _ "$T"
 check "copy discarded" test ! -e "$T/panel/work"
 check "the old build never ran on empty data before the restore (#626)" test ! -s "$T/unkeyed"
+
+echo "== install.sh: the new APK won't copy to the panel, and an earlier run left one there (#628 review)"
+panel; printf fail > "$T/push"; echo stale > "$T/panel/glassworks.apk"
+out=$(inst --switch); rc=$?
+check "fails" test $rc -ne 0
+check "installs no APK left on the panel" hasnt "$(cat "$T/adb.log")" "shell pm install -r -g /data/local/tmp/glassworks.apk"
+check "says why" has "$out" "could not copy kiosk-release.apk to the panel"
+check "the old build is back with its data" bash -c '[ "$(cat "$1/installed") $(cat "$1/disabled")" = "debug 0" ] && [ -f "$1/panel/ce/shared_prefs/kiosk.xml" ]' _ "$T"
 
 echo "== install.sh: the new build won't install, and the old one's data won't go back in"
 panel; printf fail > "$T/new-install"; printf fail > "$T/restore"

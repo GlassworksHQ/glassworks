@@ -346,8 +346,12 @@ switch_key() {
   #    restore_into enables it again.
   hold=""
   if [[ $HAS_ROOT -eq 1 ]]; then hold=" && pm disable-user --user 0 $PKG"; fi
-  adb push "$APK" "$NEW_APK" >/dev/null || true
-  out=$(adb shell "pm install -r -g $NEW_APK$hold" 2>&1 | tr -d '\r') || true
+  # a failed push must not install an APK an earlier, stopped run left there
+  if adb push "$APK" "$NEW_APK" >/dev/null; then
+    out=$(adb shell "pm install -r -g $NEW_APK$hold" 2>&1 | tr -d '\r') || true
+  else
+    out="could not copy $(basename "$APK") to the panel"
+  fi
   if ! grep -q Success <<<"$out"; then
     sed 's/^/  /' <<<"$out"
     # The data copy is the only one left until a restore worked: keep it otherwise, and say where.
