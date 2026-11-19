@@ -11,7 +11,11 @@ line of each version is what Home Assistant shows on the update card. A change o
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-19
+
 **The first release of Glassworks for Android tablets and panels, with Assist, Sendspin and the camera pane.**
+
+Experimental: run on a lululemon Mirror and a Pixel Tablet so far, not yet on other devices.
 
 ### Added
 - **Allow a new computer over USB on a panel with no touchscreen.** On the lululemon Mirror (the legacy build), the Manage
@@ -50,6 +54,10 @@ line of each version is what Home Assistant shows on the update card. A change o
   avoid that: turn the lock off in Android's settings, or keep the screen on.
 
 ### Fixed
+- **The camera recovers by itself when it stops sending frames.** If the camera opens but sends no picture for
+  5 seconds, the camera pane now closes it and opens it again, at once the first time and then less and less often
+  while it stays silent. Before, presence and the stream stayed dead until something else reopened the camera, such
+  as turning *Camera privacy* on and off. This was seen on the lululemon Mirror's first open after a flash.
 - **With Screen mode set to always, walking up no longer turns on a screen you turned off.** If you turn the screen
   off from Home Assistant, it stays off when someone comes close, whether the panel senses them with its own sensor
   or with the camera pane. *Presence* in Home Assistant still turns on. In the presence mode, walking up still wakes
@@ -62,3 +70,7 @@ line of each version is what Home Assistant shows on the update card. A change o
   draws in the app's own process instead of a separate GPU process, which Android killed whenever the screen went
   off or a system dialog came up. It also no longer runs GeckoView's crash helper, which did nothing for the app
   and was restarted about once a minute. Legacy build only. Not yet run on a real Mirror.
+- **No crash when the app may not use the microphone.** Without the Microphone permission, voice no longer tries to
+  open the microphone, which on Android 6 could crash the app. The Assist page on the device and on the Manage page
+  says *Voice isn't allowed to use the microphone*, and Home Assistant's *Voice status* reads *Microphone not
+  allowed*. Once the permission is given, voice starts listening within a few seconds. Both builds.

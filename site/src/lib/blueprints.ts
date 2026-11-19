@@ -11,7 +11,8 @@ import { frameById } from "./frames";
  * The newest app release is the newest published one on any frame's app line (`aqara-s1-plus-v1.2.3`,
  * `generic-android-v1.2.3`, `generic-android-legacy-v1.2.3`, or the S1's plain `v1.2.3` up to 0.4.4), whose
  * tree has the file: a release from before the blueprints has none, and the one before it is tried. One call
- * to GitHub's Releases API per build (with GITHUB_TOKEN when it is set), like the app's own update check.
+ * to GitHub's Releases API per build (with GITHUB_TOKEN when it is set), like the app's own update check;
+ * the site's latest release (release.ts) reads the same list.
  *
  * BLUEPRINTS_REF=<tag or commit> builds the site from another ref (a preview of unreleased blueprints).
  */
@@ -46,8 +47,8 @@ export type Blueprints = {
 /** The fields of a release in GitHub's Releases API that this file reads. */
 export type GithubRelease = { tag_name: string; draft: boolean; prerelease: boolean; published_at: string | null };
 
-/** The S1 app's frame: its releases up to 0.4.4 were tagged a plain `v1.2.3`. */
-const PLAIN_TAGS = "aqara-s1-plus";
+/** The S1 app's frame: the repo's CHANGELOG.md is its app's, and its releases up to 0.4.4 were tagged a plain `v1.2.3`. */
+export const S1 = "aqara-s1-plus";
 
 /**
  * An app release's tag, `<line>-v1.2.3` or a plain `v1.2.3`: the line is a frame's id, or its legacy build's
@@ -57,7 +58,7 @@ const PLAIN_TAGS = "aqara-s1-plus";
 export function appTag(tag: string): { frame: string; legacy: boolean; version: string } | null {
   const m = /^(?:([a-z0-9-]+)-)?v(\d+\.\d+\.\d+)$/.exec(tag);
   if (!m) return null;
-  const line = m[1] ?? PLAIN_TAGS;
+  const line = m[1] ?? S1;
   const legacy = line.endsWith("-legacy");
   const frame = legacy ? line.slice(0, -"-legacy".length) : line;
   return frameById(frame) ? { frame, legacy, version: m[2]! } : null;
@@ -98,17 +99,33 @@ export function fromAsset(json: string, ref: string): Blueprint[] {
 /** The core's own blueprints: its settings pages', in `core/blueprints/`, on every panel whatever its panes. */
 export const isCore = (b: Blueprint) => b.path.startsWith("core/");
 
-/** The blueprints at [pinned] (BLUEPRINTS_REF), else at the newest app release that has them. */
-export async function findBlueprints(get: typeof fetch, pinned?: string, token?: string): Promise<Blueprints> {
-  if (pinned) {
-    const json = await file(get, `${RAW}/${pinned}/${ASSET}`);
-    return { ref: pinned, list: json ? fromAsset(json, pinned) : [] };
-  }
+/** The repo's newest releases, from GitHub's Releases API. Anything but a 200 stops the build. */
+export async function fetchReleases(get: typeof fetch, token?: string): Promise<GithubRelease[]> {
   const r = await get(RELEASES, {
     headers: { accept: "application/vnd.github+json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
   });
   if (!r.ok) throw new Error(`src/lib/blueprints.ts: ${RELEASES}: HTTP ${r.status}${token ? "" : " (set GITHUB_TOKEN for a higher rate limit)"}`);
-  for (const tag of appReleases(await r.json())) {
+  return r.json();
+}
+
+/** The releases list, read once per build: the blueprints and the latest release (release.ts) share it. */
+export async function githubReleases(): Promise<GithubRelease[]> {
+  "use cache";
+  cacheLife({ stale: Infinity, revalidate: Infinity, expire: Infinity });
+  return fetchReleases(fetch, process.env.GITHUB_TOKEN?.trim() || undefined);
+}
+
+/** The blueprints at [pinned] (BLUEPRINTS_REF), else at the newest app release in [releases] that has them. */
+export async function findBlueprints(
+  get: typeof fetch,
+  pinned?: string,
+  releases: () => Promise<GithubRelease[]> = () => fetchReleases(get),
+): Promise<Blueprints> {
+  if (pinned) {
+    const json = await file(get, `${RAW}/${pinned}/${ASSET}`);
+    return { ref: pinned, list: json ? fromAsset(json, pinned) : [] };
+  }
+  for (const tag of appReleases(await releases())) {
     const json = await file(get, `${RAW}/${tag}/${ASSET}`);
     if (json) return { ref: tag, list: fromAsset(json, tag) };
   }
@@ -119,7 +136,7 @@ export async function blueprints(): Promise<Blueprints> {
   "use cache";
   // Read once, when the site is built, like the rest of the site's data: the pages stay static.
   cacheLife({ stale: Infinity, revalidate: Infinity, expire: Infinity });
-  return findBlueprints(fetch, process.env.BLUEPRINTS_REF?.trim() || undefined, process.env.GITHUB_TOKEN?.trim() || undefined);
+  return findBlueprints(fetch, process.env.BLUEPRINTS_REF?.trim() || undefined, githubReleases);
 }
 
 /**

@@ -25,6 +25,8 @@ import org.robolectric.shadow.api.Shadow
 import org.robolectric.shadows.MediaCodecInfoBuilder
 import org.robolectric.shadows.ShadowCameraCharacteristics
 import org.robolectric.shadows.ShadowMediaCodecList
+import org.robolectric.shadows.ShadowSystemClock
+import java.time.Duration
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
@@ -101,6 +103,7 @@ class CameraHubTest {
     @Test fun aCameraUnpluggedWhileNobodyHoldsItIsReadAgain() {
         camera("1", CameraCharacteristics.LENS_FACING_EXTERNAL)
         val hub = hub()
+        settled(hub) // the hub registers for availability on its thread: unplug only once it has
         assertEquals(StreamFit.Size(1280, 720), hub.streamFit)
         cameras.removeCamera("1")
         eventually("unplugged: no stream") { hub.streamFit == StreamFit.Refused(CameraHub.NO_CAMERA) }
@@ -142,5 +145,104 @@ class CameraHubTest {
         assertEquals(2, k.read("0") { 2 })
         assertEquals(2, k.kept("0"))
         assertEquals("another camera's", null, k.kept("1"))
+    }
+
+    // ------------------------------------------------------------ a silent camera is reopened (#599)
+
+    private fun lines(prefix: String) = synchronized(logs) { logs.count { it.startsWith(prefix) } }
+    private fun opens() = lines("camera 0 open (")
+    private fun reopens() = lines("camera: reopen ")
+
+    /** Runs what is due on the hub's thread now. Robolectric's clock is fake: delayed work waits for [advance]. */
+    private fun settled(hub: CameraHub) = shadowOf(hub.looper).idle()
+
+    private fun advance(hub: CameraHub, ms: Long) {
+        ShadowSystemClock.advanceBy(Duration.ofMillis(ms))
+        settled(hub)
+    }
+
+    /** Robolectric's camera configures the session and never sends a frame: the Mirror's stuck first session. */
+    private fun silentCamera(): CameraHub {
+        camera("0", CameraCharacteristics.LENS_FACING_FRONT)
+        return hub()
+    }
+
+    @Test fun aSilenceLeadsToExactlyOneReopen() {
+        val hub = silentCamera()
+        hub.open(5f, presence()).use {
+            opened(); settled(hub)
+            advance(hub, CameraHub.SILENT_MS - 1)
+            assertEquals("not silent long enough yet", 0, reopens())
+            advance(hub, 1)
+            assertEquals(1, reopens())
+            assertEquals("camera: reopen 1 now (no frames for 5 s)", synchronized(logs) { logs.first { it.startsWith("camera: reopen ") } })
+            assertEquals("closed and opened again at once", 2, opens())
+        }
+    }
+
+    @Test fun aRepeatedSilenceBacksOff() {
+        val hub = silentCamera()
+        hub.open(5f, presence()).use {
+            opened(); settled(hub)
+            advance(hub, CameraHub.SILENT_MS)
+            advance(hub, CameraHub.SILENT_MS)
+            assertEquals(2, reopens())
+            assertTrue(synchronized(logs) { "camera: reopen 2 in 10 s (no frames for 5 s)" in logs })
+            assertEquals("the second waits", 2, opens())
+            advance(hub, ReopenBackoff.FIRST_MS - 1)
+            assertEquals(2, opens())
+            advance(hub, 1)
+            assertEquals(3, opens())
+            advance(hub, CameraHub.SILENT_MS)
+            assertTrue("the wait doubles", synchronized(logs) { "camera: reopen 3 in 20 s (no frames for 5 s)" in logs })
+        }
+    }
+
+    @Test fun privacyMeansNoReopen() {
+        val hub = silentCamera()
+        val held = hub.open(5f, presence())
+        opened(); settled(hub)
+        advance(hub, CameraHub.SILENT_MS / 2)
+        held.close(); hub.idle() // what the pane does when privacy goes on
+        settled(hub)
+        assertTrue(synchronized(logs) { "camera closed" in logs })
+        advance(hub, CameraHub.SILENT_MS * 10)
+        assertEquals(0, reopens())
+        assertEquals(1, opens())
+    }
+
+    /** Privacy on and off during a backoff, as the root did on the Mirror: the camera opens at once, with a fresh count. */
+    @Test fun privacyEndsABackoff() {
+        val hub = silentCamera()
+        val held = hub.open(5f, presence())
+        opened(); settled(hub)
+        advance(hub, CameraHub.SILENT_MS)
+        advance(hub, CameraHub.SILENT_MS)
+        assertEquals("reopen 2 waits", 2, opens())
+        held.close(); hub.idle(); settled(hub)
+        hub.open(5f, presence()).use {
+            settled(hub)
+            assertEquals(3, opens())
+            advance(hub, CameraHub.SILENT_MS)
+            assertTrue(synchronized(logs) { logs.last { it.startsWith("camera: reopen ") } == "camera: reopen 1 now (no frames for 5 s)" })
+        }
+    }
+
+    @Test fun theBackoffStartsAtOnceDoublesAndIsCapped() {
+        val b = ReopenBackoff(firstMs = 10_000, capMs = 60_000)
+        assertEquals(listOf(0L, 10_000L, 20_000L, 40_000L, 60_000L, 60_000L), List(6) { b.silence() })
+        assertEquals(6, b.attempt)
+        repeat(100) { b.silence() }
+        assertEquals("no overflow", 60_000L, b.silence())
+    }
+
+    /** What the hub does on every image: frames coming back start the count again. */
+    @Test fun aFrameResetsTheBackoff() {
+        val b = ReopenBackoff()
+        b.silence(); b.silence()
+        b.reset()
+        assertEquals(0, b.attempt)
+        assertEquals(0L, b.silence())
+        assertEquals(1, b.attempt)
     }
 }
