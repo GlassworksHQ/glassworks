@@ -16,6 +16,7 @@
 //
 //   npx -y tsx@4.23.15 tools/mirror/flash-node.ts --dry-run
 //   npx -y tsx@4.23.15 tools/mirror/flash-node.ts --image ~/Downloads/system.img --apk generic-android-legacy.apk --ha-url http://homeassistant.local:8123
+//   npx -y tsx@4.23.15 tools/mirror/flash-node.ts --first-boot --ha-url http://homeassistant.local:8123   (after an interrupted install: writes no partition)
 //   npx -y tsx@4.23.15 tools/mirror/flash-node.ts --way-back --image system.img --userdata userdata.sparse
 import { UsageError, cli } from './src/cli';
 

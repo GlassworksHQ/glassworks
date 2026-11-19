@@ -40,6 +40,14 @@ Each step is printed and waits for `y`. `--yes` answers every question.
     screen of its own, nothing was hidden: the image's launcher stays, and the run exits 1.
 13. Screenshot.
 
+### After an interrupted install
+
+If the run stops after step 9 (a power cut while it waits for adb, a lost cable), both images are
+on the Mirror already. `--first-boot` runs only steps 10 to 13 against it, and writes no partition.
+The first boot still checks the image's fingerprint and that the app is there. It needs no `--image`
+or `--apk`. `--wifi-ssid` and `--wifi-pass-file` are optional, since the image may have the network
+saved already. Pass the same `--probe` and `--ha-url` as the install.
+
 ## Use
 
 From the repo root, after `npm install`. tsx isn't in the repo's lockfile (vite 8 lists it as an
@@ -49,6 +57,7 @@ optional peer, and that breaks `npm ci`'s lockfile check), so npx fetches the pi
 npx -y tsx@4.23.15 tools/mirror/flash-node.ts --dry-run          # every step on a fake Mirror, no device touched
 npx -y tsx@4.23.15 tools/mirror/flash-node.ts --image ~/Downloads/system.img --apk generic-android-legacy.apk \
   --ha-url http://homeassistant.local:8123
+npx -y tsx@4.23.15 tools/mirror/flash-node.ts --first-boot --ha-url http://homeassistant.local:8123  # steps 10 to 13 only
 npx -y tsx@4.23.15 tools/mirror/flash-node.ts --way-back --image system.img --userdata userdata.sparse
 npx -y tsx@4.23.15 tools/mirror/flash-node.ts --help
 ```
