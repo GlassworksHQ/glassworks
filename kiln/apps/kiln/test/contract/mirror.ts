@@ -1,0 +1,210 @@
+// The Mirror's two flows for the contract, through their existing exports only (the files are open in #596, #603,
+// #607 and #617; phase 2 of #621 moves them onto the shared engine). `fastboot`: FlashSession, Glassworks built into
+// the Glass Panes image and flashed, then the first start over adb; the image comes through the real resumableBody
+// over a fake network. `app`: MirrorSession, the app alone over adb on a Mirror already on Glass Panes.
+// A reload is a new session over the same Mirror, as a page load makes one.
+import { GLASSWORKS, SYSTEM_BYTES, USERDATA_BYTES, resumableBody, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
+import { FakeMirror, FirstBootMirror, fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
+import type { PanelShell } from '@glassworks/adb';
+import { FlashSession, type FlashDeps, type ImageMaker } from '../../src/mirror/flash';
+import { MirrorSession } from '../../src/mirror/session';
+import {
+  Clicks, REFUSED, UNPLUGGED, body, fastSleep, never, type Driver, type Knobs, type Look, type Page, type World, type Write,
+} from './harness';
+
+const IMAGE = new Uint8Array(64).fill(7);
+const pristine = (state: object) => JSON.stringify({ ...state, log: [] });
+
+function flashWorld(k: Knobs): World {
+  const writes: Write[] = [];
+  const fired = { refused: 0, dropped: false, stalled: false, reloaded: false };
+  const w: World = { writes, fired, reloadNow: false, load: async () => load() };
+  const reloadAt = <T>(step: string): Promise<T> | undefined => {
+    if (k.reloadIn !== step || fired.reloaded) return undefined;
+    fired.reloaded = true;
+    w.reloadNow = true;
+    return never<T>();
+  };
+  let mode: 'android' | 'fastboot' | 'booted' = 'android';
+
+  // Refract over a fake network: the real resumableBody reads it, as the worker does
+  const net = (async () => {
+    const r = reloadAt<Response>('image');
+    if (r) return r;
+    if (k.stall && !fired.stalled) { fired.stalled = true; return body(IMAGE, true); }
+    return body(IMAGE);
+  }) as unknown as typeof fetch;
+  const images: ImageMaker = {
+    load: async () => {},
+    async fetch(url, onProgress) {
+      const reader = resumableBody(url, IMAGE.length, { fetch: net, sleep: fastSleep }).stream().getReader();
+      let got = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        got += value.length;
+        onProgress(got / IMAGE.length);
+      }
+    },
+    build: async (_o, onProgress) => { onProgress('patch', 1); return { system: new Blob(['SS']), userdata: new Blob(['U']) }; },
+    check: async () => {},
+    discard: async () => {},
+  };
+  const fb: FastbootLike = {
+    async getvar(n) {
+      const r = reloadAt<string>('fastboot');
+      if (r) return r;
+      if (n === 'max-download-size') return '0x10000000';
+      throw new Error('FAIL');
+    },
+    partitionSize: async (n) => (n === 'system' ? SYSTEM_BYTES : USERDATA_BYTES),
+    async flashBlob(p) {
+      if (k.dropUsbIn === 'install' && !fired.dropped) { fired.dropped = true; throw new Error(UNPLUGGED); }
+      if (p === 'userdata') { const r = reloadAt<void>('install'); if (r) return r; }
+      writes.push({ what: `flash ${p}`, step: 'install' });
+    },
+    reboot: async () => { mode = 'booted'; },
+  };
+  const deps: FlashDeps = {
+    images,
+    imageUrl: 'https://proxy.test/glass-panes/system.img',
+    // VOL- under the back cover: the physical step this flow asks for, so the person does it when asked
+    requestFastboot: async () => { mode = 'fastboot'; return fb; },
+    async requestAdb() {
+      if (mode !== 'booted') throw new DOMException('No device selected.', 'NotFoundError');
+      const r = reloadAt<PanelShell>('first-boot');
+      if (r) return r;
+      if (fired.refused < (k.refuseAuth ?? 0)) { fired.refused++; throw new Error(REFUSED); }
+      return new FirstBootMirror();
+    },
+    adbKey: () => 'QAAA= kiln@contract',
+    apk: () => apk,
+    sleep: fastSleep,
+  };
+  const apk = fakeMirrorApk();
+
+  function load(): Page {
+    const f = new FlashSession(deps);
+    const clicks = new Clicks();
+    return {
+      look(): Look {
+        const s = f.state;
+        switch (s.screen) {
+          case 'image':
+            if (s.proxyFailed) return { end: 'error' };
+            if (s.image?.state === 'ok') return f.blocked() ? { end: 'error' } : clicks.act('continue', () => f.toFastboot());
+            return s.image ? 'wait' : clicks.act('download', () => f.downloadImage());
+          case 'fastboot':
+            if (s.fastboot && !s.fastboot.ok) return { end: 'error' };
+            if (s.connectError && clicks.has('fastboot')) return { end: 'error' };
+            return clicks.act('fastboot', () => f.connectFastboot());
+          case 'confirm':
+            return clicks.act('confirm', () => { f.understand(true); return f.flash(); });
+          case 'adb':
+            if (s.connectError && clicks.has('adb')) return { end: 'error' };
+            return clicks.act('adb', () => f.connectAdb());
+          case 'done':
+            return { end: 'done', goal: s.firstBoot?.home.result === 'set' };
+          case 'error':
+            return { end: 'error' };
+          default:
+            return 'wait';
+        }
+      },
+      step() {
+        const s = f.state;
+        if (s.screen === 'image' || s.screen === 'back') return 'image';
+        if (s.screen === 'fastboot') return 'fastboot';
+        if (s.screen === 'adb' || s.work?.step === 'first-boot') return 'first-boot';
+        return 'install';
+      },
+      // the error screen's "Back to the files" (FlashScreens FlashError)
+      async retry() { clicks.reset(); f.retry(); },
+      remembers: () => pristine(f.state) !== pristine(new FlashSession(deps).state),
+      snapshot: () => JSON.stringify({ ...f.state, log: f.state.log.length }),
+      close() {},
+    };
+  }
+  return w;
+}
+
+/** adb to the Mirror through one USB link: a pulled cable kills the link, and the browser hands out a new one. */
+function link(m: FakeMirror, k: Knobs, fired: World['fired'], writes: Write[], reloadAt: <T>(s: string) => Promise<T> | undefined): PanelShell {
+  let dead = false;
+  return {
+    async run(cmd) {
+      if (dead) throw new Error(UNPLUGGED);
+      if (/^pm install/.test(cmd)) {
+        if (k.dropUsbIn === 'install' && !fired.dropped) { fired.dropped = true; dead = true; throw new Error(UNPLUGGED); }
+        writes.push({ what: 'install the app', step: 'install' });
+        const out = await m.run(cmd);
+        const r = reloadAt<{ out: string; code: number }>('install');
+        return r ?? out;
+      }
+      return m.run(cmd);
+    },
+    async push(path) { if (dead) throw new Error(UNPLUGGED); return m.push(path); },
+  };
+}
+
+function appWorld(k: Knobs): World {
+  const writes: Write[] = [];
+  const fired = { refused: 0, dropped: false, stalled: false, reloaded: false };
+  const w: World = { writes, fired, reloadNow: false, load: async () => load() };
+  const reloadAt = <T>(step: string): Promise<T> | undefined => {
+    if (k.reloadIn !== step || fired.reloaded) return undefined;
+    fired.reloaded = true;
+    w.reloadNow = true;
+    return never<T>();
+  };
+  // Without the noTouch knob someone answers Android's chooser (a USB mouse, as the Mirror's Done suggests);
+  // with it, nobody does: the Mirror has no touchscreen and this flow declares no taps.
+  const mirror = new FakeMirror({ picks: k.noTouch ? undefined : (c) => c.find((x) => x.startsWith(`${GLASSWORKS.package}/`)) });
+  const apk = fakeMirrorApk();
+  const deps = {
+    async connect(): Promise<PanelShell> {
+      const r = reloadAt<PanelShell>('connect');
+      if (r) return r;
+      if (fired.refused < (k.refuseAuth ?? 0)) { fired.refused++; throw new Error(REFUSED); }
+      return link(mirror, k, fired, writes, reloadAt);
+    },
+    sleep: fastSleep,
+    homeTimeoutMs: 300,
+  };
+
+  function load(): Page {
+    const s = new MirrorSession(deps, true);
+    const clicks = new Clicks();
+    return {
+      look(): Look {
+        const st = s.state;
+        switch (st.screen) {
+          case 'pick':
+            if (!st.apk) return clicks.act('apk', () => s.pickApk('glassworks-legacy.apk', apk));
+            if (st.connecting) return 'wait';
+            if (st.connectError && clicks.has('connect')) return { end: 'error' };
+            return clicks.act('connect', () => s.connect());
+          case 'checks':
+            if (!st.apk) return clicks.act('apk', () => s.pickApk('glassworks-legacy.apk', apk));
+            return s.installBlocked() ? { end: 'error' } : clicks.act('install', () => s.install());
+          case 'done':
+            return { end: 'done', goal: st.result?.flow === 'install' && st.result.installed.home === 'set' };
+          case 'error':
+            return { end: 'error' };
+          default:
+            return 'wait';
+        }
+      },
+      step: () => (s.state.screen === 'working' || s.state.screen === 'error' || s.state.screen === 'done' ? 'install' : 'connect'),
+      // the error screen's "Back to the checks" (MirrorWizard)
+      async retry() { clicks.reset(); await s.again(); },
+      remembers: () => pristine(s.state) !== pristine(new MirrorSession(deps, true).state),
+      snapshot: () => JSON.stringify({ ...s.state, log: s.state.log.length }),
+      close() {},
+    };
+  }
+  return w;
+}
+
+export const mirrorFastboot: Driver = { id: 'lululemon-mirror', frame: 'lululemon-mirror', flow: 'fastboot', world: flashWorld };
+export const mirrorApp: Driver = { id: 'lululemon-mirror/app', frame: 'lululemon-mirror', flow: 'app', world: appWorld };
