@@ -1486,8 +1486,9 @@ class Android6ClockStep(unittest.TestCase):
         tmp = tempfile.mkdtemp()
         p, r = refstart(tmp, FAKE_ANDROID6="1", FAKE_CLOCK_STEP_S="2")
         self.assertNotEqual(p.returncode, 0)
-        self.assertIn("wall clock moved +2000", r["error"])
-        self.assertGreater(r["logcat_clock"]["drift_ms"], 1900)
+        self.assertIn("the device's wall clock moved +", r["error"])
+        # 2 s, give or take the two calibrations' errors (1999.8 ms in CI, 2026-11-19).
+        self.assertAlmostEqual(r["logcat_clock"]["drift_ms"], 2000, delta=50)
 
 
 class Android6Refusals(unittest.TestCase):
