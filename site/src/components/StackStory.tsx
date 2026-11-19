@@ -300,7 +300,7 @@ export function StackStory({ release, post, panel }: { release: StoryRelease; po
               })}
             </ol>
             <p className={s.coda} style={{ opacity: done ? 1 : 0 }}>
-              Supporting a new panel means writing a new frame. S1 Unleashed is the Aqara S1 Plus frame, with the radio
+              Supporting a new panel means writing a new frame. The Aqara S1 Plus is one, with the radio
               and wall-base panes.
             </p>
           </div>

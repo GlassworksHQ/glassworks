@@ -1,11 +1,11 @@
 # Legal notes
 
-What S1 Unleashed does and doesn't do, stated as facts about the project. This is not legal advice,
+What Glassworks does and doesn't do, stated as facts about the project. This is not legal advice,
 and the rules differ from country to country.
 
 ## Scope: your own device
 
-S1 Unleashed changes the software on an Aqara Panel Hub S1 Plus that you own. The installer
+Glassworks changes the software on an Aqara Panel Hub S1 Plus that you own. The installer
 works on the panel connected to your computer over USB. Before it writes anything, it saves a backup of
 the partitions it changes, and that backup stays with you. *Undo a previous install* writes it back
 ([install.md](../frames/aqara-s1-plus/docs/install.md)). Changing the panel's software probably voids its warranty.
@@ -41,14 +41,15 @@ lists them.
 
 ## Trademarks
 
-S1 Unleashed is not affiliated with, endorsed by or sponsored by Aqara or Lumi United Technology.
+Glassworks is not affiliated with, endorsed by or sponsored by Aqara or Lumi United Technology.
 "Aqara", "Panel Hub S1 Plus" and the other product names are trademarks of their owners. They are
 used here only to say which device the project works with. The same applies to Silicon Labs, Home
 Assistant and other names mentioned in this project.
 
 ## Licences
 
-The project's own code is MIT ([LICENSE](../LICENSE)). Third-party code keeps its own licence.
+The project's own code is MIT ([LICENSE](../LICENSE)), except the Glassworks core, which is MPL-2.0
+([its README](../pane-api/src/main/java/dev/glassworks/README.md#licence)). Third-party code keeps its own licence.
 [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md) lists everything the APK and the installer ship,
 with its licence and where its source is. The licence texts are in [LICENSES/](../LICENSES). On the
 panel, they are under *Open source licences* in the hidden settings: tap the top-left corner five
