@@ -89,7 +89,7 @@
 # Setup hotspot name (#197): with the overlay in the frame bundle, a Magisk module puts it on /product, so Android
 # names the setup hotspot Glassworks_NNNN from the next restart. Status: sys.glassworks.hotspot_name.status.
 #
-# Developer override: the loader's (/data/glassworks/dev/override and dev/radio.sh, root-made). Then
+# Developer override: the loader's (/data/glassworks/dev/override and dev/agent.sh, root-made). Then
 # binaries in $DIR win too.
 #
 # $DIR keeps its s1kiosk name: otbr-agent has $DIR/run compiled in (build-otbr.sh), with the Thread
