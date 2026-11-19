@@ -434,6 +434,12 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   it straight away. The *Thread join* sensor says how it went. Pasting the dataset still works.
 
 ### Fixed
+- **Undo and a failed switch say what really happened.** When the installer gives the panel back to
+  Aqara's apps, it now says whether Glassworks was removed, turned off, or is still on because Android
+  refused to turn it off. Before, it could say Glassworks was gone when it wasn't. When a switch to a
+  new build fails and the old build comes back, the installer says so if the app's data didn't come back
+  with it, and keeps the copy on the panel instead of deleting it. It no longer says Glassworks saved the
+  panel's Wi-Fi when it can't tell who did. This is in Kiln and in the command line installer.
 - **Assist's reply stays on a narrow screen.** On the Mirror, which stands portrait, the reply ran off
   both edges of the screen on one line. It now wraps inside the screen and gets smaller for a long
   reply, with room for up to five lines before it is cut short. The S1 and landscape tablets look as before.
