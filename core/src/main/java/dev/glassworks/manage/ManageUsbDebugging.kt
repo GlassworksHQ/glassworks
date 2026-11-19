@@ -86,8 +86,8 @@ class ManageUsbDebugging(
 
     /** What the last allow or remove did, as the page says it. */
     enum class Result(val key: String, val ok: Boolean, val text: String) {
-        ONCE("once", true, "Allowed for this connection. The computer gets in within a few seconds."),
-        FROM_NOW_ON("allowed", true, "Allowed. The computer gets in now, and each time it connects."),
+        ONCE("once", true, "Allowed for this connection, and Android didn't refuse it. If the computer is still plugged in, it gets in within a few seconds."),
+        FROM_NOW_ON("allowed", true, "Allowed, and Android didn't refuse it. If the computer is still plugged in, it gets in within a few seconds, and each time it connects."),
         REMOVED("removed", true, "Removed. That computer can't get in the next time it connects."),
         CHANGED("changed", false, "Another computer asked since this page showed. Check its fingerprint, then allow it again."),
         NONE("none", false, "No computer is asking now. Plug it in again, then reload this page."),

@@ -245,6 +245,16 @@ class AdbComputersTest {
         assertEquals("nor for a refused Allow", 2, letIn)
     }
 
+    @Test fun `the same computer reconnecting while Allow waits is let in once it's listed`() {
+        val c = computers()
+        c.asked(a)
+        android = { comp, _ -> if (allowed.size == 1) comp.asked(a) }
+        assertEquals(AdbComputers.Allowed.FROM_NOW_ON, c.allowAsking(a.fingerprint, remember = true, who = "Alex"))
+        assertEquals("the reconnect's question answered too", listOf(a.base64, a.base64), allowed)
+        assertNull(c.asking())
+        assertTrue(events.last(), events.last().startsWith("Asked Android to let in adb key ${a.fingerprint}"))
+    }
+
     @Test fun `two Allows at once each get their own answer`() {
         val c = computers()
         c.asked(a)
@@ -252,8 +262,12 @@ class AdbComputersTest {
         var other: Thread? = null
         android = { comp, k ->
             if (other == null) {
-                other = Thread { second.set(comp.allowAsking(a.fingerprint, remember = true, who = "Sam")) }.apply { start() }
-                Thread.sleep(30)
+                val sam = Thread { second.set(comp.allowAsking(a.fingerprint, remember = true, who = "Sam")) }.apply { start() }
+                other = sam
+                // Sam is inside allowAsking, waiting on the lock Alex's Allow holds, before Alex's refusal comes.
+                val until = System.nanoTime() + 5_000_000_000L
+                while (sam.state != Thread.State.BLOCKED && System.nanoTime() < until) Thread.sleep(1)
+                assertEquals("Sam waits for Alex's Allow", Thread.State.BLOCKED, sam.state)
                 comp.refused(k.fingerprint, b.fingerprint)
             }
         }
@@ -337,6 +351,14 @@ class RedactAdbKeyTest {
     @Test fun `a secret that contains a fingerprint goes as a whole`() {
         val kept = Redact.text("token=\"abc adb key $fp def\" then adb key $fp", keepAdbKeys = true)
         assertEquals("token=\"<removed>\" then adb key $fp", kept)
+    }
+
+    @Test fun `text that looks like a marker stays as it was`() {
+        val odd = "a \u000199999999999\u0001 b \u00010\u0001 adb key $fp c"
+        val kept = Redact.text(odd, keepAdbKeys = true)
+        assertTrue(kept, kept.contains("adb key $fp"))
+        assertFalse("no fingerprint where the text had a marker shape", kept.indexOf(fp) != kept.lastIndexOf(fp))
+        assertTrue(kept, kept.startsWith("a  99999999999  b  0  adb key"))
     }
 
     @Test fun `the shared text drops it`() {

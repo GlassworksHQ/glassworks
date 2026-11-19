@@ -72,6 +72,40 @@ object UsbDebugging {
         "${e.javaClass.simpleName}: ${e.message}"
     }
 
+    /**
+     * The request still waiting in [lines] (`logcat -v time`, oldest first): the last computer that asked, if the image
+     * didn't let it in itself after, and if it asked within [withinMs] of [now]. Older ones aren't replayed: the computer
+     * may be gone, and it asks again when it reconnects.
+     */
+    fun pendingRequest(lines: List<String>, now: Long, withinMs: Long): Heard.Asked? {
+        var last: Pair<Heard.Asked, Long?>? = null
+        for (line in lines) {
+            when (val h = heard(line)) {
+                is Heard.Asked -> last = h to timeOf(line, now)
+                Heard.LetInByImage -> last = null
+                else -> Unit
+            }
+        }
+        val (asked, at) = last ?: return null
+        return asked.takeIf { at != null && now - at in 0..withinMs }
+    }
+
+    private val TIME = Regex("^(\\d\\d)-(\\d\\d) (\\d\\d):(\\d\\d):(\\d\\d)\\.(\\d{3})")
+
+    /** A `-v time` line's time (`MM-DD hh:mm:ss.mmm`, local, no year) in ms, in the year that puts it at or before [now]. */
+    internal fun timeOf(line: String, now: Long): Long? {
+        val m = TIME.find(line) ?: return null
+        val (mo, d, h, mi, s, ms) = m.destructured
+        val cal = java.util.Calendar.getInstance().apply { timeInMillis = now }
+        fun at(year: Int) = java.util.Calendar.getInstance().apply {
+            clear()
+            set(year, mo.toInt() - 1, d.toInt(), h.toInt(), mi.toInt(), s.toInt())
+            set(java.util.Calendar.MILLISECOND, ms.toInt())
+        }.timeInMillis
+        val year = cal.get(java.util.Calendar.YEAR)
+        return at(year).let { if (it > now + 60_000) at(year - 1) else it }
+    }
+
     /** What the system log says about a computer asking. */
     sealed interface Heard {
         /** A computer asked with this key line (`<base64> user@host`). */
@@ -113,6 +147,11 @@ object UsbDebugging {
         private val onError: (String) -> Unit = {},
         private val retryMs: Long = 10_000,
         private val logcat: () -> Process = { ProcessBuilder("logcat", "-b", "system", "-T", "1", "-s", "UsbDebuggingManager:D", "ActivityManager:I").redirectErrorStream(true).start() },
+        /** The system log so far, with times: a computer that asked just before the reader started ([pendingRequest]). */
+        private val history: () -> Process = { ProcessBuilder("logcat", "-b", "system", "-d", "-v", "time", "-s", "UsbDebuggingManager:D").redirectErrorStream(true).start() },
+        private val clock: () -> Long = System::currentTimeMillis,
+        /** How recent a request in [history] must be to count as the one Android still waits on. */
+        private val replayMs: Long = 60_000,
     ) {
         private var running = false
         private var generation = 0
@@ -143,6 +182,9 @@ object UsbDebugging {
                         p.destroy()
                         return
                     }
+                    // After the live reader is up, so a request between the two is in one or the other.
+                    val missed = replay()
+                    if (missed != null && !dispatch(mine, missed)) return
                     val reader = BufferedReader(InputStreamReader(p.inputStream))
                     var line = reader.readLine()
                     while (line != null) {
@@ -161,6 +203,17 @@ object UsbDebugging {
                     return
                 }
             }
+        }
+
+        /** A request Android logged in the last [replayMs] that the image didn't answer itself, or null. */
+        private fun replay(): Heard.Asked? = try {
+            val p = history()
+            val lines = BufferedReader(InputStreamReader(p.inputStream)).readLines()
+            p.destroy()
+            pendingRequest(lines, clock(), replayMs)
+        } catch (e: Exception) {
+            onError("system log history: ${e.message}")
+            null
         }
 
         @Synchronized

@@ -100,7 +100,7 @@ open class AppManage(
      */
     private val adb: AdbComputers? = orWithout(ADB_CARD, ::partFailed) {
         if (!UsbDebugging.available(app)) null
-        else AdbComputers(File(dir, "adb-computers.json"), allow = { UsbDebugging.allow(it.base64) }, event = ::event,
+        else AdbComputers(File(dir, "adb-computers.json"), allow = { UsbDebugging.allow(it.base64) }, event = ::adbEvent,
             // following is volatile and read without Requests' lock on purpose: the reader holds that lock while it calls
             // onHeard, which takes AdbComputers' own, so locking here (inside Allow) would invert the order.
             listening = { adbRequests?.following == true }, letIn = { coverQuestion(log = false) })
@@ -136,7 +136,7 @@ open class AppManage(
         event = ::event,
         scripts = { name -> runCatching { app.assets.open("manage/$name").use { it.readBytes() } }.getOrNull() },
         // Without its log reader the card could see no computer asking, so it shows only with both.
-        usb = adb?.takeIf { adbRequests != null }?.let { ManageUsbDebugging(it, ManagePages()::time, ::event) },
+        usb = adb?.takeIf { adbRequests != null }?.let { ManageUsbDebugging(it, ManagePages()::time, ::adbEvent) },
     )
 
     /**
@@ -166,7 +166,16 @@ open class AppManage(
         event(msg)
     }
 
-    /** A line for the Manage page's Log. */
+    /**
+     * A USB debugging line, for the Manage page's Log only: it ties a computer's fingerprint and name to the administrator
+     * who let it in. Only browsers signed in to Manage read that Log, and its diagnostics file drops the fingerprint.
+     * Android's own log, which other tools and privileged apps read, doesn't get it.
+     */
+    private fun adbEvent(msg: String) {
+        runCatching { log.append(LogEntry(System.currentTimeMillis(), LogEntry.Level.INFO, "Manage", msg)) }
+    }
+
+    /** A line for the Manage page's Log, and Android's. */
     private fun event(msg: String) {
         Log.i(TAG, msg)
         runCatching { log.append(LogEntry(System.currentTimeMillis(), LogEntry.Level.INFO, "Manage", msg)) }

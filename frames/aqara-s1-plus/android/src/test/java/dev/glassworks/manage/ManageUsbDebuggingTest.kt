@@ -67,7 +67,7 @@ class ManageUsbDebuggingTest {
         assertEquals("/security?usb=allowed", r.headers["Location"])
         assertEquals(listOf(a.base64), allowed)
         assertEquals(listOf(a), computers.list().map { it.key })
-        assertTrue(events.contains("Alex allowed adb key ${a.fingerprint} (alex@laptop) over USB, from now on"))
+        assertTrue(events.contains("Alex allowed adb key ${a.fingerprint} (alex@laptop) over USB, from now on; Android didn't refuse it"))
         val page = br.get("/security?usb=allowed").text()
         assertTrue(page.contains(ManageUsbDebugging.Result.FROM_NOW_ON.text))
         assertTrue("listed with Remove", page.contains(">Remove</button>") && page.contains("Added 09:41 by Alex"))

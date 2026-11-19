@@ -35,6 +35,43 @@ class UsbDebuggingHeardTest {
         assertNull(UsbDebugging.heard("--------- beginning of system"))
     }
 
+    private val now = java.util.Calendar.getInstance().apply { clear(); set(2026, 10, 18, 21, 24, 30) }.timeInMillis
+    private fun at(secondsAgo: Int): String =
+        java.text.SimpleDateFormat("MM-dd HH:mm:ss.SSS", java.util.Locale.US).format(java.util.Date(now - secondsAgo * 1000L))
+
+    @Test fun `a computer that asked just before the reader started is still the one waiting`() {
+        val lines = listOf(
+            "--------- beginning of system",
+            "${at(300)} D/UsbDebuggingManager(  873): Received public key: OLD old@host",
+            "${at(290)} I/UsbDebuggingManager(  873): Authorizing the Mirror owner's ADB key",
+            "${at(10)} D/UsbDebuggingManager(  873): Received public key: QUFB alex@laptop",
+        )
+        assertEquals(UsbDebugging.Heard.Asked("QUFB alex@laptop"), UsbDebugging.pendingRequest(lines, now, 60_000))
+    }
+
+    @Test fun `an old request, or one the image answered, isn't replayed`() {
+        val old = listOf("${at(120)} D/UsbDebuggingManager(  873): Received public key: QUFB alex@laptop")
+        assertNull("older than the window", UsbDebugging.pendingRequest(old, now, 60_000))
+        val owner = listOf(
+            "${at(10)} D/UsbDebuggingManager(  873): Received public key: QUFB owner@host",
+            "${at(9)} I/UsbDebuggingManager(  873): Authorizing the Mirror owner's ADB key",
+        )
+        assertNull("the image let it in", UsbDebugging.pendingRequest(owner, now, 60_000))
+        assertNull("no time on the line", UsbDebugging.pendingRequest(listOf("D/UsbDebuggingManager(  873): Received public key: QUFB a@b"), now, 60_000))
+    }
+
+    @Test fun `the reader passes on the waiting request first, then follows the log`() {
+        val heard = ArrayList<UsbDebugging.Heard>()
+        val two = CountDownLatch(2)
+        val r = UsbDebugging.Requests(onHeard = { synchronized(heard) { heard += it }; two.countDown() }, retryMs = 10_000, clock = { now },
+            history = { FakeProcess("${at(5)} D/UsbDebuggingManager(  873): Received public key: QUFB waiting@host\n") },
+            logcat = { FakeProcess("D/UsbDebuggingManager(  873): Received public key: QUJD next@host\n") })
+        r.start()
+        assertTrue(two.await(5, TimeUnit.SECONDS))
+        r.stop()
+        assertEquals(listOf(UsbDebugging.Heard.Asked("QUFB waiting@host"), UsbDebugging.Heard.Asked("QUJD next@host")), synchronized(heard) { heard.toList() })
+    }
+
     @Test fun `Android's own question coming up on the screen`() {
         assertEquals(UsbDebugging.Heard.QuestionShown, UsbDebugging.heard(
             "11-17 20:47:13.343  1218  3801 I ActivityManager: START u0 {flg=0x10000000 cmp=com.android.systemui/.usb.UsbDebuggingActivity (has extras)} from uid 1000 on display 0"))
@@ -74,7 +111,7 @@ class UsbDebuggingHeardTest {
             override fun exitValue() = 0
             override fun destroy() { out.close() }
         }
-        val r = UsbDebugging.Requests(onHeard = {}, retryMs = 10_000, logcat = { proc })
+        val r = UsbDebugging.Requests(onHeard = {}, retryMs = 10_000, logcat = { proc }, history = { FakeProcess("") })
         r.start()
         val until = System.nanoTime() + 5_000_000_000L
         while (!r.following && System.nanoTime() < until) Thread.sleep(5)
@@ -87,7 +124,7 @@ class UsbDebuggingHeardTest {
         lateinit var r: UsbDebugging.Requests
         val stopped = CountDownLatch(1)
         val done = CountDownLatch(1)
-        r = UsbDebugging.Requests(onHeard = {}, onError = {}, retryMs = 10, logcat = {
+        r = UsbDebugging.Requests(onHeard = {}, onError = {}, retryMs = 10, history = { FakeProcess("") }, logcat = {
             r.stop()
             stopped.countDown()
             object : Process() {
@@ -110,7 +147,7 @@ class UsbDebuggingHeardTest {
         val first = CountDownLatch(1)
         val lines = (1..200).joinToString("") { "D/UsbDebuggingManager(  873): Received public key: QUFB n$it@host\n" }
         lateinit var r: UsbDebugging.Requests
-        r = UsbDebugging.Requests(onHeard = { synchronized(heard) { heard += it }; r.stop(); first.countDown() }, retryMs = 10, logcat = { FakeProcess(lines) })
+        r = UsbDebugging.Requests(onHeard = { synchronized(heard) { heard += it }; r.stop(); first.countDown() }, retryMs = 10, logcat = { FakeProcess(lines) }, history = { FakeProcess("") })
         r.start()
         assertTrue(first.await(5, TimeUnit.SECONDS))
         Thread.sleep(100)
@@ -122,7 +159,7 @@ class UsbDebuggingHeardTest {
         val heard = ArrayList<UsbDebugging.Heard>()
         val twice = CountDownLatch(2)
         var starts = 0
-        val r = UsbDebugging.Requests(onHeard = { synchronized(heard) { heard += it }; twice.countDown() }, retryMs = 10, logcat = {
+        val r = UsbDebugging.Requests(onHeard = { synchronized(heard) { heard += it }; twice.countDown() }, retryMs = 10, history = { FakeProcess("") }, logcat = {
             starts++
             FakeProcess("--------- beginning of system\nD/UsbDebuggingManager(  873): Received public key: QUFB alex@laptop\n")
         })
