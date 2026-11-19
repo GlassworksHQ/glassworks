@@ -78,7 +78,7 @@ async function ready(o: { before?: () => Promise<PanelShell>; after?: FirstBootM
   const holding: boolean[] = [];
   const built: Parameters<ImageMaker['build']>[0][] = [];
   const images: ImageMaker = {
-    async fetch(_, p) { p(1); }, async download(_, __, p) { p(1); }, async file(n) { return new Blob([n]); }, async check() {}, async discard() {},
+    async fetch(_, p) { p(1); }, async download(_, __, p) { p(1); }, async file(n) { return new Blob([n]); }, async check() {}, async discard() {}, async wifi() { throw new Error('not for Glassworks'); },
     async build(b, p) { built.push(b); p('patch', 1); return { system: new Blob(['S']), userdata: new Blob(['U']) }; },
   };
   const fb: FastbootLike = {

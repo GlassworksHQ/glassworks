@@ -13,6 +13,9 @@ import c from './choice.module.css';
 
 type P = { f: FlashSession; s: FlashState };
 
+/** "Glass Panes’", "Glassworks’", "Foo’s": the possessive of a name, as the rest of Kiln writes it. */
+export const possessive = (name: string) => (/s$/i.test(name) ? `${name}’` : `${name}’s`);
+
 const Out = ({ l }: { l: { name: string; href: string } }) => <a className="link" href={l.href} target="_blank" rel="noopener">{l.name}</a>;
 
 /**
@@ -137,6 +140,7 @@ export function Download({ f, s }: P) {
         ? `Kiln downloads ${r.name} from its own release on GitHub, checks every file against the SHA-256 the release publishes, then takes you through fastboot, its checks and a warning before it writes anything.`
         : 'From its own release on GitHub, into this browser. Kiln checks every file against the SHA-256 the release publishes before anything goes near the Mirror.'}</p>
       {s.files.map((x) => <FileRow key={x.name} f={f} file={x} />)}
+      {r.steps.some((x) => x.do === 'wifi') && <WifiFields f={f} s={s} r={r} />}
       <p className="small">{r.release ? <>Release <code>{r.release.name}</code>, through</> : 'Through'} Refract, Kiln&apos;s download proxy, which passes it on and stores nothing.{r.id === 'glass-panes' && ' Its vendor files belong to Qualcomm and Quectel.'}</p>
       <div className="foot">
         <span className="links">
@@ -146,6 +150,31 @@ export function Download({ f, s }: P) {
         <DownloadButton f={f} s={s} label={`Download ${r.name}`} />
       </div>
     </section>
+  );
+}
+
+/**
+ * A community image whose recipe saves the Wi-Fi: an optional network, so it joins by itself after its
+ * first start with nothing opened in its Settings. Empty: it goes on as published.
+ */
+function WifiFields({ f, s, r }: P & { r: ImageRecipe }) {
+  const blocked = s.wifi.ssid || s.wifi.password ? f.blocked() : undefined;
+  return (
+    <div className="well">
+      <div className="grow">
+        <span className="small">Wi-Fi (optional)</span>
+        <span className="small">Kiln saves the network in {r.name} before it writes anything, then switches Wi-Fi on after its first start, so the Mirror joins by itself. Only the network&apos;s key is saved, never the password. Leave it empty to set Wi-Fi up in {r.name} instead.</span>
+        <div className="fields">
+          <label className="field"><span>Wi-Fi network</span>
+            <input className="input" autoComplete="off" value={s.wifi.ssid} onChange={(e) => f.setWifi({ ssid: e.target.value })} />
+          </label>
+          <label className="field"><span>Wi-Fi password</span>
+            <input className="input" type="password" autoComplete="off" value={s.wifi.password} onChange={(e) => f.setWifi({ password: e.target.value })} />
+          </label>
+        </div>
+        {blocked && !blocked.startsWith('Download') && <span className="status err" role="alert">{blocked}</span>}
+      </div>
+    </div>
   );
 }
 
@@ -196,7 +225,10 @@ export function DoneCommunity({ f, log }: { f: FlashSession; log: React.ReactNod
       <Whose r={r} />
       <span className="okmark" aria-hidden="true">✓</span>
       <h2 id="h">{r.name} is on the Mirror.</h2>
-      <p className="lede">The Mirror is starting it. Its first start takes a few minutes. Kiln&apos;s part is done.</p>
+      <p className="lede">{f.state.communityWifi === 'on'
+        ? 'Wi-Fi is on, and the Mirror joins your network by itself, a few minutes after it starts. Kiln’s part is done.'
+        : 'The Mirror is starting it. Its first start takes a few minutes. Kiln’s part is done.'}</p>
+      {f.state.communityWifi === 'unconfirmed' && <p className="small" role="status">Android didn&apos;t confirm Wi-Fi is on. Your network is saved: switch Wi-Fi on once in {possessive(r.name)} Settings, and it joins by itself.</p>}
       <div className="well">
         <div className="grow">
           <span className="small">Next, in {r.name}</span>

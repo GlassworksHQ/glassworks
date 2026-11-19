@@ -170,6 +170,29 @@ class GradleJobsForgetMisses(unittest.TestCase):
                 self.assertTrue(body.endswith(last.rstrip('\n')), job[:200])
 
 
+class PrYmlSpeedUps(unittest.TestCase):
+    """#536: what made jobs faster must not drop a check."""
+    yml = PrYmlFollowsTheTable.yml
+    jobs = PrYmlFollowsTheTable.jobs
+
+    def test_the_webrtc_halves_run_every_webrtc_and_dialog_test(self):
+        body = self.jobs['perf-webrtc']
+        files = sorted(p.name for p in (ROOT / 'tools/perf/test').iterdir()
+                       if p.name == 'test_webrtc.py' or p.name.endswith(('.e2e.test.mjs', '.gecko.test.mjs')))
+        self.assertGreaterEqual(len(files), 4)
+        for name in files:
+            self.assertEqual(body.count(name), 1, name)
+        self.assertIn('        part: [relay, dialogs]\n', body)
+        for part in ('relay', 'dialogs'):
+            self.assertIn(f'            {part})\n', body)
+
+    def test_ffmpeg_comes_from_the_cached_apt_packages(self):
+        self.assertNotIn('apt-get -qq install -y --no-install-recommends ffmpeg', self.yml)
+        for job in ('scripts', 'perf-webrtc'):
+            self.assertIn('        uses: ./.github/actions/apt-install\n        with:\n          packages: ffmpeg\n',
+                          self.jobs[job], job)
+
+
 class EmulatorsRunOnMainAndNightly(unittest.TestCase):
     """The maintainer's call (2026-11-19, #536): emulator tests run on main, nightly and by hand, never on a PR."""
     workflows = ROOT / '.github/workflows'

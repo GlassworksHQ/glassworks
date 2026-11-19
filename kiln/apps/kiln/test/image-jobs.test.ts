@@ -5,7 +5,7 @@ import { fakeAdbKey, fakeMirrorApk, fakeServicesJar } from '@glassworks/lululemo
 import { describe, expect, it } from 'vitest';
 import { Disk, MemoryStore, mkfs, writeSparse } from '@glassworks/ext4';
 import { GLASS_PANES } from '@glassworks/lululemon-mirror-installer';
-import { Cancelled, claimAndSweep, imageJobs, jobQueue, sessionDir, staleDirs, type JobHandle, type Locks } from '../src/mirror/imageJobs';
+import { Cancelled, WIFI_SCRATCH, claimAndSweep, imageJobs, jobQueue, madeFile, sessionDir, staleDirs, type JobHandle, type Locks } from '../src/mirror/imageJobs';
 
 /** A file in memory, shaped like OPFS's FileSystemSyncAccessHandle. */
 class MemHandle implements JobHandle {
@@ -177,6 +177,11 @@ describe('the image worker\'s jobs', () => {
     await last;
     // 1 was running and stops mid-wait; 2 was queued and stops before it begins; the discard ends before 4 starts
     expect(order).toEqual(['start download 1', 'cancelled 1', 'start download 2', 'cancelled 2 before it began', 'start discard 3', 'end discard 3', 'start download 4', 'done 4']);
+  });
+
+  it('what a wifi step makes is never Kiln\'s own scratch file, whatever the recipe names it', () => {
+    for (const n of ['userdata+wifi', 'scratch.raw', 'scratch-wifi.raw', '../x', '']) expect(madeFile(n)).not.toBe(WIFI_SCRATCH);
+    expect(madeFile('userdata+wifi')).toBe('made-userdata_wifi');
   });
 
   it('a failed write cancels that download\'s own request; a handle that won\'t empty is closed', async () => {

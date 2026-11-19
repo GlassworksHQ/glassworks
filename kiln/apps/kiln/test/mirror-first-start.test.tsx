@@ -32,6 +32,7 @@ function setup(adb: { request: () => Promise<PanelShell>; reopen?: (o?: { authMs
     async download() {},
     async file(name) { return new Blob([name]); },
     async check() {},
+    async wifi() { throw new Error('not for Glassworks'); },
     async build(_, onProgress) { onProgress('patch', 1); onProgress('userdata', 1); return { system: new Blob(['SS']), userdata: new Blob(['U']) }; },
     async discard() {},
   };

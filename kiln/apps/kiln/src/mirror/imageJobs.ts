@@ -5,7 +5,7 @@
 import type { ImageFile } from '@glassworks/kiln-core';
 import { Sha256, hex, syncHandleStore, type SyncHandle } from '@glassworks/ext4';
 import {
-  GLASS_PANES, WrongImage, buildImages, checkDownload, loadSystem, resumableBody, type Loaded, type PrepareStep,
+  GLASS_PANES, WrongImage, buildImages, checkDownload, loadSystem, resumableBody, userdataWithWifi, wifiTemplate, type Loaded, type PrepareStep,
 } from '@glassworks/lululemon-mirror-installer';
 
 /**
@@ -46,6 +46,10 @@ export async function claimAndSweep(locks: Locks, own: string, list: () => Promi
 
 /** Where download() keeps a file, apart from the images Kiln builds. */
 export const downloaded = (name: string) => `download-${name}`;
+/** Where a community image's `wifi` step keeps what it makes: always `made-…`, so it can't be Kiln's own scratch file. */
+export const madeFile = (name: string) => `made-${name.replace(/[^A-Za-z0-9._-]/g, '_')}`;
+/** The wifi job's working copy of userdata: outside the `made-` names a recipe can choose. */
+export const WIFI_SCRATCH = 'scratch-wifi.raw';
 
 export interface JobHandle extends SyncHandle { truncate(n: number): void; flush(): void; close(): void }
 
@@ -99,7 +103,9 @@ const withSignal = (signal: AbortSignal, f: typeof fetch = fetch.bind(globalThis
   ((u: RequestInfo | URL, init?: RequestInit) => f(u, { ...init, signal })) as typeof fetch;
 
 export function imageJobs(open: (name: string) => Promise<JobHandle>, removeAll: () => Promise<void>,
-  want: { name: string; size: number; sha256: string } = GLASS_PANES.system) {
+  want: { name: string; size: number; sha256: string } = GLASS_PANES.system,
+  /** A stored file as a Blob, for reads where it lies (OPFS getFile in the worker). */
+  blobOf: (name: string) => Promise<Blob> = () => Promise.reject(new Error('no file reader here'))) {
   let loaded: Loaded | undefined;
   let abort = new AbortController();
   const handles = new Map<string, JobHandle>();
@@ -183,6 +189,31 @@ export function imageJobs(open: (name: string) => Promise<JobHandle>, removeAll:
      * if the stored file changes after it was taken, reading it fails, so what passes is what gets written.
      */
     check: (file: Blob, want: ImageFile, onProgress: (x: number) => void) => checkDownload(file, want, onProgress),
+    /**
+     * A community image's `wifi` step: the template read from the stored system image where it lies,
+     * the stored userdata read and checked against its pin as it goes, the network saved (one file),
+     * and the copy written to madeFile(makes).
+     */
+    async wifi(o: { userdata: ImageFile; system: ImageFile; makes: string; wifi: { ssid: string; password: string } }, onProgress: (x: number) => void): Promise<void> {
+      const template = await wifiTemplate(await blobOf(downloaded(o.system.name)));
+      const scratch = await fresh(WIFI_SCRATCH);
+      const out = await fresh(madeFile(o.makes));
+      let at = 0;
+      try {
+        await userdataWithWifi(await blobOf(downloaded(o.userdata.name)), o.userdata, syncHandleStore(scratch), template, o.wifi, (b) => {
+          const wrote = out.write(b, { at });
+          if (wrote !== b.length) throw new Error(`the browser stored ${wrote} of ${b.length} bytes (is its storage full?)`);
+          at += b.length;
+        }, onProgress);
+      } catch (e) {
+        out.truncate(0);
+        throw e;
+      } finally {
+        close(madeFile(o.makes));
+        scratch.truncate(0);
+        close(WIFI_SCRATCH);
+      }
+    },
     async discard(): Promise<void> {
       loaded = undefined;
       for (const name of [...handles.keys()]) close(name);
