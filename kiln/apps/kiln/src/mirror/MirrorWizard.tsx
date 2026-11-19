@@ -257,8 +257,10 @@ function Done({ s, session }: { s: MirrorState; session: MirrorSession }) {
   const home = r.flow === 'install' ? r.installed.home : r.removed.home;
   const title = r.flow === 'install' ? `Glassworks ${r.installed.app.name ?? ''} is on the Mirror.` : r.removed.removed ? 'Glassworks is off the Mirror.' : 'Glassworks wasn\'t on the Mirror.';
   const opened = (f?: string) => (!f ? 'nothing Kiln could read' : /ResolverActivity|ChooserActivity/.test(f) ? 'its list of home apps' : f.split('/')[0]);
+  const admins = r.flow === 'install' ? r.installed.adminHomes : [];
   const body = r.flow === 'install'
     ? home === 'set' ? 'It is the only home screen, upright, so it opens when the Mirror starts.'
+      : admins.length ? `${admins.join(', ')} is a device administrator on this Mirror, so Android won't hide it, and Glassworks can't be its only home screen over adb. Install Glassworks over fastboot instead: it starts from a fresh userdata, without it.`
       : `Android opened ${opened(r.installed.homeCheck.focused)} for the home screen${r.installed.homeCheck.left.length ? `, and ${r.installed.homeCheck.left.join(', ')} is still a home app` : ''}. Read the Mirror again, then Update: Kiln hides the other home apps again.`
     : home === 'set' ? `The home screen is ${r.removed.previousHome?.split('/')[0] ?? 'yours'} again.`
       : `Android opened ${opened(r.removed.focused)} for the home screen, not ${r.removed.previousHome?.split('/')[0] ?? 'the app you had before'}. Undo again: Kiln unhides it and checks once more.`;

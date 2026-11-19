@@ -14,11 +14,11 @@ const APK = fakeMirrorApk(); // a stand-in: the legacy app's manifest and nothin
 
 /** `fast`: no delays (the tests). */
 export async function mirrorDemo(name: MirrorDemo, fast = false): Promise<MirrorSession> {
-  const o: FakeMirrorOptions = { delayMs: fast ? 0 : 120 };
+  // a Mirror Kiln flashed (a fresh userdata, no community kiosk); done-unconfirmed: the kiosk as Glass Panes' userdata has it,
+  // a device admin Android won't hide; the undo demos: the kiosk with its admin off, hidden by an install
+  const o: FakeMirrorOptions = { delayMs: fast ? 0 : 120, kiosk: name === 'done-unconfirmed' ? 'admin' : name.startsWith('undo-') ? 'app' : 'none' };
   if (name === 'checks-fail') Object.assign(o, { sdk: 29, release: '10', platform: 'sun50iw10' });
   if (name === 'undo-done' || name === 'undo-pending') o.installed = 600;
-  // done-unconfirmed: a launcher pm hide can't hide, so HOME opens Android's list of home apps
-  if (name === 'done-unconfirmed') o.hideFails = true;
   if (name === 'error') o.installFails = 'Failure [INSTALL_FAILED_OLDER_SDK]';
   const mirror = new FakeMirror(o);
   const release = name === 'pick-release' ? { release: fakeReleaseRoute('out', APK, (ms) => new Promise((r) => setTimeout(r, fast ? 0 : ms))) } : {};

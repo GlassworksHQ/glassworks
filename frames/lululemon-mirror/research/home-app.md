@@ -115,3 +115,11 @@ opens it with no chooser, and it records the hidden packages in `/data/local/tmp
 unhides the home app the Mirror had (`/data/local/tmp/glassworks-previous-home`) and checks what HOME opens. The
 image's own launcher stays hidden, so undo leaves no chooser either. Neither has run on a real Mirror yet; the next
 Mirror run checks both.
+
+**A device admin's home app can't be hidden** (read: AOSP 6.0.1 `PackageManagerService.setApplicationHiddenSettingAsUser`
+refuses a package with an active device admin; untested on the unit). The community kiosk (`com.nimrod.mirrorkiosk`)
+keeps its `.AdminReceiver` active and lives in `userdata` only, so it is on a Mirror still on the Glass Panes image's
+own userdata, never on one Kiln flashed (a fresh userdata). The app-only install reads `dumpsys device_policy` first,
+leaves such a home app alone, and Done says to install over fastboot instead. Each package goes in
+`glassworks-hidden-homes` before its `pm hide`, so an interrupted install still leaves undo the whole list, and undo
+clears its records only when HOME started and opened a home app it gave back.

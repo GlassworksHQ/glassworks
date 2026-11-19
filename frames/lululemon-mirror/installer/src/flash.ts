@@ -190,9 +190,10 @@ export async function focusedActivity(p: PanelShell): Promise<string | undefined
  * Hides the image's other launchers (pm hide: adb's shell has MANAGE_USERS on Android 6), asks for
  * HOME, and checks what Android opened. Running it again is the fix when a launcher survived. `others`:
  * the home apps to hide, the image's launchers by default (the app-only install adds the one it replaces).
+ * `beforeHide`: called with each package before its `pm hide`, so a record of it survives an interrupted run.
  */
 export async function makeOnlyHome(p: PanelShell, onStep: StepFn = () => {}, sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
-  app: MirrorApp = GLASSWORKS, others: readonly string[] = OTHER_HOMES): Promise<{ hidden: string[]; home: HomeCheck }> {
+  app: MirrorApp = GLASSWORKS, others: readonly string[] = OTHER_HOMES, beforeHide: (pkg: string) => Promise<void> = async () => {}): Promise<{ hidden: string[]; home: HomeCheck }> {
   const PKG = app.package;
   const r = new Steps(p, onStep);
   const installed = async (pkg: string) => (await r.try(`pm list packages ${pkg}`)).split(/\r?\n/).some((l) => l.trim() === `package:${pkg}`);
@@ -209,6 +210,7 @@ export async function makeOnlyHome(p: PanelShell, onStep: StepFn = () => {}, sle
   const hidden: string[] = [];
   for (const pkg of others) {
     if (!(await installed(pkg))) continue;
+    await beforeHide(pkg);
     const out = await r.try(`pm hide ${pkg}`);
     if (/true/.test(out)) hidden.push(pkg);
     r.detail(`${pkg}: ${out.trim() || 'no answer'}`);

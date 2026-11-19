@@ -69,10 +69,11 @@ export interface MirrorOptions extends HomeWait {
 
 /**
  * `home`: whether HOME now opens the wanted app (`set`), else `unconfirmed`, with what it opened in `homeCheck`.
- * `hidden`: the home apps hidden for it. `rotation`: the display's, after the portrait step (always MIRROR_ROTATION).
+ * `hidden`: the home apps hidden for it. `adminHomes`: home apps left alone because they hold an active device admin,
+ * which Android 6 won't hide (the community kiosk on a Mirror still on the Glass Panes image's own userdata). `rotation`: the display's, after the portrait step (always MIRROR_ROTATION).
  * `updates`: whether its updates install by themselves, read back (a normal app here, unless it updated the image's copy).
  */
-export interface Installed { app: AppVersion; home: 'set' | 'unconfirmed'; homeCheck: HomeCheck; hidden: string[]; rotation: number;
+export interface Installed { app: AppVersion; home: 'set' | 'unconfirmed'; homeCheck: HomeCheck; hidden: string[]; adminHomes: string[]; rotation: number;
   previousHome?: string; updates: MirrorUpdates }
 /** `focused`: what HOME opened after the undo. */
 export interface Removed { removed: boolean; home: 'set' | 'unconfirmed'; previousHome?: string; focused?: string }
@@ -158,6 +159,14 @@ function installError(out: string, ours: MirrorApp): Error {
   return new Error(`installing ${ours.name} failed: ${why}`);
 }
 
+/**
+ * Packages with an active device admin. Android 6 won't hide one (PackageManagerService refuses
+ * setApplicationHiddenSettingAsUser for a device admin's package; read, AOSP 6.0.1, untested on the Mirror).
+ */
+async function adminPackages(r: Steps): Promise<string[]> {
+  return [...(await r.try('dumpsys device_policy')).matchAll(/^\s+([A-Za-z0-9_.]+)\/\S+:\s*$/gm)].map((m) => m[1]!);
+}
+
 async function recordedHidden(r: Steps): Promise<string[]> {
   return (await r.try(`cat ${HIDDEN_HOMES} 2>/dev/null`)).split(/\s+/).filter((x) => /^[A-Za-z0-9_.]+$/.test(x));
 }
@@ -229,11 +238,16 @@ export async function installMirror(p: PanelShell, o: MirrorOptions): Promise<In
   phase({ step: 'home' });
   r.step(`Make ${ours.name} the only home screen`);
   const replaced = previousHome?.split('/')[0];
-  const others = [...OTHER_HOMES, ...(replaced && replaced !== ours.package && !OTHER_HOMES.includes(replaced) ? [replaced] : [])];
-  const { hidden, home: homeCheck } = await makeOnlyHome(p, o.onStep, sleep, ours, others);
-  if (hidden.length) await keepHidden(r, [...new Set([...(await recordedHidden(r)), ...hidden])]);
+  const candidates = [...OTHER_HOMES, ...(replaced && replaced !== ours.package && !OTHER_HOMES.includes(replaced) ? [replaced] : [])];
+  const admins = await adminPackages(r);
+  const adminHomes = candidates.filter((x) => admins.includes(x));
+  for (const x of adminHomes) r.detail(`${x}: a device administrator, so Android won't hide it`);
+  // each package goes in the undo record before its pm hide: an interrupted run still leaves undo the whole list
+  let record = await recordedHidden(r);
+  const beforeHide = async (pkg: string) => { if (!record.includes(pkg)) { record = [...record, pkg]; await keepHidden(r, record); } };
+  const { hidden, home: homeCheck } = await makeOnlyHome(p, o.onStep, sleep, ours, candidates.filter((x) => !adminHomes.includes(x)), beforeHide);
   const home = homeCheck.result === 'set' ? 'set' : 'unconfirmed';
-  return { app, home, homeCheck, hidden, rotation, updates, ...(previousHome ? { previousHome } : {}) };
+  return { app, home, homeCheck, hidden, adminHomes, rotation, updates, ...(previousHome ? { previousHome } : {}) };
 }
 
 /**
@@ -267,8 +281,10 @@ export async function undoMirror(p: PanelShell, o: HomeWait = {}): Promise<Remov
   const before = previousHome?.split('/')[0];
   const back = before ? [before] : hidden;
   for (const pkg of back) r.detail(`${pkg}: ${(await r.try(`pm unhide ${pkg}`)).trim() || 'no answer'}`);
-  await r.try(HOME_INTENT);
-  const want = (f?: string) => (before ? !!f?.startsWith(`${before}/`) : !!f && !f.startsWith(`${ours.package}/`) && !/ResolverActivity|ChooserActivity/.test(f));
+  const launched = !/error/i.test(await r.try(HOME_INTENT));
+  // confirmed only by a home app undo gave back (or, with no record at all, one of the image's launchers): never Settings
+  const homesBack = before ? [before] : back.length ? back : OTHER_HOMES;
+  const want = (f?: string) => launched && !!f && homesBack.some((pkg) => f.startsWith(`${pkg}/`));
   let focused: string | undefined;
   for (let i = 0; i < 10; i++) {
     focused = await focusedActivity(p);
