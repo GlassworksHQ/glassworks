@@ -3,7 +3,7 @@
 // the Glass Panes image and flashed, then the first start over adb; the image comes through the real resumableBody
 // over a fake network. `app`: MirrorSession, the app alone over adb on a Mirror already on Glass Panes.
 // A reload is a new session over the same Mirror, as a page load makes one.
-import { GLASSWORKS, SYSTEM_BYTES, USERDATA_BYTES, resumableBody, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
+import { SYSTEM_BYTES, USERDATA_BYTES, resumableBody, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
 import { FakeMirror, FirstBootMirror, fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
 import type { PanelShell } from '@glassworks/adb';
 import { FlashSession, type FlashDeps, type ImageMaker } from '../../src/mirror/flash';
@@ -88,6 +88,12 @@ function flashWorld(k: Knobs): World {
       if (mode !== 'booted') throw new DOMException('No device selected.', 'NotFoundError');
       const r = reloadAt<PanelShell>('first-boot');
       if (r) return r;
+      if (fired.refused < (k.refuseAuth ?? 0)) { fired.refused++; throw new Error(REFUSED); }
+      return new FirstBootMirror();
+    },
+    // as MirrorWizard wires them (#607): the device requestAdb picked, asked again with no list while the Mirror starts
+    adbPicked: () => mode === 'booted',
+    async reopenAdb() {
       if (fired.refused < (k.refuseAuth ?? 0)) { fired.refused++; throw new Error(REFUSED); }
       return new FirstBootMirror();
     },
@@ -179,9 +185,9 @@ function appWorld(k: Knobs): World {
     w.reloadNow = true;
     return never<T>();
   };
-  // Without the noTouch knob someone answers Android's chooser (a USB mouse, as the Mirror's Done suggests);
-  // with it, nobody does: the Mirror has no touchscreen and this flow declares no taps.
-  const mirror = new FakeMirror({ picks: k.noTouch ? undefined : (c) => c.find((x) => x.startsWith(`${GLASSWORKS.package}/`)) });
+  // The Mirror the app-only path reaches with this browser's key: one Kiln flashed (a fresh userdata, no community kiosk).
+  // Nobody touches it with or without the noTouch knob: the flow hides the other home apps over adb (#607).
+  const mirror = new FakeMirror({ kiosk: 'none' });
   const apk = fakeMirrorApk();
   const deps = {
     async connect(): Promise<PanelShell> {
@@ -191,7 +197,6 @@ function appWorld(k: Knobs): World {
       return link(mirror, k, fired, writes, partial, reloadAt);
     },
     sleep: fastSleep,
-    homeTimeoutMs: 300,
   };
 
   function load(): Page {
