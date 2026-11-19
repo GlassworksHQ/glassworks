@@ -137,7 +137,7 @@ case "$cmd" in
     [ "$a" = restore ] && [ "$(st restore)" = fail ] && { echo "glassworks-switch: could not restore the app's data"; exit 1; }
     # the app's sealed secrets go with its data: copied by backup, back by restore, sealed with a key that is gone
     [ "$a" = backup ] && for f in key signin; do [ -f "$S/app.$f" ] && cp "$S/app.$f" "$S/copy.$f"; done
-    if [ "$a" = restore ]; then for f in key signin; do [ -f "$S/copy.$f" ] && cp "$S/copy.$f" "$S/app.$f"; done; put app.lost 1; put app.signinhere 1; fi
+    if [ "$a" = restore ]; then for f in key signin; do [ -f "$S/copy.$f" ] && cp "$S/copy.$f" "$S/app.$f"; done; put app.key.lost 1; put app.signin.lost 1; put app.signinhere 1; fi
     # shellcheck disable=SC2086
     PATH="$S/pbin:$PATH" S1_CE="$S/panel/ce" S1_DE="$S/panel/de" S1_WORK="$S/panel/work" \
       S1_WIFI_STORES="$S/WifiConfigStore.xml" sh "$S/panel/glassworks-switch.sh" $a
@@ -153,7 +153,7 @@ ssid, psk = sys.stdin.buffer.read().split(b"\0", 1)
 open(os.path.join(os.environ["S1T"], "improv.got"), "w").write(ssid.decode() + "\n" + hashlib.sha256(psk).hexdigest() + "\n")
 print("improv-send: the panel joined " + ssid.decode())
 EOF
-# The app's hand-over socket, as handover.py reaches it (#584). State: app.key, app.signin (base64), app.lost (sealed
+# The app's hand-over socket, as handover.py reaches it (#584). State: app.key, app.signin (base64), app.<f>.lost (sealed
 # with the deleted key), app.signinhere (a Home Assistant address and client id to carry a token into), old-carries
 # (both, key: an app of #574, none). Logs request verbs only to handover.log, never a secret.
 w "$T/fake-handover.py" <<'EOF'
@@ -169,19 +169,18 @@ carries = st("old-carries", "both") if st("installed") == "debug" else "both"
 for line in sys.stdin.read().splitlines():
     verb, _, arg = line.strip().partition(" ")
     open(os.path.join(S, "handover.log"), "a").write(verb + "\n")
-    lost = st("app.lost") == "1"
     known = ["get", "set"] if carries == "key" else ["carries", "get", "set", "get-signin", "set-signin"]
     if verb not in known: r = "refused unknown request"
     elif verb == "carries": r = "carries api_key signin"
     elif verb in ("get", "get-signin"):
-        f = "app.key" if verb == "get" else "app.signin"; v = st(f)
+        f = "app.key" if verb == "get" else "app.signin"; v = st(f); lost = st(f + ".lost") == "1"
         r = "none" if not v else "unreadable" if lost or st("app.unreadable") == "1" else ("key " if verb == "get" else "signin ") + v
     else:
-        f = "app.key" if verb == "set" else "app.signin"; held = "" if lost else st(f)
+        f = "app.key" if verb == "set" else "app.signin"; held = "" if st(f + ".lost") == "1" else st(f)
         passing = int(st("handover.passing", "0") or 0)
         if passing > 0: put("handover.passing", str(passing - 1)); r = "refused the key store isn't available right now"
         elif verb == "set-signin" and st("app.signinhere") != "1": r = "refused no sign-in here to carry it into"
-        elif not held or held == arg: put(f, arg); r = "ok"
+        elif not held or held == arg: put(f, arg); put(f + ".lost", "0"); r = "ok"
         else: r = "refused a different value is set already"
     print(r)
 EOF
@@ -204,6 +203,13 @@ panel() { # [wifi fixture]
 }
 # Online, but dumpsys doesn't say who saved the network.
 unknown_wifi() { panel; printf 'Wi-Fi is enabled\n' > "$T/wifi-unknown.txt"; printf '%s' "$T/wifi-unknown.txt" > "$T/wifi-dump"; }
+# The app took the sign-in and key back: the values, and readable again. The restore alone copies the same values,
+# sealed with the key Android deleted, so the values alone don't show a hand-back (#608 review).
+handed_back() {
+  [[ "$(cat "$T/app.signin" 2>/dev/null) $(cat "$T/app.key" 2>/dev/null)" == "$TOKEN $KEY" ]] &&
+    [[ "$(cat "$T/app.signin.lost" 2>/dev/null) $(cat "$T/app.key.lost" 2>/dev/null)" == "0 0" ]] ||
+    { echo "    not handed back: $(ls "$T" | grep '^app\.' | tr '\n' ' ')"; return 1; }
+}
 inst() { "$REPO/frames/aqara-s1-plus/tools/install.sh" --apk "$APK" --no-models --no-debloat "$@" </dev/null 2>&1; }
 
 echo "== glassworks-switch.sh (panel side)"
@@ -309,7 +315,7 @@ check "...and the sign-in and key, which the running app hands over (#584)" has 
 check "...but not the camera password or the Music Assistant pairing" has "$out" "The camera's stream password and the Music Assistant pairing are not carried"
 check "Done: settings, sign-in and key kept" has "$out" "Switched builds: the app's settings, Home Assistant sign-in and encryption key were kept."
 check "...so it doesn't say to log in" hasnt "$out" "Log in to Home Assistant on the panel once"
-check "the new app has the sign-in and key" test "$(cat "$T/app.signin" 2>/dev/null) $(cat "$T/app.key" 2>/dev/null)" = "$TOKEN $KEY"
+check "the new app has the sign-in and key" handed_back
 check "read from the old app, handed to the new one, nothing else" test "$(tr '\n' ' ' < "$T/handover.log")" = "carries get-signin get set set-signin "
 check "the sign-in and key are in no output" bash -c '! grep -qF -e "$2" -e "$3" <<<"$1"' _ "$out" "$TOKEN" "$KEY"
 check "...and in no adb command" bash -c '! grep -qF -e "$2" -e "$3" <<<"$1"' _ "$log" "$TOKEN" "$KEY"
@@ -383,7 +389,7 @@ check "Done: sign in again" has "$out" "but not its Home Assistant sign-in and e
 echo "== install.sh: the new app's key store is down for a moment at the hand-back (#608 review)"
 panel; printf 2 > "$T/handover.passing"
 out=$(inst --switch); rc=$?
-check "tries again, and both are handed over" test "$(cat "$T/app.signin" 2>/dev/null) $(cat "$T/app.key" 2>/dev/null)" = "$TOKEN $KEY"
+check "tries again, and both are handed over" handed_back
 check "...said so" has "$out" "Switched builds: the app's settings, Home Assistant sign-in and encryption key were kept."
 check "...after the refusals" test "$(grep -c '^set' "$T/handover.log")" -ge 4
 
@@ -391,7 +397,7 @@ echo "== install.sh: a step after the switch stops the run (#608 review)"
 panel
 out=$(inst --switch --timezone 'not a zone!'); rc=$?
 check "stops" test $rc -ne 0
-check "the new app still gets the sign-in and key" test "$(cat "$T/app.signin" 2>/dev/null) $(cat "$T/app.key" 2>/dev/null)" = "$TOKEN $KEY"
+check "the new app still gets the sign-in and key" handed_back
 check "...says so" has "$out" "Stopping early: handing the sign-in and encryption key to the new app first"
 check "...after starting it" before "$(sed -n '/pm uninstall/,$p' "$T/adb.log")" "shell am start -n sh.edm.s1kiosk/.MainActivity" "forward tcp:0 localabstract:glassworks_api_key"
 
@@ -421,7 +427,7 @@ panel; printf fail > "$T/new-install"
 out=$(inst --switch); rc=$?
 check "fails" test $rc -ne 0
 check "says the old build is back with its data" has "$out" "previous build is back with its data."
-check "...and its sign-in and key, handed back to it (#584)" test "$(cat "$T/app.signin" 2>/dev/null) $(cat "$T/app.key" 2>/dev/null)" = "$TOKEN $KEY"
+check "...and its sign-in and key, handed back to it (#584)" handed_back
 check "...after starting it" before "$(sed -n '/pm install -r -g \/data\/local\/tmp\/glassworks-old.apk/,$p' "$T/adb.log")" "shell am start -n sh.edm.s1kiosk/.MainActivity" "forward tcp:0 localabstract:glassworks_api_key"
 check "old build back, enabled, admin, data restored" bash -c '[ "$(cat "$1/installed") $(cat "$1/disabled") $(cat "$1/admin")" = "debug 0 1" ] && [ -f "$1/panel/ce/shared_prefs/kiosk.xml" ]' _ "$T"
 check "copy discarded" test ! -e "$T/panel/work"

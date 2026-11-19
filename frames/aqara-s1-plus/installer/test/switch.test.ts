@@ -177,6 +177,15 @@ class SwitchPanel implements PanelShell {
 
 const noSleep = async () => {};
 
+/**
+ * The app took the sign-in and key back: both readable again (the restore alone leaves them sealed with the deleted
+ * key, holding the same values), after a `set` and a `set-signin` it accepted (#608 review).
+ */
+function expectHandedBack(s: FakeKeySocket | undefined) {
+  expect(s).toMatchObject({ key: KEY, signIn: TOKEN, keyLost: false, signInLost: false });
+  expect(s!.verbs).toEqual(expect.arrayContaining(['set', 'set-signin']));
+}
+
 describe('Wi-Fi owner and store parsing', () => {
   it('reads who saved the current network from dumpsys wifi', () => {
     expect(parseWifiOwner(fixture('dumpsys-wifi-kiosk.txt'))).toEqual({ owner: 'kiosk', ssid: 'Home & Garden' });
@@ -263,7 +272,7 @@ describe('switching a development build to this one', () => {
     expect(asked).toEqual({ installedVersion: '0.1.0', debugBuild: true, root: true, carries: { apiKey: true, signIn: true }, wifi: { owner: 'kiosk', ssid: 'Home & Garden' } });
     expect(res.switched).toEqual({ dataKept: true, signIn: 'kept', apiKey: 'kept', wifi: 'resent', ssid: 'Home & Garden', notes: [] });
     // #584: the new app has the old one's sign-in and key, sealed with its own Keystore key now
-    expect(p.handover).toMatchObject({ key: KEY, signIn: TOKEN });
+    expectHandedBack(p.handover);
     expect(p.wifiSent).toEqual([{ ssid: 'Home & Garden', psk: PSK }]);
     expect(p.installed).toBe('release');
     expect(p.restoredInto).toBe('release');
@@ -343,7 +352,7 @@ describe('switching a development build to this one', () => {
     expect(p.installed).toBe('debug');
     expect(p.restoredInto).toBe('debug');
     // it lost its Keystore key too: it gets its sign-in and key back (#584)
-    expect(p.handover).toMatchObject({ key: KEY, signIn: TOKEN });
+    expectHandedBack(p.handover);
     expect(p.cmds).toContain('am start -n sh.edm.s1kiosk/.MainActivity');
     expect(p.disabled).toBe(false);
     expect(p.cmds).toContain('dpm set-active-admin sh.edm.s1kiosk/.AdminReceiver');
@@ -410,7 +419,7 @@ describe('switching a development build to this one', () => {
     await expect(provision(p, { kioskApk: new Uint8Array([1]), debloat: false, timezone: 'not a zone!', confirmSwitch: async () => true }, () => {}, noSleep))
       .rejects.toThrow(/bad time zone/);
     expect(p.installed).toBe('release');
-    expect(p.handover).toMatchObject({ key: KEY, signIn: TOKEN });
+    expectHandedBack(p.handover);
     expect(p.cmds).toContain('am start -n sh.edm.s1kiosk/.MainActivity');
   });
 
@@ -424,7 +433,7 @@ describe('switching a development build to this one', () => {
     };
     await expect(provision(p, { kioskApk: new Uint8Array([1]), debloat: false, confirmSwitch: async () => true }, () => {}, noSleep))
       .rejects.toThrow(/USB transfer failed/);
-    expect(p.handover).toMatchObject({ key: KEY, signIn: TOKEN });
+    expectHandedBack(p.handover);
     expect(p.cmds).toContain('am start -n sh.edm.s1kiosk/.MainActivity');
   });
 
