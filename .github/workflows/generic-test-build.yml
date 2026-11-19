@@ -82,7 +82,7 @@ jobs:
               "generic-dist/glassworks-generic-test-$version-$a-$SHORT_SHA.apk"
           done <<< "$builds"
           # The legacy build (#198), for the Mirror's ABI. Its GeckoView follows -PlegacyAbi, the APK -Ps1Abi.
-          for version in 0.1.0 0.1.1; do
+          for version in 0.1.2 0.2.1; do
             ./gradlew --no-daemon :generic-android:assembleLegacy -Ps1Abi=arm64-v8a -PlegacyAbi=arm64-v8a \
               -PgenericVersion="$version" -Ps1TestBuild="$SHORT_SHA"
             cp frames/generic-android/android/build/outputs/apk/legacy/generic-android-legacy.apk \
