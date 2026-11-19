@@ -10,6 +10,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
+import android.provider.Settings
 import dev.glassworks.dock.DockWatcher
 import dev.glassworks.dock.Docked
 import dev.glassworks.frame.Dock
@@ -93,8 +94,36 @@ class PanelDevice(
          * The MAC for a chip [serial]. The salt is the device's identity, not branding: a new one gives every panel a new
          * MAC and HA a new device, so it keeps the old app's name (#527).
          */
-        internal fun macFromSerial(serial: String): ByteArray = java.security.MessageDigest.getInstance("SHA-256")
-            .digest("s1kiosk-device-mac:$serial".toByteArray()).copyOf(6).also {
+        internal fun macFromSerial(serial: String): ByteArray = localMac("s1kiosk-device-mac:$serial")
+
+        /**
+         * The device's MAC that Kiln writes into the image's build.prop on a frame it flashes (the Mirror), so a
+         * reflash, which wipes the app's data, keeps the same device in Home Assistant (#523).
+         */
+        const val IMAGE_MAC_PROP = "ro.glassworks.device.mac"
+
+        /**
+         * The Home Assistant device identity, and where it came from. It must survive a reinstall or a reflash, or HA
+         * sees a new device with new entity ids. The first that exists wins: the [saved] one; the one the image
+         * carries ([image], [IMAGE_MAC_PROP]); the Wi-Fi MAC; one derived from the chip's [serial]; one derived from
+         * [androidId], which Android keeps across a reinstall of the same signed app; else [random].
+         */
+        internal fun pickMac(saved: String, image: String, wlan0: ByteArray?, serial: String, androidId: String?,
+                             random: () -> ByteArray): Pair<String, String> {
+            if (MAC_RE.matches(saved)) return saved to "saved"
+            if (MAC_RE.matches(image)) return image to "build.prop"
+            val (bytes, source) = when {
+                wlan0 != null && wlan0.size == 6 && wlan0.any { it != 0.toByte() } &&
+                    !(wlan0[0] == 2.toByte() && wlan0.drop(1).all { it == 0.toByte() }) -> wlan0 to "wlan0"
+                serial.length >= 8 && serial != "unknown" -> macFromSerial(serial) to "serial"
+                !androidId.isNullOrEmpty() -> localMac("glassworks-device-mac:android_id:$androidId") to "android_id"
+                else -> random().copyOf(6).also { it[0] = ((it[0].toInt() and 0xFC) or 0x02).toByte() } to "random"
+            }
+            return bytes.joinToString(":") { "%02X".format(it.toInt() and 0xFF) } to source
+        }
+
+        private fun localMac(seed: String): ByteArray = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(seed.toByteArray()).copyOf(6).also {
                 it[0] = ((it[0].toInt() and 0xFC) or 0x02).toByte() // unicast, locally administered
             }
 
@@ -744,28 +773,17 @@ class PanelDevice(
     // ------------------------------------------------------------------ helpers
 
     /**
-     * The Home Assistant device identity (ESPHome "MAC"). Must survive a reinstall or factory reset, or
-     * HA sees a new device (merge prompt, duplicate entities). Order: the saved value; the Wi-Fi MAC
-     * if readable; else one derived from the chip's serial (ro.serialno, from the SoC's SID), so it no
-     * longer depends on Wi-Fi being up at first start (factory-fresh panels boot with Wi-Fi off).
-     * Random only if neither exists.
+     * The Home Assistant device identity (ESPHome "MAC"), from [pickMac]. Kept in prefs once chosen, so it never
+     * changes while the app's data lives.
      */
+    @SuppressLint("HardwareIds") // the Wi-Fi MAC and ANDROID_ID are what keep the identity across reinstalls
     private fun stableMac(): String {
-        prefs.deviceMac.takeIf { MAC_RE.matches(it) }?.let { return it }
         val hw = try { NetworkInterface.getByName("wlan0")?.hardwareAddress } catch (_: Exception) { null }
-        val usable = hw?.takeIf { a ->
-            a.size == 6 && a.any { it != 0.toByte() } && !(a[0] == 2.toByte() && a.drop(1).all { it == 0.toByte() })
+        val androidId = try { Settings.Secure.getString(ctx.contentResolver, Settings.Secure.ANDROID_ID) } catch (_: Exception) { null }
+        val (mac, source) = pickMac(prefs.deviceMac, systemProperty(IMAGE_MAC_PROP), hw, systemProperty("ro.serialno"), androidId) {
+            ByteArray(6).also { SecureRandom().nextBytes(it) }
         }
-        val serial = systemProperty("ro.serialno").takeIf { it.length >= 8 && it != "unknown" }
-        val (bytes, source) = when {
-            usable != null -> usable to "wlan0"
-            serial != null -> macFromSerial(serial) to "serial"
-            else -> ByteArray(6).also {
-                SecureRandom().nextBytes(it)
-                it[0] = ((it[0].toInt() and 0xFC) or 0x02).toByte()
-            } to "random"
-        }
-        val mac = bytes.joinToString(":") { "%02X".format(it.toInt() and 0xFF) }
+        if (source == "saved") return mac
         prefs.deviceMac = mac
         EspHomeLog.i("Device MAC $mac ($source)")
         return mac

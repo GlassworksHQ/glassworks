@@ -447,6 +447,11 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   new build fails and the old build comes back, the installer says so if the app's data didn't come back
   with it, and keeps the copy on the panel instead of deleting it. It no longer says Glassworks saved the
   panel's Wi-Fi when it can't tell who did. This is in Kiln and in the command line installer.
+- **A Mirror reflash keeps its Home Assistant device.** Kiln and the headless flash give the Mirror an id from its
+  serial number and keep it in the image, so a later reflash comes back as the same device with the same entity
+  ids. The first flash with this still shows up as a new device once. On other Android devices, an app reinstall
+  now keeps the device where Android allows it. There too, the first reinstall after this update can show up as a
+  new device once.
 - **Assist's reply stays on a narrow screen.** On the Mirror, which stands portrait, the reply ran off
   both edges of the screen on one line. It now wraps inside the screen and gets smaller for a long
   reply, with room for up to five lines before it is cut short. The S1 and landscape tablets look as before.

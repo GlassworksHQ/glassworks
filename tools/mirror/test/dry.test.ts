@@ -13,6 +13,9 @@ import { FakeMirror, fakeAdbKey, fakeMirrorApk } from '@glassworks/lululemon-mir
 import { hostAdb } from '../src/adb';
 import { UsageError, cli } from '../src/cli';
 import { DRY_USERDATA, dryDevices, dryImage } from '../src/dry';
+
+/** The id the app derives from the dry LK's serial (core's DeviceMacPinTest pins the same bytes). */
+const DRY_MAC = 'E6:79:E6:E0:96:A3';
 import { runInstall, runWayBack } from '../src/run';
 
 const KEY = fakeAdbKey(9, 'root@host');
@@ -89,6 +92,9 @@ describe('the headless install on a fake Mirror', () => {
     for (const f of [sys, ud]) { const c = fsck(f); expect(clean(c), c.out).toBe(true); }
     expect(debugfs(sys, 'ls /priv-app')).toContain('Glassworks');
     expect(new TextDecoder().decode(debugfsCat(ud, '/misc/adb/adb_keys'))).toBe(`${KEY}\n`);
+    // #523: the Mirror's id from its serial goes into build.prop, so a reflash keeps its Home Assistant device
+    expect(new TextDecoder().decode(debugfsCat(sys, '/build.prop'))).toContain(`\nro.glassworks.device.mac=${DRY_MAC}\n`);
+    expect(lines.join('\n')).not.toContain(DRY_MAC);
   }, 60_000);
 
   it('takes repeated --adb-key: every line in adb_keys, only the first trusted in services.jar (#426 review)', async () => {
