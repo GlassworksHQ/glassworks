@@ -91,6 +91,7 @@ class CoreSettings(
         // The panel's own screens over the dashboard (#691): voice, timers, notifications and setup.
         SettingsPlace.APPEARANCE to SettingsSection(APPEARANCE, APPEARANCE_TITLE, listOf(
             SettingsItem.Group(THEME_TITLE, listOf(SettingsItem.Note { THEME_NOTE }, theme())),
+            assistLook(),
         )),
         SettingsPlace.LOG to SettingsSection("log", "Log", listOf(
             SettingsItem.Info(title = { "Screen and sensors" }, detail = status),
@@ -239,6 +240,17 @@ class CoreSettings(
         done(null)
     }
 
+    /** How a voice run shows (#691): the orb, or Spark's edge glow. Two cards on the Manage page, a choice on the panel. */
+    private fun assistLook() = SettingsItem.Choice(
+        ASSIST_TITLE,
+        value = { prefs.assistLook },
+        options = { listOf(KioskPrefs.ASSIST_ORB to "Orb", KioskPrefs.ASSIST_GLOW to "Edge glow") },
+        cards = { id -> if (id == KioskPrefs.ASSIST_GLOW) ASSIST_GLOW_LINE else ASSIST_ORB_LINE },
+    ) { v, done ->
+        prefs.assistLook = v
+        done(null)
+    }
+
     private fun switch(title: String, detail: String, value: () -> Boolean, save: (Boolean) -> Unit) =
         SettingsItem.Switch(title, detail, value) { v, done -> save(v); done(null) }
 
@@ -253,6 +265,9 @@ class CoreSettings(
         const val APPEARANCE_TITLE = "Appearance"
         const val THEME_TITLE = "Theme"
         const val THEME_NOTE = "For voice, timers, notifications and setup. Your dashboard keeps its own."
+        const val ASSIST_TITLE = "Assist"
+        const val ASSIST_ORB_LINE = "A glass orb with what you said and the reply, over a dimmed dashboard."
+        const val ASSIST_GLOW_LINE = "Light runs along the screen's edge. The dashboard stays in view."
         const val WAKE_TITLE = "Wake when someone's near"
         const val SETUP_OVER_NETWORK = "Allow setup over the network"
         const val CLOSE_SETUP = "Close setup over the network"

@@ -4,6 +4,7 @@ auth|ha_base|String|null
 auth|refresh_token|String|null
 kiosk|api_encryption|Boolean|false
 kiosk|api_key|String|""
+kiosk|assist_look|String|null
 kiosk|auto_brightness|Boolean|true
 kiosk|base_backend|String|"auto"
 kiosk|base_layout|String|""

@@ -90,6 +90,17 @@ class AppearanceTest {
         assertEquals(custom.light, prefs.overlayPick.palette)
     }
 
+    @Test fun theAssistLookIsTheOrbOrTheEdgeGlow() {
+        val c = SettingsChange.find(section(), CoreSettings.ASSIST_TITLE) as SettingsItem.Choice
+        assertEquals("orb", c.value())
+        assertEquals(listOf("orb" to "Orb", "glow" to "Edge glow"), c.options())
+        assertEquals(CoreSettings.ASSIST_GLOW_LINE, c.cards!!("glow"))
+        SettingsChange.change(c, "glow") {}
+        assertEquals(KioskPrefs.ASSIST_GLOW, prefs.assistLook)
+        app.getSharedPreferences("kiosk", 0).edit().putString("assist_look", "sparkles").commit()
+        assertEquals("anything else reads as the orb", KioskPrefs.ASSIST_ORB, KioskPrefs(app).assistLook)
+    }
+
     @Test fun anUnknownSavedThemeReadsAsTheDefaultAndAResetClearsIt() {
         app.getSharedPreferences("kiosk", 0).edit().putString("overlay_theme", "neon/dark").commit()
         assertEquals("glassworks/dark", KioskPrefs(app).overlayTheme)
@@ -116,5 +127,6 @@ class AppearanceTest {
         val after = b.get("/${CoreSettings.APPEARANCE}").text()
         assertTrue(after.contains("""value="dune/light" aria-pressed="true""""))
         assertTrue(after.contains("""class="bd sun""""))
+        assertTrue("the Assist look's two cards", after.contains(">Orb</b>") && after.contains(">Edge glow</b>"))
     }
 }

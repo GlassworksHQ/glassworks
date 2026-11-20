@@ -29,6 +29,7 @@ import dev.glassworks.OverlayHost
 import dev.glassworks.PaneOverlay
 import dev.glassworks.PaneFiles
 import dev.glassworks.TimerOverlay
+import dev.glassworks.EdgeGlowOverlay
 import dev.glassworks.VoiceOverlay
 import dev.glassworks.auth.FrontendUrls
 import dev.glassworks.auth.HaAuth
@@ -127,7 +128,18 @@ class GenericParts : AppParts {
         notifications.addListener(listener)
         notifications.onOpenList = { host.post { host.hideMenu(); notes.openList() } }
         notifications.onReveal = { host.post { host.hideMenu() } }
-        runtime.onVoiceUi = { voice.update(voiceUi, VoicePrefs(paneFile(activity, "assist")).overlay) }
+        // The Assist look picked on the Appearance page (#691): the orb, or Spark's edge glow. The other one hides.
+        val glow = EdgeGlowOverlay(activity).apply {
+            onCancel = { runtime.voiceCancel?.invoke() }
+            onShowingChanged = { timers.voiceShowing(it) }
+        }
+        val kiosk = KioskPrefs(activity)
+        runtime.onVoiceUi = {
+            val enabled = VoicePrefs(paneFile(activity, "assist")).overlay
+            val edge = kiosk.assistLook == KioskPrefs.ASSIST_GLOW
+            voice.update(voiceUi, enabled && !edge)
+            glow.update(voiceUi, enabled && edge)
+        }
         return listOf(
             object : PaneOverlay {
                 override val view = timers
@@ -149,6 +161,10 @@ class GenericParts : AppParts {
                 override val view = voice
                 override val layoutParams = FrameLayout.LayoutParams(-1, -1)
                 override fun destroy() { runtime.onVoiceUi = null }
+            },
+            object : PaneOverlay {
+                override val view = glow
+                override val layoutParams = FrameLayout.LayoutParams(-1, -1)
             },
             CameraWiring.dot(runtime, activity),
         )

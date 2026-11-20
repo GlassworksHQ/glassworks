@@ -265,6 +265,14 @@ class KioskPrefs(
         get() = dev.glassworks.theme.Themes.decode(sp.getString("overlay_custom", null))
         set(v) = sp.edit().apply { if (v == null) remove("overlay_custom") else putString("overlay_custom", dev.glassworks.theme.Themes.encode(v)) }.apply()
 
+    /**
+     * How a voice run shows (#691): `orb`, the glass orb over a dimmed dashboard (the default), or `glow`, Spark's edge
+     * glow with the dashboard in view. Anything else reads as the orb.
+     */
+    var assistLook: String
+        get() = sp.getString("assist_look", null).takeIf { it == ASSIST_GLOW } ?: ASSIST_ORB
+        set(v) = sp.edit().putString("assist_look", if (v == ASSIST_GLOW) ASSIST_GLOW else ASSIST_ORB).apply()
+
     /** What the overlays draw with now: the saved pick, the custom theme's palettes for `custom/…`. */
     val overlayPick: dev.glassworks.theme.Themes.Pick
         get() = dev.glassworks.theme.Themes.pick(sp.getString("overlay_theme", null), customTheme)
@@ -428,6 +436,10 @@ class KioskPrefs(
          * a reset mustn't take down the Zigbee or Thread network devices depend on (turning the radio off is its own
          * step, on the Radio page); and the once-per-install checks, so setup asks every step again as on a new install.
          */
+        /** The Assist looks ([assistLook]). */
+        const val ASSIST_ORB = "orb"
+        const val ASSIST_GLOW = "glow"
+
         val RESET_KEEPS = setOf("api_key", "api_encryption", "device_mac", "setup_device_steps_migrated")
         private val RESET_KEEPS_PREFIXES = listOf("radio_", "setup_radio_")
 
