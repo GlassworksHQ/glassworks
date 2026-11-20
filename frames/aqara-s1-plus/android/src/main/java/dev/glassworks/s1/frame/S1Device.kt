@@ -3,6 +3,7 @@ package dev.glassworks.s1.frame
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.SystemClock
+import dev.glassworks.frame.AgentCapability
 import dev.glassworks.frame.FrameRelease
 import dev.glassworks.frame.GenericAndroid
 import dev.glassworks.pane.Pane
@@ -65,7 +66,7 @@ class S1Device(
 
     /** Whether this boot image has the root update service; null until the first getprop lands. */
     private fun rootService(): SilentUpdates.Root? =
-        cached("root") { RootUpdateInstaller(props).present().toString() }?.let { if (it.toBoolean()) SilentUpdates.Root.PRESENT else SilentUpdates.Root.MISSING }
+        cached("root") { S1Agent(props).offers(AgentCapability.APP_UPDATES).toString() }?.let { if (it.toBoolean()) SilentUpdates.Root.PRESENT else SilentUpdates.Root.MISSING }
 
     /** What the wall base pane says of the daemon (`aqara_cloud`), else init's word for it. */
     private fun daemon(running: (String) -> Pane?): String =

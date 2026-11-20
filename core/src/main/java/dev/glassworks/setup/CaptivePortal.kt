@@ -48,7 +48,7 @@ data class PortalAddresses(val v4: Inet4Address, val v6: Inet6Address? = null) {
  * While [start]ed, this answers instead: a DNS responder on udp [DNS_PORT] that answers every name with the hotspot's
  * IPv4 address, and a web server on tcp [HTTP_PORT] that sends every request to [page]. Both bind to the hotspot's own
  * addresses only, never to the home network. An app can't listen on ports 53 and 80, so something with root must send
- * the hotspot's traffic there: on the S1 the radio helper does (`Frame.hotspotPortal`), and only while these
+ * the hotspot's traffic there: a frame agent with `hotspot-portal` (docs/frame-agent.md; the S1's) does, and only while these
  * sockets exist. Without that, this changes nothing a phone sees.
  */
 class CaptivePortal(

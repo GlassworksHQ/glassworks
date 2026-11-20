@@ -153,7 +153,7 @@ difference: both are capabilities of the S1's agent.
 
 ## In the code
 
-Built in #641's second PR. The core's side is `dev.glassworks.frame.FrameAgent`, reached as `frame.agent`:
+The core's side is `dev.glassworks.frame.FrameAgent`, reached as `frame.agent`:
 
 | Member | What |
 |---|---|

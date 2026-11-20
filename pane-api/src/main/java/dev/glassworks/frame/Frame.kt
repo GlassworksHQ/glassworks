@@ -59,17 +59,11 @@ interface Frame {
      */
     val bootRest: BootRest? get() = null
 
-    /** The frame's way to install app updates without Android's confirmation; null to use PackageInstaller. */
-    val rootUpdates: RootUpdates? get() = null
-
     /**
-     * Whether something on the device with root sends the setup hotspot's DNS (udp 53) and web (tcp 80) traffic to the
-     * app's portal (udp 8053 and tcp 8098, on the hotspot's own addresses), so a phone that joins opens the setup page
-     * by itself (#197). The S1's radio helper does. False: the app runs no portal, and the phone opens the address the
-     * screen shows. An opt-in, not a check: true starts the app's portal listeners, and on a device whose root side
-     * doesn't forward to them (an S1 with an older radio helper) they listen unused and the address stays the way in.
+     * The frame's agent (docs/frame-agent.md): what it asks of the root side, by capability, never by frame id.
+     * [NoAgent] (the default) for a frame without one.
      */
-    val hotspotPortal: Boolean get() = false
+    val agent: FrameAgent get() = NoAgent
 
     /**
      * The frame's own version and releases (#139), or null on a device its vendor updates (any generic Android device):

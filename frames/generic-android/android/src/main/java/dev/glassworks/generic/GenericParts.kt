@@ -93,8 +93,12 @@ class GenericParts : AppParts {
             nodeName = { runtime.device?.nodeName },
             now = SystemClock::elapsedRealtime,
         )
-        // No root helper reads the adapter's MAC here: Home Assistant keys the proxy on the ESPHome MAC (AdapterMac).
-        val bluetoothProxy = BluetoothProxyDefinition(paneFile(context, "bluetooth-proxy"), AndroidProxyRadio(context), page = ::BluetoothProxyPage)
+        // The adapter's MAC from the frame's agent, when it has one with `bluetooth-address`; none has today, so Home
+        // Assistant keys the proxy on the ESPHome MAC (AdapterMac).
+        val bluetoothProxy = BluetoothProxyDefinition(
+            paneFile(context, "bluetooth-proxy"), AndroidProxyRadio(context),
+            readAdapterMac = runtime.frame.agent::bluetoothAddress, page = ::BluetoothProxyPage,
+        )
         return listOf(AssistDefinition(paneFile(context, "assist")), SendspinDefinition(paneFile(context, "sendspin"), settingsWorker::execute), notify, bluetoothProxy) +
             frameDefinitions + CameraWiring.definition(context, runtime, paneFile(context, "camera")) +
             DiagnosticsDefinition(paneFile(context, "diagnostics"))
