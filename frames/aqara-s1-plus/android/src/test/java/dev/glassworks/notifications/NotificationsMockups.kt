@@ -309,7 +309,9 @@ class NotificationsMockups {
         val a = Mockup.activity()
         val ha = "http://homeassistant.local:8123"
         val radio = radioDefinition(a, FixedReadout(null, mode = RadioMode.OFF, haBase = ha, panelIp = "192.0.2.10"))
-        val notify = NotificationsDefinition(PanePrefs(a).paneFile("notifications"), NotificationsHub(), { "aqara-s1-plus-a1b2c3" }, now = { 0L })
+        // The card at its default, as on a fresh panel: forget the off that notify-12 saved.
+        val file = PanePrefs(a).paneFile("notifications").apply { edit().remove(NotificationsPrefs.KEY_ENABLED).commit() }
+        val notify = NotificationsDefinition(file, NotificationsHub(), { "aqara-s1-plus-a1b2c3" }, now = { 0L })
         val panes = listOf(
             SetupPane(PaneChoice("Voice", "Assist and timers", on = { true }, apply = { null }), emptyList()),
             SetupPane(PaneChoice("Music", "A Sendspin speaker", on = { true }, apply = { null }), emptyList()),
