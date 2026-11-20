@@ -75,10 +75,11 @@ export function useTilt<T extends HTMLElement>() {
  * `screen` is the URL the caller's bundler gives the frame's `render` file; without it, the model shows an
  * example dashboard. A frame built on someone else's work (a credit marked `card`) names it under the
  * summary, as plain text: the card is a link or a button, so the credit's own links are on its page. A frame that
- * runs the legacy build says so on its own line (`legacy`), above the credit.
+ * runs the legacy build says so on its own line (`legacy`), above the credit. `pill: false` leaves out the status pill
+ * (Kiln's picker shows none for a stable frame).
  */
-export function FrameCardBody({ f, idPrefix, as: Name = 'span', expected = !ships(f.status), screen }: {
-  f: FrameDesign; idPrefix?: string; as?: 'span' | 'h2' | 'h3' | 'h4'; expected?: boolean; screen?: string;
+export function FrameCardBody({ f, idPrefix, as: Name = 'span', expected = !ships(f.status), screen, pill = true }: {
+  f: FrameDesign; idPrefix?: string; as?: 'span' | 'h2' | 'h3' | 'h4'; expected?: boolean; screen?: string; pill?: boolean;
 }) {
   const Box = Name === 'span' ? 'span' : 'div';
   const credit = cardCredit(f);
@@ -91,7 +92,7 @@ export function FrameCardBody({ f, idPrefix, as: Name = 'span', expected = !ship
       <Box className={s.text}>
         <Box className={s.top}>
           <Name className={s.name}>{f.name}</Name>
-          <StatusPill stage={f.status} />
+          {pill && <StatusPill stage={f.status} />}
         </Box>
         <span className={s.aka}>{KIND_TEXT[f.kind]}{f.aka && ` · ${f.aka}`}</span>
         <span id={idPrefix ? `${idPrefix}-summary` : undefined} className={s.summary}>{f.summary}</span>

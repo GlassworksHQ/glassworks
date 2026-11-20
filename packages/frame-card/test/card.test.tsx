@@ -82,8 +82,16 @@ describe('FrameCardBody', () => {
     });
 
     it('reads as expected on a frame that doesn\'t ship yet, in the text aria-describedby reads', () => {
-      expect(ships(mirror.status)).toBe(false);
-      expect(tags(<FrameCardBody f={mirror} idPrefix="c" />)).toMatch(EXPECTED);
+      const unshipped = { ...mirror, status: 'development' } as FrameDesign;
+      expect(ships(unshipped.status)).toBe(false);
+      expect(tags(<FrameCardBody f={unshipped} idPrefix="c" />)).toMatch(EXPECTED);
+      expect(tags(<FrameCardBody f={mirror} idPrefix="c" />)).not.toMatch(EXPECTED); // beta: it ships
+    });
+
+    it('shows the status pill unless told not to (Kiln\'s picker: none for a stable frame)', () => {
+      expect(render(<FrameCardBody f={mirror} />).textContent).toContain('Beta');
+      expect(render(<FrameCardBody f={s1} />).textContent).toContain('Stable');
+      expect(render(<FrameCardBody f={s1} pill={false} />).textContent).not.toContain('Stable');
     });
 
     it('follows an explicit expected prop', () => {

@@ -15,9 +15,9 @@ and glassworks.dev read them from here.
 
 | Frame | Status | Installer | Design |
 |---|---|---|---|
-| [`aqara-s1-plus`](aqara-s1-plus) | Beta | yes | `frame.json`, `recovery.json` |
-| [`lululemon-mirror`](lululemon-mirror) | Under development | test only: over fastboot with the community image, or adb onto it (`/lululemon-mirror?apk=local`) | `frame.json`, `recovery.json` |
-| [`generic-android`](generic-android) | Under development | headless recipe, no screen yet (#403) | `frame.json` only. Any Android device as an app, no root. It has no `display`: there is no one screen size |
+| [`aqara-s1-plus`](aqara-s1-plus) | Stable | yes (`/aqara-s1-plus`) | `frame.json`, `recovery.json` |
+| [`lululemon-mirror`](lululemon-mirror) | Beta | yes (`/lululemon-mirror`): over fastboot, with Glassworks or the community image, or the app alone over adb onto it | `frame.json`, `recovery.json` |
+| [`generic-android`](generic-android) | Beta | yes (`/android`): the app over adb (#403) | `frame.json` only. Any Android device as an app, no root. It has no `display`: there is no one screen size |
 | [`google-pixel-tablet`](google-pixel-tablet) | Planned | none of its own: it installs as `generic-android` | `frame.json` only. A tested device: the generic app as it is |
 
 ### Three kinds of device
@@ -53,7 +53,7 @@ describes the device's look in millimetres"). Kiln's picker reads it, and glassw
 | `name` | The product's name, e.g. `Aqara S1 Plus` |
 | `brand` | Optional. The maker's part of `name` (`Aqara`), set light in the frame's banner; the rest of `name` is bold. `name` must start with it and a space |
 | `aka` | Optional. Other names it is sold under |
-| `status` | `planned`, `development`, `alpha`, `beta` or `stable` (the status badges) |
+| `status` | `planned`, `development`, `alpha`, `beta` or `stable` (the status badges). With `kiln`, alpha or later puts the frame in Kiln's picker and opens its page to everyone. Kiln's card shows the stage, except for `stable`, which shows none. `stable` needs the whole Kiln contract passed, with no expected failures (`gate.test.ts`) |
 | `summary` | One sentence on why this device |
 | `tagline` | Optional. The frame's banner's line under `frames/<id>`, at most 50 characters. glassworks.dev's `pnpm brand` draws the banner and fails if it doesn't fit |
 | `project` | Optional. `{ name, href }` of the frame's own project |

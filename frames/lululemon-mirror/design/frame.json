@@ -4,11 +4,12 @@
   "name": "lululemon Studio Mirror",
   "brand": "lululemon",
   "aka": "Originally sold as Mirror, by Mirror.co",
-  "status": "development",
+  "status": "beta",
   "summary": "A full-length mirror with a 40-inch portrait screen behind it. The original version takes a new Android image over fastboot.",
   "tagline": "A 40-inch mirror with Android behind it.",
-  "notice": "Test only for now: Kiln installs the legacy build of Glassworks, which has no release yet. Installing will erase lululemon's software, with no backup. Later revisions use an NXP i.MX8 board, where only hardware-assisted (JTAG) access has been reported; they are not a target.",
+  "notice": "Installing will erase lululemon's software, with no backup. Later revisions use an NXP i.MX8 board, where only hardware-assisted (JTAG) access has been reported; they are not a target.",
   "legacy": "Legacy: frozen engine, your Home Assistant only",
+  "kiln": "/lululemon-mirror",
   "model": {
     "body": {
       "shape": "rect",

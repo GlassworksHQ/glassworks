@@ -1,7 +1,7 @@
 # Community images in Kiln (#579)
 
 **Status: approved on 2026-11-19 (round three, draft PR #582) and built in Kiln** for the lululemon
-Mirror with Glass Panes. The Mirror's page is still test only (`?apk=local`), and the Glass Panes
+Mirror with Glass Panes. The Mirror's page is in beta (2026-11-20), and the Glass Panes
 install waits on a run on a real Mirror. How to add an image: [docs/kiln-images.md](../../kiln-images.md).
 
 A frame's page in Kiln installs Glassworks, first and picked. A quiet link under it shows the

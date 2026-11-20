@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// /android (#403): off without ?apk=local (or ?apk=release, test/android-release.test.tsx), and every demo screen on the real generic recipe behind a
+// /android (#403): open to everyone (beta; the release, test/android-release.test.tsx; ?apk=local, a file), and every demo screen on the real generic recipe behind a
 // simulated device, as the approved mockup draws them.
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { fakeApk } from '@glassworks/app-adb/fakes';
@@ -41,25 +41,18 @@ async function show(name: AndroidDemo, ready: string | RegExp) {
 }
 
 describe('the switch', () => {
-  it('is off without ?apk=local, and demos only where demos run', () => {
-    expect(androidMode('', true, ANDROID_DEMOS)).toEqual({ on: false });
+  it('is on for everyone, the release by default (beta), and demos only where demos run', () => {
+    expect(androidMode('', true, ANDROID_DEMOS)).toEqual({ on: true, apk: 'release' });
     expect(androidMode('?apk=local', false, ANDROID_DEMOS)).toEqual({ on: true, apk: 'local' });
     expect(androidMode('?demo=done', true, ANDROID_DEMOS)).toEqual({ on: true, demo: 'done' });
-    expect(androidMode('?demo=done', false, ANDROID_DEMOS)).toEqual({ on: false });
+    expect(androidMode('?demo=done', false, ANDROID_DEMOS)).toEqual({ on: true, apk: 'release' }); // a production build
   });
 
-  it('without it, the page says Kiln doesn\'t install on Android yet, with no file picker', async () => {
-    render(<AndroidWizard />);
-    await screen.findByText(/doesn.t install on Android devices yet/);
-    expect(document.querySelector('input[type=file]')).toBeNull();
-    expect(embers()).toEqual([]);
-  });
-
-  it('with it, the device screen and a test APK field', async () => {
+  it('with ?apk=local, the device screen and an APK field', async () => {
     history.replaceState(null, '', '/android?apk=local');
     render(<AndroidWizard />);
     await screen.findByText('Plug in the tablet.');
-    expect(screen.getByText('Test only')).toBeTruthy();
+    expect(screen.getByText('Pick a test build\'s APK.')).toBeTruthy(); // a file from this computer is a test build, open page or not
     expect(document.querySelector('input[type=file]')).toBeTruthy();
     expect(embers()).toEqual(['Find it']);
   });

@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 // /android?apk=release: the APK from the newest generic-android-v* release (never the legacy build's line) through
 // Kiln's release route, checked against the release's .sha256. No release is an error, never the file picker.
-// Without ?apk=…, the page stays locked.
+// Generic Android is beta (frame.json), so the page is open: without ?apk=…, the APK comes from the release. The
+// locked page of a frame that isn't open: device-locked.test.tsx.
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { fakeGenericApk } from '@glassworks/generic-android-installer/fakes';
 import type { ReactNode } from 'react';
@@ -35,9 +36,10 @@ const until = async (f: () => boolean, ms = 5_000) => {
 };
 
 describe('the switch', () => {
-  it('stays locked to the public: generic-android\'s frame.json doesn\'t make it installable yet', () => {
-    expect(ANDROID_OPEN).toBe(false);
-    expect(androidMode('', false, [])).toEqual({ on: false });
+  it('opens to everyone: generic-android\'s frame.json makes it installable (beta, with its kiln route)', () => {
+    expect(ANDROID_OPEN).toBe(true);
+    expect(androidMode('', false, [])).toEqual({ on: true, apk: 'release' });
+    expect(androidMode('', false, [], false)).toEqual({ on: false }); // a frame that isn't open: only the test links
   });
 
   it('?apk=release and ?apk=local are the test links; once open, the page takes the release by default', () => {
@@ -105,7 +107,7 @@ describe('the page', () => {
     history.replaceState(null, '', '/android?apk=release');
     render(<AndroidWizard />);
     await screen.findByText('Plug in the tablet.');
-    expect(screen.getByText('Test only')).toBeTruthy();
+    expect(screen.queryByText('Test only')).toBeNull(); // beta (frame.json): open to everyone, not a test page
     await screen.findByText('Glassworks 0.2.0');
     expect(screen.getByText(/SHA-256 checks out/)).toBeTruthy();
     expect(screen.getByText(/^Android 8 or newer, over USB\./)).toBeTruthy(); // the release is the generic build, not the legacy one for 6 and 7
@@ -133,15 +135,14 @@ describe('the page', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it('without ?apk=…, the page stays locked and asks nothing', async () => {
-    const fetch = vi.fn();
-    vi.stubGlobal('fetch', fetch);
+  it('without ?apk=…, the APK comes from the release, as for ?apk=release', async () => {
+    vi.stubGlobal('fetch', route('out'));
     history.replaceState(null, '', '/android');
     render(<AndroidWizard />);
-    await screen.findByText(/doesn.t install on Android devices yet/);
-    expect(screen.getByText(/^Its installer is still being tested\./)).toBeTruthy(); // generic-android-v0.2.0 exists: not "no release yet"
+    await screen.findByText('Plug in the tablet.');
+    await screen.findByText('Glassworks 0.2.0');
     expect(document.querySelector('input[type=file]')).toBeNull();
-    expect(fetch).not.toHaveBeenCalled();
+    expect(embers()).toEqual(['Find it']);
   });
 
   it('?apk=release after ?apk=local starts a session on the release; a running one comes back to its own link', async () => {

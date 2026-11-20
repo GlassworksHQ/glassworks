@@ -3,7 +3,7 @@
   "kind": "full",
   "name": "Aqara S1 Plus",
   "brand": "Aqara",
-  "status": "beta",
+  "status": "stable",
   "summary": "The reference frame. Every pane runs on it, including the Zigbee/Thread radio and the wall base.",
   "tagline": "A133 wall panel, rooted. The reference frame.",
   "project": {

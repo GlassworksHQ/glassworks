@@ -239,9 +239,9 @@ describe('the frames', () => {
     return completeness(f, { base: all.find((b) => b.id === f.base), clarity: clarity[id] });
   };
 
-  it('gives each frame its word: only the S1 ships, and it misses wall base buttons', () => {
+  it('gives each frame that ships its word (the Pixel Tablet is planned: none), and the S1 misses wall base buttons', () => {
     expect(Object.fromEntries(ids.map((id) => [id, of(id).word]))).toEqual({
-      'aqara-s1-plus': 'good', 'generic-android': null, 'google-pixel-tablet': null, 'lululemon-mirror': null,
+      'aqara-s1-plus': 'good', 'generic-android': 'good', 'google-pixel-tablet': null, 'lululemon-mirror': 'good',
     });
     expect(of('aqara-s1-plus').items.filter((i) => i.state !== 'yes').map((i) => i.key)).toEqual(['hardware']);
   });

@@ -66,7 +66,8 @@ describe('frame designs', () => {
     expect(new Set(f.abis).size, 'abis listed twice').toBe(f.abis?.length);
     expect([undefined, true], 'dock: true, or left out').toContain(f.dock);
     if (f.recovery) expect(existsSync(join(frames, id, 'design', f.recovery)), f.recovery).toBe(true);
-    if (f.kiln) expect(f.kiln).toBe(`/${id}`);
+    // Kiln's route is the frame's installer.json route: /<id>, or the one it had before frames were data (/android)
+    if (f.kiln) expect(f.kiln).toBe(JSON.parse(readFileSync(join(frames, id, 'design', 'installer.json'), 'utf8')).route);
     if (f.kiln) expect(f.install.href, 'install.href on a frame Kiln installs').toBeUndefined();
     expect([f.model.sides.dark, f.model.sides.light, ...(f.model.parts ?? []).map((p) => p.color)].filter((c) => !COLOUR.test(c)), 'colours').toEqual([]);
     for (const aspect of [2, 0.8]) {
@@ -85,13 +86,13 @@ describe('frame designs', () => {
     expect(RENDERS[id], 'Kiln imports it').toMatch(/render/);
   });
 
-  it('the S1 is installable from Kiln; the frames that don\'t ship yet aren\'t', () => {
-    expect(read('aqara-s1-plus')).toMatchObject({ status: 'beta', kiln: '/aqara-s1-plus', recovery: 'recovery.json' });
+  it('the S1 is stable, the Mirror and generic Android beta, all installable from Kiln; the Pixel Tablet isn\'t', () => {
+    expect(read('aqara-s1-plus')).toMatchObject({ status: 'stable', kiln: '/aqara-s1-plus', recovery: 'recovery.json' });
     expect(read('aqara-s1-plus').abis, 'the S1 runs a 32-bit userspace').toEqual(['armeabi-v7a']);
-    for (const [id, status] of [['lululemon-mirror', 'development'], ['generic-android', 'development'], ['google-pixel-tablet', 'planned']] as const) {
-      expect(read(id), id).toMatchObject({ status });
-      expect(read(id).kiln, id).toBeUndefined();
-    }
+    expect(read('lululemon-mirror')).toMatchObject({ status: 'beta', kiln: '/lululemon-mirror' });
+    expect(read('generic-android')).toMatchObject({ status: 'beta', kiln: '/android' });
+    expect(read('google-pixel-tablet')).toMatchObject({ status: 'planned' });
+    expect(read('google-pixel-tablet').kiln).toBeUndefined();
   });
 
   it('knows which frames have a Clarity result, for the "not measured yet" tag on /android\'s Done', () => {

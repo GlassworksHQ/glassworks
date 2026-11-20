@@ -21,9 +21,15 @@
       <img alt="Built on Glassworks" src="https://www.glassworks.dev/brand/badge-on-light.svg" height="30">
     </picture>
   </a>
+  <a href="https://kiln.glassworks.dev/android">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-kiln-on-dark.svg">
+      <img alt="Glassworks Kiln" src="https://www.glassworks.dev/brand/badge-kiln-on-light.svg" height="30">
+    </picture>
+  </a>
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-status-under-development-on-dark.svg">
-    <img alt="Status: under development" src="https://www.glassworks.dev/brand/badge-status-under-development-on-light.svg" height="30">
+    <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-status-beta-on-dark.svg">
+    <img alt="Status: beta" src="https://www.glassworks.dev/brand/badge-status-beta-on-light.svg" height="30">
   </picture>
   <a href="https://github.com/orgs/GlassworksHQ/projects/1">
     <picture>
@@ -43,7 +49,7 @@ This folder defines the **Generic Android** frame (`design/frame.json`, [format]
 
 ## Status
 
-**Status: under development.** Generic Android ships its own dedicated app, **Glassworks** (`dev.glassworks.generic_android`, built from [`android/`](android)), targeting Android 8.0 or newer (`minSdk` 26), alongside a separate legacy build for Android 6 and 7. On a Google Pixel Tablet (Android 17), dashboard loading, Home Assistant ESPHome adoption, automatic pane hiding, and in-place updates have all been verified; hardware testing for wake words, Sendspin, and the ambient light sensor is still underway.
+**Status: beta.** Kiln installs it for everyone at `kiln.glassworks.dev/android` (2026-11-20). Generic Android ships its own dedicated app, **Glassworks** (`dev.glassworks.generic_android`, built from [`android/`](android)), targeting Android 8.0 or newer (`minSdk` 26), alongside a separate legacy build for Android 6 and 7. On a Google Pixel Tablet (Android 17), dashboard loading, Home Assistant ESPHome adoption, automatic pane hiding, and in-place updates have all been verified; hardware testing for wake words, Sendspin, and the ambient light sensor is still underway.
 
 *(For reference, the Aqara S1 Plus APK also automatically falls back to generic behavior if installed on non-S1 hardware, naming itself after the device model and hiding unsupported panes.)*
 

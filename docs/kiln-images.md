@@ -19,7 +19,7 @@ with the same safety steps as Glassworks. The person doesn't download or select 
 gets a card on the frame's page, a line that says you make it and that questions go to your project,
 and a link of its own that opens straight into its install.
 
-Status: the first version supports the Mirror (`lululemon-mirror`), whose page is still test only.
+Status: the first version supports the Mirror (`lululemon-mirror`), whose page is in beta, open to everyone.
 The design is in [docs/design/kiln/community-images.md](design/kiln/community-images.md).
 
 ## What an image is: a recipe
@@ -166,5 +166,5 @@ https://kiln.glassworks.dev/lululemon-mirror?image=glass-panes
 
 Put it in your README. Every safety step stays: nothing downloads before the person clicks, and
 "Install Glassworks instead" is in the foot. An unknown id, or `glassworks`, opens the normal page.
-While the Mirror's page is test only, add `apk=release` (or `apk=local`):
-`https://kiln.glassworks.dev/lululemon-mirror?apk=release&image=glass-panes`.
+On a frame whose page isn't open yet (not alpha or later), add `apk=release` (or `apk=local`):
+`https://kiln.glassworks.dev/<frame>?apk=release&image=<id>`.
