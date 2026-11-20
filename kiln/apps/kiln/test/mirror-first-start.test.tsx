@@ -11,9 +11,10 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: ReactNode }) => <a href={href} {...p}>{children}</a> }));
 
-import { AUTH_MS, READ_MS, FIRST_START_AUTH_MS, FlashSession, type ImageMaker } from '../src/mirror/flash';
-import { Flash } from '../src/mirror/MirrorWizard';
-import { MirrorSession } from '../src/mirror/session';
+import { ImageSession, type ImageMaker } from '../src/device/imageSession';
+import { ImageFlow } from '../src/device/DevicePage';
+import { AppSession } from '../src/device/appSession';
+import { AUTH_MS, FIRST_START_AUTH_MS, READ_MS, mirrorFrame } from './mirror-frame';
 
 beforeAll(() => {
   Object.defineProperty(navigator, 'usb', { configurable: true, value: {} });
@@ -42,8 +43,8 @@ function setup(adb: { request: () => Promise<PanelShell>; reopen?: (o?: { authMs
     async flashBlob(_, __, onProgress = () => {}) { onProgress(1); },
     async reboot() {},
   };
-  const mirror = new MirrorSession({ connect: async () => { throw new Error('unused'); } }, true);
-  const f = new FlashSession({
+  const mirror = new AppSession({ frame: mirrorFrame, connect: async () => { throw new Error('unused'); } }, true);
+  const f = new ImageSession({ frame: mirrorFrame,
     images, refract: 'https://proxy.test', requestFastboot: adb.fastboot ?? (async () => fb), requestAdb: adb.request,
     ...(adb.reopen ? { reopenAdb: adb.reopen } : {}), ...(adb.tries !== undefined ? { adbTries: adb.tries } : {}), ...(adb.picked ? { adbPicked: adb.picked } : {}), ...(adb.windowMs !== undefined ? { adbWindowMs: adb.windowMs } : {}),
     adbKey: () => 'QAAA= kiln@glassworks', apk: () => mirror.apkBytes(), sleep: async () => {},
@@ -52,7 +53,7 @@ function setup(adb: { request: () => Promise<PanelShell>; reopen?: (o?: { authMs
   return { f, mirror };
 }
 
-async function flashed(f: FlashSession, mirror: MirrorSession) {
+async function flashed(f: ImageSession, mirror: AppSession) {
   await f.download();
   await mirror.pickApk('kiosk.apk', fakeMirrorApk());
   f.toFastboot(); await f.connectFastboot(); f.understand(true); await f.flash();
@@ -85,7 +86,7 @@ describe('connecting while the Mirror is still starting', () => {
     expect(reopen).toHaveBeenCalledTimes(3);
     expect(f.state).toMatchObject({ screen: 'adb', connecting: false, adbWaiting: false });
     expect(f.state.connectError).toBe(`The Mirror didn't let this browser in through its first start (${REFUSED}). It knows only the key of the browser that installed it: use that browser, then Connect again.`);
-    render(<Flash flash={f} mirror={mirror} />);
+    render(<ImageFlow image={f} app={mirror} />);
     expect((screen.getByRole('button', { name: 'Connect' }) as HTMLButtonElement).disabled).toBe(false);
   });
 
@@ -151,7 +152,7 @@ describe('connecting while the Mirror is still starting', () => {
   it('says the glass stays dark during the first start', async () => {
     const { f, mirror } = setup({ request: async () => new FirstBootMirror() });
     await flashed(f, mirror);
-    render(<Flash flash={f} mirror={mirror} />);
+    render(<ImageFlow image={f} app={mirror} />);
     expect(screen.getByText(/Its glass stays dark for a few minutes while it does: that.s expected, so leave it plugged in\./)).toBeTruthy();
   });
 });
@@ -160,7 +161,7 @@ describe('finishing a first start that didn\'t finish', () => {
   it('from the image screen after a reload: no download, no fastboot, the same inputs', async () => {
     const adb = new FirstBootMirror();
     const { f, mirror } = setup({ request: async () => adb });
-    render(<Flash flash={f} mirror={mirror} />);
+    render(<ImageFlow image={f} app={mirror} />);
     f.setHaUrl('not an address');
     expect(f.inputsBlocked()).toMatch(/http/);
     f.finishFirstStart();
@@ -182,7 +183,7 @@ describe('finishing a first start that didn\'t finish', () => {
     await flashed(f, mirror);
     await f.connectAdb();
     expect(f.state).toMatchObject({ screen: 'error', error: 'the device was disconnected' });
-    render(<Flash flash={f} mirror={mirror} />);
+    render(<ImageFlow image={f} app={mirror} />);
     fail = false;
     fireEvent.click(screen.getByRole('button', { name: 'Try the first start again' }));
     expect(f.state.screen).toBe('adb');
@@ -324,7 +325,7 @@ describe('a Wi-Fi switch-on that stopped (a community image)', () => {
   it('says nothing about fastboot: the Mirror runs Android', async () => {
     const { f, mirror } = setup({ request: async () => new FirstBootMirror() });
     f.state = { ...f.state, screen: 'error', error: 'USB transfer failed', work: { step: 'wifi-on', x: 0 }, files: f.state.files.map((x) => ({ ...x, state: 'ok' as const })) };
-    render(<Flash flash={f} mirror={mirror} />);
+    render(<ImageFlow image={f} app={mirror} />);
     expect(screen.queryByRole('button', { name: 'Connect fastboot again' })).toBeNull();
     expect(screen.queryByText(/still in fastboot/)).toBeNull();
   });
@@ -335,7 +336,7 @@ describe('a first start that stopped during the key hand-back', () => {
     const { f, mirror } = setup({ request: async () => new FirstBootMirror() });
     await flashed(f, mirror);
     f.state = { ...f.state, screen: 'error', error: 'USB transfer failed', work: { step: 'hand-back', x: 0 } };
-    render(<Flash flash={f} mirror={mirror} />);
+    render(<ImageFlow image={f} app={mirror} />);
     expect(screen.getByRole('button', { name: 'Try the first start again' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Connect fastboot again' })).toBeNull();
     expect(screen.queryByText(/still in fastboot/)).toBeNull();
