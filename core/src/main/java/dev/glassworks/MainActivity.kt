@@ -110,7 +110,10 @@ open class MainActivity : Activity() {
     private var offlineSince = 0L
     private var lastSetupReasons: List<String> = emptyList()
     private var lastSetupStep: String? = null
-    /** The setup screen was up when the app restarted itself: it counts as up until this process shows it (#621's Mirror run). */
+    /**
+     * The setup screen was up when the app restarted itself, or when Android recreated this activity: it counts as up
+     * until this activity shows it (#621's Mirror run).
+     */
     private var setupCarried = false
     /** This process is the app's own restart with the setup screen up: Sign in holds until the page answers (SetupState). */
     private var restartedInSetup = false
@@ -201,9 +204,11 @@ open class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = KioskPrefs(this)
-        setupCarried = prefs.takeSetupUpAtRestart()
-        restartedInSetup = setupCarried
-        if (setupCarried) Log.i(TAG, "Setup screen: up again after the app's restart")
+        val restarted = prefs.takeSetupUpAtRestart()
+        if (restarted) Log.i(TAG, "Setup screen: up again after the app's restart")
+        // Recreated (a new language, `set_locale`): the first activity read the restart's mark, so it carries on here.
+        setupCarried = restarted || savedInstanceState?.getBoolean(STATE_SETUP_UP) == true
+        restartedInSetup = restarted || savedInstanceState?.getBoolean(STATE_RESTARTED_IN_SETUP) == true
         glassworks.paneDefinitions(this) // first: a step's one-time check runs before discovery can save an HA URL
         HaAuth.init(this)
         intent?.let { screenExtras(it, runtime.app::trustsExtras) }
@@ -940,6 +945,12 @@ open class MainActivity : Activity() {
 
     // ---- immersive full screen
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean(STATE_SETUP_UP, setupCarried || (::setupOverlay.isInitialized && setupOverlay.isShowing && !setupPreview))
+        outState.putBoolean(STATE_RESTARTED_IN_SETUP, restartedInSetup)
+    }
+
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) hideSystemUi()
@@ -1399,5 +1410,7 @@ open class MainActivity : Activity() {
         /** The [dev.glassworks.screen.ScreenPolicy.stayOn] reason while setup or the connecting screen is up (#449). */
         private const val NOT_READY = "not ready"
         private const val SETUP_NO_TOUCH = "setup without touch"
+        private const val STATE_SETUP_UP = "dev.glassworks.setup_up"
+        private const val STATE_RESTARTED_IN_SETUP = "dev.glassworks.restarted_in_setup"
     }
 }
