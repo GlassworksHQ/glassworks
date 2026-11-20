@@ -87,6 +87,8 @@ tools/perf/run.sh --frame aqara-s1-plus --name "Aqara S1 Plus" --runs 3 --out pe
 | `--apk FILE` | | Add the APK's size per ABI to the report (repeat for each ABI) |
 | `--idle-only LABEL` | | Take one idle sample with this label and nothing else (for [panes on your dashboard](#ram-of-each-pane-on-your-own-dashboard)) |
 | `--max-start-temp` | 50 | Waits up to 10 minutes for the CPU to cool below this (°C) |
+| `--sf-poll` | `auto` | How SurfaceFlinger's frames are read. `auto` runs the check below first; `0` reads once after each window (the S1's way); seconds read that often during each window too. A number skips the check |
+| `--sf-check-only` | | Run the checks before a run and stop: SurfaceFlinger's history (`sfcheck.json`) and this computer's network (`netcheck.json`). About 40 s, no cameras, nothing graded |
 
 The first run fetches HA's frontend (117 MB, once) into `~/.cache/glassworks-perf` and checks its
 SHA-256 (`tools/perf/hafrontend.py`). A full run with `--runs 3` should take about 40 minutes, and
@@ -108,6 +110,40 @@ its `complete` is `false` and its facts say why.
 The output directory holds the raw files, `report.json` and `report.md`. A full run needs a new or
 empty directory; `--idle-only` adds samples to an existing one. `python3
 tools/perf/report.py <dir>` rebuilds the report from the raw files at any time, without the device.
+
+### The test computer's network
+
+The fake Home Assistant runs on your computer. Put that computer where a real Home Assistant server would be: on a
+wired link, or a quiet one. Its stalls otherwise land in the panel's numbers, wherever the test's traffic crosses
+its link:
+
+- **The live updates**, when adb reaches the panel over the network (wireless debugging). The fake's stream goes
+  through `adb reverse`, which then rides this computer's Wi-Fi. Over USB it doesn't.
+- **The cameras' video**, when it goes over the LAN (`lan-udp` or `lan-turn`, below), on any panel.
+
+Before the graded part, `run.sh` runs `tools/perf/netcheck.py` (#649). It sends 40 pings to this computer's
+default gateway and 40 to the panel, at the same time (8 s), and writes the numbers to `netcheck.json`. No
+address is recorded. If this computer's own pings to its gateway go over 20 ms, at p95 or at most, and that link
+carried graded traffic, the run warns and the report is provisional ("the test computer's network"). The
+numbers are in `report.json` (`test_network`) and on one line of `report.md` either way.
+
+Measured 2026-11-19, the Pixel Tablet's run 3:
+
+| From → to | min | max |
+|---|---|---|
+| A Mac on Wi-Fi (the fake's computer) → its gateway | 2.3 ms | 68 to 84 ms |
+| The tablet → the same gateway | 2.3 ms | 9.7 ms |
+| The Mac → the tablet | | 93 to 97 ms |
+
+The live changes then waited 65 to 91 ms (p95) to reach the page. That was the Mac's link, not the tablet's: a
+low-latency Wi-Fi lock on the tablet (#646) changed nothing. On a Mac, Wi-Fi stalls like this usually come from
+AWDL (AirDrop, Sidecar), which takes the radio off its channel now and then. For a run, use a wired link, or turn
+AWDL off with `sudo ifconfig awdl0 down` and back on with `sudo ifconfig awdl0 up` after. AirDrop or Sidecar may
+turn it back on by themselves.
+
+The S1's published grade (2026-11-17) ran over USB adb, so its live updates didn't cross the Mac's link: their
+arrival waits were 32 to 56 ms (p95) on light and typical. Its cameras went over the LAN, so their numbers may
+include the Mac's link. They don't decide its D: that's typical without a camera, blocked 2.7 s after it's drawn.
 
 ### What it changes on the device
 
@@ -221,13 +257,65 @@ runner uses. What the runner does instead:
 | `date +%N`, `nproc` | No nanoseconds (`1795071980.N`); no `nproc` | Counts the `cpuN` lines of `/proc/stat`, the same online CPUs as `nproc` |
 | `ps -A -o PID,NAME` | Ignores the options: its own columns (`USER PID PPID VSIZE RSS WCHAN PC S NAME`) | Reads the PID column by its header and the name last |
 | `pidof <package>` | Lists every process | Not used: the runner reads `ps` |
-| SurfaceFlinger's layer | Plain `SurfaceView`, without the app (Android 10: `SurfaceView - <pkg>/<activity>`, Android 12+: `SurfaceView[<pkg>/<activity>]`) | Takes plain `SurfaceView` while the app has a window listed: a kiosk is the only app on screen |
+| SurfaceFlinger's layer | Plain `SurfaceView`, without the app (Android 10: `SurfaceView - <pkg>/<activity>`, Android 12+: `SurfaceView[<pkg>/<activity>]`, Android 15+: below) | Takes plain `SurfaceView` while the app has a window listed: a kiosk is the only app on screen |
 | `dumpsys meminfo` | `65128 kB: name` instead of `65,128K: name`; the legacy engine's content process is `:tab32` | Reads both; `:tab<n>` is a tab process |
 | `toybox nc` (camera video over the LAN) | No `nc` in toybox | The camera video goes over adb (`lanprobe.py` already falls back) |
 | `cmd` | Not there | Not used |
 
 `screencap`, `wm size`, `input tap`/`swipe` with a duration, `am start -W`, `am force-stop`, `stat -c`,
 `logcat -T`, `adb reverse` and `dumpsys SurfaceFlinger --latency` work as on Android 10.
+
+**Android 15 and later name layers differently** (checked on API 35 and API 37 arm64 emulators,
+2026-11-19). The Pixel Tablet's first graded run on Android 17 had no frames from SurfaceFlinger, so
+open, restart and live updates were n/a on every view, and scrolling rested on rAF alone.
+`dumpsys SurfaceFlinger --list` wraps each line as `RequestedLayerState{<name> parentId=… z=…}`. On
+Android 17 a SurfaceView's name also starts with the view's hash:
+
+| Android | The app's frames in `--list` |
+|---|---|
+| 10 (the S1) | `SurfaceView - <pkg>/<activity>#0` |
+| 12 to 14 | `SurfaceView[<pkg>/<activity>](BLAST)#163` |
+| 15, 16 | `RequestedLayerState{SurfaceView[<pkg>/<activity>](BLAST)#169 parentId=168}` |
+| 17 | `RequestedLayerState{f5fea55 SurfaceView[<pkg>/<activity>](BLAST)#163 parentId=162}` |
+
+`--latency` takes only the whole name, hash and `#<id>` included. Any other form gets the refresh
+period alone, as an unknown name does. The runner reads the name out of the wrapper and passes it on
+whole. The `(BLAST)` layer has the frames; its parent has none. When the runner finds a window of
+the app but no SurfaceView it can name, it prints a warning in the run's log.
+
+**SurfaceFlinger's history, and the check before a run** (#643). `--latency` keeps only a layer's
+last frames, and one read must reach back to a window's start to cover it:
+
+| | S1 (Android 10) | Pixel Tablet (Android 17), run 3, 2026-11-19 |
+|---|---|---|
+| Frames one read holds while the page draws every frame | 127 (2.1 s) | 59 (0.98 s) |
+| A swipe's window | | 1.15 to 1.18 s |
+| The step line, behind the window's end | | 0.38 to 0.43 s |
+| One adb shell call (wireless on the tablet) | | 80 ms, p95 171 ms |
+
+On the tablet a swipe is longer than the whole history, so one read after it can't cover it, and
+neither can `--latency-clear` before it. Instead, `run.sh` first runs `perfrun.py sfcheck`. It opens
+`page/sfcheck.html`, a page that draws every frame for 20 s, and reads the app's layer until the history
+stops growing. Then it decides (`perflib.sf_plan`), and writes `sfcheck.json`:
+
+1. **One read after each window** when the history's frames, a refresh apart, reach back at least 1.8 s
+   (`SF_ONE_READ_MS`: a swipe, its step line's lag, and room). This is the S1's way: nothing changes
+   there, and its records are the same, byte for byte.
+2. **A read every N seconds during each window** too, when it reaches less. N is half the reach, at most
+   0.3 s (the tablet: 0.3 s). The reads keep that rhythm, so a slow read is followed at once. The
+   frame log behind the restart and the open, and the idle sample, read at the same rhythm: the known
+   layer alone, with a listing read (`--list`, then the newest layer: two calls) every third read. The
+   check times both kinds of read, and each must take at most half the reach (the API 37 emulator:
+   294 and 374 ms p95 against 525). The
+   runner joins the reads by present time (`perflib.stitch_reads`). A window counts as covered back to
+   where the reads overlap without a gap, as one read covered it before. Each window's record then has
+   `reads`, how many it took.
+3. **Stop**, exit 2, before anything is graded, when the app's layer can't be named, the page draws no
+   frames, or reads would have to come closer than 0.05 s, or one read or listing read takes longer than
+   half the reach.
+
+The reads during a window are dumpsys calls on the device while it is measured: one every 0.3 s on
+the tablet. On the S1 there are none.
 
 **The clock on Android 6.** SurfaceFlinger's frame times are on the monotonic clock (`CLOCK_MONOTONIC`), and the
 runner cuts them to the windows the page logs. Android 6's logcat stamps lines only with the wall clock. So the
@@ -1828,7 +1916,11 @@ busy main thread delays less than its timers; the taps wait 5 s each; and the ru
 deadline covers only a view that never became usable ("A view the panel can't finish"). Rubric
 v10 and v11 (2026-11-13) split typical into typical without and with its camera and made each letter
 add one page. Since Clarity v1 the numbers start again (below): protocol 2 and rubric 2 are Clarity
-v2's (the blocking time), protocol 3 and rubric 3 Clarity v3's (the more-info dialog).
+v2's (the blocking time), protocol 3 and rubric 3 Clarity v3's (the more-info dialog). Within protocol 3
+(#643, 2026-11-19): where SurfaceFlinger's history is shorter than a window, the runner reads it during
+the window too. That isn't a new protocol: what is measured, the frames on screen in the window, is the
+same. Where one read covered a window (the S1), nothing changes, record for record. Where it didn't,
+the old result rested on rAF and said so (provisional), so no stored grade changes meaning.
 
 ### Versions
 

@@ -56,6 +56,7 @@ Kiln was the first to use it, and #114 moved it here, so there is one copy.
 | `FrameDesign`, `FrameModel`, `Stage`, `Support`, `RatingKey`, `cardTags()`, `STAGE_TEXT`, `ships()`, `RATING_KEYS` | The `frame.json` types and the card's words for them. `ships()` takes a frame's `Stage` or a pane's `Support`: true for alpha, beta and stable, false for the rest, including `depends`, `unknown` and `no` |
 | `FrameCredit`, `creditProblems()`, `cardCredit()` | A frame's `credits`: the outside work it stands on ([frames/README.md](../../frames/README.md#credits)). `creditProblems()` lists what's wrong with them (a missing link, an empty `uses`, a repeated id), one line each; Kiln's tests and the site's build run it. `cardCredit()` is the card's line for the credit marked `card`, "Built on Glass Panes by git-nimrod"; `FrameCardBody` shows it under the summary as plain text |
 | `FrameKind`, `FRAME_KINDS`, `KIND_TEXT`, `kindProblems()` | A frame's `kind`: full frame, device frame or tested device, and a tested device's `base` ([frames/README.md](../../frames/README.md#three-kinds-of-device)). `kindProblems()` lists what's wrong, one line each; Kiln's tests and the site's build run it. `FrameCardBody` shows `KIND_TEXT` on the line under the name, before `aka` |
+| `AGENT_CAPABILITIES`, `AgentCapability`, `agentProblems()` | A frame's `agent`: what its frame agent does, in the words of [docs/frame-agent.md](../../docs/frame-agent.md#capabilities). `agentProblems()` lists what's wrong (an unknown word, a word twice, an agent on a tested device), one line each; the site's build runs it |
 | `keyProblems()` | The top-level keys of a `frame.json` that aren't `FrameDesign` fields, one line each. A `Record` over `FrameDesign`'s keys holds the list, so the compiler fails when the type and the list differ. Kiln's tests and the site's build run it |
 | `completeness()`, `factProblems()`, `factsOf()`, `FrameFacts`, `FrameRun`, `CHECKS`, `COUNTED`, `CHECK_TEXT`, `WORD_TEXT`, `WORD_MEANING` | How complete Glassworks is on a frame ([frames/README.md](../../frames/README.md#how-complete-it-is)). `completeness(f, { base, clarity })` is pure: from the frame's `facts` (a tested device: its `run`), its `kiln` route (a tested device: its `base`'s) and its Clarity letter, it gives the eight items, each `yes`, `no` or `na` with a reason, and the word, `full`, `good`, `basic` or `null` while the frame doesn't ship. `factProblems()` lists what's wrong with `facts` or `run`, one line each, and refuses a key the record doesn't have, so a serial or fingerprint pasted from Kiln's `--plan` fails the build; Kiln's tests and the site's build run it |
 
@@ -103,7 +104,7 @@ A frame's own page can draw the mockup alone, on a taller stage for a portrait f
 because only the caller's bundler knows the file's URL. Import the file and pass its URL as `screen`
 to `FrameCardBody` or `DeviceModel`. Without `screen`, the card draws the example dashboard as before.
 An image import is `{ src }` under Next.js and a plain string under Vite (and so in Vitest), so take
-the URL from either. Kiln does it in `kiln/apps/kiln/src/frames/catalog.ts`:
+the URL from either. Kiln does it in the frames registry's catalog (`packages/frames/src/catalog.ts`):
 
 ```tsx
 import s1Render from '…/frames/aqara-s1-plus/design/render.webp';

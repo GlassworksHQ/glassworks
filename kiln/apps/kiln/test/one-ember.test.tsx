@@ -7,7 +7,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: ReactNode }) => <a href={href} {...p}>{children}</a> }));
 
-import { s1PlusUi } from '../src/frames/aqara-s1-plus';
+import { frame as s1PlusUi, demoFrame as s1Demo } from './s1-frame';
 import { demoSession, enterDemo, type Demo } from '../src/wizard/demo';
 import type { Session } from '../src/wizard/session';
 import { Wizard } from '../src/wizard/Wizard';
@@ -25,10 +25,10 @@ afterEach(() => { cleanup(); for (const s of open.splice(0)) s.close(); });
 const embers = () => [...document.querySelectorAll('.btn.ember')].map((b) => b.textContent);
 
 async function show(which: Demo, then?: (s: Session) => Promise<void>) {
-  const s = demoSession(which);
+  const s = demoSession(s1Demo, which);
   open.push(s);
   render(<Wizard session={s} frame={s1PlusUi} base="/aqara-s1-plus" />);
-  await act(() => enterDemo(s, which));
+  await act(() => enterDemo(s, s1Demo, which));
   if (then) await act(() => then(s));
   return s;
 }

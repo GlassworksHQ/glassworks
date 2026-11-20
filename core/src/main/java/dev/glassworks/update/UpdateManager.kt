@@ -23,6 +23,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 import dev.glassworks.Glassworks
+import dev.glassworks.frame.AgentCapability
 import dev.glassworks.frame.friendlyName
 
 /**
@@ -49,8 +50,9 @@ class UpdateManager(
     private val onChange: () -> Unit,
 ) {
     private val ctx = context.applicationContext
-    /** The S1 boot image's root update service; null on a frame without one, which installs with PackageInstaller. */
-    private val root = runtime.frame.rootUpdates
+    /** The frame agent's app updates (the S1 boot image's root update service); null on a frame without, which installs with PackageInstaller. */
+    private val agent = runtime.frame.agent
+    private val root = agent.appUpdates
     /**
      * Whether [root] is in this boot image; null until [start] reads it (a getprop) on the update thread. Setup's Silent
      * updates step reads it to answer on the main thread without a getprop.
@@ -91,7 +93,7 @@ class UpdateManager(
             root?.lastFailure()?.let { model.onInfo("Last update failed: $it") }
             rootService = when {
                 root == null -> SilentUpdates.Root.NONE
-                root.present() -> SilentUpdates.Root.PRESENT
+                agent.offers(AgentCapability.APP_UPDATES) -> SilentUpdates.Root.PRESENT
                 else -> SilentUpdates.Root.MISSING
             }
             refreshSilent()
@@ -364,7 +366,7 @@ class UpdateManager(
 
     /** The verified APK at [pending]: through the frame's root update service when its boot image has one, else PackageInstaller. */
     private fun installVerified(a: UpdateModel.Attempt, pending: File) {
-        val helper = root?.takeIf { it.present() } ?: return installWithPackageInstaller(a, pending)
+        val helper = root?.takeIf { agent.offers(AgentCapability.APP_UPDATES) } ?: return installWithPackageInstaller(a, pending)
         helper.install(
             a.offer.version.toString(),
             installing = { model.onInstalling(a, SystemClock.elapsedRealtime(), it); onChange() },

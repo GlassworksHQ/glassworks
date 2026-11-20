@@ -3,6 +3,7 @@
 // network name. Each wedged command here only ends when its signal aborts.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PanelShell } from '@glassworks/adb';
+import { demoFrame as s1Demo } from './s1-frame';
 import { demoSession } from '../src/wizard/demo';
 import type { Session } from '../src/wizard/session';
 
@@ -21,8 +22,8 @@ function wedge(s: Session, wedged: RegExp): string[] {
   return aborted;
 }
 
-async function connected(which: Parameters<typeof demoSession>[0]) {
-  const s = demoSession(which);
+async function connected(which: Parameters<typeof demoSession>[1]) {
+  const s = demoSession(s1Demo, which);
   open.push(s);
   await s.connectPanel();
   return s;

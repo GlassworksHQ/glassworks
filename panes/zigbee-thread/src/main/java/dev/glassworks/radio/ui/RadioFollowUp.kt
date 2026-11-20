@@ -188,7 +188,7 @@ object RadioFollowUp {
         return listOf(label, words).filter { it.isNotEmpty() }.joinToString(" · ")
     }
 
-    /** The root helper's state words, first in its status (RadioHelper.parseStatus). */
+    /** The root helper's state words, first in its status (RadioReports.parseStatus). */
     private val HELPER_STATES = setOf("ok", "applying", "error")
 
     fun card(f: Facts, place: Place): Card {

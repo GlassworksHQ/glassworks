@@ -10,21 +10,21 @@ import dev.glassworks.update.UpdateManager
 
 /**
  * Installs app updates through the root service in the S1's patched boot image ([UpdateHelper]),
- * silently. Boot images from before it have none ([present] is false), and the app falls back to
+ * silently. Boot images from before it have none ([S1Agent] doesn't offer `app-updates`), and the app falls back to
  * Android's PackageInstaller.
  */
 class RootUpdateInstaller(
     private val props: SysProps = ShellProps,
+    /** The boot image's names for the service and its status ([S1Names.updateService]). */
+    private val names: S1Names = S1Names.of(props::peek),
     private val now: () -> Long = SystemClock::elapsedRealtime,
 ) : RootUpdates {
-    override fun present(): Boolean = props.get(UpdateHelper.PROP_VERSION).trim().toIntOrNull()?.let { it >= 1 } == true
-
     /**
      * At start: why the install the service did while this process was replaced failed, or null.
      * Success shows as the new installed version, so it is only logged.
      */
     override fun lastFailure(): String? {
-        val st = UpdateHelper.parseStatus(props.get(UpdateHelper.PROP_STATUS)) ?: return null
+        val st = UpdateHelper.parseStatus(props.get(names.updateStatus)) ?: return null
         when (st.state) {
             "ok" -> Log.i(TAG, "last root install: ok ${st.detail}")
             "error" -> { Log.w(TAG, "last root install failed: ${st.detail}"); return st.detail }
@@ -39,13 +39,13 @@ class RootUpdateInstaller(
      * Returns why it failed, or null.
      */
     override fun install(version: String, installing: (String) -> Unit, over: () -> Boolean): String? {
-        props.set(UpdateHelper.PROP_STATUS, "requested")
-        props.set("ctl.start", UpdateHelper.SERVICE)
+        props.set(names.updateStatus, "requested")
+        props.set("ctl.start", names.updateService)
         installing("Installing $version (root update service)")
         val started = now()
         var lastDetail = ""
         while (!over()) {
-            val st = UpdateHelper.parseStatus(props.get(UpdateHelper.PROP_STATUS))
+            val st = UpdateHelper.parseStatus(props.get(names.updateStatus))
             val waited = now() - started
             when (st?.state) {
                 "ok" -> {
@@ -60,7 +60,7 @@ class RootUpdateInstaller(
                     Log.i(TAG, "root update service: ${st.detail}")
                 }
                 else -> if (waited > START_TIMEOUT_MS) {
-                    return "the root update service did not start (${UpdateHelper.SERVICE})"
+                    return "the root update service did not start (${names.updateService})"
                 }
             }
             try { props.sleep(1_000) } catch (_: InterruptedException) { return null }

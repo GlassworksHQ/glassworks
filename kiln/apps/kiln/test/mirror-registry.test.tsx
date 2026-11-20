@@ -13,13 +13,14 @@ vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string
 
 import { LeaveGuard } from '../src/components/LeaveGuard';
 import { Picker } from '../src/components/Picker';
-import { MIRROR_BASE, MirrorActivity } from '../src/mirror/activity';
-import { FlashSession, type ImageMaker } from '../src/mirror/flash';
-import { MirrorWizard } from '../src/mirror/MirrorWizard';
-import { MirrorSession } from '../src/mirror/session';
+import { DeviceActivity } from '../src/device/activity';
+import { ImageSession, type ImageMaker } from '../src/device/imageSession';
+import { DevicePage } from '../src/device/DevicePage';
+import { AppSession } from '../src/device/appSession';
 import { registry } from '../src/wizard/registry';
 import { Store } from '../src/wizard/session';
 import { initial } from '../src/wizard/state';
+import { MIRROR_BASE, mirrorEntry, mirrorFrame } from './mirror-frame';
 
 beforeAll(() => {
   Object.defineProperty(navigator, 'usb', { configurable: true, value: {} });
@@ -50,9 +51,9 @@ async function midFlash() {
     async flashBlob(p) { if (p === 'system') await gate; },
     async reboot() {},
   };
-  const mirror = new MirrorSession({ connect: async () => { throw new Error('unused'); } }, true);
-  const flash = new FlashSession({ images, refract: 'https://proxy.test', requestFastboot: async () => fb, requestAdb: async () => new FirstBootMirror(), adbKey: () => 'QAAA= kiln@glassworks', apk: () => mirror.apkBytes(), sleep: async () => {} });
-  const kept = registry.keep(new MirrorActivity({ mirror, flash }, true));
+  const mirror = new AppSession({ frame: mirrorFrame, connect: async () => { throw new Error('unused'); } }, true);
+  const flash = new ImageSession({ frame: mirrorFrame, images, refract: 'https://proxy.test', requestFastboot: async () => fb, requestAdb: async () => new FirstBootMirror(), adbKey: () => 'QAAA= kiln@glassworks', apk: () => mirror.apkBytes(), sleep: async () => {} });
+  const kept = registry.keep(new DeviceActivity(MIRROR_BASE, mirrorFrame.name, { app: mirror, image: flash }, true));
   flash.choose();
   await flash.download();
   await mirror.pickApk('kiosk.apk', fakeMirrorApk());
@@ -98,19 +99,19 @@ describe('the Mirror in Kiln\'s registry', () => {
 
   it('the page keeps its sessions across a trip to the picker', async () => {
     history.replaceState(null, '', `${MIRROR_BASE}?apk=local`);
-    const first = render(<MirrorWizard />);
+    const first = render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
     await screen.findByText('What goes on the Mirror?');
-    const kept = registry.activity(MIRROR_BASE) as MirrorActivity;
-    expect(kept).toBeInstanceOf(MirrorActivity);
+    const kept = registry.activity(MIRROR_BASE) as DeviceActivity;
+    expect(kept).toBeInstanceOf(DeviceActivity);
     first.unmount(); // to the picker and back
     history.replaceState(null, '', MIRROR_BASE); // "Back to it" or Continue, without the switch
-    render(<MirrorWizard />);
+    render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
     await screen.findByText('What goes on the Mirror?');
     expect(registry.activity(MIRROR_BASE)).toBe(kept);
   });
 
   it('the page without ?apk=local keeps nothing', async () => {
-    render(<MirrorWizard />);
+    render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
     await screen.findByText(/doesn.t install from Kiln yet/);
     expect(registry.activities()).toEqual([]);
   });

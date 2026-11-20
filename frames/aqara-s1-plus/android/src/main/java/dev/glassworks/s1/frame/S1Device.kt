@@ -3,15 +3,16 @@ package dev.glassworks.s1.frame
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.SystemClock
+import dev.glassworks.frame.AgentCapability
 import dev.glassworks.frame.FrameRelease
 import dev.glassworks.frame.GenericAndroid
+import dev.glassworks.frame.RadioSetting
 import dev.glassworks.pane.Pane
 import dev.glassworks.pane.SettingsItem
 import dev.glassworks.pane.SettingsSection
 import dev.glassworks.update.SilentUpdates
 import dev.glassworks.update.UpdateChannelRow
 import dev.glassworks.s1.PanePrefs
-import dev.glassworks.radio.RadioHelper
 import dev.glassworks.radio.RadioMode
 import dev.glassworks.radio.ShellProps
 import dev.glassworks.radio.SysProps
@@ -69,7 +70,7 @@ class S1Device(
 
     /** Whether this boot image has the root update service; null until the first getprop lands. */
     private fun rootService(): SilentUpdates.Root? =
-        cached("root") { RootUpdateInstaller(props).present().toString() }?.let { if (it.toBoolean()) SilentUpdates.Root.PRESENT else SilentUpdates.Root.MISSING }
+        cached("root") { S1Agent(props).offers(AgentCapability.APP_UPDATES).toString() }?.let { if (it.toBoolean()) SilentUpdates.Root.PRESENT else SilentUpdates.Root.MISSING }
 
     /** The frame loader in boot (#139): what the boot writer's record says, with whether this boot ran the loader. */
     private fun loader(): String =
@@ -85,7 +86,7 @@ class S1Device(
     /** The radio pane's `Radio mode`, else the mode the root helper was asked for. */
     private fun radioMode(running: (String) -> Pane?): String =
         running("radio")?.entities()?.firstOrNull { it.objectId == "radio_mode" }?.shownState()?.takeIf { it.isNotBlank() }
-            ?: cached("radio") { props.get(RadioHelper.PROP_MODE) }?.let { RadioMode.fromId(it)?.label ?: RadioMode.OFF.label } ?: "Unknown"
+            ?: cached("radio") { S1Agent(props).radio.setting(RadioSetting.MODE) }?.let { RadioMode.fromId(it)?.label ?: RadioMode.OFF.label } ?: "Unknown"
 
     /** The app can see Aqara's apps (Android 10 lets it); on another firmware none is there and the row is left out. */
     private fun appsReadable(context: Context): Boolean = AQARA_APPS.keys.any { state(context, it) != null }

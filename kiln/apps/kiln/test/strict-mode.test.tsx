@@ -19,10 +19,11 @@ afterEach(() => cleanup());
 const settle = () => act(() => new Promise((r) => setTimeout(r, 50)));
 
 describe('under StrictMode', () => {
-  it('the S1 page loads its adb key once', async () => {
-    const { S1 } = await import('../src/wizard/S1');
-    render(<StrictMode><S1 /></StrictMode>);
+  it('the S1 page, loaded from the frames registry as its route loads it, loads its adb key once', async () => {
+    const { LoadFrame } = await import('../src/wizard/LoadFrame');
+    render(<StrictMode><LoadFrame id="aqara-s1-plus" base="/aqara-s1-plus" /></StrictMode>);
+    await vi.waitFor(() => expect(document.title).toBe('Aqara S1 Plus · Kiln'), { timeout: 10_000 });
     await settle();
     expect(loadKey).toHaveBeenCalledTimes(1);
-  });
+  }, 30_000);
 });

@@ -11,10 +11,11 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: ReactNode }) => <a href={href} {...p}>{children}</a> }));
 
 import { pemToPkcs8 } from '@glassworks/adb';
-import { FlashSession, readImageKey, type ImageMaker } from '../src/mirror/flash';
-import { flashDemo, type FlashDemo } from '../src/mirror/flashDemo';
-import { Flash } from '../src/mirror/MirrorWizard';
-import { MirrorSession } from '../src/mirror/session';
+import { ImageSession, readImageKey, type ImageMaker } from '../src/device/imageSession';
+import { imageDemo, type ImageDemo } from '../src/device/imageDemo';
+import { ImageFlow } from '../src/device/DevicePage';
+import { AppSession } from '../src/device/appSession';
+import { mirrorEntry, mirrorFrame } from './mirror-frame';
 
 beforeAll(() => {
   Object.defineProperty(navigator, 'usb', { configurable: true, value: {} });
@@ -68,7 +69,7 @@ function setup(o: { keyChanged?: boolean; wifiOn?: 'enabled' | 'disabled'; adbFa
     },
     async push() { throw new Error('nothing is pushed'); },
   };
-  const f = new FlashSession({
+  const f = new ImageSession({ frame: mirrorFrame,
     images, refract: 'https://refract.test', search: '?image=glass-panes', requestFastboot: async () => fb,
     requestAdb: async () => { throw new Error('Glass Panes doesn\'t trust this browser\'s key'); },
     adbWithKey: (k: Uint8Array) => { keys.push(k); return async () => {
@@ -80,7 +81,7 @@ function setup(o: { keyChanged?: boolean; wifiOn?: 'enabled' | 'disabled'; adbFa
   return { f, calls, keys };
 }
 
-const install = async (f: FlashSession) => { await f.download(); f.toFastboot(); await f.connectFastboot(); f.understand(true); await f.flash(); };
+const install = async (f: ImageSession) => { await f.download(); f.toFastboot(); await f.connectFastboot(); f.understand(true); await f.flash(); };
 
 describe('with a Wi-Fi network', () => {
   it('saves it in a copy of the checked userdata, writes that, then switches Wi-Fi on with the image\'s own key', async () => {
@@ -165,7 +166,7 @@ describe('with a Wi-Fi network', () => {
     await install(f);
     await f.connectAdb();
     expect(f.state).toMatchObject({ screen: 'error', wifiOnFailed: true });
-    render(<Flash flash={f} mirror={new MirrorSession({ connect: async () => { throw new Error('x'); } }, true)} />);
+    render(<ImageFlow image={f} app={new AppSession({ frame: mirrorFrame, connect: async () => { throw new Error('x'); } }, true)} />);
     expect(screen.getByRole('button', { name: 'Connect again' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Back to the download' })).toBeNull();
     cleanup();
@@ -184,7 +185,7 @@ describe('with a Wi-Fi network', () => {
     expect(f.state).toMatchObject({ screen: 'error', wifiOnFailed: true });
     await f.connectAdb(); // Connect again: the browser's list is closed with nothing picked
     expect(f.state).toMatchObject({ screen: 'error', wifiOnFailed: true, connectError: 'No device selected.' });
-    render(<Flash flash={f} mirror={new MirrorSession({ connect: async () => { throw new Error('x'); } }, true)} />);
+    render(<ImageFlow image={f} app={new AppSession({ frame: mirrorFrame, connect: async () => { throw new Error('x'); } }, true)} />);
     expect(screen.getByText('No device selected.').getAttribute('role')).toBe('alert');
     expect(screen.getByRole('button', { name: 'Connect again' })).toBeTruthy();
     cleanup();
@@ -230,9 +231,9 @@ describe('without a network', () => {
 });
 
 describe('the screens', () => {
-  const show = async (d: FlashDemo) => {
-    const { flash, mirror } = await flashDemo(d, true);
-    render(<Flash flash={flash} mirror={mirror} />);
+  const show = async (d: ImageDemo) => {
+    const { image: flash, app: mirror } = await imageDemo(mirrorEntry, d, true);
+    render(<ImageFlow image={flash} app={mirror} />);
     await act(async () => {});
     return flash;
   };
@@ -277,7 +278,7 @@ describe('readImageKey, the one loader for a recipe\'s published key', () => {
 });
 
 it('the session works without a key route: Done tells the person to switch Wi-Fi on once', async () => {
-  const mirror = new MirrorSession({ connect: async () => { throw new Error('x'); } }, true);
+  const mirror = new AppSession({ frame: mirrorFrame, connect: async () => { throw new Error('x'); } }, true);
   void mirror;
   const { f } = setup();
   f.setWifi(NET);

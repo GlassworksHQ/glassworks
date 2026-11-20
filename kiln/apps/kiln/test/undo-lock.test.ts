@@ -7,17 +7,13 @@ const apps = vi.hoisted(() => {
   const removed = { app: 'removed', note: 'Glassworks is removed.' } as const;
   return { removed, unprovision: async (): Promise<typeof removed> => removed };
 });
-vi.mock('@glassworks/aqara-s1-plus-installer', async (orig) => ({
-  ...(await orig<typeof import('@glassworks/aqara-s1-plus-installer')>()),
-  unprovision: () => apps.unprovision(), // the apps come back (its steps have their own tests)
-}));
 afterEach(() => { apps.unprovision = async () => apps.removed; });
 vi.spyOn(console, 'error').mockImplementation(() => {});
 
 import type { PanelShell } from '@glassworks/adb';
 import { s1Plus } from '@glassworks/aqara-s1-plus-installer';
 import { backupFile, backupZip, type BackupMeta } from '@glassworks/kiln-core';
-import { s1PlusUi } from '../src/frames/aqara-s1-plus';
+import { frame as s1PlusUi } from './s1-frame';
 import { demoBootImage } from '../src/wizard/demo';
 import { Session } from '../src/wizard/session';
 import { initial } from '../src/wizard/state';
@@ -32,7 +28,8 @@ async function setup() {
   const files_ = vi.fn(async () => { if (gate.on) await new Promise<void>((r) => { gate.release = r; }); return files; });
   const requestAdb = vi.fn(() => new Promise<PanelShell>((r) => { pick = r; }));
   const s = new Session({
-    recipe: s1Plus, frame: s1PlusUi, requestFel: () => new Promise(() => {}),
+    // the apps come back (the give-back's steps have their own tests)
+    recipe: s1Plus, frame: { ...s1PlusUi, giveBack: () => apps.unprovision() }, requestFel: () => new Promise(() => {}),
     asset: async () => new Uint8Array(0), hasAsset: async () => false,
     backups: { save: async () => {}, original: async () => meta, files: files_ },
     loadKey: async () => ({ publicKey: 'QAAAA test@example' }) as never,

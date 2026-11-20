@@ -1,13 +1,14 @@
-// The Mirror's two flows for the contract, through their existing exports only (the files are open in #596, #603,
-// #607 and #617; phase 2 of #621 moves them onto the shared engine). `fastboot`: FlashSession, Glassworks built into
+// The Mirror's two flows for the contract, on the engine's device flows (src/device) with the Mirror's declaration
+// (its installer's kilnFrame). `fastboot`: ImageSession, Glassworks built into
 // the Glass Panes image and flashed, then the first start over adb; the image comes through the real resumableBody
-// over a fake network. `app`: MirrorSession, the app alone over adb on a Mirror already on Glass Panes.
+// over a fake network. `app`: AppSession, the app alone over adb on a Mirror already on Glass Panes.
 // A reload is a new session over the same Mirror, as a page load makes one.
 import { SYSTEM_BYTES, USERDATA_BYTES, resumableBody, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
 import { FakeMirror, FirstBootMirror, fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
 import type { PanelShell } from '@glassworks/adb';
-import { FlashSession, type FlashDeps, type ImageMaker } from '../../src/mirror/flash';
-import { MirrorSession } from '../../src/mirror/session';
+import { ImageSession, type ImageDeps, type ImageMaker } from '../../src/device/imageSession';
+import { AppSession } from '../../src/device/appSession';
+import { mirrorFrame } from '../mirror-frame';
 import {
   Clicks, REFUSED, UNPLUGGED, body, fastSleep, never, type Driver, type Knobs, type Look, type Page, type World, type Write,
 } from './harness';
@@ -80,7 +81,8 @@ function flashWorld(k: Knobs): World {
       reboot: async () => { alive(); mode = 'booted'; },
     };
   };
-  const deps: FlashDeps = {
+  const deps: ImageDeps = {
+    frame: mirrorFrame,
     images,
     refract: 'https://proxy.test',
     // VOL- under the back cover: the physical step this flow asks for, so the person does it when asked
@@ -92,7 +94,7 @@ function flashWorld(k: Knobs): World {
       if (fired.refused < (k.refuseAuth ?? 0)) { fired.refused++; throw new Error(REFUSED); }
       return new FirstBootMirror();
     },
-    // as MirrorWizard wires them (#607): the device requestAdb picked, asked again with no list while the Mirror starts
+    // as DevicePage wires them (#607): the device requestAdb picked, asked again with no list while the Mirror starts
     adbPicked: () => mode === 'booted',
     async reopenAdb() {
       if (fired.refused < (k.refuseAuth ?? 0)) { fired.refused++; throw new Error(REFUSED); }
@@ -105,7 +107,7 @@ function flashWorld(k: Knobs): World {
   const apk = fakeMirrorApk();
 
   function load(): Page {
-    const f = new FlashSession(deps);
+    const f = new ImageSession(deps);
     const clicks = new Clicks();
     return {
       look(): Look {
@@ -144,9 +146,9 @@ function flashWorld(k: Knobs): World {
         if (s.screen === 'adb' || s.work?.step === 'first-boot') return 'first-boot';
         return 'install';
       },
-      // the error screen's "Back to the download" (FlashScreens FlashError)
+      // the error screen's "Back to the download" (ImageScreens ImageError)
       async retry() { clicks.reset(); f.retry(); },
-      remembers: () => pristine(f.state) !== pristine(new FlashSession(deps).state),
+      remembers: () => pristine(f.state) !== pristine(new ImageSession(deps).state),
       snapshot: () => JSON.stringify({ ...f.state, log: f.state.log.length }),
       close() {},
     };
@@ -191,6 +193,7 @@ function appWorld(k: Knobs): World {
   const mirror = new FakeMirror({ kiosk: 'none' });
   const apk = fakeMirrorApk();
   const deps = {
+    frame: mirrorFrame,
     async connect(): Promise<PanelShell> {
       const r = reloadAt<PanelShell>('connect');
       if (r) return r;
@@ -201,7 +204,7 @@ function appWorld(k: Knobs): World {
   };
 
   function load(): Page {
-    const s = new MirrorSession(deps, true);
+    const s = new AppSession(deps, true);
     const clicks = new Clicks();
     return {
       look(): Look {
@@ -224,9 +227,9 @@ function appWorld(k: Knobs): World {
         }
       },
       step: () => (s.state.screen === 'working' || s.state.screen === 'error' || s.state.screen === 'done' ? 'install' : 'connect'),
-      // the error screen's "Back to the checks" (MirrorWizard)
+      // the error screen's "Back to the checks" (DevicePage)
       async retry() { clicks.reset(); await s.again(); },
-      remembers: () => pristine(s.state) !== pristine(new MirrorSession(deps, true).state),
+      remembers: () => pristine(s.state) !== pristine(new AppSession(deps, true).state),
       snapshot: () => JSON.stringify({ ...s.state, log: s.state.log.length }),
       close() {},
     };

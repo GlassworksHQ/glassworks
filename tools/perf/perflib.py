@@ -99,14 +99,33 @@ def parse_sf_latency(text):
     return period_ms, sorted(set(presents))
 
 
+# Android 15 and later list each layer as `RequestedLayerState{<name> parentId=… z=…}` (SurfaceFlinger's new
+# front end): the name, then only these fields. Android 17 (API 37) also starts a SurfaceView's name with the
+# view's hash: `f5fea55 SurfaceView[<pkg>/<activity>](BLAST)#163`. `--latency` takes only the whole name, the hash
+# and the `#<id>` included; any other form answers with the refresh period alone, as an unknown name does
+# (API 35 and 37 emulators, 2026-11-19). The Pixel Tablet's Android 17 run named no layer before this.
+REQUESTED_LAYER_RE = re.compile(r"^RequestedLayerState\{(.*?)(?: (?:parentId|relativeParentId|z|layerStack)=-?\d+| !handle)*\}$")
+# The view's hash in front of a SurfaceView's name (Android 17).
+VIEW_HASH_RE = re.compile(r"^[0-9a-f]+ (?=SurfaceView)")
+
+
+def sf_layer_name(line):
+    """One `dumpsys SurfaceFlinger --list` line -> the layer's name, as `--latency` takes it."""
+    line = line.strip()
+    m = REQUESTED_LAYER_RE.match(line)
+    return m.group(1) if m else line
+
+
 def surfaceview_layers(listing, package):
     """The app's SurfaceView layers in `dumpsys SurfaceFlinger --list`, by Android's naming:
     `SurfaceView - <pkg>/<activity>#0` (Android 10, the S1); `SurfaceView[<pkg>/<activity>]#12` and its
-    `(BLAST)` buffer layer (Android 12 and later: read from AOSP's SurfaceView.java, to check on the Pixel Tablet);
+    `(BLAST)` buffer layer (Android 12 and later, from AOSP's SurfaceView.java; the BLAST one holds the frames),
+    wrapped in `RequestedLayerState{…}` on Android 15 and later and with the view's hash in front on 17
+    (sf_layer_name; the names come back whole, for `--latency`);
     plain `SurfaceView` on Android 6, without the app (checked on an API 23 emulator, 2026-11-18): then that one,
     while the app has a window listed, as a kiosk is the only app on screen. Never their `Background for` layers."""
-    listed = [l.strip() for l in listing.splitlines()]
-    names = [l for l in listed if l.startswith((f"SurfaceView - {package}/", f"SurfaceView[{package}/"))]
+    listed = [sf_layer_name(l) for l in listing.splitlines()]
+    names = [l for l in listed if VIEW_HASH_RE.sub("", l).startswith((f"SurfaceView - {package}/", f"SurfaceView[{package}/"))]
     if not names and "SurfaceView" in listed and any(l.startswith(f"{package}/") for l in listed):
         names = ["SurfaceView"]
     return names
@@ -141,6 +160,68 @@ def presents_in(presents_ns, start_s, end_s):
     """Present times (ms) inside a monotonic window given in seconds."""
     lo, hi = start_s * 1e9, end_s * 1e9
     return [t / 1e6 for t in presents_ns if lo <= t <= hi]
+
+
+# ---- SurfaceFlinger's history, read more than once (#643)
+# `--latency` keeps a layer's last frames only: 127 on the S1 (Android 10), about 2.1 s at 60 fps, and about 59
+# on the Pixel Tablet's Android 17 BLAST layer, 0.98 s (run 3's test page, drawing every frame, 2026-11-19).
+# One read just after a window covers it on the S1. On the tablet a 1.16 s swipe is longer than the whole
+# history, so the runner reads it during the window too and joins the reads.
+
+def stitch_reads(reads):
+    """Several `--latency` reads of one layer, in the order they were read (each a list of present times, ns)
+    -> (every frame, sorted; how far back they reach without a gap, ns or None). A read covers everything
+    from its own oldest frame on, so two reads leave no gap when the later one's oldest frame is at or before
+    the earlier one's newest. The reach walks back from the last read while that holds. With one read, it is
+    that read's frames and its oldest frame, as one read always gave."""
+    reads = [sorted(set(r)) for r in reads]
+    frames = sorted(set(t for r in reads for t in r))
+    if not reads or not reads[-1]:
+        return frames, None
+    oldest = reads[-1][0]
+    for earlier, later in zip(reversed(reads[:-1]), reversed(reads[1:])):
+        if not earlier or not later or later[0] > earlier[-1]:
+            break
+        oldest = min(oldest, earlier[0])
+    return frames, oldest
+
+
+def sf_window(period, reads, start_s, end_s):
+    """A window's `sf` record (period_ms, window_ms, oldest_ms, presents_ms) from its reads (stitch_reads).
+    One read gives exactly the record a single read after the window always gave."""
+    frames, oldest = stitch_reads(reads)
+    return {"period_ms": period, "window_ms": [start_s * 1000, end_s * 1000],
+            "oldest_ms": oldest / 1e6 if oldest is not None else None,
+            "presents_ms": presents_in(frames, start_s, end_s)}
+
+
+# One read after a window covers it when the history reaches back this far: a swipe's window (1.15 to 1.18 s
+# on the Pixel Tablet, run 3) and its step line's lag behind it (0.38 to 0.43 s), with room to spare. The S1's
+# 127 frames reach 2.1 s at least (fewer frames a second reach further), so it always reads once.
+SF_ONE_READ_MS = 1800
+# Reading during a window: a read every half of what the history holds at most, so one late read still
+# leaves no gap; never more often than every 0.3 s (each read is a dumpsys on the device), and not at all when
+# reads would have to come closer than 0.05 s or one read takes longer than that half.
+SF_POLL_MIN_S, SF_POLL_MAX_S = 0.05, 0.3
+
+
+def sf_plan(reach_ms, read_ms, list_ms=None):
+    """How the runner reads SurfaceFlinger on this device, from the preflight's numbers: how far back one read
+    reaches while the page draws every frame; how long one read of the known layer takes from this computer (p95;
+    the Pixel Tablet's one adb shell call over wireless adb: 80 ms, p95 171 ms, run 3); and how long a read that
+    lists the layers first takes (perfrun.sf_poll_read's every third read: two calls).
+    -> (poll_s, None): 0 to read once after each window (the S1's way), else seconds from one read's start to
+    the next during it (perfrun.SfReads keeps that rhythm); or (None, why) when reads can't cover a window."""
+    if reach_ms is None:
+        return None, "SurfaceFlinger gave no frames for the app's layer while the test page drew"
+    if reach_ms >= SF_ONE_READ_MS:
+        return 0, None
+    poll = min(SF_POLL_MAX_S, reach_ms / 2000)
+    slowest = max(read_ms, list_ms or 0)
+    if poll < SF_POLL_MIN_S or slowest > reach_ms / 2:
+        return None, (f"SurfaceFlinger's history reaches back {reach_ms:.0f} ms and one read takes {slowest:.0f} ms: "
+                      f"reads can't come often enough to cover a window")
+    return round(poll, 3), None
 
 
 # ---- logcat -v monotonic:  "  4945.980 15843 15981 I Tag     : message"

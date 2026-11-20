@@ -6,4 +6,6 @@ export {
   IMPROV_SOCKET, ImprovSerialClient, PacketReader, PacketType, Rpc, State, frame, parseResult, rpc, strings, wifiSettings,
   type ByteStream, type DeviceInfo, type Packet,
 } from './improv';
-export { UPDATE_SERVICE_PROP, readRootUpdates, type RootUpdates } from './updates';
+export { FRAME_ID_PROP, LOADER_UPDATE_SERVICE_PROP, UPDATE_SERVICE_PROP, readRootUpdates, type RootUpdates } from './updates';
+export { kilnFrame } from './kiln';
+export { kilnSim } from './sim';

@@ -4,13 +4,13 @@
 // LeaveGuard's (root layout), so they hold on every route.
 import { useEffect, useSyncExternalStore } from 'react';
 import { Shell, useBrowserChip } from '../components/Shell';
-import type { FrameUi } from '../frames/aqara-s1-plus';
+import type { KilnFrame } from '@glassworks/kiln-core';
 import { Browser, Connect, Done, Failure, Firing, SetUp, Undo, YourTurn } from './screens';
 import type { Session } from './session';
 import { ROUTES, status } from './routes';
 import { milestones, rail, stackLevel, type WizardState } from './state';
 
-function announce(s: WizardState, frame: FrameUi): string {
+function announce(s: WizardState, frame: KilnFrame): string {
   if (s.ask) return `Your turn. ${frame.asks[s.ask.kind].title} Pick ${frame.asks[s.ask.kind].pick} in the list.`;
   if (s.screen === 'firing') { const m = milestones(s, frame.short).at(-1); return m ? `${m.text}${m.done ? ', done' : ''}.` : ''; }
   if (s.screen === 'error') return `${s.failure?.title} ${s.failure?.body}`;
@@ -19,7 +19,7 @@ function announce(s: WizardState, frame: FrameUi): string {
   return '';
 }
 
-export function Wizard({ session, frame, base }: { session: Session; frame: FrameUi; base: string }) {
+export function Wizard({ session, frame, base }: { session: Session; frame: KilnFrame; base: string }) {
   const s = useSyncExternalStore(session.store.subscribe, session.store.get, session.store.get);
   const chip = useBrowserChip();
 

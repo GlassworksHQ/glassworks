@@ -45,7 +45,7 @@ object ThreadDataset {
 
 /**
  * What the radio helper says about the Thread router (`ok thread_router: <detail>`), parsed. The 0.4.3
- * helper reports the role and the network name ([RadioHelper] status detail):
+ * helper reports the role and the network name (the radio status's detail):
  *  - `ready to join: waiting for a Thread dataset …` (no dataset)
  *  - `joined as router|leader|child, network "Name"`, `detached: looking for network "Name"`,
  *    `starting Thread, network "Name"`, `Thread state <x>, network "Name"`

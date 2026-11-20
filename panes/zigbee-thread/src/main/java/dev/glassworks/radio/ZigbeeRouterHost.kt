@@ -36,7 +36,7 @@ interface RouterHost {
  * Runs on its own thread; [status] is a one-line text for the `Radio status` sensor.
  */
 class ZigbeeRouterHost(
-    private val connect: () -> EzspTransport = { tcp("127.0.0.1", RadioHelper.ZIGBEE_ROUTER_PORT) },
+    private val connect: () -> EzspTransport = { tcp("127.0.0.1", RadioReports.ZIGBEE_ROUTER_PORT) },
     private val log: (String) -> Unit = {},
     private val onStatus: (String) -> Unit = {},
     /** Tests/bring-up: scan and report, but never call joinNetwork. */

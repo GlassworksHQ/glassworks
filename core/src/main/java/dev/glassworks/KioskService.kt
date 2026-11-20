@@ -13,6 +13,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkRequest
 import android.os.SystemClock
+import dev.glassworks.frame.AgentCapability
 import dev.glassworks.frame.ServiceWork
 import dev.glassworks.platform.Hotspot
 import dev.glassworks.platform.HotspotFailure
@@ -127,9 +128,10 @@ open class KioskService : Service() {
      */
     private fun startSetupHotspot() {
         val schedule: (Long, () -> Unit) -> () -> Unit = { delay, run -> val r = Runnable(run); main.postDelayed(r, delay); { main.removeCallbacks(r) } }
-        // On a frame whose root sends the hotspot's DNS and port 80 to the app, a phone opens the setup page by itself.
+        // On a frame whose agent sends the hotspot's DNS and port 80 to the app, a phone opens the setup page by itself.
+        // Declared, not offered: the listeners are the request (docs/frame-agent.md), and without the agent they idle.
         val hotspot = Hotspot.of(this, main).let { h ->
-            if (!glassworks.frame.hotspotPortal) h
+            if (AgentCapability.HOTSPOT_PORTAL !in glassworks.frame.agent.declared) h
             else PortalHotspot(h, CaptivePortal({ ap -> "http://$ap:${OAuth.SIGNIN_PORT}${LanSetup.PAGE}" }, log = { Log.i(HOTSPOT_TAG, it) }), schedule,
                 addresses = { PortalAddresses.now(this) }, log = { Log.i(HOTSPOT_TAG, it) })
         }

@@ -13,7 +13,10 @@ export const IMAGE_PROXY = {
 } as const;
 
 /** The proxy couldn't give us the file: Kiln's bug, shown with Try again and Report this. */
-export class ProxyError extends Error {}
+import { ProxyError } from '@glassworks/kiln-core';
+
+/** Kiln's route couldn't serve a download (kiln-core's, so the engine knows it). */
+export { ProxyError };
 /** An answer that retrying won't change (a refusal, a wrong size): stop at once. */
 class Refused extends ProxyError {}
 /** 429, or 503 with Retry-After: Refract's rate limit. Wait as long as it asks, then try again. */

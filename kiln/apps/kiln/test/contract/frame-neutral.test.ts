@@ -6,7 +6,8 @@
 // outside it fails, and so does an entry with no hit left (delete the entry in the PR that removes the last hit).
 // `notFrames` holds words that only look like a frame's name (SHA-256's S1), under the same no-stale rule.
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, relative, sep } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
+import { parse } from '@babel/parser';
 import { describe, expect, it } from 'vitest';
 import allowlist from './frame-neutral-allowlist.json';
 import { REPO } from './harness';
@@ -81,7 +82,8 @@ describe('Kiln names no frame', () => {
   });
 
   it('reads Kiln\'s sources', () => {
-    expect([...found.values()].some((h) => h.file === 'kiln/apps/kiln/src/wizard/session.ts')).toBe(true);
+    // SHA-256's S1 (notFrames): a hit that stays when no frame is named any more
+    expect([...found.values()].some((h) => h.file === 'kiln/packages/ext4/src/sha256.ts')).toBe(true);
   });
 
   it('no frame name outside the allowlist: say it in frames/<id>/, not in Kiln', () => {
@@ -99,5 +101,82 @@ describe('Kiln names no frame', () => {
     const paths = [...ENTRIES, ...NOT_FRAMES].map((e) => e.path);
     expect(paths.filter((p, i) => paths.indexOf(p) !== i)).toEqual([]);
     expect(ENTRIES.filter((e) => !e.terms.every((t) => NAMES.some(([n]) => n === t))).map((e) => e.path)).toEqual([]);
+  });
+});
+
+/** Each frame's installer package, by its npm name (frames/<id>/installer/package.json). */
+const INSTALLER_PACKAGES = readdirSync(join(REPO, 'frames')).flatMap((id) => {
+  try { return [(JSON.parse(readFileSync(join(REPO, 'frames', id, 'installer', 'package.json'), 'utf8')) as { name: string }).name]; } catch { return []; }
+});
+
+/**
+ * The modules a source imports, re-exports or loads with import(), from its syntax tree (@babel/parser): an import with
+ * a comment inside still counts, and a commented-out one doesn't. `tsx`: the source may hold JSX.
+ */
+export function specifiers(text: string, tsx = true): string[] {
+  const out: string[] = [];
+  const walk = (n: unknown): void => {
+    if (!n || typeof n !== 'object') return;
+    if (Array.isArray(n)) { n.forEach(walk); return; }
+    const node = n as { type?: string; source?: { type?: string; value?: unknown }; callee?: { type?: string }; arguments?: { type?: string; value?: unknown }[] };
+    // import x from, export … from, and import('…') (a CallExpression on Import, or an ImportExpression)
+    if (/^(Import|ExportNamed|ExportAll)Declaration$|^ImportExpression$/.test(node.type ?? '') && typeof node.source?.value === 'string') out.push(node.source.value);
+    if (node.type === 'CallExpression' && node.callee?.type === 'Import' && typeof node.arguments?.[0]?.value === 'string') out.push(node.arguments[0].value);
+    for (const [k, v] of Object.entries(node)) if (k !== 'loc' && k !== 'leadingComments' && k !== 'trailingComments') walk(v);
+  };
+  walk(parse(text, { sourceType: 'module', plugins: tsx ? ['typescript', 'jsx'] : ['typescript'] }).program);
+  return out;
+}
+
+/** Whether `spec`, imported from the source at `abs`, reaches a frame other than through the registry. */
+export function reachesFrame(spec: string, abs: string): boolean {
+  if (INSTALLER_PACKAGES.some((n) => spec === n || spec.startsWith(`${n}/`))) return true;
+  return spec.startsWith('.') && relative(join(REPO, 'frames'), resolve(dirname(abs), spec)).split(sep)[0] !== '..';
+}
+
+/** Every import in Kiln's sources that reaches a frame other than through the registry (@glassworks/frames). */
+export function frameImports(): { file: string; spec: string }[] {
+  const out: { file: string; spec: string }[] = [];
+  for (const root of ROOTS) {
+    for (const abs of files(join(REPO, root))) {
+      if (!/\.(ts|tsx|mts|js|mjs)$/.test(abs)) continue;
+      const file = relative(REPO, abs).split(sep).join('/');
+      for (const spec of specifiers(readFileSync(abs, 'utf8'), /\.[jt]sx$/.test(abs))) if (reachesFrame(spec, abs)) out.push({ file, spec });
+    }
+  }
+  return out;
+}
+
+interface ImportEntry { path: string; why: string }
+const IMPORTS = (allowlist as unknown as { imports: ImportEntry[] }).imports;
+const importCovered = (e: ImportEntry, file: string) => (e.path.endsWith('/') ? file.startsWith(e.path) : file === e.path);
+
+describe('Kiln reaches frames only through the registry', () => {
+  const found = frameImports();
+
+  it('knows each frame\'s installer package', () => {
+    expect(INSTALLER_PACKAGES).toContain('@glassworks/aqara-s1-plus-installer');
+  });
+
+  it.each([
+    ['an import', `import { kilnFrame } from '@glassworks/aqara-s1-plus-installer';`, ['@glassworks/aqara-s1-plus-installer']],
+    ['a comment inside it', `import { kilnFrame } from /* the S1 */ '@glassworks/aqara-s1-plus-installer';`, ['@glassworks/aqara-s1-plus-installer']],
+    ['a re-export of a subpath', `export { x } from '@glassworks/aqara-s1-plus-installer/fakes';`, ['@glassworks/aqara-s1-plus-installer/fakes']],
+    ['import()', `const m = await import('@glassworks/aqara-s1-plus-installer');`, ['@glassworks/aqara-s1-plus-installer']],
+    ['a path into frames/', `import d from '../../../../../frames/aqara-s1-plus/design/frame.json';`, ['../../../../../frames/aqara-s1-plus/design/frame.json']],
+    ['the registry, which is the way', `import { KILN } from '@glassworks/frames/kiln';`, []],
+    ['a commented-out import', `// import { kilnFrame } from '@glassworks/aqara-s1-plus-installer';`, []],
+  ])('finds %s', (_, source, want) => {
+    const at = join(REPO, 'kiln/apps/kiln/src/wizard/x.ts');
+    expect(specifiers(source).filter((s) => reachesFrame(s, at))).toEqual(want);
+  });
+
+  it('no frame import outside the allowlist: import @glassworks/frames instead', () => {
+    expect(found.filter((h) => !IMPORTS.some((e) => importCovered(e, h.file))).map((h) => `${h.file} ${h.spec}`)).toEqual([]);
+  });
+
+  it('no import allowlist entry without an import: the list only shrinks', () => {
+    expect(IMPORTS.filter((e) => !found.some((h) => importCovered(e, h.file))).map((e) => e.path)).toEqual([]);
+    expect(IMPORTS.filter((e) => !/#\d+/.test(e.why)).map((e) => e.path)).toEqual([]);
   });
 });

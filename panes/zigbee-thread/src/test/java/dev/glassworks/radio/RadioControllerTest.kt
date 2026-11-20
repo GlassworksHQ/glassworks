@@ -1,5 +1,7 @@
 package dev.glassworks.radio
 
+import dev.glassworks.s1.radio.AqaraRadio
+import dev.glassworks.s1.radio.RadioHelper
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -50,7 +52,7 @@ class RadioControllerTest {
     private fun controller(init: FakeInit, initial: String? = null, ip: String? = null): RadioController {
         stored = initial
         return RadioController(
-            init, load = { stored }, store = { stored = it }, inline = true, log = {},
+            s1Agent(init), load = { stored }, store = { stored = it }, inline = true, log = {},
             panelIp = { ip }, filesDir = tmp.root, routerHostFactory = { router }, allow = allow,
         )
     }
@@ -182,8 +184,8 @@ class RadioControllerTest {
 
     @Test
     fun servicePlans() {
-        fun running(m: RadioMode) = m.aqaraServices.filterValues { it }.keys.toList()
-        assertEquals(AqaraRadio.ALL.toSet(), RadioMode.OFF.aqaraServices.keys)
+        fun running(m: RadioMode) = AqaraRadio.servicesFor(m).filterValues { it }.keys.toList()
+        assertEquals(AqaraRadio.ALL.toSet(), AqaraRadio.servicesFor(RadioMode.OFF).keys)
         assertEquals(emptyList<String>(), running(RadioMode.OFF))
         // Zigbee modes reuse cpcd + Aqara's pty pair + zigbeed; never Aqara's EZSP host or bridges.
         val zigbee = listOf(AqaraRadio.CPCD, AqaraRadio.SOCAT, AqaraRadio.ZIGBEED)
@@ -363,12 +365,12 @@ class RadioControllerTest {
 
     @Test
     fun helperStatusParsing() {
-        assertEquals(RadioHelper.Status("ok", RadioMode.ZIGBEE_TCP, ""), RadioHelper.parseStatus("ok zigbee_tcp"))
-        assertEquals(RadioHelper.Status("applying", RadioMode.OFF, ""), RadioHelper.parseStatus("applying off"))
-        assertEquals("a: b", RadioHelper.parseStatus("error thread: a: b")?.detail)
-        assertNull(RadioHelper.parseStatus(""))
-        assertNull(RadioHelper.parseStatus("weird"))
-        assertNull(RadioHelper.parseStatus("done thread"))
+        assertEquals(RadioReports.Status("ok", RadioMode.ZIGBEE_TCP, ""), RadioReports.parseStatus("ok zigbee_tcp"))
+        assertEquals(RadioReports.Status("applying", RadioMode.OFF, ""), RadioReports.parseStatus("applying off"))
+        assertEquals("a: b", RadioReports.parseStatus("error thread: a: b")?.detail)
+        assertNull(RadioReports.parseStatus(""))
+        assertNull(RadioReports.parseStatus("weird"))
+        assertNull(RadioReports.parseStatus("done thread"))
     }
 
     @Test

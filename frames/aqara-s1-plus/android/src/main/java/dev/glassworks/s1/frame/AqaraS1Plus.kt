@@ -14,7 +14,6 @@ import dev.glassworks.frame.Frame
 import dev.glassworks.frame.FrameRelease
 import dev.glassworks.frame.Hardware
 import dev.glassworks.frame.NamedBy
-import dev.glassworks.frame.RootUpdates
 import dev.glassworks.frame.ServiceWork
 import dev.glassworks.pane.PaneContext
 import dev.glassworks.pane.Pane
@@ -66,10 +65,8 @@ class AqaraS1Plus(private val aqaraCloud: AqaraCloud = AqaraCloud()) : Frame {
 
     override fun deviceSection(context: Context, running: (String) -> Pane?) = device.section(context, frameRelease, running)
 
-    override val rootUpdates: RootUpdates = RootUpdateInstaller()
-
-    /** The radio helper sends the setup hotspot's DNS and port 80 to the app's portal while it runs (#197). */
-    override val hotspotPortal = true
+    /** The root helper and its update and bundle services (docs/frame-agent.md). */
+    override val agent: S1Agent = S1Agent()
 
     /**
      * The S1 frame's version (#139), which the loader in its boot image sets at boot. A panel without the loader has

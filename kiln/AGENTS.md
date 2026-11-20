@@ -28,7 +28,7 @@ The checks, in `apps/kiln/test/contract/`:
 - `frame-neutral.test.ts`: no new frame name in `apps/kiln/src` or `packages/*/src`. Its allowlist
   only shrinks.
 
-The Mirror and Android pages don't follow this yet (#621, phase 2). Don't copy them: build on the
+Android's page doesn't follow this yet (#621, step 3). Don't copy it: build on the
 shared engine.
 
 ## What it is
@@ -61,6 +61,7 @@ lockfile swap). Its `package.json` lists `kiln` (the page), `kiln/packages/*`, `
 | `../frames/generic-android/installer` | Any Android 6+ device over adb (#403), Kiln's `/android` (test only, `?apk=release` for the newest `generic-android-v*` release or `?apk=local` for a file; `apps/kiln/src/android`). Reads the device, picks Glassworks or its legacy build from the APK, installs or updates in place, grants and reads back what adb can, sets HOME (`set-home-activity` on Android 7+, else the chooser), hands over to setup over the LAN. `devices.ts`: USB vendor ID or adb's maker and model to a brand and its sourced steps to turn on USB debugging. `browser.ts`: the same from the device's own browser, for Kiln's `/android/tablet` (no USB). Its command sequences per API level are pinned (`test/golden/generic-adb-commands.json`) |
 | `../frames/*/design` | Each frame's design data: `frame.json` (catalog fields, the 3D model in mm) and `recovery.json`. Kiln's picker reads it; format and how the website reads it in [frames/README.md](../frames/README.md) |
 | `../packages/frame-card` | The frame card and 3D device mockup, shared with glassworks.dev ([README](../packages/frame-card/README.md)). Kiln's picker wraps it in a radio item |
+| `../packages/frames` | The frames registry: the one place that names frames, and Kiln's only way to one. `catalog` (each frame's design data, no code) and `kiln` (each engine frame's `kilnFrame` and `kilnSim`, loaded on demand). A new frame adds its imports to both |
 
 A package never imports from `src/`. Packages import each other by name (`@glassworks/fel`), and
 declare those names in their `package.json`. kiln-core names no frame (`test/no-frame-names.test.ts`).
