@@ -100,6 +100,7 @@ know, and the screens say Kiln can't tell instead.
 | `src/wizard/state.ts` | The wizard's state and its one reducer. The rail, the stack, the plain log and the time left are derived |
 | `src/wizard/flowUi.ts` | kiln-core's `FlowUi` as wizard actions. `AskBridge` is the "your turn" sheet |
 | `src/wizard/session.ts` | The hardware steps: InstallFlow with the recipe, then the app's setup over adb. Screens only call it |
+| `src/setup/adbSetUp.ts` | Set-up over adb once Glassworks is on a device: Wi-Fi over Improv, then Home Assistant and the radio over the app's setup channel (`channelSetup.ts`). The wizard's Session runs it; it needs only an adb connection, so any frame's page can |
 | `src/wizard/routes.ts`, `useRouteSync.ts`, `registry.ts` | The routes, and the frame's session that outlives them |
 | `src/frames/catalog.ts`, `src/components/FrameCard.tsx` | The picker's frames, from the frames registry's catalog ([`packages/frames`](../../../packages/frames/package.json): `frames/<id>/design/frame.json`, [frames/README.md](../../../frames/README.md)), drawn by the card glassworks.dev shares ([`packages/frame-card`](../../../packages/frame-card/README.md)) as radio items |
 | `src/wizard/screens.tsx` | One component per screen of the design, on Radix primitives |

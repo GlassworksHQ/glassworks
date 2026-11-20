@@ -5,13 +5,13 @@ import type { AdbKey, PanelShell } from '@glassworks/adb';
 import type { Fastboot } from '@glassworks/fastboot';
 import { IMPROV_SOCKET, kioskVersion } from '@glassworks/app-adb';
 import type { FelDevice } from '@glassworks/fel';
-import { ImprovSerialClient, State as ImprovState } from 'improv-serial';
 import {
   BackupRefused, InstallFlow, backupZip, checkRestorable, fmtSize, readBackupZip, restoreFromBackup,
   type BackupFile, type BackupMeta, type BackupStore, type Devices, type Recipe,
 } from '@glassworks/kiln-core';
-import { openSignInWindow, SETUP_SOCKET, SetupChannel } from '@glassworks/setup-channel';
-import { ChannelSetup, type SetupSteps } from '../setup/channelSetup';
+import { openSignInWindow } from '@glassworks/setup-channel';
+import { AdbSetUp } from '../setup/adbSetUp';
+import type { SetupSteps } from '../setup/channelSetup';
 import { explain } from './explain';
 import { AskBridge, flowUi } from './flowUi';
 import type { AppPhase, AppResult, AppSettings, KilnFrame } from '@glassworks/kiln-core';
@@ -63,14 +63,11 @@ export class Session implements SetupSteps {
   private flow?: InstallFlow<string, unknown, AppResult>;
   private result?: { meta: BackupMeta; files: BackupFile[] };
   private panel?: PanelShell;
-  private improv?: ImprovSerialClient;
-  private readonly steps: ChannelSetup;
+  /** Wi-Fi, Home Assistant and the radio over adb, once the app is on the panel. */
+  private readonly setUp: AdbSetUp;
   private undoFiles?: Map<string, Uint8Array>;
   /** The backup in this browser, when Undo uses it: Undo offers it as a download. */
   private undoBackup?: { meta: BackupMeta; files: BackupFile[] };
-  private ip?: string;
-  private wifiSsid?: string;
-  private wifiHint?: string;
   /** what the person chose on the settings step, shown again if they go back to it */
   private chosen?: AppSettings;
   /** the app is on the panel: provision put it there, or `pm path` found it */
@@ -88,11 +85,9 @@ export class Session implements SetupSteps {
   close(): void {
     if (this.closed) return;
     this.closed = true;
-    this.steps.close();
-    const quiet = (p?: Promise<unknown>) => { void p?.catch(() => {}); };
-    quiet(this.improv?.close());
-    quiet((this.panel as { close?: () => Promise<void> } | undefined)?.close?.());
-    this.improv = this.panel = undefined;
+    this.setUp.close();
+    void (this.panel as { close?: () => Promise<void> } | undefined)?.close?.().catch(() => {});
+    this.panel = undefined;
   }
 
   get isClosed(): boolean { return this.closed; }
@@ -108,8 +103,8 @@ export class Session implements SetupSteps {
     // Loaded up front, so a later click can call requestDevice() without waiting on IndexedDB first.
     this.keyReady = d.loadKey().then((k) => (this.key = k));
     this.keyReady.catch(() => {});
-    this.steps = new ChannelSetup({
-      open: (tries) => this.openSetup(tries),
+    this.setUp = new AdbSetUp({
+      panel: () => this.panel,
       phase: () => this.s.setup,
       show: (setup) => this.setupPhase(setup),
       here: () => !this.closed && this.s.screen === 'setup',
@@ -120,7 +115,14 @@ export class Session implements SetupSteps {
         const v = await kioskVersion(this.panel!, this.lid(), this.d.frame.appId);
         return { version: v?.name, code: v?.code };
       },
+      appName: this.d.frame.app,
+      wifiName: (p, signal) => this.d.frame.wifiName(p, signal),
+      click: (name, run) => this.click(name, run),
+      note: (line) => this.ui.note(line),
+      lid: (ms) => this.lid(ms),
+      sleep: (ms) => this.sleep(ms),
       openTab: (url) => (this.d.openTab ? this.d.openTab(url) : openSignInWindow()),
+      simulated: d.simulated,
     });
   }
 
@@ -309,153 +311,44 @@ export class Session implements SetupSteps {
       const res = await this.getFlow(await this.keyReady).setUpApp(this.panel!, this.d.frame.appOptions(opts, (q) => (this.d.confirm ?? window.confirm)(q), at));
       this.hasApp = true;
       const sw = res.switched;
-      this.ip = res.ip;
-      this.wifiHint = sw?.wifi === 'lost'
+      this.setUp.ip = res.ip;
+      this.setUp.wifiHint = sw?.wifi === 'lost'
         ? `Switching versions made the panel forget ${sw.ssid ? `"${sw.ssid}"` : 'its Wi-Fi'}. Pick it again and type its password.`
         : undefined;
       // the first start: done when the app listens again (the Wi-Fi step would wait for it too)
       if (seen.at(-1)?.step !== 'start') at({ step: 'start' });
-      if (!(await this.waitForSocket(IMPROV_SOCKET))) {
+      if (!(await this.setUp.waitForSocket(IMPROV_SOCKET))) {
         this.setupPhase({ phase: 'wifi', networks: [], unreachable: true, status: `Couldn't reach ${this.d.frame.app} on the panel.` });
         return;
       }
-      await this.wifi();
+      await this.setUp.wifi();
     } catch (e) {
       this.setupPhase({ phase: 'settings', update, chosen: opts, error: (e as Error).message });
     }
   }
 
-  /** Waits until the app listens on `socket` (it cold-starts after the install), then connects. */
-  private async waitForSocket(socket: string, timeoutMs = 90_000): Promise<boolean> {
-    if (this.d.simulated) return true;
-    const name = socket.replace(/^localabstract:/, '@');
-    const until = Date.now() + timeoutMs;
-    while (Date.now() < until) {
-      const r = await this.panel!.run(`grep -c ' ${name}$' /proc/net/unix`).catch(() => ({ out: '0', code: 1 }));
-      if (Number.parseInt(r.out.trim(), 10) > 0) return true;
-      await this.sleep(1500);
-    }
-    this.ui.note(`${name} never started listening on the panel`);
-    return false;
-  }
+  // ---- set-up over adb (src/setup/adbSetUp.ts): Wi-Fi, then Home Assistant and the radio --------
 
-  private async openImprov(): Promise<ImprovSerialClient | undefined> {
-    const open = this.panel?.openStream?.bind(this.panel);
-    if (!open || !(await this.waitForSocket(IMPROV_SOCKET))) return undefined;
-    for (let i = 0; i < 5; i++) {
-      try {
-        const c = new ImprovSerialClient(await open(IMPROV_SOCKET), { deviceLabel: 'panel' });
-        await c.requestState(5000);
-        return c;
-      } catch (e) {
-        this.ui.note(`Improv over adb, try ${i + 1}: ${(e as Error).message ?? e}`);
-        await this.sleep(1500);
-      }
-    }
-    return undefined;
-  }
-
-  /**
-   * The Wi-Fi step. A panel already on Wi-Fi says so first, with changing it as the other way; one
-   * that isn't goes straight to the networks it can see.
-   */
-  async wifi(): Promise<void> {
-    this.setupPhase({ phase: 'wifi', status: `Starting ${this.d.frame.app} on the panel…`, hint: this.wifiHint });
-    void this.improv?.close().catch(() => {}); // back on this step: one Improv connection at a time
-    this.improv = await this.openImprov();
-    if (!this.improv) {
-      this.setupPhase({ phase: 'wifi', networks: [], unreachable: true, status: `Couldn't reach ${this.d.frame.app} on the panel.` });
-      return;
-    }
-    const on = await this.panelOnWifi();
-    if (on) { this.setupPhase({ phase: 'wifi', on, status: '' }); return; }
-    await this.scanWifi();
-  }
-
-  /**
-   * Whether the panel is on Wi-Fi, from the app's setup state (its address), and which network, from
-   * Android (`dumpsys wifi`, read-only). Undefined when it isn't, or an older app can't say.
-   */
-  private async panelOnWifi(): Promise<{ ip: string; ssid?: string } | undefined> {
-    const st = await this.steps.state();
-    if (!st?.ip) return undefined;
-    this.ip = st.ip;
-    // read-only and only for the name: a panel slow to answer doesn't hold up the step
-    const named = await this.d.frame.wifiName(this.panel!, this.lid()).catch(() => undefined);
-    const ssid = named?.ssid ?? this.wifiSsid;
-    if (ssid) this.wifiSsid = ssid;
-    return { ip: st.ip, ssid };
-  }
-
-  /** The networks the panel can see, over Improv Serial through adb ("Use another network"). */
-  async scanWifi(): Promise<void> {
-    if (!this.improv) return this.wifi();
-    const was = this.s.setup.phase === 'wifi' ? this.s.setup.on : undefined;
-    const already = !was && this.improv.state === ImprovState.Provisioned;
-    this.setupPhase({ phase: 'wifi', on: was, changing: !!was, status: 'Looking for networks the panel can see…', hint: already ? 'The panel is already on Wi-Fi. Pick another network to change it, or skip.' : this.wifiHint });
-    let networks: { ssid: string; rssi: number; secure: boolean }[] = [];
-    try { networks = await this.improv.scan(); } catch { /* typed by hand then */ }
-    const s = this.s.setup;
-    this.setupPhase({
-      phase: 'wifi', on: was, changing: !!was, networks, hint: s.phase === 'wifi' ? s.hint : undefined,
-      status: networks.length ? `${networks.length} in range of the panel` : 'None found. Type the name.',
-    });
-  }
-
-  async joinWifi(ssid: string, psk: string): Promise<void> {
-    const base = this.s.setup.phase === 'wifi' ? this.s.setup : { phase: 'wifi' as const, status: '' };
-    const step = (st: 'sent' | 'join' | 'ok' | 'err', error?: string) => this.setupPhase({ ...base, joining: { ssid, step: st, error } });
-    if (!ssid) { step('err', 'Pick or type a network.'); return; }
-    step('sent');
-    const succeeded = () => {
-      this.ui.note(`panel connected to Wi-Fi ${ssid}`);
-      void this.improv?.close();
-      this.wifiSsid = ssid;
-      step('ok');
-    };
-    try {
-      await this.improv!.provision(ssid, psk, () => step('join'));
-      succeeded();
-    } catch (e) {
-      // The app can restart right after joining (it found Home Assistant), which cuts this connection
-      // before the result arrives. Reconnect and ask: Provisioned means it's on Wi-Fi.
-      this.ui.note(`Wi-Fi: ${(e as Error).message}; asking the panel again`);
-      const again = await this.openImprov();
-      const state = again ? await again.requestState().catch(() => 0) : 0;
-      if (again && state === ImprovState.Provisioned) { this.improv = again; succeeded(); return; }
-      step('err', (e as Error).message);
-    }
-  }
-
-  private async openSetup(tries = 5): Promise<SetupChannel | undefined> {
-    const open = this.panel?.openStream?.bind(this.panel);
-    if (!open) return undefined;
-    for (let i = 0; i < tries; i++) {
-      try {
-        const c = new SetupChannel(await open(SETUP_SOCKET));
-        await c.getState();
-        return c;
-      } catch { await this.sleep(1000); }
-    }
-    return undefined;
-  }
-
-  // ---- the steps over the app's setup channel (src/setup/channelSetup.ts) ----------------------
-
-  get haAddress(): string | undefined { return this.steps.haAddress; }
-  set haAddress(v: string | undefined) { this.steps.haAddress = v; }
-  homeAssistant(): Promise<void> { return this.steps.homeAssistant(); }
-  signIn(url: string): void { this.steps.signIn(url); }
-  saveHa(url: string): Promise<void> { return this.steps.saveHa(url); }
-  skipHa(url: string): Promise<void> { return this.steps.skipHa(url); }
-  radio(): Promise<void> { return this.steps.radio(); }
-  applyRadio(mode: string): Promise<void> { return this.steps.applyRadio(mode); }
+  /** The app's setup channel (the tests reach it here). */
+  private get steps() { return this.setUp.steps; }
+  /** The Wi-Fi step. A panel already on Wi-Fi says so first, with changing it as the other way. */
+  wifi(): Promise<void> { return this.setUp.wifi(); }
+  scanWifi(): Promise<void> { return this.setUp.scanWifi(); }
+  joinWifi(ssid: string, psk: string): Promise<void> { return this.setUp.joinWifi(ssid, psk); }
+  get haAddress(): string | undefined { return this.setUp.haAddress; }
+  set haAddress(v: string | undefined) { this.setUp.haAddress = v; }
+  homeAssistant(): Promise<void> { return this.setUp.homeAssistant(); }
+  signIn(url: string): void { this.setUp.signIn(url); }
+  saveHa(url: string): Promise<void> { return this.setUp.saveHa(url); }
+  skipHa(url: string): Promise<void> { return this.setUp.skipHa(url); }
+  radio(): Promise<void> { return this.setUp.radio(); }
+  applyRadio(mode: string): Promise<void> { return this.setUp.applyRadio(mode); }
 
   /** Done, with the backup to download. */
   finish(): void {
-    const ip = this.steps.ip ?? this.ip;
+    const ip = this.steps.ip ?? this.setUp.ip;
     const b = this.s.backup;
-    const wifi = this.wifiSsid;
+    const wifi = this.setUp.wifiSsid;
     const total = b ? b.files.reduce((n, f) => n + f.size, 0) : 0;
     this.dispatch({
       type: 'done', done: {
