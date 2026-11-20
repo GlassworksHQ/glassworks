@@ -1,22 +1,21 @@
 {
   "$comment": "Kiln's install for this frame, as data. `device`: what Kiln's device flows read (kiln-core DeviceFrame): its names, board, release line, timings, assets, the browser storage it keeps, and its words. Format: docs/design/kiln/frames-as-data.md. A draft (#621): the contract (kiln/apps/kiln/test/contract) reads route, touch and each step's id, writes, reboots, downloads and taps; the engine reads the rest from phase 2.",
   "route": "/lululemon-mirror",
-  "page": "device",
   "touch": false,
   "flows": {
     "fastboot": {
       "steps": [
-        { "id": "image", "transport": "none", "inputs": ["apk", "home-assistant", "wifi"], "downloads": ["glass-panes-system"] },
-        { "id": "fastboot", "transport": "fastboot", "enter": { "how": "button", "reachable": false, "why": "VOL- is on a board inside the case. On the Glass Panes image the Mirror runs adb, so phase 2 enters fastboot with adb reboot bootloader." }, "checks": ["fastboot-vars", "partition-sizes"] },
-        { "id": "install", "transport": "fastboot", "writes": true, "reboots": true, "backup": false },
-        { "id": "first-boot", "transport": "adb", "enter": { "how": "boot", "key": "userdata" }, "writes": true }
+        { "id": "image", "route": "", "transport": "none", "inputs": ["apk", "home-assistant", "wifi"], "downloads": ["glass-panes-system"] },
+        { "id": "fastboot", "route": "fastboot", "title": "Fastboot", "transport": "fastboot", "enter": { "how": "button", "reachable": false, "why": "VOL- is on a board inside the case. On the Glass Panes image the Mirror runs adb, so phase 2 enters fastboot with adb reboot bootloader." }, "checks": ["fastboot-vars", "partition-sizes"] },
+        { "id": "install", "route": "install", "title": "Install", "transport": "fastboot", "writes": true, "reboots": true, "backup": false },
+        { "id": "first-boot", "route": "first-start", "title": "First start", "transport": "adb", "enter": { "how": "boot", "key": "userdata" }, "writes": true }
       ],
       "then": "set-up"
     },
     "app": {
       "steps": [
-        { "id": "connect", "transport": "adb", "enter": { "how": "usb-debugging", "key": "glass-panes" }, "inputs": ["apk", "home-assistant"], "checks": ["android-6", "free-space"] },
-        { "id": "install", "transport": "adb", "writes": true }
+        { "id": "connect", "route": "app", "title": "The app alone", "transport": "adb", "enter": { "how": "usb-debugging", "key": "glass-panes" }, "inputs": ["apk", "home-assistant"], "checks": ["android-6", "free-space"] },
+        { "id": "install", "route": "app/install", "title": "Install", "transport": "adb", "writes": true }
       ],
       "then": "set-up"
     }

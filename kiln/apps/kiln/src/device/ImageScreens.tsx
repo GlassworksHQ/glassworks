@@ -79,6 +79,7 @@ export function ImageImage({ f, s, m, ms }: P) {
       <TestOnly f={f.frame} />
       <h2 id="h">{`Install Glassworks on ${d.the}.`}</h2>
       <p className="lede">{d.words['image.lede']}</p>
+      {s.changed && <p className="small">{`An earlier try already changed ${d.the}.`}</p>}
       {s.files.map((x) => <FileRow key={x.name} f={f} file={x} />)}
       <ImageCredit f={d} />
       {ms.release && <ReleaseApk m={m} ms={ms} />}

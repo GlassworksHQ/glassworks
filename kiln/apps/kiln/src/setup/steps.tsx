@@ -1,6 +1,7 @@
 // The setup steps on the Kiln design: Wi-Fi, Home Assistant, the radio role and what to do next in Home
 // Assistant. Kiln's wizard shows them over USB, the panel's own page over the LAN or the panel's setup
 // hotspot (#34, issue 197); `steps` is the wizard's Session or the page's controller.
+import { paneById } from '@glassworks/frame-card';
 import * as Collapsible from '@radix-ui/react-collapsible';
 import * as RadioGroup from '@radix-ui/react-radio-group';
 import { useEffect, useState } from 'react';
@@ -157,6 +158,16 @@ export function HomeAssistant({ busy, steps, setup }: StepProps<'ha'>) {
 }
 
 /**
+ * A pane's icon, from the pane catalog (each pane's own icon.svg, as glassworks.dev draws it): 24 × 24 strokes in
+ * currentColor. A card whose id the catalog doesn't know has none.
+ */
+function PaneIcon({ id }: { id: string }) {
+  const icon = paneById(id)?.icon;
+  // the repo's own SVG files, collected at build time (packages/frame-card): never anything the device sent
+  return icon ? <span className="ic" aria-hidden="true" dangerouslySetInnerHTML={{ __html: icon }} /> : null;
+}
+
+/**
  * Panes: what the device does, one switch per pane its app offers (the panel's own Panes step, its cards and words;
  * Kiln's sketch, docs/design/kiln: "Panes are switches"). Continue applies them; a pane that is on and has a step of its
  * own (the radio) comes next.
@@ -170,6 +181,7 @@ export function Panes({ busy, steps, setup }: StepProps<'panes'>) {
         {setup.panes.map((p) => (
           <li key={p.id}>
             <label className={on[p.id] ? 'pn on' : 'pn'}>
+              <PaneIcon id={p.id} />
               <span className="t"><span>{p.title}</span><small>{p.detail}</small></span>
               <input type="checkbox" role="switch" className="sw" checked={!!on[p.id]} disabled={setup.busy}
                 onChange={(e) => setOn({ ...on, [p.id]: e.target.checked })} />

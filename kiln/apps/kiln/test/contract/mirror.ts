@@ -8,7 +8,7 @@
 import { SYSTEM_BYTES, USERDATA_BYTES, resumableBody, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
 import { FakeMirror, FirstBootMirror, fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
 import type { PanelShell } from '@glassworks/adb';
-import { ImageSession, type ImageDeps, type ImageMaker } from '../../src/device/imageSession';
+import { ImageSession, type DeviceProgress, type ImageDeps, type ImageMaker, type ProgressMark } from '../../src/device/imageSession';
 import { AppSession } from '../../src/device/appSession';
 import { withAppStreams } from '../../src/wizard/demo';
 import type { StandardSession } from '../../src/standard/session';
@@ -34,8 +34,13 @@ function standardLook(ss: StandardSession | undefined, clicks: Clicks, goal: () 
   return 'wait';
 }
 
+/** The tab's sessionStorage for one world: it outlives a page load, as the browser's does. */
+function tabProgress(): DeviceProgress {
+  let mark: ProgressMark | undefined;
+  return { get: () => mark, set: (m) => { mark = m; } };
+}
+
 const IMAGE = new Uint8Array(64).fill(7);
-const pristine = (state: object) => JSON.stringify({ ...state, log: [] });
 
 function flashWorld(k: Knobs): World {
   const writes: Write[] = [];
@@ -127,6 +132,7 @@ function flashWorld(k: Knobs): World {
     apk: () => apk,
     sleep: fastSleep,
     simulated: true,
+    progress: tabProgress(),
   };
   const apk = fakeMirrorApk();
 
@@ -180,7 +186,8 @@ function flashWorld(k: Knobs): World {
         if (standard) { const ss = standard; await ss.click('resume', () => ss.route('resume')); return; }
         f.retry();
       },
-      remembers: () => pristine(f.state) !== pristine(new ImageSession(deps).state),
+      // the page knows from the tab's mark (ImageDeps `progress`) that an earlier load wrote
+      remembers: () => !!f.state.changed,
       snapshot: () => JSON.stringify({ ...f.state, log: f.state.log.length, standard: standard && { ...standard.store.state, log: [] } }),
       close() {},
     };
@@ -234,6 +241,7 @@ function appWorld(k: Knobs): World {
       return withAppStreams(await link(mirror, k, fired, writes, partial, reloadAt), { online: true, radio: false });
     },
     sleep: fastSleep,
+    progress: tabProgress(),
   };
 
   function load(): Page {
@@ -269,7 +277,7 @@ function appWorld(k: Knobs): World {
         if (standard) { const ss = standard; await ss.click('resume', () => ss.route('resume')); return; }
         await s.again();
       },
-      remembers: () => pristine(s.state) !== pristine(new AppSession(deps, true).state),
+      remembers: () => !!s.state.changed,
       snapshot: () => JSON.stringify({ ...s.state, log: s.state.log.length, standard: standard && { ...standard.store.state, log: [] } }),
       close() {},
     };

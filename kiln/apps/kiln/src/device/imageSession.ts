@@ -81,6 +81,29 @@ export interface ImageDeps {
    * keeps what the first start found, for Done's lines about the home screen and Home Assistant's key.
    */
   handOver?(panel: PanelShell): void;
+  /**
+   * Where the install got to, kept for this browser tab across page loads (Kiln's resume after a reload, issue 621):
+   * `written`, a write started; `flashed`, the device restarted into what was written and its first start is left.
+   * None: a reload forgets.
+   */
+  progress?: DeviceProgress;
+}
+
+/** A device install's mark across page loads (ImageDeps `progress`, AppDeps `progress`). `image`: the recipe it wrote. */
+export type ProgressMark = { at: 'written' | 'flashed'; image?: string };
+export interface DeviceProgress { get(): ProgressMark | undefined; set(m: ProgressMark | undefined): void }
+
+/** A mark in the tab's sessionStorage under `key`; a browser that blocks it forgets, as a reload without storage does. */
+export function sessionProgress(key: string): DeviceProgress {
+  return {
+    get: () => {
+      try {
+        const v = JSON.parse(sessionStorage.getItem(key) ?? 'null') as ProgressMark | null;
+        return v && (v.at === 'written' || v.at === 'flashed') ? v : undefined;
+      } catch { return undefined; }
+    },
+    set: (m) => { try { if (m) sessionStorage.setItem(key, JSON.stringify(m)); else sessionStorage.removeItem(key); } catch { /* storage off */ } },
+  };
 }
 
 /** The browser's list was closed with nothing picked: nothing to ask again. */
@@ -120,6 +143,8 @@ export interface FileCheck { name: string; size: number; state: 'waiting' | 'dow
 
 export interface ImageState {
   screen: ImageScreen;
+  /** An earlier page load wrote to the device (its `progress` says): the screens say so, and nothing claims it is untouched. */
+  changed?: boolean;
   /** The picked image's id. */
   picked: string;
   /** The community images are shown on the choice. */
@@ -221,6 +246,12 @@ export class ImageSession {
     const first = linked ?? this.recipes[0]!;
     this.state = { screen: linked ? 'download' : 'choose', picked: first.id, open: !!linked, link: !!linked, files: waiting(first),
       wifi: { ssid: '', password: '' }, understood: false, log: [] };
+    // a reload: Glassworks written and restarted goes straight to its first start (no download, no fastboot); a write
+    // that didn't finish starts again from the image, saying an earlier try changed the device
+    const mark = d.progress?.get();
+    const wrote = mark && this.recipes.find((r) => r.id === mark.image);
+    if (mark?.at === 'flashed' && wrote && !wrote.community) this.state = { ...this.state, screen: 'adb', picked: wrote.id, files: waiting(wrote), changed: true };
+    else if (mark) this.state = { ...this.state, changed: true };
   }
 
   subscribe = (l: () => void) => { this.listeners.add(l); return () => { this.listeners.delete(l); }; };
@@ -618,6 +649,7 @@ export class ImageSession {
     const now = () => performance.now();
     const secs = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
     const first = steps.find((x) => x.do !== 'backup');
+    this.d.progress?.set({ at: 'written', image: r.id });
     this.set({ screen: 'working', error: undefined, flashFailed: false, communityWifi: undefined, firstBoot: undefined, work: { step: first?.do === 'patch' ? 'patch' : first?.do === 'flash' ? `flash-${first.partition}` as WorkStep : 'restart', x: 0 } });
     // what an earlier attempt made (Glassworks' images, a userdata with a network) is made again by its
     // own step, or not at all: a retry with the network cleared must write userdata as published
@@ -706,13 +738,16 @@ export class ImageSession {
           this.fb = undefined;
           this.made = Object.create(null);
           if (!r.community) this.d.flashedHere?.set(); // this browser's key is in the Glassworks it wrote: the keep step can read it next time
+          this.d.progress?.set({ at: 'flashed', image: r.id }); // a reload from here finishes the first start
           // nothing kept any more: another install downloads again. The device is restarting into what was written, so a
           // storage error here is only logged: it mustn't turn a finished install into an error
           this.set({ files: waiting(r) });
           await this.d.images.discard().catch((e: Error) => this.log('', `deleting the downloads failed: ${e.message}`));
         }
       }
-      this.set({ screen: steps.some((x) => x.do === 'first-start' || x.do === 'wifi-on') ? 'adb' : 'done' });
+      const more = steps.some((x) => x.do === 'first-start' || x.do === 'wifi-on');
+      if (!more) this.d.progress?.set(undefined); // a community image written as published: Kiln's part is over
+      this.set({ screen: more ? 'adb' : 'done', ...(more ? {} : { changed: undefined }) });
     } catch (e) {
       this.log('Stopped', (e as Error).message);
       // a failed build dropped the fetched image (it may be patched halfway), and a stored file that is gone or
@@ -792,7 +827,8 @@ export class ImageSession {
       if (fb.apiKey !== undefined) this.apiKey = undefined; // given back or refused: the tab lets go of it
       // the standard flow has the device from here. This page, if it is opened again, starts from its first screen; what
       // the first start found stays for Done (the home screen, the key, the way back)
-      this.set({ screen: this.state.link ? 'download' : 'choose', firstBoot: fb, key, work: { step: this.state.work?.step ?? 'first-boot', x: 1 } });
+      this.d.progress?.set(undefined); // installed: the standard flow's routes resume from here
+      this.set({ screen: this.state.link ? 'download' : 'choose', firstBoot: fb, key, changed: undefined, work: { step: this.state.work?.step ?? 'first-boot', x: 1 } });
       this.d.handOver?.(p);
     } catch (e) {
       this.log('Stopped', (e as Error).message);
@@ -812,7 +848,8 @@ export class ImageSession {
       const on = await this.d.frame.imageFlow.wifiOn(p, this.d.sleep);
       this.imageConnect = undefined; // one connection only
       this.log('', on ? 'Android says Wi-Fi is on' : 'Android didn\'t confirm Wi-Fi is on');
-      this.set({ screen: 'done', communityWifi: on ? 'on' : 'unconfirmed', work: { step: 'wifi-on', x: 1 } });
+      this.d.progress?.set(undefined);
+      this.set({ screen: 'done', changed: undefined, communityWifi: on ? 'on' : 'unconfirmed', work: { step: 'wifi-on', x: 1 } });
     } catch (e) {
       this.log('Stopped', (e as Error).message);
       this.set({ screen: 'error', error: (e as Error).message, wifiOnFailed: true }); // installed already: Connect again, not a reinstall

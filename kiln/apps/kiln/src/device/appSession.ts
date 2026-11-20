@@ -7,6 +7,7 @@ import type { PanelShell } from '@glassworks/adb';
 import { apkPackage } from '@glassworks/app-adb';
 import { cap, type DeviceFrame, type DevicePhase, type DeviceReport, type Installed, type Removed } from '@glassworks/kiln-core';
 import { FRAMES } from '../frames/catalog';
+import type { DeviceProgress } from './imageSession';
 import { NoRelease, apkMode, installable, releaseApk, type ApkFrom, type ReleaseApk, type ReleaseLine } from '../release/apk';
 
 /** The frame's APK release line: one Kiln's release route serves (the frames' installer.json `releases`). */
@@ -27,6 +28,8 @@ export type Result = { flow: 'install'; installed: Installed } | { flow: 'undo';
 
 export interface AppState {
   screen: AppScreen;
+  /** An earlier page load wrote to the device (its `progress` says): an install or undo there didn't finish. */
+  changed?: boolean;
   apk?: PickedApk;
   /** With the APK from the release: where its download is. */
   release?: ReleaseApk;
@@ -61,6 +64,8 @@ export interface AppDeps {
    * it, and keeps the result for Done's lines about the home screen.
    */
   handOver?(panel: PanelShell, result: Extract<Result, { flow: 'install' }>): void;
+  /** Where an install or undo got to, kept across page loads (ImageDeps `progress`): `written` while it writes. */
+  progress?: DeviceProgress;
 }
 
 /**
@@ -88,7 +93,7 @@ export class AppSession {
 
   constructor(private readonly d: AppDeps, on: boolean) {
     this.release = d.release;
-    this.state = { screen: on ? 'pick' : 'off', phases: [], log: [], ...(d.release ? { release: { state: 'waiting' } } : {}) };
+    this.state = { screen: on ? 'pick' : 'off', phases: [], log: [], ...(d.release ? { release: { state: 'waiting' } } : {}), ...(on && d.progress?.get() ? { changed: true } : {}) };
   }
 
   get from(): ApkFrom { return this.release ? 'release' : 'local'; }
@@ -242,8 +247,11 @@ export class AppSession {
     if (!this.panel || this.state.screen === 'working') return;
     this.ops++;
     this.set({ screen: 'working', flow, phases: [], error: undefined, result: undefined });
+    this.d.progress?.set({ at: 'written' });
     try {
       const result = await run((p) => this.set({ phases: [...this.state.phases, p] }));
+      this.d.progress?.set(undefined);
+      this.set({ changed: undefined });
       if (result.flow === 'undo') { this.set({ screen: 'done', result }); return; }
       // the install started the app: the standard flow has the device from here. This page, if it is opened again,
       // starts from Connect: it holds no device any more
