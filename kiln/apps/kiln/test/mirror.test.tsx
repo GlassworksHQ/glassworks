@@ -14,7 +14,7 @@ import { APP_DEMOS, appDemo, type AppDemo } from '../src/device/demo';
 import { DevicePage, AppFlow, keyedConnect } from '../src/device/DevicePage';
 import { AppSession, deviceMode, deviceOpen } from '../src/device/appSession';
 import { registry } from '../src/wizard/registry';
-import { MIRROR_BASE, mirrorEntry, mirrorFrame } from './mirror-frame';
+import { MIRROR_BASE, appOn, mirrorEntry, mirrorFrame } from './mirror-frame';
 
 beforeAll(() => {
   Object.defineProperty(navigator, 'usb', { configurable: true, value: {} });
@@ -71,9 +71,9 @@ describe('the switch', () => {
 });
 
 describe('the test install', () => {
-  it('reads the Mirror, installs, and undoes back to the home app it had', async () => {
+  it('reads the Mirror, installs, sets up, and undoes back to the home app it had', async () => {
     const m = new FakeMirror({ kiosk: 'app' }); // the community kiosk with its device admin off, so Android hides it
-    const s = new AppSession({ frame: mirrorFrame, connect: async () => m, sleep: async () => {} }, true);
+    const { s, setUp } = appOn(m);
     await s.connect();
     expect(s.state.screen).toBe('checks');
     expect(s.installBlocked()).toMatch(/APK/);
@@ -81,12 +81,14 @@ describe('the test install', () => {
     await s.pickApk('kiosk-legacy-debug.apk', apk);
     expect(s.state.apk).toMatchObject({ name: 'kiosk-legacy-debug.apk', size: apk.length, package: GLASSWORKS.package });
     expect(s.state.apk?.sha256).toMatch(/^[0-9a-f]{64}$/);
-    s.setHaUrl('homeassistant.local:8123');
-    expect(s.installBlocked()).toMatch(/http/);
-    s.setHaUrl('http://homeassistant.local:8123');
     await s.install();
-    expect(s.state).toMatchObject({ screen: 'done', result: { flow: 'install', installed: { home: 'set', previousHome: MIRROR_KIOSK } } });
-    expect(m.cmds).toContain(`am start -n ${GLASSWORKS.activity} --es url 'http://homeassistant.local:8123'`);
+    // then set-up, as the S1's: Wi-Fi (the Mirror is on it already), Home Assistant over the app's setup channel
+    expect(s.state).toMatchObject({ screen: 'setup', setup: { phase: 'wifi', on: expect.anything() }, result: { flow: 'install', installed: { home: 'set', previousHome: MIRROR_KIOSK } } });
+    expect(m.cmds).toContain(`am start -n ${GLASSWORKS.activity}`);
+    expect(m.cmds.filter((c) => c.includes('--es url'))).toEqual([]); // Home Assistant is set-up's, not the install's
+    await setUp();
+    expect(s.state.screen).toBe('done');
+    await vi.waitFor(() => expect(s.state.managePage).toBe('http://192.0.2.50:8099/'));
     await s.again();
     expect(s.state.report?.app).toBeDefined();
     await s.undo();
@@ -163,7 +165,7 @@ describe('the test install', () => {
 
   it('reading the Mirror again twice reads it once, and never lands on a running install', async () => {
     const m = new FakeMirror();
-    const s = new AppSession({ frame: mirrorFrame, connect: async () => m, sleep: async () => {} }, true);
+    const { s } = appOn(m);
     await s.connect();
     await s.pickApk('kiosk.apk', fakeMirrorApk());
     const reads = () => m.cmds.filter((c) => c === 'getprop ro.build.version.sdk').length;
@@ -175,13 +177,13 @@ describe('the test install', () => {
     await late;
     expect(s.state.screen).toBe('working');
     await install;
-    expect(s.state.screen).toBe('done');
+    expect(s.state.screen).toBe('setup');
   });
 
   it('a slow read of the Mirror that ends after a whole install doesn\'t replace its Done, even when it fails', async () => {
     for (const fails of [false, true]) {
       const m = new FakeMirror();
-      const s = new AppSession({ frame: mirrorFrame, connect: async () => m, sleep: async () => {} }, true);
+      const { s, setUp } = appOn(m);
       await s.connect();
       await s.pickApk('kiosk.apk', fakeMirrorApk());
       let release!: () => void;
@@ -194,6 +196,7 @@ describe('the test install', () => {
       };
       const reread = s.again();
       await s.install();
+      await setUp();
       expect(s.state.screen).toBe('done');
       release();
       await reread;

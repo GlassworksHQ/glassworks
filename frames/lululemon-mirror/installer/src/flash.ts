@@ -251,6 +251,10 @@ export async function firstBoot(p: PanelShell, o: { haUrl?: string; locale?: str
   if (!app) throw new Error(`${ours.name} (${ours.package}) isn't on the Mirror after the install`);
   r.detail(`${ours.name} ${app.name ?? app.code}`);
   await grantPermissions(r, ours);
+  // The image carries the APK, so nothing installed it with `pm install -g` as the app alone is: its runtime location
+  // grant is missing, and Android 6 gives an app without it no Wi-Fi scan results (the Mirror, 2026-11-20). These two
+  // are the only ones the app asks for on API 23 that grantPermissions doesn't give.
+  for (const perm of ['ACCESS_FINE_LOCATION', 'ACCESS_COARSE_LOCATION']) await r.try(`pm grant ${ours.package} android.permission.${perm}`);
   const updates = await readMirrorUpdates(p, ours);
   r.detail(describeMirrorUpdates(updates));
 

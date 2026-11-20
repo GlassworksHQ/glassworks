@@ -16,11 +16,10 @@ import { frame as s1PlusUi, demoFrame as s1Demo } from './s1-frame';
 import { imageDemo } from '../src/device/imageDemo';
 import { appDemo } from '../src/device/demo';
 import { ImageFlow, AppFlow } from '../src/device/DevicePage';
-import { AppSession } from '../src/device/appSession';
 import { demoSession, enterDemo } from '../src/wizard/demo';
 import type { Session } from '../src/wizard/session';
 import { Wizard } from '../src/wizard/Wizard';
-import { mirrorEntry, mirrorFrame } from './mirror-frame';
+import { appOn, mirrorEntry } from './mirror-frame';
 
 beforeAll(() => {
   Object.defineProperty(navigator, 'usb', { configurable: true, value: {} });
@@ -97,10 +96,11 @@ describe('the Mirror', () => {
 
   it('Done after an adb update of the image\'s copy: On', async () => {
     const m = new FakeMirror({ installed: 500, privileged: true });
-    const s = new AppSession({ frame: mirrorFrame, connect: async () => m, sleep: async () => {} }, true);
+    const { s, setUp } = appOn(m);
     await s.connect();
     await s.pickApk('generic-android-legacy.apk', fakeMirrorApk());
     await s.install();
+    await setUp();
     render(<AppFlow session={s} />);
     expect(screen.getByRole('group', { name: 'Silent updates' }).textContent).toMatch(/^Silent updatesOn/);
   });
@@ -114,10 +114,11 @@ describe('the Mirror', () => {
       if (installed && cmd === `dumpsys package ${GLASSWORKS.package}` && m.cmds.includes(`dpm set-active-admin ${GLASSWORKS.admin}`)) throw new Error('USB transfer failed');
       return run(cmd);
     };
-    const s = new AppSession({ frame: mirrorFrame, connect: async () => m, sleep: async () => {} }, true);
+    const { s, setUp } = appOn(m);
     await s.connect();
     await s.pickApk('generic-android-legacy.apk', fakeMirrorApk());
     await s.install();
+    await setUp();
     render(<AppFlow session={s} />);
     expect(block()).toBe('Silent updatesNot confirmedKiln couldn\'t read it back. Glassworks\' Device page on the Mirror says.');
     cleanup();

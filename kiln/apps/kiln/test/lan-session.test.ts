@@ -100,6 +100,18 @@ function fakePanel({ open = true, online = undefined as boolean | undefined, rad
 }
 
 describe('the panel\'s setup page', () => {
+  it('takes the panel\'s touch from its state: a frame without touch is offered nothing on the panel (Mirror run, 2026-11-20)', async () => {
+    const off = fakePanel();
+    off.st.touch = false;
+    const lan = new LanSession(off);
+    await lan.start(); // its peek at the state, before pairing
+    await vi.waitFor(() => expect(lan.touch).toBe(false));
+    const on = new LanSession(fakePanel());
+    await on.start();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(on.touch).toBeUndefined(); // an older app says nothing: the steps take it as touch, as before
+  });
+
   it('pairs with the code on the panel, then runs Kiln\'s steps to the end', async () => {
     const panel = fakePanel();
     const lan = new LanSession(panel);

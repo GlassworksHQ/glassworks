@@ -61,6 +61,8 @@ export interface SetupState {
   ip?: string;
   /** The panel is on a network (Wi-Fi or Ethernet). Absent from apps before the setup hotspot (#197). */
   online?: boolean;
+  /** The screen takes a tap. False on a frame without touch: the page offers nothing to do on the panel. Absent from older apps. */
+  touch?: boolean;
   /**
    * Setup's Silent updates step (#422), from apps that have it, once the app has read the answer. `offer` is what the
    * step offers (`allow`, `device_owner`, `boot_image`), or null with nothing to do.

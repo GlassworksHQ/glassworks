@@ -207,9 +207,11 @@ function appWorld(k: Knobs): World {
       const r = reloadAt<PanelShell>('connect');
       if (r) return r;
       if (fired.refused < (k.refuseAuth ?? 0)) { fired.refused++; throw new Error(REFUSED); }
-      return link(mirror, k, fired, writes, partial, reloadAt);
+      // Glassworks answers set-up over its setup channel and Improv once installed, on Wi-Fi already
+      return withAppStreams(await link(mirror, k, fired, writes, partial, reloadAt), { online: true, radio: false });
     },
     sleep: fastSleep,
+    simulated: true,
   };
 
   function load(): Page {
@@ -227,6 +229,11 @@ function appWorld(k: Knobs): World {
           case 'checks':
             if (!st.apk) return clicks.act('apk', () => s.pickApk('glassworks-legacy.apk', apk));
             return s.installBlocked() ? { end: 'error' } : clicks.act('install', () => s.install());
+          // the install is over and set-up (the same on every frame) begins: done once the app answers its Wi-Fi
+          // step, as the fastboot driver
+          case 'setup':
+            if (st.setup.phase !== 'wifi' || st.busy) return 'wait';
+            return st.setup.unreachable ? { end: 'error' } : { end: 'done', goal: st.result?.flow === 'install' && st.result.installed.home === 'set' };
           case 'done':
             return { end: 'done', goal: st.result?.flow === 'install' && st.result.installed.home === 'set' };
           case 'error':
@@ -235,9 +242,9 @@ function appWorld(k: Knobs): World {
             return 'wait';
         }
       },
-      step: () => (s.state.screen === 'working' || s.state.screen === 'error' || s.state.screen === 'done' ? 'install' : 'connect'),
-      // the error screen's "Back to the checks" (DevicePage)
-      async retry() { clicks.reset(); await s.again(); },
+      step: () => (['working', 'setup', 'error', 'done'].includes(s.state.screen) ? 'install' : 'connect'),
+      // the error screen's button (DevicePage): set-up again once the install went through, else Back to the checks
+      async retry() { clicks.reset(); await (s.state.result?.flow === 'install' ? s.setUpAgain() : s.again()); },
       remembers: () => pristine(s.state) !== pristine(new AppSession(deps, true).state),
       snapshot: () => JSON.stringify({ ...s.state, log: s.state.log.length }),
       close() {},

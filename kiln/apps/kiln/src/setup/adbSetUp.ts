@@ -4,10 +4,28 @@
 import type { PanelShell } from '@glassworks/adb';
 import { IMPROV_SOCKET } from '@glassworks/app-adb';
 import { SETUP_SOCKET, SetupChannel } from '@glassworks/setup-channel';
-import { ImprovSerialClient, State as ImprovState } from 'improv-serial';
+import { ImprovSerialClient, State as ImprovState, type ByteStream } from 'improv-serial';
 import type { Setup } from '../wizard/state';
 import { ChannelSetup, type SetupSteps, type WifiSteps } from './channelSetup';
 import type { PanelApp } from './radioPlan';
+
+/** How long one open of the app's Improv socket may take: a stalled one counts as a failed try. */
+export const IMPROV_OPEN_MS = 5000;
+
+/**
+ * The socket, or a rejection after `ms`: adb's stream open has no deadline of its own. One that opens after it is
+ * closed, so it doesn't leak.
+ */
+export function openWithin(open: () => Promise<ByteStream>, ms: number): Promise<ByteStream> {
+  return new Promise((resolve, reject) => {
+    let late = false;
+    const t = setTimeout(() => { late = true; reject(new Error(`the app's socket didn't open in ${ms / 1000} s`)); }, ms);
+    open().then(
+      (io) => { clearTimeout(t); if (late) void io.close().catch(() => {}); else resolve(io); },
+      (e) => { clearTimeout(t); reject(e); },
+    );
+  });
+}
 
 export interface AdbSetUpDeps {
   /** The device over adb, once connected. */
@@ -36,6 +54,10 @@ export interface AdbSetUpDeps {
   openTab(url: string): Window | null;
   /** A simulated device needs no wait for the app's socket. */
   simulated?: boolean;
+  /** The device has a touchscreen (installer.json `touch`). Without one, no step offers "do it on the panel". */
+  touch?: boolean;
+  /** The app's package, for the grant its Wi-Fi scan needs. */
+  appPackage?: string;
 }
 
 export class AdbSetUp implements SetupSteps, WifiSteps {
@@ -64,6 +86,9 @@ export class AdbSetUp implements SetupSteps, WifiSteps {
 
   click(name: string, run: () => Promise<void> | void): Promise<void> { return this.d.click(name, run); }
 
+  /** Whether the device has a touchscreen: the steps offer "do it on the panel" only then. */
+  get touch(): boolean { return this.d.touch !== false; }
+
   /** Lets go of the setup channel and the Improv client. */
   close(): void {
     this.steps.close();
@@ -91,8 +116,9 @@ export class AdbSetUp implements SetupSteps, WifiSteps {
     if (!open || !(await this.waitForSocket(IMPROV_SOCKET))) return undefined;
     for (let i = 0; i < 5; i++) {
       try {
-        const c = new ImprovSerialClient(await open(IMPROV_SOCKET), { deviceLabel: 'panel' });
-        await c.requestState(5000);
+        const c = new ImprovSerialClient(await openWithin(() => open(IMPROV_SOCKET), IMPROV_OPEN_MS), { deviceLabel: 'panel' });
+        // a try that doesn't answer lets go of its stream: one Improv connection at a time
+        try { await c.requestState(5000); } catch (e) { void c.close().catch(() => {}); throw e; }
         return c;
       } catch (e) {
         this.d.note(`Improv over adb, try ${i + 1}: ${(e as Error).message ?? e}`);
@@ -134,6 +160,38 @@ export class AdbSetUp implements SetupSteps, WifiSteps {
     return { ip: st.ip, ssid };
   }
 
+  /**
+   * Android's Wi-Fi, on before a scan: a freshly flashed device can start with it off, and then the app's scan finds
+   * nothing (a run on a real device, 2026-11-20). Read first (`settings get global wifi_on`, 0 is off); `svc wifi enable` over adb
+   * only when it is off, then a few seconds for the radio. Whether it had to turn it on.
+   */
+  private async wifiOn(): Promise<boolean> {
+    const p = this.d.panel();
+    if (!p) return false;
+    const read = async () => (await p.run('settings get global wifi_on', this.d.lid()).catch(() => ({ out: '' }))).out.trim();
+    if ((await read()) !== '0') return false;
+    this.d.note('Wi-Fi is off on the device: turning it on (svc wifi enable)');
+    await p.run('svc wifi enable', this.d.lid()).catch(() => {});
+    for (let i = 0; i < 10 && (await read()) === '0'; i++) await this.d.sleep(1000);
+    await this.d.sleep(3000); // the radio's first scan results
+    return true;
+  }
+
+  /**
+   * The grant the app's Wi-Fi scan needs: without location, Android 6 and later give it no scan results, so the scan
+   * finds nothing (the image path on a run on a real device, 2026-11-20, had no `pm install -g`). Read first
+   * (`dumpsys package`); `pm grant` only when Android lists it as not granted.
+   */
+  private async scanGrant(): Promise<void> {
+    const p = this.d.panel();
+    const pkg = this.d.appPackage;
+    if (!p || !pkg) return;
+    const out = (await p.run(`dumpsys package ${pkg}`, this.d.lid()).catch(() => ({ out: '' }))).out;
+    if (!/android\.permission\.ACCESS_FINE_LOCATION: granted=false/.test(out)) return;
+    this.d.note('The app has no location grant, so its Wi-Fi scan would find nothing: granting it (pm grant ACCESS_FINE_LOCATION)');
+    await p.run(`pm grant ${pkg} android.permission.ACCESS_FINE_LOCATION`, this.d.lid()).catch(() => {});
+  }
+
   /** The networks the panel can see, over Improv Serial through adb ("Use another network"). */
   async scanWifi(): Promise<void> {
     if (!this.improv) return this.wifi();
@@ -141,8 +199,12 @@ export class AdbSetUp implements SetupSteps, WifiSteps {
     const was = cur.phase === 'wifi' ? cur.on : undefined;
     const already = !was && this.improv.state === ImprovState.Provisioned;
     this.d.show({ phase: 'wifi', on: was, changing: !!was, status: 'Looking for networks the panel can see…', hint: already ? 'The panel is already on Wi-Fi. Pick another network to change it, or skip.' : this.wifiHint });
+    await this.scanGrant();
+    const turnedOn = await this.wifiOn();
     let networks: { ssid: string; rssi: number; secure: boolean }[] = [];
     try { networks = await this.improv.scan(); } catch { /* typed by hand then */ }
+    // a radio just turned on can miss the first scan: once more before "None found"
+    if (!networks.length && turnedOn) { await this.d.sleep(3000); try { networks = await this.improv.scan(); } catch { /* typed by hand then */ } }
     const s = this.d.phase();
     this.d.show({
       phase: 'wifi', on: was, changing: !!was, networks, hint: s.phase === 'wifi' ? s.hint : undefined,
@@ -191,7 +253,28 @@ export class AdbSetUp implements SetupSteps, WifiSteps {
 
   get haAddress(): string | undefined { return this.steps.haAddress; }
   set haAddress(v: string | undefined) { this.steps.haAddress = v; }
-  homeAssistant(): Promise<void> { return this.steps.homeAssistant(); }
+  /**
+   * Home Assistant. The app can restart right after a Wi-Fi join (it found Home Assistant), so its setup channel may be
+   * down for a while: one clear waiting state until it is back, never read as an older app with no channel.
+   */
+  async homeAssistant(): Promise<void> {
+    if (!this.d.simulated && !(await this.socketUp(SETUP_SOCKET))) {
+      this.d.show({ phase: 'waiting', note: `Waiting for ${this.d.appName} to start again…` });
+      // not back within the minute: an error with Try again, never the older-app way on to Done
+      if (!(await this.waitForSocket(SETUP_SOCKET, 60_000))) {
+        this.d.unreachable(new Error(`${this.d.appName} didn't start again within a minute. Try again.`));
+        return;
+      }
+    }
+    return this.steps.homeAssistant();
+  }
+
+  /** One read: whether the app listens on `socket` now. */
+  private async socketUp(socket: string): Promise<boolean> {
+    const name = socket.replace(/^localabstract:/, '@');
+    const r = await this.d.panel()!.run(`grep -c ' ${name}$' /proc/net/unix`, this.d.lid(5000)).catch(() => ({ out: '0' }));
+    return Number.parseInt(r.out.trim(), 10) > 0;
+  }
   signIn(url: string): void { this.steps.signIn(url); }
   saveHa(url: string): Promise<void> { return this.steps.saveHa(url); }
   skipHa(url: string): Promise<void> { return this.steps.skipHa(url); }

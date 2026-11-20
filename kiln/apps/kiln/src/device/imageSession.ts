@@ -9,14 +9,13 @@
 // Assistant's ESPHome key from the running app over adb and gives it back at the first start.
 import { AdbAuthTimeout, AdbBusy, pemToPkcs8, type PanelShell } from '@glassworks/adb';
 import { apiKeyFingerprint, apiKeySocketUp, kioskVersion, readApiKey } from '@glassworks/app-adb';
-import { openSignInWindow } from '@glassworks/setup-channel';
 import {
   ProxyError, WrongImage, cap, imageFromLink, plan, wifiStep,
   type DeviceFrame, type FastbootLike, type FastbootReport, type FirstStart, type ImageFile, type ImageMaker, type ImageRecipe, type PlannedStep, type PrepareStep,
 } from '@glassworks/kiln-core';
 
-import { AdbSetUp } from '../setup/adbSetUp';
-import type { Setup } from '../wizard/state';
+import type { AdbSetUp } from '../setup/adbSetUp';
+import { deviceSetUp, lid, setUpWaiting, type SetUpState } from './setUp';
 
 export type { ImageMaker };
 
@@ -117,7 +116,8 @@ export type KeyStep =
  */
 export interface FileCheck { name: string; size: number; state: 'waiting' | 'downloading' | 'ok' | 'bad' | 'error'; progress: number; error?: string }
 
-export interface ImageState {
+/** `setup`, `busy`, `managePage`: set-up after Glassworks' first start (setUp.ts). */
+export interface ImageState extends SetUpState {
   screen: ImageScreen;
   /** The picked image's id. */
   picked: string;
@@ -131,12 +131,6 @@ export interface ImageState {
   files: FileCheck[];
   /** A community image's Wi-Fi, saved in its userdata (Glassworks' Wi-Fi is set-up's, after the first start). */
   wifi: { ssid: string; password: string };
-  /** Set-up after Glassworks' first start: Wi-Fi, Home Assistant, the radio (setup/adbSetUp.ts). */
-  setup: Setup;
-  /** a button's work running (set-up's buttons, one at a time) */
-  busy?: string;
-  /** the device's own setup page, once set-up armed its pairing (Done) */
-  setupPage?: string;
   fastboot?: FastbootReport;
   connecting?: boolean;
   connectError?: string;
@@ -225,63 +219,25 @@ export class ImageSession {
     const linked = imageFromLink(this.recipes, d.search ?? '');
     const first = linked ?? this.recipes[0]!;
     this.state = { screen: linked ? 'download' : 'choose', picked: first.id, open: !!linked, link: !!linked, files: waiting(first),
-      wifi: { ssid: '', password: '' }, setup: { phase: 'waiting', note: '' }, understood: false, log: [] };
-    this.setUp = new AdbSetUp({
+      wifi: { ssid: '', password: '' }, setup: setUpWaiting(), understood: false, log: [] };
+    this.setUp = deviceSetUp({
+      frame: d.frame,
       panel: () => this.panel,
-      phase: () => this.state.setup,
-      show: (setup) => this.set({ setup }),
+      state: () => this.state,
+      patch: (p) => this.set(p),
       here: () => this.state.screen === 'setup',
-      done: () => { void this.finishSetUp(); },
-      unreachable: (e) => {
-        const err = e instanceof Error ? e : new Error(`${d.frame.app.name} isn't answering. Is it installed and running?`);
-        this.log('Stopped', err.message);
-        this.set({ screen: 'error', error: err.message });
-      },
-      // which Glassworks is on the device decides how a Thread router gets its network (read-only)
-      app: async () => {
-        const v = await kioskVersion(this.panel!, this.lid(), d.frame.app);
-        return { version: v?.name, code: v?.code };
-      },
-      appName: d.frame.app.name,
-      wifiName: (p, signal) => (d.frame.wifiName ? d.frame.wifiName(p, signal) : Promise.resolve({})),
-      click: (name, run) => this.click(name, run),
-      note: (line) => this.log('', line),
-      lid: (ms) => this.lid(ms),
-      sleep: (ms) => (d.sleep ?? ((x: number) => new Promise<void>((res) => setTimeout(res, x))))(ms),
-      openTab: (url) => (d.openTab ? d.openTab(url) : openSignInWindow()),
+      toDone: () => this.set({ screen: 'done' }),
+      onDone: () => this.state.screen === 'done',
+      stopped: (error) => this.set({ screen: 'error', error }),
+      log: (step, detail) => this.log(step, detail),
+      sleep: d.sleep,
+      openTab: d.openTab,
       simulated: d.simulated,
     });
   }
 
   /** Set-up after the first start (the screens call it): Wi-Fi, Home Assistant, the radio. */
   readonly setUp: AdbSetUp;
-  private clicking?: string;
-
-  /** Every set-up button runs through here: a second click while one runs does nothing. */
-  click(name: string, run: () => Promise<void> | void): Promise<void> {
-    if (this.clicking) return Promise.resolve();
-    this.clicking = name;
-    this.set({ busy: name });
-    let p: Promise<void>;
-    try { p = Promise.resolve(run()); } catch (e) { p = Promise.reject(e); }
-    return p.finally(() => { this.clicking = undefined; this.set({ busy: undefined }); });
-  }
-
-  /** A signal that cancels a read-only command after `ms`, so a wedged one is stopped on the device. */
-  private lid(ms = 8000): AbortSignal {
-    const ac = new AbortController();
-    void (this.d.sleep ?? ((x: number) => new Promise<void>((res) => setTimeout(res, x))))(ms).then(() => ac.abort(new Error(`${this.d.frame.the} did not answer in time`)));
-    return ac.signal;
-  }
-
-  /** Set-up is over: Done, then the device's own setup page once it opens pairing (as the wizard's Done). */
-  private async finishSetUp(): Promise<void> {
-    const ip = this.setUp.steps.ip ?? this.setUp.ip;
-    this.set({ screen: 'done' });
-    const now = ip ? (await this.setUp.steps.armPairing())?.ip : undefined;
-    this.setUp.steps.close();
-    if (now && this.state.screen === 'done') this.set({ setupPage: `http://${now}:8099/setup` });
-  }
 
   subscribe = (l: () => void) => { this.listeners.add(l); return () => { this.listeners.delete(l); }; };
   get = () => this.state;
@@ -354,7 +310,7 @@ export class ImageSession {
     this.selected++;
     // a fresh install: an earlier one's key outcome (handed, refused, none…) goes; a key still held for a hand-back stays
     const key = this.state.key?.state === 'held' ? this.state.key : undefined;
-    this.set({ screen: 'choose', picked: r.id, from, open: r.community, link: false, files: waiting(r), fastboot: undefined, understood: false, communityWifi: undefined, setupPage: undefined,
+    this.set({ screen: 'choose', picked: r.id, from, open: r.community, link: false, files: waiting(r), fastboot: undefined, understood: false, communityWifi: undefined, managePage: undefined,
       work: undefined, firstBoot: undefined, key, error: undefined, flashFailed: false, noFill: false });
   }
 
@@ -678,7 +634,8 @@ export class ImageSession {
     const now = () => performance.now();
     const secs = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
     const first = steps.find((x) => x.do !== 'backup');
-    this.set({ screen: 'working', error: undefined, flashFailed: false, communityWifi: undefined, work: { step: first?.do === 'patch' ? 'patch' : first?.do === 'flash' ? `flash-${first.partition}` as WorkStep : 'restart', x: 0 } });
+    this.resumingSetUp = false;
+    this.set({ screen: 'working', error: undefined, flashFailed: false, communityWifi: undefined, firstBoot: undefined, work: { step: first?.do === 'patch' ? 'patch' : first?.do === 'flash' ? `flash-${first.partition}` as WorkStep : 'restart', x: 0 } });
     // what an earlier attempt made (Glassworks' images, a userdata with a network) is made again by its
     // own step, or not at all: a retry with the network cleared must write userdata as published
     this.made = Object.create(null);
@@ -781,17 +738,58 @@ export class ImageSession {
     }
   }
 
+  /** setUpAgain is reading the device. */
+  private retrying = false;
+  /** Connect after set-up lost the device: the first start is through, so the connection goes straight to set-up. */
+  private resumingSetUp = false;
+
+  /**
+   * From an error once the first start is through (set-up stopped): set-up again from its first step, on the same
+   * connection, with nothing written again. A device that went away is connected again first ("One last click."),
+   * then set-up resumes: its first start isn't run again.
+   */
+  async setUpAgain(): Promise<void> {
+    if (this.state.screen !== 'error' || !this.state.firstBoot || this.recipe.community || this.retrying) return;
+    this.retrying = true;
+    this.setUp.close();
+    this.set({ busy: 'set-up-again' });
+    let gone = false;
+    try {
+      // on the clock, not the session's sleep: a test's instant sleep would end the read before it starts
+      await this.panel!.run('true', lid(this.d.frame, undefined, 5000));
+    } catch { gone = true; } finally {
+      this.retrying = false;
+      this.set({ busy: undefined });
+    }
+    if (gone) {
+      const stale = this.panel;
+      this.panel = undefined;
+      void stale?.close?.().catch(() => {});
+      this.resumingSetUp = true;
+      this.set({ screen: 'adb', error: undefined, connectError: undefined, adbWaiting: false });
+      return;
+    }
+    await this.toSetUp();
+  }
+
+  /** Set-up from its first step, on the connection the session holds. */
+  private async toSetUp(): Promise<void> {
+    this.set({ screen: 'setup', error: undefined, setup: setUpWaiting(), managePage: undefined });
+    await this.setUp.click('wifi', () => this.setUp.wifi());
+  }
+
   /**
    * A device already flashed with Glassworks whose first start didn't finish (an error, or the page was reloaded):
    * "One last click." again; set-up follows it, as after any first start.
    */
   finishFirstStart() {
     if (this.recipe.community || this.state.screen === 'working') return;
+    this.resumingSetUp = false;
     // the connection of a first start that stopped: let go, so Connect opens one fresh (not awaited: Connect's list stays in its click)
     const stale = this.panel;
     this.panel = undefined;
     void stale?.close?.().catch(() => {});
-    this.set({ screen: 'adb', error: undefined, connectError: undefined, adbWaiting: false, work: undefined, flashFailed: false });
+    this.set({ screen: 'adb', error: undefined, connectError: undefined, adbWaiting: false, work: undefined, flashFailed: false, firstBoot: undefined });
   }
 
   /**
@@ -833,6 +831,12 @@ export class ImageSession {
       return;
     }
     this.panel = p;
+    if (this.resumingSetUp && this.state.firstBoot) {
+      this.resumingSetUp = false;
+      this.set({ connecting: false, adbWaiting: false });
+      await this.toSetUp();
+      return;
+    }
     this.set({ connecting: false, adbWaiting: false, screen: 'working', work: { step: 'first-boot', x: 0 } });
     try {
       for (let i = 0; (await p.run('getprop sys.boot_completed')).out.trim() !== '1'; i++) {
@@ -850,9 +854,9 @@ export class ImageSession {
       const key: KeyStep | undefined = k?.state === 'held' && fb.apiKey !== undefined
         ? { state: fb.apiKey ? 'handed' : 'refused', fingerprint: k.fingerprint } : k;
       if (fb.apiKey !== undefined) this.apiKey = undefined; // given back or refused: the tab lets go of it
-      this.set({ screen: 'setup', firstBoot: fb, key, work: { step: this.state.work?.step ?? 'first-boot', x: 1 }, setup: { phase: 'waiting', note: '' } });
+      this.set({ screen: 'setup', firstBoot: fb, key, work: { step: this.state.work?.step ?? 'first-boot', x: 1 }, setup: setUpWaiting() });
       // set-up's first step, settled before this returns and busy while it runs: no button races it
-      await this.click('wifi', () => this.setUp.wifi());
+      await this.setUp.click('wifi', () => this.setUp.wifi());
     } catch (e) {
       this.log('Stopped', (e as Error).message);
       this.set({ screen: 'error', error: (e as Error).message });

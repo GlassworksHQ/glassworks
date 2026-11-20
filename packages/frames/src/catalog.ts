@@ -39,6 +39,8 @@ export interface Installer {
   /** Kiln's page for it: the wizard (its step routes too), or the device flows. Its `kiln.ts` loader's `kind`. */
   page?: 'wizard' | 'device';
   words?: { name: string };
+  /** The device has a touchscreen. Without one (false), set-up never offers "do it on the panel". */
+  touch?: boolean;
   releases?: Release[];
   /** The first installer page's links: its hash links (/#/wifi) and its release route (/api/release-asset) lead here. */
   legacy?: { hashLinks?: boolean; releaseAsset?: string };

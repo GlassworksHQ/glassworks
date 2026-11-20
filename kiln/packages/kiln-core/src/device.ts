@@ -85,7 +85,8 @@ export interface AppOverAdb {
   checkApk(apk: Uint8Array): Promise<void>;
   /** The device, read-only. */
   check(p: PanelShell): Promise<DeviceReport>;
-  install(p: PanelShell, o: { apk: Uint8Array; haUrl?: string; onStep: Step; onPhase: (p: DevicePhase) => void; sleep?: Sleep }): Promise<Installed>;
+  /** Installs the APK and starts the app. Home Assistant and the Wi-Fi are set-up's, next, over the app's channel. */
+  install(p: PanelShell, o: { apk: Uint8Array; onStep: Step; onPhase: (p: DevicePhase) => void; sleep?: Sleep }): Promise<Installed>;
   undo(p: PanelShell, o: { onStep: Step; onPhase: (p: DevicePhase) => void; sleep?: Sleep }): Promise<Removed>;
 }
 
@@ -99,7 +100,8 @@ export interface ImageOverFastboot {
   checkFastboot(fb: FastbootLike): Promise<FastbootReport>;
   /** A community image's userdata goes on at its published size: the partition must hold `bytes`. */
   communityUserdata?: { file: string; bytes: number };
-  firstBoot(p: PanelShell, o: { haUrl?: string; wifi?: { ssid: string; password: string }; onStep: Step; sleep: Sleep; apiKey?: string }): Promise<FirstStart>;
+  /** Glassworks' first start: the app started, its key handed back. Home Assistant and the Wi-Fi are set-up's, next. */
+  firstBoot(p: PanelShell, o: { onStep: Step; sleep: Sleep; apiKey?: string }): Promise<FirstStart>;
   /** Hides the other launchers again and checks HOME. */
   makeOnlyHome(p: PanelShell, onStep: Step, sleep?: Sleep): Promise<{ home: HomeCheck }>;
   /** A community image's last step: Wi-Fi on, with its own key. */

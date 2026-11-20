@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// Kiln hands off to the panel's own setup page (#34): a page on https can't reach the panel's http, so Done gives
+// Kiln hands off to the panel's Manage page (#34): a page on https can't reach the panel's http, so Done gives
 // the page's address, and only for an app that has it (`pairing.arm` answers; an older app doesn't know it).
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { Refused } from '@glassworks/setup-channel';
@@ -44,7 +44,7 @@ describe('the hand-off to the panel\'s setup page', () => {
       const close = c.close.bind(c);
       c.close = () => { closed++; return close(); };
     });
-    await vi.waitFor(() => expect(s.store.state.done?.setupPage).toBe('http://192.0.2.50:8099/setup'));
+    await vi.waitFor(() => expect(s.store.state.done?.managePage).toBe('http://192.0.2.50:8099/'));
     expect(armed).toBe(1);
     expect(closed).toBe(1); // the channel goes once the hand-off is done
     s.close();
@@ -63,7 +63,7 @@ describe('the hand-off to the panel\'s setup page', () => {
     // the hand-off has run to its end: it asked, and let the channel go
     await vi.waitFor(() => expect([asked, closed]).toEqual([1, 1]));
     expect(s.store.state.done?.title).toBe('Done.');
-    expect(s.store.state.done?.setupPage).toBeUndefined();
+    expect(s.store.state.done?.managePage).toBeUndefined();
     s.close();
   });
 
@@ -74,7 +74,7 @@ describe('the hand-off to the panel\'s setup page', () => {
       // the panel's address changed between Finish and the reply (DHCP)
       c.armPairing = async () => ({ ...(c as unknown as { state: object }).state, ip: '192.0.2.77' }) as never;
     });
-    await vi.waitFor(() => expect(moved.store.state.done?.setupPage).toBe('http://192.0.2.77:8099/setup'));
+    await vi.waitFor(() => expect(moved.store.state.done?.managePage).toBe('http://192.0.2.77:8099/'));
     moved.close();
 
     const gone = demoSession(s1Demo, 'radio');
@@ -85,7 +85,7 @@ describe('the hand-off to the panel\'s setup page', () => {
     });
     await vi.waitFor(() => expect(replied).toBe(1));
     await new Promise((r) => setTimeout(r, 0));
-    expect(gone.store.state.done?.setupPage).toBeUndefined();
+    expect(gone.store.state.done?.managePage).toBeUndefined();
     gone.close();
   });
 
@@ -104,11 +104,11 @@ describe('the hand-off to the panel\'s setup page', () => {
     const download = s.downloadBackup(); // the read waits; Done is the one without the link
     await vi.waitFor(() => expect(fail).toBeTypeOf('function'));
     reply(); // the hand-off adds the link: a new Done object
-    await vi.waitFor(() => expect(s.store.state.done?.setupPage).toBe('http://192.0.2.50:8099/setup'));
+    await vi.waitFor(() => expect(s.store.state.done?.managePage).toBe('http://192.0.2.50:8099/'));
     fail(new Error('the stored backup is gone'));
     await download;
     expect(s.store.state.done?.backup?.error).toMatch(/the stored backup is gone/);
-    expect(s.store.state.done?.setupPage).toBe('http://192.0.2.50:8099/setup');
+    expect(s.store.state.done?.managePage).toBe('http://192.0.2.50:8099/');
     s.close();
   });
 
@@ -125,18 +125,19 @@ describe('the hand-off to the panel\'s setup page', () => {
     });
     await vi.waitFor(() => expect(closed).toBe(1));
     expect(asked).toBe(0);
-    expect(s.store.state.done?.setupPage).toBeUndefined();
+    expect(s.store.state.done?.managePage).toBeUndefined();
     s.close();
   });
 
-  it('shows the address and opens the page in a new tab', async () => {
+  it('shows the Manage page\'s address, named for the frame, and opens it in a new tab', async () => {
     const s = demoSession(s1Demo, 'done');
     render(<Wizard session={s} frame={s1PlusUi} base="/aqara-s1-plus" />);
     await act(() => enterDemo(s, s1Demo, 'done'));
     const open = screen.getByRole('link', { name: 'Open' });
-    expect(open.getAttribute('href')).toBe('http://192.0.2.50:8099/setup');
+    expect(open.getAttribute('href')).toBe('http://192.0.2.50:8099/');
     expect(open.getAttribute('target')).toBe('_blank');
-    expect(screen.getByText('http://192.0.2.50:8099/setup')).toBeTruthy();
+    expect(screen.getByText('http://192.0.2.50:8099/')).toBeTruthy();
+    expect(screen.getByText('Change these later on the S1 Plus\'s Manage page. It asks for a code the S1 Plus shows.')).toBeTruthy();
     s.close();
   });
 });

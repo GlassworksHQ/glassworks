@@ -23,6 +23,8 @@ import { keptDevice } from './activity';
 import { ReleaseApk, TestOnly } from './ReleaseApk';
 import { AppSession, deviceMode, deviceOpen, type ApkFrom, type AppState } from './appSession';
 import { rich } from './rich';
+import { SetUpScreen, setUpRail } from './SetUpScreen';
+import { ManagePageRow } from '../wizard/screens';
 
 /** Demos run in `next dev` and in a build made with NEXT_PUBLIC_KILN_DEMO=1, as the wizard's do. */
 const DEMO_ON = process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_KILN_DEMO === '1';
@@ -123,18 +125,21 @@ function realSessions(frame: DeviceFrame, on: boolean, from: ApkFrom = 'local'):
   return { app, image };
 }
 
-/** Install or undo, then Done. The rail's steps and where the person is on them. */
-function rail(s: AppState, f: DeviceFrame): RailStep[] {
-  const names = [f.short, 'Connect', 'Check', s.flow === 'undo' ? 'Undo' : 'Install', 'Done'];
-  const at = { off: 0, pick: 1, checks: 2, working: 3, done: 5, error: 3 }[s.screen];
+/** Install, then set-up (Wi-Fi, Home Assistant), then Done; or undo, then Done. The rail's steps and where the person is on them. */
+export function appRail(s: AppState, f: DeviceFrame): RailStep[] {
+  const names = [f.short, 'Connect', 'Check', ...(s.flow === 'undo' ? ['Undo'] : ['Install', 'Set up']), 'Done'];
+  const setUp = names.indexOf('Set up');
+  // an error once the install is through (set-up's app stopped answering) is Set up's
+  const at = { off: 0, pick: 1, checks: 2, working: 3, setup: setUp, done: names.length, error: setUp > 0 && s.result ? setUp : 3 }[s.screen];
   return names.map((name, i): RailStep => {
     const mark: RailMark = i < at ? 'done' : i > at ? 'todo' : s.screen === 'error' ? 'bad' : 'now';
-    return { name, mark };
+    return { name, mark, ...(s.screen === 'setup' && i === setUp ? { sub: setUpRail(s, f) } : {}) };
   });
 }
 
 function level(s: AppState, f: DeviceFrame): number {
   if (s.screen === 'done') return 4;
+  if (s.screen === 'setup') return 3;
   if (s.screen === 'working') return s.phases.some((p) => f.appRows.level3.includes(p.step)) ? 3 : 2;
   return s.screen === 'checks' ? 1 : 0;
 }
@@ -164,22 +169,19 @@ function Off({ f }: { f: DeviceFrame }) {
   );
 }
 
-/** The APK and the Home Assistant address: on the first screen, and again on Checks to correct them. */
+/** The APK: on the first screen, and again on Checks to correct it. Home Assistant is set-up's, after the install. */
 function Inputs({ s, session }: { s: AppState; session: AppSession }) {
   return (
     <>
       {s.release && <ReleaseApk m={session} ms={s} />}
-      <div className="fields">
-        {!s.release && (
+      {!s.release && (
+        <div className="fields">
           <label className="field"><span>APK file</span>
             <input className="input" type="file" accept=".apk,application/vnd.android.package-archive"
               onChange={(e) => { const f = e.target.files?.[0]; if (f) void session.pickApk(f.name, f.arrayBuffer().then((b) => new Uint8Array(b))); }} />
           </label>
-        )}
-        <label className="field"><span>Home Assistant (optional)</span>
-          <input className="input" type="url" placeholder="http://homeassistant.local:8123" value={s.haUrl} onChange={(e) => session.setHaUrl(e.target.value.trim())} />
-        </label>
-      </div>
+        </div>
+      )}
       {s.apk && (!s.release || s.apk.error) && (
         <div className="well">
           <div className="grow">
@@ -290,6 +292,7 @@ function Done({ s, session }: { s: AppState; session: AppSession }) {
       <h2 id="h">{title}</h2>
       <p className="lede">{body}</p>
       {r.flow === 'install' && <SilentUpdates words={f.silent[r.installed.updates.state] ?? null} />}
+      {s.managePage && <ManagePageRow href={s.managePage} the={f.the} />}
       <BuiltOn credits={stepCredits(f.id, f.credits)} />
       <div className="foot">
         <Log s={s} />
@@ -300,13 +303,18 @@ function Done({ s, session }: { s: AppState; session: AppSession }) {
 }
 
 function Failed({ s, session }: { s: AppState; session: AppSession }) {
+  // the install went through and set-up stopped: Try again goes back to set-up, never to the install
+  const setUp = s.result?.flow === 'install';
   return (
     <section className="card err" aria-labelledby="h">
-      <h2 id="h">{s.flow === 'undo' ? 'Undo stopped.' : 'The install stopped.'}</h2>
+      <h2 id="h">{setUp ? 'Set-up stopped.' : s.flow === 'undo' ? 'Undo stopped.' : 'The install stopped.'}</h2>
       <pre className="raw">{s.error}</pre>
+      {setUp && <p className="small"><button type="button" className="link" disabled={!!s.busy} onClick={() => void session.again()}>Back to the checks</button></p>}
       <div className="foot">
         <Log s={s} />
-        <button type="button" className="btn ghost" onClick={() => void session.again()}>Back to the checks</button>
+        {setUp
+          ? <button type="button" className="btn ghost" disabled={!!s.busy} onClick={() => void session.setUpAgain()}>Try again</button>
+          : <button type="button" className="btn ghost" onClick={() => void session.again()}>Back to the checks</button>}
       </div>
     </section>
   );
@@ -381,11 +389,12 @@ export function AppFlow({ session, toImage }: { session: AppSession; toImage?: (
   }, [s, f]);
   const p = { s, session };
   return (
-    <Shell steps={rail(s, f)} level={level(s, f)} error={s.screen === 'error'} chip={chip}>
+    <Shell steps={appRail(s, f)} level={level(s, f)} error={s.screen === 'error'} chip={chip}>
       {s.screen === 'off' ? <Off f={f} />
         : s.screen === 'pick' ? <Pick {...p} />
         : s.screen === 'checks' ? <Checks {...p} />
         : s.screen === 'working' ? <Working s={s} f={f} />
+        : s.screen === 'setup' ? <SetUpScreen setUp={session.setUp} s={s} />
         : s.screen === 'done' ? <Done {...p} />
         : <Failed {...p} />}
       {toImage && s.screen === 'pick' && <p className="small">{f.words['app.toImage']} <button type="button" className="link" onClick={toImage}>Install Glassworks over fastboot</button></p>}

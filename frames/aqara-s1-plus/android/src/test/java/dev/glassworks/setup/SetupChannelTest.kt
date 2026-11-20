@@ -123,6 +123,13 @@ class SetupChannelTest {
     }
 
     @Test
+    fun saysWhetherTheScreenTakesATap() {
+        val ha = ChannelState.Ha(null, "", false, null)
+        assertEquals(false, ChannelState(null, ha, touch = false).toJson().get("touch"))
+        assertEquals(true, ChannelState(null, ha, touch = true).toJson().get("touch"))
+    }
+
+    @Test
     fun channelOffersThePanelsOptions() {
         val opts = RadioDefinition.channelOptions()
         val ids = (0 until opts.length()).map { opts.getJSONObject(it).getString("id") }

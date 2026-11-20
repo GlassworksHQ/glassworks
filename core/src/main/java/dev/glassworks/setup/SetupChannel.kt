@@ -44,6 +44,11 @@ data class ChannelState(
     val ha: Ha,
     /** The panel is on a network now: Wi-Fi or Ethernet, with or without internet. */
     val online: Boolean = false,
+    /**
+     * The screen takes a tap (the frame's input). Without one (false), the setup page offers nothing to do "on the
+     * panel". Null: left out, as before.
+     */
+    val touch: Boolean? = null,
 ) {
     data class Ha(val discovered: String?, val url: String, val signedIn: Boolean, val signinUrl: String?)
 
@@ -52,6 +57,7 @@ data class ChannelState(
         val o = JSONObject()
         ip?.let { o.put("ip", it) }
         o.put("online", online)
+        touch?.let { o.put("touch", it) }
         o.put("ha", JSONObject().apply {
             ha.discovered?.let { put("discovered", it) }
             put("url", ha.url)

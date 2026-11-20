@@ -9,7 +9,7 @@ import { useState } from 'react';
 import { BuiltOn, Credit, stepCredits } from '../components/Credit';
 import { FRAMES } from '../frames/catalog';
 import { Recovery } from '../recovery/Recovery';
-import { setUpSub, type RailMark, type RailStep } from '../wizard/state';
+import type { RailMark, RailStep } from '../wizard/state';
 import type { ImageSession, ImageState, WorkStep } from './imageSession';
 import { Choose, ConfirmCommunity, DoneCommunity, Download, DownloadButton, FileRow, WayBack, Whose } from './choice/ChoiceScreens';
 import { ReleaseApk, TestOnly } from './ReleaseApk';
@@ -17,15 +17,12 @@ import type { AppSession, AppState } from './appSession';
 import { SilentUpdates } from '../components/SilentUpdates';
 import { ImageKeep, KeyOutcome, keyHeld } from './KeepScreens';
 import { lines, rich } from './rich';
-import { HomeAssistant, Radio, RadioNext, Wifi } from '../setup/steps';
-import { SetupPageRow, Waiting } from '../wizard/screens';
+import { ManagePageRow } from '../wizard/screens';
+import { SetUpScreen, setUpRail } from './SetUpScreen';
 
 type P = { f: ImageSession; s: ImageState; m: AppSession; ms: AppState };
 
 /** Arriving by an image's link skips the choice, so its rail has no Choose step. */
-/** Whether the frame has a radio, from its frame.json (`panes.radio`): set-up's Radio step is only for one that does. */
-export const hasRadio = (f: Pick<DeviceFrame, 'id'>) => (FRAMES.find((x) => x.id === f.id)?.panes?.radio?.support ?? 'no') !== 'no';
-
 export function imageRail(s: ImageState, f: Pick<DeviceFrame, 'short' | 'id'>, community = false): RailStep[] {
   // Set up is Glassworks' (Wi-Fi, Home Assistant, the radio): a community image's install ends at Install
   const names = [f.short, 'Choose', 'Download', 'Fastboot', 'Install', ...(community ? [] : ['Set up']), 'Done'];
@@ -34,7 +31,7 @@ export function imageRail(s: ImageState, f: Pick<DeviceFrame, 'short' | 'id'>, c
   const at = { choose: 1, image: 2, download: 2, keep: 3, fastboot: 3, confirm: 3, working: 4, adb: 4, error: setUp > 0 && s.firstBoot ? setUp : 4, setup: setUp, done: names.length }[s.screen];
   return names.map((name, i): RailStep => {
     const mark: RailMark = i < at ? 'done' : i > at ? 'todo' : s.screen === 'error' ? 'bad' : s.screen === 'adb' ? 'turn' : 'now';
-    return { name, mark, ...(s.screen === 'setup' && i === setUp ? { sub: setUpSub(s.setup, false, hasRadio(f)) } : {}) };
+    return { name, mark, ...(s.screen === 'setup' && i === setUp ? { sub: setUpRail(s, f) } : {}) };
   }).filter((x) => !s.link || x.name !== 'Choose');
 }
 
@@ -268,7 +265,7 @@ export function ImageDone({ f, s }: P) {
       )}
       {fb && <SilentUpdates words={d.silent[fb.updates.state] ?? null} />}
       {fb && <KeyOutcome k={s.key} d={d} />}
-      {s.setupPage && <SetupPageRow href={s.setupPage} />}
+      {s.managePage && <ManagePageRow href={s.managePage} the={d.the} />}
       {other && <WayBack f={f} other={other} />}
       <BuiltOn credits={imageCredits(d)} />
       {rev && <p className="small">{rev}.</p>}
@@ -279,6 +276,17 @@ export function ImageDone({ f, s }: P) {
 
 export function ImageError({ f, s }: P) {
   const d = f.frame;
+  // the first start went through and set-up stopped: Try again goes back to set-up, never to the first start or the install
+  if (s.firstBoot && !f.recipe.community) return (
+    <section className="card err" aria-labelledby="h">
+      <h2 id="h">Set-up stopped.</h2>
+      <pre className="raw">{s.error}</pre>
+      <div className="foot">
+        <Log s={s} />
+        <button type="button" className="btn ghost" disabled={!!s.busy} onClick={() => void f.setUpAgain()}>Try again</button>
+      </div>
+    </section>
+  );
   return (
     <section className="card err" aria-labelledby="h">
       {f.recipe.community && <Whose r={f.recipe} />}
@@ -307,20 +315,6 @@ export function ImageError({ f, s }: P) {
   );
 }
 
-/** Set-up after Glassworks' first start: the wizard's own steps (setup/steps.tsx), over this device's adb. */
-function ImageSetUp({ f, s }: P) {
-  const setup = s.setup;
-  const busy = !!s.busy;
-  switch (setup.phase) {
-    case 'wifi': return <Wifi busy={busy} steps={f.setUp} setup={setup} />;
-    case 'ha': return <HomeAssistant key="ha" busy={busy} steps={f.setUp} setup={setup} />;
-    case 'radio': return <Radio key={setup.radio.mode} busy={busy} steps={f.setUp} setup={setup} />;
-    case 'radio-next': return <RadioNext busy={busy} steps={f.setUp} setup={setup} />;
-    // `waiting` (and `settings`, which a frame whose install set the app up never reaches): the app is starting
-    default: return <Waiting setup={{ phase: 'waiting', note: setup.phase === 'waiting' ? setup.note : '' }} />;
-  }
-}
-
 export function ImageScreens(p: P) {
   const { s } = p;
   return s.screen === 'choose' ? <Choose f={p.f} s={s} />
@@ -331,7 +325,7 @@ export function ImageScreens(p: P) {
     : s.screen === 'confirm' ? <ImageConfirm {...p} />
     : s.screen === 'working' ? <ImageWorking {...p} />
     : s.screen === 'adb' ? <ImageAdb {...p} />
-    : s.screen === 'setup' ? <ImageSetUp {...p} />
+    : s.screen === 'setup' ? <SetUpScreen setUp={p.f.setUp} s={s} />
     : s.screen === 'done' ? <ImageDone {...p} />
     : <ImageError {...p} />;
 }

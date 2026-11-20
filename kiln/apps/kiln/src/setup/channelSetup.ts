@@ -30,6 +30,8 @@ export interface ChannelSetupDeps {
 
 /** What the step screens call: the wizard's Session, or the panel page's own controller. */
 export interface SetupSteps {
+  /** The device has a touchscreen; without one (false), no step offers "do it on the panel". Unset: it has. */
+  readonly touch?: boolean;
   /** Runs a button's work, one at a time. */
   click(name: string, run: () => Promise<void> | void): Promise<void>;
   /** The Home Assistant address as the person typed it, shown again if they come back to the step. */
@@ -46,6 +48,8 @@ export interface SetupSteps {
 
 /** What the Wi-Fi step calls: the wizard's Session (Improv Serial over USB), or the panel page's controller. */
 export interface WifiSteps {
+  /** As SetupSteps `touch`. */
+  readonly touch?: boolean;
   click(name: string, run: () => Promise<void> | void): Promise<void>;
   /** The step from the start (Try again). */
   wifi(): Promise<void>;

@@ -111,7 +111,7 @@ Not available yet. **Test only, today**, in Kiln ([its recipe](installer)): `/lu
 
 The boot logo before Android starts stays lululemon's: it lives in the signed bootloader, which nothing here can change.
 
-**Over adb, onto a Mirror that already runs the community image (`&mode=app`):** Kiln installs the legacy build of Glassworks from an APK file on your computer. Nothing asks for a tap on the Mirror, which has no touchscreen (Mirror run, 2026-11-19). As the fastboot path's first start does, Kiln turns the screen upright, then makes Glassworks the only home screen: it hides the image's launcher and the home app Glassworks replaces (`pm hide`), records which on the Mirror, and checks what HOME opens ([home-app.md](research/home-app.md)). Undo removes the app and unhides the home app the Mirror had, then checks HOME again. Untested on a real Mirror, undo included.
+**Over adb, onto a Mirror that already runs the community image (`&mode=app`):** Kiln installs the legacy build of Glassworks from an APK file on your computer. Nothing asks for a tap on the Mirror, which has no touchscreen (Mirror run, 2026-11-19). As the fastboot path's first start does, Kiln turns the screen upright, then makes Glassworks the only home screen: it hides the image's launcher and the home app Glassworks replaces (`pm hide`), records which on the Mirror, and checks what HOME opens ([home-app.md](research/home-app.md)). Then Kiln's Set up, as after the fastboot path: the Wi-Fi, then Home Assistant. Undo removes the app and unhides the home app the Mirror had, then checks HOME again. Untested on a real Mirror, undo included.
 
 ## Panes
 
