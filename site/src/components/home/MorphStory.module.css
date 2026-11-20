@@ -400,8 +400,12 @@ a.eyebrow:hover {
 .bezel {
   position: relative;
   pointer-events: auto;
-  background: linear-gradient(155deg, #252832 0%, #11131a 48%, #0a0b0f 100%);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  /* --face at --face-o: a frame's own front colour fading in over the dark glass (Beat 1's tablet) */
+  --face-layer: color-mix(in srgb, var(--face, transparent) calc(var(--face-o, 0) * 100%), transparent);
+  background:
+    linear-gradient(var(--face-layer), var(--face-layer)),
+    linear-gradient(155deg, #252832 0%, #11131a 48%, #0a0b0f 100%);
+  border: 1px solid color-mix(in srgb, var(--face, transparent) calc(var(--face-o, 0) * 100%), rgba(255, 255, 255, 0.14));
   box-shadow:
     0 34px 78px -28px rgba(0, 0, 0, 0.56),
     inset 0 1px 0 rgba(255, 255, 255, 0.16);
@@ -410,19 +414,6 @@ a.eyebrow:hover {
 }
 
 /* Silvered full-height mirror body surface (forehead + chin stay real reflective glass) */
-/* Beat 1: the Pixel Tablet's front colour, as DeviceModel's .front draws it */
-.tabletFace {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  border-radius: inherit;
-  background: var(--face);
-  box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.09),
-    inset 0 1px 0 rgba(255, 255, 255, 0.14);
-}
-
 .mirrorBodySurface {
   position: absolute;
   inset: 0;

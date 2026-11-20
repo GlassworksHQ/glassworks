@@ -1565,19 +1565,15 @@ export function MorphStory({
                   onPointerMove={onPointerMove}
                   onPointerLeave={onPointerLeave}
                   style={{
+                    // the Pixel Tablet's porcelain front (frame.json model.face), painted on the glass itself,
+                    // border included, so no dark edge shows around it (.bezel's --face layer)
+                    ["--face" as string]: tablet.model.face ?? "#f2f0eb",
+                    ["--face-o" as string]: faceO.toFixed(3),
                     width: `${geom.w}px`,
                     height: `${geom.h}px`,
                     borderRadius: `${geom.bodyR}px`,
                   }}
                 >
-                  {/* The Pixel Tablet's porcelain front (frame.json model.face), before the model takes over */}
-                  {faceO > 0.01 && (
-                    <div
-                      className={s.tabletFace}
-                      aria-hidden="true"
-                      style={{ opacity: faceO, ["--face" as string]: tablet.model.face ?? "#f2f0eb" }}
-                    />
-                  )}
                   {/* Mirror silvered body surface fading smoothly across forehead & chin */}
                   <div className={s.mirrorBodySurface} aria-hidden="true" style={{ opacity: mirrorFactor }} />
                   {/* Mirror forehead camera/presence lens + sky-blue pulse ripple */}
