@@ -28,6 +28,8 @@ class OnvifPushTest {
     private val pass = "secret"
     private var server: OnvifServer? = null
     private val logged = java.util.Collections.synchronizedList(mutableListOf<String>())
+    /** What was logged so far, copied under the list's lock (iterating a synchronized list needs it). */
+    private fun logs(): List<String> = synchronized(logged) { logged.toList() }
     private val basic = "Basic " + OnvifBase64.encode("$user:$pass".toByteArray())
 
     /** What the fake [post] got: the consumer and the Notify's body. */
@@ -37,6 +39,7 @@ class OnvifPushTest {
         withCreds: Boolean = true,
         resolve: (String) -> List<InetAddress> = { listOf(InetAddress.getByName(it)) },
         fakePost: Boolean = true,
+        own: ((InetAddress) -> Boolean)? = null,
     ) = OnvifServer(
         port = 0,
         host = { "192.0.2.41" },
@@ -47,6 +50,7 @@ class OnvifPushTest {
         onLog = { logged += it },
         resolve = resolve,
         post = if (fakePost) { c, body -> posted += c to String(body, Charsets.UTF_8); 200 } else null,
+        ownAddress = own ?: { a -> try { java.net.NetworkInterface.getByInetAddress(a) != null } catch (_: Exception) { false } },
     ).also { server = it }
 
     @After fun tearDown() { server?.stop() }
@@ -68,6 +72,8 @@ class OnvifPushTest {
     private fun isMotion(notify: String) = Regex("Name=\"IsMotion\" Value=\"(\\w+)\"").find(notify)!!.groupValues[1]
 
     private fun ip(s: String) = InetAddress.getByName(s)
+
+    private val MAX_RACE = OnvifServer.MAX_PUSH_SUBSCRIPTIONS
 
     @Test fun `a consumer must be on the local network or the subscriber itself`() {
         for (a in listOf("10.1.2.3", "172.16.0.1", "172.31.255.254", "192.168.1.20", "169.254.10.1", "fe80::1", "fd12:3456::1", "::ffff:10.0.0.7")) {
@@ -111,6 +117,32 @@ class OnvifPushTest {
         }
     }
 
+    @Test fun `the panel's own addresses are refused, unless the subscriber is the panel itself`() {
+        val s = newServer(own = { it == ip("10.0.0.9") || it.isLoopbackAddress })
+        assertNull(s.pushConsumer("http://10.0.0.9:6053/", null).first)
+        assertNull(s.pushConsumer("http://10.0.0.9:6053/", ip("10.0.0.20")).first)
+        assertNotNull(s.pushConsumer("http://10.0.0.9:8089/", ip("10.0.0.9")).first)
+        assertNotNull(s.pushConsumer("http://10.0.0.8/", null).first)
+        assertNull(s.pushConsumer("http://10.0.0.8/" + "a".repeat(2_100), null).first)
+    }
+
+    @Test fun `a new subscriber's first state never comes after a newer change`() {
+        val s = newServer()
+        // Motion flips while subscriptions arrive: each consumer's Notify must end on the state motion ended on.
+        val flipper = Thread { repeat(200) { s.setMotion(it % 2 == 0) } }
+        flipper.start()
+        repeat(MAX_RACE) { i -> assertEquals(200, call(s, subscribe("http://10.0.1.${i + 1}/n")).status) }
+        flipper.join()
+        s.setMotion(true); s.setMotion(false) // a last change everyone sees
+        val last = HashMap<String, String>()
+        while (true) {
+            val (c, body) = posted.poll(1, TimeUnit.SECONDS) ?: break
+            last[c.address.hostAddress] = isMotion(body)
+        }
+        assertEquals(MAX_RACE, last.size)
+        assertTrue(last.toString(), last.values.all { it == "false" })
+    }
+
     @Test fun `subscribe answers with a reference, then the state now, then each change in order`() {
         val s = newServer()
         val r = call(s, subscribe("http://10.0.0.20:8080/notify"))
@@ -127,7 +159,7 @@ class OnvifPushTest {
         assertEquals(ip("10.0.0.20"), c.address)
         assertTrue(first, first.contains("<wsnt:Notify>"))
         assertTrue(first.contains("PropertyOperation=\"Initialized\""))
-        assertTrue(first.contains("<wsa:Action>http://docs.oasis-open.org/wsn/bw-2/NotificationProducer/Notify</wsa:Action>"))
+        assertTrue(first.contains("<wsa:Action>http://docs.oasis-open.org/wsn/bw-2/NotificationConsumer/Notify</wsa:Action>"))
         assertTrue(first.contains("<wsa:To>http://10.0.0.20:8080/notify</wsa:To>"))
         assertTrue(first.contains("tns1:VideoSource/MotionAlarm"))
         assertEquals("false", isMotion(first))
@@ -172,7 +204,7 @@ class OnvifPushTest {
         }
         s.setMotion(true)
         assertNull(posted.poll(500, TimeUnit.MILLISECONDS))
-        assertTrue(logged.any { it.contains("refused: ConsumerReference must be on the local network") })
+        assertTrue(logs().any { it.contains("refused: ConsumerReference must be on the local network") })
     }
 
     @Test fun `push subscriptions have their own cap and an end at most an hour away`() {
@@ -271,7 +303,7 @@ class OnvifPushTest {
             s.setMotion(true)
             val second = got.poll(5, TimeUnit.SECONDS) ?: throw AssertionError("no Notify on motion")
             assertEquals("true", isMotion(second.body))
-            assertFalse(logged.any { it.contains("Notify to") })
+            assertFalse(logs().any { it.contains("Notify to") })
         }
     }
 
@@ -287,10 +319,10 @@ class OnvifPushTest {
             repeat(20) { s.setMotion(it % 2 == 0) }
             assertTrue("setMotion never waits on the consumer", (System.nanoTime() - t0) / 1_000_000 < 500)
             val deadline = System.currentTimeMillis() + 8_000
-            while (logged.none { it.contains("Notify to http://127.0.0.1:${dead.localPort} failed") } && System.currentTimeMillis() < deadline) Thread.sleep(50)
-            assertTrue(logged.toString(), logged.any { it.contains("Notify to http://127.0.0.1:${dead.localPort} failed: SocketTimeoutException") })
-            assertFalse("the log never names the path", logged.any { it.contains("/n failed") })
-            held.forEach { it.close() }
+            while (logs().none { it.contains("Notify to http://127.0.0.1:${dead.localPort} failed") } && System.currentTimeMillis() < deadline) Thread.sleep(50)
+            assertTrue(logs().toString(), logs().any { it.contains("Notify to http://127.0.0.1:${dead.localPort} failed: SocketTimeoutException") })
+            assertFalse("the log never names the path", logs().any { it.contains("/n failed") })
+            synchronized(held) { held.toList() }.forEach { it.close() }
         }
     }
 }

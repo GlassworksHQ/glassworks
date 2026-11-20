@@ -22,6 +22,7 @@ import java.io.OutputStream
 import java.net.Inet6Address
 import java.net.InetAddress
 import java.net.InetSocketAddress
+import java.net.NetworkInterface
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.SocketTimeoutException
@@ -78,6 +79,8 @@ class OnvifServer(
     private val resolve: (String) -> List<InetAddress> = { InetAddress.getAllByName(it).toList() },
     /** Glassworks: sends one Notify to a push consumer and returns the HTTP status; a test passes its own. */
     private val post: ((PushConsumer, ByteArray) -> Int)? = null,
+    /** Glassworks: whether an address is one of the panel's own interfaces, which no consumer may be; a test passes its own. */
+    private val ownAddress: (InetAddress) -> Boolean = { a -> try { NetworkInterface.getByInetAddress(a) != null } catch (_: Exception) { false } },
 ) {
     companion object {
         private const val MAX_BODY = 1 shl 20
@@ -101,14 +104,18 @@ class OnvifServer(
         /** Notify batches waiting for one consumer; past it the oldest go (a dead NVR can't hold memory). */
         private const val MAX_OUTBOX = 8
         private const val NOTIFY_CONNECT_MS = 2_000
-        private const val NOTIFY_READ_MS = 2_000L
+        /** Writing a Notify and reading the answer's status line, together, once connected. */
+        private const val NOTIFY_EXCHANGE_MS = 2_000L
+        /** A consumer URL longer than this is refused (the common URL limit of browsers and servers). */
+        private const val MAX_CONSUMER_URL = 2_048
         /** After Subscribe, so the SubscribeResponse reaches the consumer first: some NVRs drop a Notify that comes before it. */
         private const val FIRST_NOTIFY_DELAY_MS = 250L
 
         /**
          * A push consumer may be on the local network only: a private (10/8, 172.16/12, 192.168/16, fc00::/7) or
-         * link-local address, or [source], the subscriber's own address. Never loopback (the panel's own ports),
-         * a wildcard or multicast, unless the subscriber is that address itself.
+         * link-local address, or [source], the subscriber's own address. Never loopback, a wildcard or multicast,
+         * unless the subscriber is that address itself. The panel's own interface addresses are refused apart from
+         * this, in [pushConsumer].
          */
         internal fun localConsumer(a: InetAddress, source: InetAddress?): Boolean {
             if (source != null && a == source) return true
@@ -172,7 +179,15 @@ class OnvifServer(
     @Volatile private var motion = false
     /** Sends Notify to push consumers; made on the first push subscription, gone at [stop]. Under [notifierLock]. */
     private var notifier: ScheduledThreadPoolExecutor? = null
+    /** Closes a Notify's socket at its deadline, on its own thread so it runs while both senders are stuck. */
+    private var watchdog: ScheduledThreadPoolExecutor? = null
     private val notifierLock = Any()
+    /**
+     * One boundary for the motion state and who hears it: a new subscription (its cap, its insertion and its first
+     * `Initialized`) and each change are queued in one order, so no consumer gets an old state after a newer one.
+     * Only queueing happens under it, never network I/O.
+     */
+    private val eventLock = Any()
     // A Set, not ConcurrentHashMap.KeySetView, so clear() is Set's: KeySetView's own methods are API 24 (#198).
     private val openSockets: MutableSet<Socket> = ConcurrentHashMap.newKeySet()
 
@@ -218,7 +233,10 @@ class OnvifServer(
         openSockets.clear()
         subscriptions.values.forEach { s -> synchronized(s.lock) { s.lock.notifyAll() } }
         subscriptions.clear()
-        synchronized(notifierLock) { notifier?.shutdownNow(); notifier = null }
+        synchronized(notifierLock) {
+            notifier?.shutdownNow(); notifier = null
+            watchdog?.shutdownNow(); watchdog = null
+        }
         pool?.shutdownNow(); pool = null
         try { acceptThread?.join(1000) } catch (_: Exception) {}
         acceptThread = null
@@ -228,7 +246,7 @@ class OnvifServer(
      * Publish motion state to every subscriber (both CellMotionDetector and MotionAlarm topics): queued for a pull
      * point, a Notify for a push consumer. Never waits on the network: a push only queues its Notify.
      */
-    fun setMotion(active: Boolean) {
+    fun setMotion(active: Boolean) = synchronized(eventLock) {
         if (motion == active) return
         motion = active
         val now = System.currentTimeMillis()
@@ -847,6 +865,7 @@ class OnvifServer(
 
     private fun notifier(): ScheduledThreadPoolExecutor? = synchronized(notifierLock) {
         if (stopped) return null
+        if (watchdog == null) watchdog = ScheduledThreadPoolExecutor(1) { r -> Thread(r, "OnvifNotifyWatchdog").apply { isDaemon = true } }
         notifier ?: ScheduledThreadPoolExecutor(2) { r -> Thread(r, "OnvifNotify").apply { isDaemon = true } }
             .also { notifier = it }
     }
@@ -872,24 +891,34 @@ class OnvifServer(
         }
     }
 
+    /**
+     * Sends one Notify of [s]'s, then queues itself again behind the other consumers' turns while more wait, so a
+     * slow consumer holds a sender for one exchange at a time, not for its whole outbox. [Subscription.sending] stays
+     * set until the outbox is empty, which keeps each consumer's Notify in order.
+     */
     private fun sendOutbox(s: Subscription, c: PushConsumer) {
-        while (true) {
-            val body = synchronized(s.lock) {
-                // Gone (Unsubscribe, expired, the server stopped): what's left isn't sent.
-                if (stopped || subscriptions[s.id] !== s || s.expiresAt < System.currentTimeMillis()) s.outbox.clear()
-                s.outbox.pollFirst().also { if (it == null) s.sending = false }
-            } ?: return
-            try {
-                val status = (post ?: ::httpPost)(c, body)
-                if (status !in 200..299) onLog("ONVIF Notify to ${c.label} answered HTTP $status")
-            } catch (e: Exception) {
-                onLog("ONVIF Notify to ${c.label} failed: ${e.javaClass.simpleName}")
-            }
+        val body = synchronized(s.lock) {
+            // Gone (Unsubscribe, expired, the server stopped): what's left isn't sent.
+            if (stopped || subscriptions[s.id] !== s || s.expiresAt < System.currentTimeMillis()) s.outbox.clear()
+            s.outbox.pollFirst().also { if (it == null) s.sending = false }
+        } ?: return
+        try {
+            val status = (post ?: ::httpPost)(c, body)
+            if (status !in 200..299) onLog("ONVIF Notify to ${c.label} answered HTTP $status")
+        } catch (e: Exception) {
+            onLog("ONVIF Notify to ${c.label} failed: ${e.javaClass.simpleName}")
+        }
+        try {
+            val ex = notifier() ?: throw RejectedExecutionException()
+            ex.execute { sendOutbox(s, c) }
+        } catch (_: RejectedExecutionException) {
+            synchronized(s.lock) { s.outbox.clear(); s.sending = false }
         }
     }
 
     private fun notifyXml(to: String, msgs: List<String>): String {
-        val header = "<wsa:Action>$WSNT_BW/NotificationProducer/Notify</wsa:Action>" +
+        // Notify is the NotificationConsumer's operation in WS-BaseNotification 1.3's WSDL (upstream named the producer).
+        val header = "<wsa:Action>$WSNT_BW/NotificationConsumer/Notify</wsa:Action>" +
             "<wsa:MessageID>urn:uuid:${UUID.randomUUID()}</wsa:MessageID>" +
             "<wsa:To>${e(to)}</wsa:To>"
         return OnvifXml.envelope("<wsnt:Notify>${msgs.joinToString("")}</wsnt:Notify>", header)
@@ -897,11 +926,21 @@ class OnvifServer(
 
     /**
      * One plain HTTP/1.1 POST on a socket of our own, to the address pinned at Subscribe: no DNS again, no redirect,
-     * no proxy. Returns the status, or -1 for an answer that isn't HTTP. The answer's status line must come within
-     * [NOTIFY_READ_MS] of the request, however slowly its bytes drip.
+     * no proxy. Returns the status, or -1 for an answer that isn't HTTP. Once connected, writing the request and
+     * reading the answer's status line must end within [NOTIFY_EXCHANGE_MS], however slowly the consumer reads or
+     * answers: reads are bounded by the time left, and the [watchdog] closes the socket at the deadline, which also
+     * ends a write that blocks on a consumer that reads nothing.
      */
     private fun httpPost(c: PushConsumer, body: ByteArray): Int = Socket().use { sock ->
         sock.connect(InetSocketAddress(c.address, c.port), NOTIFY_CONNECT_MS)
+        val deadline = System.currentTimeMillis() + NOTIFY_EXCHANGE_MS
+        val guard = try {
+            synchronized(notifierLock) { watchdog }?.schedule({ try { sock.close() } catch (_: Exception) {} }, NOTIFY_EXCHANGE_MS, TimeUnit.MILLISECONDS)
+        } catch (_: RejectedExecutionException) { null }
+        try { exchange(sock, c, body, deadline) } finally { guard?.cancel(false) }
+    }
+
+    private fun exchange(sock: Socket, c: PushConsumer, body: ByteArray, deadline: Long): Int {
         sock.tcpNoDelay = true
         val head = "POST ${c.target} HTTP/1.1\r\nHost: ${c.hostHeader}\r\n" +
             "Content-Type: application/soap+xml; charset=utf-8\r\nContent-Length: ${body.size}\r\n" +
@@ -910,7 +949,6 @@ class OnvifServer(
         out.write(head.toByteArray(Charsets.ISO_8859_1))
         out.write(body)
         out.flush()
-        val deadline = System.currentTimeMillis() + NOTIFY_READ_MS
         val input = sock.getInputStream()
         val line = StringBuilder()
         while (line.length < 256) {
@@ -922,15 +960,17 @@ class OnvifServer(
             line.append(b.toChar())
         }
         val parts = line.toString().trim().split(' ')
-        if (parts.size >= 2 && parts[0].startsWith("HTTP/")) parts[1].toIntOrNull() ?: -1 else -1
+        return if (parts.size >= 2 && parts[0].startsWith("HTTP/")) parts[1].toIntOrNull() ?: -1 else -1
     }
 
     /**
      * The consumer a Subscribe names, or why it is refused. Plain `http` only (no TLS client here: a
      * consumer that wants https gets a fault, and Home Assistant then keeps its pull point). The host is resolved
-     * now and the first address on the local network ([localConsumer]) is kept.
+     * now and the first address on the local network ([localConsumer]) that isn't one of the panel's own interfaces
+     * ([ownAddress]; a subscriber on the panel itself may name it) is kept.
      */
     internal fun pushConsumer(address: String, source: InetAddress?): Pair<PushConsumer?, String> {
+        if (address.length > MAX_CONSUMER_URL) return null to "ConsumerReference address too long"
         val uri = try { URI(address) } catch (_: Exception) { return null to "Invalid ConsumerReference address" }
         if (!uri.scheme.equals("http", true)) return null to "ConsumerReference must be http"
         if (uri.rawUserInfo != null) return null to "ConsumerReference must not carry a sign-in"
@@ -939,7 +979,7 @@ class OnvifServer(
         val target = (uri.rawPath?.ifEmpty { null } ?: "/") + (uri.rawQuery?.let { "?$it" } ?: "")
         if (target.any { it <= ' ' || it.code == 0x7F }) return null to "Invalid ConsumerReference address"
         val addrs = try { resolve(host.removePrefix("[").removeSuffix("]")) } catch (_: Exception) { emptyList() }
-        val pinned = addrs.firstOrNull { localConsumer(it, source) }
+        val pinned = addrs.firstOrNull { localConsumer(it, source) && (it == source || !ownAddress(it)) }
             ?: return null to "ConsumerReference must be on the local network"
         val hostHeader = if (uri.port == -1) host else "$host:$port"
         return PushConsumer(address, pinned, port, hostHeader, target) to ""
@@ -978,10 +1018,13 @@ class OnvifServer(
             "GetEventProperties" -> eventProperties()
             "CreatePullPointSubscription" -> {
                 val term = OnvifXml.parseTermination(OnvifXml.text(op, "InitialTerminationTime"), now) ?: (now + DEFAULT_SUB_MS)
-                makeRoom(push = false, cap = MAX_SUBSCRIPTIONS)
-                val sub = Subscription(OnvifXml.randomHex(8), term.coerceAtLeast(now + 10_000))
-                subscriptions[sub.id] = sub
-                enqueue(sub, motionMessages(motion, "Initialized", now))
+                val sub = synchronized(eventLock) {
+                    makeRoom(push = false, cap = MAX_SUBSCRIPTIONS)
+                    Subscription(OnvifXml.randomHex(8), term.coerceAtLeast(now + 10_000)).also {
+                        subscriptions[it.id] = it
+                        enqueue(it, motionMessages(motion, "Initialized", now))
+                    }
+                }
                 onLog("ONVIF pull-point subscription ${sub.id} created")
                 "<tev:CreatePullPointSubscriptionResponse><tev:SubscriptionReference>" +
                     "<wsa:Address>${baseUrl()}/onvif/pullpoint/${sub.id}</wsa:Address></tev:SubscriptionReference>" +
@@ -1014,7 +1057,9 @@ class OnvifServer(
             }
             "SetSynchronizationPoint" -> {
                 val sub = subscriptionFor(path, header)
-                (sub?.let { listOf(it) } ?: subscriptions.values.toList()).forEach { deliver(it, motionMessages(motion, "Initialized", now)) }
+                synchronized(eventLock) {
+                    (sub?.let { listOf(it) } ?: subscriptions.values.toList()).forEach { deliver(it, motionMessages(motion, "Initialized", now)) }
+                }
                 "<tev:SetSynchronizationPointResponse/>"
             }
             "Seek" -> fault("ter:ActionNotSupported", "Seek not supported")
@@ -1040,12 +1085,18 @@ class OnvifServer(
                     onLog("ONVIF push subscription from ${remoteHost.get() ?: "?"} refused: $why")
                     return fault("ter:InvalidArgVal", why)
                 }
-                makeRoom(push = true, cap = MAX_PUSH_SUBSCRIPTIONS)
-                val sub = Subscription(OnvifXml.randomHex(8), pushEnd(OnvifXml.parseTermination(OnvifXml.text(op, "InitialTerminationTime"), now), now), consumer)
-                subscriptions[sub.id] = sub
+                val end = pushEnd(OnvifXml.parseTermination(OnvifXml.text(op, "InitialTerminationTime"), now), now)
+                // The name was resolved above, outside the lock; only the cap, the insertion and the first Notify's
+                // queueing are inside, in one order with motion changes.
+                val sub = synchronized(eventLock) {
+                    makeRoom(push = true, cap = MAX_PUSH_SUBSCRIPTIONS)
+                    Subscription(OnvifXml.randomHex(8), end, consumer).also {
+                        subscriptions[it.id] = it
+                        // The state now, as a NotificationProducer sends it: the NVR starts from the right alarm state.
+                        deliver(it, motionMessages(motion, "Initialized", now), FIRST_NOTIFY_DELAY_MS)
+                    }
+                }
                 onLog("ONVIF push subscription ${sub.id} to ${consumer.label}")
-                // The state now, as a NotificationProducer sends it: the NVR starts from the right alarm state.
-                deliver(sub, motionMessages(motion, "Initialized", now), FIRST_NOTIFY_DELAY_MS)
                 "<wsnt:SubscribeResponse><wsnt:SubscriptionReference>" +
                     "<wsa:Address>${e(baseUrl())}/onvif/subscription/${sub.id}</wsa:Address></wsnt:SubscriptionReference>" +
                     "<wsnt:CurrentTime>${OnvifXml.isoUtc(now)}</wsnt:CurrentTime><wsnt:TerminationTime>${OnvifXml.isoUtc(sub.expiresAt)}</wsnt:TerminationTime>" +

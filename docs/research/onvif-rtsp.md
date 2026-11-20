@@ -254,21 +254,27 @@ out.
 - **Local network only.** `pushConsumer()` takes plain `http` only, with no user info in the URL, resolves the
   host once, and keeps the first address that `localConsumer()` allows: RFC 1918 (`isSiteLocalAddress`),
   link-local IPv4 and IPv6 (`isLinkLocalAddress`), IPv6 ULA `fc00::/7`, or the subscriber's own source address.
-  Loopback, wildcard and multicast addresses are refused unless they are the subscriber's own, so a Subscribe
-  can't aim the panel at its own ports or at the internet. The Notify goes to that pinned address, so a name that
+  Loopback, wildcard and multicast addresses are refused unless they are the subscriber's own, and so is any
+  address of the panel's own interfaces (`NetworkInterface.getByInetAddress`), so a Subscribe can't aim the panel
+  at its own ports or at the internet. A consumer URL past 2048 characters is refused. The Notify goes to that pinned address, so a name that
   resolves elsewhere later can't move it. Anything else gets a `ter:InvalidArgVal` fault, which makes Home
   Assistant keep its pull point.
 - **Its own sockets.** The Notify is one HTTP/1.1 POST on a `java.net.Socket`: no DNS lookup again, no redirects,
   no proxy, and no change to the network security config (it doesn't apply to raw sockets, and both apps already
-  set `usesCleartextTraffic` for Home Assistant over HTTP). Connect timeout 2 s, and 2 s in all for the status
-  line.
+  set `usesCleartextTraffic` for Home Assistant over HTTP). Connect timeout 2 s, then 2 s in all to write the
+  request and read the status line: reads get the time left, and a watchdog thread closes the socket at the
+  deadline, which also ends a write to a consumer that reads nothing.
+- **The Notify action** is `http://docs.oasis-open.org/wsn/bw-2/NotificationConsumer/Notify`, the operation's
+  port type in WS-BaseNotification 1.3's WSDL. Upstream sends `NotificationProducer/Notify`.
 - **Caps.** At most 8 push subscriptions, apart from the 16 pull points, so a flood of Subscribes can't push Home
   Assistant's pull point out. At the cap, the push subscription that ends soonest goes. A push subscription ends at
   most 1 h away (Subscribe and Renew), and an expired one gets nothing more. At most 8 Notify bodies wait per
   consumer.
-- **Off the caller's thread.** `setMotion` only queues. Two notifier threads send, in order per consumer, so a
-  dead NVR costs at most 4 s per Notify on one of them and never holds up motion or the pull points. The first
-  Notify (`Initialized`, the state now) goes 250 ms after Subscribe, as upstream.
+- **Off the caller's thread.** `setMotion` only queues. Two notifier threads send, in order per consumer, one
+  Notify a turn, so a dead NVR holds one of them for at most one exchange (about 4 s) at a time and never holds up
+  motion or the pull points. The first Notify (`Initialized`, the state now) goes 250 ms after Subscribe, as
+  upstream. One lock covers a new subscription's cap check, insertion and first `Initialized`, and each motion
+  change, so no consumer gets an old state after a newer one and concurrent Subscribes can't pass the cap.
 - **The log** names the consumer's host and port, never its path: Home Assistant's webhook path is the webhook's
   key.
 
