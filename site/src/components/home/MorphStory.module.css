@@ -1,0 +1,889 @@
+/* Full-bleed spacious scroll stage for Concept D: one piece of glass morphing across hardware shapes */
+.story {
+  position: relative;
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-top: -24px;
+  height: 440vh;
+}
+
+.sticky {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100svh;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+
+.ambient {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.canvas {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 1220px;
+  height: 100%;
+  padding: 72px 44px 78px;
+  display: grid;
+  place-items: center;
+}
+
+/* Copy blocks positioned cleanly in the open half opposite the morphing glass */
+.copyBlock {
+  position: absolute;
+  top: 50%;
+  width: min(440px, 40vw);
+  display: grid;
+  gap: 16px;
+  margin-top: -110px;
+  z-index: 3;
+}
+
+.copyLeft {
+  left: 44px;
+}
+
+.copyRight {
+  right: 44px;
+}
+
+.copyCenter {
+  position: absolute;
+  left: 50%;
+  bottom: 92px;
+  width: min(560px, 90vw);
+  margin-left: calc(min(560px, 90vw) / -2);
+  text-align: center;
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  z-index: 3;
+}
+
+.eyebrow {
+  font-family: var(--f-mono);
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+  text-decoration: none;
+  justify-self: start;
+}
+
+a.eyebrow:hover {
+  color: var(--fg);
+}
+
+.newPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  justify-self: start;
+  padding: 4px 12px 4px 5px;
+  border-radius: 999px;
+  border: 1px solid var(--edge);
+  background: var(--glass);
+  font-size: 13px;
+  color: var(--muted);
+  text-decoration: none;
+  max-width: 100%;
+}
+
+.newPill b {
+  font-weight: 500;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.newPill:hover {
+  border-color: color-mix(in srgb, var(--sky) 45%, var(--edge));
+}
+
+.newTag {
+  font: 600 10px/1 var(--f-sans);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--lit-gradient);
+  color: var(--night);
+  flex: none;
+}
+
+.newArrow {
+  flex: none;
+}
+
+.h1 {
+  font-size: clamp(40px, 4.4vw, 60px);
+  line-height: 1.03;
+  letter-spacing: -0.038em;
+  font-weight: 300;
+  color: var(--fg);
+  text-wrap: balance;
+}
+
+.h2 {
+  font-size: clamp(32px, 3.6vw, 48px);
+  line-height: 1.07;
+  letter-spacing: -0.032em;
+  font-weight: 300;
+  color: var(--fg);
+  text-wrap: balance;
+}
+
+.lede {
+  font-size: 16.5px;
+  line-height: 1.58;
+  color: var(--muted);
+  max-width: 44ch;
+}
+
+.ledeCenter {
+  font-size: 16px;
+  line-height: 1.56;
+  color: var(--muted);
+  max-width: 50ch;
+}
+
+.ctas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin-top: 6px;
+}
+
+.ctasCenter {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 14px;
+  margin-top: 6px;
+}
+
+.install {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-radius: 999px;
+  background: var(--ember-gradient);
+  color: #1a0a0a;
+  font-size: 14.5px;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: opacity 0.18s ease;
+}
+
+.install:hover {
+  opacity: 0.9;
+}
+
+.install svg {
+  width: 17px;
+  height: 17px;
+  flex: none;
+}
+
+.quietLink {
+  font-size: 14.5px;
+  font-weight: 450;
+  color: var(--muted);
+  text-decoration: none;
+  padding: 8px 4px;
+  transition: color 0.18s ease;
+}
+
+.quietLink:hover {
+  color: var(--fg);
+}
+
+/* Future ghost silhouettes at Keyframe 3 */
+.ghostLayer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 400px;
+  transform: translateY(-84px);
+  z-index: 2;
+  transition: opacity 0.35s ease;
+}
+
+.ghost {
+  appearance: none;
+  border: 1px dashed color-mix(in srgb, var(--fg) 24%, transparent);
+  background: color-mix(in srgb, var(--glass) 60%, transparent);
+  color: var(--muted);
+  cursor: pointer;
+  display: grid;
+  place-content: center;
+  gap: 4px;
+  text-align: center;
+  transition:
+    border-color 0.22s ease,
+    color 0.22s ease,
+    background 0.22s ease,
+    transform 0.22s ease;
+}
+
+.ghost:hover {
+  border-color: color-mix(in srgb, var(--sky) 55%, var(--edge));
+  color: var(--fg);
+  background: color-mix(in srgb, var(--sky) 8%, var(--glass));
+  transform: translateY(-2px);
+}
+
+.ghostActive {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--sky) 55%, var(--edge));
+  color: var(--fg);
+}
+
+.ghost span {
+  font-family: var(--f-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  font-weight: 500;
+}
+
+.ghost small {
+  font-size: 11.5px;
+  color: var(--faint);
+}
+
+.ghostRound {
+  width: 156px;
+  height: 156px;
+  border-radius: 50%;
+}
+
+.ghostBedside {
+  width: 190px;
+  height: 114px;
+  border-radius: 26px;
+}
+
+/* The single gliding, morphing hardware bezel */
+.hardwareCarrier {
+  position: relative;
+  z-index: 4;
+  width: 100%;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.bezel {
+  position: relative;
+  pointer-events: auto;
+  padding: 11px;
+  background: linear-gradient(155deg, #252832 0%, #12141b 48%, #0a0b0f 100%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow:
+    0 34px 78px -28px rgba(0, 0, 0, 0.52),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  overflow: hidden;
+  will-change: width, height, border-radius, transform;
+}
+
+.bezelMirror {
+  background: linear-gradient(160deg, #3c414d 0%, #171a22 50%, #0d0f14 100%);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.morphSmooth {
+  transition:
+    width 0.52s cubic-bezier(0.22, 1, 0.36, 1),
+    height 0.52s cubic-bezier(0.22, 1, 0.36, 1),
+    border-radius 0.52s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.glare {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 4;
+  background: linear-gradient(
+    115deg,
+    transparent 34%,
+    rgba(255, 255, 255, 0.05) 44%,
+    rgba(255, 255, 255, 0.11) 49%,
+    rgba(255, 255, 255, 0.04) 55%,
+    transparent 64%
+  );
+  background-size: 260% 100%;
+  background-position: var(--sheen, 34%) 0;
+  transition: background-position 0.45s ease;
+}
+
+.screen {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background:
+    radial-gradient(65% 80% at 10% 0%, rgba(56, 189, 248, 0.14), transparent 68%),
+    radial-gradient(60% 75% at 92% 100%, rgba(167, 139, 250, 0.12), transparent 68%),
+    #0b0d13;
+  color: var(--s-fg);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  overflow: hidden;
+  transition: border-radius 0.52s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.screenInner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.face {
+  position: absolute;
+  inset: 0;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  transition: opacity 0.25s ease;
+}
+
+/* Wall Switch Face */
+.wallTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.wallClock {
+  font-size: 38px;
+  font-weight: 200;
+  letter-spacing: -0.04em;
+  line-height: 0.95;
+  font-variant-numeric: tabular-nums;
+}
+
+.assistPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--f-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--s-mu);
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.skyDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--sky);
+}
+
+.greenDot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--green);
+  margin-right: 6px;
+}
+
+.wallTiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  flex: 1;
+  align-items: stretch;
+}
+
+.tile {
+  position: relative;
+  appearance: none;
+  font: inherit;
+  color: var(--s-fg);
+  text-align: left;
+  border-radius: 13px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.045);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+button.tile {
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease;
+}
+
+button.tile:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.tileWarm {
+  border-color: rgba(253, 186, 116, 0.34);
+  background: linear-gradient(145deg, rgba(253, 186, 116, 0.18), rgba(251, 191, 36, 0.06));
+}
+
+.tileSky {
+  border-color: rgba(56, 189, 248, 0.32);
+  background: linear-gradient(145deg, rgba(56, 189, 248, 0.16), rgba(167, 139, 250, 0.1));
+}
+
+.tileKicker {
+  font-size: 11px;
+  color: var(--s-mu);
+}
+
+.tileVal,
+.tileValLive {
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.tileValLive {
+  display: inline-flex;
+  align-items: center;
+}
+
+.eqMini {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  display: flex;
+  align-items: flex-end;
+  gap: 2.5px;
+  height: 14px;
+}
+
+.eqMini span {
+  width: 2.5px;
+  border-radius: 999px;
+  background: var(--lit-gradient);
+}
+
+.eqMini span:nth-child(1) {
+  height: 55%;
+}
+.eqMini span:nth-child(2) {
+  height: 100%;
+}
+.eqMini span:nth-child(3) {
+  height: 40%;
+}
+.eqMini span:nth-child(4) {
+  height: 80%;
+}
+
+/* Razor-thin sky->violet Assist light edge along the bottom */
+.assistRim {
+  position: absolute;
+  left: 16%;
+  right: 16%;
+  bottom: 0;
+  height: 2px;
+  background: var(--lit-gradient);
+  box-shadow: 0 0 12px var(--sky);
+  border-radius: 999px;
+}
+
+/* Tablet Face */
+.tabTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.tabTitle {
+  font-size: 17px;
+  font-weight: 450;
+  letter-spacing: -0.02em;
+}
+
+.clarityTag {
+  font-family: var(--f-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(52, 211, 153, 0.35);
+  background: rgba(52, 211, 153, 0.12);
+  color: var(--green);
+}
+
+.tabGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  flex: 1;
+}
+
+/* Mirror Face */
+.mirrorFace {
+  padding: 20px 16px;
+}
+
+.mirrorGlass {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.02) 38%, transparent 58%, rgba(255, 255, 255, 0.06) 100%);
+}
+
+.mirrorTop {
+  position: relative;
+  display: grid;
+  gap: 2px;
+}
+
+.mirrorClock {
+  font-size: 34px;
+  font-weight: 200;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.mirrorWeather {
+  font-size: 12px;
+  color: var(--s-mu);
+}
+
+.mirrorSpace {
+  flex: 1;
+}
+
+.mirrorBottom {
+  position: relative;
+  display: grid;
+  gap: 7px;
+}
+
+.mirrorPill,
+.mirrorPillLit {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 11px;
+  border-radius: 10px;
+  font-size: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.mirrorPillLit {
+  border-color: rgba(56, 189, 248, 0.35);
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.18), rgba(167, 139, 250, 0.12));
+}
+
+.mirrorPill span,
+.mirrorPillLit span {
+  color: var(--s-mu);
+}
+
+.mirrorPill b,
+.mirrorPillLit b {
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Square 4" & Round Dial Faces */
+.dialFace {
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+}
+
+.dialKicker {
+  font-family: var(--f-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  color: var(--s-fa);
+}
+
+.dialRingWrap {
+  position: relative;
+  width: 112px;
+  height: 112px;
+  display: grid;
+  place-items: center;
+}
+
+.dialSvg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+
+.dialTrack {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.1);
+  stroke-width: 4;
+}
+
+.dialArc {
+  fill: none;
+  stroke: url(#gw-lit);
+  stroke-width: 4.5;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.25s ease;
+}
+
+.dialTemp {
+  font-size: 32px;
+  font-weight: 250;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+.dialControls {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dialStep {
+  appearance: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--s-fg);
+  font-size: 14px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.dialStep:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.dialMode {
+  font-size: 11.5px;
+  color: var(--s-mu);
+}
+
+.roundFace {
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+}
+
+.roundSvg {
+  position: absolute;
+  inset: 8px;
+  width: calc(100% - 16px);
+  height: calc(100% - 16px);
+  transform: rotate(-90deg);
+}
+
+.roundCenter {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+}
+
+.roundTemp {
+  font-size: 42px;
+  font-weight: 200;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Bedside Display Face */
+.bedsideFace {
+  padding: 16px 20px;
+  justify-content: space-between;
+}
+
+.bedsideTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.bedsidePill {
+  font-size: 10.5px;
+  color: #7dd3fc;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.12);
+}
+
+.bedsideClock {
+  font-size: 46px;
+  font-weight: 200;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.bedsideFoot {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11.5px;
+  color: var(--s-mu);
+}
+
+/* Quiet bottom shape rail */
+.railWrap {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 24px;
+  display: flex;
+  justify-content: center;
+  z-index: 6;
+  pointer-events: none;
+}
+
+.rail {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 999px;
+  border: 1px solid var(--edge);
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+.railBtn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: 450 12.5px/1 var(--f-sans);
+  padding: 8px 13px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    color 0.18s ease,
+    background 0.18s ease;
+}
+
+.railBtn:hover {
+  color: var(--fg);
+}
+
+.railActive {
+  color: var(--fg);
+  background: var(--glass);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sky) 35%, var(--edge));
+}
+
+@media (max-width: 1140px) {
+  .hardwareCarrier {
+    --bezel-scale: 0.86;
+  }
+
+  .ghostLayer {
+    gap: 320px;
+  }
+}
+
+/* Compact / Mobile / Reduced-motion layout (zero scroll-jack, zero overflow at 375px) */
+.compactWrap {
+  display: grid;
+  gap: 26px;
+  padding: 20px 0 36px;
+  justify-items: center;
+}
+
+.compactStage {
+  width: 100%;
+  min-height: 380px;
+  display: grid;
+  place-items: center;
+}
+
+.compactRail {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 20px;
+  border: 1px solid var(--edge);
+  background: var(--glass);
+  max-width: 100%;
+}
+
+.compactCopy {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: 14px;
+  max-width: 540px;
+}
+
+.compactCopy .eyebrow,
+.compactCopy .newPill {
+  justify-self: center;
+}
+
+.compactCopy .h1 {
+  font-size: clamp(32px, 8vw, 44px);
+}
+
+.compactCopy .ctas {
+  justify-content: center;
+}
+
+@media (max-width: 480px) {
+  .face {
+    padding: 13px 14px;
+  }
+
+  .wallClock {
+    font-size: 28px;
+  }
+
+  .tile {
+    padding: 9px 10px;
+  }
+
+  .tileVal,
+  .tileValLive {
+    font-size: 12.5px;
+  }
+
+  .bedsideClock {
+    font-size: 36px;
+  }
+}
