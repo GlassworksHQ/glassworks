@@ -1005,6 +1005,8 @@ check "Leave in Off: the dataset goes, an older staged hand-off waits in the app
 echo thread_router > "$T/props/persist.glassworks.radio_mode"; : > "$T/log"; LOOPS=1 helper; pkill -f "sleep 1000"
 check "...taken later in Thread router, it is discarded, never joined" test ! -e /data/s1kiosk/radio/thread-dataset -a ! -e /data/s1kiosk/radio/thread-dataset.in -a ! -e "$APP/files/radio/thread-dataset"
 check "...and said so" grep -q 'staged before a Leave' "$T/log"
+# (the cases below join: a stored dataset again, as a hand-off after the Leave above would store it)
+( umask 077; echo 0e080000000000010000 > /data/s1kiosk/radio/thread-dataset ); rm -f /data/s1kiosk/radio/thread-left
 # #645: otbr-agent failing to start shows its own error (JOINED is cleared before, not after, start_otbr)
 CUR_KEEP=$CUR; CUR=""; chmod 644 "$TB/otbr-agent"; LOOPS=1 helper
 check "otbr-agent that can't start: its error, not 'waiting' or ok" has "$(prop sys.glassworks.radio.status)" "error thread_router: otbr-agent not installed"
