@@ -207,8 +207,10 @@ open class MainActivity : Activity() {
         val restarted = prefs.takeSetupUpAtRestart()
         if (restarted) Log.i(TAG, "Setup screen: up again after the app's restart")
         // Recreated (a new language, `set_locale`): the first activity read the restart's mark, so it carries on here.
-        setupCarried = restarted || savedInstanceState?.getBoolean(STATE_SETUP_UP) == true
-        restartedInSetup = restarted || savedInstanceState?.getBoolean(STATE_RESTARTED_IN_SETUP) == true
+        // Only in the same process: one Android killed and restored later isn't the app's own restart.
+        val recreated = savedInstanceState?.takeIf { it.getInt(STATE_PID) == android.os.Process.myPid() }
+        setupCarried = restarted || recreated?.getBoolean(STATE_SETUP_UP) == true
+        restartedInSetup = restarted || recreated?.getBoolean(STATE_RESTARTED_IN_SETUP) == true
         glassworks.paneDefinitions(this) // first: a step's one-time check runs before discovery can save an HA URL
         HaAuth.init(this)
         intent?.let { screenExtras(it, runtime.app::trustsExtras) }
@@ -947,6 +949,7 @@ open class MainActivity : Activity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
+        outState.putInt(STATE_PID, android.os.Process.myPid())
         outState.putBoolean(STATE_SETUP_UP, setupCarried || (::setupOverlay.isInitialized && setupOverlay.isShowing && !setupPreview))
         outState.putBoolean(STATE_RESTARTED_IN_SETUP, restartedInSetup)
     }
@@ -1419,5 +1422,6 @@ open class MainActivity : Activity() {
         private const val SETUP_NO_TOUCH = "setup without touch"
         private const val STATE_SETUP_UP = "dev.glassworks.setup_up"
         private const val STATE_RESTARTED_IN_SETUP = "dev.glassworks.restarted_in_setup"
+        private const val STATE_PID = "dev.glassworks.pid"
     }
 }
