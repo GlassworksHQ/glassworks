@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { DeviceModel, type FrameDesign } from "@glassworks/frame-card";
 import { KILN } from "@/lib/links";
 import { KilnGlyph, MusicGlyph } from "../Glyphs";
 import s from "./MorphStory.module.css";
@@ -14,7 +15,9 @@ import s from "./MorphStory.module.css";
  * Each beat spotlights ONE hardware shape + ONE real Glassworks feature over the live
  * CSS-Grid + @container-reflowing Home Assistant Lovelace dashboard:
  *   Beat 0: Aqara S1 Plus Wall Switch (right) — Clean unobstructed HA dashboard
- *   Beat 1: Google Pixel Tablet (left) — REAL Assist Voice Orb (OrbArt.kt + VoiceOverlay.kt)
+ *   Beat 1: Google Pixel Tablet (left) — REAL Assist Voice Orb (OrbArt.kt + VoiceOverlay.kt). As it settles, the
+ *           glass hands over to the tablet's own 3D model from @glassworks/frame-card, on its speaker dock, which
+ *           lifts off the dock on hover like the frame cards.
  *   Beat 2: Wall Switch Landscape (right) — REAL Top-Right Notification Card (NotificationOverlay.kt)
  *   Beat 3: lululemon Studio Mirror (left) — Presence Detection collapse to side pill + reflective glass
  *   Beat 4: Wide Kitchen / Bedside Display (right) — REAL TimerDock + RingView + Sendspin + 3 light lines
@@ -58,7 +61,7 @@ const KEYFRAMES: Keyframe[] = [
     glowX: 72,
     glowY: 48,
   },
-  // 1: Countertop Tablet · Google Pixel Tablet + Charging Speaker Dock (Left, 16:10, 468 × 306)
+  // 1: Countertop Tablet · Google Pixel Tablet (Left, 16:10, 468 × 306)
   {
     w: 468,
     h: 306,
@@ -68,11 +71,11 @@ const KEYFRAMES: Keyframe[] = [
     insetX: 4.3,
     screenR: 8,
     xPct: -22,
-    yPx: -20,
+    yPx: -4,
     rx: 1.5,
     ry: 5.5,
     glowX: 28,
-    glowY: 47,
+    glowY: 48,
   },
   // 2: Wall Switch Landscape · Notifications (Right, 2:1, 500 × 250)
   {
@@ -248,9 +251,12 @@ export type MorphPost = { title: string; href: string };
 export function MorphStory({
   release,
   post,
+  tablet,
 }: {
   release: MorphRelease;
   post?: MorphPost;
+  /** the Pixel Tablet's frame design (frames/google-pixel-tablet), drawn on Beat 1 with its dock */
+  tablet: FrameDesign;
 }) {
   const sectionRef = useRef<HTMLElement>(null);
   const bezelRef = useRef<HTMLDivElement>(null);
@@ -269,9 +275,8 @@ export function MorphStory({
   const [temp, setTemp] = useState(70);
   const [doorLocked, setDoorLocked] = useState(true);
 
-  // Beat 1: Real Assist Voice Overlay phase cycle (Thinking -> Speaking -> Done) + PR #696 hover-undock
+  // Beat 1: Real Assist Voice Overlay phase cycle (Thinking -> Speaking -> Done)
   const [assistPhase, setAssistPhase] = useState<AssistPhase>("thinking");
-  const [tabletHovered, setTabletHovered] = useState(false);
 
   // Beat 2: Real NotificationOverlay card dismissed/collapsed state
   const [notifDismissed, setNotifDismissed] = useState(false);
@@ -404,12 +409,7 @@ export function MorphStory({
     });
   };
 
-  const onPointerEnter = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.pointerType === "mouse" && !reducedMotion) setTabletHovered(true);
-  };
-
   const onPointerLeave = () => {
-    setTabletHovered(false);
     cancelAnimationFrame(sheenRaf.current);
     bezelRef.current?.style.removeProperty("--sheen");
   };
@@ -439,9 +439,9 @@ export function MorphStory({
     geom = FUTURE_GEOMETRY[futureShape];
   }
 
-  // Pixel Tablet Charging Speaker Dock presence factor (Beat 1) + hover-to-undock lift (PR #696)
-  const dockFactor = windowO(seg, 1, 0.24, 0.72);
-  const tabletUndocked = !compact && !reducedMotion && dockFactor > 0.45 && tabletHovered;
+  // Beat 1: the morphing glass hands over to the Pixel Tablet's real model, on its dock, as it settles
+  const modelO = compact ? 0 : windowO(seg, 1, 0.1, 0.34);
+  const modelLive = modelO > 0.5;
   // Mirror body + tubular U-stand presence factor (Beat 3)
   const mirrorFactor = windowO(seg, 3, 0.24, 0.72);
 
@@ -722,6 +722,16 @@ export function MorphStory({
     );
   };
 
+  /* Beat 1 — the Pixel Tablet's own model (frame.json), with the live dashboard and Assist on its screen */
+  const renderTabletModel = (id: string, voiceO: number) => (
+    <DeviceModel id={id} model={tablet.model} label={`${tablet.name} on its speaker dock, running Glassworks`} aspect={1.4}>
+      <div className={s.screenInner}>
+        {renderLiveLovelace("tablet")}
+        {renderRealVoiceOverlay(voiceO)}
+      </div>
+    </DeviceModel>
+  );
+
   /*
    * Beat 1 — REAL Assist Voice Overlay (OrbArt.kt + VoiceOverlay.kt)
    */
@@ -748,12 +758,6 @@ export function MorphStory({
           }
         }}
       >
-        {/* Quiet charging speaker dock telemetry micro-chip at top rim (updates on hover-undock) */}
-        <div className={`${s.dockChip} ${tabletUndocked ? s.dockChipUndocked : ""}`} aria-hidden="true">
-          <span className={`${s.dockChipDot} ${tabletUndocked ? s.dockChipDotOff : ""}`} />
-          <span>{tabletUndocked ? "Charging dock · Undocked" : "Charging dock · Docked"}</span>
-        </div>
-
         <div className={s.orbStage} style={{ transform: `scale(${0.86 + opacity * 0.14})` }}>
           <div
             className={`${s.orbGlow} ${s.orbGlowThink}`}
@@ -1042,20 +1046,27 @@ export function MorphStory({
     ) => {
       const d = MOBILE_SHAPES[shape];
       const isMirror = shape === "mirror";
-      const isDockedTablet = shape === "tablet" && overlay === "voice";
       const isMirrorCollapsed = overlay === "mirror-presence" && mirrorPresent;
+      if (shape === "tablet") {
+        return (
+          <div className={s.compactStage}>
+            <div className={s.tabletModelCompact}>
+              {renderTabletModel("home-tablet-compact", overlay === "voice" ? 1 : 0)}
+            </div>
+          </div>
+        );
+      }
       return (
         <div className={s.compactStage}>
           <div className={s.mirrorAssembly}>
             <div
-              className={`${s.bezel} ${interactiveSmooth ? s.morphSmooth : ""} ${isMirror ? s.bezelMirror : ""} ${isDockedTablet ? s.bezelPorcelain : ""}`}
+              className={`${s.bezel} ${interactiveSmooth ? s.morphSmooth : ""} ${isMirror ? s.bezelMirror : ""}`}
               style={{
                 width: `min(calc(100vw - 32px), ${d.w}px)`,
                 height: `${d.h}px`,
                 borderRadius: `${d.bodyR}px`,
               }}
             >
-              {isDockedTablet && <div className={s.tabletPorcelainSurface} aria-hidden="true" />}
               {isMirror && <div className={s.mirrorBodySurface} aria-hidden="true" />}
               {isMirror && (
                 <div className={s.mirrorSensor} aria-hidden="true">
@@ -1088,38 +1099,6 @@ export function MorphStory({
                 </div>
               </div>
             </div>
-            {isDockedTablet && (
-              <div
-                className={s.tabletDockCompact}
-                aria-hidden="true"
-                style={{ width: `calc(min(calc(100vw - 32px), ${d.w}px) * 0.655)` }}
-              >
-                <svg viewBox="0 0 260 66" className={s.tabletDockSvg} preserveAspectRatio="none">
-                  <defs>
-                    <linearGradient id="pixel-dock-fabric-c" x1="0" y1="0" x2="1" y2="1">
-                      <stop offset="0%" stopColor="#ebe7df" />
-                      <stop offset="52%" stopColor="#cfc9be" />
-                      <stop offset="100%" stopColor="#8a857c" />
-                    </linearGradient>
-                    <pattern id="pixel-dock-weave-c" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(-32)">
-                      <rect width="5" height="2" fill="black" fillOpacity="0.055" />
-                      <rect y="2.5" width="5" height="1" fill="white" fillOpacity="0.1" />
-                    </pattern>
-                  </defs>
-                  <path
-                    d="M 42 0 L 218 0 C 234 0, 248 16, 253 36 C 258 53, 244 62, 222 62 L 38 62 C 16 62, 2 53, 7 36 C 12 16, 26 0, 42 0 Z"
-                    fill="url(#pixel-dock-fabric-c)"
-                    stroke="rgba(255,255,255,0.22)"
-                    strokeWidth="1"
-                  />
-                  <path
-                    d="M 42 0 L 218 0 C 234 0, 248 16, 253 36 C 258 53, 244 62, 222 62 L 38 62 C 16 62, 2 53, 7 36 C 12 16, 26 0, 42 0 Z"
-                    fill="url(#pixel-dock-weave-c)"
-                  />
-                  <rect x="36" y="60" width="188" height="3.5" rx="1.75" fill="#6b6760" fillOpacity="0.55" />
-                </svg>
-              </div>
-            )}
             {isMirror && (
               <div
                 className={s.mirrorStandCompact}
@@ -1165,13 +1144,13 @@ export function MorphStory({
           {renderCompactFrame("wall")}
         </div>
 
-        {/* Beat 1: Pixel Tablet + Charging Speaker Dock + Real Assist Orb */}
+        {/* Beat 1: Pixel Tablet + Real Assist Orb */}
         <div className={s.compactBeat}>
           <div className={s.compactCopy}>
             <span className={s.eyebrow}>LOCAL ASSIST VOICE</span>
             <h2 className={s.h2}>A tablet that listens locally</h2>
             <p className={s.lede}>
-              Snap a Pixel Tablet onto its charging speaker dock and it becomes a local Home Assistant Assist panel — lift it off and it&rsquo;s a regular tablet again.
+              On-device wake word detection and Home Assistant Assist run right on the hardware, with the same calm glass orb on every screen.
             </p>
             <div className={s.ctas}>
               <Link href="/frames/google-pixel-tablet" className={s.quietLink}>
@@ -1348,7 +1327,7 @@ export function MorphStory({
             </div>
           </div>
 
-          {/* Beat 1 Copy (Right — Google Pixel Tablet + Charging Speaker Dock + Real Assist Orb) */}
+          {/* Beat 1 Copy (Right — Google Pixel Tablet + Real Assist Orb) */}
           <div
             className={`${s.copyBlock} ${s.copyRight}`}
             style={{
@@ -1361,7 +1340,7 @@ export function MorphStory({
             <span className={s.eyebrow}>LOCAL ASSIST VOICE</span>
             <h2 className={s.h2}>A tablet that listens locally</h2>
             <p className={s.lede}>
-              Snap a Pixel Tablet onto its charging speaker dock and it becomes a local Home Assistant Assist panel — lift it off and it&rsquo;s a regular tablet again.
+              On-device wake word detection and Home Assistant Assist run right on the hardware, with the same calm glass orb on every screen.
             </p>
             <div className={s.ctas}>
               <Link href="/frames/google-pixel-tablet" className={s.quietLink}>
@@ -1499,89 +1478,36 @@ export function MorphStory({
               transform: `translate3d(${basePose.xPct}%, ${basePose.yPx}px, 0)`,
             }}
           >
+            {modelO > 0.01 && (
+              <div
+                className={s.tabletModel}
+                style={{ opacity: modelO, pointerEvents: modelLive ? "auto" : "none" }}
+                inert={!modelLive}
+              >
+                {renderTabletModel("home-tablet", assistO)}
+              </div>
+            )}
+
             <div
               className={s.hardwareScale}
-              data-docked={dockFactor > 0.45 ? "" : undefined}
-              data-undocked={tabletUndocked ? "" : undefined}
-              onPointerEnter={onPointerEnter}
-              onPointerLeave={onPointerLeave}
+              inert={modelLive}
               style={{
+                opacity: 1 - modelO,
                 transform: `perspective(1200px) rotateX(${basePose.rx}deg) rotateY(${basePose.ry}deg) scale(var(--bezel-scale, 1))`,
               }}
             >
-              {/* Google Pixel Tablet Charging Speaker Dock (PR #696: stays planted on the ground while tablet lifts on hover!) */}
-              {dockFactor > 0.01 && (
-                <div
-                  className={s.tabletDock}
-                  aria-hidden="true"
-                  style={{
-                    width: `${(geom.w * 0.655).toFixed(1)}px`,
-                    opacity: dockFactor,
-                    transform: `translate3d(-50%, ${(1 - dockFactor) * -12}px, 0) scale(${0.92 + dockFactor * 0.08})`,
-                  }}
-                >
-                  <svg viewBox="0 0 260 156" className={s.tabletDockSvg} preserveAspectRatio="none">
-                    <defs>
-                      <linearGradient id="pixel-dock-fabric-d" x1="0" y1="0" x2="1" y2="1">
-                        <stop offset="0%" stopColor="#ebe7df" />
-                        <stop offset="52%" stopColor="#cfc9be" />
-                        <stop offset="100%" stopColor="#8a857c" />
-                      </linearGradient>
-                      <linearGradient id="pixel-dock-plate-d" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#f3f0e8" />
-                        <stop offset="100%" stopColor="#dcd7cc" />
-                      </linearGradient>
-                      <pattern id="pixel-dock-weave-d" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(-32)">
-                        <rect width="5" height="2" fill="black" fillOpacity="0.055" />
-                        <rect y="2.5" width="5" height="1" fill="white" fillOpacity="0.1" />
-                      </pattern>
-                    </defs>
-                    {/* Light woven fabric body sloping from upper pill down to rounded floor base */}
-                    <path
-                      d="M 52 14 L 208 14 C 228 14, 246 72, 253 122 C 257 144, 242 152, 220 152 L 40 152 C 18 152, 3 144, 7 122 C 14 72, 32 14, 52 14 Z"
-                      fill="url(#pixel-dock-fabric-d)"
-                      stroke="rgba(255,255,255,0.22)"
-                      strokeWidth="1"
-                    />
-                    <path
-                      d="M 52 14 L 208 14 C 228 14, 246 72, 253 122 C 257 144, 242 152, 220 152 L 40 152 C 18 152, 3 144, 7 122 C 14 72, 32 14, 52 14 Z"
-                      fill="url(#pixel-dock-weave-d)"
-                    />
-                    {/* Smooth pill-shaped magnetic docking plate revealed as the tablet lifts off on hover */}
-                    <rect
-                      x="54"
-                      y="24"
-                      width="152"
-                      height="90"
-                      rx="45"
-                      fill="url(#pixel-dock-plate-d)"
-                      stroke="rgba(0,0,0,0.08)"
-                      strokeWidth="1"
-                    />
-                    {/* Four magnetic charging & speaker pogo contacts near the foot of the pill plate */}
-                    <circle cx="109" cy="100" r="2.7" fill="#8f8676" />
-                    <circle cx="123" cy="100" r="2.7" fill="#8f8676" />
-                    <circle cx="137" cy="100" r="2.7" fill="#8f8676" />
-                    <circle cx="151" cy="100" r="2.7" fill="#8f8676" />
-                    {/* Subtle rubberized foot trim */}
-                    <rect x="38" y="150" width="184" height="3.5" rx="1.75" fill="#6b6760" fillOpacity="0.55" />
-                  </svg>
-                </div>
-              )}
-
               <div className={s.bezelRow}>
                 <div
                   ref={bezelRef}
                   className={`${s.bezel} ${clickMorph ? s.morphSmooth : ""}`}
                   onPointerMove={onPointerMove}
+                  onPointerLeave={onPointerLeave}
                   style={{
                     width: `${geom.w}px`,
                     height: `${geom.h}px`,
                     borderRadius: `${geom.bodyR}px`,
                   }}
                 >
-                  {/* Porcelain front bezel surface (PR #696: #f2f0eb) smoothly fading in on Beat 1 */}
-                  <div className={s.tabletPorcelainSurface} aria-hidden="true" style={{ opacity: dockFactor }} />
                   {/* Mirror silvered body surface fading smoothly across forehead & chin */}
                   <div className={s.mirrorBodySurface} aria-hidden="true" style={{ opacity: mirrorFactor }} />
                   {/* Mirror forehead camera/presence lens + sky-blue pulse ripple */}

@@ -156,6 +156,23 @@ describe('the model', () => {
     const ids = [...el.querySelectorAll('[id]')].map((n) => n.id);
     expect(ids).toEqual(expect.arrayContaining(['frame-floor-pt', 'frame-weave-pt']));
   });
+
+  it('is an image with the example dashboard, or a group whose screen holds the caller\'s live content', () => {
+    expect(el.firstElementChild!.getAttribute('role')).toBe('img');
+    const live = render(
+      <DeviceModel id="pt-live" model={tablet.model} label="Pixel Tablet">
+        <button type="button">Cancel</button>
+      </DeviceModel>,
+    );
+    const stage = live.firstElementChild!;
+    expect(stage.getAttribute('role')).toBe('group');
+    expect(stage.getAttribute('aria-label')).toBe('Pixel Tablet');
+    const button = live.querySelector('button')!;
+    expect(button.closest('[aria-hidden="true"]')).toBeNull();
+    expect(live.querySelector('img')).toBeNull();
+    // the dock and its lift are the same as without children
+    expect(live.querySelector('[data-dock]')).not.toBeNull();
+  });
 });
 
 describe('the undock CSS', () => {

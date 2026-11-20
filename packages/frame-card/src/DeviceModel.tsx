@@ -4,7 +4,7 @@
 // projection of the frame's model, drawn as SVG behind the glass. Light moves, glass doesn't. A dock is drawn on its
 // own, behind the body, so the body can lift off it on hover (--undock, DeviceModel.module.css).
 // Colours are styles, not attributes: a frame with a dark look paints CSS light-dark() (geometry.ts `either`).
-import { useEffect, useMemo, useRef, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, type CSSProperties, type ReactNode } from 'react';
 import type { FrameModel } from './frame';
 import { geometry, type Layout, type View } from './geometry';
 import { PAINT } from './paint';
@@ -19,8 +19,11 @@ const PAINT_VARS = {
  * `screen` is the URL of the frame's render (frame.json `render`) to show on the glass; without it, an example dashboard.
  * The render loads lazily; `priority` loads it at once, for a model that is a page's largest paint.
  * `view` turns the camera from the mount's own (geometry.ts `View`), e.g. toward the text beside the model.
+ * `children`, if given, are the screen's content instead of the render or the example dashboard, e.g. a live
+ * mockup on glassworks.dev's home page. The screen is an inline-size container, so they can size to it. The
+ * model is then a labelled group rather than an image, so content that can be used stays reachable.
  */
-export function DeviceModel({ id, model, label, aspect = 2, screen, priority = false, view }: { id: string; model: FrameModel; label: string; aspect?: number; screen?: string; priority?: boolean; view?: View }) {
+export function DeviceModel({ id, model, label, aspect = 2, screen, priority = false, view, children }: { id: string; model: FrameModel; label: string; aspect?: number; screen?: string; priority?: boolean; view?: View; children?: ReactNode }) {
   const stage = useRef<HTMLDivElement>(null);
   const rx = view?.rx;
   const ry = view?.ry;
@@ -40,7 +43,7 @@ export function DeviceModel({ id, model, label, aspect = 2, screen, priority = f
   const heather = `frame-heather-${id}`;
   const { dock } = g;
   return (
-    <div ref={stage} className={s.stage} style={{ ...PAINT_VARS, aspectRatio: aspect }} role="img" aria-label={label}>
+    <div ref={stage} className={s.stage} style={{ ...PAINT_VARS, aspectRatio: aspect }} role={children ? 'group' : 'img'} aria-label={label}>
       <div className={s.model} data-layout={g.layout} data-finish={g.finish} data-mount={g.mount} data-dock={dock ? '' : undefined} style={{ transform: g.transform, ...g.vars } as CSSProperties}>
         {g.mount === 'wall' && <div className={s.shadow} aria-hidden="true" />}
         {(g.floorShadow || dock) && (
@@ -78,9 +81,10 @@ export function DeviceModel({ id, model, label, aspect = 2, screen, priority = f
             {g.parts.map((p, i) => <line key={`p${i}`} x1={p.x1} y1={p.y1} x2={p.x2} y2={p.y2} style={{ stroke: p.color }} strokeWidth={p.width} strokeLinecap="round" />)}
             {g.faces.map((f, i) => <polygon key={i} points={f.points} style={{ fill: f.fill, stroke: f.fill }} strokeWidth="0.12" strokeLinejoin="round" />)}
           </svg>
-          <div className={s.device} aria-hidden="true">
+          {/* a picture, unless the caller's screen content is live and can be used */}
+          <div className={s.device} aria-hidden={children ? undefined : 'true'}>
             <div className={s.front}>
-              <div className={s.screen}>{screen ? <img className={s.render} src={screen} alt="" decoding="async" loading={priority ? 'eager' : 'lazy'} fetchPriority={priority ? 'high' : undefined} /> : <Dashboard layout={g.layout} />}</div>
+              <div className={s.screen}>{children ?? (screen ? <img className={s.render} src={screen} alt="" decoding="async" loading={priority ? 'eager' : 'lazy'} fetchPriority={priority ? 'high' : undefined} /> : <Dashboard layout={g.layout} />)}</div>
               <div className={s.glare} />
             </div>
           </div>

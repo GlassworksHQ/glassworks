@@ -47,6 +47,9 @@ const KILN_STAGES = [
 
 export default async function Home() {
   const [[post], latest] = await Promise.all([getPosts(), release()]);
+  // Beat 1 of the story draws this frame's own model, on its dock
+  const tablet = frames.find((f) => f.id === "google-pixel-tablet");
+  if (!tablet) throw new Error("frames/google-pixel-tablet is missing: the home page's story draws it");
 
   const clarityLetters = rubric.grade.letters.map((l) => l.letter);
   const clarityRows = frames.map((f) => ({
@@ -61,6 +64,7 @@ export default async function Home() {
       <MorphStory
         release={{ version: latest.version, href: latest.href }}
         post={post?.fresh ? { title: post.title, href: post.url } : undefined}
+        tablet={tablet}
       />
 
       <div className={s.below}>
