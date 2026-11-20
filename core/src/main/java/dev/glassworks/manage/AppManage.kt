@@ -450,7 +450,7 @@ open class AppManage(
             tag.startsWith("Glassworks.Screen") -> "Screen"
             tag.startsWith("Glassworks.Wifi") -> "Wi-Fi"
             tag.startsWith("Glassworks.Update") -> "Updates"
-            tag.startsWith("Glassworks.Improv") || tag.startsWith("Glassworks.SetupChannel") -> "Setup"
+            tag.startsWith("Glassworks.Improv") || tag.startsWith("Glassworks.SetupChannel") || tag == "Glassworks.Hotspot" -> "Setup"
             tag.startsWith("Glassworks.Voice") -> "Voice"
             tag == "Glassworks.Sendspin" -> "Music"
             tag == "Glassworks.Auth" -> "Sign-in"

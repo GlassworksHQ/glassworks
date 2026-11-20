@@ -121,6 +121,8 @@ class PrefsPinTest {
         kiosk.noiseKeyStore.save(null)
         kiosk.carryOverApiKey(ByteArray(32) { 1 })
         kiosk.carryOverApiKey(ByteArray(32) { 1 })
+        kiosk.markSetupUpAtRestart(true) // the setup screen across the app's own restart (#621's Mirror run)
+        kiosk.takeSetupUpAtRestart()
         PanePrefs.PANE_FILES.keys.forEach(panes::paneFile)
         kiosk.remoteDebugging(BuildConfig.DEBUG) // the default the runtime passes (GlassworksRuntime.build)
         panes.camera.use = dev.glassworks.camera.CameraUse.PRESENCE_AND_SNAPSHOTS
@@ -247,7 +249,7 @@ class PrefsPinTest {
         val COMPOSITE = setOf(
             "KioskPrefs.setHaUrl", "KioskPrefs.setUpdateChannel", "KioskPrefs.shownHost", "KioskPrefs.setAuth", "KioskPrefs.remoteDebugging", "PanePrefs.paneFile", "KioskPrefs.registerListener", "KioskPrefs.unregisterListener",
             ".save", "PrefsSsStore.putRecord", "PrefsSsStore.touchRecord", "PrefsSsStore.removeRecord",
-            "CameraPrefs.setUse", "CameraPrefs.setSignIn", "KioskPrefs.carryOverRefreshToken", "KioskPrefs.carryOverApiKey",
+            "CameraPrefs.setUse", "CameraPrefs.setSignIn", "KioskPrefs.carryOverRefreshToken", "KioskPrefs.carryOverApiKey", "KioskPrefs.markSetupUpAtRestart",
         )
     }
 }

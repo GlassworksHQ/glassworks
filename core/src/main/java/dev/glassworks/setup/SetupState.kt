@@ -137,7 +137,7 @@ data class SetupInputs(
     val signedOut: Boolean,
     /** "Sign in on this panel instead" was chosen (this process). */
     val usePanelLogin: Boolean,
-    /** The setup screen is already up (not a preview): it stays until every step is done. */
+    /** The setup screen is already up (not a preview), or was when the app restarted itself: it stays until every step is done. */
     val showing: Boolean = false,
     /**
      * The setup screen was up when the person chose "Sign in on this panel instead", and hid for Home Assistant's login
@@ -173,6 +173,11 @@ data class SetupInputs(
 data class SetupRules(
     val offlineGraceMs: Long = 30_000,
     val haGraceMs: Long = 120_000,
+    /**
+     * How long after the app starts the Sign in step waits for the page to show whether a sign-in is needed (Home
+     * Assistant's login page, or the dashboard with a session it has) before it asks anyway ([SetupDecision.signinChecking]).
+     */
+    val signinCheckMs: Long = 20_000,
 )
 
 data class SetupDecision(
@@ -195,6 +200,12 @@ data class SetupDecision(
      * connect first. Add it says it checks instead of only waiting (#665).
      */
     val haChecking: Boolean = false,
+    /**
+     * Sign in is the step, but the page hasn't shown yet whether one is needed, and the app started moments ago (it
+     * restarts itself once it finds Home Assistant): the screen says it connects, rather than asking to sign in and then
+     * going away when a session it has loads the dashboard (a Mirror run, 2026-11-20).
+     */
+    val signinChecking: Boolean = false,
 ) {
     /** Every step that is done, by id ([SetupFlow.DONE] never is: it's where the screen ends). */
     val done: Set<String>
@@ -243,8 +254,12 @@ object SetupState {
         // enough: the screen would move on, then come back when HA's login page loads. It waits for the
         // dashboard to load without asking (a session it already has) or the panel's own login page.
         val laterWaiting = !haDone || !panesDone || pendingWanted != null || ownPending != null
+        // Up, moments after the app started (it restarts once it finds Home Assistant): not done until the page shows
+        // whether a sign-in is needed, so the screen doesn't move on, then come back when the login page loads.
+        val signinUnknown = i.showing && !i.signedIn && !i.dashboardLoaded && !i.usePanelLogin && !wantsSignin &&
+            i.uptimeMs < rules.signinCheckMs
         val signinDone = i.signedIn ||
-            (wifiDone && i.haKnown && !wantsSignin && (!laterWaiting || i.dashboardLoaded || i.usePanelLogin))
+            (wifiDone && i.haKnown && !wantsSignin && !signinUnknown && (!laterWaiting || i.dashboardLoaded || i.usePanelLogin))
         val step = when {
             !wifiDone -> SetupFlow.WIFI
             !signinDone -> SetupFlow.SIGNIN
@@ -262,7 +277,8 @@ object SetupState {
         val show = reasons.isNotEmpty() || (up && step != SetupFlow.DONE)
         val paneDone = (i.paneSteps + i.ownSteps).filter { it.done }.map { it.id }.toSet()
         return SetupDecision(show, step, wifiDone, haDone, signinDone, reasons, WifiStep.improv(i.improv, i.input), panesDone, paneDone,
-            haChecking = haGrace && i.uptimeMs < rules.haGraceMs)
+            haChecking = haGrace && i.uptimeMs < rules.haGraceMs,
+            signinChecking = show && step == SetupFlow.SIGNIN && signinUnknown)
     }
 
     /**

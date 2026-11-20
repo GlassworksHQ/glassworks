@@ -228,6 +228,7 @@ object ImprovController {
             overlay.hide()
             status = "failed to start"
             if (startError == null) startError = "Bluetooth didn't start"
+            Log.w(TAG, "Improv didn't start: $startError ($why)")
             notifyHost()
             return
         }

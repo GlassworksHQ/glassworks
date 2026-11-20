@@ -487,6 +487,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   it straight away. The *Thread join* sensor says how it went. Pasting the dataset still works.
 
 ### Fixed
+- **Setup stays on screen when the app restarts after finding Home Assistant.** Once the panel joins Wi-Fi and
+  finds Home Assistant, the app restarts to apply it. The setup screen now comes back at once and says "Connecting
+  to Home Assistant…" until it knows whether the panel needs to sign in, so Home Assistant's page no longer flashes
+  before the sign-in step.
 - **Settings > Log says what the screen senses in plain words.** *Screen and sensors* read like
   `presence=far (raw 7.7E-4) · lux=NaN · brightness=-1.00 · admin=true`. It now reads like *Someone near: no ·
   Room light: 120 lux · Brightness: 40 %*, with only what the device has: no room light without a light sensor, no

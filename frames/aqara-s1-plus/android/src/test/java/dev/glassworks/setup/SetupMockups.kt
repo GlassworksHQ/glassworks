@@ -49,10 +49,11 @@ class SetupMockups {
         improv: ImprovFacts = ImprovFacts(), installer: InstallerWifi? = null, preview: Boolean = false,
         done: Set<String> = flow.takeWhile { it != step }.toSet(), panelIp: String? = ip,
         hotspot: dev.glassworks.setup.HotspotStep.Card? = null, signedIn: Boolean = false, haChecking: Boolean = false,
+        signinChecking: Boolean = false,
     ) = SetupOverlay.Model(
         step = step, done = done, wifi = wifi, haUrl = haUrl, haSource = "mdns", panelIp = panelIp,
         signedIn = signedIn, improv = WifiStep.improv(improv), installer = installer, preview = preview, hotspot = hotspot,
-        haChecking = haChecking,
+        haChecking = haChecking, signinChecking = signinChecking,
     )
 
     /** The setup hotspot's states (#197), with a made-up network. */
@@ -145,6 +146,8 @@ class SetupMockups {
         shot("setup-03-ha-add", model(SetupFlow.HA))
         // #665: signed in, and Home Assistant may still connect on its own within its grace.
         shot("setup-03b-ha-checking", model(SetupFlow.HA, signedIn = true, haChecking = true))
+        // after the app's restart that applies Home Assistant's address: no sign-in asked before the page says (#621)
+        shot("setup-02c-signin-checking", model(SetupFlow.SIGNIN, signinChecking = true))
         shot("setup-04-ha-added", model(SetupFlow.HA, done = setOf(SetupFlow.WIFI, SetupFlow.HA), preview = true))
         shot("setup-05-ha-looking", model(SetupFlow.HA, haUrl = null))
         shot("setup-06-signin", model(SetupFlow.SIGNIN))
@@ -201,6 +204,7 @@ class SetupMockups {
             "portrait-01-no-touch-wifi" to model(SetupFlow.WIFI, wifi = offline, panelIp = null),
             "portrait-02-no-touch-ha" to model(SetupFlow.HA),
             "portrait-03-no-touch-signin" to model(SetupFlow.SIGNIN),
+            "portrait-03c-no-touch-signin-checking" to model(SetupFlow.SIGNIN, signinChecking = true),
             "portrait-05-no-touch-hotspot-on" to model(SetupFlow.WIFI, wifi = offline, panelIp = null, hotspot = Spot.on),
             "portrait-06-no-touch-hotspot-starting" to model(SetupFlow.WIFI, wifi = offline, panelIp = null, hotspot = Spot.starting),
             "portrait-07-no-touch-hotspot-phone-joined" to model(SetupFlow.WIFI, wifi = offline, panelIp = null, hotspot = Spot.phone),

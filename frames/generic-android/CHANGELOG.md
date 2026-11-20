@@ -24,6 +24,12 @@ line of each version is what Home Assistant shows on the update card. A change o
   back to Stable never installs an older version: the panel waits for a stable release newer than the one it runs.
 
 ### Fixed
+- **Setup stays on screen when the app restarts after finding Home Assistant.** Once the panel joins Wi-Fi and
+  finds Home Assistant, the app restarts to apply it. The setup screen now comes back at once and says "Connecting
+  to Home Assistant…" until it knows whether the panel needs to sign in, so Home Assistant's page no longer flashes
+  before the sign-in step.
+- **A device without a touchscreen keeps its screen on during setup.** On the lululemon Mirror and other devices
+  without touch, the setup screen no longer goes dark while you set the device up from a computer.
 - **Settings > Log says what the screen senses in plain words.** *Screen and sensors* read like
   `presence=far (raw 7.7E-4) · lux=NaN · brightness=-1.00 · admin=true`. It now reads like *Someone near: no ·
   Room light: 120 lux · Brightness: 40 %*, with only what the device has: no room light without a light sensor, no

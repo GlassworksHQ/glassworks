@@ -109,6 +109,9 @@ open class MainActivity : Activity() {
     private var setupPreviewStep: String? = null
     private var offlineSince = 0L
     private var lastSetupReasons: List<String> = emptyList()
+    private var lastSetupStep: String? = null
+    /** The setup screen was up when the app restarted itself: it counts as up until this process shows it (#621's Mirror run). */
+    private var setupCarried = false
 
     private var lastImprovInline = false
 
@@ -175,6 +178,9 @@ open class MainActivity : Activity() {
             // connecting screen. The S1's sensor wakes it as before. Setup, which covers the connecting screen, only until
             // Home Assistant has added the panel: a set-up panel that lost Wi-Fi sleeps on its idle timeout (#484).
             glassworks.screen.stayOn(NOT_READY, !presenceSensor && if (setupOverlay.isShowing) setupOverlay.needsHomeAssistant else loadingOverlay.isShowing)
+            // Without touch nothing on the panel can wake its screen during setup, and the person reads it from a
+            // computer's steps: it stays on for as long as the setup screen is up (a Mirror run, 2026-11-20).
+            glassworks.screen.stayOn(SETUP_NO_TOUCH, setupOverlay.input == Input.NONE && setupOverlay.isShowing && !setupPreview)
             handler.postDelayed(this, SETUP_TICK_MS)
         }
     }
@@ -193,6 +199,8 @@ open class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = KioskPrefs(this)
+        setupCarried = prefs.takeSetupUpAtRestart()
+        if (setupCarried) Log.i(TAG, "Setup screen: up again after the app's restart")
         glassworks.paneDefinitions(this) // first: a step's one-time check runs before discovery can save an HA URL
         HaAuth.init(this)
         intent?.let { screenExtras(it, runtime.app::trustsExtras) }
@@ -425,7 +433,7 @@ open class MainActivity : Activity() {
             onAuthPage = FrontendUrls.isAuthorizePage(currentUrl, prefs.haBase),
             signedOut = signedOutHere,
             usePanelLogin = usePanelLogin,
-            showing = setupOverlay.isShowing && !setupPreview,
+            showing = (setupOverlay.isShowing && !setupPreview) || setupCarried,
             hidForPanelLogin = setupHidForLogin && !setupPreview,
             paneSteps = steps,
             ownSteps = deviceSteps.map { PaneStepFacts(it.id, it.done(), it.reason) },
@@ -475,6 +483,12 @@ open class MainActivity : Activity() {
             if (d.reasons.isNotEmpty()) Log.i(TAG, "Setup screen: ${d.reasons.joinToString()} (step ${d.step})")
             lastSetupReasons = d.reasons
         }
+        // every step change, kept in the Manage log: what the screen showed when, across restarts
+        val stepNow = "${d.step}${if (d.signinChecking) " (checking the sign-in)" else ""}"
+        if (stepNow != lastSetupStep) {
+            Log.i(TAG, "Setup step: $stepNow, ${if (d.show) "shown" else "hidden"}")
+            lastSetupStep = stepNow
+        }
         // Up again (the screen's own latch takes over) or nothing left: the login page's pause is over.
         if (d.show || d.step == SetupFlow.DONE) setupHidForLogin = false
         if (d.show) {
@@ -486,6 +500,7 @@ open class MainActivity : Activity() {
             hotspotAsked = false
             setupOverlay.finish { loadDashboardIfNeeded() }
         }
+        if (setupOverlay.isShowing || d.step == SetupFlow.DONE) setupCarried = false
         syncImprovInline()
     }
 
@@ -523,6 +538,7 @@ open class MainActivity : Activity() {
             preview = preview,
             hotspot = if (preview) null else hotspotCard(),
             haChecking = d.haChecking,
+            signinChecking = d.signinChecking,
         )
 
     // ---- setup: the panel's own Wi-Fi (#197)
@@ -1049,6 +1065,8 @@ open class MainActivity : Activity() {
         )
         (getSystemService(ALARM_SERVICE) as AlarmManager)
             .set(AlarmManager.RTC, System.currentTimeMillis() + 600, pi)
+        // the setup screen comes back first in the new process, so the dashboard never shows in between
+        prefs.markSetupUpAtRestart(::setupOverlay.isInitialized && setupOverlay.isShowing && !setupPreview)
         finishAffinity()
         exitProcess(0)
     }
@@ -1336,6 +1354,7 @@ open class MainActivity : Activity() {
         glassworks.screen.onStateChanged = null
         glassworks.screen.onTestDashboard = null
         glassworks.screen.stayOn(NOT_READY, false)
+        glassworks.screen.stayOn(SETUP_NO_TOUCH, false)
         glassworks.commandSink = null
         handler.removeCallbacksAndMessages(null)
         super.onDestroy()
@@ -1375,5 +1394,6 @@ open class MainActivity : Activity() {
         private const val SETTINGS_TICK_MS = 2_000L
         /** The [dev.glassworks.screen.ScreenPolicy.stayOn] reason while setup or the connecting screen is up (#449). */
         private const val NOT_READY = "not ready"
+        private const val SETUP_NO_TOUCH = "setup without touch"
     }
 }

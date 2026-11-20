@@ -107,6 +107,8 @@ class SetupOverlay(
         val signinMoved: Boolean = false,
         /** [SetupDecision.haChecking]: Add it says it checks whether Home Assistant knows the panel already (#665). */
         val haChecking: Boolean = false,
+        /** [SetupDecision.signinChecking]: Sign in says it connects until the page shows whether one is needed. */
+        val signinChecking: Boolean = false,
     )
 
     var onChooseNetwork: (() -> Unit)? = null
@@ -668,6 +670,15 @@ class SetupOverlay(
         // A step that is done says so, also as a preview's current step (reopened on a set-up panel).
         val done = shown in m.done
         cardLabel.text = SetupFlow.group(shown, ownIds)?.let { grp -> "${GROUPS.getValue(grp)} · ${title(shown)}" } ?: title(shown)
+        // Moments after the app started (it restarts once it finds Home Assistant): no sign-in asked before the page
+        // shows whether one is needed, so a session it has goes on to the dashboard with nothing in between.
+        if (shown == SetupFlow.SIGNIN && !done && m.signinChecking) {
+            cardTitle.text = SIGNIN_CHECKING
+            cardBody.text = "Checking whether the panel needs to sign in."
+            setContent(null)
+            hideKeyboard()
+            return
+        }
         if (input == Input.NONE) {
             // Nothing here takes a tap: the steps happen on a computer, or on a phone for Sign in. Before Home Assistant
             // added the panel, Sign in is the setup page's, which also finds Home Assistant.
@@ -1351,6 +1362,9 @@ class SetupOverlay(
 
     companion object {
         private val GROUPS = mapOf(SetupFlow.HA to "Home Assistant", SetupFlow.PANES to "Panes")
+
+        /** Sign in's title while the page hasn't shown yet whether one is needed ([Model.signinChecking]). */
+        const val SIGNIN_CHECKING = "Connecting to Home Assistant…"
 
         /** Add it's waiting line while Home Assistant may still connect on its own ([Model.haChecking]). */
         const val HA_CHECKING = "Checking whether Home Assistant knows this panel…"
