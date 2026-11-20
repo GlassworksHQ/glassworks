@@ -146,6 +146,22 @@ class ManageOneSignInEverywhereTest {
         keptAsIs(keep(b, csrf = csrf), "the same one again later")
     }
 
+    @Test fun aNewSignInWaitsWhileTheLastOnesRevokeIsUnconfirmed() {
+        val b = f.Browser()
+        b.cookies[ManageServer.SESSION] = f.sessions.create(null, SignedInWith.PANEL_CODE, "Safari on Mac", false, f.haBase).first
+        val csrf = b.csrf()
+        assertEquals(200, keep(b, csrf = csrf).status)
+        f.revokeWorks = false
+        assertEquals(502, b.post(ManageServer.HA_FORGET, mapOf("csrf" to csrf)).status)
+        // A second sign-in for the same session would hide the first one's pending revoke: refused until HA confirms.
+        assertEquals(409, keep(b, refresh = "SECOND", csrf = csrf).status)
+        assertFalse(f.server.keepsHaSignIn(sessionId()))
+        f.revokeWorks = true
+        f.server.sweep()
+        assertEquals("the first one's revoke went through", "TAB-REFRESH", f.revoked.last())
+        assertEquals(200, keep(b, refresh = "SECOND", csrf = csrf).status)
+    }
+
     @Test fun onlyThisPanelsOwnSignedInPageCanHandItOver() {
         val b = f.Browser()
         b.cookies[ManageServer.SESSION] = f.sessions.create(null, SignedInWith.PANEL_CODE, "Safari on Mac", false, f.haBase).first

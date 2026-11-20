@@ -191,8 +191,11 @@ class ManageServer(
     private val queued = java.util.concurrent.atomic.AtomicLong()
 
     private fun queue(id: String, k: HaSignIn.Kept) {
-        unrevoked[id] = k
-        retryOrder[id] = queued.incrementAndGet()
+        // Never over another one still waiting: that one stays tracked under a key of its own, and the sweep retries both.
+        val order = queued.incrementAndGet()
+        val key = if (unrevoked[id].let { it != null && it !== k }) "$id~$order" else id
+        unrevoked[key] = k
+        retryOrder[key] = order
     }
 
     private fun retryLater(id: String, k: HaSignIn.Kept) {
@@ -463,6 +466,9 @@ class ManageServer(
         // The same sign-in kept already (a second request with it) is plain success; another one means "revoke yours".
         val same = { k: HaSignIn.Kept? -> k != null && !k.longLived && k.refreshToken == refresh }
         kept[s.id]?.let { return json(200, JSONObject().put("ok", true).also { o -> if (!same(it)) o.put("already", true) }) }
+        // An earlier sign-in of this session is still waiting for HA to confirm its revoke: one at a time, so that one
+        // stays tracked until HA confirms it (CodeRabbit on #534). The tab keeps its own meanwhile.
+        if (unrevoked.containsKey(s.id)) return json(409, JSONObject().put("problem", "The panel is still ending this browser's earlier sign-in. Try again in a moment."))
         val host = req.headers["host"] ?: return json(400, JSONObject().put("problem", "No sign-in to keep."))
         val clientId = "http://$host/"
         if (!haCalls.tryAcquire()) return json(503, JSONObject().put("problem", BUSY))

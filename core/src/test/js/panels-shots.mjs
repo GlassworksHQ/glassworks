@@ -80,6 +80,8 @@ const requests = [];
 let challenge = null;
 /** Whether a copy ever sent a panel's own Home Assistant address (the 2026-11-18 panel run's blocker). */
 let haAddressSent = false;
+/** The token each handoff carried, in order (fakes only). */
+const handoffTokens = [];
 /** Whether any request carried an access token in its URL (it must only ever be a header or a form field). */
 let tokenInUrl = false;
 /** Handoffs a panel received: which panel, and the page it says it came from. */
@@ -160,6 +162,7 @@ async function handle(req, res) {
   if (u.pathname === '/manage/ha/token' && req.method === 'POST') {
     const f = await form(req);
     handoffs.push({ host: u.host, from: f.get('from'), token: !!f.get('token') });
+    handoffTokens.push(f.get('token'));
     return send(res, 200, '<p>Signed in</p>', 'text/html');
   }
   if (u.host === 'kitchen-panel.local:8099' && u.pathname === '/manage/ha/access' && req.method === 'POST' && panelSignIn) {
@@ -441,6 +444,7 @@ try {
   for (let i = 0; i < 50 && handoffs.length === renewedBefore; i++) await sleep(100);
   assert.equal(accessAsked, renewalsBefore + 1, 'the Manage click renewed the token from the panel');
   assert.equal(handoffs.length, renewedBefore + 1, 'and handed it to the panel');
+  assert.equal(handoffTokens.at(-1), 'fake-access-from-panel', "the panel's fresh token, not an old one");
   assert.equal(await js("JSON.parse(sessionStorage.getItem('gw-ha')).user"), who, 'still known after the renewal');
   // Sign out while Manage waits for a slow renewal from the panel, and the panel can't confirm the sign-out: the renewal's
   // late answer must not sign the page back in, and nothing goes to the other panel (CodeRabbit on #534).

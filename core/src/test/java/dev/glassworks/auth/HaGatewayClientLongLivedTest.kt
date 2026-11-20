@@ -65,14 +65,18 @@ class HaGatewayClientLongLivedTest {
         assertTrue("one HA no longer takes is as good as ended", client(FakeHa("SOMETHING-ELSE")).endLongLived("http://homeassistant.local:8123", "LLAT-1"))
     }
 
-    @Test fun aConnectionHaClosesRightAfterTheDeleteStillEndsIt() {
+    @Test fun aConnectionHaClosesRightAfterTheDeleteIsntConfirmedThere() {
         val ha = FakeHa("LLAT-1", closesOnDelete = true)
-        val gateway = client(ha)
-        assertFalse("no reply on that connection: not confirmed yet", gateway.endLongLived("http://homeassistant.local:8123", "LLAT-1"))
+        assertFalse("no reply on that connection: not confirmed yet", client(ha).endLongLived("http://homeassistant.local:8123", "LLAT-1"))
         assertEquals("mine", ha.deleted)
-        // HaSignIn's second try then finds HA no longer takes it, which is as good as ended.
-        val signIn = dev.glassworks.manage.HaSignIn(gateway)
+    }
+
+    @Test fun theSecondTryThenFindsItGoneAndCountsItEnded() {
+        val ha = FakeHa("LLAT-1", closesOnDelete = true)
+        val signIn = dev.glassworks.manage.HaSignIn(client(ha))
         assertTrue(signIn.end(dev.glassworks.manage.HaSignIn.Kept("http://homeassistant.local:8123", "", "LLAT-1", longLived = true)))
+        assertEquals("deleted on the first try", "mine", ha.deleted)
+        assertEquals("then a second sign-in, which HA refuses: ended", 2, ha.sent.count { it.optString("type") == "auth" })
     }
 
     @Test fun noAnswerIsNotEnded() {
