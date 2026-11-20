@@ -349,10 +349,13 @@ export class ChannelSetup {
   }
 
   /**
-   * The Panes step: a switch per card the app offers, as the panel's own Panes step has (proposed, #621). An app whose
+   * The Panes step: a switch per card the app offers, as the panel's own Panes step has (proposed, issue 621). An app whose
    * state has no `panes` has no such step: on to the radio, as before.
    */
   async panes(): Promise<void> {
+    // the state the channel has, if it has one: an app without the step (every app today) asks nothing more here
+    const known = this.channel?.state;
+    if (known && !known.panes?.length) { await this.radio(); return; }
     const g = this.gen;
     const stale = () => g !== this.gen || !this.d.here();
     if (!(await this.connect())) { if (!stale()) this.d.unreachable(); return; }

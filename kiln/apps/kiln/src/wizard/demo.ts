@@ -10,7 +10,6 @@ import { isMagiskPatched, loadCompressor } from '@glassworks/bootpatch';
 import { Assets, checkRestorable, fmtSize, type BackupFile, type BackupMeta } from '@glassworks/kiln-core';
 import { IMPROV_SOCKET } from '@glassworks/app-adb';
 import { SETUP_SOCKET, type PaneCard, type SetupState } from '@glassworks/setup-channel';
-import { FRAMES } from '../frames/catalog';
 import { PacketReader, PacketType, Rpc, State as ImprovState, frame as packet, parseResult, strings, type ByteStream } from 'improv-serial';
 import { explain } from './explain';
 import type { AppPhase, DemoFrame } from '@glassworks/kiln-core';
@@ -39,32 +38,12 @@ const dumpsysWifi = (pkg: string) => [
   'Configured networks End ----',
 ].join('\n');
 
-/**
- * The cards the app's Panes step shows (each pane's PaneChoice: its title and line, on as it ships), by frame.json pane
- * id, in the app's order. Demos only: a real app sends its own in its setup state.
- */
-const PANE_CARDS: [string, Omit<PaneCard, 'id'>][] = [
-  ['wall-base', { title: 'Wall base', detail: 'The S1\'s wired base', on: true }],
-  ['assist', { title: 'Voice', detail: 'Assist and timers', on: true }],
-  ['sendspin', { title: 'Music', detail: 'A Sendspin speaker', on: true }],
-  ['notifications', { title: 'Notifications', detail: 'On-screen alerts', on: false }],
-  ['camera', { title: 'Camera', detail: 'Presence, and snapshots', on: false }],
-  ['bluetooth-proxy', { title: 'Bluetooth proxy', detail: 'For BLE sensors', on: false }],
-  ['radio', { title: 'Zigbee / Thread radio', detail: 'For your devices', on: false }],
-];
-
-/** The Panes cards a simulated app on `frameId` offers: one per pane its frame.json lists (demos only). */
-export function demoPanes(frameId: string): PaneCard[] {
-  const panes = (FRAMES.find((f) => f.id === frameId) as { panes?: Record<string, { support?: string }> } | undefined)?.panes ?? {};
-  return PANE_CARDS.filter(([id]) => (panes[id]?.support ?? 'no') !== 'no').map(([id, c]) => ({ id, ...c }));
-}
-
 /** What a simulated app's Panes step does: its cards, and `refuse`: Continue refused, saying why. */
 export interface DemoPanes { cards: PaneCard[]; refuse?: string }
 
 /**
  * The app's setup channel on a simulated panel. `radio`: the app reports one (a frame without one leaves it out).
- * `panes`: the app offers the Panes step (proposed, #621); without, it has none, as every app today.
+ * `panes`: the app offers the Panes step (proposed, issue 621); without, it has none, as every app today.
  */
 function setupStream(net: Net, radio = true, panes?: DemoPanes): ByteStream {
   let cb: (c: Uint8Array) => void = () => {};
@@ -241,8 +220,8 @@ export function demoSession(d: DemoFrame, which: Demo): Session {
   // run and the app's first-install states start without Glassworks on the panel; radio-thread-old has 0.4.3
   const app = ['run', 'app', 'app-installing', 'app-keyboard'].includes(which) ? null
     : which === 'radio-thread-old' ? { name: '0.4.3', code: 403 } : { name: '0.5.0', code: 500 };
-  // the Panes mockup (#621, for approval): an app that offers the step; every other state's app has none, as today's
-  const panes = which.startsWith('panes') ? { cards: demoPanes(frame.id), refuse: which === 'panes-refused' ? 'Voice couldn\'t open the microphone. Try again, or leave Voice off.' : undefined } : undefined;
+  // the Panes mockup (issue 621, for approval): an app that offers the step; every other state's app has none, as today's
+  const panes = which.startsWith('panes') ? { cards: sim.panes ?? [], refuse: which === 'panes-refused' ? 'Voice couldn\'t open the microphone. Try again, or leave Voice off.' : undefined } : undefined;
   const panel = simulatedPanel(d, which === 'wifi-fail', which !== 'wifi-fail' && which !== 'wifi-new', app, true, panes);
   let adbAllowed = which !== 'run'; // the static states start on an installed panel
   const deps: SessionDeps = {
@@ -342,7 +321,7 @@ export async function enterDemo(session: Session, d: DemoFrame, which: Demo): Pr
     case 'home-assistant':
       await session.route('home-assistant');
       return;
-    case 'panes': // the Panes step (proposed, #621): a switch per pane the app offers
+    case 'panes': // the Panes step (proposed, issue 621): a switch per pane the app offers
     case 'panes-refused': // Continue, and a pane couldn't apply its switch (click Continue)
       await session.route('panes');
       return;

@@ -16,6 +16,8 @@ export interface AskCopy { title: string; body: string; pick: string }
 export interface FrameWords {
   name: string;
   short: string;
+  /** how a sentence names it, with its article (`the panel`); `the <short>` when it doesn't say */
+  the?: string;
   /** the app's name as people see it */
   app: string;
   photoAlt: string;
@@ -76,6 +78,8 @@ export interface FrameSim {
   installLog: string[];
   /** Done's backup line, for ?demo=done */
   backupInfo: string;
+  /** The cards its simulated app's Panes step shows (the app's own, each pane's title and line), for ?demo=panes */
+  panes?: { id: string; title: string; detail: string; on: boolean }[];
 }
 
 /** A frame and its simulated device, for ?demo=… and tests. */

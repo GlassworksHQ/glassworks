@@ -25,7 +25,8 @@ export type { AppSettings };
 export type Setup =
   | { phase: 'waiting'; note: string }
   /** `installing`: the app is going in; provision's AppPhases so far, the last one now */
-  | { phase: 'settings'; installing?: AppPhase[]; error?: string; update: boolean; chosen?: AppSettings }
+  /** `apply`: the app is on already (a frame whose install put it on): the step applies the settings, no install */
+  | { phase: 'settings'; installing?: AppPhase[]; error?: string; update: boolean; apply?: true; chosen?: AppSettings }
   | {
       phase: 'wifi';
       /** the panel is on Wi-Fi already (the app's setup state has an address); `ssid` when Android says which */

@@ -11,6 +11,14 @@ import { HIDDEN_HOMES, PREVIOUS_HOME } from './recipe';
 const never = <T>() => new Promise<T>(() => {});
 
 export const kilnSim: DeviceSim = {
+  /** The Panes step's cards as Glassworks' legacy build on the Mirror shows them (each pane's PaneChoice), for ?demo=setup-panes */
+  panes: [
+    { id: 'assist', title: 'Voice', detail: 'Assist and timers', on: true },
+    { id: 'sendspin', title: 'Music', detail: 'A Sendspin speaker', on: true },
+    { id: 'notifications', title: 'Notifications', detail: 'On-screen alerts', on: false },
+    { id: 'camera', title: 'Camera', detail: 'Presence, and snapshots', on: false },
+    { id: 'bluetooth-proxy', title: 'Bluetooth proxy', detail: 'For BLE sensors', on: false },
+  ],
   async appDevice(demo, { fast }) {
     // a Mirror Kiln flashed (a fresh userdata, no community kiosk); done-unconfirmed: the kiosk as Glass Panes' userdata has it,
     // a device admin Android won't hide; the undo demos: the kiosk with its admin off, hidden by an install

@@ -6,7 +6,7 @@ import type { DeviceEntry } from '@glassworks/kiln-core';
 import type { PanelShell } from '@glassworks/adb';
 import { SETUP_SOCKET } from '@glassworks/setup-channel';
 import { fakeReleaseRoute } from '../release/demo';
-import { demoPanes, withAppStreams } from '../wizard/demo';
+import { withAppStreams } from '../wizard/demo';
 import { AppSession, releaseLine } from './appSession';
 
 export const APP_DEMOS = ['run', 'pick', 'pick-release', 'pick-wrong', 'checks', 'checks-fail', 'installing', 'setup', 'setup-ha', 'setup-panes', 'setup-panes-refused', 'setup-error', 'done', 'done-unconfirmed', 'undo-done', 'undo-pending', 'error'] as const;
@@ -32,9 +32,9 @@ export function cuttable(p: PanelShell): { shell: PanelShell; cut(): void } {
 /** `fast`: no delays (the tests). */
 export async function appDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim'>, name: AppDemo, fast = false): Promise<AppSession> {
   // setup: not on Wi-Fi yet, so set-up asks which network
-  // setup-panes: the Panes mockup (#621, for approval), an app that offers the step
+  // setup-panes: the Panes mockup (issue 621, for approval), an app that offers the step
   const panes = name.startsWith('setup-panes')
-    ? { cards: demoPanes(frame.id), refuse: name === 'setup-panes-refused' ? 'Voice couldn\'t open the microphone. Try again, or leave Voice off.' : undefined }
+    ? { cards: sim.panes ?? [], refuse: name === 'setup-panes-refused' ? 'Voice couldn\'t open the microphone. Try again, or leave Voice off.' : undefined }
     : undefined;
   const streams = withAppStreams(await sim.appDevice(name, { fast }), { online: name !== 'setup', radio: false, panes });
   // setup-error: the app stops answering on its setup channel after Home Assistant's step

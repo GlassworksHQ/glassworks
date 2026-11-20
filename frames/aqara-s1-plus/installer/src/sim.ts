@@ -49,4 +49,11 @@ export const kilnSim = {
   installLog: ['SoC 0x1855 (A133), secure boot off', 'U-Boot started from RAM; waiting for its fastboot', 'partition layout OK (S1 Plus)', 'boot read twice, hashes match',
     'backup s1-backup-20261112-101500 stored in this browser', 'patched boot 4c1e…a0b7 (from 3a7f…91c2)', 'vbmeta flags: 3'],
   backupInfo: '9 partitions · 52 MiB',
+  /** The Panes step's cards as Glassworks on the S1 shows them (each pane's PaneChoice), for ?demo=panes (issue 621) */
+  panes: [
+    { id: 'wall-base', title: 'Wall base', detail: 'The S1\'s wired base', on: true },
+    { id: 'assist', title: 'Voice', detail: 'Assist and timers', on: true },
+    { id: 'sendspin', title: 'Music', detail: 'A Sendspin speaker', on: true },
+    { id: 'radio', title: 'Zigbee / Thread radio', detail: 'For your devices', on: false },
+  ],
 };

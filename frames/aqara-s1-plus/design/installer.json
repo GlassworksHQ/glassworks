@@ -22,6 +22,7 @@
   "words": {
     "name": "Aqara S1 Plus",
     "short": "S1 Plus",
+    "the": "the panel",
     "app": "Glassworks",
     "photoAlt": "The S1 Plus board with the back cover off. The recovery button is circled: right of the shield's notch, below the round sensor window.",
     "asks": {

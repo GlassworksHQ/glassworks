@@ -41,6 +41,11 @@ export interface Installer {
   words?: { name: string };
   /** The device has a touchscreen. Without one (false), set-up never offers "do it on the panel". */
   touch?: boolean;
+  /**
+   * The standard flow after its install (Kiln's App, Wi-Fi, Home Assistant, Panes, Radio, Done): every step unless this
+   * says otherwise. `remove`: a step it leaves out, by name, with why. A step its hardware lacks needs no line here.
+   */
+  setUp?: { remove?: Record<string, string> };
   releases?: Release[];
   /** The first installer page's links: its hash links (/#/wifi) and its release route (/api/release-asset) lead here. */
   legacy?: { hashLinks?: boolean; releaseAsset?: string };

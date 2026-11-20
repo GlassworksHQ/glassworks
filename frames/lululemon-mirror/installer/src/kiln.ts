@@ -14,6 +14,7 @@ import { GLASS_PANES_USERDATA, MIRROR_FASTBOOT, USERDATA_BYTES, checkFastboot, f
 import { checkMirrorApk } from './image';
 import { workerImages } from './kiln/images';
 import { checkMirror, installMirror, undoMirror } from './recipe';
+import { describeMirrorUpdates, readMirrorUpdates } from './updates';
 import { wifiOn } from './wifi';
 
 const d = installer.device;
@@ -25,6 +26,9 @@ export const kilnFrame: DeviceFrame = {
   short: d.short,
   the: d.the,
   app: GLASSWORKS,
+  connect: d.connect,
+  // the image's copy in /system/priv-app holds INSTALL_PACKAGES, or Android asks before each update (updates.ts)
+  updates: async (p) => { const u = await readMirrorUpdates(p); return { state: u.state, log: describeMirrorUpdates(u) }; },
   board: d.board,
   apk: { line: d.apk.line, abi: d.apk.abi },
   words: deviceWords(d.words),
