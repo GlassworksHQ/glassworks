@@ -14,7 +14,7 @@ edge glow, and the timers. Nothing here is built.
 
 **Status (2026-11-20):** the maintainer approved the themes, the picker, the orb and the timers (see
 [Decided](#decided)). The edge glow is in a second round: [edge-lit glass](#assist-the-edge-glow-round-2-edge-lit-glass),
-with three entrances to choose from. Once that is approved, the build follows in small PRs (theme
+with Spark chosen as its entrance. Once that is approved, the build follows in small PRs (theme
 plumbing and settings, then Assist, then timers), each with Robolectric mockups of the real views.
 
 | File | What |
@@ -133,7 +133,7 @@ The caption rises in as the entrance lands and leaves first on the way out.
 |---|---|
 | Listening | Light gathers at the mic and swells with the voice level. Each word sends a ripple both ways along the edge from the mic: a towards the top left, b towards the bottom right |
 | Thinking | Light trapped in the glass: a and b run round the edge in opposite directions, with tails, and flare where they cross (about every 1.3 s). Small glints catch here and there |
-| Speaking | The whole edge is lit a to b and breathes with the reply. On each word a pulse leaves the two lit corners (a top left, b bottom right) and they flare where they meet |
+| Speaking | Calm, so the reply can be read: a soft a-to-b light rests in the two corners (a top left, b bottom right) and breathes slowly with the voice. No pulses and no flares. The bottom edge, under the caption, stays dimmer |
 | Error | One rose pulse (a status colour) leaves the mic both ways, then the edge holds a dim rose until it goes |
 
 ### The mic, as frame data
@@ -189,7 +189,11 @@ The maintainer, 2026-11-20, on round 1:
 
 Not yet: the edge glow. Round 2 is above.
 
+The maintainer, 2026-11-20, on round 2: **Spark** is the entrance and exit. The motion while speaking
+was distracting, so speaking is now calm (no pulses, no flares, a slow breath). Sheen and Pour stay in
+the mockups for reference only.
+
 ## Open questions for the maintainer
 
-1. Which entrance and exit: Spark, Sheen or Pour?
+1. Is the calmer speaking state right?
 2. Where is each frame's mic? The S1's and the Mirror's positions here are placeholders.

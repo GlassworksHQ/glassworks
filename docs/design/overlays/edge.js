@@ -211,31 +211,24 @@
       return { f, flares, p: 1, thick: 1 };
     }
 
-    /** The whole border lit a to b, breathing with the reply; on each word a pulse leaves the two lit corners and they flare where they meet. */
+    /**
+     * Calm while the reply is on screen (round 2 review: the talk was distracting). The edge holds a
+     * soft a-to-b light that rests in its two corners and breathes slowly with the voice, smoothed over
+     * 0.7 s, so it never flickers. No pulses and no flares. The bottom edge, under the caption, stays dimmer.
+     */
     speaking(u) {
-      const { W, H, P } = this, L = ttsLevel(u), meet = (W + H) / 2, speed = 0.9;
-      const pulses = [];
-      for (let te = 0; te <= u; te += 260) {
-        const lv = ttsLevel(te), age = u - te;
-        if (lv > 0.32 && age < meet / speed + 200) pulses.push([speed * age, Math.min(1, lv * 1.3) * clamp(1 - age / (meet / speed + 200))]);
-      }
+      const { H } = this;
+      let L = 0, n = 0;
+      for (let te = u - 700; te <= u; te += 50) { L += ttsLevel(Math.max(0, te)); n++; }
+      L /= n;
       const f = s => {
         const [x, y] = this.pos(s), k = this.diag(x, y);
-        let I = 0.2 + 0.45 * L, wa = I * (1 - k), wb = I * k;
-        const dA = this.dist(s, 0), dB = this.dist(s, W + H);
-        for (const [r, amp] of pulses) {
-          const ga = amp * (Math.exp(-Math.pow(Math.abs(dA) - r, 2) / (2 * 30 * 30)));
-          const gb = amp * (Math.exp(-Math.pow(Math.abs(dB) - r, 2) / (2 * 30 * 30)));
-          I += ga + gb; wa += ga; wb += gb;
-        }
-        return [I, wa, wb, 0, 0];
+        const corner = Math.exp(-Math.pow(Math.min(k, 1 - k) / 0.2, 2));
+        const under = y >= H - 0.5 ? 0.6 : 1; // the caption sits over the bottom edge
+        const I = (0.34 + 0.36 * corner) * (0.88 + 0.3 * L) * under;
+        return [I, I * (1 - k), I * k, 0, 0];
       };
-      const flares = [];
-      for (let te = 0; te <= u; te += 260) {
-        const lv = ttsLevel(te), age = u - te - meet / speed;
-        if (lv > 0.32 && age >= 0 && age < 420) for (const s of [meet, P - meet]) flares.push({ s, age, life: 420, size: .75 * Math.min(1, lv * 1.4), col: "hot", amp: 1 });
-      }
-      return { f, flares, p: 1, thick: 1 + 0.35 * L };
+      return { f, flares: [], p: 1, thick: 1 + 0.12 * L };
     }
 
     /** Rose, a status colour: one rose pulse leaves the mic both ways, then the border holds a dim rose. */
