@@ -101,7 +101,7 @@ export function ImageImage({ f, s, m, ms }: P) {
         <DownloadButton f={f} s={s} label="Download the system image" />
       </div>
       {/* the flashed device is fine and keeps this browser's key: only the first start over adb is left (a real run, 2026-11-19) */}
-      <p className="small">{`Flashed already, but its first start didn't finish? `}<button type="button" className="link" disabled={!!f.inputsBlocked()} onClick={() => f.finishFirstStart()}>Finish its first start</button></p>
+      <p className="small">{`Flashed already, but its first start didn't finish? `}<button type="button" className="link" disabled={!!f.inputsBlocked()} onClick={() => f.finishFirstStart()}>Finish its first start</button>.</p>
     </section>
   );
 }
