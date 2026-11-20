@@ -169,6 +169,25 @@ unlock it each time the screen turns off, and how to turn the lock off. Its tabl
 maker and model, to the brand's steps to turn on USB debugging, each with its source. Tested against a fake
 device only; how it works per Android version is in [research/kiln-install.md](research/kiln-install.md).
 
+### Without a computer: setup's This device step
+
+Installed from the tablet's own browser, the app has only what Android gives any app. Setup then shows a
+**This device** step after Panes (#403) with the two things Kiln would have set, each a tap here:
+
+| Row | Its button | What Android shows |
+|---|---|---|
+| Home screen | Make it the home screen | The home role's dialog where Android has it (Android 10+); else, or if it can't open, Android's Home app settings |
+| Turn the screen off | Let it turn the screen off | "Activate device admin app?", with the reason: Glassworks turns the screen off when the panel is idle, or when Home Assistant turns it off; with a PIN or password, Android then locks the device |
+
+Not now skips both; the Device page keeps both rows. Kiln sets both over adb, and setup skips the step when both are
+on already. On a new setup after a Kiln install where the device refused one (a vendor build), setup still offers it
+here. Once it shows, it stays until Continue or Not now. A device set up before this step existed never sees it: its
+Device page rows say where to set each in Android's settings.
+
+**To uninstall later,** turn the device admin off first: search Android's Settings for "Device admin" (the menus differ
+by Android version and maker), then turn Glassworks off. As device owner, undo that instead (below).
+Android won't uninstall an app while it is an active device admin. Kiln's Undo does this for you.
+
 To try a branch, a test build's artifact `glassworks-generic-test-<commit>` holds its APKs
 ([generic-test-build.yml](../../.github/workflows/generic-test-build.yml)), the legacy build's
 (`glassworks-generic-legacy-test-<version>-arm64-v8a-<commit>.apk`) among them.

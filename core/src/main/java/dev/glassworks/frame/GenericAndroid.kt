@@ -79,11 +79,22 @@ class GenericAndroid(
 
     override fun panes(ctx: PaneContext, device: ScheduledExecutorService) = emptyList<Pane>()
 
-    /** The Device page, named after the device: silent updates, the update channel (#605), device owner, model, the frame version on a device frame, and Android. */
+    /**
+     * The Device page, named after the device: silent updates, the update channel (#605), the home screen and turning the
+     * screen off (setup's This device step, #403), device owner, model, the frame version on a device frame, and Android.
+     */
     override fun deviceSection(context: Context, running: (String) -> Pane?): SettingsSection =
         SettingsSection(DEVICE, friendlyName().ifBlank { "Device" }, listOfNotNull(
             silentUpdatesItem { SilentUpdates.read(context, SilentUpdates.Root.NONE) },
             UpdateChannelRow.item(context),
+            SettingsItem.Info({ HOME_TITLE }, { if (Platform.isHomeApp(context)) HOME_YES else HOME_NO }, fixable = { !Platform.isHomeApp(context) }),
+            SettingsItem.Info({ SCREEN_OFF_TITLE }, {
+                when {
+                    !adminActive(context) -> SCREEN_OFF_NO
+                    SilentUpdates.deviceOwner(context) -> SCREEN_OFF_YES_OWNER
+                    else -> SCREEN_OFF_YES
+                }
+            }, fixable = { !adminActive(context) }),
             SettingsItem.Info({ OWNER_TITLE }, { if (SilentUpdates.deviceOwner(context)) "Yes: the app can reboot the device and keep its screen" else "No" }),
             SettingsItem.Info({ MODEL_TITLE }, { "${hardware.manufacturer} ${hardware.model}".trim() }),
             frameRelease?.let { frameVersionItem(context, it) },
@@ -116,6 +127,24 @@ class GenericAndroid(
         /** The Device page's id on every frame. */
         const val DEVICE = "device"
         const val SILENT_UPDATES_TITLE = "Silent updates"
+        const val HOME_TITLE = "Home screen"
+        const val HOME_YES = "Yes: Glassworks is the default Home app"
+        /** Settings paths differ by Android version and maker, so the rows say what to search Android's Settings for. */
+        const val HOME_NO = "No: Glassworks isn't the default Home app. To change it: search Android's Settings for “Home”"
+        const val SCREEN_OFF_TITLE = "Turn the screen off"
+        const val SCREEN_OFF_YES = "Yes: Glassworks is a device admin, so it can turn the screen off when idle. " +
+            "Before you uninstall it, turn that off: search Android's Settings for “Device admin”"
+        /** A device owner is also a device admin, and Android won't let Settings turn that off: undo device owner first. */
+        const val SCREEN_OFF_YES_OWNER = "Yes: Glassworks is the device owner, so it can turn the screen off when idle. " +
+            "Before you uninstall it, undo device owner (Kiln's Undo)"
+        const val SCREEN_OFF_NO = "No: Glassworks can't turn the screen off by itself. To change it: setup's This device " +
+            "step, or search Android's Settings for “Device admin”"
+
+        /** One of this app's components is an active device admin (the receiver Kiln or setup's This device step activates). */
+        fun adminActive(context: Context): Boolean = runCatching {
+            context.getSystemService(android.app.admin.DevicePolicyManager::class.java)?.activeAdmins.orEmpty()
+                .any { it.packageName == context.packageName }
+        }.getOrDefault(false)
         const val OWNER_TITLE = "Device owner"
         const val MODEL_TITLE = "Model"
         const val ANDROID_TITLE = "Android"

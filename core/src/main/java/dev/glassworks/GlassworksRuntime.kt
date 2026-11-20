@@ -1,11 +1,16 @@
 package dev.glassworks
 
+import android.app.Activity
+import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.util.Log
 import dev.glassworks.engine.Engine
 import dev.glassworks.frame.Frame
+import dev.glassworks.frame.GenericAndroid
 import dev.glassworks.frame.Input
+import dev.glassworks.frame.NamedBy
 import dev.glassworks.manage.ManagePage
 import dev.glassworks.manage.PanelCode
 import dev.glassworks.pane.CantRun
@@ -14,6 +19,7 @@ import dev.glassworks.pane.PaneDefinition
 import dev.glassworks.pane.SetupStep
 import dev.glassworks.platform.AppBuild
 import dev.glassworks.platform.HttpsTrust
+import dev.glassworks.platform.Platform
 import dev.glassworks.screen.PresenceRelay
 import dev.glassworks.screen.ScreenPolicy
 import dev.glassworks.auth.HaTokenClient
@@ -23,7 +29,9 @@ import dev.glassworks.device.DeviceHost
 import dev.glassworks.device.PanelDevice
 import dev.glassworks.setup.SetupFlow
 import dev.glassworks.setup.SetupPane
+import dev.glassworks.setup.SetupPrefs
 import dev.glassworks.setup.SetupState
+import dev.glassworks.setup.ThisDeviceStep
 import dev.glassworks.update.ReleaseLine
 import dev.glassworks.update.SilentUpdates
 import dev.glassworks.update.SilentUpdatesStep
@@ -75,7 +83,7 @@ class GlassworksRuntime(
     override fun paneDefinitions(context: Context): List<PaneDefinition> = synchronized(this) {
         definitions ?: run {
             val ctx = context.applicationContext
-            migrateDeviceSteps(KioskPrefs(ctx))
+            migrateDeviceSteps(ctx)
             app.paneDefinitions(ctx, this, paneFrame.paneDefinitions(ctx)).map { CantRun.unless(it, frame.provides) }
         }.also { definitions = it }
     }
@@ -94,7 +102,8 @@ class GlassworksRuntime(
     private val touch by lazy { frame.input == Input.TOUCH }
 
     /**
-     * Silent updates (#422): shown during setup whenever updates ask for a tap and there's a way to change that. The
+     * This device (#403), only on a touch screen with no frame of its own (a tablet: GenericAndroid), then Silent updates
+     * (#422): shown during setup whenever updates ask for a tap and there's a way to change that. The Silent updates
      * answer is read on every ask, at most once a second, once [UpdateManager] has read the frame's root update service.
      */
     override fun deviceSetupSteps(context: Context): List<SetupStep> = synchronized(this) {
@@ -102,8 +111,35 @@ class GlassworksRuntime(
             val ctx = context.applicationContext
             val prefs = KioskPrefs(ctx)
             val silent = SilentUpdates.Fresh { updates?.rootService?.let { SilentUpdates.read(ctx, it) } }
-            listOf(SilentUpdatesStep(silent, { prefs.silentUpdatesAnswered }, { prefs.silentUpdatesAnswered = true }, { touch }))
+            listOfNotNull(
+                // Not on a device a frame recognises (the Mirror): its recipe sets both, whatever input it reports.
+                thisDevice(ctx).takeIf { frame is GenericAndroid && frame.namedBy != NamedBy.FRAME && touch },
+                SilentUpdatesStep(silent, { prefs.silentUpdatesAnswered }, { prefs.silentUpdatesAnswered = true }, { touch }),
+            )
         }.also { deviceSteps = it }
+    }
+
+    /**
+     * The home screen and the device admin a Kiln install grants, asked for on the tablet instead (#403): Android's home
+     * role or home settings, and its "Activate device admin app?" dialog with what Glassworks wants it for.
+     */
+    private fun thisDevice(ctx: Context): ThisDeviceStep {
+        val setup = SetupPrefs(ctx)
+        val admin = ComponentName(ctx, app.components.admin)
+        return ThisDeviceStep(
+            grants = { ThisDeviceStep.Grants(Platform.isHomeApp(ctx), GenericAndroid.adminActive(ctx)) },
+            answered = { setup.thisDeviceAnswered },
+            markAnswered = { setup.thisDeviceAnswered = true },
+            askHome = { c -> (c as? Activity)?.let { Platform.askHome(it, HOME_REQUEST) } == true },
+            askAdmin = { c ->
+                runCatching {
+                    val ask = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
+                        .putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, admin)
+                        .putExtra(DevicePolicyManager.EXTRA_ADD_EXPLANATION, ThisDeviceStep.ADMIN_EXPLANATION)
+                    c.startActivity(if (c is Activity) ask else ask.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                }.isSuccess
+            },
+        )
     }
 
     /**
@@ -111,10 +147,18 @@ class GlassworksRuntime(
      * the radio's step. Runs with the pane definitions, which the app makes before discovery can save a Home Assistant
      * URL in this process.
      */
-    private fun migrateDeviceSteps(prefs: KioskPrefs) {
-        if (prefs.deviceStepsMigrated) return
-        if (SetupState.setUpBefore(prefs.haBase != null, prefs.haSeen, prefs.apiEncryption, prefs.haSetupSkipped)) prefs.silentUpdatesAnswered = true
-        prefs.deviceStepsMigrated = true
+    private fun migrateDeviceSteps(ctx: Context) {
+        val prefs = KioskPrefs(ctx)
+        val before = { SetupState.setUpBefore(prefs.haBase != null, prefs.haSeen, prefs.apiEncryption, prefs.haSetupSkipped) }
+        if (!prefs.deviceStepsMigrated) {
+            if (before()) prefs.silentUpdatesAnswered = true
+            prefs.deviceStepsMigrated = true
+        }
+        val setup = SetupPrefs(ctx)
+        if (!setup.thisDeviceMigrated) {
+            if (before()) setup.thisDeviceAnswered = true
+            setup.thisDeviceMigrated = true
+        }
     }
 
     /**
@@ -179,6 +223,9 @@ class GlassworksRuntime(
 
     private companion object {
         const val TAG = "Glassworks"
+
+        /** The home role dialog's request code (it needs a result, which nothing reads: the step reads the role). */
+        const val HOME_REQUEST = 4031
     }
 }
 
