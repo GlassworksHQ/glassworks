@@ -138,7 +138,9 @@ build if one is missing here.
   https://github.com/DigitallyRefined/android-ip-camera. In
   `panes/camera/src/main/java/dev/glassworks/camera/MotionDetectorCore.kt` and
   `panes/camera/src/main/java/dev/glassworks/camera/onvif/`. Those files stay under MIT, and each says
-  what changed.
+  what changed. `OnvifServer.kt` also includes upstream `ca0085d12591465db309f571ac12f48d8a9f47dc` (a HEAD answer's
+  Content-Length) and `c58342b20009b4d0900cad082c35efb2eae26dff` (WS-BaseNotification push subscriptions), synced
+  2026-11-20.
 
 ### Kotlin and AndroidX
 

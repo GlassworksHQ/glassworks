@@ -102,7 +102,7 @@ the plan.
 | Part | In the port | What it does |
 |---|---|---|
 | RTSP | `RtspServer`, `RtspProtocol`, `H264Bitstream` | RTSP 1.0 on port 8554, H.264 as RTP (RFC 6184) over TCP-interleaved or UDP, Digest (MD5, qop=auth) and Basic auth, RTCP sender reports |
-| ONVIF | `OnvifServer`, `OnvifSoap` | Profile S device, media (ver10) and media2 (ver20) services on port 8000, WS-Security UsernameToken and HTTP Digest/Basic, a snapshot URI (`/onvif/snapshot.jpg`), pull-point motion events on `tns1:RuleEngine/CellMotionDetector/Motion` and `tns1:VideoSource/MotionAlarm` |
+| ONVIF | `OnvifServer`, `OnvifSoap` | Profile S device, media (ver10) and media2 (ver20) services on port 8000, WS-Security UsernameToken and HTTP Digest/Basic, a snapshot URI (`/onvif/snapshot.jpg`), pull-point motion events on `tns1:RuleEngine/CellMotionDetector/Motion` and `tns1:VideoSource/MotionAlarm`, and the same events pushed to a `wsnt:Subscribe` consumer (since 2026-11-20, [below](#upstream-sync-2026-11-20)) |
 | Discovery | `OnvifDiscovery` | WS-Discovery on UDP 3702 (2005/04, and 2009/01 probes answered in kind), Hello and Bye, scopes including `onvif://www.onvif.org/Profile/Streaming` |
 | Motion | `MotionDetectorCore` (in `dev.glassworks.camera`) | The panel's presence and the ONVIF events both come from it: see [camera-presence.md](camera-presence.md) |
 
@@ -226,6 +226,67 @@ events services, with a wrong password).
 To run the lab again: `tools/camera/onvif-lab.sh 45 ONVIF_LAB_CREDS_CHANGE_AT=20` (or
 `ONVIF_LAB_RESTART_AT=30`). It serves on 127.0.0.1:18000 only.
 
+## Upstream sync (2026-11-20)
+
+The port came from the maintainer's fork at `7b5e6f28`. Upstream (DigitallyRefined/android-ip-camera) took the
+same RTSP/ONVIF work as `cb6dd73` (2026-10-24) and has moved on since. Read on 2026-11-20 at upstream `082eb025`:
+every commit after `90f9f80f` that touches the RTSP, ONVIF or HTTP server, the encoder or motion (`git log
+90f9f80f..origin/HEAD -- '*Onvif*' '*Rtsp*' '*H264*' '*Motion*' '*StreamingServerHelper*' '*HttpResponse*'`),
+checked against our code, not only the diff. OpenTunnel, the relay, F-Droid, fastlane and dependency bumps are left
+out.
+
+| Upstream commit | Our file | Same bug or gap here? | Done |
+|---|---|---|---|
+| `ca0085d1` Content-Length on HTTP answers (#150) | `onvif/OnvifServer.kt` | Partly. Every ONVIF answer already had a Content-Length (upstream's close-delimited ones were in its web UI and MJPEG server, which we don't have). HEAD was wrong: the snapshot answered HEAD with `Content-Length: 0`, and a HEAD refused (401) or with no picture (503) sent its body, so a client that kept the connection read those bytes as the next answer's head | Ported: HEAD gets GET's headers, Content-Length included, and no body |
+| `c58342b2` WS-BaseNotification push to NVRs (#156) | `onvif/OnvifServer.kt` | A gap: `Subscribe` faulted | Ported, with the changes below (maintainer's call, 2026-11-20) |
+| `4c7dbb98` release the H.264 encoder when the camera stops (#138) | `ViewerEncoder.kt`, `H264Encoder.kt` | No. Upstream marked the encoder's surface as handed to CameraX, so its `stop()` waited for a release that never came. We use Camera2 with no GL pipe, and `ViewerEncoder.stop()` takes the surface out of the session (`CameraHub.setEncoder(null)`, bounded by `DETACH_WAIT_MS`), then calls `H264Encoder.release()`, which stops and frees the codec. `CameraStream.stopLocked()` and the pane's stop both reach it | Not needed |
+| `53edaef0` no needless camera restarts, no sticky Camera1 fallback (#139) | `ViewerEncoder.kt`, `CameraHub.kt` | No. A viewer joining an encoder that runs only asks for a keyframe (`ViewerEncoder.viewers`); we have no Camera1 path; an encoder whose drain fails calls `onFailure`, and `ViewerEncoder.failed` builds a new one at most every 5 s | Not needed |
+| `ee0c453d` stream resolution selection (#134) | `StreamRate.kt` (`yuvSizeFor`, `streamFitFor`) | No. Upstream capped width and height to the encoder's maxima one by one, which changed the shape. We pick from the sizes the camera lists, and ask the encoder (`isSizeSupported`) for the whole size | Not needed |
+| `14e7e666` advanced encoding controls (#155) | `H264Encoder.kt`, `OnvifServer.kt` | A feature. Our `GovLength` already matches our 1 s keyframe interval | Follow-up, if wanted |
+| `18d24ae6` continuous recording and notification-only modes (#149) | — | A feature for upstream's own recorder | Not for Glassworks (HA records) |
+| `a323b32` manual rotation (#123), `1b47ea2` background audio (#126), `7ff72e2` start on boot (#135) | — | Upstream's GL pipe, web UI and service; we have none of them | Not needed |
+
+**What Glassworks changes in the push port** (see `OnvifServer.kt`'s header):
+
+- **Sign-in.** `Subscribe` is in the WS-BaseNotification namespace, so it goes through the same check as
+  `CreatePullPointSubscription`: no sign-in set refuses everyone, and a refusal is the bare 401 every event call
+  gets.
+- **Local network only.** `pushConsumer()` takes plain `http` only, with no user info in the URL, resolves the
+  host once, and keeps the first address that `localConsumer()` allows: RFC 1918 (`isSiteLocalAddress`),
+  link-local IPv4 and IPv6 (`isLinkLocalAddress`), IPv6 ULA `fc00::/7`, or the subscriber's own source address.
+  Loopback, wildcard and multicast addresses are refused unless they are the subscriber's own, so a Subscribe
+  can't aim the panel at its own ports or at the internet. The Notify goes to that pinned address, so a name that
+  resolves elsewhere later can't move it. Anything else gets a `ter:InvalidArgVal` fault, which makes Home
+  Assistant keep its pull point.
+- **Its own sockets.** The Notify is one HTTP/1.1 POST on a `java.net.Socket`: no DNS lookup again, no redirects,
+  no proxy, and no change to the network security config (it doesn't apply to raw sockets, and both apps already
+  set `usesCleartextTraffic` for Home Assistant over HTTP). Connect timeout 2 s, and 2 s in all for the status
+  line.
+- **Caps.** At most 8 push subscriptions, apart from the 16 pull points, so a flood of Subscribes can't push Home
+  Assistant's pull point out. At the cap, the push subscription that ends soonest goes. A push subscription ends at
+  most 1 h away (Subscribe and Renew), and an expired one gets nothing more. At most 8 Notify bodies wait per
+  consumer.
+- **Off the caller's thread.** `setMotion` only queues. Two notifier threads send, in order per consumer, so a
+  dead NVR costs at most 4 s per Notify on one of them and never holds up motion or the pull points. The first
+  Notify (`Initialized`, the state now) goes 250 ms after Subscribe, as upstream.
+- **The log** names the consumer's host and port, never its path: Home Assistant's webhook path is the webhook's
+  key.
+
+**Home Assistant uses push too (read, 2026-11-20).** `homeassistant/components/onvif/event_manager.py` at
+`6a6661b90e7e` (`dev`): `EventManager.async_start` starts the pull point first, then the webhook manager whenever
+webhooks are on in the entry's options (the default), whatever `WSSubscriptionPolicySupport` says. The webhook
+manager subscribes with `get_url(prefer_external=False)` plus `/api/webhook/<id>` and then calls
+`SetSynchronizationPoint`. When the first Notify parses, `async_webhook_working` pauses the pull point (it lets the
+pull point expire rather than unsubscribing). Until now our Subscribe faulted, so Home Assistant stayed on the pull
+point. Now an entry whose internal URL is plain HTTP on the local network moves to push after the first Notify. One
+whose URL is HTTPS, or a name that doesn't resolve to a local address, gets the fault and stays on the pull point.
+**Untested** on a panel: the panel plan in the PR checks for "Switching to webhook for events" in Home Assistant's
+debug log and that motion still arrives.
+
+Tests (off-device): `OnvifHttpTest` reads several answers on one keep-alive socket byte for byte, each framed by
+its Content-Length, HEAD included. `OnvifPushTest` covers the address rule, pinning, the sign-in, the cap, the 1 h
+end, the order of Notify, Renew and Unsubscribe, a real consumer on a socket, and one that never answers.
+
 ## Open questions
 
 - Digest `nc` isn't tracked (RTSP or ONVIF), so a captured response can be replayed for the nonce's
@@ -239,6 +300,8 @@ To run the lab again: `tools/camera/onvif-lab.sh 45 ONVIF_LAB_CREDS_CHANGE_AT=20
 - RootEncoder + RTSP-Server's APK cost, and whether we accept a JitPack dependency.
 - Which ports. ONVIF has no fixed port; RTSP's is 554, which an app can't bind, so 8554.
 - Events: presence is published as ONVIF motion (cell motion and motion alarm), on and off with
-  `camera_presence`. Frigate and Protect's use of it is untested.
+  `camera_presence`. Frigate and Protect's use of it is untested, and so is push to a hardware NVR.
+- HTTPS push consumers. Refused for now: on Android 6 and 7 an `SSLSocket` may skip host name checks, and a
+  check of our own is more code than the need justifies until a consumer asks for it.
 - Whether to slow down a client whose sign-in keeps being refused, so a stale entry costs less than
   a request every 0.75 s. Not done: HA would still loop, only slower.

@@ -9,6 +9,11 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 ## [Unreleased]
 
 ### Added
+- **Recorders that record on motion get the camera's motion pushed to them.** With the ONVIF stream on, a network
+  video recorder that subscribes to the camera's motion (many Xiongmai-based NVRs do) now hears about each change
+  the moment it happens, so it can start recording. The recorder must be on your local network and sign in with the
+  stream's username and password. Home Assistant's ONVIF integration can use this too, and then gets motion
+  without asking for it.
 - **Kiln installs the lululemon Mirror and Android devices, in beta.** Both are in Kiln's picker now, marked Beta,
   and their pages are open to everyone, with Glassworks from its newest release: no test link needed. The Aqara S1
   Plus is stable, so its card shows no badge.
@@ -502,6 +507,9 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   it straight away. The *Thread join* sensor says how it went. Pasting the dataset still works.
 
 ### Fixed
+- **Snapshot checks over ONVIF give the real size.** A recorder or tool that checks the camera's snapshot before
+  downloading it now sees the picture's real size and no stray bytes, so its next request on the same connection
+  works.
 - **Setup stays on screen when the app restarts after finding Home Assistant.** Once the panel joins Wi-Fi and
   finds Home Assistant, the app restarts to apply it. The setup screen now comes back at once and says "Connecting
   to Home Assistant…" until it knows whether the panel needs to sign in, so Home Assistant's page no longer flashes
