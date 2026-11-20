@@ -326,6 +326,7 @@ a.eyebrow:hover {
 
 /* The single gliding, morphing piece of precision hardware */
 .hardwareCarrier {
+  grid-area: 1 / 1;
   position: relative;
   z-index: 4;
   width: 100%;
@@ -413,9 +414,9 @@ a.eyebrow:hover {
   --undock: 0;
 }
 
-/* Beat 4's dock alone (dockO): under the glass, its device's body hidden */
-.beatDock {
-  z-index: 0;
+/* a dock standing still at its beat (docks), behind the travelling device; its device's body is not drawn */
+.dockCarrier {
+  z-index: 3;
 }
 
 .beatDock [data-dock] > svg {
@@ -423,12 +424,13 @@ a.eyebrow:hover {
 }
 
 .beatDock [data-dock] > [data-body] {
-  opacity: var(--body-o, 1);
+  visibility: hidden;
 }
 
-/* Beat 4's tablet docking with the scroll (undockAt): its lift follows the scroll, so no eased lag */
-.beatModel[data-docking] [data-dock] [data-body] {
-  transition: none;
+/* the travelling device: its ground (a floor or wall shadow, or its own copy of a dock) only while it holds */
+.travel [data-mount] > svg,
+.travel [data-mount] > div:not([data-body]) {
+  opacity: var(--ground-o, 1);
 }
 
 /* the model's screen, as the glass's .screen: the cards' @container rules query its height too */

@@ -6,6 +6,7 @@ import { DeviceModel, geometry, type FrameDesign, type FrameModel, type View } f
 import { KILN } from "@/lib/links";
 import { KilnGlyph, MusicGlyph } from "../Glyphs";
 import s from "./MorphStory.module.css";
+import { blendModels, blendViews } from "./storyBlend";
 import { BEDSIDE_DISPLAY, ROUND_DIAL, SQUARE_SWITCH, WIDE_DISPLAY } from "./storyModels";
 
 /*
@@ -301,15 +302,16 @@ function modelPose(base: Keyframe, sm: StoryModel): { pose: Keyframe; stage: num
 
 /**
  * How far the Pixel Tablet is off its dock (Beat 4), so a reader sees it dock without hovering. One motion
- * from the Mirror: the glass rises a little as it travels, and comes down onto the dock, which is already
- * there (dockO); the model takes over on the way down (both drawn with the same lift, so the hand-over is
- * exact) and lands a little into the hold, which then stays docked. Scrolling back lifts it again.
+ * from the Mirror: it rises a little as it travels toward the dock, which stands waiting, and comes down
+ * onto it a little into the hold, faster at the end, so it lands rather than drifts in; then it stays docked.
+ * Scrolling back lifts it again.
  */
 function undockAt(p: number) {
   const from = HOLDS[3]![1];
   const land = HOLDS[4]![0] + 20 / SCROLL_VH;
   const x = clamp((p - from) / (land - from));
-  return smooth(clamp(x / 0.35)) * (1 - smooth(clamp((x - 0.4) / 0.6)));
+  const fall = clamp((x - 0.4) / 0.6);
+  return smooth(clamp(x / 0.35)) * (1 - fall * fall);
 }
 
 /* the side dots; each jumps to a point in its beat's hold (Beat 3 before its Mirror sees someone) */
@@ -322,14 +324,6 @@ const BEAT_DOTS = [
   { idx: 4, label: "Kitchen timers, Sendspin, and radios", targetP: at(4, 0.5) },
   { idx: 5, label: "Square, round, and future shapes", targetP: at(5, 0.6) },
 ] as const;
-
-/** The model shows only inside its beat's hold, where it and the glass coincide: in just after, out just before */
-function holdO(p: number, beat: number) {
-  const [a, b] = HOLDS[beat]!;
-  const fadeIn = beat === 0 ? 1 : smooth(clamp((p - a - 0.002) / 0.016));
-  const fadeOut = beat === HOLDS.length - 1 ? 1 : 1 - smooth(clamp((p - b + 0.018) / 0.016));
-  return fadeIn * fadeOut;
-}
 
 function formatTimer(totalSec: number) {
   const m = Math.floor(totalSec / 60);
@@ -578,27 +572,51 @@ export function MorphStory({
     screenR: basePose.screenR,
   };
 
-  // The glass takes on the device's front colour on its way in (the Pixel Tablet's Porcelain or Hazel) and
-  // lands exactly on its model's front (modelPose). The model takes over only inside the beat's hold, where
-  // the two coincide, so the hand-over adds the sides, stand or dock and nothing doubles; it hands back
-  // before the glass moves on. It fades in over the glass, which stays opaque under it (their fronts are the
-  // same) so nothing turns see-through, and the glass hides once the model is whole.
+  // The device itself travels: one 3D model, a blend of the beat it leaves and the one it heads for
+  // (blendModels), so its body morphs on the way and is exactly each beat's device while it holds. Its body
+  // follows the glass's path (basePose: its width and centre); the glass now shows only for the finale's
+  // tap-to-morph. A dock is drawn apart and stands still at its beat (docks, below).
+  const segFrom = Math.min(4, Math.floor(seg));
+  const segT = seg - segFrom;
+  const fromModel = modelOfBeat(segFrom);
+  const toModel = modelOfBeat(segFrom + 1);
+  const travel: StoryModel = {
+    id: "travel",
+    label: (segT < 0.5 ? fromModel : toModel).label,
+    model: blendModels(fromModel.model, toModel.model, segT),
+    aspect: lerp(fromModel.aspect, toModel.aspect, segT),
+    view: blendViews(fromModel.view, toModel.view, segT),
+  };
+  const tg = geometry(travel.model, travel.aspect, travel.view);
+  const travelStage = basePose.w / (parseFloat(tg.vars["--wp"] ?? "100") / 100);
+  // where its own fit puts the body in its stage, and the move that puts it on the glass's path instead
+  const [ttx = 0, tty = 0] = [...tg.transform.matchAll(/(-?[\d.]+)%/g)].map((m) => parseFloat(m[1]!));
+  const own = { x: (ttx / 100) * travelStage, y: (tty / 100) * (travelStage / travel.aspect) };
+  const comp = { x: (basePose.dx ?? 0) - own.x, y: (basePose.dy ?? 0) - own.y };
+  // the ground under a device (its floor or wall shadow) shows while it holds, not in the air; a docked
+  // device's is its dock's, drawn with the dock
+  const travelDocked = !!travel.model.parts?.some((x) => x.kind === "dock");
+  const groundO = travelDocked ? 0 : 1 - smooth(clamp(Math.min(segT, 1 - segT) / 0.12));
+  const modelO = compact || morphing ? 0 : 1;
+  // the glass, in the finale's tap-to-morph, wears its device's front colour
   const faceO = compact || !near.face ? 0 : windowO(seg, nearBeat, 0.12, 0.62);
-  const modelO = compact || morphing ? 0 : holdO(p, nearBeat);
-  // a dock is there before its device lands: drawn alone behind the glass, it fades in as the glass heads
-  // for it (and out as it leaves); the model, dock and all, still takes over only in the hold
-  const dockO = compact || morphing || !near.lift ? 0 : windowO(seg, nearBeat, 0.15, 0.5);
   const modelLive = modelO > 0.98;
-  // a device on a desk or counter casts one soft shadow, from whichever of glass and model shows (a
-  // standing mirror's model casts its own on the floor)
+  // a device on a desk or counter casts a soft shadow
   const dropO = compact || nearModel.model.mount !== "desk" ? 0 : windowO(seg, nearBeat, 0.12, 0.62);
+  // a dock stands still at its beat, there before its device lands and until it has left
+  const docks = [0, 1, 2, 3, 4, 5]
+    .filter((j) => modelOfBeat(j).model.parts?.some((x) => x.kind === "dock"))
+    .map((j) => ({ beat: j, o: compact || morphing ? 0 : windowO(seg, j, 0.15, 0.5) }))
+    .filter((d) => d.o > 0.01);
   // the tablet lifted off its dock: the model's own hover lift (mouse only), which the Docked line follows
   const [modelHover, setModelHover] = useState(false);
-  // the tablet off its dock as the scroll brings it in (undockAt), drawn on the glass and on the model alike
+  // the tablet off its dock as the scroll brings it in (undockAt): a move and scale of the whole travelling
+  // model about its body's centre, the same as the hover's lift of the body (geometry's --ux, --uy, --us)
   const tabletLift = poses[4]!.lift;
   const undock = compact || reducedMotion || morphing || !tabletLift ? 0 : undockAt(p);
-  const glassLift = undock > 0 ? tabletLift : undefined;
-  const tabletLifted = nearBeat === 4 && !reducedMotion && ((modelLive && modelHover) || undock > 0.04);
+  const liftK = travelStage / poses[4]!.stage;
+  const lift = tabletLift && undock > 0 ? { x: tabletLift.x * undock * liftK, y: tabletLift.y * undock * liftK, s: 1 + tabletLift.s * undock } : undefined;
+  const tabletLifted = nearBeat === 4 && !reducedMotion && ((modelLive && modelHover && segT === 0) || undock > 0.005);
   // Mirror body presence factor (Beat 3): the glass looks silvered on its way to the Mirror
   const mirrorFactor = windowO(seg, 3, 0.24, 0.72);
 
@@ -1602,7 +1620,28 @@ export function MorphStory({
             </button>
           </div>
 
-          {/* THE SINGLE MORPHING PIECE OF GLASS + MIRROR STAND + BEAT 4 LIGHT RAYS */}
+          {/* each dock where its beat's device lands, standing still while the device travels to and from it */}
+          {docks.map(({ beat, o }) => {
+            const sm = modelOfBeat(beat);
+            const kf = keyframes[beat]!;
+            return (
+              <div key={`dock-${beat}`} className={`${s.hardwareCarrier} ${s.dockCarrier}`} aria-hidden="true" style={{ transform: `translate3d(${kf.xPct}%, ${kf.yPx}px, 0)` }}>
+                <div
+                  className={`${s.beatModel} ${s.beatDock}`}
+                  inert
+                  style={{
+                    width: `${poses[beat]!.stage.toFixed(1)}px`,
+                    ["--dock-o" as string]: o.toFixed(3),
+                    filter: `drop-shadow(0 22px 26px rgb(0 0 0 / calc(var(--drop-a) * ${o.toFixed(3)})))`,
+                  }}
+                >
+                  <DeviceModel id={`home-dock-${beat}`} model={sm.model} label="" aspect={sm.aspect} view={sm.view} />
+                </div>
+              </div>
+            );
+          })}
+
+          {/* THE TRAVELLING DEVICE (and the glass, for the finale's tap-to-morph) + BEAT 4 LIGHT RAYS */}
           <div
             className={s.hardwareCarrier}
             style={{
@@ -1614,35 +1653,26 @@ export function MorphStory({
               className={s.devices}
               style={{ filter: dropO > 0.01 ? `drop-shadow(0 22px 26px rgb(0 0 0 / calc(var(--drop-a) * ${dropO.toFixed(3)})))` : undefined }}
             >
-              {/* a dock alone, behind the glass, there before the device lands on it; the model's own dock covers it exactly */}
-              {dockO > 0.01 && (
-                <div
-                  className={`${s.beatModel} ${s.beatDock}`}
-                  aria-hidden="true"
-                  inert
-                  style={{ width: `${near.stage.toFixed(1)}px`, ["--dock-o" as string]: dockO.toFixed(3), ["--body-o" as string]: 0 }}
-                >
-                  <DeviceModel id={`home-${nearModel.id}-dock`} model={nearModel.model} label="" aspect={nearModel.aspect} view={nearModel.view} />
-                </div>
-              )}
               {modelO > 0.01 && (
                 <div
                   className={s.beatModel}
                   // only the Pixel Tablet lifts off its dock; the wide display's speaker base holds it
                   data-still={nearBeat !== 4 || undefined}
-                  // while the scroll docks it, the lift follows the scroll, not the hover's eased move
-                  data-docking={undock > 0 || undefined}
-                  style={{
-                    width: `${near.stage.toFixed(1)}px`,
-                    opacity: modelO,
-                    pointerEvents: modelLive ? "auto" : "none",
-                    ...(undock > 0 ? { ["--undock" as string]: undock.toFixed(3) } : {}),
-                  }}
+                  style={{ width: `${travelStage.toFixed(1)}px`, opacity: modelO, pointerEvents: modelLive ? "auto" : "none" }}
                   inert={!modelLive}
                   onPointerEnter={(e) => e.pointerType === "mouse" && setModelHover(true)}
                   onPointerLeave={() => setModelHover(false)}
                 >
-                  {renderModel(nearModel, `home-${nearModel.id}`, currentShape, renderScreenContent())}
+                  <div
+                    className={s.travel}
+                    style={{
+                      transform: `translate(${comp.x.toFixed(2)}px, ${comp.y.toFixed(2)}px)${lift ? ` translate(${lift.x.toFixed(2)}px, ${lift.y.toFixed(2)}px) scale(${lift.s.toFixed(4)})` : ""}`,
+                      transformOrigin: `calc(50% + ${own.x.toFixed(2)}px) calc(50% + ${own.y.toFixed(2)}px)`,
+                      ["--ground-o" as string]: groundO.toFixed(3),
+                    }}
+                  >
+                    {renderModel(travel, "home-travel", currentShape, renderScreenContent())}
+                  </div>
                 </div>
               )}
 
@@ -1651,7 +1681,7 @@ export function MorphStory({
                 inert={modelLive}
                 style={{
                   opacity: modelLive ? 0 : 1,
-                  transform: `scale(var(--bezel-scale, 1)) translate(${basePose.dx}px, ${basePose.dy}px)${glassLift ? ` translate(${(glassLift.x * undock).toFixed(2)}px, ${(glassLift.y * undock).toFixed(2)}px) scale(${(1 + glassLift.s * undock).toFixed(4)})` : ""} perspective(${basePose.persp}px) rotateX(${basePose.rx}deg) rotateY(${basePose.ry}deg) rotateX(${basePose.lean}deg) translateZ(${basePose.z}px)`,
+                  transform: `scale(var(--bezel-scale, 1)) translate(${basePose.dx}px, ${basePose.dy}px) perspective(${basePose.persp}px) rotateX(${basePose.rx}deg) rotateY(${basePose.ry}deg) rotateX(${basePose.lean}deg) translateZ(${basePose.z}px)`,
                 }}
               >
                 <div className={s.bezelRow}>
