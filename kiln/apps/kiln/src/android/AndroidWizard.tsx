@@ -620,6 +620,9 @@ function AndroidOutcome({ session }: { session: AndroidSession }) {
   );
 }
 
+/** The page that hands the tablet over now: sessions kept in the registry reach today's, not the mount that made them. */
+const HAND_NOW: { current?: (p: Device, installed: GenericInstalled) => StandardSession | undefined } = {};
+
 const STANDARD_STEPS: readonly Step[] = ['set-up', 'resume', 'wifi', 'home-assistant', 'panes', 'radio', 'done'];
 const noSubscribe = () => () => {};
 const noState = () => undefined as never;
@@ -631,9 +634,11 @@ export function AndroidWizard() {
     if (m.demo) return { m, demo: m.demo as AndroidDemo, search: location.search };
     // a running install outlives the picker (wizard/registry.ts), so a link back without ?apk=… finds it
     if (!m.on && !registry.activity(ANDROID_BASE)) return { m, search: location.search, real: realSession(false) };
-    return { m, search: location.search, real: keptAndroid(() => realSession(true, m.apk, (p, i) => handRef.current?.(p, i)), m.apk).session };
+    // a session kept from an earlier visit hands over through whichever page is up then (HAND_NOW), not the one that made it
+    return { m, search: location.search, real: keptAndroid(() => realSession(true, m.apk, (p, i) => HAND_NOW.current?.(p, i)), m.apk).session };
   });
   const handRef = useRef<((p: Device, installed: GenericInstalled) => StandardSession | undefined) | undefined>(undefined);
+  HAND_NOW.current = (p, installed) => handRef.current?.(p, installed);
   handRef.current = (p, installed) => {
     try { sessionStorage.setItem(APP_KEY, installed.plan.app.package); } catch { /* storage off: a reload talks to the generic build */ }
     const e = registry.set(standardEntry(androidStandard(installed.plan.app, installed, installed.plan.device.model), { demo: start.demo, device: start.demo ? p : undefined }));
