@@ -34,7 +34,10 @@ Volume, mute, and static output delay are stored independently for Sendspin (`se
 
 Automatic pairing requires an encrypted ESPHome connection in Home Assistant and Music Assistant's Home Assistant provider running (the default when Music Assistant runs as a Home Assistant app/add-on). If the status sensor stays on `waiting for pairing or approval by …` and Music Assistant lists the panel as unpaired, you have two options:
 
-- **Pair with token (recommended):** Open **Settings → Players → \<Your panel\>** in Music Assistant and enter the pairing token. You can retrieve the token from Home Assistant's developer tools via the admin-only WebSocket command `{"type": "sendspin/get_pairing_token", "client_id": "<panel client id>"}`. Treat this token like a password—anyone holding it can pair a server with your speaker.
+- **Pair with token (recommended):** Home Assistant does not include a raw WebSocket sender in its Developer Tools UI, so retrieve the pairing token using any authenticated WebSocket client (such as `websocat` or a short Python script) connected to `ws://<ha-host>:8123/api/websocket` with an administrator long-lived access token:
+  1. Find your panel's 43-character `client_id` by sending `{"id": 1, "type": "sendspin/subscribe_clients"}` (it is also logged on the panel under `Glassworks.Sendspin` and shown in Music Assistant's player details).
+  2. Request the token by sending `{"id": 2, "type": "sendspin/get_pairing_token", "client_id": "<panel client id>"}`.
+  3. Open **Settings → Players → \<Your panel\>** in Music Assistant and paste the returned pairing token. Treat this token like a password—anyone holding it can pair a server with your speaker.
 - **Enable guest mode:** Pass `--ez sendspin_unpaired_access true` so Music Assistant approves the panel automatically without a token. Guest mode disables mutual authentication, so only use it on a trusted local network (see [Security](#security)).
 
 ## Protocol (what is implemented, with sources)

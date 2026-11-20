@@ -74,4 +74,5 @@ To bundle a blueprint with a pane or core settings page:
 3. Regenerate the catalog files so `BlueprintCatalogTest` passes:
    `./gradlew :kiosk:testDebugUnitTest --tests '*BlueprintCatalogTest*' -Ps1RegenGolden=true`
    followed by `npm run panes -w @glassworks/frame-card`.
-4. Add sample inputs to [`tools/blueprints/samples.yaml`](../tools/blueprints/samples.yaml) and validate them with [`tools/blueprints/ha-check.sh`](../tools/blueprints/ha-check.sh) using a Python environment with Home Assistant installed. Only reference entities and actions that the panel actually exposes.
+4. For a core settings page (such as Screen), wire its card into the panel UI by passing the page ID to `blueprints(...)` in `S1Settings.model`—for example, `screenBlueprints = blueprints(CoreSettings.SCREEN)`. Panes pick up their blueprint cards automatically, while core pages require this explicit model binding.
+5. Add sample inputs to [`tools/blueprints/samples.yaml`](../tools/blueprints/samples.yaml) and validate them with [`tools/blueprints/ha-check.sh`](../tools/blueprints/ha-check.sh) using a Python environment with Home Assistant installed. Only reference entities and actions that the panel actually exposes.

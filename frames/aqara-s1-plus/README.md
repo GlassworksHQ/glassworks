@@ -11,7 +11,7 @@
 
 <p align="center">
   <b>Rooted Allwinner A133 wall panel and Glassworks' reference frame</b><br>
-  Runs every pane, including the built-in Zigbee/Thread radio and wall base relays.
+  Supports every pane matched to its hardware—including the built-in Zigbee/Thread radio and wall base relays (no camera hardware).
 </p>
 
 <p align="center">
@@ -94,7 +94,7 @@ Glassworks replaces the software layer while leaving your hardware untouched. Th
 | 📡 **Local Zigbee/Thread radio** | Use the built-in Silicon Labs radio as a Zigbee coordinator (ZHA or experimental Zigbee2MQTT), a Thread border router, or a mesh repeater ([Radio guide](docs/radio-guide.md)). |
 | 🔄 **One-click HA updates** | New Glassworks versions appear under *Settings → Updates* in Home Assistant and install hands-free, including radio helper updates ([Updates](#updates)). |
 | 🔌 **Wall base relays** | Direct local UART driver for the mains relay base without Aqara's daemon—tested against an emulator, awaiting first run on a physical wall base ([Wall bases](research/bases.md)). |
-| 🔒 **Local only** | Disables Aqara's launcher, apps, updater, and cloud daemon reversibly so the panel stays strictly on your local network. |
+| 🔒 **No Aqara cloud** | Disables Aqara's launcher, apps, updater, and cloud daemon reversibly. Normal operation stays local; the panel only contacts GitHub to download wake-word models on first use, check for Glassworks updates, or fetch the optional Silicon Labs Zigbee stack. |
 | ✨ **Custom boot branding** | Displays the Glassworks splash and animated glass-tile boot sequence ([Boot branding](../../branding/glass-tile/README.md)). |
 
 <p align="center">

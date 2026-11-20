@@ -256,9 +256,10 @@ grep -q '  boot\.img$' SHA256SUMS && grep -q '  vbmeta\.img$' SHA256SUMS &&
   echo "boot and vbmeta OK: go on"
 ```
 
-Using macOS or Linux with a checkout of this repository and the U-Boot build (see [Command line](#command-line)), enter FEL mode and flash both partitions:
+Next, return to the root of your repository checkout (for example, `cd /path/to/glassworks`) on macOS or Linux with the U-Boot build ready (see [Command line](#command-line)), put the panel into FEL mode, and flash both partitions:
 
 ```sh
+cd /path/to/glassworks                        # return to the repo root first
 B=~/s1-backup                                 # your backup folder
 unset ANDROID_SERIAL                          # U-Boot's fastboot serial differs from Android's adb serial
 NO_BL31=1 frames/aqara-s1-plus/tools/fel/fel-boot.sh &&            # boot U-Boot in RAM into fastboot
