@@ -96,6 +96,7 @@ export function deviceSetUp(h: SetUpHost): AdbSetUp {
     openTab: (url) => (h.openTab ? h.openTab(url) : openSignInWindow()),
     simulated: h.simulated,
     touch: INSTALLERS[h.frame.id]?.touch !== false,
+    appPackage: h.frame.app.package,
   });
   return setUp;
 }

@@ -56,6 +56,8 @@ export interface AdbSetUpDeps {
   simulated?: boolean;
   /** The device has a touchscreen (installer.json `touch`). Without one, no step offers "do it on the panel". */
   touch?: boolean;
+  /** The app's package, for the grant its Wi-Fi scan needs. */
+  appPackage?: string;
 }
 
 export class AdbSetUp implements SetupSteps, WifiSteps {
@@ -175,6 +177,21 @@ export class AdbSetUp implements SetupSteps, WifiSteps {
     return true;
   }
 
+  /**
+   * The grant the app's Wi-Fi scan needs: without location, Android 6 and later give it no scan results, so the scan
+   * finds nothing (the image path on a run on a real device, 2026-11-20, had no `pm install -g`). Read first
+   * (`dumpsys package`); `pm grant` only when Android lists it as not granted.
+   */
+  private async scanGrant(): Promise<void> {
+    const p = this.d.panel();
+    const pkg = this.d.appPackage;
+    if (!p || !pkg) return;
+    const out = (await p.run(`dumpsys package ${pkg}`, this.d.lid()).catch(() => ({ out: '' }))).out;
+    if (!/android\.permission\.ACCESS_FINE_LOCATION: granted=false/.test(out)) return;
+    this.d.note('The app has no location grant, so its Wi-Fi scan would find nothing: granting it (pm grant ACCESS_FINE_LOCATION)');
+    await p.run(`pm grant ${pkg} android.permission.ACCESS_FINE_LOCATION`, this.d.lid()).catch(() => {});
+  }
+
   /** The networks the panel can see, over Improv Serial through adb ("Use another network"). */
   async scanWifi(): Promise<void> {
     if (!this.improv) return this.wifi();
@@ -182,6 +199,7 @@ export class AdbSetUp implements SetupSteps, WifiSteps {
     const was = cur.phase === 'wifi' ? cur.on : undefined;
     const already = !was && this.improv.state === ImprovState.Provisioned;
     this.d.show({ phase: 'wifi', on: was, changing: !!was, status: 'Looking for networks the panel can see…', hint: already ? 'The panel is already on Wi-Fi. Pick another network to change it, or skip.' : this.wifiHint });
+    await this.scanGrant();
     const turnedOn = await this.wifiOn();
     let networks: { ssid: string; rssi: number; secure: boolean }[] = [];
     try { networks = await this.improv.scan(); } catch { /* typed by hand then */ }
@@ -242,7 +260,11 @@ export class AdbSetUp implements SetupSteps, WifiSteps {
   async homeAssistant(): Promise<void> {
     if (!this.d.simulated && !(await this.socketUp(SETUP_SOCKET))) {
       this.d.show({ phase: 'waiting', note: `Waiting for ${this.d.appName} to start again…` });
-      await this.waitForSocket(SETUP_SOCKET, 60_000);
+      // not back within the minute: an error with Try again, never the older-app way on to Done
+      if (!(await this.waitForSocket(SETUP_SOCKET, 60_000))) {
+        this.d.unreachable(new Error(`${this.d.appName} didn't start again within a minute. Try again.`));
+        return;
+      }
     }
     return this.steps.homeAssistant();
   }

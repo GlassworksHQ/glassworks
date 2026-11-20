@@ -15,7 +15,7 @@ import {
 } from '@glassworks/kiln-core';
 
 import type { AdbSetUp } from '../setup/adbSetUp';
-import { deviceSetUp, setUpWaiting, type SetUpState } from './setUp';
+import { deviceSetUp, lid, setUpWaiting, type SetUpState } from './setUp';
 
 export type { ImageMaker };
 
@@ -634,7 +634,7 @@ export class ImageSession {
     const now = () => performance.now();
     const secs = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
     const first = steps.find((x) => x.do !== 'backup');
-    this.set({ screen: 'working', error: undefined, flashFailed: false, communityWifi: undefined, work: { step: first?.do === 'patch' ? 'patch' : first?.do === 'flash' ? `flash-${first.partition}` as WorkStep : 'restart', x: 0 } });
+    this.set({ screen: 'working', error: undefined, flashFailed: false, communityWifi: undefined, firstBoot: undefined, work: { step: first?.do === 'patch' ? 'patch' : first?.do === 'flash' ? `flash-${first.partition}` as WorkStep : 'restart', x: 0 } });
     // what an earlier attempt made (Glassworks' images, a userdata with a network) is made again by its
     // own step, or not at all: a retry with the network cleared must write userdata as published
     this.made = Object.create(null);
@@ -737,6 +737,32 @@ export class ImageSession {
     }
   }
 
+  /** setUpAgain is reading the device. */
+  private retrying = false;
+
+  /**
+   * From an error once the first start is through (set-up stopped): set-up again from its first step, on the same
+   * connection, with nothing written again. A device that went away goes back to "One last click." (finishFirstStart):
+   * the first start's way back over adb.
+   */
+  async setUpAgain(): Promise<void> {
+    if (this.state.screen !== 'error' || !this.state.firstBoot || this.recipe.community || this.retrying) return;
+    this.retrying = true;
+    this.setUp.close();
+    this.set({ busy: 'set-up-again' });
+    let gone = false;
+    try {
+      // on the clock, not the session's sleep: a test's instant sleep would end the read before it starts
+      await this.panel!.run('true', lid(this.d.frame, undefined, 5000));
+    } catch { gone = true; } finally {
+      this.retrying = false;
+      this.set({ busy: undefined });
+    }
+    if (gone) { this.finishFirstStart(); return; }
+    this.set({ screen: 'setup', error: undefined, setup: setUpWaiting(), managePage: undefined });
+    await this.setUp.click('wifi', () => this.setUp.wifi());
+  }
+
   /**
    * A device already flashed with Glassworks whose first start didn't finish (an error, or the page was reloaded):
    * "One last click." again; set-up follows it, as after any first start.
@@ -747,7 +773,7 @@ export class ImageSession {
     const stale = this.panel;
     this.panel = undefined;
     void stale?.close?.().catch(() => {});
-    this.set({ screen: 'adb', error: undefined, connectError: undefined, adbWaiting: false, work: undefined, flashFailed: false });
+    this.set({ screen: 'adb', error: undefined, connectError: undefined, adbWaiting: false, work: undefined, flashFailed: false, firstBoot: undefined });
   }
 
   /**

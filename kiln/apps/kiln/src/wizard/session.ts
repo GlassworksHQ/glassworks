@@ -125,6 +125,7 @@ export class Session implements SetupSteps {
       openTab: (url) => (this.d.openTab ? this.d.openTab(url) : openSignInWindow()),
       simulated: d.simulated,
       touch: INSTALLERS[d.frame.id]?.touch !== false,
+      appPackage: d.frame.appId.package,
     });
   }
 

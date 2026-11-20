@@ -26,6 +26,8 @@ import { frame as s1Frame } from '../s1-frame';
 afterEach(() => cleanup());
 
 const touchOf = (id: string) => INSTALLERS[id]!.touch !== false;
+/** Each engine frame's app package, as its session passes it to set-up. */
+const PACKAGES: Record<string, string> = { [s1Frame.id]: s1Frame.appId.package, [mirrorFrame.id]: mirrorFrame.app.package };
 
 /** Set-up as every session builds it, for frame `id`, on `panel`; `shown` is every state it showed, in order. */
 function setUpOn(id: string, panel: PanelShell, simulated = true) {
@@ -49,6 +51,7 @@ function setUpOn(id: string, panel: PanelShell, simulated = true) {
     openTab: () => null,
     simulated,
     touch: touchOf(id),
+    appPackage: PACKAGES[id],
   });
   return { s, shown, ends, now: () => setup };
 }
@@ -73,6 +76,10 @@ describe('every session builds set-up from its frame\'s installer.json', () => {
     const image = new ImageSession({ frame: mirrorFrame, images: {} as never, requestFastboot: () => new Promise(() => {}), requestAdb: () => new Promise(() => {}), adbKey: () => undefined, apk: () => undefined });
     expect(image.setUp.touch).toBe(touchOf(mirrorFrame.id));
     expect([touchOf(s1Frame.id), touchOf(mirrorFrame.id)]).toEqual([true, false]);
+    // and the app's package, for the grant its scan needs
+    expect((s1 as unknown as { setUp: { d: { appPackage?: string } } }).setUp.d.appPackage).toBe(s1Frame.appId.package);
+    expect((app.setUp as unknown as { d: { appPackage?: string } }).d.appPackage).toBe(mirrorFrame.app.package);
+    expect(Object.keys(PACKAGES).sort()).toEqual([...ENGINE].sort());
   });
 });
 
@@ -88,6 +95,18 @@ describe.each(ENGINE)('set-up on %s', (id) => {
     expect(st.phase).toBe('wifi');
     expect(st.phase === 'wifi' && st.networks?.length).toBeGreaterThan(0);
     expect(cmds).toContain('svc wifi enable');
+  });
+
+  it('an app without the location grant its scan needs gets it before the scan, which then lists the networks', async () => {
+    const { p, cmds } = shell();
+    const panel = withAppStreams(p, { online: false, noLocation: true, radio: false });
+    const run = panel.run.bind(panel);
+    panel.run = async (cmd, signal) => { cmds.push(cmd); return run(cmd, signal); };
+    const { s, now } = setUpOn(id, panel);
+    await s.wifi();
+    const st = now();
+    expect(st.phase === 'wifi' && st.networks?.length).toBeGreaterThan(0);
+    expect(cmds.filter((c) => c.startsWith('pm grant'))).toEqual([`pm grant ${PACKAGES[id]} android.permission.ACCESS_FINE_LOCATION`]);
   });
 
   it('Wi-Fi already on: nothing is switched', async () => {
@@ -118,6 +137,19 @@ describe.each(ENGINE)('set-up on %s', (id) => {
     expect(shown.map((x) => x.phase).filter((x, i, a) => x !== a[i - 1])).toEqual(['waiting', 'ha']); // no bounce
     expect(ends).toEqual({ done: false, error: undefined });
     s.close();
+  });
+
+  it('an app that doesn\'t come back within the minute is an error to try again, never Done', async () => {
+    const { p } = shell();
+    const streams = withAppStreams(p, { online: true, radio: false });
+    const panel: PanelShell = { ...streams, run: async (cmd, signal) => (cmd.startsWith('grep -c ') ? { out: '0\n', code: 0 } : streams.run(cmd, signal)) };
+    const { s, ends } = setUpOn(id, panel, false);
+    const now = Date.now;
+    let t = now();
+    Date.now = () => (t += 5000); // the minute passes in a few reads
+    try { await s.homeAssistant(); } finally { Date.now = now; }
+    expect(ends.done).toBe(false);
+    expect((ends.error as Error).message).toBe('Glassworks didn\'t start again within a minute. Try again.');
   });
 
   it(touchOf(id) ? 'a frame with touch may send the person to the panel' : 'a frame without touch is never offered "do it on the panel"', () => {

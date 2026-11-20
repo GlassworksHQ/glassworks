@@ -182,3 +182,21 @@ describe('a set-up that stops after the app alone', () => {
     expect(installs()).toBe(1);
   });
 });
+
+describe('a set-up that stops after the image\'s first start', () => {
+  it('says Set-up stopped, and Try again goes back to set-up without running the first start again', async () => {
+    const { image, app } = await imageDemo(mirrorEntry, 'flash-setup-ha', true);
+    // the app stops answering on its setup channel: what set-up's unreachable does
+    act(() => (image.setUp as unknown as { d: { unreachable(e: Error): void } }).d.unreachable(new Error('Glassworks didn\'t start again within a minute. Try again.')));
+    render(<ImageFlow image={image} app={app} />);
+    expect(image.state.screen).toBe('error');
+    expect(screen.getByRole('heading', { name: 'Set-up stopped.' })).toBeTruthy();
+    expect(screen.queryByText('Try the first start again')).toBeNull();
+    const starts = () => image.state.log.filter((l) => l === 'Start Glassworks').length;
+    expect(starts()).toBe(1);
+    await act(() => image.setUpAgain());
+    expect(image.state).toMatchObject({ screen: 'setup', setup: { phase: 'wifi' } });
+    expect(image.state.firstBoot).toBeDefined();
+    expect(starts()).toBe(1);
+  });
+});

@@ -276,6 +276,17 @@ export function ImageDone({ f, s }: P) {
 
 export function ImageError({ f, s }: P) {
   const d = f.frame;
+  // the first start went through and set-up stopped: Try again goes back to set-up, never to the first start or the install
+  if (s.firstBoot && !f.recipe.community) return (
+    <section className="card err" aria-labelledby="h">
+      <h2 id="h">Set-up stopped.</h2>
+      <pre className="raw">{s.error}</pre>
+      <div className="foot">
+        <Log s={s} />
+        <button type="button" className="btn ghost" disabled={!!s.busy} onClick={() => void f.setUpAgain()}>Try again</button>
+      </div>
+    </section>
+  );
   return (
     <section className="card err" aria-labelledby="h">
       {f.recipe.community && <Whose r={f.recipe} />}
