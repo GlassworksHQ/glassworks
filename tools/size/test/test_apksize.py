@@ -442,8 +442,11 @@ class Cli(unittest.TestCase):
             release = f.read()
         with open(os.path.join(os.path.dirname(HERE), "radio-bundle.sh")) as f:
             mine = f.read()
-        self.assertEqual(bundled(mine), bundled(release))
-        self.assertEqual(bundled(mine), ["hotspot-name.apk", "ot-ctl", "otbr-agent", "s1kiosk_radio.sh", "sisdk"])
+        def bundled_any(text):   # radio-bundle.sh builds its optional parts' arguments in arrays first
+            return sorted(set(re.findall(r"--(?:file|dir) \"?([a-z0-9_.-]+)=", text)))
+        self.assertEqual(bundled_any(mine), bundled_any(release))
+        self.assertEqual(bundled_any(mine), ["bootwriter", "hotspot-name.apk", "ot-ctl", "otbr-agent", "s1kiosk_radio.sh", "sisdk"])
+        self.assertIn("bootwriter-files.sh", release)
 
 
 if __name__ == "__main__":

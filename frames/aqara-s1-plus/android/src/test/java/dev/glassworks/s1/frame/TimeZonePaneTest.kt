@@ -68,6 +68,18 @@ class TimeZonePaneTest {
         keeper,
     )
 
+    private fun field(o: Any, name: String): Any? = o.javaClass.getDeclaredField(name).apply { isAccessible = true }.get(o)
+
+    /** #641's follow-up: the S1's time zone pane keeps the zone through the frame's own agent, the one S1Agent picked names for. */
+    @Test fun theS1sPaneAsksTheFrameAgent() {
+        val frame = AqaraS1Plus()
+        val device = java.util.concurrent.Executors.newSingleThreadScheduledExecutor()
+        try {
+            val tz = frame.panes(field(pane, "ctx") as PaneContext, device).filterIsInstance<TimeZonePane>().single()
+            org.junit.Assert.assertSame(frame.agent.timeZone, field(field(tz, "keeper")!!, "timeZone"))
+        } finally { device.shutdownNow() }
+    }
+
     /** What the shell does for a switch: start or stop the pane, then tell every pane the key changed. */
     private fun turn(on: Boolean) {
         switch.on = on

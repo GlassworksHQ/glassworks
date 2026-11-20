@@ -21,8 +21,10 @@ reset comes before PREP. Attempt 14 reads the steps plan F named, and none expla
 **The loader ran on the dev S1 on 2026-11-19 (verified; #651's boot writer run, #651 issuecomment-7024290415).**
 It is in `frames/aqara-s1-plus/tools/root/` (`glassworks_loader.sh`, `glassworks.rc`), and both boot patchers
 make byte-identical images with it (attempt 14). Of its panel tests ([Panel tests](#panel-tests)), L1–L4
-passed. L5 was inconclusive: the loader's lines were in neither logcat nor dmesg, because it logged with `log -t`
-before logd runs. It now writes them to the kernel log too, and L5 waits on the next S1 session.
+passed. L5 was inconclusive that day: the loader logged with `log -t` before logd runs, and the kernel log had
+already wrapped when it was read. It now writes its lines to the kernel log too, and the rerun of 2026-11-20 read
+`dmesg` at the first adb answer: L5 passed without a bundle, the boot step costs about 0.5 s. L5 with a bundle
+(the full check of its files) is still pending: it needs a frame release (#550).
 
 Device: Aqara S1 Plus, firmware 4.5.80. Sources: the stock `boot`, `misc` and boot package
 backups and Aqara's 4.5.80 OTA package, all outside the repo; AOSP `android-10.0.0_r41`; this repo at
@@ -567,6 +569,10 @@ on a 0.4.3 boot image gets an update card that says to update with Kiln first.
 
 ### The Kiln update: no opening
 
+> **2026-11-19: route 2 is the one chosen** (#139 issuecomment-7020084611): a boot writer in the signed radio bundle
+> puts the loader into the panel's own boot image over the air, with the FEL install's patch. It is
+> [s1-boot-writer.md](../../../docs/research/s1-boot-writer.md). The route below stays as the research it was.
+
 Route 1, in this order. Steps 1–3 don't touch `boot` or any other partition, and step 4 is the first
 partition write. Steps 1 and 3 do change `/data`: step 1 is an ordinary app update (it stays if the
 route stops there, like any app update), and the RAM-booted loader in step 3 copies the old
@@ -729,7 +735,7 @@ FEL with our U-Boot) or flashed with the usual backup. The app can stay on 0.4.3
 | L2 | The slots under init | `init.svc.glassworks_agent`, `_netwatch` = `running`; `init.svc.glassworks_firstboot` = `stopped` (it exits at once: the 0.4.3 marker says the panel was provisioned); no `init.svc.s1kiosk_*` |
 | L3 | The radio from the old setting. Starts from a known state: 0.4.3 running `thread_router` (step 0 of the run sheet checks it), no `/data/s1kiosk/radio/.settings-moved`, no frame bundle | `persist.glassworks.radio_mode` = `thread_router`, `sys.glassworks.radio.status` = `ok thread_router…`, `sys.glassworks.agent.source` = `boot`, otbr runs |
 | L4 | The boot animation mount from a shell at `post-fs-data` | the Glassworks animation plays at boot (film it); `/proc/mounts` lists `bootanimation.zip` |
-| L5 | The check's cost at `post-fs-data` | `dmesg \| grep glassworks_loader`: the times of `boot: checking the frame bundle` and `boot: done: …`, with and without a bundle (a bundle needs the bundles PR). Not logcat: at `post-fs-data` logd isn't running, and the S1 run of 2026-11-19 found nothing there; the loader writes every line to `/dev/kmsg` too |
+| L5 | The check's cost at `post-fs-data` | `dmesg \| grep glassworks_loader`: the times of `boot: checking the frame bundle` and `boot: done: …`, with and without a bundle (a bundle needs the bundles PR). Not logcat: at `post-fs-data` logd isn't running; the loader writes every line to `/dev/kmsg` too. **Read `dmesg` as soon as adb is back after the restart:** the S1's kernel log holds about 580 lines and wraps within a minute of boot (read 2026-11-20), so a minute later the loader's lines are gone |
 
 Results, 2026-11-19 (dev S1, the loader image written by #651's boot writer; #651 issuecomment-7024290415):
 
@@ -739,7 +745,7 @@ Results, 2026-11-19 (dev S1, the loader image written by #651's boot writer; #65
 | L2 | **Pass:** `glassworks_agent` and `glassworks_netwatch` running, `glassworks_firstboot` stopped; of the old services only `s1kiosk_devsu` (the dev image's, carried over on purpose) |
 | L3 | **Pass:** `persist.glassworks.radio_mode` = `thread_router`; otbr-agent up within 4 min, `sys.glassworks.radio.status` = `ok thread_router: joined as router` |
 | L4 | **Pass:** the boot animation plays as before (watched), `bootanimation.zip` mounted |
-| L5 | **Inconclusive:** no `glassworks_loader` line in `logcat -b all` or `dmesg` (`log -t` before logd). Fixed by the kernel-log lines; rerun pending |
+| L5 | 2026-11-19 **inconclusive:** no `glassworks_loader` line in `logcat -b all` or `dmesg` (`log -t` before logd, and the kernel log had wrapped). 2026-11-20 (#651 issuecomment-7028522330), **without a bundle: pass**, `dmesg` read at the first adb answer after a restart: `boot: checking the frame bundle` at 3.743 s, `boot: done: frame 1.0.0, bundle none, boot animation …` at 4.211 s; init says the `exec` took 0.516 s. **With a bundle: pending** (it needs a frame release, #550) |
 
 ## Open questions
 

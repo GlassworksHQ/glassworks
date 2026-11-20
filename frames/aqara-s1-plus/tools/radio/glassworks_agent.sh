@@ -1484,6 +1484,54 @@ thread_stored() {
 TSTORED=""
 
 PUB_DIR=${GWA_PUB:-/data/glassworks-pub} # as glassworks_loader.sh: root 0755, app-readable
+
+# --- after the boot writer's restart (#139, route 2) ------------------------------------------------------
+# glassworks_bootwriter.sh (from a 0.4.3 panel's radio bundle) wrote this boot image and restarted once, leaving
+# $BW_DIR/state = "written|restarting <backup sha> <new sha> <bundle version> <radio mode>". This boot is the first
+# with the loader, so this agent checks what the writer promised: the loader ran (ro.glassworks.frame.id), the
+# slots are up (glassworks_agent, glassworks_netwatch), boot still holds the image written, and the radio mode
+# carried over to persist.glassworks.radio_mode. The result goes to $PUB_DIR/boot-writer, as the writer's own
+# lines did, for Manage's Device page: "ok|error <epoch> <detail>". Once: the state becomes "checked".
+BW_DIR=$DIR/boot-writer
+bw_pub() {
+  { [ -d "$PUB_DIR" ] || { mkdir -p "$PUB_DIR" && chown root:root "$PUB_DIR" && chmod 755 "$PUB_DIR"; }; } || return 0
+  printf '%s %s %s\n' "$1" "$(date +%s)" "$2" > "$PUB_DIR/boot-writer.tmp" && chmod 644 "$PUB_DIR/boot-writer.tmp" &&
+    mv -f "$PUB_DIR/boot-writer.tmp" "$PUB_DIR/boot-writer"
+  say "boot writer: $1: $2"
+}
+bw_check() {
+  set -- $(cat "$BW_DIR/state" 2>/dev/null)
+  case "${1:-}" in written|restarting) ;; *) return 0 ;; esac
+  want_sha=$3; want_mode=$5; [ "$want_mode" = - ] && want_mode=""
+  ( i_=0
+    while :; do
+      why_=""
+      if [ "$(getprop ro.glassworks.frame.id)" != aqara-s1-plus ]; then why_="the loader didn't run"
+      else
+        for s_ in glassworks_agent glassworks_netwatch; do
+          [ "$(getprop init.svc.$s_)" = running ] || { why_="$s_ isn't running"; break; }
+        done
+      fi
+      [ -z "$why_" ] && break
+      i_=$((i_ + 1)); [ $i_ -ge ${GWA_BW_TRIES:-60} ] && break   # 5 min
+      sleep ${GWA_BW_EVERY:-5}
+    done
+    if [ -z "$why_" ]; then
+      m_=$(getprop persist.glassworks.radio_mode)
+      [ "$m_" = "$want_mode" ] || why_="the radio mode is '${m_:-off}', was '${want_mode:-off}' before the write"
+    fi
+    if [ -z "$why_" ]; then
+      dev_=${GWA_BOOTDEV:-/dev/block/by-name/boot}
+      set -- $(dd if="$dev_" bs=1048576 2>/dev/null | sha256sum)
+      [ "$1" = "$want_sha" ] || why_="boot no longer holds the image written"
+    fi
+    if [ -z "$why_" ]; then
+      bw_pub ok "the frame loader is in boot: it ran, the services are up, radio mode ${want_mode:-off} kept"
+      r_=ok
+    else bw_pub error "after the restart: $why_"; r_=error; fi
+    echo "checked $r_" > "$BW_DIR/state.tmp" && chmod 600 "$BW_DIR/state.tmp" && mv -f "$BW_DIR/state.tmp" "$BW_DIR/state"
+  ) &
+}
 BT_DONE=""; BT_NEXT=0
 bt_valid() { # AA:BB:CC:DD:EE:FF, and not a placeholder Android hands out
   h_='[0-9A-Fa-f][0-9A-Fa-f]'
@@ -1517,6 +1565,7 @@ zstate
 fw_init
 portal_start
 hn_apply
+bw_check     # once, on the first boot after the boot writer's restart
 [ -n "$GWA_ONCE" ] && LOOPS=$GWA_ONCE   # tests: run this many loops, then exit
 
 while true; do

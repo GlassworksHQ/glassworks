@@ -1531,6 +1531,14 @@ zstate
 fw_init
 portal_start
 hn_apply
+# Route 2 (#139): a radio bundle that carries the boot writer puts the frame loader into this panel's own boot
+# image, once (frames/aqara-s1-plus/tools/root/glassworks_bootwriter.sh). Only a signed bundle has it, never the boot
+# image's copy. In the background, so the radio comes up meanwhile; the writer keeps its own state and lock.
+if [ -n "$RBUNDLE" ] && [ -f "$RBUNDLE/bootwriter/glassworks_bootwriter.sh" ]; then
+  bwv_=$(sed -n 's/^version \([0-9][0-9]*\)$/\1/p' "$RBUNDLE/manifest" 2>/dev/null | head -1)
+  GWB_FILES="$RBUNDLE/bootwriter" GWB_RADIO="$RBUNDLE" GWB_BOOTFILES="$BUNDLE" GWB_DIR="$DIR/boot-writer" \
+    GWB_BUNDLE_VERSION="${bwv_:-0}" /system/bin/sh "$RBUNDLE/bootwriter/glassworks_bootwriter.sh" </dev/null >/dev/null 2>&1 &
+fi
 [ -n "$S1R_ONCE" ] && LOOPS=$S1R_ONCE   # tests: run this many loops, then exit
 
 while true; do

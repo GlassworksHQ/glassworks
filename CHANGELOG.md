@@ -9,6 +9,11 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 ## [Unreleased]
 
 ### Added
+- **The S1 gets its frame loader with an app update, no Kiln visit.** The app's signed radio bundle puts the frame
+  loader into the panel's own boot image, once: it checks the image first, keeps a backup on the panel, writes, reads
+  the write back (and puts the backup back if it differs), then restarts once. The app downloads Magisk's official
+  tools for it. *Settings > S1 Plus > Frame loader*, on the panel and on the Manage page, shows how far it got.
+  Comes with the radio bundle; after it, frame updates install over the air.
 - **Kiln sets up Glass Panes' Wi-Fi.** When you install Glass Panes on the lululemon Mirror from Kiln (still test
   only), you can give a Wi-Fi network. Kiln saves it in Glass Panes before it writes anything, then after the first
   start switches Wi-Fi on, so the Mirror joins by itself and you don't open its Settings through scrcpy. Kiln keeps

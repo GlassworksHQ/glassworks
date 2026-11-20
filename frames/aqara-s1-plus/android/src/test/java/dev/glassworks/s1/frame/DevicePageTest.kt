@@ -80,7 +80,7 @@ class DevicePageTest {
         val s = s1()
         assertEquals("device", s.id)
         assertEquals("S1 Plus", s.title)
-        assertEquals(listOf("Block Aqara cloud", "Aqara cloud daemon", "Aqara apps", "Radio mode", "Silent updates", "Update channel"), titles(s))
+        assertEquals(listOf("Block Aqara cloud", "Aqara cloud daemon", "Aqara apps", "Radio mode", "Silent updates", "Frame loader", "Update channel"), titles(s))
         assertEquals("Turned off: Firmware updater (1 of 2)", s.items.filterIsInstance<SettingsItem.Info>().single { it.title() == "Aqara apps" }.detail())
         val radio = s.items.filterIsInstance<SettingsItem.Link>().single()
         assertEquals("opens the Radio pane", "radio", radio.section)
@@ -112,7 +112,7 @@ class DevicePageTest {
     }
 
     @Test fun aqaraAppsTheAppCantSeeAreLeftOut() {
-        assertEquals(listOf("Block Aqara cloud", "Aqara cloud daemon", "Radio mode", "Silent updates", "Update channel"), titles(s1()))
+        assertEquals(listOf("Block Aqara cloud", "Aqara cloud daemon", "Radio mode", "Silent updates", "Frame loader", "Update channel"), titles(s1()))
     }
 
     @Test fun blockAqaraCloudIsTheWallBasesSettingUnderItsOwnKey() {
@@ -210,7 +210,7 @@ class DevicePageTest {
     /** #139: an S1 without the loader in its boot image has no stamp, so it shows the version before the first. */
     @Test fun theS1sFrameVersionComesLast() {
         val s = S1Device(AqaraCloud(run = { "" }), props, reader = { it.run() }).section(app, AqaraS1Plus().frameRelease) { null }
-        assertEquals(listOf("Block Aqara cloud", "Aqara cloud daemon", "Radio mode", "Silent updates", "Update channel", "Frame version"), titles(s))
+        assertEquals(listOf("Block Aqara cloud", "Aqara cloud daemon", "Radio mode", "Silent updates", "Frame loader", "Update channel", "Frame version"), titles(s))
         assertEquals("Before 1.0.0", frameVersion(s).detail())
         assertFalse("no release checked: nothing to do", frameVersion(s).fixable())
     }

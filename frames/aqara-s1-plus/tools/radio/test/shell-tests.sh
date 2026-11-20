@@ -949,7 +949,8 @@ check "...Magisk's setup first, init built-ins only, then the loader's exec" \
 check "...never makes a top-level /data directory (init would give it an encryption policy, or boot into recovery)" \
   sh -c '! printf "%s\n" "$1" | grep -Eq "^[[:space:]]*mkdir[[:space:]]+/data/[^/[:space:]]+/?([[:space:]]|$)"' _ "$body"
 check "...copies the boot image's busybox to where Magisk checks, executable" sh -c 'printf "%s\n" "$1" | grep -qx "    copy \${MAGISKTMP}/magisk-busybox /data/adb/magisk/busybox" && printf "%s\n" "$1" | grep -qx "    chmod 0755 /data/adb/magisk/busybox"' _ "$body"
-check "patch-boot-magisk.sh puts the busybox in the ramdisk, from the Magisk APK" sh -c 'grep -q "\"add 0700 overlay.d/sbin/magisk-busybox magisk-busybox\"" "$1" && grep -q "libbusybox.so\" \"\$W/p/magisk-busybox\"" "$1"' _ "$R/frames/aqara-s1-plus/tools/root/patch-boot-magisk.sh"
+check "patch-boot-magisk.sh puts the busybox in the ramdisk (its overlay.list), from the Magisk APK" sh -c 'grep -qx "0700 overlay.d/sbin/magisk-busybox magisk-busybox" "$1" && grep -q "libbusybox.so\" \"\$W/p/magisk-busybox\"" "$1"' _ "$R/frames/aqara-s1-plus/tools/root/patch-boot-magisk.sh"
+check "...and so does the boot writer, from the same APK" sh -c 'grep -q "echo \"0700 overlay.d/sbin/magisk-busybox magisk-busybox\"" "$1" && grep -q "libbusybox.so\" \"\$W/p/magisk-busybox\"" "$1"' _ "$R/frames/aqara-s1-plus/tools/root/glassworks_bootwriter.sh"
 check "...and Kiln's overlay the same path and mode" sh -c 'grep -q "path: .overlay.d/sbin/magisk-busybox., mode: 0o700" "$1"' _ "$R/kiln/packages/bootpatch/src/overlay.ts"
 
 # --------------------------------------------------------------- ActivityManager watchdog (#248)
@@ -1561,6 +1562,345 @@ rm -f /data/s1kiosk/radio/hotspot-name.apk; rm -rf "$T/modules"
 st=$(name)
 check "no Magisk modules dir: an error, and nothing made" test "$st" = "error: no Magisk modules dir" -a ! -e "$T/modules"
 printf '#!/bin/sh\nexit 1\n' | w "$T/bin/cmd"; rm -rf "$T/rb" "$T/modules" /t/overlay-on /t/overlay-stale; rm -f /data/s1kiosk/radio/radio.conf
+
+# ----------------------------------------------------------------------------- boot writer (#139, route 2)
+# glassworks_bootwriter.sh puts the frame loader into a 0.4.3 boot image from the radio bundle. Magisk can't be in
+# this repo, so a stand-in APK holds a fake magiskboot (Python, over a toy image format: "ANDROID!", a kernel, a
+# header and cpio entries, padded with zeros to the partition), a fake boot_patch.sh and a busybox that is sh. The
+# real patch-ramdisk.sh (the FEL install's patch) and the real writer run against them. The boot partition is a file.
+echo "--- glassworks_bootwriter.sh"
+BW=/tbw; rm -rf "$BW"; mkdir -p "$BW/apk/lib/armeabi-v7a" "$BW/apk/assets"
+bash "$R/frames/aqara-s1-plus/tools/root/bootwriter-files.sh" "$BW/files" >/dev/null
+cp "$TB/otbr-agent" "$TB/ot-ctl" "$BW/" 2>/dev/null || { printf 'otbr' > "$BW/otbr-agent"; printf 'otctl' > "$BW/ot-ctl"; }
+cat > "$BW/apk/lib/armeabi-v7a/libmagiskboot.so" <<'PY'
+#!/usr/bin/env python3
+# fake magiskboot: the commands patch-ramdisk.sh, boot_patch.sh and the writer use, over the toy image format
+import hashlib, os, sys
+def load(img):
+    b = open(img, 'rb').read().rstrip(b'\0').decode()
+    if not b.startswith('ANDROID!\n'): sys.exit(1)
+    k, h, e = '', [], []
+    for l in b.split('\n')[1:]:
+        if l.startswith('kernel '): k = l[7:]
+        elif l.startswith('header '): h.append(l[7:])
+        elif l.startswith('entry '): e.append(l[6:])
+    return k, h, e
+def ents(f):
+    d = {}
+    for l in open(f).read().splitlines():
+        p, m, x = l.split(' ', 2); d[p] = (m, x)
+    return d
+def save(f, d): open(f, 'w').write(''.join('%s %s %s\n' % (p, *d[p]) for p in sorted(d)))
+a = sys.argv[1:]
+if a[0] == 'unpack':
+    img = a[-1]; k, h, e = load(img)
+    open('kernel', 'w').write(k); open('ramdisk.cpio', 'w').write(''.join(x + '\n' for x in e))
+    if '-h' in a: open('header', 'w').write(''.join(x + '\n' for x in h))
+elif a[0] == 'repack':
+    orig = a[1]; out = a[2] if len(a) > 2 else 'new-boot.img'
+    k, h, _ = load(orig); size = os.path.getsize(orig)
+    if os.path.exists('kernel'): k = open('kernel').read()
+    e = open('ramdisk.cpio').read().splitlines()
+    b = ('ANDROID!\nkernel %s\n' % k + ''.join('header %s\n' % x for x in h) + ''.join('entry %s\n' % x for x in e)).encode()
+    if len(b) > size: sys.exit(1)
+    open(out, 'wb').write(b + b'\0' * (size - len(b)))
+elif a[0] == 'cleanup':
+    for f in ('kernel', 'ramdisk.cpio', 'header'):
+        if os.path.exists(f): os.remove(f)
+elif a[0] == 'sha1': print(hashlib.sha1(open(a[1], 'rb').read()).hexdigest())
+elif a[0].startswith('compress'): open(a[2], 'wb').write(open(a[1], 'rb').read())
+elif a[0] in ('hexpatch', 'dtb'): sys.exit(1)
+elif a[0] == 'cpio':
+    f = a[1]; d = ents(f); rc = 0
+    for c in a[2:]:
+        w = c.split()
+        if not w or w[0].startswith('#'): continue
+        if w[0] == 'test': rc = 1 if '.backup/.magisk' in d else (2 if 'init.unsupported' in d else 0)
+        elif w[0] == 'exists': rc = 0 if w[1] in d else 1
+        elif w[0] == 'extract':
+            if w[1] not in d: sys.exit(1)
+            open(w[2], 'wb').write(bytes.fromhex(d[w[1]][1]) if d[w[1]][1] != 'dir' else b'')
+        elif w[0] == 'ls':
+            for p in sorted(d):
+                if p.startswith(w[-1] + '/'): print('%s 0 0 %s' % (d[p][0], p))
+        elif w[0] == 'rm': d = {p: v for p, v in d.items() if p != w[-1] and not p.startswith(w[-1] + '/')}
+        elif w[0] == 'add': d[w[2]] = (w[1], open(w[3], 'rb').read().hex() or '00')
+        elif w[0] == 'mkdir': d[w[2]] = (w[1], 'dir')
+    save(f, d); sys.exit(rc)
+PY
+cat > "$BW/apk/assets/boot_patch.sh" <<'SH'
+#!/bin/sh
+# fake Magisk boot_patch.sh: unpack, Magisk's entries and config (KEEPVERITY, PREINITDEVICE), repack to new-boot.img
+cd "$(dirname "$0")"
+./magiskboot unpack "$1" || exit 1
+./magiskboot cpio ramdisk.cpio test; [ $? = 2 ] && exit 1
+printf 'KEEPVERITY=%s\nPREINITDEVICE=%s\n' "$KEEPVERITY" "$PREINITDEVICE" > config
+./magiskboot cpio ramdisk.cpio "add 0750 init magiskinit" "mkdir 0750 overlay.d" "mkdir 0750 overlay.d/sbin" \
+  "add 0644 overlay.d/sbin/magisk.xz magisk" "add 000 .backup/.magisk config"
+[ -f /t/bp-kernel-change ] && printf 'another-kernel' > kernel
+./magiskboot repack "$1"
+SH
+: > "$BW/apk/assets/util_functions.sh"
+printf '#!/bin/sh\n[ "$1" = sh ] || exit 1; shift; exec /bin/sh "$@"\n' > "$BW/apk/lib/armeabi-v7a/libbusybox.so"
+for b in magiskinit magisk init-ld; do printf 'fake %s' "$b" > "$BW/apk/lib/armeabi-v7a/lib$b.so"; done
+( cd "$BW/apk" && python3 -c 'import os, zipfile
+z = zipfile.ZipFile("../magisk.apk", "w")
+for r, _, fs in os.walk("."):
+    for f in fs: z.write(os.path.join(r, f), os.path.relpath(os.path.join(r, f), "."))' )
+MAPK_SHA=$(sha256sum "$BW/magisk.apk" | cut -d' ' -f1); MAPK_SIZE=$(stat -c %s "$BW/magisk.apk")
+command -v unzip >/dev/null || w "$T/bin/unzip" <<'PY'
+#!/usr/bin/env python3
+import sys, zipfile
+a = [x for x in sys.argv[1:] if not x.startswith('-')]
+z = zipfile.ZipFile(a[0]); names = set(z.namelist())
+for n in a[1:]:
+    if n not in names: sys.exit(11)
+    z.extract(n, '.')
+PY
+# a 0.4.3 image: Magisk's entries, the old services, the adb key, the boot animation (toy format, 1 MiB)
+mkimg() { # out kind: patched043 | dev043 | loader | stock | nosvc | garbage
+  python3 - "$1" "$2" <<'PY'
+import sys
+out, kind = sys.argv[1], sys.argv[2]
+e = {}
+def add(p, m, data): e[p] = (m, data.encode().hex() if data != 'dir' else 'dir')
+add('init', '0750', 'magiskinit')
+if kind != 'stock':
+    add('.backup/.magisk', '000', 'KEEPVERITY=true\nPREINITDEVICE=metadata\n')
+    add('overlay.d', '0750', 'dir'); add('overlay.d/sbin', '0750', 'dir'); add('overlay.d/sbin/magisk.xz', '0644', 'magisk')
+if kind in ('patched043', 'dev043'):
+    add('overlay.d/s1kiosk_radio.rc', '0644', 'service s1kiosk_radio'); add('overlay.d/sbin/s1kiosk_radio.sh', '0700', 'old helper')
+    add('overlay.d/sbin/s1kiosk_adb_keys', '0600', 'QAAAAfake-installer-key test@host')
+    add('overlay.d/sbin/s1kiosk_bootanimation.zip', '0644', 'anim-043')
+if kind == 'dev043':
+    add('overlay.d/s1kiosk_devsu.rc', '0644', 'service s1kiosk_devsu'); add('overlay.d/sbin/s1kiosk_devsu.sh', '0700', 'devsu 8760')
+if kind == 'loader':
+    add('overlay.d/glassworks.rc', '0644', 'service glassworks_agent')
+b = 'ANDROID!\nkernel stock-kernel-4.5.80\nheader cmdline=console=fake\nheader os_version=10.0.0\n' + ''.join('entry %s %s %s\n' % (p, *e[p]) for p in sorted(e))
+if kind == 'garbage': b = 'NOTANIMAGE\n'
+b = b.encode(); open(out, 'wb').write(b + b'\0' * (1048576 - len(b)))
+PY
+}
+ent() { python3 -c 'import sys
+b = open(sys.argv[1], "rb").read().rstrip(b"\0").decode()
+for l in b.split("\n"):
+    if l.startswith("entry " + sys.argv[2] + " "):
+        m, x = l.split(" ")[2:4]; print(m, bytes.fromhex(x).decode() if x != "dir" else "dir")' "$1" "$2"; }
+entmode() { ent "$1" "$2" 2>/dev/null | head -1 | cut -d' ' -f1; }
+kern() { sed -n 's/^kernel //p' "$1" | head -1; }
+BWD=/data/s1kiosk/radio/boot-writer; BDEV=$T/bootdev
+w "$T/bin/fake-reboot" <<'EOF'
+#!/bin/sh
+echo reboot >> /t/reboots
+EOF
+# dd that mangles what it reads or writes, once per marker: /t/dd-read-flip (the next export of $T/bootdev comes out
+# different), /t/dd-write-flip (the next write to it lands with a byte changed); a number = how many times
+DD=$(PATH=/usr/bin:/bin command -v dd)   # the real one, never this wrapper
+w "$T/bin/dd" <<EOF
+#!/bin/sh
+$DD "\$@"; rc=\$?
+for a in "\$@"; do case "\$a" in if=$T/bootdev) src=1 ;; of=$T/bootdev) dst=1 ;; of=*) out=\${a#of=} ;; esac; done
+flip() { python3 -c 'import sys; f = open(sys.argv[1], "r+b"); f.seek(100); c = f.read(1); f.seek(100); f.write(bytes([c[0] ^ 1]))' "\$1"; }
+take() { n=\$(cat "\$1" 2>/dev/null) || return 1; [ "\${n:-1}" -gt 1 ] && echo \$((n - 1)) > "\$1" || rm -f "\$1"; return 0; }
+[ -n "\$src" ] && [ -n "\$out" ] && take /t/dd-read-flip && flip "\$out"
+[ -n "\$dst" ] && take /t/dd-write-flip && flip $T/bootdev
+exit \$rc
+EOF
+bw_reset() { # a 0.4.3 panel: this image in boot, the app's Magisk download in place, no writer state
+  rm -rf "$BWD" /data/glassworks-pub /t/reboots /t/dd-read-flip /t/dd-write-flip /t/bp-kernel-change
+  rm -f "$T/props/ro.glassworks.frame.id" "$T/props/sys.s1kiosk.bootwriter.status"
+  mkimg "$BDEV" "${1:-patched043}"; cp "$BDEV" "$T/boot-before.img"
+  mkdir -p "$APP/files/boot-writer"; cp "$BW/magisk.apk" "$APP/files/boot-writer/magisk.apk"; chown -R 10050:10050 "$APP/files/boot-writer"
+  echo thread_router > "$T/props/persist.s1kiosk.radio_mode"
+}
+bwrun() { # env...: one writer run, as the bundle's helper starts it
+  env GWB_FILES="$BW/files" GWB_RADIO="$BW" GWB_BOOTFILES="$TB" GWB_BOOTDEV="$BDEV" GWB_DROP_CACHES="$T/drop_caches" \
+    GWB_MAGISK_SHA256="$MAPK_SHA" GWB_MAGISK_SIZE="$MAPK_SIZE" GWB_NEED_KB=1024 GWB_BUNDLE_VERSION=40400 GWB_MAGISK_WAIT=0 \
+    GWB_REBOOT="$T/bin/fake-reboot" "$@" /system/bin/sh "$BW/files/glassworks_bootwriter.sh" >/dev/null 2>&1
+}
+bwpub() { cut -d' ' -f1 /data/glassworks-pub/boot-writer 2>/dev/null; }
+same_boot() { cmp -s "$BDEV" "$T/boot-before.img"; }
+
+bw_reset; bwrun
+check "a 0.4.3 image: written, read back, restarted once" test "$(bwpub)/$(wc -l < /t/reboots 2>/dev/null)" = restarting/1
+check "...the loader in, the 0.4.3 services out" \
+  test -n "$(ent "$BDEV" overlay.d/glassworks.rc)" -a -z "$(ent "$BDEV" overlay.d/s1kiosk_radio.rc)$(ent "$BDEV" overlay.d/sbin/s1kiosk_radio.sh)"
+check "...the frame agent and the slot scripts, as the FEL install adds them" \
+  test "$(entmode "$BDEV" overlay.d/sbin/glassworks_agent.sh)/$(entmode "$BDEV" overlay.d/sbin/glassworks_loader.sh)/$(entmode "$BDEV" overlay.d/glassworks.rc)" = 0700/0700/0644
+check "...the installer's adb key and the boot animation carried over" \
+  test "$(ent "$BDEV" overlay.d/sbin/glassworks_adb_keys)/$(ent "$BDEV" overlay.d/sbin/glassworks_bootanimation.zip)" = "0600 QAAAAfake-installer-key test@host/0644 anim-043"
+check "...Magisk's busybox for its own setup" test -n "$(ent "$BDEV" overlay.d/sbin/magisk-busybox)"
+check "...the same kernel" test "$(kern "$BDEV")" = stock-kernel-4.5.80
+check "...the image's own pre-init partition, not cache: patch-ramdisk.sh reads it, as boot_patch.sh does outside Android" \
+  has "$(ent "$BDEV" .backup/.magisk)" "PREINITDEVICE=metadata"
+check "...the backup is the image as it was, root 0600 in a root 0700 dir" \
+  test "$(cmp -s "$BWD/backup.img" "$T/boot-before.img" && echo same)/$(stat -c %a:%u "$BWD/backup.img")/$(stat -c %a:%u "$BWD")" = "same/600:0/700:0"
+check "...the state says restarting, with the radio mode before the write" has "$(cat "$BWD/state")" "restarting "
+check "...and thread_router" test "$(cut -d' ' -f5 "$BWD/state")" = thread_router
+check "...the record for Manage is root 0644 in a root 0755 dir" \
+  test "$(stat -c %a:%u /data/glassworks-pub/boot-writer)/$(stat -c %a:%u /data/glassworks-pub)" = "644:0/755:0"
+check "...and the work dir is gone, the lock released" test ! -e "$BWD/work" -a ! -e "$BWD/run.lock"
+after=$(sha256sum "$BDEV"); bwrun
+check "started again on the old system after the restart: no second write, no second restart, an error" \
+  test "$(bwpub)/$(wc -l < /t/reboots)/$(sha256sum "$BDEV")" = "error/1/$after"
+echo aqara-s1-plus > "$T/props/ro.glassworks.frame.id"; bwrun
+check "a boot that runs the loader: the writer does nothing" test "$(wc -l < /t/reboots)" = 1
+
+bw_reset loader; bwrun
+check "boot already has the loader: left alone, said so" test "$(bwpub)/$(ls /t/reboots 2>/dev/null)" = installed/
+check "...not written" same_boot
+
+bw_reset dev043; bwrun
+check "a dev image keeps its su service, as it was" \
+  test "$(ent "$BDEV" overlay.d/sbin/s1kiosk_devsu.sh)" = "0700 devsu 8760" -a -n "$(ent "$BDEV" overlay.d/s1kiosk_devsu.rc)"
+
+bw_reset; echo 1 > /t/dd-read-flip; bwrun
+check "two exports that differ: refused, nothing written, no restart" test "$(bwpub)/$(ls /t/reboots 2>/dev/null)" = refused/
+check "...boot as it was" same_boot
+check "...and the reason" has "$(cat /data/glassworks-pub/boot-writer)" "two exports of boot differ"
+bwrun
+check "...not tried again with the same bundle" test "$(bwpub)" = refused -a ! -e /t/reboots
+bwrun GWB_BUNDLE_VERSION=40401
+check "...a newer bundle tries again (and the exports agree now)" test "$(bwpub)" = restarting
+
+bw_reset; touch /t/bp-kernel-change; bwrun
+check "a patch that would change the kernel: refused, nothing written" test "$(bwpub)/$(ls /t/reboots 2>/dev/null)" = refused/ -a -n "$(same_boot && echo y)"
+check "...saying the kernel differs" has "$(cat /data/glassworks-pub/boot-writer)" "kernel differs"
+
+for k in stock nosvc garbage; do
+  bw_reset "$k"; bwrun
+  check "an image this writer doesn't know ($k): refused, nothing written" test "$(bwpub)/$(ls /t/reboots 2>/dev/null)" = refused/ -a -n "$(same_boot && echo y)"
+done
+
+bw_reset; bwrun GWB_NEED_KB=999999999
+check "low space on /data: waits, nothing written, no backup" \
+  test "$(bwpub)/$(ls /t/reboots 2>/dev/null)/$(ls "$BWD/backup.img" 2>/dev/null)" = waiting// -a -n "$(same_boot && echo y)"
+check "...saying how much it needs" has "$(cat /data/glassworks-pub/boot-writer)" "not enough free space"
+bwrun
+check "...and goes ahead once there is room" test "$(bwpub)" = restarting
+
+bw_reset; rm -f "$APP/files/boot-writer/magisk.apk"; bwrun
+check "no Magisk APK yet: asks the app for it (need-magisk), nothing read or written" \
+  test "$(bwpub)/$(ls "$BWD/backup.img" 2>/dev/null)" = need-magisk/ -a -n "$(same_boot && echo y)"
+printf 'not magisk' > "$APP/files/boot-writer/magisk.apk"; chown 10050 "$APP/files/boot-writer/magisk.apk"; bwrun
+check "...one of another size or hash: still need-magisk" test "$(bwpub)" = need-magisk
+rm -f "$APP/files/boot-writer/magisk.apk"
+bwrun GWB_MAGISK_WAIT=60 GWB_MAGISK_POLL=0.2 & BWP=$!
+i=0; until [ "$(bwpub)" = need-magisk ] || [ $i -ge 100 ]; do sleep 0.1; i=$((i + 1)); done
+check "...one run waits for it, saying need-magisk meanwhile" test "$(bwpub)" = need-magisk
+cp "$BW/magisk.apk" "$APP/files/boot-writer/magisk.apk"; chown 10050:10050 "$APP/files/boot-writer/magisk.apk"
+wait "$BWP"
+check "...and goes on as soon as the app's download is there, in the same run" test "$(bwpub)" = restarting
+bw_reset; rm -f "$APP/files/boot-writer/magisk.apk"
+bwrun GWB_MAGISK_WAIT= GWB_MAGISK_POLL=0.1 & BWP=$!
+sleep 3   # 30 polls: as long as the test can afford to stand for hours
+check "...with no deadline (the default) it is still waiting, long after it asked" test "$(bwpub)" = need-magisk -a -n "$(kill -0 $BWP 2>/dev/null && echo y)"
+cp "$BW/magisk.apk" "$APP/files/boot-writer/magisk.apk"; chown 10050:10050 "$APP/files/boot-writer/magisk.apk"
+wait "$BWP"
+check "...and an APK that arrives that late still goes through, in that run" test "$(bwpub)" = restarting
+
+bw_reset; echo 1 > /t/dd-write-flip; bwrun
+check "a readback that differs after the write: the backup goes back, checked, no restart" \
+  test "$(bwpub)/$(ls /t/reboots 2>/dev/null)" = restored/ -a -n "$(same_boot && echo y)"
+check "...and the state says restored, for this bundle" test "$(cut -d' ' -f1,2 "$BWD/state")" = "restored 40400"
+bwrun
+check "...not tried again with that bundle" test "$(bwpub)" = restored -a ! -e /t/reboots
+bw_reset; echo 2 > /t/dd-write-flip; bwrun
+check "the backup reads back wrong too: an error that says FEL, no restart, never again from here" \
+  test "$(bwpub)/$(ls /t/reboots 2>/dev/null)/$(cut -d' ' -f1 "$BWD/state")" = error//torn
+check "...saying so" has "$(cat /data/glassworks-pub/boot-writer)" "recover with FEL"
+bwrun GWB_BUNDLE_VERSION=40409
+check "...a newer bundle doesn't touch it either" test "$(cut -d' ' -f1 "$BWD/state")" = torn -a ! -e /t/reboots
+
+bw_reset; mkdir -p "$BWD"; touch "$BWD/force-readback-mismatch"; bwrun
+check "the root-made test switch forces the mismatch: the real restore runs" test "$(bwpub)" = restored -a -n "$(same_boot && echo y)"
+check "...and the switch is used up" test ! -e "$BWD/force-readback-mismatch"
+bw_reset; mkdir -p "$BWD"; touch "$BWD/force-readback-mismatch"; chown 10050 "$BWD/force-readback-mismatch"; bwrun
+check "...one the app could have made doesn't count" test "$(bwpub)" = restarting
+
+# A checkpoint /data won't take (full after the space check): no write without "written", no restart without
+# "restarting". A mv that refuses the state file whose first word is in /t/state-refuse.
+w "$T/bin/mv" <<'MV'
+#!/bin/sh
+for a in "$@"; do case "$a" in */boot-writer/state.tmp)
+  [ -f /t/state-refuse ] && [ "$(cut -d' ' -f1 "$a")" = "$(cat /t/state-refuse)" ] && exit 1 ;; esac; done
+exec /bin/mv "$@"
+MV
+bw_reset; echo written > /t/state-refuse; bwrun; rm -f /t/state-refuse
+check "the 'written' checkpoint can't be recorded: nothing written, no restart, said so" \
+  test "$(bwpub)/$(ls /t/reboots 2>/dev/null)/$(cut -d' ' -f1 "$BWD/state")" = waiting//prepared -a -n "$(same_boot && echo y)"
+bwrun
+check "...the next start resumes from prepared and goes through" test "$(bwpub)/$(wc -l < /t/reboots)" = restarting/1
+bw_reset; echo restarting > /t/state-refuse; bwrun; rm -f /t/state-refuse
+check "the 'restarting' checkpoint can't be recorded: written and read back, but no restart" \
+  test "$(bwpub)/$(ls /t/reboots 2>/dev/null)/$(cut -d' ' -f1 "$BWD/state")" = error//written
+bwrun
+check "...the next start only restarts" test "$(bwpub)/$(wc -l < /t/reboots)" = restarting/1
+/bin/rm -f "$T/bin/mv"
+
+# Cut short (power, a helper restart): each state resumes, nothing twice
+bw_reset; bwrun GWB_REBOOT=true; new=$(sha256sum "$BDEV" | cut -d' ' -f1)
+cp "$T/boot-before.img" "$BDEV"; set -- $(cat "$BWD/state"); echo "prepared $2 $3 $4" > "$BWD/state"; bwrun
+check "cut after the patch, before the write (state prepared, boot = backup): done from the start" \
+  test "$(bwpub)/$(wc -l < /t/reboots)/$(sha256sum "$BDEV" | cut -d' ' -f1)" = "restarting/1/$new"
+bw_reset; bwrun GWB_REBOOT=true; set -- $(cat "$BWD/state"); echo "written $2 $3 $4 $5" > "$BWD/state"
+bwrun
+check "cut after the write, before the restart (state written, boot = new): only the restart" \
+  test "$(bwpub)/$(wc -l < /t/reboots)" = restarting/1
+bw_reset; bwrun GWB_REBOOT=true; set -- $(cat "$BWD/state"); cp "$T/boot-before.img" "$BDEV"; echo "written $2 $3 $4 $5" > "$BWD/state"
+bwrun
+check "cut just before the write began (state written, boot = backup): written now, restarted once" \
+  test "$(bwpub)/$(wc -l < /t/reboots)/$(sha256sum "$BDEV" | cut -d' ' -f1)" = "restarting/1/$new"
+owner() { st=$(cat "/proc/$1/stat"); st=${st##*) }; set -- "$1" $st; echo "$(cat /proc/sys/kernel/random/boot_id) $1 ${21}"; }
+bw_reset; mkdir -p "$BWD/run.lock"; owner $$ > "$BWD/run.lock/owner"; bwrun
+check "another writer running (its lock: this boot, its pid, its start time): this one leaves" \
+  test ! -e /data/glassworks-pub/boot-writer -a -n "$(same_boot && echo y)"
+set -- $(owner $$); echo "$1 $2 $(( $3 + 1 ))" > "$BWD/run.lock/owner"; bwrun
+check "...a lock whose pid now belongs to another process (start time differs) is taken over" test "$(bwpub)" = restarting
+bw_reset; mkdir -p "$BWD/run.lock"; set -- $(owner $$); echo "00000000-0000-0000-0000-000000000000 $2 $3" > "$BWD/run.lock/owner"; bwrun
+check "...so is one from an earlier boot" test "$(bwpub)" = restarting
+bw_reset; mkdir -p "$BWD/run.lock"; echo "x 999999 1" > "$BWD/run.lock/owner"; bwrun
+check "...and one whose writer is gone" test "$(bwpub)" = restarting
+
+# The radio helper of a bundle that carries the writer starts it (the hook in s1kiosk_radio.sh), the boot copy doesn't
+reset_radio; mkdir -p /data/s1kiosk/radio/bundle/current/bootwriter
+printf '#!/bin/sh\necho "$GWB_FILES|$GWB_RADIO|$GWB_BOOTFILES|$GWB_DIR|$GWB_BUNDLE_VERSION" > /t/bw-ran\n' \
+  > /data/s1kiosk/radio/bundle/current/bootwriter/glassworks_bootwriter.sh
+printf 'S1RADIO-BUNDLE 1\nversion 40400\n' > /data/s1kiosk/radio/bundle/current/manifest; rm -f /t/bw-ran
+env S1R_ONCE=1 S1R_SLEEP=0 S1R_NO_OVERRIDE=1 S1R_BUNDLE="$TB" S1R_RBUNDLE=/data/s1kiosk/radio/bundle/current \
+  /system/bin/sh "$TB/s1kiosk_radio.sh" >/dev/null 2>&1
+i=0; until [ -e /t/bw-ran ] || [ $i -ge 50 ]; do sleep 0.1; i=$((i + 1)); done
+check "a bundle's helper starts the writer with the bundle's files and its version" \
+  test "$(cat /t/bw-ran 2>/dev/null)" = "/data/s1kiosk/radio/bundle/current/bootwriter|/data/s1kiosk/radio/bundle/current|$TB|/data/s1kiosk/radio/boot-writer|40400"
+rm -f /t/bw-ran; env S1R_ONCE=1 S1R_SLEEP=0 S1R_NO_OVERRIDE=1 S1R_BUNDLE="$TB" /system/bin/sh "$TB/s1kiosk_radio.sh" >/dev/null 2>&1; sleep 0.5
+check "...the boot image's own helper (no bundle) never does" test ! -e /t/bw-ran
+rm -rf /data/s1kiosk/radio/bundle
+
+# After the restart: the frame agent checks what the writer promised, once, for Manage
+bwagent() { # state-line radio-mode-now [netwatch state]: one agent start on the new image; waits for its check
+  rm -rf /data/glassworks-pub; mkdir -p "$BWD"; echo "$1" > "$BWD/state"
+  printf '%s' "$2" > "$T/props/persist.glassworks.radio_mode"; rm -f "$T/props/persist.s1kiosk.radio_mode"
+  echo aqara-s1-plus > "$T/props/ro.glassworks.frame.id"; echo running > "$T/props/init.svc.glassworks_agent"
+  echo "${3:-running}" > "$T/props/init.svc.glassworks_netwatch"
+  LOOPS=1 helper GWA_BOOTDEV="$BDEV" GWA_BW_EVERY=0.1 GWA_BW_TRIES=5
+  i=0; until grep -q '^checked' "$BWD/state" 2>/dev/null || [ $i -ge 100 ]; do sleep 0.1; i=$((i + 1)); done
+}
+mkimg "$BDEV" loader; NS=$(sha256sum "$BDEV" | cut -d' ' -f1)
+bwagent "restarting aaa $NS 40400 thread_router" thread_router
+check "the first boot with the loader: ok for Manage, once" test "$(bwpub)/$(cat "$BWD/state")" = "ok/checked ok"
+check "...in words" has "$(cat /data/glassworks-pub/boot-writer)" "radio mode thread_router kept"
+bwagent "restarting aaa $NS 40400 thread_router" zigbee_tcp
+check "the radio mode didn't carry over: an error that says so" has "$(cat /data/glassworks-pub/boot-writer)" "radio mode is 'zigbee_tcp', was 'thread_router'"
+bwagent "written aaa $NS 40400 thread_router" thread_router stopped
+check "a slot that stays down through the wait: an error naming it (state written: a restart power made counts too)" \
+  has "$(cat /data/glassworks-pub/boot-writer)" "glassworks_netwatch isn't running"
+bwagent "restarting aaa 0000 40400 thread_router" thread_router
+check "boot no longer holds the image written: an error" has "$(cat /data/glassworks-pub/boot-writer)" "no longer holds"
+bwagent "checked ok" thread_router
+check "checked once: a later start writes nothing" test ! -e /data/glassworks-pub/boot-writer
+rm -f "$T/bin/dd" "$T/props/ro.glassworks.frame.id" "$T/props/init.svc.glassworks_agent" "$T/props/init.svc.glassworks_netwatch"
+rm -rf "$BW" "$BWD" /data/glassworks-pub "$APP/files/boot-writer"
+
 
 echo
 echo "shell tests: $PASS passed, $FAILS failed"

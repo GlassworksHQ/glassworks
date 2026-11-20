@@ -43,7 +43,9 @@ class AqaraS1PlusTest {
     @Test fun itsOwnNamesAndWorkComeFromTheFrame() {
         assertEquals("S1 Plus", frame.shortName)
         assertEquals("Aqara's own settings", frame.systemSettingsTitle)
-        assertTrue("Wi-Fi scans while the screen is off (#3)", frame.serviceWork(app) {} is ScreenOffWifiScanner)
+        val work = frame.serviceWork(app) {} as AqaraS1Plus.S1ServiceWork
+        assertTrue("Wi-Fi scans while the screen is off (#3)", work.parts.any { it is ScreenOffWifiScanner })
+        assertTrue("the boot writer's Magisk download (#139)", work.parts.any { it is MagiskFetch })
     }
 
     @Test fun theSettingsChainIsAndroidSettingsThenLumiSettings() {
