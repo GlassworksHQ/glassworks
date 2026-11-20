@@ -9,13 +9,14 @@ import type { FelDevice } from '@glassworks/fel';
 import { isMagiskPatched, loadCompressor } from '@glassworks/bootpatch';
 import { Assets, checkRestorable, fmtSize, type BackupFile, type BackupMeta } from '@glassworks/kiln-core';
 import { IMPROV_SOCKET } from '@glassworks/app-adb';
-import { SETUP_SOCKET, type SetupState } from '@glassworks/setup-channel';
+import { SETUP_SOCKET, type PaneCard, type SetupState } from '@glassworks/setup-channel';
+import { FRAMES } from '../frames/catalog';
 import { PacketReader, PacketType, Rpc, State as ImprovState, frame as packet, parseResult, strings, type ByteStream } from 'improv-serial';
 import { explain } from './explain';
 import type { AppPhase, DemoFrame } from '@glassworks/kiln-core';
 import { Session, type SessionDeps } from './session';
 
-export const DEMOS = ['run', 'selftest', 'connect', 'ask-fastboot', 'install', 'ask-adb', 'app', 'app-update', 'app-installing', 'app-keyboard', 'wifi', 'wifi-new', 'wifi-fail', 'home-assistant', 'radio', 'radio-next', 'radio-thread', 'radio-thread-old',
+export const DEMOS = ['run', 'selftest', 'connect', 'ask-fastboot', 'install', 'ask-adb', 'app', 'app-update', 'app-installing', 'app-keyboard', 'wifi', 'wifi-new', 'wifi-fail', 'home-assistant', 'panes', 'panes-busy', 'panes-refused', 'radio', 'radio-next', 'radio-thread', 'radio-thread-old',
   'done', 'done-old-boot', 'undo', 'undo-refused', 'undo-refused-splash', 'undo-apps-back', 'undo-still-on', 'undo-unreadable', 'undo-connect', 'restore', 'undo-done', 'error', 'error-written'] as const;
 export type Demo = (typeof DEMOS)[number];
 
@@ -38,8 +39,34 @@ const dumpsysWifi = (pkg: string) => [
   'Configured networks End ----',
 ].join('\n');
 
-/** The app's setup channel on a simulated panel. `radio`: the app reports one (a frame without one leaves it out). */
-function setupStream(net: Net, radio = true): ByteStream {
+/**
+ * The cards the app's Panes step shows (each pane's PaneChoice: its title and line, on as it ships), by frame.json pane
+ * id, in the app's order. Demos only: a real app sends its own in its setup state.
+ */
+const PANE_CARDS: [string, Omit<PaneCard, 'id'>][] = [
+  ['wall-base', { title: 'Wall base', detail: 'The S1\'s wired base', on: true }],
+  ['assist', { title: 'Voice', detail: 'Assist and timers', on: true }],
+  ['sendspin', { title: 'Music', detail: 'A Sendspin speaker', on: true }],
+  ['notifications', { title: 'Notifications', detail: 'On-screen alerts', on: false }],
+  ['camera', { title: 'Camera', detail: 'Presence, and snapshots', on: false }],
+  ['bluetooth-proxy', { title: 'Bluetooth proxy', detail: 'For BLE sensors', on: false }],
+  ['radio', { title: 'Zigbee / Thread radio', detail: 'For your devices', on: false }],
+];
+
+/** The Panes cards a simulated app on `frameId` offers: one per pane its frame.json lists (demos only). */
+export function demoPanes(frameId: string): PaneCard[] {
+  const panes = (FRAMES.find((f) => f.id === frameId) as { panes?: Record<string, { support?: string }> } | undefined)?.panes ?? {};
+  return PANE_CARDS.filter(([id]) => (panes[id]?.support ?? 'no') !== 'no').map(([id, c]) => ({ id, ...c }));
+}
+
+/** What a simulated app's Panes step does: its cards, and `refuse`: Continue refused, saying why. */
+export interface DemoPanes { cards: PaneCard[]; refuse?: string }
+
+/**
+ * The app's setup channel on a simulated panel. `radio`: the app reports one (a frame without one leaves it out).
+ * `panes`: the app offers the Panes step (proposed, #621); without, it has none, as every app today.
+ */
+function setupStream(net: Net, radio = true, panes?: DemoPanes): ByteStream {
   let cb: (c: Uint8Array) => void = () => {};
   const state: SetupState = {
     ip: net.online ? IP : undefined,
@@ -56,13 +83,19 @@ function setupStream(net: Net, radio = true): ByteStream {
     },
   };
   if (!radio) delete (state as Partial<SetupState>).radio;
+  if (panes) state.panes = panes.cards.map((c) => ({ ...c }));
   const send = (o: object, ms = 0) => setTimeout(() => cb(new TextEncoder().encode(`${JSON.stringify(o)}\n`)), ms);
   return {
     onData: (f) => { cb = f; },
     close: async () => {},
     write: async (data) => {
       for (const line of new TextDecoder().decode(data).split('\n').filter(Boolean)) {
-        const m = JSON.parse(line) as { id: number; op: string; url?: string; mode?: string };
+        const m = JSON.parse(line) as { id: number; op: string; url?: string; mode?: string; on?: string };
+        if (m.op === 'panes.set' && panes?.refuse) { send({ id: m.id, ok: false, error: panes.refuse }, 1200); continue; }
+        if (m.op === 'panes.set') {
+          const on = new Set((m.on ?? '').split(',').filter(Boolean));
+          state.panes = state.panes?.map((c) => ({ ...c, on: on.has(c.id) }));
+        }
         if (m.op === 'set_ha') { state.ha.url = m.url; setTimeout(() => { state.ha.signedIn = true; send({ event: 'state', state }); }, 6000); }
         if (m.op === 'set_radio') {
           state.radio.mode = m.mode!;
@@ -71,7 +104,7 @@ function setupStream(net: Net, radio = true): ByteStream {
           state.radio.allowed = m.mode === 'off' ? undefined : '';
         }
         state.ip = net.online ? IP : undefined;
-        send({ id: m.id, ok: true, state }, m.op === 'set_radio' ? 1500 : 200);
+        send({ id: m.id, ok: true, state }, m.op === 'set_radio' || m.op === 'panes.set' ? 1500 : 200);
       }
     },
   };
@@ -113,7 +146,7 @@ function improvStream(fail: boolean, net: Net): ByteStream {
  * `p` with Glassworks' setup channel and Improv answering, for any frame's simulated device after its app goes in.
  * `online`: on Wi-Fi already; `radio`: the app reports a radio; `wifiOff`: Android's Wi-Fi is off until `svc wifi enable`.
  */
-export function withAppStreams(p: PanelShell, o: { online: boolean; wifiFails?: boolean; radio?: boolean; wifiOff?: boolean; noLocation?: boolean }): PanelShell {
+export function withAppStreams(p: PanelShell, o: { online: boolean; wifiFails?: boolean; radio?: boolean; wifiOff?: boolean; noLocation?: boolean; panes?: DemoPanes }): PanelShell {
   const net: Net = { online: o.online, radioOff: o.wifiOff, noLocation: o.noLocation };
   return {
     run: async (cmd, signal) => {
@@ -126,7 +159,7 @@ export function withAppStreams(p: PanelShell, o: { online: boolean; wifiFails?: 
       return r;
     },
     push: (path, data, mode) => p.push(path, data, mode),
-    openStream: async (svc) => (svc === SETUP_SOCKET ? setupStream(net, o.radio ?? true) : svc === IMPROV_SOCKET ? improvStream(!!o.wifiFails, net) : p.openStream!(svc)),
+    openStream: async (svc) => (svc === SETUP_SOCKET ? setupStream(net, o.radio ?? true, o.panes) : svc === IMPROV_SOCKET ? improvStream(!!o.wifiFails, net) : p.openStream!(svc)),
   };
 }
 
@@ -135,7 +168,7 @@ export function withAppStreams(p: PanelShell, o: { online: boolean; wifiFails?: 
  * `app`: Glassworks' version on the device (`dumpsys package`), or null when it isn't installed. `current`: its
  * software is current, so it answers the frame's `sim.props`.
  */
-export function simulatedPanel({ frame, sim }: DemoFrame, wifiFails = false, online = true, app: { name: string; code: number } | null = { name: '0.5.0', code: 500 }, current = true): PanelShell {
+export function simulatedPanel({ frame, sim }: DemoFrame, wifiFails = false, online = true, app: { name: string; code: number } | null = { name: '0.5.0', code: 500 }, current = true, panes?: DemoPanes): PanelShell {
   const net: Net = { online };
   const pkg = frame.appId.package;
   const prop = (cmd: string) => (current ? sim.props[cmd.replace(/^getprop /, '')] : undefined);
@@ -148,7 +181,7 @@ export function simulatedPanel({ frame, sim }: DemoFrame, wifiFails = false, onl
   return {
     run: async (cmd) => ({ out: out(cmd), code: 0 }),
     push: async () => {},
-    openStream: async (svc) => (svc === SETUP_SOCKET ? setupStream(net) : improvStream(wifiFails, net)),
+    openStream: async (svc) => (svc === SETUP_SOCKET ? setupStream(net, true, panes) : improvStream(wifiFails, net)),
   };
 }
 
@@ -208,7 +241,9 @@ export function demoSession(d: DemoFrame, which: Demo): Session {
   // run and the app's first-install states start without Glassworks on the panel; radio-thread-old has 0.4.3
   const app = ['run', 'app', 'app-installing', 'app-keyboard'].includes(which) ? null
     : which === 'radio-thread-old' ? { name: '0.4.3', code: 403 } : { name: '0.5.0', code: 500 };
-  const panel = simulatedPanel(d, which === 'wifi-fail', which !== 'wifi-fail' && which !== 'wifi-new', app);
+  // the Panes mockup (#621, for approval): an app that offers the step; every other state's app has none, as today's
+  const panes = which.startsWith('panes') ? { cards: demoPanes(frame.id), refuse: which === 'panes-refused' ? 'Voice couldn\'t open the microphone. Try again, or leave Voice off.' : undefined } : undefined;
+  const panel = simulatedPanel(d, which === 'wifi-fail', which !== 'wifi-fail' && which !== 'wifi-new', app, true, panes);
   let adbAllowed = which !== 'run'; // the static states start on an installed panel
   const deps: SessionDeps = {
     recipe: sim.recipe,
@@ -306,6 +341,14 @@ export async function enterDemo(session: Session, d: DemoFrame, which: Demo): Pr
       return;
     case 'home-assistant':
       await session.route('home-assistant');
+      return;
+    case 'panes': // the Panes step (proposed, #621): a switch per pane the app offers
+    case 'panes-refused': // Continue, and a pane couldn't apply its switch (click Continue)
+      await session.route('panes');
+      return;
+    case 'panes-busy': // Continue pressed: the app applies the switches
+      await session.route('panes');
+      void session.click('panes', () => session.applyPanes(['wall-base', 'assist', 'sendspin', 'radio']));
       return;
     case 'radio':
       await session.route('radio');

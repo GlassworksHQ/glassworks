@@ -16,7 +16,7 @@ export type LanView =
   | { at: 'lost'; error: string; again?: 'start' | 'done' };
 
 /** A step on the page's rail. */
-export type RailStep = 'pair' | 'wifi' | 'ha' | 'radio' | 'done';
+export type RailStep = 'pair' | 'wifi' | 'ha' | 'panes' | 'radio' | 'done';
 
 export interface LanState {
   view: LanView;
@@ -28,8 +28,9 @@ export interface LanState {
 /** The rail before the panel has said whether it has a radio, and for one that has. */
 export const FULL_RAIL: readonly RailStep[] = ['pair', 'wifi', 'ha', 'radio', 'done'];
 
-/** The steps a panel that reported [st] has. */
-export const railOf = (st: SetupState): readonly RailStep[] => (st.radio ? FULL_RAIL : FULL_RAIL.filter((s) => s !== 'radio'));
+/** The steps a panel that reported [st] has: Panes when its app offers it (proposed, #621), the radio when it has one. */
+export const railOf = (st: SetupState): readonly RailStep[] =>
+  ['pair', 'wifi', 'ha', ...(st.panes?.length ? ['panes' as const] : []), ...(st.radio ? ['radio' as const] : []), 'done'];
 
 /** What SetupChannel reads and writes: the WebSocket, as a byte stream. */
 export type ChannelStream = ConstructorParameters<typeof SetupChannel>[0];
@@ -126,7 +127,7 @@ export class LanSession implements SetupSteps, WifiSteps {
   private saw(st: SetupState) {
     if (st.touch !== undefined && st.touch !== this.touch) { this.touch = st.touch; this.set({}); }
     const rail = railOf(st);
-    if (rail.length !== this.state.rail.length) this.set({ rail });
+    if (rail.join() !== this.state.rail.join()) this.set({ rail });
   }
 
   /**
@@ -240,6 +241,8 @@ export class LanSession implements SetupSteps, WifiSteps {
   signIn(url: string): void { this.steps.signIn(url); }
   saveHa(url: string): Promise<void> { return this.steps.saveHa(url); }
   skipHa(url: string): Promise<void> { return this.steps.skipHa(url); }
+  panes(): Promise<void> { return this.steps.panes(); }
+  applyPanes(on: readonly string[]): Promise<void> { return this.steps.applyPanes(on); }
   radio(): Promise<void> { return this.steps.radio(); }
   applyRadio(mode: string): Promise<void> { return this.steps.applyRadio(mode); }
   /** Skip and Finish: the button stays busy until the panel has ended the pairing (or said it couldn't). */

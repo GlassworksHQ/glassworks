@@ -6,7 +6,7 @@ import { frameAt, segments } from '../frames';
 /** Each step route and its title's first part. */
 const STEPS: Record<string, string> = {
   install: 'Install', resume: 'Finish setting up', done: 'Done',
-  'set-up': 'Set up', 'set-up/home-assistant': 'Home Assistant', 'set-up/radio': 'Radio', 'set-up/wifi': 'Wi-Fi',
+  'set-up': 'Set up', 'set-up/home-assistant': 'Home Assistant', 'set-up/panes': 'Panes', 'set-up/radio': 'Radio', 'set-up/wifi': 'Wi-Fi',
   undo: 'Undo', 'undo/connect': 'Undo: connect', 'undo/done': 'Undo: done', 'undo/restore': 'Undo: restore',
 };
 

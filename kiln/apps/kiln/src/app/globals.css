@@ -212,6 +212,18 @@ h2.huge { font-size: 44px; font-weight: 200; }
 .rd { width: 15px; height: 15px; border-radius: 50%; border: 1.5px solid var(--faint); flex: none; }
 .opt[data-state="checked"] .rd { border: 4.5px solid var(--ember-b); }
 .tag { font: 500 10.5px var(--f-sans); letter-spacing: 0.04em; text-transform: uppercase; color: var(--work-ink); margin-left: 8px; }
+.panes { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 560px) { .panes { grid-template-columns: minmax(0, 1fr); } }
+.pn { display: flex; align-items: center; gap: 12px; border: 1px solid var(--edge); border-radius: var(--r-pane); padding: 10px 12px; cursor: pointer; height: 100%; }
+.pn .t { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.pn .t small { color: var(--faint); font-size: 13px; }
+.pn:not(.on) .t { opacity: 0.6; }
+/* a pane's switch: the Glassworks stack's lit gradient when on (the sketch), never a status colour */
+.sw { appearance: none; margin: 0 0 0 auto; width: 34px; height: 20px; border-radius: 999px; background: color-mix(in srgb, var(--fg) 14%, transparent); position: relative; flex: none; cursor: pointer; transition: background 0.2s; }
+.sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--s-mu); transition: left 0.2s; }
+.sw:checked { background: var(--lit-gradient); }
+.sw:checked::after { left: 16px; background: var(--s-fg); }
+.sw:disabled { opacity: 0.5; cursor: default; }
 .sig { display: inline-flex; gap: 2px; align-items: end; height: 14px; margin-left: auto; }
 .sig i { width: 3px; background: var(--fg); border-radius: 1px; }
 .lock { width: 14px; height: 14px; fill: none; stroke: var(--faint); stroke-width: 2; }

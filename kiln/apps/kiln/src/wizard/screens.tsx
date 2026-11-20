@@ -13,7 +13,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Recovery } from '../recovery/Recovery';
 import type { AppPhase, KilnFrame } from '@glassworks/kiln-core';
 import type { Session } from './session';
-import { HomeAssistant, Radio, RadioNext, Wifi } from '../setup/steps';
+import { HomeAssistant, Panes, Radio, RadioNext, Wifi } from '../setup/steps';
 import { eta, milestones, type Setup, type WizardState } from './state';
 
 type P = { s: WizardState; session: Session; frame: KilnFrame };
@@ -267,6 +267,7 @@ export function SetUp(p: P) {
     case 'settings': return <Settings {...p} setup={setup} />;
     case 'wifi': return <Wifi busy={!!p.s.busy} steps={p.session} setup={setup} />;
     case 'ha': return <HomeAssistant key="ha" busy={!!p.s.busy} steps={p.session} setup={setup} />;
+    case 'panes': return <Panes busy={!!p.s.busy} steps={p.session} setup={setup} />;
     case 'radio': return <Radio key={setup.radio.mode} busy={!!p.s.busy} steps={p.session} setup={setup} />;
     case 'radio-next': return <RadioNext busy={!!p.s.busy} steps={p.session} setup={setup} />;
   }

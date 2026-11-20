@@ -3,7 +3,7 @@
 // derived from it by the selectors below, so a screen never keeps its own copy.
 import type { AskKind, BackupMeta, PartState, Phase, Progress } from '@glassworks/kiln-core';
 import type { SetupState } from '@glassworks/setup-channel';
-import { SET_UP } from './routes';
+import { SET_UP, type SetUpStep } from './routes';
 import type { SilentWords } from '../components/SilentUpdates';
 import type { AppPhase, AppSettings } from '@glassworks/kiln-core';
 
@@ -45,6 +45,8 @@ export type Setup =
     }
   /** signingIn: a sign-in window is open (Kiln's), or the page is leaving for the sign-in (the panel's setup page), and the panel isn't signed in yet */
   | { phase: 'ha'; ha: SetupState['ha']; note?: string; error?: string; busy?: boolean; signingIn?: boolean }
+  /** The Panes step: a switch per card the app offers (`SetupState.panes`), as the person set them. */
+  | { phase: 'panes'; panes: NonNullable<SetupState['panes']>; error?: string; busy?: boolean }
   | { phase: 'radio'; radio: SetupState['radio']; note: string; error?: string; busy?: boolean }
   | { phase: 'radio-next'; plan: RadioPlan };
 
@@ -144,6 +146,8 @@ export interface WizardState {
   done?: DoneState;
   /** A clicked action is running; its buttons are off until it ends (Session.click). */
   busy?: string;
+  /** The app on the device offers setup's Panes step (its setup state lists `panes`). Older apps don't: no Panes step. */
+  panes?: boolean;
 }
 
 export type Action =
@@ -162,7 +166,8 @@ export type Action =
   | { type: 'done'; done: DoneState }
   | { type: 'busy'; busy?: string }
   | { type: 'changed'; by: Changed }
-  | { type: 'backup'; backup: SavedBackup };
+  | { type: 'backup'; backup: SavedBackup }
+  | { type: 'panes'; offered: boolean };
 
 export const LOG_LIMIT = 400;
 
@@ -231,6 +236,8 @@ export function reduce(s: WizardState, a: Action): WizardState {
       return { ...s, busy: a.busy };
     case 'backup':
       return { ...s, backup: a.backup };
+    case 'panes':
+      return s.panes === a.offered ? s : { ...s, panes: a.offered };
     case 'changed': // a write outranks the apps, and both outrank not knowing
       return { ...s, changed: s.changed && OUTRANKS[s.changed] > OUTRANKS[a.by] ? s.changed : a.by };
   }
@@ -256,8 +263,8 @@ export function railIndex(s: WizardState): number {
 }
 
 /** Set up's own steps on the rail: routes.ts SET_UP, named. */
-const SET_UP_NAMES: Record<(typeof SET_UP)[number], string> = { 'set-up': 'App', wifi: 'Wi-Fi', 'home-assistant': 'Home Assistant', radio: 'Radio' };
-const SET_UP_AT: Record<Setup['phase'], number> = { waiting: 0, settings: 0, wifi: 1, ha: 2, radio: 3, 'radio-next': 3 };
+const SET_UP_NAMES: Record<(typeof SET_UP)[number], string> = { 'set-up': 'App', wifi: 'Wi-Fi', 'home-assistant': 'Home Assistant', panes: 'Panes', radio: 'Radio' };
+const SET_UP_AT: Record<Setup['phase'], number> = { waiting: 0, settings: 0, wifi: 1, ha: 2, panes: 3, radio: 4, 'radio-next': 4 };
 
 export interface RailStep {
   name: string;
@@ -267,15 +274,17 @@ export interface RailStep {
 }
 
 /**
- * Set up's own steps on the rail, marked by where set-up is. `app`: the App step comes first (the wizard installs the app
- * there); a frame whose install put the app on already starts at Wi-Fi. `radio`: the frame has a radio (frame.json
- * `panes.radio`), so set-up has its step.
+ * Set up's own steps on the rail, marked by where set-up is: `steps`, the ones this frame's set-up has (the standard
+ * flow's, less what the frame's data leaves out; standard.ts).
  */
-export function setUpSub(setup: Setup, app = true, radio = true): NonNullable<RailStep['sub']> {
+export function setUpSub(setup: Setup, steps: readonly SetUpStep[] = SET_UP): NonNullable<RailStep['sub']> {
   const at = SET_UP_AT[setup.phase];
   return SET_UP.map((route, j) => ({ name: SET_UP_NAMES[route], route, mark: j < at ? 'done' as const : j > at ? 'todo' as const : 'now' as const }))
-    .filter((x) => (app || x.route !== 'set-up') && (radio || x.route !== 'radio'));
+    .filter((x) => steps.includes(x.route));
 }
+
+/** The set-up steps this session shows: Panes once the app offers it. */
+export const setUpSteps = (s: Pick<WizardState, 'panes'>): SetUpStep[] => SET_UP.filter((x) => x !== 'panes' || !!s.panes);
 
 export function rail(s: WizardState): RailStep[] {
   const now = railIndex(s);
@@ -283,7 +292,7 @@ export function rail(s: WizardState): RailStep[] {
   return STEPS[s.flow].map((name, i) => ({
     name,
     mark: all || i < now ? 'done' : i > now ? 'todo' : s.screen === 'error' ? 'bad' : s.ask ? 'turn' : 'now',
-    ...(s.flow === 'install' && s.screen === 'setup' && i === now ? { sub: setUpSub(s.setup) } : {}),
+    ...(s.flow === 'install' && s.screen === 'setup' && i === now ? { sub: setUpSub(s.setup, setUpSteps(s)) } : {}),
   }));
 }
 

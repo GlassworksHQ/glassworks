@@ -17,6 +17,8 @@ export interface SetUpState {
   busy?: string;
   /** the device's Manage page, once set-up armed its pairing (Done) */
   managePage?: string;
+  /** The app offers setup's Panes step (WizardState `panes`). */
+  panes?: boolean;
 }
 
 export const setUpWaiting = (): Setup => ({ phase: 'waiting', note: '' });
@@ -75,6 +77,7 @@ export function deviceSetUp(h: SetUpHost): AdbSetUp {
     panel: h.panel,
     phase: () => h.state().setup,
     show: (setup) => h.patch({ setup }),
+    panesOffered: (offered) => { if (!!h.state().panes !== offered) h.patch({ panes: offered }); },
     here: h.here,
     done: () => { void finish(); },
     unreachable: (e) => {

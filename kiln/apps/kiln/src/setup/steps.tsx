@@ -156,6 +156,38 @@ export function HomeAssistant({ busy, steps, setup }: StepProps<'ha'>) {
   );
 }
 
+/**
+ * Panes: what the device does, one switch per pane its app offers (the panel's own Panes step, its cards and words;
+ * Kiln's sketch, docs/design/kiln: "Panes are switches"). Continue applies them; a pane that is on and has a step of its
+ * own (the radio) comes next.
+ */
+export function Panes({ busy, steps, setup }: StepProps<'panes'>) {
+  const [on, setOn] = useState<Record<string, boolean>>(() => Object.fromEntries(setup.panes.map((p) => [p.id, p.on])));
+  return (
+    <section className="card" aria-labelledby="h">
+      <h2 id="h">What should it do?</h2>
+      <ul className="panes" aria-label="Panes">
+        {setup.panes.map((p) => (
+          <li key={p.id}>
+            <label className={on[p.id] ? 'pn on' : 'pn'}>
+              <span className="t"><span>{p.title}</span><small>{p.detail}</small></span>
+              <input type="checkbox" role="switch" className="sw" checked={!!on[p.id]} disabled={setup.busy}
+                onChange={(e) => setOn({ ...on, [p.id]: e.target.checked })} />
+            </label>
+          </li>
+        ))}
+      </ul>
+      {setup.error && <p className="status err" role="alert">{setup.error}</p>}
+      {setup.busy && <p className="status work" role="status">Setting up…</p>}
+      <div className="foot">
+        <span />
+        <button type="button" className="btn ember" disabled={setup.busy || busy}
+          onClick={() => void steps.click('panes', () => steps.applyPanes(setup.panes.filter((p) => on[p.id]).map((p) => p.id)))}>Continue</button>
+      </div>
+    </section>
+  );
+}
+
 /** The radio pane's one choice: what the Zigbee/Thread radio does. */
 export function Radio({ busy, steps, setup }: StepProps<'radio'>) {
   const [mode, setMode] = useState(setup.radio.mode);

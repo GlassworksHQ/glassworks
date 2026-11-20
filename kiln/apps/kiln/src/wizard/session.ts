@@ -108,6 +108,7 @@ export class Session implements SetupSteps {
       panel: () => this.panel,
       phase: () => this.s.setup,
       show: (setup) => this.setupPhase(setup),
+      panesOffered: (offered) => this.dispatch({ type: 'panes', offered }),
       here: () => !this.closed && this.s.screen === 'setup',
       done: () => this.finish(),
       unreachable: (e) => this.fail(3, e ?? new Error(`${this.d.frame.app} isn't answering. Is it installed and running?`), true),
@@ -271,6 +272,7 @@ export class Session implements SetupSteps {
       case 'resume': if (await this.connectPanel()) this.setupPhase({ phase: 'settings', update: await this.appInstalled(), chosen: this.chosen }); return;
       case 'wifi': if (await this.connectPanel()) await this.wifi(); return;
       case 'home-assistant': if (await this.connectPanel()) await this.homeAssistant(); return;
+      case 'panes': if (await this.connectPanel()) await this.panes(); return;
       case 'radio': if (await this.connectPanel()) await this.radio(); return;
     }
   }
@@ -344,6 +346,8 @@ export class Session implements SetupSteps {
   signIn(url: string): void { this.setUp.signIn(url); }
   saveHa(url: string): Promise<void> { return this.setUp.saveHa(url); }
   skipHa(url: string): Promise<void> { return this.setUp.skipHa(url); }
+  panes(): Promise<void> { return this.setUp.panes(); }
+  applyPanes(on: readonly string[]): Promise<void> { return this.setUp.applyPanes(on); }
   radio(): Promise<void> { return this.setUp.radio(); }
   applyRadio(mode: string): Promise<void> { return this.setUp.applyRadio(mode); }
 

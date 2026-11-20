@@ -32,6 +32,8 @@ export interface AdbSetUpDeps {
   panel(): PanelShell | undefined;
   phase(): Setup;
   show(setup: Setup): void;
+  /** Whether the app offers setup's Panes step, each time its setup state says (ChannelSetupDeps). */
+  panesOffered?(offered: boolean): void;
   /** The set-up screen is the one showing. */
   here(): boolean;
   /** Set-up is over: Done. */
@@ -76,6 +78,7 @@ export class AdbSetUp implements SetupSteps, WifiSteps {
       open: (tries) => this.openSetup(tries),
       phase: d.phase,
       show: d.show,
+      panesOffered: d.panesOffered,
       here: d.here,
       done: d.done,
       unreachable: d.unreachable,
@@ -278,6 +281,8 @@ export class AdbSetUp implements SetupSteps, WifiSteps {
   signIn(url: string): void { this.steps.signIn(url); }
   saveHa(url: string): Promise<void> { return this.steps.saveHa(url); }
   skipHa(url: string): Promise<void> { return this.steps.skipHa(url); }
+  panes(): Promise<void> { return this.steps.panes(); }
+  applyPanes(on: readonly string[]): Promise<void> { return this.steps.applyPanes(on); }
   radio(): Promise<void> { return this.steps.radio(); }
   applyRadio(mode: string): Promise<void> { return this.steps.applyRadio(mode); }
   finish(): void { this.d.done(); }
