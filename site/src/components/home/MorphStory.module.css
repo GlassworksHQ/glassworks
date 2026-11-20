@@ -1,10 +1,10 @@
-/* Full-bleed Goldilocks 6-beat scroll stage (680vh — ~55% steady hold / ~45% smooth morph, zero bottom dock) */
+/* Full-bleed Goldilocks 6-beat scroll stage (730vh: the pacing is HOLDS in MorphStory.tsx) */
 .story {
   position: relative;
   width: 100vw;
   margin-left: calc(50% - 50vw);
   margin-top: -24px;
-  height: 680vh;
+  height: 730vh;
 }
 
 .sticky {
@@ -411,6 +411,19 @@ a.eyebrow:hover {
 .beatModel[data-still] [data-dock],
 .modelCompact[data-still] [data-dock] {
   --undock: 0;
+}
+
+/* Beat 4's dock alone (dockO): under the glass, its device's body hidden */
+.beatDock {
+  z-index: 0;
+}
+
+.beatDock [data-dock] > svg {
+  opacity: var(--dock-o, 1);
+}
+
+.beatDock [data-dock] > [data-body] {
+  opacity: var(--body-o, 1);
 }
 
 /* Beat 4's tablet docking with the scroll (undockAt): its lift follows the scroll, so no eased lag */

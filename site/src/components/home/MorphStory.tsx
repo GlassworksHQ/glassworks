@@ -14,7 +14,7 @@ import { BEDSIDE_DISPLAY, ROUND_DIAL, SQUARE_SWITCH, WIDE_DISPLAY } from "./stor
  * piece of glass travels; at each beat it lands exactly on that device's front and hands over to its model.
  *
  * One single physical piece of dark precision glass gliding across 6 clean, airy scroll beats
- * (680vh total, ~113vh per beat with ~55% steady hold + ~45% smooth cubic morph).
+ * (730vh, the pacing at HOLDS: each beat holds still, then the glass travels on an eased morph).
  *
  * Each beat spotlights ONE hardware shape + ONE real Glassworks feature over the live
  * CSS-Grid + @container-reflowing Home Assistant Lovelace dashboard:
@@ -173,14 +173,6 @@ const MOBILE_W: Record<ShapeId, number> = {
   bedside: 316,
 };
 
-const BEAT_DOTS = [
-  { idx: 0, label: "Wall switch dashboard", targetP: 0.03 },
-  { idx: 1, label: "Local Assist voice orb", targetP: 0.21 },
-  { idx: 2, label: "Rich notifications", targetP: 0.39 },
-  { idx: 3, label: "Studio mirror presence detection", targetP: 0.55 },
-  { idx: 4, label: "Kitchen timers, Sendspin, and radios", targetP: 0.77 },
-  { idx: 5, label: "Square, round, and future shapes", targetP: 0.96 },
-] as const;
 
 /* Beat 4's lines: what Home Assistant reads from the tablet. Docked is the app's binary_sensor (#444). */
 const wireRays = (docked: boolean) =>
@@ -194,30 +186,40 @@ const clamp = (v: number, a = 0, b = 1) => Math.min(b, Math.max(a, v));
 const smooth = (t: number) => t * t * (3 - 2 * t);
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
-/**
- * Goldilocks dwell/morph pacing across 6 beats (total height 680vh, ~113vh per beat):
- * Beat 3 gets a generous 0.52 – 0.65 hold window so scroll triggers Mirror presence collapse
- * cleanly at the midpoint (p >= 0.585):
- *   Beat 0 hold: 0.000 – 0.085 | morph 0.085 – 0.160
- *   Beat 1 hold: 0.160 – 0.255 | morph 0.255 – 0.335
- *   Beat 2 hold: 0.335 – 0.440 | morph 0.440 – 0.520
- *   Beat 3 hold: 0.520 – 0.650 | morph 0.650 – 0.725  (p < 0.585 clear, p >= 0.585 presence detected)
- *   Beat 4 hold: 0.725 – 0.820 | morph 0.820 – 0.895
- *   Beat 5 hold: 0.895 – 1.000
+/*
+ * The story's pacing. The section is 730vh tall (MorphStory.module.css), so it scrolls 630vh; each beat
+ * holds still for a stretch, then the glass travels to the next (an eased morph). Measured in vh of that
+ * scroll so a beat's time reads plainly; p, the section's progress, is that over 630.
+ *   Beat 0  hold   0 –  49 | travel  49 –  92
+ *   Beat 1  hold  92 – 147 | travel 147 – 193
+ *   Beat 2  hold 193 – 254 | travel 254 – 300
+ *   Beat 3  hold 300 – 375 | travel 375 – 425  (presence detected from the middle of its hold)
+ *   Beat 4  hold 425 – 523 | travel 523 – 566  (the tablet lands on its dock early on, then stays docked)
+ *   Beat 5  hold 566 – 630
  */
+const SCROLL_VH = 630;
+const HOLDS: [number, number][] = (
+  [
+    [0, 49],
+    [92, 147],
+    [193, 254],
+    [300, 375],
+    [425, 523],
+    [566, 630],
+  ] as const
+).map(([a, b]) => [a / SCROLL_VH, b / SCROLL_VH]);
+
+/** Beat 3's Mirror sees someone from the middle of its hold */
+const MIRROR_PRESENCE_P = (HOLDS[3]![0] + HOLDS[3]![1]) / 2;
+
+/** Where the glass is: a whole number while a beat holds, between two while it travels */
 function morphSegment(p: number): number {
   const x = clamp(p);
-  if (x <= 0.085) return 0;
-  if (x < 0.16) return smooth((x - 0.085) / 0.075);
-  if (x <= 0.255) return 1;
-  if (x < 0.335) return 1 + smooth((x - 0.255) / 0.08);
-  if (x <= 0.44) return 2;
-  if (x < 0.52) return 2 + smooth((x - 0.44) / 0.08);
-  if (x <= 0.65) return 3;
-  if (x < 0.725) return 3 + smooth((x - 0.65) / 0.075);
-  if (x <= 0.82) return 4;
-  if (x < 0.895) return 4 + smooth((x - 0.82) / 0.075);
-  return 5;
+  for (let i = 0; i < HOLDS.length; i++) {
+    const [a, b] = HOLDS[i]!;
+    if (x <= b) return x >= a ? i : i - 1 + smooth((x - HOLDS[i - 1]![1]) / (a - HOLDS[i - 1]![1]));
+  }
+  return HOLDS.length - 1;
 }
 
 function windowO(val: number, center: number, inner: number, outer: number) {
@@ -297,26 +299,29 @@ function modelPose(base: Keyframe, sm: StoryModel): { pose: Keyframe; stage: num
   return { pose, stage, face: g.vars["--dev-face"], lift };
 }
 
-/* Each beat's hold (morphSegment): the p where the glass sits still on its device */
-const HOLDS: [number, number][] = [
-  [0, 0.085],
-  [0.16, 0.255],
-  [0.335, 0.44],
-  [0.52, 0.65],
-  [0.725, 0.82],
-  [0.895, 1],
-];
-
 /**
- * How far the Pixel Tablet is off its dock (Beat 4), so a reader sees it dock without hovering: the glass
- * travels in lifted, the model takes over lifted (both drawn with the same lift, so the hand-over is exact),
- * then it settles onto the dock as the beat scrolls on. Scrolling back lifts it again.
+ * How far the Pixel Tablet is off its dock (Beat 4), so a reader sees it dock without hovering. One motion
+ * from the Mirror: the glass rises a little as it travels, and comes down onto the dock, which is already
+ * there (dockO); the model takes over on the way down (both drawn with the same lift, so the hand-over is
+ * exact) and lands a little into the hold, which then stays docked. Scrolling back lifts it again.
  */
 function undockAt(p: number) {
-  const [a] = HOLDS[4]!;
-  if (p < a) return smooth(clamp((p - 0.65) / (a - 0.65)));
-  return 1 - smooth(clamp((p - a - 0.021) / 0.03));
+  const from = HOLDS[3]![1];
+  const land = HOLDS[4]![0] + 20 / SCROLL_VH;
+  const x = clamp((p - from) / (land - from));
+  return smooth(clamp(x / 0.35)) * (1 - smooth(clamp((x - 0.4) / 0.6)));
 }
+
+/* the side dots; each jumps to a point in its beat's hold (Beat 3 before its Mirror sees someone) */
+const at = (beat: number, f: number) => lerp(HOLDS[beat]![0], HOLDS[beat]![1], f);
+const BEAT_DOTS = [
+  { idx: 0, label: "Wall switch dashboard", targetP: 0.03 },
+  { idx: 1, label: "Local Assist voice orb", targetP: at(1, 0.5) },
+  { idx: 2, label: "Rich notifications", targetP: at(2, 0.5) },
+  { idx: 3, label: "Studio mirror presence detection", targetP: at(3, 0.3) },
+  { idx: 4, label: "Kitchen timers, Sendspin, and radios", targetP: at(4, 0.5) },
+  { idx: 5, label: "Square, round, and future shapes", targetP: at(5, 0.6) },
+] as const;
 
 /** The model shows only inside its beat's hold, where it and the glass coincide: in just after, out just before */
 function holdO(p: number, beat: number) {
@@ -372,7 +377,7 @@ export function MorphStory({
   // Beat 2: Real NotificationOverlay card dismissed/collapsed state
   const [notifDismissed, setNotifDismissed] = useState(false);
 
-  // Beat 3: Studio Mirror presence collapse — scroll-driven on desktop (p >= 0.585), click-to-override
+  // Beat 3: Studio Mirror presence collapse — scroll-driven on desktop (from MIRROR_PRESENCE_P), click-to-override
   const [mirrorOverride, setMirrorOverride] = useState<boolean | null>(null);
   const [compactMirrorPresent, setCompactMirrorPresent] = useState(true);
 
@@ -501,9 +506,9 @@ export function MorphStory({
     return () => window.clearTimeout(id);
   }, [assistVisible, assistPhase, reducedMotion]);
 
-  // Beat 3: Presence driven directly by scroll progress inside Beat 3's hold window (p >= 0.585)
+  // Beat 3: Presence driven directly by scroll progress inside Beat 3's hold window (from MIRROR_PRESENCE_P)
   // with manual click-to-toggle override that resets when scrolling out of Beat 3
-  const scrollMirrorPresent = p >= 0.585 && seg >= 2.45 && seg <= 3.55;
+  const scrollMirrorPresent = p >= MIRROR_PRESENCE_P && seg >= 2.45 && seg <= 3.55;
   const mirrorPresent = compact
     ? compactMirrorPresent
     : mirrorOverride !== null
@@ -580,6 +585,9 @@ export function MorphStory({
   // same) so nothing turns see-through, and the glass hides once the model is whole.
   const faceO = compact || !near.face ? 0 : windowO(seg, nearBeat, 0.12, 0.62);
   const modelO = compact || morphing ? 0 : holdO(p, nearBeat);
+  // a dock is there before its device lands: drawn alone behind the glass, it fades in as the glass heads
+  // for it (and out as it leaves); the model, dock and all, still takes over only in the hold
+  const dockO = compact || morphing || !near.lift ? 0 : windowO(seg, nearBeat, 0.15, 0.5);
   const modelLive = modelO > 0.98;
   // a device on a desk or counter casts one soft shadow, from whichever of glass and model shows (a
   // standing mirror's model casts its own on the floor)
@@ -590,7 +598,7 @@ export function MorphStory({
   const tabletLift = poses[4]!.lift;
   const undock = compact || reducedMotion || morphing || !tabletLift ? 0 : undockAt(p);
   const glassLift = undock > 0 ? tabletLift : undefined;
-  const tabletLifted = nearBeat === 4 && !reducedMotion && ((modelLive && modelHover) || undock > 0.5);
+  const tabletLifted = nearBeat === 4 && !reducedMotion && ((modelLive && modelHover) || undock > 0.04);
   // Mirror body presence factor (Beat 3): the glass looks silvered on its way to the Mirror
   const mirrorFactor = windowO(seg, 3, 0.24, 0.72);
 
@@ -1606,6 +1614,17 @@ export function MorphStory({
               className={s.devices}
               style={{ filter: dropO > 0.01 ? `drop-shadow(0 22px 26px rgb(0 0 0 / calc(var(--drop-a) * ${dropO.toFixed(3)})))` : undefined }}
             >
+              {/* a dock alone, behind the glass, there before the device lands on it; the model's own dock covers it exactly */}
+              {dockO > 0.01 && (
+                <div
+                  className={`${s.beatModel} ${s.beatDock}`}
+                  aria-hidden="true"
+                  inert
+                  style={{ width: `${near.stage.toFixed(1)}px`, ["--dock-o" as string]: dockO.toFixed(3), ["--body-o" as string]: 0 }}
+                >
+                  <DeviceModel id={`home-${nearModel.id}-dock`} model={nearModel.model} label="" aspect={nearModel.aspect} view={nearModel.view} />
+                </div>
+              )}
               {modelO > 0.01 && (
                 <div
                   className={s.beatModel}
