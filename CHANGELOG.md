@@ -490,6 +490,13 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 - **Setup carries on after you sign in on the panel.** After *Sign in on this panel instead*, the dashboard showed for
   up to 2 minutes before setup came back on *Add it*, so setup looked finished. Setup now comes back as soon as you're
   signed in. While Home Assistant may still find the panel by itself, *Add it* says it's checking.
+- **The S1's radio is harder to break on a full disk or a stuck flash.** In Zigbee router mode the panel starts
+  the router only once it has a complete copy of the coordinator network, and a copy that fails no longer pushes
+  out good ones. A new Thread dataset replaces the old one only once it is fully stored, so a failed write keeps
+  the panel on its network and tries again. A radio firmware update doesn't start without its recovery marker, and
+  a retry waits for the stuck flasher to exit. *Radio status* now shows why the Thread router didn't start, and a
+  Thread join that keeps failing stops after 21 tries with a message instead of retrying for ever. Comes with the
+  frame bundle and the radio bundle.
 - **Signing in on the panel's own screen now keeps the sign-in.** *Sign in on this panel instead* shows Home
   Assistant's login page on the panel, also when the panel's browser was still signed in, and the sign-in is stored
   as the QR code's is. Before, the dashboard could open through the browser's old session with nothing stored, so

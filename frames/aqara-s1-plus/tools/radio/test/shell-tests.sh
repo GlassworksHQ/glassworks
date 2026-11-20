@@ -120,6 +120,17 @@ case "$*" in
   "-c /etc/cpcd.conf -p") echo "[19:40:00:823934] Info : Secondary APP v$(cat /t/radio-app)"; exit 0 ;;
   "-c /etc/cpcd_ota.conf -f "*)
     img=$4; echo "$img" >> /t/flashed
+    cat /data/s1kiosk/radio/fw/in-progress > /t/marker-at-flash 2>/dev/null || : > /t/marker-at-flash
+    # two flashing cpcds at once = two processes on the SPI device: recorded in /t/cpcd-overlap (#645)
+    pgrep -fc 'cpcd_ota.conf -f' > /t/cpcd-running
+    [ "$(cat /t/cpcd-running)" -gt 1 ] && echo "$img" >> /t/cpcd-overlap
+    # /t/cpcd-hang-once: this flash never ends; told to stop it takes 2 s more ("linger", releasing the
+    # device) or ignores TERM altogether ("ignore", only KILL ends it). Later flashes are normal.
+    if [ -e /t/cpcd-hang-once ]; then
+      h=$(cat /t/cpcd-hang-once); rm -f /t/cpcd-hang-once
+      if [ "$h" = ignore ]; then trap '' TERM; else trap 'sleep 2; exit 143' TERM; fi
+      sleep 1000 & wait $!; while :; do wait; done
+    fi
     # /t/cpcd-start-aqara: Aqara's boot sequence starts zigbee_cpcd in the middle of the flash
     if [ -e /t/cpcd-start-aqara ]; then setprop ctl.start zigbee_cpcd; sleep 3; fi
     prog() { [ -e /t/cpcd-quiet ] || printf '[19:40:49:485025] Info : progress:%s\r\n\r\n' "$1"; }
@@ -153,7 +164,10 @@ exec sleep 1000
 EOF
 w "$TB/ot-ctl" <<'EOF'
 #!/bin/sh
-# fake ot-ctl: the Thread role and network name come from /t/ot-state and /t/ot-name (CRLF, like ot-ctl)
+# fake ot-ctl: the Thread role and network name come from /t/ot-state and /t/ot-name (CRLF, like ot-ctl).
+# Every call's first word goes to /t/ot-calls; /t/ot-fail names a first word that fails (e.g. "thread").
+echo "$1" >> /t/ot-calls
+[ -f /t/ot-fail ] && [ "$1" = "$(cat /t/ot-fail)" ] && { echo "Error 13: InvalidState"; exit 1; }
 case "$1" in
   state) [ -f /t/ot-state ] && printf '%s\r\nDone\r\n' "$(cat /t/ot-state)" && exit 0 ;;
   networkname) [ -f /t/ot-name ] && printf '%s\r\nDone\r\n' "$(cat /t/ot-name)" && exit 0 ;;
@@ -663,6 +677,25 @@ check "...never an empty percentage" hasnt_pct "$fwlog"
 check "...and the flash still completes" has "$(prop sys.glassworks.radio.fw)" "ok stock"
 rm -f "$T/cpcd-slow" "$T/cpcd-quiet"
 
+# #645: the in-progress marker is written (and read back) before cpcd starts, or nothing is flashed
+check "the flash marker is in place when cpcd starts" grep -q "^stock $STOCK_SHA [0-9]*\$" "$T/marker-at-flash"
+mkdir -p /data/s1kiosk/radio/fw/in-progress.tmp   # the marker can't be written, as on a full /data
+req "stock ${STOCK_SHA:0:12}"; : > "$T/flashed"; LOOPS=1 helper
+check "no flash marker: nothing flashed" test ! -s "$T/flashed" -a ! -e /data/s1kiosk/radio/fw/in-progress
+check "...the status says why" has "$(prop sys.glassworks.radio.fw)" "error stock: cannot write the flash marker"
+check "...and supervision goes on in the same pass" has "$(prop sys.glassworks.radio.status)" "ok off"
+rmdir /data/s1kiosk/radio/fw/in-progress.tmp
+# #645: a cpcd stopped at the timeout is gone before the retry starts the next one on the SPI device
+req "stock ${STOCK_SHA:0:12}"; : > "$T/flashed"; rm -f "$T/cpcd-overlap"; echo linger > "$T/cpcd-hang-once"
+LOOPS=1 helper GWA_FW_TIMEOUT=2
+check "a flash that times out: the retry waits for the stopped cpcd to exit" test ! -e "$T/cpcd-overlap" -a "$(wc -l < "$T/flashed")" = 2
+check "...and then completes" has "$(prop sys.glassworks.radio.fw)" "ok stock"
+req "stock ${STOCK_SHA:0:12}"; : > "$T/flashed"; rm -f "$T/cpcd-overlap"; echo ignore > "$T/cpcd-hang-once"
+LOOPS=1 helper GWA_FW_TIMEOUT=2 GWA_FW_TERM_WAIT=10
+check "...one that ignores TERM is killed before the retry" test ! -e "$T/cpcd-overlap" -a "$(wc -l < "$T/flashed")" = 2
+check "...and then completes" has "$(prop sys.glassworks.radio.fw)" "ok stock"
+pkill -f "sleep 1000"
+
 # an interrupted flash: stock is restored before any stack starts
 echo zigbee_tcp > "$T/props/persist.glassworks.radio_mode"; echo aqara > "$T/props/persist.glassworks.radio_zigbee"
 echo "RADIO_ALLOW=any" > /data/s1kiosk/radio/radio.conf
@@ -741,6 +774,64 @@ LOOPS=1 helper
 check "aqara stack: Aqara's zigbeed wanted again" test "$(prop init.svc.zigbee_zigbeed)" = running
 check "...zigbee state aqara" test "$(prop sys.glassworks.radio.zigbee)" = aqara
 pkill -f "sleep 1000"
+
+# ------------------------------------------------------------------------- zigbee_router backup
+# #645: the router host's join replaces the coordinator network in Aqara's zigbeed NVM, so the router
+# bridge starts only once a complete copy of that NVM is in zigbee-nvm/.
+echo "--- zigbee_router: NVM backup before the bridge (#645)"
+reset_radio; pkill -f "sleep 1000"
+echo zigbee_router > "$T/props/persist.glassworks.radio_mode"; echo aqara > "$T/props/persist.glassworks.radio_zigbee"
+mkdir -p /data/s1kiosk/radio /data/zigbee_host; echo "RADIO_ALLOW=any" > /data/s1kiosk/radio/radio.conf
+NVM=/data/zigbee_host/zigbeed_host_token.nvm; NB=/data/s1kiosk/radio/zigbee-nvm
+touch /t/pty-host /t/pty-zb; ln -sf /t/pty-host /dev/ttyZigbeeNCP; ln -sf /t/pty-zb /tmp/ttyZigbeeNCP; : > "$T/stale"
+mkdir -p "$T/zb"; w "$T/zb/zigbeed" <<'EOF'
+#!/bin/sh
+# Aqara's zigbeed for pidof: holds its end of the pty pair
+exec 3<> /t/pty-zb
+while :; do sleep 1; done
+EOF
+"$T/zb/zigbeed" & ZBR=$!
+# cp, for this section only: /t/cp-nvm makes a copy into zigbee-nvm/ fail half way ("partial": 16 bytes, then an
+# error, as on a full /data) or end short with success ("short"). Every other copy is the real cp.
+w "$T/bin/cp" <<'EOF'
+#!/bin/sh
+for a; do last=$a; done
+case "$last:$(cat /t/cp-nvm 2>/dev/null)" in
+  */zigbee-nvm/*:partial) head -c 16 "$1" > "$last"; exit 1 ;;
+  */zigbee-nvm/*:short) head -c 16 "$1" > "$last"; exit 0 ;;
+esac
+exec /bin/cp "$@"
+EOF
+mkdir -p "$NB"; for d in 20000101-000001 20000101-000002 20000101-000003; do echo "old $d" > "$NB/zigbeed-$d.nvm"; done
+echo manual > "$NB/my-backup.bin"; head -c 4096 /dev/urandom > "$NVM"
+newest() { ls "$NB" | grep '^zigbeed-.*\.nvm$' | tail -1; }
+: > "$T/bridge.log"; LOOPS=1 helper
+check "zigbee_router: the NVM is backed up, then the bridge starts on 127.0.0.1:6639" test "$(grep -c 'TCP-LISTEN:6639' "$T/bridge.log")" = 1
+check "...the newest backup is the NVM" cmp -s "$NVM" "$NB/$(newest)"
+check "...root 0600" test "$(stat -c %a:%u "$NB/$(newest)")" = 600:0
+check "...the last three kept, the manual one untouched" test "$(ls "$NB" | grep -c '^zigbeed-.*\.nvm$')" = 3 -a "$(cat "$NB/my-backup.bin")" = manual
+check "...status ok" has "$(prop sys.glassworks.radio.status)" "ok zigbee_router"
+pkill -f "sleep 1000"
+kept=$(cd "$NB" && sha256sum -- * | sort); head -c 4096 /dev/urandom > "$NVM"
+echo partial > "$T/cp-nvm"; : > "$T/bridge.log"; LOOPS=1 helper
+check "a backup that fails half way (full /data): no router bridge" test ! -s "$T/bridge.log"
+check "...the status says why" has "$(prop sys.glassworks.radio.status)" "error zigbee_router: no complete backup of the zigbeed NVM"
+check "...every backup kept, no partial one added" test "$(cd "$NB" && sha256sum -- * | sort)" = "$kept"
+echo short > "$T/cp-nvm"; LOOPS=1 helper
+check "a copy that ends short without an error: no bridge either, backups as they were" test ! -s "$T/bridge.log" -a "$(cd "$NB" && sha256sum -- * | sort)" = "$kept"
+echo partial > "$T/cp-nvm"; : > "$T/log"
+timeout 120 env GWA_ONCE=25 GWA_SLEEP=0 GW_BOOT="$TB" GW_BUNDLE="$CUR" /system/bin/sh "$TB/glassworks_agent.sh" >/dev/null 2>&1
+check "a backup failing for 25 passes isn't counted: no 'giving up', the agent goes on" test $? != 124 -a -z "$(grep 'giving up' "$T/log")"
+check "...still waiting, with the reason" has "$(prop sys.glassworks.radio.status)" "error zigbee_router: no complete backup of the zigbeed NVM (/data full?): router waits"
+: > "$T/setprop.log"; LOOPS=60 helper GWA_SLEEP=0.2 & AG=$!
+sleep 4; rm -f "$T/cp-nvm"; wait $AG
+check "space again in the same process: the backup is retried" grep -q 'router waits' "$T/setprop.log"
+check "...then the bridge starts" test "$(grep -c 'TCP-LISTEN:6639' "$T/bridge.log")" = 1
+check "...status ok" has "$(prop sys.glassworks.radio.status)" "ok zigbee_router"
+check "...the newest backup is the NVM as it is now" cmp -s "$NVM" "$NB/$(newest)"
+kill $ZBR 2>/dev/null; pkill -f "sleep 1000"; rm -rf /data/zigbee_host "$T/zb"; rm -f /dev/ttyZigbeeNCP /tmp/ttyZigbeeNCP
+/bin/rm -f "$T/bin/cp" "$T/cp-nvm"; hash -r   # this shell may have hashed cp to the shim
+echo off > "$T/props/persist.glassworks.radio_mode"; rm -f /data/s1kiosk/radio/radio.conf
 
 # ---------------------------------------------------------------------------------- EZSP bridge
 # The real thing: real socat as Aqara's, a pty pair like zigbee_socat's, and a fake zigbeed (python
@@ -877,6 +968,64 @@ timeout 60 env GWA_ONCE=1 GWA_SLEEP=0 GW_BUNDLE="$CUR" /system/bin/sh "$TB/glass
 check "a FIFO dataset never blocks the helper" test $? != 124
 check "...and changes nothing" test "$(cat /data/s1kiosk/radio/thread-dataset)" = 0e080000000000010000
 rm -f "$APP/files/radio/thread-dataset"; pkill -f "sleep 1000"
+# #645: the hand-off is the only copy once taken: it stays until the new dataset is stored whole
+handoff() { echo "$1" > "$APP/files/radio/thread-dataset"; chown 10050 "$APP/files/radio/thread-dataset"; }
+mkdir /data/s1kiosk/radio/thread-dataset.tmp   # writing the new dataset fails, as on a full /data
+handoff 0e080000000000020000; : > "$T/log"; LOOPS=1 helper
+check "a new dataset that can't be written: the current one stays" test "$(cat /data/s1kiosk/radio/thread-dataset)" = 0e080000000000010000
+check "...the hand-off is kept" test "$(cat /data/s1kiosk/radio/thread-dataset.in 2>/dev/null)" = 0e080000000000020000
+check "...said so, not 'new Thread dataset'" test "$(grep -c 'cannot store the new Thread dataset' "$T/log")/$(grep -c 'new Thread dataset from the app' "$T/log")" = 1/0
+pkill -f "sleep 1000"; handoff 0e080000000000030000; LOOPS=1 helper
+check "...a newer hand-off waits in the app's files meanwhile" test -e "$APP/files/radio/thread-dataset" -a "$(cat /data/s1kiosk/radio/thread-dataset.in)" = 0e080000000000020000
+pkill -f "sleep 1000"; rmdir /data/s1kiosk/radio/thread-dataset.tmp; LOOPS=1 helper
+check "once it can be written: stored, the hand-off gone" test "$(cat /data/s1kiosk/radio/thread-dataset)" = 0e080000000000020000 -a ! -e /data/s1kiosk/radio/thread-dataset.in
+check "...root 0600" test "$(stat -c %a:%u /data/s1kiosk/radio/thread-dataset)" = 600:0
+pkill -f "sleep 1000"; LOOPS=1 helper
+check "...then the newer one" test "$(cat /data/s1kiosk/radio/thread-dataset)" = 0e080000000000030000 -a ! -e "$APP/files/radio/thread-dataset"
+pkill -f "sleep 1000"
+# Leave discards a hand-off staged before it (pending in .in, or waiting in the app's files); a newer one stays
+leave() { echo leave > "$APP/files/radio/thread-leave"; chown 10050 "$APP/files/radio/thread-leave"; }
+mkdir /data/s1kiosk/radio/thread-dataset.tmp; handoff 0e080000000000050000; LOOPS=1 helper; pkill -f "sleep 1000"
+handoff 0e080000000000060000; touch -d "@$(( $(date +%s) - 30 ))" "$APP/files/radio/thread-dataset"
+rmdir /data/s1kiosk/radio/thread-dataset.tmp; leave; LOOPS=1 helper; pkill -f "sleep 1000"
+check "Leave with a pending and an older staged hand-off: neither is stored" test ! -e /data/s1kiosk/radio/thread-dataset -a ! -e /data/s1kiosk/radio/thread-dataset.in -a ! -e "$APP/files/radio/thread-dataset"
+check "...Leave reported ok" has "$(prop sys.glassworks.radio.thread_leave)" "ok "
+handoff 0e080000000000070000; touch -d "@$(( $(date +%s) + 30 ))" "$APP/files/radio/thread-dataset"
+leave; LOOPS=1 helper; pkill -f "sleep 1000"
+check "...a hand-off newer than the Leave (a Join after it) is stored" test "$(cat /data/s1kiosk/radio/thread-dataset 2>/dev/null)" = 0e080000000000070000 -a ! -e /data/s1kiosk/radio/thread-dataset.in
+check "...and the Leave's time is dropped once it is" test ! -e /data/s1kiosk/radio/thread-left
+mkdir /data/s1kiosk/radio/thread-dataset.tmp; handoff 0e080000000000080000; touch -d "@$(( $(date +%s) + 30 ))" "$APP/files/radio/thread-dataset"
+LOOPS=1 helper; pkill -f "sleep 1000"; leave; LOOPS=1 helper; pkill -f "sleep 1000"
+check "a pending hand-off newer than a Leave survives it" test "$(cat /data/s1kiosk/radio/thread-dataset.in 2>/dev/null)" = 0e080000000000080000 -a ! -e /data/s1kiosk/radio/thread-dataset
+rmdir /data/s1kiosk/radio/thread-dataset.tmp; LOOPS=1 helper; pkill -f "sleep 1000"
+check "...and is stored once it can be" test "$(cat /data/s1kiosk/radio/thread-dataset 2>/dev/null)" = 0e080000000000080000
+echo off > "$T/props/persist.glassworks.radio_mode"
+handoff 0e080000000000090000; touch -d "@$(( $(date +%s) - 30 ))" "$APP/files/radio/thread-dataset"; leave; LOOPS=1 helper
+check "Leave in Off: the dataset goes, an older staged hand-off waits in the app's files" test ! -e /data/s1kiosk/radio/thread-dataset -a -e "$APP/files/radio/thread-dataset"
+echo thread_router > "$T/props/persist.glassworks.radio_mode"; : > "$T/log"; LOOPS=1 helper; pkill -f "sleep 1000"
+check "...taken later in Thread router, it is discarded, never joined" test ! -e /data/s1kiosk/radio/thread-dataset -a ! -e /data/s1kiosk/radio/thread-dataset.in -a ! -e "$APP/files/radio/thread-dataset"
+check "...and said so" grep -q 'staged before a Leave' "$T/log"
+D=/data/s1kiosk/radio
+( umask 077; echo 0e0800000000000a0000 > $D/thread-dataset.in ); rm -f $D/thread-dataset.in.t; LOOPS=1 helper; pkill -f "sleep 1000"
+check "a pending hand-off without its time (agent stopped after the move), after a Leave: discarded" test ! -e $D/thread-dataset -a ! -e $D/thread-dataset.in
+mkdir $D/thread-dataset.in.t; handoff 0e0800000000000b0000; touch -d "@$(( $(date +%s) - 30 ))" "$APP/files/radio/thread-dataset"
+LOOPS=1 helper; pkill -f "sleep 1000"
+check "...one whose time can't be written, after a Leave: discarded, not stored" test ! -e $D/thread-dataset -a ! -e $D/thread-dataset.in -a ! -e "$APP/files/radio/thread-dataset"
+rm -f $D/thread-left; handoff 0e0800000000000c0000; LOOPS=1 helper; pkill -f "sleep 1000"; rmdir $D/thread-dataset.in.t
+check "...with no Leave recorded, a hand-off without its time is stored" test "$(cat $D/thread-dataset 2>/dev/null)" = 0e0800000000000c0000
+# (the cases below join: a stored dataset again, as a hand-off after the Leave above would store it)
+( umask 077; echo 0e080000000000010000 > /data/s1kiosk/radio/thread-dataset ); rm -f /data/s1kiosk/radio/thread-left
+# #645: otbr-agent failing to start shows its own error (JOINED is cleared before, not after, start_otbr)
+CUR_KEEP=$CUR; CUR=""; chmod 644 "$TB/otbr-agent"; LOOPS=1 helper
+check "otbr-agent that can't start: its error, not 'waiting' or ok" has "$(prop sys.glassworks.radio.status)" "error thread_router: otbr-agent not installed"
+chmod 755 "$TB/otbr-agent"; CUR=$CUR_KEEP
+# #645: failed joins count across loops (FAILS restarts with every pass whose processes are up)
+echo thread > "$T/ot-fail"; : > "$T/ot-calls"; LOOPS=30 helper
+check "a join that always fails stops after 21 tries" has "$(prop sys.glassworks.radio.status)" "error thread_router: joining failed 21 times"
+check "...thread start was tried 21 times in 30 passes" test "$(grep -c '^thread$' "$T/ot-calls")" = 21
+rm -f "$T/ot-fail"; pkill -f "sleep 1000"; LOOPS=1 helper
+check "...a restart tries again" has "$(prop sys.glassworks.radio.status)" "ok thread_router"
+pkill -f "sleep 1000"
 mkdir -p /data/s1kiosk/radio/thread-router; echo settings > /data/s1kiosk/radio/thread-router/0_1.data
 mkdir -p /data/s1kiosk/radio/thread; echo br > /data/s1kiosk/radio/thread/0_1.data
 echo leave > "$APP/files/radio/thread-leave"; chown 10050 "$APP/files/radio/thread-leave"
@@ -900,6 +1049,20 @@ ln -s /data/s1kiosk/radio/thread "$APP/files/radio/thread-leave"; LOOPS=1 helper
 check "...a symlinked request is refused" has "$(prop sys.glassworks.radio.thread_leave)" "error" ; rm -f "$APP/files/radio/thread-leave"
 check "...and deletes nothing" test -s /data/s1kiosk/radio/thread/0_1.data
 rm -f /data/s1kiosk/radio/radio.conf
+
+# ------------------------------------------------------------------- the old helper keeps step
+# 0.4.3 panels run s1kiosk_radio.sh from the old radio bundle until the boot writer moves them (#528), so
+# it carries the #645 fixes too: the functions they touch are the agent's, names aside (the cases above
+# run the agent's copy). Goes with s1kiosk_radio.sh.
+echo "--- s1kiosk_radio.sh: the #645 fixes, as in the agent"
+fnbody() { awk -v f="$2" '$0 ~ "^"f"\\(\\)" {p=1} p {print} p && /^}/ {exit}' "$1"; }
+for f in backup_nvm router_bridge children_ok num_in take_app_dataset thread_leave start_thread_router thread_router_join fw_stop_cpcd fw_flash_one fw_attempt fw_mark fw_do; do
+  a=$(fnbody "$R/frames/aqara-s1-plus/tools/radio/glassworks_agent.sh" $f | sed 's/glassworks/s1kiosk/g; s/GWA_/S1R_/g; s/the agent/the helper/g')
+  b=$(fnbody "$R/frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh" $f)
+  check "old helper's $f is the agent's, names aside" test -n "$a" -a "$a" = "$b"
+done
+a=$(sed -n '/^while true; do/,$p' "$R/frames/aqara-s1-plus/tools/radio/glassworks_agent.sh" | sed 's/glassworks/s1kiosk/g; s/GWA_/S1R_/g; s/the agent/the helper/g')
+check "...and its main loop is the agent's" test -n "$a" -a "$a" = "$(sed -n '/^while true; do/,$p' "$R/frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh")"
 
 # ------------------------------------------------------------------------------- app updates
 echo "--- glassworks_update.sh"
