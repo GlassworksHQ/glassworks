@@ -56,11 +56,13 @@ class GenericAndroid(
     override val provides: Set<Capability> by lazy { Capability.ofDevice(context.packageManager::hasSystemFeature) }
 
     /**
-     * A device with a frame of its own stands as that frame says ([KNOWN]: a Pixel Tablet is landscape on its dock, though
-     * its screen is portrait at rotation 0). Any other turns as Android says: Kiln's first boot locks the lululemon
-     * Mirror's Android in portrait (`user_rotation=3`, auto-rotate off), and a tablet follows auto-rotate or the person's choice.
+     * A device with a frame of its own stands as that frame says: a [DeviceFrame]'s own (the lululemon Mirror is
+     * [Orientation.PORTRAIT_FIXED]: Kiln's first boot locks its Android at `user_rotation=3`, but Android 6 turns
+     * auto-rotate back on with every update of the app, #686), else [KNOWN]'s (a Pixel Tablet is landscape on its dock,
+     * though its screen is portrait at rotation 0). Any other turns as Android says: a tablet follows auto-rotate or the
+     * person's choice.
      */
-    override val orientation: Orientation get() = KNOWN[Platform.model]?.orientation ?: Orientation.ANY
+    override val orientation: Orientation get() = deviceFrame?.orientation ?: KNOWN[Platform.model]?.orientation ?: Orientation.ANY
 
     /**
      * [Dock.YES] for a device whose frame docks ([KNOWN]) or that has Google's dock manager ([DOCK_MANAGER], listed in

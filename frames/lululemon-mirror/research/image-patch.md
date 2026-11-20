@@ -307,6 +307,16 @@ lives in `userdata`. A fresh `userdata` starts at 0. The probe hid that: it aske
 itself. The legacy app before #434 held the natural orientation, landscape here. Since #434 it
 follows the system's rotation (`FULL_USER`).
 
+**After an app update (2026-11-20, #686).** Android 6 sets `accelerometer_rotation=1` and
+`user_rotation=0` in the same second an `adb install -r` of the app finishes (measured by the root,
+reading both every 2 s; the writer isn't known). An app that follows the rotation turns sideways. So
+the app now asks for `SCREEN_ORIENTATION_PORTRAIT` itself on the Mirror (`Orientation.PORTRAIT_FIXED`).
+Read in AOSP 6.0.1 `PhoneWindowManager.java` (`setInitialDisplaySize`, `rotationForOrientationLw`): on a
+display wider than tall, portrait is rotation 3 and upside down is 1, unless the image sets
+`config_reverseDefaultRotation`; `PORTRAIT` ignores the sensor and auto-rotate, and only a rotation lock
+on 1 would override it. `dumpsys window policy` prints `mPortraitRotation=` to check it on the unit:
+**untested** on the Mirror. Kiln keeps locking rotation 3 for the boot and anything before the app.
+
 **What Kiln does now** (`setPortrait` in `installer/src/flash.ts`, on the first boot, before the app
 starts): `settings put system accelerometer_rotation 0`, `settings put system user_rotation 3`, then
 `dumpsys window windows` once a second until its `mRotation=` is exactly 3. After 10 s it stops with
