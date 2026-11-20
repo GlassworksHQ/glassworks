@@ -175,7 +175,8 @@ export class ChannelSetup {
     if (!c) return await this.d.done(); // older app: the panel's own setup does the rest
     c.onState = (s) => {
       const cur = this.d.phase();
-      if (cur.phase !== 'ha') return;
+      // a state that comes once set-up is over (Done, another screen) changes nothing
+      if (cur.phase !== 'ha' || !this.d.here()) return;
       // A sign-in this page started has finished in its own window: on to the next step, with no click.
       if (cur.signingIn && s.ha.signedIn) { this.haState(s); void this.panes(); return; }
       this.haState(s, { note: cur.note, signingIn: cur.signingIn });

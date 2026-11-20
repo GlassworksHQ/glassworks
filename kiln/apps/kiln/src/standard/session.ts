@@ -186,6 +186,11 @@ export class StandardSession implements SetupSteps, WifiSteps {
 
   /** Connects to an installed, running device over adb; asks for a click if this browser hasn't been allowed. */
   async connectPanel(): Promise<boolean> {
+    // Try again from an error: a device that went away (unplugged, restarted) is connected again, not used dead
+    if (this.panel && this.s.screen === 'error') {
+      const alive = await this.panel.run('true', this.lid(5000)).then(() => true, () => false);
+      if (!alive) { this.setUp.close(); void (this.panel as { close?: () => Promise<void> }).close?.().catch(() => {}); this.panel = undefined; }
+    }
     if (this.panel) return true;
     this.began = true;
     this.dispatch({ type: 'go', screen: 'setup', flow: 'install' });
@@ -309,6 +314,8 @@ export class StandardSession implements SetupSteps, WifiSteps {
         title: 'Done.',
         body: wifi
           ? `${The} is on ${wifi}. Home Assistant finds it by itself.`
+          // without touch nothing is done on the device itself: set-up's Wi-Fi step has no skip there
+          : !this.standard.touch && ip ? `${The} is on Wi-Fi at ${ip}. Home Assistant finds it by itself.`
           : `On ${the}, join Wi-Fi and sign in to Home Assistant. Home Assistant then finds it${ip ? ` (${ip}, port 6053)` : ''}.`,
         backup: b && {
           name: `${b.id}.zip`,
@@ -351,6 +358,8 @@ export class StandardSession implements SetupSteps, WifiSteps {
   /** Done's download: only the wizard's install session has backups. */
   async downloadBackup(): Promise<void> {}
 
-  /** Done's way back, when the frame has one here (a device frame's page). */
-  get wayBack(): (() => void) | undefined { return this.sd.wayBack; }
+  /** Done and the error screen offer a way back: the frame's own here, when it has one (a device frame's page). */
+  get canUndo(): boolean { return !!this.sd.wayBack; }
+  /** The way back, from Done or an error. */
+  undo(): Promise<void> { this.sd.wayBack?.(); return Promise.resolve(); }
 }

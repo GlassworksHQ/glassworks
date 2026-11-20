@@ -7,9 +7,11 @@ import type { PanelShell } from '@glassworks/adb';
 import { SETUP_SOCKET } from '@glassworks/setup-channel';
 import { fakeReleaseRoute } from '../release/demo';
 import { withAppStreams } from '../wizard/demo';
+import { standardDemo } from '../standard/demo';
+import type { StandardSession } from '../standard/session';
 import { AppSession, releaseLine } from './appSession';
 
-export const APP_DEMOS = ['run', 'pick', 'pick-release', 'pick-wrong', 'checks', 'checks-fail', 'installing', 'setup', 'setup-ha', 'setup-panes', 'setup-panes-refused', 'setup-error', 'done', 'done-unconfirmed', 'undo-done', 'undo-pending', 'error'] as const;
+export const APP_DEMOS = ['run', 'pick', 'pick-release', 'pick-wrong', 'checks', 'checks-fail', 'installing', 'setup', 'setup-wifi', 'setup-ha', 'setup-panes', 'setup-panes-refused', 'setup-error', 'done', 'done-unconfirmed', 'undo-done', 'undo-pending', 'error'] as const;
 export type AppDemo = (typeof APP_DEMOS)[number];
 
 /** A device whose app stops answering on its setup channel once `cut()` (the open channel too). */
@@ -29,19 +31,23 @@ export function cuttable(p: PanelShell): { shell: PanelShell; cut(): void } {
   };
 }
 
-/** `fast`: no delays (the tests). */
-export async function appDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim'>, name: AppDemo, fast = false): Promise<AppSession> {
-  // setup: not on Wi-Fi yet, so set-up asks which network
+/**
+ * `fast`: no delays (the tests). `handOver`: the page's, which gives the installed device to the standard flow (setup…
+ * and done go on there: setup is its App step, setup-wifi Wi-Fi, setup-ha Home Assistant, setup-panes Panes).
+ */
+export async function appDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim'>, name: AppDemo, fast = false, handOver?: (p: PanelShell) => StandardSession | undefined): Promise<AppSession> {
+  // setup-wifi: not on Wi-Fi yet, so set-up asks which network
   // setup-panes: the Panes mockup (issue 621, for approval), an app that offers the step
   const panes = name.startsWith('setup-panes')
     ? { cards: sim.panes ?? [], refuse: name === 'setup-panes-refused' ? 'Voice couldn\'t open the microphone. Try again, or leave Voice off.' : undefined }
     : undefined;
-  const streams = withAppStreams(await sim.appDevice(name, { fast }), { online: name !== 'setup', radio: false, panes });
+  const streams = withAppStreams(await sim.appDevice(name, { fast }), { online: name !== 'setup-wifi', radio: false, panes });
   // setup-error: the app stops answering on its setup channel after Home Assistant's step
   const cutting = cuttable(streams);
   const device = name === 'setup-error' ? cutting.shell : streams;
   const release = name === 'pick-release' ? { release: fakeReleaseRoute('out', sim.apk(), (ms) => new Promise((r) => setTimeout(r, fast ? 0 : ms)), releaseLine(frame).line) } : {};
-  const s = new AppSession({ frame, connect: async () => device, simulated: true, ...release, ...(fast ? { sleep: (ms: number) => new Promise<void>((r) => setTimeout(r, ms / 100)) } : {}) }, true);
+  let standard: StandardSession | undefined;
+  const s = new AppSession({ frame, connect: async () => device, handOver: (p) => { standard = handOver?.(p); }, ...release, ...(fast ? { sleep: (ms: number) => new Promise<void>((r) => setTimeout(r, ms / 100)) } : {}) }, true);
   if (name === 'pick-wrong') { await s.pickApk(sim.wrongApkName, sim.wrongApk()); return s; }
   if (name === 'pick-release') return s; // the screen downloads it
   if (name !== 'run') await s.pickApk(sim.apkName, sim.apk());
@@ -52,11 +58,8 @@ export async function appDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim'>
   if (name === 'undo-done') { await s.undo(); return s; }
   if (name === 'undo-pending') { await s.undo(); await s.again(); return s; }
   await s.install();
-  if (name === 'setup' || s.state.screen !== 'setup') return s; // error: the install stopped
-  await s.setUp.homeAssistant();
-  if (name === 'setup-ha') return s;
-  if (panes) { await s.setUp.panes(); return s; }
-  if (name === 'setup-error') { cutting.cut(); await s.setUp.skipHa(''); return s; }
-  s.setUp.finish(); // no radio on this app: Home Assistant is set-up's last step
+  if (s.state.screen === 'error') return s; // error: the install stopped
+  if (name === 'setup-error') { await standardDemo(standard, 'home-assistant'); cutting.cut(); await standard?.skipHa(''); return s; }
+  await standardDemo(standard, name === 'setup' ? 'app' : name === 'setup-wifi' ? 'wifi' : name === 'setup-ha' ? 'home-assistant' : panes ? 'panes' : 'done');
   return s;
 }

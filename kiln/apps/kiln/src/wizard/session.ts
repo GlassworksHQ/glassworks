@@ -148,6 +148,10 @@ export class Session extends StandardSession {
     }
   }
 
+  /** Undo with the backup, from Done or an error. */
+  override get canUndo(): boolean { return true; }
+  override undo(): Promise<void> { return this.click('undo', () => this.openUndo()); }
+
   /** The App step installs the app here: the install over FEL wrote the system, not the app. */
   protected override applies(): boolean { return false; }
 

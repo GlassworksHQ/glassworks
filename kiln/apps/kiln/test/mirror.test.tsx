@@ -15,6 +15,7 @@ import { DevicePage, AppFlow, keyedConnect } from '../src/device/DevicePage';
 import { AppSession, deviceMode, deviceOpen } from '../src/device/appSession';
 import { registry } from '../src/wizard/registry';
 import { MIRROR_BASE, appOn, mirrorEntry, mirrorFrame } from './mirror-frame';
+import { showApp } from './device-page';
 
 beforeAll(() => {
   Object.defineProperty(navigator, 'usb', { configurable: true, value: {} });
@@ -73,7 +74,7 @@ describe('the switch', () => {
 describe('the test install', () => {
   it('reads the Mirror, installs, sets up, and undoes back to the home app it had', async () => {
     const m = new FakeMirror({ kiosk: 'app' }); // the community kiosk with its device admin off, so Android hides it
-    const { s, setUp } = appOn(m);
+    const { s, setUp, standard } = appOn(m);
     await s.connect();
     expect(s.state.screen).toBe('checks');
     expect(s.installBlocked()).toMatch(/APK/);
@@ -82,14 +83,16 @@ describe('the test install', () => {
     expect(s.state.apk).toMatchObject({ name: 'kiosk-legacy-debug.apk', size: apk.length, package: GLASSWORKS.package });
     expect(s.state.apk?.sha256).toMatch(/^[0-9a-f]{64}$/);
     await s.install();
-    // then set-up, as the S1's: Wi-Fi (the Mirror is on it already), Home Assistant over the app's setup channel
-    expect(s.state).toMatchObject({ screen: 'setup', setup: { phase: 'wifi', on: expect.anything() }, result: { flow: 'install', installed: { home: 'set', previousHome: MIRROR_KIOSK } } });
+    // then the standard flow, as every frame's: its App step first, on the Mirror the install handed over
+    expect(s.state).toMatchObject({ screen: 'pick', result: { flow: 'install', installed: { home: 'set', previousHome: MIRROR_KIOSK } } });
+    expect(standard().store.state).toMatchObject({ screen: 'setup', setup: { phase: 'settings', apply: true } });
     expect(m.cmds).toContain(`am start -n ${GLASSWORKS.activity}`);
     expect(m.cmds.filter((c) => c.includes('--es url'))).toEqual([]); // Home Assistant is set-up's, not the install's
     await setUp();
-    expect(s.state.screen).toBe('done');
-    await vi.waitFor(() => expect(s.state.managePage).toBe('http://192.0.2.50:8099/'));
-    await s.again();
+    expect(standard().store.state.screen).toBe('done');
+    await vi.waitFor(() => expect(standard().store.state.done?.managePage).toBe('http://192.0.2.50:8099/'));
+    // Done's way back: the app path's first screen, Connect, then Undo on the checks
+    await s.connect();
     expect(s.state.report?.app).toBeDefined();
     await s.undo();
     expect(s.state).toMatchObject({ screen: 'done', result: { flow: 'undo', removed: { removed: true, home: 'set' } } });
@@ -177,13 +180,13 @@ describe('the test install', () => {
     await late;
     expect(s.state.screen).toBe('working');
     await install;
-    expect(s.state.screen).toBe('setup');
+    expect(s.state).toMatchObject({ screen: 'pick', result: { flow: 'install' } }); // handed to the standard flow
   });
 
-  it('a slow read of the Mirror that ends after a whole install doesn\'t replace its Done, even when it fails', async () => {
+  it('a slow read of the Mirror that ends after a whole install doesn\'t replace its hand-over, even when it fails', async () => {
     for (const fails of [false, true]) {
       const m = new FakeMirror();
-      const { s, setUp } = appOn(m);
+      const { s, setUp, standard } = appOn(m);
       await s.connect();
       await s.pickApk('kiosk.apk', fakeMirrorApk());
       let release!: () => void;
@@ -197,11 +200,12 @@ describe('the test install', () => {
       const reread = s.again();
       await s.install();
       await setUp();
-      expect(s.state.screen).toBe('done');
+      expect(standard().store.state.screen).toBe('done');
       release();
       await reread;
-      expect(s.state).toMatchObject({ screen: 'done', result: { flow: 'install' } });
+      expect(s.state).toMatchObject({ screen: 'pick', result: { flow: 'install' } });
       expect(s.state.connectError).toBeUndefined();
+      expect(standard().store.state.screen).toBe('done');
     }
   });
 
@@ -247,18 +251,19 @@ describe('every demo screen', () => {
 
   it('no screen asks for a tap on the Mirror: it has no touchscreen (Mirror run, 2026-11-19)', async () => {
     for (const d of APP_DEMOS.filter((x) => x !== 'run')) {
-      render(<AppFlow session={await appDemo(mirrorEntry, d as AppDemo, true)} />);
+      await showApp(d as AppDemo);
       await until(() => !!document.querySelector('.card'));
       expect(document.body.textContent, d).not.toMatch(/Your turn|then Always|Clear defaults/);
       cleanup();
     }
-  });
+  }, 60_000);
 
-  it('Done says it opens when the Mirror starts; with a device admin\'s home app Android won\'t hide, it says to install over fastboot', async () => {
-    render(<AppFlow session={await appDemo(mirrorEntry, 'done', true)} />);
-    await screen.findByText('It opens when the Mirror starts.');
+  it('Done is the standard flow\'s; with a device admin\'s home app Android won\'t hide, it says to install over fastboot', async () => {
+    await showApp('done');
+    await screen.findByText('The Mirror is on Wi-Fi at 192.0.2.50. Home Assistant finds it by itself.');
+    expect(screen.queryByText(/device administrator/)).toBeNull();
     cleanup();
-    render(<AppFlow session={await appDemo(mirrorEntry, 'done-unconfirmed', true)} />);
+    await showApp('done-unconfirmed');
     await screen.findByText(/^com\.nimrod\.mirrorkiosk is a device administrator, so Glassworks can.t be the only home screen over adb\. Install Glassworks over fastboot instead/);
   });
 });

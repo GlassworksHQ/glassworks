@@ -1,18 +1,38 @@
 // The Mirror's two flows for the contract, on the engine's device flows (src/device) with the Mirror's declaration
 // (its installer's kilnFrame). `fastboot`: ImageSession, Glassworks built into
 // the Glass Panes image and flashed, then the first start over adb; the image comes through the real resumableBody
-// over a fake network. `app`: AppSession, the app alone over adb on a Mirror already on Glass Panes.
-// A reload is a new session over the same Mirror, as a page load makes one.
+// over a fake network. `app`: AppSession, the app alone over adb on a Mirror already on Glass Panes. Each install hands
+// the Mirror to the standard flow (StandardSession, as the page does), which this drives as the S1's driver drives its
+// set-up: the App step, then done once the app answers its Wi-Fi step. A reload is a new session over the same Mirror,
+// as a page load makes one.
 import { SYSTEM_BYTES, USERDATA_BYTES, resumableBody, type FastbootLike } from '@glassworks/lululemon-mirror-installer';
 import { FakeMirror, FirstBootMirror, fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
 import type { PanelShell } from '@glassworks/adb';
 import { ImageSession, type ImageDeps, type ImageMaker } from '../../src/device/imageSession';
 import { AppSession } from '../../src/device/appSession';
 import { withAppStreams } from '../../src/wizard/demo';
-import { mirrorFrame } from '../mirror-frame';
+import type { StandardSession } from '../../src/standard/session';
+import { mirrorFrame, standardOn } from '../mirror-frame';
 import {
   Clicks, REFUSED, UNPLUGGED, body, fastSleep, never, type Driver, type Knobs, type Look, type Page, type World, type Write,
 } from './harness';
+
+/**
+ * The standard flow after the hand-over, as a person clicks it: the App step (its settings applied), then done once the
+ * app answers its Wi-Fi step. Undefined while it isn't the standard flow's turn.
+ */
+function standardLook(ss: StandardSession | undefined, clicks: Clicks, goal: () => boolean): Look | undefined {
+  if (!ss) return undefined;
+  const s = ss.store.state;
+  if (s.screen === 'error') return { end: 'error' };
+  if (s.screen !== 'setup' || s.busy) return 'wait';
+  const st = s.setup;
+  if (st.phase === 'settings' && st.error) return { end: 'error' };
+  if (st.phase === 'settings' && !st.installing) return clicks.act('settings', () => ss.click('install-app', () => ss.installApp({ clock24: true, keyboard: false })));
+  if (st.phase === 'wifi' && st.networks === undefined && !st.on && !st.unreachable) return 'wait';
+  if (st.phase === 'wifi') return st.unreachable ? { end: 'error' } : { end: 'done', goal: goal() };
+  return 'wait';
+}
 
 const IMAGE = new Uint8Array(64).fill(7);
 const pristine = (state: object) => JSON.stringify({ ...state, log: [] });
@@ -111,11 +131,14 @@ function flashWorld(k: Knobs): World {
   const apk = fakeMirrorApk();
 
   function load(): Page {
-    const f = new ImageSession(deps);
+    let standard: StandardSession | undefined;
+    const f = new ImageSession({ ...deps, handOver: (p) => { standard = standardOn(p, { sleep: fastSleep }); void standard.handOver(p); } });
     const clicks = new Clicks();
     return {
       look(): Look {
         const s = f.state;
+        const after = standardLook(standard, clicks, () => s.firstBoot?.home.result === 'set');
+        if (after) return after;
         switch (s.screen) {
           case 'choose': // Glassworks, first and picked (#579)
             return clicks.act('choose', () => f.choose());
@@ -135,11 +158,6 @@ function flashWorld(k: Knobs): World {
           case 'adb':
             if (s.connectError && clicks.has('adb')) return { end: 'error' };
             return clicks.act('adb', () => f.connectAdb());
-          // the first start is over and set-up (the same on every frame) begins: done once the app answers its
-          // Wi-Fi step, as the S1's driver; set-up itself has its own tests (mirror-set-up.test.tsx)
-          case 'setup':
-            if (s.setup.phase !== 'wifi' || s.busy) return 'wait';
-            return s.setup.unreachable ? { end: 'error' } : { end: 'done', goal: s.firstBoot?.home.result === 'set' };
           case 'done':
             return { end: 'done', goal: s.firstBoot?.home.result === 'set' };
           case 'error':
@@ -150,15 +168,20 @@ function flashWorld(k: Knobs): World {
       },
       step() {
         const s = f.state;
+        if (standard) return 'first-boot'; // the standard flow after the first start
         if (s.screen === 'choose' || s.screen === 'image') return 'image';
         if (s.screen === 'fastboot') return 'fastboot';
         if (s.screen === 'adb' || s.work?.step === 'first-boot') return 'first-boot';
         return 'install';
       },
-      // the error screen's "Back to the download" (ImageScreens ImageError)
-      async retry() { clicks.reset(); f.retry(); },
+      // the error screen's "Back to the download" (ImageScreens ImageError), or the standard flow's Try again
+      async retry() {
+        clicks.reset();
+        if (standard) { const ss = standard; await ss.click('resume', () => ss.route('resume')); return; }
+        f.retry();
+      },
       remembers: () => pristine(f.state) !== pristine(new ImageSession(deps).state),
-      snapshot: () => JSON.stringify({ ...f.state, log: f.state.log.length }),
+      snapshot: () => JSON.stringify({ ...f.state, log: f.state.log.length, standard: standard && { ...standard.store.state, log: [] } }),
       close() {},
     };
   }
@@ -211,15 +234,17 @@ function appWorld(k: Knobs): World {
       return withAppStreams(await link(mirror, k, fired, writes, partial, reloadAt), { online: true, radio: false });
     },
     sleep: fastSleep,
-    simulated: true,
   };
 
   function load(): Page {
-    const s = new AppSession(deps, true);
+    let standard: StandardSession | undefined;
+    const s = new AppSession({ ...deps, handOver: (p) => { standard = standardOn(p, { sleep: fastSleep }); void standard.handOver(p); } }, true);
     const clicks = new Clicks();
     return {
       look(): Look {
         const st = s.state;
+        const after = standardLook(standard, clicks, () => st.result?.flow === 'install' && st.result.installed.home === 'set');
+        if (after) return after;
         switch (st.screen) {
           case 'pick':
             if (!st.apk) return clicks.act('apk', () => s.pickApk('glassworks-legacy.apk', apk));
@@ -229,11 +254,6 @@ function appWorld(k: Knobs): World {
           case 'checks':
             if (!st.apk) return clicks.act('apk', () => s.pickApk('glassworks-legacy.apk', apk));
             return s.installBlocked() ? { end: 'error' } : clicks.act('install', () => s.install());
-          // the install is over and set-up (the same on every frame) begins: done once the app answers its Wi-Fi
-          // step, as the fastboot driver
-          case 'setup':
-            if (st.setup.phase !== 'wifi' || st.busy) return 'wait';
-            return st.setup.unreachable ? { end: 'error' } : { end: 'done', goal: st.result?.flow === 'install' && st.result.installed.home === 'set' };
           case 'done':
             return { end: 'done', goal: st.result?.flow === 'install' && st.result.installed.home === 'set' };
           case 'error':
@@ -242,11 +262,15 @@ function appWorld(k: Knobs): World {
             return 'wait';
         }
       },
-      step: () => (['working', 'setup', 'error', 'done'].includes(s.state.screen) ? 'install' : 'connect'),
-      // the error screen's button (DevicePage): set-up again once the install went through, else Back to the checks
-      async retry() { clicks.reset(); await (s.state.result?.flow === 'install' ? s.setUpAgain() : s.again()); },
+      step: () => (standard || ['working', 'error', 'done'].includes(s.state.screen) ? 'install' : 'connect'),
+      // the error screen's button: the standard flow's Try again once the install went through, else Back to the checks
+      async retry() {
+        clicks.reset();
+        if (standard) { const ss = standard; await ss.click('resume', () => ss.route('resume')); return; }
+        await s.again();
+      },
       remembers: () => pristine(s.state) !== pristine(new AppSession(deps, true).state),
-      snapshot: () => JSON.stringify({ ...s.state, log: s.state.log.length }),
+      snapshot: () => JSON.stringify({ ...s.state, log: s.state.log.length, standard: standard && { ...standard.store.state, log: [] } }),
       close() {},
     };
   }

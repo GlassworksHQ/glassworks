@@ -284,16 +284,33 @@ export function setUpSub(setup: Setup, steps: readonly SetUpStep[] = SET_UP): No
     .filter((x) => steps.includes(x.route));
 }
 
-/** The set-up steps this session shows: Panes once the app offers it. */
-export const setUpSteps = (s: Pick<WizardState, 'panes'>): SetUpStep[] => SET_UP.filter((x) => x !== 'panes' || !!s.panes);
+/** The set-up steps this session shows: the frame's (`steps`, its data), Panes once the app offers it. */
+export const setUpSteps = (s: Pick<WizardState, 'panes'>, steps: readonly SetUpStep[] = SET_UP): SetUpStep[] =>
+  steps.filter((x) => x !== 'panes' || !!s.panes);
 
-export function rail(s: WizardState): RailStep[] {
+/** `steps`: the frame's set-up steps (standard/frame.ts). */
+export function rail(s: WizardState, steps: readonly SetUpStep[] = SET_UP): RailStep[] {
   const now = railIndex(s);
   const all = s.screen === 'done';
   return STEPS[s.flow].map((name, i) => ({
     name,
     mark: all || i < now ? 'done' : i > now ? 'todo' : s.screen === 'error' ? 'bad' : s.ask ? 'turn' : 'now',
-    ...(s.flow === 'install' && s.screen === 'setup' && i === now ? { sub: setUpSub(s.setup, setUpSteps(s)) } : {}),
+    ...(s.flow === 'install' && s.screen === 'setup' && i === now ? { sub: setUpSub(s.setup, setUpSteps(s, steps)) } : {}),
+  }));
+}
+
+/**
+ * The rail of a frame whose install ran on its own screens (a device frame's page): those steps, done, then Set up
+ * with the frame's set-up steps, and Done. An error here is set-up's.
+ */
+export function standardRail(s: WizardState, before: readonly string[], steps: readonly SetUpStep[]): RailStep[] {
+  const names = [...before, 'Set up', 'Done'];
+  const all = s.screen === 'done';
+  const now = names.length - 2;
+  return names.map((name, i) => ({
+    name,
+    mark: all || i < now ? 'done' : i > now ? 'todo' : s.screen === 'error' ? 'bad' : s.ask ? 'turn' : 'now',
+    ...(s.screen === 'setup' && i === now ? { sub: setUpSub(s.setup, setUpSteps(s, steps)) } : {}),
   }));
 }
 
