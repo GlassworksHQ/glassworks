@@ -61,7 +61,7 @@ class S1Device(
             SettingsItem.Info({ DAEMON_TITLE }, { daemon(running) }),
             appsReadable(context).takeIf { it }?.let { SettingsItem.Info({ APPS_TITLE }, { apps(context) }) },
             SettingsItem.Link(RADIO_TITLE, radioMode(running), section = "radio"),
-            GenericAndroid.silentUpdatesItem { rootService()?.let { SilentUpdates.read(context, it) } },
+            GenericAndroid.silentUpdatesItem(context) { rootService()?.let { SilentUpdates.read(context, it) } },
             SettingsItem.Info({ BootWriter.TITLE }, { loader() }),
             UpdateChannelRow.item(context),
             release?.let { GenericAndroid.frameVersionItem(context, it) },

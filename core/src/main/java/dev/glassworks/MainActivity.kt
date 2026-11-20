@@ -922,6 +922,7 @@ open class MainActivity : Activity() {
         resumed = true
         hideSystemUi()
         requestRuntimePermissions() // at start, and what was turned on while another screen was in front
+        glassworks.updates?.recheckSilent() // back from Android's settings: Home Assistant's Silent updates follows (#666)
     }
 
     override fun onPause() {

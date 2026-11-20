@@ -62,8 +62,8 @@ class UpdateManager(
 
     /**
      * Whether updates install with nobody at the screen, and why (#422): Home Assistant's *Silent updates*. Read at
-     * [start], on every tick and before an install, since it can change while the app runs ("Install unknown apps",
-     * device owner). Null until [start] has read [rootService].
+     * [start], on every tick, before an install, and on [recheckSilent] and [noticeSilent], since it can change while
+     * the app runs ("Install unknown apps", device owner). Null until [start] has read [rootService].
      */
     @Volatile var silentUpdates: SilentUpdates? = null
         private set
@@ -154,6 +154,25 @@ class UpdateManager(
         val p = Releases.newest(list, Platform.supportedAbis, runtime.releases, channel())
         p.problem?.let { problem("newest release not usable: $it") }
         return p.offer
+    }
+
+    /**
+     * Reads [silentUpdates] again on the update thread and tells Home Assistant when it changed (#666). The app coming
+     * back to the front calls it: the person may have allowed "Install unknown apps" in Android's settings.
+     */
+    fun recheckSilent() = onUpdateThread { if (refreshSilent()) onChange() }
+
+    /**
+     * A fresh read elsewhere (setup's Silent updates step, the Device page, Manage) gave [answer]. When it differs from
+     * [silentUpdates], Home Assistant's sensor follows at once instead of at the next tick, 15 min away (#666). Compared
+     * on the update thread, after any read already under way there (CodeRabbit on #667).
+     */
+    fun noticeSilent(answer: SilentUpdates?) {
+        if (answer != null) onUpdateThread { if (answer != silentUpdates && refreshSilent()) onChange() }
+    }
+
+    private fun onUpdateThread(task: () -> Unit) {
+        if (!stopped) runCatching { exec.execute(task) }
     }
 
     /** Reads [silentUpdates] again and sets the note under an offered update from it. True when the answer changed. */

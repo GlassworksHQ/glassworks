@@ -85,7 +85,7 @@ class GenericAndroid(
      */
     override fun deviceSection(context: Context, running: (String) -> Pane?): SettingsSection =
         SettingsSection(DEVICE, friendlyName().ifBlank { "Device" }, listOfNotNull(
-            silentUpdatesItem { SilentUpdates.read(context, SilentUpdates.Root.NONE) },
+            silentUpdatesItem(context) { SilentUpdates.read(context, SilentUpdates.Root.NONE) },
             UpdateChannelRow.item(context),
             SettingsItem.Info({ HOME_TITLE }, { if (Platform.isHomeApp(context)) HOME_YES else HOME_NO }, fixable = { !Platform.isHomeApp(context) }),
             SettingsItem.Info({ SCREEN_OFF_TITLE }, {
@@ -162,10 +162,13 @@ class GenericAndroid(
 
         /**
          * Every frame's Device page row (#422): whether updates install with nobody at the screen, and how to make
-         * them where they don't. Amber when there's a way. [read] gives null while the frame is still reading it.
+         * them where they don't. Amber when there's a way. [read] gives null while the frame is still reading it. A new
+         * answer goes to Home Assistant's sensor at once (#666).
          */
-        fun silentUpdatesItem(read: () -> SilentUpdates?): SettingsItem.Info {
-            val answer = SilentUpdates.Fresh(read = read)
+        fun silentUpdatesItem(context: Context, read: () -> SilentUpdates?): SettingsItem.Info {
+            val answer = SilentUpdates.Fresh {
+                read().also { (context.applicationContext as? GlassworksApp)?.glassworks?.updates?.noticeSilent(it) }
+            }
             return SettingsItem.Info(
                 { SILENT_UPDATES_TITLE },
                 { answer()?.detail ?: "Checking" },
