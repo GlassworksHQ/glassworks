@@ -5,6 +5,6 @@
   "requires": [
     "speaker"
   ],
-  "status": "beta",
+  "status": "stable",
   "docs": "docs/sendspin.md"
 }

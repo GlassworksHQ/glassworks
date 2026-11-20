@@ -142,8 +142,8 @@ describe('the real frames', () => {
   it('rate every pane, explicitly or worked out', () => {
     for (const id of ['aqara-s1-plus', 'lululemon-mirror', 'generic-android']) expect(Object.keys(support(id)).sort(), id).toEqual([...PANE_IDS].sort());
     expect(support('aqara-s1-plus')).toMatchObject({
-      assist: ['beta', false], diagnostics: ['alpha', true], radio: ['beta', false], sendspin: ['beta', false],
-      timers: ['beta', false], 'time-zone': ['beta', true], 'wall-base': ['alpha', false], 'bluetooth-proxy': ['alpha', true],
+      assist: ['stable', false], diagnostics: ['stable', true], radio: ['beta', false], sendspin: ['stable', false],
+      timers: ['stable', false], 'time-zone': ['stable', true], 'wall-base': ['alpha', false], 'bluetooth-proxy': ['beta', true],
       camera: ['no', true],
     });
     // the legacy build ships every pane the Mirror has the hardware for, so frame.json rates them (not "planned")
