@@ -51,7 +51,8 @@ class AqaraS1Plus(private val aqaraCloud: AqaraCloud = AqaraCloud()) : Frame {
 
     /** The time zone that Aqara resets at every boot and the root helper puts back, and the wall base. */
     override fun panes(ctx: PaneContext, device: ScheduledExecutorService) = listOf(
-        TimeZonePane(ctx, TimeZonePrefs(ctx.prefs("time-zone"))),
+        // the frame agent's time zone, with this boot image's names (#641's follow-up, after #651)
+        TimeZonePane(ctx, TimeZonePrefs(ctx.prefs("time-zone")), TimeZoneKeeper(timeZone = agent.timeZone, onChange = ctx.publishStates)),
         WallBasePane(ctx, WallBasePane.wantedConfig(WallBasePrefs(ctx.prefs("wall-base")), aqaraCloud), device, aqaraCloud),
     )
 
