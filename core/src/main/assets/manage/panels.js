@@ -167,6 +167,9 @@ async function ending(t) {
   say(listCard, 'Panels in Home Assistant', 'Signing out…');
   const ok = await end(t);
   if (mine !== generation) return;
+  // The panel ended (or dropped) the sign-in it kept: the page knows it keeps none now, and asks for Continue without
+  // asking the panel again (that question could only get "none kept", a 404 in its Log).
+  if (t.viaPanel && (ok === true || ok === 'left' || ok === 'ended')) haSignIn = false;
   if (ok === 'busy') {
     return say(listCard, 'Panels in Home Assistant', "The panel is busy, so it hasn't signed out yet. Try again in a moment.",
       h('button', { class: 'pill', type: 'button', onclick: () => ending(t) }, 'Try again'));

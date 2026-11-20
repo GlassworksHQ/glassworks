@@ -48,6 +48,20 @@ class ManageOneSignInEverywhereTest {
         b.post("/manage/signout", mapOf("csrf" to b.csrf()))
         assertEquals(listOf("LONG-LIVED"), f.endedLongLived)
         assertTrue("not a refresh token: nothing to revoke there", f.revoked.isEmpty())
+        // 2026-11-19 panel run: the sign-out's delete left no line in the Log. One line now, with no token in it.
+        assertEquals(1, f.events.count { it.contains("ended the long-lived Home Assistant token this panel made") })
+        assertTrue(f.events.none { "LONG-LIVED" in it })
+    }
+
+    @Test fun aSignOutWhoseDeleteHaDoesntConfirmSaysSo() {
+        val b = handoff()
+        f.endLongLivedWorks = false
+        b.post("/manage/signout", mapOf("csrf" to b.csrf()))
+        assertEquals("two tries", 2, f.endedLongLived.size)
+        assertEquals(1, f.events.count { it.contains("didn't confirm it ended the long-lived Home Assistant token") })
+        f.endLongLivedWorks = true
+        f.server.sweep()
+        assertEquals("the sweep ends it after", 3, f.endedLongLived.size)
     }
 
     @Test fun allPanelsSignOutDeletesItTooAndTheSessionStays() {

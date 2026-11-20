@@ -19,7 +19,7 @@ import org.junit.Test
  */
 class HaGatewayClientLongLivedTest {
     /** A fake HA websocket: takes [token] only, and answers the three calls as HA does. */
-    private class FakeHa(val token: String, val makes: String? = "LLAT-1") {
+    private class FakeHa(val token: String, val makes: String? = "LLAT-1", val closesOnDelete: Boolean = false) {
         val sent = ArrayList<JSONObject>()
         var deleted: String? = null
         fun socket(): HaSocket = object : HaSocket {
@@ -27,12 +27,13 @@ class HaGatewayClientLongLivedTest {
             override fun send(text: String) {
                 val m = JSONObject(text).also { sent += it }
                 when (m.optString("type")) {
-                    "auth" -> out += JSONObject().put("type", if (m.optString("access_token") == token) "auth_ok" else "auth_invalid").toString()
+                    "auth" -> out += JSONObject().put("type", if (m.optString("access_token") == token && deleted == null) "auth_ok" else "auth_invalid").toString()
                     "auth/long_lived_access_token" -> out += result(m, makes != null, makes)
                     "auth/refresh_tokens" -> out += result(m, true, JSONArray()
                         .put(JSONObject().put("id", "other").put("is_current", false))
                         .put(JSONObject().put("id", "mine").put("is_current", true)))
-                    "auth/delete_refresh_token" -> { deleted = m.optString("refresh_token_id"); out += result(m, true, JSONObject()) }
+                    // HA deletes it, then closes this connection (it was signed in with that token): maybe before the reply.
+                    "auth/delete_refresh_token" -> { deleted = m.optString("refresh_token_id"); if (!closesOnDelete) out += result(m, true, JSONObject()) }
                 }
             }
             override fun receive(): String? = out.removeFirstOrNull()
@@ -62,6 +63,16 @@ class HaGatewayClientLongLivedTest {
         assertTrue(client(ha).endLongLived("http://homeassistant.local:8123", "LLAT-1"))
         assertEquals("the current one, no other", "mine", ha.deleted)
         assertTrue("one HA no longer takes is as good as ended", client(FakeHa("SOMETHING-ELSE")).endLongLived("http://homeassistant.local:8123", "LLAT-1"))
+    }
+
+    @Test fun aConnectionHaClosesRightAfterTheDeleteStillEndsIt() {
+        val ha = FakeHa("LLAT-1", closesOnDelete = true)
+        val gateway = client(ha)
+        assertFalse("no reply on that connection: not confirmed yet", gateway.endLongLived("http://homeassistant.local:8123", "LLAT-1"))
+        assertEquals("mine", ha.deleted)
+        // HaSignIn's second try then finds HA no longer takes it, which is as good as ended.
+        val signIn = dev.glassworks.manage.HaSignIn(gateway)
+        assertTrue(signIn.end(dev.glassworks.manage.HaSignIn.Kept("http://homeassistant.local:8123", "", "LLAT-1", longLived = true)))
     }
 
     @Test fun noAnswerIsNotEnded() {

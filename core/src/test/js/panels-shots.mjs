@@ -560,7 +560,15 @@ try {
   assert.equal(await js("JSON.parse(sessionStorage.getItem('gw-ha')).refresh"), undefined);
   assert.equal(wsTokens.at(-1), 'fake-access-from-panel', "and the list came with the panel's token");
   keepOk = false;
+  // Sign out there, and the panel confirms: Continue, with no question to the panel after it (2026-11-19 run's 404).
+  const accessBeforeSignOut = accessAsked;
+  forgetOk = true;
+  await js("[...document.querySelectorAll('#gw-list button')].find((b) => b.textContent === 'Sign out').click()");
+  await until("[...document.querySelectorAll('#gw-list button')].some((b) => b.textContent.startsWith('Continue with Home Assistant'))", 'Continue after a confirmed sign-out');
+  await sleep(300);
+  assert.equal(accessAsked, accessBeforeSignOut, 'no renewal asked after the panel ended its sign-in');
   panelSignIn = true;
+  panelKeeps = true;
   // The module's download stalls (CodeRabbit on #488): the page says to reload it, rather than "Finding your panels…" for good.
   stallScript = 'panels-core.js';
   await call('Page.navigate', { url: PAGE });

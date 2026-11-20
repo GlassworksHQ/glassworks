@@ -113,10 +113,31 @@ class ManageServer(
      */
     private fun endSession(session: String, now: Boolean = false) {
         asked.entries.removeIf { it.value.session == session }
-        if (now) { endKept(session); leftFor.remove(session); return }
+        if (now) {
+            val k = kept[session] ?: unrevoked[session]
+            val ended = endKept(session)
+            leftFor.remove(session)
+            k?.let { said(it, ended) }
+            return
+        }
         // One step under the lock: a forget that comes in between finds it in one map or the other, never in neither.
-        synchronized(grants) { kept.remove(session)?.also { queue(session, it) } } ?: return
-        background { endKept(session); leftFor.remove(session) }
+        val k = synchronized(grants) { kept.remove(session)?.also { queue(session, it) } } ?: return
+        background { said(k, endKept(session)); leftFor.remove(session) }
+    }
+
+    /**
+     * One line in the Log for how a session's kept sign-in ended in Home Assistant, as it ends with the session (sign-out,
+     * Security, running out): a sign-out that ends it says so, and one HA didn't confirm says that (2026-11-19 panel run:
+     * a sign-out's delete left no trace either way). No token in it. A sign-in left at an old address has its own line.
+     */
+    private fun said(k: HaSignIn.Kept, ended: Ended) {
+        val what = if (k.longLived) "the long-lived Home Assistant token this panel made" else "the Home Assistant sign-in this panel kept"
+        when (ended) {
+            Ended.DONE -> event("Home Assistant ended $what for a Manage session that ended")
+            Ended.NOT_CONFIRMED -> event("Home Assistant didn't confirm it ended $what for a Manage session that ended; the panel tries again" +
+                if (k.longLived) ", and HA ends it within a day anyway" else "")
+            Ended.LEFT -> {}
+        }
     }
 
     /**
