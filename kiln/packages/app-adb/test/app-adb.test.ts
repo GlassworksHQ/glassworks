@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PanelShell } from '@glassworks/adb';
-import { ManifestError, Steps, apiKeyFingerprint, apiKeySocketUp, apkHome, apkInfo, apkPermissions, axmlTree, dropAdmin, grantPermissions, handOverApiKey, handOverDone, handOverSignIn, handoverCarries, kioskVersion, q, readApiKey, readSignIn, sendWifi, startApp, zipEntry } from '../src';
+import { ManifestError, Steps, apiKeyFingerprint, apiKeySocketUp, apkHome, apkInfo, apkPermissions, applySettings, axmlTree, dropAdmin, grantPermissions, handOverApiKey, handOverDone, handOverSignIn, handoverCarries, kioskVersion, q, readApiKey, readSignIn, sendWifi, startApp, zipEntry } from '../src';
 import { FakeKeySocket, HOME_ACTIVITY, app, fakeApk, filter, zip, type FakeEl } from './fakes';
 
 class Shell implements PanelShell {
@@ -395,5 +395,33 @@ describe('Wi-Fi over the app\'s Improv socket', () => {
       openStream: async () => { throw new Error('connection refused'); },
     };
     expect(await sendWifi(p, 'Home Net', 'not-a-real-password', async () => {}, 0)).toBe(false);
+  });
+});
+
+describe('applySettings', () => {
+  /** A device that records what runs, answering nothing. */
+  const device = () => {
+    const cmds: string[] = [];
+    return { cmds, p: { run: async (cmd: string) => { cmds.push(cmd); return { out: '', code: 0 }; }, push: async () => {} } as PanelShell };
+  };
+  const APP = { package: 'dev.example.app', activity: 'dev.example.app/.Main' };
+
+  it('sets the time zone, language and clock, then starts the app with the language: nothing installed', async () => {
+    const { cmds, p } = device();
+    await applySettings(new Steps(p), { locale: 'en-GB', timezone: 'Europe/London', clock24: true }, APP);
+    expect(cmds).toEqual([
+      'settings put global auto_time_zone 0', 'service call alarm 3 s16 \'Europe/London\'', 'getprop persist.sys.timezone',
+      'settings put system system_locales \'en-GB\'', 'settings put system time_12_24 24', 'am start -n dev.example.app/.Main --es set_locale \'en-GB\'',
+    ]);
+  });
+
+  it('leaves what wasn\'t picked as it is, and refuses a value that isn\'t a time zone or a language before running anything', async () => {
+    const { cmds, p } = device();
+    await applySettings(new Steps(p), { clock24: false }, APP);
+    expect(cmds).toEqual(['settings put system time_12_24 12', 'am start -n dev.example.app/.Main']);
+    const bad = device();
+    await expect(applySettings(new Steps(bad.p), { timezone: 'x; reboot', clock24: true }, APP)).rejects.toThrow(/bad time zone/);
+    await expect(applySettings(new Steps(bad.p), { locale: 'en_GB; reboot', clock24: true }, APP)).rejects.toThrow(/bad locale/);
+    expect(bad.cmds).toEqual([]);
   });
 });
