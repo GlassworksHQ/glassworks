@@ -1118,8 +1118,9 @@ take_app_dataset() {
     [ $r_ = 2 ] && { say "ignoring app dataset hand-off ($WHY)"; return 0; }
     echo "$TAKE_MTIME" > "$DIR/thread-dataset.in.t"
   fi
-  # (a time that couldn't be recorded counts as new: a full /data never costs a Join)
-  if [ "$(num_in "$DIR/thread-dataset.in.t" 2147483647)" -le "$(num_in "$DIR/thread-left" 0)" ]; then
+  # A time that wasn't recorded (a full /data, or the agent stopped between the move and the write) never gets past
+  # a recorded Leave: such a hand-off counts as older than it. With no Leave recorded it is kept.
+  if [ "$(num_in "$DIR/thread-dataset.in.t" 0)" -le "$(num_in "$DIR/thread-left" -1)" ]; then
     rm -f "$DIR/thread-dataset.in" "$DIR/thread-dataset.in.t"
     say "ignoring app dataset hand-off (staged before a Leave)"; return 0
   fi

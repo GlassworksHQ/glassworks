@@ -1005,6 +1005,14 @@ check "Leave in Off: the dataset goes, an older staged hand-off waits in the app
 echo thread_router > "$T/props/persist.glassworks.radio_mode"; : > "$T/log"; LOOPS=1 helper; pkill -f "sleep 1000"
 check "...taken later in Thread router, it is discarded, never joined" test ! -e /data/s1kiosk/radio/thread-dataset -a ! -e /data/s1kiosk/radio/thread-dataset.in -a ! -e "$APP/files/radio/thread-dataset"
 check "...and said so" grep -q 'staged before a Leave' "$T/log"
+D=/data/s1kiosk/radio
+( umask 077; echo 0e0800000000000a0000 > $D/thread-dataset.in ); rm -f $D/thread-dataset.in.t; LOOPS=1 helper; pkill -f "sleep 1000"
+check "a pending hand-off without its time (agent stopped after the move), after a Leave: discarded" test ! -e $D/thread-dataset -a ! -e $D/thread-dataset.in
+mkdir $D/thread-dataset.in.t; handoff 0e0800000000000b0000; touch -d "@$(( $(date +%s) - 30 ))" "$APP/files/radio/thread-dataset"
+LOOPS=1 helper; pkill -f "sleep 1000"
+check "...one whose time can't be written, after a Leave: discarded, not stored" test ! -e $D/thread-dataset -a ! -e $D/thread-dataset.in -a ! -e "$APP/files/radio/thread-dataset"
+rm -f $D/thread-left; handoff 0e0800000000000c0000; LOOPS=1 helper; pkill -f "sleep 1000"; rmdir $D/thread-dataset.in.t
+check "...with no Leave recorded, a hand-off without its time is stored" test "$(cat $D/thread-dataset 2>/dev/null)" = 0e0800000000000c0000
 # (the cases below join: a stored dataset again, as a hand-off after the Leave above would store it)
 ( umask 077; echo 0e080000000000010000 > /data/s1kiosk/radio/thread-dataset ); rm -f /data/s1kiosk/radio/thread-left
 # #645: otbr-agent failing to start shows its own error (JOINED is cleared before, not after, start_otbr)
