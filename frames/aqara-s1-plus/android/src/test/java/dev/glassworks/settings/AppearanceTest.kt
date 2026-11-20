@@ -74,6 +74,22 @@ class AppearanceTest {
         assertEquals("dusk/light", prefs.overlayTheme)
     }
 
+    @Test fun aSavedCustomThemeIsOneMoreCardAndShowsAsPicked() {
+        val custom = dev.glassworks.theme.Themes.custom(
+            dev.glassworks.theme.Themes.Palette(0xffff5722.toInt(), 0xff00bcd4.toInt(), 0xff101418.toInt()),
+            dev.glassworks.theme.Themes.Palette(0xffbf360c.toInt(), 0xff006064.toInt(), 0xfff5f5f5.toInt()),
+        )
+        prefs.customTheme = custom
+        prefs.overlayTheme = "custom/light"
+        val c = picker(section())
+        assertEquals("custom/light", c.value())
+        assertEquals(12, c.options().size)
+        val s = c.swatch!!("custom/light")
+        assertEquals("Custom", s.group)
+        assertEquals(0xffbf360c.toInt(), s.a)
+        assertEquals(custom.light, prefs.overlayPick.palette)
+    }
+
     @Test fun anUnknownSavedThemeReadsAsTheDefaultAndAResetClearsIt() {
         app.getSharedPreferences("kiosk", 0).edit().putString("overlay_theme", "neon/dark").commit()
         assertEquals("glassworks/dark", KioskPrefs(app).overlayTheme)

@@ -64,10 +64,13 @@ class CustomThemeTest {
     }
 
     @Test fun inkIsReadableOnAnyGround() {
-        for (g in listOf(0xff000000.toInt(), 0xffffffff.toInt(), 0xff808080.toInt(), 0xffffeb3b.toInt(), 0xff1e3a8a.toInt(), 0xffef4444.toInt())) {
+        for (g in listOf(0xff000000.toInt(), 0xffffffff.toInt(), 0xff808080.toInt(), 0xff757575.toInt(), 0xff6b6b6b.toInt(), 0xffffeb3b.toInt(), 0xff1e3a8a.toInt(), 0xffef4444.toInt())) {
             val p = Themes.Palette(g, g, g)
             assertTrue(Themes.hex(g), Themes.contrast(p.ink, g) >= 4.5)
         }
+        // A mid grey where neither of Glassworks' inks reaches 4.5:1 (CodeRabbit on #702): pure black or white does.
+        val mid = Themes.Palette(0xff757575.toInt(), 0xff757575.toInt(), 0xff757575.toInt())
+        assertTrue(Themes.contrast(mid.ink, mid.ground) >= 4.5)
         assertEquals(Themes.INK_LIGHT, night.ink)
         assertEquals(Themes.INK_DARK, pale.ink)
         assertTrue(night.darkGround)

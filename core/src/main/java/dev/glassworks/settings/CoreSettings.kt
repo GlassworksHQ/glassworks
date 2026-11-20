@@ -226,10 +226,11 @@ class CoreSettings(
      */
     private fun theme() = SettingsItem.Choice(
         THEME_TITLE,
-        value = { Themes.pick(prefs.overlayTheme).id },
-        options = { Themes.options() },
+        // A saved custom theme (#691's Custom themes) is one more card, and shows as picked when it is.
+        value = { prefs.overlayPick.id },
+        options = { Themes.options(prefs.customTheme) },
         swatch = { id ->
-            val p = Themes.pick(id)
+            val p = Themes.pick(id, prefs.customTheme)
             SettingsItem.Swatch(p.theme.name, if (p.theme === Themes.GLASSWORKS) "Default" else "", p.dark, p.palette.a, p.palette.b, p.palette.ground)
         },
     ) { v, done ->

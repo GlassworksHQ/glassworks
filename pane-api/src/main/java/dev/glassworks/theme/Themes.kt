@@ -21,8 +21,15 @@ object Themes {
         /** Whether the ground is dark: the light text goes on it. From the ground itself, so a custom palette is right too. */
         val darkGround: Boolean get() = luminance(ground) < 0.18
 
-        /** The text colour on the ground: near-white or near-black, whichever stands out more (Glassworks' own inks). */
-        val ink: Int get() = if (contrast(INK_LIGHT, ground) >= contrast(INK_DARK, ground)) INK_LIGHT else INK_DARK
+        /**
+         * The text colour on the ground: Glassworks' near-white or near-black ink, whichever stands out more, while it
+         * reaches 4.5:1 (WCAG's text contrast); on a mid ground where neither does, pure white or black, whichever does.
+         */
+        val ink: Int get() {
+            val branded = if (contrast(INK_LIGHT, ground) >= contrast(INK_DARK, ground)) INK_LIGHT else INK_DARK
+            if (contrast(branded, ground) >= 4.5) return branded
+            return if (contrast(WHITE, ground) >= contrast(BLACK, ground)) WHITE else BLACK
+        }
 
         /**
          * [colour] as text or a thin line on the ground: itself when it stands out at least [min] to 1 (WCAG's 3:1 for large
@@ -110,6 +117,8 @@ object Themes {
     /** Glassworks' inks: the screen's text on night, and on day ([dev.glassworks.brand.Tokens]'s fg). */
     const val INK_LIGHT = 0xfff4f4f5.toInt()
     const val INK_DARK = 0xff0c0e13.toInt()
+    private const val WHITE = 0xffffffff.toInt()
+    private const val BLACK = 0xff000000.toInt()
 
     /** WCAG relative luminance, 0 (black) to 1 (white). */
     fun luminance(c: Int): Double {
@@ -129,6 +138,7 @@ object Themes {
         return (0xff shl 24) or (ch(16) shl 16) or (ch(8) shl 8) or ch(0)
     }
 
-    /** Every pick as (id, name), theme by theme, light before dark: the picker's options. */
-    fun options(): List<Pair<String, String>> = ALL.flatMap { t -> listOf(false, true).map { dark -> Pick(t, dark).let { it.id to it.name } } }
+    /** Every pick as (id, name), theme by theme, light before dark, then [custom]'s when there is one: the picker's options. */
+    fun options(custom: Theme? = null): List<Pair<String, String>> =
+        (ALL + listOfNotNull(custom)).flatMap { t -> listOf(false, true).map { dark -> Pick(t, dark).let { it.id to it.name } } }
 }
