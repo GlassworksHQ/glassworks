@@ -89,15 +89,17 @@ class PanesStep(
                     try {
                         results[i] = runCatching { p.choice.apply(wanted[i]) }.getOrElse { it.message ?: "failed" }
                     } finally {
-                        done[i].countDown()
+                        // Its count back before it says it ended: the caller then publishes with the guard free of it,
+                        // and a Continue right after isn't refused BUSY.
                         finish()
+                        done[i].countDown()
                     }
                 }
                 // A worker that never starts is a card that failed, and gives back its count (CodeRabbit on #699).
                 try { start(work, "glassworks-setup-pane-$i") } catch (e: Throwable) {
                     results[i] = "couldn't start (${e.message ?: e::class.java.simpleName})"
-                    done[i].countDown()
                     finish()
+                    done[i].countDown()
                 }
             }
             // Monotonic: a wall-clock correction mid-way must not stretch the budget.
