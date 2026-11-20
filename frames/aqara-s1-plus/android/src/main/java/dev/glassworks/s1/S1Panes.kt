@@ -131,6 +131,10 @@ class S1Panes : AppParts {
         notifications.onOpenList = { host.post { host.hideMenu(); notes.openList() } }
         notifications.onReveal = { host.post { host.hideMenu() } }
         runtime.onVoiceUi = { voice.update(voiceUi, panePrefs.voice.overlay) }
+        // THROWAWAY (test-build/glowbench-s1): the #691 edge glow benchmark, in debug and test builds only.
+        // The receiver finds the voice overlay's parent when a run starts.
+        var glowBench: (() -> Unit)? =
+            if (runtime.build.debug || runtime.build.testBuild.isNotEmpty()) dev.glassworks.s1.glowbench.GlowBench.attach(activity, voice) else null
         return listOf(
             object : PaneOverlay {
                 override val view = timers
@@ -151,7 +155,7 @@ class S1Panes : AppParts {
             object : PaneOverlay {
                 override val view = voice
                 override val layoutParams = FrameLayout.LayoutParams(-1, -1)
-                override fun destroy() { runtime.onVoiceUi = null }
+                override fun destroy() { runtime.onVoiceUi = null; glowBench?.invoke(); glowBench = null }
             },
             // Images leaving the panel (#117): the dot follows, on the main thread (the device posts each change).
             CameraWiring.dot(runtime, activity),
