@@ -67,12 +67,12 @@ class OrientationTest {
     }
 
     /**
-     * The Mirror stands portrait because Kiln's first boot locks its Android there (`user_rotation=3`, auto-rotate
-     * off, #198): the app turns with it and locks nothing. Its model isn't a frame row (lululemon-mirror/research has
-     * no reading of it).
+     * The Mirror's model alone ("MSM8916 for arm64", which other MSM8916 devices share) isn't a frame: the device turns
+     * as Android says. A real Mirror carries its frame's mark and asks for portrait itself (#686, the generic app's
+     * MirrorOrientationTest).
      */
     @Test @Config(qualifiers = "w540dp-h960dp-port-xhdpi")
-    fun theMirrorStandsAsItsAndroidDoes() {
+    fun theMirrorsModelAloneStandsAsItsAndroidDoes() {
         ShadowBuild.setModel("MSM8916 for arm64")
         assertEquals(ActivityInfo.SCREEN_ORIENTATION_FULL_USER, requested())
     }

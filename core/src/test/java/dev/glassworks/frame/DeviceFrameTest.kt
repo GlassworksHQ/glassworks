@@ -9,6 +9,7 @@ import dev.glassworks.testing.RepoFiles
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -49,6 +50,7 @@ class DeviceFrameTest {
         assertEquals("Studio Mirror", frame.hardware.model)
         assertEquals("the mDNS board record names its frame", "lululemon-mirror", frame.board)
         assertEquals("its camera is capped at 720p (#679)", 1280 * 720, frame.cameraMaxPixels)
+        assertEquals("it asks for portrait itself, whatever auto-rotate says (#686)", Orientation.PORTRAIT_FIXED, frame.orientation)
     }
 
     @Test fun anotherMsm8916DeviceWithTheSameSystemImageIsNotAMirror() {
@@ -57,6 +59,7 @@ class DeviceFrameTest {
         assertEquals("MSM8916 for arm64", frame.friendlyName())
         assertEquals("Android", frame.hardware.manufacturer)
         assertEquals("generic-android", frame.board)
+        assertEquals(Orientation.ANY, frame.orientation)
     }
 
     @Test fun aMirrorBootImageOnAnotherBoardIsNotAMirror() {
@@ -74,6 +77,7 @@ class DeviceFrameTest {
         assertEquals("Pixel Tablet", frame.friendlyName())
         assertEquals("Google", frame.hardware.manufacturer)
         assertEquals("generic-android", frame.board)
+        assertEquals("as its KNOWN row", Orientation.LANDSCAPE, frame.orientation)
     }
 
     @Test fun anUnknownDeviceWithNoPropertiesKeepsItsOwnName() {
@@ -82,6 +86,7 @@ class DeviceFrameTest {
         assertEquals("Galaxy Tab A", frame.friendlyName())
         assertEquals("Samsung", frame.hardware.manufacturer)
         assertEquals("generic-android", frame.board)
+        assertEquals(Orientation.ANY, frame.orientation)
     }
 
     @Test fun onRobolectricItReadsTheRealPropertiesAndFindsNoFrame() {
@@ -122,6 +127,10 @@ class DeviceFrameTest {
             assertEquals(frame.id, json.getString("name"), frame.name)
             assertEquals(frame.id, json.getString("brand"), frame.brand)
             assertEquals("${frame.id}: camera.maxPixels", json.optJSONObject("camera")?.getInt("maxPixels"), frame.cameraMaxPixels)
+            val display = json.getJSONObject("display")
+            if (frame.orientation == Orientation.PORTRAIT_FIXED) {
+                assertTrue("${frame.id}: a fixed portrait needs a portrait display", display.getInt("height") > display.getInt("width"))
+            }
         }
     }
 }
