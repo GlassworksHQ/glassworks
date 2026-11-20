@@ -10,21 +10,29 @@
 # Overlays: themes, Assist and timers (mockups)
 
 Design mockups for #691: a theme for every native overlay, the Assist overlay as a reworked orb or an
-edge glow, and the timers. **Proposal, not approved.** Nothing here is built. Once the maintainer
-approves a direction, the build follows in small PRs (theme plumbing and settings, then Assist, then
-timers), each with Robolectric mockups of the real views.
+edge glow, and the timers. Nothing here is built.
+
+**Status (2026-11-20):** the maintainer approved the themes, the picker, the orb and the timers (see
+[Decided](#decided)). The edge glow is in a second round: [edge-lit glass](#assist-the-edge-glow-round-2-edge-lit-glass),
+with three entrances to choose from. Once that is approved, the build follows in small PRs (theme
+plumbing and settings, then Assist, then timers), each with Robolectric mockups of the real views.
 
 | File | What |
 |---|---|
 | [mockups.html](mockups.html) | Every screen, one per URL (`?scene=…&frame=…&mode=…&theme=…`). The parameters are listed at the top of the file |
-| [glow.html](glow.html) | The motion preview: one voice run on a loop, as the edge glow or the orb, in any theme |
-| [render.sh](render.sh) | Renders every screen to PNG at the panels' pixel sizes with headless Chrome. `MOTION=1` also makes the GIFs |
+| [edge.js](edge.js) | The round 2 edge glow: its timeline, its states and its three entrances, drawn as the A133 would draw it |
+| [glow.html](glow.html) | The motion preview: the edge glow's three entrances (and round 1 and the orb, to compare), a full run or the entrance and exit at quarter speed, in any theme |
+| [render.sh](render.sh) | Renders every screen to PNG at the panels' pixel sizes with headless Chrome. `MOTION=1` also makes the round 1 GIFs |
+| [motion.cjs](motion.cjs) | Records the round 2 edge glow frame by frame, then makes a GIF and an MP4 |
 
 To look at them, open the files in Chrome (no server needed), or render them:
 
 ```sh
 docs/design/overlays/render.sh /tmp/overlays                 # every still, ~110 PNGs
-MOTION=1 docs/design/overlays/render.sh /tmp/overlays none   # the motion GIFs only
+MOTION=1 docs/design/overlays/render.sh /tmp/overlays none   # the round 1 GIFs only
+# round 2: one GIF per call. Needs playwright-core (npm i playwright-core in any folder) and ffmpeg.
+NODE_PATH=<folder>/node_modules node docs/design/overlays/motion.cjs /tmp/overlays s1-spark-cycle \
+  "scene=lit&variant=spark&state=cycle&frame=s1&mode=dark&theme=glassworks" 960 480 0.75 0 16300 1 15
 ```
 
 The screens are sized in dp, as the app is: the S1 at 960×480 dp (density 1.5, 1440×720 px) and the
@@ -71,6 +79,9 @@ frame (the Mirror) is set from there (Manage/panel parity).
 - One card per theme: two orbs (light and dark) under the theme's name. Tap an orb to pick that
   theme in that variant.
 - The active orb is ringed and carries a sun (light) or moon (dark) badge.
+- **Follow Home Assistant's dark mode**, a switch under the cards: a named theme switches between its
+  light and dark with the dashboard. The active orb's badge is then half sun, half moon. With the
+  Home Assistant theme it's always on, so the switch shows on and greyed.
 - **Assist**: Orb or Edge glow. A segmented control on the panel, two choice cards on Manage.
 
 ## Assist: the orb (reworked)
@@ -89,23 +100,66 @@ The scrim is the theme's ground at 90 %, lit from top left (a) and bottom right 
 Every layer is still a baked bitmap that only changes alpha, scale and rotation, so it stays as cheap
 as today on the A133 (no live blur on Android 10).
 
-## Assist: the edge glow
+## Assist: the edge glow, round 1 (superseded)
 
-Our take on an edge glow. We call it **two lights**. Light a and light b live on the screen's border,
-and the dashboard stays in view under a light dim that deepens towards the bottom, where a glass
-caption shows what was heard and the reply.
+Round 1 put the theme's two lights on the border as a soft band ("two lights"). The maintainer's
+review (2026-11-20): it looks fine but doesn't feel special yet, and it has no entrance; it jumps
+straight into listening. Its mockups stay in `mockups.html` (`scene=glow-*`) to compare.
 
-| State | The border |
+## Assist: the edge glow, round 2: edge-lit glass
+
+The screen behaves like a thick pane of glass whose edges catch the light. The brand's glass is lit
+from the top left (light **a**) and the bottom right (light **b**). Here those two lights enter the
+pane, run along its edges, and make a bright **caustic** where they meet. A thin bevel line just
+inside the edge shows the pane's thickness. The dashboard stays in view under a light dim, with the
+glass caption at the bottom.
+
+### Three entrances and exits
+
+The states are the same for all three; the variant sets how the light arrives, leaves, and where it
+rests between moments.
+
+| Variant | Coming on | Going away | Rests |
+|---|---|---|---|
+| **Spark** | The light ignites at the frame's mic, splits both ways round the edge (a one way, b the other) and flares where the two halves meet, opposite the mic. 650 ms | It runs back into the mic and blinks out. 400 ms | Evenly round the edge |
+| **Sheen** | A sheen of light crosses the whole pane diagonally from the top left. Each edge catches it as it passes; the top left corner flares in a, the bottom right in b. 600 ms | A second, faster sheen switches the edges off behind it. 350 ms | In the two lit corners |
+| **Pour** | White-hot light pours in at the bottom, runs up both sides, meets at the top in a flare and cools into a and b as it goes. 700 ms | It cools and drains away to the bottom. 450 ms | Pooled along the bottom |
+
+The caption rises in as the entrance lands and leaves first on the way out.
+
+### The states
+
+| State | The edge |
 |---|---|
-| Listening | The two lights gather along the bottom edge and swell with the voice |
-| Thinking | Two short arcs, a and b, chase each other round the border |
-| Speaking | The whole border lights up, a to b, and breathes with the reply |
-| Error | Rose wash, then the overlay goes |
+| Listening | Light gathers at the mic and swells with the voice level. Each word sends a ripple both ways along the edge from the mic: a towards the top left, b towards the bottom right |
+| Thinking | Light trapped in the glass: a and b run round the edge in opposite directions, with tails, and flare where they cross (about every 1.3 s). Small glints catch here and there |
+| Speaking | The whole edge is lit a to b and breathes with the reply. On each word a pulse leaves the two lit corners (a top left, b bottom right) and they flare where they meet |
+| Error | One rose pulse (a status colour) leaves the mic both ways, then the edge holds a dim rose until it goes |
 
-How it would draw on the A133: three bands (a 2.5 dp line, a 12 dp glow and a 40 dp haze), each a
-`SweepGradient` stroke round the screen. The blurred bands are baked once per theme, and per frame
-only the sweep's rotation, alpha and band scale change. Whether a full-screen alpha layer holds 60 fps
-on the S1 needs measuring before the build.
+### The mic, as frame data
+
+Spark and the listening ripples start at the mic. That needs a new field in each frame's
+`design/frame.json`, for example `"mic": { "edge": "top", "at": 0.5 }` (which screen edge, and how far
+along it). The mockups put the S1's and the Mirror's mic at the middle of the top edge. **Those
+positions are placeholders until someone checks them on the devices.** A frame without the field
+falls back to the middle of the top edge.
+
+### What it costs on the A133
+
+No blur runs per frame in any variant. The mockup draws it the way the build would, so the cost below
+is what the mockup does.
+
+| Piece | Baked once | Per frame |
+|---|---|---|
+| The edge light (all variants, all states) | Three white sprites: a 4 dp core, a 20 dp glow, a 64 dp haze | About 1,240 stamp points round the S1's edge (a core every 4 dp, a glow every 8, a haze every 18), each drawn with an alpha into the one or two colour layers it touches: roughly 2,000 to 2,500 bitmap draws. Each layer is then tinted (SRC_IN) and added to the screen. Alternative if that's too many draws: per edge, one rect with a baked falloff bitmap times a `LinearGradient` whose stops hold the light along that edge |
+| Caustics and glints | One flare sprite per colour (a, b, white, rose) | A few draws with scale and alpha |
+| Sheen | One diagonal band bitmap | A translation and an alpha (only during Sheen's entrance and exit) |
+| Bevel line | Nothing | One stroked rounded rect with a gradient and an alpha |
+| Dim and caption | The dim gradient | Alpha and a small translation |
+
+To measure before the build: whether a full-screen additive layer at 60 fps fits on the S1 next to
+GeckoView. The sprites only need redrawing while the overlay is on screen; idle, it is gone, as the
+voice overlay is today.
 
 ## Timers
 
@@ -122,13 +176,20 @@ The Mirror has no touch input (`Input.NONE`). Its mockups show no tap targets: n
 cancel", no "Tap anywhere to dismiss", no "Hide" on the board. Its theme and Assist style are set on
 Manage.
 
+## Decided
+
+The maintainer, 2026-11-20, on round 1:
+
+1. A new **Appearance** page on the panel, and the same section on Manage.
+2. Keep all five named themes (Glassworks, Aurora, Dusk, Dune, Graphite), plus Home Assistant.
+3. The timer done screen uses the theme's colours, as drawn.
+4. The timer board is wanted.
+5. A named theme can also follow Home Assistant's dark mode: the switch under the theme cards, on the
+   panel and on Manage.
+
+Not yet: the edge glow. Round 2 is above.
+
 ## Open questions for the maintainer
 
-1. Is **Appearance** the right page, or should the theme sit on *Screen* and the Assist style on
-   *Voice*?
-2. Five named themes plus Home Assistant: keep all five, or drop one (Graphite or Dune)?
-3. Timer done: the theme's lights (as drawn) or amber, as today, because a finished timer wants
-   attention?
-4. Is the timer **board** wanted at all, or should three or more timers stay as orbs?
-5. With a named theme, should light or dark also be able to follow HA's dark mode? (Not drawn: one
-   more row.)
+1. Which entrance and exit: Spark, Sheen or Pour?
+2. Where is each frame's mic? The S1's and the Mirror's positions here are placeholders.

@@ -106,6 +106,11 @@ body{font-family:InterRepo,Inter,system-ui,sans-serif;-webkit-font-smoothing:ant
 .tc .sw .bd{position:absolute;right:-9px;top:-9px;width:20px;height:20px;border-radius:50%;background:var(--bd-bg);border:1px solid var(--edge);display:grid;place-items:center;color:var(--fg)}
 .tc .nm{font-size:13.5px;color:var(--fg);white-space:nowrap}
 .tc .sub{font-size:11px;color:var(--fa);margin-top:-7px}
+.tg{width:52px;height:30px;border-radius:999px;background:var(--tg-off);position:relative;flex:none}
+.tg::after{content:"";position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.tg.on{background:linear-gradient(90deg,var(--a),var(--b))}.tg.on::after{left:25px}
+.follow{display:flex;justify-content:space-between;align-items:center;gap:16px;border-top:1px solid var(--edge);margin-top:16px;padding-top:14px}
+.follow.off{opacity:.55}
 
 /* ------------------------------------------------------------ Manage */
 .mg{position:absolute;inset:0;color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:16px;line-height:1.45;
@@ -153,6 +158,7 @@ body{font-family:InterRepo,Inter,system-ui,sans-serif;-webkit-font-smoothing:ant
 </head>
 <body>
 <div id="root"></div>
+<script src="edge.js"></script>
 <script>
 // ======================================================================= themes
 // Each theme: two lights (a top-left, b bottom-right, as the brand's glass is lit) for dark and for
@@ -189,6 +195,8 @@ const mode = q.get("mode") || "dark";
 const themeId = q.get("theme") || "glassworks";
 const T0 = +(q.get("t") || 1200);
 const anim = q.get("anim") === "1";
+// follow=1: a named theme switches light and dark with Home Assistant (decided 2026-11-20)
+const follow = q.get("follow") === "1";
 const dark = mode === "dark";
 const th = THEMES[themeId][mode];
 const SIZES = { s1: [960, 480], mirror: [540, 960], phone: [390, 860], desk: [1200, 1000] };
@@ -214,7 +222,7 @@ function vars(t, isDark) {
     "--tc-bg": "rgba(255,255,255,.025)", "--tc-on-bg": "rgba(255,255,255,.06)", "--tc-on-edge": "rgba(255,255,255,.28)",
     "--bd-bg": "#1b1c22", "--t-sph": `radial-gradient(circle at 50% 60%, ${rgba(t.a, .10)}, transparent 70%), #121318`,
     "--t-shadow": "0 6px 22px rgba(0,0,0,.5)", "--tag-bg": rgba(t.ground, .85),
-    "--g1": rgba(t.a, .13), "--g2": rgba(t.b, .14), "--ch-bg": "#15161b",
+    "--g1": rgba(t.a, .13), "--g2": rgba(t.b, .14), "--ch-bg": "#15161b", "--tg-off": "rgba(255,255,255,.14)",
   } : {
     "--fg": "#0c0e13", "--mu": "#4f525c", "--fa": "#7d808b",
     "--glass": "rgba(255,255,255,.66)", "--edge": "rgba(16,20,32,.10)",
@@ -228,7 +236,7 @@ function vars(t, isDark) {
     "--tc-bg": "rgba(255,255,255,.45)", "--tc-on-bg": "#fff", "--tc-on-edge": "rgba(16,20,32,.32)",
     "--bd-bg": "#fff", "--t-sph": `radial-gradient(circle at 50% 60%, ${rgba(t.a, .10)}, transparent 70%), #fbfbfc`,
     "--t-shadow": "0 6px 22px rgba(16,20,32,.16)", "--tag-bg": rgba(t.ground, .92),
-    "--g1": rgba(t.a, .22), "--g2": rgba(t.b, .22), "--ch-bg": "#fff",
+    "--g1": rgba(t.a, .22), "--g2": rgba(t.b, .22), "--ch-bg": "#fff", "--tg-off": "rgba(16,20,32,.16)",
   };
   v["--a"] = t.a; v["--b"] = t.b;
   return Object.entries(v).map(([k, x]) => `${k}:${x}`).join(";");
@@ -285,31 +293,40 @@ function themeCards(active, swDp) {
 }
 
 function picker() {
-  const active = { theme: themeId, variant: themeId === "ha" ? "auto" : mode };
+  const active = { theme: themeId, variant: themeId === "ha" || follow ? "auto" : mode };
   const rail = `<div class="rail"><div class="hd">${MARK}Settings</div><h5>PANEL</h5>
     <div class="it">Home Assistant &amp; dashboard</div><div class="it">Screen</div><div class="it on">Appearance</div>
     <h5>PANES</h5><div class="it">Voice<i></i></div><div class="it">Music<i></i></div><div class="it">Wall base<i></i></div><div class="it" style="opacity:.45">Time zone<i></i></div>
     <div class="done">Done</div></div>`;
   const page = `<div class="page"><h1>Appearance</h1>
     <div class="card"><h3>Theme</h3><p>For voice, timers, notifications and setup. Your dashboard keeps its own.</p>
-      <div class="themes" style="grid-template-columns:repeat(6,1fr);margin-top:16px">${themeCards(active, 34)}</div></div>
+      <div class="themes" style="grid-template-columns:repeat(6,1fr);margin-top:16px">${themeCards(active, 34)}</div>${followRow(false)}</div>
     <div class="card"><div class="row"><div><h3>Assist</h3><p>How a voice run shows on the dashboard</p></div>
       <div class="seg"><span class="on">${orbIcon()}Orb</span><span>${glowIcon()}Edge glow</span></div></div></div></div>`;
   return `<div class="set" style="${vars(th, dark)}">${rail}${page}</div>`;
+}
+/** Light or dark follows HA's dark mode. Always on (and greyed) with the Home Assistant theme. */
+function followRow(onManage) {
+  const ha = themeId === "ha", on = ha || follow;
+  const title = "Follow Home Assistant's dark mode";
+  const sub = ha ? "Always on with the Home Assistant theme" : "Switches between the theme's light and dark with your dashboard";
+  return onManage
+    ? `<div class="follow ${ha ? "off" : ""}"><div><div style="font-size:16px">${title}</div><div style="color:var(--mu);font-size:14px">${sub}</div></div><i class="tg ${on ? "on" : ""}"></i></div>`
+    : `<div class="follow ${ha ? "off" : ""}"><div><h3>${title}</h3><p>${sub}</p></div><i class="tg ${on ? "on" : ""}"></i></div>`;
 }
 function orbIcon() { return `<i style="width:14px;height:14px;border-radius:50%;background:radial-gradient(circle at 35% 35%, ${th.a}, ${th.b});display:inline-block"></i>`; }
 function glowIcon() { return `<i style="width:18px;height:12px;border-radius:3px;border:2px solid transparent;background:linear-gradient(var(--seg-bg),var(--seg-bg)) padding-box,linear-gradient(135deg, ${th.a}, ${th.b}) border-box;display:inline-block"></i>`; }
 
 function manage() {
   const phone = frame === "phone";
-  const active = { theme: themeId, variant: themeId === "ha" ? "auto" : mode };
+  const active = { theme: themeId, variant: themeId === "ha" || follow ? "auto" : mode };
   const nav = `<div class="ni">Overview</div><div class="ni">All panels</div><h6>Panel</h6><div class="ni">Screen</div><div class="ni on">Appearance</div><h6>Panes</h6><div class="ni">Voice</div><div class="ni">Timers</div><h6>System</h6><div class="ni">Log</div><div class="ni">Security</div><div class="ni">About</div>`;
   const side = phone ? `<div class="top">${MARK}<span>Appearance</span><span style="flex:1"></span>☰</div>`
     : `<div class="side"><div class="brand">${MARK.replace('width="30" height="28"', 'width="34" height="34"')}<div><b>Glassworks Panel</b><small>${q.get("panel") || "Mirror"}</small></div></div>${nav}</div>`;
   const cols = phone ? 3 : 6;
   const main = `<div class="main" style="${phone ? "top:56px" : ""}"><h1>Appearance</h1>
     <div class="card"><div class="sh">Theme</div><p class="lede">For voice, timers, notifications and setup. Your dashboard keeps its own.</p>
-      <div class="themes" style="grid-template-columns:repeat(${cols},1fr);gap:12px">${themeCards(active, phone ? 32 : 40)}</div></div>
+      <div class="themes" style="grid-template-columns:repeat(${cols},1fr);gap:12px">${themeCards(active, phone ? 32 : 40)}</div>${followRow(true)}</div>
     <div class="card"><div class="sh">Assist</div><p class="lede">How a voice run shows on the dashboard.</p>
       <div class="choice"><div class="ch on"><b>Orb</b><span>A glass orb with what you said and the reply, over a dimmed dashboard.</span></div>
       <div class="ch"><b>Edge glow</b><span>Light runs along the screen's edge. The dashboard stays in view.</span></div></div></div></div>`;
@@ -541,8 +558,56 @@ function cycle(kind, t) {
   document.getElementById("ov").innerHTML = (k < 1 ? one(prev, 1 - k) : "") + one(state, k);
 }
 
+// ======================================================================= round 2: edge-lit glass (edge.js)
+// scene=lit&variant=spark|sheen|pour&state=cycle|clip|listening|thinking|speaking|error|enter|exit
+// cycle: one run and a failed one; clip: the entrance, a moment of listening and the exit (play it slow).
+const variant = q.get("variant") || "spark";
+const litState = q.get("state") || "cycle";
+let lit = null;
+function litMount() {
+  const root = document.getElementById("root");
+  root.innerHTML = `<div class="screen" style="width:${W}px;height:${H}px">${dashboard()}
+    <div id="dim" class="fill" style="${vars(th, dark)};opacity:0;background:linear-gradient(to bottom, ${rgba(th.ground, dark ? .16 : .10)}, ${rgba(th.ground, dark ? .28 : .22)} 55%, ${rgba(th.ground, dark ? .6 : .55)})"></div>
+    <canvas id="lit" class="fill"></canvas><div id="cap" class="fill" style="${vars(th, dark)};color:var(--fg)"></div></div>`;
+  lit = new Lit.Lit(document.getElementById("lit"), { W, H, dpr: devicePixelRatio || 1, a: th.a, b: th.b, dark, variant, frame });
+}
+/** Clip time -> cycle time: the entrance and 700 ms of listening, then the main run's exit, then a beat of nothing. */
+function clipToCycle(c) {
+  const E = Lit.ENTER[variant], X = Lit.EXIT[variant], tl = Lit.timeline(variant);
+  let exitAt = 0; for (const [p, d] of tl) { if (p === "exit") break; exitAt += d; }
+  c = c % (E + 700 + X + 600); // loops in the live preview
+  if (c < E + 700) return c;
+  if (c < E + 700 + X) return exitAt + (c - E - 700);
+  return exitAt + X + 1;
+}
+let lastCap = "";
+function litRender(t) {
+  if (!lit) litMount();
+  const ct = litState === "cycle" ? t : litState === "clip" ? clipToCycle(t) : Lit.stateTime(variant, litState);
+  const ph = lit.draw(ct);
+  window.__litPhase = ph.phase; // glow.html highlights the state on screen
+  const E = Lit.ENTER[variant], X = Lit.EXIT[variant];
+  const p = ph.phase === "gap" ? 0 : ph.phase === "enter" ? Math.min(1, ph.u / E) : ph.phase === "exit" ? 1 - Math.min(1, ph.u / X) : 1;
+  document.getElementById("dim").style.opacity = p;
+  // the caption rises in as the entrance lands, and leaves first on the way out
+  const capA = ph.phase === "gap" ? 0 : ph.phase === "enter" ? Math.max(0, Math.min(1, (ph.u - 0.55 * E) / 260)) : ph.phase === "exit" ? Math.max(0, 1 - ph.u / (0.6 * X)) : 1;
+  const st = ph.phase === "enter" || ph.phase === "exit" ? (ph.run === "err" && ph.phase === "exit" ? "error" : ph.phase === "exit" ? "speaking" : "listening") : ph.phase;
+  const key = st + capA.toFixed(2);
+  if (key !== lastCap && TEXT[st]) {
+    lastCap = key;
+    const x = TEXT[st], mirror = frame === "mirror";
+    const label = x.quote ? `<div style="font-size:15px;color:var(--mu);margin-bottom:8px">${x.quote}</div>`
+      : `<div class="label" style="color:${labelColor(st)};margin-bottom:10px;display:flex;gap:8px;justify-content:center;align-items:center">${dot(st)}${x.label}</div>`;
+    document.getElementById("cap").innerHTML = `<div class="caption" style="bottom:${mirror ? 120 : 34}px;width:${mirror ? 460 : 640}px;opacity:${capA};transform:translate(-50%, ${(1 - capA) * 10}px)">${label}
+      <div class="main" style="font-size:28px;color:${x.muted ? "var(--mu)" : "var(--fg)"}">${x.main}</div></div>`;
+  }
+  return ph;
+}
+window.renderAt = t => litRender(t);
+
 // ======================================================================= render
 function render(t) {
+  if (scene === "lit") return litRender(t * (+(q.get("speed") || 1)));
   if (scene === "glow-cycle" || scene === "orb-cycle") return cycle(scene.slice(0, scene.indexOf("-")), t);
   gid = 0;
   let html;

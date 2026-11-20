@@ -16,10 +16,15 @@ mkdir -p "$out"
 shot() { # name query w h scale
   local name=$1 query=$2 w=$3 h=$4 scale=$5
   [[ -n $filter && $name != *$filter* ]] && return 0
-  "$chrome" --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor="$scale" \
-    --window-size="$w,$h" --virtual-time-budget=1500 --screenshot="$out/$name.png" \
-    "file://$here/mockups.html?$query" >/dev/null 2>&1
-  echo "$out/$name.png"
+  local try
+  for try in 1 2 3; do # headless Chrome now and then exits without a screenshot: try again
+    rm -f "$out/$name.png"
+    "$chrome" --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor="$scale" \
+      --window-size="$w,$h" --virtual-time-budget=1500 --screenshot="$out/$name.png" \
+      "file://$here/mockups.html?$query" >/dev/null 2>&1 || true
+    [[ -s $out/$name.png ]] && { echo "$out/$name.png"; return 0; }
+  done
+  echo "failed: $name" >&2; return 1
 }
 
 frame_size() { case $1 in s1) echo "960 480 1.5" ;; mirror) echo "540 960 2" ;; esac }
@@ -42,6 +47,19 @@ for combo in "dark glassworks" "light dusk" "dark dune" "light ha"; do
   shot "s1-picker-$theme-$mode" "scene=picker&frame=s1&mode=$mode&theme=$theme" 960 480 1.5
   shot "manage-desk-$theme-$mode" "scene=manage&frame=desk&mode=$mode&theme=$theme" 1200 1000 1
   shot "manage-phone-$theme-$mode" "scene=manage&frame=phone&mode=$mode&theme=$theme" 390 860 2
+done
+# A named theme that follows Home Assistant's light and dark.
+shot "s1-picker-glassworks-dark-follow" "scene=picker&frame=s1&mode=dark&theme=glassworks&follow=1" 960 480 1.5
+shot "manage-desk-glassworks-dark-follow" "scene=manage&frame=desk&mode=dark&theme=glassworks&follow=1" 1200 1000 1
+shot "manage-phone-glassworks-dark-follow" "scene=manage&frame=phone&mode=dark&theme=glassworks&follow=1" 390 860 2
+
+# Round 2, the edge glow as edge-lit glass: each state, in each entrance's variant (S1 and Mirror, Glassworks dark).
+# The GIFs come from motion.cjs (see README.md).
+for v in spark sheen pour; do
+  for st in listening thinking speaking error; do
+    shot "s1-lit-$v-$st" "scene=lit&variant=$v&state=$st&frame=s1&mode=dark&theme=glassworks" 960 480 1.5
+    shot "mirror-lit-$v-$st" "scene=lit&variant=$v&state=$st&frame=mirror&mode=dark&theme=glassworks" 540 960 2
+  done
 done
 
 # The motion preview as GIFs (one run of the edge glow on a loop): frames at 12 fps, then ffmpeg.

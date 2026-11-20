@@ -5,8 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Edge Glow Motion</title>
 <!--
-  The #691 motion preview: one voice run on a loop (listening, thinking, speaking, error) as the edge
-  glow or the orb, on the S1 or the Mirror, in each theme. It frames mockups.html?scene=glow-cycle&anim=1.
+  The #691 motion preview. Round 2: the edge glow as "edge-lit glass", in three entrances and exits
+  (Spark, Sheen, Pour), with the round 1 glow and the orb to compare. One run on a loop, or the
+  entrance and exit alone at quarter speed. It frames mockups.html?scene=lit&anim=1.
   A still can't show how the light moves; this can. Placeholder data only.
 -->
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
@@ -34,36 +35,49 @@ p{color:var(--mu);margin:0 0 18px;max-width:70ch}
 <body>
 <main>
   <h1>Assist motion</h1>
-  <p>One voice run on a loop. The edge glow keeps the dashboard in view and puts the theme's two lights on the screen's border. The orb is the reworked one, for comparison.</p>
+  <p>The screen is a thick pane of glass whose edges catch the light. The theme's two lights enter it, run along the edges and flare where they meet. Pick an entrance below; the states are the same for all three. Slow motion plays only the entrance and the exit, at a quarter of the speed.</p>
   <div class="bar">
-    <div class="grp" data-k="scene"><button data-v="glow-cycle" aria-pressed="true">Edge glow</button><button data-v="orb-cycle">Orb</button></div>
+    <div class="grp" data-k="look"><button data-v="spark" aria-pressed="true">Spark</button><button data-v="sheen">Sheen</button><button data-v="pour">Pour</button><button data-v="glow-cycle">Round 1 glow</button><button data-v="orb-cycle">Orb</button></div>
+    <div class="grp" data-k="speed"><button data-v="1" aria-pressed="true">Full run</button><button data-v="0.25">Slow in and out</button></div>
     <div class="grp" data-k="frame"><button data-v="s1" aria-pressed="true">S1 · 1440×720</button><button data-v="mirror">Mirror · 1080×1920</button></div>
     <div class="grp" data-k="mode"><button data-v="dark" aria-pressed="true">Dark</button><button data-v="light">Light</button></div>
     <div class="grp" data-k="theme"><button data-v="glassworks" aria-pressed="true">Glassworks</button><button data-v="aurora">Aurora</button><button data-v="dusk">Dusk</button><button data-v="dune">Dune</button><button data-v="graphite">Graphite</button><button data-v="ha">Home Assistant</button></div>
   </div>
   <div class="stage" id="stage"><iframe id="f" title="Overlay preview" scrolling="no"></iframe></div>
   <div class="legend" id="legend">
-    <div data-s="listening"><b>Listening · 4.2 s</b>The two lights gather along the bottom edge and swell with the voice.</div>
-    <div data-s="thinking"><b>Thinking · 3 s</b>They chase each other round the border.</div>
-    <div data-s="speaking"><b>Speaking · 4.6 s</b>The whole border lights up and breathes with the reply.</div>
-    <div data-s="error"><b>Error · 2.4 s</b>Rose, a status colour, then the overlay goes.</div>
+    <div data-s="enter"><b>Coming on</b><span id="in-text"></span></div>
+    <div data-s="listening"><b>Listening</b>Light gathers at the mic and swells with your voice; each word sends a ripple both ways along the edge.</div>
+    <div data-s="thinking"><b>Thinking</b>Light trapped in the glass: a and b run round the edge in opposite directions and flare where they cross. Glints catch here and there.</div>
+    <div data-s="speaking"><b>Speaking</b>The whole edge is lit a to b and breathes with the reply. On each word a pulse leaves the two lit corners and they flare where they meet.</div>
+    <div data-s="error"><b>Error</b>One rose pulse leaves the mic, then the edge holds a dim rose (a status colour).</div>
+    <div data-s="exit"><b>Going away</b><span id="out-text"></span></div>
   </div>
 </main>
 <script>
-const st = { scene: "glow-cycle", frame: "s1", mode: "dark", theme: "glassworks" };
+const st = { look: "spark", speed: "1", frame: "s1", mode: "dark", theme: "glassworks" };
 const SZ = { s1: [960, 480], mirror: [540, 960] };
+const TEXT = {
+  spark: ["The light starts at the mic, splits both ways round the edge and flares where the two halves meet (650 ms).", "It runs back into the mic and blinks out (400 ms)."],
+  sheen: ["A sheen crosses the whole pane from the top left; each edge catches it as it passes, and the far corner flares (600 ms).", "A second, faster sheen switches the edges off behind it (350 ms)."],
+  pour: ["White-hot light pours in at the bottom, runs up both sides, meets at the top and cools into the theme's two lights (700 ms).", "It cools and drains away to the bottom (450 ms)."],
+};
 const f = document.getElementById("f"), stage = document.getElementById("stage");
-let started = 0;
 function load() {
   const [w, h] = SZ[st.frame];
   f.width = w; f.height = h;
-  f.src = `mockups.html?scene=${st.scene}&frame=${st.frame}&mode=${st.mode}&theme=${st.theme}&anim=1&t=0`;
-  started = performance.now();
+  const lit = ["spark", "sheen", "pour"].includes(st.look);
+  const scene = lit ? `scene=lit&variant=${st.look}&state=${st.speed === "1" ? "cycle" : "clip"}&speed=${st.speed}` : `scene=${st.look}`;
+  f.src = `mockups.html?${scene}&frame=${st.frame}&mode=${st.mode}&theme=${st.theme}&anim=1&t=0`;
+  const tx = TEXT[st.look] || ["", ""];
+  document.getElementById("in-text").textContent = tx[0] || "Round 1 and the orb have no entrance yet.";
+  document.getElementById("out-text").textContent = tx[1] || "";
   fit();
 }
 function fit() {
   const [w, h] = SZ[st.frame];
-  const max = st.frame === "mirror" ? Math.min(stage.parentElement.clientWidth, 420) : stage.parentElement.clientWidth;
+  const box = stage.parentElement, cs = getComputedStyle(box);
+  const inner = box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  const max = st.frame === "mirror" ? Math.min(inner, 420) : inner;
   const k = max / w;
   stage.style.width = `${w * k}px`; stage.style.height = `${h * k}px`;
   f.style.transform = `scale(${k})`;
@@ -74,12 +88,11 @@ document.querySelectorAll(".grp").forEach(g => g.addEventListener("click", e => 
   st[g.dataset.k] = b.dataset.v; load();
 }));
 addEventListener("resize", fit);
-// highlight the state on screen (same timings as mockups.html)
-const CYC = [["listening", 4200], ["thinking", 3000], ["speaking", 4600], ["error", 2400]], TOT = 14200;
+// highlight the state on screen (read from the frame, which runs the clock)
 (function tick() {
-  let u = (performance.now() - started) % TOT, i = 0;
-  while (u >= CYC[i][1]) { u -= CYC[i][1]; i++; }
-  document.querySelectorAll("#legend div").forEach(d => d.classList.toggle("now", d.dataset.s === CYC[i][0]));
+  let phase = null;
+  try { const w = f.contentWindow; if (w && w.__litPhase) phase = w.__litPhase; } catch (e) {}
+  document.querySelectorAll("#legend div").forEach(d => d.classList.toggle("now", d.dataset.s === phase));
   requestAnimationFrame(tick);
 })();
 load();
