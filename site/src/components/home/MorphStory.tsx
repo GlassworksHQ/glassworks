@@ -164,10 +164,10 @@ const MOBILE_SHAPES: Record<
 
 const BEAT_DOTS = [
   { idx: 0, label: "Wall switch dashboard", targetP: 0.03 },
-  { idx: 1, label: "Local Assist voice orb", targetP: 0.22 },
-  { idx: 2, label: "Rich notifications", targetP: 0.4 },
-  { idx: 3, label: "Studio mirror presence detection", targetP: 0.58 },
-  { idx: 4, label: "Kitchen timers, Sendspin, and radios", targetP: 0.76 },
+  { idx: 1, label: "Local Assist voice orb", targetP: 0.21 },
+  { idx: 2, label: "Rich notifications", targetP: 0.39 },
+  { idx: 3, label: "Studio mirror presence detection", targetP: 0.55 },
+  { idx: 4, label: "Kitchen timers, Sendspin, and radios", targetP: 0.77 },
   { idx: 5, label: "Square, round, and future shapes", targetP: 0.96 },
 ] as const;
 
@@ -183,26 +183,27 @@ const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 /**
  * Goldilocks dwell/morph pacing across 6 beats (total height 680vh, ~113vh per beat):
- * Each beat holds steady for ~10% (~68vh, 2-3 mouse-wheel ticks) and morphs across ~8% (~54vh):
- *   Beat 0 hold: 0.00 – 0.09 | morph 0.09 – 0.17
- *   Beat 1 hold: 0.17 – 0.27 | morph 0.27 – 0.35
- *   Beat 2 hold: 0.35 – 0.45 | morph 0.45 – 0.53
- *   Beat 3 hold: 0.53 – 0.63 | morph 0.63 – 0.71
- *   Beat 4 hold: 0.71 – 0.81 | morph 0.81 – 0.89
- *   Beat 5 hold: 0.89 – 1.00
+ * Beat 3 gets a generous 0.52 – 0.65 hold window so scroll triggers Mirror presence collapse
+ * cleanly at the midpoint (p >= 0.585):
+ *   Beat 0 hold: 0.000 – 0.085 | morph 0.085 – 0.160
+ *   Beat 1 hold: 0.160 – 0.255 | morph 0.255 – 0.335
+ *   Beat 2 hold: 0.335 – 0.440 | morph 0.440 – 0.520
+ *   Beat 3 hold: 0.520 – 0.650 | morph 0.650 – 0.725  (p < 0.585 clear, p >= 0.585 presence detected)
+ *   Beat 4 hold: 0.725 – 0.820 | morph 0.820 – 0.895
+ *   Beat 5 hold: 0.895 – 1.000
  */
 function morphSegment(p: number): number {
   const x = clamp(p);
-  if (x <= 0.09) return 0;
-  if (x < 0.17) return smooth((x - 0.09) / 0.08);
-  if (x <= 0.27) return 1;
-  if (x < 0.35) return 1 + smooth((x - 0.27) / 0.08);
-  if (x <= 0.45) return 2;
-  if (x < 0.53) return 2 + smooth((x - 0.45) / 0.08);
-  if (x <= 0.63) return 3;
-  if (x < 0.71) return 3 + smooth((x - 0.63) / 0.08);
-  if (x <= 0.81) return 4;
-  if (x < 0.89) return 4 + smooth((x - 0.81) / 0.08);
+  if (x <= 0.085) return 0;
+  if (x < 0.16) return smooth((x - 0.085) / 0.075);
+  if (x <= 0.255) return 1;
+  if (x < 0.335) return 1 + smooth((x - 0.255) / 0.08);
+  if (x <= 0.44) return 2;
+  if (x < 0.52) return 2 + smooth((x - 0.44) / 0.08);
+  if (x <= 0.65) return 3;
+  if (x < 0.725) return 3 + smooth((x - 0.65) / 0.075);
+  if (x <= 0.82) return 4;
+  if (x < 0.895) return 4 + smooth((x - 0.82) / 0.075);
   return 5;
 }
 
@@ -274,9 +275,9 @@ export function MorphStory({
   // Beat 2: Real NotificationOverlay card dismissed/collapsed state
   const [notifDismissed, setNotifDismissed] = useState(false);
 
-  // Beat 3: Studio Mirror live presence collapse (Room clear <-> Presence detected side pill)
-  const [mirrorPresent, setMirrorPresent] = useState(false);
-  const [presencePulseKey, setPresencePulseKey] = useState(0);
+  // Beat 3: Studio Mirror presence collapse — scroll-driven on desktop (p >= 0.585), click-to-override
+  const [mirrorOverride, setMirrorOverride] = useState<boolean | null>(null);
+  const [compactMirrorPresent, setCompactMirrorPresent] = useState(true);
 
   // Beat 4: Real TimerDock + RingView live countdown (Pasta 4:12)
   const [timerSec, setTimerSec] = useState(252);
@@ -288,7 +289,6 @@ export function MorphStory({
     const syncCompact = () => {
       setCompact(mqNarrow.matches || mqReduce.matches);
       setReducedMotion(mqReduce.matches);
-      if (mqReduce.matches) setMirrorPresent(true);
     };
     syncCompact();
     mqNarrow.addEventListener("change", syncCompact);
@@ -317,6 +317,9 @@ export function MorphStory({
       const settled = Math.abs(t - cur) < 0.0004;
       if (settled) cur = t;
       setP(cur);
+      if (cur < 0.48 || cur > 0.69) {
+        setMirrorOverride(null);
+      }
       if (cur < 0.84) {
         setFutureShape("square");
         setClickMorph(false);
@@ -360,26 +363,21 @@ export function MorphStory({
     return () => window.clearTimeout(id);
   }, [assistVisible, assistPhase, reducedMotion]);
 
-  // Beat 3: Auto-cycle Studio Mirror presence detection every ~3.4s (click toggles immediately)
-  const mirrorPresenceVisible = compact || mirrorPresenceO > 0.35;
-  useEffect(() => {
-    if (!mirrorPresenceVisible || reducedMotion) return;
-    const id = window.setTimeout(() => {
-      setMirrorPresent((prev) => {
-        const next = !prev;
-        if (next) setPresencePulseKey((k) => k + 1);
-        return next;
-      });
-    }, 3400);
-    return () => window.clearTimeout(id);
-  }, [mirrorPresenceVisible, mirrorPresent, reducedMotion]);
+  // Beat 3: Presence driven directly by scroll progress inside Beat 3's hold window (p >= 0.585)
+  // with manual click-to-toggle override that resets when scrolling out of Beat 3
+  const scrollMirrorPresent = p >= 0.585 && seg >= 2.45 && seg <= 3.55;
+  const mirrorPresent = compact
+    ? compactMirrorPresent
+    : mirrorOverride !== null
+      ? mirrorOverride
+      : scrollMirrorPresent;
 
   const toggleMirrorPresence = () => {
-    setMirrorPresent((prev) => {
-      const next = !prev;
-      if (next) setPresencePulseKey((k) => k + 1);
-      return next;
-    });
+    if (compact) {
+      setCompactMirrorPresent((v) => !v);
+    } else {
+      setMirrorOverride(!mirrorPresent);
+    }
   };
 
   // Beat 4: Tick real TimerDock RingView live while Kitchen Display is on screen
@@ -1045,9 +1043,7 @@ export function MorphStory({
               {isMirror && (
                 <div className={s.mirrorSensor} aria-hidden="true">
                   <span className={`${s.sensorLens} ${mirrorPresent ? s.sensorLensLit : ""}`} />
-                  {mirrorPresent && (
-                    <span key={`m-${presencePulseKey}`} className={s.sensorPulse} />
-                  )}
+                  {mirrorPresent && <span className={s.sensorPulse} />}
                 </div>
               )}
               <div
@@ -1103,9 +1099,9 @@ export function MorphStory({
                 GLASSWORKS {release.version}
               </a>
             )}
-            <h1 className={s.h1}>Your home, on the wall.</h1>
+            <h1 className={s.h1}>Your home, on the wall</h1>
             <p className={s.lede}>
-              Full-screen Home Assistant dashboard, local voice, synced music, and built-in radios — installed from Chrome in minutes.
+              Your Home Assistant dashboard full screen, with local voice, synced music, and built-in radios — installed from Chrome in minutes.
             </p>
             <div className={s.ctas}>
               <a href={KILN} className={s.install}>
@@ -1124,9 +1120,9 @@ export function MorphStory({
         <div className={s.compactBeat}>
           <div className={s.compactCopy}>
             <span className={s.eyebrow}>LOCAL ASSIST VOICE</span>
-            <h2 className={s.h2}>Talk to your home, privately.</h2>
+            <h2 className={s.h2}>A tablet that listens locally</h2>
             <p className={s.lede}>
-              On-device wake word detection and Home Assistant Assist, running locally with the same calm glass orb on every panel.
+              On-device wake word detection and Home Assistant Assist run right on the hardware, with the same calm glass orb on every screen.
             </p>
             <div className={s.ctas}>
               <Link href="/frames/google-pixel-tablet" className={s.quietLink}>
@@ -1141,9 +1137,9 @@ export function MorphStory({
         <div className={s.compactBeat}>
           <div className={s.compactCopy}>
             <span className={s.eyebrow}>RICH NOTIFICATIONS</span>
-            <h2 className={s.h2}>Alerts that matter, right on the glass.</h2>
+            <h2 className={s.h2}>A panel that keeps you in the loop</h2>
             <p className={s.lede}>
-              Doorbell cameras, interactive action buttons, and priority alerts from Home Assistant automations — folding away cleanly when you&rsquo;re done.
+              Doorbell cameras, interactive action buttons, and priority alerts from your automations appear cleanly on the glass and fold away when you&rsquo;re done.
             </p>
             <div className={s.ctas}>
               <Link href="/docs/notifications" className={s.quietLink}>
@@ -1158,9 +1154,9 @@ export function MorphStory({
         <div className={s.compactBeat}>
           <div className={s.compactCopy}>
             <span className={s.eyebrow}>PRESENCE DETECTION</span>
-            <h2 className={s.h2}>A mirror that gets out of your way.</h2>
+            <h2 className={s.h2}>A mirror that gets out of your way</h2>
             <p className={s.lede}>
-              Walk up and Glassworks senses you — without being fooled by a room light switch — so Home Assistant can tuck your dashboard into a slim side pill and leave you a real mirror.
+              Step up and Glassworks senses you without being fooled by a room light switch, tucking your dashboard into a slim side pill so the glass stays a real mirror.
             </p>
             <div className={s.ctas}>
               <Link href="/frames/lululemon-mirror" className={s.quietLink}>
@@ -1175,9 +1171,9 @@ export function MorphStory({
         <div className={s.compactBeat}>
           <div className={s.compactCopy}>
             <span className={s.eyebrow}>TIMERS, MUSIC &amp; RADIOS</span>
-            <h2 className={s.h2}>One ESPHome device. Zero HACS, zero cloud.</h2>
+            <h2 className={s.h2}>A fully native Home Assistant device</h2>
             <p className={s.lede}>
-              Visual voice timers, synced Music Assistant playback, built-in Zigbee/Thread radios, and automatic updates under Settings → Updates.
+              Visual voice timers, synced Music Assistant playback, built-in Zigbee and Thread radios, and automatic updates under Settings → Updates — with no custom integrations or cloud.
             </p>
           </div>
           {renderCompactFrame("kitchen", "kitchen-timer")}
@@ -1217,9 +1213,10 @@ export function MorphStory({
             </button>
           </div>
           <div className={s.compactCopy}>
-            <h2 className={s.h2}>One open core for whatever&rsquo;s next.</h2>
+            <span className={s.eyebrow}>ANY SHAPE</span>
+            <h2 className={s.h2}>One open core for whatever&rsquo;s next</h2>
             <p className={s.lede}>
-              Square switch boxes, round dials, bedside screens, or your own custom hardware — one ESPHome device, installed safely with Kiln.
+              Square switch boxes, round dials, bedside screens, or your own custom hardware — built on one open ESPHome core and installed safely with Kiln.
             </p>
             <div className={s.ctas}>
               <a href={KILN} className={s.install}>
@@ -1287,9 +1284,9 @@ export function MorphStory({
                 GLASSWORKS {release.version}
               </a>
             )}
-            <h1 className={s.h1}>Your home, on the wall.</h1>
+            <h1 className={s.h1}>Your home, on the wall</h1>
             <p className={s.lede}>
-              Full-screen Home Assistant dashboard, local voice, synced music, and built-in radios — installed from Chrome in minutes.
+              Your Home Assistant dashboard full screen, with local voice, synced music, and built-in radios — installed from Chrome in minutes.
             </p>
             <div className={s.ctas}>
               <a href={KILN} className={s.install}>
@@ -1313,9 +1310,9 @@ export function MorphStory({
             aria-hidden={copy1O < 0.2}
           >
             <span className={s.eyebrow}>LOCAL ASSIST VOICE</span>
-            <h2 className={s.h2}>Talk to your home, privately.</h2>
+            <h2 className={s.h2}>A tablet that listens locally</h2>
             <p className={s.lede}>
-              On-device wake word detection and Home Assistant Assist, running locally with the same calm glass orb on every panel.
+              On-device wake word detection and Home Assistant Assist run right on the hardware, with the same calm glass orb on every screen.
             </p>
             <div className={s.ctas}>
               <Link href="/frames/google-pixel-tablet" className={s.quietLink}>
@@ -1335,9 +1332,9 @@ export function MorphStory({
             aria-hidden={copy2O < 0.2}
           >
             <span className={s.eyebrow}>RICH NOTIFICATIONS</span>
-            <h2 className={s.h2}>Alerts that matter, right on the glass.</h2>
+            <h2 className={s.h2}>A panel that keeps you in the loop</h2>
             <p className={s.lede}>
-              Doorbell cameras, interactive action buttons, and priority alerts from Home Assistant automations — folding away cleanly when you&rsquo;re done.
+              Doorbell cameras, interactive action buttons, and priority alerts from your automations appear cleanly on the glass and fold away when you&rsquo;re done.
             </p>
             <div className={s.ctas}>
               <Link href="/docs/notifications" className={s.quietLink}>
@@ -1357,9 +1354,9 @@ export function MorphStory({
             aria-hidden={copy3O < 0.2}
           >
             <span className={s.eyebrow}>PRESENCE DETECTION</span>
-            <h2 className={s.h2}>A mirror that gets out of your way.</h2>
+            <h2 className={s.h2}>A mirror that gets out of your way</h2>
             <p className={s.lede}>
-              Walk up and Glassworks senses you — without being fooled by a room light switch — so Home Assistant can tuck your dashboard into a slim side pill and leave you a real mirror.
+              Step up and Glassworks senses you without being fooled by a room light switch, tucking your dashboard into a slim side pill so the glass stays a real mirror.
             </p>
             <div className={s.ctas}>
               <Link href="/frames/lululemon-mirror" className={s.quietLink}>
@@ -1379,9 +1376,9 @@ export function MorphStory({
             aria-hidden={copy4O < 0.2}
           >
             <span className={s.eyebrow}>TIMERS, MUSIC &amp; RADIOS</span>
-            <h2 className={s.h2}>One ESPHome device. Zero HACS, zero cloud.</h2>
+            <h2 className={s.h2}>A fully native Home Assistant device</h2>
             <p className={s.lede}>
-              Visual voice timers, synced Music Assistant playback, built-in Zigbee/Thread radios, and automatic updates under Settings → Updates.
+              Visual voice timers, synced Music Assistant playback, built-in Zigbee and Thread radios, and automatic updates under Settings → Updates — with no custom integrations or cloud.
             </p>
             <div className={s.ctas}>
               <Link href="/panes/sendspin" className={s.quietLink}>
@@ -1400,9 +1397,10 @@ export function MorphStory({
             }}
             aria-hidden={copy5O < 0.2}
           >
-            <h2 className={s.h2}>One open core for whatever&rsquo;s next.</h2>
+            <span className={s.eyebrow}>ANY SHAPE</span>
+            <h2 className={s.h2}>One open core for whatever&rsquo;s next</h2>
             <p className={s.ledeCenter}>
-              Square switch boxes, round dials, bedside screens, or your own custom hardware — one ESPHome device, installed safely with Kiln.
+              Square switch boxes, round dials, bedside screens, or your own custom hardware — built on one open ESPHome core and installed safely with Kiln.
             </p>
             <div className={s.ctasCenter}>
               <a href={KILN} className={s.install}>
@@ -1478,9 +1476,7 @@ export function MorphStory({
                       <span
                         className={`${s.sensorLens} ${mirrorPresent && mirrorPresenceO > 0.35 ? s.sensorLensLit : ""}`}
                       />
-                      {mirrorPresent && mirrorPresenceO > 0.35 && (
-                        <span key={`d-${presencePulseKey}`} className={s.sensorPulse} />
-                      )}
+                      {mirrorPresent && mirrorPresenceO > 0.35 && <span className={s.sensorPulse} />}
                     </div>
                   )}
                   {/* Full-body diagonal reflection sheen */}

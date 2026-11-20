@@ -69,7 +69,7 @@ export default async function Home() {
           <div className={s.sectionIntro}>
             <span className={s.eyebrow}>SUPPORTED HARDWARE</span>
             <h2 id="devices-heading" className={s.sectionH2}>
-              Real wall hardware — and the tablet in your drawer.
+              Real wall hardware — and the tablet in your drawer
             </h2>
             <p className={s.sectionLede}>
               Dedicated wall switches, full-length mirrors, and everyday Android tablets running the same open Home Assistant panel core.
@@ -88,7 +88,7 @@ export default async function Home() {
           <div className={s.splitCopy}>
             <span className={`${s.eyebrow} ${s.eyebrowEmber}`}>KILN WEB INSTALLER</span>
             <h2 id="kiln-heading" className={s.sectionH2}>
-              Flash from Chrome. Undo in one click.
+              Flash from Chrome, undo in one click
             </h2>
             <p className={s.sectionLede}>
               Plug your panel in over USB and open Kiln in Chrome or Edge. No command-line tools, no manual drivers, and no locked-in vendor cloud — every write is verified and every device keeps a clean way back to stock.
@@ -167,7 +167,7 @@ export default async function Home() {
           <div className={s.splitCopy}>
             <span className={s.eyebrow}>ESPHOME NATIVE</span>
             <h2 id="esphome-heading" className={s.sectionH2}>
-              Updates, sensors, and settings right where they belong.
+              Updates, sensors, and settings right where they belong
             </h2>
             <p className={s.sectionLede}>
               Glassworks speaks the native ESPHome API directly to Home Assistant. Nothing installs in HACS, no custom integration is required, no cloud account sits in the middle, and panel updates arrive under <em>Settings → Updates</em>.
@@ -188,7 +188,7 @@ export default async function Home() {
           <div className={s.splitCopy}>
             <span className={s.eyebrow}>CLARITY BENCHMARK</span>
             <h2 id="clarity-heading" className={s.sectionH2}>
-              We&rsquo;d rather show an honest C than hide it.
+              We&rsquo;d rather show an honest C than hide it
             </h2>
             <p className={s.sectionLede}>
               Every supported panel is measured running the real Home Assistant frontend on standardized dashboards — testing tap latency, scrolling frame pacing, live state updates, and camera streams.
@@ -244,7 +244,7 @@ export default async function Home() {
           <div className={s.sectionIntro}>
             <span className={s.eyebrow}>PANES &amp; BLUEPRINTS</span>
             <h2 id="panes-heading" className={s.sectionH2}>
-              Everything your panel can do.
+              Everything your panel can do
             </h2>
             <p className={s.sectionLede}>
               Each capability ships as a modular pane that turns on automatically when your hardware supports it — plus ready-to-import Home Assistant blueprints.
@@ -286,7 +286,7 @@ export default async function Home() {
           <div className={`glass ${s.devCallout}`}>
             <div className={s.devCopy}>
               <span className={s.eyebrow}>OPEN CORE · MPL-2.0</span>
-              <h2>Port Glassworks to new glass — or build with our MIT libraries.</h2>
+              <h2>Port Glassworks to new glass — or build with our MIT libraries</h2>
               <p>
                 Explore the 6-layer architecture, inspect the Pane API, grab our standalone MIT Kotlin and TypeScript libraries, or ship Glassworks on your own hardware under MPL-2.0.
               </p>
