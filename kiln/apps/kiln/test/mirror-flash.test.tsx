@@ -217,14 +217,12 @@ describe('installing Glassworks over fastboot', () => {
     expect(screen.queryByText('Glassworks isn\'t the only home screen yet.')).toBeNull();
   });
 
-  it('the fastboot card plays the Mirror\'s recovery steps and names the button to hold (#521), under "by hand" only', async () => {
+  it('the fastboot card plays the Mirror\'s recovery steps and names the button to hold (#521), first: most Mirrors still run lululemon\'s software', async () => {
     const { image: flash, app: mirror } = await imageDemo(mirrorEntry, 'flash-fastboot', true);
     expect(flash.state.screen).toBe('fastboot');
     render(<ImageFlow image={flash} app={mirror} />);
-    // the button inside the case is never the first way: it is the fallback for a Mirror Kiln can't reach over adb
-    expect(screen.queryByText(/hold VOL−/)).toBeNull();
-    expect(embers()).toEqual(['Restart into fastboot']);
-    fireEvent.click(screen.getByRole('button', { name: /Mirror still on lululemon.s software\? Fastboot by hand/ }));
+    expect(embers()).toEqual(['Connect']);
+    expect(screen.getByRole('button', { name: 'It already runs Glassworks (or Glass Panes): restart it over USB' })).toBeTruthy();
     expect(screen.getByRole('img', { name: /lululemon Studio Mirror in recovery mode: Unscrew the stand and the back, Lift off the back, Plug in the power cord, Plug in the micro-USB, Hold VOL−, Switch the power on\. VOL− \(SW3\)/ })).toBeTruthy();
     expect(screen.getByText(/hold VOL− \(SW3\): of its two buttons, the one nearer the top end's edge/)).toBeTruthy();
     expect(screen.getByText(/Keep holding while you switch the Mirror on/)).toBeTruthy();

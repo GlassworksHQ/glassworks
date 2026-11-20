@@ -246,6 +246,16 @@ describe('Glass Panes', () => {
     await waitFor(() => expect(flash.state.files.every((x) => x.state === 'ok')).toBe(true));
   });
 
+  it('fastboot opens on the steps by hand; its restart over USB restarts the image over adb, inside the click', async () => {
+    const flash = await show('image-fastboot');
+    expect(screen.getByText(/hold VOL− \(SW3\)/)).toBeTruthy();
+    expect(embers()).toEqual(['Connect']);
+    const restart = vi.spyOn(flash, 'restartToFastboot').mockResolvedValue();
+    fireEvent.click(screen.getByRole('button', { name: 'It already runs Glassworks (or Glass Panes): restart it over USB' }));
+    expect(restart).toHaveBeenCalledTimes(1);
+    expect(flash.state.screen).toBe('fastboot');
+  });
+
   it.each(['image-link', 'image-download', 'image-confirm'] as const)('%s offers Install Glassworks instead, which drops what was downloaded', async (d) => {
     const flash = await show(d);
     fireEvent.click(screen.getByRole('button', { name: 'Install Glassworks instead' }));

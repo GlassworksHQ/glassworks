@@ -340,7 +340,7 @@ describe('restarting into fastboot over adb: no button to hold', () => {
     const { f } = setup({ request: async () => { throw new AdbAuthTimeout(); } });
     await f.restartToFastboot();
     expect(f.state).toMatchObject({ restarted: false, connecting: false });
-    expect(f.state.connectError).toMatch(/didn't let this browser in: .*Put it in fastboot by hand, below/);
+    expect(f.state.connectError).toMatch(/didn't let this browser in: .*Put it in fastboot with the steps above\./);
   });
 });
 

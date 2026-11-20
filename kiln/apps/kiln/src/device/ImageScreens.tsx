@@ -113,17 +113,15 @@ export function ImageFastboot({ f, s }: P) {
     <section className="card" aria-labelledby="h">
       {f.recipe.community && <Whose r={f.recipe} />}
       <h2 id="h">{`Put ${d.the} in fastboot.`}</h2>
-      <p className="lede">{s.restarted
-        ? rich(d.words['fastboot.restarted'])
-        : rich(`Plug ${d.the} into this computer, with Glassworks running. Click Restart into fastboot and pick \`Android\`.`)}</p>
-      <ByHand f={d}>
-      <Recovery data={d.recovery} />
-      <ol className="join">
-        {lines(d.words['fastboot.byHandSteps']).map((x) => <li key={x}>{x}</li>)}
-      </ol>
-      <p className="small">{d.words['fastboot.byHandNote']}</p>
-      <p className="small">{rich('Then click Connect and pick `Android`.')}</p>
-      </ByHand>
+      {/* by hand first: most people install over the vendor's software, which Kiln can't reach over adb (the maintainer, 2026-11-19) */}
+      {s.restarted ? <p className="lede">{rich(d.words['fastboot.restarted'])}</p> : <>
+        <Recovery data={d.recovery} />
+        <ol className="join">
+          {lines(d.words['fastboot.byHandSteps']).map((x) => <li key={x}>{x}</li>)}
+        </ol>
+        <p className="small">{d.words['fastboot.byHandNote']}</p>
+        <p className="small">{rich('Then click Connect and pick `Android`.')}</p>
+      </>}
       {r && !r.ok && (
         <ol className="join">
           {r.checks.map((c) => <li key={c.what} className={c.ok ? 'done' : 'fail'}>{c.what}: {c.found}{!c.ok && <span className="sub-step">Needs {c.need}. Nothing was written.</span>}</li>)}
@@ -132,25 +130,14 @@ export function ImageFastboot({ f, s }: P) {
       {s.connecting && <p className="status work" role="status">{`Pick ${d.the} in the browser's list…`}</p>}
       {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
       <div className="foot">
-        <span className="links"><button type="button" className="link" onClick={() => f.retry()}>Back</button></span>
         <span className="links">
+          <button type="button" className="link" onClick={() => f.retry()}>Back</button>
           {/* Glassworks goes through the keep step, which reads Home Assistant's key and then restarts the device (PR 603) */}
-          {!s.restarted && <button type="button" className="btn ember" disabled={s.connecting} onClick={() => (f.recipe.community ? void f.restartToFastboot() : f.toKeep())}>Restart into fastboot</button>}
-          <button type="button" className={`btn ${s.restarted ? 'ember' : 'ghost'}`} disabled={s.connecting} onClick={() => void f.connectFastboot()}>Connect</button>
+          {!s.restarted && <><span aria-hidden="true">·</span><button type="button" className="link" disabled={s.connecting} onClick={() => (f.recipe.community ? void f.restartToFastboot() : f.toKeep())}>{d.words['fastboot.overUsb']}</button></>}
         </span>
+        <button type="button" className="btn ember" disabled={s.connecting} onClick={() => void f.connectFastboot()}>Connect</button>
       </div>
     </section>
-  );
-}
-
-/** The way into fastboot that needs the case opened: only for a device Kiln can't reach over adb (its vendor's software). */
-function ByHand({ f, children }: { f: DeviceFrame; children: React.ReactNode }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <Collapsible.Root open={open} onOpenChange={setOpen} className="tech">
-      <Collapsible.Trigger className="link">{open ? 'Hide the steps by hand' : f.words['fastboot.byHandToggle']}</Collapsible.Trigger>
-      <Collapsible.Content>{children}</Collapsible.Content>
-    </Collapsible.Root>
   );
 }
 

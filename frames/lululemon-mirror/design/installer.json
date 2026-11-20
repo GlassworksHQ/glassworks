@@ -53,7 +53,7 @@
       "fastboot.restarted": "The Mirror is restarting into fastboot. Click Connect and pick `Android`.",
       "fastboot.byHandSteps": "Switch the Mirror off with the rocker switch in its bottom edge, unplug its power cord, and lay it face down.\nTake out the 4 screws in the bottom edge and take the stand off. Take out the 14 screws in the back, 2 of them either side of the recess by the feet, and lift the back off.\nPlug the power cord back into its socket in that recess. Leave the switch off.\nPlug the micro-USB port, in the top end's corner, into this computer.\nOn the small green board at the top end, hold VOL− (SW3): of its two buttons, the one nearer the top end's edge.\nKeep holding while you switch the Mirror on, and for about 5 seconds more. Its screen stays black.",
       "fastboot.byHandNote": "Hold only VOL−: both buttons, or VOL+, start other modes. Some Mirrors have a service hatch in the back that reaches the board.",
-      "fastboot.byHandToggle": "Mirror still on lululemon’s software? Fastboot by hand",
+      "fastboot.overUsb": "It already runs Glassworks (or Glass Panes): restart it over USB",
       "confirm.title": "This replaces lululemon’s software for good.",
       "confirm.lede": "Everything on the Mirror is replaced, with no backup: its bootloader can't read anything back. The way back is the plain Glass Panes image.",
       "confirm.understand": "I understand lululemon's software can't be restored.",
@@ -67,7 +67,7 @@
       "app.pick.local": "Pick the legacy build of Glassworks for generic Android. Kiln makes it the Mirror's only home screen.",
       "app.connectHelp": "Plug the Mirror into this computer, click Connect and pick it. Then choose **Allow** on the Mirror, with a USB mouse.",
       "app.toImage": "A Mirror with lululemon's software?",
-      "fastboot.notLetIn": "The Mirror didn't let this browser in: it runs lululemon's software, or Glassworks from another browser. Put it in fastboot by hand, below."
+      "fastboot.notLetIn": "The Mirror didn't let this browser in: it runs lululemon's software, or Glassworks from another browser. Put it in fastboot with the steps above."
     },
     "silent": {
       "on": {
