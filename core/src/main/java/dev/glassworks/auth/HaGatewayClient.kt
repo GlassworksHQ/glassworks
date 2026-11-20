@@ -11,7 +11,7 @@ import org.json.JSONObject
 class HaGatewayClient(private val tokens: HaTokenClient, private val connect: (String) -> HaSocket) : HaGateway {
     override fun exchangeCode(haBase: String, clientId: String, code: String, codeVerifier: String): HaGateway.Tokens =
         when (val r = tokens.exchangeCode(haBase, clientId, code, codeVerifier)) {
-            is TokenResult.Ok -> HaGateway.Tokens.Ok(r.accessToken, r.refreshToken)
+            is TokenResult.Ok -> HaGateway.Tokens.Ok(r.accessToken, r.refreshToken, r.expiresIn)
             is TokenResult.Error -> HaGateway.Tokens.Failed(r.code, invalidCode = r.isInvalidCode, unreachable = r.httpStatus <= 0)
         }
 
@@ -38,8 +38,64 @@ class HaGatewayClient(private val tokens: HaTokenClient, private val connect: (S
         }
     }
 
+    override fun refresh(haBase: String, clientId: String, refreshToken: String): HaGateway.Tokens =
+        when (val r = tokens.refresh(StoredAuth(haBase, clientId, refreshToken))) {
+            is TokenResult.Ok -> HaGateway.Tokens.Ok(r.accessToken, null, r.expiresIn)
+            // invalid_grant with HA's 400: HA no longer has this sign-in (a proxy's 5xx with that body isn't HA saying so). access_denied (an account turned off) keeps it: it may come back,
+            // and it must stay revocable (CodeRabbit on #534). Anything else is an outage.
+            is TokenResult.Error -> HaGateway.Tokens.Failed(r.code, invalidCode = r.isInvalidCode, unreachable = r.httpStatus <= 0, refused = r.code == "invalid_grant" && r.httpStatus == 400)
+        }
+
     override fun revoke(haBase: String, clientId: String, refreshToken: String): Boolean =
         tokens.revoke(StoredAuth(haBase, clientId, refreshToken))
+
+    override fun createLongLived(haBase: String, accessToken: String, name: String, days: Int): String? =
+        signedIn(haBase, accessToken) { ws, _ ->
+            val m = ask(ws, 1, JSONObject().put("type", "auth/long_lived_access_token").put("lifespan", days).put("client_name", name))
+            m?.takeIf { it.optBoolean("success", false) }?.optString("result")?.takeIf { it.isNotEmpty() }
+        }
+
+    override fun endLongLived(haBase: String, token: String): Boolean =
+        signedIn(haBase, token, refusedMeans = true) { ws, _ ->
+            // This connection is signed in with the token itself, so HA lists it as the current one: its id is all we need.
+            val list = ask(ws, 1, JSONObject().put("type", "auth/refresh_tokens"))?.takeIf { it.optBoolean("success", false) }
+                ?.optJSONArray("result") ?: return@signedIn false
+            val id = (0 until list.length()).map { list.getJSONObject(it) }.firstOrNull { it.optBoolean("is_current") }
+                ?.optString("id")?.takeIf { it.isNotEmpty() } ?: return@signedIn false
+            ask(ws, 2, JSONObject().put("type", "auth/delete_refresh_token").put("refresh_token_id", id))?.optBoolean("success", false) == true
+        } ?: false
+
+    /**
+     * [body] on a websocket signed in with [token]; null when HA didn't answer. When HA refuses the token itself, the
+     * answer is [refusedMeans] (a token HA no longer takes is as good as deleted), else null.
+     */
+    private fun <T> signedIn(haBase: String, token: String, refusedMeans: T? = null, body: (HaSocket, JSONObject) -> T?): T? {
+        val url = HaThreadClient.websocketUrl(haBase) ?: return null
+        val ws = try { connect(url) } catch (e: Exception) { return null }
+        try {
+            if (next(ws)?.optString("type") != "auth_required") return null
+            ws.send(JSONObject().put("type", "auth").put("access_token", token).toString())
+            val auth = next(ws) ?: return null
+            return when (auth.optString("type")) {
+                "auth_ok" -> body(ws, auth)
+                "auth_invalid" -> refusedMeans
+                else -> null
+            }
+        } catch (_: Exception) {
+            return null
+        } finally {
+            runCatching { ws.close() }
+        }
+    }
+
+    /** Sends [msg] as call [id] and waits for its result (other messages skipped); null when the connection ended. */
+    private fun ask(ws: HaSocket, id: Int, msg: JSONObject): JSONObject? {
+        ws.send(msg.put("id", id).toString())
+        while (true) {
+            val m = next(ws) ?: return null
+            if (m.optString("type") == "result" && m.optInt("id", -1) == id) return m
+        }
+    }
 
     private fun next(ws: HaSocket): JSONObject? = ws.receive()?.let(::JSONObject)
 }

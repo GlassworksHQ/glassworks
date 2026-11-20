@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
 import { test } from 'node:test';
-import { MAX_WAIT_S, SETTINGS_MS, TRIES, WRITE_MS, accepts, copyRows, authorizeUrl, hello, localHost, manageOrigin, revokeAt, storedFor, tokenRequest, usable, writeSetting, outcome, panelsFrom, pkceChallenge, plan, reachability, readPanel, retrying, sha256 } from '../../main/assets/manage/panels-core.js';
+import { panelKeep, ACCESS_MS, FORGET_MS, TOKEN_MS, MAX_WAIT_S, SETTINGS_MS, TRIES, WRITE_MS, accepts, copyRows, authorizeUrl, hello, localHost, manageOrigin, panelAccess, panelForget, revokeAt, storedFor, tokenRequest, usable, writeSetting, outcome, panelsFrom, pkceChallenge, plan, reachability, readPanel, retrying, sha256 } from '../../main/assets/manage/panels-core.js';
 
 const MODEL = 'Panel Hub S1 Plus (Glassworks)';
 const device = (id, url, more = {}) => ({ id, name: 'Glassworks Panel', model: MODEL, config_entries: ['esp'], configuration_url: url, area_id: null, disabled_by: null, ...more });
@@ -392,7 +392,7 @@ test("Home Assistant's token exchange has one deadline for the request and its b
   await assert.rejects(tokenRequest('http://192.0.2.10:8123', {}, stalledBody, 30), { message: "Home Assistant didn't answer in time. Try again." });
   await assert.rejects(tokenRequest('http://192.0.2.10:8123', {}, async () => ({ status: 400, headers: { get: () => null }, json: async () => ({ error: 'invalid_grant' }) }), 1_000),
     { message: 'Home Assistant refused the sign-in. Sign in again.' });
-  await assert.rejects(tokenRequest('http://192.0.2.10:8123', {}, async () => { throw new TypeError('Failed to fetch'); }, 1_000), { message: "Can't reach Home Assistant." });
+  await assert.rejects(tokenRequest('http://192.0.2.10:8123', {}, async () => { throw new TypeError('Failed to fetch'); }, 1_000), { message: "Can't reach Home Assistant. Try again." });
 });
 
 test('no request to a panel or to Home Assistant follows a redirect', async () => {
@@ -457,4 +457,73 @@ test("each panel's own Home Assistant address is never copied (2026-11-18 panel 
   // Either side's mark is enough: an older source that doesn't mark it still never sends it to a target that does.
   const old = panel('1', [sec('dashboard', 'Home Assistant & dashboard', [ha('http://192.0.2.10:8123', true)])]);
   assert.equal(plan(old, tab).rows[0].state, 'own');
+});
+
+test("All panels takes its token from the panel's kept sign-in, same origin, with the form token", async () => {
+  const seen = [];
+  const answer = (status, body) => async (url, init) => (seen.push([url, init.method, String(init.body), init.redirect]),
+    { status, headers: { get: () => null }, json: async () => body });
+  assert.deepEqual(await panelAccess('CSRF', answer(200, { access_token: 'A', expires_in: 1800 }), 1_000), { access_token: 'A', expires_in: 1800 });
+  assert.deepEqual(seen[0], ['/manage/ha/access', 'POST', 'csrf=CSRF', 'error'], 'a relative URL: this panel only');
+  assert.equal(await panelAccess('CSRF', answer(404, { problem: 'none kept' }), 1_000), null, 'a code sign-in: Continue instead');
+  assert.equal(await panelAccess('CSRF', answer(200, { nope: 1 }), 1_000), null);
+  // An outage isn't a missing sign-in: the page says so and tries again, it doesn't ask for Continue.
+  assert.deepEqual(await panelAccess('CSRF', answer(503, { problem: "Can't reach Home Assistant. Try again in a moment." }), 1_000),
+    { outage: true, problem: "Can't reach Home Assistant. Try again in a moment." });
+  assert.equal((await panelAccess('CSRF', async () => { throw new TypeError('Failed to fetch'); }, 1_000)).outage, true);
+  assert.equal(await panelForget('CSRF', answer(200, { ok: true }), 1_000), true);
+  assert.deepEqual(seen.at(-1), ['/manage/ha/forget', 'POST', 'csrf=CSRF', 'error'], 'this panel only, with the form token');
+  assert.equal(await panelForget('CSRF', answer(500, null), 1_000), false);
+  // This Manage page's sign-in ended (CodeRabbit on #534): Sign in again, not an outage to retry.
+  assert.deepEqual(await panelAccess('CSRF', answer(401, { problem: 'Your sign-in to this Manage page has ended. Sign in again.' }), 1_000),
+    { manageEnded: true, problem: 'Your sign-in to this Manage page has ended. Sign in again.' });
+  assert.equal(await panelForget('CSRF', answer(401, { problem: 'ended' }), 1_000), 'ended', "can't confirm: not a yes");
+  // Another tab signed in to Manage again: this page's form token is stale. Reload, not a second HA sign-in.
+  assert.equal((await panelAccess('CSRF', answer(403, { problem: 'expired' }), 1_000)).stale, true);
+  // HA's address changed: reload for the new one, not a sign-in at the old (CodeRabbit on #534).
+  assert.deepEqual(await panelAccess('CSRF', answer(404, { problem: 'Reload.', reload: true }), 1_000), { stale: true, problem: 'Reload.' });
+  assert.equal(await panelForget('CSRF', answer(403, { problem: 'expired' }), 1_000), 'stale', 'a stale page: Reload, not Try again');
+});
+
+test("a tab's renewal Home Assistant didn't answer is kept for Try again; a refusal isn't (CodeRabbit on #534)", async () => {
+  const fail = (status) => async () => ({ status, headers: { get: () => null }, json: async () => ({}) });
+  const thrown = async (f) => { try { await tokenRequest('http://ha.local', {}, f, 1_000); } catch (e) { return e; } };
+  assert.equal((await thrown(async () => { throw new TypeError('Failed to fetch'); })).transient, true);
+  assert.equal((await thrown(fail(503))).transient, true);
+  assert.equal((await thrown(fail(400))).transient, undefined);
+  // The panel's forget waits for both its tries at Home Assistant.
+  assert.ok(FORGET_MS >= 40_000 && FORGET_MS > TOKEN_MS);
+});
+
+test('after a sign-out mid-read no token goes out; server errors and a skipped revoke say what they are (CodeRabbit on #534)', async () => {
+  const p = { origin: 'http://kitchen-panel.local:8099', local: true, model: MODEL };
+  const urls = [];
+  let signedOut = false;
+  const fetchFn = async (url, init) => {
+    urls.push([url, init.headers && init.headers.Authorization]);
+    if (url.endsWith('/manage/api/hello')) { signedOut = true; return { status: 200, headers: { get: () => null }, json: async () => ({ api: 1, glassworks: true, model: MODEL }) }; }
+    return { status: 200, headers: { get: () => null }, json: async () => ({ api: 1, sections: [] }) };
+  };
+  await readPanel(p, 'TOKEN', fetchFn, 1_000, async () => {}, 1_000, () => signedOut);
+  assert.deepEqual(urls.map(([u, a]) => [u.slice(u.lastIndexOf('/manage')), a]), [['/manage/api/hello', undefined]], 'hello only, no bearer');
+  const answer = (status, body) => async () => ({ status, headers: { get: () => null }, json: async () => body });
+  assert.equal((await panelAccess('CSRF', answer(500, null), 1_000)).outage, true, 'a 500 is an outage, not a missing sign-in');
+  assert.equal(await panelForget('CSRF', answer(200, { ok: true, left: true }), 1_000), 'left', 'not revoked: HA moved');
+  assert.equal(await panelForget('CSRF', answer(200, { ok: true }), 1_000), true);
+  assert.equal(await panelForget('CSRF', answer(503, { problem: 'busy' }), 1_000), 'busy', 'not started: Try again, not "may stay active"');
+  assert.equal(await panelForget('CSRF', answer(200, null), 1_000), false, 'an unreadable answer confirms nothing');
+  // The panel's renewal gets longer than a direct token request: its own call to HA can take most of 30 s.
+  assert.ok(ACCESS_MS >= 30_000 && ACCESS_MS > TOKEN_MS);
+});
+
+test("a tab's own sign-in goes to its own panel to keep, with the form token (2026-11-19 panel run)", async () => {
+  const seen = [];
+  const answer = (status, body) => async (url, init) => (seen.push([url, init.method, String(init.body), init.redirect]),
+    { status, headers: { get: () => null }, json: async () => body });
+  assert.equal(await panelKeep('CSRF', 'R', answer(200, { ok: true }), 1_000), true);
+  assert.deepEqual(seen[0], ['/manage/ha/keep', 'POST', 'csrf=CSRF&refresh=R', 'error'], 'this panel only, in the body, never a URL');
+  assert.equal(await panelKeep('CSRF', 'R', answer(200, { ok: true, already: true }), 1_000), 'already');
+  for (const [status, body] of [[403, { problem: 'x' }], [404, null], [503, { problem: 'busy' }], [200, null]]) {
+    assert.equal(await panelKeep('CSRF', 'R', answer(status, body), 1_000), false, String(status));
+  }
 });

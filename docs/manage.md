@@ -176,7 +176,10 @@ at the panel.
    address, that sign-in ends when the panel first stores one; sign in again then.
 
 **Remember this browser for 30 days** keeps you signed in on that browser. Without it, the sign-in
-ends when you close the browser (at the latest after 12 hours). Security lists every signed-in
+ends when you close the browser (at the latest after 12 hours). The Home Assistant sign-in the panel keeps for
+All panels doesn't end when you close the browser: it ends when you sign out, when the Manage page stops, or at the
+panel's check about a minute after the session runs out (12 hours at most without *Remember*). Sign out to end it
+at once. Security lists every signed-in
 browser and signs any of them out. All of them are signed out when the panel's Home Assistant
 address changes.
 
@@ -196,10 +199,18 @@ manage a panel. Whether other users get a say is open (#124).
 
 ## How it keeps you safe
 
-- The panel asks Home Assistant who you are, checks you're an administrator, and **revokes Home
-  Assistant's token straight away**. It keeps no Home Assistant token from your sign-in. If Home
-  Assistant doesn't take the revoke, the panel tries once more and then logs a warning; that token
-  then stays under your profile in Home Assistant (*Security → Refresh tokens*) until you delete it. Its own
+- The panel asks Home Assistant who you are and checks you're an administrator. Anyone else's token is
+  **revoked straight away**. An administrator's sign-in is kept in the panel's memory for that browser's Manage
+  session only, so All panels needs no second sign-in. It is never written to disk, a log or the
+  diagnostics. The panel revokes it in Home Assistant when you sign out (here, from Security or on All panels) and
+  when its Manage page stops. It also checks about once a minute for sessions that ran out, and revokes their
+  sign-ins then. If Home Assistant doesn't take a revoke, the panel tries once more, logs a warning, and tries again
+  at its later checks; as the Manage page stops there is no later check, and the Log says the sign-in stays. When
+  the panel's Home Assistant address changes, it drops the sign-in without revoking it: the token never goes to the
+  old address, where something else may answer now (the panel's own sign-in does the same). The Log says so, and the
+  sign-in stays under your profile until you remove it. If the app restarts, the panel forgets it without
+  revoking it; it then stays under your profile in Home Assistant (*Security → Refresh tokens*) until it expires
+  or you delete it. Its own
   long-lived sign-in (the one the dashboard uses) is separate, and the Manage page never shows or
   sends it.
 - Your browser gets the panel's own sign-in cookie: `HttpOnly` (scripts can't read it) and
@@ -232,9 +243,12 @@ manage a panel. Whether other users get a say is open (#124).
 **What plain HTTP on your network doesn't protect.** The page is `http://`, like Home Assistant on
 `http://`. Someone who can read your Wi-Fi traffic can see:
 
-- **The panel's cookie.** With it they can use the Manage page as you until it's signed out. The
-  cookie gets them nothing else: not Home Assistant (the panel already revoked that token), and not a
-  reboot (that needs the code on the panel's screen).
+- **The panel's cookie.** With it they can use the Manage page as you until it's signed out, but not
+  reboot (that needs the code on the panel's screen). If the panel keeps a Home Assistant sign-in for it (you signed
+  in with Home Assistant, came through another panel's **Manage**, or used Continue), it also gets
+  them what All panels gets: fresh Home Assistant access tokens for your administrator account, for as long
+  as the session lasts (up to 30 days with *Remember this browser*) or until you sign out of All panels. A
+  session signed in with the code on the panel gets none until you use Continue on All panels.
 - **Your Home Assistant password, if Home Assistant itself is on `http://`.** You type it on Home
   Assistant's own login page, not on the panel, so the panel never has it; but over plain HTTP that page
   sends it in the clear, as it does whenever you sign in to Home Assistant over `http://`. Revoking the
@@ -242,8 +256,9 @@ manage a panel. Whether other users get a say is open (#124).
   multi-factor sign-in adds a second step, so a caught password alone doesn't get anyone in.
 - **The sign-in's exchange with Home Assistant, if Home Assistant is on `http://`.** The panel trades
   the one-time code for Home Assistant's tokens, asks who you are and revokes them, over the address it
-  has, so over `http://` these pass in the clear for a few seconds. Revoking the refresh token also ends
-  its access token, so a caught token works only until then. If Home Assistant refuses the revoke twice,
+  has, so over `http://` these pass in the clear. Revoking the refresh token also ends its access tokens. An
+  administrator's refresh token stays valid while the panel keeps it for All panels, so a caught one works
+  until you sign out or the session ends; anyone else's is revoked within seconds. If Home Assistant refuses the revoke twice,
   the refresh token stays until you delete it (see above), and the Log says so. Someone who can *change* that traffic could
   also answer for Home Assistant and sign in as an administrator. This is a choice: most Home Assistant
   installs on a home network are `http://`, the panel's own dashboard sign-in crosses the same way, and
@@ -276,8 +291,24 @@ diagnostics). See the [core's README](../pane-api/src/main/java/dev/glassworks/R
 
 **All panels**, after Overview in the menu, sets up every panel in the house from one page (#466).
 
-1. **Continue with Home Assistant.** This tab signs in to Home Assistant on its own (with PKCE), with an
-   administrator, and keeps the sign-in until you close the tab. **Sign out** on the page ends it in Home
+1. **Signing in.** Signed in to this Manage page with Home Assistant, All panels uses that sign-in: the panel
+   hands the page a fresh Home Assistant access token from it (same page, its form token), so there is no
+   second sign-in. That holds only while the panel keeps it. After **Sign out** on All panels, or when Home
+   Assistant no longer takes it, the Manage session stays but All panels asks for **Continue with Home
+   Assistant** again. After the app restarts, a browser that ticked *Remember this browser* is still signed in to
+   Manage, and All panels asks for Continue; any other browser signs in to Manage again first. If this Manage
+   page's own sign-in has ended, All panels says so, with **Sign in**, when it next asks this panel to renew or end the sign-in it keeps: on loading, when its token runs out (Manage and Copy renew it then), or at Sign out. Until then, and in a tab signed in to Home Assistant on its own, Manage and Copy go on with the token the tab has. One Home Assistant
+   sign-in covers every panel this browser opens:
+   - Opened through **Manage** on another panel's All panels, this panel makes its own long-lived Home Assistant
+     token for that session with the token the other page handed it (for a day, listed under your profile in Home
+     Assistant as "Glassworks Manage on <this panel> (<browser>)"), so All panels here needs no second sign-in. It
+     is deleted in Home Assistant when that session ends: Sign out here or on All panels, Security, or the session
+     running out. It never goes to an old Home Assistant address, and if Home Assistant doesn't make one, All panels
+     asks for Continue.
+   - Signed in with the code on the panel (or after a restart), the page asks for Continue once: the tab signs in to
+     Home Assistant on its own (with PKCE), with an administrator, and hands that sign-in to this panel, which keeps it
+     for the session as above; the tab keeps no copy. If the panel can't keep it, the tab keeps it until you close
+     the tab. **Sign out** on the page ends it in Home
    Assistant too, when Home Assistant answers. If it doesn't, the page says the sign-in may stay active there, with
    **Try again**; you can also remove it in Home Assistant under your profile, Security, Refresh tokens.
 2. **The panels.** The page asks Home Assistant for its devices and lists each ESPHome device whose **Visit**

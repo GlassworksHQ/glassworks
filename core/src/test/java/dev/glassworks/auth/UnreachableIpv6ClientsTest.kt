@@ -27,6 +27,8 @@ class UnreachableIpv6ClientsTest {
     private fun handle(req: dev.glassworks.web.HttpRequest): HttpResponse = when (req.path) {
         "/auth/token" -> HttpResponse(200, mapOf("Content-Type" to "application/json"),
             """{"access_token":"AT","refresh_token":"RT","expires_in":1800,"token_type":"Bearer"}""".toByteArray())
+        // Home Assistant answers 200 to every revoke; only a 2xx counts as one (CodeRabbit on #534).
+        "/auth/revoke" -> HttpResponse.text(200, "")
         "/manifest.json" -> HttpResponse(200, mapOf("Content-Type" to "application/json"), """{"name":"Home Assistant"}""".toByteArray())
         "/api/websocket" -> HttpResponse.webSocket(WebSocketStreams.key(req)!!, 5_000) { ws ->
             fun say(json: String) = ws.output.run { write(json.toByteArray()); flush() }

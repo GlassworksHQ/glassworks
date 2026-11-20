@@ -261,9 +261,9 @@ export function usable(p) {
  * for a panel off the local network ([localHost]). Then the token-free [hello]; the token goes only to a panel that
  * passes it, and [p] comes back `trusted` then. A busy panel's 503 is tried again ([retrying]).
  */
-export async function readPanel(p, access, fetchFn = fetch, ms = 6_000, sleep = undefined, settingsMs = SETTINGS_MS) {
+export async function readPanel(p, access, fetchFn = fetch, ms = 6_000, sleep = undefined, settingsMs = SETTINGS_MS, stop = () => false) {
   if (p.local !== true) return { ...p, trusted: false, reach: { state: 'remote', why: REMOTE }, settings: null };
-  const get = (path, headers, timeout) => retrying(() => timed(fetchFn, p.origin + path, { headers }, timeout), sleep);
+  const get = (path, headers, timeout) => retrying(() => timed(fetchFn, p.origin + path, { headers }, timeout), sleep, stop);
   let hi;
   try {
     // Hello never answers 503 (it asks Home Assistant nothing), so only the settings read can wait: one read stays
@@ -273,6 +273,8 @@ export async function readPanel(p, access, fetchFn = fetch, ms = 6_000, sleep = 
     return { ...p, trusted: false, reach: { state: 'down', why: DOWN }, settings: null };
   }
   if (!hello(p, hi.body)) return { ...p, trusted: false, reach: { state: 'stranger', why: STRANGER }, settings: null };
+  // Signed out while hello was on its way: the token goes nowhere after a sign-out (CodeRabbit on #534).
+  if (stop()) return { ...p, trusted: true, reach: { state: 'unchecked', why: UNCHECKED }, settings: null };
   // It answered hello, so from here on it is reachable: whatever goes wrong is said as what it is, never Down.
   try {
     const r = await get('/manage/api/settings', { Authorization: 'Bearer ' + access }, settingsMs);
@@ -365,14 +367,22 @@ export async function tokenRequest(ha, form, fetchFn = fetch, ms = TOKEN_MS) {
   try {
     r = await timed(fetchFn, ha + '/auth/token', { method: 'POST', body: new URLSearchParams(form) }, ms);
   } catch (e) {
-    throw new Error(e && e.name === 'AbortError' ? "Home Assistant didn't answer in time. Try again." : "Can't reach Home Assistant.");
+    // No answer: the sign-in may be fine, so the tab keeps it and tries again (CodeRabbit on #534).
+    throw Object.assign(new Error(e && e.name === 'AbortError' ? "Home Assistant didn't answer in time. Try again." : "Can't reach Home Assistant. Try again."), { transient: true });
   }
+  if (r.status >= 500) throw Object.assign(new Error("Home Assistant couldn't answer. Try again."), { transient: true });
   if (r.status < 200 || r.status >= 300 || !r.body) throw new Error('Home Assistant refused the sign-in. Sign in again.');
   return r.body;
 }
 
 /** How long a token exchange or refresh may take. */
 export const TOKEN_MS = 15_000;
+
+/**
+ * How long the panel may take to renew its kept sign-in: one call to Home Assistant, up to its connect timeout and a
+ * read timeout for the head and another for the body (10 s each), and the answer back (CodeRabbit on #534).
+ */
+export const ACCESS_MS = 35_000;
 
 /** Asks Home Assistant at [ha] to drop [refresh] and every access token made from it. True only when it said yes. */
 export async function revokeAt(ha, refresh, fetchFn = fetch, ms = REVOKE_MS) {
@@ -394,6 +404,12 @@ export async function revokeAt(ha, refresh, fetchFn = fetch, ms = REVOKE_MS) {
 export const REVOKE_MS = 10_000;
 
 /**
+ * How long the panel may take to end its kept sign-in: it tries Home Assistant twice, each try up to its connect and
+ * read timeouts (10 s each), so this covers both before the page says it wasn't confirmed (CodeRabbit on #534).
+ */
+export const FORGET_MS = 45_000;
+
+/**
  * The tab's kept Home Assistant sign-in ([raw], as stored) when it was made for this Home Assistant ([ha]) and this
  * Manage session ([session]), else null. A sign-out from the Manage page ends the session, so whoever signs in next in
  * the same tab can't use the last administrator's sign-in (CodeRabbit on #488).
@@ -404,5 +420,66 @@ export function storedFor(raw, ha, session) {
     return t && t.ha === ha && typeof t.session === 'string' && t.session !== '' && t.session === session ? t : null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * A fresh Home Assistant access token from this panel, out of the sign-in it keeps with this Manage session
+ * (`POST /manage/ha/access`, same origin, with the session's [csrf]): one sign-in for the page and All panels (#466
+ * panel run). `{ access_token, expires_in }`; null when the panel keeps none (a code sign-in) or HA refused it; or
+ * `{ outage, problem }` when Home Assistant (or this panel) didn't answer: the sign-in is still there, try again.
+ */
+export async function panelAccess(csrf, fetchFn = fetch, ms = ACCESS_MS) {
+  let r;
+  try {
+    r = await timed(fetchFn, '/manage/ha/access', { method: 'POST', body: new URLSearchParams({ csrf }) }, ms);
+  } catch {
+    return { outage: true, problem: "Can't reach this panel. Try again in a moment." };
+  }
+  if (r.status === 200 && r.body && typeof r.body.access_token === 'string') return r.body;
+  // This Manage page's own sign-in ended: trying again won't help, signing in to Manage again will (CodeRabbit on #534).
+  if (r.status === 401) return { manageEnded: true, problem: (r.body && r.body.problem) || 'Your sign-in to this Manage page has ended. Sign in again.' };
+  // The form token is another session's (signed in again in another tab): this page is out of date, not signed out of HA.
+  if (r.status === 403) return { stale: true, problem: 'This page is out of date. Reload it to go on.' };
+  // HA's address changed: this page has the old one, so it reloads rather than offer a sign-in there.
+  if (r.status === 404 && r.body && r.body.reload) return { stale: true, problem: r.body.problem || 'Reload the page to go on.' };
+  if (r.status === 503) return { outage: true, problem: (r.body && r.body.problem) || "Can't reach Home Assistant. Try again in a moment." };
+  // Any other server error: the panel's sign-in may be fine, so try again rather than sign in again (CodeRabbit on #534).
+  if (r.status >= 500) return { outage: true, problem: 'The panel ran into a problem. Try again in a moment.' };
+  return null;
+}
+
+/**
+ * Hands this tab's own Home Assistant sign-in to this panel (`POST /manage/ha/keep`, same origin, the form token), which
+ * keeps it for the Manage session: then every tab and every handoff of this browser uses that one sign-in (2026-11-19
+ * panel run). True when the panel kept it, 'already' when it keeps one already, false otherwise (the tab keeps its own).
+ */
+export async function panelKeep(csrf, refresh, fetchFn = fetch, ms = ACCESS_MS) {
+  try {
+    const r = await timed(fetchFn, '/manage/ha/keep', { method: 'POST', body: new URLSearchParams({ csrf, refresh }) }, ms);
+    if (r.status !== 200 || !r.body || r.body.ok !== true) return false;
+    return r.body.already ? 'already' : true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Ends the sign-in this panel keeps for All panels (`POST /manage/ha/forget`): it revokes it in Home Assistant. True when
+ * HA confirmed it, false when not, and 'ended' when this Manage page's sign-in has ended, so the panel can't say.
+ */
+export async function panelForget(csrf, fetchFn = fetch, ms = FORGET_MS) {
+  try {
+    const r = await timed(fetchFn, '/manage/ha/forget', { method: 'POST', body: new URLSearchParams({ csrf }) }, ms);
+    // 401: this Manage page's sign-in has ended. The panel ends what it kept for it on its own, but can't confirm it
+    // here, so it isn't a confirmation (CodeRabbit on #534).
+    // 403: the form token is another session's (signed in again in another tab); Try again would be refused the same.
+    // 200 with left: HA's address had changed, so the panel didn't send the token to the old one: not revoked.
+    // Only a readable { ok: true } confirms it: a body that didn't arrive may have said left (CodeRabbit on #534).
+    if (r.status === 200) return !r.body || r.body.ok !== true ? false : r.body.left ? 'left' : true;
+    // 503: the panel was busy and didn't start; the sign-in is still kept, so it's for Try again, not "may stay active".
+    return r.status === 401 ? 'ended' : r.status === 403 ? 'stale' : r.status === 503 ? 'busy' : false;
+  } catch {
+    return false;
   }
 }

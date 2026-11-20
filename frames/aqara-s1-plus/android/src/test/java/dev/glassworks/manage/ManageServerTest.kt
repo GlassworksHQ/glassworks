@@ -123,7 +123,7 @@ class ManageServerTest {
 
     // ------------------------------------------------------------------ sign in with Home Assistant
 
-    @Test fun signingInWithHaAsksTheLocalHaWithPkceAndKeepsNoHaToken() {
+    @Test fun signingInWithHaAsksTheLocalHaWithPkceAndKeepsItsTokenInMemoryOnly() {
         val b = f.Browser()
         b.get("/")
         val start = b.post("/manage/ha", mapOf("next" to "/", "remember" to "1"))
@@ -136,7 +136,7 @@ class ManageServerTest {
         assertEquals("S256", q["code_challenge_method"])
         val cb = b.get("/manage/callback?code=CODE&state=${q["state"]}")
         assertEquals(200, cb.status)
-        assertEquals(listOf("REFRESH"), f.revoked)
+        assertEquals("an administrator's sign-in is kept for All panels (#466), not revoked", emptyList<String>(), f.revoked)
         val cookie = cb.headers["Set-Cookie"]!!.lines().first { it.startsWith(ManageServer.SESSION) }
         assertTrue(cookie.contains("HttpOnly"))
         assertTrue(cookie.contains("SameSite=Strict"))
@@ -350,7 +350,11 @@ class ManageServerTest {
 
     @Test fun aRevokeHaDidntTakeIsTriedAgainThenLogged() {
         f.revokeWorks = false
-        f.Browser().signInWithHa()
+        val b = f.Browser().also { it.signInWithHa() }
+        assertTrue("signing in revokes nothing", f.revoked.isEmpty())
+        assertTrue(f.warnings.isEmpty())
+        // Kept for All panels until sign-out (#466); sign-out ends it in HA, twice if HA doesn't take it.
+        b.post("/manage/signout", mapOf("csrf" to b.csrf()))
         assertEquals(listOf("REFRESH", "REFRESH"), f.revoked)
         assertEquals(1, f.warnings.size)
         assertFalse("the warning never holds the token", f.warnings.single().contains("REFRESH"))
