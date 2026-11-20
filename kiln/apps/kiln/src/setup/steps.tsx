@@ -68,7 +68,8 @@ export function Wifi({ busy, steps, setup }: { busy: boolean; steps: WifiSteps; 
         {j.error && <p className="status err" role="alert">{j.error}</p>}
         {setup.joinNote && <p className="lede">{setup.joinNote}</p>}
         <div className="foot">
-          {j.step === 'err' ? <button type="button" className="link" disabled={busy} onClick={() => void steps.click('ha', () => steps.homeAssistant())}>Skip, do it on the panel</button> : <span />}
+          {/* without touch the panel can't take Wi-Fi from its own screen: no skip to it */}
+          {j.step === 'err' && steps.touch !== false ? <button type="button" className="link" disabled={busy} onClick={() => void steps.click('ha', () => steps.homeAssistant())}>Skip, do it on the panel</button> : <span />}
           {j.step === 'ok' && <button type="button" className="btn ember" disabled={busy} onClick={() => void steps.click('ha', () => steps.homeAssistant())}>Continue</button>}
           {j.step === 'err' && <button type="button" className="btn ember" disabled={busy} onClick={() => void steps.click('wifi', () => steps.wifi())}>Try again</button>}
         </div>
@@ -95,7 +96,7 @@ export function Wifi({ busy, steps, setup }: { busy: boolean; steps: WifiSteps; 
       {setup.networks === undefined && !setup.unreachable ? (
         <><p className="status" role="status">{setup.status}</p><div className="bar wait"><i /></div></>
       ) : setup.unreachable ? (
-        <p className="status err" role="alert">{setup.status} Try again, or set up Wi-Fi on the panel: it shows Wi-Fi first.</p>
+        <p className="status err" role="alert">{setup.status}{steps.touch !== false ? ' Try again, or set up Wi-Fi on the panel: it shows Wi-Fi first.' : ' Try again.'}</p>
       ) : (
         <>
           <RadioGroup.Root className="list" value={pick} onValueChange={setPick} aria-label="Networks">
@@ -112,9 +113,11 @@ export function Wifi({ busy, steps, setup }: { busy: boolean; steps: WifiSteps; 
         </>
       )}
       <div className="foot">
-        <button type="button" className="link" disabled={busy} onClick={() => void steps.click('ha', () => steps.homeAssistant())}>
-          {setup.on ? `Keep ${setup.on.ssid ?? 'its Wi-Fi'}` : 'Skip, do it on the panel'}
-        </button>
+        {setup.on || steps.touch !== false ? (
+          <button type="button" className="link" disabled={busy} onClick={() => void steps.click('ha', () => steps.homeAssistant())}>
+            {setup.on ? `Keep ${setup.on.ssid ?? 'its Wi-Fi'}` : 'Skip, do it on the panel'}
+          </button>
+        ) : <span />}
         {setup.unreachable
           ? <button type="button" className="btn ember" disabled={busy} onClick={() => void steps.click('wifi', () => steps.wifi())}>Try again</button>
           : <button type="button" className="btn ember" disabled={!setup.networks || busy} onClick={() => void steps.click('join', () => steps.joinWifi(isOther ? other : pick, secure ? psk : ''))}>Connect</button>}
@@ -145,7 +148,7 @@ export function HomeAssistant({ busy, steps, setup }: StepProps<'ha'>) {
         </div>
       ) : (
         <div className="foot">
-          <button type="button" className="link" disabled={setup.busy || busy} onClick={() => void steps.click('skip-ha', () => steps.skipHa(url.trim()))}>Skip, sign in on the panel</button>
+          <button type="button" className="link" disabled={setup.busy || busy} onClick={() => void steps.click('skip-ha', () => steps.skipHa(url.trim()))}>{steps.touch !== false ? 'Skip, sign in on the panel' : 'Skip, sign in later'}</button>
           <button type="button" className="btn ember" disabled={setup.busy || setup.signingIn || busy} onClick={() => void steps.click('sign-in', () => steps.signIn(url.trim()))}>Sign in</button>
         </div>
       )}

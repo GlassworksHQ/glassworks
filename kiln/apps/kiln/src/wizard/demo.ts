@@ -23,7 +23,8 @@ const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const IP = '192.0.2.50';
 
 /** Whether the simulated panel is on Wi-Fi: its app's setup state and Android's `dumpsys wifi` read it. */
-interface Net { online: boolean }
+/** `radioOff`: Android's Wi-Fi is off (a fresh flash): its scans find nothing until `svc wifi enable`. */
+interface Net { online: boolean; radioOff?: boolean }
 
 /** `dumpsys wifi` on a panel on the made-up "Home Net", in Android 10's shape, the network added by `pkg`. */
 const dumpsysWifi = (pkg: string) => [
@@ -90,7 +91,7 @@ function improvStream(fail: boolean, net: Net): ByteStream {
         const cmd = p.data[0];
         if (cmd === Rpc.RequestState) send(PacketType.State, Uint8Array.of(net.online ? ImprovState.Provisioned : ImprovState.Ready));
         if (cmd === Rpc.ScanWifi) {
-          [['Home Net', '-48', 'YES'], ['Home Net 5G', '-62', 'YES'], ['Neighbours', '-74', 'YES'], ['Cafe Guest', '-83', 'NO']]
+          if (!net.radioOff) [['Home Net', '-48', 'YES'], ['Home Net 5G', '-62', 'YES'], ['Neighbours', '-74', 'YES'], ['Cafe Guest', '-83', 'NO']]
             .forEach((n, i) => result(Rpc.ScanWifi, n, 600 + i * 40));
           result(Rpc.ScanWifi, [], 800);
         }
@@ -107,12 +108,16 @@ function improvStream(fail: boolean, net: Net): ByteStream {
 
 /**
  * `p` with Glassworks' setup channel and Improv answering, for any frame's simulated device after its app goes in.
- * `online`: on Wi-Fi already; `radio`: the app reports a radio.
+ * `online`: on Wi-Fi already; `radio`: the app reports a radio; `wifiOff`: Android's Wi-Fi is off until `svc wifi enable`.
  */
-export function withAppStreams(p: PanelShell, o: { online: boolean; wifiFails?: boolean; radio?: boolean }): PanelShell {
-  const net: Net = { online: o.online };
+export function withAppStreams(p: PanelShell, o: { online: boolean; wifiFails?: boolean; radio?: boolean; wifiOff?: boolean }): PanelShell {
+  const net: Net = { online: o.online, radioOff: o.wifiOff };
   return {
-    run: (cmd, signal) => p.run(cmd, signal),
+    run: async (cmd, signal) => {
+      if (cmd === 'settings get global wifi_on') return { out: net.radioOff ? '0\n' : '1\n', code: 0 };
+      if (cmd === 'svc wifi enable') { net.radioOff = false; return { out: '', code: 0 }; }
+      return p.run(cmd, signal);
+    },
     push: (path, data, mode) => p.push(path, data, mode),
     openStream: async (svc) => (svc === SETUP_SOCKET ? setupStream(net, o.radio ?? true) : svc === IMPROV_SOCKET ? improvStream(!!o.wifiFails, net) : p.openStream!(svc)),
   };

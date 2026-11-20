@@ -1,6 +1,7 @@
 // One install or undo, from the first click to Done: kiln-core's InstallFlow with a frame's recipe,
 // then the app's setup over adb. All hardware work is here; screens only read the store and call
 // these methods. Port of kiln/src/app/ui.ts without the DOM.
+import { INSTALLERS } from '@glassworks/frames/catalog';
 import type { AdbKey, PanelShell } from '@glassworks/adb';
 import type { Fastboot } from '@glassworks/fastboot';
 import { IMPROV_SOCKET, kioskVersion } from '@glassworks/app-adb';
@@ -123,6 +124,7 @@ export class Session implements SetupSteps {
       sleep: (ms) => this.sleep(ms),
       openTab: (url) => (this.d.openTab ? this.d.openTab(url) : openSignInWindow()),
       simulated: d.simulated,
+      touch: INSTALLERS[d.frame.id]?.touch !== false,
     });
   }
 

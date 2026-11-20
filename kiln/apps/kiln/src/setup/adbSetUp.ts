@@ -54,6 +54,8 @@ export interface AdbSetUpDeps {
   openTab(url: string): Window | null;
   /** A simulated device needs no wait for the app's socket. */
   simulated?: boolean;
+  /** The device has a touchscreen (installer.json `touch`). Without one, no step offers "do it on the panel". */
+  touch?: boolean;
 }
 
 export class AdbSetUp implements SetupSteps, WifiSteps {
@@ -81,6 +83,9 @@ export class AdbSetUp implements SetupSteps, WifiSteps {
   }
 
   click(name: string, run: () => Promise<void> | void): Promise<void> { return this.d.click(name, run); }
+
+  /** Whether the device has a touchscreen: the steps offer "do it on the panel" only then. */
+  get touch(): boolean { return this.d.touch !== false; }
 
   /** Lets go of the setup channel and the Improv client. */
   close(): void {
@@ -153,6 +158,23 @@ export class AdbSetUp implements SetupSteps, WifiSteps {
     return { ip: st.ip, ssid };
   }
 
+  /**
+   * Android's Wi-Fi, on before a scan: a freshly flashed device can start with it off, and then the app's scan finds
+   * nothing (a run on a real device, 2026-11-20). Read first (`settings get global wifi_on`, 0 is off); `svc wifi enable` over adb
+   * only when it is off, then a few seconds for the radio. Whether it had to turn it on.
+   */
+  private async wifiOn(): Promise<boolean> {
+    const p = this.d.panel();
+    if (!p) return false;
+    const read = async () => (await p.run('settings get global wifi_on', this.d.lid()).catch(() => ({ out: '' }))).out.trim();
+    if ((await read()) !== '0') return false;
+    this.d.note('Wi-Fi is off on the device: turning it on (svc wifi enable)');
+    await p.run('svc wifi enable', this.d.lid()).catch(() => {});
+    for (let i = 0; i < 10 && (await read()) === '0'; i++) await this.d.sleep(1000);
+    await this.d.sleep(3000); // the radio's first scan results
+    return true;
+  }
+
   /** The networks the panel can see, over Improv Serial through adb ("Use another network"). */
   async scanWifi(): Promise<void> {
     if (!this.improv) return this.wifi();
@@ -160,8 +182,11 @@ export class AdbSetUp implements SetupSteps, WifiSteps {
     const was = cur.phase === 'wifi' ? cur.on : undefined;
     const already = !was && this.improv.state === ImprovState.Provisioned;
     this.d.show({ phase: 'wifi', on: was, changing: !!was, status: 'Looking for networks the panel can see…', hint: already ? 'The panel is already on Wi-Fi. Pick another network to change it, or skip.' : this.wifiHint });
+    const turnedOn = await this.wifiOn();
     let networks: { ssid: string; rssi: number; secure: boolean }[] = [];
     try { networks = await this.improv.scan(); } catch { /* typed by hand then */ }
+    // a radio just turned on can miss the first scan: once more before "None found"
+    if (!networks.length && turnedOn) { await this.d.sleep(3000); try { networks = await this.improv.scan(); } catch { /* typed by hand then */ } }
     const s = this.d.phase();
     this.d.show({
       phase: 'wifi', on: was, changing: !!was, networks, hint: s.phase === 'wifi' ? s.hint : undefined,
@@ -210,7 +235,24 @@ export class AdbSetUp implements SetupSteps, WifiSteps {
 
   get haAddress(): string | undefined { return this.steps.haAddress; }
   set haAddress(v: string | undefined) { this.steps.haAddress = v; }
-  homeAssistant(): Promise<void> { return this.steps.homeAssistant(); }
+  /**
+   * Home Assistant. The app can restart right after a Wi-Fi join (it found Home Assistant), so its setup channel may be
+   * down for a while: one clear waiting state until it is back, never read as an older app with no channel.
+   */
+  async homeAssistant(): Promise<void> {
+    if (!this.d.simulated && !(await this.socketUp(SETUP_SOCKET))) {
+      this.d.show({ phase: 'waiting', note: `Waiting for ${this.d.appName} to start again…` });
+      await this.waitForSocket(SETUP_SOCKET, 60_000);
+    }
+    return this.steps.homeAssistant();
+  }
+
+  /** One read: whether the app listens on `socket` now. */
+  private async socketUp(socket: string): Promise<boolean> {
+    const name = socket.replace(/^localabstract:/, '@');
+    const r = await this.d.panel()!.run(`grep -c ' ${name}$' /proc/net/unix`, this.d.lid(5000)).catch(() => ({ out: '0' }));
+    return Number.parseInt(r.out.trim(), 10) > 0;
+  }
   signIn(url: string): void { this.steps.signIn(url); }
   saveHa(url: string): Promise<void> { return this.steps.saveHa(url); }
   skipHa(url: string): Promise<void> { return this.steps.skipHa(url); }

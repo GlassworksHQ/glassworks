@@ -5,6 +5,7 @@ import type { PanelShell } from '@glassworks/adb';
 import { kioskVersion } from '@glassworks/app-adb';
 import type { DeviceFrame } from '@glassworks/kiln-core';
 import { openSignInWindow } from '@glassworks/setup-channel';
+import { INSTALLERS } from '@glassworks/frames/catalog';
 import { AdbSetUp } from '../setup/adbSetUp';
 import type { Setup } from '../wizard/state';
 
@@ -94,6 +95,7 @@ export function deviceSetUp(h: SetUpHost): AdbSetUp {
     sleep,
     openTab: (url) => (h.openTab ? h.openTab(url) : openSignInWindow()),
     simulated: h.simulated,
+    touch: INSTALLERS[h.frame.id]?.touch !== false,
   });
   return setUp;
 }
