@@ -2008,18 +2008,19 @@ class SentToScreen(unittest.TestCase):
 
     def test_a_change_no_frame_showed_never_passes_fluid(self):
         """CodeRabbit on #656: a change with no frame by the window's end counts as the time to the window's end, a lower
-        bound. It must land past fluid's bar (250 ms, inclusive), never at it: it counts only when that time, as stored,
-        is more than 250 ms."""
+        bound. It counts from 250 ms before the end, as before, but never at fluid's bar (inclusive): at least 250.1."""
         fluid = {lv["level"]: lv for lv in G.UPDATE_LEVELS}["fluid"]["latency_p95_max_ms"]
-        self.assertEqual((fluid, R.NO_FRAME_MS), (250, 250))
-        # Sent 250 ms and 260 ms before the window's end (page t 3750 and 3740), never read: the first isn't counted;
-        # the second counts as 260 ms, past fluid. Each beside a change shown 30 ms after it was sent.
+        self.assertEqual((fluid, R.NO_FRAME_MS, R.UNSHOWN_FLOOR_MS), (250, 250, 250.1))
+        # Sent 249, 250 and 260 ms before the window's end (page t 3751, 3750, 3740), never read: the first isn't
+        # counted; the second counts as 250.1, past fluid; the third as 260. Each beside a change shown 30 ms after it.
         shown = [100.0, 110.0, 0, 0, 120.0]
-        lat, _ = R.change_to_screen(self.step([shown, [3750.0, None, 0, 0, None]]), self.page)
+        lat, _ = R.change_to_screen(self.step([shown, [3751.0, None, 0, 0, None]]), self.page)
         self.assertEqual((lat["n"], lat["skipped"]), (1, 1))
-        lat, _ = R.change_to_screen(self.step([shown, [3740.0, None, 0, 0, None]]), self.page)
-        self.assertEqual((lat["n"], lat["max_ms"], lat["p95_ms"]), (2, 260.0, 260.0))
+        lat, _ = R.change_to_screen(self.step([shown, [3750.0, None, 0, 0, None]]), self.page)
+        self.assertEqual((lat["n"], lat["p95_ms"], lat["unshown_floor_ms"]), (2, 250.1, 250.1))
         self.assertEqual(G.update_level({"latency_n": 2, "latency_p95_ms": lat["p95_ms"], "frames": None}), G.BELOW)
+        lat, _ = R.change_to_screen(self.step([shown, [3740.0, None, 0, 0, None]]), self.page)
+        self.assertEqual((lat["n"], lat["p95_ms"]), (2, 260.0))
         # A change a frame showed at exactly 250 ms still passes fluid.
         self.assertEqual(G.update_level({"latency_n": 2, "latency_p95_ms": 250.0, "frames": None}), "fluid")
 
@@ -2483,38 +2484,36 @@ class Regrade(unittest.TestCase):
         with open(os.path.join(self.dir, "report.json"), encoding="utf-8") as f:
             self.assertIn(G.FIRST_V1, " ".join(json.load(f)["grade"]["provisional_reasons"]))
 
-    def test_a_stored_run_the_censoring_rule_could_change_is_flagged(self):
-        """CodeRabbit on #656: an unshown change exactly 250 ms before the window's end counted as 250.0 under the
-        earlier rule and is skipped now. report.json keeps latencies only, so regrade_report flags a view where that
-        could matter, and only there: a 250.0 median, p95 or max (its level could move), or counts so tight that one
-        more skipped change would leave it unmeasured. The raw rebuild of the same change skips it."""
+    def test_a_stored_run_the_unshown_rule_could_change_is_flagged(self):
+        """CodeRabbit on #656: both rules count the same changes (from 250 ms before the window's end); the earlier one
+        stored an unshown change exactly 250 ms from the end as 250.0, which passed fluid, and this one as 250.1. The
+        counts and the ranks don't move, so only a stored p95 of exactly 250.0 can grade differently, and only in a
+        report stored before the rule (no unshown_floor_ms). regrade_report flags that view and no other."""
         rep = R.build(self.dir)
         self.assertEqual(R.censoring_band(rep["graded"]["reference"]["per_run"]), 0)
-        self.assertNotIn("earlier rule", " ".join(R.regrade_report(rep)["grade"].get("provisional_reasons") or []))
         old = json.loads(json.dumps(rep))
-        view = old["graded"]["reference"]["per_run"][0]["tiers"]["typical"]
+        runs = old["graded"]["reference"]["per_run"]
+        view = runs[0]["tiers"]["typical"]
+        self.assertEqual(view["latency"]["unshown_floor_ms"], R.UNSHOWN_FLOOR_MS)          # this rule's record
+        earlier = {k: v for k, v in view["latency"].items() if k != "unshown_floor_ms"}   # a report from before it
 
         def flagged(**lat):
-            view["latency"] = dict(view["latency"], **lat)
-            return R.censoring_band(old["graded"]["reference"]["per_run"]) == 1
+            view["latency"] = dict(earlier, **lat)
+            return R.censoring_band(runs) == 1
 
-        # Case 1: one change shown at 100 ms, one unshown 250 ms from the end: stored p95 250.0 (fluid); raw: 100 (good).
+        # Case 1: one shown at 100 ms, one unshown 250 ms from the end: stored p95 250.0 (fluid); now 250.1 (slow).
         self.assertTrue(flagged(n=2, median_ms=100.0, p95_ms=250.0, max_ms=250.0, skipped=0))
         again = R.regrade_report(old)
         self.assertTrue(again["grade"]["provisional"])
-        self.assertIn("1 stored run(s) with a live-update time of exactly 250.0 ms may hold a change no frame showed",
-                      " ".join(again["grade"]["provisional_reasons"]))
-        # Case 2: shown at 708 ms, unshown 250 ms from the end, one skipped already: raw skips two of three: unmeasured.
-        self.assertTrue(flagged(n=2, median_ms=250.0, p95_ms=708.0, max_ms=708.0, skipped=1))
-        self.assertTrue(flagged(n=3, median_ms=300.0, p95_ms=708.0, max_ms=708.0, skipped=2))     # tight counts, no 250.0
-        # Not in doubt: no 250.0 and counts to spare, or every time under the bar.
-        self.assertFalse(flagged(n=20, median_ms=300.0, p95_ms=708.0, max_ms=900.0, skipped=1))
-        self.assertFalse(flagged(n=2, median_ms=100.0, p95_ms=240.0, max_ms=240.0, skipped=1))
+        self.assertIn("1 stored run(s) with a live-update p95 of exactly 250.0 ms", " ".join(again["grade"]["provisional_reasons"]))
+        # A 250.0 that isn't the p95 (a median, a max, or anywhere else): it becomes 250.1 in place, its rank holds, the
+        # p95 is the same value, and so is the level. Nor do the counts move: no view goes unmeasured.
+        self.assertFalse(flagged(n=2, median_ms=250.0, p95_ms=708.0, max_ms=708.0, skipped=1))
+        self.assertFalse(flagged(n=20, median_ms=100.0, p95_ms=240.0, max_ms=250.0, skipped=0))
         self.assertFalse(flagged(n=20, median_ms=100.0, p95_ms=260.0, max_ms=1500.0, skipped=0))
-        # The raw side of case 1: the change 250 ms from the end isn't counted (SentToScreen has the window).
-        s = SentToScreen()
-        lat, _ = R.change_to_screen(s.step([[100.0, 190.0, 0, 0, 200.0], [3750.0, None, 0, 0, None]]), s.page)
-        self.assertEqual((lat["n"], lat["skipped"]), (1, 1))
+        # The same p95 in a report under this rule is a shown change at 250.0 (an unshown one would be 250.1): trusted.
+        view["latency"] = dict(earlier, p95_ms=250.0, unshown_floor_ms=R.UNSHOWN_FLOOR_MS)
+        self.assertEqual(R.censoring_band(runs), 0)
 
     def test_dry_run_writes_nothing(self):
         before = sorted(os.listdir(self.dir))
