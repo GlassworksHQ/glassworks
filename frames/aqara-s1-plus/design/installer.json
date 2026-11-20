@@ -11,8 +11,8 @@
       "steps": [
         { "id": "connect", "route": "", "transport": "fel", "enter": { "how": "button", "reachable": false, "why": "Stock software has no adb: FEL is the only way in. The button is under the back cover (recovery.json)." }, "checks": ["chip"], "downloads": ["uboot-spl", "uboot"] },
         { "id": "install", "route": "install", "title": "Install", "transport": "fastboot", "enter": { "how": "loader" }, "checks": ["layout", "boot-read-twice"], "backup": true, "writes": true, "reboots": true, "downloads": ["magisk", "bootlogo", "bootanimation"] },
-        { "id": "first-boot", "transport": "adb", "enter": { "how": "boot", "key": "boot-image" } },
-        { "id": "app", "transport": "adb", "writes": true, "inputs": ["locale", "timezone", "clock", "keyboard"], "downloads": ["kiosk-apk", "keyboard-apk"] }
+        { "id": "first-boot", "route": "set-up", "transport": "adb", "enter": { "how": "boot", "key": "boot-image" } },
+        { "id": "app", "route": "set-up", "transport": "adb", "writes": true, "inputs": ["locale", "timezone", "clock", "keyboard"], "downloads": ["kiosk-apk", "keyboard-apk"] }
       ],
       "then": "set-up"
     }
