@@ -49,9 +49,10 @@ mkdir -p "$out"
 # adb shell joins its arguments with spaces and the device's shell splits them again: pass one quoted string when an
 # argument has spaces of its own.
 sh_() { "${ADB[@]}" shell "$@" | tr -d '\r'; }
-# This run's lines only: every line GlowBench logs for a broadcast carries its tag. No `logcat -T`: its time format
+# This run's lines only: every line GlowBench logs for a broadcast carries its tag. One filter (`-s GlowBench`): Android 17
+# keeps only the last of several. No `logcat -T`: its time format
 # varies between Android versions, and a missed start line made the check give up on a run that had started.
-gb_log() { sh_ "logcat -d -v brief -s GlowBench:I GlowBench:W" | grep -F "tag=$1" || true; }
+gb_log() { sh_ "logcat -d -v brief -s GlowBench" | grep -F "tag=$1" || true; }
 
 if [[ -z $pkg ]]; then
   installed=$(sh_ pm list packages | sed -n 's/^package://p' | grep -xE 'sh\.edm\.s1kiosk|dev\.glassworks\.generic_android(\.legacy)?' || true)
@@ -106,7 +107,7 @@ for look in $looks; do
       if [[ $log == *" done tag=$tag json="* ]]; then json=$(printf '%s\n' "$log" | sed -n 's/.* done tag=[^ ]* json=//p' | tail -1); break; fi
       if [[ $started == 0 && $SECONDS -gt $start_by ]]; then
         echo "no start in logcat after 20 s: is this a test build of test-build/glowbench-s1, with $pkg in front?" >&2
-        sh_ "logcat -d -v brief -s GlowBench:I GlowBench:W" | tail -5 >&2 || true
+        sh_ "logcat -d -v brief -s GlowBench" | tail -5 >&2 || true
         exit 1
       fi
     done
