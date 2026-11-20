@@ -17,9 +17,11 @@ describe('the frames registry', () => {
   it('loads every frame on the engine, and only those', async () => {
     expect(Object.keys(KILN).sort()).toEqual([...ENGINE].sort());
     for (const id of ENGINE) {
-      const { frame, sim } = await KILN[id]!();
+      const { kind, frame, sim } = await KILN[id]!();
       expect(frame.id).toBe(id);
-      expect(sim.recipe).not.toBe(frame.recipe);
+      expect(kind).toBe(INSTALLERS[id]!.page);
+      expect(frame).not.toHaveProperty('sim');
+      expect(sim).toBeTruthy();
       expect(INSTALLERS[id]!.route).toMatch(/^\/[a-z0-9-]+$/);
     }
   });

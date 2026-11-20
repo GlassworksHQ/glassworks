@@ -1,5 +1,6 @@
 package dev.glassworks.radio
 
+import dev.glassworks.s1.radio.RadioHelper
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -66,7 +67,7 @@ class RadioV4Test {
     // ------------------------------------------------------------------------------ firmware
 
     private var clock = 1_000_000L
-    private fun fw(p: V4Props) = RadioFirmware(p, tmp.root, now = { clock })
+    private fun fw(p: V4Props) = RadioFirmware(s1Agent(p), tmp.root, now = { clock })
     private val stockSha = "d7b79c6fab1e"
 
     @Test
@@ -155,14 +156,14 @@ class RadioV4Test {
 
     private var clockMs = 1_000_000L
     /** The root-written state file, owned by root (uid 0) unless [owner] says otherwise. */
-    private fun bundle(p: V4Props, state: String?, owner: Int = 0): Pair<RadioBundle, File> {
+    private fun bundle(p: V4Props, state: String?, owner: Int = 0, format: String = "S1RADIO-BUNDLE 1"): Pair<RadioBundle, File> {
         val pub = File(tmp.root, "pub/radio-bundle")
         pub.parentFile.mkdirs()
         if (state != null) pub.writeText(state) else pub.delete()
         p.stageDir = File(tmp.root, RadioHelper.BUNDLE_STAGE_DIR)
         p.onOk = { pub.writeText("ok 30200 30200\n") }
-        val b = RadioBundle(p, source(), tmp.root, pubFile = pub, ownerUid = { f -> if (f.exists()) owner else null },
-            now = { clockMs }, startWaitMs = 2_000, maxWaitMs = 10_000)
+        val b = RadioBundle(s1Bundle(p, pub, format) { f -> if (f.exists()) owner else null }, source(), tmp.root,
+            now = { clockMs }, sleep = p::sleep, startWaitMs = 2_000, maxWaitMs = 10_000)
         return b to pub
     }
 
@@ -176,6 +177,16 @@ class RadioV4Test {
         assertEquals(true, p.stagedWhileRunning) // not deleted under the running service
         assertFalse(p.stageDir!!.exists())
         assertNull(b.installIfNewer()) // the state file now says 30200
+    }
+
+    /** On the S1's frame loader image the agent installs frame bundles (#549): the radio bundle stays in the app. */
+    @Test
+    fun aBundleTheAgentDoesntTakeIsNeverStaged() {
+        val p = V4Props()
+        val (b, _) = bundle(p, "ok 30100 30100\n", format = "GLASSWORKS-BUNDLE 1")
+        assertNull(b.installIfNewer())
+        assertTrue(p.ops.none { it.contains(RadioHelper.BUNDLE_SERVICE) || it.contains(RadioHelper.PROP_BUNDLE_STATUS) })
+        assertFalse(p.stageDir!!.exists())
     }
 
     @Test
@@ -204,7 +215,7 @@ class RadioV4Test {
         }
         val debug = V4Props()
         val pub = File(tmp.root, "pub2/radio-bundle").apply { parentFile.mkdirs(); writeText("none 0 0") }
-        assertNull(RadioBundle(debug, source(null), tmp.root, pubFile = pub, ownerUid = { 0 }).installIfNewer())
+        assertNull(RadioBundle(s1Bundle(debug, pub) { 0 }, source(null), tmp.root, sleep = debug::sleep).installIfNewer())
     }
 
     @Test
@@ -295,7 +306,7 @@ class RadioV4Test {
         var stored: String? = mode
         p.props[RadioHelper.PROP_MODE] = mode
         return RadioController(
-            p, load = { stored }, store = { stored = it }, inline = true, log = {}, panelIp = { "198.51.100.7" },
+            s1Agent(p), load = { stored }, store = { stored = it }, inline = true, log = {}, panelIp = { "198.51.100.7" },
             filesDir = tmp.root, stackStore = stack, zigbeedFetcher = fetcher,
         )
     }

@@ -56,7 +56,7 @@ describe('one ember action per screen', () => {
   it('Done with a backup: the download is the one ember action', async () => {
     await show('done');
     expect(embers()).toEqual(['Download']);
-    expect(document.querySelector('.well')!.textContent).toMatch(/The latest backup made in this browser tab\./); // which backup, if the tab saw several
+    expect(document.querySelector('.well')!.textContent).toMatch(/^Original software, backed up\. Keep it\.s1-backup-\d{8}-\d{6}\.zip/); // which backup: its name
     expect([...document.querySelectorAll('a')].find((a) => a.textContent === 'Back to Kiln')!.className).toMatch(/ghost/);
   });
 

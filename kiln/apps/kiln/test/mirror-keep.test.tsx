@@ -13,11 +13,12 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: ReactNode }) => <a href={href} {...p}>{children}</a> }));
 
-import { AUTH_MS, FlashSession, READ_MS, type ImageMaker } from '../src/mirror/flash';
-import { flashDemo } from '../src/mirror/flashDemo';
-import { DEMO_KEY, KEEP_DEMOS, keepDemo } from '../src/mirror/keepDemo';
-import { Flash, leaveWarning } from '../src/mirror/MirrorWizard';
-import { MirrorSession } from '../src/mirror/session';
+import { ImageSession, type ImageMaker } from '../src/device/imageSession';
+import { imageDemo } from '../src/device/imageDemo';
+import { DEMO_KEY, KEEP_DEMOS, keepDemo } from '../src/device/keepDemo';
+import { ImageFlow, leaveWarning } from '../src/device/DevicePage';
+import { AppSession } from '../src/device/appSession';
+import { AUTH_MS, READ_MS, mirrorEntry, mirrorFrame } from './mirror-frame';
 
 beforeAll(() => {
   Object.defineProperty(navigator, 'usb', { configurable: true, value: {} });
@@ -27,54 +28,56 @@ beforeAll(() => {
 });
 afterEach(() => cleanup());
 
-const show = async (d: Awaited<ReturnType<typeof keepDemo>>) => { render(<Flash flash={d.flash} mirror={d.mirror} />); await act(async () => {}); };
+const show = async (d: Awaited<ReturnType<typeof keepDemo>>) => { render(<ImageFlow image={d.image} app={d.app} />); await act(async () => {}); };
 const embers = () => [...document.querySelectorAll('.btn.ember')].map((b) => b.textContent);
 
 describe('keeping the Mirror in Home Assistant over a reflash', () => {
   it.each(KEEP_DEMOS)('%s renders with at most one ember button', async (d) => {
-    await show(await keepDemo(d, true));
+    await show(await keepDemo(mirrorEntry, d, true));
     expect(document.querySelector('.card')).not.toBeNull();
     expect(embers().length).toBeLessThanOrEqual(1);
   });
 
-  it('the fastboot screen\'s Restart into fastboot is the step for Glassworks; it only reads before the restart', async () => {
-    const d = await flashDemo('flash-fastboot', true);
+  it('the fastboot screen opens on the steps by hand; its restart over USB is the keep step for Glassworks, which only asks for USB', async () => {
+    const d = await imageDemo(mirrorEntry, 'flash-fastboot', true);
     await show(d);
-    fireEvent.click(screen.getByRole('button', { name: 'Restart into fastboot' }));
-    expect(d.flash.state.screen).toBe('keep');
+    expect(screen.getByText(/hold VOL− \(SW3\)/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'It already runs Glassworks (or Glass Panes): restart it over USB' }));
+    expect(d.image.state.screen).toBe('keep');
     cleanup();
-    await show(await keepDemo('flash-keep', true));
-    expect(screen.getByText(/Nothing is written yet/)).toBeTruthy();
+    await show(await keepDemo(mirrorEntry, 'flash-keep', true));
+    expect([...document.querySelectorAll('ol.join li')].map((li) => li.textContent)).toEqual(['Plug the Mirror\'s micro-USB into this computer, with Glassworks running.']);
+    expect(screen.queryByText(/switch|unplug|screws|the back off/i)).toBeNull(); // Kiln restarts it into fastboot over adb (the Mirror run, 2026-11-19)
     expect(embers()).toEqual(['Connect']);
   });
 
   it('after the keep step restarted the Mirror, "Fastboot by hand" lands on Connect, not another restart', async () => {
-    const d = await keepDemo('flash-keep-held', true);
-    expect(d.flash.state.restarted).toBe(true);
-    d.flash.skipKeep();
-    expect(d.flash.state).toMatchObject({ screen: 'fastboot', restarted: true });
+    const d = await keepDemo(mirrorEntry, 'flash-keep-held', true);
+    expect(d.image.state.restarted).toBe(true);
+    d.image.skipKeep();
+    expect(d.image.state).toMatchObject({ screen: 'fastboot', restarted: true });
   });
 
   it('the hand-back row shows only with a key held', async () => {
-    await show(await keepDemo('flash-keep-working', true));
+    await show(await keepDemo(mirrorEntry, 'flash-keep-working', true));
     expect(screen.getByText('Give Glassworks Home Assistant’s key back')).toBeTruthy();
     cleanup();
-    await show(await flashDemo('flash-working', true));
+    await show(await imageDemo(mirrorEntry, 'flash-working', true));
     expect(screen.queryByText('Give Glassworks Home Assistant’s key back')).toBeNull();
   });
 
   it('Done says Same device when the key went back, Asks once with the HA steps otherwise, nothing on a first install', async () => {
-    await show(await keepDemo('flash-done-kept', true));
+    await show(await keepDemo(mirrorEntry, 'flash-done-kept', true));
     expect(screen.getByText('Same device')).toBeTruthy();
     expect(screen.queryByText('Reconfigure')).toBeNull();
     cleanup();
     for (const d of ['flash-done-asks', 'flash-done-refused'] as const) {
-      await show(await keepDemo(d, true));
+      await show(await keepDemo(mirrorEntry, d, true));
       expect(screen.getByText('Asks once')).toBeTruthy();
       expect(screen.getByText('Reconfigure')).toBeTruthy();
       cleanup();
     }
-    await show(await flashDemo('flash-done', true));
+    await show(await imageDemo(mirrorEntry, 'flash-done', true));
     expect(screen.queryByRole('group', { name: 'Home Assistant' })).toBeNull();
   });
 });
@@ -98,8 +101,8 @@ async function ready(o: { before?: () => Promise<PanelShell>; after?: FirstBootM
   const after = o.after ?? new FirstBootMirror().withKeySocket();
   const asked: (number | undefined)[] = [];
   let flashed = !!o.flashed;
-  const mirror = new MirrorSession({ connect: async () => { throw new Error('unused'); } }, true);
-  const f = new FlashSession({
+  const mirror = new AppSession({ frame: mirrorFrame, connect: async () => { throw new Error('unused'); } }, true);
+  const f = new ImageSession({ frame: mirrorFrame,
     images, refract: 'https://proxy.test', requestFastboot: async () => fb,
     requestAdb: async (r) => { asked.push(r?.authMs); return r?.authMs === AUTH_MS ? (o.before ?? (async () => { throw new Error('unused'); }))() : after; },
     adbKey: () => 'QAAA= kiln@test', apk: () => mirror.apkBytes(), sleep: async () => {},
@@ -122,7 +125,7 @@ function running(o: { key?: string; socket?: boolean; board?: string } = {}) {
   return { m: Object.assign(m, { rebootToBootloader: async () => { reboots.push('bootloader'); }, close: async () => { closed.push(1); } }), keys, reboots, closed };
 }
 
-const through = async (f: FlashSession) => { await f.connectFastboot(); f.understand(true); await f.flash(); await f.connectAdb(); };
+const through = async (f: ImageSession) => { await f.connectFastboot(); f.understand(true); await f.flash(); await f.connectAdb(); };
 
 describe('the keep step, on the real session (#580)', () => {
   it('reads the key, restarts into fastboot, flags the image, and gives the key back: the same device', async () => {
@@ -327,6 +330,21 @@ describe('the keep step, on the real session (#580)', () => {
     expect(f.state.connectError).toMatch(/isn't the Mirror/);
   });
 
+  it('Continue opens fastboot by hand, unless this browser has flashed a Mirror: then the keep step (the maintainer, 2026-11-19)', async () => {
+    const first = await ready();
+    first.f.toFastboot();
+    render(<ImageFlow image={first.f} app={new AppSession({ frame: mirrorFrame, connect: async () => { throw new Error('unused'); } }, true)} />);
+    expect(screen.getByRole('heading').textContent).toBe('Put the Mirror in fastboot.');
+    expect(screen.getByText(/hold VOL− \(SW3\)/)).toBeTruthy();
+    expect(embers()).toEqual(['Connect']);
+    cleanup();
+    const again = await ready({ flashed: true });
+    again.f.toFastboot();
+    render(<ImageFlow image={again.f} app={new AppSession({ frame: mirrorFrame, connect: async () => { throw new Error('unused'); } }, true)} />);
+    expect(screen.getByRole('heading').textContent).toBe('Keep the Mirror in Home Assistant.');
+    expect(screen.queryByText(/hold VOL−/)).toBeNull();
+  });
+
   it('Continue opens the keep step in a browser that has flashed a Mirror; a flash marks it', async () => {
     const first = await ready();
     first.f.toFastboot();
@@ -351,21 +369,21 @@ describe('the keep step, on the real session (#580)', () => {
   });
 
   it('the keep screen\'s Connect reads the key', async () => {
-    const d = await keepDemo('flash-keep', true);
-    const read = vi.spyOn(d.flash, 'readKey').mockResolvedValue();
-    render(<Flash flash={d.flash} mirror={d.mirror} />);
+    const d = await keepDemo(mirrorEntry, 'flash-keep', true);
+    const read = vi.spyOn(d.image, 'readKey').mockResolvedValue();
+    render(<ImageFlow image={d.image} app={d.app} />);
     await act(async () => {});
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
     expect(read).toHaveBeenCalledOnce();
   });
 
   it('the way back to a fresh install clears an earlier key outcome, so the keep step and Done start over (#579)', async () => {
-    const d = await keepDemo('flash-done-kept', true);
-    expect(d.flash.state.key?.state).toBe('handed');
-    d.flash.wayBack('glass-panes');
-    expect(d.flash.state.key).toBeUndefined();
-    d.flash.wayBack('glassworks');
-    expect(d.flash.state.key).toBeUndefined();
+    const d = await keepDemo(mirrorEntry, 'flash-done-kept', true);
+    expect(d.image.state.key?.state).toBe('handed');
+    d.image.wayBack('glass-panes');
+    expect(d.image.state.key).toBeUndefined();
+    d.image.wayBack('glassworks');
+    expect(d.image.state.key).toBeUndefined();
   });
 
   it('an image link while the key is being read stops the read: no restart, no key stored, nothing left reading (#596)', async () => {

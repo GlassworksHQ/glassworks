@@ -12,11 +12,12 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: ReactNode }) => <a href={href} {...p}>{children}</a> }));
 
-import { FlashSession, type ImageMaker } from '../src/mirror/flash';
-import { FLASH_DEMOS, flashDemo, type FlashDemo } from '../src/mirror/flashDemo';
-import { flashLevel } from '../src/mirror/FlashScreens';
-import { Flash, MirrorWizard } from '../src/mirror/MirrorWizard';
-import { MirrorSession } from '../src/mirror/session';
+import { ImageSession, type ImageMaker } from '../src/device/imageSession';
+import { IMAGE_DEMOS as ALL_DEMOS, imageDemo, type ImageDemo } from '../src/device/imageDemo';
+import { imageLevel } from '../src/device/ImageScreens';
+import { ImageFlow, DevicePage } from '../src/device/DevicePage';
+import { AppSession } from '../src/device/appSession';
+import { MIRROR_BASE, mirrorEntry, mirrorFrame } from './mirror-frame';
 
 beforeAll(() => {
   Object.defineProperty(navigator, 'usb', { configurable: true, value: {} });
@@ -29,7 +30,7 @@ afterEach(() => cleanup());
 const WHOSE = /Glass Panes is made by git-nimrod\. Questions about it go to its project\./;
 /** Round three (maintainer, 2026-11-19): welcoming to image authors, and no manual download path. */
 const NEVER = [/recommended/i, /isn.t Glassworks/i, /not Glassworks/i, /can.t help/i, /yourself/i, /select the/i, /not to Glassworks/i, /Way back:/];
-const IMAGE_DEMOS = FLASH_DEMOS.filter((d) => d.startsWith('image-'));
+const IMAGE_DEMOS = ALL_DEMOS.filter((d) => d.startsWith('image-'));
 /** The demos whose screen belongs to Glass Panes' install. */
 const COMMUNITY = IMAGE_DEMOS.filter((d) => !d.startsWith('image-choose') && !d.startsWith('image-back'));
 
@@ -37,9 +38,9 @@ const embers = () => [...document.querySelectorAll('.btn.ember')].map((b) => b.t
 const radios = () => screen.queryAllByRole('radio').map((r) => r.getAttribute('aria-label'));
 const rail = () => [...document.querySelectorAll('.steps > li')].map((li) => li.textContent);
 
-async function show(d: FlashDemo) {
-  const { flash, mirror } = await flashDemo(d, true);
-  render(<Flash flash={flash} mirror={mirror} />);
+async function show(d: ImageDemo) {
+  const { image: flash, app: mirror } = await imageDemo(mirrorEntry, d, true);
+  render(<ImageFlow image={flash} app={mirror} />);
   await act(async () => {});
   return flash;
 }
@@ -72,8 +73,8 @@ function setup(o: { search?: string; fail?: 'route' | 'hash' | 'flash' | 'change
     async flashBlob(p, blob) { if (fail === 'flash') { fail = undefined; throw new Error('flash:system: FAILed'); } calls.push(`flash ${p} ${(blob as Blob & { tag?: string }).tag}`); },
     async reboot() { calls.push('reboot'); },
   };
-  const mirror = new MirrorSession({ connect: async () => { throw new Error('unused'); } }, true);
-  const f = new FlashSession({ images, refract: 'https://refract.test', search: o.search ?? '', requestFastboot: async () => fb,
+  const mirror = new AppSession({ frame: mirrorFrame, connect: async () => { throw new Error('unused'); } }, true);
+  const f = new ImageSession({ frame: mirrorFrame, images, refract: 'https://refract.test', search: o.search ?? '', requestFastboot: async () => fb,
     requestAdb: async () => new FirstBootMirror(), adbKey: () => 'QAAA= kiln@glassworks', apk: () => undefined, sleep: async () => {} });
   return { f, mirror, calls };
 }
@@ -232,8 +233,8 @@ describe('Glass Panes', () => {
   it.each(['image-download-error', 'image-download-bad'] as const)('%s: Kiln\'s bug, Try again and Report this, nothing to pick by hand', async (d) => {
     const flash = await show(d);
     const alert = screen.getByRole('alert').textContent!;
-    expect(alert).toMatch(/Nothing was written to the Mirror\. This is a bug in Kiln, not something you did\./);
-    if (d === 'image-download-bad') expect(alert).toMatch(/its SHA-256 differs\), so it deleted it/);
+    expect(alert).toMatch(/Nothing was written to the Mirror\. This is Kiln’s bug, not yours\./);
+    if (d === 'image-download-bad') expect(alert).toMatch(/Its SHA-256 isn’t the release’s, so Kiln deleted it/);
     else expect(alert).toMatch(/Kiln couldn’t download it: the download proxy answered 502: GitHub answered 503\./);
     const report = new URL(screen.getByRole('link', { name: 'Report this' }).getAttribute('href')!);
     expect(report.origin + report.pathname).toBe('https://github.com/GlassworksHQ/glassworks/issues/new');
@@ -243,6 +244,16 @@ describe('Glass Panes', () => {
     expect(document.querySelector('input[type="file"]')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await waitFor(() => expect(flash.state.files.every((x) => x.state === 'ok')).toBe(true));
+  });
+
+  it('fastboot opens on the steps by hand; its restart over USB restarts the image over adb, inside the click', async () => {
+    const flash = await show('image-fastboot');
+    expect(screen.getByText(/hold VOL− \(SW3\)/)).toBeTruthy();
+    expect(embers()).toEqual(['Connect']);
+    const restart = vi.spyOn(flash, 'restartToFastboot').mockResolvedValue();
+    fireEvent.click(screen.getByRole('button', { name: 'It already runs Glassworks (or Glass Panes): restart it over USB' }));
+    expect(restart).toHaveBeenCalledTimes(1);
+    expect(flash.state.screen).toBe('fastboot');
   });
 
   it.each(['image-link', 'image-download', 'image-confirm'] as const)('%s offers Install Glassworks instead, which drops what was downloaded', async (d) => {
@@ -255,10 +266,10 @@ describe('Glass Panes', () => {
   it('Done says what is next in its own project, and the way back to Glassworks', async () => {
     const flash = await show('image-done');
     expect(screen.getByRole('heading').textContent).toBe('Glass Panes is on the Mirror.');
-    expect(screen.getByText(/Set it up as its README says/)).toBeTruthy();
+    expect(screen.getByText(/^Set it up as its README says\.$/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Install Glassworks' }));
     expect(flash.state).toMatchObject({ screen: 'choose', picked: 'glassworks', from: 'glass-panes', open: false });
-    expect(screen.getByRole('status').textContent).toMatch(/^The way back from Glass Panes\. Glassworks replaces it/);
+    expect(screen.getByRole('status').textContent).toMatch(/^Glassworks replaces Glass Panes and everything on the Mirror\./);
   });
 });
 
@@ -278,7 +289,7 @@ describe('?image=<id>', () => {
     const { f, calls } = setup({ search: '?image=glass-panes' });
     expect(f.state).toMatchObject({ screen: 'download', picked: 'glass-panes', link: true });
     expect(calls).toEqual([]);
-    render(<Flash flash={f} mirror={new MirrorSession({ connect: async () => { throw new Error('x'); } }, true)} />);
+    render(<ImageFlow image={f} app={new AppSession({ frame: mirrorFrame, connect: async () => { throw new Error('x'); } }, true)} />);
     expect(radios()).toEqual([]);
     expect(screen.getByRole('heading').textContent).toBe('Install Glass Panes on the Mirror.');
     expect(document.querySelector('.card')!.textContent).toMatch(WHOSE);
@@ -309,7 +320,7 @@ describe('?image=<id>', () => {
 
   it('works on the page itself, as a community project would link to it', async () => {
     history.replaceState(null, '', '/lululemon-mirror?apk=local&image=glass-panes');
-    render(<MirrorWizard />);
+    render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
     expect((await screen.findByRole('heading')).textContent).toBe('Install Glass Panes on the Mirror.');
     history.replaceState(null, '', '/');
   });
@@ -334,7 +345,7 @@ describe('every image screen', () => {
   });
 
   it('the stack stays empty while a community image installs: its layers are Glassworks\' layers', async () => {
-    for (const d of ['image-writing', 'image-done'] as const) expect(flashLevel((await flashDemo(d, true)).flash.state, true)).toBe(0);
-    expect(flashLevel((await flashDemo('flash-done', true)).flash.state, false)).toBe(4);
+    for (const d of ['image-writing', 'image-done'] as const) expect(imageLevel((await imageDemo(mirrorEntry, d, true)).image.state, true)).toBe(0);
+    expect(imageLevel((await imageDemo(mirrorEntry, 'flash-done', true)).image.state, false)).toBe(4);
   });
 });

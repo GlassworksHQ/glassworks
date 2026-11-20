@@ -36,21 +36,29 @@ export interface Release { line: string; tag: string; assets: string[] }
 /** What Kiln reads of a frame's installer.json before it loads the frame. */
 export interface Installer {
   route: string;
+  /** Kiln's page for it: the wizard (its step routes too), or the device flows. Its `kiln.ts` loader's `kind`. */
+  page?: 'wizard' | 'device';
   words?: { name: string };
   releases?: Release[];
   /** The first installer page's links: its hash links (/#/wifi) and its release route (/api/release-asset) lead here. */
   legacy?: { hashLinks?: boolean; releaseAsset?: string };
 }
 
+/** An installer.json as Kiln reads it, checked where it comes in. */
+function installer(d: Omit<Installer, 'page'> & { page?: string }): Installer {
+  if (d.page !== undefined && d.page !== 'wizard' && d.page !== 'device') throw new Error(`installer.json page: wizard or device, not ${d.page}`);
+  return d as Installer;
+}
+
 /** Each frame's installer.json, by frame id. */
 export const INSTALLERS: Record<string, Installer> = {
-  [s1Plus.id]: s1PlusInstaller,
-  [mirror.id]: mirrorInstaller,
-  [genericAndroid.id]: genericAndroidInstaller,
+  [s1Plus.id]: installer(s1PlusInstaller),
+  [mirror.id]: installer(mirrorInstaller),
+  [genericAndroid.id]: installer(genericAndroidInstaller),
 };
 
 /** The frames Kiln's shared wizard runs, by id: kiln.ts has a loader for each, and its routes are theirs. */
-export const ENGINE: readonly string[] = [s1Plus.id];
+export const ENGINE: readonly string[] = [s1Plus.id, mirror.id];
 
 /** The frame.json `abis` of each frame, for `{abi}` in its release assets. */
 export const ABIS: Record<string, readonly string[]> = Object.fromEntries(FRAMES.map((f) => [f.id, (f as FrameDesign & { abis?: string[] }).abis ?? []]));

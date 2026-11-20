@@ -62,6 +62,7 @@ export const GLASS_PANES_IMAGE: ImageRecipe = {
   licence: 'MIT; the image’s parts keep their own',
   summary: 'Android 6.0.1 for the Mirror as its release has it, with its own Mirror Kiosk app.',
   support: { name: 'Glass Panes on GitHub', href: `${panes.href}/issues` },
+  vendor: 'Its vendor files belong to Qualcomm and Quectel.',
   release: { name: 'mirror-android-2', href: GLASS_PANES.release },
   next: { name: 'its README', href: `${panes.href}#readme` },
   files: [SYSTEM, USERDATA, GLASS_PANES_KEY],

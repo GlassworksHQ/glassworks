@@ -1,0 +1,41 @@
+# Posts each published release to the Glassworks Discord server (docs/releasing.md#discord).
+#
+# A release that a workflow creates with GITHUB_TOKEN starts no `release` event, so this runs after those
+# workflows finish (workflow_run, tag pushes only, not their dry runs). A release a person publishes (a frame
+# release, a library's draft) does start one, and is caught by `release: published`. Neither path sees the
+# other's releases, so each release posts once. tools/ci/discord_release.py skips drafts and pre-releases,
+# posts libraries to #ecosystem-updates and the rest to #glassworks-releases. It runs the default branch's
+# code only, and nothing from the release but its text.
+name: Discord release feed
+
+on:
+  workflow_run:
+    workflows: ["Release", "Generic release", "Library release"]
+    types: [completed]
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  post:
+    if: >-
+      github.event_name == 'release' ||
+      (github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+          sparse-checkout: tools/ci
+
+      - name: Post the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # For a tag push, the run's head_branch is the tag.
+          TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || github.event.workflow_run.head_branch }}
+          DISCORD_RELEASES_WEBHOOK: ${{ secrets.DISCORD_RELEASES_WEBHOOK }}
+          DISCORD_ECOSYSTEM_WEBHOOK: ${{ secrets.DISCORD_ECOSYSTEM_WEBHOOK }}
+        run: python3 tools/ci/discord_release.py "$TAG"

@@ -1,6 +1,7 @@
 {
   "$comment": "Kiln's install for this frame, as data. Format: docs/design/kiln/frames-as-data.md. A draft (#621): the contract (kiln/apps/kiln/test/contract) reads route, touch and each step's id, writes, reboots, downloads and taps; the engine reads the rest from phase 2. `words`: what Kiln's screens say for this frame (the shared wizard reads them, #621).",
   "route": "/aqara-s1-plus",
+  "page": "wizard",
   "releases": [
     { "line": "aqara-s1-plus", "tag": "^(?:aqara-s1-plus-)?v(\\d+\\.\\d+\\.\\d+)$", "assets": ["s1-kiosk-{version}.apk"], "why": "Glassworks: vX.Y.Z (every release so far) or aqara-s1-plus-vX.Y.Z, and the S1's armeabi-v7a APK" }
   ],
@@ -26,17 +27,17 @@
     "asks": {
       "fastboot": {
         "title": "One click to continue.",
-        "body": "The panel restarted into the installer. Nothing has been written yet.",
+        "body": "The panel restarted into the installer.",
         "pick": "USB download gadget"
       },
       "adb": {
         "title": "One last click.",
-        "body": "The panel is starting its new software. Leave its screen alone meanwhile.",
+        "body": "The panel is starting its new software. Leave its screen alone.",
         "pick": "QUAD-CORE R818 EVB2"
       },
       "connect": {
         "title": "Connect to your panel.",
-        "body": "It should be running Glassworks and plugged in to this computer. Nothing is reflashed.",
+        "body": "Plug it into this computer, with Glassworks running.",
         "pick": "QUAD-CORE R818 EVB2"
       }
     },
@@ -60,7 +61,7 @@
       },
       "keep": {
         "title": "Keep its settings",
-        "detail": "Aqara's apps come back first, over USB with the panel running. Wi-Fi and the rest stay.",
+        "detail": "Aqara's apps come back, with the panel running. Wi-Fi and the rest stay.",
         "button": "Give back Aqara’s apps",
         "giving": "Giving the panel back to Aqara's apps",
         "back": "Aqara's apps are back.",
@@ -72,17 +73,17 @@
       "on": {
         "word": "On",
         "tone": "y",
-        "line": "Updates from Home Assistant install with nobody at the panel. The root update service in its boot image installs them."
+        "line": "Updates from Home Assistant install by themselves."
       },
       "missing": {
         "word": "A tap each",
         "tone": "n",
-        "line": "This panel's boot image has no root update service, so each update waits for a tap on the panel. Updates still come from Home Assistant. Install again with Kiln to add it."
+        "line": "Each update waits for a tap on the panel. Install again with Kiln to make them silent."
       },
       "unknown": {
         "word": "Not confirmed",
         "tone": "n",
-        "line": "Kiln couldn't read the root update service back. Glassworks' Device page on the panel says which it is."
+        "line": "Kiln couldn't read it back. Glassworks' Device page on the panel says."
       }
     }
   }

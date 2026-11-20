@@ -107,7 +107,7 @@ describe('the page', () => {
     await screen.findByText('Plug in the tablet.');
     expect(screen.getByText('Test only')).toBeTruthy();
     await screen.findByText('Glassworks 0.2.0');
-    expect(screen.getByText(/Checks out: SHA-256 as the release publishes it/)).toBeTruthy();
+    expect(screen.getByText(/SHA-256 checks out/)).toBeTruthy();
     expect(screen.getByText(/^Android 8 or newer, over USB\./)).toBeTruthy(); // the release is the generic build, not the legacy one for 6 and 7
     expect(screen.getByRole('link', { name: NAME }).getAttribute('href')).toBe(`https://github.com/GlassworksHQ/glassworks/releases/tag/${TAG}`);
     expect(document.querySelector('input[type=file]')).toBeNull();
@@ -119,7 +119,7 @@ describe('the page', () => {
     history.replaceState(null, '', '/android?apk=release');
     render(<AndroidWizard />);
     await screen.findByText('There is no release of Glassworks for Android yet.');
-    expect(screen.getByRole('alert').textContent).toMatch(/newest generic-android release from GitHub, and it found none\. Nothing was written to the tablet/);
+    expect(screen.getByRole('alert').textContent).toMatch(/no generic-android release on GitHub\. Nothing was written to the tablet/);
     expect(document.querySelector('input[type=file]')).toBeNull();
   });
 

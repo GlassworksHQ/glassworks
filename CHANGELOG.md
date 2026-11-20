@@ -23,7 +23,9 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   down. *Manage* opens another panel's page, already signed in, and *Copy settings* makes one panel like
   another: it changes only what you tick, and greys out what the other panel's version doesn't have.
   Administrators only. Each panel checks the sign-in with Home Assistant itself, so panels never trust
-  each other. Every panel needs this version for the page to reach it.
+  each other. One Home Assistant sign-in covers every panel the browser opens: All panels on the panel you
+  signed in to, and on each panel you reach with *Manage*, needs no second login. After you sign out of All panels,
+  or the app restarts, it asks for one again. Every panel needs this version for the page to reach it.
 - **Kiln's Done says whether the S1's updates install by themselves.** After an install or a setup, Kiln reads the
   panel back and shows a *Silent updates* block: *On* when the boot image has its root update service, or *A tap
   each* with how to add it when it doesn't. The lululemon Mirror's test install shows the same block, read from
@@ -234,6 +236,12 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   (was 200 ms). 100 ms stays the bar for your own taps. Every other bar is the same. A result of the earlier
   Clarity v3 measured what v1 measures: it shows "re-measure" until it is graded again, and the S1's has been (it
   stays D). Results of earlier versions (the first v1 of 2026-11-14, or v2) need a new run.
+- **Kiln's screens say less.** Each step now says what to do, plus the one fact you need to decide, on every
+  panel. Kiln no longer narrates what it does by itself. On the Mirror, keeping it in Home Assistant now asks you only
+  to plug its micro-USB into the computer, not to open its case. After you pick the Mirror at its first start, the
+  screen says Kiln is waiting for it to finish starting. Fastboot on the Mirror now opens on the steps by hand, for a
+  Mirror still on lululemon's software. A Mirror that already runs Glassworks or Glass Panes restarts over USB from
+  the link below them.
 - **A room's "lights off" no longer turns the panel's screen off.** The screen is still a light with the same
   entity id, but Home Assistant now lists it under the device's Configuration. Actions aimed at an area, floor or
   device skip it, so a presence automation's "room empty, lights off" and a Good Night script leave the panel

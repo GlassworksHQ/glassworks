@@ -105,6 +105,10 @@ can set a property or start an init service ([root.md](../frames/aqara-s1-plus/r
   state (a radio mode, a zone). The worst it can do is what the owner could choose. The firewall is
   the exception that matters: another app on the panel could set `any`. The S1 accepts that today.
   `RADIO_ALLOW` in the root-owned `radio.conf` wins over the property, for an owner who wants it fixed.
+- **The S1's name set** comes from `ro.glassworks.frame.id`. On a 0.4.3 image that property is unset,
+  and another app could set it once per boot. The app would then talk to an agent that isn't there:
+  its radio and time zone settings wouldn't apply until a restart. That denies a setting, it runs
+  nothing.
 - **No secrets in properties.** A Thread dataset goes in a file the agent moves into its root-only
   directory and deletes from the app's. The Bluetooth address is never logged.
 
@@ -130,8 +134,13 @@ Properties for small state, files in the app's private dir for anything larger o
 `ctl.start` / `ctl.restart` for init services. The full contract is in
 [radio.md](../frames/aqara-s1-plus/docs/radio.md#root-helper-contract-v4), the threat model in
 [root.md](../frames/aqara-s1-plus/research/root.md). The names below are today's (boot images up to
-0.4.3, contract 4). #549 moves them to Glassworks names in the frame loader image (contract 5); the
-S1's `FrameAgent` is the one place in the app that changes with them.
+0.4.3, contract 4). #549 moves them to Glassworks names in the frame loader image (contract 5):
+`glassworks_agent`, `glassworks_update`, `glassworks_bundle`, `sys.glassworks.*` (the agent's own version and
+source in `sys.glassworks.agent.*`), `persist.glassworks.*` and `/data/glassworks-pub`. The app's own files
+keep their paths, except the bundle, which stages in `files/frame/bundle-in`. The app uses one set or the
+other, picked once from `ro.glassworks.frame.id`, which only the loader sets: `S1Names`, the one place that
+knows both. The old set goes the release after panels have the loader. On a loader image the radio pane
+never stages its old radio bundle: `BundleAgent.format` names the bundle the agent takes.
 
 | Capability | Request | Status | Offered when |
 |---|---|---|---|
@@ -153,7 +162,7 @@ difference: both are capabilities of the S1's agent.
 
 ## In the code
 
-Built in #641's second PR. The core's side is `dev.glassworks.frame.FrameAgent`, reached as `frame.agent`:
+The core's side is `dev.glassworks.frame.FrameAgent`, reached as `frame.agent`:
 
 | Member | What |
 |---|---|
@@ -162,14 +171,18 @@ Built in #641's second PR. The core's side is `dev.glassworks.frame.FrameAgent`,
 | `offers(capability)` | Whether the running agent does it now. Always false for one not declared |
 | `appUpdates` | The `app-updates` transport (`RootUpdates`), null when not declared |
 | `bluetoothAddress()` | The `bluetooth-address` value, or null |
+| `radio` | `RadioAgent`: the radio's status lines (`RadioStatus`), its desired state (`RadioSetting`), its hand-off files (`RadioFile`), restart, and the vendor's own radio services for Off without the agent. Null without a radio capability |
+| `timeZone` | `TimeZoneAgent`: the wanted zone, its status, the zone Android runs, the agent's version. Null without `time-zone` |
+| `bundle` | `BundleAgent`: the installed bundle's state (from a root-owned file), the manifest format it takes, where to stage one, and its install. Null without `frame-bundle` |
 
 `NoAgent` is the frame without one: nothing declared, no version, nothing offered. Frames that don't
 override `Frame.agent` get it. A pane checks `offers` (or `declared`, for a passive capability such as
 `hotspot-portal`), never the frame's id.
 
-The radio and time zone panes still use the S1's transport directly (`RadioHelper`,
-`TimeZoneKeeper`): they run only where the hardware is the S1's (`silabs-radio`, the S1's own pane).
-Moving them behind `FrameAgent` comes with the second frame that has a radio.
+The radio and time zone panes talk to their root side only through these (maintainer, 2026-11-19).
+They hold no property, path or service name. A frame whose agent uses Android properties, init services
+and app files, as the S1's does, can use the radio pane's `PropsRadio` and `PropsBundle` with its own
+names (`RadioNames`); the S1's are `dev.glassworks.s1.radio.RadioHelper` and `S1TimeZone`, in the S1 app.
 
 ## The contract test
 

@@ -28,7 +28,7 @@ The checks, in `apps/kiln/test/contract/`:
 - `frame-neutral.test.ts`: no new frame name in `apps/kiln/src` or `packages/*/src`. Its allowlist
   only shrinks.
 
-The Mirror and Android pages don't follow this yet (#621, phase 2). Don't copy them: build on the
+Android's page doesn't follow this yet (#621, step 3). Don't copy it: build on the
 shared engine.
 
 ## What it is

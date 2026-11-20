@@ -27,6 +27,8 @@ class HaTokenCheck(
     private val refusedTtlMs: Long = 10_000,
     private val maxAsking: Int = 2,
     private val max: Int = 32,
+    /** Its [maxAsking] slots; the Manage server passes the ones its other Home Assistant calls share. */
+    private val asking: java.util.concurrent.Semaphore = java.util.concurrent.Semaphore(maxAsking),
 ) {
     sealed class Result {
         /** [haBase]: the Home Assistant address that confirmed [user]. */
@@ -52,7 +54,6 @@ class HaTokenCheck(
     private class Local(val haBase: String, val local: Boolean, val atMs: Long)
 
     @Volatile private var local: Local? = null
-    private val asking = java.util.concurrent.Semaphore(maxAsking)
 
     /**
      * [token] as Home Assistant answers for it now, or as it answered in the last [ttlMs] ([refusedTtlMs] for a

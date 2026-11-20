@@ -5,13 +5,11 @@
 package dev.glassworks.frame
 
 /**
- * A frame's own way to install app updates without Android's confirmation ([Frame.rootUpdates]): the
- * S1's root update service in its patched boot image. The app falls back to PackageInstaller without one.
+ * A frame's own way to install app updates without Android's confirmation ([FrameAgent.appUpdates]): the
+ * S1's root update service in its patched boot image. The app falls back to PackageInstaller without one, and while
+ * the agent doesn't offer [AgentCapability.APP_UPDATES] (a boot image from before the service).
  */
 interface RootUpdates {
-    /** The service is in this boot image. */
-    fun present(): Boolean
-
     /** At start: why the install the service did while this process was replaced failed, or null. */
     fun lastFailure(): String?
 

@@ -16,6 +16,7 @@
   "dependencies": {
     "@glassworks/aqara-s1-plus-installer": "0.0.0",
     "@glassworks/frame-card": "0.0.0",
-    "@glassworks/kiln-core": "0.0.0"
+    "@glassworks/kiln-core": "0.0.0",
+    "@glassworks/lululemon-mirror-installer": "0.0.0"
   }
 }
