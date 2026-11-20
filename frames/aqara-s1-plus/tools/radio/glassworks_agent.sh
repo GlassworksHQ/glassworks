@@ -1021,18 +1021,26 @@ coordinator_bridge() {
 
 # A copy of a zigbeed NVM (network + keys) whenever it changed; the last 3 per stack are kept, other
 # files in zigbee-nvm/ (manual backups) are never touched. Root-only, never leaves $DIR.
+# 0 = the newest copy is the NVM as it is now (just made, or unchanged since); 1 = no complete copy (WHY).
+# A copy is made under a temporary name, compared with the NVM and only then renamed, so a copy that
+# failed half way (a full /data) never counts as the newest and never makes the pruning drop a good one.
 backup_nvm() { # nvm-file prefix
   [ -s "$1" ] || return 0
-  mkdir -p "$DIR/zigbee-nvm" && chmod 700 "$DIR/zigbee-nvm"
+  { mkdir -p "$DIR/zigbee-nvm" && chmod 700 "$DIR/zigbee-nvm"; } || { WHY="cannot create zigbee-nvm/"; return 1; }
   last=$(ls "$DIR/zigbee-nvm" 2>/dev/null | grep "^$2-.*\.nvm\$" | tail -1)
   [ -n "$last" ] && cmp -s "$1" "$DIR/zigbee-nvm/$last" && return 0
-  cp "$1" "$DIR/zigbee-nvm/$2-$(date +%Y%m%d-%H%M%S).nvm" && chmod 600 "$DIR"/zigbee-nvm/*
+  n_=$DIR/zigbee-nvm/$2-$(date +%Y%m%d-%H%M%S).nvm
+  rm -f "$n_.tmp"
+  if ! { ( umask 077; cp "$1" "$n_.tmp" ) && cmp -s "$1" "$n_.tmp" && chmod 600 "$n_.tmp" && mv -f "$n_.tmp" "$n_"; }; then
+    rm -f "$n_.tmp"; WHY="no complete backup of the $2 NVM (/data full?)"; return 1
+  fi
   set -- $(ls "$DIR/zigbee-nvm" | grep "^$2-.*\.nvm\$"); while [ $# -gt 3 ]; do rm -f "$DIR/zigbee-nvm/$1"; shift; done
 }
 router_bridge() {
   zb_fresh
   alive "$BRIDGE_PID" && return 0
-  backup_nvm "$ZIGBEED_NVM" zigbeed
+  # the router host's join replaces the coordinator network in this NVM: never without a copy of it
+  backup_nvm "$ZIGBEED_NVM" zigbeed || { status error "$WHY: router waits"; return 1; }
   start_bridge ",bind=127.0.0.1" "$ROUTER_PORT" ""
 }
 
@@ -1042,7 +1050,7 @@ start_sisdk() {
   wait_for $CPC_SOCK 30 || { status error "cpcd socket missing"; return 1; }
   sleep 5   # cpcd needs ~4 s to reach the secondary after a (re)start (see start_otbr)
   mkdir -p "$SISDK_STATE" && chmod 700 "$SISDK_STATE"
-  backup_nvm "$SISDK_STATE/host_token.nvm" sisdk
+  backup_nvm "$SISDK_STATE/host_token.nvm" sisdk || say "$WHY"   # a coordinator: a copy only, nothing replaces it
   # shellcheck disable=SC2086
   ZIGBEED_BIN=$SISDK_BIN ZIGBEED_STATE=$SISDK_STATE /system/bin/sh "$SISDK_DIR/zigbeed.sh" \
     -r "$ZIGBEED_URL" -p "$ZIGBEED_PTY" $ZIGBEED_ARGS >/dev/null 2>&1 &
@@ -1091,14 +1099,28 @@ start_thread_br() {
 # thread_router: no backbone (no border routing, no mDNS on the LAN). Never forms a network on its
 # own initiative: it only starts Thread once it has a dataset the user supplied. Its own settings dir
 # ($DIR/thread-router), so it never auto-attaches to the network the border-router mode stored.
+# The hand-off is the only copy once taken (--move): it stays in thread-dataset.in until the new
+# dataset is complete in thread-dataset (written to a temp file, read back, renamed over it). Until
+# then the router keeps the dataset it has and the next loop tries again; a newer hand-off from the app
+# waits in the app's files until this one is stored.
+DS_FAILED=""
 take_app_dataset() {
-  take_app_file "${APP_DATASET#"$APP_DATA"/files/}" max:1024 "$DIR/thread-dataset.in" move; r_=$?
-  [ $r_ = 1 ] && return 0
-  [ $r_ = 2 ] && { say "ignoring app dataset hand-off ($WHY)"; return 0; }
-  d=$(tr -d ' \r\n' < "$DIR/thread-dataset.in"); rm -f "$DIR/thread-dataset.in"
-  case "$d" in ""|*[!0-9a-fA-F]*) say "ignoring app dataset hand-off (not hex TLVs)"; return 0 ;; esac
-  [ $(( ${#d} % 2 )) -eq 0 ] || { say "ignoring app dataset hand-off (odd length)"; return 0; }
-  ( umask 077; echo "$d" > "$DIR/thread-dataset" ); JOINED=""
+  if [ ! -e "$DIR/thread-dataset.in" ]; then
+    take_app_file "${APP_DATASET#"$APP_DATA"/files/}" max:1024 "$DIR/thread-dataset.in" move; r_=$?
+    [ $r_ = 1 ] && return 0
+    [ $r_ = 2 ] && { say "ignoring app dataset hand-off ($WHY)"; return 0; }
+  fi
+  d=$(tr -d ' \r\n' < "$DIR/thread-dataset.in")
+  case "$d" in ""|*[!0-9a-fA-F]*) rm -f "$DIR/thread-dataset.in"; say "ignoring app dataset hand-off (not hex TLVs)"; return 0 ;; esac
+  [ $(( ${#d} % 2 )) -eq 0 ] || { rm -f "$DIR/thread-dataset.in"; say "ignoring app dataset hand-off (odd length)"; return 0; }
+  rm -f "$DIR/thread-dataset.tmp"
+  if ! { ( umask 077; echo "$d" > "$DIR/thread-dataset.tmp" ) && [ "$(cat "$DIR/thread-dataset.tmp")" = "$d" ] &&
+         mv -f "$DIR/thread-dataset.tmp" "$DIR/thread-dataset"; }; then
+    rm -f "$DIR/thread-dataset.tmp"
+    [ -n "$DS_FAILED" ] || say "cannot store the new Thread dataset (/data full?): keeping the current one, trying again"
+    DS_FAILED=1; return 0
+  fi
+  rm -f "$DIR/thread-dataset.in"; DS_FAILED=""; JOINED=""; JFAILS=0
   say "new Thread dataset from the app"  # never log the dataset itself
   thread_stored
   # a running agent may be attached elsewhere: restart it, the next pass joins with the new dataset
@@ -1122,10 +1144,10 @@ thread_leave() {
     OTBR_PID=""
   fi
   had_=""; [ -e "$DIR/thread-dataset" ] && had_=1
-  rm -f "$DIR/thread-dataset" "$DIR/thread-dataset.in"
+  rm -f "$DIR/thread-dataset" "$DIR/thread-dataset.in" "$DIR/thread-dataset.tmp"
   # our own root dir; a symlink there (only root could make one) is removed, never followed
   if [ -L "$DIR/thread-router" ]; then rm -f "$DIR/thread-router"; elif [ -e "$DIR/thread-router" ]; then rm -rf "$DIR/thread-router"; had_=1; fi
-  JOINED=""
+  JOINED=""; JFAILS=0
   if [ -e "$DIR/thread-dataset" ] || [ -e "$DIR/thread-router" ]; then
     setp sys.glassworks.radio.thread_leave "error $(date +%s): could not delete the Thread settings"; return 0
   fi
@@ -1133,19 +1155,24 @@ thread_leave() {
   setp sys.glassworks.radio.thread_leave "ok $(date +%s): $m_"
   say "Thread network left: dataset and router settings deleted"   # never the dataset itself
 }
-start_thread_router() {
+start_thread_router() { # start_otbr's result: its failure (and the status it set) reaches the loop
+  JOINED=""
   if [ "$OTBR_KIND" = br ]; then start_otbr "$DIR/thread-router" --rest-listen-address 127.0.0.1 --rest-listen-port "$REST_PORT"
   else start_otbr "$DIR/thread-router"; fi
-  JOINED=""
 }
-# Called every loop once the agent answers: joins once a dataset is there.
+# Called every loop once the agent answers: joins once a dataset is there. Failed joins count across
+# loops (JFAILS; the main loop's FAILS restarts with every pass whose processes are up). After 21 in a
+# row with one dataset it stops trying that one and says so; a new dataset, Leave or a restart tries again.
+JFAILS=0
 thread_router_join() {
   [ -n "$JOINED" ] && return 0
   [ -s "$DIR/thread-dataset" ] || return 0
+  [ $JFAILS -gt 20 ] && { status error "joining failed $JFAILS times (dataset rejected?): send a new one"; return 1; }
   if ot dataset set active "$(cat "$DIR/thread-dataset")" >/dev/null && ot ifconfig up >/dev/null &&
      ot thread start >/dev/null; then
-    JOINED=1
+    JOINED=1; JFAILS=0
   else
+    JFAILS=$((JFAILS + 1))
     status error "ot-ctl join steps failed (dataset rejected?)"; return 1
   fi
 }
@@ -1237,6 +1264,21 @@ fw_progress() {
     { read -r n_ && [ "$n_" -le 100 ] 2>/dev/null && echo "$n_"; }
 }
 
+# A cpcd we stop must be gone before anything opens the SPI device again: the retry's cpcd would start
+# while the old one may still hold the device's lock. TERM, up to 10 s; then KILL, up to 5 s more.
+# 1 = it is still there (FW_STUCK: nothing else may touch the radio in this run).
+FW_STUCK=""
+fw_stop_cpcd() { # pid
+  kill "$1" 2>/dev/null
+  i_=0; while alive "$1" && [ $i_ -lt "${GWA_FW_TERM_WAIT:-100}" ]; do sleep 0.1; i_=$((i_ + 1)); done
+  if alive "$1"; then
+    kill -9 "$1" 2>/dev/null
+    i_=0; while alive "$1" && [ $i_ -lt 50 ]; do sleep 0.1; i_=$((i_ + 1)); done
+  fi
+  alive "$1" && { FW_STUCK=1; return 1; }
+  wait "$1" 2>/dev/null; return 0
+}
+
 fw_flash_one() { # file id -> 0 if cpcd reports success
   ( umask 077; : > "$FW_DIR/flash.log" )
   /vendor/bin/cpcd -c /etc/cpcd_ota.conf -f "$1" >> "$FW_DIR/flash.log" 2>&1 &
@@ -1247,7 +1289,10 @@ fw_flash_one() { # file id -> 0 if cpcd reports success
     # a percentage only when cpcd said one; otherwise the time it has been flashing
     if pc_=$(fw_progress "$FW_DIR/flash.log"); then d_="$pc_%"; else d_="$t_ s"; fi
     fwstat "flashing $2: $d_ (do not unplug the panel)"
-    [ $t_ -ge 240 ] && { kill $p_; WHY="cpcd timed out"; return 1; }
+    if [ $t_ -ge "${GWA_FW_TIMEOUT:-240}" ] && alive $p_; then
+      if fw_stop_cpcd $p_; then WHY="cpcd timed out"; else WHY="cpcd timed out and did not exit"; fi
+      return 1
+    fi
   done
   wait $p_; r_=$?
   grep -q "Firmware upgrade successful" "$FW_DIR/flash.log" && [ $r_ = 0 ] && return 0
@@ -1305,11 +1350,22 @@ fw_guard() {
 
 fw_attempt() { # id -> flash it (2 tries) and verify; FW_* from fw_resolve
   for a_ in 1 2; do
+    [ -n "$FW_STUCK" ] && return 1   # a cpcd that would not exit still holds the radio: no second one
     fwstat "flashing $1: try $a_ (do not unplug the panel)"
     fw_flash_one "$FW_FILE" "$1" && fw_verify "$FW_APP" && return 0
     say "firmware: $1 try $a_ failed: $WHY"
   done
   return 1
+}
+
+# fw_mark <line>: $FW_DIR/in-progress, written to a temp file, read back, renamed and synced. 1 = not there.
+fw_mark() {
+  rm -f "$FW_DIR/in-progress.tmp"
+  if { echo "$1" > "$FW_DIR/in-progress.tmp" && mv -f "$FW_DIR/in-progress.tmp" "$FW_DIR/in-progress" &&
+       [ "$(cat "$FW_DIR/in-progress" 2>/dev/null)" = "$1" ]; } 2>/dev/null; then
+    sync; return 0
+  fi
+  rm -f "$FW_DIR/in-progress.tmp"; return 1
 }
 
 fw_do() { # id sha-prefix: the whole explicit operation; the agent restarts afterwards
@@ -1327,14 +1383,15 @@ fw_do() { # id sha-prefix: the whole explicit operation; the agent restarts afte
   fw_quiet || { fwstat "error $id_: $WHY"; WANT=$MODE_WANT; return 0; }
   before=$(fw_read_app)
   say "firmware: radio reports APP '${before:-nothing}' before flashing $id_ (APP $FW_APP, sha256 $FW_SHA)"
-  echo "$id_ $FW_SHA $(date +%s)" > "$FW_DIR/in-progress"
+  # The marker is what makes the next start restore stock after an interrupted flash: no flash without it.
+  fw_mark "$id_ $FW_SHA $(date +%s)" || { fwstat "error $id_: cannot write the flash marker (/data full?), nothing flashed"; WANT=$MODE_WANT; return 0; }
   if fw_attempt "$id_"; then
     rm -f "$FW_DIR/in-progress" "$FW_DIR/restore-tries"
     echo "$id_ $FW_APP $FW_SPINEL" > "$FW_DIR/current"
     fwdone "ok $id_: APP $FW_APP${FW_SPINEL:+ ($FW_SPINEL)}"
   else
     why_=$WHY
-    if [ "$id_" != stock ] && fw_resolve stock; then
+    if [ "$id_" != stock ] && [ -z "$FW_STUCK" ] && fw_resolve stock; then
       fwstat "flashing stock: $id_ failed ($why_), rolling back"
       if fw_attempt stock; then
         rm -f "$FW_DIR/in-progress" "$FW_DIR/restore-tries"
@@ -1590,7 +1647,7 @@ while true; do
       if w=$(not_ready); then
         status applying "$w"
       elif [ "$MODE" = thread_router ] && ! thread_router_join; then
-        FAILS=$((FAILS+1))   # thread_router_join set the status
+        :   # thread_router_join set the status and counts its failures across loops (JFAILS)
       else
         status ok "$(detail)"
         ZB_DEATHS=0
