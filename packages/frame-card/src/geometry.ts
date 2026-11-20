@@ -2,9 +2,10 @@
 // (fbfd364), one copy for Kiln's frame cards and the site's. The site keeps its models in a
 // table there; here each frame's model comes from its own `frames/<id>/design/frame.json` (the
 // `model` section in planning's decisions.md, "frame.json describes the device's look in millimetres").
-// The maths is the site's, unchanged: fit the body to the stage, pose it for its mount, shade the
-// sides that face the viewer, and give the CSS-3D front glass the same transform.
-import type { FrameModel } from './frame';
+// The maths is the site's: fit the body to the stage, pose it for its mount, shade the sides that
+// face the viewer, and give the CSS-3D front glass the same transform. A dock part (the Pixel
+// Tablet dock) is built here, on the level floor, and drawn apart from the body so the body can lift off it.
+import type { DockPart, FrameModel, TubePart } from './frame';
 
 type V3 = [number, number, number];
 
@@ -13,6 +14,8 @@ const VIEWS = {
   wall: { rx: 9, ry: -22 },
   floor: { rx: 3, ry: -24 },
   lean: { rx: 3, ry: -24 },
+  /* on a desk or counter, e.g. in a dock: from a little above */
+  desk: { rx: 10, ry: -24 },
 } as const;
 const PERSPECTIVE = 170;
 
@@ -61,9 +64,118 @@ function mix(a: string, b: string, t: number) {
 
 const f3 = (n: number) => +n.toFixed(3);
 
+/** no view: rotate(p, LEVEL, lean) takes a point from the body's frame to the level floor's (y down) */
+const LEVEL = { rx: 0, ry: 0 } as const;
+
+const sub = (a: V3, b: V3): V3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const dot = (a: V3, b: V3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const unit = (v: V3): V3 => {
+  const n = Math.hypot(...v) || 1;
+  return [v[0] / n, v[1] / n, v[2] / n];
+};
+
+/** a level ellipse at height y, around z = zc, as points */
+function ellipse(rx: number, rz: number, y: number, zc: number, n = 28): V3[] {
+  return Array.from({ length: n }, (_, i): V3 => {
+    const t = (i / n) * Math.PI * 2;
+    return [Math.cos(t) * rx, y, zc + Math.sin(t) * rz];
+  });
+}
+
+/**
+ * A stadium (a rectangle with fully round ends), `len` long and `wide` across, as points [along, across]
+ * by the direction of their outward normal, so two stadiums sampled alike can be joined point to point.
+ */
+function stadium(len: number, wide: number, n = 36): [number, number][] {
+  const r = wide / 2;
+  const half = Math.max(0, len / 2 - r);
+  return Array.from({ length: n }, (_, i) => {
+    const t = ((i + 0.5) / n) * Math.PI * 2;
+    return [Math.sign(Math.cos(t)) * half + r * Math.cos(t), r * Math.sin(t)];
+  });
+}
+
+/**
+ * The dock on the level floor (mm, y down, z towards the viewer), after the Pixel Tablet's: a smooth
+ * pill-shaped plate on the body's leaned back, wrapped in fabric that runs back and down from the
+ * pill to a stadium-shaped foot on the floor. So its ends are cones and its side is a triangle with a
+ * round top. `bodyFloor` is the body's lowest point; the floor is `gap` below it.
+ */
+function dockShape(dk: DockPart, body: FrameModel['body'], lean: number, bodyFloor: number) {
+  const l = rad(lean);
+  const back0 = rotate([0, body.height / 2, -body.depth / 2], LEVEL, lean);
+  const floor = bodyFloor + dk.gap;
+  const onBack = (y: number) => back0[2] + (y - back0[1]) * Math.tan(l);
+  // the pill: up the body's back from just above the floor to the dock's height
+  const foot = Math.min(6, dk.height / 10);
+  const tall = (dk.height - foot) / Math.cos(l);
+  const yc = floor - foot - (tall / 2) * Math.cos(l);
+  const zc = onBack(yc);
+  const onPlate = (x: number, v: number, out = 0): V3 => [x, yc - v * Math.cos(l) - out * Math.sin(l), zc - v * Math.sin(l) + out * Math.cos(l)];
+  const pill = stadium(dk.width, tall).map(([x, v]) => onPlate(x, v));
+  // the foot: as wide as the pill, `depth` deep, from where the body's back meets the floor. Its back
+  // pairs with the pill's top, so the fabric slopes from the top down to the floor behind
+  const front = onBack(floor);
+  const back = front - dk.depth;
+  const toe = stadium(dk.width, dk.depth).map(([x, b]): V3 => [x, floor, (front + back) / 2 - b]);
+  const sides = pill.map((p, i) => {
+    const j = (i + 1) % pill.length;
+    return [p, pill[j]!, toe[j]!, toe[i]!];
+  });
+  // the smooth plate in the fabric's rim, and the four contacts near its foot
+  const rim = Math.min(4, tall / 8);
+  const plate = stadium(dk.width - 2 * rim, tall - 2 * rim).map(([x, v]) => onPlate(x, v, 0.4));
+  const pins = [-1.5, -0.5, 0.5, 1.5].map((i) => onPlate(i * 5, -tall / 2 + rim + 7, 0.6));
+  return { polygons: [...sides, pill, toe], plate, pins, floor, front, back, points: [...pill, ...toe] };
+}
+
+/** A face's normal (Newell's method, which a many-sided cap needs too), unit length, or undefined if it has no area. */
+function normal(v: V3[]): V3 | undefined {
+  const raw = v.reduce<V3>((s, p, i) => {
+    const q = v[(i + 1) % v.length]!;
+    return [s[0] + (p[1] - q[1]) * (p[2] + q[2]), s[1] + (p[2] - q[2]) * (p[0] + q[0]), s[2] + (p[0] - q[0]) * (p[1] + q[1])];
+  }, [0, 0, 0]);
+  return Math.hypot(...raw) < 1e-9 ? undefined : unit(raw);
+}
+
+const centroid = (v: V3[]): V3 => v.reduce<V3>((s, p) => [s[0] + p[0] / v.length, s[1] + p[1] / v.length, s[2] + p[2] / v.length], [0, 0, 0]);
+
+/**
+ * The faces of a closed, roughly convex solid that face the viewer, shaded like the body's sides,
+ * back to front. `lift` lightens them all, for a smoother material.
+ */
+function solidFaces(polygons: V3[][], centre: V3, sides: { dark: string; light: string }, view: { rx: number; ry: number }, k: number, Q: (p: V3) => [number, number], lift = 0): Face[] {
+  const V = (p: V3) => rotate([p[0] * k, p[1] * k, p[2] * k], view);
+  const mid = V(centre);
+  const camera: V3 = [0, 0, PERSPECTIVE];
+  const faces: { face: Face; z: number }[] = [];
+  for (const q of polygons) {
+    const v = q.map(V);
+    const c = centroid(v);
+    let n = normal(v);
+    if (!n) continue;
+    if (dot(n, sub(c, mid)) < 0) n = [-n[0], -n[1], -n[2]];
+    if (dot(n, sub(camera, c)) <= 0) continue;
+    const lit = Math.max(0, dot(n, LIGHT));
+    faces.push({
+      face: { points: q.map(Q).map(([x, y]) => `${f3(x)},${f3(y)}`).join(' '), fill: mix(sides.dark, sides.light, Math.min(1, 0.25 + lift + 0.75 * lit)) },
+      z: c[2],
+    });
+  }
+  return faces.sort((a, b) => a.z - b.z).map((f) => f.face);
+}
+
 export type Face = { points: string; fill: string };
 export type Line = { x1: number; y1: number; x2: number; y2: number; width: number; color: string };
 export type Layout = 'landscape' | 'square' | 'portrait';
+/** A dock the body sits in: drawn behind the body and left in place when the body lifts off it. */
+export type Dock = {
+  /** its fabric's faces that face the viewer, back to front, shaded like the body's sides */
+  faces: Face[];
+  /** the smooth plate on its front, and the contacts on it, when the front faces the viewer */
+  plate?: Face;
+  pins?: { cx: number; cy: number; r: number }[];
+};
 
 export type Geometry = {
   /** stage height in stage units (width is 100) */
@@ -71,7 +183,9 @@ export type Geometry = {
   faces: Face[];
   parts: Line[];
   floorShadow?: string;
-  /** CSS custom properties for the front glass */
+  /** a dock part, drawn apart from the body so the body can lift off it */
+  dock?: Dock;
+  /** CSS custom properties for the front glass, and for a docked body its lift (--ux, --uy, --us) */
   vars: Record<string, string>;
   /** 2D shift that centres what's drawn */
   transform: string;
@@ -83,7 +197,7 @@ export type Geometry = {
 /** Fit, pose and project a model for a stage of the given aspect ratio (width / height). */
 export function geometry(m: FrameModel, stageAspect: number): Geometry {
   const view = VIEWS[m.mount];
-  const lean = m.mount === 'lean' ? (m.lean ?? 0) : 0;
+  const lean = m.mount === 'lean' || m.mount === 'desk' ? (m.lean ?? 0) : 0;
   const stageH = 100 / stageAspect;
   const cx = 50;
   const cy = stageH / 2;
@@ -94,10 +208,18 @@ export function geometry(m: FrameModel, stageAspect: number): Geometry {
 
   const { width: w, height: h, depth: d, radius: r } = m.body;
   const ring = outline(w, h, r);
-  const silhouette: V3[] = [
+  const tubes = (m.parts ?? []).filter((p): p is TubePart => p.kind === 'tube');
+  const dockPart = (m.parts ?? []).find((p): p is DockPart => p.kind === 'dock');
+  const shell: V3[] = [
     ...ring.map((p): V3 => [p.x, p.y, d / 2]),
     ...ring.map((p): V3 => [p.x, p.y, -d / 2]),
-    ...(m.parts ?? []).flatMap((p) => [p.from, p.to]),
+  ];
+  const dock = dockPart && dockShape(dockPart, m.body, lean, Math.max(...shell.map((p) => rotate(p, LEVEL, lean)[1])));
+  const silhouette: V3[] = [
+    ...shell,
+    ...tubes.flatMap((p) => [p.from, p.to]),
+    // the dock is built on the level floor; turn it back into the body's frame, which P leans
+    ...(dock?.points ?? []).map((p) => rotate(p, LEVEL, -lean)),
   ];
 
   // scale mm to stage units so the drawing fills the stage with a margin; perspective makes this
@@ -139,7 +261,7 @@ export function geometry(m: FrameModel, stageAspect: number): Geometry {
   }
 
   // parts as thick projected lines, drawn back to front
-  const parts: Line[] = (m.parts ?? [])
+  const parts: Line[] = tubes
     .map((p) => {
       const [x1, y1] = P(p.from);
       const [x2, y2] = P(p.to);
@@ -149,9 +271,15 @@ export function geometry(m: FrameModel, stageAspect: number): Geometry {
     .sort((a, b) => a.z - b.z)
     .map((p) => p.line);
 
-  // a soft shadow on the level floor under a standing or leaning device
+  // a soft shadow on the level floor under a standing or leaning device, or under its dock
   let floorShadow: string | undefined;
-  if (m.mount !== 'wall') {
+  if (dock) {
+    const { floor, front, back } = dock;
+    const rx = dockPart!.width * 0.56 * k;
+    const rz = (front - back) * 0.6 * k;
+    const zc = ((front + back) / 2) * k;
+    floorShadow = ellipse(rx, rz, floor * k, zc).map((p) => project(rotate(p, view))).map(([x, y]) => `${f3(x)},${f3(y)}`).join(' ');
+  } else if (m.mount !== 'wall') {
     const leaned = silhouette.map((p) => rotate([p[0] * k, p[1] * k, p[2] * k], { rx: 0, ry: 0 }, lean));
     const floorY = Math.max(...leaned.map((p) => p[1]));
     const base = leaned.filter((p) => p[1] > floorY - 0.5);
@@ -167,6 +295,32 @@ export function geometry(m: FrameModel, stageAspect: number): Geometry {
       .join(' ');
   }
 
+  // the dock, in the level floor's frame: its faces that face the viewer, its plate and contacts
+  let docked: Dock | undefined;
+  const lift: Record<string, string> = {};
+  if (dock && dockPart) {
+    const Q = (p: V3) => project(rotate([p[0] * k, p[1] * k, p[2] * k], view));
+    const centre = centroid(dock.points);
+    const faces = solidFaces(dock.polygons, centre, dockPart.sides, view, k, Q);
+    // the plate shows when the front of the fabric does: it lies on it
+    const plate = solidFaces([dock.plate], centre, dockPart.sides, view, k, Q, 0.12)[0];
+    docked = { faces };
+    if (plate) {
+      docked.plate = plate;
+      const r = 0.9 * k;
+      docked.pins = dock.pins.map(Q).map(([x, y]) => ({ cx: f3(x), cy: f3(y), r: f3(r) }));
+    }
+    // lifted off: up two fifths of the dock's height and a little towards the viewer, as a 2D move and
+    // scale of what's drawn, about the body's centre (the stage's centre before the shift below)
+    const up = rotate([0, -dockPart.height * 0.4 * k, dockPart.height * 0.16 * k], view);
+    const [ux, uy] = project(up);
+    Object.assign(lift, {
+      '--ux': `${f3(ux - cx)}%`,
+      '--uy': `${f3(((uy - cy) / stageH) * 100)}%`,
+      '--us': String(f3(PERSPECTIVE / (PERSPECTIVE - up[2]) - 1)),
+    });
+  }
+
   const dx = cx - (box.x0 + box.x1) / 2;
   const dy = cy - (box.y0 + box.y1) / 2;
   const ar = w / h;
@@ -178,6 +332,7 @@ export function geometry(m: FrameModel, stageAspect: number): Geometry {
     faces,
     parts,
     floorShadow,
+    dock: docked,
     vars: {
       '--wp': pct(sw),
       '--ar': `${f3(ar)} / 1`,
@@ -188,6 +343,8 @@ export function geometry(m: FrameModel, stageAspect: number): Geometry {
       '--rx': `${view.rx}deg`,
       '--ry': `${view.ry}deg`,
       '--lean': `${lean}deg`,
+      ...(m.face ? { '--dev-face': m.face } : {}),
+      ...lift,
     },
     transform: `translate(${f3(dx)}%, ${f3((dy / stageH) * 100)}%)`,
     layout: ar >= 1.3 ? 'landscape' : ar <= 0.8 ? 'portrait' : 'square',
