@@ -37,6 +37,12 @@ line of each version is what Home Assistant shows on the update card. A change o
   before the sign-in step.
 - **A device without a touchscreen keeps its screen on during setup.** On the lululemon Mirror and other devices
   without touch, the setup screen no longer goes dark while you set the device up from a computer.
+- **Notifications on a screen without touch show nothing you would have to tap.** On the lululemon Mirror a
+  notification showed Home Assistant's buttons, such as the test notification's OK, and after its card went away an
+  "N notifications · Show all" pill stayed on screen for good. Now cards and critical alerts show without buttons
+  or a close. A normal or low card goes away on its own and leaves nothing behind. A high or critical one with a
+  `tag` stays until Home Assistant clears it, and one without closes after 2 minutes, as before. Do not disturb's
+  pill only says it's on. Touch screens are unchanged.
 - **The lululemon Mirror stays upright after an update.** Android turned auto-rotate back on with every update of
   the app, so the Mirror's dashboard came up sideways until someone fixed it over adb. The app now holds the Mirror
   in portrait itself, whatever auto-rotate says. Other devices turn as before.

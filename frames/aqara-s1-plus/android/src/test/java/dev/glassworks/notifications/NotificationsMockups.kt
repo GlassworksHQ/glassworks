@@ -207,6 +207,26 @@ class NotificationsMockups {
         viewShot("notify-21-no-touch-full", garage, emptyList(), Ha.GARAGE, w = 1080, h = 1920, dark = true, input = Input.NONE)
     }
 
+    /**
+     * The Mirror's cards (2026-11-20): the panel's test notification (Home Assistant's button OK) in front of a card with
+     * two buttons, then the two folded (once the pill case), then a critical one with a button. Run on main for *before*.
+     */
+    @Test
+    @Config(qualifiers = "w540dp-h960dp-port-xhdpi")
+    fun noTouchCards() {
+        assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", Mockup.dir != null)
+        val test = entry(NotificationsHub.TEST_TITLE, NotificationsHub.TEST_MESSAGE, actions = listOf("OK"), tag = "glassworks_test", agoMs = 4_000)
+        val gate = entry("Someone at the gate", "The gate camera saw a visitor.", Priority.HIGH, actions = listOf("Open the gate", "Ignore"), tag = "gate")
+        val washer = entry("Washing machine", "Done. 1 h 32 min, 0.84 kWh.", agoMs = 2_000)
+        viewShot("notify-24-no-touch-card-buttons", null, emptyList(), Ha.HOME, cards = listOf(test, gate), w = 1080, h = 1920, dark = true, input = Input.NONE)
+        // Both normal: past their 15 s on screen they fold, and on main the pill stays for good.
+        viewShot("notify-25-no-touch-folded", null, emptyList(), Ha.HOME, cards = listOf(washer, test), w = 1080, h = 1920, dark = true,
+            input = Input.NONE, laterMs = (Delivery.FOLD_NORMAL_S + 1) * 1000L)
+        val leak = entry("Water under the kitchen sink", "The leak sensor turned on at 14:32. The main valve is still open.",
+            Priority.CRITICAL, actions = listOf("Close the valve"), tag = "water_leak")
+        viewShot("notify-26-no-touch-critical", null, emptyList(), Ha.HOME, cards = listOf(leak), w = 1080, h = 1920, dark = true, input = Input.NONE)
+    }
+
     private fun view(title: String, path: String, timeout: Int, agoMs: Long = 0, half: Boolean = false): Entry {
         val n = Notification(title, "", priority = Priority.HIGH, timeoutS = timeout, url = "$HA$path", size = if (half) ViewSize.HALF else ViewSize.FULL)
         return Entry(nextId++, n, now - agoMs, Delivery.of(Priority.HIGH, false))
@@ -215,11 +235,12 @@ class NotificationsMockups {
     /**
      * The overlay over a stand-in for the activity's page: a drawn HA dashboard that goes to the view the overlay
      * opens, and moves where it puts it ([dev.glassworks.engine.PageCapture.place], as the activity does). A half view
-     * gets the dashboard's picture first.
+     * gets the dashboard's picture first. [laterMs]: the overlay's clock moves on by that much before the final shot, so
+     * cards in view fold.
      */
     private fun viewShot(
         name: String, open: Entry?, waiting: List<Entry>, kind: Int, cards: List<Entry> = emptyList(),
-        w: Int = Mockup.W, h: Int = Mockup.H, dark: Boolean = false, input: Input = Input.TOUCH,
+        w: Int = Mockup.W, h: Int = Mockup.H, dark: Boolean = false, input: Input = Input.TOUCH, laterMs: Long = 0,
     ) {
         // Full screen, as the panel's activity: the window's own layout pass then agrees with the shot's size.
         val a = Mockup.activity()
@@ -234,7 +255,8 @@ class NotificationsMockups {
         fun show(k: Int) { page.removeAllViews(); page.addView(Ha(root.context, k, dark), FrameLayout.LayoutParams(-1, -1)) }
         show(Ha.HOME)
         root.addView(page, FrameLayout.LayoutParams(-1, -1))
-        val o = NotificationOverlay(root.context, NotificationsHub(), images, now = { now })
+        var clock = now
+        val o = NotificationOverlay(root.context, NotificationsHub(), images, now = { clock })
         o.input = input
         o.capturePage = { done ->
             val b = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
@@ -248,6 +270,7 @@ class NotificationsMockups {
         o.update(NotificationsHub.State(cards = cards, page = open, list = cards + listOfNotNull(open) + waiting))
         val critical = cards.any { it.notification.priority == Priority.CRITICAL }
         repeat(if (critical) 60 else 10) { Thread.sleep(if (critical) 100 else 50); Mockup.idle() }
+        clock += laterMs
         // At the final size, as the panel's first layout: the overlay puts the page in the dialog again.
         Mockup.layout(root, w, h)
         o.update(NotificationsHub.State(cards = cards, page = open, list = cards + listOfNotNull(open) + waiting))

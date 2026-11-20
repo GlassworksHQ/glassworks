@@ -116,7 +116,7 @@ data:
 - **Footer bar:** A slim bar at the bottom shows the view title, countdown timer, and an action button (*Next* if another view is queued, *Back now* on the last full-screen view, or *Close* on a half-screen view). Tapping outside a half-screen view, pressing Back, or letting the timeout expire also closes it.
 - **One view at a time:** An active view stays on screen while any newly arriving views wait in a queue (the footer shows *"Next in 0:24 · 1 more waiting"*). A replacement notification with a matching `tag` updates its queued entry in place, and waiting views continue counting down their timeouts so stale views do not pop up later. Tapping a button `uri` or an item from the notification list opens it immediately in front.
 - **Critical notifications:** A `critical` notification always shows the full-screen alert screen first. If it includes a `url`, the alert provides an **Open the view** button that launches the view full screen when tapped.
-- **Non-touch displays (such as the lululemon Studio Mirror):** Because nobody can tap to dismiss an alert on a mirror, views without a `timeout` close automatically after 2 minutes, as do `high` or `critical` notifications that have neither a `timeout` nor a `tag`. Give an alert a `tag` if you want it to stay up until Home Assistant clears it.
+- **Non-touch displays (such as the lululemon Studio Mirror):** Because nobody can tap to dismiss an alert on a mirror, views without a `timeout` close automatically after 2 minutes, as do `high` or `critical` notifications that have neither a `timeout` nor a `tag`. Give an alert a `tag` if you want it to stay up until Home Assistant clears it. Cards and alerts there show no buttons and no close, since nobody could press them, and there is no *Show all* pill: a `normal` or `low` card disappears once it has been on screen for its usual 15 or 10 seconds.
 - **Do not disturb:** While Do not disturb is active, incoming views are held in the notification list instead of interrupting the screen, and can still be opened from there manually.
 
 ## When someone presses a button
@@ -175,7 +175,7 @@ actions:
 
 ## The list
 
-Tap **N notifications · Show all** below the cards (or tap the Do not disturb pill) to open the notification list, and tap any item to view it again. The list is kept in memory until the panel restarts.
+Tap **N notifications · Show all** below the cards (or tap the Do not disturb pill) to open the notification list, and tap any item to view it again. The list is kept in memory until the panel restarts. A screen without touch has no list to open; the Manage page still shows what is in it.
 
 ## The doorbell
 
