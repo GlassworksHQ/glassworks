@@ -1,10 +1,10 @@
-/* Full-bleed spacious scroll stage for Concept D: one piece of glass morphing across hardware shapes */
+/* Full-bleed spacious scroll stage with sticky hold plateaus (580vh) */
 .story {
   position: relative;
   width: 100vw;
   margin-left: calc(50% - 50vw);
   margin-top: -24px;
-  height: 440vh;
+  height: 580vh;
 }
 
 .sticky {
@@ -30,19 +30,19 @@
   width: 100%;
   max-width: 1220px;
   height: 100%;
-  padding: 72px 44px 78px;
+  padding: 72px 44px 82px;
   display: grid;
   place-items: center;
 }
 
-/* Copy blocks positioned cleanly in the open half opposite the morphing glass */
+/* Copy blocks positioned cleanly opposite the morphing glass */
 .copyBlock {
   position: absolute;
   top: 50%;
   width: min(440px, 40vw);
   display: grid;
   gap: 16px;
-  margin-top: -110px;
+  margin-top: -116px;
   z-index: 3;
 }
 
@@ -57,7 +57,7 @@
 .copyCenter {
   position: absolute;
   left: 50%;
-  bottom: 92px;
+  bottom: 94px;
   width: min(560px, 90vw);
   margin-left: calc(min(560px, 90vw) / -2);
   text-align: center;
@@ -218,8 +218,8 @@ a.eyebrow:hover {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 400px;
-  transform: translateY(-84px);
+  gap: 416px;
+  transform: translateY(-88px);
   z-index: 2;
   transition: opacity 0.35s ease;
 }
@@ -278,7 +278,7 @@ a.eyebrow:hover {
   border-radius: 26px;
 }
 
-/* The single gliding, morphing hardware bezel */
+/* The single gliding, morphing piece of precision hardware */
 .hardwareCarrier {
   position: relative;
   z-index: 4;
@@ -289,29 +289,66 @@ a.eyebrow:hover {
   will-change: transform;
 }
 
+.hardwareScale {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+  will-change: transform;
+}
+
 .bezel {
   position: relative;
   pointer-events: auto;
-  padding: 11px;
-  background: linear-gradient(155deg, #252832 0%, #12141b 48%, #0a0b0f 100%);
+  background: linear-gradient(155deg, #252832 0%, #11131a 48%, #0a0b0f 100%);
   border: 1px solid rgba(255, 255, 255, 0.14);
   box-shadow:
-    0 34px 78px -28px rgba(0, 0, 0, 0.52),
+    0 34px 78px -28px rgba(0, 0, 0, 0.56),
     inset 0 1px 0 rgba(255, 255, 255, 0.16);
   overflow: hidden;
-  will-change: width, height, border-radius, transform;
+  will-change: width, height, border-radius;
+}
+
+/* Silvered full-height mirror body surface (forehead + chin stay real reflective glass) */
+.mirrorBodySurface {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: linear-gradient(155deg, #2c303a 0%, #171920 46%, #242833 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24);
 }
 
 .bezelMirror {
-  background: linear-gradient(160deg, #3c414d 0%, #171a22 50%, #0d0f14 100%);
-  border-color: rgba(255, 255, 255, 0.2);
+  background: linear-gradient(155deg, #2c303a 0%, #171920 46%, #242833 100%);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+/* Tubular U-shaped metal stand extending below the Studio Mirror */
+.mirrorStand {
+  height: 22px;
+  margin-top: -2px;
+  border-left: 4px solid #595e6a;
+  border-right: 4px solid #595e6a;
+  border-bottom: 4px solid #454954;
+  border-radius: 0 0 10px 10px;
+  box-shadow: 0 10px 18px -6px rgba(0, 0, 0, 0.45);
+  transform-origin: top center;
+  pointer-events: none;
+  will-change: opacity, transform;
 }
 
 .morphSmooth {
   transition:
     width 0.52s cubic-bezier(0.22, 1, 0.36, 1),
     height 0.52s cubic-bezier(0.22, 1, 0.36, 1),
-    border-radius 0.52s cubic-bezier(0.22, 1, 0.36, 1);
+    border-radius 0.52s cubic-bezier(0.22, 1, 0.36, 1),
+    top 0.52s cubic-bezier(0.22, 1, 0.36, 1),
+    bottom 0.52s cubic-bezier(0.22, 1, 0.36, 1),
+    left 0.52s cubic-bezier(0.22, 1, 0.36, 1),
+    right 0.52s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .glare {
@@ -322,29 +359,27 @@ a.eyebrow:hover {
   z-index: 4;
   background: linear-gradient(
     115deg,
-    transparent 34%,
-    rgba(255, 255, 255, 0.05) 44%,
-    rgba(255, 255, 255, 0.11) 49%,
-    rgba(255, 255, 255, 0.04) 55%,
-    transparent 64%
+    transparent 32%,
+    rgba(255, 255, 255, calc(var(--glare-a, 0.11) * 0.45)) 43%,
+    rgba(255, 255, 255, var(--glare-a, 0.11)) 49%,
+    rgba(255, 255, 255, calc(var(--glare-a, 0.11) * 0.35)) 55%,
+    transparent 65%
   );
   background-size: 260% 100%;
   background-position: var(--sheen, 34%) 0;
   transition: background-position 0.45s ease;
 }
 
+/* Inner screen positioned by real frame inset percentages; container-type: size lets HA cards reflow! */
 .screen {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  background:
-    radial-gradient(65% 80% at 10% 0%, rgba(56, 189, 248, 0.14), transparent 68%),
-    radial-gradient(60% 75% at 92% 100%, rgba(167, 139, 250, 0.12), transparent 68%),
-    #0b0d13;
-  color: var(--s-fg);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  position: absolute;
+  z-index: 2;
+  container-type: size;
+  background: #111111;
+  color: #e1e1e1;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   overflow: hidden;
-  transition: border-radius 0.52s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: top, bottom, left, right, border-radius;
 }
 
 .screenInner {
@@ -353,434 +388,1219 @@ a.eyebrow:hover {
   height: 100%;
 }
 
-.face {
-  position: absolute;
-  inset: 0;
-  padding: 18px 20px;
+/* ==================== LIVE RESPONSIVE HOME ASSISTANT LOVELACE SECTIONS DASHBOARD ==================== */
+.haRoot {
+  width: 100%;
+  height: 100%;
+  background: #111111;
+  color: #e1e1e1;
+  padding: 10px;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  gap: 12px;
-  transition: opacity 0.25s ease;
+  gap: 8px;
+  overflow: hidden;
+  font-family: var(--f-sans);
 }
 
-/* Wall Switch Face */
-.wallTop {
+/* Top HA Badges / Chips Bar */
+.haBadges {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  flex: none;
 }
 
-.wallClock {
-  font-size: 38px;
-  font-weight: 200;
+.haBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: #1c1c1c;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  font-size: 10.5px;
+  font-weight: 500;
+  color: #e1e1e1;
+  white-space: nowrap;
+  flex: none;
+}
+
+.haBadgeDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  flex: none;
+}
+
+.dotAmber {
+  background: #ffc107;
+}
+.dotGreen {
+  background: #4caf50;
+}
+.dotOrange {
+  background: #ff8100;
+}
+.dotBlue {
+  background: #03a9f4;
+}
+.dotMuted {
+  background: #6b7280;
+}
+
+/* Base Lovelace Card */
+.haCard {
+  background: #1c1c1c;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  color: #e1e1e1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Default Wide Landscape Grid (Wall Switch ~478×230): 4-col HA Sections */
+.haGrid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
+  gap: 8px;
+}
+
+/* Weather & Clock */
+.haWeatherCard {
+  grid-column: span 2;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.haWeatherLeft {
+  display: grid;
+  gap: 1px;
+}
+
+.haClock {
+  font-size: 26px;
+  font-weight: 300;
   letter-spacing: -0.04em;
-  line-height: 0.95;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 
-.assistPill {
-  display: inline-flex;
+.haWeatherCond {
+  font-size: 11px;
+  color: #9b9b9b;
+}
+
+.haWeatherRight {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+}
+
+.haSunIcon {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+}
+
+.haSunIcon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.haHiLo {
+  font-size: 10px;
+  color: #9b9b9b;
+  font-variant-numeric: tabular-nums;
+}
+
+/* HA Thermostat / Climate Dial Card */
+.haClimateCard {
+  grid-column: span 2;
+  grid-row: span 2;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.haClimateHead {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
   gap: 6px;
-  font-family: var(--f-mono);
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  color: var(--s-mu);
-  padding: 4px 9px;
+}
+
+.haCardTitle {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #e1e1e1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.haModePill {
+  font-size: 9.5px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.haModeHeat {
+  background: rgba(255, 129, 0, 0.16);
+  color: #ff8100;
+}
+
+.haModeCool {
+  background: rgba(3, 169, 244, 0.16);
+  color: #03a9f4;
+}
+
+.haDialStage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+}
+
+.haDialSvg {
+  width: min(100%, 96px);
+  height: min(100%, 96px);
+  transform: rotate(90deg);
+}
+
+.haDialTrack {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.12);
+  stroke-width: 6.5;
+  stroke-linecap: round;
+}
+
+.haDialHeat {
+  fill: none;
+  stroke: #ff8100;
+  stroke-width: 7;
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.2s ease;
+}
+
+.haDialCool {
+  fill: none;
+  stroke: #03a9f4;
+  stroke-width: 7;
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.2s ease;
+}
+
+.haDialCenter {
+  position: absolute;
+  display: grid;
+  justify-items: center;
+  line-height: 1.05;
+}
+
+.haDialTemp {
+  font-size: 24px;
+  font-weight: 400;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+.haDialSub {
+  font-size: 9px;
+  color: #9b9b9b;
+}
+
+.haDialControls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.haStepBtn {
+  appearance: none;
+  width: 24px;
+  height: 24px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.04);
-}
-
-.skyDot {
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--sky);
-}
-
-.greenDot {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 999px;
-  background: var(--green);
-  margin-right: 6px;
-}
-
-.wallTiles {
+  background: #262626;
+  color: #e1e1e1;
+  font-size: 14px;
+  cursor: pointer;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  flex: 1;
-  align-items: stretch;
+  place-items: center;
+  flex: none;
 }
 
-.tile {
-  position: relative;
+.haStepBtn:hover {
+  background: #333333;
+}
+
+.haDialTarget {
+  font-size: 10px;
+  color: #9b9b9b;
+}
+
+/* Authentic HA Tile Cards (round tinted icon circles + real brightness bars) */
+.haTile {
   appearance: none;
   font: inherit;
-  color: var(--s-fg);
   text-align: left;
-  border-radius: 13px;
-  padding: 12px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.045);
+  padding: 8px 9px;
+  cursor: pointer;
   display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.haTile:hover {
+  background: #232323;
+}
+
+.haTileAmber {
+  border-color: rgba(255, 193, 7, 0.26);
+}
+
+.haTileRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.haCircle {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.haCircle svg {
+  width: 15px;
+  height: 15px;
+}
+
+.haCircleAmber {
+  background: rgba(255, 193, 7, 0.2);
+  color: #ffc107;
+}
+
+.haCircleOff {
+  background: rgba(155, 155, 155, 0.16);
+  color: #9b9b9b;
+}
+
+.haCircleGreen {
+  background: rgba(76, 175, 80, 0.2);
+  color: #4caf50;
+}
+
+.haCircleOrange {
+  background: rgba(255, 129, 0, 0.2);
+  color: #ff8100;
+}
+
+.haCircleBlue {
+  background: rgba(3, 169, 244, 0.2);
+  color: #03a9f4;
+}
+
+.haTileMeta {
+  display: grid;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.haTileMeta b {
+  font-size: 11px;
+  font-weight: 500;
+  color: #e1e1e1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.haTileMeta small {
+  font-size: 10px;
+  color: #9b9b9b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.haSlider {
+  display: block;
+  width: 100%;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.09);
+  overflow: hidden;
+}
+
+.haSliderFillAmber {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #ffc107;
+  transition: width 0.22s ease;
+}
+
+/* Energy Sparkline + Live Camera Cards (hidden on wide short Wall Switch, smoothly revealed on Tablet & Mirror!) */
+.haSparkCard,
+.haCamCard,
+.haLockTile,
+.haMediaTile {
+  display: none;
+}
+
+.haSparkCard {
+  padding: 9px 11px;
   flex-direction: column;
   justify-content: space-between;
   gap: 4px;
 }
 
-button.tile {
-  cursor: pointer;
-  transition:
-    background 0.2s ease,
-    border-color 0.2s ease;
-}
-
-button.tile:hover {
-  border-color: rgba(255, 255, 255, 0.2);
-}
-
-.tileWarm {
-  border-color: rgba(253, 186, 116, 0.34);
-  background: linear-gradient(145deg, rgba(253, 186, 116, 0.18), rgba(251, 191, 36, 0.06));
-}
-
-.tileSky {
-  border-color: rgba(56, 189, 248, 0.32);
-  background: linear-gradient(145deg, rgba(56, 189, 248, 0.16), rgba(167, 139, 250, 0.1));
-}
-
-.tileKicker {
-  font-size: 11px;
-  color: var(--s-mu);
-}
-
-.tileVal,
-.tileValLive {
-  font-size: 14px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-}
-
-.tileValLive {
-  display: inline-flex;
-  align-items: center;
-}
-
-.eqMini {
-  position: absolute;
-  right: 12px;
-  top: 12px;
-  display: flex;
-  align-items: flex-end;
-  gap: 2.5px;
-  height: 14px;
-}
-
-.eqMini span {
-  width: 2.5px;
-  border-radius: 999px;
-  background: var(--lit-gradient);
-}
-
-.eqMini span:nth-child(1) {
-  height: 55%;
-}
-.eqMini span:nth-child(2) {
-  height: 100%;
-}
-.eqMini span:nth-child(3) {
-  height: 40%;
-}
-.eqMini span:nth-child(4) {
-  height: 80%;
-}
-
-/* Razor-thin sky->violet Assist light edge along the bottom */
-.assistRim {
-  position: absolute;
-  left: 16%;
-  right: 16%;
-  bottom: 0;
-  height: 2px;
-  background: var(--lit-gradient);
-  box-shadow: 0 0 12px var(--sky);
-  border-radius: 999px;
-}
-
-/* Tablet Face */
-.tabTop {
+.haSparkHead {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-}
-
-.tabTitle {
-  font-size: 17px;
-  font-weight: 450;
-  letter-spacing: -0.02em;
-}
-
-.clarityTag {
-  font-family: var(--f-mono);
-  font-size: 10px;
-  letter-spacing: 0.12em;
-  padding: 3px 8px;
-  border-radius: 999px;
-  border: 1px solid rgba(52, 211, 153, 0.35);
-  background: rgba(52, 211, 153, 0.12);
-  color: var(--green);
-}
-
-.tabGrid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  flex: 1;
-}
-
-/* Mirror Face */
-.mirrorFace {
-  padding: 20px 16px;
-}
-
-.mirrorGlass {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.02) 38%, transparent 58%, rgba(255, 255, 255, 0.06) 100%);
-}
-
-.mirrorTop {
-  position: relative;
-  display: grid;
-  gap: 2px;
-}
-
-.mirrorClock {
-  font-size: 34px;
-  font-weight: 200;
-  letter-spacing: -0.04em;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-}
-
-.mirrorWeather {
-  font-size: 12px;
-  color: var(--s-mu);
-}
-
-.mirrorSpace {
-  flex: 1;
-}
-
-.mirrorBottom {
-  position: relative;
-  display: grid;
-  gap: 7px;
-}
-
-.mirrorPill,
-.mirrorPillLit {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 9px 11px;
-  border-radius: 10px;
-  font-size: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.mirrorPillLit {
-  border-color: rgba(56, 189, 248, 0.35);
-  background: linear-gradient(135deg, rgba(56, 189, 248, 0.18), rgba(167, 139, 250, 0.12));
-}
-
-.mirrorPill span,
-.mirrorPillLit span {
-  color: var(--s-mu);
-}
-
-.mirrorPill b,
-.mirrorPillLit b {
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-}
-
-/* Square 4" & Round Dial Faces */
-.dialFace {
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px;
-}
-
-.dialKicker {
-  font-family: var(--f-mono);
-  font-size: 9.5px;
-  letter-spacing: 0.14em;
-  color: var(--s-fa);
-}
-
-.dialRingWrap {
-  position: relative;
-  width: 112px;
-  height: 112px;
-  display: grid;
-  place-items: center;
-}
-
-.dialSvg {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  transform: rotate(-90deg);
-}
-
-.dialTrack {
-  fill: none;
-  stroke: rgba(255, 255, 255, 0.1);
-  stroke-width: 4;
-}
-
-.dialArc {
-  fill: none;
-  stroke: url(#gw-lit);
-  stroke-width: 4.5;
-  stroke-linecap: round;
-  transition: stroke-dashoffset 0.25s ease;
-}
-
-.dialTemp {
-  font-size: 32px;
-  font-weight: 250;
-  letter-spacing: -0.04em;
-  font-variant-numeric: tabular-nums;
-}
-
-.dialControls {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.dialStep {
-  appearance: none;
-  width: 26px;
-  height: 26px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--s-fg);
-  font-size: 14px;
-  cursor: pointer;
-  display: grid;
-  place-items: center;
-}
-
-.dialStep:hover {
-  background: rgba(255, 255, 255, 0.15);
-}
-
-.dialMode {
-  font-size: 11.5px;
-  color: var(--s-mu);
-}
-
-.roundFace {
-  align-items: center;
-  justify-content: center;
-  padding: 12px;
-}
-
-.roundSvg {
-  position: absolute;
-  inset: 8px;
-  width: calc(100% - 16px);
-  height: calc(100% - 16px);
-  transform: rotate(-90deg);
-}
-
-.roundCenter {
-  position: relative;
-  display: grid;
-  justify-items: center;
+  align-items: baseline;
   gap: 6px;
 }
 
-.roundTemp {
-  font-size: 42px;
-  font-weight: 200;
-  letter-spacing: -0.04em;
-  line-height: 1;
+.haSparkLabel {
+  font-size: 10.5px;
+  color: #9b9b9b;
+}
+
+.haSparkVal {
+  font-size: 12px;
+  font-weight: 500;
+  color: #03a9f4;
   font-variant-numeric: tabular-nums;
 }
 
-/* Bedside Display Face */
-.bedsideFace {
-  padding: 16px 20px;
-  justify-content: space-between;
+.haSparkSvg {
+  width: 100%;
+  height: 36px;
+  display: block;
 }
 
-.bedsideTop {
+.haCamCard {
+  position: relative;
+  padding: 0;
+}
+
+.haCamSvg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.haCamOverlay {
+  position: absolute;
+  inset: auto 0 0;
+  padding: 5px 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.72));
+  font-size: 10px;
+}
+
+.haCamBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 500;
+}
+
+.haCamFps {
+  font-family: var(--f-mono);
+  font-size: 9px;
+  color: #9b9b9b;
+}
+
+/* ==================== @CONTAINER REFLOW RULES (THE ACTUAL HA CARDS REFLOW LIVE!) ==================== */
+
+/* 1. Wide Landscape Tablet (height >= 242px AND width >= 350px): reveals Living Room light, Energy Sparkline & Front Door Camera */
+@container (min-width: 350px) and (min-height: 242px) {
+  .haGrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-rows: auto 1fr 1fr;
+  }
+
+  .haWeatherCard {
+    grid-column: 1 / span 2;
+    grid-row: 1;
+  }
+
+  .haClimateCard {
+    grid-column: 3 / span 2;
+    grid-row: 1 / span 2;
+  }
+
+  .haKitchenTile {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .haLivingTile {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .haSparkCard {
+    display: flex;
+    grid-column: 1 / span 2;
+    grid-row: 3;
+  }
+
+  .haCamCard {
+    display: block;
+    grid-column: 3 / span 2;
+    grid-row: 3;
+  }
+}
+
+/* 2. Wide Short Wall Switch (width >= 270px AND height < 242px): Weather, Kitchen light, Front Door lock & Climate dial */
+@container (min-width: 270px) and (max-height: 241px) {
+  .haGrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-rows: 1fr 1fr;
+  }
+
+  .haWeatherCard {
+    grid-column: 1 / span 2;
+    grid-row: 1;
+  }
+
+  .haKitchenTile {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .haLivingTile {
+    display: none;
+  }
+
+  .haLockTile {
+    display: flex;
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .haClimateCard {
+    grid-column: 3 / span 2;
+    grid-row: 1 / span 2;
+  }
+}
+
+/* Compact Bedside Display (width <= 340px AND height <= 165px) */
+@container (max-width: 340px) and (max-height: 165px) {
+  .haBadges {
+    display: none;
+  }
+
+  .haGrid {
+    grid-template-columns: 1.1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+  }
+
+  .haWeatherCard {
+    grid-column: 1;
+    grid-row: 1;
+    padding: 8px 10px;
+  }
+
+  .haClock {
+    font-size: 22px;
+  }
+
+  .haKitchenTile {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .haLivingTile,
+  .haLockTile {
+    display: none;
+  }
+
+  .haClimateCard {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    padding: 8px;
+  }
+
+  .haDialSvg {
+    width: 68px;
+    height: 68px;
+  }
+
+  .haDialTemp {
+    font-size: 19px;
+  }
+
+  .haDialSub {
+    display: none;
+  }
+}
+
+/* 3. Tall Narrow Portrait Studio Mirror Inset (width < 260px AND height >= 260px) */
+@container (max-width: 259px) and (min-height: 260px) {
+  .haRoot {
+    padding: 8px;
+    gap: 6px;
+  }
+
+  .haBadgeExtra {
+    display: none;
+  }
+
+  .haBadge {
+    padding: 3px 7px;
+    font-size: 9.5px;
+  }
+
+  .haGrid {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1.15fr auto auto 0.9fr;
+    gap: 6px;
+  }
+
+  .haWeatherCard {
+    grid-column: 1;
+    grid-row: 1;
+    padding: 7px 9px;
+  }
+
+  .haClock {
+    font-size: 20px;
+  }
+
+  .haClimateCard {
+    grid-column: 1;
+    grid-row: 2;
+    padding: 7px 9px;
+    gap: 2px;
+  }
+
+  .haDialSvg {
+    width: 58px;
+    height: 58px;
+  }
+
+  .haDialTemp {
+    font-size: 18px;
+  }
+
+  .haDialSub {
+    display: none;
+  }
+
+  .haStepBtn {
+    width: 20px;
+    height: 20px;
+    font-size: 12px;
+  }
+
+  .haKitchenTile {
+    grid-column: 1;
+    grid-row: 3;
+    padding: 6px 8px;
+    gap: 4px;
+  }
+
+  .haLivingTile {
+    display: none;
+  }
+
+  .haMediaTile {
+    display: flex;
+    grid-column: 1;
+    grid-row: 4;
+    padding: 6px 8px;
+  }
+
+  .haCamCard {
+    display: block;
+    grid-column: 1;
+    grid-row: 5;
+  }
+}
+
+/* 4. Compact Square 4" Switch & Round Dial (width < 260px AND height < 260px) — Thermostat Dial becomes solo centerpiece! */
+@container (max-width: 259px) and (max-height: 259px) {
+  .haRoot {
+    padding: 10px;
+  }
+
+  .haBadges,
+  .haWeatherCard,
+  .haKitchenTile,
+  .haLivingTile,
+  .haLockTile,
+  .haMediaTile,
+  .haSparkCard,
+  .haCamCard {
+    display: none;
+  }
+
+  .haGrid {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr;
+  }
+
+  .haClimateCard {
+    grid-column: 1;
+    grid-row: 1;
+    padding: 12px;
+    border-radius: 14px;
+  }
+
+  .haDialSvg {
+    width: 118px;
+    height: 118px;
+  }
+
+  .haDialTemp {
+    font-size: 32px;
+  }
+
+  .haDialSub {
+    font-size: 10px;
+  }
+}
+
+/* Round Dial circular refinement */
+.haRoot[data-round] {
+  padding: 0;
+  background: #1c1c1c;
+}
+
+.haRoot[data-round] .haClimateCard {
+  background: transparent;
+  border: 0;
+  padding: 20px 24px 18px;
+  align-items: center;
+}
+
+.haRoot[data-round] .haClimateHead {
+  justify-content: center;
+}
+
+.haRoot[data-round] .haCardTitle {
+  display: none;
+}
+
+.haRoot[data-round] .haDialControls {
+  justify-content: center;
+  gap: 14px;
+}
+
+.haRoot[data-round] .haDialTarget {
+  display: none;
+}
+
+/* ==================== LIVE GLASSWORKS NATIVE OVERLAYS (over ANY shape!) ==================== */
+.overlayLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 10px;
+  pointer-events: auto;
+  transition: background 0.25s ease;
+}
+
+.overlayDim {
+  background: rgba(10, 11, 15, 0.58);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  justify-content: center;
+  align-items: center;
+}
+
+/* 1. Assist Overlay */
+.assistOverlay {
+  position: relative;
+  width: 100%;
+  display: grid;
+  justify-items: center;
+}
+
+.assistCard {
+  width: 100%;
+  max-width: 360px;
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: rgba(10, 11, 15, 0.9);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  display: grid;
+  gap: 6px;
+}
+
+.assistHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.assistIconLit,
+.musicIconLit {
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: var(--lit-gradient);
+  color: var(--night);
+  flex: none;
+}
+
+.assistIconLit svg,
+.musicIconLit svg {
+  width: 13px;
+  height: 13px;
+}
+
+.assistState {
+  font-size: 11px;
+  font-weight: 500;
+  color: #7dd3fc;
+  flex: 1;
+}
+
+.wave {
+  display: flex;
+  align-items: center;
+  gap: 2.5px;
+  height: 16px;
+}
+
+.wave span {
+  width: 2.5px;
+  height: var(--h, 55%);
+  border-radius: 999px;
+  background: var(--lit-gradient);
+  animation: waveBar 0.9s ease-in-out infinite alternate;
+}
+
+.waveDone span {
+  animation: none;
+  height: 30%;
+  opacity: 0.5;
+}
+
+@keyframes waveBar {
+  0% {
+    transform: scaleY(0.35);
+    opacity: 0.65;
+  }
+  100% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+.assistLine {
+  font-size: 13px;
+  font-weight: 450;
+  color: var(--s-fg);
+  line-height: 1.3;
+}
+
+.assistReply {
+  font-size: 11.5px;
+  color: var(--green);
+}
+
+.assistChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.ovChip {
+  appearance: none;
+  font: 500 10.5px/1 var(--f-sans);
+  padding: 5px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--s-mu);
+  cursor: pointer;
+}
+
+.ovChipOn {
+  color: var(--s-fg);
+  border-color: rgba(56, 189, 248, 0.45);
+  background: rgba(56, 189, 248, 0.15);
+}
+
+.assistBottomGlow {
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  bottom: -10px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--lit-gradient);
+  box-shadow: 0 0 16px 2px var(--sky);
+}
+
+/* 2. Notification & 3. Timer Overlays */
+.centerOverlay {
+  width: 100%;
+  display: grid;
+  place-items: center;
+}
+
+.notifCard,
+.timerCard {
+  width: 100%;
+  max-width: 340px;
+  border-radius: 15px;
+  padding: 12px;
+  background: rgba(10, 11, 15, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  display: grid;
+  gap: 10px;
+}
+
+.notifCard {
+  grid-template-columns: 104px minmax(0, 1fr);
+  align-items: center;
+}
+
+.notifCam {
+  position: relative;
+  border-radius: 9px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  aspect-ratio: 4 / 3;
+}
+
+.notifSvg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.liveTag {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(10, 11, 15, 0.8);
+  font-family: var(--f-mono);
+  font-size: 9px;
+  color: var(--s-fg);
+}
+
+.liveDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--green);
+}
+
+.notifBody {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.notifBody b {
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--s-fg);
+}
+
+.notifBody span {
+  font-size: 11.5px;
+  color: var(--s-mu);
+  line-height: 1.3;
+}
+
+.ovBtns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.ovBtn,
+.ovBtnLit,
+.ovBtnOk {
+  appearance: none;
+  font: 500 11px/1 var(--f-sans);
+  padding: 7px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.ovBtnLit {
+  border: 0;
+  background: var(--lit-gradient);
+  color: var(--night);
+}
+
+.ovBtnOk {
+  border: 1px solid rgba(52, 211, 153, 0.45);
+  background: rgba(52, 211, 153, 0.18);
+  color: var(--green);
+}
+
+.ovBtn {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--s-fg);
+}
+
+.timerTop {
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
-.bedsidePill {
-  font-size: 10.5px;
-  color: #7dd3fc;
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: rgba(56, 189, 248, 0.12);
+.timerTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
 }
 
-.bedsideClock {
-  font-size: 46px;
-  font-weight: 200;
-  letter-spacing: -0.04em;
+.timerTitle svg {
+  width: 15px;
+  height: 15px;
+  color: var(--sky);
+}
+
+.timerMeta {
+  font-family: var(--f-mono);
+  font-size: 10px;
+  color: var(--s-mu);
+}
+
+.timerClock {
+  font-family: var(--f-mono);
+  font-size: 32px;
+  font-weight: 300;
+  letter-spacing: -0.03em;
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 
-.bedsideFoot {
-  display: flex;
-  justify-content: space-between;
-  font-size: 11.5px;
-  color: var(--s-mu);
+.timerTrack {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
 }
 
-/* Quiet bottom shape rail */
+.timerFill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--lit-gradient);
+  transition: width 0.5s linear;
+}
+
+/* 4. Music Assistant / Sendspin Mini-Player Overlay */
+.musicOverlay {
+  width: 100%;
+  display: grid;
+  justify-items: center;
+}
+
+.musicBar {
+  width: 100%;
+  max-width: 380px;
+  border-radius: 14px;
+  padding: 9px 11px;
+  background: rgba(10, 11, 15, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.musicInfo {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  line-height: 1.25;
+}
+
+.musicInfo b {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--s-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.musicInfo span {
+  font-size: 10.5px;
+  color: var(--s-mu);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.musicEq {
+  display: flex;
+  align-items: flex-end;
+  gap: 2.5px;
+  height: 15px;
+  flex: none;
+}
+
+.musicEq span {
+  width: 2.5px;
+  height: var(--h, 50%);
+  border-radius: 999px;
+  background: var(--lit-gradient);
+  animation: waveBar 0.78s ease-in-out infinite alternate;
+}
+
+.musicEqOff span {
+  animation: none;
+  height: 25%;
+  opacity: 0.45;
+}
+
+/* Keep overlays crisp inside narrow Mirror inset & compact Square/Round screens */
+@container (max-width: 250px) {
+  .notifCard {
+    grid-template-columns: 1fr;
+    padding: 10px;
+    gap: 8px;
+  }
+
+  .notifCam {
+    aspect-ratio: 16 / 9;
+  }
+
+  .timerClock {
+    font-size: 26px;
+  }
+
+  .musicEq {
+    display: none;
+  }
+
+  .assistChips {
+    display: none;
+  }
+}
+
+.screen[data-round] .overlayLayer {
+  padding: 20px;
+  justify-content: center;
+  align-items: center;
+}
+
+.screen[data-round] .notifCam {
+  display: none;
+}
+
+.screen[data-round] .notifBody,
+.screen[data-round] .timerCard,
+.screen[data-round] .assistCard {
+  text-align: center;
+  justify-items: center;
+}
+
+.screen[data-round] .ovBtns {
+  justify-content: center;
+}
+
+/* ==================== Quiet Bottom Control Dock (Shape | Try feature) ==================== */
 .railWrap {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 24px;
+  bottom: 20px;
   display: flex;
   justify-content: center;
+  padding-inline: 16px;
   z-index: 6;
   pointer-events: none;
 }
 
-.rail {
+.dock {
   pointer-events: auto;
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  padding: 4px;
+  gap: 10px;
+  padding: 4px 8px;
   border-radius: 999px;
   border: 1px solid var(--edge);
-  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  background: color-mix(in srgb, var(--bg) 74%, transparent);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
+  max-width: 100%;
+}
+
+.dockGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.dockLabel {
+  font-family: var(--f-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+  padding: 0 7px 0 6px;
+  white-space: nowrap;
+}
+
+.dockSep {
+  width: 1px;
+  height: 18px;
+  background: var(--edge);
+  flex: none;
 }
 
 .railBtn {
@@ -788,10 +1608,11 @@ button.tile:hover {
   border: 0;
   background: transparent;
   color: var(--muted);
-  font: 450 12.5px/1 var(--f-sans);
-  padding: 8px 13px;
+  font: 450 12px/1 var(--f-sans);
+  padding: 7px 10px;
   border-radius: 999px;
   cursor: pointer;
+  white-space: nowrap;
   transition:
     color 0.18s ease,
     background 0.18s ease;
@@ -804,44 +1625,65 @@ button.tile:hover {
 .railActive {
   color: var(--fg);
   background: var(--glass);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sky) 35%, var(--edge));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--fg) 22%, var(--edge));
 }
 
-@media (max-width: 1140px) {
+.railFeatureActive {
+  color: var(--fg);
+  background: color-mix(in srgb, var(--sky) 14%, var(--glass));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sky) 42%, var(--edge));
+}
+
+@media (max-width: 1140px), (max-height: 820px) {
   .hardwareCarrier {
     --bezel-scale: 0.86;
   }
 
   .ghostLayer {
-    gap: 320px;
+    gap: 330px;
   }
 }
 
-/* Compact / Mobile / Reduced-motion layout (zero scroll-jack, zero overflow at 375px) */
+@media (max-width: 1020px) {
+  .dockLabel {
+    display: none;
+  }
+}
+
+/* Compact / Mobile / Reduced-motion layout */
 .compactWrap {
   display: grid;
-  gap: 26px;
-  padding: 20px 0 36px;
+  gap: 22px;
+  padding: 14px 0 32px;
   justify-items: center;
 }
 
 .compactStage {
   width: 100%;
-  min-height: 380px;
+  min-height: 360px;
   display: grid;
   place-items: center;
 }
 
-.compactRail {
+.mirrorAssembly {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 4px;
-  padding: 4px;
+  flex-direction: column;
+  align-items: center;
+}
+
+.compactDock {
+  display: grid;
+  gap: 8px;
+  padding: 8px 10px;
   border-radius: 20px;
   border: 1px solid var(--edge);
   background: var(--glass);
   max-width: 100%;
+}
+
+.compactDock .dockSep {
+  width: 100%;
+  height: 1px;
 }
 
 .compactCopy {
@@ -865,25 +1707,9 @@ button.tile:hover {
   justify-content: center;
 }
 
-@media (max-width: 480px) {
-  .face {
-    padding: 13px 14px;
-  }
-
-  .wallClock {
-    font-size: 28px;
-  }
-
-  .tile {
-    padding: 9px 10px;
-  }
-
-  .tileVal,
-  .tileValLive {
-    font-size: 12.5px;
-  }
-
-  .bedsideClock {
-    font-size: 36px;
+@media (prefers-reduced-motion: reduce) {
+  .wave span,
+  .musicEq span {
+    animation: none;
   }
 }
