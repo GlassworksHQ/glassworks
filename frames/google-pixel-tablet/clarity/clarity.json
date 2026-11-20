@@ -1,0 +1,769 @@
+{
+ "schema": "glassworks.perf-summary/3",
+ "test": "Clarity",
+ "clarity": 1,
+ "protocol_version": 1,
+ "report_schema": "glassworks.perf/4",
+ "measured_on": "2026-11-19",
+ "frame": {
+  "id": "google-pixel-tablet",
+  "name": "Google Pixel Tablet"
+ },
+ "app_version": "0.2.0-519bf2e",
+ "viewport": {
+  "css": [
+   1280,
+   800
+  ],
+  "dpr": 2,
+  "default_dpr": 2.0
+ },
+ "runs": {
+  "attempted": 3,
+  "graded": 3
+ },
+ "pages": {
+  "light": {
+   "inp_ms": 32.0,
+   "open_ms": 249.0,
+   "blocking_ms": 0.0,
+   "usable_ms": 249,
+   "scroll": {
+    "fps": 59.7,
+    "p95_ms": 16.67,
+    "scrolled_px": 6747,
+    "sf_valid": [
+     true,
+     true,
+     true
+    ],
+    "during_updates": [
+     6,
+     6,
+     6
+    ],
+    "swipes_moved": 18,
+    "swipes_at_edge": 0,
+    "runs": [
+     {
+      "p95_ms": 16.67,
+      "jank_pct": 0.74,
+      "frozen_pct": 0.0,
+      "fps": 59.68,
+      "n": 408
+     },
+     {
+      "p95_ms": 16.67,
+      "jank_pct": 0.99,
+      "frozen_pct": 0.0,
+      "fps": 59.53,
+      "n": 405
+     },
+     {
+      "p95_ms": 16.67,
+      "jank_pct": 0.49,
+      "frozen_pct": 0.0,
+      "fps": 59.82,
+      "n": 407
+     }
+    ]
+   },
+   "updates": {
+    "latency_p95_ms": 110.6,
+    "latency_median_ms": 61.6,
+    "pacing_p95_ms": 16.67,
+    "runs": [
+     {
+      "latency_n": 21,
+      "latency_median_ms": 62.3,
+      "latency_p95_ms": 117.9,
+      "frames": {
+       "p95_ms": 16.67,
+       "jank_pct": 0.0,
+       "frozen_pct": 0.0,
+       "fps": 60.14,
+       "n": 29
+      },
+      "sent": 22,
+      "arrived": 22
+     },
+     {
+      "latency_n": 21,
+      "latency_median_ms": 61.6,
+      "latency_p95_ms": 110.6,
+      "frames": {
+       "p95_ms": 16.67,
+       "jank_pct": 0.0,
+       "frozen_pct": 0.0,
+       "fps": 60.14,
+       "n": 29
+      },
+      "sent": 22,
+      "arrived": 22
+     },
+     {
+      "latency_n": 22,
+      "latency_median_ms": 54.5,
+      "latency_p95_ms": 85.8,
+      "frames": {
+       "p95_ms": 16.67,
+       "jank_pct": 0.0,
+       "frozen_pct": 0.0,
+       "fps": 60.31,
+       "n": 22
+      },
+      "sent": 23,
+      "arrived": 23
+     }
+    ]
+   },
+   "camera": {
+    "runs": [],
+    "path": null,
+    "fallback": null
+   },
+   "timed_out_runs": 0,
+   "runs": {
+    "tap": 3,
+    "scroll": 3,
+    "updates": 3,
+    "open": 3,
+    "blocking": 3,
+    "camera": 0,
+    "dialog": 3
+   },
+   "dialog": {
+    "settled_ms": 300,
+    "runs": [
+     {
+      "n": 3,
+      "failed": 0,
+      "settled_ms": 300.3799999999974,
+      "frames": {
+       "p95_ms": 50.0,
+       "jank_pct": 17.86,
+       "frozen_pct": 0.0,
+       "fps": 43.16,
+       "n": 28
+      }
+     },
+     {
+      "n": 3,
+      "failed": 0,
+      "settled_ms": 273.54000000000815,
+      "frames": {
+       "p95_ms": 50.0,
+       "jank_pct": 11.54,
+       "frozen_pct": 0.0,
+       "fps": 42.11,
+       "n": 26
+      }
+     },
+     {
+      "n": 3,
+      "failed": 0,
+      "settled_ms": 299.820000000007,
+      "frames": {
+       "p95_ms": 33.33,
+       "jank_pct": 12.5,
+       "frozen_pct": 0.0,
+       "fps": 49.28,
+       "n": 32
+      }
+     }
+    ]
+   }
+  },
+  "typical-nocam": {
+   "inp_ms": 40.0,
+   "open_ms": 533.0,
+   "blocking_ms": 0.0,
+   "usable_ms": 533,
+   "scroll": {
+    "fps": 59.5,
+    "p95_ms": 16.67,
+    "scrolled_px": 6744,
+    "sf_valid": [
+     true,
+     true,
+     true
+    ],
+    "during_updates": [
+     6,
+     6,
+     6
+    ],
+    "swipes_moved": 18,
+    "swipes_at_edge": 0,
+    "runs": [
+     {
+      "p95_ms": 16.67,
+      "jank_pct": 0.99,
+      "frozen_pct": 0.0,
+      "fps": 59.53,
+      "n": 405
+     },
+     {
+      "p95_ms": 16.67,
+      "jank_pct": 0.49,
+      "frozen_pct": 0.0,
+      "fps": 59.82,
+      "n": 412
+     },
+     {
+      "p95_ms": 16.67,
+      "jank_pct": 0.98,
+      "frozen_pct": 0.0,
+      "fps": 59.53,
+      "n": 408
+     }
+    ]
+   },
+   "updates": {
+    "latency_p95_ms": 145.9,
+    "latency_median_ms": 64.5,
+    "pacing_p95_ms": 16.67,
+    "runs": [
+     {
+      "latency_n": 21,
+      "latency_median_ms": 65.4,
+      "latency_p95_ms": 145.9,
+      "frames": {
+       "p95_ms": 16.67,
+       "jank_pct": 0.0,
+       "frozen_pct": 0.0,
+       "fps": 60.21,
+       "n": 31
+      },
+      "sent": 22,
+      "arrived": 22
+     },
+     {
+      "latency_n": 21,
+      "latency_median_ms": 64.5,
+      "latency_p95_ms": 153.0,
+      "frames": {
+       "p95_ms": 16.67,
+       "jank_pct": 0.0,
+       "frozen_pct": 0.0,
+       "fps": 60.18,
+       "n": 29
+      },
+      "sent": 22,
+      "arrived": 22
+     },
+     {
+      "latency_n": 21,
+      "latency_median_ms": 63.4,
+      "latency_p95_ms": 100.4,
+      "frames": {
+       "p95_ms": 16.67,
+       "jank_pct": 0.0,
+       "frozen_pct": 0.0,
+       "fps": 60.15,
+       "n": 25
+      },
+      "sent": 22,
+      "arrived": 22
+     }
+    ]
+   },
+   "camera": {
+    "runs": [],
+    "path": null,
+    "fallback": null
+   },
+   "timed_out_runs": 0,
+   "runs": {
+    "tap": 3,
+    "scroll": 3,
+    "updates": 3,
+    "open": 3,
+    "blocking": 3,
+    "camera": 0,
+    "dialog": 3
+   },
+   "dialog": {
+    "settled_ms": 310,
+    "runs": [
+     {
+      "n": 3,
+      "failed": 0,
+      "settled_ms": 310.4400000000023,
+      "frames": {
+       "p95_ms": 50.0,
+       "jank_pct": 13.79,
+       "frozen_pct": 0.0,
+       "fps": 47.01,
+       "n": 29
+      }
+     },
+     {
+      "n": 3,
+      "failed": 0,
+      "settled_ms": 306.76000000000204,
+      "frames": {
+       "p95_ms": 50.0,
+       "jank_pct": 13.79,
+       "frozen_pct": 0.0,
+       "fps": 45.92,
+       "n": 29
+      }
+     },
+     {
+      "n": 3,
+      "failed": 0,
+      "settled_ms": 316.4800000000105,
+      "frames": {
+       "p95_ms": 50.0,
+       "jank_pct": 12.9,
+       "frozen_pct": 0.0,
+       "fps": 47.8,
+       "n": 31
+      }
+     }
+    ]
+   }
+  },
+  "typical": {
+   "inp_ms": 32.0,
+   "open_ms": 535.0,
+   "blocking_ms": 13.1,
+   "usable_ms": 581,
+   "scroll": {
+    "fps": 59.2,
+    "p95_ms": 16.67,
+    "scrolled_px": 6686,
+    "sf_valid": [
+     true,
+     true,
+     true
+    ],
+    "during_updates": [
+     6,
+     6,
+     6
+    ],
+    "swipes_moved": 18,
+    "swipes_at_edge": 0,
+    "runs": [
+     {
+      "p95_ms": 16.67,
+      "jank_pct": 1.49,
+      "frozen_pct": 0.0,
+      "fps": 59.23,
+      "n": 402
+     },
+     {
+      "p95_ms": 16.67,
+      "jank_pct": 0.98,
+      "frozen_pct": 0.0,
+      "fps": 59.53,
+      "n": 407
+     },
+     {
+      "p95_ms": 16.67,
+      "jank_pct": 1.49,
+      "frozen_pct": 0.0,
+      "fps": 59.24,
+      "n": 403
+     }
+    ]
+   },
+   "updates": {
+    "latency_p95_ms": 108.9,
+    "latency_median_ms": 65.1,
+    "pacing_p95_ms": 16.67,
+    "runs": [
+     {
+      "latency_n": 21,
+      "latency_median_ms": 65.1,
+      "latency_p95_ms": 129.8,
+      "frames": {
+       "p95_ms": 16.67,
+       "jank_pct": 0.0,
+       "frozen_pct": 0.0,
+       "fps": 60.13,
+       "n": 26
+      },
+      "sent": 22,
+      "arrived": 22
+     },
+     {
+      "latency_n": 21,
+      "latency_median_ms": 65.8,
+      "latency_p95_ms": 108.9,
+      "frames": {
+       "p95_ms": 16.67,
+       "jank_pct": 0.0,
+       "frozen_pct": 0.0,
+       "fps": 60.17,
+       "n": 25
+      },
+      "sent": 22,
+      "arrived": 22
+     },
+     {
+      "latency_n": 21,
+      "latency_median_ms": 62.7,
+      "latency_p95_ms": 90.8,
+      "frames": {
+       "p95_ms": 16.67,
+       "jank_pct": 4.17,
+       "frozen_pct": 0.0,
+       "fps": 57.76,
+       "n": 24
+      },
+      "sent": 22,
+      "arrived": 21
+     }
+    ]
+   },
+   "camera": {
+    "runs": [
+     {
+      "first_frame_ms": 840.5,
+      "shown_pct": 100,
+      "max_gap_ms": 216.67,
+      "stall_total_ms": 0,
+      "uncovered_ms": 0.0
+     },
+     {
+      "first_frame_ms": 913.2,
+      "shown_pct": 100,
+      "max_gap_ms": 216.67,
+      "stall_total_ms": 0,
+      "uncovered_ms": 0.0
+     },
+     {
+      "first_frame_ms": 786.4,
+      "shown_pct": 100,
+      "max_gap_ms": 216.67,
+      "stall_total_ms": 0,
+      "uncovered_ms": 0.0
+     }
+    ],
+    "path": "web_rtc",
+    "fallback": {
+     "path": "hls",
+     "runs": [
+      {
+       "first_frame_ms": 2388.5,
+       "shown_pct": 100,
+       "max_gap_ms": 117.1,
+       "stall_total_ms": 0
+      },
+      {
+       "first_frame_ms": 2423.5,
+       "shown_pct": 100,
+       "max_gap_ms": 116.4,
+       "stall_total_ms": 0
+      },
+      {
+       "first_frame_ms": 2506.4,
+       "shown_pct": 100,
+       "max_gap_ms": 116.7,
+       "stall_total_ms": 0
+      }
+     ]
+    }
+   },
+   "timed_out_runs": 0,
+   "runs": {
+    "tap": 3,
+    "scroll": 3,
+    "updates": 3,
+    "open": 3,
+    "blocking": 3,
+    "camera": 3,
+    "dialog": 3
+   },
+   "dialog": {
+    "settled_ms": 289,
+    "runs": [
+     {
+      "n": 3,
+      "failed": 0,
+      "settled_ms": 266.35999999998603,
+      "frames": {
+       "p95_ms": 66.67,
+       "jank_pct": 36.36,
+       "frozen_pct": 0.0,
+       "fps": 36.58,
+       "n": 11
+      }
+     },
+     {
+      "n": 3,
+      "failed": 0,
+      "settled_ms": 289.25999999999476,
+      "frames": {
+       "p95_ms": 133.33,
+       "jank_pct": 16.67,
+       "frozen_pct": 0.0,
+       "fps": 36.01,
+       "n": 18
+      }
+     },
+     {
+      "n": 3,
+      "failed": 0,
+      "settled_ms": 330.5199999999968,
+      "frames": {
+       "p95_ms": 50.0,
+       "jank_pct": 22.73,
+       "frozen_pct": 0.0,
+       "fps": 45.56,
+       "n": 22
+      }
+     }
+    ]
+   }
+  },
+  "heavy": {
+   "inp_ms": 32.0,
+   "open_ms": 325.0,
+   "blocking_ms": 880.54,
+   "usable_ms": 2218,
+   "scroll": {
+    "fps": 59.5,
+    "p95_ms": 16.67,
+    "scrolled_px": 6743,
+    "sf_valid": [
+     true,
+     true,
+     true
+    ],
+    "during_updates": [
+     6,
+     6,
+     6
+    ],
+    "swipes_moved": 18,
+    "swipes_at_edge": 0,
+    "runs": [
+     {
+      "p95_ms": 16.67,
+      "jank_pct": 0.74,
+      "frozen_pct": 0.0,
+      "fps": 59.68,
+      "n": 408
+     },
+     {
+      "p95_ms": 16.67,
+      "jank_pct": 0.99,
+      "frozen_pct": 0.0,
+      "fps": 59.53,
+      "n": 406
+     },
+     {
+      "p95_ms": 16.67,
+      "jank_pct": 1.48,
+      "frozen_pct": 0.0,
+      "fps": 59.24,
+      "n": 405
+     }
+    ]
+   },
+   "updates": {
+    "latency_p95_ms": 118.4,
+    "latency_median_ms": 50.3,
+    "pacing_p95_ms": 16.67,
+    "runs": [
+     {
+      "latency_n": 21,
+      "latency_median_ms": 66.6,
+      "latency_p95_ms": 120.5,
+      "frames": {
+       "p95_ms": 16.67,
+       "jank_pct": 3.85,
+       "frozen_pct": 0.0,
+       "fps": 57.97,
+       "n": 26
+      },
+      "sent": 22,
+      "arrived": 22
+     },
+     {
+      "latency_n": 22,
+      "latency_median_ms": 42.7,
+      "latency_p95_ms": 118.4,
+      "frames": {
+       "p95_ms": 16.67,
+       "jank_pct": 3.85,
+       "frozen_pct": 0.0,
+       "fps": 57.92,
+       "n": 26
+      },
+      "sent": 22,
+      "arrived": 22
+     },
+     {
+      "latency_n": 22,
+      "latency_median_ms": 50.3,
+      "latency_p95_ms": 90.8,
+      "frames": {
+       "p95_ms": 16.67,
+       "jank_pct": 0.0,
+       "frozen_pct": 0.0,
+       "fps": 60.13,
+       "n": 25
+      },
+      "sent": 23,
+      "arrived": 22
+     }
+    ]
+   },
+   "camera": {
+    "runs": [
+     {
+      "first_frame_ms": 2058.2,
+      "shown_pct": 99.8,
+      "max_gap_ms": null,
+      "stall_total_ms": null,
+      "stalls_reported": false,
+      "uncovered_ms": 1002
+     },
+     {
+      "first_frame_ms": 1047.6,
+      "shown_pct": 99.7,
+      "max_gap_ms": null,
+      "stall_total_ms": null,
+      "stalls_reported": false,
+      "uncovered_ms": 998
+     },
+     {
+      "first_frame_ms": 2122.9,
+      "shown_pct": 99.7,
+      "max_gap_ms": null,
+      "stall_total_ms": null,
+      "stalls_reported": false,
+      "uncovered_ms": 991
+     }
+    ],
+    "path": "web_rtc",
+    "fallback": {
+     "path": "hls",
+     "runs": [
+      {
+       "first_frame_ms": 2536,
+       "shown_pct": 100,
+       "max_gap_ms": 116.5,
+       "stall_total_ms": 0
+      },
+      {
+       "first_frame_ms": 2484,
+       "shown_pct": 100,
+       "max_gap_ms": 116.5,
+       "stall_total_ms": 0
+      },
+      {
+       "first_frame_ms": 2523.6,
+       "shown_pct": 100,
+       "max_gap_ms": 116.7,
+       "stall_total_ms": 0
+      }
+     ]
+    }
+   },
+   "timed_out_runs": 0,
+   "runs": {
+    "tap": 3,
+    "scroll": 3,
+    "updates": 3,
+    "open": 3,
+    "blocking": 3,
+    "camera": 3,
+    "dialog": 3
+   },
+   "dialog": {
+    "settled_ms": 465,
+    "runs": [
+     {
+      "n": 3,
+      "failed": 0,
+      "settled_ms": 464.61999999999534,
+      "frames": {
+       "p95_ms": 133.33,
+       "jank_pct": 21.43,
+       "frozen_pct": 0.0,
+       "fps": 31.19,
+       "n": 14
+      }
+     },
+     {
+      "n": 3,
+      "failed": 0,
+      "settled_ms": 449.85999999998603,
+      "frames": {
+       "p95_ms": 216.67,
+       "jank_pct": 15.38,
+       "frozen_pct": 0.0,
+       "fps": 30.06,
+       "n": 13
+      }
+     },
+     {
+      "n": 3,
+      "failed": 0,
+      "settled_ms": 476.3399999999965,
+      "frames": {
+       "p95_ms": 116.67,
+       "jank_pct": 15.0,
+       "frozen_pct": 0.0,
+       "fps": 30.87,
+       "n": 20
+      }
+     }
+    ]
+   }
+  }
+ },
+ "restart_ms": 2926.0,
+ "gaps": [
+  "heavy: 3 camera run(s) whose receiver counts left up to 1.0 s of the window out (getStats answered late): stalls n/a, not measured"
+ ],
+ "not_comparable": null,
+ "report": "https://github.com/GlassworksHQ/glassworks/blob/main/frames/google-pixel-tablet/clarity/report.md",
+ "ram": {
+  "idle_app_pss_kb": 1302616,
+  "idle_by_process_pss_kb": {
+   "crashhelper": 5556,
+   "gpu": 434843,
+   "main": 318540,
+   "media": 15231,
+   "tab": 518181,
+   "utility": 16995
+  },
+  "peak_app_pss_kb": 1309942,
+  "peak_by_process_pss_kb": {
+   "crashhelper": 5752,
+   "gpu": 593410,
+   "main": 300849,
+   "media": 16527,
+   "tab": 395131,
+   "utility": 0
+  },
+  "panes": [],
+  "panes_waiting": [],
+  "panes_not_switched": [],
+  "budget_ok": true
+ },
+ "apk": null,
+ "notes": {
+  "good": "Typical with a camera dashboards feel good: taps, live updates, opening a view, more-info dialogs and the cameras are quick, and scrolling is smooth.",
+  "limits": "Bigger dashboards slow down: heavy blocks for 0.9 s after it is drawn.",
+  "causes": [
+   "Memory isn't the limit (1279 of 3721 MB)."
+  ],
+  "text": "Typical with a camera dashboards feel good: taps, live updates, opening a view, more-info dialogs and the cameras are quick, and scrolling is smooth. Bigger dashboards slow down: heavy blocks for 0.9 s after it is drawn. Memory isn't the limit (1279 of 3721 MB). Provisional: 2 things weren't measured fully.",
+  "rubric": 1
+ },
+ "webrtc_transport": {
+  "transport": "lan-udp",
+  "chosen_by": "auto",
+  "reason": "the panel reached this computer over UDP on the LAN, as a real setup's video goes",
+  "possibly_limited": false
+ },
+ "complete": false
+}

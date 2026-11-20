@@ -1959,7 +1959,8 @@ start again at 1, as they did on 2026-11-14, so everything below this entry is h
   protocol 1 measures, so report.py reads them as v1 (`SAME_AS_V1`). A stored v3 report or summary
   says "re-measure" until it is graded again, with `tools/perf/regrade.py <run-dir>`: from the raw files
   when the folder has them, else from its `report.json`. The S1's published result was graded again so
-  (it stays D).
+  (it stays D), and the Pixel Tablet's first one (run 4, 2026-11-19, measured with v3's pages) was
+  published under v1 from its raw files: B, provisional (heavy's camera stalls unmeasured).
 - **The first v1 (2026-11-14) also said `clarity: 1`, protocol 1.** A v1 report or summary measured
   before `clarity_measured_since` (rubric.json, 2026-11-16 UTC) is that one's: report.py makes it
   provisional and `gradeSummary` returns "re-measure" ("measured with the first Clarity v1

@@ -15,7 +15,8 @@ Either way the earlier Clarity v3's pages (protocol 3) read as v1's: they measur
 of other versions, or the first v1's (2026-11-14), come out "re-measure".
 
 Then the summary: clarity.json when the directory has one (a frame's published folder: its report URL is kept),
-else summary.json. As summary.py, it refuses incomplete or not comparable measurements unless --allow-provisional;
+else summary.json. As summary.py, it refuses incomplete or not comparable measurements unless --allow-provisional, or
+the summary there was itself published incomplete (complete: false);
 the report is written either way, and a summary it refuses is removed, so no summary is left with the earlier grade.
 
   tools/perf/regrade.py <run-dir> [--allow-provisional] [--dry-run]
@@ -66,7 +67,11 @@ def main():
     rep, old, how = regrade(a.run_dir)
     published = os.path.join(a.run_dir, "clarity.json")
     summary_path = published if os.path.exists(published) else os.path.join(a.run_dir, "summary.json")
-    report_url = R.read_json(published).get("report", "report.json") if os.path.exists(published) else "report.json"
+    earlier = R.read_json(summary_path) if os.path.exists(summary_path) else {}
+    report_url = earlier.get("report", "report.json") if os.path.exists(published) else "report.json"
+    # A summary published incomplete (complete: false, as summary.py --allow-provisional writes it) stays published
+    # that way: graded again, marked, rather than removed.
+    allow = a.allow_provisional or earlier.get("complete") is False
     was = (old or {}).get("grade") or {}
     now = rep["grade"]
     print(f"{a.run_dir}: graded again from its {how} under Clarity v{rep.get('clarity') or '?'} "
@@ -76,7 +81,7 @@ def main():
     print(f"  now: {now.get('grade') or 'no letter'}{' (provisional)' if now.get('provisional') else ''}")
     print(f"  {now['headline']}")
     try:
-        summary = S.summarise(rep, report_url, a.allow_provisional)
+        summary = S.summarise(rep, report_url, allow)
     except S.Refused as e:
         summary = None
         print(f"  summary not written: {e}")

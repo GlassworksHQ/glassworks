@@ -2515,6 +2515,23 @@ class Regrade(unittest.TestCase):
         view["latency"] = dict(earlier, p95_ms=250.0, unshown_floor_ms=R.UNSHOWN_FLOOR_MS)
         self.assertEqual(R.censoring_band(runs), 0)
 
+    def test_a_published_incomplete_summary_stays_published(self):
+        """The Pixel Tablet's published result (run 4, 2026-11-19) is provisional on heavy's late getStats, so its
+        clarity.json was exported incomplete (complete: false). Graded again, it stays so: the same three files."""
+        src = os.path.join(os.path.dirname(os.path.dirname(self.PERF)), "frames", "google-pixel-tablet", "clarity")
+        d = tempfile.mkdtemp()
+        for name in ("report.json", "report.md", "clarity.json"):
+            shutil.copy(os.path.join(src, name), d)
+        p = self.regrade(d)
+        self.assertEqual(p.returncode, 0, p.stderr + p.stdout)
+        for name in ("report.json", "report.md", "clarity.json"):
+            with open(os.path.join(src, name)) as a, open(os.path.join(d, name)) as b:
+                self.assertEqual(a.read(), b.read(), name)
+        with open(os.path.join(d, "clarity.json")) as f:
+            summ = json.load(f)
+        g = G.grade_summary(summ)
+        self.assertEqual((summ["complete"], g["status"], g["grade"], g["provisional"]), (False, "graded", "B", True))
+
     def test_dry_run_writes_nothing(self):
         before = sorted(os.listdir(self.dir))
         p = self.regrade(self.dir, "--dry-run")
