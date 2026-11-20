@@ -9,9 +9,13 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: ReactNode }) => <a href={href} {...p}>{children}</a> }));
 
 import { AppFlow, ImageFlow } from '../src/device/DevicePage';
-import { appDemo } from '../src/device/demo';
+import type { PanelShell } from '@glassworks/adb';
+import { FakeMirror, fakeMirrorApk } from '@glassworks/lululemon-mirror-installer/fakes';
+import { AppSession } from '../src/device/appSession';
+import { appDemo, cuttable } from '../src/device/demo';
+import { withAppStreams } from '../src/wizard/demo';
 import { imageDemo } from '../src/device/imageDemo';
-import { mirrorEntry } from './mirror-frame';
+import { mirrorEntry, mirrorFrame } from './mirror-frame';
 
 beforeAll(() => {
   Object.defineProperty(navigator, 'usb', { configurable: true, value: {} });
@@ -114,5 +118,29 @@ describe('a set-up that stops after the app alone', () => {
     expect(s.state).toMatchObject({ screen: 'setup', setup: { phase: 'wifi' }, result: { flow: 'install' } });
     expect(starts()).toBe(1);
     expect(s.state.phases).toBe(phases);
+  });
+
+  it('with the Mirror gone, Try again connects again, then set-up resumes: the install isn\'t run again', async () => {
+    const m = new FakeMirror({ kiosk: 'app' });
+    const c = cuttable(withAppStreams(m, { online: true, radio: false }));
+    let gone = false;
+    const shell: PanelShell = { ...c.shell, run: (cmd, signal) => (gone ? Promise.reject(new Error('USB transfer failed')) : c.shell.run(cmd, signal)) };
+    const s = new AppSession({ frame: mirrorFrame, connect: async () => shell, sleep: async () => {}, simulated: true }, true);
+    await s.connect();
+    await s.pickApk('generic-android-legacy.apk', fakeMirrorApk());
+    await s.install();
+    await s.setUp.homeAssistant();
+    c.cut();
+    await s.setUp.skipHa('');
+    await vi.waitFor(() => expect(s.state.screen).toBe('error'));
+    const installs = () => m.cmds.filter((x) => x.startsWith('pm install')).length;
+    expect(installs()).toBe(1);
+    gone = true;
+    await s.setUpAgain();
+    expect(s.state).toMatchObject({ screen: 'pick', connectError: expect.stringMatching(/went away: USB transfer failed/) });
+    gone = false;
+    await s.connect();
+    expect(s.state).toMatchObject({ screen: 'setup', setup: { phase: 'wifi' }, result: { flow: 'install' } });
+    expect(installs()).toBe(1);
   });
 });

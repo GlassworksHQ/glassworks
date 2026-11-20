@@ -8,7 +8,7 @@ import { cap, type DeviceFrame, type DevicePhase, type DeviceReport, type Instal
 import { FRAMES } from '../frames/catalog';
 import { NoRelease, apkMode, installable, releaseApk, type ApkFrom, type ReleaseApk, type ReleaseLine } from '../release/apk';
 import type { AdbSetUp } from '../setup/adbSetUp';
-import { deviceSetUp, setUpWaiting, type SetUpState } from './setUp';
+import { deviceSetUp, lid, setUpWaiting, type SetUpState } from './setUp';
 
 /** The frame's APK release line: one Kiln's release route serves (the frames' installer.json `releases`). */
 export const releaseLine = (f: Pick<DeviceFrame, 'apk'>) => f.apk as ReleaseLine;
@@ -199,7 +199,15 @@ export class AppSession {
     this.set({ connecting: true, connectError: undefined });
     try {
       this.panel = await req;
+      const resume = this.resume;
       await this.check(); // Connect stays off until the check settles: a second device can't slip in under this report
+      this.resume = undefined; // read: set-up resumes now, or this device isn't one to resume on
+      // back after set-up lost the device: the install is done, so on to set-up again when Glassworks is there
+      if (resume && this.state.report?.ok && this.state.report.app && this.state.screen === 'checks') {
+        this.set({ connecting: false });
+        await this.toSetUp(resume);
+        return;
+      }
       this.set({ connecting: false });
     } catch (e) {
       this.set({ connecting: false, connectError: (e as Error).message });
@@ -256,6 +264,7 @@ export class AppSession {
   private async work(flow: 'install' | 'undo', run: (onPhase: (p: DevicePhase) => void) => Promise<Result>): Promise<void> {
     if (!this.panel || this.state.screen === 'working') return;
     this.ops++;
+    this.resume = undefined;
     this.setUp.close();
     this.set({ screen: 'working', flow, phases: [], error: undefined, result: undefined, setupPage: undefined });
     try {
@@ -271,21 +280,40 @@ export class AppSession {
     }
   }
 
+  /** The install's result while the device is connected again after set-up lost it (setUpAgain). */
+  private resume?: Result;
+
   /**
-   * From an error once the install went through (set-up stopped): set-up again from its first step, over the same
-   * connection. The install stays done and nothing is written again. Its Wi-Fi step says when the device can't be
-   * reached; the error screen's Back to the checks connects again.
+   * From an error once the install went through (set-up stopped): set-up again from its first step. The install stays
+   * done and nothing is written again. A device that went away is connected again first (Connect), then set-up
+   * resumes once its read shows Glassworks.
    */
   async setUpAgain(): Promise<void> {
-    if (this.state.screen !== 'error' || this.state.result?.flow !== 'install') return;
+    const result = this.state.result;
+    if (this.state.screen !== 'error' || result?.flow !== 'install') return;
     this.setUp.close();
-    this.set({ screen: 'setup', error: undefined, setup: setUpWaiting(), setupPage: undefined });
+    try {
+      // on the clock, not the session's sleep: a test's instant sleep would end the read before it starts
+      await this.panel!.run('true', lid(this.d.frame, undefined, 5000));
+    } catch (e) {
+      this.panel = undefined;
+      this.resume = result;
+      this.set({ screen: 'pick', report: undefined, error: undefined,
+        connectError: `${cap(this.d.frame.the)} went away: ${(e as Error).message}. Connect again.` });
+      return;
+    }
+    await this.toSetUp(result);
+  }
+
+  private async toSetUp(result: Result): Promise<void> {
+    this.set({ screen: 'setup', result, error: undefined, setup: setUpWaiting(), setupPage: undefined });
     await this.setUp.click('wifi', () => this.setUp.wifi());
   }
 
   /** From Done or an error: read the device again, or connect again if it went away. */
   async again(): Promise<void> {
     const op = this.ops;
+    this.resume = undefined; // Back to the checks: the checks, not set-up
     this.setUp.close();
     this.set({ setupPage: undefined });
     try { await this.check(); } catch (e) {
