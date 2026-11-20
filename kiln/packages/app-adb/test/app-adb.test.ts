@@ -423,6 +423,9 @@ describe('applySettings', () => {
     await expect(applySettings(new Steps(bad.p), { timezone: 'x; reboot', clock24: true }, APP)).rejects.toThrow(/bad time zone/);
     await expect(applySettings(new Steps(bad.p), { locale: 'en_GB; reboot', clock24: true }, APP)).rejects.toThrow(/bad locale/);
     expect(bad.cmds).toEqual([]);
+  });
+});
+
 describe('wifiSsid', () => {
   const on = (out: string) => ({ run: async () => ({ out, code: 0 }), push: async () => {} });
   it('reads the network from mWifiInfo, quoted (Android 10+) or not (Android 6), and nothing when there is none', async () => {
