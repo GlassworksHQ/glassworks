@@ -167,16 +167,61 @@ class CameraHubTest {
         return hub()
     }
 
-    @Test fun aSilenceLeadsToExactlyOneReopen() {
+    /** #674: the Mirror's camera sent its first frame more than 5 s after it opened. Its first frame gets longer. */
+    @Test fun aStartingCameraIsNotReopenedBeforeTheFirstFrameGrace() {
         val hub = silentCamera()
         hub.open(5f, presence()).use {
             opened(); settled(hub)
-            advance(hub, CameraHub.SILENT_MS - 1)
-            assertEquals("not silent long enough yet", 0, reopens())
+            advance(hub, CameraHub.SILENT_MS)
+            assertEquals("a mid-run silence's 5 s don't apply to the first frame", 0, reopens())
+            advance(hub, CameraHub.FIRST_FRAME_MS - CameraHub.SILENT_MS - 1)
+            assertEquals(0, reopens())
             advance(hub, 1)
             assertEquals(1, reopens())
-            assertEquals("camera: reopen 1 now (no frames for 5 s)", synchronized(logs) { logs.first { it.startsWith("camera: reopen ") } })
+            assertEquals("camera: reopen 1 now (no first frame in 10 s)", synchronized(logs) { logs.first { it.startsWith("camera: reopen ") } })
             assertEquals("closed and opened again at once", 2, opens())
+        }
+    }
+
+    /**
+     * #674: presence starts its clock when the camera is asked for frames, not when the pane turned on. A silence is
+     * reported to it before the reopen starts the camera again, so the new session's grace can't hide it.
+     */
+    @Test fun presenceHearsWhenTheCameraStartsAndOfASilenceBeforeTheReopen() {
+        val hub = silentCamera()
+        val events = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val sink = object : FrameSink {
+            override fun frame(frame: LumaFrame) {}
+            override fun lost(why: String) { events += "lost: $why" }
+            override fun started() { events += "started" }
+        }
+        hub.open(5f, sink).use {
+            opened(); settled(hub)
+            assertEquals(listOf("started"), events.toList())
+            advance(hub, CameraHub.FIRST_FRAME_MS)
+            assertEquals(listOf("started", "lost: no first frame in 10 s", "started"), events.toList())
+        }
+    }
+
+    /** The same with presence itself: its own check is still pending when the hub reopens, and the silence is reported anyway. */
+    @Test fun presenceReportsASilenceTheHubCaughtFirst() {
+        val hub = silentCamera()
+        val readings = java.util.Collections.synchronizedList(mutableListOf<Pair<Boolean, Float>>())
+        val problems = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val held = mutableListOf<Runnable>() // presence's own checks: never run here
+        val presence = CameraPresence(
+            hub, clock = android.os.SystemClock::elapsedRealtime, post = { it.run() }, after = { _, r -> synchronized(held) { held += r } },
+            onProblem = { problems += it },
+        )
+        presence.start(app) { near, raw -> readings += near to raw }
+        try {
+            opened(); settled(hub)
+            advance(hub, CameraHub.FIRST_FRAME_MS)
+            assertEquals(1, reopens())
+            assertEquals(listOf(false to -1f), readings.toList())
+            assertEquals(listOf("the camera stopped: no first frame in 10 s"), problems.toList())
+        } finally {
+            presence.stop(app)
         }
     }
 
@@ -184,17 +229,17 @@ class CameraHubTest {
         val hub = silentCamera()
         hub.open(5f, presence()).use {
             opened(); settled(hub)
-            advance(hub, CameraHub.SILENT_MS)
-            advance(hub, CameraHub.SILENT_MS)
+            advance(hub, CameraHub.FIRST_FRAME_MS)
+            advance(hub, CameraHub.FIRST_FRAME_MS)
             assertEquals(2, reopens())
-            assertTrue(synchronized(logs) { "camera: reopen 2 in 10 s (no frames for 5 s)" in logs })
+            assertTrue(synchronized(logs) { "camera: reopen 2 in 10 s (no first frame in 10 s)" in logs })
             assertEquals("the second waits", 2, opens())
             advance(hub, ReopenBackoff.FIRST_MS - 1)
             assertEquals(2, opens())
             advance(hub, 1)
             assertEquals(3, opens())
-            advance(hub, CameraHub.SILENT_MS)
-            assertTrue("the wait doubles", synchronized(logs) { "camera: reopen 3 in 20 s (no frames for 5 s)" in logs })
+            advance(hub, CameraHub.FIRST_FRAME_MS)
+            assertTrue("the wait doubles", synchronized(logs) { "camera: reopen 3 in 20 s (no first frame in 10 s)" in logs })
         }
     }
 
@@ -206,7 +251,7 @@ class CameraHubTest {
         held.close(); hub.idle() // what the pane does when privacy goes on
         settled(hub)
         assertTrue(synchronized(logs) { "camera closed" in logs })
-        advance(hub, CameraHub.SILENT_MS * 10)
+        advance(hub, CameraHub.FIRST_FRAME_MS * 10)
         assertEquals(0, reopens())
         assertEquals(1, opens())
     }
@@ -216,15 +261,15 @@ class CameraHubTest {
         val hub = silentCamera()
         val held = hub.open(5f, presence())
         opened(); settled(hub)
-        advance(hub, CameraHub.SILENT_MS)
-        advance(hub, CameraHub.SILENT_MS)
+        advance(hub, CameraHub.FIRST_FRAME_MS)
+        advance(hub, CameraHub.FIRST_FRAME_MS)
         assertEquals("reopen 2 waits", 2, opens())
         held.close(); hub.idle(); settled(hub)
         hub.open(5f, presence()).use {
             settled(hub)
             assertEquals(3, opens())
-            advance(hub, CameraHub.SILENT_MS)
-            assertTrue(synchronized(logs) { logs.last { it.startsWith("camera: reopen ") } == "camera: reopen 1 now (no frames for 5 s)" })
+            advance(hub, CameraHub.FIRST_FRAME_MS)
+            assertTrue(synchronized(logs) { logs.last { it.startsWith("camera: reopen ") } == "camera: reopen 1 now (no first frame in 10 s)" })
         }
     }
 
@@ -234,6 +279,21 @@ class CameraHubTest {
         assertEquals(6, b.attempt)
         repeat(100) { b.silence() }
         assertEquals("no overflow", 60_000L, b.silence())
+    }
+
+    /** #674: the first frame after a start gets [CameraHub.FIRST_FRAME_MS]; once frames came, a silence gets [CameraHub.SILENT_MS]. */
+    @Test fun theDeadlineGivesTheFirstFrameLongerThanAMidRunSilence() {
+        val d = FrameDeadline(firstMs = 10_000, silentMs = 5_000)
+        d.started(1_000)
+        assertEquals(1, d.left(10_999))
+        assertEquals(0, d.left(11_000))
+        assertEquals("no first frame in 10 s", d.why(11_000))
+        d.frame(12_000)
+        assertEquals(1, d.left(16_999))
+        assertEquals("no frames for 5 s", d.why(17_000))
+        d.started(20_000)
+        assertEquals("a new session's first frame gets the grace again", 10_000, d.left(20_000))
+        assertEquals("but it is looked at every 5 s", 5_000, d.nextCheck(20_000))
     }
 
     /** What the hub does on every image: frames coming back start the count again. */
