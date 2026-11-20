@@ -82,13 +82,13 @@
   },
   "panes": {
     "assist": {
-      "support": "beta"
+      "support": "stable"
     },
     "timers": {
-      "support": "beta"
+      "support": "stable"
     },
     "sendspin": {
-      "support": "beta"
+      "support": "stable"
     },
     "radio": {
       "support": "beta",

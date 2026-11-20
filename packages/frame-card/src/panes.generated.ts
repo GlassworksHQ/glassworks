@@ -11,59 +11,10 @@ export const PANE_FILES: readonly PaneInfo[] = [
       "microphone",
       "speaker"
     ],
-    "status": "beta",
+    "status": "stable",
     "docs": "docs/esphome.md#voice-assistant",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"9\" y=\"3\" width=\"6\" height=\"11\" rx=\"3\"/><path d=\"M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21\"/></svg>",
     "source": "panes/assist/src/main/java/dev/glassworks/assist"
-  },
-  {
-    "id": "sendspin",
-    "name": "Sendspin",
-    "does": "Synced Music Assistant player.",
-    "requires": [
-      "speaker"
-    ],
-    "status": "beta",
-    "docs": "docs/sendspin.md",
-    "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M9 18V6l10-2v12\"/><circle cx=\"6.5\" cy=\"18\" r=\"2.5\"/><circle cx=\"16.5\" cy=\"16\" r=\"2.5\"/></svg>",
-    "source": "panes/sendspin/src/main/java/dev/glassworks/speaker"
-  },
-  {
-    "id": "timers",
-    "name": "Timers",
-    "does": "Voice timers on screen.",
-    "requires": [
-      "microphone",
-      "speaker"
-    ],
-    "status": "beta",
-    "docs": "docs/esphome.md#timers-on-screen",
-    "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"13.5\" r=\"7.5\"/><path d=\"M12 13.5V9.5M9.5 2.5h5\"/></svg>",
-    "source": "panes/timers/src/main/java/dev/glassworks/timers"
-  },
-  {
-    "id": "radio",
-    "name": "Zigbee / Thread radio",
-    "does": "Zigbee coordinator or router, Thread border router.",
-    "requires": [
-      "silabs-radio"
-    ],
-    "status": "beta",
-    "docs": "frames/aqara-s1-plus/docs/radio.md",
-    "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"2\"/><path d=\"M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M5 5a10 10 0 0 0 0 14M19 5a10 10 0 0 1 0 14\"/></svg>",
-    "source": "panes/zigbee-thread/src/main/java/dev/glassworks/radio"
-  },
-  {
-    "id": "bluetooth-proxy",
-    "name": "Bluetooth proxy",
-    "does": "Relays nearby BLE sensors to Home Assistant, and connects to devices that need it.",
-    "requires": [
-      "bluetooth-le"
-    ],
-    "status": "alpha",
-    "docs": "docs/esphome.md#bluetooth-proxy",
-    "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M7 7.5 16.5 16 12 20V4l4.5 4L7 16.5\"/><circle cx=\"4\" cy=\"12\" r=\"1\"/><circle cx=\"20\" cy=\"12\" r=\"1\"/></svg>",
-    "source": "panes/bluetooth-proxy/src/main/java/dev/glassworks/bluetoothproxy"
   },
   {
     "id": "camera",
@@ -72,7 +23,7 @@ export const PANE_FILES: readonly PaneInfo[] = [
     "requires": [
       "camera"
     ],
-    "status": "alpha",
+    "status": "stable",
     "docs": "docs/esphome.md#camera-entities",
     "blueprints": [
       {
@@ -92,17 +43,54 @@ export const PANE_FILES: readonly PaneInfo[] = [
     "name": "Diagnostics",
     "does": "CPU, temperature, RAM, storage, Wi-Fi and uptime in Home Assistant.",
     "requires": [],
-    "status": "alpha",
+    "status": "stable",
     "docs": "docs/esphome.md#diagnostics",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"2\" y=\"6\" width=\"20\" height=\"12\" rx=\"3.5\"/><path d=\"M5.5 12h3l1.5-3 3 6 1.5-3h4\"/></svg>",
     "source": "panes/diagnostics/src/main/java/dev/glassworks/diagnostics"
+  },
+  {
+    "id": "sendspin",
+    "name": "Sendspin",
+    "does": "Synced Music Assistant player.",
+    "requires": [
+      "speaker"
+    ],
+    "status": "stable",
+    "docs": "docs/sendspin.md",
+    "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M9 18V6l10-2v12\"/><circle cx=\"6.5\" cy=\"18\" r=\"2.5\"/><circle cx=\"16.5\" cy=\"16\" r=\"2.5\"/></svg>",
+    "source": "panes/sendspin/src/main/java/dev/glassworks/speaker"
+  },
+  {
+    "id": "timers",
+    "name": "Timers",
+    "does": "Voice timers on screen.",
+    "requires": [
+      "microphone",
+      "speaker"
+    ],
+    "status": "stable",
+    "docs": "docs/esphome.md#timers-on-screen",
+    "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"13.5\" r=\"7.5\"/><path d=\"M12 13.5V9.5M9.5 2.5h5\"/></svg>",
+    "source": "panes/timers/src/main/java/dev/glassworks/timers"
+  },
+  {
+    "id": "bluetooth-proxy",
+    "name": "Bluetooth proxy",
+    "does": "Relays nearby BLE sensors to Home Assistant, and connects to devices that need it.",
+    "requires": [
+      "bluetooth-le"
+    ],
+    "status": "beta",
+    "docs": "docs/esphome.md#bluetooth-proxy",
+    "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M7 7.5 16.5 16 12 20V4l4.5 4L7 16.5\"/><circle cx=\"4\" cy=\"12\" r=\"1\"/><circle cx=\"20\" cy=\"12\" r=\"1\"/></svg>",
+    "source": "panes/bluetooth-proxy/src/main/java/dev/glassworks/bluetoothproxy"
   },
   {
     "id": "notifications",
     "name": "Notifications",
     "does": "Home Assistant's notifications over the dashboard, with a picture, buttons and a sound.",
     "requires": [],
-    "status": "alpha",
+    "status": "beta",
     "docs": "docs/notifications.md",
     "blueprints": [
       {
@@ -118,11 +106,23 @@ export const PANE_FILES: readonly PaneInfo[] = [
     "source": "panes/notifications/src/main/java/dev/glassworks/notifications"
   },
   {
+    "id": "radio",
+    "name": "Zigbee / Thread radio",
+    "does": "Zigbee coordinator or router, Thread border router.",
+    "requires": [
+      "silabs-radio"
+    ],
+    "status": "beta",
+    "docs": "frames/aqara-s1-plus/docs/radio.md",
+    "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"2\"/><path d=\"M7.8 7.8a6 6 0 0 0 0 8.4M16.2 7.8a6 6 0 0 1 0 8.4M5 5a10 10 0 0 0 0 14M19 5a10 10 0 0 1 0 14\"/></svg>",
+    "source": "panes/zigbee-thread/src/main/java/dev/glassworks/radio"
+  },
+  {
     "id": "time-zone",
     "name": "Time zone",
     "does": "Keeps the time zone Aqara resets at every boot.",
     "requires": [],
-    "status": "beta",
+    "status": "stable",
     "frame": "aqara-s1-plus",
     "icon": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"8.5\"/><path d=\"M12 3.5a4.5 8.5 0 0 0 0 17\"/><path d=\"M12 7.5V12h3.8\"/></svg>",
     "source": "frames/aqara-s1-plus/android/src/main/java/dev/glassworks/s1/frame"
