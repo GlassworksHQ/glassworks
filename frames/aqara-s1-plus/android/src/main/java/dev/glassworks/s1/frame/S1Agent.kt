@@ -11,43 +11,50 @@ import dev.glassworks.frame.AgentCapability.RADIO_FIREWALL
 import dev.glassworks.frame.AgentCapability.RADIO_FIRMWARE
 import dev.glassworks.frame.AgentCapability.RADIO_MODE
 import dev.glassworks.frame.AgentCapability.TIME_ZONE
+import dev.glassworks.frame.BundleAgent
 import dev.glassworks.frame.FrameAgent
 import dev.glassworks.radio.RadioBundle
-import dev.glassworks.radio.RadioHelper
+import dev.glassworks.radio.PropsBundle
+import dev.glassworks.radio.PropsRadio
+import dev.glassworks.s1.radio.RadioHelper
+import dev.glassworks.radio.RadioReports
 import dev.glassworks.radio.ShellProps
 import dev.glassworks.radio.SysProps
 import dev.glassworks.update.UpdateHelper
 import java.io.File
-import java.io.FileNotFoundException
 
 /**
  * The S1's frame agent (docs/frame-agent.md#the-s1-the-reference): the root helper `s1kiosk_radio` and its sibling
  * init services `s1kiosk_update` and `s1kiosk_bundle`, in boot images up to 0.4.3 (contract 4). Every check is the one
  * the app made before the contract (#641), on the same properties and files. #549's names
- * (`glassworks_agent`, `sys.glassworks.*`) come here.
+ * (`glassworks_agent`, `sys.glassworks.*`) come here and in [RadioHelper] and [S1TimeZone].
  *
- * The radio and time zone panes still talk to the helper themselves ([RadioHelper], [TimeZoneKeeper]); this reads
- * the same properties to say what it offers.
+ * The radio pane talks to the radio through [radio] ([RadioHelper]'s names), the bundle install through [bundle], and
+ * the time zone pane through [timeZone].
  */
 class S1Agent(
     private val props: SysProps = ShellProps,
-    /** The radio bundle's state, from the root-owned file ([RadioBundle.installed]). The radio pane still installs on the file alone. */
-    private val bundle: () -> RadioBundle.Installed? = RadioBundle(props, NoBundle, null)::installed,
+    /** The radio bundle's install and its state, from the root-owned file. The radio pane still installs on the file alone. */
+    override val bundle: BundleAgent = PropsBundle(
+        props, RadioHelper.BUNDLE_SERVICE, RadioHelper.PROP_BUNDLE_STATUS, RadioHelper.BUNDLE_STAGE_DIR, File(RadioHelper.BUNDLE_STATE_FILE),
+    ),
     private val bluetoothFile: File = File(BLUETOOTH_ADDRESS_FILE),
     override val appUpdates: RootUpdateInstaller = RootUpdateInstaller(props),
 ) : FrameAgent {
     override val declared: Set<AgentCapability> = DECLARED
 
+    override val radio = PropsRadio(props, RadioHelper.NAMES)
+
+    override val timeZone = S1TimeZone(props)
+
     /** The helper's contract version, 1 for a helper from before it said one; null without the helper. */
-    override fun version(): Int? =
-        if (props.get(RadioHelper.PROP_SVC_STATE).isEmpty()) null else props.get(RadioHelper.PROP_VERSION).trim().toIntOrNull() ?: 1
+    override fun version(): Int? = if (radio.state().isEmpty()) null else radio.version()
 
     override fun offers(capability: AgentCapability): Boolean = when (capability) {
-        RADIO_MODE -> version() != null
-        RADIO_FIREWALL -> (version() ?: 0) >= RadioHelper.FIREWALL_VERSION
-        RADIO_FIRMWARE, TIME_ZONE -> (version() ?: 0) >= RadioHelper.BUNDLE_VERSION
+        RADIO_MODE, RADIO_FIREWALL, RADIO_FIRMWARE -> radio.offers(capability) == true
+        TIME_ZONE -> (version() ?: 0) >= RadioReports.BUNDLE_VERSION
         // This boot's marker as well as the file: an undo keeps /data, and with it the file (docs/frame-agent.md#discovery).
-        FRAME_BUNDLE -> props.get(RadioHelper.PROP_BUNDLE_LOADER).trim() == "1" && bundle() != null
+        FRAME_BUNDLE -> props.get(RadioHelper.PROP_BUNDLE_LOADER).trim() == "1" && bundle.state()?.let(RadioBundle::parsePub) != null
         APP_UPDATES -> props.get(UpdateHelper.PROP_VERSION).trim().toIntOrNull()?.let { it >= 1 } == true
         HOTSPOT_PORTAL -> props.get(PORTAL_STATUS).isNotEmpty()
         HOTSPOT_NAME -> props.get(HOTSPOT_NAME_STATUS).isNotEmpty()
@@ -57,11 +64,6 @@ class S1Agent(
 
     /** The helper's file (`bt_publish`, root 0644), as it says it; the Bluetooth proxy checks the format. */
     override fun bluetoothAddress(): String? = try { bluetoothFile.readText() } catch (_: Exception) { null }
-
-    private object NoBundle : RadioBundle.Source {
-        override fun manifest(): String? = null
-        override fun open(path: String) = throw FileNotFoundException(path)
-    }
 
     companion object {
         /** frame.json's `agent.capabilities` (the agent contract test checks it). */

@@ -106,7 +106,7 @@ class RadioAllowTest {
 
     @Test
     fun describe() {
-        fun a(raw: String) = RadioHelper.parseAllowed(raw)!!
+        fun a(raw: String) = RadioReports.parseAllowed(raw)!!
         assertEquals("Home Assistant (192.0.2.10)", RadioAllow.describe(a("app 192.0.2.10"), false, "192.0.2.10", null))
         assertEquals("nobody yet (waiting for Home Assistant to connect over ESPHome)",
             RadioAllow.describe(a("app none"), false, null, null))
@@ -121,16 +121,16 @@ class RadioAllowTest {
 
     @Test
     fun parseAllowedProp() {
-        assertNull(RadioHelper.parseAllowed(""))
-        assertNull(RadioHelper.parseAllowed(null))
-        assertNull(RadioHelper.parseAllowed("app"))
-        assertNull(RadioHelper.parseAllowed("x 192.0.2.10"))
-        assertEquals(RadioHelper.Allowed("app", false, listOf("192.0.2.10", "2001:db8::1")),
-            RadioHelper.parseAllowed("app 192.0.2.10 2001:db8::1"))
-        assertEquals(RadioHelper.Allowed("conf", true, emptyList()), RadioHelper.parseAllowed("conf any"))
-        assertEquals(RadioHelper.Allowed("app", false, emptyList()), RadioHelper.parseAllowed("app none"))
+        assertNull(RadioReports.parseAllowed(""))
+        assertNull(RadioReports.parseAllowed(null))
+        assertNull(RadioReports.parseAllowed("app"))
+        assertNull(RadioReports.parseAllowed("x 192.0.2.10"))
+        assertEquals(RadioReports.Allowed("app", false, listOf("192.0.2.10", "2001:db8::1")),
+            RadioReports.parseAllowed("app 192.0.2.10 2001:db8::1"))
+        assertEquals(RadioReports.Allowed("conf", true, emptyList()), RadioReports.parseAllowed("conf any"))
+        assertEquals(RadioReports.Allowed("app", false, emptyList()), RadioReports.parseAllowed("app none"))
         // a radio.conf list too long for the prop: the helper ends it with "+<n more>"
         assertEquals("192.0.2.1, +3 (radio.conf)",
-            RadioAllow.describe(RadioHelper.parseAllowed("conf 192.0.2.1 +3")!!, false, null, null))
+            RadioAllow.describe(RadioReports.parseAllowed("conf 192.0.2.1 +3")!!, false, null, null))
     }
 }

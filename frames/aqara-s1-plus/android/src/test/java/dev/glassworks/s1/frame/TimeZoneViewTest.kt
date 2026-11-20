@@ -37,7 +37,7 @@ class TimeZoneViewTest {
     private fun page(queued: MutableList<Runnable>): TimeZoneView {
         TimeZone.setDefault(TimeZone.getTimeZone("Europe/Madrid"))
         val props = object : SysProps {
-            val p = mutableMapOf(TimeZoneKeeper.PROP to "Europe/Madrid", TimeZoneKeeper.PROP_STATUS to "ok Europe/Madrid")
+            val p = mutableMapOf(S1TimeZone.PROP to "Europe/Madrid", S1TimeZone.PROP_STATUS to "ok Europe/Madrid")
             override fun get(name: String) = p[name].orEmpty()
             override fun set(name: String, value: String) { p[name] = value }
         }
@@ -46,7 +46,7 @@ class TimeZoneViewTest {
             publishStates = {}, emit = {}, entitiesChanged = {}, sendEvent = { _, _ -> },
             build = AppBuild("1.0.0", 10000, debug = false),
         )
-        val pane = TimeZonePane(ctx, TimeZonePrefs(PanePrefs(app).paneFile("time-zone")), TimeZoneKeeper(props, inline = true))
+        val pane = TimeZonePane(ctx, TimeZonePrefs(PanePrefs(app).paneFile("time-zone")), TimeZoneKeeper(S1TimeZone(props), inline = true))
         pane.start()
         pane.onEvent(PanelEvent.HomeAssistantTimeZone("CET-1CEST,M3.5.0,M10.5.0/3"))
         val host = object : SettingsItem.NativeHost {

@@ -1,5 +1,6 @@
 package dev.glassworks.radio
 
+import dev.glassworks.frame.FrameAgent
 import android.util.Log
 import dev.glassworks.pane.Pane
 import dev.glassworks.pane.PaneContext
@@ -24,7 +25,9 @@ class RadioPane(
     private val running: RunningRadio,
     /** The panel's LAN address, for the ZHA serial path in the status text. */
     panelIp: () -> String?,
-    internal val radio: RadioController = newController(ctx, panelIp),
+    /** The frame's agent: the radio's capabilities and requests go through it. */
+    agent: FrameAgent,
+    internal val radio: RadioController = newController(ctx, panelIp, agent),
 ) : Pane {
     override val id = "radio"
 
@@ -120,10 +123,11 @@ class RadioPane(
     }
 
     private companion object {
-        fun newController(ctx: PaneContext, panelIp: () -> String?): RadioController {
+        fun newController(ctx: PaneContext, panelIp: () -> String?, agent: FrameAgent): RadioController {
             val app = ctx.context
             val prefs = RadioPrefs(ctx.prefs("radio"))
             return RadioController(
+                agent = agent,
                 load = { prefs.mode },
                 store = { prefs.mode = it },
                 onChange = ctx.publishStates,
@@ -134,7 +138,7 @@ class RadioPane(
                 },
                 allow = prefs,
                 stackStore = prefs,
-                bundle = RadioBundle(ShellProps, AssetBundleSource(app.assets), app.filesDir, log = { Log.i(RadioController.TAG, it) }),
+                bundle = agent.bundle?.let { RadioBundle(it, AssetBundleSource(app.assets), app.filesDir, log = { Log.i(RadioController.TAG, it) }) },
                 zigbeedFetcher = { dest, progress ->
                     SisdkZigbeed.fetch(dest, app.cacheDir, "glassworks-aqara-s1-plus/${ctx.build.versionName} (+https://github.com/GlassworksHQ/glassworks)", progress)
                 },
