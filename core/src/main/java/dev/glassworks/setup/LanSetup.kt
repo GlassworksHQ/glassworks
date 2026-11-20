@@ -124,6 +124,8 @@ class LanSetup(
 
     /** `POST` [PAIR]: show a code on the panel, or check the one typed. */
     private fun pair(req: HttpRequest): HttpResponse {
+        // Taken before the checks: a close() while this pairs makes the session below refused, not created after it.
+        val generation = sessions.generation()
         if (!pairingOpen()) return problem(403, PAIRING_OFF)
         val typed = req.form["code"]
         val id = req.cookies[COOKIE]?.takeIf { it.length in 20..64 }
@@ -143,8 +145,9 @@ class LanSetup(
         if (id == null) return problem(409, NO_CODE)
         return when (val c = code.check(PURPOSE, id, typed)) {
             PanelCode.Check.Ok -> {
+                val session = sessions.create(req.remote, generation) ?: return problem(403, CLOSED)
                 event("A browser paired with the panel to set it up over the network (${req.remote ?: "unknown address"})")
-                json(200, JSONObject().put("ok", true).put("paired", true), cookie(sessions.create(req.remote)))
+                json(200, JSONObject().put("ok", true).put("paired", true), cookie(session))
             }
             is PanelCode.Check.Wrong -> {
                 event("Wrong code typed to set the panel up over the network")
@@ -218,8 +221,16 @@ class LanSetup(
 
         private val byKey = LinkedHashMap<String, Paired>()
 
+        /** How many times [endAll] ran: a pairing that started before the last one gets no session. */
+        private var closes = 0
+
         @Synchronized
-        fun create(remote: String?): String {
+        fun generation(): Int = closes
+
+        /** A new session from [remote], or null when setup was closed since [generation] was read. */
+        @Synchronized
+        fun create(remote: String?, generation: Int): String? {
+            if (generation != closes) return null
             val t = token(32)
             val now = monoMs()
             byKey[SessionStore.hash(t)] = Paired(now, now, remote)
@@ -242,7 +253,7 @@ class LanSetup(
 
         /** Ends every session; how many there were. */
         @Synchronized
-        fun endAll(): Int = byKey.size.also { byKey.clear() }
+        fun endAll(): Int = byKey.size.also { byKey.clear(); closes++ }
 
         @Synchronized
         /** Ends [token]'s session when [remote] is the address that paired it. */
@@ -298,5 +309,6 @@ class LanSetup(
         const val PAIRING_OFF = "Pairing is off: Home Assistant has added this panel. Turn it on with Allow setup over the network: " +
             "in Home Assistant, in the panel's settings, or over USB with Kiln."
         private const val NO_CODE = "That code has run out. Show a new one."
+        private const val CLOSED = "Setup over the network was closed on the panel just now. Show a new code to pair again."
     }
 }

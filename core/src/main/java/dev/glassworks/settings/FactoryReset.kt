@@ -10,7 +10,8 @@ package dev.glassworks.settings
  * page, which asks for the panel's code first. What it keeps is [dev.glassworks.KioskPrefs.RESET_KEEPS].
  *
  * The sign-in goes first: a reset that couldn't remove it stops there, with the settings as they were, and says so.
- * Then the settings, then every browser on the Manage page. The app restarts only when the settings were cleared.
+ * Then every browser on the Manage page: one that couldn't be signed out for good would come back after the restart,
+ * so the reset stops there too. Then the settings. The app restarts only when all three are done.
  */
 class FactoryReset(
     /** Revokes the dashboard's Home Assistant sign-in and deletes it ([dev.glassworks.auth.HaAuth.signOut]); false when it stayed. */
@@ -33,13 +34,17 @@ class FactoryReset(
                     done(SIGN_IN_STAYED)
                     return@onMain
                 }
+                if (signOutBrowsers() == false) {
+                    log("Factory reset stopped: the Manage page's browsers couldn't be signed out for good")
+                    done(BROWSERS_STAYED)
+                    return@onMain
+                }
                 if (!clearSettings()) {
                     log("Factory reset stopped: the settings couldn't be cleared")
                     done(NOT_CLEARED)
                     return@onMain
                 }
-                val browsers = signOutBrowsers()
-                log("Factory reset: settings and Home Assistant sign-in cleared${if (browsers == false) "; browsers stay signed in until the restart" else ""}; restarting into setup")
+                log("Factory reset: settings, Home Assistant sign-in and browsers cleared; restarting into setup")
                 done(null)
                 restart()
             }
@@ -59,6 +64,9 @@ class FactoryReset(
         const val CONFIRM_ACTION = "Reset the panel"
 
         const val SIGN_IN_STAYED = "The panel couldn't remove its Home Assistant sign-in, so nothing was reset. Try again in a minute."
-        const val NOT_CLEARED = "The panel couldn't clear its settings. Its Home Assistant sign-in is already removed. Try again."
+        const val BROWSERS_STAYED = "The panel couldn't sign the Manage page's browsers out for good, so its settings weren't reset. " +
+            "Its Home Assistant sign-in is already removed. Try again."
+        const val NOT_CLEARED = "The panel couldn't clear its settings. Its Home Assistant sign-in is already removed, and every browser " +
+            "is signed out. Try again."
     }
 }

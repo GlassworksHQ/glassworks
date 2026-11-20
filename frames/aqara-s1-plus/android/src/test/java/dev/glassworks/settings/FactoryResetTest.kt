@@ -94,9 +94,9 @@ class FactoryResetTest {
         fun run() = reset.run { answer = it; did += "answered" }
     }
 
-    @Test fun itSignsOutThenClearsThenSignsBrowsersOutThenRestarts() {
+    @Test fun itSignsOutThenSignsBrowsersOutThenClearsThenRestarts() {
         val s = Steps().apply { run() }
-        assertEquals(listOf("sign out", "clear", "browsers", "answered", "restart"), s.did)
+        assertEquals(listOf("sign out", "browsers", "clear", "answered", "restart"), s.did)
         assertNull(s.answer)
     }
 
@@ -108,13 +108,20 @@ class FactoryResetTest {
 
     @Test fun settingsThatCantBeClearedMeanNoRestart() {
         val s = Steps(cleared = false).apply { run() }
-        assertEquals(listOf("sign out", "clear", "answered"), s.did)
+        assertEquals(listOf("sign out", "browsers", "clear", "answered"), s.did)
         assertEquals(FactoryReset.NOT_CLEARED, s.answer)
     }
 
-    @Test fun browsersThatCantBeSavedSignedOutStillRestart() {
+    /** A sign-out that couldn't be saved would bring the browsers back after the restart (CodeRabbit on #682). */
+    @Test fun browsersThatCantBeSignedOutForGoodStopTheResetBeforeTheSettings() {
         val s = Steps(browsers = false).apply { run() }
-        assertEquals(listOf("sign out", "clear", "browsers", "answered", "restart"), s.did)
+        assertEquals(listOf("sign out", "browsers", "answered"), s.did)
+        assertEquals(FactoryReset.BROWSERS_STAYED, s.answer)
+    }
+
+    @Test fun withoutAManagePageTheResetGoesOn() {
+        val s = Steps(browsers = null).apply { run() }
+        assertEquals(listOf("sign out", "browsers", "clear", "answered", "restart"), s.did)
         assertNull(s.answer)
     }
 

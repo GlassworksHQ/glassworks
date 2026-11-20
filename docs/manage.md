@@ -93,7 +93,7 @@ A few actions prove that someone stands at the panel, as **Reboot** does. On the
 | **Close setup over the network** | Shown while pairing is open again. Closes it now, ends setup on any computer that paired, and closes the panel's setup Wi-Fi. |
 | **Reset the panel** | A factory reset of the app, not of Android. It asks first and says what goes and what stays, then needs the code. |
 
-**What a reset clears:** every setting of the app and its panes, setup's answers, the dashboard's Home Assistant sign-in (revoked in Home Assistant), and every browser signed in to Manage. The app then restarts into setup.
+**What a reset clears:** every setting of the app and its panes, setup's answers, the dashboard's Home Assistant sign-in, and every browser signed in to Manage. The app then restarts into setup. The panel asks Home Assistant to revoke the dashboard's sign-in, but that is best effort: when Home Assistant is down or has moved, the panel deletes its copy anyway and the Log says the revoke wasn't confirmed. Then remove the old sign-in under your Home Assistant profile → Security → Refresh tokens.
 
 **What a reset keeps:** Wi-Fi (Android's), the installed app, the Log, the radio's settings (its Zigbee or Thread network stays up; turn the radio off on its own page), and the panel in Home Assistant with its entities and its ESPHome encryption key. To remove the panel from Home Assistant too, delete it there.
 
