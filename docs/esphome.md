@@ -1,916 +1,395 @@
-# ESPHome device (native API, voice assistant, panel controls)
+# ESPHome entities and device reference
 
-The kiosk app makes the panel look like **one ESPHome device** to Home Assistant. HA's built-in
-**ESPHome** integration connects to it over the ESPHome native API (TCP port **6053**) and gets:
+Glassworks exposes your entire panel to Home Assistant as **one native ESPHome device** over the ESPHome API (TCP port `6053`). You do not need to install any custom integration, HACS add-on, Wyoming satellite, or MQTT broker—Home Assistant's built-in ESPHome integration discovers the panel automatically and gives you:
 
-- an **Assist satellite** with an on-device wake word (microWakeWord on TFLite, as Home Assistant
-  Voice PE runs it), like Voice PE: wake word select, pipeline select, VAD sensitivity, announcements, timers;
-- a **media player** (`media_player.<device>_speaker`) for TTS, announcements and audio;
-- the **screen** as a light, the presence and light sensors, and the kiosk/screen settings;
-- the switch for the panel's native **Music Assistant player** (Sendspin, [sendspin.md](sendspin.md)),
-  and the Sendspin pairing-token hand-off that lets Music Assistant pair with it automatically.
+- **Screen and sensor controls:** Control the display like a dimmable light, read presence and ambient light levels, adjust idle timeout and zoom, or switch dashboards remotely.
+- **Home Assistant Assist satellite:** On-device wake word detection (microWakeWord), Assist pipelines, spoken announcements, and voice timers ([Voice and timers guide](voice-and-timers.md)).
+- **Built-in speaker:** A `media_player.<device>_speaker` entity for TTS, announcements, and audio playback, plus automatic pairing for the synchronized [Music Assistant (Sendspin)](sendspin.md) player.
+- **Hardware panes:** Depending on your device, controls for the Zigbee/Thread radio, mains relay wall base, Bluetooth proxy, camera, notifications, time zone, and system diagnostics.
 
-One integration, discovered automatically, no Wyoming or MQTT. It replaces the earlier Wyoming
-satellite (remove that Wyoming entry from HA when you switch).
+To keep Home Assistant's device page clean and uncluttered, Glassworks only enables everyday entities by default. One-time configuration and troubleshooting entities start disabled—you can enable any of them from the panel's device page anytime, or adjust the same settings on the panel itself or the [Manage page](manage.md).
 
-Code: the protocol core is the reusable pure-JVM library [`libs/esphome-api`](../libs/esphome-api/README.md)
-(package `dev.glassworks.esphome`), with mDNS from [`libs/esphome-api-android`](../libs/esphome-api-android/README.md);
-the panel's entities and glue are `PanelDevice` in
-`core/src/main/java/dev/glassworks/device/` and the voice assistant in the
-[`voice`](../libs/voice/README.md) library (`VoiceAssistantController`, `VoiceEngine`), wrapped by `panes/assist`, with the wall base and the Aqara cloud switch in `frames/aqara-s1-plus/panes/wall-base`
-(`WallBasePane.kt`) and the radio in `radio/RadioPane.kt`, owned by the foreground `KioskService`, so it
-keeps working while the screen is off. Logs: `adb logcat -s Glassworks.ESPHome Glassworks.Voice`.
+> [!TIP]
+> **Developers:** The pure-JVM ESPHome protocol implementation lives in [`libs/esphome-api`](../libs/esphome-api/README.md) (`dev.glassworks.esphome`) with mDNS discovery in [`libs/esphome-api-android`](../libs/esphome-api-android/README.md). Panel entities are wired in `core/src/main/java/dev/glassworks/device/PanelDevice.kt`, voice in [`libs/voice`](../libs/voice/README.md) and `panes/assist`, wall base in `frames/aqara-s1-plus/panes/wall-base`, and radio in `radio/RadioPane.kt`, all hosted inside the foreground `KioskService` so they keep running when the screen sleeps. View logs with `adb logcat -s Glassworks.ESPHome Glassworks.Voice`.
 
 ## Add it to Home Assistant
 
-1. Install the app ([install.md](../frames/aqara-s1-plus/docs/install.md)). The panel downloads the wake word models itself the
-   first time it needs one (`voice/ModelFetcher.kt`): the four official microWakeWord models
-   (`okay_nabu`, `hey_jarvis`, `alexa`, `hey_mycroft`) from
-   [esphome/micro-wake-word-models](https://github.com/esphome/micro-wake-word-models) at a pinned
-   commit, each checked against a pinned SHA-256, into
-   `/sdcard/Android/data/sh.edm.s1kiosk/files/models/micro/`. `frames/aqara-s1-plus/tools/install.sh` also pushes them
-   over adb (`tools/voice/fetch-models.sh`, which downloads and checks the same files; `--no-models`
-   skips it). Without models the API still works; the engine retries loading every 30 s.
-2. **Discovery**: the panel advertises `aqara-s1-plus-a1b2c3._esphomelib._tcp` over mDNS (its own
-   [name](#names)). If mDNS reaches HA, **Settings → Devices & services** shows a discovered
-   **ESPHome** device "Aqara S1 Plus". Click **Add**.
-3. **Manual**: **Settings → Devices & services → Add integration → ESPHome**, host = the panel's
-   IP, port `6053`.
-4. On the device page pick the **Assist pipeline** and the **Wake word** (one select per pipeline;
-   the options are the models found on the panel). Say the wake word.
+1. **Install Glassworks** on your panel ([Getting started](getting-started.md)). The first time voice is needed, the panel automatically downloads the four official microWakeWord models (`okay_nabu`, `hey_jarvis`, `alexa`, `hey_mycroft`) from [esphome/micro-wake-word-models](https://github.com/esphome/micro-wake-word-models) and verifies their SHA-256 hashes. *(The CLI installer also pushes them via `tools/voice/fetch-models.sh`.)*
+2. **Automatic discovery:** The panel advertises `_esphomelib._tcp` over mDNS using its unique node name (for example, `aqara-s1-plus-a1b2c3`). Open **Settings → Devices & services** in Home Assistant and click **Add** on the discovered ESPHome device.
+3. **Manual setup (across VLANs):** If mDNS does not cross your network segments, click **Add integration → ESPHome**, enter the panel's IP address, and use port `6053`.
+4. **Configure voice (optional):** On the device page, pick your **Assist pipeline** and **Wake word**, then say the wake word to test.
 
 ### Encryption (automatic)
 
-Noise encryption (`Noise_NNpsk0_25519_ChaChaPoly_SHA256`, the same as ESPHome) works like an
-ESPHome device built with `api: encryption:` and no key in YAML:
+Glassworks uses standard ESPHome Noise encryption (`Noise_NNpsk0_25519_ChaChaPoly_SHA256`) with dynamic key provisioning:
 
-- **No key yet** (fresh panel): plaintext and zero-PSK Noise clients are accepted. DeviceInfo
-  reports `api_encryption_supported` and `api_encryption_provisionable`. mDNS advertises
-  `api_encryption_supported` + `api_provisioning=zero-psk`. When you add the panel in HA (2026.11+),
-  HA generates a key and sends it over a zero-PSK Noise session (`NoiseEncryptionSetKeyRequest`).
-  The panel stores it, activates it 100 ms later and drops every older session. HA reconnects with
-  the key. You never see the key.
-- **With a key**: only Noise with that key (as before). Logs show only a 4-hex fingerprint.
-- **A key it can't read right now** (the Keystore is down, [secrets.md](secrets.md#when-the-key-is-gone)):
-  nobody gets in, not plaintext and not a new key, until it reads the key again (on each connection
-  and every minute). mDNS keeps advertising `api_encryption`, so Home Assistant tries Noise. A panel
-  with a key never falls back to plaintext by itself.
-- Removing the device in HA sends an empty key, which puts the panel back to "no key".
-- `$A --ez api_encryption false` (adb only) turns encryption off on purpose: the panel then takes
-  plaintext and zero-PSK clients again, like a panel with no key. Use it to start over, never on a
-  network you don't trust.
-- Manual key, as before: `$A --es api_key $(openssl rand -base64 32) --ez api_encryption true`
-  (applied live; all sessions are dropped). Then enter the same key in HA. If the panel's key store
-  is down, the key isn't stored and `api_encryption` stays as it was.
+- **Fresh panel (no key yet):** Accepts plaintext and zero-PSK Noise connections and advertises `api_encryption_supported` and `api_provisioning=zero-psk`. When you add the panel in **Home Assistant 2026.11 or newer**, Home Assistant generates a random encryption key and sends it over a zero-PSK Noise session (`NoiseEncryptionSetKeyRequest`). The panel saves it securely in the Android Keystore, activates encryption 100 ms later, drops older sessions, and reconnects encrypted—you never have to touch a key.
+- **Once keyed:** Only encrypted Noise connections using that key are accepted. Logs display only a 4-hex fingerprint, never the key itself.
+- **Fail-closed security:** If the Android Keystore is temporarily unavailable ([secrets.md](secrets.md#when-the-key-is-gone)), the panel refuses all connections rather than falling back to plaintext, retrying until the key is readable again.
+- **Removing the device:** Deleting the ESPHome integration entry in Home Assistant clears the encryption key only when Home Assistant can reach the panel. If the panel is offline when you delete the entry, the old key remains on the panel and it will refuse automatic re-provisioning until you clear encryption manually (see **Manual key control** below).
+- **Manual key control (adb only):** Set a manual key with `--es api_key $(openssl rand -base64 32) --ez api_encryption true`, or clear encryption to start over with `--ez api_encryption false` (only on a trusted network).
 
-Details and sources: [onboarding.md](onboarding.md#2-adoption--encryption-esphome-dynamic-keys-).
+See [onboarding.md](onboarding.md#2-adoption--encryption-esphome-dynamic-keys-) for wire-level provisioning details.
 
 ## Device identity
 
 | Field | Value |
 |---|---|
-| name / friendly name | `aqara-s1-plus-a1b2c3` / `Aqara S1 Plus`: what the device is, and the end of its MAC (see [Names](#names)). Before #260: `s1-panel` / `Glassworks Panel` |
-| MAC (unique id in HA) | Kept in prefs (`device_mac`) once chosen. With none saved, the first of: `ro.glassworks.device.mac` (Kiln writes it into the Mirror's image, see [Identity across reinstalls](#identity-across-reinstalls)); the Wi-Fi MAC of `wlan0` if readable; a locally administered MAC derived from the chip serial (SHA-256 of `ro.serialno`); one derived from `ANDROID_ID`; else a random one |
-| manufacturer / model | The frame's: `Aqara` / `Panel Hub S1 Plus (Glassworks)` on the S1. Elsewhere the device's own (`Build.MANUFACTURER` / `Build.MODEL`): `Google` / `Pixel Tablet (Glassworks)`. Up to 0.4.3 the S1 app said `(S1 Kiosk)` |
-| esphome_version / compilation_time | `2026.10.2` / `Glassworks <app version>` (HA shows "2026.10.2 (Glassworks 0.1.0)") |
-| API version | 1.20 (as ESPHome 2026.10/11); `DeviceCapabilitiesRequest` is answered |
-| Sendspin | `DeviceCapabilitiesResponse.sendspin` = `{feature_flags: PAIRING_TOKEN, client_id}`; `SendspinPairingTokenRequest` (159) → `SendspinPairingTokenResponse` (160), token only over Noise with a key ([sendspin.md](sendspin.md#esphome-hand-off-how-ha-gives-ma-the-token)) |
-| voice_assistant_feature_flags | 61 = VOICE_ASSISTANT 1 + API_AUDIO 4 + TIMERS 8 + ANNOUNCE 16 + START_CONVERSATION 32 (0 when `voice_enabled` is false). Voice turned on or off while the panel runs changes it, and the panel asks Home Assistant to reconnect so it reads it again (#67) |
-
+| `name` / `friendly_name` | Device node name with MAC suffix (e.g. `aqara-s1-plus-a1b2c3`) and friendly display name (`Aqara S1 Plus`). See [Names](#names). |
+| MAC (unique ID in HA) | Persisted in app preferences (`device_mac`). Derived on first start from the first available source: `ro.glassworks.device.mac` (stamped by Kiln on the Mirror), `wlan0` Wi-Fi MAC, SHA-256 of `ro.serialno` (locally administered), `ANDROID_ID`, or a random fallback. |
+| Manufacturer / model | Frame-defined on dedicated frames (`Aqara` / `Panel Hub S1 Plus (Glassworks)`), or read from Android (`Build.MANUFACTURER` / `<Model> (Glassworks)`) on Generic Android. |
+| `esphome_version` / `compilation_time` | `2026.10.2` / `Glassworks <app version>` |
+| API version | `1.20` (supports `DeviceCapabilitiesRequest`) |
+| Sendspin capability | `DeviceCapabilitiesResponse.sendspin` (`PAIRING_TOKEN`, `client_id`) and `SendspinPairingTokenRequest` (159) → `Response` (160) over encrypted sessions only ([Sendspin hand-off](sendspin.md#esphome-hand-off-how-ha-gives-ma-the-token)). |
+| `voice_assistant_feature_flags` | `61` (`VOICE_ASSISTANT` + `API_AUDIO` + `TIMERS` + `ANNOUNCE` + `START_CONVERSATION`), or `0` while Voice is turned off. Toggling Voice asks Home Assistant to reconnect so capabilities refresh cleanly. |
 
 ### Identity across reinstalls
 
-Home Assistant keys the device and every entity's unique id by the MAC above. A new MAC means a new device in HA,
-and its entities get new ids. Where each frame stands (#523):
+Home Assistant keys each device and all of its entities by the panel's MAC address. Keeping that MAC stable ensures updates and reflashes reconnect to the same device instead of creating duplicates:
 
-| Frame | After a reinstall or reflash | Why |
+| Frame | After reinstall or reflash | How identity is preserved |
 |---|---|---|
-| S1 | Same device | An update installs in place and keeps the saved MAC. With the app's data wiped, `wlan0` is readable on its Android 10, so it comes out the same |
-| Mirror (Kiln or `tools/mirror/flash-node.ts`) | Same device, from the first flash that writes `ro.glassworks.device.mac` | A flash writes a fresh userdata, which wipes the app's data. Kiln derives the MAC from the serial its bootloader reports (`fastboot getvar serialno`), with the app's own formula, and writes it into `build.prop`. The Mirror's current MAC isn't the one derived from its serial (checked 2026-11-18), so the first flash with this moves it to a new device once |
-| Generic app, Android 6 to 7 | Same device | `ro.serialno` is readable |
-| Generic app, Android 8 and later | Same device, unless the device is factory reset or the APK's signing key changes | `ANDROID_ID`, which Android keeps for the same app signing key until a factory reset. `wlan0` and `ro.serialno` are hidden from apps there. An install from before this change may have saved a random MAC: an update keeps it, but the first reinstall after it moves to the `ANDROID_ID` one, a new device once |
+| **Aqara S1 Plus** | Same device | Updates install in place and keep saved preferences. Even after a full data wipe, Android 10 allows reading `wlan0`, producing the exact same MAC. |
+| **lululemon Studio Mirror** | Same device (once flashed with `ro.glassworks.device.mac`) | Because reflashing wipes `userdata`, Kiln derives a deterministic MAC from `fastboot getvar serialno` and writes it into `build.prop`. |
+| **Generic Android (Android 6–7)** | Same device | Derived deterministically from `ro.serialno`. |
+| **Generic Android (Android 8+)** | Same device (unless factory reset or signing key changes) | Derived from `ANDROID_ID`, which stays stable for the app's signing key until a factory reset. |
 
-The API key ([Encryption](#encryption-automatic)) lives in the app's data too, so a reflash wipes it, while Home
-Assistant's entry keeps it. A fresh app that answers with no key makes HA open a re-authentication
-(`reauth_encryption_removed_confirm`), and the entities stay unavailable until someone confirms it (seen on the Mirror
-2026-11-18). So the Mirror's flashes carry the key over (#574; Kiln's page since #580):
-
-1. Just before it restarts the Mirror into fastboot, it reads the key from the running app over adb, on the app's
-   socket `@glassworks_api_key` (`SecretHandover`: adb only, uid 0 or 2000; never on the LAN). It prints the key's
-   4-hex fingerprint, never the key. If the app has a key but can't hand it over now, the flash stops there, with
-   nothing written.
-2. It writes `ro.glassworks.api_key.handover=1` into the image's `build.prop`: a flag, not the key, since every app
-   can read `build.prop`.
-3. On that flag, the fresh app keeps its API server shut and unannounced until a key comes, for up to 15 minutes. HA
-   only gets "connection refused" and retries, which opens no re-authentication.
-4. At the first boot, right after it starts the app, the flash hands the key back on the same socket, and tries again
-   while the socket fails or doesn't answer. `set` only fills an empty key store: it never replaces a key in use. The app starts its API server with the key, and HA reconnects.
-
-What each installer can reach before the flash:
-
-| Installer | Before the flash | Carries the key |
-|---|---|---|
-| `tools/mirror/flash-node.ts` | adb to the running app (the Mirror on our image lets the flash's adb key in) | Yes, from an app with #574. An older app has no socket: HA asks once more |
-| Kiln's page | adb to the running app over WebUSB, in its keep step before fastboot (#580). The Mirror lets in only the browser that last installed Glassworks on it, so Kiln opens that step by itself in that browser; elsewhere it is a link under the fastboot steps | Yes, from an app with #574: the same steps as flash-node, and Kiln restarts the Mirror into fastboot itself. The key stays in the tab's memory until the first start. Another browser, a Mirror that doesn't start, or an older app: no flag, and HA asks once (Kiln's Done says what to click) |
-| The S1 | Not reflashed: updates install in place and keep the key. A signing-key switch (a development build to a release) uninstalls the app, and with it the key's Keystore key | On a switch with root, from an app that answers the hand-over socket: Kiln and `install.sh` read the key from the running app and hand it to the new one, with the Home Assistant sign-in from an app that lists `signin` in its `carries` (#584). The new app's API stays locked until then, so HA asks nothing. An app from #574 hands over the key only. An older app has no socket: neither comes across, the installer says so, and the new app's API stays locked until a new key is set (HA asks once) |
-
-If the hand-over fails, the app starts without a key after the 15 minutes, as before, and HA asks once. A key derived
-from the serial, like the MAC, would need no hand-over, but anyone who knows the serial could compute it.
+**Preserving the ESPHome encryption key across reflashes:** When reflashing a Mirror (or switching a rooted S1 Plus from a debug build to a release), wiping app data would normally erase the API key and cause Home Assistant to prompt for re-authentication. To avoid that interruption, Kiln and the CLI installers read the existing key over the adb-only `@glassworks_api_key` socket right before flashing, keep it strictly in memory (never written to disk or logs), signal the fresh app via `ro.glassworks.api_key.handover=1` (or `files/secrets-handover` on S1) to hold its ESPHome API closed for up to 15 minutes until handover completes, and inject the key back on first boot so Home Assistant reconnects automatically without prompting.
 
 ## Entities
 
-HA names entities `<friendly name> <entity name>`, so they show as "Aqara S1 Plus Screen" and so
-on. The `object_id` is the ESPHome-style snake_case name, the key is FNV-1a of the `object_id`
-(stable). The entity ids in this page are those of a panel added before #63 (`light.s1_panel_screen`).
-One added before #260 has `glassworks_panel_*`, and a new S1 `aqara_s1_plus_*` ([Names](#names)). Elsewhere `<device>` stands for that prefix.
+Home Assistant displays entities as `<Friendly Name> <Entity Name>` (for example, *Aqara S1 Plus Screen*). Each entity's internal `object_id` uses ESPHome snake_case with a stable FNV-1a key. Entity IDs on newly added S1 Plus panels start with `aqara_s1_plus_*` (panels added in earlier releases keep their original `glassworks_panel_*` or `s1_panel_*` entity IDs).
 
 ### Names
 
-Each device is its own ESPHome node, named after what it is (#260). The node name ends in the last
-three bytes of the MAC the panel reports ([Device identity](#device-identity)), as ESPHome's
-`name_add_mac_suffix` does. So a second panel, or a tablet next to the S1, never meets HA's "Name
-conflict" dialog.
+Every panel automatically appends the last three bytes of its MAC address to its ESPHome node name (matching ESPHome's `name_add_mac_suffix`), so adding multiple panels or tablets never triggers a name conflict in Home Assistant:
 
-| The frame | Node name (`device_name`, mDNS) | Friendly name (the device page) |
+| Frame naming mode | Node name (`device_name`, mDNS) | Friendly name (HA device page) |
 |---|---|---|
-| `namedBy = FRAME`: one product (the S1) | The frame's id and the suffix: `aqara-s1-plus-a1b2c3` | The frame's name: "Aqara S1 Plus" |
-| `namedBy = MODEL`: many devices (generic-android: any other device) | The model as a host name and the suffix: `pixel-tablet-a1b2c3` | The model: "Pixel Tablet" |
-| A device frame the generic app recognises (`DeviceFrame`): the lululemon Mirror (#454) | As `namedBy = FRAME`: `lululemon-mirror-a1b2c3` | The frame's name: "lululemon Studio Mirror" |
+| Dedicated frame (`namedBy = FRAME`, e.g. S1 Plus) | `aqara-s1-plus-a1b2c3` | `Aqara S1 Plus` |
+| Generic Android (`namedBy = MODEL`) | `<model>-a1b2c3` (e.g. `pixel-tablet-a1b2c3`) | Device model (e.g. `Pixel Tablet`) |
+| Recognized device on Generic Android (e.g. lululemon Mirror) | `lululemon-mirror-a1b2c3` | `lululemon Studio Mirror` |
 
-The node name is lowercase `a-z0-9-` and at most 63 characters. It is the same on every start and after
-an update, because the MAC is kept in prefs (`device_mac`). The code is `dev.glassworks.frame.DeviceName`,
-and `DeviceNameTest`, `PanelNameTest` and `GenericFrameTest` test it. The app picks the S1 frame only on the
-S1's hardware (`Build.HARDWARE` `sun50iw10p1`) and the generic one everywhere else. The Music Assistant
-player and Improv use the same friendly name.
-
-The generic frame goes by a device frame only when the device carries that frame's mark, so another device
-is never named after it. The Mirror's community image reports the Qualcomm reference board (`ro.product.model`
-"MSM8916 for arm64"), as other MSM8916 devices do. Its mark is lululemon's own signed boot image, which every
-Mirror keeps: `ro.bootimage.build.fingerprint` starts `mirror/mirror/`, on `ro.board.platform` `msm8916`. There,
-the `board` record is `lululemon-mirror`, and HA's device page shows the model *Studio Mirror (Glassworks)* by
-*lululemon* (`PanelDevice` adds the app's product in brackets, as *Pixel Tablet (Glassworks)*).
-`DeviceFrameTest` covers the Mirror, another MSM8916 device, the Pixel Tablet and an unknown device. A Mirror
-added to HA before #454 as `msm8916-for-arm64-…` is renamed in place, as in the table below.
-
-**After updating** a panel that HA already has (read 2026-11-14 from home-assistant/core 2026.11.0,
-`esphome/manager.py` and `esphome/config_flow.py`, and aioesphomeapi 46.25.0; the dev HA runs
-2026.11.0; not yet seen on a panel):
-
-| | What HA does |
-|---|---|
-| Config entry | Keeps working, with no repair and nothing to re-add. Its unique id is the MAC, which doesn't change. On the next connection `_on_connect` sees the MAC match and writes the new node name into the entry's `device_name` |
-| Discovery | The new mDNS name carries the same MAC, so the zeroconf flow finds the entry by MAC and ends as "already configured". No new device shows up |
-| Device name | Becomes "Aqara S1 Plus" on the next connection (HA's device registry follows the friendly name), unless you renamed the device in HA |
-| Config entry title | Stays as it was ("S1 Panel" or "Glassworks Panel"). HA doesn't retitle an entry. Rename it yourself if you like |
-| Entity ids | Unchanged: `s1_panel_*` on a panel added before #63, `glassworks_panel_*` on one added before #260. An entity id is made once, and the unique id (`<mac>/<device_id>/<domain>/<entity name>`) holds no device name |
-| Entities that appear later (a new feature's, or one re-added) | HA 2025.12 and later: from the device's name as HA shows it, so `aqara_s1_plus_*` next to the old ones. Up to 2025.11: from the node name, `aqara_s1_plus_a1b2c3_*` |
-| Reconnects | Until HA reloads the entry (an HA restart, or **Reload** on the entry), its reconnect logic still listens for the old name's mDNS record. A panel that restarts is found on the retry timer (at most 60 s) instead of at once |
-
-Where a new entity's id comes from depends on Home Assistant's version:
-- **Up to 2025.11** the esphome integration sets it itself, from the node name (`device_info.name`):
-  `{domain}.{node name}_{entity}` (`esphome/entity.py` 2025.1.0:234, 2025.11.0:366). HA takes an id an
-  entity supplies as it is.
-- **From 2025.12** it doesn't (`esphome/entity.py` 2025.12.0 sets no `entity_id`). The entity has
-  `has_entity_name`, so HA builds the id from the device's name as HA shows it: `name_by_user`, or the
-  name the integration registers from the friendly name (`esphome/manager.py` 2025.1.0:601, 2025.10.0:913;
-  `helpers/entity_platform.py` 2025.1.0:800, 2026.1.0:1244). So `aqara_s1_plus_*`, or your own name.
-- **From 2026.8** the area's name can come first (`light.<area>_aqara_s1_plus_screen`,
-  `helpers/entity_registry.py` 2026.8.0:1367; earlier versions have no area part).
+The Music Assistant Sendspin player and Bluetooth Improv use the same friendly name. When an existing panel updates to a newer naming scheme, Home Assistant matches it automatically by MAC: your config entry and existing entity IDs remain intact, your device name updates unless you renamed it manually, and any *new* entities added later use Home Assistant's standard naming rules (derived from your device name on Home Assistant 2025.12+, or including area prefix when configured on 2026.8+).
 
 ### Categories and defaults
 
-Each entity has a category and a default, following the rule in
-[the pane rules](../pane-api/src/main/java/dev/glassworks/README.md#entities). An entity is enabled
-when HA first adds it only if people reach for it day to day. When HA adds a panel, 16 entities
-are on (23 with a two-channel switch base). The rest are created turned off. To turn one on, open
-**Settings → Devices & services → ESPHome → Aqara S1 Plus**, select *+N entities not shown*,
-open the entity, and turn on *Enabled*.
+Following [Glassworks Principles](principles.md#entities), entities you use every day start enabled, while one-time setup and deep diagnostic entities start disabled so your Home Assistant device page stays readable. On a fresh Aqara S1 Plus, 16 entities are enabled out of the box (23 with a two-channel wall base).
 
-| Entity | object_id | Pane | Category | Default | Why |
+To enable any disabled entity in Home Assistant: open **Settings → Devices & services → ESPHome → \<Your panel\>**, click **+N entities not shown**, select the entity, and toggle **Enabled** on.
+
+| Entity | `object_id` | Source | Category | Enabled by default | Notes |
 |---|---|---|---|---|---|
-| Presence | `presence` | core | none | on | Automations |
-| Illuminance | `illuminance` | core | none | on | Automations |
-| Docked | `docked` | core | none | on | Automations: what the panel does on and off its dock. Only on a device that docks ([Docked](#docked)) |
-| Screen | `screen` | core | config | on | Dashboards and automations, by its entity id. Config keeps it out of a room's "lights off" ([below](#the-screen-is-a-config-light)) |
-| Speaker | `speaker` | core | none | on | Dashboards, Music Assistant, announcements |
-| Reload dashboard | `reload_dashboard` | core | none | on | Used often |
-| Restart app | `restart_app` | core | config | on | Used often |
-| Screen mode | `screen_mode` | core | config | on | Automations (night, away) |
-| App update | `app_update` | core | config | on | HA shows updates only while it is on |
-| Frame update | `frame_update` | core | config | on | Only on the S1 and the Mirror ([frame updates](#frame-updates)) |
-| Allow setup over the network | `lan_setup` | core | config | on | The way back to setup from a laptop once HA has the panel |
-| IP address | `ip_address` | core | diagnostic | on | People check it |
-| Silent updates | `silent_updates` | core | diagnostic | on | People check it: whether an update needs someone at the panel |
-| Auto brightness | `auto_brightness` | core | config | off | Set once |
-| Idle timeout | `idle_timeout` | core | config | on | Automations: [Panel night mode](blueprints.md) sets it at night |
-| Max auto brightness | `max_brightness` | core | config | on | Automations: [Panel night mode](blueprints.md) lowers it at night |
-| Presence range | `presence_range` | core | config | off | Set once, for the room. Only on a sensor with a range ([by frame](#screen-entities-by-frame)) |
-| Zoom | `zoom` | core | config | off | Set once |
-| Dashboard | `dashboard` | core | config | off | Set once. Turn it on to pick a dashboard; the panel has no picker of its own yet |
-| Dashboard URL | `dashboard_url` | core | config | off | Set once |
-| Hide HA header | `hide_ha_header` | core | config | off | Set once |
-| Open device settings | `open_settings` | core | config | off | Rare; you can open the menu on the panel |
-| Start Wi-Fi setup (Bluetooth) | `improv_ble` | core | config | off | Only when the panel changes network |
-| Sign out | `sign_out` | core | config | off | Rare |
-| App version | `app_version` | core | diagnostic | off | *App update* shows the version |
-| Update status | `update_status` | core | diagnostic | off | *App update* shows progress; for troubleshooting |
-| Home Assistant URL | `home_assistant_url` | core | diagnostic | off | Troubleshooting |
-| Signed in | `signed_in` | core | diagnostic | off | Troubleshooting |
-| CPU usage, CPU temperature, Wi-Fi signal, Uptime | `cpu_usage`, `cpu_temperature`, `wifi_signal`, `uptime` | diagnostics | diagnostic | on | The few health values people check ([Diagnostics](#diagnostics)) |
-| Diagnostics | `diagnostics` | diagnostics | config | off | Set once: the pane's on/off |
-| Bluetooth proxy | `bluetooth_proxy` | Bluetooth proxy | config | off | Set once: the pane's on/off ([Bluetooth proxy](#bluetooth-proxy)) |
-| Bluetooth advertisements, Bluetooth proxy status | `bluetooth_advertisements`, `bluetooth_proxy_status` | Bluetooth proxy | diagnostic | off | Troubleshooting: the settings page shows both. Unavailable while the pane is off |
-| App CPU usage, RAM available, App RAM, Storage free, Wi-Fi link speed, App uptime, Web content processes, Last restart reason | `app_cpu_usage`, `memory_available`, `app_memory`, `storage_free`, `wifi_link_speed`, `app_uptime`, `web_content_processes`, `last_restart_reason` | diagnostics | diagnostic | off | Troubleshooting (unchanged since #142) |
-| Voice | `voice` | voice | config | off | Set once: the pane's on/off ([Panes on and off](#panes-on-and-off)) |
-| Mute microphone | `mute_microphone` | voice | config | on | Privacy, toggled day to day |
-| Wake sound | `wake_sound` | voice | config | off | Set once |
-| Voice overlay | `voice_overlay` | voice | config | off | Set once |
-| Mic gain | `mic_gain` | voice | config | off | Set once |
-| Wake word threshold | `wake_word_threshold` | voice | config | off | Set once |
-| Voice status | `voice_status` | voice | diagnostic | on | People check it when voice doesn't answer, and automate on it ([When voice can't get ready](#when-voice-cant-get-ready)) |
-| Music Assistant player (Sendspin) | `sendspin` | music | config | off | Set once |
-| Music Assistant player status | `sendspin_status` | music | diagnostic | off | Troubleshooting |
-| Notifications | `notifications` | notifications | config | off | Set once: the pane's on/off. The pane itself is off by default ([notifications.md](notifications.md)) |
-| Do not disturb | `do_not_disturb` | notifications | config | on | Automations (bedtime) |
-| `notify` action (`esphome.<panel>_notify`) | `notify` | notifications | n/a | listed | An action, not an entity: HA lists it while the panel is connected, and it answers "off" while the pane is off |
-| Radio status | `radio_status` | radio | diagnostic | on | People check it when they use the radio |
-| Radio mode | `radio_mode` | radio | config | off | Set once |
-| Zigbee stack | `zigbee_stack` | radio | config | off | Set once |
-| Radio allowed clients | `radio_allowed_clients` | radio | config | off | Set once |
-| Radio firmware image, Flash radio firmware | `radio_firmware_image`, `radio_firmware_flash` | radio | config | off | Rare, and risky |
-| Join / Leave Zigbee network | `zigbee_router_join`, `zigbee_router_leave` | radio | config | off | Once per network |
-| Join Home Assistant's Thread network, Leave Thread network | `thread_join_ha`, `thread_leave` | radio | config | off | Once per network |
-| Thread dataset | `thread_dataset` | radio | config | off | Once per network |
-| Thread join | `thread_join` | radio | diagnostic | off | Only during a join |
-| Radio helper, Radio firmware | `radio_helper`, `radio_firmware` | radio | diagnostic | off | Troubleshooting |
-| Radio connected client | `radio_connected` | radio | diagnostic | off | Troubleshooting |
-| Keep time zone | `keep_time_zone` | time zone | config | off | Set once: the pane's on/off |
-| Time zone | `time_zone` | time zone | config | off | Set once |
-| Time zone status | `time_zone_status` | time zone | diagnostic | off | Troubleshooting |
-| Wall base | `wall_base` | wall base | config | off | Set once: the pane's on/off |
-| Block Aqara cloud | `block_aqara_cloud` | wall base | config | off | Set once |
-| Aqara cloud daemon | `aqara_cloud` | wall base | diagnostic | off | Troubleshooting |
-| Base | `base` | wall base | diagnostic | off | Troubleshooting; the base's own entities show what is mounted |
-| Base firmware | `base_firmware` | wall base | diagnostic | off | Troubleshooting |
-| Base relay N, Base button N, Base power, Base energy | `base_relay_N`, `base_button_N`, `base_power`, `base_energy` | wall base | none | on | The reason to mount a base |
-| Base protection | `base_protection` | wall base | diagnostic | on | Overheat and overload; people automate on it. It had no category before #132 |
+| Presence | `presence` | Core | None | Yes | Everyday automations |
+| Illuminance | `illuminance` | Core | None | Yes | Everyday automations |
+| Docked | `docked` | Core | None | Yes | Docking tablets only ([Docked](#docked)) |
+| Screen | `screen` | Core | Config | Yes | Config category keeps it out of room "lights off" ([details](#the-screen-is-a-config-light)) |
+| Speaker | `speaker` | Core | None | Yes | TTS, announcements, HA media |
+| Reload dashboard | `reload_dashboard` | Core | None | Yes | Quick refresh action |
+| Restart app | `restart_app` | Core | Config | Yes | Quick recovery action |
+| Screen mode | `screen_mode` | Core | Config | Yes | Switch between `presence` and `always` |
+| Idle timeout | `idle_timeout` | Core | Config | Yes | Used by [Panel night mode](blueprints.md) |
+| Max auto brightness | `max_brightness` | Core | Config | Yes | Used by [Panel night mode](blueprints.md) |
+| App update | `app_update` | Core | Config | Yes | Surfaces Glassworks releases in HA Updates |
+| Frame update | `frame_update` | Core | Config | Yes | S1 Plus and Mirror only ([Frame updates](#frame-updates)) |
+| Allow setup over the network | `lan_setup` | Core | Config | Yes | Reopens `/setup` pairing for 30 minutes |
+| IP address | `ip_address` | Core | Diagnostic | Yes | Quick network lookup |
+| Silent updates | `silent_updates` | Core | Diagnostic | Yes | Shows whether updates install hands-free |
+| Auto brightness | `auto_brightness` | Core | Config | No | Usually configured once |
+| Presence range | `presence_range` | Core | Config | No | Frames with adjustable range only (S1 Plus) |
+| Zoom | `zoom` | Core | Config | No | Usually configured once |
+| Dashboard | `dashboard` | Core | Config | No | Enable to pick a Lovelace dashboard from HA |
+| Dashboard URL | `dashboard_url` | Core | Config | No | Custom dashboard URL override |
+| Hide HA header | `hide_ha_header` | Core | Config | No | Usually configured once |
+| Open device settings | `open_settings` | Core | Config | No | Opens the hidden settings overlay on screen |
+| Start Wi-Fi setup (Bluetooth) | `improv_ble` | Core | Config | No | Needed only when changing Wi-Fi via BLE |
+| Sign out | `sign_out` | Core | Config | No | Revokes dashboard sign-in |
+| App version, Update status, Home Assistant URL, Signed in | `app_version`, `update_status`, `home_assistant_url`, `signed_in` | Core | Diagnostic | No | Troubleshooting |
+| CPU usage, CPU temperature, Wi-Fi signal, Uptime | `cpu_usage`, `cpu_temperature`, `wifi_signal`, `uptime` | Diagnostics | Diagnostic | Yes | Everyday health metrics ([Diagnostics](#diagnostics)) |
+| Diagnostics (pane switch) | `diagnostics` | Diagnostics | Config | No | Pane on/off |
+| App CPU usage, RAM available, App RAM, Storage free, Wi-Fi link speed, App uptime, Web content processes, Last restart reason | `app_cpu_usage`, `memory_available`, `app_memory`, `storage_free`, `wifi_link_speed`, `app_uptime`, `web_content_processes`, `last_restart_reason` | Diagnostics | Diagnostic | No | Detailed troubleshooting |
+| Mute microphone | `mute_microphone` | Assist | Config | Yes | Everyday privacy toggle |
+| Voice status | `voice_status` | Assist | Diagnostic | Yes | Wake word readiness & error reporting |
+| Voice, Wake sound, Voice overlay, Mic gain, Wake word threshold | `voice`, `wake_sound`, `voice_overlay`, `mic_gain`, `wake_word_threshold` | Assist | Config | No | One-time voice tuning |
+| Music Assistant player (Sendspin) | `sendspin` | Sendspin | Config | No | Pane on/off |
+| Music Assistant player status | `sendspin_status` | Sendspin | Diagnostic | No | Pairing and playback status |
+| Do not disturb | `do_not_disturb` | Notifications | Config | Yes | Bedtime / quiet-hours automations |
+| Notifications (pane switch) | `notifications` | Notifications | Config | No | Pane on/off (starts off by default) |
+| `notify` action (`esphome.<panel>_notify`) | `notify` | Notifications | Action | Listed | Always listed when connected ([Notifications](notifications.md)) |
+| Bluetooth proxy, Bluetooth advertisements, Bluetooth proxy status | `bluetooth_proxy`, `bluetooth_advertisements`, `bluetooth_proxy_status` | Bluetooth proxy | Config / Diagnostic | No | Pane on/off (off by default) and stats |
+| Camera, Camera presence, Camera privacy | `camera`, `camera_presence`, `camera_privacy` | Camera | None | Yes | Camera-equipped devices only ([Camera entities](#camera-entities)) |
+| Camera use, ONVIF stream, Camera sensitivity, Camera pane | `camera_use`, `onvif_stream`, `camera_sensitivity`, `camera_pane` | Camera | Config | No | Camera-equipped devices only |
+| Radio status | `radio_status` | Radio | Diagnostic | Yes | Current radio role and client info |
+| Radio mode, Zigbee stack, Radio allowed clients, Radio firmware image, Flash radio firmware, Join/Leave Zigbee, Join/Leave Thread, Thread dataset | `radio_mode`, `zigbee_stack`, `radio_allowed_clients`, `radio_firmware_image`, `radio_firmware_flash`, `zigbee_router_join`, `zigbee_router_leave`, `thread_join_ha`, `thread_leave`, `thread_dataset` | Radio | Config | No | One-time radio configuration (S1 Plus) |
+| Thread join, Radio helper, Radio firmware, Radio connected client | `thread_join`, `radio_helper`, `radio_firmware`, `radio_connected` | Radio | Diagnostic | No | Radio troubleshooting (S1 Plus) |
+| Keep time zone, Time zone, Time zone status | `keep_time_zone`, `time_zone`, `time_zone_status` | Time zone | Config / Diagnostic | No | S1 Plus persistent time zone |
+| Base relay N, Base button N, Base power, Base energy | `base_relay_N`, `base_button_N`, `base_power`, `base_energy` | Wall base | None | Yes | S1 Plus relay base controls (present when mounted) |
+| Base protection | `base_protection` | Wall base | Diagnostic | Yes | Overheat and overload alerts |
+| Wall base, Block Aqara cloud, Aqara cloud daemon, Base, Base firmware | `wall_base`, `block_aqara_cloud`, `aqara_cloud`, `base`, `base_firmware` | Wall base | Config / Diagnostic | No | Base and Aqara cloud controls (S1 Plus) |
+
+Home Assistant also creates its own built-in Assist entities automatically (**Assist satellite**, **Assist pipeline**, **Wake word**, and **Finished speaking detection**) using Home Assistant's defaults.
 
 #### The screen is a config light
 
-Most people don't count their wall panel as one of the room's lights. Up to #591 the screen had no
-category, so every "lights off" aimed at the panel's area turned the screen off too: a presence
-automation's "room empty", a Good Night script, Assist's "turn off the bedroom lights". Home Assistant
-leaves an entity with a category out of a target it reaches through an area, floor, device or a labelled
-device or area, and doesn't show it to Assist unless someone exposes it (`helpers/target.py` 2026.11.0:227). So the screen is `config`, and it keeps its object id, key and entity id.
+Most people do not want *"Turn off the bedroom lights"* or an area-wide Good Night script to accidentally shut off their wall panel screen. Because the **Screen** entity uses the `CONFIG` category, Home Assistant excludes it from area, floor, device, and device-label `light.turn_off` calls and hides it from Assist by default—while still letting you control it directly by its `entity_id` on dashboards and in automations.
 
-| | Before #591 | Now |
-|---|---|---|
-| `light.turn_off` with an `area_id`, `floor_id` or `device_id`, or a `label_id` on the panel's device or area | Turns the screen off | Skips it |
-| `light.turn_off` with the screen's `entity_id`, or a `label_id` put on the screen entity itself; a dashboard card | Turns it off | Turns it off |
-| Assist, a panel HA adds from now on | Sees it | Doesn't see it until someone exposes it |
-| Assist, a panel HA already has | Sees it | Still sees it: HA saved the choice when it first saw the entity. Turn off **Expose** once in **Settings → Voice assistants → Expose** |
+| Action | Behavior |
+|---|---|
+| `light.turn_off` targeting an area, floor, or device | Skips the panel screen |
+| `light.turn_off` targeting `light.<panel>_screen` directly (or a dashboard card) | Controls screen power and brightness normally |
+| Assist voice commands (newly added panels) | Ignored unless you explicitly expose it |
+| Assist voice commands (panels added in earlier releases) | If previously exposed, turn off **Expose** once under **Settings → Voice assistants → Expose** |
 
-HA's registry takes the category only when it adds the panel's entities again: after a restart of HA or a
-**Reload** of the ESPHome entry (Settings → Devices & services → ESPHome → the panel → ⋮ → Reload). The app
-update's reconnect alone isn't enough (verified on the S1, 2026-11-19, HA 2026.11).
-
-HA adds its own voice entities (*Assist satellite*, *Assist pipeline*, *Wake word*, *Finished speaking
-detection*). The panel doesn't send those, so their defaults are HA's.
-
-The pin goldens (`panel-entities*.golden.txt`) end a line with `disabledByDefault` when the entity is
-off by default, so a review shows every new entity's default.
+If you updated an existing panel from an older release where Screen had no category, reload the ESPHome integration entry (**Settings → Devices & services → ESPHome → \<panel\> → ⋮ → Reload**) or restart Home Assistant so the updated category applies.
 
 #### A panel that HA already has
 
-HA reads `disabled_by_default` only when it first registers an entity. Read 2026-11-13 from
-home-assistant/core 2026.11.1:
-
-- `esphome/entity.py`:616 turns `disabled_by_default` into `entity_registry_enabled_default`, and
-  :623-626 maps `entity_category`. Both are read again on every listing.
-- `helpers/entity_platform.py`:1108-1109 makes that `disabled_by=INTEGRATION`, and passes it with the
-  category to `async_get_or_create`.
-- `helpers/entity_registry.py`:1650-1666: for an entity already in the registry, `async_get_or_create`
-  updates the category, the name and the icon but not `disabled_by`. Its docstring (:1634) says
-  `disabled_by` "does not affect an existing entity".
-- An entity HA deleted and later sees again gets back the enabled state it had before
-  (`entity_registry.py`:1694, :1836).
-
-So on a panel HA already has:
-
-| What | After the update |
-|---|---|
-| Entities that were on | Stay on, with the same entity id, area and name |
-| Entities you turned off | Stay off |
-| Category | Follows the panel: *Base protection* moves to the device page's *Diagnostic* section, and *Screen* to *Configuration* ([the screen is a config light](#the-screen-is-a-config-light)). No other category changes |
-| Entities that appear later (a new pane, a wall base mounted after the update) | Get the new default when HA first sees them |
-| Removing the panel from HA and adding it back | Each entity gets back the state it had, while HA still remembers the deleted entities |
+Home Assistant applies `disabled_by_default` only when an entity is registered for the first time. Updating an existing panel preserves your current enabled/disabled choices, entity IDs, names, and area assignments; only entity categories update (for instance, moving *Screen* to Configuration and *Base protection* to Diagnostic). Any brand-new entities added by future features or newly attached hardware use the current defaults.
 
 ### What each entity does
 
-| Entity | object_id | What it does |
+| Entity | `object_id` | Behavior |
 |---|---|---|
-| light `Screen` | `screen` | on → wake the screen, off → screen off (`ScreenPolicy.wake/sleep`); brightness sets a fixed brightness and turns *Auto brightness* off |
-| switch `Auto brightness` | `auto_brightness` | light-sensor brightness curve. Only with a light sensor ([by frame](#screen-entities-by-frame)) |
-| binary_sensor `Presence` (occupancy) | `presence` | the frame's presence sensor "near": the VI5300 ToF on the S1, a proximity sensor elsewhere. A camera's is `camera_presence` |
-| sensor `Illuminance` (lx) | `illuminance` | the light sensor: the MK6212 on the S1 |
-| binary_sensor `Docked` (plug) | `docked` | on while the device sits on its dock, off once it's lifted off; only on a device that docks ([Docked](#docked)) |
-| select `Screen mode` | `screen_mode` | `presence` / `always`. `always` until someone picks one (#522). `presence`: walking up wakes the screen, and it turns off after the idle timeout. `always`: it never turns off by itself, and walking up never turns it on, so a screen Home Assistant turned off stays off (#601). `presence` still reports in both |
-| number `Idle timeout` (s) | `idle_timeout` | screen off after idle (0 = never). Above 0 it also sets `Screen mode` to `presence`, as the panel's own *Turn off when idle* does. The panel has no night timeout of its own: an automation changes this one, such as the [Panel night mode](blueprints.md) blueprint |
-| number `Max auto brightness` (%, 5–100, step 5) | `max_brightness` | the most *Auto brightness* reaches (100 by default). Lower it at night to keep the screen dim when the room's lights are on. A held screen (a high or critical notification) ignores it. A fixed brightness from the `Screen` light doesn't follow it |
-| number `Presence range` (m, 0–2.5, step 0.1) | `presence_range` | VI5300 threshold (needs `WRITE_SECURE_SETTINGS`); 0 = firmware default |
-| text `Dashboard URL` | `dashboard_url` | sets + loads the dashboard; `auto` (default) = HA's root on the discovered instance |
-| select `Dashboard` | `dashboard` | `Default` + every Lovelace dashboard (by title) + `Custom` only while the saved URL matches none; choosing one saves the URL and reloads ([onboarding.md](onboarding.md#5-which-dashboard-)). The list comes from the HA frontend on the panel; when the options change the entity list is rebuilt (debounced 10 s, at most once a minute) and HA reconnects |
-| number `Zoom` (0 = auto) | `zoom` | CSS px ratio; restarts the app |
-| button `Reload dashboard` | `reload_dashboard` | |
-| button `Open device settings` | `open_settings` | opens the panel's hidden settings dialog on its screen |
-| button `Restart app` | `restart_app` | restarts the kiosk process |
-| button `Start Wi-Fi setup (Bluetooth)` | `improv_ble` | starts Improv over Bluetooth on demand ([onboarding.md](onboarding.md)) |
-| button `Allow setup over the network` | `lan_setup` | opens pairing for setup over the LAN for 30 minutes. Pairing is open until HA adds the panel, then closed until this button, the panel's settings (Home Assistant & dashboard → Allow setup over the network, also on the Manage page) or Kiln over USB opens it again ([guide](manage.md#set-up-over-the-network)) |
-| switch `Hide HA header` | `hide_ha_header` | header + sidebar, applied live |
-| media_player `Speaker` | `speaker` | play/pause/stop, volume, mute, play media, announce; formats: mp3 (default + announcement) |
-| switch `Music Assistant player (Sendspin)` | `sendspin` | the native Sendspin player ([sendspin.md](sendspin.md)), default on; off sends `client/goodbye` `user_request`; encrypted connection only ([Panes on and off](#panes-on-and-off)) |
-| text_sensor `Music Assistant player status` | `sendspin_status` | diagnostic; e.g. `ready, paired with Music Assistant (…)`, `playing from …: Artist – Title`, `waiting for pairing or approval by …`, `off` |
-| switch `Mute microphone` | `mute_microphone` | releases the microphone entirely |
-| switch `Wake sound` | `wake_sound` | short two-tone chime when the wake word is detected (default on) |
-| switch `Voice overlay` | `voice_overlay` | Full-screen overlay during voice runs: an orb that follows the voice, what was heard and the reply; tap anywhere to cancel the run (default on) |
-| number `Mic gain` | `mic_gain` | 0.5–4× |
-| number `Wake word threshold` | `wake_word_threshold` | 0.10–0.99. For a microWakeWord word, the probability cutoff for the mean of the model's last 5 outputs; it starts at the model's own (Okay Nabu and Hey Jarvis 0.97, Mycroft 0.95, Alexa 0.9) and goes back to it when you pick another word. Lower is more sensitive. For a legacy openWakeWord word, openWakeWord's score threshold (default 0.5), as before |
-| text sensor `Voice status` | `voice_status` | Whether the wake word can listen: `Ready`, `Getting ready`, or why not (`Download failed`, `Model check failed`, `Model not saved`, `Model missing`, `Engine failed`, `Microphone not allowed`, `Microphone unavailable`). No state while voice is off. See [When voice can't get ready](#when-voice-cant-get-ready) |
-| select `Radio mode` | `radio_mode` | `Off` (default), `Zigbee coordinator (TCP)`, `Zigbee router (repeater)`, `Thread border router`, `Thread router (repeater)` ([radio.md](../frames/aqara-s1-plus/docs/radio.md); before 0.4.3 the repeaters were `Zigbee router` / `Thread router`, still accepted when sent); without the root helper only `Off` applies, other choices are refused and snap back |
-| text_sensor `Radio status` | `radio_status` | diagnostic; e.g. `Off: Aqara's radio services stopped, radio idle. …`, or the root helper's `ok zigbee_tcp: EZSP on tcp:6638`, plus who may connect and the ZHA / Zigbee2MQTT settings |
-| text `Radio allowed clients` | `radio_allowed_clients` | who may reach the radio's ports besides Home Assistant: addresses or CIDRs, `any`, or empty = Home Assistant only ([radio-guide.md](../frames/aqara-s1-plus/docs/radio-guide.md#who-may-connect)) |
-| select `Zigbee stack` | `zigbee_stack` | `Aqara 7.3.3 (EZSP 12, ZHA)` (default) or `Silicon Labs 8.2.2 (EZSP 18, Zigbee2MQTT, experimental)` ([radio.md](../frames/aqara-s1-plus/docs/radio.md#zigbee-stack-aqara-or-silicon-labs-helper-v4)); encrypted connection only, needs helper v4 |
-| text_sensor `Radio helper` | `radio_helper` | diagnostic; which root helper runs (boot image or radio bundle, version) and whether the boot image needs updating |
-| text_sensor `Radio connected client` | `radio_connected` | diagnostic; who uses the Zigbee coordinator's EZSP port now: `Home Assistant · 192.0.2.20 · since 14:32`, another client's address, or `Nobody` ([radio.md](../frames/aqara-s1-plus/docs/radio.md#app-side)); needs the radio bundle from the same release |
-| text_sensor `Radio firmware` | `radio_firmware` | diagnostic; the radio's firmware version, flash progress or result |
-| select `Radio firmware image` | `radio_firmware_image` | `Keep current`, `Aqara stock image`, `Image from the radio bundle`; arms the choice for 2 minutes ([radio.md](../frames/aqara-s1-plus/docs/radio.md#radio-firmware-updates-helper-v4)); encrypted connection only |
-| button `Flash radio firmware` | `radio_firmware_flash` | flashes the armed image; encrypted connection only |
-| button `Join Zigbee network` / `Leave Zigbee network` | `zigbee_router_join` / `zigbee_router_leave` | Zigbee router mode ([radio.md](../frames/aqara-s1-plus/docs/radio.md#zigbee-router)) |
-| button `Leave Thread network` | `thread_leave` | forgets the Thread dataset and router settings, in any mode; encrypted connection only, needs helper v4 |
-| button `Join Home Assistant's Thread network` | `thread_join_ha` | gets the preferred Thread network's dataset from Home Assistant and switches to Thread router; if the panel's HA user isn't an administrator, the panel shows a QR code for a one-off administrator sign-in ([radio-guide.md](../frames/aqara-s1-plus/docs/radio-guide.md#repeater-modes-experimental)); encrypted connection only |
-| text_sensor `Thread join` | `thread_join` | diagnostic; how the last join went (waiting for the QR code, joining `<network>`, or why not) |
-| text `Thread dataset` | `thread_dataset` | write-only (always reads empty): the active dataset hex for the Thread router mode; whitespace in a paste (spaces, line breaks, no-break or zero-width spaces) is accepted and dropped; never logged |
-| text_sensor `IP address` | `ip_address` | diagnostic |
-| text `Time zone` | `time_zone` | an Olson id such as `Europe/Berlin`, kept by the root helper across reboots ([install.md](../frames/aqara-s1-plus/docs/install.md#time-zone)); encrypted connection only |
-| text_sensor `Time zone status` | `time_zone_status` | diagnostic; whether the zone is being kept |
-| text_sensor `App version` | `app_version` | diagnostic |
-| update `App update` (firmware) | `app_update` | the latest GitHub release vs this app; install from HA ([app updates](#app-updates)) |
-| update `Frame update` (firmware) | `frame_update` | the frame's latest release vs its frame version; on the S1 and the Mirror only ([frame updates](#frame-updates)) |
-| text_sensor `Update status` | `update_status` | diagnostic; e.g. `up to date (1.2.0)`, `1.3.0 available`, `Downloading 1.3.0: 42%`, `Install of 1.3.0 failed: …` |
-| text_sensor `Silent updates` | `silent_updates` | diagnostic; whether app updates install with nobody at the panel, and why: `Yes: …` or `No: …` ([Silent updates](#silent-updates)) |
-| text_sensor `Home Assistant URL` | `home_assistant_url` | diagnostic; the HA the panel uses: the origin of a configured dashboard URL, else the discovered one ([onboarding.md](onboarding.md)) |
-| text_sensor `Signed in` | `signed_in` | diagnostic; `yes` / `no`: whether the dashboard's Home Assistant has a QR sign-in on the panel (never the token). It says `no` after Home Assistant moved to another address, although the old sign-in is still stored ([onboarding.md](onboarding.md#4-login-without-typing-on-the-panel-qr-sign-in--external-auth-)) |
-| button `Sign out` | `sign_out` | revokes the refresh token at HA (`/auth/revoke`), deletes it, shows the sign-in screen. After Home Assistant moved it skips the revoke, which would send the token to an address that isn't the sign-in's, so the old token stays in the old Home Assistant's profile until deleted there |
+| `light` **Screen** | `screen` | Turns the screen on or off (`ScreenPolicy.wake/sleep`). Setting brightness applies a fixed brightness level and turns **Auto brightness** off. |
+| `switch` **Auto brightness** | `auto_brightness` | Adjusts screen brightness automatically using the ambient light sensor (listed only on frames with a light sensor). |
+| `binary_sensor` **Presence** (`occupancy`) | `presence` | Reports `on` when someone is within range of the panel's presence/proximity sensor (VI5300 ToF on S1 Plus). Camera-based presence uses `camera_presence` instead. |
+| `sensor` **Illuminance** (`lx`) | `illuminance` | Ambient light reading in lux (MK6212 on S1 Plus). |
+| `binary_sensor` **Docked** (`plug`) | `docked` | Reports whether a docking tablet is sitting on its charging dock ([Docked](#docked)). |
+| `select` **Screen mode** | `screen_mode` | `presence` (wakes on approach and sleeps after idle timeout) or `always` (stays awake and ignores approach wake so Home Assistant can turn the screen off and keep it off). Presence sensor continues reporting in both modes. |
+| `number` **Idle timeout** (`s`) | `idle_timeout` | Seconds of inactivity before turning the screen off (`0` = never). Setting a value above 0 switches **Screen mode** to `presence`. Automated by [Panel night mode](blueprints.md). |
+| `number` **Max auto brightness** (`%`, 5–100, step 5) | `max_brightness` | Caps the maximum brightness that **Auto brightness** can reach (default 100%). Manual brightness and high/critical notifications are not capped. |
+| `number` **Presence range** (`m`, 0–2.5, step 0.1) | `presence_range` | Adjusts VI5300 detection distance on the S1 Plus (`0` = firmware default; requires `WRITE_SECURE_SETTINGS`). |
+| `text` **Dashboard URL** | `dashboard_url` | Loads a specific dashboard URL (`auto` loads your default Home Assistant dashboard). |
+| `select` **Dashboard** | `dashboard` | Lists `Default` plus every Lovelace dashboard fetched from Home Assistant (and `Custom` if a custom URL is saved). Selecting an option saves and reloads immediately. |
+| `number` **Zoom** (`0` = auto) | `zoom` | Overrides CSS display scale ratio and restarts the app. |
+| `button` **Reload dashboard** | `reload_dashboard` | Reloads the active dashboard web page. |
+| `button` **Open device settings** | `open_settings` | Opens the panel's hidden settings menu on screen. |
+| `button` **Restart app** | `restart_app` | Restarts the Glassworks kiosk process. |
+| `button` **Start Wi-Fi setup (Bluetooth)** | `improv_ble` | Starts Improv Wi-Fi provisioning over Bluetooth on demand. |
+| `button` **Allow setup over the network** | `lan_setup` | Opens `/setup` network pairing for 30 minutes ([Manage guide](manage.md#set-up-over-the-network)). |
+| `switch` **Hide HA header** | `hide_ha_header` | Hides Home Assistant's top header bar and sidebar live. |
+| `media_player` **Speaker** | `speaker` | Supports play, pause, stop, volume, mute, `play_media`, and `announce` (MP3 format). |
+| `switch` **Music Assistant player (Sendspin)** | `sendspin` | Enables or disables the native synchronized Sendspin player (encrypted connection required; [Sendspin guide](sendspin.md)). |
+| `text_sensor` **Music Assistant player status** | `sendspin_status` | Reports Sendspin pairing, active stream codec, track metadata, or `off`. |
+| `switch` **Mute microphone** | `mute_microphone` | Completely releases the microphone. |
+| `switch` **Wake sound** | `wake_sound` | Plays a short two-tone chime when the wake word fires (default on). |
+| `switch` **Voice overlay** | `voice_overlay` | Displays the full-screen Assist overlay during voice interactions; tap anywhere to cancel (default on). |
+| `number` **Mic gain** | `mic_gain` | Scales microphone input gain from `0.5` to `4.0×`. |
+| `number` **Wake word threshold** | `wake_word_threshold` | Detection cutoff (`0.10`–`0.99`; lower = more sensitive). Resets to each microWakeWord model's default cutoff when switching wake words (`0.97` for Okay Nabu and Hey Jarvis, `0.95` for Hey Mycroft, `0.90` for Alexa; `0.50` for legacy openWakeWord). |
+| `text_sensor` **Voice status** | `voice_status` | Wake word readiness (`Ready`, `Getting ready`, or specific failure reason; see [When voice can't get ready](#when-voice-cant-get-ready)). |
+| `select` **Radio mode** | `radio_mode` | `Off` (default), `Zigbee coordinator (TCP)`, `Zigbee router (repeater)`, `Thread border router`, `Thread router (repeater)` ([Radio guide](../frames/aqara-s1-plus/docs/radio-guide.md)). Requires root helper. |
+| `text_sensor` **Radio status** | `radio_status` | Active radio mode, port/URL details, and allowed clients. |
+| `text` **Radio allowed clients** | `radio_allowed_clients` | Space- or comma-separated IPs/CIDRs allowed alongside Home Assistant (`any` disables firewall; blank = Home Assistant only). |
+| `select` **Zigbee stack** | `zigbee_stack` | `Aqara 7.3.3 (EZSP 12, ZHA)` or `Silicon Labs 8.2.2 (EZSP 18, Zigbee2MQTT, experimental)` (encrypted connection only; requires helper v4). |
+| `text_sensor` **Radio helper** | `radio_helper` | Reports active root helper source and version, noting if a boot image refresh is needed. |
+| `text_sensor` **Radio connected client** | `radio_connected` | Shows the client currently connected to the Zigbee coordinator port (e.g. `Home Assistant · 192.0.2.20 · since 14:32` or `Nobody`). |
+| `text_sensor` **Radio firmware** | `radio_firmware` | Active radio firmware version and flashing progress/result. |
+| `select` **Radio firmware image** / `button` **Flash radio firmware** | `radio_firmware_image` / `radio_firmware_flash` | Two-step armed radio firmware flash (`Keep current`, `Aqara stock image`, `Image from the radio bundle`; encrypted connection only). |
+| `button` **Join / Leave Zigbee network** | `zigbee_router_join` / `zigbee_router_leave` | Joins or leaves a Zigbee network in repeater mode. |
+| `button` **Join Home Assistant's Thread network** / **Leave Thread network** | `thread_join_ha` / `thread_leave` | Automatically fetches your preferred Thread dataset from Home Assistant (via QR admin prompt if needed) or forgets stored Thread credentials (encrypted connection only). |
+| `text_sensor` **Thread join** / `text` **Thread dataset** | `thread_join` / `thread_dataset` | Join progress status and write-only manual Thread TLV dataset input (whitespace stripped, never logged). |
+| `text_sensor` **IP address** | `ip_address` | Panel's current IP address. |
+| `text` **Time zone** / `text_sensor` **Time zone status** | `time_zone` / `time_zone_status` | IANA time zone (e.g. `America/New_York`) persisted across reboots by the S1 Plus root helper (encrypted connection only). |
+| `text_sensor` **App version** / `update` **App update** / `text_sensor` **Update status** | `app_version`, `app_update`, `update_status` | Installed version, Home Assistant update control, and detailed download/install progress ([App updates](#app-updates)). |
+| `update` **Frame update** | `frame_update` | Tracks Glassworks frame-layer releases on S1 Plus and Mirror ([Frame updates](#frame-updates)). |
+| `text_sensor` **Silent updates** | `silent_updates` | Reports whether updates install hands-free (`Yes: …` or `No: …`; [Silent updates](#silent-updates)). |
+| `text_sensor` **Home Assistant URL** / **Signed in** / `button` **Sign out** | `home_assistant_url`, `signed_in`, `sign_out` | Active dashboard server URL, QR sign-in state (`yes`/`no`), and remote sign-out. |
 
 #### Screen entities by frame
 
-The screen's entities follow the device's hardware (#476), from the same facts as the panel's **Settings → Screen**
-and the Manage page: an entity the device can't back isn't listed. A device decides when the app starts, from
-the sensors Android lists then. Android gives an app its sensor list once (`SystemSensorManager` reads it when it is
-made, and the app reuses that one; read in AOSP, not tried on a device), so a sensor Android lists only later shows
-up after the next app start: an update, a restart, or **Restart app**. The S1 doesn't ask: its frame declares both
-of its sensors.
+Screen and sensor entities adapt automatically to each device's hardware so Home Assistant only lists entities your panel can actually support:
 
-| Entity | object_id | Needs | S1 | Pixel Tablet | Mirror | Other Android devices |
-|---|---|---|---|---|---|---|
-| Screen, Screen mode, Idle timeout | `screen`, `screen_mode`, `idle_timeout` | nothing | yes | yes | yes | yes |
-| Presence | `presence` | the frame's own presence sensor | yes (VI5300) | no | no | with a proximity sensor whose range isn't 0 |
-| Presence range | `presence_range` | a presence sensor with a range | yes | no | no | no: a proximity sensor's range is fixed |
-| Auto brightness, Illuminance, Max auto brightness | `auto_brightness`, `illuminance`, `max_brightness` | a light sensor | yes (MK6212) | yes | no: none expected, not yet read on a Mirror | with a light sensor |
-| Camera presence | `camera_presence` | a camera ([Camera entities](#camera-entities)) | no | yes | yes | with a camera |
+| Entities | Hardware required | Aqara S1 Plus | Pixel Tablet | lululemon Mirror | Other Android |
+|---|---|---|---|---|---|
+| `screen`, `screen_mode`, `idle_timeout` | None | Yes | Yes | Yes | Yes |
+| `presence` | Built-in presence/proximity sensor | Yes (VI5300) | No | No | If proximity sensor exists |
+| `presence_range` | Adjustable-range presence sensor | Yes | No | No | No |
+| `auto_brightness`, `illuminance`, `max_brightness` | Ambient light sensor | Yes (MK6212) | Yes | No | If light sensor exists |
+| `camera_presence` | Camera ([Camera entities](#camera-entities)) | No | Yes | Yes | If camera exists |
 
-**Presence from the camera is `camera_presence`, not `presence`.** The camera pane has its own
-presence entity, listed whenever the device has a camera, with the pane on or off: off, it has no
-state, and the entity list stays the same (as for every pane, [Panes on and off](#panes-on-and-off)).
-So turning the Camera pane on or off never makes Home Assistant reconnect. On a device that has both
-its own sensor and a camera, `presence` is the sensor's and `camera_presence` the camera's.
-
-Before #476 every device listed all of them. After the update, a device drops the ones it can't back, and
-Home Assistant removes them on the next reconnect (`esphome/entry_data.py` and `entity.py`, 2026.11: the
-entity registry's `async_remove`). If the hardware comes back, so does the entity, with its old id
-if no other entity has taken that id meanwhile. An automation that used one stops working. The S1 lists the same entities, with the same object ids, order and
-defaults, as before. The Mirror and Pixel Tablet columns come from the frames' hardware and the tests
-(`FrameEntitiesTest`), not yet checked on those devices (2026-11-17).
-
-Plus `Block Aqara cloud` and `Aqara cloud daemon` ([below](#aqara-cloud)), the wall base entities, and the entities HA adds itself for a voice device: `assist_satellite.<device>_assist_satellite`,
-*Assist pipeline* and *Wake word* selects (two of each), *Finished speaking detection*.
+Camera motion presence always uses `camera_presence` rather than `presence`, keeping the entity list stable whenever you toggle the Camera pane on or off (and letting devices with both sensors report them separately).
 
 ### Docked
 
-A tablet on a dock is a wall panel; lifted off, it's a tablet in someone's hands. *Docked* tells Home
-Assistant which, so an automation can, say, show another dashboard or stop announcements while it's off
-its dock. It is a binary sensor with the `plug` device class (HA shows *Plugged in* and *Unplugged*),
-no category, and on by default, because people automate on it ([Categories and defaults](#categories-and-defaults)).
+On tablets that sit on a charging dock—such as the Google Pixel Tablet—the **Docked** binary sensor (`plug` device class, enabled by default) tells Home Assistant whether the tablet is currently mounted on its dock or lifted off into someone's hands. Use it to switch dashboards, dim the screen, or pause announcements whenever the tablet is undocked.
 
-**On** when either says so (`dev.glassworks.dock.Docked.of`):
-
-1. The battery charges from a dock: the sticky `ACTION_BATTERY_CHANGED`'s `EXTRA_PLUGGED` is
-   `BATTERY_PLUGGED_DOCK`. Android 13 and later only; below it no value means a dock. A Pixel Tablet on its
-   charging speaker dock says this (`dumpsys battery`: `Dock powered: true`, read on one 2026-11-17).
-2. The sticky `ACTION_DOCK_EVENT`'s `EXTRA_DOCK_STATE` is any dock (desk, car, low-end or high-end desk),
-   not `EXTRA_DOCK_STATE_UNDOCKED`. The Pixel Tablet sends it too: `EXTRA_DOCK_STATE` 4
-   (`EXTRA_DOCK_STATE_HE_DESK`) on its dock and 0 off it (read on one, 2026-11-18).
-
-It follows both broadcasts as they come (`DockWatcher`), while the app runs. Nothing polls, and nothing
-wakes the device: Android delivers them to the app's registered receiver. On the Pixel Tablet (generic app
-0.1.1, 2026-11-18) the sensor went off 0.9 s after Android's dock broadcast when the tablet was lifted, and on
-again 0.8 s after it when it was put back.
-
-**On the panel and the Manage page too.** Where Home Assistant has the sensor, the frame's Device page (the
-panel's settings, *Pixel Tablet*, and the same page on the Manage page) ends with a status row: *Docked · On
-its dock*, or *Not docked*. It isn't a setting. The panel's menu reads it again every couple of seconds; the
-Manage page has no scripts, so a page with this row reloads itself every 3 seconds, never under an open dialog,
-and says so with a **Pause** link (`?live=off`), since a reload restarts a screen reader (`DockRow`,
-`ManagePages.LIVE_RELOAD_S`). Home Assistant gets no state for the sensor until the app's first read of the
-broadcasts, not a guessed *off*.
-
-**Only where it means something.** Home Assistant gets the entity when any of these holds
-(`Docked.hasEntity`, `GenericAndroid.dockOf`):
-
-| Rule | Who it covers |
-|---|---|
-| The frame says the device docks: `"dock": true` in its `frame.json` ([frames/README.md](../frames/README.md)), and `GenericAndroid.KNOWN` by model | The Pixel Tablet (`google-pixel-tablet`) |
-| Google's dock manager, `com.google.android.apps.nest.dockmanager.app`, is installed (the app's manifest lists it under `<queries>`) | Google's tablets with a dock, under another model name |
-| The device has reported a dock at least once. The app keeps that (`dock_seen`), so the entity stays after a restart, off its dock too | Other brands' docks |
-
-Otherwise there's no entity, so an ordinary tablet's device page doesn't show one that is always off. The
-S1 frame never has it and listens for no dock. A device that gets it from the third rule gets it the
-moment it first docks: the panel lists its entities again and HA adds *Docked*, and the Device page gets its
-row.
+Glassworks watches Android's `ACTION_BATTERY_CHANGED` (`BATTERY_PLUGGED_DOCK` on Android 13+) and `ACTION_DOCK_EVENT` broadcasts passively with zero polling overhead, and also shows **Docked / Not docked** on the Device page of the panel and Manage page. To avoid cluttering non-docking tablets, the entity only appears when the frame declares `"dock": true`, Google's dock manager package is installed, or Android has reported a dock event at least once.
 
 ### Panes on and off
 
-Each pane has a config switch that turns it on or off while the panel runs (#67), with two
-exceptions: the radio, whose on/off is `Radio mode` (`Off`), and the timers, which come with voice and
-have no switch of their own. The settings menu (the switch at the top of the pane's page), setup's
-Panes step and the adb extras set the same setting. A pane that is off keeps its entities, with no
-state where it has none to give, so the entity list doesn't change. Each switch is a config entity,
-off in Home Assistant until you turn it on on the device page
-([Categories and defaults](#categories-and-defaults)): people set them once. Only an encrypted
-connection with the panel's key may change one, as for `Time zone`: turned on, a pane can open the
-microphone or a port.
+Each modular pane exposes a configuration switch so you can enable or disable it live without restarting the panel (except Radio, which uses **Radio mode** = `Off`, and Timers, which follow the **Voice** switch). Toggling a pane switch over ESPHome requires an encrypted connection, and disabled panes keep their entity registrations in Home Assistant (with empty states) so automations do not break:
 
-| Entity | object_id | Pane | adb extra | Enabled in HA by default |
-|---|---|---|---|---|
-| switch `Voice` | `voice` | the voice assistant and timers | `voice_enabled` | no |
-| switch `Music Assistant player (Sendspin)` | `sendspin` | Sendspin (the same entity as before) | `sendspin_enabled` | no |
-| switch `Wall base` | `wall_base` | the wall base driver; off closes the port, and Aqara's daemon may run again unless `Block Aqara cloud` is on | `wall_base_enabled` | no |
-| switch `Keep time zone` | `keep_time_zone` | the time zone; off sets the zone to keep to `(off)`, so the root helper keeps none and adopts none ([radio.md](../frames/aqara-s1-plus/docs/radio.md#root-helper-contract-v4)), and on keeps the same zone again. *Time zone status* says `off` only once the helper has let go | `time_zone_enabled` | no |
-| switch `Diagnostics` | `diagnostics` | the diagnostic sensors; off stops the sampling | `diagnostics_enabled` | no |
-| switch `Bluetooth proxy` | `bluetooth_proxy` | the Bluetooth proxy; **off by default**. On or off changes what the device info offers, so Home Assistant reconnects | `bluetooth_proxy_enabled` | no |
+| Switch entity | `object_id` | Pane | adb extra |
+|---|---|---|---|
+| **Voice** | `voice` | Assist voice assistant and timers | `voice_enabled` |
+| **Music Assistant player (Sendspin)** | `sendspin` | Native Sendspin music player | `sendspin_enabled` |
+| **Wall base** | `wall_base` | Aqara S1 Plus wall base relay driver | `wall_base_enabled` |
+| **Keep time zone** | `keep_time_zone` | S1 Plus persistent time zone | `time_zone_enabled` |
+| **Diagnostics** | `diagnostics` | System and app health sensors | `diagnostics_enabled` |
+| **Bluetooth proxy** | `bluetooth_proxy` | ESPHome BLE proxy (off by default) | `bluetooth_proxy_enabled` |
+| **Notifications** | `notifications` | Rich dashboard alerts (off by default) | — |
+| **Camera pane** | `camera_pane` | Camera presence, snapshots, ONVIF (off by default) | `camera_enabled` |
 
-The radio's on/off is `Radio mode` (`Off`). Voice on or off changes the voice features in the device
-info, so the panel asks Home Assistant to reconnect, as it does when the entity list changes. For those
-few seconds every entity of the panel is unavailable (on the dev panel, 2026-11-14: 2 to 8 s, the screen,
-presence and speaker together). Then:
-
-- The **speaker** (`media_player`) is the panel's, not voice's: it stays, and Home Assistant can play on
-  it with Voice off.
-- The **Assist satellite** and HA's own voice entities (*Assist pipeline*, *Wake word*, *Finished
-  speaking detection*) go away while Voice is off, because the panel has no voice features then. They
-  come back when Voice is on.
+Toggling **Voice** or **Bluetooth proxy** updates advertised device capabilities and briefly reconnects Home Assistant (a few seconds). While **Voice** is off, Home Assistant's built-in Assist entities disappear while the panel's **Speaker** remains available for media and TTS.
 
 ### Bluetooth proxy
 
-The Bluetooth proxy pane (`dev.glassworks.bluetoothproxy`, #121) makes the panel an ESPHome Bluetooth
-proxy. It is off by default. Turn it on in the panel's settings, on setup's Panes step, or with the
-*Bluetooth proxy* switch. Home Assistant then finds it by itself under *Settings › Devices &
-services › Bluetooth*, and hears the BLE sensors near the panel through it. Nothing is added to HA.
+Turn on **Bluetooth proxy** (off by default) from setup, the panel settings, the Manage page, or Home Assistant to let your panel act as a standard ESPHome Bluetooth proxy under **Settings → Devices & services → Bluetooth**.
 
-- **Listen only, or listen and connect.** By default it forwards advertisements, which covers
-  thermometers, plant sensors and tags. Pick *Listen and connect* on its settings page and Home
-  Assistant can also connect through the panel to devices that need it (locks, SwitchBots, sensors
-  with a key), up to 3 at once. The *Connections* tile shows how many are in use. Switching the mode
-  makes Home Assistant reconnect to the panel. The panel never pairs: a device that needs a PIN
-  still needs another proxy. Connections are new and not yet tried with every device (#246).
-- **Can't run** shows in the settings menu and on the Manage page while the pane is on but
-  Bluetooth or location is off, or the app lacks the location permission, with the reason.
-- **It scans only while Home Assistant listens**, full time then. On the S1 that cost nothing
-  measurable: Wi-Fi on 5 GHz kept its throughput and Sendspin had no underruns (2026-11-14, #121).
-- *Bluetooth advertisements* is how many it forwarded in the last full minute. *Bluetooth proxy
-  status* is `Listening`, `Waiting for Home Assistant`, `Waiting for the panel's key` (Home Assistant
-  was refused for want of the key; another client without it doesn't count), `Bluetooth off`, `Location off`,
-  `No permission`, `Retrying` or `No Bluetooth LE`. Both are diagnostic and off in HA until you turn
-  them on there; the panel's settings page shows both anyway. Both are unavailable while the pane is off.
-- Android hands Bluetooth results to apps only while **location** is on. The settings page offers to
-  turn Bluetooth and location on when they are off.
-- **The scanner's address.** On the S1 the proxy tells Home Assistant the panel's own Bluetooth
-  address, as an ESPHome proxy does, read through the root helper (Android hides it from apps). It is
-  read the first time the proxy runs after the app starts, and kept from then on. When it can't be read (no root helper yet,
-  Bluetooth never turned on, an error), the proxy sends none and Home Assistant keys the scanner on the
-  panel's ESPHome MAC, as before. Other frames always do the latter. The first time, Home Assistant
-  moves the panel's scanner to the Bluetooth address by itself; no second scanner appears.
-- The panel never logs or keeps the addresses it hears. They go only to Home Assistant, and only
-  over an encrypted connection with the panel's key: Home Assistant 2026.11 and later sets it when
-  you add the panel. Without a key, the proxy answers nobody, so no one else on the LAN can listen.
+- **Listen only vs. Listen and connect:** By default, the proxy passively forwards BLE advertisements (thermometers, plant sensors, presence tags). Switch to **Listen and connect** on the panel or Manage page to allow up to 3 simultaneous active GATT connections (for devices like SwitchBot or smart locks; PIN pairing is not supported). Switching modes triggers a brief reconnect.
+- **Zero wasted scanning:** The panel only scans while Home Assistant is actively subscribed over an encrypted ESPHome connection, adding no measurable impact to 5 GHz Wi-Fi or Sendspin playback on the S1 Plus.
+- **Permissions and status:** Android requires **Bluetooth** and **Location** enabled to deliver BLE scan results; the settings page prompts with quick shortcuts if either is off. Check **Bluetooth proxy status** (`Listening`, `Waiting for Home Assistant`, `Waiting for the panel's key`, `Bluetooth off`, `Location off`, `No permission`, `Retrying`, or `No Bluetooth LE`) and **Bluetooth advertisements** (packets forwarded in the last minute) on the settings page or by enabling them in Home Assistant.
+- **Scanner identity:** On the S1 Plus, the root helper reads the panel's real Bluetooth MAC address so Home Assistant registers it like a dedicated ESPHome proxy. On non-rooted devices, Home Assistant keys the scanner on the panel's ESPHome MAC.
 
-How it works, and Android's limits on scanning, are in the
-[bluetooth-proxy library](../libs/bluetooth-proxy/README.md).
+For Android BLE scanning details and architecture, see [`libs/bluetooth-proxy`](../libs/bluetooth-proxy/README.md).
 
 ### Diagnostics
 
-The diagnostics pane (`dev.glassworks.diagnostics`) shows the panel's health. All of its entities
-are diagnostic, so they sit in the device page's *Diagnostic* section and stay off dashboards. Only
-the four marked *on* are enabled when HA adds the panel. Turn the others on from the device page.
+The Diagnostics pane samples device health once a minute without root or shell commands, only reporting updates when a reading changes past its reporting band so idle panels generate almost no traffic. Four core health sensors (**CPU usage**, **CPU temperature**, **Wi-Fi signal**, and **Uptime**) start enabled by default; the rest can be enabled on the device page for troubleshooting:
 
-The pane samples once a minute. It sends a value only when it moved by at least its band since the
-last value it sent, so a quiet panel sends almost nothing. It reads files in `/proc` and `/sys` and
-asks Android. It runs no shell commands and needs no root. The S1 app and the generic app (both of its
-builds, Android 6 and up) have it.
-
-| Entity | object_id | Default | Band | Source |
+| Entity | `object_id` | Default | Reporting band | Source |
 |---|---|---|---|---|
-| sensor `CPU usage` (%) | `cpu_usage` | on | 1 % | `/proc/stat`, all cores, busy share over the last minute. Unknown where SELinux keeps apps from `/proc/stat`: Android 8 and later, unless permissive as the S1's (untested on a tablet) |
-| sensor `App CPU usage` (%) | `app_cpu_usage` | off | 0.5 % | `/proc/<pid>/stat` of every app process (Gecko's too), as a share of all cores |
-| sensor `CPU temperature` (°C) | `cpu_temperature` | on | 0.5 °C | the frame's thermal zone; on the S1 `cpu_thermal_zone`. No entity on a frame without one: the generic app's (the Pixel Tablet, the lululemon Mirror, any other device) |
-| sensor `RAM available` (MiB) | `memory_available` | off | 8 MiB | `ActivityManager.MemoryInfo.availMem` |
-| sensor `App RAM` (MiB) | `app_memory` | off | 4 MiB | PSS of every app process, from `/proc/<pid>/smaps_rollup`; unknown for a minute if one of them can't be read. A kernel without `smaps_rollup` (before Linux 4.14 and Android's 4.4 and 4.9, such as the Mirror's 3.10) sums the `Pss:` lines of `/proc/<pid>/smaps` |
-| sensor `Storage free` (GiB) | `storage_free` | off | 0.05 GiB | `StatFs` on `/data` |
-| sensor `Wi-Fi signal` (dBm) | `wifi_signal` | on | 2 dB | the Wi-Fi network `ConnectivityManager` has, then its `WifiInfo` (#263); unknown while Wi-Fi is down |
-| sensor `Wi-Fi link speed` (Mbit/s) | `wifi_link_speed` | off | 1 Mbit/s | as Wi-Fi signal |
-| sensor `Uptime` (timestamp) | `uptime` | on | 120 s | when the panel booted; HA shows "3 hours ago" |
-| sensor `App uptime` (timestamp) | `app_uptime` | off | 120 s | when the app process started: `Process.getStartElapsedRealtime`, or `/proc/self/stat` on Android 6 |
-| sensor `Web content processes` | `web_content_processes` | off | 1 | the engine's content processes (Gecko's tabs) |
-| text_sensor `Last restart reason` | `last_restart_reason` | off | | why the app's process last ended, e.g. `crash`, `low memory`, `app updated`; Android 11 and later. Always `unknown` on the S1 (Android 10) |
-
-- CPU usage and App CPU usage are unknown for the first minute after a start: they need two samples.
-- CPU usage counts I/O wait as idle. `top` shows `iow` apart from `idle`, so a busy share worked out from `top`'s `idle` column counts I/O wait as busy and reads higher.
-- The timestamps are accurate to about a minute, because ESPHome sends sensor values as 32-bit floats.
-- The pane logs its own cost under `Glassworks.ESPHome` (`diagnostics: sample N took X ms CPU`) for the
-  first three samples and then once an hour.
+| `sensor` **CPU usage** (`%`) | `cpu_usage` | On | 1% | `/proc/stat` across all cores (unavailable on Android 8+ where SELinux restricts `/proc/stat`) |
+| `sensor` **App CPU usage** (`%`) | `app_cpu_usage` | Off | 0.5% | `/proc/<pid>/stat` for all Glassworks and GeckoView processes |
+| `sensor` **CPU temperature** (`°C`) | `cpu_temperature` | On | 0.5 °C | Frame thermal zone (`cpu_thermal_zone` on S1 Plus; omitted on Generic Android) |
+| `sensor` **RAM available** (`MiB`) | `memory_available` | Off | 8 MiB | `ActivityManager.MemoryInfo.availMem` |
+| `sensor` **App RAM** (`MiB`) | `app_memory` | Off | 4 MiB | Total PSS across app processes (`smaps_rollup`, or `smaps` on kernels older than 4.14) |
+| `sensor` **Storage free** (`GiB`) | `storage_free` | Off | 0.05 GiB | Free space on `/data` |
+| `sensor` **Wi-Fi signal** (`dBm`) | `wifi_signal` | On | 2 dB | Active `WifiInfo` RSSI |
+| `sensor` **Wi-Fi link speed** (`Mbit/s`) | `wifi_link_speed` | Off | 1 Mbit/s | Active `WifiInfo` link speed |
+| `sensor` **Uptime** (`timestamp`) | `uptime` | On | 120 s | System boot timestamp |
+| `sensor` **App uptime** (`timestamp`) | `app_uptime` | Off | 120 s | App process start timestamp |
+| `sensor` **Web content processes** | `web_content_processes` | Off | 1 | Active GeckoView tab processes |
+| `text_sensor` **Last restart reason** | `last_restart_reason` | Off | — | Android 11+ exit reason (`crash`, `low memory`, `app updated`; `unknown` on Android 10) |
 
 ### Wall base entities
 
-Built from the detected base, through the app's own UART driver (default) or the stock LocalService
-([frames/aqara-s1-plus/research/bases.md](../frames/aqara-s1-plus/research/bases.md#implementation-s1-kiosk)); both backends produce the same entities.
-Only *Base* is always present; the rest exist only while a matching base is detected.
+On the Aqara S1 Plus, Glassworks detects the attached mains relay wall base using our direct local UART driver (default) or Aqara's stock LocalService ([bases.md](../frames/aqara-s1-plus/research/bases.md#implementation-s1-kiosk)). Only **Base** is always listed; relay, power, and button entities appear automatically whenever a matching switch base is mounted:
 
-| Entity | object_id | When | What it does |
+| Entity | `object_id` | When present | Details |
 |---|---|---|---|
-| text_sensor `Base` (diagnostic) | `base` | always | `none`, `switch (2ch)`, `ethernet`, `unknown (0xNN)` (`0x7f` = UART: an unsupported model answered), or `unavailable` (port/LocalService not usable) |
-| text_sensor `Base firmware` (diagnostic) | `base_firmware` | any base | `8.0.2022`, raw |
-| switch `Base relay N` | `base_relay_1`..`3` | switch base, per channel | writes `4.N.85` = 0/1. UART: the ack (else a re-read) confirms it; LocalService: re-reads |
-| sensor `Base power` (W, power, measurement) | `base_power` | switch base | `0.12.85` |
-| sensor `Base energy` (total_increasing, no unit) | `base_energy` | switch base | `0.13.85`. UART: integrated in the app from power, Wh (as libha_bracket does); LocalService: ha_master's value |
-| text_sensor `Base protection` (diagnostic) | `base_protection` | switch base | `8.0.2014`: `normal`, `over_temperature`, `over_load`, `over_temperature_error`, `over_load_error`, `over_temperature_removed`, `over_load_removed` |
-| event `Base button N` (button) | `base_button_1`..`3` | switch base, per channel | `13.N.85` clicks (LocalService only; the UART protocol has no click frames); event types `single`, `double`, `triple`, `long`, `release`, `unknown` (mapping unverified, raw value logged) |
+| `text_sensor` **Base** | `base` | Always | `none`, `switch (2ch)`, `ethernet`, `unknown (0xNN)`, or `unavailable` |
+| `text_sensor` **Base firmware** | `base_firmware` | Any base | Raw firmware version (e.g. `8.0.2022`) |
+| `switch` **Base relay N** | `base_relay_1`..`3` | Switch base | Controls each mains relay channel (`4.N.85`) |
+| `sensor` **Base power** (`W`) | `base_power` | Switch base | Instantaneous load power (`0.12.85`) |
+| `sensor` **Base energy** (`total_increasing`) | `base_energy` | Switch base | Cumulative energy (Wh, integrated from power under the UART driver) |
+| `text_sensor` **Base protection** | `base_protection` | Switch base | `normal`, `over_temperature`, `over_load`, and related fault/clear states |
+| `event` **Base button N** | `base_button_1`..`3` | Switch base | Click events (`single`, `double`, `triple`, `long`, `release`, `unknown`; LocalService backend only) |
 
-On a panel added before #63 the entity ids are `switch.s1_panel_base_relay_1`,
-`event.s1_panel_base_button_1`, and so on (`glassworks_panel_*` on one added before #260, `aqara_s1_plus_*` on a new S1, see [Names](#names)). The names are fixed and don't follow the channel names
-configured in the Aqara app: HA 2026.11 derives the ESPHome unique id from the entity *name*
-(aioesphomeapi `build_unique_id` v3), so a rename on the Aqara side would orphan the HA entity.
-Rename them in HA.
-
-When the detected base changes (none ↔ switch, channel count) and stays changed for 5 s, the panel
-rebuilds its entity list and sends `DisconnectRequest` to every API client. HA reconnects (after
-its short "expected disconnect" cool-down), lists the entities again and adds the new ones. It removes
-the ones that went away from its entity registry, as for [a frame's screen entities](#screen-entities-by-frame),
-and they come back when the base does, with their old ids if no other entity has taken them meanwhile. The last layout is persisted, so
-restarting the app with the same base doesn't trigger this.
-
-The **Dashboard** select uses the same mechanism: its options are only sent in the entity listing,
-so a changed dashboard list triggers the same rebuild + `DisconnectRequest` (same object_id, so the
-entity keeps its key and its id in HA). The list it was built from is persisted (`dashboards`).
-
-Two hooks feed the setup screen ([onboarding.md](onboarding.md#setup-screen-)): a Hello from a
-client whose `client_info` starts with "Home Assistant", and `SubscribeStatesRequest` from one
-(`ApiServer.onStatesSubscribed`). HA only subscribes after it has added the panel, so that is
-persisted as `ha_seen`.
-
-Kiosk actions are applied in the running activity exactly like the `adb am start` extras
-(`GlassworksRuntime.commandSink`). State changes made on the panel (settings dialog, `adb` extras,
-sensors) are pushed to HA right away (pref listener + `ScreenPolicy` listeners), with a 5 s
-poll as a safety net.
+Channel names stay fixed (`Base relay 1`, etc.) rather than pulling Aqara app labels so Home Assistant unique IDs never break—rename them inside Home Assistant if desired. When a wall base is attached or removed for 5 seconds, the panel updates its entity list and prompts Home Assistant to reconnect cleanly.
 
 ### Camera entities
 
-Only on a panel with a camera (#117). On one without, such as the S1, the pane isn't shown, as every pane that lacks its hardware (#23): no page, no on/off and no entities. The pane is off until you turn it on.
-Presence comes from lighting-insensitive motion on the panel; no image leaves it in *Presence only*.
+Available only on camera-equipped devices (hidden automatically on the Aqara S1 Plus). Starts turned off until you enable it. Motion detection uses lighting-insensitive processing locally on the device, and no image ever leaves the panel while set to **Presence only**:
 
-| Entity | object_id | Category, default | What it does |
+| Entity | `object_id` | Category / default | Behavior |
 |---|---|---|---|
-| camera `Camera` | `camera` | none, on | A still when Home Assistant asks, in *Presence + camera* only, and only over an encrypted connection; an empty image otherwise |
-| binary_sensor `Camera presence` (occupancy) | `camera_presence` | none, on | Someone moving in view; ends 8 s after the last movement. Lighting changes don't count |
-| switch `Camera privacy` | `camera_privacy` | none, on | Closes the camera: no presence, no stills, no stream |
-| select `Camera use` | `camera_use` | config, off | `Presence only` or `Presence + camera` (snapshots for Home Assistant, and the stream if you turn it on) |
-| switch `ONVIF stream` | `onvif_stream` | config, off | RTSP on 8554 and ONVIF on 8000 for HA's ONVIF integration, Frigate and UniFi Protect. Refused in *Presence only*, and on a camera whose picture the panel can't encode (the Camera page says why); runs only once you set its sign-in on the Camera page; encrypted connections only. H.264 at 1280×720, or at the size the camera offers when it has no 1280×720 |
-| number `Camera sensitivity` | `camera_sensitivity` | config, off | 1 (least) to 10 (most), default 5 |
-| switch `Camera pane` | `camera_pane` | config, off | The pane's on/off (#67) |
+| `camera` **Camera** | `camera` | None / On | Serves on-demand snapshots to Home Assistant in **Presence + camera** mode over encrypted connections only |
+| `binary_sensor` **Camera presence** (`occupancy`) | `camera_presence` | None / On | Triggers on movement in view and clears 8 seconds after motion stops |
+| `switch` **Camera privacy** | `camera_privacy` | None / On | Closes the camera completely (stops presence, snapshots, and streaming) |
+| `select` **Camera use** | `camera_use` | Config / Off | `Presence only` or `Presence + camera` (enables snapshots and optional ONVIF stream) |
+| `switch` **ONVIF stream** | `onvif_stream` | Config / Off | Exposes H.264 RTSP (port `8554`) and ONVIF (port `8000`) for Home Assistant ONVIF, Frigate, or UniFi Protect once credentials are set (encrypted HA connection required) |
+| `number` **Camera sensitivity** | `camera_sensitivity` | Config / Off | Motion sensitivity from `1` (least) to `10` (most), default `5` |
+| `switch` **Camera pane** | `camera_pane` | Config / Off | Pane on/off switch |
 
-**The stream is not encrypted.** RTSP and ONVIF here are plain TCP: anyone on the network can watch
-the video of a session, and a client that signs in with Basic auth or WS-Security `PasswordText` sends
-the password in a form they can read. Turn it on only on a network you trust ([the limits](research/onvif-rtsp.md#result)).
+**Privacy and stream security:** Whenever images leave the panel, Android 12+ shows its system camera indicator and older Android versions display a small green dot in the top-right corner. The ONVIF/RTSP stream refuses to start without a username and password configured on the Camera settings page (default username `glassworks`, write-only password with no default). Because local RTSP and ONVIF run over unencrypted TCP, only enable streaming on a trusted home network ([technical notes](research/onvif-rtsp.md#result)).
 
-On the panel, *Settings → Camera* shows how the camera is doing, what it may do (Presence only or
-Presence + camera), Camera privacy and the stream switch, the stream's sign-in, the panel's address
-with the stream's RTSP and ONVIF URLs, and who watches now. First-boot setup has a Camera step under
-Panes that picks the use and asks Android for the camera. While images leave the panel (a still to
-Home Assistant, the stream to a viewer), Android 12 and later show their own camera indicator; on
-older Android the panel shows a small green dot in the top-right corner, over no content. The page's
-*Images out* tile says the same.
-
-The Camera page also offers two [blueprints](blueprints.md): *Lights on at the panel* (lights on when
-`camera_presence` sees someone, off again once nobody has been there for a while, optionally only while
-it's dark) and *Snapshot when away* (the panel's picture to your phone when it sees movement and nobody
-is home; it needs *Presence + camera*). Neither has run on a panel yet (2026-11-15).
-
-**You set the stream's sign-in, and the panel never shows its password.** The stream never runs
-without a sign-in, and there is no default. Turn the stream on, then open the Camera page's *Sign-in*
-row and type a user name (it starts as `glassworks`) and a password of your own. Until you do, the
-page's status line says the stream has no sign-in. The password is write-only: once saved, no screen,
-page, entity, log or diagnostic shows it, so keep it where you keep other passwords. To change it,
-type a new one; leave the field empty to keep the stored one and change only the user name. **Clear**
-removes both and closes the stream until you set a new one. The Manage page has the same row. Use
-this sign-in when you add the panel to Home Assistant's ONVIF integration, Frigate or UniFi Protect. A
-client that signs in wrong is refused: the device and media services answer with a SOAP
-`NotAuthorized` fault (Home Assistant then asks you to sign in again), the event service with a bare
-HTTP 401 so a stale client waits instead of retrying fast, and RTSP with a 401. The panel logs the
-refusal once a minute per client.
-
-The camera's settings can also be set from adb, through an activity only `adb shell` may start (another app on a tablet could otherwise turn privacy off or open
-the stream). Its component and the main activity's differ per app:
-
-| App | Camera settings | Main activity |
-|---|---|---|
-| Glassworks on the Aqara S1 Plus | `sh.edm.s1kiosk/dev.glassworks.camera.CameraAdbActivity` | `sh.edm.s1kiosk/.MainActivity` |
-| Glassworks for generic Android | `dev.glassworks.generic_android/dev.glassworks.camera.CameraAdbActivity` | `dev.glassworks.generic_android/dev.glassworks.MainActivity` |
-| Its legacy build (Android 6-7, the lululemon Mirror) | `dev.glassworks.generic_android.legacy/dev.glassworks.camera.CameraAdbActivity` | `dev.glassworks.generic_android.legacy/dev.glassworks.MainActivity` |
-
-For example, on the S1: `adb shell am start -n sh.edm.s1kiosk/dev.glassworks.camera.CameraAdbActivity --es camera_use snapshots --ez onvif_stream true`.
-`--es camera_stream_sign_in 'user:password'` sets the stream's sign-in, and an empty value clears
-it, which closes the stream until a sign-in is set again. The pane's on/off is the
-usual `--ez camera_enabled true` on the main activity, for example
-`adb shell am start -n dev.glassworks.generic_android.legacy/dev.glassworks.MainActivity --ez camera_enabled true` on the Mirror.
+The Camera settings page also offers two ready-made [blueprints](blueprints.md): **Lights on at the panel** and **Snapshot when away**. For adb automation, camera settings are isolated behind an adb-only activity (`<package>/dev.glassworks.camera.CameraAdbActivity`, accepting `--es camera_use snapshots`, `--ez onvif_stream true`, and `--es camera_stream_sign_in 'user:password'`).
 
 ### App updates
 
-`update/UpdateManager.kt`; releases and signing in [releasing.md](releasing.md).
+Managed by `update/UpdateManager.kt` (see [Updates and restoring stock software](updates.md) for the user walkthrough and [releasing.md](releasing.md) for release mechanics):
 
-- **State:** `current_version` is the app's versionName and `title` is `Glassworks` (`S1 Kiosk` up to 0.4.3). `missing_state`
-  stays set until the first successful check, and until then `latest_version` = `current_version`:
-  Home Assistant 2026.11 ignores `missing_state` for update entities, and an empty `latest_version`
-  can't be compared, which its `UpdateEntity.has_update` counts as an update (the entity turned on with
-  a blank version after an offline start). After a check: `latest_version`, `release_url`, and
-  `release_summary` (the release notes, cut to HA's 255 characters). A status line goes on top of
-  the summary when there is one, e.g. a failed install.
-- **Check:** `GET https://api.github.com/repos/GlassworksHQ/glassworks/releases?per_page=100` (read up to 4 MB), then
-  the newest release whose tag is `v<version>` or `aqara-s1-plus-v<version>`. Other frames' and
-  libraries' releases in the same repo are skipped; a refused newer release is reported, and the
-  newest acceptable one is still offered.
-  - When: 30 s after start, when a network comes up, every 24 h, and on HA's check command
-    (`homeassistant.update_entity`, at most once a minute).
-  - ETag'd, so an unchanged answer costs no rate limit.
-  - Failures back off from 15 min to 6 h, or until GitHub's rate-limit reset. They are logged once
-    per new reason, not on every retry. A check that failed because the panel had no network
-    (`UnknownHostException`, no route, timeouts; not TLS or HTTP errors) is retried 10 s after Wi-Fi
-    is back (available or validated; callbacks debounced, at most one such retry per 30 s) instead of
-    after its backoff.
-  - **Update channel** (#605): the Device page's *Update channel* row, on the panel and on the Manage page.
-    Stable, the default, skips GitHub pre-releases without reporting them. Beta takes them too, and offers the
-    highest version of both. A lower version is never offered: back on Stable after a beta, `latest_version`
-    stays the installed version until a stable release is higher. When the offer is a beta, `Beta: …` goes on
-    top of the summary. It is not an entity: someone picks it once, on the panel or the Manage page, and no
-    automation would change it ([principles](principles.md#entities)).
-  - Ignored: drafts, pre-releases on Stable (GitHub's flag), `-rc` tags on both channels, and releases without both
-    the APK for one of the device's ABIs and its `.sha256`. The S1 (`armeabi-v7a`) takes
-    `s1-kiosk-<version>.apk`; an `arm64-v8a` device takes `s1-kiosk-arm64-v8a-<version>.apk`
-    ([releasing.md](releasing.md#abis)). Assets must download from github.com over HTTPS.
-- **Install:**
-  1. Download the `.sha256`, then the APK over HTTPS into `files/update/`. `in_progress` is set and
-     `progress` goes 0-100 %.
-  2. Check the SHA-256 against the `.sha256` file and against GitHub's own asset digest.
-  3. `PackageManager.getPackageArchiveInfo(GET_SIGNING_CERTIFICATES | GET_SIGNATURES)` must give
-     package `sh.edm.s1kiosk`, the release's version and versionCode, and the installed app's signing
-     certificate. Otherwise the install is refused with the reason. Both flags are needed: on Android
-     10, `GET_SIGNING_CERTIFICATES` alone leaves `signingInfo` empty for a downloaded APK, so up to
-     0.4.0 every update was refused as "the APK is not signed". **Fixed in 0.4.1**; because the bug is
-     in the installed version, panels on 0.4.0 or older update once by hand
-     ([install.md](../frames/aqara-s1-plus/docs/install.md#updating)).
-  4. The verified file becomes `files/update/pending.apk`, and the root update service installs it
-     ([frames/aqara-s1-plus/research/root.md](../frames/aqara-s1-plus/research/root.md)). On success the app is replaced and restarted, and the
-     new version reports the result in *Update status*.
-  5. Without the service (generic Android, or an S1 boot image from before it:
-     `sys.s1kiosk.update.version` unset), a PackageInstaller session instead.
-     - Below Android 12, Android asks for confirmation on the screen, unless the app is device owner
-       or a privileged system app holding `INSTALL_PACKAGES` (the Mirror, which Kiln flashes into
-       `/system/priv-app`; #198). The summary says so while an update waits.
-     - On Android 12+ the session asks for no user action (`setRequireUserAction(USER_ACTION_NOT_REQUIRED)`,
-       with the `UPDATE_PACKAGES_WITHOUT_USER_ACTION` permission), and the status is "Installing
-       1.2.3 without a tap". Android can still ask: when "Install unknown apps" isn't allowed, or
-       when the new APK targets too old an API for the device
-       ([frames/generic-android](../frames/generic-android/README.md#updates)). Then the status
-       becomes "Installing 1.2.3: waiting for a tap on the screen" (`STATUS_PENDING_USER_ACTION`),
-       and the app shows Android's confirmation.
-  6. Any failure, or a phase stuck for 30 min (download) or 10 min (verify/install), ends with
-     `in_progress` off and the reason on top of the summary.
-- A debug build can't update to a release: the keys differ, and the entity says so.
+- **Release checks:** Queries `GET https://api.github.com/repos/GlassworksHQ/glassworks/releases?per_page=100` (with ETag caching) 30 seconds after boot, 10 seconds after Wi-Fi reconnects following an offline check, every 24 hours, and on demand via `homeassistant.update_entity` (rate-limited to once per minute). Filters strictly to each app's release line and compatible ABI.
+- **Update channels:** Configured on the panel's Device page or Manage page (**Stable** default, or **Beta** to include GitHub pre-releases; `-rc` tags and drafts are always skipped). Returning to Stable waits for a newer stable version rather than downgrading.
+- **Verification before install:** Downloads the `.sha256` and APK over HTTPS from `github.com`, verifies the digest against both the `.sha256` file and GitHub's asset digest, and checks that package ID, version, and signing certificate match the running app.
+- **Install path:** On the Aqara S1 Plus with the root update service, writes `files/update/pending.apk` for silent installation and automatic restart. Elsewhere, uses Android's `PackageInstaller` (silent on Android 12+ with *Install unknown apps*, as device owner, or as a `/system/priv-app` on the Mirror; prompts on screen otherwise).
 
 ### Frame updates
 
-`update/FrameUpdate.kt` (#139). A frame version is the version of the parts of a device that Glassworks owns: the
-S1's boot-side services, scripts and boot animation, or the Mirror's patched image (the Glass Panes release plus
-Kiln's recipe). It is not Android's version, which the Device page still shows as *Android*. Frame versions use
-semantic versioning and start at 1.0.0, with Glassworks 1.0.0.
+Tracked by `update/FrameUpdate.kt` on dedicated frames that ship Glassworks system layers (**Aqara S1 Plus** and **lululemon Studio Mirror**; omitted on Generic Android tablets where the manufacturer updates the OS).
 
-| Frame | Frame version row and *Frame update* entity | Installs from Home Assistant |
-|---|---|---|
-| S1 | Yes | Not yet. A panel without the loader in its boot image needs one Kiln update first, and the card says so |
-| Mirror | Yes | No. The card says to flash the Mirror again with Kiln |
-| Pixel Tablet, any other generic Android device | No: Google or the maker updates the device | - |
-
-- **The version** comes from two system properties: `ro.glassworks.frame.id` (the frame's id) and
-  `ro.glassworks.frame.version`. Kiln stamps them into the Mirror's `build.prop` when it flashes it. The S1's loader
-  will set them at boot. A device without them shows *Before 1.0.0*, and a Mirror names its Glass Panes image from
-  `ro.build.fingerprint` (*Before 1.0.0 (Glass Panes image 2)*). Such a device is older than any frame release.
-- **The check** is the app's own: the same release list, read at the same times. The newest stable release tagged
-  `frames/<id>/v<version>` is the frame's latest ([releasing.md](releasing.md#frame-releases)).
-- **State:** `current_version` is the frame version, `title` is the frame's name and "frame" (`Aqara S1 Plus frame`).
-  While no newer release is out, `latest_version` = `current_version`, as for the app. When one is out:
-  `latest_version`, `release_url`, and `release_summary`, which starts with how to install it.
-- **Install:** Home Assistant's ESPHome update entity always has an Install button. Here it does nothing (the
-  log says why), and the summary says how to install the update.
-- **The Device page and Manage** show a *Frame version* row from the same model: the version, and when a newer
-  one is out, which and how to install it, in amber.
+Reads `ro.glassworks.frame.id` and `ro.glassworks.frame.version` (showing *Before 1.0.0* on panels installed prior to frame-version stamping), compares against `frames/<id>/v<version>` GitHub releases, and shows install instructions in the **Frame update** entity summary and on the Device / Manage page.
 
 ### Silent updates
 
-*Silent updates* (`silent_updates`, a diagnostic text sensor, on) says whether an update from Home
-Assistant installs with nobody at the panel, and why (#422). The panel's settings and the Manage page
-show the same answer on the device's page, with how to change it where there's a way. The answer is
-read again every 15 minutes, so allowing "Install unknown apps" shows within that time.
+The **Silent updates** diagnostic sensor (`silent_updates`, enabled by default and refreshed every 15 minutes) reports whether Home Assistant app updates install hands-free—and tells you exactly how to enable hands-free installs if they do not:
 
-| State | When | How to change a "No" |
+| Reported state | Meaning | How to enable hands-free updates |
 |---|---|---|
-| `Yes: the boot image's root update service installs them` | The S1, with the root update service in its boot image | |
-| `Yes: the app is a system app that may install apps` | `INSTALL_PACKAGES` granted: the Mirror, from Kiln's image | |
-| `Yes: the app is the device owner` | Any Android the app runs on | |
-| `Yes: Android 12 or newer lets the app update itself` | Android 12+, "Install unknown apps" allowed, and the app targets what this Android needs | |
-| `No: this boot image has no root update service` | The S1 with a boot image from before the service | Update the boot image with Kiln |
-| `No: Android <n> asks for a tap on each update` | Android 6 to 11, not device owner, not a system app | Make the app device owner, on a reset device with no accounts ([generic Android](../frames/generic-android/README.md#device-owner)) |
-| `No: Android needs “Install unknown apps” allowed for the app` | Android 12+ | Allow it in Android's settings, under Apps |
-| `No: Android <n> needs an app that targets API <t>, and this one targets <s>` | Android 12+ newer than the app's target allows | A release with a newer target (and "Install unknown apps", when that's off too), or device owner |
-
-The routes come in the order the app takes them (`dev.glassworks.update.SilentUpdates`). Where they
-come from, read 2026-11-16:
-
-- No prompt for the device owner, an installer holding `INSTALL_PACKAGES`, or root: AOSP
-  `PackageInstallerSession`, android-6.0.1_r1 (constructor) to android-15.0.0_r1
-  (`computeUserActionRequirement`).
-- Android 12+ self-update: the
-  [`setRequireUserAction`](https://developer.android.com/reference/android/content/pm/PackageInstaller.SessionParams#setRequireUserAction(int))
-  docs, and the same AOSP method. It needs `USER_ACTION_NOT_REQUIRED`, the declared
-  `UPDATE_PACKAGES_WITHOUT_USER_ACTION` permission, the app updating itself (or the installer of
-  record), "Install unknown apps" allowed (`isInstallDisabledForPackage`), and the new APK's
-  targetSdk: 29 on Android 12, 30 on 13, 31 on 14, 33 on 15, 34 on 16, 35 on 17
-  (`Platform.silentInstallMinTarget`). AOSP's public `main` still asks for 33 after Android 15; the
-  app follows the stricter docs. Past 17 it assumes one more level a year.
-- The answer assumes the next release targets what the running app targets: both come from one build.
-- Not covered: an Android 14+ update owner other than the app (a store that set one; Kiln and adb
-  don't), and Android's 30-second throttle between two silent updates of one app
-  (`SilentUpdatePolicy`). Either makes Android ask, and *Update status* then says "waiting for a tap".
+| `Yes: the boot image's root update service installs them` | Aqara S1 Plus with root update service | Already enabled |
+| `Yes: the app is a system app that may install apps` | lululemon Mirror (`/system/priv-app`) | Already enabled |
+| `Yes: the app is the device owner` | Any Android device in device-owner mode | Already enabled |
+| `Yes: Android 12 or newer lets the app update itself` | Android 12+ with *Install unknown apps* allowed and matching `targetSdk` | Already enabled |
+| `No: this boot image has no root update service` | Older S1 Plus boot image | Refresh boot image with Kiln |
+| `No: Android <n> asks for a tap on each update` | Android 6–11 without device owner or system privileges | Set as [device owner](../frames/generic-android/README.md#device-owner) on an account-free device |
+| `No: Android needs “Install unknown apps” allowed for the app` | Android 12+ without permission | Enable *Install unknown apps* for Glassworks in Android Settings |
+| `No: Android <n> needs an app that targets API <t>, and this one targets <s>` | OS newer than current `targetSdk` threshold | Wait for an updated release targeting a newer API level, or use device owner |
 
 ## Voice assistant
 
-Same model as an ESPHome `voice_assistant` with a media player (Voice PE): audio goes over the API
-connection, TTS is played from a URL. Checked against esphome `voice_assistant.cpp`,
-`api_connection.cpp`, aioesphomeapi `client.py` / `api.proto` (v46.25.0, the version HA
-2026.11.0 pins) and HA `components/esphome/assist_satellite.py` (2026.11.0).
+For everyday setup, wake word choices, and troubleshooting, start with **[Voice and timers](voice-and-timers.md)**.
 
-| Direction | Message | What we do |
+Under the hood, Glassworks implements the ESPHome voice assistant protocol identically to Home Assistant Voice PE: audio streams over the ESPHome API connection (16 kHz 16-bit mono PCM in 80 ms / 2560-byte frames, with up to 2 seconds of pre-roll audio), and TTS/announcements stream over HTTP using **Media3 ExoPlayer** (`ExoAudioPlayer`, chosen over Android's `MediaPlayer` to avoid an Allwinner CedarX file-descriptor crash in `mediaserver`).
+
+| Direction | ESPHome message | Panel behavior |
 |---|---|---|
-| HA → panel | `SubscribeVoiceAssistantRequest` | This connection receives voice messages. |
-| HA → panel | `VoiceAssistantConfigurationRequest` | Reply with the four microWakeWord words (`okay_nabu` → "Okay Nabu", …), then any legacy openWakeWord model already on the panel (`hey_jarvis_v0.1` → "Hey Jarvis (openWakeWord)"), the active one, max 1. |
-| HA → panel | `VoiceAssistantSetConfiguration` | Switch the wake word live, persist its id (`wake_word`); empty list = no wake word. |
-| panel → HA | `VoiceAssistantRequest{start, flags=USE_VAD, wake_word_phrase, conversation_id}` | On a local detection. `USE_WAKE_WORD` is not set, so HA starts at STT. |
-| HA → panel | `VoiceAssistantResponse{port=0}` | Start streaming; audio captured since the wake word (≤ 2 s) is sent first. |
-| panel → HA | `VoiceAssistantAudio{data}` | 16 kHz s16le mono, 2560-byte (80 ms) chunks. |
-| HA → panel | `RUN_START{url}` | Remember the streaming TTS URL. |
-| HA → panel | `STT_VAD_END` / `STT_END` | Stop streaming → *Thinking*. |
-| HA → panel | `INTENT_PROGRESS{tts_start_streaming=1}` | Start playing the RUN_START URL early (streaming TTS). |
-| HA → panel | `INTENT_END{conversation_id, continue_conversation}` | Keep the conversation id (5 min). |
-| HA → panel | `TTS_END{url}` | Play the URL (unless already streaming). |
-| HA → panel | `RUN_END` | Back to idle if nothing is playing. |
-| HA → panel | `ERROR{code,message}` | Stop (`VoiceAssistantRequest{start=false}`) and go idle; wake-word codes are ignored like ESPHome. |
-| panel → HA | `VoiceAssistantAnnounceFinished{success}` | After the TTS / announcement finished playing; HA marks the response finished. If `continue_conversation` was set, a new run starts without a wake word. |
-| HA → panel | `VoiceAssistantAnnounceRequest{media_id, text, preannounce_media_id, start_conversation}` | Play the pre-announce chime then the media, reply `AnnounceFinished`, optionally start a conversation. |
-| HA → panel | `VoiceAssistantTimerEventResponse` | Started / updated / paused / cancelled / finished: shown on screen (see [Timers on screen](#timers-on-screen)). On *finished* the screen wakes and a chime plays 3×, 3 s apart. |
+| HA → panel | `SubscribeVoiceAssistantRequest` | Registers this connection for voice traffic |
+| HA → panel | `VoiceAssistantConfigurationRequest` | Lists the four microWakeWord models plus any legacy openWakeWord models on disk (max 1 active) |
+| HA → panel | `VoiceAssistantSetConfiguration` | Switches the active wake word live and persists `wake_word` |
+| panel → HA | `VoiceAssistantRequest` (`USE_VAD`) | Fired on local wake word detection (HA starts directly at STT) |
+| HA → panel | `VoiceAssistantResponse{port=0}` | Begins streaming microphone audio over the API |
+| HA → panel | `RUN_START`, `STT_VAD_END`, `INTENT_PROGRESS`, `INTENT_END`, `TTS_END`, `RUN_END`, `ERROR` | Drives overlay states, streaming TTS playback, and 5-minute continued conversations |
+| panel → HA | `VoiceAssistantAnnounceFinished` | Signals playback completion (re-triggers listening automatically when `continue_conversation` is set) |
+| HA → panel | `VoiceAssistantAnnounceRequest` | Plays optional pre-announce chime and announcement media, optionally starting a conversation |
+| HA → panel | `VoiceAssistantTimerEventResponse` | Updates on-screen timer orbs; wakes screen and rings 3 chimes when a timer finishes |
 
-Playback uses **Media3 ExoPlayer** (`ExoAudioPlayer`), which streams mp3/flac/aac/ogg/wav over HTTP
-in-process, including endless streams. Android's `MediaPlayer` is deliberately avoided: on this
-panel it is backed by Allwinner's CedarX player inside `mediaserver`, whose HTTP code aborts
-(`FORTIFY: FD_SET: file descriptor 1024 >= FD_SETSIZE`, `libcdx_base CdxSockAsynConnect`) and kills
-`mediaserver` on the first stream. Because the media
-player entity declares mp3 as its announcement format, HA asks the TTS engine for mp3 and routes
-other media through its ffmpeg proxy as mp3. URLs from HA are absolute (HA's internal URL);
-relative ones are resolved against the dashboard URL. Music on the media player is paused while the
-assistant listens or talks.
-
-The microphone has one consumer, `VoiceEngine`: every 80 ms frame goes through the wake word model
-(always, so its buffers stay fresh), and during a run the same frame is handed to the API stream.
-Detections only count while idle and 3 s after the previous one. Safety caps: 15 s maximum stream,
-10 s for HA to answer a start request, 60 s waiting for a response.
-
-A detection reports the word of the model that fired: while a newly picked word loads, the old one
-keeps listening as itself. If the new word can't load (no network for its model), the old model
-stops, and the panel says why ([below](#when-voice-cant-get-ready)) and tries again.
+Safety watchdogs cap audio streaming at 15 seconds, start replies at 10 seconds, and response waits at 60 seconds, with a 3-second cooldown between detections.
 
 ### When voice can't get ready
 
-The panel downloads the wake word models from GitHub the first time it needs them, and checks each
-against a pinned SHA-256. Until a model is there, the wake word doesn't work. Assist started from Home
-Assistant still does, unless the microphone is the problem. Each failure shows in three places:
+Wake word readiness is reported in three places: the **Assist** settings page (on the panel and Manage page, with a **Try again** button), the `voice_status` sensor in Home Assistant, and the **Voice** log (`Glassworks.Voice`). Failed downloads or engine starts retry automatically (30 s, 1 m, 2 m, 5 m, then every 10 minutes), while microphone failures retry every 5 seconds.
 
-- **The Assist page** on the panel and on the Manage page: a rose line under the heading that says what
-  went wrong, what to do and when the panel tries again, and a **Try again** row under *Listening* for
-  the failures the panel retries. The pane's chip in the settings list reads *Problem*.
-- **The `voice_status` sensor** in Home Assistant (diagnostic, on by default).
-- **The log** (`Glassworks.Voice`, the Manage page's *Voice* source): one line per new failure, with the reason.
-  It never holds a token or a network name.
-
-A failed download or engine start is tried again after 30 s, then 1, 2 and 5 minutes, then every 10
-minutes. Picking another wake word, or **Try again**, tries at once, and the waits start over at 30 s. The microphone is tried every 5 s.
-
-| `voice_status` | The page says | What it means, what to do |
-|---|---|---|
-| `Ready` | Listening for “Okay Nabu” | The wake word listens. |
-| `Getting ready` | Getting “Okay Nabu” ready | The model loads or downloads. It takes a few seconds on a first start. |
-| `Download failed` | …the panel couldn't reach GitHub. Check that it can reach the internet. | No network, no DNS, or a timeout. The panel's network may block GitHub (`github.com`, `raw.githubusercontent.com`). |
-| `Download failed` | …the panel couldn't verify GitHub's certificate. Check the panel's date and time. | A wrong clock, or a CA store too old for GitHub's certificate (Android 6 before #464). |
-| `Download failed` | …the secure connection to GitHub failed. | Another TLS failure, such as a proxy that rewrites HTTPS. |
-| `Download failed` | …GitHub answered HTTP 404. | GitHub refused the file. A 404 or 410 means the model moved; a 5xx usually passes. |
-| `Model check failed` | The wake word model failed its check after the download, so the panel didn't use it. | What came back wasn't the model (a captive portal's page, a proxy). It isn't used. |
-| `Model not saved` | The wake word model couldn't be saved. Free some storage on the panel. | The app's storage is full or not writable. |
-| `Model missing` | The wake word model isn't on the panel. Pick another wake word. | A custom openWakeWord model that the panel can't download. |
-| `Engine failed` | The wake word engine didn't start on this panel. | TensorFlow Lite didn't load or refused the model: a build without it for this CPU. Report it with the log. |
-| `Microphone not allowed` | Voice isn't allowed to use the microphone. Allow Microphone for this app in Android's app settings. | The microphone permission was refused. Kiln and the S1's installer grant it. |
-| `Microphone unavailable` | The microphone doesn't work: the panel has none, another app is using it, or its reads fail. | It doesn't open (none, or another app holds it), or it opens but 3 reads in a row fail. One failed read doesn't count. It recovers on its own once a read works. |
-
-**What HA does with the wake word select.** HA's select (`homeassistant/components/esphome/select.py`,
-2026.11.1) restores its last state, but on every connection it only reads the panel's configuration
-and shows the active word; it never sends its restored value back. Only picking a word (a person, an
-automation, a scene or a script calling `select.select_option`) sends one. Options are matched by
-name, so a restored "Hey Jarvis" from 0.4 now means the microWakeWord `hey_jarvis`; the legacy ones
-are named "… (openWakeWord)" so the two never share a name.
-
-**Updating from 0.4 (openWakeWord).** The word 0.4 saved (`wake_model`, e.g. `hey_jarvis_v0.1.tflite`)
-moves to the microWakeWord model of the same word (`wake_word` = `hey_jarvis`) with no user action. Its
-openWakeWord threshold doesn't carry over, because the scales differ: the word starts at its model's
-cutoff. `wake_model` and `wake_threshold` are only read, so a downgrade to 0.4 finds its own settings.
-A custom openWakeWord model stays on openWakeWord. The openWakeWord models already on the panel stay
-selectable for this release as "<word> (openWakeWord)"; a later release removes them and their
-CC BY-NC-SA models.
+| `voice_status` | Meaning and remedy |
+|---|---|
+| `Ready` | Wake word engine is actively listening. |
+| `Getting ready` | Downloading or loading the selected model (takes a few seconds on first run). |
+| `Download failed` | Could not reach `github.com` / `raw.githubusercontent.com`, TLS verification failed (check panel date/time), or GitHub returned an HTTP error. |
+| `Model check failed` | Downloaded file failed SHA-256 verification (often a captive portal or intercepting proxy) and was rejected. |
+| `Model not saved` | Storage is full or not writable; free up space. |
+| `Model missing` | A custom legacy openWakeWord model is selected that cannot be fetched automatically; choose an official wake word. |
+| `Engine failed` | TensorFlow Lite failed to initialize; check logs and report an issue. |
+| `Microphone not allowed` | Android's Microphone permission is denied; grant it in Android app settings. |
+| `Microphone unavailable` | No microphone hardware, another app is holding the mic, or repeated audio reads failed; recovers automatically once available. |
 
 ### microWakeWord parameters
 
-The engine runs ESPHome's microWakeWord v2 streaming models (`MicroWakeWord.kt`), as
-pymicro-wakeword and ESPHome's `micro_wake_word` do:
+The engine runs ESPHome microWakeWord v2 streaming models (`MicroWakeWord.kt`):
 
-| Parameter | Value |
+| Parameter | Specification |
 |---|---|
-| Front end | `MicroFrontend.kt`, a port of TFLite Micro's audio microfrontend: 30 ms Hann window every 10 ms, 512-point 16-bit fixed-point FFT (kissfft), 40 mel channels 125–7500 Hz, noise reduction (smoothing bits 10, even 0.025, odd 0.06, min 0.05), PCAN (strength 0.95, offset 80, gain bits 21), log scale (shift 6) |
-| Model input | int8 `[1, 3, 40]`: three 10 ms feature rows, so one inference per 30 ms. `round(value × 0.0390625 / scale + zero_point)`, half to even, clamped to int8 (scale 0.10196, zero point −128 for all four) |
-| Model output | uint8 `[1, 1]`, × 1/256; the model keeps its own streaming state (resource variables) |
-| Score | mean of the last `sliding_window_size` outputs (5 for all four), 0 until there are 5; per 80 ms microphone frame, the best mean in that frame |
-| Detection | score ≥ the threshold entity (default: the manifest's `probability_cutoff`), then 3 s before the next one. This is pymicro-wakeword's comparison, not ESPHome's: ESPHome fires when the sum of the 5 raw outputs is above `int(cutoff × 255) × 5`, so at the same cutoff the panel needs about 1.1 more per output (sum 1242 instead of 1236 at 0.97, 1216/1211 at 0.95, 1152/1146 at 0.9), about 0.5% stricter than Voice PE |
-| Models | `okay_nabu`, `hey_jarvis`, `alexa`, `hey_mycroft` from esphome/micro-wake-word-models `models/v2` at `40ff33f`, SHA-256 in `WakeWords.kt` |
+| Audio frontend | `MicroFrontend.kt` (Kotlin port of TFLite Micro frontend + kissfft): 30 ms Hann window every 10 ms, 512-point fixed-point FFT, 40 mel channels (125–7500 Hz), noise reduction, PCAN, log scale |
+| Model input / output | `int8 [1, 3, 40]` (one inference every 30 ms); streaming `uint8 [1, 1]` scaled by `1/256` |
+| Scoring & trigger | Mean of last 5 outputs ≥ `wake_word_threshold` (default: manifest `probability_cutoff`), followed by a 3-second cooldown |
+| Official models | `okay_nabu`, `hey_jarvis`, `alexa`, `hey_mycroft` from `esphome/micro-wake-word-models` `models/v2`, pinned by SHA-256 in `WakeWords.kt` |
 
-The research note is [research/microwakeword.md](research/microwakeword.md).
+Technical benchmarks and implementation notes live in [research/microwakeword.md](research/microwakeword.md).
 
 ### Timers on screen
 
-Timers live in Home Assistant; the panel only shows what HA's timer events say, so pausing,
-cancelling or adding time is done by voice ("pause the pasta timer"). Code: `TimerOverlay`,
-`TimerBoard`, `timers/`.
+Home Assistant owns all timer state, and the panel renders active timers natively (`TimerOverlay`, `TimerBoard`, `panes/timers`):
 
-- **Running timers** are small glass orbs at the bottom right, one per timer, soonest nearest the
-  corner: the time left inside, an amber ring that runs down, the name underneath ("TIMER" if it has
-  none). In the last 10 seconds the orb glows and counts down in large digits, with a ripple each
-  second. A paused timer shows a pause sign and a grey ring.
-- **Move:** drag the timers anywhere; they snap to the nearest of eight spots (corners, the middle of
-  each edge), 16 dp from the edges, and later timers appear there too (stored in the app's `timers`
-  preferences).
-- **Hide:** tap a timer, then *Hide timers*. They tuck into the nearest side (or the top/bottom edge
-  for the middle spots) as half an orb whose amber arc still shows the time left; tap it to bring
-  them back. Hidden timers come back by themselves for their last 10 seconds, and when a new timer is
-  set; when the last one ends, hiding is forgotten. Touches anywhere else go to the dashboard.
-- **Set by voice:** a timer set while the voice overlay is up comes out of the assistant's orb as the
-  overlay closes.
-- **Timer done** is full screen, like the voice overlay: the amber orb with a ripple per chime, the
-  timer's name and length ("2 timers done" when several finish together) and the timers still
-  running. A tap anywhere dismisses it and stops the remaining chimes; otherwise it closes 60 s after
-  the last timer finished. It shows even when the timers were hidden.
+- **Running & paused orbs:** Glass orbs in the bottom-right corner ordered soonest-first, showing remaining time, an amber countdown arc, and the timer name (gray ring with pause icon when paused; enlarged glowing countdown with 1-second ripples during the final 10 seconds).
+- **Drag to reposition:** Drag orbs to any of the eight edge/corner anchor positions; saved in preferences.
+- **Hide & restore:** Tap a timer → **Hide timers** to tuck them into an edge half-orb; tap to restore. Automatically reappears for the final 10 seconds or when a new timer starts.
+- **Completion screen:** Wakes the display, shows a full-screen amber completion overlay (grouping simultaneous finishes), and chimes three times (~3 seconds apart). Tap anywhere to dismiss, or it closes automatically after 60 seconds.
 
 ### Announce on every panel
 
-"Dinner's ready" on every panel at once, from a dashboard or an automation. No pane: each panel is an
-Assist satellite with announcements (`ANNOUNCE` in [Device identity](#device-identity)), so Home
-Assistant's `assist_satellite.announce` does it. It is text to speech, not your own voice; live calls
-between panels are #116, parked after v1.
+Because every panel with Voice enabled exposes an `assist_satellite` entity, you can broadcast spoken announcements across your house using Home Assistant's built-in `assist_satellite.announce` action—no custom integration needed:
 
-1. Make a **Text** helper named *Announcement* (Settings → Devices & services → Helpers), so
-   `input_text.announcement`.
-2. Make a script. In the script editor, **Edit in YAML**, and list your panels' Assist satellites
-   (each panel's device page shows its own):
+1. Create a **Text** helper named **Announcement** (`input_text.announcement`) under **Settings → Devices & services → Helpers**.
+2. Create a script (**Edit in YAML**) listing your panels' `assist_satellite` entities:
 
    ```yaml
    alias: Announce on every panel
@@ -918,7 +397,7 @@ between panels are #116, parked after v1.
    fields:
      message:
        name: Message
-       description: What the panels say. Leave it out to say the Announcement helper's text.
+       description: What the panels say (defaults to the Announcement helper).
        selector:
          text:
    sequence:
@@ -931,7 +410,7 @@ between panels are #116, parked after v1.
          message: "{{ message | default(states('input_text.announcement'), true) }}"
    ```
 
-3. On a dashboard, put the helper in an entities card and add a button that runs the script:
+3. Add the helper and a button card to your dashboard (or call `script.announce_on_every_panel` with `data: {message: "Dinner's ready"}` from any automation):
 
    ```yaml
    type: button
@@ -942,127 +421,34 @@ between panels are #116, parked after v1.
      perform_action: script.announce_on_every_panel
    ```
 
-4. From an automation, pass the text: `action: script.announce_on_every_panel` with
-   `data: {message: "Dinner's ready"}`.
+Each panel plays Home Assistant's pre-announce chime (pass `preannounce: false` to skip), wakes the screen, shows the text on the voice overlay, speaks it using that panel's Assist pipeline voice, and resumes any paused music afterward. Using `mode: queued` prevents overlapping announcements from hitting a busy satellite.
 
-The script reads the helper when its run starts. A press while the panels are still speaking waits
-its turn, and then says what the helper holds at that moment, not when you pressed.
+To include a panel whose **Voice** pane is turned off, add a `tts.speak` step targeting its `media_player.<panel>_speaker` entity (plays as an announcement with music ducking, without a chime or overlay):
 
-What each panel does: Home Assistant's chime, then the message in the voice of that panel's Assist
-pipeline (`preannounce: false` drops the chime). The screen wakes, and with *Voice overlay* on, the
-overlay shows the message. Music on the speaker pauses and Music Assistant's player goes quiet; both
-come back afterwards. The *Speaker* volume applies, so a muted panel stays silent. Home Assistant
-announces on all the panels at once and the action ends when the last one has finished.
-
-- **A panel with Voice off** has no Assist satellite, and an offline panel's is unavailable. Home
-  Assistant skips both and logs a warning. To reach a panel with Voice off, add a step that speaks
-  on its speaker. It plays as an announcement (music pauses and resumes), with no chime and nothing
-  on the screen:
-
-  ```yaml
-  - action: tts.speak
-    target:
-      entity_id: tts.piper  # your TTS engine
-    data:
-      media_player_entity_id: media_player.office_panel_speaker
-      message: "{{ message | default(states('input_text.announcement'), true) }}"
-  ```
-
-  This step doesn't wait for the speaker to finish, so `mode: queued` doesn't protect it. A new
-  announcement on that speaker replaces the one playing (`ExoAudioPlayer.play`), so a second run
-  straight after can cut the first one off.
-- **A panel that is still announcing** refuses a second one (`SatelliteBusyError`). `mode: queued`
-  keeps the script's own runs from overlapping.
-
-Read on 2026-11-18 from the app (`VoiceAssistantController.onAnnounce`, `PanelDevice.announce`) and
-Home Assistant 2026.11.0 (`assist_satellite/entity.py`, `esphome/assist_satellite.py`,
-`tts/entity.py`, `helpers/service.py`). Untested: not yet run on panels.
+```yaml
+- action: tts.speak
+  target:
+    entity_id: tts.piper  # replace with your TTS engine
+  data:
+    media_player_entity_id: media_player.office_panel_speaker
+    message: "{{ message | default(states('input_text.announcement'), true) }}"
+```
 
 ### openWakeWord parameters (legacy)
 
-Kept for one release as the fallback. The code is a port of `AudioFeatures` (`openwakeword/utils.py`) and `Model.predict`
-(`openwakeword/model.py`), fed exact 1280-sample frames:
-
-| Parameter | Value |
-|---|---|
-| Frame | 1280 samples (80 ms) of 16 kHz int16, passed to the mel model as float32 *without* normalisation |
-| Mel input | last `1280 + 160*3 = 1760` samples (only 1280 on the very first frame, like upstream) → 8 frames × 32 bins (5 for 1280) |
-| Mel transform | `x / 10 + 2` |
-| Mel buffer | starts as `ones(76, 32)`, capped at `10*97 = 970` frames |
-| Embedding | last 76 mel frames, `[1, 76, 32, 1]` → 96 floats, one per 80 ms frame |
-| Feature buffer | starts with embeddings of 4 s of uniform random int16 noise in [-1000, 1000) (76-frame windows, step 8 → 41 rows), capped at 120 rows |
-| Wake model input | last 16 rows → `[1, 16, 96]` (read from the model's input shape), output `[1, 1]` |
-| Warm-up | the first 5 scores are forced to 0 (as in `Model.predict`) |
-| Detection | score ≥ `threshold` (0.5), then `refractoryMs` (3 s) before the next one |
-
-TFLite Java detail: the `Interpreter` constructor allocates tensors at the model's *stored* input
-shape. `melspectrogram.tflite` stores `[1, 1]` (signature `[-1, -1]`), and at that size its
-CONV_2D fails to prepare, so the constructor throws. Upstream Python avoids this by resizing
-before it allocates. We patch the stored shape in the FlatBuffer to `[1, 1760]` in memory before
-building the interpreter (`TfliteShapePatch`), then `resizeInput` as upstream does. We checked
-with the Python TFLite runtime that the patched model gives bit-identical output at 1280, 1760 and
-64000 samples.
+Retained temporarily as a fallback for existing custom or pre-downloaded openWakeWord models (`AudioFeatures` / `Model.predict` port with 1280-sample / 80 ms frames, 1760-sample mel windows, 76-frame embeddings, 16-row wake model input, 5-frame warm-up, default threshold `0.5`, and in-memory FlatBuffer input shape patching in `TfliteShapePatch` for TFLite Java).
 
 ## Wire protocol notes
 
-- **Keepalive** (as ESPHome's `api_connection.cpp`): when a client has sent nothing for 60 s, the
-  panel sends it a `PingRequest`; only when nothing at all arrives for 150 s after that is it dropped.
-  Any frame from the client counts as traffic. A plain read timeout doesn't work: aioesphomeapi
-  (46.25.0, `connection.py _async_send_keep_alive`) only pings when it has *received* nothing for 20 s,
-  so a device that keeps sending states hears nothing from Home Assistant. Until 2026-11-10 the server
-  closed after 90 s without input, so HA reconnected every 90 s (panel log: "idle for 90 s; closing",
-  then a new hello 70 ms later). `EspHomeKeepaliveTest` checks both the raw ping/close timing and a real
-  aioesphomeapi client staying connected while states stream (with `ESPHOME_PYTHON`).
-
-- **Unprovisioned**: the first byte picks the transport: `0x00` plaintext, `0x01` Noise with the
-  all-zeros PSK (esphome `api_frame_helper_plaintext.cpp` hand-off). `NoiseEncryptionSetKeyRequest`
-  (124, base64 text of 32 bytes) → `NoiseEncryptionSetKeyResponse` (125).
-- **Plaintext framing**: `0x00`, varint payload length, varint message type, protobuf payload. A
-  Noise client gets `0x00 "Bad indicator byte"` back (aioesphomeapi reports "device is using
-  plaintext").
-- **Noise**: frames are `0x01` + 16-bit length. ClientHello (empty) → ServerHello
-  `01 <node name> 00 <mac hex> 00` → NNpsk0 handshake with prologue `"NoiseAPIInit" 00 00`
-  (ESPHome appends the ClientHello's length and contents). A wrong key gets
-  `01 "Handshake MAC failure"` (HA shows "invalid encryption key"); a plaintext client gets a Noise
-  reject frame (HA shows "requires encryption"). X25519 and ChaCha20-Poly1305 come from BouncyCastle
-  (`bcprov-jdk18on`, lightweight API).
-- Protobuf is hand-written (`Proto.kt`, `Entities.kt`, `ApiServer.kt`), with field numbers from
-  aioesphomeapi `api.proto`. Unknown messages are ignored, as ESPHome does.
-- **Event entities**: `ListEntitiesEventResponse` (107: object_id 1, key 2, name 3, icon 5,
-  disabled_by_default 6, entity_category 7, device_class 8, event_types 9) and `EventResponse`
-  (108: key 1, event_type 2). Events have no state: nothing is sent on `SubscribeStates`, one
-  `EventResponse` per occurrence (`ApiServer.sendEvent`).
-- **Update entities**: `ListEntitiesUpdateResponse` (116: object_id 1, key 2, name 3, icon 5,
-  disabled_by_default 6, entity_category 7, device_class 8), `UpdateStateResponse` (117: key 1,
-  missing_state 2, in_progress 3, has_progress 4, progress 5 (float, percent), current_version 6,
-  latest_version 7, title 8, release_summary 9, release_url 10) and `UpdateCommandRequest` (118:
-  key 1, command 2 = `UpdateCommand` NONE 0 / INSTALL 1 / CHECK 2). From aioesphomeapi 46.25.0's
-  `api_pb2` descriptors.
-- **Entity set changes**: `ApiServer.setEntities` swaps the list and asks every client to
-  disconnect (`DisconnectRequest`). The connection closes on the client's answer, or 2 s after the
-  request is written. A client that doesn't take the request within 10 s is closed without it.
-  `setEntities` doesn't wait for any of this, and further calls while a request is on its way don't
-  send another.
-- **Home Assistant's time zone** (#212): once an authenticated client subscribes to states, the
-  panel sends `GetTimeRequest` (36). Home Assistant answers with `GetTimeResponse` (37), and its
-  `timezone` (field 2) is a POSIX `TZ` rule, not an IANA id: aioesphomeapi 46.25.0 sent
-  `Europe/Madrid` as `CET-1CEST,M3.5.0,M10.5.0/3` (verified 2026-11-13, `EspHomeApiTest`). The time
-  zone page matches the rule to the zones the panel knows that keep the same clock all year
-  (`PosixTimeZone`). A plaintext client's answer is ignored. The panel never sets its clock from it.
-- **The wake word, picked on the panel**: Home Assistant reads the satellite's wake words
-  (`VoiceAssistantConfigurationRequest`) only when it sets the satellite up, which it does on every
-  connect: `esphome/manager.py` `on_disconnect` unloads the `assist_satellite` platform (HA core,
-  read 2026-11-13). So a wake word picked on the panel asks HA to reconnect, as an entity set change
-  does. Once is not enough: HA's wake word select keeps its own pick unless that pick reads
-  `no_wake_word`, and a pick that isn't active turns into `no_wake_word`
-  (`esphome/select.py` `async_satellite_config_updated`, read 2026-11-14). After one reconnect it read
-  `no_wake_word` (verified on the panel, 2026-11-14). So the panel asks again about 2 s after HA's
-  first configuration read, and HA's select then takes the panel's word (`AssistPaneTest`).
-- aioesphomeapi sends `SubscribeVoiceAssistantRequest.flags = 4` for API audio while `api.proto`
-  defines `VOICE_ASSISTANT_SUBSCRIBE_API_AUDIO = 1`; like ESPHome, the panel ignores the flags and
-  uses `VoiceAssistantResponse.port` (0 = API audio).
+- **Keepalive:** Mirrors ESPHome's `api_connection.cpp`—sends `PingRequest` after 60 seconds without client traffic and disconnects only after 150 seconds of silence so streaming-only connections stay alive reliably.
+- **Framing & Noise:** Unprovisioned sockets inspect byte 0 (`0x00` plaintext varint framing, `0x01` Noise with zero-PSK hand-off). Provisioned Noise uses `0x01` + 16-bit length, `ClientHello` → `ServerHello` → `NNpsk0` (`NoiseAPIInit\0\0` prologue) via BouncyCastle lightweight API.
+- **Protobuf & entities:** Hand-written encoders (`Proto.kt`, `Entities.kt`, `ApiServer.kt`) aligned with `aioesphomeapi` `api.proto`, including event entities (`107`/`108`), update entities (`116`/`117`/`118`), and dynamic entity rebuilds via `DisconnectRequest`.
+- **Home Assistant time zone lookup:** After state subscription on encrypted sessions, sends `GetTimeRequest` (36) and matches Home Assistant's POSIX `TZ` string in `GetTimeResponse` (37) against IANA time zones (`PosixTimeZone`) to offer a one-click *Use it* hint on the Time zone settings page.
+- **Syncing panel-selected wake words back to HA:** Because Home Assistant only re-reads `VoiceAssistantConfigurationRequest` on reconnect and clears stale selections on the first read, picking a wake word on the panel requests two brief reconnects (~2 seconds apart) so Home Assistant's wake word selector immediately reflects the new choice.
 
 ## Tests (host)
+
+Run the full JVM protocol and voice verification suite against real `aioesphomeapi` and reference fixtures:
 
 ```sh
 python3 -m venv /tmp/esphome-venv && /tmp/esphome-venv/bin/pip install aioesphomeapi==46.25.0
@@ -1070,103 +456,28 @@ MODELS_CACHE=/tmp/oww-models tools/voice/fetch-models.sh --no-push
 ESPHOME_PYTHON=/tmp/esphome-venv/bin/python OWW_MODELS_DIR=/tmp/oww-models ./gradlew test
 ```
 
-- `EspHomeApiTest`: runs the API server (plaintext and Noise) on the JVM against the real
-  aioesphomeapi client (`src/test/resources/esphome_client.py` plays HA): hello/API version,
-  device info, device capabilities, list entities, subscribe states, a command for every entity
-  type, voice assistant subscribe, wake word configuration get/set, a full pipeline run (wake →
-  start → mic audio → events → TTS playback → `AnnounceFinished`), an announcement with
-  pre-announce, a timer event, and Noise with the right key, a wrong key, no key, and a Noise
-  client against the plaintext server, an event entity (list + fired event), and an entity set
-  change (server-initiated disconnect, reconnect lists the new entity), and HA 2026.11's dynamic
-  key provisioning (keyless connect, zero-PSK `noise_encryption_set_key`, the keyless session is
-  dropped, plaintext and zero PSK are refused, reconnect with the key, bad/same/empty keys, key
-  survives a restart), and the Sendspin capability (client id) and pairing token (`OK` over Noise,
-  `ENCRYPTION_REQUIRED` over plaintext), and the update entity (missing state, check and install
-  commands, release fields, progress). Skipped without
-  `ESPHOME_PYTHON`. Also passes with
-  aioesphomeapi 46.28.0.
-- `NoiseKeysTest`: the key state machine. `OAuthTest` / `SignInServerTest`: authorize URL, state
-  store, token replies, access token cache, external-auth URL flag, and `/signin` → `/callback`
-  over sockets against a fake HA token endpoint. `HaUrlsTest`: mDNS TXT parsing, manifest probe.
-- `BaseProtocolTest` / `BaseTrackerTest`: wall base dock class decoding, mask/count to channels,
-  LocalService reply/event parsing (all known shapes, foreign DIDs, garbage), DID redaction,
-  debounce (no rebuild loop on flapping), click de-duplication, entity ids per layout.
-- `WallBasePaneTest`: a new layout asks for an entity rebuild and saves the layout; a button press
-  fires the event entity Home Assistant has. `BaseLayoutEntitiesPinTest`: the full entity list
-  for each kind of base, against `panel-entities-base.golden.txt`.
-- `BracketProtocolTest` / `BracketSessionTest`: the wall base UART protocol. CRC-16/MODBUS, frames
-  byte-identical to Aqara's `bracket_cli` output, resource ids/types, a resyncing framer (noise,
-  bad/swapped CRC), identity → dock class, protection mapping, termios verification; the handshake
-  sequence, retries (200 ms, 3 sends, new seq), unsupported model, reports/energy, an unacked write
-  → read, and silence → probe → removal. `UartBaseLinkEmulatorTest`: the real `UartBaseLink` over
-  TCP against `frames/aqara-s1-plus/tools/bracket/base_emulator.py` (needs only python3; uses `BRACKET_PYTHON` /
-  `ESPHOME_PYTHON` / `python3`).
-- `update/*Test`: version comparison and versionCode, GitHub release parsing (fixture shaped like
-  the real `releases/latest` response), asset selection and URL checks, `.sha256` parsing, the
-  pre-install APK checks, the root service status, check scheduling and rate limits, and the update
-  entity's state machine.
-- `VoiceAssistantControllerTest`: pre-roll, "never mind" runs, pipeline errors, the max-stream
-  cap, continue-conversation.
-- `MicroFrontendTest`: compares `MicroFrontend` with pymicro-features (the TFLite Micro frontend's C
-  code) on synthesised speech and a synthetic signal (fixtures made by `tools/voice/mww_reference.py`).
-- `MicroDetectorTest`: strides, quantization and the sliding window. `MicroWakeWordClipTest` runs
-  the four real models (LiteRT) behind the Kotlin pipeline over the clip: each fires in its own word
-  only. Skipped without `MWW_PYTHON`; CI's `wake-word` job runs it with LiteRT from
-  `libs/voice/mww-test-requirements.txt` and fails if it skipped.
-- `WakeWordCatalogTest`, `AssistPaneTest`: the words HA is offered, the 0.4 migration, the threshold.
-- `OwwFeaturesTest`: compares the Kotlin feature buffering with openWakeWord's own
-  `AudioFeatures` code, run with deterministic fake models (fixture made by
-  `tools/voice/oww_reference.py`).
-- `TfliteShapePatchTest`: patches the real `melspectrogram.tflite`. Skipped without
-  `OWW_MODELS_DIR`.
+The test suite exercises `EspHomeApiTest` (end-to-end against real `aioesphomeapi`), `EspHomeKeepaliveTest`, `NoiseKeysTest`, `OAuthTest` / `SignInServerTest`, `BaseProtocolTest` / `UartBaseLinkEmulatorTest`, `update/*Test`, `VoiceAssistantControllerTest`, `MicroFrontendTest`, `MicroDetectorTest`, `MicroWakeWordClipTest` (LiteRT over real audio clips in CI), `WakeWordCatalogTest`, `AssistPaneTest`, and `OwwFeaturesTest`.
 
 ## Licensing
 
-- The ESPHome API and voice code is MIT, like the rest of the app. The openWakeWord feature pipeline is
-  re-implemented from the Apache-2.0 upstream. `MicroFrontend.kt` is a port of TFLite Micro's audio
-  microfrontend (Apache-2.0) and kissfft (BSD-3-Clause), and keeps those licences.
-- **The microWakeWord models are Apache-2.0** (esphome/micro-wake-word-models). They are downloaded
-  by the panel, not shipped.
-- TensorFlow Lite (`org.tensorflow:tensorflow-lite:2.16.1`) is Apache-2.0.
-- **The openWakeWord pre-trained models are CC BY-NC-SA 4.0** (non-commercial, share-alike).
-  That's why they are **not bundled** in the APK or the repo. They are only used as the legacy
-  fallback; `fetch-models.sh --openwakeword` downloads them. Don't ship them in a commercial product. Custom-trained models carry
-  whatever license you give them.
-- BouncyCastle (`org.bouncycastle:bcprov-jdk18on`) is MIT-style (Bouncy Castle licence).
+- Glassworks' ESPHome API and voice libraries are **MIT** licensed; `MicroFrontend.kt` retains its upstream **Apache-2.0** (TFLite Micro) and **BSD-3-Clause** (kissfft) licenses.
+- Official **microWakeWord models** and **TensorFlow Lite** are **Apache-2.0** (models are downloaded on demand, not bundled).
+- Legacy **openWakeWord pre-trained models** are **CC BY-NC-SA 4.0** (non-commercial, share-alike) and are never bundled in the repository or APKs.
+- **BouncyCastle** is licensed under the MIT-style Bouncy Castle License.
 
 ## Limitations / known gaps
 
-- **Verified on the panel (2026-11-09):** HA adds it (by IP; the panel sits on a separate VLAN so
-  mDNS didn't reach HA), all entities report live values, `announce` with pre-announce chime plays,
-  `media_player.play_media` plays and reports playing → idle. **Not yet verified:** real-speech
-  wake word accuracy / mic gain, mDNS discovery on a flat network. Music Assistant playback has
-  since been measured on the panel ([sendspin.md](sendspin.md#measured-on-the-panel)).
-- The mDNS SRV target is the Android hostname, not `<node name>.local`; HA uses the IP it discovered and
-  replaces the name with `DeviceInfoResponse.name` once connected.
-- No `SPEAKER` flag: TTS is fetched by URL, not streamed as PCM over the API.
-- One wake word at a time (`max_active_wake_words = 1`); wake word models HA offers for download
-  are ignored (the panel has the four official ones).
-- No acoustic echo cancellation / barge-in: detections are ignored while listening or speaking.
-- Shared microphone with GeckoView: if the dashboard's in-browser Assist uses the mic at the same
-  time, one of the two captures may get silence. *Mute microphone* releases it.
-- Music Assistant: the panel is a native, synced Sendspin player (`media_player.s1_panel`, see
-  [sendspin.md](sendspin.md)), so MA's *Home Assistant* player provider is no longer needed for it.
-  `media_player.<device>_speaker` stays for TTS, announcements and HA media; while it announces,
-  the Sendspin output is muted locally.
-- Chromecast: not possible. A Cast receiver must be a Google-certified device.
-- Radio modes other than `Off` need the root helper from the boot-image patch ([radio.md](../frames/aqara-s1-plus/docs/radio.md)).
-- Entities marked "encrypted connection only" refuse changes from a plaintext connection (a panel that
-  was never given a key).
+- **mDNS hostname target:** mDNS advertises Android's hostname rather than `<node name>.local`; Home Assistant connects via the advertised IP and adopts `DeviceInfoResponse.name` automatically.
+- **URL-based TTS:** Speech responses stream from Home Assistant URLs via ExoPlayer rather than raw PCM API audio (`SPEAKER` flag is not advertised).
+- **One active wake word:** `max_active_wake_words = 1`; custom wake word downloads pushed from Home Assistant are not supported (use the four built-in microWakeWord models).
+- **No acoustic echo cancellation / barge-in:** Wake word detections are paused while listening or speaking; tap the overlay to interrupt.
+- **Shared microphone with GeckoView:** Running in-browser Assist inside the dashboard competes with the on-device wake word engine; toggle **Mute microphone** if using in-browser Assist.
+- **No Chromecast:** Google Cast receivers require Google device certification; use native [Sendspin](sendspin.md) for synced audio instead.
+- **Privileged controls require encryption:** Radio, time zone, pane switches, and camera streaming refuse changes over unencrypted plaintext connections.
 
 ### Aqara cloud
 
-Both show on the S1 Plus page of the panel's settings and the Manage page (the frame's Device page),
-not on the wall base's page. Their entity ids are the wall base pane's, as before.
+Displayed on the **S1 Plus** Device page (on both the panel and the Manage page), keeping their original wall-base entity IDs:
 
-- switch `Block Aqara cloud` (`block_aqara_cloud`, default on): stops Aqara's cloud daemon `ha_master`.
-  With the UART wall-base backend (default) it is always stopped; with the LocalService backend it is
-  kept only while a switch base is attached (or before the base check has read the dock). With no base,
-  blocking wins and it stays stopped. With the wall base pane off, only this switch counts. See [frames/aqara-s1-plus/research/debloat.md](../frames/aqara-s1-plus/research/debloat.md).
-- text_sensor `Aqara cloud daemon` (`aqara_cloud`): `blocked`, `running`,
-  `stopped (UART wall base backend owns /dev/ttyS3)`, `running (needed by the wall base, LocalService
-  backend)`, or `error (…)`.
+- `switch` **Block Aqara cloud** (`block_aqara_cloud`, default on): Keeps Aqara's `ha_master` cloud daemon stopped. Under the default UART wall-base driver it stays stopped unconditionally; under the legacy LocalService backend it runs only when a switch base requires it.
+- `text_sensor` **Aqara cloud daemon** (`aqara_cloud`): Reports `blocked`, `running`, `stopped (UART wall base backend owns /dev/ttyS3)`, `running (needed by the wall base, LocalService backend)`, or an error string.

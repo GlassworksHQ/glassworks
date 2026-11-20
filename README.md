@@ -10,8 +10,8 @@
 <h1 align="center">Glassworks</h1>
 
 <p align="center">
-  <b>The open core for Home Assistant wall panels.</b><br>
-  It makes a wall panel one ESPHome device: your dashboard full screen, voice, music, sensors and radios, all local.
+  <b>The open core for Home Assistant wall panels</b><br>
+  Turn a wall panel or Android tablet into a local ESPHome device with your full-screen dashboard, voice assistant, music player, sensors, and radios.
 </p>
 
 <p align="center">
@@ -29,17 +29,18 @@
 
 ---
 
+Glassworks turns a wall panel or Android tablet into a clean, local Home Assistant device. Home Assistant handles all of your automations and dashboards, while Glassworks hands it the panel's screen, microphones, speaker, sensors, and radios as a single ESPHome device. You install nothing in Home Assistant—no custom integration, no cloud service, and no Glassworks account.
+
+New here? Read the **[Getting started guide](docs/getting-started.md)** or browse the full docs at **[glassworks.dev/docs](https://www.glassworks.dev/docs)**.
+
 ## Have an Aqara Panel Hub S1 Plus? Start here
 
-This repository used to be **S1 Unleashed**. The S1 Plus is now Glassworks' reference frame, and
-everything about it is on its frame page.
+This repository began as **S1 Unleashed**. The Aqara Panel Hub S1 Plus is now Glassworks' reference device, and its dedicated page has everything you need:
 
-- **[Install it from your browser with Kiln →](https://kiln.glassworks.dev/aqara-s1-plus)** You
-  need one USB cable and Chrome or Edge. Kiln backs the panel up first, and undo is built in.
-- **[The Aqara S1 Plus frame page](frames/aqara-s1-plus/README.md)**: what you get, what works
-  today, the radio, updates, known issues, undo and the FAQ.
+- **[Install from your browser with Kiln →](https://kiln.glassworks.dev/aqara-s1-plus)** — Plug in a USB-C cable and use Chrome or Edge. Kiln backs up your panel first, verifies every write, and includes built-in undo.
+- **[Aqara S1 Plus device guide](frames/aqara-s1-plus/README.md)** — Features, current status, Zigbee/Thread radio setup, updates, known issues, undo, and FAQ.
 
-Already running Glassworks? New versions still arrive in Home Assistant under *Settings → Updates*.
+Already running Glassworks? New releases continue to appear in Home Assistant under *Settings → Updates*.
 
 Jump to:
 <a id="install"></a><a id="what-you-need"></a><a id="the-web-installer-recommended"></a><a id="the-command-line"></a>[Install](frames/aqara-s1-plus/README.md#install) ·
@@ -52,139 +53,103 @@ Jump to:
 <a id="supported-hardware"></a>[Supported hardware](frames/aqara-s1-plus/README.md#supported-hardware) ·
 <a id="faq"></a>[FAQ](frames/aqara-s1-plus/README.md#faq)
 
-## What Glassworks is
+## How Glassworks is organized
 
-Glassworks turns a wall panel into a Home Assistant device. Home Assistant is the brain. The panel
-is a screen, microphones, a speaker, sensors and radios on a wall, and Glassworks gives them to
-Home Assistant as one ESPHome device. The panel shows a Home Assistant dashboard full screen. You
-install nothing in Home Assistant: no custom integration, no cloud, no account with us.
+Glassworks is built around three core concepts, guided by our [Principles](docs/principles.md):
 
-It is opinionated on purpose. [Glassworks Principles](docs/principles.md) says what it builds,
-what it doesn't, and the rules every part follows.
+- **Frames** describe individual hardware devices—their sensors, screen sizes, and install recipes.
+- **Panes** are modular features (like voice, music, notifications, or a radio) that run on any frame with the required hardware.
+- **Kiln** is the browser-based WebUSB installer that backs up, installs, and restores panels without requiring command-line tools.
 
-A **frame** describes one device. A **pane** is a feature that a frame can run. **Kiln** installs
-Glassworks from the browser.
+## Supported frames
 
-## Frames
-
-| Frame | Status | What it is |
+| Frame | Status | Overview |
 |---|---|---|
-| [Aqara S1 Plus](frames/aqara-s1-plus/README.md) | Beta | A133 wall panel, rooted. The reference frame. |
-| [Generic Android](frames/generic-android/README.md) | Under development | Any Android device, as an app. No root. |
-| [lululemon Studio Mirror](frames/lululemon-mirror/README.md) | Under development | A 40-inch mirror with Android behind it. |
+| [Aqara S1 Plus](frames/aqara-s1-plus/README.md) | Beta | Rooted Allwinner A133 wall panel and Glassworks' reference device. Runs every pane, including Zigbee/Thread radio and wall base relays. |
+| [Generic Android](frames/generic-android/README.md) | Under development | Standard Android app for Android 8+ tablets and phones (plus a legacy build for Android 6–7), with no root required. Includes tested devices like the [Google Pixel Tablet](frames/google-pixel-tablet/README.md). |
+| [lululemon Studio Mirror](frames/lululemon-mirror/README.md) | Under development | 40-inch smart mirror running Android behind the glass. |
 
-Each row comes from the frame's `design/frame.json` ([the format](frames/README.md)).
-[glassworks.dev/frames](https://www.glassworks.dev/frames) shows the same frames with their 3D
-models.
+Each device definition lives in `frames/<id>/design/frame.json` (see [the frame format](frames/README.md)) and is showcased with interactive 3D models at [glassworks.dev/frames](https://www.glassworks.dev/frames).
 
-## Panes
+## Available panes
 
-A pane is a feature the panel can run or leave out. These are the panes today:
+Panes are optional features that a panel can enable or turn off at any time:
 
-- **Assist**: the voice assistant, with an on-device wake word.
-- **Timers**: voice timers on the screen, and a chime when one finishes.
-- **Sendspin**: a Music Assistant player that plays in sync with your other speakers.
-- **Radio**: the panel's Zigbee/Thread radio as a Zigbee coordinator, a Thread border router or a
-  repeater.
-- **Wall base**: the S1 Plus's mains relay base.
-- **Time zone**: the panel's time zone as an entity, kept across reboots.
-- **Diagnostics**: CPU, temperature, RAM, storage, Wi-Fi and uptime as entities.
-- **Bluetooth proxy**: the panel listens for Bluetooth devices and passes them to Home Assistant, and
-  can connect to the ones that need it (*Listen and connect*, new).
-- **Notifications**: Home Assistant's notifications over the dashboard, with a picture, buttons and a
-  sound, or a dashboard view full screen for a doorbell.
-- **Camera**: on a panel with a camera, presence from motion, snapshots and an opt-in ONVIF/RTSP
-  stream for Home Assistant ([entities](docs/esphome.md#camera-entities)). New, not yet run on a device.
+- **Assist** — Home Assistant voice assistant with an on-device wake word ([guide](docs/voice-and-timers.md)).
+- **Timers** — On-screen countdown orbs and completion chimes for Home Assistant voice timers ([guide](docs/voice-and-timers.md#voice-timers)).
+- **Sendspin** — Native Music Assistant player that plays in sync with your other Sendspin speakers ([guide](docs/sendspin.md)).
+- **Notifications** — Rich Home Assistant alerts over your dashboard with camera snapshots, action buttons, chimes, and full-screen or half-screen views ([guide](docs/notifications.md)).
+- **Radio** — Exposes the Aqara S1 Plus Zigbee/Thread radio as a Zigbee coordinator, Thread border router, or network repeater ([guide](frames/aqara-s1-plus/docs/radio-guide.md)).
+- **Wall base** — Direct local control of the Aqara S1 Plus mains relay base ([entities](docs/esphome.md#wall-base-entities)).
+- **Bluetooth proxy** — Forwards nearby BLE sensors to Home Assistant, with optional active GATT connections ([details](docs/esphome.md#bluetooth-proxy)).
+- **Camera** — On-device motion presence, Home Assistant snapshots, and an opt-in ONVIF/RTSP stream on panels with a camera ([entities](docs/esphome.md#camera-entities)).
+- **Time zone** — Preserves the panel's time zone across reboots as an ESPHome entity.
+- **Diagnostics** — Reports CPU, temperature, memory, storage, Wi-Fi signal, and uptime to Home Assistant ([details](docs/esphome.md#diagnostics)).
 
-Notifications and Camera also offer Home Assistant [blueprints](docs/blueprints.md) on their settings
-page, added through Home Assistant's own import dialog.
+Several features also include ready-made Home Assistant [blueprints](docs/blueprints.md) that you can import directly through Home Assistant's built-in blueprint dialog.
 
-Each frame's README rates the panes its `frame.json` lists. The [pane API](pane-api/src/main/java/dev/glassworks/README.md)
-says how to write one, and [What makes a pane](pane-api/src/main/java/dev/glassworks/README.md#what-makes-a-pane)
-says which features qualify.
+Each frame's README lists which panes it supports. If you want to build a new pane, read the [Pane API](pane-api/src/main/java/dev/glassworks/README.md) and [What makes a pane](pane-api/src/main/java/dev/glassworks/README.md#what-makes-a-pane).
 
-## Kiln
+## Kiln installer
 
-Kiln installs Glassworks on a panel from the browser, over WebUSB. It backs the panel up first and
-can put it back. Open it at [kiln.glassworks.dev](https://kiln.glassworks.dev). Its code and
-design are in [`kiln/`](kiln/apps/kiln/README.md). The S1 Plus also has a
-[command-line installer](frames/aqara-s1-plus/README.md#the-command-line).
+Kiln installs Glassworks straight from Chrome or Edge over WebUSB, backing up original partitions first and providing a built-in undo path. Launch it at [kiln.glassworks.dev](https://kiln.glassworks.dev), or browse its code and architecture in [`kiln/`](kiln/apps/kiln/README.md). If you prefer working from a terminal, the Aqara S1 Plus also includes a [command-line installer](frames/aqara-s1-plus/README.md#the-command-line).
 
-## Clarity
+## Clarity performance grades
 
-Clarity is the performance test that every frame runs ([docs/perf.md](docs/perf.md)). It loads
-real Home Assistant dashboards on the device and gives the frame a letter grade. The letter names
-the biggest dashboard on which every wall-panel task still feels good. No frame has a published grade yet.
+**Clarity** is our standardized performance benchmark for wall panels ([docs/perf.md](docs/perf.md)). It loads real Home Assistant dashboards of increasing complexity on a device and assigns a letter grade from **A+** to **E**, showing the largest dashboard size where taps, scrolling, live updates, dialogs, and cameras still feel responsive.
 
-## Docs
+## Documentation
 
-- [docs/](docs/README.md): the guides, such as install, the ESPHome entities, Sendspin, the
-  sensors and the radio.
-- [Glassworks Principles](docs/principles.md): what Glassworks is and isn't.
-- [How we got here](docs/research/README.md): the research notes, from the first UART log to the
-  browser installer.
-- [CHANGELOG.md](CHANGELOG.md): what changed in each release.
+- **[Getting started](docs/getting-started.md)** — Quickstart guide from installation to your first dashboard.
+- **[Full docs index](docs/README.md)** — User guides, device instructions, developer references, and research notes.
+- **[Glassworks Principles](docs/principles.md)** — What Glassworks builds, what it avoids, and the design rules behind it.
+- **[How we got here](docs/research/README.md)** — Engineering and reverse-engineering notes, from the first UART boot log to the browser installer.
+- **[CHANGELOG.md](CHANGELOG.md)** — Release history and user-facing changes.
 
 ## Contributing
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) first, and [Glassworks Principles](docs/principles.md)
-before you propose a feature. Questions, ideas and bring-up of a new device go to
-[Discussions](https://github.com/GlassworksHQ/glassworks/discussions). Bugs and hardware reports
-are issues. Report security problems privately, as [SECURITY.md](SECURITY.md) says. For anything
-else private, write to [hi@glassworks.dev](mailto:hi@glassworks.dev). Everyone here follows the
-[code of conduct](CODE_OF_CONDUCT.md).
+Read [CONTRIBUTING.md](CONTRIBUTING.md) and [Glassworks Principles](docs/principles.md) before proposing a feature. Share questions, ideas, and new device bring-up threads in [Discussions](https://github.com/GlassworksHQ/glassworks/discussions), and file bugs or hardware reports as GitHub issues. Report security vulnerabilities privately following [SECURITY.md](SECURITY.md). For other private inquiries, email [hi@glassworks.dev](mailto:hi@glassworks.dev). Everyone participating in this project follows the [code of conduct](CODE_OF_CONDUCT.md).
 
-## Repository
+## Repository layout
 
-| Path | What |
+| Path | Description |
 |---|---|
-| [`kiln/`](kiln/apps/kiln/README.md) | Kiln, the browser (WebUSB) installer |
-| [`frames/`](frames/README.md) | One folder per device: its README, its Kiln recipe (`installer/`) and its data (`design/frame.json`) |
-| [`packages/`](packages/frame-card/README.md) | Code shared with glassworks.dev: the frame card and 3D renderer |
-| [`site/`](site/README.md) | [glassworks.dev](https://www.glassworks.dev), the project site, and the brand's badges and banners |
-| [`frames/aqara-s1-plus/android`](frames/aqara-s1-plus/android/README.md) | Glassworks, the Android app (GeckoView, ESPHome API, voice, Sendspin), with the Glassworks core in `dev.glassworks` |
-| [`frames/generic-android/android`](frames/generic-android/README.md) | Glassworks for generic Android (`dev.glassworks.generic_android`): the core as an app for any Android 8+ device (Android 6-7 through its legacy build), with Assist, Sendspin and, on a device with a camera, the camera pane |
-| [`frames/aqara-s1-plus/tools/`](frames/aqara-s1-plus/tools/AGENTS.md) | The S1's command-line installer, U-Boot/FEL build, boot patch, radio helper |
-| `tools/` | Tools every frame shares: Clarity, release and size checks, dev tools |
-| [`branding/`](branding/glass-tile/README.md) | Boot splash and animation, social preview |
-| [`docs/`](docs/README.md) | User guides, plus [research](docs/research/README.md) |
-| [`CHANGELOG.md`](CHANGELOG.md) | What changed in each release |
+| [`kiln/`](kiln/apps/kiln/README.md) | Kiln, the browser-based WebUSB installer |
+| [`frames/`](frames/README.md) | Per-device definitions: README, Kiln recipe (`installer/`), design data (`design/frame.json`), and device research |
+| [`packages/`](packages/frame-card/README.md) | Shared React and TypeScript packages used by Kiln and glassworks.dev |
+| [`site/`](site/README.md) | [glassworks.dev](https://www.glassworks.dev) website, docs portal, and brand asset generator |
+| [`frames/aqara-s1-plus/android`](frames/aqara-s1-plus/android/README.md) | Aqara S1 Plus Android kiosk app built on Glassworks Core (`dev.glassworks`) |
+| [`frames/generic-android/android`](frames/generic-android/README.md) | Glassworks for Generic Android (`dev.glassworks.generic_android`) and its Android 6–7 legacy build |
+| [`frames/aqara-s1-plus/tools/`](frames/aqara-s1-plus/tools/AGENTS.md) | S1 Plus command-line installer, U-Boot/FEL tooling, boot patch scripts, and radio helper |
+| `tools/` | Shared Clarity benchmark suite, release scripts, APK size checks, and doc validators |
+| [`branding/`](branding/glass-tile/README.md) | Boot splash, boot animation, and social preview assets |
+| [`docs/`](docs/README.md) | User guides, developer documentation, and [hardware research](docs/research/README.md) |
+| [`CHANGELOG.md`](CHANGELOG.md) | Release notes and change history |
 
-## Credits and licences
+## Credits and licenses
 
-Built by [@aguilaair](https://github.com/aguilaair). It stands on the work of
-[linux-sunxi](https://linux-sunxi.org/) (sunxi-tools, U-Boot), [Magisk](https://github.com/topjohnwu/Magisk),
-[Home Assistant](https://www.home-assistant.io/), [ESPHome](https://esphome.io/),
-[Music Assistant](https://music-assistant.io/), [OpenThread](https://openthread.io/),
-[microWakeWord](https://github.com/kahrendt/microWakeWord), [openWakeWord](https://github.com/dscripka/openWakeWord) and
-[Tango / ya-webadb](https://github.com/yume-chan/ya-webadb).
+Built by [@aguilaair](https://github.com/aguilaair), standing on the open-source work of [linux-sunxi](https://linux-sunxi.org/) (sunxi-tools, U-Boot), [Magisk](https://github.com/topjohnwu/Magisk), [Home Assistant](https://www.home-assistant.io/), [ESPHome](https://esphome.io/), [Music Assistant](https://music-assistant.io/), [OpenThread](https://openthread.io/), [microWakeWord](https://github.com/kahrendt/microWakeWord), [openWakeWord](https://github.com/dscripka/openWakeWord), and [Tango / ya-webadb](https://github.com/yume-chan/ya-webadb).
 
-The code in this repository is **MIT** ([LICENSE](LICENSE)), except the Glassworks core in `dev.glassworks`, which is **MPL-2.0** ([its README](pane-api/src/main/java/dev/glassworks/README.md#licence)). The libraries in `libs/` stay MIT: `dev.glassworks.esphome` with its subpackages, and `dev.glassworks.improv`. Third-party parts keep their licences. The main
-ones are below. [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) lists everything that ships, with versions
-and sources. On the panel, *Open source licences* in the hidden settings (tap the top-left corner five
-times) shows the same list with each licence's full text.
+Code in this repository is licensed under **MIT** ([LICENSE](LICENSE)), except for Glassworks Core (`dev.glassworks`), which is licensed under **MPL-2.0** ([details](pane-api/src/main/java/dev/glassworks/README.md#licence)). Standalone libraries in `libs/`—including `dev.glassworks.esphome` and `dev.glassworks.improv`—are MIT licensed. Third-party dependencies keep their original licenses; see [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) for the complete list with versions and sources, or open *Open source licenses* in the panel's hidden settings menu (tap the top-left corner five times).
 
-| Component | Licence | How it's used |
+| Component | License | How it is used |
 |---|---|---|
-| U-Boot (with our A133 patches) | GPL-2.0-or-later | Built from source in [`frames/aqara-s1-plus/tools/fel/`](frames/aqara-s1-plus/tools/fel); runs from RAM only |
-| Magisk v31.1 | GPL-3.0 | The official release APK, pinned by SHA-256 (the CLI downloads it, the web installer serves the same file); [source](https://github.com/topjohnwu/Magisk/tree/v31.1) |
+| U-Boot (with Allwinner A133 patches) | GPL-2.0-or-later | Built from source in [`frames/aqara-s1-plus/tools/fel/`](frames/aqara-s1-plus/tools/fel); runs from RAM only |
+| Magisk v31.1 | GPL-3.0 | Official release APK pinned by SHA-256 (downloaded by the CLI or served by Kiln); [source](https://github.com/topjohnwu/Magisk/tree/v31.1) |
 | ot-br-posix (`otbr-agent`, `ot-ctl`) | BSD-3-Clause | Built by [`frames/aqara-s1-plus/tools/radio/`](frames/aqara-s1-plus/tools/radio) |
-| cJSON, cpp-httplib (in the border-router `otbr-agent`) | MIT | Bundled by ot-br-posix's REST server |
-| Silicon Labs `libcpc` and CPC interface | Silicon Labs MSLA, Zlib | Built from Silicon Labs' public source into `otbr-agent` and the radio package, to talk to the panel's own radio |
-| GNU C library, GCC runtime | LGPL-2.1-or-later, GPL-3.0 with the GCC exception | Runtime for the radio tools, unmodified from Ubuntu 22.04 |
+| cJSON, cpp-httplib (in `otbr-agent`) | MIT | Bundled by ot-br-posix's REST server |
+| Silicon Labs `libcpc` and CPC interface | Silicon Labs MSLA, Zlib | Built from Silicon Labs' public source into `otbr-agent` and the radio bundle |
+| GNU C library, GCC runtime | LGPL-2.1-or-later, GPL-3.0 with GCC exception | Unmodified runtime libraries from Ubuntu 22.04 for the radio tools |
 | Simple Keyboard | Apache-2.0 | Optional on-screen keyboard |
-| GeckoView | MPL-2.0 | Maven dependency of Glassworks |
-| TensorFlow Lite, Media3 ExoPlayer, ZXing | Apache-2.0 | Wake word inference, audio, QR codes |
-| TFLite Micro audio frontend, kissfft | Apache-2.0, BSD-3-Clause | Ported to Kotlin for the wake word's audio features |
-| microWakeWord models | Apache-2.0 | **Not shipped.** The panel downloads them itself. |
-| Bouncy Castle | MIT-style | ESPHome API encryption |
-| Tango (ya-webadb) | MIT | adb over WebUSB in the installer |
-| Inter | SIL OFL 1.1 | Boot branding, fetched at build time |
-| openWakeWord models (legacy, this release only) | **CC BY-NC-SA 4.0** | **Not shipped.** Only used if you pick a legacy word. Non-commercial. |
+| GeckoView | MPL-2.0 | Embedded browser engine dependency |
+| TensorFlow Lite, Media3 ExoPlayer, ZXing | Apache-2.0 | Wake word inference, audio playback, and QR codes |
+| TFLite Micro audio frontend, kissfft | Apache-2.0, BSD-3-Clause | Ported to Kotlin for wake word audio feature extraction |
+| microWakeWord models | Apache-2.0 | **Not shipped.** Downloaded on demand by the panel |
+| Bouncy Castle | MIT-style | ESPHome API Noise encryption |
+| Tango (ya-webadb) | MIT | ADB over WebUSB in Kiln |
+| Inter | SIL OFL 1.1 | Boot branding typeface, fetched at build time |
+| openWakeWord models (legacy fallback) | **CC BY-NC-SA 4.0** | **Not shipped.** Used only if a legacy wake word is selected; non-commercial |
 
-Legal notes (scope, no copy protection bypassed, no Aqara or Silicon Labs firmware shipped,
-trademarks, licences): [docs/legal.md](docs/legal.md).
+For scope, trademark, and firmware policies, see [docs/legal.md](docs/legal.md).
 
-**Not affiliated with Aqara, Lumi United or lululemon.** Aqara, lululemon and the product names
-are trademarks of their owners and are used here only to say which device this works with. No
-Aqara software is included in this repository.
+**Not affiliated with Aqara, Lumi United, or lululemon.** Aqara, lululemon, and their product names are trademarks of their respective owners and are used here solely to identify compatible hardware. No Aqara software is included in this repository.

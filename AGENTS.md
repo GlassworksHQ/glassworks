@@ -144,10 +144,11 @@ are in [`docs/research/bringup.md`](docs/research/bringup.md).
 
 ## Writing style
 
-Docs, comments, commit messages and PR bodies use plain, short sentences. Say what was measured and
-when (`2026-11-10`). Prefer tables for comparisons and numbered steps for procedures. Don't oversell:
-"experimental" and "not yet met a real base" are fine to write. Mail to upstream projects (U-Boot,
-TF-A, Magisk, HA) is terse and follows their own conventions.
+Match the voice to the audience:
+
+- **User docs, READMEs, website copy, blog posts, and UI strings:** Write natural, clear, conversational **American English** (`color`, `license`, `center`, `behavior`). Vary sentence length so prose reads smoothly—avoid choppy staccato fragments, periods on headings or short UI labels, repetitive "Not X, Y" antitheses, and awkward possessive chains ("the panel's own page", "an earlier one's"). Keep user-facing docs completely free of PR numbers (`#240`), commit SHAs, internal issue references, and dated lab timestamps (`measured 2026-11-14`). Prefer tables for comparisons and numbered steps for procedures, and stay honest about beta or experimental status without overselling.
+- **Hardware research notes (`docs/research/`, `frames/*/research/`):** Keep these terse and factual. Record exact commands, redacted outputs, dated measurements (`2026-11-10`), dead ends, and confidence tags (**verified**, **read**, or **untested**).
+- **Upstream communication:** Mail and patches to upstream projects (U-Boot, TF-A, Magisk, Home Assistant) should stay concise and follow each project's own conventions.
 
 ## Branding
 

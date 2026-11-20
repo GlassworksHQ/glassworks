@@ -10,8 +10,8 @@
 <h1 align="center">Glassworks Principles</h1>
 
 <p align="center">
-  <b>An opinionated, simple Home Assistant panel controller.</b><br>
-  What Glassworks is, what it isn't, and the rules every part follows.
+  <b>An opinionated, simple Home Assistant panel controller</b><br>
+  What Glassworks builds, what it avoids, and the design rules every part follows.
 </p>
 
 <p align="center">
@@ -35,53 +35,38 @@
 
 ---
 
-Glassworks turns a wall panel into a Home Assistant device. It is opinionated on purpose. This page
-says what we build, what we don't, and the rules each part follows. When a feature, a PR or an issue
-goes against it, point here. If the rule is wrong, change this page first, in a `Decide:` issue,
-and the code after.
+Glassworks turns a wall panel into a clean, dependable Home Assistant device. Because wall panels easily become bloated when they try to duplicate everything Home Assistant already does, Glassworks is deliberately opinionated. This page outlines what we build, what we leave to Home Assistant, and the rules that guide every component. If a proposal or pull request conflicts with these rules, point to this page—and if a rule itself needs to change, open a `Decide:` issue to update this document before changing the code.
 
 ## In one sentence
 
-**Home Assistant is the brain. The panel is a screen, mics, a speaker, sensors and radios on a
-wall, and Glassworks hands them to Home Assistant, simply.**
+**Home Assistant is the brain, while the panel provides the screen, microphones, speaker, sensors, and radios on the wall—and Glassworks connects them simply.**
 
 ## Principles
 
-1. **Home Assistant is the brain.** Glassworks has no automations, rules, scenes, schedules or
-   user accounts. If it decides something about the home, it belongs in HA.
-2. **ESPHome is the wire.** The panel is an ESPHome device. Its state, settings and commands go
-   over the ESPHome API, and nothing else controls it.
-3. **The dashboard is the UI.** The panel shows a HA dashboard. We don't draw our own home screens.
-   We only draw what the panel itself does: setup, voice, timers, notifications, calls.
-4. **Nothing to install in HA.** No custom integration, nothing from the marketplace, no cloud, no
-   account with us. Adopting the ESPHome device is the whole setup.
-5. **Open standards out.** When the panel talks to something other than HA, it uses a standard
-   that thing already speaks: Sendspin, Matter, ONVIF. Never a protocol only our code speaks.
-6. **Local only.** No cloud, no telemetry, no phoning home. It works with the internet down.
-7. **Off by default, cheap when on.** A feature you didn't turn on costs nothing. The slowest
-   frame we support (today the S1: 32-bit, with its RAM shared with the web engine) sets the budget.
-8. **Write it once.** A feature is written for every device. What only one device has stays in
-   that device's frame.
-9. **Never brick, always a way back.** Read first, write second. Back up, verify, and offer an undo
-   for every change to a device.
-   Kiln is one engine: frames are declared, not coded into it, and no frame is less forgiving than
-   the S1 ([frames as data](design/kiln/frames-as-data.md)).
-10. **Simple beats complete.** One feature done well beats ten settings. If a setting exists only
-    because we couldn't decide, decide.
+1. **Home Assistant is the brain.** Glassworks does not include its own automations, rules, scenes, schedules, or user accounts. Anything that makes decisions about your home belongs in Home Assistant.
+2. **ESPHome is the wire.** Every panel presents itself as a native ESPHome device. State, settings, and commands travel over the ESPHome API rather than a custom control channel.
+3. **The dashboard is the UI.** The panel displays a Home Assistant dashboard full screen instead of inventing a separate home interface. Glassworks only draws native UI for panel-specific tasks like setup, voice runs, timers, notifications, and calls.
+4. **Nothing to install in Home Assistant.** You never need a custom integration, HACS add-on, cloud account, or third-party service. Adopting the discovered ESPHome device is the entire Home Assistant setup.
+5. **Open standards out.** Whenever a panel speaks to software outside Home Assistant, it uses an existing open standard such as Sendspin, Matter, or ONVIF rather than a proprietary protocol.
+6. **Local only.** Glassworks runs without a cloud backend, telemetry, or phoning home, and continues working even when your internet connection is down.
+7. **Off by default, cheap when on.** Features you leave disabled should consume zero resources. Performance and memory budgets are set by the slowest supported hardware—currently the 32-bit Aqara S1 Plus, which shares its RAM with the embedded web engine.
+8. **Write it once.** Features are built to work across every compatible frame. Device-specific drivers and workarounds stay isolated inside that device's frame folder.
+9. **Never brick, always a way back.** Read before writing, back up and verify every partition change, and provide a reliable undo path for every device modification. Kiln uses a single installer engine driven by per-frame data ([frames as data](design/kiln/frames-as-data.md)) so every device receives the same safety checks as the S1 Plus.
+10. **Simple beats complete.** One feature done thoughtfully is better than ten confusing toggles. When a configuration option only exists because we could not agree on a good default, we make the decision instead of passing it to the user.
 
 ## What we're not building
 
-| Not this | Because | Use instead |
+| Out of scope | Why | Use instead |
 |---|---|---|
-| A kiosk browser with hundreds of options | Every option is a setting someone has to understand | The HA dashboard, and the few settings a panel needs |
-| A dashboard designer, or our own home UI | HA has dashboards | HA dashboards, and the marketplace's cards if you want them |
-| An automation engine | HA has automations | HA automations, scripts and blueprints |
-| A fleet manager that works around HA | Settings are entities, so HA can already set them on every panel | Scenes and scripts, or the Manage page, which goes through HA |
-| A voice assistant | HA's Assist does the thinking | The panel is an Assist satellite |
-| A media centre | Music Assistant exists | The panel is a Sendspin player |
-| A security system or an NVR | That needs certification and storage we don't have | The panel can be a camera and a sensor for one |
-| A cloud service | Principle 6 | Nothing |
-| A HA custom integration | Principle 4 | ESPHome |
+| A kiosk browser with hundreds of knobs | Every extra option adds complexity someone has to learn and maintain | A Home Assistant dashboard plus the small set of panel controls Glassworks needs |
+| A custom dashboard designer or home UI | Home Assistant already excels at dashboards | Home Assistant dashboards and community cards |
+| An on-panel automation engine | Home Assistant already handles automations | Home Assistant automations, scripts, and blueprints |
+| A separate fleet manager that bypasses Home Assistant | Panel settings are ESPHome entities, so Home Assistant can already manage them across rooms | Home Assistant scenes and scripts, or the Manage page (which authenticates through Home Assistant) |
+| A standalone voice assistant | Home Assistant Assist handles speech and intent | The panel acting as an Assist satellite |
+| A standalone media center | Music Assistant already solves multi-room audio | The panel acting as a Sendspin player |
+| A security system or NVR | Security systems require dedicated storage and reliability guarantees | The panel acting as a camera or presence sensor feeding Home Assistant or an NVR |
+| A cloud service | Conflicts with Principle 6 (local only) | Local network operation |
+| A Home Assistant custom integration | Conflicts with Principle 4 (nothing to install in HA) | Native ESPHome integration |
 
 ## The parts
 
@@ -89,149 +74,106 @@ wall, and Glassworks hands them to Home Assistant, simply.**
 
 <a href="https://www.glassworks.dev/brand#parts"><picture><source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-core-on-dark.svg"><img alt="Glassworks Core" src="https://www.glassworks.dev/brand/badge-core-on-light.svg" height="30"></picture></a>
 
-What runs on every panel: the ESPHome device, the screen policy (presence, light, idle), the
-web engine that shows the dashboard, setup, the Manage page, and the pane host.
+Glassworks Core provides the shared runtime for every panel: the ESPHome device server, screen policy (presence wake, ambient light, idle timeout), embedded browser engine, first-boot setup, the Manage web page, and the pane host.
 
-- **Device-neutral.** No device paths, no vendor services. That's the frame's job.
-- **Small.** Something goes into the core only when two panes need it, or every panel does. Until
-  then it lives in the pane.
-- **Confined.** Android versions are read only in `dev.glassworks.platform`. GeckoView is used only
-  in `dev.glassworks.engine.gecko`. Tests enforce both.
-- **Stable for panes.** After v1, a change to the pane API needs a reason good enough to break
-  every pane.
-- MPL-2.0, file by file.
+- **Device-neutral:** Hardware paths and vendor services stay out of Core and belong in individual frames.
+- **Small by design:** Code moves into Core only when every panel needs it or at least two panes share it; otherwise it stays inside its pane.
+- **Strictly layered:** Android version checks live exclusively in `dev.glassworks.platform`, and GeckoView code lives exclusively in `dev.glassworks.engine.gecko`, enforced by automated tests.
+- **Stable pane API:** After v1, breaking changes to the pane API require a strong justification.
+- **Licensed under MPL-2.0**, file by file.
 
 ### Frames (`frames/<id>`, e.g. `aqara-s1-plus`)
 
 <a href="https://www.glassworks.dev/brand#badge"><picture><source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-on-dark.svg"><img alt="Built on Glassworks" src="https://www.glassworks.dev/brand/badge-on-light.svg" height="30"></picture></a>
 
-A description of one device: its sensors, its ABIs, how Kiln installs it, and the panes only it
-can have (the S1's wall base).
+A frame defines a single hardware device: its sensors, CPU architectures (ABIs), Kiln installation recipe, and any hardware-specific panes that only exist on that device (such as the Aqara S1 Plus wall base).
 
-- **A frame adds no features.** If a feature would make sense on another device, it's a pane, and
-  the frame provides the hardware it needs (a `PresenceSource`, a radio backend).
-- **A frame hides its vendor.** Vendor daemons, binder calls and serial ports stay behind the
-  frame's interfaces.
-- **No vendor bytes in the repo.** Describe offsets and symbols, never commit firmware.
+- **Frames provide hardware, not general features.** If a capability makes sense across multiple devices, it belongs in a shared pane while each frame supplies the hardware interface (such as a `PresenceSource` or radio backend).
+- **Frames isolate vendor internals.** Vendor daemons, binder calls, and serial ports stay hidden behind clean frame interfaces.
+- **No vendor firmware in the repository.** Document offsets and protocol behavior in research notes, and never commit proprietary binaries.
 
 #### The frame agent
 
-**The frame agent** is the root-side service a frame runs to give the panes the hardware they need.
-The app can't do those jobs itself: they need root, a vendor service stopped, or a port below 1024.
-On the S1 it is `glassworks_agent`, one slot of the frame loader
-([frame-loader.md](../frames/aqara-s1-plus/research/frame-loader.md)). It runs the radio modes and
-their firewall, radio firmware, the time zone, the Bluetooth address, and the setup hotspot's portal
-and name ([radio.md](../frames/aqara-s1-plus/docs/radio.md)).
+The **frame agent** is the privileged root-side service a rooted frame runs to handle hardware tasks the Android app cannot perform directly—such as managing a Zigbee/Thread radio, stopping vendor daemons, or binding privileged ports. On the Aqara S1 Plus, this service is `glassworks_agent` ([frame-loader.md](../frames/aqara-s1-plus/research/frame-loader.md)), which handles radio modes and firewall rules, radio firmware flashing, persistent time zones, Bluetooth address lookup, and the setup hotspot portal ([radio.md](../frames/aqara-s1-plus/docs/radio.md)).
 
-- **It decides nothing.** It does what the app asks and reports what it did. The app decides, and HA
-  decides for the app.
-- **It trusts no input.** It reads only files the app owns, and checks them. Any app can set a
-  property, so no property can make it run code we did not sign. The S1's threat model is in
-  [root.md](../frames/aqara-s1-plus/research/root.md).
-- **It ships in the frame bundle.** A fix reaches panels without a reflash. The boot image keeps a
-  copy to fall back on.
-- **One agent per frame**, not one root service per pane.
+- **Executes, never decides:** The agent carries out requests from the app and reports status back, leaving all user decisions to the app and Home Assistant.
+- **Validates every input:** It only reads verified files owned by the app and never lets unprivileged Android properties trigger unsigned code (see the S1 Plus threat model in [root.md](../frames/aqara-s1-plus/research/root.md)).
+- **Updatable via the frame bundle:** Fixes reach panels without a full reflash, while the boot image keeps a fallback copy.
+- **One agent per frame:** Root capabilities live in a single unified agent rather than a separate root daemon per pane.
 
 ### Panes
 
 <a href="https://www.glassworks.dev/brand#parts"><picture><source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-pane-on-dark.svg"><img alt="Glassworks Pane" src="https://www.glassworks.dev/brand/badge-pane-on-light.svg" height="30"></picture></a>
 
-A feature the panel can have or leave out. The rules are in
-[What makes a pane](../pane-api/src/main/java/dev/glassworks/README.md#what-makes-a-pane). In short:
+Panes are modular features that a panel can enable or disable. Full guidelines live in [What makes a pane](../pane-api/src/main/java/dev/glassworks/README.md#what-makes-a-pane). In summary:
 
-1. **It adds something only the panel can do.** If a HA dashboard can do it, it's a dashboard.
-2. **It works through ESPHome alone.** State as entities, the settings worth changing from HA as
-   config entities, commands as ESPHome actions, reports as events. One approved exception
-   (2026-11-13, #118): a report whose name the automation chose, like a notification's button,
-   goes out as a bus event (`esphome.<name>`), because HA's event entity only fires names it listed
-   up front. It is still ESPHome alone and needs no option in HA.
-3. **Other protocols are opt-in outputs.** An open standard something else already speaks, off by
-   default, with the pane still working without it.
-4. **The panel's sign-in only reads.** The panel may read from HA what ESPHome can't carry (the
-   dashboard, the Thread network, a camera stream), and never controls HA with it. A *person*
-   signed in on the Manage page acts with their own HA rights, like the HA app does.
+1. **Adds hardware or panel-native value.** If a Home Assistant dashboard card can already do the job, it should stay in the dashboard.
+2. **Communicates through ESPHome.** State is exposed as entities, automatable settings as config entities, commands as ESPHome actions, and reports as events. (One documented exception exists for dynamic user-chosen action names such as notification buttons, which fire a bus event `esphome.<name>` because Home Assistant event entities require fixed event types upfront—this still uses ESPHome alone with no extra Home Assistant configuration.)
+3. **External protocols stay opt-in.** Any secondary open protocol must be disabled by default, and the pane must remain useful without it.
+4. **Read-only panel sign-in.** The panel's own Home Assistant login only reads data that ESPHome cannot carry (dashboards, preferred Thread credentials, camera snapshots) and never modifies Home Assistant state. When a human administrator signs in on the Manage page, actions run under their own Home Assistant permissions.
 
-Also:
-
-- **Off by default** unless the frame says otherwise. It declares what it `requires`, and frames
-  without that hardware don't show it at all (maintainer, 2026-11-15).
-- **One pane, one feature.** A pane owns its own entities and settings keys, and talks to other
-  panes only through `PanelEvent` and services in `PaneContext`.
+Every pane also declares its hardware requirements (`requires`) so devices lacking that hardware hide the pane completely. Each pane owns its own entities and settings keys, communicating with other panes only through `PanelEvent` and `PaneContext` services.
 
 #### Entities
 
-The ESPHome device is an API, not the settings screen. People set panels up on the Manage page,
-and HA's device page stays short. So every entity has a place:
+Home Assistant's ESPHome device page works best as a clean control surface rather than a wall of rarely touched settings. Users configure one-time options on the panel or the Manage page, while Home Assistant exposes the controls worth automating:
 
-| Kind | Category | Enabled by default | Example |
+| Kind | Category | Enabled by default | Examples |
 |---|---|---|---|
-| Something people put on a dashboard or automate on | none | Yes | Presence, screen on/off, the media player |
-| A setting someone would change from HA, for one panel or the whole house | `CONFIG` | Only the common ones | Night mode, wake word, do not disturb |
-| Health and versions | `DIAGNOSTIC` | No, except the few people check | Wi-Fi signal, CPU, radio firmware |
+| Everyday sensors and controls | none | Yes | Presence, speaker, wall base relays |
+| Settings commonly automated per panel or across the house | `CONFIG` | Common ones only | Idle timeout, max auto brightness, Do not disturb, Mute microphone |
+| Health, status, and versions | `DIAGNOSTIC` | Key status values only | Wi-Fi signal, CPU usage, radio status, voice status |
 
-- **A pane adds at most a handful of uncategorised entities.** Everything else is config or
-  diagnostic.
-- **Enabled by default only if people reach for it day to day.** Restarting the app, yes. Changing
-  the radio mode, no: that's set once, on the panel or the Manage page. Anyone can turn a disabled
-  entity on from HA's device page.
-- **Not every setting is an entity.** Hardware calibration, one-off setup and anything nobody would
-  change from an automation stay on the panel and its Manage page.
-- **A pane that's off adds nothing to the list a person sees.**
+- Each pane adds only a small number of uncategorized primary entities; everything else goes under Configuration or Diagnostic.
+- Entities start enabled by default only when people use them regularly. One-time setup options (such as changing the radio mode) start disabled in Home Assistant and can be enabled on the device page anytime.
+- Hardware calibration and purely local setup options stay on the panel and Manage page instead of cluttering Home Assistant.
+- Panes that are turned off avoid adding noise to the entities a user interacts with.
 
 ### Libraries (`libs/*`)
 
 <a href="https://www.glassworks.dev/brand#parts"><picture><source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-library-on-dark.svg"><img alt="Glassworks Library" src="https://www.glassworks.dev/brand/badge-library-on-light.svg" height="30"></picture></a>
 
-Protocols, written so anyone can use them: `esphome-api`, `esphome-api-android`, `improv`,
-`bluetooth-proxy`, `sendspin`, `voice`.
+Protocol implementations are extracted into standalone MIT-licensed libraries (`esphome-api`, `esphome-api-android`, `improv`, `bluetooth-proxy`, `sendspin`, and `voice`) so other projects can reuse them directly:
 
-- **One protocol per library**, with no pane or core dependency: a library may use another library
-  (`voice` and `sendspin` use `esphome-api`), never the Pane API, the core or an app. Someone building
-  something else should be able to take it as it is. `LibraryBoundaryTest` checks this.
-- **Plain Kotlin where possible.** JVM libraries have no Android imports, so a JVM test can drive
-  them.
-- **Tested against the reference.** `esphome-api` is checked against `aioesphomeapi`, and Sendspin
-  against a real server. If the reference disagrees, the reference wins.
-- MIT. Code ported from elsewhere keeps its own licence and ships it in the artifact: `voice`'s
-  `MicroFrontend.kt` is Apache-2.0 and BSD-3-Clause.
+- **One protocol per library:** Libraries may depend on other Glassworks libraries (for example, `voice` and `sendspin` build on `esphome-api`), but never on the Pane API, Glassworks Core, or any frame app (`LibraryBoundaryTest` enforces this boundary).
+- **Pure Kotlin where possible:** Keeping JVM libraries free of Android imports makes them easy to embed and fast to unit test.
+- **Verified against reference implementations:** `esphome-api` is tested against `aioesphomeapi`, and `sendspin` against a real `aiosendspin` server. When behavior diverges, the reference implementation wins.
+- **Clean licensing:** Libraries are MIT licensed, with ported upstream files preserving their original licenses (such as Apache-2.0 and BSD-3-Clause in `voice`'s `MicroFrontend.kt`).
 
 ### Kiln (`kiln/`)
 
 <a href="https://www.glassworks.dev/brand#parts"><picture><source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-kiln-on-dark.svg"><img alt="Glassworks Kiln" src="https://www.glassworks.dev/brand/badge-kiln-on-light.svg" height="30"></picture></a>
 
-The installer. A web page that installs Glassworks on a frame over USB, with nothing to install
-on your computer.
+Kiln is the browser-based WebUSB installer that provisions supported panels with nothing to install on your computer.
 
-- **RAM first.** Boot from RAM (FEL, `fastboot boot`) before writing anything.
-- **Backup, hash, verify.** Every partition we write is backed up and read back.
-- **Always an undo.** The restore puts the device back as it was.
-- **One recipe per frame.** The core of Kiln doesn't know about any one device.
+- **RAM first:** Boot temporary recovery tools in memory (FEL, `fastboot boot`) before touching persistent storage.
+- **Back up, hash, and verify:** Every modified partition is backed up beforehand and read back afterward to confirm integrity.
+- **Reversible by design:** Every install recipe includes a tested undo flow.
+- **Data-driven recipes:** Kiln's engine stays device-agnostic; each frame declares its own steps and hardware checks.
 
 ## Who does what
 
-| Job | Home Assistant | The panel |
+| Responsibility | Home Assistant | The panel |
 |---|---|---|
-| Decide what happens | Automations, scripts, scenes | Nothing |
-| Show the home | Dashboards | Shows the dashboard |
-| Settings for every panel | Scenes and scripts, on config entities | Applies its own |
-| Who may change what | HA users and permissions | Follows them |
-| Voice | Assist (wake word in HA or on the panel, STT, intent, TTS) | Mics, speaker, wake word |
-| Music | Music Assistant | A Sendspin player |
-| Hardware: presence, light, radio, Bluetooth, camera, NFC | Uses it as entities | Provides it |
-| Interrupt the user (ring, alert, wake the screen) | Says when, through an ESPHome action | Does it |
+| Decisions and schedules | Automations, scripts, scenes | None |
+| Home interface | Dashboards | Displays the dashboard full screen |
+| House-wide configuration | Scenes and scripts targeting config entities | Applies its local state |
+| Permissions and access | Home Assistant users and admin roles | Enforces Home Assistant permissions |
+| Voice | Assist pipelines (STT, intent, TTS) | Microphones, speaker, on-device wake word |
+| Music | Music Assistant | Native Sendspin player |
+| Hardware (presence, light, radio, Bluetooth, camera) | Consumes entities in automations and dashboards | Exposes hardware cleanly |
+| Interruptions (alerts, chimes, waking screen) | Triggers ESPHome actions | Renders overlays, sounds, and screen wake |
 
 ## Before you add something
 
-Ask, in this order. A "no" to any of them means it doesn't ship as it is.
+Run any new feature idea through these seven questions in order. If the answer to any question fails the check, reconsider the design before building it:
 
-1. **Can HA already do it?** With an automation, a script, a dashboard or a card? Then document the
-   recipe instead.
-2. **Does it need something installed in HA?** Then rethink it.
-3. **Does it work over ESPHome alone, with no setup beyond adopting the device?**
-4. **If it speaks another protocol: is that an open standard, opt-in, and is the feature still
-   whole without it?**
-5. **Is it off by default, and cheap on the slowest frame when it's on?**
-6. **Does it work on every frame that has the hardware, not only the one you're testing on?**
-7. **Is there a way back?** For anything that writes to a device.
+1. **Can Home Assistant already do this** with an automation, script, blueprint, or dashboard card? If so, write a guide or blueprint instead of app code.
+2. **Does it require installing something inside Home Assistant?** If yes, redesign it around native ESPHome capabilities.
+3. **Does it work over ESPHome alone** once the device is adopted?
+4. **If it uses another protocol**, is that protocol an open standard, opt-in, and non-essential to the core experience?
+5. **Is it off by default**, and lightweight enough for our slowest supported hardware when turned on?
+6. **Does it work across every frame with the required hardware**, rather than only one device?
+7. **Is there a clean undo path** for anything that modifies device storage?
 
-When the answer is unclear, open a `Decide:` issue rather than building it.
+When the answer is not clear-cut, open a `Decide:` issue to discuss it before writing code.

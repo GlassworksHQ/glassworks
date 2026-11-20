@@ -311,6 +311,18 @@
   line-height: 1.05;
 }
 
+.trackHead {
+  display: grid;
+  gap: 4px;
+  margin: 28px 4px 12px;
+}
+
+.trackHead p {
+  color: var(--muted);
+  font-size: 14.5px;
+  margin: 0;
+}
+
 .cards {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

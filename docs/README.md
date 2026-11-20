@@ -1,57 +1,68 @@
-# Glassworks docs
+# Glassworks documentation
 
-Start with **[Glassworks Principles](principles.md)**: what Glassworks is, what it isn't, and the
-rules every part follows.
+New to Glassworks? Start with **[Getting started](getting-started.md)** to install Glassworks on your panel and connect it to Home Assistant.
 
-## Guides
+## User guide
 
-| Guide | What it covers |
-|---|---|
-| [frame-agent.md](frame-agent.md) | The frame agent: the contract between the core and a frame's root side. What it does, discovery, requests, trust and undo per capability, and the S1 as the reference |
-| [onboarding.md](onboarding.md) | Design notes for the first boot: Wi-Fi (Improv), adding it to Home Assistant, QR sign-in, dashboard picker (the steps themselves are in install.md) |
-| [kiln-images.md](kiln-images.md) | Adding a community image to Kiln: the recipe format, the step library, Kiln's safety steps, the review an image needs, and its `?image=` link |
-| [manage.md](manage.md) | The Manage page at `http://<panel>:8099/`: signing in through Home Assistant or with the code on the panel, the log, diagnostics, and how it keeps you safe |
-| [esphome.md](esphome.md) | The panel as an ESPHome device: every entity, the voice assistant, encryption, app updates |
-| [notifications.md](notifications.md) | Notifications from Home Assistant: the `notify` action and its fields, button presses, priorities, Do not disturb, the doorbell blueprint |
-| [blueprints.md](blueprints.md) | Ready-made Home Assistant automations for the panes, and the card on each pane's page that adds them through Home Assistant's own import dialog |
-| [secrets.md](secrets.md) | The secrets the panel keeps, how they are sealed with the Android Keystore, and what that does and doesn't protect against |
-| [sendspin.md](sendspin.md) | The native Music Assistant player (Sendspin): setup, pairing, synced playback |
-| [perf.md](perf.md) | Clarity, the performance test and grade for any frame: how to run it, what it measures, the rubric and its sources, the report format |
-| [size.md](size.md) | APK size per frame and per pane in CI: the parts, the assets lint, the size budgets, the PR comment |
-| [ci.md](ci.md) | For contributors: which CI jobs run for which change, cancelled runs, adding a job |
-| [releasing.md](releasing.md) | For maintainers: the signing keys, GitHub secrets, tagging a release, the radio bundle |
-| [branding.md](branding.md) | Where the Glassworks brand lives, and which badge or banner each part of this repo uses |
-| [legal.md](legal.md) | Legal notes: your own device, no copy protection bypassed, what is and isn't shipped, trademarks, licences ([third-party notices](../THIRD-PARTY-NOTICES.md)) |
-
-## Aqara S1 Plus
-
-The guides that only apply to the S1 Plus live with its frame, in
-[frames/aqara-s1-plus/docs](../frames/aqara-s1-plus/docs/).
+Guides for setting up and using Glassworks every day on any supported panel.
 
 | Guide | What it covers |
 |---|---|
-| [install.md](../frames/aqara-s1-plus/docs/install.md) | Installing with the web installer or the command line, updating, undo, troubleshooting |
-| [sensors.md](../frames/aqara-s1-plus/docs/sensors.md) | Presence (VI5300 time-of-flight), ambient light, and how the screen uses them |
-| [radio-guide.md](../frames/aqara-s1-plus/docs/radio-guide.md) | Using the Zigbee/Thread radio: ZHA, Zigbee2MQTT, Thread, repeaters, who may connect |
-| [radio.md](../frames/aqara-s1-plus/docs/radio.md) | The radio's technical reference: how each mode works, tests, firmware, the root helper |
+| [Getting started](getting-started.md) | What Glassworks is, supported devices, installing with Kiln, first boot, and picking your dashboard |
+| [The Manage page](manage.md) | Managing your panel from a browser at `http://<panel>:8099/`: settings, logs, diagnostics, network setup, and managing multiple panels |
+| [Voice and timers](voice-and-timers.md) | Using Home Assistant Assist, on-device wake words, on-screen voice timers, announcements, and troubleshooting |
+| [Music Assistant (Sendspin)](sendspin.md) | Setting up the native synchronized Music Assistant player |
+| [Notifications](notifications.md) | Sending alerts from Home Assistant with camera pictures, action buttons, sounds, Do not disturb, and full-screen or half-screen views |
+| [ESPHome entities](esphome.md) | Complete reference for every sensor, switch, control, and action your panel exposes to Home Assistant |
+| [Blueprints](blueprints.md) | Ready-made Home Assistant automations for night mode, doorbells, interactive questions, and motion-triggered lights |
+| [Updates and restoring stock software](updates.md) | Updating Glassworks from Home Assistant, silent updates, beta channels, and returning to stock firmware |
+| [Clarity performance grades](perf.md) | How Clarity tests wall-panel performance on real Home Assistant dashboards and awards A+ to E grades |
 
-What changed in each release: [CHANGELOG.md](../CHANGELOG.md). The app itself is documented in
-[app/README.md](../frames/aqara-s1-plus/android/README.md) and the boot branding in
-[branding/glass-tile](../branding/glass-tile/README.md).
+## Devices
 
-## Design
+Device-specific setup instructions, hardware details, and supported features live in each device's folder under `frames/`.
 
-[design/kiln](design/kiln/README.md) holds the Kiln prototypes: the installer's screens, and the
-data-driven animation that shows each frame's way into recovery mode.
+| Device / guide | What it covers |
+|---|---|
+| [Aqara Panel Hub S1 Plus](../frames/aqara-s1-plus/README.md) | Overview, supported hardware, features, status, known issues, and FAQ for the reference frame |
+| [S1 Plus install guide](../frames/aqara-s1-plus/docs/install.md) | Step-by-step Kiln web installer walkthrough, OS setup, command-line install, undo, and troubleshooting |
+| [S1 Plus Zigbee/Thread radio guide](../frames/aqara-s1-plus/docs/radio-guide.md) | Using the built-in radio with ZHA, Zigbee2MQTT, Thread border router, and repeater modes |
+| [S1 Plus sensors](../frames/aqara-s1-plus/docs/sensors.md) | Presence (time-of-flight) and ambient light sensors, wake on approach, and auto-brightness |
+| [S1 Plus radio technical reference](../frames/aqara-s1-plus/docs/radio.md) | Deep-dive technical reference for radio modes, firmware, firewall rules, and the root helper |
+| [Generic Android](../frames/generic-android/README.md) | Running Glassworks on Android 8+ tablets and phones (plus the legacy build for Android 6–7) |
+| [Google Pixel Tablet](../frames/google-pixel-tablet/README.md) | Tested device profile, dock sensor behavior, and Clarity results |
+| [lululemon Studio Mirror](../frames/lululemon-mirror/README.md) | Hardware details and Kiln installation for the 40-inch mirror |
 
-## Research
+## Developers and hardware makers
 
-**[How we got here](research/README.md)** tells the story behind the project, from the first UART
-log to the browser installer, and links the detailed notes: hardware, boot log, FEL and the DRAM
-fix, Magisk root, the installer design, screen policy, de-bloat, and the wall base protocol.
+Architecture, design philosophy, pane and frame development, standalone libraries, security, and project operations.
+
+| Guide | What it covers |
+|---|---|
+| [Glassworks Principles](principles.md) | Design philosophy, core rules, and what Glassworks deliberately does not build |
+| [Pane API & what makes a pane](../pane-api/src/main/java/dev/glassworks/README.md) | Writing a pane plugin and the criteria for new features |
+| [Writing a frame](../frames/README.md) | Defining a new device (`frame.json`, 3D models, recovery animations, and Kiln recipes) |
+| [The frame agent](frame-agent.md) | Contract between Glassworks Core and a rooted frame's privileged helper service |
+| [Kiln web installer](../kiln/apps/kiln/README.md) | Architecture and development guide for the WebUSB installer |
+| [Kiln design prototypes](design/kiln/README.md) | Screen prototypes and data-driven recovery-mode animations |
+| [Adding a community image to Kiln](kiln-images.md) | Recipe format, safety steps, review process, and `?image=` links |
+| [Panel secrets and security](secrets.md) | How credentials and keys are sealed with the Android Keystore, and threat-model boundaries |
+| [APK size budgets](size.md) | Per-frame and per-pane APK size tracking and CI budgets |
+| [CI workflows](ci.md) | Which CI jobs run for each change, required checks, and adding new jobs |
+| [Releasing](releasing.md) | Maintainer guide for signing keys, GitHub secrets, tagging releases, and bundles |
+| [Branding](branding.md) | Official Glassworks logos, badges, banners, and usage rules |
+| [Legal notes](legal.md) | Scope, trademarks, licensing, and [third-party notices](../THIRD-PARTY-NOTICES.md) |
+| [Changelog](../CHANGELOG.md) | User-visible changes in each release |
+
+The Android app internals are documented in [frames/aqara-s1-plus/android/README.md](../frames/aqara-s1-plus/android/README.md), and the boot splash and animation generator live in [branding/glass-tile/README.md](../branding/glass-tile/README.md).
+
+## Hardware research
+
+Reverse-engineering notes, hardware bring-up logs, protocol captures, and design studies—including dead ends and dated measurements.
+
+- **[How we got here](research/README.md)** — The full engineering index, covering hardware teardowns, boot logs, FEL recovery and DRAM fixes, Magisk root, de-bloating, wall base UART protocols, and bring-up playbooks.
+- **[Onboarding design notes](onboarding.md)** — Technical design and protocol notes for first-boot Wi-Fi (Improv), automatic ESPHome encryption, QR sign-in, and the dashboard picker.
 
 ## Images
 
-`img/` holds the pictures these pages use: `fel-button.jpg` (also used by the installer, so keep
-its path), `installer/` (web installer screens, captured from its development demo states) and
-`panel/` (panel screens).
+`img/` stores the screenshots and diagrams used across these guides, including `fel-button.jpg` (also referenced by Kiln—keep its path stable), `kiln/` (web installer screens), and `panel/` (on-device screens).

@@ -10,8 +10,8 @@
 <h1 align="center">Aqara S1 Plus</h1>
 
 <p align="center">
-  <b>A133 wall panel, rooted. The reference frame.</b><br>
-  Every pane runs on it, including the Zigbee/Thread radio and the wall base.
+  <b>Rooted Allwinner A133 wall panel and Glassworks' reference frame</b><br>
+  Supports every pane matched to its hardware—including the built-in Zigbee/Thread radio and wall base relays (no camera hardware).
 </p>
 
 <p align="center">
@@ -45,7 +45,7 @@
   </a>
 </p>
 
-A Glassworks **frame**: the device definition for the Aqara S1 Plus. Its data is in [`design/frame.json`](design/frame.json) (format: [frames/README.md](../README.md)), and [glassworks.dev/frames/aqara-s1-plus](https://www.glassworks.dev/frames/aqara-s1-plus) shows it.
+This folder defines the Glassworks **frame** for the Aqara Panel Hub S1 Plus. Its hardware metadata lives in [`design/frame.json`](design/frame.json) (see [frames/README.md](../README.md)) and is published at [glassworks.dev/frames/aqara-s1-plus](https://www.glassworks.dev/frames/aqara-s1-plus).
 
 <p align="center">
   <a href="#install">Install</a> ·
@@ -66,52 +66,36 @@ A Glassworks **frame**: the device definition for the Aqara S1 Plus. Its data is
 
 ## Credits
 
-Kiln's install stands on two open-source projects. Thank you.
+Kiln's installation workflow stands on two foundational open-source projects:
 
-- **FEL tooling: [sunxi-tools](https://github.com/linux-sunxi/sunxi-tools), by
-  [linux-sunxi](https://github.com/linux-sunxi)** (GPL-2.0). The FEL protocol reference that the
-  recovery-mode step follows to start U-Boot from RAM ([fel.md](research/fel.md),
-  [web-installer.md](research/web-installer.md)).
-- **Root: [Magisk](https://github.com/topjohnwu/Magisk), by [topjohnwu](https://github.com/topjohnwu)**
-  (GPL-3.0). The root that the boot patch adds. Kiln downloads it from Magisk's own release and
-  checks its hash; Glassworks never ships it.
+- **FEL recovery tooling:** [sunxi-tools](https://github.com/linux-sunxi/sunxi-tools) by [linux-sunxi](https://github.com/linux-sunxi) (GPL-2.0), which provides the FEL protocol reference used to boot U-Boot from RAM ([fel.md](research/fel.md), [web-installer.md](research/web-installer.md)).
+- **Root access:** [Magisk](https://github.com/topjohnwu/Magisk) by [topjohnwu](https://github.com/topjohnwu) (GPL-3.0). Kiln downloads the official release directly and verifies its hash—Glassworks never bundles Magisk.
 
-U-Boot, Trusted Firmware-A and the other code we ship are in
-[THIRD-PARTY-NOTICES.md](../../THIRD-PARTY-NOTICES.md). The list above is in
-[`design/frame.json`](design/frame.json) (`credits`; [how](../README.md#credits)).
+U-Boot, Trusted Firmware-A, and all other third-party components are documented in [THIRD-PARTY-NOTICES.md](../../THIRD-PARTY-NOTICES.md). Frame credits are declared in [`design/frame.json`](design/frame.json) ([format](../README.md#credits)).
 
 ## Why
 
-The S1 Plus is good wall hardware: a 1440×720 touchscreen, a microphone and a speaker, a
-time-of-flight presence sensor, an ambient light sensor, a Zigbee/Thread radio and a mains relay
-base. Out of the box it only runs Aqara's launcher and talks to Aqara's cloud. Its system
-WebView is Chromium 74, which is too old for the current Home Assistant frontend.
+The Aqara Panel Hub S1 Plus is great wall-mount hardware: a crisp 1440×720 touchscreen, microphone and speaker, time-of-flight presence sensor, ambient light sensor, Zigbee/Thread radio, and a mains relay wall base. Out of the box, however, it is locked to Aqara's launcher and cloud services, and its built-in Android WebView (Chromium 74) is far too old to run modern Home Assistant dashboards.
 
-Glassworks replaces the software layer and leaves the hardware alone. The panel boots into
-**Glassworks**, a small open-source app built on GeckoView (Firefox's engine). It shows your
-dashboard and appears in Home Assistant as a single ESPHome device. You don't need an Aqara
-account, soldering, or a terminal.
+Glassworks replaces the software layer while leaving your hardware untouched. The panel boots straight into the open-source Glassworks app powered by GeckoView (Firefox's browser engine), displaying your Home Assistant dashboard full screen and exposing the panel as a single ESPHome device—with no Aqara account, no soldering, and no command-line tools required.
 
 ## What you get
 
-**Your dashboard, full screen.** A current Home Assistant frontend in a kiosk that is the panel's
-home screen. HA's header and sidebar are hidden. You sign in by scanning a QR code with your
-phone, so you never type a password on the wall. You pick which dashboard it shows in HA.
+**Your dashboard, full screen:** A modern Home Assistant frontend running as the panel's home screen with the header and sidebar hidden. Sign in by scanning a QR code with your phone so you never type passwords on the wall, and choose which dashboard to show from Home Assistant or the Manage page.
 
-**A voice assistant.** On-device wake word (microWakeWord), Assist pipelines, timers and
-announcements, with a calm full-screen overlay while you talk.
+**Built-in Assist voice assistant:** On-device wake word detection (microWakeWord), Assist pipelines, on-screen voice timers, and spoken announcements with a calm full-screen overlay ([Voice and timers guide](../../docs/voice-and-timers.md)).
 
-| | |
+| Feature | What it gives you |
 |---|---|
-| 🏠 **One ESPHome device** | HA discovers the panel and sets up encryption automatically. You get the screen as a light, presence, light level, a speaker, voice settings and the wall base, plus the dashboard and radio controls. [The entities](../../docs/esphome.md) |
-| 🎵 **Music Assistant player** | A native Sendspin player that plays in sync with your other speakers. [Sendspin guide](../../docs/sendspin.md) |
-| 🔔 **Notifications** | HA sends a notification and the panel shows it over the dashboard, with a camera's picture, buttons and a sound. It can also open a dashboard view, like a doorbell's, over the whole screen or half of it. [Notifications guide](../../docs/notifications.md) |
-| 👋 **Wakes when you walk up** | The screen wakes as you approach, turns off when the room is empty, and follows the room's light. Home Assistant can dim it at night ([Panel night mode](../../docs/blueprints.md)). It is driven by the panel's own sensors. [Sensors guide](docs/sensors.md) |
-| 📡 **Radio for Home Assistant** | The panel's Zigbee/Thread radio can be a Zigbee coordinator for ZHA or (experimental) Zigbee2MQTT, a Thread border router, or a repeater in your existing network. You switch roles from HA. [How to](docs/radio-guide.md) |
-| 🔄 **Updates in Home Assistant** | New versions show up under *Settings → Updates*, and one click installs them. Fixes for the radio side come with them. [Updates](#updates) |
-| 🔌 **Wall base relays** | A driver for the mains relay base that speaks its UART protocol directly, with no Aqara daemon. Not yet tried on a real base. [Wall bases](research/bases.md) |
-| 🔒 **No Aqara cloud** | Aqara's launcher, apps, updater and cloud daemon are switched off (reversibly), so the panel stops talking to Aqara. |
-| ✨ **Its own boot screen** | The Glassworks splash and boot animation: glass plates drop into place and the top one lights up. [Boot branding](../../branding/glass-tile/README.md) |
+| 🏠 **Single ESPHome device** | Home Assistant discovers the panel automatically and configures encryption for you, exposing the screen light, presence, illuminance, speaker, voice controls, wall base, dashboard picker, and radio controls ([ESPHome entities](../../docs/esphome.md)). |
+| 🎵 **Music Assistant player** | Native Sendspin player that streams synchronized multi-room audio alongside your other Sendspin speakers ([Sendspin guide](../../docs/sendspin.md)). |
+| 🔔 **Rich notifications** | Show alerts from Home Assistant right over your dashboard with camera snapshots, action buttons, and chimes, or open a full-screen or half-screen doorbell view ([Notifications guide](../../docs/notifications.md)). |
+| 👋 **Smart wake and dimming** | Wakes smoothly as you approach, sleeps when the room is empty, and adapts brightness to ambient light using the built-in sensors. Pair it with [Panel night mode](../../docs/blueprints.md) to dim at night ([Sensors guide](docs/sensors.md)). |
+| 📡 **Local Zigbee/Thread radio** | Use the built-in Silicon Labs radio as a Zigbee coordinator (ZHA or experimental Zigbee2MQTT), a Thread border router, or a mesh repeater ([Radio guide](docs/radio-guide.md)). |
+| 🔄 **One-click HA updates** | New Glassworks versions appear under *Settings → Updates* in Home Assistant and install hands-free, including radio helper updates ([Updates](#updates)). |
+| 🔌 **Wall base relays** | Direct local UART driver for the mains relay base without Aqara's daemon—tested against an emulator, awaiting first run on a physical wall base ([Wall bases](research/bases.md)). |
+| 🔒 **No Aqara cloud** | Disables Aqara's launcher, apps, updater, and cloud daemon reversibly. Normal operation stays local; the panel only contacts GitHub to download wake-word models on first use, check for Glassworks updates, or fetch the optional Silicon Labs Zigbee stack. |
+| ✨ **Custom boot branding** | Displays the Glassworks splash and animated glass-tile boot sequence ([Boot branding](../../branding/glass-tile/README.md)). |
 
 <p align="center">
   <img src="../../branding/glass-tile/preview.webp" alt="The Glassworks boot animation: three glass plates drop onto a dashed outline, the top one lights from sky to violet, and the Glassworks wordmark fades in above &quot;On Aqara S1 Plus&quot;." width="60%">
@@ -121,108 +105,88 @@ announcements, with a calm full-screen overlay while you talk.
 
 **Status: beta.**
 
-**Clarity v1: D**, a good wall panel for light dashboards (measured 2026-11-17 UTC, 3 of 3 runs, not
-provisional; graded again under Clarity v1 on 2026-11-19, the letter unchanged). Typical dashboards hold it back: without a camera their view is drawn in 0.9 s, but the main
-thread then stays blocked for 2.7 s. Home Assistant's more-info dialogs settle in about 1 s on
-light dashboards and 1.2 to 1.4 s on typical ones. On heavy ones the thermostat's never opens within
-20 s, and the sensor's opens in about 4 s in 2 of 3 runs but its history graph isn't drawn. The report is in
-[clarity/report.md](clarity/report.md), and the summary the site grades in
-[clarity/clarity.json](clarity/clarity.json) ([how Clarity grades](../../docs/perf.md)). The Clarity
-badge shows the grade once glassworks.dev publishes it.
+**Clarity v1: D** — performs well as a wall panel for light Home Assistant dashboards. Typical dashboards hold it back from a C grade: without a live camera, the view draws in 0.9 seconds, but the main thread remains blocked for 2.7 seconds afterward. Home Assistant more-info dialogs settle in about 1 second on light dashboards and 1.2 to 1.4 seconds on typical dashboards, while heavy dashboards struggle with thermostat dialogs and sensor history graphs. See the full benchmark report in [clarity/report.md](clarity/report.md) and summary in [clarity/clarity.json](clarity/clarity.json) ([how Clarity grades](../../docs/perf.md)).
 
-What works on `main`, as of 2026-11-14. The latest release is v0.4.3, and rows marked New come with
-the next one. "Verified" means tested on a real panel in a real home.
+Here is the current feature maturity on `main` (rows marked **New** ship in the upcoming release following v0.4.3):
 
 | Feature | Status |
 |---|---|
-| Kiosk, HA dashboard, QR sign-in, dashboard picker | ✅ Works |
+| Full-screen kiosk, Home Assistant dashboard, QR sign-in, dashboard picker | ✅ Works |
 | ESPHome device with automatic encryption | ✅ Works |
-| Voice assistant with on-device wake word, timers, announcements | ✅ Works · far-field tuning ongoing |
-| Music Assistant player (Sendspin, synced) | ✅ Works |
-| Notifications from HA: cards, pictures, buttons, sounds, a view over the whole screen or half of it ([how](../../docs/notifications.md)) | 🧪 New · first run on the S1 2026-11-14 (cards, pictures, buttons, Do not disturb, a view full screen); the critical alert's rerun pending. Views in turn and the half view (#230): on the S1 2026-11-16, two full views with Next and one half view opened and closed; the rest of the run pending |
-| Presence wake, idle-off, auto-brightness | ✅ Works |
-| Night mode from Home Assistant ([Panel night mode](../../docs/blueprints.md) blueprint) | 🧪 New, not yet run on a panel |
-| Aqara cloud and bloat disabled (reversible) | ✅ Works |
-| Boot splash and animation | 🧪 The Glassworks redraw has not yet run on a panel. The Glass Tile one before it works |
-| Web installer, command-line installer, undo | ✅ Verified end to end (firmware 4.5.80) with the old S1 installer; boot patch tested on two firmware versions. Kiln has not yet done a full install on a panel |
-| Manage page in the browser (`:8099`, sign in through Home Assistant): status, log, diagnostics, signed-in browsers ([guide](../../docs/manage.md)) | 🧪 New · not yet checked on a panel; settings are read-only for now |
-| Set up over the network: the panel's own setup page (`:8099/setup`), paired with a code on its screen ([guide](../../docs/manage.md#set-up-over-the-network)) | 🧪 New · paired, the Home Assistant step, the radio kept and Done on the S1 (2026-11-16); allowing it from the settings and Kiln's link not yet |
-| Set up from a phone with no Wi-Fi: the panel's own setup Wi-Fi, a QR code on its screen ([guide](../../docs/manage.md#the-panels-own-wi-fi)) | 🧪 New · unit tests only; not yet run on a panel |
-| Panel health in Home Assistant: CPU, temperature, RAM, storage, Wi-Fi, uptime ([entities](../../docs/esphome.md#diagnostics)) | 🧪 New · not yet checked on a panel |
-| Bluetooth proxy for Home Assistant: listen, or listen and connect ([details](../../docs/esphome.md#bluetooth-proxy)) | 🧪 New · its engine met the S1 (HA found it, no Wi-Fi cost, 2026-11-14), the pane on 2026-11-16, and GATT connections with two real devices, one at a time, on 2026-11-17; more than one link at once untested |
-| App updates from Home Assistant | ✅ Works from v0.4.1 on ([one manual update first](#updates) on older versions) |
-| Frame version on the panel and the Manage page, and a *Frame update* entity in HA ([details](../../docs/esphome.md#frame-updates)) | 🧪 New · unit tests only. A panel without the loader shows *Before 1.0.0*; frame updates over the air come with the loader (#139) |
-| Time zone kept across reboots | ✅ Works (needs the boot software from v0.4.0) |
-| Radio: Zigbee coordinator for **ZHA** | ✅ Verified · keep the radio's network settings ([known issue](#known-issues)) |
-| Radio: Zigbee coordinator for **Zigbee2MQTT** | 🧪 Experimental · `ember` adapter: forming a network, resuming it and opening joining verified; not yet used for long with real devices |
-| Radio: **Thread border router** | ✅ Works · as your only border router (a Matter bulb added with the HA app and controlled from HA) or next to an existing one, also after a Wi-Fi drop and a restart. Must be on HA's network |
-| Radio: **Zigbee router (repeater), Thread router (repeater)** | 🧪 Experimental · both joined a real home network as a repeater |
-| Radio: only Home Assistant can connect | ✅ Verified |
-| Radio firmware updates | 🧪 Experimental · re-flashing Aqara's original firmware verified; no other firmware offered yet |
-| Wall base relays | 🧪 Driver done and checked against Aqara's own tool, but not yet tried on a real base |
+| Voice assistant (on-device wake word, timers, announcements) | ✅ Works · far-field tuning ongoing |
+| Music Assistant synchronized player (Sendspin) | ✅ Works |
+| Notifications (cards, snapshots, buttons, sounds, full/half views) | 🧪 New · core cards, buttons, Do not disturb, and full/half views tested on hardware; final edge-case runs ongoing |
+| Presence wake, idle screen-off, auto-brightness | ✅ Works |
+| Night mode via Home Assistant ([Panel night mode](../../docs/blueprints.md)) | 🧪 New · validated in Home Assistant, awaiting panel run |
+| Reversible Aqara cloud and bloat disabling | ✅ Works |
+| Boot splash and animation | 🧪 Previous Glass Tile animation verified; updated Glassworks redraw awaiting hardware run |
+| Web installer, CLI installer, and undo | ✅ End-to-end install verified with the original S1 installer (firmware 4.5.80) and boot patch tested on two firmware versions; full Kiln UI run on hardware pending |
+| Browser Manage page (`:8099`, HA sign-in, logs, diagnostics, multi-panel) | 🧪 New · HA sign-in and core pages checked on hardware; ongoing polish |
+| Network setup page (`:8099/setup`, 6-digit pairing code) | 🧪 New · core setup flow verified on hardware |
+| Phone setup via temporary setup Wi-Fi | 🧪 New · unit-tested, awaiting hardware run |
+| Panel health diagnostics (CPU, temperature, RAM, storage, Wi-Fi, uptime) | 🧪 New · awaiting hardware check |
+| Bluetooth proxy (listen and active GATT connections) | 🧪 New · scanning and single-device GATT verified on hardware; concurrent multi-device links untested |
+| Hands-free app updates from Home Assistant | ✅ Works from v0.4.1 onward ([one manual update](#updates) needed on older versions) |
+| Frame version display and *Frame update* entity | 🧪 New · unit-tested; over-the-air frame updates arrive with the frame loader |
+| Persistent time zone across reboots | ✅ Works (requires boot software from v0.4.0+) |
+| Radio: Zigbee coordinator for **ZHA** | ✅ Verified (choose *keep the radio's network settings*; see [Known issues](#known-issues)) |
+| Radio: Zigbee coordinator for **Zigbee2MQTT** | 🧪 Experimental · `ember` adapter forms networks and pairs devices; long-term soak testing ongoing |
+| Radio: **Thread border router** | ✅ Works · verified standalone with Matter devices and alongside existing border routers (must share Home Assistant's network) |
+| Radio: **Zigbee router** and **Thread router** repeaters | 🧪 Experimental · verified joining existing home networks |
+| Radio firewall (Home Assistant only by default) | ✅ Verified |
+| Radio firmware flashing | 🧪 Experimental · verified re-flashing Aqara's stock image; no third-party firmware offered yet |
+| Wall base relays | 🧪 Driver verified against emulator matching Aqara's `bracket_cli`; not yet tested on a physical wall base |
 | Wi-Fi setup over Bluetooth (Improv) | 🧪 Implemented; lightly tested |
-| A short entity list in HA: settings and troubleshooting entities start turned off ([list](../../docs/esphome.md#categories-and-defaults)) | 🧪 New · the check on a panel HA already has is pending |
+| Streamlined default HA entity list | 🧪 New · upgrade verification on existing HA installs ongoing |
 
 ## Hardware
 
-| | |
+| Specification | Details |
 |---|---|
-| SoC | Allwinner A133 |
-| Size | 172 × 86 mm; 42 mm deep with the in-wall box |
-| Screen | 1440 × 720 |
-| Radio | EFR32MG21 on SPI, RCP firmware |
-| Presence | VI5300 time-of-flight sensor |
-| Audio | Microphone and speaker |
-| Extras | Wired wall base on a UART |
-| Root | FEL, then a patched boot image |
+| SoC | Allwinner A133 (quad-core Cortex-A53), 2 GiB DDR4, 8 GB eMMC |
+| OS | Android 10 (32-bit userspace) |
+| Dimensions | 172 × 86 mm; 42 mm deep with in-wall box |
+| Display | 1440 × 720 capacitive touchscreen |
+| Radio | Silicon Labs EFR32MG21 on SPI (RCP firmware) |
+| Sensors | VI5300 time-of-flight presence sensor, MK6212 ambient light sensor |
+| Audio | Built-in microphone and speaker |
+| Extras | Wired mains relay wall base over UART |
+| Root method | USB FEL recovery mode + patched boot image |
 
 ### Supported hardware
 
-| Device | Status |
+| Model | Support |
 |---|---|
-| **Aqara Panel Hub S1 Plus, MP-K03D** (wall-mounted; EU, UK, AU and other regions) | ✅ Tested on firmware 4.5.80 |
-| **S1 Plus for China, JYMKP01LM** (86-box) | ✅ Reported working by a user: two panels running S1 Kiosk 0.4.3, installed with Kiln ([#503](https://github.com/GlassworksHQ/glassworks/issues/503), 2026-11-17). Not tested by us; firmware version not reported. The installer still refuses a panel whose layout doesn't match. |
-| S1 Plus Desktop, MP-K05D | ❓ Untested |
+| **Aqara Panel Hub S1 Plus, MP-K03D** (wall-mounted; EU, UK, AU, and international regions) | ✅ Tested on firmware 4.5.80 |
+| **Aqara S1 Plus China edition, JYMKP01LM** (86-box) | ✅ Community-reported working with Kiln (two panels running v0.4.3). Not directly tested by maintainers; Kiln refuses incompatible partition layouts before writing. |
+| **S1 Plus Desktop, MP-K05D** | ❓ Untested |
 | Other Aqara panels and hubs | ❌ Not supported |
-
-Inside: Allwinner A133 (quad Cortex-A53), 2 GiB DDR4, 8 GB eMMC, Android 10, a 1440×720 screen,
-a Silicon Labs EFR32 802.15.4 radio, a VI5300 time-of-flight sensor and an ambient light sensor.
 
 ## Install
 
-In the browser, over USB. It backs the panel up first, then roots and flashes it.
+Install Glassworks straight from your browser over USB-C using **[Kiln](https://kiln.glassworks.dev/aqara-s1-plus)**. Kiln backs up your panel's original partitions before modifying anything, patches the boot image safely in memory, and verifies every write. Full step-by-step instructions live in [docs/install.md](docs/install.md), and the frame's Kiln recipe lives in [`installer/`](installer/).
 
-Install it from Kiln: [kiln.glassworks.dev/aqara-s1-plus](https://kiln.glassworks.dev/aqara-s1-plus). The steps are in [docs/install.md](docs/install.md), and Kiln's recipe for it is in [`installer/`](installer/).
-
-Without root, the app can install over adb on its own, but you lose the radio modes.
+*(You can also sideload the app over adb without rooting, though radio modes require the root helper.)*
 
 ### What you need
 
-- An **Aqara Panel Hub S1 Plus** ([supported hardware](#supported-hardware)).
-- A **USB-C data cable** and a **small screwdriver** to open the back cover once.
-- **Chrome or Edge** on Windows, macOS or Linux. The installer uses WebUSB, which Firefox and
-  Safari don't support.
-- **Home Assistant** on the same network (2026.11 or newer recommended).
-- About **10 minutes**.
+- An **Aqara Panel Hub S1 Plus** ([supported hardware](#supported-hardware))
+- A **USB-C data cable** plugged directly into your computer and a **small screwdriver** to remove the back cover once
+- **Google Chrome or Microsoft Edge** on Windows, macOS, or Linux (WebUSB is not supported in Firefox or Safari)
+- **Home Assistant** on the same network (2026.11 or newer recommended for automatic encryption)
+- About **10 minutes**
 
 ### The web installer (recommended)
 
 **[Open Kiln at kiln.glassworks.dev/aqara-s1-plus →](https://kiln.glassworks.dev/aqara-s1-plus)**
 
-Kiln runs entirely in your browser and uploads nothing. It walks you through five steps:
+Kiln runs entirely inside your browser and uploads nothing to any server. It guides you through five clear steps:
 
-1. **Panel.** Pick the Aqara S1 Plus.
-2. **Connect.** With the back cover off, hold the small button on the board while you plug in
-   USB-C. That's recovery mode (FEL), built into the chip. Windows needs a Zadig driver once, and
-   Linux a udev rule; macOS needs nothing.
-3. **Install.** Kiln starts its own bootloader in RAM, then backs up the panel's partitions in the
-   browser. Only after that does it patch `boot` (Magisk plus the S1 helper), flash it and read it
-   back to verify.
-4. **Set up.** Glassworks is installed as the home screen, with your language, time zone and clock.
-   From the same page you set the panel's Wi-Fi (sent over USB), sign it in to Home Assistant, and
-   choose the radio role.
-5. **Done.** Download the backup and keep it. Home Assistant finds the panel as an ESPHome device.
-   Click **Add**.
+1. **Panel:** Select **Aqara S1 Plus**.
+2. **Connect:** Remove the back cover, hold the small FEL recovery button on the circuit board, and plug in USB-C. Windows needs a one-time Zadig WinUSB driver and Linux needs a udev rule; macOS needs no extra drivers.
+3. **Install:** Kiln boots a temporary bootloader in RAM, backs up your panel's partitions inside your browser, patches `boot` (Magisk plus the S1 root helper), flashes it, and verifies every partition by reading it back.
+4. **Set up:** Installs Glassworks as the panel's home screen with your language, time zone, and clock format, then walks you through Wi-Fi (sent directly over USB), Home Assistant sign-in, and your radio role.
+5. **Done:** Download and safely store your backup `.zip` file. Home Assistant automatically discovers the panel as an ESPHome device—just click **Add**.
 
 <table>
 <tr>
@@ -235,21 +199,14 @@ Kiln runs entirely in your browser and uploads nothing. It walks you through fiv
 </tr>
 </table>
 
-Every screen, per-OS setup, what to do when something fails, undo, updating and troubleshooting
-are in **[docs/install.md](docs/install.md)**.
+See **[docs/install.md](docs/install.md)** for per-OS driver setup, every screen walkthrough, undo instructions, and troubleshooting.
 
 > [!NOTE]
-> The web installer has been tested end to end on a real S1 Plus (firmware 4.5.80), from FEL mode
-> through the backup, the install and the app setup, with the old S1 installer, which runs the same
-> recipe as Kiln. Kiln itself has not yet done a full install on a real panel. The boot patch has been tested on two firmware
-> versions: 4.5.80 and the December 2025 firmware the panel shipped with. So far that is a small
-> number of panels. If anything looks wrong, stop and
-> [open an issue](https://github.com/GlassworksHQ/glassworks/issues). Your backup is safe.
+> The installation recipe has been verified end to end on real S1 Plus hardware (firmware 4.5.80) using the original S1 installer, and the boot patch has been verified across two stock firmware versions. Because this is still a beta tested on a relatively small number of panels, stop and [open an issue](https://github.com/GlassworksHQ/glassworks/issues) if anything looks unexpected—your backup remains safe.
 
 ### The command line
 
-The same steps as shell scripts, for people who would rather run them by hand (macOS or Linux;
-needs `sunxi-fel`, `fastboot`, `adb`, Docker and a U-Boot build):
+Prefer shell scripts or scripting? You can run the exact same workflow from macOS or Linux (requires `sunxi-fel`, `fastboot`, `adb`, Docker, and a U-Boot build):
 
 ```sh
 frames/aqara-s1-plus/tools/install/fel-install.sh ~/s1-backup          # FEL → back up → patch → flash → verify
@@ -257,203 +214,148 @@ frames/aqara-s1-plus/tools/install.sh --url http://homeassistant.local:8123 \
     --timezone America/Los_Angeles --locale en-US # install and configure Glassworks over adb
 ```
 
-See [docs/install.md](docs/install.md#command-line) for the details.
+See [Command line in docs/install.md](docs/install.md#command-line) for all options.
 
 ## The radio
 
-The S1 Plus has a Silicon Labs Zigbee/Thread radio inside. Glassworks can give it to Home
-Assistant in one role at a time. You pick the role with **Radio mode** on the panel's device page
-in Home Assistant (turn it on there first: HA adds it turned off), or in the panel's own settings
-menu (*Radio*), which also shows what to do next, with QR codes for your phone:
+Glassworks lets you assign the S1 Plus's built-in Silicon Labs EFR32 radio to one role at a time—either from **Settings → Radio** on the panel (with helpful phone QR codes for Home Assistant setup) or via **Radio mode** on the panel's Home Assistant device page:
 
-- **Zigbee coordinator** for ZHA: radio type EZSP, serial path `socket://<panel IP>:6638`.
-- **Zigbee coordinator** for Zigbee2MQTT (experimental): set **Zigbee stack** to *Silicon Labs
-  8.2.2* first, then use `adapter: ember` and `port: tcp://<panel IP>:6638`. The panel downloads that
-  stack from Silicon Labs itself.
-- **Thread border router**: runs its own Thread network, for HA's OpenThread Border
-  Router integration.
-- **Zigbee router (repeater)** or **Thread router (repeater)** (experimental): joins the network you
-  already have and extends it.
+- **Zigbee coordinator (ZHA):** Radio type `EZSP`, serial path `socket://<panel IP>:6638`.
+- **Zigbee coordinator (Zigbee2MQTT, experimental):** Switch **Zigbee stack** to *Silicon Labs 8.2.2* first (downloaded automatically from Silicon Labs), then configure `adapter: ember` and `port: tcp://<panel IP>:6638`.
+- **Thread border router:** Hosts a Thread network for Home Assistant's OpenThread Border Router integration.
+- **Zigbee or Thread router (repeater, experimental):** Joins and extends your existing Zigbee or Thread mesh.
 
-Only Home Assistant can connect to the radio unless you allow other computers. The step-by-step
-guide is **[docs/radio-guide.md](docs/radio-guide.md)**; the technical reference is
-[docs/radio.md](docs/radio.md).
+By default, only Home Assistant is allowed to connect to the radio ports. Read the [step-by-step radio guide](docs/radio-guide.md) or dive into the [technical radio reference](docs/radio.md).
 
 ## Updates
 
-New releases appear in Home Assistant under *Settings → Updates* (the panel's **App update**
-entity). Press **Install** and the panel installs it by itself; nothing to confirm on the panel.
-Each update is checked against its checksum and the project's signing key first.
+New Glassworks releases appear automatically in Home Assistant under **Settings → Updates** (**App update**). Click **Install** and the panel downloads, verifies its SHA-256 checksum and signing certificate, and installs hands-free with nothing to confirm on screen. See [Updates and restoring stock software](../../docs/updates.md) for the complete guide.
 
-- **Panels on v0.4.0 or older need one manual update.** Their update installs from Home Assistant
-  always failed with "the APK is not signed". Open the installer, choose **Already installed? Finish
-  setting it up**, and follow it (or run `adb install -r` with the new APK). From v0.4.1 on, updates
-  from Home Assistant work.
-- **The radio side updates with the app** (from v0.4.0), once the panel has the matching boot
-  software. Home Assistant's **Radio helper** sensor says when it needs that. To get it, run the web
-  installer's full install once more (one press of the FEL button). Panels that skip it keep working
-  as before.
-- **Moving from a development build to a release** (panels set up with the command line) needs a
-  one-time reinstall, because the two are signed with different keys. The installers do it for you
-  and keep the panel on its Wi-Fi. Without root over adb, which is the normal case, **the app's
-  settings are reset**: you sign in again and may need to add the panel to Home Assistant again.
-  See [docs/install.md](docs/install.md#switching-a-development-build-to-a-release).
+- **Panels on v0.4.0 or older:** Perform one manual update first (earlier versions failed Home Assistant installs with *"the APK is not signed"*). Open Kiln's [Finish setting up](https://kiln.glassworks.dev/aqara-s1-plus/set-up) flow or run `adb install -r` with the latest APK; from v0.4.1 onward, Home Assistant updates work automatically.
+- **Radio helper updates:** Starting with v0.4.0, radio helper updates ship alongside app updates once your panel has the matching boot image. Check the **Radio helper** sensor in Home Assistant—if it asks for a boot image refresh, run a full Kiln install once more (keep the backup from your **first** install).
+- **Switching from a development build to a release:** Because debug and release builds use different signing keys, moving to releases requires a one-time reinstall. Both Kiln and the CLI installer handle this safely and prompt you before making changes ([details](docs/install.md#switching-a-development-build-to-a-release)).
 
 ## Known issues
 
-- **ZHA can't create a new network or restore a backup onto the panel yet.** It hangs, because of a
-  bug in ZHA's radio library. The fix ([zigpy/bellows#774](https://github.com/zigpy/bellows/pull/774))
-  was merged on 2026-11-10 and will work once it reaches a Home Assistant release. Until then, choose
-  **keep the radio's network settings** when ZHA asks.
-- **Zigbee2MQTT has little time to spare at start-up.** The radio answers its reset in about 4.3
-  seconds and Zigbee2MQTT waits 5. A slow moment can make a start fail; it works on the next start.
-- **Zigbee2MQTT on the Silicon Labs stack** hasn't been used for long with real Zigbee devices yet.
-- **Thread border router:** the panel must be on Home Assistant's network (not a separate IoT
-  network). Tested as the only border router and as a second one.
-- **Switching a development build to a release** without root resets the app's settings (see
-  [Updates](#updates)).
+- **ZHA network creation and restore:** Creating a new Zigbee network or restoring a backup onto the panel hangs on older ZHA builds until upstream fix [zigpy/bellows#774](https://github.com/zigpy/bellows/pull/774) reaches Home Assistant. Choose **Keep the radio's network settings** during ZHA setup until then.
+- **Zigbee2MQTT startup timing:** The Silicon Labs stack answers reset commands in ~4.3 seconds while Zigbee2MQTT waits 5 seconds. If a startup occasionally times out, restarting Zigbee2MQTT usually succeeds.
+- **Zigbee2MQTT soak testing:** The Silicon Labs 8.2.2 stack has not yet had extended multi-device field testing.
+- **Thread border router subnet:** The panel must sit on the same LAN/VLAN as Home Assistant (not an isolated IoT VLAN) so Home Assistant can route to Thread devices.
+- **Switching from a debug build without adb root:** Replacing a debug build with a release build resets app settings unless adb has root access (see [Updates](#updates)).
 
 ## Undo and safety
 
-- **The backup comes first.** Nothing is written until the panel's own partitions are on your
-  computer: in the browser and as a `.zip` with a `SHA256SUMS` file, which the CLI's `--undo`
-  also accepts. Keep the backup from your **first** install, because it is the only copy of the
-  original software.
-- **Every write is verified.** The installer reads each partition back after flashing it and
-  stops if anything differs. It refuses hardware it doesn't recognise (SoC id, partition layout)
-  before it writes anything.
-- **Small footprint.** It changes three partitions: `boot`, the `vbmeta` flags and the boot
-  splash. Android, `system` and `vendor` are never modified, and everything Aqara ships is
-  disabled rather than deleted.
-- **Undo is built in.** In the installer, choose *Undo a previous install*. *Back to how it came
-  from Aqara* writes your backed-up partitions back over FEL; a factory reset on the panel then
-  removes Glassworks and its settings. *Keep the panel's settings* removes Glassworks over USB (or turns it off, if it
-  saved the panel's Wi-Fi) and brings Aqara's apps back; the panel keeps its Wi-Fi. From the CLI:
-  `frames/aqara-s1-plus/tools/install/fel-install.sh --undo <backup-dir>` or `frames/aqara-s1-plus/tools/install.sh --undo`.
-- **Hard to brick.** FEL lives in the chip's mask ROM, so it can't be erased. As long as you
-  have your backup, you can always get back in.
+- **Backups always come first:** Nothing is written until Kiln or the CLI saves a verified backup of your panel's partitions (as a `.zip` with `SHA256SUMS`). Keep the backup from your **first** install—it is the only copy of your original Aqara software.
+- **Verified writes and hardware checks:** Every flashed partition is read back and compared byte for byte. Kiln also checks the SoC ID and partition layout before writing anything and stops if it sees unfamiliar hardware.
+- **Minimal footprint:** Only `boot`, `vbmeta` flags, and the boot splash are modified. Android's `system` and `vendor` partitions are untouched, and Aqara's stock apps are disabled reversibly rather than deleted.
+- **Built-in undo:** Open **Undo an install** in Kiln (or run `fel-install.sh --undo <backup-dir>` / `install.sh --undo`). Choose **As it came from Aqara** to restore the original partitions and factory reset, or **Keep its settings** to bring back Aqara's apps while preserving Wi-Fi.
+- **Hard to brick:** FEL recovery mode lives in the A133 chip's read-only mask ROM and cannot be erased. As long as you have your original backup, you can always recover the panel.
 
 > [!WARNING]
-> This modifies a device you own, at your own risk, and probably voids its warranty. It has
-> been tested on a small number of panels. Follow the steps as written.
+> Installing Glassworks modifies hardware you own at your own risk and may void your manufacturer warranty. Follow the installation steps carefully and always keep your first backup safe.
 
-Legal notes (scope, no copy protection bypassed, no Aqara or Silicon Labs firmware shipped, trademarks,
-licences): [docs/legal.md](../../docs/legal.md).
+For scope, trademark, and licensing details, see [docs/legal.md](../../docs/legal.md).
 
 ## FAQ
 
 <details>
 <summary><b>Do I need to solder or use a serial console?</b></summary>
 
-No. You open the back cover once to press a button on the board while you plug in USB-C. A
-serial console was only used during development.
+No. You only remove the back cover once to press a small button on the board while plugging in USB-C. A serial console was only needed during initial hardware research.
 </details>
 
 <details>
-<summary><b>Can I go back to stock?</b></summary>
+<summary><b>Can I go back to Aqara's stock software?</b></summary>
 
-Yes. *Undo a previous install* (or `fel-install.sh --undo`) restores `boot`, `vbmeta` and the
-splash from your backup, and a factory reset afterwards brings back Aqara's setup. See
-[docs/install.md](docs/install.md#undo).
+Yes. Use **Undo an install** in Kiln (or `fel-install.sh --undo`) to restore `boot`, `vbmeta`, and the boot splash from your first backup, then run a factory reset on the panel. See [Undo in docs/install.md](docs/install.md#undo).
 </details>
 
 <details>
 <summary><b>Do I need an Aqara account or the Aqara app?</b></summary>
 
-No. A panel that was never set up with Aqara works fine. If it was, it keeps its Wi-Fi.
+No. A brand-new panel that has never been paired with Aqara works right away. If your panel was previously set up with Aqara, it keeps its existing Wi-Fi credentials.
 </details>
 
 <details>
-<summary><b>Will my Aqara Zigbee devices keep working?</b></summary>
+<summary><b>Will my existing Aqara Zigbee devices stay paired?</b></summary>
 
-Not through Aqara: its hub software is switched off. The panel's radio can instead be the Zigbee
-coordinator for Home Assistant (ZHA, or Zigbee2MQTT experimentally), and you pair your devices
-there again.
+Not through Aqara's hub software, which Glassworks disables. Instead, you can run the panel's radio as a Zigbee coordinator for Home Assistant (ZHA or experimental Zigbee2MQTT) and pair your Zigbee devices directly to Home Assistant.
 </details>
 
 <details>
-<summary><b>Does the panel still talk to Aqara's cloud?</b></summary>
+<summary><b>Does the panel still contact Aqara's cloud?</b></summary>
 
-No. The kiosk stops Aqara's cloud daemon a few seconds after boot and disables Aqara's apps and
-updater. It does reach out to GitHub: once to download the wake word models, and about once a
-day to check for Glassworks updates. If you choose the Silicon Labs Zigbee stack, it downloads that
-from Silicon Labs' GitHub once. Everything else stays on your LAN.
+No. Glassworks stops Aqara's cloud daemon shortly after boot and disables Aqara's apps and updater. The panel only contacts GitHub to download wake word models on first use and to check for Glassworks updates roughly once a day (plus Silicon Labs' GitHub once if you opt into the Zigbee2MQTT stack). Everything else stays strictly on your local network.
 </details>
 
 <details>
-<summary><b>Will Aqara firmware updates still arrive?</b></summary>
+<summary><b>Will Aqara firmware updates still install automatically?</b></summary>
 
-No. Aqara's updater is disabled while Glassworks is installed. Undo first if you want stock
-updates back.
+No. Aqara's updater is disabled while Glassworks is installed. Undo the install first if you want stock updates again.
 </details>
 
 <details>
-<summary><b>Why GeckoView and not the built-in browser?</b></summary>
+<summary><b>Why does Glassworks use GeckoView instead of Android's built-in browser?</b></summary>
 
-The panel's system WebView is Chromium 74 and can't run the current Home Assistant frontend.
-GeckoView ships its own up-to-date engine inside the app.
+The S1 Plus ships with Android 10's Chromium 74 WebView, which cannot render modern Home Assistant frontends. GeckoView bundles an up-to-date browser engine right inside the app.
 </details>
 
 <details>
 <summary><b>Which Home Assistant version do I need?</b></summary>
 
-2026.11 or newer is recommended. Older versions don't set up the panel's encryption by themselves,
-and then the radio can't tell which address is Home Assistant's. Development and testing use HA 2026.11 and Music
-Assistant 2.10. Voice needs an Assist pipeline; music needs Music Assistant with Sendspin.
+Home Assistant **2026.11 or newer** is recommended because it provisions ESPHome encryption automatically, which also lets the radio firewall identify your Home Assistant server. Voice features require an Assist pipeline, and synced music requires Music Assistant with Sendspin.
 </details>
 
 <details>
-<summary><b>How was this figured out?</b></summary>
+<summary><b>How was the S1 Plus unlocked and brought up?</b></summary>
 
-FEL bring-up, a DRAM controller fix for mainline U-Boot, a byte-exact Magisk patch in the
-browser, the radio and the wall base protocol: it's all written up in
-**[How we got here](../../docs/research/README.md)**.
+Everything from FEL recovery and mainline U-Boot DRAM fixes to byte-exact browser boot patching, radio bring-up, and the wall base UART protocol is documented in **[How we got here](../../docs/research/README.md)**.
 </details>
 
 ## Panes
 
-| Pane | Support | Note |
+| Pane | Support | Notes |
 |---|---|---|
-| Assist | Beta |  |
-| Timers | Beta |  |
-| Sendspin | Beta |  |
-| Zigbee and Thread radio | Beta | Zigbee coordinator or router, and Thread. |
-| Time zone | Beta | Worked out: needs no special hardware. |
-| Diagnostics | Alpha | Worked out: needs no special hardware. Not yet checked on a panel. |
-| Bluetooth proxy | Alpha | Worked out: has Bluetooth LE. Its engine met the S1 on 2026-11-14 and the pane on 2026-11-16. GATT connections (*Listen and connect*, #246) worked with two real devices, one at a time, on 2026-11-17; more than one link at once is untested. |
-| Notifications | Alpha | Worked out: needs no special hardware (the speaker plays its sounds). First run on the S1 2026-11-14; the critical alert's rerun pending. |
-| Camera | No | Worked out: needs a camera. The S1 has none; its settings say the pane can't run. |
-| Wall base | Alpha | The driver passes against an emulator that Aqara's own `bracket_cli` accepts. It has not yet been tried on a real base ([base-protocol.md](research/base-protocol.md), [bases.md](research/bases.md)). |
+| Assist | Beta | On-device wake word and Home Assistant Assist satellite |
+| Timers | Beta | On-screen voice timers and chimes |
+| Sendspin | Beta | Synchronized Music Assistant player |
+| Zigbee and Thread radio | Beta | Zigbee coordinator/repeater and Thread border router/repeater |
+| Time zone | Beta | Automatically supported; persists time zone across reboots |
+| Diagnostics | Alpha | System and app health sensors; awaiting final panel check |
+| Bluetooth proxy | Alpha | Passive BLE scanning and active GATT connections (single-device GATT verified; concurrent links untested) |
+| Notifications | Alpha | Rich alerts, snapshots, buttons, and dashboard views |
+| Camera | Not supported | The S1 Plus does not have a built-in camera |
+| Wall base | Alpha | Verified against emulator matching Aqara's `bracket_cli`; awaiting physical base test ([base-protocol.md](research/base-protocol.md), [bases.md](research/bases.md)) |
 
-"Worked out" means `frame.json` doesn't rate the pane; its support comes from what the pane needs and what the frame has ([how](../README.md#the-panes-a-frame-runs)).
+Panes without an explicit override in `frame.json` derive their compatibility automatically from the frame's declared hardware capabilities ([how it works](../README.md#the-panes-a-frame-runs)).
 
 ## Research notes
 
-What we found on this device, and how ([all notes](../../docs/research/README.md#the-research-notes)):
+Detailed engineering notes for the Aqara S1 Plus ([see all research notes](../../docs/research/README.md#the-research-notes)):
 
-- [hardware.md](research/hardware.md): Board, SoC, FEL button, the 3-pin UART console and an ESP32-S3 as the adapter
-- [boot-log.md](research/boot-log.md): Annotated stock boot log: BOOT0 DRAM bring-up, secure-boot state, partitions
-- [findings.md](research/findings.md): Root, SELinux, AVB, partitions, USB/adb defaults; why there is no button-free USB entry
-- [fel.md](research/fel.md): Mainline U-Boot from FEL: the A133 DDR4 fix, CPU clock, chunked uploads, fastboot
-- [root.md](research/root.md): Persistent root with Magisk, the root helper, first-boot adb provisioning, `fel-install.sh`
-- [web-installer.md](research/web-installer.md): The WebUSB installer's design spec: FEL port, fastboot, byte-exact boot patch, per-OS setup
-- [screen-policy.md](research/screen-policy.md): Why the panel turned its screen off (Aqara's DND night rule) and what replaced it
-- [debloat.md](research/debloat.md): Aqara's packages, the reversible de-bloat, and the cloud daemon and its Wi-Fi watchdog
-- [bases.md](research/bases.md): Which wall bases exist, how the panel talks to them, the kiosk's driver
-- [base-protocol.md](research/base-protocol.md): The wall base UART protocol, with the emulator proof against Aqara's own tool
-- [zigbee2mqtt.md](research/zigbee2mqtt.md): Zigbee2MQTT on the stock radio: Silicon Labs' zigbeed 8.2.2 on Aqara's RCP, panel tests, licences
-- [rcp-firmware.md](research/rcp-firmware.md): Could a newer multiprotocol RCP be built for this MG21? CPC protocol, tooling, board config
-- [framework-restart.md](research/framework-restart.md): Android 10's ActivityManager breaking during fast kiosk restarts, and `system_server` restarting; the likely (untested) cause of the panel "dropping off USB"
-- [boot-animation.md](research/boot-animation.md): What Android 10's boot animation and the 32 MiB boot image allow: texture caching, trim, the size budget, and what was cut from the #63 design
-- [idle-cpu.md](research/idle-cpu.md): Why the kiosk uses ~40% of a core at idle: the wake word's embedding model, per-thread numbers, and the options (#105)
-- [bluetooth.md](research/bluetooth.md): The panel's Bluetooth (RTL8821CS, shared with Wi-Fi), Android 10's scan rules from AOSP, what HA needs from an ESPHome Bluetooth proxy (#121), and GATT connections on Android 10 (#246)
-- [view-open.md](research/view-open.md): Where typical's 4.7 s view open goes: HA's JavaScript on one Gecko thread at 1.5 GHz; the app candidates tried on the panel (none helped), and what's left upstream (#244)
-- [install-crash-loop.md](research/install-crash-loop.md): Why the kiosk crash-looped after installs: Android 10's ActivityManager LRU bug (one step per kiosk force-stop), not dex2oat; the netwatch check that restarts the framework (#248)
-- [frame-loader.md](research/frame-loader.md): Frame updates (#139, #528): `/data` at `post-fs-data`, fixed service slots, the frame bundle and its names, and a Kiln update without opening the panel (read, panel tests pending)
+- [hardware.md](research/hardware.md): Board teardown, SoC, FEL button, and 3-pin UART console setup
+- [boot-log.md](research/boot-log.md): Annotated stock boot log, BOOT0 DRAM bring-up, secure boot, and partitions
+- [findings.md](research/findings.md): Root, SELinux, AVB, partitions, USB/adb defaults, and why buttonless USB entry is unavailable
+- [fel.md](research/fel.md): Mainline U-Boot over FEL, A133 DDR4 fix, CPU clocking, chunked uploads, and fastboot
+- [root.md](research/root.md): Persistent Magisk root, root helper threat model, first-boot adb provisioning, and `fel-install.sh`
+- [web-installer.md](research/web-installer.md): WebUSB installer design spec (FEL, fastboot, byte-exact boot patching, per-OS setup)
+- [screen-policy.md](research/screen-policy.md): Investigating Aqara's stock night Do Not Disturb rule and replacing it
+- [debloat.md](research/debloat.md): Aqara package inventory, reversible de-bloating, and cloud daemon Wi-Fi watchdog
+- [bases.md](research/bases.md): Wall base variants, communication path, and kiosk driver architecture
+- [base-protocol.md](research/base-protocol.md): Wall base UART protocol specification and emulator proof against `bracket_cli`
+- [zigbee2mqtt.md](research/zigbee2mqtt.md): Running Silicon Labs `zigbeed` 8.2.2 on Aqara's RCP firmware
+- [rcp-firmware.md](research/rcp-firmware.md): Feasibility study for building newer multiprotocol RCP firmware on EFR32MG21
+- [framework-restart.md](research/framework-restart.md): Android 10 ActivityManager failure during rapid kiosk restarts
+- [boot-animation.md](research/boot-animation.md): Android 10 boot animation constraints, texture caching, and boot partition budget
+- [idle-cpu.md](research/idle-cpu.md): Idle CPU profiling of wake word inference and per-thread breakdown
+- [bluetooth.md](research/bluetooth.md): RTL8821CS Bluetooth coexistence, Android 10 scan rules, and ESPHome GATT proxy behavior
+- [view-open.md](research/view-open.md): Profiling Home Assistant dashboard view-open latency on GeckoView at 1.5 GHz
+- [install-crash-loop.md](research/install-crash-loop.md): Android 10 ActivityManager LRU bug after force-stops and framework watchdog recovery
+- [frame-loader.md](research/frame-loader.md): Frame loader architecture, fixed service slots, frame bundles, and over-the-air frame updates
 
 ## Files
 
-- [`design/frame.json`](design/frame.json): the catalog data and the 3D model, and the boot branding's target
-- [`design/recovery.json`](design/recovery.json): the steps into recovery mode, as drawing data
-- [`installer/`](installer/): Kiln's recipe for this frame
-- [`research/`](research/): the notes above
+- [`design/frame.json`](design/frame.json): Catalog metadata, 3D model definition, and boot branding target
+- [`design/recovery.json`](design/recovery.json): Data-driven recovery-mode animation steps
+- [`installer/`](installer/): Kiln WebUSB installation recipe
+- [`research/`](research/): Hardware bring-up and engineering notes listed above

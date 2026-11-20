@@ -4,7 +4,7 @@ import { getDocs, SECTIONS, type Doc } from "./index";
 import { apiReferenceOf } from "../apiDocs";
 import { researchUrl } from "./research";
 
-/** The docs' sidebar: sections of links, a frame's guides nested under it, a library's API reference under it. */
+/** The docs sidebar: three audience tracks with expandable frame guides and library API references. */
 export type NavItem = {
   label: string;
   href: string;
@@ -29,26 +29,36 @@ export async function docsNav(): Promise<NavGroup[]> {
     return n ? [{ label: "Research", href: researchUrl(frame), aside: String(n), also: `/docs/frames/${frame}/notes/` }] : [];
   };
   const of = (section: string) => docs.filter((d) => d.section === section);
+  const byUrl = (url: string) => docs.filter((d) => d.url === url).map(item);
   const libraries = docs.filter((d) => d.url.startsWith("/docs/libraries/"));
-  const groups: Record<string, NavItem[]> = {
-    panel: [{ label: "Introduction", href: "/docs" }, ...of("panel").map(item)],
-    frames: [
-      ...frames.map((f) => ({
-        label: f.name,
-        href: `/docs/frames/${f.id}`,
-        aside: f.status === "beta" || f.status === "stable" ? undefined : STAGE_TEXT[f.status],
-        children: [
-          ...of("frames")
-            .filter((d) => d.frame === f.id && d.url !== `/docs/frames/${f.id}`)
-            .map(item),
-          ...research(f.id),
-        ],
-      })),
-      ...of("frames").filter((d) => !d.frame).map(item),
+
+  const frameItems: NavItem[] = frames.map((f) => ({
+    label: f.name,
+    href: `/docs/frames/${f.id}`,
+    aside: f.status === "beta" || f.status === "stable" ? undefined : STAGE_TEXT[f.status],
+    children: [
+      ...of("user")
+        .filter((d) => d.frame === f.id && d.url !== `/docs/frames/${f.id}`)
+        .map(item),
+      ...research(f.id),
     ],
-    philosophy: of("philosophy").map(item),
-    build: [
-      ...docs.filter((d) => d.url === "/docs/core/pane-api").map(item),
+  }));
+
+  const userDaily = of("user").filter((d) => !d.frame && d.url !== "/docs/getting-started");
+
+  const groups: Record<string, NavItem[]> = {
+    user: [
+      { label: "Docs overview", href: "/docs" },
+      ...byUrl("/docs/getting-started"),
+      ...frameItems,
+      ...userDaily.map(item),
+    ],
+    developers: [
+      ...byUrl("/docs/principles"),
+      ...byUrl("/docs/what-makes-a-pane"),
+      ...byUrl("/docs/frames"),
+      ...byUrl("/docs/frame-agent"),
+      ...byUrl("/docs/core/pane-api"),
       { label: "Panes", href: "/docs/panes", aside: String(PANES.length) },
       {
         label: "Libraries",
@@ -66,10 +76,11 @@ export async function docsNav(): Promise<NavGroup[]> {
         }),
       },
       ...docs.filter((d) => d.url.startsWith("/docs/kiln")).map(item),
+      ...byUrl("/docs/secrets"),
+      ...["/docs/size", "/docs/ci", "/docs/releasing", "/docs/branding", "/docs/legal", "/changelog"].flatMap(byUrl),
     ],
-    project: of("project").map(item),
     notes: [
-      { label: "Research", href: "/research", aside: String(of("notes").length - 1), also: "/docs/notes/" },
+      { label: "All research notes", href: "/research", aside: String(of("notes").length - 1), also: "/docs/notes/" },
       { label: "How we got here", href: "/docs/notes" },
     ],
   };
