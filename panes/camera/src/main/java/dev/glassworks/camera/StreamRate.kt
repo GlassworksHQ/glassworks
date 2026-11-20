@@ -17,16 +17,33 @@ fun announcedFps(range: IntRange?): Int = range?.last ?: 0
 
 /**
  * The size the hub reads frames at: [want] when the camera lists it for YUV ([sizes], width to height), else the
- * listed size nearest it in area among those up to 1920x1080. A camera that lists nothing that small gets the
- * smallest size it lists, which can be larger. A LEGACY camera (Android 6's, on the
- * Camera1 shim) refuses a session at a size it doesn't list. With no list, [want].
+ * listed size nearest it in area among those up to [maxPixels] (the frame's cap, [CameraHub.MAX_PIXELS] by default).
+ * A camera that lists nothing that small gets the smallest size it lists, which can be larger. With no list, [want].
+ *
+ * A LEGACY camera (Android 6's Camera1 shim) refuses a session at a size it doesn't list, and its [sensor] aspect
+ * ([legacyAspect]) decides what the camera really runs at: the shim's preview is the smallest preview size with the
+ * sensor's aspect that covers the largest output, else its largest preview size (AOSP 6.0.1,
+ * `RequestThreadManager.configureOutputs`). The Mirror's 5 MP 4:3 camera ran its preview at 1920x1080 for a 1280x720
+ * reader (#679). So on one, a size with the sensor's aspect up to [maxPixels] comes first: the preview is then that size.
  */
-fun yuvSizeFor(sizes: List<Pair<Int, Int>>?, want: Pair<Int, Int>): Pair<Int, Int> {
-    if (sizes.isNullOrEmpty() || want in sizes) return want
+fun yuvSizeFor(
+    sizes: List<Pair<Int, Int>>?,
+    want: Pair<Int, Int>,
+    maxPixels: Int = CameraHub.MAX_PIXELS,
+    sensor: Pair<Int, Int>? = null,
+): Pair<Int, Int> {
+    if (sizes.isNullOrEmpty()) return want
     val area = want.first.toLong() * want.second
-    return sizes.filter { it.first * it.second <= 1920 * 1080 }
-        .minByOrNull { Math.abs(it.first.toLong() * it.second - area) } ?: sizes.minBy { it.first.toLong() * it.second }
+    fun nearest(of: List<Pair<Int, Int>>) =
+        of.filter { it.first.toLong() * it.second <= maxPixels }.minByOrNull { Math.abs(it.first.toLong() * it.second - area) }
+    sensor?.let { s -> nearest(sizes.filter { legacyAspect(it, s) })?.let { return it } }
+    if (want in sizes && area <= maxPixels) return want
+    return nearest(sizes) ?: sizes.minBy { it.first.toLong() * it.second }
 }
+
+/** The same shape as [sensor] within the LEGACY shim's tolerance (0.01, AOSP 6.0.1's `ASPECT_RATIO_TOLERANCE`). */
+fun legacyAspect(size: Pair<Int, Int>, sensor: Pair<Int, Int>): Boolean =
+    Math.abs(size.first.toFloat() / size.second - sensor.first.toFloat() / sensor.second) < 0.01f
 
 /**
  * While only presence reads frames from a LEGACY camera: the range with the lowest top that still covers presence's

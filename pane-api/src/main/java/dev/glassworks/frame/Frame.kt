@@ -52,6 +52,12 @@ interface Frame {
      */
     val cpuThermalZone: String? get() = null
 
+    /**
+     * The most pixels the camera and its stream may run at (frame.json's `camera.maxPixels`), for a device whose memory
+     * can't hold more next to the page; null (the default) for the camera pane's own limit, 1080p.
+     */
+    val cameraMaxPixels: Int? get() = null
+
     /** The device's own settings screens, best first. [systemSettings] picks the first that opens. */
     /**
      * The boot animation's last frame and where it sits on the screen (px), so the app's first screen

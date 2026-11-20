@@ -6,6 +6,7 @@ package dev.glassworks.camera
 
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -90,6 +91,46 @@ class CameraPartsTest {
         assertEquals("nothing up to 1080p: the smallest listed, never one it doesn't list", 2048 to 1536, yuvSizeFor(listOf(2592 to 1944, 2048 to 1536), hd))
         assertEquals(hd, yuvSizeFor(null, hd))
         assertEquals(hd, yuvSizeFor(emptyList(), hd))
+    }
+
+    /** #679: the frame's cap replaces 1080p. */
+    @Test fun theFramesCapBoundsTheSize() {
+        val hd = 1280 to 720
+        assertEquals("listed but above the cap", 1024 to 576, yuvSizeFor(listOf(640 to 480, 1024 to 576, 1280 to 720), hd, maxPixels = 1024 * 576))
+        assertEquals("nearest under the cap", 960 to 720, yuvSizeFor(listOf(640 to 480, 960 to 720, 1920 to 1080), 1920 to 1080, maxPixels = 1280 * 720))
+    }
+
+    /**
+     * #679: a LEGACY camera runs its preview at the smallest sensor-shaped size that covers the reader, else its
+     * largest. The Mirror's 4:3 sensor ran 1920x1080 for a 1280x720 reader; a 4:3 reader is the preview itself.
+     */
+    @Test fun aLegacyCameraReadsAtTheSensorsShapeUnderTheCap() {
+        val mirrorLike = listOf(1280 to 720, 1024 to 768, 800 to 600, 640 to 480, 320 to 240)
+        val sensor = 2592 to 1944
+        assertEquals(1024 to 768, yuvSizeFor(mirrorLike, 1280 to 720, maxPixels = 1280 * 720, sensor = sensor))
+        assertEquals("the cap still holds", 800 to 600, yuvSizeFor(mirrorLike, 1280 to 720, maxPixels = 640 * 480 + 200_000, sensor = sensor))
+        assertEquals("a 16:9 sensor keeps 1280x720", 1280 to 720, yuvSizeFor(mirrorLike, 1280 to 720, sensor = 1920 to 1080))
+        assertEquals("no size of the sensor's shape: as before", 1280 to 720, yuvSizeFor(listOf(1280 to 720, 640 to 360), 1280 to 720, sensor = sensor))
+        assertEquals("not LEGACY: as before", 1280 to 720, yuvSizeFor(mirrorLike, 1280 to 720, maxPixels = 1280 * 720))
+        assertTrue(legacyAspect(1024 to 768, sensor))
+        assertFalse(legacyAspect(1280 to 720, sensor))
+    }
+
+    /** #679: the device's own encoder first, when it takes the size; Android's order within each group. */
+    @Test fun theHardwareEncoderComesFirst() {
+        val any = { _: Int, _: Int -> true }
+        val google = AvcEncoder("OMX.google.h264.encoder", hardware = false, listsSurface = true, takes = any)
+        val qcom = AvcEncoder("OMX.qcom.video.encoder.avc", hardware = true, listsSurface = true, takes = any)
+        val oldQcom = AvcEncoder("OMX.qcom.old.avc", hardware = true, listsSurface = false, takes = any)
+        assertEquals(listOf(qcom, oldQcom, google).map { it.name }, encoderOrder(listOf(google, oldQcom, qcom), 1280, 720).map { it.name })
+        val small = AvcEncoder("OMX.small.avc", hardware = true, listsSurface = true, takes = { w, h -> w * h <= 640 * 480 })
+        assertEquals("one that can't take the size isn't tried", listOf(google.name), encoderOrder(listOf(small, google), 1280, 720).map { it.name })
+        assertTrue(encoderOrder(emptyList(), 1280, 720).isEmpty())
+    }
+
+    @Test fun softwareCodecsAreNamedAsAospNamesThem() {
+        for (sw in listOf("OMX.google.h264.encoder", "c2.android.avc.encoder", "OMX.Google.H264.Encoder", "ffmpeg.avc")) assertTrue(sw, isSoftwareCodec(sw))
+        for (hw in listOf("OMX.qcom.video.encoder.avc", "c2.exynos.h264.encoder", "OMX.MTK.VIDEO.ENCODER.AVC")) assertFalse(hw, isSoftwareCodec(hw))
     }
 
     /** #479: Android 6's emulator camera (LEGACY) lists no 1280x720; the stream runs at the size the hub reads. */

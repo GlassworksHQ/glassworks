@@ -70,6 +70,8 @@ export interface FrameDesign {
   abis?: Abi[];
   /** the device can sit on a dock (the Pixel Tablet): the app gives Home Assistant its Docked sensor from the start (docs/esphome.md#docked) */
   dock?: boolean;
+  /** `maxPixels`: the most the camera and its stream may run at, for a device whose memory can't hold more next to the page */
+  camera?: { maxPixels: number };
   /**
    * The app Kiln installs on this frame, when it isn't Glassworks: its package (`id`), the activity adb
    * starts it with (whose extras it trusts from adb), the activity its HOME filter is on (an alias),
@@ -202,7 +204,7 @@ export function kindProblems(f: Pick<FrameDesign, 'kind' | 'base' | 'kiln' | 'ap
 const FIELDS: Record<keyof FrameDesign, true> = {
   id: true, kind: true, base: true, name: true, brand: true, aka: true, status: true, summary: true, tagline: true, project: true,
   kiln: true, model: true, recovery: true, render: true, display: true, boot: true, abis: true, app: true, specs: true, panes: true,
-  provides: true, agent: true, dock: true, install: true, ratings: true, ratingsNote: true, notice: true, legacy: true, unverified: true, credits: true, facts: true, run: true,
+  provides: true, agent: true, dock: true, camera: true, install: true, ratings: true, ratingsNote: true, notice: true, legacy: true, unverified: true, credits: true, facts: true, run: true,
 };
 
 /**
