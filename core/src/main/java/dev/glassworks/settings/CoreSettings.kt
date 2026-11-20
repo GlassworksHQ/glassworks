@@ -5,11 +5,12 @@ import dev.glassworks.pane.SettingsItem.TextKind
 import dev.glassworks.pane.SettingsPlace
 import dev.glassworks.pane.SettingsSection
 import dev.glassworks.screen.ScreenHardware
+import dev.glassworks.theme.Themes
 import dev.glassworks.KioskPrefs
 import java.util.Locale
 
 /**
- * The settings sections the app has itself, before and after the panes': Home Assistant & dashboard, Screen, Log,
+ * The settings sections the app has itself, before and after the panes': Home Assistant & dashboard, Screen, Appearance, Log,
  * Security and About (#63). Network has nothing yet. Durations are picked, the
  * presence range is a slider: nothing on the Screen page is typed (#63 round 2). Values are read when the menu opens; each change
  * applies on its own. The ones Gecko reads at start (the dashboard's address, zoom, secure hosts) ask
@@ -48,6 +49,8 @@ class CoreSettings(
         val brightness: () -> Unit = {},
         /** Ends the paired browsers of setup over the network and the setup hotspot (dev.glassworks.setup.LanSetup.close). */
         val closeSetup: () -> Unit = {},
+        /** The overlays' theme changed ([KioskPrefs.overlayTheme]): they draw with it from now on. */
+        val theme: () -> Unit = {},
         /** A factory reset ([FactoryReset.run]); null leaves the row out. */
         val factoryReset: ((done: (String?) -> Unit) -> Unit)? = null,
     )
@@ -84,6 +87,10 @@ class CoreSettings(
             deviceSettings?.takeIf { hardware.touch },
             // Night is Home Assistant's to decide (#473): the blueprint turns the screen off sooner and dims it.
             screenBlueprints,
+        )),
+        // The panel's own screens over the dashboard (#691): voice, timers, notifications and setup.
+        SettingsPlace.APPEARANCE to SettingsSection(APPEARANCE, APPEARANCE_TITLE, listOf(
+            SettingsItem.Group(THEME_TITLE, listOf(SettingsItem.Note { THEME_NOTE }, theme())),
         )),
         SettingsPlace.LOG to SettingsSection("log", "Log", listOf(
             SettingsItem.Info(title = { "Screen and sensors" }, detail = status),
@@ -213,6 +220,25 @@ class CoreSettings(
         shown: (String) -> String = { it }, restartsApp: Boolean = false, perPanel: Boolean = false, save: (String) -> Unit,
     ) = SettingsItem.Text(title, hint, kind, value, shown = shown, restartsApp = restartsApp, perPanel = perPanel, save = { v, done -> save(v.trim()); done(null) })
 
+    /**
+     * The theme picker (#691): one card per theme with its light and its dark orb; a tap on an orb picks that theme in
+     * that variant. Glassworks, dark is the default, today's look.
+     */
+    private fun theme() = SettingsItem.Choice(
+        THEME_TITLE,
+        // A saved custom theme (#691's Custom themes) is one more card, and shows as picked when it is.
+        value = { prefs.overlayPick.id },
+        options = { Themes.options(prefs.customTheme) },
+        swatch = { id ->
+            val p = Themes.pick(id, prefs.customTheme)
+            SettingsItem.Swatch(p.theme.name, if (p.theme === Themes.GLASSWORKS) "Default" else "", p.dark, p.palette.a, p.palette.b, p.palette.ground)
+        },
+    ) { v, done ->
+        prefs.overlayTheme = v
+        live.theme()
+        done(null)
+    }
+
     private fun switch(title: String, detail: String, value: () -> Boolean, save: (Boolean) -> Unit) =
         SettingsItem.Switch(title, detail, value) { v, done -> save(v); done(null) }
 
@@ -222,6 +248,11 @@ class CoreSettings(
         /** The Screen page's id, and its blueprints' `pane` in the app's blueprint list (core/src/main/java/dev/glassworks/screen/page.json). */
         const val SCREEN = "screen"
         const val ACCOUNT_TITLE = "Dashboard sign-in"
+        /** The Appearance page's id (#691). */
+        const val APPEARANCE = "appearance"
+        const val APPEARANCE_TITLE = "Appearance"
+        const val THEME_TITLE = "Theme"
+        const val THEME_NOTE = "For voice, timers, notifications and setup. Your dashboard keeps its own."
         const val WAKE_TITLE = "Wake when someone's near"
         const val SETUP_OVER_NETWORK = "Allow setup over the network"
         const val CLOSE_SETUP = "Close setup over the network"

@@ -510,7 +510,7 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         }
         is SettingsItem.Note -> g.text(14.5f, MU).apply { text = i.text(); setLineSpacing(0f, 1.25f); setPadding(0, px(14f), 0, px(14f)) }
         is SettingsItem.Info -> infoRow(i)
-        is SettingsItem.Choice -> follow(valueRow(i.title, choiceName(i), chevron = true, dim = false) { sheet.choice(i) { build() } }) { choiceName(i) }
+        is SettingsItem.Choice -> if (i.swatch != null) themes(i) else follow(valueRow(i.title, choiceName(i), chevron = true, dim = false) { sheet.choice(i) { build() } }) { choiceName(i) }
         is SettingsItem.SignIn -> follow(valueRow(i.title, i.shown(i.isSet()), chevron = true, dim = false) { sheet.signIn(i) { build() } }) { i.shown(i.isSet()) }
         is SettingsItem.Action -> actionRow(i, prefix)
         is SettingsItem.Group, is SettingsItem.States, is SettingsItem.Status, is SettingsItem.Tiles, is SettingsItem.Blueprints -> error("laid out by layOut")
@@ -551,6 +551,18 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
     }
 
     private fun choiceName(i: SettingsItem.Choice): String = SettingsChange.shown(i)
+
+    /**
+     * A choice with swatches as the theme picker (#691): a tap on an orb picks it at once. A pick made elsewhere (the
+     * Manage page) while the page is open draws the page again.
+     */
+    private fun themes(i: SettingsItem.Choice): View {
+        val shown = runCatching { i.value() }.getOrNull()
+        live += { if (runCatching { i.value() }.getOrNull() != shown) build() }
+        return ThemePicker(context, i) { id ->
+            save({ done -> i.save(id, done) }) { why -> if (why != null) showProblem(why) else { problem.visibility = View.GONE; build() } }
+        }.apply { setPadding(0, px(6f), 0, px(8f)) }
+    }
 
     /**
      * "In Home Assistant" (#212): its label, then a name on the left and its value on the right, one line

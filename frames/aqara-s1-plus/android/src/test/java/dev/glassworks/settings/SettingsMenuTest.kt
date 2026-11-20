@@ -94,8 +94,8 @@ class SettingsMenuTest {
 
     @Test
     fun theS1sSectionsInOrder() {
-        assertEquals(listOf("dashboard", "screen", "voice", "sendspin", "radio", "log", "security", "about"), menu().map { it.id })
-        assertEquals(listOf("Home Assistant & dashboard", "Screen", "Voice", "Music", "Radio", "Log", "Security", "About"), menu().map { it.title })
+        assertEquals(listOf("dashboard", "screen", "appearance", "voice", "sendspin", "radio", "log", "security", "about"), menu().map { it.id })
+        assertEquals(listOf("Home Assistant & dashboard", "Screen", "Appearance", "Voice", "Music", "Radio", "Log", "Security", "About"), menu().map { it.title })
         assertEquals("Zigbee / Thread radio", menu().first { it.id == "radio" }.heading)
     }
 

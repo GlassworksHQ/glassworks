@@ -84,7 +84,9 @@ class PanelManageParityTest {
         is SettingsItem.Slider -> listOf(i.title, i.shown(i.value()))
         is SettingsItem.Duration -> listOf(i.title, i.shown(i.value()))
         is SettingsItem.TimeRange -> listOf(i.title, i.shown(i.value()))
-        is SettingsItem.Choice -> listOf(i.title, SettingsChange.shown(i))
+        // A theme picker (#691) shows its title and each card's name; the picked one is ringed and badged, not written.
+        is SettingsItem.Choice -> i.swatch?.let { sw -> listOf(i.title) + i.options().map { sw(it.first).group }.distinct() }
+            ?: listOf(i.title, SettingsChange.shown(i))
         is SettingsItem.SignIn -> listOf(i.title, i.shown(i.isSet()))
         // Its button may sit elsewhere on the panel (the time zone's "Use it" is in its picker): the row's words.
         is SettingsItem.Action -> listOf(i.title, i.detail()).filter { it.isNotEmpty() }

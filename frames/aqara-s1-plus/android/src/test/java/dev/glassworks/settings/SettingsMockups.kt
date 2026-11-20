@@ -95,6 +95,11 @@ class SettingsMockups {
         KioskPrefs(RuntimeEnvironment.getApplication()).apply { closeLanSetup(); haSeen = false }
         shot("settings-02-radio", menu(radioRunning = true), "radio")
         shot("settings-03-screen", menu(radioRunning = true), "screen")
+        // #691: the Appearance page, Glassworks dark (the default), then Dusk light picked.
+        shot("settings-03b-appearance", menu(radioRunning = true), CoreSettings.APPEARANCE)
+        KioskPrefs(RuntimeEnvironment.getApplication()).overlayTheme = "dusk/light"
+        shot("settings-03c-appearance-dusk-light", menu(radioRunning = true), CoreSettings.APPEARANCE)
+        KioskPrefs(RuntimeEnvironment.getApplication()).overlayTheme = "glassworks/dark"
         shot("settings-04-about", menu(radioRunning = true), "about")
         shot("settings-05-radio-service-not-running", menu(radioRunning = false), "radio")
         shot("settings-06-screen-no-device-settings", menu(radioRunning = true, deviceSettings = false), "screen")

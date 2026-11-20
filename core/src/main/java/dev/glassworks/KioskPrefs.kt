@@ -249,6 +249,26 @@ class KioskPrefs(
         get() = sp.getBoolean("hide_header", true)
         set(v) = sp.edit().putBoolean("hide_header", v).apply()
 
+    /**
+     * The overlays' theme (#691): a [dev.glassworks.theme.Themes] pick id, `glassworks/dark` when none is saved. An id
+     * this build doesn't know reads as the default. A factory reset clears it, as the other settings.
+     */
+    var overlayTheme: String
+        get() = dev.glassworks.theme.Themes.pick(sp.getString("overlay_theme", null), customTheme).id
+        set(v) = sp.edit().putString("overlay_theme", dev.glassworks.theme.Themes.pick(v, customTheme).id).apply()
+
+    /**
+     * The custom theme's palettes (#691's "Custom themes"), or null while none are saved: then `custom/…` reads as the
+     * default. Stored as [dev.glassworks.theme.Themes.encode]'s text; a factory reset clears it.
+     */
+    var customTheme: dev.glassworks.theme.Themes.Theme?
+        get() = dev.glassworks.theme.Themes.decode(sp.getString("overlay_custom", null))
+        set(v) = sp.edit().apply { if (v == null) remove("overlay_custom") else putString("overlay_custom", dev.glassworks.theme.Themes.encode(v)) }.apply()
+
+    /** What the overlays draw with now: the saved pick, the custom theme's palettes for `custom/…`. */
+    val overlayPick: dev.glassworks.theme.Themes.Pick
+        get() = dev.glassworks.theme.Themes.pick(sp.getString("overlay_theme", null), customTheme)
+
     var hideSidebar: Boolean
         get() = sp.getBoolean("hide_sidebar", true)
         set(v) = sp.edit().putBoolean("hide_sidebar", v).apply()

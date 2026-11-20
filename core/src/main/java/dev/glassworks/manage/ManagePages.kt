@@ -237,7 +237,8 @@ ${foot(viewer)}"""
             }
             is SettingsItem.Duration -> edit(item.title, safe { item.shown(item.value()) })
             is SettingsItem.TimeRange -> edit(item.title, safe { item.shown(item.value()) })
-            is SettingsItem.Choice -> item.cards?.let { lines -> cards(v, section, key, item, lines) } ?: edit(item.title, safe { SettingsChange.shown(item) })
+            is SettingsItem.Choice -> item.swatch?.let { sw -> themes(v, section, key, item, sw) }
+                ?: item.cards?.let { lines -> cards(v, section, key, item, lines) } ?: edit(item.title, safe { SettingsChange.shown(item) })
             is SettingsItem.SignIn -> edit(item.title, safe { item.shown(item.isSet()) })
             // As the panel: a line that says what's missing and can be set is amber (fixable).
             is SettingsItem.Info -> row(safe { item.title() }, safe { item.detail() }, fix = runCatching { item.fixable() }.getOrDefault(false))
@@ -296,6 +297,32 @@ ${foot(viewer)}"""
         return """<form class="ucs" id="${anchor(key)}" method="post" action="/settings">${fields(v, section, key)}<div class="gl">${esc(item.title)}</div>""" +
             """<div class="ucg">$buttons</div></form>"""
     }
+
+    /**
+     * A choice with swatches as the theme picker (#691), as the panel draws it: one card per theme with its light and
+     * its dark orb, each orb a button that posts its option; the picked orb ringed with a sun or moon badge.
+     */
+    private fun themes(v: Viewer, section: String, key: String, item: SettingsItem.Choice, swatch: (String) -> SettingsItem.Swatch): String {
+        val now = safe { item.value() }
+        val groups = LinkedHashMap<String, MutableList<Pair<String, SettingsItem.Swatch>>>()
+        for ((id, _) in runCatching { item.options() }.getOrDefault(emptyList())) runCatching { swatch(id) }.getOrNull()?.let { groups.getOrPut(it.group) { ArrayList() } += id to it }
+        val cards = groups.entries.joinToString("") { (name, orbs) ->
+            val on = orbs.any { it.first == now }
+            val buttons = orbs.joinToString("") { (id, s) ->
+                val picked = id == now
+                val words = "$name, ${if (s.dark) "dark" else "light"}"
+                """<button class="sw${if (s.dark) " dk" else ""}${if (picked) " on" else ""}" type="submit" name="value" value="${esc(id)}" aria-pressed="$picked" """ +
+                    """aria-label="${esc(words)}" title="${esc(words)}" style="--a:${css(s.a)};--b:${css(s.b)};--g:${css(s.ground)}">""" +
+                    (if (picked) """<i class="bd ${if (s.dark) "moon" else "sun"}" aria-hidden="true"></i>""" else "") + "</button>"
+            }
+            val note = orbs.first().second.note
+            """<div class="tc${if (on) " on" else ""}"><div class="pair">$buttons</div><b>${esc(name)}</b>${if (note.isNotEmpty()) "<span>${esc(note)}</span>" else ""}</div>"""
+        }
+        return """<form class="ths" id="${anchor(key)}" method="post" action="/settings">${fields(v, section, key)}<div class="thg">$cards</div></form>"""
+    }
+
+    /** A colour as CSS (#rrggbb). */
+    private fun css(argb: Int): String = String.format(Locale.ROOT, "#%06x", argb and 0xffffff)
 
     /** [text], as a link to the item at [key] on the same page when there is one. */
     private fun see(text: String, key: String?): String =
@@ -654,6 +681,17 @@ details.off summary::-webkit-details-marker{display:none}details.off summary::af
 a.see{color:inherit;text-decoration:underline;text-underline-offset:3px}[id^="i-"]{scroll-margin-top:24px}
 .ucs{margin:0;padding:6px 0 18px;border-bottom:1px solid var(--edge)}.ucs .gl{margin-top:16px}
 .ucg{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px}
+.ths{margin:0;padding:10px 0 18px;min-width:0;max-width:100%}.thg{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(104px,100%),1fr));gap:12px;min-width:0}
+.tc{display:flex;flex-direction:column;align-items:center;gap:6px;min-width:0;padding:14px 8px 11px;border-radius:16px;border:1px solid var(--edge);background:var(--glass)}
+.tc.on{border-color:color-mix(in srgb,var(--fg) 30%,transparent)}.tc b{font-weight:400;font-size:14px}.tc span{font-size:11.5px;color:var(--faint);margin-top:-5px}
+.tc .pair{display:flex;gap:12px;padding:4px 0}
+.ths .sw{position:relative;width:38px;height:38px;border-radius:50%;border:1px solid rgba(16,20,32,.1);padding:0;cursor:pointer;
+background:radial-gradient(circle at 30% 26%,rgba(255,255,255,.95),transparent 30%),linear-gradient(135deg,color-mix(in srgb,var(--a) 65%,#fff),color-mix(in srgb,var(--b) 75%,#fff))}
+.ths .sw.dk{border-color:rgba(255,255,255,.14);background:radial-gradient(circle at 30% 28%,rgba(255,255,255,.35),transparent 22%),radial-gradient(circle at 32% 34%,var(--a),transparent 62%),radial-gradient(circle at 70% 72%,var(--b),transparent 64%),color-mix(in srgb,var(--g) 95%,#fff)}
+.ths .sw.on{outline:2px solid var(--fg);outline-offset:4px}.ths .sw:focus-visible{outline:2px solid var(--sky);outline-offset:4px}
+.ths .sw .bd{position:absolute;right:-10px;top:-10px;width:20px;height:20px;border-radius:50%;background:var(--bg-2);border:1px solid var(--edge)}
+.ths .sw .bd.sun::after{content:"";position:absolute;inset:6px;border-radius:50%;background:var(--fg);box-shadow:0 0 0 1.5px var(--bg-2),0 0 0 3px var(--fg)}
+.ths .sw .bd.moon::after{content:"";position:absolute;inset:4px;border-radius:50%;box-shadow:inset -4px -3px 0 0 var(--fg);transform:rotate(-20deg)}
 .uc{display:flex;flex-direction:column;gap:4px;text-align:left;padding:16px 18px;border-radius:22px;border:1px solid var(--edge);background:var(--glass);color:var(--muted);font:inherit;cursor:pointer}
 .uc b{font-weight:400;font-size:19px}.uc span{font-size:14px;line-height:1.35;color:var(--muted)}.uc:hover{background:var(--hover)}
 .uc.on{color:var(--fg);border:1.6px solid transparent;background:linear-gradient(var(--bg-2),var(--bg-2)) padding-box,linear-gradient(135deg,var(--sky),var(--violet)) border-box}
