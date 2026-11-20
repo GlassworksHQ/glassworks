@@ -17,11 +17,11 @@
       "width": 172,
       "height": 86,
       "depth": 12,
-      "radius": 2.5
+      "radius": 0
     },
     "bezel": 3.5,
     "screen": {
-      "radius": 1.4
+      "radius": 0
     },
     "sides": {
       "dark": "#8f949d",
