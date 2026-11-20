@@ -20,8 +20,8 @@ them warmly and say plainly where their support lives.
 
 ## See the screens
 
-The screens are Kiln's own, on the real session (`kiln/apps/kiln/src/mirror/flash.ts`, the screens
-in `FlashScreens.tsx` and `choice/`), with demo states that need no Mirror:
+The screens are Kiln's own, on the real session (`kiln/apps/kiln/src/device/imageSession.ts`, the
+screens in `ImageScreens.tsx` and `choice/`), with demo states that need no Mirror:
 
 ```sh
 npm run dev -w @glassworks/kiln-app
@@ -116,7 +116,7 @@ steps from Kiln's step library. The Mirror's two recipes are in
 | Glass Panes | download `system.img` → download `userdata.sparse` → fastboot → *checks* → *backup* → *warning* → flash system → flash userdata → restart → *way back* |
 
 The Mirror's bootloader can't read anything back, so its *backup* step writes each file's SHA-256 to
-the log instead, and the warning says lululemon's software can't be restored. `FlashSession` runs
+the log instead, and the warning says lululemon's software can't be restored. `ImageSession` runs
 either recipe from `plan()`; the format, the step library and the rules a recipe must pass are in
 [docs/kiln-images.md](../../kiln-images.md).
 

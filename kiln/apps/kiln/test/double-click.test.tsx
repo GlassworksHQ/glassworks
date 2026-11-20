@@ -6,7 +6,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { s1Plus } from '@glassworks/aqara-s1-plus-installer';
 import { FelDevice } from '@glassworks/fel';
 import { FakeBrom, makeSpl } from '@glassworks/fel/fakes';
-import { s1PlusUi } from '../src/frames/aqara-s1-plus';
+import { frame as s1PlusUi } from './s1-frame';
 import { Session } from '../src/wizard/session';
 import { initial } from '../src/wizard/state';
 import { Wizard } from '../src/wizard/Wizard';

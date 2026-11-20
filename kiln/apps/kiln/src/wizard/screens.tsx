@@ -10,14 +10,13 @@ import { BuiltOn, stepCredits } from '../components/Credit';
 import { SilentUpdates } from '../components/SilentUpdates';
 import { LastRun } from '../components/LastRun';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { FrameUi } from '../frames/aqara-s1-plus';
 import { Recovery } from '../recovery/Recovery';
+import type { AppPhase, KilnFrame } from '@glassworks/kiln-core';
 import type { Session } from './session';
-import type { AppPhase } from '@glassworks/aqara-s1-plus-installer';
 import { HomeAssistant, Radio, RadioNext, Wifi } from '../setup/steps';
 import { eta, milestones, type Setup, type WizardState } from './state';
 
-type P = { s: WizardState; session: Session; frame: FrameUi };
+type P = { s: WizardState; session: Session; frame: KilnFrame };
 
 function os(): 'win' | 'linux' | 'other' {
   const ua = navigator.userAgent;
@@ -148,11 +147,11 @@ const ROWS: { id: Row; text: (app: string) => string }[] = [
   { id: 'prefs', text: () => 'Apply your time zone, language and clock' },
   { id: 'start', text: () => 'First start' },
 ];
-const rowOf = (p: AppPhase): Row => (p.step === 'apk' ? p.apk : p.step);
+const rowOf = (p: AppPhase): Row => (p.step === 'apk' ? (p.apk as Row) : p.step);
 
 /**
  * `update`: the app was on the panel already. Then `pm install -r` stops it while it runs, it comes
- * back, and the end of dex2oat restarts it again (frames/aqara-s1-plus/research/web-installer.md §7.1). A first
+ * back, and the end of dex2oat restarts it again (web-installer.md §7.1 in the frame's research). A first
  * install has no app running, so nothing there is said to restart.
  */
 function nowSays(p: AppPhase, update: boolean): { sub?: string; note?: string } {
@@ -165,14 +164,14 @@ function nowSays(p: AppPhase, update: boolean): { sub?: string; note?: string } 
   return {};
 }
 
-function Installing({ frame, setup }: { frame: FrameUi; setup: Extract<Setup, { phase: 'settings' }> }) {
+function Installing({ frame, setup }: { frame: KilnFrame; setup: Extract<Setup, { phase: 'settings' }> }) {
   const seen = setup.installing ?? [];
   const now = seen.at(-1);
   const reached = new Set(seen.map(rowOf));
   const cur = now ? ROWS.findIndex((r) => r.id === rowOf(now)) : 0;
   // the keyboard row while it is still to come, if asked for; one passed without an install is left out
   const rows = ROWS.filter((r, i) => r.id !== 'keyboard' || reached.has('keyboard') || (setup.chosen?.keyboard !== false && i > cur));
-  const at = rows.findIndex((r) => r.id === ROWS[cur]!.id);
+  const at = rows.findIndex((r) => r.id === ROWS[cur]?.id);
   const { sub, note } = now ? nowSays(now, setup.update) : {};
   // the list changes only its marks, which a live region doesn't read: say the step in words
   const says = [rows[at]?.text(frame.app), sub, note].filter(Boolean).join('. ').replace(/\.\./g, '.');

@@ -10,10 +10,11 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: ReactNode }) => <a href={href} {...p}>{children}</a> }));
 
-import { MIRROR_DEMOS, mirrorDemo, type MirrorDemo } from '../src/mirror/demo';
-import { MirrorWizard, Screens, keyedConnect } from '../src/mirror/MirrorWizard';
-import { MirrorSession, mirrorMode } from '../src/mirror/session';
+import { APP_DEMOS, appDemo, type AppDemo } from '../src/device/demo';
+import { DevicePage, AppFlow, keyedConnect } from '../src/device/DevicePage';
+import { AppSession, deviceMode, deviceOpen } from '../src/device/appSession';
 import { registry } from '../src/wizard/registry';
+import { MIRROR_BASE, mirrorEntry, mirrorFrame } from './mirror-frame';
 
 beforeAll(() => {
   Object.defineProperty(navigator, 'usb', { configurable: true, value: {} });
@@ -32,17 +33,17 @@ const embers = () => [...document.querySelectorAll('.btn.ember')].map((b) => b.t
 
 describe('the switch', () => {
   it('is off without ?apk=local or ?apk=release, and demos only where demos run', () => {
-    expect(mirrorMode('', true, MIRROR_DEMOS)).toEqual({ on: false });
-    expect(mirrorMode('?apk=other', true, MIRROR_DEMOS)).toEqual({ on: false });
-    expect(mirrorMode('?apk=release', false, MIRROR_DEMOS)).toEqual({ on: true, apk: 'release' });
-    expect(mirrorMode('?apk=local', false, MIRROR_DEMOS)).toEqual({ on: true, apk: 'local' });
-    expect(mirrorMode('?demo=checks', true, MIRROR_DEMOS)).toEqual({ on: true, demo: 'checks' });
-    expect(mirrorMode('?demo=checks', false, MIRROR_DEMOS)).toEqual({ on: false }); // a production build
-    expect(mirrorMode('?demo=nope', true, MIRROR_DEMOS)).toEqual({ on: false });
+    expect(deviceMode('', true, APP_DEMOS, deviceOpen(mirrorFrame))).toEqual({ on: false });
+    expect(deviceMode('?apk=other', true, APP_DEMOS, deviceOpen(mirrorFrame))).toEqual({ on: false });
+    expect(deviceMode('?apk=release', false, APP_DEMOS, deviceOpen(mirrorFrame))).toEqual({ on: true, apk: 'release' });
+    expect(deviceMode('?apk=local', false, APP_DEMOS, deviceOpen(mirrorFrame))).toEqual({ on: true, apk: 'local' });
+    expect(deviceMode('?demo=checks', true, APP_DEMOS, deviceOpen(mirrorFrame))).toEqual({ on: true, demo: 'checks' });
+    expect(deviceMode('?demo=checks', false, APP_DEMOS, deviceOpen(mirrorFrame))).toEqual({ on: false }); // a production build
+    expect(deviceMode('?demo=nope', true, APP_DEMOS, deviceOpen(mirrorFrame))).toEqual({ on: false });
   });
 
   it('without it, the page says the Mirror doesn\'t install yet and offers no file picker', async () => {
-    render(<MirrorWizard />);
+    render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
     await screen.findByText(/doesn.t install from Kiln yet/);
     expect(document.querySelector('input[type=file]')).toBeNull();
     expect(embers()).toEqual([]);
@@ -50,7 +51,7 @@ describe('the switch', () => {
 
   it('with it, Kiln installs Glassworks over fastboot by default: first and picked on the choice (#579)', async () => {
     history.replaceState(null, '', '/lululemon-mirror?apk=local');
-    render(<MirrorWizard />);
+    render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
     await screen.findByText('What goes on the Mirror?');
     expect(screen.getByText('Test only')).toBeTruthy();
     expect(embers()).toEqual(['Continue with Glassworks']);
@@ -61,7 +62,7 @@ describe('the switch', () => {
 
   it('with &mode=app, the app alone over adb, its APK from this computer, labelled test only', async () => {
     history.replaceState(null, '', '/lululemon-mirror?apk=local&mode=app');
-    render(<MirrorWizard />);
+    render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
     await screen.findByText('Install a test build on the Mirror.');
     expect(screen.getByText('Test only')).toBeTruthy();
     expect(document.querySelector('input[type=file]')).not.toBeNull();
@@ -72,7 +73,7 @@ describe('the switch', () => {
 describe('the test install', () => {
   it('reads the Mirror, installs, and undoes back to the home app it had', async () => {
     const m = new FakeMirror({ kiosk: 'app' }); // the community kiosk with its device admin off, so Android hides it
-    const s = new MirrorSession({ connect: async () => m, sleep: async () => {} }, true);
+    const s = new AppSession({ frame: mirrorFrame, connect: async () => m, sleep: async () => {} }, true);
     await s.connect();
     expect(s.state.screen).toBe('checks');
     expect(s.installBlocked()).toMatch(/APK/);
@@ -95,7 +96,7 @@ describe('the test install', () => {
   });
 
   it('the latest APK picked wins, however long the earlier one takes to read', async () => {
-    const s = new MirrorSession({ connect: async () => new FakeMirror() }, true);
+    const s = new AppSession({ frame: mirrorFrame, connect: async () => new FakeMirror() }, true);
     let release!: (b: Uint8Array) => void;
     const slow = s.pickApk('big-old.apk', new Promise<Uint8Array>((r) => { release = r; }));
     await s.pickApk('kiosk-legacy-debug.apk', fakeMirrorApk());
@@ -105,7 +106,7 @@ describe('the test install', () => {
   });
 
   it('a file that isn\'t Glassworks is named and blocks Install; the inputs stay editable on Checks', async () => {
-    const s = await mirrorDemo('pick-wrong', true);
+    const s = await appDemo(mirrorEntry, 'pick-wrong', true);
     expect(s.state.apk).toMatchObject({ package: 'com.nimrod.mirrorkiosk', error: expect.stringMatching(/not Glassworks/) });
     // a build with no home screen (the first real flash, 2026-11-16, had it off): refused at the picker, before any write
     await s.pickApk('kiosk-legacy-test.apk', fakeMirrorApk({ home: 'none' }));
@@ -113,22 +114,22 @@ describe('the test install', () => {
     expect(s.apkBytes()).toBeUndefined();
     await s.connect();
     expect(s.installBlocked()).toMatch(/Pick another file/);
-    render(<Screens session={s} />);
+    render(<AppFlow session={s} />);
     expect(document.querySelector('input[type=file]')).not.toBeNull(); // on Checks
     await act(() => s.pickApk('kiosk-legacy-debug.apk', fakeMirrorApk()));
     expect(s.installBlocked()).toBeUndefined();
   });
 
   it('after an undo that couldn\'t confirm the home app, Checks offers undo again', async () => {
-    const s = await mirrorDemo('undo-pending', true);
+    const s = await appDemo(mirrorEntry, 'undo-pending', true);
     expect(s.state).toMatchObject({ screen: 'checks', report: { pendingHome: MIRROR_KIOSK } });
-    render(<Screens session={s} />);
+    render(<AppFlow session={s} />);
     expect(screen.getByText('Undo: give the home screen back')).toBeTruthy();
   });
 
   it('Connect asks for the device inside the click, before anything is awaited', () => {
     const connect = vi.fn(() => new Promise<never>(() => {}));
-    const s = new MirrorSession({ connect }, true);
+    const s = new AppSession({ frame: mirrorFrame, connect }, true);
     void s.connect();
     expect(connect).toHaveBeenCalledTimes(1);
   });
@@ -145,14 +146,14 @@ describe('the test install', () => {
   });
 
   it('an APK that can\'t be read says so', async () => {
-    const s = new MirrorSession({ connect: async () => new FakeMirror() }, true);
+    const s = new AppSession({ frame: mirrorFrame, connect: async () => new FakeMirror() }, true);
     await s.pickApk('gone.apk', Promise.reject(new Error('NotFoundError')));
     expect(s.state.apk).toMatchObject({ name: 'gone.apk', error: expect.stringMatching(/couldn't be read \(NotFoundError\)/) });
   });
 
   it('reading the Mirror again when it went away goes back to Connect and says why', async () => {
     const m = new FakeMirror({ installed: 600 });
-    const s = new MirrorSession({ connect: async () => m, sleep: async () => {} }, true);
+    const s = new AppSession({ frame: mirrorFrame, connect: async () => m, sleep: async () => {} }, true);
     await s.connect();
     await s.undo();
     m.run = async () => { throw new Error('USB transfer failed'); };
@@ -162,7 +163,7 @@ describe('the test install', () => {
 
   it('reading the Mirror again twice reads it once, and never lands on a running install', async () => {
     const m = new FakeMirror();
-    const s = new MirrorSession({ connect: async () => m, sleep: async () => {} }, true);
+    const s = new AppSession({ frame: mirrorFrame, connect: async () => m, sleep: async () => {} }, true);
     await s.connect();
     await s.pickApk('kiosk.apk', fakeMirrorApk());
     const reads = () => m.cmds.filter((c) => c === 'getprop ro.build.version.sdk').length;
@@ -180,7 +181,7 @@ describe('the test install', () => {
   it('a slow read of the Mirror that ends after a whole install doesn\'t replace its Done, even when it fails', async () => {
     for (const fails of [false, true]) {
       const m = new FakeMirror();
-      const s = new MirrorSession({ connect: async () => m, sleep: async () => {} }, true);
+      const s = new AppSession({ frame: mirrorFrame, connect: async () => m, sleep: async () => {} }, true);
       await s.connect();
       await s.pickApk('kiosk.apk', fakeMirrorApk());
       let release!: () => void;
@@ -208,7 +209,7 @@ describe('the test install', () => {
     const run = m.run.bind(m);
     m.run = async (cmd: string) => { if (cmd === 'getprop ro.build.version.sdk') await gate; return run(cmd); };
     const connect = vi.fn(async () => m);
-    const s = new MirrorSession({ connect }, true);
+    const s = new AppSession({ frame: mirrorFrame, connect }, true);
     const first = s.connect();
     await new Promise((r) => setTimeout(r, 0));
     expect(s.state.connecting).toBe(true);
@@ -220,30 +221,30 @@ describe('the test install', () => {
   });
 
   it('a refused install ends on the error screen with the reason', async () => {
-    const s = await mirrorDemo('error', true);
+    const s = await appDemo(mirrorEntry, 'error', true);
     expect(s.state).toMatchObject({ screen: 'error' });
     expect(s.state.error).toMatch(/legacy build/);
   });
 
   it('a failed connection stays on the first screen and says why', async () => {
-    const s = new MirrorSession({ connect: async () => { throw new Error('another program holds the panel\'s adb connection'); } }, true);
+    const s = new AppSession({ frame: mirrorFrame, connect: async () => { throw new Error('another program holds the panel\'s adb connection'); } }, true);
     await s.connect();
     expect(s.state).toMatchObject({ screen: 'pick', connectError: expect.stringMatching(/another program/) });
   });
 });
 
 describe('every demo screen', () => {
-  it.each(MIRROR_DEMOS.filter((d) => d !== 'run'))('%s has at most one ember button', async (d) => {
-    const s = await mirrorDemo(d as MirrorDemo, true);
+  it.each(APP_DEMOS.filter((d) => d !== 'run'))('%s has at most one ember button', async (d) => {
+    const s = await appDemo(mirrorEntry, d as AppDemo, true);
     expect(s.state.screen).not.toBe('off');
-    render(<Screens session={s} />);
+    render(<AppFlow session={s} />);
     await until(() => !!document.querySelector('.card'));
     expect(embers().length).toBeLessThanOrEqual(1);
   });
 
   it('no screen asks for a tap on the Mirror: it has no touchscreen (Mirror run, 2026-11-19)', async () => {
-    for (const d of MIRROR_DEMOS.filter((x) => x !== 'run')) {
-      render(<Screens session={await mirrorDemo(d as MirrorDemo, true)} />);
+    for (const d of APP_DEMOS.filter((x) => x !== 'run')) {
+      render(<AppFlow session={await appDemo(mirrorEntry, d as AppDemo, true)} />);
       await until(() => !!document.querySelector('.card'));
       expect(document.body.textContent, d).not.toMatch(/Your turn|then Always|Clear defaults/);
       cleanup();
@@ -251,10 +252,10 @@ describe('every demo screen', () => {
   });
 
   it('Done says it is the only home screen, upright; with a device admin\'s home app Android won\'t hide, it says to install over fastboot', async () => {
-    render(<Screens session={await mirrorDemo('done', true)} />);
+    render(<AppFlow session={await appDemo(mirrorEntry, 'done', true)} />);
     await screen.findByText('It is the only home screen, upright, so it opens when the Mirror starts.');
     cleanup();
-    render(<Screens session={await mirrorDemo('done-unconfirmed', true)} />);
+    render(<AppFlow session={await appDemo(mirrorEntry, 'done-unconfirmed', true)} />);
     await screen.findByText(/^com\.nimrod\.mirrorkiosk is a device administrator on this Mirror, so Android won.t hide it.*Install Glassworks over fastboot instead/);
   });
 });

@@ -2,15 +2,15 @@
 // data. Every change goes through `reduce`; the rail, the stack, the plain log and the chip are
 // derived from it by the selectors below, so a screen never keeps its own copy.
 import type { AskKind, BackupMeta, PartState, Phase, Progress } from '@glassworks/kiln-core';
-import type { AppPhase } from '@glassworks/aqara-s1-plus-installer';
 import type { SetupState } from '@glassworks/setup-channel';
 import { SET_UP } from './routes';
 import type { SilentWords } from '../components/SilentUpdates';
+import type { AppPhase, AppSettings } from '@glassworks/kiln-core';
 
 export type Flow = 'install' | 'undo';
 /**
  * What an earlier step did to the panel: `written`, a run started writing; `apps`, the panel was (being)
- * given back to Aqara's apps; `unknown`, this browser tab can't remember (its storage is blocked), so an
+ * given back to its own apps; `unknown`, this browser tab can't remember (its storage is blocked), so an
  * earlier page load may have done either.
  */
 export type Changed = 'written' | 'apps' | 'unknown';
@@ -19,8 +19,7 @@ export type Screen = 'connect' | 'firing' | 'setup' | 'done' | 'undo' | 'error';
 
 export interface Network { ssid: string; rssi: number; secure: boolean }
 
-/** The app's settings as the person chose them: kept, so going back to the step shows them again. */
-export interface AppSettings { locale?: string; timezone?: string; clock24: boolean; keyboard: boolean }
+export type { AppSettings };
 
 /** What the setup step shows, one phase at a time (Glassworks over adb). */
 export type Setup =
@@ -126,7 +125,7 @@ export interface WizardState {
   touched: boolean;
   /**
    * an earlier step may have changed the panel, and no run has reached Done since: `written`, a run
-   * started writing; `apps`, the panel was (being) given back to Aqara's apps. Unlike `wrote` and
+   * started writing; `apps`, the panel was (being) given back to its own apps. Unlike `wrote` and
    * `touched`, which are this attempt's, a new attempt (go, start) keeps it, and the registry keeps it
    * for the browser tab across sessions: a later failure must not say nothing was written.
    */

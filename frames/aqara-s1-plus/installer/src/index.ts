@@ -7,3 +7,5 @@ export {
   type ByteStream, type DeviceInfo, type Packet,
 } from './improv';
 export { UPDATE_SERVICE_PROP, readRootUpdates, type RootUpdates } from './updates';
+export { kilnFrame } from './kiln';
+export { kilnSim } from './sim';

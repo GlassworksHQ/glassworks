@@ -1,6 +1,6 @@
 package dev.glassworks.radio.ui
 
-import dev.glassworks.radio.RadioHelper
+import dev.glassworks.radio.RadioReports
 import dev.glassworks.radio.RadioMode
 
 /**
@@ -88,10 +88,10 @@ object RadioStep {
     fun otbrAddUrl(haBase: String?): String? = haRoot(haBase)?.let { "$it/config/integrations/dashboard/add?domain=otbr" }
 
     /** The border router's REST URL, what OTBR's config flow asks for. */
-    fun otbrUrl(panelIp: String?): String = "http://${panelIp ?: "<panel IP>"}:${RadioHelper.OTBR_REST_PORT}"
+    fun otbrUrl(panelIp: String?): String = "http://${panelIp ?: "<panel IP>"}:${RadioReports.OTBR_REST_PORT}"
 
     /** Zigbee2MQTT's `port` for the coordinator with Silicon Labs' stack (adapter `ember`). */
-    fun z2mPort(panelIp: String?): String = "tcp://${panelIp ?: "<panel IP>"}:${RadioHelper.ZIGBEE_TCP_PORT}"
+    fun z2mPort(panelIp: String?): String = "tcp://${panelIp ?: "<panel IP>"}:${RadioReports.ZIGBEE_TCP_PORT}"
 
     /** What to do in Home Assistant after a mode was applied (shown under the options), or null. */
     fun nextStep(mode: RadioMode, panelIp: String?): String? = when (mode) {

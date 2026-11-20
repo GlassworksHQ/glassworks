@@ -36,6 +36,7 @@ sys.path.insert(0, os.path.dirname(HERE))
 import fakeha  # noqa: E402
 import perfrun  # noqa: E402
 import report  # noqa: E402
+import perflib as P  # noqa: E402
 import summary  # noqa: E402
 import grade  # noqa: E402
 import threading  # noqa: E402
@@ -81,7 +82,8 @@ class Runner(unittest.TestCase):
         env = dict(os.environ, ADB=adb, FAKE_ADB_STATE=state, GW_PERF_IDLE_SETTLE="0", GW_PERF_IDLE_WINDOW="2",
                    GW_PERF_COLD_SETTLE="0", GW_PERF_RUN_GAP="0", GW_PERF_BETWEEN_QUIET="0.5", GW_PERF_FRONTEND=STUB_FRONTEND,
                    GW_PERF_SWITCH_SETTLE="0", FAKE_HA_URL=f"http://127.0.0.1:{port(89)}", GW_PERF_CAMERA=STUB_CAMERA,
-                   GW_PERF_FAKE_PYTHON=sys.executable, GW_PERF_TIME_SCALE=TIME_SCALE)
+                   GW_PERF_FAKE_PYTHON=sys.executable, GW_PERF_TIME_SCALE=TIME_SCALE,
+                   GW_PERF_PING=os.path.join(HERE, "fake_ping.py"), GW_PERF_GATEWAY="192.0.2.1")
         env.pop("ANDROID_SERIAL", None)
         cls.state = state
         cls.out = os.path.join(cls.tmp, "out")
@@ -96,6 +98,15 @@ class Runner(unittest.TestCase):
 
     def test_run_succeeds(self):
         self.assertEqual(self.proc.returncode, 0, self.proc.stderr[-3000:])
+
+    def test_the_test_computers_network_is_in_the_report(self):
+        """#649: netcheck.py before the graded part; the fake S1 on USB with a quiet fake link: recorded, not provisional."""
+        n = self.rep["test_network"]
+        self.assertEqual((n["quiet"], n["adb_over_network"], n["gateway"]["received"]), (True, False, 40))
+        self.assertIsNone(n["limited"])
+        with open(os.path.join(self.out, "netcheck.json")) as f:
+            self.assertNotIn("192.0.2", f.read())
+        self.assertIn("this computer's network", self.proc.stderr)
 
     def test_report_has_every_part(self):
         r = self.rep
@@ -236,11 +247,12 @@ class Runner(unittest.TestCase):
         extras = {m for c in shell for m in re.findall(r"--e\w \w+", c)}
         self.assertEqual(extras, {"--es open", "--es test_dashboard", "--ez test_hold", "--ei test_hold_s"})
         opens = [re.search(r"--es open '([^']+)'", c).group(1) for c in shell if "--es open" in c]
-        # The animation test page and the idle sample's page load; the graded views don't: they open
-        # inside the loaded frontend, by navigation, on the runner's command to the fake HA.
-        self.assertEqual(len(opens), 2)
-        self.assertTrue(opens[0].startswith(f"http://127.0.0.1:{port(89)}/clarity/page/index.html?"), opens[0])
-        self.assertEqual(opens[1], f"http://127.0.0.1:{port(89)}/clarity-ref/typical")       # the idle sample's page, no nonce
+        # The SurfaceFlinger check's page (#643), the animation test page and the idle sample's page load; the
+        # graded views don't: they open inside the loaded frontend, by navigation, on the runner's command to the fake HA.
+        self.assertEqual(len(opens), 3)
+        self.assertEqual(opens[0], f"http://127.0.0.1:{port(89)}/clarity/page/sfcheck.html")
+        self.assertTrue(opens[1].startswith(f"http://127.0.0.1:{port(89)}/clarity/page/index.html?"), opens[1])
+        self.assertEqual(opens[2], f"http://127.0.0.1:{port(89)}/clarity-ref/typical")       # the idle sample's page, no nonce
         views = [c.split()[1:4:2] for c in self.commands if c.startswith("view ")]
         self.assertEqual(views, [["light", "taps=2"], ["typical-nocam", "taps=2"], ["typical", "taps=2"], ["heavy", "taps=2"],
                                  ["typical-hls", "taps=2"], ["heavy-hls", "taps=2"]])
@@ -295,7 +307,8 @@ def fake_env(tmp, **extra):
     extra.setdefault("FAKE_HA_URL", HA.url if HA else "")
     env = dict(os.environ, ADB=adb, FAKE_ADB_STATE=state, GW_PERF_IDLE_SETTLE="0", GW_PERF_IDLE_WINDOW="1",
                GW_PERF_FRONTEND=STUB_FRONTEND, GW_PERF_CAMERA=STUB_CAMERA, GW_PERF_SWITCH_SETTLE="0", GW_PERF_PANES_SAVE_S="0",
-               GW_PERF_FAKE_PYTHON=sys.executable, GW_PERF_TIME_SCALE=TIME_SCALE)
+               GW_PERF_FAKE_PYTHON=sys.executable, GW_PERF_TIME_SCALE=TIME_SCALE,
+               GW_PERF_PING=os.path.join(HERE, "fake_ping.py"), GW_PERF_GATEWAY="192.0.2.1")
     env.update(extra)
     env.pop("ANDROID_SERIAL", None)
     return env, state
@@ -600,6 +613,235 @@ class FakeSplitsLikeThePage(unittest.TestCase):
         # Equal today also when the fake writes the number itself; it must read it from the pages.
         with open(os.path.join(HERE, "fake_adb.py")) as f:
             self.assertEqual(re.findall(r"PROTOCOL\s*=\s*\d|[\"']protocol[\"']\s*:\s*\d", f.read()), [])
+
+
+class SurfaceFlingerNames(unittest.TestCase):
+    """The Pixel Tablet's Android 17 run (2026-11-19): SurfaceFlinger listed every layer as
+    `RequestedLayerState{…}`, the SurfaceView's after the view's hash; the runner named none, and open, restart and live updates were n/a on
+    every view. The runner reads that listing, and says so when it can't read one."""
+
+    def build(self, tmp):
+        with open(os.path.join(tmp, "device.json"), "w") as f:
+            json.dump({"frame": "f", "mem_total_kb": 1, "display": {"density": "240"}, "app": {"package": "sh.edm.s1kiosk"}}, f)
+        return report.build(tmp)
+
+    def test_android_15_and_later_layers_give_frames(self):
+        tmp = tempfile.mkdtemp()
+        p, c = refstart(tmp, FAKE_SF_WRAPPED="1")
+        self.assertEqual(p.returncode, 0, p.stderr[-1500:])
+        self.assertNotIn("SurfaceView this runner can read", p.stderr)
+        self.assertTrue(c["presents_mono_ms"])
+        with open(os.path.join(tmp, "state", "commands.log")) as f:
+            latency = {c for c in f.read().splitlines() if "--latency" in c}
+        # By the whole name, the view's hash and #<id> included (the fake, as API 37, answers no other); the
+        # BLAST child (the frames) and its parent (none) are both asked, and the newest frame wins.
+        self.assertTrue(any("--latency 'f5fea55 SurfaceView[sh.edm.s1kiosk/sh.edm.s1kiosk.MainActivity](BLAST)#163'" in c
+                            for c in latency), latency)
+        run = self.build(tmp)["graded"]["reference"]["per_run"][0]
+        self.assertIsNone(run["start_error"])
+        self.assertGreater(run["start_ms"], 0)
+        for t, r in run["tiers"].items():
+            self.assertIsNotNone(r.get("load_ms"), (t, r.get("load_error")))
+            self.assertIsNotNone(r.get("latency"), (t, r.get("updates_error")))
+            self.assertIs(r["sf_valid"], True, t)               # scrolling from frames on screen, not rAF only
+
+    def test_a_listing_it_cant_read_is_said_once(self):
+        tmp = tempfile.mkdtemp()
+        p, c = refstart(tmp, FAKE_SF_UNNAMED="1")
+        self.assertEqual(p.returncode, 0, p.stderr[-1500:])
+        self.assertEqual(p.stderr.count("SurfaceView this runner can read"), 1, p.stderr[-1500:])
+        self.assertIn("SomeNewLayer<sh.edm.s1kiosk/", p.stderr)
+        self.assertEqual(c["presents_mono_ms"], [])
+
+
+def latency_reads_inside_windows(state):
+    """The `--latency` reads the runner sent while a page's window was open (the fake marks each window)."""
+    with open(os.path.join(state, "commands.log")) as f:
+        lines = f.read().splitlines()
+    inside, n = False, 0
+    for l in lines:
+        if l.startswith("window open"):
+            inside = True
+        elif l.startswith("window closed"):
+            inside = False
+        elif inside and "--latency" in l:
+            n += 1
+    return n
+
+
+def sfcheck(tmp, *extra, **env_extra):
+    env, state = fake_env(tmp, **env_extra)
+    p = subprocess.run([sys.executable, os.path.join(os.path.dirname(HERE), "perfrun.py"), "sfcheck", "--out", tmp,
+                        "--url", "http://127.0.0.1:1/clarity/page/sfcheck.html", *extra], env=env, capture_output=True, text=True, timeout=120)
+    with open(os.path.join(tmp, "sfcheck.json")) as f:
+        return p, json.load(f)
+
+
+class SurfaceFlingerHistory(unittest.TestCase):
+    """#643: the Pixel Tablet's Android 17 keeps about 59 frames (0.98 s) in `--latency`, shorter than a swipe's
+    window; the S1 keeps 127 (2.1 s), enough. Where one read can't cover a window, the runner reads during it."""
+
+    def build(self, tmp):
+        with open(os.path.join(tmp, "device.json"), "w") as f:
+            json.dump({"frame": "f", "mem_total_kb": 1, "display": {"density": "240"}, "app": {"package": "sh.edm.s1kiosk"}}, f)
+        return report.build(tmp)["graded"]["reference"]["per_run"][0]
+
+    def test_the_s1_reads_once_after_each_window_and_never_inside_one(self):
+        tmp = tempfile.mkdtemp()
+        p, c = refstart(tmp)
+        self.assertEqual(p.returncode, 0, p.stderr[-1500:])
+        # Every read is Device.sf()'s: a --list, then --latency of the fake S1's one layer. A read during a window
+        # (SfReads) or at the poll rhythm is a --latency alone, so --latency would outnumber --list. (Counted, not
+        # paired: the frame log's thread and a window's read can list at the same time and interleave.)
+        with open(os.path.join(tmp, "state", "commands.log")) as f:
+            sf = [l for l in f.read().splitlines() if "dumpsys SurfaceFlinger" in l]
+        lists, reads = sum("--list" in l for l in sf), sum("--latency" in l for l in sf)
+        self.assertGreater(reads, 0)
+        self.assertLessEqual(reads, lists)
+        self.assertGreaterEqual(reads, lists - 1)        # the frame log's thread may stop between its two calls
+        for t, e in c["tiers"].items():
+            for sw in e["swipes"]:
+                self.assertEqual(list(sw["sf"]), ["period_ms", "window_ms", "oldest_ms", "presents_ms"], t)  # no "reads"
+        self.assertTrue(all(r["sf_valid"] for r in self.build(tmp)["tiers"].values()))
+
+    def test_one_read_window_record_is_the_old_one(self):
+        """The S1 path's record, from SfReads with no polling, is what one read gave (test_report's one_read_record)."""
+        import perfrun
+        import test_report
+
+        class Dev:
+            sf_name = "SurfaceView - p/p.A#0"
+
+            def sf(self):
+                return 16.666, [int(t * 1e6) for t in range(10_000, 12_100, 16)]
+
+        rec = perfrun.SfReads(Dev(), 0).window(10.5, 11.6)
+        self.assertEqual(json.dumps(rec), json.dumps(test_report.one_read_record(*Dev().sf(), 10.5, 11.6)))
+
+    def test_a_short_history_is_read_during_each_window(self):
+        # 28 frames (0.47 s) against the fake's 0.5 s windows, in real time (the frames and the reads are): one read,
+        # after the step line and a --list, reaches back too little; reads every 0.05 s join up.
+        runs = {}
+        for poll in ("0", "0.05"):
+            tmp = tempfile.mkdtemp()
+            p, c = refstart(tmp, FAKE_SF_HISTORY="28", GW_PERF_TIME_SCALE="1", GW_PERF_SF_POLL=poll)
+            self.assertEqual(p.returncode, 0, p.stderr[-1500:])
+            runs[poll] = (c, self.build(tmp), latency_reads_inside_windows(os.path.join(tmp, "state")))
+        c, run, inside = runs["0"]
+        self.assertEqual([r["sf_valid"] for r in run["tiers"].values()], [False] * 4)    # the tablet's run 3
+        c, run, inside = runs["0.05"]
+        self.assertGreater(inside, 8)
+        self.assertEqual([r["sf_valid"] for r in run["tiers"].values()], [True] * 4)
+        self.assertIsNone(run["start_error"])
+        for t, e in c["tiers"].items():
+            self.assertTrue(all(sw["sf"]["reads"] >= 3 for sw in e["swipes"]), t)
+            self.assertLess(e["step"]["sf"]["oldest_ms"], e["step"]["sf"]["window_ms"][0], t)  # the updates window too
+
+    def test_the_check_reads_the_s1_once(self):
+        p, out = sfcheck(tempfile.mkdtemp())
+        self.assertEqual(p.returncode, 0, p.stderr[-800:])
+        self.assertEqual(p.stdout.strip(), "0")
+        self.assertEqual(out["poll_s"], 0)
+        # It stops once the frames are enough for one read (at most the S1's 127), full or not.
+        self.assertLessEqual(out["frames"], 127)
+        self.assertGreaterEqual(out["reach_ms"], P.SF_ONE_READ_MS)
+
+    def test_the_check_reads_a_short_history_during_each_window(self):
+        # 100 frames (1.67 s): under the one-read bar, as the Pixel Tablet's 59 are (test_report has its numbers);
+        # room for a fake read slowed by a busy test machine (a Python start each).
+        p, out = sfcheck(tempfile.mkdtemp(), FAKE_SF_HISTORY="100", GW_PERF_TIME_SCALE="1")
+        self.assertEqual(p.returncode, 0, p.stderr[-800:])
+        self.assertEqual((out["frames"], out["full"]), (100, True))
+        self.assertAlmostEqual(out["reach_ms"], 1666.7, delta=0.1)       # 100 frames, a refresh apart
+        self.assertEqual(out["poll_s"], P.SF_POLL_MAX_S)
+        self.assertGreater(out["list_ms"], 0)                           # the listing reads were timed too (CodeRabbit on #648)
+        self.assertLessEqual(max(out["read_ms"], out["list_ms"]), out["reach_ms"] / 2)
+        self.assertEqual(float(p.stdout.strip()), out["poll_s"])
+        self.assertIn("a read every 0.3 s", p.stderr)
+
+    def test_the_check_fails_fast(self):
+        p, out = sfcheck(tempfile.mkdtemp(), FAKE_SF_HISTORY="3", GW_PERF_TIME_SCALE="1")
+        self.assertEqual(p.returncode, 2)
+        self.assertIsNone(out["poll_s"])
+        self.assertIn("reads can't come often enough", out["why"])
+        p, out = sfcheck(tempfile.mkdtemp(), FAKE_SF_UNNAMED="1")
+        self.assertEqual(p.returncode, 2)
+        self.assertIn("lists no SurfaceView of sh.edm.s1kiosk", out["why"])
+
+    def test_a_slow_listing_fails_the_check(self):
+        """CodeRabbit on #648: every third read at the poll rhythm lists the layers first; a listing slower than half
+        the history would leave gaps however quick the layer's own read is, so the check times it and stops."""
+        p, out = sfcheck(tempfile.mkdtemp(), FAKE_SF_HISTORY="100", FAKE_SF_SLOW_LIST="1.0", GW_PERF_TIME_SCALE="1")
+        self.assertEqual(p.returncode, 2, p.stderr[-800:])
+        self.assertGreater(out["list_ms"], 1000)
+        self.assertLess(out["read_ms"], out["reach_ms"] / 2)
+        self.assertIn("reads can't come often enough", out["why"])
+
+    def test_a_lockdown_reads_once(self):
+        p, out = sfcheck(tempfile.mkdtemp(), FAKE_LOCKDOWN="1")
+        self.assertEqual(p.returncode, 0, p.stderr[-800:])
+        self.assertEqual(out["poll_s"], 0)
+        self.assertIn("lockdown", out["why"])
+
+
+class SurfaceFlingerCheckInRunSh(unittest.TestCase):
+    """#643: run.sh runs the check before the test page and the graded part, and stops there when it fails."""
+
+    def run_sh(self, *extra, **env_extra):
+        tmp = tempfile.mkdtemp()
+        env, state = fake_env(tmp, FAKE_HA_URL=f"http://127.0.0.1:{port(76)}", GW_PERF_COLD_SETTLE="0", GW_PERF_RUN_GAP="0",
+                              **env_extra)
+        out = os.path.join(tmp, "out")
+        p = subprocess.run([RUN, "--frame", "aqara-s1-plus", "--runs", "1", "--out", out, "--port", port(76), "--quick", *extra],
+                           env=env, capture_output=True, text=True, timeout=300)
+        return p, out, state
+
+    def test_check_only(self):
+        p, out, state = self.run_sh("--sf-check-only")
+        self.assertEqual(p.returncode, 0, p.stderr[-2000:])
+        with open(os.path.join(out, "sfcheck.json")) as f:
+            self.assertEqual(json.load(f)["poll_s"], 0)
+        with open(os.path.join(out, "netcheck.json")) as f:                 # the network check too (#649)
+            self.assertIs(json.load(f)["quiet"], True)
+        self.assertEqual([f for f in os.listdir(out) if f.startswith(("synthetic-", "refstart-", "idle-"))], [])
+        self.assertIn("checks done (--sf-check-only)", p.stderr)
+        with open(os.path.join(state, "commands.log")) as f:
+            log = f.read()
+        self.assertNotIn("lanprobe", log)
+        self.assertNotIn("nc ", log)                                     # no LAN probe for the check alone
+
+    def test_a_short_history_stops_the_run_before_it_starts(self):
+        p, out, state = self.run_sh(FAKE_SF_HISTORY="3", GW_PERF_TIME_SCALE="1")
+        self.assertEqual(p.returncode, 2, p.stderr[-2000:])
+        self.assertIn("the SurfaceFlinger check failed, before the run", p.stderr)
+        self.assertEqual([f for f in os.listdir(out) if f.startswith(("synthetic-", "refstart-"))], [])
+
+    def test_a_set_way(self):
+        # --sf-check-only is the check: a set way would skip it (CodeRabbit on #648).
+        p, out, _ = self.run_sh("--sf-check-only", "--sf-poll", "0.2")
+        self.assertEqual(p.returncode, 2)
+        self.assertIn("--sf-check-only runs the check", p.stderr)
+        p, out, _ = self.run_sh("--sf-check-only", "--idle-only", "x")        # CodeRabbit on #648: no check would run
+        self.assertEqual(p.returncode, 2)
+        self.assertIn("--sf-check-only and --idle-only can't be combined", p.stderr)
+        self.assertFalse(os.path.exists(out))                                  # refused before anything ran
+        p, _, _ = self.run_sh("--sf-poll", "often")
+        self.assertEqual(p.returncode, 2)
+        self.assertIn("--sf-poll is auto, 0 or seconds", p.stderr)
+
+    def test_an_idle_only_sample_takes_the_set_way(self):
+        """CodeRabbit on #648: --idle-only leaves before the check; it reads at --sf-poll's rhythm, the known layer
+        alone between full listings (sf_poll_read), or once every 1.5 s without it."""
+        counts = {}
+        for poll in ("0", "0.1"):
+            p, out, state = self.run_sh("--idle-only", "x", "--sf-poll", poll, GW_PERF_IDLE_WINDOW="3", GW_PERF_TIME_SCALE="1")
+            self.assertEqual(p.returncode, 0, p.stderr[-2000:])
+            with open(os.path.join(state, "commands.log")) as f:
+                sf = [l for l in f.read().splitlines() if "dumpsys SurfaceFlinger" in l]
+            counts[poll] = (sum("--list" in l for l in sf), sum("--latency" in l for l in sf))
+        self.assertEqual(counts["0"][0], counts["0"][1])                 # each read a listing and its layer
+        self.assertGreater(counts["0.1"][1], counts["0.1"][0])           # the layer alone between listings
+        self.assertGreater(counts["0.1"][1], 2 * counts["0"][1])
 
 
 class LongLines(unittest.TestCase):

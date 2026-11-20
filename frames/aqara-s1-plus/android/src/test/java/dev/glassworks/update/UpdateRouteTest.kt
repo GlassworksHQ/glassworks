@@ -1,7 +1,9 @@
 package dev.glassworks.update
 
 import android.app.Application
+import dev.glassworks.frame.AgentCapability
 import dev.glassworks.frame.Frame
+import dev.glassworks.frame.FrameAgent
 import dev.glassworks.frame.GenericAndroid
 import dev.glassworks.frame.RootUpdates
 import dev.glassworks.platform.AppBuild
@@ -22,8 +24,8 @@ import java.util.concurrent.TimeUnit
 import dev.glassworks.s1.KioskApp
 
 /**
- * Which way an update installs, from the frame's [RootUpdates] (Frame.rootUpdates): the S1's root update
- * service when the boot image has it, else Android's PackageInstaller.
+ * Which way an update installs, from the frame agent's [RootUpdates] (FrameAgent.appUpdates): the S1's root update
+ * service when the boot image has it (the agent offers `app-updates`), else Android's PackageInstaller.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34], application = Application::class)
@@ -35,9 +37,8 @@ class UpdateRouteTest {
 
     @After fun tearDown() = managers.forEach { it.stop() }
 
-    private class FakeRoot(private val present: Boolean, private val failure: String? = null, private val last: String? = null) : RootUpdates {
+    private class FakeRoot(val present: Boolean, private val failure: String? = null, private val last: String? = null) : RootUpdates {
         val installed = ArrayList<String>()
-        override fun present() = present
         override fun lastFailure() = last
         override fun install(version: String, installing: (String) -> Unit, over: () -> Boolean): String? {
             installed += version
@@ -46,9 +47,14 @@ class UpdateRouteTest {
         }
     }
 
-    /** The generic frame, with [root] as its root update service. */
-    private fun frame(root: RootUpdates?): Frame = object : Frame by GenericAndroid(app) {
-        override val rootUpdates = root
+    /** The generic frame, with an agent whose app updates are [root], offered when its boot image has the service. */
+    private fun frame(root: FakeRoot?): Frame = object : Frame by GenericAndroid(app) {
+        override val agent = object : FrameAgent {
+            override val declared = if (root == null) emptySet() else setOf(AgentCapability.APP_UPDATES)
+            override fun version() = if (root == null) null else 1
+            override fun offers(capability: AgentCapability) = capability == AgentCapability.APP_UPDATES && root?.present == true
+            override val appUpdates: RootUpdates? = root
+        }
     }
 
     /** A manager on [frame], started, once its first pass on the update thread is done. */

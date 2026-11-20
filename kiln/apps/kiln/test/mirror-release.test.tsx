@@ -10,11 +10,12 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: ReactNode }) => <a href={href} {...p}>{children}</a> }));
 
-import { MirrorWizard } from '../src/mirror/MirrorWizard';
+import { DevicePage } from '../src/device/DevicePage';
 import { releaseApk, type ReleaseApk } from '../src/release/apk';
 import { demoRelease, fakeReleaseRoute as routeFor, type FakeRelease } from '../src/release/demo';
-import { MIRROR_APK, MIRROR_OPEN, MirrorSession, mirrorMode } from '../src/mirror/session';
+import { AppSession, deviceMode, deviceOpen, releaseLine } from '../src/device/appSession';
 import { registry } from '../src/wizard/registry';
+import { MIRROR_BASE, mirrorEntry, mirrorFrame } from './mirror-frame';
 
 beforeAll(() => {
   Object.defineProperty(navigator, 'usb', { configurable: true, value: {} });
@@ -25,24 +26,24 @@ beforeAll(() => {
 afterEach(() => { cleanup(); registry.clear(); vi.unstubAllGlobals(); history.replaceState(null, '', '/'); });
 
 /** The Mirror's line: its stand-in release and the route that serves it. */
-const { tag: DEMO_TAG, apk: DEMO_APK } = demoRelease(MIRROR_APK.line);
-const fakeReleaseRoute = (kind: FakeRelease, apk: Uint8Array, tick: (ms: number) => Promise<void> = async () => {}) => routeFor(kind, apk, tick, MIRROR_APK.line);
+const { tag: DEMO_TAG, apk: DEMO_APK } = demoRelease(releaseLine(mirrorFrame).line);
+const fakeReleaseRoute = (kind: FakeRelease, apk: Uint8Array, tick: (ms: number) => Promise<void> = async () => {}) => routeFor(kind, apk, tick, releaseLine(mirrorFrame).line);
 const APK = fakeMirrorApk();
 const session = (kind: FakeRelease | typeof fetch) =>
-  new MirrorSession({ connect: async () => { throw new Error('unused'); }, release: typeof kind === 'function' ? kind : fakeReleaseRoute(kind, APK) }, true);
+  new AppSession({ frame: mirrorFrame, connect: async () => { throw new Error('unused'); }, release: typeof kind === 'function' ? kind : fakeReleaseRoute(kind, APK) }, true);
 const embers = () => [...document.querySelectorAll('.btn.ember')].map((b) => b.textContent);
 
 describe('the switch', () => {
   it('stays locked to the public: frame.json doesn\'t make the Mirror installable yet', () => {
-    expect(MIRROR_OPEN).toBe(false);
-    expect(mirrorMode('', false, [])).toEqual({ on: false });
+    expect(deviceOpen(mirrorFrame)).toBe(false);
+    expect(deviceMode('', false, [], false)).toEqual({ on: false });
   });
 
   it('?apk=release and ?apk=local are the test links; once open, the page takes the release by default', () => {
-    expect(mirrorMode('?apk=release', false, [])).toEqual({ on: true, apk: 'release' });
-    expect(mirrorMode('?apk=local', false, [])).toEqual({ on: true, apk: 'local' });
-    expect(mirrorMode('', false, [], true)).toEqual({ on: true, apk: 'release' });
-    expect(mirrorMode('?apk=local', false, [], true)).toEqual({ on: true, apk: 'local' });
+    expect(deviceMode('?apk=release', false, [], false)).toEqual({ on: true, apk: 'release' });
+    expect(deviceMode('?apk=local', false, [], false)).toEqual({ on: true, apk: 'local' });
+    expect(deviceMode('', false, [], true)).toEqual({ on: true, apk: 'release' });
+    expect(deviceMode('?apk=local', false, [], true)).toEqual({ on: true, apk: 'local' });
   });
 });
 
@@ -79,7 +80,7 @@ describe('the release\'s APK', () => {
 
   it('a release APK that isn\'t the Mirror\'s app is refused before any write, and Try again fetches the release again', async () => {
     let apk = fakeApk('com.example.other');
-    const s = new MirrorSession({ connect: async () => { throw new Error('unused'); }, release: ((u: RequestInfo | URL) => fakeReleaseRoute('out', apk)(u)) as typeof fetch }, true);
+    const s = new AppSession({ frame: mirrorFrame, connect: async () => { throw new Error('unused'); }, release: ((u: RequestInfo | URL) => fakeReleaseRoute('out', apk)(u)) as typeof fetch }, true);
     await s.loadRelease();
     expect(s.state.release).toMatchObject({ state: 'error', why: expect.stringMatching(/^Kiln can't install it: /) });
     expect(s.apkBytes()).toBeUndefined();
@@ -125,7 +126,7 @@ describe('the release\'s APK', () => {
   it('a .sha256 that never answers ends in Try again, not a row stuck on "Looking" (Mirror run, 2026-11-19)', async () => {
     const route = fakeReleaseRoute('out', APK);
     let hang = true;
-    const s = new MirrorSession({
+    const s = new AppSession({ frame: mirrorFrame,
       connect: async () => { throw new Error('unused'); },
       release: (async (u: RequestInfo | URL, init?: RequestInit) => (hang && String(u).endsWith('.sha256') ? silent(init) : route(u))) as typeof fetch,
       releaseStallMs: 50,
@@ -148,7 +149,7 @@ describe('the release\'s APK', () => {
       return new Response(body, { headers: { 'content-length': String(big.length) } });
     }) as typeof fetch;
     const states: ReleaseApk[] = [];
-    await releaseApk(MIRROR_APK, chunked, (x) => states.push(x));
+    await releaseApk(releaseLine(mirrorFrame), chunked, (x) => states.push(x));
     const downloading = states.filter((x) => x.state === 'downloading');
     expect(downloading.length).toBeLessThanOrEqual(101); // 250 chunks
     expect(downloading.at(-1)).toMatchObject({ got: 1_000_000, size: 1_000_000 });
@@ -156,7 +157,7 @@ describe('the release\'s APK', () => {
 
   it('an APK download that stops part way ends in Try again too', async () => {
     const route = fakeReleaseRoute('stuck', APK);
-    const s = new MirrorSession({
+    const s = new AppSession({ frame: mirrorFrame,
       connect: async () => { throw new Error('unused'); },
       release: (async (u: RequestInfo | URL, init?: RequestInit) => {
         const res = await route(u);
@@ -184,7 +185,7 @@ describe('the page', () => {
     expect(f()).toBe(true);
   };
   const toImage = async () => {
-    render(<MirrorWizard />);
+    render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
     await screen.findByText('What goes on the Mirror?');
     expect(screen.getByText('Test only')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Continue with Glassworks' }));
@@ -214,7 +215,7 @@ describe('the page', () => {
   it('?apk=release&mode=app: the app alone over adb, its APK from the release', async () => {
     vi.stubGlobal('fetch', fakeReleaseRoute('out', APK));
     history.replaceState(null, '', '/lululemon-mirror?apk=release&mode=app');
-    render(<MirrorWizard />);
+    render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
     await screen.findByText('Install Glassworks on the Mirror.');
     await until(() => !!screen.queryByText('Glassworks 0.2.0'));
     expect(document.querySelector('input[type=file]')).toBeNull();
@@ -234,7 +235,7 @@ describe('the page', () => {
     const fetch = vi.fn();
     vi.stubGlobal('fetch', fetch);
     history.replaceState(null, '', '/lululemon-mirror');
-    render(<MirrorWizard />);
+    render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
     await screen.findByText(/doesn.t install from Kiln yet/);
     expect(screen.getByText(/^Its installer is still being tested\./)).toBeTruthy(); // a release exists now: not "no release yet"
     expect(document.querySelector('input[type=file]')).toBeNull();
@@ -257,7 +258,7 @@ describe('the page', () => {
     const page = async (q: string) => {
       cleanup();
       history.replaceState(null, '', `/lululemon-mirror?apk=${q}`);
-      render(<StrictMode><MirrorWizard /></StrictMode>);
+      render(<StrictMode><DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} /></StrictMode>);
       await until(() => !!screen.queryByText('What goes on the Mirror?') || !!screen.queryByText('Install Glassworks on the Mirror.'));
       if (!screen.queryByText('Install Glassworks on the Mirror.')) fireEvent.click(screen.getByRole('button', { name: 'Continue with Glassworks' }));
       await screen.findByText('Install Glassworks on the Mirror.');
@@ -271,52 +272,52 @@ describe('the page', () => {
     gates[0]!(); // the first lookup answers late: it no longer counts
     gates[1]!();
     await until(() => !!screen.queryByText('Glassworks 0.2.0'));
-    expect(kept().sessions.mirror.state.release?.state).toBe('ready');
+    expect(kept().sessions.app.state.release?.state).toBe('ready');
   });
 
-  type Kept = { sessions: { mirror: MirrorSession; flash: { state: { screen: string } } }; running(): string | undefined };
+  type Kept = { sessions: { app: AppSession; image: { state: { screen: string } } }; running(): string | undefined };
   const kept = () => registry.activity('/lululemon-mirror') as unknown as Kept;
 
   it('a running install comes back to its own link', async () => {
     vi.stubGlobal('fetch', fakeReleaseRoute('out', APK));
     history.replaceState(null, '', '/lululemon-mirror?apk=release');
-    render(<MirrorWizard />);
+    render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
     await screen.findByText('What goes on the Mirror?');
-    expect(kept().sessions.mirror.from).toBe('release');
-    kept().sessions.flash.state = { ...kept().sessions.flash.state, screen: 'working' };
+    expect(kept().sessions.app.from).toBe('release');
+    kept().sessions.image.state = { ...kept().sessions.image.state, screen: 'working' };
     expect(kept().running()).toBe('/lululemon-mirror?apk=release');
   });
 
   it('?apk=release after ?apk=local keeps the one session and its image worker, and takes the APK from the release', async () => {
     vi.stubGlobal('fetch', fakeReleaseRoute('out', APK));
     history.replaceState(null, '', '/lululemon-mirror?apk=local');
-    render(<MirrorWizard />);
+    render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
     await screen.findByText('What goes on the Mirror?');
     const first = kept();
-    await act(() => first.sessions.mirror.pickApk('local.apk', APK));
+    await act(() => first.sessions.app.pickApk('local.apk', APK));
     cleanup();
     history.replaceState(null, '', '/lululemon-mirror?apk=release');
     await toImage();
     expect(kept()).toBe(first);
-    expect(first.sessions.mirror.from).toBe('release');
+    expect(first.sessions.app.from).toBe('release');
     await screen.findByText('Glassworks 0.2.0');
-    expect(first.sessions.mirror.state.apk?.name).toBe(DEMO_APK);
+    expect(first.sessions.app.state.apk?.name).toBe(DEMO_APK);
     expect(document.querySelector('input[type=file]')).toBeNull();
   });
 
   it('the app-only path takes ?apk=release on a kept session whose fastboot install is done', async () => {
     vi.stubGlobal('fetch', fakeReleaseRoute('out', APK));
     history.replaceState(null, '', '/lululemon-mirror?apk=local');
-    render(<MirrorWizard />);
+    render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
     await screen.findByText('What goes on the Mirror?');
     const first = kept();
-    await act(() => first.sessions.mirror.pickApk('local.apk', APK));
-    first.sessions.flash.state = { ...first.sessions.flash.state, screen: 'done' };
+    await act(() => first.sessions.app.pickApk('local.apk', APK));
+    first.sessions.image.state = { ...first.sessions.image.state, screen: 'done' };
     cleanup();
     history.replaceState(null, '', '/lululemon-mirror?apk=release&mode=app');
-    render(<MirrorWizard />);
+    render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
     expect(kept()).toBe(first);
-    expect(first.sessions.mirror.from).toBe('release');
+    expect(first.sessions.app.from).toBe('release');
     await screen.findByText('Glassworks 0.2.0');
     expect(document.querySelector('input[type=file]')).toBeNull();
   });
@@ -324,17 +325,17 @@ describe('the page', () => {
   it('a session past its download keeps the APK it has', async () => {
     vi.stubGlobal('fetch', fakeReleaseRoute('out', APK));
     history.replaceState(null, '', '/lululemon-mirror?apk=local');
-    render(<MirrorWizard />);
+    render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
     await screen.findByText('What goes on the Mirror?');
     const first = kept();
-    await act(() => first.sessions.mirror.pickApk('local.apk', APK));
-    first.sessions.flash.state = { ...first.sessions.flash.state, screen: 'fastboot' };
+    await act(() => first.sessions.app.pickApk('local.apk', APK));
+    first.sessions.image.state = { ...first.sessions.image.state, screen: 'fastboot' };
     cleanup();
     history.replaceState(null, '', '/lululemon-mirror?apk=release');
-    render(<MirrorWizard />);
+    render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
     expect(kept()).toBe(first);
-    expect(first.sessions.mirror.from).toBe('local');
-    expect(first.sessions.mirror.apkBytes()).toEqual(APK);
+    expect(first.sessions.app.from).toBe('local');
+    expect(first.sessions.app.apkBytes()).toEqual(APK);
   });
 
   it('switching back to the file drops the release\'s APK, and a download still running no longer counts', async () => {

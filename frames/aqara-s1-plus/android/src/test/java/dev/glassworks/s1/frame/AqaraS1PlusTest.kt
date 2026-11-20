@@ -37,7 +37,7 @@ class AqaraS1PlusTest {
     }
 
     @Test fun updatesInstallThroughTheBootImagesRootService() {
-        assertTrue(frame.rootUpdates is RootUpdateInstaller)
+        assertTrue(frame.agent.appUpdates is RootUpdateInstaller)
     }
 
     @Test fun itsOwnNamesAndWorkComeFromTheFrame() {

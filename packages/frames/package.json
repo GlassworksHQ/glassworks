@@ -1,0 +1,22 @@
+{
+  "name": "@glassworks/frames",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The frames registry: every frame Kiln knows, by id. `catalog`: each frame's design data (frame.json, installer.json, its render), light enough for the picker and the routes. `kiln`: each frame's declaration for Kiln's engine, loaded only when its wizard opens. The one place that names frames; Kiln imports frames only through it (#621).",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    "./catalog": "./src/catalog.ts",
+    "./kiln": "./src/kiln.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@glassworks/aqara-s1-plus-installer": "0.0.0",
+    "@glassworks/frame-card": "0.0.0",
+    "@glassworks/kiln-core": "0.0.0",
+    "@glassworks/lululemon-mirror-installer": "0.0.0"
+  }
+}

@@ -2,7 +2,6 @@ package dev.glassworks.s1.frame
 
 import android.app.Application
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -29,25 +28,6 @@ class RootUpdateInstallerTest {
     }
 
     private fun installer(props: Props) = RootUpdateInstaller(props, now = { props.clock })
-
-    @Test fun presentOnlyWithServiceVersionOneOrMore() {
-        val props = Props()
-        assertFalse(installer(props).present())
-        props.p["sys.s1kiosk.update.version"] = "0"
-        assertFalse(installer(props).present())
-        props.p["sys.s1kiosk.update.version"] = "1"
-        assertTrue(installer(props).present())
-    }
-
-    @Test fun aVersionThatIsntANumberMeansNoService() {
-        val props = Props()
-        for (v in listOf("-1", "yes", "1.0", " v2 ", "1-rc")) {
-            props.p["sys.s1kiosk.update.version"] = v
-            assertFalse("'$v'", installer(props).present())
-        }
-        props.p["sys.s1kiosk.update.version"] = " 3\n" // getprop's own whitespace
-        assertTrue(installer(props).present())
-    }
 
     @Test fun onlyAFailedLastInstallIsReported() {
         val props = Props()

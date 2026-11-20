@@ -7,7 +7,7 @@ import java.net.InetAddress
 /**
  * Who may reach the radio's network services (EZSP bridge tcp:6638, OTBR REST tcp:8081), frames/aqara-s1-plus/docs/radio.md
  * "Who may connect". Pure (no Android): parsing/normalizing allow-lists and deciding what the app
- * hands to the root helper in [RadioHelper.PROP_ALLOW].
+ * hands to the frame agent ([dev.glassworks.frame.RadioSetting.ALLOW]).
  *
  * By default only Home Assistant may connect: the address of its last authenticated (Noise, provisioned
  * key) ESPHome API connection, one IPv4 and one IPv6 at most. The owner can replace that with an
@@ -74,7 +74,7 @@ object RadioAllow {
     }
 
     /**
-     * The value for [RadioHelper.PROP_ALLOW]: the owner's [explicit] list when set, else Home
+     * The value for the agent's allow setting: the owner's [explicit] list when set, else Home
      * Assistant's last known addresses ("" = none known yet: the helper allows loopback only).
      */
     fun decide(explicit: String?, haV4: String?, haV6: String?): String {
@@ -85,9 +85,9 @@ object RadioAllow {
 
     /**
      * "Who may connect", for the status text. [allowed] is what the helper enforces
-     * ([RadioHelper.parseAllowed]); [explicit]: the owner set `Radio allowed clients`.
+     * ([RadioReports.parseAllowed]); [explicit]: the owner set `Radio allowed clients`.
      */
-    fun describe(allowed: RadioHelper.Allowed, explicit: Boolean, haV4: String?, haV6: String?): String {
+    fun describe(allowed: RadioReports.Allowed, explicit: Boolean, haV4: String?, haV6: String?): String {
         if (allowed.any) return "any client (no firewall${if (allowed.source == "conf") ", radio.conf" else ""})"
         if (allowed.addresses.isEmpty()) {
             return if (allowed.source == "conf") "nobody but the panel itself (radio.conf)"

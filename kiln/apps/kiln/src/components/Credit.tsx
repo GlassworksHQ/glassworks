@@ -29,7 +29,7 @@ const Glyph = () => (
 
 /**
  * One credit, next to the step that uses it: "Uses Magisk by topjohnwu." With `built` (what the step
- * hands over, e.g. `image`): "This image is built by git-nimrod as part of Glass Panes."
+ * hands over, e.g. `image`): "This image is built by <its maker> as part of <the project>."
  */
 export function Credit({ c, built }: { c: FrameCredit; built?: string }) {
   return (

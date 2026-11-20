@@ -52,7 +52,7 @@ All of it at the frame level, in `frames/<id>/`. A new frame needs no change und
 | Whether it writes, and whether the device restarts after | step `writes`, `reboots` | S1 install: both |
 | Taps on the device's own screen | step `taps`; none on a frame without touch | Android: `allow-usb-debugging` |
 | Its way back | `installer.json` `wayBack` | S1: restore the backup; Mirror: flash the Glass Panes images |
-| Words that name its hardware | the frame's copy (today `apps/kiln/src/frames/aqara-s1-plus.ts`; it moves in phase 2) | "Hold VOL−" |
+| Words that name its hardware | `installer.json` `words`: the USB names at each "your turn", help links, the way back's words, the Silent updates words by state | "USB Device (1f3a:efe8)" |
 | Recovery drawing | `design/recovery.json` | (unchanged) |
 
 `installer.json` is a draft today. The contract reads `route`, `touch` and each step's `id`,
@@ -78,6 +78,48 @@ interface FrameSteps {
 `kiln-core`'s `Recipe` is the S1's version of this today (`checkChip`, `checkLayout`, `patchBoot`,
 `writesBeforeBoot`, `setUp`). The Mirror's image building (`image.ts`, `buildImages`) and Android's
 `installGeneric` become `build` and `setUp`. Code never decides order, retries, waits or screens.
+
+Since phase 2's first step, the shared wizard reads a frame only through `KilnFrame` (kiln-core's
+`frame.ts`): the `words` above, checked where they come in (`frameWords`), its recovery drawing and
+photo, and `FrameCode`. Each frame's installer package exports its whole `kilnFrame`, the S1's in
+`frames/aqara-s1-plus/installer/src/kiln.ts`:
+
+| `FrameCode` | What it says | The S1's |
+|---|---|---|
+| `recipe` | The device steps | `s1Plus` |
+| `appId` | The app on the device | Glassworks' `sh.edm.s1kiosk` |
+| `appOptions` | The recipe's setUp options from the settings step | Asks before a signing-key switch |
+| `wifiName` | The network the device is on, read-only | `dumpsys wifi` |
+| `updates`, `updateStates` | A key of `words.silent`, read-only, and every key it can give (each needs its words) | The boot image's root update service |
+| `giveBack` | Undo's "keep its settings": the device's own apps back | `unprovision` |
+
+**A frame's real install and its demo device are separate files.** `kiln.ts` is the real install: its recipe is
+`recipe.ts`, the steps the panel runs. `sim.ts` (`kilnSim`) is only for Kiln's `?demo=…` states and the tests: the
+recipe with FEL, the layout check and the patch faked, the getprops a current device answers, and the log lines a demo
+install shows. The frame Kiln installs (`KilnFrame`) never carries it. The demo path takes it beside the frame, as a
+`DemoFrame` (`{ frame, sim }`), and `FrameWizard` uses it only when demos are on.
+
+**The frames registry** (`packages/frames`, `@glassworks/frames`) is the one place that names frames,
+and the only way Kiln reaches one. `catalog` is each frame's design data (frame.json, installer.json,
+its render), light enough for the picker, the routes and the release route. `kiln` loads each engine
+frame's `kilnFrame` and `kilnSim` on demand. One route, `apps/kiln/src/app/[frame]`, serves every frame
+on the shared wizard (the catalog's `ENGINE`), titled from its `words.name`. Release lines come from
+`installer.json` `releases`, and the first installer page's links from `legacy`.
+`frame-neutral.test.ts` checks both halves: no frame name in Kiln's sources, and no import of a
+frame's package or a path into `frames/` except through the registry. Its allowlists only shrink.
+**A frame installed by image and adb** (the Mirror) declares a `DeviceFrame` (kiln-core `device.ts`)
+instead of the wizard's `KilnFrame`. Its data is its `installer.json` `device`: what it is called
+(`short`, `the`), its board, the APK's release line, its timings, the assets its image adds, the
+browser storage it keeps, every word only it says, the rows its app install shows, and its Silent
+updates words. Its code, in its installer package, is `appFlow` (check the APK, read the device,
+install, undo) and `imageFlow` (its image recipes, its fastboot checks, the first start, the
+only-home-screen step, Wi-Fi on, and its image builder in a worker). The engine's device flows
+(`apps/kiln/src/device`) run every step and every screen for any frame of that kind. `installer.json`
+`page` (`wizard` or `device`) says which page a frame gets; the registry's loader gives the same
+`kind`, and only a wizard frame has the step routes (`/install`, `/set-up/wifi`, …).
+
+The radio's next steps (`setup/radioPlan.ts`) are the radio pane's, not a frame's: the panel's own
+setup page shows them on any frame whose app reports a radio.
 
 ## What the engine owns
 
@@ -147,10 +189,17 @@ in `kiln/AGENTS.md`, `docs/principles.md` and the root `AGENTS.md`. Files that o
 **Phase 2**, after #596, #603, #607 and #617 merge:
 
 1. Make `apps/kiln/src/wizard` frame-neutral first. The S1's copy, `radioPlan` and FEL move behind
-   the frame's declaration and its `FrameSteps`. The allowlist shrinks as they go.
+   the frame's declaration and its `FrameSteps`. The allowlist shrinks as they go. Done: the wizard,
+   `setup/radioPlan.ts` and the S1's words in `SilentUpdates.tsx` name no frame. FEL stays an engine
+   transport the S1 declares (`connect`'s `transport`).
 2. Move the Mirror onto the shared engine, then Android, one frame per PR. Delete their own sessions
    (`mirror/session.ts`, `mirror/flash.ts`, `android/session.ts`) and screens. Each move deletes
-   that frame's lines in `expected-failures.json`, and its driver becomes the shared one.
+   that frame's lines in `expected-failures.json`, and its driver becomes the shared one. The
+   Mirror's move came in two parts. First the frames registry and one `[frame]` route (#652). Then
+   the Mirror as a `DeviceFrame` on the engine's device flows, with no Mirror code left in Kiln.
+   Both left its behaviour as it was, demo states byte-identical. So its expected failures stay
+   until the flows themselves get the S1's forgiveness: resume after a reload, waiting through a
+   refused auth, a stall watchdog on the image download.
 3. Enter fastboot over adb (`adb reboot bootloader`) where a frame declares its button unreachable.
    Add contract cases for it, for the way back on every writing screen, and for errors that say
    whether anything was written (engine rules 5 to 7 have no case yet).

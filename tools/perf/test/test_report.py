@@ -122,6 +122,68 @@ def clock_samples(nonce, pairs):
     return sandwich, marks
 
 
+def one_read_record(period, presents, m0, end_mono):
+    """The record a single read after a window gave before #643 (perfrun.py's read_sf and the synthetic step, as
+    they were), kept here word for word: the S1 path must still give exactly this."""
+    return {"period_ms": period, "window_ms": [m0 * 1000, end_mono * 1000],
+            "oldest_ms": min(presents) / 1e6 if presents else None, "presents_ms": P.presents_in(presents, m0, end_mono)}
+
+
+class SurfaceFlingerReads(unittest.TestCase):
+    """#643: reads during a window, joined by present time, and the preflight's plan."""
+    NS = 1_000_000
+
+    def frames(self, a_ms, b_ms):
+        return [int(t * self.NS) for t in range(a_ms, b_ms, 16)]
+
+    def test_one_read_gives_the_record_one_read_always_gave(self):
+        # The S1's way (SF_POLL_S 0): byte for byte, in JSON, over full, partial and empty histories.
+        cases = [(16.666, self.frames(10_000, 12_100), 10.5, 11.6), (16.666, self.frames(11_000, 11_200), 10.5, 11.6),
+                 (16.666, [], 10.5, 11.6), (None, [], 1.0, 2.0), (16.666, self.frames(10_000, 12_100), 12.2, 12.4)]
+        for period, ts, m0, end in cases:
+            self.assertEqual(json.dumps(P.sf_window(period, [ts], m0, end)), json.dumps(one_read_record(period, ts, m0, end)))
+
+    def test_overlapping_reads_reach_back_to_the_first(self):
+        # Three reads of a 1 s history during a 2.5 s window, 0.8 s apart: each overlaps the one before.
+        reads = [self.frames(9_200, 10_200), self.frames(10_000, 11_000), self.frames(10_800, 11_800)]
+        frames, oldest = P.stitch_reads(reads)
+        self.assertEqual(oldest, reads[0][0])
+        self.assertEqual(frames, sorted(set(reads[0] + reads[1] + reads[2])))
+        rec = P.sf_window(16.666, reads, 9.5, 11.7)
+        self.assertLess(rec["oldest_ms"], 9500)                  # the window is covered: report.py trusts its gaps
+        self.assertEqual(rec["presents_ms"][0], 9504.0)
+
+    def test_a_gap_between_reads_keeps_only_what_follows_it(self):
+        # The second read's oldest frame comes after the first's newest: frames between them may be lost.
+        reads = [self.frames(9_000, 9_500), self.frames(10_000, 11_000), self.frames(10_500, 11_500)]
+        _, oldest = P.stitch_reads(reads)
+        self.assertEqual(oldest, reads[1][0])
+
+    def test_a_still_screen_between_reads_is_no_gap(self):
+        same = self.frames(9_000, 9_500)
+        _, oldest = P.stitch_reads([same, same, same + self.frames(9_500, 9_600)])
+        self.assertEqual(oldest, same[0])
+
+    def test_no_frames_in_the_last_read(self):
+        self.assertEqual(P.stitch_reads([self.frames(9_000, 9_500), []]), (self.frames(9_000, 9_500), None))
+        self.assertEqual(P.stitch_reads([]), ([], None))
+
+    def test_the_plan(self):
+        self.assertEqual(P.sf_plan(2116.7, 300), (0, None))        # the S1: 127 frames, one read after each window
+        self.assertEqual(P.sf_plan(1800, 900), (0, None))
+        self.assertEqual(P.sf_plan(966.7, 171), (P.SF_POLL_MAX_S, None))   # the Pixel Tablet: 59 frames, run 3's p95 read
+        self.assertEqual(P.sf_plan(983.3, 171, 342), (P.SF_POLL_MAX_S, None))   # and a listing read: two calls
+        poll, why = P.sf_plan(983.3, 171, 600)                           # a listing read slower than half the history
+        self.assertIsNone(poll)
+        self.assertIn("one read takes 600 ms", why)
+        self.assertEqual(P.sf_plan(400, 90), (0.2, None))
+        for reach, read in ((90, 10), (966.7, 500)):                      # reads too close, or one too slow
+            poll, why = P.sf_plan(reach, read)
+            self.assertIsNone(poll)
+            self.assertIn(f"reaches back {reach:.0f} ms and one read takes {read:.0f} ms", why)
+        self.assertIsNone(P.sf_plan(None, 0)[0])
+
+
 class SurfaceViewLayers(unittest.TestCase):
     def test_each_androids_naming(self):
         pkg = "dev.glassworks.generic_android"
@@ -136,6 +198,46 @@ class SurfaceViewLayers(unittest.TestCase):
         self.assertEqual(P.surfaceview_layers(m, pkg + ".legacy"), ["SurfaceView"])
         # Plain SurfaceView with another app on screen: not ours.
         self.assertEqual(P.surfaceview_layers("SurfaceView\ncom.android.launcher3/com.android.launcher3.Launcher\n", pkg), [])
+
+    def test_android_15_and_later_wrap_each_layer(self):
+        # The lines API 35 and 37 emulators listed for the generic app with GeckoView on screen (2026-11-19).
+        # Before the fix the runner named no layer and never asked `--latency`, so every window had no frames
+        # (the Pixel Tablet's Android 17 run). The names come back whole: `--latency` takes nothing else.
+        pkg = "dev.glassworks.generic_android"
+        act = f"{pkg}/dev.glassworks.MainActivity"
+        api35 = (
+            "RequestedLayerState{Display 0 name=\"Built-in Screen\"#41}\n"
+            f"RequestedLayerState{{Background for SurfaceView[{act}]#170 parentId=168 relativeParentId=164 z=-2147483648}}\n"
+            f"RequestedLayerState{{SurfaceView[{act}](BLAST)#169 parentId=168}}\n"
+            f"RequestedLayerState{{178b495 ActivityRecordInputSink {act}#125 parentId=121 !handle z=-2147483648}}\n"
+            f"RequestedLayerState{{ActivityRecord{{4f16477 u0 {act}#121}}\n"
+            f"RequestedLayerState{{SurfaceView[{act}]#168 parentId=167 relativeParentId=164 z=-2}}\n"
+            "RequestedLayerState{SurfaceView[com.other/.Main](BLAST)#9 parentId=8}\n")
+        self.assertEqual(P.surfaceview_layers(api35, pkg), [f"SurfaceView[{act}](BLAST)#169", f"SurfaceView[{act}]#168"])
+        api37 = (
+            f"RequestedLayerState{{Background for f5fea55 SurfaceView[{act}]#164 parentId=162 relativeParentId=158 z=-2147483648}}\n"
+            f"RequestedLayerState{{f5fea55 SurfaceView[{act}](BLAST)#163 parentId=162}}\n"
+            f"RequestedLayerState{{ActivityRecord{{104391098 u0 {act} t10}}#147 parentId=146}}\n"
+            f"RequestedLayerState{{23cb354 {act}#155 parentId=147}}\n"
+            f"RequestedLayerState{{f5fea55 SurfaceView[{act}]#162 parentId=161 relativeParentId=158 z=-2}}\n"
+            "RequestedLayerState{9a6f5b2 SurfaceView[com.other/.Main](BLAST)#9 parentId=8}\n")
+        self.assertEqual(P.surfaceview_layers(api37, pkg), [f"f5fea55 SurfaceView[{act}](BLAST)#163", f"f5fea55 SurfaceView[{act}]#162"])
+        self.assertEqual(P.layer_number(f"f5fea55 SurfaceView[{act}](BLAST)#163"), 163)
+
+    def test_layer_names(self):
+        self.assertEqual(P.sf_layer_name("RequestedLayerState{SurfaceView[a/b](BLAST)#169 parentId=168}"), "SurfaceView[a/b](BLAST)#169")
+        self.assertEqual(P.sf_layer_name("RequestedLayerState{Task=187#582}"), "Task=187#582")
+        self.assertEqual(P.sf_layer_name("RequestedLayerState{ImeContainer#10 parentId=109 relativeParentId=124 z=1}"), "ImeContainer#10")
+        self.assertEqual(P.sf_layer_name("RequestedLayerState{x#5 parentId=4 !handle z=-2147483648 layerStack=1}"), "x#5")
+        # A name with a space, braces or a # of its own keeps them; only the fields after it go.
+        self.assertEqual(P.sf_layer_name("RequestedLayerState{ActivityRecord{1 u0 p/a t10}#147 parentId=146}"),
+                         "ActivityRecord{1 u0 p/a t10}#147")
+        self.assertEqual(P.sf_layer_name("RequestedLayerState{Leaf:0:1#5 parentId=4}"), "Leaf:0:1#5")
+        # A line with no #<id> (as the root copied one off the tablet): the name is what comes before the fields.
+        self.assertEqual(P.sf_layer_name("RequestedLayerState{abc1d8b SurfaceView[p/a](BLAST) parentId=826}"),
+                         "abc1d8b SurfaceView[p/a](BLAST)")
+        # Older Androids print the bare name.
+        self.assertEqual(P.sf_layer_name("  SurfaceView - p/p.A#0 "), "SurfaceView - p/p.A#0")
 
 
 class ScreenSize(unittest.TestCase):
@@ -2196,6 +2298,60 @@ class ScreenOff(unittest.TestCase):
         s = R.synthetic_summary(runs)
         self.assertEqual((s["runs"], s["screen_off_runs"]), (1, 1))
         self.assertEqual(s["js_burst_ms"]["median"], 9.0)
+
+
+class TestNetwork(unittest.TestCase):
+    """#649: the test computer's own link. A stalling one (a Mac's Wi-Fi: max 68 to 84 ms to its gateway, 2026-11-19)
+    that carried graded traffic makes the grade provisional; the numbers are in report.json either way."""
+    setUp, write = Build.setUp, Build.write
+    NOISY = {"sent": 40, "received": 40, "min_ms": 2.3, "median_ms": 3.7, "p95_ms": 68.6, "max_ms": 89.8}
+    QUIET = {"sent": 40, "received": 40, "min_ms": 0.4, "median_ms": 0.6, "p95_ms": 1.1, "max_ms": 2.0}
+
+    def net(self, gateway, adb_over_network, transport=None, link="wifi"):
+        quiet = gateway["p95_ms"] <= 20 and gateway["max_ms"] <= 20
+        self.write("netcheck.json", {"gateway": gateway, "panel": dict(gateway, max_ms=97.0), "link": link,
+                                     "adb_over_network": adb_over_network, "tail_ms": 20, "quiet": quiet})
+        if transport:
+            self.write("transport.json", {"transport": transport, "chosen_by": "auto", "reason": "r", "checks": {}})
+        return R.build(self.dir)
+
+    def test_a_noisy_link_carrying_the_live_updates(self):
+        before = self.rep["grade"]
+        rep = self.net(self.NOISY, True)
+        n = rep["test_network"]
+        self.assertEqual((n["link"], n["carried"], n["quiet"]), ("wifi", ["live updates"], False))
+        self.assertEqual(n["gateway"], self.NOISY)
+        self.assertTrue(rep["grade"]["provisional"])
+        self.assertIn("the test computer's network: its own link to its gateway reached p95 68.6 ms, max 89.8 ms "
+                      "(over 20 ms) and carried the live updates", rep["grade"]["provisional_reasons"][-1])
+        self.assertEqual(rep["grade"]["grade"], before["grade"])            # the letter is kept, flagged
+        md = R.markdown(rep)
+        self.assertIn("The test computer's network (wifi): to its gateway p95 68.6 ms, max 89.8 ms; to the panel p95 68.6 ms, "
+                      "max 97.0 ms. It carried the live updates. **Limited by the test:**", md)
+
+    def test_a_noisy_link_carrying_the_cameras_only(self):
+        rep = self.net(self.NOISY, False, "lan-udp")
+        self.assertEqual(rep["test_network"]["carried"], ["camera video"])
+        self.assertIn("carried the camera video", rep["grade"]["provisional_reasons"][-1])
+
+    def test_a_noisy_link_that_carried_nothing_graded(self):
+        # The S1 on USB with its video through adb: the computer's Wi-Fi is on no graded path.
+        before = self.rep["grade"]
+        rep = self.net(self.NOISY, False, "adb")
+        self.assertEqual(rep["test_network"]["carried"], [])
+        self.assertIsNone(rep["test_network"]["limited"])
+        self.assertEqual(rep["grade"].get("provisional_reasons"), before.get("provisional_reasons"))
+        self.assertIn("It carried no graded traffic (adb over USB, video over adb).", R.markdown(rep))
+
+    def test_a_quiet_link(self):
+        before = self.rep["grade"]
+        rep = self.net(self.QUIET, True, "lan-udp", link="wired")
+        self.assertIsNone(rep["test_network"]["limited"])
+        self.assertEqual(rep["grade"].get("provisional_reasons"), before.get("provisional_reasons"))
+
+    def test_runs_before_the_check(self):
+        self.assertIsNone(self.rep["test_network"])
+        self.assertNotIn("The test computer's network", R.markdown(self.rep))
 
 
 if __name__ == "__main__":

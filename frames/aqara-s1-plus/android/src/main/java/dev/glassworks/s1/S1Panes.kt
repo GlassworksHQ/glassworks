@@ -87,6 +87,7 @@ class S1Panes : AppParts {
         val radio = RadioDefinition.app(
             panePrefs.radio,
             setUpBefore = { SetupState.setUpBefore(prefs.haBase != null, prefs.haSeen, prefs.apiEncryption, prefs.haSetupSkipped) },
+            agent = runtime.frame.agent,
         ) { prefs.haBase }
         val notify = NotificationsDefinition(
             panePrefs.paneFile("notifications"), notifications,
@@ -95,11 +96,11 @@ class S1Panes : AppParts {
         )
         // It requires a camera: without one in the frame's hardware it is CantRun, as every pane that lacks its own.
         val camera = CameraWiring.definition(context, runtime, panePrefs.paneFile("camera"))
-        // The Bluetooth adapter's MAC comes from the root helper (#246); without the helper there is no
-        // file, and Home Assistant keys the proxy on the panel's ESPHome MAC, as before.
+        // The Bluetooth adapter's MAC comes from the frame agent (#246); without one there is none, and Home
+        // Assistant keys the proxy on the panel's ESPHome MAC, as before.
         val bluetoothProxy = BluetoothProxyDefinition(
             panePrefs.paneFile("bluetooth-proxy"), AndroidProxyRadio(context),
-            readAdapterMac = { java.io.File(BLUETOOTH_ADDRESS_FILE).readText() }, page = ::BluetoothProxyPage,
+            readAdapterMac = runtime.frame.agent::bluetoothAddress, page = ::BluetoothProxyPage,
         )
         return listOf(AssistDefinition(panePrefs.paneFile("assist")), SendspinDefinition(panePrefs.paneFile("sendspin"), settingsWorker::execute), notify, radio, bluetoothProxy) +
             frameDefinitions + camera + DiagnosticsDefinition(panePrefs.paneFile("diagnostics"))
@@ -270,12 +271,3 @@ class S1Panes : AppParts {
         return panes
     }
 }
-
-/** The root helpers' app-readable directory (`PUB_DIR` in `s1kiosk_radio.sh` and `s1kiosk_bundle.sh`). */
-internal const val PUB_DIR = "/data/s1kiosk-pub"
-
-/**
- * The Bluetooth adapter's MAC, as the root helper publishes it (`s1kiosk_radio.sh` `bt_publish`, root
- * 0644): Android 10 hides it from apps (#246).
- */
-internal const val BLUETOOTH_ADDRESS_FILE = "$PUB_DIR/bluetooth-address"

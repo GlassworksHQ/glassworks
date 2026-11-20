@@ -71,7 +71,10 @@ export async function flashImages(fb: FastbootLike, images: { system: Blob; user
 }
 
 /** The person's file isn't the published `system.img`: wrong, or not fully downloaded. */
-export class WrongImage extends Error {}
+import { WrongImage } from '@glassworks/kiln-core';
+
+/** Bytes that aren't the release's (kiln-core's, so the engine knows it). */
+export { WrongImage };
 
 export type PrepareStep = 'check' | 'patch' | 'system' | 'userdata';
 

@@ -1,5 +1,5 @@
 'use client';
-// While a frame's session writes to the panel (the S1's, or another frame's kept beside it), leaving or reloading the page asks first, and the
+// While a frame's session writes to the panel (the wizard's, or another frame's kept beside it), leaving or reloading the page asks first, and the
 // screen stays awake. It sits in the root layout and reads the registry, so it holds on every route:
 // the session keeps writing when someone goes to the picker (wizard/registry.ts).
 import { useEffect, useState, useSyncExternalStore } from 'react';

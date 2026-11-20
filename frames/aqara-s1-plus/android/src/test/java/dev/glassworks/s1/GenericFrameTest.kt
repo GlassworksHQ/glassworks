@@ -5,6 +5,7 @@ import android.app.Application
 import android.content.pm.PackageManager
 import dev.glassworks.frame.Capability
 import dev.glassworks.frame.GenericAndroid
+import dev.glassworks.frame.NoAgent
 import dev.glassworks.pane.CantRun
 import dev.glassworks.platform.AppBuild
 import dev.glassworks.testing.RepoFiles
@@ -15,6 +16,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -97,8 +99,9 @@ class GenericFrameTest {
         for (hw in listOf("tangorpro", "qcom", "robolectric", "")) assertEquals(hw, generic, AqaraS1Plus.orElse(hw) { generic })
     }
 
-    @Test fun aTabletInstallsUpdatesWithPackageInstaller() {
-        assertNull(GenericAndroid(app).rootUpdates)
+    @Test fun aTabletHasNoAgentSoItInstallsUpdatesWithPackageInstaller() {
+        assertSame(NoAgent, GenericAndroid(app).agent)
+        assertNull(GenericAndroid(app).agent.appUpdates)
     }
 
     @Test fun aTabletUsesItsOwnNameAndAndroidsSettingsAndRunsNoServiceWork() {

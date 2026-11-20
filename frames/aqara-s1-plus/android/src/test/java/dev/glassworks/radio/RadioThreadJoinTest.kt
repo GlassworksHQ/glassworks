@@ -1,5 +1,7 @@
 package dev.glassworks.radio
 
+import dev.glassworks.s1.radio.RadioHelper
+import dev.glassworks.s1.frame.S1Agent
 import android.app.Application
 import org.json.JSONObject
 import org.junit.After
@@ -99,7 +101,7 @@ class RadioThreadJoinTest {
         System.setOut(PrintStream(stdout, true))
         ShadowLog.clear()
         threadRouter("ready to join: waiting for a Thread dataset")
-        radio = RadioController(init, load = { panePrefs.radio.mode }, store = { panePrefs.radio.mode = it }, inline = true, log = { radioLog += it }, filesDir = tmp.root, clock = { now })
+        radio = RadioController(S1Agent(init), load = { panePrefs.radio.mode }, store = { panePrefs.radio.mode = it }, inline = true, log = { radioLog += it }, filesDir = tmp.root, clock = { now })
             .also { it.start() }
         // As RadioPane wires it: the join hands the dataset to this radio.
         join.deliver = { r -> radio.joinThreadNetwork(r.tlv) }
@@ -287,7 +289,7 @@ class RadioThreadJoinTest {
     @Test
     fun aStatusTheRadioThreadNeverSawBeforeTheTakeIsNotTheAnswer() {
         threadRouter("detached: looking for network \"older-net\"")
-        val c = RadioController(init, load = { panePrefs.radio.mode }, store = { panePrefs.radio.mode = it }, log = { radioLog += it }, filesDir = tmp.root, clock = { now })
+        val c = RadioController(S1Agent(init), load = { panePrefs.radio.mode }, store = { panePrefs.radio.mode = it }, log = { radioLog += it }, filesDir = tmp.root, clock = { now })
         fun settle() { val done = CountDownLatch(1); c.afterPending { done.countDown() }; assertTrue(done.await(5, TimeUnit.SECONDS)) }
         try {
             c.start()
@@ -340,7 +342,7 @@ class RadioThreadJoinTest {
                 return v
             }
         }
-        val c = RadioController(props, load = { panePrefs.radio.mode }, store = { panePrefs.radio.mode = it }, log = { radioLog += it }, filesDir = tmp.root, clock = { now })
+        val c = RadioController(S1Agent(props), load = { panePrefs.radio.mode }, store = { panePrefs.radio.mode = it }, log = { radioLog += it }, filesDir = tmp.root, clock = { now })
         fun settle() { val done = CountDownLatch(1); c.afterPending { done.countDown() }; assertTrue(done.await(5, TimeUnit.SECONDS)) }
         try {
             c.start()

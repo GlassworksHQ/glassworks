@@ -1,5 +1,6 @@
 package dev.glassworks.radio
 
+import dev.glassworks.s1.frame.S1Agent
 import android.app.Application
 import android.view.View
 import android.view.ViewGroup
@@ -42,7 +43,7 @@ class RadioSetupScreenTest {
     private val init = TestInit()
 
     private fun definition(): RadioDefinition {
-        val c = RadioController(init, load = { panePrefs.radio.mode }, store = { panePrefs.radio.mode = it }, inline = true, log = {}, filesDir = tmp.root)
+        val c = RadioController(S1Agent(init), load = { panePrefs.radio.mode }, store = { panePrefs.radio.mode = it }, inline = true, log = {}, filesDir = tmp.root)
         return radioDefinition(app, TestReadout(c, prefs))
     }
 
@@ -102,7 +103,7 @@ class RadioSetupScreenTest {
     @Test
     fun aPreviewDoesntPollTheHelper() {
         // Verifier 6d0f2cd7 / 72dfae7d: the follow-up's 2 s tick asked the controller to refresh, also in a preview.
-        val c = RadioController(init, load = { panePrefs.radio.mode }, store = { panePrefs.radio.mode = it }, inline = true, log = {}, filesDir = tmp.root)
+        val c = RadioController(S1Agent(init), load = { panePrefs.radio.mode }, store = { panePrefs.radio.mode = it }, inline = true, log = {}, filesDir = tmp.root)
         var asked = 0
         val readout = object : RadioReadout by TestReadout(c, prefs) {
             override fun controller(): RadioController? { asked++; return c }

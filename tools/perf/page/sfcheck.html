@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clarity SurfaceFlinger check</title>
+<style>
+  /* Clarity's preflight (#643): a page that draws every frame for 20 s, so the runner can see how far back
+     SurfaceFlinger's history reaches (perfrun.py sfcheck). Then it stops, and costs nothing until the next page. */
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #0a0b0f; color: #a1a1aa; font: 16px/1.3 system-ui, sans-serif; overflow: hidden; }
+  #box { position: absolute; left: 50%; top: 50%; width: 80px; height: 80px; margin: -40px; border-radius: 12px;
+         background: #38bdf8; will-change: transform; animation: spin 1s linear 20; }
+  #status { position: fixed; left: 12px; bottom: 8px; font-size: 13px; }
+  @keyframes spin { from { transform: rotate(0deg) translateX(60px); } to { transform: rotate(360deg) translateX(60px); } }
+</style>
+</head>
+<body>
+<div id="box"></div>
+<div id="status">Clarity: checking SurfaceFlinger's history</div>
+</body>
+</html>

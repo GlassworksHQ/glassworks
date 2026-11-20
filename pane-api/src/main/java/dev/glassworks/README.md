@@ -569,10 +569,10 @@ The S1 needs no root for it: the local-only hotspot is open to any app in the fo
 kiosk's foreground service counts. The hidden API changes two things on the device, and
 `HiddenApHotspot` puts both back whenever the hotspot ends: the device's saved hotspot settings, and
 the Wi-Fi client that Android turns off to start the AP. On most devices, the S1 among them, the Wi-Fi
-client is off while the hotspot runs. A captive portal needs root, so only a frame with root can have one:
-on the S1 (`hotspotPortal`), a phone that joins shows its Wi-Fi sign-in prompt, which opens the setup page. The
-address on the screen stays the way in when no prompt comes up, and on every other frame (`hotspotPortal` is false
-by default).
+client is off while the hotspot runs. A captive portal needs root, so only a frame whose agent declares
+`hotspot-portal` can have one ([docs/frame-agent.md](../../../../../../docs/frame-agent.md)): on the S1, a phone that
+joins shows its Wi-Fi sign-in prompt, which opens the setup page. The address on the screen stays the way in when no
+prompt comes up, and on every other frame.
 
 `HotspotPermission` decides what the setup screen shows before it asks: the reason first, then
 Android's dialog, and where to allow it once Android won't ask again.
@@ -591,8 +591,7 @@ A frame (`dev.glassworks.frame.Frame`) is what the core asks the device:
 | `wifiSettingsIntents()` | Where to choose a Wi-Fi network, best first. The default is Android's Wi-Fi panel and settings. |
 | `paneDefinitions(context)` | The definitions of the frame's panes: their setup steps, settings sections and adb extras. |
 | `panes(ctx, device)` | The panes only this device has. The app builds them with its own, once per device run, and the device runs them like any other. |
-| `hotspotPortal` | Whether something with root sends the setup hotspot's DNS (udp 53) and web (tcp 80) to the app's portal (udp 8053, tcp 8098), so a phone that joins opens the setup page by itself (#197). True on the S1, whose radio helper does it. False (the default): no portal. |
-| `rootUpdates` | The frame's way to install app updates without Android's confirmation (the S1's root update service). Null (the default) means PackageInstaller. |
+| `agent` | The frame's agent, the service outside the app that does what needs root ([docs/frame-agent.md](../../../../../../docs/frame-agent.md)): what it `declared` in frame.json, the `version()` the running one reports, whether it `offers(capability)` now, and the transports the core and panes use: `appUpdates` (app updates without Android's confirmation; null means PackageInstaller), `bluetoothAddress()`, and `radio`, `timeZone` and `bundle` (`RadioAgent`, `TimeZoneAgent`, `BundleAgent`), through which the radio and time zone panes send every request and read every status. A pane checks a capability, never the frame's id. `NoAgent` (the default) declares and offers nothing. The S1's is `S1Agent`: its root helper and its update and bundle services, by the names in `dev.glassworks.s1.radio.RadioHelper` and `S1TimeZone`. With `hotspot-portal` declared, the app runs the setup hotspot's portal listeners (udp 8053, tcp 8098), and the agent sends the hotspot's DNS and port 80 to them (#197). |
 | `frameRelease` | The frame's own version and releases (#139, `FrameRelease`): its id, the version the device carries in `ro.glassworks.frame.id` and `ro.glassworks.frame.version`, and how an update installs. The core adds a *Frame version* row to the Device page and a *Frame update* entity for it. Null (the default) means neither: a device its vendor updates. The S1 and the Mirror have one. |
 | `shortName` | A short name for the panel on its own pages (the S1's `S1 Plus`). Null (the default) means its friendly name. |
 | `systemSettingsTitle` | What the settings call the device's own settings app when it isn't Android's (the S1's: Aqara's). Null (the default) means Android's. |
@@ -606,7 +605,7 @@ The app makes one frame at start, and `GlassworksRuntime` holds it. The device s
 The S1's frame is [`AqaraS1Plus`](../../../../../../frames/aqara-s1-plus/android/src/main/java/dev/glassworks/s1/frame/AqaraS1Plus.kt) (`aqara-s1-plus`). Its
 presence source is the VI5300 time-of-flight sensor, with Lumi's `proximity_threshold` range table,
 and its light source is the MK6212 sensor. Its panes are the wall base (with Aqara's cloud daemon,
-which holds the wall base UART) and the time zone. It also holds the root update service (`rootUpdates`) and
+which holds the wall base UART) and the time zone. It also holds its agent (`S1Agent`, with the root update service) and
 the Wi-Fi scans while the screen is off (`serviceWork`). The rest of the planned frame (installer) comes in
 the next migration steps.
 
