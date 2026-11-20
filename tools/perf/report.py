@@ -725,7 +725,7 @@ def timed_out(tier, out, deadline_s):
 def reference_run(c):
     """One graded run: restart (protocol 4: process start to the reference dashboard the kiosk comes
     back to being usable; before it, to engine ready), then each reference dashboard."""
-    base = {"ttid_ms": c.get("ttid_ms"), "launch": c.get("launch"), "own_page_state": c.get("own_page_state"),
+    base = {"run": c.get("run"), "ttid_ms": c.get("ttid_ms"), "launch": c.get("launch"), "own_page_state": c.get("own_page_state"),
             "own_page_loads": c.get("own_page_loads"), "engine_uri": c.get("engine_uri")}
     proc, engine = c.get("proc_mono"), c.get("engine_mono")
     start, start_error = None, None

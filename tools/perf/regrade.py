@@ -19,8 +19,8 @@ else summary.json. As summary.py, it refuses incomplete or not comparable measur
 the summary there was itself published incomplete (complete: false);
 in a run folder the report is written either way and a summary it refuses is removed, so none is left with the
 earlier grade; a published folder (clarity.json) is left as it was, report and summary together, and it says so.
-From the raw files, it stops when a refstart file isn't the run its name says (its own "run"), or when they hold
-fewer graded runs than the report.json there (some were lost).
+From the raw files, it stops, writing nothing, unless they are refstart-1 to refstart-N, each the run its name says
+(its own "run"), with every graded run the report.json there names (reports since Clarity v1 do) and no fewer runs.
 
   tools/perf/regrade.py <run-dir> [--allow-provisional] [--dry-run]
 
@@ -53,7 +53,17 @@ def regrade(run_dir):
                 bad.append(f"{f} says run {got}")
         if bad:
             sys.exit(f"{run_dir}: the raw files aren't the runs their names say ({'; '.join(bad)}). Nothing written.")
-        stored = len((((old or {}).get("graded") or {}).get("reference") or {}).get("per_run") or [])
+        # A run folder holds refstart-1 to refstart-N (a failed run leaves its file too): a gap means some are gone.
+        numbers = sorted(int(f[len("refstart-"):-len(".json")]) for f in refstarts)
+        if numbers != list(range(1, len(numbers) + 1)):
+            sys.exit(f"{run_dir}: the raw files are runs {numbers}, not 1 to {len(numbers)}: some are missing. Nothing "
+                     "written. Restore them, or move the raw files aside to grade it again from report.json alone.")
+        stored_runs = (((old or {}).get("graded") or {}).get("reference") or {}).get("per_run") or []
+        named = {r.get("run") for r in stored_runs if r.get("run") is not None}
+        if named - set(numbers):
+            # Reports since Clarity v1 name each graded run: the raw files must hold every one.
+            sys.exit(f"{run_dir}: report.json graded runs {sorted(named)}, the raw files hold {numbers}. Nothing written.")
+        stored = len(stored_runs)
         if len(refstarts) < stored:
             # Some graded runs' raw files are gone: a rebuild would drop them and overwrite the stored report.
             sys.exit(f"{run_dir}: report.json has {stored} graded runs but only {len(refstarts)} refstart-*.json: "

@@ -2541,9 +2541,29 @@ class Regrade(unittest.TestCase):
         os.remove(os.path.join(self.dir, "refstart-3.json"))
         p = self.regrade(self.dir)
         self.assertNotEqual(p.returncode, 0)
-        self.assertIn("report.json has 3 graded runs but only 2 refstart-*.json", p.stderr)
+        self.assertIn("report.json graded runs [1, 2, 3], the raw files hold [1, 2]", p.stderr)
         with open(os.path.join(self.dir, "report.json")) as f:
             self.assertEqual(f.read(), before)
+        # A report from before runs were named (the S1's): the count still tells.
+        older = json.loads(before)
+        for r in older["graded"]["reference"]["per_run"]:
+            del r["run"]
+        self.write("report.json", older)
+        p = self.regrade(self.dir)
+        self.assertIn("report.json has 3 graded runs but only 2 refstart-*.json", p.stderr)
+        self.write("report.json", json.loads(before))
+        with open(os.path.join(self.dir, "report.json")) as f:
+            before = f.read()
+        # The same count with a gap (run 3 lost, a valid run 4 in its place): runs 1 to N or nothing.
+        run4 = json.load(open(os.path.join(self.dir, "refstart-2.json")))
+        self.write("refstart-4.json", dict(run4, run=4))
+        p = self.regrade(self.dir)
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("the raw files are runs [1, 2, 4], not 1 to 3", p.stderr)
+        os.remove(os.path.join(self.dir, "refstart-4.json"))
+        # Reports since v1 name their graded runs: the raw files must hold each.
+        with open(os.path.join(self.dir, "report.json")) as f:
+            self.assertEqual([r["run"] for r in json.load(f)["graded"]["reference"]["per_run"]], [1, 2, 3])
         # The same count from a copy (run 3 lost, refstart-4.json a copy of run 1's): each file says which run it is.
         shutil.copy(os.path.join(self.dir, "refstart-1.json"), os.path.join(self.dir, "refstart-4.json"))
         p = self.regrade(self.dir)
