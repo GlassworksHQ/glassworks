@@ -34,6 +34,8 @@ export interface AdbSetUpDeps {
   show(setup: Setup): void;
   /** Whether the app offers setup's Panes step, each time its setup state says (ChannelSetupDeps). */
   panesOffered?(offered: boolean): void;
+  /** Whether the frame has this step (ChannelSetupDeps `has`). */
+  has?(step: 'home-assistant' | 'panes' | 'radio'): boolean;
   /** The set-up screen is the one showing. */
   here(): boolean;
   /** Set-up is over: Done. */
@@ -79,6 +81,7 @@ export class AdbSetUp implements SetupSteps, WifiSteps {
       phase: d.phase,
       show: d.show,
       panesOffered: d.panesOffered,
+      has: d.has,
       here: d.here,
       done: d.done,
       unreachable: d.unreachable,
@@ -261,6 +264,7 @@ export class AdbSetUp implements SetupSteps, WifiSteps {
    * down for a while: one clear waiting state until it is back, never read as an older app with no channel.
    */
   async homeAssistant(): Promise<void> {
+    if (this.d.has?.('home-assistant') === false) return this.steps.homeAssistant(); // it passes over to the next one
     if (!this.d.simulated && !(await this.socketUp(SETUP_SOCKET))) {
       this.d.show({ phase: 'waiting', note: `Waiting for ${this.d.appName} to start again…` });
       // not back within the minute: an error with Try again, never the older-app way on to Done

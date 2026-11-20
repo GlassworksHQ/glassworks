@@ -9,7 +9,7 @@ import { Assets, cap, fmtSize, webUsbDevices, type DeviceEntry, type DeviceFrame
 import * as Collapsible from '@radix-ui/react-collapsible';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState, useSyncExternalStore } from 'react';
 import { BuiltOn, stepCredits } from '../components/Credit';
 import { Shell, useBrowserChip } from '../components/Shell';
 import { standardOfDevice } from '../standard/frame';
@@ -186,6 +186,15 @@ function useInstallRoute(base: string, route: string | undefined) {
     if (window.location.pathname.replace(/\/+$/, '') !== want) window.history.replaceState(null, '', `${want}${window.location.search}`);
   }, [base, route]);
 }
+
+/**
+ * The page that hands a frame's device over now, by its base: sessions kept in the registry from an earlier visit were
+ * made by another mount, and must reach this one's mode and way back.
+ */
+const HANDS = new Map<string, HandOver>();
+
+/** The hand-over a frame's sessions are made with: whichever page of the frame is up when their install ends. */
+export const pageHandOver = (base: string): HandOver => (p) => HANDS.get(base)?.(p);
 
 /** The standard flow's routes, after any frame's install. */
 const STANDARD_ROUTES: readonly Step[] = ['set-up', 'resume', 'wifi', 'home-assistant', 'panes', 'radio', 'done'];
@@ -398,9 +407,9 @@ const isImageDemo = (d: string) => d.startsWith('flash-') || d.startsWith('image
 export function DevicePage({ frame, demo: sim, base }: { frame: DeviceFrame; demo?: DeviceEntry; base: string }) {
   // null outside Next's router (the tests): no step route then
   const path = usePathname() ?? '';
-  /** The install's end: what this page hands the device to (set below, once the router is here). */
+  /** The install's end: what this page hands the device to (set below). Sessions kept from an earlier visit reach it too. */
   const handRef = useRef<HandOver | undefined>(undefined);
-  const handOver: HandOver = (p) => handRef.current?.(p);
+  const handOver = pageHandOver(base);
   const [start] = useState(() => {
     const m = deviceMode(location.search, DEMO_ON && !!sim, DEMOS, deviceOpen(frame));
     // an app flow's route (a reload there, a link) opens the app alone, as &mode=app does
@@ -433,14 +442,25 @@ export function DevicePage({ frame, demo: sim, base }: { frame: DeviceFrame; dem
   const entry = useSyncExternalStore(registry.subscribe, current, current);
   const ws = useSyncExternalStore(entry?.session.store.subscribe ?? noSubscribe, entry?.session.store.get ?? noState, entry?.session.store.get ?? noState);
   /** Done's way back on the app alone: its first screen, to connect and undo there */
+  /** A change React doesn't see (the entry's `handed`): the page draws again. */
+  const [, redraw] = useReducer((n: number) => n + 1, 0);
   const wayBack = useCallback(() => {
+    // the standard flow lets go of the device first: the app's Connect opens it again (one adb connection at a time)
     const e = current();
-    if (e) e.handed = false;
+    if (e) { e.handed = false; e.session.close(); }
     setImageMode(false);
     go(`${base}${start.search}`);
+    redraw();
   }, [current, setImageMode, base, start]);
   /** The image's way back (to the community image) leaves the standard flow's Done for the install's first screen. */
-  const away = useCallback(() => { const e = current(); if (e) e.handed = false; go(`${base}${start.search}`); }, [current, base, start]);
+  const away = useCallback(() => {
+    const e = current();
+    if (e) { e.handed = false; e.session.close(); }
+    go(`${base}${start.search}`);
+    redraw();
+  }, [current, base, start]);
+  // this mount's, for every session of this frame: one kept from an earlier visit hands over with today's mode and way back
+  HANDS.set(base, (p) => handRef.current?.(p));
   handRef.current = (p) => {
     const demoName = start.m.demo;
     const e = registry.set(standardEntry(frame, base, { demo: demoName, device: demoName ? p : undefined, wayBack: imageMode ? undefined : wayBack }));

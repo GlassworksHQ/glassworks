@@ -29,6 +29,9 @@ export class Store {
   get = () => this.state;
 }
 
+/** How long one of the App step's settings commands may take before it counts as stalled (`am start` included). */
+export const SETTINGS_MS = 15_000;
+
 export interface StandardDeps {
   /** How the standard flow reads the frame (frame.ts standardOf, standardOfDevice). */
   standard: StandardFrame;
@@ -79,6 +82,7 @@ export class StandardSession implements SetupSteps, WifiSteps {
       phase: () => this.s.setup,
       show: (setup) => this.setupPhase(setup),
       panesOffered: (offered) => this.dispatch({ type: 'panes', offered }),
+      has: (step) => f.steps.includes(step),
       here: () => !this.closed && this.s.screen === 'setup',
       done: () => this.finish(),
       unreachable: (e) => this.fail(3, e ?? new Error(`${f.app} isn't answering. Is it installed and running?`), true),
@@ -111,6 +115,7 @@ export class StandardSession implements SetupSteps, WifiSteps {
   close(): void {
     if (this.closed) return;
     this.closed = true;
+    this.asking?.abort();
     this.setUp.close();
     void (this.panel as { close?: () => Promise<void> } | undefined)?.close?.().catch(() => {});
     this.panel = undefined;
@@ -173,10 +178,15 @@ export class StandardSession implements SetupSteps, WifiSteps {
     return this.first();
   }
 
-  /** The standard flow's first step on a device with the app on it: App when the frame has it, else Wi-Fi. */
+  /** The standard flow's first step on a device with the app on it: App when the frame has it, else the next it has. */
   protected async first(): Promise<void> {
     if (this.standard.steps.includes('set-up')) { this.setupPhase({ phase: 'settings', update: this.hasApp, ...this.applyMark(), chosen: this.chosen }); return; }
-    await this.setUp.click('wifi', () => this.setUp.wifi());
+    await this.setUp.click('wifi', () => this.afterApp());
+  }
+
+  /** The step after App: Wi-Fi when the frame has it, else Home Assistant's, which passes over any it leaves out. */
+  protected afterApp(): Promise<void> {
+    return this.standard.steps.includes('wifi') ? this.setUp.wifi() : this.setUp.homeAssistant();
   }
 
   /** The App step applies settings to the app already on (true), or installs the app with them (the wizard's install session). */
@@ -195,22 +205,34 @@ export class StandardSession implements SetupSteps, WifiSteps {
     this.began = true;
     this.dispatch({ type: 'go', screen: 'setup', flow: 'install' });
     this.setupPhase({ phase: 'waiting', note: `Connecting to ${this.standard.the}. It should be running and plugged in.` });
+    // the browser's list, cancelled when the session closes (the registry replaced it): nothing waits for a click then
+    const asking = new AbortController();
+    this.asking = asking;
     try {
       const key = await this.keyReady;
-      this.panel = (await this.sd.devices.knownAdb(key).catch(() => undefined))
-        ?? (await this.asks.open('connect', () => this.sd.devices.requestAdb(key), new AbortController().signal));
+      if (this.closed) return false;
+      const p = (await this.sd.devices.knownAdb(key).catch(() => undefined))
+        ?? (this.closed ? undefined : await this.asks.open('connect', () => this.sd.devices.requestAdb(key), asking.signal));
+      // closed meanwhile: a connection that came late is let go, not kept by a session nobody looks at
+      if (this.closed) { void (p as { close?: () => Promise<void> } | undefined)?.close?.().catch(() => {}); return false; }
+      this.panel = p;
       return true;
     } catch (e) {
-      this.fail(3, e, true);
+      if (!this.closed) this.fail(3, e, true);
       return false;
+    } finally {
+      if (this.asking === asking) this.asking = undefined;
     }
   }
+
+  /** The browser's list connectPanel opened, while it waits: close() calls it off. */
+  private asking?: AbortController;
 
   /** The standard flow's routes: /set-up (and its old alias), /set-up/wifi, /home-assistant, /panes, /radio. */
   async route(r: string): Promise<void> {
     switch (r) {
       case 'resume': if (await this.connectPanel()) await this.resume(); return;
-      case 'wifi': if (await this.connectPanel()) await this.wifi(); return;
+      case 'wifi': if (await this.connectPanel()) await this.afterApp(); return;
       case 'home-assistant': if (await this.connectPanel()) await this.homeAssistant(); return;
       case 'panes': if (await this.connectPanel()) await this.panes(); return;
       case 'radio': if (await this.connectPanel()) await this.radio(); return;
@@ -219,7 +241,7 @@ export class StandardSession implements SetupSteps, WifiSteps {
 
   /** `/set-up` on a connected device: its App step, or Wi-Fi on a frame without one. */
   protected async resume(): Promise<void> {
-    if (!this.standard.steps.includes('set-up')) { await this.wifi(); return; }
+    if (!this.standard.steps.includes('set-up')) { await this.afterApp(); return; }
     this.setupPhase({ phase: 'settings', update: await this.appInstalled(), ...this.applyMark(), chosen: this.chosen });
   }
 
@@ -241,7 +263,10 @@ export class StandardSession implements SetupSteps, WifiSteps {
    */
   protected async appStep(opts: AppSettings, at: (p: AppPhase) => void): Promise<AppResult> {
     at({ step: 'prefs' });
-    await applySettings(new Steps(this.panel!, (step, detail) => this.ui.note(step || `  ${detail}`)), opts, this.standard.appId);
+    // each command on a lid (the stall watchdog): a device that stops answering ends in an error with Try again
+    const p = this.panel!;
+    const bounded: PanelShell = { ...p, run: (cmd, signal) => p.run(cmd, signal ?? this.lid(SETTINGS_MS)) };
+    await applySettings(new Steps(bounded, (step, detail) => this.ui.note(step || `  ${detail}`)), opts, this.standard.appId);
     at({ step: 'start' });
     return {};
   }
@@ -270,6 +295,7 @@ export class StandardSession implements SetupSteps, WifiSteps {
         : undefined;
       // the app's start: done when it listens again (the Wi-Fi step would wait for it too)
       if (seen.at(-1)?.step !== 'start') at({ step: 'start' });
+      if (!this.standard.steps.includes('wifi')) { await this.afterApp(); return; }
       if (!(await this.setUp.waitForSocket(IMPROV_SOCKET))) {
         this.setupPhase({ phase: 'wifi', networks: [], unreachable: true, status: `Couldn't reach ${this.standard.app} on the panel.` });
         return;

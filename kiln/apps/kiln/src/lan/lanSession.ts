@@ -78,7 +78,7 @@ export class LanSession implements SetupSteps, WifiSteps {
   private readonly steps: ChannelSetup;
   private running?: string;
   /** The step to go back to after pairing again; `signed-in`: the step after Home Assistant. */
-  private resume?: 'wifi' | 'ha' | 'radio' | 'signed-in';
+  private resume?: 'wifi' | 'ha' | 'panes' | 'radio' | 'signed-in';
 
   constructor(private readonly d: LanDeps) {
     if (d.backFromSignIn) this.resume = 'signed-in';
@@ -146,7 +146,7 @@ export class LanSession implements SetupSteps, WifiSteps {
 
   /** A step's state, unless the panel said this browser isn't paired (the pairing ran out): then pair again. */
   private showStep(setup: Setup) {
-    const ranOut = ((setup.phase === 'ha' || setup.phase === 'radio') && setup.error === NOT_PAIRED) ||
+    const ranOut = ((setup.phase === 'ha' || setup.phase === 'panes' || setup.phase === 'radio') && setup.error === NOT_PAIRED) ||
       (setup.phase === 'wifi' && (setup.status === NOT_PAIRED || setup.joining?.error === NOT_PAIRED));
     if (ranOut) {
       this.resume = setup.phase;
@@ -227,6 +227,7 @@ export class LanSession implements SetupSteps, WifiSteps {
     const back = this.resume;
     this.set({ view: { at: 'setup', setup: { phase: 'waiting', note: 'Connecting to the panel.' } } });
     if (back === 'signed-in') await this.steps.afterSignIn();
+    else if (back === 'panes') await this.steps.panes();
     else if (back === 'radio') await this.steps.radio();
     else if (back === 'ha') await this.steps.homeAssistant();
     else await this.steps.wifi(); // an offline panel (on its setup hotspot) starts with Wi-Fi, one on a network with HA

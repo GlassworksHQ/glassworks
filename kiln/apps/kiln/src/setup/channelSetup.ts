@@ -13,6 +13,8 @@ export interface ChannelSetupDeps {
   show(setup: Setup): void;
   /** Whether the app offers setup's Panes step: said each time its setup state comes, so the rail can list it. */
   panesOffered?(offered: boolean): void;
+  /** Whether the frame has this step (its data, standard/frame.ts): one it leaves out is passed over. Unset: every one. */
+  has?(step: 'home-assistant' | 'panes' | 'radio'): boolean;
   /** Still on the setup screen: an answer that comes after the person moved on changes nothing. */
   here(): boolean;
   /** Setup is over (Finish, Skip, or an older app that has no channel). A promise keeps the button busy until it settles. */
@@ -169,6 +171,7 @@ export class ChannelSetup {
 
   /** Home Assistant: the address (what the panel found), sign-in on the panel's own page. */
   async homeAssistant(): Promise<void> {
+    if (this.d.has?.('home-assistant') === false) return this.panes();
     const g = this.gen;
     const c = await this.connect();
     if (g !== this.gen) return;
@@ -354,6 +357,7 @@ export class ChannelSetup {
    * state has no `panes` has no such step: on to the radio, as before.
    */
   async panes(): Promise<void> {
+    if (this.d.has?.('panes') === false) return this.radio();
     // the state the channel has, if it has one: an app without the step (every app today) asks nothing more here
     const known = this.channel?.state;
     if (known && !known.panes?.length) { await this.radio(); return; }
@@ -395,6 +399,7 @@ export class ChannelSetup {
 
   /** The radio role. */
   async radio(): Promise<void> {
+    if (this.d.has?.('radio') === false) { await this.d.done(); return; }
     const g = this.gen;
     // closed (or replaced) while waiting on the panel: that answer, or its failure, is no one's to show
     const stale = () => g !== this.gen || !this.d.here();

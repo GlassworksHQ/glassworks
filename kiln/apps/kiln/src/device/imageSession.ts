@@ -246,11 +246,13 @@ export class ImageSession {
     const first = linked ?? this.recipes[0]!;
     this.state = { screen: linked ? 'download' : 'choose', picked: first.id, open: !!linked, link: !!linked, files: waiting(first),
       wifi: { ssid: '', password: '' }, understood: false, log: [] };
-    // a reload: Glassworks written and restarted goes straight to its first start (no download, no fastboot); a write
-    // that didn't finish starts again from the image, saying an earlier try changed the device
+    // a reload: an image written and restarted goes straight to its last step over adb, with no download and no fastboot
+    // (Glassworks' first start; a community image's Wi-Fi on, whose published key went with the restart's cleanup, so
+    // that step then says to switch Wi-Fi on in the image's own Settings). A write that didn't finish starts again from
+    // the image, saying an earlier try changed the device
     const mark = d.progress?.get();
     const wrote = mark && this.recipes.find((r) => r.id === mark.image);
-    if (mark?.at === 'flashed' && wrote && !wrote.community) this.state = { ...this.state, screen: 'adb', picked: wrote.id, files: waiting(wrote), changed: true };
+    if (mark?.at === 'flashed' && wrote) this.state = { ...this.state, screen: 'adb', picked: wrote.id, open: wrote.community, files: waiting(wrote), changed: true };
     else if (mark) this.state = { ...this.state, changed: true };
   }
 
