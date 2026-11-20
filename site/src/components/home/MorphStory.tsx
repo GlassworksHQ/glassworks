@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { DeviceModel, geometry, type FrameDesign, type FrameModel } from "@glassworks/frame-card";
+import { DeviceModel, geometry, type FrameDesign, type FrameModel, type View } from "@glassworks/frame-card";
 import { KILN } from "@/lib/links";
 import { KilnGlyph, MusicGlyph } from "../Glyphs";
 import s from "./MorphStory.module.css";
@@ -251,8 +251,11 @@ function samplePose(sVal: number, frames: Keyframe[]): Keyframe {
   };
 }
 
-/** A beat's device: a frame's model or a made-up shape, and its stage's aspect, picked so the stage hugs it. */
-type StoryModel = { id: string; label: string; model: FrameModel; aspect: number };
+/**
+ * A beat's device: a frame's model or a made-up shape, its stage's aspect (picked so the stage hugs it), and the
+ * angle it is seen from: turned toward the beat's text, gentler than a card's, so each beat has its own.
+ */
+type StoryModel = { id: string; label: string; model: FrameModel; aspect: number; view: View };
 
 /**
  * A keyframe posed exactly as its model's front glass: the same numbers geometry() gives DeviceModel (size,
@@ -262,7 +265,7 @@ type StoryModel = { id: string; label: string; model: FrameModel; aspect: number
  * only adds its sides, stand or dock.
  */
 function modelPose(base: Keyframe, sm: StoryModel): { pose: Keyframe; stage: number; face?: string } {
-  const g = geometry(sm.model, sm.aspect);
+  const g = geometry(sm.model, sm.aspect, sm.view);
   const n = (k: string) => parseFloat(g.vars[k] ?? "0");
   const stage = base.w / (n("--wp") / 100);
   const u = stage / 100;
@@ -425,19 +428,20 @@ export function MorphStory({
   const seg = morphSegment(p);
   // every beat's device, and the keyframes posed on them
   const models = useMemo(() => {
-    const s1: StoryModel = { id: "s1", label: `${frames.s1.name} on a wall, running Glassworks`, model: frames.s1.model, aspect: 2 };
+    // right of the text, a device turns left toward it (ry < 0); left of it, right (ry > 0)
+    const s1 = (ry: number): StoryModel => ({ id: "s1", label: `${frames.s1.name} on a wall, running Glassworks`, model: frames.s1.model, aspect: 2, view: { rx: 6, ry } });
     return {
       beats: [
-        s1,
-        { id: "wide", label: "A wide display on a speaker base, running Glassworks (an illustration)", model: WIDE_DISPLAY, aspect: 1.8 },
-        s1,
-        { id: "mirror", label: `${frames.mirror.name} on its stand, running Glassworks`, model: frames.mirror.model, aspect: 0.45 },
-        { id: "tablet", label: `${frames.tablet.name} on its speaker dock, running Glassworks`, model: frames.tablet.model, aspect: 1.6 },
+        s1(-16),
+        { id: "wide", label: "A wide display on a speaker base, running Glassworks (an illustration)", model: WIDE_DISPLAY, aspect: 1.8, view: { rx: 9, ry: 18 } },
+        s1(-14),
+        { id: "mirror", label: `${frames.mirror.name} on its stand, running Glassworks`, model: frames.mirror.model, aspect: 0.45, view: { rx: 3, ry: 16 } },
+        { id: "tablet", label: `${frames.tablet.name} on its speaker dock, running Glassworks`, model: frames.tablet.model, aspect: 1.6, view: { rx: 9, ry: -18 } },
       ] as StoryModel[],
       future: {
-        square: { id: "square", label: "A square 4-inch wall switch, running Glassworks (an illustration)", model: SQUARE_SWITCH, aspect: 1 },
-        round: { id: "round", label: "A round wall dial, running Glassworks (an illustration)", model: ROUND_DIAL, aspect: 1 },
-        bedside: { id: "bedside", label: "A bedside display, running Glassworks (an illustration)", model: BEDSIDE_DISPLAY, aspect: 1.8 },
+        square: { id: "square", label: "A square 4-inch wall switch, running Glassworks (an illustration)", model: SQUARE_SWITCH, aspect: 1, view: { rx: 5, ry: -12 } },
+        round: { id: "round", label: "A round wall dial, running Glassworks (an illustration)", model: ROUND_DIAL, aspect: 1, view: { rx: 5, ry: -12 } },
+        bedside: { id: "bedside", label: "A bedside display, running Glassworks (an illustration)", model: BEDSIDE_DISPLAY, aspect: 1.8, view: { rx: 9, ry: -14 } },
       } as Record<"square" | "round" | "bedside", StoryModel>,
     };
   }, [frames]);
@@ -860,7 +864,7 @@ export function MorphStory({
 
   /* A beat's device as its 3D model (frame.json's, or storyModels.ts), with the live screen on it */
   const renderModel = (sm: StoryModel, id: string, shape: ShapeId, content: React.ReactNode) => (
-    <DeviceModel key={sm.id} id={id} model={sm.model} label={sm.label} aspect={sm.aspect}>
+    <DeviceModel key={sm.id} id={id} model={sm.model} label={sm.label} aspect={sm.aspect} view={sm.view}>
       {/* the glass's own screen box (a size container), so the dashboard lays out the same on both */}
       <div className={s.modelScreen} data-round={shape === "round" || undefined} data-mirror={shape === "mirror" || undefined}>
         {content}
@@ -1184,7 +1188,7 @@ export function MorphStory({
       const sm = modelOfShape(shape);
       // the stage that draws the body MOBILE_W wide; on a narrower screen it shrinks, and the screen's
       // content is drawn at the full size and zoomed down, so the dashboard keeps its layout
-      const stage = MOBILE_W[shape] / (parseFloat(geometry(sm.model, sm.aspect).vars["--wp"] ?? "100") / 100);
+      const stage = MOBILE_W[shape] / (parseFloat(geometry(sm.model, sm.aspect, sm.view).vars["--wp"] ?? "100") / 100);
       const zoom = Math.min(1, (vw - 32) / stage);
       return (
         <div className={s.compactStage}>
