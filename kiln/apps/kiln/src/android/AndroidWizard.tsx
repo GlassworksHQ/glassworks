@@ -308,9 +308,11 @@ const rowOf = (p: GenericPhase): RowId => (p.step === 'updates' || p.step === 'g
 const GRANT_TEXT: Record<Grant['what'], { name: string; without: string }> = {
   'microphone': { name: 'Microphone', without: 'Assist can\'t hear you' },
   'camera': { name: 'Camera', without: 'the camera pane has no picture' },
-  'secure-settings': { name: 'Screen on and off', without: 'the screen won\'t turn off by itself' },
+  // What the generic app does with each (read in its code, 2026-11-18): secure settings let the Bluetooth proxy turn
+  // Location on; the device admin is what turns the screen off when idle (lockNow).
+  'secure-settings': { name: 'Secure settings', without: 'the Bluetooth proxy can\'t turn Location on by itself' },
   'overlay': { name: 'Show over other apps', without: 'its codes can\'t show over other apps' },
-  'device-admin': { name: 'Lock the screen', without: 'it can\'t lock the screen' },
+  'device-admin': { name: 'Turn the screen off', without: 'Glassworks can\'t turn the screen off by itself' },
 };
 
 function GrantList({ grants, updates }: { grants: Grant[]; updates?: SilentUpdatesResult }) {

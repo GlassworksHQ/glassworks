@@ -693,10 +693,12 @@ class SetupOverlay(
             SetupFlow.PANES -> content = bindPanes(m, stepChanged)
             else -> {
                 // A pane's step fills the card itself (SetupCard.content), slot included, and sets its status
-                // on every draw: it starts from none (SetupCard's promise).
-                setContent(null)
+                // on every draw: it starts from none (SetupCard's promise). Its view stays attached when the step
+                // sets the same one again, so a redraw every couple of seconds never cuts a drag short (#524).
                 status.visibility = View.GONE
+                stepContentSet = false
                 stepsById[shown]?.let { (_, step) -> bindPaneStep(step, stepChanged) }
+                if (!stepContentSet) setContent(null)
                 hideKeyboard()
                 return
             }
@@ -1280,6 +1282,9 @@ class SetupOverlay(
         private fun redraw() { sync(); model?.let { bindCard(it, stepChanged = false) } }
     }
 
+    /** The step being drawn set its own view ([SetupCard.content]) during this draw. */
+    private var stepContentSet = false
+
     /** What the setup screen offers a pane's step. */
     private val stepHost = object : SetupHost {
         override val preview: Boolean get() = model?.preview == true
@@ -1309,7 +1314,10 @@ class SetupOverlay(
             qrGlow.visibility = View.VISIBLE
         }
 
-        override fun content(view: View?) = setContent(view)
+        override fun content(view: View?) {
+            stepContentSet = true
+            setContent(view)
+        }
 
         override fun primary(text: String, enabled: Boolean, onClick: () -> Unit) {
             primary.text = text

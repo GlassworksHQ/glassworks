@@ -62,6 +62,13 @@ Experimental: run on a lululemon Mirror and a Pixel Tablet so far, not yet on ot
 - **Know when a tablet is on its dock.** A Pixel Tablet has a *Docked* sensor in Home Assistant, on while it
   sits on its dock and off when you lift it off, and its page in the settings and on the Manage page says
   *Docked* or *Not docked*. Another tablet gets both once it has been on a dock; ordinary tablets have neither.
+- **Setup makes a downloaded app the panel on its own.** Installed from the device's own browser, the app shows
+  a *This device* step after Panes with the two things Kiln would set: make it the home screen, and let it turn the
+  screen off when idle. Each is one button that opens Android's own page or dialog. Turning the screen off makes
+  Glassworks a device admin, so turn that off in Android's settings before you uninstall it. Kiln sets both, and
+  setup skips the step when both are on already. Once it shows, it stays until you tap Continue or Not now. The
+  Device page shows both as rows. In Kiln's `/android`, the grant that was called "Screen on and off" is now
+  *Secure settings*, and "Lock the screen" is *Turn the screen off*, which is what each does.
 - **Setup offers silent updates when it can.** On a new setup, a *Silent updates* step follows Panes when
   updates would ask for a tap and something can change that. On Android 12 or newer it opens Android's "Install
   unknown apps" page for Glassworks. On Android 6 to 11, and on newer Android while this release targets an older

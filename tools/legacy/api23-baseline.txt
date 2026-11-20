@@ -39,6 +39,10 @@ dev/glassworks/platform/Platform.kt|android.content.Intent#getParcelableExtra
 dev/glassworks/platform/Platform.kt|android.net.ConnectivityManager#registerDefaultNetworkCallback
 dev/glassworks/platform/Platform.kt|android.net.NetworkCapabilities#getTransportInfo
 dev/glassworks/platform/Platform.kt|android.os.Process#getStartElapsedRealtime
+dev/glassworks/platform/Platform.kt|android.app.role.RoleManager
+dev/glassworks/platform/Platform.kt|android.app.role.RoleManager#isRoleHeld
+dev/glassworks/platform/Platform.kt|android.app.role.RoleManager#isRoleAvailable
+dev/glassworks/platform/Platform.kt|android.app.role.RoleManager#createRequestRoleIntent
 dev/glassworks/secrets/SecretPrefs.kt|java.util.concurrent.ConcurrentHashMap#newKeySet
 dev/glassworks/secrets/SecretStore.kt|java.util.Base64#getDecoder
 dev/glassworks/secrets/SecretStore.kt|java.util.Base64#getEncoder
