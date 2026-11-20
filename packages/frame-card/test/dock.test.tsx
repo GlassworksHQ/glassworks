@@ -80,11 +80,15 @@ describe('a dark look (model.dark)', () => {
     expect(g.dock!.faces.map((f) => f.fill.slice(11, 18))).toEqual(plain.dock!.faces.map((f) => f.fill));
   });
 
+  it('paints the S1 silver on a light page and in its dark finish on a dark one, behind the same black glass', () => {
+    const g = geometry(s1.model, 2);
+    for (const f of g.faces) expect(f.fill).toMatch(lightDark);
+    expect(g.vars['--dev-face']).toBeUndefined();
+  });
+
   it('leaves a frame without one as it was: plain colours', () => {
-    for (const f of [s1, mirror]) {
-      const g = geometry(f.model, 2);
-      expect([...g.faces.map((x) => x.fill), ...g.parts.map((x) => x.color)].filter((c) => c.startsWith('light-dark'))).toEqual([]);
-    }
+    const g = geometry(mirror.model, 2);
+    expect([...g.faces.map((x) => x.fill), ...g.parts.map((x) => x.color)].filter((c) => c.startsWith('light-dark'))).toEqual([]);
   });
 
   it('draws a dark front over black glass when only the dark look has one', () => {

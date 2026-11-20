@@ -28,7 +28,13 @@
       "light": "#f4f5f7"
     },
     "finish": "glass",
-    "mount": "wall"
+    "mount": "wall",
+    "dark": {
+      "sides": {
+        "dark": "#1e1f22",
+        "light": "#5a5c61"
+      }
+    }
   },
   "recovery": "recovery.json",
   "render": "render.webp",

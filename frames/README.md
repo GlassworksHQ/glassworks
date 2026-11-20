@@ -92,7 +92,7 @@ describes the device's look in millimetres"). Kiln's picker reads it, and glassw
 | `face` | Optional. The front's colour around the screen, e.g. a white bezel. Black glass when left out |
 | `mount` | `wall`, `floor`, `lean` or `desk` (on a desk or counter, seen from a little above); `lean` and `desk` take `lean`, the degrees the top tilts back |
 | `parts` | Optional. Parts outside the body: tubes and a dock (below) |
-| `dark` | Optional. The look on a dark page, when the device also comes in a dark colour: `{ face, sides }`, only the ones that change. The Pixel Tablet is Porcelain on a light page and Hazel on a dark one. Kiln and the site draw each colour as CSS `light-dark()`, so the page's `color-scheme` picks the look |
+| `dark` | Optional. The look on a dark page, when the device also comes in a dark colour: `{ face, sides }`, only the ones that change. The Pixel Tablet is Porcelain on a light page and Hazel on a dark one; the S1 is silver, or dark behind the same black glass. Kiln and the site draw each colour as CSS `light-dark()`, so the page's `color-scheme` picks the look |
 
 A part is one of:
 
