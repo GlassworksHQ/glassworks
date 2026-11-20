@@ -449,8 +449,12 @@ ${ownCard(v, s, "log")}<section class="card logs">$rows</section>"""
         return frame(s, "/log", "Log", v, main)
     }
 
-    /** [more]: cards after the signed-in browsers' (a frame's own, such as "Allow a new computer"). */
-    fun security(s: PanelStatus, v: Viewer, sessions: List<Session>, mine: String, notice: String?, more: String = ""): String {
+    /**
+     * The signed-in browsers, then the core's Security section (#33's drawing 07: setup over the network, the factory reset),
+     * then [more]: a frame's own cards, such as "Allow a new computer". [dialog] and [problem] as on a settings page ([section]).
+     */
+    fun security(s: PanelStatus, v: Viewer, sessions: List<Session>, mine: String, notice: String?, more: String = "",
+                 dialog: Dialog? = null, problem: String? = null): String {
         val rows = sessions.joinToString("") { x ->
             val me = x.id == mine
             val detail = if (x.remember) "Remembered until ${day(x.expiresMs)}" else "Last used ${ago(x.lastUsedMs)}"
@@ -458,9 +462,12 @@ ${ownCard(v, s, "log")}<section class="card logs">$rows</section>"""
             """<div class="row static"><div><b>${esc(x.browser)}${if (me) """ · <span class="me">this browser</span>""" else ""}</b><span>${esc(detail + who)}</span></div>
 <form method="post" action="/security/signout">${csrf(v)}<input type="hidden" name="id" value="${esc(x.id)}"><button class="pill" type="submit">Sign out</button></form></div>"""
         }
-        val main = """<h1 class="ph">Security</h1><p class="sub">Who can manage this panel, and the actions that need you there.</p>
-<section class="card list"><div class="lh"><b>Signed-in browsers</b></div>$rows</section>$more"""
-        return frame(s, "/security", "Security", v, main, notice)
+        val err = problem?.let { """<p class="err" role="alert">${esc(it)}</p>""" }.orEmpty()
+        val main = """<h1 class="ph">Security</h1><p class="sub">Who can manage this panel, and the actions that need you there.</p>$err
+<section class="card list"><div class="lh"><b>Signed-in browsers</b></div>$rows</section>${ownCard(v, s, SECURITY)}$more"""
+        val sec = s.sections.firstOrNull { it.id == SECURITY }
+        val overlay = if (dialog != null && sec != null) dialog(v, "/$SECURITY", sec, dialog) else ""
+        return frame(s, "/$SECURITY", "Security", v, main, notice, overlay)
     }
 
     fun about(s: PanelStatus, v: Viewer): String {
@@ -521,6 +528,9 @@ ${if (ha == null) "" else """<script src="$PANELS_BOOT" async></script><script t
     companion object {
         /** Sections drawn on a page of their own under "System" in the nav, not under "Panel". */
         val OWN_PAGES = mapOf("log" to "Log", "security" to "Security", "about" to "About")
+
+        /** The Security page's id; the core's section of that id draws on it ([security]). */
+        const val SECURITY = "security"
 
         /** All panels (#466), after the Overview in the nav. */
         const val PANELS = "/panels"

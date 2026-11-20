@@ -213,6 +213,21 @@ class LanSetupTest {
         assertTrue("and it stays good for the browser that paired", JSONObject(get(LanSetup.PAIR, session).text()).getBoolean("paired"))
     }
 
+    /** "Close setup over the network" (#33): every paired browser and its open channel end, and the setup hotspot closes, as Done does. */
+    @Test fun closeEndsEveryPairedBrowserAndItsChannel() {
+        val first = pair()
+        wall += 31_000
+        val second = pair()
+        ws(second).use { c ->
+            assertTrue(c.ask("""{"id":1,"op":"pairing.arm"}""").getBoolean("ok"))
+            lan.close()
+            assertTrue("close ends the open channel", c.ended())
+        }
+        assertEquals("close closes the setup hotspot", 1, dones)
+        for (s in listOf(first, second)) assertFalse("no longer paired", JSONObject(get(LanSetup.PAIR, s).text()).getBoolean("paired"))
+        assertEquals(listOf("arm"), changes)
+    }
+
     @Test fun doneFromAnotherAddressEndsNothing() {
         val session = pair()
         ws(session).use { c ->

@@ -25,6 +25,9 @@ interface ManagePage {
 
     /** The Overview's actions, the same on the page and in the panel's menu. */
     val actions: PanelActions
+
+    /** Signs every browser out of the page (a factory reset, #33); false when that couldn't be saved. */
+    fun signOutAll(): Boolean
 }
 
 /**

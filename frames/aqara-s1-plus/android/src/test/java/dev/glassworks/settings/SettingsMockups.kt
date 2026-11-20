@@ -86,13 +86,13 @@ class SettingsMockups {
         assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", Mockup.dir != null)
 
         shot("settings-01-dashboard", menu(radioRunning = true), "dashboard")
-        // "Allow setup over the network" as on the S1 (#34): Home Assistant has the panel, and Allow was pressed.
-        KioskPrefs(RuntimeEnvironment.getApplication()).apply { haSeen = true; armLanSetup() }
-        shot("settings-01b-dashboard-setup-allowed", menu(radioRunning = true, panelIp = "192.0.2.10"), "dashboard") { o ->
-            Mockup.layout(o)
-            o.previewScrollTo(Mockup.label(o, CoreSettings.SETUP_OVER_NETWORK), alignBottom = true)
-        }
-        KioskPrefs(RuntimeEnvironment.getApplication()).haSeen = false
+        // The Security page (#33): "Allow setup over the network" (#34) and the factory reset, as when Home Assistant has the panel.
+        KioskPrefs(RuntimeEnvironment.getApplication()).haSeen = true
+        shot("settings-01b-security", menu(radioRunning = true, panelIp = "192.0.2.10"), CoreSettings.SECURITY)
+        // Allow was pressed: Close shows until the 30 minutes end.
+        KioskPrefs(RuntimeEnvironment.getApplication()).armLanSetup()
+        shot("settings-01c-security-setup-allowed", menu(radioRunning = true, panelIp = "192.0.2.10"), CoreSettings.SECURITY)
+        KioskPrefs(RuntimeEnvironment.getApplication()).apply { closeLanSetup(); haSeen = false }
         shot("settings-02-radio", menu(radioRunning = true), "radio")
         shot("settings-03-screen", menu(radioRunning = true), "screen")
         shot("settings-04-about", menu(radioRunning = true), "about")

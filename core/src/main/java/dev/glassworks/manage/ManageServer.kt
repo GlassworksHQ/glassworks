@@ -279,6 +279,17 @@ class ManageServer(
 
 
 
+    /**
+     * A factory reset (#33): signs every browser out, the one that asked for it too, and ends in Home Assistant the
+     * sign-ins All panels kept for them. False when the sign-outs couldn't be saved: they hold until the app restarts.
+     */
+    fun signOutAll(): Boolean {
+        val (ids, saved) = sessions.revokeAll()
+        ids.forEach { endSession(it) }
+        event("Every browser was signed out (factory reset)")
+        return saved != SessionStore.Revoked.NOT_SAVED
+    }
+
     /** How many sessions are marked as having their sign-in left at an old address (tests). */
     fun leftMarks(): Int = leftFor.size
 
@@ -633,23 +644,31 @@ class ManageServer(
                 html(200, pages.log(status, viewer, log.read(level, q), level, q))
             }
             path == "/log/diagnostics.txt" -> diagnostics()
-            path == "/security" -> html(200, pages.security(status, viewer, sessions.list(haBase()), s.id, notice(req.query["done"]),
-                more = usb?.cards(viewer, req.query["usb"]).orEmpty()))
+            path == "/security" -> html(200, securityPage(status, viewer, s.id, notice(req.query["done"]), req.query["usb"]))
             path == "/about" -> html(200, pages.about(status, viewer))
             path == ManagePages.PANELS -> panels(status, viewer, s.id)
             path == "/confirm/reboot" -> html(200, rebootDialog(status, viewer, null))
             else -> {
                 val edit = req.query["edit"]?.let { ManagePages.Dialog.Edit(it) }
                 settingsPage(status, viewer, path.removePrefix("/"), dialog = edit, done = req.query["done"],
-                    paused = req.query[ManagePages.LIVE_PARAM] == "off")
+                    paused = req.query[ManagePages.LIVE_PARAM] == "off", mine = s.id)
                     ?: html(404, pages.notFound(status, viewer))
             }
         }
     }
 
-    /** A pane's or a core section's page by [id], or null when the panel has no such page. */
+    /** The Security page: the signed-in browsers ([mine] is this one's), the core's Security section, and this frame's cards. */
+    private fun securityPage(status: PanelStatus, viewer: ManagePages.Viewer, mine: String, notice: String?, usbQuery: String? = null,
+                             dialog: ManagePages.Dialog? = null, problem: String? = null): String =
+        pages.security(status, viewer, sessions.list(haBase()), mine, notice, more = usb?.cards(viewer, usbQuery).orEmpty(), dialog = dialog, problem = problem)
+
+    /**
+     * A pane's or a core section's page by [id], or null when the panel has no such page. The core's Security section
+     * draws on the Security page, with the signed-in browsers; [mine] is the session that asks.
+     */
     private fun settingsPage(status: PanelStatus, viewer: ManagePages.Viewer, id: String, dialog: ManagePages.Dialog? = null,
-                             problem: String? = null, done: String? = null, code: Int = 200, problemSee: String? = null, paused: Boolean = false): HttpResponse? {
+                             problem: String? = null, done: String? = null, code: Int = 200, problemSee: String? = null, paused: Boolean = false,
+                             mine: String = ""): HttpResponse? {
         val pane = status.panes.firstOrNull { it.id == id }
         val section = status.sections.firstOrNull { it.id == (pane?.sectionId ?: id) }
         if (pane == null && section == null) return null
@@ -658,6 +677,7 @@ class ManageServer(
             val item = section?.let { SettingsChange.find(it, d.key) }
             d is ManagePages.Dialog.Confirm || (item != null && item !is SettingsItem.Switch && item !is SettingsItem.Slider && item !is SettingsItem.Action)
         }
+        if (pane == null && id == ManagePages.SECURITY) return html(code, securityPage(status, viewer, mine, sectionNotice(done), dialog = shown, problem = problem))
         return html(code, pages.section(status, viewer, "/$id", pane?.title ?: section!!.title, pane?.state, section, pane?.links.orEmpty(),
             dialog = shown, problem = problem, restart = done == "restart", notice = sectionNotice(done), problemSee = problemSee, paused = paused))
     }
@@ -691,9 +711,13 @@ class ManageServer(
         // A change that asks first on the panel asks here too, and runs only with the answer to that question:
         // a one-shot token the dialog carries, for this session and this exact change (#269 verifier).
         val question = ManageApi.question(item, raw)
-        if (question != null && !answered(req.form["answer"], s.id, id, key, raw)) {
-            return settingsPage(status, viewer, page.removePrefix("/"), ManagePages.Dialog.Confirm(key, raw, question, ask(s.id, id, key, raw)))!!
+        val atPanel = item is SettingsItem.Action && item.needsCode && raw == SettingsItem.Action.RUN
+        val confirmed = (question != null || atPanel) && answered(req.form["answer"], s.id, id, key, raw)
+        if (question != null && !confirmed) {
+            return settingsPage(status, viewer, page.removePrefix("/"), ManagePages.Dialog.Confirm(key, raw, question, ask(s.id, id, key, raw)), mine = s.id)!!
         }
+        // Then, for an action that needs someone at the panel, the code it shows: the same one-shot answer binds the code to this change.
+        if (atPanel) codeGate(req, s, viewer, id, key, page, item as SettingsItem.Action, confirmed)?.let { return it }
         val problem = apply(item, raw)
         val did = if (item is SettingsItem.Action) "ran" else "changed"
         if (problem == PENDING) {
@@ -713,7 +737,51 @@ class ManageServer(
         // The link follows the page as it is now: the refusal came from the state the save saw, not the one posted against.
         val now = host.status()
         val see = (now.sections.firstOrNull { it.id == id }?.let { SettingsChange.find(it, key) } as? SettingsItem.Switch)?.see
-        return settingsPage(now, viewer, page.removePrefix("/"), dialog, problem = if (dialog == null) problem else null, code = 422, problemSee = see)!!
+        return settingsPage(now, viewer, page.removePrefix("/"), dialog, problem = if (dialog == null) problem else null, code = 422, problemSee = see, mine = s.id)!!
+    }
+
+    /**
+     * The panel's code before an action that needs someone at the panel ([SettingsItem.Action.needsCode]): null once the
+     * code typed is right, else the page to answer with. Without a typed code (or with a stale answer) the panel shows a
+     * code for this browser and this action, and the dialog asks for it, as Reboot does.
+     */
+    private fun codeGate(req: HttpRequest, s: Session, viewer: ManagePages.Viewer, section: String, key: String, page: String,
+                         item: SettingsItem.Action, confirmed: Boolean): HttpResponse? {
+        val purpose = "$PURPOSE_ACTION:$section/$key"
+        val what = ManageApi.what(host.status().sections.first { it.id == section }, key)
+        fun dialog(problem: String?, status: Int) = html(status, actionCodeDialog(viewer, s, section, key, page, item, problem))
+        val typed = req.form["code"]
+        if (typed == null || !confirmed) return when (val shown = code.show(purpose, item.title, s.id)) {
+            is PanelCode.Show.Ok -> dialog(null, 200)
+            is PanelCode.Show.Locked -> dialog(lockedText(), 429)
+            is PanelCode.Show.Busy -> { capped(req, shown); dialog(busyText(shown), 429) }
+            PanelCode.Show.Unavailable -> {
+                event("${who(s)}: $what refused, the panel can't show a code")
+                settingsPage(host.status(), viewer, page.removePrefix("/"), problem = "$NO_CODE ${item.title} needs it.", code = 503, mine = s.id)!!
+            }
+        }
+        return when (val c = code.check(purpose, s.id, typed)) {
+            PanelCode.Check.Ok -> null
+            is PanelCode.Check.Wrong -> {
+                event("Wrong code typed for $what")
+                dialog(if (c.triesLeft > 0) "That's not the code. ${c.triesLeft} ${if (c.triesLeft == 1) "try" else "tries"} left." else "That was the last try. Cancel and start again.", 401)
+            }
+            PanelCode.Check.NoCode -> dialog("That code has run out. Cancel and start again.", 401)
+            is PanelCode.Check.Locked -> dialog(lockedText(), 429)
+        }
+    }
+
+    /** The code dialog over [page] for [item]: its answer is a fresh one-shot token for this session and this action. */
+    private fun actionCodeDialog(viewer: ManagePages.Viewer, s: Session, section: String, key: String, page: String,
+                                 item: SettingsItem.Action, problem: String?): String {
+        val run = SettingsItem.Action.RUN
+        val behind = settingsPage(host.status(), viewer, page.removePrefix("/"), mine = s.id)?.body?.toString(Charsets.UTF_8).orEmpty()
+        return pages.codeDialog(name(), "Enter the code on the panel.", "${item.title} needs someone at the panel. It's showing a 6-digit code now.",
+            "/settings", item.confirm?.action ?: item.label, page,
+            mapOf("csrf" to viewer.csrf, "section" to section, "key" to key, "value" to run, "answer" to ask(s.id, section, key, run)), problem,
+            // An action that asks first costs something (the reset): its button is rose, as Reboot's.
+            danger = item.confirm != null,
+            behindHtml = behind.substringAfter("<body>").substringBeforeLast("</body>"))
     }
 
     /**
@@ -949,6 +1017,8 @@ class ManageServer(
         private const val PENDING = "\u0000pending"
         const val PURPOSE_SIGN_IN = "signin"
         const val PURPOSE_REBOOT = "reboot"
+        /** A settings action that needs someone at the panel; the code's purpose names its section and key. */
+        const val PURPOSE_ACTION = "action"
 
         /** How long a question's answer stays good, and how many may wait at once. */
         private const val ASK_MS = 5 * 60_000L

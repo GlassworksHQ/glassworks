@@ -123,6 +123,15 @@ class KioskPrefs(
         lanSetupUntil = System.currentTimeMillis() + dev.glassworks.setup.LanSetup.ARM_MS
     }
 
+    /** Ends a re-arm now: pairing over the LAN is closed again once Home Assistant has the panel. */
+    fun closeLanSetup() {
+        lanSetupUntil = 0L
+    }
+
+    /** Pairing over the LAN is open because someone re-armed it, not only because Home Assistant hasn't added the panel. */
+    val lanSetupArmed: Boolean
+        get() = haSeen && System.currentTimeMillis() < lanSetupUntil
+
     /** The panel has been online over Wi-Fi at least once (the boot screen's "Connecting to Wi-Fi…" hint). */
     var wifiSeen: Boolean
         get() = sp.getBoolean(KEY_WIFI_SEEN, false)
@@ -361,8 +370,32 @@ class KioskPrefs(
         return hosts.distinct()
     }
 
+    /**
+     * The settings part of a factory reset (#33, decided 2026-11-17): removes every setting in `kiosk.xml`, the core's
+     * and the panes', except what [keptByReset] keeps. A secret that can't be opened now goes too. False when the file
+     * couldn't be written, and then nothing changed.
+     */
+    fun resetSettings(): Boolean {
+        val keys = sp.all.keys + SecretFiles.SECRETS.getValue("kiosk")
+        val e = sp.edit()
+        for (k in keys) if (!keptByReset(k)) e.remove(k)
+        return e.commit()
+    }
+
     companion object {
         const val AUTO = "auto"
+
+        /**
+         * What a factory reset keeps in `kiosk.xml` ([resetSettings]): the panel's identity in Home Assistant (its ESPHome
+         * encryption key and MAC), so Home Assistant keeps the panel and its entities; the radio pane's settings, because
+         * a reset mustn't take down the Zigbee or Thread network devices depend on (turning the radio off is its own
+         * step, on the Radio page); and the once-per-install checks, so setup asks every step again as on a new install.
+         */
+        val RESET_KEEPS = setOf("api_key", "api_encryption", "device_mac", "setup_device_steps_migrated")
+        private val RESET_KEEPS_PREFIXES = listOf("radio_", "setup_radio_")
+
+        /** Whether a factory reset keeps the `kiosk.xml` setting [key] ([RESET_KEEPS]). */
+        fun keptByReset(key: String): Boolean = key in RESET_KEEPS || RESET_KEEPS_PREFIXES.any { key.startsWith(it) }
 
         /** [engineStart] for [secureHosts] and a dashboard [url]: also what an engine [started][dev.glassworks.engine.Engine.started] with. */
         fun engineStart(secureHosts: List<String>, url: String?): List<String> =

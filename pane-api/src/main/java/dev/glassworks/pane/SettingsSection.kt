@@ -382,7 +382,9 @@ sealed interface SettingsItem {
     /**
      * A button on a row (#269): its [title], a [detail] line read again while the page is open, and the
      * button's [label] ("Use it"). [confirm]: asked first, as a [Switch] does, for anything that costs
-     * something (a reset, the radio's roles). `run` does it and calls `done` with null, or what went wrong.
+     * something (a reset, the radio's roles). [needsCode]: a surface away from the panel (the Manage page)
+     * runs it only after someone types the code the panel shows then, which proves they stand at it; the
+     * panel's own menu doesn't ask. `run` does it and calls `done` with null, or what went wrong.
      * A surface sends the word [RUN] for it.
      */
     class Action(
@@ -390,6 +392,7 @@ sealed interface SettingsItem {
         val detail: () -> String,
         val label: String,
         val confirm: Confirm? = null,
+        val needsCode: Boolean = false,
         val run: (done: (String?) -> Unit) -> Unit,
     ) : SettingsItem {
         companion object {

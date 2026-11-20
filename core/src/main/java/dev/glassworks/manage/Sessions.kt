@@ -121,6 +121,17 @@ class SessionStore(
     }
 
     /**
+     * Signs out every browser (a factory reset, #33): the ids of those that were signed in, and whether the file
+     * reflects it, as [revoke] says.
+     */
+    @Synchronized
+    fun revokeAll(): Pair<Set<String>, Revoked> {
+        val ids = sessions.values.mapTo(HashSet()) { it.id }
+        sessions.clear()
+        return ids to if (saveOrDelete()) Revoked.DONE else Revoked.NOT_SAVED
+    }
+
+    /**
      * Ends every session made for another HA address than [haBase], on disk too, so none comes back after a
      * restart ([saveOrDelete]).
      */

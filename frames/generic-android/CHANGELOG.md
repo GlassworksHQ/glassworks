@@ -12,6 +12,13 @@ line of each version is what Home Assistant shows on the update card. A change o
 ## [Unreleased]
 
 ### Added
+- **Reset the panel, and open or close setup over the network, from the Security page.** The panel's settings and
+  the Manage page have a new *Security* page. *Reset the panel* clears the app's settings, its panes' settings and
+  its Home Assistant sign-in, signs every browser out of the Manage page, and restarts into setup. It keeps Wi-Fi,
+  the Log, the radio's settings (so its Zigbee or Thread network stays up) and the panel in Home Assistant. It
+  asks first and says what goes and what stays. *Allow setup over the network* moved here from the dashboard's
+  page, and *Close setup over the network* ends it before the 30 minutes are up. On the Manage page all three
+  need the code the panel shows then.
 - **Notifications and the Bluetooth proxy, in both builds.** Home Assistant can show notifications on the panel
   with the panel's notify action, and a device with Bluetooth LE can relay nearby BLE sensors to Home Assistant.
   Both are off until you turn them on, in the panel's settings, on the Manage page or from Home Assistant. A device

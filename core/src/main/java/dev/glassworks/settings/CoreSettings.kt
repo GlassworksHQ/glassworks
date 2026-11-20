@@ -9,8 +9,8 @@ import dev.glassworks.KioskPrefs
 import java.util.Locale
 
 /**
- * The settings sections the app has itself, before and after the panes': Home Assistant & dashboard, Screen, Log and
- * About (#63). Network and Security have nothing yet. Durations are picked, the
+ * The settings sections the app has itself, before and after the panes': Home Assistant & dashboard, Screen, Log,
+ * Security and About (#63). Network has nothing yet. Durations are picked, the
  * presence range is a slider: nothing on the Screen page is typed (#63 round 2). Values are read when the menu opens; each change
  * applies on its own. The ones Gecko reads at start (the dashboard's address, zoom, secure hosts) ask
  * for a restart, as their adb extras always did.
@@ -46,6 +46,10 @@ class CoreSettings(
         val presenceRange: () -> String? = { null },
         /** Brightness follows the light sensor, or stops. */
         val brightness: () -> Unit = {},
+        /** Ends the paired browsers of setup over the network and the setup hotspot (dev.glassworks.setup.LanSetup.close). */
+        val closeSetup: () -> Unit = {},
+        /** A factory reset ([FactoryReset.run]); null leaves the row out. */
+        val factoryReset: ((done: (String?) -> Unit) -> Unit)? = null,
     )
 
     fun sections(): Map<SettingsPlace, SettingsSection> = mapOf(
@@ -71,7 +75,6 @@ class CoreSettings(
                 "Secure hosts", "Other addresses the dashboard loads over HTTP, like a camera", TextKind.ADDRESS,
                 value = { prefs.extraSecureHosts }, restartsApp = true,
             ) { prefs.extraSecureHosts = it },
-            setupOverNetwork(),
         )),
         SettingsPlace.SCREEN to SettingsSection(SCREEN, "Screen", presence() + listOfNotNull(
             idle(),
@@ -84,6 +87,12 @@ class CoreSettings(
         )),
         SettingsPlace.LOG to SettingsSection("log", "Log", listOf(
             SettingsItem.Info(title = { "Screen and sensors" }, detail = status),
+        )),
+        // What needs someone at the panel (#33's drawing 07): the Manage page asks for the code the panel shows first.
+        SettingsPlace.SECURITY to SettingsSection(SECURITY, "Security", listOfNotNull(
+            setupOverNetwork(),
+            if (prefs.lanSetupArmed) closeSetup() else null,
+            live.factoryReset?.let(::factoryReset),
         )),
         SettingsPlace.ABOUT to SettingsSection("about", "About", listOf(
             SettingsItem.Info(title = { "$product $version" }, detail = { "" }),
@@ -167,7 +176,29 @@ class CoreSettings(
             }
         },
         label = "Allow",
+        needsCode = true,
     ) { done -> prefs.armLanSetup(); done(null) }
+
+    /** "Close setup over the network": ends a re-arm before its 30 minutes, and any setup a computer started meanwhile. */
+    private fun closeSetup() = SettingsItem.Action(
+        title = CLOSE_SETUP,
+        detail = { "Open until ${java.text.SimpleDateFormat("HH:mm", Locale.ENGLISH).format(java.util.Date(prefs.lanSetupUntil))}. Closing it ends setup on any computer that paired." },
+        label = "Close",
+        needsCode = true,
+    ) { done ->
+        prefs.closeLanSetup()
+        live.closeSetup()
+        done(null)
+    }
+
+    private fun factoryReset(reset: (done: (String?) -> Unit) -> Unit) = SettingsItem.Action(
+        title = FactoryReset.TITLE,
+        detail = { FactoryReset.DETAIL },
+        label = FactoryReset.LABEL,
+        confirm = SettingsItem.Confirm("${FactoryReset.TITLE}?", FactoryReset.CONFIRM_DETAIL, FactoryReset.CONFIRM_ACTION),
+        needsCode = true,
+        run = reset,
+    )
 
     /** Where the dashboard loads from when its address is automatic. */
     private fun found(): String = prefs.haBase?.let { b ->
@@ -193,6 +224,9 @@ class CoreSettings(
         const val ACCOUNT_TITLE = "Dashboard sign-in"
         const val WAKE_TITLE = "Wake when someone's near"
         const val SETUP_OVER_NETWORK = "Allow setup over the network"
+        const val CLOSE_SETUP = "Close setup over the network"
+        /** The Security page's id: a System page on both surfaces ([dev.glassworks.manage.SettingsNav.SYSTEM]). */
+        const val SECURITY = "security"
         const val LOCK_TITLE = "Screen lock"
         const val LOCK_TURNS_OFF = "This panel has a screen lock. When the screen turns off, someone has to unlock it. " +
             "Turn the lock off in Android's settings, or keep the screen always on."

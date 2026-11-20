@@ -19,4 +19,7 @@ class SetupPrefs(context: Context) {
     var thisDeviceMigrated: Boolean
         get() = sp.getBoolean("this_device_migrated", false)
         set(v) = sp.edit().putBoolean("this_device_migrated", v).apply()
+
+    /** A factory reset (#33): forgets every answer, and keeps only that the once-per-install check ran. False when not written. */
+    fun reset(): Boolean = sp.edit().clear().putBoolean("this_device_migrated", thisDeviceMigrated).commit()
 }

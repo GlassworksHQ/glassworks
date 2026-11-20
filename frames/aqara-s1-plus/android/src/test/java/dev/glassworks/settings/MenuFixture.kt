@@ -46,7 +46,8 @@ object MenuFixture {
     fun model(
         context: Context, radio: RadioDefinition, deviceSettings: Boolean = true, version: String = "0.4.3", status: String = "screen on",
         panes: List<PaneDefinition> = listOf(cardOnly("voice", "Voice", "Assist and timers"), cardOnly("sendspin", "Music", "A Sendspin speaker"), radio),
-        live: CoreSettings.Live = CoreSettings.Live(),
+        /** The app always has a factory reset (S1Settings.model); here it does nothing. */
+        live: CoreSettings.Live = CoreSettings.Live(factoryReset = { done -> done(null) }),
         running: (String) -> Pane? = { null },
         blueprints: (String) -> SettingsItem.Blueprints? = { null },
         account: String? = "Signed in as Wall panel",

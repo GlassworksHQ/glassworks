@@ -11,6 +11,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
+import dev.glassworks.manage.answer
 import dev.glassworks.KioskPrefs
 
 /**
@@ -29,7 +30,7 @@ class SetupOverNetworkSettingTest {
             licences = SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) {},
             panelIp = { ip }, hardware = MenuFixture.S1_HARDWARE,
         )
-        return core.sections().getValue(SettingsPlace.DASHBOARD).items.filterIsInstance<SettingsItem.Action>()
+        return core.sections().getValue(SettingsPlace.SECURITY).items.filterIsInstance<SettingsItem.Action>()
             .single { it.title == CoreSettings.SETUP_OVER_NETWORK }
     }
 
@@ -75,13 +76,13 @@ class SetupOverNetworkSettingTest {
         assertTrue("and a new window opens it", prefs.lanPairingOpen)
     }
 
-    /** The Manage page draws the same row: Allow there needs a signed-in Manage session, and then opens pairing. */
+    /** The Manage page draws the same row: Allow there needs a signed-in Manage session and the code the panel shows (#33). */
     @Test fun theManagePageAllowsItOnlyForASignedInBrowser() {
         prefs.haSeen = true
         val section = CoreSettings(
             prefs, "1.0.0", status = { "" }, deviceSettings = null,
             licences = SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) {}, panelIp = { ip }, hardware = MenuFixture.S1_HARDWARE,
-        ).sections().getValue(SettingsPlace.DASHBOARD)
+        ).sections().getValue(SettingsPlace.SECURITY)
         val key = dev.glassworks.pane.SettingsChange.changeable(section).first { (_, i) -> i is SettingsItem.Action && i.title == CoreSettings.SETUP_OVER_NETWORK }.first
         val f = dev.glassworks.manage.ManageFixture()
         f.statusFn = { f.status.copy(sections = listOf(section)) }
@@ -93,7 +94,11 @@ class SetupOverNetworkSettingTest {
         assertFalse("nothing opened", prefs.lanPairingOpen)
 
         val b = f.Browser().also { it.signInWithHa() }
-        assertEquals(303, b.post("/settings", form + ("csrf" to b.csrf())).status)
-        assertTrue("signed in, Allow opened pairing", prefs.lanPairingOpen)
+        val asked = b.post("/settings", form + ("csrf" to b.csrf()))
+        assertEquals("signed in, Allow asks for the panel's code", 200, asked.status)
+        assertFalse("nothing opened without the code", prefs.lanPairingOpen)
+        val code = f.shown.last()!!.code
+        assertEquals(303, b.post("/settings", form + mapOf("csrf" to b.csrf(), "answer" to asked.answer()!!, "code" to code)).status)
+        assertTrue("with the code, Allow opened pairing", prefs.lanPairingOpen)
     }
 }

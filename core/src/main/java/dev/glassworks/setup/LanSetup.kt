@@ -110,6 +110,18 @@ class LanSetup(
         }
     }
 
+    /**
+     * Ends setup over the network now ("Close setup over the network", behind the panel's code): every paired
+     * browser's session and its channel, then [onDone], as a browser's own [DONE] does. Pairing stays as
+     * [pairingOpen] says; the caller closes that first (KioskPrefs.closeLanSetup).
+     */
+    fun close() {
+        val ended = sessions.endAll()
+        held.getAndSet(null)?.ws?.abort()
+        event("Setup over the network closed${if (ended > 0) ": $ended paired ${if (ended == 1) "browser" else "browsers"} ended" else ""}")
+        onDone()
+    }
+
     /** `POST` [PAIR]: show a code on the panel, or check the one typed. */
     private fun pair(req: HttpRequest): HttpResponse {
         if (!pairingOpen()) return problem(403, PAIRING_OFF)
@@ -227,6 +239,10 @@ class LanSetup(
             if (touch) p.usedMs = now
             return true
         }
+
+        /** Ends every session; how many there were. */
+        @Synchronized
+        fun endAll(): Int = byKey.size.also { byKey.clear() }
 
         @Synchronized
         /** Ends [token]'s session when [remote] is the address that paired it. */

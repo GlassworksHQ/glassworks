@@ -94,8 +94,8 @@ class SettingsMenuTest {
 
     @Test
     fun theS1sSectionsInOrder() {
-        assertEquals(listOf("dashboard", "screen", "voice", "sendspin", "radio", "log", "about"), menu().map { it.id })
-        assertEquals(listOf("Home Assistant & dashboard", "Screen", "Voice", "Music", "Radio", "Log", "About"), menu().map { it.title })
+        assertEquals(listOf("dashboard", "screen", "voice", "sendspin", "radio", "log", "security", "about"), menu().map { it.id })
+        assertEquals(listOf("Home Assistant & dashboard", "Screen", "Voice", "Music", "Radio", "Log", "Security", "About"), menu().map { it.title })
         assertEquals("Zigbee / Thread radio", menu().first { it.id == "radio" }.heading)
     }
 
@@ -128,8 +128,10 @@ class SettingsMenuTest {
     @Test
     fun theSectionsAsDrawn() {
         val m = menu().associate { it.id to titles(it.items) }
-        // "Allow setup over the network" (#34): the panel's own way to open pairing for the setup page again.
-        assertEquals(listOf("Home Assistant", "info", "Full screen", "Zoom", "Secure hosts", "action ${CoreSettings.SETUP_OVER_NETWORK}"), m["dashboard"])
+        assertEquals(listOf("Home Assistant", "info", "Full screen", "Zoom", "Secure hosts"), m["dashboard"])
+        // What needs someone at the panel (#33's drawing 07): "Allow setup over the network" (#34), the panel's own way to
+        // open pairing for the setup page again, and the factory reset. "Close" shows only while pairing is re-armed.
+        assertEquals(listOf("action ${CoreSettings.SETUP_OVER_NETWORK}", "action ${FactoryReset.TITLE}"), m["security"])
         assertEquals(
             listOf(
                 "Wake when someone's near", "Presence range", "Turn off when idle", "Brightness", AqaraS1Plus.SETTINGS_TITLE,

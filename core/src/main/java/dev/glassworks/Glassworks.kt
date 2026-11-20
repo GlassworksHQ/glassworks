@@ -111,6 +111,12 @@ interface Glassworks {
     var setupHotspot: dev.glassworks.setup.SetupHotspot?
 
     /**
+     * Setup over the network (#34), set while the panel's web server runs (HaAuth.startServer): "Close setup over the
+     * network" ends its paired browsers through it. Any thread.
+     */
+    var lanSetup: dev.glassworks.setup.LanSetup?
+
+    /**
      * The networks the panel saw just before its setup hotspot started: while it runs, the radio can't scan on most
      * devices (S1 panel run, 2026-11-16), so the setup page lists these. Any thread.
      */

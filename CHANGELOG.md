@@ -9,6 +9,13 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 ## [Unreleased]
 
 ### Added
+- **Reset the panel, and open or close setup over the network, from the Security page.** The panel's settings and
+  the Manage page have a new *Security* page. *Reset the panel* clears the app's settings, its panes' settings and
+  its Home Assistant sign-in, signs every browser out of the Manage page, and restarts into setup. It keeps Wi-Fi,
+  the Log, the radio's settings (so its Zigbee or Thread network stays up) and the panel in Home Assistant. It
+  asks first and says what goes and what stays. *Allow setup over the network* moved here from the dashboard's
+  page, and *Close setup over the network* ends it before the 30 minutes are up. On the Manage page all three
+  need the code the panel shows then.
 - **The S1 gets its frame loader with an app update, no Kiln visit.** The app's signed radio bundle puts the frame
   loader into the panel's own boot image, once: it checks the image first, keeps a backup on the panel, writes, reads
   the write back (and puts the backup back if it differs), then restarts once. The app downloads Magisk's official

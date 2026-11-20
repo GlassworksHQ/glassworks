@@ -16,7 +16,7 @@ Because Manage is part of Glassworks Core, every supported frame—from the Aqar
 | **Home Assistant & dashboard, Screen, and each pane** | Every setting from the panel's on-device settings menu, laid out in the same order with live editing. Screen and supported panes also include one-click [Home Assistant blueprints](blueprints.md#adding-one-from-the-manage-page). Each pane page has an on/off toggle in the top right and live status details. |
 | **Device page** *(e.g. S1 Plus or Pixel Tablet)* | Hardware-specific details that do not belong to a single pane: on the S1 Plus, **Block Aqara cloud**, disabled Aqara apps, radio mode shortcut, and **Silent updates**; on Android tablets, **Silent updates**, device owner status, dock status, model, and Android version ([Silent updates](esphome.md#silent-updates)). |
 | **Log** | Rolling 7-day log persisted across reboots. Filter by warnings or errors, search by keyword, or click **Download diagnostics** to export a redacted troubleshooting bundle. |
-| **Security** | Lists every browser currently signed in to Manage, with one-click **Sign out**. On devices where Glassworks manages USB debugging authorization (such as the lululemon Mirror), you can also approve or revoke authorized computers here. |
+| **Security** | Lists every browser currently signed in to Manage, with one-click **Sign out**. Below it are the actions that need someone at the panel: **Allow setup over the network**, **Close setup over the network** and **Reset the panel** ([details below](#actions-that-need-the-panels-code)). On devices where Glassworks manages USB debugging authorization (such as the lululemon Mirror), you can also approve or revoke authorized computers here. |
 | **About** | App and frame versions, hardware frame ID, and open-source licenses. |
 
 The interface adapts cleanly to mobile browsers (folding navigation behind the `☰` menu) and automatically matches your browser's light or dark theme.
@@ -43,8 +43,10 @@ If a panel is already on Wi-Fi (or broadcasting its temporary setup Wi-Fi), you 
 **Re-enabling network setup after Home Assistant adoption:** Once Home Assistant adopts the panel, network setup pairing closes automatically so nobody else on your LAN can reconfigure it. To reopen pairing for 30 minutes later:
 
 - Press **Allow setup over the network** on the panel's ESPHome device page in Home Assistant (under Configuration), or
-- Open **Settings → Home Assistant & dashboard → Allow setup over the network** on the panel or Manage page, or
+- Open **Settings → Security → Allow setup over the network** on the panel, or on the Manage page with the code the panel shows, or
 - Reconnect with Kiln over USB (Kiln enables it automatically on the Done screen).
+
+To close it again before the 30 minutes end, use **Settings → Security → Close setup over the network** on the panel, or on the Manage page with the code the panel shows. Closing also ends setup on any computer that paired and closes the panel's setup Wi-Fi.
 
 **Touchless panels:** On devices without a touchscreen (such as the lululemon Studio Mirror), the panel displays its setup QR code and URL automatically, keeps the screen awake until Home Assistant adopts it, and dismisses the pairing code as soon as it is used or expires.
 
@@ -80,6 +82,20 @@ Manage offers two ways to authenticate:
 Check **Remember this browser for 30 days** to stay signed in across browser restarts; otherwise your session ends when you close the browser (or after 12 hours). You can review and revoke active browser sessions anytime on the **Security** page. Changing the panel's Home Assistant address automatically signs out all active Manage sessions.
 
 **Reboot safety:** Clicking **Reboot** always requires confirming a 6-digit code on the panel itself, since rebooting briefly takes down any Zigbee/Thread radio network hosted on the panel.
+
+### Actions that need the panel's code
+
+A few actions prove that someone stands at the panel, as **Reboot** does. On the Manage page each one shows a 6-digit code on the panel's screen and runs only when you type it. A stolen session cookie can't run them. On the panel's own **Settings → Security** page they run without a code, because you are already there.
+
+| Action | What it does |
+|---|---|
+| **Allow setup over the network** | Opens pairing for `/setup` for 30 minutes ([Set up over the network](#set-up-over-the-network)). |
+| **Close setup over the network** | Shown while pairing is open again. Closes it now, ends setup on any computer that paired, and closes the panel's setup Wi-Fi. |
+| **Reset the panel** | A factory reset of the app, not of Android. It asks first and says what goes and what stays, then needs the code. |
+
+**What a reset clears:** every setting of the app and its panes, setup's answers, the dashboard's Home Assistant sign-in (revoked in Home Assistant), and every browser signed in to Manage. The app then restarts into setup.
+
+**What a reset keeps:** Wi-Fi (Android's), the installed app, the Log, the radio's settings (its Zigbee or Thread network stays up; turn the radio off on its own page), and the panel in Home Assistant with its entities and its ESPHome encryption key. To remove the panel from Home Assistant too, delete it there.
 
 **Fast multi-address fallback:** If your Home Assistant `.local` hostname resolves to both IPv6 and IPv4 addresses—for instance, when an mDNS reflector advertises an unreachable IPv6 address—Glassworks races connections across addresses like a modern browser so sign-in succeeds quickly without timing out.
 
