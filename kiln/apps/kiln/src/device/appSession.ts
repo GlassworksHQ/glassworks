@@ -291,6 +291,7 @@ export class AppSession {
   async setUpAgain(): Promise<void> {
     const result = this.state.result;
     if (this.state.screen !== 'error' || result?.flow !== 'install') return;
+    this.ops++; // a read of the device still running (Back to the checks) no longer lands over this
     this.setUp.close();
     try {
       // on the clock, not the session's sleep: a test's instant sleep would end the read before it starts
