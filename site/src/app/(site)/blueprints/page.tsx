@@ -3,15 +3,17 @@ import { BlueprintRows } from "@/components/Blueprints";
 import { paneIcon } from "@/components/DeviceBits";
 import { DeviceGlyph } from "@/components/Glyphs";
 import { ListCard, PageHead, Sq, Tile, Tiles, manage as m } from "@/components/Manage";
+import { RecipeList } from "@/components/Recipes";
 import { blueprints, isCore, releaseName } from "@/lib/blueprints";
+import { RECIPES } from "@/lib/recipes";
 import { pageMetadata } from "@/lib/seo";
 import { panes } from "@/lib/site";
 import s from "./blueprints.module.css";
 
 export const metadata = pageMetadata({
-  title: "Blueprints: ready-made Home Assistant automations",
+  title: "Blueprints & starter prompts: Home Assistant automations and dashboards",
   description:
-    "Home Assistant blueprints for Glassworks panels: night mode for the screens, ring the panels when the doorbell rings, ask a question on the panels, lights on at the panel.",
+    "Ready-made Home Assistant blueprints for Glassworks panels, plus copyable LLM starter prompts for building lightweight custom Lovelace dashboards for mirrors, wall switches, and tablets.",
   path: "/blueprints",
 });
 
@@ -85,6 +87,17 @@ export default async function BlueprintsPage() {
       {ref && core.length + groups.length > 0 && (
         <p className={s.fine}>From {releaseName(ref)}: the same files a panel on that version offers. MIT, like the rest of the repository.</p>
       )}
+
+      <section id="recipes" className={s.recipes} aria-labelledby="recipes-heading">
+        <div className={s.recipesHead}>
+          <span className="label">Dashboard starter prompts</span>
+          <h2 id="recipes-heading">Generate a dashboard that fits your home</h2>
+          <p>
+            Glassworks shows your Home Assistant dashboard instead of shipping its own home UI. Rather than installing bulky one-size-fits-all custom cards, copy a starter prompt for your screen shape into your favorite LLM and generate a lightweight single-file Lovelace card tailored to your exact rooms and entities.
+          </p>
+        </div>
+        <RecipeList recipes={RECIPES} />
+      </section>
     </>
   );
 }

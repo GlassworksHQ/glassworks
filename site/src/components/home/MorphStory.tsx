@@ -332,17 +332,15 @@ function formatTimer(totalSec: number) {
 }
 
 /**
- * What a beat's example takes besides Glassworks itself: a Home Assistant blueprint to import, or a custom card
- * for the dashboard, built on what the panel reports. Each shows as a link beside its beat's own once it has an
- * `href`; one without is not published yet and stays hidden until it is, so publishing it is one line here.
+ * What a beat's example takes besides Glassworks itself: a Home Assistant blueprint to import, or a starter
+ * prompt to generate your own Lovelace card against the entities the panel exposes.
  */
-type BeatNeed = { kind: "Blueprint" | "Custom card"; name: string; href?: string };
+type BeatNeed = { kind: "Blueprint" | "Starter prompt"; name: string; href?: string };
 const BEAT_NEEDS: Partial<Record<number, readonly BeatNeed[]>> = {
   // the doorbell notification, with its camera and Unlock button
   2: [{ kind: "Blueprint", name: "Doorbell on Glassworks panels", href: "/blueprints#bp-notifications" }],
-  // the fade and the capsule are a custom Lovelace card on the Mirror's dashboard (Mirror Home), reading its
-  // Camera presence: neither a Glassworks feature nor a blueprint. Its link once it is published
-  3: [{ kind: "Custom card", name: "Mirror Home" }],
+  // the fade and side capsule can be built as a single-file Lovelace card reading camera_presence
+  3: [{ kind: "Starter prompt", name: "Presence-aware mirror dashboard", href: "/blueprints#recipe-two-way-mirror-presence" }],
 };
 
 export type MorphRelease = { version: string; href: string };
