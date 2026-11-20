@@ -335,6 +335,39 @@ a.eyebrow:hover {
   will-change: transform;
 }
 
+/* Shadow strengths: the glass's own (--box-a) and the one the tablet beat casts (--drop-a), lighter on a light page */
+.hardwareCarrier {
+  --box-a: 0.3;
+  --drop-a: 0.2;
+}
+
+@media (prefers-color-scheme: dark) {
+  :global(:root:not([data-theme="light"])) .hardwareCarrier {
+    --box-a: 0.56;
+    --drop-a: 0.55;
+  }
+}
+
+:global(:root[data-theme="dark"]) .hardwareCarrier {
+  --box-a: 0.56;
+  --drop-a: 0.55;
+}
+
+/* the glass and the tablet's model, stacked; the tablet beat's drop shadow is set on this inline */
+.devices {
+  grid-area: 1 / 1;
+  display: grid;
+  place-items: center;
+}
+
+/* Beat 4's lines sit beside the device, outside the glass's 3D pose, so their labels stay flat */
+.raysAnchor {
+  grid-area: 1 / 1;
+  position: relative;
+  height: 0;
+  pointer-events: none;
+}
+
 .hardwareScale {
   grid-area: 1 / 1;
   position: relative;
@@ -362,9 +395,9 @@ a.eyebrow:hover {
   position: absolute;
   inset: 0;
   container-type: size;
-  background: #111111;
-  color: #e1e1e1;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--ha-bg);
+  color: var(--ha-text);
+  border: 1px solid var(--ha-screen-edge);
   border-radius: inherit;
   overflow: hidden;
 }
@@ -373,22 +406,10 @@ a.eyebrow:hover {
   width: min(calc(100vw - 32px), 452px);
 }
 
-/* on a phone the model's screen is ~250px wide: the reply sizes to it (the screen is an inline-size container) */
-.tabletModelCompact .voiceMain {
-  font-size: clamp(12px, 6.2cqi, 19px);
-}
-
-.tabletModelCompact .voiceScrim {
-  gap: 6px;
-  padding: 10px 14px 14px;
-}
-
-.tabletModelCompact .orbStage {
-  zoom: 0.62;
-}
-
-.tabletModelCompact .voiceHint {
-  display: none;
+/* on a phone the model's screen is ~240 × 136px, which would pick the dashboard's most cramped layout:
+   draw it at 1 / 0.7 the size and zoom it down, so it lays out as the wide display's does */
+.tabletModelCompact .modelScreen {
+  zoom: 0.7;
 }
 
 .bezelRow {
@@ -407,7 +428,7 @@ a.eyebrow:hover {
     linear-gradient(155deg, #252832 0%, #11131a 48%, #0a0b0f 100%);
   border: 1px solid color-mix(in srgb, var(--face, transparent) calc(var(--face-o, 0) * 100%), rgba(255, 255, 255, 0.14));
   box-shadow:
-    0 34px 78px -28px rgba(0, 0, 0, 0.56),
+    0 34px 78px -28px rgb(0 0 0 / calc(var(--box-a, 0.56) * (1 - var(--face-o, 0)))),
     inset 0 1px 0 rgba(255, 255, 255, 0.16);
   overflow: hidden;
   will-change: width, height, border-radius;
@@ -607,14 +628,69 @@ a.eyebrow:hover {
   transition: background-position 0.45s ease;
 }
 
+/*
+ * The dashboard's colours follow the page, as globals.css does: Home Assistant's default light theme,
+ * or its dark theme on a dark page. The app's own overlays (Assist, notifications, timers) stay dark
+ * glass, as on a panel.
+ */
+.screen,
+.modelScreen {
+  --ha-bg: #fafafa;
+  --ha-card: #ffffff;
+  --ha-card-hover: #f5f5f5;
+  --ha-edge: rgba(0, 0, 0, 0.08);
+  --ha-text: #212121;
+  --ha-muted: #727272;
+  --ha-btn: #f2f2f2;
+  --ha-btn-hover: #e8e8e8;
+  --ha-btn-edge: rgba(0, 0, 0, 0.1);
+  --ha-track: rgba(0, 0, 0, 0.1);
+  --ha-slider: rgba(0, 0, 0, 0.08);
+  --ha-screen-edge: rgba(0, 0, 0, 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+  :global(:root:not([data-theme="light"])) .screen,
+  :global(:root:not([data-theme="light"])) .modelScreen {
+    --ha-bg: #111111;
+    --ha-card: #1c1c1c;
+    --ha-card-hover: #232323;
+    --ha-edge: rgba(255, 255, 255, 0.07);
+    --ha-text: #e1e1e1;
+    --ha-muted: #9b9b9b;
+    --ha-btn: #262626;
+    --ha-btn-hover: #333333;
+    --ha-btn-edge: rgba(255, 255, 255, 0.1);
+    --ha-track: rgba(255, 255, 255, 0.12);
+    --ha-slider: rgba(255, 255, 255, 0.09);
+    --ha-screen-edge: rgba(255, 255, 255, 0.08);
+  }
+}
+
+:global(:root[data-theme="dark"]) .screen,
+:global(:root[data-theme="dark"]) .modelScreen {
+  --ha-bg: #111111;
+  --ha-card: #1c1c1c;
+  --ha-card-hover: #232323;
+  --ha-edge: rgba(255, 255, 255, 0.07);
+  --ha-text: #e1e1e1;
+  --ha-muted: #9b9b9b;
+  --ha-btn: #262626;
+  --ha-btn-hover: #333333;
+  --ha-btn-edge: rgba(255, 255, 255, 0.1);
+  --ha-track: rgba(255, 255, 255, 0.12);
+  --ha-slider: rgba(255, 255, 255, 0.09);
+  --ha-screen-edge: rgba(255, 255, 255, 0.08);
+}
+
 /* Inner screen positioned by real frame inset percentages; container-type: size lets HA cards reflow */
 .screen {
   position: absolute;
   z-index: 2;
   container-type: size;
-  background: #111111;
-  color: #e1e1e1;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--ha-bg);
+  color: var(--ha-text);
+  border: 1px solid var(--ha-screen-edge);
   overflow: hidden;
   will-change: top, bottom, left, right, border-radius;
 }
@@ -629,8 +705,8 @@ a.eyebrow:hover {
 .haRoot {
   width: 100%;
   height: 100%;
-  background: #111111;
-  color: #e1e1e1;
+  background: var(--ha-bg);
+  color: var(--ha-text);
   padding: 10px;
   display: flex;
   flex-direction: column;
@@ -665,11 +741,11 @@ a.eyebrow:hover {
   gap: 5px;
   padding: 4px 9px;
   border-radius: 999px;
-  background: #1c1c1c;
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: var(--ha-card);
+  border: 1px solid var(--ha-edge);
   font-size: 10.5px;
   font-weight: 500;
-  color: #e1e1e1;
+  color: var(--ha-text);
   white-space: nowrap;
   flex: none;
 }
@@ -698,10 +774,10 @@ a.eyebrow:hover {
 }
 
 .haCard {
-  background: #1c1c1c;
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: var(--ha-card);
+  border: 1px solid var(--ha-edge);
   border-radius: 12px;
-  color: #e1e1e1;
+  color: var(--ha-text);
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -740,7 +816,7 @@ a.eyebrow:hover {
 
 .haWeatherCond {
   font-size: 11px;
-  color: #9b9b9b;
+  color: var(--ha-muted);
 }
 
 .haWeatherRight {
@@ -763,7 +839,7 @@ a.eyebrow:hover {
 
 .haHiLo {
   font-size: 10px;
-  color: #9b9b9b;
+  color: var(--ha-muted);
   font-variant-numeric: tabular-nums;
 }
 
@@ -788,7 +864,7 @@ a.eyebrow:hover {
 .haCardTitle {
   font-size: 11.5px;
   font-weight: 500;
-  color: #e1e1e1;
+  color: var(--ha-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -828,7 +904,7 @@ a.eyebrow:hover {
 
 .haDialTrack {
   fill: none;
-  stroke: rgba(255, 255, 255, 0.12);
+  stroke: var(--ha-track);
   stroke-width: 6.5;
   stroke-linecap: round;
 }
@@ -865,7 +941,7 @@ a.eyebrow:hover {
 
 .haDialSub {
   font-size: 9px;
-  color: #9b9b9b;
+  color: var(--ha-muted);
 }
 
 .haDialControls {
@@ -880,9 +956,9 @@ a.eyebrow:hover {
   width: 24px;
   height: 24px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: #262626;
-  color: #e1e1e1;
+  border: 1px solid var(--ha-btn-edge);
+  background: var(--ha-btn);
+  color: var(--ha-text);
   font-size: 14px;
   cursor: pointer;
   display: grid;
@@ -891,12 +967,12 @@ a.eyebrow:hover {
 }
 
 .haStepBtn:hover {
-  background: #333333;
+  background: var(--ha-btn-hover);
 }
 
 .haDialTarget {
   font-size: 10px;
-  color: #9b9b9b;
+  color: var(--ha-muted);
 }
 
 .haTile {
@@ -915,7 +991,7 @@ a.eyebrow:hover {
 }
 
 .haTile:hover {
-  background: #232323;
+  background: var(--ha-card-hover);
 }
 
 .haTileAmber {
@@ -954,7 +1030,7 @@ a.eyebrow:hover {
 
 .haCircleOff {
   background: rgba(155, 155, 155, 0.16);
-  color: #9b9b9b;
+  color: var(--ha-muted);
 }
 
 .haCircleGreen {
@@ -981,7 +1057,7 @@ a.eyebrow:hover {
 .haTileMeta b {
   font-size: 11px;
   font-weight: 500;
-  color: #e1e1e1;
+  color: var(--ha-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -989,7 +1065,7 @@ a.eyebrow:hover {
 
 .haTileMeta small {
   font-size: 10px;
-  color: #9b9b9b;
+  color: var(--ha-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1000,7 +1076,7 @@ a.eyebrow:hover {
   width: 100%;
   height: 5px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.09);
+  background: var(--ha-slider);
   overflow: hidden;
 }
 
@@ -1035,7 +1111,7 @@ a.eyebrow:hover {
 
 .haSparkLabel {
   font-size: 10.5px;
-  color: #9b9b9b;
+  color: var(--ha-muted);
 }
 
 .haSparkVal {
@@ -1090,7 +1166,7 @@ a.eyebrow:hover {
 .haCamFps {
   font-family: var(--f-mono);
   font-size: 9px;
-  color: #9b9b9b;
+  color: var(--ha-muted);
 }
 
 /* ==================== @CONTAINER REFLOW RULES (REAL HA CARDS REFLOW LIVE) ==================== */
@@ -1359,7 +1435,7 @@ a.eyebrow:hover {
 
 .haRoot[data-round] {
   padding: 0;
-  background: #1c1c1c;
+  background: var(--ha-card);
 }
 
 .haRoot[data-round] .haClimateCard {

@@ -142,9 +142,9 @@ export default async function Home() {
                 <span className={s.litBadge}>Up to date</span>
               </div>
               <div className={s.esphomeRow}>
-                <span>Charging dock</span>
-                <b>Docked</b>
-                <span className={s.mutedVal}>Speaker &amp; power</span>
+                <span>Docked</span>
+                <b>On</b>
+                <span className={s.mutedVal}>Binary sensor</span>
               </div>
               <div className={s.esphomeRow}>
                 <span>Presence</span>

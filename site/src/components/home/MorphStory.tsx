@@ -15,12 +15,12 @@ import s from "./MorphStory.module.css";
  * Each beat spotlights ONE hardware shape + ONE real Glassworks feature over the live
  * CSS-Grid + @container-reflowing Home Assistant Lovelace dashboard:
  *   Beat 0: Aqara S1 Plus Wall Switch (right) — Clean unobstructed HA dashboard
- *   Beat 1: Google Pixel Tablet (left) — REAL Assist Voice Orb (OrbArt.kt + VoiceOverlay.kt). As it settles, the
- *           glass hands over to the tablet's own 3D model from @glassworks/frame-card, on its speaker dock, which
- *           lifts off the dock on hover like the frame cards.
+ *   Beat 1: Wide Kitchen Display (left) — REAL Assist Voice Orb (OrbArt.kt + VoiceOverlay.kt)
  *   Beat 2: Wall Switch Landscape (right) — REAL Top-Right Notification Card (NotificationOverlay.kt)
  *   Beat 3: lululemon Studio Mirror (left) — Presence Detection collapse to side pill + reflective glass
- *   Beat 4: Wide Kitchen / Bedside Display (right) — REAL TimerDock + RingView + Sendspin + 3 light lines
+ *   Beat 4: Google Pixel Tablet (right) — REAL TimerDock + Sendspin + 3 light lines to what HA reads, its dock
+ *           state among them. As it settles, the glass hands over to the tablet's own 3D model from
+ *           @glassworks/frame-card, on its speaker dock; lift it off (hover) and the Docked line reads Off.
  *   Beat 5: Compact Square 4" Switch (center) — Solo HA Thermostat + Round/Bedside ghost silhouettes
  */
 
@@ -69,15 +69,15 @@ const KEYFRAMES: Keyframe[] = [
     glowX: 72,
     glowY: 48,
   },
-  // 1: Countertop Tablet · Google Pixel Tablet (Left, 16:10, 468 × 306)
+  // 1: Wide Kitchen Display · Assist voice (Left, 440 × 240)
   {
-    w: 468,
-    h: 306,
-    bodyR: 22,
-    insetTop: 6.5,
-    insetBottom: 6.5,
-    insetX: 4.3,
-    screenR: 8,
+    w: 440,
+    h: 240,
+    bodyR: 18,
+    insetTop: 5,
+    insetBottom: 5,
+    insetX: 3.2,
+    screenR: 10,
     xPct: -22,
     yPx: -4,
     rx: 1.5,
@@ -117,15 +117,16 @@ const KEYFRAMES: Keyframe[] = [
     glowX: 27,
     glowY: 46,
   },
-  // 4: Wide Kitchen / Bedside Display · ESPHome + Sendspin + Radios (Right, 440 × 240, room for right light rays)
+  // 4: Google Pixel Tablet on its dock · timers, Sendspin, Docked (Right, room for right light rays).
+  //    The size, corners, insets and angles here are replaced by tabletPose(), from the tablet's model.
   {
-    w: 440,
-    h: 240,
-    bodyR: 18,
-    insetTop: 5,
-    insetBottom: 5,
-    insetX: 3.2,
-    screenR: 10,
+    w: 468,
+    h: 306,
+    bodyR: 22,
+    insetTop: 6.5,
+    insetBottom: 6.5,
+    insetX: 4.3,
+    screenR: 8,
     xPct: 7,
     yPx: -4,
     rx: 1.5,
@@ -182,11 +183,13 @@ const BEAT_DOTS = [
   { idx: 5, label: "Square, round, and future shapes", targetP: 0.96 },
 ] as const;
 
-const WIRE_RAYS = [
-  { title: "Home Assistant", detail: "ESPHome" },
-  { title: "Music Assistant", detail: "Sendspin" },
-  { title: "Zigbee & Thread", detail: "ZHA · Z2M · OTBR" },
-] as const;
+/* Beat 4's lines: what Home Assistant reads from the tablet. Docked is the app's binary_sensor (#444). */
+const wireRays = (docked: boolean) =>
+  [
+    { title: "Home Assistant", detail: "ESPHome" },
+    { title: "Music Assistant", detail: "Sendspin" },
+    { title: "Docked", detail: docked ? "On · binary sensor" : "Off · binary sensor" },
+  ] as const;
 
 const clamp = (v: number, a = 0, b = 1) => Math.min(b, Math.max(a, v));
 const smooth = (t: number) => t * t * (3 - 2 * t);
@@ -252,12 +255,13 @@ function samplePose(sVal: number, frames: Keyframe[]): Keyframe {
   };
 }
 
-/* Beat 1's model: its stage is TABLET_STAGE px wide (.tabletModel) at this aspect */
+/* the beat that draws the Pixel Tablet's model, and its stage: TABLET_STAGE px wide (.tabletModel) at this aspect */
+const TABLET_BEAT = 4;
 const TABLET_STAGE = 642;
 const TABLET_ASPECT = 1.4;
 
 /**
- * Beat 1's keyframe, posed exactly as the Pixel Tablet model's front glass: the same numbers geometry()
+ * Beat 4's keyframe, posed exactly as the Pixel Tablet model's front glass: the same numbers geometry()
  * gives DeviceModel (size, corner and screen box, rx/ry/lean, the push to the front face, the model's
  * centring and its perspective, 170 × --u in DeviceModel.module.css). The glass lands on the model's
  * front, so handing over to the model only adds its sides and dock.
@@ -398,7 +402,7 @@ export function MorphStory({
   // Continuous Goldilocks coordinate seg in [0..5]
   const seg = morphSegment(p);
   const keyframes = useMemo(
-    () => KEYFRAMES.map((k, i) => (i === 1 ? tabletPose(k, tablet.model) : k)),
+    () => KEYFRAMES.map((k, i) => (i === TABLET_BEAT ? tabletPose(k, tablet.model) : k)),
     [tablet.model],
   );
   const basePose = samplePose(seg, keyframes);
@@ -494,13 +498,16 @@ export function MorphStory({
 
   // Beat 1: the morphing glass hands over to the Pixel Tablet's real model, on its dock, as it settles
   // The glass turns porcelain on its way in and lands exactly on the model's front (tabletPose). The model
-  // takes over only inside Beat 1's hold (p 0.16 – 0.255, morphSegment), where the two coincide, so the
+  // takes over only inside Beat 4's hold (p 0.725 – 0.82, morphSegment), where the two coincide, so the
   // hand-over adds the sides and the dock and nothing doubles; it hands back before the glass moves on.
-  const faceO = compact ? 0 : windowO(seg, 1, 0.12, 0.62);
-  const modelO = compact ? 0 : smooth(clamp((p - 0.162) / 0.016)) * (1 - smooth(clamp((p - 0.236) / 0.016)));
+  const faceO = compact ? 0 : windowO(seg, TABLET_BEAT, 0.12, 0.62);
+  const modelO = compact ? 0 : smooth(clamp((p - 0.727) / 0.016)) * (1 - smooth(clamp((p - 0.802) / 0.016)));
   // The model fades in over the glass, which stays opaque under it (their fronts are the same) so nothing
   // turns see-through, and the glass hides once the model is whole: its body can then lift off the dock.
   const modelLive = modelO > 0.98;
+  // the tablet lifted off its dock: the model's own hover lift (mouse only), which the Docked line follows
+  const [tabletHover, setTabletHover] = useState(false);
+  const tabletLifted = modelLive && tabletHover && !reducedMotion;
   // Mirror body + tubular U-stand presence factor (Beat 3)
   const mirrorFactor = windowO(seg, 3, 0.24, 0.72);
 
@@ -518,13 +525,13 @@ export function MorphStory({
     seg < 0.5
       ? "wall"
       : seg < 1.5
-        ? "tablet"
+        ? "kitchen"
         : seg < 2.5
           ? "wall"
           : seg < 3.5
             ? "mirror"
             : seg < 4.5
-              ? "kitchen"
+              ? "tablet"
               : futureShape;
 
   const activeLightsCount = (kitchenOn ? 2 : 0) + (livingOn ? 1 : 0);
@@ -781,14 +788,14 @@ export function MorphStory({
     );
   };
 
-  /* Beat 1 — the Pixel Tablet's own model (frame.json), with the live dashboard and Assist on its screen */
-  const renderTabletModel = (id: string, voiceO: number) => (
-    <DeviceModel id={id} model={tablet.model} label={`${tablet.name} on its speaker dock, running Glassworks`} aspect={1.4}>
+  /* Beat 4 — the Pixel Tablet's own model (frame.json), with the live dashboard and the timer on its screen */
+  const renderTabletModel = (id: string, timer: number, highlightSendspin: boolean) => (
+    <DeviceModel id={id} model={tablet.model} label={`${tablet.name} on its speaker dock, running Glassworks`} aspect={TABLET_ASPECT}>
       {/* the glass's own screen box (a size container), so the dashboard lays out the same on both */}
       <div className={s.modelScreen}>
         <div className={s.screenInner}>
-          {renderLiveLovelace("tablet")}
-          {renderRealVoiceOverlay(voiceO)}
+          {renderLiveLovelace("tablet", highlightSendspin)}
+          {renderRealTimerOverlay(timer)}
         </div>
       </div>
     </DeviceModel>
@@ -1113,7 +1120,7 @@ export function MorphStory({
         return (
           <div className={s.compactStage}>
             <div className={s.tabletModelCompact}>
-              {renderTabletModel("home-tablet-compact", overlay === "voice" ? 1 : 0)}
+              {renderTabletModel("home-tablet-compact", overlay === "kitchen-timer" ? 1 : 0, overlay === "kitchen-timer")}
             </div>
           </div>
         );
@@ -1206,21 +1213,21 @@ export function MorphStory({
           {renderCompactFrame("wall")}
         </div>
 
-        {/* Beat 1: Pixel Tablet + Real Assist Orb */}
+        {/* Beat 1: Wide Kitchen Display + Real Assist Orb */}
         <div className={s.compactBeat}>
           <div className={s.compactCopy}>
             <span className={s.eyebrow}>LOCAL ASSIST VOICE</span>
-            <h2 className={s.h2}>A tablet that listens locally</h2>
+            <h2 className={s.h2}>A screen that listens locally</h2>
             <p className={s.lede}>
               On-device wake word detection and Home Assistant Assist run right on the hardware, with the same calm glass orb on every screen.
             </p>
             <div className={s.ctas}>
-              <Link href="/frames/google-pixel-tablet" className={s.quietLink}>
-                Pixel Tablet details →
+              <Link href="/panes/assist" className={s.quietLink}>
+                Assist pane →
               </Link>
             </div>
           </div>
-          {renderCompactFrame("tablet", "voice")}
+          {renderCompactFrame("kitchen", "voice")}
         </div>
 
         {/* Beat 2: Wall Switch + Real Top-Right Notification Card */}
@@ -1257,18 +1264,18 @@ export function MorphStory({
           {renderCompactFrame("mirror", "mirror-presence")}
         </div>
 
-        {/* Beat 4: Wide Kitchen Display + Real TimerDock + Sendspin / Radios / ESPHome */}
+        {/* Beat 4: Pixel Tablet on its dock + Real TimerDock + what HA reads (ESPHome, Sendspin, Docked) */}
         <div className={s.compactBeat}>
           <div className={s.compactCopy}>
-            <span className={s.eyebrow}>TIMERS, MUSIC &amp; RADIOS</span>
+            <span className={s.eyebrow}>TIMERS, MUSIC &amp; SENSORS</span>
             <h2 className={s.h2}>A fully native Home Assistant device</h2>
             <p className={s.lede}>
-              Visual voice timers, synced Music Assistant playback, built-in Zigbee and Thread radios, and automatic updates under Settings → Updates — with no custom integrations or cloud.
+              Voice timers, synced Music Assistant playback and sensors like the tablet&rsquo;s dock reach Home Assistant over ESPHome. No custom integration, no cloud, and updates arrive under Settings → Updates.
             </p>
           </div>
-          {renderCompactFrame("kitchen", "kitchen-timer")}
+          {renderCompactFrame("tablet", "kitchen-timer")}
           <div className={s.compactRays} aria-label="Native Home Assistant protocols">
-            {WIRE_RAYS.map((ray) => (
+            {wireRays(true).map((ray) => (
               <div key={ray.title} className={s.compactRayRow}>
                 <span className={s.rayDot} aria-hidden="true" />
                 <span className={s.compactRayDash} aria-hidden="true" />
@@ -1389,7 +1396,7 @@ export function MorphStory({
             </div>
           </div>
 
-          {/* Beat 1 Copy (Right — Google Pixel Tablet + Real Assist Orb) */}
+          {/* Beat 1 Copy (Right — Wide Kitchen Display + Real Assist Orb) */}
           <div
             className={`${s.copyBlock} ${s.copyRight}`}
             style={{
@@ -1400,13 +1407,13 @@ export function MorphStory({
             aria-hidden={copy1O < 0.2}
           >
             <span className={s.eyebrow}>LOCAL ASSIST VOICE</span>
-            <h2 className={s.h2}>A tablet that listens locally</h2>
+            <h2 className={s.h2}>A screen that listens locally</h2>
             <p className={s.lede}>
               On-device wake word detection and Home Assistant Assist run right on the hardware, with the same calm glass orb on every screen.
             </p>
             <div className={s.ctas}>
-              <Link href="/frames/google-pixel-tablet" className={s.quietLink}>
-                Pixel Tablet details →
+              <Link href="/panes/assist" className={s.quietLink}>
+                Assist pane →
               </Link>
             </div>
           </div>
@@ -1455,7 +1462,7 @@ export function MorphStory({
             </div>
           </div>
 
-          {/* Beat 4 Copy (Left — Wide Kitchen Display + TimerDock / Sendspin / Radios) */}
+          {/* Beat 4 Copy (Left — Pixel Tablet on its dock + TimerDock / Sendspin / Docked) */}
           <div
             className={`${s.copyBlock} ${s.copyLeft} ${s.copyNarrow}`}
             style={{
@@ -1465,14 +1472,14 @@ export function MorphStory({
             }}
             aria-hidden={copy4O < 0.2}
           >
-            <span className={s.eyebrow}>TIMERS, MUSIC &amp; RADIOS</span>
+            <span className={s.eyebrow}>TIMERS, MUSIC &amp; SENSORS</span>
             <h2 className={s.h2}>A fully native Home Assistant device</h2>
             <p className={s.lede}>
-              Visual voice timers, synced Music Assistant playback, built-in Zigbee and Thread radios, and automatic updates under Settings → Updates — with no custom integrations or cloud.
+              Voice timers, synced Music Assistant playback and sensors like the tablet&rsquo;s dock reach Home Assistant over ESPHome. No custom integration, no cloud, and updates arrive under Settings → Updates.
             </p>
             <div className={s.ctas}>
-              <Link href="/panes/sendspin" className={s.quietLink}>
-                Synced audio &amp; radios →
+              <Link href="/frames/google-pixel-tablet" className={s.quietLink}>
+                Pixel Tablet details →
               </Link>
             </div>
           </div>
@@ -1540,142 +1547,154 @@ export function MorphStory({
               transform: `translate3d(${basePose.xPct}%, ${basePose.yPx}px, 0)`,
             }}
           >
-            {modelO > 0.01 && (
-              <div
-                className={s.tabletModel}
-                style={{ opacity: modelO, pointerEvents: modelLive ? "auto" : "none" }}
-                inert={!modelLive}
-              >
-                {renderTabletModel("home-tablet", assistO)}
-              </div>
-            )}
-
+            {/* the glass and the tablet's model share one shadow, cast by whichever shows, so the swap keeps it */}
             <div
-              className={s.hardwareScale}
-              inert={modelLive}
-              style={{
-                opacity: modelLive ? 0 : 1,
-                transform: `scale(var(--bezel-scale, 1)) translate(${basePose.dx}px, ${basePose.dy}px) perspective(${basePose.persp}px) rotateX(${basePose.rx}deg) rotateY(${basePose.ry}deg) rotateX(${basePose.lean}deg) translateZ(${basePose.z}px)`,
-              }}
+              className={s.devices}
+              style={{ filter: faceO > 0.01 ? `drop-shadow(0 22px 26px rgb(0 0 0 / calc(var(--drop-a) * ${faceO.toFixed(3)})))` : undefined }}
             >
-              <div className={s.bezelRow}>
+              {modelO > 0.01 && (
                 <div
-                  ref={bezelRef}
-                  className={`${s.bezel} ${clickMorph ? s.morphSmooth : ""}`}
-                  onPointerMove={onPointerMove}
-                  onPointerLeave={onPointerLeave}
-                  style={{
-                    // the Pixel Tablet's porcelain front (frame.json model.face), painted on the glass itself,
-                    // border included, so no dark edge shows around it (.bezel's --face layer)
-                    ["--face" as string]: tablet.model.face ?? "#f2f0eb",
-                    ["--face-o" as string]: faceO.toFixed(3),
-                    width: `${geom.w}px`,
-                    height: `${geom.h}px`,
-                    borderRadius: `${geom.bodyR}px`,
-                  }}
+                  className={s.tabletModel}
+                  style={{ opacity: modelO, pointerEvents: modelLive ? "auto" : "none" }}
+                  inert={!modelLive}
+                  onPointerEnter={(e) => e.pointerType === "mouse" && setTabletHover(true)}
+                  onPointerLeave={() => setTabletHover(false)}
                 >
-                  {/* Mirror silvered body surface fading smoothly across forehead & chin */}
-                  <div className={s.mirrorBodySurface} aria-hidden="true" style={{ opacity: mirrorFactor }} />
-                  {/* Mirror forehead camera/presence lens + sky-blue pulse ripple */}
-                  {mirrorFactor > 0.05 && (
-                    <div className={s.mirrorSensor} aria-hidden="true" style={{ opacity: mirrorFactor }}>
-                      <span
-                        className={`${s.sensorLens} ${mirrorPresent && mirrorPresenceO > 0.35 ? s.sensorLensLit : ""}`}
-                      />
-                      {mirrorPresent && mirrorPresenceO > 0.35 && <span className={s.sensorPulse} />}
-                    </div>
-                  )}
-                  {/* Full-body diagonal reflection sheen */}
-                  <div
-                    className={s.glare}
-                    aria-hidden="true"
-                    style={{
-                      ["--glare-a" as string]: (
-                        0.11 +
-                        mirrorFactor * (mirrorPresent && mirrorPresenceO > 0.35 ? 0.17 : 0.09)
-                      ).toFixed(2),
-                    }}
-                  />
+                  {renderTabletModel("home-tablet", timerO, raysO > 0.35)}
+                </div>
+              )}
 
-                  {/* Inner screen with smoothly interpolated real frame inset */}
+              <div
+                className={s.hardwareScale}
+                inert={modelLive}
+                style={{
+                  opacity: modelLive ? 0 : 1,
+                  transform: `scale(var(--bezel-scale, 1)) translate(${basePose.dx}px, ${basePose.dy}px) perspective(${basePose.persp}px) rotateX(${basePose.rx}deg) rotateY(${basePose.ry}deg) rotateX(${basePose.lean}deg) translateZ(${basePose.z}px)`,
+                }}
+              >
+                <div className={s.bezelRow}>
                   <div
-                    className={`${s.screen} ${clickMorph ? s.morphSmooth : ""}`}
-                    data-round={currentShape === "round" || undefined}
+                    ref={bezelRef}
+                    className={`${s.bezel} ${clickMorph ? s.morphSmooth : ""}`}
+                    onPointerMove={onPointerMove}
+                    onPointerLeave={onPointerLeave}
                     style={{
-                      top: `${geom.insetTop}%`,
-                      bottom: `${geom.insetBottom}%`,
-                      left: `${geom.insetX}%`,
-                      right: `${geom.insetX}%`,
-                      borderRadius: `${geom.screenR}px`,
+                      // the Pixel Tablet's porcelain front (frame.json model.face), painted on the glass itself,
+                      // border included, so no dark edge shows around it (.bezel's --face layer)
+                      ["--face" as string]: tablet.model.face ?? "#f2f0eb",
+                      ["--face-o" as string]: faceO.toFixed(3),
+                      width: `${geom.w}px`,
+                      height: `${geom.h}px`,
+                      borderRadius: `${geom.bodyR}px`,
                     }}
                   >
-                    <div className={s.screenInner}>
-                      {renderLiveLovelace(
-                        currentShape,
-                        raysO > 0.35,
-                        mirrorPresent && mirrorPresenceO > 0.35,
-                      )}
-                      {renderRealVoiceOverlay(assistO)}
-                      {renderRealNotificationOverlay(notifO)}
-                      {renderMirrorPresenceOverlay(mirrorPresenceO)}
-                      {renderRealTimerOverlay(timerO)}
+                    {/* Mirror silvered body surface fading smoothly across forehead & chin */}
+                    <div className={s.mirrorBodySurface} aria-hidden="true" style={{ opacity: mirrorFactor }} />
+                    {/* Mirror forehead camera/presence lens + sky-blue pulse ripple */}
+                    {mirrorFactor > 0.05 && (
+                      <div className={s.mirrorSensor} aria-hidden="true" style={{ opacity: mirrorFactor }}>
+                        <span
+                          className={`${s.sensorLens} ${mirrorPresent && mirrorPresenceO > 0.35 ? s.sensorLensLit : ""}`}
+                        />
+                        {mirrorPresent && mirrorPresenceO > 0.35 && <span className={s.sensorPulse} />}
+                      </div>
+                    )}
+                    {/* Full-body diagonal reflection sheen */}
+                    <div
+                      className={s.glare}
+                      aria-hidden="true"
+                      style={{
+                        ["--glare-a" as string]: (
+                          0.11 +
+                          mirrorFactor * (mirrorPresent && mirrorPresenceO > 0.35 ? 0.17 : 0.09)
+                        ).toFixed(2),
+                      }}
+                    />
+
+                    {/* Inner screen with smoothly interpolated real frame inset */}
+                    <div
+                      className={`${s.screen} ${clickMorph ? s.morphSmooth : ""}`}
+                      data-round={currentShape === "round" || undefined}
+                      style={{
+                        top: `${geom.insetTop}%`,
+                        bottom: `${geom.insetBottom}%`,
+                        left: `${geom.insetX}%`,
+                        right: `${geom.insetX}%`,
+                        borderRadius: `${geom.screenR}px`,
+                      }}
+                    >
+                      <div className={s.screenInner}>
+                        {renderLiveLovelace(
+                          currentShape,
+                          raysO > 0.35,
+                          mirrorPresent && mirrorPresenceO > 0.35,
+                        )}
+                        {renderRealVoiceOverlay(assistO)}
+                        {renderRealNotificationOverlay(notifO)}
+                        {renderMirrorPresenceOverlay(mirrorPresenceO)}
+                        {renderRealTimerOverlay(timerO)}
+                      </div>
                     </div>
                   </div>
+
                 </div>
 
-                {/* Beat 4: 3 sleek animated horizontal dashed light lines sweeping from the glass to open-air labels */}
-                {raysO > 0.01 && (
+                {/* Accurate tall tubular U-shaped steel stand (220/536 ≈ 41% height, 98% width) */}
+                {mirrorFactor > 0.01 && (
                   <div
-                    className={s.wireRays}
+                    className={s.mirrorStand}
+                    aria-hidden="true"
                     style={{
-                      opacity: raysO,
-                      transform: `translate3d(${(1 - raysO) * -14}px, 0, 0)`,
+                      width: `${(geom.w * 0.98).toFixed(1)}px`,
+                      opacity: mirrorFactor,
+                      transform: `translate3d(-50%, ${(1 - mirrorFactor) * -18}px, 0) scaleY(${0.65 + mirrorFactor * 0.35})`,
                     }}
-                    aria-hidden={raysO < 0.2}
-                  >
-                    {WIRE_RAYS.map((ray, idx) => (
-                      <div key={ray.title} className={s.wireRay}>
-                        <svg viewBox="0 0 88 12" className={s.wireRaySvg} aria-hidden="true">
-                          <defs>
-                            <linearGradient id={`ray-grad-${idx}`} x1="0" y1="0" x2="1" y2="0">
-                              <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.9" />
-                              <stop offset="100%" stopColor="#a78bfa" stopOpacity="0.9" />
-                            </linearGradient>
-                          </defs>
-                          <line
-                            x1="0"
-                            y1="6"
-                            x2="82"
-                            y2="6"
-                            stroke={`url(#ray-grad-${idx})`}
-                            strokeWidth="1.5"
-                            strokeDasharray="5 5"
-                            className={s.wireRayDash}
-                            style={{ animationDelay: `${idx * -0.45}s` }}
-                          />
-                          <circle cx="84" cy="6" r="2.5" fill="#a78bfa" />
-                        </svg>
-                        <div className={s.rayText}>
-                          <b>{ray.title}</b>
-                          <small>{ray.detail}</small>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  />
                 )}
               </div>
+            </div>
 
-              {/* Accurate tall tubular U-shaped steel stand (220/536 ≈ 41% height, 98% width) */}
-              {mirrorFactor > 0.01 && (
+            <div className={s.raysAnchor} style={{ width: `calc(${geom.w.toFixed(1)}px * var(--bezel-scale, 1))` }}>
+              {/* Beat 4: 3 dashed lines from the device to what Home Assistant reads; flat, outside the glass's 3D pose */}
+              {raysO > 0.01 && (
                 <div
-                  className={s.mirrorStand}
-                  aria-hidden="true"
+                  className={s.wireRays}
                   style={{
-                    width: `${(geom.w * 0.98).toFixed(1)}px`,
-                    opacity: mirrorFactor,
-                    transform: `translate3d(-50%, ${(1 - mirrorFactor) * -18}px, 0) scaleY(${0.65 + mirrorFactor * 0.35})`,
+                    opacity: raysO,
+                    transform: `translate3d(${(1 - raysO) * -14}px, 0, 0)`,
                   }}
-                />
+                  aria-hidden={raysO < 0.2}
+                >
+                  {wireRays(!tabletLifted).map((ray, idx) => (
+                    <div key={ray.title} className={s.wireRay}>
+                      <svg viewBox="0 0 88 12" className={s.wireRaySvg} aria-hidden="true">
+                        <defs>
+                          {/* user space: a flat line's box has no height, so a bounding-box gradient would paint nothing */}
+                          <linearGradient id={`ray-grad-${idx}`} gradientUnits="userSpaceOnUse" x1="0" y1="6" x2="82" y2="6">
+                            <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.9" />
+                            <stop offset="100%" stopColor="#a78bfa" stopOpacity="0.9" />
+                          </linearGradient>
+                        </defs>
+                        <line
+                          x1="0"
+                          y1="6"
+                          x2="82"
+                          y2="6"
+                          stroke={`url(#ray-grad-${idx})`}
+                          strokeWidth="1.5"
+                          strokeDasharray="5 5"
+                          className={s.wireRayDash}
+                          style={{ animationDelay: `${idx * -0.45}s` }}
+                        />
+                        <circle cx="84" cy="6" r="2.5" fill="#a78bfa" />
+                      </svg>
+                      <div className={s.rayText}>
+                        <b>{ray.title}</b>
+                        <small>{ray.detail}</small>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           </div>
