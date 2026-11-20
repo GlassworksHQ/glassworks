@@ -6,6 +6,6 @@
     "microphone",
     "speaker"
   ],
-  "status": "beta",
+  "status": "stable",
   "docs": "docs/esphome.md#timers-on-screen"
 }

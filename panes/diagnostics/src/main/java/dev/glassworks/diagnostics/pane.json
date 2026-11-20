@@ -3,6 +3,6 @@
   "name": "Diagnostics",
   "does": "CPU, temperature, RAM, storage, Wi-Fi and uptime in Home Assistant.",
   "requires": [],
-  "status": "alpha",
+  "status": "stable",
   "docs": "docs/esphome.md#diagnostics"
 }

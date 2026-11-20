@@ -5,7 +5,7 @@
   "requires": [
     "camera"
   ],
-  "status": "alpha",
+  "status": "stable",
   "docs": "docs/esphome.md#camera-entities",
   "blueprints": [
     {
