@@ -53,15 +53,15 @@ const PERSPECTIVE = 1200;
 
 /* Physically accurate proportions from frames/<id>/design/frame.json */
 const KEYFRAMES: Keyframe[] = [
-  // 0: Wall Switch · Aqara S1 Plus (Right, 2:1, 500 × 250)
+  // 0: Wall Switch · Aqara S1 Plus (Right, 2:1, 500 × 250; square corners, as frame.json)
   {
     w: 500,
     h: 250,
-    bodyR: 10,
+    bodyR: 0,
     insetTop: 4,
     insetBottom: 4,
     insetX: 2.2,
-    screenR: 5,
+    screenR: 0,
     xPct: 22,
     yPx: -4,
     rx: 2,
@@ -89,11 +89,11 @@ const KEYFRAMES: Keyframe[] = [
   {
     w: 500,
     h: 250,
-    bodyR: 10,
+    bodyR: 0,
     insetTop: 4,
     insetBottom: 4,
     insetX: 2.2,
-    screenR: 5,
+    screenR: 0,
     xPct: 22,
     yPx: -4,
     rx: 1.5,
@@ -165,7 +165,7 @@ const MOBILE_SHAPES: Record<
   ShapeId,
   Pick<Keyframe, "w" | "h" | "bodyR" | "insetTop" | "insetBottom" | "insetX" | "screenR">
 > = {
-  wall: { w: 336, h: 168, bodyR: 8, insetTop: 4, insetBottom: 4, insetX: 2.2, screenR: 4 },
+  wall: { w: 336, h: 168, bodyR: 0, insetTop: 4, insetBottom: 4, insetX: 2.2, screenR: 0 },
   tablet: { w: 330, h: 216, bodyR: 18, insetTop: 6.5, insetBottom: 6.5, insetX: 4.3, screenR: 7 },
   mirror: { w: 184, h: 444, bodyR: 6, insetTop: 12.7, insetBottom: 21.1, insetX: 3.5, screenR: 3 },
   kitchen: { w: 336, h: 184, bodyR: 16, insetTop: 5, insetBottom: 5, insetX: 3.2, screenR: 9 },
@@ -406,6 +406,7 @@ export function MorphStory({
     [tablet.model],
   );
   const basePose = samplePose(seg, keyframes);
+  const tabletFace = useMemo(() => geometry(tablet.model, TABLET_ASPECT).vars["--dev-face"] ?? "#07080b", [tablet.model]);
   const atFinale = seg >= 4.86;
 
   // Individual feature overlay opacities (ONE feature per beat, never stacked!)
@@ -1579,9 +1580,9 @@ export function MorphStory({
                     onPointerMove={onPointerMove}
                     onPointerLeave={onPointerLeave}
                     style={{
-                      // the Pixel Tablet's porcelain front (frame.json model.face), painted on the glass itself,
-                      // border included, so no dark edge shows around it (.bezel's --face layer)
-                      ["--face" as string]: tablet.model.face ?? "#f2f0eb",
+                      // the Pixel Tablet's front, as its model paints it (Porcelain, or Hazel on a dark page: the
+                      // model's light-dark() --dev-face), on the glass itself, border included (.bezel's --face layer)
+                      ["--face" as string]: tabletFace,
                       ["--face-o" as string]: faceO.toFixed(3),
                       width: `${geom.w}px`,
                       height: `${geom.h}px`,
