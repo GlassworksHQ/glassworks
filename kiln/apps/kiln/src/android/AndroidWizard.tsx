@@ -16,6 +16,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Fragment, useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { webUsbDevices } from '@glassworks/kiln-core';
+import { wifiSsid } from '@glassworks/app-adb';
 import { GENERIC, LEGACY, type GenericApp, type GenericInstalled } from '@glassworks/generic-android-installer';
 import { INSTALLERS } from '@glassworks/frames/catalog';
 import { sessionProgress } from '../device/imageSession';
@@ -566,7 +567,7 @@ export function androidStandard(app: GenericApp, installed?: GenericInstalled, m
     connect: { title: 'Connect to your tablet.', body: 'Plug it into this computer, with USB debugging on.', pick: model ?? 'your tablet' },
     credits: {},
     silent: { install: words ?? { word: 'Not confirmed', tone: 'n', line: 'Glassworks\' Device page on the tablet says whether updates install by themselves.' } },
-    wifiName: async () => ({}),
+    wifiName: (p, signal) => wifiSsid(p, signal),
     updates: async () => ({ state: 'install', log: 'silent updates: as the install read them back' }),
     ...standardData(ANDROID_ID),
   };

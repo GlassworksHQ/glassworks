@@ -4,6 +4,7 @@
 // frame.json, no Radio step), and its installer.json `setUp.remove` names any other it leaves out, each with why.
 import type { PanelShell } from '@glassworks/adb';
 import type { AppId } from '@glassworks/app-adb';
+import { wifiSsid } from '@glassworks/app-adb';
 import { FRAMES, INSTALLERS } from '@glassworks/frames/catalog';
 import type { AskCopy, DeviceFrame, KilnFrame, SilentWords, StepCredits } from '@glassworks/kiln-core';
 
@@ -74,7 +75,8 @@ export function standardOfDevice(d: DeviceFrame): StandardFrame {
   return {
     id: d.id, name: d.name, short: d.short, the: d.the, app: d.app.name, appId: d.app,
     connect: d.connect, credits: d.credits, silent: d.silent,
-    wifiName: (p, signal) => (d.wifiName ? d.wifiName(p, signal) : Promise.resolve({})),
+    // a frame without a reader of its own: Android's own answer (app-adb wifiSsid)
+    wifiName: (p, signal) => (d.wifiName ? d.wifiName(p, signal) : wifiSsid(p, signal)),
     // a frame that doesn't say can't tell: its `silent` words for `unknown`
     updates: (p, signal) => (d.updates ? d.updates(p, signal) : Promise.resolve({ state: 'unknown', log: 'silent updates: not read' })),
     ...standardData(d.id),
