@@ -332,16 +332,17 @@ function formatTimer(totalSec: number) {
 }
 
 /**
- * What a beat's example takes besides Glassworks itself: a Home Assistant blueprint to import, or a card for the
- * dashboard. Each shows as a link beside its beat's own once it has an `href`; one without is not published yet
- * and stays hidden until it is, so publishing it is one line here.
+ * What a beat's example takes besides Glassworks itself: a Home Assistant blueprint to import, or a custom card
+ * for the dashboard, built on what the panel reports. Each shows as a link beside its beat's own once it has an
+ * `href`; one without is not published yet and stays hidden until it is, so publishing it is one line here.
  */
-type BeatNeed = { kind: "Blueprint" | "Dashboard card"; name: string; href?: string };
+type BeatNeed = { kind: "Blueprint" | "Custom card"; name: string; href?: string };
 const BEAT_NEEDS: Partial<Record<number, readonly BeatNeed[]>> = {
   // the doorbell notification, with its camera and Unlock button
   2: [{ kind: "Blueprint", name: "Doorbell on Glassworks panels", href: "/blueprints#bp-notifications" }],
-  // the dashboard tucked into a side pill while someone is at the Mirror (its Camera presence)
-  3: [{ kind: "Dashboard card", name: "Side pill on presence" }],
+  // the fade and the capsule are a custom Lovelace card on the Mirror's dashboard (Mirror Home), reading its
+  // Camera presence: neither a Glassworks feature nor a blueprint. Its link once it is published
+  3: [{ kind: "Custom card", name: "Mirror Home" }],
 };
 
 export type MorphRelease = { version: string; href: string };
@@ -1187,23 +1188,35 @@ export function MorphStory({
         {/* Subtle monospace presence micro-chip at the top rim */}
         <div className={`${s.presenceChip} ${active ? s.presenceChipDetected : ""}`}>
           <span className={`${s.presenceDot} ${active ? s.presenceDotLit : ""}`} aria-hidden="true" />
-          <span>{active ? "binary_sensor.presence: detected" : "binary_sensor.presence: clear"}</span>
+          <span>{active ? "camera_presence: on" : "camera_presence: off"}</span>
         </div>
 
-        {/* Sleek ~36px frosted vertical side pill docked on the right inner edge */}
+        {/* the capsule the dashboard leaves on the right edge while someone is there: the time, the weather,
+            what's playing and how many lights are on, as the Mirror's own dashboard card has it */}
         <div className={`${s.mirrorSidePill} ${active ? s.mirrorSidePillOn : ""}`} aria-hidden={!active}>
-          <span className={s.sidePillTime}>
-            <span>07</span>
-            <span>15</span>
-          </span>
+          <span className={s.sidePillTime}>19:40</span>
           <span className={s.sidePillSep} aria-hidden="true" />
-          <span className={s.sidePillTemp}>64°</span>
-          <span
-            className={`${s.sidePillLight} ${activeLightsCount > 0 ? s.sidePillLightOn : ""}`}
-            aria-hidden="true"
-          />
-          <span className={s.sidePillExpand} aria-hidden="true">
-            ‹
+          <span className={s.sidePillItem}>
+            <svg viewBox="0 0 24 24" className={s.sidePillIcon} aria-hidden="true">
+              <circle cx="12" cy="12" r="4" fill="#ffc107" />
+              <path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4" stroke="#ffc107" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+            71°
+          </span>
+          {sendspinOn && (
+            <>
+              <span className={s.sidePillSep} aria-hidden="true" />
+              <span className={s.sidePillEq} aria-hidden="true">
+                <i />
+                <i />
+                <i />
+              </span>
+            </>
+          )}
+          <span className={s.sidePillSep} aria-hidden="true" />
+          <span className={`${s.sidePillItem} ${activeLightsCount > 0 ? s.sidePillLightOn : ""}`}>
+            <span className={s.sidePillLight} aria-hidden="true" />
+            {activeLightsCount}
           </span>
         </div>
       </div>
@@ -1377,7 +1390,7 @@ export function MorphStory({
             <span className={s.eyebrow}>PRESENCE DETECTION</span>
             <h2 className={s.h2}>A mirror that gets out of your way</h2>
             <p className={s.lede}>
-              Step up and Glassworks senses you without being fooled by a room light switch, tucking your dashboard into a slim side pill so the glass stays a real mirror.
+              Glassworks tells Home Assistant the moment you step up, without being fooled by a room light switch. Your dashboard can then tuck itself into a slim side pill, so the glass stays a real mirror.
             </p>
             <div className={s.ctas}>
               <Link href="/frames/lululemon-mirror" className={s.quietLink}>
@@ -1586,7 +1599,7 @@ export function MorphStory({
             <span className={s.eyebrow}>PRESENCE DETECTION</span>
             <h2 className={s.h2}>A mirror that gets out of your way</h2>
             <p className={s.lede}>
-              Step up and Glassworks senses you without being fooled by a room light switch, tucking your dashboard into a slim side pill so the glass stays a real mirror.
+              Glassworks tells Home Assistant the moment you step up, without being fooled by a room light switch. Your dashboard can then tuck itself into a slim side pill, so the glass stays a real mirror.
             </p>
             <div className={s.ctas}>
               <Link href="/frames/lululemon-mirror" className={s.quietLink}>
