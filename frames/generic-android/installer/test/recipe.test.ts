@@ -366,6 +366,15 @@ describe('the screen lock (#522)', () => {
 });
 
 describe('the hand-off to setup over the LAN', () => {
+  it('stays off when Kiln\'s standard flow sets the device up next (handoff: false): no pairing, no handoff phase', async () => {
+    const p = new FakeAndroid({ sdk: 34, ip: IP, picksAfter: 0 });
+    const phases: GenericPhase[] = [];
+    const res = await installGeneric(p, { apk: apkFor(34), sleep: noSleep, setupTries: 1, handoff: false, onPhase: (x) => phases.push(x) });
+    expect(res.handoff).toEqual({});
+    expect(phases.some((x) => x.step === 'handoff')).toBe(false);
+    expect(p.cmds.filter((c) => /pairing/.test(c))).toEqual([]);
+  });
+
   it('not on Wi-Fi: no page, and why', async () => {
     const { res } = await run({ ...LEVELS.api34!, ip: undefined });
     expect(res.handoff).toEqual({ why: 'The device isn\'t on Wi-Fi yet.' });

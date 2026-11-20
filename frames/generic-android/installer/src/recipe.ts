@@ -130,6 +130,11 @@ export interface GenericOptions {
   setupTries?: number;
   /** Android 12+: allow "Install unknown apps", so updates install by themselves (#422). Default on */
   silentUpdates?: boolean;
+  /**
+   * Hand over to the app's setup page over the LAN at the end (default). Off when Kiln's standard flow sets the device
+   * up next over the same USB (issue 621): it arms the setup page itself, at Done.
+   */
+  handoff?: boolean;
 }
 
 const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -476,10 +481,13 @@ export async function installGeneric(p: PanelShell, o: GenericOptions): Promise<
 
   const home = await setHome(p, r, app, device.sdk, o);
 
-  phase({ step: 'handoff' });
-  r.step('Hand over to setup');
-  const handoff = await handOff(p, { tries: o.setupTries, sleep: o.sleep });
-  r.detail(handoff.setupPage ? `setup page: ${handoff.setupPage}` : handoff.why ?? '');
+  let handoff: Handoff = {};
+  if (o.handoff !== false) {
+    phase({ step: 'handoff' });
+    r.step('Hand over to setup');
+    handoff = await handOff(p, { tries: o.setupTries, sleep: o.sleep });
+    r.detail(handoff.setupPage ? `setup page: ${handoff.setupPage}` : handoff.why ?? '');
+  }
   const screenLock = await readScreenLock(r);
   return { plan, app: version, updated: !!plan.installed, grants, silentUpdates: silent, home, handoff, ...(screenLock ? { screenLock } : {}) };
 }

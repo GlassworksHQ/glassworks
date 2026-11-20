@@ -1,15 +1,36 @@
 // /android's flow for the contract, through AndroidSession's existing exports (the file is open in #617; phase 2
 // of #621 moves it onto the shared engine): any Android tablet over adb, Glassworks installed and granted. The
 // tablet has a touchscreen and the flow declares its one tap (Allow USB debugging), so the person makes it.
-// A reload is a new session over the same tablet, as a page load makes one.
+// The install hands the tablet to the standard flow (as the page does), driven as the S1's set-up is: the App step,
+// then done once the app answers its Wi-Fi step. A reload is a new session over the same tablet, as a page load makes one.
 import type { PanelShell } from '@glassworks/adb';
 import { FakeAndroid, fakeGenericApk } from '@glassworks/generic-android-installer/fakes';
+import { GENERIC } from '@glassworks/generic-android-installer';
+import { androidStandard } from '../../src/android/AndroidWizard';
 import { AndroidSession, type AndroidDeps, type Device } from '../../src/android/session';
+import type { DeviceProgress, ProgressMark } from '../../src/device/imageSession';
+import { StandardSession } from '../../src/standard/session';
+import { withAppStreams } from '../../src/wizard/demo';
 import {
   Clicks, REFUSED, UNPLUGGED, fastSleep, flowData, never, tick, type Driver, type Knobs, type Look, type Page, type World, type Write,
 } from './harness';
 
-const pristine = (state: object) => JSON.stringify({ ...state, log: [] });
+/**
+ * The standard flow after the hand-over, as a person clicks it: the App step (its settings applied), then done once the
+ * app answers its Wi-Fi step. Undefined while it isn't the standard flow's turn.
+ */
+function standardLook(ss: StandardSession | undefined, clicks: Clicks, goal: () => boolean): Look | undefined {
+  if (!ss) return undefined;
+  const s = ss.store.state;
+  if (s.screen === 'error') return { end: 'error' };
+  if (s.screen !== 'setup' || s.busy) return 'wait';
+  const st = s.setup;
+  if (st.phase === 'settings' && st.error) return { end: 'error' };
+  if (st.phase === 'settings' && !st.installing) return clicks.act('settings', () => ss.click('install-app', () => ss.installApp({ clock24: true, keyboard: false })));
+  if (st.phase === 'wifi' && st.networks === undefined && !st.on && !st.unreachable) return 'wait';
+  if (st.phase === 'wifi') return st.unreachable ? { end: 'error' } : { end: 'done', goal: goal() };
+  return 'wait';
+}
 
 function world(k: Knobs): World {
   const writes: Write[] = [];
@@ -69,13 +90,28 @@ function world(k: Knobs): World {
     homeTimeoutMs: 300,
     setupTries: 1,
   };
+  // the tab's sessionStorage: it outlives a page load
+  let mark: ProgressMark | undefined;
+  const progress: DeviceProgress = { get: () => mark, set: (m) => { mark = m; } };
 
   function load(): Page {
-    const s = new AndroidSession(deps, true);
+    let standard: StandardSession | undefined;
+    const s = new AndroidSession({
+      ...deps, progress,
+      handOver: (d, installed) => {
+        // Glassworks answers set-up over its setup channel and Improv once it is on, on Wi-Fi already
+        const p = withAppStreams(d, { online: true, radio: false });
+        standard = new StandardSession({ standard: androidStandard(installed.plan.app ?? GENERIC, installed), devices: { knownAdb: async () => p, requestAdb: async () => p },
+          loadKey: async () => ({ publicKey: 'QAAA kiln@contract' }) as never, sleep: fastSleep, simulated: true });
+        void standard.handOver(p);
+      },
+    }, true);
     const clicks = new Clicks();
     return {
       look(): Look {
         const st = s.state;
+        const after = standardLook(standard, clicks, () => st.result?.flow === 'install' && st.result.installed.home.state === 'set');
+        if (after) return after;
         switch (st.screen) {
           case 'find':
             if (!st.apk) return clicks.act('apk', () => s.pickApk('glassworks.apk', apk));
@@ -98,13 +134,19 @@ function world(k: Knobs): World {
         }
       },
       step() {
+        if (standard) return 'install'; // the standard flow after the install
         const sc = s.state.screen;
         return sc === 'find' || sc === 'named' || sc === 'brand' ? 'find' : sc === 'debug' || sc === 'allow' ? 'connect' : 'install';
       },
-      // the error screen's Try again (AndroidWizard Stopped)
-      async retry() { clicks.reset(); void s.connect(); await tick(); },
-      remembers: () => pristine(s.state) !== pristine(new AndroidSession(deps, true).state),
-      snapshot: () => JSON.stringify({ ...s.state, log: s.state.log.length }),
+      // the error screen's Try again (AndroidWizard Stopped), or the standard flow's
+      async retry() {
+        clicks.reset();
+        if (standard) { const ss = standard; await ss.click('resume', () => ss.route('resume')); return; }
+        void s.connect(); await tick();
+      },
+      // the page knows from the tab's mark (AndroidDeps `progress`) that an earlier load wrote
+      remembers: () => !!s.state.changed,
+      snapshot: () => JSON.stringify({ ...s.state, log: s.state.log.length, standard: standard && { ...standard.store.state, log: [] } }),
       close: () => s.close(),
     };
   }

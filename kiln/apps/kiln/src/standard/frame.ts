@@ -4,6 +4,7 @@
 // frame.json, no Radio step), and its installer.json `setUp.remove` names any other it leaves out, each with why.
 import type { PanelShell } from '@glassworks/adb';
 import type { AppId } from '@glassworks/app-adb';
+import { wifiSsid } from '@glassworks/app-adb';
 import { FRAMES, INSTALLERS } from '@glassworks/frames/catalog';
 import type { AskCopy, DeviceFrame, KilnFrame, SilentWords, StepCredits } from '@glassworks/kiln-core';
 
@@ -53,7 +54,7 @@ export function standardSteps(d: StandardData): StandardStep[] {
 }
 
 /** The frame's data the standard flow reads, from the catalog: its radio (frame.json `panes.radio`) and installer.json. */
-function dataOf(id: string): { touch: boolean; steps: StandardStep[] } {
+export function standardData(id: string): { touch: boolean; steps: StandardStep[] } {
   const radio = (FRAMES.find((f) => f.id === id)?.panes?.radio?.support ?? 'no') !== 'no';
   const i = INSTALLERS[id];
   return { touch: i?.touch !== false, steps: standardSteps({ radio, setUp: i?.setUp }) };
@@ -65,7 +66,7 @@ export function standardOf(k: KilnFrame): StandardFrame {
     id: k.id, name: k.name, short: k.short, the: k.the ?? `the ${k.short}`, app: k.app, appId: k.appId,
     connect: k.asks.connect, credits: k.credits, silent: k.silent,
     wifiName: (p, signal) => k.wifiName(p, signal), updates: (p, signal) => k.updates(p, signal),
-    ...dataOf(k.id),
+    ...standardData(k.id),
   };
 }
 
@@ -74,9 +75,10 @@ export function standardOfDevice(d: DeviceFrame): StandardFrame {
   return {
     id: d.id, name: d.name, short: d.short, the: d.the, app: d.app.name, appId: d.app,
     connect: d.connect, credits: d.credits, silent: d.silent,
-    wifiName: (p, signal) => (d.wifiName ? d.wifiName(p, signal) : Promise.resolve({})),
+    // a frame without a reader of its own: Android's own answer (app-adb wifiSsid)
+    wifiName: (p, signal) => (d.wifiName ? d.wifiName(p, signal) : wifiSsid(p, signal)),
     // a frame that doesn't say can't tell: its `silent` words for `unknown`
     updates: (p, signal) => (d.updates ? d.updates(p, signal) : Promise.resolve({ state: 'unknown', log: 'silent updates: not read' })),
-    ...dataOf(d.id),
+    ...standardData(d.id),
   };
 }

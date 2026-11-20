@@ -113,6 +113,17 @@ export async function startApp(r: Steps, opts: { haUrl?: string; locale?: string
 }
 
 /**
+ * The Wi-Fi network the device is on, read-only, from `dumpsys wifi`'s `mWifiInfo` (Android 6 to 14 print it, quoted
+ * from 10 on). Undefined when it isn't on one, or Android doesn't say: a frame with a reader of its own uses that.
+ */
+export async function wifiSsid(p: PanelShell, signal?: AbortSignal): Promise<{ ssid?: string }> {
+  // up to the `, BSSID` that ends it, as printed: a network's name may hold spaces at its ends, commas and quotes
+  const m = /mWifiInfo SSID: (?:"(.*?)"|(.*?)), BSSID/.exec((await p.run('dumpsys wifi', signal)).out);
+  const ssid = m?.[1] ?? m?.[2];
+  return ssid && ssid !== '<unknown ssid>' ? { ssid } : {};
+}
+
+/**
  * The person's language, time zone and clock, on a device whose app is already on (the standard flow's App step on a
  * frame whose install put the app on, issue 621). The same commands a frame's provisioning runs after an install, each a `try`: a vendor build
  * that refuses one still gets the rest. Then the app starts again with the language, which it applies itself.

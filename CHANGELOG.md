@@ -9,10 +9,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 ## [Unreleased]
 
 ### Added
-- **Kiln sets up the Mirror the way it sets up the S1.** After the install, Kiln asks the Mirror the same steps as
-  the S1: its language, time zone and clock, Wi-Fi, Home Assistant, then Done. Every step has its own address. A reload
-  during set-up picks up where it was. A reload during the write says an earlier try changed the Mirror; after the
-  restart, a reload goes straight to the first start, without writing the Mirror again.
+- **Kiln sets up the Mirror and Android tablets the way it sets up the S1.** After the install, Kiln asks the same
+  steps as on the S1: the language, time zone and clock, Wi-Fi, Home Assistant, then Done. Every step has its own
+  address. A reload during set-up picks up where it was. A reload during the write says an earlier try changed the
+  device; after the Mirror's restart, a reload goes straight to its first start, without writing it again.
 - **Kiln installs the lululemon Mirror and Android devices, in beta.** Both are in Kiln's picker now, marked Beta,
   and their pages are open to everyone, with Glassworks from its newest release: no test link needed. The Aqara S1
   Plus is stable, so its card shows no badge.
