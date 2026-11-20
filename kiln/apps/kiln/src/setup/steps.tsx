@@ -171,7 +171,10 @@ function PaneIcon({ svg }: { svg?: string }) {
  * own (the radio) comes next.
  */
 export function Panes({ busy, steps, setup, icons }: StepProps<'panes'> & { icons?: (id: string) => string | undefined }) {
-  const [on, setOn] = useState<Record<string, boolean>>(() => Object.fromEntries(setup.panes.map((p) => [p.id, p.on])));
+  // the person's switches survive the screen going (pairing again on the panel's page): kept by the steps, for the cards
+  // the app still offers; the others start as the app says
+  const [on, setOn] = useState<Record<string, boolean>>(() => Object.fromEntries(setup.panes.map((p) => [p.id, steps.panesDraft?.[p.id] ?? p.on])));
+  const set = (next: Record<string, boolean>) => { setOn(next); steps.panesDraft = next; };
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">What should it do?</h2>
@@ -182,7 +185,7 @@ export function Panes({ busy, steps, setup, icons }: StepProps<'panes'> & { icon
               <PaneIcon svg={icons?.(p.id)} />
               <span className="t"><span>{p.title}</span><small>{p.detail}</small></span>
               <input type="checkbox" role="switch" className="sw" checked={!!on[p.id]} disabled={setup.busy}
-                onChange={(e) => setOn({ ...on, [p.id]: e.target.checked })} />
+                onChange={(e) => set({ ...on, [p.id]: e.target.checked })} />
             </label>
           </li>
         ))}

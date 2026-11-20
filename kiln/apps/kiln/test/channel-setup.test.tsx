@@ -6,7 +6,7 @@ import { NOT_PAIRED, SetupChannel, type SetupState } from '@glassworks/setup-cha
 import type { ByteStream } from 'improv-serial';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ChannelSetup, type SetupSteps } from '../src/setup/channelSetup';
-import { HomeAssistant, Radio, RadioNext } from '../src/setup/steps';
+import { HomeAssistant, Panes, Radio, RadioNext } from '../src/setup/steps';
 import type { Setup } from '../src/wizard/state';
 
 afterEach(() => cleanup());
@@ -216,5 +216,19 @@ describe('the setup steps over the LAN', () => {
     render(<Radio busy={false} steps={steps} setup={{ phase: 'radio', radio: panelState.radio, note: '' }} />);
     act(() => { fireEvent.click(screen.getByRole('button', { name: 'Finish' })); });
     expect(calls.at(-1)).toBe('applyRadio off');
+  });
+});
+
+describe('the Panes step\'s switches', () => {
+  it('are kept by the steps, so a screen that goes and comes back (pairing again) shows what the person set', () => {
+    const steps = { click: async (_n: string, run: () => Promise<void> | void) => { await run(); }, signIn: () => {}, saveHa: async () => {}, skipHa: async () => {},
+      panes: async () => {}, applyPanes: async () => {}, radio: async () => {}, applyRadio: async () => {}, finish: () => {} } as SetupSteps;
+    const setup = { phase: 'panes' as const, panes: [{ id: 'assist', title: 'Voice', detail: 'Assist and timers', on: true }, { id: 'notifications', title: 'Notifications', detail: 'On-screen alerts', on: false }] };
+    const first = render(<Panes busy={false} steps={steps} setup={setup} />);
+    fireEvent.click(screen.getByRole('switch', { name: /Voice/ }));
+    expect(steps.panesDraft).toEqual({ assist: false, notifications: false });
+    first.unmount();
+    render(<Panes busy={false} steps={steps} setup={setup} />);
+    expect((screen.getByRole('switch', { name: /Voice/ }) as HTMLInputElement).checked).toBe(false);
   });
 });

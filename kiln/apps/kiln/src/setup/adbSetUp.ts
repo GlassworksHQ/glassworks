@@ -257,6 +257,8 @@ export class AdbSetUp implements SetupSteps, WifiSteps {
     return undefined;
   }
 
+  get panesDraft(): Record<string, boolean> | undefined { return this.steps.panesDraft; }
+  set panesDraft(v: Record<string, boolean> | undefined) { this.steps.panesDraft = v; }
   get haAddress(): string | undefined { return this.steps.haAddress; }
   set haAddress(v: string | undefined) { this.steps.haAddress = v; }
   /**

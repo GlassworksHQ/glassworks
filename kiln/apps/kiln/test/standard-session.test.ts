@@ -97,3 +97,37 @@ describe('Wi-Fi on a device that went off USB', () => {
     expect((s.store.state.setup as { unreachable?: boolean }).unreachable).toBeFalsy();
   });
 });
+
+describe('Try again', () => {
+  it('goes back to the set-up step that stopped, not to the App step', async () => {
+    const p = withAppStreams(new FakeMirror({ kiosk: 'none' }), { online: true, radio: false, panes: { cards: [{ id: 'assist', title: 'Voice', detail: 'Assist and timers', on: true }] } });
+    const s = on(standardOfDevice(mirrorFrame), p);
+    await s.handOver(p);
+    await s.panes();
+    expect(s.store.state.setup.phase).toBe('panes');
+    // the app stopped answering there
+    (s as unknown as { fail(at: number, e: unknown, installed: boolean): void }).fail(3, new Error('Glassworks isn\'t answering.'), true);
+    expect(s.store.state.screen).toBe('error');
+    await s.click('resume', () => s.route('resume'));
+    expect(s.store.state).toMatchObject({ screen: 'setup', setup: { phase: 'panes' } });
+  });
+});
+
+describe('Done twice', () => {
+  it('a read the earlier Done started doesn\'t land on the later one', async () => {
+    const p = mirror();
+    let call = 0;
+    const f = {
+      ...standardOfDevice(mirrorFrame),
+      updates: async () => (++call === 1
+        ? new Promise<{ state: string; log: string }>((r) => setTimeout(() => r({ state: 'on', log: 'first' }), 50))
+        : { state: 'unknown', log: 'second' }),
+    };
+    const s = on(f, p);
+    await s.handOver(p);
+    s.finish();
+    s.finish();
+    await new Promise((r) => setTimeout(r, 100));
+    expect(s.store.state.done?.updates).toEqual(f.silent.unknown);
+  });
+});

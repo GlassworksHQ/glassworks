@@ -40,6 +40,8 @@ export interface SetupSteps {
   click(name: string, run: () => Promise<void> | void): Promise<void>;
   /** The Home Assistant address as the person typed it, shown again if they come back to the step. */
   haAddress?: string;
+  /** The Panes switches as the person set them, kept if the step's screen goes and comes back (pairing again). */
+  panesDraft?: Record<string, boolean>;
   signIn(url: string): void;
   saveHa(url: string): Promise<void>;
   /** Skip the sign-in (the panel asks for it on its own screen): keeps a valid address, then moves on. */
@@ -87,6 +89,7 @@ const NOT_AN_ADDRESS = 'That doesn\'t look like a web address (http://… or htt
 
 export class ChannelSetup {
   haAddress?: string;
+  panesDraft?: Record<string, boolean>;
   /** The panel's address on Wi-Fi, from the last state it sent. */
   ip?: string;
   private channel?: SetupChannel;
@@ -392,6 +395,7 @@ export class ChannelSetup {
       return;
     }
     if (stale()) return;
+    this.panesDraft = undefined; // applied: the app's state says it now
     const radioCard = st.panes?.find((p) => p.id === 'radio');
     if (radioCard && !radioCard.on) { await this.d.done(); return; }
     await this.radio();

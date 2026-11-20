@@ -132,6 +132,8 @@ export class StandardSession implements SetupSteps, WifiSteps {
 
   protected fail(at: number, e: unknown, installed = false) {
     console.error(e);
+    // the set-up step that stopped: Try again goes back to it, never to an earlier one (Kiln's rule)
+    this.stopped = this.s.screen === 'setup' ? this.s.setup.phase : undefined;
     const written = this.s.wrote ? 'verified' : this.s.touched ? 'maybe' : 'none';
     this.dispatch({ type: 'fail', failure: explain(e, at, written, installed, this.s.changed) });
   }
@@ -236,8 +238,19 @@ export class StandardSession implements SetupSteps, WifiSteps {
     }
   }
 
-  /** `/set-up` on a connected device: its App step, or Wi-Fi on a frame without one. */
+  /** The set-up step a failure stopped at (`fail`): Try again (`/set-up`) goes back to it. */
+  private stopped?: Setup['phase'];
+
+  /** `/set-up` on a connected device: the step that stopped, if one did; else its App step, or the next it has. */
   protected async resume(): Promise<void> {
+    const at = this.stopped;
+    this.stopped = undefined;
+    // back on set-up's screen first: its channel steps show only there
+    if (at && at !== 'settings' && at !== 'waiting') this.setupPhase({ phase: 'waiting', note: `Connecting to ${this.standard.the}. It should be running and plugged in.` });
+    if (at === 'wifi') return this.wifi();
+    if (at === 'ha') return this.homeAssistant();
+    if (at === 'panes') return this.panes();
+    if (at === 'radio' || at === 'radio-next') return this.radio();
     if (!this.standard.steps.includes('set-up')) { await this.afterApp(); return; }
     this.setupPhase({ phase: 'settings', update: await this.appInstalled(), ...this.applyMark(), chosen: this.chosen });
   }
@@ -332,6 +345,8 @@ export class StandardSession implements SetupSteps, WifiSteps {
   }
   scanWifi(): Promise<void> { return this.setUp.scanWifi(); }
   joinWifi(ssid: string, psk: string): Promise<void> { return this.setUp.joinWifi(ssid, psk); }
+  get panesDraft(): Record<string, boolean> | undefined { return this.setUp.panesDraft; }
+  set panesDraft(v: Record<string, boolean> | undefined) { this.setUp.panesDraft = v; }
   get haAddress(): string | undefined { return this.setUp.haAddress; }
   set haAddress(v: string | undefined) { this.setUp.haAddress = v; }
   homeAssistant(): Promise<void> { return this.setUp.homeAssistant(); }
@@ -345,6 +360,7 @@ export class StandardSession implements SetupSteps, WifiSteps {
 
   /** Done, with the backup to download when this tab's run saved one. */
   finish(): void {
+    const run = ++this.doneRuns;
     const ip = this.steps.ip ?? this.setUp.ip;
     const b = this.s.backup;
     const wifi = this.setUp.wifiSsid;
@@ -368,18 +384,22 @@ export class StandardSession implements SetupSteps, WifiSteps {
         },
       },
     });
-    void this.readUpdates();
-    void this.handOff(ip);
+    void this.readUpdates(run);
+    void this.handOff(ip, run);
   }
 
+  /** Each Done counts up: a read or a pairing that an earlier Done started lands on that Done only. */
+  private doneRuns = 0;
+  private current(run: number): boolean { return run === this.doneRuns && !this.closed && this.s.screen === 'done'; }
+
   /** Done's Silent updates block (issue 422): read back from the device, whatever route led to Done. */
-  private async readUpdates(): Promise<void> {
+  private async readUpdates(run: number): Promise<void> {
     const p = this.panel;
     if (!p) return;
     const u = await this.standard.updates(p, this.lid());
     this.ui.note(u.log);
     const d = this.s.done;
-    if (!d || this.closed || this.s.screen !== 'done') return;
+    if (!d || !this.current(run)) return;
     this.dispatch({ type: 'done', done: { ...d, updates: this.standard.silent[u.state] } });
   }
 
@@ -388,12 +408,14 @@ export class StandardSession implements SetupSteps, WifiSteps {
    * its address. Only for an app that has the page, which `pairing.arm` shows: it answers, and opens pairing for 30
    * minutes, so the page pairs even once Home Assistant has the device.
    */
-  private async handOff(ip: string | undefined): Promise<void> {
+  private async handOff(ip: string | undefined, run: number): Promise<void> {
     // The link is the address in the device's reply, not the one Done had: it can change in between (DHCP).
     const now = ip ? (await this.steps.armPairing())?.ip : undefined;
+    // only the Done still current, and still on screen, lets go of the channel: a later set-up may be using it
+    if (run !== this.doneRuns || this.s.screen !== 'done') return;
     this.steps.close();
     const d = this.s.done;
-    if (!now || !d || this.closed || this.s.screen !== 'done') return;
+    if (!now || !d || !this.current(run)) return;
     this.dispatch({ type: 'done', done: { ...d, managePage: `http://${now}:8099/` } });
   }
 

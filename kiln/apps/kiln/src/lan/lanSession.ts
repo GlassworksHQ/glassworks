@@ -157,6 +157,8 @@ export class LanSession implements SetupSteps, WifiSteps {
     this.set({ view: { at: 'setup', setup } });
   }
 
+  get panesDraft() { return this.steps.panesDraft; }
+  set panesDraft(v: Record<string, boolean> | undefined) { this.steps.panesDraft = v; }
   get haAddress() { return this.steps.haAddress; }
   set haAddress(v: string | undefined) { this.steps.haAddress = v; }
 
