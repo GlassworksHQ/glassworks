@@ -29,14 +29,14 @@ export default async function BlueprintsPage() {
   return (
     <>
       <PageHead
-        title="Blueprints"
-        lede="Ready-made Home Assistant automations for the panel and its panes. Home Assistant imports each one, and you pick your devices when you make the automation."
+        title="Home Assistant blueprints"
+        lede="Ready-made automations for your wall panels. Import any blueprint straight into Home Assistant and choose your own doorbells, lights, and rooms."
       />
 
       <Tiles cols={3} className={m.trio}>
-        <Tile label="1" value="Add to Home Assistant" sub="Opens your Home Assistant. The first time, it asks for its address." />
-        <Tile label="2" value="Import" sub="Preview, then Import blueprint. Only an administrator can." />
-        <Tile label="3" value="Create the automation" sub="Pick your doorbell, lights or panels. Nothing else to install." />
+        <Tile label="Step 1" value="Open in Home Assistant" sub="Launches your Home Assistant instance and asks for its URL the first time." />
+        <Tile label="Step 2" value="Import the blueprint" sub="Review the inputs and click Import blueprint as an administrator." />
+        <Tile label="Step 3" value="Pick your devices" sub="Select your doorbell, lights, or wall panels — nothing extra to install." />
       </Tiles>
 
       {core.length > 0 && (

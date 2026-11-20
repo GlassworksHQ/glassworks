@@ -1,0 +1,32 @@
+.whyHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 22px 4px 12px;
+}
+
+.whyHead h2 {
+  font-weight: 500;
+  font-size: 17px;
+  letter-spacing: -0.005em;
+}
+
+.whyHead span {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.libCode {
+  font-family: var(--f-mono);
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.endChips {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+}
