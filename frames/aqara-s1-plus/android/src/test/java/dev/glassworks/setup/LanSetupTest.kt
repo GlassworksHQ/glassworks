@@ -35,6 +35,8 @@ class LanSetupTest {
     private var wall = 1_000_000_000L
     private var mono = 0L
     private var open = true
+    /** Runs while a pairing request checks that pairing is open. */
+    private var duringCheck: () -> Unit = {}
     private val changes = CopyOnWriteArrayList<String>()
     private var shown: PanelCode.Shown? = null
     private val code = PanelCode(clock = { wall }).apply { canDisplay = { true }; display = { shown = it } }
@@ -47,7 +49,7 @@ class LanSetupTest {
 
     private val lan = LanSetup(
         serve = { i, o, may -> SetupChannel(backend, mayChange = may).serve(i, o, pollMs = 50) },
-        code = code, ownHosts = { setOf("127.0.0.1") }, pairingOpen = { open }, monoMs = { mono }, wallMs = { wall },
+        code = code, ownHosts = { setOf("127.0.0.1") }, pairingOpen = { duringCheck(); open }, monoMs = { mono }, wallMs = { wall },
         files = { name -> RepoFiles.file("core/src/main/assets/setup").resolve(name).takeIf { it.exists() }?.readBytes() ?: if (name == "inter.ttf") ByteArray(4) else null },
         onDone = { dones++ },
         phoneJoin = null,
@@ -211,6 +213,34 @@ class LanSetupTest {
         assertTrue(JSONObject(get(LanSetup.PAIR, session).text()).getBoolean("paired"))
         assertFalse("a copied cookie from another device", JSONObject(get(LanSetup.PAIR, session, remote = "192.0.2.99").text()).getBoolean("paired"))
         assertTrue("and it stays good for the browser that paired", JSONObject(get(LanSetup.PAIR, session).text()).getBoolean("paired"))
+    }
+
+    /** "Close setup over the network" (#33): every paired browser and its open channel end, and the setup hotspot closes, as Done does. */
+    @Test fun closeEndsEveryPairedBrowserAndItsChannel() {
+        val first = pair()
+        wall += 31_000
+        val second = pair()
+        ws(second).use { c ->
+            assertTrue(c.ask("""{"id":1,"op":"pairing.arm"}""").getBoolean("ok"))
+            lan.close()
+            assertTrue("close ends the open channel", c.ended())
+        }
+        assertEquals("close closes the setup hotspot", 1, dones)
+        for (s in listOf(first, second)) assertFalse("no longer paired", JSONObject(get(LanSetup.PAIR, s).text()).getBoolean("paired"))
+        assertEquals(listOf("arm"), changes)
+    }
+
+    /** A pairing already past its checks when setup closes gets no session (CodeRabbit on #682). */
+    @Test fun aPairingUnderWayWhenSetupClosesGetsNoSession() {
+        val id = cookie(post(LanSetup.PAIR))!!
+        val typed = shown!!.code
+        duringCheck = { duringCheck = {}; lan.close() }
+        val r = post(LanSetup.PAIR, "code=$typed", id)
+        assertEquals(r.text(), 403, r.status)
+        assertEquals(null, cookie(r))
+        assertTrue(r.text().contains("closed on the panel just now"))
+        wall += 31_000
+        pair()
     }
 
     @Test fun doneFromAnotherAddressEndsNothing() {

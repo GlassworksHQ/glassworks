@@ -518,7 +518,7 @@ main thread on Android), so a change from the browser takes the panel's own path
 asks first on the panel asks here too, and the change runs only with that dialog's answer: a one-shot
 token for the same session and change, good for five minutes and dropped when that session signs out (#269). Either sign-in may change any item, a pane's `master`
 included (maintainer, 2026-11-15: the sign-in is the only extra layer). An `Action` is a button that
-posts `run`; one with a `confirm` asks first. A `Native` draws its `twin`'s rows (#269), and a `Link`
+posts `run`; one with a `confirm` asks first. One with `needsCode` (factory reset, setup over the network) then shows a code on the panel and runs only when that code comes back, as Reboot does; the panel's own menu, where the person already stands, asks only its `confirm`, and a page on another panel can't run any `Action`. A `Native` draws its `twin`'s rows (#269), and a `Link`
 its `twin` under its title (#518). Only a `Link` to another app (Android's or Aqara's settings, the
 licences) says "On the panel". A pane's row (`manage.paneRow`) takes its name and on/off from its section: the title,
 `unavailable` for Can't run, the `master` switch (#67) for Off; its chip is `chipWord` and

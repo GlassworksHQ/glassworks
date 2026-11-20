@@ -2,6 +2,9 @@ package dev.glassworks.settings
 
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.widget.Toast
 import dev.glassworks.dock.DockRow
@@ -19,6 +22,9 @@ import dev.glassworks.screen.ScreenHardware
 import dev.glassworks.Glassworks
 import dev.glassworks.KioskPrefs
 import dev.glassworks.Licences
+import dev.glassworks.auth.HaAuth
+import dev.glassworks.manage.AppManage
+import dev.glassworks.setup.SetupPrefs
 
 /**
  * The panel's settings: the one model the menu ([KioskSettingsOverlay]) and the Manage page both draw
@@ -55,6 +61,8 @@ object S1Settings {
                 fullScreen = fullScreen,
                 presenceRange = { runtime.screen.applyPresenceRange() },
                 brightness = { runtime.screen.refreshBrightness() },
+                closeSetup = { runtime.lanSetup?.close() },
+                factoryReset = { done -> factoryReset(runtime, prefs, context).run(done) },
             ),
             hardware = hardware,
             screenBlueprints = blueprints(CoreSettings.SCREEN),
@@ -72,6 +80,27 @@ object S1Settings {
         val own = core.sections() + listOfNotNull(device?.let { SettingsPlace.DEVICE to it })
         val ha = withHaLink(settingsOrder(own, sections)) { HaLink.of(connected = runtime.homeAssistantConnected(), added = prefs.haSeen) }
         return KioskSettingsOverlay.Model(ha, version, sections.map { it.id }.toSet(), frameName(runtime))
+    }
+
+    /** The factory reset's steps on this app: HaAuth's sign-out, the core's settings files, the Manage page's browsers. */
+    private fun factoryReset(runtime: Glassworks, prefs: KioskPrefs, context: Context): FactoryReset {
+        val app = context.applicationContext
+        val main = Handler(Looper.getMainLooper())
+        return FactoryReset(
+            signOut = { done -> HaAuth.init(app); HaAuth.signOut("factory reset", done) },
+            clearSettings = { prefs.resetSettings() && SetupPrefs(app).reset() },
+            signOutBrowsers = { HaAuth.manage?.signOutAll() },
+            // As the Overview's Restart app: after the answer has gone out (AppManage.ACTION_DELAY_MS).
+            restart = {
+                val i = Intent(app, runtime.components.mainActivity).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).putExtra("restart", true)
+                main.postDelayed({
+                    val sink = runtime.commandSink
+                    if (sink != null) sink(i) else runCatching { app.startActivity(i) }.onFailure { Log.w(TAG, "can't restart after the reset", it) }
+                }, AppManage.ACTION_DELAY_MS)
+            },
+            onMain = { main.post(it) },
+            log = { Log.i(TAG, it) },
+        )
     }
 
     /** The frame's name in words: "S1 Plus", or the device's ("Google Pixel Tablet"). */

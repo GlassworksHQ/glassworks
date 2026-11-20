@@ -183,6 +183,7 @@ open class KioskService : Service() {
         discovery = null
         glassworks.discovery = null
         HaAuth.stopServer()
+        glassworks.lanSetup = null
         glassworks.panelCode.display = {}
         glassworks.panelCode.canDisplay = { false }
         codeOverlay?.show(null)

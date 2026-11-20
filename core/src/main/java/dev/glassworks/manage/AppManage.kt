@@ -191,6 +191,8 @@ open class AppManage(
 
     override val actions: PanelActions get() = host.actions
 
+    override fun signOutAll(): Boolean = server.signOutAll()
+
     override fun startLog() {
         tail.start()
         adbRequests?.start()

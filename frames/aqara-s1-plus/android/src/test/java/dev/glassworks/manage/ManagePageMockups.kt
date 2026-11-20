@@ -74,6 +74,23 @@ class ManagePageMockups {
         save("07-security", b.get("/security"))
         b.post("/action/reboot", mapOf("csrf" to b.csrf()))
         save("07b-reboot-code", b.get("/confirm/reboot"))
+        // #33: the Security section's rows (the app's CoreSettings has the same), then the reset's question and its code.
+        val security = SettingsSection(ManagePages.SECURITY, "Security", listOf(
+            SettingsItem.Action(dev.glassworks.settings.CoreSettings.SETUP_OVER_NETWORK, { "Open until 10:12. Open http://192.0.2.40:8099/setup on a computer on this network." }, "Allow", needsCode = true) { d -> d(null) },
+            SettingsItem.Action(dev.glassworks.settings.CoreSettings.CLOSE_SETUP, { "Open until 10:12. Closing it ends setup on any computer that paired." }, "Close", needsCode = true) { d -> d(null) },
+            SettingsItem.Action(dev.glassworks.settings.FactoryReset.TITLE, { dev.glassworks.settings.FactoryReset.DETAIL }, dev.glassworks.settings.FactoryReset.LABEL,
+                SettingsItem.Confirm("${dev.glassworks.settings.FactoryReset.TITLE}?", dev.glassworks.settings.FactoryReset.CONFIRM_DETAIL, dev.glassworks.settings.FactoryReset.CONFIRM_ACTION),
+                needsCode = true) { d -> d(null) },
+        ))
+        f.statusFn = { f.status.copy(sections = f.status.sections + security) }
+        save("07c-security-actions", b.get("/security"))
+        f.now += 31_000
+        fun reset(extra: Map<String, String> = emptyMap()) = b.post("/settings", mapOf("csrf" to b.csrf(), "section" to security.id,
+            "key" to dev.glassworks.pane.SettingsChange.changeable(security).first { it.second === security.items[2] }.first, "value" to SettingsItem.Action.RUN) + extra)
+        val question = reset()
+        save("07d-reset-question", question)
+        save("07e-reset-code", reset(mapOf("answer" to question.answer()!!)))
+        f.statusFn = null
         save("08-about", b.get("/about"))
         save("09-wall-base", b.get("/wall-base"))
         // #466: All panels as the server draws it; panels-shots.mjs runs its script against fakes.

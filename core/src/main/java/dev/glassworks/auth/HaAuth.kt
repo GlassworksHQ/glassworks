@@ -157,6 +157,7 @@ object HaAuth {
             },
         )
         s.front = lan::handle
+        context.glassworks.lanSetup = lan
         try {
             s.start()
             server = s
