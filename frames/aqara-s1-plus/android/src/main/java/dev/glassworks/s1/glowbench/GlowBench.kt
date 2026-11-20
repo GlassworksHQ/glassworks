@@ -61,7 +61,8 @@ object GlowBench {
             }
         }
         val filter = IntentFilter(ACTION)
-        if (Build.VERSION.SDK_INT >= 33) activity.registerReceiver(receiver, filter, android.Manifest.permission.DUMP, null, Context.RECEIVER_EXPORTED)
+        // The API level comes from Platform (PlatformConfinementTest).
+        if (dev.glassworks.platform.Platform.apiLevel >= 33) activity.registerReceiver(receiver, filter, android.Manifest.permission.DUMP, null, Context.RECEIVER_EXPORTED)
         else activity.registerReceiver(receiver, filter, android.Manifest.permission.DUMP, null)
         return {
             view?.let { it.stop(); (it.parent as? ViewGroup)?.removeView(it) }
