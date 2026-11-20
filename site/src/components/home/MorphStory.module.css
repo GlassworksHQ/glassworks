@@ -378,16 +378,39 @@ a.eyebrow:hover {
   will-change: transform;
 }
 
-/* Beat 1: the Pixel Tablet's own model (@glassworks/frame-card), on its dock, where the glass was.
-   Its stage is 1.4:1 and the body 73% of it (geometry.ts), so 642px puts the body at the glass's 468px. */
-.tabletModel {
+/* A beat's own 3D model (@glassworks/frame-card), where the glass was. Its width is set inline: the stage
+   that draws its body at the glass's width (modelPose). */
+.beatModel {
   grid-area: 1 / 1;
   position: relative;
   z-index: 1;
-  width: 642px;
-  max-width: 100%;
   transform: scale(var(--bezel-scale, 1));
   will-change: opacity;
+}
+
+/* a model's floor shadow (the blurred polygon under a standing device) is drawn for a dark page; on a
+   light one it reads as a dark puddle, so it is lighter there */
+.beatModel svg > polygon[filter],
+.modelCompact svg > polygon[filter] {
+  fill-opacity: 0.2;
+}
+
+@media (prefers-color-scheme: dark) {
+  :global(:root:not([data-theme="light"])) .beatModel svg > polygon[filter],
+  :global(:root:not([data-theme="light"])) .modelCompact svg > polygon[filter] {
+    fill-opacity: 0.5;
+  }
+}
+
+:global(:root[data-theme="dark"]) .beatModel svg > polygon[filter],
+:global(:root[data-theme="dark"]) .modelCompact svg > polygon[filter] {
+  fill-opacity: 0.5;
+}
+
+/* only the Pixel Tablet lifts off its dock on hover; another device's base holds it */
+.beatModel[data-still] [data-dock],
+.modelCompact[data-still] [data-dock] {
+  --undock: 0;
 }
 
 /* the model's screen, as the glass's .screen: the cards' @container rules query its height too */
@@ -402,14 +425,22 @@ a.eyebrow:hover {
   overflow: hidden;
 }
 
-.tabletModelCompact {
-  width: min(calc(100vw - 32px), 452px);
+/* A mirror's screen sits behind continuous glass: no background or edge of its own, which showed as a
+   light outline on a light page once the dashboard tucked away */
+.screen[data-mirror],
+.modelScreen[data-mirror] {
+  background: transparent;
+  border-color: transparent;
 }
 
-/* on a phone the model's screen is ~240 × 136px, which would pick the dashboard's most cramped layout:
-   draw it at 1 / 0.7 the size and zoom it down, so it lays out as the wide display's does */
-.tabletModelCompact .modelScreen {
-  zoom: 0.7;
+/* the phone layout's models: the width is set inline. On a narrow screen the stage shrinks, and the
+   screen's content is drawn at full size and zoomed down (--screen-zoom), so the dashboard keeps its layout */
+.modelCompact {
+  max-width: 100%;
+}
+
+.modelCompact .modelScreen {
+  zoom: var(--screen-zoom, 1);
 }
 
 .bezelRow {
@@ -428,7 +459,7 @@ a.eyebrow:hover {
     linear-gradient(155deg, #252832 0%, #11131a 48%, #0a0b0f 100%);
   border: 1px solid color-mix(in srgb, var(--face, transparent) calc(var(--face-o, 0) * 100%), rgba(255, 255, 255, 0.14));
   box-shadow:
-    0 34px 78px -28px rgb(0 0 0 / calc(var(--box-a, 0.56) * (1 - var(--face-o, 0)))),
+    0 34px 78px -28px rgb(0 0 0 / calc(var(--box-a, 0.56) * (1 - var(--drop-o, 0)))),
     inset 0 1px 0 rgba(255, 255, 255, 0.16);
   overflow: hidden;
   will-change: width, height, border-radius;
@@ -446,10 +477,6 @@ a.eyebrow:hover {
     inset 0 1px 0 rgba(255, 255, 255, 0.24);
 }
 
-.bezelMirror {
-  background: linear-gradient(155deg, #2c303a 0%, #171920 46%, #242833 100%);
-  border-color: rgba(255, 255, 255, 0.22);
-}
 
 /* Mirror forehead camera / presence sensor lens + sky-blue pulse ring */
 .mirrorSensor {
@@ -500,46 +527,8 @@ a.eyebrow:hover {
   }
 }
 
-/* Accurate tall tubular U-shaped steel stand (frame.json: 220/536 ≈ 41% height, 98% width, #4b4f58) */
-.mirrorStand {
-  position: absolute;
-  top: calc(100% - 4px);
-  left: 50%;
-  height: 84px;
-  border-left: 3.5px solid #4b4f58;
-  border-right: 3.5px solid #4b4f58;
-  border-bottom: 3.5px solid #4b4f58;
-  border-radius: 0 0 14px 14px;
-  transform-origin: top center;
-  pointer-events: none;
-  z-index: 0;
-  will-change: opacity, transform;
-}
 
-.mirrorStand::after,
-.mirrorStandCompact::after {
-  content: "";
-  position: absolute;
-  left: 6px;
-  right: 6px;
-  bottom: -10px;
-  height: 7px;
-  border-radius: 50%;
-  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.52) 0%, transparent 72%);
-  pointer-events: none;
-}
 
-.mirrorStandCompact {
-  position: relative;
-  height: 74px;
-  margin-top: -4px;
-  margin-bottom: 10px;
-  border-left: 3.5px solid #4b4f58;
-  border-right: 3.5px solid #4b4f58;
-  border-bottom: 3.5px solid #4b4f58;
-  border-radius: 0 0 13px 13px;
-  pointer-events: none;
-}
 
 /* Beat 4: 3 sleek animated horizontal dashed light lines sweeping from the glass to open-air labels */
 .wireRays {
@@ -600,6 +589,7 @@ a.eyebrow:hover {
 
 .morphSmooth {
   transition:
+    transform 0.52s cubic-bezier(0.22, 1, 0.36, 1),
     width 0.52s cubic-bezier(0.22, 1, 0.36, 1),
     height 0.52s cubic-bezier(0.22, 1, 0.36, 1),
     border-radius 0.52s cubic-bezier(0.22, 1, 0.36, 1),
@@ -2285,11 +2275,6 @@ a.eyebrow:hover {
   place-items: center;
 }
 
-.mirrorAssembly {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
 
 .compactCopy {
   display: grid;

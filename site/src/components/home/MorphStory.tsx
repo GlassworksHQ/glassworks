@@ -6,9 +6,13 @@ import { DeviceModel, geometry, type FrameDesign, type FrameModel } from "@glass
 import { KILN } from "@/lib/links";
 import { KilnGlyph, MusicGlyph } from "../Glyphs";
 import s from "./MorphStory.module.css";
+import { BEDSIDE_DISPLAY, ROUND_DIAL, SQUARE_SWITCH, WIDE_DISPLAY } from "./storyModels";
 
 /*
- * Concept D (6-Beat Goldilocks Edition):
+ * Concept D (6-Beat Goldilocks Edition). Every beat is a real 3D device, drawn by @glassworks/frame-card:
+ * the frames' own models (S1, Mirror, Pixel Tablet) or made-up shapes (storyModels.ts). Between beats one
+ * piece of glass travels; at each beat it lands exactly on that device's front and hands over to its model.
+ *
  * One single physical piece of dark precision glass gliding across 6 clean, airy scroll beats
  * (680vh total, ~113vh per beat with ~55% steady hold + ~45% smooth cubic morph).
  *
@@ -101,17 +105,17 @@ const KEYFRAMES: Keyframe[] = [
     glowX: 72,
     glowY: 48,
   },
-  // 3: Full-Length Mirror · lululemon Studio Mirror (Left, 204 × 484 + 84px U-stand, top 12.7%, bottom 21.1%)
+  // 3: Full-Length Mirror · lululemon Studio Mirror on its stand (Left; its model sizes the rest)
   {
-    w: 204,
-    h: 484,
+    w: 168,
+    h: 419,
     bodyR: 6,
     insetTop: 12.7,
     insetBottom: 21.1,
     insetX: 3.5,
     screenR: 3,
     xPct: -23,
-    yPx: -36,
+    yPx: -8,
     rx: 1,
     ry: 5,
     glowX: 27,
@@ -152,26 +156,18 @@ const KEYFRAMES: Keyframe[] = [
   },
 ];
 
-const FUTURE_GEOMETRY: Record<
-  "square" | "round" | "bedside",
-  Pick<Keyframe, "w" | "h" | "bodyR" | "insetTop" | "insetBottom" | "insetX" | "screenR">
-> = {
-  square: { w: 244, h: 244, bodyR: 20, insetTop: 5, insetBottom: 5, insetX: 5, screenR: 12 },
-  round: { w: 238, h: 238, bodyR: 119, insetTop: 5, insetBottom: 5, insetX: 5, screenR: 119 },
-  bedside: { w: 356, h: 174, bodyR: 22, insetTop: 6, insetBottom: 6, insetX: 4, screenR: 14 },
-};
+/* the finale's shapes: the body's width on screen, px (its height and the rest come from its model) */
+const FUTURE_W: Record<"square" | "round" | "bedside", number> = { square: 244, round: 238, bedside: 356 };
 
-const MOBILE_SHAPES: Record<
-  ShapeId,
-  Pick<Keyframe, "w" | "h" | "bodyR" | "insetTop" | "insetBottom" | "insetX" | "screenR">
-> = {
-  wall: { w: 336, h: 168, bodyR: 0, insetTop: 4, insetBottom: 4, insetX: 2.2, screenR: 0 },
-  tablet: { w: 330, h: 216, bodyR: 18, insetTop: 6.5, insetBottom: 6.5, insetX: 4.3, screenR: 7 },
-  mirror: { w: 184, h: 444, bodyR: 6, insetTop: 12.7, insetBottom: 21.1, insetX: 3.5, screenR: 3 },
-  kitchen: { w: 336, h: 184, bodyR: 16, insetTop: 5, insetBottom: 5, insetX: 3.2, screenR: 9 },
-  square: { w: 220, h: 220, bodyR: 18, insetTop: 5, insetBottom: 5, insetX: 5, screenR: 10 },
-  round: { w: 220, h: 220, bodyR: 110, insetTop: 5, insetBottom: 5, insetX: 5, screenR: 110 },
-  bedside: { w: 316, h: 156, bodyR: 20, insetTop: 6, insetBottom: 6, insetX: 4, screenR: 12 },
+/* the phone layout's bodies: px wide, before they shrink to fit a narrow screen */
+const MOBILE_W: Record<ShapeId, number> = {
+  wall: 336,
+  tablet: 330,
+  mirror: 140,
+  kitchen: 336,
+  square: 220,
+  round: 220,
+  bedside: 316,
 };
 
 const BEAT_DOTS = [
@@ -255,25 +251,25 @@ function samplePose(sVal: number, frames: Keyframe[]): Keyframe {
   };
 }
 
-/* the beat that draws the Pixel Tablet's model, and its stage: TABLET_STAGE px wide (.tabletModel) at this aspect */
-const TABLET_BEAT = 4;
-const TABLET_STAGE = 642;
-const TABLET_ASPECT = 1.4;
+/** A beat's device: a frame's model or a made-up shape, and its stage's aspect, picked so the stage hugs it. */
+type StoryModel = { id: string; label: string; model: FrameModel; aspect: number };
 
 /**
- * Beat 4's keyframe, posed exactly as the Pixel Tablet model's front glass: the same numbers geometry()
- * gives DeviceModel (size, corner and screen box, rx/ry/lean, the push to the front face, the model's
- * centring and its perspective, 170 × --u in DeviceModel.module.css). The glass lands on the model's
- * front, so handing over to the model only adds its sides and dock.
+ * A keyframe posed exactly as its model's front glass: the same numbers geometry() gives DeviceModel (size,
+ * corner and screen box, rx/ry/lean, the push to the front face, the model's centring and its perspective,
+ * 170 × --u in DeviceModel.module.css). The keyframe's width is the body's; `stage` is the model's stage
+ * width that draws the body that wide. The glass lands on the model's front, so handing over to the model
+ * only adds its sides, stand or dock.
  */
-function tabletPose(base: Keyframe, model: FrameModel): Keyframe {
-  const g = geometry(model, TABLET_ASPECT);
+function modelPose(base: Keyframe, sm: StoryModel): { pose: Keyframe; stage: number; face?: string } {
+  const g = geometry(sm.model, sm.aspect);
   const n = (k: string) => parseFloat(g.vars[k] ?? "0");
-  const u = TABLET_STAGE / 100;
-  const w = (n("--wp") / 100) * TABLET_STAGE;
+  const stage = base.w / (n("--wp") / 100);
+  const u = stage / 100;
+  const w = base.w;
   const [arW = 1, arH = 1] = (g.vars["--ar"] ?? "1 / 1").split("/").map((x) => parseFloat(x));
   const [tx = 0, ty = 0] = [...g.transform.matchAll(/(-?[\d.]+)%/g)].map((m) => parseFloat(m[1]!));
-  return {
+  const pose: Keyframe = {
     ...base,
     w,
     h: (w * arH) / arW,
@@ -287,9 +283,28 @@ function tabletPose(base: Keyframe, model: FrameModel): Keyframe {
     lean: n("--lean"),
     z: u * n("--du") * 0.5,
     persp: u * 170,
-    dx: (tx / 100) * TABLET_STAGE,
-    dy: (ty / 100) * (TABLET_STAGE / TABLET_ASPECT),
+    dx: (tx / 100) * stage,
+    dy: (ty / 100) * (stage / sm.aspect),
   };
+  return { pose, stage, face: g.vars["--dev-face"] };
+}
+
+/* Each beat's hold (morphSegment): the p where the glass sits still on its device */
+const HOLDS: [number, number][] = [
+  [0, 0.085],
+  [0.16, 0.255],
+  [0.335, 0.44],
+  [0.52, 0.65],
+  [0.725, 0.82],
+  [0.895, 1],
+];
+
+/** The model shows only inside its beat's hold, where it and the glass coincide: in just after, out just before */
+function holdO(p: number, beat: number) {
+  const [a, b] = HOLDS[beat]!;
+  const fadeIn = beat === 0 ? 1 : smooth(clamp((p - a - 0.002) / 0.016));
+  const fadeOut = beat === HOLDS.length - 1 ? 1 : 1 - smooth(clamp((p - b + 0.018) / 0.016));
+  return fadeIn * fadeOut;
 }
 
 function formatTimer(totalSec: number) {
@@ -304,12 +319,12 @@ export type MorphPost = { title: string; href: string };
 export function MorphStory({
   release,
   post,
-  tablet,
+  frames,
 }: {
   release: MorphRelease;
   post?: MorphPost;
-  /** the Pixel Tablet's frame design (frames/google-pixel-tablet), drawn on Beat 1 with its dock */
-  tablet: FrameDesign;
+  /** the frames whose models the story draws: the S1 (Beats 0 and 2), the Mirror (3), the Pixel Tablet (4) */
+  frames: { s1: FrameDesign; mirror: FrameDesign; tablet: FrameDesign };
 }) {
   const sectionRef = useRef<HTMLElement>(null);
   const bezelRef = useRef<HTMLDivElement>(null);
@@ -320,6 +335,10 @@ export function MorphStory({
   const [reducedMotion, setReducedMotion] = useState(false);
   const [futureShape, setFutureShape] = useState<"square" | "round" | "bedside">("square");
   const [clickMorph, setClickMorph] = useState(false);
+  // the window's width, for the phone layout's models (renderCompactFrame)
+  const [vw, setVw] = useState(390);
+  // a finale shape picked: the glass morphs to it, then its model takes over (selectFuture)
+  const [morphing, setMorphing] = useState(false);
 
   // Interactive Home Assistant entities (persist live across every shape)
   const [kitchenOn, setKitchenOn] = useState(true);
@@ -346,13 +365,16 @@ export function MorphStory({
     const mqNarrow = window.matchMedia("(max-width: 900px)");
     const mqReduce = window.matchMedia("(prefers-reduced-motion: reduce)");
     const syncCompact = () => {
+      setVw(window.innerWidth);
       setCompact(mqNarrow.matches || mqReduce.matches);
       setReducedMotion(mqReduce.matches);
     };
     syncCompact();
+    window.addEventListener("resize", syncCompact);
     mqNarrow.addEventListener("change", syncCompact);
     mqReduce.addEventListener("change", syncCompact);
     return () => {
+      window.removeEventListener("resize", syncCompact);
       mqNarrow.removeEventListener("change", syncCompact);
       mqReduce.removeEventListener("change", syncCompact);
     };
@@ -401,13 +423,45 @@ export function MorphStory({
 
   // Continuous Goldilocks coordinate seg in [0..5]
   const seg = morphSegment(p);
-  const keyframes = useMemo(
-    () => KEYFRAMES.map((k, i) => (i === TABLET_BEAT ? tabletPose(k, tablet.model) : k)),
-    [tablet.model],
+  // every beat's device, and the keyframes posed on them
+  const models = useMemo(() => {
+    const s1: StoryModel = { id: "s1", label: `${frames.s1.name} on a wall, running Glassworks`, model: frames.s1.model, aspect: 2 };
+    return {
+      beats: [
+        s1,
+        { id: "wide", label: "A wide display on a speaker base, running Glassworks (an illustration)", model: WIDE_DISPLAY, aspect: 1.8 },
+        s1,
+        { id: "mirror", label: `${frames.mirror.name} on its stand, running Glassworks`, model: frames.mirror.model, aspect: 0.45 },
+        { id: "tablet", label: `${frames.tablet.name} on its speaker dock, running Glassworks`, model: frames.tablet.model, aspect: 1.6 },
+      ] as StoryModel[],
+      future: {
+        square: { id: "square", label: "A square 4-inch wall switch, running Glassworks (an illustration)", model: SQUARE_SWITCH, aspect: 1 },
+        round: { id: "round", label: "A round wall dial, running Glassworks (an illustration)", model: ROUND_DIAL, aspect: 1 },
+        bedside: { id: "bedside", label: "A bedside display, running Glassworks (an illustration)", model: BEDSIDE_DISPLAY, aspect: 1.8 },
+      } as Record<"square" | "round" | "bedside", StoryModel>,
+    };
+  }, [frames]);
+  const modelOfBeat = (i: number) => (i === 5 ? models.future[futureShape] : models.beats[i]!);
+  const modelOfShape = (shape: ShapeId): StoryModel =>
+    shape === "wall"
+      ? models.beats[0]!
+      : shape === "kitchen"
+        ? models.beats[1]!
+        : shape === "mirror"
+          ? models.beats[3]!
+          : shape === "tablet"
+            ? models.beats[4]!
+            : models.future[shape];
+  const poses = useMemo(
+    () => KEYFRAMES.map((k, i) => modelPose(i === 5 ? { ...k, w: FUTURE_W[futureShape] } : k, i === 5 ? models.future[futureShape] : models.beats[i]!)),
+    [models, futureShape],
   );
+  const keyframes = useMemo(() => poses.map((x) => x.pose), [poses]);
   const basePose = samplePose(seg, keyframes);
-  const tabletFace = useMemo(() => geometry(tablet.model, TABLET_ASPECT).vars["--dev-face"] ?? "#07080b", [tablet.model]);
-  const atFinale = seg >= 4.86;
+  // the beat the glass is at or nearest, and its device
+  const nearBeat = Math.min(5, Math.max(0, Math.round(seg)));
+  const near = poses[nearBeat]!;
+  const nearModel = modelOfBeat(nearBeat);
 
   // Individual feature overlay opacities (ONE feature per beat, never stacked!)
   const assistO = compact ? 1 : windowO(seg, 1, 0.22, 0.56);
@@ -479,12 +533,17 @@ export function MorphStory({
     window.scrollTo({ top: el.offsetTop + span * targetP, behavior: "smooth" });
   };
 
+  const morphTimer = useRef(0);
   const selectFuture = (next: "square" | "round" | "bedside") => {
     setClickMorph(true);
+    setMorphing(true);
     setFutureShape(next);
+    // the glass morphs to the new shape (.morphSmooth, 0.52s), then the shape's model takes over
+    window.clearTimeout(morphTimer.current);
+    morphTimer.current = window.setTimeout(() => setMorphing(false), 600);
   };
 
-  let geom = {
+  const geom = {
     w: basePose.w,
     h: basePose.h,
     bodyR: basePose.bodyR,
@@ -493,23 +552,22 @@ export function MorphStory({
     insetX: basePose.insetX,
     screenR: basePose.screenR,
   };
-  if (!compact && atFinale && futureShape !== "square") {
-    geom = FUTURE_GEOMETRY[futureShape];
-  }
 
-  // Beat 1: the morphing glass hands over to the Pixel Tablet's real model, on its dock, as it settles
-  // The glass turns porcelain on its way in and lands exactly on the model's front (tabletPose). The model
-  // takes over only inside Beat 4's hold (p 0.725 – 0.82, morphSegment), where the two coincide, so the
-  // hand-over adds the sides and the dock and nothing doubles; it hands back before the glass moves on.
-  const faceO = compact ? 0 : windowO(seg, TABLET_BEAT, 0.12, 0.62);
-  const modelO = compact ? 0 : smooth(clamp((p - 0.727) / 0.016)) * (1 - smooth(clamp((p - 0.802) / 0.016)));
-  // The model fades in over the glass, which stays opaque under it (their fronts are the same) so nothing
-  // turns see-through, and the glass hides once the model is whole: its body can then lift off the dock.
+  // The glass takes on the device's front colour on its way in (the Pixel Tablet's Porcelain or Hazel) and
+  // lands exactly on its model's front (modelPose). The model takes over only inside the beat's hold, where
+  // the two coincide, so the hand-over adds the sides, stand or dock and nothing doubles; it hands back
+  // before the glass moves on. It fades in over the glass, which stays opaque under it (their fronts are the
+  // same) so nothing turns see-through, and the glass hides once the model is whole.
+  const faceO = compact || !near.face ? 0 : windowO(seg, nearBeat, 0.12, 0.62);
+  const modelO = compact || morphing ? 0 : holdO(p, nearBeat);
   const modelLive = modelO > 0.98;
+  // a device on a desk or counter casts one soft shadow, from whichever of glass and model shows (a
+  // standing mirror's model casts its own on the floor)
+  const dropO = compact || nearModel.model.mount !== "desk" ? 0 : windowO(seg, nearBeat, 0.12, 0.62);
   // the tablet lifted off its dock: the model's own hover lift (mouse only), which the Docked line follows
-  const [tabletHover, setTabletHover] = useState(false);
-  const tabletLifted = modelLive && tabletHover && !reducedMotion;
-  // Mirror body + tubular U-stand presence factor (Beat 3)
+  const [modelHover, setModelHover] = useState(false);
+  const tabletLifted = nearBeat === 4 && modelLive && modelHover && !reducedMotion;
+  // Mirror body presence factor (Beat 3): the glass looks silvered on its way to the Mirror
   const mirrorFactor = windowO(seg, 3, 0.24, 0.72);
 
   // Copy opacities synced smoothly to the 6 beats
@@ -789,15 +847,23 @@ export function MorphStory({
     );
   };
 
-  /* Beat 4 — the Pixel Tablet's own model (frame.json), with the live dashboard and the timer on its screen */
-  const renderTabletModel = (id: string, timer: number, highlightSendspin: boolean) => (
-    <DeviceModel id={id} model={tablet.model} label={`${tablet.name} on its speaker dock, running Glassworks`} aspect={TABLET_ASPECT}>
+  /* The screen's content at this point of the story: the dashboard and the beat's overlay, on the glass or the model */
+  const renderScreenContent = () => (
+    <div className={s.screenInner}>
+      {renderLiveLovelace(currentShape, raysO > 0.35, mirrorPresent && mirrorPresenceO > 0.35)}
+      {renderRealVoiceOverlay(assistO)}
+      {renderRealNotificationOverlay(notifO)}
+      {renderMirrorPresenceOverlay(mirrorPresenceO)}
+      {renderRealTimerOverlay(timerO)}
+    </div>
+  );
+
+  /* A beat's device as its 3D model (frame.json's, or storyModels.ts), with the live screen on it */
+  const renderModel = (sm: StoryModel, id: string, shape: ShapeId, content: React.ReactNode) => (
+    <DeviceModel key={sm.id} id={id} model={sm.model} label={sm.label} aspect={sm.aspect}>
       {/* the glass's own screen box (a size container), so the dashboard lays out the same on both */}
-      <div className={s.modelScreen}>
-        <div className={s.screenInner}>
-          {renderLiveLovelace("tablet", highlightSendspin)}
-          {renderRealTimerOverlay(timer)}
-        </div>
+      <div className={s.modelScreen} data-round={shape === "round" || undefined} data-mirror={shape === "mirror" || undefined}>
+        {content}
       </div>
     </DeviceModel>
   );
@@ -1114,67 +1180,30 @@ export function MorphStory({
       overlay?: "voice" | "notif" | "mirror-presence" | "kitchen-timer",
       interactiveSmooth?: boolean,
     ) => {
-      const d = MOBILE_SHAPES[shape];
-      const isMirror = shape === "mirror";
       const isMirrorCollapsed = overlay === "mirror-presence" && mirrorPresent;
-      if (shape === "tablet") {
-        return (
-          <div className={s.compactStage}>
-            <div className={s.tabletModelCompact}>
-              {renderTabletModel("home-tablet-compact", overlay === "kitchen-timer" ? 1 : 0, overlay === "kitchen-timer")}
-            </div>
-          </div>
-        );
-      }
+      const sm = modelOfShape(shape);
+      // the stage that draws the body MOBILE_W wide; on a narrower screen it shrinks, and the screen's
+      // content is drawn at the full size and zoomed down, so the dashboard keeps its layout
+      const stage = MOBILE_W[shape] / (parseFloat(geometry(sm.model, sm.aspect).vars["--wp"] ?? "100") / 100);
+      const zoom = Math.min(1, (vw - 32) / stage);
       return (
         <div className={s.compactStage}>
-          <div className={s.mirrorAssembly}>
-            <div
-              className={`${s.bezel} ${interactiveSmooth ? s.morphSmooth : ""} ${isMirror ? s.bezelMirror : ""}`}
-              style={{
-                width: `min(calc(100vw - 32px), ${d.w}px)`,
-                height: `${d.h}px`,
-                borderRadius: `${d.bodyR}px`,
-              }}
-            >
-              {isMirror && <div className={s.mirrorBodySurface} aria-hidden="true" />}
-              {isMirror && (
-                <div className={s.mirrorSensor} aria-hidden="true">
-                  <span className={`${s.sensorLens} ${mirrorPresent ? s.sensorLensLit : ""}`} />
-                  {mirrorPresent && <span className={s.sensorPulse} />}
-                </div>
-              )}
-              <div
-                className={s.glare}
-                aria-hidden="true"
-                style={{ ["--glare-a" as string]: isMirror ? (mirrorPresent ? "0.28" : "0.2") : "0.11" }}
-              />
-              <div
-                className={`${s.screen} ${interactiveSmooth ? s.morphSmooth : ""}`}
-                data-round={shape === "round" || undefined}
-                style={{
-                  top: `${d.insetTop}%`,
-                  bottom: `${d.insetBottom}%`,
-                  left: `${d.insetX}%`,
-                  right: `${d.insetX}%`,
-                  borderRadius: `${d.screenR}px`,
-                }}
-              >
-                <div className={s.screenInner}>
-                  {renderLiveLovelace(shape, overlay === "kitchen-timer", isMirrorCollapsed)}
-                  {overlay === "voice" && renderRealVoiceOverlay(1)}
-                  {overlay === "notif" && renderRealNotificationOverlay(1)}
-                  {overlay === "mirror-presence" && renderMirrorPresenceOverlay(1)}
-                  {overlay === "kitchen-timer" && renderRealTimerOverlay(1)}
-                </div>
-              </div>
-            </div>
-            {isMirror && (
-              <div
-                className={s.mirrorStandCompact}
-                aria-hidden="true"
-                style={{ width: `calc(min(calc(100vw - 32px), ${d.w}px) * 0.98)` }}
-              />
+          <div
+            className={`${s.modelCompact} ${interactiveSmooth ? s.morphSmooth : ""}`}
+            data-still={shape !== "tablet" || undefined}
+            style={{ width: `min(calc(100vw - 32px), ${stage.toFixed(1)}px)`, ["--screen-zoom" as string]: zoom.toFixed(3) }}
+          >
+            {renderModel(
+              sm,
+              `home-${sm.id}-compact`,
+              shape,
+              <div className={s.screenInner}>
+                {renderLiveLovelace(shape, overlay === "kitchen-timer", isMirrorCollapsed)}
+                {overlay === "voice" && renderRealVoiceOverlay(1)}
+                {overlay === "notif" && renderRealNotificationOverlay(1)}
+                {overlay === "mirror-presence" && renderMirrorPresenceOverlay(1)}
+                {overlay === "kitchen-timer" && renderRealTimerOverlay(1)}
+              </div>,
             )}
           </div>
         </div>
@@ -1551,22 +1580,24 @@ export function MorphStory({
             {/* the glass and the tablet's model share one shadow, cast by whichever shows, so the swap keeps it */}
             <div
               className={s.devices}
-              style={{ filter: faceO > 0.01 ? `drop-shadow(0 22px 26px rgb(0 0 0 / calc(var(--drop-a) * ${faceO.toFixed(3)})))` : undefined }}
+              style={{ filter: dropO > 0.01 ? `drop-shadow(0 22px 26px rgb(0 0 0 / calc(var(--drop-a) * ${dropO.toFixed(3)})))` : undefined }}
             >
               {modelO > 0.01 && (
                 <div
-                  className={s.tabletModel}
-                  style={{ opacity: modelO, pointerEvents: modelLive ? "auto" : "none" }}
+                  className={s.beatModel}
+                  // only the Pixel Tablet lifts off its dock; the wide display's speaker base holds it
+                  data-still={nearBeat !== 4 || undefined}
+                  style={{ width: `${near.stage.toFixed(1)}px`, opacity: modelO, pointerEvents: modelLive ? "auto" : "none" }}
                   inert={!modelLive}
-                  onPointerEnter={(e) => e.pointerType === "mouse" && setTabletHover(true)}
-                  onPointerLeave={() => setTabletHover(false)}
+                  onPointerEnter={(e) => e.pointerType === "mouse" && setModelHover(true)}
+                  onPointerLeave={() => setModelHover(false)}
                 >
-                  {renderTabletModel("home-tablet", timerO, raysO > 0.35)}
+                  {renderModel(nearModel, `home-${nearModel.id}`, currentShape, renderScreenContent())}
                 </div>
               )}
 
               <div
-                className={s.hardwareScale}
+                className={`${s.hardwareScale} ${clickMorph ? s.morphSmooth : ""}`}
                 inert={modelLive}
                 style={{
                   opacity: modelLive ? 0 : 1,
@@ -1582,8 +1613,9 @@ export function MorphStory({
                     style={{
                       // the Pixel Tablet's front, as its model paints it (Porcelain, or Hazel on a dark page: the
                       // model's light-dark() --dev-face), on the glass itself, border included (.bezel's --face layer)
-                      ["--face" as string]: tabletFace,
+                      ["--face" as string]: near.face ?? "transparent",
                       ["--face-o" as string]: faceO.toFixed(3),
+                      ["--drop-o" as string]: dropO.toFixed(3),
                       width: `${geom.w}px`,
                       height: `${geom.h}px`,
                       borderRadius: `${geom.bodyR}px`,
@@ -1616,6 +1648,7 @@ export function MorphStory({
                     <div
                       className={`${s.screen} ${clickMorph ? s.morphSmooth : ""}`}
                       data-round={currentShape === "round" || undefined}
+                      data-mirror={currentShape === "mirror" || undefined}
                       style={{
                         top: `${geom.insetTop}%`,
                         bottom: `${geom.insetBottom}%`,
@@ -1624,34 +1657,12 @@ export function MorphStory({
                         borderRadius: `${geom.screenR}px`,
                       }}
                     >
-                      <div className={s.screenInner}>
-                        {renderLiveLovelace(
-                          currentShape,
-                          raysO > 0.35,
-                          mirrorPresent && mirrorPresenceO > 0.35,
-                        )}
-                        {renderRealVoiceOverlay(assistO)}
-                        {renderRealNotificationOverlay(notifO)}
-                        {renderMirrorPresenceOverlay(mirrorPresenceO)}
-                        {renderRealTimerOverlay(timerO)}
-                      </div>
+                      {renderScreenContent()}
                     </div>
                   </div>
 
                 </div>
 
-                {/* Accurate tall tubular U-shaped steel stand (220/536 ≈ 41% height, 98% width) */}
-                {mirrorFactor > 0.01 && (
-                  <div
-                    className={s.mirrorStand}
-                    aria-hidden="true"
-                    style={{
-                      width: `${(geom.w * 0.98).toFixed(1)}px`,
-                      opacity: mirrorFactor,
-                      transform: `translate3d(-50%, ${(1 - mirrorFactor) * -18}px, 0) scaleY(${0.65 + mirrorFactor * 0.35})`,
-                    }}
-                  />
-                )}
               </div>
             </div>
 
