@@ -171,7 +171,7 @@ object SecretHandoverServer {
             encode = { Base64.encodeToString(it, Base64.NO_WRAP) },
             decode = { runCatching { Base64.decode(it, Base64.DEFAULT) }.getOrNull() },
             log = { Log.i(TAG, it) },
-            onSignIn = { HaAuth.init(context); HaAuth.signInCarriedOver() },
+            onSignIn = { HaAuth.init(context); HaAuth.signInStored("Sign-in carried over by the installer") },
             onDone = { SecretFiles.endHandover(context.applicationContext.filesDir) },
         )
         return AdbSocketServer(SOCKET, TAG) { input, output -> handover.serve(input, output) }

@@ -56,6 +56,50 @@ class SetupStateTest {
     }
 
     @Test
+    fun afterSigningInOnThePanelSetupComesBackOnAddItAtOnce() {
+        // #665: HA's login page hid the screen. Before, the dashboard showed until the 2 min grace ran out.
+        val login = fresh.copy(haKnown = true, uptimeMs = 40_000, usePanelLogin = true, hidForPanelLogin = true)
+        assertFalse("not over Home Assistant's login page", SetupState.decide(login).show)
+        assertFalse("nor while it loads over the dashboard", SetupState.decide(login.copy(dashboardLoaded = true)).show)
+        val signedIn = SetupState.decide(login.copy(usePanelLogin = false, signedIn = true))
+        assertTrue(signedIn.show)
+        assertEquals(SetupFlow.HA, signedIn.step)
+        assertTrue("Add it checks while the grace runs", signedIn.haChecking)
+        // A failed sign-in brings it back on Sign in, over a new login page.
+        val failed = SetupState.decide(login.copy(usePanelLogin = false, onAuthPage = true))
+        assertTrue(failed.show)
+        assertEquals(SetupFlow.SIGNIN, failed.step)
+    }
+
+    @Test
+    fun withoutTheLoginPagesPauseTheDashboardStillWaitsOutTheGrace() {
+        // A panel whose setup screen wasn't up (a Kiln install that carried the sign-in over): HA may know it already.
+        val kiln = fresh.copy(haKnown = true, signedIn = true, uptimeMs = 40_000, panesChosen = true, paneSteps = radio(true))
+        assertFalse(SetupState.decide(kiln).show)
+        assertTrue(SetupState.decide(kiln.copy(uptimeMs = 3 * min)).show)
+    }
+
+    @Test
+    fun addItChecksOnlyWhileTheGraceRuns() {
+        val up = fresh.copy(haKnown = true, signedIn = true, showing = true)
+        assertTrue(SetupState.decide(up).haChecking)
+        assertFalse("grace over", SetupState.decide(up.copy(uptimeMs = 3 * min)).haChecking)
+        assertFalse("Home Assistant said Hello", SetupState.decide(up.copy(haHelloThisProcess = true)).haChecking)
+        assertFalse("added", SetupState.decide(up.copy(haSeen = true)).haChecking)
+        assertFalse("skipped", SetupState.decide(up.copy(haSkipped = true)).haChecking)
+    }
+
+    @Test
+    fun afterTheSignInTheRestOfSetupFollowsAndThenEnds() {
+        val after = fresh.copy(haKnown = true, signedIn = true, hidForPanelLogin = true, haSeen = true)
+        assertEquals(SetupFlow.PANES, SetupState.decide(after).step)
+        assertTrue(SetupState.decide(after).show)
+        val done = SetupState.decide(after.copy(panesChosen = true, paneSteps = radio(true)))
+        assertEquals(SetupFlow.DONE, done.step)
+        assertFalse(done.show)
+    }
+
+    @Test
     fun freshOfflinePanelShowsSetupAtOnce() {
         // First boot after the installer: nothing set up, no Wi-Fi yet. No 30 s "waiting" screen.
         val first = fresh.copy(online = false, offlineForMs = 0, uptimeMs = 1_000, neverSetUp = true)

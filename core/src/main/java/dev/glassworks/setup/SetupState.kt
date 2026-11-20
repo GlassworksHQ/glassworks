@@ -139,6 +139,12 @@ data class SetupInputs(
     val usePanelLogin: Boolean,
     /** The setup screen is already up (not a preview): it stays until every step is done. */
     val showing: Boolean = false,
+    /**
+     * The setup screen was up when the person chose "Sign in on this panel instead", and hid for Home Assistant's login
+     * page. Once that sign-in ends ([usePanelLogin] is cleared: signed in, or it failed) it is up again, like [showing],
+     * so the steps left follow the sign-in (#665).
+     */
+    val hidForPanelLogin: Boolean = false,
     /** The page shows Home Assistant without asking to sign in (a session it already has). */
     val dashboardLoaded: Boolean = false,
     /** Continue on the Panes step, in this process. */
@@ -184,6 +190,11 @@ data class SetupDecision(
     val panesDone: Boolean = true,
     /** The ids of the panes' steps, and of the device's own, that are done. */
     val paneDone: Set<String> = emptySet(),
+    /**
+     * Home Assistant hasn't added the panel, and [SetupRules.haGraceMs] still runs: an entry it already has may
+     * connect first. Add it says it checks instead of only waiting (#665).
+     */
+    val haChecking: Boolean = false,
 ) {
     /** Every step that is done, by id ([SetupFlow.DONE] never is: it's where the screen ends). */
     val done: Set<String>
@@ -217,9 +228,8 @@ object SetupState {
         // Not while the person signs in on Home Assistant's own login page ("Sign in on this panel instead"), from the tap
         // on, while that page loads too: Add it follows Sign in, so it asks once the page shows Home Assistant.
         val panelLoginOpen = i.usePanelLogin && !i.dashboardLoaded
-        if (i.online && i.haKnown && !haEverRecorded && !i.haHelloThisProcess && i.uptimeMs >= rules.haGraceMs && !panelLoginOpen) {
-            reasons += "not added to home assistant"
-        }
+        val haGrace = i.online && i.haKnown && !haEverRecorded && !i.haHelloThisProcess
+        if (haGrace && i.uptimeMs >= rules.haGraceMs && !panelLoginOpen) reasons += "not added to home assistant"
         if (i.online && i.haKnown && wantsSignin) reasons += "sign-in needed"
         // Before Continue on Panes every pending step asks; after it, only those of panes that are on.
         val asking = if (i.panesChosen) pendingWanted else pending
@@ -246,9 +256,13 @@ object SetupState {
         }
         // Once up, the screen stays until everything is done, so it doesn't flicker away between
         // steps (e.g. Wi-Fi joined, HA not discovered yet). It can't start on its own though.
-        val show = reasons.isNotEmpty() || (i.showing && step != SetupFlow.DONE)
+        // Hidden for Home Assistant's login page, it comes back once that sign-in ends (#665). Not on the page's URL: right
+        // after the tap it is still the dashboard's until the login page loads.
+        val up = i.showing || (i.hidForPanelLogin && !i.usePanelLogin)
+        val show = reasons.isNotEmpty() || (up && step != SetupFlow.DONE)
         val paneDone = (i.paneSteps + i.ownSteps).filter { it.done }.map { it.id }.toSet()
-        return SetupDecision(show, step, wifiDone, haDone, signinDone, reasons, WifiStep.improv(i.improv, i.input), panesDone, paneDone)
+        return SetupDecision(show, step, wifiDone, haDone, signinDone, reasons, WifiStep.improv(i.improv, i.input), panesDone, paneDone,
+            haChecking = haGrace && i.uptimeMs < rules.haGraceMs)
     }
 
     /**

@@ -487,6 +487,9 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   it straight away. The *Thread join* sensor says how it went. Pasting the dataset still works.
 
 ### Fixed
+- **Setup carries on after you sign in on the panel.** After *Sign in on this panel instead*, the dashboard showed for
+  up to 2 minutes before setup came back on *Add it*, so setup looked finished. Setup now comes back as soon as you're
+  signed in. While Home Assistant may still find the panel by itself, *Add it* says it's checking.
 - **Signing in on the panel's own screen now keeps the sign-in.** *Sign in on this panel instead* shows Home
   Assistant's login page on the panel, also when the panel's browser was still signed in, and the sign-in is stored
   as the QR code's is. Before, the dashboard could open through the browser's old session with nothing stored, so

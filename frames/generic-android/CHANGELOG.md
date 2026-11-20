@@ -24,6 +24,9 @@ line of each version is what Home Assistant shows on the update card. A change o
   back to Stable never installs an older version: the panel waits for a stable release newer than the one it runs.
 
 ### Fixed
+- **Setup carries on after you sign in on the panel.** After *Sign in on this panel instead*, the dashboard showed for
+  up to 2 minutes before setup came back on *Add it*, so setup looked finished. Setup now comes back as soon as you're
+  signed in. While Home Assistant may still find the panel by itself, *Add it* says it's checking.
 - **No log-access prompt on every start, on Android 10 and later.** The app asked for the system log for
   "Allow a new computer", which only works on Android 6 to 9. Where an install over adb granted it, Android 13 and
   later showed "Allow access to all device logs?" each time the app started. Now only Android 6 to 9 are asked.

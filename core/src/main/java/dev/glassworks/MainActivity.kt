@@ -95,6 +95,9 @@ open class MainActivity : Activity() {
     /** "Sign in on this panel instead" was chosen: don't cover HA's login page again (this process). */
     private var usePanelLogin = false
 
+    /** The setup screen hid for that login page: it comes back once that sign-in ends (#665). */
+    private var setupHidForLogin = false
+
     /** That sign-in: Home Assistant's login page on the panel, for a refresh token of the panel's own (#633). */
     private val panelSignIn by lazy { PanelSignIn(HaTokenClient(UrlConnectionPoster())) }
 
@@ -423,6 +426,7 @@ open class MainActivity : Activity() {
             signedOut = signedOutHere,
             usePanelLogin = usePanelLogin,
             showing = setupOverlay.isShowing && !setupPreview,
+            hidForPanelLogin = setupHidForLogin && !setupPreview,
             paneSteps = steps,
             ownSteps = deviceSteps.map { PaneStepFacts(it.id, it.done(), it.reason) },
             panesChosen = setupOverlay.panesChosen,
@@ -471,6 +475,8 @@ open class MainActivity : Activity() {
             if (d.reasons.isNotEmpty()) Log.i(TAG, "Setup screen: ${d.reasons.joinToString()} (step ${d.step})")
             lastSetupReasons = d.reasons
         }
+        // Up again (the screen's own latch takes over) or nothing left: the login page's pause is over.
+        if (d.show || d.step == SetupFlow.DONE) setupHidForLogin = false
         if (d.show) {
             setupOverlay.render(setupModel(d, d.step, d.done, preview = false))
         } else if (setupOverlay.isShowing && setupOverlay.model?.step != SetupFlow.DONE) {
@@ -516,6 +522,7 @@ open class MainActivity : Activity() {
             signinMoved = !preview && HaAuth.movedAway,
             preview = preview,
             hotspot = if (preview) null else hotspotCard(),
+            haChecking = d.haChecking,
         )
 
     // ---- setup: the panel's own Wi-Fi (#197)
@@ -732,6 +739,7 @@ open class MainActivity : Activity() {
     }
 
     private fun onUsePanelLogin() {
+        setupHidForLogin = setupOverlay.isShowing && !setupPreview
         if (setupPreview) closeSetupPreview()
         usePanelLogin = true
         setupOverlay.hide()
@@ -763,7 +771,7 @@ open class MainActivity : Activity() {
             if (failed == null) {
                 Log.i(TAG, "Signed in on this panel (refresh token stored)")
                 // Drops any access token cached for an earlier sign-in, and tells every screen.
-                HaAuth.signInCarriedOver()
+                HaAuth.signInStored("Signed in on this panel")
                 return@Thread
             }
             Log.w(TAG, "Sign-in on this panel failed: $failed")

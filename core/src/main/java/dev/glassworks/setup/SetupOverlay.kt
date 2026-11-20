@@ -105,6 +105,8 @@ class SetupOverlay(
         val hotspot: dev.glassworks.setup.HotspotStep.Card? = null,
         /** Signed in for an address Home Assistant left (#467): Sign in says why it asks again. */
         val signinMoved: Boolean = false,
+        /** [SetupDecision.haChecking]: Add it says it checks whether Home Assistant knows the panel already (#665). */
+        val haChecking: Boolean = false,
     )
 
     var onChooseNetwork: (() -> Unit)? = null
@@ -905,7 +907,7 @@ class SetupOverlay(
             return null
         }
         cardTitle.text = "Add it in Home Assistant."
-        waitingText.text = "Waiting for Home Assistant…"
+        waitingText.text = if (m.haChecking) HA_CHECKING else "Waiting for Home Assistant…"
         cardBody.text = SpannableStringBuilder().apply {
             append("Settings → Devices & services → ")
             val start = length
@@ -1014,7 +1016,7 @@ class SetupOverlay(
         }
         val url = "http://$ip:${OAuth.SIGNIN_PORT}${dev.glassworks.setup.LanSetup.PAGE}"
         // Signed in, and only Home Assistant's add is left: nothing to scan any more (#484).
-        if (shown() == SetupFlow.HA && SetupFlow.SIGNIN in m.done && SetupFlow.HA !in m.done) return bindAddWait(url)
+        if (shown() == SetupFlow.HA && SetupFlow.SIGNIN in m.done && SetupFlow.HA !in m.done) return bindAddWait(url, m.haChecking)
         if (qrFor != url) {
             qrImage.setImageBitmap(QrCode.bitmap(url, px(200f)))
             qrFor = url
@@ -1026,7 +1028,7 @@ class SetupOverlay(
     }
 
     /** Without touch, signed in: waiting for Home Assistant to add the panel, and where to do that. */
-    private fun bindAddWait(url: String): View {
+    private fun bindAddWait(url: String, checking: Boolean): View {
         cardTitle.text = "Add it in Home Assistant."
         cardBody.text = SpannableStringBuilder().apply {
             append("Settings → Devices & services, where ")
@@ -1035,7 +1037,7 @@ class SetupOverlay(
             setSpan(ForegroundColorSpan(TX), start, length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             append(" shows up as discovered. If Home Assistant knew this panel before a reinstall, its entry asks to re-authenticate.")
         }
-        waitingText.text = "Waiting for Home Assistant to add it…"
+        waitingText.text = if (checking) HA_CHECKING else "Waiting for Home Assistant to add it…"
         foot.text = "Another computer? $url"
         foot.visibility = View.VISIBLE
         return waiting
@@ -1349,6 +1351,9 @@ class SetupOverlay(
 
     companion object {
         private val GROUPS = mapOf(SetupFlow.HA to "Home Assistant", SetupFlow.PANES to "Panes")
+
+        /** Add it's waiting line while Home Assistant may still connect on its own ([Model.haChecking]). */
+        const val HA_CHECKING = "Checking whether Home Assistant knows this panel…"
 
         /** Without touch, Bluetooth setup fills the Wi-Fi card while it takes Wi-Fi: open by itself, a retry, a join. */
         private val NO_TOUCH_IMPROV = setOf(WifiStep.Phase.AUTHORIZED, WifiStep.Phase.FAILED, WifiStep.Phase.CONNECTING)

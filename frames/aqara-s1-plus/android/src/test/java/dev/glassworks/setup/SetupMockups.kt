@@ -48,10 +48,11 @@ class SetupMockups {
         step: String, wifi: WifiSetupStatus.Snapshot = online, haUrl: String? = ha,
         improv: ImprovFacts = ImprovFacts(), installer: InstallerWifi? = null, preview: Boolean = false,
         done: Set<String> = flow.takeWhile { it != step }.toSet(), panelIp: String? = ip,
-        hotspot: dev.glassworks.setup.HotspotStep.Card? = null, signedIn: Boolean = false,
+        hotspot: dev.glassworks.setup.HotspotStep.Card? = null, signedIn: Boolean = false, haChecking: Boolean = false,
     ) = SetupOverlay.Model(
         step = step, done = done, wifi = wifi, haUrl = haUrl, haSource = "mdns", panelIp = panelIp,
         signedIn = signedIn, improv = WifiStep.improv(improv), installer = installer, preview = preview, hotspot = hotspot,
+        haChecking = haChecking,
     )
 
     /** The setup hotspot's states (#197), with a made-up network. */
@@ -142,6 +143,8 @@ class SetupMockups {
         ))
         shot("setup-02-wifi-connected", model(SetupFlow.WIFI, done = setOf(SetupFlow.WIFI), preview = true))
         shot("setup-03-ha-add", model(SetupFlow.HA))
+        // #665: signed in, and Home Assistant may still connect on its own within its grace.
+        shot("setup-03b-ha-checking", model(SetupFlow.HA, signedIn = true, haChecking = true))
         shot("setup-04-ha-added", model(SetupFlow.HA, done = setOf(SetupFlow.WIFI, SetupFlow.HA), preview = true))
         shot("setup-05-ha-looking", model(SetupFlow.HA, haUrl = null))
         shot("setup-06-signin", model(SetupFlow.SIGNIN))
@@ -182,6 +185,7 @@ class SetupMockups {
         shot("setup-28-hotspot-asked-failed", model(SetupFlow.WIFI, wifi = offline, improv = idle, hotspot = Spot.askedFailed))
         // #484: the setup page signed it in; only Home Assistant's add is left.
         shot("setup-29-no-touch-ha-waiting", addWait, frame = TestFrames::mirror)
+        shot("setup-29b-no-touch-ha-checking", addWait.copy(haChecking = true), frame = TestFrames::mirror)
     }
 
     /**
