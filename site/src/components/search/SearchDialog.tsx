@@ -10,7 +10,7 @@ import s from "./Search.module.css";
  * server, no third party. Results are grouped by section, guides first and engineering notes last.
  */
 const PAGEFIND = "/_next/static/pagefind/pagefind.js";
-const ORDER = ["Using a panel", "Frames", "Philosophy", "Panes and libraries", "Project", "Engineering notes"];
+const ORDER = ["User Guide", "Developers & Hardware Makers", "Hardware Research"];
 
 type Sub = { title: string; url: string; excerpt: string };
 type Data = { url: string; excerpt: string; meta: { title?: string; section?: string }; sub_results: Sub[] };

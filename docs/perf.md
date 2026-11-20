@@ -9,147 +9,66 @@
   </a>
 </p>
 
-**Clarity** is the Glassworks perf test. `tools/perf/run.sh` measures how good a wall panel a frame
-(a device definition, such as the S1's `aqara-s1-plus`) makes, and gives it a Clarity grade from
-**A+** to **E**, as in "Clarity A". The name lives in `rubric.json` (`name`), which the report, the
-summary and `grade.ts` read; the files keep their `perf` paths. The letter says **the biggest
-fixed dashboard on which every wall-panel task still feels good**:
+**Clarity** is the standardized performance benchmark for Glassworks wall panels. Running `tools/perf/run.sh` tests how smoothly a frame handles real Home Assistant dashboards and awards it a letter grade from **A+** to **E** (for example, *Clarity B*). Each letter represents the largest standardized dashboard where everyday wall-panel interactions—taps, scrolling, live state updates, more-info dialogs, and camera streams—still feel responsive:
 
-| Grade | Meaning |
+| Grade | What it means |
 |---|---|
-| A+ | Premium: an A where every task on large dashboards also holds 60 fps |
-| A | A good wall panel even for large dashboards |
-| B | A good wall panel for typical dashboards, with a camera |
-| C | A good wall panel for typical dashboards without a camera |
-| D | A good wall panel for light dashboards |
-| E | Not a good wall panel, even for light dashboards |
+| **A+** | Premium: meets grade A and holds a steady 60 fps across large dashboards |
+| **A** | Great wall panel even for large, dense dashboards |
+| **B** | Great wall panel for typical dashboards with a live camera |
+| **C** | Great wall panel for typical dashboards without a camera |
+| **D** | Great wall panel for light dashboards |
+| **E** | Struggles to feel responsive even on light dashboards |
 
-Typical is measured twice in each run: without a camera (`typical-nocam`) and with one (`typical`).
-A live camera costs a panel more than anything else on a dashboard, and many homes have none, so C
-asks only for the camera-free typical, and B for typical with its camera playing (the maintainer,
-2026-11-13). Each letter adds one page: D light, C typical without a camera, B typical with one, A
-and A+ heavy. The thresholds are those of the pre-release rubrics; only the ladder's steps changed.
+Because a live WebRTC camera stream is the heaviest load most dashboards carry—and many wall panels do not display cameras—Clarity measures the typical dashboard both without a camera (`typical-nocam`, grade C) and with a live 720p camera (`typical`, grade B). Each step up the scale adds one dashboard tier: **D** (light), **C** (typical without camera), **B** (typical with camera), and **A / A+** (heavy).
 
-The report opens with one line such as "Aqara S1 Plus: Clarity C, a good wall panel for typical dashboards without a camera.
-Held back by large dashboards: scrolling averages 41.5 fps (p95 50 ms)." (an example of the
-format, not a measured result). The second sentence names the tasks that keep the frame from the
-next letter up. A table under it shows each page's tasks.
+Every report opens with a plain-English headline and summary naming both the grade and the specific tasks holding the device back from the next letter up (for example: *"Aqara S1 Plus: Clarity C, a good wall panel for typical dashboards without a camera. Held back by large dashboards: scrolling averages 41.5 fps (p95 50 ms)."*). Grades are never hardcoded: each frame stores its measured [summary](#the-summary-glassworksperf-summary3), and `glassworks.dev` calculates the letter at render time against `tools/perf/page/rubric.json` (see [Showing the grade](#showing-the-grade)).
 
-The letter is derived, so it isn't stored anywhere it is shown: a frame's
-[summary](#the-summary-glassworksperf-summary3) holds the measurements, and the site computes the
-letter at render time from the summary and `rubric.json` (see [Showing the grade](#showing-the-grade)).
+Clarity runs **Clarity v1** (protocol 1, rubric 1) on three standardized **reference dashboards**—*light*, *typical*, and *heavy*—using a pinned release of Home Assistant's real frontend served by a local fake Home Assistant (`tools/perf/fakeha.py`). Because every panel receives the exact same cards, layout, and update stream over USB, grades reflect the hardware and Glassworks runtime rather than your home network or Home Assistant server. Background panes, the radio, and device thermals remain active just as they do in daily use (see [What the grade does and doesn't tell you](#what-the-grade-does-and-doesnt-tell-you)), and thresholds come from published web and mobile UX guidelines (Core Web Vitals, RAIL, Android vitals) rather than tuning to any specific panel.
 
-**Version numbers on this page.** Clarity is v1, measured with protocol 1 and graded with rubric 1
-(2026-11-19, the version Glassworks 1.0.0 ships with). The numbers started again then, as they did on
-2026-11-14, so a protocol or rubric number in a dated or "since" note below is an earlier one's: the
-pre-release protocols 1 to 8 (to 2026-11-13), or the earlier v2 and v3 (2026-11-14 to 2026-11-19), whose
-protocol 3 is today's protocol 1 ([Versions](#versions)).
-
-The grade is measured on three fixed **reference dashboards** that this test ships: light, typical
-and heavy. Since protocol 4 (2026-11-13) they are **Home Assistant's real frontend**, a pinned
-release, showing fixed Lovelace dashboards. A small fake Home Assistant on your computer
-(`tools/perf/fakeha.py`) serves that frontend and answers its websocket with fixed states and the
-same stream of updates every time. So the grade doesn't depend on your Home Assistant, your
-dashboard or your network. The one way your panel's own setup reaches it is background load: the
-panes, the radio and the device's heat keep running while the pages are measured, as they do every
-day (see [What the grade does and doesn't tell you](#what-the-grade-does-and-doesnt-tell-you)). The
-bands underneath come from published guidelines (Core Web Vitals, RAIL, Android vitals), not from
-any frame's own numbers.
-
-The test also measures RAM on the reference dashboards (per process, at idle and at the peak, and
-per pane), the panel as you run it (your own dashboard, memory, CPU) and animation capacity. Those
-are reported separately and never graded. Every page runs in the kiosk's own GeckoView, loaded the
-way the kiosk loads your dashboard. The one thing it needs from the app is the test hold, which
-keeps the screen on for the run (#240; see [What it changes on the device](#what-it-changes-on-the-device)).
+Alongside the graded tasks, Clarity records per-process and per-pane RAM usage, idle CPU, real-dashboard reload times, and animation capacity for engineering visibility without affecting the letter grade. For pre-release protocol and renumbering notes, see [Version history](#version-history) at the bottom of this page.
 
 ## Run it
 
-You need adb, Python 3.11 or later, ffmpeg with libx264 (for the camera streams; it runs only on your
-computer) and the kiosk installed on the device, built from `main` after the test dashboard came in (the
-test hold of #240 and its dashboard, `test_dashboard`; the runner refuses an app without either). The first run makes a Python venv for the fake's
-WebRTC camera (aiortc, about 93 MB on macOS (measured 2026-11-14), from `tools/perf/webrtc-requirements.txt`, every wheel's hash
-checked) in `~/.cache/glassworks-perf`. The computer needs an IPv4 address that isn't loopback (any
-network interface that is up; the camera's packets never leave the computer). Let the device idle for 10 minutes
-first, with the screen on, at normal room temperature, and the kiosk's zoom at its default ("auto").
-The run changes none of the kiosk's settings and not its sign-in to Home Assistant (see
-[What it changes on the device](#what-it-changes-on-the-device)).
+Before running Clarity, make sure you have `adb`, Python 3.11 or newer, `ffmpeg` with `libx264` (runs on your computer to generate camera streams), and a recent Glassworks build installed on the device (supporting the test hold and `test_dashboard` extras). The first run creates a local Python virtual environment in `~/.cache/glassworks-perf` for WebRTC cameras (`aiortc`, ~93 MB from `tools/perf/webrtc-requirements.txt`, verified by wheel hashes). Your computer needs an active non-loopback IPv4 interface (camera traffic stays strictly local).
+
+Let the panel idle with its screen on for 10 minutes at room temperature with zoom left at default (`auto`). The benchmark never modifies your saved dashboard URL or Home Assistant sign-in (see [What it changes on the device](#what-it-changes-on-the-device)).
 
 ```sh
 tools/perf/run.sh --frame aqara-s1-plus --name "Aqara S1 Plus" --runs 3 --out perf-s1
 ```
 
-| Option | Default | What |
+| Option | Default | What it does |
 |---|---|---|
-| `--frame` | (required) | The frame id that goes in the report |
-| `--name` | the frame id | The frame's name in the report's headline |
-| `--serial` | `$ANDROID_SERIAL` | Which device |
-| `--package` | `sh.edm.s1kiosk` | The Glassworks app to measure: `dev.glassworks.generic_android` for the generic app, `dev.glassworks.generic_android.legacy` for its legacy build (the Mirror) |
-| `--activity` | read from the device | The app's activity that takes Clarity's extras. The runner reads it from the app's task (see [Other Glassworks apps, and Android 6](#other-glassworks-apps-and-android-6)); give it only if the app hasn't run since the device booted |
-| `--runs` | 3 | Repeats of each part. The report gives the median and range |
-| `--pane-ram` | | Also measure each switchable pane's RAM, with the panes' settings now, which it puts back: `assist=on,sendspin=on,wall-base=on,time-zone=on,diagnostics=on,mic=on` (`mic` is Assist's microphone: on unless muted). It runs one warm-up cycle first, not recorded. See [RAM](#ram) |
-| `--taps` | 10 | Taps on each reference dashboard's toggle. 0 skips them: tap isn't measured, which fails every level, so the grade is E, provisional |
-| `--skip-synthetic`, `--skip-reference`, `--skip-real-use` | | Skip the animation test page (detail), the reference dashboards (the grade), or the real-use part. Skipping the reference dashboards gives no grade (refused, not an E) |
-| `--quick` | | Short ladder on the animation test page (1, 16 and 128 elements), to check the setup works |
-| `--apk FILE` | | Add the APK's size per ABI to the report (repeat for each ABI) |
-| `--idle-only LABEL` | | Take one idle sample with this label and nothing else (for [panes on your dashboard](#ram-of-each-pane-on-your-own-dashboard)) |
-| `--max-start-temp` | 50 | Waits up to 10 minutes for the CPU to cool below this (°C) |
-| `--sf-poll` | `auto` | How SurfaceFlinger's frames are read. `auto` runs the check below first; `0` reads once after each window (the S1's way); seconds read that often during each window too. A number skips the check |
-| `--sf-check-only` | | Run the checks before a run and stop: SurfaceFlinger's history (`sfcheck.json`) and this computer's network (`netcheck.json`). About 40 s, no cameras, nothing graded |
+| `--frame` | *(required)* | Frame ID written into the report |
+| `--name` | Frame ID | Display name used in the report headline |
+| `--serial` | `$ANDROID_SERIAL` | Target adb device serial |
+| `--package` | `sh.edm.s1kiosk` | Glassworks package to test (`dev.glassworks.generic_android` for Generic Android, `dev.glassworks.generic_android.legacy` for Android 6–7 / Mirror) |
+| `--activity` | Auto-detected | Activity accepting Clarity extras (pass manually only if the app has not run since reboot; see [Other Glassworks apps, and Android 6](#other-glassworks-apps-and-android-6)) |
+| `--runs` | `3` | Number of measurement runs (report uses medians and ranges) |
+| `--pane-ram` | Off | Measure per-pane RAM impact by toggling switchable panes and restoring them afterward (`assist`, `sendspin`, `wall-base`, `time-zone`, `diagnostics`, `mic`); includes one unrecorded warm-up cycle (see [RAM](#ram)) |
+| `--taps` | `10` | Number of toggle taps per reference view (`0` skips tap timing and yields a provisional E) |
+| `--skip-synthetic`, `--skip-reference`, `--skip-real-use` | Off | Skip the animation ladder, graded reference views (yields no grade), or real-dashboard measurements |
+| `--quick` | Off | Run a shortened animation ladder (1, 16, and 128 elements) to smoke-test setup |
+| `--apk FILE` | None | Record APK size per ABI in the report (repeatable) |
+| `--idle-only LABEL` | None | Capture a single idle sample under `LABEL` ([per-pane dashboard RAM](#ram-of-each-pane-on-your-own-dashboard)) |
+| `--max-start-temp` | `50` | Wait up to 10 minutes for CPU temperature to cool below this threshold (°C) |
+| `--sf-poll` | `auto` | SurfaceFlinger sampling strategy: `auto` runs the preflight check, `0` reads once per window (S1 default), or pass seconds to poll during windows |
+| `--sf-check-only` | Off | Run preflight SurfaceFlinger (`sfcheck.json`) and network (`netcheck.json`) checks (~40 s) and exit |
 
-The first run fetches HA's frontend (117 MB, once) into `~/.cache/glassworks-perf` and checks its
-SHA-256 (`tools/perf/hafrontend.py`). A full run with `--runs 3` should take about 40 minutes, and
-`--pane-ram` adds about 10. Those are estimates from the step timings, not yet timed on a device
-under protocol 4. A graded run is a restart back to the reference dashboard's start view, then the
-four reference views (light, typical without and with its camera, heavy), each opened in the loaded
-frontend as a view tab opens it, with 10 taps and 6 swipes each, then an idle sample on the typical
-view.
+On its first run, Clarity caches Home Assistant's frontend (~117 MB) in `~/.cache/glassworks-perf` and verifies its SHA-256 hash (`tools/perf/hafrontend.py`). A full 3-run benchmark takes roughly 40 minutes (`--pane-ram` adds ~10 minutes). Each graded run restarts to the start view and then navigates through all four reference views (*light*, *typical without camera*, *typical with camera*, and *heavy*) inside the loaded frontend with 10 taps, 6 swipes, and 3 more-info dialogs per view, followed by an idle sample.
 
-For the site, export the frame's summary from the finished report:
+Export the compact site summary from a completed report:
 
 ```sh
 tools/perf/summary.py perf-s1/report.json perf-s1/summary.json --report-url report.json
 ```
 
-It refuses incomplete or not comparable measurements unless you pass `--allow-provisional`; then
-its `complete` is `false` and its facts say why.
-
-The output directory holds the raw files, `report.json` and `report.md`. A full run needs a new or
-empty directory; `--idle-only` adds samples to an existing one. `python3
-tools/perf/report.py <dir>` rebuilds the report from the raw files at any time, without the device.
+Incomplete or non-comparable runs are refused unless `--allow-provisional` is passed (which sets `complete: false` and records why). You can regenerate `report.json` and `report.md` offline anytime with `python3 tools/perf/report.py <dir>`.
 
 ### The test computer's network
 
-The fake Home Assistant runs on your computer. Put that computer where a real Home Assistant server would be: on a
-wired link, or a quiet one. Its stalls otherwise land in the panel's numbers, wherever the test's traffic crosses
-its link:
-
-- **The live updates**, when adb reaches the panel over the network (wireless debugging). The fake's stream goes
-  through `adb reverse`, which then rides this computer's Wi-Fi. Over USB it doesn't.
-- **The cameras' video**, when it goes over the LAN (`lan-udp` or `lan-turn`, below), on any panel.
-
-Before the graded part, `run.sh` runs `tools/perf/netcheck.py` (#649). It sends 40 pings to this computer's
-default gateway and 40 to the panel, at the same time (8 s), and writes the numbers to `netcheck.json`. No
-address is recorded. If this computer's own pings to its gateway go over 20 ms, at p95 or at most, and that link
-carried graded traffic, the run warns and the report is provisional ("the test computer's network"). The
-numbers are in `report.json` (`test_network`) and on one line of `report.md` either way.
-
-Measured 2026-11-19, the Pixel Tablet's run 3:
-
-| From → to | min | max |
-|---|---|---|
-| A Mac on Wi-Fi (the fake's computer) → its gateway | 2.3 ms | 68 to 84 ms |
-| The tablet → the same gateway | 2.3 ms | 9.7 ms |
-| The Mac → the tablet | | 93 to 97 ms |
-
-The live changes then waited 65 to 91 ms (p95) to reach the page. That was the Mac's link, not the tablet's: a
-low-latency Wi-Fi lock on the tablet (#646) changed nothing. On a Mac, Wi-Fi stalls like this usually come from
-AWDL (AirDrop, Sidecar), which takes the radio off its channel now and then. For a run, use a wired link, or turn
-AWDL off with `sudo ifconfig awdl0 down` and back on with `sudo ifconfig awdl0 up` after. AirDrop or Sidecar may
-turn it back on by themselves.
-
-The S1's published grade (2026-11-17) ran over USB adb, so its live updates didn't cross the Mac's link: their
-arrival waits were 32 to 56 ms (p95) on light and typical. Its cameras went over the LAN, so their numbers may
-include the Mac's link. They don't decide its D: that's typical without a camera, blocked 2.7 s after it's drawn.
+Because `fakeha.py` runs on your computer, connect your test machine over wired Ethernet (or a quiet link) whenever graded traffic crosses the LAN—such as wireless adb (`adb reverse`) or LAN camera streaming (`lan-udp` / `lan-turn`). Before graded runs begin, `tools/perf/netcheck.py` pings both the default gateway and the panel (40 pings over 8 seconds, recording timings without addresses in `netcheck.json`). If gateway latency exceeds 20 ms while graded traffic uses that link, the report warns and marks the grade provisional. On macOS Wi-Fi, background AWDL traffic (AirDrop/Sidecar) frequently causes 60–90 ms spikes; use Ethernet or temporarily disable AWDL (`sudo ifconfig awdl0 down`, re-enabling with `up` afterward).
 
 ### What it changes on the device
 
@@ -2360,3 +2279,10 @@ frontend upgrade, record the traffic again and add any new command to the fake.
 The node tests need node 24 or later, which runs `grade.ts` without a build step.
 
 CI runs both in the `scripts` job.
+
+## Version history
+
+Clarity shipped with Glassworks 1.0.0 as **Clarity v1** (`clarity: 1`, protocol 1, rubric 1). During pre-release development, the protocol and rubric went through two earlier numbering sequences before resetting to v1 for release:
+
+- **Pre-release protocols 1–8 and rubrics 1–11:** Iterated from synthetic pages to Home Assistant's real frontend (protocol 4), live HLS and WebRTC cameras (protocols 5–8), and feel-based grading for live updates and scrolling (rubric v5–v11). Pre-release summaries carry no `clarity` field and are flagged as `re-measure`.
+- **Early v1–v3 iterations:** Split view-open paint time from post-draw Total Blocking Time (`blocking_ms`, early v2), added Home Assistant more-info dialog grading (early v3), and widened the live-update threshold to 150 ms good / 250 ms fluid. When the numbers reset to **Clarity v1** (`clarity: 1`, protocol 1, rubric 1), early v3 measurements remained byte-compatible and can be regraded with `tools/perf/regrade.py <run-dir>`, while runs dated before `clarity_measured_since` (`2026-11-16 UTC`) or from early v2 are marked `re-measure`.

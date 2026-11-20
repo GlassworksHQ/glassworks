@@ -1,191 +1,115 @@
-# Using the panel's Zigbee/Thread radio
+# Using the Aqara S1 Plus Zigbee and Thread radio
 
-The S1 Plus has a Silicon Labs EFR32 radio inside. Glassworks can offer it to Home Assistant in one
-role at a time. You pick the role in Home Assistant, or on the panel itself ([below](#on-the-panel)).
-This page is the how-to. [radio.md](radio.md) is the technical reference: how each mode works, what was tested, and
-the root helper.
+The Aqara Panel Hub S1 Plus has a built-in Silicon Labs EFR32 802.15.4 radio. Glassworks lets you hand that radio to Home Assistant in one role at a time—either from the panel's own settings menu or from the panel's ESPHome device page in Home Assistant.
 
-You need the panel's root helper (installed by the [web installer](install.md)) for every mode except
-*Off*. The panel shows up in Home Assistant as an ESPHome device, and all of the controls below are on
-that device's page.
+This page is the everyday setup guide. For deep technical details on firmware, firewall rules, and the root helper, see the [radio technical reference](radio.md).
 
-Home Assistant adds every radio control except **Radio status** turned off, because you set them
-once. Turn on the ones you need on the device page first ([how](../../../docs/esphome.md#categories-and-defaults)),
-or use the panel's own settings menu ([below](#on-the-panel)), which needs nothing turned on. A panel
-that Home Assistant already had before this change keeps its controls as they were.
+All active radio modes require the panel's root helper (installed automatically by [Kiln](install.md)). Because most people configure their radio once and leave it alone, Home Assistant creates all radio controls except **Radio status** disabled by default. You can either enable the controls you need on the ESPHome device page ([how](../../../docs/esphome.md#categories-and-defaults)) or configure everything directly from the panel's settings menu ([below](#on-the-panel)) without enabling extra entities in Home Assistant.
 
 ## Pick a mode
 
-Set **Radio mode** on the panel's device page (turn it on first, as above), or on the panel:
+Choose a role using **Radio mode** in Home Assistant or under **Settings → Radio** on the panel:
 
-| Mode | What the panel becomes | Status |
+| Mode | Role | Status |
 |---|---|---|
-| **Off** (default) | Nothing; the radio is idle | Works |
-| **Zigbee coordinator (TCP)** | The coordinator of a Zigbee network, for ZHA (or Zigbee2MQTT, below) | Works with ZHA; Zigbee2MQTT experimental |
-| **Zigbee router (repeater)** | A repeater in your existing Zigbee network | Experimental; joined a real home network |
-| **Thread border router** | Runs its own Thread network, for Home Assistant's OpenThread Border Router integration | Works |
-| **Thread router (repeater)** | A repeater in your existing Thread network | Experimental; joined a real home network |
+| **Off** (default) | Radio stays idle and Aqara's stock radio services remain stopped | Ready |
+| **Zigbee coordinator (TCP)** | Hosts a Zigbee network over your LAN for ZHA or Zigbee2MQTT | Works with ZHA; experimental with Zigbee2MQTT |
+| **Zigbee router (repeater)** | Joins an existing Zigbee network to extend its mesh range | Experimental (tested joining a home network) |
+| **Thread border router** | Runs a Thread border router for Home Assistant's OpenThread Border Router integration | Works |
+| **Thread router (repeater)** | Joins an existing Thread network to extend its mesh range | Experimental (tested joining a home network) |
 
-*Thread border router* and *Thread router (repeater)* are different roles: the border router starts a
-Thread network of its own; the router joins the one you already have (from Home Assistant's
-OpenThread Border Router app, or another border router) and extends it.
+Note the distinction between the two Thread roles: **Thread border router** creates and routes a Thread network to your LAN, while **Thread router (repeater)** simply joins a Thread network you already have (from Home Assistant's OpenThread Border Router or another border router) to extend coverage.
 
-Before 0.4.3 the repeaters were called *Zigbee router* and *Thread router*. Automations that set
-**Radio mode** to the old names need updating.
+*(If you have automations written before v0.4.3, note that the repeater options were renamed from "Zigbee router" and "Thread router" to include "(repeater)".)*
 
-**Radio status** says what the radio is doing, and who may connect to it. If something doesn't work,
-look there first.
-
-Only one Zigbee coordinator can run per ZHA install, and Zigbee and Thread can't run at the same time
-on this radio (Home Assistant dropped that kind of sharing too).
+Whenever you change modes or troubleshoot a connection, check **Radio status** first—it reports what the radio is running and which clients are allowed to connect. Keep in mind that ZHA supports only one Zigbee coordinator per instance, and this radio cannot run Zigbee and Thread simultaneously.
 
 ## On the panel
 
-The kiosk settings menu (tap the top-left corner five times) has a **Radio** section:
+Open the hidden settings menu by tapping the top-left corner of the screen five times, then select **Radio**. From there you can:
 
-- the radio's switch at the top right: off turns the radio off (it asks first), on shows the roles;
-- the same roles as **Radio mode**, technology first: **Zigbee** (Coordinator, Repeater β) and
-  **Thread** (Border router, Repeater β), the one that is on lit. Tap another to switch; it asks
-  first, because it restarts the radio;
-- under them, what to do next for the role that is on, with a QR code your phone can scan to open
-  the right page in Home Assistant (shown once the panel knows Home Assistant's address), and the role's
-  own buttons: **Zigbee stack**, **Join / Leave Zigbee network**, **Leave Thread network**. Leaving a
-  network asks first. *How does this work?* has the longer explanation;
-- who may connect ([below](#who-may-connect)).
+- Toggle the radio on or off using the top-right switch (turning it off prompts for confirmation first).
+- Pick your role grouped by protocol—**Zigbee** (*Coordinator* or *Repeater β*) or **Thread** (*Border router* or *Repeater β*). Switching roles asks for confirmation because it restarts the radio.
+- Follow the tailored next steps for your active role, including a QR code your phone can scan to jump straight to the right Home Assistant setup page, plus role-specific buttons (**Zigbee stack**, **Join / Leave Zigbee network**, and **Leave Thread network**).
+- Configure [who may connect](#who-may-connect) to the radio's network ports.
 
-During setup you pick the mode on the Panes step; this section is where you find what to do next. The
-buttons do exactly what the Home Assistant controls of the same name do. In Home Assistant they only
-work over the panel's encrypted connection; on the panel, being there is what allows them, as for the
-"who may connect" field.
+Every button on the panel performs the exact same action as its matching Home Assistant control. While Home Assistant controls require an encrypted ESPHome connection, physical access to the panel authorizes changes directly.
 
 ## Zigbee coordinator with ZHA
 
-1. Set **Radio mode** to *Zigbee coordinator (TCP)* and wait until **Radio status** starts with `ok`.
-2. In Home Assistant, add the **Zigbee Home Automation** integration. Choose radio type **EZSP** and
-   enter the serial path `socket://<panel IP>:6638` (Radio status shows it).
-3. When ZHA asks about the network, choose **keep the radio's network settings**. Creating a new
-   network or restoring a backup hangs until a fix in ZHA's radio library
-   ([bellows#774](https://github.com/zigpy/bellows/pull/774), merged on 2026-11-10) reaches a Home
-   Assistant release.
+1. Set **Radio mode** to **Zigbee coordinator (TCP)** and wait until **Radio status** starts with `ok`.
+2. In Home Assistant, add the **Zigbee Home Automation (ZHA)** integration. Choose radio type **EZSP** and enter the serial path `socket://<panel IP>:6638` (also displayed in **Radio status**).
+3. When ZHA asks how to initialize the network, select **Keep the radio's network settings**. *(Creating a brand-new network or restoring a backup hangs on older ZHA builds until upstream fix [zigpy/bellows#774](https://github.com/zigpy/bellows/pull/774) lands in a Home Assistant release.)*
 
 ## Zigbee coordinator with Zigbee2MQTT (experimental)
 
-Zigbee2MQTT needs a newer Zigbee stack than the one Aqara ships. This needs Glassworks 0.4.0 or later
-and the boot software that came with it (Home Assistant's **Radio helper** sensor says whether you have
-it; [install.md](install.md#updating) says how to update it). Forming a network, resuming it and
-pairing have been tested on the panel, but not yet for long with real devices.
+Zigbee2MQTT requires a newer Zigbee stack than the one Aqara ships. Make sure your panel is running Glassworks 0.4.0 or newer along with the matching boot software (check the **Radio helper** sensor in Home Assistant, and see [Updating](install.md#updating) if it needs a refresh). Network formation, restarts, and pairing work on the panel, though long-term multi-device stability is still being tested.
 
-1. Set **Zigbee stack** to *Silicon Labs 8.2.2 (EZSP 18, Zigbee2MQTT, experimental)*. The panel downloads Silicon Labs' stack from Silicon
-   Labs itself (we can't ship it, for licence reasons) and checks it. **Radio status** shows the
-   progress, then `EZSP 18`.
-2. Set **Radio mode** to *Zigbee coordinator (TCP)*.
-3. In Zigbee2MQTT's configuration:
+1. Set **Zigbee stack** to **Silicon Labs 8.2.2 (EZSP 18, Zigbee2MQTT, experimental)**. The panel downloads and verifies the stack directly from Silicon Labs' GitHub repository (we cannot bundle it due to licensing). Watch **Radio status** until it reports `EZSP 18`.
+2. Set **Radio mode** to **Zigbee coordinator (TCP)**.
+3. Configure Zigbee2MQTT's serial section:
    ```yaml
    serial:
      adapter: ember
      port: tcp://<panel IP>:6638
    ```
-4. If Zigbee2MQTT runs on another machine than Home Assistant (an add-on runs on the same one), put
-   that machine's address in **Radio allowed clients** (see [Who may connect](#who-may-connect)).
+4. If Zigbee2MQTT runs on a different machine than Home Assistant (Home Assistant add-ons share the same host), add that machine's IP address to **Radio allowed clients** (see [Who may connect](#who-may-connect)).
 
-ZHA also works with this stack. Switching back to *Aqara 7.3.3* gives back Aqara's stack and its own
-network, untouched. The Zigbee router mode always uses Aqara's stack.
+ZHA works with the Silicon Labs 8.2.2 stack as well, and switching back to **Aqara 7.3.3** restores Aqara's stack and network untouched. Zigbee router mode always uses Aqara's stack.
 
-Zigbee2MQTT gives the radio 5 seconds to answer its reset, and this stack takes about 4.3. If a start
-fails now and then with a reset timeout, restart Zigbee2MQTT; it usually works the next time.
+> [!TIP]
+> Zigbee2MQTT waits 5 seconds for a radio reset reply, and the Silicon Labs stack takes around 4.3 seconds to respond. If Zigbee2MQTT occasionally fails to start with a reset timeout, simply restart it and it will usually connect cleanly on the next try.
 
 ## Thread border router
 
-**The panel must be on the same network as Home Assistant** (same Wi-Fi/VLAN, with IPv6, which
-home routers normally have). A border router can only show Home Assistant the way to your Thread
-devices on its own network. If the panel sits on a separate IoT network, Home Assistant's OTBR
-integration can still connect to it, but it can't reach any device through it.
-[Why](radio.md#same-network-as-home-assistant).
+> [!IMPORTANT]
+> **Same network required:** Your panel must be on the same Wi-Fi/VLAN as Home Assistant with IPv6 enabled (standard on most home routers). A Thread border router advertises routes only on its local subnet; if the panel sits on an isolated IoT VLAN, Home Assistant can connect to the OTBR API but cannot reach your Thread devices through it. See [why](radio.md#same-network-as-home-assistant).
 
-This mode makes the panel a border router. On its own it starts a Thread network of its own; to
-extend a network you already have, *Thread router (repeater)* is the simple way. The panel can also
-be a second border router in your existing network, but for now that takes joining it by hand
-([radio.md](radio.md#thread-border-router-build-profilebr-2026-11-10)).
+1. Set **Radio mode** to **Thread border router**.
+2. In Home Assistant, add the **OpenThread Border Router** integration and enter `http://<panel IP>:8081`. The panel's **Radio** settings page also displays this URL alongside a QR code that opens the setup dialog on your phone.
 
-1. Set **Radio mode** to *Thread border router*.
-2. In Home Assistant, add the **OpenThread Border Router** integration with the URL
-   `http://<panel IP>:8081`. On the panel, the settings menu's Radio section shows this URL and a
-   QR code that opens the integration's setup in Home Assistant on your phone.
+By default, this mode forms a new Thread network—verified both as a standalone border router with Matter devices and alongside existing Home Assistant or Apple border routers, recovering cleanly after Wi-Fi drops and reboots. If you already run a Thread network and just want to extend its range, use **Thread router (repeater)** below instead. Joining the panel as a second border router on an existing Thread network currently requires manual CLI steps ([see the technical reference](radio.md#thread-border-router-build-profilebr-2026-11-10)).
 
-Tested so far, both after Wi-Fi dropped and after a restart:
-
-- **As your only border router:** a Matter bulb added with the Home Assistant app as usual, then
-  switched and dimmed from Home Assistant.
-- **Next to an existing border router** (Home Assistant's own, Apple's): the panel joins the same
-  network, and traffic between your network and real Matter devices flows through it both ways.
-
-If the panel has started its own network while you already have one, Home Assistant lists both under
-*Settings → Devices & services → Thread*; keep yours as the preferred one.
+If the panel forms a separate Thread network while you already have one, both appear in Home Assistant under **Settings → Devices & services → Thread**—just keep your primary network marked as preferred.
 
 ## Repeater modes (experimental)
 
-**Zigbee router (repeater).** Set **Radio mode** to *Zigbee router (repeater)*. In ZHA, open joining
-(*Add device*; the QR code on the panel opens it), then press **Join Zigbee network** within that
-window, on the panel's device page or in the panel's settings menu. ZHA lists the panel as a router.
-**Leave Zigbee network** takes it out again (remove it from ZHA too).
+### Zigbee router (repeater)
 
-**Thread router (repeater).**
+1. Set **Radio mode** to **Zigbee router (repeater)**.
+2. Open pairing in ZHA (*Add device*—you can scan the QR code on the panel to open it quickly).
+3. While ZHA is listening, tap **Join Zigbee network** on the panel or in Home Assistant. ZHA adds the panel as a Zigbee router.
+4. To leave later, tap **Leave Zigbee network** and remove the device from ZHA.
 
-1. Set **Radio mode** to *Thread router (repeater)*.
-2. Give the panel your Thread network. The easiest is **Get it from Home Assistant** on the panel's
-   Thread router card (or **Join Home Assistant's Thread network** on its device page): the panel gets
-   your *preferred* Thread network from Home Assistant by itself. If the panel is signed in to Home
-   Assistant as an administrator, that's all. Otherwise it shows a QR code: scan it with your phone
-   and sign in as a Home Assistant administrator (Home Assistant only gives a Thread network's
-   settings to administrators). The panel uses that sign-in once, to read the settings, and then
-   deletes it again (it no longer appears under your profile's *Refresh tokens*). The QR code works
-   for 10 minutes. If Home Assistant has several Thread networks, make the one you want *preferred*
-   first. **Thread join** on the device page says how it went.
-3. Or copy the dataset by hand: open Home Assistant's **Thread** page (the panel's card has a QR code
-   for it). Under *Preferred network*, open ⓘ *Network information* and copy **Active dataset TLVs**
-   (Home Assistant shows it to admin users, for a network that comes from an OpenThread Border Router
-   it manages). Paste it into the panel's **Thread dataset** field (the panel's device page in Home
-   Assistant → *Configuration*). Spaces or line breaks in the copy are fine. The field is write-only
-   and the panel keeps the dataset where only root can read it. (The settings menu on the panel has
-   the same field under *Advanced*, also for datasets longer than the 255 characters Home Assistant
-   allows.)
-4. **Radio status** shows the Thread role and the network's name: first *joined as a child*, then
-   *as a router* once the network promotes the panel, which takes a few minutes.
+### Thread router (repeater)
 
-**Leave Thread network** makes the panel forget the network again (needs the boot software from 0.4.0
-or later). The panel's settings menu offers it whenever a Thread network is still stored, also after
-switching to another mode.
+1. Set **Radio mode** to **Thread router (repeater)**.
+2. Send your preferred Thread network credentials to the panel using either method:
+   - **Automatic (easiest):** Tap **Get it from Home Assistant** on the panel's Thread router card (or press **Join Home Assistant's Thread network** in Home Assistant). If the panel is signed in to Home Assistant as an administrator, it fetches your preferred Thread network automatically. Otherwise, scan the one-time QR code with your phone and sign in as a Home Assistant administrator; the panel reads the dataset once and immediately revokes that temporary login. Check **Thread join** in Home Assistant to follow progress.
+   - **Manual copy:** Open Home Assistant's **Thread** page, tap the info icon (ⓘ) under your **Preferred network**, copy **Active dataset TLVs**, and paste it into the panel's **Thread dataset** field under **Configuration** in Home Assistant (or under **Advanced** on the panel, which also supports datasets longer than Home Assistant's 255-character limit). Extra spaces or line breaks are stripped automatically, and the field is write-only.
+3. Watch **Radio status**—it starts as *joined as a child* and promotes to *as a router* within a few minutes.
 
-The dataset contains your Thread network key: paste it only into the panel's field, never into a chat
-or a bug report.
+Press **Leave Thread network** (requires boot software from v0.4.0 or newer) whenever you want the panel to forget stored Thread credentials.
+
+> [!CAUTION]
+> Your Thread dataset contains your Thread network encryption key. Only paste it into the panel's dedicated field—never share it in chat messages or bug reports.
 
 ## Who may connect
 
-The radio's network ports have no password of their own, so the panel lets only Home Assistant in. It
-learns Home Assistant's address from Home Assistant's encrypted connection to the panel. To let other
-computers in (Zigbee2MQTT on another machine, a laptop for testing), set **Radio allowed clients**:
-addresses or ranges separated by spaces or commas, e.g. `192.0.2.10 198.51.100.0/24`, or `any` to
-turn the check off. Leave it empty for "Home Assistant only". The same setting is on the panel itself:
-tap the top-left corner five times, *Radio*, *Who may connect*.
+Because the radio's TCP and OTBR ports do not have passwords of their own, Glassworks firewalls them to allow only your Home Assistant server by default. The panel automatically learns Home Assistant's IP address from the encrypted ESPHome connection.
 
-In the Zigbee coordinator role, the same page says who is connected now, under *The radio*:
-`Home Assistant · 192.0.2.20 · since 14:32`, another computer's address, or *Nobody*. It follows a
-connect or disconnect within a few seconds. Home Assistant has it too, as the **Radio connected
-client** sensor (off by default).
+To grant access to additional hosts (such as Zigbee2MQTT running on a separate server, or a laptop for testing), enter space- or comma-separated IP addresses or CIDR ranges in **Radio allowed clients** (for example, `192.0.2.10 198.51.100.0/24`), or type `any` to disable the restriction. Leave the field blank for Home Assistant only. You can edit the same list directly on the panel under **Settings → Radio → Who may connect**.
 
-If **Radio status** says `nobody yet (waiting for Home Assistant to connect over ESPHome)` and stays
-that way, Home Assistant is probably connecting without an encryption key (Home Assistant older than
-2026.11). Update Home Assistant, or put its address in **Radio allowed clients**.
+In Zigbee coordinator mode, the panel's Radio settings page also shows who is currently connected (for example, `Home Assistant · 192.0.2.20 · since 14:32` or `Nobody`), mirrored in Home Assistant via the **Radio connected client** sensor.
+
+If **Radio status** remains stuck on `nobody yet (waiting for Home Assistant to connect over ESPHome)`, Home Assistant is likely connecting without encryption (Home Assistant older than 2026.11). Upgrade Home Assistant or add its IP address manually to **Radio allowed clients**.
 
 ## Radio firmware
 
-The radio runs Aqara's firmware, and nothing here needs a different one. The panel can flash radio
-firmware (boot software from 0.4.0 or later), but never by itself: choose an image in **Radio
-firmware image**, then press **Flash radio firmware** within two minutes. **Radio firmware** shows the
-progress. If anything goes wrong it puts Aqara's original firmware back. No newer firmware is offered
-yet; flashing Aqara's original image again has been tested on the panel.
+The EFR32 radio runs Aqara's stock RCP firmware, which already supports every mode described above—you do not need to flash new firmware to use Zigbee or Thread.
+
+On panels with boot software from v0.4.0 or newer, Glassworks includes a safe two-step radio flashing tool: pick an image in **Radio firmware image** and press **Flash radio firmware** within two minutes, watching progress on the **Radio firmware** sensor. If anything fails, the helper automatically restores Aqara's original firmware. No newer third-party firmware images are bundled at this time.
 
 ## Going back to Aqara's radio
 
-*Off* stops Aqara's radio services too. To get Aqara's own hub back, undo the install
-([install.md](install.md#undo)) and restart the panel.
+Setting **Radio mode** to **Off** keeps Aqara's stock radio services stopped so the radio stays completely idle. If you want Aqara's built-in smart home hub functionality back, undo the Glassworks installation ([install.md](install.md#undo)) and reboot the panel.

@@ -41,8 +41,12 @@ async function Doc({ params }: { params: PageProps<"/docs/[...slug]">["params"] 
   if (!doc) notFound();
   const notes = await getNotes();
   const note = notes.find((n) => n.url === doc.url);
-  // a note's prev and next stay in its frame's notes (or the general ones), in the research list's order
-  const same = note ? notesOf(notes, note.frame) : (await getDocs()).filter((d) => d.section === doc.section && d.url.startsWith("/docs/"));
+  // a note's prev and next stay in its frame's notes; a frame guide stays within its frame; other docs page within their audience track
+  const same = note
+    ? notesOf(notes, note.frame)
+    : (await getDocs()).filter((d) =>
+        doc.frame ? d.frame === doc.frame && d.section !== "notes" : !d.frame && d.section === doc.section && d.url.startsWith("/docs/"),
+      );
   // matched by URL: each cached call hands back its own copies
   const i = same.findIndex((d) => d.url === doc.url);
   const frame = doc.frame ? frameById(doc.frame) : undefined;

@@ -1,79 +1,70 @@
 # Notifications
 
-Home Assistant sends a notification, and the panel shows it over the dashboard: a title, a message, a
-camera's picture, up to three buttons and a sound. A button press goes back to Home Assistant, where
-an automation acts on it. A notification can also open a dashboard view, full screen or half, like a doorbell
-view with its camera, and go back to the normal dashboard afterwards.
+Glassworks lets Home Assistant display rich notifications directly over your panel's dashboard—complete with a title, message, camera snapshot, up to three action buttons, and a chime or alert tone. Tapping a button sends an event back to Home Assistant so your automations can react right away. Notifications can also temporarily open a Home Assistant dashboard view (full screen or as a half-screen dialog), making it easy to show a live doorbell camera and automatically return to your main dashboard afterward.
 
-It works through the panel's ESPHome device alone. Nothing to install in Home Assistant.
+Everything runs over the panel's native ESPHome connection, with nothing extra to install in Home Assistant.
 
-**Status (2026-11-13): new, not yet run on a panel.** The unit tests and the real `aioesphomeapi`
-client pass; the first run on a real panel is pending.
+> [!NOTE]
+> **Feature status:** Notifications are currently in alpha. Core cards, camera snapshots, action buttons, Do not disturb, and full-screen and half-screen views have been tested on hardware, with ongoing polish for edge cases.
 
 ## Turn it on
 
-Notifications are off until you turn them on:
+The Notifications pane starts turned off until you enable it in one of three places:
 
-- on the panel's setup screen, the **Notifications** card on the Panes step, or
-- in the panel's settings: **Panes → Notifications**, the switch at the top right, or
-- in Home Assistant, the panel's `Notifications` switch (it starts disabled in HA; turn it on on the
-  device page first).
+- During first-boot setup, on the **Notifications** card in the Panes step
+- On the panel or [Manage page](manage.md) under **Settings → Panes → Notifications** (using the switch at the top right)
+- In Home Assistant, by enabling and toggling the panel's **Notifications** switch on its ESPHome device page
 
-The settings page shows what is on the panel, has **Do not disturb**, and **Send a test notification**.
+The Notifications settings page also lets you toggle **Do not disturb** and click **Send a test notification** to verify how alerts look and sound on your wall.
 
 ## Send one
 
-The panel adds one action to Home Assistant: `esphome.<node name>_notify`, with the panel's ESPHome
-node name, `-` as `_`. The node name ends in the panel's MAC ([Names](esphome.md#names)), so an S1's
-action looks like `esphome.aqara_s1_plus_a1b2c3_notify`. The panel's settings show its exact name
-(**Panes → Notifications → Action**), and *Developer tools → Actions* lists it: search for `_notify`.
-The examples below use `a1b2c3`; put your panel's in.
+Each panel exposes a single ESPHome action in Home Assistant: `esphome.<node_name>_notify`, where `<node_name>` is the panel's ESPHome node name with hyphens replaced by underscores (see [Names](esphome.md#names)). For example, on an Aqara S1 Plus the action looks like `esphome.aqara_s1_plus_a1b2c3_notify`. You can copy your panel's exact action name from **Settings → Panes → Notifications → Action**, or find it in Home Assistant under **Developer tools → Actions** by searching for `_notify`. The examples below use `a1b2c3` as a placeholder.
 
-**Who can call it.** On a panel without an API key, anyone on your network can call `notify`, so
-anyone there could raise a critical alert or open a view of your Home Assistant on the panel. The
-key closes that: Home Assistant 2026.11 and later sets it when you add the panel.
+> [!IMPORTANT]
+> **Security note:** Always keep ESPHome encryption enabled on your panel. Without an API encryption key, anyone on your local network could call the `notify` action to trigger a critical alert or open a view on your screen. Home Assistant 2026.11 and newer configure encryption automatically when you adopt the panel.
 
-It takes the Home Assistant Companion app's fields: `message`, `title` and `data`. Home Assistant
-makes every ESPHome action field required, so all three are always there. `title` may be empty, and
-`data` is a JSON object, or `{}` for none.
+The action accepts the same three fields as the Home Assistant Companion app—`title`, `message`, and `data`. Because Home Assistant requires all ESPHome action arguments to be present, always include all three (use `""` for an empty title and `"{}"` when you don't need extra `data` fields):
 
 ```yaml
 action: esphome.aqara_s1_plus_a1b2c3_notify
 data:
   title: Washing machine
-  message: Done. 1 h 32 min.
+  message: Cycle finished in 1 h 32 min.
   data: "{}"
 ```
 
 ### The `data` fields
 
-| Key | What it does |
-|---|---|
-| `tag` | A name for the notification. A new one with the same tag replaces it, and `clear_notification` closes it |
-| `priority` | `low`, `normal` (the default), `high` or `critical`. See [Priorities](#priorities) |
-| `image` | A picture: a path on this Home Assistant, like `/api/camera_proxy/camera.porch`, `/local/…` or `/media/…` |
-| `entity_id` | A camera, like `camera.porch`, when there is no `image` |
-| `actions` | Up to 3 buttons: `[{"action": "open_gate", "title": "Open the gate"}]`. Add `"uri": "/lovelace/garage"` to also open that view |
-| `sound` | `chime`, `doorbell`, `alert` or `none`. Without it: none for low, a chime for normal and high, the alert for critical |
-| `timeout` | Seconds until it closes by itself |
-| `url` | A dashboard view on this Home Assistant, like `/dashboard-door/0`. It opens at once, or after the view that is open. See [Open a view](#open-a-view) |
-| `sticky` | `true`: a button press leaves it open |
-| `size` | `full` (the default) or `half`: the view, and the views of its buttons' `uri`, as a dialog over half the screen |
+Pass extra options inside `data` as a JSON string:
 
-Write `data` as a JSON string. A block string is the easiest to read:
+| Key | Description |
+|---|---|
+| `tag` | Identifier for updating or clearing a notification. Sending a new notification with the same `tag` replaces the existing one, and `clear_notification` dismisses it. |
+| `priority` | `low`, `normal` (default), `high`, or `critical`. See [Priorities](#priorities). |
+| `image` | Snapshot or image path hosted on your Home Assistant instance, such as `/api/camera_proxy/camera.porch`, `/local/…`, or `/media/…`. |
+| `entity_id` | A Home Assistant camera entity (such as `camera.porch`) used to fetch a snapshot when `image` is omitted. |
+| `actions` | Up to 3 buttons in the form `[{"action": "open_gate", "title": "Open gate"}]`. Add `"uri": "/lovelace/garage"` to also open a dashboard view when tapped. |
+| `sound` | `chime`, `doorbell`, `alert`, or `none`. Defaults to `none` for `low`, `chime` for `normal` and `high`, and `alert` for `critical`. |
+| `timeout` | Number of seconds before the notification closes automatically (1 second to 24 hours). |
+| `url` | A dashboard view path on your Home Assistant instance (such as `/dashboard-door/0`). Opens immediately—or queues behind an already open view. See [Open a view](#open-a-view). |
+| `sticky` | Set to `true` to keep the notification open after a button is tapped. |
+| `size` | `full` (default) or `half`. Displays the `url` view (and any button `uri` views) either full screen or as a half-screen overlay. |
+
+A YAML folded block string (`>`) makes JSON options easy to read:
 
 ```yaml
 action: esphome.aqara_s1_plus_a1b2c3_notify
 data:
-  title: Parcel at the door
-  message: The porch camera saw a delivery.
+  title: Package at the door
+  message: The porch camera spotted a delivery.
   data: >
     {"tag": "parcel", "priority": "high", "image": "/api/camera_proxy/camera.porch",
-     "actions": [{"action": "open_gate", "title": "Open the gate"},
+     "actions": [{"action": "open_gate", "title": "Open gate"},
                  {"action": "snooze", "title": "Snooze 10 min"}]}
 ```
 
-With values from a template, build it with `to_json`:
+When using Jinja templates, serialize the dictionary with `to_json`:
 
 ```yaml
 data:
@@ -82,24 +73,24 @@ data:
   data: "{{ {'tag': 'door', 'priority': 'high', 'timeout': 600} | to_json }}"
 ```
 
-A plain YAML mapping under `data` doesn't work: Home Assistant refuses it ("value should be a string").
+Note that passing a raw YAML mapping under `data` will fail because Home Assistant expects an ESPHome string argument.
 
 ### Coming from the Companion app
 
-Change the action's name and put `data` in a string. Keys the panel doesn't use (`channel`, `color`,
-`ttl`, `group`, …) are ignored. iOS's `push: {interruption-level: …}` works as a priority when there
-is no `priority`. The call fails, with the reason in the script's trace, when:
+If you are adapting an existing phone notification automation, change the action name and format `data` as a JSON string. Unsupported mobile keys (`channel`, `color`, `ttl`, `group`, etc.) are safely ignored, and iOS `push.interruption-level` values map automatically to `priority` when `priority` is not set.
 
-- `sound` isn't one of the panel's four,
-- there are more than 3 actions, or one is `REPLY` (the panel has no keyboard),
-- `url`, `image` or an action's `uri` points anywhere but this Home Assistant,
-- `timeout` isn't a number of seconds between 1 and a day.
+Home Assistant rejects the call (with the exact reason shown in your automation trace) if:
 
-One difference: on a phone, `url` opens when you tap the notification. On the panel it opens at once,
-which is what a doorbell wants. Use an action's `uri` for "open it when I tap". A critical one is the
-exception: see [Open a view](#open-a-view).
+- `sound` is not one of the four supported values (`chime`, `doorbell`, `alert`, `none`)
+- `actions` contains more than 3 buttons, or uses `REPLY` (panels do not display an inline reply keyboard)
+- `url`, `image`, or an action `uri` points outside your Home Assistant instance
+- `timeout` is not a number between 1 and 86400 seconds
+
+One behavioral difference to keep in mind: on a phone, `url` opens only after you tap the notification. On a wall panel, `url` opens right away so doorbell and security views appear automatically (except on `critical` alerts—see below). If you want a view to open only when tapped, put it in a button's `uri` field instead.
 
 ### Clear one
+
+To dismiss an active or queued notification by tag from an automation or script:
 
 ```yaml
 action: esphome.aqara_s1_plus_a1b2c3_notify
@@ -111,44 +102,26 @@ data:
 
 ## Open a view
 
-`url` opens a dashboard view of this Home Assistant on the panel, in the dashboard that is already
-loaded, and goes back to the dashboard afterwards.
+Setting `url` temporarily opens a Home Assistant dashboard view inside your already loaded frontend, then switches back to your main dashboard once closed or timed out:
 
 ```yaml
 action: esphome.aqara_s1_plus_a1b2c3_notify
 data:
   title: Doorbell
-  message: Someone is at the door.
+  message: Someone is at the front door.
   data: '{"tag": "doorbell", "url": "/dashboard-door/0", "size": "half", "timeout": 90}'
 ```
 
-- **Full or half.** Without `size`, the view takes the whole screen. With `"size": "half"` it is a
-  dialog over half the screen: a panel on the right of a landscape screen (the S1), a sheet at the
-  bottom of a portrait one. The dashboard stays behind it as a still picture, dimmed. On the S1 the
-  picture takes under 0.1 s. If it isn't there 0.75 s after the screen is on, the view opens over a
-  plain dark backdrop instead. With the screen off, the picture is taken when the screen comes back
-  on. A normal notification doesn't wake the screen, so that is when someone walks up.
-- **One button.** A bar at the foot of the view shows its title, the time left, and one button. It
-  says *Next* when another view is waiting, *Back now* on the last full view, and *Close* on the last
-  half one. Tapping outside a half view does the same, and so do Back and the time running out.
-- **One at a time.** The open view keeps the screen. A view that arrives meanwhile waits its turn, and
-  the bar says "Next in 0:24 · 1 more waiting". A new one with the tag of a waiting one takes its
-  place in the line. A button's `uri`, or a tap in the list, opens at once, in front. A waiting view's
-  `timeout` keeps running, so one that runs out while it waits never opens.
-- **Critical ones don't open by themselves.** A critical notification is the alert screen, always.
-  With a `url`, the alert gets an **Open the view** button, which opens it full screen. That matches
-  the phone, where `url` opens when you tap the notification.
-- **A screen without touch** (the lululemon Mirror) has no button. The view moves on when its time runs
-  out, or when Home Assistant clears it. A view with no `timeout` closes after 2 minutes there. So does a
-  high or critical notification with neither a `timeout` nor a `tag`, since nothing could close it. Give
-  it a `tag` to keep it up until Home Assistant clears it.
-- Do not disturb holds a view like any other notification: it goes to the list, and opens from there.
+- **Full-screen or half-screen layout:** Without `size`, the view takes over the whole display. With `"size": "half"`, it appears as a side panel on landscape screens (like the Aqara S1 Plus) or a bottom sheet on portrait screens, laid over a dimmed snapshot of your dashboard. If the snapshot takes longer than 0.75 seconds to capture—or if the screen was asleep—the panel falls back smoothly to a dark backdrop until the screen wakes.
+- **Footer bar:** A slim bar at the bottom shows the view title, countdown timer, and an action button (*Next* if another view is queued, *Back now* on the last full-screen view, or *Close* on a half-screen view). Tapping outside a half-screen view, pressing Back, or letting the timeout expire also closes it.
+- **One view at a time:** An active view stays on screen while any newly arriving views wait in a queue (the footer shows *"Next in 0:24 · 1 more waiting"*). A replacement notification with a matching `tag` updates its queued entry in place, and waiting views continue counting down their timeouts so stale views do not pop up later. Tapping a button `uri` or an item from the notification list opens it immediately in front.
+- **Critical notifications:** A `critical` notification always shows the full-screen alert screen first. If it includes a `url`, the alert provides an **Open the view** button that launches the view full screen when tapped.
+- **Non-touch displays (such as the lululemon Studio Mirror):** Because nobody can tap to dismiss an alert on a mirror, views without a `timeout` close automatically after 2 minutes, as do `high` or `critical` notifications that have neither a `timeout` nor a `tag`. Give an alert a `tag` if you want it to stay up until Home Assistant clears it.
+- **Do not disturb:** While Do not disturb is active, incoming views are held in the notification list instead of interrupting the screen, and can still be opened from there manually.
 
 ## When someone presses a button
 
-The panel fires the event `esphome.notification_action` in Home Assistant, with the button's `action`,
-the notification's `tag` (if it has one), and the panel's `device_id`. This is the shape of the
-Companion app's `mobile_app_notification_action`.
+When someone taps a notification button, the panel fires an `esphome.notification_action` event on Home Assistant's event bus containing the button's `action`, the notification's `tag` (if set), and the panel's `device_id`—matching the structure of the Companion app's `mobile_app_notification_action`:
 
 ```yaml
 triggers:
@@ -162,36 +135,33 @@ actions:
       entity_id: cover.gate
 ```
 
-It is an event on Home Assistant's bus, not an event entity, so it doesn't show on the device page.
-An event entity can only fire the names it listed up front, and a button's name is whatever your
-script chose ([why](research/ha-esphome-actions-events.md)). It needs no "Allow the device to perform
-Home Assistant actions" option. Listen for it in *Developer tools → Events* to see what arrives.
+This is a standard Home Assistant bus event rather than a fixed event entity, so you will not see it listed on the device page (Home Assistant event entities cannot accept arbitrary button names chosen by your automations—see [our technical note](research/ha-esphome-actions-events.md)). It works out of the box without enabling *"Allow the device to perform Home Assistant actions"*. You can inspect incoming payloads anytime in **Developer tools → Events**.
 
 ## Priorities
 
-| Priority | On the panel | Sound | Screen |
+| Priority | On-screen behavior | Default sound | Screen wake |
 |---|---|---|---|
-| `low` | A card when the screen is on; folds into the list after 10 s | none | Waits for the screen to wake |
-| `normal` | A card; folds into the list after 15 s | chime | Waits for the screen to wake |
-| `high` | A card marked *Important*, until answered | chime | Wakes it, at full brightness also at night |
-| `critical` | The alert screen, until answered or dismissed | the alert, every 4 s for about 2 minutes (the last one may end 1.45 s past) | Wakes it, at full brightness also at night |
+| `low` | Shows a card when the screen is awake; folds into the list after 10 seconds | None | Waits until the screen wakes |
+| `normal` | Shows a card; folds into the list after 15 seconds | Chime | Waits until the screen wakes |
+| `high` | Shows a card labeled *Important* until answered or dismissed | Chime | Wakes the screen at full brightness (even at night) |
+| `critical` | Opens the full-screen alert overlay until answered or dismissed | Alert tone every 4 seconds for ~2 minutes | Wakes the screen at full brightness (even at night) |
 
-The sounds are made by the app from sine tones
-([`NotificationSounds.kt`](../panes/notifications/src/main/java/dev/glassworks/notifications/NotificationSounds.kt),
-MPL-2.0 like the rest of the core). There are no recordings, so no other licence applies.
+All notification tones are synthesized cleanly inside the app from sine waves ([`NotificationSounds.kt`](../panes/notifications/src/main/java/dev/glassworks/notifications/NotificationSounds.kt)), so no external audio files are required.
 
-The screen stays on for a high or critical one while it is up, for at most 10 minutes, so one nobody
-answers doesn't keep a room lit all night. A sound pauses the music, as the voice assistant does.
+High and critical notifications keep the screen awake for up to 10 minutes while unanswered, ensuring an alert does not leave a room lit all night. Playing a notification sound briefly pauses active music just like Assist voice runs do.
 
 ## Do not disturb
 
-The panel's `Do not disturb` switch in Home Assistant (`switch.aqara_s1_plus_do_not_disturb` on a new
-S1; `glassworks_panel_*` or `s1_panel_*` on one added earlier: [Names](esphome.md#names)), the same
-switch in the panel's list, and on the settings page. While it is on, every notification but a critical one goes to the list without a
-sound or a card, and the screen stays as it is. Turning it on also does that to the ones already up:
-a high one's card goes to the list and lets its hold on the screen go, so the screen goes dark at the
-idle timeout; a critical one stays, and keeps the screen on. A pill at the top right says how many are held. When it turns off, the held ones stay
-in the list. Bedtime is one automation:
+Turn on **Do not disturb** from Home Assistant (`switch.<panel>_do_not_disturb`), from the panel's notification drawer, or on the Notifications settings page.
+
+While Do not disturb is on:
+
+- Every notification except `critical` goes straight into the notification list silently without waking the screen.
+- Any `high`-priority cards currently on screen move quietly into the list and release their screen wake lock.
+- A compact pill in the top-right corner shows how many notifications are waiting.
+- `critical` alerts still break through with full sound and screen wake.
+
+Turning Do not disturb off leaves held notifications waiting in the list until you review or clear them. Automating bedtime takes just a few lines of YAML:
 
 ```yaml
 triggers:
@@ -205,51 +175,27 @@ actions:
 
 ## The list
 
-**N notifications · Show all** under the cards (or the pill) opens the list. Tap one to see it again.
-The list is kept until the panel restarts: Home Assistant holds the facts and can send again.
+Tap **N notifications · Show all** below the cards (or tap the Do not disturb pill) to open the notification list, and tap any item to view it again. The list is kept in memory until the panel restarts.
 
 ## The doorbell
 
-No doorbell pane: your doorbell is in Home Assistant already, and a dashboard does the rest.
+You do not need a dedicated doorbell plugin—your doorbell is already in Home Assistant, and a dashboard view handles the interface:
 
-1. Make a dashboard view for the door: the doorbell's camera, an *Open the gate* button, and a *Done*
-   button. The panel gives the page its microphone, so a camera card with two-way audio works.
-2. Import the blueprint *Doorbell on Glassworks panels*
-   ([`panes/notifications/blueprints/doorbell-panels.yaml`](../panes/notifications/blueprints/doorbell-panels.yaml)):
-   on the panel, **Settings → Panes → Notifications → Blueprints for Home Assistant → Add to Home Assistant**
-   opens Home Assistant's import dialog with it filled in ([Blueprints](blueprints.md)). Pick the
-   doorbell, the camera and the view, and type each panel's notify action: `esphome.` plus the
-   panel's ESPHome node name with `-` as `_`, plus `_notify`, like `esphome.aqara_s1_plus_a1b2c3_notify`.
-   Each panel's settings show its own (**Panes → Notifications → Action**).
-   Home Assistant has no selector that picks one action, so they are typed. When it rings, every panel rings,
-   shows the camera's picture and opens the view; each goes back to its dashboard after the timeout.
-3. Make *Done* run a script that clears `doorbell` on every panel, so the others stop too. The
-   blueprint's file has that script at the end, to copy.
-
-Not yet run with a real doorbell (2026-11-13).
+1. Create a dedicated Home Assistant dashboard view for your front door with your camera card, an *Unlock* or *Open gate* button, and a *Done* button. Glassworks grants the dashboard access to the panel's microphone, so camera cards with two-way audio work automatically.
+2. Import the **Doorbell on Glassworks panels** blueprint ([`panes/notifications/blueprints/doorbell-panels.yaml`](../panes/notifications/blueprints/doorbell-panels.yaml)) from **Settings → Panes → Notifications → Blueprints for Home Assistant → Add to Home Assistant** (see [Blueprints](blueprints.md)). Pick your doorbell trigger, camera, and door view, and list each panel's `notify` action (such as `esphome.aqara_s1_plus_a1b2c3_notify`, shown on each panel's Notifications settings page). When the doorbell rings, every listed panel chimes, displays the camera snapshot, opens the door view, and returns to its normal dashboard after the timeout.
+3. Wire your *Done* button to a script that clears the `doorbell` tag across all panels so dismissing it in one room clears the rest. A ready-to-copy clear script is included at the bottom of the blueprint file.
 
 ## Ask on the panels
 
-The blueprint *Ask on the panels*
-([`panes/notifications/blueprints/ask-panels.yaml`](../panes/notifications/blueprints/ask-panels.yaml))
-puts a question with up to three buttons on the panels you pick, when its trigger fires (a time, a door,
-anything Home Assistant can trigger on). Each button runs a script you choose. The first answer, on any
-panel, clears the question from the others; with no answer it closes by itself after the time you set.
-It listens for `esphome.notification_action` with the question's tag, so other notifications' buttons
-don't count. Add it from the same card as the doorbell.
-
-Not yet run on a panel (2026-11-15).
+The **Ask on the panels** blueprint ([`panes/notifications/blueprints/ask-panels.yaml`](../panes/notifications/blueprints/ask-panels.yaml)) lets you send an interactive question with up to three buttons to one or more panels whenever any Home Assistant trigger fires (such as a time of day or an open garage door). Each button runs a Home Assistant script you choose. As soon as someone answers on any panel, the prompt clears automatically from all the other panels; if nobody responds, it dismisses itself when its timeout expires. Import it from the same **Blueprints for Home Assistant** card on the Notifications page.
 
 ## When notifications are off
 
-`esphome.<panel>_notify` stays in Home Assistant, like every pane's entities (#67), and answers
-"Notifications are off on this panel". Turn them on, and the same scripts work.
+If you turn the Notifications pane off, the `esphome.<panel>_notify` action stays registered in Home Assistant so your automations do not break, and replies with *"Notifications are off on this panel"*. Turn the pane back on anytime and your existing automations resume immediately.
 
 ## What it can't do yet
 
-- Pictures need the panel's dashboard sign-in (the QR code) on the same Home Assistant. Without it,
-  the card says "No picture" and why.
-- Pictures from other sites: only this Home Assistant's. Put a camera or a file in Home Assistant
-  instead.
-- A sound from Home Assistant (`media_id`): only the three built-in sounds so far.
-- A live camera view on the card: open a dashboard view with `url` instead.
+- **Camera snapshots require dashboard sign-in:** Fetching images from Home Assistant requires the panel to be signed in to that same Home Assistant instance (via QR sign-in). Without it, the card shows *"No picture"* with the reason.
+- **Local Home Assistant images only:** External image URLs are blocked for security; serve images through Home Assistant (`/api/camera_proxy/…`, `/local/…`, or `/media/…`).
+- **Built-in sounds only:** Custom Home Assistant `media_id` notification sounds are not supported yet—use `chime`, `doorbell`, `alert`, or `none`.
+- **Live video on cards:** Cards display still snapshots. For live video, open a dashboard view using `url`.

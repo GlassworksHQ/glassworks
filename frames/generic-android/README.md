@@ -10,9 +10,8 @@
 <h1 align="center">Generic Android</h1>
 
 <p align="center">
-  <b>Any Android device, as an app. No root.</b><br>
-  Core plus the panes that need no special hardware.<br>
-  Tablets, old phones, other Android panels.
+  <b>Any Android device, installed as a standard app with no root required</b><br>
+  Glassworks Core plus every pane your hardware supports—great for tablets, old phones, and off-the-shelf Android panels.
 </p>
 
 <p align="center">
@@ -40,332 +39,184 @@
   </a>
 </p>
 
-A Glassworks **frame**: the device definition for the Generic Android. Its data is in [`design/frame.json`](design/frame.json) (format: [frames/README.md](../README.md)), and [glassworks.dev/frames/generic-android](https://www.glassworks.dev/frames/generic-android) shows it.
+This folder defines the **Generic Android** frame (`design/frame.json`, [format](../README.md)), showcased at [glassworks.dev/frames/generic-android](https://www.glassworks.dev/frames/generic-android).
 
 ## Status
 
-**Status: under development.** The frame has its own app, **Glassworks** (`dev.glassworks.generic_android`, built from
-[`android/`](android)), for Android 8.0 or newer (`minSdk` 26; Android 6 and 7 get the separate legacy build,
-#198). It has run on a Pixel Tablet (Android 17, 2026-11-16, #364): the dashboard, Home Assistant adoption as its
-own device, the hidden panes and an update in place. The wake word, Music Assistant and the light sensor haven't
-been checked on a device yet (#23). The S1 app also runs as this frame on any device that isn't an Aqara S1
-(`Build.HARDWARE` other than `sun50iw10p1`). Either app names itself after the device and runs the panes the
-device's features allow.
+**Status: under development.** Generic Android ships its own dedicated app, **Glassworks** (`dev.glassworks.generic_android`, built from [`android/`](android)), targeting Android 8.0 or newer (`minSdk` 26), alongside a separate legacy build for Android 6 and 7. On a Google Pixel Tablet (Android 17), dashboard loading, Home Assistant ESPHome adoption, automatic pane hiding, and in-place updates have all been verified; hardware testing for wake words, Sendspin, and the ambient light sensor is still underway.
 
-The app is the Glassworks core with a fixed set of panes: Assist (with its timers), Sendspin, notifications, the
-Bluetooth proxy, the camera (#117) and diagnostics. A pane the device has no hardware for (no microphone, no speaker,
-no Bluetooth LE, no camera) is hidden: it isn't in the settings, on the Manage page, in setup or in Home Assistant.
-The Bluetooth proxy has no root helper here to read the adapter's address, so Home Assistant keys it on the panel's
-ESPHome MAC. On a screen without touch, a high or critical notification with neither a `timeout` nor a `tag` closes
-after 2 minutes, as a view does: nothing else could close it. The camera pane is off until someone turns it on, as
-in the S1 app; then it wakes the screen when someone walks up, on a device without a proximity sensor of its own.
-On a screen without touch (the lululemon Mirror) its setup step never waits: the use stays Presence only, and
-Kiln grants the camera. On a camera without 1280x720 (Android 6-7's) its stream runs at a size the camera lists, or
-stays off with the reason on the Camera page; presence works either way. The screen follows Android's standard proximity sensor (near means under
-5 cm, so a hand over it, not a person across the room) and the light sensor for brightness. Many tablets have
-no proximity sensor; then the screen goes off after the idle time and wakes on a touch. Until setup is done and
-the dashboard has loaded, it stays on (#449). The screen stays on until someone picks a time in **Settings → Screen →
-Turn off when idle** or turns on waking (#522). On a device with a PIN, pattern or password, Android locks it when the
-screen goes off, and someone has to unlock it: the Screen settings and the Manage page say so in amber, with the way
-out (turn the lock off in Android's settings, or keep the screen on).
+*(For reference, the Aqara S1 Plus APK also automatically falls back to generic behavior if installed on non-S1 hardware, naming itself after the device model and hiding unsupported panes.)*
 
-| | The S1 app on a tablet | Glassworks for generic Android |
+### What the Generic Android app includes
+
+The app bundles Glassworks Core with the hardware-neutral panes: **Assist** (with **Timers**), **Sendspin**, **Notifications**, **Bluetooth proxy**, **Camera**, and **Diagnostics**. Any pane whose required hardware is missing (such as a microphone, speaker, Bluetooth LE, or camera) is hidden automatically from setup, settings, the Manage page, and Home Assistant.
+
+Key behaviors to know on non-rooted Android tablets and phones:
+
+- **Screen and sensors:** Uses Android's built-in proximity sensor (short-range hand wave, typically under 5 cm) and ambient light sensor when available. On tablets without a proximity sensor, you can enable the **Camera** pane for motion-based wake on approach, or simply let the screen sleep after your idle timeout and wake on touch. The screen stays awake until initial setup finishes and until you configure an idle timeout under **Settings → Screen → Turn off when idle**.
+- **Screen lock warning:** If your Android device has a PIN, pattern, or password enabled, turning the screen off locks Android and requires unlocking on wake. Both Screen settings and the Manage page display an amber reminder explaining how to disable the lock screen or keep the display awake.
+- **Bluetooth proxy:** Without a root helper to read the Bluetooth adapter's hardware MAC, Home Assistant keys the scanner on the panel's ESPHome MAC.
+- **Non-touch displays:** On touchless screens (like the lululemon Studio Mirror), high or critical notifications without a `timeout` or `tag` dismiss automatically after 2 minutes, and the Camera setup step stays in *Presence only* mode without blocking for touch input.
+- **Intent security:** Configuration extras (`adb shell am start -n dev.glassworks.generic_android/dev.glassworks.MainActivity --es …`) require Android's `WRITE_SECURE_SETTINGS` permission (available to `adb shell` only). The launcher icon uses a separate alias that strips extras so other installed apps cannot modify Glassworks settings.
+
+| Detail | S1 app on a tablet | Generic Android app |
 |---|---|---|
-| applicationId | `sh.edm.s1kiosk` | `dev.glassworks.generic_android` |
-| Home Assistant's model | "Pixel Tablet (Glassworks)" | "Pixel Tablet (Glassworks)" |
-| Panes | All of the S1 app's panes the device can run | Assist, Timers, Sendspin, Notifications, Bluetooth proxy, Camera, Diagnostics |
-| Presence and light | None | Android's proximity and light sensors |
+| `applicationId` | `sh.edm.s1kiosk` | `dev.glassworks.generic_android` |
+| Home Assistant model | `<Model> (Glassworks)` | `<Model> (Glassworks)` |
+| Included panes | All S1 panes supported by hardware | Assist, Timers, Sendspin, Notifications, Bluetooth proxy, Camera, Diagnostics |
+| Presence & ambient light | None | Android proximity and light sensors |
 
-Settings that the S1 app takes as intent extras (`--es url …`, `--es api_key …`, the panes' switches) reach
-this app only from adb: `adb shell am start -n dev.glassworks.generic_android/dev.glassworks.MainActivity --es …`.
-Starting that activity takes `WRITE_SECURE_SETTINGS`, which adb's shell has and other apps can't get. The
-launcher and the home screen use an alias whose extras the app drops, so another app on the device can't
-change a setting.
-
-The two are separate apps with their own data and keys, so both can be installed on one device. Only one
-can run at a time: both serve Home Assistant on port 6053 and the Manage page on 8099. Stop the other
-first (`adb shell am force-stop <id>`).
+Both apps keep separate data and keys, so both can coexist on a test device—just stop one (`adb shell am force-stop <package>`) before launching the other since both listen on ports `6053` and `8099`.
 
 ### The legacy build (Android 6 and 7)
 
-Android 6 and 7 (API 23-25) get a legacy build of this app (#198): GeckoView 144, locked to the panel's Home
-Assistant ([legacy-engine.md](../../docs/research/legacy-engine.md)). It is a separate app,
-`dev.glassworks.generic_android.legacy`, with its own release line, so neither build ever installs over or
-updates the other. The same APK is meant for older tablets and the lululemon Mirror, where Kiln's Mirror recipe flashes it into
-`/system/priv-app` under this id (#411).
+Devices running Android 6 or 7 (API 23–25), including older tablets and the **lululemon Studio Mirror**, use a dedicated legacy build: `dev.glassworks.generic_android.legacy`. It runs GeckoView 144 (`:engine-gecko-legacy`), locks navigation strictly to your Home Assistant origin ([legacy-engine.md](../../docs/research/legacy-engine.md)), disables remote debugging, and follows its own release channel so it never conflicts with the modern Android 8+ build.
 
-It is the `legacy` build type of [`android/`](android): the same sources, manifest and key as the release build,
-with its own id, GeckoView 144 (`:engine-gecko-legacy`), minSdk 23 and core library desugaring. A build type, not
-a product flavor, so the release build keeps its tasks (a flavor would rename them and add `BuildConfig.FLAVOR`).
-Desugaring is the module's, though (AGP has no per-variant switch), so it changes the release APK too: no desugared
-library code goes in at minSdk 26, but D8 adds a small dex of inert API stubs, and the APK isn't byte-identical to
-one built without it. Desugaring puts `desugar_jdk_libs` code (GPL-2.0 with the Classpath exception) in the legacy
-APK only, which the maintainer allowed on 2026-11-16 (`AGENTS.md`, rule 4; `THIRD-PARTY-NOTICES.md`). Its GeckoView follows `-PlegacyAbi`, and the build fails unless that is the APK's `-Ps1Abi`:
+To build it locally (note that `-PlegacyAbi` must match `-Ps1Abi`):
 
 ```sh
 ./gradlew :generic-android:assembleLegacy -Ps1Abi=arm64-v8a -PlegacyAbi=arm64-v8a
-# → frames/generic-android/android/build/outputs/apk/legacy/generic-android-legacy-unsigned.apk
+# Output: frames/generic-android/android/build/outputs/apk/legacy/generic-android-legacy-unsigned.apk
 ```
 
-Status: it builds (CI builds and checks it on every change, and test builds publish it), and CI's conformance test
-starts the core's `MainActivity` on an API 23 emulator (core-emulators.yml). It has run on a lululemon Mirror
-(Android 6.0.1): it starts with no crashes (2026-11-17, #443), and the dashboard loads after a sign-in from a phone
-(2026-11-17, #459). There is no release. Try it first where a crash loop is cheap: as the home app, a crash at start
-would repeat at every boot. What waits: a release job: `release.yml` doesn't build the generic app or its legacy
-build yet. The release key exists ([Signing](#signing)).
+Because Android Gradle Plugin applies core library desugaring module-wide, the legacy build includes `desugar_jdk_libs` (GPL-2.0 with Classpath exception, approved for legacy Android 6–7 support; see `THIRD-PARTY-NOTICES.md`), while the modern Android 8+ release APK contains no desugared library code.
 
-The app reads two things from the device, so the Mirror needs no frame code of its own (#198):
+On the Manage page's Overview screen, the legacy build displays a **Legacy** badge next to the version number summarizing its security restrictions (frozen browser engine locked to Home Assistant, remote debugging disabled).
 
-- **Orientation:** the device's rotation: Android's auto-rotate, or the way the person locked the screen. The Mirror
-  stands portrait because Kiln's first boot locks it there (`user_rotation=3`, auto-rotate off). A device with a frame of its own
-  stands as its `frame.json`'s `display` says: the Pixel Tablet is landscape, though its screen is portrait at
-  rotation 0. The app knows it by `Build.MODEL`, as Kiln's [`devices.ts`](installer/src/devices.ts) does
-  (`GenericAndroid.KNOWN`; `GenericAndroidKnownTest` keeps the two the same).
-- **Touch:** with input devices listed and no touchscreen among them (the Mirror), setup works from a computer
-  instead of the screen (#34).
-Neither build can go on Google Play as it is: each updates itself from the repo's releases, and Play updates
-the apps it installs itself. A Play build would need a variant without the self-updater (#403). Play wouldn't grant
-the system permissions both builds ask for (`INSTALL_PACKAGES`, `REBOOT`, `WRITE_SECURE_SETTINGS`, for the Mirror)
-either.
-Why one legacy app and not a Mirror app of its own: [The legacy build's id](#the-legacy-builds-id).
+The app automatically adapts to the device without requiring custom per-device code:
 
-The Manage page says so: on the legacy build its Overview has a **Legacy** chip next to the version, whose tooltip
-names the limits (#29, [manage.md](../../docs/manage.md#whats-on-it)). No other build shows it, and Home Assistant gets
-no entity for it. Remote debugging stays off on the legacy build: it ignores
-`--ez remote_debug true`, and logs why, and it starts the engine without remote debugging even if the setting was
-left on.
+- **Orientation:** Follows Android's auto-rotate or user rotation lock (Kiln locks the Mirror to portrait at first boot), while recognized frames like the Pixel Tablet use the orientation defined in their `frame.json`.
+- **Touchless setup:** When no touchscreen input device is detected, first-boot setup automatically switches to network setup from a phone or computer ([Set up over the network](../../docs/manage.md#set-up-over-the-network)).
 
-The Clarity badge shows its Clarity grade ([docs/perf.md](../../docs/perf.md)) once one is published; none is yet.
+Neither build is distributed on Google Play because Glassworks manages its own updates from GitHub Releases and requests privileged permissions (`INSTALL_PACKAGES`, `REBOOT`, `WRITE_SECURE_SETTINGS`) needed for dedicated hardware like the Mirror.
 
 ## Hardware
 
-| | |
+| Component | Support |
 |---|---|
 | Radio | None |
-| Presence | Whatever sensors the device has |
-| Audio | Whatever the device has |
-| Root | Not needed |
+| Presence | Built-in proximity sensor or front camera (if present) |
+| Audio | Built-in microphone and speaker (if present) |
+| Root | Not required |
 
 ## Install
 
-It installs as a normal app (an APK). Kiln installs it only as a test for now. Open
-`kiln.glassworks.dev/android?apk=release` (or `/android?apk=release` on `npm run dev -w @glassworks/kiln-app`) in Chrome
-or Edge: Kiln downloads the arm64-v8a APK of the newest `generic-android-v*` release and checks it against the
-release's `.sha256`. `?apk=local` takes a test build's APK from the computer instead. Then plug the tablet in with USB
-debugging still off, and follow the screens. Without either, the page says Kiln doesn't install on Android devices
-yet. It opens to everyone, with the release as the default, when this frame's `design/frame.json` has `status`
-`alpha` and `kiln` `/android`. Kiln names
-the tablet or asks for its brand, shows that brand's steps to turn on USB debugging, waits for Allow on the tablet,
-then installs. Undo is on the Done screen, and on the first screen for a later visit.
+Generic Android installs as a standard APK. While the frame is still under development, you can try Kiln's test installer in Chrome or Edge by opening `kiln.glassworks.dev/android?apk=release` (which fetches and checksum-verifies the latest `generic-android-v*` arm64-v8a release) or `?apk=local` to install a local test APK from your computer. Once this frame reaches alpha, `kiln.glassworks.dev/android` will open directly without query parameters.
 
-Kiln's recipe for it is in [`installer/`](installer) (`@glassworks/generic-android-installer`, #403). Given an adb connection and an APK, it reads the device, refuses a device with a frame of its own (the S1, by
-`ro.hardware`: Kiln installs it from its own page), below Android 6 or the wrong build,
-installs or updates in place, grants what adb can of what the APK asks for (the microphone, secure settings, the overlay, the device
-admin, the camera) and reads each grant back, allows "Install unknown apps" on Android 12+
-so updates install by themselves ([Silent self-update](#silent-self-update-android-12)), makes it the home screen (`cmd package set-home-activity` on Android 7+, else
-Android's chooser), hands over to setup over the LAN, and reads whether the device has a PIN, pattern or password
-(`dumpsys lock_settings`, [research/screen-lock.md](research/screen-lock.md)): with one, Done says someone has to
-unlock it each time the screen turns off, and how to turn the lock off. Its table of brands maps a USB vendor ID, or adb's
-maker and model, to the brand's steps to turn on USB debugging, each with its source. Tested against a fake
-device only; how it works per Android version is in [research/kiln-install.md](research/kiln-install.md).
+Kiln's Generic Android recipe ([`installer/`](installer)) guides you through enabling USB debugging for your tablet's brand, then automatically:
+
+1. Checks device compatibility (rejecting devices below Android 6 or devices with their own dedicated frame like the Aqara S1 Plus).
+2. Installs or updates Glassworks in place.
+3. Grants runtime permissions over adb (microphone, camera, overlay, secure settings, device admin) and verifies each grant.
+4. Allows **Install unknown apps** on Android 12+ so future updates install silently ([Silent self-update](#silent-self-update-android-12)).
+5. Sets Glassworks as the home screen and checks whether a screen lock PIN/password is active so it can warn you if unlocking will be required after sleep.
+6. Hands off to network setup (`http://<panel>:8099/setup`).
+
+To test an unreleased branch, grab the APK from the `glassworks-generic-test-<commit>` artifact produced by [generic-test-build.yml](../../.github/workflows/generic-test-build.yml) (which includes both standard and legacy APKs) and run `adb install -r <apk>`.
 
 ### Without a computer: setup's This device step
 
-Installed from the tablet's own browser, the app has only what Android gives any app. Setup then shows a
-**This device** step after Panes (#403) with the two things Kiln would have set, each a tap here:
+If you sideload the APK directly on your tablet without using Kiln over USB, first-boot setup adds a **This device** step right after Panes so you can grant the two key Android roles with a tap:
 
-| Row | Its button | What Android shows |
+| Setting | Button | What Android shows |
 |---|---|---|
-| Home screen | Make it the home screen | The home role's dialog where Android has it (Android 10+); else, or if it can't open, Android's Home app settings |
-| Turn the screen off | Let it turn the screen off | "Activate device admin app?", with the reason: Glassworks turns the screen off when the panel is idle, or when Home Assistant turns it off; with a PIN or password, Android then locks the device |
+| **Home screen** | Make it the home screen | Android's Home app role prompt (Android 10+) or Home app settings screen |
+| **Turn the screen off** | Let it turn the screen off | Android's Device Admin activation prompt, allowing Glassworks to sleep the display immediately when idle or when Home Assistant turns it off |
 
-Not now skips both; the Device page keeps both rows. Kiln sets both over adb, and setup skips the step when both are
-on already. On a new setup after a Kiln install where the device refused one (a vendor build), setup still offers it
-here. Once it shows, it stays until Continue or Not now. A device set up before this step existed never sees it: its
-Device page rows say where to set each in Android's settings.
+If you tap **Not now**, both options stay available anytime on the **Device** settings page. When Kiln configures both over adb, setup skips this step automatically.
 
-**To uninstall later,** turn the device admin off first: search Android's Settings for "Device admin" (the menus differ
-by Android version and maker), then turn Glassworks off. As device owner, undo that instead (below).
-Android won't uninstall an app while it is an active device admin. Kiln's Undo does this for you.
-
-To try a branch, a test build's artifact `glassworks-generic-test-<commit>` holds its APKs
-([generic-test-build.yml](../../.github/workflows/generic-test-build.yml)), the legacy build's
-(`glassworks-generic-legacy-test-<version>-arm64-v8a-<commit>.apk`) among them.
+**Uninstalling later:** Android prevents uninstalling an app while it is an active device admin. Open Android's Settings, search for **Device admin apps**, and turn off Glassworks first (or release device owner if configured below), then uninstall normally. Kiln's **Undo** handles this automatically.
 
 ## Updates
 
-App updates come from Home Assistant's update entity, as on the S1
-([docs/esphome.md](../../docs/esphome.md#app-updates)). Each app takes only its own releases from the
-repo's GitHub releases (`ReleaseLine` in `core/.../update/Releases.kt`):
+Updates arrive in Home Assistant under **Settings → Updates** just like on the Aqara S1 Plus ([Updates guide](../../docs/updates.md), [ESPHome App updates](../../docs/esphome.md#app-updates)). Each build tracks only its own GitHub release line so builds never overwrite one another:
 
-| App | Release tag | APK, per ABI, with its `.sha256` |
+| Build | GitHub release tag | APK assets (with `.sha256`) |
 |---|---|---|
-| Glassworks for generic Android | `generic-android-v1.2.3` | `glassworks-generic-android-arm64-v8a-1.2.3.apk`, `glassworks-generic-android-armeabi-v7a-1.2.3.apk` |
-| Its legacy build (Android 6-7) | `generic-android-legacy-v1.2.3` | `glassworks-generic-android-legacy-arm64-v8a-1.2.3.apk`, `…-armeabi-v7a-…` |
-| The S1 app | `aqara-s1-plus-v1.2.3` or `v1.2.3` | `s1-kiosk-1.2.3.apk`, `s1-kiosk-arm64-v8a-1.2.3.apk` |
+| Generic Android (Android 8+) | `generic-android-v1.2.3` | `glassworks-generic-android-arm64-v8a-1.2.3.apk`, `glassworks-generic-android-armeabi-v7a-1.2.3.apk` |
+| Legacy build (Android 6–7) | `generic-android-legacy-v1.2.3` | `glassworks-generic-android-legacy-arm64-v8a-1.2.3.apk`, `…-armeabi-v7a-…` |
+| Aqara S1 Plus | `aqara-s1-plus-v1.2.3` or `v1.2.3` | `s1-kiosk-1.2.3.apk`, `s1-kiosk-arm64-v8a-1.2.3.apk` |
 
-So no app ever offers itself another's APK.
+You can opt into pre-releases by changing **Update channel** from **Stable** to **Beta** on the panel's Device settings page or the [Manage page](../../docs/manage.md). Switching back to Stable waits for a newer stable release rather than downgrading.
 
-The Device page's *Update channel* row (and the Manage page's) picks Stable, the default, or Beta, which also takes
-the line's GitHub pre-releases (#605, [releasing.md](../../docs/releasing.md#betas)). Going back to Stable never
-offers a lower version: the app waits for a stable release higher than the one it runs.
+Without a root update daemon, Generic Android installs updates via Android's `PackageInstaller`. Three paths allow hands-free updates without tapping the screen:
 
-The check reads the repo's 100 newest releases (`Releases.LIST_URL`, `per_page=100`, GitHub's largest page),
-all apps and libraries together, and takes the newest of its own among them. So if more than 100 releases of
-other parts come out after this app's newest one, the app sees no update until its next release: every app
-should release at least once in any 100 of the repo's releases. A full page is about 1 MB (7 kB a release on
-2026-11-16); the check reads up to 4 MB. One page keeps each check (after the app starts, then every 24 hours) to one request
-against GitHub's limit of 60 an hour without a token. [`generic-release.yml`](../../.github/workflows/generic-release.yml)
-publishes both builds on the tags above, with notes from [CHANGELOG.md](CHANGELOG.md) (how to cut one:
-[docs/releasing.md](../../docs/releasing.md#glassworks-for-generic-android-and-its-legacy-build)). There has been
-no release of either yet.
-
-The commands below use the generic app's id and component names (`dev.glassworks.generic_android/dev.glassworks.…`).
-For the S1 app on a tablet, use its own: `sh.edm.s1kiosk/.AdminReceiver` and `sh.edm.s1kiosk/.improv.ImprovActivity`.
-
-There is no root update service here, so the app installs the new APK through Android's
-PackageInstaller. Two routes install it without anyone touching the screen:
-
-| Route | Android | What you set up once |
+| Method | Android version | One-time setup |
 |---|---|---|
-| Silent self-update | 12 or newer | Allow "Install unknown apps" for the app |
-| Device owner | 8.0 or newer | `dpm set-device-owner` over adb, on a device with no accounts |
-| Privileged system app | 6.0 or newer | Nothing: Kiln flashes the app into `/system/priv-app` (the Mirror), where Android grants `INSTALL_PACKAGES` |
+| **Silent self-update** | Android 12+ | Allow **Install unknown apps** for Glassworks |
+| **Device owner** | Android 8.0+ | Run `dpm set-device-owner` over adb on a device with no accounts |
+| **Privileged system app** | Android 6.0+ | Automatic when Kiln flashes the legacy build into `/system/priv-app` (lululemon Mirror) |
 
-Without one of them, Android asks for a tap on the screen before it installs. The device's page in
-the panel's settings and on the Manage page, and the *Silent updates* sensor in Home Assistant, say
-whether updates install silently, and how to change it
-([esphome.md](../../docs/esphome.md#silent-updates)). The *Update status* sensor says which one happens: "Installing 1.2.3 without a tap", or "Installing 1.2.3: waiting for a tap on
-the screen".
+Without one of those enabled, Android prompts for a confirmation tap on the screen. Check Home Assistant's **Silent updates** sensor (or the panel's Device page) to see your current status ([esphome.md](../../docs/esphome.md#silent-updates)).
+
+*(Note: The adb commands below use `dev.glassworks.generic_android`. If you are running the S1 APK on a tablet, substitute `sh.edm.s1kiosk/.AdminReceiver` and `sh.edm.s1kiosk/.improv.ImprovActivity`.)*
 
 ### Silent self-update (Android 12+)
 
-The app asks Android to install its own update with no user action (#277). Android allows it when:
+On Android 12 and newer, Glassworks requests silent self-updates automatically when:
 
-1. "Install unknown apps" is allowed for the app: *Settings → Apps → Glassworks → Install unknown
-   apps*, or `adb shell appops set dev.glassworks.generic_android REQUEST_INSTALL_PACKAGES allow`.
-   Kiln's recipe does this by default on Android 12+ and reads it back; the person can say no
-   (`silentUpdates: false`), and `undoSilentUpdates` sets it back to Android's default (#422).
-2. The app that runs the install has this feature. An app from before it asks for a tap once, and
-   the version it installs updates silently from then on.
-3. The new APK targets a recent enough API for the device's Android
-   ([`setRequireUserAction`](https://developer.android.com/reference/android/content/pm/PackageInstaller.SessionParams#setRequireUserAction(int)),
-   read 2026-11-14):
-
-| Device runs | The new APK must target at least |
-|---|---|
-| Android 12 (API 31) | 29 |
-| Android 13 (33) | 30 |
-| Android 14 (34) | 31 |
-| Android 15 (35) | 33 |
-| Android 16 (36) | 34 |
-| Android 17 (37) | 35 |
-
-The app targets 35, so every Android up to 17 qualifies. Android raises the bar by one level each
-year, so the target goes up with each new Android
-([releasing.md](../../docs/releasing.md#raising-targetsdk)).
-
-Status: unit-tested only (2026-11-15). The first run on a real device (the Pixel Tablet, Android 17)
-waits for a release that has the feature.
+1. **Install unknown apps** is enabled for Glassworks (*Settings → Apps → Glassworks → Install unknown apps*, or `adb shell appops set dev.glassworks.generic_android REQUEST_INSTALL_PACKAGES allow`). Kiln sets this automatically during USB setup unless you opt out.
+2. The new APK targets a recent enough Android API level for the device's OS version (Android requires `targetSdk` ≥ 29 on Android 12, 30 on 13, 31 on 14, 33 on 15, 34 on 16, and 35 on 17). Glassworks currently targets API 35, covering everything through Android 17 ([releasing.md](../../docs/releasing.md#raising-targetsdk)).
 
 ### Device owner
 
-A device-owner app installs its updates silently on any Android version it runs on. It also lets the
-app do more on the device (Wi-Fi, permissions), and Settings shows "managed by your organization".
-Android allows it only on a device with no accounts and a single user: remove the Google account
-first, or set it up right after a factory reset.
+Making Glassworks the Android **device owner** enables silent updates on any Android version from 8.0 onward and grants tighter kiosk control. Android only allows setting a device owner when the device has **no Google or user accounts** and a single user profile (for example, right after a factory reset):
 
 ```sh
 adb shell dpm set-device-owner dev.glassworks.generic_android/dev.glassworks.AdminReceiver
 adb shell dumpsys device_policy | grep -A3 "Device Owner"
-# undo (`dpm remove-active-admin` doesn't work for a release build):
+
+# To undo later (dpm remove-active-admin does not work on release builds):
 adb shell am start -n dev.glassworks.generic_android/dev.glassworks.provisioning.ImprovActivity --ez release_device_owner true
 ```
 
-While it is device owner, the app can't be uninstalled until you undo it. The details are in
-[docs/onboarding.md](../../docs/onboarding.md#device-owner-optional). Silent installs as device owner
-are Android's documented behaviour (Android 6.0 and later); they haven't been tried on a generic
-device yet.
+While active, Android Settings notes the device is managed and prevents uninstalling Glassworks until you release device owner using the command above. See [docs/onboarding.md](../../docs/onboarding.md#device-owner-optional) for additional notes.
 
 ### The legacy build's id
 
-The legacy build is `dev.glassworks.generic_android.legacy` on every Android 6-7 device, the Mirror included.
-The choice is permanent for a Mirror: the app in `/system` keeps its id, and an update gets only the privileged
-permissions that copy asked for. What was weighed (2026-11-15):
-
-| | One legacy app (chosen) | A Mirror app of its own |
-|---|---|---|
-| Release lines | Two: current and legacy | Three: current, legacy, Mirror, with the same engine and floor |
-| A fix for Android 6-7 | One release | Two releases of the same code, which can drift apart |
-| Mirror-only behaviour (portrait, no touchscreen, camera presence) | To be chosen on the device, as for any device (not built yet): the screen's size, its input, its sensors, the permissions it holds | Built in |
-| Kiln's Mirror recipe | Checks for the legacy id | Checks for the Mirror id, so a tablet build can't be flashed |
-| What the Mirror build must keep | Every legacy build asks for `INSTALL_PACKAGES`, `REBOOT` and `WRITE_SECURE_SETTINGS` and keeps MAIN, HOME and DEFAULT in one filter (`GenericAppTest`) | The same, in its own build |
-
-A tablet build on the Mirror would be the same APK, so the second app's guard buys nothing. Kiln's Mirror
-recipe installs the legacy id and refuses `sh.edm.s1kiosk` (#411).
+All Android 6–7 devices—including the lululemon Studio Mirror—share the single package ID `dev.glassworks.generic_android.legacy`. Keeping one unified legacy release line avoids duplicating releases and bug fixes while letting Kiln's Mirror recipe verify the package ID before flashing into `/system/priv-app` (where the package ID is permanent and privileged permissions are fixed at install time). Every legacy build declares `INSTALL_PACKAGES`, `REBOOT`, and `WRITE_SECURE_SETTINGS`, verified by `GenericAppTest`.
 
 ## Signing
 
-The app has its own release key, never the S1 app's: Android updates an app only with an APK signed by the same
-key, so this key is what lets every later version install in place over the one before. The build reads it
-from the environment only, as the S1 app's reads its `S1_*` variables:
+Generic Android uses its own dedicated release signing key (`CN=Glassworks, O=GlassworksHQ`, RSA 4096, SHA-256 `564d1367c4eafeac81e80b5b51d4db090a5df9b615d5aa46a83c4c33d5c67caa`), shared by both `dev.glassworks.generic_android` and `.legacy` and kept separate from the S1 Plus release key. Both official releases ([generic-release.yml](../../.github/workflows/generic-release.yml)) and signed test builds ([generic-test-build.yml](../../.github/workflows/generic-test-build.yml)) sign with this key, and CI verifies the certificate fingerprint against [`tools/release/generic-release-cert.sha256`](../../tools/release/generic-release-cert.sha256) so updates always install cleanly in place.
 
-| Variable | What |
+Local release signing reads environment variables (if none are set, Gradle builds an unsigned APK):
+
+| Environment variable | Purpose |
 |---|---|
-| `GENERIC_KEYSTORE_FILE` | The keystore (`.jks`) |
-| `GENERIC_KEYSTORE_PASSWORD`, `GENERIC_KEY_ALIAS`, `GENERIC_KEY_PASSWORD` | Its password, the key's alias and the key's password |
-| `GENERIC_REQUIRE_RELEASE_SIGNING=true` | Fail the build when no key is set, instead of an unsigned APK |
-
-None set: the release APK is unsigned. Some but not all set: the build fails.
-
-The key exists since 2026-11-17: certificate `CN=Glassworks, O=GlassworksHQ` (RSA 4096, valid to 2054). One key
-signs both builds, `dev.glassworks.generic_android` and `.legacy`. It lives in the `release-signing` environment as
-`GENERIC_KEYSTORE_B64` (the PKCS12 keystore, base64), `GENERIC_KEYSTORE_PASSWORD` and `GENERIC_KEY_PASSWORD`
-(the alias, `glassworks`, isn't secret and sits in the workflow), and in the maintainer's password manager. It is never in the repo, and it never changes.
-The keystore is PKCS12, which has one password: `GENERIC_KEYSTORE_PASSWORD` and `GENERIC_KEY_PASSWORD` must be the
-same value, or signing fails with "keystore password was incorrect". The certificate's SHA-256 is
-`564d1367c4eafeac81e80b5b51d4db090a5df9b615d5aa46a83c4c33d5c67caa`.
-
-Releases ([generic-release.yml](../../.github/workflows/generic-release.yml)) and test builds
-([generic-test-build.yml](../../.github/workflows/generic-test-build.yml)) sign with it, so each one updates the last
-in place, settings kept. CI checks every APK's certificate SHA-256 against the one above
-([`tools/release/generic-release-cert.sha256`](../../tools/release/generic-release-cert.sha256), through
-`check-update-compat.sh --app`), so a new key, even with the same name, fails the build. Builds from before 2026-11-17 were signed with a key made for their
-own run: uninstall one before installing a newer build (once; that wipes the app's settings).
+| `GENERIC_KEYSTORE_FILE` | Path to the PKCS12 keystore |
+| `GENERIC_KEYSTORE_PASSWORD`, `GENERIC_KEY_ALIAS`, `GENERIC_KEY_PASSWORD` | Keystore password, alias (`glassworks`), and key password (must match for PKCS12) |
+| `GENERIC_REQUIRE_RELEASE_SIGNING=true` | Fail the build instead of producing an unsigned APK if credentials are missing |
 
 ## Panes
 
-| Pane | Support | Note |
+| Pane | Support | Notes |
 |---|---|---|
-| Assist | Depends on the device | Needs a microphone. |
-| Timers | Depends on the device | Needs Assist. |
-| Sendspin | Depends on the device | Needs a speaker. |
-| Zigbee and Thread radio | No | No supported radio. |
-| Time zone | No | Worked out: only on the S1 (`aqara-s1-plus`). |
-| Diagnostics | Alpha | Needs no special hardware. Both builds have it, with no CPU temperature: no frame here names a thermal zone. |
-| Bluetooth proxy | Depends on the device | Needs Bluetooth LE. Both builds have it. |
-| Notifications | Alpha | Needs no special hardware. Both builds have it. |
-| Camera | Depends on the device | Needs a camera. Both builds have it. |
-| Wall base | No | S1 only. |
+| Assist | Depends on device | Requires a microphone |
+| Timers | Depends on device | Requires Assist |
+| Sendspin | Depends on device | Requires a speaker |
+| Zigbee and Thread radio | Not supported | No supported built-in radio |
+| Time zone | Not supported | Aqara S1 Plus only |
+| Diagnostics | Alpha | Included in both builds (no CPU temperature sensor without a frame-defined thermal zone) |
+| Bluetooth proxy | Depends on device | Requires Bluetooth LE; included in both builds |
+| Notifications | Alpha | Included in both builds |
+| Camera | Depends on device | Requires a camera; included in both builds |
+| Wall base | Not supported | Aqara S1 Plus only |
 
-"Worked out" means `frame.json` doesn't rate the pane; its support comes from what the pane needs and what the frame has ([how](../README.md#the-panes-a-frame-runs)).
+Panes without an explicit override in `frame.json` derive their compatibility automatically from device hardware capabilities ([how it works](../README.md#the-panes-a-frame-runs)).
 
 ## Tests
 
-The app's unit tests are `GenericAppTest` (`:generic-android`). The core it builds on runs on emulators at
-API 26, 29 and 34 in CI: `CoreConformanceTest` boots the core with a fake frame
-([core-emulators.yml](../../.github/workflows/core-emulators.yml)).
+App-specific unit tests live in `GenericAppTest` (`:generic-android`). Across the broader core, CI runs `CoreConformanceTest` on Android emulators at API 23 (legacy), 26, 29, and 34 ([core-emulators.yml](../../.github/workflows/core-emulators.yml)).
 
 ## Research notes
 
-- [kiln-install.md](research/kiln-install.md): which adb commands work on which Android, and how Kiln tells a
-  device's brand before USB debugging is on (#403)
-- [screen-lock.md](research/screen-lock.md): how Kiln reads over adb, without root, whether the device has a PIN,
-  pattern or password (#522)
+- [kiln-install.md](research/kiln-install.md): ADB command compatibility across Android versions and pre-debugging USB brand detection
+- [screen-lock.md](research/screen-lock.md): Detecting PIN, pattern, or password locks over adb without root
 
 ## Files
 
-- [`design/frame.json`](design/frame.json): the catalog data and the 3D model
-- [`android/`](android): the app (`:generic-android`), Glassworks for generic Android
-- [`installer/`](installer): Kiln's recipe, headless for now (#403)
-- [`budgets.json`](budgets.json): the app's size budget, per ABI and per pane ([docs/size.md](../../docs/size.md#budgets)); its RAM budgets are still to set
+- [`design/frame.json`](design/frame.json): Catalog data and 3D model definition
+- [`android/`](android): Gradle app module (`:generic-android`)
+- [`installer/`](installer): Kiln WebUSB installer recipe
+- [`budgets.json`](budgets.json): Per-ABI and per-pane APK size budgets ([docs/size.md](../../docs/size.md#budgets))

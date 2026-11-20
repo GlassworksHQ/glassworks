@@ -68,7 +68,7 @@ async function Device({ params }: { params: Params }) {
   const notRunning = rows.filter((r) => !ships(r.support)).map((r) => r.p.name);
   const running = rows.filter((r) => ships(r.support)).length;
   const all = await getDocs();
-  const guides = all.filter((x) => x.frame === d.id && x.section === "frames" && x.url !== `/docs/frames/${d.id}`);
+  const guides = all.filter((x) => x.frame === d.id && x.section !== "notes" && x.url !== `/docs/frames/${d.id}`);
   const notes = all.filter((x) => x.frame === d.id && x.section === "notes");
   const installGuide = guides.find((g) => g.url.endsWith("/install"));
 
