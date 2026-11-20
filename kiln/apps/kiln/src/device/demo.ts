@@ -65,7 +65,7 @@ export async function appDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim'>
   await s.install();
   if (s.state.screen === 'error') return s; // error: the install stopped
   // setup-error: the app stops answering after the App step, so Wi-Fi can't reach it ("Couldn't reach Glassworks", Try
-  // again). It is back once that shows, so Try again goes through (test/mirror-set-up)
+  // again). It is back once that shows, so Try again goes through (its test is in the set-up tests)
   if (name === 'setup-error' && standard) {
     cutting.cut();
     await standard.installApp({ clock24: true, keyboard: false });
