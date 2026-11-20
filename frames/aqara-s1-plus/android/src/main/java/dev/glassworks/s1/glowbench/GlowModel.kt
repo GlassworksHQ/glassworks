@@ -101,14 +101,18 @@ class GlowModel(val w: Float, val h: Float, val variant: Variant) {
 
     // out = [intensity, weight a, weight b, weight white, weight rose]
     private fun listening(u: Float): Frame {
-        val l = micLevel(u)
         val ripples = ArrayList<FloatArray>()
         var te = 0f
-        while (te <= u) {
-            val lv = micLevel(te); val age = u - te
-            if (lv > 0.3f && age < 1600f) ripples += floatArrayOf(0.62f * age, 0.95f * lv * (1 - age / 1600f).pow(1.4f))
-            te += 140f
-        }
+        while (te <= u) { ripple(micLevel(te), u - te)?.let { ripples += it }; te += 140f }
+        return listeningLive(u, micLevel(u), ripples)
+    }
+
+    /** A ripple sent at level [lv], [age] ms ago: [distance from the mic, strength], or null once gone. */
+    fun ripple(lv: Float, age: Float): FloatArray? =
+        if (lv > 0.3f && age < 1600f) floatArrayOf(0.62f * age, 0.95f * lv * (1 - age / 1600f).pow(1.4f)) else null
+
+    /** Listening at mic level [l], with the [ripples] still running ([ripple]); [u] ms into listening. */
+    fun listeningLive(u: Float, l: Float, ripples: List<FloatArray>): Frame {
         val tail = enterFrame(variant.enterMs + u).flares
         return Frame({ s, out ->
             pos(s, xy); val k = diag(xy[0], xy[1])
@@ -133,7 +137,7 @@ class GlowModel(val w: Float, val h: Float, val variant: Variant) {
         }
     }
 
-    private fun thinking(u: Float): Frame {
+    fun thinking(u: Float): Frame {
         val ph = phi(u); val heads = floatArrayOf(sMic - ph, sMic + ph)
         val flares = ArrayList<Flare>()
         for (idx in crossings.indices) {
@@ -166,7 +170,11 @@ class GlowModel(val w: Float, val h: Float, val variant: Variant) {
     private fun speaking(u: Float): Frame {
         var l = 0f; var n = 0; var te = u - 700
         while (te <= u) { l += ttsLevel(max(0f, te)); n++; te += 50 }
-        l /= n
+        return speakingLive(l / n)
+    }
+
+    /** Speaking at [l], the reply's level already smoothed over about 0.7 s. */
+    fun speakingLive(l: Float): Frame {
         return Frame({ s, out ->
             pos(s, xy); val k = diag(xy[0], xy[1])
             val corner = exp(-(min(k, 1 - k) / 0.2f).pow(2))
@@ -178,7 +186,7 @@ class GlowModel(val w: Float, val h: Float, val variant: Variant) {
 
     private fun enterFrame(u: Float) = when (variant) { Variant.SPARK -> sparkIn(u); Variant.SHEEN -> sheenIn(u); Variant.POUR -> pourIn(u) }
 
-    private fun sparkIn(u: Float): Frame {
+    fun sparkIn(u: Float): Frame {
         val half = p / 2; val ph = half * ease((u - 90) / 430)
         val flares = ArrayList<Flare>()
         if (u < 260) flares += Flare(sMic, u, 260f, .55f * easeOut(u / 90), HOT, 1f, true)
@@ -244,21 +252,37 @@ class GlowModel(val w: Float, val h: Float, val variant: Variant) {
         }, flares, ease(u / 700), 1 + .5f * exp(-max(0f, u - 300) / 300f))
     }
 
+    /** Spark's exit from whatever was on screen ([base]): the light runs back into the mic and blinks out. */
+    fun sparkExit(base: Frame, u: Float, rose: Boolean = false): Frame {
+        val x = Variant.SPARK.exitMs
+        val rho = (p / 2 + 40) * (1 - ease(u / (x - 80)))
+        val flares = if (u > x - 120) listOf(Flare(sMic, u - (x - 120), 160f, .5f, if (rose) ROSE else HOT, 1f)) else emptyList()
+        return Frame({ s, out ->
+            base.eval(s, out)
+            val d = abs(dist(s, sMic))
+            val m = if (d < rho) 1f else exp(-(d - rho).pow(2) / (2 * 16f * 16f))
+            val b = if (u < x - 80) .9f * exp(-(d - rho).pow(2) / (2 * 20f * 20f)) else 0f
+            out[0] = out[0] * m + b; out[1] = out[1] * m + b * .5f; out[2] = out[2] * m + b * .5f; out[3] = out[3] * m + b * .4f
+            out[4] = out[4] * m
+        }, flares, 1 - ease(u / x), 1f)
+    }
+
+    /** Rose, a status colour: one rose pulse leaves the mic both ways, then the edge holds a dim rose. */
+    fun error(u: Float): Frame {
+        val k0 = clamp(u / 240); val r = 1.3f * u
+        return Frame({ s, out ->
+            val d = dist(s, sMic)
+            val pulse = .9f * clamp(1 - u / 1100) * (exp(-(d - r).pow(2) / (2 * 40f * 40f)) + exp(-(d + r).pow(2) / (2 * 40f * 40f)))
+            val i = .12f + .2f * k0 * (1 - .3f * clamp((u - 600) / 800)) + pulse
+            out[0] = i; out[1] = (1 - k0) * .12f; out[2] = (1 - k0) * .12f; out[3] = 0f; out[4] = k0 * (i - .12f) + pulse
+        }, if (u < 360) listOf(Flare(sMic, u, 360f, .6f, ROSE, 1f)) else emptyList(), 1f, 1f)
+    }
+
     private fun exit(u: Float): Frame {
         val x = variant.exitMs
         val base = speaking(3800 + u)
         return when (variant) {
-            Variant.SPARK -> {
-                val rho = (p / 2 + 40) * (1 - ease(u / (x - 80)))
-                val flares = if (u > x - 120) listOf(Flare(sMic, u - (x - 120), 160f, .5f, HOT, 1f)) else emptyList()
-                Frame({ s, out ->
-                    base.eval(s, out)
-                    val d = abs(dist(s, sMic))
-                    val m = if (d < rho) 1f else exp(-(d - rho).pow(2) / (2 * 16f * 16f))
-                    val b = if (u < x - 80) .9f * exp(-(d - rho).pow(2) / (2 * 20f * 20f)) else 0f
-                    out[0] = out[0] * m + b; out[1] = out[1] * m + b * .5f; out[2] = out[2] * m + b * .5f; out[3] = out[3] * m + b * .4f
-                }, flares, 1 - ease(u / x), 1f)
-            }
+            Variant.SPARK -> sparkExit(base, u)
             Variant.SHEEN -> {
                 val q = -0.2f + 1.4f * ease(u / (x - 30))
                 Frame({ s, out ->

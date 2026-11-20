@@ -13,7 +13,7 @@ import pathlib
 import re
 import sys
 
-ORDER = ["enter", "listening", "thinking", "speaking", "exit"]
+ORDER = ["enter", "listening", "thinking", "speaking", "error", "exit"]
 
 
 def main(d: pathlib.Path) -> int:
@@ -26,7 +26,8 @@ def main(d: pathlib.Path) -> int:
     for f in files:
         r = json.loads(f.read_text())
         vsync = 1000.0 / r["refreshHz"]
-        print(f"\n{f.stem}: {r['device']}, Android {r['android']}, {r['refreshHz']:.0f} Hz, {r['loops']} loops")
+        runs = "runs" if r.get("mode") == "live" else "loops"
+        print(f"\n{f.stem} ({r.get('mode', 'bench')}): {r['device']}, Android {r['android']}, {r['refreshHz']:.0f} Hz, {r['loops']} {runs}")
         print(head)
         rows = sorted(r["phases"], key=lambda x: (x["variant"], ORDER.index(x["phase"]) if x["phase"] in ORDER else 9))
         for x in rows:

@@ -37,3 +37,20 @@ class GlowModelTest {
         assertEquals(GlowModel.Phase.GAP, m.at(m.totalMs - 100f).phase)
     }
 }
+
+/** THROWAWAY (test-build/glowbench-s1): the live forms the real voice runs use stay finite too. */
+class GlowModelLiveTest {
+    @Test fun liveFramesAreFinite() {
+        val m = GlowModel(960f, 480f, GlowModel.Variant.SPARK)
+        val out = FloatArray(5)
+        val frames = listOf(
+            m.listeningLive(500f, 0.8f, listOfNotNull(m.ripple(0.8f, 200f), m.ripple(0.5f, 900f))),
+            m.speakingLive(0.4f), m.error(300f), m.thinking(1200f),
+            m.sparkExit(m.speakingLive(0.3f), 200f), m.sparkExit(m.error(800f), 350f, rose = true),
+        )
+        for (f in frames) {
+            var s = 0f
+            while (s < m.p) { f.eval(s, out); for (x in out) assertTrue(x.isFinite() && x >= 0f); s += 4f }
+        }
+    }
+}

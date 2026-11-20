@@ -22,7 +22,7 @@ import kotlin.math.pow
  * caustic per light. Each frame only stamps those bitmaps along the border with an alpha, additively (PLUS), plus a
  * few caustics, the sheen band (a gradient moved by a matrix), the bevel line and the dim. No blur per frame.
  *
- * [run] plays the runs in order; [onPhase] gets each frame's interval and draw time, [onDone] the end.
+ * [play] draws a [Source] until it ends; [onFrame] gets each frame's interval and draw time.
  */
 class GlowBenchView(context: Context) : View(context) {
 
@@ -42,23 +42,63 @@ class GlowBenchView(context: Context) : View(context) {
     private val xy = FloatArray(3)
     private var samples = FloatArray(0)
 
-    var onFrame: ((variant: GlowModel.Variant, phase: GlowModel.Phase, loop: Int, intervalMs: Float, drawMs: Float) -> Unit)? = null
-    var onDone: (() -> Unit)? = null
+    /** What to draw: the frame [ms] after the start and its phase's name, or null when it has ended. */
+    fun interface Source { fun at(ms: Float): Pair<String, GlowModel.Frame>? }
 
-    private var queue: List<GlowModel.Variant> = emptyList()
-    private var loops = 1
-    private var index = 0
-    private var model: GlowModel? = null
+    /** Each frame's phase, interval since the previous frame (Choreographer, ms) and the previous draw's time (ms). */
+    var onFrame: ((phase: String, intervalMs: Float, drawMs: Float) -> Unit)? = null
+
+    private var source: Source? = null
+    private var onEnd: (() -> Unit)? = null
+    var model: GlowModel? = null
+        private set
     private var startNs = 0L
     private var lastNs = 0L
     private var frame: GlowModel.Frame? = null
-    private var phase = GlowModel.Phase.GAP
     private var lastDrawMs = 0f
-    private var running = false
 
     init {
-        setLayerType(LAYER_TYPE_NONE, null)
         visibility = INVISIBLE
+    }
+
+    /** A model for this view's size, once it has one. */
+    fun modelFor(variant: GlowModel.Variant): GlowModel? =
+        if (width == 0 || height == 0) null else GlowModel(width / density, height / density, variant).also {
+            model = it; samples = FloatArray(ceil(it.p / 4f).toInt() * 5)
+        }
+
+    fun play(source: Source, onEnd: () -> Unit) {
+        Choreographer.getInstance().removeFrameCallback(tick)
+        this.source = source; this.onEnd = onEnd
+        startNs = 0L; lastNs = 0L; frame = null
+        visibility = VISIBLE
+        Choreographer.getInstance().postFrameCallback(tick)
+    }
+
+    fun stop() {
+        Choreographer.getInstance().removeFrameCallback(tick)
+        source = null; frame = null
+        visibility = INVISIBLE
+    }
+
+    private val tick = object : Choreographer.FrameCallback {
+        override fun doFrame(frameTimeNanos: Long) {
+            val src = source ?: return
+            if (startNs == 0L) startNs = frameTimeNanos
+            val next = src.at((frameTimeNanos - startNs) / 1e6f)
+            if (next == null) {
+                // Ended: nothing on screen, as the overlay would be GONE.
+                val end = onEnd
+                stop(); end?.invoke()
+                return
+            }
+            // The interval belongs to the frame that just started; the first frame of a run has none.
+            if (lastNs != 0L) onFrame?.invoke(next.first, (frameTimeNanos - lastNs) / 1e6f, lastDrawMs)
+            lastNs = frameTimeNanos
+            frame = next.second
+            invalidate()
+            Choreographer.getInstance().postFrameCallback(this)
+        }
     }
 
     override fun hasOverlappingRendering() = false
@@ -70,51 +110,6 @@ class GlowBenchView(context: Context) : View(context) {
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         dimShader = LinearGradient(0f, 0f, 0f, h.toFloat(), intArrayOf(alpha(ground, .16f), alpha(ground, .28f), alpha(ground, .6f)), floatArrayOf(0f, .55f, 1f), Shader.TileMode.CLAMP)
         bevelShader = LinearGradient(0f, 0f, w.toFloat(), h.toFloat(), colours[0], colours[1], Shader.TileMode.CLAMP)
-    }
-
-    fun run(variants: List<GlowModel.Variant>, loops: Int) {
-        queue = variants; this.loops = loops; index = 0; running = true
-        startRun()
-    }
-
-    fun stop() {
-        running = false
-        Choreographer.getInstance().removeFrameCallback(tick)
-        visibility = INVISIBLE
-    }
-
-    private fun startRun() {
-        if (index >= queue.size * loops) { stop(); onDone?.invoke(); return }
-        val wDp = width / density; val hDp = height / density
-        model = GlowModel(wDp, hDp, queue[index % queue.size])
-        samples = FloatArray(ceil(model!!.p / 4f).toInt() * 5)
-        startNs = 0L; lastNs = 0L
-        visibility = VISIBLE
-        Choreographer.getInstance().postFrameCallback(tick)
-    }
-
-    private val tick = object : Choreographer.FrameCallback {
-        override fun doFrame(frameTimeNanos: Long) {
-            if (!running) return
-            val m = model ?: return
-            if (startNs == 0L) startNs = frameTimeNanos
-            val t = (frameTimeNanos - startNs) / 1e6f
-            val at = m.at(t)
-            if (t >= m.totalMs - 700f || at.phase == GlowModel.Phase.GAP) {
-                // The run is over: nothing on screen for the gap, as the overlay would be GONE, then the next run.
-                visibility = INVISIBLE
-                index++
-                postDelayed({ if (running) startRun() }, 700)
-                return
-            }
-            // The interval belongs to the frame that just started; the first frame of a run has none.
-            if (lastNs != 0L) onFrame?.invoke(m.variant, at.phase, index / queue.size + 1, (frameTimeNanos - lastNs) / 1e6f, lastDrawMs)
-            lastNs = frameTimeNanos
-            phase = at.phase
-            frame = m.frame(t)
-            invalidate()
-            Choreographer.getInstance().postFrameCallback(this)
-        }
     }
 
     override fun onDraw(canvas: Canvas) {
