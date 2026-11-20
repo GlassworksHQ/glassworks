@@ -37,16 +37,16 @@ class S1AgentContractTest : FrameAgentContract("aqara-s1-plus") {
             p[RadioHelper.PROP_VERSION] = "${RadioReports.VERSION}"
             p[UpdateHelper.PROP_VERSION] = "${UpdateHelper.VERSION}"
             p[RadioHelper.PROP_BUNDLE_LOADER] = "1"
-            p[S1Agent.PORTAL_STATUS] = "off"
-            p[S1Agent.HOTSPOT_NAME_STATUS] = "glassworks"
+            p[S1Names.OLD.portalStatus] = "off"
+            p[S1Names.OLD.hotspotNameStatus] = "glassworks"
         }
         when (without) {
             RADIO_MODE -> p.remove(RadioHelper.PROP_SVC_STATE)
             RADIO_FIREWALL -> p[RadioHelper.PROP_VERSION] = "${RadioReports.FIREWALL_VERSION - 1}"
             RADIO_FIRMWARE, TIME_ZONE -> p[RadioHelper.PROP_VERSION] = "${RadioReports.BUNDLE_VERSION - 1}"
             APP_UPDATES -> p.remove(UpdateHelper.PROP_VERSION)
-            HOTSPOT_PORTAL -> p.remove(S1Agent.PORTAL_STATUS)
-            HOTSPOT_NAME -> p.remove(S1Agent.HOTSPOT_NAME_STATUS)
+            HOTSPOT_PORTAL -> p.remove(S1Names.OLD.portalStatus)
+            HOTSPOT_NAME -> p.remove(S1Names.OLD.hotspotNameStatus)
             // An undo: the boot image's marker is gone, the state file stays in /data.
             FRAME_BUNDLE -> p.remove(RadioHelper.PROP_BUNDLE_LOADER)
             BLUETOOTH_ADDRESS, LOADER_INSTALL, null -> Unit
@@ -56,7 +56,7 @@ class S1AgentContractTest : FrameAgentContract("aqara-s1-plus") {
             override fun set(name: String, value: String) { p[name] = value }
         }
         val state = File(Files.createTempDirectory("s1-bundle").toFile(), "radio-bundle").apply { if (!none) writeText("ok 5 5\n") }
-        val bundle = PropsBundle(props, RadioHelper.BUNDLE_SERVICE, RadioHelper.PROP_BUNDLE_STATUS, RadioHelper.BUNDLE_STAGE_DIR, state) { if (it.exists()) 0 else null }
+        val bundle = PropsBundle(props, RadioHelper.BUNDLE_SERVICE, RadioHelper.PROP_BUNDLE_STATUS, RadioHelper.BUNDLE_STAGE_DIR, state, ownerUid = { if (it.exists()) 0 else null })
         val bt = File(Files.createTempDirectory("s1-agent").toFile(), "bluetooth-address")
         if (!none && without != BLUETOOTH_ADDRESS) bt.writeText("00:00:5E:00:53:01\n")
         return S1Agent(props, bundle = bundle, bluetoothFile = bt)

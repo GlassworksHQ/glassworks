@@ -89,6 +89,9 @@ interface BundleAgent {
     /** Where the app stages a bundle, relative to its files dir. */
     val stageDir: String
 
+    /** The first line of a bundle manifest this agent installs (`S1RADIO-BUNDLE 1`); the app stages no other bundle. */
+    val format: String
+
     /** Asks for the staged bundle to be installed. */
     fun request()
 

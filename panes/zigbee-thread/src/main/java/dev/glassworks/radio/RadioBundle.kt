@@ -60,6 +60,8 @@ class RadioBundle(
         val inst = installed() ?: return null
         val manifest = source.manifest() ?: return null
         val shipped = parseVersion(manifest) ?: return "radio bundle in this app has no version".also { lastResult = it }
+        // A bundle the agent doesn't take (the radio bundle on a frame loader image, which installs frame bundles): leave it.
+        if (!manifest.startsWith(bundle.format + "\n")) return null
         if (inst.floor > shipped) return null                        // the panel would refuse it anyway
         if (inst.state == "ok" && inst.version >= shipped) return null
         val last = tried[shipped]
