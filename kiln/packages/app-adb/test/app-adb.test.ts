@@ -433,5 +433,8 @@ describe('wifiSsid', () => {
     expect(await wifiSsid(on('mWifiInfo SSID: Home Net, BSSID: 02:00:00:00:00:01, Supplicant state: COMPLETED'))).toEqual({ ssid: 'Home Net' });
     expect(await wifiSsid(on('mWifiInfo SSID: <unknown ssid>, BSSID: <none>, Supplicant state: DISCONNECTED'))).toEqual({});
     expect(await wifiSsid(on('Wi-Fi is disabled'))).toEqual({});
+    // as printed: spaces at its ends, and a comma in an unquoted name
+    expect(await wifiSsid(on('mWifiInfo SSID: " Home Net ", BSSID: 02:00:00:00:00:01'))).toEqual({ ssid: ' Home Net ' });
+    expect(await wifiSsid(on('mWifiInfo SSID: Home, Net, BSSID: 02:00:00:00:00:01, Supplicant state: COMPLETED'))).toEqual({ ssid: 'Home, Net' });
   });
 });

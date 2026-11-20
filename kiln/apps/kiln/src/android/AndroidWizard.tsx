@@ -159,6 +159,7 @@ function Find({ s, session }: { s: AndroidState; session: AndroidSession }) {
         : 'Use its USB cable, with USB debugging still off. Kiln reads what the tablet is; nothing on it changes.'}</p>
       <ApkField s={s} session={session} />
       {s.flow === 'install' && <p className="small">{s.release ? 'Android 8' : 'Android 6'} or newer, over USB. {WHAT_KILN_DOES}</p>}
+      {s.changed && <p className="small">An earlier try already changed the tablet.</p>}
       {s.finding && <p className="status work" role="status">Pick the tablet in the browser&apos;s list…</p>}
       {s.findError && <p className="status err" role="alert">{s.findError}</p>}
       <div className="foot">

@@ -117,8 +117,9 @@ export async function startApp(r: Steps, opts: { haUrl?: string; locale?: string
  * from 10 on). Undefined when it isn't on one, or Android doesn't say: a frame with a reader of its own uses that.
  */
 export async function wifiSsid(p: PanelShell, signal?: AbortSignal): Promise<{ ssid?: string }> {
-  const m = /mWifiInfo SSID: (?:"([^"]*)"|([^,]*)), BSSID/.exec((await p.run('dumpsys wifi', signal)).out);
-  const ssid = (m?.[1] ?? m?.[2])?.trim();
+  // up to the `, BSSID` that ends it, as printed: a network's name may hold spaces at its ends, commas and quotes
+  const m = /mWifiInfo SSID: (?:"(.*?)"|(.*?)), BSSID/.exec((await p.run('dumpsys wifi', signal)).out);
+  const ssid = m?.[1] ?? m?.[2];
   return ssid && ssid !== '<unknown ssid>' ? { ssid } : {};
 }
 

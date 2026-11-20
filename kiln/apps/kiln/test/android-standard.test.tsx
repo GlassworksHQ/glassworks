@@ -94,3 +94,12 @@ describe('/android\'s addresses', () => {
     expect(location.pathname).toBe('/android/set-up/wifi');
   });
 });
+
+describe('a reload during the install', () => {
+  it('says on the first screen that an earlier try changed the tablet', async () => {
+    sessionStorage.setItem('kiln:device:/android:app', JSON.stringify({ at: 'written' }));
+    history.replaceState(null, '', '/android?apk=local');
+    render(<AndroidWizard />);
+    expect(await screen.findByText('An earlier try already changed the tablet.')).toBeTruthy();
+  });
+});
