@@ -8,6 +8,7 @@ import android.content.Context
 import dev.glassworks.frame.Frame
 import dev.glassworks.frame.Input
 import dev.glassworks.pane.PaneDefinition
+import kotlin.math.roundToInt
 
 /**
  * What this device has for the Screen settings (#471): the one answer the panel's settings and the Manage
@@ -28,6 +29,17 @@ data class ScreenHardware(val presence: Presence, val light: Boolean, val touch:
 
     /** Someone near can wake the screen now. */
     val sensesPresence: Boolean get() = presence is Presence.Sensor || (presence as? Presence.Pane)?.on == true
+
+    /**
+     * The Log page's "Screen and sensors" line (#675), in words, with a row only for what this device has: no
+     * room light without a light sensor, no one near without presence. [brightness] below 0 means the app leaves
+     * the screen's brightness to Android (every frame's app can set it, so that row always shows).
+     */
+    fun status(near: Boolean, lux: Float, brightness: Float): String = listOfNotNull(
+        if (sensesPresence) "Someone near: ${if (near) "yes" else "no"}" else null,
+        if (light) "Room light: ${if (lux.isNaN()) "no reading yet" else "${lux.roundToInt()} lux"}" else null,
+        "Brightness: ${if (brightness < 0f) "set by Android" else "${(brightness * 100).roundToInt()} %"}",
+    ).joinToString(" · ")
 
     companion object {
         /**

@@ -24,6 +24,10 @@ line of each version is what Home Assistant shows on the update card. A change o
   back to Stable never installs an older version: the panel waits for a stable release newer than the one it runs.
 
 ### Fixed
+- **Settings > Log says what the screen senses in plain words.** *Screen and sensors* read like
+  `presence=far (raw 7.7E-4) · lux=NaN · brightness=-1.00 · admin=true`. It now reads like *Someone near: no ·
+  Room light: 120 lux · Brightness: 40 %*, with only what the device has: no room light without a light sensor, no
+  one near without presence. The panel and the Manage page show the same. The raw values are in the app's log.
 - **Setup carries on after you sign in on the panel.** After *Sign in on this panel instead*, the dashboard showed for
   up to 2 minutes before setup came back on *Add it*, so setup looked finished. Setup now comes back as soon as you're
   signed in. While Home Assistant may still find the panel by itself, *Add it* says it's checking.
