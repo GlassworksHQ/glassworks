@@ -11,7 +11,7 @@ import { FRAMES } from '../frames/catalog';
 import { Recovery } from '../recovery/Recovery';
 import type { RailMark, RailStep } from '../wizard/state';
 import type { ImageSession, ImageState, WorkStep } from './imageSession';
-import { Choose, ConfirmCommunity, DoneCommunity, Download, DownloadButton, FileRow, WayBack, Whose, possessive } from './choice/ChoiceScreens';
+import { Choose, ConfirmCommunity, DoneCommunity, Download, DownloadButton, FileRow, WayBack, Whose } from './choice/ChoiceScreens';
 import { ReleaseApk, TestOnly } from './ReleaseApk';
 import type { AppSession, AppState } from './appSession';
 import { SilentUpdates } from '../components/SilentUpdates';
@@ -101,7 +101,7 @@ export function ImageImage({ f, s, m, ms }: P) {
         <DownloadButton f={f} s={s} label="Download the system image" />
       </div>
       {/* the flashed device is fine and keeps this browser's key: only the first start over adb is left (a real run, 2026-11-19) */}
-      <p className="small">{`Flashed this ${d.short} already, and its first start didn't finish? `}<button type="button" className="link" disabled={!!f.inputsBlocked()} onClick={() => f.finishFirstStart()}>Finish its first start</button>, with Home Assistant and the Wi-Fi above.</p>
+      <p className="small">{`Flashed already, but its first start didn't finish? `}<button type="button" className="link" disabled={!!f.inputsBlocked()} onClick={() => f.finishFirstStart()}>Finish its first start</button></p>
     </section>
   );
 }
@@ -114,19 +114,19 @@ export function ImageFastboot({ f, s }: P) {
       {f.recipe.community && <Whose r={f.recipe} />}
       <h2 id="h">{`Put ${d.the} in fastboot.`}</h2>
       <p className="lede">{s.restarted
-        ? d.words['fastboot.restarted']
-        : `A ${d.short} that runs Glassworks restarts into fastboot over USB, with no button to hold: plug it into this computer, click Restart into fastboot and pick it (Android) in the browser’s list.`}</p>
+        ? rich(d.words['fastboot.restarted'])
+        : rich(`Plug ${d.the} into this computer, with Glassworks running. Click Restart into fastboot and pick \`Android\`.`)}</p>
       <ByHand f={d}>
       <Recovery data={d.recovery} />
       <ol className="join">
         {lines(d.words['fastboot.byHandSteps']).map((x) => <li key={x}>{x}</li>)}
       </ol>
       <p className="small">{d.words['fastboot.byHandNote']}</p>
-      <p className="small">{rich(`Then click Connect and pick ${d.the} (\`Android\`) in the browser's list. Kiln only reads it here.`)}</p>
+      <p className="small">{rich('Then click Connect and pick `Android`.')}</p>
       </ByHand>
       {r && !r.ok && (
         <ol className="join">
-          {r.checks.map((c) => <li key={c.what} className={c.ok ? 'done' : 'fail'}>{c.what}: {c.found}{!c.ok && <span className="sub-step">Needs {c.need}. Kiln stops here; nothing was written.</span>}</li>)}
+          {r.checks.map((c) => <li key={c.what} className={c.ok ? 'done' : 'fail'}>{c.what}: {c.found}{!c.ok && <span className="sub-step">Needs {c.need}. Nothing was written.</span>}</li>)}
         </ol>
       )}
       {s.connecting && <p className="status work" role="status">{`Pick ${d.the} in the browser's list…`}</p>}
@@ -206,7 +206,7 @@ export function ImageWorking({ f, s }: P) {
       <ol className="join">
         {rows.map((r, i) => <li key={r.id} className={i < at ? 'done' : i === at ? 'cur' : ''}>{r.text}{i === at && x > 0 && x < 1 && <span className="sub-step">{Math.floor(x * 100)}%</span>}
           {/* the image is small to send; the device then writes an empty filesystem (212 MiB on the first frame), with nothing to report (a real run, 2026-11-19) */}
-          {i === at && r.id === 'flash-userdata' && <span className="sub-step">This part takes a minute or two, and the bar hardly moves.</span>}</li>)}
+          {i === at && r.id === 'flash-userdata' && <span className="sub-step">A minute or two. The bar hardly moves.</span>}</li>)}
       </ol>
       <div className="bar" role="progressbar" aria-label={rows[at]?.text} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.floor(((at + x) / rows.length) * 100)}>
         <i style={{ width: `${Math.max(2, ((at + x) / rows.length) * 100)}%` }} />
@@ -225,10 +225,10 @@ export function ImageAdb({ f, s }: P) {
       <span className="turn-label"><span className="pulse" />Your turn</span>
       <h2 id="h">One last click.</h2>
       {r.community
-        ? <p className="lede">{`${cap(d.the)} is starting ${r.name}. Its first start takes a few minutes. Click Connect and pick ${d.the} in the browser's list. Kiln connects with ${possessive(r.name)} own published key, which the image trusts, so nothing asks on its screen. It switches Wi-Fi on, and that's all it does.`}</p>
-        : <p className="lede">{d.words['adb.firstStart']}{keyHeld(s.key) && ' Then Kiln gives Glassworks Home Assistant’s key back.'}</p>}
+        ? <p className="lede">{`Its first start takes a few minutes. Click Connect and pick ${d.the} in the browser's list, and Kiln switches its Wi-Fi on.`}</p>
+        : <p className="lede">{rich(d.words['adb.firstStart'])}</p>}
       {s.connecting && !s.adbWaiting && <p className="status work" role="status">{`Pick ${d.the} in the browser's list…`}</p>}
-      {s.adbWaiting && <p className="status work" role="status">{`${cap(d.the)} is still starting. Kiln asks again every few seconds…`}</p>}
+      {s.adbWaiting && <><p className="status work" role="status">{`Waiting for ${d.the} to finish starting…`}</p><div className="bar wait"><i /></div></>}
       {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
       <div className="foot">
         <Log s={s} />
@@ -267,7 +267,7 @@ export function ImageDone({ f, s }: P) {
           <div className="grow">
             <span className="status err">This Glassworks build has no home screen.</span>
             <span className="small">
-              So Kiln hid nothing: {fb.home.left.length ? <code>{fb.home.left.join(', ')}</code> : 'the image’s launcher'}{` stays ${d.the}'s home screen, and ${d.the} still starts to it.`}
+              {fb.home.left.length ? <code>{fb.home.left.join(', ')}</code> : 'The image’s launcher'}{' stays its home screen.'}
               {` ${d.words['done.noHomeFix']}`}
             </span>
           </div>
@@ -291,13 +291,12 @@ export function ImageDone({ f, s }: P) {
 
 export function ImageError({ f, s }: P) {
   const d = f.frame;
-  const community = f.recipes.find((x) => x.community);
   return (
     <section className="card err" aria-labelledby="h">
       {f.recipe.community && <Whose r={f.recipe} />}
       <h2 id="h">The install stopped.</h2>
       <pre className="raw">{s.error}</pre>
-      {s.work && !['first-boot', 'hand-back', 'restart', 'wifi-on'].includes(s.work.step) && <p className="small">{`${cap(d.the)} is still in fastboot: leave it on and plugged in. `}{s.files.every((x) => x.state === 'ok') ? 'Connect fastboot again' : 'Download the files again, then connect fastboot'} and install again{f.recipe.community || !community ? '' : `, or install the ${community.name} image from this page`}: no button to hold.</p>}
+      {s.work && !['first-boot', 'hand-back', 'restart', 'wifi-on'].includes(s.work.step) && <p className="small">{`${cap(d.the)} is still in fastboot: leave it plugged in. `}{s.files.every((x) => x.state === 'ok') ? 'Connect fastboot again' : 'Download the files again, then connect fastboot'}, and install again.</p>}
       {s.flashFailed && !f.recipe.community && !s.noFill && (
         <p className="small">{d.words['error.noFill']}</p>
       )}

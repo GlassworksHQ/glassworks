@@ -31,8 +31,9 @@ export interface ImageDeps {
    * The browser's device list for the device's adb, inside the click: after the first boot, and before the flash to
    * read Home Assistant's key (issue 580). Throws AdbAuthTimeout when the device hasn't let this browser's key in within
    * `authMs`: the frame's `timings.authMs` for the read before the flash, `firstStartAuthMs` for the first start's first try.
+   * `onPicked`: called when the list closes on a device, before it lets the key in.
    */
-  requestAdb(o?: { authMs?: number }): Promise<PanelShell>;
+  requestAdb(o?: { authMs?: number; onPicked?: () => void }): Promise<PanelShell>;
   /**
    * adb again on the device requestAdb picked, with no list: while the device is still starting it refuses this
    * browser's key (adbd answers before it reads the adb_keys in the new userdata), so Kiln asks again. Each call gives
@@ -125,7 +126,7 @@ export interface ImageState {
   fastboot?: FastbootReport;
   connecting?: boolean;
   connectError?: string;
-  /** The device refused this browser's key so far: it is still starting, and Kiln asks again. */
+  /** A device is picked and hasn't let this browser in yet: it is still starting, and Kiln waits and asks again. */
   adbWaiting?: boolean;
   understood: boolean;
   work?: { step: WorkStep; x: number };
@@ -744,9 +745,12 @@ export class ImageSession {
     if (this.recipe.community) return this.connectWifiOn();
     if (this.state.connecting) return;
     // every try has a deadline: the first `firstStartAuthMs`, each retry at most `authMs` (reopenAdb)
-    const req = this.d.requestAdb({ authMs: this.d.frame.timings.firstStartAuthMs });
-    this.connects++;
-    this.set({ connecting: true, connectError: undefined, adbWaiting: false });
+    const run = ++this.connects;
+    // the screen says it waits from the pick on: the first try alone can take firstStartAuthMs (a real run, 2026-11-19)
+    let pickedNow = false;
+    const onPicked = () => { pickedNow = true; if (run === this.connects && this.state.connecting) this.set({ adbWaiting: true }); };
+    const req = this.d.requestAdb({ authMs: this.d.frame.timings.firstStartAuthMs, onPicked });
+    this.set({ connecting: true, connectError: undefined, adbWaiting: pickedNow });
     const sleep = this.d.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
     let p: PanelShell | undefined;
     let last: unknown;

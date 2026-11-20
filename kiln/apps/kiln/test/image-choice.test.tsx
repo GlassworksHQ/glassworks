@@ -233,8 +233,8 @@ describe('Glass Panes', () => {
   it.each(['image-download-error', 'image-download-bad'] as const)('%s: Kiln\'s bug, Try again and Report this, nothing to pick by hand', async (d) => {
     const flash = await show(d);
     const alert = screen.getByRole('alert').textContent!;
-    expect(alert).toMatch(/Nothing was written to the Mirror\. This is a bug in Kiln, not something you did\./);
-    if (d === 'image-download-bad') expect(alert).toMatch(/its SHA-256 differs\), so it deleted it/);
+    expect(alert).toMatch(/Nothing was written to the Mirror\. This is Kiln’s bug, not yours\./);
+    if (d === 'image-download-bad') expect(alert).toMatch(/Its SHA-256 isn’t the release’s, so Kiln deleted it/);
     else expect(alert).toMatch(/Kiln couldn’t download it: the download proxy answered 502: GitHub answered 503\./);
     const report = new URL(screen.getByRole('link', { name: 'Report this' }).getAttribute('href')!);
     expect(report.origin + report.pathname).toBe('https://github.com/GlassworksHQ/glassworks/issues/new');
@@ -256,10 +256,10 @@ describe('Glass Panes', () => {
   it('Done says what is next in its own project, and the way back to Glassworks', async () => {
     const flash = await show('image-done');
     expect(screen.getByRole('heading').textContent).toBe('Glass Panes is on the Mirror.');
-    expect(screen.getByText(/Set it up as its README says/)).toBeTruthy();
+    expect(screen.getByText(/Unplug it from this computer, then set it up as its README says/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Install Glassworks' }));
     expect(flash.state).toMatchObject({ screen: 'choose', picked: 'glassworks', from: 'glass-panes', open: false });
-    expect(screen.getByRole('status').textContent).toMatch(/^The way back from Glass Panes\. Glassworks replaces it/);
+    expect(screen.getByRole('status').textContent).toMatch(/^Glassworks replaces Glass Panes and everything on the Mirror\./);
   });
 });
 

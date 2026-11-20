@@ -100,7 +100,11 @@ function realSessions(frame: DeviceFrame, on: boolean, from: ApkFrom = 'local'):
     requestFastboot: () => Fastboot.request([flow.fastbootFilter]),
     requestAdb: (o) => {
       adbDevice = undefined; // a click that fails before the list (the key still loading) picks nothing
-      return keys.connectWith(async (k) => Panel.connect(k, (adbDevice = await Panel.pick()), o))();
+      return keys.connectWith(async (k) => {
+        adbDevice = await Panel.pick();
+        o?.onPicked?.();
+        return Panel.connect(k, adbDevice, { authMs: o?.authMs });
+      })();
     },
     adbPicked: () => !!adbDevice,
     reopenAdb: async (o) => {
@@ -151,7 +155,7 @@ function Off({ f }: { f: DeviceFrame }) {
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">{`${cap(f.the)} doesn't install from Kiln yet.`}</h2>
-      <p className="lede">Its installer is still being tested. Follow it on GitHub, or pick another panel.</p>
+      <p className="lede">Its installer is still being tested.</p>
       <div className="foot">
         <a className="link" href={`https://github.com/GlassworksHQ/glassworks/tree/main/frames/${f.id}`}>{`${cap(f.the)} on GitHub`}</a>
         <Link className="btn ghost" href="/">Pick a panel</Link>
@@ -207,7 +211,7 @@ function Pick({ s, session }: { s: AppState; session: AppSession }) {
       {s.connecting && <p className="status work" role="status">{`Pick ${f.the} in the browser's list, then choose Allow on ${f.the}'s screen…`}</p>}
       {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
       <div className="foot">
-        <span className="small">{`Connecting only reads ${f.the}.`}</span>
+        <span />
         <button type="button" className="btn ember" disabled={s.connecting} onClick={() => void session.connect()}>Connect</button>
       </div>
     </section>
@@ -275,11 +279,11 @@ function Done({ s, session }: { s: AppState; session: AppSession }) {
   const opened = (f?: string) => (!f ? 'nothing Kiln could read' : /ResolverActivity|ChooserActivity/.test(f) ? 'its list of home apps' : f.split('/')[0]);
   const admins = r.flow === 'install' ? r.installed.heldHomes : [];
   const body = r.flow === 'install'
-    ? home === 'set' ? `It is the only home screen, upright, so it opens when ${f.the} starts.`
-      : admins.length ? `${admins.join(', ')} is a device administrator on this ${f.short}, so Android won't hide it, and Glassworks can't be its only home screen over adb. Install Glassworks over fastboot instead: it starts from a fresh userdata, without it.`
-      : `Android opened ${opened(r.installed.homeCheck.focused)} for the home screen${r.installed.homeCheck.left.length ? `, and ${r.installed.homeCheck.left.join(', ')} is still a home app` : ''}. Read ${f.the} again, then Update: Kiln hides the other home apps again.`
+    ? home === 'set' ? `It opens when ${f.the} starts.`
+      : admins.length ? `${admins.join(', ')} is a device administrator, so Glassworks can't be the only home screen over adb. Install Glassworks over fastboot instead.`
+      : `Android opened ${opened(r.installed.homeCheck.focused)} for the home screen${r.installed.homeCheck.left.length ? `, and ${r.installed.homeCheck.left.join(', ')} is still a home app` : ''}. Read ${f.the} again, then Update.`
     : home === 'set' ? `The home screen is ${r.removed.previousHome?.split('/')[0] ?? 'yours'} again.`
-      : `Android opened ${opened(r.removed.focused)} for the home screen, not ${r.removed.previousHome?.split('/')[0] ?? 'the app you had before'}. Undo again: Kiln unhides it and checks once more.`;
+      : `Android opened ${opened(r.removed.focused)} for the home screen, not ${r.removed.previousHome?.split('/')[0] ?? 'the app you had before'}. Undo again.`;
   return (
     <section className="card" aria-labelledby="h">
       <span className="okmark" aria-hidden="true">✓</span>

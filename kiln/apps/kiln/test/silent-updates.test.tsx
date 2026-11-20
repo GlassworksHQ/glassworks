@@ -47,14 +47,14 @@ describe('the S1', () => {
 
   it('Done: On when the boot image has the root update service', async () => {
     await s1('done');
-    expect(block()).toBe('Silent updatesOnUpdates from Home Assistant install with nobody at the panel. The root update service in its boot image installs them.');
+    expect(block()).toBe('Silent updatesOnUpdates from Home Assistant install by themselves.');
     // it lands after Done opens, so the live region says it too
     expect(document.querySelector('[aria-live="polite"]')?.textContent).toBe('Done. Silent updates: On.');
   });
 
   it('Done: a tap each on a boot image from before the service, and how to add it', async () => {
     await s1('done-old-boot');
-    expect(block()).toBe('Silent updatesA tap eachThis panel\'s boot image has no root update service, so each update waits for a tap on the panel. Updates still come from Home Assistant. Install again with Kiln to add it.');
+    expect(block()).toBe('Silent updatesA tap eachEach update waits for a tap on the panel. Install again with Kiln to make them silent.');
   });
 
   /** A set-up session on the simulated panel reaches Done; `prop` is what the panel answers for the update service's prop. */
@@ -87,12 +87,12 @@ describe('the Mirror', () => {
   it('Done after the fastboot install: On, read back from the image\'s privileged copy', async () => {
     const { image: flash, app: mirror } = await imageDemo(mirrorEntry, 'flash-done', true);
     render(<ImageFlow image={flash} app={mirror} />);
-    expect(block()).toBe('Silent updatesOnUpdates from Home Assistant install with nobody at the Mirror. Glassworks is a system app in the Mirror\'s image, and Android lets it install its own updates.');
+    expect(block()).toBe('Silent updatesOnUpdates from Home Assistant install by themselves.');
   });
 
   it('Done after the app alone over adb: a normal app, so a click each, and what makes it silent', async () => {
     render(<AppFlow session={await appDemo(mirrorEntry, 'done', true)} />);
-    expect(block()).toBe('Silent updatesA click eachGlassworks went in as a normal app, so Android asks before each update, and the Mirror has no touchscreen to answer it. A USB mouse can. Kiln\'s install over fastboot makes it a system app whose updates install by themselves.');
+    expect(block()).toBe('Silent updatesA click eachAndroid asks before each update, and the Mirror has no touchscreen to answer: use a USB mouse. An install over fastboot makes updates silent.');
   });
 
   it('Done after an adb update of the image\'s copy: On', async () => {
@@ -119,7 +119,7 @@ describe('the Mirror', () => {
     await s.pickApk('generic-android-legacy.apk', fakeMirrorApk());
     await s.install();
     render(<AppFlow session={s} />);
-    expect(block()).toBe('Silent updatesNot confirmedKiln couldn\'t read Glassworks back from Android. Glassworks\' Device page on the Mirror says which it is.');
+    expect(block()).toBe('Silent updatesNot confirmedKiln couldn\'t read it back. Glassworks\' Device page on the Mirror says.');
     cleanup();
     render(<AppFlow session={await appDemo(mirrorEntry, 'undo-done', true)} />);
     expect(block()).toBeUndefined();

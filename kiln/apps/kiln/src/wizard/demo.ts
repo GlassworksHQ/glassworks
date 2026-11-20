@@ -295,8 +295,8 @@ export async function enterDemo(session: Session, d: DemoFrame, which: Demo): Pr
     case 'done':
     case 'done-old-boot': // set up on a panel whose boot image is from before the root update service
       dispatch({ type: 'done', done: {
-        title: 'Done.', body: 'The panel is on Home Net. Home Assistant finds it by itself as an ESPHome device.',
-        backup: { name: `${plan.idPrefix}-20261112-101500.zip`, info: sim.backupInfo, hint: 'Original software, backed up. Keep it: it\'s also kept in this browser.' },
+        title: 'Done.', body: 'The panel is on Home Net. Home Assistant finds it by itself.',
+        backup: { name: `${plan.idPrefix}-20261112-101500.zip`, info: sim.backupInfo, hint: 'Original software, backed up. Keep it.' },
         setupPage: `http://${IP}:8099/setup`,
         updates: frame.silent[(await frame.updates(simulatedPanel(d, false, true, undefined, which === 'done'))).state],
       } });

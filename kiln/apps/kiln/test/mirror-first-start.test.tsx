@@ -27,7 +27,7 @@ afterEach(() => cleanup());
 /** What @yume-chan/adb throws when the Mirror refuses the key and the public-key fallback has nobody to approve it. */
 const REFUSED = 'No authenticator can handle the request';
 
-function setup(adb: { request: () => Promise<PanelShell>; reopen?: (o?: { authMs?: number }) => Promise<PanelShell>; tries?: number; picked?: () => boolean; windowMs?: number; fastboot?: () => Promise<FastbootLike> }) {
+function setup(adb: { request: (o?: { authMs?: number; onPicked?: () => void }) => Promise<PanelShell>; reopen?: (o?: { authMs?: number }) => Promise<PanelShell>; tries?: number; picked?: () => boolean; windowMs?: number; fastboot?: () => Promise<FastbootLike> }) {
   const images: ImageMaker = {
     async fetch(_, onProgress) { onProgress(1); },
     async download() {},
@@ -135,7 +135,7 @@ describe('connecting while the Mirror is still starting', () => {
     const { f, mirror } = setup({ request, reopen, picked: () => true });
     await flashed(f, mirror);
     await f.connectAdb();
-    expect(request).toHaveBeenCalledWith({ authMs: FIRST_START_AUTH_MS });
+    expect(request).toHaveBeenCalledWith(expect.objectContaining({ authMs: FIRST_START_AUTH_MS }));
     expect(reopen).toHaveBeenCalledTimes(1);
     expect(f.state.screen).toBe('done');
   });
@@ -153,7 +153,30 @@ describe('connecting while the Mirror is still starting', () => {
     const { f, mirror } = setup({ request: async () => new FirstBootMirror() });
     await flashed(f, mirror);
     render(<ImageFlow image={f} app={mirror} />);
-    expect(screen.getByText(/Its glass stays dark for a few minutes while it does: that.s expected, so leave it plugged in\./)).toBeTruthy();
+    expect(screen.getByText(/Its glass stays dark for a few minutes\. Leave it plugged in/)).toBeTruthy();
+  });
+
+  it('says it waits for the Mirror from the moment it is picked, before the Mirror answers or refuses', async () => {
+    let answer!: (p: PanelShell) => void;
+    const { f, mirror } = setup({ request: async (o) => { o?.onPicked?.(); return new Promise<PanelShell>((r) => { answer = r; }); } });
+    await flashed(f, mirror);
+    render(<ImageFlow image={f} app={mirror} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+    expect(await screen.findByText('Waiting for the Mirror to finish starting…')).toBeTruthy();
+    expect(screen.queryByText('Pick the Mirror in the browser\'s list…')).toBeNull();
+    expect(f.state).toMatchObject({ screen: 'adb', connecting: true, adbWaiting: true });
+    answer(new FirstBootMirror());
+    expect(await screen.findByText('Glassworks is on the Mirror.')).toBeTruthy();
+    expect(f.state.adbWaiting).toBe(false);
+  });
+
+  it('before the pick, it asks for the pick', async () => {
+    const { f, mirror } = setup({ request: () => new Promise<PanelShell>(() => {}) });
+    await flashed(f, mirror);
+    render(<ImageFlow image={f} app={mirror} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
+    expect(await screen.findByText('Pick the Mirror in the browser\'s list…')).toBeTruthy();
+    expect(screen.queryByText(/Waiting for the Mirror/)).toBeNull();
   });
 });
 
@@ -317,7 +340,7 @@ describe('restarting into fastboot over adb: no button to hold', () => {
     const { f } = setup({ request: async () => { throw new AdbAuthTimeout(); } });
     await f.restartToFastboot();
     expect(f.state).toMatchObject({ restarted: false, connecting: false });
-    expect(f.state.connectError).toMatch(/didn't let this browser in over adb.*Put it in fastboot by hand, below/);
+    expect(f.state.connectError).toMatch(/didn't let this browser in: .*Put it in fastboot by hand, below/);
   });
 });
 

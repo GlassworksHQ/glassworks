@@ -238,10 +238,10 @@ describe('the screens', () => {
     return flash;
   };
 
-  it('the download screen offers an optional network, and says only its key is saved', async () => {
+  it('the download screen offers an optional network, joined by itself after the first start', async () => {
     await show('image-wifi');
     expect(screen.getByText('Wi-Fi (optional)')).toBeTruthy();
-    expect(screen.getByText(/Only the network's key is saved, never the password/)).toBeTruthy();
+    expect(screen.getByText(/The Mirror joins it by itself after its first start\. Leave it empty to set up Wi-Fi in Glass Panes instead\./)).toBeTruthy();
     expect((screen.getByLabelText('Wi-Fi network') as HTMLInputElement).value).toBe('Home Net');
   });
 
@@ -252,17 +252,17 @@ describe('the screens', () => {
     ]);
   });
 
-  it('One last click says whose key Kiln uses, and what it does with it', async () => {
+  it('One last click says what Kiln does there', async () => {
     await show('image-adb');
-    expect(screen.getByText(/Kiln connects with Glass Panes’ own published key, which the image trusts.*It switches Wi-Fi on, and that's all it does\./)).toBeTruthy();
+    expect(screen.getByText(/Click Connect and pick the Mirror in the browser's list, and Kiln switches its Wi-Fi on\./)).toBeTruthy();
   });
 
   it('Done says Wi-Fi is on, or how to switch it on once', async () => {
     await show('image-done-wifi');
-    expect(screen.getByText(/Wi-Fi is on, and the Mirror joins your network by itself/)).toBeTruthy();
+    expect(screen.getByText(/The Mirror joins your Wi-Fi a few minutes after it starts\./)).toBeTruthy();
     cleanup();
     await show('image-done-wifi-unconfirmed');
-    expect(screen.getByText(/Android didn't confirm Wi-Fi is on\. Your network is saved: switch Wi-Fi on once in Glass Panes’ Settings/)).toBeTruthy();
+    expect(screen.getByText(/Android didn't confirm Wi-Fi is on: switch it on once in Glass Panes’ Settings/)).toBeTruthy();
   });
 });
 

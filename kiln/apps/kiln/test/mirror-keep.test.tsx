@@ -38,14 +38,15 @@ describe('keeping the Mirror in Home Assistant over a reflash', () => {
     expect(embers().length).toBeLessThanOrEqual(1);
   });
 
-  it('the fastboot screen\'s Restart into fastboot is the step for Glassworks; it only reads before the restart', async () => {
+  it('the fastboot screen\'s Restart into fastboot is the step for Glassworks; the keep step only asks for USB, no case opened', async () => {
     const d = await imageDemo(mirrorEntry, 'flash-fastboot', true);
     await show(d);
     fireEvent.click(screen.getByRole('button', { name: 'Restart into fastboot' }));
     expect(d.image.state.screen).toBe('keep');
     cleanup();
     await show(await keepDemo(mirrorEntry, 'flash-keep', true));
-    expect(screen.getByText(/Nothing is written yet/)).toBeTruthy();
+    expect([...document.querySelectorAll('ol.join li')].map((li) => li.textContent)).toEqual(['Plug the Mirror\'s micro-USB into this computer, with Glassworks running.']);
+    expect(screen.queryByText(/switch|unplug|screws|the back off/i)).toBeNull(); // Kiln restarts it into fastboot over adb (the Mirror run, 2026-11-19)
     expect(embers()).toEqual(['Connect']);
   });
 

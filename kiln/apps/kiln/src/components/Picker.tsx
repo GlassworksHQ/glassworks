@@ -71,7 +71,7 @@ export function Picker() {
           <a className="yours" href="https://github.com/GlassworksHQ">
             <span className="plus" aria-hidden="true">+</span>
             <b>Your panel</b>
-            <p>Any Android panel can be a frame. A guide to writing one comes with the first release; until then, follow along on GitHub.</p>
+            <p>Any Android panel can be a frame. Follow along on GitHub.</p>
           </a>
         </RadioGroup.Root>
         <div className="foot">

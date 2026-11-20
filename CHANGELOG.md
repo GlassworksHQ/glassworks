@@ -228,6 +228,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   back to Stable never installs an older version: the panel waits for a stable release newer than the one it runs.
 
 ### Changed
+- **Kiln's screens say less.** Each step now says what to do, plus the one fact you need to decide, on every
+  panel. Kiln no longer narrates what it does by itself. On the Mirror, keeping it in Home Assistant now asks you only
+  to plug its micro-USB into the computer, not to open its case. After you pick the Mirror at its first start, the
+  screen says Kiln is waiting for it to finish starting.
 - **A room's "lights off" no longer turns the panel's screen off.** The screen is still a light with the same
   entity id, but Home Assistant now lists it under the device's Configuration. Actions aimed at an area, floor or
   device skip it, so a presence automation's "room empty, lights off" and a Good Night script leave the panel
