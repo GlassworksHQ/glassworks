@@ -158,4 +158,17 @@ describe('the card', () => {
     expect(card).toMatch(/\.card:hover \.bob:has\(\[data-dock\]\),\s*\.card:focus-visible \.bob:has\(\[data-dock\]\) \{\s*animation: none;/);
     expect(card).toMatch(/\.card:hover \.model:has\(\[data-dock\]\) > \.shadow,\s*\.card:focus-visible \.model:has\(\[data-dock\]\) > \.shadow \{\s*opacity: 0;/);
   });
+
+  it('bobs a docked model\'s lifted body as the others bob, with `translate` so the lift holds, and not with reduced motion', () => {
+    const card = css('FrameCard.module.css');
+    expect(card).toMatch(/\.card:hover \.bob \[data-dock\] > \[data-body\],\s*\.card:focus-visible \.bob \[data-dock\] > \[data-body\] \{\s*animation: bodyBob/);
+    expect(card).toMatch(/@keyframes bodyBob \{\s*50% \{\s*translate: 0 -5px;/);
+    const reduced = card.slice(card.indexOf('@media (prefers-reduced-motion: reduce)'));
+    expect(reduced).toMatch(/\.card:focus-visible \.bob \[data-dock\] > \[data-body\] \{\s*animation: none;/);
+    // the body is the part that lifts, apart from the dock
+    const el = render(<DeviceModel id="pt-body" model={tablet.model} label="Pixel Tablet" />);
+    const body = el.querySelector('[data-dock] > [data-body]')!;
+    expect(body).not.toBeNull();
+    expect(body.querySelector('circle')).toBeNull();
+  });
 });

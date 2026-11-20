@@ -70,7 +70,7 @@ export function DeviceModel({ id, model, label, aspect = 2, screen, priority = f
           </svg>
         )}
         {/* the body, which lifts off a dock on hover (--undock) */}
-        <div className={s.slab}>
+        <div className={s.slab} data-body="">
           <svg className={s.sides} viewBox={`0 0 100 ${g.stageH}`} preserveAspectRatio="none" aria-hidden="true">
             {g.parts.map((p, i) => <line key={`p${i}`} x1={p.x1} y1={p.y1} x2={p.x2} y2={p.y2} style={{ stroke: p.color }} strokeWidth={p.width} strokeLinecap="round" />)}
             {g.faces.map((f, i) => <polygon key={i} points={f.points} style={{ fill: f.fill, stroke: f.fill }} strokeWidth="0.12" strokeLinejoin="round" />)}
