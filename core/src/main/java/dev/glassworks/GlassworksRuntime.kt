@@ -104,13 +104,14 @@ class GlassworksRuntime(
     /**
      * This device (#403), only on a touch screen with no frame of its own (a tablet: GenericAndroid), then Silent updates
      * (#422): shown during setup whenever updates ask for a tap and there's a way to change that. The Silent updates
-     * answer is read on every ask, at most once a second, once [UpdateManager] has read the frame's root update service.
+     * answer is read on every ask, at most once a second, once [UpdateManager] has read the frame's root update service;
+     * a new answer goes to Home Assistant at once (#666).
      */
     override fun deviceSetupSteps(context: Context): List<SetupStep> = synchronized(this) {
         deviceSteps ?: run {
             val ctx = context.applicationContext
             val prefs = KioskPrefs(ctx)
-            val silent = SilentUpdates.Fresh { updates?.rootService?.let { SilentUpdates.read(ctx, it) } }
+            val silent = SilentUpdates.Fresh { updates?.let { u -> u.rootService?.let { SilentUpdates.read(ctx, it) }?.also(u::noticeSilent) } }
             listOfNotNull(
                 // Not on a device a frame recognises (the Mirror): its recipe sets both, whatever input it reports.
                 thisDevice(ctx).takeIf { frame is GenericAndroid && frame.namedBy != NamedBy.FRAME && touch },

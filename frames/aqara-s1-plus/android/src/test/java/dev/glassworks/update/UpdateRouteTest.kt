@@ -1,6 +1,10 @@
 package dev.glassworks.update
 
 import android.app.Application
+import android.content.ContextWrapper
+import dev.glassworks.Glassworks
+import dev.glassworks.GlassworksApp
+import dev.glassworks.pane.SettingsItem
 import dev.glassworks.frame.AgentCapability
 import dev.glassworks.frame.Frame
 import dev.glassworks.frame.FrameAgent
@@ -20,6 +24,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import java.io.File
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import dev.glassworks.s1.KioskApp
 
@@ -121,6 +126,54 @@ class UpdateRouteTest {
         assertEquals(SilentUpdates.UnknownAppsOff, m.silentUpdates)
         assertEquals(UpdateManager.CONFIRM_NOTE, m.model.installNote)
         assertEquals("Installing 1.2.3: confirm on the screen", installVerified(m))
+    }
+
+    /** A started manager on the generic frame, and each time it tells Home Assistant its state may have changed. */
+    private fun watched(runtime: Glassworks = KioskApp.runtime(frame(null), AppBuild("1.0.0", 10000, debug = false))): Pair<UpdateManager, LinkedBlockingQueue<Unit>> {
+        val changes = LinkedBlockingQueue<Unit>()
+        val m = UpdateManager(app, runtime) { changes.put(Unit) }
+        managers += m
+        m.start()
+        assertTrue("the update thread started", changes.poll(5, TimeUnit.SECONDS) != null)
+        return m to changes
+    }
+
+    @Test fun homeAssistantFollowsInstallUnknownAppsWhenTheAppComesBack() {
+        shadowOf(app.packageManager).setCanRequestPackageInstalls(false)
+        val (m, changes) = watched()
+        assertEquals(SilentUpdates.UnknownAppsOff, m.silentUpdates)
+        shadowOf(app.packageManager).setCanRequestPackageInstalls(true) // allowed in Android's settings
+        m.recheckSilent() // MainActivity.onResume
+        assertTrue("Home Assistant is told", changes.poll(5, TimeUnit.SECONDS) != null)
+        assertEquals(SilentUpdates.SelfUpdate, m.silentUpdates)
+        assertEquals(UpdateManager.NO_TAP_NOTE, m.model.installNote)
+    }
+
+    @Test fun aFreshReadThatDiffersReachesHomeAssistant() {
+        shadowOf(app.packageManager).setCanRequestPackageInstalls(false)
+        val (m, changes) = watched()
+        m.noticeSilent(SilentUpdates.UnknownAppsOff) // the Device page agrees: nothing to tell
+        m.recheckSilent() // and nothing changed since
+        assertEquals("no push while nothing changed", null, changes.poll(500, TimeUnit.MILLISECONDS))
+        shadowOf(app.packageManager).setCanRequestPackageInstalls(true)
+        m.noticeSilent(SilentUpdates.SelfUpdate) // setup's step or Manage read the new answer
+        assertTrue("Home Assistant is told", changes.poll(5, TimeUnit.SECONDS) != null)
+        assertEquals(SilentUpdates.SelfUpdate, m.silentUpdates)
+    }
+
+    @Test fun theDevicePageRowAndManageTellHomeAssistant() {
+        shadowOf(app.packageManager).setCanRequestPackageInstalls(false)
+        val runtime = KioskApp.runtime(frame(null), AppBuild("1.0.0", 10000, debug = false))
+        val (m, changes) = watched(runtime)
+        val context = object : ContextWrapper(app), GlassworksApp {
+            override val glassworks = runtime
+            override fun getApplicationContext() = this
+        }
+        val row = GenericAndroid(context).deviceSection(context)!!.items.filterIsInstance<SettingsItem.Info>().single { it.title() == "Silent updates" }
+        shadowOf(app.packageManager).setCanRequestPackageInstalls(true)
+        assertTrue(row.detail().startsWith("Yes: "))
+        assertTrue("Home Assistant is told", changes.poll(5, TimeUnit.SECONDS) != null)
+        assertEquals(SilentUpdates.SelfUpdate, m.silentUpdates)
     }
 
     @Test fun theLastFailedRootInstallIsShownAtStart() {

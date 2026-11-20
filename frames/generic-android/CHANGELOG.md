@@ -36,6 +36,10 @@ line of each version is what Home Assistant shows on the update card. A change o
 - **The setup Wi-Fi opens on the lululemon Mirror.** The legacy build's setup screen said "This device doesn't let apps
   open a Wi-Fi hotspot." on the Mirror. Android 6 and 7 want one more permission for it, which the legacy build now
   asks for. An update is enough: no new flash. If Android still refuses, the reason is in the log.
+- **Home Assistant's *Silent updates* follows within seconds.** After you allowed "Install unknown apps" for
+  Glassworks, the panel and the Manage page said Silent updates was on, but Home Assistant's sensor could still say
+  no for up to 15 minutes. It now changes when you come back from Android's settings, or as soon as setup, the
+  panel's settings or the Manage page show the new answer.
 
 ## [0.2.0] - 2026-11-19
 
