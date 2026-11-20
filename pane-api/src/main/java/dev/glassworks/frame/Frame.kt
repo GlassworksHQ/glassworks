@@ -92,8 +92,9 @@ interface Frame {
 
     /**
      * How the app's screen stands on this device: [Orientation.LANDSCAPE] or [Orientation.PORTRAIT], either way up, for
-     * a device that is always held one way (the S1, a Pixel Tablet on its dock), or [Orientation.ANY] to turn as
-     * Android's auto-rotate or the person's choice says. Read when the activity starts.
+     * a device that is always held one way (the S1, a Pixel Tablet on its dock), [Orientation.PORTRAIT_FIXED] for a
+     * screen that only one way up is right for (the lululemon Mirror), or [Orientation.ANY] to turn as Android's
+     * auto-rotate or the person's choice says. Read when the activity starts.
      */
     val orientation: Orientation get() = Orientation.LANDSCAPE
 
@@ -174,8 +175,13 @@ enum class Dock {
     YES,
 }
 
-/** How a frame's screen stands ([Frame.orientation]). [ANY]: as the device stands, which Android decides. */
-enum class Orientation { LANDSCAPE, PORTRAIT, ANY }
+/**
+ * How a frame's screen stands ([Frame.orientation]). [LANDSCAPE] and [PORTRAIT]: that way, either way up, as the sensor
+ * says. [ANY]: as the device stands, which Android decides. [PORTRAIT_FIXED]: portrait one way up only, Android's own
+ * portrait, which auto-rotate and the sensor don't turn: for a screen fixed to a wall whose Android can turn
+ * auto-rotate back on by itself (the lululemon Mirror's does on every app update, #686).
+ */
+enum class Orientation { LANDSCAPE, PORTRAIT, ANY, PORTRAIT_FIXED }
 
 /** [manufacturer] ("Aqara"), [model] ("Panel Hub S1 Plus") and [chip] ("Allwinner A133", or the board's name where Android gives no chip). */
 class Hardware(val manufacturer: String, val model: String, val chip: String)

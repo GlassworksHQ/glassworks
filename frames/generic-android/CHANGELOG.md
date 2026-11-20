@@ -30,6 +30,9 @@ line of each version is what Home Assistant shows on the update card. A change o
   before the sign-in step.
 - **A device without a touchscreen keeps its screen on during setup.** On the lululemon Mirror and other devices
   without touch, the setup screen no longer goes dark while you set the device up from a computer.
+- **The lululemon Mirror stays upright after an update.** Android turned auto-rotate back on with every update of
+  the app, so the Mirror's dashboard came up sideways until someone fixed it over adb. The app now holds the Mirror
+  in portrait itself, whatever auto-rotate says. Other devices turn as before.
 - **The camera isn't restarted while it is still starting.** On the lululemon Mirror, turning the camera on could
   log "no frames" and open the camera a second time, so it took about 12 s to come up. A camera's first picture
   now gets 10 s from the moment the camera opens; "no frames" shows only after that. A camera that goes quiet

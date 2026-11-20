@@ -232,7 +232,7 @@ open class MainActivity : Activity() {
         val (long, short) = maxOf(real.x, real.y) to minOf(real.x, real.y)
         when (orientation) {
             Orientation.LANDSCAPE -> Backdrop.prewarm(long, short)
-            Orientation.PORTRAIT -> Backdrop.prewarm(short, long)
+            Orientation.PORTRAIT, Orientation.PORTRAIT_FIXED -> Backdrop.prewarm(short, long)
             Orientation.ANY -> Backdrop.prewarm(real.x, real.y)
         }
         loadingOverlay = LoadingOverlay(this, glassworks.frame.bootRest).apply { onAction = ::openWifiSettings }
@@ -1387,11 +1387,18 @@ open class MainActivity : Activity() {
             return true
         }
 
-        /** The activity's requested orientation for a frame's ([dev.glassworks.frame.Frame.orientation]). Public for tests. */
+        /**
+         * The activity's requested orientation for a frame's ([dev.glassworks.frame.Frame.orientation]). Public for tests.
+         * [Orientation.PORTRAIT_FIXED] is plain `PORTRAIT`: AOSP 6.0.1's `PhoneWindowManager` gives it the display's
+         * portrait rotation whatever auto-rotate says (only a rotation lock on the other portrait overrides it). On a
+         * landscape panel (the Mirror's 1920x1080) that is rotation 3, the Mirror's upright, unless the image sets
+         * `config_reverseDefaultRotation`; then it is 1 and this would be `REVERSE_PORTRAIT` (#686, needs the Mirror's proof).
+         */
         fun screenOrientation(orientation: Orientation): Int = when (orientation) {
             Orientation.LANDSCAPE -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
             Orientation.PORTRAIT -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
             Orientation.ANY -> ActivityInfo.SCREEN_ORIENTATION_FULL_USER
+            Orientation.PORTRAIT_FIXED -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         }
 
         /** Onboarding/dashboard background (#0a0b0f), also used to cover the page until first paint. */
