@@ -245,9 +245,11 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   back to Stable never installs an older version: the panel waits for a stable release newer than the one it runs.
 
 ### Changed
-- **Notifications are on by default.** A panel where nobody has touched the Notifications switch turns it on
-  with this update, so it shows what Home Assistant sends to its notify action. To turn it off, use its switch
-  under *Settings → Panes → Notifications* on the panel or the Manage page, or in Home Assistant.
+- **Notifications are on by default.** A new panel, or one that hasn't had the Notifications pane yet, starts
+  with it on, so it shows what Home Assistant sends to its notify action. A panel that already had the pane keeps
+  its setting: setup saves every card on the Panes step, so one set up with the card off stays off. To turn it on
+  or off, use its switch under *Settings → Panes → Notifications* on the panel or the Manage page. In Home
+  Assistant, enable the panel's *Notifications* entity first, then use it.
 - **Clarity v1: live updates are good within 150 ms, fluid within 250 ms.** Clarity, the performance grade on
   glassworks.dev, starts again at v1, the version Glassworks 1.0.0 ships with. A light someone else switches, or an
   automation, now counts as quick when 95% of its changes show within 150 ms (was 100 ms), and fluid within 250 ms

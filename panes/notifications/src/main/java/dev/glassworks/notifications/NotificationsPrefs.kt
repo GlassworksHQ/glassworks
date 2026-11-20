@@ -26,7 +26,10 @@ class NotificationsPrefs(private val sp: SharedPreferences) {
         const val KEY_ENABLED = "notifications_enabled"
         const val KEY_DND = "notifications_dnd"
 
-        /** On until turned off. A panel that never touched the switch has no key, so it follows this. */
+        /**
+         * On until turned off. Only a panel with no stored value follows this: setup's Panes step stores
+         * every card's value, so a panel set up while the default was off keeps its off (no migration).
+         */
         const val DEFAULT_ENABLED = true
     }
 }

@@ -37,7 +37,7 @@ class NotificationsDefinitionTest {
         }
     }
 
-    /** On by default (maintainer, 2026-11-20): a panel that never touched the switch has no key, and is on. */
+    /** On by default (maintainer, 2026-11-20): with no stored value, the pane is on. */
     @Test
     fun onByDefaultWithASetupCard() {
         assertFalse(file.contains(NotificationsPrefs.KEY_ENABLED))
