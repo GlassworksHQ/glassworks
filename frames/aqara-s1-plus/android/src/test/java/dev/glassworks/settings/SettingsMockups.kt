@@ -111,6 +111,8 @@ class SettingsMockups {
         shot("settings-18-wall-base", menu(radioRunning = true), "wall-base")
         shot("settings-19-time-zone", menu(radioRunning = true), "time-zone")
         shot("settings-20-diagnostics", menu(radioRunning = true), "diagnostics")
+        // Notifications at their default, as on a panel that never touched the switch (on since 2026-11-20).
+        shot("settings-21-notifications", menu(radioRunning = true), "notifications")
         shot("settings-16-screen-scrolled", menu(radioRunning = true), "screen") { o ->
             Mockup.layout(o)
             o.previewScrollTo(Mockup.label(o, "Brightness"), alignBottom = true)

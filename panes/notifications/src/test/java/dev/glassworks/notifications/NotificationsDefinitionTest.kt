@@ -37,10 +37,20 @@ class NotificationsDefinitionTest {
         }
     }
 
+    /** On by default (maintainer, 2026-11-20): with no stored value, the pane is on. */
     @Test
-    fun offByDefaultWithASetupCard() {
-        assertFalse(d.switch.on)
+    fun onByDefaultWithASetupCard() {
+        assertFalse(file.contains(NotificationsPrefs.KEY_ENABLED))
+        assertTrue(d.switch.on)
+        assertTrue(NotificationsPrefs(file).enabled)
+        assertTrue(d.setupChoice!!.on())
         assertEquals("Notifications" to "On-screen alerts", d.setupChoice!!.let { it.title to it.detail })
+    }
+
+    @Test
+    fun turnedOffThePageSaysTheActionStays() {
+        d.switch.on = false
+        assertFalse(NotificationsPrefs(file).enabled)
         val t = texts(d.settings().single().items)
         assertTrue(t.first(), t.first().contains("notify action stays in Home Assistant"))
         assertTrue("its state from HA", "Action: esphome.aqara_s1_plus_a1b2c3_notify" in t)

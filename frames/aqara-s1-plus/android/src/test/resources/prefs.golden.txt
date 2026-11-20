@@ -37,7 +37,7 @@ kiosk|mic_gain|Float|1.0
 kiosk|mic_muted|Boolean|false
 kiosk|min_brightness|Float|0.1
 kiosk|notifications_dnd|Boolean|false
-kiosk|notifications_enabled|Boolean|false
+kiosk|notifications_enabled|Boolean|true
 kiosk|onvif_stream|Boolean|false
 kiosk|presence_range_m|Float|0.0
 kiosk|radio_allow|String|""

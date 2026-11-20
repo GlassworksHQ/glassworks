@@ -245,6 +245,11 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   back to Stable never installs an older version: the panel waits for a stable release newer than the one it runs.
 
 ### Changed
+- **Notifications are on by default.** A panel that has never saved the Notifications switch starts with it on,
+  so it shows what Home Assistant sends to its notify action. A panel that saved it keeps what it saved. Setup's
+  Panes step saves every card when you continue, so a panel set up with the card off stays off. To turn it on or
+  off, use its switch under *Settings → Panes → Notifications* on the panel or the Manage page. In Home Assistant,
+  enable the panel's *Notifications* entity first, then use it.
 - **Clarity v1: live updates are good within 150 ms, fluid within 250 ms.** Clarity, the performance grade on
   glassworks.dev, starts again at v1, the version Glassworks 1.0.0 ships with. A light someone else switches, or an
   automation, now counts as quick when 95% of its changes show within 150 ms (was 100 ms), and fluid within 250 ms
@@ -455,8 +460,8 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   message and the Companion app's fields, and the panel shows a card over the dashboard, with a
   camera's picture, up to three buttons and a sound. A button press fires `esphome.notification_action`
   in Home Assistant. A high or critical one wakes the screen, `url` opens a dashboard view full screen
-  and comes back after the timeout, and *Do not disturb* holds everything but critical. Off until you
-  turn it on, on the setup screen or in the settings. A doorbell blueprint is in the repo. Examples:
+  and comes back after the timeout, and *Do not disturb* holds everything but critical. On by default;
+  turn it off on the setup screen or in the settings. A doorbell blueprint is in the repo. Examples:
   docs/notifications.md.
 - **Turn any pane off, and back on, without a restart.** Voice, music, the wall base, the time zone
   and diagnostics each have an on/off: at the top of the pane's page in the panel's settings, in

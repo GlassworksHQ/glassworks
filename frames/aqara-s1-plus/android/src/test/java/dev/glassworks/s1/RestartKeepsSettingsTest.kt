@@ -67,7 +67,7 @@ class RestartKeepsSettingsTest {
         assertEquals(listOf("assist", "sendspin", "notifications", "wall-base"), cards.map { it.id })
         cards.forEach { it.setupChoice!!.apply(false) }
         assertEquals(mapOf("assist" to false, "sendspin" to false, "notifications" to false, "wall-base" to false), switches(process()).filterKeys { it in cards.map { c -> c.id } })
-        // Notifications starts off: turned on on the Panes step, it stays on too.
+        // Turned back on on the Panes step, a pane stays on too.
         definitions(process()).first { it.id == "notifications" }.setupChoice!!.apply(true)
         assertEquals(true, switches(process())["notifications"])
     }

@@ -7,9 +7,9 @@ Everything runs over the panel's native ESPHome connection, with nothing extra t
 > [!NOTE]
 > **Feature status:** Notifications are currently in alpha. Core cards, camera snapshots, action buttons, Do not disturb, and full-screen and half-screen views have been tested on hardware, with ongoing polish for edge cases.
 
-## Turn it on
+## Turn it on or off
 
-The Notifications pane starts turned off until you enable it in one of three places:
+The Notifications pane is on by default. It costs next to nothing while it waits, and it only shows something when Home Assistant sends a notification. You can turn it off, or back on, in any of three places:
 
 - During first-boot setup, on the **Notifications** card in the Panes step
 - On the panel or [Manage page](manage.md) under **Settings → Panes → Notifications** (using the switch at the top right)
