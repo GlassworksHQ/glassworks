@@ -533,8 +533,14 @@ end
   bundle, and its `hotspot-name.apk`), and `bootanimation.zip`.
 - **The old `S1RADIO-BUNDLE 1` format** is refused cleanly by the new loader ("not a frame bundle").
   The app ships only the frame bundle from S1 frame 1.0.0 on.
-- **Where it comes from.** The app ships the bundle in its assets, as it ships the radio bundle now.
-  A frame update in HA stages it, starts `glassworks_bundle`, and restarts the panel.
+- **Where it comes from.** A frame release of its own: the tag `frames/aqara-s1-plus/v<version>`
+  (the scheme of #544) starts `frame-release.yml`, which builds the bundle with `frame-bundle.sh`, signs it
+  and publishes `frame-bundle-aqara-s1-plus-<version>.zip`. The app's Frame update entity downloads it,
+  stages it, starts `glassworks_bundle`, and restarts the panel (planned, not built: it comes after #543 and
+  #544). Not an APK asset: the frame version counts separately from the app's, so a frame update shouldn't wait
+  for an app release. During the #528 transition the APK still carries the old radio bundle, for 0.4.3 boot
+  images only; frame bundles never ship in the APK. What runs today: the shell tests build the release's zip,
+  unpack it, stage it in the app's staging dir by hand, and install and load it through the loader.
 
 ### The names (#528)
 

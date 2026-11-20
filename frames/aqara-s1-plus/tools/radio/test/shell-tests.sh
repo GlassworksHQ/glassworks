@@ -498,6 +498,58 @@ check "the floor can't be recorded: the promotion is undone" test "$(prop ro.gla
 check "...2.0.9 stays staged" test "$(L check "$B/next")" = "2.0.9 2000009" -a ! -e "$B/old"
 rm -f "$T/mv-fail"; L boot
 check "...and loads once it can" test "$(prop ro.glassworks.frame.version)" = 2.0.9 -a "$(cat "$B/version")" = 2000009
+
+# The frame release's own bundle (frame-bundle.sh, as frame-release.yml runs it), unpacked from its zip as the
+# app will: it installs and loads.
+mkdir -p "$T/fakert/lib"; cp "$R/frames/aqara-s1-plus/tools/radio/sisdk/zigbeed.sh" "$T/fakert/"
+for l in ld-linux-armhf.so.3 libc.so.6 libcpc.so.3; do echo stub > "$T/fakert/lib/$l"; done
+chmod 0755 "$T/fakert/zigbeed.sh" "$T/fakert/lib/ld-linux-armhf.so.3"
+# the radio dir: the boot image's otbr-agent and ot-ctl, and a stand-in for hotspot-name/build.sh's overlay (no SDK here)
+mkdir -p "$T/radio-in"; cp "$TB/otbr-agent" "$TB/ot-ctl" "$T/radio-in/"; printf 'overlay-release' > "$T/radio-in/hotspot-name.apk"
+mkdir -p "$T/radio-nohn"; cp "$TB/otbr-agent" "$TB/ot-ctl" "$T/radio-nohn/"
+out=$(bash "$R/frames/aqara-s1-plus/tools/radio/frame-bundle.sh" 3.0.0 "$T/key.pem" "$T/relnohn" "$T/radio-nohn" "$T/fakert" 2>&1 >/dev/null); rc=$?
+check "a radio dir without the hotspot name overlay is refused before signing (the agent would undo the name)" \
+  test $rc != 0 -a ! -e "$T/relnohn"
+check "...saying which file" has "$out" "hotspot-name.apk is missing"
+cp -r "$T/fakert" "$T/fakert-noexec"; chmod 0644 "$T/fakert-noexec/lib/ld-linux-armhf.so.3"
+bash "$R/frames/aqara-s1-plus/tools/radio/frame-bundle.sh" 3.0.0 "$T/key.pem" "$T/relnx" "$T/radio-in" "$T/fakert-noexec" >/dev/null 2>&1
+check "a runtime loader without its execute bit is refused before signing" test $? != 0 -a ! -e "$T/relnx"
+cp -r "$T/fakert" "$T/fakert-noexec2"; chmod 0644 "$T/fakert-noexec2/zigbeed.sh"
+out=$(bash "$R/frames/aqara-s1-plus/tools/radio/frame-bundle.sh" 3.0.0 "$T/key.pem" "$T/relnx2" "$T/radio-in" "$T/fakert-noexec2" 2>&1 >/dev/null); rc=$?
+check "...so is a launcher without it" test $rc != 0 -a ! -e "$T/relnx2"
+check "...saying which file" has "$out" "zigbeed.sh is not executable"
+cp -r "$T/fakert" "$T/fakert-nolib"; rm "$T/fakert-nolib/lib/libcpc.so.3"
+out=$(bash "$R/frames/aqara-s1-plus/tools/radio/frame-bundle.sh" 3.0.0 "$T/key.pem" "$T/relbad" "$T/radio-in" "$T/fakert-nolib" 2>&1 >/dev/null); rc=$?
+check "a Silicon Labs runtime without a library is refused" test $rc != 0
+check "...saying which file" has "$out" "lib/libcpc.so.3 is missing"
+check "...before anything is signed or written (no output dir)" test ! -e "$T/relbad"
+for d in rel rel2; do
+  SOURCE_DATE_EPOCH=1800000000 bash "$R/frames/aqara-s1-plus/tools/radio/frame-bundle.sh" 3.0.0 "$T/key.pem" "$T/$d" "$T/radio-in" \
+    "$T/fakert" "$TB/glassworks_bundle.pub" >/dev/null 2>&1
+done
+out=$(bash "$R/frames/aqara-s1-plus/tools/radio/frame-bundle.sh" 3.0.0 "$T/other.pem" "$T/relkey" "$T/radio-in" "$T/fakert" "$TB/glassworks_bundle.pub" 2>&1 >/dev/null); rc=$?
+check "signed with a key panels don't trust: refused, no release zip" test $rc != 0 -a ! -e "$T/relkey/frame-bundle-aqara-s1-plus-3.0.0.zip"
+check "...saying so" has "$out" "does not verify"
+check "the release's frame bundle builds and checks with the project key" test -s "$T/rel/frame-bundle-aqara-s1-plus-3.0.0.zip"
+check "...the same inputs give the same zip, byte for byte" cmp -s "$T/rel/frame-bundle-aqara-s1-plus-3.0.0.zip" "$T/rel2/frame-bundle-aqara-s1-plus-3.0.0.zip"
+check "...its created time is SOURCE_DATE_EPOCH's" grep -qx "created 2027-01-15T08:00:00Z" "$T/rel/frame-bundle/manifest"
+python3 -c 'import sys, zipfile; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' "$T/rel/frame-bundle-aqara-s1-plus-3.0.0.zip" "$T/relx"
+stage_frame "$T/relx"; s=$(install_frame)
+check "...its zip, unpacked as the app will, stages" has "$s" "ok: frame bundle 3.0.0 staged"
+L boot
+check "...and loads at boot" test "$(prop ro.glassworks.frame.version)/$(prop sys.glassworks.bundle.state)" = "3.0.0/ok 3.0.0"
+check "...with its boot animation mounted" has "$(tail -1 "$T/mounts")" "/data/glassworks/bundle/current/bootanimation.zip"
+check "...with the release's Thread binaries, byte for byte" cmp -s "$TB/otbr-agent" /data/glassworks/bundle/current/otbr-agent
+check "...otbr-agent executable" test "$(stat -c %a /data/glassworks/bundle/current/otbr-agent)" = 700
+check "...ot-ctl too" cmp -s "$TB/ot-ctl" /data/glassworks/bundle/current/ot-ctl
+check "...ot-ctl executable" test "$(stat -c %a /data/glassworks/bundle/current/ot-ctl)" = 700
+check "...with the hotspot name overlay where the agent looks for it, readable" \
+  test "$(cat /data/glassworks/bundle/current/hotspot-name.apk)/$(stat -c %a /data/glassworks/bundle/current/hotspot-name.apk)" = "overlay-release/644"
+check "...with the Silicon Labs launcher the frame agent looks for" cmp -s "$T/fakert/zigbeed.sh" /data/glassworks/bundle/current/sisdk/zigbeed.sh
+check "...the runtime's loader stays executable" test "$(stat -c %a /data/glassworks/bundle/current/sisdk/lib/ld-linux-armhf.so.3)" = 755
+check "...and every slot script of the release" test -s /data/glassworks/bundle/current/services/agent.sh -a -s /data/glassworks/bundle/current/services/netwatch.sh \
+  -a -s /data/glassworks/bundle/current/services/firstboot.sh -a -s /data/glassworks/bundle/current/services/update.sh
+
 reset_frame
 
 # ----------------------------------------------------------------------- frame agent v5 (frame loader)
