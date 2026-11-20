@@ -51,7 +51,8 @@ class AqaraS1Plus(private val aqaraCloud: AqaraCloud = AqaraCloud()) : Frame {
 
     /** The time zone that Aqara resets at every boot and the root helper puts back, and the wall base. */
     override fun panes(ctx: PaneContext, device: ScheduledExecutorService) = listOf(
-        TimeZonePane(ctx, TimeZonePrefs(ctx.prefs("time-zone"))),
+        // the frame agent's time zone, with this boot image's names (#641's follow-up, after #651)
+        TimeZonePane(ctx, TimeZonePrefs(ctx.prefs("time-zone")), TimeZoneKeeper(timeZone = agent.timeZone, onChange = ctx.publishStates)),
         WallBasePane(ctx, WallBasePane.wantedConfig(WallBasePrefs(ctx.prefs("wall-base")), aqaraCloud), device, aqaraCloud),
     )
 
@@ -74,12 +75,21 @@ class AqaraS1Plus(private val aqaraCloud: AqaraCloud = AqaraCloud()) : Frame {
      */
     override val frameRelease: FrameRelease by lazy {
         val stamp = FrameRelease.stamp(board, DeviceFrame::systemProperty)
-        FrameRelease(board, stamp, install = if (stamp != null) null else NEEDS_LOADER)
+        FrameRelease(board, stamp, install = if (stamp != null) null else needsLoader(DeviceFrame.systemProperty(BootWriter.HELPER_PROP)))
     }
 
-    /** Its Wi-Fi chip has no PNO scans, so the app scans while the screen is off (#3). One per service run. */
+    /**
+     * Its Wi-Fi chip has no PNO scans, so the app scans while the screen is off (#3); and the boot writer's Magisk APK,
+     * fetched only while the writer asks for it (#139). One of each per service run.
+     */
     override fun serviceWork(context: Context, onForegroundOnly: () -> Unit): ServiceWork =
-        ScreenOffWifiScanner(context, onForegroundOnly = onForegroundOnly)
+        S1ServiceWork(listOf(ScreenOffWifiScanner(context, onForegroundOnly = onForegroundOnly), MagiskFetch(context)))
+
+    /** The S1's per-run work, started and stopped together, in order. */
+    class S1ServiceWork(val parts: List<ServiceWork>) : ServiceWork {
+        override fun start() = parts.forEach { it.start() }
+        override fun stop() = parts.forEach { it.stop() }
+    }
 
     override val shortName = "S1 Plus"
 
@@ -107,8 +117,13 @@ class AqaraS1Plus(private val aqaraCloud: AqaraCloud = AqaraCloud()) : Frame {
         /** What the settings menu calls the S1's own settings app (com.lumi.settings). */
         const val SETTINGS_TITLE = "Aqara's own settings"
 
-        /** How a panel without the loader gets a frame update (#139). */
-        const val NEEDS_LOADER = "To install it: update the panel once with Kiln, at ${FrameRelease.KILN}. Later frame updates install over the air"
+        /** How a panel without the loader gets a frame update (#139): over the air with our root helper, else Kiln. */
+        const val NEEDS_LOADER = "The app's radio bundle puts the frame loader into the boot image over the air " +
+            "(the Device page shows how far it got). Later frame updates install over the air"
+        const val NEEDS_LOADER_KILN = "To install it: update the panel once with Kiln, at ${FrameRelease.KILN}. Later frame updates install over the air"
+
+        /** [NEEDS_LOADER] on a boot image whose root helper can run the boot writer ([BootWriter.helperCanWrite]), else Kiln. */
+        fun needsLoader(helperVersion: String): String = if (BootWriter.helperCanWrite(helperVersion)) NEEDS_LOADER else NEEDS_LOADER_KILN
 
         /**
          * `Build.HARDWARE` on the S1's A133 (read 2026-11-14), the S1 frame's only check. Its other build

@@ -13,6 +13,8 @@
 #                            CI's cache; it is checked the same way and rebuilt if it doesn't match)
 #   hotspot-name.apk         frames/aqara-s1-plus/tools/radio/hotspot-name/build.sh's output (the Android SDK's
 #                            build-tools; skipped for a base commit from before it existed)
+#   bootwriter/              frames/aqara-s1-plus/tools/root/bootwriter-files.sh's output (#139's boot writer; skipped
+#                            for a base commit from before it existed)
 # Signed with a throwaway Ed25519 key made here, not the release key: the signature is 64 bytes
 # whichever key makes it, so the APK's bundle is the shipped one but for manifest.sig, the
 # manifest's version line and hotspot-name.apk: build.sh signs the overlay with a key made for each
@@ -81,6 +83,12 @@ if [ -x "$RADIO/hotspot-name/build.sh" ]; then
   hotspot=(--file "hotspot-name.apk=$W/hotspot-name/hotspot-name.apk:0644")
 fi
 
+bootwriter=()
+if [ -x "$SRC/frames/aqara-s1-plus/tools/root/bootwriter-files.sh" ]; then   # skipped for a base from before #139's writer
+  "$SRC/frames/aqara-s1-plus/tools/root/bootwriter-files.sh" "$W/bootwriter" >/dev/null
+  bootwriter=(--dir "bootwriter=$W/bootwriter")
+fi
+
 openssl genpkey -algorithm ed25519 -out "$W/throwaway.pem" 2>/dev/null
 rm -rf "$OUT/radio-bundle"
 python3 "$RADIO/make-bundle.py" --version 1 --force --key "$W/throwaway.pem" --out "$OUT" \
@@ -88,5 +96,6 @@ python3 "$RADIO/make-bundle.py" --version 1 --force --key "$W/throwaway.pem" --o
   --file "otbr-agent=$W/radio-in/otbr-agent:0700" \
   --file "ot-ctl=$W/radio-in/ot-ctl:0700" \
   ${hotspot[@]+"${hotspot[@]}"} \
+  ${bootwriter[@]+"${bootwriter[@]}"} \
   --dir "sisdk=$SISDK"
 du -sh "$OUT/radio-bundle"

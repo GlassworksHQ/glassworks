@@ -561,6 +561,10 @@ on a 0.4.3 boot image gets an update card that says to update with Kiln first.
 
 ### The Kiln update: no opening
 
+> **2026-11-19: route 2 is the one chosen** (#139 issuecomment-7020084611): a boot writer in the signed radio bundle
+> puts the loader into the panel's own boot image over the air, with the FEL install's patch. It is
+> [s1-boot-writer.md](../../../docs/research/s1-boot-writer.md). The route below stays as the research it was.
+
 Route 1, in this order. Steps 1–3 don't touch `boot` or any other partition, and step 4 is the first
 partition write. Steps 1 and 3 do change `/data`: step 1 is an ordinary app update (it stays if the
 route stops there, like any app update), and the RAM-booted loader in step 3 copies the old

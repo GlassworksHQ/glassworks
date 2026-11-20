@@ -25,7 +25,8 @@ import java.util.concurrent.Executors
  * pane. Block Aqara cloud (the wall base pane's setting and Home Assistant entity, `block_aqara_cloud`; the
  * pane still applies it), the cloud daemon's state, which of Aqara's apps are turned off
  * (frames/aqara-s1-plus/tools/debloat/debloat.sh), the radio's mode, which opens the Radio pane, and whether
- * app updates install silently (the boot image's root update service, #422), and the frame version (#139).
+ * app updates install silently (the boot image's root update service, #422), whether boot has the frame loader (the
+ * boot writer's record, #139 route 2), and the frame version (#139).
  */
 class S1Device(
     private val cloud: AqaraCloud,
@@ -33,6 +34,8 @@ class S1Device(
     /** Where `getprop` runs: never on the main thread, which builds this page every couple of seconds. */
     private val reader: Executor = Executors.newSingleThreadExecutor { r -> Thread(r, "s1-device").apply { isDaemon = true } },
     private val clock: () -> Long = SystemClock::elapsedRealtime,
+    /** The boot writer's record (/data/glassworks-pub/boot-writer); a test passes its own. */
+    private val record: () -> BootWriter.Record? = { BootWriter.read() },
 ) {
     private val values = ConcurrentHashMap<String, String>()
     private val readAt = ConcurrentHashMap<String, Long>()
@@ -59,6 +62,7 @@ class S1Device(
             appsReadable(context).takeIf { it }?.let { SettingsItem.Info({ APPS_TITLE }, { apps(context) }) },
             SettingsItem.Link(RADIO_TITLE, radioMode(running), section = "radio"),
             GenericAndroid.silentUpdatesItem { rootService()?.let { SilentUpdates.read(context, it) } },
+            SettingsItem.Info({ BootWriter.TITLE }, { loader() }),
             UpdateChannelRow.item(context),
             release?.let { GenericAndroid.frameVersionItem(context, it) },
         ))
@@ -67,6 +71,12 @@ class S1Device(
     /** Whether this boot image has the root update service; null until the first getprop lands. */
     private fun rootService(): SilentUpdates.Root? =
         cached("root") { S1Agent(props).offers(AgentCapability.APP_UPDATES).toString() }?.let { if (it.toBoolean()) SilentUpdates.Root.PRESENT else SilentUpdates.Root.MISSING }
+
+    /** The frame loader in boot (#139): what the boot writer's record says, with whether this boot ran the loader. */
+    private fun loader(): String =
+        cached("loader") {
+            BootWriter.rowText(record(), props.get(BootWriter.LOADER_PROP).isNotBlank(), BootWriter.helperCanWrite(props.get(BootWriter.HELPER_PROP)))
+        } ?: "Checking"
 
     /** What the wall base pane says of the daemon (`aqara_cloud`), else init's word for it. */
     private fun daemon(running: (String) -> Pane?): String =
