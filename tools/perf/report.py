@@ -237,11 +237,12 @@ def change_frames(step, period=None):
     return P.frame_stats(xs, period), None
 
 
-# A change with no frame on screen by the window's end, and at least this long before it, counts as
-# late as the window can show: from the change to the window's end. That is conservative: the change
-# may show later still. So it must be past the fluid bar, never at it: fluid's limit (250 ms in Clarity v1)
-# plus 50 ms, as it was before (200 + 50). An unshown change can then pass no level.
-NO_FRAME_MS = max(lv["latency_p95_max_ms"] for lv in G.UPDATE_LEVELS) + 50
+# A change with no frame on screen by the window's end, and more than this before it, counts as late as the
+# window can show: from the change to the window's end. That is conservative: the change may show later still.
+# It must be past the fluid bar, never at it (CodeRabbit on #656): so this is fluid's limit (250 ms in Clarity v1,
+# the old cutoff's value too) and the count is strict, on the value as stored (to 0.1 ms). An unshown change then
+# passes no level. Before, a change exactly 250.0 ms from the end counted as 250.0; regrade_report flags that.
+NO_FRAME_MS = max(lv["latency_p95_max_ms"] for lv in G.UPDATE_LEVELS)
 # SurfaceFlinger's present times and the page's frame times are on clocks tied by the page's log
 # line; allow this much for that and for vsync jitter when finding the first frame that can show it.
 PRESENT_SLACK_MS = 3
@@ -254,7 +255,7 @@ def change_to_screen(step, page, period=None):
     change on its main thread, so a busy main thread holds it back before anything is drawn: that
     wait counts. A change that hadn't arrived when the window was logged has no frame either. The change is drawn in the next animation frame
     (tick), which reaches the screen one refresh later at the earliest; presents before that are
-    frames already on their way. A change with no frame by the window's end, at least NO_FRAME_MS
+    frames already on their way. A change with no frame by the window's end, more than NO_FRAME_MS
     after it, counts as the time to the window's end (conservative).
     A change SurfaceFlinger's history doesn't reach back to isn't counted.
     Returns ({n, median_ms, p95_ms, max_ms, skipped}, None) or (None, why)."""
@@ -290,7 +291,7 @@ def change_to_screen(step, page, period=None):
                 (t for t in pres if t >= max(P.page_to_mono_ms(page, step["t0"] + tick) + period - PRESENT_SLACK_MS, m_ran)), None)
         if nxt is not None:
             out.append(round(nxt - m_start, 1))
-        elif end is not None and end - m_start >= NO_FRAME_MS:
+        elif end is not None and round(end - m_start, 1) > NO_FRAME_MS:
             out.append(round(end - m_start, 1))
         else:
             skipped += 1                  # too close to the window's end to tell
@@ -1631,12 +1632,18 @@ def build(run_dir, apks=(), budgets=None):
 
 
 def censoring_band(runs):
-    """How many stored runs' views have a live-update p95 in (fluid's bar, NO_FRAME_MS): only there can a change no
-    frame showed, counted under a shorter cutoff than NO_FRAME_MS, decide a level (below fluid's bar it passes
-    either way; from NO_FRAME_MS up, every censored value under either cutoff is past every bar)."""
-    lo = UPDATE_MS["fluid"]
-    return sum(1 for r in runs for t in (r.get("tiers") or {}).values()
-               if lo < ((t.get("updates_run") or {}).get("latency_p95_ms") or 0) < NO_FRAME_MS)
+    """How many stored runs' views a change no frame showed could grade differently under this rule: the earlier one
+    counted it from 250 ms before the window's end (as 250.0), this one only past 250.0. Report.json keeps latencies,
+    not the changes, so a view is in doubt when skipping a 250.0 could move its level (its median, p95 or max is
+    250.0) or make it unmeasured (skipped would then reach counted). Anywhere else both rules count the same."""
+    def doubtful(lat):
+        if not lat:
+            return False
+        if any(lat.get(k) == NO_FRAME_MS for k in ("median_ms", "p95_ms", "max_ms")):
+            return True                  # its level could move
+        # Skipping one more change could leave no more counted than skipped: change_to_screen then refuses the run.
+        return (lat.get("max_ms") or 0) >= NO_FRAME_MS and (lat.get("n") or 0) <= (lat.get("skipped") or 0) + 1
+    return sum(1 for r in runs for t in (r.get("tiers") or {}).values() if doubtful(t.get("latency")))
 
 
 def regrade_report(rep):
@@ -1661,13 +1668,12 @@ def regrade_report(rep):
     ref = graded["reference"]
     band = censoring_band(refs)
     if band:
-        # Stored latencies can't be censored again (the changes aren't in report.json): a run whose p95 lies past
-        # fluid's bar and under NO_FRAME_MS may hold a change no frame showed that the earlier, shorter cutoff
-        # counted and this one skips. Only the raw files tell (CodeRabbit on #656).
+        # Stored latencies can't be censored again (the changes aren't in report.json): a run with a 250.0 ms time may
+        # hold a change no frame showed that the earlier rule counted and this one skips (CodeRabbit on #656).
         grade["provisional"] = True
         grade.setdefault("provisional_reasons", []).append(
-            f"{band} stored run(s) with a live-update p95 between {UPDATE_MS['fluid']:.0f} and {NO_FRAME_MS:.0f} ms may hold "
-            "a change no frame showed, counted under an earlier cutoff: grade it again from the raw files")
+            f"{band} stored run(s) with a live-update time of exactly {NO_FRAME_MS:.1f} ms may hold a change no frame "
+            "showed, counted under the earlier rule: grade it again from the raw files")
         grade["headline"] = headline(device.get("frame_name") or device["frame"], grade, ref)
     ref = graded["reference"]
     out.update(graded=graded, grade=grade,
