@@ -28,6 +28,7 @@ import dev.glassworks.KioskPrefs
 import dev.glassworks.MainActivity
 import dev.glassworks.device.MdnsAdvertiser
 import dev.glassworks.device.PanelDevice
+import dev.glassworks.screen.ScreenHardware
 import dev.glassworks.glassworks
 import dev.glassworks.glassworksRuntime
 
@@ -91,13 +92,14 @@ class CoreConformanceTest {
         instrumentation.runOnMainSync {
             runtime.screen.start(app)
             try {
+                val hardware = ScreenHardware.of(app.glassworks.frame, emptyList(), app)
                 FakeFrame.presenceSource.onReading!!(true, 0f)
                 FakeFrame.lightSource.onLux!!(123f)
-                val line = runtime.screen.statusLine()
-                assertTrue(line, line.startsWith("presence=near"))
-                assertTrue(line, "lux=123" in line)
+                val line = runtime.screen.status(hardware)
+                assertTrue(line, line.startsWith("Someone near: yes"))
+                assertTrue(line, "Room light: 123 lux" in line)
                 FakeFrame.presenceSource.onReading!!(false, 5f)
-                assertTrue(runtime.screen.statusLine().startsWith("presence=far"))
+                assertTrue(runtime.screen.status(hardware).startsWith("Someone near: no"))
             } finally {
                 runtime.screen.stop()
             }

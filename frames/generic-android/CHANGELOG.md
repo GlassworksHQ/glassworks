@@ -28,6 +28,10 @@ line of each version is what Home Assistant shows on the update card. A change o
   log "no frames" and open the camera a second time, so it took about 12 s to come up. A camera's first picture
   now gets 10 s from the moment the camera opens; "no frames" shows only after that. A camera that goes quiet
   later is still restarted after 5 s.
+- **Settings > Log says what the screen senses in plain words.** *Screen and sensors* read like
+  `presence=far (raw 7.7E-4) · lux=NaN · brightness=-1.00 · admin=true`. It now reads like *Someone near: no ·
+  Room light: 120 lux · Brightness: 40 %*, with only what the device has: no room light without a light sensor, no
+  one near without presence. The panel and the Manage page show the same. The raw values are in the app's log.
 - **Setup carries on after you sign in on the panel.** After *Sign in on this panel instead*, the dashboard showed for
   up to 2 minutes before setup came back on *Add it*, so setup looked finished. Setup now comes back as soon as you're
   signed in. While Home Assistant may still find the panel by itself, *Add it* says it's checking.

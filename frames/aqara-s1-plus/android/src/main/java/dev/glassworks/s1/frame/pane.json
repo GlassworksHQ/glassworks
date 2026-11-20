@@ -3,6 +3,6 @@
   "name": "Time zone",
   "does": "Keeps the time zone Aqara resets at every boot.",
   "requires": [],
-  "status": "beta",
+  "status": "stable",
   "frame": "aqara-s1-plus"
 }

@@ -36,7 +36,7 @@ import java.io.File
 /**
  * Mock-ups of what differs on the generic Android frame (#23): the menu's device-settings link, the rail's
  * panes (no radio: a pane the frame can't run is hidden), setup's Panes and Home Assistant steps, and the
- * Manage page's Overview, from the real runtime's pane definitions.
+ * Manage page's Overview, from the real runtime's pane definitions, and the Log page's "Screen and sensors" (#675).
  * The S1's same screens come with them (`-s1`), to show they stay as they were. A made-up Pixel Tablet
  * with a microphone, a speaker, Bluetooth LE and a camera. Skipped unless asked:
  *   ./gradlew :kiosk:testDebugUnitTest --tests '*GenericFrameMockups*' -Ps1MockupDir=<dir>
@@ -57,14 +57,15 @@ class GenericFrameMockups {
         KioskPrefs(app).apply { urlSetting = "http://homeassistant.local:8123/lovelace/panel"; zoom = 1.25f }
     }
 
-    private fun menu(frame: Frame, section: String): KioskSettingsOverlay {
+    private fun menu(frame: Frame, section: String, status: (ScreenHardware) -> String = { "screen on" }): KioskSettingsOverlay {
         val o = Mockup.show(KioskSettingsOverlay(Mockup.activity()))
         val definitions = KioskApp.runtime(frame, build = AppBuild("1.0.0", 10000, debug = false)).paneDefinitions(app)
+        val hardware = ScreenHardware.of(frame, definitions, app)
         val core = CoreSettings(
-            KioskPrefs(app), "0.4.3", status = { "screen on" },
+            KioskPrefs(app), "0.4.3", status = { status(hardware) },
             deviceSettings = SettingsItem.Link(SettingsMenu.deviceSettingsTitle(frame), SettingsMenu.DEVICE_SETTINGS_DETAIL) {},
             licences = SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) {},
-            hardware = ScreenHardware.of(frame, definitions, app),
+            hardware = hardware,
         )
         val sections = paneSections(definitions)
         o.show(KioskSettingsOverlay.Model(settingsOrder(core.sections(), sections), "0.4.3", sections.map { it.id }.toSet()))
@@ -107,6 +108,9 @@ class GenericFrameMockups {
     @Test
     fun mockups() {
         assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", Mockup.dir != null)
+        // The Log page, as S1Settings builds it: someone at the S1 in a lit room; nobody at the tablet, which has no light sensor.
+        Mockup.save("frame-06-log-generic", menu(GenericAndroid(app), "log") { it.status(near = false, lux = Float.NaN, brightness = -1f) + " · Voice: idle" })
+        Mockup.save("frame-06-log-s1", menu(AqaraS1Plus(), "log") { it.status(near = true, lux = 120f, brightness = 0.4f) + " · Voice: idle" })
         for ((suffix, frame) in listOf("generic" to GenericAndroid(app), "s1" to AqaraS1Plus())) {
             Mockup.save("frame-01-screen-$suffix", menu(frame, "screen").also { o -> scrollDown(o); Mockup.idle() })
             // The rail's Panes, open: only the panes this frame can run (#23, maintainer 2026-11-15).
