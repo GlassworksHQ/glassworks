@@ -14,11 +14,32 @@ export interface FrameModel {
   /** the body's sides: the colour facing away from the light, and facing it */
   sides: { dark: string; light: string };
   finish: 'glass' | 'mirror';
-  mount: 'wall' | 'floor' | 'lean';
-  /** for lean: how far the top tilts back, degrees */
+  /** the front's colour around the screen, e.g. a white bezel; black glass when left out */
+  face?: string;
+  /** `desk`: on a desk or counter, seen from a little above, e.g. in a dock */
+  mount: 'wall' | 'floor' | 'lean' | 'desk';
+  /** for lean and desk: how far the top tilts back, degrees */
   lean?: number;
-  /** parts outside the body, mm from its centre (x right, y down, z towards you) */
-  parts?: { kind: 'tube'; from: V3; to: V3; diameter: number; color: string }[];
+  /** parts outside the body: tubes that move with it, and a dock it sits in */
+  parts?: (TubePart | DockPart)[];
+}
+
+/** A tube, e.g. a stand's leg: mm from the body's centre (x right, y down, z towards you), leaning with the body. */
+export interface TubePart { kind: 'tube'; from: V3; to: V3; diameter: number; color: string }
+
+/**
+ * A dock the body sits in, on the floor behind it (the Pixel Tablet's speaker dock). Its front leans with
+ * the body's back; it is `height` tall and `depth` deep along the floor, and holds the body's lowest edge
+ * `gap` above the floor. `sides` shades it like the body's sides.
+ * The card lifts the body off it on hover. mm.
+ */
+export interface DockPart {
+  kind: 'dock';
+  width: number;
+  depth: number;
+  height: number;
+  gap: number;
+  sides: { dark: string; light: string };
 }
 
 /** The same stages as the Glassworks status badges (planned, under development, alpha, beta, stable). */

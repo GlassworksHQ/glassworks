@@ -1,7 +1,8 @@
 'use client';
 // A frame's 3D mockup, as on glassworks.dev (`DeviceModel.tsx`, fbfd364): the front glass is one CSS-3D
 // plane with the frame's render (or an example dashboard); the body's sides, any parts and a floor shadow are geometry.ts's
-// projection of the frame's model, drawn as SVG behind the glass. Light moves, glass doesn't.
+// projection of the frame's model, drawn as SVG behind the glass. Light moves, glass doesn't. A dock is drawn on its
+// own, behind the body, so the body can lift off it on hover (--undock, DeviceModel.module.css).
 import { useEffect, useMemo, useRef, type CSSProperties } from 'react';
 import type { FrameModel } from './frame';
 import { geometry, type Layout } from './geometry';
@@ -31,26 +32,53 @@ export function DeviceModel({ id, model, label, aspect = 2, screen, priority = f
     return () => ro.disconnect();
   }, []);
   const blur = `frame-floor-${id}`;
+  const weave = `frame-weave-${id}`;
+  const heather = `frame-heather-${id}`;
+  const { dock } = g;
   return (
     <div ref={stage} className={s.stage} style={{ ...PAINT_VARS, aspectRatio: aspect }} role="img" aria-label={label}>
-      <div className={s.model} data-layout={g.layout} data-finish={g.finish} data-mount={g.mount} style={{ transform: g.transform, ...g.vars } as CSSProperties}>
+      <div className={s.model} data-layout={g.layout} data-finish={g.finish} data-mount={g.mount} data-dock={dock ? '' : undefined} style={{ transform: g.transform, ...g.vars } as CSSProperties}>
         {g.mount === 'wall' && <div className={s.shadow} aria-hidden="true" />}
-        <svg className={s.sides} viewBox={`0 0 100 ${g.stageH}`} preserveAspectRatio="none" aria-hidden="true">
-          {g.floorShadow && (
-            <>
-              <defs>
-                <filter id={blur} x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.6" /></filter>
-              </defs>
-              <polygon points={g.floorShadow} fill="black" fillOpacity={0.5} filter={`url(#${blur})`} />
-            </>
-          )}
-          {g.parts.map((p, i) => <line key={`p${i}`} x1={p.x1} y1={p.y1} x2={p.x2} y2={p.y2} stroke={p.color} strokeWidth={p.width} strokeLinecap="round" />)}
-          {g.faces.map((f, i) => <polygon key={i} points={f.points} fill={f.fill} stroke={f.fill} strokeWidth="0.12" strokeLinejoin="round" />)}
-        </svg>
-        <div className={s.device} aria-hidden="true">
-          <div className={s.front}>
-            <div className={s.screen}>{screen ? <img className={s.render} src={screen} alt="" decoding="async" loading={priority ? 'eager' : 'lazy'} fetchPriority={priority ? 'high' : undefined} /> : <Dashboard layout={g.layout} />}</div>
-            <div className={s.glare} />
+        {(g.floorShadow || dock) && (
+          // what stays put: the floor's shadow, and a dock
+          <svg className={s.sides} viewBox={`0 0 100 ${g.stageH}`} preserveAspectRatio="none" aria-hidden="true">
+            <defs>
+              {/* the blur's region is the stage's, not the shadow's: a flat floor shadow's own box would clip it */}
+              <filter id={blur} filterUnits="userSpaceOnUse" x="-50" y={-g.stageH / 2} width="200" height={g.stageH * 2}><feGaussianBlur stdDeviation={dock ? 1.1 : 1.6} /></filter>
+              {dock && (
+                // the fabric: a fine diagonal twill, drawn as lines so it stays sharp at any size, over a faint heather
+                <>
+                  <pattern id={weave} width="0.5" height="0.5" patternUnits="userSpaceOnUse" patternTransform="rotate(-32)">
+                    <rect width="0.5" height="0.2" fill="black" fillOpacity={0.055} />
+                    <rect y="0.25" width="0.5" height="0.1" fill="white" fillOpacity={0.1} />
+                  </pattern>
+                  <filter id={heather} x="0" y="0" width="100%" height="100%">
+                    <feTurbulence type="fractalNoise" baseFrequency="2.4 3.4" numOctaves={2} seed={7} />
+                    <feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  -0.5 0 0 0 0.25" />
+                    <feComposite in2="SourceGraphic" operator="in" />
+                    <feMerge><feMergeNode in="SourceGraphic" /><feMergeNode /></feMerge>
+                  </filter>
+                </>
+              )}
+            </defs>
+            {g.floorShadow && <polygon points={g.floorShadow} fill="black" fillOpacity={dock ? 0.32 : 0.5} filter={`url(#${blur})`} />}
+            {dock && <g filter={`url(#${heather})`}>{dock.faces.map((f, i) => <polygon key={`d${i}`} points={f.points} fill={f.fill} stroke={f.fill} strokeWidth="0.12" strokeLinejoin="round" />)}</g>}
+            {dock && <g fill={`url(#${weave})`}>{dock.faces.map((f, i) => <polygon key={`w${i}`} points={f.points} />)}</g>}
+            {dock?.plate && <polygon points={dock.plate.points} fill={dock.plate.fill} />}
+            {dock?.pins?.map((p, i) => <circle key={`n${i}`} cx={p.cx} cy={p.cy} r={p.r} fill={PAINT.pin} />)}
+          </svg>
+        )}
+        {/* the body, which lifts off a dock on hover (--undock) */}
+        <div className={s.slab}>
+          <svg className={s.sides} viewBox={`0 0 100 ${g.stageH}`} preserveAspectRatio="none" aria-hidden="true">
+            {g.parts.map((p, i) => <line key={`p${i}`} x1={p.x1} y1={p.y1} x2={p.x2} y2={p.y2} stroke={p.color} strokeWidth={p.width} strokeLinecap="round" />)}
+            {g.faces.map((f, i) => <polygon key={i} points={f.points} fill={f.fill} stroke={f.fill} strokeWidth="0.12" strokeLinejoin="round" />)}
+          </svg>
+          <div className={s.device} aria-hidden="true">
+            <div className={s.front}>
+              <div className={s.screen}>{screen ? <img className={s.render} src={screen} alt="" decoding="async" loading={priority ? 'eager' : 'lazy'} fetchPriority={priority ? 'high' : undefined} /> : <Dashboard layout={g.layout} />}</div>
+              <div className={s.glare} />
+            </div>
           </div>
         </div>
       </div>

@@ -20,7 +20,38 @@
   place-items: center;
   width: 100%;
   height: 100%;
+}
+
+/* the body: its sides and front glass, which lift off a dock together. It fills the stage, so its
+   perspective is the model's, centred where geometry.ts projects from. */
+.slab {
+  grid-area: 1 / 1;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
   perspective: calc(var(--u) * 170);
+}
+
+/*
+ * Undock: a docked body lifts up and a little towards the viewer when the model is hovered, or when
+ * a caller sets --undock: 1 (the card does on hover and keyboard focus). The move and scale
+ * (--ux, --uy, --us) are geometry.ts's projection of the lift, so the sides and the glass move as one.
+ * The dock stays put. Nothing moves with reduced motion.
+ */
+@media (hover: hover) {
+  .stage:hover {
+    --undock: 1;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .model[data-dock] .slab {
+    transform:
+      translate(calc(var(--undock, 0) * var(--ux)), calc(var(--undock, 0) * var(--uy)))
+      scale(calc(1 + var(--undock, 0) * var(--us)));
+    transition: transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+  }
 }
 
 /* Sizes and angles (--wp, --ar, --rad, --du, --sr, --rx, --ry, --lean) and the
@@ -62,7 +93,8 @@
   position: absolute;
   inset: 0;
   border-radius: var(--rad);
-  background: var(--dev-glass);
+  /* the frame's own front colour (frame.json model.face), or black glass */
+  background: var(--dev-face, var(--dev-glass));
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, white 9%, transparent),
     inset 0 1px 0 color-mix(in srgb, white 14%, transparent);

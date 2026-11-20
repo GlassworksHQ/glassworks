@@ -22,6 +22,8 @@
 
 .card:hover,
 .card:focus-visible {
+  /* a docked device lifts off its dock (DeviceModel.module.css) */
+  --undock: 1;
   border-color: color-mix(in srgb, var(--sky) 38%, var(--edge));
   box-shadow: 0 24px 60px -32px color-mix(in srgb, var(--sky) 45%, transparent);
   transform: translateY(-2px);
@@ -65,6 +67,23 @@
   50% {
     transform: translateY(-5px);
   }
+}
+
+/* a docked device stays on the ground: only its body lifts off the dock (--undock above,
+   DeviceModel.module.css), and the model still leans toward the pointer */
+.card:hover .float:has([data-dock]),
+.card:focus-visible .float:has([data-dock]) {
+  transform: rotateX(calc(var(--tilt-x, 0deg) * 0.5)) rotateY(calc(var(--tilt-z, 0deg) * 0.45));
+}
+
+.card:hover .bob:has([data-dock]),
+.card:focus-visible .bob:has([data-dock]) {
+  animation: none;
+}
+
+.card:hover .model:has([data-dock]) > .shadow,
+.card:focus-visible .model:has([data-dock]) > .shadow {
+  opacity: 0;
 }
 
 .shadow {

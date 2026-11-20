@@ -19,11 +19,26 @@
       "radius": 4
     },
     "sides": {
-      "dark": "#2b2d2a",
-      "light": "#9a9d96"
+      "dark": "#c4bfb4",
+      "light": "#f4f2ed"
     },
     "finish": "glass",
-    "mount": "wall"
+    "face": "#f2f0eb",
+    "mount": "desk",
+    "lean": 15,
+    "parts": [
+      {
+        "kind": "dock",
+        "width": 169,
+        "depth": 70,
+        "height": 94,
+        "gap": 5,
+        "sides": {
+          "dark": "#8a857c",
+          "light": "#ebe7df"
+        }
+      }
+    ]
   },
   "render": "render.webp",
   "display": {
