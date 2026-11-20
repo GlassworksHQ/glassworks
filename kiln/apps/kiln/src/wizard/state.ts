@@ -237,8 +237,8 @@ export function reduce(s: WizardState, a: Action): WizardState {
       return { ...s, busy: a.busy };
     case 'backup':
       return { ...s, backup: a.backup };
-    case 'panes':
-      return s.panes === a.offered ? s : { ...s, panes: a.offered };
+    case 'panes': // unset and false are the same: an app without the step leaves the state as it was
+      return !!s.panes === a.offered ? s : { ...s, panes: a.offered };
     case 'changed': // a write outranks the apps, and both outrank not knowing
       return { ...s, changed: s.changed && OUTRANKS[s.changed] > OUTRANKS[a.by] ? s.changed : a.by };
   }

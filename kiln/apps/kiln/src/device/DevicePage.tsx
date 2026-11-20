@@ -473,8 +473,8 @@ export function DevicePage({ frame, demo: sim, base }: { frame: DeviceFrame; dem
     return <StandardRoutes entry={entry} renew={renew} before={before} outcome={outcome} />;
   }
   if (!live) return null;
-  // demos keep their own address (?demo=…): only a real install moves it
-  const at = start.m.demo ? undefined : base;
+  // the address follows the install's step (a demo's too, keeping its ?demo=…)
+  const at = base;
   if (live.app.state.screen !== 'off' && imageMode && live.image) return <ImageFlow image={live.image} app={live.app} toApp={() => setImageMode(false)} base={at} />;
   return <AppFlow session={live.app} toImage={live.image && live.app.state.screen !== 'off' ? () => setImageMode(true) : undefined} base={at} />;
 }
