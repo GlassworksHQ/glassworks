@@ -17,6 +17,7 @@ import dev.glassworks.screen.ScreenPolicy
 import dev.glassworks.auth.HaTokenClient
 import dev.glassworks.auth.SignInServer
 import dev.glassworks.discovery.HaDiscovery
+import dev.glassworks.setup.PanesStep
 import dev.glassworks.setup.SetupPane
 import dev.glassworks.update.UpdateManager
 import dev.glassworks.assist.OrbBakes
@@ -59,6 +60,12 @@ interface Glassworks {
 
     /** The panes on setup's Panes step, in definition order: each card with its pane's usable steps. */
     fun setupPanes(context: Context): List<SetupPane>
+
+    /**
+     * Setup's Panes step for the whole process, over [setupPanes], made once: the panel's screen and the setup
+     * channel's `panes.set` answer the same one.
+     */
+    fun panesStep(context: Context): PanesStep
 
     /**
      * The device's own setup steps, after Panes, each a rail row of its own (#422's Silent updates). Made once. None by

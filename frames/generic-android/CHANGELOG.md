@@ -12,6 +12,10 @@ line of each version is what Home Assistant shows on the update card. A change o
 ## [Unreleased]
 
 ### Added
+- **Kiln asks which panes to turn on.** After Home Assistant, Kiln's set-up shows the app's Panes step: one switch
+  per pane the device can run, with each pane's icon, and Continue turns them on or off. It is the same answer as
+  the Panes step on the device's own screen, and the same switches as the pane's settings, the Manage page and Home
+  Assistant, so all of them agree. A pane whose hardware the device lacks isn't listed.
 - **Kiln installs Glassworks on Android devices for everyone, in beta.** Open `kiln.glassworks.dev/android` in
   Chrome or Edge: Kiln takes the newest release, with no `?apk=release` link needed. It is in Kiln's picker, marked
   Beta.

@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicReference
  * The setup channel on `@s1kiosk_setup` (adb `localabstract:`), started by KioskService. Thin glue:
  * the protocol is [SetupChannel]; this reads the app's state and applies changes the same way the
  * panel itself does. The panes' setup steps (Glassworks.paneDefinitions) bring their own state
- * and requests.
+ * and requests; the Panes step is the panel screen's own (Glassworks.panesStep).
  */
 object SetupChannelServer {
     private const val TAG = "Glassworks.SetupChannel"
@@ -43,7 +43,8 @@ object SetupChannelServer {
      */
     fun channels(context: Context, runtime: Glassworks, backend: SetupChannel.Backend): (mayChange: () -> Boolean) -> SetupChannel {
         val steps = runtime.setupSteps(context)
-        return { mayChange -> SetupChannel(backend, steps, { Log.i(TAG, it) }, mayChange) }
+        val panes = runtime.panesStep(context)
+        return { mayChange -> SetupChannel(backend, steps, { Log.i(TAG, it) }, mayChange, panes) }
     }
 
     /**

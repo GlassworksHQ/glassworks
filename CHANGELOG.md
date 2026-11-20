@@ -9,6 +9,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 ## [Unreleased]
 
 ### Added
+- **Kiln asks which panes to turn on.** After Home Assistant, Kiln's set-up shows the app's Panes step: one switch
+  per pane the device can run, with each pane's icon, and Continue turns them on or off. It is the same answer as
+  the Panes step on the device's own screen, and the same switches as the pane's settings, the Manage page and Home
+  Assistant, so all of them agree. A pane whose hardware the device lacks isn't listed.
 - **Kiln sets up the Mirror and Android tablets the way it sets up the S1.** After the install, Kiln asks the same
   steps as on the S1: the language, time zone and clock, Wi-Fi, Home Assistant, then Done. Every step has its own
   address. A reload during set-up picks up where it was. A reload during the write says an earlier try changed the

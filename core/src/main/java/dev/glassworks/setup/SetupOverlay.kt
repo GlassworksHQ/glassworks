@@ -78,6 +78,11 @@ class SetupOverlay(
     private val setupPanes: List<SetupPane> = emptyList(),
     /** The device's own steps (#422's Silent updates): each a row of its own after Panes (Glassworks.deviceSetupSteps). */
     private val ownSteps: List<SetupStep> = emptyList(),
+    /**
+     * The Panes step's answer, shared with the setup channel's `panes.set` (Glassworks.panesStep): Kiln's answer is this
+     * screen's too. Over [setupPanes].
+     */
+    private val panesStep: PanesStep = PanesStep(setupPanes),
 ) : FrameLayout(context) {
 
     private val haName = frame.friendlyName()
@@ -1180,12 +1185,10 @@ class SetupOverlay(
      * The Panes step: one card per [PaneChoice], two to a row, in a list that scrolls above Continue.
      * It only chooses which panes are on: a
      * pane that is on is set up in its own steps after this one. What the person sets stays here; Continue
-     * applies every card, each within [BUDGET_MS].
+     * applies every card through [panesStep] (the setup channel's too), each within [BUDGET_MS].
      */
     private inner class PanesView {
         private val on = BooleanArray(choices.size)
-        /** What Continue applied, by card: the panes that are on from then on. Null: not answered yet. */
-        private var applied: BooleanArray? = null
         /**
          * A preview's Continue, kept apart: a preview never changes the live answer (verifier 4bc205dc:
          * it marked the live Panes step chosen). Cleared when the screen hides.
@@ -1196,7 +1199,7 @@ class SetupOverlay(
             private set
         var problem: String? = null
             private set
-        val chosen: Boolean get() = applied != null
+        val chosen: Boolean get() = panesStep.chosen
 
         /** Two cards to a row, in a list that scrolls when they don't all fit (#121, the maintainer's review). */
         val view = ScrollView(context).apply {
@@ -1224,7 +1227,7 @@ class SetupOverlay(
         }
 
         /** Card [i] is on: as Continue applied it, else as the pane runs. A preview reads its own answer. */
-        fun wanted(i: Int): Boolean = (if (model?.preview == true) previewApplied?.get(i) else applied?.get(i)) ?: choices[i].on()
+        fun wanted(i: Int): Boolean = if (model?.preview == true) previewApplied?.get(i) ?: choices[i].on() else panesStep.wanted(i)
 
         fun forgetPreview() { previewApplied = null }
 
@@ -1267,29 +1270,15 @@ class SetupOverlay(
             problem = null
             val wanted = on.copyOf()
             redraw()
-            val results = arrayOfNulls<String>(choices.size)
-            val workers = choices.mapIndexed { i, c ->
-                Thread({ results[i] = runCatching { c.apply(wanted[i]) }.getOrElse { it.message ?: "failed" } }, "glassworks-setup-pane-$i").apply { isDaemon = true; start() }
-            }
-            val started = System.currentTimeMillis()
-            fun check() {
-                val late = workers.withIndex().filter { it.value.isAlive }
-                if (late.isNotEmpty() && System.currentTimeMillis() - started < panesBudgetMs) { main.postDelayed(::check, 200); return }
-                applying = false
-                val problems = choices.indices.mapNotNull { i ->
-                    when {
-                        workers[i].isAlive -> "The ${choices[i].title} didn't answer."
-                        results[i] != null -> "${choices[i].title}: ${results[i]}"
-                        else -> null
-                    }
+            val budget = panesBudgetMs
+            Thread({
+                val p = panesStep.apply(wanted, budget)
+                main.post {
+                    applying = false
+                    problem = p
+                    if (p == null) onPanesDone?.invoke() else redraw()
                 }
-                problem = problems.joinToString("\n").ifEmpty { null }
-                if (problems.isEmpty()) {
-                    applied = wanted
-                    onPanesDone?.invoke()
-                } else redraw()
-            }
-            main.postDelayed(::check, 200)
+            }, "glassworks-setup-panes").apply { isDaemon = true; start() }
         }
 
         private fun redraw() { sync(); model?.let { bindCard(it, stepChanged = false) } }
@@ -1394,6 +1383,6 @@ class SetupOverlay(
         private const val OWN = -1
 
         /** Continue on Panes waits this long for every card in all (the radio's Off waits for its helper). */
-        const val BUDGET_MS = 30_000L
+        const val BUDGET_MS = PanesStep.BUDGET_MS
     }
 }
