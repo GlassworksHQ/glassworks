@@ -7,18 +7,24 @@ import type { FrameModel } from "@glassworks/frame-card";
  * Sizes in mm, as in frame.json's `model` (frames/README.md).
  */
 
-const graphite = { dark: "#1b1d22", light: "#4a4e57" };
+/*
+ * Each one follows the page's theme, as the Pixel Tablet does: chalk on a light page, graphite with a
+ * black glass front on a dark one (the model's `dark` look, drawn as CSS light-dark()).
+ */
+const chalk = { dark: "#c5c8ce", light: "#f6f7f9" };
+const night = { face: "#07080b", sides: { dark: "#1b1d22", light: "#4a4e57" } };
+const look = { sides: chalk, face: "#f1f2f4", dark: night };
 
 /** A wide display on a fabric speaker base, on a kitchen counter (Beat 1) */
 export const WIDE_DISPLAY: FrameModel = {
   body: { shape: "rect", width: 220, height: 120, depth: 10, radius: 7 },
   bezel: 6,
   screen: { radius: 2 },
-  sides: graphite,
+  ...look,
   finish: "glass",
   mount: "desk",
   lean: 12,
-  parts: [{ kind: "dock", width: 150, depth: 62, height: 72, gap: 4, sides: { dark: "#2a2c31", light: "#5b5f68" } }],
+  parts: [{ kind: "dock", width: 150, depth: 62, height: 72, gap: 4, sides: { dark: "#b9bcc2", light: "#e9ebee" }, dark: { sides: { dark: "#2a2c31", light: "#5b5f68" } } }],
 };
 
 /** A square 4" wall switch (the finale) */
@@ -26,7 +32,7 @@ export const SQUARE_SWITCH: FrameModel = {
   body: { shape: "rect", width: 86, height: 86, depth: 9, radius: 4 },
   bezel: 5,
   screen: { radius: 2 },
-  sides: graphite,
+  ...look,
   finish: "glass",
   mount: "wall",
 };
@@ -36,7 +42,7 @@ export const ROUND_DIAL: FrameModel = {
   body: { shape: "rect", width: 84, height: 84, depth: 12, radius: 42 },
   bezel: 6,
   screen: { radius: 36 },
-  sides: graphite,
+  ...look,
   finish: "glass",
   mount: "wall",
 };
@@ -46,7 +52,7 @@ export const BEDSIDE_DISPLAY: FrameModel = {
   body: { shape: "rect", width: 180, height: 90, depth: 14, radius: 9 },
   bezel: 6,
   screen: { radius: 3 },
-  sides: graphite,
+  ...look,
   finish: "glass",
   mount: "desk",
   lean: 16,

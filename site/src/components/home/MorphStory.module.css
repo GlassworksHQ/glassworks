@@ -452,7 +452,7 @@ a.eyebrow:hover {
 .bezel {
   position: relative;
   pointer-events: auto;
-  /* --face at --face-o: a frame's own front colour fading in over the dark glass (Beat 1's tablet) */
+  /* --face at --face-o: a frame's own front colour fading in over the dark glass */
   --face-layer: color-mix(in srgb, var(--face, transparent) calc(var(--face-o, 0) * 100%), transparent);
   background:
     linear-gradient(var(--face-layer), var(--face-layer)),
