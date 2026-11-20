@@ -346,12 +346,22 @@ a.eyebrow:hover {
 
 .bezelRow {
   position: relative;
+  z-index: 2;
   display: flex;
   align-items: center;
+  transition: transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* PR #696 undock effect: tablet lifts smoothly up and slightly forward while dock stays planted */
+@media (prefers-reduced-motion: no-preference) {
+  .hardwareScale[data-docked][data-undocked] .bezelRow {
+    transform: translate3d(0, -44px, 0) scale(1.035);
+  }
 }
 
 .bezel {
   position: relative;
+  z-index: 2;
   pointer-events: auto;
   background: linear-gradient(155deg, #252832 0%, #11131a 48%, #0a0b0f 100%);
   border: 1px solid rgba(255, 255, 255, 0.14);
@@ -360,6 +370,22 @@ a.eyebrow:hover {
     inset 0 1px 0 rgba(255, 255, 255, 0.16);
   overflow: hidden;
   will-change: width, height, border-radius;
+}
+
+/* Porcelain front bezel for Google Pixel Tablet (PR #696: face #f2f0eb, sides #c4bfb4/#f4f2ed) */
+.tabletPorcelainSurface {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: linear-gradient(155deg, #f6f4ef 0%, #f2f0eb 58%, #e4e0d8 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(196, 191, 180, 0.72),
+    inset 0 1px 0 rgba(255, 255, 255, 0.85);
+}
+
+.bezelPorcelain {
+  border-color: rgba(196, 191, 180, 0.75);
 }
 
 /* Silvered full-height mirror body surface (forehead + chin stay real reflective glass) */
@@ -426,6 +452,51 @@ a.eyebrow:hover {
     transform: scale(4.2);
     opacity: 0;
   }
+}
+
+/* Google Pixel Tablet Charging Speaker Dock (PR #696: light woven twill fabric + pill plate + 4 contacts behind bezel) */
+.tabletDock {
+  position: absolute;
+  bottom: -38px;
+  left: 50%;
+  height: 152px;
+  transform-origin: bottom center;
+  pointer-events: none;
+  z-index: 0;
+  will-change: opacity, transform;
+}
+
+.hardwareScale[data-docked] .tabletDock {
+  pointer-events: auto;
+}
+
+.tabletDockCompact {
+  position: relative;
+  height: 40px;
+  margin-top: -10px;
+  margin-bottom: 10px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.tabletDockSvg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  filter: drop-shadow(0 10px 16px rgba(0, 0, 0, 0.34));
+}
+
+.tabletDock::after,
+.tabletDockCompact::after {
+  content: "";
+  position: absolute;
+  left: 6%;
+  right: 6%;
+  bottom: -7px;
+  height: 10px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.44) 0%, transparent 72%);
+  pointer-events: none;
 }
 
 /* Accurate tall tubular U-shaped steel stand (frame.json: 220/536 ≈ 41% height, 98% width, #4b4f58) */
@@ -1354,6 +1425,48 @@ a.eyebrow:hover {
   padding: 18px 24px 28px;
   cursor: pointer;
   user-select: none;
+}
+
+/* Subtle top-rim Pixel Tablet Charging Speaker Dock status micro-chip */
+.dockChip {
+  position: absolute;
+  top: 9px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(10, 11, 15, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-family: var(--f-mono);
+  font-size: 8px;
+  letter-spacing: 0.04em;
+  color: #a1a1aa;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.dockChipDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 7px rgba(52, 211, 153, 0.7);
+  flex: none;
+  transition: background 0.28s ease, box-shadow 0.28s ease;
+}
+
+.dockChipUndocked {
+  border-color: rgba(251, 191, 36, 0.34);
+  color: #e4e4e7;
+}
+
+.dockChipDotOff {
+  background: #fbbf24;
+  box-shadow: 0 0 7px rgba(251, 191, 36, 0.6);
 }
 
 .orbStage {
