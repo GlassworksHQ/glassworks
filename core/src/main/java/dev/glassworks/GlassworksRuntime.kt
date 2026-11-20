@@ -28,6 +28,7 @@ import dev.glassworks.discovery.HaDiscovery
 import dev.glassworks.device.DeviceHost
 import dev.glassworks.device.PanelDevice
 import dev.glassworks.setup.SetupFlow
+import dev.glassworks.setup.PanesStep
 import dev.glassworks.setup.SetupPane
 import dev.glassworks.setup.SetupPrefs
 import dev.glassworks.setup.SetupState
@@ -178,8 +179,14 @@ class GlassworksRuntime(
             if (card == null) {
                 if (steps.isNotEmpty()) Log.e(TAG, "Setup steps of pane '${d.id}' left out: it has no card on the Panes step (setupChoice)")
                 null
-            } else SetupPane(card, steps)
+            } else SetupPane(card, steps, d.id)
         }
+    }
+
+    private var panesStep: PanesStep? = null
+
+    override fun panesStep(context: Context): PanesStep = synchronized(this) {
+        panesStep ?: PanesStep(setupPanes(context)).also { panesStep = it }
     }
 
     @Volatile override var cameraLeaving = false

@@ -40,7 +40,13 @@ describe('the Glassworks app, as recorded', () => {
     const ha = await c.setHa('http://homeassistant.local:8123');
     expect(ha.ha.url).toBe('http://homeassistant.local:8123');
     expect(ha.ha.signinUrl).toBe('http://192.0.2.10:8099/signin');
-    expect((await c.getState()).ha.signedIn).toBe(false);
+    const before = await c.getState();
+    expect(before.ha.signedIn).toBe(false);
+
+    // The Panes step: one card per pane the S1 can run, by the pane's id; panes.set answers it, every other card off.
+    expect(before.panes?.map((p) => p.id)).toEqual(['assist', 'sendspin', 'notifications', 'radio', 'wall-base']);
+    const panes = await c.setPanes(['assist', 'radio']);
+    expect(panes.panes?.filter((p) => p.on).map((p) => p.id)).toEqual(['assist', 'radio']);
 
     // No root helper on this panel: only Off works, and the refusal says why.
     await expect(c.setRadio('zigbee_tcp')).rejects.toThrow(/root helper/);

@@ -87,7 +87,7 @@ open class MainActivity : Activity() {
     /** The panes' definitions: their setup steps, settings sections and adb extras. */
     private val panes by lazy { glassworks.paneDefinitions(this) }
     /** The panes on setup's Panes step, each with its steps (only usable ones). */
-    private val setupPanes by lazy { glassworks.setupPanes(this) }
+    private val setupPanes by lazy { glassworks.panesStep(this).panes }
     private val paneSteps by lazy { setupPanes.flatMap { it.steps } }
     /** The device's own steps, after Panes (#422's Silent updates). */
     private val deviceSteps by lazy { glassworks.deviceSetupSteps(this) }
@@ -239,7 +239,7 @@ open class MainActivity : Activity() {
         }
         loadingOverlay = LoadingOverlay(this, glassworks.frame.bootRest).apply { onAction = ::openWifiSettings }
         overlays = runtime.app.overlays(runtime, overlayHost)
-        setupOverlay = SetupOverlay(this, glassworks.frame, setupPanes, deviceSteps).apply {
+        setupOverlay = SetupOverlay(this, glassworks.frame, setupPanes, deviceSteps, glassworks.panesStep(this)).apply {
             onUsePanel = ::onUsePanelLogin
             onManualUrl = ::onManualHaUrl
             onChooseNetwork = { if (!setupPreview) glassworks.setupHotspot?.configured(); openWifiSettings() }

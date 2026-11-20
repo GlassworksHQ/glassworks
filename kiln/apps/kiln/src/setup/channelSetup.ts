@@ -356,7 +356,7 @@ export class ChannelSetup {
   }
 
   /**
-   * The Panes step: a switch per card the app offers, as the panel's own Panes step has (proposed, issue 621). An app whose
+   * The Panes step: a switch per card the app offers, as the panel's own Panes step has (issue 621). An app whose
    * state has no `panes` has no such step: on to the radio, as before.
    */
   async panes(): Promise<void> {

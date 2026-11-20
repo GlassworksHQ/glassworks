@@ -9,6 +9,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 ## [Unreleased]
 
 ### Added
+- **Kiln asks which panes to turn on.** After Home Assistant, Kiln's set-up shows the app's Panes step: one switch
+  per pane the device can run, with each pane's icon, and Continue turns them on or off. It is the same answer as
+  the Panes step on the device's own screen, and the same switches as the pane's settings, the Manage page and Home
+  Assistant, so all of them agree. A pane whose hardware the device lacks isn't listed.
 - **Recorders that record on motion get the camera's motion pushed to them.** With the ONVIF stream on, a network
   video recorder that subscribes to the camera's motion (many Xiongmai-based NVRs do) now hears about each change
   the moment it happens, so it can start recording. The recorder must be on your local network and sign in with the

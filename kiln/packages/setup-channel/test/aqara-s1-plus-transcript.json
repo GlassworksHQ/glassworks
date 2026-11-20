@@ -14,6 +14,38 @@
           "url": "",
           "signedIn": false
         },
+        "panes": [
+          {
+            "id": "assist",
+            "title": "Voice",
+            "detail": "Assist and timers",
+            "on": true
+          },
+          {
+            "id": "sendspin",
+            "title": "Music",
+            "detail": "A Sendspin speaker",
+            "on": true
+          },
+          {
+            "id": "notifications",
+            "title": "Notifications",
+            "detail": "On-screen alerts",
+            "on": true
+          },
+          {
+            "id": "radio",
+            "title": "Zigbee / Thread radio",
+            "detail": "For your devices",
+            "on": false
+          },
+          {
+            "id": "wall-base",
+            "title": "Wall base",
+            "detail": "The S1's wired base",
+            "on": true
+          }
+        ],
         "radio": {
           "mode": "off",
           "status": "Off: Aqara's radio services stopped, radio idle. Other modes need the root helper (s1kiosk_radio, not installed).",
@@ -71,6 +103,38 @@
           "signedIn": false,
           "signinUrl": "http://192.0.2.10:8099/signin"
         },
+        "panes": [
+          {
+            "id": "assist",
+            "title": "Voice",
+            "detail": "Assist and timers",
+            "on": true
+          },
+          {
+            "id": "sendspin",
+            "title": "Music",
+            "detail": "A Sendspin speaker",
+            "on": true
+          },
+          {
+            "id": "notifications",
+            "title": "Notifications",
+            "detail": "On-screen alerts",
+            "on": true
+          },
+          {
+            "id": "radio",
+            "title": "Zigbee / Thread radio",
+            "detail": "For your devices",
+            "on": false
+          },
+          {
+            "id": "wall-base",
+            "title": "Wall base",
+            "detail": "The S1's wired base",
+            "on": true
+          }
+        ],
         "radio": {
           "mode": "off",
           "status": "Off: Aqara's radio services stopped, radio idle. Other modes need the root helper (s1kiosk_radio, not installed).",
@@ -127,6 +191,38 @@
           "signedIn": false,
           "signinUrl": "http://192.0.2.10:8099/signin"
         },
+        "panes": [
+          {
+            "id": "assist",
+            "title": "Voice",
+            "detail": "Assist and timers",
+            "on": true
+          },
+          {
+            "id": "sendspin",
+            "title": "Music",
+            "detail": "A Sendspin speaker",
+            "on": true
+          },
+          {
+            "id": "notifications",
+            "title": "Notifications",
+            "detail": "On-screen alerts",
+            "on": true
+          },
+          {
+            "id": "radio",
+            "title": "Zigbee / Thread radio",
+            "detail": "For your devices",
+            "on": false
+          },
+          {
+            "id": "wall-base",
+            "title": "Wall base",
+            "detail": "The S1's wired base",
+            "on": true
+          }
+        ],
         "radio": {
           "mode": "off",
           "status": "Off: Aqara's radio services stopped, radio idle. Other modes need the root helper (s1kiosk_radio, not installed).",
@@ -170,23 +266,11 @@
   {
     "request": {
       "id": 4,
-      "op": "set_radio",
-      "mode": "zigbee_tcp"
+      "op": "panes.set",
+      "on": "assist,radio"
     },
     "reply": {
       "id": 4,
-      "ok": false,
-      "error": "Zigbee coordinator (TCP) needs the root helper (init service s1kiosk_radio is not installed; see frames/aqara-s1-plus/docs/radio.md). Still in Off."
-    }
-  },
-  {
-    "request": {
-      "id": 5,
-      "op": "set_radio",
-      "mode": "off"
-    },
-    "reply": {
-      "id": 5,
       "ok": true,
       "state": {
         "ip": "192.0.2.10",
@@ -196,6 +280,139 @@
           "signedIn": false,
           "signinUrl": "http://192.0.2.10:8099/signin"
         },
+        "panes": [
+          {
+            "id": "assist",
+            "title": "Voice",
+            "detail": "Assist and timers",
+            "on": true
+          },
+          {
+            "id": "sendspin",
+            "title": "Music",
+            "detail": "A Sendspin speaker",
+            "on": false
+          },
+          {
+            "id": "notifications",
+            "title": "Notifications",
+            "detail": "On-screen alerts",
+            "on": false
+          },
+          {
+            "id": "radio",
+            "title": "Zigbee / Thread radio",
+            "detail": "For your devices",
+            "on": true
+          },
+          {
+            "id": "wall-base",
+            "title": "Wall base",
+            "detail": "The S1's wired base",
+            "on": false
+          }
+        ],
+        "radio": {
+          "mode": "off",
+          "status": "Off: Aqara's radio services stopped, radio idle. Other modes need the root helper (s1kiosk_radio, not installed).",
+          "options": [
+            {
+              "id": "off",
+              "label": "Off",
+              "detail": "The radio stays idle. Choose this if unsure."
+            },
+            {
+              "id": "zigbee_tcp",
+              "label": "Zigbee coordinator",
+              "detail": "For ZHA or Zigbee2MQTT, as a network radio."
+            },
+            {
+              "id": "thread",
+              "label": "Thread border router",
+              "detail": "Runs a Thread network for Home Assistant (OTBR)."
+            },
+            {
+              "id": "zigbee_router",
+              "label": "Zigbee router (repeater)",
+              "detail": "Joins the Zigbee network you already have.",
+              "experimental": true,
+              "repeater": true
+            },
+            {
+              "id": "thread_router",
+              "label": "Thread router (repeater)",
+              "detail": "Joins the Thread network you already have.",
+              "experimental": true,
+              "repeater": true
+            }
+          ],
+          "helper": false,
+          "answered": false
+        }
+      }
+    }
+  },
+  {
+    "request": {
+      "id": 5,
+      "op": "set_radio",
+      "mode": "zigbee_tcp"
+    },
+    "reply": {
+      "id": 5,
+      "ok": false,
+      "error": "Zigbee coordinator (TCP) needs the root helper (init service s1kiosk_radio is not installed; see frames/aqara-s1-plus/docs/radio.md). Still in Off."
+    }
+  },
+  {
+    "request": {
+      "id": 6,
+      "op": "set_radio",
+      "mode": "off"
+    },
+    "reply": {
+      "id": 6,
+      "ok": true,
+      "state": {
+        "ip": "192.0.2.10",
+        "online": false,
+        "ha": {
+          "url": "http://homeassistant.local:8123",
+          "signedIn": false,
+          "signinUrl": "http://192.0.2.10:8099/signin"
+        },
+        "panes": [
+          {
+            "id": "assist",
+            "title": "Voice",
+            "detail": "Assist and timers",
+            "on": true
+          },
+          {
+            "id": "sendspin",
+            "title": "Music",
+            "detail": "A Sendspin speaker",
+            "on": false
+          },
+          {
+            "id": "notifications",
+            "title": "Notifications",
+            "detail": "On-screen alerts",
+            "on": false
+          },
+          {
+            "id": "radio",
+            "title": "Zigbee / Thread radio",
+            "detail": "For your devices",
+            "on": true
+          },
+          {
+            "id": "wall-base",
+            "title": "Wall base",
+            "detail": "The S1's wired base",
+            "on": false
+          }
+        ],
         "radio": {
           "mode": "off",
           "status": "Off: Aqara's radio services stopped, radio idle. Other modes need the root helper (s1kiosk_radio, not installed).",

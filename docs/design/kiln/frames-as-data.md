@@ -136,7 +136,9 @@ and its Done carries what that install found (the home screen, Home Assistant's 
 
 The App step installs the app where the install didn't (the S1, over FEL), and applies the settings
 to the app already on where it did (the Mirror), with no reinstall. Panes shows once the app's setup
-state lists its cards (the setup channel's `panes`, `panes.set`).
+state lists its cards (the setup channel's `panes`, `panes.set`). Every frame's app does: the step is the core's
+(`PanesStep`), the same answer as the device's own Panes screen, and a pane the frame lacks the hardware for has no
+card, so Kiln never shows it.
 
 A frame changes the list only in its data. A step its hardware lacks goes by itself: no radio in
 `frame.json` `panes.radio`, no Radio step; no touch (`installer.json` `touch`), no on-screen keyboard

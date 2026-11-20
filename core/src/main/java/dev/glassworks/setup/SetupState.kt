@@ -99,8 +99,12 @@ object SetupFlow {
     }
 }
 
-/** A pane on setup's Panes step: its card, and the steps it adds under Panes while the card is on. */
-class SetupPane(val choice: PaneChoice, val steps: List<SetupStep>)
+/**
+ * A pane on setup's Panes step: its card, and the steps it adds under Panes while the card is on. [id] is the pane's
+ * ([dev.glassworks.pane.PaneDefinition.id]): the setup channel names the card by it, and Kiln finds its icon by it. Tests
+ * may leave it to the card's title.
+ */
+class SetupPane(val choice: PaneChoice, val steps: List<SetupStep>, val id: String = choice.title)
 
 /** A pane's setup step as [SetupState] sees it. */
 data class PaneStepFacts(

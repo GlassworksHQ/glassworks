@@ -6,10 +6,11 @@
 // - the app came back after the Wi-Fi join without the sign-in it was handed: set-up must say one clear thing, then
 //   ask to sign in, never read the restart as an older app and skip to Done;
 // - a frame with no touchscreen was offered "do it on the panel".
+// And the Panes step, which every frame's app offers (issue 621): its cards, Continue's panes.set, a refusal.
 import { IMPROV_SOCKET } from '@glassworks/app-adb';
 import type { PanelShell } from '@glassworks/adb';
 import { ENGINE, INSTALLERS } from '@glassworks/frames/catalog';
-import { SETUP_SOCKET } from '@glassworks/setup-channel';
+import { SETUP_SOCKET, type PaneCard } from '@glassworks/setup-channel';
 import { cleanup, render } from '@testing-library/react';
 import { s1Plus } from '@glassworks/aqara-s1-plus-installer';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -54,6 +55,30 @@ function setUpOn(id: string, panel: PanelShell, simulated = true) {
     appPackage: PACKAGES[id],
   });
   return { s, shown, ends, now: () => setup };
+}
+
+/** Cards as Glassworks' Panes step sends them: a pane the frame can't run has none. */
+const CARDS: PaneCard[] = [
+  { id: 'assist', title: 'Voice', detail: 'Assist and timers', on: true },
+  { id: 'sendspin', title: 'Music', detail: 'A Sendspin speaker', on: false },
+];
+
+/** `p` with every request Kiln writes to the app's setup channel kept in `sent`. */
+function recording(p: PanelShell): PanelShell & { sent: { op: string; on?: string }[] } {
+  const sent: { op: string; on?: string }[] = [];
+  return {
+    ...p,
+    sent,
+    openStream: async (svc) => {
+      const io = await p.openStream!(svc);
+      if (svc !== SETUP_SOCKET) return io;
+      return {
+        onData: (cb) => io.onData(cb),
+        close: () => io.close(),
+        write: (d) => { new TextDecoder().decode(d).split('\n').filter(Boolean).forEach((l) => sent.push(JSON.parse(l))); return io.write(d); },
+      };
+    },
+  };
 }
 
 /** A device's shell before Glassworks' streams: records what runs, answers nothing. */
@@ -149,6 +174,42 @@ describe.each(ENGINE)('set-up on %s', (id) => {
     try { await s.homeAssistant(); } finally { Date.now = now; }
     expect(ends.done).toBe(false);
     expect((ends.error as Error).message).toBe('Glassworks didn\'t start again within a minute. Try again.');
+  });
+
+  it('the Panes step: the app\'s cards, and Continue answers them with panes.set (issue 621)', async () => {
+    const { p } = shell();
+    const panel = recording(withAppStreams(p, { online: true, radio: false, panes: { cards: CARDS } }));
+    const { s, ends, now } = setUpOn(id, panel, false);
+    await s.panes();
+    const st = now();
+    expect(st.phase).toBe('panes');
+    expect(st.phase === 'panes' && st.panes.map((c) => c.id)).toEqual(CARDS.map((c) => c.id));
+    await s.applyPanes(['sendspin']);
+    expect(panel.sent.filter((m) => m.op === 'panes.set')).toEqual([expect.objectContaining({ op: 'panes.set', on: 'sendspin' })]);
+    expect(ends).toEqual({ done: true, error: undefined }); // no radio on this app: on to Done
+    s.close();
+  });
+
+  it('a pane that refuses keeps the Panes step, saying why', async () => {
+    const { p } = shell();
+    const panel = withAppStreams(p, { online: true, radio: false, panes: { cards: CARDS, refuse: 'Music: the player didn\'t start' } });
+    const { s, ends, now } = setUpOn(id, panel, false);
+    await s.panes();
+    await s.applyPanes(['assist', 'sendspin']);
+    expect(now()).toMatchObject({ phase: 'panes', busy: false, error: 'Music: the player didn\'t start' });
+    expect(ends.done).toBe(false);
+    s.close();
+  });
+
+  it('an app without the Panes step (before issue 621) has none: on past it, nothing sent', async () => {
+    const { p } = shell();
+    const panel = recording(withAppStreams(p, { online: true, radio: false }));
+    const { s, shown, ends } = setUpOn(id, panel, false);
+    await s.panes();
+    expect(shown.some((x) => x.phase === 'panes')).toBe(false);
+    expect(panel.sent.some((m) => m.op === 'panes.set')).toBe(false);
+    expect(ends.done).toBe(true);
+    s.close();
   });
 
   it(touchOf(id) ? 'a frame with touch may send the person to the panel' : 'a frame without touch is never offered "do it on the panel"', () => {

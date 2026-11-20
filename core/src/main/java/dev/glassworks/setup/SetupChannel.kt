@@ -27,6 +27,8 @@ import java.util.concurrent.TimeUnit
  * The state is the core's (`ip`, `ha`) plus each pane step's own part under its id (`radio`). The S1's
  * first names (`set_ha`, `set_radio`, `set_radio_allow`) still work: Kiln sends them.
  * `pairing.arm` opens pairing over the LAN again for a while (dev.glassworks.setup.LanSetup).
+ * The Panes step ([PanesStep]) is the state's `panes`, one card per pane (`id`, `title`, `detail`, `on`), and
+ * `panes.set` (`on`: the ids to turn on, comma-separated) answers it as the panel's Continue does: every other card off.
  * `wifi.scan` answers with the networks the panel sees (`networks`, besides the state), and `wifi.join` (`ssid`,
  * `password`) joins one, after the reply is written: the panel's screen shows how it goes (#197).
  * The same loop serves the LAN's WebSocket (LanSetup), where [mayChange] is false until the browser
@@ -106,7 +108,11 @@ class SetupChannel(
     private val log: (String) -> Unit = {},
     /** Whether a request that changes something may run now; `state` always may. */
     private val mayChange: () -> Boolean = { true },
+    /** Setup's Panes step (Glassworks.panesStep), the panel screen's own. Null or no cards: no `panes`, no `panes.set`. */
+    panes: PanesStep? = null,
 ) {
+    private val panes = panes?.takeIf { it.panes.isNotEmpty() }
+
 
     interface Backend {
         /** The core's part of the state. */
@@ -153,6 +159,7 @@ class SetupChannel(
 
     /** The whole state: the core's, and each step's part under its id. */
     private fun state(): JSONObject = backend.state().toJson().apply {
+        panes?.let { put(PANES, it.toJson()) }
         steps.forEach { s -> s.channelState()?.let { put(s.id, it) } }
     }
 
@@ -179,6 +186,13 @@ class SetupChannel(
             } to null
             WIFI_SCAN -> reply(id, state = state(), networks = WifiNetwork.list(backend.hotspotNetworks() ?: backend.scanWifi())) to null
             WIFI_JOIN -> joinWifi(id, req)
+            PANES_SET -> if (panes == null) reply(id, error = "Unknown request '$asked'.") to null else {
+                val on = req.optString("on", "").split(',').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
+                when (val err = panes.set(on)) {
+                    null -> reply(id, state = state())
+                    else -> reply(id, error = err)
+                } to null
+            }
             HA_SET_URL -> {
                 val url = req.optString("url", "").trim()
                 if (!ChannelState.validHaUrl(url)) {
@@ -276,13 +290,15 @@ class SetupChannel(
         const val PAIRING_ARM = "pairing.arm"
         const val WIFI_SCAN = "wifi.scan"
         const val WIFI_JOIN = "wifi.join"
+        const val PANES = "panes"
+        const val PANES_SET = "panes.set"
         const val WIFI_OFF = "The panel's Wi-Fi is turned off, and it can't turn it on itself. Turn on Wi-Fi on the panel first."
         const val ON_A_NETWORK = "The panel is on a network already. Change its Wi-Fi on the panel's screen."
         const val NOT_PAIRED = "Pair with the panel first: enter the code it shows."
         /** The core's keys in the state; no step may take them. */
-        val CORE_KEYS = setOf("ip", "ha", "online")
+        val CORE_KEYS = setOf("ip", "ha", "online", PANES)
         /** The core's requests, by every name they have. */
-        val CORE_OPS = setOf("state", HA_SET_URL, "set_ha", PAIRING_ARM, WIFI_SCAN, WIFI_JOIN)
+        val CORE_OPS = setOf("state", HA_SET_URL, "set_ha", PAIRING_ARM, WIFI_SCAN, WIFI_JOIN, PANES_SET)
 
         /**
          * No network takes a longer password: at most 63 bytes of UTF-8, or 64 ASCII hex digits (a raw WPA key). Shorter ones go

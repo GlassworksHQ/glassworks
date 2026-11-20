@@ -28,7 +28,7 @@ export interface LanState {
 /** The rail before the panel has said whether it has a radio, and for one that has. */
 export const FULL_RAIL: readonly RailStep[] = ['pair', 'wifi', 'ha', 'radio', 'done'];
 
-/** The steps a panel that reported [st] has: Panes when its app offers it (proposed, issue 621), the radio when it has one. */
+/** The steps a panel that reported [st] has: Panes when its app offers it (issue 621), the radio when it has one. */
 export const railOf = (st: SetupState): readonly RailStep[] =>
   ['pair', 'wifi', 'ha', ...(st.panes?.length ? ['panes' as const] : []), ...(st.radio ? ['radio' as const] : []), 'done'];
 

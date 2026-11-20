@@ -78,7 +78,8 @@ class SetupChannelStepsTest {
         steps = runtime.paneDefinitions(app).flatMap { it.setupSteps }
     }
 
-    private fun channel() = SetupChannel(Core(), steps)
+    /** The channel as the app makes it: its steps, and the Panes step the panel's screen answers too. */
+    private fun channel() = SetupChannel(Core(), steps, panes = runtime.panesStep(app))
 
     private fun reply(c: SetupChannel, line: String) = JSONObject(c.handle(line).first)
 
@@ -122,14 +123,41 @@ class SetupChannelStepsTest {
         assertEquals("http://$IP:8099/signin", after.getString("signinUrl"))
     }
 
-    /** What Kiln sends, in session.ts order: the state, the HA address, the state again, the radio role. */
+    /** What Kiln sends, in the standard flow's order: the state, the HA address, the state again, the panes, the radio role. */
     private val kiln = listOf(
         """{"id":1,"op":"state"}""",
         """{"id":2,"op":"set_ha","url":"http://homeassistant.local:8123"}""",
         """{"id":3,"op":"state"}""",
-        """{"id":4,"op":"set_radio","mode":"zigbee_tcp"}""",
-        """{"id":5,"op":"set_radio","mode":"off"}""",
+        """{"id":4,"op":"panes.set","on":"assist,radio"}""",
+        """{"id":5,"op":"set_radio","mode":"zigbee_tcp"}""",
+        """{"id":6,"op":"set_radio","mode":"off"}""",
     )
+
+    @Test
+    fun kilnsPanesAreThePanelsAndHomeAssistantsToo() {
+        val defs = runtime.paneDefinitions(app)
+        val music = defs.single { it.id == "sendspin" }.switch!!
+        val voice = defs.single { it.id == "assist" }.switch!!
+        music.on = true
+        voice.on = false
+        val c = channel()
+        val cards = reply(c, """{"id":1,"op":"state"}""").getJSONObject("state").getJSONArray("panes")
+        val ids = (0 until cards.length()).map { cards.getJSONObject(it).getString("id") }
+        // Every card the panel's own Panes step has, by its pane's id (Kiln finds the icon by it); none the S1 can't run.
+        assertEquals(runtime.panesStep(app).panes.map { it.id }, ids)
+        assertTrue(ids.containsAll(listOf("assist", "sendspin", "radio")))
+        assertFalse("no camera on the S1", "camera" in ids)
+
+        assertTrue(reply(c, """{"id":2,"op":"panes.set","on":"assist"}""").getBoolean("ok"))
+        // The switches the pane's settings page, the Manage page and Home Assistant's switch read
+        assertTrue(voice.on)
+        assertFalse(music.on)
+        assertEquals("On", voice.entity().shownState())
+        assertEquals("Off", music.entity().shownState())
+        // and the panel's own setup screen moves past Panes: the same answer
+        assertTrue(runtime.panesStep(app).chosen)
+        assertTrue(SetupOverlay(app, dev.glassworks.s1.frame.TestFrames.s1(), runtime.panesStep(app).panes, panesStep = runtime.panesStep(app)).panesChosen)
+    }
 
     @Test
     fun kilnsRequestsStillGetTheRepliesItExpects() {

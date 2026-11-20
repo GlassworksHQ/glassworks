@@ -43,7 +43,7 @@ export interface DemoPanes { cards: PaneCard[]; refuse?: string }
 
 /**
  * The app's setup channel on a simulated panel. `radio`: the app reports one (a frame without one leaves it out).
- * `panes`: the app offers the Panes step (proposed, issue 621); without, it has none, as every app today.
+ * `panes`: the app offers the Panes step (issue 621); without, it has none, as apps before it.
  */
 function setupStream(net: Net, radio = true, panes?: DemoPanes): ByteStream {
   let cb: (c: Uint8Array) => void = () => {};
@@ -321,7 +321,7 @@ export async function enterDemo(session: Session, d: DemoFrame, which: Demo): Pr
     case 'home-assistant':
       await session.route('home-assistant');
       return;
-    case 'panes': // the Panes step (proposed, issue 621): a switch per pane the app offers
+    case 'panes': // the Panes step (issue 621): a switch per pane the app offers
     case 'panes-refused': // Continue, and a pane couldn't apply its switch (click Continue)
       await session.route('panes');
       return;
