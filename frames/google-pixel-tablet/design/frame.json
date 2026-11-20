@@ -36,9 +36,22 @@
         "sides": {
           "dark": "#8a857c",
           "light": "#ebe7df"
+        },
+        "dark": {
+          "sides": {
+            "dark": "#353833",
+            "light": "#62665e"
+          }
         }
       }
-    ]
+    ],
+    "dark": {
+      "face": "#2c2e2b",
+      "sides": {
+        "dark": "#3d413b",
+        "light": "#747a70"
+      }
+    }
   },
   "render": "render.webp",
   "display": {

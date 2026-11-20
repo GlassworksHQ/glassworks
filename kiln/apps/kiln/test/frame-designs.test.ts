@@ -69,8 +69,14 @@ describe('frame designs', () => {
     // Kiln's route is the frame's installer.json route: /<id>, or the one it had before frames were data (/android)
     if (f.kiln) expect(f.kiln).toBe(JSON.parse(readFileSync(join(frames, id, 'design', 'installer.json'), 'utf8')).route);
     if (f.kiln) expect(f.install.href, 'install.href on a frame Kiln installs').toBeUndefined();
-    const partColours = (f.model.parts ?? []).flatMap((p) => (p.kind === 'tube' ? [p.color] : [p.sides.dark, p.sides.light]));
-    expect([f.model.sides.dark, f.model.sides.light, ...(f.model.face ? [f.model.face] : []), ...partColours].filter((c) => !COLOUR.test(c)), 'colours').toEqual([]);
+    const sides = (s?: { dark: string; light: string }) => (s ? [s.dark, s.light] : []);
+    const partColours = (f.model.parts ?? []).flatMap((p) =>
+      p.kind === 'tube' ? [p.color, ...(p.dark ? [p.dark.color] : [])] : [...sides(p.sides), ...sides(p.dark?.sides)]);
+    const night = f.model.dark;
+    const darkColours = [...(night?.face ? [night.face] : []), ...sides(night?.sides)];
+    expect([...sides(f.model.sides), ...(f.model.face ? [f.model.face] : []), ...partColours, ...darkColours].filter((c) => !COLOUR.test(c)), 'colours').toEqual([]);
+    // a dark look names only colours it changes (frames/README.md, `dark`)
+    if (night) expect(Object.keys(night).filter((k) => k !== 'face' && k !== 'sides'), 'model.dark: only face and sides').toEqual([]);
     for (const aspect of [2, 0.8]) {
       const g = geometry(f.model, aspect);
       expect(g.faces.length).toBeGreaterThan(0);

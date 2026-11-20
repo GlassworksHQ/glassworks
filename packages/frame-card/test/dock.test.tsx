@@ -62,8 +62,41 @@ describe('the Pixel Tablet on its dock', () => {
   });
 
   it('paints its white front from the frame\'s data, and black glass without', () => {
-    expect(geometry(tablet.model, 2).vars['--dev-face']).toBe(tablet.model.face);
+    expect(geometry({ ...tablet.model, dark: undefined }, 2).vars['--dev-face']).toBe(tablet.model.face);
     expect(geometry(s1.model, 2).vars['--dev-face']).toBeUndefined();
+  });
+});
+
+describe('a dark look (model.dark)', () => {
+  const lightDark = /^light-dark\(#[0-9a-f]{6}, #[0-9a-f]{6}\)$/;
+
+  it('paints the Pixel Tablet Porcelain on a light page and Hazel on a dark one, dock included', () => {
+    const g = geometry(tablet.model, 2);
+    expect(g.vars['--dev-face']).toBe(`light-dark(${tablet.model.face}, ${tablet.model.dark!.face})`);
+    for (const f of [...g.faces, ...g.dock!.faces, g.dock!.plate!]) expect(f.fill).toMatch(lightDark);
+    // the light half is what the frame drew before it had a dark look
+    const plain = geometry({ ...tablet.model, dark: undefined, parts: [{ ...dockOf(tablet.model)!, dark: undefined }] }, 2);
+    expect(g.faces.map((f) => f.fill.slice(11, 18))).toEqual(plain.faces.map((f) => f.fill));
+    expect(g.dock!.faces.map((f) => f.fill.slice(11, 18))).toEqual(plain.dock!.faces.map((f) => f.fill));
+  });
+
+  it('leaves a frame without one as it was: plain colours', () => {
+    for (const f of [s1, mirror]) {
+      const g = geometry(f.model, 2);
+      expect([...g.faces.map((x) => x.fill), ...g.parts.map((x) => x.color)].filter((c) => c.startsWith('light-dark'))).toEqual([]);
+    }
+  });
+
+  it('draws a dark front over black glass when only the dark look has one', () => {
+    const { face: _face, ...noFace } = tablet.model;
+    expect(geometry({ ...noFace, dark: { face: '#2c2e2b' } }, 2).vars['--dev-face']).toBe('light-dark(#07080b, #2c2e2b)');
+  });
+
+  it('draws its colours as styles, which take light-dark(), not attributes', () => {
+    const el = render(<DeviceModel id="pt-dark" model={tablet.model} label="Pixel Tablet" />);
+    const polys = [...el.querySelectorAll('polygon[style]')];
+    expect(polys.length).toBeGreaterThan(10);
+    expect(polys.every((p) => p.getAttribute('style')!.includes('light-dark('))).toBe(true);
   });
 });
 

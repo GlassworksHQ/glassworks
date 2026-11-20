@@ -92,13 +92,14 @@ describes the device's look in millimetres"). Kiln's picker reads it, and glassw
 | `face` | Optional. The front's colour around the screen, e.g. a white bezel. Black glass when left out |
 | `mount` | `wall`, `floor`, `lean` or `desk` (on a desk or counter, seen from a little above); `lean` and `desk` take `lean`, the degrees the top tilts back |
 | `parts` | Optional. Parts outside the body: tubes and a dock (below) |
+| `dark` | Optional. The look on a dark page, when the device also comes in a dark colour: `{ face, sides }`, only the ones that change. The Pixel Tablet is Porcelain on a light page and Hazel on a dark one. Kiln and the site draw each colour as CSS `light-dark()`, so the page's `color-scheme` picks the look |
 
 A part is one of:
 
 | Part | What |
 |---|---|
-| `{ kind: "tube", from, to, diameter, color }` | A tube in mm from the body's centre (x right, y down, z towards you), leaning with the body, e.g. a stand's leg |
-| `{ kind: "dock", width, depth, height, gap, sides }` | A dock the body sits in, on the floor behind it, as the Pixel Tablet's speaker dock: a smooth pill-shaped plate on the body's back, in fabric that slopes back to a round foot. `height` is from the floor, `depth` along the floor, `gap` how far the body's lowest edge sits above the floor. `sides` is `{ dark, light }` like the body's. The card lifts the body off it on hover |
+| `{ kind: "tube", from, to, diameter, color }` | A tube in mm from the body's centre (x right, y down, z towards you), leaning with the body, e.g. a stand's leg. Optional `dark: { color }` for the dark look |
+| `{ kind: "dock", width, depth, height, gap, sides }` | A dock the body sits in, on the floor behind it, as the Pixel Tablet's speaker dock: a smooth pill-shaped plate on the body's back, in fabric that slopes back to a round foot. `height` is from the floor, `depth` along the floor, `gap` how far the body's lowest edge sits above the floor. `sides` is `{ dark, light }` like the body's. Optional `dark: { sides }` for the dark look. The card lifts the body off it on hover |
 
 There is no SVG illustration per frame: the device is drawn from `model`. That's the site's 3D
 mockup (glassworks.dev `deviceGeometry.ts`), now in the shared package
