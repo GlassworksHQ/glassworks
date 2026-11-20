@@ -31,6 +31,43 @@ class SetupStateTest {
         signedOut = false, usePanelLogin = false, paneSteps = radio(false),
     )
 
+    /**
+     * The Mirror's run on 2026-11-20: the app joined Wi-Fi, found Home Assistant and restarted itself to apply it. The
+     * new process had no setup screen up, so it showed Home Assistant's page, then asked to sign in. Carried across the
+     * restart (showing), the screen stays up and says it connects until the page shows whether a sign-in is needed.
+     */
+    private val afterRestart = fresh.copy(haKnown = true, apiKeySet = true, uptimeMs = 3_000, input = Input.NONE, paneSteps = emptyList())
+
+    @Test
+    fun theSetupScreenCarriedAcrossTheRestartConnectsUntilTheSignInIsKnown() {
+        val d = SetupState.decide(afterRestart.copy(showing = true, afterOwnRestart = true))
+        assertTrue(d.show)
+        assertEquals(SetupFlow.SIGNIN, d.step)
+        assertTrue(d.signinChecking)
+        // without the carry nothing put the screen up: the page showed Home Assistant first
+        assertFalse(SetupState.decide(afterRestart).show)
+    }
+
+    @Test
+    fun theSignInCheckEndsWhenThePageAnswersOrAfterAWhile() {
+        val up = afterRestart.copy(showing = true, afterOwnRestart = true)
+        // Home Assistant's login page: a sign-in is needed, asked at once
+        SetupState.decide(up.copy(onAuthPage = true)).let { assertEquals(SetupFlow.SIGNIN, it.step); assertFalse(it.signinChecking) }
+        // the dashboard with a session it has: no sign-in, and nothing else left
+        SetupState.decide(up.copy(dashboardLoaded = true)).let { assertFalse(it.signinChecking); assertTrue(it.signinDone); assertEquals(SetupFlow.DONE, it.step) }
+        // signed in already (a sign-in handed back): nothing to check
+        assertFalse(SetupState.decide(up.copy(signedIn = true)).signinChecking)
+        // the page never answered: after the check's time, the screen goes on as before the check
+        assertFalse(SetupState.decide(up.copy(uptimeMs = SetupRules().signinCheckMs)).signinChecking)
+        // Home Assistant not found yet: the step finds it (its address field), no check over it
+        assertFalse(SetupState.decide(up.copy(haKnown = false)).signinChecking)
+        // a panel that just started without the app's own restart (a reboot) isn't held, also with the screen up
+        // for another reason (CodeRabbit on #681): as before
+        assertFalse(SetupState.decide(afterRestart.copy(dashboardLoaded = false)).signinChecking)
+        assertFalse(SetupState.decide(afterRestart.copy(showing = true, paneSteps = radio(false))).signinChecking)
+        assertFalse(SetupState.decide(afterRestart.copy(showing = true)).signinChecking)
+    }
+
     @Test
     fun aHeldPanesStepGivesWayToALostWifi() {
         // CodeRabbit on #160: after a refusal Panes held the screen, also with Wi-Fi gone, and Panes can't fix Wi-Fi.

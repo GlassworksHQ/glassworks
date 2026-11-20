@@ -24,6 +24,12 @@ line of each version is what Home Assistant shows on the update card. A change o
   back to Stable never installs an older version: the panel waits for a stable release newer than the one it runs.
 
 ### Fixed
+- **Setup stays on screen when the app restarts after finding Home Assistant.** Once the panel joins Wi-Fi and
+  finds Home Assistant, the app restarts to apply it. The setup screen now comes back at once and says "Connecting
+  to Home Assistant…" until it knows whether the panel needs to sign in, so Home Assistant's page no longer flashes
+  before the sign-in step.
+- **A device without a touchscreen keeps its screen on during setup.** On the lululemon Mirror and other devices
+  without touch, the setup screen no longer goes dark while you set the device up from a computer.
 - **The lululemon Mirror stays upright after an update.** Android turned auto-rotate back on with every update of
   the app, so the Mirror's dashboard came up sideways until someone fixed it over adb. The app now holds the Mirror
   in portrait itself, whatever auto-rotate says. Other devices turn as before.

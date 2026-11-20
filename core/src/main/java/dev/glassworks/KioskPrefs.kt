@@ -138,6 +138,22 @@ class KioskPrefs(
         get() = sp.getBoolean("setup_ha_skipped", false)
         set(v) = sp.edit().putBoolean("setup_ha_skipped", v).apply()
 
+    /**
+     * Whether the setup screen was up when the app restarted itself (Gecko reads Home Assistant's host only at startup):
+     * the new process puts it up again at once, so nothing else shows in between. Written with commit(), as the
+     * process exits right after; read once ([takeSetupUpAtRestart]).
+     */
+    fun markSetupUpAtRestart(up: Boolean) {
+        sp.edit().putBoolean(SETUP_UP_AT_RESTART, up).commit()
+    }
+
+    /** [markSetupUpAtRestart]'s mark, cleared as it is read: only the first start after the restart has it. */
+    fun takeSetupUpAtRestart(): Boolean {
+        val up = sp.getBoolean(SETUP_UP_AT_RESTART, false)
+        if (sp.contains(SETUP_UP_AT_RESTART)) sp.edit().remove(SETUP_UP_AT_RESTART).commit()
+        return up
+    }
+
     /** Setup's Silent updates step was answered: Continue or Not now, or the panel was set up before the step (#422). */
     var silentUpdatesAnswered: Boolean
         get() = sp.getBoolean("setup_silent_updates_answered", false)
@@ -362,6 +378,7 @@ class KioskPrefs(
     }
 
     companion object {
+        private const val SETUP_UP_AT_RESTART = "setup_up_at_restart"
         const val AUTO = "auto"
 
         /** [engineStart] for [secureHosts] and a dashboard [url]: also what an engine [started][dev.glassworks.engine.Engine.started] with. */

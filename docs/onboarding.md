@@ -369,6 +369,14 @@ use the address. A failed load browses for Home Assistant again, in case DHCP mo
 address restarts the app onto it. `https://` URLs keep the name, since the certificate is for it.
 Android 12 and later load the URL as set.
 
+Finding Home Assistant restarts the app: Gecko reads the Home Assistant host into its secure-context
+allowlist only at startup, and the legacy engine holds every page to the origin it starts with. When the
+setup screen is up at that restart, the new process puts it up again at once (`setup_up_at_restart`, read
+once), and for its first 20 s the Sign in step says *Connecting to Home Assistant…* until the page shows
+whether a sign-in is needed: Home Assistant's login page asks for one, and a session the page already has
+goes on. So Home Assistant's page never shows between the Wi-Fi step and the sign-in (a Mirror run,
+2026-11-20). On a frame without touch, the screen stays on for as long as the setup screen is up.
+
 ### 4. Login without typing on the panel: QR sign-in + external auth ✅
 
 This is the part that removes the login screen. Implemented in `auth/` (`OAuth.kt`,

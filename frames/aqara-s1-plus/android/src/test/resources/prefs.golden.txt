@@ -57,6 +57,7 @@ kiosk|setup_ha_skipped|Boolean|false
 kiosk|setup_radio_done|Boolean|false
 kiosk|setup_radio_migrated|Boolean|false
 kiosk|setup_silent_updates_answered|Boolean|false
+kiosk|setup_up_at_restart|Boolean|false
 kiosk|speaker_muted|Boolean|false
 kiosk|speaker_volume|Float|1.0
 kiosk|time_zone_enabled|Boolean|true
