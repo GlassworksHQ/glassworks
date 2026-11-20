@@ -6,7 +6,7 @@
 // Colours are styles, not attributes: a frame with a dark look paints CSS light-dark() (geometry.ts `either`).
 import { useEffect, useMemo, useRef, type CSSProperties } from 'react';
 import type { FrameModel } from './frame';
-import { geometry, type Layout } from './geometry';
+import { geometry, type Layout, type View } from './geometry';
 import { PAINT } from './paint';
 import s from './DeviceModel.module.css';
 
@@ -18,10 +18,13 @@ const PAINT_VARS = {
  * `aspect` is the stage's width / height: 2 by default, as on Kiln's cards; a taller stage, e.g. 0.8, suits a portrait frame's own page.
  * `screen` is the URL of the frame's render (frame.json `render`) to show on the glass; without it, an example dashboard.
  * The render loads lazily; `priority` loads it at once, for a model that is a page's largest paint.
+ * `view` turns the camera from the mount's own (geometry.ts `View`), e.g. toward the text beside the model.
  */
-export function DeviceModel({ id, model, label, aspect = 2, screen, priority = false }: { id: string; model: FrameModel; label: string; aspect?: number; screen?: string; priority?: boolean }) {
+export function DeviceModel({ id, model, label, aspect = 2, screen, priority = false, view }: { id: string; model: FrameModel; label: string; aspect?: number; screen?: string; priority?: boolean; view?: View }) {
   const stage = useRef<HTMLDivElement>(null);
-  const g = useMemo(() => geometry(model, aspect), [model, aspect]);
+  const rx = view?.rx;
+  const ry = view?.ry;
+  const g = useMemo(() => geometry(model, aspect, rx === undefined || ry === undefined ? undefined : { rx, ry }), [model, aspect, rx, ry]);
   // --u = 1% of the stage width, for the depth and perspective lengths
   useEffect(() => {
     const el = stage.current;

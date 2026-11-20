@@ -67,6 +67,20 @@ describe('the Pixel Tablet on its dock', () => {
   });
 });
 
+describe('a view of its own (geometry view, DeviceModel view)', () => {
+  it('turns the camera, and the sides, dock and glass pose follow; without one, the mount\'s', () => {
+    const own = geometry(tablet.model, 1.6);
+    const turned = geometry(tablet.model, 1.6, { rx: 8, ry: 16 });
+    expect([own.vars['--rx'], own.vars['--ry']]).toEqual(['10deg', '-24deg']);
+    expect([turned.vars['--rx'], turned.vars['--ry']]).toEqual(['8deg', '16deg']);
+    expect(turned.faces.map((f) => f.points)).not.toEqual(own.faces.map((f) => f.points));
+    expect(turned.dock?.faces.length).toBeGreaterThan(10);
+    expect(JSON.stringify(turned)).not.toMatch(/NaN|Infinity/);
+    const el = render(<DeviceModel id="pt-view" model={tablet.model} label="Pixel Tablet" aspect={1.6} view={{ rx: 8, ry: 16 }} />);
+    expect(el.querySelector('[data-dock]')!.getAttribute('style')).toContain('--ry:16deg');
+  });
+});
+
 describe('round corners', () => {
   it('draws a body that is all corner smooth, and a small corner as before', () => {
     const round = { ...s1.model, body: { ...s1.model.body, width: 84, height: 84, radius: 42 }, dark: undefined };

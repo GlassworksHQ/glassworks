@@ -209,8 +209,14 @@ export type Geometry = {
 };
 
 /** Fit, pose and project a model for a stage of the given aspect ratio (width / height). */
-export function geometry(m: FrameModel, stageAspect: number): Geometry {
-  const view = VIEWS[m.mount];
+/** Where the camera looks from, in degrees: `rx` from above, `ry` from the side (negative: from the right). */
+export type View = { rx: number; ry: number };
+
+/**
+ * `view` overrides the mount's camera (VIEWS), e.g. to turn a model toward the text beside it; everything,
+ * the sides, parts, dock, shadow and the glass's CSS pose, follows it.
+ */
+export function geometry(m: FrameModel, stageAspect: number, view: View = VIEWS[m.mount]): Geometry {
   const lean = m.mount === 'lean' || m.mount === 'desk' ? (m.lean ?? 0) : 0;
   const stageH = 100 / stageAspect;
   const cx = 50;
