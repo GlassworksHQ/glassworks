@@ -6,9 +6,10 @@ import { ProxyError, WrongImage, type DeviceEntry, type ImageMaker } from '@glas
 import { ImageSession, type ImageDeps } from './imageSession';
 import { fakeReleaseRoute, type FakeRelease } from '../release/demo';
 import { AppSession, releaseLine } from './appSession';
+import { withAppStreams } from '../wizard/demo';
 
-export const IMAGE_DEMOS = ['flash-image', 'flash-release', 'flash-release-downloading', 'flash-release-none', 'flash-release-bad', 'flash-downloading', 'flash-download-error', 'flash-download-bad', 'flash-ready', 'flash-wifi-short', 'flash-fastboot', 'flash-fastboot-wrong', 'flash-confirm',
-  'flash-working', 'flash-adb', 'flash-adb-wait', 'flash-done', 'flash-done-chooser', 'flash-done-no-home', 'flash-error', 'flash-run',
+export const IMAGE_DEMOS = ['flash-image', 'flash-release', 'flash-release-downloading', 'flash-release-none', 'flash-release-bad', 'flash-downloading', 'flash-download-error', 'flash-download-bad', 'flash-ready', 'flash-fastboot', 'flash-fastboot-wrong', 'flash-confirm',
+  'flash-working', 'flash-adb', 'flash-adb-wait', 'flash-setup', 'flash-setup-ha', 'flash-done', 'flash-done-chooser', 'flash-done-no-home', 'flash-error', 'flash-run',
   'image-choose', 'image-choose-open', 'image-choose-panes', 'image-link', 'image-download', 'image-download-done', 'image-download-error', 'image-download-bad',
   'image-fastboot', 'image-confirm', 'image-writing', 'image-done', 'image-error', 'image-back-glassworks', 'image-back-panes',
   'image-wifi', 'image-wifi-writing', 'image-adb', 'image-done-wifi', 'image-done-wifi-unconfirmed'] as const;
@@ -73,7 +74,8 @@ export async function imageDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim
     requestAdb: async (o) => {
       o?.onPicked?.();
       if (name === 'flash-adb-wait') throw new Error('No authenticator can handle the request');
-      return sim.firstStart({ hideFails: name === 'flash-done-chooser', noHome: name === 'flash-done-no-home' });
+      // the device after its first start, with Glassworks' setup channel and Improv (flash-setup: not on Wi-Fi yet)
+      return withAppStreams(sim.firstStart({ hideFails: name === 'flash-done-chooser', noHome: name === 'flash-done-no-home' }), { online: name !== 'flash-setup', radio: false });
     },
     // the image's own key: an adb shell that has started, takes svc wifi enable and reports Wi-Fi on (or not)
     adbWithKey: () => async () => ({
@@ -83,6 +85,7 @@ export async function imageDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim
     adbKey: () => 'QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= kiln@glassworks',
     apk: () => app.apkBytes(),
     apkBlocked: () => app.releaseBlocked(),
+    simulated: true,
     sleep: (ms) => tick(ms / 20),
     ...deps,
   });
@@ -98,11 +101,7 @@ export async function imageDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim
   await image.download(); // through Kiln's download route
   if (name === 'flash-download-error' || name === 'flash-download-bad') return done;
   await app.pickApk(sim.apkName, sim.apk());
-  image.setHaUrl('http://homeassistant.local:8123');
-  image.setWifi({ ssid: 'Home Net', password: 'not-a-real-password' });
   if (name === 'flash-ready') return done;
-  // a password WPA can't take: refused before fastboot, since the image saves it as the network's PSK
-  if (name === 'flash-wifi-short') { image.setWifi({ password: 'short' }); return done; }
   image.toFastboot();
   if (name === 'flash-fastboot') return done;
   await image.connectFastboot();
@@ -113,7 +112,11 @@ export async function imageDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim
   await flashing;
   if (name === 'flash-adb' || name === 'flash-error') return done;
   if (name === 'flash-adb-wait') { void image.connectAdb(); return done; }
-  await image.connectAdb();
+  await image.connectAdb(); // then set-up: Wi-Fi, Home Assistant
+  if (name === 'flash-setup') return done;
+  await image.setUp.homeAssistant();
+  if (name === 'flash-setup-ha') return done;
+  image.setUp.finish(); // no radio on this app: Home Assistant is set-up's last step
   return done;
 }
 
@@ -124,7 +127,7 @@ async function withCommunity(name: ImageDemo, d: { image: ImageSession; app: App
     image.choose();
     await image.download();
     await d.app.pickApk(sim.apkName, sim.apk());
-    image.toFastboot(); await image.connectFastboot(); image.understand(true); await image.flash(); await image.connectAdb();
+    image.toFastboot(); await image.connectFastboot(); image.understand(true); await image.flash(); await image.connectAdb(); await image.setUp.homeAssistant(); image.setUp.finish();
     image.wayBack(id);
     return d;
   }

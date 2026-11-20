@@ -8,6 +8,7 @@ import { FakeMirror, FirstBootMirror, fakeMirrorApk } from '@glassworks/lululemo
 import type { PanelShell } from '@glassworks/adb';
 import { ImageSession, type ImageDeps, type ImageMaker } from '../../src/device/imageSession';
 import { AppSession } from '../../src/device/appSession';
+import { withAppStreams } from '../../src/wizard/demo';
 import { mirrorFrame } from '../mirror-frame';
 import {
   Clicks, REFUSED, UNPLUGGED, body, fastSleep, never, type Driver, type Knobs, type Look, type Page, type World, type Write,
@@ -81,6 +82,8 @@ function flashWorld(k: Knobs): World {
       reboot: async () => { alive(); mode = 'booted'; },
     };
   };
+  // the Mirror after its first start: Glassworks answers set-up over its setup channel and Improv, on Wi-Fi already
+  const started = () => withAppStreams(new FirstBootMirror(), { online: true, radio: false });
   const deps: ImageDeps = {
     frame: mirrorFrame,
     images,
@@ -92,17 +95,18 @@ function flashWorld(k: Knobs): World {
       const r = reloadAt<PanelShell>('first-boot');
       if (r) return r;
       if (fired.refused < (k.refuseAuth ?? 0)) { fired.refused++; throw new Error(REFUSED); }
-      return new FirstBootMirror();
+      return started();
     },
     // as DevicePage wires them (#607): the device requestAdb picked, asked again with no list while the Mirror starts
     adbPicked: () => mode === 'booted',
     async reopenAdb() {
       if (fired.refused < (k.refuseAuth ?? 0)) { fired.refused++; throw new Error(REFUSED); }
-      return new FirstBootMirror();
+      return started();
     },
     adbKey: () => 'QAAA= kiln@contract',
     apk: () => apk,
     sleep: fastSleep,
+    simulated: true,
   };
   const apk = fakeMirrorApk();
 
@@ -131,6 +135,11 @@ function flashWorld(k: Knobs): World {
           case 'adb':
             if (s.connectError && clicks.has('adb')) return { end: 'error' };
             return clicks.act('adb', () => f.connectAdb());
+          // the first start is over and set-up (the same on every frame) begins: done once the app answers its
+          // Wi-Fi step, as the S1's driver; set-up itself has its own tests (mirror-set-up.test.tsx)
+          case 'setup':
+            if (s.setup.phase !== 'wifi' || s.busy) return 'wait';
+            return s.setup.unreachable ? { end: 'error' } : { end: 'done', goal: s.firstBoot?.home.result === 'set' };
           case 'done':
             return { end: 'done', goal: s.firstBoot?.home.result === 'set' };
           case 'error':

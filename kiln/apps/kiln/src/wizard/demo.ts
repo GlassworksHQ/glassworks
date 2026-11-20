@@ -8,6 +8,7 @@ import type { Fastboot } from '@glassworks/fastboot';
 import type { FelDevice } from '@glassworks/fel';
 import { isMagiskPatched, loadCompressor } from '@glassworks/bootpatch';
 import { Assets, checkRestorable, fmtSize, type BackupFile, type BackupMeta } from '@glassworks/kiln-core';
+import { IMPROV_SOCKET } from '@glassworks/app-adb';
 import { SETUP_SOCKET, type SetupState } from '@glassworks/setup-channel';
 import { PacketReader, PacketType, Rpc, State as ImprovState, frame as packet, parseResult, strings, type ByteStream } from 'improv-serial';
 import { explain } from './explain';
@@ -33,8 +34,8 @@ const dumpsysWifi = (pkg: string) => [
   'Configured networks End ----',
 ].join('\n');
 
-/** The app's setup channel on a simulated panel. */
-function setupStream(net: Net): ByteStream {
+/** The app's setup channel on a simulated panel. `radio`: the app reports one (a frame without one leaves it out). */
+function setupStream(net: Net, radio = true): ByteStream {
   let cb: (c: Uint8Array) => void = () => {};
   const state: SetupState = {
     ip: net.online ? IP : undefined,
@@ -50,6 +51,7 @@ function setupStream(net: Net): ByteStream {
       ],
     },
   };
+  if (!radio) delete (state as Partial<SetupState>).radio;
   const send = (o: object, ms = 0) => setTimeout(() => cb(new TextEncoder().encode(`${JSON.stringify(o)}\n`)), ms);
   return {
     onData: (f) => { cb = f; },
@@ -100,6 +102,19 @@ function improvStream(fail: boolean, net: Net): ByteStream {
         }
       }
     },
+  };
+}
+
+/**
+ * `p` with Glassworks' setup channel and Improv answering, for any frame's simulated device after its app goes in.
+ * `online`: on Wi-Fi already; `radio`: the app reports a radio.
+ */
+export function withAppStreams(p: PanelShell, o: { online: boolean; wifiFails?: boolean; radio?: boolean }): PanelShell {
+  const net: Net = { online: o.online };
+  return {
+    run: (cmd, signal) => p.run(cmd, signal),
+    push: (path, data, mode) => p.push(path, data, mode),
+    openStream: async (svc) => (svc === SETUP_SOCKET ? setupStream(net, o.radio ?? true) : svc === IMPROV_SOCKET ? improvStream(!!o.wifiFails, net) : p.openStream!(svc)),
   };
 }
 

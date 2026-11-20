@@ -243,12 +243,13 @@ describe('the page', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it('labels the Wi-Fi password as needed only for a network that has one', async () => {
+  it('asks for no Wi-Fi and no Home Assistant on the image screen: those are set-up\'s, after the first start', async () => {
     vi.stubGlobal('fetch', fakeReleaseRoute('out', APK));
     history.replaceState(null, '', '/lululemon-mirror?apk=release');
     await toImage();
-    expect(screen.getByText('Wi-Fi network (optional)')).toBeTruthy();
-    expect(screen.getByText('Wi-Fi password (if it has one)')).toBeTruthy();
+    expect(screen.queryByText(/Wi-Fi network/)).toBeNull();
+    expect(screen.queryByText(/Wi-Fi password/)).toBeNull();
+    expect(screen.queryByText(/Home Assistant \(optional\)/)).toBeNull();
   });
 
   it('release, file, release again on the kept session while the first lookup is still out (StrictMode, as next dev runs it)', async () => {

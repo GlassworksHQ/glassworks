@@ -365,7 +365,7 @@ export function ImageFlow({ image, app, toApp }: { image: ImageSession; app: App
   useEffect(() => { document.title = s.screen === 'adb' ? `Your turn · ${f.name} · Kiln` : `${f.name} · Kiln`; }, [s.screen, f]);
   const community = image.recipes.find((x) => x.community);
   return (
-    <Shell steps={imageRail(s, f)} level={imageLevel(s, image.recipe.community)} error={s.screen === 'error'} chip={chip}>
+    <Shell steps={imageRail(s, f, image.recipe.community)} level={imageLevel(s, image.recipe.community)} error={s.screen === 'error'} chip={chip}>
       <ImageScreens f={image} s={s} m={app} ms={ms} />
       {toApp && community && s.screen === 'image' && <p className="small">{`Already runs the ${community.name} image? `}<button type="button" className="link" onClick={toApp}>Add the app only, over adb</button></p>}
     </Shell>
