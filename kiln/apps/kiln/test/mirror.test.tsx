@@ -251,11 +251,11 @@ describe('every demo screen', () => {
     }
   });
 
-  it('Done says it is the only home screen, upright; with a device admin\'s home app Android won\'t hide, it says to install over fastboot', async () => {
+  it('Done says it opens when the Mirror starts; with a device admin\'s home app Android won\'t hide, it says to install over fastboot', async () => {
     render(<AppFlow session={await appDemo(mirrorEntry, 'done', true)} />);
-    await screen.findByText('It is the only home screen, upright, so it opens when the Mirror starts.');
+    await screen.findByText('It opens when the Mirror starts.');
     cleanup();
     render(<AppFlow session={await appDemo(mirrorEntry, 'done-unconfirmed', true)} />);
-    await screen.findByText(/^com\.nimrod\.mirrorkiosk is a device administrator on this Mirror, so Android won.t hide it.*Install Glassworks over fastboot instead/);
+    await screen.findByText(/^com\.nimrod\.mirrorkiosk is a device administrator, so Glassworks can.t be the only home screen over adb\. Install Glassworks over fastboot instead/);
   });
 });

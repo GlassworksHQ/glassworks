@@ -60,10 +60,10 @@ export function Choose({ f, s }: P) {
     <section className="card" aria-labelledby="h">
       <TestOnly f={f.frame} />
       <h2 id="h">{`What goes on ${f.frame.the}?`}</h2>
-      <p className="lede">{s.open ? 'Glassworks, or a community image as its project publishes it. Kiln downloads either one, checks it, and writes it over USB.' : 'Kiln downloads Glassworks, checks it, and writes it over USB.'}</p>
+      {s.open && <p className="lede">Glassworks, or a community image as its project publishes it.</p>}
       {from && (
         <p className={`small ${c.from}`} role="status">
-          The way back from {from.name}. {r.name}{` replaces it and everything on ${f.frame.the}; `}{from.name} stays a choice here.
+          {r.name}{` replaces ${from.name} and everything on ${f.frame.the}.`}
         </p>
       )}
       <RadioGroup.Root id="images" className={`${c.cards}${s.open ? '' : ` ${c.one}`}`} value={r.id} onValueChange={(v) => f.pick(v)} aria-labelledby="h">
@@ -72,11 +72,11 @@ export function Choose({ f, s }: P) {
       {others > 0 && (
         <p className={`small ${c.more}`}>
           <button type="button" className="link" aria-expanded={s.open} aria-controls="images" onClick={() => f.showCommunity(!s.open)}>{s.open ? 'Hide community images' : `Show community images (${others})`}</button>
-          <span>{s.open ? 'Both take the same steps: fastboot, Kiln’s checks, and a warning before anything is written.' : 'Made by other projects.'}</span>
+          {!s.open && <span>Made by other projects.</span>}
         </p>
       )}
       <div className="foot">
-        <span className="small">Choosing writes nothing.</span>
+        <span />
         <button type="button" className="btn ember" onClick={() => f.choose()}>Continue with {r.name}</button>
       </div>
     </section>
@@ -100,16 +100,16 @@ export function FileRow({ f, file }: { f: ImageSession; file: FileCheck }) {
           </div>
         )}
         {file.state === 'waiting' && <span className="small">{started && before && before.state !== 'ok' ? `Next, once ${before.name} is in.` : 'Not downloaded yet.'}</span>}
-        {file.state === 'ok' && <span className="status ok">✓ Checks out: SHA-256 as the release publishes it.</span>}
+        {file.state === 'ok' && <span className="status ok">✓ SHA-256 checks out.</span>}
         {failed && (
           <span className="status err" role="alert">
             {file.state === 'bad'
-              ? 'Kiln got a different file from the one the release publishes (its SHA-256 differs), so it deleted it.'
+              ? 'Its SHA-256 isn’t the release’s, so Kiln deleted it.'
               : `Kiln couldn’t download it: ${file.error}.`}
-            {` Nothing was written to ${f.frame.the}. This is a bug in Kiln, not something you did.`}
+            {` Nothing was written to ${f.frame.the}. This is Kiln’s bug, not yours.`}
           </span>
         )}
-        {failed && <span className="small"><a className="link" href={f.reportUrl(file)} target="_blank" rel="noopener">Report this</a> on GitHub, with what Kiln saw filled in.</span>}
+        {failed && <span className="small"><a className="link" href={f.reportUrl(file)} target="_blank" rel="noopener">Report this</a> on GitHub.</span>}
       </div>
     </div>
   );
@@ -136,12 +136,10 @@ export function Download({ f, s }: P) {
     <section className="card" aria-labelledby="h">
       <Whose r={r} />
       <h2 id="h">{idle ? `Install ${r.name} on ${f.frame.the}.` : `Downloading ${r.name}.`}</h2>
-      <p className="lede">{idle
-        ? `Kiln downloads ${r.name} from its own release on GitHub, checks every file against the SHA-256 the release publishes, then takes you through fastboot, its checks and a warning before it writes anything.`
-        : `From its own release on GitHub, into this browser. Kiln checks every file against the SHA-256 the release publishes before anything goes near ${f.frame.the}.`}</p>
+      <p className="lede">From its own release on GitHub, checked by SHA-256.</p>
       {s.files.map((x) => <FileRow key={x.name} f={f} file={x} />)}
       {r.steps.some((x) => x.do === 'wifi') && <WifiFields f={f} s={s} r={r} />}
-      <p className="small">{r.release ? <>Release <code>{r.release.name}</code>, through</> : 'Through'} Refract, Kiln&apos;s download proxy, which passes it on and stores nothing.{r.vendor && ` ${r.vendor}`}</p>
+      <p className="small">{r.release ? <>Release <code>{r.release.name}</code>, through</> : 'Through'} Refract, Kiln&apos;s download proxy, which stores nothing.{r.vendor && ` ${r.vendor}`}</p>
       <div className="foot">
         <span className="links">
           {!s.link && <><button type="button" className="link" onClick={() => f.backToChoice()}>Back</button><span aria-hidden="true">·</span></>}
@@ -163,7 +161,7 @@ function WifiFields({ f, s, r }: P & { r: ImageRecipe }) {
     <div className="well">
       <div className="grow">
         <span className="small">Wi-Fi (optional)</span>
-        <span className="small">Kiln saves the network in {r.name}{` before it writes anything, then switches Wi-Fi on after its first start, so ${f.frame.the} joins by itself. Only the network's key is saved, never the password. Leave it empty to set Wi-Fi up in `}{r.name} instead.</span>
+        <span className="small">{`${cap(f.frame.the)} joins it by itself after its first start. Leave it empty to set up Wi-Fi in `}{r.name} instead.</span>
         <div className="fields">
           <label className="field"><span>Wi-Fi network</span>
             <input className="input" autoComplete="off" value={s.wifi.ssid} onChange={(e) => f.setWifi({ ssid: e.target.value })} />
@@ -187,7 +185,7 @@ export function ConfirmCommunity({ f, s, reversible }: P & { reversible?: string
       <h2 id="h">{`This replaces everything on ${f.frame.the}.`}</h2>
       <ol className="join">{s.fastboot!.checks.map((x) => <li key={x.what} className="done">{x.what}: {x.found}</li>)}</ol>
       <p className="lede">
-        {r.name}{` goes on as its release has it, with a fresh start: what ${f.frame.the} runs now and its data are replaced, Glassworks included. ${f.frame.words['community.ifVendor']}`}
+        {`What ${f.frame.the} runs now and its data are replaced, Glassworks included. ${f.frame.words['community.ifVendor']}`}
       </p>
       {reversible && <p className="small">{reversible}.</p>}
       <label className="check"><input type="checkbox" checked={s.understood} onChange={(e) => f.understand(e.target.checked)} />{` I understand everything on ${f.frame.the} is replaced.`}</label>
@@ -209,7 +207,7 @@ export function WayBack({ f, other }: { f: ImageSession; other: ImageRecipe }) {
     <div className="well">
       <div className="grow">
         <span className="small">The way back</span>
-        <span>{other.community ? `For ${other.name} instead` : `To go back to ${other.name}`}, pick {other.name} here{now.community ? ` and put ${f.frame.the} in fastboot` : `: Kiln restarts ${f.frame.the} into fastboot over USB, with no button to hold`}. It replaces {now.community ? `${now.name} and its data` : 'Glassworks and its settings'}.</span>
+        <span>{`Install ${other.name} from here. It replaces ${now.community ? `${now.name} and its data` : 'Glassworks and its settings'}.`}</span>
       </div>
       <button type="button" className="btn ghost" onClick={() => f.wayBack(other.id)}>{other.community ? `Install ${other.name} instead` : `Install ${other.name}`}</button>
     </div>
@@ -225,13 +223,13 @@ export function DoneCommunity({ f, log }: { f: ImageSession; log: React.ReactNod
       <span className="okmark" aria-hidden="true">✓</span>
       <h2 id="h">{r.name}{` is on ${f.frame.the}.`}</h2>
       <p className="lede">{f.state.communityWifi === 'on'
-        ? `Wi-Fi is on, and ${f.frame.the} joins your network by itself, a few minutes after it starts. Kiln’s part is done.`
-        : `${cap(f.frame.the)} is starting it. Its first start takes a few minutes. Kiln’s part is done.`}</p>
-      {f.state.communityWifi === 'unconfirmed' && <p className="small" role="status">Android didn&apos;t confirm Wi-Fi is on. Your network is saved: switch Wi-Fi on once in {possessive(r.name)} Settings, and it joins by itself.</p>}
+        ? `${cap(f.frame.the)} joins your Wi-Fi a few minutes after it starts.`
+        : 'Its first start takes a few minutes.'}</p>
+      {f.state.communityWifi === 'unconfirmed' && <p className="small" role="status">Android didn&apos;t confirm Wi-Fi is on: switch it on once in {possessive(r.name)} Settings.</p>}
       <div className="well">
         <div className="grow">
           <span className="small">Next, in {r.name}</span>
-          <span>Set it up as {r.next ? r.next.name : 'its project'}{` says. Unplug ${f.frame.the} from this computer first.`}</span>
+          <span>Set it up as {r.next ? r.next.name : 'its project'} says.</span>
         </div>
       </div>
       <WayBack f={f} other={f.recipes[0]!} />

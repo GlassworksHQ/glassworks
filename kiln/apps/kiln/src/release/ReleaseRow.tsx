@@ -40,10 +40,10 @@ export function ReleaseRow({ r, line, what, device, apkError, load }: ReleaseRow
         </> : r.state === 'ready' ? <>
           <span className={c.fileHead}><b>Glassworks {r.version}</b><span className="small">{fmtSize(r.size)}</span></span>
           <span className="small"><a className="link" href={releasePage(r.tag)} target="_blank" rel="noopener"><code>{r.name}</code></a></span>
-          {!apkError && <span className="status ok">✓ Checks out: SHA-256 as the release publishes it.</span>}
+          {!apkError && <span className="status ok">✓ SHA-256 checks out.</span>}
         </> : r.state === 'none' ? <>
           <b>There is no release of {what} yet.</b>
-          <span className="status err" role="alert">Kiln installs the newest <code>{line}</code> release from GitHub, and it found none. Nothing was written to {device}.</span>
+          <span className="status err" role="alert">Kiln found no <code>{line}</code> release on GitHub. Nothing was written to {device}.</span>
           <span className="small">{again}, or <a className="link" href="https://github.com/GlassworksHQ/glassworks/releases" target="_blank" rel="noopener">see the releases</a>.</span>
         </> : <>
           <b>Kiln couldn&apos;t get Glassworks from its release.</b>

@@ -30,7 +30,7 @@ export function Connect({ s, session, frame }: P) {
     <section className="card" aria-labelledby="h">
       <h2 id="h" className="huge">Hold the button. Plug it in.</h2>
       <Recovery data={frame.recovery} />
-      <p className="small">Then click Connect and pick <code>{frame.felPick}</code>.{s.flow === 'undo' ? ' Nothing is written until your backup checks out.' : s.changed === 'unknown' ? ' Kiln can\'t tell if an earlier try in this browser tab changed the panel.' : s.changed ? ' An earlier try already changed the panel.' : ' Nothing is written yet.'}</p>
+      <p className="small">Then click Connect and pick <code>{frame.felPick}</code>.{s.flow === 'undo' ? '' : s.changed === 'unknown' ? ' Kiln can\'t tell if an earlier try in this browser tab changed the panel.' : s.changed ? ' An earlier try already changed the panel.' : ''}</p>
       {driver && <p className="small">{driver} <a className="link" href={frame.help.drivers} target="_blank" rel="noopener">How</a></p>}
       <LastRun />
       <BuiltOn credits={stepCredits(frame.id, frame.credits, s.flow === 'undo' ? ['boot'] : undefined)} />
@@ -107,7 +107,6 @@ export function Firing({ s, frame }: P) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
   const steps = milestones(s, frame.short);
-  const backedUp = s.flow === 'install' && ['patch', 'flash', 'verify'].includes(s.progress.phase);
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h" className="huge">Keep it plugged in.</h2>
@@ -122,7 +121,7 @@ export function Firing({ s, frame }: P) {
       </ul>
       <BuiltOn credits={stepCredits(frame.id, frame.credits, s.flow === 'undo' ? ['boot'] : undefined)} />
       <div className="foot">
-        <span className="small">{s.flow === 'undo' ? 'Each part is checked after it is written.' : backedUp ? 'Your backup is safe in this browser.' : 'Your backup comes before any write.'}</span>
+        <span />
         <TechLog s={s} />
       </div>
     </section>
@@ -157,10 +156,9 @@ const rowOf = (p: AppPhase): Row => (p.step === 'apk' ? (p.apk as Row) : p.step)
 function nowSays(p: AppPhase, update: boolean): { sub?: string; note?: string } {
   if (p.step === 'apk' && p.stage === 'copy') return { sub: 'Copying it to the panel' };
   if (p.step === 'apk' && p.apk === 'kiosk') {
-    return { sub: 'Android installs it and optimises it for this panel', note: update ? 'The app on the panel closes and restarts during this. That\'s expected.' : undefined };
+    return { sub: 'Android installs it and optimises it for this panel', note: update ? 'The app on the panel restarts during this.' : undefined };
   }
   if (p.step === 'apk') return { sub: 'Android installs it' };
-  if (p.step === 'start') return { note: update ? 'It starts again with your settings.' : 'It starts with your settings.' };
   return {};
 }
 
@@ -218,7 +216,6 @@ function Settings({ s, session, frame, setup }: P & { setup: Extract<Setup, { ph
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">{setup.update ? `Update ${frame.app}.` : 'A few settings.'}</h2>
-      <p className="lede">These go to the panel with {frame.app}. They start as this computer&apos;s.</p>
       <div className="fields">
         <label className="field"><span>Language</span>
           <select className="select" value={locale} onChange={(e) => setLocale(e.target.value)} disabled={busy}>
@@ -286,14 +283,14 @@ export function Done({ s, session, frame }: P) {
       {d.updates && <SilentUpdates words={d.updates} />}
       {d.backup && (
         <div className="well">
-          <span className="grow"><span>{d.backup.hint}</span><span className="small">{d.backup.name} · {d.backup.info}</span><span className="small">The latest backup made in this browser tab.</span></span>
+          <span className="grow"><span>{d.backup.hint}</span><span className="small">{d.backup.name} · {d.backup.info}</span></span>
           <button type="button" className="btn ember" onClick={() => void session.downloadBackup()}>Download</button>
         </div>
       )}
       {d.backup?.error && <p className="status err" role="alert">{d.backup.error}</p>}
       {d.setupPage && (
         <div className="well">
-          <span className="grow"><span>Change these later from any computer on this network, on the panel&apos;s own page. It asks for a code the panel shows.</span><span className="small"><code>{d.setupPage}</code></span></span>
+          <span className="grow"><span>Change these later on the panel&apos;s own page. It asks for a code the panel shows.</span><span className="small"><code>{d.setupPage}</code></span></span>
           <a className="btn ghost" href={d.setupPage} target="_blank" rel="noopener">Open</a>
         </div>
       )}

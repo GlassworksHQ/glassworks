@@ -197,7 +197,7 @@ describe('the page', () => {
     history.replaceState(null, '', '/lululemon-mirror?apk=release');
     await toImage();
     await screen.findByText('Glassworks 0.2.0');
-    expect(screen.getByText(/Checks out: SHA-256 as the release publishes it/)).toBeTruthy();
+    expect(screen.getByText(/SHA-256 checks out/)).toBeTruthy();
     expect(screen.getByRole('link', { name: DEMO_APK }).getAttribute('href')).toBe(`https://github.com/GlassworksHQ/glassworks/releases/tag/${DEMO_TAG}`);
     expect(document.querySelector('input[type=file]')).toBeNull();
     expect(embers()).toEqual(['Download the system image']);
@@ -208,7 +208,7 @@ describe('the page', () => {
     history.replaceState(null, '', '/lululemon-mirror?apk=release');
     await toImage();
     await screen.findByText('There is no release of Glassworks for the Mirror yet.');
-    expect(screen.getByRole('alert').textContent).toMatch(/found none\. Nothing was written to the Mirror/);
+    expect(screen.getByRole('alert').textContent).toMatch(/found no .* release on GitHub\. Nothing was written to the Mirror/);
     expect(document.querySelector('input[type=file]')).toBeNull();
   });
 

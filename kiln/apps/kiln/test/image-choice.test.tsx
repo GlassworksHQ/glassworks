@@ -233,8 +233,8 @@ describe('Glass Panes', () => {
   it.each(['image-download-error', 'image-download-bad'] as const)('%s: Kiln\'s bug, Try again and Report this, nothing to pick by hand', async (d) => {
     const flash = await show(d);
     const alert = screen.getByRole('alert').textContent!;
-    expect(alert).toMatch(/Nothing was written to the Mirror\. This is a bug in Kiln, not something you did\./);
-    if (d === 'image-download-bad') expect(alert).toMatch(/its SHA-256 differs\), so it deleted it/);
+    expect(alert).toMatch(/Nothing was written to the Mirror\. This is Kiln’s bug, not yours\./);
+    if (d === 'image-download-bad') expect(alert).toMatch(/Its SHA-256 isn’t the release’s, so Kiln deleted it/);
     else expect(alert).toMatch(/Kiln couldn’t download it: the download proxy answered 502: GitHub answered 503\./);
     const report = new URL(screen.getByRole('link', { name: 'Report this' }).getAttribute('href')!);
     expect(report.origin + report.pathname).toBe('https://github.com/GlassworksHQ/glassworks/issues/new');
@@ -244,6 +244,16 @@ describe('Glass Panes', () => {
     expect(document.querySelector('input[type="file"]')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     await waitFor(() => expect(flash.state.files.every((x) => x.state === 'ok')).toBe(true));
+  });
+
+  it('fastboot opens on the steps by hand; its restart over USB restarts the image over adb, inside the click', async () => {
+    const flash = await show('image-fastboot');
+    expect(screen.getByText(/hold VOL− \(SW3\)/)).toBeTruthy();
+    expect(embers()).toEqual(['Connect']);
+    const restart = vi.spyOn(flash, 'restartToFastboot').mockResolvedValue();
+    fireEvent.click(screen.getByRole('button', { name: 'It already runs Glassworks (or Glass Panes): restart it over USB' }));
+    expect(restart).toHaveBeenCalledTimes(1);
+    expect(flash.state.screen).toBe('fastboot');
   });
 
   it.each(['image-link', 'image-download', 'image-confirm'] as const)('%s offers Install Glassworks instead, which drops what was downloaded', async (d) => {
@@ -256,10 +266,10 @@ describe('Glass Panes', () => {
   it('Done says what is next in its own project, and the way back to Glassworks', async () => {
     const flash = await show('image-done');
     expect(screen.getByRole('heading').textContent).toBe('Glass Panes is on the Mirror.');
-    expect(screen.getByText(/Set it up as its README says/)).toBeTruthy();
+    expect(screen.getByText(/^Set it up as its README says\.$/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Install Glassworks' }));
     expect(flash.state).toMatchObject({ screen: 'choose', picked: 'glassworks', from: 'glass-panes', open: false });
-    expect(screen.getByRole('status').textContent).toMatch(/^The way back from Glass Panes\. Glassworks replaces it/);
+    expect(screen.getByRole('status').textContent).toMatch(/^Glassworks replaces Glass Panes and everything on the Mirror\./);
   });
 });
 

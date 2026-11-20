@@ -148,8 +148,8 @@ export interface DeviceFrame {
 export const DEVICE_WORDS = [
   'adb.firstStart', 'app.connectHelp', 'app.pick.local', 'app.pick.release', 'app.toImage',
   'community.ifVendor', 'confirm.lede', 'confirm.title', 'confirm.understand', 'done.noHomeFix',
-  'done.noTouch', 'error.noFill', 'fastboot.byHandNote', 'fastboot.byHandSteps', 'fastboot.byHandToggle',
-  'fastboot.notLetIn', 'fastboot.restarted', 'image.apkLabel', 'image.lede', 'image.vendor',
+  'done.noTouch', 'error.noFill', 'fastboot.byHandNote', 'fastboot.byHandSteps', 'fastboot.notLetIn',
+  'fastboot.overUsb', 'fastboot.restarted', 'image.apkLabel', 'image.lede', 'image.vendor',
   'keep.steps',
 ] as const;
 export type DeviceWord = (typeof DEVICE_WORDS)[number];

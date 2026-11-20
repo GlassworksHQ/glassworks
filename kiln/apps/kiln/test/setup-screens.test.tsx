@@ -98,7 +98,6 @@ describe('the set-up forms', () => {
       s.store.dispatch({ type: 'start', flow: 'install', now: Date.now() });
     });
     expect(document.body.textContent).not.toMatch(/Nothing is written/);
-    expect(document.body.textContent).toMatch(/Your backup comes before any write\./);
     s.close();
   });
 
@@ -179,7 +178,7 @@ describe('the set-up forms', () => {
     s.close();
   }, 20_000);
 
-  it('Updating the app already on the panel: its restarts are called expected', async () => {
+  it('Updating the app already on the panel: its restarts are said', async () => {
     const s = demoSession(s1Demo, 'app-update');
     render(<Wizard session={s} frame={s1PlusUi} base="/aqara-s1-plus" />);
     await act(() => s.route('resume'));
@@ -187,7 +186,7 @@ describe('the set-up forms', () => {
     const going = s.installApp({ clock24: true, keyboard: false });
     await act(() => new Promise((r) => setTimeout(r, 1200))); // Glassworks' pm install
     expect(screen.getByRole('heading').textContent).toBe('Updating Glassworks.');
-    expect(screen.getByRole('status').textContent).toBe('Install Glassworks. Android installs it and optimises it for this panel. The app on the panel closes and restarts during this. That\'s expected.');
+    expect(screen.getByRole('status').textContent).toBe('Install Glassworks. Android installs it and optimises it for this panel. The app on the panel restarts during this.');
     expect([...document.querySelectorAll('.join li')].map((li) => li.firstChild?.textContent)).not.toContain('Install the on-screen keyboard'); // not asked for
     await act(() => going);
     s.close();

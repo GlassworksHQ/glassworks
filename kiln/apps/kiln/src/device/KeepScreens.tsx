@@ -19,7 +19,7 @@ export function HaAsksOnce({ d }: { d: DeviceFrame }) {
     <div className="how">
       <b>In Home Assistant, after the install</b>
       <span className="small">
-        {rich(`Open Settings, then Devices & services. ${cap(d.the)} is under **Attention required**: Home Assistant says it “disabled transport encryption”. Click **Reconfigure**, then **Submit**. Home Assistant keeps the same device, with its entities and their history.`)}
+        {rich(`In Settings → Devices & services, ${d.the} is under **Attention required**. Click **Reconfigure**, then **Submit**. It stays the same device.`)}
       </span>
     </div>
   );
@@ -30,7 +30,7 @@ function Fingerprint({ fingerprint }: { fingerprint: string }) {
     <div className="well">
       <div className="grow">
         <span className="small">Home Assistant&apos;s key</span>
-        <span>Fingerprint <code>{fingerprint}</code>, as Glassworks logs it. Kiln holds the key in this tab only: it never saves it, shows it or logs it.</span>
+        <span>Fingerprint <code>{fingerprint}</code></span>
       </div>
     </div>
   );
@@ -46,9 +46,7 @@ function Connect({ f, s }: P) {
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">{`Keep ${d.the} in Home Assistant.`}</h2>
-      <p className="lede">
-        {`Glassworks on this ${d.short} has a key from Home Assistant. Kiln reads it now and gives it back after the install, so Home Assistant keeps the same device with no click.`}
-      </p>
+      <p className="lede">So Home Assistant keeps the same device after the install.</p>
       {reading ? (
         <ol className="join" aria-live="polite">
           {READ_ROWS.map((r, i) => <li key={r} className={i < at! ? 'done' : i === at ? 'cur' : ''}>{r}</li>)}
@@ -58,7 +56,7 @@ function Connect({ f, s }: P) {
           {lines(d.words['keep.steps']).map((x) => <li key={x}>{x}</li>)}
         </ol>
       )}
-      {!reading && <p className="small">{rich(`Then click Connect and pick ${d.the} (\`Android\`) in the browser's list. Kiln only reads it, then restarts it into fastboot itself. Nothing is written yet.`)}</p>}
+      {!reading && <p className="small">{rich('Then click Connect and pick `Android`.')}</p>}
       {s.connecting && <p className="status work" role="status">{`Pick ${d.the} in the browser's list…`}</p>}
       {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
       <div className="foot">
@@ -78,19 +76,15 @@ function Restarted({ f, s }: P) {
   const k = s.key as Extract<KeyStep, { state: 'held' } | { state: 'none' } | { state: 'unreachable' }>;
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h">{k.state === 'held' ? 'Kiln has the key.' : k.state === 'none' ? 'Nothing to keep.' : `${cap(d.the)} is restarting into fastboot.`}</h2>
+      <h2 id="h">{`${cap(d.the)} is restarting into fastboot.`}</h2>
       <p className="lede">
-        {k.state === 'held'
-          ? `${cap(d.the)} is restarting into fastboot, so its screen goes black. Click Connect and pick it in the browser’s list.`
-          : k.state === 'none'
-            ? `Glassworks on this ${d.short} has no key from Home Assistant yet, so there’s no device to keep. ${cap(d.the)} is restarting into fastboot: click Connect and pick it in the browser’s list.`
-            : 'Its screen goes black. Click Connect and pick it in the browser’s list. After the install, Home Assistant asks you once to keep the device.'}
+        {rich('Click Connect and pick `Android`.')}
+        {k.state === 'none' ? ' Home Assistant hasn’t added it yet, so there’s nothing to keep.' : k.state === 'unreachable' ? ' After the install, Home Assistant asks once to keep the device.' : ''}
       </p>
       {k.state === 'held' && <Fingerprint fingerprint={k.fingerprint} />}
-      {k.state === 'held' && <p className="small">Keep this tab open until Done. If it closes before then, the key is gone, and Home Assistant asks once after the install.</p>}
+      {k.state === 'held' && <p className="small">Keep this tab open until Done, or Home Assistant asks once after the install.</p>}
       {s.connecting && <p className="status work" role="status">{rich(`Pick ${d.the} (\`Android\`) in the browser's list…`)}</p>}
       {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
-      <p className="small">{`Fastboot only reads ${d.the} here.`}</p>
       <div className="foot">
         <span className="links"><button type="button" className="link" onClick={() => f.skipKeep()}>Still on Glassworks? Fastboot by hand</button></span>
         <button type="button" className="btn ember" disabled={s.connecting} onClick={() => void f.connectFastboot()}>Connect</button>
@@ -107,11 +101,11 @@ function Unreachable({ f, s }: P) {
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">{old ? 'This Glassworks can’t hand its key over.' : `Kiln can’t reach Glassworks on this ${d.short}.`}</h2>
-      <p className="lede">You can still reflash it. Afterwards, Home Assistant asks you once to keep the device.</p>
+      <p className="lede">You can still reflash it. Home Assistant then asks once to keep the device.</p>
       <p className="small">
         {old
-          ? <>Glassworks {k.app}{` on ${d.the} is older than the hand-over, so it has no way to give the key out. Kiln can still restart it into fastboot.`}</>
-          : <>{`${cap(d.the)} lets in only the browser that last installed Glassworks on it, and only once Glassworks has started. From another browser or computer, or on a ${d.short} that doesn't start, Kiln can't read the key.`}</>}
+          ? <>Glassworks {k.app} is too old to hand it over.</>
+          : <>Only the browser that last installed Glassworks gets in, once Glassworks has started.</>}
       </p>
       <HaAsksOnce d={d} />
       {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
@@ -136,11 +130,9 @@ export function ImageKeep(p: P) {
 export function KeyOutcome({ k, d }: { k?: KeyStep; d: DeviceFrame }) {
   if (!k || k.state === 'reading' || k.state === 'held') return null;
   const [word, tone, line] =
-    k.state === 'handed' ? ['Same device', 'y', 'Glassworks has the key Home Assistant set before the reflash, so Home Assistant reconnected on its own: the same device, entities and history.']
-    : k.state === 'none' ? ['Not added yet', 'n', `Home Assistant hasn’t added this ${d.short}. It finds it on the network: Settings, then Devices & services, under Discovered.`]
-    : ['Asks once', 'w', k.state === 'refused'
-      ? 'Kiln read the key before the reflash, but Glassworks didn’t take it back at its first start, so Home Assistant asks once.'
-      : 'Kiln couldn’t read the key before the reflash, so Home Assistant asks once.'];
+    k.state === 'handed' ? ['Same device', 'y', 'Glassworks has Home Assistant’s key back, so it stays the same device.']
+    : k.state === 'none' ? ['Not added yet', 'n', 'Add it in Settings → Devices & services, under Discovered.']
+    : ['Asks once', 'w', k.state === 'refused' ? 'Glassworks didn’t take the key back.' : 'Kiln couldn’t read the key before the install.'];
   return (
     <>
       <div className="su" role="group" aria-label="Home Assistant">

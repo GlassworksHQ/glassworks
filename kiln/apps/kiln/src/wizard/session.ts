@@ -354,14 +354,14 @@ export class Session implements SetupSteps {
       type: 'done', done: {
         title: 'Done.',
         body: wifi
-          ? `The panel is on ${wifi}. Home Assistant finds it by itself as an ESPHome device.`
-          : `On the panel, join Wi-Fi and sign in to Home Assistant. Home Assistant then finds it as an ESPHome device${ip ? ` (${ip}, port 6053)` : ''}.`,
+          ? `The panel is on ${wifi}. Home Assistant finds it by itself.`
+          : `On the panel, join Wi-Fi and sign in to Home Assistant. Home Assistant then finds it${ip ? ` (${ip}, port 6053)` : ''}.`,
         backup: b && {
           name: `${b.id}.zip`,
           info: `${b.files.length} partitions · ${fmtSize(total)}`,
           hint: b.bootWasPatched
             ? 'This panel already had the software, so this backup isn\'t the original. Keep the one from your first install.'
-            : 'Original software, backed up. Keep it: it\'s also kept in this browser.',
+            : 'Original software, backed up. Keep it.',
         },
       },
     });

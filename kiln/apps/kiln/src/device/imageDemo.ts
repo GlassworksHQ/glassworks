@@ -70,7 +70,8 @@ export async function imageDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim
     requestFastboot: async () => fastboot(name === 'flash-fastboot-wrong' ? sim.wrongSystemBytes : sim.systemBytes),
     // flash-adb-wait: the device refuses this browser's key while it starts, and Kiln asks again
     ...(name === 'flash-adb-wait' ? { reopenAdb: async () => { throw new Error('No authenticator can handle the request'); } } : {}),
-    requestAdb: async () => {
+    requestAdb: async (o) => {
+      o?.onPicked?.();
       if (name === 'flash-adb-wait') throw new Error('No authenticator can handle the request');
       return sim.firstStart({ hideFails: name === 'flash-done-chooser', noHome: name === 'flash-done-no-home' });
     },

@@ -38,14 +38,16 @@ describe('keeping the Mirror in Home Assistant over a reflash', () => {
     expect(embers().length).toBeLessThanOrEqual(1);
   });
 
-  it('the fastboot screen\'s Restart into fastboot is the step for Glassworks; it only reads before the restart', async () => {
+  it('the fastboot screen opens on the steps by hand; its restart over USB is the keep step for Glassworks, which only asks for USB', async () => {
     const d = await imageDemo(mirrorEntry, 'flash-fastboot', true);
     await show(d);
-    fireEvent.click(screen.getByRole('button', { name: 'Restart into fastboot' }));
+    expect(screen.getByText(/hold VOL− \(SW3\)/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'It already runs Glassworks (or Glass Panes): restart it over USB' }));
     expect(d.image.state.screen).toBe('keep');
     cleanup();
     await show(await keepDemo(mirrorEntry, 'flash-keep', true));
-    expect(screen.getByText(/Nothing is written yet/)).toBeTruthy();
+    expect([...document.querySelectorAll('ol.join li')].map((li) => li.textContent)).toEqual(['Plug the Mirror\'s micro-USB into this computer, with Glassworks running.']);
+    expect(screen.queryByText(/switch|unplug|screws|the back off/i)).toBeNull(); // Kiln restarts it into fastboot over adb (the Mirror run, 2026-11-19)
     expect(embers()).toEqual(['Connect']);
   });
 
@@ -326,6 +328,21 @@ describe('the keep step, on the real session (#580)', () => {
     expect(r.keys.verbs).toEqual([]);
     expect(r.reboots).toEqual([]);
     expect(f.state.connectError).toMatch(/isn't the Mirror/);
+  });
+
+  it('Continue opens fastboot by hand, unless this browser has flashed a Mirror: then the keep step (the maintainer, 2026-11-19)', async () => {
+    const first = await ready();
+    first.f.toFastboot();
+    render(<ImageFlow image={first.f} app={new AppSession({ frame: mirrorFrame, connect: async () => { throw new Error('unused'); } }, true)} />);
+    expect(screen.getByRole('heading').textContent).toBe('Put the Mirror in fastboot.');
+    expect(screen.getByText(/hold VOL− \(SW3\)/)).toBeTruthy();
+    expect(embers()).toEqual(['Connect']);
+    cleanup();
+    const again = await ready({ flashed: true });
+    again.f.toFastboot();
+    render(<ImageFlow image={again.f} app={new AppSession({ frame: mirrorFrame, connect: async () => { throw new Error('unused'); } }, true)} />);
+    expect(screen.getByRole('heading').textContent).toBe('Keep the Mirror in Home Assistant.');
+    expect(screen.queryByText(/hold VOL−/)).toBeNull();
   });
 
   it('Continue opens the keep step in a browser that has flashed a Mirror; a flash marks it', async () => {
