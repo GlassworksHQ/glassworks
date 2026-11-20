@@ -193,6 +193,77 @@ class NotificationOverlayTest {
         assertEquals("Doorbell", hub.state.page?.notification?.title)
     }
 
+    /** Nothing shown on a screen without touch that takes a tap: no view, card, pill or stage is clickable. */
+    private fun clickableShown() = views(overlay).filter { it.isShown && (it.isClickable || it.hasOnClickListeners()) }.toList()
+
+    /**
+     * The Mirror's "OK" (2026-11-20): the panel's own test notification is a card with Home Assistant's button OK. Without
+     * touch the card has no buttons and no close; with touch it keeps both.
+     */
+    @Test
+    fun withoutTouchACardHasNoButtonsAndNoClose() {
+        overlay.input = Input.NONE
+        center.handle(NotificationsHub.TEST_MESSAGE, NotificationsHub.TEST_TITLE, NotificationsHub.TEST_DATA)
+        center.handle("m", "Doorbell", """{"priority":"high","tag":"door","actions":[{"action":"open_gate","title":"Open the gate"}]}""")
+        val shown = shownText()
+        assertTrue(shown.contains("Doorbell"))
+        assertFalse(shown.toString(), shown.any { it in setOf("OK", "Open the gate", "×") })
+        assertEquals(emptyList<View>(), clickableShown())
+        overlay.input = Input.TOUCH
+        overlay.update(hub.state)
+        assertTrue("with touch: the front card's button and its close", shownText().containsAll(listOf("Open the gate", "×")))
+    }
+
+    /**
+     * The Mirror's pill (2026-11-20): folded cards stay in the list, and the pill counted them for good. Without touch
+     * nobody can open the list, so a card folds and nothing is left; with touch the pill is there, as before.
+     */
+    @Test
+    fun withoutTouchFoldedCardsLeaveNoPill() {
+        overlay.input = Input.NONE
+        center.handle("Done. 1 h 32 min.", "Washing machine", "")
+        center.handle("Put the green bin out tonight.", "Bin day", """{"priority":"low"}""")
+        assertTrue(shownText().containsAll(listOf("Washing machine", "Bin day")))
+        assertFalse("two cards in view: no pill", shownText().any { it.contains("Show all") })
+        t = (Delivery.FOLD_NORMAL_S + 1) * 1000L
+        overlay.update(hub.state)
+        assertEquals("both folded; the list keeps them", 2, hub.state.list.size)
+        val shown = shownText()
+        assertFalse(shown.toString(), shown.any { it.contains("notification") || it.contains("Show all") })
+        assertEquals(emptyList<View>(), clickableShown())
+        overlay.input = Input.TOUCH
+        overlay.update(hub.state)
+        assertTrue("with touch the pill counts them", shownText().contains("2 notifications"))
+    }
+
+    /** Without touch the critical stage has no buttons, Dismiss included: Home Assistant clears it, or its timeout. */
+    @Test
+    fun withoutTouchTheCriticalStageHasNoButtons() {
+        center.handle("The kitchen smoke alarm went off.", "Smoke in the kitchen",
+            """{"priority":"critical","tag":"smoke","actions":[{"action":"silence","title":"Silence"}]}""")
+        assertTrue("with touch", shownText().containsAll(listOf("Silence", "Dismiss")))
+        overlay.input = Input.NONE
+        overlay.update(hub.state)
+        val shown = shownText()
+        assertTrue(shown.contains("Smoke in the kitchen"))
+        assertFalse(shown.toString(), shown.any { it == "Silence" || it == "Dismiss" })
+        assertEquals(emptyList<View>(), clickableShown())
+    }
+
+    /** Do not disturb's pill without touch: that it is on, with no held count pointing at a list nobody can open. */
+    @Test
+    fun withoutTouchDoNotDisturbsPillIsAPlainStatus() {
+        val held = NotificationStore.Entry(1, Notification("Garage door open", "m"), 0L, Delivery.of(Priority.NORMAL, doNotDisturb = true))
+        val dnd = NotificationsHub.State(list = listOf(held), doNotDisturb = true)
+        overlay.update(dnd)
+        assertTrue("with touch", shownText().contains("  ·  1 held"))
+        overlay.input = Input.NONE
+        overlay.update(dnd)
+        assertTrue(shownText().contains("Do not disturb"))
+        assertFalse(shownText().any { it.contains("held") })
+        assertEquals(emptyList<View>(), clickableShown())
+    }
+
     /** #230: a critical one with a view is the stage, with "Open the view" first; there is no such button without touch. */
     @Test
     fun aCriticalOneOpensItsViewFromTheStage() {

@@ -91,10 +91,15 @@ class NotificationOverlay(
     var capturePage: ((done: (Bitmap?) -> Unit) -> Unit)? = null
 
     /**
-     * Whether the screen takes a tap ([dev.glassworks.frame.Frame.input]). Without ([Input.NONE]) a view has
-     * no button, nothing outside a half view takes a tap, and the critical stage has no "Open the view".
+     * Whether the screen takes a tap ([dev.glassworks.frame.Frame.input]). Without ([Input.NONE]) nothing drawn
+     * asks for one: a view has no button and nothing outside a half view takes a tap; a card and the critical stage
+     * have no buttons, no Dismiss and no close; and there is no "N notifications · Show all" pill, because nobody
+     * can open the list. A card folds away on its own and nothing is left of it on screen; what stays until Home
+     * Assistant clears it is decided by [NotificationCenter] (its `noTouchTimeout`).
      */
     var input: Input = Input.TOUCH
+
+    private val touch: Boolean get() = input == Input.TOUCH
 
     private val g = Glass(context)
     private val dp = g.dp
@@ -261,12 +266,19 @@ class NotificationOverlay(
         // The open view and the ones waiting behind it have their own bar: they aren't more to show.
         val count = state.list.count { it.id != state.page?.id && !it.queued }
         val text = when {
+            // Held ones wait in a list a screen without touch can't open: Do not disturb's pill says only that it is on.
+            state.doNotDisturb && !touch -> "Do not disturb" to ""
             state.doNotDisturb -> "Do not disturb" to if (held > 0) "  ·  $held held" else ""
+            // Show all opens the list. Without touch nobody can, and the folded cards it counts never leave: no pill.
+            !touch -> null
             count > 1 || count > inView -> "$count notification${if (count == 1) "" else "s"}" to "  ·  Show all"
             else -> null
         }
         if (text == null || listOpen) { pill.visibility = View.GONE; return }
         pill.visibility = View.VISIBLE
+        // It opens the list: without touch it's a status alone, and takes no tap.
+        pill.setOnClickListener(if (touch) View.OnClickListener { openList() } else null)
+        pill.isClickable = touch
         (pill.getChildAt(0)).visibility = if (state.doNotDisturb) View.VISIBLE else View.GONE
         (pill.getChildAt(1) as TextView).text = text.first
         (pill.getChildAt(2) as TextView).text = text.second
@@ -282,7 +294,7 @@ class NotificationOverlay(
             return
         }
         stage.visibility = View.VISIBLE
-        stage.isClickable = true // nothing behind it takes a tap until it's answered
+        stage.isClickable = touch // nothing behind it takes a tap until it's answered
         // The ripple and the pulse, until it's answered or dismissed; the orb pauses itself while the
         // screen is off or the window hidden.
         criticalOrb.start()
@@ -312,8 +324,10 @@ class NotificationOverlay(
         })
         column.addView(ButtonRows(context, px(12f)).apply {
             // A critical one's view opens from here, never by itself (#230): the stage is what can't be missed.
+            // Without touch, none: the alert stays until Home Assistant clears it, or its timeout (NotificationCenter).
+            if (!touch) return@apply
             val buttons = listOfNotNull(
-                n.url?.takeIf { input == Input.TOUCH }?.let { OPEN_THE_VIEW to { hub.openView(e.id) } },
+                n.url?.let { OPEN_THE_VIEW to { hub.openView(e.id) } },
             ) + n.actions.map { a -> a.title to { tap(e, a.id, a.uri) } }
             buttons.forEachIndexed { i, (title, onTap) ->
                 addView((if (i == 0) g.primary(title) else g.ghost(title)).apply { setOnClickListener { onTap() } })
@@ -593,7 +607,7 @@ class NotificationOverlay(
         orientation = LinearLayout.VERTICAL
         background = glassBg(24f)
         elevation = 12 * dp
-        isClickable = true // a tap on the card doesn't reach the dashboard under it
+        isClickable = touch // a tap on the card doesn't reach the dashboard under it
         setPadding(px(20f), px(16f), px(20f), px(if (n.timeoutS != null) 12f else 18f))
         addView(LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -601,8 +615,9 @@ class NotificationOverlay(
             val important = n.priority == Priority.HIGH
             val label = (if (important) "Important · " else "") + NotificationsDefinition.ago(now() - e.postedAt).replaceFirstChar { it.uppercase() }
             addView(g.label(label).apply { setTextColor(if (important) AMBER else FA) }, LinearLayout.LayoutParams(0, -2, 1f))
-            if (n.priority == Priority.LOW) addView(g.text(12f, FA).apply { text = "Silent" }, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = px(12f) })
-            addView(g.text(22f, MU, Inter.LIGHT).apply {
+            if (n.priority == Priority.LOW) addView(g.text(12f, FA).apply { text = "Silent" }, LinearLayout.LayoutParams(-2, -2).apply { if (touch) marginEnd = px(12f) })
+            // Without touch the card folds away by itself, or Home Assistant clears it: no close.
+            if (touch) addView(g.text(22f, MU, Inter.LIGHT).apply {
                 text = "×"
                 contentDescription = "Close"
                 setPadding(px(10f), 0, 0, 0)
@@ -614,7 +629,8 @@ class NotificationOverlay(
         if (n.message.isNotEmpty()) addView(g.text(15.5f, MU).apply { text = n.message; setLineSpacing(0f, 1.2f); maxLines = 3; ellipsize = TextUtils.TruncateAt.END },
             LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(5f) })
         if (n.image != null && !compact) addView(picture(e), LinearLayout.LayoutParams(-1, px(190f)).apply { topMargin = px(12f) })
-        if (n.actions.isNotEmpty() && !compact) addView(LinearLayout(context).apply {
+        // Home Assistant's buttons need a tap: none without touch.
+        if (n.actions.isNotEmpty() && !compact && touch) addView(LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             n.actions.forEachIndexed { i, a ->
                 addView(smallPill(a.title).apply { setOnClickListener { tap(e, a.id, a.uri) } },
@@ -763,7 +779,6 @@ class NotificationOverlay(
         background = glassBg(999f)
         elevation = 8 * dp
         setPadding(px(14f), px(9f), px(16f), px(9f))
-        setOnClickListener { openList() }
         addView(Moon(context), LinearLayout.LayoutParams(px(16f), px(16f)).apply { marginEnd = px(9f) })
         addView(g.text(14.5f, TX, Inter.MEDIUM))
         addView(g.text(14.5f, MU))
