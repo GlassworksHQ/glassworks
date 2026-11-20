@@ -740,7 +740,10 @@ export class ImageSession {
           this.fb = undefined;
           this.made = Object.create(null);
           if (!r.community) this.d.flashedHere?.set(); // this browser's key is in the Glassworks it wrote: the keep step can read it next time
-          this.d.progress?.set({ at: 'flashed', image: r.id }); // a reload from here finishes the first start
+          // a reload from here goes to the step over adb still to come (Glassworks' first start, a community image's Wi-Fi
+          // on); with none left, the install ends here and there is nothing to resume
+          const after = steps.some((x) => x.do === 'first-start' || x.do === 'wifi-on');
+          this.d.progress?.set(after ? { at: 'flashed', image: r.id } : undefined);
           // nothing kept any more: another install downloads again. The device is restarting into what was written, so a
           // storage error here is only logged: it mustn't turn a finished install into an error
           this.set({ files: waiting(r) });

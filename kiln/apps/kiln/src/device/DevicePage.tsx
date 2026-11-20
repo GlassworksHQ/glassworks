@@ -193,8 +193,22 @@ function useInstallRoute(base: string, route: string | undefined) {
  */
 const HANDS = new Map<string, HandOver>();
 
-/** The hand-over a frame's sessions are made with: whichever page of the frame is up when their install ends. */
-export const pageHandOver = (base: string): HandOver => (p) => HANDS.get(base)?.(p);
+/**
+ * Installs that ended while no page of their frame was up (the person went to the picker or another frame): the device,
+ * kept with its frame until its page opens again. Handing it over then would replace another frame's session.
+ */
+const PENDING = new Map<string, PanelShell>();
+
+/**
+ * The hand-over a frame's sessions are made with: whichever page of the frame is up when their install ends, or, with
+ * none up, the frame's pending hand-over, which its page takes when it opens.
+ */
+export const pageHandOver = (base: string): HandOver => (p) => {
+  const page = HANDS.get(base);
+  if (page) return page(p);
+  PENDING.set(base, p);
+  return undefined;
+};
 
 /** The standard flow's routes, after any frame's install. */
 const STANDARD_ROUTES: readonly Step[] = ['set-up', 'resume', 'wifi', 'home-assistant', 'panes', 'radio', 'done'];
@@ -459,8 +473,17 @@ export function DevicePage({ frame, demo: sim, base }: { frame: DeviceFrame; dem
     go(`${base}${start.search}`);
     redraw();
   }, [current, base, start]);
-  // this mount's, for every session of this frame: one kept from an earlier visit hands over with today's mode and way back
-  HANDS.set(base, (p) => handRef.current?.(p));
+  // this mount's, for every session of this frame: one kept from an earlier visit hands over with today's mode and way back.
+  // Gone when the page goes, so an install that ends meanwhile waits for it (PENDING) instead of replacing another session
+  const mine = useRef<HandOver>((p) => handRef.current?.(p));
+  HANDS.set(base, mine.current);
+  useEffect(() => {
+    HANDS.set(base, mine.current);
+    // a hand-over that came while no page of this frame was up: this page takes it now
+    const waiting = PENDING.get(base);
+    if (waiting) { PENDING.delete(base); handRef.current?.(waiting); }
+    return () => { if (HANDS.get(base) === mine.current) HANDS.delete(base); };
+  }, [base]);
   handRef.current = (p) => {
     const demoName = start.m.demo;
     const e = registry.set(standardEntry(frame, base, { demo: demoName, device: demoName ? p : undefined, wayBack: imageMode ? undefined : wayBack }));

@@ -90,6 +90,19 @@ describe('sessions kept from an earlier visit', () => {
   });
 });
 
+describe('a community image written as published', () => {
+  it('leaves no mark once written: nothing over adb is left, so a reload has nothing to resume', async () => {
+    const { imageDemo } = await import('../src/device/imageDemo');
+    const marks: unknown[] = [];
+    const progress = { get: () => marks.at(-1) as never, set: (m: unknown) => { marks.push(m); } };
+    const { image } = await imageDemo(mirrorEntry, 'image-done', true, { progress });
+    expect(image.state.screen).toBe('done');
+    // never `flashed`, not even while the downloads are cleaned up: a reload then would wait for a step that isn't coming
+    expect(marks.some((m) => (m as { at?: string } | undefined)?.at === 'flashed')).toBe(false);
+    expect(marks.at(-1)).toBeUndefined();
+  });
+});
+
 describe('a community image after a reload at its last step', () => {
   it('comes back on it, with no rewrite: Connect says to switch Wi-Fi on in the image\'s Settings, its key gone with the restart', async () => {
     const community = mirrorFrame.imageFlow.recipes.find((r) => r.community)!;
@@ -99,5 +112,28 @@ describe('a community image after a reload at its last step', () => {
     expect(image.state).toMatchObject({ screen: 'adb', picked: community.id, changed: true });
     await image.connectAdb();
     expect(image.state.connectError).toMatch(/Turn Wi-Fi on in the Mirror's Settings once instead/);
+  });
+});
+
+describe('an install that ends with no page of its frame up', () => {
+  it('waits for its page: another frame\'s session stays, and the frame\'s page takes the device when it opens again', async () => {
+    const m = new FakeMirror({ kiosk: 'app' });
+    const app = new AppSession({ frame: mirrorFrame, connect: async () => withAppStreams(m, { online: true, radio: false }), sleep: async () => {}, handOver: pageHandOver(MIRROR_BASE) }, true);
+    const image = new ImageSession({ frame: mirrorFrame, images: {} as never, requestFastboot: () => new Promise(() => {}), requestAdb: () => new Promise(() => {}), adbKey: () => undefined, apk: () => undefined });
+    registry.keep(new DeviceActivity(MIRROR_BASE, mirrorFrame.name, { app, image }, false));
+    at(`${MIRROR_BASE}/app`);
+    const page = render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
+    await app.connect();
+    await app.pickApk('kiosk.apk', fakeMirrorApk());
+    page.unmount(); // the person went to another frame, which has its session now
+    const other = new StandardSession({ standard: { ...(await import('../src/standard/frame')).standardOfDevice(mirrorFrame), id: 'another' }, devices: { knownAdb: async () => undefined, requestAdb: () => new Promise(() => {}) }, loadKey: () => new Promise(() => {}) });
+    registry.set({ base: '/another', name: 'Another', session: other });
+    await app.install();
+    expect(registry.get()!.session).toBe(other); // not replaced
+    expect(other.isClosed).toBe(false);
+    render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />); // back to the Mirror's page
+    await vi.waitFor(() => expect(registry.get()?.base).toBe(MIRROR_BASE));
+    expect(registry.get()!.standard).toBe(true);
+    expect(registry.get()!.session.store.state.setup.phase).toBe('settings'); // its App step, on the device the install had
   });
 });
