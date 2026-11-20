@@ -1,10 +1,10 @@
-/* Full-bleed fluid scroll stage (380vh — gentle ~5-6% settling per beat, zero bottom dock) */
+/* Full-bleed Goldilocks 6-beat scroll stage (680vh — ~55% steady hold / ~45% smooth morph, zero bottom dock) */
 .story {
   position: relative;
   width: 100vw;
   margin-left: calc(50% - 50vw);
   margin-top: -24px;
-  height: 380vh;
+  height: 680vh;
 }
 
 .sticky {
@@ -24,13 +24,51 @@
   z-index: 0;
 }
 
+/* Whisper-quiet far-right vertical progress rail (6 tiny 4px dots, active elongates to 18px sky) */
+.edgeRail {
+  position: absolute;
+  right: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.edgeDot {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--fg) 24%, transparent);
+  cursor: pointer;
+  transition:
+    height 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    background 0.24s ease,
+    opacity 0.24s ease;
+}
+
+.edgeDot:hover {
+  background: color-mix(in srgb, var(--fg) 56%, transparent);
+}
+
+.edgeDotActive {
+  height: 18px;
+  background: var(--sky);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--sky) 55%, transparent);
+}
+
 .canvas {
   position: relative;
   z-index: 1;
   width: 100%;
   max-width: 1220px;
   height: 100%;
-  padding: 72px 44px 48px;
+  padding: 72px 48px 48px;
   display: grid;
   place-items: center;
 }
@@ -39,19 +77,23 @@
 .copyBlock {
   position: absolute;
   top: 50%;
-  width: min(440px, 40vw);
+  width: min(440px, 39vw);
   display: grid;
   gap: 16px;
   margin-top: -116px;
   z-index: 3;
 }
 
+.copyNarrow {
+  width: min(390px, 34vw);
+}
+
 .copyLeft {
-  left: 44px;
+  left: 48px;
 }
 
 .copyRight {
-  right: 44px;
+  right: 48px;
 }
 
 .copyCenter {
@@ -134,7 +176,7 @@ a.eyebrow:hover {
 }
 
 .h2 {
-  font-size: clamp(32px, 3.6vw, 48px);
+  font-size: clamp(32px, 3.5vw, 46px);
   line-height: 1.07;
   letter-spacing: -0.032em;
   font-weight: 300;
@@ -146,7 +188,7 @@ a.eyebrow:hover {
   font-size: 16.5px;
   line-height: 1.58;
   color: var(--muted);
-  max-width: 44ch;
+  max-width: 43ch;
 }
 
 .ledeCenter {
@@ -211,7 +253,7 @@ a.eyebrow:hover {
   color: var(--fg);
 }
 
-/* Future ghost silhouettes at Beat 3 */
+/* Future ghost silhouettes at Beat 5 */
 .ghostLayer {
   position: absolute;
   inset: 0;
@@ -297,6 +339,12 @@ a.eyebrow:hover {
   will-change: transform;
 }
 
+.bezelRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
 .bezel {
   position: relative;
   pointer-events: auto;
@@ -338,6 +386,63 @@ a.eyebrow:hover {
   transform-origin: top center;
   pointer-events: none;
   will-change: opacity, transform;
+}
+
+/* Beat 4: 3 sleek animated horizontal dashed light lines sweeping from the glass to open-air labels */
+.wireRays {
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  margin-top: -66px;
+  display: grid;
+  gap: 20px;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.wireRay {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+
+.wireRaySvg {
+  width: 82px;
+  height: 12px;
+  flex: none;
+  overflow: visible;
+}
+
+.wireRayDash {
+  animation: rayFlow 1.6s linear infinite;
+}
+
+@keyframes rayFlow {
+  from {
+    stroke-dashoffset: 20;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.rayText {
+  display: grid;
+  line-height: 1.2;
+}
+
+.rayText b {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg);
+}
+
+.rayText small {
+  font-family: var(--f-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--ink-sky);
 }
 
 .morphSmooth {
@@ -674,6 +779,10 @@ a.eyebrow:hover {
   border-color: rgba(255, 193, 7, 0.26);
 }
 
+.haTileBlue {
+  border-color: rgba(56, 189, 248, 0.35);
+}
+
 .haTileRow {
   display: flex;
   align-items: center;
@@ -883,7 +992,7 @@ a.eyebrow:hover {
   }
 }
 
-/* 2. Wide Short Wall Switch */
+/* 2. Wide Short Wall Switch & Kitchen Display */
 @container (min-width: 270px) and (max-height: 241px) {
   .haGrid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -916,6 +1025,17 @@ a.eyebrow:hover {
   }
 }
 
+/* Beat 4 Kitchen/Bedside: swap Front Door slot to live Sendspin audio tile so music playback is visible */
+.haRoot[data-sendspin] .haLockTile {
+  display: none;
+}
+
+.haRoot[data-sendspin] .haMediaTile {
+  display: flex;
+  grid-column: 2;
+  grid-row: 2;
+}
+
 /* Compact Bedside Display */
 @container (max-width: 340px) and (max-height: 165px) {
   .haBadges {
@@ -943,7 +1063,8 @@ a.eyebrow:hover {
   }
 
   .haLivingTile,
-  .haLockTile {
+  .haLockTile,
+  .haMediaTile {
     display: none;
   }
 
@@ -1122,7 +1243,7 @@ a.eyebrow:hover {
   display: none;
 }
 
-/* ==================== REAL ASSIST VOICE OVERLAY (OrbArt.kt + VoiceOverlay.kt) ==================== */
+/* ==================== BEAT 1: REAL ASSIST VOICE OVERLAY (OrbArt.kt + VoiceOverlay.kt) ==================== */
 .voiceScrim {
   position: absolute;
   inset: 0;
@@ -1152,7 +1273,6 @@ a.eyebrow:hover {
   flex: none;
 }
 
-/* 300dp ambient radial glow scaled to ~196px */
 .orbGlow {
   position: absolute;
   width: 196px;
@@ -1177,7 +1297,6 @@ a.eyebrow:hover {
   background: radial-gradient(circle at 50% 50%, rgba(52, 211, 153, 0.3) 0%, transparent 60%);
 }
 
-/* Speaking Sky ripple rings (VoiceOverlay.Ring: scale 1 -> 1.85) */
 .orbRipple {
   position: absolute;
   inset: 0;
@@ -1202,7 +1321,6 @@ a.eyebrow:hover {
   }
 }
 
-/* OrbArt.sphere: fill white@0.04, 1px white@0.13 border, inset white@0.05, outer drop shadow */
 .orbSphere {
   position: relative;
   width: 74px;
@@ -1222,7 +1340,6 @@ a.eyebrow:hover {
   overflow: hidden;
 }
 
-/* OrbArt.swirl: conic gradient blurred & spinning in 1.5s */
 .orbSwirl {
   position: absolute;
   inset: -16px;
@@ -1241,7 +1358,6 @@ a.eyebrow:hover {
   transition: opacity 0.4s ease;
 }
 
-/* OrbArt.core(SKY) */
 .orbCoreSky {
   position: absolute;
   inset: 9px;
@@ -1257,7 +1373,6 @@ a.eyebrow:hover {
   transition: opacity 0.4s ease;
 }
 
-/* OrbArt.core(GREEN) */
 .orbCoreGreen {
   position: absolute;
   inset: 9px;
@@ -1272,7 +1387,6 @@ a.eyebrow:hover {
   transition: opacity 0.35s ease;
 }
 
-/* OrbArt.shine: always-on specular highlight at (32%, 24%) */
 .orbShine {
   position: absolute;
   inset: 0;
@@ -1281,7 +1395,6 @@ a.eyebrow:hover {
   pointer-events: none;
 }
 
-/* VoiceOverlay.Check */
 .orbCheck {
   position: absolute;
   inset: 0;
@@ -1325,7 +1438,6 @@ a.eyebrow:hover {
   }
 }
 
-/* VoiceOverlay typography: label slot + Inter Light main text + subtle bottom hint */
 .voiceTexts {
   position: relative;
   z-index: 1;
@@ -1382,7 +1494,6 @@ a.eyebrow:hover {
   transition: opacity 0.3s ease;
 }
 
-/* Compact tablet adjustments inside mobile container */
 @container (max-height: 210px) {
   .voiceScrim {
     gap: 10px;
@@ -1405,24 +1516,24 @@ a.eyebrow:hover {
   }
 }
 
-/* ==================== REAL NOTIFICATION CARD + TIMER DOCK (Beat 2: Studio Mirror) ==================== */
-.mirrorOverlayLayer {
+/* ==================== BEAT 2 (NOTIFICATIONS) & BEAT 3 (TIMER DOCK) OVERLAY SLOTS ==================== */
+.overlaySlot {
   position: absolute;
   inset: 0;
   z-index: 3;
 }
 
-/* NotificationOverlay.kt: top-right #16171c glass card, 1px white@0.12 border, AMBER header, SKY→VIOLET TimeLeft */
+/* NotificationOverlay.kt: top-right #16171c glass card, 1px white@0.12, AMBER label, SKY→VIOLET TimeLeft */
 .gwNotifCard {
   position: absolute;
-  top: 8px;
-  right: 8px;
-  width: min(176px, calc(100% - 16px));
-  border-radius: 15px;
+  top: 10px;
+  right: 10px;
+  width: min(214px, calc(100% - 20px));
+  border-radius: 16px;
   background: #16171c;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.52);
-  padding: 9px 10px 8px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.54);
+  padding: 10px 12px 9px;
   display: grid;
   gap: 4px;
   text-align: left;
@@ -1436,7 +1547,7 @@ a.eyebrow:hover {
 }
 
 .gwNotifLabel {
-  font-size: 7.5px;
+  font-size: 8px;
   font-weight: 500;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -1451,7 +1562,7 @@ a.eyebrow:hover {
   border: 0;
   background: transparent;
   color: #a1a1aa;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 300;
   line-height: 1;
   padding: 0 0 0 4px;
@@ -1463,24 +1574,24 @@ a.eyebrow:hover {
 }
 
 .gwNotifTitle {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   color: #f4f4f5;
   line-height: 1.15;
 }
 
 .gwNotifBody {
-  font-size: 9.5px;
+  font-size: 10px;
   color: #a1a1aa;
   line-height: 1.25;
 }
 
 .gwNotifPic {
   margin-top: 3px;
-  border-radius: 9px;
+  border-radius: 10px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  height: 52px;
+  height: 54px;
   background: #101218;
 }
 
@@ -1492,7 +1603,7 @@ a.eyebrow:hover {
 
 .gwNotifActions {
   display: flex;
-  gap: 5px;
+  gap: 6px;
   margin-top: 4px;
 }
 
@@ -1503,8 +1614,8 @@ a.eyebrow:hover {
   border: 1px solid rgba(255, 255, 255, 0.1);
   background: rgba(255, 255, 255, 0.07);
   color: #f4f4f5;
-  font: 500 9.5px/1 var(--f-sans);
-  padding: 6px 6px;
+  font: 500 10px/1 var(--f-sans);
+  padding: 6.5px 8px;
   cursor: pointer;
   white-space: nowrap;
   transition: background 0.16s ease, border-color 0.16s ease;
@@ -1520,7 +1631,6 @@ a.eyebrow:hover {
   color: #34d399;
 }
 
-/* NotificationOverlay.TimeLeft: 3px pill track with SKY -> VIOLET gradient */
 .gwTimeLeftTrack {
   margin-top: 4px;
   height: 2.5px;
@@ -1538,14 +1648,14 @@ a.eyebrow:hover {
 
 .gwNotifPill {
   position: absolute;
-  top: 8px;
-  right: 8px;
+  top: 10px;
+  right: 10px;
   appearance: none;
   border-radius: 999px;
   background: #16171c;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  padding: 5px 10px;
-  font: 400 9.5px/1 var(--f-sans);
+  padding: 6px 11px;
+  font: 400 10px/1 var(--f-sans);
   color: #a1a1aa;
   cursor: pointer;
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
@@ -1556,11 +1666,25 @@ a.eyebrow:hover {
   color: #f4f4f5;
 }
 
-/* TimerDock.kt + RingView.kt: bottom-right floating 80dp ring scaled to 62px + dark sphere + PASTA tag */
+@container (max-height: 175px) {
+  .gwNotifCard {
+    top: 7px;
+    right: 7px;
+    width: min(176px, calc(100% - 14px));
+    padding: 8px 9px 7px;
+    gap: 3px;
+  }
+
+  .gwNotifPic {
+    height: 36px;
+  }
+}
+
+/* Beat 3 — TimerDock.kt + RingView.kt: bottom-right floating 80dp ring scaled to 68px + dark glass orb + PASTA tag */
 .timerDock {
   position: absolute;
-  right: 10px;
-  bottom: 10px;
+  right: 12px;
+  bottom: 12px;
   appearance: none;
   border: 0;
   background: transparent;
@@ -1568,22 +1692,21 @@ a.eyebrow:hover {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   cursor: pointer;
 }
 
 .ringWrap {
   position: relative;
-  width: 62px;
-  height: 62px;
+  width: 68px;
+  height: 68px;
   display: grid;
   place-items: center;
 }
 
-/* RingView dark halo + amber glow */
 .ringHalo {
   position: absolute;
-  inset: -16px;
+  inset: -18px;
   border-radius: 50%;
   background: radial-gradient(
     circle,
@@ -1596,9 +1719,9 @@ a.eyebrow:hover {
 
 .ringGlow {
   position: absolute;
-  inset: -12px;
+  inset: -14px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(251, 191, 36, 0.22) 0%, transparent 64%);
+  background: radial-gradient(circle, rgba(251, 191, 36, 0.24) 0%, transparent 64%);
   pointer-events: none;
   transition: opacity 0.25s ease;
 }
@@ -1610,8 +1733,8 @@ a.eyebrow:hover {
 .ringSvg {
   position: relative;
   z-index: 1;
-  width: 62px;
-  height: 62px;
+  width: 68px;
+  height: 68px;
   transform: rotate(-90deg);
 }
 
@@ -1636,12 +1759,11 @@ a.eyebrow:hover {
   stroke-linecap: round;
 }
 
-/* Inner 62dp dark glass sphere scaled to 48px */
 .ringSphere {
   position: absolute;
   z-index: 2;
-  width: 48px;
-  height: 48px;
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
   background: rgba(14, 15, 20, 0.96);
   border: 1px solid rgba(255, 255, 255, 0.14);
@@ -1687,7 +1809,7 @@ a.eyebrow:hover {
 
 .ringPauseBars span {
   width: 2px;
-  height: 6px;
+  height: 6.5px;
   border-radius: 1px;
   background: rgba(244, 244, 245, 0.8);
 }
@@ -1695,7 +1817,7 @@ a.eyebrow:hover {
 .ringDigits {
   position: relative;
   z-index: 1;
-  font-size: 14.5px;
+  font-size: 16px;
   font-weight: 300;
   color: #f4f4f5;
   font-variant-numeric: tabular-nums;
@@ -1704,19 +1826,18 @@ a.eyebrow:hover {
 }
 
 .timerDockPaused .ringDigits {
-  font-size: 12px;
+  font-size: 13px;
   color: #a1a1aa;
 }
 
-/* RingView name tag pill under the ring */
 .ringTag {
   position: relative;
   z-index: 2;
-  padding: 3px 8px;
+  padding: 3.5px 9px;
   border-radius: 999px;
   background: rgba(10, 11, 15, 0.82);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  font-size: 7.5px;
+  font-size: 8px;
   font-weight: 500;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -1724,17 +1845,21 @@ a.eyebrow:hover {
   line-height: 1;
 }
 
-@media (max-width: 1140px), (max-height: 820px) {
+@media (max-width: 1180px), (max-height: 820px) {
   .hardwareCarrier {
-    --bezel-scale: 0.86;
+    --bezel-scale: 0.84;
   }
 
   .ghostLayer {
     gap: 330px;
   }
+
+  .wireRaySvg {
+    width: 56px;
+  }
 }
 
-/* ==================== COMPACT / MOBILE / REDUCED-MOTION VERTICAL 4-BEAT STACK ==================== */
+/* ==================== COMPACT / MOBILE / REDUCED-MOTION VERTICAL 6-BEAT STACK ==================== */
 .compactStack {
   display: grid;
   gap: 64px;
@@ -1784,6 +1909,33 @@ a.eyebrow:hover {
   justify-content: center;
 }
 
+.compactRays {
+  display: grid;
+  gap: 10px;
+  width: min(336px, calc(100vw - 32px));
+}
+
+.compactRayRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rayDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--sky);
+  flex: none;
+}
+
+.compactRayDash {
+  width: 28px;
+  height: 1px;
+  border-top: 1.5px dashed color-mix(in srgb, var(--sky) 65%, var(--violet));
+  flex: none;
+}
+
 .compactGhosts {
   display: flex;
   flex-wrap: wrap;
@@ -1809,7 +1961,8 @@ a.eyebrow:hover {
   .orbGlowThink,
   .orbSwirl,
   .orbCoreSky,
-  .orbRipple {
+  .orbRipple,
+  .wireRayDash {
     animation: none;
   }
 }

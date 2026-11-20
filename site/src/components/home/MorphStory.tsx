@@ -7,21 +7,21 @@ import { KilnGlyph, MusicGlyph } from "../Glyphs";
 import s from "./MorphStory.module.css";
 
 /*
- * Concept D: One single physical piece of dark precision glass gliding smoothly across 4 beats
- * (380vh total, short gentle settling at each beat — no frozen holds, no bottom pill dock).
+ * Concept D (6-Beat Goldilocks Edition):
+ * One single physical piece of dark precision glass gliding across 6 clean, airy scroll beats
+ * (680vh total, ~113vh per beat with ~55% steady hold + ~45% smooth cubic morph).
  *
- * Underneath lives ONE real, responsive Home Assistant Lovelace Sections dashboard powered by
- * CSS Grid + @container size queries so actual HA cards physically reflow across shapes.
- * Woven directly into the scroll beats are faithful reproductions of Glassworks' REAL Android
- * overlays from this repo:
- *   - Beat 1 (Pixel Tablet): OrbArt.kt + VoiceOverlay.kt (glass sphere, Sky+Violet conic swirl,
- *     ambient glow, 90% scrim, Inter Light transcript & status label).
- *   - Beat 2 (lululemon Studio Mirror): NotificationOverlay.kt (top-right #16171c glass card,
- *     AMBER "IMPORTANT · JUST NOW", rounded porch image, glass pills, SKY→VIOLET TimeLeft bar)
- *     + TimerDock.kt / RingView.kt (bottom-right amber countdown ring, inner glass sphere, PASTA tag).
+ * Each beat spotlights ONE hardware shape + ONE real Glassworks feature over the live
+ * CSS-Grid + @container-reflowing Home Assistant Lovelace dashboard:
+ *   Beat 0: Aqara S1 Plus Wall Switch (right) — Clean unobstructed HA dashboard
+ *   Beat 1: Google Pixel Tablet (left) — REAL Assist Voice Orb (OrbArt.kt + VoiceOverlay.kt)
+ *   Beat 2: Wall Switch Landscape (right) — REAL Top-Right Notification Card (NotificationOverlay.kt)
+ *   Beat 3: lululemon Studio Mirror (left) — REAL TimerDock + RingView (TimerDock.kt + RingView.kt)
+ *   Beat 4: Wide Kitchen / Bedside Display (right) — Sendspin + Radios + 3 dashed light lines
+ *   Beat 5: Compact Square 4" Switch (center) — Solo HA Thermostat + Round/Bedside ghost silhouettes
  */
 
-type ShapeId = "wall" | "tablet" | "mirror" | "square" | "round" | "bedside";
+type ShapeId = "wall" | "tablet" | "mirror" | "kitchen" | "square" | "round" | "bedside";
 type AssistPhase = "thinking" | "speaking" | "done";
 
 type Keyframe = {
@@ -42,7 +42,7 @@ type Keyframe = {
 
 /* Physically accurate proportions from frames/<id>/design/frame.json */
 const KEYFRAMES: Keyframe[] = [
-  // 0: Wall Switch · Aqara S1 Plus (172 × 86 mm, bezel 3.5 mm, radius 2.5 mm)
+  // 0: Wall Switch · Aqara S1 Plus (Right, 2:1, 500 × 250)
   {
     w: 500,
     h: 250,
@@ -58,7 +58,7 @@ const KEYFRAMES: Keyframe[] = [
     glowX: 72,
     glowY: 48,
   },
-  // 1: Countertop Tablet · Google Pixel Tablet (258 × 169 mm, bezel 11 mm, radius 12 mm)
+  // 1: Countertop Tablet · Google Pixel Tablet (Left, 16:10, 468 × 306)
   {
     w: 468,
     h: 306,
@@ -74,7 +74,23 @@ const KEYFRAMES: Keyframe[] = [
     glowX: 28,
     glowY: 48,
   },
-  // 2: Full-Length Mirror · lululemon Studio Mirror (536 × 1336 mm, top 12.7%, bottom 21.1%)
+  // 2: Wall Switch Landscape · Notifications (Right, 2:1, 500 × 250)
+  {
+    w: 500,
+    h: 250,
+    bodyR: 10,
+    insetTop: 4,
+    insetBottom: 4,
+    insetX: 2.2,
+    screenR: 5,
+    xPct: 22,
+    yPx: -4,
+    rx: 1.5,
+    ry: -5.5,
+    glowX: 72,
+    glowY: 48,
+  },
+  // 3: Full-Length Mirror · lululemon Studio Mirror (Left, 216 × 520, top 12.7%, bottom 21.1%)
   {
     w: 216,
     h: 520,
@@ -83,14 +99,30 @@ const KEYFRAMES: Keyframe[] = [
     insetBottom: 21.1,
     insetX: 3.5,
     screenR: 3,
-    xPct: 24,
-    yPx: -10,
+    xPct: -23,
+    yPx: -12,
     rx: 1,
-    ry: -5,
-    glowX: 74,
+    ry: 5,
+    glowX: 27,
     glowY: 47,
   },
-  // 3: Compact Square · Square 4" Switch (center)
+  // 4: Wide Kitchen / Bedside Display · ESPHome + Sendspin + Radios (Right, 440 × 240, room for right light rays)
+  {
+    w: 440,
+    h: 240,
+    bodyR: 18,
+    insetTop: 5,
+    insetBottom: 5,
+    insetX: 3.2,
+    screenR: 10,
+    xPct: 7,
+    yPx: -4,
+    rx: 1.5,
+    ry: -4,
+    glowX: 60,
+    glowY: 48,
+  },
+  // 5: Compact Square · Square 4" Switch + Future Shapes (Center, 244 × 244)
   {
     w: 244,
     h: 244,
@@ -124,35 +156,54 @@ const MOBILE_SHAPES: Record<
   wall: { w: 336, h: 168, bodyR: 8, insetTop: 4, insetBottom: 4, insetX: 2.2, screenR: 4 },
   tablet: { w: 330, h: 216, bodyR: 18, insetTop: 6.5, insetBottom: 6.5, insetX: 4.3, screenR: 7 },
   mirror: { w: 196, h: 472, bodyR: 6, insetTop: 12.7, insetBottom: 21.1, insetX: 3.5, screenR: 3 },
+  kitchen: { w: 336, h: 184, bodyR: 16, insetTop: 5, insetBottom: 5, insetX: 3.2, screenR: 9 },
   square: { w: 220, h: 220, bodyR: 18, insetTop: 5, insetBottom: 5, insetX: 5, screenR: 10 },
   round: { w: 220, h: 220, bodyR: 110, insetTop: 5, insetBottom: 5, insetX: 5, screenR: 110 },
   bedside: { w: 316, h: 156, bodyR: 20, insetTop: 6, insetBottom: 6, insetX: 4, screenR: 12 },
 };
+
+const BEAT_DOTS = [
+  { idx: 0, label: "Wall switch dashboard", targetP: 0.03 },
+  { idx: 1, label: "Local Assist voice orb", targetP: 0.22 },
+  { idx: 2, label: "Rich notifications", targetP: 0.4 },
+  { idx: 3, label: "Studio mirror voice timers", targetP: 0.58 },
+  { idx: 4, label: "Native ESPHome, Sendspin and radios", targetP: 0.76 },
+  { idx: 5, label: "Square, round, and future shapes", targetP: 0.96 },
+] as const;
+
+const WIRE_RAYS = [
+  { title: "Home Assistant", detail: "ESPHome" },
+  { title: "Music Assistant", detail: "Sendspin" },
+  { title: "Zigbee & Thread", detail: "ZHA · Z2M · OTBR" },
+] as const;
 
 const clamp = (v: number, a = 0, b = 1) => Math.min(b, Math.max(a, v));
 const smooth = (t: number) => t * t * (3 - 2 * t);
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 /**
- * Fluid scroll curve across 380vh with short, gentle ~5-6% settling at each beat
- * (zero long flat dead zones):
- *   0.00 – 0.05: Beat 0 settle (Wall Switch)
- *   0.05 – 0.30: Smooth morph 0 → 1
- *   0.30 – 0.36: Beat 1 settle (Pixel Tablet + Assist Orb)
- *   0.36 – 0.63: Smooth morph 1 → 2
- *   0.63 – 0.69: Beat 2 settle (Studio Mirror + Notification Card & TimerDock)
- *   0.69 – 0.94: Smooth morph 2 → 3
- *   0.94 – 1.00: Beat 3 settle (Square 4" + Future Shapes)
+ * Goldilocks dwell/morph pacing across 6 beats (total height 680vh, ~113vh per beat):
+ * Each beat holds steady for ~10% (~68vh, 2-3 mouse-wheel ticks) and morphs across ~8% (~54vh):
+ *   Beat 0 hold: 0.00 – 0.09 | morph 0.09 – 0.17
+ *   Beat 1 hold: 0.17 – 0.27 | morph 0.27 – 0.35
+ *   Beat 2 hold: 0.35 – 0.45 | morph 0.45 – 0.53
+ *   Beat 3 hold: 0.53 – 0.63 | morph 0.63 – 0.71
+ *   Beat 4 hold: 0.71 – 0.81 | morph 0.81 – 0.89
+ *   Beat 5 hold: 0.89 – 1.00
  */
 function morphSegment(p: number): number {
   const x = clamp(p);
-  if (x <= 0.05) return 0;
-  if (x < 0.3) return smooth((x - 0.05) / 0.25);
-  if (x <= 0.36) return 1;
-  if (x < 0.63) return 1 + smooth((x - 0.36) / 0.27);
-  if (x <= 0.69) return 2;
-  if (x < 0.94) return 2 + smooth((x - 0.69) / 0.25);
-  return 3;
+  if (x <= 0.09) return 0;
+  if (x < 0.17) return smooth((x - 0.09) / 0.08);
+  if (x <= 0.27) return 1;
+  if (x < 0.35) return 1 + smooth((x - 0.27) / 0.08);
+  if (x <= 0.45) return 2;
+  if (x < 0.53) return 2 + smooth((x - 0.45) / 0.08);
+  if (x <= 0.63) return 3;
+  if (x < 0.71) return 3 + smooth((x - 0.63) / 0.08);
+  if (x <= 0.81) return 4;
+  if (x < 0.89) return 4 + smooth((x - 0.81) / 0.08);
+  return 5;
 }
 
 function windowO(val: number, center: number, inner: number, outer: number) {
@@ -216,15 +267,15 @@ export function MorphStory({
   const [temp, setTemp] = useState(70);
   const [doorLocked, setDoorLocked] = useState(true);
 
-  // Live Assist Voice Overlay phase cycle (Beat 1: Thinking -> Speaking -> Done)
+  // Beat 1: Real Assist Voice Overlay phase cycle (Thinking -> Speaking -> Done)
   const [assistPhase, setAssistPhase] = useState<AssistPhase>("thinking");
 
-  // Live TimerDock + RingView state (Beat 2: Pasta 4:12 ticking live)
+  // Beat 2: Real NotificationOverlay card dismissed/collapsed state
+  const [notifDismissed, setNotifDismissed] = useState(false);
+
+  // Beat 3: Real TimerDock + RingView live countdown (Pasta 4:12)
   const [timerSec, setTimerSec] = useState(252);
   const [timerPaused, setTimerPaused] = useState(false);
-
-  // Notification card dismissed state on Beat 2 (tapping x dismisses briefly or restores)
-  const [notifDismissed, setNotifDismissed] = useState(false);
 
   useEffect(() => {
     const mqNarrow = window.matchMedia("(max-width: 900px)");
@@ -253,11 +304,11 @@ export function MorphStory({
 
     const tick = () => {
       const t = target();
-      cur = cur + (t - cur) * 0.2;
+      cur = cur + (t - cur) * 0.18;
       const settled = Math.abs(t - cur) < 0.0004;
       if (settled) cur = t;
       setP(cur);
-      if (cur < 0.78) {
+      if (cur < 0.84) {
         setFutureShape("square");
         setClickMorph(false);
       }
@@ -277,16 +328,18 @@ export function MorphStory({
     };
   }, [compact]);
 
-  // Continuous piecewise-fluid keyframe coordinate s in [0..3]
+  // Continuous Goldilocks coordinate seg in [0..5]
   const seg = morphSegment(p);
   const basePose = samplePose(seg);
-  const atFinale = seg >= 2.86;
+  const atFinale = seg >= 4.86;
 
-  // Overlay opacities tied directly to Beat 1 (Assist) and Beat 2 (Notification + TimerDock)
-  const assistO = compact ? 1 : windowO(seg, 1, 0.2, 0.56);
-  const mirrorOverlaysO = compact ? 1 : windowO(seg, 2, 0.2, 0.56);
+  // Individual feature overlay opacities (ONE feature per beat, never stacked!)
+  const assistO = compact ? 1 : windowO(seg, 1, 0.22, 0.56);
+  const notifO = compact ? 1 : windowO(seg, 2, 0.22, 0.56);
+  const timerO = compact ? 1 : windowO(seg, 3, 0.22, 0.56);
+  const raysO = compact ? 1 : windowO(seg, 4, 0.22, 0.54);
 
-  // Calmly cycle the real Assist Orb states (Thinking -> Speaking -> Done) while Beat 1 is visible
+  // Auto-cycle Assist Orb states cleanly while Beat 1 is on screen
   const assistVisible = compact || assistO > 0.15;
   useEffect(() => {
     if (!assistVisible) return;
@@ -297,8 +350,8 @@ export function MorphStory({
     return () => window.clearTimeout(id);
   }, [assistVisible, assistPhase]);
 
-  // Tick the real TimerDock RingView live while Beat 2 is visible
-  const timerVisible = compact || mirrorOverlaysO > 0.15;
+  // Tick real TimerDock RingView live while Beat 3 is on screen
+  const timerVisible = compact || timerO > 0.15;
   useEffect(() => {
     if (!timerVisible || timerPaused) return;
     const id = window.setInterval(() => {
@@ -325,6 +378,13 @@ export function MorphStory({
     bezelRef.current?.style.removeProperty("--sheen");
   };
 
+  const jumpToBeat = (targetP: number) => {
+    const el = sectionRef.current;
+    if (!el) return;
+    const span = el.offsetHeight - window.innerHeight;
+    window.scrollTo({ top: el.offsetTop + span * targetP, behavior: "smooth" });
+  };
+
   const selectFuture = (next: "square" | "round" | "bedside") => {
     setClickMorph(true);
     setFutureShape(next);
@@ -343,18 +403,31 @@ export function MorphStory({
     geom = FUTURE_GEOMETRY[futureShape];
   }
 
-  // Mirror body + tubular stand presence factor (0..1)
-  const mirrorFactor = windowO(seg, 2, 0.22, 0.72);
+  // Mirror body + tubular U-stand presence factor (Beat 3)
+  const mirrorFactor = windowO(seg, 3, 0.24, 0.72);
 
-  // Copy opacities synced smoothly to the 4 beats
-  const copy0O = 1 - smooth(clamp((seg - 0.12) / 0.44));
-  const copy1O = windowO(seg, 1, 0.22, 0.62);
-  const copy2O = windowO(seg, 2, 0.22, 0.62);
-  const copy3O = smooth(clamp((seg - 2.42) / 0.44));
-  const ghostsO = smooth(clamp((seg - 2.52) / 0.38));
+  // Copy opacities synced smoothly to the 6 beats
+  const copy0O = 1 - smooth(clamp((seg - 0.14) / 0.44));
+  const copy1O = windowO(seg, 1, 0.24, 0.62);
+  const copy2O = windowO(seg, 2, 0.24, 0.62);
+  const copy3O = windowO(seg, 3, 0.24, 0.62);
+  const copy4O = windowO(seg, 4, 0.24, 0.62);
+  const copy5O = smooth(clamp((seg - 4.42) / 0.44));
+  const ghostsO = smooth(clamp((seg - 4.52) / 0.38));
 
+  const activeBeat = Math.min(5, Math.max(0, Math.round(seg)));
   const currentShape: ShapeId =
-    seg < 0.5 ? "wall" : seg < 1.5 ? "tablet" : seg < 2.5 ? "mirror" : futureShape;
+    seg < 0.5
+      ? "wall"
+      : seg < 1.5
+        ? "tablet"
+        : seg < 2.5
+          ? "wall"
+          : seg < 3.5
+            ? "mirror"
+            : seg < 4.5
+              ? "kitchen"
+              : futureShape;
 
   const activeLightsCount = (kitchenOn ? 2 : 0) + (livingOn ? 1 : 0);
   const haHeatRatio = clamp((temp - 60) / 20);
@@ -366,7 +439,7 @@ export function MorphStory({
    * ONE live, responsive Home Assistant Lovelace Sections dashboard powered by
    * CSS Grid + @container size queries so actual HA cards reflow as the glass morphs.
    */
-  const renderLiveLovelace = (shape: ShapeId) => {
+  const renderLiveLovelace = (shape: ShapeId, highlightSendspin = false) => {
     const isRound = shape === "round";
     const isSolo = shape === "square" || shape === "round";
     return (
@@ -375,6 +448,7 @@ export function MorphStory({
         data-shape={shape}
         data-solo={isSolo || undefined}
         data-round={isRound || undefined}
+        data-sendspin={highlightSendspin || undefined}
       >
         {/* Top Home Assistant Badges / Chips Bar */}
         <div className={s.haBadges}>
@@ -392,7 +466,7 @@ export function MorphStory({
           </span>
           <span className={`${s.haBadge} ${s.haBadgeExtra}`}>
             <span className={`${s.haBadgeDot} ${s.dotBlue}`} aria-hidden="true" />
-            Armed
+            {highlightSendspin ? "Thread + Zigbee" : "Armed"}
           </span>
         </div>
 
@@ -540,10 +614,10 @@ export function MorphStory({
             </div>
           </button>
 
-          {/* Interactive HA Tile Card: Sendspin Audio */}
+          {/* Interactive HA Tile Card: Sendspin Audio (highlighted on Beat 4 Kitchen/Bedside) */}
           <button
             type="button"
-            className={`${s.haCard} ${s.haTile} ${s.haMediaTile}`}
+            className={`${s.haCard} ${s.haTile} ${s.haMediaTile} ${highlightSendspin && sendspinOn ? s.haTileBlue : ""}`}
             onClick={() => setSendspinOn((v) => !v)}
             aria-pressed={sendspinOn}
           >
@@ -553,7 +627,7 @@ export function MorphStory({
               </span>
               <span className={s.haTileMeta}>
                 <b>Sendspin</b>
-                <small>{sendspinOn ? "Playing · 3 rooms" : "Idle"}</small>
+                <small>{sendspinOn ? "Playing · 3 rooms" : "Paused"}</small>
               </span>
             </div>
           </button>
@@ -566,14 +640,14 @@ export function MorphStory({
             </div>
             <svg viewBox="0 0 180 42" className={s.haSparkSvg} preserveAspectRatio="none" aria-hidden="true">
               <defs>
-                <linearGradient id={`ha-spark-${shape}`} x1="0" y1="0" x2="0" y2="1">
+                <linearGradient id={`ha-spark-${shape}-${highlightSendspin ? "s" : "n"}`} x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0" stopColor="#03a9f4" stopOpacity="0.32" />
                   <stop offset="1" stopColor="#03a9f4" stopOpacity="0" />
                 </linearGradient>
               </defs>
               <path
                 d="M0 32 L20 28 L42 30 L64 20 L86 23 L108 14 L132 18 L156 10 L180 15 L180 42 L0 42 Z"
-                fill={`url(#ha-spark-${shape})`}
+                fill={`url(#ha-spark-${shape}-${highlightSendspin ? "s" : "n"})`}
               />
               <path
                 d="M0 32 L20 28 L42 30 L64 20 L86 23 L108 14 L132 18 L156 10 L180 15"
@@ -610,11 +684,7 @@ export function MorphStory({
   };
 
   /*
-   * REAL Assist Voice Overlay (OrbArt.kt + VoiceOverlay.kt):
-   *   - 90% Ambient Stage backdrop scrim over the dashboard
-   *   - Floating translucent glass sphere (white @ 0.04, 1px white @ 0.13, inset shade, specular 32%/24%)
-   *   - Two-color Sky+Violet conic thinking swirl -> Sky listening/speaking core + ripples -> Green done + check
-   *   - Calm spaced uppercase label / quoted prompt + Inter Light transcript below, "TAP ANYWHERE TO CANCEL" hint
+   * Beat 1 — REAL Assist Voice Overlay (OrbArt.kt + VoiceOverlay.kt)
    */
   const renderRealVoiceOverlay = (opacity: number) => {
     if (opacity <= 0.01) return null;
@@ -631,7 +701,7 @@ export function MorphStory({
         onClick={nextPhase}
         role="button"
         tabIndex={opacity > 0.45 ? 0 : -1}
-        aria-label="Glassworks Assist voice overlay preview — tap to cycle voice state"
+        aria-label="Glassworks Assist voice overlay — tap to cycle voice state"
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
@@ -640,7 +710,6 @@ export function MorphStory({
         }}
       >
         <div className={s.orbStage} style={{ transform: `scale(${0.86 + opacity * 0.14})` }}>
-          {/* 300dp Ambient radial glow behind sphere (OrbArt.glow) */}
           <div
             className={`${s.orbGlow} ${s.orbGlowThink}`}
             style={{ opacity: assistPhase === "thinking" ? 1 : 0 }}
@@ -657,7 +726,6 @@ export function MorphStory({
             aria-hidden="true"
           />
 
-          {/* Two slow Sky speaking ripples (VoiceOverlay.Ring) */}
           {assistPhase === "speaking" && (
             <>
               <span className={`${s.orbRipple} ${s.orbRippleA}`} aria-hidden="true" />
@@ -665,9 +733,7 @@ export function MorphStory({
             </>
           )}
 
-          {/* Outer Glass Sphere (OrbArt.sphere: white@0.04, 1px white@0.13, inset shade, outer shadow) */}
           <div className={s.orbSphere}>
-            {/* Clipped soft cores inside sphere */}
             <div className={s.orbClip}>
               <div
                 className={s.orbSwirl}
@@ -684,11 +750,9 @@ export function MorphStory({
                 style={{ opacity: assistPhase === "done" ? 1 : 0 }}
                 aria-hidden="true"
               />
-              {/* Always-on specular highlight at (32%, 24%) (OrbArt.shine) */}
               <div className={s.orbShine} aria-hidden="true" />
             </div>
 
-            {/* Done Checkmark SVG (VoiceOverlay.Check: M40 57.5 l11 11 l22 -24 in 112x112) */}
             <svg
               viewBox="0 0 112 112"
               className={`${s.orbCheck} ${assistPhase === "done" ? s.orbCheckShow : ""}`}
@@ -699,7 +763,6 @@ export function MorphStory({
           </div>
         </div>
 
-        {/* Calm label + main Inter Light text slots (VoiceOverlay.Slot) */}
         <div className={s.voiceTexts}>
           {assistPhase === "thinking" && (
             <>
@@ -733,27 +796,19 @@ export function MorphStory({
   };
 
   /*
-   * REAL NotificationOverlay.kt (top-right night glass card) + REAL TimerDock.kt / RingView.kt
-   * (bottom-right amber countdown ring & dark glass orb with PASTA pill tag)
+   * Beat 2 — REAL Top-Right Notification Card ALONE (NotificationOverlay.kt + Glass.kt)
    */
-  const renderRealMirrorOverlays = (opacity: number) => {
+  const renderRealNotificationOverlay = (opacity: number) => {
     if (opacity <= 0.01) return null;
-    const slideOffset = (1 - opacity) * 10;
+    const slideX = (1 - opacity) * 16;
 
     return (
-      <div
-        className={s.mirrorOverlayLayer}
-        style={{
-          opacity,
-          pointerEvents: "none",
-        }}
-      >
-        {/* 1. REAL Top-Right NotificationOverlay Card (#16171c glass, 1px white@0.12, AMBER label, SKY→VIOLET TimeLeft) */}
+      <div className={s.overlaySlot} style={{ opacity, pointerEvents: "none" }}>
         {!notifDismissed ? (
           <div
             className={s.gwNotifCard}
             style={{
-              transform: `translate3d(0, ${-slideOffset}px, 0)`,
+              transform: `translate3d(${slideX}px, 0, 0)`,
               pointerEvents: opacity > 0.45 ? "auto" : "none",
             }}
           >
@@ -773,12 +828,12 @@ export function MorphStory({
               {doorLocked ? "Person detected at the porch" : "Front door unlocked"}
             </div>
             <div className={s.gwNotifPic} aria-hidden="true">
-              <svg viewBox="0 0 220 92" className={s.gwNotifPicSvg} preserveAspectRatio="xMidYMid slice">
-                <rect width="220" height="92" fill="#12151f" />
-                <path d="M0 64 L220 64 L220 92 L0 92 Z" fill="#181c28" />
-                <path d="M68 64 L152 64 L178 92 L42 92 Z" fill="#212738" />
-                <circle cx="110" cy="36" r="8.5" fill="#38bdf8" fillOpacity="0.32" stroke="#38bdf8" strokeOpacity="0.65" />
-                <path d="M96 63 C96 50 124 50 124 63 Z" fill="#a78bfa" fillOpacity="0.28" stroke="#a78bfa" strokeOpacity="0.6" />
+              <svg viewBox="0 0 220 82" className={s.gwNotifPicSvg} preserveAspectRatio="xMidYMid slice">
+                <rect width="220" height="82" fill="#12151f" />
+                <path d="M0 56 L220 56 L220 82 L0 82 Z" fill="#181c28" />
+                <path d="M68 56 L152 56 L178 82 L42 82 Z" fill="#212738" />
+                <circle cx="110" cy="31" r="8" fill="#38bdf8" fillOpacity="0.32" stroke="#38bdf8" strokeOpacity="0.65" />
+                <path d="M96 55 C96 43 124 43 124 55 Z" fill="#a78bfa" fillOpacity="0.28" stroke="#a78bfa" strokeOpacity="0.6" />
               </svg>
             </div>
             <div className={s.gwNotifActions}>
@@ -812,13 +867,24 @@ export function MorphStory({
             <span> · Show</span>
           </button>
         )}
+      </div>
+    );
+  };
 
-        {/* 2. REAL Bottom-Right TimerDock + RingView (80dp ring scaled, amber clockwise arc, dark glass sphere, PASTA tag) */}
+  /*
+   * Beat 3 — REAL Bottom-Right TimerDock + RingView ALONE (TimerDock.kt + RingView.kt)
+   */
+  const renderRealTimerOverlay = (opacity: number) => {
+    if (opacity <= 0.01) return null;
+    const liftY = (1 - opacity) * 12;
+
+    return (
+      <div className={s.overlaySlot} style={{ opacity, pointerEvents: "none" }}>
         <button
           type="button"
           className={`${s.timerDock} ${timerPaused ? s.timerDockPaused : ""}`}
           style={{
-            transform: `translate3d(0, ${slideOffset}px, 0)`,
+            transform: `translate3d(0, ${liftY}px, 0)`,
             pointerEvents: opacity > 0.45 ? "auto" : "none",
           }}
           onClick={() => setTimerPaused((v) => !v)}
@@ -828,9 +894,7 @@ export function MorphStory({
             <span className={s.ringHalo} aria-hidden="true" />
             <span className={s.ringGlow} aria-hidden="true" />
             <svg viewBox="0 0 80 80" className={s.ringSvg} aria-hidden="true">
-              {/* Track circle */}
               <circle cx="40" cy="40" r="36.5" className={s.ringTrack} />
-              {/* Clockwise progress arc from 12 o'clock */}
               <circle
                 cx="40"
                 cy="40"
@@ -839,7 +903,6 @@ export function MorphStory({
                 strokeDasharray={`${(ringCircumference * timerFraction).toFixed(1)} ${ringCircumference.toFixed(1)}`}
               />
             </svg>
-            {/* Inner 62dp dark glass sphere with subtle amber core and 32%/24% specular shine */}
             <span className={s.ringSphere}>
               <span className={s.ringCore} aria-hidden="true" />
               <span className={s.ringShine} aria-hidden="true" />
@@ -852,7 +915,6 @@ export function MorphStory({
               <span className={s.ringDigits}>{formatTimer(timerSec)}</span>
             </span>
           </span>
-          {/* Name tag pill under ring (RingView: #0a0b0f @ 0.82, 1px white @ 0.07, uppercase MU) */}
           <span className={s.ringTag}>Pasta</span>
         </button>
       </div>
@@ -861,13 +923,13 @@ export function MorphStory({
 
   /*
    * Mobile (< 900px) & prefers-reduced-motion:
-   * Clean vertical stack of the 4 concise beats — zero scroll-jacking, zero bottom pill dock,
+   * Clean vertical stack of all 6 concise beats — zero scroll-jacking, zero bottom dock,
    * zero horizontal overflow at 375px.
    */
   if (compact) {
     const renderCompactFrame = (
       shape: ShapeId,
-      overlay?: "voice" | "mirror",
+      overlay?: "voice" | "notif" | "timer" | "sendspin",
       interactiveSmooth?: boolean,
     ) => {
       const d = MOBILE_SHAPES[shape];
@@ -901,9 +963,10 @@ export function MorphStory({
                 }}
               >
                 <div className={s.screenInner}>
-                  {renderLiveLovelace(shape)}
+                  {renderLiveLovelace(shape, overlay === "sendspin")}
                   {overlay === "voice" && renderRealVoiceOverlay(1)}
-                  {overlay === "mirror" && renderRealMirrorOverlays(1)}
+                  {overlay === "notif" && renderRealNotificationOverlay(1)}
+                  {overlay === "timer" && renderRealTimerOverlay(1)}
                 </div>
               </div>
             </div>
@@ -920,7 +983,7 @@ export function MorphStory({
     };
 
     return (
-      <section className={s.compactStack} aria-label="Glassworks across hardware shapes">
+      <section className={s.compactStack} aria-label="Glassworks across hardware shapes and features">
         {/* Beat 0: Wall Switch */}
         <div className={s.compactBeat}>
           <div className={s.compactCopy}>
@@ -945,20 +1008,20 @@ export function MorphStory({
                 Install with Kiln →
               </a>
               <a href="#devices" className={s.quietLink}>
-                Supported devices
+                Explore devices
               </a>
             </div>
           </div>
           {renderCompactFrame("wall")}
         </div>
 
-        {/* Beat 1: Pixel Tablet + Real Assist Voice Orb */}
+        {/* Beat 1: Pixel Tablet + Real Assist Orb */}
         <div className={s.compactBeat}>
           <div className={s.compactCopy}>
             <span className={s.eyebrow}>LOCAL ASSIST VOICE</span>
             <h2 className={s.h2}>Talk to your home, privately.</h2>
             <p className={s.lede}>
-              On-device wake word detection and Home Assistant Assist, on a tablet in your drawer or a switch on your wall — with no root required.
+              On-device wake word detection and Home Assistant Assist, running locally with the same calm glass orb on every panel.
             </p>
             <div className={s.ctas}>
               <Link href="/frames/google-pixel-tablet" className={s.quietLink}>
@@ -969,13 +1032,30 @@ export function MorphStory({
           {renderCompactFrame("tablet", "voice")}
         </div>
 
-        {/* Beat 2: Studio Mirror + Real Notification Card & TimerDock */}
+        {/* Beat 2: Wall Switch + Real Top-Right Notification Card */}
         <div className={s.compactBeat}>
           <div className={s.compactCopy}>
-            <span className={s.eyebrow}>NOTIFICATIONS &amp; TIMERS</span>
-            <h2 className={s.h2}>Alerts and timers, right when they matter.</h2>
+            <span className={s.eyebrow}>RICH NOTIFICATIONS</span>
+            <h2 className={s.h2}>Alerts that matter, right on the glass.</h2>
             <p className={s.lede}>
-              Doorbell cards, visual voice timers, and synced Music Assistant playback float cleanly over your dashboard — even behind a 40-inch mirror.
+              Doorbell cameras, interactive action buttons, and priority alerts from Home Assistant automations — folding away cleanly when you&rsquo;re done.
+            </p>
+            <div className={s.ctas}>
+              <Link href="/docs/notifications" className={s.quietLink}>
+                Notification docs →
+              </Link>
+            </div>
+          </div>
+          {renderCompactFrame("wall", "notif")}
+        </div>
+
+        {/* Beat 3: Studio Mirror + Real TimerDock RingView */}
+        <div className={s.compactBeat}>
+          <div className={s.compactCopy}>
+            <span className={s.eyebrow}>VOICE TIMERS</span>
+            <h2 className={s.h2}>Timers you can see from across the room.</h2>
+            <p className={s.lede}>
+              Start a timer by voice and watch it count down over your dashboard, with a chime when it finishes — even behind a 40-inch mirror.
             </p>
             <div className={s.ctas}>
               <Link href="/frames/lululemon-mirror" className={s.quietLink}>
@@ -983,10 +1063,34 @@ export function MorphStory({
               </Link>
             </div>
           </div>
-          {renderCompactFrame("mirror", "mirror")}
+          {renderCompactFrame("mirror", "timer")}
         </div>
 
-        {/* Beat 3: Square 4" + Future Shapes */}
+        {/* Beat 4: Wide Kitchen Display + Sendspin / Radios / ESPHome */}
+        <div className={s.compactBeat}>
+          <div className={s.compactCopy}>
+            <span className={s.eyebrow}>90% HOME ASSISTANT · 10% HARDWARE</span>
+            <h2 className={s.h2}>One ESPHome device. Zero HACS, zero cloud.</h2>
+            <p className={s.lede}>
+              Synced Music Assistant playback, built-in Zigbee/Thread radios, and automatic updates under Settings → Updates.
+            </p>
+          </div>
+          {renderCompactFrame("kitchen", "sendspin")}
+          <div className={s.compactRays} aria-label="Native Home Assistant protocols">
+            {WIRE_RAYS.map((ray) => (
+              <div key={ray.title} className={s.compactRayRow}>
+                <span className={s.rayDot} aria-hidden="true" />
+                <span className={s.compactRayDash} aria-hidden="true" />
+                <span className={s.rayText}>
+                  <b>{ray.title}</b>
+                  <small>{ray.detail}</small>
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Beat 5: Square 4" + Future Shapes */}
         <div className={s.compactBeat}>
           {renderCompactFrame(futureShape, undefined, true)}
           <div className={s.compactGhosts}>
@@ -1028,7 +1132,7 @@ export function MorphStory({
   }
 
   return (
-    <section ref={sectionRef} className={s.story} aria-label="Glassworks across hardware shapes">
+    <section ref={sectionRef} className={s.story} aria-label="Glassworks across hardware shapes and features">
       <div className={s.sticky}>
         {/* Ambient radial light following the morphing glass */}
         <div
@@ -1038,6 +1142,23 @@ export function MorphStory({
             background: `radial-gradient(38vw 46vh at ${basePose.glowX}% ${basePose.glowY}%, color-mix(in srgb, var(--sky) 13%, transparent), transparent 68%), radial-gradient(32vw 40vh at ${100 - basePose.glowX * 0.65}% ${basePose.glowY + 12}%, color-mix(in srgb, var(--violet) 9%, transparent), transparent 70%)`,
           }}
         />
+
+        {/* Whisper-quiet right-edge vertical progress dots (6 tiny 4px dots, active elongates to 18px sky) */}
+        <nav className={s.edgeRail} aria-label="Story progress">
+          {BEAT_DOTS.map((dot) => {
+            const active = activeBeat === dot.idx;
+            return (
+              <button
+                key={dot.idx}
+                type="button"
+                className={`${s.edgeDot} ${active ? s.edgeDotActive : ""}`}
+                onClick={() => jumpToBeat(dot.targetP)}
+                aria-label={`Jump to ${dot.label}`}
+                aria-current={active ? "step" : undefined}
+              />
+            );
+          })}
+        </nav>
 
         <div className={s.canvas}>
           {/* Beat 0 Copy (Left — Aqara S1 Plus Wall Switch) */}
@@ -1071,12 +1192,12 @@ export function MorphStory({
                 Install with Kiln →
               </a>
               <a href="#devices" className={s.quietLink}>
-                Supported devices
+                Explore devices
               </a>
             </div>
           </div>
 
-          {/* Beat 1 Copy (Right — Pixel Tablet + Real Assist Voice Orb) */}
+          {/* Beat 1 Copy (Right — Google Pixel Tablet + Real Assist Orb) */}
           <div
             className={`${s.copyBlock} ${s.copyRight}`}
             style={{
@@ -1089,7 +1210,7 @@ export function MorphStory({
             <span className={s.eyebrow}>LOCAL ASSIST VOICE</span>
             <h2 className={s.h2}>Talk to your home, privately.</h2>
             <p className={s.lede}>
-              On-device wake word detection and Home Assistant Assist, on a tablet in your drawer or a switch on your wall — with no root required.
+              On-device wake word detection and Home Assistant Assist, running locally with the same calm glass orb on every panel.
             </p>
             <div className={s.ctas}>
               <Link href="/frames/google-pixel-tablet" className={s.quietLink}>
@@ -1098,7 +1219,7 @@ export function MorphStory({
             </div>
           </div>
 
-          {/* Beat 2 Copy (Left — lululemon Studio Mirror + Real Notifications & Timers) */}
+          {/* Beat 2 Copy (Left — Wall Switch + Real Top-Right Notification Card) */}
           <div
             className={`${s.copyBlock} ${s.copyLeft}`}
             style={{
@@ -1108,10 +1229,32 @@ export function MorphStory({
             }}
             aria-hidden={copy2O < 0.2}
           >
-            <span className={s.eyebrow}>NOTIFICATIONS &amp; TIMERS</span>
-            <h2 className={s.h2}>Alerts and timers, right when they matter.</h2>
+            <span className={s.eyebrow}>RICH NOTIFICATIONS</span>
+            <h2 className={s.h2}>Alerts that matter, right on the glass.</h2>
             <p className={s.lede}>
-              Doorbell cards, visual voice timers, and synced Music Assistant playback float cleanly over your dashboard — even behind a 40-inch mirror.
+              Doorbell cameras, interactive action buttons, and priority alerts from Home Assistant automations — folding away cleanly when you&rsquo;re done.
+            </p>
+            <div className={s.ctas}>
+              <Link href="/docs/notifications" className={s.quietLink}>
+                Notification docs →
+              </Link>
+            </div>
+          </div>
+
+          {/* Beat 3 Copy (Right — lululemon Studio Mirror + Real TimerDock RingView) */}
+          <div
+            className={`${s.copyBlock} ${s.copyRight}`}
+            style={{
+              opacity: copy3O,
+              transform: `translateY(${(1 - copy3O) * 16}px)`,
+              pointerEvents: copy3O > 0.35 ? "auto" : "none",
+            }}
+            aria-hidden={copy3O < 0.2}
+          >
+            <span className={s.eyebrow}>VOICE TIMERS</span>
+            <h2 className={s.h2}>Timers you can see from across the room.</h2>
+            <p className={s.lede}>
+              Start a timer by voice and watch it count down over your dashboard, with a chime when it finishes — even behind a 40-inch mirror.
             </p>
             <div className={s.ctas}>
               <Link href="/frames/lululemon-mirror" className={s.quietLink}>
@@ -1120,15 +1263,37 @@ export function MorphStory({
             </div>
           </div>
 
-          {/* Beat 3 Copy (Centered Below Hardware — Square 4" & Future Shapes) */}
+          {/* Beat 4 Copy (Left — Wide Kitchen Display + ESPHome / Sendspin / Radios) */}
+          <div
+            className={`${s.copyBlock} ${s.copyLeft} ${s.copyNarrow}`}
+            style={{
+              opacity: copy4O,
+              transform: `translateY(${(1 - copy4O) * 16}px)`,
+              pointerEvents: copy4O > 0.35 ? "auto" : "none",
+            }}
+            aria-hidden={copy4O < 0.2}
+          >
+            <span className={s.eyebrow}>90% HOME ASSISTANT · 10% HARDWARE</span>
+            <h2 className={s.h2}>One ESPHome device. Zero HACS, zero cloud.</h2>
+            <p className={s.lede}>
+              Synced Music Assistant playback, built-in Zigbee/Thread radios, and automatic updates under Settings → Updates.
+            </p>
+            <div className={s.ctas}>
+              <Link href="/panes/sendspin" className={s.quietLink}>
+                Synced audio &amp; radios →
+              </Link>
+            </div>
+          </div>
+
+          {/* Beat 5 Copy (Centered Below Hardware — Square 4" & Future Shapes) */}
           <div
             className={s.copyCenter}
             style={{
-              opacity: copy3O,
-              transform: `translateY(${(1 - copy3O) * 18}px)`,
-              pointerEvents: copy3O > 0.35 ? "auto" : "none",
+              opacity: copy5O,
+              transform: `translateY(${(1 - copy5O) * 18}px)`,
+              pointerEvents: copy5O > 0.35 ? "auto" : "none",
             }}
-            aria-hidden={copy3O < 0.2}
+            aria-hidden={copy5O < 0.2}
           >
             <h2 className={s.h2}>One open core for whatever&rsquo;s next.</h2>
             <p className={s.ledeCenter}>
@@ -1145,7 +1310,7 @@ export function MorphStory({
             </div>
           </div>
 
-          {/* Interactive Future Ghost Silhouettes flanking the centered Beat 3 hardware */}
+          {/* Interactive Future Ghost Silhouettes flanking Beat 5 hardware */}
           <div
             className={s.ghostLayer}
             style={{
@@ -1175,7 +1340,7 @@ export function MorphStory({
             </button>
           </div>
 
-          {/* THE SINGLE MORPHING PIECE OF GLASS + MIRROR STAND */}
+          {/* THE SINGLE MORPHING PIECE OF GLASS + MIRROR STAND + BEAT 4 LIGHT RAYS */}
           <div
             className={s.hardwareCarrier}
             style={{
@@ -1188,44 +1353,88 @@ export function MorphStory({
                 transform: `perspective(1200px) rotateX(${basePose.rx}deg) rotateY(${basePose.ry}deg) scale(var(--bezel-scale, 1))`,
               }}
             >
-              <div
-                ref={bezelRef}
-                className={`${s.bezel} ${clickMorph ? s.morphSmooth : ""}`}
-                onPointerMove={onPointerMove}
-                onPointerLeave={onPointerLeave}
-                style={{
-                  width: `${geom.w}px`,
-                  height: `${geom.h}px`,
-                  borderRadius: `${geom.bodyR}px`,
-                }}
-              >
-                {/* Mirror silvered body surface fading smoothly across forehead & chin */}
-                <div className={s.mirrorBodySurface} aria-hidden="true" style={{ opacity: mirrorFactor }} />
-                {/* Full-body diagonal reflection sheen */}
+              <div className={s.bezelRow}>
                 <div
-                  className={s.glare}
-                  aria-hidden="true"
-                  style={{ ["--glare-a" as string]: (0.11 + mirrorFactor * 0.1).toFixed(2) }}
-                />
-
-                {/* Inner screen with smoothly interpolated real frame inset */}
-                <div
-                  className={`${s.screen} ${clickMorph ? s.morphSmooth : ""}`}
-                  data-round={currentShape === "round" || undefined}
+                  ref={bezelRef}
+                  className={`${s.bezel} ${clickMorph ? s.morphSmooth : ""}`}
+                  onPointerMove={onPointerMove}
+                  onPointerLeave={onPointerLeave}
                   style={{
-                    top: `${geom.insetTop}%`,
-                    bottom: `${geom.insetBottom}%`,
-                    left: `${geom.insetX}%`,
-                    right: `${geom.insetX}%`,
-                    borderRadius: `${geom.screenR}px`,
+                    width: `${geom.w}px`,
+                    height: `${geom.h}px`,
+                    borderRadius: `${geom.bodyR}px`,
                   }}
                 >
-                  <div className={s.screenInner}>
-                    {renderLiveLovelace(currentShape)}
-                    {renderRealVoiceOverlay(assistO)}
-                    {renderRealMirrorOverlays(mirrorOverlaysO)}
+                  {/* Mirror silvered body surface fading smoothly across forehead & chin */}
+                  <div className={s.mirrorBodySurface} aria-hidden="true" style={{ opacity: mirrorFactor }} />
+                  {/* Full-body diagonal reflection sheen */}
+                  <div
+                    className={s.glare}
+                    aria-hidden="true"
+                    style={{ ["--glare-a" as string]: (0.11 + mirrorFactor * 0.1).toFixed(2) }}
+                  />
+
+                  {/* Inner screen with smoothly interpolated real frame inset */}
+                  <div
+                    className={`${s.screen} ${clickMorph ? s.morphSmooth : ""}`}
+                    data-round={currentShape === "round" || undefined}
+                    style={{
+                      top: `${geom.insetTop}%`,
+                      bottom: `${geom.insetBottom}%`,
+                      left: `${geom.insetX}%`,
+                      right: `${geom.insetX}%`,
+                      borderRadius: `${geom.screenR}px`,
+                    }}
+                  >
+                    <div className={s.screenInner}>
+                      {renderLiveLovelace(currentShape, raysO > 0.35)}
+                      {renderRealVoiceOverlay(assistO)}
+                      {renderRealNotificationOverlay(notifO)}
+                      {renderRealTimerOverlay(timerO)}
+                    </div>
                   </div>
                 </div>
+
+                {/* Beat 4: 3 sleek animated horizontal dashed light lines sweeping from the glass to open-air labels */}
+                {raysO > 0.01 && (
+                  <div
+                    className={s.wireRays}
+                    style={{
+                      opacity: raysO,
+                      transform: `translate3d(${(1 - raysO) * -14}px, 0, 0)`,
+                    }}
+                    aria-hidden={raysO < 0.2}
+                  >
+                    {WIRE_RAYS.map((ray, idx) => (
+                      <div key={ray.title} className={s.wireRay}>
+                        <svg viewBox="0 0 88 12" className={s.wireRaySvg} aria-hidden="true">
+                          <defs>
+                            <linearGradient id={`ray-grad-${idx}`} x1="0" y1="0" x2="1" y2="0">
+                              <stop offset="0%" stopColor="#38bdf8" stopOpacity="0.9" />
+                              <stop offset="100%" stopColor="#a78bfa" stopOpacity="0.9" />
+                            </linearGradient>
+                          </defs>
+                          <line
+                            x1="0"
+                            y1="6"
+                            x2="82"
+                            y2="6"
+                            stroke={`url(#ray-grad-${idx})`}
+                            strokeWidth="1.5"
+                            strokeDasharray="5 5"
+                            className={s.wireRayDash}
+                            style={{ animationDelay: `${idx * -0.45}s` }}
+                          />
+                          <circle cx="84" cy="6" r="2.5" fill="#a78bfa" />
+                        </svg>
+                        <div className={s.rayText}>
+                          <b>{ray.title}</b>
+                          <small>{ray.detail}</small>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Tubular U-shaped metal stand extending cleanly below the Studio Mirror */}

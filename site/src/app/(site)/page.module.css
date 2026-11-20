@@ -1,82 +1,485 @@
-/* Ultra-spacious below-the-fold sections after MorphStory */
+/* Spacious 6-section Apple-grade editorial rhythm below MorphStory */
 .below {
   display: grid;
-  gap: 88px;
-  padding-top: 48px;
+  gap: 112px;
+  padding-top: 64px;
 }
 
-/* Single clean frosted-glass hairline bar for the 3 editorial pillars */
-.pillars {
+.band {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  border-radius: var(--r-tile);
-  border: 1px solid var(--edge);
-  background: var(--glass);
-  backdrop-filter: blur(18px) saturate(1.2);
-  -webkit-backdrop-filter: blur(18px) saturate(1.2);
-  overflow: hidden;
+  gap: 28px;
 }
 
-.pillar {
+.sectionIntro {
   display: grid;
   gap: 10px;
-  align-content: start;
-  padding: 28px 30px;
-  text-decoration: none;
-  border-right: 1px solid var(--edge);
-  transition: background 0.2s ease;
+  max-width: 620px;
 }
 
-.pillar:last-child {
-  border-right: 0;
-}
-
-.pillar:hover {
-  background: var(--hover);
-}
-
-.pillarNum {
+.eyebrow {
   font-family: var(--f-mono);
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 500;
-  letter-spacing: 0.12em;
-  color: var(--ink-sky);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
 }
 
-.pillarEmber {
+.eyebrowEmber {
   color: color-mix(in srgb, var(--ember-b) 82%, var(--fg));
 }
 
-.pillar h2 {
-  font-size: 18px;
-  font-weight: 500;
-  letter-spacing: -0.015em;
-  line-height: 1.28;
+.sectionH2 {
+  font-size: clamp(28px, 3.2vw, 40px);
+  line-height: 1.09;
+  letter-spacing: -0.03em;
+  font-weight: 300;
+  color: var(--fg);
+  text-wrap: balance;
 }
 
-.pillar p {
+.sectionLede {
+  font-size: 16px;
+  line-height: 1.62;
+  color: var(--muted);
+  max-width: 52ch;
+}
+
+/* Dedicated 2-Column Editorial Split Sections */
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  gap: clamp(32px, 5vw, 72px);
+  align-items: center;
+}
+
+.splitCopy {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 18px;
+  margin-top: 8px;
+}
+
+.kilnBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-radius: 999px;
+  background: var(--ember-gradient);
+  color: #1a0a0a;
+  font-size: 14.5px;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: opacity 0.18s ease;
+}
+
+.kilnBtn:hover {
+  opacity: 0.9;
+}
+
+.kilnBtn svg {
+  width: 17px;
+  height: 17px;
+  flex: none;
+}
+
+.textLink {
+  font-size: 14.5px;
+  font-weight: 450;
+  color: var(--muted);
+  text-decoration: none;
+  transition: color 0.18s ease;
+}
+
+.textLink:hover {
+  color: var(--fg);
+}
+
+/* Section 2: Kiln 4-Stage Safety Pipeline */
+.pipeline {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border-radius: var(--r-tile);
+  overflow: hidden;
+}
+
+.pipelineStep {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--edge);
+}
+
+.pipelineStep:last-child {
+  border-bottom: 0;
+}
+
+.stepNum {
+  font-family: var(--f-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  color: color-mix(in srgb, var(--ember-b) 82%, var(--fg));
+  padding-top: 2px;
+}
+
+.stepBody {
+  display: grid;
+  gap: 4px;
+}
+
+.stepBody h3 {
+  font-size: 15.5px;
+  font-weight: 500;
+  color: var(--fg);
+  line-height: 1.25;
+}
+
+.stepBody p {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* Section 3: Native ESPHome Device Card */
+.esphomeCard {
+  border-radius: var(--r-tile);
+  overflow: hidden;
+}
+
+.esphomeHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--edge);
+}
+
+.esphomeHead b {
+  display: block;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--fg);
+}
+
+.esphomeHead span {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.statusChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--edge);
+  background: var(--glass);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fg);
+  white-space: nowrap;
+}
+
+.dotGreen {
+  width: 6.5px;
+  height: 6.5px;
+  border-radius: 999px;
+  background: var(--green);
+}
+
+.esphomeRows {
+  display: grid;
+}
+
+.esphomeRow {
+  display: grid;
+  grid-template-columns: minmax(110px, 1fr) auto auto;
+  align-items: center;
+  gap: 14px;
+  padding: 15px 24px;
+  border-bottom: 1px solid var(--edge);
+  font-size: 13.5px;
+}
+
+.esphomeRow:last-child {
+  border-bottom: 0;
+}
+
+.esphomeRow > span:first-child {
+  color: var(--muted);
+}
+
+.esphomeRow b {
+  font-weight: 500;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+}
+
+.mutedVal {
+  font-size: 12px;
+  color: var(--faint);
+  text-align: right;
+}
+
+.litBadge {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--sky) 15%, var(--glass));
+  border: 1px solid color-mix(in srgb, var(--sky) 35%, var(--edge));
+  color: var(--fg);
+}
+
+.toggleOn {
+  width: 34px;
+  height: 19px;
+  border-radius: 999px;
+  background: var(--lit-gradient);
+  padding: 2.5px;
+  display: flex;
+  justify-content: flex-end;
+  justify-self: end;
+}
+
+.toggleOn span {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ffffff;
+}
+
+.miniBar {
+  width: 72px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--edge);
+  overflow: hidden;
+  justify-self: end;
+}
+
+.miniBar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--lit-gradient);
+}
+
+/* Section 4: Clarity Grade Card */
+.clarityCard {
+  border-radius: var(--r-tile);
+  overflow: hidden;
+}
+
+.clarityScale {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--edge);
+}
+
+.clarityScaleLabel {
+  font-family: var(--f-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.letterStrip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.letterPill {
+  font-family: var(--f-mono);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--edge);
+  color: var(--muted);
+}
+
+.clarityRows {
+  display: grid;
+}
+
+.clarityRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 24px;
+  text-decoration: none;
+  border-bottom: 1px solid var(--edge);
+  transition: background 0.18s ease;
+}
+
+.clarityRow:last-child {
+  border-bottom: 0;
+}
+
+.clarityRow:hover {
+  background: var(--hover);
+}
+
+.clarityMeta {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.clarityMeta b {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--fg);
+}
+
+.clarityMeta span {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.gradeBadge {
+  font-family: var(--f-mono);
   font-size: 14px;
+  font-weight: 600;
+  min-width: 44px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--edge);
+  background: var(--glass);
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.gradeGraded {
+  color: var(--fg);
+  border-color: color-mix(in srgb, var(--sky) 40%, var(--edge));
+  background: color-mix(in srgb, var(--sky) 12%, var(--glass));
+}
+
+/* Section 5: Panes header links */
+.cardLinks {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Section 6: Builders & Open Core Callout Banner */
+.devCallout {
+  border-radius: var(--r-tile);
+  padding: 34px 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+}
+
+.devCopy {
+  display: grid;
+  gap: 10px;
+  max-width: 580px;
+}
+
+.devCopy h2 {
+  font-size: clamp(22px, 2.4vw, 30px);
+  line-height: 1.16;
+  letter-spacing: -0.025em;
+  font-weight: 300;
+  color: var(--fg);
+}
+
+.devCopy p {
+  font-size: 15px;
   line-height: 1.58;
   color: var(--muted);
 }
 
+.devActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  flex: none;
+}
+
+.devPrimary {
+  display: inline-flex;
+  align-items: center;
+  padding: 12px 20px;
+  border-radius: 999px;
+  background: var(--fg);
+  color: var(--bg);
+  font-size: 14.5px;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: opacity 0.18s ease;
+}
+
+.devPrimary:hover {
+  opacity: 0.88;
+}
+
 @media (max-width: 900px) {
   .below {
-    gap: 56px;
-    padding-top: 20px;
+    gap: 72px;
+    padding-top: 24px;
   }
 
-  .pillars {
+  .split {
     grid-template-columns: 1fr;
+    gap: 28px;
   }
 
-  .pillar {
-    padding: 22px 20px;
-    border-right: 0;
-    border-bottom: 1px solid var(--edge);
+  .splitFlip > :first-child {
+    order: 2;
   }
 
-  .pillar:last-child {
-    border-bottom: 0;
+  .pipelineStep,
+  .esphomeHead,
+  .esphomeRow,
+  .clarityScale,
+  .clarityRow {
+    padding-inline: 18px;
+  }
+
+  .esphomeRow {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .mutedVal {
+    display: none;
+  }
+
+  .devCallout {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 26px 22px;
+    gap: 20px;
   }
 }
