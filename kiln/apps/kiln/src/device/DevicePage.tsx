@@ -493,7 +493,7 @@ export function DevicePage({ frame, demo: sim, base }: { frame: DeviceFrame; dem
     // longer held, so the page opens set-up, which connects to it again over adb
     const waiting = PENDING.get(base);
     if (waiting) { PENDING.delete(base); setUpPending(base, false); handRef.current?.(waiting); }
-    else if (isSetUpPending(base)) { setUpPending(base, false); if (!current()) { const e = registry.set(standardEntry(frame, base, {})); e.handed = true; go(`${base}${ROUTES['set-up']}`); redraw(); } }
+    else if (isSetUpPending(base)) { setUpPending(base, false); if (!current()) { const e = registry.set(standardEntry(frame, base, { wayBack: start.imageFirst ? undefined : wayBack })); e.handed = true; go(`${base}${ROUTES['set-up']}`); redraw(); } }
     return () => { if (HANDS.get(base) === mine.current) HANDS.delete(base); };
   }, [base]);
   handRef.current = (p) => {

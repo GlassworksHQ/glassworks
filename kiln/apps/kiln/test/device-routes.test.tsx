@@ -147,4 +147,12 @@ describe('an install that ended with no page up, then a reload', () => {
     expect(location.pathname).toBe(`${MIRROR_BASE}/set-up`);
     expect(sessionStorage.getItem(`kiln:standard:${MIRROR_BASE}:pending`)).toBeNull();
   });
+
+  it('on the app path keeps its way back: Done offers the return to Connect and Undo', async () => {
+    sessionStorage.setItem(`kiln:standard:${MIRROR_BASE}:pending`, '1');
+    at(`${MIRROR_BASE}/app/install`);
+    render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
+    await vi.waitFor(() => expect(registry.get()?.standard).toBe(true));
+    expect(registry.get()!.session.canUndo).toBe(true);
+  });
 });
