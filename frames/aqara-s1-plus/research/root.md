@@ -5,6 +5,13 @@ evidence: verified
 
 # Persistent root: Magisk + the S1 Kiosk root helper
 
+> **S1 frame 1.0.0 (#139, #528):** the boot image now carries the frame loader, with Glassworks
+> names (`glassworks.rc`, `glassworks_loader.sh`, `/data/glassworks`). The boot image keeps the
+> verifier, the bundle key and its own copies of every service script, so it runs without a bundle; a
+> signed frame bundle can replace those scripts and bring more (the boot animation, the radio's files):
+> [frame-loader.md](frame-loader.md). This page describes how root was
+> set up, and the 0.4.3 boot image's services, which panels keep until their Kiln update.
+
 **Status (2026-11-09): working on the reference panel.**
 - `boot` is Magisk v31.1 plus our `overlay.d/s1kiosk_radio.rc`.
 - It was flashed from the FEL U-Boot with `fastboot flash boot`.
@@ -100,8 +107,9 @@ Since helper v4, binaries and a newer helper come from a **signed radio bundle**
   `s1kiosk_verify` (static ARM Ed25519 checker) and `s1kiosk_bundle.pub` (the project's public key).
   After this boot image, helper fixes, new radio stacks and radio firmware images come with app
   updates; see [Radio bundle service](#radio-bundle-service).
-- **Extra in the boot image: Magisk's own setup.** `s1kiosk_magiskenv.rc` and `magisk-busybox`
-  (`lib/armeabi-v7a/libbusybox.so` from the same Magisk APK). At `post-fs-data`, just before Magisk's own step,
+- **Extra in the boot image: Magisk's own setup.** `magisk-busybox` (`lib/armeabi-v7a/libbusybox.so` from the same
+  Magisk APK) and three lines that copy it: `s1kiosk_magiskenv.rc` before the frame loader, the start of
+  `glassworks.rc`'s `post-fs-data` with it. At `post-fs-data`, just before Magisk's own step,
   init copies it to `/data/adb/magisk/busybox`. Without it Magisk loads no module
   ([magisk-modules.md](../../../docs/research/magisk-modules.md)).
 

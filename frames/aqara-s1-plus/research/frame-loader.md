@@ -18,6 +18,12 @@ so far explains the reset. Plan F (attempt 13) then reset like E1 without ever l
 reset comes before PREP. Attempt 14 reads the steps plan F named, and none explains it. All of it goes through [`fastboot-usb.py`](../tools/fel/fastboot-usb.py), not the
 `fastboot` CLI.
 
+**The loader ran on the dev S1 on 2026-11-19 (verified; #651's boot writer run, #651 issuecomment-7024290415).**
+It is in `frames/aqara-s1-plus/tools/root/` (`glassworks_loader.sh`, `glassworks.rc`), and both boot patchers
+make byte-identical images with it (attempt 14). Of its panel tests ([Panel tests](#panel-tests)), L1–L4
+passed. L5 was inconclusive: the loader's lines were in neither logcat nor dmesg, because it logged with `log -t`
+before logd runs. It now writes them to the kernel log too, and L5 waits on the next S1 session.
+
 Device: Aqara S1 Plus, firmware 4.5.80. Sources: the stock `boot`, `misc` and boot package
 backups and Aqara's 4.5.80 OTA package, all outside the repo; AOSP `android-10.0.0_r41`; this repo at
 `c8b0493f9`. Tools: `strings` (macOS), `brotli` 1.1, Python 3.11.
@@ -428,6 +434,27 @@ Every S1 in the field needs one more Kiln update to get the loader. Before build
     Android path doesn't have. That is a guess, untested. There is no plan G yet: the next step is
     the maintainer's call (see the open questions).
 
+14. **Re-patching an already-patched image** (2026-11-18, verified on a host). The Kiln goldens
+    were made again with the loader's overlay: `patch-boot-magisk.sh` in its arm64 container over the
+    stock 4.5.80 and older images, then `S1_WEB_GOLDEN=<dir> npm test -w @glassworks/bootpatch`.
+    Re-patching the old radio-bundle image (`repatch-bundled`) did **not** give the same image as
+    patching stock:
+    ```
+    --- overlay.d:   (repatch-bundled, before the fix)
+    overlay.d/glassworks.rc
+    overlay.d/s1kiosk_radio.rc
+    overlay.d/sbin/glassworks_loader.sh
+    …
+    overlay.d/sbin/s1kiosk_radio.sh
+    ```
+    The Magisk restore only undoes the Magisk changes, so the overlay files of the earlier patch stay.
+    Kiln's update path patches the panel's own, already-patched `boot`, so a 0.4.3 panel would have run
+    `s1kiosk_radio` next to the new radio slot, both driving the radio. Both patchers now drop every
+    `overlay.d` entry but the Magisk ones before adding theirs. After the fix, `repatch-bundled` equals
+    `stock-old` and every golden case matches byte for byte (61 tests). It also fixed an older slip:
+    re-patching with `BOOT_ANIMATION=none` used to keep the animation of the earlier patch.
+    `kiln/packages/bootpatch/test/repatch-overlay.test.ts` pins it in CI without the goldens.
+
 ## Result
 
 ### The open questions in #139
@@ -444,7 +471,7 @@ Every S1 in the field needs one more Kiln update to get the loader. Before build
 - **Fixed slots.** One `.rc` in the boot image (`overlay.d/glassworks.rc`) names every service the
   frame can run, and each slot runs `glassworks_loader.sh run <slot>`. The loader execs the slot's
   script from the active bundle, or the boot image's own copy when there is no valid bundle.
-  - Slots: `glassworks_radio`, `glassworks_netwatch`, `glassworks_firstboot`, `glassworks_update`,
+  - Slots: `glassworks_agent` (the frame agent, [principles](../../../docs/principles.md#the-frame-agent)), `glassworks_netwatch`, `glassworks_firstboot`, `glassworks_update`,
     `glassworks_bundle`, and two spares, `glassworks_svc1` and `glassworks_svc2`, which start at boot
     and exit unless the bundle has `services/svc1.sh` or `services/svc2.sh`.
   - A generic runner (one service that starts whatever a bundle lists) was ruled out. Init would
@@ -463,9 +490,26 @@ Every S1 in the field needs one more Kiln update to get the loader. Before build
      version row and update notice read exactly these two properties.
   4. It bind-mounts the bundle's `bootanimation.zip` over `/system/media/bootanimation.zip`, or the
      ramdisk's copy when the bundle has none or is bad.
+- **The installer is not a slot.** `glassworks_bundle` always runs the boot image's
+  `glassworks_loader.sh install`, so a bundle can't replace the code that checks bundles.
 - **Fallback.** A missing bundle, a failed check, or another frame's bundle means the boot image's
-  copies run. A slot whose bundle script exits 3 times within a minute is marked bad, and that slot
-  runs the boot copy from then on. That is the radio helper's rule today, applied to every slot.
+  copies run. In the long-running slots (`agent`, `netwatch`, `svc1`, `svc2`), a bundle script whose runs
+  each last under 60 s, 3 runs in a row, is marked bad for that bundle version, and that slot runs the boot
+  copy from then on. The run-once slots (`firstboot`, `update`) have no retry loop: their bundle script runs
+  once per start. That was the 0.4.3 radio helper's rule, applied to the long-running slots.
+
+### What the app reads
+
+| What | Where | Values |
+|---|---|---|
+| Frame id and version (what runs) | `ro.glassworks.frame.id`, `ro.glassworks.frame.version` | `aqara-s1-plus`; the loaded bundle's version, else the boot image's (`1.0.0`) |
+| Bundle state, and a staged bundle ("staged, restart to apply") | `/data/glassworks-pub/frame-bundle`, root 0644, written at boot (deleted first, so an old one never stands for this boot's) and when an install stages a bundle; an install that finds the bundle already loaded leaves it as it is | `<ok\|bad\|none> <loaded frame version\|-> <floor> <staged frame version\|->` |
+| The same, for display and logs | `sys.glassworks.bundle.state`, `sys.glassworks.bundle.staged` | `ok <version>` \| `bad: <why>` \| `none`; the staged version, empty when none |
+| The last install | `sys.glassworks.bundle.status` | `<running\|ok\|error>: <detail>` |
+
+Decisions come from the file. Any app can set `sys.*` properties under permissive SELinux, so those are for
+display only. "Staged" is not an `ro.*` property, because `ro.*` can be set only once per boot (a second
+install in the same boot couldn't update it) and any app could set it first.
 
 ### The bundle
 
@@ -484,9 +528,9 @@ end
 - **Signed per frame id.** The frame id is inside the signed manifest, and the loader compares it
   with its own (built into the boot image). A bundle signed for another frame is refused, even with
   a valid signature.
-- **What it carries** at S1 frame 1.0.0: the slot scripts (`services/radio.sh`, `netwatch.sh`,
-  `firstboot.sh`, `update.sh`), the radio helper's binaries and firmware (all of today's radio
-  bundle), and `bootanimation.zip`.
+- **What it carries** at S1 frame 1.0.0: the slot scripts (`services/agent.sh`, `netwatch.sh`,
+  `firstboot.sh`, `update.sh`), the frame agent's binaries and firmware (all of today's radio
+  bundle, and its `hotspot-name.apk`), and `bootanimation.zip`.
 - **The old `S1RADIO-BUNDLE 1` format** is refused cleanly by the new loader ("not a frame bundle").
   The app ships only the frame bundle from S1 frame 1.0.0 on.
 - **Where it comes from.** The app ships the bundle in its assets, as it ships the radio bundle now.
@@ -499,12 +543,13 @@ bundle, once the loader makes that possible over the air.
 
 | 0.4.3 boot image | S1 frame 1.0.0 | Notes |
 |---|---|---|
-| init services `s1kiosk_radio`, `_update`, `_bundle`, `_netwatch`, `_firstboot` | `glassworks_radio`, `_update`, `_bundle`, `_netwatch`, `_firstboot` | Plus `glassworks_svc1`, `_svc2` |
+| init services `s1kiosk_radio`, `_update`, `_bundle`, `_netwatch`, `_firstboot` | `glassworks_agent`, `_update`, `_bundle`, `_netwatch`, `_firstboot` | The radio helper does far more than the radio now, so it is the frame agent (maintainer, 2026-11-19). Plus `glassworks_svc1`, `_svc2` |
 | `s1kiosk_devsu` (dev images) | `glassworks_devsu` | |
 | `s1kiosk_verify`, `s1kiosk_bundle.pub`, `s1kiosk_adb_keys`, `s1kiosk_bootanimation.zip`, `s1kiosk_*.rc` | `glassworks_verify`, `glassworks_bundle.pub`, `glassworks_adb_keys`, `glassworks_bootanimation.zip`, `glassworks.rc` | In the ramdisk (`overlay.d`) |
-| `sys.s1kiosk.update.*`, `sys.s1kiosk.bundle.*`, `sys.s1kiosk.radio.*`, `sys.s1kiosk.timezone.status` | `sys.glassworks.*`, same suffixes | |
-| `persist.s1kiosk.radio_mode`, `radio_zigbee`, `radio_allow`, `timezone` | `persist.glassworks.*` | The radio helper copies each old value once when the new one is empty, so the radio mode and the time zone survive the reflash. Removed with the old names |
+| `sys.s1kiosk.update.*`, `sys.s1kiosk.bundle.*`, `sys.s1kiosk.radio.*`, `sys.s1kiosk.timezone.status`, `sys.s1kiosk.portal.status`, `sys.s1kiosk.hotspot_name.status` | `sys.glassworks.*`, same suffixes, except the agent's own two: `sys.glassworks.agent.version`, `sys.glassworks.agent.source` (were `radio.version`, `radio.source`) | |
+| `persist.s1kiosk.radio_mode`, `radio_zigbee`, `radio_allow`, `timezone`, `hotspot_name` | `persist.glassworks.*` | The frame agent copies each old value at its first start (where the new one is empty), then again only when the old value changes, so the radio mode and the time zone survive the reflash and a stopped update. Removed with the old names |
 | `/data/s1kiosk` (bundle store, update copy, markers), `/data/s1kiosk-pub` | `/data/glassworks`, `/data/glassworks-pub` | |
+| Magisk module `s1kiosk_hotspot_name`, overlay package `sh.edm.s1kiosk.overlay.hotspotname` | **stay** | A 0.4.3 helper made the module; a second id would leave two, one the undo can't see |
 | `/data/s1kiosk/radio` (dataset, Zigbee NVM, otbr's Thread settings in `run/thread`) | **stays** | `otbr-agent` has `/data/s1kiosk/radio/run` compiled in (`build-otbr.sh` line 127). It moves in a later bundle, with an otbr built for the new path and a one-time move of `run/thread` |
 | `applicationId` `sh.edm.s1kiosk`, `files/update/pending.apk` | stays | The app id stays (maintainer). App-private paths sit under it |
 | (none) | `ro.glassworks.frame.id`, `ro.glassworks.frame.version` | New |
@@ -543,6 +588,16 @@ stopping after step 3 leaves the panel working as before.
      hash compare ([root.md](root.md#one-command-fel-installsh), `fel-install.sh --undo`).
    - **If the panel doesn't come up from flash** after a matching read-back, the same FEL recovery
      applies. The backup is Kiln's own, so its undo takes it.
+5. **Load the frame bundle before calling it done.** The new boot image has no frame bundle yet, and
+   some things live only in one: Silicon Labs' Zigbee runtime (`sisdk/`) above all. Until a bundle
+   loads, a panel in `zigbee_tcp` with the Silicon Labs stack reports "needs a radio bundle with its
+   runtime" and its coordinator is down. So Kiln has the app fetch and stage the frame release's bundle,
+   restarts the panel once more, and calls the update done only when the loader's own record,
+   `/data/glassworks-pub/frame-bundle` (`<state> <loaded version> <floor> <staged version>`, e.g.
+   `ok 1.0.1 1000001 -`), has `ok` in its first field and the release's version in its second. The boot step deletes that file
+   before it starts, so a record there was written by the reboot Kiln asked for. `ro.glassworks.frame.version`
+   alone doesn't prove it: the boot image and the first bundle are both 1.0.0. The radio status is a
+   separate check after that.
 
 If the panel never reaches fastboot, or stock fastboot refuses `boot` or `flash`, the route stops
 before any write, and the FEL button stays the way in. **Route 2** (root writes `boot` from Android,
@@ -655,6 +710,30 @@ boot from flash doesn't. `vbmeta` has flags 3, so the changed header boots.
 `fastboot flash boot "$B/boot.img"` (and `misc` if T2 ran),
 `frames/aqara-s1-plus/tools/install/fb-read-partition.sh boot <file>`, compare the first 33554432
 bytes with `SHA256SUMS`, and `fastboot reboot`.
+
+### The loader on the panel (L1–L5)
+
+These need a boot image built by `patch-boot-magisk.sh` from this branch, RAM-booted (T3's route, or
+FEL with our U-Boot) or flashed with the usual backup. The app can stay on 0.4.3: the radio helper reads
+`persist.s1kiosk.*` into the new names at its first start, so `thread_router` comes back by itself.
+
+| Test | What it settles | Expect |
+|---|---|---|
+| L1 | `/data` at `post-fs-data`, and the `exec` step (on a store with no bundle: no `/data/glassworks/bundle/current`, `next` or `next.old`; with one, expect `ok <its version>` instead) | `getprop ro.glassworks.frame.id` = `aqara-s1-plus`, `ro.glassworks.frame.version` = `1.0.0`, `sys.glassworks.bundle.state` = `none`; the boot step's lines in the kernel log, as in L5 (not logcat: logd isn't up at `post-fs-data`) |
+| L2 | The slots under init | `init.svc.glassworks_agent`, `_netwatch` = `running`; `init.svc.glassworks_firstboot` = `stopped` (it exits at once: the 0.4.3 marker says the panel was provisioned); no `init.svc.s1kiosk_*` |
+| L3 | The radio from the old setting. Starts from a known state: 0.4.3 running `thread_router` (step 0 of the run sheet checks it), no `/data/s1kiosk/radio/.settings-moved`, no frame bundle | `persist.glassworks.radio_mode` = `thread_router`, `sys.glassworks.radio.status` = `ok thread_router…`, `sys.glassworks.agent.source` = `boot`, otbr runs |
+| L4 | The boot animation mount from a shell at `post-fs-data` | the Glassworks animation plays at boot (film it); `/proc/mounts` lists `bootanimation.zip` |
+| L5 | The check's cost at `post-fs-data` | `dmesg \| grep glassworks_loader`: the times of `boot: checking the frame bundle` and `boot: done: …`, with and without a bundle (a bundle needs the bundles PR). Not logcat: at `post-fs-data` logd isn't running, and the S1 run of 2026-11-19 found nothing there; the loader writes every line to `/dev/kmsg` too |
+
+Results, 2026-11-19 (dev S1, the loader image written by #651's boot writer; #651 issuecomment-7024290415):
+
+| Test | Result |
+|---|---|
+| L1 | **Pass:** `ro.glassworks.frame.id` = `aqara-s1-plus`, `ro.glassworks.frame.version` = `1.0.0` |
+| L2 | **Pass:** `glassworks_agent` and `glassworks_netwatch` running, `glassworks_firstboot` stopped; of the old services only `s1kiosk_devsu` (the dev image's, carried over on purpose) |
+| L3 | **Pass:** `persist.glassworks.radio_mode` = `thread_router`; otbr-agent up within 4 min, `sys.glassworks.radio.status` = `ok thread_router: joined as router` |
+| L4 | **Pass:** the boot animation plays as before (watched), `bootanimation.zip` mounted |
+| L5 | **Inconclusive:** no `glassworks_loader` line in `logcat -b all` or `dmesg` (`log -t` before logd). Fixed by the kernel-log lines; rerun pending |
 
 ## Open questions
 

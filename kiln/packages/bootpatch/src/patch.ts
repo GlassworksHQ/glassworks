@@ -37,6 +37,8 @@ const enc = new TextEncoder();
 const BACKUP = '.backup';
 const CONFIG = '.backup/.magisk';
 const RMLIST = '.backup/.rmlist';
+/** The overlay.d entries Magisk's own patch adds (below); every other one is the caller's overlay. */
+const MAGISK_OVERLAY = new Set(['overlay.d/sbin', 'overlay.d/sbin/magisk.xz', 'overlay.d/sbin/init-ld.xz']);
 
 export type RamdiskState = 'stock' | 'magisk' | 'other-root';
 
@@ -161,6 +163,11 @@ export async function patchWith(input: PatchImageInput, comp: Compressor): Promi
   ].map((l) => `${l}\n`).join('');
   ramdisk.set(CONFIG, entry(S_IFREG, 0, enc.encode(magiskConfig)));
 
+  // A boot image patched before still carries the overlay files added then: Magisk's restore only undoes
+  // its own changes. Drop every overlay.d entry but Magisk's, so a re-patch equals a patch of stock.
+  for (const name of [...ramdisk.keys()]) {
+    if (name.startsWith('overlay.d/') && !MAGISK_OVERLAY.has(name)) ramdisk.delete(name);
+  }
   for (const f of input.overlay) {
     ramdisk.set(f.path.split('/').filter(Boolean).join('/'), entry(S_IFREG, f.mode, f.data));
   }

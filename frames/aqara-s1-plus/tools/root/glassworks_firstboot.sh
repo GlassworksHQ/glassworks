@@ -1,17 +1,19 @@
 #!/system/bin/sh
-# S1 Kiosk first-boot provisioning. Runs as root from the Magisk boot image (s1kiosk_firstboot.rc),
-# once per panel: a marker in /data/s1kiosk stops it from undoing a later user choice.
+# Glassworks first-boot provisioning. Runs as root from the Magisk boot image (the glassworks_firstboot slot in glassworks.rc),
+# once per panel: a marker in /data/glassworks stops it from undoing a later user choice.
 #
 # Factory firmware exposes no adb. The installer bakes the installing computer's adb public key into
-# the boot image (overlay.d/sbin/s1kiosk_adb_keys); this authorizes that key and enables adb over USB,
+# the boot image (overlay.d/sbin/glassworks_adb_keys); this authorizes that key and enables adb over USB,
 # so tools/install.sh can continue with no screen interaction.
-MARK=/data/s1kiosk/.firstboot-done
-KEYS=${0%/*}/s1kiosk_adb_keys
+MARK=${GWF_ROOT:-/data/glassworks}/.firstboot-done
+# A panel set up by a 0.4.3 boot image: provisioning ran then. TODO(#528): drop with the old names.
+OLD_MARK=${GWF_OLD:-/data/s1kiosk}/.firstboot-done
+KEYS=${GW_BOOT:-${0%/*}}/glassworks_adb_keys   # the boot image's, also when this script comes from a bundle
 ADB_KEYS=/data/misc/adb/adb_keys
-log() { echo "s1kiosk_firstboot: $*" > /dev/kmsg; }
+log() { echo "glassworks_firstboot: $*" > /dev/kmsg; }
 
-[ -e "$MARK" ] && exit 0
-mkdir -p /data/s1kiosk && chown root:root /data/s1kiosk && chmod 700 /data/s1kiosk
+{ [ -e "$MARK" ] || [ -e "$OLD_MARK" ]; } && exit 0
+mkdir -p "${MARK%/*}" && chown root:root "${MARK%/*}" && chmod 700 "${MARK%/*}"
 
 if [ -s "$KEYS" ]; then
   mkdir -p /data/misc/adb

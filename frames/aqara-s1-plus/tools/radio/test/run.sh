@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Off-device tests of the root side (radio helper v4 + loader, s1kiosk_bundle.sh, make-bundle.py,
-# s1kiosk_verify) in a 32-bit ARM Linux container with mksh as /system/bin/sh (Android's shell) and
+# Off-device tests of the root side (the frame loader glassworks_loader.sh, the radio helper v5,
+# make-bundle.py, the verifier, the update and netwatch services, and the old radio bundle of 0.4.3 boot
+# images) in a 32-bit ARM Linux container with mksh as /system/bin/sh (Android's shell) and
 # mocks for init, properties, PackageManager, Aqara's cpcd/socat and the radio (plus real socat and a
 # pty pair for the EZSP bridge's drain on connect). Nothing here talks to a panel.
 #

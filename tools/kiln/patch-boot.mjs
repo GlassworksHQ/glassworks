@@ -51,7 +51,7 @@ registerHooks({
   },
 });
 const pkg = resolve(opt.package ?? join(REPO, 'kiln/packages/bootpatch'));
-const { magiskBusybox, patchBoot, s1Overlay } = await import(pathToFileURL(join(pkg, 'src/index.ts')).href);
+const { magiskBusybox, patchBoot } = await import(pathToFileURL(join(pkg, 'src/index.ts')).href);
 
 const read = (p) => new Uint8Array(readFileSync(p));
 const sha256 = (d) => createHash('sha256').update(d).digest('hex');
@@ -78,23 +78,22 @@ if (sha256(apk) !== pinned) fail(`${opt.apk} is not the pinned Magisk APK (sha25
 const from = opt['overlay-dir']
   ? (name) => read(join(opt['overlay-dir'], name))
   : (name) => read({
-    's1kiosk_radio.rc': join(radio, name), 's1kiosk_radio.sh': join(radio, name),
+    'glassworks_agent.sh': join(radio, name),
     'otbr-agent': join(radio, 'out', name), 'ot-ctl': join(radio, 'out', name),
-    's1kiosk_verify': join(root, 'out', name),
-    's1kiosk_bootanimation.zip': join(REPO, 'branding/glass-tile/bootanimation.zip'),
+    'glassworks_verify': join(root, 'out', 's1kiosk_verify'),
+    'glassworks_bootanimation.zip': join(REPO, 'branding/glass-tile/bootanimation.zip'),
   }[name] ?? join(root, name));
 const adbKey = opt['adb-key'] ?? join(homedir(), '.android/adbkey.pub');
 
+// The overlay always comes from this checkout, so --package changes only the patch algorithm.
+const { s1Overlay } = await import(pathToFileURL(join(REPO, 'kiln/packages/bootpatch/src/index.ts')).href);
 const overlay = s1Overlay({
-  radioRc: from('s1kiosk_radio.rc'), radioSh: from('s1kiosk_radio.sh'), otbrAgent: from('otbr-agent'), otCtl: from('ot-ctl'),
-  firstbootRc: from('s1kiosk_firstboot.rc'), firstbootSh: from('s1kiosk_firstboot.sh'),
+  rc: from('glassworks.rc'), loaderSh: from('glassworks_loader.sh'), verify: from('glassworks_verify'), bundlePub: from('glassworks_bundle.pub'),
   adbKeys: adbKey === 'none' ? new Uint8Array(0) : read(adbKey),
-  netwatchRc: from('s1kiosk_netwatch.rc'), netwatchSh: from('s1kiosk_netwatch.sh'),
-  updateRc: from('s1kiosk_update.rc'), updateSh: from('s1kiosk_update.sh'),
-  bundleRc: from('s1kiosk_bundle.rc'), bundleSh: from('s1kiosk_bundle.sh'),
-  verify: from('s1kiosk_verify'), bundlePub: from('s1kiosk_bundle.pub'),
-  magiskEnvRc: from('s1kiosk_magiskenv.rc'), magiskBusybox: await magiskBusybox(apk),
-  branding: opt['no-anim'] ? undefined : { rc: from('s1kiosk_branding.rc'), bootAnimation: from('s1kiosk_bootanimation.zip') },
+  agentSh: from('glassworks_agent.sh'), otbrAgent: from('otbr-agent'), otCtl: from('ot-ctl'),
+  firstbootSh: from('glassworks_firstboot.sh'), netwatchSh: from('glassworks_netwatch.sh'), updateSh: from('glassworks_update.sh'),
+  magiskBusybox: await magiskBusybox(apk),
+  bootAnimation: opt['no-anim'] ? undefined : from('glassworks_bootanimation.zip'),
 });
 
 const r = await patchBoot({ boot: read(input), magiskApk: apk, overlay, preinitDevice: opt.preinit });

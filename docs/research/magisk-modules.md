@@ -96,7 +96,7 @@ after a restart nothing was mounted. Why, and what's the smallest fix that reach
 | Option | Verdict |
 |---|---|
 | (a) The installer fills `/data/adb/magisk` over adb | No: a fresh panel has no root after the flash. Kiln's adb session is uid 2000 |
-| **(b) The boot image carries busybox and copies it at `post-fs-data`** | **Built.** `s1kiosk_magiskenv.rc`: `mkdir /data/adb/magisk`, `copy ${MAGISKTMP}/magisk-busybox`, `chmod 0755`. init built-ins only, so nothing can hang the boot. Rewritten every boot, so a torn write heals on the next one |
+| **(b) The boot image carries busybox and copies it at `post-fs-data`** | **Built.** `s1kiosk_magiskenv.rc` (in the frame loader's image, the first lines of `glassworks.rc`'s `post-fs-data`, #549): `mkdir /data/adb/magisk`, `copy ${MAGISKTMP}/magisk-busybox`, `chmod 0755`. init built-ins only, so nothing can hang the boot. Rewritten every boot, so a torn write heals on the next one |
 | (c) Mount the overlay ourselves, no Magisk modules | Also a boot-image change, plus a hand-rolled magic mount before the package manager scans `/product/overlay` |
 | (d) The app downloads Magisk and the helper extracts busybox | A runtime download of a GPL binary, and more code. Only worth it if field panels must get it without a Kiln visit |
 
@@ -117,7 +117,7 @@ What changes on a panel with (b):
   `/data/adb/magisk` stays and nothing reads it. With this boot image, removing `/data/adb/magisk/busybox` does
   nothing: init copies it back on the next boot, before Magisk checks. To stop one module, leave a `disable` file in
   its directory (what Magisk's app does), or, for #430's, set the name back to Android. To stop every module, go
-  back to a boot image without `s1kiosk_magiskenv.rc`, then remove the file. Each takes effect at the next boot:
+  back to a boot image without `s1kiosk_magiskenv.rc` (or, with the loader, without those lines in `glassworks.rc`), then remove the file. Each takes effect at the next boot:
   Magisk mounts modules once, at `post-fs-data`, and what it mounted stays until a restart. So restart after the
   change (after removing the file, in the last case: the boot that brought the old image back may still have
   loaded them).
@@ -130,7 +130,7 @@ What changes on a panel with (b):
   `lib/armeabi-v7a/libbusybox.so` to `/data/adb/magisk/busybox` (root, 0755) and restart. Undo: remove it and restart.
   The S1's panel plan for #430 and this change has the exact steps.
 - **The goldens (host only):** run `patch-boot-magisk.sh` over the eight inputs (as
-  `~/src/aqara-panel-backups/web-golden/gen.sh` does), copy `s1kiosk_magiskenv.rc` into `fixtures/overlay/`, then
+  `~/src/aqara-panel-backups/web-golden/gen.sh` does), copy `glassworks.rc` (before the loader, `s1kiosk_magiskenv.rc`) into `fixtures/overlay/`, then
   `S1_WEB_GOLDEN=<dir> npx vitest run` in `kiln/packages/bootpatch`. Through OrbStack on macOS, root in the container
   can't read the mode-000 `magisk.cfg` the CLI extracts (the host's permissions win). The CLI now makes it readable
   before printing it (`chmod u+r`); before that it stopped there. The image bytes don't depend on it. The root's run

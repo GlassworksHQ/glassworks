@@ -114,6 +114,24 @@ can have (the S1's wall base).
   frame's interfaces.
 - **No vendor bytes in the repo.** Describe offsets and symbols, never commit firmware.
 
+#### The frame agent
+
+**The frame agent** is the root-side service a frame runs to give the panes the hardware they need.
+The app can't do those jobs itself: they need root, a vendor service stopped, or a port below 1024.
+On the S1 it is `glassworks_agent`, one slot of the frame loader
+([frame-loader.md](../frames/aqara-s1-plus/research/frame-loader.md)). It runs the radio modes and
+their firewall, radio firmware, the time zone, the Bluetooth address, and the setup hotspot's portal
+and name ([radio.md](../frames/aqara-s1-plus/docs/radio.md)).
+
+- **It decides nothing.** It does what the app asks and reports what it did. The app decides, and HA
+  decides for the app.
+- **It trusts no input.** It reads only files the app owns, and checks them. Any app can set a
+  property, so no property can make it run code we did not sign. The S1's threat model is in
+  [root.md](../frames/aqara-s1-plus/research/root.md).
+- **It ships in the frame bundle.** A fix reaches panels without a reflash. The boot image keeps a
+  copy to fall back on.
+- **One agent per frame**, not one root service per pane.
+
 ### Panes
 
 <a href="https://www.glassworks.dev/brand#parts"><picture><source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-pane-on-dark.svg"><img alt="Glassworks Pane" src="https://www.glassworks.dev/brand/badge-pane-on-light.svg" height="30"></picture></a>

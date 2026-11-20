@@ -123,7 +123,7 @@ Only the armeabi-v7a (S1) APK carries a **signed radio bundle**: the root radio 
 and the Silicon Labs Zigbee runtime ([radio.md](../frames/aqara-s1-plus/docs/radio.md#radio-bundles-helper-v4)). The other ABIs'
 APKs carry none, because no S1 runs them. Panels whose boot image has the bundle
 loader install it only if it is signed with the Ed25519 key whose public half is baked into the boot
-image ([`frames/aqara-s1-plus/tools/root/s1kiosk_bundle.pub`](../frames/aqara-s1-plus/tools/root/s1kiosk_bundle.pub)). It is a separate key from
+image ([`frames/aqara-s1-plus/tools/root/glassworks_bundle.pub`](../frames/aqara-s1-plus/tools/root/glassworks_bundle.pub)). It is a separate key from
 the APK key on purpose: it lets root code run on the panel, so it lives only in `~/secure` and in one
 repository secret.
 
@@ -131,7 +131,7 @@ repository secret.
 # Done once (2026-11-10): ~/secure/s1kiosk-radio-bundle-ed25519.pem, mode 600, never printed.
 openssl genpkey -algorithm ed25519 -out ~/secure/s1kiosk-radio-bundle-ed25519.pem   # OpenSSL 3
 openssl pkey -in ~/secure/s1kiosk-radio-bundle-ed25519.pem -pubout -outform DER | tail -c 32 | xxd -p -c 64 \
-  > frames/aqara-s1-plus/tools/root/s1kiosk_bundle.pub
+  > frames/aqara-s1-plus/tools/root/glassworks_bundle.pub
 # The secret: an environment secret of the `radio-signing` environment (Settings -> Environments;
 # create the environment first), so only the release workflow's signing job can read it:
 gh secret set S1_RADIO_BUNDLE_KEY --env radio-signing --repo GlassworksHQ/glassworks \
@@ -150,7 +150,7 @@ gh secret set S1_RADIO_BUNDLE_KEY --env radio-signing --repo GlassworksHQ/glassw
 - Back it up like the APK key. **Losing it** means no more radio bundle updates until panels get a boot
   image with a new public key (one FEL session each). **If it leaks**, someone who can also get a file
   into the kiosk's private storage could run root code: rotate it (new key, new
-  `s1kiosk_bundle.pub`, new boot image on every panel).
+  `glassworks_bundle.pub`, new boot image on every panel).
 - The bundle version is the APK's versionCode, and panels refuse a lower one than they have, so a
   bundle can't be rolled back to an older (perhaps buggy) helper by replaying it.
 
@@ -250,7 +250,7 @@ The workflow then:
    image and Ubuntu snapshot; it must reproduce `frames/aqara-s1-plus/tools/radio/sisdk-runtime.sha256`; never Silicon Labs'
    zigbeed itself), then signs the radio bundle in the `sign-bundle` job (environment `radio-signing`,
    main only, every input checked against committed hashes; `frames/aqara-s1-plus/tools/radio/make-bundle.py --app-version`,
-   version = the versionCode, checked against `frames/aqara-s1-plus/tools/root/s1kiosk_bundle.pub`). PR CI catches most drift
+   version = the versionCode, checked against `frames/aqara-s1-plus/tools/root/glassworks_bundle.pub`). PR CI catches most drift
    before a tag does. The `size` job in `pr.yml` caches the runtime under a key made from the script,
    `frames/aqara-s1-plus/tools/radio/sisdk/` and the hash file. When one of them changes, it rebuilds from scratch and checks
    the hashes. On a cache hit, it only checks the cached files against the hashes. So drift outside the

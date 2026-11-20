@@ -229,11 +229,9 @@ the SHA-1 of all of `I`'s bytes, in lower-case hex.
      each listed name (that exact entry, not what is under it), then put the restored entries back,
      replacing what is there.
 
-   Kiln's overlay files from the earlier patch were never listed, so they survive this step. So
-   patching a patched image with **the same overlay files** gives the same image as patching the
-   stock one, which the repatch vectors check. With different overlay files the results differ: a
-   file the earlier patch added and the new overlay omits stays in the ramdisk. The CLI does the
-   same, and the golden case `repatch-noanim-from-anim` pins it on the real image.
+   Kiln's overlay files from the earlier patch were never listed, so they survive this step. Step 7
+   removes them (#139, 2026-11-18). Before that, a file the earlier patch added and the new overlay
+   omitted stayed in the ramdisk.
 3. **Config values.**
    - SHA1: from the old config if there was one (the first line starting `SHA1=`, CR stripped, value
      after `=`, maybe empty), else `S`.
@@ -271,9 +269,14 @@ the SHA-1 of all of `I`'s bytes, in lower-case hex.
    ```
    Each line ends with `\n`. `PatchResult.magiskConfig` is this text. Kiln always keeps verity and
    forced encryption, so nothing in `fstab*` files or `verity_key` changes.
-7. **Overlay.** Add each overlay file: a regular file, mode `mode & 07777`, uid and gid 0, replacing
-   any entry with that name. Empty path components are dropped (`/a//b/` is `a/b`). These go in
-   after the backup, so they are neither backed up nor listed.
+7. **Overlay.** First remove every entry under `overlay.d/` except `overlay.d/sbin`,
+   `overlay.d/sbin/magisk.xz` and `overlay.d/sbin/init-ld.xz` (step 4's), so the overlay files of an
+   earlier patch go. Then add each overlay file: a regular file, mode `mode & 07777`, uid and gid 0,
+   replacing any entry with that name. Empty path components are dropped (`/a//b/` is `a/b`). These
+   go in after the backup, so they are neither backed up nor listed. So patching a patched image gives
+   the same image as patching the stock one, whatever overlay the earlier patch had
+   (`test/repatch-overlay.test.ts`). The CLI does the same, and the golden cases `repatch-bundled`
+   (an image with older overlay files) and `repatch-noanim-from-anim` pin it on the real image.
 8. **Refuse the DTB patches the CLI would make**, which Kiln doesn't do:
    - the DTB contains `"/system_root"` followed by a NUL: refuse, with a message that contains
      `patched by old` ("This boot image's DTB was patched by old Magisk versions.");

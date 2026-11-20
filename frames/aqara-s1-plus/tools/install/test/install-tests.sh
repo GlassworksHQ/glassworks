@@ -669,6 +669,14 @@ out=$("$REPO/frames/aqara-s1-plus/tools/install.sh" --undo --dry-run </dev/null 
 check "dry run: shows the disable" has "$out" "+ adb shell pm disable-user --user 0 sh.edm.s1kiosk"
 check "dry run: changes nothing" test "$(cat "$T/installed") $(cat "$T/disabled")" = "debug 0"
 
+echo "== the scripts fel-install.sh runs parse"
+# patch-boot-magisk.sh runs its container part as one single-quoted sh -c argument: an apostrophe in a comment there
+# ends the quote, and bash refuses the whole script (main after #615, found 2026-11-19). A comment there must not
+# have an odd number of apostrophes; this catches that.
+for s in install/fel-install.sh root/patch-boot-magisk.sh; do
+  check "$s: bash -n" bash -n "$REPO/frames/aqara-s1-plus/tools/$s"
+done
+
 echo "== fel-install.sh step 9: waits on the device that came back, with others on the same adb server"
 # The two helpers, out of the script, against a fake adb whose device list is $T/adbdev.
 sed -n '/^adb_serials() {/p; /^pick_adb_serial() {/,/^}/p' "$REPO/frames/aqara-s1-plus/tools/install/fel-install.sh" > "$T/pick.sh"

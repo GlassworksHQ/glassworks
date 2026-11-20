@@ -422,13 +422,40 @@ VLANs, which makes this easy to miss: the integration looks healthy while routin
 
 As a **repeater** (*Thread router* mode) the panel has no such requirement: it only talks Thread.
 
+## The frame agent, contract v5: the frame loader (S1 frame 1.0.0)
+
+From S1 frame 1.0.0 the boot image holds the frame loader ([frame-loader.md](../research/frame-loader.md)),
+and the root helper becomes **the frame agent**: the root-side service the S1 frame runs to give the
+panes the hardware they need ([principles](../../../docs/principles.md#the-frame-agent)). It does
+more than the radio now: the radio modes and their firewall, radio firmware, the time zone, the
+Bluetooth address, and the setup hotspot's portal and name. It is
+`frames/aqara-s1-plus/tools/radio/glassworks_agent.sh`, contract **v5**: the helper's v4 below with
+Glassworks names, run in the loader's `glassworks_agent` slot. What changes against v4:
+
+| v4 (0.4.3 boot images) | v5 |
+|---|---|
+| init service `s1kiosk_radio`, `.rc` in the boot image | `glassworks_agent`, a slot in `glassworks.rc` that runs `glassworks_loader.sh run agent`; in a frame bundle, `services/agent.sh`; logs tagged `glassworks_agent` |
+| `sys.s1kiosk.radio.version`, `sys.s1kiosk.radio.source` (the helper's own) | `sys.glassworks.agent.version` = `5`, `sys.glassworks.agent.source` |
+| the other `sys.s1kiosk.radio.*`, `sys.s1kiosk.timezone.status`, `sys.s1kiosk.portal.status`, `sys.s1kiosk.hotspot_name.status` | `sys.glassworks.radio.*`, `sys.glassworks.timezone.status`, `sys.glassworks.portal.status`, `sys.glassworks.hotspot_name.status` |
+| `persist.s1kiosk.radio_mode`, `radio_zigbee`, `radio_allow`, `timezone`, `hotspot_name` | `persist.glassworks.*`. The agent copies each old value to the new name at its first start (where the new one is empty), then again only when the old value changes; `$DIR/.settings-moved` records the old values it copied. So an allow-list cleared later under the new name stays empty, and a mode a 0.4.3 image or app sets still arrives (#528) |
+| the helper's own loader and the radio bundle (`$DIR/bundle`, `s1kiosk_bundle.sh`), installed and restarted at once | the frame loader and the frame bundle (`/data/glassworks/bundle`); the agent gets the checked bundle in `GW_BUNDLE`. An install only stages the bundle (`bundle/next`, status `ok: … staged`); it becomes active at the next reboot, when the loader checks and promotes it. Restarting `glassworks_agent` doesn't activate it. `sys.s1kiosk.radio.bundle` is gone: the bundle state is the loader's, in `/data/glassworks-pub/frame-bundle` = `<ok\|bad\|none> <loaded version\|-> <floor> <staged version\|->`, mirrored in `sys.glassworks.bundle.state` and `sys.glassworks.bundle.staged` ([what the app reads](../research/frame-loader.md#what-the-app-reads)) |
+| `/data/s1kiosk-pub` (bundle state, Bluetooth address) | `/data/glassworks-pub` (`frame-bundle`, `bluetooth-address`) |
+| iptables chains `S1RADIO`, `S1PORTAL` | `GWRADIO`, `GWPORTAL` |
+| the hotspot name overlay from the radio bundle | from the frame bundle (`hotspot-name.apk` at its top level). The Magisk module keeps its id `s1kiosk_hotspot_name` and the overlay its package `sh.edm.s1kiosk.overlay.hotspotname`: a 0.4.3 helper made that module, and a second id would leave two |
+| developer override `$DIR/dev-override` + `$DIR/s1kiosk_radio.sh` | the loader's `/data/glassworks/dev/override` + `dev/agent.sh` |
+
+Unchanged: `$DIR` stays `/data/s1kiosk/radio`, because `otbr-agent` has `$DIR/run` (and the Thread
+settings under it) compiled in. Everything else in the v4 table holds. The app reads both sets of names
+for one release; `s1kiosk_radio.sh` and `s1kiosk_bundle.sh` stay in the repo for that release, for the
+old radio bundle that 0.4.3 boot images install.
+
 ## Root helper contract (v4)
 
 The root half of the modes lives in a helper. The Magisk boot patch installs it as an init service
 ([frames/aqara-s1-plus/research/root.md](../research/root.md); working on the reference panel since 2026-11-09). Files:
 
 - `frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh`: the helper (mksh).
-- `frames/aqara-s1-plus/tools/radio/s1kiosk_radio.rc`: the init snippet.
+- `s1kiosk_radio.rc`: the init snippet, in 0.4.3 boot images (the loader image has `glassworks.rc` instead).
 - `frames/aqara-s1-plus/tools/radio/build-otbr.sh`: builds `otbr-agent`/`ot-ctl`.
 
 Contract **v4** (2026-11-10): v3 plus the loader and signed radio bundles ([Radio bundles](#radio-bundles-helper-v4)),

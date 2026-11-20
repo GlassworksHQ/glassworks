@@ -18,6 +18,17 @@ const STOCK = join(B, 'install-4.5.80-20261109-203611');
 const G = process.env.S1_WEB_GOLDEN ?? join(B, 'web-golden');
 const OUT = process.env.S1_WIRE_TRACE;
 const HAVE = existsSync(join(STOCK, 'boot.img')) && existsSync(join(G, 'out/SHA256SUMS'));
+/** The overlay files this revision's recipe reads: goldens made for another overlay can't drive the trace. */
+const OVERLAY = ['glassworks.rc', 'glassworks_loader.sh', 'glassworks_verify', 'glassworks_bundle.pub', 'glassworks_agent.sh',
+  'glassworks_firstboot.sh', 'glassworks_netwatch.sh', 'glassworks_update.sh', 'glassworks_bootanimation.zip', 'otbr-agent', 'ot-ctl'];
+const MISSING = HAVE ? OVERLAY.filter((f) => !existsSync(join(G, 'fixtures/overlay', f))) : [];
+if (OUT && !HAVE) {
+  throw new Error(`S1_WIRE_TRACE: needs ${join(STOCK, 'boot.img')} and ${join(G, 'out/SHA256SUMS')}: no trace was written`);
+}
+if (OUT && MISSING.length) {
+  throw new Error(`S1_WIRE_TRACE: ${G} has goldens for another overlay (missing ${MISSING.join(', ')}): ` +
+    'regenerate them with gen.sh, or point S1_WEB_GOLDEN at a set for this revision');
+}
 const rd = (p: string) => new Uint8Array(readFileSync(p));
 
 const text = (b: Uint8Array) => (b.length <= 64 && b.every((x) => x >= 0x20 && x < 0x7f) ? JSON.stringify(new TextDecoder().decode(b)) : '');
@@ -38,12 +49,10 @@ function assets(): Record<AssetName, () => Uint8Array> {
     'uboot-spl': () => new Uint8Array(0), uboot: () => new Uint8Array(0),
     magisk: () => rd(join(G, 'fixtures/Magisk-v31.1.apk')),
     'otbr-agent': ov('otbr-agent'), 'ot-ctl': ov('ot-ctl'),
-    'radio-rc': ov('s1kiosk_radio.rc'), 'radio-sh': ov('s1kiosk_radio.sh'),
-    'firstboot-rc': ov('s1kiosk_firstboot.rc'), 'firstboot-sh': ov('s1kiosk_firstboot.sh'),
-    'netwatch-rc': ov('s1kiosk_netwatch.rc'), 'netwatch-sh': ov('s1kiosk_netwatch.sh'),
-    'update-rc': ov('s1kiosk_update.rc'), 'update-sh': ov('s1kiosk_update.sh'),
-    'bundle-rc': ov('s1kiosk_bundle.rc'), 'bundle-sh': ov('s1kiosk_bundle.sh'), verify: ov('s1kiosk_verify'), 'bundle-pub': ov('s1kiosk_bundle.pub'), 'magiskenv-rc': ov('s1kiosk_magiskenv.rc'),
-    'branding-rc': ov('s1kiosk_branding.rc'), bootanimation: ov('s1kiosk_bootanimation.zip'),
+    rc: ov('glassworks.rc'), 'loader-sh': ov('glassworks_loader.sh'), verify: ov('glassworks_verify'), 'bundle-pub': ov('glassworks_bundle.pub'),
+    'agent-sh': ov('glassworks_agent.sh'), 'firstboot-sh': ov('glassworks_firstboot.sh'),
+    'netwatch-sh': ov('glassworks_netwatch.sh'), 'update-sh': ov('glassworks_update.sh'),
+    bootanimation: ov('glassworks_bootanimation.zip'),
     bootlogo: () => rd(join(G, 'fixtures/bootlogo.bmp')),
     'kiosk-apk': () => new Uint8Array(0), 'keyboard-apk': () => new Uint8Array(0),
   };

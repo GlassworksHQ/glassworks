@@ -1,21 +1,29 @@
 #!/usr/bin/env python3
-"""Build and sign an S1 Kiosk radio bundle (docs/radio.md "Radio bundles").
+"""Build and sign a frame bundle (frames/aqara-s1-plus/research/frame-loader.md, "The bundle").
 
-    frames/aqara-s1-plus/tools/radio/make-bundle.py --version 30200 --key KEY.pem --out OUTDIR \\
-        --file s1kiosk_radio.sh=frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh:0700 \\
+    frames/aqara-s1-plus/tools/radio/make-bundle.py --frame aqara-s1-plus --frame-version 1.0.1 \\
+        --key KEY.pem --out OUTDIR \\
+        --file services/agent.sh=frames/aqara-s1-plus/tools/radio/glassworks_agent.sh:0700 \\
         --file otbr-agent=frames/aqara-s1-plus/tools/radio/out/otbr-agent:0700 \\
         --dir sisdk=frames/aqara-s1-plus/tools/radio/out/sisdk \\
+        [--file bootanimation.zip=branding/glass-tile/bootanimation.zip] \\
         [--firmware ID=PATH-IN-BUNDLE:APP-VERSION:LABEL ...]
 
-Writes OUTDIR/radio-bundle/{manifest,manifest.sig,<files>} (the layout the app ships as an APK asset
-and the panel's s1kiosk_bundle.sh installs). KEY.pem is the project's Ed25519 private key (PKCS#8 PEM,
-GitHub secret S1_RADIO_BUNDLE_KEY in CI); it is only read by `openssl pkeyutl -sign`. --pubkey FILE
-checks the result against a public key (frames/aqara-s1-plus/tools/root/s1kiosk_bundle.pub) afterwards.
+Writes OUTDIR/frame-bundle/{manifest,manifest.sig,<files>} (the layout the app ships as an APK asset
+and the panel's glassworks_loader.sh installs). KEY.pem is the project's Ed25519 private key (PKCS#8
+PEM, GitHub secret S1_RADIO_BUNDLE_KEY in CI); it is only read by `openssl pkeyutl -sign`. --pubkey
+FILE checks the result against a public key (frames/aqara-s1-plus/tools/root/glassworks_bundle.pub).
 
-The manifest format is the one s1kiosk_bundle.sh parses (its header): version must only go up, so CI
-uses the app's versionCode. The script refuses to package Silicon Labs' zigbeed binary (MSLA object
-code, never redistributed by this project: the panel downloads it from Silicon Labs).
-Only the standard library and an OpenSSL 3 command line are needed.
+The manifest format is the one glassworks_loader.sh parses (its header). The frame id and version are
+inside the signed text, so a bundle only loads on its own frame. Panels refuse a version below the
+highest they ever loaded, so a typo such as 10.0.0 for 1.0.0 blocks every later bundle: take the
+version from the frame's one source of truth, never by hand. The script refuses to package Silicon
+Labs' zigbeed binary (MSLA object code, never redistributed by this project: the panel downloads it
+from Silicon Labs). Only the standard library and an OpenSSL 3 command line are needed.
+
+Transition (#528), remove with the s1kiosk names: with --version (and --app-version) instead of
+--frame, it writes the old radio bundle (OUTDIR/radio-bundle, "S1RADIO-BUNDLE 1", version = the app's
+versionCode) that the s1kiosk_bundle.sh of 0.4.3 boot images installs.
 """
 import argparse
 import hashlib
@@ -27,7 +35,9 @@ import sys
 import tempfile
 from datetime import datetime, timezone
 
-PATH_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]*(/[A-Za-z0-9][A-Za-z0-9._+-]*){0,3}$")
+PATH_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]*(/[A-Za-z0-9][A-Za-z0-9._+-]*){0,4}$")
+FRAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
+SEMVER_RE = re.compile(r"^(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})$")
 MODES = {"0600", "0644", "0700", "0755"}
 FW_ID_RE = re.compile(r"^[a-z0-9-]{1,16}$")
 APP_RE = re.compile(r"^[A-Za-z0-9._-]{1,16}$")
@@ -35,6 +45,7 @@ APP_RE = re.compile(r"^[A-Za-z0-9._-]{1,16}$")
 MSLA_SHA256 = {"a66d45842a770e1c449a55208a6d2a3b36786eb1c94bf10d3c3aac317274e3bb"}
 MAX_FILES = 200
 MAX_TOTAL = 96 * 1024 * 1024
+MAX_MANIFEST = 65536  # glassworks_loader.sh and s1kiosk_bundle.sh refuse a longer manifest
 
 
 def die(msg):
@@ -78,9 +89,11 @@ def openssl():
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--version", required=True, type=int)
-    ap.add_argument("--app-version", help="the APK's MAJOR.MINOR.PATCH: the bundle version must not exceed its versionCode")
-    ap.add_argument("--force", action="store_true", help="skip the --app-version check (tests, emergencies)")
+    ap.add_argument("--frame", help="the frame id the bundle is for, e.g. aqara-s1-plus")
+    ap.add_argument("--frame-version", help="the frame version, MAJOR.MINOR.PATCH (each 0..999)")
+    ap.add_argument("--version", type=int, help="old radio bundle only (#528 transition): the app's versionCode")
+    ap.add_argument("--app-version", help="old radio bundle only: the APK's MAJOR.MINOR.PATCH; the version must not exceed its versionCode")
+    ap.add_argument("--force", action="store_true", help="old radio bundle only: skip the --app-version check (tests, emergencies)")
     ap.add_argument("--key", required=True, help="Ed25519 private key, PKCS#8 PEM")
     ap.add_argument("--out", required=True)
     ap.add_argument("--file", action="append", default=[], help="BUNDLE-PATH=SOURCE[:MODE]")
@@ -90,17 +103,39 @@ def main():
     ap.add_argument("--pubkey", help="verify the signature with this public key file (64 hex digits)")
     a = ap.parse_args()
 
-    if not 0 < a.version <= 999_999_999:
-        die("version must be 1..999999999")
-    # Panels never accept a lower version than the highest they ever installed, so a typo like 3020000
-    # instead of 30200 would block every later bundle. The version is the app's versionCode.
-    if not a.force:
-        m = re.match(r"^(\d{1,4})\.(\d{1,2})\.(\d{1,2})$", a.app_version or "")
+    if a.frame is None and a.frame_version is not None:
+        die("--frame-version needs --frame")
+    if a.frame is not None:
+        if a.version is not None or a.app_version is not None:
+            die("--frame and --version are two formats: give one")
+        if not FRAME_RE.fullmatch(a.frame):
+            die(f"bad frame id {a.frame!r}")
+        m = SEMVER_RE.fullmatch(a.frame_version or "")
         if not m:
-            die("--app-version MAJOR.MINOR.PATCH is required (or --force)")
-        code = int(m[1]) * 10000 + int(m[2]) * 100 + int(m[3])
-        if a.version > code:
-            die(f"version {a.version} is above the app's versionCode {code}: panels would refuse every later bundle (--force to override)")
+            die(f"bad frame version {a.frame_version!r}: MAJOR.MINOR.PATCH, each 0..999")
+        version = int(m[1]) * 1_000_000 + int(m[2]) * 1_000 + int(m[3])
+        if version == 0:
+            die("frame version 0.0.0 is not allowed")
+        head = ["GLASSWORKS-BUNDLE 1", f"frame {a.frame} {a.frame_version}", f"version {version}"]
+        out_name, what = "frame-bundle", f"frame bundle {a.frame} {a.frame_version}"
+    else:
+        # The old radio bundle (#528 transition): remove with the s1kiosk names.
+        if a.version is None:
+            die("--frame and --frame-version are required")
+        if not 0 < a.version <= 999_999_999:
+            die("version must be 1..999999999")
+        # Panels never accept a lower version than the highest they ever installed, so a typo like 3020000
+        # instead of 30200 would block every later bundle. The version is the app's versionCode.
+        if not a.force:
+            m = re.match(r"^(\d{1,4})\.(\d{1,2})\.(\d{1,2})$", a.app_version or "")
+            if not m:
+                die("--app-version MAJOR.MINOR.PATCH is required (or --force)")
+            code = int(m[1]) * 10000 + int(m[2]) * 100 + int(m[3])
+            if a.version > code:
+                die(f"version {a.version} is above the app's versionCode {code}: panels would refuse every later bundle (--force to override)")
+        version = a.version
+        head = ["S1RADIO-BUNDLE 1", f"version {version}"]
+        out_name, what = "radio-bundle", f"radio bundle {version}"
     files = {}  # bundle path -> (source, mode)
     for spec in a.file:
         dst, _, src = spec.partition("=")
@@ -124,10 +159,10 @@ def main():
     if len(files) > MAX_FILES:
         die("too many files")
     total = 0
-    lines = ["S1RADIO-BUNDLE 1", f"version {a.version}", f"created {a.created}"]
+    lines = [*head, f"created {a.created}"]
     for dst in sorted(files):
         src, mode = files[dst]
-        if not good_path(dst):
+        if not good_path(dst) or (out_name == "radio-bundle" and dst.count("/") > 3):
             die(f"bad bundle path {dst!r}")
         if mode not in MODES:
             die(f"{dst}: mode {mode} not allowed")
@@ -153,11 +188,15 @@ def main():
         lines.append(f"firmware {fid} {path} {app} {label}")
     lines.append("end")
     manifest = ("\n".join(lines) + "\n").encode()
+    if len(manifest) > MAX_MANIFEST:
+        die(f"manifest is {len(manifest)} bytes; panels refuse more than {MAX_MANIFEST}")
     for l in lines:
+        if "\n" in l or "\r" in l:
+            die(f"manifest line {l!r} spans lines (a line break in --created?)")
         if "  " in l or l != l.strip():
             die(f"manifest line {l!r} has stray spaces")
 
-    out = os.path.join(a.out, "radio-bundle")
+    out = os.path.join(a.out, out_name)
     if os.path.exists(out):
         shutil.rmtree(out)
     os.makedirs(out)
@@ -191,7 +230,7 @@ def main():
                                 "-in", os.path.join(out, "manifest"), "-sigfile", sig_raw], capture_output=True, text=True)
             if r.returncode != 0:
                 die(f"the signature does not verify with {a.pubkey}: wrong key? {r.stdout.strip()} {r.stderr.strip()}")
-    print(f"radio bundle {a.version}: {len(files)} files, {total} bytes -> {out}")
+    print(f"{what}: {len(files)} files, {total} bytes -> {out}")
     print(manifest.decode(), end="")
 
 
