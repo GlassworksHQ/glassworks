@@ -199,4 +199,18 @@ describe('a set-up that stops after the image\'s first start', () => {
     expect(image.state.firstBoot).toBeDefined();
     expect(starts()).toBe(1);
   });
+
+  it('with the Mirror gone, Try again connects again, then set-up resumes: the first start isn\'t run again', async () => {
+    const { image } = await imageDemo(mirrorEntry, 'flash-setup-ha', true);
+    act(() => (image.setUp as unknown as { d: { unreachable(e: Error): void } }).d.unreachable(new Error('the app stopped answering')));
+    const panel = (image as unknown as { panel: PanelShell }).panel;
+    panel.run = async () => { throw new Error('USB transfer failed'); };
+    await act(() => image.setUpAgain());
+    expect(image.state.screen).toBe('adb'); // "One last click.": Connect
+    expect(image.state.firstBoot).toBeDefined();
+    const starts = () => image.state.log.filter((l) => l === 'Start Glassworks').length;
+    await act(() => image.connectAdb()); // the demo's device, connected again
+    expect(image.state).toMatchObject({ screen: 'setup', setup: { phase: 'wifi' } });
+    expect(starts()).toBe(1);
+  });
 });

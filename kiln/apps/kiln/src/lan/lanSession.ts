@@ -119,8 +119,12 @@ export class LanSession implements SetupSteps, WifiSteps {
     for (const l of this.listeners) l();
   }
 
-  /** A state the panel sent: which steps it has. */
+  /** The panel's screen takes a tap, as its state says (absent from older apps: it has). */
+  touch?: boolean;
+
+  /** A state the panel sent: which steps it has, and whether its screen takes a tap. */
   private saw(st: SetupState) {
+    if (st.touch !== undefined && st.touch !== this.touch) { this.touch = st.touch; this.set({}); }
     const rail = railOf(st);
     if (rail.length !== this.state.rail.length) this.set({ rail });
   }

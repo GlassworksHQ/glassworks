@@ -634,6 +634,7 @@ export class ImageSession {
     const now = () => performance.now();
     const secs = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
     const first = steps.find((x) => x.do !== 'backup');
+    this.resumingSetUp = false;
     this.set({ screen: 'working', error: undefined, flashFailed: false, communityWifi: undefined, firstBoot: undefined, work: { step: first?.do === 'patch' ? 'patch' : first?.do === 'flash' ? `flash-${first.partition}` as WorkStep : 'restart', x: 0 } });
     // what an earlier attempt made (Glassworks' images, a userdata with a network) is made again by its
     // own step, or not at all: a retry with the network cleared must write userdata as published
@@ -739,11 +740,13 @@ export class ImageSession {
 
   /** setUpAgain is reading the device. */
   private retrying = false;
+  /** Connect after set-up lost the device: the first start is through, so the connection goes straight to set-up. */
+  private resumingSetUp = false;
 
   /**
    * From an error once the first start is through (set-up stopped): set-up again from its first step, on the same
-   * connection, with nothing written again. A device that went away goes back to "One last click." (finishFirstStart):
-   * the first start's way back over adb.
+   * connection, with nothing written again. A device that went away is connected again first ("One last click."),
+   * then set-up resumes: its first start isn't run again.
    */
   async setUpAgain(): Promise<void> {
     if (this.state.screen !== 'error' || !this.state.firstBoot || this.recipe.community || this.retrying) return;
@@ -758,7 +761,19 @@ export class ImageSession {
       this.retrying = false;
       this.set({ busy: undefined });
     }
-    if (gone) { this.finishFirstStart(); return; }
+    if (gone) {
+      const stale = this.panel;
+      this.panel = undefined;
+      void stale?.close?.().catch(() => {});
+      this.resumingSetUp = true;
+      this.set({ screen: 'adb', error: undefined, connectError: undefined, adbWaiting: false });
+      return;
+    }
+    await this.toSetUp();
+  }
+
+  /** Set-up from its first step, on the connection the session holds. */
+  private async toSetUp(): Promise<void> {
     this.set({ screen: 'setup', error: undefined, setup: setUpWaiting(), managePage: undefined });
     await this.setUp.click('wifi', () => this.setUp.wifi());
   }
@@ -769,6 +784,7 @@ export class ImageSession {
    */
   finishFirstStart() {
     if (this.recipe.community || this.state.screen === 'working') return;
+    this.resumingSetUp = false;
     // the connection of a first start that stopped: let go, so Connect opens one fresh (not awaited: Connect's list stays in its click)
     const stale = this.panel;
     this.panel = undefined;
@@ -815,6 +831,12 @@ export class ImageSession {
       return;
     }
     this.panel = p;
+    if (this.resumingSetUp && this.state.firstBoot) {
+      this.resumingSetUp = false;
+      this.set({ connecting: false, adbWaiting: false });
+      await this.toSetUp();
+      return;
+    }
     this.set({ connecting: false, adbWaiting: false, screen: 'working', work: { step: 'first-boot', x: 0 } });
     try {
       for (let i = 0; (await p.run('getprop sys.boot_completed')).out.trim() !== '1'; i++) {

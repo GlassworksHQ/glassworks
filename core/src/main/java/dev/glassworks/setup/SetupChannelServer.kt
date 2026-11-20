@@ -73,6 +73,7 @@ object SetupChannelServer {
             return ChannelState(
                 ip = ip,
                 online = dev.glassworks.platform.NetworkUp.now(ctx),
+                touch = runtime.frame.input != dev.glassworks.frame.Input.NONE,
                 ha = ChannelState.Ha(
                     discovered = ChannelState.discovered(prefs.haUrl, prefs.haUrlSource),
                     url = haUrl,
