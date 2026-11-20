@@ -1,5 +1,7 @@
 package dev.glassworks.setup
 
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -44,8 +46,10 @@ class PanesStep(val panes: List<SetupPane>) {
 
     /**
      * Continue: applies every card, each on its own thread, within [budgetMs] in all. Blocks; never on the main thread.
-     * When each applied, the step is answered ([chosen]). Else every problem, one a line, and the step stays unanswered.
-     * One Continue at a time: a second, from the screen or the channel, is refused while one applies.
+     * When each applied, the step is answered ([chosen]). Else every problem, one a line, and the step is unanswered
+     * again: some switches may have changed, so an earlier answer no longer says what is on.
+     * One Continue at a time: a second, from the screen or the channel, is refused while one applies. A card that didn't
+     * answer in time still holds it until its worker ends, so a retry can't race its late write.
      */
     fun apply(wanted: BooleanArray, budgetMs: Long = BUDGET_MS): String? {
         require(wanted.size == panes.size) { "one answer per card" }
@@ -53,28 +57,36 @@ class PanesStep(val panes: List<SetupPane>) {
             if (applying) return BUSY
             applying = true
         }
-        try {
-            val results = arrayOfNulls<String>(panes.size)
-            val workers = panes.mapIndexed { i, p ->
-                Thread({ results[i] = runCatching { p.choice.apply(wanted[i]) }.getOrElse { it.message ?: "failed" } }, "glassworks-setup-pane-$i")
-                    .apply { isDaemon = true; start() }
-            }
-            val until = System.currentTimeMillis() + budgetMs
-            workers.forEach { it.join(maxOf(1L, until - System.currentTimeMillis())) }
-            val problems = panes.indices.mapNotNull { i ->
-                val title = panes[i].choice.title
-                when {
-                    workers[i].isAlive -> "The $title didn't answer."
-                    results[i] != null -> "$title: ${results[i]}"
-                    else -> null
+        val left = AtomicInteger(panes.size)
+        val release = { synchronized(lock) { applying = false } }
+        if (panes.isEmpty()) release()
+        val results = arrayOfNulls<String>(panes.size)
+        val workers = panes.mapIndexed { i, p ->
+            Thread({
+                try {
+                    results[i] = runCatching { p.choice.apply(wanted[i]) }.getOrElse { it.message ?: "failed" }
+                } finally {
+                    if (left.decrementAndGet() == 0) release()
                 }
-            }
-            if (problems.isNotEmpty()) return problems.joinToString("\n")
-            applied = wanted.copyOf()
-            return null
-        } finally {
-            synchronized(lock) { applying = false }
+            }, "glassworks-setup-pane-$i").apply { isDaemon = true; start() }
         }
+        // Monotonic: a wall-clock correction mid-way must not stretch the budget.
+        val until = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(budgetMs)
+        workers.forEach { it.join(maxOf(1L, TimeUnit.NANOSECONDS.toMillis(until - System.nanoTime()))) }
+        val problems = panes.indices.mapNotNull { i ->
+            val title = panes[i].choice.title
+            when {
+                workers[i].isAlive -> "The $title didn't answer."
+                results[i] != null -> "$title: ${results[i]}"
+                else -> null
+            }
+        }
+        if (problems.isNotEmpty()) {
+            applied = null
+            return problems.joinToString("\n")
+        }
+        applied = wanted.copyOf()
+        return null
     }
 
     companion object {

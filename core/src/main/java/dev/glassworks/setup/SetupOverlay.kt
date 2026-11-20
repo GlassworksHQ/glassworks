@@ -1197,7 +1197,9 @@ class SetupOverlay(
         private val toggles = ArrayList<Glass.Toggle>()
         var applying = false
             private set
+        /** The last refusal of this screen's Continue, while the step is unanswered: an answer from anywhere since clears it. */
         var problem: String? = null
+            get() = field?.takeIf { !panesStep.chosen }
             private set
         val chosen: Boolean get() = panesStep.chosen
 

@@ -87,6 +87,39 @@ class PanesStepTest {
     }
 
     @Test
+    fun aLateCardHoldsTheStepUntilItEnds() {
+        // CodeRabbit on #699: a retry must not race a timed-out card's late write.
+        val stuck = CountDownLatch(1)
+        val s = PanesStep(listOf(SetupPane(PaneChoice("Music", "A Sendspin speaker", on = { music }, apply = { v -> stuck.await(10, TimeUnit.SECONDS); music = v; null }), emptyList(), "sendspin")))
+        assertEquals("The Music didn't answer.", s.set(setOf("sendspin"), budgetMs = 100))
+        assertEquals(PanesStep.BUSY, s.set(emptySet()))
+        stuck.countDown()
+        val until = System.currentTimeMillis() + 5_000
+        var r: String? = PanesStep.BUSY
+        while (r == PanesStep.BUSY && System.currentTimeMillis() < until) { Thread.sleep(20); r = s.set(emptySet()) }
+        assertNull(r)
+        assertFalse(music)
+    }
+
+    @Test
+    fun aFailedAttemptUnanswersAnEarlierAnswer() {
+        // CodeRabbit on #699: some switches may have changed, so the earlier answer no longer says what is on.
+        var refuse: String? = null
+        val s = step { refuse }
+        assertNull(s.set(setOf("assist")))
+        assertTrue(s.chosen)
+        refuse = "the player didn't start"
+        assertEquals("Music: the player didn't start", s.set(setOf("sendspin")))
+        assertFalse(s.chosen)
+        assertFalse(s.wanted(0)) // the cards say what runs now
+        // a refusal before anything is applied keeps the answer
+        refuse = null
+        assertNull(s.set(setOf("assist")))
+        assertTrue(s.set(setOf("radio"))!!.startsWith("This panel has no pane"))
+        assertTrue(s.chosen)
+    }
+
+    @Test
     fun oneContinueAtATime() {
         val release = CountDownLatch(1)
         val started = CountDownLatch(1)

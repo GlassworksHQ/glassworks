@@ -172,6 +172,26 @@ class SetupPanesTest {
     }
 
     @Test
+    fun kilnsAnswerClearsTheScreensEarlierRefusal() {
+        // CodeRabbit on #699: the panel's refused Continue, then Kiln's panes.set goes through: the step no longer holds.
+        var refuse = true
+        val ps = listOf(SetupPane(PaneChoice("Music", "A Sendspin speaker", on = { true }, apply = { if (refuse) "the player didn't start" else null }), emptyList(), "sendspin"))
+        val shared = PanesStep(ps)
+        val a = Mockup.activity()
+        val s = SetupOverlay(a, TestFrames.s1(), ps, panesStep = shared)
+        a.setContentView(s, ViewGroup.LayoutParams(-1, -1))
+        s.render(model(SetupFlow.PANES))
+        Mockup.idle()
+        shown(s, "Continue")!!.performClick()
+        waitFor("refused") { shown(s, "Music: the player didn't start") != null }
+        assertTrue(s.holdsPanes)
+        refuse = false
+        assertEquals(null, shared.set(setOf("sendspin"))) // Kiln, over the setup channel
+        assertTrue(s.panesChosen)
+        assertFalse(s.holdsPanes)
+    }
+
+    @Test
     fun aRefusalHoldsTheStepUntilEveryCardApplies() {
         var refuse = true
         val s = overlay(listOf(
