@@ -3,18 +3,19 @@
 // lockup and stack here, the panel's colours in lan/lan.css.
 import lockup from '@glassworks/brand/lockup-on-dark.svg?raw';
 import { useState, useSyncExternalStore } from 'react';
-import { HomeAssistant, Radio, RadioNext, Wifi } from '../setup/steps';
+import { HomeAssistant, Panes, Radio, RadioNext, Wifi } from '../setup/steps';
 import { FULL_RAIL, type LanSession, type LanView, type RailStep } from './lanSession';
 import { PanelStack, type PlateLook } from './PanelStack';
 
 const LOCKUP = `data:image/svg+xml,${encodeURIComponent(lockup)}`;
 
-const NAMES: Record<RailStep, string> = { pair: 'Pair with the panel', wifi: 'Wi-Fi', ha: 'Home Assistant', radio: 'Radio', done: 'Done' };
+const NAMES: Record<RailStep, string> = { pair: 'Pair with the panel', wifi: 'Wi-Fi', ha: 'Home Assistant', panes: 'Panes', radio: 'Radio', done: 'Done' };
 
 function stepOf(v: LanView): RailStep {
   if (v.at === 'done') return 'done';
   if (v.at !== 'setup') return 'pair';
   if (v.setup.phase === 'wifi') return 'wifi';
+  if (v.setup.phase === 'panes') return 'panes';
   return v.setup.phase === 'radio' || v.setup.phase === 'radio-next' ? 'radio' : 'ha';
 }
 
@@ -88,6 +89,7 @@ function Screen({ lan, v, busy }: { lan: LanSession; v: LanView; busy: boolean }
       switch (s.phase) {
         case 'wifi': return <Wifi busy={busy} steps={lan} setup={s} />;
         case 'ha': return <HomeAssistant key="ha" busy={busy} steps={lan} setup={s} />;
+        case 'panes': return <Panes busy={busy} steps={lan} setup={s} />;
         case 'radio': return <Radio key={s.radio.mode} busy={busy} steps={lan} setup={s} />;
         case 'radio-next': return <RadioNext busy={busy} steps={lan} setup={s} />;
         default:

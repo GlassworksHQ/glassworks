@@ -28,18 +28,19 @@ export function Wizard({ session, frame, base }: { session: Session; frame: Kiln
   }, [s.ask, frame]);
 
   const p = { s, session, frame };
+  const sp = { s, session, frame: session.standard };
   const unsupported = chip?.kind === 'bad';
   return (
-    <Shell steps={rail(s)} level={stackLevel(s)} error={s.screen === 'error'} chip={s.ask ? { kind: 'work', text: 'Your turn' } : chip}
+    <Shell steps={rail(s, session.standard.steps)} level={stackLevel(s)} error={s.screen === 'error'} chip={s.ask ? { kind: 'work', text: 'Your turn' } : chip}
       href={status(s) === 'idle' ? (r) => base + ROUTES[r] : undefined}>
       {unsupported ? <Browser />
         : s.screen === 'connect' ? <Connect {...p} />
         : s.screen === 'firing' ? <Firing {...p} />
-        : s.screen === 'setup' ? <SetUp {...p} />
-        : s.screen === 'done' ? <Done {...p} />
+        : s.screen === 'setup' ? <SetUp {...sp} />
+        : s.screen === 'done' ? <Done {...sp} />
         : s.screen === 'undo' ? <Undo {...p} />
-        : <Failure {...p} />}
-      <YourTurn {...p} />
+        : <Failure s={s} session={session} help={frame.help} />}
+      <YourTurn s={s} session={session} asks={frame.asks} />
       <p className="visually-hidden" aria-live="polite">{announce(s, frame)}</p>
     </Shell>
   );

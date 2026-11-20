@@ -4,19 +4,24 @@
 import * as Collapsible from '@radix-ui/react-collapsible';
 import * as Dialog from '@radix-ui/react-dialog';
 import * as RadioGroup from '@radix-ui/react-radio-group';
+import { paneById } from '@glassworks/frame-card';
 import { fmtSize } from '@glassworks/kiln-core';
 import Link from 'next/link';
 import { BuiltOn, stepCredits } from '../components/Credit';
 import { SilentUpdates } from '../components/SilentUpdates';
 import { LastRun } from '../components/LastRun';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Recovery } from '../recovery/Recovery';
-import type { AppPhase, KilnFrame } from '@glassworks/kiln-core';
+import type { AppPhase, AskCopy, AskKind, KilnFrame } from '@glassworks/kiln-core';
+import type { StandardFrame } from '../standard/frame';
+import type { StandardSession } from '../standard/session';
 import type { Session } from './session';
-import { HomeAssistant, Radio, RadioNext, Wifi } from '../setup/steps';
+import { HomeAssistant, Panes, Radio, RadioNext, Wifi } from '../setup/steps';
 import { eta, milestones, type Setup, type WizardState } from './state';
 
 type P = { s: WizardState; session: Session; frame: KilnFrame };
+/** The standard flow's screens (every frame's steps after its install): any frame's session, the frame as the flow reads it. */
+type SP = { s: WizardState; session: StandardSession; frame: StandardFrame };
 
 function os(): 'win' | 'linux' | 'other' {
   const ua = navigator.userAgent;
@@ -57,9 +62,9 @@ export function Connect({ s, session, frame }: P) {
 }
 
 /** 3 · Your turn: a sheet over the step when the browser needs a click. */
-export function YourTurn({ s, session, frame }: P) {
+export function YourTurn({ s, session, asks }: { s: WizardState; session: StandardSession; asks: Partial<Record<AskKind, AskCopy>> }) {
   const ask = s.ask;
-  const copy = ask && frame.asks[ask.kind];
+  const copy = ask && asks[ask.kind];
   return (
     <Dialog.Root open={!!ask}>
       <Dialog.Portal>
@@ -162,20 +167,22 @@ function nowSays(p: AppPhase, update: boolean): { sub?: string; note?: string } 
   return {};
 }
 
-function Installing({ frame, setup }: { frame: KilnFrame; setup: Extract<Setup, { phase: 'settings' }> }) {
+function Installing({ frame, setup }: { frame: Pick<StandardFrame, 'app'>; setup: Extract<Setup, { phase: 'settings' }> }) {
   const seen = setup.installing ?? [];
   const now = seen.at(-1);
   const reached = new Set(seen.map(rowOf));
   const cur = now ? ROWS.findIndex((r) => r.id === rowOf(now)) : 0;
-  // the keyboard row while it is still to come, if asked for; one passed without an install is left out
-  const rows = ROWS.filter((r, i) => r.id !== 'keyboard' || reached.has('keyboard') || (setup.chosen?.keyboard !== false && i > cur));
+  // the keyboard row while it is still to come, if asked for; one passed without an install is left out. Applying the
+  // settings to an app already on (`apply`) has only their row.
+  const rows = setup.apply ? ROWS.filter((r) => r.id === 'prefs')
+    : ROWS.filter((r, i) => r.id !== 'keyboard' || reached.has('keyboard') || (setup.chosen?.keyboard !== false && i > cur));
   const at = rows.findIndex((r) => r.id === ROWS[cur]?.id);
   const { sub, note } = now ? nowSays(now, setup.update) : {};
   // the list changes only its marks, which a live region doesn't read: say the step in words
   const says = [rows[at]?.text(frame.app), sub, note].filter(Boolean).join('. ').replace(/\.\./g, '.');
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h">{setup.update ? `Updating ${frame.app}.` : `Installing ${frame.app}.`}</h2>
+      <h2 id="h">{setup.apply ? 'A few settings.' : setup.update ? `Updating ${frame.app}.` : `Installing ${frame.app}.`}</h2>
       <p className="lede">Keep it plugged in.</p>
       <ol className="join">
         {rows.map((r, i) => (
@@ -191,8 +198,11 @@ function Installing({ frame, setup }: { frame: KilnFrame; setup: Extract<Setup, 
   );
 }
 
-/** Language, time zone and clock, defaulting to this computer's; then the app goes in. */
-function Settings({ s, session, frame, setup }: P & { setup: Extract<Setup, { phase: 'settings' }> }) {
+/**
+ * Language, time zone and clock, defaulting to this computer's; then the app goes in, or (`apply`, an app the install
+ * put on) they go to it. The on-screen keyboard only on a frame with touch.
+ */
+function Settings({ s, session, frame, setup }: SP & { setup: Extract<Setup, { phase: 'settings' }> }) {
   const here = typeof navigator === 'undefined' ? 'en-US' : navigator.language || 'en-US';
   const locales = useMemo(() => {
     const tags = [...LOCALES];
@@ -206,7 +216,7 @@ function Settings({ s, session, frame, setup }: P & { setup: Extract<Setup, { ph
   const [locale, setLocale] = useState(() => was ? was.locale ?? '' : (LOCALES.includes(here) ? here : LOCALES.find((t) => t.split('-')[0] === here.split('-')[0]) ?? ''));
   const [tz, setTz] = useState(was ? was.timezone ?? '' : tzs.includes(tzHere) ? tzHere : '');
   const [clock, setClock] = useState(was ? (was.clock24 ? '24' : '12') : new Intl.DateTimeFormat(here, { hour: 'numeric' }).resolvedOptions().hour12 ? '12' : '24');
-  const [keyboard, setKeyboard] = useState(was?.keyboard ?? true);
+  const [keyboard, setKeyboard] = useState(was?.keyboard ?? frame.touch);
   const busy = !!setup.installing;
   // kept as it changes, so going to another set-up step and back doesn't lose an edit not yet installed
   useEffect(() => {
@@ -215,7 +225,7 @@ function Settings({ s, session, frame, setup }: P & { setup: Extract<Setup, { ph
   if (setup.installing) return <Installing frame={frame} setup={setup} />;
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h">{setup.update ? `Update ${frame.app}.` : 'A few settings.'}</h2>
+      <h2 id="h">{setup.update && !setup.apply ? `Update ${frame.app}.` : 'A few settings.'}</h2>
       <div className="fields">
         <label className="field"><span>Language</span>
           <select className="select" value={locale} onChange={(e) => setLocale(e.target.value)} disabled={busy}>
@@ -235,14 +245,14 @@ function Settings({ s, session, frame, setup }: P & { setup: Extract<Setup, { ph
           <RadioGroup.Item value="12">12-hour</RadioGroup.Item>
           <RadioGroup.Item value="24">24-hour</RadioGroup.Item>
         </RadioGroup.Root>
-        <label className="check"><input type="checkbox" checked={keyboard} onChange={(e) => setKeyboard(e.target.checked)} disabled={busy} /> On-screen keyboard</label>
+        {frame.touch && <label className="check"><input type="checkbox" checked={keyboard} onChange={(e) => setKeyboard(e.target.checked)} disabled={busy} /> On-screen keyboard</label>}
       </div>
       {setup.error && <p className="status err" role="alert">{setup.error}</p>}
       <div className="foot">
-        <span className="small">About a minute.</span>
+        {setup.apply ? <span /> : <span className="small">About a minute.</span>}
         <button type="button" className="btn ember" disabled={busy || !!s.busy}
           onClick={() => void session.click('install-app', () => session.installApp({ locale: locale || undefined, timezone: tz || undefined, clock24: clock === '24', keyboard }))}>
-          {setup.update ? 'Update and continue' : `Install ${frame.app}`}
+          {setup.apply ? 'Continue' : setup.update ? 'Update and continue' : `Install ${frame.app}`}
         </button>
       </div>
     </section>
@@ -259,14 +269,18 @@ export function Waiting({ setup }: { setup: Extract<Setup, { phase: 'waiting' }>
   );
 }
 
+/** A pane's icon from the pane catalog (packages/frame-card: each pane's icon.svg). */
+const paneIcon = (id: string) => paneById(id)?.icon;
+
 /** The set-up step, one phase at a time. */
-export function SetUp(p: P) {
+export function SetUp(p: SP) {
   const setup = p.s.setup;
   switch (setup.phase) {
     case 'waiting': return <Waiting setup={setup} />;
     case 'settings': return <Settings {...p} setup={setup} />;
     case 'wifi': return <Wifi busy={!!p.s.busy} steps={p.session} setup={setup} />;
     case 'ha': return <HomeAssistant key="ha" busy={!!p.s.busy} steps={p.session} setup={setup} />;
+    case 'panes': return <Panes busy={!!p.s.busy} steps={p.session} setup={setup} icons={paneIcon} />;
     case 'radio': return <Radio key={setup.radio.mode} busy={!!p.s.busy} steps={p.session} setup={setup} />;
     case 'radio-next': return <RadioNext busy={!!p.s.busy} steps={p.session} setup={setup} />;
   }
@@ -285,8 +299,11 @@ export function ManagePageRow({ href, the }: { href: string; the: string }) {
   );
 }
 
-/** 7 · Done: in one line. The backup is one row whose download is the ember action; undo is a link. */
-export function Done({ s, session, frame }: P) {
+/**
+ * 7 · Done: in one line. The backup is one row whose download is the ember action; undo is a link. `children`: what a
+ * frame's own install left to say (a device frame's page), under the standard flow's lines.
+ */
+export function Done({ s, session, frame, children }: SP & { children?: ReactNode }) {
   const d = s.done!;
   return (
     <section className="card" aria-labelledby="h">
@@ -301,10 +318,11 @@ export function Done({ s, session, frame }: P) {
         </div>
       )}
       {d.backup?.error && <p className="status err" role="alert">{d.backup.error}</p>}
+      {children}
       {d.managePage && <ManagePageRow href={d.managePage} the={`the ${frame.short}`} />}
       {s.flow === 'install' && <BuiltOn credits={stepCredits(frame.id, frame.credits)} />}
       <div className="foot">
-        {s.flow === 'install' ? <button type="button" className="link" onClick={() => void session.click('undo', () => session.openUndo())}>Undo</button> : <span />}
+        {s.flow === 'install' && session.canUndo ? <button type="button" className="link" onClick={() => void session.undo()}>Undo</button> : <span />}
         <Link className={`btn ${d.backup ? 'ghost' : 'ember'}`} href="/">Back to Kiln</Link>
       </div>
     </section>
@@ -348,7 +366,8 @@ export function Undo({ s, session, frame }: P) {
 }
 
 /** 9 · When something fails: what happened, whether anything was written, the most likely fix. */
-export function Failure({ s, session, frame }: P) {
+/** `help`: the frame's help links (the wizard's install frames have them). */
+export function Failure({ s, session, help }: { s: WizardState; session: StandardSession; help?: KilnFrame['help'] }) {
   const f = s.failure!;
   const [open, setOpen] = useState(false);
   const retry = () => {
@@ -366,18 +385,18 @@ export function Failure({ s, session, frame }: P) {
             {f.wrote && <><span aria-hidden="true">·</span><button type="button" className="link" onClick={retry}>Try again</button></>}
           </span>
           {f.wrote
-            ? <button type="button" className="btn ember" onClick={() => void session.click('undo', () => session.openUndo())}>Undo with your backup</button>
+            ? <button type="button" className="btn ember" onClick={() => void session.undo()}>Undo with your backup</button>
             : <button type="button" className="btn ember" onClick={retry}>Try again</button>}
         </div>
         <Collapsible.Content className="more">
           <ol className="tips">{f.tips.map(([b, t]) => <li key={b}><b>{b}</b> {t}</li>)}</ol>
           {f.raw && <pre className="raw">{f.raw}</pre>}
-          <p className="links">
-            <a className="link" href={frame.help.recovery} target="_blank" rel="noopener">Recovery and troubleshooting</a>
+          {help && <p className="links">
+            <a className="link" href={help.recovery} target="_blank" rel="noopener">Recovery and troubleshooting</a>
             <span aria-hidden="true">·</span>
-            <button type="button" className="link" onClick={() => void session.click('undo', () => session.openUndo())}>Undo with your backup</button>
-          </p>
-          <p className="small">Undo from a terminal: <code>{frame.help.undoCli}</code> (<a className="link" href={frame.help.undo} target="_blank" rel="noopener">how</a>)</p>
+            <button type="button" className="link" onClick={() => void session.undo()}>Undo with your backup</button>
+          </p>}
+          {help && <p className="small">Undo from a terminal: <code>{help.undoCli}</code> (<a className="link" href={help.undo} target="_blank" rel="noopener">how</a>)</p>}
           <TechLog s={s} />
         </Collapsible.Content>
       </Collapsible.Root>

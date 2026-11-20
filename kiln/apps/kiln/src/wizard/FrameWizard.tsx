@@ -48,7 +48,7 @@ function create(frame: KilnFrame, demoFrame: DemoFrame | undefined, base: string
 export function FrameWizard({ frame, demo, base }: { frame: KilnFrame; demo?: DemoFrame; base: string }) {
   const current = useCallback((): Entry => {
     const e = registry.get();
-    return e?.base === base ? e : registry.set(create(frame, demo, base, true));
+    return e?.base === base && !e.standard ? e : registry.set(create(frame, demo, base, true));
   }, [frame, demo, base]);
   const entry = useSyncExternalStore(registry.subscribe, current, current);
   const router = useRouter();
@@ -60,7 +60,7 @@ export function FrameWizard({ frame, demo, base }: { frame: KilnFrame; demo?: De
   const renew = useCallback(() => registry.set(create(frame, demo, base, false)), [frame, demo, base]);
   useRouteSync(entry, path, nav, renew);
   useEffect(() => {
-    if (entry.demo && demo && !entry.demoEntered) { entry.demoEntered = true; void enterDemo(entry.session, demo, entry.demo as Demo); }
+    if (entry.demo && demo && !entry.demoEntered) { entry.demoEntered = true; void enterDemo(entry.session as Session, demo, entry.demo as Demo); }
   }, [entry, demo]);
-  return <Wizard session={entry.session} frame={frame} base={base} />;
+  return <Wizard session={entry.session as Session} frame={frame} base={base} />;
 }

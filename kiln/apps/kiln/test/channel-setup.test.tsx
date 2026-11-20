@@ -6,7 +6,7 @@ import { NOT_PAIRED, SetupChannel, type SetupState } from '@glassworks/setup-cha
 import type { ByteStream } from 'improv-serial';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ChannelSetup, type SetupSteps } from '../src/setup/channelSetup';
-import { HomeAssistant, Radio, RadioNext } from '../src/setup/steps';
+import { HomeAssistant, Panes, Radio, RadioNext } from '../src/setup/steps';
 import type { Setup } from '../src/wizard/state';
 
 afterEach(() => cleanup());
@@ -173,7 +173,7 @@ describe('the setup steps over the LAN', () => {
 
   it('the next steps\' Finish waits while a button\'s work runs', () => {
     const finished: string[] = [];
-    const steps: SetupSteps = { click: async () => {}, signIn: () => {}, saveHa: async () => {}, skipHa: async () => {}, radio: async () => {}, applyRadio: async () => {}, finish: () => { finished.push('finish'); } };
+    const steps: SetupSteps = { click: async () => {}, signIn: () => {}, saveHa: async () => {}, skipHa: async () => {}, panes: async () => {}, applyPanes: async () => {}, radio: async () => {}, applyRadio: async () => {}, finish: () => { finished.push('finish'); } };
     const plan = { title: 'Use the radio in Home Assistant.', lead: '', steps: [] };
     const { rerender } = render(<RadioNext busy steps={steps} setup={{ phase: 'radio-next', plan }} />);
     const finish = screen.getByRole('button', { name: 'Finish' });
@@ -192,7 +192,7 @@ describe('the setup steps over the LAN', () => {
       copied.push(`${cmd}:${document.querySelector('textarea')?.value ?? ''}`);
       return true;
     }) as typeof document.execCommand;
-    const steps: SetupSteps = { click: async () => {}, signIn: () => {}, saveHa: async () => {}, skipHa: async () => {}, radio: async () => {}, applyRadio: async () => {}, finish: () => {} };
+    const steps: SetupSteps = { click: async () => {}, signIn: () => {}, saveHa: async () => {}, skipHa: async () => {}, panes: async () => {}, applyPanes: async () => {}, radio: async () => {}, applyRadio: async () => {}, finish: () => {} };
     const plan = { title: 'Use the radio in Home Assistant.', lead: '', steps: [{ title: 'Add the radio', body: '', kv: [['Serial path', 'socket://192.0.2.10:6638', true]] as [string, string, boolean][] }] };
     render(<RadioNext busy={false} steps={steps} setup={{ phase: 'radio-next', plan }} />);
     fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
@@ -205,7 +205,7 @@ describe('the setup steps over the LAN', () => {
     const steps: SetupSteps = {
       click: async (name, run) => { calls.push(name); await run(); },
       signIn: (u) => { calls.push(`signIn ${u}`); }, saveHa: async (u) => { calls.push(`saveHa ${u}`); },
-      skipHa: async (u) => { calls.push(`skipHa ${u}`); }, radio: async () => {},
+      skipHa: async (u) => { calls.push(`skipHa ${u}`); }, panes: async () => {}, applyPanes: async () => {}, radio: async () => {},
       applyRadio: async (m) => { calls.push(`applyRadio ${m}`); }, finish: () => {},
     };
     const { unmount } = render(<HomeAssistant busy={false} steps={steps} setup={{ phase: 'ha', ha: panelState.ha }} />);
@@ -216,5 +216,19 @@ describe('the setup steps over the LAN', () => {
     render(<Radio busy={false} steps={steps} setup={{ phase: 'radio', radio: panelState.radio, note: '' }} />);
     act(() => { fireEvent.click(screen.getByRole('button', { name: 'Finish' })); });
     expect(calls.at(-1)).toBe('applyRadio off');
+  });
+});
+
+describe('the Panes step\'s switches', () => {
+  it('are kept by the steps, so a screen that goes and comes back (pairing again) shows what the person set', () => {
+    const steps = { click: async (_n: string, run: () => Promise<void> | void) => { await run(); }, signIn: () => {}, saveHa: async () => {}, skipHa: async () => {},
+      panes: async () => {}, applyPanes: async () => {}, radio: async () => {}, applyRadio: async () => {}, finish: () => {} } as SetupSteps;
+    const setup = { phase: 'panes' as const, panes: [{ id: 'assist', title: 'Voice', detail: 'Assist and timers', on: true }, { id: 'notifications', title: 'Notifications', detail: 'On-screen alerts', on: false }] };
+    const first = render(<Panes busy={false} steps={steps} setup={setup} />);
+    fireEvent.click(screen.getByRole('switch', { name: /Voice/ }));
+    expect(steps.panesDraft).toEqual({ assist: false, notifications: false });
+    first.unmount();
+    render(<Panes busy={false} steps={steps} setup={setup} />);
+    expect((screen.getByRole('switch', { name: /Voice/ }) as HTMLInputElement).checked).toBe(false);
   });
 });

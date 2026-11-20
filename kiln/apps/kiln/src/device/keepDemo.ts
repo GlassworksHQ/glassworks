@@ -7,6 +7,8 @@ import type { DeviceEntry } from '@glassworks/kiln-core';
 import type { AppSession } from './appSession';
 import type { ImageSession } from './imageSession';
 import { imageDemo } from './imageDemo';
+import { standardDemo } from '../standard/demo';
+import type { StandardSession } from '../standard/session';
 import { withAppStreams } from '../wizard/demo';
 
 export const KEEP_DEMOS = ['flash-keep', 'flash-keep-reading', 'flash-keep-held', 'flash-keep-none', 'flash-keep-unreachable', 'flash-keep-old',
@@ -18,7 +20,8 @@ export const DEMO_KEY = btoa(String.fromCharCode(...Array.from({ length: 32 }, (
 /** Another made-up key: the fresh app holds this one already, so it refuses DEMO_KEY. */
 const OTHER_KEY = btoa(String.fromCharCode(...Array.from({ length: 32 }, (_, i) => 64 + i)));
 
-export async function keepDemo(d: Pick<DeviceEntry, 'frame' | 'sim'>, name: KeepDemo, fast = false): Promise<{ image: ImageSession; app: AppSession }> {
+/** `handOver`: the page's (imageDemo); flash-done-… end on the standard flow's Done, with the key's outcome under it. */
+export async function keepDemo(d: Pick<DeviceEntry, 'frame' | 'sim'>, name: KeepDemo, fast = false, handOver?: (p: PanelShell) => StandardSession | undefined): Promise<{ image: ImageSession; app: AppSession }> {
   const { frame, sim } = d;
   /** the running device before the flash: Glassworks with the key socket (or without it, an app from before issue 574) */
   const running = (): PanelShell => sim.running({ socket: name !== 'flash-keep-old', key: name === 'flash-keep-none' ? undefined : DEMO_KEY });
@@ -33,7 +36,7 @@ export async function keepDemo(d: Pick<DeviceEntry, 'frame' | 'sim'>, name: Keep
       if (name === 'flash-keep-unreachable' || name === 'flash-done-asks') throw new AdbAuthTimeout();
       return running();
     },
-  });
+  }, handOver);
   const f = out.image;
   f.toFastboot();
   if (name === 'flash-keep') return out;
@@ -47,7 +50,6 @@ export async function keepDemo(d: Pick<DeviceEntry, 'frame' | 'sim'>, name: Keep
   if (name === 'flash-keep-adb') return out;
   if (name === 'flash-keep-working') { f.state = { ...f.state, screen: 'working', work: { step: 'hand-back', x: 0 } }; return out; } // the hand-back waits on the app
   await f.connectAdb();
-  await f.setUp.homeAssistant();
-  f.setUp.finish(); // set-up's steps are the wizard's; these states are about the key
+  await standardDemo(out.standard?.(), 'done'); // set-up's steps are the standard flow's; these states are about the key
   return out;
 }

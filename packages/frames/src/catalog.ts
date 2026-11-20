@@ -36,20 +36,31 @@ export interface Release { line: string; tag: string; assets: string[] }
 /** What Kiln reads of a frame's installer.json before it loads the frame. */
 export interface Installer {
   route: string;
-  /** Kiln's page for it: the wizard (its step routes too), or the device flows. Its `kiln.ts` loader's `kind`. */
-  page?: 'wizard' | 'device';
   words?: { name: string };
+  /**
+   * Its flows' steps (docs/design/kiln/frames-as-data.md). `route`: the step's address under the frame's route ("" is
+   * the route itself), `title` the first part of that page's title. Kiln gives every frame its steps' routes, the
+   * standard flow's after them, and resumes at each.
+   */
+  flows?: Record<string, { steps: { id: string; route?: string; title?: string }[] }>;
+  /** The way back: `restore-backup` has Kiln's undo routes. */
+  wayBack?: { how: string };
   /** The device has a touchscreen. Without one (false), set-up never offers "do it on the panel". */
   touch?: boolean;
+  /**
+   * The standard flow after its install (Kiln's App, Wi-Fi, Home Assistant, Panes, Radio, Done): every step unless this
+   * says otherwise. `remove`: a step it leaves out, by name, with why. A step its hardware lacks needs no line here.
+   */
+  setUp?: { remove?: Record<string, string> };
   releases?: Release[];
   /** The first installer page's links: its hash links (/#/wifi) and its release route (/api/release-asset) lead here. */
   legacy?: { hashLinks?: boolean; releaseAsset?: string };
 }
 
-/** An installer.json as Kiln reads it, checked where it comes in. */
-function installer(d: Omit<Installer, 'page'> & { page?: string }): Installer {
-  if (d.page !== undefined && d.page !== 'wizard' && d.page !== 'device') throw new Error(`installer.json page: wizard or device, not ${d.page}`);
-  return d as Installer;
+/** An installer.json as Kiln reads it, checked where it comes in: a frame names no page of its own (issue 621). */
+function installer(d: Installer & { page?: unknown }): Installer {
+  if (d.page !== undefined) throw new Error('installer.json page: gone. Every frame runs on Kiln\'s one page, from its flows');
+  return d;
 }
 
 /** Each frame's installer.json, by frame id. */

@@ -1,14 +1,14 @@
 // The app alone over adb, outside React: the APK (the frame's newest release, or a file from this computer), the
-// device over WebUSB adb, its read-only checks, then install or undo (the frame's `appFlow`). An install goes on to
-// set-up, the wizard's own (setUp.ts: Wi-Fi, Home Assistant, the radio), then Done. Locked to the public
-// until the frame's frame.json makes it installable (deviceOpen): until then ?apk=release and ?apk=local are test links.
+// device over WebUSB adb, its read-only checks, then install or undo (the frame's `appFlow`). An install hands the
+// device to the standard flow every frame runs after its install (standard/session.ts: App, Wi-Fi, Home Assistant,
+// Panes, Radio, Done). Locked to the public until the frame's frame.json makes it installable (deviceOpen): until then
+// ?apk=release and ?apk=local are test links.
 import type { PanelShell } from '@glassworks/adb';
 import { apkPackage } from '@glassworks/app-adb';
 import { cap, type DeviceFrame, type DevicePhase, type DeviceReport, type Installed, type Removed } from '@glassworks/kiln-core';
 import { FRAMES } from '../frames/catalog';
+import type { DeviceProgress } from './imageSession';
 import { NoRelease, apkMode, installable, releaseApk, type ApkFrom, type ReleaseApk, type ReleaseLine } from '../release/apk';
-import type { AdbSetUp } from '../setup/adbSetUp';
-import { deviceSetUp, lid, setUpWaiting, type SetUpState } from './setUp';
 
 /** The frame's APK release line: one Kiln's release route serves (the frames' installer.json `releases`). */
 export const releaseLine = (f: Pick<DeviceFrame, 'apk'>) => f.apk as ReleaseLine;
@@ -18,16 +18,18 @@ export type { ApkFrom };
 /** The page is everyone's once the frame's frame.json makes it installable (release/apk.ts `installable`). */
 export const deviceOpen = (f: Pick<DeviceFrame, 'id'>) => { const d = FRAMES.find((x) => x.id === f.id); return !!d && installable(d); };
 
-export type AppScreen = 'off' | 'pick' | 'checks' | 'working' | 'setup' | 'done' | 'error';
+/** `done`: an undo's end (an install's is the standard flow's Done). */
+export type AppScreen = 'off' | 'pick' | 'checks' | 'working' | 'done' | 'error';
 
 /** The APK the tester picked: what the screen shows of it. The bytes stay in the session. */
 export interface PickedApk { name: string; size: number; sha256: string; package?: string; error?: string }
 
 export type Result = { flow: 'install'; installed: Installed } | { flow: 'undo'; removed: Removed };
 
-/** `setup`, `busy`, `managePage`: set-up after an install (setUp.ts). */
-export interface AppState extends SetUpState {
+export interface AppState {
   screen: AppScreen;
+  /** An earlier page load wrote to the device (its `progress` says): an install or undo there didn't finish. */
+  changed?: boolean;
   apk?: PickedApk;
   /** With the APK from the release: where its download is. */
   release?: ReleaseApk;
@@ -57,8 +59,13 @@ export interface AppDeps {
   releaseStallMs?: number;
   /** Opens Home Assistant's sign-in for set-up; the browser's own tab by default. */
   openTab?: (url: string) => Window | null;
-  /** A simulated device needs no wait for the app's socket. */
-  simulated?: boolean;
+  /**
+   * The install is through: the standard flow takes the device from here (its App step first). The session lets go of
+   * it, and keeps the result for Done's lines about the home screen.
+   */
+  handOver?(panel: PanelShell, result: Extract<Result, { flow: 'install' }>): void;
+  /** Where an install or undo got to, kept across page loads (ImageDeps `progress`): `written` while it writes. */
+  progress?: DeviceProgress;
 }
 
 /**
@@ -86,25 +93,8 @@ export class AppSession {
 
   constructor(private readonly d: AppDeps, on: boolean) {
     this.release = d.release;
-    this.state = { screen: on ? 'pick' : 'off', setup: setUpWaiting(), phases: [], log: [], ...(d.release ? { release: { state: 'waiting' } } : {}) };
-    this.setUp = deviceSetUp({
-      frame: d.frame,
-      panel: () => this.panel,
-      state: () => this.state,
-      patch: (p) => this.set(p),
-      here: () => this.state.screen === 'setup',
-      toDone: () => this.set({ screen: 'done' }),
-      onDone: () => this.state.screen === 'done',
-      stopped: (error) => this.set({ screen: 'error', error }),
-      log: (step, detail) => this.log(step, detail),
-      sleep: d.sleep,
-      openTab: d.openTab,
-      simulated: d.simulated,
-    });
+    this.state = { screen: on ? 'pick' : 'off', phases: [], log: [], ...(d.release ? { release: { state: 'waiting' } } : {}), ...(on && d.progress?.get() ? { changed: true } : {}) };
   }
-
-  /** Set-up after an install (the screens call it): Wi-Fi, Home Assistant, the radio. */
-  readonly setUp: AdbSetUp;
 
   get from(): ApkFrom { return this.release ? 'release' : 'local'; }
 
@@ -199,15 +189,7 @@ export class AppSession {
     this.set({ connecting: true, connectError: undefined });
     try {
       this.panel = await req;
-      const resume = this.resume;
       await this.check(); // Connect stays off until the check settles: a second device can't slip in under this report
-      this.resume = undefined; // read: set-up resumes now, or this device isn't one to resume on
-      // back after set-up lost the device: the install is done, so on to set-up again when Glassworks is there
-      if (resume && this.state.report?.ok && this.state.report.app && this.state.screen === 'checks') {
-        this.set({ connecting: false });
-        await this.toSetUp(resume);
-        return;
-      }
       this.set({ connecting: false });
     } catch (e) {
       this.set({ connecting: false, connectError: (e as Error).message });
@@ -224,15 +206,27 @@ export class AppSession {
    */
   private check(): Promise<void> {
     const op = this.ops;
-    this.checking ??= (async () => {
-      try {
-        const report = await this.d.frame.appFlow.check(this.panel!);
-        if (op === this.ops) this.set({ screen: 'checks', report, error: undefined, result: undefined, phases: [] });
-      } finally {
-        this.checking = undefined;
-      }
-    })();
-    return this.checking;
+    const panel = this.panel;
+    // a read shared with repeated clicks is the read of one device: a device connected since gets a read of its own
+    if (this.checking && this.checkingOn === panel) return this.checking;
+    const read: Promise<void> = (async () => {
+      if (!panel) throw new Error('no device connected');
+      const report = await this.d.frame.appFlow.check(panel);
+      if (op === this.ops && this.panel === panel) this.set({ screen: 'checks', report, error: undefined, result: undefined, phases: [] });
+    })().finally(() => { if (this.checking === read) { this.checking = undefined; this.checkingOn = undefined; } });
+    this.checking = read;
+    this.checkingOn = panel;
+    return read;
+  }
+
+  /** The device `checking` reads. */
+  private checkingOn?: PanelShell;
+
+  /** Lets go of the device: its adb connection and its USB claim (Panel.close), so Connect can open it again. */
+  private drop(): void {
+    const gone = this.panel as (PanelShell & { close?(): Promise<void> }) | undefined;
+    this.panel = undefined;
+    void gone?.close?.().catch(() => {});
   }
 
   /** Why Install can't start, or undefined when it can. */
@@ -264,71 +258,31 @@ export class AppSession {
   private async work(flow: 'install' | 'undo', run: (onPhase: (p: DevicePhase) => void) => Promise<Result>): Promise<void> {
     if (!this.panel || this.state.screen === 'working') return;
     this.ops++;
-    this.resume = undefined;
-    this.setUp.close();
-    this.set({ screen: 'working', flow, phases: [], error: undefined, result: undefined, managePage: undefined });
+    this.set({ screen: 'working', flow, phases: [], error: undefined, result: undefined });
+    this.d.progress?.set({ at: 'written' });
     try {
       const result = await run((p) => this.set({ phases: [...this.state.phases, p] }));
+      this.d.progress?.set(undefined);
+      this.set({ changed: undefined });
       if (result.flow === 'undo') { this.set({ screen: 'done', result }); return; }
-      // the install started the app: set-up's first step, settled before this returns and busy while it runs, so no
-      // button races it
-      this.set({ screen: 'setup', result, setup: setUpWaiting() });
-      await this.setUp.click('wifi', () => this.setUp.wifi());
+      // the install started the app: the standard flow has the device from here. This page, if it is opened again,
+      // starts from Connect: it holds no device any more
+      const panel = this.panel;
+      this.panel = undefined;
+      this.set({ screen: 'pick', report: undefined, phases: [], result });
+      this.d.handOver?.(panel, result);
     } catch (e) {
       this.log('Stopped', (e as Error).message);
       this.set({ screen: 'error', error: (e as Error).message });
     }
   }
 
-  /** The install's result while the device is connected again after set-up lost it (setUpAgain). */
-  private resume?: Result;
-  /** setUpAgain is reading the device. */
-  private retrying = false;
-
-  /**
-   * From an error once the install went through (set-up stopped): set-up again from its first step. The install stays
-   * done and nothing is written again. A device that went away is connected again first (Connect), then set-up
-   * resumes once its read shows Glassworks.
-   */
-  async setUpAgain(): Promise<void> {
-    const result = this.state.result;
-    if (this.state.screen !== 'error' || result?.flow !== 'install' || this.retrying) return;
-    // while the device is read, nothing else starts here (the error screen's buttons are off: `busy`)
-    this.retrying = true;
-    this.ops++; // a read of the device still running (Back to the checks) no longer lands over this
-    this.setUp.close();
-    this.set({ busy: 'set-up-again' });
-    try {
-      // on the clock, not the session's sleep: a test's instant sleep would end the read before it starts
-      await this.panel!.run('true', lid(this.d.frame, undefined, 5000));
-    } catch (e) {
-      this.panel = undefined;
-      this.resume = result;
-      this.set({ screen: 'pick', report: undefined, error: undefined,
-        connectError: `${cap(this.d.frame.the)} went away: ${(e as Error).message}. Connect again.` });
-      return;
-    } finally {
-      this.retrying = false;
-      this.set({ busy: undefined });
-    }
-    await this.toSetUp(result);
-  }
-
-  private async toSetUp(result: Result): Promise<void> {
-    this.set({ screen: 'setup', result, error: undefined, setup: setUpWaiting(), managePage: undefined });
-    await this.setUp.click('wifi', () => this.setUp.wifi());
-  }
-
   /** From Done or an error: read the device again, or connect again if it went away. */
   async again(): Promise<void> {
-    if (this.retrying) return; // Try again is reading the device: it decides where this goes
     const op = this.ops;
-    this.resume = undefined; // Back to the checks: the checks, not set-up
-    this.setUp.close();
-    this.set({ managePage: undefined });
     try { await this.check(); } catch (e) {
       if (op !== this.ops) return; // an install or undo started meanwhile: it owns the screen now
-      this.panel = undefined;
+      this.drop();
       this.set({ screen: 'pick', report: undefined, flow: undefined, result: undefined, error: undefined, phases: [],
         connectError: `${cap(this.d.frame.the)} went away: ${(e as Error).message}. Connect again.` });
     }

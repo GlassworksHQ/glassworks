@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-// Set-up is the engine's stage, the same for every frame whose set-up runs over adb. The S1's wizard Session and the
-// device flows' sessions all build setup/adbSetUp.ts, from the frame's installer.json, so a failure here is every
-// frame's. The cases come from the Mirror's run on 2026-11-20, which failed at set-up:
+// Set-up is the engine's stage, the same for every frame: the standard flow (standard/session.ts), which the S1's wizard
+// Session extends and a device frame's page hands its device to. Both build setup/adbSetUp.ts from the frame's
+// installer.json, so a failure here is every frame's. The cases come from the Mirror's run on 2026-11-20, which failed at set-up:
 // - a fresh flash with Android's Wi-Fi off: the scan found nothing, and nothing turned it on;
 // - the app came back after the Wi-Fi join without the sign-in it was handed: set-up must say one clear thing, then
 //   ask to sign in, never read the restart as an older app and skip to Done;
@@ -13,8 +13,8 @@ import { SETUP_SOCKET } from '@glassworks/setup-channel';
 import { cleanup, render } from '@testing-library/react';
 import { s1Plus } from '@glassworks/aqara-s1-plus-installer';
 import { afterEach, describe, expect, it } from 'vitest';
-import { AppSession } from '../../src/device/appSession';
-import { ImageSession } from '../../src/device/imageSession';
+import { standardOfDevice } from '../../src/standard/frame';
+import { StandardSession } from '../../src/standard/session';
 import { AdbSetUp } from '../../src/setup/adbSetUp';
 import { HomeAssistant, Wifi } from '../../src/setup/steps';
 import { withAppStreams } from '../../src/wizard/demo';
@@ -71,14 +71,13 @@ describe('every session builds set-up from its frame\'s installer.json', () => {
       devices: { knownFastboot: async () => undefined, requestFastboot: () => new Promise(() => {}), knownAdb: async () => undefined, requestAdb: () => new Promise(() => {}) },
     });
     expect((s1 as unknown as { setUp: AdbSetUp }).setUp.touch).toBe(touchOf(s1Frame.id));
-    const app = new AppSession({ frame: mirrorFrame, connect: () => new Promise(() => {}) }, true);
-    expect(app.setUp.touch).toBe(touchOf(mirrorFrame.id));
-    const image = new ImageSession({ frame: mirrorFrame, images: {} as never, requestFastboot: () => new Promise(() => {}), requestAdb: () => new Promise(() => {}), adbKey: () => undefined, apk: () => undefined });
-    expect(image.setUp.touch).toBe(touchOf(mirrorFrame.id));
+    const mirror = new StandardSession({ standard: standardOfDevice(mirrorFrame), devices: { knownAdb: async () => undefined, requestAdb: () => new Promise(() => {}) }, loadKey: () => new Promise(() => {}) });
+    const mirrorSetUp = (mirror as unknown as { setUp: AdbSetUp }).setUp;
+    expect(mirrorSetUp.touch).toBe(touchOf(mirrorFrame.id));
     expect([touchOf(s1Frame.id), touchOf(mirrorFrame.id)]).toEqual([true, false]);
     // and the app's package, for the grant its scan needs
     expect((s1 as unknown as { setUp: { d: { appPackage?: string } } }).setUp.d.appPackage).toBe(s1Frame.appId.package);
-    expect((app.setUp as unknown as { d: { appPackage?: string } }).d.appPackage).toBe(mirrorFrame.app.package);
+    expect((mirrorSetUp as unknown as { d: { appPackage?: string } }).d.appPackage).toBe(mirrorFrame.app.package);
     expect(Object.keys(PACKAGES).sort()).toEqual([...ENGINE].sort());
   });
 });

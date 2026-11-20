@@ -114,9 +114,35 @@ browser storage it keeps, every word only it says, the rows its app install show
 updates words. Its code, in its installer package, is `appFlow` (check the APK, read the device,
 install, undo) and `imageFlow` (its image recipes, its fastboot checks, the first start, the
 only-home-screen step, Wi-Fi on, and its image builder in a worker). The engine's device flows
-(`apps/kiln/src/device`) run every step and every screen for any frame of that kind. `installer.json`
-`page` (`wizard` or `device`) says which page a frame gets; the registry's loader gives the same
-`kind`, and only a wizard frame has the step routes (`/install`, `/set-up/wifi`, …).
+(`apps/kiln/src/device`) run every step and every screen for any frame of that kind. Its install
+hands the device to the standard flow, below.
+
+**Every frame has the same page and the same kind of routes.** There is no `page` in `installer.json`
+any more (the catalog refuses one). Each flow step declares its `route` under the frame's route (`""`
+is the route itself) and a `title`; Kiln builds those, the standard flow's and, for a frame whose way
+back restores a backup, undo's (`apps/kiln/src/app/[frame]/frames.ts` `routesOf`). The address follows
+the step, a reload there resumes it, and going to one never starts anything. `test/contract/routes.test.ts`
+checks every step has its route and the standard flow's are there, and the contract's `reload@<step>`
+cases check the resume.
+
+### The standard flow
+
+After its install, every frame runs the same steps on the same screens: **App** (the app's language,
+time zone and clock), **Wi-Fi**, **Home Assistant**, **Panes**, **Radio**, then **Done**
+(`apps/kiln/src/standard/`). The engine owns them, their routes (`/set-up`, `/set-up/wifi`,
+`/set-up/home-assistant`, `/set-up/panes`, `/set-up/radio`, `/done`) and their resume. The S1's
+install session extends it; a device frame's page hands its device to one at the end of its install,
+and its Done carries what that install found (the home screen, Home Assistant's key, the way back).
+
+The App step installs the app where the install didn't (the S1, over FEL), and applies the settings
+to the app already on where it did (the Mirror), with no reinstall. Panes shows once the app's setup
+state lists its cards (the setup channel's `panes`, `panes.set`).
+
+A frame changes the list only in its data. A step its hardware lacks goes by itself: no radio in
+`frame.json` `panes.radio`, no Radio step; no touch (`installer.json` `touch`), no on-screen keyboard
+on the App step. Any other step a frame leaves out is in `installer.json` `setUp.remove`, by name, with
+why (`{ "setUp": { "remove": { "panes": "…" } } }`); a name that isn't a step, or no reason, fails where
+the data comes in. No frame has a set-up of its own.
 
 The radio's next steps (`setup/radioPlan.ts`) are the radio pane's, not a frame's: the panel's own
 setup page shows them on any frame whose app reports a radio.
