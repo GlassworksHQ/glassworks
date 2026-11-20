@@ -203,6 +203,28 @@ class CameraHubTest {
         }
     }
 
+    /** The same with presence itself: its own check is still pending when the hub reopens, and the silence is reported anyway. */
+    @Test fun presenceReportsASilenceTheHubCaughtFirst() {
+        val hub = silentCamera()
+        val readings = java.util.Collections.synchronizedList(mutableListOf<Pair<Boolean, Float>>())
+        val problems = java.util.Collections.synchronizedList(mutableListOf<String>())
+        val held = mutableListOf<Runnable>() // presence's own checks: never run here
+        val presence = CameraPresence(
+            hub, clock = android.os.SystemClock::elapsedRealtime, post = { it.run() }, after = { _, r -> synchronized(held) { held += r } },
+            onProblem = { problems += it },
+        )
+        presence.start(app) { near, raw -> readings += near to raw }
+        try {
+            opened(); settled(hub)
+            advance(hub, CameraHub.FIRST_FRAME_MS)
+            assertEquals(1, reopens())
+            assertEquals(listOf(false to -1f), readings.toList())
+            assertEquals(listOf("the camera stopped: no first frame in 10 s"), problems.toList())
+        } finally {
+            presence.stop(app)
+        }
+    }
+
     @Test fun aRepeatedSilenceBacksOff() {
         val hub = silentCamera()
         hub.open(5f, presence()).use {
