@@ -2532,6 +2532,42 @@ class Regrade(unittest.TestCase):
         g = G.grade_summary(summ)
         self.assertEqual((summ["complete"], g["status"], g["grade"], g["provisional"]), (False, "graded", "B", True))
 
+    def test_raw_files_that_lost_a_run_dont_overwrite_the_report(self):
+        """CodeRabbit on #656: with a refstart file gone, a rebuild would drop that graded run from the report."""
+        p = self.regrade(self.dir)
+        self.assertEqual(p.returncode, 0, p.stderr + p.stdout)
+        with open(os.path.join(self.dir, "report.json")) as f:
+            before = f.read()
+        os.remove(os.path.join(self.dir, "refstart-3.json"))
+        p = self.regrade(self.dir)
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("report.json has 3 graded runs but only 2 refstart-*.json", p.stderr)
+        with open(os.path.join(self.dir, "report.json")) as f:
+            self.assertEqual(f.read(), before)
+
+    def test_a_published_folder_whose_summary_is_refused_is_left_whole(self):
+        """CodeRabbit on #656: a published folder (clarity.json, with its report URL) changes all at once or not at
+        all: a refused summary leaves the report and clarity.json as they were."""
+        src = os.path.join(os.path.dirname(os.path.dirname(self.PERF)), "frames", "aqara-s1-plus", "clarity")
+        d = tempfile.mkdtemp()
+        for name in ("report.json", "report.md", "clarity.json"):
+            shutil.copy(os.path.join(src, name), d)
+        with open(os.path.join(d, "report.json")) as f:
+            rep = json.load(f)
+        rep["measured_on"] = "2026-11-14"                          # the first v1's day: refused now
+        self.write_to(d, "report.json", rep)
+        before = {n: open(os.path.join(d, n)).read() for n in ("report.json", "report.md", "clarity.json")}
+        p = self.regrade(d)
+        self.assertEqual(p.returncode, 1, p.stdout)
+        self.assertIn("nothing written: a published folder keeps its report and clarity.json together", p.stdout)
+        self.assertEqual({n: open(os.path.join(d, n)).read() for n in before}, before)
+
+    @staticmethod
+    def write_to(d, name, obj):
+        with open(os.path.join(d, name), "w") as f:
+            json.dump(obj, f, indent=1)
+            f.write("\n")
+
     def test_dry_run_writes_nothing(self):
         before = sorted(os.listdir(self.dir))
         p = self.regrade(self.dir, "--dry-run")

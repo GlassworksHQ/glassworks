@@ -17,7 +17,9 @@ of other versions, or the first v1's (2026-11-14), come out "re-measure".
 Then the summary: clarity.json when the directory has one (a frame's published folder: its report URL is kept),
 else summary.json. As summary.py, it refuses incomplete or not comparable measurements unless --allow-provisional, or
 the summary there was itself published incomplete (complete: false);
-the report is written either way, and a summary it refuses is removed, so no summary is left with the earlier grade.
+in a run folder the report is written either way and a summary it refuses is removed, so none is left with the
+earlier grade; a published folder (clarity.json) is left as it was, report and summary together, and it says so.
+From the raw files, it stops when they hold fewer graded runs than the report.json there (some were lost).
 
   tools/perf/regrade.py <run-dir> [--allow-provisional] [--dry-run]
 
@@ -37,9 +39,15 @@ def regrade(run_dir):
     """(new report, how): from the raw files when the directory has them, else from its report.json."""
     old_path = os.path.join(run_dir, "report.json")
     old = R.read_json(old_path) if os.path.exists(old_path) else None
-    raw = os.path.exists(os.path.join(run_dir, "device.json")) and any(
-        f.startswith("refstart-") and f.endswith(".json") for f in os.listdir(run_dir))
+    refstarts = [f for f in os.listdir(run_dir) if f.startswith("refstart-") and f.endswith(".json")]
+    raw = os.path.exists(os.path.join(run_dir, "device.json")) and bool(refstarts)
     if raw:
+        stored = len((((old or {}).get("graded") or {}).get("reference") or {}).get("per_run") or [])
+        if len(refstarts) < stored:
+            # Some graded runs' raw files are gone: a rebuild would drop them and overwrite the stored report.
+            sys.exit(f"{run_dir}: report.json has {stored} graded runs but only {len(refstarts)} refstart-*.json: "
+                     "a rebuild from the raw files would drop the others. Nothing written. Restore the files, or move "
+                     "the raw files aside to grade it again from report.json alone.")
         rep = R.build(run_dir)
         if old:
             rep["apk"] = old.get("apk", rep.get("apk"))
@@ -88,6 +96,12 @@ def main():
     if a.dry_run:
         return 0
     md = R.markdown(rep)
+    if summary is None and os.path.exists(published):
+        # A published folder changes all at once or not at all: its report and clarity.json (and its report URL) stay
+        # as they were, rather than a new report beside no summary (CodeRabbit on #656).
+        print("  nothing written: a published folder keeps its report and clarity.json together. "
+              "Pass --allow-provisional to publish the new grade marked incomplete.")
+        return 1
     # The report and its summary must agree: a summary refused now goes, rather than stay with the old grade.
     if summary is None and os.path.exists(summary_path):
         os.remove(summary_path)
