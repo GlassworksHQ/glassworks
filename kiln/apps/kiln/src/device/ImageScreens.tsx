@@ -9,7 +9,7 @@ import { useState } from 'react';
 import { BuiltOn, Credit, stepCredits } from '../components/Credit';
 import { FRAMES } from '../frames/catalog';
 import { Recovery } from '../recovery/Recovery';
-import type { RailMark, RailStep } from '../wizard/state';
+import { setUpSub, type RailMark, type RailStep } from '../wizard/state';
 import type { ImageSession, ImageState, WorkStep } from './imageSession';
 import { Choose, ConfirmCommunity, DoneCommunity, Download, DownloadButton, FileRow, WayBack, Whose } from './choice/ChoiceScreens';
 import { ReleaseApk, TestOnly } from './ReleaseApk';
@@ -17,16 +17,24 @@ import type { AppSession, AppState } from './appSession';
 import { SilentUpdates } from '../components/SilentUpdates';
 import { ImageKeep, KeyOutcome, keyHeld } from './KeepScreens';
 import { lines, rich } from './rich';
+import { HomeAssistant, Radio, RadioNext, Wifi } from '../setup/steps';
+import { SetupPageRow, Waiting } from '../wizard/screens';
 
 type P = { f: ImageSession; s: ImageState; m: AppSession; ms: AppState };
 
 /** Arriving by an image's link skips the choice, so its rail has no Choose step. */
-export function imageRail(s: ImageState, f: Pick<DeviceFrame, 'short'>): RailStep[] {
-  const names = [f.short, 'Choose', 'Download', 'Fastboot', 'Install', 'Done'];
-  const at = { choose: 1, image: 2, download: 2, keep: 3, fastboot: 3, confirm: 3, working: 4, adb: 4, error: 4, done: 6 }[s.screen];
+/** Whether the frame has a radio, from its frame.json (`panes.radio`): set-up's Radio step is only for one that does. */
+export const hasRadio = (f: Pick<DeviceFrame, 'id'>) => (FRAMES.find((x) => x.id === f.id)?.panes?.radio?.support ?? 'no') !== 'no';
+
+export function imageRail(s: ImageState, f: Pick<DeviceFrame, 'short' | 'id'>, community = false): RailStep[] {
+  // Set up is Glassworks' (Wi-Fi, Home Assistant, the radio): a community image's install ends at Install
+  const names = [f.short, 'Choose', 'Download', 'Fastboot', 'Install', ...(community ? [] : ['Set up']), 'Done'];
+  const setUp = names.indexOf('Set up');
+  // an error after the first start (set-up's app stopped answering) is Set up's
+  const at = { choose: 1, image: 2, download: 2, keep: 3, fastboot: 3, confirm: 3, working: 4, adb: 4, error: setUp > 0 && s.firstBoot ? setUp : 4, setup: setUp, done: names.length }[s.screen];
   return names.map((name, i): RailStep => {
     const mark: RailMark = i < at ? 'done' : i > at ? 'todo' : s.screen === 'error' ? 'bad' : s.screen === 'adb' ? 'turn' : 'now';
-    return { name, mark };
+    return { name, mark, ...(s.screen === 'setup' && i === setUp ? { sub: setUpSub(s.setup, false, hasRadio(f)) } : {}) };
   }).filter((x) => !s.link || x.name !== 'Choose');
 }
 
@@ -34,7 +42,7 @@ export function imageRail(s: ImageState, f: Pick<DeviceFrame, 'short'>): RailSte
 export function imageLevel(s: ImageState, community = false): number {
   if (community) return 0;
   if (s.screen === 'done') return 4;
-  if (s.screen === 'adb') return 3;
+  if (s.screen === 'adb' || s.screen === 'setup') return 3;
   if (s.screen === 'working') return s.work?.step.startsWith('flash') || s.work?.step === 'restart' ? 2 : 1;
   return 0;
 }
@@ -77,23 +85,15 @@ export function ImageImage({ f, s, m, ms }: P) {
       {s.files.map((x) => <FileRow key={x.name} f={f} file={x} />)}
       <ImageCredit f={d} />
       {ms.release && <ReleaseApk m={m} ms={ms} />}
-      <div className="fields">
-        {!ms.release && (
+      {/* Home Assistant and the Wi-Fi are set-up's, after the first start, as on every frame */}
+      {!ms.release && (
+        <div className="fields">
           <label className="field"><span>{d.words['image.apkLabel']}</span>
             <input className="input" type="file" accept=".apk,application/vnd.android.package-archive"
               onChange={(e) => { const x = e.target.files?.[0]; if (x) void m.pickApk(x.name, x.arrayBuffer().then((b) => new Uint8Array(b))); }} />
           </label>
-        )}
-        <label className="field"><span>Home Assistant (optional)</span>
-          <input className="input" type="url" placeholder="http://homeassistant.local:8123" value={s.haUrl} onChange={(e) => f.setHaUrl(e.target.value.trim())} />
-        </label>
-        <label className="field"><span>Wi-Fi network (optional)</span>
-          <input className="input" autoComplete="off" value={s.wifi.ssid} onChange={(e) => f.setWifi({ ssid: e.target.value })} />
-        </label>
-        <label className="field"><span>Wi-Fi password (if it has one)</span>
-          <input className="input" type="password" autoComplete="off" value={s.wifi.password} onChange={(e) => f.setWifi({ password: e.target.value })} />
-        </label>
-      </div>
+        </div>
+      )}
       {ms.apk && (!ms.release || ms.apk.error) && <p className={`small${ms.apk.error ? ' status err' : ''}`}>{ms.apk.name}: {ms.apk.error ?? `${ms.apk.package}, ${fmtSize(ms.apk.size)}`}</p>}
       {blocked && ready && <p className="status err" role="alert">{blocked}</p>}
       <div className="foot">
@@ -101,7 +101,7 @@ export function ImageImage({ f, s, m, ms }: P) {
         <DownloadButton f={f} s={s} label="Download the system image" />
       </div>
       {/* the flashed device is fine and keeps this browser's key: only the first start over adb is left (a real run, 2026-11-19) */}
-      <p className="small">{`Flashed already, but its first start didn't finish? `}<button type="button" className="link" disabled={!!f.inputsBlocked()} onClick={() => f.finishFirstStart()}>Finish its first start</button>.</p>
+      <p className="small">{`Flashed already, but its first start didn't finish? `}<button type="button" className="link" onClick={() => f.finishFirstStart()}>Finish its first start</button>.</p>
     </section>
   );
 }
@@ -268,6 +268,7 @@ export function ImageDone({ f, s }: P) {
       )}
       {fb && <SilentUpdates words={d.silent[fb.updates.state] ?? null} />}
       {fb && <KeyOutcome k={s.key} d={d} />}
+      {s.setupPage && <SetupPageRow href={s.setupPage} />}
       {other && <WayBack f={f} other={other} />}
       <BuiltOn credits={imageCredits(d)} />
       {rev && <p className="small">{rev}.</p>}
@@ -306,6 +307,20 @@ export function ImageError({ f, s }: P) {
   );
 }
 
+/** Set-up after Glassworks' first start: the wizard's own steps (setup/steps.tsx), over this device's adb. */
+function ImageSetUp({ f, s }: P) {
+  const setup = s.setup;
+  const busy = !!s.busy;
+  switch (setup.phase) {
+    case 'wifi': return <Wifi busy={busy} steps={f.setUp} setup={setup} />;
+    case 'ha': return <HomeAssistant key="ha" busy={busy} steps={f.setUp} setup={setup} />;
+    case 'radio': return <Radio key={setup.radio.mode} busy={busy} steps={f.setUp} setup={setup} />;
+    case 'radio-next': return <RadioNext busy={busy} steps={f.setUp} setup={setup} />;
+    // `waiting` (and `settings`, which a frame whose install set the app up never reaches): the app is starting
+    default: return <Waiting setup={{ phase: 'waiting', note: setup.phase === 'waiting' ? setup.note : '' }} />;
+  }
+}
+
 export function ImageScreens(p: P) {
   const { s } = p;
   return s.screen === 'choose' ? <Choose f={p.f} s={s} />
@@ -316,6 +331,7 @@ export function ImageScreens(p: P) {
     : s.screen === 'confirm' ? <ImageConfirm {...p} />
     : s.screen === 'working' ? <ImageWorking {...p} />
     : s.screen === 'adb' ? <ImageAdb {...p} />
+    : s.screen === 'setup' ? <ImageSetUp {...p} />
     : s.screen === 'done' ? <ImageDone {...p} />
     : <ImageError {...p} />;
 }

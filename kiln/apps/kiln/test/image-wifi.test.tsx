@@ -69,7 +69,7 @@ function setup(o: { keyChanged?: boolean; wifiOn?: 'enabled' | 'disabled'; adbFa
     },
     async push() { throw new Error('nothing is pushed'); },
   };
-  const f = new ImageSession({ frame: mirrorFrame,
+  const f = new ImageSession({ frame: mirrorFrame, simulated: true,
     images, refract: 'https://refract.test', search: '?image=glass-panes', requestFastboot: async () => fb,
     requestAdb: async () => { throw new Error('Glass Panes doesn\'t trust this browser\'s key'); },
     adbWithKey: (k: Uint8Array) => { keys.push(k); return async () => {

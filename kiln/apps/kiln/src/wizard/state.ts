@@ -266,16 +266,24 @@ export interface RailStep {
   sub?: { name: string; mark: RailMark; route: (typeof SET_UP)[number] }[];
 }
 
+/**
+ * Set up's own steps on the rail, marked by where set-up is. `app`: the App step comes first (the wizard installs the app
+ * there); a frame whose install put the app on already starts at Wi-Fi. `radio`: the frame has a radio (frame.json
+ * `panes.radio`), so set-up has its step.
+ */
+export function setUpSub(setup: Setup, app = true, radio = true): NonNullable<RailStep['sub']> {
+  const at = SET_UP_AT[setup.phase];
+  return SET_UP.map((route, j) => ({ name: SET_UP_NAMES[route], route, mark: j < at ? 'done' as const : j > at ? 'todo' as const : 'now' as const }))
+    .filter((x) => (app || x.route !== 'set-up') && (radio || x.route !== 'radio'));
+}
+
 export function rail(s: WizardState): RailStep[] {
   const now = railIndex(s);
   const all = s.screen === 'done';
-  const at = SET_UP_AT[s.setup.phase];
   return STEPS[s.flow].map((name, i) => ({
     name,
     mark: all || i < now ? 'done' : i > now ? 'todo' : s.screen === 'error' ? 'bad' : s.ask ? 'turn' : 'now',
-    ...(s.flow === 'install' && s.screen === 'setup' && i === now
-      ? { sub: SET_UP.map((route, j) => ({ name: SET_UP_NAMES[route], route, mark: j < at ? 'done' as const : j > at ? 'todo' as const : 'now' as const })) }
-      : {}),
+    ...(s.flow === 'install' && s.screen === 'setup' && i === now ? { sub: setUpSub(s.setup) } : {}),
   }));
 }
 

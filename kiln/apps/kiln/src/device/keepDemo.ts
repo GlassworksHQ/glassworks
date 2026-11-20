@@ -7,6 +7,7 @@ import type { DeviceEntry } from '@glassworks/kiln-core';
 import type { AppSession } from './appSession';
 import type { ImageSession } from './imageSession';
 import { imageDemo } from './imageDemo';
+import { withAppStreams } from '../wizard/demo';
 
 export const KEEP_DEMOS = ['flash-keep', 'flash-keep-reading', 'flash-keep-held', 'flash-keep-none', 'flash-keep-unreachable', 'flash-keep-old',
   'flash-keep-working', 'flash-keep-adb', 'flash-done-kept', 'flash-done-asks', 'flash-done-refused'] as const;
@@ -28,7 +29,7 @@ export async function keepDemo(d: Pick<DeviceEntry, 'frame' | 'sim'>, name: Keep
     flashedHere: { get: () => true, set: () => {} },
     // authMs: the read before the flash; firstStartAuthMs: the first start after it
     requestAdb: async (o) => {
-      if (o?.authMs !== frame.timings.authMs) return firstStart();
+      if (o?.authMs !== frame.timings.authMs) return withAppStreams(firstStart(), { online: true, radio: false });
       if (name === 'flash-keep-unreachable' || name === 'flash-done-asks') throw new AdbAuthTimeout();
       return running();
     },
@@ -46,5 +47,7 @@ export async function keepDemo(d: Pick<DeviceEntry, 'frame' | 'sim'>, name: Keep
   if (name === 'flash-keep-adb') return out;
   if (name === 'flash-keep-working') { f.state = { ...f.state, screen: 'working', work: { step: 'hand-back', x: 0 } }; return out; } // the hand-back waits on the app
   await f.connectAdb();
+  await f.setUp.homeAssistant();
+  f.setUp.finish(); // set-up's steps are the wizard's; these states are about the key
   return out;
 }

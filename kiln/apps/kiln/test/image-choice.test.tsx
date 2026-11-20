@@ -74,7 +74,7 @@ function setup(o: { search?: string; fail?: 'route' | 'hash' | 'flash' | 'change
     async reboot() { calls.push('reboot'); },
   };
   const mirror = new AppSession({ frame: mirrorFrame, connect: async () => { throw new Error('unused'); } }, true);
-  const f = new ImageSession({ frame: mirrorFrame, images, refract: 'https://refract.test', search: o.search ?? '', requestFastboot: async () => fb,
+  const f = new ImageSession({ frame: mirrorFrame, simulated: true, images, refract: 'https://refract.test', search: o.search ?? '', requestFastboot: async () => fb,
     requestAdb: async () => new FirstBootMirror(), adbKey: () => 'QAAA= kiln@glassworks', apk: () => undefined, sleep: async () => {} });
   return { f, mirror, calls };
 }
@@ -86,7 +86,7 @@ describe('the choice', () => {
     expect(radios()).toEqual(['Glassworks']);
     expect(screen.getByRole('radio', { name: 'Glassworks' }).getAttribute('aria-checked')).toBe('true');
     expect(screen.getByRole('radio', { name: 'Glassworks' }).querySelector('.pill')).toBeNull();
-    expect(rail()).toEqual(['Mirror', 'Choose', 'Download', 'Fastboot', 'Install', 'Done']);
+    expect(rail()).toEqual(['Mirror', 'Choose', 'Download', 'Fastboot', 'Install', 'Set up', 'Done']);
     const more = screen.getByRole('button', { name: 'Show community images (1)' });
     expect(more.getAttribute('aria-expanded')).toBe('false');
     fireEvent.click(more);

@@ -131,6 +131,8 @@ function flashWorld(k: Knobs): World {
           case 'adb':
             if (s.connectError && clicks.has('adb')) return { end: 'error' };
             return clicks.act('adb', () => f.connectAdb());
+          // the first start is over and set-up (the same on every frame) begins, or Done
+          case 'setup':
           case 'done':
             return { end: 'done', goal: s.firstBoot?.home.result === 'set' };
           case 'error':

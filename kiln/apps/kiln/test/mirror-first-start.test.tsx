@@ -15,6 +15,7 @@ import { ImageSession, type ImageMaker } from '../src/device/imageSession';
 import { ImageFlow } from '../src/device/DevicePage';
 import { AppSession } from '../src/device/appSession';
 import { AUTH_MS, FIRST_START_AUTH_MS, READ_MS, mirrorFrame } from './mirror-frame';
+import { withAppStreams } from '../src/wizard/demo';
 
 beforeAll(() => {
   Object.defineProperty(navigator, 'usb', { configurable: true, value: {} });
@@ -44,7 +45,7 @@ function setup(adb: { request: (o?: { authMs?: number; onPicked?: () => void }) 
     async reboot() {},
   };
   const mirror = new AppSession({ frame: mirrorFrame, connect: async () => { throw new Error('unused'); } }, true);
-  const f = new ImageSession({ frame: mirrorFrame,
+  const f = new ImageSession({ frame: mirrorFrame, simulated: true,
     images, refract: 'https://proxy.test', requestFastboot: adb.fastboot ?? (async () => fb), requestAdb: adb.request,
     ...(adb.reopen ? { reopenAdb: adb.reopen } : {}), ...(adb.tries !== undefined ? { adbTries: adb.tries } : {}), ...(adb.picked ? { adbPicked: adb.picked } : {}), ...(adb.windowMs !== undefined ? { adbWindowMs: adb.windowMs } : {}),
     adbKey: () => 'QAAA= kiln@glassworks', apk: () => mirror.apkBytes(), sleep: async () => {},
@@ -69,12 +70,11 @@ describe('connecting while the Mirror is still starting', () => {
     await flashed(f, mirror);
     const seen: boolean[] = [];
     f.subscribe(() => seen.push(!!f.state.adbWaiting));
-    f.setHaUrl('http://homeassistant.local:8123');
     await f.connectAdb();
     expect(reopen).toHaveBeenCalledTimes(4);
     expect(seen).toContain(true); // the screen said it is still starting
-    expect(f.state).toMatchObject({ screen: 'done', adbWaiting: false });
-    expect(adb.cmds).toContain(`am start -n ${GLASSWORKS.activity} --es url 'http://homeassistant.local:8123'`);
+    expect(f.state).toMatchObject({ screen: 'setup', adbWaiting: false });
+    expect(adb.cmds.some((c) => c.startsWith(`am start -n ${GLASSWORKS.activity}`))).toBe(true);
     expect(f.state.log.filter((l) => l.includes('still starting. Asking again in 5 s.'))).toHaveLength(4);
   });
 
@@ -137,7 +137,7 @@ describe('connecting while the Mirror is still starting', () => {
     await f.connectAdb();
     expect(request).toHaveBeenCalledWith(expect.objectContaining({ authMs: FIRST_START_AUTH_MS }));
     expect(reopen).toHaveBeenCalledTimes(1);
-    expect(f.state.screen).toBe('done');
+    expect(f.state.screen).toBe('setup');
   });
 
   it('a closed list is not retried', async () => {
@@ -165,8 +165,8 @@ describe('connecting while the Mirror is still starting', () => {
     expect(await screen.findByText('Waiting for the Mirror to finish starting…')).toBeTruthy();
     expect(screen.queryByText('Pick the Mirror in the browser\'s list…')).toBeNull();
     expect(f.state).toMatchObject({ screen: 'adb', connecting: true, adbWaiting: true });
-    answer(new FirstBootMirror());
-    expect(await screen.findByText('Glassworks is on the Mirror.')).toBeTruthy();
+    answer(withAppStreams(new FirstBootMirror(), { online: true, radio: false }));
+    expect(await screen.findByText('Connected to Wi-Fi.')).toBeTruthy(); // the first start, then set-up's Wi-Fi step
     expect(f.state.adbWaiting).toBe(false);
   });
 
@@ -181,20 +181,15 @@ describe('connecting while the Mirror is still starting', () => {
 });
 
 describe('finishing a first start that didn\'t finish', () => {
-  it('from the image screen after a reload: no download, no fastboot, the same inputs', async () => {
+  it('from the image screen after a reload: no download, no fastboot, then set-up', async () => {
     const adb = new FirstBootMirror();
     const { f, mirror } = setup({ request: async () => adb });
     render(<ImageFlow image={f} app={mirror} />);
-    f.setHaUrl('not an address');
-    expect(f.inputsBlocked()).toMatch(/http/);
-    f.finishFirstStart();
-    expect(f.state.screen).toBe('image'); // refused until the address is right
-    f.setHaUrl('http://homeassistant.local:8123');
     fireEvent.click(await screen.findByRole('button', { name: 'Finish its first start' }));
     expect(f.state.screen).toBe('adb');
     await f.connectAdb();
-    expect(f.state.screen).toBe('done');
-    expect(adb.cmds).toContain(`am start -n ${GLASSWORKS.activity} --es url 'http://homeassistant.local:8123'`);
+    expect(f.state.screen).toBe('setup');
+    expect(adb.cmds.some((c) => c.startsWith(`am start -n ${GLASSWORKS.activity}`))).toBe(true);
   });
 
   it('from the error screen after a first start that stopped', async () => {
@@ -212,7 +207,7 @@ describe('finishing a first start that didn\'t finish', () => {
     expect(f.state.screen).toBe('adb');
     expect(close).toHaveBeenCalledTimes(1); // the stopped first start's connection, let go before Connect opens a new one
     await f.connectAdb();
-    expect(f.state.screen).toBe('done');
+    expect(f.state.screen).toBe('setup');
   });
 });
 

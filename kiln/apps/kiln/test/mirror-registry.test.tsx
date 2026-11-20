@@ -52,7 +52,7 @@ async function midFlash() {
     async reboot() {},
   };
   const mirror = new AppSession({ frame: mirrorFrame, connect: async () => { throw new Error('unused'); } }, true);
-  const flash = new ImageSession({ frame: mirrorFrame, images, refract: 'https://proxy.test', requestFastboot: async () => fb, requestAdb: async () => new FirstBootMirror(), adbKey: () => 'QAAA= kiln@glassworks', apk: () => mirror.apkBytes(), sleep: async () => {} });
+  const flash = new ImageSession({ frame: mirrorFrame, simulated: true, images, refract: 'https://proxy.test', requestFastboot: async () => fb, requestAdb: async () => new FirstBootMirror(), adbKey: () => 'QAAA= kiln@glassworks', apk: () => mirror.apkBytes(), sleep: async () => {} });
   const kept = registry.keep(new DeviceActivity(MIRROR_BASE, mirrorFrame.name, { app: mirror, image: flash }, true));
   flash.choose();
   await flash.download();

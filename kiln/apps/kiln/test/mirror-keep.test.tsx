@@ -102,7 +102,7 @@ async function ready(o: { before?: () => Promise<PanelShell>; after?: FirstBootM
   const asked: (number | undefined)[] = [];
   let flashed = !!o.flashed;
   const mirror = new AppSession({ frame: mirrorFrame, connect: async () => { throw new Error('unused'); } }, true);
-  const f = new ImageSession({ frame: mirrorFrame,
+  const f = new ImageSession({ frame: mirrorFrame, simulated: true,
     images, refract: 'https://proxy.test', requestFastboot: async () => fb,
     requestAdb: async (r) => { asked.push(r?.authMs); return r?.authMs === AUTH_MS ? (o.before ?? (async () => { throw new Error('unused'); }))() : after; },
     adbKey: () => 'QAAA= kiln@test', apk: () => mirror.apkBytes(), sleep: async () => {},
@@ -145,7 +145,7 @@ describe('the keep step, on the real session (#580)', () => {
     expect(built[0]?.apiKeyHandover).toBe(true);
     expect(JSON.stringify(built[0])).not.toContain(KEY);
     expect(after.keys?.key).toBe(KEY);
-    expect(f.state.screen).toBe('done');
+    expect(f.state.screen).toBe('setup'); // the first start, then set-up
     expect(f.state.key).toMatchObject({ state: 'handed' });
     expect(f.holdsKey()).toBe(false);
     expect(holding).toEqual([true, false]);

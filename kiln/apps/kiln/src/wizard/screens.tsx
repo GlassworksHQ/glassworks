@@ -249,7 +249,7 @@ function Settings({ s, session, frame, setup }: P & { setup: Extract<Setup, { ph
   );
 }
 
-function Waiting({ setup }: { setup: Extract<Setup, { phase: 'waiting' }> }) {
+export function Waiting({ setup }: { setup: Extract<Setup, { phase: 'waiting' }> }) {
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">Starting the panel.</h2>
@@ -272,6 +272,16 @@ export function SetUp(p: P) {
   }
 }
 
+/** On Done: the panel's own setup page, where set-up's choices can change later. */
+export function SetupPageRow({ href }: { href: string }) {
+  return (
+    <div className="well">
+      <span className="grow"><span>Change these later on the panel&apos;s own page. It asks for a code the panel shows.</span><span className="small"><code>{href}</code></span></span>
+      <a className="btn ghost" href={href} target="_blank" rel="noopener">Open</a>
+    </div>
+  );
+}
+
 /** 7 · Done: in one line. The backup is one row whose download is the ember action; undo is a link. */
 export function Done({ s, session, frame }: P) {
   const d = s.done!;
@@ -288,12 +298,7 @@ export function Done({ s, session, frame }: P) {
         </div>
       )}
       {d.backup?.error && <p className="status err" role="alert">{d.backup.error}</p>}
-      {d.setupPage && (
-        <div className="well">
-          <span className="grow"><span>Change these later on the panel&apos;s own page. It asks for a code the panel shows.</span><span className="small"><code>{d.setupPage}</code></span></span>
-          <a className="btn ghost" href={d.setupPage} target="_blank" rel="noopener">Open</a>
-        </div>
-      )}
+      {d.setupPage && <SetupPageRow href={d.setupPage} />}
       {s.flow === 'install' && <BuiltOn credits={stepCredits(frame.id, frame.credits)} />}
       <div className="foot">
         {s.flow === 'install' ? <button type="button" className="link" onClick={() => void session.click('undo', () => session.openUndo())}>Undo</button> : <span />}

@@ -9,10 +9,14 @@
 // Assistant's ESPHome key from the running app over adb and gives it back at the first start.
 import { AdbAuthTimeout, AdbBusy, pemToPkcs8, type PanelShell } from '@glassworks/adb';
 import { apiKeyFingerprint, apiKeySocketUp, kioskVersion, readApiKey } from '@glassworks/app-adb';
+import { openSignInWindow } from '@glassworks/setup-channel';
 import {
   ProxyError, WrongImage, cap, imageFromLink, plan, wifiStep,
   type DeviceFrame, type FastbootLike, type FastbootReport, type FirstStart, type ImageFile, type ImageMaker, type ImageRecipe, type PlannedStep, type PrepareStep,
 } from '@glassworks/kiln-core';
+
+import { AdbSetUp } from '../setup/adbSetUp';
+import type { Setup } from '../wizard/state';
 
 export type { ImageMaker };
 
@@ -73,13 +77,17 @@ export interface ImageDeps {
   /** The settings APK the frame's image starts with (its `imageFlow.assets.settings`), when Kiln has it staged: a first boot with nothing to tap. */
   settings?(): Promise<Uint8Array | undefined>;
   sleep?: (ms: number) => Promise<void>;
+  /** Opens a tab for Home Assistant's sign-in; must run inside the click (popup blockers). */
+  openTab?: (url: string) => Window | null;
+  /** A simulated device needs no wait for the app's socket. */
+  simulated?: boolean;
 }
 
 /** The browser's list was closed with nothing picked: nothing to ask again. */
 const nothingPicked = (e: unknown) => (e as { name?: string } | undefined)?.name === 'NotFoundError' || (e as Error | undefined)?.message === 'no panel selected';
 
 /** `image`: Glassworks' download and settings; `download`: a community image's. */
-export type ImageScreen = 'choose' | 'image' | 'download' | 'keep' | 'fastboot' | 'confirm' | 'working' | 'adb' | 'done' | 'error';
+export type ImageScreen = 'choose' | 'image' | 'download' | 'keep' | 'fastboot' | 'confirm' | 'working' | 'adb' | 'setup' | 'done' | 'error';
 export type WorkStep = PrepareStep | 'wifi' | 'flash-system' | 'flash-userdata' | 'restart' | 'first-boot' | 'hand-back' | 'wifi-on';
 /**
  * Home Assistant's ESPHome key across a reflash (issue 580): read from the running app before the flash, given back at the
@@ -121,8 +129,14 @@ export interface ImageState {
   link: boolean;
   /** The picked image's files, in the order its recipe downloads them. */
   files: FileCheck[];
-  haUrl: string;
+  /** A community image's Wi-Fi, saved in its userdata (Glassworks' Wi-Fi is set-up's, after the first start). */
   wifi: { ssid: string; password: string };
+  /** Set-up after Glassworks' first start: Wi-Fi, Home Assistant, the radio (setup/adbSetUp.ts). */
+  setup: Setup;
+  /** a button's work running (set-up's buttons, one at a time) */
+  busy?: string;
+  /** the device's own setup page, once set-up armed its pairing (Done) */
+  setupPage?: string;
   fastboot?: FastbootReport;
   connecting?: boolean;
   connectError?: string;
@@ -211,7 +225,62 @@ export class ImageSession {
     const linked = imageFromLink(this.recipes, d.search ?? '');
     const first = linked ?? this.recipes[0]!;
     this.state = { screen: linked ? 'download' : 'choose', picked: first.id, open: !!linked, link: !!linked, files: waiting(first),
-      haUrl: '', wifi: { ssid: '', password: '' }, understood: false, log: [] };
+      wifi: { ssid: '', password: '' }, setup: { phase: 'waiting', note: '' }, understood: false, log: [] };
+    this.setUp = new AdbSetUp({
+      panel: () => this.panel,
+      phase: () => this.state.setup,
+      show: (setup) => this.set({ setup }),
+      here: () => this.state.screen === 'setup',
+      done: () => { void this.finishSetUp(); },
+      unreachable: (e) => {
+        const err = e instanceof Error ? e : new Error(`${d.frame.app.name} isn't answering. Is it installed and running?`);
+        this.log('Stopped', err.message);
+        this.set({ screen: 'error', error: err.message });
+      },
+      // which Glassworks is on the device decides how a Thread router gets its network (read-only)
+      app: async () => {
+        const v = await kioskVersion(this.panel!, this.lid(), d.frame.app);
+        return { version: v?.name, code: v?.code };
+      },
+      appName: d.frame.app.name,
+      wifiName: (p, signal) => (d.frame.wifiName ? d.frame.wifiName(p, signal) : Promise.resolve({})),
+      click: (name, run) => this.click(name, run),
+      note: (line) => this.log('', line),
+      lid: (ms) => this.lid(ms),
+      sleep: (ms) => (d.sleep ?? ((x: number) => new Promise<void>((res) => setTimeout(res, x))))(ms),
+      openTab: (url) => (d.openTab ? d.openTab(url) : openSignInWindow()),
+      simulated: d.simulated,
+    });
+  }
+
+  /** Set-up after the first start (the screens call it): Wi-Fi, Home Assistant, the radio. */
+  readonly setUp: AdbSetUp;
+  private clicking?: string;
+
+  /** Every set-up button runs through here: a second click while one runs does nothing. */
+  click(name: string, run: () => Promise<void> | void): Promise<void> {
+    if (this.clicking) return Promise.resolve();
+    this.clicking = name;
+    this.set({ busy: name });
+    let p: Promise<void>;
+    try { p = Promise.resolve(run()); } catch (e) { p = Promise.reject(e); }
+    return p.finally(() => { this.clicking = undefined; this.set({ busy: undefined }); });
+  }
+
+  /** A signal that cancels a read-only command after `ms`, so a wedged one is stopped on the device. */
+  private lid(ms = 8000): AbortSignal {
+    const ac = new AbortController();
+    void (this.d.sleep ?? ((x: number) => new Promise<void>((res) => setTimeout(res, x))))(ms).then(() => ac.abort(new Error(`${this.d.frame.the} did not answer in time`)));
+    return ac.signal;
+  }
+
+  /** Set-up is over: Done, then the device's own setup page once it opens pairing (as the wizard's Done). */
+  private async finishSetUp(): Promise<void> {
+    const ip = this.setUp.steps.ip ?? this.setUp.ip;
+    this.set({ screen: 'done' });
+    const now = ip ? (await this.setUp.steps.armPairing())?.ip : undefined;
+    this.setUp.steps.close();
+    if (now && this.state.screen === 'done') this.set({ setupPage: `http://${now}:8099/setup` });
   }
 
   subscribe = (l: () => void) => { this.listeners.add(l); return () => { this.listeners.delete(l); }; };
@@ -234,7 +303,6 @@ export class ImageSession {
   get recipe(): ImageRecipe { return this.recipes.find((r) => r.id === this.state.picked) ?? this.recipes[0]!; }
   recipeOf(id: string): ImageRecipe | undefined { return this.recipes.find((r) => r.id === id); }
 
-  setHaUrl(haUrl: string) { this.set({ haUrl }); }
   setWifi(wifi: Partial<ImageState['wifi']>) { this.set({ wifi: { ...this.state.wifi, ...wifi } }); }
   understand(understood: boolean) { this.set({ understood }); }
 
@@ -286,7 +354,7 @@ export class ImageSession {
     this.selected++;
     // a fresh install: an earlier one's key outcome (handed, refused, none…) goes; a key still held for a hand-back stays
     const key = this.state.key?.state === 'held' ? this.state.key : undefined;
-    this.set({ screen: 'choose', picked: r.id, from, open: r.community, link: false, files: waiting(r), fastboot: undefined, understood: false, communityWifi: undefined,
+    this.set({ screen: 'choose', picked: r.id, from, open: r.community, link: false, files: waiting(r), fastboot: undefined, understood: false, communityWifi: undefined, setupPage: undefined,
       work: undefined, firstBoot: undefined, key, error: undefined, flashFailed: false, noFill: false });
   }
 
@@ -367,14 +435,7 @@ export class ImageSession {
     if (left) return `Download ${left.name} first.`;
     if (this.recipe.community) return this.recipe.steps.some((x) => x.do === 'wifi') ? this.wifiBlocked() : undefined;
     if (!this.d.apk()) return this.d.apkBlocked?.() ?? 'Pick the Glassworks APK file first.';
-    return this.inputsBlocked();
-  }
-
-  /** Why Home Assistant's address or the Wi-Fi can't be used, or undefined. */
-  inputsBlocked(): string | undefined {
-    const s = this.state;
-    if (s.haUrl && !/^https?:\/\/[^\s/]+/.test(s.haUrl)) return 'Home Assistant\'s address starts with http:// or https://.';
-    return this.wifiBlocked();
+    return undefined;
   }
 
   /** The network as wpa_supplicant can save it, or why not: refused here, before anything is built (wpaSupplicantConf). */
@@ -659,12 +720,9 @@ export class ImageSession {
           // each build step's time, in the log: where the minutes go on a real device
           let at = { step: '', t: now() };
           const built = (step: string) => { if (at.step && at.step !== step) this.log('', `${at.step}: built in ${secs(now() - at.t)}`); if (at.step !== step) at = { step, t: now() }; };
-          // the Wi-Fi goes into the new userdata (saved for Android, its password only as WPA's PSK), so the
-          // device joins on its first boot with nothing tapped; sending it to the app after the boot stays a fallback
-          const wifi = s.wifi.ssid ? { ssid: s.wifi.ssid, password: s.wifi.password } : undefined;
           this.made = Object.assign(Object.create(null) as Record<string, Blob>, await this.d.images.build({
             apk: this.d.apk()!, bootAnimation: await this.d.bootAnimation?.(), settings: await this.d.settings?.(),
-            adbKey, userdataBytes: s.fastboot.userdataBytes, fill: !s.noFill, ...(s.fastboot.deviceMac ? { deviceMac: s.fastboot.deviceMac } : {}), ...(wifi ? { wifi } : {}),
+            adbKey, userdataBytes: s.fastboot.userdataBytes, fill: !s.noFill, ...(s.fastboot.deviceMac ? { deviceMac: s.fastboot.deviceMac } : {}),
             // the flag only: the key stays in this tab until the first start
             ...(this.apiKey ? { apiKeyHandover: true } : {}),
           }, (step, x) => { built(step); work(step, x); }));
@@ -725,10 +783,10 @@ export class ImageSession {
 
   /**
    * A device already flashed with Glassworks whose first start didn't finish (an error, or the page was reloaded):
-   * "One last click." again, with Home Assistant's address and the Wi-Fi as given on the image screen.
+   * "One last click." again; set-up follows it, as after any first start.
    */
   finishFirstStart() {
-    if (this.recipe.community || this.inputsBlocked() || this.state.screen === 'working') return;
+    if (this.recipe.community || this.state.screen === 'working') return;
     // the connection of a first start that stopped: let go, so Connect opens one fresh (not awaited: Connect's list stays in its click)
     const stale = this.panel;
     this.panel = undefined;
@@ -781,19 +839,20 @@ export class ImageSession {
         if (i > 180) throw new Error(`${this.d.frame.the} didn't finish starting in 6 minutes`);
         await sleep(2000);
       }
-      const { ssid, password } = this.state.wifi;
       const k = this.state.key;
       // firstBoot hands the key back right after it starts the app (PR 575): the row turns to it there
       const onStep = (step: string, detail?: string) => {
         if (step.startsWith('Home Assistant API key')) this.set({ work: { step: 'hand-back', x: 0 } });
         this.log(step, detail);
       };
-      const fb = await this.d.frame.imageFlow.firstBoot(p, { haUrl: this.state.haUrl || undefined, wifi: ssid ? { ssid, password } : undefined, onStep, sleep,
-        ...(this.apiKey ? { apiKey: this.apiKey } : {}) });
+      // Home Assistant and the Wi-Fi are set-up's, next, over this same connection
+      const fb = await this.d.frame.imageFlow.firstBoot(p, { onStep, sleep, ...(this.apiKey ? { apiKey: this.apiKey } : {}) });
       const key: KeyStep | undefined = k?.state === 'held' && fb.apiKey !== undefined
         ? { state: fb.apiKey ? 'handed' : 'refused', fingerprint: k.fingerprint } : k;
       if (fb.apiKey !== undefined) this.apiKey = undefined; // given back or refused: the tab lets go of it
-      this.set({ screen: 'done', firstBoot: fb, key, work: { step: this.state.work?.step ?? 'first-boot', x: 1 } });
+      this.set({ screen: 'setup', firstBoot: fb, key, work: { step: this.state.work?.step ?? 'first-boot', x: 1 }, setup: { phase: 'waiting', note: '' } });
+      // set-up's first step, settled before this returns: a later step never races it
+      await this.setUp.wifi();
     } catch (e) {
       this.log('Stopped', (e as Error).message);
       this.set({ screen: 'error', error: (e as Error).message });

@@ -126,6 +126,8 @@ export interface DeviceFrame {
   the: string;
   /** The app: its id, and what the screens call it. */
   app: AppId & { name: string };
+  /** The Wi-Fi network the device is on, read-only, for set-up's Wi-Fi step. None: the step shows no name. */
+  wifiName?(p: PanelShell, signal?: AbortSignal): Promise<{ ssid?: string }>;
   /** The board `getprop ro.board.platform` gives: anything else isn't this device. */
   board: string;
   /** The APK's release line and ABI. */

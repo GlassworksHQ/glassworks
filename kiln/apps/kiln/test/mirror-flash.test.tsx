@@ -54,7 +54,7 @@ function setup(o: { system?: number; flashFails?: number; buildFails?: boolean; 
   const mirror = new AppSession({ frame: mirrorFrame, connect: async () => { throw new Error('unused'); } }, true);
   const adb = new FirstBootMirror();
   const requestFastboot = vi.fn(async () => fb);
-  const f = new ImageSession({ frame: mirrorFrame, images, ...(o.refract === null ? {} : { refract: o.refract ?? 'https://proxy.test' }), requestFastboot, requestAdb: async () => adb, adbKey: () => 'QAAA= kiln@glassworks', apk: () => mirror.apkBytes(), sleep: async () => {},
+  const f = new ImageSession({ frame: mirrorFrame, simulated: true, images, ...(o.refract === null ? {} : { refract: o.refract ?? 'https://proxy.test' }), requestFastboot, requestAdb: async () => adb, adbKey: () => 'QAAA= kiln@glassworks', apk: () => mirror.apkBytes(), sleep: async () => {},
     ...(o.settingsOverlay ? { settings: async () => o.settingsOverlay } : {}) });
   f.choose(); // Glassworks, first and picked
   return { f, mirror, calls, adb, requestFastboot, built };
@@ -87,8 +87,7 @@ describe('installing Glassworks over fastboot', () => {
     expect(f.state.files).toMatchObject([{ name: 'system.img', state: 'ok', progress: 1 }]);
     expect(f.blocked()).toMatch(/APK/);
     await mirror.pickApk('kiosk.apk', fakeMirrorApk());
-    f.setHaUrl('http://homeassistant.local:8123');
-    expect(f.blocked()).toBeUndefined();
+    expect(f.blocked()).toBeUndefined(); // Home Assistant and the Wi-Fi are set-up's, after the first start
     f.toFastboot();
     await f.connectFastboot();
     expect(f.state.screen).toBe('confirm');
@@ -100,37 +99,21 @@ describe('installing Glassworks over fastboot', () => {
     expect(calls).toEqual([fetched, `build userdata=${USERDATA_BYTES} key=kiln@glassworks`, 'flash system 2', 'flash userdata 1', 'reboot', 'discard']);
     expect(f.state.screen).toBe('adb');
     await f.connectAdb();
-    expect(f.state).toMatchObject({ screen: 'done', firstBoot: { hidden: ['com.android.launcher3'], rotation: 3 } });
-    expect(adb.cmds).toContain(`am start -n ${GLASSWORKS.activity} --es url 'http://homeassistant.local:8123'`);
+    // the first start, then set-up (Wi-Fi, Home Assistant) over the same connection, as on every frame
+    expect(f.state).toMatchObject({ screen: 'setup', firstBoot: { hidden: ['com.android.launcher3'], rotation: 3 } });
+    expect(adb.cmds.some((c) => c.startsWith(`am start -n ${GLASSWORKS.activity}`))).toBe(true);
+    expect(adb.cmds.filter((c) => c.includes('--es url'))).toEqual([]);
   });
 
-  it('saves the Wi-Fi and the settings overlay into the images, and refuses a password WPA can\'t take before fastboot', async () => {
+  it('builds the settings overlay into the images; Glassworks\' Wi-Fi is set-up\'s, not the image\'s', async () => {
     const overlay = new Uint8Array([1, 2, 3]);
     const { f, mirror, built } = setup({ settingsOverlay: overlay });
     await f.download();
     await mirror.pickApk('kiosk.apk', fakeMirrorApk());
-    f.setWifi({ ssid: 'Home Net', password: 'short' });
-    expect(f.blocked()).toMatch(/8 to 63 characters/);
-    f.toFastboot();
-    expect(f.state.screen).toBe('image'); // nothing reached fastboot
-    f.setWifi({ password: 'not-a-real-password' });
-    expect(f.blocked()).toBeUndefined();
     f.toFastboot(); await f.connectFastboot(); f.understand(true); await f.flash();
     expect(built).toHaveLength(1);
-    expect(built[0]!.wifi).toEqual({ ssid: 'Home Net', password: 'not-a-real-password' });
     expect(built[0]!.settings).toBe(overlay);
-    await f.connectAdb(); // the first boot sends the network to Glassworks too (the fallback)
-    // the Technical log, and the failure report saved from it: never the network's name or password (CLAUDE.md rule 2)
-    expect(f.state.log).toContain('Wi-Fi: the network you entered');
-    expect(f.state.log.join('\n')).not.toContain('Home Net');
-    expect(f.state.log.join('\n')).not.toContain('not-a-real-password');
-  });
-
-  it('the flash-wifi-short demo shows the refusal of a password WPA can\'t take', async () => {
-    const { image: flash, app: mirror } = await imageDemo(mirrorEntry, 'flash-wifi-short', true);
-    expect(flash.blocked()).toMatch(/8 to 63 characters/);
-    render(<ImageFlow image={flash} app={mirror} />);
-    expect(screen.getByText(/The Wi-Fi password must be 8 to 63 characters/)).toBeTruthy();
+    expect(built[0]!.wifi).toBeUndefined();
   });
 
   it('when Refract can\'t serve the image: Kiln\'s bug, with nothing to download by hand (#579)', async () => {
