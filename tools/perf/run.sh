@@ -6,7 +6,8 @@
 #     (and --pane-ram): `--es test_dashboard <url>` with the test hold. The kiosk shows it instead of its own
 #     dashboard until `--es test_dashboard ''` after the part, on any exit, or when the hold ends. Its
 #     dashboard setting and its sign-in to Home Assistant don't change.
-#   - Opens the test page and the reference dashboards with the kiosk's one-off `--es open` extra.
+#   - Opens the SurfaceFlinger check's page (#643), the test page and the reference dashboards with the kiosk's
+#     one-off `--es open` extra.
 #     The pages are served by the fake Home Assistant on this machine over `adb reverse`.
 #   - With --pane-ram only: turns the switchable panes off and on with the kiosk's own extras
 #     (`--ez voice_enabled`, `--ez sendspin_enabled`, `--ez wall_base_enabled`, `--ez time_zone_enabled`,
@@ -38,17 +39,25 @@
 #          [--pane-ram assist=on,sendspin=on,mic=on]
 #          [--skip-synthetic] [--skip-reference] [--skip-real-use] [--taps 10] [--quick] [--apk FILE]...
 #          [--webrtc-transport auto|adb|lan-turn|lan-udp]   # the camera video's path; auto (default) asks the panel
+#          [--sf-poll auto|0|SECONDS] [--sf-check-only]     # how SurfaceFlinger is read (below)
 #
 # Camera video (protocol 7, #202): with --webrtc-transport auto, lanprobe.py first has the panel send one
 # UDP datagram and open one TCP connection to this computer's LAN address (two `toybox nc` over adb
 # shell: connections from the panel, nothing written on it), and picks lan-udp, lan-turn or adb.
 #        tools/perf/run.sh --frame ID --out DIR --idle-only LABEL   # one idle sample (pane diffs)
+#
+# SurfaceFlinger (#643): before the test page and the graded part, `perfrun.py sfcheck` opens a page that draws
+# every frame and measures how far back one `dumpsys SurfaceFlinger --latency` read reaches. Where that covers a
+# window (the S1: 2.1 s), the runner reads once after each window; where it doesn't (the Pixel Tablet: 1 s), it
+# reads during each window too and joins the reads. If not even that can cover a window, the run stops there
+# (exit 2, sfcheck.json). --sf-poll 0 or SECONDS skips the check and reads that way; --sf-check-only runs the
+# checks before a run (this one and netcheck.py's) and stops.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ADB="${ADB:-adb}"
 FRAME="" NAME="" RUNS=3 OUT="" PORT=8089 TURN_PORT="" WEBRTC_TRANSPORT=auto PACKAGE=sh.edm.s1kiosk ACTIVITY="" TAPS=10 QUICK=0
-SYNTH=1 REF=1 REAL=1 IDLE_ONLY="" MAX_TEMP_C=50 APKS=() PANE_RAM=""
+SYNTH=1 REF=1 REAL=1 IDLE_ONLY="" MAX_TEMP_C=50 APKS=() PANE_RAM="" SF_POLL=auto SF_CHECK_ONLY=0
 # Waits, in seconds. Only the off-device test (test/test_runner.py) shortens them.
 IDLE_SETTLE="${GW_PERF_IDLE_SETTLE:-30}" IDLE_WINDOW="${GW_PERF_IDLE_WINDOW:-15}"
 COLD_SETTLE="${GW_PERF_COLD_SETTLE:-3}" COLD_TIMEOUT="${GW_PERF_COLD_TIMEOUT:-120}" RUN_GAP="${GW_PERF_RUN_GAP:-10}"
@@ -74,12 +83,19 @@ while [ $# -gt 0 ]; do
     --apk) APKS+=(--apk "$2"); shift 2 ;;
     --pane-ram) PANE_RAM="$2"; shift 2 ;;
     --webrtc-transport) WEBRTC_TRANSPORT="$2"; shift 2 ;;
+    --sf-poll) SF_POLL="$2"; shift 2 ;;
+    --sf-check-only) SF_CHECK_ONLY=1; shift ;;
     -h|--help) sed -n '2,/^set -e/p' "$0" | grep '^#' | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
 done
 [ -n "$FRAME" ] || { echo "--frame is required (e.g. aqara-s1-plus)" >&2; exit 2; }
 [ "$RUNS" -ge 1 ] || { echo "--runs must be at least 1" >&2; exit 2; }
+# The check alone needs only the fake Home Assistant's pages: no cameras, no WebRTC peer, no LAN probe.
+[ "$SF_CHECK_ONLY" = 1 ] && { SYNTH=1 REF=0 REAL=0 PANE_RAM=""; }
+[ "$SF_CHECK_ONLY" = 1 ] && [ -n "$IDLE_ONLY" ] && { echo "--sf-check-only and --idle-only can't be combined: one runs the checks, the other one idle sample" >&2; exit 2; }
+[ "$SF_CHECK_ONLY" = 1 ] && [ "$SF_POLL" != auto ] && { echo "--sf-check-only runs the check: leave --sf-poll at auto" >&2; exit 2; }
+[ "$SF_POLL" = auto ] || [[ "$SF_POLL" =~ ^[0-9]+(\.[0-9]+)?$ ]] || { echo "--sf-poll is auto, 0 or seconds between reads" >&2; exit 2; }
 TURN_PORT=$((PORT + 1))
 OUT="${OUT:-perf-$FRAME-$(date +%Y%m%d-%H%M%S)}"
 mkdir -p "$OUT"
@@ -135,6 +151,9 @@ run hold >/dev/null || {
 trap release_hold EXIT
 
 if [ -n "$IDLE_ONLY" ]; then
+  # No check for one sample: the --sf-poll given, or one read at a time (#643).
+  [ "$SF_POLL" = auto ] && SF_POLL=0
+  export GW_PERF_SF_POLL="$SF_POLL"
   n=0
   for f in "$OUT"/idle-"$IDLE_ONLY"-*.json; do [ -e "$f" ] && n=$((n + 1)); done
   [ -f "$OUT/device.json" ] || run device ${NAME:+--name "$NAME"}
@@ -286,7 +305,7 @@ if [ "$SYNTH" = 1 ] || [ "$REF" = 1 ] || [ -n "$PANE_RAM" ]; then
   elif [ "$WEBRTC_TRANSPORT" = auto ]; then
     WEBRTC_TRANSPORT=adb
   fi
-  if [ "$REF" = 1 ]; then
+  if [ "$REF" = 1 ] || [ "$SF_CHECK_ONLY" = 1 ]; then
     # This computer's own network (#649): 40 pings to its gateway and to the panel. A stalling link (macOS Wi-Fi)
     # adds to the live updates and cameras where they cross it; the report is then provisional. Never fails the run.
     python3 "$HERE/netcheck.py" --out "$OUT" || log "the network check failed (netcheck.py); the report won't have it"
@@ -309,6 +328,20 @@ if [ "$SYNTH" = 1 ] || [ "$REF" = 1 ] || [ -n "$PANE_RAM" ]; then
   "$ADB" reverse "tcp:$PORT" "tcp:$PORT" >/dev/null
   # The WebRTC relay (TURN over TCP): the panel's only way to this computer's WebRTC peer.
   "$ADB" reverse "tcp:$TURN_PORT" "tcp:$TURN_PORT" >/dev/null
+  if [ "$SF_POLL" = auto ]; then
+    log "checking how far back SurfaceFlinger's history reaches (perfrun.py sfcheck)"
+    SF_POLL=$(run sfcheck --url "http://127.0.0.1:$PORT/clarity/page/sfcheck.html") || {
+      echo "the SurfaceFlinger check failed, before the run: see $OUT/sfcheck.json (run.sh --sf-poll to read a set way)" >&2
+      exit 2
+    }
+  fi
+fi
+[ "$SF_POLL" = auto ] && SF_POLL=0
+# Seconds between SurfaceFlinger reads during each window; 0: one read after it (perfrun.py SF_POLL_S).
+export GW_PERF_SF_POLL="$SF_POLL"
+if [ "$SF_CHECK_ONLY" = 1 ]; then
+  log "checks done (--sf-check-only): SurfaceFlinger read every ${SF_POLL} s during a window (0: once after it); the network in netcheck.json"
+  exit 0
 fi
 
 if [ "$SYNTH" = 1 ]; then
