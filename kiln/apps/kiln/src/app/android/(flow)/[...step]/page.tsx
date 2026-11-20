@@ -1,9 +1,8 @@
 // /android's step routes, from its frame's data (routesOf, as every frame's): its install's steps and the
-// standard flow's. Each renders the same page; what it shows comes from the session.
+// standard flow's. Each page only names its route: the layout holds the page, so it stays mounted across them.
 import type { Metadata } from 'next';
 import { INSTALLERS } from '@glassworks/frames/catalog';
-import { routesOf } from '../../[frame]/frames';
-import { AndroidPage } from '../AndroidPage';
+import { routesOf } from '../../../[frame]/frames';
 
 type StepParams = { params: Promise<{ step: string[] }> };
 
@@ -21,5 +20,5 @@ export async function generateMetadata({ params }: StepParams): Promise<Metadata
 }
 
 export default function Page() {
-  return <AndroidPage />;
+  return null;
 }
