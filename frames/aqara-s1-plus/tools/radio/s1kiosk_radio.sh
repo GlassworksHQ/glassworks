@@ -1119,16 +1119,27 @@ start_thread_br() {
 # dataset is complete in thread-dataset (written to a temp file, read back, renamed over it). Until
 # then the router keeps the dataset it has and the next loop tries again; a newer hand-off from the app
 # waits in the app's files until this one is stored.
+# A Leave (thread_leave) records its request's time in thread-left, and each hand-off its file's time in
+# thread-dataset.in.t when taken: a hand-off the app staged before the last Leave belongs to the network
+# left, so it is discarded here, whenever and in whichever mode it is taken. A newer one (a Join after it)
+# is stored as usual.
 DS_FAILED=""
+num_in() { n_=$(cat "$1" 2>/dev/null); case "$n_" in ''|*[!0-9]*) echo "$2" ;; *) echo "$n_" ;; esac; }
 take_app_dataset() {
   if [ ! -e "$DIR/thread-dataset.in" ]; then
     take_app_file "${APP_DATASET#"$APP_DATA"/files/}" max:1024 "$DIR/thread-dataset.in" move; r_=$?
     [ $r_ = 1 ] && return 0
     [ $r_ = 2 ] && { say "ignoring app dataset hand-off ($WHY)"; return 0; }
+    echo "$TAKE_MTIME" > "$DIR/thread-dataset.in.t"
+  fi
+  # (a time that couldn't be recorded counts as new: a full /data never costs a Join)
+  if [ "$(num_in "$DIR/thread-dataset.in.t" 2147483647)" -le "$(num_in "$DIR/thread-left" 0)" ]; then
+    rm -f "$DIR/thread-dataset.in" "$DIR/thread-dataset.in.t"
+    say "ignoring app dataset hand-off (staged before a Leave)"; return 0
   fi
   d=$(tr -d ' \r\n' < "$DIR/thread-dataset.in")
-  case "$d" in ""|*[!0-9a-fA-F]*) rm -f "$DIR/thread-dataset.in"; say "ignoring app dataset hand-off (not hex TLVs)"; return 0 ;; esac
-  [ $(( ${#d} % 2 )) -eq 0 ] || { rm -f "$DIR/thread-dataset.in"; say "ignoring app dataset hand-off (odd length)"; return 0; }
+  case "$d" in ""|*[!0-9a-fA-F]*) rm -f "$DIR/thread-dataset.in" "$DIR/thread-dataset.in.t"; say "ignoring app dataset hand-off (not hex TLVs)"; return 0 ;; esac
+  [ $(( ${#d} % 2 )) -eq 0 ] || { rm -f "$DIR/thread-dataset.in" "$DIR/thread-dataset.in.t"; say "ignoring app dataset hand-off (odd length)"; return 0; }
   rm -f "$DIR/thread-dataset.tmp"
   if ! { ( umask 077; echo "$d" > "$DIR/thread-dataset.tmp" ) && [ "$(cat "$DIR/thread-dataset.tmp")" = "$d" ] &&
          mv -f "$DIR/thread-dataset.tmp" "$DIR/thread-dataset"; }; then
@@ -1136,7 +1147,8 @@ take_app_dataset() {
     [ -n "$DS_FAILED" ] || say "cannot store the new Thread dataset (/data full?): keeping the current one, trying again"
     DS_FAILED=1; return 0
   fi
-  rm -f "$DIR/thread-dataset.in"; DS_FAILED=""; JOINED=""; JFAILS=0
+  # stored: anything the app stages from now on is newer than this one, so the Leave's time has done its job
+  rm -f "$DIR/thread-dataset.in" "$DIR/thread-dataset.in.t" "$DIR/thread-left"; DS_FAILED=""; JOINED=""; JFAILS=0
   say "new Thread dataset from the app"  # never log the dataset itself
   thread_stored
   # a running agent may be attached elsewhere: restart it, the next pass joins with the new dataset
@@ -1161,16 +1173,20 @@ thread_leave() {
     OTBR_PID=""
   fi
   had_=""; [ -e "$DIR/thread-dataset" ] && had_=1
-  rm -f "$DIR/thread-dataset" "$DIR/thread-dataset.in" "$DIR/thread-dataset.tmp"
+  rm -f "$DIR/thread-dataset" "$DIR/thread-dataset.tmp"
+  # A pending hand-off stays only when it is newer than this request (a Join after the Leave); one staged in the
+  # app's files is judged by take_app_dataset against thread-left when it is taken.
+  [ "$(num_in "$DIR/thread-dataset.in.t" 0)" -gt "$lt_" ] || rm -f "$DIR/thread-dataset.in" "$DIR/thread-dataset.in.t"
   # our own root dir; a symlink there (only root could make one) is removed, never followed
   if [ -L "$DIR/thread-router" ]; then rm -f "$DIR/thread-router"; elif [ -e "$DIR/thread-router" ]; then rm -rf "$DIR/thread-router"; had_=1; fi
   JOINED=""; JFAILS=0
-  # A hand-off the app staged before this request belongs to the network being left: discarded. A newer one (a Join
-  # after the Leave) stays, as the pending hand-off that take_app_dataset stores next.
-  take_app_file "${APP_DATASET#"$APP_DATA"/files/}" max:1024 "$DIR/thread-dataset.in" move &&
-    [ "$TAKE_MTIME" -le "$lt_" ] && rm -f "$DIR/thread-dataset.in"
   if [ -e "$DIR/thread-dataset" ] || [ -e "$DIR/thread-router" ]; then
     setp sys.s1kiosk.radio.thread_leave "error $(date +%s): could not delete the Thread settings"; return 0
+  fi
+  # what makes a hand-off staged before this request never join (take_app_dataset): no "ok" without it
+  if ! { echo "$lt_" > "$DIR/thread-left.tmp" && mv -f "$DIR/thread-left.tmp" "$DIR/thread-left"; }; then
+    rm -f "$DIR/thread-left.tmp"
+    setp sys.s1kiosk.radio.thread_leave "error $(date +%s): could not record the Leave (/data full?)"; return 0
   fi
   if [ -n "$had_" ]; then m_="Thread dataset and router settings deleted"; else m_="no Thread network was stored"; fi
   setp sys.s1kiosk.radio.thread_leave "ok $(date +%s): $m_"

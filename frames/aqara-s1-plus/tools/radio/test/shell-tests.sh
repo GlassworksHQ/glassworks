@@ -993,6 +993,18 @@ check "...Leave reported ok" has "$(prop sys.glassworks.radio.thread_leave)" "ok
 handoff 0e080000000000070000; touch -d "@$(( $(date +%s) + 30 ))" "$APP/files/radio/thread-dataset"
 leave; LOOPS=1 helper; pkill -f "sleep 1000"
 check "...a hand-off newer than the Leave (a Join after it) is stored" test "$(cat /data/s1kiosk/radio/thread-dataset 2>/dev/null)" = 0e080000000000070000 -a ! -e /data/s1kiosk/radio/thread-dataset.in
+check "...and the Leave's time is dropped once it is" test ! -e /data/s1kiosk/radio/thread-left
+mkdir /data/s1kiosk/radio/thread-dataset.tmp; handoff 0e080000000000080000; touch -d "@$(( $(date +%s) + 30 ))" "$APP/files/radio/thread-dataset"
+LOOPS=1 helper; pkill -f "sleep 1000"; leave; LOOPS=1 helper; pkill -f "sleep 1000"
+check "a pending hand-off newer than a Leave survives it" test "$(cat /data/s1kiosk/radio/thread-dataset.in 2>/dev/null)" = 0e080000000000080000 -a ! -e /data/s1kiosk/radio/thread-dataset
+rmdir /data/s1kiosk/radio/thread-dataset.tmp; LOOPS=1 helper; pkill -f "sleep 1000"
+check "...and is stored once it can be" test "$(cat /data/s1kiosk/radio/thread-dataset 2>/dev/null)" = 0e080000000000080000
+echo off > "$T/props/persist.glassworks.radio_mode"
+handoff 0e080000000000090000; touch -d "@$(( $(date +%s) - 30 ))" "$APP/files/radio/thread-dataset"; leave; LOOPS=1 helper
+check "Leave in Off: the dataset goes, an older staged hand-off waits in the app's files" test ! -e /data/s1kiosk/radio/thread-dataset -a -e "$APP/files/radio/thread-dataset"
+echo thread_router > "$T/props/persist.glassworks.radio_mode"; : > "$T/log"; LOOPS=1 helper; pkill -f "sleep 1000"
+check "...taken later in Thread router, it is discarded, never joined" test ! -e /data/s1kiosk/radio/thread-dataset -a ! -e /data/s1kiosk/radio/thread-dataset.in -a ! -e "$APP/files/radio/thread-dataset"
+check "...and said so" grep -q 'staged before a Leave' "$T/log"
 # #645: otbr-agent failing to start shows its own error (JOINED is cleared before, not after, start_otbr)
 CUR_KEEP=$CUR; CUR=""; chmod 644 "$TB/otbr-agent"; LOOPS=1 helper
 check "otbr-agent that can't start: its error, not 'waiting' or ok" has "$(prop sys.glassworks.radio.status)" "error thread_router: otbr-agent not installed"
@@ -1034,7 +1046,7 @@ rm -f /data/s1kiosk/radio/radio.conf
 # run the agent's copy). Goes with s1kiosk_radio.sh.
 echo "--- s1kiosk_radio.sh: the #645 fixes, as in the agent"
 fnbody() { awk -v f="$2" '$0 ~ "^"f"\\(\\)" {p=1} p {print} p && /^}/ {exit}' "$1"; }
-for f in backup_nvm router_bridge children_ok take_app_dataset thread_leave start_thread_router thread_router_join fw_stop_cpcd fw_flash_one fw_attempt fw_mark fw_do; do
+for f in backup_nvm router_bridge children_ok num_in take_app_dataset thread_leave start_thread_router thread_router_join fw_stop_cpcd fw_flash_one fw_attempt fw_mark fw_do; do
   a=$(fnbody "$R/frames/aqara-s1-plus/tools/radio/glassworks_agent.sh" $f | sed 's/glassworks/s1kiosk/g; s/GWA_/S1R_/g; s/the agent/the helper/g')
   b=$(fnbody "$R/frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh" $f)
   check "old helper's $f is the agent's, names aside" test -n "$a" -a "$a" = "$b"
