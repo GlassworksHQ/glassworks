@@ -20,10 +20,20 @@
     transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* a docked device lifts off its dock (DeviceModel.module.css): on keyboard focus, and on hover
+   only with a pointer that hovers, so a tap on a touch screen doesn't lift it */
+.card:focus-visible {
+  --undock: 1;
+}
+
+@media (hover: hover) {
+  .card:hover {
+    --undock: 1;
+  }
+}
+
 .card:hover,
 .card:focus-visible {
-  /* a docked device lifts off its dock (DeviceModel.module.css) */
-  --undock: 1;
   border-color: color-mix(in srgb, var(--sky) 38%, var(--edge));
   box-shadow: 0 24px 60px -32px color-mix(in srgb, var(--sky) 45%, transparent);
   transform: translateY(-2px);
@@ -70,10 +80,13 @@
 }
 
 /* a docked device stays on the ground: only its body lifts off the dock (--undock above,
-   DeviceModel.module.css), and the model still leans toward the pointer */
-.card:hover .float:has([data-dock]),
-.card:focus-visible .float:has([data-dock]) {
-  transform: rotateX(calc(var(--tilt-x, 0deg) * 0.5)) rotateY(calc(var(--tilt-z, 0deg) * 0.45));
+   DeviceModel.module.css), and the model still leans toward the pointer. With reduced motion the
+   reset below holds it still instead */
+@media (prefers-reduced-motion: no-preference) {
+  .card:hover .float:has([data-dock]),
+  .card:focus-visible .float:has([data-dock]) {
+    transform: rotateX(calc(var(--tilt-x, 0deg) * 0.5)) rotateY(calc(var(--tilt-z, 0deg) * 0.45));
+  }
 }
 
 .card:hover .bob:has([data-dock]),

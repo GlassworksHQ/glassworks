@@ -105,14 +105,19 @@ describe('the undock CSS', () => {
 
   it('lifts on hover with a mouse, and on the card\'s hover and keyboard focus', () => {
     expect(css('DeviceModel.module.css')).toMatch(/@media \(hover: hover\) \{\s*\.stage:hover \{\s*--undock: 1;/);
-    expect(css('FrameCard.module.css')).toMatch(/\.card:hover,\s*\.card:focus-visible \{\s*--undock: 1;/);
+    const card = css('FrameCard.module.css');
+    expect(card).toMatch(/(^|\})\s*\.card:focus-visible \{\s*--undock: 1;\s*\}/);
+    // hover only with a pointer that hovers: a tap on a touch screen emulates :hover
+    expect(card).toMatch(/@media \(hover: hover\) \{\s*\.card:hover \{\s*--undock: 1;\s*\}\s*\}/);
+    expect(card.match(/--undock: 1/g)).toHaveLength(2);
   });
 });
 
 describe('the card', () => {
   it('keeps a docked model on the ground: no float, bob or floating shadow, but the lean toward the pointer', () => {
     const card = css('FrameCard.module.css');
-    expect(card).toMatch(/\.card:hover \.float:has\(\[data-dock\]\),\s*\.card:focus-visible \.float:has\(\[data-dock\]\) \{\s*transform: rotateX\(calc\(var\(--tilt-x, 0deg\) \* 0\.5\)\) rotateY\(calc\(var\(--tilt-z, 0deg\) \* 0\.45\)\);\s*\}/);
+    // only without reduced motion, so the reduced-motion reset (transform: none) holds a docked model still too
+    expect(card).toMatch(/@media \(prefers-reduced-motion: no-preference\) \{\s*\.card:hover \.float:has\(\[data-dock\]\),\s*\.card:focus-visible \.float:has\(\[data-dock\]\) \{\s*transform: rotateX\(calc\(var\(--tilt-x, 0deg\) \* 0\.5\)\) rotateY\(calc\(var\(--tilt-z, 0deg\) \* 0\.45\)\);\s*\}/);
     expect(card).toMatch(/\.card:hover \.bob:has\(\[data-dock\]\),\s*\.card:focus-visible \.bob:has\(\[data-dock\]\) \{\s*animation: none;/);
     expect(card).toMatch(/\.card:hover \.model:has\(\[data-dock\]\) > \.shadow,\s*\.card:focus-visible \.model:has\(\[data-dock\]\) > \.shadow \{\s*opacity: 0;/);
   });
