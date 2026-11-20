@@ -410,6 +410,8 @@ L boot
 check "a staged bundle that fails its check is dropped at boot" test ! -e /data/glassworks/bundle/next -a "$(prop ro.glassworks.frame.version)" = 2.0.0
 check "...and doesn't move the floor" test "$(cat /data/glassworks/bundle/version)" = 2000000
 stage_frame "$T/f3/frame-bundle"; install_frame >/dev/null; mv /data/glassworks/bundle/next /data/glassworks/bundle/next.old
+check "(setup: the staged bundle moved aside whole: no next, next.old checks as 2.0.1)" \
+  test ! -e /data/glassworks/bundle/next -a "$(L check /data/glassworks/bundle/next.old)" = "2.0.1 2000001"
 L boot
 check "an install stopped with the staged bundle moved aside: it still loads" test "$(prop ro.glassworks.frame.version)" = 2.0.1 -a ! -e /data/glassworks/bundle/next.old
 
@@ -1109,12 +1111,12 @@ check "once written, asked once per start only" test "$(grep -c 'get secure blue
 echo keep > "$T/not-ours"; rm -f "$BTP/bluetooth-address"; ln -s "$T/not-ours" "$BTP/bluetooth-address"
 LOOPS=1 helper GWA_PUB="$BTP"
 check "a planted symlink is replaced, its target untouched" test ! -L "$BTP/bluetooth-address" -a "$(cat "$T/not-ours")" = keep -a "$(cat "$BTP/bluetooth-address")" = 02:AA:00:00:00:01
-rm -rf "$BTP"; touch "$T/settings-hang"; t0=$(date +%s)
+rm -rf "$BTP"; touch "$T/settings-hang"; rm -f "$T/props/sys.glassworks.radio.status"; t0=$(date +%s)
 ( sleep 90; pkill -f "sleep 1000" ) & W=$!   # an outer deadline: an agent without its own bound fails, not hangs
 LOOPS=1 helper GWA_PUB="$BTP" GWA_BT_TIMEOUT=1
 kill "$W" 2>/dev/null
 check "a settings call that never returns doesn't stall the loop (bounded, then retried later)" test $(( $(date +%s) - t0 )) -lt 15 -a ! -e "$BTP/bluetooth-address"
-check "...and the radio's status was still set" test -n "$(prop sys.glassworks.radio.status)"
+check "...and the loop went on to the radio: a fresh status, from this run" has "$(prop sys.glassworks.radio.status)" "ok off"
 rm -f "$T/settings-hang"; pkill -f "sleep 1000" 2>/dev/null
 touch "$T/settings-fail"; LOOPS=1 helper GWA_PUB="$BTP"
 check "a lookup that prints an address and then fails: nothing written" test ! -e "$BTP/bluetooth-address"
@@ -1271,7 +1273,12 @@ bg_until() { i=0; until "$@" || [ $i -ge 600 ]; do sleep 0.1; i=$((i + 1)); done
 jumps4() { test "$(nat 4 | grep -c '^-A PREROUTING -j GWPORTAL$')" = 1; }
 rules4() { test -n "$(nat 4 | grep '^-A GWPORTAL')"; }
 : > "$T/setprop.log"; LOOPS=100000 helper GWA_PROC_NET="$T/net" GWA_PORTAL_SLEEP=0.2 GWA_SLEEP=0.1 &
-H=$!; first_check; sed -i '/^-A PREROUTING -j GWPORTAL$/d' "$T/ipt/4-nat"; bg_until jumps4
+H=$!; first_check
+# pause the agent and its loops while the jump goes, so the setup can see it gone before the loop runs again
+P=$(pgrep -P "$H" -f glassworks_agent.sh | head -1); PL="$P $(pgrep -P "$P" | tr '\n' ' ')"; kill -STOP $PL
+sed -i '/^-A PREROUTING -j GWPORTAL$/d' "$T/ipt/4-nat"
+check "(setup: the jump is gone, with the agent paused)" test $? = 0 -a "$(nat 4 | grep -c '^-A PREROUTING -j GWPORTAL$')" = 0
+kill -CONT $PL; bg_until jumps4
 check "a jump lost while it runs (netd restarted) is put back by the loop" test "$(nat 4 | grep -c '^-A PREROUTING -j GWPORTAL$')" = 1
 socks tcp6; portal
 check "the redirect's socket gone: everything removed, both families" \
@@ -1349,7 +1356,12 @@ H=$!; logged '^sys.glassworks.portal.status=error: iptables refused the rules'
 check "(the half-done IPv4 rules stay, the clear refused)" rules4
 hostapd_off; rm -f /t/ipt-refuse /t/ipt-nodel; bg_until gone
 check "...once the hotspot stops and iptables takes removals again, the same agent clears them and says off" gone
-hostapd_off; ap_up; portal
+hostapd_off; ap_up
+# what an old agent left: our chain, a rule and the jump, in both families
+printf ':GWPORTAL\n-A PREROUTING -j GWPORTAL\n%s\n' "$RULE4_DNS" > "$T/ipt/4-nat"
+printf ':GWPORTAL\n-A PREROUTING -j GWPORTAL\n%s\n' "$RULE6_DNS" > "$T/ipt/6-nat"
+check "(setup: an old agent's chain, rule and jump in both families)" test "$(nat 4 | grep -c GWPORTAL)/$(nat 6 | grep -c GWPORTAL)" = 3/3
+portal
 check "a new helper removes what an old one left" test -z "$(nat 4 | grep GWPORTAL)$(nat 6 | grep GWPORTAL)"
 check "...the filter tables untouched" test "$(cat "$T/ipt/4-filter")" = "$FILTER" -a "$(cat "$T/ipt/6-filter")" = "$FILTER"
 for b in iptables ip6tables iptables-restore ip6tables-restore iptables-save ip6tables-save; do printf '#!/bin/sh\nexit 0\n' | w "$T/bin/$b"; done

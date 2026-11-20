@@ -18,9 +18,11 @@ so far explains the reset. Plan F (attempt 13) then reset like E1 without ever l
 reset comes before PREP. Attempt 14 reads the steps plan F named, and none explains it. All of it goes through [`fastboot-usb.py`](../tools/fel/fastboot-usb.py), not the
 `fastboot` CLI.
 
-**The loader is built and passes off-device tests; untested on a panel.** It is in
-`frames/aqara-s1-plus/tools/root/` (`glassworks_loader.sh`, `glassworks.rc`), and both boot patchers
-make byte-identical images with it (attempt 14). Its panel tests are L1–L5 in [Panel tests](#panel-tests).
+**The loader ran on the dev S1 on 2026-11-19 (verified; #651's boot writer run, #651 issuecomment-7024290415).**
+It is in `frames/aqara-s1-plus/tools/root/` (`glassworks_loader.sh`, `glassworks.rc`), and both boot patchers
+make byte-identical images with it (attempt 14). Of its panel tests ([Panel tests](#panel-tests)), L1–L4
+passed. L5 was inconclusive: the loader's lines were in neither logcat nor dmesg, because it logged with `log -t`
+before logd runs. It now writes them to the kernel log too, and L5 waits on the next S1 session.
 
 Device: Aqara S1 Plus, firmware 4.5.80. Sources: the stock `boot`, `misc` and boot package
 backups and Aqara's 4.5.80 OTA package, all outside the repo; AOSP `android-10.0.0_r41`; this repo at
@@ -491,8 +493,10 @@ Every S1 in the field needs one more Kiln update to get the loader. Before build
 - **The installer is not a slot.** `glassworks_bundle` always runs the boot image's
   `glassworks_loader.sh install`, so a bundle can't replace the code that checks bundles.
 - **Fallback.** A missing bundle, a failed check, or another frame's bundle means the boot image's
-  copies run. A slot whose bundle script exits 3 times within a minute is marked bad, and that slot
-  runs the boot copy from then on. That was the 0.4.3 radio helper's rule, applied to every slot.
+  copies run. In the long-running slots (`agent`, `netwatch`, `svc1`, `svc2`), a bundle script whose runs
+  each last under 60 s, 3 runs in a row, is marked bad for that bundle version, and that slot runs the boot
+  copy from then on. The run-once slots (`firstboot`, `update`) have no retry loop: their bundle script runs
+  once per start. That was the 0.4.3 radio helper's rule, applied to the long-running slots.
 
 ### What the app reads
 
@@ -589,7 +593,8 @@ stopping after step 3 leaves the panel working as before.
    loads, a panel in `zigbee_tcp` with the Silicon Labs stack reports "needs a radio bundle with its
    runtime" and its coordinator is down. So Kiln has the app fetch and stage the frame release's bundle,
    restarts the panel once more, and calls the update done only when the loader's own record,
-   `/data/glassworks-pub/frame-bundle`, reads `ok <the release's version>`. The boot step deletes that file
+   `/data/glassworks-pub/frame-bundle` (`<state> <loaded version> <floor> <staged version>`, e.g.
+   `ok 1.0.1 1000001 -`), has `ok` in its first field and the release's version in its second. The boot step deletes that file
    before it starts, so a record there was written by the reboot Kiln asked for. `ro.glassworks.frame.version`
    alone doesn't prove it: the boot image and the first bundle are both 1.0.0. The radio status is a
    separate check after that.
@@ -714,11 +719,21 @@ FEL with our U-Boot) or flashed with the usual backup. The app can stay on 0.4.3
 
 | Test | What it settles | Expect |
 |---|---|---|
-| L1 | `/data` at `post-fs-data`, and the `exec` step (on a store with no bundle: no `/data/glassworks/bundle/current`, `next` or `next.old`; with one, expect `ok <its version>` instead) | `getprop ro.glassworks.frame.id` = `aqara-s1-plus`, `ro.glassworks.frame.version` = `1.0.0`, `sys.glassworks.bundle.state` = `none`; `logcat -d -s glassworks_loader` |
+| L1 | `/data` at `post-fs-data`, and the `exec` step (on a store with no bundle: no `/data/glassworks/bundle/current`, `next` or `next.old`; with one, expect `ok <its version>` instead) | `getprop ro.glassworks.frame.id` = `aqara-s1-plus`, `ro.glassworks.frame.version` = `1.0.0`, `sys.glassworks.bundle.state` = `none`; the boot step's lines in the kernel log, as in L5 (not logcat: logd isn't up at `post-fs-data`) |
 | L2 | The slots under init | `init.svc.glassworks_agent`, `_netwatch` = `running`; `init.svc.glassworks_firstboot` = `stopped` (it exits at once: the 0.4.3 marker says the panel was provisioned); no `init.svc.s1kiosk_*` |
 | L3 | The radio from the old setting. Starts from a known state: 0.4.3 running `thread_router` (step 0 of the run sheet checks it), no `/data/s1kiosk/radio/.settings-moved`, no frame bundle | `persist.glassworks.radio_mode` = `thread_router`, `sys.glassworks.radio.status` = `ok thread_router…`, `sys.glassworks.agent.source` = `boot`, otbr runs |
 | L4 | The boot animation mount from a shell at `post-fs-data` | the Glassworks animation plays at boot (film it); `/proc/mounts` lists `bootanimation.zip` |
 | L5 | The check's cost at `post-fs-data` | `dmesg \| grep glassworks_loader`: the times of `boot: checking the frame bundle` and `boot: done: …`, with and without a bundle (a bundle needs the bundles PR). Not logcat: at `post-fs-data` logd isn't running, and the S1 run of 2026-11-19 found nothing there; the loader writes every line to `/dev/kmsg` too |
+
+Results, 2026-11-19 (dev S1, the loader image written by #651's boot writer; #651 issuecomment-7024290415):
+
+| Test | Result |
+|---|---|
+| L1 | **Pass:** `ro.glassworks.frame.id` = `aqara-s1-plus`, `ro.glassworks.frame.version` = `1.0.0` |
+| L2 | **Pass:** `glassworks_agent` and `glassworks_netwatch` running, `glassworks_firstboot` stopped; of the old services only `s1kiosk_devsu` (the dev image's, carried over on purpose) |
+| L3 | **Pass:** `persist.glassworks.radio_mode` = `thread_router`; otbr-agent up within 4 min, `sys.glassworks.radio.status` = `ok thread_router: joined as router` |
+| L4 | **Pass:** the boot animation plays as before (watched), `bootanimation.zip` mounted |
+| L5 | **Inconclusive:** no `glassworks_loader` line in `logcat -b all` or `dmesg` (`log -t` before logd). Fixed by the kernel-log lines; rerun pending |
 
 ## Open questions
 
