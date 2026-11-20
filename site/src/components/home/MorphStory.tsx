@@ -331,6 +331,19 @@ function formatTimer(totalSec: number) {
   return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
+/**
+ * What a beat's example takes besides Glassworks itself: a Home Assistant blueprint to import, or a card for the
+ * dashboard. Each shows as a link beside its beat's own once it has an `href`; one without is not published yet
+ * and stays hidden until it is, so publishing it is one line here.
+ */
+type BeatNeed = { kind: "Blueprint" | "Dashboard card"; name: string; href?: string };
+const BEAT_NEEDS: Partial<Record<number, readonly BeatNeed[]>> = {
+  // the doorbell notification, with its camera and Unlock button
+  2: [{ kind: "Blueprint", name: "Doorbell on Glassworks panels", href: "/blueprints#bp-notifications" }],
+  // the dashboard tucked into a side pill while someone is at the Mirror (its Camera presence)
+  3: [{ kind: "Dashboard card", name: "Side pill on presence" }],
+};
+
 export type MorphRelease = { version: string; href: string };
 export type MorphPost = { title: string; href: string };
 
@@ -909,14 +922,42 @@ export function MorphStory({
   );
 
   /* A beat's device as its 3D model (frame.json's, or storyModels.ts), with the live screen on it */
-  const renderModel = (sm: StoryModel, id: string, shape: ShapeId, content: React.ReactNode) => (
-    <DeviceModel key={sm.id} id={id} model={sm.model} label={sm.label} aspect={sm.aspect} view={sm.view}>
+  const renderModel = (sm: StoryModel, id: string, shape: ShapeId, content: React.ReactNode, face?: React.ReactNode) => (
+    <DeviceModel key={sm.id} id={id} model={sm.model} label={sm.label} aspect={sm.aspect} view={sm.view} face={face}>
       {/* the glass's own screen box (a size container), so the dashboard lays out the same on both */}
       <div className={s.modelScreen} data-round={shape === "round" || undefined} data-mirror={shape === "mirror" || undefined}>
         {content}
       </div>
     </DeviceModel>
   );
+
+  /* a beat's blueprints and dashboard cards that are published (BEAT_NEEDS), as links beside its own */
+  const renderNeeds = (beat: number) =>
+    BEAT_NEEDS[beat]
+      ?.filter((n) => n.href)
+      .map((n) => (
+        <Link key={n.name} href={n.href!} className={s.need}>
+          <span className={s.needKind}>{n.kind}</span>
+          {n.name} →
+        </Link>
+      ));
+
+  /*
+   * Beat 3: the Mirror's presence sensor in its forehead, on the model's front: it lights, and a ring ripples
+   * out, when someone steps up. `opacity` fades it in as the device becomes the Mirror; its place is the middle
+   * of the frame above the screen, wherever that is on the body as it morphs
+   */
+  const renderMirrorSensor = (m: FrameModel, opacity: number) => {
+    if (opacity <= 0.05) return undefined;
+    const lit = mirrorPresent && mirrorPresenceO > 0.35;
+    const top = ((m.screen.top ?? m.bezel) / 2 / m.body.height) * 100;
+    return (
+      <div className={s.mirrorSensor} aria-hidden="true" style={{ opacity, top: `${top.toFixed(2)}%` }}>
+        <span className={`${s.sensorLens} ${lit ? s.sensorLensLit : ""}`} />
+        {lit && <span className={s.sensorPulse} />}
+      </div>
+    );
+  };
 
   /*
    * Beat 1 — REAL Assist Voice Overlay (OrbArt.kt + VoiceOverlay.kt)
@@ -1254,6 +1295,7 @@ export function MorphStory({
                 {overlay === "mirror-presence" && renderMirrorPresenceOverlay(1)}
                 {overlay === "kitchen-timer" && renderRealTimerOverlay(1)}
               </div>,
+              overlay === "mirror-presence" ? renderMirrorSensor(sm.model, 1) : undefined,
             )}
           </div>
         </div>
@@ -1305,6 +1347,7 @@ export function MorphStory({
               <Link href="/panes/assist" className={s.quietLink}>
                 Assist pane →
               </Link>
+              {renderNeeds(1)}
             </div>
           </div>
           {renderCompactFrame("kitchen", "voice")}
@@ -1322,6 +1365,7 @@ export function MorphStory({
               <Link href="/docs/notifications" className={s.quietLink}>
                 Notification docs →
               </Link>
+              {renderNeeds(2)}
             </div>
           </div>
           {renderCompactFrame("wall", "notif")}
@@ -1339,6 +1383,7 @@ export function MorphStory({
               <Link href="/frames/lululemon-mirror" className={s.quietLink}>
                 Mirror frame details →
               </Link>
+              {renderNeeds(3)}
             </div>
           </div>
           {renderCompactFrame("mirror", "mirror-presence")}
@@ -1352,6 +1397,12 @@ export function MorphStory({
             <p className={s.lede}>
               Voice timers, synced Music Assistant playback and sensors like the tablet&rsquo;s dock reach Home Assistant over ESPHome. No custom integration, no cloud, and updates arrive under Settings → Updates.
             </p>
+            <div className={s.ctas}>
+              <Link href="/frames/google-pixel-tablet" className={s.quietLink}>
+                Pixel Tablet details →
+              </Link>
+              {renderNeeds(4)}
+            </div>
           </div>
           {renderCompactFrame("tablet", "kitchen-timer")}
           <div className={s.compactRays} aria-label="Native Home Assistant protocols">
@@ -1495,6 +1546,7 @@ export function MorphStory({
               <Link href="/panes/assist" className={s.quietLink}>
                 Assist pane →
               </Link>
+              {renderNeeds(1)}
             </div>
           </div>
 
@@ -1517,6 +1569,7 @@ export function MorphStory({
               <Link href="/docs/notifications" className={s.quietLink}>
                 Notification docs →
               </Link>
+              {renderNeeds(2)}
             </div>
           </div>
 
@@ -1539,6 +1592,7 @@ export function MorphStory({
               <Link href="/frames/lululemon-mirror" className={s.quietLink}>
                 Mirror frame details →
               </Link>
+              {renderNeeds(3)}
             </div>
           </div>
 
@@ -1561,6 +1615,7 @@ export function MorphStory({
               <Link href="/frames/google-pixel-tablet" className={s.quietLink}>
                 Pixel Tablet details →
               </Link>
+              {renderNeeds(4)}
             </div>
           </div>
 
@@ -1671,7 +1726,7 @@ export function MorphStory({
                       ["--ground-o" as string]: groundO.toFixed(3),
                     }}
                   >
-                    {renderModel(travel, "home-travel", currentShape, renderScreenContent())}
+                    {renderModel(travel, "home-travel", currentShape, renderScreenContent(), renderMirrorSensor(travel.model, mirrorFactor))}
                   </div>
                 </div>
               )}

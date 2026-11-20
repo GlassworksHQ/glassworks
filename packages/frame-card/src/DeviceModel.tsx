@@ -22,8 +22,10 @@ const PAINT_VARS = {
  * `children`, if given, are the screen's content instead of the render or the example dashboard, e.g. a live
  * mockup on glassworks.dev's home page. The screen is an inline-size container, so they can size to it. The
  * model is then a labelled group rather than an image, so content that can be used stays reachable.
+ * `face` is drawn on the front itself, over the screen and the frame around it, e.g. a sensor in a mirror's
+ * forehead; it is placed in the front's box (a percentage of the body) and turns with the model.
  */
-export function DeviceModel({ id, model, label, aspect = 2, screen, priority = false, view, children }: { id: string; model: FrameModel; label: string; aspect?: number; screen?: string; priority?: boolean; view?: View; children?: ReactNode }) {
+export function DeviceModel({ id, model, label, aspect = 2, screen, priority = false, view, children, face }: { id: string; model: FrameModel; label: string; aspect?: number; screen?: string; priority?: boolean; view?: View; children?: ReactNode; face?: ReactNode }) {
   const stage = useRef<HTMLDivElement>(null);
   const rx = view?.rx;
   const ry = view?.ry;
@@ -86,6 +88,7 @@ export function DeviceModel({ id, model, label, aspect = 2, screen, priority = f
             <div className={s.front}>
               <div className={s.screen}>{children ?? (screen ? <img className={s.render} src={screen} alt="" decoding="async" loading={priority ? 'eager' : 'lazy'} fetchPriority={priority ? 'high' : undefined} /> : <Dashboard layout={g.layout} />)}</div>
               <div className={s.glare} />
+              {face}
             </div>
           </div>
         </div>
