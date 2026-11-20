@@ -254,16 +254,18 @@ out.
 - **Local network only.** `pushConsumer()` takes plain `http` only, with no user info in the URL, resolves the
   host once, and keeps the first address that `localConsumer()` allows: RFC 1918 (`isSiteLocalAddress`),
   link-local IPv4 and IPv6 (`isLinkLocalAddress`), IPv6 ULA `fc00::/7`, or the subscriber's own source address.
-  Loopback, wildcard and multicast addresses are refused unless they are the subscriber's own, and so is any
-  address of the panel's own interfaces (`NetworkInterface.getByInetAddress`), so a Subscribe can't aim the panel
-  at its own ports or at the internet. A consumer URL past 2048 characters is refused. The Notify goes to that pinned address, so a name that
+  Loopback, wildcard and multicast addresses are refused, and so is any address of the panel's own interfaces
+  (`NetworkInterface.getByInetAddress`; an address it can't check counts as the panel's). The one exception is the
+  subscriber's own address: a Subscribe may always name the client that sent it, whatever that address is, and a
+  client on the panel itself may name the panel. Apart from that, a Subscribe can't aim the panel at its own ports or
+  at the internet. A consumer URL past 2048 characters is refused. The Notify goes to that pinned address, so a name that
   resolves elsewhere later can't move it. Anything else gets a `ter:InvalidArgVal` fault, which makes Home
   Assistant keep its pull point.
 - **Its own sockets.** The Notify is one HTTP/1.1 POST on a `java.net.Socket`: no DNS lookup again, no redirects,
   no proxy, and no change to the network security config (it doesn't apply to raw sockets, and both apps already
   set `usesCleartextTraffic` for Home Assistant over HTTP). Connect timeout 2 s, then 2 s in all to write the
-  request and read the status line: reads get the time left, and a watchdog thread closes the socket at the
-  deadline, which also ends a write to a consumer that reads nothing.
+  request and read the status line. Reads get the time left, and a watchdog thread closes the socket 0.5 s after the
+  deadline, which ends a write to a consumer that reads nothing.
 - **The Notify action** is `http://docs.oasis-open.org/wsn/bw-2/NotificationConsumer/Notify`, the operation's
   port type in WS-BaseNotification 1.3's WSDL. Upstream sends `NotificationProducer/Notify`.
 - **Caps.** At most 8 push subscriptions, apart from the 16 pull points, so a flood of Subscribes can't push Home

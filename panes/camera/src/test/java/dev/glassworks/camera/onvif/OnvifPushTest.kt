@@ -137,7 +137,7 @@ class OnvifPushTest {
         val last = HashMap<String, String>()
         while (true) {
             val (c, body) = posted.poll(1, TimeUnit.SECONDS) ?: break
-            last[c.address.hostAddress] = isMotion(body)
+            last[c.address.hostAddress.orEmpty()] = isMotion(body)
         }
         assertEquals(MAX_RACE, last.size)
         assertTrue(last.toString(), last.values.all { it == "false" })
@@ -320,7 +320,11 @@ class OnvifPushTest {
             assertTrue("setMotion never waits on the consumer", (System.nanoTime() - t0) / 1_000_000 < 500)
             val deadline = System.currentTimeMillis() + 8_000
             while (logs().none { it.contains("Notify to http://127.0.0.1:${dead.localPort} failed") } && System.currentTimeMillis() < deadline) Thread.sleep(50)
-            assertTrue(logs().toString(), logs().any { it.contains("Notify to http://127.0.0.1:${dead.localPort} failed: SocketTimeoutException") })
+            // The read times out first; a watchdog close (a blocked write, a slow runner) logs SocketException. Both are bounded.
+            assertTrue(logs().toString(), logs().any {
+                it.contains("Notify to http://127.0.0.1:${dead.localPort} failed: SocketTimeoutException") ||
+                    it.contains("Notify to http://127.0.0.1:${dead.localPort} failed: SocketException")
+            })
             assertFalse("the log never names the path", logs().any { it.contains("/n failed") })
             synchronized(held) { held.toList() }.forEach { it.close() }
         }

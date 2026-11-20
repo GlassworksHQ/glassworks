@@ -79,8 +79,11 @@ class OnvifServer(
     private val resolve: (String) -> List<InetAddress> = { InetAddress.getAllByName(it).toList() },
     /** Glassworks: sends one Notify to a push consumer and returns the HTTP status; a test passes its own. */
     private val post: ((PushConsumer, ByteArray) -> Int)? = null,
-    /** Glassworks: whether an address is one of the panel's own interfaces, which no consumer may be; a test passes its own. */
-    private val ownAddress: (InetAddress) -> Boolean = { a -> try { NetworkInterface.getByInetAddress(a) != null } catch (_: Exception) { false } },
+    /**
+     * Glassworks: whether an address is one of the panel's own interfaces, which no consumer may be; a test passes its
+     * own. Fails closed: an address the lookup can't check counts as the panel's.
+     */
+    private val ownAddress: (InetAddress) -> Boolean = { a -> try { NetworkInterface.getByInetAddress(a) != null } catch (_: Exception) { true } },
 ) {
     companion object {
         private const val MAX_BODY = 1 shl 20
@@ -106,6 +109,8 @@ class OnvifServer(
         private const val NOTIFY_CONNECT_MS = 2_000
         /** Writing a Notify and reading the answer's status line, together, once connected. */
         private const val NOTIFY_EXCHANGE_MS = 2_000L
+        /** The watchdog closes the socket this long after the exchange's deadline: a read times out first, on its own. */
+        private const val WATCHDOG_GRACE_MS = 500L
         /** A consumer URL longer than this is refused (the common URL limit of browsers and servers). */
         private const val MAX_CONSUMER_URL = 2_048
         /** After Subscribe, so the SubscribeResponse reaches the consumer first: some NVRs drop a Notify that comes before it. */
@@ -928,14 +933,14 @@ class OnvifServer(
      * One plain HTTP/1.1 POST on a socket of our own, to the address pinned at Subscribe: no DNS again, no redirect,
      * no proxy. Returns the status, or -1 for an answer that isn't HTTP. Once connected, writing the request and
      * reading the answer's status line must end within [NOTIFY_EXCHANGE_MS], however slowly the consumer reads or
-     * answers: reads are bounded by the time left, and the [watchdog] closes the socket at the deadline, which also
-     * ends a write that blocks on a consumer that reads nothing.
+     * answers: reads are bounded by the time left, and the [watchdog] closes the socket [WATCHDOG_GRACE_MS] after the
+     * deadline, which ends a write that blocks on a consumer that reads nothing.
      */
     private fun httpPost(c: PushConsumer, body: ByteArray): Int = Socket().use { sock ->
         sock.connect(InetSocketAddress(c.address, c.port), NOTIFY_CONNECT_MS)
         val deadline = System.currentTimeMillis() + NOTIFY_EXCHANGE_MS
         val guard = try {
-            synchronized(notifierLock) { watchdog }?.schedule({ try { sock.close() } catch (_: Exception) {} }, NOTIFY_EXCHANGE_MS, TimeUnit.MILLISECONDS)
+            synchronized(notifierLock) { watchdog }?.schedule({ try { sock.close() } catch (_: Exception) {} }, NOTIFY_EXCHANGE_MS + WATCHDOG_GRACE_MS, TimeUnit.MILLISECONDS)
         } catch (_: RejectedExecutionException) { null }
         try { exchange(sock, c, body, deadline) } finally { guard?.cancel(false) }
     }
