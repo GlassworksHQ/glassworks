@@ -5,6 +5,6 @@
   "requires": [
     "bluetooth-le"
   ],
-  "status": "alpha",
+  "status": "beta",
   "docs": "docs/esphome.md#bluetooth-proxy"
 }

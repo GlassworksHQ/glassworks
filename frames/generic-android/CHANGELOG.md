@@ -24,6 +24,10 @@ line of each version is what Home Assistant shows on the update card. A change o
   back to Stable never installs an older version: the panel waits for a stable release newer than the one it runs.
 
 ### Fixed
+- **The camera isn't restarted while it is still starting.** On the lululemon Mirror, turning the camera on could
+  log "no frames" and open the camera a second time, so it took about 12 s to come up. A camera's first picture
+  now gets 10 s from the moment the camera opens; "no frames" shows only after that. A camera that goes quiet
+  later is still restarted after 5 s.
 - **Settings > Log says what the screen senses in plain words.** *Screen and sensors* read like
   `presence=far (raw 7.7E-4) · lux=NaN · brightness=-1.00 · admin=true`. It now reads like *Someone near: no ·
   Room light: 120 lux · Brightness: 40 %*, with only what the device has: no room light without a light sensor, no
