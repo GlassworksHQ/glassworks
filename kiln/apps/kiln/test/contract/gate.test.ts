@@ -93,9 +93,11 @@ describe('the gate', () => {
 
 describe('every Kiln page has a contract', () => {
   const data = installers();
-  // a route is a folder with an App Router page in it (page.tsx), not any folder; [frame] is every route of a frame on
-  // the shared wizard (the registry's ENGINE)
-  const folders = readdirSync(APP).filter((n) => statSync(join(APP, n)).isDirectory() && existsSync(join(APP, n, 'page.tsx')));
+  // a route is a folder with an App Router page in it (page.tsx, or in a route group of it: `(flow)/page.tsx`), not any
+  // folder; [frame] is every route of a frame on the shared wizard (the registry's ENGINE)
+  const hasPage = (dir: string) => existsSync(join(dir, 'page.tsx'))
+    || readdirSync(dir).some((g) => /^\(.+\)$/.test(g) && existsSync(join(dir, g, 'page.tsx')));
+  const folders = readdirSync(APP).filter((n) => statSync(join(APP, n)).isDirectory() && hasPage(join(APP, n)));
   const pages = folders.flatMap((n) => (n === '[frame]' ? ENGINE.map((id) => INSTALLERS[id]!.route) : [`/${n}`]));
 
   it('each frame page is the route of an installer.json, and each route has a page', () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PanelShell } from '@glassworks/adb';
-import { ManifestError, Steps, apiKeyFingerprint, apiKeySocketUp, apkHome, apkInfo, apkPermissions, applySettings, axmlTree, dropAdmin, grantPermissions, handOverApiKey, handOverDone, handOverSignIn, handoverCarries, kioskVersion, q, readApiKey, readSignIn, sendWifi, startApp, zipEntry } from '../src';
+import { ManifestError, Steps, apiKeyFingerprint, apiKeySocketUp, apkHome, apkInfo, apkPermissions, applySettings, axmlTree, dropAdmin, grantPermissions, handOverApiKey, handOverDone, handOverSignIn, handoverCarries, kioskVersion, q, readApiKey, readSignIn, sendWifi, startApp, wifiSsid, zipEntry } from '../src';
 import { FakeKeySocket, HOME_ACTIVITY, app, fakeApk, filter, zip, type FakeEl } from './fakes';
 
 class Shell implements PanelShell {
@@ -423,5 +423,18 @@ describe('applySettings', () => {
     await expect(applySettings(new Steps(bad.p), { timezone: 'x; reboot', clock24: true }, APP)).rejects.toThrow(/bad time zone/);
     await expect(applySettings(new Steps(bad.p), { locale: 'en_GB; reboot', clock24: true }, APP)).rejects.toThrow(/bad locale/);
     expect(bad.cmds).toEqual([]);
+  });
+});
+
+describe('wifiSsid', () => {
+  const on = (out: string) => ({ run: async () => ({ out, code: 0 }), push: async () => {} });
+  it('reads the network from mWifiInfo, quoted (Android 10+) or not (Android 6), and nothing when there is none', async () => {
+    expect(await wifiSsid(on('mWifiInfo SSID: "Home Net", BSSID: 02:00:00:00:00:01, MAC: …'))).toEqual({ ssid: 'Home Net' });
+    expect(await wifiSsid(on('mWifiInfo SSID: Home Net, BSSID: 02:00:00:00:00:01, Supplicant state: COMPLETED'))).toEqual({ ssid: 'Home Net' });
+    expect(await wifiSsid(on('mWifiInfo SSID: <unknown ssid>, BSSID: <none>, Supplicant state: DISCONNECTED'))).toEqual({});
+    expect(await wifiSsid(on('Wi-Fi is disabled'))).toEqual({});
+    // as printed: spaces at its ends, and a comma in an unquoted name
+    expect(await wifiSsid(on('mWifiInfo SSID: " Home Net ", BSSID: 02:00:00:00:00:01'))).toEqual({ ssid: ' Home Net ' });
+    expect(await wifiSsid(on('mWifiInfo SSID: Home, Net, BSSID: 02:00:00:00:00:01, Supplicant state: COMPLETED'))).toEqual({ ssid: 'Home, Net' });
   });
 });

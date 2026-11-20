@@ -14,6 +14,7 @@ import {
   type BrandId, type OwnFrame, type GenericApp, type GenericInstalled, type GenericPhase, type Grant, type Identified, type Plan, type SilentUpdatesResult,
 } from '@glassworks/generic-android-installer';
 import frame from '../../../../../frames/generic-android/design/frame.json';
+import type { DeviceProgress } from '../device/imageSession';
 import { NoRelease, apkMode, installable, releaseApk, type ApkFrom, type ReleaseApk, type ReleaseLine } from '../release/apk';
 
 /**
@@ -40,6 +41,8 @@ export type AndroidResult = { flow: 'install'; installed: GenericInstalled } | {
 
 export interface AndroidState {
   screen: AndroidScreen;
+  /** An earlier page load wrote to the device (its `progress` says): an install or undo there didn't finish. */
+  changed?: boolean;
   flow: Flow;
   apk?: PickedApk;
   /** With the APK from the release: where its download is. */
@@ -83,6 +86,13 @@ export interface AndroidDeps {
   setupTries?: number;
   /** The APK from the newest generic-android release, through Kiln's release route; without it, a file the tester picks. */
   release?: typeof fetch;
+  /**
+   * The install is through: the standard flow takes the device from here (its App step first, issue 621), so the install
+   * doesn't hand over to the app's setup page. The session lets go of the device and keeps the result for Done's lines.
+   */
+  handOver?(device: Device, installed: GenericInstalled): void;
+  /** Where an install or undo got to, kept across page loads (device/imageSession.ts `DeviceProgress`). */
+  progress?: DeviceProgress;
 }
 
 /** Whether the page is on and where its APK comes from (release/apk.ts `apkMode`). */
@@ -104,7 +114,7 @@ export class AndroidSession {
   private picks = 0;
 
   constructor(private readonly d: AndroidDeps, on: boolean) {
-    this.state = { screen: on ? 'find' : 'off', flow: 'install', phases: [], log: [], ...(d.release ? { release: { state: 'waiting' } } : {}) };
+    this.state = { screen: on ? 'find' : 'off', flow: 'install', phases: [], log: [], ...(d.release ? { release: { state: 'waiting' } } : {}), ...(on && d.progress?.get() ? { changed: true } : {}) };
   }
 
   get from(): ApkFrom { return this.d.release ? 'release' : 'local'; }
@@ -241,6 +251,8 @@ export class AndroidSession {
       this.set({ plan, identified: plan.identified });
       const installed = await installGeneric(this.device!, {
         apk: this.apk!, onStep: this.log, sleep: this.d.sleep, homeTimeoutMs: this.d.homeTimeoutMs, setupTries: this.d.setupTries,
+        // the standard flow sets it up next, over this USB: no hand-over to its setup page
+        ...(this.d.handOver ? { handoff: false } : {}),
         onPhase: (p) => this.set({ phases: [...this.state.phases, p], ...(p.step === 'granted' ? { granted: { grants: p.grants, silentUpdates: p.silentUpdates } } : {}) }),
       });
       return { flow: 'install', installed };
@@ -254,10 +266,20 @@ export class AndroidSession {
   private async work(run: () => Promise<AndroidResult>): Promise<void> {
     if (this.state.screen === 'working') return;
     this.set({ screen: 'working', phases: [], granted: undefined, result: undefined, error: undefined, own: undefined });
+    this.d.progress?.set({ at: 'written' });
     try {
       const result = await run();
+      this.d.progress?.set(undefined);
+      if (result.flow === 'install' && this.d.handOver && this.device) {
+        // the standard flow has the device from here; this page, opened again, starts from its first screen
+        const device = this.device;
+        this.device = undefined;
+        this.set({ screen: 'find', changed: undefined, result, phases: [] });
+        this.d.handOver(device, result.installed);
+        return;
+      }
       this.release();
-      this.set({ screen: 'done', result });
+      this.set({ screen: 'done', changed: undefined, result });
     } catch (e) {
       if (!(e instanceof Refused)) this.release();
       this.log('Stopped');
