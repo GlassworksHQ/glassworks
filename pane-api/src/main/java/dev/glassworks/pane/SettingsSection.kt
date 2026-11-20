@@ -189,10 +189,10 @@ const val UNKNOWN = "Unknown"
 const val UNAVAILABLE = "Unavailable"
 
 /** Where a settings section sits. The core's own come first and last; panes go in between. */
-enum class SettingsPlace { DASHBOARD, SCREEN, DEVICE, NETWORK, PANES, LOG, SECURITY, ABOUT }
+enum class SettingsPlace { DASHBOARD, SCREEN, APPEARANCE, DEVICE, NETWORK, PANES, LOG, SECURITY, ABOUT }
 
 /**
- * The sections in the order every settings surface uses: the core's Dashboard and Screen, the frame's
+ * The sections in the order every settings surface uses: the core's Dashboard, Screen and Appearance, the frame's
  * Device page ([dev.glassworks.frame.Frame.deviceSection]) and Network,
  * then [panes] in definition order, then Log, Security and About. Sections without items are left out.
  */
@@ -376,8 +376,20 @@ sealed interface SettingsItem {
          * picked one lit, and a tap picks at once (the camera's use, #117's approved cards).
          */
         val cards: ((String) -> String)? = null,
+        /**
+         * Each option id's [Swatch], or null. With swatches, a surface draws the options as one card per
+         * [Swatch.group] (a theme), each option an orb in it, the picked one ringed and badged with a sun or moon
+         * (#691's theme picker). A tap on an orb picks it at once.
+         */
+        val swatch: ((String) -> Swatch)? = null,
         val save: (String, done: (String?) -> Unit) -> Unit,
     ) : SettingsItem
+
+    /**
+     * How a [Choice] option looks as an orb (#691): the card it sits in ([group], with a [note] under the name, "Default"),
+     * whether it is the [dark] one, and its two lights and ground ([dev.glassworks.theme.Themes.Palette], 0xAARRGGBB).
+     */
+    class Swatch(val group: String, val note: String, val dark: Boolean, val a: Int, val b: Int, val ground: Int)
 
     /**
      * A button on a row (#269): its [title], a [detail] line read again while the page is open, and the

@@ -125,6 +125,9 @@ class PrefsPinTest {
         kiosk.takeSetupUpAtRestart()
         PanePrefs.PANE_FILES.keys.forEach(panes::paneFile)
         kiosk.remoteDebugging(BuildConfig.DEBUG) // the default the runtime passes (GlassworksRuntime.build)
+        // #691: a custom theme's palettes, saved and cleared
+        kiosk.customTheme = dev.glassworks.theme.Themes.custom(dev.glassworks.theme.Themes.GLASSWORKS.dark, dev.glassworks.theme.Themes.GLASSWORKS.light)
+        kiosk.customTheme = null
         panes.camera.use = dev.glassworks.camera.CameraUse.PRESENCE_AND_SNAPSHOTS
         panes.camera.signIn = "pin-user" to "pin-pass"
         panes.camera.signIn = null
@@ -250,6 +253,7 @@ class PrefsPinTest {
             "KioskPrefs.setHaUrl", "KioskPrefs.setUpdateChannel", "KioskPrefs.shownHost", "KioskPrefs.setAuth", "KioskPrefs.remoteDebugging", "PanePrefs.paneFile", "KioskPrefs.registerListener", "KioskPrefs.unregisterListener",
             ".save", "PrefsSsStore.putRecord", "PrefsSsStore.touchRecord", "PrefsSsStore.removeRecord",
             "CameraPrefs.setUse", "CameraPrefs.setSignIn", "KioskPrefs.carryOverRefreshToken", "KioskPrefs.carryOverApiKey", "KioskPrefs.markSetupUpAtRestart",
+            "KioskPrefs.setCustomTheme",
         )
     }
 }

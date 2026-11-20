@@ -732,7 +732,7 @@ class ManageServer(
         })
         if (problem == null) return HttpResponse.seeOther(if (SettingsChange.restarts(item)) "$page?done=restart" else page)
         // As the panel: a typed value, a duration, a choice or a window keeps its sheet open with why; the rest say it on the page.
-        val dialog = if (item is SettingsItem.Switch || item is SettingsItem.Slider || item is SettingsItem.Action || (item is SettingsItem.Choice && item.cards != null)) null
+        val dialog = if (item is SettingsItem.Switch || item is SettingsItem.Slider || item is SettingsItem.Action || (item is SettingsItem.Choice && (item.cards != null || item.swatch != null))) null
             else ManagePages.Dialog.Edit(key, problem, typed = raw.takeIf { item is SettingsItem.Text })
         // The link follows the page as it is now: the refusal came from the state the save saw, not the one posted against.
         val now = host.status()
