@@ -196,12 +196,13 @@ object HaAuth {
     }
 
     /**
-     * An installer carried the sign-in over a reinstall into the stored settings (SecretHandover, #584): forget any
-     * cached token and tell the screens, which showed the sign-in QR code until now.
+     * A sign-in went into the stored settings by another way than the QR code's: an installer carried it over a
+     * reinstall (SecretHandover, #584), or Home Assistant's login page on the panel (#633). Forgets any cached token
+     * and tells the screens, which showed the sign-in QR code until now. [how] starts the log line.
      */
-    fun signInCarriedOver() {
+    fun signInStored(how: String) {
         cache.clear()
-        AuthLog.i("Sign-in carried over by the installer${signedInBase?.let { " for $it" } ?: ""}")
+        AuthLog.i("$how${signedInBase?.let { " for $it" } ?: ""}")
         notifyChanged()
     }
 

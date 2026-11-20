@@ -575,7 +575,8 @@ Assistant."), with the way to change it second ("Use another network", "Add it b
    Hello doesn't count. `ApiServer.onStatesSubscribed` → `PanelDevice` persists `ha_seen` and
    notifies `SetupSignals`. Until then the step shows "Add it in Home Assistant. Settings → Devices &
    services → <the panel's name> → Add", "Waiting for Home Assistant…", and the panel's IP + port
-   6053 for a manual ESPHome add. Without touch, once signed in, it waits for Home Assistant to add the
+   6053 for a manual ESPHome add. In the first 2 min after the app starts, Home Assistant may still connect on its own
+   (an entry it already has), and the waiting line says "Checking whether Home Assistant knows this panel…" (#665). Without touch, once signed in, it waits for Home Assistant to add the
    panel (#484). **Skip** persists `setup_ha_skipped` (for kiosk-only use without the ESPHome device).
 4. **Panes**: "Choose", one card per pane that offers one (`PaneDefinition.setupChoice`): Voice
    (Assist and timers), Music (a Sendspin speaker), the Zigbee / Thread radio, the Bluetooth proxy
@@ -628,7 +629,8 @@ session without a refresh token):
   offer it then moves on by itself.
 
 The current step is the first one not done (Wi-Fi → Sign in → Add it → Panes → each pane's steps → Silent updates). Once shown, the screen stays
-until all steps are done, so it doesn't flicker between steps. It is re-evaluated on connectivity,
+until all steps are done, so it doesn't flicker between steps. It hides for HA's login page after "Sign in on this panel
+instead", and comes back as soon as that sign-in ends, also within the 2 min grace (#665). It is re-evaluated on connectivity,
 sign-in, HA connection and page changes, and every 2 s. The trigger is logged (`Glassworks`:
 "Setup screen: <reasons> (step …)").
 
