@@ -9,9 +9,9 @@
   "flows": {
     "install": {
       "steps": [
-        { "id": "find", "transport": "usb", "inputs": ["apk", "brand"] },
-        { "id": "connect", "transport": "adb", "enter": { "how": "usb-debugging" }, "taps": ["allow-usb-debugging"] },
-        { "id": "install", "transport": "adb", "writes": true, "checks": ["android-version", "abi", "own-frame"], "taps": ["home-always-android-6"] }
+        { "id": "find", "route": "", "transport": "usb", "inputs": ["apk", "brand"] },
+        { "id": "connect", "route": "connect", "title": "Connect", "transport": "adb", "enter": { "how": "usb-debugging" }, "taps": ["allow-usb-debugging"] },
+        { "id": "install", "route": "install", "title": "Install", "transport": "adb", "writes": true, "checks": ["android-version", "abi", "own-frame"], "taps": ["home-always-android-6"] }
       ],
       "then": "set-up"
     }

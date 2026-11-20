@@ -8,7 +8,6 @@
     "auth-refused-while-booting": "#621: AppSession.connect stops at the first refusal"
   },
   "generic-android": {
-    "auth-refused-while-booting": "#621: AndroidSession.connect stops at the first refusal",
-    "reload@install": "#621: AndroidSession keeps nothing across a page load, so the new page doesn't know the app was going in"
+    "auth-refused-while-booting": "#621: AndroidSession.connect stops at the first refusal"
   }
 }

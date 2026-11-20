@@ -13,7 +13,17 @@ import {
 import * as Collapsible from '@radix-ui/react-collapsible';
 import * as RadioGroup from '@radix-ui/react-radio-group';
 import Link from 'next/link';
-import { Fragment, useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import { usePathname } from 'next/navigation';
+import { Fragment, useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { webUsbDevices } from '@glassworks/kiln-core';
+import { GENERIC, LEGACY, type GenericApp, type GenericInstalled } from '@glassworks/generic-android-installer';
+import { INSTALLERS } from '@glassworks/frames/catalog';
+import { sessionProgress } from '../device/imageSession';
+import { standardData, type StandardFrame } from '../standard/frame';
+import { StandardSession } from '../standard/session';
+import { StandardRoutes } from '../standard/StandardWizard';
+import { status, stepOf, type Step } from '../wizard/routes';
+import type { Entry } from '../wizard/registry';
 import { Shell, useBrowserChip } from '../components/Shell';
 import { SilentUpdates, type SilentWords } from '../components/SilentUpdates';
 import { FRAMES, MEASURED, RENDERS } from '../frames/catalog';
@@ -24,9 +34,12 @@ import { registry } from '../wizard/registry';
 import { ANDROID_BASE, keptAndroid } from './activity';
 import { ANDROID_DEMOS, androidDemo, type AndroidDemo } from './demo';
 import { ScreenLockBlock } from './ScreenLockBlock';
-import { ANDROID_APK, ANDROID_OPEN, AndroidSession, androidMode, type AndroidState } from './session';
+import { ANDROID_APK, ANDROID_OPEN, AndroidSession, androidMode, type AndroidState, type Device } from './session';
 import type { ApkFrom } from '../release/apk';
 import './android.css';
+
+/** generic-android's frame id: its data in the catalog. */
+const ANDROID_ID = 'generic-android';
 
 const DEMO_ON = process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_KILN_DEMO === '1';
 const SITE = 'https://www.glassworks.dev/frames';
@@ -34,7 +47,7 @@ const SITE = 'https://www.glassworks.dev/frames';
 /** Kiln's release route, from the page (a bare `fetch` held by an object is an illegal invocation). */
 const releaseRoute = (...a: Parameters<typeof fetch>) => fetch(...a);
 
-function realSession(on: boolean, from: ApkFrom = 'local'): AndroidSession {
+function realSession(on: boolean, from: ApkFrom = 'local', handOver?: (p: Device, installed: GenericInstalled) => void): AndroidSession {
   if (!on) return new AndroidSession({ findUsb: () => Promise.reject(new Error('off')), connect: () => Promise.reject(new Error('off')) }, false);
   const keys = adbKeyHolder(loadOrCreateAdbKey);
   return new AndroidSession({
@@ -45,6 +58,8 @@ function realSession(on: boolean, from: ApkFrom = 'local'): AndroidSession {
     },
     connect: keys.connectWith((k) => Panel.connect(k)),
     ...(from === 'release' ? { release: releaseRoute } : {}),
+    handOver: (p, i) => { handOver?.(p, i); },
+    progress: sessionProgress(`kiln:device:${ANDROID_BASE}:app`),
   }, true);
 }
 
@@ -507,8 +522,15 @@ function Stopped({ s, session }: { s: AndroidState; session: AndroidSession }) {
   );
 }
 
-export function Screens({ session }: { session: AndroidSession }) {
+/** `base`: the page's route, whose step routes the address follows (installer.json); none in tests. */
+export function Screens({ session, base }: { session: AndroidSession; base?: string }) {
   const s = useSyncExternalStore(session.subscribe, session.get, session.get);
+  const route = base === undefined || s.screen === 'off' ? undefined : installRoute(s);
+  useEffect(() => {
+    if (route === undefined || base === undefined) return;
+    const want = `${base}${route ? `/${route}` : ''}`;
+    if (window.location.pathname.replace(/\/+$/, '') !== want) window.history.replaceState(null, '', `${want}${window.location.search}`);
+  }, [base, route]);
   const chip = useBrowserChip();
   const turn = rail(s).some((x) => x.mark === 'turn');
   useEffect(() => { document.title = `${turn ? 'Your turn · ' : ''}Android device · Kiln`; }, [turn]);
@@ -528,16 +550,110 @@ export function Screens({ session }: { session: AndroidSession }) {
   );
 }
 
+/** The app the last install put on, kept for the tab: a reload at a set-up step talks to the right one (generic or legacy). */
+const APP_KEY = `kiln:standard:${ANDROID_BASE}:app`;
+const keptApp = (): GenericApp => { try { return sessionStorage.getItem(APP_KEY) === LEGACY.package ? LEGACY : GENERIC; } catch { return GENERIC; } };
+
+/**
+ * The tablet as the standard flow reads it (issue 621): the S1's steps on the S1's screens after its install. `installed`:
+ * what the install found, for Done's Silent updates; without it (a reload at a set-up step), they are read as not confirmed.
+ */
+export function androidStandard(app: GenericApp, installed?: GenericInstalled, model?: string): StandardFrame {
+  const release = installed ? installed.plan.device.release || androidName(installed.plan.device.sdk) : '';
+  const words = installed ? silentBlock(installed.silentUpdates, release) : null;
+  return {
+    id: ANDROID_ID, name: 'Android device', short: 'tablet', the: 'the tablet', app: app.name, appId: app,
+    connect: { title: 'Connect to your tablet.', body: 'Plug it into this computer, with USB debugging on.', pick: model ?? 'your tablet' },
+    credits: {},
+    silent: { install: words ?? { word: 'Not confirmed', tone: 'n', line: 'Glassworks\' Device page on the tablet says whether updates install by themselves.' } },
+    wifiName: async () => ({}),
+    updates: async () => ({ state: 'install', log: 'silent updates: as the install read them back' }),
+    ...standardData(ANDROID_ID),
+  };
+}
+
+/** The tablet's standard flow, as Kiln's registry entry for /android. `device`: a demo's simulated tablet. */
+function standardEntry(f: StandardFrame, o: { demo?: string; device?: Device } = {}): Entry {
+  const device = o.device;
+  const session = new StandardSession({
+    standard: f,
+    devices: device ? { knownAdb: async () => device, requestAdb: async () => device } : webUsbDevices,
+    loadKey: device ? async () => ({ publicKey: 'QAAAAdemo kiln@demo' }) as never : loadOrCreateAdbKey,
+    ...(device ? { simulated: true, sleep: (ms: number) => new Promise<void>((r) => setTimeout(r, Math.min(ms, 800))) } : {}),
+  });
+  return { base: ANDROID_BASE, name: 'Android device', session, demo: o.demo, standard: true };
+}
+
+/** The install's step routes from generic-android's installer.json: `find`, `connect`, `install`. */
+function installRoute(s: AndroidState): string | undefined {
+  const steps = (INSTALLERS[ANDROID_ID]?.flows?.install?.steps ?? []) as { id: string; route?: string }[];
+  const id = s.screen === 'working' || (s.screen === 'error' && s.phases.length) ? 'install' : s.screen === 'debug' || s.screen === 'allow' ? 'connect' : 'find';
+  return steps.find((x) => x.id === id)?.route;
+}
+
+/** What the install left to say on the standard flow's Done: the frame card, the screen lock, what didn't apply, the home screen. */
+function AndroidOutcome({ session }: { session: AndroidSession }) {
+  const s = useSyncExternalStore(session.subscribe, session.get, session.get);
+  const r = s.result;
+  if (r?.flow !== 'install') return null;
+  const { installed } = r;
+  const f = frameOf(s.identified);
+  const name = deviceName(s);
+  return (
+    <>
+      {installed.home.state !== 'set' && <p className="small" role="alert">Kiln didn&apos;t see Glassworks picked as the home screen: on the tablet, pick Glassworks, then Always.</p>}
+      {f ? (
+        <div className="fc">
+          <div className="spread"><b>{f.name}</b>{!MEASURED.has(f.id) && <span className="ctag">Clarity · not measured yet</span>}</div>
+          <span className="kind">{KIND_TEXT[f.kind]} · <a className="link" href={`${SITE}/${f.id}`}>Its page on glassworks.dev</a></span>
+        </div>
+      ) : (
+        <div className="fc">
+          <b>Untested device</b>
+          <span className="small">Nobody has run Glassworks on this model yet. <a className="link" href={`https://github.com/GlassworksHQ/glassworks/issues/new?title=${encodeURIComponent(`Tested: ${name}`)}`}>Tell us how it goes</a></span>
+        </div>
+      )}
+      <ScreenLockBlock lock={installed.screenLock} />
+      <Refusals grants={installed.grants} />
+    </>
+  );
+}
+
+const STANDARD_STEPS: readonly Step[] = ['set-up', 'resume', 'wifi', 'home-assistant', 'panes', 'radio', 'done'];
+const noSubscribe = () => () => {};
+const noState = () => undefined as never;
+
 export function AndroidWizard() {
+  const path = usePathname() ?? '';
   const [start] = useState(() => {
     const m = androidMode(location.search, DEMO_ON, ANDROID_DEMOS);
-    if (m.demo) return { demo: m.demo as AndroidDemo };
+    if (m.demo) return { m, demo: m.demo as AndroidDemo, search: location.search };
     // a running install outlives the picker (wizard/registry.ts), so a link back without ?apk=… finds it
-    if (!m.on && !registry.activity(ANDROID_BASE)) return { real: realSession(false) };
-    return { real: keptAndroid(() => realSession(true, m.apk), m.apk).session };
+    if (!m.on && !registry.activity(ANDROID_BASE)) return { m, search: location.search, real: realSession(false) };
+    return { m, search: location.search, real: keptAndroid(() => realSession(true, m.apk, (p, i) => handRef.current?.(p, i)), m.apk).session };
   });
+  const handRef = useRef<((p: Device, installed: GenericInstalled) => StandardSession | undefined) | undefined>(undefined);
+  handRef.current = (p, installed) => {
+    try { sessionStorage.setItem(APP_KEY, installed.plan.app.package); } catch { /* storage off: a reload talks to the generic build */ }
+    const e = registry.set(standardEntry(androidStandard(installed.plan.app, installed, installed.plan.device.model), { demo: start.demo, device: start.demo ? p : undefined }));
+    e.handed = true;
+    void e.session.handOver(p);
+    return e.session;
+  };
   const [demo, setDemo] = useState<AndroidSession>();
-  useEffect(() => { if (start.demo) void androidDemo(start.demo).then(setDemo); }, [start]);
+  useEffect(() => { if (start.demo) void androidDemo(start.demo, false, (p, i) => handRef.current?.(p, i)).then(setDemo); }, [start]);
+  const current = useCallback(() => { const e = registry.get(); return e?.base === ANDROID_BASE && e.standard ? e : undefined; }, []);
+  const entry = useSyncExternalStore(registry.subscribe, current, current);
+  const ws = useSyncExternalStore(entry?.session.store.subscribe ?? noSubscribe, entry?.session.store.get ?? noState, entry?.session.store.get ?? noState);
+  const step = path.startsWith(ANDROID_BASE) ? stepOf(path.slice(ANDROID_BASE.length)) : undefined;
+  const onStandard = !!step && STANDARD_STEPS.includes(step);
+  // a set-up step opened with no session for it (a reload, a link): a new one, which connects to the tablet
+  useEffect(() => { if (onStandard && !current() && !start.demo) registry.set(standardEntry(androidStandard(keptApp()))); }, [onStandard, current, start]);
+  const renew = useCallback(() => registry.set(standardEntry(androidStandard(keptApp()))), []);
   const live = start.real ?? demo;
-  return live ? <Screens session={live} /> : null;
+  if (entry && (onStandard || (entry.handed && status(ws) !== 'finished'))) {
+    return <StandardRoutes entry={entry} renew={renew} before={['Device', 'Connect', 'Install']} outcome={live ? <AndroidOutcome session={live} /> : undefined} />;
+  }
+  if (onStandard) return null;
+  return live ? <Screens session={live} base={ANDROID_BASE} /> : null;
 }

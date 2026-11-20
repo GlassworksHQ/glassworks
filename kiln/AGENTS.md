@@ -37,7 +37,8 @@ lacks (`frame.json`, `installer.json` `touch`), or `installer.json` `setUp.remov
 set-up of a frame's own, and never a step dropped because "the install already did it". Every flow
 step has its `route` in `installer.json`; there is no per-frame page (`test/contract/routes.test.ts`).
 
-Android's page doesn't follow this yet (#621, step 3). Don't copy it: build on the
+Android's install (`/android`) still has its own page (#621, step 3), but it ends the same way: it
+hands the tablet to the standard flow, at `/android/set-up`… Don't copy its page: build on the
 shared engine.
 
 ## What it is

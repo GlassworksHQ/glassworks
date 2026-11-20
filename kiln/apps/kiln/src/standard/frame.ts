@@ -53,7 +53,7 @@ export function standardSteps(d: StandardData): StandardStep[] {
 }
 
 /** The frame's data the standard flow reads, from the catalog: its radio (frame.json `panes.radio`) and installer.json. */
-function dataOf(id: string): { touch: boolean; steps: StandardStep[] } {
+export function standardData(id: string): { touch: boolean; steps: StandardStep[] } {
   const radio = (FRAMES.find((f) => f.id === id)?.panes?.radio?.support ?? 'no') !== 'no';
   const i = INSTALLERS[id];
   return { touch: i?.touch !== false, steps: standardSteps({ radio, setUp: i?.setUp }) };
@@ -65,7 +65,7 @@ export function standardOf(k: KilnFrame): StandardFrame {
     id: k.id, name: k.name, short: k.short, the: k.the ?? `the ${k.short}`, app: k.app, appId: k.appId,
     connect: k.asks.connect, credits: k.credits, silent: k.silent,
     wifiName: (p, signal) => k.wifiName(p, signal), updates: (p, signal) => k.updates(p, signal),
-    ...dataOf(k.id),
+    ...standardData(k.id),
   };
 }
 
@@ -77,6 +77,6 @@ export function standardOfDevice(d: DeviceFrame): StandardFrame {
     wifiName: (p, signal) => (d.wifiName ? d.wifiName(p, signal) : Promise.resolve({})),
     // a frame that doesn't say can't tell: its `silent` words for `unknown`
     updates: (p, signal) => (d.updates ? d.updates(p, signal) : Promise.resolve({ state: 'unknown', log: 'silent updates: not read' })),
-    ...dataOf(d.id),
+    ...standardData(d.id),
   };
 }

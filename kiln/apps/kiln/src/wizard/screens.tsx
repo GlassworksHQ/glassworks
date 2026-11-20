@@ -200,7 +200,7 @@ function Installing({ frame, setup }: { frame: Pick<StandardFrame, 'app'>; setup
 
 /**
  * Language, time zone and clock, defaulting to this computer's; then the app goes in, or (`apply`, an app the install
- * put on) they go to it. The on-screen keyboard only on a frame with touch.
+ * put on) they go to it. The on-screen keyboard only on a frame with touch, and only where the step installs.
  */
 function Settings({ s, session, frame, setup }: SP & { setup: Extract<Setup, { phase: 'settings' }> }) {
   const here = typeof navigator === 'undefined' ? 'en-US' : navigator.language || 'en-US';
@@ -245,7 +245,7 @@ function Settings({ s, session, frame, setup }: SP & { setup: Extract<Setup, { p
           <RadioGroup.Item value="12">12-hour</RadioGroup.Item>
           <RadioGroup.Item value="24">24-hour</RadioGroup.Item>
         </RadioGroup.Root>
-        {frame.touch && <label className="check"><input type="checkbox" checked={keyboard} onChange={(e) => setKeyboard(e.target.checked)} disabled={busy} /> On-screen keyboard</label>}
+        {frame.touch && !setup.apply && <label className="check"><input type="checkbox" checked={keyboard} onChange={(e) => setKeyboard(e.target.checked)} disabled={busy} /> On-screen keyboard</label>}
       </div>
       {setup.error && <p className="status err" role="alert">{setup.error}</p>}
       <div className="foot">
