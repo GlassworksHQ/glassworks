@@ -213,13 +213,53 @@ class CameraPresenceTest {
         assertEquals(listOf("couldn't open the camera: SecurityException"), problems)
     }
 
-    @Test fun aSourceThatNeverSendsReadsFarAfterTheStaleTime() {
+    @Test fun aSourceThatNeverSendsReadsFarAfterTheFirstFrameGrace() {
         val r = started()
-        r.timers.runDue(CameraPresence.STALE_MS - 1)
+        r.timers.runDue(CameraPresence.FIRST_FRAME_MS - 1)
         assertTrue(r.readings.isEmpty())
-        r.timers.runDue(CameraPresence.STALE_MS)
+        r.timers.runDue(CameraPresence.FIRST_FRAME_MS)
         assertEquals(listOf(false to -1f), r.readings)
+        assertEquals(listOf("no first frame in 10 s"), r.problems)
+    }
+
+    /** #674: the Mirror's camera opened 2 s after the pane turned on, then took more than 5 s to send. */
+    @Test fun theFirstFrameGraceStartsWhenTheCameraStarts() {
+        val r = started()
+        r.timers.runDue(2_000)
+        r.cam.sink!!.started()
+        r.timers.runDue(2_000 + CameraPresence.STALE_MS)
+        assertTrue("no \"no frames\" 5 s after the open", r.problems.isEmpty())
+        r.timers.runDue(2_000 + CameraPresence.FIRST_FRAME_MS - 1)
+        assertTrue("nor within the grace, counted from the open", r.readings.isEmpty())
+        r.feed(listOf(flat(60.0)))
+        r.timers.runDue(r.timers.now + CameraPresence.STALE_MS - 1)
+        assertTrue(r.problems.isEmpty())
+        r.timers.runDue(r.timers.now + 1)
+        assertEquals("once frames came, a silence is 5 s again", listOf("no frames for 5 s"), r.problems)
+    }
+
+    @Test fun aSilenceRightAfterTheFirstFrameIsCaughtAfterFiveSeconds() {
+        val r = started()
+        r.feed(listOf(flat(60.0)))
+        val last = r.timers.now
+        r.timers.runDue(last + CameraPresence.STALE_MS - 1)
+        assertTrue(r.problems.isEmpty())
+        r.timers.runDue(last + CameraPresence.STALE_MS)
+        assertEquals("not when the first frame's grace would have ended", listOf("no frames for 5 s"), r.problems)
+    }
+
+    @Test fun aSilentReopenedCameraIsReportedAfterItsGraceOnly() {
+        val r = started()
+        r.feed(listOf(flat(60.0)))
+        r.timers.runDue(r.timers.now + CameraPresence.STALE_MS)
         assertEquals(listOf("no frames for 5 s"), r.problems)
+        r.cam.sink!!.started() // the hub reopened it
+        val opened = r.timers.now
+        r.timers.runDue(opened + CameraPresence.FIRST_FRAME_MS - 1)
+        assertEquals(1, r.readings.count { it.second == -1f })
+        r.timers.runDue(opened + CameraPresence.FIRST_FRAME_MS)
+        assertEquals("far again, said once", listOf(false to -1f, false to -1f), r.readings.filter { it.second == -1f })
+        assertEquals(1, r.problems.size)
     }
 
     @Test fun aSourceThatGoesSilentWhileSomeoneIsThereReadsFar() {
@@ -255,7 +295,7 @@ class CameraPresenceTest {
         val p = CameraPresence({ _, _ -> throw SecurityException("no permission") }, clock = { timers.now }, post = { it.run() },
             after = timers::after, onProblem = { problems += it })
         p.start(ctx) { near, raw -> readings += near to raw }
-        timers.runDue(CameraPresence.STALE_MS)
+        timers.runDue(CameraPresence.FIRST_FRAME_MS)
         assertEquals(listOf(false to -1f, false to -1f), readings)
         assertEquals(listOf("couldn't open the camera: SecurityException"), problems)
     }
@@ -335,6 +375,7 @@ class CameraPresenceTest {
         assertEquals(8_000L, CameraPresence.HOLD_MS)
         assertEquals(5, CameraPresence.DEFAULT_SENSITIVITY)
         assertEquals(5_000L, CameraPresence.STALE_MS)
+        assertEquals(10_000L, CameraPresence.FIRST_FRAME_MS)
         val cam = FakeCamera()
         CameraPresence(cam, post = { it.run() }, after = { _, _ -> }).start(ctx) { _, _ -> }
         assertEquals(CameraPresence.DEFAULT_FPS, cam.openedAt)

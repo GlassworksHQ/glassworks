@@ -24,6 +24,10 @@ line of each version is what Home Assistant shows on the update card. A change o
   back to Stable never installs an older version: the panel waits for a stable release newer than the one it runs.
 
 ### Fixed
+- **The camera isn't restarted while it is still starting.** On the lululemon Mirror, turning the camera on could
+  log "no frames" and open the camera a second time, so it took about 12 s to come up. A camera's first picture
+  now gets 10 s from the moment the camera opens; "no frames" shows only after that. A camera that goes quiet
+  later is still restarted after 5 s.
 - **Setup carries on after you sign in on the panel.** After *Sign in on this panel instead*, the dashboard showed for
   up to 2 minutes before setup came back on *Add it*, so setup looked finished. Setup now comes back as soon as you're
   signed in. While Home Assistant may still find the panel by itself, *Add it* says it's checking.
