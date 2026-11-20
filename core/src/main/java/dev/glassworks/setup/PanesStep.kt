@@ -20,6 +20,8 @@ class PanesStep(
     val panes: List<SetupPane>,
     /** Starts a card's worker. Tests make it fail. */
     private val start: (Runnable, String) -> Unit = { r, name -> Thread(r, name).apply { isDaemon = true }.start() },
+    /** Runs once every card has ended or timed out, just before the outcome is published. Tests hold it there. */
+    private val beforePublish: () -> Unit = {},
 ) {
 
     /** What Continue applied, by card: the panes that are on from then on. Null: not answered in this process. */
@@ -77,7 +79,8 @@ class PanesStep(
         }
         // One count per card's worker, plus this caller until it has published `applied` (CodeRabbit on #699).
         val left = AtomicInteger(panes.size + 1)
-        val finish = { if (left.decrementAndGet() == 0) synchronized(lock) { applying = false } }
+        val finish = { synchronized(lock) { if (left.decrementAndGet() == 0) applying = false } }
+        var published = false
         try {
             val results = arrayOfNulls<String>(panes.size)
             val done = Array(panes.size) { CountDownLatch(1) }
@@ -108,11 +111,18 @@ class PanesStep(
                     else -> null
                 }
             }
-            applied = if (problems.isEmpty()) wanted.copyOf() else null
-            answers++ // only the guard's holder writes it
-            return Outcome(problems.joinToString("\n").ifEmpty { null }, answers)
+            beforePublish()
+            // The outcome and this caller's release in one step: a Continue refused BUSY sees the guard held with the
+            // earlier answer, or the new answer with the guard free (CodeRabbit on #699). A card still running holds it on.
+            return synchronized(lock) {
+                applied = if (problems.isEmpty()) wanted.copyOf() else null
+                answers++
+                published = true
+                if (left.decrementAndGet() == 0) applying = false
+                Outcome(problems.joinToString("\n").ifEmpty { null }, answers)
+            }
         } finally {
-            finish()
+            if (!published) finish()
         }
     }
 

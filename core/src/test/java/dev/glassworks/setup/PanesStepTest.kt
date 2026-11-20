@@ -150,6 +150,35 @@ class PanesStepTest {
     }
 
     @Test
+    fun aContinueAtThePublicationBoundaryIsRefusedAndTheFirstAnswerStands() {
+        // CodeRabbit on #699: every card of the first Continue has ended, and it is about to publish. A second one then
+        // is refused BUSY with the answer from before, and can't publish an answer the first would overwrite.
+        val atBoundary = CountDownLatch(1)
+        val publish = CountDownLatch(1)
+        var hold = true
+        val s = PanesStep(
+            listOf(card("sendspin", "Music", "A Sendspin speaker", { music }, { music = it })),
+            beforePublish = { if (hold) { hold = false; atBoundary.countDown(); publish.await(5, TimeUnit.SECONDS) } },
+        )
+        var first: String? = "not yet"
+        val t = Thread { first = s.set(setOf("sendspin")) }.apply { start() }
+        assertTrue(atBoundary.await(5, TimeUnit.SECONDS))
+        assertTrue(music) // the first's card has applied
+        val second = s.attempt(booleanArrayOf(false))
+        assertEquals(PanesStep.BUSY, second.problem)
+        assertEquals(0, second.answer) // the answer it saw: none yet
+        assertTrue(music)
+        publish.countDown()
+        t.join(5_000)
+        assertNull(first)
+        assertEquals(1, s.answers)
+        assertTrue(s.chosen)
+        assertTrue(s.wanted(0))
+        assertNull(s.set(emptySet())) // and the guard is free again
+        assertFalse(s.wanted(0))
+    }
+
+    @Test
     fun aBusyRefusalSeesTheAnswerItFound() {
         val release = CountDownLatch(1)
         val started = CountDownLatch(1)
