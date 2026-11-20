@@ -43,6 +43,9 @@ class ManageFixture(
     var tokens: HaGateway.Tokens = HaGateway.Tokens.Ok("ACCESS", "REFRESH")
     val exchanged = Collections.synchronizedList(ArrayList<String>())
     val revoked = Collections.synchronizedList(ArrayList<String>())
+    /** Refresh tokens the panel renewed with, and what the fake HA answers. */
+    val refreshed = Collections.synchronizedList(ArrayList<String>())
+    var refreshAnswer: HaGateway.Tokens = HaGateway.Tokens.Ok("ACCESS-RENEWED", null, 1800)
     /** The HA address of each `auth/current_user` the panel asked. */
     val userChecks = Collections.synchronizedList(ArrayList<String>())
     /** When set, each `auth/current_user` waits for it: Home Assistant slow or down. */
@@ -59,18 +62,59 @@ class ManageFixture(
             userGate?.await()
             return if (accessToken in refusedTokens) null else user
         }
-        override fun revoke(haBase: String, clientId: String, refreshToken: String): Boolean { revoked += refreshToken; return revokeWorks }
+        override fun revoke(haBase: String, clientId: String, refreshToken: String): Boolean {
+            revoked += refreshToken
+            duringRevoke?.invoke()
+            revokeStarted?.countDown()
+            revokeGate?.let { if (!it.await(10, java.util.concurrent.TimeUnit.SECONDS)) revokeGateTimedOut = true }
+            return revokeWorks
+        }
+        override fun createLongLived(haBase: String, accessToken: String, name: String, days: Int): String? {
+            madeLongLived += Triple(accessToken, name, days)
+            return longLivedAnswer
+        }
+        override fun endLongLived(haBase: String, token: String): Boolean {
+            endedLongLived += token
+            return endLongLivedWorks
+        }
+        override fun refresh(haBase: String, clientId: String, refreshToken: String): HaGateway.Tokens {
+            refreshed += refreshToken
+            duringRefresh?.invoke()
+            return refreshAnswer
+        }
     }
     /** Every name the panel looked up to decide whether Home Assistant is local. */
     val resolved = Collections.synchronizedList(ArrayList<String>())
     /** How long each of those lookups takes, on [monoMs]. */
     var lookupMs = 0L
     val signIn = HaSignIn(gateway, resolve = { resolved += it; monoMs += lookupMs; listOf(InetAddress.getByName(it)) }, clock = { now },
-        local = { HaSignIn.isLocalAddress(it) || it.hostAddress.startsWith("192.0.2.") }, warn = { warnings += it })
+        local = { HaSignIn.isLocalAddress(it) || it.hostAddress.startsWith("192.0.2.") }, warn = { warnings += it },
+        cleanup = { work -> deferred?.add(work) ?: work() })
 
     val warnings = Collections.synchronizedList(ArrayList<String>())
     val events = Collections.synchronizedList(ArrayList<String>())
-    var revokeWorks = true
+    @Volatile var revokeWorks = true
+
+    /** While set, a revoke waits for it, as when Home Assistant is slow to answer; [revokeStarted] says one began. */
+    @Volatile var revokeGate: java.util.concurrent.CountDownLatch? = null
+    @Volatile var revokeStarted: java.util.concurrent.CountDownLatch? = null
+    /** A revoke waited 10 s for [revokeGate] and went on: the test that set it failed to release it. */
+    @Volatile var revokeGateTimedOut = false
+
+    /** While set, the server's background work waits here until the test runs it; else it runs at once. */
+    @Volatile var deferred: MutableList<() -> Unit>? = null
+
+    /** Long-lived tokens the panel had HA make (handed token, name, days) and end; what the fake HA answers. */
+    val madeLongLived = Collections.synchronizedList(ArrayList<Triple<String, String, Int>>())
+    val endedLongLived = Collections.synchronizedList(ArrayList<String>())
+    @Volatile var longLivedAnswer: String? = "LONG-LIVED"
+    @Volatile var endLongLivedWorks = true
+
+    /** Runs while Home Assistant takes a revoke (an address that changes meanwhile). */
+    @Volatile var duringRevoke: (() -> Unit)? = null
+
+    /** Runs while Home Assistant renews a kept sign-in (an address that changes meanwhile). */
+    @Volatile var duringRefresh: (() -> Unit)? = null
     var canReboot = true
     val actions = object : PanelActions {
         override fun reloadDashboard(): String? { ran += "reload"; return null }
@@ -138,6 +182,8 @@ class ManageFixture(
         saveWaitMs = saveWaitMs,
         monoMs = { monoMs },
         scripts = { name -> dev.glassworks.testing.RepoFiles.file("core/src/main/assets/manage/$name").readBytes() },
+        sweepMs = 0,
+        background = { work -> deferred?.add(work) ?: work() },
         usb = usb,
     )
 

@@ -162,9 +162,15 @@ object HaAuth {
             server = s
         } catch (e: IOException) {
             AuthLog.w("Cannot listen on ${OAuth.SIGNIN_PORT}: ${e.message}; retrying in 10 s")
-            main.postDelayed({ startServer(context) }, 10_000)
+            // Cancelled by stopServer: a stopped service mustn't get its web server back (CodeRabbit on #534).
+            val retry = Runnable { bindRetry = null; startServer(context) }
+            bindRetry = retry
+            main.postDelayed(retry, 10_000)
         }
     }
+
+    /** The pending retry when the port was busy, until it runs or [stopServer] cancels it. */
+    private var bindRetry: Runnable? = null
 
     /** The web server with only the QR-code pages, for when the Manage page can't load. */
     internal fun qrOnly(signIn: SignInServer): HttpServer = HttpServer(OAuth.SIGNIN_PORT, { req ->
@@ -174,9 +180,11 @@ object HaAuth {
 
     @Synchronized
     fun stopServer() {
+        bindRetry?.let(main::removeCallbacks)
+        bindRetry = null
         server?.stop()
         server = null
-        manage?.stopLog()
+        manage?.stop()
         manage = null
     }
 
@@ -239,7 +247,7 @@ object HaAuth {
                 auth == null -> Unit
                 // Revoking sends the token: never to an address that isn't the sign-in's own.
                 !auth.isFor(prefs.haBase) -> AuthLog.i("Signed out ($reason); Home Assistant moved, so no revoke sent")
-                else -> AuthLog.i("Signed out ($reason); revoke ${if (tokens.revoke(auth)) "sent" else "not reachable"}")
+                else -> AuthLog.i("Signed out ($reason); revoke ${if (tokens.revoke(auth)) "confirmed" else "not confirmed"}")
             }
             done(clearLocal())
         }
