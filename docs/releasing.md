@@ -287,6 +287,54 @@ Vercel preview. Production builds come only from that deploy hook, called by `re
 `main` that changes an installer input (`kiln/`, `branding/`, or a repo file the installer stages), or
 by hand from the Actions tab.
 
+## The S1 frame bundle
+
+The S1's frame version (#139) is released on its own tag, `frames/aqara-s1-plus/v<version>`, with semantic
+versioning from 1.0.0 (each part 0–999). The tag starts `.github/workflows/frame-release.yml`. It builds the
+frame bundle with `frames/aqara-s1-plus/tools/radio/frame-bundle.sh`, the same script the shell tests install
+through the loader:
+
+- **What it holds:** the service scripts (the frame agent, netwatch, first boot, app updates), otbr-agent and ot-ctl (the
+  pinned builds in `kiln/assets.lock.json`), the setup hotspot's name overlay (`hotspot-name.apk`, built in the signing
+  job with the runner's Android SDK, as for the radio bundle), the Silicon Labs Zigbee runtime (checked against
+  `frames/aqara-s1-plus/tools/radio/sisdk-runtime.sha256`; never zigbeed itself) and the boot animation.
+- **The key:** the radio bundle's (`S1_RADIO_BUNDLE_KEY`, [3b](#3b-the-radio-bundle-key-once)), whose public half
+  boot images carry as `glassworks_bundle.pub`. The signing job only signs commits on `main`.
+- **The release:** `frame-bundle-aqara-s1-plus-<version>.zip` and its `.sha256`, published with
+  `--latest=false`, with notes from that version's section of `frames/aqara-s1-plus/FRAME-CHANGELOG.md` (the
+  release fails without one). The frame bundle's version only goes up: panels refuse a lower one for good, so
+  never tag by hand without checking the last frame release.
+
+To cut one:
+
+1. Move the `[Unreleased]` items of `FRAME-CHANGELOG.md` to `## [x.y.z] - YYYY-MM-DD`, and merge that to `main`.
+2. Tag the merged commit itself, not your local `HEAD`:
+   ```sh
+   git fetch origin
+   tools/release/changelog-section.sh x.y.z <(git show origin/main:frames/aqara-s1-plus/FRAME-CHANGELOG.md)   # prints the notes
+   git tag frames/aqara-s1-plus/vx.y.z "$(git rev-parse origin/main)" && git push origin frames/aqara-s1-plus/vx.y.z
+   ```
+3. If a later job fails (signing waits for the `radio-signing` approval, or `publish` fails), "Re-run failed jobs"
+   works for 7 days, while the artifacts last: it reuses the signed zip. After that, re-running the whole workflow
+   signs a new zip, and it is not the same bytes (`hotspot-name/build.sh` signs the overlay with a key made for
+   each build). So:
+   - **No release yet:** re-run the whole workflow.
+   - **A draft release from the first run:** the new zip can't complete it (`publish` refuses a draft that holds
+     other files). Delete the draft (it was never public), then re-run the whole workflow.
+   - **A published release:** never replace its files; panels may have its zip already. If it is broken, fix it
+     with a higher frame version.
+
+The publish job refuses to publish if the tag has moved since the run started.
+
+**What a frame release needs from the repository settings (admin; both set, checked 2026-11-19).** Without
+the first, `sign-bundle` can't get the key, and the release stops there:
+
+1. Settings → Environments → `radio-signing` → deployment branches and tags: the tag pattern
+   `frames/aqara-s1-plus/v*` (next to `main`, `v*` and `aqara-s1-plus-v*`).
+2. Settings → Rules → "Release tags: admins only": `refs/tags/frames/**`, so only admins can create, move
+   or delete a frame tag. The workflow's own "only commits on main" check runs from the tagged commit, so it
+   is no boundary on its own: this ruleset and the environment's tag list are.
+
 ## Betas
 
 Every app has an **Update channel** on its Device page and on the Manage page (#605): Stable, the default, or Beta.
