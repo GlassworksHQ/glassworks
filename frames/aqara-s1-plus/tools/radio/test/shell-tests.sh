@@ -98,17 +98,6 @@ w "$T/bin/ip" <<'EOF'
 #!/bin/sh
 case "$*" in *"rule del"*) exit 1 ;; esac; exit 0
 EOF
-# cp: /t/cp-nvm makes a copy into zigbee-nvm/ fail half way ("partial": 16 bytes, then an error, as on a
-# full /data) or end short with success ("short"). Every other copy is the real cp.
-w "$T/bin/cp" <<'EOF'
-#!/bin/sh
-for a; do last=$a; done
-case "$last:$(cat /t/cp-nvm 2>/dev/null)" in
-  */zigbee-nvm/*:partial) head -c 16 "$1" > "$last"; exit 1 ;;
-  */zigbee-nvm/*:short) head -c 16 "$1" > "$last"; exit 0 ;;
-esac
-exec /bin/cp "$@"
-EOF
 # Aqara's socat: the pty drain reads /t/stale once; bridges just sit there. (The "EZSP bridge" section
 # swaps in the real socat.)
 w /vendor/bin/socat <<'EOF'
@@ -802,6 +791,17 @@ exec 3<> /t/pty-zb
 while :; do sleep 1; done
 EOF
 "$T/zb/zigbeed" & ZBR=$!
+# cp, for this section only: /t/cp-nvm makes a copy into zigbee-nvm/ fail half way ("partial": 16 bytes, then an
+# error, as on a full /data) or end short with success ("short"). Every other copy is the real cp.
+w "$T/bin/cp" <<'EOF'
+#!/bin/sh
+for a; do last=$a; done
+case "$last:$(cat /t/cp-nvm 2>/dev/null)" in
+  */zigbee-nvm/*:partial) head -c 16 "$1" > "$last"; exit 1 ;;
+  */zigbee-nvm/*:short) head -c 16 "$1" > "$last"; exit 0 ;;
+esac
+exec /bin/cp "$@"
+EOF
 mkdir -p "$NB"; for d in 20000101-000001 20000101-000002 20000101-000003; do echo "old $d" > "$NB/zigbeed-$d.nvm"; done
 echo manual > "$NB/my-backup.bin"; head -c 4096 /dev/urandom > "$NVM"
 newest() { ls "$NB" | grep '^zigbeed-.*\.nvm$' | tail -1; }
@@ -819,10 +819,18 @@ check "...the status says why" has "$(prop sys.glassworks.radio.status)" "error 
 check "...every backup kept, no partial one added" test "$(cd "$NB" && sha256sum -- * | sort)" = "$kept"
 echo short > "$T/cp-nvm"; LOOPS=1 helper
 check "a copy that ends short without an error: no bridge either, backups as they were" test ! -s "$T/bridge.log" -a "$(cd "$NB" && sha256sum -- * | sort)" = "$kept"
-rm -f "$T/cp-nvm"; LOOPS=1 helper
-check "space again: backed up, then the bridge" test "$(grep -c 'TCP-LISTEN:6639' "$T/bridge.log")" = 1
+echo partial > "$T/cp-nvm"; : > "$T/log"
+timeout 120 env GWA_ONCE=25 GWA_SLEEP=0 GW_BOOT="$TB" GW_BUNDLE="$CUR" /system/bin/sh "$TB/glassworks_agent.sh" >/dev/null 2>&1
+check "a backup failing for 25 passes isn't counted: no 'giving up', the agent goes on" test $? != 124 -a -z "$(grep 'giving up' "$T/log")"
+check "...still waiting, with the reason" has "$(prop sys.glassworks.radio.status)" "error zigbee_router: no complete backup of the zigbeed NVM (/data full?): router waits"
+: > "$T/setprop.log"; LOOPS=60 helper GWA_SLEEP=0.2 & AG=$!
+sleep 4; rm -f "$T/cp-nvm"; wait $AG
+check "space again in the same process: the backup is retried" grep -q 'router waits' "$T/setprop.log"
+check "...then the bridge starts" test "$(grep -c 'TCP-LISTEN:6639' "$T/bridge.log")" = 1
+check "...status ok" has "$(prop sys.glassworks.radio.status)" "ok zigbee_router"
 check "...the newest backup is the NVM as it is now" cmp -s "$NVM" "$NB/$(newest)"
 kill $ZBR 2>/dev/null; pkill -f "sleep 1000"; rm -rf /data/zigbee_host "$T/zb"; rm -f /dev/ttyZigbeeNCP /tmp/ttyZigbeeNCP
+/bin/rm -f "$T/bin/cp" "$T/cp-nvm"; hash -r   # this shell may have hashed cp to the shim
 echo off > "$T/props/persist.glassworks.radio_mode"; rm -f /data/s1kiosk/radio/radio.conf
 
 # ---------------------------------------------------------------------------------- EZSP bridge
@@ -975,6 +983,16 @@ check "...root 0600" test "$(stat -c %a:%u /data/s1kiosk/radio/thread-dataset)" 
 pkill -f "sleep 1000"; LOOPS=1 helper
 check "...then the newer one" test "$(cat /data/s1kiosk/radio/thread-dataset)" = 0e080000000000030000 -a ! -e "$APP/files/radio/thread-dataset"
 pkill -f "sleep 1000"
+# Leave discards a hand-off staged before it (pending in .in, or waiting in the app's files); a newer one stays
+leave() { echo leave > "$APP/files/radio/thread-leave"; chown 10050 "$APP/files/radio/thread-leave"; }
+mkdir /data/s1kiosk/radio/thread-dataset.tmp; handoff 0e080000000000050000; LOOPS=1 helper; pkill -f "sleep 1000"
+handoff 0e080000000000060000; touch -d "@$(( $(date +%s) - 30 ))" "$APP/files/radio/thread-dataset"
+rmdir /data/s1kiosk/radio/thread-dataset.tmp; leave; LOOPS=1 helper; pkill -f "sleep 1000"
+check "Leave with a pending and an older staged hand-off: neither is stored" test ! -e /data/s1kiosk/radio/thread-dataset -a ! -e /data/s1kiosk/radio/thread-dataset.in -a ! -e "$APP/files/radio/thread-dataset"
+check "...Leave reported ok" has "$(prop sys.glassworks.radio.thread_leave)" "ok "
+handoff 0e080000000000070000; touch -d "@$(( $(date +%s) + 30 ))" "$APP/files/radio/thread-dataset"
+leave; LOOPS=1 helper; pkill -f "sleep 1000"
+check "...a hand-off newer than the Leave (a Join after it) is stored" test "$(cat /data/s1kiosk/radio/thread-dataset 2>/dev/null)" = 0e080000000000070000 -a ! -e /data/s1kiosk/radio/thread-dataset.in
 # #645: otbr-agent failing to start shows its own error (JOINED is cleared before, not after, start_otbr)
 CUR_KEEP=$CUR; CUR=""; chmod 644 "$TB/otbr-agent"; LOOPS=1 helper
 check "otbr-agent that can't start: its error, not 'waiting' or ok" has "$(prop sys.glassworks.radio.status)" "error thread_router: otbr-agent not installed"
@@ -1016,12 +1034,13 @@ rm -f /data/s1kiosk/radio/radio.conf
 # run the agent's copy). Goes with s1kiosk_radio.sh.
 echo "--- s1kiosk_radio.sh: the #645 fixes, as in the agent"
 fnbody() { awk -v f="$2" '$0 ~ "^"f"\\(\\)" {p=1} p {print} p && /^}/ {exit}' "$1"; }
-for f in backup_nvm router_bridge take_app_dataset thread_leave start_thread_router thread_router_join fw_stop_cpcd fw_flash_one fw_attempt fw_mark fw_do; do
+for f in backup_nvm router_bridge children_ok take_app_dataset thread_leave start_thread_router thread_router_join fw_stop_cpcd fw_flash_one fw_attempt fw_mark fw_do; do
   a=$(fnbody "$R/frames/aqara-s1-plus/tools/radio/glassworks_agent.sh" $f | sed 's/glassworks/s1kiosk/g; s/GWA_/S1R_/g; s/the agent/the helper/g')
   b=$(fnbody "$R/frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh" $f)
   check "old helper's $f is the agent's, names aside" test -n "$a" -a "$a" = "$b"
 done
-check "...its main loop leaves join failures to thread_router_join too" grep -q 'counts its failures across loops (JFAILS)' "$R/frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh"
+a=$(sed -n '/^while true; do/,$p' "$R/frames/aqara-s1-plus/tools/radio/glassworks_agent.sh" | sed 's/glassworks/s1kiosk/g; s/GWA_/S1R_/g; s/the agent/the helper/g')
+check "...and its main loop is the agent's" test -n "$a" -a "$a" = "$(sed -n '/^while true; do/,$p' "$R/frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh")"
 
 # ------------------------------------------------------------------------------- app updates
 echo "--- glassworks_update.sh"

@@ -1054,7 +1054,9 @@ router_bridge() {
   zb_fresh
   alive "$BRIDGE_PID" && return 0
   # the router host's join replaces the coordinator network in this NVM: never without a copy of it
-  backup_nvm "$ZIGBEED_NVM" zigbeed || { status error "$WHY: router waits"; return 1; }
+  # A failed copy (a full /data) can clear up: the bridge waits, supervision goes on, and it isn't counted
+  # towards the give-up limit (the main loop shows BLOCKED as the error).
+  backup_nvm "$ZIGBEED_NVM" zigbeed || { BLOCKED="$WHY: router waits"; return 0; }
   start_bridge ",bind=127.0.0.1" "$ROUTER_PORT" ""
 }
 
@@ -1150,6 +1152,7 @@ thread_leave() {
   rm -f "$DIR/thread-leave.req"
   [ $r_ = 2 ] && { setp sys.s1kiosk.radio.thread_leave "error $(date +%s): $WHY"; return 0; }
   [ $(( $(date +%s) - TAKE_MTIME )) -le 120 ] || { setp sys.s1kiosk.radio.thread_leave "error $(date +%s): request too old, ignored"; return 0; }
+  lt_=$TAKE_MTIME
   if [ "$MODE" = thread_router ] && alive "$OTBR_PID"; then
     timeout 10 "$(bin ot-ctl)" detach >/dev/null 2>&1   # tell the network we're going (best effort)
     ot thread stop >/dev/null 2>&1; ot ifconfig down >/dev/null 2>&1
@@ -1162,6 +1165,10 @@ thread_leave() {
   # our own root dir; a symlink there (only root could make one) is removed, never followed
   if [ -L "$DIR/thread-router" ]; then rm -f "$DIR/thread-router"; elif [ -e "$DIR/thread-router" ]; then rm -rf "$DIR/thread-router"; had_=1; fi
   JOINED=""; JFAILS=0
+  # A hand-off the app staged before this request belongs to the network being left: discarded. A newer one (a Join
+  # after the Leave) stays, as the pending hand-off that take_app_dataset stores next.
+  take_app_file "${APP_DATASET#"$APP_DATA"/files/}" max:1024 "$DIR/thread-dataset.in" move &&
+    [ "$TAKE_MTIME" -le "$lt_" ] && rm -f "$DIR/thread-dataset.in"
   if [ -e "$DIR/thread-dataset" ] || [ -e "$DIR/thread-router" ]; then
     setp sys.s1kiosk.radio.thread_leave "error $(date +%s): could not delete the Thread settings"; return 0
   fi
@@ -1476,7 +1483,9 @@ fw_init() { # status at start: an interrupted flash, the last verified version, 
   fw_targets
 }
 
+BLOCKED=""   # a child that waits on something the owner can fix: the status error, not counted in FAILS
 children_ok() {
+  BLOCKED=""
   case "$MODE" in
     off)               br_net_off; fw_off ;;
     zigbee_tcp)        br_net_off; fw_apply || return 1
@@ -1617,7 +1626,9 @@ while true; do
   if enforce; then
     if children_ok; then
       FAILS=0
-      if w=$(not_ready); then
+      if [ -n "$BLOCKED" ]; then
+        status error "$BLOCKED"
+      elif w=$(not_ready); then
         status applying "$w"
       elif [ "$MODE" = thread_router ] && ! thread_router_join; then
         :   # thread_router_join set the status and counts its failures across loops (JFAILS)
