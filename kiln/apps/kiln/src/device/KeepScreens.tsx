@@ -130,7 +130,7 @@ export function ImageKeep(p: P) {
 export function KeyOutcome({ k, d }: { k?: KeyStep; d: DeviceFrame }) {
   if (!k || k.state === 'reading' || k.state === 'held') return null;
   const [word, tone, line] =
-    k.state === 'handed' ? ['Same device', 'y', 'Home Assistant reconnected by itself.']
+    k.state === 'handed' ? ['Same device', 'y', 'Glassworks has Home Assistant’s key back, so it stays the same device.']
     : k.state === 'none' ? ['Not added yet', 'n', 'Add it in Settings → Devices & services, under Discovered.']
     : ['Asks once', 'w', k.state === 'refused' ? 'Glassworks didn’t take the key back.' : 'Kiln couldn’t read the key before the install.'];
   return (

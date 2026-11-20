@@ -229,7 +229,7 @@ export function DoneCommunity({ f, log }: { f: ImageSession; log: React.ReactNod
       <div className="well">
         <div className="grow">
           <span className="small">Next, in {r.name}</span>
-          <span>Unplug it from this computer, then set it up as {r.next ? r.next.name : 'its project'} says.</span>
+          <span>Set it up as {r.next ? r.next.name : 'its project'} says.</span>
         </div>
       </div>
       <WayBack f={f} other={f.recipes[0]!} />

@@ -256,7 +256,7 @@ describe('Glass Panes', () => {
   it('Done says what is next in its own project, and the way back to Glassworks', async () => {
     const flash = await show('image-done');
     expect(screen.getByRole('heading').textContent).toBe('Glass Panes is on the Mirror.');
-    expect(screen.getByText(/Unplug it from this computer, then set it up as its README says/)).toBeTruthy();
+    expect(screen.getByText(/^Set it up as its README says\.$/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Install Glassworks' }));
     expect(flash.state).toMatchObject({ screen: 'choose', picked: 'glassworks', from: 'glass-panes', open: false });
     expect(screen.getByRole('status').textContent).toMatch(/^Glassworks replaces Glass Panes and everything on the Mirror\./);
