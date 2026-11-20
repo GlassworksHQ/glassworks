@@ -8,11 +8,16 @@ import android.content.IntentFilter
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
+import android.os.Handler
+import android.os.HandlerThread
 import android.util.Log
 import android.util.TypedValue
+import android.view.Choreographer
+import android.view.FrameMetrics
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.Window
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -25,25 +30,27 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import kotlin.math.max
+import kotlin.math.pow
+import kotlin.math.sin
 
 /**
- * THROWAWAY (test-build/glowbench-s1, never merged): the #691 edge glow, Spark, inside the kiosk, in the voice
- * overlay's layer (same parent, same elevation), over the live dashboard. Two ways in:
+ * THROWAWAY (test-build/glowbench-s1, never merged): the #691 edge glow benchmark inside the kiosk, round 3.
  *
- * - **Real Assist runs.** In this test build the glow replaces the voice overlay during a voice run: [Handle.voice]
- *   takes the app's voice state (listening with the real mic level, thinking, speaking with the real playback,
- *   errors) and plays Spark's entrance, the states and Spark's exit, with a small caption.
- * - **Repeatable loops.** `am broadcast -a dev.glassworks.debug.GLOW --ei loops N` (senders need
- *   android.permission.DUMP, which adb's shell has) plays the scripted run N times: entrance, listening with a fake
- *   voice, thinking, speaking, exit.
+ * Looks: `glow` is Spark built for RenderThread ([LitGlow]); `orb` is today's voice overlay, the baseline. Ways in:
+ * - **Real Assist runs.** With look `glow` (the default) the glow replaces the voice overlay during a voice run,
+ *   driven by the real voice state and mic level; with look `orb` the voice overlay draws as usual. Either way each
+ *   run is measured per phase.
+ * - **Scripted loops.** `am broadcast -a dev.glassworks.debug.GLOW --es look glow|orb --ei loops N --ei fps 60|30`
+ *   (senders need android.permission.DUMP, which adb's shell has). `--ei loops 0` only sets the look and the cap for
+ *   the real runs that follow.
  *
- * Both log each phase's frame intervals (Choreographer) and draw times to logcat (tag GlowBench) and to a JSON file
- * in the files dir and, so adb can read it from a release-signed test build, in the external files dir.
+ * Measured per phase: UI-thread frame intervals (Choreographer), and the window's drawn frames (FrameMetrics:
+ * the interval between frames, which includes RenderThread-only animation frames, and the time to render each).
+ * Logged to logcat (GlowBench) and to JSON in the files dir and the external files dir.
  */
 object GlowBench {
     const val ACTION = "dev.glassworks.debug.GLOW"
     const val TAG = "GlowBench"
-    private const val ENTER_MS = 650f
 
     interface Handle {
         /** The voice overlay's update, in this test build: true when the glow took it. */
@@ -51,54 +58,40 @@ object GlowBench {
         fun detach()
     }
 
-    fun attach(activity: Activity, voice: View): Handle = Bench(activity, voice)
+    fun attach(activity: Activity, voice: View, orb: (VoiceUi) -> Unit): Handle = Bench(activity, voice, orb)
 
-    private class Bench(private val activity: Activity, private val voice: View) : Handle {
+    private class Bench(private val activity: Activity, private val voice: View, private val orb: (VoiceUi) -> Unit) : Handle {
         private val dp = activity.resources.displayMetrics.density
-        private val glow = GlowBenchView(activity)
+        private val glow = LitGlow(activity)
         private val caption = Caption(activity)
         private val layer = FrameLayout(activity).apply {
+            clipChildren = false
             addView(glow, FrameLayout.LayoutParams(-1, -1))
             addView(caption.view, FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = (34 * dp).toInt() })
-            caption.view.visibility = View.INVISIBLE
+            caption.view.alpha = 0f
             isClickable = false; isFocusable = false
         }
-        private var busy: String? = null // "bench" or "live"
+        private var look = "glow"
+        private var fps = 60
+        private var busy: String? = null // "loops" or "live"
+        private var meter: Meter? = null
         private var live: Live? = null
-        private var lastSeq = -1
-        private val liveStats = Stats(activity, "live")
+        private var liveMeter: Meter? = null
         private var liveRuns = 0
+        private var lastSeq = -1
 
         private val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
+                intent.getStringExtra("look")?.let { if (it == "glow" || it == "orb") look = it }
+                fps = if (intent.getIntExtra("fps", fps) == 30) 30 else 60
+                val loops = intent.getIntExtra("loops", 3).coerceIn(0, 50)
+                if (loops == 0) { liveMeter = null; Log.i(TAG, "config look=$look fps=$fps"); return }
                 if (busy != null) { Log.w(TAG, "busy: a $busy run is on screen"); return }
-                val v = intent.getStringExtra("variant") ?: "spark"
-                if (!v.equals("spark", true) && !v.equals("all", true)) { Log.w(TAG, "only spark is in this build (decided 2026-11-20)"); return }
-                val loops = intent.getIntExtra("loops", 3).coerceIn(1, 50)
                 if (!show()) return
-                busy = "bench"
-                val stats = Stats(activity, "bench")
-                Log.i(TAG, "start mode=bench variant=spark loops=$loops refresh=${stats.refreshHz}Hz size=${layer.width}x${layer.height}")
-                glow.onFrame = { phase, iv, dr -> stats.add(phase, iv, dr); captionFor(phase, null) }
-                runLoop(1, loops, stats)
-            }
-        }
-
-        private fun runLoop(i: Int, loops: Int, stats: Stats) {
-            if (i > loops) {
-                val file = stats.finish(loops)
-                Log.i(TAG, "done json=${file.absolutePath}")
-                caption.view.visibility = View.INVISIBLE
-                busy = null
-                return
-            }
-            glow.post {
-                val m = glow.modelFor(GlowModel.Variant.SPARK)
-                if (m == null) { runLoop(i, loops, stats); return@post } // not laid out yet
-                glow.play({ ms -> if (ms >= m.totalMs - 700f) null else m.at(ms).phase.name.lowercase() to m.frame(ms)!! }) {
-                    caption.view.visibility = View.INVISIBLE
-                    glow.postDelayed({ runLoop(i + 1, loops, stats) }, 700) // the gap: nothing on screen
-                }
+                busy = "loops"
+                val m = Meter(activity, "loops", look, fps).also { meter = it }
+                Log.i(TAG, "start mode=loops look=$look fps=$fps loops=$loops refresh=${m.refreshHz}Hz size=${layer.width}x${layer.height}")
+                Script(m, loops).start()
             }
         }
 
@@ -109,7 +102,6 @@ object GlowBench {
             else activity.registerReceiver(receiver, filter, android.Manifest.permission.DUMP, null)
         }
 
-        /** Puts the glow's layer next to the voice overlay, at its elevation; false if the overlay isn't in a window yet. */
         private fun show(): Boolean {
             if (layer.parent != null) return true
             val parent = voice.parent as? ViewGroup ?: run { Log.w(TAG, "no voice overlay layer yet"); return false }
@@ -118,141 +110,198 @@ object GlowBench {
             return true
         }
 
+        // ------------------------------------------------------------------ scripted loops
+        /** One run: enter 650, listening 3600, thinking 2600, speaking 3800, exit (400 glow, 1600 orb), gap 700. */
+        private inner class Script(private val m: Meter, private val loops: Int) : Choreographer.FrameCallback {
+            private val exitMs = if (look == "glow") 400f else 1600f
+            private val bounds = floatArrayOf(650f, 4250f, 6850f, 10650f, 10650f + exitMs, 10650f + exitMs + 700f)
+            private val names = arrayOf("enter", "listening", "thinking", "speaking", "exit", "gap")
+            private var loop = 1
+            private var t0 = 0L
+            private var phase = ""
+            private var frameNo = 0
+            private var lastRipple = -1e9f
+            private var lap = -1
+            private var seq = 0
+
+            fun start() { m.start(); Choreographer.getInstance().postFrameCallback(this) }
+
+            override fun doFrame(now: Long) {
+                if (t0 == 0L) t0 = now
+                val t = (now - t0) / 1e6f
+                val i = bounds.indexOfFirst { t < it }.let { if (it < 0) bounds.size else it }
+                if (i >= bounds.size) { // the run is over
+                    if (loop >= loops) { finish(); return }
+                    loop++; t0 = now; phase = ""; lap = -1
+                    Choreographer.getInstance().postFrameCallback(this); return
+                }
+                val p = names[i]
+                val u = t - (if (i == 0) 0f else bounds[i - 1])
+                if (p != phase) { phase = p; m.phase = if (p == "gap") null else p; enterPhase(p) }
+                frameNo++
+                val capped = fps == 60 || frameNo % 2 == 0
+                when (p) {
+                    "listening" -> {
+                        val l = fakeMic(u)
+                        if (look == "glow") {
+                            if (capped) glow.level(l)
+                            if (t - lastRipple >= 140f) { if (l > .3f) glow.ripple(l); lastRipple = t }
+                        } else VoiceLevels.mic = l
+                    }
+                    "thinking" -> if (look == "glow") { val k = (u / 1300f).toInt(); if (k != lap) { lap = k; glow.thinking(k) } }
+                    "speaking" -> {
+                        val l = fakeTts(u)
+                        if (look == "glow") { if (capped) glow.speaking(l) } else { VoiceLevels.ttsPlaying = l > 0f }
+                    }
+                }
+                Choreographer.getInstance().postFrameCallback(this)
+            }
+
+            private fun enterPhase(p: String) {
+                if (look == "glow") when (p) {
+                    "enter" -> { glow.enter(); caption.show("LISTENING", VoiceTexts.PROMPT, 0xff38bdf8.toInt(), delay = 360) }
+                    "listening" -> glow.listening()
+                    "thinking" -> { caption.show("THINKING", "“Turn off the kitchen lights”", 0xff6b6b74.toInt()) }
+                    "speaking" -> { glow.speakingStart(); caption.show("“Turn off the kitchen lights”", "Turned off 3 lights in the kitchen.", 0xffa1a1aa.toInt()) }
+                    "exit" -> { glow.exit(); caption.hide() }
+                    "gap" -> glow.reset()
+                } else when (p) {
+                    "enter" -> { seq++; orb(VoiceUi("listening", seq = seq)) }
+                    "thinking" -> { seq++; orb(VoiceUi("thinking", heard = "Turn off the kitchen lights", seq = seq)) }
+                    "speaking" -> { seq++; orb(VoiceUi("speaking", heard = "Turn off the kitchen lights", reply = "Turned off 3 lights in the kitchen.", seq = seq)) }
+                    "exit" -> { VoiceLevels.ttsPlaying = false; VoiceLevels.mic = 0f; seq++; orb(VoiceUi("idle", heard = "Turn off the kitchen lights", reply = "Turned off 3 lights in the kitchen.", seq = seq)) }
+                }
+            }
+
+            private fun finish() {
+                m.phase = null
+                val file = m.finish(loops)
+                Log.i(TAG, "done json=${file.absolutePath}")
+                busy = null; meter = null
+            }
+        }
+
         // ------------------------------------------------------------------ real Assist runs
         override fun voice(ui: VoiceUi, enabled: Boolean): Boolean {
-            if (busy == "bench") return false // the loops own the screen; the old overlay takes this run
+            if (busy == "loops") return false // the loops own the screen; the voice overlay takes this run
             val fresh = ui.seq != lastSeq
             lastSeq = ui.seq
-            if (!enabled) { live?.leave(false); return true }
             val st = ui.state
-            when {
-                st == "wake" || st == "listening" -> start()?.request("listening")
-                st == "thinking" -> start()?.request("thinking")
-                st == "speaking" -> start()?.request("speaking")
-                st.startsWith("error") -> if (fresh) {
-                    // A panel-side problem (mic, models) outside a run doesn't bring the glow up, as with the orb.
-                    if (ui.errorLocal && live == null) return true
-                    start()?.request("error")
-                    layer.postDelayed({ if (live?.phase == "error") live?.leave(true) }, 1600)
-                }
-                else -> if (fresh) live?.let { if (it.phase != "error") it.leave(false) } // idle or off: the run is over
+            val target = when {
+                st == "wake" || st == "listening" -> "listening"
+                st == "thinking" || st == "speaking" -> st
+                st.startsWith("error") -> if (fresh && !(ui.errorLocal && live == null)) "error" else null
+                else -> if (fresh) "end" else null
             }
-            live?.let { captionFor(it.phase, ui) }
-            return true
+            if (target != null && target != "end" && live == null && enabled) startLive()
+            live?.on(target, ui)
+            return look == "glow" && enabled && live != null
         }
 
-        private fun start(): Live? {
-            live?.let { return it }
-            if (!show()) return null
-            busy = "live"
-            val l = Live()
-            live = l
-            liveRuns++
-            Log.i(TAG, "start mode=live run=$liveRuns refresh=${liveStats.refreshHz}Hz size=${layer.width}x${layer.height}")
-            glow.onFrame = { phase, iv, dr -> liveStats.add(phase, iv, dr) }
-            glow.play(l) {
-                caption.view.visibility = View.INVISIBLE
-                val file = liveStats.finish(liveRuns)
-                Log.i(TAG, "live run $liveRuns done json=${file.absolutePath}")
-                live = null; busy = null
-            }
-            return l
+        private fun startLive() {
+            if (look == "glow" && !show()) return
+            busy = "live"; liveRuns++
+            val m = liveMeter ?: Meter(activity, "live", look, fps).also { liveMeter = it }
+            Log.i(TAG, "start mode=live look=$look fps=$fps run=$liveRuns refresh=${m.refreshHz}Hz")
+            live = Live(m).also { it.start() }
         }
 
-        /** One voice run as Spark: entrance, then whatever the voice state asks for, then Spark's exit. */
-        private inner class Live : GlowBenchView.Source {
-            var phase = "enter"; private set
-            private var phaseAt = 0f
-            private var prev: String? = null
-            private var prevAt = 0f
+        private inner class Live(private val m: Meter) : Choreographer.FrameCallback {
+            private var phase = "enter"
+            private var phaseAt = 0L
             private var pending = "listening"
-            private var now = 0f
-            private var lastT = 0f
-            private var exitAt = -1f
-            private var exitRose = false
-            private var exitBase: GlowModel.Frame? = null
-            private var last: GlowModel.Frame? = null
+            private var t0 = 0L
+            private var now = 0L
+            private var lastFrame = 0L
+            private var frameNo = 0
+            private var ending = -1L
+            private var lastRipple = 0L
+            private var lap = -1
             private val mic = LevelSmoother()
-            private val tts = LevelSmoother(attackMs = 350f, releaseMs = 700f) // speaking breathes slowly (calm)
-            private var micL = 0f
-            private var ttsL = 0f
-            private val ripples = ArrayList<FloatArray>() // [sent at, level]
-            private var lastRipple = -1e9f
+            private val tts = LevelSmoother(attackMs = 350f, releaseMs = 700f)
+            private var ui = VoiceUi()
 
-            fun request(p: String) {
-                if (exitAt >= 0f) { exitAt = -1f; set(p); return } // a new run while leaving: stay
-                if (phase == "enter") pending = p else set(p)
+            fun start() {
+                m.start(); m.phase = "enter"
+                if (look == "glow") { glow.enter(); caption.show("LISTENING", VoiceTexts.PROMPT, 0xff38bdf8.toInt(), delay = 360) }
+                Choreographer.getInstance().postFrameCallback(this)
+            }
+
+            fun on(target: String?, next: VoiceUi) {
+                ui = next
+                when (target) {
+                    null -> Unit
+                    "end" -> if (phase != "error") end()
+                    "error" -> { set("error"); layer.postDelayed({ if (phase == "error") end() }, 1600) }
+                    else -> if (phase == "enter") pending = target else set(target)
+                }
             }
 
             private fun set(p: String) {
-                if (p == phase) return
-                prev = phase; prevAt = phaseAt; phase = p; phaseAt = now
-                if (p == "listening") { ripples.clear(); lastRipple = -1e9f }
-            }
-
-            fun leave(rose: Boolean) {
-                if (exitAt >= 0f) return
-                exitAt = now; exitRose = rose; exitBase = last
-            }
-
-            override fun at(ms: Float): Pair<String, GlowModel.Frame>? {
-                now = ms
-                val dt = (ms - lastT).coerceIn(0f, 100f); lastT = ms
-                val m = glow.model?.takeIf { it.w * dp == glow.width.toFloat() } ?: glow.modelFor(GlowModel.Variant.SPARK)
-                    ?: return "enter" to GlowModel(1f, 1f, GlowModel.Variant.SPARK).sparkIn(0f) // not laid out yet
-                if (phase == "enter" && ms - phaseAt >= ENTER_MS) set(pending)
-                // the real levels, once per frame
-                micL = max(mic.step(VoiceLevels.mic, dt), if (phase == "listening") AudioLevel.LISTENING_FLOOR else 0f)
-                ttsL = tts.step(if (VoiceLevels.ttsPlaying) AudioLevel.ttsPulse((ms - phaseAt).toDouble()) else 0f, dt)
-                if (phase == "listening" && ms - lastRipple >= 140f) { if (micL > 0.3f) ripples += floatArrayOf(ms, micL); lastRipple = ms }
-                ripples.removeAll { ms - it[0] >= 1600f }
-                if (exitAt >= 0f) {
-                    val u = ms - exitAt
-                    if (u >= GlowModel.Variant.SPARK.exitMs) return null
-                    return "exit" to m.sparkExit(exitBase ?: m.speakingLive(0f), u, exitRose)
+                if (ending >= 0 || p == phase) return
+                phase = p; phaseAt = now; m.phase = p; lap = -1
+                if (look != "glow") return
+                when (p) {
+                    "listening" -> { glow.listening(); caption.show("LISTENING", VoiceTexts.PROMPT, 0xff38bdf8.toInt()) }
+                    "thinking" -> caption.show("THINKING", ui.heard.takeIf { it.isNotBlank() }?.let(VoiceTexts::quote) ?: "", 0xff6b6b74.toInt())
+                    "speaking" -> { glow.speakingStart(); caption.show(ui.heard.takeIf { it.isNotBlank() }?.let(VoiceTexts::quote) ?: "", ui.reply, 0xffa1a1aa.toInt()) }
+                    "error" -> { glow.error(); caption.show("SOMETHING WENT WRONG", VoiceTexts.friendlyError(ui.state, ui.errorLocal), 0xfffb7185.toInt()) }
                 }
-                var f = frameFor(m, phase, ms - phaseAt)
-                val p0 = prev
-                if (p0 != null && p0 != "enter" && phase != "enter" && ms - phaseAt < 300f) {
-                    val g = frameFor(m, p0, ms - prevAt); val k = GlowModel.ease((ms - phaseAt) / 300f); val tmp = FloatArray(5)
-                    val a = f
-                    f = m.Frame({ s, out -> a.eval(s, out); g.eval(s, tmp); for (i in 0 until 5) out[i] = out[i] * k + tmp[i] * (1 - k) },
-                        a.flares, 1f, a.thick * k + g.thick * (1 - k))
+            }
+
+            private fun end() {
+                if (ending >= 0) return
+                ending = now; m.phase = "exit"
+                if (look == "glow") { glow.exit(); caption.hide() }
+            }
+
+            override fun doFrame(frameTimeNanos: Long) {
+                if (t0 == 0L) { t0 = frameTimeNanos; phaseAt = 0L }
+                now = (frameTimeNanos - t0) / 1_000_000L
+                val dt = if (lastFrame == 0L) 16f else ((frameTimeNanos - lastFrame) / 1e6f).coerceIn(0f, 100f); lastFrame = frameTimeNanos
+                if (ending >= 0 && now - ending >= (if (look == "glow") 420 else 1600)) { finish(); return }
+                if (phase == "enter" && now - phaseAt >= 650) set(pending)
+                frameNo++
+                val capped = fps == 60 || frameNo % 2 == 0
+                if (look == "glow" && ending < 0) when (phase) {
+                    "listening" -> {
+                        val l = max(mic.step(VoiceLevels.mic, dt), AudioLevel.LISTENING_FLOOR)
+                        if (capped) glow.level(l)
+                        if (now - lastRipple >= 140) { if (l > .3f) glow.ripple(l); lastRipple = now }
+                    }
+                    "thinking" -> { val k = ((now - phaseAt) / 1300).toInt(); if (k != lap) { lap = k; glow.thinking(k) } }
+                    "speaking" -> { val l = tts.step(if (VoiceLevels.ttsPlaying) AudioLevel.ttsPulse((now - phaseAt).toDouble()) else 0f, dt); if (capped) glow.speaking(l) }
                 }
-                last = f
-                return phase to f
+                Choreographer.getInstance().postFrameCallback(this)
             }
 
-            private fun frameFor(m: GlowModel, p: String, u: Float): GlowModel.Frame = when (p) {
-                "enter" -> m.sparkIn(u)
-                "listening" -> m.listeningLive(u, micL, ripples.mapNotNull { m.ripple(it[1], now - it[0]) })
-                "thinking" -> m.thinking(u)
-                "speaking" -> m.speakingLive(ttsL)
-                else -> m.error(u)
+            private fun finish() {
+                m.phase = null; m.stop()
+                if (look == "glow") glow.reset()
+                val file = m.finish(liveRuns)
+                Log.i(TAG, "live run $liveRuns done json=${file.absolutePath}")
+                live = null; busy = null
             }
-        }
-
-        // ------------------------------------------------------------------ caption
-        private var captionKey = ""
-        private fun captionFor(phase: String, ui: VoiceUi?) {
-            val (label, text, colour) = when (phase) {
-                "enter", "listening" -> Triple("LISTENING", VoiceTexts.PROMPT, 0xff38bdf8.toInt())
-                "thinking" -> Triple("THINKING", ui?.heard?.takeIf { it.isNotBlank() }?.let(VoiceTexts::quote) ?: "“Turn off the kitchen lights”", 0xff6b6b74.toInt())
-                "speaking" -> Triple(ui?.heard?.takeIf { it.isNotBlank() }?.let(VoiceTexts::quote) ?: "", ui?.reply?.ifBlank { null } ?: if (ui == null) "Turned off 3 lights in the kitchen." else "", 0xffa1a1aa.toInt())
-                "error" -> Triple("SOMETHING WENT WRONG", ui?.let { VoiceTexts.friendlyError(it.state, it.errorLocal) } ?: "", 0xfffb7185.toInt())
-                else -> return
-            }
-            val key = "$label|$text"
-            if (key == captionKey && caption.view.visibility == View.VISIBLE) return
-            captionKey = key
-            caption.set(label, text, colour)
         }
 
         override fun detach() {
-            glow.stop()
+            glow.reset()
             (layer.parent as? ViewGroup)?.removeView(layer)
             runCatching { activity.unregisterReceiver(receiver) }
         }
+    }
+
+    // ---------------------------------------------------------------------- fake levels (scripted loops)
+    /** "Turn off the kitchen lights" from 0.3 s to 2.5 s of listening, then quiet. */
+    fun fakeMic(u: Float): Float {
+        val env = ((u - 300) / 120).coerceIn(0f, 1f) * ((2500 - u) / 160).coerceIn(0f, 1f)
+        val syl = (0.5f + 0.5f * sin(u * 0.021f + 1.9f * sin(u * 0.0053f))).pow(1.6f)
+        return 0.06f + 0.94f * env * syl
+    }
+
+    fun fakeTts(u: Float): Float {
+        val env = (u / 150).coerceIn(0f, 1f) * ((3500 - u) / 250).coerceIn(0f, 1f)
+        return env * (0.35f + 0.25f * sin(u * 0.027f + 2 * sin(u * 0.0041f)))
     }
 
     /** The glass caption at the bottom: a small label and the main line. Redrawn only when its text changes. */
@@ -268,48 +317,95 @@ object GlowBench {
             minimumWidth = (640 * dp).toInt()
         }
 
-        fun set(l: String, text: String, colour: Int) {
-            label.text = l; label.setTextColor(colour); main.text = text
-            view.visibility = View.VISIBLE
+        fun show(l: String, text: String, colour: Int, delay: Long = 0) {
+            if (label.text != l) label.text = l
+            label.setTextColor(colour)
+            if (main.text != text) main.text = text
+            if (view.alpha < 1f) view.animate().alpha(1f).setStartDelay(delay).setDuration(200).start()
         }
+
+        fun hide() { view.animate().alpha(0f).setStartDelay(0).setDuration(200).start() }
     }
 
-    /** Frame intervals and draw times per phase. */
-    private class Stats(private val activity: Activity, private val mode: String) {
+    /**
+     * Frame times per phase. [phase] null pauses it. UI thread: Choreographer intervals. The window: FrameMetrics,
+     * delivered on a thread of its own, for every frame the window draws, RenderThread-only frames included.
+     */
+    private class Meter(private val activity: Activity, private val mode: String, private val look: String, private val fps: Int) {
         @Suppress("DEPRECATION")
         val refreshHz: Float = activity.windowManager.defaultDisplay.refreshRate
+        @Volatile var phase: String? = null
         private val startedAt = System.currentTimeMillis()
-        private val buckets = LinkedHashMap<String, Pair<ArrayList<Float>, ArrayList<Float>>>()
+        private val lock = Any()
+        private class B { val ui = ArrayList<Float>(); val frame = ArrayList<Float>(); val render = ArrayList<Float>(); var dropped = 0 }
+        private val buckets = LinkedHashMap<String, B>()
+        private fun b(p: String) = buckets.getOrPut(p) { B() }
+        private var thread: HandlerThread? = null
+        private var lastVsync = 0L
+        private var lastUi = 0L
+        private var running = false
 
-        fun add(phase: String, intervalMs: Float, drawMs: Float) {
-            val b = buckets.getOrPut(phase) { ArrayList<Float>() to ArrayList() }
-            b.first += intervalMs; b.second += drawMs
+        private val metrics = Window.OnFrameMetricsAvailableListener { _, fm, dropped ->
+            val p = phase
+            val vs = fm.getMetric(FrameMetrics.VSYNC_TIMESTAMP)
+            if (p == null) { lastVsync = 0L; return@OnFrameMetricsAvailableListener }
+            synchronized(lock) {
+                val bk = b(p)
+                if (lastVsync != 0L && vs > lastVsync) bk.frame += (vs - lastVsync) / 1e6f
+                bk.render += fm.getMetric(FrameMetrics.TOTAL_DURATION) / 1e6f
+                bk.dropped += dropped
+            }
+            lastVsync = vs
         }
 
-        /** Writes everything so far (a live session's file is rewritten after each run); [runs] is loops or runs so far. */
+        private val uiTick = object : Choreographer.FrameCallback {
+            override fun doFrame(now: Long) {
+                if (!running) return
+                val p = phase
+                if (p != null && lastUi != 0L) synchronized(lock) { b(p).ui += (now - lastUi) / 1e6f }
+                lastUi = if (p == null) 0L else now
+                Choreographer.getInstance().postFrameCallback(this)
+            }
+        }
+
+        fun start() {
+            if (running) return
+            running = true
+            val t = HandlerThread("GlowBenchMeter").also { it.start(); thread = it }
+            activity.window.addOnFrameMetricsAvailableListener(metrics, Handler(t.looper))
+            Choreographer.getInstance().postFrameCallback(uiTick)
+        }
+
+        fun stop() {
+            if (!running) return
+            running = false
+            runCatching { activity.window.removeOnFrameMetricsAvailableListener(metrics) }
+            thread?.quitSafely(); thread = null
+            lastUi = 0L; lastVsync = 0L
+        }
+
+        /** Stops (loops) or keeps going (a live session), and writes everything so far; [runs] is loops or runs. */
         fun finish(runs: Int): File {
+            if (mode == "loops") stop()
             val vsync = 1000f / refreshHz
             val rows = JSONArray()
-            for ((phase, b) in buckets) {
-                val iv = b.first.sorted(); val dr = b.second.sorted()
-                // A 60 Hz frame is 16.7 ms give or take a little jitter: one vsync plus 1 ms counts as "over 16.7 ms",
-                // two vsyncs plus 1 ms as "over 33 ms".
-                val over16 = iv.count { it > vsync + 1f }
-                val over33 = iv.count { it > 2 * vsync + 1f }
-                val missed = iv.sumOf { (Math.round(it / vsync) - 1).coerceAtLeast(0) }
-                rows.put(JSONObject()
-                    .put("variant", "spark").put("phase", phase).put("frames", iv.size)
-                    .put("p50", pct(iv, .5)).put("p90", pct(iv, .9)).put("p99", pct(iv, .99)).put("max", iv.lastOrNull() ?: 0f)
-                    .put("over16_7", over16).put("over33", over33).put("missedVsyncs", missed)
-                    .put("drawP50", pct(dr, .5)).put("drawP90", pct(dr, .9)).put("drawP99", pct(dr, .99)))
-                Log.i(TAG, "%-5s %-9s frames=%4d p50=%5.1f p90=%5.1f p99=%5.1f max=%5.1f over16.7=%3d over33=%3d draw_p90=%4.1f".format(
-                    mode, phase, iv.size, pct(iv, .5), pct(iv, .9), pct(iv, .99), iv.lastOrNull() ?: 0f, over16, over33, pct(dr, .9)))
+            synchronized(lock) {
+                for ((p, bk) in buckets) {
+                    val fr = bk.frame.sorted(); val ui = bk.ui.sorted(); val rn = bk.render.sorted()
+                    val over16 = fr.count { it > vsync + 1f }; val over33 = fr.count { it > 2 * vsync + 1f }
+                    rows.put(JSONObject().put("variant", "spark").put("phase", p).put("frames", fr.size)
+                        .put("p50", pct(fr, .5)).put("p90", pct(fr, .9)).put("p99", pct(fr, .99)).put("max", fr.lastOrNull() ?: 0f)
+                        .put("over16_7", over16).put("over33", over33).put("dropped", bk.dropped)
+                        .put("renderP50", pct(rn, .5)).put("renderP90", pct(rn, .9))
+                        .put("uiP50", pct(ui, .5)).put("uiP90", pct(ui, .9)).put("uiP99", pct(ui, .99)))
+                    Log.i(TAG, "%-5s %-4s %-9s frames=%4d p50=%5.1f p90=%5.1f p99=%5.1f over16.7=%3d over33=%3d render_p90=%5.1f ui_p90=%5.1f".format(
+                        mode, look, p, fr.size, pct(fr, .5), pct(fr, .9), pct(fr, .99), over16, over33, pct(rn, .9), pct(ui, .9)))
+                }
             }
-            val json = JSONObject()
-                .put("bench", "glowbench-s1").put("mode", mode).put("device", Build.MODEL).put("android", Build.VERSION.RELEASE)
-                .put("refreshHz", refreshHz.toDouble()).put("loops", runs).put("variants", JSONArray(listOf("spark")))
-                .put("startedAt", startedAt).put("phases", rows)
-            val name = "glowbench-$mode-$startedAt.json"
+            val json = JSONObject().put("bench", "glowbench-s1").put("round", 3).put("mode", mode).put("look", look).put("fps", fps)
+                .put("device", Build.MODEL).put("android", Build.VERSION.RELEASE).put("refreshHz", refreshHz.toDouble())
+                .put("loops", runs).put("startedAt", startedAt).put("phases", rows)
+            val name = "glowbench-$mode-$look-$fps-$startedAt.json"
             File(File(activity.filesDir, "glowbench").apply { mkdirs() }, name).writeText(json.toString(2))
             val ext = activity.getExternalFilesDir("glowbench")
             return if (ext != null) File(ext, name).apply { writeText(json.toString(2)) } else File(File(activity.filesDir, "glowbench"), name)

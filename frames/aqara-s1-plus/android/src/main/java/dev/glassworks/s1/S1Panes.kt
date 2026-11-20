@@ -133,7 +133,7 @@ class S1Panes : AppParts {
         // THROWAWAY (test-build/glowbench-s1): the #691 edge glow (Spark) in debug and test builds only. It replaces the
         // voice overlay during real voice runs and answers the GLOW broadcast; the glow joins the voice overlay's layer.
         var glowBench: dev.glassworks.s1.glowbench.GlowBench.Handle? =
-            if (runtime.build.debug || runtime.build.testBuild.isNotEmpty()) dev.glassworks.s1.glowbench.GlowBench.attach(activity, voice) else null
+            if (runtime.build.debug || runtime.build.testBuild.isNotEmpty()) dev.glassworks.s1.glowbench.GlowBench.attach(activity, voice) { voice.update(it, true) } else null
         runtime.onVoiceUi = {
             if (glowBench?.voice(voiceUi, panePrefs.voice.overlay) != true) voice.update(voiceUi, panePrefs.voice.overlay)
         }
