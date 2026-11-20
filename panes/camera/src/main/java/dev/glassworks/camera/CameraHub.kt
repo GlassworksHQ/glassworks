@@ -49,6 +49,8 @@ class CameraHub(
     context: Context,
     private val width: Int = WIDTH,
     private val height: Int = HEIGHT,
+    /** The frame's cap on the camera's and the stream's size, in pixels ([dev.glassworks.frame.Frame.cameraMaxPixels]). */
+    private val maxPixels: Int = MAX_PIXELS,
     private val log: (String) -> Unit = { Log.i(TAG, it) },
 ) : FrameSource, StillCamera, EncoderInput, CameraFacts {
     private val app = context.applicationContext
@@ -272,9 +274,21 @@ class CameraHub(
     private fun read(id: String?): Sizes {
         if (id == null) return Sizes(width to height, StreamFit.Refused(NO_CAMERA))
         return sizes.read(id) {
-            val map = manager.getCameraCharacteristics(id).get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
-            val reader = yuvSizeFor(map?.getOutputSizes(ImageFormat.YUV_420_888)?.map { it.width to it.height }, width to height)
-            Sizes(reader, streamFitFor(reader, map?.getOutputSizes(MediaCodec::class.java)?.map { it.width to it.height }, H264Encoder::encodes))
+            val c = manager.getCameraCharacteristics(id)
+            val map = c.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+            // On a LEGACY camera the largest JPEG size has the sensor's shape, as the shim assumes.
+            val sensor = if (c.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL) != CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LEGACY) null
+                else map?.getOutputSizes(ImageFormat.JPEG)?.maxByOrNull { it.width.toLong() * it.height }?.let { it.width to it.height }
+            val yuv = map?.getOutputSizes(ImageFormat.YUV_420_888)?.map { it.width to it.height }
+            val surfaces = map?.getOutputSizes(MediaCodec::class.java)?.map { it.width to it.height }
+            val reader = yuvSizeFor(yuv, width to height, maxPixels, sensor) { streamFitFor(it, surfaces, H264Encoder::encodes) is StreamFit.Size }
+            if (sensor != null) {
+                log("camera: LEGACY, sensor ${sensor.first}x${sensor.second}, YUV ${yuv?.joinToString { "${it.first}x${it.second}" }}")
+                // No reader size bounds the shim's preview then: it takes the smallest sensor-shaped size that covers
+                // the reader, which is already the smallest there is, or with none its largest preview size.
+                if (!legacyAspect(reader, sensor)) log("camera: no size of the sensor's shape up to $maxPixels px; the preview may run larger than ${reader.first}x${reader.second}")
+            }
+            Sizes(reader, streamFitFor(reader, surfaces, H264Encoder::encodes))
         }
     }
 
@@ -493,6 +507,8 @@ class CameraHub(
         /** Enough for a still people recognise and an H.264 stream; presence reads a sparse 48x27 grid of it. */
         const val WIDTH = 1280
         const val HEIGHT = 720
+        /** The most a camera runs at on a frame that sets no cap of its own: 1080p. */
+        const val MAX_PIXELS = 1920 * 1080
         const val JPEG_QUALITY = 85
         const val STILL_WAIT_MS = 2_000L
         const val LINGER_MS = 10_000L

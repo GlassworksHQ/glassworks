@@ -50,7 +50,7 @@ object CameraWiring {
         val identity = paneContext.device
         val main = Handler(Looper.getMainLooper())
         val def = glassworks.paneDefinitions(ctx).filterIsInstance<CameraDefinition>().firstOrNull() ?: return null
-        val hub = CameraHub(ctx)
+        val hub = CameraHub(ctx, maxPixels = glassworks.frame.cameraMaxPixels ?: CameraHub.MAX_PIXELS)
         host.onStop { hub.release() }
         val egress = FrameEgress(SystemClock::elapsedRealtime, { ms, r -> main.postDelayed(r, ms) }) { leaving ->
             EspHomeLog.i("Camera frames ${if (leaving) "leaving the panel" else "no longer leaving"}")

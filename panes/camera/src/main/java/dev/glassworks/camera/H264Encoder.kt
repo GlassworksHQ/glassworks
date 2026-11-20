@@ -19,6 +19,10 @@ import dev.glassworks.camera.onvif.H264ParameterSetCache
  * [onAccessUnit] in Annex-B with its parameter sets before every keyframe (the ported
  * [H264ParameterSetCache]), on the encoder's own thread. A keyframe every second, so a new viewer
  * waits at most that long, and [requestKeyFrame] for one now.
+ *
+ * The device's own (hardware) encoder when it takes the picture ([encoderOrder]): `createEncoderByType` gave the
+ * Mirror Google's software encoder, which spends CPU and memory the page needs (#679). Each encoder that refuses is
+ * logged with why, and the next is tried.
  */
 class H264Encoder(
     width: Int,
@@ -28,8 +32,9 @@ class H264Encoder(
     private val onAccessUnit: (annexB: ByteArray, key: Boolean) -> Unit,
     /** The encoder stopped by itself (a codec error), not through [release]. On the encoder's thread. */
     private val onFailure: (StreamEncoder) -> Unit = {},
+    private val log: (String) -> Unit = { Log.i(TAG, it) },
 ) : StreamEncoder {
-    private val codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
+    private val codec: MediaCodec
     override val surface: Surface
     @Volatile private var running = true
     private val drain: Thread
@@ -42,18 +47,37 @@ class H264Encoder(
             setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
             setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR)
         }
+        val tried = encoderOrder(avcEncoders(), width, height)
+        log("camera: H.264 encoders for ${width}x$height: ${tried.joinToString { it.describe() }.ifEmpty { "none listed" }}")
+        var opened: Pair<MediaCodec, Surface>? = null
+        for (e in tried) {
+            opened = try { open(MediaCodec.createByCodecName(e.name), format) } catch (x: Exception) {
+                log("camera: ${e.name} refused: ${x.javaClass.simpleName}: ${x.message}")
+                null
+            }
+            if (opened != null) { log("camera: H.264 encoder ${e.name} (${if (e.hardware) "hardware" else "software"})"); break }
+        }
+        // None listed, or each refused: Android's own pick, as before.
+        val (c, made) = opened ?: open(MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC), format)
+            .also { log("camera: H.264 encoder ${it.first.name} (Android's pick)") }
+        codec = c
+        surface = made
+        drain = Thread(::drainLoop, "glassworks-h264").apply { isDaemon = true; start() }
+    }
+
+    /** Configures and starts [codec] for [format]; frees it and throws when it refuses. */
+    private fun open(codec: MediaCodec, format: MediaFormat): Pair<MediaCodec, Surface> {
         var made: Surface? = null
         try {
             codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
             made = codec.createInputSurface()
             codec.start()
+            return codec to made
         } catch (e: Exception) {
             made?.release()
             codec.release()
             throw e
         }
-        surface = made
-        drain = Thread(::drainLoop, "glassworks-h264").apply { isDaemon = true; start() }
     }
 
     override fun requestKeyFrame() {
@@ -119,16 +143,45 @@ class H264Encoder(
         /** About 0.1 bit a pixel at [FPS]: 1.4 Mbit/s at 1280x720. */
         fun bitrateFor(width: Int, height: Int): Int = (width * height * FPS / 10).coerceIn(500_000, 6_000_000)
 
-        /**
-         * Whether the encoder [H264Encoder] gets (the first H.264 encoder, as `createEncoderByType` picks) takes
-         * [width] x [height]. False without one. True when Android can't say: the encoder then tries.
-         */
+        /** Whether some H.264 encoder takes [width] x [height] ([encoderOrder]). False without one. True when Android can't say: the encoder then tries. */
         fun encodes(width: Int, height: Int): Boolean = try {
-            MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos
-                .firstOrNull { it.isEncoder && it.supportedTypes.any { t -> t.equals(MediaFormat.MIMETYPE_VIDEO_AVC, true) } }
-                ?.getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_AVC)?.videoCapabilities?.isSizeSupported(width, height) ?: false
+            encoderOrder(avcEncoders(), width, height).isNotEmpty()
         } catch (e: Exception) {
             true
         }
+
+        /** The H.264 encoders Android lists, in its order. */
+        private fun avcEncoders(): List<AvcEncoder> = MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos
+            .filter { it.isEncoder && it.supportedTypes.any { t -> t.equals(MediaFormat.MIMETYPE_VIDEO_AVC, true) } }
+            .map { info ->
+                val caps = runCatching { info.getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_AVC) }.getOrNull()
+                AvcEncoder(
+                    info.name,
+                    hardware = !isSoftwareCodec(info.name),
+                    listsSurface = caps?.colorFormats?.contains(MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface) ?: false,
+                    takes = { w, h -> caps?.videoCapabilities?.let { v -> runCatching { v.isSizeSupported(w, h) }.getOrDefault(true) } ?: true },
+                )
+            }
     }
+}
+
+/** One H.264 encoder as [encoderOrder] weighs it: [listsSurface] when it names Surface input among its color formats. */
+class AvcEncoder(val name: String, val hardware: Boolean, val listsSurface: Boolean, val takes: (width: Int, height: Int) -> Boolean) {
+    fun describe() = "$name (${if (hardware) "hardware" else "software"}${if (listsSurface) "" else ", no surface listed"})"
+}
+
+/**
+ * The encoders to try at [width] x [height]: those that take the size, hardware first, then the ones that list Surface
+ * input first (an older encoder may take it without listing it), each group in Android's own order.
+ */
+fun encoderOrder(all: List<AvcEncoder>, width: Int, height: Int): List<AvcEncoder> =
+    all.filter { it.takes(width, height) }.sortedWith(compareBy({ !it.hardware }, { !it.listsSurface }))
+
+/**
+ * AOSP's own test (`MediaCodecList::isSoftwareCodec`): Google's and Android's codecs, and any whose name starts with
+ * neither `OMX.` nor `c2.`, run on the CPU.
+ */
+fun isSoftwareCodec(name: String): Boolean {
+    val n = name.lowercase()
+    return n.startsWith("omx.google.") || n.startsWith("c2.android.") || (!n.startsWith("omx.") && !n.startsWith("c2."))
 }
