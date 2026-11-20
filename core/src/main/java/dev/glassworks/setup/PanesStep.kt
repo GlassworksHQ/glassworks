@@ -57,36 +57,40 @@ class PanesStep(val panes: List<SetupPane>) {
             if (applying) return BUSY
             applying = true
         }
-        val left = AtomicInteger(panes.size)
-        val release = { synchronized(lock) { applying = false } }
-        if (panes.isEmpty()) release()
-        val results = arrayOfNulls<String>(panes.size)
-        val workers = panes.mapIndexed { i, p ->
-            Thread({
-                try {
-                    results[i] = runCatching { p.choice.apply(wanted[i]) }.getOrElse { it.message ?: "failed" }
-                } finally {
-                    if (left.decrementAndGet() == 0) release()
-                }
-            }, "glassworks-setup-pane-$i").apply { isDaemon = true; start() }
-        }
-        // Monotonic: a wall-clock correction mid-way must not stretch the budget.
-        val until = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(budgetMs)
-        workers.forEach { it.join(maxOf(1L, TimeUnit.NANOSECONDS.toMillis(until - System.nanoTime()))) }
-        val problems = panes.indices.mapNotNull { i ->
-            val title = panes[i].choice.title
-            when {
-                workers[i].isAlive -> "The $title didn't answer."
-                results[i] != null -> "$title: ${results[i]}"
-                else -> null
+        // One count per card's worker, plus this caller until it has published `applied` (CodeRabbit on #699).
+        val left = AtomicInteger(panes.size + 1)
+        val finish = { if (left.decrementAndGet() == 0) synchronized(lock) { applying = false } }
+        try {
+            val results = arrayOfNulls<String>(panes.size)
+            val workers = panes.mapIndexed { i, p ->
+                Thread({
+                    try {
+                        results[i] = runCatching { p.choice.apply(wanted[i]) }.getOrElse { it.message ?: "failed" }
+                    } finally {
+                        finish()
+                    }
+                }, "glassworks-setup-pane-$i").apply { isDaemon = true; start() }
             }
+            // Monotonic: a wall-clock correction mid-way must not stretch the budget.
+            val until = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(budgetMs)
+            workers.forEach { it.join(maxOf(1L, TimeUnit.NANOSECONDS.toMillis(until - System.nanoTime()))) }
+            val problems = panes.indices.mapNotNull { i ->
+                val title = panes[i].choice.title
+                when {
+                    workers[i].isAlive -> "The $title didn't answer."
+                    results[i] != null -> "$title: ${results[i]}"
+                    else -> null
+                }
+            }
+            if (problems.isNotEmpty()) {
+                applied = null
+                return problems.joinToString("\n")
+            }
+            applied = wanted.copyOf()
+            return null
+        } finally {
+            finish()
         }
-        if (problems.isNotEmpty()) {
-            applied = null
-            return problems.joinToString("\n")
-        }
-        applied = wanted.copyOf()
-        return null
     }
 
     companion object {
