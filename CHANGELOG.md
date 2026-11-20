@@ -13,6 +13,11 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   per pane the device can run, with each pane's icon, and Continue turns them on or off. It is the same answer as
   the Panes step on the device's own screen, and the same switches as the pane's settings, the Manage page and Home
   Assistant, so all of them agree. A pane whose hardware the device lacks isn't listed.
+- **Recorders that record on motion get the camera's motion pushed to them.** With the ONVIF stream on, a network
+  video recorder that subscribes to the camera's motion (many Xiongmai-based NVRs do) now hears about each change
+  the moment it happens, so it can start recording. The recorder must be on your local network and sign in with the
+  stream's username and password. Home Assistant's ONVIF integration can use this too, and then gets motion
+  without asking for it.
 - **Kiln sets up the Mirror and Android tablets the way it sets up the S1.** After the install, Kiln asks the same
   steps as on the S1: the language, time zone and clock, Wi-Fi, Home Assistant, then Done. Every step has its own
   address. A reload during set-up picks up where it was. A reload during the write says an earlier try changed the
@@ -510,6 +515,9 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   it straight away. The *Thread join* sensor says how it went. Pasting the dataset still works.
 
 ### Fixed
+- **Snapshot checks over ONVIF give the real size.** A recorder or tool that checks the camera's snapshot before
+  downloading it now sees the picture's real size and no stray bytes, so its next request on the same connection
+  works.
 - **Setup stays on screen when the app restarts after finding Home Assistant.** Once the panel joins Wi-Fi and
   finds Home Assistant, the app restarts to apply it. The setup screen now comes back at once and says "Connecting
   to Home Assistant…" until it knows whether the panel needs to sign in, so Home Assistant's page no longer flashes
