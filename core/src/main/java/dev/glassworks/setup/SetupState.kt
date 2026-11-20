@@ -256,7 +256,8 @@ object SetupState {
         val laterWaiting = !haDone || !panesDone || pendingWanted != null || ownPending != null
         // Up, moments after the app started (it restarts once it finds Home Assistant): not done until the page shows
         // whether a sign-in is needed, so the screen doesn't move on, then come back when the login page loads.
-        val signinUnknown = i.showing && !i.signedIn && !i.dashboardLoaded && !i.usePanelLogin && !wantsSignin &&
+        // Only once Home Assistant's address is known: until then the step finds it (its address field stays put).
+        val signinUnknown = i.showing && i.haKnown && !i.signedIn && !i.dashboardLoaded && !i.usePanelLogin && !wantsSignin &&
             i.uptimeMs < rules.signinCheckMs
         val signinDone = i.signedIn ||
             (wifiDone && i.haKnown && !wantsSignin && !signinUnknown && (!laterWaiting || i.dashboardLoaded || i.usePanelLogin))

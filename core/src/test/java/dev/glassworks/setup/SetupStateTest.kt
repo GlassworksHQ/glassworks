@@ -59,6 +59,8 @@ class SetupStateTest {
         assertFalse(SetupState.decide(up.copy(signedIn = true)).signinChecking)
         // the page never answered: after the check's time, the screen goes on as before the check
         assertFalse(SetupState.decide(up.copy(uptimeMs = SetupRules().signinCheckMs)).signinChecking)
+        // Home Assistant not found yet: the step finds it (its address field), no check over it
+        assertFalse(SetupState.decide(up.copy(haKnown = false)).signinChecking)
         // a panel that just started with no setup screen up (a reboot) isn't held: as before
         assertFalse(SetupState.decide(afterRestart.copy(dashboardLoaded = false)).signinChecking)
     }
