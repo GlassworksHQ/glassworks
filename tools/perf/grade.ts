@@ -19,7 +19,9 @@ export interface Rule { good_max: number; poor_above?: number; poor_at?: number 
 export interface Rubric {
   name: string;           // "Clarity": show a grade as `${name} ${grade}`
   version: number;
-  clarity: number;        // Clarity's version: 1 from 2026-11-14; a summary without it is pre-release
+  clarity: number;        // Clarity's version: v1, the one Glassworks 1.0.0 ships with; a summary without it is pre-release
+  /** The first day (UTC) a v1 summary can be from: the first v1 (2026-11-14) also said 1 (rubric.json) */
+  clarity_measured_since: string;
   protocol_version: number;
   metrics: Record<string, Rule>;
   grade: {
@@ -58,12 +60,13 @@ export interface PageSummary {
   scroll?: { runs?: FrameRun[] } & Record<string, unknown>;
   updates?: { runs?: UpdateRun[] } & Record<string, unknown>;
   camera?: { runs?: CameraRun[] } & Record<string, unknown>;
-  dialog?: { runs?: DialogRun[] } & Record<string, unknown>;   // rubric 3 (#211); absent before Clarity v3
+  dialog?: { runs?: DialogRun[] } & Record<string, unknown>;   // HA's more-info dialogs (#211)
   timed_out_runs?: number;     // runs in which the page didn't finish within the runner's deadline (#202)
 }
 
 export interface Summary {
   clarity?: number | null;
+  measured_on?: string | null;
   protocol_version?: number | null;
   webrtc_transport?: { transport?: string | null; chosen_by?: string | null; reason?: string | null; possibly_limited?: boolean } | null;
   pages?: Record<string, PageSummary>;
@@ -308,8 +311,9 @@ export function summaryInputs(summary: Summary, rubric: Rubric): [Record<string,
  * The letter for a summary, at render time. status:
  * - "graded": show the letter (and "provisional" when it is set: something wasn't measured, or the
  *   summary lists gaps);
- * - "re-measure": the summary was measured with a pre-release version of Clarity (no `clarity: 1`)
- *   or another protocol than these rules are for; show "re-measure", not a letter;
+ * - "re-measure": the summary was measured with a pre-release version of Clarity (no `clarity`), another
+ *   version, the first v1 (before clarity_measured_since) or another protocol than these rules are for;
+ *   show "re-measure", not a letter;
  * - "not-comparable": the measurement says why (e.g. not at the default zoom); show no letter.
  */
 export function gradeSummary(summary: Summary, rubric: Rubric): Grade {
@@ -322,6 +326,11 @@ export function gradeSummary(summary: Summary, rubric: Rubric): Grade {
       ? `measured with a pre-release version of Clarity (protocol ${summary.protocol_version ?? "unknown"}): re-measure`
       : `measured with Clarity v${summary.clarity}; these rules are Clarity v${rubric.clarity}'s: re-measure`;
     return { status: "re-measure", grade: null, meaning: null, why };
+  }
+  if (summary.measured_on && summary.measured_on < rubric.clarity_measured_since) {
+    // The numbers started again at 1 on 2026-11-19, as on 2026-11-14: the first v1's summaries also say 1.
+    return { status: "re-measure", grade: null, meaning: null,
+             why: "measured with the first Clarity v1 (2026-11-14), before the version started again at 1: re-measure" };
   }
   if (summary.protocol_version !== rubric.protocol_version) {
     return { status: "re-measure", grade: null, meaning: null,

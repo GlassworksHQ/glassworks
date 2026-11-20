@@ -1,8 +1,8 @@
 {
  "schema": "glassworks.perf-summary/3",
  "test": "Clarity",
- "clarity": 3,
- "protocol_version": 3,
+ "clarity": 1,
+ "protocol_version": 1,
  "report_schema": "glassworks.perf/4",
  "measured_on": "2026-11-17",
  "frame": {
@@ -770,7 +770,7 @@
    "Memory isn't the limit (964 of 988 MB)."
   ],
   "text": "Light dashboards feel good: taps, live updates, opening a view and more-info dialogs are quick, and scrolling is fluid. Bigger dashboards slow down: typical without a camera blocks for 2.7 s after it is drawn, and heavy takes 1.5 s to show a change and doesn't open a more-info dialog fully. The likely limit is the browser's main thread: it stays busy (82% of a core on typical with a camera playing), and the page draws too few frames. Memory isn't the limit (964 of 988 MB).",
-  "rubric": 3
+  "rubric": 1
  },
  "webrtc_transport": {
   "transport": "lan-udp",

@@ -1,8 +1,8 @@
 {
  "_comment": "Clarity reference dashboards (MIT): the counts, the first screen, the update stream and the phases. The one source for the fake Home Assistant (dashboards.py), the in-page harness and the node tests. Project choices, fixed before any frame was graded under them; change one only on purpose, with the docs and the tests, never to move a frame's letter.",
- "_CLARITY": "Clarity's version: v3 (rubric 3, #211), measured with protocol 3 (which adds opening HA's more-info dialog on each view) and graded with rubric 3; v2 was protocol 2 and rubric 2 (the blocking time from the first screen drawn to usable), v1 protocol 1 and rubric 1. Every page line carries it (refdash `clarity`), so a line from before the reset (pre-release protocols 1 to 8) can't pass for v1.",
- "CLARITY": 3,
- "PROTOCOL": 3,
+ "_CLARITY": "Clarity's version: v1 (the maintainer, 2026-11-19), the version that ships with Glassworks 1.0.0, measured with protocol 1 and graded with rubric 1. Every page line carries it (refdash `clarity`). The numbers started again from 1 (as on 2026-11-14, #205): pages that said Clarity v3 and protocol 3 measured exactly this, and report.py reads them as v1; the first v1's (2026-11-14) also said 1, and rubric.json's clarity_measured_since tells them apart.",
+ "CLARITY": 1,
+ "PROTOCOL": 1,
  "ORDER": [
   "light",
   "typical-nocam",

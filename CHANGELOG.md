@@ -230,6 +230,12 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   back to Stable never installs an older version: the panel waits for a stable release newer than the one it runs.
 
 ### Changed
+- **Clarity v1: live updates are good within 150 ms, fluid within 250 ms.** Clarity, the performance grade on
+  glassworks.dev, starts again at v1, the version Glassworks 1.0.0 ships with. A light someone else switches, or an
+  automation, now counts as quick when 95% of its changes show within 150 ms (was 100 ms), and fluid within 250 ms
+  (was 200 ms). 100 ms stays the bar for your own taps. Every other bar is the same. A result of the earlier
+  Clarity v3 measured what v1 measures: it shows "re-measure" until it is graded again, and the S1's has been (it
+  stays D). Results of earlier versions (the first v1 of 2026-11-14, or v2) need a new run.
 - **Kiln's screens say less.** Each step now says what to do, plus the one fact you need to decide, on every
   panel. Kiln no longer narrates what it does by itself. On the Mirror, keeping it in Home Assistant now asks you only
   to plug its micro-USB into the computer, not to open its case. After you pick the Mirror at its first start, the

@@ -35,7 +35,14 @@ It has no banner: a frame's banner is drawn from its `tagline`, and a tested dev
 
 **Status: planned.** It installs the generic app (`dev.glassworks.generic_android`) as any Android 8+ device
 does. Kiln's generic Android recipe (#403) will install it over USB; until then it is `adb install`, as in
-[generic-android](../generic-android/README.md#install). Its Clarity results come with its first graded run.
+[generic-android](../generic-android/README.md#install).
+
+**Clarity v1: B, provisional**, a good wall panel for typical dashboards, with a camera (measured 2026-11-19 UTC,
+3 of 3 runs, Android 17, the generic app's test build 0.2.0-519bf2e, the test computer wired). Large dashboards
+hold it back: heavy's camera takes 2.1 s to show its first frame, and its main thread blocks for 0.9 s after the
+view is drawn. It is provisional because heavy's camera stalls weren't measured: the page answered getStats late.
+The report is in [clarity/report.md](clarity/report.md), and the summary the site grades in
+[clarity/clarity.json](clarity/clarity.json) ([how Clarity grades](../../docs/perf.md)).
 
 ## Hardware
 

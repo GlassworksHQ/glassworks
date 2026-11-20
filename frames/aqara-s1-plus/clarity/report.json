@@ -1,7 +1,7 @@
 {
  "schema": "glassworks.perf/4",
- "protocol_version": 3,
- "clarity": 3,
+ "protocol_version": 1,
+ "clarity": 1,
  "measured_on": "2026-11-17",
  "runs_attempted": 3,
  "frame": {
@@ -261,7 +261,7 @@
   "limited": null
  },
  "grade": {
-  "rubric_version": 3,
+  "rubric_version": 1,
   "grade": "D",
   "meaning": "a good wall panel for light dashboards",
   "capped_by_start": false,
@@ -280,7 +280,7 @@
    "typical-nocam": {
     "tap": "good",
     "scroll": "fluid",
-    "updates": "fluid",
+    "updates": "good",
     "load": "good",
     "camera": "none",
     "blocking": "poor",
@@ -289,7 +289,7 @@
    "typical": {
     "tap": "good",
     "scroll": "slow",
-    "updates": "fluid",
+    "updates": "good",
     "load": "good",
     "camera": "slow",
     "blocking": "poor",
@@ -380,10 +380,10 @@
    "lost_scroll_steps": 0,
    "timed_out": [],
    "protocols": [
-    3
+    1
    ],
    "clarity": [
-    3
+    1
    ],
    "warmups": [
     null,
@@ -1488,11 +1488,11 @@
      "dialog_errors": [],
      "dialog_settles_away": [],
      "updates_levels": [
-      "fluid",
-      "fluid",
+      "good",
+      "good",
       "good"
      ],
-     "updates_level": "fluid",
+     "updates_level": "good",
      "swipes_during_updates": [
       6,
       6,
@@ -1511,7 +1511,7 @@
         "scroll_p95_ms": 66.67,
         "scroll_level": "fluid",
         "latency_p95_ms": 104.8,
-        "updates_level": "fluid",
+        "updates_level": "good",
         "inp_ms": 64,
         "load_ms": 796,
         "dialog_settled_ms": 1144.5799999999872,
@@ -1524,7 +1524,7 @@
         "scroll_p95_ms": 66.67,
         "scroll_level": "fluid",
         "latency_p95_ms": 101.6,
-        "updates_level": "fluid",
+        "updates_level": "good",
         "inp_ms": 160,
         "load_ms": 1049,
         "dialog_settled_ms": 1223.7599999999948,
@@ -2712,11 +2712,11 @@
      "dialog_errors": [],
      "dialog_settles_away": [],
      "updates_levels": [
-      "fluid",
-      "fluid",
-      "fluid"
+      "good",
+      "good",
+      "good"
      ],
-     "updates_level": "fluid",
+     "updates_level": "good",
      "swipes_during_updates": [
       6,
       6,
@@ -2735,7 +2735,7 @@
         "scroll_p95_ms": 83.33,
         "scroll_level": "slow",
         "latency_p95_ms": 117.6,
-        "updates_level": "fluid",
+        "updates_level": "good",
         "inp_ms": 200,
         "load_ms": 1320,
         "dialog_settled_ms": 1302.7999999999884,
@@ -2748,7 +2748,7 @@
         "scroll_p95_ms": 83.33,
         "scroll_level": "slow",
         "latency_p95_ms": 121.8,
-        "updates_level": "fluid",
+        "updates_level": "good",
         "inp_ms": 144,
         "load_ms": 1296,
         "dialog_settled_ms": 1430.6000000000058,
@@ -2761,7 +2761,7 @@
         "scroll_p95_ms": 116.67,
         "scroll_level": "slow",
         "latency_p95_ms": 125.1,
-        "updates_level": "fluid",
+        "updates_level": "good",
         "inp_ms": 176,
         "load_ms": 1529,
         "dialog_settled_ms": 1734.5599999999977,
@@ -7426,8 +7426,8 @@
         480
        ],
        "dpr": 1.5,
-       "protocol": 3,
-       "clarity": 3,
+       "protocol": 1,
+       "clarity": 1,
        "load_ms": 1068,
        "first_screen_cards": 13,
        "usable_ms": 1428,
@@ -7595,8 +7595,8 @@
         480
        ],
        "dpr": 1.5,
-       "protocol": 3,
-       "clarity": 3,
+       "protocol": 1,
+       "clarity": 1,
        "load_ms": 796,
        "first_screen_cards": 15,
        "usable_ms": 4425,
@@ -7768,8 +7768,8 @@
         480
        ],
        "dpr": 1.5,
-       "protocol": 3,
-       "clarity": 3,
+       "protocol": 1,
+       "clarity": 1,
        "load_ms": 1320,
        "first_screen_cards": 15,
        "usable_ms": 5633,
@@ -8061,8 +8061,8 @@
         480
        ],
        "dpr": 1.5,
-       "protocol": 3,
-       "clarity": 3,
+       "protocol": 1,
+       "clarity": 1,
        "load_ms": 1171,
        "first_screen_cards": 15,
        "usable_ms": 37194,
@@ -10207,8 +10207,8 @@
         480
        ],
        "dpr": 1.5,
-       "protocol": 3,
-       "clarity": 3,
+       "protocol": 1,
+       "clarity": 1,
        "load_ms": 1049,
        "first_screen_cards": 15,
        "usable_ms": 4547,
@@ -10380,8 +10380,8 @@
         480
        ],
        "dpr": 1.5,
-       "protocol": 3,
-       "clarity": 3,
+       "protocol": 1,
+       "clarity": 1,
        "load_ms": 1296,
        "first_screen_cards": 15,
        "usable_ms": 5692,
@@ -10673,8 +10673,8 @@
         480
        ],
        "dpr": 1.5,
-       "protocol": 3,
-       "clarity": 3,
+       "protocol": 1,
+       "clarity": 1,
        "load_ms": 1232,
        "first_screen_cards": 15,
        "usable_ms": 37187,
@@ -11432,8 +11432,8 @@
         480
        ],
        "dpr": 1.5,
-       "protocol": 3,
-       "clarity": 3,
+       "protocol": 1,
+       "clarity": 1,
        "load_ms": 828,
        "first_screen_cards": 13,
        "usable_ms": 1063,
@@ -12961,8 +12961,8 @@
         480
        ],
        "dpr": 1.5,
-       "protocol": 3,
-       "clarity": 3,
+       "protocol": 1,
+       "clarity": 1,
        "load_ms": 1529,
        "first_screen_cards": 15,
        "usable_ms": 5904,
@@ -13254,8 +13254,8 @@
         480
        ],
        "dpr": 1.5,
-       "protocol": 3,
-       "clarity": 3,
+       "protocol": 1,
+       "clarity": 1,
        "load_ms": 1388,
        "first_screen_cards": 15,
        "usable_ms": 35814,
@@ -14001,8 +14001,8 @@
         480
        ],
        "dpr": 1.5,
-       "protocol": 3,
-       "clarity": 3,
+       "protocol": 1,
+       "clarity": 1,
        "load_ms": 2185,
        "first_screen_cards": 13,
        "usable_ms": 2484,
@@ -14170,8 +14170,8 @@
         480
        ],
        "dpr": 1.5,
-       "protocol": 3,
-       "clarity": 3,
+       "protocol": 1,
+       "clarity": 1,
        "load_ms": 912,
        "first_screen_cards": 15,
        "usable_ms": 4088,
@@ -14410,6 +14410,6 @@
    "Memory isn't the limit (964 of 988 MB)."
   ],
   "text": "Light dashboards feel good: taps, live updates, opening a view and more-info dialogs are quick, and scrolling is fluid. Bigger dashboards slow down: typical without a camera blocks for 2.7 s after it is drawn, and heavy takes 1.5 s to show a change and doesn't open a more-info dialog fully. The likely limit is the browser's main thread: it stays busy (82% of a core on typical with a camera playing), and the page draws too few frames. Memory isn't the limit (964 of 988 MB).",
-  "rubric": 3
+  "rubric": 1
  }
 }

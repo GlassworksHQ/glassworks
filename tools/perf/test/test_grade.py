@@ -116,11 +116,15 @@ class UpdateLevel(unittest.TestCase):
     """Rubric v5: live updates are judged on how fast a change reaches the screen, not frame pacing."""
 
     CASES = [
-        ("100 ms and the change frames at 60 fps", upd(100.0), "premium"),
-        ("100 ms, change frames at 40 fps: pacing doesn't grade", upd(100.0, frames=False), "good"),
-        ("just over 100 ms", upd(100.1), "fluid"),
-        ("200 ms", upd(200.0, frames=False), "fluid"),
-        ("just over 200 ms", upd(200.1), "slow"),
+        # Clarity v1 (2026-11-19): good within 150 ms, fluid within 250 ms; premium is good at 60 fps.
+        ("150 ms and the change frames at 60 fps", upd(150.0), "premium"),
+        ("150 ms, change frames at 40 fps: pacing doesn't grade", upd(150.0, frames=False), "good"),
+        ("just over 150 ms", upd(150.1), "fluid"),
+        ("151 ms", upd(151.0), "fluid"),
+        ("100 ms: tap's bar, not live updates'", upd(100.0, frames=False), "good"),
+        ("250 ms", upd(250.0, frames=False), "fluid"),
+        ("just over 250 ms", upd(250.1), "slow"),
+        ("251 ms", upd(251.0), "slow"),
         ("no change measured", upd(80.0, n=0), None),
         ("no pacing frames: not premium", dict(upd(50.0), frames=None), "good"),
     ]
@@ -143,8 +147,8 @@ class PageLevel(unittest.TestCase):
         ("scroll good, view loads in up to 4 s", page(scroll="good", load="ni"), "good"),
         ("scroll fluid", page(scroll="fluid"), "fluid"),
         ("scroll slow", page(scroll="slow"), None),
-        ("live updates good (within 100 ms), pacing not 60 fps", page(updates="good"), "good"),
-        ("live updates fluid (within 200 ms)", page(updates="fluid"), "fluid"),
+        ("live updates good (within 150 ms), pacing not 60 fps", page(updates="good"), "good"),
+        ("live updates fluid (within 250 ms)", page(updates="fluid"), "fluid"),
         ("scroll good, live updates fluid", page(scroll="good", updates="fluid"), "fluid"),
         ("live updates slower than 200 ms", page(updates="slow"), None),
         ("live updates not measured", page(updates=None), None),

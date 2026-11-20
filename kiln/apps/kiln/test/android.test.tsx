@@ -125,7 +125,8 @@ describe('the screens', () => {
   it('5: a tested device: its frame card, its page, and the setup page on the network', async () => {
     await show('done', 'Done.');
     expect(screen.getByText('Glassworks is the Pixel Tablet\'s home screen.')).toBeTruthy();
-    expect(screen.getByText('Clarity · not measured yet')).toBeTruthy();
+    // The Pixel Tablet has a published Clarity result (frames/google-pixel-tablet/clarity, Clarity v1): no "not measured" tag.
+    expect(screen.queryByText('Clarity · not measured yet')).toBeNull();
     expect(screen.getByText('Its page on glassworks.dev').getAttribute('href')).toBe('https://www.glassworks.dev/frames/google-pixel-tablet');
     expect(screen.getByText('Open setup').getAttribute('href')).toBe('http://192.0.2.10:8099/setup');
     expect(embers()).toEqual(['Open setup']);

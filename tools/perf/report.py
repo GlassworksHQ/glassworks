@@ -13,6 +13,7 @@ grade reads it.
 The report schema (glassworks.perf/4) is documented in docs/perf.md.
 """
 import argparse
+import copy
 import glob
 import json
 import os
@@ -236,10 +237,12 @@ def change_frames(step, period=None):
     return P.frame_stats(xs, period), None
 
 
-# A change with no frame on screen by the window's end, and at least this long before it, counts as
-# late as the window can show: from the change to the window's end (so at least this, past the
-# fluid bar). That is conservative: the change may show later still.
-NO_FRAME_MS = 250
+# A change with no frame on screen by the window's end, and at least this long before it, counts as late as the
+# window can show: from the change to the window's end, a lower bound (the change may show later still). It must
+# never pass a level (CodeRabbit on #656), so its time is at least UNSHOWN_FLOOR_MS: just past the fluid bar. The
+# cutoff stays fluid's 250 ms as it was, so the same changes count as before and a stored report's ranks hold.
+NO_FRAME_MS = max(lv["latency_p95_max_ms"] for lv in G.UPDATE_LEVELS)
+UNSHOWN_FLOOR_MS = NO_FRAME_MS + 0.1
 # SurfaceFlinger's present times and the page's frame times are on clocks tied by the page's log
 # line; allow this much for that and for vsync jitter when finding the first frame that can show it.
 PRESENT_SLACK_MS = 3
@@ -289,7 +292,7 @@ def change_to_screen(step, page, period=None):
         if nxt is not None:
             out.append(round(nxt - m_start, 1))
         elif end is not None and end - m_start >= NO_FRAME_MS:
-            out.append(round(end - m_start, 1))
+            out.append(max(round(end - m_start, 1), UNSHOWN_FLOOR_MS))
         else:
             skipped += 1                  # too close to the window's end to tell
     if not out:
@@ -298,7 +301,9 @@ def change_to_screen(step, page, period=None):
         return None, f"SurfaceFlinger covered only {len(out)} of {len(out) + skipped} changes"
     xs = sorted(out)
     return {"n": len(xs), "median_ms": P.nearest_rank(xs, 0.5), "p95_ms": P.nearest_rank(xs, 0.95),
-            "max_ms": xs[-1], "skipped": skipped}, None
+            "max_ms": xs[-1], "skipped": skipped,
+            # The rule its unshown changes were counted by (Clarity v1): regrade_report trusts a stored p95 with it.
+            "unshown_floor_ms": UNSHOWN_FLOOR_MS}, None
 
 
 def _good_max_gap_ms():
@@ -492,9 +497,9 @@ def scroll_frames(swipes):
 # Pre-release protocol 8 was Clarity v1's release candidate (#205: s1rtc5 ran it on 2026-11-13): the
 # same measurement as v1's protocol 1, before its lines carried `clarity`. Its lines read as v1.
 RC_PROTOCOL = 8
-# The more-info dialogs (#211) came with Clarity v3 (protocol 3): a view of an earlier version that
-# timed out didn't miss them. By the marker, not the number: pre-release protocols reuse 3 to 8.
-DIALOG_CLARITY = 3
+# (protocol, clarity) of the pages that measured what Clarity v1's protocol 1 measures, from before the numbers
+# started again at 1 (2026-11-19): the earlier v3's.
+SAME_AS_V1 = (3, 3)
 
 
 def page_version(page):
@@ -504,6 +509,10 @@ def page_version(page):
     the numbers v1 starts again from."""
     if not page:
         return None, None
+    if (page.get("protocol"), page.get("clarity")) == SAME_AS_V1:
+        # The earlier Clarity v3's pages: protocol 3 measured exactly what protocol 1 measures now. When the
+        # numbers started again (2026-11-19) only the rubric moved, so their runs are v1's (rubric.json _clarity).
+        return 1, 1
     if page.get("clarity") is not None:
         return page.get("protocol"), page["clarity"]
     if page.get("protocol") == RC_PROTOCOL and (page.get("usable") or {}).get("busy_ms") is not None:
@@ -520,9 +529,11 @@ def recorded_clarity(ref):
     return cl[0] if len(cl) == 1 else None
 
 
-def is_current(ref):
-    """Every page of the graded runs ran this rubric's protocol, in this Clarity version (v2 now)."""
-    return bool(ref) and ref.get("protocols") == [G.PROTOCOL_VERSION] and ref.get("clarity") == [G.CLARITY]
+def is_current(ref, measured_on=None):
+    """Every page of the graded runs ran this rubric's protocol, in this Clarity version (v1), and not the first
+    v1's (2026-11-14), which said the same numbers: measured on or after G.CLARITY_SINCE."""
+    return (bool(ref) and ref.get("protocols") == [G.PROTOCOL_VERSION] and ref.get("clarity") == [G.CLARITY]
+            and not G.first_v1(measured_on))
 
 
 def tier_run(tier, entry, presents_ms):
@@ -694,7 +705,10 @@ def timed_out(tier, out, deadline_s):
     if not out.get("updates_run"):
         out.update(updates_run={"timed_out": True}, updates_error=None)
         out["timed_out_tasks"].append("updates")
-    known_older = out.get("clarity") is not None and out["clarity"] < DIALOG_CLARITY or \
+    # The more-info dialogs are part of v1 (#211): a view of another version (the earlier v2, the first v1's
+    # pages, which read as v1 but are re-measure by date anyway) or a pre-release one that timed out didn't miss
+    # them. By the marker, not the number: pre-release protocols reuse the numbers.
+    known_older = out.get("clarity") not in (None, G.CLARITY) or \
         out.get("clarity") is None and out.get("protocol") is not None
     if not out.get("dialog_run") and not known_older:
         # Protocol 3: the view never got to its dialogs (they come last). A view that said nothing
@@ -711,7 +725,7 @@ def timed_out(tier, out, deadline_s):
 def reference_run(c):
     """One graded run: restart (protocol 4: process start to the reference dashboard the kiosk comes
     back to being usable; before it, to engine ready), then each reference dashboard."""
-    base = {"ttid_ms": c.get("ttid_ms"), "launch": c.get("launch"), "own_page_state": c.get("own_page_state"),
+    base = {"run": c.get("run"), "ttid_ms": c.get("ttid_ms"), "launch": c.get("launch"), "own_page_state": c.get("own_page_state"),
             "own_page_loads": c.get("own_page_loads"), "engine_uri": c.get("engine_uri")}
     proc, engine = c.get("proc_mono"), c.get("engine_mono")
     start, start_error = None, None
@@ -1484,24 +1498,13 @@ def coverage_reasons(ref, attempted):
     return out
 
 
-def build(run_dir, apks=(), budgets=None):
-    device = read_json(os.path.join(run_dir, "device.json"))
-    package = device["app"]["package"]
-    files = lambda pat: sorted(glob.glob(os.path.join(run_dir, pat)))  # noqa: E731
-    syn = [synthetic_run(read_jsonl(p)) for p in files("synthetic-*.jsonl")]
-    raw_refs = [read_json(p) for p in files("refstart-*.json")]
-    refs = [reference_run(c) for c in raw_refs]
-    plan = read_json(os.path.join(run_dir, "plan.json")) if os.path.exists(os.path.join(run_dir, "plan.json")) else {}
-    attempted = max(len(refs), plan.get("runs") or 0) if refs or plan.get("runs") else 0
-    cold = [coldstart_run(read_json(p)) for p in files("coldstart-*.json")]
-    idles, ref_idles = {}, {}
-    for p in files("idle-*.json"):
-        i = read_json(p)
-        (ref_idles if i["label"].startswith(REF_LABEL) else idles).setdefault(i["label"], []).append(i)
-    if not isinstance(budgets, dict):
-        # A path (--budgets) or nothing: the frame's own file over the default.
-        budgets = load_budgets(device["frame"], budgets)
-
+def grade_part(device, refs, attempted, fake_log, transport_of, net_of):
+    """The graded part of a report from its graded runs (reference_run's records) and the run's device: the reference
+    summary, the grade with its provisional reasons and headline, and the camera video's path and the test network
+    (transport_of(ref), net_of(ref, transport): from the run's files, or from a stored report). build() and
+    regrade_report() share it, so a report graded again from report.json is the one its raw files would give.
+    -> (graded, grade, transport, net)."""
+    measured_on = device.get("measured_on")
     graded = {"reference": reference_summary(refs) if refs else None}
     tiers, start = grade_inputs(graded)
     grade = G.grade(tiers, start)
@@ -1514,9 +1517,8 @@ def build(run_dir, apks=(), budgets=None):
         # painting (a clock card) is normal and changes nothing.
         reasons.append("the kiosk's own page never finished loading in a graded run (Home Assistant down?)")
     reasons += coverage_reasons(ref, attempted)
-    fake_log = fake_ha_log(os.path.join(run_dir, "fakeha.jsonl"))
     # The fake's log exists since pre-release protocol 4, and in v1.
-    reasons += fake_ha_reasons(fake_log, is_current(ref) or any(isinstance(p, int) and p >= 4 for p in (ref or {}).get("protocols") or []))
+    reasons += fake_ha_reasons(fake_log, is_current(ref, measured_on) or any(isinstance(p, int) and p >= 4 for p in (ref or {}).get("protocols") or []))
     if ref and ref.get("bad_page_lines"):
         reasons.append(f"{ref['bad_page_lines']} page line(s) didn't parse or never arrived whole (cut off in logcat?)")
     if ref and ref.get("lost_scroll_steps"):
@@ -1524,8 +1526,11 @@ def build(run_dir, apks=(), budgets=None):
         reasons.append(f"{ref['lost_scroll_steps']} swipe(s) answered with no scroll step back")
     # Only the graded runs' pages count; a run that failed has none (smoke7 printed "protocol " with
     # nothing after it). A page that didn't say reads as "unknown", as in grade.ts.
-    if ref and ref["protocols"] and not is_current(ref):
-        if None in (ref.get("clarity") or [None]):
+    if ref and ref["protocols"] and not is_current(ref, measured_on):
+        if is_current(ref, G.CLARITY_SINCE):
+            # v1's numbers, from before they started again (2026-11-19): the first v1's (2026-11-14).
+            reasons.append(f"{G.FIRST_V1}: re-measure")
+        elif None in (ref.get("clarity") or [None]):
             # Before v1 (2026-11-14): never graded as v1, whatever its protocol's number.
             reasons.append(f"{G.PRE_RELEASE} (protocol {', '.join(G.protocol_name(p) for p in ref['protocols'])}): re-measure")
         elif recorded_clarity(ref) not in (None, G.CLARITY):
@@ -1534,8 +1539,8 @@ def build(run_dir, apks=(), budgets=None):
         else:
             reasons.append(f"the pages ran protocol {', '.join(G.protocol_name(p) for p in ref['protocols'])}; "
                            f"this rubric is for protocol {G.PROTOCOL_VERSION}")
-    transport = webrtc_transport(run_dir, graded.get("reference"))
-    net = test_network(run_dir, ref, transport)
+    transport = transport_of(ref)
+    net = net_of(ref, transport)
     if net and net["limited"]:
         # The test rig's network, not the frame's (#649): a real Home Assistant sits on a wired or quiet link.
         reasons.append(net["limited"])
@@ -1556,9 +1561,37 @@ def build(run_dir, apks=(), budgets=None):
         grade["provisional_reasons"] = reasons
     name = device.get("frame_name") or device["frame"]
     grade["headline"] = headline(name, grade, graded["reference"])
-    if grade["grade"] and ref and ref["protocols"] and not is_current(ref):
+    if grade["grade"] and ref and ref["protocols"] and not is_current(ref, measured_on):
         # The report still gives the letter (for the record); the site won't, for these pages.
         grade["headline"] += " Re-measure to publish: the site shows no letter for these pages."
+
+    return graded, grade, transport, net
+
+
+def build(run_dir, apks=(), budgets=None):
+    device = read_json(os.path.join(run_dir, "device.json"))
+    package = device["app"]["package"]
+    files = lambda pat: sorted(glob.glob(os.path.join(run_dir, pat)))  # noqa: E731
+    syn = [synthetic_run(read_jsonl(p)) for p in files("synthetic-*.jsonl")]
+    raw_refs = [read_json(p) for p in files("refstart-*.json")]
+    refs = [reference_run(c) for c in raw_refs]
+    plan = read_json(os.path.join(run_dir, "plan.json")) if os.path.exists(os.path.join(run_dir, "plan.json")) else {}
+    attempted = max(len(refs), plan.get("runs") or 0) if refs or plan.get("runs") else 0
+    cold = [coldstart_run(read_json(p)) for p in files("coldstart-*.json")]
+    idles, ref_idles = {}, {}
+    for p in files("idle-*.json"):
+        i = read_json(p)
+        (ref_idles if i["label"].startswith(REF_LABEL) else idles).setdefault(i["label"], []).append(i)
+    if not isinstance(budgets, dict):
+        # A path (--budgets) or nothing: the frame's own file over the default.
+        budgets = load_budgets(device["frame"], budgets)
+
+    fake_log = fake_ha_log(os.path.join(run_dir, "fakeha.jsonl"))
+    graded, grade, transport, net = grade_part(device, refs, attempted, fake_log,
+                                               lambda ref: webrtc_transport(run_dir, ref),
+                                               lambda ref, t: test_network(run_dir, ref, t))
+    ref = graded["reference"]
+    name = device.get("frame_name") or device["frame"]
 
     s = synthetic_summary(syn) if syn else None
     med = lambda x: x and x["median"]  # noqa: E731
@@ -1598,6 +1631,53 @@ def build(run_dir, apks=(), budgets=None):
     }
     rep["notes"] = N.notes(rep)
     return rep
+
+
+def censoring_band(runs):
+    """How many stored views an unshown change could grade differently under this rule. The earlier one counted the
+    same changes (from 250 ms before the window's end) at their own time, so one exactly 250 ms from the end was
+    250.0 and passed fluid; this one makes it 250.1. The counts and the ranks are the same, so only a view whose
+    stored p95 is 250.0 is in doubt, and only if it was stored before this rule (no unshown_floor_ms). report.json
+    keeps latencies, not the changes: the raw files tell."""
+    return sum(1 for r in runs for t in (r.get("tiers") or {}).values()
+               if (t.get("latency") or {}).get("p95_ms") == NO_FRAME_MS and "unshown_floor_ms" not in (t.get("latency") or {}))
+
+
+def regrade_report(rep):
+    """A report.json graded again under this rubric from what it stored, for a run whose raw files are gone (the S1's
+    published report): its graded runs (graded.reference.per_run, reference_run's records as measured) go through
+    grade_part as build()'s do, their pages' versions read again (page_version: the earlier v3's pages are v1's).
+    Everything measured stays as it was; the grade, the graded summary, the version and the notes are this
+    rubric's. The camera video's path and the test network are the stored ones. One thing it can't redo: the
+    censoring of changes no frame showed (NO_FRAME_MS), which report.json keeps only as latencies; a run where that
+    could decide a level is flagged (censoring_band), and only the raw files settle it."""
+    out = copy.deepcopy(rep)
+    old = (out.get("graded") or {}).get("reference") or {}
+    refs = old.get("per_run") or []
+    for r in refs:
+        for t in (r.get("tiers") or {}).values():
+            t["protocol"], t["clarity"] = page_version({"protocol": t.get("protocol"), "clarity": t.get("clarity")})
+    frame = out["frame"]
+    device = dict(frame.get("device") or {}, frame=frame["id"], frame_name=frame.get("name"), app=frame.get("app") or {},
+                  measured_on=out.get("measured_on"))
+    graded, grade, _, _ = grade_part(device, refs, out.get("runs_attempted") or len(refs), out.get("fake_ha"),
+                                     lambda ref: out.get("webrtc_transport"), lambda ref, t: out.get("test_network"))
+    ref = graded["reference"]
+    band = censoring_band(refs)
+    if band:
+        # Stored latencies can't be counted again (the changes aren't in report.json): a 250.0 ms p95 stored before
+        # UNSHOWN_FLOOR_MS may be an unshown change, which now counts as 250.1 (CodeRabbit on #656).
+        grade["provisional"] = True
+        grade.setdefault("provisional_reasons", []).append(
+            f"{band} stored run(s) with a live-update p95 of exactly {NO_FRAME_MS:.1f} ms, measured before unshown "
+            "changes counted past it, may be a change no frame showed: grade it again from the raw files")
+        grade["headline"] = headline(device.get("frame_name") or device["frame"], grade, ref)
+    ref = graded["reference"]
+    out.update(graded=graded, grade=grade,
+               protocol_version=(ref["protocols"][0] if ref and len(ref["protocols"]) == 1 else None),
+               clarity=recorded_clarity(ref))
+    out["notes"] = N.notes(out)
+    return out
 
 
 def webrtc_transport(run_dir, ref):
@@ -1856,7 +1936,7 @@ def dialog_cell(s_, b):
     the level, and how many runs had one that didn't open fully."""
     runs = s_.get("dialog_runs")
     if runs is None:
-        return "n/a (before Clarity v3)"
+        return "n/a (not measured by this version)"
     if not runs:
         return "not measured"
     failed = sum(1 for r in runs if r.get("failed"))
@@ -1909,6 +1989,10 @@ def notes_md(n):
     return " ".join(x for x in [n["good"], n["limits"]] + n["causes"] if x)
 
 
+# The live-update bars, by level (rubric.json update_levels): what report.md says a page is held to.
+UPDATE_MS = {lv["level"]: lv["latency_p95_max_ms"] for lv in G.UPDATE_LEVELS}
+
+
 def markdown(rep):
     g = rep["grade"]
     dev = rep["frame"]["device"]
@@ -1922,12 +2006,11 @@ def markdown(rep):
     if ref:
         out += ["Each page's tasks (median of runs; scroll and live-update levels are the median of each run's level). "
                 "A page is good when scrolling averages at least 50 fps (p95 at most 50 ms), 95% of live changes "
-                "show within 100 ms, taps within 200 ms, the view is drawn within 4 s and its main thread blocks for at "
-                "most 600 ms after that; fluid at 30 fps (scroll p95 at "
-                "most 67 ms) and changes within 200 ms; premium when scrolling and the live changes also hold 60 fps (A+ on heavy). "
-                "Live-update pacing is detail, not graded. Since Clarity v3, HA's more-info dialogs (a light's, a thermostat's "
-                "and a sensor's with its history graph) settle within 1 s for good and 2 s for fluid (the slowest of them, "
-                "from the tile's event), and premium asks their open animation to hold 60 fps.", "",
+                f"show within {UPDATE_MS['good']:.0f} ms, taps within 200 ms, the view is drawn within 4 s and its main thread blocks for at "
+                "most 600 ms after that, and HA's more-info dialogs (a light's, a thermostat's and a sensor's with its history "
+                "graph) settle within 1 s (the slowest of them, from the tile's event); fluid at 30 fps (scroll p95 at "
+                f"most 67 ms), changes within {UPDATE_MS['fluid']:.0f} ms and dialogs within 2 s; premium when scrolling, the live changes "
+                "and the dialogs' open animation also hold 60 fps (A+ on heavy). Live-update pacing is detail, not graded.", "",
                 "| Page | Level | Tap (INP) | Scroll | Live updates | Open the view (drawn) | Blocking after it | Cameras | More-info dialog | Holds it back |",
                 "|---|---|---|---|---|---|---|---|---|---|"]
         for t in G.TIERS:
