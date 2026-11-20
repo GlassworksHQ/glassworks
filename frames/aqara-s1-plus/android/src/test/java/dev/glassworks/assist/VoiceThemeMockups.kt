@@ -58,11 +58,15 @@ class VoiceThemeMockups {
                     "thinking" -> { voice.update(VoiceUi("listening", seq = 1), true); voice.update(VoiceUi("thinking", heard = heard, seq = 2), true) }
                     "speaking" -> { VoiceLevels.ttsPlaying = true; voice.update(VoiceUi("speaking", heard = heard, reply = "Turned off 3 lights in the kitchen.", seq = 1), true) }
                     "error" -> voice.update(VoiceUi("error: Home Assistant is not connected", seq = 1), true)
-                    "done" -> { voice.update(VoiceUi("speaking", heard = heard, reply = "Turned off 3 lights in the kitchen.", seq = 1), true); idle(600); voice.update(VoiceUi("idle", heard = heard, reply = "Turned off 3 lights in the kitchen.", seq = 2), true) }
+                    "done" -> voice.update(VoiceUi("speaking", heard = heard, reply = "Turned off 3 lights in the kitchen.", seq = 1), true)
                 }
                 repeat(3) { Mockup.layout(root, m.widthPixels, m.heightPixels); idle(300) }
                 Thread.sleep(2_000) // the orb's bake runs on a real thread
-                idle(if (state == "done") 500 else 900)
+                if (state == "done") {
+                    // Done holds for 1 s (DONE_HOLD_MS) before it fades: capture it 600 ms in, once the check is drawn.
+                    voice.update(VoiceUi("idle", heard = heard, reply = "Turned off 3 lights in the kitchen.", seq = 2), true)
+                    idle(600)
+                } else idle(900)
                 Mockup.save("voice-$frame-${id.replace('/', '-')}-$state", root, m.widthPixels, m.heightPixels)
                 VoiceLevels.mic = 0f; VoiceLevels.ttsPlaying = false
             }
