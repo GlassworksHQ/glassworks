@@ -2572,6 +2572,27 @@ class Regrade(unittest.TestCase):
         with open(os.path.join(self.dir, "report.json")) as f:
             self.assertEqual(f.read(), before)
 
+    def test_raw_files_that_lost_other_evidence_dont_overwrite_the_report(self):
+        """CodeRabbit on #656: a report built with netcheck.json, transport.json or plan.json keeps what they said; a
+        rebuild without one would replace it with "not measured" (or fewer runs attempted), so it stops."""
+        self.write("netcheck.json", {"gateway": {"sent": 40, "received": 40, "min_ms": 2.3, "median_ms": 3.7, "p95_ms": 68.6,
+                                                 "max_ms": 89.8}, "panel": None, "link": "wifi", "adb_over_network": True,
+                                     "tail_ms": 20, "quiet": False})
+        self.write("plan.json", {"runs": 4})                              # run 4 attempted, failed, left no file
+        p = self.regrade(self.dir)
+        self.assertEqual(p.returncode, 1, p.stdout)                         # provisional on the network: summary refused
+        with open(os.path.join(self.dir, "report.json")) as f:
+            before = f.read()
+        self.assertIsNotNone(json.loads(before)["test_network"]["limited"])
+        for name in ("netcheck.json", "plan.json"):
+            os.rename(os.path.join(self.dir, name), os.path.join(self.dir, name + ".gone"))
+            p = self.regrade(self.dir)
+            self.assertNotEqual(p.returncode, 0)
+            self.assertIn(f"raw files the report.json was built from are gone: {name}", p.stderr)
+            with open(os.path.join(self.dir, "report.json")) as f:
+                self.assertEqual(f.read(), before, name)
+            os.rename(os.path.join(self.dir, name + ".gone"), os.path.join(self.dir, name))
+
     def test_a_published_folder_whose_summary_is_refused_is_left_whole(self):
         """CodeRabbit on #656: a published folder (clarity.json, with its report URL) changes all at once or not at
         all: a refused summary leaves the report and clarity.json as they were."""

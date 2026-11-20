@@ -20,7 +20,8 @@ the summary there was itself published incomplete (complete: false);
 in a run folder the report is written either way and a summary it refuses is removed, so none is left with the
 earlier grade; a published folder (clarity.json) is left as it was, report and summary together, and it says so.
 From the raw files, it stops, writing nothing, unless they are refstart-1 to refstart-N, each the run its name says
-(its own "run"), with every graded run the report.json there names (reports since Clarity v1 do) and no fewer runs.
+(its own "run"), with every graded run the report.json there names (reports since Clarity v1 do) and no fewer runs,
+and still hold the other raw files that report.json was built from (netcheck.json, transport.json, plan.json).
 
   tools/perf/regrade.py <run-dir> [--allow-provisional] [--dry-run]
 
@@ -69,6 +70,17 @@ def regrade(run_dir):
             sys.exit(f"{run_dir}: report.json has {stored} graded runs but only {len(refstarts)} refstart-*.json: "
                      "a rebuild from the raw files would drop the others. Nothing written. Restore the files, or move "
                      "the raw files aside to grade it again from report.json alone.")
+        # What the stored report took from other raw files must still be there: a rebuild without them would put
+        # "not measured" in place of what was (the network's limit, the camera video's path, the runs attempted).
+        lost = [f"{name} (report.json has {key})" for key, name in
+                (("test_network", "netcheck.json"), ("webrtc_transport", "transport.json"))
+                if (old or {}).get(key) and not os.path.exists(os.path.join(run_dir, name))]
+        # Without plan.json the runs attempted are the files there: only fewer than the report counted is a loss.
+        if ((old or {}).get("runs_attempted") or 0) > len(refstarts) and not os.path.exists(os.path.join(run_dir, "plan.json")):
+            lost.append(f"plan.json (report.json has runs_attempted {old['runs_attempted']})")
+        if lost:
+            sys.exit(f"{run_dir}: raw files the report.json was built from are gone: {', '.join(lost)}. Nothing written. "
+                     "Restore them, or move the raw files aside to grade it again from report.json alone.")
         rep = R.build(run_dir)
         if old:
             rep["apk"] = old.get("apk", rep.get("apk"))
