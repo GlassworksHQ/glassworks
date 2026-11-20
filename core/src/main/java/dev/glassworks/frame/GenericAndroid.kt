@@ -51,6 +51,8 @@ class GenericAndroid(
 
     override val hardware = Hardware(deviceFrame?.brand ?: Platform.manufacturer, deviceFrame?.modelName ?: Platform.model, Platform.hardware)
 
+    override val cameraMaxPixels = deviceFrame?.cameraMaxPixels
+
     override val provides: Set<Capability> by lazy { Capability.ofDevice(context.packageManager::hasSystemFeature) }
 
     /**

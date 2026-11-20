@@ -48,6 +48,7 @@ class DeviceFrameTest {
         assertEquals("lululemon", frame.hardware.manufacturer)
         assertEquals("Studio Mirror", frame.hardware.model)
         assertEquals("the mDNS board record names its frame", "lululemon-mirror", frame.board)
+        assertEquals("its camera is capped at 720p (#679)", 1280 * 720, frame.cameraMaxPixels)
     }
 
     @Test fun anotherMsm8916DeviceWithTheSameSystemImageIsNotAMirror() {
@@ -61,6 +62,10 @@ class DeviceFrameTest {
     @Test fun aMirrorBootImageOnAnotherBoardIsNotAMirror() {
         val props = mirror + ("ro.board.platform" to "msm8953")
         assertNull(DeviceFrame.of { props[it].orEmpty() })
+    }
+
+    @Test fun aDeviceWithoutAFrameKeepsTheCamerasOwnLimit() {
+        assertEquals(null, device("Google", "Pixel Tablet").cameraMaxPixels)
     }
 
     @Test fun thePixelTabletKeepsItsOwnName() {
@@ -116,6 +121,7 @@ class DeviceFrameTest {
             assertEquals(frame.id, "device", json.getString("kind"))
             assertEquals(frame.id, json.getString("name"), frame.name)
             assertEquals(frame.id, json.getString("brand"), frame.brand)
+            assertEquals("${frame.id}: camera.maxPixels", json.optJSONObject("camera")?.getInt("maxPixels"), frame.cameraMaxPixels)
         }
     }
 }

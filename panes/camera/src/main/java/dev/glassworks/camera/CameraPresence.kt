@@ -22,10 +22,14 @@ class LumaFrame(val width: Int, val height: Int, val rowStride: Int, val luma: B
 
 /**
  * Where frames go. Called on one thread that isn't the main thread. While the source is open, frames
- * keep coming; if none comes for [CameraPresence.STALE_MS], presence counts the camera as gone.
+ * keep coming; if none comes for [CameraPresence.STALE_MS] (the first one: [CameraPresence.FIRST_FRAME_MS]
+ * after [started]), presence counts the camera as gone.
  */
 interface FrameSink {
     fun frame(frame: LumaFrame)
+
+    /** The camera opened and was asked for frames: the first may take [CameraPresence.FIRST_FRAME_MS]. */
+    fun started() {}
 
     /** The camera stopped delivering (closed by another app, disconnected, an error). No frames follow. */
     fun lost(why: String)
@@ -110,15 +114,21 @@ class CameraPresence(
         private var handle: AutoCloseable? = null
         private var closed = false
         private var lastSeenMs = Long.MIN_VALUE
-        private var lastFrameMs = 0L
+        private val deadline = FrameDeadline()
         private var watching = false
         private var failing = false
 
         /** Starts the silence watchdog before the camera opens: a source that never sends counts as gone too. */
         fun begin() = synchronized(lock) {
-            lastFrameMs = clock()
+            deadline.started(clock())
+            watch()
+        }
+
+        /** Under [lock]: arms the watchdog unless it is armed. */
+        private fun watch() {
+            if (watching) return
             watching = true
-            after(STALE_MS, ::checkStale)
+            after(deadline.nextCheck(clock()), ::checkStale)
         }
 
         /** The camera [open] returned. A [close] that came first closes it at once. */
@@ -130,8 +140,8 @@ class CameraPresence(
         override fun frame(frame: LumaFrame) = synchronized(lock) {
             if (closed) return
             val now = clock()
-            lastFrameMs = now
-            if (!watching) { watching = true; after(STALE_MS, ::checkStale) }
+            deadline.frame(now)
+            watch()
             if (lastSeenMs != Long.MIN_VALUE && now - lastSeenMs < (1000f / fps).toLong()) return
             lastSeenMs = now
             failing = false
@@ -141,6 +151,12 @@ class CameraPresence(
             val near = motion
             val raw = detector.lastChangedFraction.toFloat()
             post { if (isOpen()) onReading(near, raw) }
+        }
+
+        override fun started() = synchronized(lock) {
+            if (closed) return
+            deadline.started(clock())
+            watch()
         }
 
         override fun lost(why: String) = fail("the camera stopped: $why")
@@ -166,13 +182,9 @@ class CameraPresence(
         private fun checkStale() = synchronized(lock) {
             watching = false
             if (closed) return
-            val idle = clock() - lastFrameMs
-            if (idle < STALE_MS) {
-                watching = true
-                after(STALE_MS - idle, ::checkStale)
-                return
-            }
-            failLocked("no frames for ${idle / 1000} s")
+            val now = clock()
+            if (deadline.left(now) > 0) { watch(); return }
+            failLocked(deadline.why(now))
         }
 
         private fun isOpen() = synchronized(lock) { !closed }
@@ -199,6 +211,44 @@ class CameraPresence(
         /** A camera that sends nothing this long counts as gone, so a stuck source can't keep the screen on. */
         const val STALE_MS = 5_000L
 
+        /**
+         * The first frame's grace, from the open (or the start, until the camera says it opened). The Mirror's
+         * LEGACY camera sent nothing for more than 5 s after it opened, then streamed (#674). Twice [STALE_MS]
+         * covers that and still ends a first session that never sends (#599) within 10 s.
+         */
+        const val FIRST_FRAME_MS = 10_000L
+
         const val NO_RANGE = "The camera has no range setting"
+    }
+}
+
+/**
+ * When a camera's next frame is late: [firstMs] after it [started], [silentMs] after each [frame]. Both the hub's
+ * reopen watchdog and presence keep one, so they see the same silence. Not thread-safe: its owner's thread or lock.
+ */
+internal class FrameDeadline(
+    private val firstMs: Long = CameraPresence.FIRST_FRAME_MS,
+    private val silentMs: Long = CameraPresence.STALE_MS,
+) {
+    private var markMs = 0L
+    private var framed = false
+
+    fun started(now: Long) { markMs = now; framed = false }
+
+    fun frame(now: Long) { markMs = now; framed = true }
+
+    /** How long until the frame is late: 0 or less when it is. */
+    fun left(now: Long) = (if (framed) silentMs else firstMs) - (now - markMs)
+
+    /**
+     * When to look again: never later than [silentMs], so a first frame that comes during the grace and is then
+     * followed by silence is still caught [silentMs] after it, not when the grace would have run out.
+     */
+    fun nextCheck(now: Long) = minOf(left(now), silentMs)
+
+    /** The silence, in words, for the log and Home Assistant. */
+    fun why(now: Long): String {
+        val s = (now - markMs) / 1000
+        return if (framed) "no frames for $s s" else "no first frame in $s s"
     }
 }

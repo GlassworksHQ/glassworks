@@ -114,6 +114,35 @@ the memory go, and what can the app or the image give back?
    measurement). Kiln's flash now leaves the same apps out of `system`
    ([image-patch.md](image-patch.md)).
 
+8. **Read why the camera ran at 1080p and encoded in software** (2026-11-20, #679). The root's read-only pull while
+   Home Assistant's ONVIF integration held the stream (2 RTSP clients): two `:tab` kills in 6 min, both at adj 0;
+   free 79 MB, lost RAM 262 MB, kgsl `page_alloc` 122 MB; the camera at 1920×1080; mediaserver encoding with
+   `OMX.google.h264.encoder` though `OMX.qcom.video.encoder.avc` is listed. The app asked for 1280×720
+   (`camera 0 open (front, 1280x720, legacy)`).
+
+   - **The 1080p is the LEGACY shim's preview** (read, AOSP `android-6.0.1_r81`,
+     `core/java/android/hardware/camera2/legacy/RequestThreadManager.java`, `configureOutputs`). The shim sets the
+     Camera1 preview to the smallest preview size with the largest JPEG size's aspect (the sensor's, within 0.01)
+     whose area covers the largest output; with none, the largest preview size. It then scales that preview into
+     each output on the GPU. A 4:3 5 MP sensor with a 16:9 1280×720 output and no 4:3 preview size between
+     921,600 and the largest gives the largest, 1920×1080.
+   - **Camera2 shows every 4:3 preview size** (read, same tag, `LegacyMetadataMapper.mapScalerStreamConfigs`). Its
+     YUV list is the Camera1 preview list with its largest sizes dropped until the largest has the JPEG aspect, so
+     every size of the sensor's shape stays in it, and the largest JPEG size gives that shape.
+   - **So the app reads at a size of the sensor's shape on a LEGACY camera**, up to the frame's cap (`camera.maxPixels`
+     in frame.json; the Mirror's is 1280×720). The preview is then that size: no 1080p buffers and no scaling.
+     Which 4:3 sizes the Mirror lists is **untested**: the app logs the size it opens at.
+   - **The encoder** (read, same tag, `frameworks/av` `ACodec.cpp` `UninitializedState::onAllocateComponent` and
+     `OMXCodec::findMatchingCodecs`). `createEncoderByType` takes the AVC encoders in the codec list's order, with no
+     preference for hardware, and when `allocateNode` fails it logs `Allocating component '…' failed, try next one.`
+     and takes the next. So on the Mirror the qcom encoder either failed to allocate (that line is then in logcat) or
+     is listed after Google's. Which is **untested**. The app now picks by name, hardware first, logs each encoder it
+     tries and why one refuses, and falls back to Android's pick: the Mirror run answers it.
+   - **The camera HAL's logging** is not ours: the app and Kiln's image set no camera debug property (read,
+     `panes/camera`, `frames/lululemon-mirror/installer`).
+   - **Encoding stops when the last viewer leaves** already (`ViewerEncoder`). Home Assistant's two clients kept it
+     running the whole time.
+
 ## Result
 
 | Cut | Where | Expected on the Mirror | How sure |
@@ -127,6 +156,7 @@ the memory go, and what can the app or the image give back?
 | lowmemorykiller limits | image | not changed. Lowering adj 0's 72 MB would let the page live longer but evict the file cache that libxul runs from, so the panel thrashes instead | Untested, judgement |
 | zram size | image | not changed: 512 MB with 167 MB used is not the limit; the limit is free plus file cache | Read |
 | Camera | app | unknown; its buffers sit in Lost RAM. The HAL delivered 30 frames a second (frame 17,211 after about 9.5 min) though presence asks for 5 | Read (logcat); panel plan step E measures it |
+| Camera at the sensor's shape, capped at 720p; hardware encoder first | app (#679) | no 1080p preview buffers and no GPU scaling; a hardware encoder if it takes the surface | Read (AOSP 6.0.1); Mirror untested |
 
 A killed page reloads by itself: `MainActivity.onContentGone` restarts the session and loads the dashboard, so a
 `:tab` kill shows as a reload, not a crash. Only a main-process kill restarts the app.

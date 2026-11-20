@@ -18,6 +18,8 @@ class DeviceFrame(
     private val mark: (prop: (String) -> String) -> Boolean,
     /** The frame's own release line (#139) on a device with these system properties, or null when it has none. */
     val release: (prop: (String) -> String) -> FrameRelease? = { null },
+    /** frame.json's `camera.maxPixels` ([Frame.cameraMaxPixels]), or null when it sets none. */
+    val cameraMaxPixels: Int? = null,
 ) {
     /**
      * frame.json's `name`: [brand], a space, then [modelName], the product's model as Home Assistant's device info gives
@@ -40,6 +42,8 @@ class DeviceFrame(
             release = { prop ->
                 FrameRelease("lululemon-mirror", FrameRelease.stamp("lululemon-mirror", prop), GLASS_PANES[prop("ro.build.fingerprint")], MIRROR_INSTALL)
             },
+            // 720p: about 950 MB of RAM, and the page's process was killed while the camera ran at 1080p (#679).
+            cameraMaxPixels = 1280 * 720,
         )
 
         /**

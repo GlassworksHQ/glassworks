@@ -42,12 +42,15 @@ import java.util.concurrent.TimeUnit
  * presence at about the rate it asked for; the rest are dropped without a copy.
  *
  * A session that sends no frame for [SILENT_MS] is closed and the camera opened again ([ReopenBackoff]): a
- * LEGACY camera's first session can start and never deliver (the Mirror, 2026-11-19, #599).
+ * LEGACY camera's first session can start and never deliver (the Mirror, 2026-11-19, #599). The first frame of a
+ * session gets [FIRST_FRAME_MS]: the same camera can also take more than 5 s to start (#674).
  */
 class CameraHub(
     context: Context,
     private val width: Int = WIDTH,
     private val height: Int = HEIGHT,
+    /** The frame's cap on the camera's and the stream's size, in pixels ([dev.glassworks.frame.Frame.cameraMaxPixels]). */
+    private val maxPixels: Int = MAX_PIXELS,
     private val log: (String) -> Unit = { Log.i(TAG, it) },
 ) : FrameSource, StillCamera, EncoderInput, CameraFacts {
     private val app = context.applicationContext
@@ -88,8 +91,8 @@ class CameraHub(
     private var openFit: StreamFit = StreamFit.Refused(SIZES_UNREADABLE)
     /** The camera the hub opens or holds open, for [availability]. */
     private var openId: String? = null
-    /** When the reader last had an image, or the session's requests started: the silence watchdog's mark. */
-    private var lastImageMs = 0L
+    /** When the session's next image is late: the silence watchdog's clock, started with its requests. */
+    private val deadline = FrameDeadline()
     private val reopen = ReopenBackoff()
     /** A silent camera isn't opened again before this ([ReopenBackoff]). */
     private var reopenAt = 0L
@@ -271,9 +274,21 @@ class CameraHub(
     private fun read(id: String?): Sizes {
         if (id == null) return Sizes(width to height, StreamFit.Refused(NO_CAMERA))
         return sizes.read(id) {
-            val map = manager.getCameraCharacteristics(id).get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
-            val reader = yuvSizeFor(map?.getOutputSizes(ImageFormat.YUV_420_888)?.map { it.width to it.height }, width to height)
-            Sizes(reader, streamFitFor(reader, map?.getOutputSizes(MediaCodec::class.java)?.map { it.width to it.height }, H264Encoder::encodes))
+            val c = manager.getCameraCharacteristics(id)
+            val map = c.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+            // On a LEGACY camera the largest JPEG size has the sensor's shape, as the shim assumes.
+            val sensor = if (c.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL) != CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LEGACY) null
+                else map?.getOutputSizes(ImageFormat.JPEG)?.maxByOrNull { it.width.toLong() * it.height }?.let { it.width to it.height }
+            val yuv = map?.getOutputSizes(ImageFormat.YUV_420_888)?.map { it.width to it.height }
+            val surfaces = map?.getOutputSizes(MediaCodec::class.java)?.map { it.width to it.height }
+            val reader = yuvSizeFor(yuv, width to height, maxPixels, sensor) { streamFitFor(it, surfaces, H264Encoder::encodes) is StreamFit.Size }
+            if (sensor != null) {
+                log("camera: LEGACY, sensor ${sensor.first}x${sensor.second}, YUV ${yuv?.joinToString { "${it.first}x${it.second}" }}")
+                // No reader size bounds the shim's preview then: it takes the smallest sensor-shaped size that covers
+                // the reader, which is already the smallest there is, or with none its largest preview size.
+                if (!legacyAspect(reader, sensor)) log("camera: no size of the sensor's shape up to $maxPixels px; the preview may run larger than ${reader.first}x${reader.second}")
+            }
+            Sizes(reader, streamFitFor(reader, surfaces, H264Encoder::encodes))
         }
     }
 
@@ -359,8 +374,9 @@ class CameraHub(
                             else presenceRange?.let { set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
                         }
                         s.setRepeatingRequest(req.build(), null, handler)
-                        lastImageMs = SystemClock.elapsedRealtime()
-                        watchSilence(gen, SILENT_MS)
+                        deadline.started(SystemClock.elapsedRealtime())
+                        sinks.forEach { it.sink.started() }
+                        watchSilence(gen, deadline.nextCheck(SystemClock.elapsedRealtime()))
                     } catch (e: Exception) {
                         fail("camera session failed: ${e.javaClass.simpleName}")
                     }
@@ -382,7 +398,7 @@ class CameraHub(
         val image = try { r.acquireLatestImage() } catch (e: IllegalStateException) { null } ?: return
         try {
             val now = SystemClock.elapsedRealtime()
-            lastImageMs = now
+            deadline.frame(now)
             reopen.reset()
             val due = sinks.filter { now - it.lastMs >= (1000f / it.fps).toLong() }
             if (due.isNotEmpty()) {
@@ -428,17 +444,21 @@ class CameraHub(
     }
 
     /**
-     * Checks session [gen] for silence in [delayMs]: no image for [SILENT_MS] closes the camera and opens it again,
-     * at once the first time and later after each silence that follows ([ReopenBackoff]). Presence reports the
-     * silence on its own ([CameraPresence.STALE_MS]); this is what ends it.
+     * Checks session [gen] for silence in [delayMs]: no first image for [FIRST_FRAME_MS], or no image for [SILENT_MS]
+     * after one, closes the camera and opens it again, at once the first time and later after each silence that
+     * follows ([ReopenBackoff]). The sinks hear of it ([FrameSink.lost]) first; this is what ends it.
      */
     private fun watchSilence(gen: Int, delayMs: Long) {
         handler.postDelayed({
             if (gen != generation || session == null || released) return@postDelayed
-            val idle = SystemClock.elapsedRealtime() - lastImageMs
-            if (idle < SILENT_MS) { watchSilence(gen, SILENT_MS - idle); return@postDelayed }
+            val now = SystemClock.elapsedRealtime()
+            val left = deadline.left(now)
+            if (left > 0) { watchSilence(gen, deadline.nextCheck(now)); return@postDelayed }
+            val why = deadline.why(now)
             val wait = reopen.silence()
-            log("camera: reopen ${reopen.attempt} ${if (wait == 0L) "now" else "in ${wait / 1000} s"} (no frames for ${idle / 1000} s)")
+            log("camera: reopen ${reopen.attempt} ${if (wait == 0L) "now" else "in ${wait / 1000} s"} ($why)")
+            // Before the reopen's started() gives presence a new grace, so the silence is reported, not skipped.
+            sinks.forEach { it.sink.lost(why) }
             closeCamera()
             reopenAt = SystemClock.elapsedRealtime() + wait
             handler.postDelayed(::settle, wait)
@@ -487,12 +507,16 @@ class CameraHub(
         /** Enough for a still people recognise and an H.264 stream; presence reads a sparse 48x27 grid of it. */
         const val WIDTH = 1280
         const val HEIGHT = 720
+        /** The most a camera runs at on a frame that sets no cap of its own: 1080p. */
+        const val MAX_PIXELS = 1920 * 1080
         const val JPEG_QUALITY = 85
         const val STILL_WAIT_MS = 2_000L
         const val LINGER_MS = 10_000L
         const val RETRY_MS = 5_000L
         /** A session that sends no frame this long is reopened: [CameraPresence.STALE_MS], so both see one silence. */
         const val SILENT_MS = CameraPresence.STALE_MS
+        /** A session's first frame may take this long: [CameraPresence.FIRST_FRAME_MS], for the same reason. */
+        const val FIRST_FRAME_MS = CameraPresence.FIRST_FRAME_MS
         const val DETACH_WAIT_MS = 1_000L
         const val SIZES_UNREADABLE = "The panel couldn't read the camera's sizes"
         const val NO_CAMERA = "The panel has no camera now"
