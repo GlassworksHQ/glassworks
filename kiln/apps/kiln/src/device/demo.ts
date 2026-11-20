@@ -4,6 +4,7 @@
 // channel and Improv, wizard/demo.ts). Nothing here taps the device.
 import type { DeviceEntry } from '@glassworks/kiln-core';
 import type { PanelShell } from '@glassworks/adb';
+import { IMPROV_SOCKET } from '@glassworks/app-adb';
 import { SETUP_SOCKET } from '@glassworks/setup-channel';
 import { fakeReleaseRoute } from '../release/demo';
 import { withAppStreams } from '../wizard/demo';
@@ -14,15 +15,19 @@ import { AppSession, releaseLine } from './appSession';
 export const APP_DEMOS = ['run', 'pick', 'pick-release', 'pick-wrong', 'checks', 'checks-fail', 'installing', 'setup', 'setup-wifi', 'setup-ha', 'setup-panes', 'setup-panes-refused', 'setup-error', 'done', 'done-unconfirmed', 'undo-done', 'undo-pending', 'error'] as const;
 export type AppDemo = (typeof APP_DEMOS)[number];
 
-/** A device whose app stops answering on its setup channel once `cut()` (the open channel too). */
-export function cuttable(p: PanelShell): { shell: PanelShell; cut(): void } {
+/**
+ * A device whose app stops answering on its sockets (the setup channel and Improv, the open ones too) once `cut()`, until
+ * `heal()`: the app came back, so Try again can get through.
+ */
+export function cuttable(p: PanelShell): { shell: PanelShell; cut(): void; heal(): void } {
   let cut = false;
   return {
     cut: () => { cut = true; },
+    heal: () => { cut = false; },
     shell: {
       ...p,
       openStream: async (svc) => {
-        if (svc !== SETUP_SOCKET) return p.openStream!(svc);
+        if (svc !== SETUP_SOCKET && svc !== IMPROV_SOCKET) return p.openStream!(svc);
         if (cut) throw new Error('closed');
         const io = await p.openStream!(svc);
         return { onData: (cb) => io.onData(cb), close: () => io.close(), write: (d) => (cut ? Promise.reject(new Error('closed')) : io.write(d)) };
@@ -42,7 +47,7 @@ export async function appDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim'>
     ? { cards: sim.panes ?? [], refuse: name === 'setup-panes-refused' ? 'Voice couldn\'t open the microphone. Try again, or leave Voice off.' : undefined }
     : undefined;
   const streams = withAppStreams(await sim.appDevice(name, { fast }), { online: name !== 'setup-wifi', radio: false, panes });
-  // setup-error: the app stops answering on its setup channel after Home Assistant's step
+  // setup-error: the app stops answering on its sockets after the App step (below)
   const cutting = cuttable(streams);
   const device = name === 'setup-error' ? cutting.shell : streams;
   const release = name === 'pick-release' ? { release: fakeReleaseRoute('out', sim.apk(), (ms) => new Promise((r) => setTimeout(r, fast ? 0 : ms)), releaseLine(frame).line) } : {};
@@ -59,7 +64,14 @@ export async function appDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim'>
   if (name === 'undo-pending') { await s.undo(); await s.again(); return s; }
   await s.install();
   if (s.state.screen === 'error') return s; // error: the install stopped
-  if (name === 'setup-error') { await standardDemo(standard, 'home-assistant'); cutting.cut(); await standard?.skipHa(''); return s; }
+  // setup-error: the app stops answering after the App step, so Wi-Fi can't reach it ("Couldn't reach Glassworks", Try
+  // again). It is back once that shows, so Try again goes through (test/mirror-set-up)
+  if (name === 'setup-error' && standard) {
+    cutting.cut();
+    await standard.installApp({ clock24: true, keyboard: false });
+    cutting.heal();
+    return s;
+  }
   await standardDemo(standard, name === 'setup' ? 'app' : name === 'setup-wifi' ? 'wifi' : name === 'setup-ha' ? 'home-assistant' : panes ? 'panes' : 'done');
   return s;
 }

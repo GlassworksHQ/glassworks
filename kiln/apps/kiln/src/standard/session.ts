@@ -197,10 +197,7 @@ export class StandardSession implements SetupSteps, WifiSteps {
   /** Connects to an installed, running device over adb; asks for a click if this browser hasn't been allowed. */
   async connectPanel(): Promise<boolean> {
     // Try again from an error: a device that went away (unplugged, restarted) is connected again, not used dead
-    if (this.panel && this.s.screen === 'error') {
-      const alive = await this.panel.run('true', this.lid(5000)).then(() => true, () => false);
-      if (!alive) { this.setUp.close(); void (this.panel as { close?: () => Promise<void> }).close?.().catch(() => {}); this.panel = undefined; }
-    }
+    if (this.panel && this.s.screen === 'error' && !(await this.alive())) this.dropPanel();
     if (this.panel) return true;
     this.began = true;
     this.dispatch({ type: 'go', screen: 'setup', flow: 'install' });
@@ -313,7 +310,26 @@ export class StandardSession implements SetupSteps, WifiSteps {
   /** The device has a touchscreen: the steps offer "do it on the panel" only then. */
   get touch(): boolean { return this.standard.touch; }
   /** The Wi-Fi step. A device already on Wi-Fi says so first, with changing it as the other way. */
-  wifi(): Promise<void> { return this.setUp.wifi(); }
+  async wifi(): Promise<void> {
+    // Try again after the app couldn't be reached: a device that went off USB is connected again first, so a frame with
+    // no touch (nothing to do on it) always has a way on from Kiln
+    const s = this.s.setup;
+    if (this.panel && s.phase === 'wifi' && s.unreachable && !(await this.alive())) this.dropPanel();
+    if (!this.panel && !(await this.connectPanel())) return;
+    return this.setUp.wifi();
+  }
+
+  /** Whether the device still answers over adb (one bounded read). */
+  private alive(): Promise<boolean> {
+    return this.panel!.run('true', this.lid(5000)).then(() => true, () => false);
+  }
+
+  /** Lets go of a device that went away: set-up's channels and the adb connection, so the next connect opens it fresh. */
+  private dropPanel(): void {
+    this.setUp.close();
+    void (this.panel as { close?: () => Promise<void> } | undefined)?.close?.().catch(() => {});
+    this.panel = undefined;
+  }
   scanWifi(): Promise<void> { return this.setUp.scanWifi(); }
   joinWifi(ssid: string, psk: string): Promise<void> { return this.setUp.joinWifi(ssid, psk); }
   get haAddress(): string | undefined { return this.setUp.haAddress; }

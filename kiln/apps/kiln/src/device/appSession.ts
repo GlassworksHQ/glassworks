@@ -206,15 +206,27 @@ export class AppSession {
    */
   private check(): Promise<void> {
     const op = this.ops;
-    this.checking ??= (async () => {
-      try {
-        const report = await this.d.frame.appFlow.check(this.panel!);
-        if (op === this.ops) this.set({ screen: 'checks', report, error: undefined, result: undefined, phases: [] });
-      } finally {
-        this.checking = undefined;
-      }
-    })();
-    return this.checking;
+    const panel = this.panel;
+    // a read shared with repeated clicks is the read of one device: a device connected since gets a read of its own
+    if (this.checking && this.checkingOn === panel) return this.checking;
+    const read: Promise<void> = (async () => {
+      if (!panel) throw new Error('no device connected');
+      const report = await this.d.frame.appFlow.check(panel);
+      if (op === this.ops && this.panel === panel) this.set({ screen: 'checks', report, error: undefined, result: undefined, phases: [] });
+    })().finally(() => { if (this.checking === read) { this.checking = undefined; this.checkingOn = undefined; } });
+    this.checking = read;
+    this.checkingOn = panel;
+    return read;
+  }
+
+  /** The device `checking` reads. */
+  private checkingOn?: PanelShell;
+
+  /** Lets go of the device: its adb connection and its USB claim (Panel.close), so Connect can open it again. */
+  private drop(): void {
+    const gone = this.panel as (PanelShell & { close?(): Promise<void> }) | undefined;
+    this.panel = undefined;
+    void gone?.close?.().catch(() => {});
   }
 
   /** Why Install can't start, or undefined when it can. */
@@ -270,7 +282,7 @@ export class AppSession {
     const op = this.ops;
     try { await this.check(); } catch (e) {
       if (op !== this.ops) return; // an install or undo started meanwhile: it owns the screen now
-      this.panel = undefined;
+      this.drop();
       this.set({ screen: 'pick', report: undefined, flow: undefined, result: undefined, error: undefined, phases: [],
         connectError: `${cap(this.d.frame.the)} went away: ${(e as Error).message}. Connect again.` });
     }

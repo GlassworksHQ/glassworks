@@ -75,3 +75,25 @@ describe('the App step on an app already on', () => {
     expect(s.store.state.setup).toMatchObject({ phase: 'settings', error: 'the panel did not answer in time' });
   });
 });
+
+describe('Wi-Fi on a device that went off USB', () => {
+  it('Try again connects to it again, then asks which Wi-Fi: a frame without touch always has a way on', async () => {
+    const close = vi.fn(async () => {});
+    // unplugged: every command and stream fails
+    const gone: PanelShell & { close(): Promise<void> } = { run: async () => { throw new Error('transferOut: the device was disconnected'); }, push: async () => {}, openStream: async () => { throw new Error('closed'); }, close };
+    const back = mirror();
+    let known: PanelShell = gone;
+    const s = new StandardSession({
+      standard: { ...standardOfDevice(mirrorFrame), steps: ['wifi', 'home-assistant'] as StandardFrame['steps'] },
+      devices: { knownAdb: async () => known, requestAdb: async () => known },
+      loadKey: async () => ({ publicKey: 'QAAA kiln@test' }) as never, sleep: async () => {}, simulated: true,
+    });
+    await s.handOver(gone);
+    expect(s.store.state.setup).toMatchObject({ phase: 'wifi', unreachable: true });
+    known = back; // plugged in again: the browser has it
+    await s.click('wifi', () => s.wifi()); // the step's Try again
+    expect(close).toHaveBeenCalled();
+    expect(s.store.state.setup).toMatchObject({ phase: 'wifi' });
+    expect((s.store.state.setup as { unreachable?: boolean }).unreachable).toBeFalsy();
+  });
+});

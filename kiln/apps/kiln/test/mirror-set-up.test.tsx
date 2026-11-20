@@ -172,3 +172,18 @@ describe('the standard flow after the app alone', () => {
     expect(installs()).toBe(1);
   });
 });
+
+describe('the setup-error demo', () => {
+  it('Wi-Fi can\'t reach the app, and its Try again recovers once the app is back: no tap on the Mirror needed', async () => {
+    const h = handTo();
+    await appDemo(mirrorEntry, 'setup-error', true, h.handOver);
+    const ss = h.standard();
+    expect(ss.store.state.setup).toMatchObject({ phase: 'wifi', unreachable: true });
+    show(ss, APP);
+    expect(screen.getByText(/Couldn't reach Glassworks on the panel\. Try again\./)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    await settle();
+    expect((ss.store.state.setup as { unreachable?: boolean }).unreachable).toBeFalsy();
+    expect(ss.store.state.setup.phase).toBe('wifi');
+  });
+});
