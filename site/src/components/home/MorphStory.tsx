@@ -16,8 +16,8 @@ import s from "./MorphStory.module.css";
  *   Beat 0: Aqara S1 Plus Wall Switch (right) — Clean unobstructed HA dashboard
  *   Beat 1: Google Pixel Tablet (left) — REAL Assist Voice Orb (OrbArt.kt + VoiceOverlay.kt)
  *   Beat 2: Wall Switch Landscape (right) — REAL Top-Right Notification Card (NotificationOverlay.kt)
- *   Beat 3: lululemon Studio Mirror (left) — REAL TimerDock + RingView (TimerDock.kt + RingView.kt)
- *   Beat 4: Wide Kitchen / Bedside Display (right) — Sendspin + Radios + 3 dashed light lines
+ *   Beat 3: lululemon Studio Mirror (left) — Presence Detection collapse to side pill + reflective glass
+ *   Beat 4: Wide Kitchen / Bedside Display (right) — REAL TimerDock + RingView + Sendspin + 3 light lines
  *   Beat 5: Compact Square 4" Switch (center) — Solo HA Thermostat + Round/Bedside ghost silhouettes
  */
 
@@ -166,8 +166,8 @@ const BEAT_DOTS = [
   { idx: 0, label: "Wall switch dashboard", targetP: 0.03 },
   { idx: 1, label: "Local Assist voice orb", targetP: 0.22 },
   { idx: 2, label: "Rich notifications", targetP: 0.4 },
-  { idx: 3, label: "Studio mirror voice timers", targetP: 0.58 },
-  { idx: 4, label: "Native ESPHome, Sendspin and radios", targetP: 0.76 },
+  { idx: 3, label: "Studio mirror presence detection", targetP: 0.58 },
+  { idx: 4, label: "Kitchen timers, Sendspin, and radios", targetP: 0.76 },
   { idx: 5, label: "Square, round, and future shapes", targetP: 0.96 },
 ] as const;
 
@@ -257,6 +257,7 @@ export function MorphStory({
 
   const [p, setP] = useState(0);
   const [compact, setCompact] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(false);
   const [futureShape, setFutureShape] = useState<"square" | "round" | "bedside">("square");
   const [clickMorph, setClickMorph] = useState(false);
 
@@ -273,14 +274,22 @@ export function MorphStory({
   // Beat 2: Real NotificationOverlay card dismissed/collapsed state
   const [notifDismissed, setNotifDismissed] = useState(false);
 
-  // Beat 3: Real TimerDock + RingView live countdown (Pasta 4:12)
+  // Beat 3: Studio Mirror live presence collapse (Room clear <-> Presence detected side pill)
+  const [mirrorPresent, setMirrorPresent] = useState(false);
+  const [presencePulseKey, setPresencePulseKey] = useState(0);
+
+  // Beat 4: Real TimerDock + RingView live countdown (Pasta 4:12)
   const [timerSec, setTimerSec] = useState(252);
   const [timerPaused, setTimerPaused] = useState(false);
 
   useEffect(() => {
     const mqNarrow = window.matchMedia("(max-width: 900px)");
     const mqReduce = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const syncCompact = () => setCompact(mqNarrow.matches || mqReduce.matches);
+    const syncCompact = () => {
+      setCompact(mqNarrow.matches || mqReduce.matches);
+      setReducedMotion(mqReduce.matches);
+      if (mqReduce.matches) setMirrorPresent(true);
+    };
     syncCompact();
     mqNarrow.addEventListener("change", syncCompact);
     mqReduce.addEventListener("change", syncCompact);
@@ -336,21 +345,44 @@ export function MorphStory({
   // Individual feature overlay opacities (ONE feature per beat, never stacked!)
   const assistO = compact ? 1 : windowO(seg, 1, 0.22, 0.56);
   const notifO = compact ? 1 : windowO(seg, 2, 0.22, 0.56);
-  const timerO = compact ? 1 : windowO(seg, 3, 0.22, 0.56);
+  const mirrorPresenceO = compact ? 1 : windowO(seg, 3, 0.24, 0.58);
+  const timerO = compact ? 1 : windowO(seg, 4, 0.22, 0.56);
   const raysO = compact ? 1 : windowO(seg, 4, 0.22, 0.54);
 
   // Auto-cycle Assist Orb states cleanly while Beat 1 is on screen
   const assistVisible = compact || assistO > 0.15;
   useEffect(() => {
-    if (!assistVisible) return;
+    if (!assistVisible || reducedMotion) return;
     const ms = assistPhase === "thinking" ? 2600 : assistPhase === "speaking" ? 2800 : 1800;
     const id = window.setTimeout(() => {
       setAssistPhase((prev) => (prev === "thinking" ? "speaking" : prev === "speaking" ? "done" : "thinking"));
     }, ms);
     return () => window.clearTimeout(id);
-  }, [assistVisible, assistPhase]);
+  }, [assistVisible, assistPhase, reducedMotion]);
 
-  // Tick real TimerDock RingView live while Beat 3 is on screen
+  // Beat 3: Auto-cycle Studio Mirror presence detection every ~3.4s (click toggles immediately)
+  const mirrorPresenceVisible = compact || mirrorPresenceO > 0.35;
+  useEffect(() => {
+    if (!mirrorPresenceVisible || reducedMotion) return;
+    const id = window.setTimeout(() => {
+      setMirrorPresent((prev) => {
+        const next = !prev;
+        if (next) setPresencePulseKey((k) => k + 1);
+        return next;
+      });
+    }, 3400);
+    return () => window.clearTimeout(id);
+  }, [mirrorPresenceVisible, mirrorPresent, reducedMotion]);
+
+  const toggleMirrorPresence = () => {
+    setMirrorPresent((prev) => {
+      const next = !prev;
+      if (next) setPresencePulseKey((k) => k + 1);
+      return next;
+    });
+  };
+
+  // Beat 4: Tick real TimerDock RingView live while Kitchen Display is on screen
   const timerVisible = compact || timerO > 0.15;
   useEffect(() => {
     if (!timerVisible || timerPaused) return;
@@ -439,12 +471,12 @@ export function MorphStory({
    * ONE live, responsive Home Assistant Lovelace Sections dashboard powered by
    * CSS Grid + @container size queries so actual HA cards reflow as the glass morphs.
    */
-  const renderLiveLovelace = (shape: ShapeId, highlightSendspin = false) => {
+  const renderLiveLovelace = (shape: ShapeId, highlightSendspin = false, collapsed = false) => {
     const isRound = shape === "round";
     const isSolo = shape === "square" || shape === "round";
     return (
       <div
-        className={s.haRoot}
+        className={`${s.haRoot} ${collapsed ? s.haRootCollapsed : ""}`}
         data-shape={shape}
         data-solo={isSolo || undefined}
         data-round={isRound || undefined}
@@ -872,7 +904,70 @@ export function MorphStory({
   };
 
   /*
-   * Beat 3 — REAL Bottom-Right TimerDock + RingView ALONE (TimerDock.kt + RingView.kt)
+   * Beat 3 — Studio Mirror Presence Collapse:
+   *   - Deep reflective mirror glass layer fades in across 90%+ of the 40" screen
+   *   - Subtle top-rim presence micro-chip (`binary_sensor.presence: detected`)
+   *   - Sleek ~36px frosted vertical side pill docked along the right inner edge
+   *   - Clicking anywhere on the mirror toggles Room clear <-> Presence detected
+   */
+  const renderMirrorPresenceOverlay = (opacity: number) => {
+    if (opacity <= 0.01) return null;
+    const active = mirrorPresent;
+
+    return (
+      <div
+        className={s.presenceLayer}
+        style={{
+          opacity,
+          pointerEvents: opacity > 0.45 ? "auto" : "none",
+        }}
+        onClick={toggleMirrorPresence}
+        role="button"
+        tabIndex={opacity > 0.45 ? 0 : -1}
+        aria-pressed={active}
+        aria-label={
+          active
+            ? "Presence detected — dashboard collapsed to side pill. Tap to show full dashboard."
+            : "Room clear — full mirror dashboard visible. Tap to simulate presence detection."
+        }
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            toggleMirrorPresence();
+          }
+        }}
+      >
+        {/* Pure deep reflective mirror glass + diagonal architectural sheen when presence collapses dashboard */}
+        <div className={`${s.mirrorReflectGlass} ${active ? s.mirrorReflectGlassOn : ""}`} aria-hidden="true" />
+
+        {/* Subtle monospace presence micro-chip at the top rim */}
+        <div className={`${s.presenceChip} ${active ? s.presenceChipDetected : ""}`}>
+          <span className={`${s.presenceDot} ${active ? s.presenceDotLit : ""}`} aria-hidden="true" />
+          <span>{active ? "binary_sensor.presence: detected" : "binary_sensor.presence: clear"}</span>
+        </div>
+
+        {/* Sleek ~36px frosted vertical side pill docked on the right inner edge */}
+        <div className={`${s.mirrorSidePill} ${active ? s.mirrorSidePillOn : ""}`} aria-hidden={!active}>
+          <span className={s.sidePillTime}>
+            <span>07</span>
+            <span>15</span>
+          </span>
+          <span className={s.sidePillSep} aria-hidden="true" />
+          <span className={s.sidePillTemp}>64°</span>
+          <span
+            className={`${s.sidePillLight} ${activeLightsCount > 0 ? s.sidePillLightOn : ""}`}
+            aria-hidden="true"
+          />
+          <span className={s.sidePillExpand} aria-hidden="true">
+            ‹
+          </span>
+        </div>
+      </div>
+    );
+  };
+
+  /*
+   * Beat 4 — REAL Bottom-Right TimerDock + RingView ALONE (TimerDock.kt + RingView.kt)
    */
   const renderRealTimerOverlay = (opacity: number) => {
     if (opacity <= 0.01) return null;
@@ -929,11 +1024,12 @@ export function MorphStory({
   if (compact) {
     const renderCompactFrame = (
       shape: ShapeId,
-      overlay?: "voice" | "notif" | "timer" | "sendspin",
+      overlay?: "voice" | "notif" | "mirror-presence" | "kitchen-timer",
       interactiveSmooth?: boolean,
     ) => {
       const d = MOBILE_SHAPES[shape];
       const isMirror = shape === "mirror";
+      const isMirrorCollapsed = overlay === "mirror-presence" && mirrorPresent;
       return (
         <div className={s.compactStage}>
           <div className={s.mirrorAssembly}>
@@ -946,10 +1042,18 @@ export function MorphStory({
               }}
             >
               {isMirror && <div className={s.mirrorBodySurface} aria-hidden="true" />}
+              {isMirror && (
+                <div className={s.mirrorSensor} aria-hidden="true">
+                  <span className={`${s.sensorLens} ${mirrorPresent ? s.sensorLensLit : ""}`} />
+                  {mirrorPresent && (
+                    <span key={`m-${presencePulseKey}`} className={s.sensorPulse} />
+                  )}
+                </div>
+              )}
               <div
                 className={s.glare}
                 aria-hidden="true"
-                style={{ ["--glare-a" as string]: isMirror ? "0.21" : "0.11" }}
+                style={{ ["--glare-a" as string]: isMirror ? (mirrorPresent ? "0.28" : "0.2") : "0.11" }}
               />
               <div
                 className={`${s.screen} ${interactiveSmooth ? s.morphSmooth : ""}`}
@@ -963,10 +1067,11 @@ export function MorphStory({
                 }}
               >
                 <div className={s.screenInner}>
-                  {renderLiveLovelace(shape, overlay === "sendspin")}
+                  {renderLiveLovelace(shape, overlay === "kitchen-timer", isMirrorCollapsed)}
                   {overlay === "voice" && renderRealVoiceOverlay(1)}
                   {overlay === "notif" && renderRealNotificationOverlay(1)}
-                  {overlay === "timer" && renderRealTimerOverlay(1)}
+                  {overlay === "mirror-presence" && renderMirrorPresenceOverlay(1)}
+                  {overlay === "kitchen-timer" && renderRealTimerOverlay(1)}
                 </div>
               </div>
             </div>
@@ -1049,13 +1154,13 @@ export function MorphStory({
           {renderCompactFrame("wall", "notif")}
         </div>
 
-        {/* Beat 3: Studio Mirror + Real TimerDock RingView */}
+        {/* Beat 3: Studio Mirror + Presence Detection Collapse */}
         <div className={s.compactBeat}>
           <div className={s.compactCopy}>
-            <span className={s.eyebrow}>VOICE TIMERS</span>
-            <h2 className={s.h2}>Timers you can see from across the room.</h2>
+            <span className={s.eyebrow}>PRESENCE DETECTION</span>
+            <h2 className={s.h2}>A mirror that gets out of your way.</h2>
             <p className={s.lede}>
-              Start a timer by voice and watch it count down over your dashboard, with a chime when it finishes — even behind a 40-inch mirror.
+              Walk up and Glassworks senses you — without being fooled by a room light switch — so Home Assistant can tuck your dashboard into a slim side pill and leave you a real mirror.
             </p>
             <div className={s.ctas}>
               <Link href="/frames/lululemon-mirror" className={s.quietLink}>
@@ -1063,19 +1168,19 @@ export function MorphStory({
               </Link>
             </div>
           </div>
-          {renderCompactFrame("mirror", "timer")}
+          {renderCompactFrame("mirror", "mirror-presence")}
         </div>
 
-        {/* Beat 4: Wide Kitchen Display + Sendspin / Radios / ESPHome */}
+        {/* Beat 4: Wide Kitchen Display + Real TimerDock + Sendspin / Radios / ESPHome */}
         <div className={s.compactBeat}>
           <div className={s.compactCopy}>
-            <span className={s.eyebrow}>90% HOME ASSISTANT · 10% HARDWARE</span>
+            <span className={s.eyebrow}>TIMERS, MUSIC &amp; RADIOS</span>
             <h2 className={s.h2}>One ESPHome device. Zero HACS, zero cloud.</h2>
             <p className={s.lede}>
-              Synced Music Assistant playback, built-in Zigbee/Thread radios, and automatic updates under Settings → Updates.
+              Visual voice timers, synced Music Assistant playback, built-in Zigbee/Thread radios, and automatic updates under Settings → Updates.
             </p>
           </div>
-          {renderCompactFrame("kitchen", "sendspin")}
+          {renderCompactFrame("kitchen", "kitchen-timer")}
           <div className={s.compactRays} aria-label="Native Home Assistant protocols">
             {WIRE_RAYS.map((ray) => (
               <div key={ray.title} className={s.compactRayRow}>
@@ -1241,7 +1346,7 @@ export function MorphStory({
             </div>
           </div>
 
-          {/* Beat 3 Copy (Right — lululemon Studio Mirror + Real TimerDock RingView) */}
+          {/* Beat 3 Copy (Right — lululemon Studio Mirror + Presence Collapse) */}
           <div
             className={`${s.copyBlock} ${s.copyRight}`}
             style={{
@@ -1251,10 +1356,10 @@ export function MorphStory({
             }}
             aria-hidden={copy3O < 0.2}
           >
-            <span className={s.eyebrow}>VOICE TIMERS</span>
-            <h2 className={s.h2}>Timers you can see from across the room.</h2>
+            <span className={s.eyebrow}>PRESENCE DETECTION</span>
+            <h2 className={s.h2}>A mirror that gets out of your way.</h2>
             <p className={s.lede}>
-              Start a timer by voice and watch it count down over your dashboard, with a chime when it finishes — even behind a 40-inch mirror.
+              Walk up and Glassworks senses you — without being fooled by a room light switch — so Home Assistant can tuck your dashboard into a slim side pill and leave you a real mirror.
             </p>
             <div className={s.ctas}>
               <Link href="/frames/lululemon-mirror" className={s.quietLink}>
@@ -1263,7 +1368,7 @@ export function MorphStory({
             </div>
           </div>
 
-          {/* Beat 4 Copy (Left — Wide Kitchen Display + ESPHome / Sendspin / Radios) */}
+          {/* Beat 4 Copy (Left — Wide Kitchen Display + TimerDock / Sendspin / Radios) */}
           <div
             className={`${s.copyBlock} ${s.copyLeft} ${s.copyNarrow}`}
             style={{
@@ -1273,10 +1378,10 @@ export function MorphStory({
             }}
             aria-hidden={copy4O < 0.2}
           >
-            <span className={s.eyebrow}>90% HOME ASSISTANT · 10% HARDWARE</span>
+            <span className={s.eyebrow}>TIMERS, MUSIC &amp; RADIOS</span>
             <h2 className={s.h2}>One ESPHome device. Zero HACS, zero cloud.</h2>
             <p className={s.lede}>
-              Synced Music Assistant playback, built-in Zigbee/Thread radios, and automatic updates under Settings → Updates.
+              Visual voice timers, synced Music Assistant playback, built-in Zigbee/Thread radios, and automatic updates under Settings → Updates.
             </p>
             <div className={s.ctas}>
               <Link href="/panes/sendspin" className={s.quietLink}>
@@ -1367,11 +1472,27 @@ export function MorphStory({
                 >
                   {/* Mirror silvered body surface fading smoothly across forehead & chin */}
                   <div className={s.mirrorBodySurface} aria-hidden="true" style={{ opacity: mirrorFactor }} />
+                  {/* Mirror forehead camera/presence lens + sky-blue pulse ripple */}
+                  {mirrorFactor > 0.05 && (
+                    <div className={s.mirrorSensor} aria-hidden="true" style={{ opacity: mirrorFactor }}>
+                      <span
+                        className={`${s.sensorLens} ${mirrorPresent && mirrorPresenceO > 0.35 ? s.sensorLensLit : ""}`}
+                      />
+                      {mirrorPresent && mirrorPresenceO > 0.35 && (
+                        <span key={`d-${presencePulseKey}`} className={s.sensorPulse} />
+                      )}
+                    </div>
+                  )}
                   {/* Full-body diagonal reflection sheen */}
                   <div
                     className={s.glare}
                     aria-hidden="true"
-                    style={{ ["--glare-a" as string]: (0.11 + mirrorFactor * 0.1).toFixed(2) }}
+                    style={{
+                      ["--glare-a" as string]: (
+                        0.11 +
+                        mirrorFactor * (mirrorPresent && mirrorPresenceO > 0.35 ? 0.17 : 0.09)
+                      ).toFixed(2),
+                    }}
                   />
 
                   {/* Inner screen with smoothly interpolated real frame inset */}
@@ -1387,9 +1508,14 @@ export function MorphStory({
                     }}
                   >
                     <div className={s.screenInner}>
-                      {renderLiveLovelace(currentShape, raysO > 0.35)}
+                      {renderLiveLovelace(
+                        currentShape,
+                        raysO > 0.35,
+                        mirrorPresent && mirrorPresenceO > 0.35,
+                      )}
                       {renderRealVoiceOverlay(assistO)}
                       {renderRealNotificationOverlay(notifO)}
+                      {renderMirrorPresenceOverlay(mirrorPresenceO)}
                       {renderRealTimerOverlay(timerO)}
                     </div>
                   </div>
