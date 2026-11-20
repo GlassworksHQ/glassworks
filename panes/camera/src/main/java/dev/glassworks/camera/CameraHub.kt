@@ -279,14 +279,15 @@ class CameraHub(
             val sensor = if (c.get(CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL) != CameraCharacteristics.INFO_SUPPORTED_HARDWARE_LEVEL_LEGACY) null
                 else map?.getOutputSizes(ImageFormat.JPEG)?.maxByOrNull { it.width.toLong() * it.height }?.let { it.width to it.height }
             val yuv = map?.getOutputSizes(ImageFormat.YUV_420_888)?.map { it.width to it.height }
-            val reader = yuvSizeFor(yuv, width to height, maxPixels, sensor)
+            val surfaces = map?.getOutputSizes(MediaCodec::class.java)?.map { it.width to it.height }
+            val reader = yuvSizeFor(yuv, width to height, maxPixels, sensor) { streamFitFor(it, surfaces, H264Encoder::encodes) is StreamFit.Size }
             if (sensor != null) {
                 log("camera: LEGACY, sensor ${sensor.first}x${sensor.second}, YUV ${yuv?.joinToString { "${it.first}x${it.second}" }}")
                 // No reader size bounds the shim's preview then: it takes the smallest sensor-shaped size that covers
                 // the reader, which is already the smallest there is, or with none its largest preview size.
                 if (!legacyAspect(reader, sensor)) log("camera: no size of the sensor's shape up to $maxPixels px; the preview may run larger than ${reader.first}x${reader.second}")
             }
-            Sizes(reader, streamFitFor(reader, map?.getOutputSizes(MediaCodec::class.java)?.map { it.width to it.height }, H264Encoder::encodes))
+            Sizes(reader, streamFitFor(reader, surfaces, H264Encoder::encodes))
         }
     }
 

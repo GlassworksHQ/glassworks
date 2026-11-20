@@ -112,6 +112,10 @@ class CameraPartsTest {
         assertEquals("a 16:9 sensor keeps 1280x720", 1280 to 720, yuvSizeFor(mirrorLike, 1280 to 720, sensor = 1920 to 1080))
         assertEquals("no size of the sensor's shape: as before", 1280 to 720, yuvSizeFor(listOf(1280 to 720, 640 to 360), 1280 to 720, sensor = sensor))
         assertEquals("not LEGACY: as before", 1280 to 720, yuvSizeFor(mirrorLike, 1280 to 720, maxPixels = 1280 * 720))
+        assertEquals("an encoder that refuses 1024x768: the next sensor-shaped size it takes", 800 to 600,
+            yuvSizeFor(mirrorLike, 1280 to 720, maxPixels = 1280 * 720, sensor = sensor) { it != 1024 to 768 })
+        assertEquals("none it takes: as before, so a stream that worked still does", 1280 to 720,
+            yuvSizeFor(mirrorLike, 1280 to 720, maxPixels = 1280 * 720, sensor = sensor) { it == 1280 to 720 })
         assertTrue(legacyAspect(1024 to 768, sensor))
         assertFalse(legacyAspect(1280 to 720, sensor))
     }

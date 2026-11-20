@@ -24,19 +24,21 @@ fun announcedFps(range: IntRange?): Int = range?.last ?: 0
  * ([legacyAspect]) decides what the camera really runs at: the shim's preview is the smallest preview size with the
  * sensor's aspect that covers the largest output, else its largest preview size (AOSP 6.0.1,
  * `RequestThreadManager.configureOutputs`). The Mirror's 5 MP 4:3 camera ran its preview at 1920x1080 for a 1280x720
- * reader (#679). So on one, a size with the sensor's aspect up to [maxPixels] comes first: the preview is then that size.
+ * reader (#679). So on one, a size with the sensor's aspect up to [maxPixels] that the stream can use ([streams]) comes
+ * first: the preview is then that size. With none, the rule above, so a camera that streamed before still does.
  */
 fun yuvSizeFor(
     sizes: List<Pair<Int, Int>>?,
     want: Pair<Int, Int>,
     maxPixels: Int = CameraHub.MAX_PIXELS,
     sensor: Pair<Int, Int>? = null,
+    streams: (Pair<Int, Int>) -> Boolean = { true },
 ): Pair<Int, Int> {
     if (sizes.isNullOrEmpty()) return want
     val area = want.first.toLong() * want.second
     fun nearest(of: List<Pair<Int, Int>>) =
         of.filter { it.first.toLong() * it.second <= maxPixels }.minByOrNull { Math.abs(it.first.toLong() * it.second - area) }
-    sensor?.let { s -> nearest(sizes.filter { legacyAspect(it, s) })?.let { return it } }
+    sensor?.let { s -> nearest(sizes.filter { legacyAspect(it, s) && streams(it) })?.let { return it } }
     if (want in sizes && area <= maxPixels) return want
     return nearest(sizes) ?: sizes.minBy { it.first.toLong() * it.second }
 }
