@@ -19,7 +19,8 @@ else summary.json. As summary.py, it refuses incomplete or not comparable measur
 the summary there was itself published incomplete (complete: false);
 in a run folder the report is written either way and a summary it refuses is removed, so none is left with the
 earlier grade; a published folder (clarity.json) is left as it was, report and summary together, and it says so.
-From the raw files, it stops when they hold fewer graded runs than the report.json there (some were lost).
+From the raw files, it stops when a refstart file isn't the run its name says (its own "run"), or when they hold
+fewer graded runs than the report.json there (some were lost).
 
   tools/perf/regrade.py <run-dir> [--allow-provisional] [--dry-run]
 
@@ -42,6 +43,16 @@ def regrade(run_dir):
     refstarts = [f for f in os.listdir(run_dir) if f.startswith("refstart-") and f.endswith(".json")]
     raw = os.path.exists(os.path.join(run_dir, "device.json")) and bool(refstarts)
     if raw:
+        # Each raw file says which run it is ("run"): it must match its name, once each, or the files aren't the
+        # runs they claim to be (a copy, a rename). Then there must be at least as many as the report graded.
+        bad = []
+        for f in sorted(refstarts):
+            want = f[len("refstart-"):-len(".json")]
+            got = R.read_json(os.path.join(run_dir, f)).get("run")
+            if str(got) != want:
+                bad.append(f"{f} says run {got}")
+        if bad:
+            sys.exit(f"{run_dir}: the raw files aren't the runs their names say ({'; '.join(bad)}). Nothing written.")
         stored = len((((old or {}).get("graded") or {}).get("reference") or {}).get("per_run") or [])
         if len(refstarts) < stored:
             # Some graded runs' raw files are gone: a rebuild would drop them and overwrite the stored report.

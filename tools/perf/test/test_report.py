@@ -2544,6 +2544,13 @@ class Regrade(unittest.TestCase):
         self.assertIn("report.json has 3 graded runs but only 2 refstart-*.json", p.stderr)
         with open(os.path.join(self.dir, "report.json")) as f:
             self.assertEqual(f.read(), before)
+        # The same count from a copy (run 3 lost, refstart-4.json a copy of run 1's): each file says which run it is.
+        shutil.copy(os.path.join(self.dir, "refstart-1.json"), os.path.join(self.dir, "refstart-4.json"))
+        p = self.regrade(self.dir)
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("the raw files aren't the runs their names say (refstart-4.json says run 1)", p.stderr)
+        with open(os.path.join(self.dir, "report.json")) as f:
+            self.assertEqual(f.read(), before)
 
     def test_a_published_folder_whose_summary_is_refused_is_left_whole(self):
         """CodeRabbit on #656: a published folder (clarity.json, with its report URL) changes all at once or not at
