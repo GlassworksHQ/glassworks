@@ -77,7 +77,8 @@ export class AdbSetUp implements SetupSteps, WifiSteps {
     const name = socket.replace(/^localabstract:/, '@');
     const until = Date.now() + timeoutMs;
     while (Date.now() < until) {
-      const r = await this.d.panel()!.run(`grep -c ' ${name}$' /proc/net/unix`).catch(() => ({ out: '0', code: 1 }));
+      // each read on a lid: a stalled USB transfer counts as not yet, and the deadline still holds
+      const r = await this.d.panel()!.run(`grep -c ' ${name}$' /proc/net/unix`, this.d.lid(5000)).catch(() => ({ out: '0', code: 1 }));
       if (Number.parseInt(r.out.trim(), 10) > 0) return true;
       await this.d.sleep(1500);
     }

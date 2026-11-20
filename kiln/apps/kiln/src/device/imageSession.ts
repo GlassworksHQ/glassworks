@@ -851,8 +851,8 @@ export class ImageSession {
         ? { state: fb.apiKey ? 'handed' : 'refused', fingerprint: k.fingerprint } : k;
       if (fb.apiKey !== undefined) this.apiKey = undefined; // given back or refused: the tab lets go of it
       this.set({ screen: 'setup', firstBoot: fb, key, work: { step: this.state.work?.step ?? 'first-boot', x: 1 }, setup: { phase: 'waiting', note: '' } });
-      // set-up's first step, settled before this returns: a later step never races it
-      await this.setUp.wifi();
+      // set-up's first step, settled before this returns and busy while it runs: no button races it
+      await this.click('wifi', () => this.setUp.wifi());
     } catch (e) {
       this.log('Stopped', (e as Error).message);
       this.set({ screen: 'error', error: (e as Error).message });
