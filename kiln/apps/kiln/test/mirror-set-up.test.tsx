@@ -1,14 +1,15 @@
 // @vitest-environment jsdom
 // The Mirror runs the wizard's set-up after its first start, as the S1 does after its app goes in: the rail's Set up
 // (Wi-Fi, Home Assistant, and the radio only on a frame that has one; no App step, the install set the app up), then Done. A
-// community image's install has no Set up: Kiln's part ends with it.
+// community image's install has no Set up: Kiln's part ends with it. The app alone over adb ends the same way.
 import { act, cleanup, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: ReactNode }) => <a href={href} {...p}>{children}</a> }));
 
-import { ImageFlow } from '../src/device/DevicePage';
+import { AppFlow, ImageFlow } from '../src/device/DevicePage';
+import { appDemo } from '../src/device/demo';
 import { imageDemo } from '../src/device/imageDemo';
 import { mirrorEntry } from './mirror-frame';
 
@@ -59,5 +60,41 @@ describe('set-up on the Mirror', () => {
     render(<ImageFlow image={image} app={app} />);
     await settle();
     expect(rail()).not.toContain('Set up');
+  });
+});
+
+describe('set-up after the app alone', () => {
+  it('follows the install: Set up on the rail, Wi-Fi first', async () => {
+    const s = await appDemo(mirrorEntry, 'setup', true);
+    render(<AppFlow session={s} />);
+    await settle();
+    expect(s.state.screen).toBe('setup');
+    expect(rail()).toEqual(['Mirror', 'Connect', 'Check', 'Install', 'Set up', 'Done']);
+    expect(subs()).toEqual(['Wi-Fi', 'Home Assistant']);
+    expect(screen.getByRole('heading', { name: 'Which Wi-Fi?' })).toBeTruthy();
+  });
+
+  it('then Home Assistant, and Done with the Mirror\'s own setup page', async () => {
+    const ha = await appDemo(mirrorEntry, 'setup-ha', true);
+    render(<AppFlow session={ha} />);
+    await settle();
+    expect(screen.getByRole('heading', { name: 'Sign in to Home Assistant.' })).toBeTruthy();
+    cleanup();
+    const done = await appDemo(mirrorEntry, 'done', true);
+    render(<AppFlow session={done} />);
+    await settle();
+    expect(done.state.screen).toBe('done');
+    expect(done.state.setupPage).toBe('http://192.0.2.50:8099/setup');
+    expect(screen.getByText('http://192.0.2.50:8099/setup')).toBeTruthy();
+  });
+
+  it('asks for no Home Assistant address before the install, and an undo has no Set up', async () => {
+    const s = await appDemo(mirrorEntry, 'checks', true);
+    render(<AppFlow session={s} />);
+    expect(document.querySelector('input[type=url]')).toBeNull();
+    expect(screen.queryByText(/Home Assistant/)).toBeNull();
+    cleanup();
+    render(<AppFlow session={await appDemo(mirrorEntry, 'undo-done', true)} />);
+    expect(rail()).toEqual(['Mirror', 'Connect', 'Check', 'Undo', 'Done']);
   });
 });

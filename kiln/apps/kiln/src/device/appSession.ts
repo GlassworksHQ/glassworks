@@ -1,11 +1,14 @@
 // The app alone over adb, outside React: the APK (the frame's newest release, or a file from this computer), the
-// device over WebUSB adb, its read-only checks, then install or undo (the frame's `appFlow`). Locked to the public
+// device over WebUSB adb, its read-only checks, then install or undo (the frame's `appFlow`). An install goes on to
+// set-up, the wizard's own (setUp.ts: Wi-Fi, Home Assistant, the radio), then Done. Locked to the public
 // until the frame's frame.json makes it installable (deviceOpen): until then ?apk=release and ?apk=local are test links.
 import type { PanelShell } from '@glassworks/adb';
 import { apkPackage } from '@glassworks/app-adb';
 import { cap, type DeviceFrame, type DevicePhase, type DeviceReport, type Installed, type Removed } from '@glassworks/kiln-core';
 import { FRAMES } from '../frames/catalog';
 import { NoRelease, apkMode, installable, releaseApk, type ApkFrom, type ReleaseApk, type ReleaseLine } from '../release/apk';
+import type { AdbSetUp } from '../setup/adbSetUp';
+import { deviceSetUp, setUpWaiting, type SetUpState } from './setUp';
 
 /** The frame's APK release line: one Kiln's release route serves (the frames' installer.json `releases`). */
 export const releaseLine = (f: Pick<DeviceFrame, 'apk'>) => f.apk as ReleaseLine;
@@ -15,19 +18,19 @@ export type { ApkFrom };
 /** The page is everyone's once the frame's frame.json makes it installable (release/apk.ts `installable`). */
 export const deviceOpen = (f: Pick<DeviceFrame, 'id'>) => { const d = FRAMES.find((x) => x.id === f.id); return !!d && installable(d); };
 
-export type AppScreen = 'off' | 'pick' | 'checks' | 'working' | 'done' | 'error';
+export type AppScreen = 'off' | 'pick' | 'checks' | 'working' | 'setup' | 'done' | 'error';
 
 /** The APK the tester picked: what the screen shows of it. The bytes stay in the session. */
 export interface PickedApk { name: string; size: number; sha256: string; package?: string; error?: string }
 
 export type Result = { flow: 'install'; installed: Installed } | { flow: 'undo'; removed: Removed };
 
-export interface AppState {
+/** `setup`, `busy`, `setupPage`: set-up after an install (setUp.ts). */
+export interface AppState extends SetUpState {
   screen: AppScreen;
   apk?: PickedApk;
   /** With the APK from the release: where its download is. */
   release?: ReleaseApk;
-  haUrl: string;
   /** the browser's device list or the device's "Allow USB debugging?" is open */
   connecting?: boolean;
   connectError?: string;
@@ -52,6 +55,10 @@ export interface AppDeps {
   release?: typeof fetch;
   /** How long the release route may stay silent (release.ts RELEASE_STALL_MS); tests make it short. */
   releaseStallMs?: number;
+  /** Opens Home Assistant's sign-in for set-up; the browser's own tab by default. */
+  openTab?: (url: string) => Window | null;
+  /** A simulated device needs no wait for the app's socket. */
+  simulated?: boolean;
 }
 
 /**
@@ -79,8 +86,25 @@ export class AppSession {
 
   constructor(private readonly d: AppDeps, on: boolean) {
     this.release = d.release;
-    this.state = { screen: on ? 'pick' : 'off', haUrl: '', phases: [], log: [], ...(d.release ? { release: { state: 'waiting' } } : {}) };
+    this.state = { screen: on ? 'pick' : 'off', setup: setUpWaiting(), phases: [], log: [], ...(d.release ? { release: { state: 'waiting' } } : {}) };
+    this.setUp = deviceSetUp({
+      frame: d.frame,
+      panel: () => this.panel,
+      state: () => this.state,
+      patch: (p) => this.set(p),
+      here: () => this.state.screen === 'setup',
+      toDone: () => this.set({ screen: 'done' }),
+      onDone: () => this.state.screen === 'done',
+      stopped: (error) => this.set({ screen: 'error', error }),
+      log: (step, detail) => this.log(step, detail),
+      sleep: d.sleep,
+      openTab: d.openTab,
+      simulated: d.simulated,
+    });
   }
+
+  /** Set-up after an install (the screens call it): Wi-Fi, Home Assistant, the radio. */
+  readonly setUp: AdbSetUp;
 
   get from(): ApkFrom { return this.release ? 'release' : 'local'; }
 
@@ -165,8 +189,6 @@ export class AppSession {
     return 'Kiln is still downloading Glassworks.';
   }
 
-  setHaUrl(haUrl: string) { this.set({ haUrl }); }
-
   /** The picked APK's bytes when it is the frame's build (the image flow builds it into the image). */
   apkBytes(): Uint8Array | undefined { return this.apk; }
 
@@ -211,7 +233,6 @@ export class AppSession {
     if (!s.report?.ok) return 'This device doesn\'t pass the checks.';
     if (s.apk?.error && !this.release) return `Pick another file: ${s.apk.error}.`;
     if (!this.apk) return this.releaseBlocked() ?? 'Pick the APK file first.';
-    if (s.haUrl && !/^https?:\/\/[^\s/]+/.test(s.haUrl)) return 'Home Assistant\'s address starts with http:// or https://.';
     return undefined;
   }
 
@@ -220,7 +241,7 @@ export class AppSession {
     await this.work('install', async (onPhase) => ({
       flow: 'install',
       installed: await this.d.frame.appFlow.install(this.panel!, {
-        apk: this.apk!, haUrl: this.state.haUrl || undefined, onStep: this.log, onPhase, sleep: this.d.sleep,
+        apk: this.apk!, onStep: this.log, onPhase, sleep: this.d.sleep,
       }),
     }));
   }
@@ -235,10 +256,15 @@ export class AppSession {
   private async work(flow: 'install' | 'undo', run: (onPhase: (p: DevicePhase) => void) => Promise<Result>): Promise<void> {
     if (!this.panel || this.state.screen === 'working') return;
     this.ops++;
-    this.set({ screen: 'working', flow, phases: [], error: undefined, result: undefined });
+    this.setUp.close();
+    this.set({ screen: 'working', flow, phases: [], error: undefined, result: undefined, setupPage: undefined });
     try {
       const result = await run((p) => this.set({ phases: [...this.state.phases, p] }));
-      this.set({ screen: 'done', result });
+      if (result.flow === 'undo') { this.set({ screen: 'done', result }); return; }
+      // the install started the app: set-up's first step, settled before this returns and busy while it runs, so no
+      // button races it
+      this.set({ screen: 'setup', result, setup: setUpWaiting() });
+      await this.setUp.click('wifi', () => this.setUp.wifi());
     } catch (e) {
       this.log('Stopped', (e as Error).message);
       this.set({ screen: 'error', error: (e as Error).message });
@@ -248,6 +274,8 @@ export class AppSession {
   /** From Done or an error: read the device again, or connect again if it went away. */
   async again(): Promise<void> {
     const op = this.ops;
+    this.setUp.close();
+    this.set({ setupPage: undefined });
     try { await this.check(); } catch (e) {
       if (op !== this.ops) return; // an install or undo started meanwhile: it owns the screen now
       this.panel = undefined;
