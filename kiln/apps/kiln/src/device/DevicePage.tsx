@@ -472,6 +472,8 @@ export function DevicePage({ frame, demo: sim, base }: { frame: DeviceFrame; dem
     const outcome = live ? (image ? <LiveImageOutcome image={image} away={away} /> : <LiveAppOutcome app={live.app} />) : undefined;
     return <StandardRoutes entry={entry} renew={renew} before={before} outcome={outcome} />;
   }
+  // a standard route whose session the effect above is making: nothing yet, so the install's screens don't move the address
+  if (onStandard) return null;
   if (!live) return null;
   // the address follows the install's step (a demo's too, keeping its ?demo=…)
   const at = base;
