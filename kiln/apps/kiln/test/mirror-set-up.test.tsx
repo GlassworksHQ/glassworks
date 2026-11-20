@@ -136,6 +136,27 @@ describe('a set-up that stops after the app alone', () => {
     expect(s.state).toMatchObject({ screen: 'setup', result: { flow: 'install' } });
   });
 
+  it('while Try again reads the Mirror, nothing else starts: a second Try again or Back to the checks does nothing', async () => {
+    const s = await appDemo(mirrorEntry, 'setup-error', true);
+    await vi.waitFor(() => expect(s.state.screen).toBe('error'), { timeout: 10_000 });
+    const panel = (s as unknown as { panel: PanelShell }).panel;
+    const run = panel.run.bind(panel);
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    panel.run = async (cmd, signal) => { if (cmd === 'true') await gate; return run(cmd, signal); };
+    const first = s.setUpAgain();
+    expect(s.state.busy).toBe('set-up-again');
+    const reads = () => s.state.log.length;
+    const before = reads();
+    await s.setUpAgain();
+    await s.again();
+    expect(s.state.screen).toBe('error');
+    expect(reads()).toBe(before);
+    release();
+    await first;
+    expect(s.state).toMatchObject({ screen: 'setup', result: { flow: 'install' } });
+  });
+
   it('with the Mirror gone, Try again connects again, then set-up resumes: the install isn\'t run again', async () => {
     const m = new FakeMirror({ kiosk: 'app' });
     const c = cuttable(withAppStreams(m, { online: true, radio: false }));

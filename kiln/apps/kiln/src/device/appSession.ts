@@ -282,6 +282,8 @@ export class AppSession {
 
   /** The install's result while the device is connected again after set-up lost it (setUpAgain). */
   private resume?: Result;
+  /** setUpAgain is reading the device. */
+  private retrying = false;
 
   /**
    * From an error once the install went through (set-up stopped): set-up again from its first step. The install stays
@@ -290,9 +292,12 @@ export class AppSession {
    */
   async setUpAgain(): Promise<void> {
     const result = this.state.result;
-    if (this.state.screen !== 'error' || result?.flow !== 'install') return;
+    if (this.state.screen !== 'error' || result?.flow !== 'install' || this.retrying) return;
+    // while the device is read, nothing else starts here (the error screen's buttons are off: `busy`)
+    this.retrying = true;
     this.ops++; // a read of the device still running (Back to the checks) no longer lands over this
     this.setUp.close();
+    this.set({ busy: 'set-up-again' });
     try {
       // on the clock, not the session's sleep: a test's instant sleep would end the read before it starts
       await this.panel!.run('true', lid(this.d.frame, undefined, 5000));
@@ -302,6 +307,9 @@ export class AppSession {
       this.set({ screen: 'pick', report: undefined, error: undefined,
         connectError: `${cap(this.d.frame.the)} went away: ${(e as Error).message}. Connect again.` });
       return;
+    } finally {
+      this.retrying = false;
+      this.set({ busy: undefined });
     }
     await this.toSetUp(result);
   }
@@ -313,6 +321,7 @@ export class AppSession {
 
   /** From Done or an error: read the device again, or connect again if it went away. */
   async again(): Promise<void> {
+    if (this.retrying) return; // Try again is reading the device: it decides where this goes
     const op = this.ops;
     this.resume = undefined; // Back to the checks: the checks, not set-up
     this.setUp.close();

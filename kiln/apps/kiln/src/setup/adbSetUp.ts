@@ -110,7 +110,8 @@ export class AdbSetUp implements SetupSteps, WifiSteps {
     for (let i = 0; i < 5; i++) {
       try {
         const c = new ImprovSerialClient(await openWithin(() => open(IMPROV_SOCKET), IMPROV_OPEN_MS), { deviceLabel: 'panel' });
-        await c.requestState(5000);
+        // a try that doesn't answer lets go of its stream: one Improv connection at a time
+        try { await c.requestState(5000); } catch (e) { void c.close().catch(() => {}); throw e; }
         return c;
       } catch (e) {
         this.d.note(`Improv over adb, try ${i + 1}: ${(e as Error).message ?? e}`);
