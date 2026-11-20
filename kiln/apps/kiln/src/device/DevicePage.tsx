@@ -207,8 +207,18 @@ export const pageHandOver = (base: string): HandOver => (p) => {
   const page = HANDS.get(base);
   if (page) return page(p);
   PENDING.set(base, p);
+  setUpPending(base, true); // a reload before the page opens still knows set-up is next (the device itself stays here)
   return undefined;
 };
+
+/** The tab's mark that a frame's install finished with set-up still to do: no device data, only that. */
+const pendingKey = (base: string) => `kiln:standard:${base}:pending`;
+function setUpPending(base: string, on: boolean): void {
+  try { if (on) sessionStorage.setItem(pendingKey(base), '1'); else sessionStorage.removeItem(pendingKey(base)); } catch { /* storage off */ }
+}
+function isSetUpPending(base: string): boolean {
+  try { return sessionStorage.getItem(pendingKey(base)) === '1'; } catch { return false; }
+}
 
 /** The standard flow's routes, after any frame's install. */
 const STANDARD_ROUTES: readonly Step[] = ['set-up', 'resume', 'wifi', 'home-assistant', 'panes', 'radio', 'done'];
@@ -479,9 +489,11 @@ export function DevicePage({ frame, demo: sim, base }: { frame: DeviceFrame; dem
   HANDS.set(base, mine.current);
   useEffect(() => {
     HANDS.set(base, mine.current);
-    // a hand-over that came while no page of this frame was up: this page takes it now
+    // a hand-over that came while no page of this frame was up: this page takes it now. After a reload the device is no
+    // longer held, so the page opens set-up, which connects to it again over adb
     const waiting = PENDING.get(base);
-    if (waiting) { PENDING.delete(base); handRef.current?.(waiting); }
+    if (waiting) { PENDING.delete(base); setUpPending(base, false); handRef.current?.(waiting); }
+    else if (isSetUpPending(base)) { setUpPending(base, false); if (!current()) { const e = registry.set(standardEntry(frame, base, {})); e.handed = true; go(`${base}${ROUTES['set-up']}`); redraw(); } }
     return () => { if (HANDS.get(base) === mine.current) HANDS.delete(base); };
   }, [base]);
   handRef.current = (p) => {

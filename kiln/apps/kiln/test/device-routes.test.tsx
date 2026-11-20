@@ -137,3 +137,14 @@ describe('an install that ends with no page of its frame up', () => {
     expect(registry.get()!.session.store.state.setup.phase).toBe('settings'); // its App step, on the device the install had
   });
 });
+
+describe('an install that ended with no page up, then a reload', () => {
+  it('opens the frame\'s set-up, which connects to the device again: the tab kept only that set-up is next', async () => {
+    sessionStorage.setItem(`kiln:standard:${MIRROR_BASE}:pending`, '1');
+    at(MIRROR_BASE);
+    render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
+    await vi.waitFor(() => expect(registry.get()?.standard).toBe(true));
+    expect(location.pathname).toBe(`${MIRROR_BASE}/set-up`);
+    expect(sessionStorage.getItem(`kiln:standard:${MIRROR_BASE}:pending`)).toBeNull();
+  });
+});
