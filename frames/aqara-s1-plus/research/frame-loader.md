@@ -23,7 +23,8 @@ It is in `frames/aqara-s1-plus/tools/root/` (`glassworks_loader.sh`, `glassworks
 make byte-identical images with it (attempt 14). Of its panel tests ([Panel tests](#panel-tests)), L1–L4
 passed. L5 was inconclusive that day: the loader logged with `log -t` before logd runs, and the kernel log had
 already wrapped when it was read. It now writes its lines to the kernel log too, and the rerun of 2026-11-20 read
-`dmesg` at the first adb answer: L5 passed, the boot step costs about 0.5 s.
+`dmesg` at the first adb answer: L5 passed without a bundle, the boot step costs about 0.5 s. L5 with a bundle
+(the full check of its files) is still pending: it needs a frame release (#550).
 
 Device: Aqara S1 Plus, firmware 4.5.80. Sources: the stock `boot`, `misc` and boot package
 backups and Aqara's 4.5.80 OTA package, all outside the repo; AOSP `android-10.0.0_r41`; this repo at
@@ -738,7 +739,7 @@ Results, 2026-11-19 (dev S1, the loader image written by #651's boot writer; #65
 | L2 | **Pass:** `glassworks_agent` and `glassworks_netwatch` running, `glassworks_firstboot` stopped; of the old services only `s1kiosk_devsu` (the dev image's, carried over on purpose) |
 | L3 | **Pass:** `persist.glassworks.radio_mode` = `thread_router`; otbr-agent up within 4 min, `sys.glassworks.radio.status` = `ok thread_router: joined as router` |
 | L4 | **Pass:** the boot animation plays as before (watched), `bootanimation.zip` mounted |
-| L5 | 2026-11-19 **inconclusive:** no `glassworks_loader` line in `logcat -b all` or `dmesg` (`log -t` before logd, and the kernel log had wrapped). 2026-11-20 (#651 issuecomment-7028522330) **pass**, `dmesg` read at the first adb answer after a restart: `boot: checking the frame bundle` at 3.743 s, `boot: done: frame 1.0.0, bundle none, boot animation …` at 4.211 s; init says the `exec` took 0.516 s |
+| L5 | 2026-11-19 **inconclusive:** no `glassworks_loader` line in `logcat -b all` or `dmesg` (`log -t` before logd, and the kernel log had wrapped). 2026-11-20 (#651 issuecomment-7028522330), **without a bundle: pass**, `dmesg` read at the first adb answer after a restart: `boot: checking the frame bundle` at 3.743 s, `boot: done: frame 1.0.0, bundle none, boot animation …` at 4.211 s; init says the `exec` took 0.516 s. **With a bundle: pending** (it needs a frame release, #550) |
 
 ## Open questions
 
