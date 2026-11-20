@@ -46,6 +46,7 @@ Architecture, design philosophy, pane and frame development, standalone librarie
 | [Clarity benchmark spec](perf.md) | Full Clarity benchmark specification, scoring rubric, and `tools/perf/run.sh` runner reference |
 | [Kiln web installer](../kiln/apps/kiln/README.md) | Architecture and development guide for the WebUSB installer |
 | [Kiln design prototypes](design/kiln/README.md) | Screen prototypes and data-driven recovery-mode animations |
+| [Overlay mockups](design/overlays/README.md) | Themes, the Assist orb and edge glow, and timers (#691). Proposal, not approved |
 | [Adding a community image to Kiln](kiln-images.md) | Recipe format, safety steps, review process, and `?image=` links |
 | [Panel secrets and security](secrets.md) | How credentials and keys are sealed with the Android Keystore, and threat-model boundaries |
 | [APK size budgets](size.md) | Per-frame and per-pane APK size tracking and CI budgets |

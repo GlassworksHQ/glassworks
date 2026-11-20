@@ -1,0 +1,563 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Overlay Mockups</title>
+<!--
+  Mockups for #691: overlay themes, the Assist orb and edge glow, and timers. Not the app: a sketch for
+  the maintainer to approve before anything is built. One screen per URL, sized in dp:
+
+    mockups.html?scene=orb-listening&frame=s1&mode=dark&theme=glassworks&t=1200
+
+  scene  picker | manage | orb-{listening,thinking,speaking,error} | glow-{listening,thinking,speaking,error}
+         | timer-dock | timer-board | timer-ring | timer-done
+  frame  s1 (960x480 dp, density 1.5 = 1440x720 px) | mirror (540x960 dp, density 2 = 1080x1920 px, no touch)
+         | phone (Manage at 390 px) | desk (Manage at 1200 px)
+  mode   light | dark
+  theme  glassworks | aurora | dusk | dune | graphite | ha
+  t      ms on the animation clock (the glow and the swirl), so a still is reproducible
+  anim   1: run the clock (the glow preview)
+
+  render.sh turns every scene into a PNG with headless Chrome. Placeholder data only.
+-->
+<link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,100..900&display=swap" rel="stylesheet">
+<style>
+@font-face{font-family:InterRepo;src:url("../../../core/src/main/res/font/inter.ttf") format("truetype");font-weight:100 900}
+*{box-sizing:border-box}
+html,body{margin:0;background:#000}
+body{font-family:InterRepo,Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased;font-optical-sizing:auto}
+.screen{position:relative;overflow:hidden}
+.abs{position:absolute}
+.fill{position:absolute;inset:0}
+
+/* ------------------------------------------------------------ the dashboard stand-in */
+.dash{position:absolute;inset:0;padding:12px;display:grid;gap:12px;color:var(--d-fg);background:var(--d-bg);font-size:14px}
+.dash.s1{grid-template-columns:1fr 1fr 1fr;grid-template-rows:44px 1fr 1fr}
+.dash.mirror{grid-template-columns:1fr 1fr;grid-template-rows:44px 170px 150px 150px 1fr 1fr}
+.dash .bar{grid-column:1/-1;display:flex;gap:22px;align-items:center;padding:0 10px;color:var(--d-mu);font-size:14px}
+.dash .bar b{color:var(--d-fg);font-weight:500;border-bottom:2px solid var(--d-acc);padding:12px 0 10px}
+.dash .bar .sp{flex:1}
+.dc{background:var(--d-card);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:8px;min-width:0;box-shadow:var(--d-shadow)}
+.dc h4{margin:0;font-weight:500;font-size:15px}
+.dc .r{display:flex;justify-content:space-between;align-items:center;color:var(--d-mu)}
+.dc .r i{width:30px;height:16px;border-radius:9px;background:var(--d-off);position:relative}
+.dc .r i.on{background:var(--d-acc)}
+.dc .r i::after{content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:#fff}
+.dc .r i.on::after{left:16px}
+.dc .big{font-size:40px;font-weight:300;letter-spacing:-.02em;color:var(--d-fg)}
+.dc .tile{display:grid;grid-template-columns:1fr 1fr;gap:8px;flex:1}
+.dc .tile span{border-radius:10px;background:var(--d-tile);padding:10px;color:var(--d-fg);font-size:13px}
+.dc .tile span.lit{background:var(--d-lit);color:#3b2a00}
+.dc .bars{flex:1;display:flex;align-items:flex-end;gap:5px}
+.dc .bars u{flex:1;background:var(--d-acc);opacity:.6;border-radius:3px 3px 0 0}
+
+/* ------------------------------------------------------------ type */
+.label{font-weight:500;font-size:11.5px;letter-spacing:.14em;text-transform:uppercase}
+.main{font-weight:300;letter-spacing:-.02em;line-height:1.2}
+
+/* ------------------------------------------------------------ the orb */
+.orb{position:absolute;transform:translate(-50%,-50%)}
+.orb .halo{position:absolute;left:50%;top:50%;width:340px;height:340px;transform:translate(-50%,-50%);border-radius:50%}
+.orb .sphere{position:absolute;left:50%;top:50%;width:var(--sz);height:var(--sz);transform:translate(-50%,-50%);border-radius:50%;overflow:hidden;
+  background:var(--sph-fill);border:1px solid var(--sph-edge);box-shadow:var(--sph-shadow)}
+.orb .sphere > *{position:absolute;border-radius:50%}
+.orb .ring{position:absolute;left:50%;top:50%;border-radius:50%;transform:translate(-50%,-50%);border:1px solid}
+.orb .shine{inset:0;background:radial-gradient(circle at 32% 24%,rgba(255,255,255,var(--shine)) 0,rgba(255,255,255,0) 36%)}
+.check{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%)}
+
+/* ------------------------------------------------------------ the edge glow */
+.edge{position:absolute;inset:0;pointer-events:none}
+.edge .ly{position:absolute;inset:0}
+.edge .ly > i{position:absolute;inset:0;border-radius:var(--corner);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
+
+/* ------------------------------------------------------------ glass */
+.glass{background:var(--glass);border:1px solid var(--edge);border-radius:22px}
+.caption{position:absolute;left:50%;transform:translateX(-50%);text-align:center;border-radius:26px;padding:18px 30px 20px;
+  background:var(--cap-bg);border:1px solid var(--edge);box-shadow:var(--cap-shadow)}
+
+/* ------------------------------------------------------------ settings (panel) */
+.set{position:absolute;inset:0;color:var(--fg);background:var(--set-bg)}
+.set .rail{position:absolute;left:0;top:0;bottom:0;width:211px;border-right:1px solid var(--edge);padding:20px 12px;background:var(--rail-bg)}
+.set .rail .hd{display:flex;align-items:center;gap:12px;padding:4px 12px 14px;font-size:17px;font-weight:450}
+.set .rail h5{margin:14px 12px 8px;font-size:10.5px;letter-spacing:.16em;color:var(--fa);font-weight:500}
+.set .rail .it{display:flex;justify-content:space-between;align-items:center;padding:9px 12px;border-radius:12px;font-size:15.5px;line-height:1.35;border:1px solid transparent}
+.set .rail .it.on{background:var(--glass);border-color:var(--edge)}
+.set .rail .it i{width:7px;height:7px;border-radius:50%;background:#34d399}
+.set .rail .done{position:absolute;left:12px;right:12px;bottom:14px;height:43px;border-radius:999px;display:grid;place-items:center;font-size:15px;background:var(--btn);color:var(--btx)}
+.set .page{position:absolute;left:240px;right:28px;top:0;bottom:0}
+.set h1{margin:20px 0 0;font-size:30px;font-weight:300;letter-spacing:-.02em}
+.set .card{background:var(--glass);border:1px solid var(--edge);border-radius:20px;padding:18px 20px;margin-top:16px}
+.set .card h3{margin:0;font-size:15.5px;font-weight:400}
+.set .card p{margin:3px 0 0;font-size:13.5px;color:var(--mu)}
+.set .row{display:flex;justify-content:space-between;align-items:center;gap:16px}
+.seg{display:inline-flex;padding:3px;border-radius:999px;background:var(--seg-bg);border:1px solid var(--edge)}
+.seg span{padding:7px 16px;border-radius:999px;font-size:14px;color:var(--mu);display:flex;gap:8px;align-items:center}
+.seg span.on{background:var(--seg-on);color:var(--fg);box-shadow:var(--seg-shadow)}
+
+/* theme cards: shared by the panel and Manage */
+.themes{display:grid;gap:10px}
+.tc{border-radius:16px;border:1px solid var(--edge);background:var(--tc-bg);padding:14px 8px 11px;display:flex;flex-direction:column;align-items:center;gap:10px;position:relative}
+.tc.on{border-color:var(--tc-on-edge);background:var(--tc-on-bg)}
+.tc .pair{display:flex;gap:10px}
+.tc .sw{position:relative;width:var(--sw);height:var(--sw);border-radius:50%}
+.tc .sw.on::before{content:"";position:absolute;inset:-5px;border-radius:50%;border:2px solid var(--fg)}
+.tc .sw .bd{position:absolute;right:-9px;top:-9px;width:20px;height:20px;border-radius:50%;background:var(--bd-bg);border:1px solid var(--edge);display:grid;place-items:center;color:var(--fg)}
+.tc .nm{font-size:13.5px;color:var(--fg);white-space:nowrap}
+.tc .sub{font-size:11px;color:var(--fa);margin-top:-7px}
+
+/* ------------------------------------------------------------ Manage */
+.mg{position:absolute;inset:0;color:var(--fg);font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:16px;line-height:1.45;
+  background:radial-gradient(900px 600px at -10% -20%,var(--g1),transparent 60%),radial-gradient(800px 600px at 110% 120%,var(--g2),transparent 60%),var(--set-bg)}
+.mg .side{position:absolute;left:0;top:0;bottom:0;width:280px;padding:28px 18px;border-right:1px solid var(--edge)}
+.mg .brand{display:flex;gap:14px;align-items:center;padding:0 12px 26px}.mg .brand b{display:block;font-size:18px;font-weight:500}.mg .brand small{color:var(--mu);font-size:14px}
+.mg h6{margin:20px 12px 6px;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--fa);font-weight:600}
+.mg .ni{padding:10px 12px;border-radius:12px;border:1px solid transparent}.mg .ni.on{background:var(--glass);border-color:var(--edge)}
+.mg .main{position:absolute;left:280px;right:0;top:0;padding:40px 56px}
+.mg h1{font-size:44px;font-weight:400;margin:0 0 26px;letter-spacing:-.02em}.mg h1 span{color:var(--mu);font-size:30px;font-weight:300}
+.mg .card{background:var(--glass);border:1px solid var(--edge);border-radius:22px;padding:24px 28px;margin-bottom:18px}
+.mg .sh{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--fa);font-weight:600;margin:0 0 12px}
+.mg .lede{color:var(--mu);font-size:15px;margin:-4px 0 16px}
+.mg .choice{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.mg .ch{border:1px solid var(--edge);border-radius:18px;padding:16px 18px;background:var(--glass)}
+.mg .ch b{display:block;font-weight:500;font-size:17px}.mg .ch span{color:var(--mu);font-size:14px}
+.mg .ch.on{border:1.5px solid transparent;background:linear-gradient(var(--ch-bg),var(--ch-bg)) padding-box,linear-gradient(135deg,var(--a),var(--b)) border-box}
+.mg .ch:not(.on) b{color:var(--mu)}
+.mg .top{display:flex;align-items:center;gap:10px;padding:14px 16px;font-weight:600;font-size:15px;border-bottom:1px solid var(--edge)}
+.mg.phone .main{left:0;padding:20px 16px}
+.mg.phone h1{font-size:34px;margin-bottom:18px}
+.mg.phone .card{padding:18px 16px}
+.mg.phone .choice{grid-template-columns:1fr}
+
+/* ------------------------------------------------------------ timers */
+.tring{position:absolute;width:80px;height:107px}
+.tring svg{position:absolute;left:0;top:0}
+.tring .sph{position:absolute;left:9px;top:9px;width:62px;height:62px;border-radius:50%;background:var(--t-sph);border:1px solid var(--sph-edge);display:grid;place-items:center;box-shadow:var(--t-shadow)}
+.tring .dg{font-size:21px;font-weight:300;letter-spacing:-.01em;font-variant-numeric:tabular-nums;color:var(--fg)}
+.tring .tag{position:absolute;left:50%;top:88px;transform:translateX(-50%);height:19px;padding:0 10px;border-radius:999px;background:var(--tag-bg);border:1px solid var(--edge);
+  font-size:10px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--mu);display:flex;align-items:center;white-space:nowrap}
+.board{position:absolute;width:300px;padding:10px;border-radius:24px;background:var(--cap-bg);border:1px solid var(--edge);box-shadow:var(--cap-shadow)}
+.board .bh{display:flex;justify-content:space-between;align-items:baseline;padding:6px 10px 8px}
+.board .br{display:flex;align-items:center;gap:12px;padding:8px 10px;border-radius:16px}
+.board .br + .br{border-top:1px solid var(--edge);border-radius:0}
+.board .br .n{flex:1;font-size:15px}
+.board .br .n small{display:block;color:var(--fa);font-size:12px}
+.board .br .d{font-size:24px;font-weight:300;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.spec{position:absolute;inset:0;background:var(--set-bg);color:var(--fg)}
+.spec .cell{position:absolute;display:flex;flex-direction:column;align-items:center;gap:0}
+.spec .cap{font-size:13px;color:var(--mu);text-align:center;margin-top:12px;line-height:1.35}
+.spec .cap b{display:block;color:var(--fg);font-weight:500;font-size:14px}
+.note{position:absolute;font-size:12px;color:var(--fa);letter-spacing:.02em}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+// ======================================================================= themes
+// Each theme: two lights (a top-left, b bottom-right, as the brand's glass is lit) for dark and for
+// light, and a ground (the scrim and the settings' night or day). Status colours stay status:
+// green done, amber the last 10 seconds, rose errors. No theme uses Ember (Kiln's peach to rose).
+const THEMES = {
+  glassworks: { name: "Glassworks", sub: "Default",
+    dark:  { a: "#38bdf8", b: "#a78bfa", ground: "#0a0b0f" },
+    light: { a: "#0ea5e9", b: "#8b5cf6", ground: "#eceef2" } },
+  aurora:     { name: "Aurora",
+    dark:  { a: "#5eead4", b: "#c4b5fd", ground: "#06100f" },
+    light: { a: "#14b8a6", b: "#a855f7", ground: "#e7f0ee" } },
+  dusk:       { name: "Dusk",
+    dark:  { a: "#818cf8", b: "#f0abfc", ground: "#0c0a14" },
+    light: { a: "#6366f1", b: "#d946ef", ground: "#eeecf5" } },
+  dune:       { name: "Dune",
+    dark:  { a: "#f1d6ae", b: "#c39a78", ground: "#110e0b" },
+    light: { a: "#b88a5c", b: "#8c5f45", ground: "#f3efe8" } },
+  graphite:   { name: "Graphite",
+    dark:  { a: "#f4f4f5", b: "#8b8b94", ground: "#0b0b0c" },
+    light: { a: "#52525b", b: "#a1a1aa", ground: "#ededee" } },
+  // Follow Home Assistant: the active HA theme's primary colour and dark mode. Shown with HA's default primary.
+  ha:         { name: "Home Assistant", sub: "Your dashboard's",
+    dark:  { a: "#03a9f4", b: "#7dd3fc", ground: "#111111" },
+    light: { a: "#03a9f4", b: "#0277bd", ground: "#fafafa" } },
+};
+const ORDER = ["ha", "glassworks", "aurora", "dusk", "dune", "graphite"];
+const ROSE = "#fb7185", GREEN = "#34d399", AMBER = "#fbbf24";
+
+const q = new URLSearchParams(location.search);
+const scene = q.get("scene") || "orb-listening";
+const frame = q.get("frame") || "s1";
+const mode = q.get("mode") || "dark";
+const themeId = q.get("theme") || "glassworks";
+const T0 = +(q.get("t") || 1200);
+const anim = q.get("anim") === "1";
+const dark = mode === "dark";
+const th = THEMES[themeId][mode];
+const SIZES = { s1: [960, 480], mirror: [540, 960], phone: [390, 860], desk: [1200, 1000] };
+const [W, H] = SIZES[frame];
+const touch = frame !== "mirror";
+
+function hex(c) { const n = parseInt(c.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; }
+function rgba(c, a) { const [r, g, b] = hex(c); return `rgba(${r},${g},${b},${a})`; }
+function mix(c1, c2, k) { const x = hex(c1), y = hex(c2); return "#" + x.map((v, i) => Math.round(v + (y[i] - v) * k).toString(16).padStart(2, "0")).join(""); }
+
+// ======================================================================= tokens per mode
+function vars(t, isDark) {
+  const v = isDark ? {
+    "--fg": "#f4f4f5", "--mu": "#a1a1aa", "--fa": "#63636b",
+    "--glass": "rgba(255,255,255,.045)", "--edge": "rgba(255,255,255,.08)",
+    "--set-bg": `radial-gradient(70% 90% at 0% 0%, ${rgba(t.a, .10)}, transparent 70%), radial-gradient(60% 80% at 100% 100%, ${rgba(t.b, .10)}, transparent 70%), ${t.ground}`,
+    "--rail-bg": "rgba(255,255,255,.015)",
+    "--btn": "#f4f4f5", "--btx": "#0a0b0f",
+    "--sph-fill": "rgba(255,255,255,.04)", "--sph-edge": "rgba(255,255,255,.13)",
+    "--sph-shadow": "0 10px 40px rgba(0,0,0,.35), inset 0 0 28px rgba(255,255,255,.05)", "--shine": ".26",
+    "--cap-bg": rgba(t.ground, .86), "--cap-shadow": "0 18px 50px rgba(0,0,0,.45)",
+    "--seg-bg": "rgba(255,255,255,.04)", "--seg-on": "rgba(255,255,255,.10)", "--seg-shadow": "none",
+    "--tc-bg": "rgba(255,255,255,.025)", "--tc-on-bg": "rgba(255,255,255,.06)", "--tc-on-edge": "rgba(255,255,255,.28)",
+    "--bd-bg": "#1b1c22", "--t-sph": `radial-gradient(circle at 50% 60%, ${rgba(t.a, .10)}, transparent 70%), #121318`,
+    "--t-shadow": "0 6px 22px rgba(0,0,0,.5)", "--tag-bg": rgba(t.ground, .85),
+    "--g1": rgba(t.a, .13), "--g2": rgba(t.b, .14), "--ch-bg": "#15161b",
+  } : {
+    "--fg": "#0c0e13", "--mu": "#4f525c", "--fa": "#7d808b",
+    "--glass": "rgba(255,255,255,.66)", "--edge": "rgba(16,20,32,.10)",
+    "--set-bg": `radial-gradient(70% 90% at 0% 0%, ${rgba(t.a, .16)}, transparent 70%), radial-gradient(60% 80% at 100% 100%, ${rgba(t.b, .16)}, transparent 70%), ${t.ground}`,
+    "--rail-bg": "rgba(255,255,255,.35)",
+    "--btn": "#0c0e13", "--btx": "#f4f4f5",
+    "--sph-fill": "rgba(255,255,255,.55)", "--sph-edge": "rgba(16,20,32,.10)",
+    "--sph-shadow": "0 14px 40px rgba(16,20,32,.14), inset 0 0 26px rgba(255,255,255,.9)", "--shine": ".85",
+    "--cap-bg": rgba(t.ground, .9), "--cap-shadow": "0 18px 50px rgba(16,20,32,.16)",
+    "--seg-bg": "rgba(16,20,32,.04)", "--seg-on": "#fff", "--seg-shadow": "0 1px 4px rgba(16,20,32,.12)",
+    "--tc-bg": "rgba(255,255,255,.45)", "--tc-on-bg": "#fff", "--tc-on-edge": "rgba(16,20,32,.32)",
+    "--bd-bg": "#fff", "--t-sph": `radial-gradient(circle at 50% 60%, ${rgba(t.a, .10)}, transparent 70%), #fbfbfc`,
+    "--t-shadow": "0 6px 22px rgba(16,20,32,.16)", "--tag-bg": rgba(t.ground, .92),
+    "--g1": rgba(t.a, .22), "--g2": rgba(t.b, .22), "--ch-bg": "#fff",
+  };
+  v["--a"] = t.a; v["--b"] = t.b;
+  return Object.entries(v).map(([k, x]) => `${k}:${x}`).join(";");
+}
+
+// The dashboard is the user's HA theme, not ours: it stays HA-like in both modes.
+function dashVars(isDark) {
+  return isDark
+    ? "--d-bg:#111318;--d-card:#1c1e24;--d-fg:#e8e9ec;--d-mu:#9a9ca4;--d-off:#3a3d45;--d-acc:#03a9f4;--d-tile:#262931;--d-lit:#f4c26b;--d-shadow:none"
+    : "--d-bg:#f2f3f5;--d-card:#ffffff;--d-fg:#1f2329;--d-mu:#6b7079;--d-off:#c9ccd2;--d-acc:#03a9f4;--d-tile:#eef0f3;--d-lit:#ffd58a;--d-shadow:0 1px 3px rgba(0,0,0,.08)";
+}
+
+function dashboard() {
+  const cards = {
+    lights: `<div class="dc"><h4>Living room</h4><div class="r">Ceiling<i class="on"></i></div><div class="r">Floor lamp<i></i></div><div class="r">Shelf<i class="on"></i></div><div class="r">Blinds<span>Open</span></div></div>`,
+    climate: `<div class="dc"><h4>Thermostat</h4><div class="big">21.5 °C</div><div class="r">Heating to 22 °C<span>Humidity 46 %</span></div></div>`,
+    weather: `<div class="dc"><h4>Weather</h4><div class="big">14°</div><div class="r">Cloudy<span>H 17° · L 9°</span></div></div>`,
+    kitchen: `<div class="dc"><h4>Kitchen</h4><div class="tile"><span class="lit">Island</span><span>Counter</span><span class="lit">Pendant</span><span>Kettle</span></div></div>`,
+    energy: `<div class="dc"><h4>Energy today</h4><div class="bars">${[30,45,38,60,72,55,40,66,80,52,35,48].map(h => `<u style="height:${h}%"></u>`).join("")}</div></div>`,
+    door: `<div class="dc"><h4>Front door</h4><div class="r">Lock<span>Locked</span></div><div class="r">Doorbell<span>Quiet</span></div></div>`,
+  };
+  const bar = `<div class="bar"><b>Home</b><span>Kitchen</span><span>Energy</span><span class="sp"></span><span>09:41</span></div>`;
+  return `<div class="dash ${frame === "mirror" ? "mirror" : "s1"}" style="${dashVars(dark)}">${bar}${
+    frame === "mirror"
+      ? cards.climate + cards.weather + cards.lights + cards.kitchen + cards.door + cards.energy + cards.energy.replace("Energy today", "Solar") + cards.door.replace("Front door", "Garage")
+      : cards.lights + cards.climate + cards.kitchen + cards.weather + cards.energy + cards.door}</div>`;
+}
+
+// ======================================================================= icons
+const SUN = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/></svg>`;
+const MOON = `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M20.5 14.6A8.6 8.6 0 0 1 9.4 3.5a8.6 8.6 0 1 0 11.1 11.1z"/></svg>`;
+const AUTO = `<svg width="12" height="12" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M12 4a8 8 0 0 1 0 16z" fill="currentColor"/></svg>`;
+const MARK = `<svg width="30" height="28" viewBox="2 6 116 108"><defs><linearGradient id="lit" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#38bdf8"/><stop offset=".55" stop-color="#818cf8"/><stop offset="1" stop-color="#a78bfa"/></linearGradient></defs><g fill="none" stroke="currentColor" stroke-width="2.4" vector-effect="non-scaling-stroke"><rect width="60" height="60" rx="9" transform="matrix(.866 .5 -.866 .5 60 49)" stroke-opacity=".2"/><rect width="60" height="60" rx="9" transform="matrix(.866 .5 -.866 .5 60 30)" stroke-opacity=".45"/></g><rect width="60" height="60" rx="9" transform="matrix(.866 .5 -.866 .5 60 11)" fill="url(#lit)"/></svg>`;
+
+// ======================================================================= theme picker (panel + Manage)
+function swatch(t, isDark) {
+  const v = THEMES[t][isDark ? "dark" : "light"];
+  if (isDark) return `radial-gradient(circle at 30% 28%, rgba(255,255,255,.35) 0, transparent 22%), radial-gradient(circle at 32% 34%, ${v.a} 0, ${rgba(v.a, 0)} 62%), radial-gradient(circle at 70% 72%, ${v.b} 0, ${rgba(v.b, 0)} 64%), ${mix(v.ground, "#ffffff", .05)}`;
+  return `radial-gradient(circle at 30% 26%, rgba(255,255,255,.95) 0, rgba(255,255,255,0) 30%), linear-gradient(135deg, ${mix(v.a, "#ffffff", .35)}, ${mix(v.b, "#ffffff", .25)})`;
+}
+// active: { theme, variant: "light" | "dark" | "auto" }
+function themeCards(active, swDp) {
+  return ORDER.map(id => {
+    const t = THEMES[id];
+    const on = active.theme === id;
+    const orb = isDark => {
+      const sel = on && (active.variant === "auto" ? isDark === dark : (active.variant === "dark") === isDark);
+      const icon = active.variant === "auto" ? AUTO : isDark ? MOON : SUN;
+      const edge = isDark ? "rgba(255,255,255,.14)" : "rgba(16,20,32,.10)";
+      return `<div class="sw ${sel ? "on" : ""}" style="background:${swatch(id, isDark)};box-shadow:inset 0 0 0 1px ${edge}">${sel ? `<span class="bd">${icon}</span>` : ""}</div>`;
+    };
+    return `<div class="tc ${on ? "on" : ""}" style="--sw:${swDp}px"><div class="pair">${orb(false)}${orb(true)}</div><div class="nm">${t.name}</div>${t.sub ? `<div class="sub">${t.sub}</div>` : ""}</div>`;
+  }).join("");
+}
+
+function picker() {
+  const active = { theme: themeId, variant: themeId === "ha" ? "auto" : mode };
+  const rail = `<div class="rail"><div class="hd">${MARK}Settings</div><h5>PANEL</h5>
+    <div class="it">Home Assistant &amp; dashboard</div><div class="it">Screen</div><div class="it on">Appearance</div>
+    <h5>PANES</h5><div class="it">Voice<i></i></div><div class="it">Music<i></i></div><div class="it">Wall base<i></i></div><div class="it" style="opacity:.45">Time zone<i></i></div>
+    <div class="done">Done</div></div>`;
+  const page = `<div class="page"><h1>Appearance</h1>
+    <div class="card"><h3>Theme</h3><p>For voice, timers, notifications and setup. Your dashboard keeps its own.</p>
+      <div class="themes" style="grid-template-columns:repeat(6,1fr);margin-top:16px">${themeCards(active, 34)}</div></div>
+    <div class="card"><div class="row"><div><h3>Assist</h3><p>How a voice run shows on the dashboard</p></div>
+      <div class="seg"><span class="on">${orbIcon()}Orb</span><span>${glowIcon()}Edge glow</span></div></div></div></div>`;
+  return `<div class="set" style="${vars(th, dark)}">${rail}${page}</div>`;
+}
+function orbIcon() { return `<i style="width:14px;height:14px;border-radius:50%;background:radial-gradient(circle at 35% 35%, ${th.a}, ${th.b});display:inline-block"></i>`; }
+function glowIcon() { return `<i style="width:18px;height:12px;border-radius:3px;border:2px solid transparent;background:linear-gradient(var(--seg-bg),var(--seg-bg)) padding-box,linear-gradient(135deg, ${th.a}, ${th.b}) border-box;display:inline-block"></i>`; }
+
+function manage() {
+  const phone = frame === "phone";
+  const active = { theme: themeId, variant: themeId === "ha" ? "auto" : mode };
+  const nav = `<div class="ni">Overview</div><div class="ni">All panels</div><h6>Panel</h6><div class="ni">Screen</div><div class="ni on">Appearance</div><h6>Panes</h6><div class="ni">Voice</div><div class="ni">Timers</div><h6>System</h6><div class="ni">Log</div><div class="ni">Security</div><div class="ni">About</div>`;
+  const side = phone ? `<div class="top">${MARK}<span>Appearance</span><span style="flex:1"></span>☰</div>`
+    : `<div class="side"><div class="brand">${MARK.replace('width="30" height="28"', 'width="34" height="34"')}<div><b>Glassworks Panel</b><small>${q.get("panel") || "Mirror"}</small></div></div>${nav}</div>`;
+  const cols = phone ? 3 : 6;
+  const main = `<div class="main" style="${phone ? "top:56px" : ""}"><h1>Appearance</h1>
+    <div class="card"><div class="sh">Theme</div><p class="lede">For voice, timers, notifications and setup. Your dashboard keeps its own.</p>
+      <div class="themes" style="grid-template-columns:repeat(${cols},1fr);gap:12px">${themeCards(active, phone ? 32 : 40)}</div></div>
+    <div class="card"><div class="sh">Assist</div><p class="lede">How a voice run shows on the dashboard.</p>
+      <div class="choice"><div class="ch on"><b>Orb</b><span>A glass orb with what you said and the reply, over a dimmed dashboard.</span></div>
+      <div class="ch"><b>Edge glow</b><span>Light runs along the screen's edge. The dashboard stays in view.</span></div></div></div></div>`;
+  return `<div class="mg ${phone ? "phone" : ""}" style="${vars(th, dark)}">${side}${main}</div>`;
+}
+
+// ======================================================================= Assist: the orb
+// States: listening (light a leads, swells with the voice, one ripple), thinking (a and b circle each
+// other), speaking (b leads, two slow ripples), error (rose, a status colour). Only alpha, scale and
+// rotation move, as today: every layer can be baked once on the A133.
+function orbHtml(state, cx, cy, size, t, opts = {}) {
+  const s = size, rot = (t / 1500) * 360 % 360;
+  const lvl = state === "listening" ? .7 : state === "speaking" ? .55 : 0;
+  const A = state === "error" ? ROSE : opts.a || th.a, B = state === "error" ? ROSE : opts.b || th.b;
+  const k = dark ? 1 : .9;
+  let halo, inner, rings = "";
+  if (state === "thinking") {
+    halo = `radial-gradient(circle closest-side at 44% 45%, ${rgba(A, .26 * k)}, transparent 80%), radial-gradient(circle closest-side at 56% 55%, ${rgba(B, .28 * k)}, transparent 80%)`;
+    inner = `<i style="inset:-30%;background:conic-gradient(from ${rot}deg, transparent 0deg, ${rgba(A, .9)} 70deg, ${rgba(B, .9)} 150deg, transparent 220deg, ${rgba(A, .4)} 290deg, transparent 360deg);filter:blur(${s * .1}px)"></i>`;
+  } else if (state === "error") {
+    halo = `radial-gradient(circle closest-side, ${rgba(ROSE, .24 * k)}, transparent 75%)`;
+    inner = `<i style="inset:14%;background:radial-gradient(circle, ${rgba(ROSE, .7)} 0, ${rgba(ROSE, .2)} 50%, transparent 72%);filter:blur(${s * .06}px)"></i>`;
+  } else if (state === "done") {
+    halo = `radial-gradient(circle closest-side, ${rgba(GREEN, .24 * k)}, transparent 75%)`;
+    inner = `<i style="inset:14%;background:radial-gradient(circle, ${rgba(GREEN, .55)} 0, ${rgba(GREEN, .15)} 55%, transparent 72%);filter:blur(${s * .06}px)"></i>`;
+  } else {
+    const lead = state === "speaking" ? B : A, follow = state === "speaking" ? A : B;
+    const la = state === "speaking" ? .55 : .95, lb = state === "speaking" ? .95 : .5;
+    halo = `radial-gradient(circle closest-side at 45% 44%, ${rgba(A, (.16 + .14 * lvl * (state === "listening")) * k)}, transparent 78%), radial-gradient(circle closest-side at 55% 56%, ${rgba(B, (.14 + .14 * lvl * (state === "speaking")) * k)}, transparent 78%)`;
+    inner = `<i style="left:6%;top:6%;width:66%;height:66%;background:radial-gradient(circle, ${rgba(A, la)} 0, ${rgba(A, la * .35)} 45%, transparent 70%);filter:blur(${s * .06}px)"></i>
+             <i style="left:30%;top:30%;width:66%;height:66%;background:radial-gradient(circle, ${rgba(B, lb)} 0, ${rgba(B, lb * .35)} 45%, transparent 70%);filter:blur(${s * .06}px)"></i>`;
+    if (state === "listening") rings = ring(s * 1.32, A, .45) ;
+    if (state === "speaking") rings = ring(s * 1.28, B, .35) + ring(s * 1.62, B, .18);
+    void lead; void follow;
+  }
+  if (state === "error") rings = ring(s * 1.3, ROSE, .3);
+  const check = state === "done" ? `<svg class="check" width="${s * .5}" height="${s * .5}" viewBox="0 0 56 56"><path d="M15 29l9 9 18-20" fill="none" stroke="${dark ? "#f4f4f5" : "#0c0e13"}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>` : "";
+  return `<div class="orb" style="left:${cx}px;top:${cy}px;--sz:${s}px">
+    <div class="halo" style="width:${s * 3}px;height:${s * 3}px;background:${halo}"></div>${rings}
+    <div class="sphere">${inner}<i class="shine"></i></div>${check}</div>`;
+}
+function ring(d, c, a) { return `<div class="ring" style="width:${d}px;height:${d}px;border-color:${rgba(c, a)}"></div>`; }
+
+const TEXT = {
+  listening: { label: "Listening", main: "How can I help?", muted: true },
+  thinking: { label: "Thinking", main: "“Turn off the kitchen lights”" },
+  speaking: { quote: "“Turn off the kitchen lights”", main: "Turned off 3 lights in the kitchen." },
+  error: { label: "Something went wrong", main: "Can't reach Home Assistant", muted: true },
+};
+
+function labelColor(state) {
+  if (state === "error") return ROSE;
+  if (state === "listening") return dark ? th.a : mix(th.a, "#000000", .15);
+  return "var(--fa)";
+}
+
+function orbScene(state, t) {
+  const p = frame === "mirror" ? { cx: 270, cy: 330, size: 128, top: 450, col: 476, mainSize: 34 } : { cx: 480, cy: 160, size: 120, top: 262, col: 820, mainSize: 36 };
+  const x = TEXT[state];
+  const scrim = dark
+    ? `background:radial-gradient(60% 70% at 0% 0%, ${rgba(th.a, .10)}, transparent 70%), radial-gradient(55% 65% at 100% 100%, ${rgba(th.b, .10)}, transparent 70%), ${rgba(th.ground, .90)}`
+    : `background:radial-gradient(60% 70% at 0% 0%, ${rgba(th.a, .14)}, transparent 70%), radial-gradient(55% 65% at 100% 100%, ${rgba(th.b, .14)}, transparent 70%), ${rgba(th.ground, .90)}`;
+  const label = x.quote
+    ? `<div style="font-size:17px;color:var(--mu);margin-bottom:12px">${x.quote}</div>`
+    : `<div class="label" style="color:${labelColor(state)};margin-bottom:14px">${x.label}</div>`;
+  const hint = touch ? `<div class="label abs" style="left:0;right:0;bottom:22px;text-align:center;color:var(--fa)">Tap anywhere to cancel</div>` : "";
+  return `${dashboard()}<div class="fill" style="${vars(th, dark)};${scrim}"></div>
+    <div class="fill" style="${vars(th, dark)};color:var(--fg)">
+      ${orbHtml(state, p.cx, p.cy, p.size, t)}
+      <div class="abs" style="left:${(W - p.col) / 2}px;width:${p.col}px;top:${p.top}px;text-align:center">${label}
+        <div class="main" style="font-size:${p.mainSize}px;color:${x.muted ? "var(--mu)" : "var(--fg)"}">${x.main}</div></div>
+      ${state === "error" || state === "speaking" && false ? "" : hint}
+    </div>`;
+}
+
+// ======================================================================= Assist: the edge glow
+// "Two lights" (our spin on the edge glow): the theme's two colours live on the screen's border, a at
+// top left and b at bottom right, as the brand's glass is lit. Listening, they gather along the bottom
+// edge and swell with the voice. Thinking, they chase each other round the edge. Speaking, the whole
+// border breathes with the reply. An error washes the border rose once. The dashboard stays in view.
+function edgeLayers(state, t) {
+  const sec = t / 1000;
+  const A = th.a, B = th.b;
+  let grad, levels, thick = 1;
+  const voice = .55 + .45 * Math.abs(Math.sin(sec * 5.1 + 2 * Math.sin(sec * 1.3)));
+  if (state === "listening") {
+    // the two lights sit low (bottom-left a, bottom-right b) and swell with the mic level
+    const sway = 12 * Math.sin(sec * .9);
+    grad = `conic-gradient(from ${sway}deg at 50% 50%, ${rgba(B, .0)} 0deg, ${rgba(B, .0)} 40deg, ${rgba(B, .95)} 115deg, ${rgba(mix(A, B, .5), .95)} 180deg, ${rgba(A, .95)} 245deg, ${rgba(A, 0)} 320deg, ${rgba(B, 0)} 360deg)`;
+    thick = .8 + .5 * voice;
+  } else if (state === "thinking") {
+    const r = (sec * 140) % 360;
+    grad = `conic-gradient(from ${r}deg at 50% 50%, ${rgba(A, 0)} 0deg, ${rgba(A, 1)} 70deg, ${rgba(A, 0)} 130deg, ${rgba(B, 0)} 180deg, ${rgba(B, 1)} 250deg, ${rgba(B, 0)} 310deg, ${rgba(A, 0)} 360deg)`;
+    thick = 1;
+  } else if (state === "speaking") {
+    const r = (sec * 30) % 360;
+    grad = `conic-gradient(from ${r}deg at 50% 50%, ${A}, ${mix(A, B, .5)}, ${B}, ${mix(A, B, .5)}, ${A})`;
+    thick = .7 + .55 * voice;
+  } else if (state === "error") {
+    grad = `conic-gradient(from 0deg at 50% 50%, ${rgba(ROSE, .55)}, ${rgba(ROSE, .9)} 180deg, ${rgba(ROSE, .55)})`;
+    thick = .8;
+  }
+  const corner = frame === "mirror" ? "0px" : "0px";
+  // three bands: a crisp line, a soft glow, a wide haze (each band blurred inwards; the screen edge clips it)
+  const bands = dark
+    ? [[2.5 * thick, .6, 1], [12 * thick, 7, .8], [40 * thick, 26, .5]]
+    : [[2.5 * thick, .6, 1], [12 * thick, 7, .7], [40 * thick, 26, .4]];
+  return `<div class="edge" style="--corner:${corner}">${bands.map(([w, blur, o]) =>
+    `<div class="ly" style="filter:blur(${blur}px);opacity:${o};mix-blend-mode:${dark ? "screen" : "normal"}"><i style="padding:${w}px;background:${grad}"></i></div>`).join("")}</div>`;
+}
+
+function glowScene(state, t) {
+  const x = TEXT[state];
+  const mirror = frame === "mirror";
+  // a light dim, deepest at the bottom where the caption sits, so the caption reads on any dashboard
+  const dim = dark
+    ? `background:linear-gradient(to bottom, ${rgba(th.ground, .18)}, ${rgba(th.ground, .30)} 55%, ${rgba(th.ground, .62)})`
+    : `background:linear-gradient(to bottom, ${rgba(th.ground, .12)}, ${rgba(th.ground, .25)} 55%, ${rgba(th.ground, .6)})`;
+  const label = x.quote
+    ? `<div style="font-size:15px;color:var(--mu);margin-bottom:8px">${x.quote}</div>`
+    : `<div class="label" style="color:${labelColor(state)};margin-bottom:10px;display:flex;gap:8px;justify-content:center;align-items:center">${dot(state)}${x.label}</div>`;
+  const size = mirror ? 28 : 28;
+  const cap = `<div class="caption" style="bottom:${mirror ? 120 : 34}px;width:${mirror ? 460 : 640}px">${label}
+    <div class="main" style="font-size:${size}px;color:${x.muted ? "var(--mu)" : "var(--fg)"}">${x.main}</div></div>`;
+  return `${dashboard()}<div class="fill" style="${vars(th, dark)};${dim}"></div>
+    <div class="fill" style="${vars(th, dark)};color:var(--fg)">${edgeLayers(state, t)}${cap}</div>`;
+}
+function dot(state) {
+  if (state === "error") return `<i style="width:7px;height:7px;border-radius:50%;background:${ROSE}"></i>`;
+  if (state === "listening") return `<i style="width:7px;height:7px;border-radius:50%;background:linear-gradient(135deg, ${th.a}, ${th.b})"></i>`;
+  return `<i style="width:7px;height:7px;border-radius:50%;border:1.5px solid var(--fa)"></i>`;
+}
+
+// ======================================================================= timers
+let gid = 0;
+// One timer: the theme's two lights run down the ring (a to b); paused dims it; the last 10 seconds are amber.
+function tring(x, y, name, digits, left, kind = "run") {
+  const id = "g" + (gid++);
+  const r = 36, c = 2 * Math.PI * r;
+  const track = dark ? "rgba(255,255,255,.08)" : "rgba(16,20,32,.08)";
+  const stroke = kind === "hot" ? AMBER : `url(#${id})`;
+  const op = kind === "paused" ? .4 : 1;
+  const glow = kind === "hot" ? `filter:drop-shadow(0 0 6px ${rgba(AMBER, .7)})` : `filter:drop-shadow(0 0 5px ${rgba(th.a, dark ? .45 : .25)})`;
+  const svg = `<svg width="80" height="80" viewBox="0 0 80 80"><defs><linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${th.a}"/><stop offset="1" stop-color="${th.b}"/></linearGradient></defs>
+    <circle cx="40" cy="40" r="${r}" fill="none" stroke="${track}" stroke-width="3.5"/>
+    <circle cx="40" cy="40" r="${r}" fill="none" stroke="${stroke}" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="${c * left} ${c}" transform="rotate(-90 40 40)" opacity="${op}" style="${kind === "paused" ? "" : glow}"/></svg>`;
+  const dg = kind === "hot" ? `color:${dark ? AMBER : "#b45309"}` : kind === "paused" ? "color:var(--mu)" : "";
+  const pause = kind === "paused" ? `<div style="position:absolute;top:7px;left:50%;transform:translateX(-50%);display:flex;gap:3px"><i style="width:3px;height:9px;border-radius:1px;background:var(--fa)"></i><i style="width:3px;height:9px;border-radius:1px;background:var(--fa)"></i></div>` : "";
+  return `<div class="tring" style="left:${x}px;top:${y}px">${svg}<div class="sph">${pause}<span class="dg" style="${dg}">${digits}</span></div><div class="tag">${name}</div></div>`;
+}
+
+function timerDock() {
+  const sh = frame === "mirror" ? [540, 960] : [960, 480];
+  const x2 = sh[0] - 16 - 80, x1 = x2 - 96, y = sh[1] - 16 - 107;
+  return `${dashboard()}<div class="fill" style="${vars(th, dark)};pointer-events:none">${tring(x1, y, "Pasta", "8:11", .82)}${tring(x2, y, "Eggs", "0:07", .02, "hot")}</div>`;
+}
+
+function timerBoard() {
+  const rows = [["Pasta", "8:11", .82, "run", "10 min"], ["Rice", "14:52", .74, "run", "20 min"], ["Oven", "Paused", .55, "paused", "45 min · 24:30 left"], ["Eggs", "0:07", .02, "hot", "7 min"]];
+  const mini = (left, kind) => {
+    const id = "m" + (gid++), r = 15, c = 2 * Math.PI * r;
+    const stroke = kind === "hot" ? AMBER : `url(#${id})`;
+    return `<svg width="36" height="36" viewBox="0 0 36 36"><defs><linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${th.a}"/><stop offset="1" stop-color="${th.b}"/></linearGradient></defs>
+      <circle cx="18" cy="18" r="${r}" fill="none" stroke="${dark ? "rgba(255,255,255,.1)" : "rgba(16,20,32,.1)"}" stroke-width="3"/>
+      <circle cx="18" cy="18" r="${r}" fill="none" stroke="${stroke}" stroke-width="3" stroke-linecap="round" stroke-dasharray="${c * left} ${c}" transform="rotate(-90 18 18)" opacity="${kind === "paused" ? .4 : 1}"/></svg>`;
+  };
+  const body = rows.map(([n, d, l, k, sub]) => `<div class="br">${mini(l, k)}<div class="n">${n}<small>${sub}</small></div>
+    <div class="d" style="${k === "hot" ? `color:${dark ? AMBER : "#b45309"}` : k === "paused" ? "color:var(--mu);font-size:15px" : ""}">${d}</div></div>`).join("");
+  const sh = frame === "mirror" ? [540, 960] : [960, 480];
+  const hd = `<div class="bh"><span class="label" style="color:var(--fa)">Timers · 4</span>${touch ? `<span style="font-size:13px;color:var(--mu)">Hide</span>` : ""}</div>`;
+  return `${dashboard()}<div class="fill" style="${vars(th, dark)};color:var(--fg)"><div class="board" style="right:16px;bottom:16px">${hd}${body}</div></div>`;
+}
+
+function timerRingSpec() {
+  const cells = [
+    ["run", "8:11", .82, "Running", "The theme's two lights run down the ring"],
+    ["paused", "6:31", .65, "Paused", "Dimmed ring, pause mark, digits muted"],
+    ["hot", "0:07", .02, "Last 10 seconds", "Amber, a status colour: about to ring"],
+  ];
+  const mirror = frame === "mirror";
+  const cw = mirror ? 540 : 960;
+  return `<div class="spec" style="${vars(th, dark)}">
+    <div class="note" style="left:28px;top:24px;font-size:13px">TIMER RING · ${THEMES[themeId].name.toUpperCase()} · ${mode.toUpperCase()}</div>
+    ${cells.map(([k, d, l, title, cap], i) => {
+      const x = mirror ? cw / 2 - 40 : 160 + i * 280, y = mirror ? 130 + i * 280 : 140;
+      return `<div style="position:absolute;left:${x}px;top:${y}px;transform:scale(1.6);transform-origin:40px 40px">${tring(0, 0, ["Pasta", "Oven", "Eggs"][i], d, l, k)}</div><div class="cell" style="left:${x - 80}px;top:${y + 150}px;width:240px"><div class="cap"><b>${title}</b>${cap}</div></div>`;
+    }).join("")}</div>`;
+}
+
+function timerDone() {
+  const mirror = frame === "mirror";
+  const p = mirror ? { cx: 270, cy: 330, size: 128, top: 450, col: 476 } : { cx: 480, cy: 160, size: 120, top: 262, col: 820 };
+  const scrim = `background:radial-gradient(60% 70% at 0% 0%, ${rgba(th.a, dark ? .10 : .14)}, transparent 70%), radial-gradient(55% 65% at 100% 100%, ${rgba(th.b, dark ? .10 : .14)}, transparent 70%), ${rgba(th.ground, .90)}`;
+  // the chime: rings go out every 1.5 s in the theme's light
+  const rings = ring(p.size * 1.4, th.a, .35) + ring(p.size * 1.85, th.b, .18) + ring(p.size * 2.3, th.b, .08);
+  const orb = orbHtml("listening", p.cx, p.cy, p.size, 0).replace('<div class="sphere">', rings + '<div class="sphere">');
+  const hint = touch ? `<div class="label abs" style="left:0;right:0;bottom:22px;text-align:center;color:var(--fa)">Tap anywhere to dismiss</div>` : "";
+  return `${timerDock()}<div class="fill" style="${vars(th, dark)};${scrim}"></div>
+    <div class="fill" style="${vars(th, dark)};color:var(--fg)">${orb}
+      <div class="abs" style="left:${(W - p.col) / 2}px;width:${p.col}px;top:${p.top}px;text-align:center">
+        <div class="label" style="color:${labelColor("listening")};margin-bottom:14px">Timer done</div>
+        <div class="main" style="font-size:44px">Eggs</div>
+        <div style="font-size:19px;color:var(--mu);margin-top:8px">7-minute timer</div>
+        <div class="label" style="margin-top:26px;color:var(--fa)">Still running <b style="color:var(--mu);margin-left:14px;font-weight:600">Pasta 8:11</b></div></div>
+      ${hint}</div>`;
+}
+
+// ======================================================================= cycle (the motion preview)
+// One run on a loop: listening, thinking, speaking, then an error, each light cross-fading into the next.
+const CYCLE = [["listening", 4200], ["thinking", 3000], ["speaking", 4600], ["error", 2400]];
+const CYCLE_MS = CYCLE.reduce((n, [, d]) => n + d, 0);
+function cyclePhase(t) {
+  let u = ((t % CYCLE_MS) + CYCLE_MS) % CYCLE_MS, i = 0;
+  while (u >= CYCLE[i][1]) { u -= CYCLE[i][1]; i++; }
+  return { state: CYCLE[i][0], prev: CYCLE[(i + CYCLE.length - 1) % CYCLE.length][0], k: Math.min(1, u / 450) };
+}
+let dashDone = false;
+function cycle(kind, t) {
+  const root = document.getElementById("root");
+  if (!dashDone) {
+    root.innerHTML = `<div class="screen" style="width:${W}px;height:${H}px">${dashboard()}<div id="ov" class="fill"></div></div>`;
+    dashDone = true;
+  }
+  const { state, prev, k } = cyclePhase(t);
+  const one = (st, o) => {
+    const html = kind === "glow" ? glowScene(st, t) : orbScene(st, t);
+    return `<div class="fill" style="opacity:${o}">${html.replace(dashboard(), "")}</div>`;
+  };
+  document.getElementById("ov").innerHTML = (k < 1 ? one(prev, 1 - k) : "") + one(state, k);
+}
+
+// ======================================================================= render
+function render(t) {
+  if (scene === "glow-cycle" || scene === "orb-cycle") return cycle(scene.slice(0, scene.indexOf("-")), t);
+  gid = 0;
+  let html;
+  if (scene === "picker") html = picker();
+  else if (scene === "manage") html = manage();
+  else if (scene.startsWith("orb-")) html = orbScene(scene.slice(4), t);
+  else if (scene.startsWith("glow-")) html = glowScene(scene.slice(5), t);
+  else if (scene === "timer-dock") html = timerDock();
+  else if (scene === "timer-board") html = timerBoard();
+  else if (scene === "timer-ring") html = timerRingSpec();
+  else if (scene === "timer-done") html = timerDone();
+  document.getElementById("root").innerHTML = `<div class="screen" style="width:${W}px;height:${H}px">${html}</div>`;
+}
+render(T0);
+if (anim) { const s = performance.now(); const tick = n => { render(T0 + n - s); requestAnimationFrame(tick); }; requestAnimationFrame(tick); }
+</script>
+</body>
+</html>
