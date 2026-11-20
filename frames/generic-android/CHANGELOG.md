@@ -12,6 +12,11 @@ line of each version is what Home Assistant shows on the update card. A change o
 ## [Unreleased]
 
 ### Added
+- **Recorders that record on motion get the camera's motion pushed to them.** With the ONVIF stream on, a network
+  video recorder that subscribes to the camera's motion (many Xiongmai-based NVRs do) now hears about each change
+  the moment it happens, so it can start recording. The recorder must be on your local network and sign in with the
+  stream's username and password. Home Assistant's ONVIF integration can use this too, and then gets motion
+  without asking for it.
 - **Kiln installs Glassworks on Android devices for everyone, in beta.** Open `kiln.glassworks.dev/android` in
   Chrome or Edge: Kiln takes the newest release, with no `?apk=release` link needed. It is in Kiln's picker, marked
   Beta.
@@ -35,6 +40,9 @@ line of each version is what Home Assistant shows on the update card. A change o
   back to Stable never installs an older version: the panel waits for a stable release newer than the one it runs.
 
 ### Fixed
+- **Snapshot checks over ONVIF give the real size.** A recorder or tool that checks the camera's snapshot before
+  downloading it now sees the picture's real size and no stray bytes, so its next request on the same connection
+  works.
 - **Setup stays on screen when the app restarts after finding Home Assistant.** Once the panel joins Wi-Fi and
   finds Home Assistant, the app restarts to apply it. The setup screen now comes back at once and says "Connecting
   to Home Assistant…" until it knows whether the panel needs to sign in, so Home Assistant's page no longer flashes
