@@ -183,20 +183,23 @@ class CameraHubTest {
         }
     }
 
-    /** #674: presence starts its clock when the camera is asked for frames, not when the pane turned on. */
-    @Test fun presenceHearsWhenTheCameraStarts() {
+    /**
+     * #674: presence starts its clock when the camera is asked for frames, not when the pane turned on. A silence is
+     * reported to it before the reopen starts the camera again, so the new session's grace can't hide it.
+     */
+    @Test fun presenceHearsWhenTheCameraStartsAndOfASilenceBeforeTheReopen() {
         val hub = silentCamera()
-        val starts = java.util.concurrent.atomic.AtomicInteger()
+        val events = java.util.Collections.synchronizedList(mutableListOf<String>())
         val sink = object : FrameSink {
             override fun frame(frame: LumaFrame) {}
-            override fun lost(why: String) {}
-            override fun started() { starts.incrementAndGet() }
+            override fun lost(why: String) { events += "lost: $why" }
+            override fun started() { events += "started" }
         }
         hub.open(5f, sink).use {
             opened(); settled(hub)
-            assertEquals(1, starts.get())
+            assertEquals(listOf("started"), events.toList())
             advance(hub, CameraHub.FIRST_FRAME_MS)
-            assertEquals("the reopened camera starts again", 2, starts.get())
+            assertEquals(listOf("started", "lost: no first frame in 10 s", "started"), events.toList())
         }
     }
 

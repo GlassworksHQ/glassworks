@@ -432,7 +432,7 @@ class CameraHub(
     /**
      * Checks session [gen] for silence in [delayMs]: no first image for [FIRST_FRAME_MS], or no image for [SILENT_MS]
      * after one, closes the camera and opens it again, at once the first time and later after each silence that
-     * follows ([ReopenBackoff]). Presence reports the silence on its own, on the same clock; this is what ends it.
+     * follows ([ReopenBackoff]). The sinks hear of it ([FrameSink.lost]) first; this is what ends it.
      */
     private fun watchSilence(gen: Int, delayMs: Long) {
         handler.postDelayed({
@@ -440,8 +440,11 @@ class CameraHub(
             val now = SystemClock.elapsedRealtime()
             val left = deadline.left(now)
             if (left > 0) { watchSilence(gen, deadline.nextCheck(now)); return@postDelayed }
+            val why = deadline.why(now)
             val wait = reopen.silence()
-            log("camera: reopen ${reopen.attempt} ${if (wait == 0L) "now" else "in ${wait / 1000} s"} (${deadline.why(now)})")
+            log("camera: reopen ${reopen.attempt} ${if (wait == 0L) "now" else "in ${wait / 1000} s"} ($why)")
+            // Before the reopen's started() gives presence a new grace, so the silence is reported, not skipped.
+            sinks.forEach { it.sink.lost(why) }
             closeCamera()
             reopenAt = SystemClock.elapsedRealtime() + wait
             handler.postDelayed(::settle, wait)
