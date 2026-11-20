@@ -515,7 +515,9 @@ class ScreenPolicy(
         }
     }
 
-    fun statusLine(): String =
-        "presence=${if (near) "near" else "far"} (raw ${proximityRaw}) · lux=${lux} · " +
-            "brightness=${"%.2f".format(brightness)} · admin=${isAdmin}"
+    /** The Log page's line for [hardware] ([ScreenHardware.status]). The raw readings go to logcat only. */
+    fun status(hardware: ScreenHardware): String {
+        Log.i(logTag, "status: presence=${if (near) "near" else "far"} (raw $proximityRaw) lux=$lux brightness=$brightness admin=$isAdmin")
+        return hardware.status(near, lux, brightness)
+    }
 }

@@ -43,9 +43,10 @@ object S1Settings {
         context: Context,
     ): KioskSettingsOverlay.Model {
         val frame = runtime.frame
+        val hardware = ScreenHardware.of(frame, panes, context)
         val core = CoreSettings(
             prefs, version,
-            status = { runtime.screen.statusLine() + " · voice=" + runtime.voiceState },
+            status = { runtime.screen.status(hardware) + " · Voice: " + runtime.voiceState },
             deviceSettings = if (!deviceSettings) null else SettingsItem.Link(SettingsMenu.deviceSettingsTitle(frame), SettingsMenu.DEVICE_SETTINGS_DETAIL) { c ->
                 if (!frame.openSystemSettings(c)) Toast.makeText(c, "No settings app on this panel", Toast.LENGTH_LONG).show()
             },
@@ -55,7 +56,7 @@ object S1Settings {
                 presenceRange = { runtime.screen.applyPresenceRange() },
                 brightness = { runtime.screen.refreshBrightness() },
             ),
-            hardware = ScreenHardware.of(frame, panes, context),
+            hardware = hardware,
             screenBlueprints = blueprints(CoreSettings.SCREEN),
             account = runtime.dashboardAccount::shown,
             product = runtime.build.product,

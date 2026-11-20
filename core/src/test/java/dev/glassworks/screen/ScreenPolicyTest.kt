@@ -634,4 +634,36 @@ class ScreenPolicyTest {
             assertFalse(no, TestHoldFile.isTestDashboard(no))
         }
     }
+
+    // ------------------------------------------------------------ the Log page's line (#675)
+
+    private val s1 = ScreenHardware(ScreenHardware.Presence.Sensor(ranged = true), light = true, touch = true)
+
+    /** The Mirror: presence from the camera pane, no light sensor. */
+    private val mirror = ScreenHardware(ScreenHardware.Presence.Pane("camera", "Camera", on = true), light = false, touch = false)
+
+    @Test fun theLogLineSaysWhatTheFrameHasInWords() {
+        assertEquals("Someone near: yes · Room light: 120 lux · Brightness: 40 %", s1.status(near = true, lux = 120.4f, brightness = 0.4f))
+        assertEquals("Someone near: no · Room light: no reading yet · Brightness: set by Android", s1.status(false, Float.NaN, -1f))
+    }
+
+    @Test fun theLogLineLeavesOutWhatTheFrameLacks() {
+        assertEquals("Someone near: no · Brightness: set by Android", mirror.status(near = false, lux = Float.NaN, brightness = -1f))
+        val cameraOff = mirror.copy(presence = ScreenHardware.Presence.Pane("camera", "Camera", on = false))
+        assertEquals("Brightness: 75 %", cameraOff.status(near = false, lux = Float.NaN, brightness = 0.75f))
+        assertEquals("Brightness: 75 %", mirror.copy(presence = ScreenHardware.Presence.None).status(true, 3f, 0.75f))
+    }
+
+    @Test fun theRawReadingsGoToLogcatOnly() {
+        ShadowLog.clear()
+        val sensor = FakeSource()
+        val screen = policy(presence = sensor)
+        screen.start(context)
+        sensor.presence!!(false, 7.716E-4f)
+        val line = screen.status(mirror)
+        assertEquals("Someone near: no · Brightness: set by Android", line)
+        val raw = ShadowLog.getLogsForTag("Test.Screen").map { it.msg }.single { it.startsWith("status: ") }
+        assertTrue(raw, "raw 7.716E-4" in raw && "lux=NaN" in raw && "admin=" in raw)
+        screen.stop()
+    }
 }
