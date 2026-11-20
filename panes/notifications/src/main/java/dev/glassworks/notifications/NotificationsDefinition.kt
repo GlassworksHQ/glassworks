@@ -27,7 +27,7 @@ class NotificationsDefinition(
     private val prefs = NotificationsPrefs(file)
 
     override val switch = PaneSwitch(
-        file, NotificationsPrefs.KEY_ENABLED, default = false, title = "Notifications", detail = "On-screen alerts",
+        file, NotificationsPrefs.KEY_ENABLED, default = NotificationsPrefs.DEFAULT_ENABLED, title = "Notifications", detail = "On-screen alerts",
         objectId = "notifications", entityName = "Notifications", icon = "mdi:bell-outline", inSetup = true,
         // The core shows this on the page while the pane is off (#212), then the pane's entities.
         offNote = OFF_NOTE,

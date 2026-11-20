@@ -114,7 +114,7 @@ To enable any disabled entity in Home Assistant: open **Settings → Devices & s
 | Music Assistant player (Sendspin) | `sendspin` | Sendspin | Config | No | Pane on/off |
 | Music Assistant player status | `sendspin_status` | Sendspin | Diagnostic | No | Pairing and playback status |
 | Do not disturb | `do_not_disturb` | Notifications | Config | Yes | Bedtime / quiet-hours automations |
-| Notifications (pane switch) | `notifications` | Notifications | Config | No | Pane on/off (starts off by default) |
+| Notifications (pane switch) | `notifications` | Notifications | Config | No | Pane on/off (on by default) |
 | `notify` action (`esphome.<panel>_notify`) | `notify` | Notifications | Action | Listed | Always listed when connected ([Notifications](notifications.md)) |
 | Bluetooth proxy, Bluetooth advertisements, Bluetooth proxy status | `bluetooth_proxy`, `bluetooth_advertisements`, `bluetooth_proxy_status` | Bluetooth proxy | Config / Diagnostic | No | Pane on/off (off by default) and stats |
 | Camera, Camera presence, Camera privacy | `camera`, `camera_presence`, `camera_privacy` | Camera | None | Yes | Camera-equipped devices only ([Camera entities](#camera-entities)) |
@@ -227,7 +227,7 @@ Each modular pane exposes a configuration switch so you can enable or disable it
 | **Keep time zone** | `keep_time_zone` | S1 Plus persistent time zone | `time_zone_enabled` |
 | **Diagnostics** | `diagnostics` | System and app health sensors | `diagnostics_enabled` |
 | **Bluetooth proxy** | `bluetooth_proxy` | ESPHome BLE proxy (off by default) | `bluetooth_proxy_enabled` |
-| **Notifications** | `notifications` | Rich dashboard alerts (off by default) | — |
+| **Notifications** | `notifications` | Rich dashboard alerts (on by default) | `notifications_enabled` |
 | **Camera pane** | `camera_pane` | Camera presence, snapshots, ONVIF (off by default) | `camera_enabled` |
 
 Toggling **Voice** or **Bluetooth proxy** updates advertised device capabilities and briefly reconnects Home Assistant (a few seconds). While **Voice** is off, Home Assistant's built-in Assist entities disappear while the panel's **Speaker** remains available for media and TTS.

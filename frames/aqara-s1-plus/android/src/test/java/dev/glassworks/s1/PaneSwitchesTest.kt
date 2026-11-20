@@ -33,7 +33,7 @@ class PaneSwitchesTest {
         assertEquals(listOf("assist", "sendspin", "notifications", "radio", "bluetooth-proxy", "wall-base", "time-zone", "diagnostics"), sections.map { it.id })
         assertEquals(listOf("Voice", "Music", "Notifications", "Zigbee / Thread radio", "Bluetooth proxy", "Wall base", "Time zone", "Diagnostics"), sections.map { it.master?.title })
         // No device runs here: a page that shows the running pane says so (#212); the radio, the Bluetooth proxy
-        // and notifications (off by default, so its page is its off note) have their own.
+        // (off by default, so its page is its off note) and notifications (its page reads the hub) have their own.
         val waiting = sections.filter { s -> s.items.singleOrNull().let { it is SettingsItem.Note && it.text() == NOT_RUNNING } }
         assertEquals(listOf("assist", "sendspin", "wall-base", "time-zone", "diagnostics"), waiting.map { it.id })
     }
@@ -80,11 +80,14 @@ class PaneSwitchesTest {
         assertEquals(listOf("assist"), definitions.filter { it.switch?.voiceAssistant == true }.map { it.id })
     }
 
-    /** Notifications (#118, Principle 7) and the Bluetooth proxy (it starts the radio scanning, #121) are off until turned on. */
-    @Test fun everyPaneButNotificationsAndTheBluetoothProxyIsOnUntilTurnedOff() {
+    /**
+     * Only the Bluetooth proxy (it starts the radio scanning, #121) is off until turned on. Notifications are
+     * on by default (maintainer, 2026-11-20): idle they only wait for a notify call.
+     */
+    @Test fun everyPaneButTheBluetoothProxyIsOnUntilTurnedOff() {
         assertEquals(
             listOf(
-                "assist" to true, "sendspin" to true, "notifications" to false, "bluetooth-proxy" to false,
+                "assist" to true, "sendspin" to true, "notifications" to true, "bluetooth-proxy" to false,
                 "wall-base" to true, "time-zone" to true, "diagnostics" to true,
             ),
             definitions.mapNotNull { d -> d.switch?.let { d.id to it.on } },
