@@ -9,6 +9,9 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 ## [Unreleased]
 
 ### Added
+- **Kiln installs the lululemon Mirror and Android devices, in beta.** Both are in Kiln's picker now, marked Beta,
+  and their pages are open to everyone, with Glassworks from its newest release: no test link needed. The Aqara S1
+  Plus is stable, so its card shows no badge.
 - **Reset the panel, and open or close setup over the network, from the Security page.** The panel's settings and
   the Manage page have a new *Security* page. *Reset the panel* clears the app's settings, its panes' settings and
   its Home Assistant sign-in, signs every browser out of the Manage page, and restarts into setup. It keeps Wi-Fi,

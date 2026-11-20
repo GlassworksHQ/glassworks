@@ -12,6 +12,9 @@ line of each version is what Home Assistant shows on the update card. A change o
 ## [Unreleased]
 
 ### Added
+- **Kiln installs Glassworks on Android devices for everyone, in beta.** Open `kiln.glassworks.dev/android` in
+  Chrome or Edge: Kiln takes the newest release, with no `?apk=release` link needed. It is in Kiln's picker, marked
+  Beta.
 - **Reset the panel, and open or close setup over the network, from the Security page.** The panel's settings and
   the Manage page have a new *Security* page. *Reset the panel* clears the app's settings, its panes' settings and
   its Home Assistant sign-in, signs every browser out of the Manage page, and restarts into setup. It keeps Wi-Fi,

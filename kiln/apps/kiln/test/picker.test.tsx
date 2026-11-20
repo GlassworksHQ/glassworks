@@ -41,14 +41,23 @@ describe('the picker', () => {
 
   it('shows the frames, and Continue goes to the picked one\'s start', () => {
     render(<Picker />);
-    expect(screen.getByRole('radio', { name: /Aqara S1 Plus, Beta/ })).toHaveProperty('dataset.state', 'checked');
-    expect(screen.getByRole('radio', { name: /lululemon Studio Mirror, Under development, not installable/ })).toHaveProperty('disabled', true);
-    expect(screen.getByRole('radio', { name: /Generic Android, Under development, not installable/ })).toHaveProperty('disabled', true);
+    // stable: no stage in its name and no pill; the beta frames say Beta and can be picked
+    expect(screen.getByRole('radio', { name: 'Aqara S1 Plus' })).toHaveProperty('dataset.state', 'checked');
+    expect(screen.getByRole('radio', { name: 'lululemon Studio Mirror, Beta' })).toHaveProperty('disabled', false);
+    expect(screen.getByRole('radio', { name: 'Generic Android, Beta' })).toHaveProperty('disabled', false);
+    expect(screen.getByRole('radio', { name: /Google Pixel Tablet, Planned, not installable/ })).toHaveProperty('disabled', true);
+    const pills = (name: string) => screen.getByRole('radio', { name }).textContent ?? '';
+    expect(pills('Aqara S1 Plus')).not.toMatch(/Stable|Beta/);
+    expect(pills('lululemon Studio Mirror, Beta')).toContain('Beta');
     expect(screen.queryByText(/still working/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     expect(router.push).toHaveBeenCalledWith('/aqara-s1-plus');
+    // a beta frame is picked and continued like any other: its route, opened to everyone
+    fireEvent.click(screen.getByRole('radio', { name: 'lululemon Studio Mirror, Beta' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(router.push).toHaveBeenLastCalledWith('/lululemon-mirror');
     // the summary and install tags reach screen readers as the card's description
-    const s1 = screen.getByRole('radio', { name: /Aqara S1 Plus, Beta/ });
+    const s1 = screen.getByRole('radio', { name: 'Aqara S1 Plus' });
     const described = (s1.getAttribute('aria-describedby') ?? '').split(' ').map((id) => document.getElementById(id)?.textContent ?? '').join(' ');
     expect(described).toMatch(/The reference frame\./);
     expect(described).toMatch(/Medium install.*Reversible.*Modifies Android/);

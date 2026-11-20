@@ -22,9 +22,15 @@
       <img alt="Built on Glassworks" src="https://www.glassworks.dev/brand/badge-on-light.svg" height="30">
     </picture>
   </a>
+  <a href="https://kiln.glassworks.dev/lululemon-mirror">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-kiln-on-dark.svg">
+      <img alt="Glassworks Kiln" src="https://www.glassworks.dev/brand/badge-kiln-on-light.svg" height="30">
+    </picture>
+  </a>
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-status-under-development-on-dark.svg">
-    <img alt="Status: under development" src="https://www.glassworks.dev/brand/badge-status-under-development-on-light.svg" height="30">
+    <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-status-beta-on-dark.svg">
+    <img alt="Status: beta" src="https://www.glassworks.dev/brand/badge-status-beta-on-light.svg" height="30">
   </picture>
   <a href="https://github.com/orgs/GlassworksHQ/projects/1">
     <picture>
@@ -77,7 +83,7 @@ Kiln show ([how](../README.md#credits)).
 
 ## Status
 
-**Status: under development.** The legacy build has run on a real Mirror, but there is no release for it yet, and Kiln's install is test only. The target is the Qualcomm (MSM8916) board with stock software 1.x. Later revisions use an NXP i.MX8 board, where only hardware-assisted (JTAG) access has been reported; they are not a target. Screen size doesn't tell them apart ([revisions.md](research/revisions.md)).
+**Status: beta.** Kiln installs it for everyone at `kiln.glassworks.dev/lululemon-mirror` (2026-11-20). Some of Kiln's forgiveness is still missing on it: its marked contract failures, #621. The target is the Qualcomm (MSM8916) board with stock software 1.x. Later revisions use an NXP i.MX8 board, where only hardware-assisted (JTAG) access has been reported; they are not a target. Screen size doesn't tell them apart ([revisions.md](research/revisions.md)).
 
 The original version runs Android 6.0.1, and the S1 app needs Android 8.0 or newer (`minSdk` 26), so today's app doesn't install on it. Kiln's Mirror recipe installs the legacy build of Glassworks for generic Android (`dev.glassworks.generic_android.legacy`, #198) instead, which asks for Android 6.0 (API 23). It has run on a Mirror: it starts with no crashes and stands upright (2026-11-17, #443), and the dashboard loads after a sign-in from a phone (2026-11-17, #459). It runs a frozen engine and opens only your Home Assistant ([legacy-engine.md](../../docs/research/legacy-engine.md)). Why a newer Android is hard on this board: [mirror-android.md](research/mirror-android.md).
 
@@ -97,7 +103,7 @@ The Clarity badge shows its Clarity grade ([docs/perf.md](../../docs/perf.md)) o
 
 ## Install
 
-Not available yet. **Test only, today**, in Kiln ([its recipe](installer)): `/lululemon-mirror?apk=release` installs Glassworks from its newest `generic-android-legacy-v*` release (the arm64-v8a APK, checked against the release's `.sha256`), and `/lululemon-mirror?apk=local` from an APK file on the computer. Without either, the page says the Mirror doesn't install from Kiln yet. It opens to everyone when this frame's `design/frame.json` has `status` `alpha` and `kiln` `/lululemon-mirror`; then the release is the default. The fastboot path has run end to end on a real Mirror from the command line, with `tools/mirror/flash-node.ts`, which runs the same steps without a browser ([image-patch.md](research/image-patch.md#the-first-real-flash-2026-11-16-verified-by-the-root)). In that run the home-screen step failed: its test APK had no home screen. The legacy build has been the home screen since (2026-11-17, #443). It hasn't run from Kiln's page yet.
+**Beta**, in Kiln ([its recipe](installer)): `kiln.glassworks.dev/lululemon-mirror` installs Glassworks from its newest `generic-android-legacy-v*` release (the arm64-v8a APK, checked against the release's `.sha256`), and `?apk=local` from an APK file on the computer. The fastboot path has run end to end on a real Mirror from the command line, with `tools/mirror/flash-node.ts`, which runs the same steps without a browser ([image-patch.md](research/image-patch.md#the-first-real-flash-2026-11-16-verified-by-the-root)). In that run the home-screen step failed: its test APK had no home screen. The legacy build has been the home screen since (2026-11-17, #443). It hasn't run from Kiln's page yet.
 
 **Over fastboot, from lululemon's software or the community image (#40):**
 

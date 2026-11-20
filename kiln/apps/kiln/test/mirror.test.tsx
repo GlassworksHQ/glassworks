@@ -32,39 +32,39 @@ const until = async (f: () => boolean, ms = 10_000) => {
 const embers = () => [...document.querySelectorAll('.btn.ember')].map((b) => b.textContent);
 
 describe('the switch', () => {
-  it('is off without ?apk=local or ?apk=release, and demos only where demos run', () => {
-    expect(deviceMode('', true, APP_DEMOS, deviceOpen(mirrorFrame))).toEqual({ on: false });
-    expect(deviceMode('?apk=other', true, APP_DEMOS, deviceOpen(mirrorFrame))).toEqual({ on: false });
+  it('is on for everyone, the release by default (beta), and demos only where demos run', () => {
+    expect(deviceMode('', true, APP_DEMOS, deviceOpen(mirrorFrame))).toEqual({ on: true, apk: 'release' });
+    expect(deviceMode('?apk=other', true, APP_DEMOS, deviceOpen(mirrorFrame))).toEqual({ on: true, apk: 'release' });
     expect(deviceMode('?apk=release', false, APP_DEMOS, deviceOpen(mirrorFrame))).toEqual({ on: true, apk: 'release' });
     expect(deviceMode('?apk=local', false, APP_DEMOS, deviceOpen(mirrorFrame))).toEqual({ on: true, apk: 'local' });
     expect(deviceMode('?demo=checks', true, APP_DEMOS, deviceOpen(mirrorFrame))).toEqual({ on: true, demo: 'checks' });
-    expect(deviceMode('?demo=checks', false, APP_DEMOS, deviceOpen(mirrorFrame))).toEqual({ on: false }); // a production build
-    expect(deviceMode('?demo=nope', true, APP_DEMOS, deviceOpen(mirrorFrame))).toEqual({ on: false });
+    expect(deviceMode('?demo=checks', false, APP_DEMOS, deviceOpen(mirrorFrame))).toEqual({ on: true, apk: 'release' }); // a production build
+    expect(deviceMode('?demo=nope', true, APP_DEMOS, deviceOpen(mirrorFrame))).toEqual({ on: true, apk: 'release' });
   });
 
-  it('without it, the page says the Mirror doesn\'t install yet and offers no file picker', async () => {
+  it('without it, the page opens on the choice, for everyone (the locked page: device-locked.test.tsx)', async () => {
     render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
-    await screen.findByText(/doesn.t install from Kiln yet/);
-    expect(document.querySelector('input[type=file]')).toBeNull();
-    expect(embers()).toEqual([]);
+    await screen.findByText('What goes on the Mirror?');
+    expect(screen.queryByText(/doesn.t install from Kiln yet/)).toBeNull();
+    expect(screen.queryByText('Test only')).toBeNull();
   });
 
   it('with it, Kiln installs Glassworks over fastboot by default: first and picked on the choice (#579)', async () => {
     history.replaceState(null, '', '/lululemon-mirror?apk=local');
     render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
     await screen.findByText('What goes on the Mirror?');
-    expect(screen.getByText('Test only')).toBeTruthy();
+    expect(screen.queryByText('Test only')).toBeNull(); // beta (frame.json): open to everyone, not a test page
     expect(embers()).toEqual(['Continue with Glassworks']);
     fireEvent.click(screen.getByRole('button', { name: 'Continue with Glassworks' }));
     await screen.findByText('Install Glassworks on the Mirror.');
     expect(embers()).toEqual(['Download the system image']);
   });
 
-  it('with &mode=app, the app alone over adb, its APK from this computer, labelled test only', async () => {
+  it('with &mode=app, the app alone over adb, its APK from this computer, not labelled test only', async () => {
     history.replaceState(null, '', '/lululemon-mirror?apk=local&mode=app');
     render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
     await screen.findByText('Install a test build on the Mirror.');
-    expect(screen.getByText('Test only')).toBeTruthy();
+    expect(screen.queryByText('Test only')).toBeNull(); // beta (frame.json): open to everyone, not a test page
     expect(document.querySelector('input[type=file]')).not.toBeNull();
     expect(embers()).toEqual(['Connect']);
   });

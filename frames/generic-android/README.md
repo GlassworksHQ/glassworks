@@ -21,9 +21,15 @@
       <img alt="Built on Glassworks" src="https://www.glassworks.dev/brand/badge-on-light.svg" height="30">
     </picture>
   </a>
+  <a href="https://kiln.glassworks.dev/android">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-kiln-on-dark.svg">
+      <img alt="Glassworks Kiln" src="https://www.glassworks.dev/brand/badge-kiln-on-light.svg" height="30">
+    </picture>
+  </a>
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-status-under-development-on-dark.svg">
-    <img alt="Status: under development" src="https://www.glassworks.dev/brand/badge-status-under-development-on-light.svg" height="30">
+    <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-status-beta-on-dark.svg">
+    <img alt="Status: beta" src="https://www.glassworks.dev/brand/badge-status-beta-on-light.svg" height="30">
   </picture>
   <a href="https://github.com/orgs/GlassworksHQ/projects/1">
     <picture>
@@ -43,7 +49,7 @@ This folder defines the **Generic Android** frame (`design/frame.json`, [format]
 
 ## Status
 
-**Status: under development.** Generic Android ships its own dedicated app, **Glassworks** (`dev.glassworks.generic_android`, built from [`android/`](android)), targeting Android 8.0 or newer (`minSdk` 26), alongside a separate legacy build for Android 6 and 7. On a Google Pixel Tablet (Android 17), dashboard loading, Home Assistant ESPHome adoption, automatic pane hiding, and in-place updates have all been verified; hardware testing for wake words, Sendspin, and the ambient light sensor is still underway.
+**Status: beta.** Kiln installs it for everyone at `kiln.glassworks.dev/android` (2026-11-20). Generic Android ships its own dedicated app, **Glassworks** (`dev.glassworks.generic_android`, built from [`android/`](android)), targeting Android 8.0 or newer (`minSdk` 26), alongside a separate legacy build for Android 6 and 7. On a Google Pixel Tablet (Android 17), dashboard loading, Home Assistant ESPHome adoption, automatic pane hiding, and in-place updates have all been verified; hardware testing for wake words, Sendspin, and the ambient light sensor is still underway.
 
 *(For reference, the Aqara S1 Plus APK also automatically falls back to generic behavior if installed on non-S1 hardware, naming itself after the device model and hiding unsupported panes.)*
 
@@ -101,7 +107,7 @@ Neither build is distributed on Google Play because Glassworks manages its own u
 
 ## Install
 
-Generic Android installs as a standard APK. While the frame is still under development, you can try Kiln's test installer in Chrome or Edge by opening `kiln.glassworks.dev/android?apk=release` (which fetches and checksum-verifies the latest modern Android 8+ `generic-android-v*` arm64-v8a release) or `?apk=local` to choose a local APK from your computer. Devices running **Android 6 or 7** require the legacy build (`dev.glassworks.generic_android.legacy`)—Kiln's recipe rejects the modern APK on API 23–25 before writing anything, so open `kiln.glassworks.dev/android?apk=local` and select a compatible legacy APK instead. Once this frame reaches alpha, `kiln.glassworks.dev/android` will open directly without query parameters.
+Generic Android installs as a standard APK. Open `kiln.glassworks.dev/android` in Chrome or Edge: Kiln downloads the arm64-v8a APK of the newest `generic-android-v*` release and checks it against the release's `.sha256`. That build needs Android 8 or newer on a 64-bit (arm64-v8a) device. Kiln reads the device's Android version and processor first, and refuses one the APK doesn't fit before it writes anything. For **Android 6 or 7** (the legacy build, `dev.glassworks.generic_android.legacy`) or a 32-bit device (the armeabi-v7a APK), open `kiln.glassworks.dev/android?apk=local` and pick the APK that fits from your computer, as you would a test build.
 
 Kiln's Generic Android recipe ([`installer/`](installer)) guides you through enabling USB debugging for your tablet's brand, then automatically:
 

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 // /lululemon-mirror?apk=release: the APK from the newest Mirror release through Kiln's release route, checked against
-// the release's .sha256. No release is an error, never the file picker. Without ?apk=…, the page stays locked.
+// the release's .sha256. No release is an error, never the file picker. The Mirror is beta (frame.json), so the page is
+// open: without ?apk=…, the APK comes from the release. The locked page of a frame that isn't open: device-locked.test.tsx.
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { GLASSWORKS } from '@glassworks/lululemon-mirror-installer';
 import { fakeApk } from '@glassworks/app-adb/fakes';
@@ -34,9 +35,9 @@ const session = (kind: FakeRelease | typeof fetch) =>
 const embers = () => [...document.querySelectorAll('.btn.ember')].map((b) => b.textContent);
 
 describe('the switch', () => {
-  it('stays locked to the public: frame.json doesn\'t make the Mirror installable yet', () => {
-    expect(deviceOpen(mirrorFrame)).toBe(false);
-    expect(deviceMode('', false, [], false)).toEqual({ on: false });
+  it('opens to everyone: frame.json makes the Mirror installable (beta, with its kiln route)', () => {
+    expect(deviceOpen(mirrorFrame)).toBe(true);
+    expect(deviceMode('', false, [], deviceOpen(mirrorFrame))).toEqual({ on: true, apk: 'release' });
   });
 
   it('?apk=release and ?apk=local are the test links; once open, the page takes the release by default', () => {
@@ -187,7 +188,7 @@ describe('the page', () => {
   const toImage = async () => {
     render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
     await screen.findByText('What goes on the Mirror?');
-    expect(screen.getByText('Test only')).toBeTruthy();
+    expect(screen.queryByText('Test only')).toBeNull(); // beta (frame.json): open to everyone, not a test page
     fireEvent.click(screen.getByRole('button', { name: 'Continue with Glassworks' }));
     await screen.findByText('Install Glassworks on the Mirror.');
   };
@@ -231,16 +232,13 @@ describe('the page', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it('without ?apk=…, the page stays locked and asks nothing', async () => {
-    const fetch = vi.fn();
-    vi.stubGlobal('fetch', fetch);
+  it('without ?apk=…, Glassworks comes from its release, as for ?apk=release', async () => {
+    vi.stubGlobal('fetch', fakeReleaseRoute('out', APK));
     history.replaceState(null, '', '/lululemon-mirror');
-    render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
-    await screen.findByText(/doesn.t install from Kiln yet/);
-    expect(screen.getByText(/^Its installer is still being tested\./)).toBeTruthy(); // a release exists now: not "no release yet"
+    await toImage();
+    await screen.findByText('Glassworks 0.2.0');
     expect(document.querySelector('input[type=file]')).toBeNull();
-    expect(embers()).toEqual([]);
-    expect(fetch).not.toHaveBeenCalled();
+    expect(embers()).toEqual(['Download the system image']);
   });
 
   it('asks for no Wi-Fi and no Home Assistant on the image screen: those are set-up\'s, after the first start', async () => {

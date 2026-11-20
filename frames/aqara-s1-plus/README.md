@@ -28,8 +28,8 @@
     </picture>
   </a>
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-status-beta-on-dark.svg">
-    <img alt="Status: beta" src="https://www.glassworks.dev/brand/badge-status-beta-on-light.svg" height="30">
+    <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-status-stable-on-dark.svg">
+    <img alt="Status: stable" src="https://www.glassworks.dev/brand/badge-status-stable-on-light.svg" height="30">
   </picture>
   <a href="https://github.com/orgs/GlassworksHQ/projects/1">
     <picture>
@@ -103,7 +103,7 @@ Glassworks replaces the software layer while leaving your hardware untouched. Th
 
 ## Status
 
-**Status: beta.**
+**Status: stable.** It passes every case of Kiln's install contract, with none marked as failing (2026-11-20).
 
 **Clarity v1: D** — performs well as a wall panel for light Home Assistant dashboards. Typical dashboards hold it back from a C grade: without a live camera, the view draws in 0.9 seconds, but the main thread remains blocked for 2.7 seconds afterward. Home Assistant more-info dialogs settle in about 1 second on light dashboards and 1.2 to 1.4 seconds on typical dashboards, while heavy dashboards struggle with thermostat dialogs and sensor history graphs. See the full benchmark report in [clarity/report.md](clarity/report.md) and summary in [clarity/clarity.json](clarity/clarity.json) ([how Clarity grades](../../docs/perf.md)).
 

@@ -161,9 +161,11 @@ what a person does: one click per screen visit, and the physical steps the frame
 fixes it, and runs as `it.fails`. The suite is green now, and turns red when someone fixes a case
 without removing its line. So the marks stay honest.
 
-**The gate.** `gate.test.ts` refuses a frame that is public in Kiln (a shipping `status` and a `kiln`
-route in `frame.json`, the picker's rule) while any of its flows has an expected failure. It also
-fails when a Kiln page has no `installer.json` or a flow has no driver.
+**The gate.** A frame is public in Kiln when its `frame.json` has a shipping `status` (alpha, beta or
+stable) and a `kiln` route, the picker's rule: its card can be picked and its page is open to everyone.
+`gate.test.ts` refuses a `stable` frame while any of its flows has an expected failure (decided
+2026-11-20: an alpha or beta frame may keep its marks, and the picker shows its stage). It also fails
+when a public frame or a Kiln page has no `installer.json`, or a flow has no driver.
 
 **Frame-neutral.** `frame-neutral.test.ts` fails when `kiln/apps/kiln/src` or `kiln/packages/*/src`
 gain a frame's id, path or hardware name outside `frame-neutral-allowlist.json`. Today's hits are
