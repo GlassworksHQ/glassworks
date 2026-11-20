@@ -99,8 +99,8 @@ export interface UndoState {
 export interface DoneState {
   title: string;
   body: string;
-  /** The panel's own setup page (`http://<panel>:8099/setup`, #34), when the app on it has one: Kiln hands off to it. */
-  setupPage?: string;
+  /** The device's Manage page (`http://<address>:8099/`, #34), when the app on it has one: Done hands off to it. */
+  managePage?: string;
   backup?: { name: string; info: string; hint: string; error?: string };
   /** Whether the app's updates install by themselves, as read back from the device (issue 422). */
   updates?: SilentWords;

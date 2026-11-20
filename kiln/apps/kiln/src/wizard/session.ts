@@ -393,7 +393,7 @@ export class Session implements SetupSteps {
     this.steps.close();
     const d = this.s.done;
     if (!now || !d || this.closed || this.s.screen !== 'done') return;
-    this.dispatch({ type: 'done', done: { ...d, setupPage: `http://${now}:8099/setup` } });
+    this.dispatch({ type: 'done', done: { ...d, managePage: `http://${now}:8099/` } });
   }
 
   /** Done's download: the files from this session's run, or from this browser's store for an earlier session's. */

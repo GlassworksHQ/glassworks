@@ -272,11 +272,14 @@ export function SetUp(p: P) {
   }
 }
 
-/** On Done: the panel's own setup page, where set-up's choices can change later. */
-export function SetupPageRow({ href }: { href: string }) {
+/**
+ * On Done: the device's Manage page (`http://<address>:8099/`, the app's own page once it is set up), where set-up's
+ * choices can change later. It asks for a code the device shows. `the`: how a sentence names the device (a DeviceFrame `the`).
+ */
+export function ManagePageRow({ href, the }: { href: string; the: string }) {
   return (
     <div className="well">
-      <span className="grow"><span>Change these later on the panel&apos;s own page. It asks for a code the panel shows.</span><span className="small"><code>{href}</code></span></span>
+      <span className="grow"><span>{`Change these later on ${the}'s Manage page. It asks for a code ${the} shows.`}</span><span className="small"><code>{href}</code></span></span>
       <a className="btn ghost" href={href} target="_blank" rel="noopener">Open</a>
     </div>
   );
@@ -298,7 +301,7 @@ export function Done({ s, session, frame }: P) {
         </div>
       )}
       {d.backup?.error && <p className="status err" role="alert">{d.backup.error}</p>}
-      {d.setupPage && <SetupPageRow href={d.setupPage} />}
+      {d.managePage && <ManagePageRow href={d.managePage} the={`the ${frame.short}`} />}
       {s.flow === 'install' && <BuiltOn credits={stepCredits(frame.id, frame.credits)} />}
       <div className="foot">
         {s.flow === 'install' ? <button type="button" className="link" onClick={() => void session.click('undo', () => session.openUndo())}>Undo</button> : <span />}

@@ -15,8 +15,8 @@ export interface SetUpState {
   setup: Setup;
   /** the set-up button that is running */
   busy?: string;
-  /** the device's own setup page, once set-up armed its pairing (Done) */
-  setupPage?: string;
+  /** the device's Manage page, once set-up armed its pairing (Done) */
+  managePage?: string;
 }
 
 export const setUpWaiting = (): Setup => ({ phase: 'waiting', note: '' });
@@ -63,13 +63,13 @@ export function deviceSetUp(h: SetUpHost): AdbSetUp {
     try { p = Promise.resolve(run()); } catch (e) { p = Promise.reject(e); }
     return p.finally(() => { clicking = undefined; h.patch({ busy: undefined }); });
   };
-  // Done, then the device's own setup page once it opens pairing (as the wizard's Done)
+  // Done, then the device's Manage page once it opens pairing (as the wizard's Done)
   const finish = async () => {
     const ip = setUp.steps.ip ?? setUp.ip;
     h.toDone();
     const now = ip ? (await setUp.steps.armPairing())?.ip : undefined;
     setUp.steps.close();
-    if (now && h.onDone()) h.patch({ setupPage: `http://${now}:8099/setup` });
+    if (now && h.onDone()) h.patch({ managePage: `http://${now}:8099/` });
   };
   const setUp: AdbSetUp = new AdbSetUp({
     panel: h.panel,

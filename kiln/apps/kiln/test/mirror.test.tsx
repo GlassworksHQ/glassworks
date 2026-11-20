@@ -88,7 +88,7 @@ describe('the test install', () => {
     expect(m.cmds.filter((c) => c.includes('--es url'))).toEqual([]); // Home Assistant is set-up's, not the install's
     await setUp();
     expect(s.state.screen).toBe('done');
-    await vi.waitFor(() => expect(s.state.setupPage).toBe('http://192.0.2.50:8099/setup'));
+    await vi.waitFor(() => expect(s.state.managePage).toBe('http://192.0.2.50:8099/'));
     await s.again();
     expect(s.state.report?.app).toBeDefined();
     await s.undo();

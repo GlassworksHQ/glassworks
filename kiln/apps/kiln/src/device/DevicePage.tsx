@@ -24,7 +24,7 @@ import { ReleaseApk, TestOnly } from './ReleaseApk';
 import { AppSession, deviceMode, deviceOpen, type ApkFrom, type AppState } from './appSession';
 import { rich } from './rich';
 import { SetUpScreen, setUpRail } from './SetUpScreen';
-import { SetupPageRow } from '../wizard/screens';
+import { ManagePageRow } from '../wizard/screens';
 
 /** Demos run in `next dev` and in a build made with NEXT_PUBLIC_KILN_DEMO=1, as the wizard's do. */
 const DEMO_ON = process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_KILN_DEMO === '1';
@@ -292,7 +292,7 @@ function Done({ s, session }: { s: AppState; session: AppSession }) {
       <h2 id="h">{title}</h2>
       <p className="lede">{body}</p>
       {r.flow === 'install' && <SilentUpdates words={f.silent[r.installed.updates.state] ?? null} />}
-      {s.setupPage && <SetupPageRow href={s.setupPage} />}
+      {s.managePage && <ManagePageRow href={s.managePage} the={f.the} />}
       <BuiltOn credits={stepCredits(f.id, f.credits)} />
       <div className="foot">
         <Log s={s} />

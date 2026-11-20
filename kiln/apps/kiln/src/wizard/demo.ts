@@ -317,7 +317,7 @@ export async function enterDemo(session: Session, d: DemoFrame, which: Demo): Pr
       dispatch({ type: 'done', done: {
         title: 'Done.', body: 'The panel is on Home Net. Home Assistant finds it by itself.',
         backup: { name: `${plan.idPrefix}-20261112-101500.zip`, info: sim.backupInfo, hint: 'Original software, backed up. Keep it.' },
-        setupPage: `http://${IP}:8099/setup`,
+        managePage: `http://${IP}:8099/`,
         updates: frame.silent[(await frame.updates(simulatedPanel(d, false, true, undefined, which === 'done'))).state],
       } });
       return;

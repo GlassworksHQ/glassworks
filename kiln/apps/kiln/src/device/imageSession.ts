@@ -116,7 +116,7 @@ export type KeyStep =
  */
 export interface FileCheck { name: string; size: number; state: 'waiting' | 'downloading' | 'ok' | 'bad' | 'error'; progress: number; error?: string }
 
-/** `setup`, `busy`, `setupPage`: set-up after Glassworks' first start (setUp.ts). */
+/** `setup`, `busy`, `managePage`: set-up after Glassworks' first start (setUp.ts). */
 export interface ImageState extends SetUpState {
   screen: ImageScreen;
   /** The picked image's id. */
@@ -310,7 +310,7 @@ export class ImageSession {
     this.selected++;
     // a fresh install: an earlier one's key outcome (handed, refused, none…) goes; a key still held for a hand-back stays
     const key = this.state.key?.state === 'held' ? this.state.key : undefined;
-    this.set({ screen: 'choose', picked: r.id, from, open: r.community, link: false, files: waiting(r), fastboot: undefined, understood: false, communityWifi: undefined, setupPage: undefined,
+    this.set({ screen: 'choose', picked: r.id, from, open: r.community, link: false, files: waiting(r), fastboot: undefined, understood: false, communityWifi: undefined, managePage: undefined,
       work: undefined, firstBoot: undefined, key, error: undefined, flashFailed: false, noFill: false });
   }
 

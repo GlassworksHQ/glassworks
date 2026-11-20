@@ -17,7 +17,7 @@ import type { AppSession, AppState } from './appSession';
 import { SilentUpdates } from '../components/SilentUpdates';
 import { ImageKeep, KeyOutcome, keyHeld } from './KeepScreens';
 import { lines, rich } from './rich';
-import { SetupPageRow } from '../wizard/screens';
+import { ManagePageRow } from '../wizard/screens';
 import { SetUpScreen, setUpRail } from './SetUpScreen';
 
 type P = { f: ImageSession; s: ImageState; m: AppSession; ms: AppState };
@@ -265,7 +265,7 @@ export function ImageDone({ f, s }: P) {
       )}
       {fb && <SilentUpdates words={d.silent[fb.updates.state] ?? null} />}
       {fb && <KeyOutcome k={s.key} d={d} />}
-      {s.setupPage && <SetupPageRow href={s.setupPage} />}
+      {s.managePage && <ManagePageRow href={s.managePage} the={d.the} />}
       {other && <WayBack f={f} other={other} />}
       <BuiltOn credits={imageCredits(d)} />
       {rev && <p className="small">{rev}.</p>}

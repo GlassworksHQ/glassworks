@@ -25,7 +25,7 @@ export interface PickedApk { name: string; size: number; sha256: string; package
 
 export type Result = { flow: 'install'; installed: Installed } | { flow: 'undo'; removed: Removed };
 
-/** `setup`, `busy`, `setupPage`: set-up after an install (setUp.ts). */
+/** `setup`, `busy`, `managePage`: set-up after an install (setUp.ts). */
 export interface AppState extends SetUpState {
   screen: AppScreen;
   apk?: PickedApk;
@@ -266,7 +266,7 @@ export class AppSession {
     this.ops++;
     this.resume = undefined;
     this.setUp.close();
-    this.set({ screen: 'working', flow, phases: [], error: undefined, result: undefined, setupPage: undefined });
+    this.set({ screen: 'working', flow, phases: [], error: undefined, result: undefined, managePage: undefined });
     try {
       const result = await run((p) => this.set({ phases: [...this.state.phases, p] }));
       if (result.flow === 'undo') { this.set({ screen: 'done', result }); return; }
@@ -315,7 +315,7 @@ export class AppSession {
   }
 
   private async toSetUp(result: Result): Promise<void> {
-    this.set({ screen: 'setup', result, error: undefined, setup: setUpWaiting(), setupPage: undefined });
+    this.set({ screen: 'setup', result, error: undefined, setup: setUpWaiting(), managePage: undefined });
     await this.setUp.click('wifi', () => this.setUp.wifi());
   }
 
@@ -325,7 +325,7 @@ export class AppSession {
     const op = this.ops;
     this.resume = undefined; // Back to the checks: the checks, not set-up
     this.setUp.close();
-    this.set({ setupPage: undefined });
+    this.set({ managePage: undefined });
     try { await this.check(); } catch (e) {
       if (op !== this.ops) return; // an install or undo started meanwhile: it owns the screen now
       this.panel = undefined;

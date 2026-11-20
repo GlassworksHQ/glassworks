@@ -48,14 +48,15 @@ describe('set-up on the Mirror', () => {
     expect(screen.getByRole('heading', { name: 'Sign in to Home Assistant.' })).toBeTruthy();
   });
 
-  it('and Done after it, with the Mirror\'s own setup page', async () => {
+  it('and Done after it, with the Mirror\'s Manage page', async () => {
     const { image, app } = await imageDemo(mirrorEntry, 'flash-done', true);
     render(<ImageFlow image={image} app={app} />);
     await settle();
     expect(image.state.screen).toBe('done');
     expect(screen.getByRole('heading', { name: 'Glassworks is on the Mirror.' })).toBeTruthy();
-    expect(image.state.setupPage).toBe('http://192.0.2.50:8099/setup');
-    expect(screen.getByText('http://192.0.2.50:8099/setup')).toBeTruthy();
+    expect(image.state.managePage).toBe('http://192.0.2.50:8099/');
+    expect(screen.getByText('http://192.0.2.50:8099/')).toBeTruthy();
+    expect(screen.getByText('Change these later on the Mirror\'s Manage page. It asks for a code the Mirror shows.')).toBeTruthy();
     expect(rail().at(-1)).toBe('Done');
   });
 
@@ -78,7 +79,7 @@ describe('set-up after the app alone', () => {
     expect(screen.getByRole('heading', { name: 'Which Wi-Fi?' })).toBeTruthy();
   });
 
-  it('then Home Assistant, and Done with the Mirror\'s own setup page', async () => {
+  it('then Home Assistant, and Done with the Mirror\'s Manage page', async () => {
     const ha = await appDemo(mirrorEntry, 'setup-ha', true);
     render(<AppFlow session={ha} />);
     await settle();
@@ -88,8 +89,8 @@ describe('set-up after the app alone', () => {
     render(<AppFlow session={done} />);
     await settle();
     expect(done.state.screen).toBe('done');
-    expect(done.state.setupPage).toBe('http://192.0.2.50:8099/setup');
-    expect(screen.getByText('http://192.0.2.50:8099/setup')).toBeTruthy();
+    expect(done.state.managePage).toBe('http://192.0.2.50:8099/');
+    expect(screen.getByText('http://192.0.2.50:8099/')).toBeTruthy();
   });
 
   it('asks for no Home Assistant address before the install, and an undo has no Set up', async () => {
