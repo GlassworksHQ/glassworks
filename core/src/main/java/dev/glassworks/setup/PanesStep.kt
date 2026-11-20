@@ -1,5 +1,6 @@
 package dev.glassworks.setup
 
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import org.json.JSONArray
@@ -15,13 +16,27 @@ import org.json.JSONObject
  * A pane the frame lacks the hardware for has no card ([dev.glassworks.pane.CantRun]): it is hidden here too, never
  * offered as unavailable. Pure JVM (SetupChannelPanesTest); runs on Android 6 too (the legacy build).
  */
-class PanesStep(val panes: List<SetupPane>) {
+class PanesStep(
+    val panes: List<SetupPane>,
+    /** Starts a card's worker. Tests make it fail. */
+    private val start: (Runnable, String) -> Unit = { r, name -> Thread(r, name).apply { isDaemon = true }.start() },
+) {
 
     /** What Continue applied, by card: the panes that are on from then on. Null: not answered in this process. */
     @Volatile private var applied: BooleanArray? = null
 
     private val lock = Any()
     private var applying = false
+
+    /**
+     * How many times an attempt has published its outcome (an answer, or none after a failure). A refusal is current
+     * while this hasn't moved since it ([Outcome.answer]).
+     */
+    @Volatile var answers = 0
+        private set
+
+    /** What a Continue came to: [problem], null when every card applied, and [answers] as it left it (or found it, BUSY). */
+    class Outcome(val problem: String?, val answer: Int)
 
     /** Continue on Panes, here or over the setup channel, in this process (SetupInputs.panesChosen). */
     val chosen: Boolean get() = applied != null
@@ -51,10 +66,13 @@ class PanesStep(val panes: List<SetupPane>) {
      * One Continue at a time: a second, from the screen or the channel, is refused while one applies. A card that didn't
      * answer in time still holds it until its worker ends, so a retry can't race its late write.
      */
-    fun apply(wanted: BooleanArray, budgetMs: Long = BUDGET_MS): String? {
+    fun apply(wanted: BooleanArray, budgetMs: Long = BUDGET_MS): String? = attempt(wanted, budgetMs).problem
+
+    /** [apply], with which answer it saw: the panel's screen shows its refusal only until another answer comes. */
+    fun attempt(wanted: BooleanArray, budgetMs: Long = BUDGET_MS): Outcome {
         require(wanted.size == panes.size) { "one answer per card" }
         synchronized(lock) {
-            if (applying) return BUSY
+            if (applying) return Outcome(BUSY, answers)
             applying = true
         }
         // One count per card's worker, plus this caller until it has published `applied` (CodeRabbit on #699).
@@ -62,32 +80,37 @@ class PanesStep(val panes: List<SetupPane>) {
         val finish = { if (left.decrementAndGet() == 0) synchronized(lock) { applying = false } }
         try {
             val results = arrayOfNulls<String>(panes.size)
-            val workers = panes.mapIndexed { i, p ->
-                Thread({
+            val done = Array(panes.size) { CountDownLatch(1) }
+            panes.forEachIndexed { i, p ->
+                val work = Runnable {
                     try {
                         results[i] = runCatching { p.choice.apply(wanted[i]) }.getOrElse { it.message ?: "failed" }
                     } finally {
+                        done[i].countDown()
                         finish()
                     }
-                }, "glassworks-setup-pane-$i").apply { isDaemon = true; start() }
+                }
+                // A worker that never starts is a card that failed, and gives back its count (CodeRabbit on #699).
+                try { start(work, "glassworks-setup-pane-$i") } catch (e: Throwable) {
+                    results[i] = "couldn't start (${e.message ?: e::class.java.simpleName})"
+                    done[i].countDown()
+                    finish()
+                }
             }
             // Monotonic: a wall-clock correction mid-way must not stretch the budget.
             val until = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(budgetMs)
-            workers.forEach { it.join(maxOf(1L, TimeUnit.NANOSECONDS.toMillis(until - System.nanoTime()))) }
+            val ended = done.map { it.await(maxOf(0L, until - System.nanoTime()), TimeUnit.NANOSECONDS) }
             val problems = panes.indices.mapNotNull { i ->
                 val title = panes[i].choice.title
                 when {
-                    workers[i].isAlive -> "The $title didn't answer."
+                    !ended[i] -> "The $title didn't answer."
                     results[i] != null -> "$title: ${results[i]}"
                     else -> null
                 }
             }
-            if (problems.isNotEmpty()) {
-                applied = null
-                return problems.joinToString("\n")
-            }
-            applied = wanted.copyOf()
-            return null
+            applied = if (problems.isEmpty()) wanted.copyOf() else null
+            answers++ // only the guard's holder writes it
+            return Outcome(problems.joinToString("\n").ifEmpty { null }, answers)
         } finally {
             finish()
         }

@@ -961,6 +961,8 @@ class SetupOverlay(
         primary.isEnabled = !panes.applying
         primary.alpha = if (panes.applying) 0.5f else 1f
         primary.setOnClickListener { panes.apply(m.preview) }
+        // Nothing to say: no line left from an earlier draw (a refusal an answer since cleared).
+        if (panes.problem == null && !panes.applying) status.visibility = View.GONE
         panes.problem?.let { showStatus(it, ROSE) }
         if (panes.applying) showStatus("Setting up…", AMBER)
         return panes.view
@@ -1197,10 +1199,14 @@ class SetupOverlay(
         private val toggles = ArrayList<Glass.Toggle>()
         var applying = false
             private set
-        /** The last refusal of this screen's Continue, while the step is unanswered: an answer from anywhere since clears it. */
+        /**
+         * The last refusal of this screen's Continue, while it is current: an outcome published since, from anywhere
+         * (Kiln's panes.set), clears it; a BUSY while Kiln applies stays until Kiln's is in (CodeRabbit on #699).
+         */
         var problem: String? = null
-            get() = field?.takeIf { !panesStep.chosen }
+            get() = field?.takeIf { panesStep.answers == problemAt }
             private set
+        private var problemAt = -1
         val chosen: Boolean get() = panesStep.chosen
 
         /** Two cards to a row, in a list that scrolls when they don't all fit (#121, the maintainer's review). */
@@ -1274,11 +1280,12 @@ class SetupOverlay(
             redraw()
             val budget = panesBudgetMs
             Thread({
-                val p = panesStep.apply(wanted, budget)
+                val o = panesStep.attempt(wanted, budget)
                 main.post {
                     applying = false
-                    problem = p
-                    if (p == null) onPanesDone?.invoke() else redraw()
+                    problem = o.problem
+                    problemAt = o.answer
+                    if (o.problem == null) onPanesDone?.invoke() else redraw()
                 }
             }, "glassworks-setup-panes").apply { isDaemon = true; start() }
         }

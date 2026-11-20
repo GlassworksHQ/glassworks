@@ -192,6 +192,35 @@ class SetupPanesTest {
     }
 
     @Test
+    fun aBusyWhileKilnAppliesShowsThoughAnEarlierAnswerStands() {
+        // CodeRabbit on #699: the panel's Continue is refused while Kiln's panes.set applies. That refusal is current
+        // (an earlier answer doesn't hide it) until Kiln's is in; then it goes, and a redraw leaves no stale line.
+        val release = CountDownLatch(1)
+        val applying = CountDownLatch(1)
+        var block = false
+        val ps = listOf(SetupPane(PaneChoice("Music", "A Sendspin speaker", on = { true }, apply = { if (block) { applying.countDown(); release.await(5, TimeUnit.SECONDS) }; null }), emptyList(), "sendspin"))
+        val shared = PanesStep(ps)
+        assertEquals(null, shared.set(setOf("sendspin"))) // answered earlier
+        val a = Mockup.activity()
+        val s = SetupOverlay(a, TestFrames.s1(), ps, panesStep = shared)
+        a.setContentView(s, ViewGroup.LayoutParams(-1, -1))
+        s.render(model(SetupFlow.PANES))
+        Mockup.idle()
+        block = true
+        val kiln = Thread { shared.set(setOf("sendspin")) }.apply { start() }
+        assertTrue("Kiln applying", applying.await(5, TimeUnit.SECONDS))
+        shown(s, "Continue")!!.performClick()
+        waitFor("busy shown") { shown(s, PanesStep.BUSY) != null }
+        assertTrue(s.holdsPanes)
+        release.countDown()
+        kiln.join(5_000)
+        assertFalse(s.holdsPanes)
+        s.render(model(SetupFlow.PANES)) // the same step, drawn again
+        Mockup.idle()
+        assertEquals(null, shown(s, PanesStep.BUSY))
+    }
+
+    @Test
     fun aRefusalHoldsTheStepUntilEveryCardApplies() {
         var refuse = true
         val s = overlay(listOf(

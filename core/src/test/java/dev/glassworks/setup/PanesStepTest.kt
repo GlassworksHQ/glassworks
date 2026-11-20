@@ -120,6 +120,51 @@ class PanesStepTest {
     }
 
     @Test
+    fun aCardWhoseWorkerCantStartFailsAndFreesTheStep() {
+        // CodeRabbit on #699: a worker that never starts must not keep the step BUSY, nor leave an earlier answer.
+        var failStart = false
+        val s = PanesStep(listOf(
+            card("assist", "Voice", "Assist and timers", { voice }, { voice = it }),
+            card("sendspin", "Music", "A Sendspin speaker", { music }, { music = it }),
+        )) { r, name -> if (failStart && name.endsWith("-1")) throw OutOfMemoryError("no threads") else Thread(r, name).start() }
+        assertNull(s.set(setOf("assist")))
+        failStart = true
+        assertEquals("Music: couldn't start (no threads)", s.set(setOf("sendspin")))
+        assertFalse(s.chosen)
+        failStart = false
+        assertNull(s.set(setOf("sendspin"))) // not BUSY: its count was given back
+        assertTrue(s.chosen)
+    }
+
+    @Test
+    fun theAnswerIsTheLastOneApplied() {
+        // CodeRabbit on #699: a second Continue right as the first publishes must not have its answer overwritten by
+        // the first's. Two callers race many times; after each round the answer says what the switch is.
+        val s = PanesStep(listOf(card("sendspin", "Music", "A Sendspin speaker", { music }, { music = it })))
+        repeat(300) {
+            val a = Thread { s.set(setOf("sendspin")) }
+            val b = Thread { s.set(emptySet()) }
+            a.start(); b.start(); a.join(); b.join()
+            if (s.chosen) assertEquals("round $it", music, s.wanted(0))
+        }
+    }
+
+    @Test
+    fun aBusyRefusalSeesTheAnswerItFound() {
+        val release = CountDownLatch(1)
+        val started = CountDownLatch(1)
+        val s = PanesStep(listOf(SetupPane(PaneChoice("Music", "A Sendspin speaker", on = { true }, apply = { started.countDown(); release.await(5, TimeUnit.SECONDS); null }), emptyList(), "sendspin")))
+        val t = Thread { s.set(setOf("sendspin")) }.apply { start() }
+        assertTrue(started.await(5, TimeUnit.SECONDS))
+        val busy = s.attempt(booleanArrayOf(false))
+        assertEquals(PanesStep.BUSY, busy.problem)
+        assertEquals(0, busy.answer)
+        release.countDown()
+        t.join(5_000)
+        assertEquals(1, s.answers) // the refusal is no longer current
+    }
+
+    @Test
     fun oneContinueAtATime() {
         val release = CountDownLatch(1)
         val started = CountDownLatch(1)
