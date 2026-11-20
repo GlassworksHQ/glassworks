@@ -3,23 +3,26 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { KILN } from "@/lib/links";
-import { KilnGlyph, MicGlyph, MusicGlyph, TimerGlyph } from "../Glyphs";
+import { KilnGlyph, MusicGlyph } from "../Glyphs";
 import s from "./MorphStory.module.css";
 
 /*
- * Concept D: One single physical piece of dark precision glass holding steady on generous
- * scroll plateaus, then smoothly morphing its exact physical proportions, inner screen inset,
- * corner radius, tilt, mirror stand, and ambient light.
+ * Concept D: One single physical piece of dark precision glass gliding smoothly across 4 beats
+ * (380vh total, short gentle settling at each beat — no frozen holds, no bottom pill dock).
  *
- * Inside the screen lives ONE real, responsive Home Assistant Lovelace Sections dashboard
- * powered by CSS Grid and @container size queries — so the actual HA cards physically reflow
- * as the glass changes shape (zero image crossfading). Visitors can also test live Glassworks
- * overlays (Assist, Notification, Timer, Music) over whichever shape is currently on screen.
+ * Underneath lives ONE real, responsive Home Assistant Lovelace Sections dashboard powered by
+ * CSS Grid + @container size queries so actual HA cards physically reflow across shapes.
+ * Woven directly into the scroll beats are faithful reproductions of Glassworks' REAL Android
+ * overlays from this repo:
+ *   - Beat 1 (Pixel Tablet): OrbArt.kt + VoiceOverlay.kt (glass sphere, Sky+Violet conic swirl,
+ *     ambient glow, 90% scrim, Inter Light transcript & status label).
+ *   - Beat 2 (lululemon Studio Mirror): NotificationOverlay.kt (top-right #16171c glass card,
+ *     AMBER "IMPORTANT · JUST NOW", rounded porch image, glass pills, SKY→VIOLET TimeLeft bar)
+ *     + TimerDock.kt / RingView.kt (bottom-right amber countdown ring, inner glass sphere, PASTA tag).
  */
 
 type ShapeId = "wall" | "tablet" | "mirror" | "square" | "round" | "bedside";
-type RailShape = "wall" | "tablet" | "mirror" | "square" | "round";
-type FeatureMode = "dashboard" | "assist" | "notification" | "timer" | "music";
+type AssistPhase = "thinking" | "speaking" | "done";
 
 type Keyframe = {
   w: number;
@@ -49,11 +52,11 @@ const KEYFRAMES: Keyframe[] = [
     insetX: 2.2,
     screenR: 5,
     xPct: 22,
-    yPx: -12,
+    yPx: -4,
     rx: 2,
     ry: -6,
     glowX: 72,
-    glowY: 47,
+    glowY: 48,
   },
   // 1: Countertop Tablet · Google Pixel Tablet (258 × 169 mm, bezel 11 mm, radius 12 mm)
   {
@@ -65,11 +68,11 @@ const KEYFRAMES: Keyframe[] = [
     insetX: 4.3,
     screenR: 8,
     xPct: -22,
-    yPx: -12,
+    yPx: -4,
     rx: 1.5,
     ry: 5.5,
     glowX: 28,
-    glowY: 47,
+    glowY: 48,
   },
   // 2: Full-Length Mirror · lululemon Studio Mirror (536 × 1336 mm, top 12.7%, bottom 21.1%)
   {
@@ -81,11 +84,11 @@ const KEYFRAMES: Keyframe[] = [
     insetX: 3.5,
     screenR: 3,
     xPct: 24,
-    yPx: -22,
+    yPx: -10,
     rx: 1,
     ry: -5,
     glowX: 74,
-    glowY: 46,
+    glowY: 47,
   },
   // 3: Compact Square · Square 4" Switch (center)
   {
@@ -97,11 +100,11 @@ const KEYFRAMES: Keyframe[] = [
     insetX: 5,
     screenR: 12,
     xPct: 0,
-    yPx: -88,
+    yPx: -82,
     rx: 0,
     ry: 0,
     glowX: 50,
-    glowY: 36,
+    glowY: 38,
   },
 ];
 
@@ -119,66 +122,36 @@ const MOBILE_SHAPES: Record<
   Pick<Keyframe, "w" | "h" | "bodyR" | "insetTop" | "insetBottom" | "insetX" | "screenR">
 > = {
   wall: { w: 336, h: 168, bodyR: 8, insetTop: 4, insetBottom: 4, insetX: 2.2, screenR: 4 },
-  tablet: { w: 324, h: 212, bodyR: 18, insetTop: 6.5, insetBottom: 6.5, insetX: 4.3, screenR: 7 },
-  mirror: { w: 174, h: 416, bodyR: 5, insetTop: 12.7, insetBottom: 21.1, insetX: 3.5, screenR: 3 },
-  square: { w: 218, h: 218, bodyR: 18, insetTop: 5, insetBottom: 5, insetX: 5, screenR: 10 },
-  round: { w: 218, h: 218, bodyR: 109, insetTop: 5, insetBottom: 5, insetX: 5, screenR: 109 },
+  tablet: { w: 330, h: 216, bodyR: 18, insetTop: 6.5, insetBottom: 6.5, insetX: 4.3, screenR: 7 },
+  mirror: { w: 196, h: 472, bodyR: 6, insetTop: 12.7, insetBottom: 21.1, insetX: 3.5, screenR: 3 },
+  square: { w: 220, h: 220, bodyR: 18, insetTop: 5, insetBottom: 5, insetX: 5, screenR: 10 },
+  round: { w: 220, h: 220, bodyR: 110, insetTop: 5, insetBottom: 5, insetX: 5, screenR: 110 },
   bedside: { w: 316, h: 156, bodyR: 20, insetTop: 6, insetBottom: 6, insetX: 4, screenR: 12 },
 };
-
-/* Scroll plateaus (midpoints for pill navigation) */
-const RAIL_SHAPES: { id: RailShape; label: string; targetP: number; future?: "square" | "round" }[] = [
-  { id: "wall", label: "Wall", targetP: 0.06 },
-  { id: "tablet", label: "Tablet", targetP: 0.35 },
-  { id: "mirror", label: "Mirror", targetP: 0.63 },
-  { id: "square", label: "Square", targetP: 0.92, future: "square" },
-  { id: "round", label: "Round", targetP: 0.92, future: "round" },
-];
-
-const FEATURE_ITEMS: { id: FeatureMode; label: string }[] = [
-  { id: "dashboard", label: "Dashboard" },
-  { id: "assist", label: "Assist" },
-  { id: "notification", label: "Notification" },
-  { id: "timer", label: "Timer" },
-  { id: "music", label: "Music" },
-];
-
-const ASSIST_PROMPTS = [
-  {
-    short: "5-min timer",
-    transcript: "Set a 5-minute pasta timer",
-    response: "Timer started for 5 minutes",
-  },
-  {
-    short: "Kitchen lights",
-    transcript: "Turn off the kitchen lights",
-    response: "Done — kitchen lights turned off",
-  },
-] as const;
 
 const clamp = (v: number, a = 0, b = 1) => Math.min(b, Math.max(a, v));
 const smooth = (t: number) => t * t * (3 - 2 * t);
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
 /**
- * Piecewise dwell + fast-morph curve mapping scroll progress p (0..1) to continuous
- * keyframe coordinate s (0..3):
- *   0.00 – 0.16: HOLD at 0 (Wall)
- *   0.16 – 0.25: Smooth morph 0 → 1
- *   0.25 – 0.44: HOLD at 1 (Tablet)
- *   0.44 – 0.53: Smooth morph 1 → 2
- *   0.53 – 0.72: HOLD at 2 (Mirror)
- *   0.72 – 0.81: Smooth morph 2 → 3
- *   0.81 – 1.00: HOLD at 3 (Square / Future Shapes)
+ * Fluid scroll curve across 380vh with short, gentle ~5-6% settling at each beat
+ * (zero long flat dead zones):
+ *   0.00 – 0.05: Beat 0 settle (Wall Switch)
+ *   0.05 – 0.30: Smooth morph 0 → 1
+ *   0.30 – 0.36: Beat 1 settle (Pixel Tablet + Assist Orb)
+ *   0.36 – 0.63: Smooth morph 1 → 2
+ *   0.63 – 0.69: Beat 2 settle (Studio Mirror + Notification Card & TimerDock)
+ *   0.69 – 0.94: Smooth morph 2 → 3
+ *   0.94 – 1.00: Beat 3 settle (Square 4" + Future Shapes)
  */
 function morphSegment(p: number): number {
   const x = clamp(p);
-  if (x <= 0.16) return 0;
-  if (x < 0.25) return smooth((x - 0.16) / 0.09);
-  if (x <= 0.44) return 1;
-  if (x < 0.53) return 1 + smooth((x - 0.44) / 0.09);
-  if (x <= 0.72) return 2;
-  if (x < 0.81) return 2 + smooth((x - 0.72) / 0.09);
+  if (x <= 0.05) return 0;
+  if (x < 0.3) return smooth((x - 0.05) / 0.25);
+  if (x <= 0.36) return 1;
+  if (x < 0.63) return 1 + smooth((x - 0.36) / 0.27);
+  if (x <= 0.69) return 2;
+  if (x < 0.94) return 2 + smooth((x - 0.69) / 0.25);
   return 3;
 }
 
@@ -214,7 +187,7 @@ function samplePose(sVal: number): Keyframe {
 function formatTimer(totalSec: number) {
   const m = Math.floor(totalSec / 60);
   const sec = totalSec % 60;
-  return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+  return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
 export type MorphRelease = { version: string; href: string };
@@ -233,30 +206,25 @@ export function MorphStory({
 
   const [p, setP] = useState(0);
   const [compact, setCompact] = useState(false);
-  const [mobileShape, setMobileShape] = useState<ShapeId>("wall");
   const [futureShape, setFutureShape] = useState<"square" | "round" | "bedside">("square");
   const [clickMorph, setClickMorph] = useState(false);
 
-  // Interactive Home Assistant entities (persist seamlessly across every shape!)
+  // Interactive Home Assistant entities (persist live across every shape)
   const [kitchenOn, setKitchenOn] = useState(true);
   const [livingOn, setLivingOn] = useState(false);
   const [sendspinOn, setSendspinOn] = useState(true);
   const [temp, setTemp] = useState(70);
   const [doorLocked, setDoorLocked] = useState(true);
 
-  // Interactive native feature overlay state
-  const [feature, setFeature] = useState<FeatureMode>("dashboard");
+  // Live Assist Voice Overlay phase cycle (Beat 1: Thinking -> Speaking -> Done)
+  const [assistPhase, setAssistPhase] = useState<AssistPhase>("thinking");
 
-  // Assist live 3-step cycle
-  const [assistPromptIdx, setAssistPromptIdx] = useState(0);
-  const [assistPhase, setAssistPhase] = useState<"listening" | "transcript" | "done">("listening");
-
-  // Live countdown timer state
-  const [timerSec, setTimerSec] = useState(252); // 04:12
+  // Live TimerDock + RingView state (Beat 2: Pasta 4:12 ticking live)
+  const [timerSec, setTimerSec] = useState(252);
   const [timerPaused, setTimerPaused] = useState(false);
 
-  // Sendspin music state
-  const [musicPlaying, setMusicPlaying] = useState(true);
+  // Notification card dismissed state on Beat 2 (tapping x dismisses briefly or restores)
+  const [notifDismissed, setNotifDismissed] = useState(false);
 
   useEffect(() => {
     const mqNarrow = window.matchMedia("(max-width: 900px)");
@@ -285,11 +253,11 @@ export function MorphStory({
 
     const tick = () => {
       const t = target();
-      cur = cur + (t - cur) * 0.16;
+      cur = cur + (t - cur) * 0.2;
       const settled = Math.abs(t - cur) < 0.0004;
       if (settled) cur = t;
       setP(cur);
-      if (cur < 0.76) {
+      if (cur < 0.78) {
         setFutureShape("square");
         setClickMorph(false);
       }
@@ -309,37 +277,35 @@ export function MorphStory({
     };
   }, [compact]);
 
-  // Assist automatic 3-step live voice interaction
-  useEffect(() => {
-    if (feature !== "assist") return;
-    const t1 = window.setTimeout(() => setAssistPhase("transcript"), 1150);
-    const t2 = window.setTimeout(() => setAssistPhase("done"), 2550);
-    return () => {
-      window.clearTimeout(t1);
-      window.clearTimeout(t2);
-    };
-  }, [feature, assistPromptIdx]);
+  // Continuous piecewise-fluid keyframe coordinate s in [0..3]
+  const seg = morphSegment(p);
+  const basePose = samplePose(seg);
+  const atFinale = seg >= 2.86;
 
-  // Live timer tick
+  // Overlay opacities tied directly to Beat 1 (Assist) and Beat 2 (Notification + TimerDock)
+  const assistO = compact ? 1 : windowO(seg, 1, 0.2, 0.56);
+  const mirrorOverlaysO = compact ? 1 : windowO(seg, 2, 0.2, 0.56);
+
+  // Calmly cycle the real Assist Orb states (Thinking -> Speaking -> Done) while Beat 1 is visible
+  const assistVisible = compact || assistO > 0.15;
   useEffect(() => {
-    if (feature !== "timer" || timerPaused) return;
+    if (!assistVisible) return;
+    const ms = assistPhase === "thinking" ? 2600 : assistPhase === "speaking" ? 2800 : 1800;
+    const id = window.setTimeout(() => {
+      setAssistPhase((prev) => (prev === "thinking" ? "speaking" : prev === "speaking" ? "done" : "thinking"));
+    }, ms);
+    return () => window.clearTimeout(id);
+  }, [assistVisible, assistPhase]);
+
+  // Tick the real TimerDock RingView live while Beat 2 is visible
+  const timerVisible = compact || mirrorOverlaysO > 0.15;
+  useEffect(() => {
+    if (!timerVisible || timerPaused) return;
     const id = window.setInterval(() => {
       setTimerSec((prev) => (prev > 1 ? prev - 1 : 252));
     }, 1000);
     return () => window.clearInterval(id);
-  }, [feature, timerPaused]);
-
-  const openFeature = (next: FeatureMode) => {
-    setFeature(next);
-    if (next === "assist") {
-      setAssistPhase("listening");
-    }
-  };
-
-  const selectAssistPrompt = (idx: number) => {
-    setAssistPromptIdx(idx);
-    setAssistPhase("listening");
-  };
+  }, [timerVisible, timerPaused]);
 
   const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.pointerType !== "mouse" || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -359,37 +325,10 @@ export function MorphStory({
     bezelRef.current?.style.removeProperty("--sheen");
   };
 
-  const jumpToShape = (item: (typeof RAIL_SHAPES)[number]) => {
-    if (compact) {
-      setMobileShape(item.id);
-      return;
-    }
-    const el = sectionRef.current;
-    if (!el) return;
-    const span = el.offsetHeight - window.innerHeight;
-    if (item.future) {
-      setClickMorph(true);
-      setFutureShape(item.future);
-    } else {
-      setClickMorph(false);
-      setFutureShape("square");
-    }
-    window.scrollTo({ top: el.offsetTop + span * item.targetP, behavior: "smooth" });
-  };
-
   const selectFuture = (next: "square" | "round" | "bedside") => {
-    if (compact) {
-      setMobileShape(next);
-      return;
-    }
     setClickMorph(true);
     setFutureShape(next);
   };
-
-  // Continuous piecewise-held keyframe coordinate s in [0..3]
-  const seg = morphSegment(p);
-  const basePose = samplePose(seg);
-  const atFinale = seg >= 2.85;
 
   let geom = {
     w: basePose.w,
@@ -405,59 +344,37 @@ export function MorphStory({
   }
 
   // Mirror body + tubular stand presence factor (0..1)
-  const mirrorFactor = compact ? (mobileShape === "mirror" ? 1 : 0) : windowO(seg, 2, 0.2, 0.78);
+  const mirrorFactor = windowO(seg, 2, 0.22, 0.72);
 
-  // Copy opacities locked steady across each plateau
-  const copy0O = 1 - smooth(clamp((seg - 0.1) / 0.45));
-  const copy1O = windowO(seg, 1, 0.25, 0.65);
-  const copy2O = windowO(seg, 2, 0.25, 0.65);
-  const copy3O = smooth(clamp((seg - 2.45) / 0.45));
-  const ghostsO = smooth(clamp((seg - 2.55) / 0.4));
+  // Copy opacities synced smoothly to the 4 beats
+  const copy0O = 1 - smooth(clamp((seg - 0.12) / 0.44));
+  const copy1O = windowO(seg, 1, 0.22, 0.62);
+  const copy2O = windowO(seg, 2, 0.22, 0.62);
+  const copy3O = smooth(clamp((seg - 2.42) / 0.44));
+  const ghostsO = smooth(clamp((seg - 2.52) / 0.38));
 
-  const activeRail: RailShape = compact
-    ? mobileShape === "bedside"
-      ? "square"
-      : mobileShape
-    : seg < 0.5
-      ? "wall"
-      : seg < 1.5
-        ? "tablet"
-        : seg < 2.5
-          ? "mirror"
-          : futureShape === "round"
-            ? "round"
-            : "square";
+  const currentShape: ShapeId =
+    seg < 0.5 ? "wall" : seg < 1.5 ? "tablet" : seg < 2.5 ? "mirror" : futureShape;
 
-  const currentShape: ShapeId = compact
-    ? mobileShape
-    : seg < 0.5
-      ? "wall"
-      : seg < 1.5
-        ? "tablet"
-        : seg < 2.5
-          ? "mirror"
-          : futureShape;
-
-  const isRoundActive = currentShape === "round";
-  const isSoloDial = currentShape === "square" || currentShape === "round";
   const activeLightsCount = (kitchenOn ? 2 : 0) + (livingOn ? 1 : 0);
-
-  const activeAssist = ASSIST_PROMPTS[assistPromptIdx]!;
-  const timerPct = Math.max(4, Math.min(100, (timerSec / 300) * 100));
   const haHeatRatio = clamp((temp - 60) / 20);
   const haHeating = temp >= 68;
+  const timerFraction = clamp(timerSec / 300, 0.02, 1);
+  const ringCircumference = 2 * Math.PI * 36.5;
 
   /*
-   * ONE live, responsive Home Assistant Lovelace Sections dashboard!
-   * Cards physically reflow via CSS Grid + @container size queries as the glass morphs.
+   * ONE live, responsive Home Assistant Lovelace Sections dashboard powered by
+   * CSS Grid + @container size queries so actual HA cards reflow as the glass morphs.
    */
-  const renderLiveLovelace = () => (
-    <div className={s.screenInner}>
+  const renderLiveLovelace = (shape: ShapeId) => {
+    const isRound = shape === "round";
+    const isSolo = shape === "square" || shape === "round";
+    return (
       <div
         className={s.haRoot}
-        data-shape={currentShape}
-        data-solo={isSoloDial || undefined}
-        data-round={isRoundActive || undefined}
+        data-shape={shape}
+        data-solo={isSolo || undefined}
+        data-round={isRound || undefined}
       >
         {/* Top Home Assistant Badges / Chips Bar */}
         <div className={s.haBadges}>
@@ -479,7 +396,7 @@ export function MorphStory({
           </span>
         </div>
 
-        {/* Live Responsive HA Sections Grid — cards physically reflow across shapes */}
+        {/* Live Responsive HA Sections Grid */}
         <div className={s.haGrid}>
           {/* Weather & Clock Card */}
           <div className={`${s.haCard} ${s.haWeatherCard}`}>
@@ -491,14 +408,17 @@ export function MorphStory({
               <span className={s.haSunIcon} aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
                   <circle cx="12" cy="12" r="4" fill="#ffc107" stroke="#ffc107" />
-                  <path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4" stroke="#ffc107" />
+                  <path
+                    d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M5.6 18.4 7 17M17 7l1.4-1.4"
+                    stroke="#ffc107"
+                  />
                 </svg>
               </span>
               <span className={s.haHiLo}>H:74° L:61°</span>
             </div>
           </div>
 
-          {/* Authentic HA Thermostat / Climate Dial Card (becomes solo centerpiece on Square & Round!) */}
+          {/* Authentic HA Thermostat / Climate Dial Card */}
           <div className={`${s.haCard} ${s.haClimateCard}`}>
             <div className={s.haClimateHead}>
               <span className={s.haCardTitle}>Living Room</span>
@@ -553,7 +473,7 @@ export function MorphStory({
             </div>
           </div>
 
-          {/* Interactive HA Tile Card: Kitchen Lights with real HA brightness bar */}
+          {/* Interactive HA Tile Card: Kitchen Lights with brightness slider */}
           <button
             type="button"
             className={`${s.haCard} ${s.haTile} ${s.haKitchenTile} ${kitchenOn ? s.haTileAmber : ""}`}
@@ -599,7 +519,7 @@ export function MorphStory({
             </span>
           </button>
 
-          {/* Interactive HA Tile Card: Hallway / Front Door Lock */}
+          {/* Interactive HA Tile Card: Front Door Lock */}
           <button
             type="button"
             className={`${s.haCard} ${s.haTile} ${s.haLockTile}`}
@@ -638,7 +558,7 @@ export function MorphStory({
             </div>
           </button>
 
-          {/* HA Energy / History Sparkline Card (naturally reveals on Tablet & Mirror!) */}
+          {/* HA Energy Sparkline Card */}
           <div className={`${s.haCard} ${s.haSparkCard}`}>
             <div className={s.haSparkHead}>
               <span className={s.haSparkLabel}>Home Power</span>
@@ -646,14 +566,14 @@ export function MorphStory({
             </div>
             <svg viewBox="0 0 180 42" className={s.haSparkSvg} preserveAspectRatio="none" aria-hidden="true">
               <defs>
-                <linearGradient id="ha-spark-fill" x1="0" y1="0" x2="0" y2="1">
+                <linearGradient id={`ha-spark-${shape}`} x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0" stopColor="#03a9f4" stopOpacity="0.32" />
                   <stop offset="1" stopColor="#03a9f4" stopOpacity="0" />
                 </linearGradient>
               </defs>
               <path
                 d="M0 32 L20 28 L42 30 L64 20 L86 23 L108 14 L132 18 L156 10 L180 15 L180 42 L0 42 Z"
-                fill="url(#ha-spark-fill)"
+                fill={`url(#ha-spark-${shape})`}
               />
               <path
                 d="M0 32 L20 28 L42 30 L64 20 L86 23 L108 14 L132 18 L156 10 L180 15"
@@ -666,7 +586,7 @@ export function MorphStory({
             </svg>
           </div>
 
-          {/* HA Front Door Live Camera Card (naturally reveals on Tablet & Mirror!) */}
+          {/* HA Front Porch Live Camera Card */}
           <div className={`${s.haCard} ${s.haCamCard}`}>
             <svg viewBox="0 0 220 96" className={s.haCamSvg} preserveAspectRatio="xMidYMid slice" aria-hidden="true">
               <rect width="220" height="96" fill="#131720" />
@@ -686,325 +606,422 @@ export function MorphStory({
           </div>
         </div>
       </div>
+    );
+  };
 
-      {/* ================= LIVE GLASSWORKS FEATURE OVERLAYS (over ANY shape!) ================= */}
-      {feature !== "dashboard" && (
-        <div className={`${s.overlayLayer} ${feature === "notification" || feature === "timer" ? s.overlayDim : ""}`}>
-          {/* 1. Assist Voice Overlay */}
-          {feature === "assist" && (
-            <div className={s.assistOverlay} role="status" aria-live="polite">
-              <div className={s.assistCard}>
-                <div className={s.assistHead}>
-                  <span className={s.assistIconLit} aria-hidden="true">
-                    <MicGlyph />
-                  </span>
-                  <span className={s.assistState}>
-                    {assistPhase === "listening"
-                      ? "Listening…"
-                      : assistPhase === "transcript"
-                        ? "Assist"
-                        : "Home Assistant"}
-                  </span>
-                  <div className={`${s.wave} ${assistPhase === "done" ? s.waveDone : ""}`} aria-hidden="true">
-                    {[38, 86, 100, 58, 92, 46].map((barH, i) => (
-                      <span key={i} style={{ ["--h" as string]: `${barH}%`, animationDelay: `${i * 0.11}s` }} />
-                    ))}
-                  </div>
-                </div>
-                <p className={s.assistLine}>
-                  {assistPhase === "listening" ? "Say a command…" : `“${activeAssist.transcript}”`}
-                </p>
-                {assistPhase === "done" && <p className={s.assistReply}>{activeAssist.response}</p>}
-                <div className={s.assistChips}>
-                  {ASSIST_PROMPTS.map((pr, idx) => (
-                    <button
-                      key={pr.short}
-                      type="button"
-                      className={`${s.ovChip} ${assistPromptIdx === idx ? s.ovChipOn : ""}`}
-                      onClick={() => selectAssistPrompt(idx)}
-                    >
-                      {pr.short}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className={s.assistBottomGlow} aria-hidden="true" />
-            </div>
-          )}
+  /*
+   * REAL Assist Voice Overlay (OrbArt.kt + VoiceOverlay.kt):
+   *   - 90% Ambient Stage backdrop scrim over the dashboard
+   *   - Floating translucent glass sphere (white @ 0.04, 1px white @ 0.13, inset shade, specular 32%/24%)
+   *   - Two-color Sky+Violet conic thinking swirl -> Sky listening/speaking core + ripples -> Green done + check
+   *   - Calm spaced uppercase label / quoted prompt + Inter Light transcript below, "TAP ANYWHERE TO CANCEL" hint
+   */
+  const renderRealVoiceOverlay = (opacity: number) => {
+    if (opacity <= 0.01) return null;
+    const nextPhase = () =>
+      setAssistPhase((prev) => (prev === "thinking" ? "speaking" : prev === "speaking" ? "done" : "thinking"));
 
-          {/* 2. Rich Home Assistant Notification / Doorbell Overlay */}
-          {feature === "notification" && (
-            <div className={s.centerOverlay} role="status" aria-live="polite">
-              <div className={s.notifCard}>
-                <div className={s.notifCam} aria-hidden="true">
-                  <svg viewBox="0 0 240 120" className={s.notifSvg}>
-                    <rect width="240" height="120" fill="#121622" />
-                    <path d="M0 88 L240 88 L240 120 L0 120 Z" fill="#181d2c" />
-                    <path d="M74 88 L166 88 L196 120 L44 120 Z" fill="#21283b" />
-                    <circle cx="120" cy="52" r="10" fill="#38bdf8" fillOpacity="0.35" stroke="#38bdf8" strokeOpacity="0.7" />
-                    <path d="M103 86 C103 71 137 71 137 86 Z" fill="#a78bfa" fillOpacity="0.3" stroke="#a78bfa" strokeOpacity="0.65" />
-                  </svg>
-                  <span className={s.liveTag}>
-                    <span className={s.liveDot} />
-                    Live
-                  </span>
-                </div>
-                <div className={s.notifBody}>
-                  <b>Front Door</b>
-                  <span>{!doorLocked ? "Front door unlocked" : "Person detected at the porch"}</span>
-                  <div className={s.ovBtns}>
-                    <button
-                      type="button"
-                      className={!doorLocked ? s.ovBtnOk : s.ovBtnLit}
-                      onClick={() => setDoorLocked((l) => !l)}
-                    >
-                      {!doorLocked ? "✓ Unlocked" : "Unlock door"}
-                    </button>
-                    <button type="button" className={s.ovBtn} onClick={() => setFeature("dashboard")}>
-                      Dismiss
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* 3. Voice Timer Overlay */}
-          {feature === "timer" && (
-            <div className={s.centerOverlay} role="status" aria-live="polite">
-              <div className={s.timerCard}>
-                <div className={s.timerTop}>
-                  <span className={s.timerTitle}>
-                    <TimerGlyph />
-                    Pasta
-                  </span>
-                  <span className={s.timerMeta}>{timerPaused ? "Paused" : "Running"}</span>
-                </div>
-                <div className={s.timerClock}>{formatTimer(timerSec)}</div>
-                <div className={s.timerTrack} aria-hidden="true">
-                  <div className={s.timerFill} style={{ width: `${timerPct}%` }} />
-                </div>
-                <div className={s.ovBtns}>
-                  <button type="button" className={s.ovBtnLit} onClick={() => setTimerSec((sec) => sec + 60)}>
-                    +1 min
-                  </button>
-                  <button type="button" className={s.ovBtn} onClick={() => setTimerPaused((v) => !v)}>
-                    {timerPaused ? "Resume" : "Pause"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* 4. Music Assistant / Sendspin Overlay */}
-          {feature === "music" && (
-            <div className={s.musicOverlay} role="status" aria-live="polite">
-              <div className={s.musicBar}>
-                <span className={s.musicIconLit} aria-hidden="true">
-                  <MusicGlyph />
-                </span>
-                <div className={s.musicInfo}>
-                  <b>Midnight Reflections</b>
-                  <span>Kitchen + Living Room</span>
-                </div>
-                <div className={`${s.musicEq} ${!musicPlaying ? s.musicEqOff : ""}`} aria-hidden="true">
-                  {[54, 100, 44, 82].map((barH, i) => (
-                    <span key={i} style={{ ["--h" as string]: `${barH}%`, animationDelay: `${i * 0.14}s` }} />
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  className={s.ovBtn}
-                  onClick={() => setMusicPlaying((m) => !m)}
-                  aria-label={musicPlaying ? "Pause music" : "Play music"}
-                >
-                  {musicPlaying ? "Pause" : "Play"}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-
-  const renderControlDock = (isCompact: boolean) => (
-    <div className={isCompact ? s.compactDock : s.dock}>
-      <div className={s.dockGroup} role="tablist" aria-label="Hardware shapes">
-        <span className={s.dockLabel}>Shape</span>
-        {RAIL_SHAPES.map((item) => {
-          const active = activeRail === item.id;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              className={`${s.railBtn} ${active ? s.railActive : ""}`}
-              onClick={() => jumpToShape(item)}
-            >
-              {item.label}
-            </button>
-          );
-        })}
-        {isCompact && (
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mobileShape === "bedside"}
-            className={`${s.railBtn} ${mobileShape === "bedside" ? s.railActive : ""}`}
-            onClick={() => setMobileShape("bedside")}
-          >
-            Bedside
-          </button>
-        )}
-      </div>
-
-      <span className={s.dockSep} aria-hidden="true" />
-
-      <div className={s.dockGroup} role="tablist" aria-label="Try Glassworks features">
-        <span className={s.dockLabel}>Try feature</span>
-        {FEATURE_ITEMS.map((item) => {
-          const active = feature === item.id;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              className={`${s.railBtn} ${active ? s.railFeatureActive : ""}`}
-              onClick={() => openFeature(item.id)}
-            >
-              {item.label}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-
-  // Mobile (< 900px) & prefers-reduced-motion: calm tap-to-morph stage with zero scroll-jack
-  if (compact) {
-    const dims = MOBILE_SHAPES[mobileShape];
     return (
-      <section className={s.compactWrap} aria-label="Glassworks across hardware shapes">
-        <div className={s.compactStage}>
-          <div className={s.mirrorAssembly}>
-            <div
-              ref={bezelRef}
-              className={`${s.bezel} ${s.morphSmooth} ${mobileShape === "mirror" ? s.bezelMirror : ""}`}
-              style={{
-                width: `min(calc(100vw - 32px), ${dims.w}px)`,
-                height: `${dims.h}px`,
-                borderRadius: `${dims.bodyR}px`,
-              }}
-            >
-              <div className={s.glare} aria-hidden="true" />
+      <div
+        className={s.voiceScrim}
+        style={{
+          opacity,
+          pointerEvents: opacity > 0.45 ? "auto" : "none",
+        }}
+        onClick={nextPhase}
+        role="button"
+        tabIndex={opacity > 0.45 ? 0 : -1}
+        aria-label="Glassworks Assist voice overlay preview — tap to cycle voice state"
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            nextPhase();
+          }
+        }}
+      >
+        <div className={s.orbStage} style={{ transform: `scale(${0.86 + opacity * 0.14})` }}>
+          {/* 300dp Ambient radial glow behind sphere (OrbArt.glow) */}
+          <div
+            className={`${s.orbGlow} ${s.orbGlowThink}`}
+            style={{ opacity: assistPhase === "thinking" ? 1 : 0 }}
+            aria-hidden="true"
+          />
+          <div
+            className={`${s.orbGlow} ${s.orbGlowSky}`}
+            style={{ opacity: assistPhase === "speaking" ? 1 : 0 }}
+            aria-hidden="true"
+          />
+          <div
+            className={`${s.orbGlow} ${s.orbGlowGreen}`}
+            style={{ opacity: assistPhase === "done" ? 1 : 0 }}
+            aria-hidden="true"
+          />
+
+          {/* Two slow Sky speaking ripples (VoiceOverlay.Ring) */}
+          {assistPhase === "speaking" && (
+            <>
+              <span className={`${s.orbRipple} ${s.orbRippleA}`} aria-hidden="true" />
+              <span className={`${s.orbRipple} ${s.orbRippleB}`} aria-hidden="true" />
+            </>
+          )}
+
+          {/* Outer Glass Sphere (OrbArt.sphere: white@0.04, 1px white@0.13, inset shade, outer shadow) */}
+          <div className={s.orbSphere}>
+            {/* Clipped soft cores inside sphere */}
+            <div className={s.orbClip}>
               <div
-                className={`${s.screen} ${s.morphSmooth}`}
-                data-round={mobileShape === "round" || undefined}
-                style={{
-                  top: `${dims.insetTop}%`,
-                  bottom: `${dims.insetBottom}%`,
-                  left: `${dims.insetX}%`,
-                  right: `${dims.insetX}%`,
-                  borderRadius: `${dims.screenR}px`,
-                }}
-              >
-                {renderLiveLovelace()}
-              </div>
+                className={s.orbSwirl}
+                style={{ opacity: assistPhase === "thinking" ? 0.95 : 0 }}
+                aria-hidden="true"
+              />
+              <div
+                className={s.orbCoreSky}
+                style={{ opacity: assistPhase === "speaking" ? 1 : 0 }}
+                aria-hidden="true"
+              />
+              <div
+                className={s.orbCoreGreen}
+                style={{ opacity: assistPhase === "done" ? 1 : 0 }}
+                aria-hidden="true"
+              />
+              {/* Always-on specular highlight at (32%, 24%) (OrbArt.shine) */}
+              <div className={s.orbShine} aria-hidden="true" />
             </div>
-            <div
-              className={s.mirrorStand}
+
+            {/* Done Checkmark SVG (VoiceOverlay.Check: M40 57.5 l11 11 l22 -24 in 112x112) */}
+            <svg
+              viewBox="0 0 112 112"
+              className={`${s.orbCheck} ${assistPhase === "done" ? s.orbCheckShow : ""}`}
               aria-hidden="true"
-              style={{
-                width: `min(calc(100vw - 32px), ${dims.w}px)`,
-                opacity: mirrorFactor,
-                transform: `translateY(${(1 - mirrorFactor) * -10}px) scaleY(${0.6 + mirrorFactor * 0.4})`,
-              }}
-            />
+            >
+              <path d="M40 57.5 l11 11 l22 -24" />
+            </svg>
           </div>
         </div>
 
-        {renderControlDock(true)}
-
-        <div className={s.compactCopy}>
-          {mobileShape === "wall" && (
+        {/* Calm label + main Inter Light text slots (VoiceOverlay.Slot) */}
+        <div className={s.voiceTexts}>
+          {assistPhase === "thinking" && (
             <>
-              {post ? (
-                <Link href={post.href} className={s.newPill}>
-                  <span className={s.newTag}>New</span>
-                  <b>{post.title}</b>
-                </Link>
-              ) : (
-                <a href={release.href} className={s.eyebrow}>
-                  GLASSWORKS {release.version}
-                </a>
+              <span className={`${s.voiceLabel} ${s.voiceLabelFaint}`}>Thinking</span>
+              <p className={s.voiceMain}>“Set a 5-minute pasta timer”</p>
+            </>
+          )}
+          {assistPhase === "speaking" && (
+            <>
+              <span className={s.voiceQuote}>“Set a 5-minute pasta timer”</span>
+              <p className={s.voiceMain}>Timer started for 5 minutes.</p>
+            </>
+          )}
+          {assistPhase === "done" && (
+            <>
+              <span className={`${s.voiceLabel} ${s.voiceLabelGreen}`}>Done</span>
+              <p className={s.voiceMain}>Timer started for 5 minutes.</p>
+            </>
+          )}
+        </div>
+
+        <span
+          className={s.voiceHint}
+          style={{ opacity: assistPhase === "done" ? 0 : 0.85 }}
+          aria-hidden="true"
+        >
+          Tap anywhere to cancel
+        </span>
+      </div>
+    );
+  };
+
+  /*
+   * REAL NotificationOverlay.kt (top-right night glass card) + REAL TimerDock.kt / RingView.kt
+   * (bottom-right amber countdown ring & dark glass orb with PASTA pill tag)
+   */
+  const renderRealMirrorOverlays = (opacity: number) => {
+    if (opacity <= 0.01) return null;
+    const slideOffset = (1 - opacity) * 10;
+
+    return (
+      <div
+        className={s.mirrorOverlayLayer}
+        style={{
+          opacity,
+          pointerEvents: "none",
+        }}
+      >
+        {/* 1. REAL Top-Right NotificationOverlay Card (#16171c glass, 1px white@0.12, AMBER label, SKY→VIOLET TimeLeft) */}
+        {!notifDismissed ? (
+          <div
+            className={s.gwNotifCard}
+            style={{
+              transform: `translate3d(0, ${-slideOffset}px, 0)`,
+              pointerEvents: opacity > 0.45 ? "auto" : "none",
+            }}
+          >
+            <div className={s.gwNotifHead}>
+              <span className={s.gwNotifLabel}>Important · Just now</span>
+              <button
+                type="button"
+                className={s.gwNotifClose}
+                onClick={() => setNotifDismissed(true)}
+                aria-label="Close notification"
+              >
+                ×
+              </button>
+            </div>
+            <div className={s.gwNotifTitle}>Front Door</div>
+            <div className={s.gwNotifBody}>
+              {doorLocked ? "Person detected at the porch" : "Front door unlocked"}
+            </div>
+            <div className={s.gwNotifPic} aria-hidden="true">
+              <svg viewBox="0 0 220 92" className={s.gwNotifPicSvg} preserveAspectRatio="xMidYMid slice">
+                <rect width="220" height="92" fill="#12151f" />
+                <path d="M0 64 L220 64 L220 92 L0 92 Z" fill="#181c28" />
+                <path d="M68 64 L152 64 L178 92 L42 92 Z" fill="#212738" />
+                <circle cx="110" cy="36" r="8.5" fill="#38bdf8" fillOpacity="0.32" stroke="#38bdf8" strokeOpacity="0.65" />
+                <path d="M96 63 C96 50 124 50 124 63 Z" fill="#a78bfa" fillOpacity="0.28" stroke="#a78bfa" strokeOpacity="0.6" />
+              </svg>
+            </div>
+            <div className={s.gwNotifActions}>
+              <button
+                type="button"
+                className={`${s.gwPillBtn} ${!doorLocked ? s.gwPillBtnOk : ""}`}
+                onClick={() => setDoorLocked((l) => !l)}
+              >
+                {doorLocked ? "Unlock" : "✓ Unlocked"}
+              </button>
+              <button
+                type="button"
+                className={s.gwPillBtn}
+                onClick={() => setNotifDismissed(true)}
+              >
+                Dismiss
+              </button>
+            </div>
+            <div className={s.gwTimeLeftTrack} aria-hidden="true">
+              <div className={s.gwTimeLeftFill} />
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className={s.gwNotifPill}
+            style={{ pointerEvents: opacity > 0.45 ? "auto" : "none" }}
+            onClick={() => setNotifDismissed(false)}
+          >
+            <b>1 notification</b>
+            <span> · Show</span>
+          </button>
+        )}
+
+        {/* 2. REAL Bottom-Right TimerDock + RingView (80dp ring scaled, amber clockwise arc, dark glass sphere, PASTA tag) */}
+        <button
+          type="button"
+          className={`${s.timerDock} ${timerPaused ? s.timerDockPaused : ""}`}
+          style={{
+            transform: `translate3d(0, ${slideOffset}px, 0)`,
+            pointerEvents: opacity > 0.45 ? "auto" : "none",
+          }}
+          onClick={() => setTimerPaused((v) => !v)}
+          aria-label={`Pasta timer ${formatTimer(timerSec)}, ${timerPaused ? "paused, tap to resume" : "running, tap to pause"}`}
+        >
+          <span className={s.ringWrap}>
+            <span className={s.ringHalo} aria-hidden="true" />
+            <span className={s.ringGlow} aria-hidden="true" />
+            <svg viewBox="0 0 80 80" className={s.ringSvg} aria-hidden="true">
+              {/* Track circle */}
+              <circle cx="40" cy="40" r="36.5" className={s.ringTrack} />
+              {/* Clockwise progress arc from 12 o'clock */}
+              <circle
+                cx="40"
+                cy="40"
+                r="36.5"
+                className={timerPaused ? s.ringArcPaused : s.ringArc}
+                strokeDasharray={`${(ringCircumference * timerFraction).toFixed(1)} ${ringCircumference.toFixed(1)}`}
+              />
+            </svg>
+            {/* Inner 62dp dark glass sphere with subtle amber core and 32%/24% specular shine */}
+            <span className={s.ringSphere}>
+              <span className={s.ringCore} aria-hidden="true" />
+              <span className={s.ringShine} aria-hidden="true" />
+              {timerPaused && (
+                <span className={s.ringPauseBars} aria-hidden="true">
+                  <span />
+                  <span />
+                </span>
               )}
-              <h1 className={s.h1}>Your home, on the wall.</h1>
-              <p className={s.lede}>
-                Full-screen Home Assistant dashboard, local voice, synced music, and built-in radios — installed from Chrome in minutes.
-              </p>
-              <div className={s.ctas}>
-                <a href={KILN} className={s.install}>
-                  <KilnGlyph />
-                  Install with Kiln →
-                </a>
-                <a href="#devices" className={s.quietLink}>
-                  Supported devices
-                </a>
-              </div>
-            </>
-          )}
+              <span className={s.ringDigits}>{formatTimer(timerSec)}</span>
+            </span>
+          </span>
+          {/* Name tag pill under ring (RingView: #0a0b0f @ 0.82, 1px white @ 0.07, uppercase MU) */}
+          <span className={s.ringTag}>Pasta</span>
+        </button>
+      </div>
+    );
+  };
 
-          {mobileShape === "tablet" && (
-            <>
-              <span className={s.eyebrow}>ANY ANDROID TABLET</span>
-              <h1 className={s.h1}>Or the tablet in your drawer.</h1>
-              <p className={s.lede}>
-                Same dashboard, local Assist voice, and lighting-aware camera presence — no root required. Tested on the Pixel Tablet.
-              </p>
-              <div className={s.ctas}>
-                <Link href="/frames/google-pixel-tablet" className={s.quietLink}>
-                  Pixel Tablet details →
-                </Link>
+  /*
+   * Mobile (< 900px) & prefers-reduced-motion:
+   * Clean vertical stack of the 4 concise beats — zero scroll-jacking, zero bottom pill dock,
+   * zero horizontal overflow at 375px.
+   */
+  if (compact) {
+    const renderCompactFrame = (
+      shape: ShapeId,
+      overlay?: "voice" | "mirror",
+      interactiveSmooth?: boolean,
+    ) => {
+      const d = MOBILE_SHAPES[shape];
+      const isMirror = shape === "mirror";
+      return (
+        <div className={s.compactStage}>
+          <div className={s.mirrorAssembly}>
+            <div
+              className={`${s.bezel} ${interactiveSmooth ? s.morphSmooth : ""} ${isMirror ? s.bezelMirror : ""}`}
+              style={{
+                width: `min(calc(100vw - 32px), ${d.w}px)`,
+                height: `${d.h}px`,
+                borderRadius: `${d.bodyR}px`,
+              }}
+            >
+              {isMirror && <div className={s.mirrorBodySurface} aria-hidden="true" />}
+              <div
+                className={s.glare}
+                aria-hidden="true"
+                style={{ ["--glare-a" as string]: isMirror ? "0.21" : "0.11" }}
+              />
+              <div
+                className={`${s.screen} ${interactiveSmooth ? s.morphSmooth : ""}`}
+                data-round={shape === "round" || undefined}
+                style={{
+                  top: `${d.insetTop}%`,
+                  bottom: `${d.insetBottom}%`,
+                  left: `${d.insetX}%`,
+                  right: `${d.insetX}%`,
+                  borderRadius: `${d.screenR}px`,
+                }}
+              >
+                <div className={s.screenInner}>
+                  {renderLiveLovelace(shape)}
+                  {overlay === "voice" && renderRealVoiceOverlay(1)}
+                  {overlay === "mirror" && renderRealMirrorOverlays(1)}
+                </div>
               </div>
-            </>
-          )}
+            </div>
+            {isMirror && (
+              <div
+                className={s.mirrorStand}
+                aria-hidden="true"
+                style={{ width: `min(calc(100vw - 32px), ${d.w}px)` }}
+              />
+            )}
+          </div>
+        </div>
+      );
+    };
 
-          {mobileShape === "mirror" && (
-            <>
-              <span className={s.eyebrow}>LULULEMON STUDIO MIRROR</span>
-              <h1 className={s.h1}>Even behind a 40-inch mirror.</h1>
-              <p className={s.lede}>
-                Your morning weather, calendar, and scenes tuck cleanly to the edges while the glass stays a real mirror.
-              </p>
-              <div className={s.ctas}>
-                <Link href="/frames/lululemon-mirror" className={s.quietLink}>
-                  Mirror frame details →
-                </Link>
-              </div>
-            </>
-          )}
+    return (
+      <section className={s.compactStack} aria-label="Glassworks across hardware shapes">
+        {/* Beat 0: Wall Switch */}
+        <div className={s.compactBeat}>
+          <div className={s.compactCopy}>
+            {post ? (
+              <Link href={post.href} className={s.newPill}>
+                <span className={s.newTag}>New</span>
+                <b>{post.title}</b>
+                <span className={s.newArrow}>→</span>
+              </Link>
+            ) : (
+              <a href={release.href} className={s.eyebrow}>
+                GLASSWORKS {release.version}
+              </a>
+            )}
+            <h1 className={s.h1}>Your home, on the wall.</h1>
+            <p className={s.lede}>
+              Full-screen Home Assistant dashboard, local voice, synced music, and built-in radios — installed from Chrome in minutes.
+            </p>
+            <div className={s.ctas}>
+              <a href={KILN} className={s.install}>
+                <KilnGlyph />
+                Install with Kiln →
+              </a>
+              <a href="#devices" className={s.quietLink}>
+                Supported devices
+              </a>
+            </div>
+          </div>
+          {renderCompactFrame("wall")}
+        </div>
 
-          {(mobileShape === "square" || mobileShape === "round" || mobileShape === "bedside") && (
-            <>
-              <span className={s.eyebrow}>ONE OPEN CORE</span>
-              <h1 className={s.h1}>One open core for whatever&rsquo;s next.</h1>
-              <p className={s.lede}>
-                Square switch boxes, round dials, bedside screens, or your own custom hardware — one ESPHome device, installed safely with Kiln.
-              </p>
-              <div className={s.ctas}>
-                <a href={KILN} className={s.install}>
-                  <KilnGlyph />
-                  Install with Kiln →
-                </a>
-                <Link href="/developers" className={s.quietLink}>
-                  For developers →
-                </Link>
-              </div>
-            </>
-          )}
+        {/* Beat 1: Pixel Tablet + Real Assist Voice Orb */}
+        <div className={s.compactBeat}>
+          <div className={s.compactCopy}>
+            <span className={s.eyebrow}>LOCAL ASSIST VOICE</span>
+            <h2 className={s.h2}>Talk to your home, privately.</h2>
+            <p className={s.lede}>
+              On-device wake word detection and Home Assistant Assist, on a tablet in your drawer or a switch on your wall — with no root required.
+            </p>
+            <div className={s.ctas}>
+              <Link href="/frames/google-pixel-tablet" className={s.quietLink}>
+                Pixel Tablet details →
+              </Link>
+            </div>
+          </div>
+          {renderCompactFrame("tablet", "voice")}
+        </div>
+
+        {/* Beat 2: Studio Mirror + Real Notification Card & TimerDock */}
+        <div className={s.compactBeat}>
+          <div className={s.compactCopy}>
+            <span className={s.eyebrow}>NOTIFICATIONS &amp; TIMERS</span>
+            <h2 className={s.h2}>Alerts and timers, right when they matter.</h2>
+            <p className={s.lede}>
+              Doorbell cards, visual voice timers, and synced Music Assistant playback float cleanly over your dashboard — even behind a 40-inch mirror.
+            </p>
+            <div className={s.ctas}>
+              <Link href="/frames/lululemon-mirror" className={s.quietLink}>
+                Mirror frame details →
+              </Link>
+            </div>
+          </div>
+          {renderCompactFrame("mirror", "mirror")}
+        </div>
+
+        {/* Beat 3: Square 4" + Future Shapes */}
+        <div className={s.compactBeat}>
+          {renderCompactFrame(futureShape, undefined, true)}
+          <div className={s.compactGhosts}>
+            <button
+              type="button"
+              className={`${s.compactGhostBtn} ${futureShape === "round" ? s.ghostActive : ""}`}
+              onClick={() => selectFuture(futureShape === "round" ? "square" : "round")}
+              aria-pressed={futureShape === "round"}
+            >
+              {futureShape === "round" ? 'Square 4"' : "Round Dial"}
+            </button>
+            <button
+              type="button"
+              className={`${s.compactGhostBtn} ${futureShape === "bedside" ? s.ghostActive : ""}`}
+              onClick={() => selectFuture(futureShape === "bedside" ? "square" : "bedside")}
+              aria-pressed={futureShape === "bedside"}
+            >
+              {futureShape === "bedside" ? 'Square 4"' : "Bedside Display"}
+            </button>
+          </div>
+          <div className={s.compactCopy}>
+            <h2 className={s.h2}>One open core for whatever&rsquo;s next.</h2>
+            <p className={s.lede}>
+              Square switch boxes, round dials, bedside screens, or your own custom hardware — one ESPHome device, installed safely with Kiln.
+            </p>
+            <div className={s.ctas}>
+              <a href={KILN} className={s.install}>
+                <KilnGlyph />
+                Install with Kiln →
+              </a>
+              <Link href="/developers" className={s.quietLink}>
+                For developers →
+              </Link>
+            </div>
+          </div>
         </div>
       </section>
     );
@@ -1023,7 +1040,7 @@ export function MorphStory({
         />
 
         <div className={s.canvas}>
-          {/* Keyframe 0 Copy (Left) */}
+          {/* Beat 0 Copy (Left — Aqara S1 Plus Wall Switch) */}
           <div
             className={`${s.copyBlock} ${s.copyLeft}`}
             style={{
@@ -1059,7 +1076,7 @@ export function MorphStory({
             </div>
           </div>
 
-          {/* Keyframe 1 Copy (Right) */}
+          {/* Beat 1 Copy (Right — Pixel Tablet + Real Assist Voice Orb) */}
           <div
             className={`${s.copyBlock} ${s.copyRight}`}
             style={{
@@ -1069,10 +1086,10 @@ export function MorphStory({
             }}
             aria-hidden={copy1O < 0.2}
           >
-            <span className={s.eyebrow}>ANY ANDROID TABLET</span>
-            <h2 className={s.h2}>Or the tablet in your drawer.</h2>
+            <span className={s.eyebrow}>LOCAL ASSIST VOICE</span>
+            <h2 className={s.h2}>Talk to your home, privately.</h2>
             <p className={s.lede}>
-              Same dashboard, local Assist voice, and lighting-aware camera presence — no root required. Tested on the Pixel Tablet.
+              On-device wake word detection and Home Assistant Assist, on a tablet in your drawer or a switch on your wall — with no root required.
             </p>
             <div className={s.ctas}>
               <Link href="/frames/google-pixel-tablet" className={s.quietLink}>
@@ -1081,7 +1098,7 @@ export function MorphStory({
             </div>
           </div>
 
-          {/* Keyframe 2 Copy (Left) */}
+          {/* Beat 2 Copy (Left — lululemon Studio Mirror + Real Notifications & Timers) */}
           <div
             className={`${s.copyBlock} ${s.copyLeft}`}
             style={{
@@ -1091,10 +1108,10 @@ export function MorphStory({
             }}
             aria-hidden={copy2O < 0.2}
           >
-            <span className={s.eyebrow}>LULULEMON STUDIO MIRROR</span>
-            <h2 className={s.h2}>Even behind a 40-inch mirror.</h2>
+            <span className={s.eyebrow}>NOTIFICATIONS &amp; TIMERS</span>
+            <h2 className={s.h2}>Alerts and timers, right when they matter.</h2>
             <p className={s.lede}>
-              Your morning weather, calendar, and scenes tuck cleanly to the edges while the glass stays a real mirror.
+              Doorbell cards, visual voice timers, and synced Music Assistant playback float cleanly over your dashboard — even behind a 40-inch mirror.
             </p>
             <div className={s.ctas}>
               <Link href="/frames/lululemon-mirror" className={s.quietLink}>
@@ -1103,7 +1120,7 @@ export function MorphStory({
             </div>
           </div>
 
-          {/* Keyframe 3 Copy (Centered Below Hardware) */}
+          {/* Beat 3 Copy (Centered Below Hardware — Square 4" & Future Shapes) */}
           <div
             className={s.copyCenter}
             style={{
@@ -1128,7 +1145,7 @@ export function MorphStory({
             </div>
           </div>
 
-          {/* Interactive Future Ghost Silhouettes flanking the centered Keyframe 3 hardware */}
+          {/* Interactive Future Ghost Silhouettes flanking the centered Beat 3 hardware */}
           <div
             className={s.ghostLayer}
             style={{
@@ -1194,7 +1211,7 @@ export function MorphStory({
                 {/* Inner screen with smoothly interpolated real frame inset */}
                 <div
                   className={`${s.screen} ${clickMorph ? s.morphSmooth : ""}`}
-                  data-round={isRoundActive || undefined}
+                  data-round={currentShape === "round" || undefined}
                   style={{
                     top: `${geom.insetTop}%`,
                     bottom: `${geom.insetBottom}%`,
@@ -1203,7 +1220,11 @@ export function MorphStory({
                     borderRadius: `${geom.screenR}px`,
                   }}
                 >
-                  {renderLiveLovelace()}
+                  <div className={s.screenInner}>
+                    {renderLiveLovelace(currentShape)}
+                    {renderRealVoiceOverlay(assistO)}
+                    {renderRealMirrorOverlays(mirrorOverlaysO)}
+                  </div>
                 </div>
               </div>
 
@@ -1220,9 +1241,6 @@ export function MorphStory({
             </div>
           </div>
         </div>
-
-        {/* Quiet Bottom Control Dock: Shape + Try Feature */}
-        <div className={s.railWrap}>{renderControlDock(false)}</div>
       </div>
     </section>
   );
