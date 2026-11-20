@@ -18,7 +18,7 @@ line of each version is what Home Assistant shows on the update card. A change o
   Assistant, so all of them agree. A pane whose hardware the device lacks isn't listed.
 - **Themes for the voice overlay.** A new *Appearance* page in the panel's settings and on the Manage page picks one
   of five themes, Glassworks, Aurora, Dusk, Dune or Graphite, each light or dark. The voice overlay takes its
-  colors: the orb glows in the theme's first colour while it listens and its second while it speaks, and a light
+  colors: the orb glows in the theme's first color while it listens and its second while it speaks, and a light
   theme gives the overlay a light background with dark text. Done stays green and errors stay red. Glassworks dark
   is the default, so the orb now listens in blue rather than amber. Timers follow in a later release.
 - **Recorders that record on motion get the camera's motion pushed to them.** With the ONVIF stream on, a network
