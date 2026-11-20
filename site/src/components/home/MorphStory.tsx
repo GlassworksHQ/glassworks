@@ -90,21 +90,21 @@ const KEYFRAMES: Keyframe[] = [
     glowX: 72,
     glowY: 48,
   },
-  // 3: Full-Length Mirror · lululemon Studio Mirror (Left, 216 × 520, top 12.7%, bottom 21.1%)
+  // 3: Full-Length Mirror · lululemon Studio Mirror (Left, 204 × 484 + 84px U-stand, top 12.7%, bottom 21.1%)
   {
-    w: 216,
-    h: 520,
+    w: 204,
+    h: 484,
     bodyR: 6,
     insetTop: 12.7,
     insetBottom: 21.1,
     insetX: 3.5,
     screenR: 3,
     xPct: -23,
-    yPx: -12,
+    yPx: -36,
     rx: 1,
     ry: 5,
     glowX: 27,
-    glowY: 47,
+    glowY: 46,
   },
   // 4: Wide Kitchen / Bedside Display · ESPHome + Sendspin + Radios (Right, 440 × 240, room for right light rays)
   {
@@ -155,7 +155,7 @@ const MOBILE_SHAPES: Record<
 > = {
   wall: { w: 336, h: 168, bodyR: 8, insetTop: 4, insetBottom: 4, insetX: 2.2, screenR: 4 },
   tablet: { w: 330, h: 216, bodyR: 18, insetTop: 6.5, insetBottom: 6.5, insetX: 4.3, screenR: 7 },
-  mirror: { w: 196, h: 472, bodyR: 6, insetTop: 12.7, insetBottom: 21.1, insetX: 3.5, screenR: 3 },
+  mirror: { w: 184, h: 444, bodyR: 6, insetTop: 12.7, insetBottom: 21.1, insetX: 3.5, screenR: 3 },
   kitchen: { w: 336, h: 184, bodyR: 16, insetTop: 5, insetBottom: 5, insetX: 3.2, screenR: 9 },
   square: { w: 220, h: 220, bodyR: 18, insetTop: 5, insetBottom: 5, insetX: 5, screenR: 10 },
   round: { w: 220, h: 220, bodyR: 110, insetTop: 5, insetBottom: 5, insetX: 5, screenR: 110 },
@@ -1073,9 +1073,9 @@ export function MorphStory({
             </div>
             {isMirror && (
               <div
-                className={s.mirrorStand}
+                className={s.mirrorStandCompact}
                 aria-hidden="true"
-                style={{ width: `min(calc(100vw - 32px), ${d.w}px)` }}
+                style={{ width: `calc(min(calc(100vw - 32px), ${d.w}px) * 0.98)` }}
               />
             )}
           </div>
@@ -1559,16 +1559,18 @@ export function MorphStory({
                 )}
               </div>
 
-              {/* Tubular U-shaped metal stand extending cleanly below the Studio Mirror */}
-              <div
-                className={s.mirrorStand}
-                aria-hidden="true"
-                style={{
-                  width: `${geom.w}px`,
-                  opacity: mirrorFactor,
-                  transform: `translateY(${(1 - mirrorFactor) * -12}px) scaleY(${0.55 + mirrorFactor * 0.45})`,
-                }}
-              />
+              {/* Accurate tall tubular U-shaped steel stand (220/536 ≈ 41% height, 98% width) */}
+              {mirrorFactor > 0.01 && (
+                <div
+                  className={s.mirrorStand}
+                  aria-hidden="true"
+                  style={{
+                    width: `${(geom.w * 0.98).toFixed(1)}px`,
+                    opacity: mirrorFactor,
+                    transform: `translate3d(-50%, ${(1 - mirrorFactor) * -18}px, 0) scaleY(${0.65 + mirrorFactor * 0.35})`,
+                  }}
+                />
+              )}
             </div>
           </div>
         </div>
