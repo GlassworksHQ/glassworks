@@ -35,8 +35,16 @@ function rotate([x0, y0, z0]: V3, view: { rx: number; ry: number }, lean = 0): V
   return [x1, Math.cos(b) * y - Math.sin(b) * z1, Math.sin(b) * y + Math.cos(b) * z1];
 }
 
+/**
+ * Segments per rounded corner: 6 for a corner that is small next to the body, up to 16 as it grows, so a
+ * body that is all corner (a round dial) has 64 sides instead of 24 and its edge stays smooth.
+ */
+function cornerSteps(w: number, h: number, r: number) {
+  return Math.min(16, Math.max(6, Math.round((32 * r) / Math.min(w, h))));
+}
+
 /* the rounded-rectangle outline, clockwise on screen, with outward normals */
-function outline(w: number, h: number, r: number, steps = 6) {
+function outline(w: number, h: number, r: number, steps = cornerSteps(w, h, r)) {
   const hw = w / 2;
   const hh = h / 2;
   const corners: [number, number, number][] = [[hw - r, -hh + r, -90], [hw - r, hh - r, 0], [-hw + r, hh - r, 90], [-hw + r, -hh + r, 180]];

@@ -67,6 +67,19 @@ describe('the Pixel Tablet on its dock', () => {
   });
 });
 
+describe('round corners', () => {
+  it('draws a body that is all corner smooth, and a small corner as before', () => {
+    const round = { ...s1.model, body: { ...s1.model.body, width: 84, height: 84, radius: 42 }, dark: undefined };
+    const sides = (m: FrameModel) => geometry(m, 1).faces.length;
+    // a circle's edge: 64 segments (16 a quarter); 26 face the viewer on a 2:1 stage (9 with the old 24)
+    expect(geometry(round, 2).faces.length).toBe(26);
+    expect(sides(round)).toBeGreaterThan(15);
+    // the frames' small corners keep 6 segments: the same faces as before (checked byte for byte, 2026-11-20)
+    expect(geometry(tablet.model, 2).faces.length).toBe(12);
+    expect(geometry(mirror.model, 2).faces.length).toBe(12);
+  });
+});
+
 describe('a dark look (model.dark)', () => {
   const lightDark = /^light-dark\(#[0-9a-f]{6}, #[0-9a-f]{6}\)$/;
 
