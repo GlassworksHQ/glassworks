@@ -4,6 +4,7 @@
 import * as Collapsible from '@radix-ui/react-collapsible';
 import * as Dialog from '@radix-ui/react-dialog';
 import * as RadioGroup from '@radix-ui/react-radio-group';
+import { paneById } from '@glassworks/frame-card';
 import { fmtSize } from '@glassworks/kiln-core';
 import Link from 'next/link';
 import { BuiltOn, stepCredits } from '../components/Credit';
@@ -268,6 +269,9 @@ export function Waiting({ setup }: { setup: Extract<Setup, { phase: 'waiting' }>
   );
 }
 
+/** A pane's icon from the pane catalog (packages/frame-card: each pane's icon.svg). */
+const paneIcon = (id: string) => paneById(id)?.icon;
+
 /** The set-up step, one phase at a time. */
 export function SetUp(p: SP) {
   const setup = p.s.setup;
@@ -276,7 +280,7 @@ export function SetUp(p: SP) {
     case 'settings': return <Settings {...p} setup={setup} />;
     case 'wifi': return <Wifi busy={!!p.s.busy} steps={p.session} setup={setup} />;
     case 'ha': return <HomeAssistant key="ha" busy={!!p.s.busy} steps={p.session} setup={setup} />;
-    case 'panes': return <Panes busy={!!p.s.busy} steps={p.session} setup={setup} />;
+    case 'panes': return <Panes busy={!!p.s.busy} steps={p.session} setup={setup} icons={paneIcon} />;
     case 'radio': return <Radio key={setup.radio.mode} busy={!!p.s.busy} steps={p.session} setup={setup} />;
     case 'radio-next': return <RadioNext busy={!!p.s.busy} steps={p.session} setup={setup} />;
   }
