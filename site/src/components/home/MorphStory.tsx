@@ -55,6 +55,9 @@ type Keyframe = {
 
 const PERSPECTIVE = 1200;
 
+/** A docked model's body lifted off its dock: a 2D move (px) and a scale less 1, about the body's centre */
+type Lift = { x: number; y: number; s: number };
+
 /* Physically accurate proportions from frames/<id>/design/frame.json */
 const KEYFRAMES: Keyframe[] = [
   // 0: Wall Switch · Aqara S1 Plus (Right, 2:1, 500 × 250; square corners, as frame.json)
@@ -264,7 +267,7 @@ type StoryModel = { id: string; label: string; model: FrameModel; aspect: number
  * width that draws the body that wide. The glass lands on the model's front, so handing over to the model
  * only adds its sides, stand or dock.
  */
-function modelPose(base: Keyframe, sm: StoryModel): { pose: Keyframe; stage: number; face?: string } {
+function modelPose(base: Keyframe, sm: StoryModel): { pose: Keyframe; stage: number; face?: string; lift?: Lift } {
   const g = geometry(sm.model, sm.aspect, sm.view);
   const n = (k: string) => parseFloat(g.vars[k] ?? "0");
   const stage = base.w / (n("--wp") / 100);
@@ -289,7 +292,9 @@ function modelPose(base: Keyframe, sm: StoryModel): { pose: Keyframe; stage: num
     dx: (tx / 100) * stage,
     dy: (ty / 100) * (stage / sm.aspect),
   };
-  return { pose, stage, face: g.vars["--dev-face"] };
+  // a docked model's lift off its dock (--ux, --uy, --us: % of the stage, and a scale), in px for the glass
+  const lift = g.vars["--ux"] ? { x: (n("--ux") / 100) * stage, y: (n("--uy") / 100) * (stage / sm.aspect), s: n("--us") } : undefined;
+  return { pose, stage, face: g.vars["--dev-face"], lift };
 }
 
 /* Each beat's hold (morphSegment): the p where the glass sits still on its device */
@@ -301,6 +306,17 @@ const HOLDS: [number, number][] = [
   [0.725, 0.82],
   [0.895, 1],
 ];
+
+/**
+ * How far the Pixel Tablet is off its dock (Beat 4), so a reader sees it dock without hovering: the glass
+ * travels in lifted, the model takes over lifted (both drawn with the same lift, so the hand-over is exact),
+ * then it settles onto the dock as the beat scrolls on. Scrolling back lifts it again.
+ */
+function undockAt(p: number) {
+  const [a] = HOLDS[4]!;
+  if (p < a) return smooth(clamp((p - 0.65) / (a - 0.65)));
+  return 1 - smooth(clamp((p - a - 0.021) / 0.03));
+}
 
 /** The model shows only inside its beat's hold, where it and the glass coincide: in just after, out just before */
 function holdO(p: number, beat: number) {
@@ -570,7 +586,11 @@ export function MorphStory({
   const dropO = compact || nearModel.model.mount !== "desk" ? 0 : windowO(seg, nearBeat, 0.12, 0.62);
   // the tablet lifted off its dock: the model's own hover lift (mouse only), which the Docked line follows
   const [modelHover, setModelHover] = useState(false);
-  const tabletLifted = nearBeat === 4 && modelLive && modelHover && !reducedMotion;
+  // the tablet off its dock as the scroll brings it in (undockAt), drawn on the glass and on the model alike
+  const tabletLift = poses[4]!.lift;
+  const undock = compact || reducedMotion || morphing || !tabletLift ? 0 : undockAt(p);
+  const glassLift = undock > 0 ? tabletLift : undefined;
+  const tabletLifted = nearBeat === 4 && !reducedMotion && ((modelLive && modelHover) || undock > 0.5);
   // Mirror body presence factor (Beat 3): the glass looks silvered on its way to the Mirror
   const mirrorFactor = windowO(seg, 3, 0.24, 0.72);
 
@@ -1591,7 +1611,14 @@ export function MorphStory({
                   className={s.beatModel}
                   // only the Pixel Tablet lifts off its dock; the wide display's speaker base holds it
                   data-still={nearBeat !== 4 || undefined}
-                  style={{ width: `${near.stage.toFixed(1)}px`, opacity: modelO, pointerEvents: modelLive ? "auto" : "none" }}
+                  // while the scroll docks it, the lift follows the scroll, not the hover's eased move
+                  data-docking={undock > 0 || undefined}
+                  style={{
+                    width: `${near.stage.toFixed(1)}px`,
+                    opacity: modelO,
+                    pointerEvents: modelLive ? "auto" : "none",
+                    ...(undock > 0 ? { ["--undock" as string]: undock.toFixed(3) } : {}),
+                  }}
                   inert={!modelLive}
                   onPointerEnter={(e) => e.pointerType === "mouse" && setModelHover(true)}
                   onPointerLeave={() => setModelHover(false)}
@@ -1605,7 +1632,7 @@ export function MorphStory({
                 inert={modelLive}
                 style={{
                   opacity: modelLive ? 0 : 1,
-                  transform: `scale(var(--bezel-scale, 1)) translate(${basePose.dx}px, ${basePose.dy}px) perspective(${basePose.persp}px) rotateX(${basePose.rx}deg) rotateY(${basePose.ry}deg) rotateX(${basePose.lean}deg) translateZ(${basePose.z}px)`,
+                  transform: `scale(var(--bezel-scale, 1)) translate(${basePose.dx}px, ${basePose.dy}px)${glassLift ? ` translate(${(glassLift.x * undock).toFixed(2)}px, ${(glassLift.y * undock).toFixed(2)}px) scale(${(1 + glassLift.s * undock).toFixed(4)})` : ""} perspective(${basePose.persp}px) rotateX(${basePose.rx}deg) rotateY(${basePose.ry}deg) rotateX(${basePose.lean}deg) translateZ(${basePose.z}px)`,
                 }}
               >
                 <div className={s.bezelRow}>
