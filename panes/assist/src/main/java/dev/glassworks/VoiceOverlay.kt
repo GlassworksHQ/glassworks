@@ -32,6 +32,8 @@ import dev.glassworks.assist.Fader
 import dev.glassworks.assist.LevelSmoother
 import dev.glassworks.assist.MainTextFit
 import dev.glassworks.assist.OrbArt
+import dev.glassworks.assist.ThemedBackdrop
+import dev.glassworks.theme.Themes
 import dev.glassworks.assist.TextFade
 import dev.glassworks.assist.VoiceLevels
 import dev.glassworks.assist.VoiceTexts
@@ -61,12 +63,23 @@ class VoiceOverlay(context: Context) : FrameLayout(context) {
 
     private enum class Phase { WAKE, LISTENING, THINKING, SPEAKING, DONE, ERROR }
 
-    private enum class Style { LABEL_AMBER, LABEL_FAINT, LABEL_GREEN, LABEL_ROSE, QUOTE, MAIN_TEXT, MAIN_MUTED }
+    private enum class Style { LABEL_LISTEN, LABEL_FAINT, LABEL_GREEN, LABEL_ROSE, QUOTE, MAIN_TEXT, MAIN_MUTED }
 
     private data class Spec(val text: String, val style: Style)
 
     private val dp = resources.displayMetrics.density
-    private val art = OrbArt(dp)
+    private var art = OrbArt(dp)
+
+    /**
+     * The overlays' theme now (#691): read when the overlay appears and when the setting changes. The app's setting by
+     * default; a test gives its own.
+     */
+    var theme: () -> Themes.Pick = { KioskPrefs(context).overlayPick }
+    private var pick: Themes.Pick? = null
+    private var palette: Themes.Palette = Themes.DEFAULT.palette
+    // The texts' colours on the theme's ground: its ink, and the lights and status colours made readable on it.
+    private var tx = TX; private var mu = MU; private var fa = FA
+    private var listen = Themes.DEFAULT.palette.a; private var green = GREEN; private var rose = ROSE
     private fun px(v: Float) = art.px(v)
     private val interp = PathInterpolator(0.65f, 0f, 0.35f, 1f)
     private val ease: (Float) -> Float = { interp.getInterpolation(it.coerceIn(0f, 1f)) }
@@ -77,7 +90,7 @@ class VoiceOverlay(context: Context) : FrameLayout(context) {
     private val stage = FrameLayout(context).apply { clipChildren = false; clipToPadding = false }
     private val glowAmber = layer(); private val glowThink = layer(); private val glowSky = layer()
     private val glowGreen = layer(); private val glowRose = layer()
-    private val rings = Array(3) { i -> Ring(context, if (i == 0) AMBER else SKY) }
+    private val rings = Array(3) { Ring(context) }
     private val sphere = layer()
     private val clip = FrameLayout(context).apply {
         outlineProvider = object : ViewOutlineProvider() {
@@ -91,7 +104,7 @@ class VoiceOverlay(context: Context) : FrameLayout(context) {
     private val label = Slot(dy = 6f, durMs = 450f, maxDp = 840f)
     private val main = Slot(dy = 8f, durMs = 500f, maxDp = 820f)
     private val hint = TextView(context).apply {
-        styleLabel(this, FA)
+        styleLabel(this, fa)
         text = "Tap anywhere to cancel"
         gravity = Gravity.CENTER
         visibility = View.GONE
@@ -166,11 +179,45 @@ class VoiceOverlay(context: Context) : FrameLayout(context) {
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        applyTheme()
+        // A theme picked while the overlay is hidden bakes then, so the next run shows it at once.
+        runCatching { KioskPrefs(context).registerListener(themeChanged) }
         // Let the backdrop bake first (it is on screen at start-up); the orb isn't needed yet.
         postDelayed({ bake() }, 1_500)
     }
 
+    private val themeChanged = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == "overlay_theme" || key == "overlay_custom") post { applyTheme() }
+    }
+
+    /**
+     * Takes the theme's colours (#691): listening in light a, speaking in light b, thinking in both, the ground as the
+     * scrim, the texts in the ground's ink. Done stays green and errors rose (status). A new theme bakes the orb again.
+     */
+    private fun applyTheme() {
+        val p = theme()
+        if (pick?.id == p.id && palette == p.palette) return
+        pick = p; palette = p.palette
+        val light = !palette.darkGround
+        tx = palette.ink
+        mu = Themes.mix(tx, palette.ground, 0.35f)
+        fa = Themes.mix(tx, palette.ground, 0.58f)
+        listen = palette.readable(palette.a)
+        green = palette.readable(GREEN)
+        rose = palette.readable(ROSE)
+        art = OrbArt(dp, palette, light)
+        // Glassworks dark keeps the onboarding backdrop itself; other themes light their own ground.
+        scrim.background = if (p.id == Themes.DEFAULT.id) Backdrop() else ThemedBackdrop(palette)
+        rings[0].tint(palette.a)
+        for (i in 1..2) rings[i].tint(palette.b)
+        check.tint(tx)
+        styleLabel(hint, fa)
+        label.restyle(); main.restyle()
+        if (baked) { baked = false; if (isAttachedToWindow) bake() }
+    }
+
     override fun onDetachedFromWindow() {
+        runCatching { KioskPrefs(context).unregisterListener(themeChanged) }
         Choreographer.getInstance().removeFrameCallback(frame)
         looping = false
         removeCallbacks(holdEnd)
@@ -235,6 +282,7 @@ class VoiceOverlay(context: Context) : FrameLayout(context) {
             lastFrame = now
             snapTexts = true
             visibility = View.VISIBLE
+            applyTheme()
             if (!baked) bake()
         }
         vis.set(1f, now)
@@ -286,7 +334,7 @@ class VoiceOverlay(context: Context) : FrameLayout(context) {
     }
 
     private fun labelSpec(): Spec = when (phase) {
-        Phase.WAKE, Phase.LISTENING -> Spec("Listening", Style.LABEL_AMBER)
+        Phase.WAKE, Phase.LISTENING -> Spec("Listening", Style.LABEL_LISTEN)
         Phase.THINKING -> Spec("Thinking", Style.LABEL_FAINT)
         Phase.SPEAKING -> Spec(if (ui.announcement) "" else VoiceTexts.quote(ui.heard), Style.QUOTE)
         Phase.DONE -> Spec("Done", Style.LABEL_GREEN)
@@ -379,6 +427,7 @@ class VoiceOverlay(context: Context) : FrameLayout(context) {
     private fun bake() {
         if (baked) return
         baked = true
+        val art = art // this theme's, even if another is picked while it bakes (that one bakes after)
         Bakery.bake("voice orb", {
             val d = Dither()
             fun FloatImage.bmp(): Bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
@@ -414,8 +463,9 @@ class VoiceOverlay(context: Context) : FrameLayout(context) {
     }
 
     /** A 1 dp ripple ring around the sphere: scale 1 → 1.85 while fading out. */
-    private inner class Ring(context: Context, color: Int) : View(context) {
-        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = dp; this.color = color }
+    private inner class Ring(context: Context) : View(context) {
+        private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = dp; color = Themes.DEFAULT.palette.a }
+        fun tint(c: Int) { paint.color = c; invalidate() }
         override fun hasOverlappingRendering() = false
         override fun onDraw(c: Canvas) = c.drawCircle(width / 2f, height / 2f, width / 2f - dp / 2, paint)
 
@@ -434,6 +484,7 @@ class VoiceOverlay(context: Context) : FrameLayout(context) {
             style = Paint.Style.STROKE; strokeWidth = 3 * dp; color = TX
             strokeCap = Paint.Cap.ROUND; strokeJoin = Paint.Join.ROUND
         }
+        fun tint(c: Int) { paint.color = c; invalidate() }
         private val full = Path().apply {
             val u = px(OrbArt.SPHERE_DP) / OrbArt.SPHERE_DP
             moveTo(40f * u, 57.5f * u); rLineTo(11f * u, 11f * u); rLineTo(22f * u, -24f * u)
@@ -506,6 +557,9 @@ class VoiceOverlay(context: Context) : FrameLayout(context) {
             }
         }
 
+        /** The shown texts again, in the theme's colours now. */
+        fun restyle() { for (i in 0..1) specs[i]?.let { apply(i, it) } }
+
         fun clear() {
             for (i in 0..1) { specs[i] = null; views[i].text = ""; views[i].alpha = 0f }
             fading = false
@@ -534,21 +588,21 @@ class VoiceOverlay(context: Context) : FrameLayout(context) {
             val tv = views[i]
             base[i] = 0f
             when (spec.style) {
-                Style.LABEL_AMBER -> styleLabel(tv, AMBER)
-                Style.LABEL_FAINT -> styleLabel(tv, FA)
-                Style.LABEL_GREEN -> styleLabel(tv, GREEN)
-                Style.LABEL_ROSE -> styleLabel(tv, ROSE)
+                Style.LABEL_LISTEN -> styleLabel(tv, listen)
+                Style.LABEL_FAINT -> styleLabel(tv, fa)
+                Style.LABEL_GREEN -> styleLabel(tv, green)
+                Style.LABEL_ROSE -> styleLabel(tv, rose)
                 Style.QUOTE -> {
                     tv.isAllCaps = false
                     tv.typeface = Inter.typeface(context, Inter.REGULAR, 17f)
                     tv.letterSpacing = 0f
                     tv.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
-                    tv.setTextColor(MU)
+                    tv.setTextColor(mu)
                     tv.setSingleLine(true)
                     tv.ellipsize = TextUtils.TruncateAt.END
                     base[i] = -3f * dp
                 }
-                Style.MAIN_TEXT, Style.MAIN_MUTED -> styleMain(tv, spec.text, if (spec.style == Style.MAIN_TEXT) TX else MU, widthPx)
+                Style.MAIN_TEXT, Style.MAIN_MUTED -> styleMain(tv, spec.text, if (spec.style == Style.MAIN_TEXT) tx else mu, widthPx)
             }
             tv.text = spec.text
         }
@@ -601,9 +655,7 @@ class VoiceOverlay(context: Context) : FrameLayout(context) {
         val TX = Color.parseColor("#f4f4f5")
         val MU = Color.parseColor("#a1a1aa")
         val FA = Color.parseColor("#63636b")
-        val AMBER = Color.parseColor("#fbbf24")
         val GREEN = Color.parseColor("#34d399")
         val ROSE = Color.parseColor("#fb7185")
-        val SKY = Color.parseColor("#38bdf8")
     }
 }

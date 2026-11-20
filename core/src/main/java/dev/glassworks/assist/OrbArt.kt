@@ -1,5 +1,6 @@
 package dev.glassworks.assist
 
+import dev.glassworks.theme.Themes
 import dev.glassworks.ui.FloatImage
 import dev.glassworks.ui.Stop
 import kotlin.math.hypot
@@ -13,8 +14,18 @@ import kotlin.math.sqrt
  *
  * Every layer is centred on the orb centre. Radial stop percentages follow CSS `circle` sizing
  * (farthest-corner), which is what the prototype renders. Pure JVM.
+ *
+ * [palette] (#691): the theme's two lights take the place of the voice's colours: [Tint.AMBER] (listening) becomes
+ * light a, [Tint.SKY] (speaking) light b, and thinking swirls a and b. [Tint.GREEN] and [Tint.ROSE] mean status and
+ * stay. Without one, the colours are the original ones (the timers' and the critical alert's orbs). [light]: the
+ * glass for a light ground (a white sphere with a soft shadow, a brighter shine).
  */
-class OrbArt(private val pxPerDp: Float) {
+class OrbArt(private val pxPerDp: Float, private val palette: Themes.Palette? = null, private val light: Boolean = false) {
+    private val amber = palette?.a ?: AMBER
+    private val sky = palette?.b ?: SKY
+    private val skyLight = palette?.let { Themes.mix(it.b, 0xffffffff.toInt(), 0.75f) and 0xffffff } ?: SKY_LIGHT
+    private val thinkA = palette?.a ?: SKY
+    private val thinkB = palette?.b ?: VIOLET
 
     enum class Tint { AMBER, SKY, GREEN, ROSE }
 
@@ -27,12 +38,12 @@ class OrbArt(private val pxPerDp: Float) {
         val box = GLOW_DP
         if (thinking) {
             // CSS draws the first background on top: violet first, then sky over it.
-            radialDp(img, box, 0.60f, 0.58f, VIOLET, listOf(0f to 0.34f, 0.46f to 0f))
-            radialDp(img, box, 0.40f, 0.42f, SKY, listOf(0f to 0.30f, 0.46f to 0f))
+            radialDp(img, box, 0.60f, 0.58f, thinkB and 0xffffff, listOf(0f to 0.34f, 0.46f to 0f))
+            radialDp(img, box, 0.40f, 0.42f, thinkA and 0xffffff, listOf(0f to 0.30f, 0.46f to 0f))
         } else {
             val (rgb, a, end) = when (tint!!) {
-                Tint.AMBER -> Triple(AMBER, 0.34f, 0.62f)
-                Tint.SKY -> Triple(SKY, 0.28f, 0.62f)
+                Tint.AMBER -> Triple(amber and 0xffffff, 0.34f, 0.62f)
+                Tint.SKY -> Triple(sky and 0xffffff, 0.28f, 0.62f)
                 Tint.GREEN -> Triple(GREEN, 0.28f, 0.60f)
                 Tint.ROSE -> Triple(ROSE, 0.26f, 0.60f)
             }
@@ -50,8 +61,8 @@ class OrbArt(private val pxPerDp: Float) {
         val r = CORE_DISC_DP / 2f
         val fc = r * SQRT2 // farthest corner of the 82 dp box
         val stops = when (tint) {
-            Tint.AMBER -> listOf(Stop.rgb(0f, AMBER, 0.95f), Stop.rgb(0.52f * fc, AMBER, 0.35f), Stop.rgb(0.72f * fc, AMBER, 0f))
-            Tint.SKY -> listOf(Stop.rgb(0f, SKY_LIGHT, 0.9f), Stop.rgb(0.50f * fc, SKY, 0.45f), Stop.rgb(0.72f * fc, SKY, 0f))
+            Tint.AMBER -> (amber and 0xffffff).let { c -> listOf(Stop.rgb(0f, c, 0.95f), Stop.rgb(0.52f * fc, c, 0.35f), Stop.rgb(0.72f * fc, c, 0f)) }
+            Tint.SKY -> (sky and 0xffffff).let { c -> listOf(Stop.rgb(0f, skyLight, 0.9f), Stop.rgb(0.50f * fc, c, 0.45f), Stop.rgb(0.72f * fc, c, 0f)) }
             Tint.GREEN -> listOf(Stop.rgb(0f, GREEN, 0.55f), Stop.rgb(0.55f * fc, GREEN, 0.15f), Stop.rgb(0.72f * fc, GREEN, 0f))
             Tint.ROSE -> listOf(Stop.rgb(0f, ROSE, 0.60f), Stop.rgb(0.55f * fc, ROSE, 0.18f), Stop.rgb(0.72f * fc, ROSE, 0f))
         }
@@ -73,8 +84,8 @@ class OrbArt(private val pxPerDp: Float) {
         img.conicDisc(
             c, c, SWIRL_DISC_DP / 2f * pxPerDp,
             listOf(
-                Stop(0f, 0, 0, 0, 0f), Stop.rgb(70f, SKY, 0.85f), Stop.rgb(150f, VIOLET, 0.9f),
-                Stop(220f, 0, 0, 0, 0f), Stop.rgb(290f, SKY, 0.35f), Stop(360f, 0, 0, 0, 0f),
+                Stop(0f, 0, 0, 0, 0f), Stop.rgb(70f, thinkA and 0xffffff, 0.85f), Stop.rgb(150f, thinkB and 0xffffff, 0.9f),
+                Stop(220f, 0, 0, 0, 0f), Stop.rgb(290f, thinkA and 0xffffff, 0.35f), Stop(360f, 0, 0, 0, 0f),
             ),
         )
         img.blur(sigma)
@@ -108,18 +119,24 @@ class OrbArt(private val pxPerDp: Float) {
             cov[i] = FloatImage.discCoverage(d, outer)
             covInner[i] = FloatImage.discCoverage(d, inner)
         }
+        // On a light ground (#691's light variants): white glass, a softer cool shadow, a dark hairline.
+        val shadowA = if (light) 0.14f else 0.35f
+        val ink = if (light) floatArrayOf(16 / 255f, 20 / 255f, 32 / 255f) else floatArrayOf(0f, 0f, 0f)
+        val fill = if (light) 0.55f else 0.04f
+        val insetA = if (light) 0.9f else 0.05f
         for (i in 0 until n) {
             // 1. outer shadow, not under the sphere
-            img.over(i, 0f, 0f, 0f, 0.35f * shadow.a[i] * (1f - cov[i]))
+            val sa = shadowA * shadow.a[i] * (1f - cov[i])
+            img.over(i, ink[0] * sa, ink[1] * sa, ink[2] * sa, sa)
             // 2. background
-            val bg = 0.04f * cov[i]
+            val bg = fill * cov[i]
             img.over(i, bg, bg, bg, bg)
             // 3. inset shade, inside the border
-            val sh = 0.05f * inset.a[i] * covInner[i]
+            val sh = insetA * inset.a[i] * covInner[i]
             img.over(i, sh, sh, sh, sh)
-            // 4. border ring
-            val bd = 0.13f * (cov[i] - covInner[i]).coerceAtLeast(0f)
-            img.over(i, bd, bd, bd, bd)
+            // 4. border ring: a light hairline on night, a dark one on day
+            val bd = (if (light) 0.10f else 0.13f) * (cov[i] - covInner[i]).coerceAtLeast(0f)
+            if (light) img.over(i, ink[0] * bd, ink[1] * bd, ink[2] * bd, bd) else img.over(i, bd, bd, bd, bd)
         }
         return img
     }
@@ -131,7 +148,7 @@ class OrbArt(private val pxPerDp: Float) {
         val img = FloatImage(side, side)
         val cx = 0.32f * box; val cy = 0.24f * box
         val fc = hypot(box - cx, box - cy)
-        img.radial(cx * pxPerDp, cy * pxPerDp, listOf(Stop(0f, 255, 255, 255, 0.26f), Stop(0.36f * fc * pxPerDp, 255, 255, 255, 0f)))
+        img.radial(cx * pxPerDp, cy * pxPerDp, listOf(Stop(0f, 255, 255, 255, if (light) 0.85f else 0.26f), Stop(0.36f * fc * pxPerDp, 255, 255, 255, 0f)))
         img.clipCircle(side / 2f, side / 2f, side / 2f)
         return img
     }

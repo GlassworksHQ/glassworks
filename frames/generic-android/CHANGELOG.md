@@ -16,6 +16,11 @@ line of each version is what Home Assistant shows on the update card. A change o
   per pane the device can run, with each pane's icon, and Continue turns them on or off. It is the same answer as
   the Panes step on the device's own screen, and the same switches as the pane's settings, the Manage page and Home
   Assistant, so all of them agree. A pane whose hardware the device lacks isn't listed.
+- **Themes for the voice overlay.** A new *Appearance* page in the panel's settings and on the Manage page picks one
+  of five themes, Glassworks, Aurora, Dusk, Dune or Graphite, each light or dark. The voice overlay takes its
+  colors: the orb glows in the theme's first color while it listens and its second while it speaks, and a light
+  theme gives the overlay a light background with dark text. Done stays green and errors stay red. Glassworks dark
+  is the default, so the orb now listens in blue rather than amber. Timers follow in a later release.
 - **Recorders that record on motion get the camera's motion pushed to them.** With the ONVIF stream on, a network
   video recorder that subscribes to the camera's motion (many Xiongmai-based NVRs do) now hears about each change
   the moment it happens, so it can start recording. The recorder must be on your local network and sign in with the
