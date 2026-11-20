@@ -40,7 +40,7 @@ class SetupStateTest {
 
     @Test
     fun theSetupScreenCarriedAcrossTheRestartConnectsUntilTheSignInIsKnown() {
-        val d = SetupState.decide(afterRestart.copy(showing = true))
+        val d = SetupState.decide(afterRestart.copy(showing = true, afterOwnRestart = true))
         assertTrue(d.show)
         assertEquals(SetupFlow.SIGNIN, d.step)
         assertTrue(d.signinChecking)
@@ -50,7 +50,7 @@ class SetupStateTest {
 
     @Test
     fun theSignInCheckEndsWhenThePageAnswersOrAfterAWhile() {
-        val up = afterRestart.copy(showing = true)
+        val up = afterRestart.copy(showing = true, afterOwnRestart = true)
         // Home Assistant's login page: a sign-in is needed, asked at once
         SetupState.decide(up.copy(onAuthPage = true)).let { assertEquals(SetupFlow.SIGNIN, it.step); assertFalse(it.signinChecking) }
         // the dashboard with a session it has: no sign-in, and nothing else left
@@ -61,8 +61,11 @@ class SetupStateTest {
         assertFalse(SetupState.decide(up.copy(uptimeMs = SetupRules().signinCheckMs)).signinChecking)
         // Home Assistant not found yet: the step finds it (its address field), no check over it
         assertFalse(SetupState.decide(up.copy(haKnown = false)).signinChecking)
-        // a panel that just started with no setup screen up (a reboot) isn't held: as before
+        // a panel that just started without the app's own restart (a reboot) isn't held, also with the screen up
+        // for another reason (CodeRabbit on #681): as before
         assertFalse(SetupState.decide(afterRestart.copy(dashboardLoaded = false)).signinChecking)
+        assertFalse(SetupState.decide(afterRestart.copy(showing = true, paneSteps = radio(false))).signinChecking)
+        assertFalse(SetupState.decide(afterRestart.copy(showing = true)).signinChecking)
     }
 
     @Test

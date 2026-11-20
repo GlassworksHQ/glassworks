@@ -112,6 +112,8 @@ open class MainActivity : Activity() {
     private var lastSetupStep: String? = null
     /** The setup screen was up when the app restarted itself: it counts as up until this process shows it (#621's Mirror run). */
     private var setupCarried = false
+    /** This process is the app's own restart with the setup screen up: Sign in holds until the page answers (SetupState). */
+    private var restartedInSetup = false
 
     private var lastImprovInline = false
 
@@ -200,6 +202,7 @@ open class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         prefs = KioskPrefs(this)
         setupCarried = prefs.takeSetupUpAtRestart()
+        restartedInSetup = setupCarried
         if (setupCarried) Log.i(TAG, "Setup screen: up again after the app's restart")
         glassworks.paneDefinitions(this) // first: a step's one-time check runs before discovery can save an HA URL
         HaAuth.init(this)
@@ -434,6 +437,7 @@ open class MainActivity : Activity() {
             signedOut = signedOutHere,
             usePanelLogin = usePanelLogin,
             showing = (setupOverlay.isShowing && !setupPreview) || setupCarried,
+            afterOwnRestart = restartedInSetup,
             hidForPanelLogin = setupHidForLogin && !setupPreview,
             paneSteps = steps,
             ownSteps = deviceSteps.map { PaneStepFacts(it.id, it.done(), it.reason) },

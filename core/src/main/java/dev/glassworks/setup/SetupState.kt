@@ -140,6 +140,11 @@ data class SetupInputs(
     /** The setup screen is already up (not a preview), or was when the app restarted itself: it stays until every step is done. */
     val showing: Boolean = false,
     /**
+     * This process is the app's own restart with the setup screen up (it restarts once it finds Home Assistant): the
+     * Sign in step holds until the page shows whether a sign-in is needed ([SetupDecision.signinChecking]).
+     */
+    val afterOwnRestart: Boolean = false,
+    /**
      * The setup screen was up when the person chose "Sign in on this panel instead", and hid for Home Assistant's login
      * page. Once that sign-in ends ([usePanelLogin] is cleared: signed in, or it failed) it is up again, like [showing],
      * so the steps left follow the sign-in (#665).
@@ -257,7 +262,7 @@ object SetupState {
         // Up, moments after the app started (it restarts once it finds Home Assistant): not done until the page shows
         // whether a sign-in is needed, so the screen doesn't move on, then come back when the login page loads.
         // Only once Home Assistant's address is known: until then the step finds it (its address field stays put).
-        val signinUnknown = i.showing && i.haKnown && !i.signedIn && !i.dashboardLoaded && !i.usePanelLogin && !wantsSignin &&
+        val signinUnknown = i.afterOwnRestart && i.haKnown && !i.signedIn && !i.dashboardLoaded && !i.usePanelLogin && !wantsSignin &&
             i.uptimeMs < rules.signinCheckMs
         val signinDone = i.signedIn ||
             (wifiDone && i.haKnown && !wantsSignin && !signinUnknown && (!laterWaiting || i.dashboardLoaded || i.usePanelLogin))
