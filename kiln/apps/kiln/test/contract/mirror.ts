@@ -243,8 +243,8 @@ function appWorld(k: Knobs): World {
         }
       },
       step: () => (['working', 'setup', 'error', 'done'].includes(s.state.screen) ? 'install' : 'connect'),
-      // the error screen's "Back to the checks" (DevicePage)
-      async retry() { clicks.reset(); await s.again(); },
+      // the error screen's button (DevicePage): set-up again once the install went through, else Back to the checks
+      async retry() { clicks.reset(); await (s.state.result?.flow === 'install' ? s.setUpAgain() : s.again()); },
       remembers: () => pristine(s.state) !== pristine(new AppSession(deps, true).state),
       snapshot: () => JSON.stringify({ ...s.state, log: s.state.log.length }),
       close() {},

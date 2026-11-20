@@ -271,6 +271,18 @@ export class AppSession {
     }
   }
 
+  /**
+   * From an error once the install went through (set-up stopped): set-up again from its first step, over the same
+   * connection. The install stays done and nothing is written again. Its Wi-Fi step says when the device can't be
+   * reached; the error screen's Back to the checks connects again.
+   */
+  async setUpAgain(): Promise<void> {
+    if (this.state.screen !== 'error' || this.state.result?.flow !== 'install') return;
+    this.setUp.close();
+    this.set({ screen: 'setup', error: undefined, setup: setUpWaiting(), setupPage: undefined });
+    await this.setUp.click('wifi', () => this.setUp.wifi());
+  }
+
   /** From Done or an error: read the device again, or connect again if it went away. */
   async again(): Promise<void> {
     const op = this.ops;

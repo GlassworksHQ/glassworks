@@ -98,3 +98,21 @@ describe('set-up after the app alone', () => {
     expect(rail()).toEqual(['Mirror', 'Connect', 'Check', 'Undo', 'Done']);
   });
 });
+
+describe('a set-up that stops after the app alone', () => {
+  it('keeps the install: Try again goes back to set-up, not to Checks, and writes nothing again', async () => {
+    const s = await appDemo(mirrorEntry, 'setup-error', true);
+    await vi.waitFor(() => expect(s.state.screen).toBe('error'), { timeout: 10_000 });
+    render(<AppFlow session={s} />);
+    expect(screen.getByRole('heading', { name: 'Set-up stopped.' })).toBeTruthy();
+    expect(rail()).toEqual(['Mirror', 'Connect', 'Check', 'Install', 'Set up', 'Done']);
+    expect(document.querySelector('.steps li.bad')?.textContent).toBe('Set up');
+    const starts = () => s.state.log.filter((l) => l === 'Start Glassworks').length; // the install's last step
+    const phases = s.state.phases;
+    expect(starts()).toBe(1);
+    await act(() => s.setUpAgain());
+    expect(s.state).toMatchObject({ screen: 'setup', setup: { phase: 'wifi' }, result: { flow: 'install' } });
+    expect(starts()).toBe(1);
+    expect(s.state.phases).toBe(phases);
+  });
+});

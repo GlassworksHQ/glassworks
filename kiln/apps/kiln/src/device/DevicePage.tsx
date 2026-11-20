@@ -303,13 +303,18 @@ function Done({ s, session }: { s: AppState; session: AppSession }) {
 }
 
 function Failed({ s, session }: { s: AppState; session: AppSession }) {
+  // the install went through and set-up stopped: Try again goes back to set-up, never to the install
+  const setUp = s.result?.flow === 'install';
   return (
     <section className="card err" aria-labelledby="h">
-      <h2 id="h">{s.flow === 'undo' ? 'Undo stopped.' : 'The install stopped.'}</h2>
+      <h2 id="h">{setUp ? 'Set-up stopped.' : s.flow === 'undo' ? 'Undo stopped.' : 'The install stopped.'}</h2>
       <pre className="raw">{s.error}</pre>
+      {setUp && <p className="small"><button type="button" className="link" onClick={() => void session.again()}>Back to the checks</button></p>}
       <div className="foot">
         <Log s={s} />
-        <button type="button" className="btn ghost" onClick={() => void session.again()}>Back to the checks</button>
+        {setUp
+          ? <button type="button" className="btn ghost" onClick={() => void session.setUpAgain()}>Try again</button>
+          : <button type="button" className="btn ghost" onClick={() => void session.again()}>Back to the checks</button>}
       </div>
     </section>
   );

@@ -4,10 +4,28 @@
 import type { PanelShell } from '@glassworks/adb';
 import { IMPROV_SOCKET } from '@glassworks/app-adb';
 import { SETUP_SOCKET, SetupChannel } from '@glassworks/setup-channel';
-import { ImprovSerialClient, State as ImprovState } from 'improv-serial';
+import { ImprovSerialClient, State as ImprovState, type ByteStream } from 'improv-serial';
 import type { Setup } from '../wizard/state';
 import { ChannelSetup, type SetupSteps, type WifiSteps } from './channelSetup';
 import type { PanelApp } from './radioPlan';
+
+/** How long one open of the app's Improv socket may take: a stalled one counts as a failed try. */
+export const IMPROV_OPEN_MS = 5000;
+
+/**
+ * The socket, or a rejection after `ms`: adb's stream open has no deadline of its own. One that opens after it is
+ * closed, so it doesn't leak.
+ */
+export function openWithin(open: () => Promise<ByteStream>, ms: number): Promise<ByteStream> {
+  return new Promise((resolve, reject) => {
+    let late = false;
+    const t = setTimeout(() => { late = true; reject(new Error(`the app's socket didn't open in ${ms / 1000} s`)); }, ms);
+    open().then(
+      (io) => { clearTimeout(t); if (late) void io.close().catch(() => {}); else resolve(io); },
+      (e) => { clearTimeout(t); reject(e); },
+    );
+  });
+}
 
 export interface AdbSetUpDeps {
   /** The device over adb, once connected. */
@@ -91,7 +109,7 @@ export class AdbSetUp implements SetupSteps, WifiSteps {
     if (!open || !(await this.waitForSocket(IMPROV_SOCKET))) return undefined;
     for (let i = 0; i < 5; i++) {
       try {
-        const c = new ImprovSerialClient(await open(IMPROV_SOCKET), { deviceLabel: 'panel' });
+        const c = new ImprovSerialClient(await openWithin(() => open(IMPROV_SOCKET), IMPROV_OPEN_MS), { deviceLabel: 'panel' });
         await c.requestState(5000);
         return c;
       } catch (e) {
