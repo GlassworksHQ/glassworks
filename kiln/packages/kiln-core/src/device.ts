@@ -4,7 +4,7 @@
 import type { PanelShell } from '@glassworks/adb';
 import type { AppId } from '@glassworks/app-adb';
 import type { ImageFile, ImageRecipe } from './images';
-import type { FrameSim, KilnFrame } from './frame';
+import type { AskCopy, FrameSim, KilnFrame } from './frame';
 import type { StepCredits } from './recipe';
 import type { RecoveryData } from './recovery';
 
@@ -130,6 +130,10 @@ export interface DeviceFrame {
   app: AppId & { name: string };
   /** The Wi-Fi network the device is on, read-only, for set-up's Wi-Fi step. None: the step shows no name. */
   wifiName?(p: PanelShell, signal?: AbortSignal): Promise<{ ssid?: string }>;
+  /** The browser's list when set-up connects to the device again over adb (a reload, a route): its "your turn" sheet. */
+  connect: AskCopy;
+  /** Whether updates install with nobody at the device, read back: one of `silent`'s states, and a line for the log. */
+  updates(p: PanelShell, signal?: AbortSignal): Promise<{ state: string; log: string }>;
   /** The board `getprop ro.board.platform` gives: anything else isn't this device. */
   board: string;
   /** The APK's release line and ABI. */
@@ -169,6 +173,8 @@ export const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** A DeviceFrame's simulated device, for ?demo=… and tests only: never part of the frame Kiln installs. */
 export interface DeviceSim {
+  /** The cards its simulated app's Panes step shows (the app's own, each pane's title and line), for ?demo=setup-panes */
+  panes?: { id: string; title: string; detail: string; on: boolean }[];
   /** The device over adb for an app-alone demo (Kiln's demo names), set up for it. `fast`: no delays (the tests). */
   appDevice(demo: string, o: { fast: boolean }): Promise<PanelShell>;
   /** A stand-in for the APK this frame installs, and its file name. */

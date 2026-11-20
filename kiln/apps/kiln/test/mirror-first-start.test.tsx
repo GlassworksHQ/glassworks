@@ -28,6 +28,10 @@ afterEach(() => cleanup());
 /** What @yume-chan/adb throws when the Mirror refuses the key and the public-key fallback has nobody to approve it. */
 const REFUSED = 'No authenticator can handle the request';
 
+/** The devices the image session handed to the standard flow after the first start (the page's hand-over). */
+let handed: PanelShell[] = [];
+afterEach(() => { handed = []; });
+
 function setup(adb: { request: (o?: { authMs?: number; onPicked?: () => void }) => Promise<PanelShell>; reopen?: (o?: { authMs?: number }) => Promise<PanelShell>; tries?: number; picked?: () => boolean; windowMs?: number; fastboot?: () => Promise<FastbootLike> }) {
   const images: ImageMaker = {
     async fetch(_, onProgress) { onProgress(1); },
@@ -49,6 +53,7 @@ function setup(adb: { request: (o?: { authMs?: number; onPicked?: () => void }) 
     images, refract: 'https://proxy.test', requestFastboot: adb.fastboot ?? (async () => fb), requestAdb: adb.request,
     ...(adb.reopen ? { reopenAdb: adb.reopen } : {}), ...(adb.tries !== undefined ? { adbTries: adb.tries } : {}), ...(adb.picked ? { adbPicked: adb.picked } : {}), ...(adb.windowMs !== undefined ? { adbWindowMs: adb.windowMs } : {}),
     adbKey: () => 'QAAA= kiln@glassworks', apk: () => mirror.apkBytes(), sleep: async () => {},
+    handOver: (p) => { handed.push(p); },
   });
   f.choose();
   return { f, mirror };
@@ -73,7 +78,8 @@ describe('connecting while the Mirror is still starting', () => {
     await f.connectAdb();
     expect(reopen).toHaveBeenCalledTimes(4);
     expect(seen).toContain(true); // the screen said it is still starting
-    expect(f.state).toMatchObject({ screen: 'setup', adbWaiting: false });
+    expect(f.state).toMatchObject({ screen: 'choose', adbWaiting: false, firstBoot: expect.anything() });
+    expect(handed).toEqual([adb]); // the first start is through: the standard flow has the Mirror
     expect(adb.cmds.some((c) => c.startsWith(`am start -n ${GLASSWORKS.activity}`))).toBe(true);
     expect(f.state.log.filter((l) => l.includes('still starting. Asking again in 5 s.'))).toHaveLength(4);
   });
@@ -137,7 +143,7 @@ describe('connecting while the Mirror is still starting', () => {
     await f.connectAdb();
     expect(request).toHaveBeenCalledWith(expect.objectContaining({ authMs: FIRST_START_AUTH_MS }));
     expect(reopen).toHaveBeenCalledTimes(1);
-    expect(f.state.screen).toBe('setup');
+    expect(handed).toHaveLength(1); // the first start is through: the standard flow has the Mirror
   });
 
   it('a closed list is not retried', async () => {
@@ -166,7 +172,7 @@ describe('connecting while the Mirror is still starting', () => {
     expect(screen.queryByText('Pick the Mirror in the browser\'s list…')).toBeNull();
     expect(f.state).toMatchObject({ screen: 'adb', connecting: true, adbWaiting: true });
     answer(withAppStreams(new FirstBootMirror(), { online: true, radio: false }));
-    expect(await screen.findByText('Connected to Wi-Fi.')).toBeTruthy(); // the first start, then set-up's Wi-Fi step
+    await vi.waitFor(() => expect(handed).toHaveLength(1)); // the first start, then the standard flow has the Mirror
     expect(f.state.adbWaiting).toBe(false);
   });
 
@@ -188,7 +194,7 @@ describe('finishing a first start that didn\'t finish', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Finish its first start' }));
     expect(f.state.screen).toBe('adb');
     await f.connectAdb();
-    expect(f.state.screen).toBe('setup');
+    expect(handed).toHaveLength(1); // the first start is through: the standard flow has the Mirror
     expect(adb.cmds.some((c) => c.startsWith(`am start -n ${GLASSWORKS.activity}`))).toBe(true);
   });
 
@@ -207,7 +213,7 @@ describe('finishing a first start that didn\'t finish', () => {
     expect(f.state.screen).toBe('adb');
     expect(close).toHaveBeenCalledTimes(1); // the stopped first start's connection, let go before Connect opens a new one
     await f.connectAdb();
-    expect(f.state.screen).toBe('setup');
+    expect(handed).toHaveLength(1); // the first start is through: the standard flow has the Mirror
   });
 });
 

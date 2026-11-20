@@ -260,6 +260,23 @@ describe('the panel\'s setup page', () => {
     expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'radio-next' } });
   });
 
+  it('a Panes step whose pairing ran out pairs again, and comes back to Panes', async () => {
+    const panel = fakePanel();
+    panel.st.panes = [{ id: 'assist', title: 'Voice', detail: 'Assist and timers', on: true }];
+    const lan = new LanSession(panel);
+    await lan.start();
+    await lan.showCode();
+    await lan.enterCode(CODE);
+    await lan.saveHa('http://192.0.2.20:8123');
+    expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'panes' } });
+    panel.paired = false;
+    await lan.applyPanes(['assist']);
+    expect(lan.state.view).toEqual({ at: 'pair', open: true, shown: false, note: RAN_OUT });
+    await lan.showCode();
+    await lan.enterCode(CODE);
+    expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'panes' } });
+  });
+
   it('a short code is caught before it goes to the panel', async () => {
     const panel = fakePanel();
     const lan = new LanSession(panel);

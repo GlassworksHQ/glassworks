@@ -10,6 +10,7 @@ export const ROUTES = {
   'set-up': '/set-up',
   wifi: '/set-up/wifi',
   'home-assistant': '/set-up/home-assistant',
+  panes: '/set-up/panes',
   radio: '/set-up/radio',
   done: '/done',
   undo: '/undo',
@@ -26,20 +27,21 @@ export type Step = keyof typeof ROUTES;
  * (Connect waits for a click) or connect to an installed panel over adb; nothing here writes.
  * `route` is the session's entry (`Session.route`).
  */
-export const ENTRIES: Partial<Record<Step, { route: 'install' | 'undo' | 'resume' | 'wifi' | 'home-assistant' | 'radio' }>> = {
+export const ENTRIES: Partial<Record<Step, { route: 'install' | 'undo' | 'resume' | 'wifi' | 'home-assistant' | 'panes' | 'radio' }>> = {
   start: { route: 'install' },
   undo: { route: 'undo' },
   'set-up': { route: 'resume' },
   resume: { route: 'resume' },
   wifi: { route: 'wifi' },
   'home-assistant': { route: 'home-assistant' },
+  panes: { route: 'panes' },
   radio: { route: 'radio' },
 };
 
 /** A mid-flow step reached with nothing running goes to its mode's start. */
 const START_OF: Record<Step, Step> = {
   start: 'start', install: 'start', done: 'start',
-  'set-up': 'set-up', wifi: 'wifi', 'home-assistant': 'home-assistant', radio: 'radio', resume: 'set-up',
+  'set-up': 'set-up', wifi: 'wifi', 'home-assistant': 'home-assistant', panes: 'panes', radio: 'radio', resume: 'set-up',
   undo: 'undo', 'undo-connect': 'undo', 'undo-restore': 'undo', 'undo-done': 'undo',
 };
 
@@ -59,7 +61,7 @@ export function canonical(s: WizardState): Step {
     case 'done': return undo ? 'undo-done' : 'done';
     case 'setup': {
       const p = s.setup.phase;
-      return p === 'wifi' ? 'wifi' : p === 'ha' ? 'home-assistant' : p === 'radio' || p === 'radio-next' ? 'radio' : 'set-up';
+      return p === 'wifi' ? 'wifi' : p === 'ha' ? 'home-assistant' : p === 'panes' ? 'panes' : p === 'radio' || p === 'radio-next' ? 'radio' : 'set-up';
     }
     case 'error': {
       const at = s.failure?.at ?? 1;
@@ -70,7 +72,8 @@ export function canonical(s: WizardState): Step {
 }
 
 /** The set-up steps, in order. Each can be gone back to (Back, the rail) while set-up waits for the person. */
-export const SET_UP = ['set-up', 'wifi', 'home-assistant', 'radio'] as const satisfies readonly Step[];
+export const SET_UP = ['set-up', 'wifi', 'home-assistant', 'panes', 'radio'] as const satisfies readonly Step[];
+export type SetUpStep = (typeof SET_UP)[number];
 const inSetUp = (step: Step | undefined): step is (typeof SET_UP)[number] => SET_UP.includes(step as never);
 
 /**

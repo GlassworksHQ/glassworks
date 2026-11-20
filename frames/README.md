@@ -89,8 +89,16 @@ describes the device's look in millimetres"). Kiln's picker reads it, and glassw
 | `screen` | `{ radius }`, plus `width`, `height` and `top` (mm from the body's top edge) when the screen is smaller than the face minus the bezel, e.g. behind a mirror |
 | `sides` | `{ dark, light }`: the body's side colour facing away from the light, and facing it |
 | `finish` | `glass` or `mirror` |
-| `mount` | `wall`, `floor` or `lean`; `lean` takes `lean`, the degrees the top tilts back |
-| `parts` | Optional. `{ kind: "tube", from, to, diameter, color }` outside the body, in mm from its centre (x right, y down, z towards you), e.g. a stand |
+| `face` | Optional. The front's colour around the screen, e.g. a white bezel. Black glass when left out |
+| `mount` | `wall`, `floor`, `lean` or `desk` (on a desk or counter, seen from a little above); `lean` and `desk` take `lean`, the degrees the top tilts back |
+| `parts` | Optional. Parts outside the body: tubes and a dock (below) |
+
+A part is one of:
+
+| Part | What |
+|---|---|
+| `{ kind: "tube", from, to, diameter, color }` | A tube in mm from the body's centre (x right, y down, z towards you), leaning with the body, e.g. a stand's leg |
+| `{ kind: "dock", width, depth, height, gap, sides }` | A dock the body sits in, on the floor behind it, as the Pixel Tablet's speaker dock: a smooth pill-shaped plate on the body's back, in fabric that slopes back to a round foot. `height` is from the floor, `depth` along the floor, `gap` how far the body's lowest edge sits above the floor. `sides` is `{ dark, light }` like the body's. The card lifts the body off it on hover |
 
 There is no SVG illustration per frame: the device is drawn from `model`. That's the site's 3D
 mockup (glassworks.dev `deviceGeometry.ts`), now in the shared package

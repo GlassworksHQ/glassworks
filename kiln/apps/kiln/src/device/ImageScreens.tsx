@@ -18,20 +18,20 @@ import { SilentUpdates } from '../components/SilentUpdates';
 import { ImageKeep, KeyOutcome, keyHeld } from './KeepScreens';
 import { lines, rich } from './rich';
 import { ManagePageRow } from '../wizard/screens';
-import { SetUpScreen, setUpRail } from './SetUpScreen';
 
 type P = { f: ImageSession; s: ImageState; m: AppSession; ms: AppState };
 
-/** Arriving by an image's link skips the choice, so its rail has no Choose step. */
+/** The install's steps on the rail, before the standard flow's Set up and Done. Arriving by an image's link skips the choice. */
+export const imageSteps = (f: Pick<DeviceFrame, 'short'>, link: boolean): string[] =>
+  [f.short, 'Choose', 'Download', 'Fastboot', 'Install'].filter((x) => !link || x !== 'Choose');
+
+/** Set up is Glassworks' (the standard flow, after the first start): a community image's install ends at Install. */
 export function imageRail(s: ImageState, f: Pick<DeviceFrame, 'short' | 'id'>, community = false): RailStep[] {
-  // Set up is Glassworks' (Wi-Fi, Home Assistant, the radio): a community image's install ends at Install
   const names = [f.short, 'Choose', 'Download', 'Fastboot', 'Install', ...(community ? [] : ['Set up']), 'Done'];
-  const setUp = names.indexOf('Set up');
-  // an error after the first start (set-up's app stopped answering) is Set up's
-  const at = { choose: 1, image: 2, download: 2, keep: 3, fastboot: 3, confirm: 3, working: 4, adb: 4, error: setUp > 0 && s.firstBoot ? setUp : 4, setup: setUp, done: names.length }[s.screen];
+  const at = { choose: 1, image: 2, download: 2, keep: 3, fastboot: 3, confirm: 3, working: 4, adb: 4, error: 4, done: names.length }[s.screen];
   return names.map((name, i): RailStep => {
     const mark: RailMark = i < at ? 'done' : i > at ? 'todo' : s.screen === 'error' ? 'bad' : s.screen === 'adb' ? 'turn' : 'now';
-    return { name, mark, ...(s.screen === 'setup' && i === setUp ? { sub: setUpRail(s, f) } : {}) };
+    return { name, mark };
   }).filter((x) => !s.link || x.name !== 'Choose');
 }
 
@@ -39,7 +39,7 @@ export function imageRail(s: ImageState, f: Pick<DeviceFrame, 'short' | 'id'>, c
 export function imageLevel(s: ImageState, community = false): number {
   if (community) return 0;
   if (s.screen === 'done') return 4;
-  if (s.screen === 'adb' || s.screen === 'setup') return 3;
+  if (s.screen === 'adb') return 3;
   if (s.screen === 'working') return s.work?.step.startsWith('flash') || s.work?.step === 'restart' ? 2 : 1;
   return 0;
 }
@@ -79,6 +79,7 @@ export function ImageImage({ f, s, m, ms }: P) {
       <TestOnly f={f.frame} />
       <h2 id="h">{`Install Glassworks on ${d.the}.`}</h2>
       <p className="lede">{d.words['image.lede']}</p>
+      {s.changed && <p className="small">{`An earlier try already changed ${d.the}.`}</p>}
       {s.files.map((x) => <FileRow key={x.name} f={f} file={x} />)}
       <ImageCredit f={d} />
       {ms.release && <ReleaseApk m={m} ms={ms} />}
@@ -222,18 +223,25 @@ export function ImageAdb({ f, s }: P) {
   );
 }
 
+/** A community image's Done (Glassworks' is the standard flow's, with ImageOutcome under it). */
 export function ImageDone({ f, s }: P) {
+  return <DoneCommunity f={f} log={<Log s={s} />} />;
+}
+
+/**
+ * What Glassworks' first start left to say on the standard flow's Done: whether it is the only home screen (with the
+ * fix), Home Assistant's key, the way back to the community image, and how reversible it is. `away`: the way back
+ * opens the install's first screen again.
+ */
+export function ImageOutcome({ f, s, away }: { f: ImageSession; s: ImageState; away: () => void }) {
   const d = f.frame;
   const rev = reversible(d);
-  if (f.recipe.community) return <DoneCommunity f={f} log={<Log s={s} />} />;
   const fb = s.firstBoot;
   const noHome = fb?.home.result === 'none';
   const stranded = fb && fb.home.result !== 'set' && !noHome;
   const other = f.recipes.find((r) => r.community);
   return (
-    <section className="card" aria-labelledby="h">
-      <span className="okmark" aria-hidden="true">✓</span>
-      <h2 id="h">{`Glassworks is on ${d.the}.`}</h2>
+    <>
       {stranded && (
         <div className="well" role="alert">
           <div className="grow">
@@ -257,36 +265,15 @@ export function ImageDone({ f, s }: P) {
           </div>
         </div>
       )}
-      {fb && (
-        <p className="lede">
-          Glassworks {fb.app.name ?? fb.app.code} {stranded || noHome ? 'is installed' : 'is its home screen'}{fb.hidden.length ? ` (${fb.hidden.join(', ')} hidden)` : ''}.
-          {fb.wifi === false && ' It didn’t confirm the Wi-Fi; the network saved in the image still applies.'}
-        </p>
-      )}
-      {fb && <SilentUpdates words={d.silent[fb.updates.state] ?? null} />}
       {fb && <KeyOutcome k={s.key} d={d} />}
-      {s.managePage && <ManagePageRow href={s.managePage} the={d.the} />}
-      {other && <WayBack f={f} other={other} />}
-      <BuiltOn credits={imageCredits(d)} />
+      {other && <WayBack f={f} other={other} then={away} />}
       {rev && <p className="small">{rev}.</p>}
-      <div className="foot"><Log s={s} /></div>
-    </section>
+    </>
   );
 }
 
 export function ImageError({ f, s }: P) {
   const d = f.frame;
-  // the first start went through and set-up stopped: Try again goes back to set-up, never to the first start or the install
-  if (s.firstBoot && !f.recipe.community) return (
-    <section className="card err" aria-labelledby="h">
-      <h2 id="h">Set-up stopped.</h2>
-      <pre className="raw">{s.error}</pre>
-      <div className="foot">
-        <Log s={s} />
-        <button type="button" className="btn ghost" disabled={!!s.busy} onClick={() => void f.setUpAgain()}>Try again</button>
-      </div>
-    </section>
-  );
   return (
     <section className="card err" aria-labelledby="h">
       {f.recipe.community && <Whose r={f.recipe} />}
@@ -325,7 +312,6 @@ export function ImageScreens(p: P) {
     : s.screen === 'confirm' ? <ImageConfirm {...p} />
     : s.screen === 'working' ? <ImageWorking {...p} />
     : s.screen === 'adb' ? <ImageAdb {...p} />
-    : s.screen === 'setup' ? <SetUpScreen setUp={p.f.setUp} s={s} />
     : s.screen === 'done' ? <ImageDone {...p} />
     : <ImageError {...p} />;
 }

@@ -1,16 +1,21 @@
 // The frame's current session, outside React, so it outlives route changes and the picker can see
 // a running install. Type-only imports: the picker reads this without loading the engine.
-import type { Session } from './session';
+import type { StandardSession } from '../standard/session';
 import type { Changed, Failure, SavedBackup, WizardState } from './state';
 
 export interface Entry {
   /** the frame's route base, its installer.json `route` */
   base: string;
   name: string;
-  session: Session;
+  /** The frame's session: the wizard's install session (a Session), or a standard flow's after a frame's own install. */
+  session: StandardSession;
   /** ?demo=… states; never in a production build */
   demo?: string;
   demoEntered?: boolean;
+  /** The standard flow alone, after a frame's own install (a device frame's page), not the wizard's install session. */
+  standard?: boolean;
+  /** An install handed this session its device: the page shows it until it has finished, on any of its routes. */
+  handed?: boolean;
 }
 
 /**

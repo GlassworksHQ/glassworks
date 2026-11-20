@@ -15,10 +15,11 @@ vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string
 
 import { ImageSession, type ImageMaker } from '../src/device/imageSession';
 import { imageDemo } from '../src/device/imageDemo';
-import { DEMO_KEY, KEEP_DEMOS, keepDemo } from '../src/device/keepDemo';
+import { DEMO_KEY, KEEP_DEMOS, keepDemo, type KeepDemo } from '../src/device/keepDemo';
 import { ImageFlow, leaveWarning } from '../src/device/DevicePage';
 import { AppSession } from '../src/device/appSession';
 import { AUTH_MS, READ_MS, mirrorEntry, mirrorFrame } from './mirror-frame';
+import { showImage } from './device-page';
 
 beforeAll(() => {
   Object.defineProperty(navigator, 'usb', { configurable: true, value: {} });
@@ -29,6 +30,8 @@ beforeAll(() => {
 afterEach(() => cleanup());
 
 const show = async (d: Awaited<ReturnType<typeof keepDemo>>) => { render(<ImageFlow image={d.image} app={d.app} />); await act(async () => {}); };
+/** A Done demo as the page shows it: the standard flow's Done, with the key's line under it. */
+const showDone = (d: KeepDemo | 'flash-done') => showImage(d);
 const embers = () => [...document.querySelectorAll('.btn.ember')].map((b) => b.textContent);
 
 describe('keeping the Mirror in Home Assistant over a reflash', () => {
@@ -67,17 +70,17 @@ describe('keeping the Mirror in Home Assistant over a reflash', () => {
   });
 
   it('Done says Same device when the key went back, Asks once with the HA steps otherwise, nothing on a first install', async () => {
-    await show(await keepDemo(mirrorEntry, 'flash-done-kept', true));
+    await showDone('flash-done-kept');
     expect(screen.getByText('Same device')).toBeTruthy();
     expect(screen.queryByText('Reconfigure')).toBeNull();
     cleanup();
     for (const d of ['flash-done-asks', 'flash-done-refused'] as const) {
-      await show(await keepDemo(mirrorEntry, d, true));
+      await showDone(d);
       expect(screen.getByText('Asks once')).toBeTruthy();
       expect(screen.getByText('Reconfigure')).toBeTruthy();
       cleanup();
     }
-    await show(await imageDemo(mirrorEntry, 'flash-done', true));
+    await showDone('flash-done');
     expect(screen.queryByRole('group', { name: 'Home Assistant' })).toBeNull();
   });
 });
@@ -145,7 +148,7 @@ describe('the keep step, on the real session (#580)', () => {
     expect(built[0]?.apiKeyHandover).toBe(true);
     expect(JSON.stringify(built[0])).not.toContain(KEY);
     expect(after.keys?.key).toBe(KEY);
-    expect(f.state.screen).toBe('setup'); // the first start, then set-up
+    expect(f.state.firstBoot).toBeDefined(); // the first start, then the standard flow
     expect(f.state.key).toMatchObject({ state: 'handed' });
     expect(f.holdsKey()).toBe(false);
     expect(holding).toEqual([true, false]);

@@ -15,11 +15,13 @@ vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string
 import { frame as s1PlusUi, demoFrame as s1Demo } from './s1-frame';
 import { imageDemo } from '../src/device/imageDemo';
 import { appDemo } from '../src/device/demo';
-import { ImageFlow, AppFlow } from '../src/device/DevicePage';
+import { AppFlow } from '../src/device/DevicePage';
+import type { StandardSession } from '../src/standard/session';
+import { StandardWizard } from '../src/standard/StandardWizard';
 import { demoSession, enterDemo } from '../src/wizard/demo';
 import type { Session } from '../src/wizard/session';
 import { Wizard } from '../src/wizard/Wizard';
-import { appOn, mirrorEntry } from './mirror-frame';
+import { appOn, handTo, mirrorEntry } from './mirror-frame';
 
 beforeAll(() => {
   Object.defineProperty(navigator, 'usb', { configurable: true, value: {} });
@@ -83,25 +85,34 @@ describe('the S1', () => {
 });
 
 describe('the Mirror', () => {
+  /** The standard flow's Done, as the page shows it after the hand-over; the block lands once the read is back. */
+  const done = async (ss: StandardSession) => {
+    render(<StandardWizard session={ss} base="/lululemon-mirror" before={[]} />);
+    await until('Done', () => ss.store.state.screen === 'done' && !!block());
+  };
+
   it('Done after the fastboot install: On, read back from the image\'s privileged copy', async () => {
-    const { image: flash, app: mirror } = await imageDemo(mirrorEntry, 'flash-done', true);
-    render(<ImageFlow image={flash} app={mirror} />);
+    const h = handTo();
+    await imageDemo(mirrorEntry, 'flash-done', true, {}, h.handOver);
+    await done(h.standard());
     expect(block()).toBe('Silent updatesOnUpdates from Home Assistant install by themselves.');
   });
 
   it('Done after the app alone over adb: a normal app, so a click each, and what makes it silent', async () => {
-    render(<AppFlow session={await appDemo(mirrorEntry, 'done', true)} />);
+    const h = handTo();
+    await appDemo(mirrorEntry, 'done', true, h.handOver);
+    await done(h.standard());
     expect(block()).toBe('Silent updatesA click eachAndroid asks before each update, and the Mirror has no touchscreen to answer: use a USB mouse. An install over fastboot makes updates silent.');
   });
 
   it('Done after an adb update of the image\'s copy: On', async () => {
     const m = new FakeMirror({ installed: 500, privileged: true });
-    const { s, setUp } = appOn(m);
+    const { s, setUp, standard } = appOn(m);
     await s.connect();
     await s.pickApk('generic-android-legacy.apk', fakeMirrorApk());
     await s.install();
     await setUp();
-    render(<AppFlow session={s} />);
+    await done(standard());
     expect(screen.getByRole('group', { name: 'Silent updates' }).textContent).toMatch(/^Silent updatesOn/);
   });
 
@@ -114,12 +125,12 @@ describe('the Mirror', () => {
       if (installed && cmd === `dumpsys package ${GLASSWORKS.package}` && m.cmds.includes(`dpm set-active-admin ${GLASSWORKS.admin}`)) throw new Error('USB transfer failed');
       return run(cmd);
     };
-    const { s, setUp } = appOn(m);
+    const { s, setUp, standard } = appOn(m);
     await s.connect();
     await s.pickApk('generic-android-legacy.apk', fakeMirrorApk());
     await s.install();
     await setUp();
-    render(<AppFlow session={s} />);
+    await done(standard());
     expect(block()).toBe('Silent updatesNot confirmedKiln couldn\'t read it back. Glassworks\' Device page on the Mirror says.');
     cleanup();
     render(<AppFlow session={await appDemo(mirrorEntry, 'undo-done', true)} />);

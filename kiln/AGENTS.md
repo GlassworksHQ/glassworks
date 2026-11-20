@@ -30,6 +30,13 @@ The checks, in `apps/kiln/test/contract/`:
 - `frame-neutral.test.ts`: no new frame name in `apps/kiln/src` or `packages/*/src`. Its allowlist
   only shrinks.
 
+**After its install, every frame runs the standard flow** (`apps/kiln/src/standard`): App, Wi-Fi,
+Home Assistant, Panes, Radio, Done, on the same screens, routes and resume as the S1. Install paths
+differ per frame; nothing after them does. A step goes only when the frame's data says so: hardware it
+lacks (`frame.json`, `installer.json` `touch`), or `installer.json` `setUp.remove` with why. Never a
+set-up of a frame's own, and never a step dropped because "the install already did it". Every flow
+step has its `route` in `installer.json`; there is no per-frame page (`test/contract/routes.test.ts`).
+
 Android's page doesn't follow this yet (#621, step 3). Don't copy it: build on the
 shared engine.
 

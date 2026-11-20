@@ -40,6 +40,16 @@ describe('silent updates on the Mirror, read back (#422)', () => {
     expect(await readMirrorUpdates(shell(async () => { throw new Error('adb: device offline'); }))).toEqual({ state: 'unknown', detail: 'adb: device offline' });
   });
 
+  it('passes the read its signal: a read cut off by it is not confirmed', async () => {
+    let got: AbortSignal | undefined;
+    const ac = new AbortController();
+    const stalls: PanelShell = { push: async () => {}, run: (_cmd, signal) => { got = signal; return new Promise((_, reject) => signal?.addEventListener('abort', () => reject(new Error('the panel did not answer in time')))); } };
+    const read = readMirrorUpdates(stalls, undefined, ac.signal);
+    ac.abort();
+    expect(await read).toEqual({ state: 'unknown', detail: 'the panel did not answer in time' });
+    expect(got).toBe(ac.signal);
+  });
+
   it('the adb install reads it back: off for a first install, on when it updates the image\'s copy', async () => {
     const first = await installMirror(new FakeMirror(), { apk: fakeMirrorApk(), sleep: noSleep });
     expect(first.updates).toEqual({ state: 'normal-app', privileged: false });

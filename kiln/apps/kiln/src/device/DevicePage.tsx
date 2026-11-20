@@ -1,30 +1,35 @@
 'use client';
-// A device frame's route (DeviceFrame): its install as an image over fastboot, or the app alone over adb. Locked to the
-// public (Off) until its frame.json makes it installable (deviceOpen); until then ?apk=release (its newest release) and
-// ?apk=local (a file from this computer) are test links, or a demo.
+// A device frame's route (DeviceFrame): its install as an image over fastboot, or the app alone over adb, then the
+// standard flow every frame runs after its install (standard/: App, Wi-Fi, Home Assistant, Panes, Radio, Done, on the
+// wizard's own screens and routes). Locked to the public (Off) until its frame.json makes it installable (deviceOpen);
+// until then ?apk=release (its newest release) and ?apk=local (a file from this computer) are test links, or a demo.
 // The screens follow Kiln's (docs/design/kiln): one idea each, one ember button, the log one click away.
 import { Panel, adbKeyFromPkcs8, loadOrCreateAdbKey, type AdbKey, type PanelShell } from '@glassworks/adb';
-import { Assets, cap, fmtSize, type DeviceEntry, type DeviceFrame, type DevicePhase } from '@glassworks/kiln-core';
+import { Assets, cap, fmtSize, webUsbDevices, type DeviceEntry, type DeviceFrame, type DevicePhase } from '@glassworks/kiln-core';
 import * as Collapsible from '@radix-ui/react-collapsible';
 import Link from 'next/link';
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { usePathname } from 'next/navigation';
+import { useCallback, useEffect, useReducer, useRef, useState, useSyncExternalStore } from 'react';
 import { BuiltOn, stepCredits } from '../components/Credit';
 import { Shell, useBrowserChip } from '../components/Shell';
-import { SilentUpdates } from '../components/SilentUpdates';
+import { standardOfDevice } from '../standard/frame';
+import { StandardSession } from '../standard/session';
+import { StandardRoutes } from '../standard/StandardWizard';
+import { ROUTES, status, stepOf, type Step } from '../wizard/routes';
 import type { RailMark, RailStep } from '../wizard/state';
 import { Fastboot } from '@glassworks/fastboot';
 import { APP_DEMOS, appDemo, type AppDemo } from './demo';
-import { ImageSession } from './imageSession';
+import { ImageSession, sessionProgress } from './imageSession';
 import { IMAGE_DEMOS, imageDemo, type ImageDemo } from './imageDemo';
 import { KEEP_DEMOS, keepDemo, type KeepDemo } from './keepDemo';
-import { ImageScreens, imageLevel, imageRail } from './ImageScreens';
-import { registry } from '../wizard/registry';
+import { ImageOutcome, ImageScreens, imageLevel, imageRail, imageSteps } from './ImageScreens';
+import { registry, type Entry } from '../wizard/registry';
 import { keptDevice } from './activity';
 import { ReleaseApk, TestOnly } from './ReleaseApk';
 import { AppSession, deviceMode, deviceOpen, type ApkFrom, type AppState } from './appSession';
+import { INSTALLERS } from '@glassworks/frames/catalog';
+import type { ImageState } from './imageSession';
 import { rich } from './rich';
-import { SetUpScreen, setUpRail } from './SetUpScreen';
-import { ManagePageRow } from '../wizard/screens';
 
 /** Demos run in `next dev` and in a build made with NEXT_PUBLIC_KILN_DEMO=1, as the wizard's do. */
 const DEMO_ON = process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_KILN_DEMO === '1';
@@ -71,8 +76,11 @@ export function leaveWarning(target: Pick<Window, 'addEventListener' | 'removeEv
   return (on) => (on ? target.addEventListener('beforeunload', warn) : target.removeEventListener('beforeunload', warn));
 }
 
+/** The install's end: the device, handed to the standard flow (its session, when there is one to take it). */
+export type HandOver = (panel: PanelShell) => StandardSession | undefined;
+
 /** The page's two paths on one adb key: the app over adb (AppSession), or the image over fastboot (ImageSession). */
-function realSessions(frame: DeviceFrame, on: boolean, from: ApkFrom = 'local'): { app: AppSession; image: ImageSession } {
+function realSessions(frame: DeviceFrame, on: boolean, from: ApkFrom = 'local', handOver?: HandOver, base = ''): { app: AppSession; image: ImageSession } {
   const flow = frame.imageFlow;
   if (!on) {
     const app = new AppSession({ frame, connect: () => Promise.reject(new Error('off')) }, false);
@@ -83,6 +91,8 @@ function realSessions(frame: DeviceFrame, on: boolean, from: ApkFrom = 'local'):
     frame,
     connect: keys.connectWith((k) => Panel.connect(k)),
     ...(from === 'release' ? { release: releaseRoute } : {}),
+    handOver: (p) => { handOver?.(p); },
+    progress: sessionProgress(`kiln:device:${base}:app`),
   }, true);
   const assets = new Assets<string>('/assets/');
   /** a staged asset the frame names, checked by SHA-256, when Kiln has it */
@@ -121,25 +131,113 @@ function realSessions(frame: DeviceFrame, on: boolean, from: ApkFrom = 'local'):
     holdingKey: leaveWarning(),
     apk: () => app.apkBytes(),
     apkBlocked: () => app.releaseBlocked(),
+    handOver: (p) => { handOver?.(p); },
+    progress: sessionProgress(`kiln:device:${base}:image`),
   });
   return { app, image };
 }
 
-/** Install, then set-up (Wi-Fi, Home Assistant), then Done; or undo, then Done. The rail's steps and where the person is on them. */
+/**
+ * The frame's standard flow, as Kiln's registry entry for its base: a StandardSession over WebUSB, or for a demo, over
+ * its simulated `device`. `wayBack`: Done's way back to the frame's install.
+ */
+function standardEntry(frame: DeviceFrame, base: string, o: { demo?: string; device?: PanelShell; wayBack?: () => void } = {}): Entry {
+  const device = o.device;
+  const session = new StandardSession({
+    standard: standardOfDevice(frame),
+    devices: device ? { knownAdb: async () => device, requestAdb: async () => device } : webUsbDevices,
+    loadKey: device ? async () => ({ publicKey: 'QAAAAdemo kiln@demo' }) as unknown as AdbKey : loadOrCreateAdbKey,
+    ...(device ? { simulated: true, sleep: (ms: number) => new Promise<void>((r) => setTimeout(r, Math.min(ms, 800))) } : {}),
+    wayBack: o.wayBack,
+  });
+  return { base, name: frame.name, session, demo: o.demo, standard: true };
+}
+
+/**
+ * The install's step routes, from the frame's installer.json: its image flow (the one with a fastboot step) and its app
+ * flow (the other), each step's `route` by id. The address follows the install's step; going to one starts nothing.
+ */
+function installRoutes(id: string): { image: Record<string, string>; app: Record<string, string> } {
+  const flows = Object.values(INSTALLERS[id]?.flows ?? {}) as { steps: { id: string; route?: string; transport?: string }[] }[];
+  const byId = (f?: { steps: { id: string; route?: string }[] }) => Object.fromEntries((f?.steps ?? []).filter((x) => x.route !== undefined).map((x) => [x.id, x.route!]));
+  return { image: byId(flows.find((f) => f.steps.some((x) => x.transport === 'fastboot'))), app: byId(flows.find((f) => !f.steps.some((x) => x.transport === 'fastboot'))) };
+}
+
+/** The image flow's step for each of its screens (installer.json step ids). */
+function imageStep(s: ImageState): string {
+  const firstStart = s.screen === 'adb' || s.work?.step === 'first-boot' || s.work?.step === 'hand-back';
+  if (firstStart && (s.screen === 'adb' || s.screen === 'working' || s.screen === 'error')) return 'first-boot';
+  if (s.screen === 'working' || s.screen === 'done' || (s.screen === 'error' && s.work)) return 'install';
+  if (s.screen === 'keep' || s.screen === 'fastboot' || s.screen === 'confirm') return 'fastboot';
+  return 'image';
+}
+
+/** The app flow's step: `install` while it writes, `connect` (with its checks) otherwise. */
+const appStep = (s: AppState) => (s.screen === 'working' ? 'install' : 'connect');
+
+/**
+ * Keeps the address on the install's step (its declared route under `base`), without a history entry. `route`
+ * undefined: the frame declares none for it, so the address stays.
+ */
+function useInstallRoute(base: string, route: string | undefined) {
+  useEffect(() => {
+    if (route === undefined || typeof window === 'undefined') return;
+    const want = `${base}${route ? `/${route}` : ''}`;
+    if (window.location.pathname.replace(/\/+$/, '') !== want) window.history.replaceState(null, '', `${want}${window.location.search}`);
+  }, [base, route]);
+}
+
+/**
+ * The page that hands a frame's device over now, by its base: sessions kept in the registry from an earlier visit were
+ * made by another mount, and must reach this one's mode and way back.
+ */
+const HANDS = new Map<string, HandOver>();
+
+/**
+ * Installs that ended while no page of their frame was up (the person went to the picker or another frame): the device,
+ * kept with its frame until its page opens again. Handing it over then would replace another frame's session.
+ */
+const PENDING = new Map<string, PanelShell>();
+
+/**
+ * The hand-over a frame's sessions are made with: whichever page of the frame is up when their install ends, or, with
+ * none up, the frame's pending hand-over, which its page takes when it opens.
+ */
+export const pageHandOver = (base: string): HandOver => (p) => {
+  const page = HANDS.get(base);
+  if (page) return page(p);
+  PENDING.set(base, p);
+  setUpPending(base, true); // a reload before the page opens still knows set-up is next (the device itself stays here)
+  return undefined;
+};
+
+/** The tab's mark that a frame's install finished with set-up still to do: no device data, only that. */
+const pendingKey = (base: string) => `kiln:standard:${base}:pending`;
+function setUpPending(base: string, on: boolean): void {
+  try { if (on) sessionStorage.setItem(pendingKey(base), '1'); else sessionStorage.removeItem(pendingKey(base)); } catch { /* storage off */ }
+}
+function isSetUpPending(base: string): boolean {
+  try { return sessionStorage.getItem(pendingKey(base)) === '1'; } catch { return false; }
+}
+
+/** The standard flow's routes, after any frame's install. */
+const STANDARD_ROUTES: readonly Step[] = ['set-up', 'resume', 'wifi', 'home-assistant', 'panes', 'radio', 'done'];
+
+/** The app alone's install steps on the rail, before the standard flow's Set up and Done. */
+export const appSteps = (f: Pick<DeviceFrame, 'short'>): string[] => [f.short, 'Connect', 'Check', 'Install'];
+
+/** Install, then the standard flow's Set up and Done; or undo, then Done. The rail's steps and where the person is on them. */
 export function appRail(s: AppState, f: DeviceFrame): RailStep[] {
-  const names = [f.short, 'Connect', 'Check', ...(s.flow === 'undo' ? ['Undo'] : ['Install', 'Set up']), 'Done'];
-  const setUp = names.indexOf('Set up');
-  // an error once the install is through (set-up's app stopped answering) is Set up's
-  const at = { off: 0, pick: 1, checks: 2, working: 3, setup: setUp, done: names.length, error: setUp > 0 && s.result ? setUp : 3 }[s.screen];
+  const names = [...appSteps(f).slice(0, 3), ...(s.flow === 'undo' ? ['Undo'] : ['Install', 'Set up']), 'Done'];
+  const at = { off: 0, pick: 1, checks: 2, working: 3, done: names.length, error: 3 }[s.screen];
   return names.map((name, i): RailStep => {
     const mark: RailMark = i < at ? 'done' : i > at ? 'todo' : s.screen === 'error' ? 'bad' : 'now';
-    return { name, mark, ...(s.screen === 'setup' && i === setUp ? { sub: setUpRail(s, f) } : {}) };
+    return { name, mark };
   });
 }
 
 function level(s: AppState, f: DeviceFrame): number {
   if (s.screen === 'done') return 4;
-  if (s.screen === 'setup') return 3;
   if (s.screen === 'working') return s.phases.some((p) => f.appRows.level3.includes(p.step)) ? 3 : 2;
   return s.screen === 'checks' ? 1 : 0;
 }
@@ -209,7 +307,7 @@ function Pick({ s, session }: { s: AppState; session: AppSession }) {
       </>}
       <Inputs s={s} session={session} />
       <BuiltOn credits={stepCredits(f.id, f.credits)} />
-      <p className="small">{rich(f.words['app.connectHelp'])}</p>
+      <p className="small">{rich(f.words['app.connectHelp'])}{s.changed ? ` An earlier try already changed ${f.the}.` : ''}</p>
       {s.connecting && <p className="status work" role="status">{`Pick ${f.the} in the browser's list, then choose Allow on ${f.the}'s screen…`}</p>}
       {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
       <div className="foot">
@@ -273,26 +371,20 @@ function Working({ s, f }: { s: AppState; f: DeviceFrame }) {
   );
 }
 
+const opened = (f?: string) => (!f ? 'nothing Kiln could read' : /ResolverActivity|ChooserActivity/.test(f) ? 'its list of home apps' : f.split('/')[0]);
+
+/** An undo's Done (an install's is the standard flow's, with AppOutcome under it). */
 function Done({ s, session }: { s: AppState; session: AppSession }) {
   const f = session.frame;
-  const r = s.result!;
-  const home = r.flow === 'install' ? r.installed.home : r.removed.home;
-  const title = r.flow === 'install' ? `Glassworks ${r.installed.app.name ?? ''} is on ${f.the}.` : r.removed.removed ? `Glassworks is off ${f.the}.` : `Glassworks wasn't on ${f.the}.`;
-  const opened = (f?: string) => (!f ? 'nothing Kiln could read' : /ResolverActivity|ChooserActivity/.test(f) ? 'its list of home apps' : f.split('/')[0]);
-  const admins = r.flow === 'install' ? r.installed.heldHomes : [];
-  const body = r.flow === 'install'
-    ? home === 'set' ? `It opens when ${f.the} starts.`
-      : admins.length ? `${admins.join(', ')} is a device administrator, so Glassworks can't be the only home screen over adb. Install Glassworks over fastboot instead.`
-      : `Android opened ${opened(r.installed.homeCheck.focused)} for the home screen${r.installed.homeCheck.left.length ? `, and ${r.installed.homeCheck.left.join(', ')} is still a home app` : ''}. Read ${f.the} again, then Update.`
-    : home === 'set' ? `The home screen is ${r.removed.previousHome?.split('/')[0] ?? 'yours'} again.`
-      : `Android opened ${opened(r.removed.focused)} for the home screen, not ${r.removed.previousHome?.split('/')[0] ?? 'the app you had before'}. Undo again.`;
+  const r = s.result as Extract<NonNullable<AppState['result']>, { flow: 'undo' }>;
+  const title = r.removed.removed ? `Glassworks is off ${f.the}.` : `Glassworks wasn't on ${f.the}.`;
+  const body = r.removed.home === 'set' ? `The home screen is ${r.removed.previousHome?.split('/')[0] ?? 'yours'} again.`
+    : `Android opened ${opened(r.removed.focused)} for the home screen, not ${r.removed.previousHome?.split('/')[0] ?? 'the app you had before'}. Undo again.`;
   return (
     <section className="card" aria-labelledby="h">
       <span className="okmark" aria-hidden="true">✓</span>
       <h2 id="h">{title}</h2>
       <p className="lede">{body}</p>
-      {r.flow === 'install' && <SilentUpdates words={f.silent[r.installed.updates.state] ?? null} />}
-      {s.managePage && <ManagePageRow href={s.managePage} the={f.the} />}
       <BuiltOn credits={stepCredits(f.id, f.credits)} />
       <div className="foot">
         <Log s={s} />
@@ -302,19 +394,26 @@ function Done({ s, session }: { s: AppState; session: AppSession }) {
   );
 }
 
+/** What the app's install left to say on the standard flow's Done: a home screen Android didn't take, and why. */
+export function AppOutcome({ s, f }: { s: AppState; f: DeviceFrame }) {
+  const r = s.result;
+  if (r?.flow !== 'install' || r.installed.home === 'set') return null;
+  const admins = r.installed.heldHomes;
+  return (
+    <p className="small" role="alert">{admins.length
+      ? `${admins.join(', ')} is a device administrator, so Glassworks can't be the only home screen over adb. Install Glassworks over fastboot instead.`
+      : `Android opened ${opened(r.installed.homeCheck.focused)} for the home screen${r.installed.homeCheck.left.length ? `, and ${r.installed.homeCheck.left.join(', ')} is still a home app` : ''}. Read ${f.the} again, then Update.`}</p>
+  );
+}
+
 function Failed({ s, session }: { s: AppState; session: AppSession }) {
-  // the install went through and set-up stopped: Try again goes back to set-up, never to the install
-  const setUp = s.result?.flow === 'install';
   return (
     <section className="card err" aria-labelledby="h">
-      <h2 id="h">{setUp ? 'Set-up stopped.' : s.flow === 'undo' ? 'Undo stopped.' : 'The install stopped.'}</h2>
+      <h2 id="h">{s.flow === 'undo' ? 'Undo stopped.' : 'The install stopped.'}</h2>
       <pre className="raw">{s.error}</pre>
-      {setUp && <p className="small"><button type="button" className="link" disabled={!!s.busy} onClick={() => void session.again()}>Back to the checks</button></p>}
       <div className="foot">
         <Log s={s} />
-        {setUp
-          ? <button type="button" className="btn ghost" disabled={!!s.busy} onClick={() => void session.setUpAgain()}>Try again</button>
-          : <button type="button" className="btn ghost" onClick={() => void session.again()}>Back to the checks</button>}
+        <button type="button" className="btn ghost" onClick={() => void session.again()}>Back to the checks</button>
       </div>
     </section>
   );
@@ -330,14 +429,23 @@ const isImageDemo = (d: string) => d.startsWith('flash-') || d.startsWith('image
  * device, for ?demo=… only.
  */
 export function DevicePage({ frame, demo: sim, base }: { frame: DeviceFrame; demo?: DeviceEntry; base: string }) {
+  // null outside Next's router (the tests): no step route then
+  const path = usePathname() ?? '';
+  /** The install's end: what this page hands the device to (set below). Sessions kept from an earlier visit reach it too. */
+  const handRef = useRef<HandOver | undefined>(undefined);
+  const handOver = pageHandOver(base);
   const [start] = useState(() => {
     const m = deviceMode(location.search, DEMO_ON && !!sim, DEMOS, deviceOpen(frame));
-    const imageFirst = m.demo ? isImageDemo(m.demo) : new URLSearchParams(location.search).get('mode') !== 'app';
-    if (m.demo) return { m, imageFirst };
+    // an app flow's route (a reload there, a link) opens the app alone, as &mode=app does
+    const routes = installRoutes(frame.id);
+    const sub = location.pathname.slice(base.length).replace(/^\/+|\/+$/g, '');
+    const appRoute = !!sub && Object.values(routes.app).includes(sub);
+    const imageFirst = m.demo ? isImageDemo(m.demo) : !appRoute && new URLSearchParams(location.search).get('mode') !== 'app';
+    if (m.demo) return { m, imageFirst, search: location.search };
     // the sessions live in Kiln's registry, not in this component: a running install outlives the picker
     const earlier = registry.activity(base);
-    if (!m.on && !earlier) return { m, imageFirst, real: realSessions(frame, false) };
-    const kept = keptDevice(base, frame.name, () => realSessions(frame, true, m.apk), imageFirst);
+    if (!m.on && !earlier) return { m, imageFirst, search: location.search, real: realSessions(frame, false) };
+    const kept = keptDevice(base, frame.name, () => realSessions(frame, true, m.apk, handOver, base), imageFirst);
     // back to a running install (or from a link without ?apk=…): as it was; otherwise the address's path
     if (kept === earlier && m.on && !kept.running()) {
       kept.imageMode = imageFirst;
@@ -347,27 +455,108 @@ export function DevicePage({ frame, demo: sim, base }: { frame: DeviceFrame; dem
       const fastbootIdle = ['choose', 'image', 'download'].includes(kept.sessions.image.state.screen);
       if (m.apk && (!imageFirst || fastbootIdle)) kept.sessions.app.switchApk(m.apk, releaseRoute);
     }
-    return { m, imageFirst: kept.imageMode, real: kept.sessions, kept };
+    return { m, imageFirst: kept.imageMode, search: location.search, real: kept.sessions, kept };
   });
   const [demo, setDemo] = useState<{ app: AppSession; image?: ImageSession }>();
   const [imageMode, setMode] = useState(start.imageFirst);
-  const setImageMode = (on: boolean) => { if (start.kept) start.kept.imageMode = on; setMode(on); };
+  const setImageMode = useCallback((on: boolean) => { if (start.kept) start.kept.imageMode = on; setMode(on); }, [start]);
+
+  // the standard flow's session for this frame, once an install handed it the device or one of its routes opened
+  const current = useCallback(() => { const e = registry.get(); return e?.base === base && e.standard ? e : undefined; }, [base]);
+  const entry = useSyncExternalStore(registry.subscribe, current, current);
+  const ws = useSyncExternalStore(entry?.session.store.subscribe ?? noSubscribe, entry?.session.store.get ?? noState, entry?.session.store.get ?? noState);
+  /** Done's way back on the app alone: its first screen, to connect and undo there */
+  /** A change React doesn't see (the entry's `handed`): the page draws again. */
+  const [, redraw] = useReducer((n: number) => n + 1, 0);
+  const wayBack = useCallback(() => {
+    // the standard flow lets go of the device first: the app's Connect opens it again (one adb connection at a time)
+    const e = current();
+    if (e) { e.handed = false; e.session.close(); }
+    setImageMode(false);
+    go(`${base}${start.search}`);
+    redraw();
+  }, [current, setImageMode, base, start]);
+  /** The image's way back (to the community image) leaves the standard flow's Done for the install's first screen. */
+  const away = useCallback(() => {
+    const e = current();
+    if (e) { e.handed = false; e.session.close(); }
+    go(`${base}${start.search}`);
+    redraw();
+  }, [current, base, start]);
+  // this mount's, for every session of this frame: one kept from an earlier visit hands over with today's mode and way back.
+  // Gone when the page goes, so an install that ends meanwhile waits for it (PENDING) instead of replacing another session
+  const mine = useRef<HandOver>((p) => handRef.current?.(p));
+  HANDS.set(base, mine.current);
+  useEffect(() => {
+    HANDS.set(base, mine.current);
+    // a hand-over that came while no page of this frame was up: this page takes it now. After a reload the device is no
+    // longer held, so the page opens set-up, which connects to it again over adb
+    const waiting = PENDING.get(base);
+    if (waiting) { PENDING.delete(base); setUpPending(base, false); handRef.current?.(waiting); }
+    else if (isSetUpPending(base)) { setUpPending(base, false); if (!current()) { const e = registry.set(standardEntry(frame, base, { wayBack: start.imageFirst ? undefined : wayBack })); e.handed = true; go(`${base}${ROUTES['set-up']}`); redraw(); } }
+    return () => { if (HANDS.get(base) === mine.current) HANDS.delete(base); };
+  }, [base]);
+  handRef.current = (p) => {
+    const demoName = start.m.demo;
+    const e = registry.set(standardEntry(frame, base, { demo: demoName, device: demoName ? p : undefined, wayBack: imageMode ? undefined : wayBack }));
+    e.handed = true;
+    void e.session.handOver(p);
+    return e.session;
+  };
+  const step = path.startsWith(base) ? stepOf(path.slice(base.length)) : undefined;
+  const onStandard = !!step && STANDARD_ROUTES.includes(step);
+  // a standard route opened with no session for it (a reload, a link): a new one, which connects to the device
+  useEffect(() => {
+    if (onStandard && !current() && !start.m.demo) registry.set(standardEntry(frame, base, { wayBack: start.imageFirst ? undefined : wayBack }));
+  }, [onStandard, current, start, frame, base, wayBack]);
+  const renew = useCallback(() => registry.set(standardEntry(frame, base, { wayBack: imageMode ? undefined : wayBack })), [frame, base, imageMode, wayBack]);
+
   useEffect(() => {
     const d = start.m.demo;
     if (!d || !sim) return;
-    if ((KEEP_DEMOS as readonly string[]).includes(d)) void keepDemo(sim, d as KeepDemo).then(setDemo);
-    else if (isImageDemo(d)) void imageDemo(sim, d as ImageDemo).then(setDemo);
-    else void appDemo(sim, d as AppDemo).then((app) => setDemo({ app }));
+    if ((KEEP_DEMOS as readonly string[]).includes(d)) void keepDemo(sim, d as KeepDemo, false, handOver).then(setDemo);
+    else if (isImageDemo(d)) void imageDemo(sim, d as ImageDemo, false, {}, handOver).then(setDemo);
+    else void appDemo(sim, d as AppDemo, false, handOver).then((app) => setDemo({ app }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the demo runs once, on the page's first sessions
   }, [start, sim]);
   const live = start.real ?? demo;
+  // the standard flow shows on its routes, and from the hand-over until it has finished
+  if (entry && (onStandard || (entry.handed && status(ws) !== 'finished'))) {
+    const image = imageMode && live?.image;
+    const before = image ? imageSteps(frame, image.state.link) : appSteps(frame);
+    const outcome = live ? (image ? <LiveImageOutcome image={image} away={away} /> : <LiveAppOutcome app={live.app} />) : undefined;
+    return <StandardRoutes entry={entry} renew={renew} before={before} outcome={outcome} />;
+  }
+  // a standard route whose session the effect above is making: nothing yet, so the install's screens don't move the address
+  if (onStandard) return null;
   if (!live) return null;
-  if (live.app.state.screen !== 'off' && imageMode && live.image) return <ImageFlow image={live.image} app={live.app} toApp={() => setImageMode(false)} />;
-  return <AppFlow session={live.app} toImage={live.image && live.app.state.screen !== 'off' ? () => setImageMode(true) : undefined} />;
+  // the address follows the install's step (a demo's too, keeping its ?demo=…)
+  const at = base;
+  if (live.app.state.screen !== 'off' && imageMode && live.image) return <ImageFlow image={live.image} app={live.app} toApp={() => setImageMode(false)} base={at} />;
+  return <AppFlow session={live.app} toImage={live.image && live.app.state.screen !== 'off' ? () => setImageMode(true) : undefined} base={at} />;
 }
 
-export function ImageFlow({ image, app, toApp }: { image: ImageSession; app: AppSession; toApp?: () => void }) {
+/** A step back to the install's screens: a history entry Next's router follows (usePathname), with no router needed here. */
+const go = (url: string) => window.history.pushState(null, '', url);
+
+const noSubscribe = () => () => {};
+const noState = () => undefined as never;
+
+export function LiveImageOutcome({ image, away }: { image: ImageSession; away: () => void }) {
+  const s = useSyncExternalStore(image.subscribe, image.get, image.get);
+  return image.recipe.community ? null : <ImageOutcome f={image} s={s} away={away} />;
+}
+
+export function LiveAppOutcome({ app }: { app: AppSession }) {
+  const s = useSyncExternalStore(app.subscribe, app.get, app.get);
+  return <AppOutcome s={s} f={app.frame} />;
+}
+
+/** `base`: the frame's route, whose step routes the address follows; none in demos and tests. */
+export function ImageFlow({ image, app, toApp, base }: { image: ImageSession; app: AppSession; toApp?: () => void; base?: string }) {
   const f = image.frame;
   const s = useSyncExternalStore(image.subscribe, image.get, image.get);
+  useInstallRoute(base ?? '', base === undefined ? undefined : installRoutes(f.id).image[imageStep(s)]);
   const ms = useSyncExternalStore(app.subscribe, app.get, app.get);
   const chip = useBrowserChip();
   useEffect(() => { document.title = s.screen === 'adb' ? `Your turn · ${f.name} · Kiln` : `${f.name} · Kiln`; }, [s.screen, f]);
@@ -380,9 +569,10 @@ export function ImageFlow({ image, app, toApp }: { image: ImageSession; app: App
   );
 }
 
-export function AppFlow({ session, toImage }: { session: AppSession; toImage?: () => void }) {
+export function AppFlow({ session, toImage, base }: { session: AppSession; toImage?: () => void; base?: string }) {
   const f = session.frame;
   const s = useSyncExternalStore(session.subscribe, session.get, session.get);
+  useInstallRoute(base ?? '', base === undefined || s.screen === 'off' ? undefined : installRoutes(f.id).app[appStep(s)]);
   const chip = useBrowserChip();
   useEffect(() => {
     document.title = `${f.name} · Kiln`;
@@ -394,7 +584,6 @@ export function AppFlow({ session, toImage }: { session: AppSession; toImage?: (
         : s.screen === 'pick' ? <Pick {...p} />
         : s.screen === 'checks' ? <Checks {...p} />
         : s.screen === 'working' ? <Working s={s} f={f} />
-        : s.screen === 'setup' ? <SetUpScreen setUp={session.setUp} s={s} />
         : s.screen === 'done' ? <Done {...p} />
         : <Failed {...p} />}
       {toImage && s.screen === 'pick' && <p className="small">{f.words['app.toImage']} <button type="button" className="link" onClick={toImage}>Install Glassworks over fastboot</button></p>}

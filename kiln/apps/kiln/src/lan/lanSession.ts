@@ -16,7 +16,7 @@ export type LanView =
   | { at: 'lost'; error: string; again?: 'start' | 'done' };
 
 /** A step on the page's rail. */
-export type RailStep = 'pair' | 'wifi' | 'ha' | 'radio' | 'done';
+export type RailStep = 'pair' | 'wifi' | 'ha' | 'panes' | 'radio' | 'done';
 
 export interface LanState {
   view: LanView;
@@ -28,8 +28,9 @@ export interface LanState {
 /** The rail before the panel has said whether it has a radio, and for one that has. */
 export const FULL_RAIL: readonly RailStep[] = ['pair', 'wifi', 'ha', 'radio', 'done'];
 
-/** The steps a panel that reported [st] has. */
-export const railOf = (st: SetupState): readonly RailStep[] => (st.radio ? FULL_RAIL : FULL_RAIL.filter((s) => s !== 'radio'));
+/** The steps a panel that reported [st] has: Panes when its app offers it (proposed, issue 621), the radio when it has one. */
+export const railOf = (st: SetupState): readonly RailStep[] =>
+  ['pair', 'wifi', 'ha', ...(st.panes?.length ? ['panes' as const] : []), ...(st.radio ? ['radio' as const] : []), 'done'];
 
 /** What SetupChannel reads and writes: the WebSocket, as a byte stream. */
 export type ChannelStream = ConstructorParameters<typeof SetupChannel>[0];
@@ -77,7 +78,7 @@ export class LanSession implements SetupSteps, WifiSteps {
   private readonly steps: ChannelSetup;
   private running?: string;
   /** The step to go back to after pairing again; `signed-in`: the step after Home Assistant. */
-  private resume?: 'wifi' | 'ha' | 'radio' | 'signed-in';
+  private resume?: 'wifi' | 'ha' | 'panes' | 'radio' | 'signed-in';
 
   constructor(private readonly d: LanDeps) {
     if (d.backFromSignIn) this.resume = 'signed-in';
@@ -126,7 +127,7 @@ export class LanSession implements SetupSteps, WifiSteps {
   private saw(st: SetupState) {
     if (st.touch !== undefined && st.touch !== this.touch) { this.touch = st.touch; this.set({}); }
     const rail = railOf(st);
-    if (rail.length !== this.state.rail.length) this.set({ rail });
+    if (rail.join() !== this.state.rail.join()) this.set({ rail });
   }
 
   /**
@@ -145,7 +146,7 @@ export class LanSession implements SetupSteps, WifiSteps {
 
   /** A step's state, unless the panel said this browser isn't paired (the pairing ran out): then pair again. */
   private showStep(setup: Setup) {
-    const ranOut = ((setup.phase === 'ha' || setup.phase === 'radio') && setup.error === NOT_PAIRED) ||
+    const ranOut = ((setup.phase === 'ha' || setup.phase === 'panes' || setup.phase === 'radio') && setup.error === NOT_PAIRED) ||
       (setup.phase === 'wifi' && (setup.status === NOT_PAIRED || setup.joining?.error === NOT_PAIRED));
     if (ranOut) {
       this.resume = setup.phase;
@@ -156,6 +157,8 @@ export class LanSession implements SetupSteps, WifiSteps {
     this.set({ view: { at: 'setup', setup } });
   }
 
+  get panesDraft() { return this.steps.panesDraft; }
+  set panesDraft(v: Record<string, boolean> | undefined) { this.steps.panesDraft = v; }
   get haAddress() { return this.steps.haAddress; }
   set haAddress(v: string | undefined) { this.steps.haAddress = v; }
 
@@ -226,6 +229,7 @@ export class LanSession implements SetupSteps, WifiSteps {
     const back = this.resume;
     this.set({ view: { at: 'setup', setup: { phase: 'waiting', note: 'Connecting to the panel.' } } });
     if (back === 'signed-in') await this.steps.afterSignIn();
+    else if (back === 'panes') await this.steps.panes();
     else if (back === 'radio') await this.steps.radio();
     else if (back === 'ha') await this.steps.homeAssistant();
     else await this.steps.wifi(); // an offline panel (on its setup hotspot) starts with Wi-Fi, one on a network with HA
@@ -240,6 +244,8 @@ export class LanSession implements SetupSteps, WifiSteps {
   signIn(url: string): void { this.steps.signIn(url); }
   saveHa(url: string): Promise<void> { return this.steps.saveHa(url); }
   skipHa(url: string): Promise<void> { return this.steps.skipHa(url); }
+  panes(): Promise<void> { return this.steps.panes(); }
+  applyPanes(on: readonly string[]): Promise<void> { return this.steps.applyPanes(on); }
   radio(): Promise<void> { return this.steps.radio(); }
   applyRadio(mode: string): Promise<void> { return this.steps.applyRadio(mode); }
   /** Skip and Finish: the button stays busy until the panel has ended the pairing (or said it couldn't). */

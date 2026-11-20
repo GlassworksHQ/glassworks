@@ -113,6 +113,32 @@ export async function startApp(r: Steps, opts: { haUrl?: string; locale?: string
 }
 
 /**
+ * The person's language, time zone and clock, on a device whose app is already on (the standard flow's App step on a
+ * frame whose install put the app on, issue 621). The same commands a frame's provisioning runs after an install, each a `try`: a vendor build
+ * that refuses one still gets the rest. Then the app starts again with the language, which it applies itself.
+ */
+export async function applySettings(r: Steps, s: { locale?: string; timezone?: string; clock24?: boolean }, app: AppId): Promise<void> {
+  if (s.timezone && !/^[A-Za-z0-9_+\-/]+$/.test(s.timezone)) throw new Error(`bad time zone ${s.timezone}`);
+  if (s.locale && !/^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(s.locale)) throw new Error(`bad locale ${s.locale}`);
+  if (s.timezone) {
+    r.step(`Time zone ${s.timezone}`);
+    await r.try('settings put global auto_time_zone 0');
+    await r.try(`service call alarm 3 s16 ${q(s.timezone)}`);
+    r.detail(`now ${(await r.try('getprop persist.sys.timezone')).trim() || 'unknown'}`);
+  }
+  if (s.locale) {
+    r.step(`Language ${s.locale}`);
+    await r.try(`settings put system system_locales ${q(s.locale)}`); // Android 7 and later read it at boot; the app applies it now
+  }
+  if (s.clock24 !== undefined) {
+    r.step(`${s.clock24 ? '24' : '12'}-hour clock`);
+    await r.try(`settings put system time_12_24 ${s.clock24 ? 24 : 12}`);
+  }
+  r.step('Start the app');
+  await startApp(r, { locale: s.locale }, app);
+}
+
+/**
  * Android refuses to uninstall (or disable) an active device admin, and adb's shell can't remove
  * one. So the app is asked to drop it (`remove_admin`), and this waits until it has. False if it
  * still holds it after 15 s.

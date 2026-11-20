@@ -11,6 +11,10 @@ export interface ChannelSetupDeps {
   /** The step on screen now. */
   phase(): Setup;
   show(setup: Setup): void;
+  /** Whether the app offers setup's Panes step: said each time its setup state comes, so the rail can list it. */
+  panesOffered?(offered: boolean): void;
+  /** Whether the frame has this step (its data, standard/frame.ts): one it leaves out is passed over. Unset: every one. */
+  has?(step: 'home-assistant' | 'panes' | 'radio'): boolean;
   /** Still on the setup screen: an answer that comes after the person moved on changes nothing. */
   here(): boolean;
   /** Setup is over (Finish, Skip, or an older app that has no channel). A promise keeps the button busy until it settles. */
@@ -36,10 +40,16 @@ export interface SetupSteps {
   click(name: string, run: () => Promise<void> | void): Promise<void>;
   /** The Home Assistant address as the person typed it, shown again if they come back to the step. */
   haAddress?: string;
+  /** The Panes switches as the person set them, kept if the step's screen goes and comes back (pairing again). */
+  panesDraft?: Record<string, boolean>;
   signIn(url: string): void;
   saveHa(url: string): Promise<void>;
   /** Skip the sign-in (the panel asks for it on its own screen): keeps a valid address, then moves on. */
   skipHa(url: string): Promise<void>;
+  /** The Panes step, when the app offers it; else on to the radio. */
+  panes(): Promise<void>;
+  /** Continue on Panes: the cards whose ids are in `on` on, every other off. */
+  applyPanes(on: readonly string[]): Promise<void>;
   radio(): Promise<void>;
   applyRadio(mode: string): Promise<void>;
   /** Ends setup; a promise keeps the button that ran it busy until it settles. */
@@ -79,6 +89,7 @@ const NOT_AN_ADDRESS = 'That doesn\'t look like a web address (http://… or htt
 
 export class ChannelSetup {
   haAddress?: string;
+  panesDraft?: Record<string, boolean>;
   /** The panel's address on Wi-Fi, from the last state it sent. */
   ip?: string;
   private channel?: SetupChannel;
@@ -128,8 +139,12 @@ export class ChannelSetup {
     if (!(await this.connect())) return undefined;
     const st = await this.request((x) => x.getState()).catch(() => undefined);
     if (st?.ip) this.ip = st.ip;
+    if (st) this.offers(st);
     return st;
   }
+
+  /** Tells the session whether the app offers the Panes step, from a state it sent. */
+  private offers(st: SetupState): void { this.d.panesOffered?.(!!st.panes?.length); }
 
   /**
    * Opens pairing over the LAN for 30 minutes (`pairing.arm`, #34) on the channel already open, and answers with the
@@ -153,20 +168,23 @@ export class ChannelSetup {
 
   private haState(s: SetupState, extra: { note?: string; error?: string; busy?: boolean; signingIn?: boolean } = {}) {
     this.ip = s.ip ?? this.ip;
+    this.offers(s);
     this.d.show({ phase: 'ha', ha: s.ha, ...extra });
   }
 
   /** Home Assistant: the address (what the panel found), sign-in on the panel's own page. */
   async homeAssistant(): Promise<void> {
+    if (this.d.has?.('home-assistant') === false) return this.panes();
     const g = this.gen;
     const c = await this.connect();
     if (g !== this.gen) return;
     if (!c) return await this.d.done(); // older app: the panel's own setup does the rest
     c.onState = (s) => {
       const cur = this.d.phase();
-      if (cur.phase !== 'ha') return;
+      // a state that comes once set-up is over (Done, another screen) changes nothing
+      if (cur.phase !== 'ha' || !this.d.here()) return;
       // A sign-in this page started has finished in its own window: on to the next step, with no click.
-      if (cur.signingIn && s.ha.signedIn) { this.haState(s); void this.radio(); return; }
+      if (cur.signingIn && s.ha.signedIn) { this.haState(s); void this.panes(); return; }
       this.haState(s, { note: cur.note, signingIn: cur.signingIn });
     };
     this.haState(c.state!);
@@ -293,7 +311,7 @@ export class ChannelSetup {
       this.d.show({ ...s, busy: true, error: undefined });
       try { await this.request((x) => x.setHa(url)); } catch (e) { this.d.show({ ...s, busy: false, error: (e as Error).message }); return; }
     }
-    await this.radio();
+    await this.panes();
   }
 
   /**
@@ -327,18 +345,65 @@ export class ChannelSetup {
     const g = this.gen;
     const st = await this.state().catch(() => undefined);
     if (g !== this.gen) return; // closed meanwhile: this run is over
-    if (st?.ha.signedIn) await this.radio();
+    if (st?.ha.signedIn) await this.panes();
     else await this.homeAssistant();
   }
 
   /** Moves on without signing in: a valid address is saved as Continue would; anything else is left for the panel. */
   async skipHa(url: string): Promise<void> {
-    if (!validHaUrl(url)) return this.radio();
+    if (!validHaUrl(url)) return this.panes();
     return this.saveHa(url);
+  }
+
+  /**
+   * The Panes step: a switch per card the app offers, as the panel's own Panes step has (proposed, issue 621). An app whose
+   * state has no `panes` has no such step: on to the radio, as before.
+   */
+  async panes(): Promise<void> {
+    if (this.d.has?.('panes') === false) return this.radio();
+    // the state the channel has, if it has one: an app without the step (every app today) asks nothing more here
+    const known = this.channel?.state;
+    if (known && !known.panes?.length) { await this.radio(); return; }
+    const g = this.gen;
+    const stale = () => g !== this.gen || !this.d.here();
+    if (!(await this.connect())) { if (!stale()) this.d.unreachable(); return; }
+    let st: SetupState;
+    try {
+      st = await this.request((x) => x.getState());
+    } catch (e) {
+      if (!stale()) this.d.unreachable(e);
+      return;
+    }
+    if (stale()) return;
+    this.ip = st.ip ?? this.ip;
+    this.offers(st);
+    if (!st.panes?.length) { await this.radio(); return; }
+    this.d.show({ phase: 'panes', panes: st.panes });
+  }
+
+  /** Continue on Panes. The radio's own step follows only while its card is on; a refusal stays on Panes, saying why. */
+  async applyPanes(on: readonly string[]): Promise<void> {
+    const s = this.d.phase();
+    if (s.phase !== 'panes') return;
+    const stale = () => !this.d.here() || this.d.phase().phase !== 'panes';
+    this.d.show({ ...s, busy: true, error: undefined });
+    let st: SetupState;
+    try {
+      st = await this.request((x) => x.setPanes(on));
+    } catch (e) {
+      if (!stale()) this.d.show({ ...s, busy: false, error: (e as Error).message });
+      return;
+    }
+    if (stale()) return;
+    this.panesDraft = undefined; // applied: the app's state says it now
+    const radioCard = st.panes?.find((p) => p.id === 'radio');
+    if (radioCard && !radioCard.on) { await this.d.done(); return; }
+    await this.radio();
   }
 
   /** The radio role. */
   async radio(): Promise<void> {
+    if (this.d.has?.('radio') === false) { await this.d.done(); return; }
     const g = this.gen;
     // closed (or replaced) while waiting on the panel: that answer, or its failure, is no one's to show
     const stale = () => g !== this.gen || !this.d.here();

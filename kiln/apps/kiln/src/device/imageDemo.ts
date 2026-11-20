@@ -6,10 +6,13 @@ import { ProxyError, WrongImage, type DeviceEntry, type ImageMaker } from '@glas
 import { ImageSession, type ImageDeps } from './imageSession';
 import { fakeReleaseRoute, type FakeRelease } from '../release/demo';
 import { AppSession, releaseLine } from './appSession';
+import type { PanelShell } from '@glassworks/adb';
+import { standardDemo } from '../standard/demo';
+import type { StandardSession } from '../standard/session';
 import { withAppStreams } from '../wizard/demo';
 
 export const IMAGE_DEMOS = ['flash-image', 'flash-release', 'flash-release-downloading', 'flash-release-none', 'flash-release-bad', 'flash-downloading', 'flash-download-error', 'flash-download-bad', 'flash-ready', 'flash-fastboot', 'flash-fastboot-wrong', 'flash-confirm',
-  'flash-working', 'flash-adb', 'flash-adb-wait', 'flash-setup', 'flash-setup-ha', 'flash-done', 'flash-done-chooser', 'flash-done-no-home', 'flash-error', 'flash-run',
+  'flash-working', 'flash-adb', 'flash-adb-wait', 'flash-setup', 'flash-setup-wifi', 'flash-setup-ha', 'flash-done', 'flash-done-chooser', 'flash-done-no-home', 'flash-error', 'flash-run',
   'image-choose', 'image-choose-open', 'image-choose-panes', 'image-link', 'image-download', 'image-download-done', 'image-download-error', 'image-download-bad',
   'image-fastboot', 'image-confirm', 'image-writing', 'image-done', 'image-error', 'image-back-glassworks', 'image-back-panes',
   'image-wifi', 'image-wifi-writing', 'image-adb', 'image-done-wifi', 'image-done-wifi-unconfirmed'] as const;
@@ -17,8 +20,13 @@ export type ImageDemo = (typeof IMAGE_DEMOS)[number];
 
 const REFRACT_DOWN = 'the download proxy answered 502: GitHub answered 503';
 
-/** `deps`: what another demo changes on the simulated device (keepDemo.ts: the app's key before and after the flash). */
-export async function imageDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim'>, name: ImageDemo, fast = false, deps: Partial<ImageDeps> = {}): Promise<{ image: ImageSession; app: AppSession }> {
+/**
+ * `deps`: what another demo changes on the simulated device (keepDemo.ts: the app's key before and after the flash).
+ * `handOver`: the page's, which gives the device to the standard flow after the first start (flash-setup is its App step,
+ * flash-setup-wifi Wi-Fi, flash-setup-ha Home Assistant, flash-done… its Done).
+ */
+export async function imageDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim'>, name: ImageDemo, fast = false, deps: Partial<ImageDeps> = {}, handOver?: (p: PanelShell) => StandardSession | undefined): Promise<{ image: ImageSession; app: AppSession; standard?: () => StandardSession | undefined }> {
+  let standard: StandardSession | undefined;
   const tick = (ms: number) => new Promise<void>((r) => setTimeout(r, fast ? 0 : ms));
   // the frame's community image: its id, its files in download order, and the published key its wifi-on step uses
   const community = frame.imageFlow.recipes.find((x) => x.community)!;
@@ -75,7 +83,7 @@ export async function imageDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim
       o?.onPicked?.();
       if (name === 'flash-adb-wait') throw new Error('No authenticator can handle the request');
       // the device after its first start, with Glassworks' setup channel and Improv (flash-setup: not on Wi-Fi yet)
-      return withAppStreams(sim.firstStart({ hideFails: name === 'flash-done-chooser', noHome: name === 'flash-done-no-home' }), { online: name !== 'flash-setup', radio: false });
+      return withAppStreams(sim.firstStart({ hideFails: name === 'flash-done-chooser', noHome: name === 'flash-done-no-home' }), { online: name !== 'flash-setup-wifi', radio: false });
     },
     // the image's own key: an adb shell that has started, takes svc wifi enable and reports Wi-Fi on (or not)
     adbWithKey: () => async () => ({
@@ -87,9 +95,10 @@ export async function imageDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim
     apkBlocked: () => app.releaseBlocked(),
     simulated: true,
     sleep: (ms) => tick(ms / 20),
+    handOver: (p) => { standard = handOver?.(p); },
     ...deps,
   });
-  const done = { image, app };
+  const done = { image, app, standard: () => standard };
   if (name === 'image-choose' || name === 'image-link') return done;
   if (name === 'image-choose-open') { image.showCommunity(true); return done; }
   if (name === 'image-choose-panes') { image.showCommunity(true); image.pick(community.id); return done; }
@@ -112,22 +121,20 @@ export async function imageDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim
   await flashing;
   if (name === 'flash-adb' || name === 'flash-error') return done;
   if (name === 'flash-adb-wait') { void image.connectAdb(); return done; }
-  await image.connectAdb(); // then set-up: Wi-Fi, Home Assistant
-  if (name === 'flash-setup') return done;
-  await image.setUp.homeAssistant();
-  if (name === 'flash-setup-ha') return done;
-  image.setUp.finish(); // no radio on this app: Home Assistant is set-up's last step
+  await image.connectAdb(); // then the standard flow: App, Wi-Fi, Home Assistant, Panes, Done
+  await standardDemo(standard, name === 'flash-setup' ? 'app' : name === 'flash-setup-wifi' ? 'wifi' : name === 'flash-setup-ha' ? 'home-assistant' : 'done');
   return done;
 }
 
 /** The community image, picked on the choice: its download, fastboot, warning, writes and Done, and both ways back. */
-async function withCommunity(name: ImageDemo, d: { image: ImageSession; app: AppSession }, sim: DeviceEntry['sim'], id: string, glassworks: string) {
+async function withCommunity(name: ImageDemo, d: { image: ImageSession; app: AppSession; standard: () => StandardSession | undefined }, sim: DeviceEntry['sim'], id: string, glassworks: string) {
   const { image } = d;
   if (name === 'image-back-panes') { // Glassworks' Done, then its way back
     image.choose();
     await image.download();
     await d.app.pickApk(sim.apkName, sim.apk());
-    image.toFastboot(); await image.connectFastboot(); image.understand(true); await image.flash(); await image.connectAdb(); await image.setUp.homeAssistant(); image.setUp.finish();
+    image.toFastboot(); await image.connectFastboot(); image.understand(true); await image.flash(); await image.connectAdb();
+    await standardDemo(d.standard(), 'done');
     image.wayBack(id);
     return d;
   }

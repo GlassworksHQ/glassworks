@@ -156,6 +156,51 @@ export function HomeAssistant({ busy, steps, setup }: StepProps<'ha'>) {
   );
 }
 
+/**
+ * A pane's icon: an SVG of 24 × 24 strokes in currentColor, from the page's `icons` (Kiln's: the pane catalog, each pane's
+ * own icon.svg as glassworks.dev draws it). Never anything the device sent. The panel's own page has none: its bundle
+ * goes into the shared app, which names no frame's pane (DeviceNamesTest).
+ */
+function PaneIcon({ svg }: { svg?: string }) {
+  return svg ? <span className="ic" aria-hidden="true" dangerouslySetInnerHTML={{ __html: svg }} /> : null;
+}
+
+/**
+ * Panes: what the device does, one switch per pane its app offers (the panel's own Panes step, its cards and words;
+ * Kiln's sketch, docs/design/kiln: "Panes are switches"). Continue applies them; a pane that is on and has a step of its
+ * own (the radio) comes next.
+ */
+export function Panes({ busy, steps, setup, icons }: StepProps<'panes'> & { icons?: (id: string) => string | undefined }) {
+  // the person's switches survive the screen going (pairing again on the panel's page): kept by the steps, for the cards
+  // the app still offers; the others start as the app says
+  const [on, setOn] = useState<Record<string, boolean>>(() => Object.fromEntries(setup.panes.map((p) => [p.id, steps.panesDraft?.[p.id] ?? p.on])));
+  const set = (next: Record<string, boolean>) => { setOn(next); steps.panesDraft = next; };
+  return (
+    <section className="card" aria-labelledby="h">
+      <h2 id="h">What should it do?</h2>
+      <ul className="panes" aria-label="Panes">
+        {setup.panes.map((p) => (
+          <li key={p.id}>
+            <label className={on[p.id] ? 'pn on' : 'pn'}>
+              <PaneIcon svg={icons?.(p.id)} />
+              <span className="t"><span>{p.title}</span><small>{p.detail}</small></span>
+              <input type="checkbox" role="switch" className="sw" checked={!!on[p.id]} disabled={setup.busy}
+                onChange={(e) => set({ ...on, [p.id]: e.target.checked })} />
+            </label>
+          </li>
+        ))}
+      </ul>
+      {setup.error && <p className="status err" role="alert">{setup.error}</p>}
+      {setup.busy && <p className="status work" role="status">Setting up…</p>}
+      <div className="foot">
+        <span />
+        <button type="button" className="btn ember" disabled={setup.busy || busy}
+          onClick={() => void steps.click('panes', () => steps.applyPanes(setup.panes.filter((p) => on[p.id]).map((p) => p.id)))}>Continue</button>
+      </div>
+    </section>
+  );
+}
+
 /** The radio pane's one choice: what the Zigbee/Thread radio does. */
 export function Radio({ busy, steps, setup }: StepProps<'radio'>) {
   const [mode, setMode] = useState(setup.radio.mode);

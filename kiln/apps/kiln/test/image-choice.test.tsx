@@ -18,6 +18,8 @@ import { imageLevel } from '../src/device/ImageScreens';
 import { ImageFlow, DevicePage } from '../src/device/DevicePage';
 import { AppSession } from '../src/device/appSession';
 import { MIRROR_BASE, mirrorEntry, mirrorFrame } from './mirror-frame';
+import { showImage } from './device-page';
+import { stackLevel } from '../src/wizard/state';
 
 beforeAll(() => {
   Object.defineProperty(navigator, 'usb', { configurable: true, value: {} });
@@ -38,11 +40,9 @@ const embers = () => [...document.querySelectorAll('.btn.ember')].map((b) => b.t
 const radios = () => screen.queryAllByRole('radio').map((r) => r.getAttribute('aria-label'));
 const rail = () => [...document.querySelectorAll('.steps > li')].map((li) => li.textContent);
 
+/** As the page shows it: the install's screens, or after the first start the standard flow with the image's lines. */
 async function show(d: ImageDemo) {
-  const { image: flash, app: mirror } = await imageDemo(mirrorEntry, d, true);
-  render(<ImageFlow image={flash} app={mirror} />);
-  await act(async () => {});
-  return flash;
+  return (await showImage(d)).image;
 }
 
 /** A session on fakes that records what reaches Refract, the worker and the Mirror, in order. */
@@ -275,10 +275,13 @@ describe('Glass Panes', () => {
 
 describe('Glassworks\' Done', () => {
   it('has the way back: the choice, community images shown, Glass Panes picked', async () => {
-    const flash = await show('flash-done');
+    const { image: flash, app } = await showImage('flash-done');
     expect(screen.queryByText(/choose Way back/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Install Glass Panes instead' }));
     expect(flash.state).toMatchObject({ screen: 'choose', picked: 'glass-panes', from: 'glassworks', open: true, files: [{ state: 'waiting' }, { state: 'waiting' }, { state: 'waiting' }] });
+    // the page leaves Done for the install's first screen
+    cleanup();
+    render(<ImageFlow image={flash} app={app} />);
     expect(radios()).toEqual(['Glassworks', 'Glass Panes']);
     expect(embers()).toEqual(['Continue with Glass Panes']);
   });
@@ -346,6 +349,8 @@ describe('every image screen', () => {
 
   it('the stack stays empty while a community image installs: its layers are Glassworks\' layers', async () => {
     for (const d of ['image-writing', 'image-done'] as const) expect(imageLevel((await imageDemo(mirrorEntry, d, true)).image.state, true)).toBe(0);
-    expect(imageLevel((await imageDemo(mirrorEntry, 'flash-done', true)).image.state, false)).toBe(4);
+    // Glassworks' Done is the standard flow's: all four layers
+    const { standard } = await showImage('flash-done');
+    expect(stackLevel(standard!.store.state)).toBe(4);
   });
 });

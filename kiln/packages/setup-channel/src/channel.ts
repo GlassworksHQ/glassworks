@@ -21,6 +21,10 @@
 //       Opens pairing over the LAN again for 30 minutes, once Home Assistant has adopted the panel.
 //     → {"id":7,"op":"wifi.scan"}   (apps with the setup hotspot, #197)
 //     ← {"id":7,"ok":true,"state":SetupState,"networks":[{"ssid":"…","rssi":-50,"secure":true}]}
+//     → {"id":9,"op":"panes.set","on":"voice,sendspin"}   (proposed, #621: apps whose state has `panes`)
+//     ← {"id":9,"ok":true,"state":SetupState}            or {"id":9,"ok":false,"error":"…"}
+//       Answers the Panes step as its Continue does: the ids in `on` are on, every other card off. A card that can't
+//       apply its switch refuses with why, in words.
 //     → {"id":8,"op":"wifi.join","ssid":"…","password":"…"}   ("" for an open network)
 //     ← {"id":8,"ok":true,"state":SetupState}            or {"id":8,"ok":false,"error":"…"}
 //       The panel joins after it replies, and its own screen shows how it goes: the join can take it off the
@@ -56,6 +60,9 @@ export interface ThreadJoinState {
 /** A network the panel sees (`wifi.scan`). */
 export interface WifiNetwork { ssid: string; rssi: number; secure: boolean }
 
+/** A card on setup's Panes step (the app's PaneChoice): what the pane does, and whether it is on now. */
+export interface PaneCard { id: string; title: string; detail: string; on: boolean }
+
 export interface SetupState {
   /** Panel's Wi-Fi IPv4 address, if connected. */
   ip?: string;
@@ -68,6 +75,11 @@ export interface SetupState {
    * step offers (`allow`, `device_owner`, `boot_image`), or null with nothing to do.
    */
   silent_updates?: { silent: boolean; reason: string; offer: 'allow' | 'device_owner' | 'boot_image' | null; answered: boolean };
+  /**
+   * Setup's Panes step (proposed, #621): one card per pane the app offers there, in its order. Absent from apps
+   * without it; Kiln then has no Panes step.
+   */
+  panes?: PaneCard[];
   ha: {
     /** Address the app found on the network by itself (mDNS), if any. */
     discovered?: string;
@@ -173,6 +185,8 @@ export class SetupChannel {
   joinThread(): Promise<SetupState> { return this.request('radio.thread_join'); }
   /** Answers setup's Silent updates step, as Not now does (apps with #422). Refused while the app hasn't read the answer. */
   answerSilentUpdates(): Promise<SetupState> { return this.request('silent_updates.answer'); }
+  /** Answers the Panes step (proposed, #621): the cards in `on` on, every other off. */
+  setPanes(on: readonly string[]): Promise<SetupState> { return this.request('panes.set', { on: on.join(',') }, 35_000); }
   /** Over USB: lets a browser pair over the LAN again after Home Assistant adopted the panel (apps with #34). */
   armPairing(): Promise<SetupState> { return this.request('pairing.arm'); }
   /** The networks the panel sees now, strongest first: a fresh scan, up to about 15 s (apps with #197). */

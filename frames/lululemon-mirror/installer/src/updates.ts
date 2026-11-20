@@ -29,9 +29,10 @@ export function parseMirrorUpdates(dump: string, pkg: string): MirrorUpdates {
   return { state: privileged ? 'not-granted' : 'normal-app', privileged };
 }
 
-export async function readMirrorUpdates(p: PanelShell, app: MirrorApp = GLASSWORKS): Promise<MirrorUpdates> {
+/** `signal`: cancels a read that takes too long (Kiln's set-up bounds it); it then reads as not confirmed. */
+export async function readMirrorUpdates(p: PanelShell, app: MirrorApp = GLASSWORKS, signal?: AbortSignal): Promise<MirrorUpdates> {
   try {
-    const r = await p.run(`dumpsys package ${app.package}`);
+    const r = await p.run(`dumpsys package ${app.package}`, signal);
     if (r.code !== 0) return { state: 'unknown', detail: `dumpsys exited ${r.code}` };
     return parseMirrorUpdates(r.out, app.package);
   } catch (e) {

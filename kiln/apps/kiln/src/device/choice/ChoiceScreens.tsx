@@ -201,7 +201,8 @@ export function ConfirmCommunity({ f, s, reversible }: P & { reversible?: string
 }
 
 /** The way back, on both Done screens: the other image is one install away, on this same page. */
-export function WayBack({ f, other }: { f: ImageSession; other: ImageRecipe }) {
+/** `then`: after the way back is taken (the standard flow's Done leaves for the install's first screen). */
+export function WayBack({ f, other, then }: { f: ImageSession; other: ImageRecipe; then?: () => void }) {
   const now = f.recipe;
   return (
     <div className="well">
@@ -209,7 +210,7 @@ export function WayBack({ f, other }: { f: ImageSession; other: ImageRecipe }) {
         <span className="small">The way back</span>
         <span>{`Install ${other.name} from here. It replaces ${now.community ? `${now.name} and its data` : 'Glassworks and its settings'}.`}</span>
       </div>
-      <button type="button" className="btn ghost" onClick={() => f.wayBack(other.id)}>{other.community ? `Install ${other.name} instead` : `Install ${other.name}`}</button>
+      <button type="button" className="btn ghost" onClick={() => { f.wayBack(other.id); then?.(); }}>{other.community ? `Install ${other.name} instead` : `Install ${other.name}`}</button>
     </div>
   );
 }

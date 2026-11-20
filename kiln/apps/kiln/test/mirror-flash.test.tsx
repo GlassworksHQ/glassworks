@@ -16,6 +16,7 @@ import { IMAGE_DEMOS, imageDemo } from '../src/device/imageDemo';
 import { ImageFlow } from '../src/device/DevicePage';
 import { AppSession } from '../src/device/appSession';
 import { mirrorEntry, mirrorFrame } from './mirror-frame';
+import { showImage } from './device-page';
 
 beforeAll(() => {
   Object.defineProperty(navigator, 'usb', { configurable: true, value: {} });
@@ -99,8 +100,8 @@ describe('installing Glassworks over fastboot', () => {
     expect(calls).toEqual([fetched, `build userdata=${USERDATA_BYTES} key=kiln@glassworks`, 'flash system 2', 'flash userdata 1', 'reboot', 'discard']);
     expect(f.state.screen).toBe('adb');
     await f.connectAdb();
-    // the first start, then set-up (Wi-Fi, Home Assistant) over the same connection, as on every frame
-    expect(f.state).toMatchObject({ screen: 'setup', firstBoot: { hidden: ['com.android.launcher3'], rotation: 3 } });
+    // the first start, then the standard flow over the same connection, as on every frame: the page has its screen back
+    expect(f.state).toMatchObject({ screen: 'choose', firstBoot: { hidden: ['com.android.launcher3'], rotation: 3 } });
     expect(adb.cmds.some((c) => c.startsWith(`am start -n ${GLASSWORKS.activity}`))).toBe(true);
     expect(adb.cmds.filter((c) => c.includes('--es url'))).toEqual([]);
   });
@@ -182,18 +183,16 @@ describe('installing Glassworks over fastboot', () => {
   });
 
   it('Done says when another launcher is still a home app, and its button hides it again', async () => {
-    const { image: flash, app: mirror } = await imageDemo(mirrorEntry, 'flash-done-chooser', true);
+    const { image: flash } = await showImage('flash-done-chooser');
     expect(flash.state.firstBoot?.home.result).toBe('chooser');
-    render(<ImageFlow image={flash} app={mirror} />);
     expect(screen.getByText('Glassworks isn\'t the only home screen yet.')).toBeTruthy();
     expect(screen.getByText(/no touchscreen: hide the other launcher again, or use a USB mouse/)).toBeTruthy();
   });
 
   it('Done says when the Glassworks build has no home screen, and offers no hiding: the launcher stays (2026-11-16)', async () => {
-    const { image: flash, app: mirror } = await imageDemo(mirrorEntry, 'flash-done-no-home', true);
+    const { image: flash } = await showImage('flash-done-no-home');
     expect(flash.state.firstBoot?.home).toEqual({ result: 'none', left: ['com.android.launcher3'] });
     expect(flash.state.firstBoot?.hidden).toEqual([]);
-    render(<ImageFlow image={flash} app={mirror} />);
     expect(screen.getByText('This Glassworks build has no home screen.')).toBeTruthy();
     expect(screen.getByText((_, el) => el?.tagName === 'SPAN' && /^com\.android\.launcher3 stays its home screen\./.test(el.textContent ?? ''))).toBeTruthy();
     expect(screen.queryByText('Hide the other launcher again')).toBeNull();
@@ -287,10 +286,9 @@ describe('every flash demo screen', () => {
     expect([...credit.querySelectorAll('a')].map((a) => a.getAttribute('href'))).toEqual(['https://github.com/git-nimrod', 'https://github.com/git-nimrod/glass-panes']);
     expect(screen.getByText(/vendor files are Qualcomm's and Quectel's, from the Glass Panes release/)).toBeTruthy();
     cleanup();
-    const done = await imageDemo(mirrorEntry, 'flash-done', true);
-    render(<ImageFlow image={done.image} app={done.app} />);
+    await showImage('flash-done');
     expect(screen.getByText((_, el) => el?.tagName === 'SPAN' && /^Built on Glass Panes by git-nimrod\.$/.test(el.textContent ?? ''))).toBeTruthy();
-    expect(screen.getByText('Glassworks is on the Mirror.')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Done.' })).toBeTruthy();
     expect(screen.getByText("Reversible to the community image, not to lululemon's software.")).toBeTruthy();
   });
 
