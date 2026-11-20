@@ -29,8 +29,8 @@ def main(d: pathlib.Path) -> int:
         r = json.loads(f.read_text())
         vsync = 1000.0 / r["refreshHz"]
         runs = "runs" if r.get("mode") == "live" else "loops"
-        print(f"\n{f.stem}: look={r.get('look', 'glow')} cap={r.get('fps', 60)} fps, {r['device']}, Android {r['android']}, "
-              f"{r['refreshHz']:.0f} Hz, {r['loops']} {runs}")
+        print(f"\n{f.stem}: look={r.get('look', 'glow')}, {r.get('package', '?')} on {r['device']}, Android {r['android']}, "
+              f"{r.get('screen', '?')} at {r['refreshHz']:.0f} Hz, {r['loops']} {runs}, drawn frames from {r.get('frameSource', 'framemetrics')}")
         print(head)
         rows = sorted(r["phases"], key=lambda x: ORDER.index(x["phase"]) if x["phase"] in ORDER else 9)
         for x in rows:

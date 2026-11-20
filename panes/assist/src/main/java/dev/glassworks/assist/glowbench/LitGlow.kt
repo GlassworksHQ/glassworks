@@ -1,4 +1,4 @@
-package dev.glassworks.s1.glowbench
+package dev.glassworks.assist.glowbench
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -49,8 +49,8 @@ class LitGlow(context: Context) : FrameLayout(context) {
     }
 
     // half rings: [top, side, bottom] for a (left) and b (right); and the rose ring for errors
-    private val ringA = Array(3) { strip(a, it, right = false) }
-    private val ringB = Array(3) { strip(b, it, right = true) }
+    private val ringA = Array(3) { strip(a, it, right = false, toMid = true) }
+    private val ringB = Array(3) { strip(b, it, right = true, toMid = true) }
     private val roseRing = Array(4) { strip(rose, if (it < 2) it * 2 else 1, right = it == 3) } // top, bottom, left, right
     private val halfA = layer(); private val halfB = layer()
 
@@ -236,21 +236,32 @@ class LitGlow(context: Context) : FrameLayout(context) {
     }
 
     /** One strip: [kind] 0 top, 1 side, 2 bottom; a 1 px profile (edge to inside) stretched along the edge. A [right] side's edge is on its right. */
-    private fun strip(colour: Int, kind: Int, right: Boolean): ImageView {
-        val vertical = kind != 1 // top and bottom strips: the profile runs down (or up)
-        val bmp = if (vertical) Bitmap.createBitmap(1, depth, Bitmap.Config.ARGB_8888) else Bitmap.createBitmap(depth, 1, Bitmap.Config.ARGB_8888)
-        for (i in 0 until depth) {
-            val y = i / d // dp from the edge
-            val core = exp(-(y / 2f) * (y / 2f)); val glow = .45f * exp(-(y / 10f) * (y / 10f)); val haze = .22f * exp(-(y / 32f) * (y / 32f))
-            val al = (core + glow + haze).coerceAtMost(1f)
-            val hot = core * .5f // the edge itself is whiter
-            val c = Color.argb((255 * al).toInt(), mix(Color.red(colour), hot), mix(Color.green(colour), hot), mix(Color.blue(colour), hot))
-            if (vertical) bmp.setPixel(0, if (kind == 2) depth - 1 - i else i, c) else bmp.setPixel(if (right) depth - 1 - i else i, 0, c)
+    private fun strip(colour: Int, kind: Int, right: Boolean, toMid: Boolean = false): ImageView {
+        // Top and bottom strips are 256 px along the edge, so a half can run from its corner's light to the a/b middle
+        // at the centre, where it meets the other half in the same colour (no seam). Sides are one colour, 1 px long.
+        val vertical = kind != 1
+        val len = if (vertical) 256 else 1
+        val bmp = if (vertical) Bitmap.createBitmap(len, depth, Bitmap.Config.ARGB_8888) else Bitmap.createBitmap(depth, 1, Bitmap.Config.ARGB_8888)
+        val mid = Color.rgb(lerp(Color.red(a), Color.red(b), .5f), lerp(Color.green(a), Color.green(b), .5f), lerp(Color.blue(a), Color.blue(b), .5f))
+        for (x in 0 until len) {
+            // k: 0 at the corner, 1 at the centre (a left half's corner is on its left, a right half's on its right)
+            val k = if (!toMid || len == 1) 0f else if (right) 1f - x / (len - 1f) else x / (len - 1f)
+            val r = lerp(Color.red(colour), Color.red(mid), k); val g = lerp(Color.green(colour), Color.green(mid), k); val bl = lerp(Color.blue(colour), Color.blue(mid), k)
+            for (i in 0 until depth) {
+                val y = i / d // dp from the edge
+                val core = exp(-(y / 2f) * (y / 2f)); val glow = .45f * exp(-(y / 10f) * (y / 10f)); val haze = .22f * exp(-(y / 32f) * (y / 32f))
+                val al = (core + glow + haze).coerceAtMost(1f)
+                val hot = core * .5f // the edge itself is whiter
+                val c = Color.argb((255 * al).toInt(), mix(r, hot), mix(g, hot), mix(bl, hot))
+                if (vertical) bmp.setPixel(x, if (kind == 2) depth - 1 - i else i, c) else bmp.setPixel(if (right) depth - 1 - i else i, 0, c)
+            }
         }
         return object : ImageView(context) { override fun hasOverlappingRendering() = false }.apply { setImageBitmap(bmp); scaleType = ImageView.ScaleType.FIT_XY }
     }
 
     private fun mix(c: Int, k: Float) = (c + (255 - c) * k).toInt().coerceIn(0, 255)
+
+    private fun lerp(x: Int, y: Int, k: Float) = (x + (y - x) * k).toInt()
 
     private fun stripParams(kind: Int, left: Boolean): LayoutParams = when (kind) {
         0 -> LayoutParams(0, depth, Gravity.TOP or if (left) Gravity.LEFT else Gravity.RIGHT)

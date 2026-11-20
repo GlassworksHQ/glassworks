@@ -127,7 +127,15 @@ class GenericParts : AppParts {
         notifications.addListener(listener)
         notifications.onOpenList = { host.post { host.hideMenu(); notes.openList() } }
         notifications.onReveal = { host.post { host.hideMenu() } }
-        runtime.onVoiceUi = { voice.update(voiceUi, VoicePrefs(paneFile(activity, "assist")).overlay) }
+        // THROWAWAY (test-build/glowbench-s1): the #691 edge glow benchmark (Spark), in debug and test builds only. It
+        // replaces the voice overlay during real voice runs and answers the GLOW broadcast; the glow joins its layer.
+        var glowBench: dev.glassworks.assist.glowbench.GlowBench.Handle? =
+            if (runtime.build.debug || runtime.build.testBuild.isNotEmpty()) dev.glassworks.assist.glowbench.GlowBench.attach(activity, voice,
+                orb = { voice.update(it, true) }, onShowing = { timers.voiceShowing(it) }, onCancel = { runtime.voiceCancel?.invoke() }) else null
+        runtime.onVoiceUi = {
+            val enabled = VoicePrefs(paneFile(activity, "assist")).overlay
+            if (glowBench?.voice(voiceUi, enabled) != true) voice.update(voiceUi, enabled)
+        }
         return listOf(
             object : PaneOverlay {
                 override val view = timers
@@ -148,7 +156,7 @@ class GenericParts : AppParts {
             object : PaneOverlay {
                 override val view = voice
                 override val layoutParams = FrameLayout.LayoutParams(-1, -1)
-                override fun destroy() { runtime.onVoiceUi = null }
+                override fun destroy() { runtime.onVoiceUi = null; glowBench?.detach(); glowBench = null }
             },
             CameraWiring.dot(runtime, activity),
         )

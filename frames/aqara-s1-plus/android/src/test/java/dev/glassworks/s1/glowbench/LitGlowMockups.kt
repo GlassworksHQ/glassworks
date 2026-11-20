@@ -1,4 +1,4 @@
-package dev.glassworks.s1.glowbench
+package dev.glassworks.assist.glowbench
 
 import android.app.Activity
 import android.app.Application
@@ -47,5 +47,28 @@ class LitGlowMockups {
         g.speakingStart(); g.speaking(.4f); idle(400); save("lit-5-speaking")
         g.exit(); idle(200); save("lit-6-exit-200ms")
         g.reset(); g.visibility = View.VISIBLE; g.enter(); idle(700); g.error(); idle(300); save("lit-7-error")
+    }
+}
+
+/** THROWAWAY (test-build/glowbench-s1): LitGlow standing portrait, at the Mirror's 1080x1920 (540x960 dp at xhdpi). */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34], application = Application::class, qualifiers = "w540dp-h960dp-port-xhdpi")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+class LitGlowPortraitMockups {
+    @Test fun mockups() {
+        val dir = System.getProperty("s1.mockupDir")
+        assumeTrue(dir != null)
+        val a = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val root = FrameLayout(a).apply { setBackgroundColor(Color.rgb(17, 19, 24)) }
+        val g = LitGlow(a)
+        root.addView(g, FrameLayout.LayoutParams(-1, -1))
+        a.setContentView(root)
+        fun layout() { root.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(1920, View.MeasureSpec.EXACTLY)); root.layout(0, 0, 1080, 1920) }
+        layout(); shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(50))
+        g.enter(); shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(700))
+        g.listening(); g.level(.8f)
+        layout()
+        val b = Bitmap.createBitmap(1080, 1920, Bitmap.Config.ARGB_8888); root.draw(Canvas(b))
+        File(dir!!).mkdirs(); File(dir, "lit-portrait-listening.png").outputStream().use { b.compress(Bitmap.CompressFormat.PNG, 100, it) }
     }
 }

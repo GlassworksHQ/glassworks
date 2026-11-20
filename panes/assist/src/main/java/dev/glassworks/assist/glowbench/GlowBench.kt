@@ -1,4 +1,4 @@
-package dev.glassworks.s1.glowbench
+package dev.glassworks.assist.glowbench
 
 import android.app.Activity
 import android.content.BroadcastReceiver
@@ -8,16 +8,12 @@ import android.content.IntentFilter
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
-import android.os.Handler
-import android.os.HandlerThread
 import android.util.Log
 import android.util.TypedValue
 import android.view.Choreographer
-import android.view.FrameMetrics
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.view.Window
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -34,7 +30,7 @@ import kotlin.math.pow
 import kotlin.math.sin
 
 /**
- * THROWAWAY (test-build/glowbench-s1, never merged): the #691 edge glow benchmark inside the kiosk, round 3.
+ * THROWAWAY (test-build/glowbench-s1, never merged): the #691 edge glow benchmark inside the kiosk (the S1 app and the generic app, standard and legacy), round 4.
  *
  * Looks: `glow` is Spark built for RenderThread ([LitGlow]); `orb` is today's voice overlay, the baseline. Ways in:
  * - **Real Assist runs.** With look `glow` (the default) the glow replaces the voice overlay during a voice run,
@@ -58,16 +54,29 @@ object GlowBench {
         fun detach()
     }
 
-    fun attach(activity: Activity, voice: View, orb: (VoiceUi) -> Unit): Handle = Bench(activity, voice, orb)
+    /**
+     * [orb] updates the voice overlay (the baseline look); [onShowing] is the voice overlay's onShowingChanged (a timer
+     * set by voice flies out as it goes); [onCancel] stops the run, as the voice overlay's tap does.
+     */
+    fun attach(activity: Activity, voice: View, orb: (VoiceUi) -> Unit, onShowing: (Boolean) -> Unit, onCancel: () -> Unit): Handle =
+        Bench(activity, voice, orb, onShowing, onCancel)
 
-    private class Bench(private val activity: Activity, private val voice: View, private val orb: (VoiceUi) -> Unit) : Handle {
+    private class Bench(
+        private val activity: Activity,
+        private val voice: View,
+        private val orb: (VoiceUi) -> Unit,
+        private val onShowing: (Boolean) -> Unit,
+        private val onCancel: () -> Unit,
+    ) : Handle {
         private val dp = activity.resources.displayMetrics.density
         private val glow = LitGlow(activity)
         private val caption = Caption(activity)
         private val layer = FrameLayout(activity).apply {
             clipChildren = false
             addView(glow, FrameLayout.LayoutParams(-1, -1))
-            addView(caption.view, FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = (34 * dp).toInt() })
+            // The caption sits low on a landscape screen and higher on a portrait one (the Mirror), as in the mockups.
+            val portrait = activity.resources.displayMetrics.let { it.heightPixels > it.widthPixels }
+            addView(caption.view, FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = ((if (portrait) 120 else 34) * dp).toInt() })
             caption.view.alpha = 0f
             isClickable = false; isFocusable = false
         }
@@ -79,18 +88,24 @@ object GlowBench {
         private var liveMeter: Meter? = null
         private var liveRuns = 0
         private var lastSeq = -1
+        /** The broadcast's tag, echoed in the start and done lines so run.sh finds its own run in logcat. */
+        private var tag = "-"
+        /** The idle time between scripted runs, ms (a broadcast extra; a short gap tests the clocks' ramp-down). */
+        private var gapMs = 700
 
         private val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 intent.getStringExtra("look")?.let { if (it == "glow" || it == "orb") look = it }
+                intent.getStringExtra("tag")?.let { tag = it }
+                gapMs = intent.getIntExtra("gap", gapMs).coerceIn(0, 10_000)
                 fps = if (intent.getIntExtra("fps", fps) == 30) 30 else 60
                 val loops = intent.getIntExtra("loops", 3).coerceIn(0, 50)
-                if (loops == 0) { liveMeter = null; Log.i(TAG, "config look=$look fps=$fps"); return }
+                if (loops == 0) { liveMeter = null; Log.i(TAG, "config tag=$tag look=$look fps=$fps"); return }
                 if (busy != null) { Log.w(TAG, "busy: a $busy run is on screen"); return }
                 if (!show()) return
                 busy = "loops"
                 val m = Meter(activity, "loops", look, fps).also { meter = it }
-                Log.i(TAG, "start mode=loops look=$look fps=$fps loops=$loops refresh=${m.refreshHz}Hz size=${layer.width}x${layer.height}")
+                Log.i(TAG, "start tag=$tag mode=loops look=$look fps=$fps loops=$loops gap=${gapMs}ms refresh=${m.refreshHz}Hz size=${layer.width}x${layer.height}")
                 Script(m, loops).start()
             }
         }
@@ -114,7 +129,7 @@ object GlowBench {
         /** One run: enter 650, listening 3600, thinking 2600, speaking 3800, exit (400 glow, 1600 orb), gap 700. */
         private inner class Script(private val m: Meter, private val loops: Int) : Choreographer.FrameCallback {
             private val exitMs = if (look == "glow") 400f else 1600f
-            private val bounds = floatArrayOf(650f, 4250f, 6850f, 10650f, 10650f + exitMs, 10650f + exitMs + 700f)
+            private val bounds = floatArrayOf(650f, 4250f, 6850f, 10650f, 10650f + exitMs, 10650f + exitMs + gapMs)
             private val names = arrayOf("enter", "listening", "thinking", "speaking", "exit", "gap")
             private var loop = 1
             private var t0 = 0L
@@ -176,7 +191,7 @@ object GlowBench {
             private fun finish() {
                 m.phase = null
                 val file = m.finish(loops)
-                Log.i(TAG, "done json=${file.absolutePath}")
+                Log.i(TAG, "done tag=$tag json=${file.absolutePath}")
                 busy = null; meter = null
             }
         }
@@ -202,7 +217,7 @@ object GlowBench {
             if (look == "glow" && !show()) return
             busy = "live"; liveRuns++
             val m = liveMeter ?: Meter(activity, "live", look, fps).also { liveMeter = it }
-            Log.i(TAG, "start mode=live look=$look fps=$fps run=$liveRuns refresh=${m.refreshHz}Hz")
+            Log.i(TAG, "start tag=$tag mode=live look=$look fps=$fps run=$liveRuns refresh=${m.refreshHz}Hz")
             live = Live(m).also { it.start() }
         }
 
@@ -223,7 +238,12 @@ object GlowBench {
 
             fun start() {
                 m.start(); m.phase = "enter"
-                if (look == "glow") { glow.enter(); caption.show("LISTENING", VoiceTexts.PROMPT, 0xff38bdf8.toInt(), delay = 360) }
+                if (look == "glow") {
+                    glow.enter(); caption.show("LISTENING", VoiceTexts.PROMPT, 0xff38bdf8.toInt(), delay = 360)
+                    onShowing(true)
+                    // Tap anywhere to cancel, as with the orb: the layer takes touches only while a run is on screen.
+                    layer.setOnClickListener { onCancel(); end() }
+                }
                 Choreographer.getInstance().postFrameCallback(this)
             }
 
@@ -252,7 +272,11 @@ object GlowBench {
             private fun end() {
                 if (ending >= 0) return
                 ending = now; m.phase = "exit"
-                if (look == "glow") { glow.exit(); caption.hide() }
+                if (look == "glow") {
+                    glow.exit(); caption.hide()
+                    layer.setOnClickListener(null); layer.isClickable = false // touches go to the dashboard while it leaves
+                    onShowing(false) // a timer set by voice flies out now
+                }
             }
 
             override fun doFrame(frameTimeNanos: Long) {
@@ -279,7 +303,7 @@ object GlowBench {
                 m.phase = null; m.stop()
                 if (look == "glow") glow.reset()
                 val file = m.finish(liveRuns)
-                Log.i(TAG, "live run $liveRuns done json=${file.absolutePath}")
+                Log.i(TAG, "live run $liveRuns done tag=$tag json=${file.absolutePath}")
                 live = null; busy = null
             }
         }
@@ -308,13 +332,17 @@ object GlowBench {
     private class Caption(context: Context) {
         private val dp = context.resources.displayMetrics.density
         private val label = TextView(context).apply { setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f); letterSpacing = .14f; gravity = Gravity.CENTER }
-        private val main = TextView(context).apply { setTextSize(TypedValue.COMPLEX_UNIT_SP, 26f); setTextColor(0xfff4f4f5.toInt()); gravity = Gravity.CENTER; maxLines = 2 }
+        private val main = TextView(context).apply {
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 26f); setTextColor(0xfff4f4f5.toInt()); gravity = Gravity.CENTER; maxLines = 3
+            maxWidth = minOf((640 * dp).toInt(), context.resources.displayMetrics.widthPixels - (124 * dp).toInt())
+        }
         val view = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             setPadding((30 * dp).toInt(), (16 * dp).toInt(), (30 * dp).toInt(), (18 * dp).toInt())
             background = GradientDrawable().apply { cornerRadius = 26 * dp; setColor(Color.argb(220, 10, 11, 15)); setStroke(dp.toInt(), Color.argb(20, 255, 255, 255)) }
             addView(label); addView(main)
-            minimumWidth = (640 * dp).toInt()
+            // 640 dp, or the screen less a 32 dp gutter each side on a narrow (portrait) one
+            minimumWidth = minOf((640 * dp).toInt(), context.resources.displayMetrics.widthPixels - (64 * dp).toInt())
         }
 
         fun show(l: String, text: String, colour: Int, delay: Long = 0) {
@@ -328,8 +356,10 @@ object GlowBench {
     }
 
     /**
-     * Frame times per phase. [phase] null pauses it. UI thread: Choreographer intervals. The window: FrameMetrics,
-     * delivered on a thread of its own, for every frame the window draws, RenderThread-only frames included.
+     * Frame times per phase. [phase] null pauses it. UI thread: Choreographer intervals. The window's drawn frames:
+     * FrameMetrics on Android 8 and up ([FrameTap]: every frame the window draws, RenderThread-only frames included).
+     * Below Android 8 FrameMetrics has no frame timestamps (and before Android 7, no FrameMetrics), so the drawn
+     * frames fall back to the Choreographer intervals; the JSON's frameSource says which.
      */
     private class Meter(private val activity: Activity, private val mode: String, private val look: String, private val fps: Int) {
         @Suppress("DEPRECATION")
@@ -337,33 +367,33 @@ object GlowBench {
         @Volatile var phase: String? = null
         private val startedAt = System.currentTimeMillis()
         private val lock = Any()
-        private class B { val ui = ArrayList<Float>(); val frame = ArrayList<Float>(); val render = ArrayList<Float>(); var dropped = 0 }
+        class B { val ui = ArrayList<Float>(); val frame = ArrayList<Float>(); val render = ArrayList<Float>(); var dropped = 0 }
         private val buckets = LinkedHashMap<String, B>()
         private fun b(p: String) = buckets.getOrPut(p) { B() }
-        private var thread: HandlerThread? = null
-        private var lastVsync = 0L
+        // The API level comes from Platform (PlatformConfinementTest).
+        private val tapped = dev.glassworks.platform.Platform.apiLevel >= 26
+        private var tap: Any? = null // a FrameTap, only ever made on Android 8 and up
         private var lastUi = 0L
+        private var lastUiPhase: String? = null
         private var running = false
 
-        private val metrics = Window.OnFrameMetricsAvailableListener { _, fm, dropped ->
-            val p = phase
-            val vs = fm.getMetric(FrameMetrics.VSYNC_TIMESTAMP)
-            if (p == null) { lastVsync = 0L; return@OnFrameMetricsAvailableListener }
-            synchronized(lock) {
-                val bk = b(p)
-                if (lastVsync != 0L && vs > lastVsync) bk.frame += (vs - lastVsync) / 1e6f
-                bk.render += fm.getMetric(FrameMetrics.TOTAL_DURATION) / 1e6f
-                bk.dropped += dropped
-            }
-            lastVsync = vs
+        /** One drawn frame (from the FrameTap's thread): its interval since the last frame of the same phase, if any. */
+        fun frame(p: String, intervalMs: Float?, renderMs: Float, dropped: Int) = synchronized(lock) {
+            val bk = b(p)
+            intervalMs?.let { bk.frame += it }
+            bk.render += renderMs; bk.dropped += dropped
         }
 
         private val uiTick = object : Choreographer.FrameCallback {
             override fun doFrame(now: Long) {
                 if (!running) return
                 val p = phase
-                if (p != null && lastUi != 0L) synchronized(lock) { b(p).ui += (now - lastUi) / 1e6f }
-                lastUi = if (p == null) 0L else now
+                // Only between two frames of the same phase: across a change the gap is the screen being still.
+                if (p != null && lastUi != 0L && lastUiPhase == p) {
+                    val iv = (now - lastUi) / 1e6f
+                    synchronized(lock) { val bk = b(p); bk.ui += iv; if (!tapped) bk.frame += iv }
+                }
+                lastUi = if (p == null) 0L else now; lastUiPhase = p
                 Choreographer.getInstance().postFrameCallback(this)
             }
         }
@@ -371,17 +401,15 @@ object GlowBench {
         fun start() {
             if (running) return
             running = true
-            val t = HandlerThread("GlowBenchMeter").also { it.start(); thread = it }
-            activity.window.addOnFrameMetricsAvailableListener(metrics, Handler(t.looper))
+            if (tapped) tap = FrameTap(activity, { phase }, ::frame).also { it.start() }
             Choreographer.getInstance().postFrameCallback(uiTick)
         }
 
         fun stop() {
             if (!running) return
             running = false
-            runCatching { activity.window.removeOnFrameMetricsAvailableListener(metrics) }
-            thread?.quitSafely(); thread = null
-            lastUi = 0L; lastVsync = 0L
+            (tap as? FrameTap)?.stop(); tap = null
+            lastUi = 0L; lastUiPhase = null
         }
 
         /** Stops (loops) or keeps going (a live session), and writes everything so far; [runs] is loops or runs. */
@@ -402,8 +430,11 @@ object GlowBench {
                         mode, look, p, fr.size, pct(fr, .5), pct(fr, .9), pct(fr, .99), over16, over33, pct(rn, .9), pct(ui, .9)))
                 }
             }
-            val json = JSONObject().put("bench", "glowbench-s1").put("round", 3).put("mode", mode).put("look", look).put("fps", fps)
-                .put("device", Build.MODEL).put("android", Build.VERSION.RELEASE).put("refreshHz", refreshHz.toDouble())
+            val metrics = activity.resources.displayMetrics
+            val json = JSONObject().put("bench", "glowbench").put("round", 4).put("mode", mode).put("look", look).put("fps", fps)
+                .put("package", activity.packageName).put("device", Build.MODEL).put("android", Build.VERSION.RELEASE)
+                .put("api", dev.glassworks.platform.Platform.apiLevel).put("refreshHz", refreshHz.toDouble())
+                .put("screen", "${metrics.widthPixels}x${metrics.heightPixels}").put("frameSource", if (tapped) "framemetrics" else "choreographer")
                 .put("loops", runs).put("startedAt", startedAt).put("phases", rows)
             val name = "glowbench-$mode-$look-$fps-$startedAt.json"
             File(File(activity.filesDir, "glowbench").apply { mkdirs() }, name).writeText(json.toString(2))
