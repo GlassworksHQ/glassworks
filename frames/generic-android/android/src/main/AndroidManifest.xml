@@ -38,9 +38,11 @@
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" tools:ignore="ProtectedPermissions" />
     <!-- Also a privileged app's: "Allow a new computer" on the Manage page (#435). READ_LOGS shows the app which
          computer asks for USB debugging (the framework logs its key on the system log), and MANAGE_USB lets it
-         answer. Same rule: only the /system copy's own list counts. -->
-    <uses-permission android:name="android.permission.MANAGE_USB" tools:ignore="ProtectedPermissions" />
-    <uses-permission android:name="android.permission.READ_LOGS" tools:ignore="ProtectedPermissions" />
+         answer. Same rule: only the /system copy's own list counts. Android 6 to 9 only (UsbDebugging), so up to
+         API 28: on Android 13 and later a READ_LOGS granted over adb shows the system's log-access dialog on every
+         start of the app (the Pixel Tablet, Android 17, 2026-11-19), and the feature can't run there anyway. -->
+    <uses-permission android:name="android.permission.MANAGE_USB" android:maxSdkVersion="28" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.READ_LOGS" android:maxSdkVersion="28" tools:ignore="ProtectedPermissions" />
     <!-- Improv Wi-Fi over BLE. -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />

@@ -191,14 +191,18 @@ class GenericAppTest {
      */
     @Test fun everyBuildAsksForThePrivilegedPermissionsAndHasOneHomeFilter() {
         val requested = app.packageManager.getPackageInfo(app.packageName, PackageManager.GET_PERMISSIONS).requestedPermissions.orEmpty().toList()
-        // #435: MANAGE_USB and READ_LOGS let the Manage page allow a new computer over adb.
-        for (p in listOf("android.permission.INSTALL_PACKAGES", "android.permission.REBOOT", "android.permission.WRITE_SECURE_SETTINGS",
-                "android.permission.MANAGE_USB", "android.permission.READ_LOGS")) {
+        for (p in listOf("android.permission.INSTALL_PACKAGES", "android.permission.REBOOT", "android.permission.WRITE_SECURE_SETTINGS")) {
             assertTrue(p, p in requested)
         }
         val manifest = javax.xml.parsers.DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
             .newDocumentBuilder().parse(RepoFiles.file("frames/generic-android/android/src/main/AndroidManifest.xml"))
         val ns = "http://schemas.android.com/apk/res/android"
+        // #435: MANAGE_USB and READ_LOGS let the Manage page allow a new computer over adb, on Android 6 to 9 only.
+        val perms = manifest.getElementsByTagName("uses-permission").let { l -> (0 until l.length).map { l.item(it) as org.w3c.dom.Element } }
+            .associate { it.getAttributeNS(ns, "name") to it.getAttributeNS(ns, "maxSdkVersion") }
+        for (p in listOf("android.permission.MANAGE_USB", "android.permission.READ_LOGS")) {
+            assertEquals(p, "28", perms[p])
+        }
         fun names(filter: org.w3c.dom.Element, tag: String) = filter.getElementsByTagName(tag).let { l ->
             (0 until l.length).map { (l.item(it) as org.w3c.dom.Element).getAttributeNS(ns, "name").substringAfterLast('.') }
         }
@@ -209,6 +213,18 @@ class GenericAppTest {
         assertEquals(setOf("HOME", "DEFAULT"), names(home.single(), "category").toSet())
         assertEquals("no <data>: the HOME intent carries none", 0, home.single().getElementsByTagName("data").length)
         assertEquals(GenericParts.LAUNCHER, (home.single().parentNode as org.w3c.dom.Element).getAttributeNS(ns, "name"))
+    }
+
+    /**
+     * The Pixel Tablet (Android 17, 2026-11-19): a test install over adb granted READ_LOGS, and Android 13 and later
+     * then showed its log-access dialog on every start of the app, Clarity's restarts included. The permission
+     * serves only "Allow a new computer", which runs on Android 6 to 9 (UsbDebugging), so from API 29 on the app
+     * doesn't ask for it, nor for MANAGE_USB.
+     */
+    @Test fun aNewAndroidIsNotAskedForTheLogs() {
+        val requested = app.packageManager.getPackageInfo(app.packageName, PackageManager.GET_PERMISSIONS).requestedPermissions.orEmpty().toList()
+        assertFalse("android.permission.READ_LOGS" in requested)
+        assertFalse("android.permission.MANAGE_USB" in requested)
     }
 
     @Test fun theFrameReadsAndroidsStandardSensors() {

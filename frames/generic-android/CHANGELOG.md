@@ -24,6 +24,9 @@ line of each version is what Home Assistant shows on the update card. A change o
   back to Stable never installs an older version: the panel waits for a stable release newer than the one it runs.
 
 ### Fixed
+- **No log-access prompt on every start, on Android 10 and later.** The app asked for the system log for
+  "Allow a new computer", which only works on Android 6 to 9. Where an install over adb granted it, Android 13 and
+  later showed "Allow access to all device logs?" each time the app started. Now only Android 6 to 9 are asked.
 - **Wi-Fi setup over Bluetooth works on the lululemon Mirror.** On a panel with no touchscreen, nobody could press
   Allow, so Home Assistant and phones could never send it Wi-Fi over Bluetooth. Now, when it starts with no network,
   Bluetooth setup is open by itself for 5 minutes, and the setup screen says to send the Wi-Fi from Home Assistant or
