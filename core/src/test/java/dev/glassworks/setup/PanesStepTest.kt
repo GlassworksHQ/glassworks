@@ -155,14 +155,17 @@ class PanesStepTest {
         // is refused BUSY with the answer from before, and can't publish an answer the first would overwrite.
         val atBoundary = CountDownLatch(1)
         val publish = CountDownLatch(1)
+        val workerReturned = CountDownLatch(1) // the card's worker is all the way out, its count given back
         var hold = true
         val s = PanesStep(
             listOf(card("sendspin", "Music", "A Sendspin speaker", { music }, { music = it })),
+            start = { r, name -> Thread({ r.run(); workerReturned.countDown() }, name).start() },
             beforePublish = { if (hold) { hold = false; atBoundary.countDown(); publish.await(5, TimeUnit.SECONDS) } },
         )
         var first: String? = "not yet"
         val t = Thread { first = s.set(setOf("sendspin")) }.apply { start() }
         assertTrue(atBoundary.await(5, TimeUnit.SECONDS))
+        assertTrue(workerReturned.await(5, TimeUnit.SECONDS)) // only this caller holds the guard now
         assertTrue(music) // the first's card has applied
         val second = s.attempt(booleanArrayOf(false))
         assertEquals(PanesStep.BUSY, second.problem)
