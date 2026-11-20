@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
-import { DeviceModel, type FrameDesign } from "@glassworks/frame-card";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { DeviceModel, geometry, type FrameDesign, type FrameModel } from "@glassworks/frame-card";
 import { KILN } from "@/lib/links";
 import { KilnGlyph, MusicGlyph } from "../Glyphs";
 import s from "./MorphStory.module.css";
@@ -41,7 +41,15 @@ type Keyframe = {
   ry: number;
   glowX: number;
   glowY: number;
+  /* the glass's 3D pose; Beat 1 takes all of these from the Pixel Tablet's model (tabletPose) */
+  persp?: number; // px
+  lean?: number; // deg, a second rotateX after rotateY, as DeviceModel's front
+  z?: number; // px, translateZ
+  dx?: number; // px
+  dy?: number; // px
 };
+
+const PERSPECTIVE = 1200;
 
 /* Physically accurate proportions from frames/<id>/design/frame.json */
 const KEYFRAMES: Keyframe[] = [
@@ -217,12 +225,17 @@ function windowO(val: number, center: number, inner: number, outer: number) {
   return 1 - smooth((d - inner) / (outer - inner));
 }
 
-function samplePose(sVal: number): Keyframe {
-  const i = Math.min(KEYFRAMES.length - 2, Math.floor(clamp(sVal, 0, KEYFRAMES.length - 1)));
+function samplePose(sVal: number, frames: Keyframe[]): Keyframe {
+  const i = Math.min(frames.length - 2, Math.floor(clamp(sVal, 0, frames.length - 1)));
   const t = clamp(sVal - i, 0, 1);
-  const a = KEYFRAMES[i]!;
-  const b = KEYFRAMES[i + 1]!;
+  const a = frames[i]!;
+  const b = frames[i + 1]!;
   return {
+    persp: lerp(a.persp ?? PERSPECTIVE, b.persp ?? PERSPECTIVE, t),
+    lean: lerp(a.lean ?? 0, b.lean ?? 0, t),
+    z: lerp(a.z ?? 0, b.z ?? 0, t),
+    dx: lerp(a.dx ?? 0, b.dx ?? 0, t),
+    dy: lerp(a.dy ?? 0, b.dy ?? 0, t),
     w: lerp(a.w, b.w, t),
     h: lerp(a.h, b.h, t),
     bodyR: lerp(a.bodyR, b.bodyR, t),
@@ -236,6 +249,42 @@ function samplePose(sVal: number): Keyframe {
     ry: lerp(a.ry, b.ry, t),
     glowX: lerp(a.glowX, b.glowX, t),
     glowY: lerp(a.glowY, b.glowY, t),
+  };
+}
+
+/* Beat 1's model: its stage is TABLET_STAGE px wide (.tabletModel) at this aspect */
+const TABLET_STAGE = 642;
+const TABLET_ASPECT = 1.4;
+
+/**
+ * Beat 1's keyframe, posed exactly as the Pixel Tablet model's front glass: the same numbers geometry()
+ * gives DeviceModel (size, corner and screen box, rx/ry/lean, the push to the front face, the model's
+ * centring and its perspective, 170 × --u in DeviceModel.module.css). The glass lands on the model's
+ * front, so handing over to the model only adds its sides and dock.
+ */
+function tabletPose(base: Keyframe, model: FrameModel): Keyframe {
+  const g = geometry(model, TABLET_ASPECT);
+  const n = (k: string) => parseFloat(g.vars[k] ?? "0");
+  const u = TABLET_STAGE / 100;
+  const w = (n("--wp") / 100) * TABLET_STAGE;
+  const [arW = 1, arH = 1] = (g.vars["--ar"] ?? "1 / 1").split("/").map((x) => parseFloat(x));
+  const [tx = 0, ty = 0] = [...g.transform.matchAll(/(-?[\d.]+)%/g)].map((m) => parseFloat(m[1]!));
+  return {
+    ...base,
+    w,
+    h: (w * arH) / arW,
+    bodyR: (n("--rad") / 100) * w,
+    insetTop: n("--scr-y"),
+    insetBottom: 100 - n("--scr-y") - n("--scr-h"),
+    insetX: n("--scr-x"),
+    screenR: u * n("--sr"),
+    rx: n("--rx"),
+    ry: n("--ry"),
+    lean: n("--lean"),
+    z: u * n("--du") * 0.5,
+    persp: u * 170,
+    dx: (tx / 100) * TABLET_STAGE,
+    dy: (ty / 100) * (TABLET_STAGE / TABLET_ASPECT),
   };
 }
 
@@ -348,7 +397,11 @@ export function MorphStory({
 
   // Continuous Goldilocks coordinate seg in [0..5]
   const seg = morphSegment(p);
-  const basePose = samplePose(seg);
+  const keyframes = useMemo(
+    () => KEYFRAMES.map((k, i) => (i === 1 ? tabletPose(k, tablet.model) : k)),
+    [tablet.model],
+  );
+  const basePose = samplePose(seg, keyframes);
   const atFinale = seg >= 4.86;
 
   // Individual feature overlay opacities (ONE feature per beat, never stacked!)
@@ -440,8 +493,14 @@ export function MorphStory({
   }
 
   // Beat 1: the morphing glass hands over to the Pixel Tablet's real model, on its dock, as it settles
-  const modelO = compact ? 0 : windowO(seg, 1, 0.1, 0.34);
-  const modelLive = modelO > 0.5;
+  // The glass turns porcelain on its way in and lands exactly on the model's front (tabletPose). The model
+  // takes over only inside Beat 1's hold (p 0.16 – 0.255, morphSegment), where the two coincide, so the
+  // hand-over adds the sides and the dock and nothing doubles; it hands back before the glass moves on.
+  const faceO = compact ? 0 : windowO(seg, 1, 0.12, 0.62);
+  const modelO = compact ? 0 : smooth(clamp((p - 0.162) / 0.016)) * (1 - smooth(clamp((p - 0.236) / 0.016)));
+  // The model fades in over the glass, which stays opaque under it (their fronts are the same) so nothing
+  // turns see-through, and the glass hides once the model is whole: its body can then lift off the dock.
+  const modelLive = modelO > 0.98;
   // Mirror body + tubular U-stand presence factor (Beat 3)
   const mirrorFactor = windowO(seg, 3, 0.24, 0.72);
 
@@ -725,9 +784,12 @@ export function MorphStory({
   /* Beat 1 — the Pixel Tablet's own model (frame.json), with the live dashboard and Assist on its screen */
   const renderTabletModel = (id: string, voiceO: number) => (
     <DeviceModel id={id} model={tablet.model} label={`${tablet.name} on its speaker dock, running Glassworks`} aspect={1.4}>
-      <div className={s.screenInner}>
-        {renderLiveLovelace("tablet")}
-        {renderRealVoiceOverlay(voiceO)}
+      {/* the glass's own screen box (a size container), so the dashboard lays out the same on both */}
+      <div className={s.modelScreen}>
+        <div className={s.screenInner}>
+          {renderLiveLovelace("tablet")}
+          {renderRealVoiceOverlay(voiceO)}
+        </div>
       </div>
     </DeviceModel>
   );
@@ -1492,8 +1554,8 @@ export function MorphStory({
               className={s.hardwareScale}
               inert={modelLive}
               style={{
-                opacity: 1 - modelO,
-                transform: `perspective(1200px) rotateX(${basePose.rx}deg) rotateY(${basePose.ry}deg) scale(var(--bezel-scale, 1))`,
+                opacity: modelLive ? 0 : 1,
+                transform: `scale(var(--bezel-scale, 1)) translate(${basePose.dx}px, ${basePose.dy}px) perspective(${basePose.persp}px) rotateX(${basePose.rx}deg) rotateY(${basePose.ry}deg) rotateX(${basePose.lean}deg) translateZ(${basePose.z}px)`,
               }}
             >
               <div className={s.bezelRow}>
@@ -1508,6 +1570,14 @@ export function MorphStory({
                     borderRadius: `${geom.bodyR}px`,
                   }}
                 >
+                  {/* The Pixel Tablet's porcelain front (frame.json model.face), before the model takes over */}
+                  {faceO > 0.01 && (
+                    <div
+                      className={s.tabletFace}
+                      aria-hidden="true"
+                      style={{ opacity: faceO, ["--face" as string]: tablet.model.face ?? "#f2f0eb" }}
+                    />
+                  )}
                   {/* Mirror silvered body surface fading smoothly across forehead & chin */}
                   <div className={s.mirrorBodySurface} aria-hidden="true" style={{ opacity: mirrorFactor }} />
                   {/* Mirror forehead camera/presence lens + sky-blue pulse ripple */}

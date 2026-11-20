@@ -349,10 +349,24 @@ a.eyebrow:hover {
    Its stage is 1.4:1 and the body 73% of it (geometry.ts), so 642px puts the body at the glass's 468px. */
 .tabletModel {
   grid-area: 1 / 1;
+  position: relative;
+  z-index: 1;
   width: 642px;
   max-width: 100%;
   transform: scale(var(--bezel-scale, 1));
   will-change: opacity;
+}
+
+/* the model's screen, as the glass's .screen: the cards' @container rules query its height too */
+.modelScreen {
+  position: absolute;
+  inset: 0;
+  container-type: size;
+  background: #111111;
+  color: #e1e1e1;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: inherit;
+  overflow: hidden;
 }
 
 .tabletModelCompact {
@@ -396,6 +410,19 @@ a.eyebrow:hover {
 }
 
 /* Silvered full-height mirror body surface (forehead + chin stay real reflective glass) */
+/* Beat 1: the Pixel Tablet's front colour, as DeviceModel's .front draws it */
+.tabletFace {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  border-radius: inherit;
+  background: var(--face);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.09),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
 .mirrorBodySurface {
   position: absolute;
   inset: 0;
