@@ -114,16 +114,17 @@ pane, run along its edges, and make a bright **caustic** where they meet. A thin
 inside the edge shows the pane's thickness. The dashboard stays in view under a light dim, with the
 glass caption at the bottom.
 
-### Three entrances and exits
+### Entrance and exit: Spark (decided)
 
-The states are the same for all three; the variant sets how the light arrives, leaves, and where it
-rests between moments.
+**Spark** is the entrance and exit (the maintainer, 2026-11-20). Sheen and Pour were the alternatives;
+they are rejected and stay in `glow.html` and below only for reference. The states are the same for
+all three; the variant sets how the light arrives, leaves, and where it rests between moments.
 
 | Variant | Coming on | Going away | Rests |
 |---|---|---|---|
-| **Spark** | The light ignites at the frame's mic, splits both ways round the edge (a one way, b the other) and flares where the two halves meet, opposite the mic. 650 ms | It runs back into the mic and blinks out. 400 ms | Evenly round the edge |
-| **Sheen** | A sheen of light crosses the whole pane diagonally from the top left. Each edge catches it as it passes; the top left corner flares in a, the bottom right in b. 600 ms | A second, faster sheen switches the edges off behind it. 350 ms | In the two lit corners |
-| **Pour** | White-hot light pours in at the bottom, runs up both sides, meets at the top in a flare and cools into a and b as it goes. 700 ms | It cools and drains away to the bottom. 450 ms | Pooled along the bottom |
+| **Spark (chosen)** | The light ignites at the frame's mic, splits both ways round the edge (a one way, b the other) and flares where the two halves meet, opposite the mic. 650 ms | It runs back into the mic and blinks out. 400 ms | Evenly round the edge |
+| Sheen (rejected) | A sheen of light crosses the whole pane diagonally from the top left. Each edge catches it as it passes; the top left corner flares in a, the bottom right in b. 600 ms | A second, faster sheen switches the edges off behind it. 350 ms | In the two lit corners |
+| Pour (rejected) | White-hot light pours in at the bottom, runs up both sides, meets at the top in a flare and cools into a and b as it goes. 700 ms | It cools and drains away to the bottom. 450 ms | Pooled along the bottom |
 
 The caption rises in as the entrance lands and leaves first on the way out.
 
@@ -140,8 +141,8 @@ The caption rises in as the entrance lands and leaves first on the way out.
 
 Spark and the listening ripples start at the mic. That needs a new field in each frame's
 `design/frame.json`, for example `"mic": { "edge": "top", "at": 0.5 }` (which screen edge, and how far
-along it). The mockups put the S1's and the Mirror's mic at the middle of the top edge. **Those
-positions are placeholders until someone checks them on the devices.** A frame without the field
+along it). The S1's and the Mirror's mics are at the top, so both use the middle of the top edge
+(`"edge": "top", "at": 0.5`), confirmed by the maintainer (2026-11-20). A frame without the field
 falls back to the middle of the top edge.
 
 ### What it costs on the A133
@@ -189,11 +190,16 @@ The maintainer, 2026-11-20, on round 1:
 
 Not yet: the edge glow. Round 2 is above.
 
-The maintainer, 2026-11-20, on round 2: **Spark** is the entrance and exit. The motion while speaking
-was distracting, so speaking is now calm (no pulses, no flares, a slow breath). Sheen and Pour stay in
-the mockups for reference only.
+The maintainer, 2026-11-20, on round 2:
+
+1. **Spark** is the edge glow's entrance and exit. Sheen and Pour are rejected; they stay in the
+   mockups, labelled, for reference only.
+2. The motion while speaking was distracting, so speaking is now calm (no pulses, no flares, a slow
+   breath).
+3. The mic is at the top on the S1 and the Mirror: both use the middle of the top edge. The proposed
+   `mic` field in `frame.json` stays.
 
 ## Open questions for the maintainer
 
-1. Is the calmer speaking state right?
-2. Where is each frame's mic? The S1's and the Mirror's positions here are placeholders.
+1. Is the calmer speaking state right? A native prototype on the S1 (a throwaway test build, never
+   merged) is measuring how Spark performs, on scripted loops and on real Assist runs.

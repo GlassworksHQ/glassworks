@@ -3,7 +3,8 @@
  * light. The theme's two lights (a from the top left, b from the bottom right) enter the glass, run
  * along its edges, and flare into a bright caustic where they meet.
  *
- * Three entrances and exits to choose from (the states are shared):
+ * Three entrances and exits; Spark is chosen (2026-11-20), Sheen and Pour are rejected alternatives kept
+ * for reference (the states are shared):
  *   spark  The light starts at the frame's mic, splits both ways round the border, and flares where
  *          the two halves meet. Out: it runs back into the mic and blinks out.
  *   sheen  A sheen of light crosses the whole pane diagonally from the top left, and every edge it
@@ -19,8 +20,8 @@
  * Placeholder data only. Used by mockups.html (scene=lit).
  */
 (function () {
-  // Where each frame's mic is: a field this proposes for frames/<id>/design/frame.json. The positions
-  // are placeholders until someone measures them on the device.
+  // Where each frame's mic is: a field this proposes for frames/<id>/design/frame.json. Both mics are at
+  // the top, in the middle (confirmed by the maintainer, 2026-11-20).
   const MIC = { s1: { edge: "top", at: 0.5 }, mirror: { edge: "top", at: 0.5 } };
 
   const ENTER = { spark: 650, sheen: 600, pour: 700 };
