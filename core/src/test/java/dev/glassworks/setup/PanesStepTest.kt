@@ -126,7 +126,7 @@ class PanesStepTest {
         val s = PanesStep(listOf(
             card("assist", "Voice", "Assist and timers", { voice }, { voice = it }),
             card("sendspin", "Music", "A Sendspin speaker", { music }, { music = it }),
-        )) { r, name -> if (failStart && name.endsWith("-1")) throw OutOfMemoryError("no threads") else Thread(r, name).start() }
+        ), start = { r, name -> if (failStart && name.endsWith("-1")) throw OutOfMemoryError("no threads") else Thread(r, name).start() })
         assertNull(s.set(setOf("assist")))
         failStart = true
         assertEquals("Music: couldn't start (no threads)", s.set(setOf("sendspin")))
