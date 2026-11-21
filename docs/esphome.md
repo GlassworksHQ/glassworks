@@ -309,7 +309,20 @@ Managed by `update/UpdateManager.kt` (see [Updates and restoring stock software]
 
 Tracked by `update/FrameUpdate.kt` on dedicated frames that ship Glassworks system layers (**Aqara S1 Plus** and **lululemon Studio Mirror**; omitted on Generic Android tablets where the manufacturer updates the OS).
 
-Reads `ro.glassworks.frame.id` and `ro.glassworks.frame.version` (showing *Before 1.0.0* on panels installed prior to frame-version stamping), compares against `frames/<id>/v<version>` GitHub releases, and shows install instructions in the **Frame update** entity summary and on the Device / Manage page.
+Reads `ro.glassworks.frame.id` and `ro.glassworks.frame.version` (showing *Before 1.0.0* on panels installed prior to frame-version stamping) and compares them against `frames/<id>/v<version>` GitHub releases.
+
+**Installing from Home Assistant (Aqara S1 Plus with the frame loader).** Press **Install** on the **Frame update** card, call `update.install` from an automation, or press **Install** on the **Frame update** row of the Device page (on the panel, or on the Manage page with the code the panel shows). Glassworks then:
+
+1. Downloads the release's `frame-bundle-<id>-<version>.zip` and its `.sha256` over HTTPS from `github.com`, and checks the zip against both the `.sha256` file and GitHub's asset digest, like an app update. The card shows progress while it downloads.
+2. Unpacks only the files the bundle should hold (its `manifest`, `manifest.sig` and the files the manifest lists, at their listed sizes and SHA-256) into the app's staging folder. It refuses links, folders, unlisted files, paths outside the loader's rules, and a bundle for another frame or version.
+3. Hands the bundle to the frame loader's install, which checks the signature itself, and reads the result from the loader's own record (`/data/glassworks-pub/frame-bundle`).
+4. Restarts the panel as soon as the bundle is staged. The loader loads it at boot, and the card and the Device page show the new version.
+
+A panel that hasn't loaded a frame bundle yet runs its boot image's own copies, so the card shows the installed version as, for example, `1.0.0 (boot image)` and offers that same version's bundle.
+
+If anything stops it, the card says why: a SHA-256 mismatch, the loader's refusal (with its reason), no network, or a busy panel. Nothing restarts then. An app update and a frame update never run together: whichever comes second is refused with a message, so press Install again once the first is done.
+
+**Everywhere else** (the lululemon Studio Mirror, or an S1 Plus whose boot image has no frame loader yet), the card and the Device / Manage page say how to install the update instead.
 
 ### Silent updates
 

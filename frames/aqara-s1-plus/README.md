@@ -127,7 +127,7 @@ Here is the current feature maturity on `main` (rows marked **New** ship in the 
 | Panel health diagnostics (CPU, temperature, RAM, storage, Wi-Fi, uptime) | 🧪 New · awaiting hardware check |
 | Bluetooth proxy (listen and active GATT connections) | 🧪 New · scanning and single-device GATT verified on hardware; concurrent multi-device links untested |
 | Hands-free app updates from Home Assistant | ✅ Works from v0.4.1 onward ([one manual update](#updates) needed on older versions) |
-| Frame version display and *Frame update* entity | 🧪 New · unit-tested; over-the-air frame updates arrive with the frame loader |
+| Frame version display and *Frame update* entity | 🧪 New · unit-tested; with the frame loader, Install downloads the signed frame bundle and restarts the panel (awaiting hardware run) |
 | Persistent time zone across reboots | ✅ Works (requires boot software from v0.4.0+) |
 | Radio: Zigbee coordinator for **ZHA** | ✅ Verified (choose *keep the radio's network settings*; see [Known issues](#known-issues)) |
 | Radio: Zigbee coordinator for **Zigbee2MQTT** | 🧪 Experimental · `ember` adapter forms networks and pairs devices; long-term soak testing ongoing |

@@ -123,7 +123,16 @@ class PropsBundle(
 
     override fun status() = props.get(statusProp)
 
+    /**
+     * init's `sys.powerctl`, set through [props] as the app starts [service] (`ctl.start`): the restart the boot writer
+     * does as root (`setprop sys.powerctl reboot,glassworks-loader`), with a reason of its own.
+     */
+    override fun restart() = props.set("sys.powerctl", RESTART)
+
     companion object {
+        /** What [restart] sets: a reboot, and why (`reboot,<reason>`, which init logs as it shuts down). */
+        const val RESTART = "reboot,glassworks-frame-update"
+
         fun lstatUid(f: File): Int? = try { android.system.Os.lstat(f.path).st_uid } catch (t: Throwable) { null }
     }
 }

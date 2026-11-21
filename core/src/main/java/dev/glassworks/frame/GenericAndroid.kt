@@ -101,7 +101,7 @@ class GenericAndroid(
             }, fixable = { !adminActive(context) }),
             SettingsItem.Info({ OWNER_TITLE }, { if (SilentUpdates.deviceOwner(context)) "Yes: the app can reboot the device and keep its screen" else "No" }),
             SettingsItem.Info({ MODEL_TITLE }, { "${hardware.manufacturer} ${hardware.model}".trim() }),
-            frameRelease?.let { frameVersionItem(context, it) },
+            *frameRelease?.let { frameVersionItems(context, it, FrameUpdateModel.installs(it, agent)) }.orEmpty().toTypedArray(),
             SettingsItem.Info({ ANDROID_TITLE }, { Build.VERSION.RELEASE.orEmpty() }),
         ))
 
@@ -154,15 +154,35 @@ class GenericAndroid(
         const val MODEL_TITLE = "Model"
         const val ANDROID_TITLE = "Android"
         const val FRAME_VERSION_TITLE = "Frame version"
+        const val FRAME_UPDATE_TITLE = "Frame update"
+        const val FRAME_INSTALL = "Install"
+        val FRAME_INSTALL_CONFIRM = SettingsItem.Confirm(
+            "Install the frame update?",
+            "The panel downloads it, checks it, and restarts once to finish. That takes a few minutes.",
+            FRAME_INSTALL,
+        )
 
         /**
-         * The Device page's Frame version row on a frame with releases of its own (#139): the version, and when a newer
-         * one is out, which and how to install it, in amber. It reads the app's update check while one runs.
+         * The Device page's frame rows on a frame with releases of its own (#139). Frame version: the version, and when a
+         * newer one is out, which and how to install it, in amber. On a frame whose bundles install from here
+         * ([installs], [FrameUpdateModel.installs]) also Frame update: what Install does now or how it went, and the
+         * Install button, the same install as Home Assistant's card. The panel's menu and the Manage page draw the same
+         * rows; from the Manage page Install needs the code the panel shows, as Reboot does: it restarts the panel.
+         * They read the app's update check while one runs.
          */
-        fun frameVersionItem(context: Context, release: FrameRelease): SettingsItem.Info {
-            val own = FrameUpdateModel(release, "")
-            fun model() = (context.applicationContext as? GlassworksApp)?.glassworks?.updates?.frame ?: own
-            return SettingsItem.Info({ FRAME_VERSION_TITLE }, { model().detail() }, fixable = { model().updateAvailable })
+        fun frameVersionItems(context: Context, release: FrameRelease, installs: Boolean): List<SettingsItem> {
+            val own = FrameUpdateModel(release, "", installs)
+            fun updates() = (context.applicationContext as? GlassworksApp)?.glassworks?.updates
+            fun model() = updates()?.frame ?: own
+            val version = SettingsItem.Info({ FRAME_VERSION_TITLE }, { model().detail() }, fixable = { model().updateAvailable })
+            if (!installs) return listOf(version)
+            return listOf(
+                version,
+                SettingsItem.Action(
+                    FRAME_UPDATE_TITLE, { if (updates() == null) "Checking" else model().installLine() }, FRAME_INSTALL,
+                    confirm = FRAME_INSTALL_CONFIRM, needsCode = true,
+                ) { done -> updates()?.installFrame(done) ?: done("The update service isn't running.") },
+            )
         }
 
         /**

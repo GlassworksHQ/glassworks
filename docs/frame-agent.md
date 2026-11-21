@@ -173,7 +173,7 @@ The core's side is `dev.glassworks.frame.FrameAgent`, reached as `frame.agent`:
 | `bluetoothAddress()` | The `bluetooth-address` value, or null |
 | `radio` | `RadioAgent`: the radio's status lines (`RadioStatus`), its desired state (`RadioSetting`), its hand-off files (`RadioFile`), restart, and the vendor's own radio services for Off without the agent. Null without a radio capability |
 | `timeZone` | `TimeZoneAgent`: the wanted zone, its status, the zone Android runs, the agent's version. Null without `time-zone` |
-| `bundle` | `BundleAgent`: the installed bundle's state (from a root-owned file), the manifest format it takes, where to stage one, and its install. Null without `frame-bundle` |
+| `bundle` | `BundleAgent`: the installed bundle's state (from a root-owned file), the manifest format it takes, where to stage one, its install, and the restart that loads a staged bundle (the S1: init's `sys.powerctl`, as its boot writer restarts). Null without `frame-bundle` |
 
 `NoAgent` is the frame without one: nothing declared, no version, nothing offered. Frames that don't
 override `Frame.agent` get it. A pane checks `offers` (or `declared`, for a passive capability such as
