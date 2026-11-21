@@ -1,4 +1,4 @@
-// The on-device page (issue 403 part 3, #621) without React: which screen comes first, which build and APK fit, and the
+// The on-device page (issue 403 part 3, issue 621) without React: which screen comes first, which build and APK fit, and the
 // release each line has. OnDevicePage.tsx draws it; facts.ts reads the browser.
 import type { OnDevice } from '@glassworks/kiln-core';
 import type { FrameDesign } from '@glassworks/frame-card';

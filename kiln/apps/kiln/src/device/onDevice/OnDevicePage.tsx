@@ -1,5 +1,5 @@
 'use client';
-// The install from the device's own browser, no computer (issue 403, part 3; #621): the engine's page for a UsbFrame's
+// The install from the device's own browser, no computer (issue 403, part 3; issue 621): the engine's page for a UsbFrame's
 // `onDevice` (at /android/tablet for the frame whose route is /android). It names the device as far as the browser lets it (the frame's
 // `identify`), offers the right APK from its build's latest release through Kiln's release route, says what the app's
 // own setup asks next, and how to finish with Kiln over USB. Its words, brands and lines are the frame's.
