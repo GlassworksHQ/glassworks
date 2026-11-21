@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { ships, type FrameDesign } from '@glassworks/frame-card';
 import { describe, expect, it } from 'vitest';
 import { ENGINE, INSTALLERS } from '@glassworks/frames/catalog';
-import { FRAMES } from '../../src/frames/catalog';
+import { FRAMES, installsAs, kilnRoute } from '../../src/frames/catalog';
 import { installers, type InstallerData } from './harness';
 import { DRIVERS, MARKS } from './suite';
 import type { Driver } from './harness';
@@ -16,19 +16,22 @@ import type { Driver } from './harness';
 const APP = join(__dirname, '../../src/app');
 
 /** The picker's rule, word for word (Picker.tsx INSTALLABLE). */
-const isPublic = (f: Pick<FrameDesign, 'status' | 'kiln'>) => ships(f.status) && !!f.kiln;
+const isPublic = (f: Pick<FrameDesign, 'id' | 'kind' | 'base' | 'status' | 'kiln'>) => ships(f.status) && !!kilnRoute(f);
 
 /** Why each public frame can't be public at its status yet; empty when the gate passes. */
-export function gate(frames: Pick<FrameDesign, 'id' | 'status' | 'kiln'>[], data: Map<string, InstallerData>,
+export function gate(frames: Pick<FrameDesign, 'id' | 'kind' | 'base' | 'status' | 'kiln'>[], data: Map<string, InstallerData>,
   drivers: Pick<Driver, 'id' | 'frame' | 'flow'>[], marks: Record<string, Record<string, string>>): string[] {
   const out: string[] = [];
   for (const f of frames.filter(isPublic)) {
-    const d = data.get(f.id);
+    // a tested device installs as its base: the base's installer.json, flows and contract drivers are its own
+    const id = installsAs(f);
+    const route = kilnRoute(f);
+    const d = data.get(id);
     if (!d) { out.push(`${f.id} is public in Kiln but has no design/installer.json`); continue; }
-    if (f.kiln !== d.route) { out.push(`${f.id} is public in Kiln at ${f.kiln}, but its installer.json route is ${d.route}`); continue; }
+    if (route !== d.route) { out.push(`${f.id} is public in Kiln at ${route}, but its installer.json route is ${d.route}`); continue; }
     if (!Object.keys(d.flows).length) { out.push(`${f.id} is public in Kiln but its installer.json has no flows`); continue; }
     for (const flow of Object.keys(d.flows)) {
-      const driver = drivers.find((x) => x.frame === f.id && x.flow === flow);
+      const driver = drivers.find((x) => x.frame === id && x.flow === flow);
       if (!driver) { out.push(`${f.id} is public in Kiln but its ${flow} flow has no contract driver`); continue; }
       const m = Object.keys(marks[driver.id] ?? {});
       if (f.status === 'stable' && m.length) out.push(`${f.id} is stable but ${driver.id} fails the contract: ${m.join(', ')}`);
@@ -40,12 +43,12 @@ export function gate(frames: Pick<FrameDesign, 'id' | 'status' | 'kiln'>[], data
 describe('the gate', () => {
   it('reads public the way the picker does', () => {
     const picker = readFileSync(join(__dirname, '../../src/components/Picker.tsx'), 'utf8');
-    expect(picker).toContain('FRAMES.filter((f) => ships(f.status) && f.kiln)');
+    expect(picker).toContain('FRAMES.filter((f) => ships(f.status) && kilnRoute(f))');
   });
 
   it('passes: every frame public in Kiln today has its contract, and a stable one passes all of it', () => {
     expect(FRAMES.filter(isPublic).map((f) => `${f.id} ${f.status}`).sort())
-      .toEqual(['aqara-s1-plus stable', 'generic-android beta', 'lululemon-mirror beta']);
+      .toEqual(['aqara-s1-plus stable', 'generic-android beta', 'google-pixel-tablet beta', 'lululemon-mirror beta']);
     expect(gate(FRAMES, installers(), DRIVERS, MARKS)).toEqual([]);
   });
 
@@ -72,8 +75,16 @@ describe('the gate', () => {
     expect(gate(at('stable'), installers(), DRIVERS, {})).toEqual([]);
   });
 
+  it('checks a tested device as its base: the base\'s route, data and drivers, and nothing without a base Kiln installs', () => {
+    const tested = { id: 'some-tablet', kind: 'tested' as const, base: 'lululemon-mirror', status: 'beta' as const };
+    expect(gate([tested], installers(), DRIVERS, {})).toEqual([]);
+    expect(gate([tested], installers(), DRIVERS.filter((d) => d.id !== 'lululemon-mirror/app'), {}))
+      .toEqual(['some-tablet is public in Kiln but its app flow has no contract driver']);
+    expect(gate([{ ...tested, base: 'no-such-frame' }], installers(), DRIVERS, {})).toEqual([]);
+  });
+
   it.each(['planned', 'development'] as const)('a %s frame isn\'t public, whatever it has', (status) => {
-    expect(gate([{ id: 'new-frame', status, kiln: '/new-frame' }], installers(), DRIVERS, marks)).toEqual([]);
+    expect(gate([{ id: 'new-frame', kind: 'device', status, kiln: '/new-frame' }], installers(), DRIVERS, marks)).toEqual([]);
   });
 
   it('refuses a public frame, at any status, without a contract', () => {
@@ -82,7 +93,7 @@ describe('the gate', () => {
     expect(gate(opened, flowless, DRIVERS, {})).toEqual(['lululemon-mirror is public in Kiln but its installer.json has no flows']);
     expect(gate(at('beta'), installers(), DRIVERS.filter((d) => d.id !== 'lululemon-mirror/app'), {}))
       .toEqual(['lululemon-mirror is public in Kiln but its app flow has no contract driver']);
-    expect(gate([{ id: 'new-frame', status: 'beta', kiln: '/new-frame' }], installers(), DRIVERS, MARKS))
+    expect(gate([{ id: 'new-frame', kind: 'device', status: 'beta', kiln: '/new-frame' }], installers(), DRIVERS, MARKS))
       .toEqual(['new-frame is public in Kiln but has no design/installer.json']);
     // a public route that isn't the one its contract covers
     const s1 = FRAMES.find((f) => f.id === 'aqara-s1-plus')!;

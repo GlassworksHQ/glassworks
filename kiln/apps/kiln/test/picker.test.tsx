@@ -11,7 +11,7 @@ vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string
 import { ships } from '@glassworks/frame-card';
 import { INSTALLERS } from '@glassworks/frames/catalog';
 import { Picker } from '../src/components/Picker';
-import { FRAMES } from '../src/frames/catalog';
+import { FRAMES, installsAs, kilnRoute } from '../src/frames/catalog';
 import { registry } from '../src/wizard/registry';
 import { Store } from '../src/wizard/session';
 import { initial } from '../src/wizard/state';
@@ -48,7 +48,8 @@ describe('the picker', () => {
     expect(screen.getByRole('radio', { name: 'Aqara S1 Plus' })).toHaveProperty('dataset.state', 'checked');
     expect(screen.getByRole('radio', { name: 'lululemon Studio Mirror, Beta' })).toHaveProperty('disabled', false);
     expect(screen.getByRole('radio', { name: 'Generic Android, Beta' })).toHaveProperty('disabled', false);
-    expect(screen.getByRole('radio', { name: /Google Pixel Tablet, Planned, not installable/ })).toHaveProperty('disabled', true);
+    // a tested device installs through its base: Ready to install, and Continue goes to generic Android's route
+    expect(screen.getByRole('radio', { name: 'Google Pixel Tablet, Beta' })).toHaveProperty('disabled', false);
     const pills = (name: string) => screen.getByRole('radio', { name }).textContent ?? '';
     expect(pills('Aqara S1 Plus')).not.toMatch(/Stable|Beta/);
     expect(pills('lululemon Studio Mirror, Beta')).toContain('Beta');
@@ -59,6 +60,13 @@ describe('the picker', () => {
     fireEvent.click(screen.getByRole('radio', { name: 'lululemon Studio Mirror, Beta' }));
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     expect(router.push).toHaveBeenLastCalledWith('/lululemon-mirror');
+    // a tested device goes to its base's pages, and says what its base needs
+    fireEvent.click(screen.getByRole('radio', { name: 'Google Pixel Tablet, Beta' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(router.push).toHaveBeenLastCalledWith('/android');
+    expect(screen.getByText('Already installed on Google Pixel Tablet?')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Finish setting up' }).getAttribute('href')).toBe('/android/set-up');
+    expect(screen.getAllByText(INSTALLERS['generic-android']!.picker!.needs[0]!).length).toBeGreaterThan(0);
     // the summary and install tags reach screen readers as the card's description
     const s1 = screen.getByRole('radio', { name: 'Aqara S1 Plus' });
     const described = (s1.getAttribute('aria-describedby') ?? '').split(' ').map((id) => document.getElementById(id)?.textContent ?? '').join(' ');
@@ -96,20 +104,27 @@ describe('the picker, calm for a first visit and a returning one (#672)', () => 
   const group = (id: string) => document.querySelector<HTMLElement>(`[aria-labelledby="${id}"]`)!;
   const names = (id: string) => [...group(id).querySelectorAll('[role=radio]')].map((r) => r.getAttribute('aria-label'));
 
+  // the frames Kiln can't install yet, from their data: Coming soon shows only while there is one
+  const soon = FRAMES.filter((f) => !(ships(f.status) && kilnRoute(f)));
+
   it('puts the frames Kiln installs first, and the ones to come in their own group, none of them pickable', () => {
     render(<Picker />);
     expect(screen.getByRole('heading', { name: 'Ready to install' })).toBeTruthy();
     expect(names('ready')).toEqual(expect.arrayContaining(['Aqara S1 Plus']));
     expect(names('ready').every((n) => !/not installable/.test(n ?? ''))).toBe(true);
+    if (soon.length === 0) {
+      expect(screen.queryByRole('heading', { name: 'Coming soon' })).toBeNull();
+      return;
+    }
     expect(screen.getByRole('heading', { name: 'Coming soon' })).toBeTruthy();
-    expect(names('soon').length).toBeGreaterThan(0);
+    expect(names('soon').length).toBe(soon.length);
     expect([...group('soon').querySelectorAll('[role=radio]')].every((r) => r.hasAttribute('disabled') || r.getAttribute('data-disabled') !== null)).toBe(true);
   });
 
   it('puts what you\'ll need first, keeps Continue last and pinned, and shows no "Your panel" card (the maintainer, #672)', () => {
     render(<Picker />);
     const order = [...document.querySelectorAll('[aria-labelledby="needs"], [aria-labelledby="ready"], [aria-labelledby="soon"]')].map((e) => e.getAttribute('aria-labelledby'));
-    expect(order).toEqual(['needs', 'ready', 'soon']);
+    expect(order).toEqual(soon.length ? ['needs', 'ready', 'soon'] : ['needs', 'ready']);
     const section = document.querySelector('section.picker')!;
     const continueRow = screen.getByRole('button', { name: 'Continue' }).closest('.foot')!;
     expect(section.lastElementChild).toBe(continueRow);
@@ -138,10 +153,10 @@ describe('the picker, calm for a first visit and a returning one (#672)', () => 
   });
 
   it('every frame Kiln installs says what it needs and its way back (installer.json picker)', () => {
-    const ready = FRAMES.filter((f) => ships(f.status) && f.kiln);
+    const ready = FRAMES.filter((f) => ships(f.status) && kilnRoute(f));
     expect(ready.length).toBeGreaterThan(0);
     for (const f of ready) {
-      const d = INSTALLERS[f.id]?.picker;
+      const d = INSTALLERS[installsAs(f)]?.picker;
       expect(d?.needs.length, f.id).toBeGreaterThan(0);
       expect(d?.wayBack, f.id).toMatch(/\.$/);
     }
