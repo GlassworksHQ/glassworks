@@ -150,12 +150,33 @@ class ActionsCameraServerTest {
         val s = server(porch, door, streamMs = 300)
         PlainClient(s.localPort).use { c ->
             c.send(Msg.SUBSCRIBE_STATES_REQUEST)
-            val images = c.roundTrip().filter { it.type == Msg.CAMERA_IMAGE_RESPONSE }.map { ProtoMessage(it.data) }
+            val images = List(2) { c.await(Msg.CAMERA_IMAGE_RESPONSE) }
             assertEquals("one per camera", listOf(porch.key, door.key), images.map { it.fixed32(1) })
             assertTrue("empty", images.all { it.bytes(2).isEmpty() })
             assertTrue("whole", images.all { it.bool(3) })
             assertEquals("nothing more unless asked", null, c.read(1_000))
             assertEquals("the frame function never ran", 0, frames.get())
+        }
+    }
+
+    /** The empty image waits for an image in progress: a `done` chunk between two of its chunks would cut it in two. */
+    @Test
+    fun theEmptyImageWaitsForAnImageInProgress() {
+        val jpeg = ByteArray(3 * CameraEntity.CHUNK_BYTES + 7) { (it * 13).toByte() }
+        val inFrame = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val cam = CameraEntity("cam", "Cam") { inFrame.countDown(); release.await(10, TimeUnit.SECONDS); jpeg }
+        val s = server(cam)
+        PlainClient(s.localPort).use { c ->
+            c.send(Msg.SUBSCRIBE_STATES_REQUEST)
+            assertArrayEquals(ByteArray(0), c.image())
+            c.send(Msg.CAMERA_IMAGE_REQUEST, ProtoWriter().bool(1, true))
+            assertTrue(inFrame.await(10, TimeUnit.SECONDS))
+            c.send(Msg.SUBSCRIBE_STATES_REQUEST) // Home Assistant subscribing again while the image is on its way
+            c.roundTrip()
+            release.countDown()
+            assertArrayEquals("the image, whole", jpeg, c.image())
+            assertArrayEquals("then the empty image", ByteArray(0), c.image())
         }
     }
 
@@ -165,7 +186,7 @@ class ActionsCameraServerTest {
         val s = server(cam)
         PlainClient(s.localPort).use { c ->
             c.send(Msg.SUBSCRIBE_STATES_REQUEST)
-            assertTrue(c.roundTrip().none { it.type == Msg.CAMERA_IMAGE_RESPONSE })
+            assertEquals(null, c.read(1_000))
         }
     }
 
@@ -189,7 +210,7 @@ class ActionsCameraServerTest {
         val s = server(cam, streamMs = streamMs)
         PlainClient(s.localPort).use { c ->
             c.send(Msg.SUBSCRIBE_STATES_REQUEST)
-            c.roundTrip()
+            assertArrayEquals("the empty image on subscribe", ByteArray(0), c.image())
             val start = System.nanoTime()
             c.send(Msg.CAMERA_IMAGE_REQUEST, ProtoWriter().bool(2, true))
             var images = 0
