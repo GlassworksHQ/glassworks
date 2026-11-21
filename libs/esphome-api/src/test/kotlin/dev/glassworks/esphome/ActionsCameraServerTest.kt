@@ -129,10 +129,43 @@ class ActionsCameraServerTest {
         val s = server(cam)
         PlainClient(s.localPort).use { c ->
             c.send(Msg.SUBSCRIBE_STATES_REQUEST)
+            assertArrayEquals("the empty image on subscribe", ByteArray(0), c.image())
             c.send(Msg.CAMERA_IMAGE_REQUEST, ProtoWriter().bool(1, true))
             assertArrayEquals(jpeg, c.image())
             assertTrue(c.roundTrip().none { it.type == Msg.CAMERA_IMAGE_RESPONSE })
             assertEquals(1, frames.get())
+        }
+    }
+
+    /**
+     * #117: Home Assistant shows an ESPHome camera as unavailable after a reconnect until an image
+     * arrives for it, so each camera announces itself with one empty image when a client subscribes.
+     * No bytes, and the frame function isn't called: nothing from the camera leaves the device unasked.
+     */
+    @Test
+    fun subscribingGetsOneEmptyImagePerCameraAndNoFrame() {
+        val frames = AtomicInteger()
+        val porch = CameraEntity("porch", "Porch") { frames.incrementAndGet(); byteArrayOf(1, 2, 3) }
+        val door = CameraEntity("door", "Door") { frames.incrementAndGet(); byteArrayOf(4, 5, 6) }
+        val s = server(porch, door, streamMs = 300)
+        PlainClient(s.localPort).use { c ->
+            c.send(Msg.SUBSCRIBE_STATES_REQUEST)
+            val images = c.roundTrip().filter { it.type == Msg.CAMERA_IMAGE_RESPONSE }.map { ProtoMessage(it.data) }
+            assertEquals("one per camera", listOf(porch.key, door.key), images.map { it.fixed32(1) })
+            assertTrue("empty", images.all { it.bytes(2).isEmpty() })
+            assertTrue("whole", images.all { it.bool(3) })
+            assertEquals("nothing more unless asked", null, c.read(1_000))
+            assertEquals("the frame function never ran", 0, frames.get())
+        }
+    }
+
+    @Test
+    fun anAuthOnlyCameraIsNotAnnouncedToAnUnauthenticatedClient() {
+        val cam = CameraEntity("cam", "Cam") { byteArrayOf(1) }.apply { authOnly = true }
+        val s = server(cam)
+        PlainClient(s.localPort).use { c ->
+            c.send(Msg.SUBSCRIBE_STATES_REQUEST)
+            assertTrue(c.roundTrip().none { it.type == Msg.CAMERA_IMAGE_RESPONSE })
         }
     }
 
@@ -203,6 +236,7 @@ class ActionsCameraServerTest {
         repeat(2) { round ->
             PlainClient(s.localPort).use { c ->
                 c.send(Msg.SUBSCRIBE_STATES_REQUEST)
+                assertArrayEquals("the empty image on subscribe", ByteArray(0), c.image())
                 c.send(Msg.EXECUTE_SERVICE_REQUEST, call(n, 1, false, ProtoWriter().uint32(5, (round + 1) * 2)))
                 assertTrue(c.await(Msg.EXECUTE_SERVICE_RESPONSE).bool(2))
                 c.send(Msg.CAMERA_IMAGE_REQUEST, ProtoWriter().bool(1, true))

@@ -543,6 +543,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   keeps asking instead of stopping. If writing the image stops partway, *Try again* goes straight back to fastboot
   rather than to the download. A download that goes quiet picks up where it left off. Kiln also tells you to pick the
   Mirror as "Android" in the browser's list, the only name Chrome shows for it.
+- **The panel's camera no longer shows as unavailable in Home Assistant after the app restarts.** Until now the
+  camera entity stayed unavailable after a restart or a reload of the ESPHome integration, until something asked
+  for a picture. The panel now tells Home Assistant the camera is there as soon as it connects, without sending
+  any picture: images still leave the panel only when Home Assistant asks for one.
 - **Snapshot checks over ONVIF give the real size.** A recorder or tool that checks the camera's snapshot before
   downloading it now sees the picture's real size and no stray bytes, so its next request on the same connection
   works.

@@ -18,6 +18,9 @@ import kotlin.concurrent.withLock
  * promptly: a connection's camera thread ends only after [frame] returns.
  * With [authOnly] set, only an authenticated connection (Noise with the provisioned key) gets images.
  *
+ * Unasked, a client gets one thing: an empty image right after it subscribes to states, which Home
+ * Assistant needs to show the camera as available. It carries no bytes and doesn't call [frame].
+ *
  * @property maxFps The most frames a second a stream sends to one connection.
  * @param frame Returns the current JPEG, or null for none.
  */

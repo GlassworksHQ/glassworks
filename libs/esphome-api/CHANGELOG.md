@@ -33,6 +33,11 @@ publish the matching section below as the release notes.
   call that passes `get` and `set` by position needs them named (#591).
 
 ### Fixed
+- **Home Assistant shows a camera as available after a reconnect.** HA's ESPHome integration marks an
+  entity available again only when a state for it arrives, and a camera's state is an image, so a
+  `CameraEntity` stayed unavailable until something asked for one. Each client now gets one empty image
+  per camera (no bytes, `done`) right after it subscribes to states. The frame function isn't called,
+  so no picture leaves the device unasked (#117).
 - **Home Assistant finds the Bluetooth proxy's flags where API 1.15 and later put them.** With
   `ApiServer.bluetooth` set, `DeviceCapabilitiesResponse` now carries the `bluetooth_proxy` block with
   the feature flags. HA still reads them from DeviceInfo too, so nothing changes today; this keeps the

@@ -2,6 +2,7 @@
 lists the device's actions and calls them as HA's ESPHome integration does (manager.py
 execute_service), then asks for camera images as its camera platform does (camera.py: one
 request_single_image, and request_image_stream again after every frame for the MJPEG stream).
+Before asking, it records the image the device sends unasked once it subscribed to states.
 Usage: esphome_actions_camera.py <port>; prints RESULT {json}."""
 import asyncio
 import hashlib
@@ -36,6 +37,12 @@ async def main(port: int) -> None:
 
     images: asyncio.Queue[bytes] = asyncio.Queue()
     cli.subscribe_states(lambda s: images.put_nowait(s.data) if isinstance(s, CameraState) else None)
+    # Unasked: the empty image that makes HA's camera entity available (#117).
+    try:
+        announced = await asyncio.wait_for(images.get(), 5)
+        out["on_subscribe"] = {"len": len(announced)}
+    except TimeoutError:
+        out["on_subscribe"] = None
     cli.request_single_image()
     img = await asyncio.wait_for(images.get(), 10)
     out["single"] = {"len": len(img), "sha256": hashlib.sha256(img).hexdigest()}

@@ -997,6 +997,7 @@ public class ApiServer(
                 }
                 Msg.SUBSCRIBE_STATES_REQUEST -> {
                     subscribeStates()
+                    announceCameras()
                     try { onStatesSubscribed?.invoke(clientInfo, socket.inetAddress, authenticated) } catch (t: Throwable) { EspHomeLog.w("onStatesSubscribed failed", t) }
                     if (authenticated && onTimeZone != null) send(listOf(Frame(Msg.GET_TIME_REQUEST, ByteArray(0))))
                 }
@@ -1079,6 +1080,19 @@ public class ApiServer(
             }
             EspHomeLog.i("[$id] Sendspin pairing token requested: status $status")
             return ProtoWriter().uint32(1, status).string(2, token)
+        }
+
+        /**
+         * One empty image (no bytes, `done`) per camera this client may see, right after it subscribed
+         * to states, so that Home Assistant shows the camera as available (#117). HA writes an ESPHome
+         * entity back from "unavailable" only when a state for it arrives (esphome entity.py
+         * `_on_device_update` writes only the drop), and a camera's state is an image (aioesphomeapi
+         * turns any `done` image, empty too, into a `CameraState`). An ESPHome camera gets there with
+         * its idle frames; this sends no pixels and never calls the camera's frame function.
+         */
+        private fun announceCameras() {
+            val frames = visibleCameras().flatMap { cam -> cam.responses(null).map { Frame(Msg.CAMERA_IMAGE_RESPONSE, it) } }
+            if (frames.isNotEmpty()) send(frames)
         }
 
         private fun subscribeStates() = synchronized(stateLock) {
