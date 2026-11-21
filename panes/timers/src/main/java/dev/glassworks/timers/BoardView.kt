@@ -90,7 +90,9 @@ class BoardView(context: Context) : View(context) {
 
         val rows = rowsFor(timers.size)
         var top = pad + HEAD_DP * dp
-        for ((i, t) in timers.take(rows).withIndex()) {
+        // Soonest first as of now: a paused timer's time stands still while running ones count down between updates.
+        val soonest = timers.sortedWith(compareBy({ it.secondsLeft(now) }, { it.id }))
+        for ((i, t) in soonest.take(rows).withIndex()) {
             if (i > 0) { stroke.strokeWidth = 1 * dp; stroke.color = l.edge; c.drawLine(left, top, right, top, stroke) }
             row(c, t, now, left, right, top)
             top += ROW_DP * dp

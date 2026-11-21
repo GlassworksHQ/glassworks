@@ -112,6 +112,24 @@ class TimerBoardViewTest {
         assertTrue(b.hideBox.isEmpty)
     }
 
+    @Test fun aRunningTimerThatPassesPausedOnesMovesUpAsItDraws() {
+        val b = BoardView(org.robolectric.RuntimeEnvironment.getApplication())
+        val now = SystemClock.elapsedRealtime()
+        // Five paused at 60 s and one running at 120 s, listed as at the last update; 61 s later it has 59 s left.
+        val paused = (1..5).map { TimerBoard.Shown("p$it", "Paused $it", 0, active = false, pausedLeft = 60, totalSeconds = 600) }
+        val running = TimerBoard.Shown("r", "Running", now - 61_000 + 120_000, active = true, pausedLeft = 120, totalSeconds = 600)
+        b.timers = paused + running
+        b.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        b.layout(0, 0, b.measuredWidth, b.measuredHeight)
+        val drawn = ArrayList<String>()
+        val canvas = object : Canvas(Bitmap.createBitmap(b.width, b.height, Bitmap.Config.ARGB_8888)) {
+            override fun drawText(text: String, x: Float, y: Float, paint: android.graphics.Paint) { drawn += text; super.drawText(text, x, y, paint) }
+        }
+        b.draw(canvas)
+        assertTrue("the running timer is listed, not under +1 more: $drawn", "Running" in drawn)
+        assertEquals("it comes first: soonest", "Running", drawn.first { it == "Running" || it.startsWith("Paused ") })
+    }
+
     @Test fun theBoardsWords() {
         assertEquals("10 min", TimerTexts.short(600))
         assertEquals("1 h 30 min", TimerTexts.short(5400))

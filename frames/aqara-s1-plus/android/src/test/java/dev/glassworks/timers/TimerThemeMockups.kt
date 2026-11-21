@@ -106,16 +106,17 @@ class TimerThemeMockups {
         TimerBoard.reset()
     }
 
-    private fun shots(tag: String, w: Int, h: Int) {
+    /** The rings and the done screen. [touch] false is the Mirror. */
+    private fun shots(tag: String, w: Int, h: Int, touch: Boolean) {
         for ((theme, dark) in listOf("glassworks/dark" to true, "dusk/light" to false, "aurora/dark" to true, "dune/light" to false)) {
             val name = theme.replace('/', '-')
-            var (root, timers) = scene(theme, w, h, dark)
-            // Running, the last 10 seconds, and paused.
-            TimerBoard.update(listOf(Entry("p", "Pasta", 600, 492, true), Entry("e", "Eggs", 420, 7, true), Entry("o", "Oven", 2700, 1470, false)))
+            var (root, timers) = scene(theme, w, h, dark, touch)
+            // Two timers stay rings (three make the board): running, and the last 10 seconds.
+            TimerBoard.update(listOf(Entry("p", "Pasta", 600, 492, true), Entry("e", "Eggs", 420, 7, true)))
             timers.refresh(); idle(400)
             save("timers-$tag-$name-dock", root, w, h)
             // Done: Eggs finished, Pasta still running.
-            val s = scene(theme, w, h, dark); root = s.first; timers = s.second
+            val s = scene(theme, w, h, dark, touch); root = s.first; timers = s.second
             TimerBoard.update(listOf(Entry("p", "Pasta", 600, 491, true), Entry("e", "Eggs", 420, 0, true)))
             TimerBoard.finished("Eggs")
             TimerBoard.update(listOf(Entry("p", "Pasta", 600, 491, true)))
@@ -127,14 +128,14 @@ class TimerThemeMockups {
 
     @Test fun s1() {
         assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", dir != null)
-        shots("s1", 1440, 720)
+        shots("s1", 1440, 720, touch = true)
         boards("s1", 1440, 720, touch = true)
     }
 
     @Config(qualifiers = "w540dp-h960dp-port-xhdpi")
     @Test fun mirror() {
         assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", dir != null)
-        shots("mirror", 1080, 1920)
+        shots("mirror", 1080, 1920, touch = false)
         boards("mirror", 1080, 1920, touch = false)
     }
 
