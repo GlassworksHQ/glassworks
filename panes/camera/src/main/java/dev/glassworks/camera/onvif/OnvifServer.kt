@@ -1046,7 +1046,9 @@ class OnvifServer(
                     while (sub.queue.isEmpty() && !stopped && subscriptions.containsKey(sub.id)) {
                         val left = deadline - System.currentTimeMillis()
                         if (left <= 0) break
-                        sub.lock.wait(left)
+                        // stop() wakes this wait, then interrupts the pool's threads; ART throws for an interrupt that
+                        // lands before the lock is taken back, though the wait was woken first. Either way it ends.
+                        try { sub.lock.wait(left) } catch (_: InterruptedException) { break }
                     }
                     while (msgs.size < limit && sub.queue.isNotEmpty()) msgs += sub.queue.removeFirst()
                 }
