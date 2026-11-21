@@ -22,6 +22,7 @@ import dev.glassworks.s1.PanePrefs
 import dev.glassworks.s1.base.WallBaseDefinition
 import dev.glassworks.s1.base.WallBasePane
 import dev.glassworks.s1.base.WallBasePrefs
+import dev.glassworks.update.FrameUpdateModel
 import java.util.concurrent.ScheduledExecutorService
 import dev.glassworks.s1.R
 
@@ -64,7 +65,8 @@ class AqaraS1Plus(private val aqaraCloud: AqaraCloud = AqaraCloud()) : Frame {
 
     private val device by lazy { S1Device(aqaraCloud) }
 
-    override fun deviceSection(context: Context, running: (String) -> Pane?) = device.section(context, frameRelease, running)
+    override fun deviceSection(context: Context, running: (String) -> Pane?) =
+        device.section(context, frameRelease, FrameUpdateModel.installs(frameRelease, agent), running)
 
     /** The root helper and its update and bundle services (docs/frame-agent.md). */
     override val agent: S1Agent = S1Agent()

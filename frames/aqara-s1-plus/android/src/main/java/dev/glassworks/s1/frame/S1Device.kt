@@ -51,7 +51,8 @@ class S1Device(
         return values[key]
     }
 
-    fun section(context: Context, release: FrameRelease? = null, running: (String) -> Pane?): SettingsSection {
+    /** [installs]: frame updates install from here ([dev.glassworks.update.FrameUpdateModel.installs]): the Device page has an Install row. */
+    fun section(context: Context, release: FrameRelease? = null, installs: Boolean = false, running: (String) -> Pane?): SettingsSection {
         val wallBase = PanePrefs(context).wallBase
         return SettingsSection(GenericAndroid.DEVICE, TITLE, listOfNotNull(
             SettingsItem.Switch(BLOCK_TITLE, "Stops ha_master, the panel's link to Aqara's cloud", { wallBase.blockAqaraCloud }) { v, done ->
@@ -64,7 +65,7 @@ class S1Device(
             GenericAndroid.silentUpdatesItem(context) { rootService()?.let { SilentUpdates.read(context, it) } },
             SettingsItem.Info({ BootWriter.TITLE }, { loader() }),
             UpdateChannelRow.item(context),
-            release?.let { GenericAndroid.frameVersionItem(context, it) },
+            *release?.let { GenericAndroid.frameVersionItems(context, it, installs) }.orEmpty().toTypedArray(),
         ))
     }
 

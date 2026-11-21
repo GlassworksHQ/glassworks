@@ -9,6 +9,11 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 ## [Unreleased]
 
 ### Added
+- **Frame updates install from Home Assistant.** On a panel with the frame loader, Install on the Frame update card
+  (or an automation's `update.install`) downloads the S1's signed frame bundle, checks it, and restarts the panel
+  once to load it. The card shows the download's progress, and says why when it stops: a download that doesn't match,
+  a bundle the panel refuses, no network, or an app update in progress. The Device page and the Manage page have the
+  same Install button; from the Manage page it asks for the code the panel shows, as Reboot does.
 - **Assist can show as an edge glow.** On the *Appearance* page, *Assist* now picks between the orb and an edge
   glow. With the edge glow, the dashboard stays in view: the theme's two colors light up at the microphone, run
   around the edge of the screen and meet at the bottom, and a small caption shows what you said and the reply.

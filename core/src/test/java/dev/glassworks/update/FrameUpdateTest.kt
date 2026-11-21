@@ -110,4 +110,90 @@ class FrameUpdateTest {
         assertEquals("Fixes.", m.view().releaseSummary)
         assertEquals("1.0.0. 1.0.1 is out", m.detail())
     }
+
+    private fun asset(tag: String, name: String, size: Long = 100) =
+        ReleaseAsset(name, "https://github.com/GlassworksHQ/glassworks/releases/download/$tag/$name", size)
+
+    @Test fun aReleaseWithItsBundleOffersIt() {
+        val tag = "frames/aqara-s1-plus/v1.0.1"
+        val zip = "frame-bundle-aqara-s1-plus-1.0.1.zip"
+        val r = gh(tag).copy(assets = listOf(asset(tag, zip, 60_000_000), asset(tag, "$zip.sha256", 90)))
+        val b = FrameOffer.newest(listOf(r), "aqara-s1-plus")!!.bundle!!
+        assertEquals(zip, b.zip.name)
+        assertEquals("$zip.sha256", b.sha256.name)
+        // GitHub may give the tag's slashes encoded.
+        val encoded = gh(tag).copy(assets = listOf(
+            ReleaseAsset(zip, "https://github.com/GlassworksHQ/glassworks/releases/download/frames%2Faqara-s1-plus%2Fv1.0.1/$zip", 1),
+            ReleaseAsset("$zip.sha256", "https://github.com/GlassworksHQ/glassworks/releases/download/frames%2Faqara-s1-plus%2Fv1.0.1/$zip.sha256", 1),
+        ))
+        assertTrue(FrameOffer.newest(listOf(encoded), "aqara-s1-plus")!!.bundle != null)
+    }
+
+    @Test fun aBundleNeedsBothFilesFromThisReleaseAtASaneSize() {
+        val tag = "frames/aqara-s1-plus/v1.0.1"
+        val zip = "frame-bundle-aqara-s1-plus-1.0.1.zip"
+        fun offer(vararg a: ReleaseAsset) = FrameOffer.newest(listOf(gh(tag).copy(assets = a.toList())), "aqara-s1-plus")!!.bundle
+        assertNull("no .sha256", offer(asset(tag, zip)))
+        assertNull("no zip", offer(asset(tag, "$zip.sha256")))
+        assertNull("another version's", offer(asset(tag, "frame-bundle-aqara-s1-plus-1.0.0.zip"), asset(tag, "frame-bundle-aqara-s1-plus-1.0.0.zip.sha256")))
+        assertNull("another frame's", offer(asset(tag, "frame-bundle-lululemon-mirror-1.0.1.zip"), asset(tag, "frame-bundle-lululemon-mirror-1.0.1.zip.sha256")))
+        assertNull("another release's download", offer(asset("frames/aqara-s1-plus/v1.0.0", zip), asset(tag, "$zip.sha256")))
+        assertNull("empty", offer(asset(tag, zip, 0), asset(tag, "$zip.sha256")))
+        assertNull("too large", offer(asset(tag, zip, FrameBundleZip.MAX_ZIP + 1), asset(tag, "$zip.sha256")))
+        assertNull("not https", offer(ReleaseAsset(zip, "http://github.com/GlassworksHQ/glassworks/releases/download/$tag/$zip", 1), asset(tag, "$zip.sha256")))
+        assertNull("the Mirror's notice-only release", FrameOffer.newest(listOf(gh("frames/lululemon-mirror/v1.0.0")), "lululemon-mirror")!!.bundle)
+    }
+
+    @Test fun appReleaseDownloadsAreCheckedAsBefore() {
+        val u = "https://github.com/GlassworksHQ/glassworks/releases/download/v0.4.5/s1-kiosk-0.4.5.apk"
+        assertTrue(Releases.isReleaseDownload(u, "v0.4.5", "s1-kiosk-0.4.5.apk"))
+        assertFalse(Releases.isReleaseDownload(u, "v0.4.4", "s1-kiosk-0.4.5.apk"))
+        assertFalse(Releases.isReleaseDownload(u, "v0.4.5", "s1-kiosk-0.4.4.apk"))
+        assertFalse(Releases.isReleaseDownload("$u?x=1", "v0.4.5", "s1-kiosk-0.4.5.apk"))
+        assertFalse(Releases.isReleaseDownload("https://example.com/GlassworksHQ/glassworks/releases/download/v0.4.5/s1-kiosk-0.4.5.apk", "v0.4.5", "s1-kiosk-0.4.5.apk"))
+        assertFalse("the name can't hide in the tag", Releases.isReleaseDownload(u, "v0.4.5/s1-kiosk-0.4.5.apk", ""))
+    }
+
+    @Test fun onlyAFrameThatInstallsFromHereAndDeclaresBundlesInstalls() {
+        val s1 = object : dev.glassworks.frame.FrameAgent {
+            override val declared = setOf(dev.glassworks.frame.AgentCapability.FRAME_BUNDLE)
+            override fun version(): Int? = null
+            override fun offers(capability: dev.glassworks.frame.AgentCapability) = false
+        }
+        assertTrue(FrameUpdateModel.installs(FrameRelease("aqara-s1-plus", "1.0.0", install = null), s1))
+        assertFalse("a panel without the loader says how instead", FrameUpdateModel.installs(FrameRelease("aqara-s1-plus", null, install = "Kiln"), s1))
+        assertFalse("the Mirror", FrameUpdateModel.installs(release("1.0.0"), dev.glassworks.frame.NoAgent))
+        assertFalse("no frame-bundle in frame.json", FrameUpdateModel.installs(FrameRelease("x", "1.0.0", install = null), dev.glassworks.frame.NoAgent))
+    }
+
+    @Test fun aFrameThatDoesntInstallFromHereKeepsTodaysCardAndRefusesInstall() {
+        val m = FrameUpdateModel(release("1.0.0"), "lululemon Studio Mirror frame")
+        m.onChecked(FrameOffer.newest(listOf(gh("frames/lululemon-mirror/v1.0.1", body = "Fixes.")), "lululemon-mirror"))
+        val before = m.view()
+        assertEquals(install, (m.begin(0, null) as FrameUpdateModel.Begin.Refused).reason)
+        assertEquals("the card didn't change", before.releaseSummary, m.view().releaseSummary)
+        assertEquals("$install\n\nFixes.", m.view().releaseSummary)
+        assertFalse(m.view().inProgress)
+    }
+
+    @Test fun theInstallRowSaysWhatInstallDoes() {
+        val m = FrameUpdateModel(FrameRelease("aqara-s1-plus", "1.0.0", install = null), "Aqara S1 Plus frame", installs = true)
+        assertEquals("Not checked yet", m.installLine())
+        assertEquals(FrameUpdateModel.NOT_CHECKED, (m.begin(0, null) as FrameUpdateModel.Begin.Refused).reason)
+        m.onChecked(null)
+        assertEquals("Up to date", m.installLine())
+        assertEquals(FrameUpdateModel.UP_TO_DATE, (m.begin(0, null) as FrameUpdateModel.Begin.Refused).reason)
+        assertEquals("up to date is no error on the card", "", m.view().releaseSummary)
+        val tag = "frames/aqara-s1-plus/v1.0.1"
+        val zip = "frame-bundle-aqara-s1-plus-1.0.1.zip"
+        m.onChecked(FrameOffer.newest(listOf(gh(tag).copy(assets = listOf(asset(tag, zip, 1000), asset(tag, "$zip.sha256", 90)))), "aqara-s1-plus"))
+        assertEquals("Frame 1.0.1 is out. Installing it restarts the panel once", m.installLine())
+        val a = (m.begin(0, null) as FrameUpdateModel.Begin.Started).attempt
+        m.onProgress(a, 0.42)
+        assertEquals("Downloading frame 1.0.1: 42%", m.installLine())
+        assertEquals(42f, m.view().progress)
+        assertTrue(m.view().hasProgress)
+        m.onFailed(a, "no network (UnknownHostException)")
+        assertEquals("Install of frame 1.0.1 failed: no network (UnknownHostException)", m.installLine())
+    }
 }
