@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Mark } from "./Mark";
-import { GitHubGlyph, KilnGlyph } from "./Glyphs";
+import { DiscordGlyph, GitHubGlyph, KilnGlyph } from "./Glyphs";
 import { ThemeToggle } from "./shell/ThemeToggle";
 import { KILN, links } from "@/lib/links";
 import s from "./TopNav.module.css";
@@ -83,6 +83,10 @@ export function TopNav({ hasFreshPost = false }: { hasFreshPost?: boolean }) {
 
         <div className={s.actions}>
           <ThemeToggle />
+          <a href={links.discord} className={s.discordPill} aria-label="Join Glassworks on Discord" title="Join Discord">
+            <DiscordGlyph />
+            <span className={s.discordLabel}>Discord</span>
+          </a>
           <a href={links.org} className={s.iconLink} aria-label="Glassworks on GitHub" title="GitHub">
             <GitHubGlyph />
           </a>
@@ -131,6 +135,13 @@ export function TopNav({ hasFreshPost = false }: { hasFreshPost?: boolean }) {
             );
           })}
           <div className={s.drawerDivider} />
+          <a href={links.discord} className={s.drawerLink} onClick={() => setOpen(false)}>
+            <span className={s.drawerGitHub}>
+              <DiscordGlyph />
+              Discord
+            </span>
+            <span className={s.drawerMeta}>Community ↗</span>
+          </a>
           <a href={links.org} className={s.drawerLink} onClick={() => setOpen(false)}>
             <span className={s.drawerGitHub}>
               <GitHubGlyph />

@@ -6,5 +6,6 @@
   { "id": "status-alpha", "label": "STATUS", "value": "ALPHA", "status": "alpha" },
   { "id": "status-beta", "label": "STATUS", "value": "BETA", "status": "beta" },
   { "id": "status-stable", "label": "STATUS", "value": "STABLE", "status": "stable" },
-  { "id": "roadmap", "label": "ROADMAP", "value": "GLASSWORKS V1" }
+  { "id": "roadmap", "label": "ROADMAP", "value": "GLASSWORKS V1" },
+  { "id": "discord", "label": "COMMUNITY", "value": "DISCORD" }
 ]
