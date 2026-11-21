@@ -378,6 +378,14 @@ class ScreenPolicy(
      */
     fun voiceRunning(on: Boolean) = voice(VOICE_RUN, on)
 
+    /**
+     * The voice run said something without changing its state (what was heard, the answer's text): renews a run in
+     * progress against [VOICE_MAX_MS], and starts nothing outside one.
+     */
+    fun voiceRenew() {
+        if (VOICE_RUN in stays || VOICE_SHOWN in stays) voiceAt = SystemClock.elapsedRealtime()
+    }
+
     /** The Assist look (the orb or the edge glow) shows a voice run, its closing moment included: as [voiceRunning]. */
     fun voiceShowing(on: Boolean) = voice(VOICE_SHOWN, on)
 

@@ -345,6 +345,29 @@ class ScreenPolicyTest {
         screen.stop()
     }
 
+    /** What was heard and the answer's text renew a run in progress, and hold nothing on their own. */
+    @Test fun aVoiceRunsTextsRenewItAndStartNothing() {
+        val settings = Settings().apply { idleOffSec = 30 }
+        val screen = policy(settings = settings)
+        screen.start(context)
+        val keepOn = mutableListOf<Boolean>()
+        screen.onKeepScreenOn = { keepOn += it }
+        keepOn.clear()
+
+        screen.voiceRenew() // no run: nothing to renew
+        advance(31_000)
+        assertEquals("a text outside a run holds nothing", listOf(false), keepOn.filter { !it })
+
+        screen.wake("voice")
+        keepOn.clear()
+        screen.voiceRunning(true)
+        advance(ScreenPolicy.VOICE_MAX_MS - 60_000)
+        screen.voiceRenew() // the answer's text
+        advance(ScreenPolicy.VOICE_MAX_MS - 1_000)
+        assertEquals("on: the text renewed the run", emptyList<Boolean>(), keepOn.filter { !it })
+        screen.stop()
+    }
+
     @Test fun stayOnLeavesAScreenThatIsOffAlone() {
         val screen = policy()
         screen.start(context)

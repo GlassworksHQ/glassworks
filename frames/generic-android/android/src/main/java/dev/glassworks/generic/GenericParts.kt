@@ -222,7 +222,7 @@ class GenericParts : AppParts {
     private fun onVoiceEvent(runtime: GlassworksRuntime, e: VoiceEvent) {
         voiceUi = voiceUi.on(e)
         try { runtime.onVoiceUi?.invoke() } catch (t: Throwable) { Log.w("Glassworks.Voice", "voice overlay failed", t) }
-        if (e is VoiceEvent.Heard || e is VoiceEvent.Reply) return
+        if (e is VoiceEvent.Heard || e is VoiceEvent.Reply) { runtime.screen.voiceRenew(); return } // texts only, no state change
         runtime.voiceState = voiceUi.state
         // Talking to the panel counts as activity: wake the screen and keep it on until the run ends.
         val running = e !is VoiceEvent.Idle && e !is VoiceEvent.Error
