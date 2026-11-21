@@ -25,6 +25,8 @@ import dev.glassworks.timers.RingView
 import dev.glassworks.timers.TimerDoneView
 import dev.glassworks.ui.Inter
 import dev.glassworks.assist.OrbBakes
+import dev.glassworks.theme.Themes
+import dev.glassworks.timers.TimerLook
 
 /**
  * Voice timers on screen (0.4.3, direction B; mock-ups in aqara-panel-backups/mockups/0.4.3-timers):
@@ -35,6 +37,8 @@ import dev.glassworks.assist.OrbBakes
  * remembered), a tap shows "Hide timers", and hidden timers tuck into the edge as a half orb that
  * brings them back when tapped. The last 10 seconds bring them back by themselves. A timer set while
  * the voice overlay is up flies out of the voice orb as the overlay fades ([voiceShowing]).
+ *
+ * In the overlays' theme (#691): [theme], read when attached and again when it changes.
  *
  * Under the voice overlay (elevation 12 dp < 16 dp). Main thread only.
  */
@@ -55,6 +59,11 @@ class TimerOverlay(
     private val chip = HideChip(context)
     private val peek = Peek(context)
     private val done = TimerDoneView(context, orbs)
+
+    /** The overlays' theme now: the app's setting by default; a test gives its own. */
+    var theme: () -> Themes.Pick = { KioskPrefs(context).overlayPick }
+    private var pick: Themes.Pick? = null
+    private var look = TimerLook.DEFAULT
 
     private val rings = LinkedHashMap<String, RingView>()
     /** Timers set while the voice overlay is up: they appear when it goes. */
@@ -85,6 +94,27 @@ class TimerOverlay(
     }
 
     fun layoutParams(): LayoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        applyTheme()
+        runCatching { KioskPrefs(context).registerListener(themeChanged) }
+    }
+
+    private val themeChanged = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == "overlay_theme" || key == "overlay_custom") post { applyTheme() }
+    }
+
+    /** Takes the theme now: the rings, the chip, the peek, the guide and the done screen. */
+    fun applyTheme() {
+        val p = runCatching { theme() }.getOrDefault(Themes.DEFAULT)
+        if (pick?.id == p.id && pick?.palette == p.palette) return
+        pick = p
+        look = TimerLook(p.palette)
+        for (r in rings.values) r.look = look
+        chip.invalidate(); peek.invalidate(); guide.invalidate()
+        done.theme(p)
+    }
 
     /**
      * The voice overlay appeared or went. Timers set while it was up fly out of its orb once it goes.
@@ -121,7 +151,7 @@ class TimerOverlay(
         val ids = timers.map { it.id }.toSet()
         rings.keys.filter { it !in ids }.forEach { id -> dock.removeView(rings.remove(id)) }
         for (t in timers) {
-            val r = rings.getOrPut(t.id) { RingView(context).also { dock.addView(it) } }
+            val r = rings.getOrPut(t.id) { RingView(context).also { it.look = look; dock.addView(it) } }
             r.timer = t
             r.alpha = if (t.id in waiting) 0f else r.alpha
         }
@@ -280,6 +310,7 @@ class TimerOverlay(
     }
 
     override fun onDetachedFromWindow() {
+        runCatching { KioskPrefs(context).unregisterListener(themeChanged) }
         removeCallbacks(tick)
         removeCallbacks(chipEnd)
         super.onDetachedFromWindow()
@@ -405,11 +436,11 @@ class TimerOverlay(
         var groupW = 0f; var groupH = 0f
         var target: Anchor = anchor
             set(v) { if (v != field) { field = v; invalidate() } }
-        private val dim = Paint().apply { color = Color.argb(107, 10, 11, 15) }
+        private val dim = Paint()
         private val dash = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE; strokeWidth = 1.5f * dp; pathEffect = DashPathEffect(floatArrayOf(4 * dp, 3 * dp), 0f)
         }
-        private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(15, 251, 191, 36) }
+        private val fill = Paint(Paint.ANTI_ALIAS_FLAG)
         private val box = RectF()
 
         override fun hasOverlappingRendering() = false
@@ -421,6 +452,8 @@ class TimerOverlay(
         }
 
         override fun onDraw(c: Canvas) {
+            dim.color = look.veil
+            fill.color = TimerLook.withAlpha(look.a, 0.06f)
             c.drawRect(0f, 0f, width.toFloat(), height.toFloat(), dim)
             val m = DockMath.MARGIN_DP * dp
             for (a in Anchor.entries) {
@@ -428,10 +461,10 @@ class TimerOverlay(
                 if (a == target) {
                     box.set(s.x - 6 * dp, s.y - 6 * dp, s.x + groupW + 6 * dp, s.y + groupH + 6 * dp)
                     c.drawRoundRect(box, 22 * dp, 22 * dp, fill)
-                    dash.color = Color.argb(191, 251, 191, 36)
+                    dash.color = TimerLook.withAlpha(look.accent, 0.75f)
                     c.drawRoundRect(box, 22 * dp, 22 * dp, dash)
                 } else {
-                    dash.color = Color.argb(115, 244, 244, 245)
+                    dash.color = TimerLook.withAlpha(look.ink, 0.45f)
                     c.drawCircle(s.x + groupW / 2, s.y + groupH / 2, 7 * dp, dash)
                 }
             }
@@ -444,11 +477,11 @@ class TimerOverlay(
         var below = false
         private val chipH = 38 * dp; private val tagH = 18 * dp; private val gap = 8 * dp
         private val text = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
-            textSize = 14 * dp; typeface = Inter.typeface(context, Inter.MEDIUM, 14f); color = Color.parseColor("#f4f4f5")
+            textSize = 14 * dp; typeface = Inter.typeface(context, Inter.MEDIUM, 14f)
         }
         private val tag = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             textSize = 10 * dp; typeface = Inter.typeface(context, Inter.MEDIUM, 10f); letterSpacing = 0.14f
-            color = Color.parseColor("#a1a1aa"); textAlign = Paint.Align.CENTER
+            textAlign = Paint.Align.CENTER
         }
         private val bg = Paint(Paint.ANTI_ALIAS_FLAG)
         private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -473,16 +506,17 @@ class TimerOverlay(
 
         override fun onDraw(c: Canvas) {
             val cw = 12 * dp + 16 * dp + 8 * dp + text.measureText(label) + 16 * dp
+            text.color = look.glassInk; tag.color = look.mu // the label on the chip's glass, the tag on the ground
             val chipTop = if (below) 0f else tagH + gap
             val tagTop = if (below) chipH + gap else 0f
             val cx = when (edge) { Edge.LEFT -> 0f; Edge.RIGHT -> width - cw; else -> (width - cw) / 2 }
             // chip: opaque glass (no blur on API 29), top highlight, 1 dp rim
             r.set(cx, chipTop, cx + cw, chipTop + chipH)
-            bg.shader = null; bg.color = Color.rgb(15, 16, 21)
+            bg.shader = null; bg.color = look.glass
             c.drawRoundRect(r, chipH / 2, chipH / 2, bg)
-            bg.color = Color.argb(15, 255, 255, 255)
+            bg.color = look.sheen
             c.drawRoundRect(r.left, r.top, r.right, r.top + chipH * 0.6f, chipH / 2, chipH / 2, bg)
-            line.strokeWidth = 1 * dp; line.color = Color.argb(31, 255, 255, 255)
+            line.strokeWidth = 1 * dp; line.color = look.edge
             r.inset(0.5f * dp, 0.5f * dp); c.drawRoundRect(r, chipH / 2, chipH / 2, line)
             // arrow to the edge: "→|" turned to face it
             val ix = cx + 12 * dp; val iy = chipTop + (chipH - 16 * dp) / 2
@@ -494,7 +528,7 @@ class TimerOverlay(
             arrow.moveTo(-7 * u, 0f); arrow.lineTo(5 * u, 0f)
             arrow.moveTo(1 * u, -5 * u); arrow.lineTo(6 * u, 0f); arrow.lineTo(1 * u, 5 * u)
             arrow.moveTo(8 * u, -8 * u); arrow.lineTo(8 * u, 8 * u)
-            line.strokeWidth = 2 * dp; line.color = Color.rgb(251, 191, 36)
+            line.strokeWidth = 2 * dp; line.color = look.glassAccent
             c.drawPath(arrow, line)
             c.restore()
             val fm = text.fontMetrics
@@ -503,7 +537,7 @@ class TimerOverlay(
             val tw = tag.measureText(tagText) + 16 * dp
             val tx = when (edge) { Edge.LEFT -> 0f; Edge.RIGHT -> width - tw; else -> (width - tw) / 2 }
             r.set(tx, tagTop, tx + tw, tagTop + tagH)
-            bg.color = Color.argb(209, 10, 11, 15)
+            bg.color = look.tag
             c.drawRoundRect(r, tagH / 2, tagH / 2, bg)
             val tfm = tag.fontMetrics
             c.drawText(tagText, r.centerX(), tagTop + tagH / 2 - (tfm.ascent + tfm.descent) / 2, tag)
@@ -511,8 +545,8 @@ class TimerOverlay(
     }
 
     /**
-     * Hidden timers: half an orb peeking from the edge, its rim an amber arc for the soonest timer's
-     * time left. Tapping it brings the timers back.
+     * Hidden timers: half an orb peeking from the edge, its rim an arc in the theme's light for the soonest
+     * timer's time left. Tapping it brings the timers back.
      */
     private inner class Peek(context: Context) : View(context) {
         var edge = Edge.RIGHT
@@ -534,13 +568,14 @@ class TimerOverlay(
             val t = TimerBoard.timers.firstOrNull { it.active } ?: TimerBoard.timers.firstOrNull() ?: return
             val cx = width / 2f; val cy = height / 2f
             val r = PEEK_R_DP * dp
-            paint.shader = null; paint.color = Color.argb(140, 0, 0, 0)
+            val l = look
+            paint.shader = null; paint.color = if (l.light) Color.argb(46, 16, 20, 32) else Color.argb(140, 0, 0, 0)
             c.drawCircle(cx, cy, r + 3 * dp, paint) // soft edge over the page
-            paint.color = Color.rgb(15, 16, 21); c.drawCircle(cx, cy, r, paint)
-            stroke.strokeWidth = 1 * dp; stroke.color = Color.argb(36, 255, 255, 255); c.drawCircle(cx, cy, r, stroke)
+            paint.color = l.glass; c.drawCircle(cx, cy, r, paint)
+            stroke.strokeWidth = 1 * dp; stroke.color = l.edge; c.drawCircle(cx, cy, r, stroke)
             val ar = r - 1.5f * dp
             box.set(cx - ar, cy - ar, cx + ar, cy + ar)
-            stroke.strokeWidth = 2.5f * dp; stroke.color = Color.argb(26, 255, 255, 255)
+            stroke.strokeWidth = 2.5f * dp; stroke.color = l.track
             c.drawCircle(cx, cy, ar, stroke)
             // The visible half, from one end along to the other, scaled by the time left.
             val (start, dir) = when (edge) {
@@ -550,14 +585,14 @@ class TimerOverlay(
                 Edge.BOTTOM -> 180f to 1f
             }
             val left = t.remaining(now)
-            stroke.color = if (t.active) Color.argb(230, 251, 191, 36) else Color.argb(97, 244, 244, 245)
+            stroke.color = if (t.active) TimerLook.withAlpha(l.glassAccent, 0.9f) else TimerLook.withAlpha(l.glassInk, 0.38f)
             if (left > 0f) c.drawArc(box, start, dir * 180f * left, false, stroke)
-            // the amber core, inside the visible half
+            // the core in the theme's light, inside the visible half
             val inward = 11 * dp
             val (dx, dy) = when (edge) { Edge.RIGHT -> -inward to 0f; Edge.LEFT -> inward to 0f; Edge.TOP -> 0f to inward; Edge.BOTTOM -> 0f to -inward }
             if (t.active) {
                 paint.shader = RadialGradient(cx + dx, cy + dy, 9 * dp,
-                    intArrayOf(Color.argb(242, 251, 191, 36), Color.argb(77, 251, 191, 36), Color.argb(0, 251, 191, 36)),
+                    intArrayOf(TimerLook.withAlpha(l.a, 0.95f), TimerLook.withAlpha(l.a, 0.3f), TimerLook.withAlpha(l.a, 0f)),
                     floatArrayOf(0f, 0.55f, 1f), Shader.TileMode.CLAMP)
                 c.drawCircle(cx + dx, cy + dy, 9 * dp, paint)
                 paint.shader = null
