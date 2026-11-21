@@ -337,7 +337,9 @@ the free plan's daily deploy limit, even cancelled). Kiln, glassworks.dev and th
 [`web-deploy.yml`](../.github/workflows/web-deploy.yml), on a push to `main` or every 6 hours when what each one
 builds from changed since its last successful deploy, or by hand from the Actions tab. A deploy that failed at the
 limit goes out again on the next push or schedule; a running deploy is never cancelled, because a newer one waits
-for it. `tools/ci/web_deploy.py` decides, and each run's summary lists what it deployed, from which commit, and why.
+for it. `tools/ci/web_deploy.py` decides: once Vercel takes an upload, the job records the commit it deployed as a
+GitHub deployment (task `web-deploy`) in the project's environment, and the next run diffs from that commit. Each
+run's summary lists what it deployed, from which commit, and why.
 
 Versions are `MAJOR.MINOR.PATCH`. For the app lines minor and patch are below 100, and the versionCode is
 `major*10000 + minor*100 + patch`, so `1.2.3` is 10203. Frame versions take each part up to 999. SemVer pre-release

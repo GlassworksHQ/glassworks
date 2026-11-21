@@ -7,9 +7,10 @@
 #     without a push. Nothing deploys when nothing changed since the last successful deploy;
 #   - by hand from the Actions tab (workflow_dispatch), for one project or both.
 #
-# tools/ci/web_deploy.py decides. A project's base is the commit of its newest successful deploy, from GitHub's
-# deployments for its environment, not the push's `before`: a change whose deploy was cancelled or failed still
-# deploys on the next push or schedule. Without a base it deploys (a schedule, when GitHub's API fails, doesn't).
+# tools/ci/web_deploy.py decides. A project's base is the commit its last deploy went up from, which each job
+# records as a GitHub deployment (task web-deploy) once Vercel took the upload, not the push's `before`: a change
+# whose deploy was cancelled or failed still deploys on the next push or schedule. Without a base it deploys (a
+# schedule, when GitHub's API fails, doesn't).
 #
 # glassworks.dev is built here and uploaded prebuilt (vercel build, then vercel deploy --prebuilt). Its build on
 # Vercel's own machines fails at the Pagefind step, because the newer Vercel CLI there moves Next's output away
@@ -40,7 +41,12 @@ on:
 
 permissions:
   contents: read
-  deployments: read   # each project's last successful deploy (tools/ci/web_deploy.py)
+  deployments: read   # each project's last recorded deploy (tools/ci/web_deploy.py)
+
+# Bash with pipefail: a picker that fails fails its step, though tee copies its output.
+defaults:
+  run:
+    shell: bash
 
 env:
   VERCEL_CLI: vercel@65.14.0
@@ -77,6 +83,9 @@ jobs:
     # One deploy per project at a time, and a running one is never cancelled: Vercel counts it against the free
     # plan's daily cap even then. A newer run waits (GitHub keeps only the newest waiting one), then checks out the
     # newest main and deploys only if something it builds from changed since the deploy before it.
+    permissions:
+      contents: read
+      deployments: write   # the record of what it deployed
     concurrency:
       group: web-deploy-site
       cancel-in-progress: false
@@ -153,12 +162,23 @@ jobs:
           url=$(npx -y "$VERCEL_CLI" deploy --prebuilt --prod --archive=tgz --token "$VERCEL_TOKEN")
           echo "Deployed: $url, from main at $COMMIT" | tee -a "$GITHUB_STEP_SUMMARY"
 
+      # Only after Vercel took it: the next run diffs from this commit.
+      - name: Record the deployed commit
+        if: steps.check.outputs.deploy == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          COMMIT: ${{ steps.check.outputs.commit }}
+        run: python3 tools/ci/web_deploy.py record site --commit "$COMMIT"
+
   kiln:
     needs: changes
     if: needs.changes.outputs.kiln == 'true'
     # One deploy per project at a time, and a running one is never cancelled: Vercel counts it against the free
     # plan's daily cap even then. A newer run waits (GitHub keeps only the newest waiting one), then checks out the
     # newest main and deploys only if something it builds from changed since the deploy before it.
+    permissions:
+      contents: read
+      deployments: write   # the record of what it deployed
     concurrency:
       group: web-deploy-kiln
       cancel-in-progress: false
@@ -208,12 +228,23 @@ jobs:
           url=$(npx -y "$VERCEL_CLI" deploy --prod --archive=tgz --token "$VERCEL_TOKEN")
           echo "Deployed: $url, from main at $COMMIT" | tee -a "$GITHUB_STEP_SUMMARY"
 
+      # Only after Vercel took it: the next run diffs from this commit.
+      - name: Record the deployed commit
+        if: steps.check.outputs.deploy == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          COMMIT: ${{ steps.check.outputs.commit }}
+        run: python3 tools/ci/web_deploy.py record kiln --commit "$COMMIT"
+
   # s1.edm.sh, the first installer's address, only redirects to Kiln's S1 page: kiln/s1-redirect/vercel.json, which
   # forwards every path (and so old #/wifi links, which Kiln's S1 page maps). The project's root directory is kiln/,
   # so the folder goes up as kiln/ in an upload of its own, with nothing to build.
   installer:
     needs: changes
     if: needs.changes.outputs.installer == 'true'
+    permissions:
+      contents: read
+      deployments: write   # the record of what it deployed
     concurrency:   # as the site's and Kiln's
       group: web-deploy-installer
       cancel-in-progress: false
@@ -262,3 +293,11 @@ jobs:
           cd "$up"
           url=$(npx -y "$VERCEL_CLI" deploy --prod --archive=tgz --token "$VERCEL_TOKEN")
           echo "Deployed: $url, from main at $COMMIT" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # Only after Vercel took it: the next run diffs from this commit.
+      - name: Record the deployed commit
+        if: steps.check.outputs.deploy == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          COMMIT: ${{ steps.check.outputs.commit }}
+        run: python3 tools/ci/web_deploy.py record installer --commit "$COMMIT"

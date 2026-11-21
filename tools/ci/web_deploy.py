@@ -1,25 +1,27 @@
 #!/usr/bin/env python3
 """Which of web-deploy.yml's projects to deploy: each one whose inputs changed since its last successful deploy.
 
-Read-only: one GitHub GraphQL query (the repo's deployments, with $GITHUB_TOKEN) and git diff. It writes nothing
-but its output and the run summary.
+`pick` and `check` are read-only: one GitHub GraphQL query (the repo's deployments, with $GITHUB_TOKEN) and git
+diff, writing nothing but their output and the run summary. `record` creates one GitHub deployment.
 
 Usage:
   tools/ci/web_deploy.py pick --event <event> [--project both|site|kiln|installer] [--summary <file>]
       site=, kiln=, installer= true|false, for $GITHUB_OUTPUT (the changes job)
   tools/ci/web_deploy.py check <project> --event <event> --started-for <sha> [--summary <file>]
       deploy=true|false, commit=<sha> and base=<sha>, in a deploy job once it holds the project's queue
+  tools/ci/web_deploy.py record <project> --commit <sha>
+      after Vercel took the deploy: a GitHub deployment of that commit (task TASK) with a success status
 
-The base. Each deploy job runs in a GitHub environment (ENVIRONMENTS), so GitHub records a deployment for it with
-the commit the run was started for, and a success status when the job succeeds. A project's base is the newest
-such commit. Not the push's `before`: a deploy that was cancelled by a newer run or failed (Vercel's daily cap)
-left its change undeployed, and a later push that doesn't touch the project would never deploy it. The job deploys
-main as it is when the job starts, the commit it was started for or a newer one (`check` makes sure), so the diff
-from the base may list a change the live deploy already has: at worst one deploy more, never one fewer.
+The base. A project's base is the commit of its newest `record`: the commit the deploy job checked out and
+Vercel took, written only once the upload succeeded. Not the push's `before`: a deploy that was cancelled by a newer
+run or failed (Vercel's daily cap) left its change undeployed, and a later push that doesn't touch the project
+would never deploy it. Not the deployment GitHub makes for each job in an environment either: that one has the
+commit the run was started for, older than main at checkout, and succeeds when `check` skips the deploy too.
+A cancelled job whose upload still reached Vercel records nothing, so the project deploys once more.
 
 Events:
   - workflow_dispatch: the project(s) asked for, with no diff (a deploy by hand always deploys);
-  - push: what changed since the base. With no successful deploy in the last DEPTH, or when GitHub's API or
+  - push: what changed since the base. With no record in the last DEPTH deployments, or when GitHub's API or
     git fails, it deploys, failing closed as changes.py does;
   - schedule: the same, so a deploy that failed is tried again without a push, and nothing deploys when nothing
     changed. When the API or git fails it deploys nothing: the free plan caps deploys a day, and the next push
@@ -36,8 +38,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import changes  # noqa: E402
 
-# The GitHub environment each deploy job runs in (its `environment.name` in web-deploy.yml).
+# The GitHub environment each deploy job runs in (its `environment` in web-deploy.yml), where `record` writes.
 ENVIRONMENTS = {'site': 'glassworks.dev', 'kiln': 'kiln.glassworks.dev', 'installer': 's1.edm.sh'}
+URLS = {'site': 'https://www.glassworks.dev', 'kiln': 'https://kiln.glassworks.dev', 'installer': 'https://s1.edm.sh'}
 NAMES = {'site': 'glassworks.dev', 'kiln': 'Kiln', 'installer': 's1.edm.sh'}
 
 # Kiln's app: its npm workspaces (kiln/, the frames' recipes, packages/), what every workspace builds with, and
@@ -56,8 +59,12 @@ KILN = (
 # s1.edm.sh's redirect.
 INSTALLER = ('kiln/s1-redirect',)
 
-# How many of a project's newest deployments to look through for a successful one.
-DEPTH = 30
+# How many of a project's newest deployments to look through for a record (each deploy makes two: the job's and
+# the record).
+DEPTH = 50
+
+# The task of a `record` deployment; the ones GitHub makes for a job have the task `deploy`.
+TASK = 'web-deploy'
 
 DISPATCH = {'both': ('site', 'kiln'), 'site': ('site',), 'kiln': ('kiln',), 'installer': ('installer',)}
 
@@ -80,8 +87,10 @@ def wants(project, changed, deleted=()):
 
 
 def last_success(nodes):
-    """The commit of the newest deployment that succeeded (a later one marks it INACTIVE, after its SUCCESS)."""
+    """The commit of the newest record that succeeded (a later one marks it INACTIVE, after its SUCCESS)."""
     for node in nodes:
+        if node.get('task') != TASK:
+            continue
         if any(s.get('state') == 'SUCCESS' for s in (node.get('statuses') or {}).get('nodes') or ()):
             return node.get('commitOid') or None
     return None
@@ -92,27 +101,49 @@ def query(projects):
     variables = ''.join(f', $e{i}: [String!]' for i in range(len(keys)))
     fields = ''.join(
         f' p{i}: deployments(environments: $e{i}, first: {DEPTH}, orderBy: {{field: CREATED_AT, direction: DESC}})'
-        ' { nodes { commitOid statuses(first: 10) { nodes { state } } } }' for i in range(len(keys)))
+        ' { nodes { task commitOid statuses(first: 10) { nodes { state } } } }' for i in range(len(keys)))
     return f'query($owner: String!, $name: String!{variables}) {{ repository(owner: $owner, name: $name) {{{fields} }} }}'
 
 
+def call(url, payload, token, opener):
+    req = urllib.request.Request(url, data=json.dumps(payload).encode(), method='POST',
+                                 headers={'Authorization': f'bearer {token}', 'Content-Type': 'application/json',
+                                          'Accept': 'application/vnd.github+json', 'User-Agent': 'glassworks-web-deploy'})
+    with opener(req, timeout=30) as res:
+        return json.load(res)
+
+
 def bases(projects, repo=None, token=None, url=None, opener=urllib.request.urlopen):
-    """{project: commit or None}: each project's last successful deploy. Raises when GitHub can't say."""
+    """{project: commit or None}: each project's last recorded deploy. Raises when GitHub can't say."""
     repo = repo or os.environ['GITHUB_REPOSITORY']
     token = token or os.environ['GITHUB_TOKEN']
     url = url or os.environ.get('GITHUB_GRAPHQL_URL', 'https://api.github.com/graphql')
     owner, name = repo.split('/', 1)
     keys = list(projects)
     variables = {'owner': owner, 'name': name, **{f'e{i}': [ENVIRONMENTS[k]] for i, k in enumerate(keys)}}
-    req = urllib.request.Request(url, data=json.dumps({'query': query(keys), 'variables': variables}).encode(),
-                                 headers={'Authorization': f'bearer {token}', 'Content-Type': 'application/json',
-                                          'User-Agent': 'glassworks-web-deploy'})
-    with opener(req, timeout=30) as res:
-        body = json.load(res)
+    body = call(url, {'query': query(keys), 'variables': variables}, token, opener)
     if body.get('errors') or not (body.get('data') or {}).get('repository'):
         raise RuntimeError(f"GitHub's API: {body.get('errors') or 'no repository'}")
     data = body['data']['repository']
     return {k: last_success(((data.get(f'p{i}') or {}).get('nodes')) or ()) for i, k in enumerate(keys)}
+
+
+def record(project, commit, repo=None, token=None, api=None, run_url=None, opener=urllib.request.urlopen):
+    """A deployment of `commit` in the project's environment, with a success status: the next run's base."""
+    repo = repo or os.environ['GITHUB_REPOSITORY']
+    token = token or os.environ['GITHUB_TOKEN']
+    api = api or os.environ.get('GITHUB_API_URL', 'https://api.github.com')
+    run_url = run_url or '{}/{}/actions/runs/{}'.format(
+        os.environ.get('GITHUB_SERVER_URL', 'https://github.com'), repo, os.environ.get('GITHUB_RUN_ID', ''))
+    dep = call(f'{api}/repos/{repo}/deployments', {
+        'ref': commit, 'task': TASK, 'environment': ENVIRONMENTS[project], 'auto_merge': False,
+        'required_contexts': [], 'production_environment': True,
+        'description': f'{NAMES[project]} deployed from this commit by web-deploy.yml'}, token, opener)
+    if not isinstance(dep.get('id'), int):
+        raise RuntimeError(f"GitHub didn't create the deployment: {dep.get('message') or dep}")
+    call(f'{api}/repos/{repo}/deployments/{dep["id"]}/statuses', {
+        'state': 'success', 'environment_url': URLS[project], 'log_url': run_url}, token, opener)
+    return dep['id']
 
 
 def decide(project, base, event, head='HEAD', unread=None):
@@ -122,7 +153,7 @@ def decide(project, base, event, head='HEAD', unread=None):
             return False, f'{unread}, so a scheduled run leaves it (a push deploys it)'
         return True, unread
     if not base:
-        return True, f'no successful deploy in its last {DEPTH}'
+        return True, f'no recorded deploy in its last {DEPTH} deployments'
     try:
         git('cat-file', '-e', f'{base}^{{commit}}')
         rows = git('diff', '--no-renames', '--name-status', '-z', '--end-of-options', base, head).split('\0')
@@ -166,6 +197,9 @@ def main(argv):
     check = sub.add_parser('check')
     check.add_argument('project', choices=list(ENVIRONMENTS))
     check.add_argument('--started-for', required=True, help='the commit the run was started for (github.sha)')
+    rec = sub.add_parser('record')
+    rec.add_argument('project', choices=list(ENVIRONMENTS))
+    rec.add_argument('--commit', required=True, help='the commit the job checked out and deployed')
     for p in (pick, check):
         p.add_argument('--event', required=True)
         p.add_argument('--head', default='HEAD')
@@ -184,13 +218,23 @@ def main(argv):
                     f.write(f'| {NAMES[p]} | {"yes" if deploy else "no"} | `{short(base)}` | {why} |\n')
         return 0
 
+    if a.cmd == 'record':
+        try:
+            record(a.project, a.commit)
+        except Exception as e:  # Vercel has it, but the next run doesn't know: it deploys again, which is safe
+            print(f"::error::{NAMES[a.project]} is deployed from {short(a.commit)}, but GitHub didn't take the record "
+                  f'({e}): the next run deploys it again', file=sys.stderr)
+            return 1
+        print(f'Recorded {NAMES[a.project]} as deployed from {a.commit}')
+        return 0
+
     # check: the job deploys main as checked out now, which must have the commit the run was started for.
     commit = git('rev-parse', a.head).strip()
     try:
         git('merge-base', '--is-ancestor', a.started_for, commit)
     except subprocess.CalledProcessError:
         print(f'::error::main at {short(commit)} does not have {short(a.started_for)}, the commit this run was '
-              f'started for: {NAMES[a.project]} was not deployed')
+              f'started for: {NAMES[a.project]} was not deployed', file=sys.stderr)
         return 1
     deploy, base, why = plan([a.project], a.event, a.project, head=commit)[a.project]
     print(f'deploy={"true" if deploy else "false"}')
