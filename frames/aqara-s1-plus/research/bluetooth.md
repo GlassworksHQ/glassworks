@@ -317,6 +317,19 @@ untouched, while `logcat -v time -s BtGatt.ScanManager:V BtGatt.GattService:V Gl
 | Advertisements a minute (HA) | 69 samples: median **2291**, lowest **2143**, highest 2572. None at 0, and none below half the median between minutes 25 and 35 |
 | *Bluetooth proxy status* | `Listening` throughout |
 
+How each number was taken:
+- **The log**: the `logcat` command above, run for the whole window and filtered through the plan's MAC `sed`, then
+  `grep -ci opportunistic` (0) and `grep "Bluetooth proxy"` (the restart pairs and their times).
+- **Android's scans**: `dumpsys bluetooth_manager`, its *GATT Scanner Map* section, after the window: the app's
+  last scans, their lengths and result counts, each marked `Filter`.
+- **The rate**: Home Assistant's recorder history of `sensor.<panel>_bluetooth_advertisements`, which the panel
+  updates once a minute with the past minute's count. The history API was read for 03:30:37–04:41 UTC in ascending
+  order: 69 values, one a minute. The median, lowest and highest are over all 69. Minutes count from the window's
+  start, so "minutes 25–35" are the values stamped 25 to 35 min after 03:30:37. "Below half the median" compares each
+  of those with 2291 / 2.
+- **The status**: the same history for `sensor.<panel>_bluetooth_proxy_status`, one value (`Listening`) for the
+  whole window.
+
 What it shows: the 25-min restart keeps Android 10 from downgrading the scan, and the rate holds steady across
 the restarts.
 
