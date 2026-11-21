@@ -1,5 +1,5 @@
 // This browser's adb key. The public half is baked into the patched boot image
-// (overlay.d/sbin/glassworks_adb_keys, see frames/aqara-s1-plus/tools/root/glassworks_firstboot.sh), so the panel authorizes
+// (a frame's boot overlay, e.g. overlay.d/sbin/glassworks_adb_keys read by its firstboot script), so the device authorizes
 // this browser on its first boot without a prompt on the screen. Kept in IndexedDB so a later visit
 // (undo, re-run) is still authorized.
 import { adbGeneratePublicKey, type AdbCredentialStore, type AdbPrivateKey } from '@yume-chan/adb';

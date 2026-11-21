@@ -1,23 +1,17 @@
 // Glassworks over adb, the steps that are the same on every frame: install the APK, grant what adb's
 // shell can grant, start the app with the Home Assistant URL, read its version, and take back its
 // device admin before it is removed. Each frame's recipe adds its own steps around these
-// (frames/<id>/installer). The same "try" (never fails) vs "run" (must succeed) split as
-// frames/aqara-s1-plus/tools/install.sh.
+// (frames/<id>/installer). The same "try" (never fails) vs "run" (must succeed) split as the
+// reference CLI's install.sh.
 import type { PanelShell } from '@glassworks/adb';
 import { ImprovSerialClient } from 'improv-serial';
 
-/** The app's id. The boot helpers and every installed panel use it: never change it. */
-export const PKG = 'sh.edm.s1kiosk';
-export const ACT = `${PKG}/.MainActivity`;
-export const ADMIN = `${PKG}/.AdminReceiver`;
 /**
  * Which app the steps below act on: its package, the activity adb starts it with (and whose extras
- * it trusts from adb), and its device admin if it has one. Glassworks by default, so the S1's commands
- * stay as pinned (frames/aqara-s1-plus/installer/test/adb-commands-pin.test.ts). Another frame names
- * its own app, e.g. the Mirror's legacy build of Glassworks for generic Android.
+ * it trusts from adb), and its device admin if it has one. Each frame names its own app, in its
+ * installer (frames/<id>/installer).
  */
 export interface AppId { package: string; activity: string; admin?: string }
-export const S1_KIOSK: AppId = { package: PKG, activity: ACT, admin: ADMIN };
 
 /** The app's ImprovAdbServer socket (ImprovSerialServer.SOCKET). */
 export const IMPROV_SOCKET = 'localabstract:s1kiosk_improv';
@@ -77,7 +71,7 @@ export class Steps {
  * Glassworks' version on the device, from `dumpsys package` (read-only); undefined when it isn't
  * installed. `signal` cancels the read.
  */
-export async function kioskVersion(p: PanelShell, signal?: AbortSignal, app: AppId = S1_KIOSK): Promise<{ name?: string; code: number } | undefined> {
+export async function kioskVersion(p: PanelShell, signal: AbortSignal | undefined, app: AppId): Promise<{ name?: string; code: number } | undefined> {
   const dump = (await p.run(`dumpsys package ${app.package}`, signal)).out;
   const code = /versionCode=(\d+)/.exec(dump)?.[1];
   const name = /versionName=(\S+)/.exec(dump)?.[1];
@@ -95,7 +89,7 @@ export async function deviceInfo(p: PanelShell): Promise<{ model: string; sdk: s
  * secure settings and the language (development permissions), the overlay, and the device admin
  * it locks the screen with. Each is a `try`: a device that refuses one still gets the rest.
  */
-export async function grantPermissions(r: Steps, app: AppId = S1_KIOSK): Promise<void> {
+export async function grantPermissions(r: Steps, app: AppId): Promise<void> {
   const pkg = app.package;
   r.step('Permissions');
   await r.try(`pm grant ${pkg} android.permission.RECORD_AUDIO`);
@@ -107,7 +101,7 @@ export async function grantPermissions(r: Steps, app: AppId = S1_KIOSK): Promise
 }
 
 /** Starts the app, handing it the Home Assistant URL and the language when given. */
-export async function startApp(r: Steps, opts: { haUrl?: string; locale?: string }, app: AppId = S1_KIOSK): Promise<void> {
+export async function startApp(r: Steps, opts: { haUrl?: string; locale?: string }, app: AppId): Promise<void> {
   const extras = [opts.haUrl ? `--es url ${q(opts.haUrl)}` : '', opts.locale ? `--es set_locale ${q(opts.locale)}` : ''].filter(Boolean);
   await r.run(`am start -n ${app.activity}${extras.length ? ` ${extras.join(' ')}` : ''}`);
 }
@@ -154,7 +148,7 @@ export async function applySettings(r: Steps, s: { locale?: string; timezone?: s
  * one. So the app is asked to drop it (`remove_admin`), and this waits until it has. False if it
  * still holds it after 15 s.
  */
-export async function dropAdmin(p: PanelShell, sleep: (ms: number) => Promise<void>, app: AppId = S1_KIOSK): Promise<boolean> {
+export async function dropAdmin(p: PanelShell, sleep: (ms: number) => Promise<void>, app: AppId): Promise<boolean> {
   await p.run(`am start -n ${app.activity} --ez remove_admin true`);
   // the admin's component (pkg/cls): a bare package would also match another package that starts with it
   for (let i = 0; i < 30; i++) {

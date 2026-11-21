@@ -29,8 +29,10 @@ by SHA-256 (`kiln/assets.lock.json`). This repo never ships them.
 | `src/patch.ts` | The patch: undo an earlier Magisk patch, add Magisk, back up, add the overlay |
 | `src/apk.ts` | A small zip reader that takes the binaries out of the Magisk APK |
 | `src/compress.ts`, `src/wasm/` | gzip and xz in WebAssembly, from the same Rust crates the CLI's `magiskboot` uses, so the bytes match |
-| `src/overlay.ts` | The S1's own files for the ramdisk, the same as the CLI's |
 | `src/vbmeta.ts`, `src/bootlogo.ts` | vbmeta flags and the boot logo |
+
+The files a frame adds to the ramdisk are its own, passed in as `overlay`: the S1's are in
+[its installer](../../../frames/aqara-s1-plus/installer/src/overlay.ts), with the whole patch's golden test.
 
 ## Tests
 

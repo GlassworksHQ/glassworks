@@ -3,6 +3,9 @@ import type { PanelShell } from '@glassworks/adb';
 import { ManifestError, Steps, apiKeyFingerprint, apiKeySocketUp, apkHome, apkInfo, apkPermissions, applySettings, axmlTree, dropAdmin, grantPermissions, handOverApiKey, handOverDone, handOverSignIn, handoverCarries, kioskVersion, q, readApiKey, readSignIn, sendWifi, startApp, wifiSsid, zipEntry } from '../src';
 import { FakeKeySocket, HOME_ACTIVITY, app, fakeApk, filter, zip, type FakeEl } from './fakes';
 
+/** An app with the S1 app's ids, as the S1's provisioning passes it (its commands are pinned there too). */
+const S1 = { package: 'sh.edm.s1kiosk', activity: 'sh.edm.s1kiosk/.MainActivity', admin: 'sh.edm.s1kiosk/.AdminReceiver' };
+
 class Shell implements PanelShell {
   cmds: string[] = [];
   constructor(private readonly answer: (cmd: string) => { out: string; code: number } = () => ({ out: '', code: 0 })) {}
@@ -13,8 +16,8 @@ class Shell implements PanelShell {
 describe('Glassworks over adb', () => {
   it('starts the app with the URL and language quoted, or with neither', async () => {
     const s = new Shell();
-    await startApp(new Steps(s), { haUrl: `http://ha.local:8123/it's`, locale: 'en-GB' });
-    await startApp(new Steps(s), {});
+    await startApp(new Steps(s), { haUrl: `http://ha.local:8123/it's`, locale: 'en-GB' }, S1);
+    await startApp(new Steps(s), {}, S1);
     expect(s.cmds).toEqual([
       `am start -n sh.edm.s1kiosk/.MainActivity --es url 'http://ha.local:8123/it'\\''s' --es set_locale 'en-GB'`,
       'am start -n sh.edm.s1kiosk/.MainActivity',
@@ -24,7 +27,7 @@ describe('Glassworks over adb', () => {
 
   it('grants what it can and carries on past a refusal', async () => {
     const s = new Shell((c) => (c.includes('CAMERA') ? { out: 'Security exception', code: 255 } : { out: '', code: 0 }));
-    await grantPermissions(new Steps(s));
+    await grantPermissions(new Steps(s), S1);
     expect(s.cmds.at(-1)).toBe('dpm set-active-admin sh.edm.s1kiosk/.AdminReceiver');
     expect(s.cmds).toHaveLength(6);
   });
@@ -39,11 +42,11 @@ describe('Glassworks over adb', () => {
   it('asks the app to drop its device admin and waits until Android no longer lists it', async () => {
     let polls = 0;
     const s = new Shell((c) => (c === 'dumpsys device_policy' ? { out: ++polls < 3 ? 'sh.edm.s1kiosk/.AdminReceiver' : '', code: 0 } : { out: '', code: 0 }));
-    expect(await dropAdmin(s, async () => {})).toBe(true);
+    expect(await dropAdmin(s, async () => {}, S1)).toBe(true);
     expect(s.cmds[0]).toBe('am start -n sh.edm.s1kiosk/.MainActivity --ez remove_admin true');
     expect(polls).toBe(3);
     const stuck = new Shell((c) => ({ out: c === 'dumpsys device_policy' ? 'sh.edm.s1kiosk/.AdminReceiver' : '', code: 0 }));
-    expect(await dropAdmin(stuck, async () => {})).toBe(false);
+    expect(await dropAdmin(stuck, async () => {}, S1)).toBe(false);
   });
 
   it('doesn\'t wait on another app\'s admin whose package starts with this one\'s', async () => {
@@ -54,8 +57,8 @@ describe('Glassworks over adb', () => {
   });
 
   it('reads the installed version, or none', async () => {
-    expect(await kioskVersion(new Shell(() => ({ out: '    versionCode=600 minSdk=23\n    versionName=0.5.0-legacy\n', code: 0 })))).toEqual({ name: '0.5.0-legacy', code: 600 });
-    expect(await kioskVersion(new Shell())).toBeUndefined(); // Android 6 prints nothing for a missing package
+    expect(await kioskVersion(new Shell(() => ({ out: '    versionCode=600 minSdk=23\n    versionName=0.5.0-legacy\n', code: 0 })), undefined, S1)).toEqual({ name: '0.5.0-legacy', code: 600 });
+    expect(await kioskVersion(new Shell(), undefined, S1)).toBeUndefined(); // Android 6 prints nothing for a missing package
   });
 });
 

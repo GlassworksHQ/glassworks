@@ -622,7 +622,7 @@
  "refusals": [
   {
    "name": "not an A133",
-   "errorContains": "not an Aqara S1 Plus"
+   "errorContains": "isn't an A133"
   },
   {
    "name": "secure boot on",

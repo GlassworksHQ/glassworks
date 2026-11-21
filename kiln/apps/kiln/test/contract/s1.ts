@@ -5,8 +5,7 @@
 // backups (IndexedDB) and the same panel.
 import { vi } from 'vitest';
 import type { PanelShell } from '@glassworks/adb';
-import { ACT } from '@glassworks/app-adb';
-import { s1Plus, type AssetName, type Provisioned, type SetUpOptions } from '@glassworks/aqara-s1-plus-installer';
+import { ACT, s1Plus, type AssetName, type Provisioned, type SetUpOptions } from '@glassworks/aqara-s1-plus-installer';
 import type { Fastboot } from '@glassworks/fastboot';
 import type { FelDevice } from '@glassworks/fel';
 import { Assets, toHex, type BackupFile, type BackupMeta, type Recipe } from '@glassworks/kiln-core';

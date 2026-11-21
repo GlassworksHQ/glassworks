@@ -1,11 +1,12 @@
 // The Aqara Panel Hub S1 Plus for Kiln: frames/aqara-s1-plus/tools/install/fel-install.sh's device-specific steps. FEL on
 // the A133 boots our U-Boot from RAM, fastboot shows the S1 Plus layout, the patched boot carries the
 // root helper, radio and update services, and provisioning is frames/aqara-s1-plus/tools/install.sh (provision.ts).
-import { isMagiskPatched, magiskBusybox, patchBoot, replaceBootlogo, s1Overlay, vbmetaFlags, withVbmetaFlags } from '@glassworks/bootpatch';
-import { bootUboot, checkChip } from '@glassworks/fel';
+import { isMagiskPatched, magiskBusybox, patchBoot, replaceBootlogo, vbmetaFlags, withVbmetaFlags } from '@glassworks/bootpatch';
+import { WrongChip, bootUboot, checkChip } from '@glassworks/fel';
 import type { FlashStep, Recipe } from '@glassworks/kiln-core';
 import { provision, type Provisioned, type ProvisionOptions } from './provision';
 import { isOurSplash } from './splash';
+import { s1Overlay } from './overlay';
 
 /** The blobs in kiln/assets.lock.json (staged by kiln/scripts/stage-assets.mjs). */
 export type AssetName =
@@ -18,14 +19,19 @@ export type SetUpOptions = Omit<ProvisionOptions, 'kioskApk' | 'keyboardApk'> & 
 const BOOT_SIZE = 0x2000000;      // 32 MiB: S1 Plus layout check (fel-install.sh step 3)
 const SUPER_SIZE = 0x60000000;    // 1.5 GiB
 
+/** The FEL package's refusal of another chip, in the S1's words. */
+const asS1 = <T>(p: Promise<T>): Promise<T> => p.catch((e: unknown) => {
+  throw e instanceof WrongChip ? new Error(`this is not an Aqara S1 Plus (SoC 0x${e.socId.toString(16)}, expected an A133, 0x1855)`) : e;
+});
+
 export const s1Plus: Recipe<AssetName, SetUpOptions, Provisioned> = {
   fel: {
     async checkChip(fel) {
-      const chip = await checkChip(fel);
+      const chip = await asS1(checkChip(fel));
       return `SoC 0x${chip.socId.toString(16)} (A133), secure boot off`;
     },
     loader: ['uboot-spl', 'uboot'],
-    boot: (fel, [spl, uboot], onProgress) => bootUboot(fel, spl!, uboot!, onProgress),
+    boot: (fel, [spl, uboot], onProgress) => asS1(bootUboot(fel, spl!, uboot!, onProgress)),
   },
 
   async checkLayout(fb) {
