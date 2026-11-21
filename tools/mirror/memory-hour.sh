@@ -43,11 +43,16 @@ pss() {
 }
 echo "utc main_pid main_pss main_swap main_egl main_gfx main_unknown main_dalvik tab_pid tab_pss tab_swap tab_egl tab_gfx tab_unknown tab_dalvik memfree_kb" > "$OUT/pss.txt"
 minute() {
-  local ps main tab
+  local ps main tab main_pss tab_pss memfree
   ps=$(sh 'ps')
   main=$(printf '%s\n' "$ps" | awk -v p="$P" '$NF == p {print $2; exit}'); main=${main:--}
   tab=$(printf '%s\n' "$ps" | awk -v p="$P:tab" 'index($NF, p) == 1 {print $2; exit}'); tab=${tab:--}
-  echo "$(date -u +%H:%M:%SZ) $main $(pss "$main") $tab $(pss "$tab") $(sh 'cat /proc/meminfo' | awk '/^MemFree:/{print $2}')" >> "$OUT/pss.txt"
+  # each read on its own line: inside one echo, a failed read would only end its own subshell and write zeros
+  main_pss=$(pss "$main") || exit 1
+  tab_pss=$(pss "$tab") || exit 1
+  memfree=$(sh 'cat /proc/meminfo' | awk '/^MemFree:/{print $2}') || exit 1
+  [ -n "$memfree" ] || { echo "memory-hour: no MemFree in /proc/meminfo" >&2; exit 1; }
+  echo "$(date -u +%H:%M:%SZ) $main $main_pss $tab $tab_pss $memfree" >> "$OUT/pss.txt"
 }
 left=$((MIN * 60)); n=0; m=0
 sample $n; minute
