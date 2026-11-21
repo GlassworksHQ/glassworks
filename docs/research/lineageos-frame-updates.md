@@ -118,8 +118,9 @@ Nothing to run yet. The first device test, in order, on a spare LineageOS tablet
    `adb remount`,
    add a test `addon.d` script that backs up and restores `/product/media/bootanimation.zip` plus a
    replaced zip, and install the next monthly update. Undo: the test changes blocks in the
-   verity-protected partitions, so putting files back isn't enough. Sideload the same LineageOS build in
-   LineageOS Recovery (it rewrites `system` and `product`), then `adb enable-verity` if you disabled it.
+   verity-protected partitions, so putting files back isn't enough. Delete the test `addon.d` script first
+   (otherwise the same-version sideload runs it and restores the test animation), then sideload the same
+   LineageOS build in LineageOS Recovery (it rewrites `system` and `product`), then `adb enable-verity` if you disabled it.
 
 ## Open questions
 
