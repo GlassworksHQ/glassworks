@@ -92,8 +92,11 @@ image the user downloads from LineageOS, and the `addon.d` script and animation 
 EROFS), copying the file back doesn't work either: root can't write a read-only filesystem. What works
 there is a bind mount of our zip from `/data` over `/product/media/bootanimation.zip` early in every boot,
 which is how the S1 tried its animation (`frames/aqara-s1-plus/research/boot-animation.md`). That needs
-root and a boot-time hook that runs before `bootanimation` starts; a mount made later only shows from
-the next boot. Also untested on LineageOS. A Magisk module that overlays the file would also work, but on non-A/B
+root and a hook that makes the mount before `bootanimation` starts, on every boot: a bind mount doesn't
+survive a reboot, and one made after the animation starts doesn't change what plays. The S1 test also
+logged a SELinux `mounton` denial and only worked because SELinux was permissive there, so under
+LineageOS's enforcing policy the hook needs a policy rule or a context that allows it. Untested on
+LineageOS. A Magisk module that overlays the file would also work, but on non-A/B
 devices it goes away with Magisk at the first update, so it's the weakest choice.
 
 ## How to reproduce
@@ -110,10 +113,11 @@ Nothing to run yet. The first device test, in order, on a spare LineageOS tablet
 4. Writes `/system`: only on a device where `adb remount` writes the partitions in place. On devices
    with dynamic partitions, `adb remount` sets up OverlayFS instead, `update_engine` may refuse an OTA
    while it is active, and `adb enable-verity` to clear it also drops the test files, so the test can't
-   run there. On a device where it writes in place: with "Rooted debugging", `adb root && adb remount`,
+   run there. On a device where it writes in place: with "Rooted debugging", `adb root`, then `adb disable-verity`
+   and a reboot if verity is on (the remount fails until then), then `adb remount`,
    add a test `addon.d` script that backs up and restores `/product/media/bootanimation.zip` plus a
-   replaced zip, and install the next monthly update. Undo: delete the script and restore the original
-   zip.
+   replaced zip, and install the next monthly update. Undo: delete the script, restore the original
+   zip, and `adb enable-verity` if you disabled it.
 
 ## Open questions
 
