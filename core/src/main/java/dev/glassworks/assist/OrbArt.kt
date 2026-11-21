@@ -69,6 +69,8 @@ class OrbArt(private val pxPerDp: Float, private val palette: Themes.Palette? = 
         img.radial(c, c, stops.map { it.copy(pos = it.pos * pxPerDp) })
         img.clipCircle(c, c, r * pxPerDp)
         img.blur(7f * pxPerDp)
+        // The blur reaches past the sphere's inside: cut there too, so no renderer depends on the outline (see [INSIDE_DP]).
+        img.clipCircle(c, c, INSIDE_DP / 2f * pxPerDp)
         return img
     }
 
@@ -90,7 +92,8 @@ class OrbArt(private val pxPerDp: Float, private val palette: Themes.Palette? = 
         )
         img.blur(sigma)
         val side = px(SWIRL_DP)
-        return img.cropCentre(side, side)
+        // Round, not square: it turns during thinking, and only the sphere's inside may show (see [INSIDE_DP]).
+        return img.cropCentre(side, side).apply { clipCircle(side / 2f, side / 2f, INSIDE_DP / 2f * pxPerDp) }
     }
 
     /**
@@ -174,6 +177,14 @@ class OrbArt(private val pxPerDp: Float, private val palette: Themes.Palette? = 
     companion object {
         const val GLOW_DP = 300f
         const val SPHERE_DP = 112f
+
+        /**
+         * The sphere's inside, (SPHERE_DP - 2) dp across: the round view the orbs put their cores, swirl and shine in. Its
+         * outline clips them where the screen is drawn in hardware, but not in software (a software layer, Robolectric's
+         * mockups, #703's thinking mockups showed the turning swirl as a square). So the layers are cut to it when baked,
+         * and stay inside on every renderer at no cost: a circle stays a circle when it turns.
+         */
+        const val INSIDE_DP = SPHERE_DP - 2
         const val CORE_DISC_DP = 82f // inset 14 inside the 110 dp padding box
         const val CORE_DP = CORE_DISC_DP + 2 * 3 * 7f // + 3 sigma of blur each side
         const val SWIRL_DISC_DP = 158f // inset -24
