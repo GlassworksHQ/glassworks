@@ -87,10 +87,16 @@ object SettingsChange {
                     val ok = when (item.kind) {
                         SettingsItem.TextKind.NUMBER -> v.all(Char::isDigit)
                         SettingsItem.TextKind.DECIMAL -> v.isEmpty() || DECIMAL.matches(v)
+                        SettingsItem.TextKind.COLOR -> COLOR.matches(v)
                         else -> true
                     }
-                    if (!ok) return done(if (item.kind == SettingsItem.TextKind.NUMBER) "Use digits only." else "Use a number, like 1.5.")
-                    item.save(v, done)
+                    if (!ok) return done(when (item.kind) {
+                        SettingsItem.TextKind.NUMBER -> "Use digits only."
+                        SettingsItem.TextKind.COLOR -> "Use a color like #38bdf8."
+                        else -> "Use a number, like 1.5."
+                    })
+                    // A color is saved one way, `#rrggbb` in lower case, however it was typed.
+                    item.save(if (item.kind == SettingsItem.TextKind.COLOR) "#" + v.removePrefix("#").lowercase() else v, done)
                 }
                 is SettingsItem.Switch -> when (v) {
                     "on" -> item.save(true, done)
@@ -216,4 +222,5 @@ object SettingsChange {
     private const val MAX_LENGTH = 2000
     private const val EPS = 1e-4f
     private val DECIMAL = Regex("""^\d+(\.\d+)?$""")
+    private val COLOR = Regex("""^#?[0-9a-fA-F]{6}$""")
 }

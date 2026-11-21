@@ -19,6 +19,7 @@ import dev.glassworks.pane.SettingsSection
 import dev.glassworks.pane.StatesShown
 import dev.glassworks.pane.shown
 import dev.glassworks.brand.Tokens
+import dev.glassworks.theme.Themes
 import dev.glassworks.web.PageShell
 import dev.glassworks.web.PageShell.Look
 import dev.glassworks.web.PageShell.esc
@@ -224,10 +225,16 @@ ${foot(viewer)}"""
 
     private fun items(v: Viewer, path: String, section: String, items: List<SettingsItem>, prefix: String = ""): String = items.joinToString("") { item ->
         val key = prefix + SettingsChange.titleOf(item)
-        fun edit(title: String, value: String) =
-            """<a class="row" id="${anchor(key)}" href="${esc(path)}?edit=${esc(enc(key))}"><div><b>${esc(title)}</b><span>${esc(value)}</span></div><i class="chev" aria-hidden="true">›</i></a>"""
+        fun edit(title: String, value: String, dot: Int? = null) =
+            """<a class="row" id="${anchor(key)}" href="${esc(path)}?edit=${esc(enc(key))}"><div><b>${esc(title)}</b><span>""" +
+                dot?.let { """<i class="dot" style="background:${css(it)}" aria-hidden="true"></i>""" }.orEmpty() +
+                """${esc(value)}</span></div><i class="chev" aria-hidden="true">›</i></a>"""
         when (item) {
-            is SettingsItem.Text -> if (SettingsChange.canChange(item)) edit(item.title, safe { SettingsChange.shown(item) })
+            is SettingsItem.Text -> if (SettingsChange.canChange(item)) {
+                val shown = safe { SettingsChange.shown(item) }
+                // A color shows itself next to its value.
+                edit(item.title, shown, if (item.kind == SettingsItem.TextKind.COLOR) Themes.colour(shown) else null)
+            }
                 else row(item.title, safe { SettingsChange.shown(item) }, dim = true)
             is SettingsItem.Switch -> """<div class="row" id="${anchor(key)}"><div><b>${esc(item.title)}</b>${if (item.detail.isNotEmpty()) "<span>${see(item.detail, item.see)}</span>" else ""}</div>${toggle(v, section, key, item, item.title)}</div>"""
             is SettingsItem.Slider -> {
@@ -393,7 +400,13 @@ ${foot(viewer)}"""
             is Dialog.Confirm -> sheet(d.ask.title, d.ask.detail,
                 """<input type="hidden" name="value" value="${esc(d.value)}"><input type="hidden" name="answer" value="${esc(d.answer)}">""", d.ask.action, null)
             is Dialog.Edit -> when (item) {
-                is SettingsItem.Text -> {
+                // A color: the browser's color picker, offering the same swatches as the panel's sheet.
+                is SettingsItem.Text -> if (item.kind == SettingsItem.TextKind.COLOR) {
+                    val now = Themes.colour(d.typed ?: safe { item.value() })?.let(Themes::hex) ?: Themes.hex(Themes.GLASSWORKS.dark.a)
+                    val list = runCatching { item.suggestions() }.getOrDefault(emptyList()).mapNotNull { Themes.colour(it)?.let(Themes::hex) }
+                    sheet(item.title, "", """<div class="cpk"><input type="color" name="value" value="$now" list="cpk-s" autofocus aria-label="${esc(item.title)}">""" +
+                        """<datalist id="cpk-s">${list.joinToString("") { """<option value="$it"></option>""" }}</datalist></div>""", "Save", d.problem)
+                } else {
                     val mode = when (item.kind) { SettingsItem.TextKind.NUMBER -> "numeric"; SettingsItem.TextKind.DECIMAL -> "decimal"; SettingsItem.TextKind.ADDRESS -> "url"; else -> "text" }
                     sheet(item.title, item.hint, """<input class="fld" name="value" value="${esc(d.typed ?: safe { item.value() })}" placeholder="${esc(item.hint)}" inputmode="$mode" autocomplete="off" spellcheck="false" autofocus aria-label="${esc(item.title)}">""",
                         "Save", d.problem)
@@ -731,7 +744,7 @@ background:radial-gradient(circle at 30% 26%,rgba(255,255,255,.95),transparent 3
 .scrim .dlg{max-height:calc(100vh - 32px);overflow:auto}
 .pcs{display:flex;flex-wrap:wrap;gap:10px;margin:4px 0}.pc{padding:10px 17px;border-radius:999px;border:1px solid var(--edge);background:var(--glass);color:var(--muted);font:inherit;font-size:15.5px;font-weight:500;cursor:pointer}
 .pc:hover{background:var(--hover)}.pc.on{background:linear-gradient(90deg,var(--sky),var(--violet));color:#0a0b0f;border-color:transparent}
-.dflt{position:absolute;width:1px;height:1px;padding:0;border:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.flds{display:flex;flex-direction:column;gap:12px}.fld{width:100%;padding:14px 18px;border-radius:16px;border:1px solid var(--edge);background:var(--field);color:var(--fg);font:inherit;font-size:17px}.fld:focus{outline:none;border-color:rgba(56,189,248,.55)}select.fld{cursor:pointer}select.fld option,select.fld optgroup{background:var(--bg);color:var(--fg)}
+.dflt{position:absolute;width:1px;height:1px;padding:0;border:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.flds{display:flex;flex-direction:column;gap:12px}.fld{width:100%;padding:14px 18px;border-radius:16px;border:1px solid var(--edge);background:var(--field);color:var(--fg);font:inherit;font-size:17px}.fld:focus{outline:none;border-color:rgba(56,189,248,.55)}.cpk input{display:block;width:100%;height:64px;padding:6px;border-radius:16px;border:1px solid var(--edge);background:var(--field);cursor:pointer}.cpk input:focus-visible{outline:2px solid var(--sky);outline-offset:3px}.row .dot{display:inline-block;width:13px;height:13px;border-radius:50%;margin-right:7px;vertical-align:-1px;border:1px solid var(--edge)}select.fld{cursor:pointer}select.fld option,select.fld optgroup{background:var(--bg);color:var(--fg)}
 .sw{display:flex;justify-content:space-between;align-items:center;gap:12px;color:var(--fg);font-size:16.5px;cursor:pointer}
 .sw input{appearance:none;-webkit-appearance:none;margin:0;width:${Tokens.Toggle.W}px;height:${Tokens.Toggle.H}px;border-radius:999px;background:var(--field);border:1px solid var(--edge);position:relative;cursor:pointer;flex:none;order:2}
 .sw input::after{content:"";position:absolute;top:${Tokens.Toggle.KNOB_INSET - 1}px;left:${Tokens.Toggle.KNOB_INSET - 1}px;width:${Tokens.Toggle.H - 2 * Tokens.Toggle.KNOB_INSET}px;height:${Tokens.Toggle.H - 2 * Tokens.Toggle.KNOB_INSET}px;border-radius:50%;background:var(--muted)}

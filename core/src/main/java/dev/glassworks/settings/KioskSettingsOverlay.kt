@@ -45,6 +45,7 @@ import dev.glassworks.ui.Inter
 import dev.glassworks.ui.QrCode
 import dev.glassworks.ui.StackView
 import dev.glassworks.ui.TileView
+import dev.glassworks.theme.Themes
 import dev.glassworks.ui.Wrap
 
 /**
@@ -240,7 +241,9 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         }
         // Only the page on screen: the others' views wait until they are shown again.
         natives.values.forEach { if (it.view.parent != null) it.refresh() }
-        live.forEach { it() }
+        // A row can draw the page again (the theme picker, when its colors changed): the rest of the old page's rows stop.
+        val page = pages
+        for (l in live.toList()) { l(); if (pages != page) break }
         bindRail()
         bindMaster()
         if (current == SettingsNav.OVERVIEW) bindOverview()
@@ -265,6 +268,9 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
 
     /** The page's read-only rows ([SettingsItem.States]) that read their values again on [refresh]. */
     private val live = ArrayList<() -> Unit>()
+
+    /** How many times a page was drawn: [refresh] stops reading the old page's rows once one draws it again. */
+    private var pages = 0
 
     /** Previews (the mock-ups): a section's page, an open editor or picker, a native view, the restart banner. */
     fun previewSection(id: String) { current = id; build() }
@@ -333,7 +339,7 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         bindMaster()
         banner.bind()
         rows.removeAllViews()
-        live.clear()
+        live.clear(); pages++
         natives.values.forEach { n -> (n.view.parent as? android.view.ViewGroup)?.removeView(n.view); n.reset() }
         // A key no section has now (a pane from before a device restart, another base) is let go of.
         val keys = m.sections.flatMap { nativeKeys(it.items) }.toSet()
@@ -500,6 +506,7 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
 
     private fun item(i: SettingsItem, prefix: String = ""): View = when (i) {
         is SettingsItem.Text -> follow(valueRow(i.title, shownOf(i), chevron = i.enabled(), dim = !i.enabled()) { if (i.enabled()) sheet.text(i) { build() } }) { shownOf(i) }
+            .also { r -> if (i.kind == SettingsItem.TextKind.COLOR) colourDot(r) { shownOf(i) } }
         is SettingsItem.Switch -> toggleRow(i)
         is SettingsItem.Slider -> sliderRow(i)
         is SettingsItem.Duration -> follow(valueRow(i.title, i.shown(i.value()), chevron = true, dim = false) { sheet.duration(i) { build() } }) { i.shown(i.value()) }
@@ -518,6 +525,22 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
     }
 
     /** The row's value follows a change made elsewhere: Home Assistant (the wake word select) or the Manage page (#242). */
+    /** A color row's value with the color itself before it, following it as [follow] follows the text. */
+    private fun colourDot(r: LinearLayout, now: () -> String) {
+        val value = r.findViewWithTag<TextView>(VALUE) ?: return
+        var shown: Int? = null
+        fun bind() {
+            val c = Themes.colour(now())
+            if (c == shown && value.compoundDrawablesRelative[0] != null) return
+            shown = c
+            val dot = c?.let { GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(it); setStroke(px(1f), BD); setBounds(0, 0, px(14f), px(14f)) } }
+            value.setCompoundDrawablesRelative(dot, null, null, null)
+            value.compoundDrawablePadding = px(8f)
+        }
+        bind()
+        live += { bind() }
+    }
+
     private fun follow(r: LinearLayout, now: () -> String): LinearLayout = r.also {
         (r.findViewWithTag<TextView>(VALUE))?.let { value ->
             live += { val n = now(); if (value.text != n) { value.text = n; value.visibility = if (n.isEmpty()) View.GONE else View.VISIBLE } }
@@ -554,11 +577,18 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
 
     /**
      * A choice with swatches as the theme picker (#691): a tap on an orb picks it at once. A pick made elsewhere (the
-     * Manage page) while the page is open draws the page again.
+     * Manage page) while the page is open draws the page again, and so does a change to the colors the orbs were drawn
+     * in (a Custom color changed there keeps the same pick).
      */
     private fun themes(i: SettingsItem.Choice): View {
-        val shown = runCatching { i.value() }.getOrNull()
-        live += { if (runCatching { i.value() }.getOrNull() != shown) build() }
+        fun look(): List<Any?> = runCatching {
+            listOf<Any?>(i.value()) + i.options().flatMap { (id, _) -> i.swatch?.invoke(id)?.let { listOf(it.a, it.b, it.ground) }.orEmpty() }
+        }.getOrDefault(emptyList())
+        val shown = look()
+        live += {
+            // Drawn again where the person had scrolled it, as refresh does for a page whose shape changed.
+            if (look() != shown) { val y = scroll.scrollY; build(); if (y > 0) scroll.post { scroll.scrollTo(0, y) } }
+        }
         return ThemePicker(context, i) { id ->
             save({ done -> i.save(id, done) }) { why -> if (why != null) showProblem(why) else { problem.visibility = View.GONE; build() } }
         }.apply { setPadding(0, px(6f), 0, px(8f)) }
@@ -991,7 +1021,8 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
             setBackgroundColor(Color.argb(170, 10, 11, 15))
             isClickable = true
             setOnClickListener { close() }
-            addView(card, LayoutParams(px(560f), -2, Gravity.CENTER_HORIZONTAL or Gravity.TOP).apply { topMargin = px(40f) })
+            // 560 dp, or the screen less a margin on a narrow portrait screen.
+            addView(card, LayoutParams(minOf(px(560f), context.resources.displayMetrics.widthPixels - px(32f)), -2, Gravity.CENTER_HORIZONTAL or Gravity.TOP).apply { topMargin = px(40f) })
             visibility = View.GONE
         }
 
@@ -1016,6 +1047,9 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
             view.visibility = View.VISIBLE
             view.bringToFront()
         }
+
+        /** The color sheet's content while it is open ([text] for a [SettingsItem.TextKind.COLOR]). */
+        private var colour: ColourField? = null
 
         private fun busy(on: Boolean) { saveButton.isEnabled = !on; saveButton.alpha = if (on) 0.5f else 1f }
 
@@ -1042,11 +1076,22 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
                 SettingsItem.TextKind.ADDRESS -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
                 SettingsItem.TextKind.NUMBER -> InputType.TYPE_CLASS_NUMBER
                 SettingsItem.TextKind.DECIMAL -> InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+                SettingsItem.TextKind.COLOR -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
             }
             // Checked as the Manage page checks it (#242): one path for a typed value.
             onSave = { commit(i.restartsApp, after) { done -> SettingsChange.change(i, field.text?.toString().orEmpty(), done) } }
-            open(i.title, i.hint, field, "Save")
+            colour?.release(); colour = null
             field.setText(i.value())
+            if (i.kind == SettingsItem.TextKind.COLOR) {
+                // Swatches to tap, and the field for an exact color; no keyboard until the field is tapped.
+                open(i.title, "", null, "Save")
+                val c = ColourField(context, runCatching { i.suggestions() }.getOrDefault(emptyList()), field).also { colour = it }
+                body.addView(c, LayoutParams(-1, -2)); body.visibility = View.VISIBLE
+                field.hint = i.hint
+                field.setSelection(field.text.length)
+                return
+            }
+            open(i.title, i.hint, field, "Save")
             field.hint = i.hint
             field.setSelection(field.text.length)
             // The keyboard once the field has focus and is laid out: asked at once, it didn't come up on
@@ -1193,6 +1238,7 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
             if (view.visibility != View.VISIBLE) return
             onSave = null
             clearPassword()
+            colour?.release(); colour = null
             hideKeyboard()
             view.visibility = View.GONE
         }

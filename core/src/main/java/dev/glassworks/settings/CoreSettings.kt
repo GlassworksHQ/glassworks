@@ -91,6 +91,8 @@ class CoreSettings(
         // The panel's own screens over the dashboard (#691): voice, timers, notifications and setup.
         SettingsPlace.APPEARANCE to SettingsSection(APPEARANCE, APPEARANCE_TITLE, listOf(
             SettingsItem.Group(THEME_TITLE, listOf(SettingsItem.Note { THEME_NOTE }, theme())),
+            SettingsItem.Group(CUSTOM_DARK_TITLE, listOf(SettingsItem.Note { CUSTOM_NOTE }) + customColours(dark = true)),
+            SettingsItem.Group(CUSTOM_LIGHT_TITLE, customColours(dark = false)),
             assistLook(),
         )),
         SettingsPlace.LOG to SettingsSection("log", "Log", listOf(
@@ -229,12 +231,15 @@ class CoreSettings(
         THEME_TITLE,
         // A saved custom theme (#691's Custom themes) is one more card, and shows as picked when it is.
         value = { prefs.overlayPick.id },
-        options = { Themes.options(prefs.customTheme) },
+        // Custom is always a card: Glassworks' colors until some are picked below.
+        options = { Themes.options(custom()) },
         swatch = { id ->
-            val p = Themes.pick(id, prefs.customTheme)
+            val p = Themes.pick(id, custom())
             SettingsItem.Swatch(p.theme.name, if (p.theme === Themes.GLASSWORKS) "Default" else "", p.dark, p.palette.a, p.palette.b, p.palette.ground)
         },
     ) { v, done ->
+        // Custom picked before any color: its starting colors become the saved ones, so the pick holds.
+        if (v.startsWith(Themes.CUSTOM + "/") && prefs.customTheme == null) prefs.customTheme = Themes.CUSTOM_START
         prefs.overlayTheme = v
         live.theme()
         done(null)
@@ -251,6 +256,33 @@ class CoreSettings(
         done(null)
     }
 
+    /** The custom theme as saved, or the one it starts as. */
+    private fun custom() = prefs.customTheme ?: Themes.CUSTOM_START
+
+    /**
+     * The custom theme's three colors in one variant (#691's Custom themes): its two lights and its ground. Changing
+     * one saves the theme and picks Custom in that variant, so the change shows at once. Text on the overlays comes
+     * from the ground's contrast ([Themes.Palette.ink]), so any ground stays readable.
+     */
+    private fun customColours(dark: Boolean): List<SettingsItem> {
+        fun palette() = custom().let { if (dark) it.dark else it.light }
+        fun row(title: String, ground: Boolean, get: (Themes.Palette) -> Int, with: (Themes.Palette, Int) -> Themes.Palette) =
+            SettingsItem.Text(title, "#rrggbb", SettingsItem.TextKind.COLOR, value = { Themes.hex(get(palette())) },
+                suggestions = { Themes.suggestions(ground) }) { v, done ->
+                val c = Themes.colour(v) ?: return@Text done("Use a color like #38bdf8.")
+                val t = custom()
+                prefs.customTheme = if (dark) Themes.custom(with(t.dark, c), t.light) else Themes.custom(t.dark, with(t.light, c))
+                prefs.overlayTheme = Themes.Pick(Themes.CUSTOM_START, dark).id
+                live.theme()
+                done(null)
+            }
+        return listOf(
+            row(CUSTOM_LIGHT_A, ground = false, { it.a }) { p, c -> Themes.Palette(c, p.b, p.ground) },
+            row(CUSTOM_LIGHT_B, ground = false, { it.b }) { p, c -> Themes.Palette(p.a, c, p.ground) },
+            row(CUSTOM_GROUND, ground = true, { it.ground }) { p, c -> Themes.Palette(p.a, p.b, c) },
+        )
+    }
+
     private fun switch(title: String, detail: String, value: () -> Boolean, save: (Boolean) -> Unit) =
         SettingsItem.Switch(title, detail, value) { v, done -> save(v); done(null) }
 
@@ -265,6 +297,12 @@ class CoreSettings(
         const val APPEARANCE_TITLE = "Appearance"
         const val THEME_TITLE = "Theme"
         const val THEME_NOTE = "For voice, timers, notifications and setup. Your dashboard keeps its own."
+        const val CUSTOM_DARK_TITLE = "Custom theme, dark"
+        const val CUSTOM_LIGHT_TITLE = "Custom theme, light"
+        const val CUSTOM_NOTE = "Pick your own colors. Changing one switches to Custom. Text turns light or dark to stay readable on your background."
+        const val CUSTOM_LIGHT_A = "Accent"
+        const val CUSTOM_LIGHT_B = "Second accent"
+        const val CUSTOM_GROUND = "Background"
         const val ASSIST_TITLE = "Assist"
         const val ASSIST_ORB_LINE = "A glass orb with what you said and the reply, over a dimmed dashboard."
         const val ASSIST_GLOW_LINE = "Light runs along the screen's edge. The dashboard stays in view."
