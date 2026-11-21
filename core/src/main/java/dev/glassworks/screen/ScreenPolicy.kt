@@ -34,6 +34,8 @@ import kotlin.math.log10
  *    presence sensor keeps the screen on with it until setup is done and the dashboard is up (#449).
  *  - [testHold] keeps the screen on past the idle timeout for a test run, and changes nothing else:
  *    brightness stays as it is. It ends by itself.
+ *  - A voice run pauses the idle timeout while it runs ([voiceRunning]) and while it shows ([voiceShowing]), so the
+ *    screen doesn't go dark in the middle of a long answer; the countdown starts again when the run ends.
  *
  * Turning the screen off uses DevicePolicyManager.lockNow() when [admin] is an active device admin.
  *
@@ -71,6 +73,14 @@ class ScreenPolicy(
         const val TEST_HOLD_S_EXTRA = "test_hold_s"
         /** A loopback dashboard for the test hold ([testDashboard]); "" ends it. */
         const val TEST_DASHBOARD_EXTRA = "test_dashboard"
+        /** The [stayOn] reasons of a voice run: in progress ([voiceRunning]), on screen ([voiceShowing]). */
+        const val VOICE_RUN = "voice run"
+        const val VOICE_SHOWN = "voice on screen"
+        /**
+         * How long a voice run may pause the idle timeout with no word from it: a safety net, so a run that never
+         * ends (a lost Idle) can't keep the screen on for good. Every voice event renews it.
+         */
+        const val VOICE_MAX_MS = 10 * 60_000L
 
         /** The most automatic brightness may reach: [max], or full while something [held] the screen. */
         fun brightnessCap(held: Boolean, max: Float): Float = if (held) 1f else max
@@ -358,6 +368,24 @@ class ScreenPolicy(
         }
     }
 
+    /** When the voice run last said something ([voiceRunning], [voiceShowing]), on [SystemClock.elapsedRealtime]. */
+    private var voiceAt = 0L
+
+    /**
+     * A voice run is in progress, from the wake word or push-to-talk through the answer and any follow-up question
+     * ([on]), or over ([on] false: idle or an error). Called on every voice event. It pauses the idle timeout as
+     * [stayOn] does, and the countdown starts again when the run ends. Waking the screen stays with the caller.
+     */
+    fun voiceRunning(on: Boolean) = voice(VOICE_RUN, on)
+
+    /** The Assist look (the orb or the edge glow) shows a voice run, its closing moment included: as [voiceRunning]. */
+    fun voiceShowing(on: Boolean) = voice(VOICE_SHOWN, on)
+
+    private fun voice(reason: String, on: Boolean) {
+        if (on) voiceAt = SystemClock.elapsedRealtime()
+        stayOn(reason, on)
+    }
+
     /** Lets go of a [hold]. The idle timeout counts from now, so the screen doesn't go dark at once. */
     fun release(reason: String) {
         if (!holds.remove(reason)) return
@@ -399,6 +427,11 @@ class ScreenPolicy(
         override fun run() {
             handler.postDelayed(this, TICK_MS)
             if (testHeld && SystemClock.elapsedRealtime() >= testHoldUntil) endTestHold("expired")
+            if ((VOICE_RUN in stays || VOICE_SHOWN in stays) && SystemClock.elapsedRealtime() - voiceAt >= VOICE_MAX_MS) {
+                Log.w(logTag, "voice run silent for ${VOICE_MAX_MS / 1000} s: idle timeout back on")
+                stayOn(VOICE_RUN, false)
+                stayOn(VOICE_SHOWN, false)
+            }
             if (!screenOn) return
             // Still wanted on: take the wake lock again before its own timeout runs out. Not while the
             // device isn't interactive: the power key may have just turned it off, its broadcast not yet

@@ -297,6 +297,54 @@ class ScreenPolicyTest {
         screen.stop()
     }
 
+    /**
+     * A long Assist answer: the run (and its look on screen) keeps the screen on far past a 30 s idle timeout, and the
+     * countdown starts again when the last of them ends. Either one alone holds it.
+     */
+    @Test fun aVoiceRunKeepsTheScreenOnUntilItEndsThenTheIdleTimeoutRunsFromThere() {
+        val settings = Settings().apply { idleOffSec = 30 }
+        val screen = policy(settings = settings)
+        screen.start(context)
+        val keepOn = mutableListOf<Boolean>()
+        screen.onKeepScreenOn = { keepOn += it }
+        keepOn.clear()
+
+        screen.wake("voice")
+        screen.voiceRunning(true)
+        screen.voiceShowing(true)
+        advance(90_000) // thinking, then a long answer, with no voice event in between
+        assertEquals("on through the run", emptyList<Boolean>(), keepOn.filter { !it })
+        screen.voiceRunning(false) // the answer ended
+        advance(2_000) // the look's closing moment
+        assertEquals("on while the look still shows the run", emptyList<Boolean>(), keepOn.filter { !it })
+        screen.voiceShowing(false)
+        advance(29_000)
+        assertEquals("a full timeout after the run", emptyList<Boolean>(), keepOn.filter { !it })
+        advance(2_000)
+        assertEquals("then off", listOf(false), keepOn.filter { !it })
+        screen.stop()
+    }
+
+    /** A run that never says it ended can't keep the screen on for good: the idle timeout comes back after a while. */
+    @Test fun aVoiceRunThatGoesSilentLetsTheIdleTimeoutBackAfterItsLimit() {
+        val settings = Settings().apply { idleOffSec = 30 }
+        val screen = policy(settings = settings)
+        screen.start(context)
+        val keepOn = mutableListOf<Boolean>()
+        screen.onKeepScreenOn = { keepOn += it }
+        keepOn.clear()
+
+        screen.voiceRunning(true)
+        screen.voiceShowing(true)
+        advance(ScreenPolicy.VOICE_MAX_MS - 60_000)
+        screen.voiceRunning(true) // a voice event renews it
+        advance(ScreenPolicy.VOICE_MAX_MS - 1_000)
+        assertEquals("on while the run still speaks up", emptyList<Boolean>(), keepOn.filter { !it })
+        advance(33_000)
+        assertEquals("off a timeout after the limit", listOf(false), keepOn.filter { !it })
+        screen.stop()
+    }
+
     @Test fun stayOnLeavesAScreenThatIsOffAlone() {
         val screen = policy()
         screen.start(context)

@@ -23,6 +23,7 @@ line of each version is what Home Assistant shows on the update card. A change o
 - **lululemon Studio Mirror & legacy Android 6–7 stability.** Keeps the Mirror locked upright in portrait across updates, reduces camera streaming RAM with 720p hardware encoding, prevents premature camera restarts during startup, re-notifies the legacy web engine during sustained low memory so dashboards reload less often, and restores device Wi-Fi and hotspot settings reliably after an interrupted setup hotspot.
 - **Touchless setup & notification polish.** Keeps non-touch screens awake during setup, removes tap-only buttons and persistent notification pills on non-touch displays, fits the timer done screen cleanly on portrait screens, and enables automatic Bluetooth and hotspot Wi-Fi setup on the Mirror without touch input.
 - **Setup flow, camera, and sensors.** Keeps the setup screen visible across the post-Wi-Fi restart and immediately after on-panel sign-in, reports the camera entity available as soon as ESPHome connects, returns accurate ONVIF snapshot sizes, formats *Screen and sensors* in plain English, updates Home Assistant's *Silent updates* sensor immediately after permission changes, and stops prompting for system log access on Android 10 and newer.
+- **The screen stays on while Assist answers.** The screen no longer turns off in the middle of a voice run when the idle timeout hits, whether Assist is listening, thinking or reading a long answer, with the orb or the edge glow. The idle countdown starts again once the run is over.
 
 ## [0.2.0] - 2026-11-19
 

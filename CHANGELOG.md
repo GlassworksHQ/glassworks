@@ -40,6 +40,7 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 - **Screen wake timeout & startup brightness.** Non-touch wakes (Home Assistant, voice, timers) now respect the full idle timeout instead of dimming after 20 seconds, and manual brightness applies immediately on boot.
 - **Sign-in reliability over IPv4/IPv6 and on-panel login.** Fixes sign-in hangs when `.local` resolves an unreachable IPv6 address, ensures on-panel sign-in stores credentials properly, and re-prompts cleanly if Home Assistant changes address.
 - **Settings persistence, Sendspin stability, and Kiln backup safety.** Prevents rapid changes before restart from being lost, prevents duplicate Sendspin connections or pairing while disabled, fixes Magisk busybox loading for modules (comes with next Kiln boot image), and hardens Kiln download timeouts, Undo backup validation, and dev-to-release credential hand-off.
+- **The screen stays on while Assist answers.** The screen no longer turns off in the middle of a voice run when the idle timeout hits, whether Assist is listening, thinking or reading a long answer, with the orb or the edge glow. The idle countdown starts again once the run is over.
 
 ### Security
 - **PKCE for Thread-join admin sign-in.** Matches the dashboard QR sign-in's PKCE protection (requires Home Assistant 2026.10 or newer).
