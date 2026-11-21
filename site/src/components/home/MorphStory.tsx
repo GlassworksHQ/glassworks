@@ -244,7 +244,7 @@ function undockAt(p: number) {
 const at = (beat: number, f: number) => lerp(HOLDS[beat]![0], HOLDS[beat]![1], f);
 const BEAT_DOTS = [
   { idx: 0, label: "Wall switch dashboard", targetP: 0.03 },
-  { idx: 1, label: "Local Assist voice, Spark", targetP: at(1, 0.5) },
+  { idx: 1, label: "Local Assist voice", targetP: at(1, 0.5) },
   { idx: 2, label: "Rich notifications", targetP: at(2, 0.5) },
   { idx: 3, label: "Studio mirror presence detection", targetP: at(3, 0.3) },
   { idx: 4, label: "Kitchen timers, Sendspin, and radios", targetP: at(4, 0.5) },
@@ -1038,7 +1038,7 @@ export function MorphStory({
           onClick={nextPhase}
           role="button"
           tabIndex={interactive ? 0 : -1}
-          aria-label="Glassworks Assist, Spark edge glow: tap to move to the next step"
+          aria-label="Glassworks Assist: tap to move to the next step"
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === " ") {
               e.preventDefault();
@@ -1406,7 +1406,7 @@ export function MorphStory({
           <span className={s.eyebrow}>LOCAL ASSIST VOICE</span>
           <h2 className={s.h2}>A screen that listens locally</h2>
           <p className={s.lede}>
-            On-device wake word detection runs right on the hardware and hands off to your Home Assistant Assist pipeline. Spark lights the edge of the screen while you talk, so your dashboard stays in view.
+            On-device wake word detection runs right on the hardware and hands off to your Home Assistant Assist pipeline.
           </p>
           <div className={s.ctas}>
             <Link href="/panes/assist" className={s.quietLink}>
@@ -1616,7 +1616,7 @@ export function MorphStory({
             <span className={s.eyebrow}>LOCAL ASSIST VOICE</span>
             <h2 className={s.h2}>A screen that listens locally</h2>
             <p className={s.lede}>
-              On-device wake word detection runs right on the hardware and hands off to your Home Assistant Assist pipeline. Spark lights the edge of the screen while you talk, so your dashboard stays in view.
+              On-device wake word detection runs right on the hardware and hands off to your Home Assistant Assist pipeline.
             </p>
             <div className={s.ctas}>
               <Link href="/panes/assist" className={s.quietLink}>
