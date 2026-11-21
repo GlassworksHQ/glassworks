@@ -140,6 +140,15 @@ describe('the report sheet', () => {
     expect(url.searchParams.get('worked')).not.toContain('192.168.1.5');
   });
 
+  it('says when GitHub\'s form gets less than was written, and only then', async () => {
+    await openFrom({ model: 'Teclast P20HD', android: '10', flow: 'usb' }, fake().t);
+    fillPersonalPart();
+    expect(screen.queryByText(/GitHub's form gets the first/)).toBeNull();
+    type('What didn\'t work', 'x '.repeat(900));
+    expect(screen.getByText('GitHub\'s form gets the first 1,500 characters of each answer. Paste the rest there before you submit it.')).toBeTruthy();
+    expect(new URL(screen.getByText('Open it on GitHub instead').getAttribute('href')!).searchParams.get('didnt')).toHaveLength(1500);
+  });
+
   it('when Kiln can\'t send (no credentials: 503), the preview\'s one button is GitHub\'s form', async () => {
     await openFrom({ model: 'Teclast P20HD', android: '10', flow: 'usb' }, fake({ off: true }).t);
     fillPersonalPart();

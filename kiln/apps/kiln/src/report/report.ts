@@ -235,9 +235,15 @@ export function issueOf(f: ReportFields): { title: string; body: string } {
 
 /**
  * The template on GitHub with the fields filled in, for someone who'd rather send it themselves or when Kiln can't send it:
- * the same cleaned fields, unescaped (GitHub's form shows them before anything is posted). The long texts are cut to keep
- * the address short enough for every browser.
+ * the same cleaned fields, unescaped (GitHub's form shows them before anything is posted). The long texts are cut at
+ * FORM_TEXT to keep the address short enough for every browser (githubCuts says when, and the sheet says so), and "Kiln
+ * got to" stays out: the template has no field for it.
  */
+export const FORM_TEXT = 1500;
+
+/** Whether GitHub's form gets less of what worked or what didn't than the person wrote. */
+export const githubCuts = (raw: ReportFields): boolean => { const f = clean(raw); return f.worked.length > FORM_TEXT || f.didnt.length > FORM_TEXT; };
+
 export function githubUrl(raw: ReportFields): string {
   const f = clean(raw);
   const q = new URLSearchParams({ template: TEMPLATE, title: issueOf(f).title });
@@ -248,8 +254,8 @@ export function githubUrl(raw: ReportFields): string {
   put('custom_os', f.customOs);
   put('abi', f.abi);
   if (f.flow) q.set('flow', FLOWS[f.flow]);
-  put('worked', f.worked.slice(0, 1500));
-  put('didnt', f.didnt.slice(0, 1500));
+  put('worked', f.worked.slice(0, FORM_TEXT));
+  put('didnt', f.didnt.slice(0, FORM_TEXT));
   put('clarity', f.clarity);
   put('app_version', f.appVersion);
   return `https://github.com/${REPO}/issues/new?${q.toString()}`;

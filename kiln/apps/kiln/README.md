@@ -166,7 +166,9 @@ from custom Android, so the person picks. They add what worked, what didn't, and
 
 Before anything is sent the sheet shows the issue exactly as GitHub will have it, and says it's public. **Send it**
 posts the fields to `/api/report`, which opens the issue and the sheet links it. **Open it on GitHub instead** is
-always there: the template on GitHub with the same fields filled in. It's also the way on when Kiln can't send (no
+always there: the template on GitHub with the same fields filled in, except how far Kiln got (the template has no
+field for it), and the first 1,500 characters of each answer, to keep the address short (the sheet says so when it
+cuts one). It's also the way on when Kiln can't send (no
 credentials, an error, the rate limit, or a route that doesn't answer within 20 s). Nothing is sent unless the person
 presses Send, and nothing is kept.
 
@@ -219,7 +221,8 @@ To create the app (an org owner, once):
 5. Put the three values in the Vercel project, redeploy, and open `/api/report` in a browser: it answers with a token,
    not 503. Then send one report from a demo-free page and close the issue.
 
-To turn reports off, remove the variables (the sheet falls back to GitHub's form). To rotate the key, generate a new
+To turn reports off, remove the variables and redeploy (a deployment keeps the variables it was built with), then
+check that `/api/report` answers 503: the sheet falls back to GitHub's form. To rotate the key, generate a new
 one on the app, update `REPORT_APP_PRIVATE_KEY`, redeploy, then delete the old key.
 
 ## The panel's setup page
