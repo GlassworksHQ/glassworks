@@ -209,6 +209,15 @@ class FrameInstallerTest {
         loader.running = true
         installer.atStart()
         assertTrue(File(files, "${loader.stageDir}/manifest").exists())
+        assertTrue("after a restart, app updates still wait for the loader this app handed a bundle to", installer.loaderHolds())
+        loader.running = false
+        assertFalse("and not once it stopped", installer.loaderHolds())
+    }
+
+    @Test fun aLoaderRunNobodyHereStartedHoldsNothing() {
+        loader.running = true
+        installer.atStart()
+        assertFalse(installer.loaderHolds())
     }
 
     @Test fun aSecondInstallWhileOneRunsIsRefused() {

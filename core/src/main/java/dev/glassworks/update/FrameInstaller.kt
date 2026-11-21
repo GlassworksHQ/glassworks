@@ -48,8 +48,10 @@ class FrameInstaller(
     /** At start: what an install cut short left, and what the loader loaded and staged ([FrameUpdateModel.onLoaderRecord]). */
     fun atStart() {
         downloads.deleteRecursively()
-        // Never under the loader: deleting while it copies would make it fail half-way.
-        if (!bundle.running()) stage.deleteRecursively()
+        // Never under the loader: deleting while it copies would make it fail half-way. A staging dir that is still there
+        // is one an install of this app handed over (every other way out deletes it), so a loader running now copies it:
+        // app updates wait for it as before the restart ([loaderHolds]). A loader run nobody here started has no dir.
+        if (bundle.running() && stage.exists()) handedOff = true else stage.deleteRecursively()
         model.onLoaderRecord(FrameBundleState.parse(bundle.state()))
     }
 
