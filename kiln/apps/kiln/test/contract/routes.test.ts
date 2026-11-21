@@ -33,6 +33,11 @@ describe.each(WITH_A_PAGE)('%s', (id) => {
     }
   });
 
+  it('its install from the device\'s own browser, when it declares one, has its address too', () => {
+    const od = (INSTALLERS[id] as { onDevice?: { route: string } }).onDevice;
+    if (od) expect(new Set(pages()).has(`${base}/${od.route}`), `${base}/${od.route}`).toBe(true);
+  });
+
   it('has the standard flow\'s routes, every one of them: a frame can\'t opt out', () => {
     const built = new Set(pages());
     for (const r of Object.keys(STANDARD_ROUTES)) expect(built.has(`${base}/${r}`), `${base}/${r}`).toBe(true);
