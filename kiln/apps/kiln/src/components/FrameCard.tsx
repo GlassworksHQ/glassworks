@@ -5,12 +5,12 @@
 import { FrameCardBody, STAGE_TEXT, frameCardClass, ships, useTilt, type FrameDesign } from '@glassworks/frame-card';
 import * as RadioGroup from '@radix-ui/react-radio-group';
 import { useId } from 'react';
-import { RENDERS } from '../frames/catalog';
+import { RENDERS, kilnRoute } from '../frames/catalog';
 import s from './FrameCard.module.css';
 
 export function FrameCard({ f }: { f: FrameDesign }) {
   const tilt = useTilt<HTMLButtonElement>();
-  const installable = ships(f.status) && !!f.kiln;
+  const installable = ships(f.status) && !!kilnRoute(f);
   const id = useId();
   const stage = f.status === 'stable' ? '' : `, ${STAGE_TEXT[f.status]}`;
   return (

@@ -34,8 +34,10 @@ describe('Try again after a failed write', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
 
     expect(await screen.findByRole('heading', { name: 'No panel in recovery mode' })).toBeTruthy();
-    expect(screen.getByText(/hold the board button first/, { selector: '.lede' }).textContent)
-      .toBe('This attempt wrote nothing; an earlier try did. Unplug it, hold the board button first, then plug in and keep holding for 10 seconds. Then use Undo with your backup.');
+    // what happened, then how to fix it in its own callout (#672)
+    expect(document.querySelector('.lede')?.textContent).toBe('This attempt wrote nothing; an earlier try did.');
+    expect(screen.getByRole('group', { name: 'How to fix it' }).textContent)
+      .toBe('How to fix itUnplug it, hold the board button first, then plug in and keep holding for 10 seconds. Then use Undo with your backup.');
     expect(screen.getAllByRole('button', { name: 'Undo with your backup' })[0]!.className).toMatch(/ember/);
     expect(s.store.state.failure).toMatchObject({ at: 1, wrote: true });
     s.close();
