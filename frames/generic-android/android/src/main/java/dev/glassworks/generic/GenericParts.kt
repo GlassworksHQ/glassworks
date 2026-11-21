@@ -113,8 +113,11 @@ class GenericParts : AppParts {
     override fun overlays(runtime: GlassworksRuntime, host: OverlayHost): List<PaneOverlay> {
         val activity = host.activity
         val timers = TimerOverlay(activity, runtime.orbs).apply { touch = { runtime.frame.input == Input.TOUCH } }
-        // Both Assist looks report whether they show; the timers hear one signal (either shows).
-        val showing = VoiceShowing(timers::voiceShowing)
+        // Both Assist looks report whether they show; the timers and the screen hear one signal (either shows).
+        val showing = VoiceShowing { showing ->
+            timers.voiceShowing(showing)
+            runtime.screen.voiceShowing(showing) // the screen stays on while a run shows, either look
+        }
         val voice = VoiceOverlay(activity).apply {
             onCancel = { runtime.voiceCancel?.invoke() }
             onShowingChanged = showing::orb
@@ -163,7 +166,10 @@ class GenericParts : AppParts {
             object : PaneOverlay {
                 override val view = voice
                 override val layoutParams = FrameLayout.LayoutParams(-1, -1)
-                override fun destroy() { runtime.onVoiceUi = null }
+                override fun destroy() {
+                    runtime.onVoiceUi = null
+                    runtime.screen.voiceShowing(false) // gone with the activity: nothing shows a run now
+                }
             },
             object : PaneOverlay {
                 override val view = glow
@@ -216,9 +222,12 @@ class GenericParts : AppParts {
     private fun onVoiceEvent(runtime: GlassworksRuntime, e: VoiceEvent) {
         voiceUi = voiceUi.on(e)
         try { runtime.onVoiceUi?.invoke() } catch (t: Throwable) { Log.w("Glassworks.Voice", "voice overlay failed", t) }
-        if (e is VoiceEvent.Heard || e is VoiceEvent.Reply) return
+        if (e is VoiceEvent.Heard || e is VoiceEvent.Reply) { runtime.screen.voiceRenew(); return } // texts only, no state change
         runtime.voiceState = voiceUi.state
-        if (e !is VoiceEvent.Idle && e !is VoiceEvent.Error) runtime.screen.wake("voice")
+        // Talking to the panel counts as activity: wake the screen and keep it on until the run ends.
+        val running = e !is VoiceEvent.Idle && e !is VoiceEvent.Error
+        if (running) runtime.screen.wake("voice")
+        runtime.screen.voiceRunning(running)
         runtime.screen.onStateChanged?.invoke()
     }
 
