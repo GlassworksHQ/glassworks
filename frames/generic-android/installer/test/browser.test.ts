@@ -72,6 +72,8 @@ describe('the version and the build that fits', () => {
     // the same tablet in Chrome: the frozen "Linux armv81" and an empty hint say nothing
     expect(read('GALAXY_TAB_A_2016')).toMatchObject({ release: '8.1', modelCode: 'SM-T580', app: 'generic' });
     expect(read('GALAXY_TAB_A_2016')).not.toHaveProperty('bits');
+    // it has a tested-device frame of its own, which runs both ABIs (stock 32-bit, LineageOS 64-bit): no answer either
+    expect(read('GALAXY_TAB_A_2016').identified).toMatchObject({ model: { frame: 'samsung-galaxy-tab-a-10-1-2016' }, tested: true });
     expect(read('UNKNOWN_DESKTOP')).not.toHaveProperty('bits');
     // a computer's or a Pi's machine isn't an Android device's
     expect(read('PI_TOUCH').bits).toBeUndefined();

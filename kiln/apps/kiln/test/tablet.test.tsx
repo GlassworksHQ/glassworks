@@ -61,6 +61,8 @@ describe('the build and APK', () => {
     expect(abiFor(on('GALAXY_TAB'), FRAMES)).toEqual({ abi: 'arm64-v8a', sure: true });
     // issue 700: a 32-bit userspace on a 64-bit chip, in a browser that says so, and in Chrome, which doesn't
     expect(abiFor(on('GALAXY_TAB_A_2016_SAMSUNG'), FRAMES)).toEqual({ abi: 'armeabi-v7a', sure: true });
+    // its tested-device frame lists both ABIs, so the frame doesn't settle it
+    expect(FRAMES.find((f) => f.id === 'samsung-galaxy-tab-a-10-1-2016')?.abis).toEqual(['arm64-v8a', 'armeabi-v7a']);
     expect(abiFor(on('GALAXY_TAB_A_2016'), FRAMES)).toEqual({ abi: 'arm64-v8a', sure: false });
     expect(abiFor({ ...on('GALAXY_TAB'), bits: 32 }, FRAMES)).toEqual({ abi: 'armeabi-v7a', sure: true });
     expect(abiFor(on('PIXEL_DESKTOP'), FRAMES)).toEqual({ abi: 'arm64-v8a', sure: true });
