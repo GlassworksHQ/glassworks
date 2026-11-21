@@ -296,5 +296,14 @@ class BluetoothProxyEngineTest {
         assertEquals("cut to whole structures within 62 bytes", 62, adStructures(long).size)
     }
 
+    @Test fun adStructuresKeepTheScanResponseAndroidGluesOn() {
+        // Android 10's shape for a legacy scan: the advertisement, its scan response right after it, then
+        // zeros to 62 bytes (GattService.onScanResult; research/bluetooth.md, Scan-record padding).
+        val adv = byteArrayOf(2, 1, 6, 3, 3, 0x95.toByte(), 0xFE.toByte())
+        val response = byteArrayOf(5, 9, 'S'.code.toByte(), 'o'.code.toByte(), 'i'.code.toByte(), 'l'.code.toByte())
+        val record = (adv + response).copyOf(62)
+        assertArrayEquals("the scan response is kept", adv + response, adStructures(record))
+    }
+
     @Test fun addressesAreBigEndian() = assertEquals(0xAABBCCDDEEFFL, parseAddress("AA:BB:CC:DD:EE:FF"))
 }
