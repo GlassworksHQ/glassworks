@@ -1833,8 +1833,9 @@ a.eyebrow:hover {
   color: var(--sp-lit);
 }
 
+/* quieter than the reply, but readable at this size: 62 % ink (the panel's faint is 42 %, on a larger screen) */
 .sparkFaint {
-  color: color-mix(in srgb, var(--sp-ink) 42%, var(--sp-ground));
+  color: color-mix(in srgb, var(--sp-ink) 62%, var(--sp-ground));
 }
 
 .sparkHeard {
