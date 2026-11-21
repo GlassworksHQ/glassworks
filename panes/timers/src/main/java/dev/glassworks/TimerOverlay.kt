@@ -528,7 +528,7 @@ class TimerOverlay(
             arrow.moveTo(-7 * u, 0f); arrow.lineTo(5 * u, 0f)
             arrow.moveTo(1 * u, -5 * u); arrow.lineTo(6 * u, 0f); arrow.lineTo(1 * u, 5 * u)
             arrow.moveTo(8 * u, -8 * u); arrow.lineTo(8 * u, 8 * u)
-            line.strokeWidth = 2 * dp; line.color = look.accent
+            line.strokeWidth = 2 * dp; line.color = look.glassAccent
             c.drawPath(arrow, line)
             c.restore()
             val fm = text.fontMetrics
@@ -585,7 +585,7 @@ class TimerOverlay(
                 Edge.BOTTOM -> 180f to 1f
             }
             val left = t.remaining(now)
-            stroke.color = if (t.active) TimerLook.withAlpha(l.accent, 0.9f) else TimerLook.withAlpha(l.ink, 0.38f)
+            stroke.color = if (t.active) TimerLook.withAlpha(l.glassAccent, 0.9f) else TimerLook.withAlpha(l.ink, 0.38f)
             if (left > 0f) c.drawArc(box, start, dir * 180f * left, false, stroke)
             // the core in the theme's light, inside the visible half
             val inward = 11 * dp

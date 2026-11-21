@@ -239,7 +239,7 @@ class TimerDoneView(
         fa = Themes.mix(tx, palette.ground, 0.58f)
         scrim.background = if (p.id == Themes.DEFAULT.id) Backdrop() else ThemedBackdrop(palette)
         rings[0].tint(palette.a); rings[1].tint(palette.b)
-        label.setTextColor(palette.readable(palette.a))
+        label.setTextColor(palette.readable(palette.a, 4.5)) // 11.5 sp: small text
         main.setTextColor(tx); sub.setTextColor(mu); rest.setTextColor(mu)
         restHead.setTextColor(fa); hint.setTextColor(fa)
         if (baked) { baked = false; if (isAttachedToWindow) bake() }

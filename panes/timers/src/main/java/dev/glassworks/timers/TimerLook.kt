@@ -43,8 +43,14 @@ class TimerLook(val palette: Themes.Palette) {
     val hotRing = AMBER
     val hotText = palette.readable(AMBER, 4.5)
 
-    /** A light that reads on the ground, for small strokes (the chip's arrow, the peek's arc). */
+    /** The last 10 seconds' digits, large and on the [glass]: amber that reads there. */
+    val hotDigits = readableOn(AMBER, glass, 3.0)
+
+    /** Light a where it is drawn on the ground (the drag guide's target), made to read there. */
     val accent = palette.readable(palette.a, 3.0)
+
+    /** Light a where it is drawn on the [glass] (the chip's arrow, the peek's arc), made to read there. */
+    val glassAccent = readableOn(palette.a, glass, 3.0)
 
     /** The guide's veil over the page while the group is dragged. */
     val veil = withAlpha(palette.ground, if (light) 0.55f else 0.42f)
@@ -56,5 +62,13 @@ class TimerLook(val palette: Themes.Palette) {
         val DEFAULT = TimerLook(Themes.DEFAULT.palette)
 
         fun withAlpha(c: Int, a: Float) = (c and 0x00ffffff) or ((a.coerceIn(0f, 1f) * 255).toInt() shl 24)
+
+        /** [c] if it reads on [bg] at [min]:1, else mixed toward black or white (whichever [bg] wants) until it does. */
+        fun readableOn(c: Int, bg: Int, min: Double): Int {
+            if (Themes.contrast(c, bg) >= min) return c
+            val ink = if (Themes.contrast(Themes.INK_DARK, bg) >= Themes.contrast(Themes.INK_LIGHT, bg)) Themes.INK_DARK else Themes.INK_LIGHT
+            for (k in 1..20) { val m = Themes.mix(c, ink, k / 20f); if (Themes.contrast(m, bg) >= min) return m }
+            return ink
+        }
     }
 }

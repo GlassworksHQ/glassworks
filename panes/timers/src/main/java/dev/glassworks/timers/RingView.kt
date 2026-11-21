@@ -178,7 +178,7 @@ class RingView(context: Context) : View(context) {
         }
         digits.textSize = size * dp
         digits.typeface = Inter.typeface(context, Inter.LIGHT, size)
-        digits.color = when { hot -> l.hotText; paused -> l.mu; else -> l.ink }
+        digits.color = when { hot -> l.hotDigits; paused -> l.mu; else -> l.ink }
         digits.fontFeatureSettings = "tnum"
         val fm = digits.fontMetrics
         var baseline = c - (fm.ascent + fm.descent) / 2f
