@@ -1552,274 +1552,336 @@ a.eyebrow:hover {
   display: none;
 }
 
-/* ==================== BEAT 1: REAL ASSIST VOICE OVERLAY (OrbArt.kt + VoiceOverlay.kt) ==================== */
-.voiceScrim {
+/* ==================== BEAT 1: ASSIST AS SPARK, THE EDGE GLOW (EdgeGlow.kt + EdgeGlowOverlay.kt) ====================
+   The Glassworks theme's palettes (Themes.GLASSWORKS): its two lights, a and b, and its ground, light or dark with the
+   page (the light one here, the dark one below). On a dark ground the edge glows white-hot; on a light one, the
+   lights' middle shows instead. */
+.spark {
+  --sp-a: #0ea5e9;
+  --sp-b: #8b5cf6;
+  --sp-ground: #eceef2;
+  --sp-ink: #0c0e13;
+  --sp-hot: color-mix(in srgb, var(--sp-mid) 80%, black);
+  --sp-lit: #0369a1;
+  /* EdgeGlow's dim, deepening to the bottom: 26, 56 and 140 of 255 on a light ground */
+  --sp-dim-0: 10%;
+  --sp-dim-1: 22%;
+  --sp-dim-2: 55%;
+  --sp-mid: color-mix(in srgb, var(--sp-a), var(--sp-b));
+  --sp-edge: conic-gradient(
+    from 0deg,
+    var(--sp-mid),
+    var(--sp-b) 50deg,
+    var(--sp-b) 130deg,
+    var(--sp-mid) 180deg,
+    var(--sp-a) 230deg,
+    var(--sp-a) 310deg,
+    var(--sp-mid)
+  );
   position: absolute;
   inset: 0;
   z-index: 3;
-  background:
-    radial-gradient(62% 58% at 24% 20%, rgba(56, 189, 248, 0.08), transparent 64%),
-    radial-gradient(56% 52% at 78% 82%, rgba(167, 139, 250, 0.07), transparent 64%),
-    rgba(10, 11, 15, 0.9);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  padding: 18px 24px 28px;
+  border-radius: inherit;
+  overflow: hidden;
   cursor: pointer;
   user-select: none;
 }
 
-.orbStage {
-  position: relative;
-  width: 74px;
-  height: 74px;
-  display: grid;
-  place-items: center;
-  flex: none;
+@media (prefers-color-scheme: dark) {
+  :global(:root:not([data-theme="light"])) .spark {
+    --sp-a: #38bdf8;
+    --sp-b: #a78bfa;
+    --sp-ground: #0a0b0f;
+    --sp-ink: #f4f4f5;
+    --sp-hot: #ffffff;
+    --sp-lit: #38bdf8;
+    /* 41, 72 and 153 of 255 on a dark ground */
+    --sp-dim-0: 16%;
+    --sp-dim-1: 28%;
+    --sp-dim-2: 60%;
+  }
 }
 
-.orbGlow {
+:global(:root[data-theme="dark"]) .spark {
+  --sp-a: #38bdf8;
+  --sp-b: #a78bfa;
+  --sp-ground: #0a0b0f;
+  --sp-ink: #f4f4f5;
+  --sp-hot: #ffffff;
+  --sp-lit: #38bdf8;
+  /* 41, 72 and 153 of 255 on a dark ground */
+  --sp-dim-0: 16%;
+  --sp-dim-1: 28%;
+  --sp-dim-2: 60%;
+}
+
+/* a light dim that deepens to the bottom, where the caption sits: the dashboard stays in view */
+.sparkDim {
   position: absolute;
-  width: 196px;
-  height: 196px;
-  border-radius: 50%;
-  pointer-events: none;
-  transition: opacity 0.4s ease;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--sp-ground) var(--sp-dim-0), transparent),
+    color-mix(in srgb, var(--sp-ground) var(--sp-dim-1), transparent) 50%,
+    color-mix(in srgb, var(--sp-ground) var(--sp-dim-2), transparent)
+  );
 }
 
-.orbGlowThink {
+/* the lit edge: a sharp core, a glow and a haze, each the two lights round the edge cut to a ring */
+@property --sp-reveal {
+  syntax: "<angle>";
+  inherits: true;
+  initial-value: 180deg;
+}
+
+.sparkRing {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  /* lit from the mic both ways round, to meet at the bottom */
+  --sp-reveal: 180deg;
+  mask: conic-gradient(from 0deg, #000 var(--sp-reveal), transparent 0 calc(360deg - var(--sp-reveal)), #000 0);
+  transition: opacity 0.6s ease;
+}
+
+.spark[data-phase="listening"] .sparkRing {
+  animation: sparkIgnite 0.65s cubic-bezier(0.3, 0, 0.2, 1) both;
+}
+
+.spark[data-phase="thinking"] .sparkRing {
+  opacity: 0.45;
+}
+
+.spark[data-phase="speaking"] .sparkRing {
+  animation: sparkBreathe 2.6s ease-in-out infinite;
+}
+
+.sparkEdge,
+.sparkGlow,
+.sparkHaze {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--sp-edge);
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+}
+
+.sparkEdge {
+  padding: 1.5px;
   background:
-    radial-gradient(circle at 40% 42%, rgba(56, 189, 248, 0.3) 0%, transparent 46%),
-    radial-gradient(circle at 60% 58%, rgba(167, 139, 250, 0.34) 0%, transparent 46%);
-  animation: orbSpin 4s linear infinite;
+    linear-gradient(color-mix(in srgb, var(--sp-hot) 45%, transparent) 0 0),
+    var(--sp-edge);
 }
 
-.orbGlowSky {
-  background: radial-gradient(circle at 50% 50%, rgba(56, 189, 248, 0.3) 0%, transparent 62%);
+.sparkGlow {
+  padding: 5px;
+  filter: blur(6px);
+  opacity: 0.75;
 }
 
-.orbGlowGreen {
-  background: radial-gradient(circle at 50% 50%, rgba(52, 211, 153, 0.3) 0%, transparent 60%);
+.sparkHaze {
+  padding: 16px;
+  filter: blur(20px);
+  opacity: 0.4;
 }
 
-.orbRipple {
+/* the mic, the middle of the top edge: it glows with the voice while listening */
+.sparkMic {
   position: absolute;
-  inset: 0;
+  top: -10px;
+  left: 50%;
+  width: 34%;
+  height: 26px;
+  transform: translateX(-50%);
   border-radius: 50%;
-  border: 1px solid rgba(56, 189, 248, 0.45);
-  pointer-events: none;
-  animation: orbRippleAnim 1.8s cubic-bezier(0.65, 0, 0.35, 1) infinite;
-}
-
-.orbRippleB {
-  animation-delay: 0.9s;
-}
-
-@keyframes orbRippleAnim {
-  0% {
-    transform: scale(1);
-    opacity: 0.42;
-  }
-  100% {
-    transform: scale(1.85);
-    opacity: 0;
-  }
-}
-
-.orbSphere {
-  position: relative;
-  width: 74px;
-  height: 74px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.13);
-  box-shadow:
-    0 8px 28px rgba(0, 0, 0, 0.38),
-    inset 0 0 20px rgba(255, 255, 255, 0.05);
-}
-
-.orbClip {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  overflow: hidden;
-}
-
-.orbSwirl {
-  position: absolute;
-  inset: -16px;
-  border-radius: 50%;
-  background: conic-gradient(
-    from 0deg,
-    transparent 0deg,
-    rgba(56, 189, 248, 0.85) 70deg,
-    rgba(167, 139, 250, 0.9) 150deg,
-    transparent 220deg,
-    rgba(56, 189, 248, 0.35) 290deg,
-    transparent 360deg
-  );
-  filter: blur(8px);
-  animation: orbSpin 1.5s linear infinite;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--sp-hot) 85%, transparent), transparent);
+  opacity: 0.35;
   transition: opacity 0.4s ease;
 }
 
-.orbCoreSky {
+.spark[data-phase="listening"] .sparkMic {
+  animation: sparkVoice 1.3s ease-in-out infinite;
+}
+
+/* loud words: ripples run from the mic along the top edge, sky to the left and violet to the right */
+.sparkRipples i {
   position: absolute;
-  inset: 9px;
+  top: -4px;
+  left: 50%;
+  width: 16%;
+  height: 9px;
   border-radius: 50%;
-  background: radial-gradient(
-    circle,
-    rgba(224, 242, 254, 0.92) 0%,
-    rgba(56, 189, 248, 0.48) 52%,
-    transparent 74%
-  );
-  filter: blur(5px);
-  animation: orbPulse 1.6s ease-in-out infinite alternate;
-  transition: opacity 0.4s ease;
+  background: radial-gradient(closest-side, var(--sp-a), transparent);
+  animation: sparkRippleLeft 1.3s ease-out infinite;
 }
 
-.orbCoreGreen {
+.sparkRipples i:nth-child(2) {
+  background: radial-gradient(closest-side, var(--sp-b), transparent);
+  animation-name: sparkRippleRight;
+}
+
+/* thinking: the lights shuttle along the top and bottom edges, half a lap apart, and cross in the middle */
+.sparkShuttles i {
   position: absolute;
-  inset: 9px;
+  top: -5px;
+  width: 22px;
+  height: 10px;
+  margin-left: -11px;
   border-radius: 50%;
-  background: radial-gradient(
-    circle,
-    rgba(52, 211, 153, 0.6) 0%,
-    rgba(52, 211, 153, 0.18) 55%,
-    transparent 74%
-  );
-  filter: blur(5px);
-  transition: opacity 0.35s ease;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--sp-hot) 50%, var(--sp-a)), transparent);
+  animation: sparkLap 1.7s ease-in-out infinite alternate;
 }
 
-.orbShine {
+.sparkShuttles i:nth-child(2) {
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--sp-hot) 50%, var(--sp-b)), transparent);
+  animation-direction: alternate-reverse;
+}
+
+.sparkShuttles i:nth-child(n + 3) {
+  top: auto;
+  bottom: -5px;
+  animation-delay: -0.85s;
+}
+
+.sparkShuttles i:nth-child(4) {
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--sp-hot) 50%, var(--sp-b)), transparent);
+  animation-direction: alternate-reverse;
+}
+
+/* the glass caption: what was heard, and the reply */
+.sparkCaption {
   position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background: radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.26) 0%, transparent 40%);
-  pointer-events: none;
-}
-
-.orbCheck {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  transition: opacity 0.25s ease;
-}
-
-.orbCheck path {
-  fill: none;
-  stroke: #f4f4f5;
-  stroke-width: 3.4;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-dasharray: 54;
-  stroke-dashoffset: 54;
-  transition: stroke-dashoffset 0.45s cubic-bezier(0.65, 0, 0.35, 1);
-}
-
-.orbCheckShow {
-  opacity: 1;
-}
-
-.orbCheckShow path {
-  stroke-dashoffset: 0;
-}
-
-@keyframes orbSpin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@keyframes orbPulse {
-  0% {
-    transform: scale(0.9);
-  }
-  100% {
-    transform: scale(1.08);
-  }
-}
-
-.voiceTexts {
-  position: relative;
-  z-index: 1;
+  left: 50%;
+  bottom: 6%;
+  transform: translateX(-50%);
+  width: min(72%, 360px);
+  padding: 9px 16px 10px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--sp-ground) 86%, transparent);
+  border: 1px solid color-mix(in srgb, var(--sp-ground), var(--sp-ink) 12%);
   display: grid;
   justify-items: center;
-  gap: 5px;
+  gap: 4px;
   text-align: center;
-  max-width: 320px;
+  animation: sparkCaptionIn 0.2s ease 0.36s both;
 }
 
-.voiceLabel {
-  font-size: 9.5px;
-  font-weight: 500;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  line-height: 1.2;
-}
-
-.voiceLabelFaint {
-  color: #63636b;
-}
-
-.voiceLabelGreen {
-  color: #34d399;
-}
-
-.voiceQuote {
-  font-size: 11px;
-  font-weight: 400;
-  color: #a1a1aa;
-  line-height: 1.25;
-}
-
-.voiceMain {
-  font-size: 19px;
-  font-weight: 300;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
-  color: #f4f4f5;
-  margin: 0;
-}
-
-.voiceHint {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 12px;
-  text-align: center;
+.sparkLabel {
   font-size: 8.5px;
   font-weight: 500;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: #63636b;
-  transition: opacity 0.3s ease;
+  line-height: 1.2;
+}
+
+.sparkLabelLit {
+  color: var(--sp-lit);
+}
+
+.sparkFaint {
+  color: color-mix(in srgb, var(--sp-ink) 42%, var(--sp-ground));
+}
+
+.sparkHeard {
+  font-size: 9.5px;
+  line-height: 1.25;
+  color: color-mix(in srgb, var(--sp-ink) 65%, var(--sp-ground));
+}
+
+.sparkMain {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: var(--sp-ink);
+}
+
+.sparkMuted {
+  color: color-mix(in srgb, var(--sp-ink) 65%, var(--sp-ground));
 }
 
 @container (max-height: 210px) {
-  .voiceScrim {
-    gap: 10px;
-    padding: 12px 16px 22px;
+  .sparkMain {
+    font-size: 12.5px;
   }
 
-  .orbStage,
-  .orbSphere {
-    width: 60px;
-    height: 60px;
+  .sparkCaption {
+    padding: 7px 12px 8px;
   }
+}
 
-  .orbGlow {
-    width: 150px;
-    height: 150px;
+@keyframes sparkIgnite {
+  from {
+    --sp-reveal: 0deg;
   }
+  to {
+    --sp-reveal: 180deg;
+  }
+}
 
-  .voiceMain {
-    font-size: 15.5px;
+@keyframes sparkBreathe {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 0.95;
+  }
+}
+
+@keyframes sparkVoice {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  30% {
+    opacity: 1;
+  }
+  55% {
+    opacity: 0.6;
+  }
+  75% {
+    opacity: 0.9;
+  }
+}
+
+@keyframes sparkRippleLeft {
+  from {
+    transform: translateX(-50%);
+    opacity: 0.9;
+  }
+  to {
+    transform: translateX(-310%);
+    opacity: 0;
+  }
+}
+
+@keyframes sparkRippleRight {
+  from {
+    transform: translateX(-50%);
+    opacity: 0.9;
+  }
+  to {
+    transform: translateX(210%);
+    opacity: 0;
+  }
+}
+
+@keyframes sparkLap {
+  from {
+    left: 8%;
+  }
+  to {
+    left: 92%;
+  }
+}
+
+@keyframes sparkCaptionIn {
+  from {
+    opacity: 0;
   }
 }
 
@@ -2496,10 +2558,11 @@ a.eyebrow:hover {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .orbGlowThink,
-  .orbSwirl,
-  .orbCoreSky,
-  .orbRipple,
+  .sparkRing,
+  .sparkMic,
+  .sparkRipples i,
+  .sparkShuttles i,
+  .sparkCaption,
   .wireRayDash,
   .sensorPulse,
   .sidePillEq i {

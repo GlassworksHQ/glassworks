@@ -20,7 +20,7 @@ import { BEDSIDE_DISPLAY, ROUND_DIAL, SQUARE_SWITCH, WIDE_DISPLAY } from "./stor
  * Each beat spotlights ONE hardware shape + ONE real Glassworks feature over the live
  * CSS-Grid + @container-reflowing Home Assistant Lovelace dashboard:
  *   Beat 0: Aqara S1 Plus Wall Switch (right) — Clean unobstructed HA dashboard
- *   Beat 1: Wide Kitchen Display (left) — REAL Assist Voice Orb (OrbArt.kt + VoiceOverlay.kt)
+ *   Beat 1: Wide Kitchen Display (left) — Assist as Spark, the edge glow (EdgeGlow.kt + EdgeGlowOverlay.kt)
  *   Beat 2: Wall Switch Landscape (right) — REAL Top-Right Notification Card (NotificationOverlay.kt)
  *   Beat 3: lululemon Studio Mirror (left) — Presence Detection collapse to side pill + reflective glass
  *   Beat 4: Google Pixel Tablet (right) — REAL TimerDock + Sendspin + 3 light lines to what HA reads, its dock
@@ -30,7 +30,9 @@ import { BEDSIDE_DISPLAY, ROUND_DIAL, SQUARE_SWITCH, WIDE_DISPLAY } from "./stor
  */
 
 type ShapeId = "wall" | "tablet" | "mirror" | "kitchen" | "square" | "round" | "bedside";
-type AssistPhase = "thinking" | "speaking" | "done";
+type AssistPhase = "listening" | "thinking" | "speaking";
+/** Spark's run, as the demo steps through it: it listens, thinks, then speaks the reply, and starts over */
+const nextAssistPhase = (p: AssistPhase): AssistPhase => (p === "listening" ? "thinking" : p === "thinking" ? "speaking" : "listening");
 
 type BeatStage = {
   w: number;
@@ -242,7 +244,7 @@ function undockAt(p: number) {
 const at = (beat: number, f: number) => lerp(HOLDS[beat]![0], HOLDS[beat]![1], f);
 const BEAT_DOTS = [
   { idx: 0, label: "Wall switch dashboard", targetP: 0.03 },
-  { idx: 1, label: "Local Assist voice orb", targetP: at(1, 0.5) },
+  { idx: 1, label: "Local Assist voice, Spark", targetP: at(1, 0.5) },
   { idx: 2, label: "Rich notifications", targetP: at(2, 0.5) },
   { idx: 3, label: "Studio mirror presence detection", targetP: at(3, 0.3) },
   { idx: 4, label: "Kitchen timers, Sendspin, and radios", targetP: at(4, 0.5) },
@@ -322,7 +324,7 @@ export function MorphStory({
   const [doorLocked, setDoorLocked] = useState(true);
 
   // Beat 1: Real Assist Voice Overlay phase cycle (Thinking -> Speaking -> Done)
-  const [assistPhase, setAssistPhase] = useState<AssistPhase>("thinking");
+  const [assistPhase, setAssistPhase] = useState<AssistPhase>("listening");
 
   // Beat 2: Real NotificationOverlay card dismissed/collapsed state
   const [notifDismissed, setNotifDismissed] = useState(false);
@@ -482,14 +484,12 @@ export function MorphStory({
   const timerO = compact ? 1 : windowO(seg, 4, 0.22, 0.56);
   const raysO = compact ? 1 : windowO(seg, 4, 0.22, 0.54);
 
-  // Auto-cycle Assist Orb states cleanly while Beat 1 is on screen
+  // Spark steps through its run on its own while Beat 1 is on screen
   const assistVisible = compact ? compactAssistInView : assistO > 0.15;
   useEffect(() => {
     if (!assistVisible || reducedMotion) return;
-    const ms = assistPhase === "thinking" ? 2600 : assistPhase === "speaking" ? 2800 : 1800;
-    const id = window.setTimeout(() => {
-      setAssistPhase((prev) => (prev === "thinking" ? "speaking" : prev === "speaking" ? "done" : "thinking"));
-    }, ms);
+    const ms = assistPhase === "speaking" ? 3200 : 2400;
+    const id = window.setTimeout(() => setAssistPhase(nextAssistPhase), ms);
     return () => window.clearTimeout(id);
   }, [assistVisible, assistPhase, reducedMotion]);
 
@@ -976,25 +976,29 @@ export function MorphStory({
   };
 
   /*
-   * Beat 1 — REAL Assist Voice Overlay (OrbArt.kt + VoiceOverlay.kt)
+   * Beat 1: Assist as Spark, the edge glow (EdgeGlow.kt + EdgeGlowOverlay.kt). The dashboard stays in view under a
+   * light dim; the theme's two lights (Glassworks: sky on the left, violet on the right) ignite at the mic in the middle
+   * of the top edge and run both ways round the screen's edge to meet at the bottom. Listening, the mic glows with the
+   * voice and ripples run along the top; thinking, the lights shuttle along the top and bottom edges; speaking, the edge
+   * breathes calmly with the reply. A glass caption at the bottom shows what was heard and the reply. A tap moves on.
    */
   const renderRealVoiceOverlay = (opacity: number) => {
     if (opacity <= 0.01) return null;
-    const nextPhase = () =>
-      setAssistPhase((prev) => (prev === "thinking" ? "speaking" : prev === "speaking" ? "done" : "thinking"));
+    const nextPhase = () => setAssistPhase(nextAssistPhase);
 
     const interactive = opacity > 0.45;
-    // what the overlay says, for a screen reader: a button's own text is not read, so it is announced here
+    // what the caption says, for a screen reader: a button's own text is not read, so it is announced here
     const said =
-      assistPhase === "thinking"
-        ? "Assist is thinking: “Set a 5-minute pasta timer”"
-        : assistPhase === "speaking"
-          ? "Assist says: Timer started for 5 minutes."
-          : "Done: Timer started for 5 minutes.";
+      assistPhase === "listening"
+        ? "Assist is listening: How can I help?"
+        : assistPhase === "thinking"
+          ? "Assist is thinking: “Set a 5-minute pasta timer”"
+          : "Assist says: Timer started for 5 minutes.";
     return (
       <>
         <div
-          className={s.voiceScrim}
+          className={s.spark}
+          data-phase={assistPhase}
           style={{
             opacity,
             pointerEvents: interactive ? "auto" : "none",
@@ -1004,7 +1008,7 @@ export function MorphStory({
           onClick={nextPhase}
           role="button"
           tabIndex={interactive ? 0 : -1}
-          aria-label="Glassworks Assist voice overlay — tap to cycle voice state"
+          aria-label="Glassworks Assist, Spark edge glow: tap to move to the next step"
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === " ") {
               e.preventDefault();
@@ -1012,88 +1016,48 @@ export function MorphStory({
             }
           }}
         >
-          <div className={s.orbStage} style={{ transform: `scale(${0.86 + opacity * 0.14})` }}>
-            <div
-              className={`${s.orbGlow} ${s.orbGlowThink}`}
-              style={{ opacity: assistPhase === "thinking" ? 1 : 0 }}
-              aria-hidden="true"
-            />
-            <div
-              className={`${s.orbGlow} ${s.orbGlowSky}`}
-              style={{ opacity: assistPhase === "speaking" ? 1 : 0 }}
-              aria-hidden="true"
-            />
-            <div
-              className={`${s.orbGlow} ${s.orbGlowGreen}`}
-              style={{ opacity: assistPhase === "done" ? 1 : 0 }}
-              aria-hidden="true"
-            />
-
-            {assistPhase === "speaking" && (
+          <div className={s.sparkDim} aria-hidden="true" />
+          {/* keyed by phase, so the lights ignite again when listening starts over */}
+          <div key={assistPhase === "listening" ? "lit" : "on"} className={s.sparkRing} aria-hidden="true">
+            <span className={s.sparkHaze} />
+            <span className={s.sparkGlow} />
+            <span className={s.sparkEdge} />
+          </div>
+          <span className={s.sparkMic} aria-hidden="true" />
+          {assistPhase === "listening" && (
+            <span className={s.sparkRipples} aria-hidden="true">
+              <i />
+              <i />
+            </span>
+          )}
+          {assistPhase === "thinking" && (
+            <span className={s.sparkShuttles} aria-hidden="true">
+              <i />
+              <i />
+              <i />
+              <i />
+            </span>
+          )}
+          <div className={s.sparkCaption} aria-hidden="true">
+            {assistPhase === "listening" && (
               <>
-                <span className={`${s.orbRipple} ${s.orbRippleA}`} aria-hidden="true" />
-                <span className={`${s.orbRipple} ${s.orbRippleB}`} aria-hidden="true" />
+                <span className={`${s.sparkLabel} ${s.sparkLabelLit}`}>Listening</span>
+                <p className={`${s.sparkMain} ${s.sparkMuted}`}>How can I help?</p>
               </>
             )}
-
-            <div className={s.orbSphere}>
-              <div className={s.orbClip}>
-                <div
-                  className={s.orbSwirl}
-                  style={{ opacity: assistPhase === "thinking" ? 0.95 : 0 }}
-                  aria-hidden="true"
-                />
-                <div
-                  className={s.orbCoreSky}
-                  style={{ opacity: assistPhase === "speaking" ? 1 : 0 }}
-                  aria-hidden="true"
-                />
-                <div
-                  className={s.orbCoreGreen}
-                  style={{ opacity: assistPhase === "done" ? 1 : 0 }}
-                  aria-hidden="true"
-                />
-                <div className={s.orbShine} aria-hidden="true" />
-              </div>
-
-              <svg
-                viewBox="0 0 112 112"
-                className={`${s.orbCheck} ${assistPhase === "done" ? s.orbCheckShow : ""}`}
-                aria-hidden="true"
-              >
-                <path d="M40 57.5 l11 11 l22 -24" />
-              </svg>
-            </div>
-          </div>
-
-          <div className={s.voiceTexts} aria-hidden="true">
             {assistPhase === "thinking" && (
               <>
-                <span className={`${s.voiceLabel} ${s.voiceLabelFaint}`}>Thinking</span>
-                <p className={s.voiceMain}>“Set a 5-minute pasta timer”</p>
+                <span className={`${s.sparkLabel} ${s.sparkFaint}`}>Thinking</span>
+                <p className={s.sparkMain}>“Set a 5-minute pasta timer”</p>
               </>
             )}
             {assistPhase === "speaking" && (
               <>
-                <span className={s.voiceQuote}>“Set a 5-minute pasta timer”</span>
-                <p className={s.voiceMain}>Timer started for 5 minutes.</p>
-              </>
-            )}
-            {assistPhase === "done" && (
-              <>
-                <span className={`${s.voiceLabel} ${s.voiceLabelGreen}`}>Done</span>
-                <p className={s.voiceMain}>Timer started for 5 minutes.</p>
+                <span className={s.sparkHeard}>“Set a 5-minute pasta timer”</span>
+                <p className={s.sparkMain}>Timer started for 5 minutes.</p>
               </>
             )}
           </div>
-
-          <span
-            className={s.voiceHint}
-            style={{ opacity: assistPhase === "done" ? 0 : 0.85 }}
-            aria-hidden="true"
-          >
-            Tap anywhere to cycle state
-          </span>
         </div>
         <span className="visually-hidden" role="status">
           {interactive ? said : ""}
@@ -1401,13 +1365,13 @@ export function MorphStory({
         {renderCompactFrame("wall")}
       </div>
 
-      {/* Beat 1: Wide Kitchen Display + Real Assist Orb */}
+      {/* Beat 1: Wide Kitchen Display + Assist's Spark edge glow */}
       <div ref={compactAssistRef} className={s.compactBeat}>
         <div className={s.compactCopy}>
           <span className={s.eyebrow}>LOCAL ASSIST VOICE</span>
           <h2 className={s.h2}>A screen that listens locally</h2>
           <p className={s.lede}>
-            On-device wake word detection runs right on the hardware and hands off to your Home Assistant Assist pipeline, with the same calm glass orb on every screen.
+            On-device wake word detection runs right on the hardware and hands off to your Home Assistant Assist pipeline. Spark lights the edge of the screen while you talk, so your dashboard stays in view.
           </p>
           <div className={s.ctas}>
             <Link href="/panes/assist" className={s.quietLink}>
@@ -1602,7 +1566,7 @@ export function MorphStory({
             </div>
           </div>
 
-          {/* Beat 1 Copy (Right — Wide Kitchen Display + Real Assist Orb) */}
+          {/* Beat 1 Copy (Right — Wide Kitchen Display + Assist's Spark edge glow) */}
           <div
             className={`${s.copyBlock} ${s.copyRight}`}
             style={{
@@ -1616,7 +1580,7 @@ export function MorphStory({
             <span className={s.eyebrow}>LOCAL ASSIST VOICE</span>
             <h2 className={s.h2}>A screen that listens locally</h2>
             <p className={s.lede}>
-              On-device wake word detection runs right on the hardware and hands off to your Home Assistant Assist pipeline, with the same calm glass orb on every screen.
+              On-device wake word detection runs right on the hardware and hands off to your Home Assistant Assist pipeline. Spark lights the edge of the screen while you talk, so your dashboard stays in view.
             </p>
             <div className={s.ctas}>
               <Link href="/panes/assist" className={s.quietLink}>
