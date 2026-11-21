@@ -102,6 +102,47 @@ export class OwnFrameRefused extends Refused {
   constructor(readonly own: OwnFrame, why: string) { super(why); }
 }
 
+/** What the device's own browser says about it (navigator, screen, WebGL, client hints), for UsbOnDevice `identify`. */
+export interface BrowserFacts {
+  userAgent: string;
+  platform: string;
+  maxTouchPoints: number;
+  screen: { width: number; height: number; dpr: number };
+  gpu?: string;
+  hints?: { platform?: string; model?: string; platformVersion?: string; bitness?: string };
+}
+
+/** The device as its own browser shows it, and which of the frame's builds fits (`either`: the version is hidden). */
+export interface OnDevice {
+  android: boolean;
+  form: 'tablet' | 'phone';
+  desktopSite: boolean;
+  /** the Android version as read; undefined when the browser hides it */
+  release?: string;
+  app: 'generic' | 'legacy' | 'either' | 'too-old';
+  modelCode?: string;
+  bits?: 64 | 32;
+  identified: UsbIdentified;
+}
+
+/**
+ * The browsers the on-device page's demos show: a model Kiln knows, a brand it knows, a phone, an unknown device, one
+ * that fits only the legacy build, one whose version is hidden (either build), one too old, and a computer.
+ */
+export type OnDeviceRole = 'known' | 'branded' | 'phone' | 'unknown' | 'legacy' | 'either' | 'too-old' | 'computer';
+
+/**
+ * The install from the device's own browser, no computer: its route under the frame's (installer.json `onDevice`), how
+ * the browser's facts name the device, the release line of each build, and what the first screen says it needs.
+ */
+export interface UsbOnDevice {
+  route: string;
+  identify(f: BrowserFacts): OnDevice;
+  lines: { generic: string; legacy: string };
+  /** the version line when the browser hides it but its build is the current one, and the note when either fits */
+  needs: { generic: string; either: string };
+}
+
 /** What the engine's USB-debugging flow needs from a frame: its words and release line in its data, its code here. */
 export interface UsbFrame {
   kind: 'usb';
@@ -134,6 +175,8 @@ export interface UsbFrame {
   silent(u: UsbSilentUpdates | undefined, release: string): SilentWords | null;
   /** An API level's Android version, for a device that doesn't say its release. */
   androidName(sdk: number): string;
+  /** The install from the device's own browser, when the frame has one. */
+  onDevice?: UsbOnDevice;
   /** From WebUSB, before USB debugging is on. */
   identifyUsb(d: { vendorId: number; productName?: string }): UsbIdentified;
   /** The person's pick of a brand, or none ("Other"): its steps. */
@@ -151,6 +194,8 @@ export interface UsbSim {
    * APK that matches it, what WebUSB says of it, and whether Kiln knows its model. `fast`: no delays (the tests).
    */
   demo(name: string, o: { fast: boolean }): { device: PanelShell & { app?: UsbApp }; apk: Uint8Array; apkName: string; usb: { vendorId: number; productName?: string }; known: boolean };
+  /** Its detection fixtures, by the role the on-device page's ?demo=… states ask for (OnDeviceRole). */
+  browsers?: Partial<Record<OnDeviceRole, BrowserFacts>>;
   /** The cards its simulated app's Panes step shows, for ?demo=setup-panes. */
   panes?: { id: string; title: string; detail: string; on: boolean }[];
 }

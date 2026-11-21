@@ -3,7 +3,10 @@
 import type { UsbApp, UsbInstalled } from '@glassworks/kiln-core';
 import { kilnFrame } from '@glassworks/generic-android-installer/kiln';
 import { kilnSim } from '@glassworks/generic-android-installer/sim';
-import { UsbPage, usbStandard } from '../src/device/UsbPage';
+import { UsbPage, UsbRoutes, usbStandard } from '../src/device/UsbPage';
+import { OnDeviceFrame, OnDevicePage, TabletScreens as Screens } from '../src/device/onDevice/OnDevicePage';
+import { ON_DEVICE_DEMOS, onDeviceDemo, type OnDeviceDemo } from '../src/device/onDevice/demo';
+import type { ComponentProps } from 'react';
 import { UsbActivity, keptUsb } from '../src/device/usbActivity';
 import { USB_DEMOS, usbDemo, type UsbDemo } from '../src/device/usbDemo';
 import { UsbSession, usbMode, usbOpen, type Device, type UsbDeps } from '../src/device/usbSession';
@@ -31,3 +34,13 @@ export const androidMode = (s: string, demosOn: boolean, demos: readonly string[
 export const androidDemo = (name: UsbDemo, fast = false, handOver?: (p: Device, installed: UsbInstalled) => StandardSession | undefined) => usbDemo(android, androidSim, name, fast, handOver);
 export const keptAndroid = (make: () => UsbSession, from?: UsbSession['from']) => keptUsb(ANDROID_BASE, android.name, make, from);
 export const androidStandard = (app: UsbApp, installed?: UsbInstalled, model?: string) => usbStandard(android, app, installed, model);
+
+/** The on-device page at /android/tablet, as [frame] renders it for generic Android. */
+const onDevice = { ...android, onDevice: android.onDevice! };
+export const TabletPage = () => <OnDevicePage frame={onDevice} sim={androidSim} base={ANDROID_BASE} />;
+export const TabletScreens = (p: ComponentProps<typeof Screens>) => <OnDeviceFrame frame={onDevice} base={ANDROID_BASE}><Screens {...p} /></OnDeviceFrame>;
+export const TABLET_DEMOS = ON_DEVICE_DEMOS;
+export type TabletDemo = OnDeviceDemo;
+export const tabletDemo = (name: string) => onDeviceDemo(onDevice.onDevice, androidSim.browsers!, name);
+/** generic Android's routes as [frame] gives them: /android and /android/tablet, from its installer.json */
+export const AndroidRoutes = () => <UsbRoutes frame={android} demo={{ sim: androidSim }} base={ANDROID_BASE} />;

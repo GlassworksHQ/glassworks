@@ -39,8 +39,9 @@ step has its `route` in `installer.json`; there is no per-frame page (`test/cont
 
 Android's install (`/android`) runs on the engine's USB-debugging flow (`apps/kiln/src/device/usb*`, kiln-core
 `UsbFrame`): a frame whose device runs its own Android declares its words in `installer.json` `device` and its code in
-`frames/<id>/installer/src/kiln.ts`, as generic Android does. `/android/tablet` (from the tablet's own browser) still
-has its own page (#621); don't copy it.
+`frames/<id>/installer/src/kiln.ts`, as generic Android does. Its install from the device's own browser
+(`/android/tablet`) is the same flow's `onDevice` page (`apps/kiln/src/device/onDevice`), at the route its
+`installer.json` `onDevice` declares. Every frame's pages come from `[frame]`; `apps/kiln/src/app` has none of a frame's own.
 
 ## What it is
 

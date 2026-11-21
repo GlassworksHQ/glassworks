@@ -17,6 +17,16 @@
     }
   },
   "wayBack": { "how": "remove-app" },
+  "onDevice": {
+    "route": "tablet",
+    "title": "From the tablet",
+    "lines": { "generic": "generic-android", "legacy": "generic-android-legacy" },
+    "needs": {
+      "generic": "Android 8 or newer",
+      "either": "The browser doesn't say the Android version. Glassworks needs Android 8, or its legacy build on Android 6 and 7. The next step has both."
+    },
+    "why": "Glassworks from the tablet's own browser, no computer (#403): the APK of the build that fits, from each line's newest release"
+  },
   "device": {
     "name": "Android device",
     "short": "tablet",

@@ -4,7 +4,7 @@
 // hash before the file exists, and a Glassworks release isn't known until its tag is cut. Never releases/latest: that
 // is another line's.
 import { ships, type Support } from '@glassworks/frame-card';
-import { download, loadRelease, type Abi, type Line } from '../android/tablet/model';
+import { download, loadRelease, type Abi, type Line } from '../device/onDevice/model';
 
 /** Where a page's APK comes from: the newest release, or a file the tester picks. */
 export type ApkFrom = 'release' | 'local';

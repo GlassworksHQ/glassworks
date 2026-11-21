@@ -31,6 +31,7 @@ import { registry } from '../wizard/registry';
 import { keptUsb } from './usbActivity';
 import { USB_DEMOS, usbDemo, type UsbDemo } from './usbDemo';
 import { ScreenLockBlock } from './ScreenLockBlock';
+import { OnDevicePage } from './onDevice/OnDevicePage';
 import { UsbSession, usbMode, usbOpen, type Device, type UsbState } from './usbSession';
 import type { ApkFrom } from '../release/apk';
 import './usb.css';
@@ -676,4 +677,12 @@ export function UsbPage({ frame: dev, demo: sim, base }: { frame: UsbFrame; demo
   }
   if (onStandard) return null;
   return live ? <Screens session={live} base={base} /> : null;
+}
+
+/** A UsbFrame's routes: the install from the device's own browser at its `onDevice` route, the USB page everywhere else. */
+export function UsbRoutes(p: { frame: UsbFrame; demo?: { sim: UsbSim }; base: string }) {
+  const path = (usePathname() ?? '').replace(/\/+$/, '');
+  const od = p.frame.onDevice;
+  if (od && path === `${p.base}/${od.route}`) return <OnDevicePage frame={{ ...p.frame, onDevice: od }} sim={p.demo?.sim} base={p.base} />;
+  return <UsbPage {...p} />;
 }

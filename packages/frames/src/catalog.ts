@@ -47,6 +47,8 @@ export interface Installer {
   wayBack?: { how: string };
   /** The device has a touchscreen. Without one (false), set-up never offers "do it on the panel". */
   touch?: boolean;
+  /** An install from the device's own browser, at `route` under the frame's, its page's title `title`. */
+  onDevice?: { route: string; title: string };
   /**
    * The standard flow after its install (Kiln's App, Wi-Fi, Home Assistant, Panes, Radio, Done): every step unless this
    * says otherwise. `remove`: a step it leaves out, by name, with why. A step its hardware lacks needs no line here.
