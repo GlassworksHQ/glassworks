@@ -134,7 +134,7 @@ class HiddenApHotspot(
 
     /** Ends the AP, then puts back what a start changed: this run's, or one that died ([undo]). Does nothing when nothing is changed. */
     private fun restore() {
-        val b = before ?: undo.read() ?: return
+        val b = before ?: undo.read()?.also { log("setup hotspot: putting back what a run that died left") } ?: return
         before = null
         started = false
         clearTimeout()

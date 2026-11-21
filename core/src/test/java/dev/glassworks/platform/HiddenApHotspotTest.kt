@@ -112,6 +112,7 @@ class HiddenApHotspotTest {
         assertEquals(net.ssid, d.config)
 
         hotspot(d) // the app's next start
+        assertEquals(listOf("setup hotspot: putting back what a run that died left"), logged)
         assertFalse(d.apOn)
         assertEquals("Home hotspot", d.config)
         assertTrue(d.wifiOn)
