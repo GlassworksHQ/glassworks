@@ -3,12 +3,17 @@
 // their license (CC BY-NC-SA) keeps them out of our hosting and GitHub sends no CORS headers, so the
 // kiosk app downloads them on the panel itself.
 import type { PanelShell } from '@glassworks/adb';
-import { ACT, PKG, Steps, deviceInfo, dropAdmin, grantPermissions, q, startApp, type StepFn } from '@glassworks/app-adb';
+import { Steps, deviceInfo, dropAdmin, grantPermissions, kioskVersion as appVersion, q, startApp, type StepFn } from '@glassworks/app-adb';
+import { ACT, PKG, S1_KIOSK } from './app';
 import {
   type Carried, type SwitchOutcome, type SwitchPlan, handBackSecrets, isDowngrade, isKeyMismatch, openApiPort, panelWifi, planSwitch, resendWifi, switchSigningKey, wifiAtRisk,
 } from './switch';
 
-export { PKG, deviceInfo, kioskVersion, q, type StepFn } from '@glassworks/app-adb';
+export { deviceInfo, q, type StepFn } from '@glassworks/app-adb';
+export { PKG } from './app';
+
+/** The S1 app's version on the panel (read-only); undefined when it isn't installed. */
+export const kioskVersion = (p: PanelShell, signal?: AbortSignal) => appVersion(p, signal, S1_KIOSK);
 
 const LAUNCHER = 'com.aqara.inhome.launcher';
 const AQARA_HOME = `${LAUNCHER}/.MainActivity`;
@@ -173,7 +178,7 @@ export async function provision(p: PanelShell, opts: ProvisionOptions, onStep: S
 async function afterInstall(p: PanelShell, r: Steps, opts: ProvisionOptions, phase: (ph: AppPhase) => void,
   sw: SwitchOutcome | undefined, sleep: (ms: number) => Promise<void>): Promise<Provisioned> {
   phase({ step: 'home' });
-  await grantPermissions(r);
+  await grantPermissions(r, S1_KIOSK);
 
   r.step('Make the kiosk the HOME app');
   await r.run(`cmd package set-home-activity ${ACT}`);
@@ -222,7 +227,7 @@ async function afterInstall(p: PanelShell, r: Steps, opts: ProvisionOptions, pha
 
   phase({ step: 'start' });
   r.step('Start the kiosk');
-  await startApp(r, opts);
+  await startApp(r, opts, S1_KIOSK);
 
   let switched: SwitchResult | undefined;
   if (sw) {
@@ -270,7 +275,7 @@ export async function unprovision(p: PanelShell, onStep: StepFn = () => {},
   sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms))): Promise<UndoResult> {
   const r = new Steps(p, onStep);
   r.step('Removing Glassworks\' device admin');
-  const adminGone = await dropAdmin(p, sleep);
+  const adminGone = await dropAdmin(p, sleep, S1_KIOSK);
   r.detail(adminGone ? 'device admin removed' : 'device admin still active: removing the app may fail');
 
   r.step('Bringing back Aqara\'s apps');

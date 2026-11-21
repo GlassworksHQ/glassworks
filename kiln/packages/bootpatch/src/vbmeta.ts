@@ -1,4 +1,4 @@
-// The standalone `vbmeta` partition (frames/aqara-s1-plus/research/web-installer.md §6a, frames/aqara-s1-plus/tools/install/fel-install.sh):
+// The standalone `vbmeta` partition (the web installer's research note, §6a; the reference CLI's fel-install.sh):
 // flags are the big-endian u32 at offset 120 of the AVB0 header; 3 = verification + hashtree off.
 
 const FLAGS_OFF = 120;

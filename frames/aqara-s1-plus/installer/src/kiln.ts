@@ -2,12 +2,12 @@
 // (../../design), the steps only code can say are below, and its recipe is recipe.ts. Kiln reads it through the frames
 // registry (packages/frames). The simulated device for ?demo=… and tests is separate: sim.ts.
 import type { PanelShell } from '@glassworks/adb';
-import { S1_KIOSK } from '@glassworks/app-adb';
 import { frameWords, type KilnFrame, type RecoveryData } from '@glassworks/kiln-core';
 import photo from '../../../../docs/img/fel-button.jpg';
 import design from '../../design/frame.json';
 import installer from '../../design/installer.json';
 import recovery from '../../design/recovery.json';
+import { S1_KIOSK } from './app';
 import { credits } from './credits';
 import { unprovision, type AppPhase } from './provision';
 import { s1Plus, type SetUpOptions } from './recipe';

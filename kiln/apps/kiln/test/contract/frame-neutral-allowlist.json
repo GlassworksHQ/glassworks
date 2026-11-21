@@ -20,121 +20,25 @@
       "why": "#621 step 3, after #524: /android's own session and screens; they go when Android moves onto the shared engine"
     },
     {
-      "path": "kiln/packages/adb/src/key.ts",
-      "terms": [
-        "aqara",
-        "s1"
-      ],
-      "why": "#621 phase 2: a package names the S1 or the Mirror (as an example, a source path or its own name); say it generically, or move the frame's part to frames/<id>"
-    },
-    {
-      "path": "kiln/packages/app-adb/src/apk.ts",
-      "terms": [
-        "s1"
-      ],
-      "why": "#621 phase 2: a package names the S1 or the Mirror (as an example, a source path or its own name); say it generically, or move the frame's part to frames/<id>"
-    },
-    {
-      "path": "kiln/packages/app-adb/src/index.ts",
-      "terms": [
-        "aqara",
-        "generic-android",
-        "mirror",
-        "s1"
-      ],
-      "why": "#621 phase 2: a package names the S1 or the Mirror (as an example, a source path or its own name); say it generically, or move the frame's part to frames/<id>"
-    },
-    {
-      "path": "kiln/packages/bootpatch/src/index.ts",
-      "terms": [
-        "aqara",
-        "s1"
-      ],
-      "why": "#621 phase 2: a package names the S1 or the Mirror (as an example, a source path or its own name); say it generically, or move the frame's part to frames/<id>"
-    },
-    {
-      "path": "kiln/packages/bootpatch/src/overlay.ts",
-      "terms": [
-        "aqara",
-        "s1"
-      ],
-      "why": "#621 phase 2: a package names the S1 or the Mirror (as an example, a source path or its own name); say it generically, or move the frame's part to frames/<id>"
-    },
-    {
-      "path": "kiln/packages/bootpatch/src/patch.ts",
-      "terms": [
-        "aqara",
-        "s1"
-      ],
-      "why": "#621 phase 2: a package names the S1 or the Mirror (as an example, a source path or its own name); say it generically, or move the frame's part to frames/<id>"
-    },
-    {
-      "path": "kiln/packages/bootpatch/src/vbmeta.ts",
-      "terms": [
-        "aqara",
-        "s1"
-      ],
-      "why": "#621 phase 2: a package names the S1 or the Mirror (as an example, a source path or its own name); say it generically, or move the frame's part to frames/<id>"
-    },
-    {
       "path": "kiln/packages/bootpatch/src/wasm/Cargo.lock",
       "terms": [
         "s1"
       ],
-      "why": "#621 phase 2: a package names the S1 or the Mirror (as an example, a source path or its own name); say it generically, or move the frame's part to frames/<id>"
+      "why": "#709: the wasm crate's name; renaming it changes bootpatch.wasm's bytes, so it goes with the next rebuild"
     },
     {
       "path": "kiln/packages/bootpatch/src/wasm/Cargo.toml",
       "terms": [
         "s1"
       ],
-      "why": "#621 phase 2: a package names the S1 or the Mirror (as an example, a source path or its own name); say it generically, or move the frame's part to frames/<id>"
+      "why": "#709: the wasm crate's name; renaming it changes bootpatch.wasm's bytes, so it goes with the next rebuild"
     },
     {
       "path": "kiln/packages/bootpatch/src/wasm/build-wasm.sh",
       "terms": [
         "s1"
       ],
-      "why": "#621 phase 2: a package names the S1 or the Mirror (as an example, a source path or its own name); say it generically, or move the frame's part to frames/<id>"
-    },
-    {
-      "path": "kiln/packages/fastboot/src/fastboot.ts",
-      "terms": [
-        "aqara",
-        "s1"
-      ],
-      "why": "#621 phase 2: a package names the S1 or the Mirror (as an example, a source path or its own name); say it generically, or move the frame's part to frames/<id>"
-    },
-    {
-      "path": "kiln/packages/fastboot/src/sparse.ts",
-      "terms": [
-        "mirror"
-      ],
-      "why": "#621 phase 2: a package names the S1 or the Mirror (as an example, a source path or its own name); say it generically, or move the frame's part to frames/<id>"
-    },
-    {
-      "path": "kiln/packages/fel/src/a133.ts",
-      "terms": [
-        "aqara",
-        "s1"
-      ],
-      "why": "#621 phase 2: a package names the S1 or the Mirror (as an example, a source path or its own name); say it generically, or move the frame's part to frames/<id>"
-    },
-    {
-      "path": "kiln/packages/fel/src/uboot.ts",
-      "terms": [
-        "aqara",
-        "s1"
-      ],
-      "why": "#621 phase 2: a package names the S1 or the Mirror (as an example, a source path or its own name); say it generically, or move the frame's part to frames/<id>"
-    },
-    {
-      "path": "kiln/packages/setup-channel/src/channel.ts",
-      "terms": [
-        "mirror",
-        "s1"
-      ],
-      "why": "#621 phase 2: a package names the S1 or the Mirror (as an example, a source path or its own name); say it generically, or move the frame's part to frames/<id>"
+      "why": "#709: the wasm crate's name; renaming it changes bootpatch.wasm's bytes, so it goes with the next rebuild"
     }
   ],
   "notFrames": [
@@ -144,6 +48,27 @@
         "s1"
       ],
       "why": "SHA-256's \u03a31 (S1 in FIPS 180-4's names), not the frame"
+    },
+    {
+      "path": "kiln/packages/adb/src/key.ts",
+      "terms": [
+        "s1"
+      ],
+      "why": "the project's old name in this browser's stored adb key (its IndexedDB database and the key's name): a new name is a new key, which every device that let the old one in refuses"
+    },
+    {
+      "path": "kiln/packages/app-adb/src/index.ts",
+      "terms": [
+        "s1"
+      ],
+      "why": "the core's socket name, the same in every frame's app (Kotlin's ImprovSerialServer.SOCKET and SetupChannel.SOCKET); every installed app listens on it, so it never changes"
+    },
+    {
+      "path": "kiln/packages/setup-channel/src/channel.ts",
+      "terms": [
+        "s1"
+      ],
+      "why": "the core's socket name, the same in every frame's app (Kotlin's ImprovSerialServer.SOCKET and SetupChannel.SOCKET); every installed app listens on it, so it never changes"
     }
   ],
   "imports": [

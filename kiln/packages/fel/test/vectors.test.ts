@@ -28,7 +28,7 @@ const uboot = () => new Uint8Array(300_000).map((_, i) => (i * 13) & 0xff);
 /** `late`: refused after the SPL was uploaded, so writes did happen. `ran`: the SPL itself ran (and failed). */
 interface Refusal { name: string; error: string | RegExp; setup: (b: FakeBrom) => void; spl: () => Uint8Array; late?: boolean; ran?: boolean }
 const refusals: Refusal[] = [
-  { name: 'not an A133', error: 'not an Aqara S1 Plus', setup: (b) => { b.socId = 0x1823; }, spl },
+  { name: 'not an A133', error: 'isn\'t an A133', setup: (b) => { b.socId = 0x1823; }, spl },
   { name: 'secure boot on', error: 'secure boot is enabled', setup: (b) => { b.regs.set(A133.sidSecureBootReg, 1); }, spl },
   { name: 'MMU on', error: 'MMU', setup: (b) => { b.sctlr |= 1; }, spl },
   { name: 'no eGON header', error: 'eGON', setup: () => {}, spl: () => { const s = spl(); s[4] = 0x58; return s; } },

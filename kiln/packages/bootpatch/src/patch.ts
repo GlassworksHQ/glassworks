@@ -3,7 +3,7 @@
 // Written clean-room from docs/research/kiln-cleanroom/bootpatch-spec.md ("The patch").
 //
 // Adds Magisk to a stock ramdisk, after undoing an earlier Magisk patch, so that the result matches
-// the CLI (frames/aqara-s1-plus/tools/root/patch-boot-magisk.sh) byte for byte.
+// the reference CLI (patch-boot-magisk.sh) byte for byte.
 
 import type { MagiskBinaries } from './apk';
 import { type BootImage, type Compression, hasBytes, ramdiskCompression, readBootImage, repackBootImage } from './bootimage';

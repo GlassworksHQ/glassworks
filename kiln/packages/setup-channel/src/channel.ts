@@ -92,8 +92,8 @@ export interface SetupState {
     signinUrl?: string;
   };
   /**
-   * The panel's Zigbee/Thread radio. A frame without one (any Android device, the Mirror) leaves it out;
-   * Kiln's phone setup checks for that at run time. The S1 installer (kiln/src) only meets the S1, which always sends it.
+   * The panel's Zigbee/Thread radio. A frame without one (most Android devices) leaves it out; Kiln's phone setup
+   * checks for that at run time. The old installer page (kiln/src) only meets a frame with a radio, which always sends it.
    */
   radio: {
     mode: string;

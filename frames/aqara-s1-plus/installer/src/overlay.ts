@@ -1,23 +1,22 @@
-// The files frames/aqara-s1-plus/tools/root/patch-boot-magisk.sh adds to the ramdisk after Magisk's own patch, with the
+// The files ../../tools/root/patch-boot-magisk.sh adds to the ramdisk after Magisk's own patch, with the
 // same paths, modes and pre-flight checks. The caller supplies the bytes (fetched assets + the
 // browser's adb key).
 
-import type { OverlayFile } from './index';
-import { zipEntries } from './apk';
+import { zipEntries, type OverlayFile } from '@glassworks/bootpatch';
 
 export interface S1OverlayInputs {
-  rc: Uint8Array;             // frames/aqara-s1-plus/tools/root/glassworks.rc (the init service slots)
-  loaderSh: Uint8Array;       // frames/aqara-s1-plus/tools/root/glassworks_loader.sh
-  verify: Uint8Array;         // frames/aqara-s1-plus/tools/root/out/s1kiosk_verify (frames/aqara-s1-plus/tools/root/build-verify.sh)
-  bundlePub: Uint8Array;      // frames/aqara-s1-plus/tools/root/glassworks_bundle.pub (bundle signing key, public half)
+  rc: Uint8Array;             // ../../tools/root/glassworks.rc (the init service slots)
+  loaderSh: Uint8Array;       // ../../tools/root/glassworks_loader.sh
+  verify: Uint8Array;         // ../../tools/root/out/s1kiosk_verify (../../tools/root/build-verify.sh)
+  bundlePub: Uint8Array;      // ../../tools/root/glassworks_bundle.pub (bundle signing key, public half)
   /** adb authorized_keys line(s) ('QAAAA... name\n'), or empty (ADB_PUBKEY=none). */
   adbKeys: Uint8Array;
-  agentSh: Uint8Array;        // frames/aqara-s1-plus/tools/radio/glassworks_agent.sh
-  otbrAgent: Uint8Array;      // frames/aqara-s1-plus/tools/radio/out/otbr-agent
-  otCtl: Uint8Array;          // frames/aqara-s1-plus/tools/radio/out/ot-ctl
-  firstbootSh: Uint8Array;    // frames/aqara-s1-plus/tools/root/glassworks_firstboot.sh
-  netwatchSh: Uint8Array;     // frames/aqara-s1-plus/tools/root/glassworks_netwatch.sh
-  updateSh: Uint8Array;       // frames/aqara-s1-plus/tools/root/glassworks_update.sh
+  agentSh: Uint8Array;        // ../../tools/radio/glassworks_agent.sh
+  otbrAgent: Uint8Array;      // ../../tools/radio/out/otbr-agent
+  otCtl: Uint8Array;          // ../../tools/radio/out/ot-ctl
+  firstbootSh: Uint8Array;    // ../../tools/root/glassworks_firstboot.sh
+  netwatchSh: Uint8Array;     // ../../tools/root/glassworks_netwatch.sh
+  updateSh: Uint8Array;       // ../../tools/root/glassworks_update.sh
   /** lib/armeabi-v7a/libbusybox.so from the Magisk APK (`magiskBusybox(magiskApk)`): Magisk loads no module without it. */
   magiskBusybox: Uint8Array;
   /** Boot animation (all entries STORED), mounted by the loader; omit for stock. */
@@ -29,7 +28,7 @@ export function s1Overlay(i: S1OverlayInputs): OverlayFile[] {
   // patch-boot-magisk.sh: grep -q '^QAAAA' (some line must start with it); empty = ADB_PUBKEY=none
   if (i.adbKeys.length && !/^QAAAA/m.test(new TextDecoder().decode(i.adbKeys)))
     throw new Error('adbKeys does not look like an adb public key (must start with QAAAA)');
-  // patch-boot-magisk.sh: grep -qE '^[0-9a-f]{64}$' frames/aqara-s1-plus/tools/root/glassworks_bundle.pub
+  // patch-boot-magisk.sh: grep -qE '^[0-9a-f]{64}$' tools/root/glassworks_bundle.pub
   if (!/^[0-9a-f]{64}$/m.test(new TextDecoder().decode(i.bundlePub)))
     throw new Error('bundlePub is not a 32-byte hex public key');
   if (!i.verify.length) throw new Error('empty verifier');

@@ -1,4 +1,4 @@
-// frames/aqara-s1-plus/tools/fel/fel-boot.sh with NO_BL31=1, in the browser: check the chip, run the SPL (DRAM init),
+// The reference CLI's fel-boot.sh with NO_BL31=1, in the browser: check the chip, run the SPL (DRAM init),
 // upload u-boot.bin to DRAM in 64 KiB writes, then warm-reset into it. Nothing is written to eMMC.
 // Our U-Boot then starts USB fastboot by itself (BOOTCOMMAND "fastboot usb 0").
 import { A133 } from './a133';
@@ -6,11 +6,19 @@ import { hex, type FelDevice } from './felDevice';
 
 export interface ChipCheck { socId: number; secureBoot: number }
 
+/** Another chip than the A133: a frame's recipe says what the person plugged in instead (its own words). */
+export class WrongChip extends Error {
+  constructor(readonly socId: number) {
+    super(`this chip isn't an A133 (SoC 0x${socId.toString(16)}, expected 0x${A133.socId.toString(16)})`);
+    this.name = 'WrongChip';
+  }
+}
+
 /** Refuses anything but an A133 whose boot ROM still runs unsigned code (fel-install.sh step 1). */
 export async function checkChip(fel: FelDevice): Promise<ChipCheck> {
   const v = await fel.version();
   if (v.socId !== A133.socId) {
-    throw new Error(`this is not an Aqara S1 Plus (SoC 0x${v.socId.toString(16)}, expected an A133, 0x1855)`);
+    throw new WrongChip(v.socId);
   }
   const secureBoot = await fel.readl(A133.sidSecureBootReg);
   if (secureBoot !== 0) {
