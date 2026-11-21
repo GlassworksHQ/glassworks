@@ -86,5 +86,14 @@
         "line": "Kiln couldn't read it back. Glassworks' Device page on the panel says."
       }
     }
+  },
+  "picker": {
+    "needs": [
+      "A USB-C data cable, plugged straight into this computer",
+      "A small screwdriver, for the back cover",
+      "About 10 minutes"
+    ],
+    "wayBack": "Kiln backs up the panel before it writes anything. Undo puts its original software back.",
+    "why": "The picker's What you'll need bar (#672), as the frame's README says it (What you need)"
   }
 }
