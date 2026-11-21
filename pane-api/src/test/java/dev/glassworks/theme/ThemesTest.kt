@@ -88,4 +88,21 @@ class CustomThemeTest {
         for (t in Themes.ALL) for (p in listOf(t.dark, t.light)) for (c in listOf(p.a, p.b))
             assertTrue("${t.id} ${Themes.hex(c)}", Themes.contrast(p.readable(c), p.ground) >= 3.0)
     }
+
+    @Test fun homeAssistantsThemeIsOnePickInTheVariantItsGroundIs() {
+        val dark = Themes.ha(Themes.Palette(0xff03a9f4.toInt(), 0xffff9800.toInt(), 0xff111111.toInt()))
+        val light = Themes.ha(Themes.Palette(0xff03a9f4.toInt(), 0xffff9800.toInt(), 0xfffafafa.toInt()))
+        assertEquals(Themes.DEFAULT.id, Themes.pick(Themes.HA_PICK).id) // the dashboard hasn't shown its colors
+        assertEquals(Themes.HA_PICK, Themes.pick(Themes.HA_PICK, ha = dark).id)
+        assertTrue(Themes.pick(Themes.HA_PICK, ha = dark).dark)
+        assertFalse(Themes.pick(Themes.HA_PICK, ha = light).dark)
+        assertEquals(Themes.DEFAULT.id, Themes.pick("ha/dark", ha = dark).id) // only ha/auto names it
+        assertEquals("Home Assistant", Themes.pick(Themes.HA_PICK, ha = dark).name)
+        val opts = Themes.options(Themes.CUSTOM_START, dark).map { it.first }
+        assertEquals(1, opts.count { it.startsWith("ha/") })
+        assertTrue("after the five, before Custom", opts.indexOf(Themes.HA_PICK) == 10 && opts.last().startsWith("custom/"))
+        assertEquals(dark.dark, Themes.decodePalette(Themes.encode(dark.dark)))
+        assertEquals(null, Themes.decodePalette("#123456,#abcdef"))
+    }
 }
+

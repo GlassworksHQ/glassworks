@@ -254,8 +254,8 @@ class KioskPrefs(
      * this build doesn't know reads as the default. A factory reset clears it, as the other settings.
      */
     var overlayTheme: String
-        get() = dev.glassworks.theme.Themes.pick(sp.getString("overlay_theme", null), customTheme).id
-        set(v) = sp.edit().putString("overlay_theme", dev.glassworks.theme.Themes.pick(v, customTheme).id).apply()
+        get() = dev.glassworks.theme.Themes.pick(sp.getString("overlay_theme", null), customTheme, haTheme).id
+        set(v) = sp.edit().putString("overlay_theme", dev.glassworks.theme.Themes.pick(v, customTheme, haTheme).id).apply()
 
     /**
      * The custom theme's palettes (#691's "Custom themes"), or null while none are saved: then `custom/…` reads as the
@@ -279,7 +279,9 @@ class KioskPrefs(
      */
     val overlayPick: dev.glassworks.theme.Themes.Pick
         get() {
-            val saved = dev.glassworks.theme.Themes.pick(sp.getString("overlay_theme", null), customTheme)
+            val saved = dev.glassworks.theme.Themes.pick(sp.getString("overlay_theme", null), customTheme, haTheme)
+            // Home Assistant's own theme is already in HA's variant.
+            if (saved.theme.id == dev.glassworks.theme.Themes.HA) return saved
             val dark = haDark?.takeIf { followHaDark } ?: return saved
             return dev.glassworks.theme.Themes.Pick(saved.theme, dark)
         }
@@ -291,6 +293,17 @@ class KioskPrefs(
     var followHaDark: Boolean
         get() = sp.getBoolean(KEY_FOLLOW_HA_DARK, false)
         set(v) = sp.edit().putBoolean(KEY_FOLLOW_HA_DARK, v).apply()
+
+    /**
+     * Home Assistant's theme (#691): the colors its dashboard shows now (primary, accent, background), as the kiosk
+     * extension last read them, or null while it hasn't. Kept so the overlays have them from the start.
+     */
+    var haColors: dev.glassworks.theme.Themes.Palette?
+        get() = dev.glassworks.theme.Themes.decodePalette(sp.getString(KEY_HA_COLORS, null))
+        set(v) = sp.edit().apply { if (v == null) remove(KEY_HA_COLORS) else putString(KEY_HA_COLORS, dev.glassworks.theme.Themes.encode(v)) }.apply()
+
+    /** [haColors] as a theme to pick, or null while the dashboard hasn't shown its colors. */
+    val haTheme: dev.glassworks.theme.Themes.Theme? get() = haColors?.let(dev.glassworks.theme.Themes::ha)
 
     /**
      * Whether Home Assistant's frontend is in dark mode, as the dashboard last said (`hass.themes.darkMode`, read by the
@@ -465,9 +478,10 @@ class KioskPrefs(
 
         const val KEY_FOLLOW_HA_DARK = "overlay_follow_ha_dark"
         const val KEY_HA_DARK = "overlay_ha_dark"
+        const val KEY_HA_COLORS = "overlay_ha_colors"
 
         /** The settings the overlays' theme reads ([overlayPick]): a change to one of them, and they take the theme again. */
-        val THEME_KEYS = setOf("overlay_theme", "overlay_custom", KEY_FOLLOW_HA_DARK, KEY_HA_DARK)
+        val THEME_KEYS = setOf("overlay_theme", "overlay_custom", KEY_FOLLOW_HA_DARK, KEY_HA_DARK, KEY_HA_COLORS)
 
         val RESET_KEEPS = setOf("api_key", "api_encryption", "device_mac", "setup_device_steps_migrated")
         private val RESET_KEEPS_PREFIXES = listOf("radio_", "setup_radio_")

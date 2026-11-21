@@ -119,7 +119,7 @@ class ThemePicker(context: Context, private val item: SettingsItem.Choice, priva
         private val edge = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = dp; color = if (s.dark) Color.argb(36, 255, 255, 255) else Color.argb(26, 16, 20, 32) }
 
         init {
-            contentDescription = "${s.group}, ${if (s.dark) "dark" else "light"}"
+            contentDescription = if (s.auto) "${s.group}, light or dark as Home Assistant is" else "${s.group}, ${if (s.dark) "dark" else "light"}"
             isClickable = true
             setOnClickListener { if (!picked) onPick(id) }
         }
@@ -145,12 +145,17 @@ class ThemePicker(context: Context, private val item: SettingsItem.Choice, priva
             c.drawCircle(cx, cy, r - dp / 2, edge)
             if (!picked) return
             c.drawCircle(cx, cy, r + 5 * dp, ring)
-            // the badge, at the ring's top right: a sun for the light variant, a moon for the dark one
+            // the badge, at the ring's top right: a sun for the light variant, a moon for the dark one, half and half for
+            // Home Assistant's theme (HA decides)
             val bx = cx + .78f * (r + 5 * dp); val by = cy - .78f * (r + 5 * dp); val br = 9.5f * dp
             c.drawCircle(bx, by, br, p.apply { shader = null; color = 0xff1b1c22.toInt() })
             c.drawCircle(bx, by, br, edge)
             p.color = TX
-            if (s.dark) {
+            if (s.auto) {
+                val half = Paint(p).apply { style = Paint.Style.STROKE; strokeWidth = 1.5f * dp }
+                c.drawCircle(bx, by, 5 * dp, half)
+                c.drawArc(bx - 5 * dp, by - 5 * dp, bx + 5 * dp, by + 5 * dp, 90f, 180f, true, p)
+            } else if (s.dark) {
                 val moon = Path().apply { addCircle(bx, by, 5 * dp, Path.Direction.CW) }
                 moon.op(Path().apply { addCircle(bx + 2.6f * dp, by - 2.2f * dp, 4.2f * dp, Path.Direction.CW) }, Path.Op.DIFFERENCE)
                 c.drawPath(moon, p)

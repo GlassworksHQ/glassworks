@@ -37,6 +37,9 @@ line of each version is what Home Assistant shows on the update card. A change o
 - **Your theme can follow Home Assistant's dark mode.** Under the theme cards on the *Appearance* page, *Follow
   Home Assistant's dark mode* keeps the theme you picked and turns it light or dark when your dashboard does. The
   panel reads the mode from the dashboard it already shows, so nothing is added to Home Assistant.
+- **A Home Assistant theme.** Once your dashboard has loaded, the *Appearance* page offers a *Home Assistant* card
+  that uses your dashboard's own colors: its primary and accent colors for the lights, and its background. It turns
+  light or dark with Home Assistant, and follows when you change your theme there. Nothing is added to Home Assistant.
 - **A timer board.** With three or more timers running, they now gather into one glass card that lists each
   one with a small ring, its name and length, and the time left, soonest first. It takes your theme, moves and hides
   like the timers do, and has its own *Hide* on touch screens. Up to five are listed, then how many more.

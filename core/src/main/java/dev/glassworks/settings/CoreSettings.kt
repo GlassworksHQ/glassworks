@@ -231,11 +231,14 @@ class CoreSettings(
         THEME_TITLE,
         // A saved custom theme (#691's Custom themes) is one more card, and shows as picked when it is.
         value = { prefs.overlayPick.id },
-        // Custom is always a card: Glassworks' colors until some are picked below.
-        options = { Themes.options(custom()) },
+        // Custom is always a card: Glassworks' colors until some are picked below. Home Assistant's is one once the
+        // dashboard has shown its colors: one orb, light or dark as HA is.
+        options = { Themes.options(custom(), prefs.haTheme) },
         swatch = { id ->
-            val p = Themes.pick(id, custom())
-            SettingsItem.Swatch(p.theme.name, if (p.theme === Themes.GLASSWORKS) "Default" else "", p.dark, p.palette.a, p.palette.b, p.palette.ground)
+            val p = Themes.pick(id, custom(), prefs.haTheme)
+            val ha = p.theme.id == Themes.HA
+            val note = when { p.theme === Themes.GLASSWORKS -> "Default"; ha -> HA_THEME_NOTE; else -> "" }
+            SettingsItem.Swatch(p.theme.name, note, p.dark, p.palette.a, p.palette.b, p.palette.ground, auto = ha)
         },
     ) { v, done ->
         // Custom picked before any color: its starting colors become the saved ones, so the pick holds.
@@ -307,6 +310,8 @@ class CoreSettings(
         const val THEME_TITLE = "Theme"
         const val THEME_NOTE = "For voice, timers, notifications and setup. Your dashboard keeps its own."
         const val FOLLOW_HA_DARK = "Follow Home Assistant's dark mode"
+        /** Under Home Assistant's theme card: where its colors come from. */
+        const val HA_THEME_NOTE = "Your dashboard's"
         const val FOLLOW_HA_DARK_DETAIL = "Your theme turns light or dark when your dashboard does"
         const val CUSTOM_DARK_TITLE = "Custom theme, dark"
         const val CUSTOM_LIGHT_TITLE = "Custom theme, light"
