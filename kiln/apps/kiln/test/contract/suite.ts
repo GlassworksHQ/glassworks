@@ -25,7 +25,7 @@ export function cases(d: Driver): Case[] {
     ...f.steps.map((s): Case => ({ id: `reload@${s.id}`, kind: 'reload', knobs: { reloadIn: s.id }, step: s.id,
       what: `the page reloads during ${s.id}: it knows a write may have happened, and reaches Done without redoing a finished step's writes` })),
     ...(download ? [{ id: 'stalled-download', kind: 'stalled-download' as const, knobs: { stall: true }, step: download.id,
-      what: `the first download (in ${download.id}) stops sending: a watchdog ends it with an error, Try again on that step's screen (or the one before), then Done` }] : []),
+      what: `the first download (in ${download.id}) stops sending: a watchdog ends it, and it resumes by itself or ends with an error whose Try again is on that step's screen (or the one before), then Done` }] : []),
     { id: 'no-touch', kind: 'no-touch', knobs: { noTouch: true },
       what: `nobody touches the device beyond the taps the flow declares (${f.steps.flatMap((s) => s.taps ?? []).join(', ') || 'none'}): it reaches Done` },
   ];

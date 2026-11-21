@@ -1,4 +1,4 @@
-export { Assets, type AssetEntry, type Manifest } from './assets';
+export { Assets, STALL_MS, type AssetEntry, type Manifest } from './assets';
 export { webUsbDevices } from './devices';
 export {
   BackupStore, backupFile, backupId, backupZip, readBackupZip, sha256sums, toHex, type BackupFile, type BackupMeta,
@@ -18,7 +18,7 @@ export {
 } from './frame';
 export type { Mm, RecoveryData, Rect, Screw, Shown } from './recovery';
 export {
-  DEVICE_WORDS, ProxyError, WrongImage, cap, deviceWords,
+  DEVICE_WORDS, ProxyError, WrongImage, cap, pickInList, deviceWords,
   type AppOverAdb, type AppVersion, type DeviceCheck, type DeviceEntry, type DeviceFrame, type KilnEntry, type DevicePhase, type DeviceReport, type DeviceSim, type DeviceWord,
   type FastbootLike, type FastbootReport, type FirstStart, type HomeCheck, type ImageMaker, type ImageOverFastboot, type Installed, type PrepareStep, type Removed,
 } from './device';

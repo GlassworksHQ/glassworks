@@ -235,8 +235,11 @@ describe('installing Glassworks over fastboot', () => {
     const { image: flash } = await imageDemo(mirrorEntry, 'flash-error', true);
     expect(flash.state).toMatchObject({ screen: 'error', error: expect.stringMatching(/FAILed/) });
     render(<ImageFlow image={flash} app={new AppSession({ frame: mirrorFrame, connect: async () => { throw new Error('x'); } }, true)} />);
-    expect(screen.getByText(/The Mirror is still in fastboot: leave it plugged in\. Connect fastboot again/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Connect fastboot again' }));
+    expect(screen.getByText(/The Mirror is still in fastboot: leave it plugged in\. Try again connects fastboot again/)).toBeTruthy();
+    // one ember, Try again, on the step that stopped: fastboot, not the download two steps back
+    expect(embers()).toEqual(['Try again']);
+    expect(screen.getByRole('button', { name: 'Back to the download' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(flash.state).toMatchObject({ screen: 'fastboot', restarted: true }); // no restart needed: Connect is the ember
     expect(embers()).toEqual(['Connect']);
     flash.state = { ...flash.state, screen: 'error', flashFailed: true };

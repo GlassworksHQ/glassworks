@@ -3,7 +3,7 @@
 // download, fastboot, the warning, building and flashing, the first start, and Done with the way back. Same design as
 // the rest of Kiln (docs/design/kiln): one idea per screen, one ember button, the log one click away. What the device
 // is called and what only it needs said come from the frame (DeviceFrame `the`, `short`, `words`).
-import { cap, fmtSize, type DeviceFrame } from '@glassworks/kiln-core';
+import { cap, fmtSize, pickInList, type DeviceFrame } from '@glassworks/kiln-core';
 import * as Collapsible from '@radix-ui/react-collapsible';
 import { useState } from 'react';
 import { BuiltOn, Credit, stepCredits } from '../components/Credit';
@@ -118,14 +118,14 @@ export function ImageFastboot({ f, s }: P) {
           {lines(d.words['fastboot.byHandSteps']).map((x) => <li key={x}>{x}</li>)}
         </ol>
         <p className="small">{d.words['fastboot.byHandNote']}</p>
-        <p className="small">{rich('Then click Connect and pick `Android`.')}</p>
+        <p className="small">{`Then click Connect and ${pickInList(d)}.`}</p>
       </>}
       {r && !r.ok && (
         <ol className="join">
           {r.checks.map((c) => <li key={c.what} className={c.ok ? 'done' : 'fail'}>{c.what}: {c.found}{!c.ok && <span className="sub-step">Needs {c.need}. Nothing was written.</span>}</li>)}
         </ol>
       )}
-      {s.connecting && <p className="status work" role="status">{`Pick ${d.the} in the browser's list…`}</p>}
+      {s.connecting && <p className="status work" role="status">{`${cap(pickInList(d))}…`}</p>}
       {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
       <div className="foot">
         <span className="links">
@@ -210,9 +210,9 @@ export function ImageAdb({ f, s }: P) {
       <span className="turn-label"><span className="pulse" />Your turn</span>
       <h2 id="h">One last click.</h2>
       {r.community
-        ? <p className="lede">{`Its first start takes a few minutes. Click Connect and pick ${d.the} in the browser's list, and Kiln switches its Wi-Fi on.`}</p>
+        ? <p className="lede">{`Its first start takes a few minutes. Click Connect and ${pickInList(d)}, and Kiln switches its Wi-Fi on.`}</p>
         : <p className="lede">{rich(d.words['adb.firstStart'])}</p>}
-      {s.connecting && !s.adbWaiting && <p className="status work" role="status">{`Pick ${d.the} in the browser's list…`}</p>}
+      {s.connecting && !s.adbWaiting && <p className="status work" role="status">{`${cap(pickInList(d))}…`}</p>}
       {s.adbWaiting && <><p className="status work" role="status">{`Waiting for ${d.the} to finish starting…`}</p><div className="bar wait"><i /></div></>}
       {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
       <div className="foot">
@@ -279,24 +279,21 @@ export function ImageError({ f, s }: P) {
       {f.recipe.community && <Whose r={f.recipe} />}
       <h2 id="h">The install stopped.</h2>
       <pre className="raw">{s.error}</pre>
-      {s.work && !['first-boot', 'hand-back', 'restart', 'wifi-on'].includes(s.work.step) && <p className="small">{`${cap(d.the)} is still in fastboot: leave it plugged in. `}{s.files.every((x) => x.state === 'ok') ? 'Connect fastboot again' : 'Download the files again, then connect fastboot'}, and install again.</p>}
+      {s.work && !['first-boot', 'hand-back', 'restart', 'wifi-on'].includes(s.work.step) && <p className="small">{`${cap(d.the)} is still in fastboot: leave it plugged in. `}{s.files.every((x) => x.state === 'ok') ? 'Try again connects fastboot again, then you install again.' : 'Try again downloads the files again, then you connect fastboot and install again.'}</p>}
       {s.flashFailed && !f.recipe.community && !s.noFill && (
         <p className="small">{d.words['error.noFill']}</p>
       )}
       <div className="foot">
         <Log s={s} />
         <span className="links">
-          {/* the first start, or its key hand-back (PR 603): the device runs Android, so adb again, never fastboot */}
-          {(s.work?.step === 'first-boot' || s.work?.step === 'hand-back') && <button type="button" className="btn ghost" onClick={() => f.finishFirstStart()}>Try the first start again</button>}
-          {/* a write or a build that stopped: the device is still in fastboot. Files that no longer check out download again first */}
-          {s.work && !['first-boot', 'hand-back', 'restart', 'wifi-on'].includes(s.work.step) && s.files.every((x) => x.state === 'ok') && <button type="button" className="btn ghost" onClick={() => f.reconnectFastboot()}>Connect fastboot again</button>}
           {s.flashFailed && !f.recipe.community && !s.noFill && <button type="button" className="btn ghost" onClick={() => f.retryWithoutFill()}>Try again without FILL</button>}
-          {s.wifiOnFailed && s.connecting && <span className="status work" role="status">{`Pick ${d.the} in the browser's list…`}</span>}
+          {s.wifiOnFailed && s.connecting && <span className="status work" role="status">{`${cap(pickInList(d))}…`}</span>}
           {s.wifiOnFailed && s.connectError && <span className="status err" role="alert">{s.connectError}</span>}
-          {s.wifiOnFailed
-            ? <button type="button" className="btn ghost" disabled={s.connecting} onClick={() => void f.connectAdb()}>Connect again</button>
-            : <button type="button" className="btn ghost" onClick={() => f.retry()}>Back to the download</button>}
+          {s.wifiOnFailed && <button type="button" className="btn ghost" disabled={s.connecting} onClick={() => void f.connectAdb()}>Connect again</button>}
+          {!s.wifiOnFailed && f.tryAgainLands() !== 'image' && <button type="button" className="btn ghost" onClick={() => f.retry()}>Back to the download</button>}
         </span>
+        {/* the step that stopped, on its own screen: the first start over adb, a write over fastboot, else the download */}
+        {!s.wifiOnFailed && <button type="button" className="btn ember" onClick={() => f.tryAgain()}>Try again</button>}
       </div>
     </section>
   );

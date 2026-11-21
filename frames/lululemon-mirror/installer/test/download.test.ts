@@ -87,6 +87,27 @@ describe('the image from the release proxy', () => {
     expect(retryAfterMs(null, now)).toBeUndefined();
   });
 
+  it('a connection that goes silent counts as dropped: it resumes with Range where the bytes stopped (#621)', async () => {
+    const body = new Uint8Array(randomBytes(100_000));
+    let at = 0;
+    // the first answer sends 30 000 bytes, then nothing, and never closes
+    const silent = (n: number) => (n === 1 ? new Response(new ReadableStream<Uint8Array>({
+      pull(c) { if (at < 30_000) { c.enqueue(body.slice(at, at + 7500)); at += 7500; return; } return new Promise(() => {}); },
+    }), { status: 200, headers: { 'content-length': String(body.length) } }) : undefined);
+    const { f, asked } = proxy(body, { override: silent });
+    const got = await read(resumableBody(URL, body.length, { fetch: f, sleep: noSleep, stallMs: 20 }).stream());
+    expect(Buffer.from(got)).toEqual(Buffer.from(body));
+    expect(asked).toEqual([undefined, 'bytes=30000-']);
+  });
+
+  it('a proxy that never answers, or stays silent, ends with ProxyError after its retries, not a wait for ever', async () => {
+    const never = (async () => new Promise<Response>(() => {})) as typeof fetch;
+    await expect(read(resumableBody(URL, 10, { fetch: never, retries: 2, sleep: noSleep, stallMs: 20 }).stream())).rejects.toThrow(/sent nothing for 1 s/);
+    const mute = (async () => new Response(new ReadableStream({ pull: () => new Promise(() => {}) }), { headers: { 'content-length': '10' } })) as typeof fetch;
+    const e = await read(resumableBody(URL, 10, { fetch: mute, retries: 2, sleep: noSleep, stallMs: 20 }).stream()).then(() => undefined, (x: unknown) => x);
+    expect(e).toBeInstanceOf(ProxyError);
+  });
+
   it('gives up after its retries when the network keeps failing', async () => {
     const f = (async () => { throw new TypeError('Failed to fetch'); }) as typeof fetch;
     await expect(read(resumableBody(URL, 10, { fetch: f, retries: 2, sleep: noSleep }).stream())).rejects.toThrow(/can't be reached \(Failed to fetch\)/);

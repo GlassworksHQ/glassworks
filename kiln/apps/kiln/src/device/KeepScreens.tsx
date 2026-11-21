@@ -3,7 +3,7 @@
 // before the flash that reads Home Assistant's ESPHome key from the running app over adb, the way on
 // when Kiln can't reach it, and what Done says. Same design as the rest of Kiln (docs/design/kiln).
 // The key never reaches these screens: ImageState holds its 4-hex fingerprint at most.
-import { cap, type DeviceFrame } from '@glassworks/kiln-core';
+import { cap, pickInList, type DeviceFrame } from '@glassworks/kiln-core';
 import type { ImageSession, ImageState, KeyStep } from './imageSession';
 import { lines, rich } from './rich';
 import '../components/SilentUpdates.css';
@@ -56,8 +56,8 @@ function Connect({ f, s }: P) {
           {lines(d.words['keep.steps']).map((x) => <li key={x}>{x}</li>)}
         </ol>
       )}
-      {!reading && <p className="small">{rich('Then click Connect and pick `Android`.')}</p>}
-      {s.connecting && <p className="status work" role="status">{`Pick ${d.the} in the browser's list…`}</p>}
+      {!reading && <p className="small">{`Then click Connect and ${pickInList(d)}.`}</p>}
+      {s.connecting && <p className="status work" role="status">{`${cap(pickInList(d))}…`}</p>}
       {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
       <div className="foot">
         <span className="links"><button type="button" className="link" onClick={() => f.skipKeep()}>It doesn&apos;t run Glassworks: fastboot by hand</button></span>
@@ -78,12 +78,12 @@ function Restarted({ f, s }: P) {
     <section className="card" aria-labelledby="h">
       <h2 id="h">{`${cap(d.the)} is restarting into fastboot.`}</h2>
       <p className="lede">
-        {rich('Click Connect and pick `Android`.')}
+        {`Click Connect and ${pickInList(d)}.`}
         {k.state === 'none' ? ' Home Assistant hasn’t added it yet, so there’s nothing to keep.' : k.state === 'unreachable' ? ' After the install, Home Assistant asks once to keep the device.' : ''}
       </p>
       {k.state === 'held' && <Fingerprint fingerprint={k.fingerprint} />}
       {k.state === 'held' && <p className="small">Keep this tab open until Done, or Home Assistant asks once after the install.</p>}
-      {s.connecting && <p className="status work" role="status">{rich(`Pick ${d.the} (\`Android\`) in the browser's list…`)}</p>}
+      {s.connecting && <p className="status work" role="status">{`${cap(pickInList(d))}…`}</p>}
       {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
       <div className="foot">
         <span className="links"><button type="button" className="link" onClick={() => f.skipKeep()}>Still on Glassworks? Fastboot by hand</button></span>

@@ -92,8 +92,10 @@ async function contract(d: Driver, c: Case) {
       await noFinishedStepRedone(d, c.step!, r);
       return;
     case 'stalled-download':
-      expect(r.stops[0]!.end, 'the stall ends with an error the person can retry, not a page that waits for ever').toBe('error');
-      landsOn(steps, c.step!, r.landed);
+      // a watchdog ends the stall: the flow resumes the download by itself (as from a dropped connection), or stops with
+      // an error whose Try again lands on that step. Never a page that waits for ever (a stuck run fails reachedDone)
+      expect(r.stops[0]!.end, 'the stall ends in Done by itself, or in an error the person can retry').toMatch(/^(done|error)$/);
+      if (r.stops[0]!.end === 'error') landsOn(steps, c.step!, r.landed);
       reachedDone(r);
       return;
     case 'reload':
