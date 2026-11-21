@@ -92,6 +92,38 @@ class GlowThemeMockups {
         }
     }
 
+    /**
+     * Listening at a run of mic levels (silence, quiet, normal speech, loud and back), each as it settles: the frames of
+     * a voice sequence, for a GIF of how the border answers the voice. The level is the engine's (VoiceLevels.mic).
+     */
+    private fun voice(frame: String) {
+        assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", Mockup.dir != null)
+        val pick = Themes.pick("glassworks/dark")
+        val a = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val m = a.resources.displayMetrics
+        val root = FrameLayout(a)
+        root.addView(Dashboard(a, true), FrameLayout.LayoutParams(-1, -1))
+        val glow = EdgeGlowOverlay(a).apply { theme = { pick } }
+        root.addView(glow, FrameLayout.LayoutParams(-1, -1))
+        a.setContentView(root, ViewGroup.LayoutParams(-1, -1))
+        Mockup.layout(root, m.widthPixels, m.heightPixels); idle(50)
+        VoiceLevels.mic = 0f
+        glow.update(VoiceUi("listening", seq = 1), enabled = true)
+        repeat(4) { Mockup.layout(root, m.widthPixels, m.heightPixels); idle(250) }
+        val levels = listOf(0f, .1f, .2f, .3f, .4f, .5f, .4f, .3f, .2f, .1f, 0f)
+        for ((i, l) in levels.withIndex()) {
+            VoiceLevels.mic = l
+            repeat(3) { Mockup.layout(root, m.widthPixels, m.heightPixels); idle(200) }
+            Mockup.save("voice-$frame-%02d-level-%02d".format(i, (l * 100).toInt()), root, m.widthPixels, m.heightPixels)
+        }
+        VoiceLevels.mic = 0f
+    }
+
+    @Test fun s1Voice() = voice("s1")
+
+    @Test @Config(qualifiers = "w540dp-h960dp-port-xhdpi")
+    fun mirrorVoice() = voice("mirror")
+
     @Test fun s1() = shoot("s1")
 
     @Test @Config(qualifiers = "w540dp-h960dp-port-xhdpi")
