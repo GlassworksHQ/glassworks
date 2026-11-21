@@ -193,7 +193,7 @@ class VoiceOverlay(context: Context) : FrameLayout(context) {
     private var kiosk: KioskPrefs? = null
 
     private val themeChanged = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key == "overlay_theme" || key == "overlay_custom") post { applyTheme() }
+        if (key in KioskPrefs.THEME_KEYS) post { applyTheme() }
     }
 
     /**

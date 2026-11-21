@@ -1114,7 +1114,7 @@ check "...never makes a top-level /data directory (init would give it an encrypt
 check "...copies the boot image's busybox to where Magisk checks, executable" sh -c 'printf "%s\n" "$1" | grep -qx "    copy \${MAGISKTMP}/magisk-busybox /data/adb/magisk/busybox" && printf "%s\n" "$1" | grep -qx "    chmod 0755 /data/adb/magisk/busybox"' _ "$body"
 check "patch-boot-magisk.sh puts the busybox in the ramdisk (its overlay.list), from the Magisk APK" sh -c 'grep -qx "0700 overlay.d/sbin/magisk-busybox magisk-busybox" "$1" && grep -q "libbusybox.so\" \"\$W/p/magisk-busybox\"" "$1"' _ "$R/frames/aqara-s1-plus/tools/root/patch-boot-magisk.sh"
 check "...and so does the boot writer, from the same APK" sh -c 'grep -q "echo \"0700 overlay.d/sbin/magisk-busybox magisk-busybox\"" "$1" && grep -q "libbusybox.so\" \"\$W/p/magisk-busybox\"" "$1"' _ "$R/frames/aqara-s1-plus/tools/root/glassworks_bootwriter.sh"
-check "...and Kiln's overlay the same path and mode" sh -c 'grep -q "path: .overlay.d/sbin/magisk-busybox., mode: 0o700" "$1"' _ "$R/kiln/packages/bootpatch/src/overlay.ts"
+check "...and Kiln's overlay the same path and mode" sh -c 'grep -q "path: .overlay.d/sbin/magisk-busybox., mode: 0o700" "$1"' _ "$R/frames/aqara-s1-plus/installer/src/overlay.ts"
 
 # --------------------------------------------------------------- ActivityManager watchdog (#248)
 echo "--- glassworks_netwatch.sh: ActivityManager"

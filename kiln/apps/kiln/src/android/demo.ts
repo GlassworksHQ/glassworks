@@ -3,11 +3,12 @@
 // other names go to one screen. Addresses are RFC 5737 (192.0.2.x).
 import { FakeAndroid, fakeGenericApk, type FakeAndroidOptions } from '@glassworks/generic-android-installer/fakes';
 import { fakeReleaseRoute, type FakeRelease } from '../release/demo';
-import type { GenericInstalled } from '@glassworks/generic-android-installer';
+import type { UsbInstalled } from '@glassworks/kiln-core';
 import { standardDemo } from '../standard/demo';
 import type { StandardSession } from '../standard/session';
 import { withAppStreams } from '../wizard/demo';
-import { AndroidSession, type Device, type UsbFacts } from './session';
+import { UsbSession, type Device, type UsbFacts } from '../device/usbSession';
+import { kilnFrame as android } from '@glassworks/generic-android-installer/kiln';
 
 /** The cards Glassworks' Panes step shows on a tablet (each pane's PaneChoice), for ?demo=setup-panes. */
 const PANES = [
@@ -40,7 +41,7 @@ class Held extends FakeAndroid {
  * `fast`: no delays (the tests). `handOver`: the page's, which gives the installed tablet to the standard flow (setup is
  * its App step, setup-wifi Wi-Fi, setup-ha Home Assistant, setup-panes Panes, done… its Done).
  */
-export async function androidDemo(name: AndroidDemo, fast = false, handOver?: (p: Device, installed: GenericInstalled) => StandardSession | undefined): Promise<AndroidSession> {
+export async function androidDemo(name: AndroidDemo, fast = false, handOver?: (p: Device, installed: UsbInstalled) => StandardSession | undefined): Promise<UsbSession> {
   const untested = name === 'done-untested' || name === 'done-old' || name === 'brand' || name === 'debug-generic';
   const o: FakeAndroidOptions = untested
     ? { manufacturer: 'Teclast', model: 'P20HD', release: '13', sdk: 33, ip: '192.0.2.11', picksAfter: 3 }
@@ -67,13 +68,14 @@ export async function androidDemo(name: AndroidDemo, fast = false, handOver?: (p
   // find-release…: the APK from a stand-in generic-android release (?apk=release); the first screen downloads it
   const kind = ({ 'find-release': 'out', 'find-release-none': 'none', 'find-release-bad': 'bad' } as Partial<Record<AndroidDemo, FakeRelease>>)[name];
   let standard: StandardSession | undefined;
-  const s = new AndroidSession({
+  const s = new UsbSession({
+    frame: android,
     findUsb: async () => (untested ? NO_NAME : PIXEL),
     connect: () => (name === 'allow' ? new Promise(() => {}) : Promise.resolve(device)),
     sleep: (ms) => new Promise((r) => setTimeout(r, fast ? 0 : Math.min(ms, 400))),
     homeTimeoutMs: 10 * 60_000,
     setupTries: 2,
-    ...(handOver ? { handOver: (p: Device, i: GenericInstalled) => { standard = handOver(p, i); } } : {}),
+    ...(handOver ? { handOver: (p: Device, i: UsbInstalled) => { standard = handOver(p, i); } } : {}),
     ...(kind ? { release: fakeReleaseRoute(kind, apk, (ms) => new Promise((r) => setTimeout(r, fast ? 0 : ms)), 'generic-android') } : {}),
   }, true);
   if (kind) return s;

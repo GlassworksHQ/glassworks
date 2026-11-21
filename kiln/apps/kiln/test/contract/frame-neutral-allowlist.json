@@ -2,13 +2,6 @@
   "$comment": "Frame names Kiln's app and packages have today, each with the issue that removes it (frame-neutral.test.ts). This list only shrinks: the check fails on a hit outside it, and on an entry with no hit left. A path ending in / covers its folder (only for code phase 2 deletes whole). imports: files that still import a frame's package or a path into frames/ other than through the registry (@glassworks/frames), each with the issue that removes it; shrink-only too. notFrames: words that only look like a frame's name; they need no issue, but go when the word does.",
   "entries": [
     {
-      "path": "kiln/apps/kiln/src/mirror/MirrorWizard.ts",
-      "terms": [
-        "mirror"
-      ],
-      "why": "#524 has src/android/AndroidWizard.tsx open, which imports adbKeyHolder from this path; the file only re-exports it, and step 3 of #621 deletes it"
-    },
-    {
       "path": "kiln/apps/kiln/src/android/",
       "terms": [
         "aqara",

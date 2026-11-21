@@ -263,7 +263,16 @@ app. One case is left: the app dies while the AP is on. Its 15-minute limit live
 keeps the AP on and the client off. A restarted app is offline, so it starts its own hotspot 3 minutes later. That
 start finds the AP already up: `ApEnabledState` ignores a second start, so the AP keeps the old run's network and
 key while the screen shows the new ones (read, untested). That run's stop, 15 minutes later, ends the AP and brings
-the client back. If the app doesn't come back, only a restart of the Mirror ends the AP.
+the client back. If the app doesn't come back, only a restart of the Mirror ends the AP. That run's "before" is also
+the dead run's state, so its stop puts back our own network as the device's hotspot settings.
+
+The app handles it since 2026-11-20 (#197; untested on the unit). Before each start, `HiddenApHotspot` writes what it
+changes (the device's hotspot settings as a parcel with the build fingerprint, and whether Wi-Fi was on) to
+`noBackupFilesDir/setup_hotspot_undo`, sealed with the app's Keystore key. It deletes the record only once the AP is off
+and the settings read back as they were; until then, and while the key store can't open the record, no new start runs.
+A new `HiddenApHotspot` (the service's start) reads a record left behind and puts it back at once: it stops the AP, restores the
+settings and turns Wi-Fi back on. A start that finds an AP up with no record of ours (`isWifiApEnabled`) fails as
+`TETHERING_ON` and leaves it alone, so the screen never shows a network the AP doesn't have.
 
 ## Can a privileged app approve an adb key?
 

@@ -244,4 +244,66 @@ class AppearanceTest {
         assertEquals("where the person had scrolled it", y, scroll()!!.scrollY)
         assertEquals("custom/dark", prefs.overlayTheme)
     }
+
+    // ---- #691: follow Home Assistant's dark mode
+
+    private fun follow(s: SettingsSection) =
+        SettingsChange.find(s, "${CoreSettings.THEME_TITLE}/${CoreSettings.FOLLOW_HA_DARK}") as SettingsItem.Switch
+
+    @Test fun followingHomeAssistantsDarkModeKeepsTheThemeAndTakesItsVariant() {
+        prefs.overlayTheme = "dune/light"
+        val s = section()
+        val f = follow(s)
+        assertFalse("off by default", f.value())
+        var why: String? = "not called"
+        SettingsChange.change(f, "on") { why = it }
+        assertEquals(null, why)
+        assertTrue(prefs.followHaDark)
+        assertEquals(1, changed)
+        // Home Assistant hasn't said yet: the pick as saved.
+        assertEquals("dune/light", prefs.overlayPick.id)
+        prefs.haDark = true
+        assertEquals("dune/dark", prefs.overlayPick.id)
+        assertEquals("the picker rings what shows now", "dune/dark", picker(section()).value())
+        assertEquals("the saved pick stays", "dune/light", prefs.overlayTheme)
+        prefs.haDark = false
+        assertEquals("dune/light", prefs.overlayPick.id)
+        // Off again: the pick as saved, whatever HA says.
+        prefs.haDark = true
+        SettingsChange.change(f, "off") { why = it }
+        assertEquals("dune/light", prefs.overlayPick.id)
+    }
+
+    @Test fun aCustomThemeFollowsToo() {
+        val c = Themes.custom(Themes.Palette(0xffff5722.toInt(), 0xff00bcd4.toInt(), 0xff101418.toInt()), Themes.Palette(0xffbf360c.toInt(), 0xff006064.toInt(), 0xfff5f5f5.toInt()))
+        prefs.customTheme = c
+        prefs.overlayTheme = "custom/light"
+        prefs.followHaDark = true
+        prefs.haDark = true
+        assertEquals(c.dark, prefs.overlayPick.palette)
+    }
+
+    @Test fun theSwitchIsUnderTheCardsOnManageToo() {
+        val s = section()
+        val f = ManageFixture()
+        f.statusFn = { f.status.copy(sections = listOf(s)) }
+        val b = f.Browser().also { it.signInWithHa() }
+        val page = b.get("/${CoreSettings.APPEARANCE}").text()
+        assertTrue(page.contains(CoreSettings.FOLLOW_HA_DARK))
+        assertTrue("under the theme cards", page.indexOf(CoreSettings.FOLLOW_HA_DARK) > page.indexOf("""<button class="sw"""))
+        val r = b.post("/settings", mapOf("csrf" to b.csrf(), "section" to CoreSettings.APPEARANCE, "key" to "${CoreSettings.THEME_TITLE}/${CoreSettings.FOLLOW_HA_DARK}", "value" to "on"))
+        assertEquals(303, r.status)
+        assertTrue(prefs.followHaDark)
+    }
+
+    @Test fun whatHomeAssistantSaidIsKeptAndAFactoryResetForgetsIt() {
+        assertEquals(null, prefs.haDark)
+        prefs.haDark = true
+        assertEquals(true, KioskPrefs(app).haDark)
+        prefs.followHaDark = true
+        assertTrue(prefs.resetSettings())
+        assertEquals(null, KioskPrefs(app).haDark)
+        assertFalse(KioskPrefs(app).followHaDark)
+    }
 }
+

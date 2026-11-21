@@ -10,7 +10,7 @@ import vm from "node:vm";
 const SOURCE = readFileSync(process.env.CONTENT_JS, "utf8");
 
 /** content.js in a fresh page: [launchScreen] in the body or not, [externalAuth] in the URL or not. */
-function page({ launchScreen = true, externalAuth = true, search = null } = {}) {
+function page({ launchScreen = true, externalAuth = true, search = null, hass = null } = {}) {
   const posted = [];
   const timers = [];
   let frames = [];
@@ -31,7 +31,8 @@ function page({ launchScreen = true, externalAuth = true, search = null } = {}) 
     readyState: "loading",
     addEventListener: (type, fn) => { (domListeners[type] ||= []).push(fn); },
     getElementById: (id) => (id === "ha-launch-screen" ? launch : null),
-    querySelector: () => null,
+    // <home-assistant> with the frontend's hass object, when the test gives one.
+    querySelector: (sel) => (sel === "home-assistant" && hass ? { wrappedJSObject: { hass } } : null),
     createElement: (tag) => ({ tag, removed: false, remove() { this.removed = true; } }),
     head: null, // document_start: no <head> yet
     documentElement: { appendChild: (el) => appended.push(el) },
@@ -205,3 +206,29 @@ test("panel state reaches the page as window.glassworks, and as window.s1kiosk f
   assert.deepEqual(p.events.map((e) => e.type), ["glassworks-state", "s1kiosk-state"]);
   assert.ok(p.events.every((e) => e.detail === p.window.wrappedJSObject.glassworks));
 });
+
+test("Home Assistant's dark mode is sent when it is known, and again only when it changes", () => {
+  const hass = { themes: { darkMode: true } };
+  const p = page({ launchScreen: false, hass });
+  const theme = () => p.posted.filter((m) => m.type === "haTheme");
+  assert.deepEqual(theme(), [], "nothing before the first check");
+  p.advance(2000);
+  assert.deepEqual(theme(), [{ type: "haTheme", dark: true }]);
+  p.advance(6000);
+  assert.equal(theme().length, 1, "the same mode isn't sent again");
+  hass.themes.darkMode = false;
+  p.advance(2000);
+  assert.deepEqual(theme().at(-1), { type: "haTheme", dark: false });
+  assert.equal(theme().length, 2);
+});
+
+test("no dark mode is sent before the frontend has one", () => {
+  const hass = { themes: {} };
+  const p = page({ launchScreen: false, hass });
+  p.advance(10000);
+  assert.deepEqual(p.posted.filter((m) => m.type === "haTheme"), []);
+  hass.themes.darkMode = true;
+  p.advance(2000);
+  assert.deepEqual(p.posted.filter((m) => m.type === "haTheme"), [{ type: "haTheme", dark: true }]);
+});
+

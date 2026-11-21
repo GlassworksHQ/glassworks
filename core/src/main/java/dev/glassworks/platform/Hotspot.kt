@@ -8,6 +8,9 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Handler
+import android.util.Log
+import dev.glassworks.secrets.SecretStore
+import java.io.File
 import java.net.Inet4Address
 import java.net.NetworkInterface
 
@@ -35,8 +38,15 @@ interface Hotspot {
         /** The way this Android allows ([PlatformApi.hotspotKind]). */
         fun of(context: Context, handler: Handler, platform: PlatformApi = Platform): Hotspot = when (platform.hotspotKind) {
             HotspotKind.LOCAL_ONLY -> LocalOnlyHotspot(context, handler, platform)
-            HotspotKind.HIDDEN_AP -> HiddenApHotspot(ReflectedAp(context, handler), handler, address = { HotspotAddress.now(context) })
+            HotspotKind.HIDDEN_AP -> HiddenApHotspot(
+                ReflectedAp(context, handler), handler, address = { HotspotAddress.now(context) },
+                undo = ApUndoFile(File(context.applicationContext.noBackupFilesDir, UNDO_FILE), SecretStore.keystore()) { Log.w(TAG, it) },
+            )
         }
+
+        /** [ApUndoFile]'s file in `noBackupFilesDir`. Panels keep it: never rename it. */
+        const val UNDO_FILE = "setup_hotspot_undo"
+        private const val TAG = "Glassworks.Hotspot"
     }
 }
 

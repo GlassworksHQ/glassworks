@@ -38,7 +38,7 @@ class HotspotConformanceTest {
         }
         when (Platform.hotspotKind) {
             HotspotKind.LOCAL_ONLY -> assertTrue("API ${Platform.apiLevel}: $h", h is LocalOnlyHotspot)
-            HotspotKind.HIDDEN_AP -> assertTrue("API ${Platform.apiLevel}: $h", h is HiddenApHotspot<*>)
+            HotspotKind.HIDDEN_AP -> assertTrue("API ${Platform.apiLevel}: $h", h is HiddenApHotspot)
         }
     }
 

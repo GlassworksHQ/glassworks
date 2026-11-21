@@ -34,6 +34,9 @@ line of each version is what Home Assistant shows on the update card. A change o
   *Appearance* page. The theme's two colors run down each timer's ring, the glass turns light with a light theme,
   and the done screen's orb and ripples glow in the theme's colors. The last 10 seconds stay amber in every theme so
   you can tell a timer is about to ring.
+- **Your theme can follow Home Assistant's dark mode.** Under the theme cards on the *Appearance* page, *Follow
+  Home Assistant's dark mode* keeps the theme you picked and turns it light or dark when your dashboard does. The
+  panel reads the mode from the dashboard it already shows, so nothing is added to Home Assistant.
 - **A timer board.** With three or more timers running, they now gather into one glass card that lists each
   one with a small ring, its name and length, and the time left, soonest first. It takes your theme, moves and hides
   like the timers do, and has its own *Hide* on touch screens. Up to five are listed, then how many more.
@@ -68,6 +71,10 @@ line of each version is what Home Assistant shows on the update card. A change o
   back to Stable never installs an older version: the panel waits for a stable release newer than the one it runs.
 
 ### Fixed
+- **The setup Wi-Fi on Android 6 and 7 always gives back the device's Wi-Fi.** If the app stopped while its setup
+  Wi-Fi was open, Android kept that Wi-Fi up, the device's own Wi-Fi stayed off, and the device's hotspot settings
+  kept the setup network. Now the app puts all of that back the next time it starts. If the device's own hotspot is
+  already on, the setup screen says so instead of showing a network the panel can't open. Legacy build only.
 - **The timer done screen fits a portrait screen.** On a portrait screen such as the Mirror, the timer's name,
   its length and the timers still running now fit the screen's width, as the voice overlay's text does. Before,
   long names ran off the edges. On a screen without touch, the hint now says the screen closes by itself after a

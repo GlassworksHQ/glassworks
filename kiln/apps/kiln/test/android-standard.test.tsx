@@ -10,10 +10,11 @@ const path = vi.hoisted(() => ({ now: '/android' }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace() {}, push() {} }), usePathname: () => path.now }));
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: ReactNode }) => <a href={href} {...p}>{children}</a> }));
 
-import { GENERIC, type GenericInstalled } from '@glassworks/generic-android-installer';
+import { GENERIC } from '@glassworks/generic-android-installer';
 import { AndroidWizard, androidStandard } from '../src/android/AndroidWizard';
 import { androidDemo, type AndroidDemo } from '../src/android/demo';
-import type { Device } from '../src/android/session';
+import type { Device } from '../src/device/usbSession';
+import type { UsbInstalled } from '@glassworks/kiln-core';
 import { StandardSession } from '../src/standard/session';
 import { StandardWizard } from '../src/standard/StandardWizard';
 import { registry } from '../src/wizard/registry';
@@ -33,7 +34,7 @@ const settle = () => act(() => new Promise((r) => setTimeout(r, 300)));
 /** A demo with the page's hand-over: the tablet's standard flow, rendered as the page does. */
 async function show(d: AndroidDemo) {
   let standard: StandardSession | undefined;
-  const handOver = (p: Device, installed: GenericInstalled) => {
+  const handOver = (p: Device, installed: UsbInstalled) => {
     standard = new StandardSession({ standard: androidStandard(installed.plan.app, installed), devices: { knownAdb: async () => p, requestAdb: async () => p },
       loadKey: async () => ({ publicKey: 'QAAA kiln@test' }) as never, sleep: async () => {}, simulated: true });
     void standard.handOver(p);

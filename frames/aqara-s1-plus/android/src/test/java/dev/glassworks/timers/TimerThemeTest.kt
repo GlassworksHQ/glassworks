@@ -69,6 +69,21 @@ class TimerThemeTest {
         for (r in rings(t)) assertEquals(Themes.AURORA.dark, r.look.palette)
     }
 
+    @Test fun followingHomeAssistantTheRingsTurnLightOrDarkWithIt() {
+        val prefs = KioskPrefs(RuntimeEnvironment.getApplication())
+        prefs.overlayTheme = "dusk/light"
+        prefs.followHaDark = true
+        prefs.haDark = false
+        val t = overlay()
+        TimerBoard.update(listOf(Entry("p", "Pasta", 600, 492, true)))
+        t.refresh()
+        assertEquals(Themes.DUSK.light, rings(t).single().look.palette)
+        // The dashboard goes dark (content.js tells the app, which saves it): the rings follow.
+        prefs.haDark = true
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(Themes.DUSK.dark, rings(t).single().look.palette)
+    }
+
     @Test fun theDefaultIsGlassworksDark() {
         KioskPrefs(RuntimeEnvironment.getApplication()).overlayTheme = "glassworks/dark"
         val t = overlay()

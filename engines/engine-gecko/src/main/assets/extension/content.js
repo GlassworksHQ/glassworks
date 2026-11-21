@@ -299,6 +299,29 @@
   }
   setTimeout(scheduleDashboards, DASH_RETRY_MS);
 
+  // ---- Home Assistant's dark mode, for the panel's own screens (#691) --------------------------------
+  // The panel's overlays (voice, timers) can follow HA's light or dark: Appearance, "Follow Home
+  // Assistant's dark mode". Read from the page's own hass object (`hass.themes.darkMode`, which the
+  // frontend keeps for its theme) every 2 s, and sent only when it changes. The app only believes the
+  // top-level page on the Home Assistant it uses, as with the dashboards.
+  const THEME_CHECK_MS = 2000;
+  let sentDark = null;
+  function reportTheme() {
+    let dark = null;
+    try {
+      const ha = document.querySelector("home-assistant");
+      const hass = ha && ha.wrappedJSObject && ha.wrappedJSObject.hass;
+      if (hass && hass.themes && typeof hass.themes.darkMode === "boolean") dark = hass.themes.darkMode;
+    } catch (e) { dark = null; }
+    if (port && dark !== null && dark !== sentDark) {
+      try { port.postMessage({ type: "haTheme", dark }); sentDark = dark; } catch (e) { /* port gone */ }
+    }
+    // Not a Home Assistant page (its index.html has <home-assistant> from the start): stop.
+    if (!document.querySelector("home-assistant") && document.readyState === "complete") return;
+    setTimeout(reportTheme, THEME_CHECK_MS);
+  }
+  setTimeout(reportTheme, THEME_CHECK_MS);
+
   // ---- ready: the page is drawn (#63 round 2) ----------------------------------------------------
   // Home Assistant's index.html starts with its own launch screen (#ha-launch-screen: the logo, an info
   // box and the attribution) and the frontend removes it once it has drawn. The app keeps its connecting
