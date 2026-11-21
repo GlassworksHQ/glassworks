@@ -1,16 +1,16 @@
 // @vitest-environment jsdom
 // The page of a frame its frame.json doesn't open yet (status `development` or `planned`): locked to the public, with
 // ?apk=release and ?apk=local as test links, labelled Test only. Today every frame with a page is open, so the frames
-// are made closed here: the Mirror's device page (DevicePage, deviceOpen) and /android (ANDROID_OPEN).
+// are made closed here: the Mirror's device page (DevicePage, deviceOpen) and /android (usbOpen).
 import { cleanup, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: ReactNode }) => <a href={href} {...p}>{children}</a> }));
 vi.mock('../src/device/appSession', async (orig) => ({ ...(await orig<typeof import('../src/device/appSession')>()), deviceOpen: () => false }));
-vi.mock('../src/android/session', async (orig) => {
-  const m = await orig<typeof import('../src/android/session')>();
-  return { ...m, ANDROID_OPEN: false, androidMode: (s: string, on: boolean, demos: readonly string[]) => m.androidMode(s, on, demos, false) };
+vi.mock('../src/device/usbSession', async (orig) => {
+  const m = await orig<typeof import('../src/device/usbSession')>();
+  return { ...m, usbOpen: () => false };
 });
 
 import { AndroidWizard } from '../src/android/AndroidWizard';

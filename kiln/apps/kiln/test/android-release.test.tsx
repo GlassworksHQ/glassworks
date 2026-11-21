@@ -12,7 +12,13 @@ vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string
 
 import { ANDROID_BASE, type AndroidActivity } from '../src/android/activity';
 import { AndroidWizard } from '../src/android/AndroidWizard';
-import { ANDROID_OPEN, AndroidSession, androidMode } from '../src/android/session';
+import { UsbSession, usbMode, usbOpen, type UsbDeps } from '../src/device/usbSession';
+import { kilnFrame as android } from '@glassworks/generic-android-installer/kiln';
+
+/** /android's session, on generic Android's frame. */
+const AndroidSession = class extends UsbSession { constructor(d: Omit<UsbDeps, 'frame'>, on: boolean) { super({ frame: android, ...d }, on); } };
+const androidMode = (s: string, demosOn: boolean, demos: readonly string[], open = usbOpen(android)) => usbMode(s, demosOn, demos, open);
+const ANDROID_OPEN = usbOpen(android);
 import { demoRelease, fakeReleaseRoute, type FakeRelease } from '../src/release/demo';
 import { registry } from '../src/wizard/registry';
 
