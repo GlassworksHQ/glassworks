@@ -14,7 +14,7 @@
 // gitignored.
 //
 // Kiln is redeployed only when one of its inputs changes on main. If you add a repo file here, add it
-// to KILN in .github/workflows/web-deploy.yml too.
+// to KILN in tools/ci/web_deploy.py too.
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
