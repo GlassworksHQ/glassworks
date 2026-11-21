@@ -125,6 +125,48 @@
   height: 15px;
 }
 
+.discordPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 11px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--lit-b) 38%, var(--edge));
+  background: color-mix(in srgb, var(--lit-b) 8%, var(--glass));
+  color: var(--fg);
+  font-size: 12.5px;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    border-color 0.18s ease,
+    background 0.18s ease;
+}
+
+.discordPill:hover {
+  border-color: color-mix(in srgb, var(--lit-b) 70%, var(--edge));
+  background: color-mix(in srgb, var(--lit-b) 15%, var(--glass));
+}
+
+.discordPill svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+@media (max-width: 1080px) {
+  .discordPill {
+    width: 30px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .discordLabel {
+    display: none;
+  }
+}
+
 /* Quiet Ember-bordered pill: unmistakable Kiln accent without shouting */
 .kilnPill {
   display: inline-flex;

@@ -25,6 +25,12 @@
       <img alt="Roadmap" src="https://www.glassworks.dev/brand/badge-roadmap-on-light.svg" height="30">
     </picture>
   </a>
+  <a href="https://discord.gg/BTn9NstFM">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="site/public/brand/badge-discord-on-dark.svg">
+      <img alt="Community: Discord" src="site/public/brand/badge-discord-on-light.svg" height="30">
+    </picture>
+  </a>
 </p>
 
 ---
@@ -106,7 +112,16 @@ Kiln installs Glassworks straight from Chrome or Edge over WebUSB, backing up or
 - **[How we got here](docs/research/README.md)** — Engineering and reverse-engineering notes, from the first UART boot log to the browser installer.
 - **[CHANGELOG.md](CHANGELOG.md)** — Release history and user-facing changes.
 
-## Contributing
+## Community & contributing
+
+<p align="center">
+  <a href="https://discord.gg/BTn9NstFM">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="site/public/brand/card-discord-on-dark.svg">
+      <img alt="Join the Glassworks Discord community" src="site/public/brand/card-discord-on-light.svg" width="580">
+    </picture>
+  </a>
+</p>
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) and [Glassworks Principles](docs/principles.md) before proposing a feature. Chat with the community on [Discord](https://discord.gg/BTn9NstFM), share questions, ideas, and new device bring-up threads in [Discussions](https://github.com/GlassworksHQ/glassworks/discussions), and file bugs or hardware reports as GitHub issues. Report security vulnerabilities privately following [SECURITY.md](SECURITY.md). For other private inquiries, email [hi@glassworks.dev](mailto:hi@glassworks.dev). Everyone participating in this project follows the [code of conduct](CODE_OF_CONDUCT.md).
 
