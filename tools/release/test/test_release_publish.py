@@ -28,6 +28,12 @@ def rel(tag):
     return state / 'releases' / tag.replace('/', '%')
 cmd = args[:2]
 if cmd == ['release', 'list']:
+    race = os.environ.get('FAKE_RACE_TAG')   # "<tag> <commit> <remote>": pushed at the first list, after its check
+    if race and not (state / 'raced').exists():
+        (state / 'raced').write_text('')
+        tag, commit, remote = race.split()
+        import subprocess
+        subprocess.run(['git', 'push', '-q', remote, f'{commit}:refs/tags/{tag}'], check=True)
     for d in sorted((state / 'releases').iterdir()):
         m = json.loads((d / 'meta.json').read_text())
         if not m['draft']:
@@ -203,6 +209,23 @@ class Publish(unittest.TestCase):
         self.assertEqual([], self.creates())
         self.assertEqual(['frames/lululemon-mirror/v1.0.0'], list(self.remote_tags()))   # nothing else pushed
 
+    def later_commit(self):
+        (self.work / 'later').write_text('x')
+        git('add', 'later', cwd=self.work)
+        git('commit', '-q', '-m', 'later', cwd=self.work)
+        later = git('rev-parse', 'HEAD', cwd=self.work)
+        git('push', '-q', str(self.remote), f'{later}:refs/heads/later', cwd=self.work)
+        git('reset', '-q', '--hard', self.sha, cwd=self.work)
+        return later
+
+    def test_a_tag_pushed_elsewhere_after_the_checks_is_never_published_over(self):
+        # The S1 app's tag appears on another commit between the checks and its push: no release under it.
+        self.standard()
+        r = self.run_publish(FAKE_RACE_TAG=f'aqara-s1-plus-v1.0.0 {self.later_commit()} {self.remote}')
+        self.assertNotEqual(0, r.returncode)
+        self.assertIn('aqara-s1-plus-v1.0.0 now names', r.stderr)
+        self.assertEqual([], self.creates())
+
     def test_a_tag_pushed_by_hand_on_this_commit_is_used(self):
         self.standard()
         git('push', '-q', str(self.remote), f'{self.sha}:refs/tags/aqara-s1-plus-v1.0.0', cwd=self.work)
@@ -263,6 +286,18 @@ class Publish(unittest.TestCase):
         r = self.run_publish()
         self.assertNotEqual(0, r.returncode)
         self.assertIn('published with other files', r.stderr)
+
+    def test_an_old_draft_is_never_made_again_over_a_newer_release(self):
+        # A draft 1.0.0 left by an earlier run, then 1.1.0 published: retrying the old publish must stop.
+        self.standard()
+        d = self.state / 'releases' / 'aqara-s1-plus-v1.0.0'
+        (d / 'files').mkdir(parents=True)
+        (d / 'meta.json').write_text(json.dumps({'tag': 'aqara-s1-plus-v1.0.0', 'draft': True}))
+        r = self.run_publish(FAKE_TAGS='aqara-s1-plus-v1.1.0')
+        self.assertNotEqual(0, r.returncode)
+        self.assertIn('not higher than aqara-s1-plus', r.stdout + r.stderr)
+        self.assertEqual([], self.creates())
+        self.assertTrue(d.exists())   # the draft is left as it was
 
     def test_a_draft_is_made_again(self):
         self.standard()

@@ -73,7 +73,10 @@ for ((i = 0; i < n; i++)); do
   [ -z "$at" ] || [ "$at" = "$sha" ] || fail "$tag already names $at, not this run's $sha: refusing to publish"
   # The release: none yet (then the version must be new), this run's files already, or a draft to make again.
   if draft=$(gh release view "$tag" -R "$repo" --json isDraft --jq .isDraft 2>/dev/null); then
-    if [ "$draft" = true ]; then action[i]=redo
+    if [ "$draft" = true ]; then
+      # A draft isn't a release: the version must still be higher than the line's last one, as for a new release.
+      "$here/check-newer-than-released.sh" "$(item check)" "$version" "$repo"
+      action[i]=redo
     elif [ "$(release_files "$tag")" = "$(cat "$work/want-$i")" ]; then action[i]=done
     else fail "$tag is published with other files: refusing to touch it (fix it with a higher version)"; fi
   else
@@ -88,10 +91,14 @@ for ((i = 0; i < n; i++)); do
   item() { jq -r ".items[$i].$1 // empty" "$plan"; }
   tag=$(item tag) name=$(item name)
   if [ "${action[i]}" = done ]; then echo "$tag: already published with these files"; echo "$tag" >> "$published"; continue; fi
-  if [ -z "$(remote_tag "$tag")" ]; then
+  # The tag again: someone may have pushed it since the checks above, and --verify-tag only asks that it exists.
+  at=$(remote_tag "$tag")
+  if [ -z "$at" ]; then
     git tag -f "$tag" "$sha"   # lightweight: the release carries the title, notes and channel
     git push "$remote" "refs/tags/$tag:refs/tags/$tag"
     [ "$(remote_tag "$tag")" = "$sha" ] || fail "$tag did not reach $remote on $sha"
+  else
+    [ "$at" = "$sha" ] || fail "$tag now names $at, not this run's $sha: refusing to publish"
   fi
   if [ "${action[i]}" = redo ]; then
     echo "$tag: a draft from an earlier try, never public: making it again"

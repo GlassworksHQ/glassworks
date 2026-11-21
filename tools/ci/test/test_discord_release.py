@@ -75,6 +75,10 @@ class Workflow(unittest.TestCase):
         self.assertIn('workflows: ["Release", "Library release"]', text)
         self.assertIn("github.event.workflow_run.event == 'workflow_dispatch'", text)
         self.assertIn('-n published-tags', text)
+        # Absent (a dry run) is nothing to post; present but not downloadable fails the job.
+        self.assertIn('artifacts?name=published-tags', text)
+        self.assertIn("won't download", text)
+        self.assertNotIn('2>/dev/null ||', text)
         release = (ROOT / '.github/workflows/release.yml').read_text()
         self.assertIn('name: Release\n', release)
         self.assertIn('name: published-tags', release)

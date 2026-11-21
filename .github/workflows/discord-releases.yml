@@ -47,9 +47,21 @@ jobs:
           TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || github.event.workflow_run.head_branch }}
         run: |
           if [ "$EVENT" = workflow_run ] && [ "$RUN_EVENT" = workflow_dispatch ]; then
-            # The Release button: the tags its publish job wrote. A dry run, or a run that published nothing, has none.
-            gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n published-tags -D "$RUNNER_TEMP/published" 2>/dev/null ||
-              { echo "run $RUN_ID published nothing: not posted."; : > "$RUNNER_TEMP/tags"; exit 0; }
+            # The Release button: the tags its publish job wrote. A dry run, or a run that published nothing, has no
+            # such artifact: nothing to post. One that has it but won't download fails the job, so no post is lost
+            # without a trace (rerun it).
+            count="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts?name=published-tags" \
+              --jq '[.artifacts[] | select(.expired | not)] | length')" ||
+              { echo "::error::cannot list the artifacts of run $RUN_ID"; exit 1; }
+            if [ "$count" = 0 ]; then echo "run $RUN_ID published nothing: not posted."; : > "$RUNNER_TEMP/tags"; exit 0; fi
+            for try in 1 2 3; do
+              rm -rf "$RUNNER_TEMP/published"
+              gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n published-tags -D "$RUNNER_TEMP/published" && break
+              [ "$try" = 3 ] && { echo "::error::run $RUN_ID has a published-tags artifact that won't download"; exit 1; }
+              sleep $((try * 15))
+            done
+            [ -f "$RUNNER_TEMP/published/published-tags.txt" ] ||
+              { echo "::error::run $RUN_ID's published-tags artifact has no published-tags.txt"; exit 1; }
             cp "$RUNNER_TEMP/published/published-tags.txt" "$RUNNER_TEMP/tags"
           else
             printf '%s\n' "$TAG" > "$RUNNER_TEMP/tags"
