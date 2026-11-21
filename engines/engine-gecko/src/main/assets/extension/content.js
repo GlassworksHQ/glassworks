@@ -299,22 +299,48 @@
   }
   setTimeout(scheduleDashboards, DASH_RETRY_MS);
 
-  // ---- Home Assistant's dark mode, for the panel's own screens (#691) --------------------------------
-  // The panel's overlays (voice, timers) can follow HA's light or dark: Appearance, "Follow Home
-  // Assistant's dark mode". Read from the page's own hass object (`hass.themes.darkMode`, which the
-  // frontend keeps for its theme) every 2 s, and sent only when it changes. The app only believes the
+  // ---- Home Assistant's theme, for the panel's own screens (#691) ------------------------------------
+  // The panel's overlays (voice, timers) can follow HA's light or dark (Appearance, "Follow Home Assistant's
+  // dark mode") or take HA's own colors (the "Home Assistant" theme). Read from the page every 2 s: the
+  // dark mode from the frontend's hass object (`hass.themes.darkMode`), the colors from the theme variables
+  // it puts on the document (`--primary-color`, `--accent-color`, `--primary-background-color`), each as
+  // `#rrggbb` when it is a plain color. Sent only when something changes; the app only believes the
   // top-level page on the Home Assistant it uses, as with the dashboards.
   const THEME_CHECK_MS = 2000;
-  let sentDark = null;
+  let sentTheme = "";
+
+  /** A CSS color as `#rrggbb`: `#rgb`, `#rrggbb(aa)`, `rgb()`/`rgba()`; null for anything else. */
+  function hexColor(v) {
+    const s = String(v || "").trim().toLowerCase();
+    let m = /^#([0-9a-f]{3})$/.exec(s);
+    if (m) return "#" + m[1].split("").map((c) => c + c).join("");
+    m = /^#([0-9a-f]{6})(?:[0-9a-f]{2})?$/.exec(s);
+    if (m) return "#" + m[1];
+    m = /^rgba?\(\s*(\d{1,3})[\s,]+(\d{1,3})[\s,]+(\d{1,3})(?:[\s,/]+[\d.]+%?)?\s*\)$/.exec(s);
+    if (m) {
+      const c = m.slice(1, 4).map(Number);
+      if (c.some((n) => n > 255)) return null;
+      return "#" + c.map((n) => n.toString(16).padStart(2, "0")).join("");
+    }
+    return null;
+  }
+
   function reportTheme() {
-    let dark = null;
+    const theme = { type: "haTheme" };
     try {
       const ha = document.querySelector("home-assistant");
       const hass = ha && ha.wrappedJSObject && ha.wrappedJSObject.hass;
-      if (hass && hass.themes && typeof hass.themes.darkMode === "boolean") dark = hass.themes.darkMode;
-    } catch (e) { dark = null; }
-    if (port && dark !== null && dark !== sentDark) {
-      try { port.postMessage({ type: "haTheme", dark }); sentDark = dark; } catch (e) { /* port gone */ }
+      if (hass && hass.themes && typeof hass.themes.darkMode === "boolean") theme.dark = hass.themes.darkMode;
+      if (hass) {
+        const css = getComputedStyle(document.documentElement);
+        const read = (name) => hexColor(css.getPropertyValue(name));
+        const primary = read("--primary-color"), accent = read("--accent-color"), background = read("--primary-background-color");
+        if (primary && background) Object.assign(theme, { primary, accent: accent || primary, background });
+      }
+    } catch (e) { /* not ready */ }
+    const text = JSON.stringify(theme);
+    if (port && Object.keys(theme).length > 1 && text !== sentTheme) {
+      try { port.postMessage(theme); sentTheme = text; } catch (e) { /* port gone */ }
     }
     // Not a Home Assistant page (its index.html has <home-assistant> from the start): stop.
     if (!document.querySelector("home-assistant") && document.readyState === "complete") return;

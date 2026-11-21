@@ -586,6 +586,15 @@ class GeckoBehaviourPinTest {
         assertEquals(emptyList<org.json.JSONObject>(), h.send(top, org.json.JSONObject().put("type", "haTheme").put("dark", true), replies = 0))
         org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
         assertEquals(true, prefs.haDark)
+        // Home Assistant's colors, as #rrggbb: saved as its theme's palette.
+        h.send(top, org.json.JSONObject().put("type", "haTheme").put("dark", true).put("primary", "#03a9f4").put("accent", "#ff9800").put("background", "#111111"), replies = 0)
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertEquals(dev.glassworks.theme.Themes.Palette(0xff03a9f4.toInt(), 0xffff9800.toInt(), 0xff111111.toInt()), prefs.haColors)
+        // Colors that aren't plain, or without a background, leave them as they were.
+        h.send(top, org.json.JSONObject().put("type", "haTheme").put("primary", "red").put("background", "#ffffff"), replies = 0)
+        h.send(top, org.json.JSONObject().put("type", "haTheme").put("primary", "#ffffff"), replies = 0)
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertEquals(0xff111111.toInt(), prefs.haColors!!.ground)
         // Something that isn't a yes or no changes nothing.
         h.send(top, org.json.JSONObject().put("type", "haTheme").put("dark", "maybe"), replies = 0)
         org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()

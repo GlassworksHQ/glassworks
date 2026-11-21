@@ -1325,17 +1325,24 @@ open class MainActivity : Activity() {
     }
 
     /**
-     * `{type: "haTheme", dark}` from the HA frontend (content.js, the page's `hass.themes.darkMode`), for the overlays
-     * that follow Home Assistant's dark mode (#691). Only the top-level page on the Home Assistant the panel uses is
-     * believed, as with the dashboards; saved, so the overlays have it from the next start.
+     * `{type: "haTheme", dark?, primary?, accent?, background?}` from the HA frontend (content.js: the page's
+     * `hass.themes.darkMode` and its theme colors as `#rrggbb`), for the overlays that follow Home Assistant's dark mode
+     * or take its colors (#691). Only the top-level page on the Home Assistant the panel uses is believed, as with the
+     * dashboards; saved, so the overlays have them from the next start. A part that isn't one is left as it was.
      */
     private fun onHaTheme(m: JSONObject, sender: PagePort) {
         if (!sender.topLevel || !FrontendUrls.sameOrigin(sender.url, prefs.haBase)) {
             Log.w(TAG, "theme from ${sender.url} ignored (not the Home Assistant in use)")
             return
         }
-        val dark = m.opt("dark") as? Boolean ?: return
-        handler.post { if (prefs.haDark != dark) { prefs.haDark = dark; Log.i(TAG, "Home Assistant is in ${if (dark) "dark" else "light"} mode") } }
+        val dark = m.opt("dark") as? Boolean
+        fun colour(k: String) = (m.opt(k) as? String)?.let(dev.glassworks.theme.Themes::colour)
+        val primary = colour("primary"); val background = colour("background")
+        val colors = if (primary != null && background != null) dev.glassworks.theme.Themes.Palette(primary, colour("accent") ?: primary, background) else null
+        handler.post {
+            if (dark != null && prefs.haDark != dark) { prefs.haDark = dark; Log.i(TAG, "Home Assistant is in ${if (dark) "dark" else "light"} mode") }
+            if (colors != null && prefs.haColors != colors) { prefs.haColors = colors; Log.i(TAG, "Home Assistant's theme colors changed") }
+        }
     }
 
     /** Only the signed-in HA origin may ask for tokens. */

@@ -10,7 +10,7 @@ import vm from "node:vm";
 const SOURCE = readFileSync(process.env.CONTENT_JS, "utf8");
 
 /** content.js in a fresh page: [launchScreen] in the body or not, [externalAuth] in the URL or not. */
-function page({ launchScreen = true, externalAuth = true, search = null, hass = null } = {}) {
+function page({ launchScreen = true, externalAuth = true, search = null, hass = null, vars = {} } = {}) {
   const posted = [];
   const timers = [];
   let frames = [];
@@ -60,6 +60,8 @@ function page({ launchScreen = true, externalAuth = true, search = null, hass = 
     clearTimeout() {},
     setInterval: () => 0,
     requestAnimationFrame: (fn) => { frames.push(fn); return frames.length; },
+    // The theme variables Home Assistant puts on the document ([vars], changed by the test as it goes).
+    getComputedStyle: () => ({ getPropertyValue: (name) => vars[name] ?? "" }),
   };
   vm.runInNewContext(SOURCE, ctx);
 
@@ -230,5 +232,29 @@ test("no dark mode is sent before the frontend has one", () => {
   hass.themes.darkMode = true;
   p.advance(2000);
   assert.deepEqual(p.posted.filter((m) => m.type === "haTheme"), [{ type: "haTheme", dark: true }]);
+});
+
+test("Home Assistant's colors are sent as #rrggbb with its mode, and again when they change", () => {
+  const hass = { themes: { darkMode: true } };
+  const vars = { "--primary-color": " #03A9F4", "--accent-color": "rgb(255, 152, 0)", "--primary-background-color": "#111" };
+  const p = page({ launchScreen: false, hass, vars });
+  const theme = () => p.posted.filter((m) => m.type === "haTheme");
+  p.advance(2000);
+  assert.deepEqual(theme(), [{ type: "haTheme", dark: true, primary: "#03a9f4", accent: "#ff9800", background: "#111111" }]);
+  p.advance(4000);
+  assert.equal(theme().length, 1);
+  vars["--primary-color"] = "rgba(76, 175, 80, 0.9)";
+  p.advance(2000);
+  assert.equal(theme().at(-1).primary, "#4caf50");
+});
+
+test("colors that aren't plain are left out, and a missing accent takes the primary", () => {
+  const hass = { themes: { darkMode: false } };
+  const p = page({ launchScreen: false, hass, vars: { "--primary-color": "#fafafa", "--primary-background-color": "#ffffff" } });
+  p.advance(2000);
+  assert.deepEqual(p.posted.filter((m) => m.type === "haTheme").at(-1), { type: "haTheme", dark: false, primary: "#fafafa", accent: "#fafafa", background: "#ffffff" });
+  const q = page({ launchScreen: false, hass, vars: { "--primary-color": "hsl(200 50% 50%)", "--primary-background-color": "#fff" } });
+  q.advance(2000);
+  assert.deepEqual(q.posted.filter((m) => m.type === "haTheme"), [{ type: "haTheme", dark: false }]);
 });
 

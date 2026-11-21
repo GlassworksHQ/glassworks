@@ -103,6 +103,13 @@ class SettingsMockups {
         KioskPrefs(RuntimeEnvironment.getApplication()).apply { followHaDark = true; haDark = true }
         shot("settings-03d-appearance-follow-ha", menu(radioRunning = true), CoreSettings.APPEARANCE)
         KioskPrefs(RuntimeEnvironment.getApplication()).apply { followHaDark = false; haDark = null }
+        // Home Assistant's own theme (its default colors, dark), picked: one orb with a half sun, half moon.
+        KioskPrefs(RuntimeEnvironment.getApplication()).apply {
+            haColors = dev.glassworks.theme.Themes.Palette(0xff03a9f4.toInt(), 0xffff9800.toInt(), 0xff111111.toInt())
+            overlayTheme = dev.glassworks.theme.Themes.HA_PICK
+        }
+        shot("settings-03e-appearance-ha", menu(radioRunning = true), CoreSettings.APPEARANCE)
+        KioskPrefs(RuntimeEnvironment.getApplication()).apply { haColors = null }
         KioskPrefs(RuntimeEnvironment.getApplication()).overlayTheme = "glassworks/dark"
         shot("settings-04-about", menu(radioRunning = true), "about")
         shot("settings-05-radio-service-not-running", menu(radioRunning = false), "radio")

@@ -317,10 +317,11 @@ ${foot(viewer)}"""
             val on = orbs.any { it.first == now }
             val buttons = orbs.joinToString("") { (id, s) ->
                 val picked = id == now
-                val words = "$name, ${if (s.dark) "dark" else "light"}"
+                // Home Assistant's theme is light or dark as HA is: its badge is half sun, half moon.
+                val words = if (s.auto) "$name, light or dark as Home Assistant is" else "$name, ${if (s.dark) "dark" else "light"}"
                 """<button class="sw${if (s.dark) " dk" else ""}${if (picked) " on" else ""}" type="submit" name="value" value="${esc(id)}" aria-pressed="$picked" """ +
                     """aria-label="${esc(words)}" title="${esc(words)}" style="--a:${css(s.a)};--b:${css(s.b)};--g:${css(s.ground)}">""" +
-                    (if (picked) """<i class="bd ${if (s.dark) "moon" else "sun"}" aria-hidden="true"></i>""" else "") + "</button>"
+                    (if (picked) """<i class="bd ${when { s.auto -> "auto"; s.dark -> "moon"; else -> "sun" }}" aria-hidden="true"></i>""" else "") + "</button>"
             }
             val note = orbs.first().second.note
             """<div class="tc${if (on) " on" else ""}"><div class="pair">$buttons</div><b>${esc(name)}</b>${if (note.isNotEmpty()) "<span>${esc(note)}</span>" else ""}</div>"""
@@ -704,6 +705,7 @@ background:radial-gradient(circle at 30% 26%,rgba(255,255,255,.95),transparent 3
 .ths .sw.on{outline:2px solid var(--fg);outline-offset:4px}.ths .sw:focus-visible{outline:2px solid var(--sky);outline-offset:4px}
 .ths .sw .bd{position:absolute;right:-10px;top:-10px;width:20px;height:20px;border-radius:50%;background:var(--bg-2);border:1px solid var(--edge)}
 .ths .sw .bd.sun::after{content:"";position:absolute;inset:6px;border-radius:50%;background:var(--fg);box-shadow:0 0 0 1.5px var(--bg-2),0 0 0 3px var(--fg)}
+.ths .sw .bd.auto::after{content:"";position:absolute;inset:4px;border-radius:50%;border:1.5px solid var(--fg);background:linear-gradient(90deg,var(--fg) 50%,transparent 50%)}
 .ths .sw .bd.moon::after{content:"";position:absolute;inset:4px;border-radius:50%;box-shadow:inset -4px -3px 0 0 var(--fg);transform:rotate(-20deg)}
 .uc{display:flex;flex-direction:column;gap:4px;text-align:left;padding:16px 18px;border-radius:22px;border:1px solid var(--edge);background:var(--glass);color:var(--muted);font:inherit;cursor:pointer}
 .uc b{font-weight:400;font-size:19px}.uc span{font-size:14px;line-height:1.35;color:var(--muted)}.uc:hover{background:var(--hover)}

@@ -90,6 +90,11 @@ class CustomThemeMockups {
         assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", Mockup.dir != null)
         val app = RuntimeEnvironment.getApplication()
         menu()
+        // Home Assistant's theme known (its default colors, dark), and picked.
+        KioskPrefs(app).apply {
+            haColors = Themes.Palette(0xff03a9f4.toInt(), 0xffff9800.toInt(), 0xff111111.toInt())
+            overlayTheme = Themes.HA_PICK
+        }
         val s = CoreSettings(
             KioskPrefs(app), "1.0.0", status = { "" }, deviceSettings = null,
             licences = dev.glassworks.pane.SettingsItem.Link(CoreSettings.LICENCES_TITLE, CoreSettings.LICENCES_DETAIL) {}, hardware = MenuFixture.S1_HARDWARE,

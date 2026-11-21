@@ -392,7 +392,11 @@ sealed interface SettingsItem {
      * How a [Choice] option looks as an orb (#691): the card it sits in ([group], with a [note] under the name, "Default"),
      * whether it is the [dark] one, and its two lights and ground ([dev.glassworks.theme.Themes.Palette], 0xAARRGGBB).
      */
-    class Swatch(val group: String, val note: String, val dark: Boolean, val a: Int, val b: Int, val ground: Int)
+    class Swatch(
+        val group: String, val note: String, val dark: Boolean, val a: Int, val b: Int, val ground: Int,
+        /** Light or dark is decided elsewhere (Home Assistant's theme): picked, it shows a half sun, half moon. */
+        val auto: Boolean = false,
+    )
 
     /**
      * A button on a row (#269): its [title], a [detail] line read again while the page is open, and the

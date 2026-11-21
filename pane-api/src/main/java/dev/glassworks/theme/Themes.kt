@@ -47,6 +47,17 @@ object Themes {
 
     class Theme(val id: String, val name: String, val dark: Palette, val light: Palette)
 
+    /**
+     * Home Assistant's theme (#691): the dashboard's own colors as the kiosk extension reads them (its primary and
+     * accent colors as the two lights, its background as the ground). One pick, [HA_PICK]: light or dark is whatever
+     * Home Assistant is, so the ground decides.
+     */
+    const val HA = "ha"
+    const val HA_PICK = "ha/auto"
+
+    /** Home Assistant's theme from the palette its dashboard shows now. */
+    fun ha(p: Palette) = Theme(HA, "Home Assistant", p, p)
+
     /** The custom theme's id: its palettes are the ones someone picked ([custom], [encode]). */
     const val CUSTOM = "custom"
 
@@ -87,21 +98,23 @@ object Themes {
     class Pick(val theme: Theme, val dark: Boolean) {
         val id: String get() = id(theme, dark)
         val palette: Palette get() = if (dark) theme.dark else theme.light
-        /** In words: "Glassworks, dark". */
-        val name: String get() = "${theme.name}, ${if (dark) "dark" else "light"}"
+        /** In words: "Glassworks, dark"; Home Assistant's is just "Home Assistant" (it decides light or dark). */
+        val name: String get() = if (theme.id == HA) theme.name else "${theme.name}, ${if (dark) "dark" else "light"}"
     }
 
     /** Glassworks, dark: today's look. */
     val DEFAULT = Pick(GLASSWORKS, dark = true)
 
-    fun id(theme: Theme, dark: Boolean): String = theme.id + if (dark) "/dark" else "/light"
+    fun id(theme: Theme, dark: Boolean): String = if (theme.id == HA) HA_PICK else theme.id + if (dark) "/dark" else "/light"
 
     /**
      * The pick an id names, or [DEFAULT] for none or one this build doesn't know. `custom/<variant>` names [custom]'s
-     * palettes, the default too while none are saved.
+     * palettes, the default too while none are saved; [HA_PICK] names [ha]'s, in the variant its ground is, and is the
+     * default too while the dashboard hasn't shown its colors.
      */
-    fun pick(id: String?, custom: Theme? = null): Pick {
+    fun pick(id: String?, custom: Theme? = null, ha: Theme? = null): Pick {
         val parts = id?.split('/')?.takeIf { it.size == 2 } ?: return DEFAULT
+        if (parts[0] == HA) return ha?.takeIf { parts[1] == "auto" }?.let { Pick(it, it.dark.darkGround) } ?: DEFAULT
         val theme = (ALL + listOfNotNull(custom)).firstOrNull { it.id == parts[0] } ?: return DEFAULT
         return when (parts[1]) {
             "dark" -> Pick(theme, true)
@@ -149,7 +162,21 @@ object Themes {
         return (0xff shl 24) or (ch(16) shl 16) or (ch(8) shl 8) or ch(0)
     }
 
-    /** Every pick as (id, name), theme by theme, light before dark, then [custom]'s when there is one: the picker's options. */
-    fun options(custom: Theme? = null): List<Pair<String, String>> =
-        (ALL + listOfNotNull(custom)).flatMap { t -> listOf(false, true).map { dark -> Pick(t, dark).let { it.id to it.name } } }
+    /**
+     * Every pick as (id, name), theme by theme, light before dark, then Home Assistant's one when its colors are known
+     * ([ha]), then [custom]'s when there is one: the picker's options.
+     */
+    fun options(custom: Theme? = null, ha: Theme? = null): List<Pair<String, String>> =
+        ALL.flatMap { t -> listOf(false, true).map { dark -> Pick(t, dark).let { it.id to it.name } } } +
+            listOfNotNull(ha?.let { HA_PICK to it.name }) +
+            listOfNotNull(custom).flatMap { t -> listOf(false, true).map { dark -> Pick(t, dark).let { it.id to it.name } } }
+
+    /** One palette as text, `a,b,ground` as `#rrggbb` (Home Assistant's, in the settings file). */
+    fun encode(p: Palette): String = listOf(p.a, p.b, p.ground).joinToString(",") { hex(it) }
+
+    /** A palette from [encode]'s text, or null when it isn't one. */
+    fun decodePalette(text: String?): Palette? {
+        val c = text?.split(',')?.takeIf { it.size == 3 }?.map { colour(it) ?: return null } ?: return null
+        return Palette(c[0], c[1], c[2])
+    }
 }

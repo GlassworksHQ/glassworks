@@ -305,5 +305,59 @@ class AppearanceTest {
         assertEquals(null, KioskPrefs(app).haDark)
         assertFalse(KioskPrefs(app).followHaDark)
     }
+
+    // ---- #691: Home Assistant's theme
+
+    private val haDarkColors = Themes.Palette(0xff03a9f4.toInt(), 0xffff9800.toInt(), 0xff111111.toInt())
+
+    @Test fun homeAssistantsCardComesOnceTheDashboardHasShownItsColors() {
+        assertFalse("not before", picker(section()).options().any { it.first == Themes.HA_PICK })
+        var why: String? = null
+        SettingsChange.change(picker(section()), Themes.HA_PICK) { why = it }
+        assertTrue("can't be picked before", why != null)
+        prefs.haColors = haDarkColors
+        val c = picker(section())
+        assertTrue(c.options().contains(Themes.HA_PICK to "Home Assistant"))
+        val sw = c.swatch!!(Themes.HA_PICK)
+        assertEquals("Home Assistant", sw.group)
+        assertEquals(CoreSettings.HA_THEME_NOTE, sw.note)
+        assertTrue("its badge is half sun, half moon", sw.auto)
+        assertTrue("a dark ground: dark glass", sw.dark)
+        assertEquals(1, c.options().count { c.swatch!!(it.first).group == "Home Assistant" })
+    }
+
+    @Test fun pickedTheOverlaysTakeHomeAssistantsColorsAndFollowThem() {
+        prefs.haColors = haDarkColors
+        var why: String? = "not called"
+        SettingsChange.change(picker(section()), Themes.HA_PICK) { why = it }
+        assertEquals(null, why)
+        assertEquals(Themes.HA_PICK, prefs.overlayTheme)
+        assertEquals(haDarkColors, prefs.overlayPick.palette)
+        assertTrue(prefs.overlayPick.dark)
+        assertEquals("Home Assistant", SettingsChange.shown(picker(section())))
+        // The dashboard turns light: so do the overlays, without the switch.
+        val light = Themes.Palette(0xff03a9f4.toInt(), 0xffff9800.toInt(), 0xfffafafa.toInt())
+        prefs.haColors = light
+        assertEquals(light, prefs.overlayPick.palette)
+        assertFalse(prefs.overlayPick.dark)
+        // The switch changes nothing for HA's own theme.
+        prefs.followHaDark = true; prefs.haDark = true
+        assertEquals(light, prefs.overlayPick.palette)
+        assertEquals(Themes.HA_PICK, picker(section()).value())
+    }
+
+    @Test fun onManageTheHomeAssistantCardHasTheHalfBadge() {
+        prefs.haColors = haDarkColors
+        prefs.overlayTheme = Themes.HA_PICK
+        val s = section()
+        val f = ManageFixture()
+        f.statusFn = { f.status.copy(sections = listOf(s)) }
+        val b = f.Browser().also { it.signInWithHa() }
+        val page = b.get("/${CoreSettings.APPEARANCE}").text()
+        assertTrue(page.contains("""value="${Themes.HA_PICK}" aria-pressed="true""""))
+        assertTrue(page.contains("""class="bd auto""""))
+        assertTrue(page.contains("Home Assistant, light or dark as Home Assistant is"))
+        assertTrue(page.contains(CoreSettings.HA_THEME_NOTE))
+    }
 }
 
