@@ -276,6 +276,18 @@ class HiddenApHotspotTest {
     }
 
     @Test
+    fun `once the client is back on, a Wi-Fi switched off right after stays off`() {
+        val d = FakeDevice(wifiOn = true).apply { wifiLags = true }
+        diedWithTheApUp(d)
+        val h = hotspot(d)
+        d.wifiOn = true // Android finishes turning it on
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(1))
+        d.wifiOn = false // and the person turns it off, well within half a minute
+        h.start { events += it }
+        assertEquals(ApUndo.Kept.Found(ApBefore("Home hotspot", wifiOn = false)), undo().read())
+    }
+
+    @Test
     fun `an undo record that no longer opens is dropped, and changes nothing`() {
         undoFile.writeText("not sealed")
         val d = FakeDevice(wifiOn = false, config = "Home hotspot")

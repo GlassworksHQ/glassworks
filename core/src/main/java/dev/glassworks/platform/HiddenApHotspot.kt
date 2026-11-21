@@ -13,7 +13,6 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Handler
 import android.os.Parcel
-import android.os.SystemClock
 import android.util.Base64
 import android.util.Log
 import java.lang.reflect.InvocationTargetException
@@ -63,12 +62,11 @@ class HiddenApHotspot(
     private var left: ApBefore? = null
 
     /**
-     * What the last stop put back, and when ([SystemClock.uptimeMillis]). For [WIFI_BACK_MS] its Wi-Fi state counts for a
-     * start: Android may still be turning the client on (CodeRabbit on #712), and a start then would keep "off" as the
-     * state to go back to. After that the switch is the person's again.
+     * Set while the Wi-Fi client a stop asked back on isn't on yet: Android may take a while (CodeRabbit on #712), and a
+     * start then must keep "on" as the state to go back to. Polled until the client is on, or for [WIFI_BACK_MS]; after
+     * that the switch is the person's again.
      */
-    private var putBack: ApBefore? = null
-    private var putBackAt = 0L
+    private var wifiComingBack: Runnable? = null
     private var unwatch: (() -> Unit)? = null
     private var started = false
     private var timeout: Runnable? = null
@@ -90,9 +88,8 @@ class HiddenApHotspot(
             handler.post { onEvent(Hotspot.Event.Failed(HotspotFailure.TETHERING_ON)) }
             return
         }
-        val turningOn = putBack?.wifiOn == true && SystemClock.uptimeMillis() - putBackAt < WIFI_BACK_MS
-        val saved = ApBefore(ap.savedConfig(), ap.wifiEnabled() || turningOn)
-        putBack = null
+        val saved = ApBefore(ap.savedConfig(), ap.wifiEnabled() || wifiComingBack != null)
+        followWifiBack(false)
         before = saved
         undo.write(saved)
         started = false
@@ -173,9 +170,9 @@ class HiddenApHotspot(
         unwatch = null
         val apOff = runCatching { ap.setAp(null, false) }.getOrDefault(false) || !runCatching { ap.apEnabled() }.getOrDefault(true)
         val configBack = runCatching { ap.restoreConfig(b.config) }.getOrDefault(false) || runCatching { ap.savedConfig() == b.config }.getOrDefault(false)
-        if (b.wifiOn && !ap.wifiEnabled()) runCatching { ap.setWifiEnabled(true) }
-        putBack = b
-        putBackAt = SystemClock.uptimeMillis()
+        val askWifi = b.wifiOn && !ap.wifiEnabled()
+        if (askWifi) runCatching { ap.setWifiEnabled(true) }
+        followWifiBack(askWifi)
         if (!apOff || !configBack) {
             left = b
             log("setup hotspot: couldn't put everything back (AP off $apOff, settings back $configBack); trying again at the next start")
@@ -184,6 +181,23 @@ class HiddenApHotspot(
         left = null
         undo.clear()
         return true
+    }
+
+    /** [wifiComingBack]: follows the client a stop asked back on ([on]), or stops following it. */
+    private fun followWifiBack(on: Boolean) {
+        wifiComingBack?.let(handler::removeCallbacks)
+        wifiComingBack = null
+        if (!on) return
+        var tries = (WIFI_BACK_MS / ADDRESS_POLL_MS).toInt()
+        val check = object : Runnable {
+            override fun run() {
+                if (wifiComingBack !== this) return
+                if (tries-- <= 0 || runCatching { ap.wifiEnabled() }.getOrDefault(true)) wifiComingBack = null
+                else handler.postDelayed(this, ADDRESS_POLL_MS)
+            }
+        }
+        wifiComingBack = check
+        handler.postDelayed(check, ADDRESS_POLL_MS)
     }
 
     private fun clearTimeout() {
