@@ -18,9 +18,13 @@ we build, what we don't, and the questions a new feature has to pass. New panes 
 
 ## Issues
 
-Pick a template: **Bug**, **Hardware report** (a model, firmware or base we haven't tested), or
-**Feature request**. Include the Glassworks version and Aqara firmware, and strip tokens, Wi-Fi
-passwords and Thread datasets from logs.
+Pick a template: **Bug**, **Hardware report** (an Aqara S1 model, firmware or base we haven't tested),
+**Device report** (an Android tablet or phone you ran Glassworks on, whether it worked or not), or
+**Feature request**. Include the Glassworks version (and the Aqara firmware on an S1), and strip
+tokens, Wi-Fi passwords and Thread datasets from logs.
+
+A device report can make a device a tested device: its own page on glassworks.dev, known by Kiln,
+marked as tested by the community ([frames/README.md](frames/README.md#who-tested-it)).
 
 ## Pull requests
 
@@ -66,6 +70,6 @@ where to find it and which badge or banner to use.
 | `area: …` | Which part of the project |
 | `needs info`, `needs hardware` | Waiting on the reporter, or on someone with that hardware |
 | `upstream` | Caused by or waiting on HA, zigpy, Zigbee2MQTT or another project |
-| `hardware report` | Results from untested hardware |
+| `hardware report` | Results from untested hardware: the Hardware report and Device report forms |
 
 Code is MIT ([LICENSE](LICENSE)).
