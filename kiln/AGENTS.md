@@ -20,7 +20,8 @@ The engine gives every frame the S1's forgiveness, and no frame can turn it off:
 step's own screen, resume after a reload, waiting through a reboot, stall watchdogs, no touch it
 doesn't declare, a way back on every screen that writes. A frame is public in Kiln (in the picker,
 its page open to everyone) at `status` alpha or later with a `kiln` route, and only with a contract
-for every flow. It is `stable` only when it passes the whole contract: an alpha or beta frame may
+for every flow. A tested device (`kind: tested`) has no route of its own: it installs as its `base`,
+on the base's route, data and contract (`kilnRoute`, `installsAs` in `packages/frames`). It is `stable` only when it passes the whole contract: an alpha or beta frame may
 still have marked failures. The design: [frames-as-data.md](../docs/design/kiln/frames-as-data.md).
 The checks, in `apps/kiln/test/contract/`:
 
