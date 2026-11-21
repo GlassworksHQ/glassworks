@@ -7,10 +7,11 @@
 #     without a push. Nothing deploys when nothing changed since the last successful deploy;
 #   - by hand from the Actions tab (workflow_dispatch), for one project or both.
 #
-# tools/ci/web_deploy.py decides. A project's base is the commit its last deploy went up from, which each job
-# records as a GitHub deployment (task web-deploy) once Vercel took the upload, not the push's `before`: a change
-# whose deploy was cancelled or failed still deploys on the next push or schedule. Without a base it deploys (a
-# schedule, when GitHub's API fails, doesn't).
+# tools/ci/web_deploy.py decides. Each job records its upload as a GitHub deployment (task web-deploy) of the commit
+# it checked out, started before the upload and marked success once Vercel took it. A project's base is the newest
+# record that reached success, not the push's `before`: a change whose deploy was cancelled or failed still deploys
+# on the next push or schedule, and so does a project with a newer record that never reached success. Without a
+# base it deploys (a schedule, when GitHub's API fails, doesn't).
 #
 # glassworks.dev is built here and uploaded prebuilt (vercel build, then vercel deploy --prebuilt). Its build on
 # Vercel's own machines fails at the Pagefind step, because the newer Vercel CLI there moves Next's output away
@@ -150,6 +151,15 @@ jobs:
           echo "::warning::The site build lost a connection to GitHub's API (fetch failed). Building once more."
           npx -y "$VERCEL_CLI" build --prod --token "$VERCEL_TOKEN"
 
+      # Before the upload: if the job stops after Vercel took it, this record says the live commit is unknown.
+      - name: Record the deploy as started
+        id: start
+        if: steps.check.outputs.deploy == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          COMMIT: ${{ steps.check.outputs.commit }}
+        run: python3 tools/ci/web_deploy.py start site --commit "$COMMIT" | tee -a "$GITHUB_OUTPUT"
+
       # One archive: the free plan also caps file uploads a day.
       - name: Deploy the build to production
         if: steps.check.outputs.deploy == 'true'
@@ -162,13 +172,21 @@ jobs:
           url=$(npx -y "$VERCEL_CLI" deploy --prebuilt --prod --archive=tgz --token "$VERCEL_TOKEN")
           echo "Deployed: $url, from main at $COMMIT" | tee -a "$GITHUB_STEP_SUMMARY"
 
-      # Only after Vercel took it: the next run diffs from this commit.
-      - name: Record the deployed commit
+      # Success makes this commit the next run's base. Without it (a failed upload, or a job cancelled or timed out
+      # before here) the record stays unsettled, and the next push or schedule deploys again.
+      - name: Record the deploy as done
         if: steps.check.outputs.deploy == 'true'
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          COMMIT: ${{ steps.check.outputs.commit }}
-        run: python3 tools/ci/web_deploy.py record site --commit "$COMMIT"
+          ID: ${{ steps.start.outputs.id }}
+        run: python3 tools/ci/web_deploy.py finish site --id "$ID" --state success
+
+      - name: Record the deploy as failed
+        if: failure() && steps.start.outputs.id != ''
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ID: ${{ steps.start.outputs.id }}
+        run: python3 tools/ci/web_deploy.py finish site --id "$ID" --state failure
 
   kiln:
     needs: changes
@@ -212,6 +230,15 @@ jobs:
         with:
           node-version: '24'
 
+      # Before the upload: if the job stops after Vercel took it, this record says the live commit is unknown.
+      - name: Record the deploy as started
+        id: start
+        if: steps.check.outputs.deploy == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          COMMIT: ${{ steps.check.outputs.commit }}
+        run: python3 tools/ci/web_deploy.py start kiln --commit "$COMMIT" | tee -a "$GITHUB_OUTPUT"
+
       # Vercel builds it from the uploaded repo with kiln/apps/kiln/vercel.json's commands (the project's root
       # directory is kiln/apps/kiln), and waits until the deployment is ready or fails.
       - name: Deploy to production
@@ -228,13 +255,21 @@ jobs:
           url=$(npx -y "$VERCEL_CLI" deploy --prod --archive=tgz --token "$VERCEL_TOKEN")
           echo "Deployed: $url, from main at $COMMIT" | tee -a "$GITHUB_STEP_SUMMARY"
 
-      # Only after Vercel took it: the next run diffs from this commit.
-      - name: Record the deployed commit
+      # Success makes this commit the next run's base. Without it (a failed upload, or a job cancelled or timed out
+      # before here) the record stays unsettled, and the next push or schedule deploys again.
+      - name: Record the deploy as done
         if: steps.check.outputs.deploy == 'true'
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          COMMIT: ${{ steps.check.outputs.commit }}
-        run: python3 tools/ci/web_deploy.py record kiln --commit "$COMMIT"
+          ID: ${{ steps.start.outputs.id }}
+        run: python3 tools/ci/web_deploy.py finish kiln --id "$ID" --state success
+
+      - name: Record the deploy as failed
+        if: failure() && steps.start.outputs.id != ''
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ID: ${{ steps.start.outputs.id }}
+        run: python3 tools/ci/web_deploy.py finish kiln --id "$ID" --state failure
 
   # s1.edm.sh, the first installer's address, only redirects to Kiln's S1 page: kiln/s1-redirect/vercel.json, which
   # forwards every path (and so old #/wifi links, which Kiln's S1 page maps). The project's root directory is kiln/,
@@ -276,6 +311,15 @@ jobs:
         with:
           node-version: '24'
 
+      # Before the upload: if the job stops after Vercel took it, this record says the live commit is unknown.
+      - name: Record the deploy as started
+        id: start
+        if: steps.check.outputs.deploy == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          COMMIT: ${{ steps.check.outputs.commit }}
+        run: python3 tools/ci/web_deploy.py start installer --commit "$COMMIT" | tee -a "$GITHUB_OUTPUT"
+
       - name: Deploy the redirect to production
         if: steps.check.outputs.deploy == 'true'
         env:
@@ -294,10 +338,18 @@ jobs:
           url=$(npx -y "$VERCEL_CLI" deploy --prod --archive=tgz --token "$VERCEL_TOKEN")
           echo "Deployed: $url, from main at $COMMIT" | tee -a "$GITHUB_STEP_SUMMARY"
 
-      # Only after Vercel took it: the next run diffs from this commit.
-      - name: Record the deployed commit
+      # Success makes this commit the next run's base. Without it (a failed upload, or a job cancelled or timed out
+      # before here) the record stays unsettled, and the next push or schedule deploys again.
+      - name: Record the deploy as done
         if: steps.check.outputs.deploy == 'true'
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          COMMIT: ${{ steps.check.outputs.commit }}
-        run: python3 tools/ci/web_deploy.py record installer --commit "$COMMIT"
+          ID: ${{ steps.start.outputs.id }}
+        run: python3 tools/ci/web_deploy.py finish installer --id "$ID" --state success
+
+      - name: Record the deploy as failed
+        if: failure() && steps.start.outputs.id != ''
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ID: ${{ steps.start.outputs.id }}
+        run: python3 tools/ci/web_deploy.py finish installer --id "$ID" --state failure

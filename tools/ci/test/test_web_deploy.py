@@ -74,6 +74,13 @@ class LastSuccess(unittest.TestCase):
         self.assertEqual(wd.last_success([node('t', 'SUCCESS', task='deploy'), node('d', 'SUCCESS')]), 'd')
         self.assertIsNone(wd.last_success([node('t', 'SUCCESS', 'IN_PROGRESS', task='deploy')]))
 
+    def test_a_newer_record_that_never_succeeded_is_unsettled(self):
+        self.assertEqual(wd.last([node('c', 'FAILURE', 'IN_PROGRESS'), node('b', 'IN_PROGRESS'), node('a', 'SUCCESS')]),
+                         ('a', 'c'))
+        self.assertEqual(wd.last([node('a', 'SUCCESS'), node('z', 'IN_PROGRESS')]), ('a', None))  # older: settled
+        self.assertEqual(wd.last([node('b', 'IN_PROGRESS', task='deploy'), node('a', 'SUCCESS')]), ('a', None))
+        self.assertEqual(wd.last([node('b', 'IN_PROGRESS')]), (None, 'b'))
+
     def test_a_deploy_still_running_or_cancelled_is_not_one(self):
         # A cancelled job's deployment ends ERROR, though its upload may have reached Vercel: deploying again is safe.
         self.assertIsNone(wd.last_success([node('b', 'IN_PROGRESS', 'QUEUED'), node('a', 'ERROR', 'QUEUED')]))
@@ -104,7 +111,7 @@ class Bases(unittest.TestCase):
             'p1': {'nodes': [node('k1', 'INACTIVE', 'SUCCESS')]},
             'p2': {'nodes': []}}}})
         got = wd.bases(['site', 'kiln', 'installer'], repo='o/r', token='t', url='https://api.invalid/graphql', opener=opener)
-        self.assertEqual(got, {'site': 's1', 'kiln': 'k1', 'installer': None})
+        self.assertEqual(got, {'site': ('s1', 's2'), 'kiln': ('k1', None), 'installer': (None, None)})
         v = seen['body']['variables']
         self.assertEqual((v['owner'], v['name'], v['e0'], v['e1'], v['e2']),
                          ('o', 'r', ['glassworks.dev'], ['kiln.glassworks.dev'], ['s1.edm.sh']))
@@ -112,28 +119,31 @@ class Bases(unittest.TestCase):
         self.assertIn(f'first: {wd.DEPTH}', seen['body']['query'])
         self.assertIn(' task ', seen['body']['query'])
 
-    def test_record_writes_a_deployment_of_the_deployed_commit_and_its_success(self):
+    def test_start_writes_an_in_progress_deployment_of_the_checked_out_commit(self):
         opener, seen = self.fake(lambda url: {'id': 7} if url.endswith('/deployments') else {})
-        wd.record('kiln', 'abc123', repo='o/r', token='t', api='https://api.invalid', run_url='https://run.invalid/1',
-                  opener=opener)
+        got = wd.start('kiln', 'abc123', repo='o/r', token='t', api='https://api.invalid', run_url='https://run.invalid/1',
+                       opener=opener)
+        self.assertEqual(got, 7)
         (u1, dep), (u2, status) = seen['calls']
         self.assertEqual(u1, 'https://api.invalid/repos/o/r/deployments')
         self.assertEqual((dep['ref'], dep['task'], dep['environment'], dep['required_contexts'], dep['auto_merge']),
                          ('abc123', 'web-deploy', 'kiln.glassworks.dev', [], False))
         self.assertEqual(u2, 'https://api.invalid/repos/o/r/deployments/7/statuses')
-        self.assertEqual(status, {'state': 'success', 'environment_url': 'https://kiln.glassworks.dev',
-                                  'log_url': 'https://run.invalid/1'})
+        self.assertEqual(status, {'state': 'in_progress', 'log_url': 'https://run.invalid/1'})
 
-    def test_record_fails_when_github_makes_no_deployment(self):
+    def test_start_fails_when_github_makes_no_deployment(self):
         opener, seen = self.fake({'message': 'Conflict'})
         with self.assertRaises(RuntimeError):
-            wd.record('site', 'abc', repo='o/r', token='t', api='https://api.invalid', run_url='x', opener=opener)
-        self.assertEqual(len(seen['calls']), 1)  # no success status for a deployment that isn't there
+            wd.start('site', 'abc', repo='o/r', token='t', api='https://api.invalid', run_url='x', opener=opener)
+        self.assertEqual(len(seen['calls']), 1)
 
-    def test_an_api_error_raises_and_does_not_read_as_never_deployed(self):
-        opener, _ = self.fake({'errors': [{'message': 'Resource not accessible by integration'}]})
-        with self.assertRaises(RuntimeError):
-            wd.bases(['kiln'], repo='o/r', token='t', url='https://api.invalid/graphql', opener=opener)
+    def test_finish_marks_the_outcome(self):
+        opener, seen = self.fake({})
+        wd.finish('installer', 7, 'success', repo='o/r', token='t', api='https://api.invalid', opener=opener)
+        wd.finish('installer', 8, 'failure', repo='o/r', token='t', api='https://api.invalid', opener=opener)
+        self.assertEqual(seen['calls'], [
+            ('https://api.invalid/repos/o/r/deployments/7/statuses', {'state': 'success', 'environment_url': 'https://s1.edm.sh'}),
+            ('https://api.invalid/repos/o/r/deployments/8/statuses', {'state': 'failure'})])
 
 
 class Push(InRepo):
@@ -155,6 +165,17 @@ class Push(InRepo):
         self.repo.git('revert', '--no-edit', 'HEAD')  # C
         self.assertTrue(self.plan({'site': b, 'kiln': b, 'installer': b})['kiln'])
         self.assertFalse(self.plan({'site': a, 'kiln': a, 'installer': a})['kiln'])  # what the old base missed
+
+    def test_an_upload_whose_success_was_never_recorded_deploys_after_a_revert(self):
+        # B is recorded as started but never reached success (Vercel took it, GitHub didn't take the status). C
+        # reverts B, so its inputs equal A's, the base. B may be live, so C deploys.
+        a = self.repo.commit('kiln/apps/kiln/src/page.tsx')
+        b = self.repo.commit('kiln/apps/kiln/src/flow.tsx')
+        self.repo.git('revert', '--no-edit', 'HEAD')
+        got = self.plan({'site': wd.Last(a), 'kiln': wd.Last(a, b), 'installer': wd.Last(a)})
+        self.assertEqual(got, {'site': False, 'kiln': True, 'installer': False})
+        got = self.plan({'site': wd.Last(a), 'kiln': wd.Last(a, b), 'installer': wd.Last(a)}, event='schedule')
+        self.assertTrue(got['kiln'])
 
     def test_nothing_deploys_when_nothing_it_builds_from_changed(self):
         deployed = self.repo.commit('kiln/apps/kiln/src/page.tsx')
@@ -290,16 +311,21 @@ class Workflow(unittest.TestCase):
             self.assertTrue(f'tools/ci/web_deploy.py check {project}' in job.group(1), project)
             self.assertTrue('deployments: write' in job.group(1), project)
 
-    def test_each_job_records_only_after_its_deploy_step(self):
+    def test_each_job_records_its_upload_around_the_deploy_step(self):
         for project in wd.ENVIRONMENTS:
             job = re.search(rf'^  {project}:\n(.*?)(?=^  \S|\Z)', WORKFLOW, re.M | re.S).group(1)
-            steps = re.findall(r'^      - (?:name: (.*)|uses: )', job, re.M)
-            names = [n for n in steps if n]
-            self.assertEqual(names[-1], 'Record the deployed commit', project)
-            self.assertTrue(names[-2].startswith('Deploy'), project)
-            rec = job[job.index('Record the deployed commit'):]
-            self.assertTrue("if: steps.check.outputs.deploy == 'true'" in rec, project)
-            self.assertTrue(f'tools/ci/web_deploy.py record {project} --commit "$COMMIT"' in rec, project)
+            names = [n for n in re.findall(r'^      - (?:name: (.*)|uses: )', job, re.M) if n]
+            deploy = next(i for i, n in enumerate(names) if n.startswith('Deploy'))
+            self.assertEqual(names[deploy - 1:], ['Record the deploy as started', names[deploy],
+                                                  'Record the deploy as done', 'Record the deploy as failed'], project)
+
+            def step(name):
+                return job[job.index(f'name: {name}'):].split('\n      - ')[0]
+            self.assertTrue("if: steps.check.outputs.deploy == 'true'" in step('Record the deploy as started'), project)
+            self.assertTrue(f'web_deploy.py start {project} --commit "$COMMIT"' in step('Record the deploy as started'))
+            self.assertTrue("if: steps.check.outputs.deploy == 'true'" in step('Record the deploy as done'), project)
+            self.assertTrue(f'web_deploy.py finish {project} --id "$ID" --state success' in step('Record the deploy as done'))
+            self.assertTrue("if: failure() && steps.start.outputs.id != ''" in step('Record the deploy as failed'), project)
 
     def test_the_workflow_picks_with_the_script_and_retries_on_a_schedule(self):
         self.assertTrue('tools/ci/web_deploy.py pick' in WORKFLOW)

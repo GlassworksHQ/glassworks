@@ -2,22 +2,28 @@
 """Which of web-deploy.yml's projects to deploy: each one whose inputs changed since its last successful deploy.
 
 `pick` and `check` are read-only: one GitHub GraphQL query (the repo's deployments, with $GITHUB_TOKEN) and git
-diff, writing nothing but their output and the run summary. `record` creates one GitHub deployment.
+diff, writing nothing but their output and the run summary. `start` creates one GitHub deployment and `finish`
+adds a status to it.
 
 Usage:
   tools/ci/web_deploy.py pick --event <event> [--project both|site|kiln|installer] [--summary <file>]
       site=, kiln=, installer= true|false, for $GITHUB_OUTPUT (the changes job)
   tools/ci/web_deploy.py check <project> --event <event> --started-for <sha> [--summary <file>]
       deploy=true|false, commit=<sha> and base=<sha>, in a deploy job once it holds the project's queue
-  tools/ci/web_deploy.py record <project> --commit <sha>
-      after Vercel took the deploy: a GitHub deployment of that commit (task TASK) with a success status
+  tools/ci/web_deploy.py start <project> --commit <sha>
+      just before the upload: a GitHub deployment of that commit (task TASK), in progress; prints id=<id>
+  tools/ci/web_deploy.py finish <project> --id <id> --state success|failure
+      after the upload: its outcome
 
-The base. A project's base is the commit of its newest `record`: the commit the deploy job checked out and
-Vercel took, written only once the upload succeeded. Not the push's `before`: a deploy that was cancelled by a newer
-run or failed (Vercel's daily cap) left its change undeployed, and a later push that doesn't touch the project
-would never deploy it. Not the deployment GitHub makes for each job in an environment either: that one has the
-commit the run was started for, older than main at checkout, and succeeds when `check` skips the deploy too.
-A cancelled job whose upload still reached Vercel records nothing, so the project deploys once more.
+The base. A project's base is the commit of its newest record that reached success: the commit the deploy job
+checked out, marked only once Vercel took the upload. Not the push's `before`: a deploy that was cancelled by a
+newer run or failed (Vercel's daily cap) left its change undeployed, and a later push that doesn't touch the
+project would never deploy it. Not the deployment GitHub makes for each job in an environment either: that one has
+the commit the run was started for, older than main at checkout, and succeeds when `check` skips the deploy too.
+
+Unsettled. A record newer than the base that never reached success (the upload failed, the job was cancelled or
+timed out, or GitHub didn't take the success status) may or may not be live. Then production can't be read from
+the base, so the project deploys whatever the diff says.
 
 Events:
   - workflow_dispatch: the project(s) asked for, with no diff (a deploy by hand always deploys);
@@ -86,14 +92,31 @@ def wants(project, changed, deleted=()):
     return next((f for f in changed if changes.matches(f, patterns)), None)
 
 
-def last_success(nodes):
-    """The commit of the newest record that succeeded (a later one marks it INACTIVE, after its SUCCESS)."""
+class Last(tuple):
+    """(base, unsettled): the commit of the newest record that succeeded, and of a newer record that didn't."""
+    __slots__ = ()
+
+    def __new__(cls, base=None, unsettled=None):
+        return super().__new__(cls, (base, unsettled))
+
+    base = property(lambda self: self[0])
+    unsettled = property(lambda self: self[1])
+
+
+def last(nodes):
+    """Last for a project's deployments, newest first. A SUCCESS a later deploy made INACTIVE still counts."""
+    unsettled = None
     for node in nodes:
         if node.get('task') != TASK:
             continue
         if any(s.get('state') == 'SUCCESS' for s in (node.get('statuses') or {}).get('nodes') or ()):
-            return node.get('commitOid') or None
-    return None
+            return Last(node.get('commitOid') or None, unsettled)
+        unsettled = unsettled or node.get('commitOid') or '?'
+    return Last(None, unsettled)
+
+
+def last_success(nodes):
+    return last(nodes).base
 
 
 def query(projects):
@@ -114,7 +137,7 @@ def call(url, payload, token, opener):
 
 
 def bases(projects, repo=None, token=None, url=None, opener=urllib.request.urlopen):
-    """{project: commit or None}: each project's last recorded deploy. Raises when GitHub can't say."""
+    """{project: Last}: each project's last recorded deploy. Raises when GitHub can't say."""
     repo = repo or os.environ['GITHUB_REPOSITORY']
     token = token or os.environ['GITHUB_TOKEN']
     url = url or os.environ.get('GITHUB_GRAPHQL_URL', 'https://api.github.com/graphql')
@@ -125,14 +148,17 @@ def bases(projects, repo=None, token=None, url=None, opener=urllib.request.urlop
     if body.get('errors') or not (body.get('data') or {}).get('repository'):
         raise RuntimeError(f"GitHub's API: {body.get('errors') or 'no repository'}")
     data = body['data']['repository']
-    return {k: last_success(((data.get(f'p{i}') or {}).get('nodes')) or ()) for i, k in enumerate(keys)}
+    return {k: last(((data.get(f'p{i}') or {}).get('nodes')) or ()) for i, k in enumerate(keys)}
 
 
-def record(project, commit, repo=None, token=None, api=None, run_url=None, opener=urllib.request.urlopen):
-    """A deployment of `commit` in the project's environment, with a success status: the next run's base."""
-    repo = repo or os.environ['GITHUB_REPOSITORY']
-    token = token or os.environ['GITHUB_TOKEN']
-    api = api or os.environ.get('GITHUB_API_URL', 'https://api.github.com')
+def env(repo, token, api):
+    return (repo or os.environ['GITHUB_REPOSITORY'], token or os.environ['GITHUB_TOKEN'],
+            api or os.environ.get('GITHUB_API_URL', 'https://api.github.com'))
+
+
+def start(project, commit, repo=None, token=None, api=None, run_url=None, opener=urllib.request.urlopen):
+    """A deployment of `commit` in the project's environment, in progress: its id."""
+    repo, token, api = env(repo, token, api)
     run_url = run_url or '{}/{}/actions/runs/{}'.format(
         os.environ.get('GITHUB_SERVER_URL', 'https://github.com'), repo, os.environ.get('GITHUB_RUN_ID', ''))
     dep = call(f'{api}/repos/{repo}/deployments', {
@@ -141,17 +167,29 @@ def record(project, commit, repo=None, token=None, api=None, run_url=None, opene
         'description': f'{NAMES[project]} deployed from this commit by web-deploy.yml'}, token, opener)
     if not isinstance(dep.get('id'), int):
         raise RuntimeError(f"GitHub didn't create the deployment: {dep.get('message') or dep}")
-    call(f'{api}/repos/{repo}/deployments/{dep["id"]}/statuses', {
-        'state': 'success', 'environment_url': URLS[project], 'log_url': run_url}, token, opener)
+    call(f'{api}/repos/{repo}/deployments/{dep["id"]}/statuses', {'state': 'in_progress', 'log_url': run_url},
+         token, opener)
     return dep['id']
 
 
-def decide(project, base, event, head='HEAD', unread=None):
-    """(deploy, why) for a push or a schedule. `unread`: why GitHub couldn't say, when it couldn't."""
+def finish(project, dep_id, state, repo=None, token=None, api=None, opener=urllib.request.urlopen):
+    """The upload's outcome on the deployment `start` made. Success makes its commit the next run's base."""
+    repo, token, api = env(repo, token, api)
+    body = {'state': state}
+    if state == 'success':
+        body['environment_url'] = URLS[project]
+    call(f'{api}/repos/{repo}/deployments/{dep_id}/statuses', body, token, opener)
+
+
+def decide(project, base, event, head='HEAD', unread=None, unsettled=None):
+    """(deploy, why) for a push or a schedule. `unread`: why GitHub couldn't say, when it couldn't. `unsettled`:
+    the commit of a newer deploy that never reached success, which may be live."""
     if unread:
         if event == 'schedule':
             return False, f'{unread}, so a scheduled run leaves it (a push deploys it)'
         return True, unread
+    if unsettled:
+        return True, f'the deploy from {short(unsettled)} never reached success, so what is live is unknown'
     if not base:
         return True, f'no recorded deploy in its last {DEPTH} deployments'
     try:
@@ -184,8 +222,10 @@ def plan(projects, event, project='both', head='HEAD', fetch=None):
         found, unread = {}, "couldn't read the last deploy from GitHub"
     out = {}
     for p in projects:
-        deploy, why = decide(p, found.get(p), event, head, unread)
-        out[p] = (deploy, found.get(p), why)
+        got = found.get(p)
+        got = got if isinstance(got, Last) else Last(got)  # a commit alone: a record that succeeded, nothing after
+        deploy, why = decide(p, got.base, event, head, unread, got.unsettled)
+        out[p] = (deploy, got.base, why)
     return out
 
 
@@ -197,9 +237,13 @@ def main(argv):
     check = sub.add_parser('check')
     check.add_argument('project', choices=list(ENVIRONMENTS))
     check.add_argument('--started-for', required=True, help='the commit the run was started for (github.sha)')
-    rec = sub.add_parser('record')
-    rec.add_argument('project', choices=list(ENVIRONMENTS))
-    rec.add_argument('--commit', required=True, help='the commit the job checked out and deployed')
+    st = sub.add_parser('start')
+    st.add_argument('project', choices=list(ENVIRONMENTS))
+    st.add_argument('--commit', required=True, help='the commit the job checked out and is about to upload')
+    fin = sub.add_parser('finish')
+    fin.add_argument('project', choices=list(ENVIRONMENTS))
+    fin.add_argument('--id', required=True, type=int, help="start's deployment id")
+    fin.add_argument('--state', required=True, choices=('success', 'failure'))
     for p in (pick, check):
         p.add_argument('--event', required=True)
         p.add_argument('--head', default='HEAD')
@@ -218,14 +262,17 @@ def main(argv):
                     f.write(f'| {NAMES[p]} | {"yes" if deploy else "no"} | `{short(base)}` | {why} |\n')
         return 0
 
-    if a.cmd == 'record':
+    if a.cmd == 'start':  # fails the job before the upload when GitHub won't take the record
+        print(f'id={start(a.project, a.commit)}')
+        return 0
+    if a.cmd == 'finish':
         try:
-            record(a.project, a.commit)
-        except Exception as e:  # Vercel has it, but the next run doesn't know: it deploys again, which is safe
-            print(f"::error::{NAMES[a.project]} is deployed from {short(a.commit)}, but GitHub didn't take the record "
-                  f'({e}): the next run deploys it again', file=sys.stderr)
+            finish(a.project, a.id, a.state)
+        except (OSError, ValueError, RuntimeError) as e:  # urllib's errors are OSErrors; JSON's are ValueErrors
+            # The record stays unsettled, and an unsettled record makes the next run deploy.
+            print(f"::error::GitHub didn't take {NAMES[a.project]}'s deploy outcome ({a.state}, {e}). Its record "
+                  'stays in progress, so the next push or schedule deploys it again', file=sys.stderr)
             return 1
-        print(f'Recorded {NAMES[a.project]} as deployed from {a.commit}')
         return 0
 
     # check: the job deploys main as checked out now, which must have the commit the run was started for.
