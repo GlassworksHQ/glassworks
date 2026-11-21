@@ -33,6 +33,7 @@ const pages: RouteSource = () => [
   { path: "/frames" },
   { path: "/panes" },
   { path: "/blueprints" },
+  { path: "/developers" },
   { path: "/brand" },
   { path: "/trademarks" },
   { path: "/research" },

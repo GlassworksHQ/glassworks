@@ -16,14 +16,17 @@ export const metadata = pageMetadata({
 export default function PanesPage() {
   return (
     <>
-      <PageHead title="Panes" lede="Everything beyond the core is a pane. Each runs on any frame with the hardware it needs." />
+      <PageHead
+        title="Features and panes"
+        lede="Every capability beyond the core ships as a modular pane matched to what your panel supports — some run automatically, while opt-in panes like the Bluetooth proxy stay off until you turn them on."
+      />
 
-      <ListCard id="general" title="Any frame" aside={<span>{generalPanes.length} panes</span>}>
+      <ListCard id="general" title="Works across devices" aside={<span>{generalPanes.length} panes</span>}>
         <PaneRows panes={generalPanes} />
       </ListCard>
 
       {framePanes.length > 0 && (
-        <ListCard id="frame-panes" title="Frame panes" aside={<span>One device each</span>}>
+        <ListCard id="frame-panes" title="Device-specific panes" aside={<span>Built for individual hardware</span>}>
           <PaneRows panes={framePanes} />
         </ListCard>
       )}

@@ -13,3 +13,31 @@
   font-size: 13.5px;
   color: var(--faint);
 }
+
+.recipes {
+  margin-top: 56px;
+  padding-top: 40px;
+  border-top: 1px solid var(--edge);
+  display: grid;
+  gap: 24px;
+  scroll-margin-top: 96px;
+}
+
+.recipesHead {
+  display: grid;
+  gap: 8px;
+  max-width: 720px;
+}
+
+.recipesHead h2 {
+  font-size: clamp(24px, 3vw, 32px);
+  font-weight: 300;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+}
+
+.recipesHead p {
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.6;
+}

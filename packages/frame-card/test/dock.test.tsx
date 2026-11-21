@@ -156,6 +156,52 @@ describe('the model', () => {
     const ids = [...el.querySelectorAll('[id]')].map((n) => n.id);
     expect(ids).toEqual(expect.arrayContaining(['frame-floor-pt', 'frame-weave-pt']));
   });
+
+  it('is an image with the example dashboard, or a group whose screen holds the caller\'s live content', () => {
+    expect(el.firstElementChild!.getAttribute('role')).toBe('img');
+    const live = render(
+      <DeviceModel id="pt-live" model={tablet.model} label="Pixel Tablet">
+        <button type="button">Cancel</button>
+      </DeviceModel>,
+    );
+    const stage = live.firstElementChild!;
+    expect(stage.getAttribute('role')).toBe('group');
+    expect(stage.getAttribute('aria-label')).toBe('Pixel Tablet');
+    const button = live.querySelector('button')!;
+    expect(button.closest('[aria-hidden="true"]')).toBeNull();
+    // the live content takes the example dashboard's place on the screen
+    expect([...button.parentElement!.children]).toEqual([button]);
+    expect(live.textContent).not.toContain('3 lights on');
+    expect(live.querySelector('img')).toBeNull();
+    // the dock and its lift are the same as without children
+    expect(live.querySelector('[data-dock]')).not.toBeNull();
+  });
+
+  it('is a group with live face content alone, its screen picture hidden', () => {
+    const faced = render(<DeviceModel id="pt-face" model={tablet.model} label="Pixel Tablet" face={<button type="button">Wake</button>} />);
+    expect(faced.firstElementChild!.getAttribute('role')).toBe('group');
+    expect(faced.querySelector('button')!.closest('[aria-hidden="true"]')).toBeNull();
+    // the example dashboard is still drawn, but hidden from assistive technology
+    expect(faced.textContent).toContain('3 lights on');
+    const screen = [...faced.querySelectorAll('[aria-hidden="true"]')].find((n) => n.textContent!.includes('3 lights on'));
+    expect(screen).toBeDefined();
+  });
+
+  it('renders no empty slot as live content', () => {
+    const none = render(<DeviceModel id="pt-none" model={tablet.model} label="Pixel Tablet" face={false}>{null}</DeviceModel>);
+    expect(none.firstElementChild!.getAttribute('role')).toBe('img');
+    expect(none.textContent).toContain('3 lights on');
+    // a list filtered down to nothing, or of nothing, is empty too
+    for (const empty of [[], [null, false, '']]) {
+      const list = render(<DeviceModel id="pt-list" model={tablet.model} label="Pixel Tablet" face={empty}>{empty}</DeviceModel>);
+      expect(list.firstElementChild!.getAttribute('role')).toBe('img');
+      expect(list.textContent).toContain('3 lights on');
+    }
+    // 0 is content
+    const zero = render(<DeviceModel id="pt-zero" model={tablet.model} label="Pixel Tablet">{0}</DeviceModel>);
+    expect(zero.firstElementChild!.getAttribute('role')).toBe('group');
+    expect(zero.textContent).not.toContain('3 lights on');
+  });
 });
 
 describe('the undock CSS', () => {
@@ -197,5 +243,39 @@ describe('the card', () => {
     const body = el.querySelector('[data-dock] > [data-body]')!;
     expect(body).not.toBeNull();
     expect(body.querySelector('circle')).toBeNull();
+  });
+});
+
+describe('dock and screen edge cases', () => {
+  it('hides the charging contacts when the dock plate faces away from the camera', () => {
+    const g = geometry(tablet.model, 2, { rx: 0, ry: 180 });
+    expect(g.dock!.faces.length).toBeGreaterThan(0);
+    expect(g.dock!.plate).toBeUndefined();
+    expect(g.dock!.pins).toBeUndefined();
+    expect(g.floorShadow).toBeDefined();
+  });
+
+  it('paints the tube in both themes without changing its projection', () => {
+    const parts = mirror.model.parts!;
+    const themed = parts.map((p) => p.kind === 'tube' ? { ...p, dark: { color: '#000000' } } : p);
+    const plain = geometry(mirror.model, 0.8);
+    const night = geometry({ ...mirror.model, parts: themed }, 0.8);
+    expect(night.parts.length).toBeGreaterThan(0);
+    expect(night.parts).toEqual(plain.parts.map((p) => ({ ...p, color: `light-dark(${p.color}, #000000)` })));
+  });
+
+  it('uses live content instead of a supplied render and places the face overlay outside the screen', () => {
+    const el = render(
+      <DeviceModel id="pt-overlay" model={tablet.model} label="Pixel Tablet" screen="/render.webp"
+        face={<span data-status>Sensor</span>}>
+        <button type="button">Pause timer</button>
+      </DeviceModel>,
+    );
+    const control = el.querySelector('button')!;
+    const overlay = el.querySelector('[data-status]')!;
+    expect(el.querySelector('img')).toBeNull();
+    expect(control.closest('[role="group"]')).toBe(el.firstElementChild);
+    expect(control.parentElement!.parentElement).toBe(overlay.parentElement);
+    expect(overlay.closest('[aria-hidden="true"]')).toBeNull();
   });
 });

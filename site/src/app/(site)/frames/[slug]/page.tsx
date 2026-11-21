@@ -9,8 +9,10 @@ import { BookGlyph, CreditGlyph, KilnGlyph } from "@/components/Glyphs";
 import { ClarityPanel } from "@/components/clarity/Clarity";
 import { ClarityChipLink } from "@/components/clarity/ClarityChipLink";
 import { CompletenessPanel } from "@/components/completeness/Completeness";
+import { RecipeList } from "@/components/Recipes";
 import { CLARITY, clarityFor } from "@/lib/clarity";
 import { frameById, frames, installLink } from "@/lib/frames";
+import { recipesForFrame } from "@/lib/recipes";
 import { getDocs } from "@/lib/docs";
 import { researchUrl } from "@/lib/docs/research";
 import { KIND_TEXT, completeness } from "@glassworks/frame-card";
@@ -71,6 +73,7 @@ async function Device({ params }: { params: Params }) {
   const guides = all.filter((x) => x.frame === d.id && x.section !== "notes" && x.url !== `/docs/frames/${d.id}`);
   const notes = all.filter((x) => x.frame === d.id && x.section === "notes");
   const installGuide = guides.find((g) => g.url.endsWith("/install"));
+  const matchingRecipes = recipesForFrame(d);
 
   return (
     <article>
@@ -243,6 +246,20 @@ async function Device({ params }: { params: Params }) {
         {/* a tested device's dated run on a real unit is the install these ratings describe */}
         {((!live && !d.run?.on) || d.unverified) && <p className={s.expected}>Expected. Nothing has run on this device yet.</p>}
       </section>
+
+      {matchingRecipes.length > 0 && (
+        <section style={{ marginBottom: 24 }} aria-labelledby="frame-recipes">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap", padding: "8px 4px 12px" }}>
+            <h2 id="frame-recipes" style={{ fontSize: 17, fontWeight: 500, letterSpacing: "-0.005em" }}>
+              Dashboard starter prompts
+            </h2>
+            <Link href="/blueprints#recipes" style={{ fontSize: 14, color: "var(--muted)", textDecoration: "none" }}>
+              All blueprints &amp; prompts ›
+            </Link>
+          </div>
+          <RecipeList recipes={matchingRecipes} compact />
+        </section>
+      )}
 
       <p className={s.back}>
         <Link href="/frames">All frames</Link>

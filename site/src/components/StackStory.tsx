@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import type { HeroPanel } from "@/lib/frames";
 import { ENTRIES, KILN_STEPS, LAYERS, type Layer } from "./Stack";
 import { HeroModel } from "./FrameCard";
@@ -121,7 +122,17 @@ export type StoryRelease = { name: string; version: string; href: string };
 /** A post from the last 30 days, for the hero's "New" pill. */
 export type StoryPost = { title: string; href: string };
 
-export function StackStory({ release, post, panel }: { release: StoryRelease; post?: StoryPost; panel?: HeroPanel }) {
+export function StackStory({
+  release,
+  post,
+  panel,
+  mode = "default",
+}: {
+  release: StoryRelease;
+  post?: StoryPost;
+  panel?: HeroPanel;
+  mode?: "default" | "developers";
+}) {
   const ref = useRef<HTMLElement>(null);
   const [p, setP] = useState(0);
 
@@ -252,21 +263,37 @@ export function StackStory({ release, post, panel }: { release: StoryRelease; po
                 {release.name} <b>{release.version}</b>
               </a>
             </span>
-            <h1 className={s.h1}>The open core for Home Assistant wall panels.</h1>
+            <h1 className={s.h1}>The open core for Home Assistant wall panels</h1>
             <p className={s.lede}>
-              Dashboard, ESPHome device, setup and updates for any wall panel. Everything else is a pane: voice, music,
+              Dashboard, ESPHome device, setup, and updates for any wall panel. Everything else is a pane: voice, music,
               Zigbee/Thread, or one you write.
             </p>
             <div className={s.ctas}>
-              {panel && (
-                <a className={s.install} href={panel.href}>
-                  <KilnGlyph />
-                  Install on {panel.frame.name}
-                </a>
+              {mode === "developers" ? (
+                <>
+                  <Link className={s.primary} href="/docs/frames">
+                    Write a frame
+                  </Link>
+                  <Link className={s.secondary} href="/docs/core/pane-api">
+                    Pane API
+                  </Link>
+                  <a className={s.secondary} href={links.org}>
+                    GitHub
+                  </a>
+                </>
+              ) : (
+                <>
+                  {panel && (
+                    <a className={s.install} href={panel.href}>
+                      <KilnGlyph />
+                      Install on {panel.frame.name}
+                    </a>
+                  )}
+                  <a className={panel ? s.secondary : s.primary} href={links.org}>
+                    Follow on GitHub
+                  </a>
+                </>
               )}
-              <a className={panel ? s.secondary : s.primary} href={links.org}>
-                Follow on GitHub
-              </a>
             </div>
             <span className={s.scrollHint} aria-hidden="true">
               Scroll to take it apart
@@ -275,7 +302,7 @@ export function StackStory({ release, post, panel }: { release: StoryRelease; po
 
           <div className={s.steps} style={{ opacity: storyO }} inert={storyO < 0.5}>
             <span className="label">How it&rsquo;s built</span>
-            <h2 className={s.h2}>A frame holds panes, and Kiln installs it.</h2>
+            <h2 className={s.h2}>A frame holds panes, and Kiln installs it</h2>
             <ol className={s.list}>
               {ENTRIES.map((l, i) => {
                 const open = active === i;

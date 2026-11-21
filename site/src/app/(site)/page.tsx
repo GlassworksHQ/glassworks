@@ -1,77 +1,328 @@
-import { StackStory } from "@/components/StackStory";
 import Link from "next/link";
-import { ListCard, Tile, Tiles, manage as m } from "@/components/Manage";
+import { MorphStory } from "@/components/home/MorphStory";
+import { ListCard, manage as m } from "@/components/Manage";
 import { FrameGrid } from "@/components/FrameGrid";
 import { PaneRows } from "@/components/PaneRows";
-import { frames, heroPanel } from "@/lib/frames";
+import { KilnGlyph } from "@/components/Glyphs";
+import { CLARITY, clarityFor, rubric } from "@/lib/clarity";
+import { blueprints } from "@/lib/blueprints";
+import { frames, KILN } from "@/lib/frames";
 import { release } from "@/lib/release";
-import { panes, stageCounts } from "@/lib/site";
+import { panes } from "@/lib/site";
 import { JsonLd } from "@/components/JsonLd";
 import { SITE_DESCRIPTION, organizationLd, pageMetadata, softwareLd, websiteLd } from "@/lib/seo";
 import { DraftFlag, PostCover, longDate } from "@/components/blog/PostBits";
 import { getPosts } from "@/lib/docs";
 import b from "@/components/blog/Blog.module.css";
-import styles from "./page.module.css";
+import s from "./page.module.css";
 
 export const metadata = pageMetadata({
-  title: "Glassworks: the open core for Home Assistant wall panels",
+  title: "Glassworks: your home, on the wall",
   absoluteTitle: true,
   description: SITE_DESCRIPTION,
   path: "/",
 });
 
+const KILN_STAGES = [
+  {
+    num: "01",
+    title: "Backup",
+    detail: "Saves your stock partitions to your computer before a single byte changes. The Mirror is the exception: installing erases lululemon's software, with no backup.",
+  },
+  {
+    num: "02",
+    title: "Verify",
+    detail: "Checks every download before it's written. On the S1, each partition is read back after writing to confirm every byte.",
+  },
+  {
+    num: "03",
+    title: "Flash",
+    detail: "Installs Glassworks and hands off Wi-Fi and Home Assistant setup straight from Chrome.",
+  },
+  {
+    num: "04",
+    title: "Restore",
+    detail: "A guided restore puts the S1 back on your saved stock backup, and the Mirror can go back to plain Glass Panes.",
+  },
+] as const;
+
 export default async function Home() {
-  const [[post], latest] = await Promise.all([getPosts(), release()]);
-  const app = frames.find((f) => f.project)?.project?.name ?? "Glassworks";
+  const [[post], latest, catalog] = await Promise.all([getPosts(), release(), blueprints()]);
+  // the story draws these frames' own models
+  const frame = (id: string) => {
+    const f = frames.find((x) => x.id === id);
+    if (!f) throw new Error(`frames/${id} is missing: the home page's story draws it`);
+    return f;
+  };
+  const storyFrames = { s1: frame("aqara-s1-plus"), mirror: frame("lululemon-mirror"), tablet: frame("google-pixel-tablet") };
+
+  // every letter Clarity gives, the fallback (E) last
+  const clarityLetters = [...rubric.grade.letters.map((l) => l.letter), rubric.grade.fallback.letter];
+  const clarityScale = `${clarityLetters[0]} to ${clarityLetters[clarityLetters.length - 1]}`;
+  const clarityRows = frames.map((f) => ({
+    frame: f,
+    clarity: clarityFor(f.id),
+  }));
+
   return (
     <>
       <JsonLd nodes={[organizationLd(), websiteLd(), softwareLd(SITE_DESCRIPTION)]} />
-      <StackStory
-        release={{ name: app, version: latest.version, href: latest.href }}
+
+      <MorphStory
+        release={{ version: latest.version, href: latest.href }}
         post={post?.fresh ? { title: post.title, href: post.url } : undefined}
-        panel={heroPanel()}
+        frames={storyFrames}
+        blueprints={catalog.list.map((b) => b.path)}
       />
 
-      <Tiles>
-        <Tile href="/frames" label="Frames" value={frames.length} sub={stageCounts(frames)} />
-        <Tile href="/panes" label="Panes" value={panes.length} sub={stageCounts(panes)} />
-        <Tile href={latest.href} label="Latest release" value={latest.version} sub={`${app} · ${latest.date}`} />
-        <Tile href="/docs/principles" label="Docs" value="Principles" sub="What it is and isn't" />
-      </Tiles>
-
-      {post && (
-        <Link href={post.url} className={`${m.card} ${b.homeCard}`}>
-          <PostCover post={post} />
-          <div>
-            <div className={b.meta}>
-              {post.draft && <DraftFlag />}
-              <span>Blog</span>
-              <time dateTime={post.date}>{longDate(post.date)}</time>
-            </div>
-            <h2>{post.title}</h2>
-            <p>{post.summary}</p>
-            <span className={b.read}>Read the post</span>
+      <div className={s.below}>
+        {/* 1. Supported Hardware */}
+        <section className={s.band} aria-labelledby="devices-heading">
+          <div className={s.sectionIntro}>
+            <span className={s.eyebrow}>SUPPORTED HARDWARE</span>
+            <h2 id="devices-heading" className={s.sectionH2}>
+              Real wall hardware — and the tablet in your drawer
+            </h2>
+            <p className={s.sectionLede}>
+              Dedicated wall switches, full-length mirrors, and everyday Android tablets running the same open Home Assistant panel core.
+            </p>
           </div>
-        </Link>
-      )}
+          <FrameGrid
+            id="devices"
+            title="Supported devices"
+            aside={<Link href="/frames">All devices ›</Link>}
+            frames={frames}
+          />
+        </section>
 
-      <ListCard id="panes" title="Panes" aside={<Link href="/panes">All panes ›</Link>}>
-        <PaneRows panes={panes} />
-      </ListCard>
+        {/* 2. Install Safely with Kiln (Dedicated 2-Column Section) */}
+        <section className={s.split} aria-labelledby="kiln-heading">
+          <div className={s.splitCopy}>
+            <span className={`${s.eyebrow} ${s.eyebrowEmber}`}>KILN WEB INSTALLER</span>
+            <h2 id="kiln-heading" className={s.sectionH2}>
+              Flash from Chrome, with a way back
+            </h2>
+            <p className={s.sectionLede}>
+              Plug your panel in over USB and open Kiln in Chrome or Edge. There are no command-line tools and no vendor cloud; on Windows, the S1 needs a <Link href="/docs/frames/aqara-s1-plus/install#one-time-setup-for-your-computer">one-time USB driver step</Link>. Wall panels keep a backup of their stock software and a guided way back to it, and the lululemon Studio Mirror keeps a plain Glass Panes recovery image.
+            </p>
+            <div className={s.actions}>
+              <a href={KILN} className={s.kilnBtn}>
+                <KilnGlyph />
+                Open Kiln ↗
+              </a>
+              <Link href="/docs/kiln" className={s.textLink}>
+                How Kiln works →
+              </Link>
+            </div>
+          </div>
 
-      <FrameGrid id="devices" title="Devices" aside={<Link href="/frames">All frames ›</Link>} frames={frames} />
+          <ol className={`glass ${s.pipeline}`} aria-label="Kiln four-stage safety pipeline">
+            {KILN_STAGES.map((stage) => (
+              <li key={stage.num} className={s.pipelineStep}>
+                <span className={s.stepNum}>{stage.num}</span>
+                <div className={s.stepBody}>
+                  <h3>{stage.title}</h3>
+                  <p>{stage.detail}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </section>
 
-      <section aria-labelledby="why">
-        <div className={styles.whyHead}>
-          <h2 id="why">Why MPL-2.0</h2>
-          <span>Glassworks stays open. Your product doesn&rsquo;t have to.</span>
-        </div>
-        <Tiles className={m.trio}>
-          <Tile value="Port it" sub="Write a frame for your device." />
-          <Tile value="Ship it" sub="Sell panels. Your frames and panes can stay closed." />
-          <Tile value="Share back" sub="Changes to Glassworks' own files stay open." />
-        </Tiles>
-      </section>
+        {/* 3. Built Native for Home Assistant (Dedicated 2-Column Section) */}
+        <section className={`${s.split} ${s.splitFlip}`} aria-labelledby="esphome-heading">
+          <div className={`glass ${s.esphomeCard}`} aria-label="Example Home Assistant ESPHome device card">
+            <div className={s.esphomeHead}>
+              <div>
+                <b>Glassworks · Kitchen Tablet</b>
+                <span>ESPHome Native API · Local</span>
+              </div>
+              <span className={s.statusChip}>
+                <span className={s.dotGreen} aria-hidden="true" />
+                Connected
+              </span>
+            </div>
+
+            <div className={s.esphomeRows}>
+              <div className={s.esphomeRow}>
+                <span>Update</span>
+                <b>{latest.version}</b>
+                <span className={s.litBadge}>Up to date</span>
+              </div>
+              <div className={s.esphomeRow}>
+                <span>Docked</span>
+                <b>On</b>
+                <span className={s.mutedVal}>Binary sensor</span>
+              </div>
+              <div className={s.esphomeRow}>
+                <span>Camera presence</span>
+                <b>Clear</b>
+                <span className={s.mutedVal}>Motion in view</span>
+              </div>
+              <div className={s.esphomeRow}>
+                <span>Ambient light</span>
+                <b>142 lx</b>
+                <span className={s.mutedVal}>Auto-dim active</span>
+              </div>
+              <div className={s.esphomeRow}>
+                <span>Assist microphone</span>
+                <b>Enabled</b>
+                <span className={s.toggleOn} aria-hidden="true">
+                  <span />
+                </span>
+              </div>
+              <div className={s.esphomeRow}>
+                <span>Screen brightness</span>
+                <b>80%</b>
+                <span className={s.miniBar} aria-hidden="true">
+                  <span style={{ width: "80%" }} />
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className={s.splitCopy}>
+            <span className={s.eyebrow}>ESPHOME NATIVE</span>
+            <h2 id="esphome-heading" className={s.sectionH2}>
+              Updates, sensors, and settings right where they belong
+            </h2>
+            <p className={s.sectionLede}>
+              Glassworks speaks the native ESPHome API directly to Home Assistant. Nothing installs in HACS, no custom integration is required, no cloud account sits in the middle, and panel updates arrive under <em>Settings → Updates</em>.
+            </p>
+            <div className={s.actions}>
+              <Link href="/docs/esphome" className={s.textLink}>
+                Explore the ESPHome entities →
+              </Link>
+              <Link href="/docs/principles" className={s.textLink}>
+                Read our principles →
+              </Link>
+            </div>
+          </div>
+        </section>
+
+        {/* 4. Honest Speed with Clarity (Dedicated Section) */}
+        <section className={s.split} aria-labelledby="clarity-heading">
+          <div className={s.splitCopy}>
+            <span className={s.eyebrow}>CLARITY BENCHMARK</span>
+            <h2 id="clarity-heading" className={s.sectionH2}>
+              We&rsquo;d rather show an honest C than hide it
+            </h2>
+            <p className={s.sectionLede}>
+              Measured panels are tested running the real Home Assistant frontend on standardized dashboards for tap latency, scrolling frame pacing, live state updates, and camera streams. Devices without published runs are marked pending until measured.
+            </p>
+            <div className={s.actions}>
+              <Link href="/docs/perf" className={s.textLink}>
+                How {CLARITY} grades work →
+              </Link>
+              <Link href="/frames" className={s.textLink}>
+                Compare all devices →
+              </Link>
+            </div>
+          </div>
+
+          <div className={`glass ${s.clarityCard}`}>
+            <div className={s.clarityScale} aria-label={`${CLARITY} grade scale from ${clarityScale}`}>
+              <span className={s.clarityScaleLabel}>{CLARITY} scale</span>
+              <div className={s.letterStrip}>
+                {clarityLetters.map((letter) => (
+                  <span key={letter} className={s.letterPill}>
+                    {letter}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className={s.clarityRows}>
+              {clarityRows.map(({ frame, clarity }) => (
+                <Link key={frame.id} href={`/frames/${frame.id}`} className={s.clarityRow}>
+                  <div className={s.clarityMeta}>
+                    <b>{frame.name}</b>
+                    <span>
+                      {clarity.state === "graded"
+                        ? clarity.grade.meaning ?? `${CLARITY} ${clarity.grade.grade}`
+                        : clarity.state === "none"
+                          ? "Measurements pending"
+                          : clarity.state === "re-measure"
+                            ? "Measured before this version of Clarity: needs a new run"
+                            : "Measured, but not comparable with this version of Clarity"}
+                    </span>
+                  </div>
+                  {clarity.state === "graded" ? (
+                    <span className={`${s.gradeBadge} ${s.gradeGraded}`}>
+                      {clarity.grade.grade}
+                    </span>
+                  ) : (
+                    <span className={s.gradeBadge}>—</span>
+                  )}
+                </Link>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* 5. Everything Your Panel Can Do */}
+        <section className={s.band} aria-labelledby="panes-heading">
+          <div className={s.sectionIntro}>
+            <span className={s.eyebrow}>PANES &amp; BLUEPRINTS</span>
+            <h2 id="panes-heading" className={s.sectionH2}>
+              Everything your panel can do
+            </h2>
+            <p className={s.sectionLede}>
+              Each capability ships as a modular pane matched to your hardware — core features start automatically while opt-in panes like the Bluetooth proxy can be toggled anytime — plus ready-to-import Home Assistant blueprints.
+            </p>
+          </div>
+          <ListCard
+            id="panes"
+            title="Built-in panes"
+            aside={
+              <span className={s.cardLinks}>
+                <Link href="/blueprints">Blueprints</Link>
+                <span aria-hidden="true">·</span>
+                <Link href="/panes">All features ›</Link>
+              </span>
+            }
+          >
+            <PaneRows panes={panes} />
+          </ListCard>
+        </section>
+
+        {/* 6. Latest from the Blog + Builders & Open Core (MPL-2.0) Callout */}
+        <section className={s.band} aria-label="Blog and developer open core">
+          {post && (
+            <Link href={post.url} className={`${m.card} ${b.homeCard}`}>
+              <PostCover post={post} />
+              <div>
+                <div className={b.meta}>
+                  {post.draft && <DraftFlag />}
+                  <span>Blog</span>
+                  <time dateTime={post.date}>{longDate(post.date)}</time>
+                </div>
+                <h2>{post.title}</h2>
+                <p>{post.summary}</p>
+                <span className={b.read}>Read the post</span>
+              </div>
+            </Link>
+          )}
+
+          <div className={`glass ${s.devCallout}`}>
+            <div className={s.devCopy}>
+              <span className={s.eyebrow}>OPEN CORE · MPL-2.0</span>
+              <h2>Port Glassworks to new glass — or build with our MIT libraries</h2>
+              <p>
+                Explore the 6-layer architecture, inspect the Pane API, grab our standalone MIT Kotlin and TypeScript libraries, or ship Glassworks on your own hardware under MPL-2.0.
+              </p>
+            </div>
+            <div className={s.devActions}>
+              <Link href="/developers" className={s.devPrimary}>
+                For developers →
+              </Link>
+              <Link href="/docs/frames" className={s.textLink}>
+                Add a device
+              </Link>
+            </div>
+          </div>
+        </section>
+      </div>
     </>
   );
 }

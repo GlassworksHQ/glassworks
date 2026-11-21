@@ -26,7 +26,7 @@ export async function Sidebar() {
         <NavLink href="/">Overview</NavLink>
 
         <Link href="/frames" className={s.group}>
-          Frames
+          Devices
         </Link>
         {frames.map((f) => (
           <NavLink key={f.id} href={`/frames/${f.id}`}>
@@ -37,16 +37,20 @@ export async function Sidebar() {
           </NavLink>
         ))}
 
-        <span className={s.group}>Build</span>
+        <span className={s.group}>Features</span>
         <NavLink href="/panes">
           Panes<small>{panes.length}</small>
         </NavLink>
         <NavLink href="/blueprints">Blueprints</NavLink>
-        <NavLink href="/docs">Docs</NavLink>
         <a href={KILN} className={s.ni}>
           <span className={s.ember}>Kiln</span>
           <small aria-hidden="true">↗</small>
         </a>
+
+        <span className={s.group}>Developers</span>
+        <NavLink href="/developers">Overview</NavLink>
+        <NavLink href="/docs">Docs</NavLink>
+        <NavLink href="/research">Research</NavLink>
 
         <span className={s.group}>Project</span>
         {POSTS.length > 0 && (

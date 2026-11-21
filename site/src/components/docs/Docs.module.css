@@ -20,7 +20,76 @@
 }
 
 .search {
-  padding: 0 0 6px;
+  padding: 0 0 8px;
+}
+
+/* 3-track audience switcher in the docs sidebar */
+.trackSwitch {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px;
+  padding: 3px;
+  margin: 0 2px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--edge);
+  background: var(--glass);
+}
+
+.trackBtn {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 9px;
+  padding: 6px 4px;
+  font: 500 12px/1.2 var(--f-sans);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.trackBtn:hover {
+  color: var(--fg);
+}
+
+.trackBtnOn {
+  background: var(--bg);
+  color: var(--fg);
+  border-color: var(--edge);
+}
+
+/* 3-track audience tabs on the /docs landing page */
+.landingTabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 4px 10px;
+}
+
+.landingTab {
+  border: 1px solid var(--edge);
+  background: var(--glass);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 8px 16px;
+  font: 450 14px/1.2 var(--f-sans);
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.landingTab:hover {
+  color: var(--fg);
+}
+
+.landingTabOn {
+  color: var(--fg);
+  border-color: color-mix(in srgb, var(--sky) 55%, var(--edge));
+  background: color-mix(in srgb, var(--sky) 12%, var(--glass));
 }
 
 .layout {
@@ -513,4 +582,11 @@
 .topic h3 small {
   color: var(--faint);
   font-size: 13px;
+}
+
+/* the active track's tree, as the tabs' panel: it fills the sidebar as the nav inside it did */
+.trackPanel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
 }

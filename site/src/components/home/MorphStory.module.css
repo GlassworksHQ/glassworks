@@ -1,0 +1,2635 @@
+/* Full-bleed Goldilocks 6-beat scroll stage (730vh: the pacing is HOLDS in MorphStory.tsx) */
+.story {
+  position: relative;
+  width: 100vw;
+  margin-left: calc(50% - 50vw);
+  margin-top: -24px;
+  height: 730vh;
+}
+
+.sticky {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100svh;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+
+.ambient {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Whisper-quiet far-right vertical progress rail (6 tiny 4px dots, active elongates to 18px sky); each dot
+   sits in a 24px button, so it is easy to hit */
+.edgeRail {
+  position: absolute;
+  right: 18px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.edgeDot {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  cursor: pointer;
+}
+
+.edgeDot::before {
+  content: "";
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--fg) 24%, transparent);
+  transition:
+    height 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    background 0.24s ease,
+    opacity 0.24s ease;
+}
+
+.edgeDot:hover::before {
+  background: color-mix(in srgb, var(--fg) 56%, transparent);
+}
+
+.edgeDotActive::before,
+.edgeDotActive:hover::before {
+  height: 18px;
+  background: var(--sky);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--sky) 55%, transparent);
+}
+
+.canvas {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 1220px;
+  height: 100%;
+  padding: 72px 48px 48px;
+  display: grid;
+  place-items: center;
+}
+
+/* Copy blocks positioned cleanly opposite the morphing glass */
+.copyBlock {
+  position: absolute;
+  top: 50%;
+  width: min(440px, 39vw);
+  display: grid;
+  gap: 16px;
+  margin-top: -116px;
+  z-index: 3;
+}
+
+.copyNarrow {
+  width: min(390px, 34vw);
+}
+
+.copyLeft {
+  left: 48px;
+}
+
+.copyRight {
+  right: 48px;
+}
+
+.copyCenter {
+  position: absolute;
+  left: 50%;
+  bottom: 58px;
+  width: min(560px, 90vw);
+  margin-left: calc(min(560px, 90vw) / -2);
+  text-align: center;
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  z-index: 3;
+}
+
+.copyCenter .eyebrow {
+  justify-self: center;
+}
+
+.eyebrow {
+  font-family: var(--f-mono);
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+  text-decoration: none;
+  justify-self: start;
+}
+
+a.eyebrow:hover {
+  color: var(--fg);
+}
+
+.newPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  justify-self: start;
+  padding: 4px 12px 4px 5px;
+  border-radius: 999px;
+  border: 1px solid var(--edge);
+  background: var(--glass);
+  font-size: 13px;
+  color: var(--muted);
+  text-decoration: none;
+  max-width: 100%;
+}
+
+.newPill b {
+  font-weight: 500;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.newPill:hover {
+  border-color: color-mix(in srgb, var(--sky) 45%, var(--edge));
+}
+
+.newTag {
+  font: 600 10px/1 var(--f-sans);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--lit-gradient);
+  color: var(--night);
+  flex: none;
+}
+
+.newArrow {
+  flex: none;
+}
+
+.h1 {
+  font-size: clamp(40px, 4.4vw, 60px);
+  line-height: 1.03;
+  letter-spacing: -0.038em;
+  font-weight: 300;
+  color: var(--fg);
+  text-wrap: balance;
+}
+
+.h2 {
+  font-size: clamp(32px, 3.5vw, 46px);
+  line-height: 1.07;
+  letter-spacing: -0.032em;
+  font-weight: 300;
+  color: var(--fg);
+  text-wrap: balance;
+}
+
+.lede {
+  font-size: 16.5px;
+  line-height: 1.58;
+  color: var(--muted);
+  max-width: 43ch;
+}
+
+.ledeCenter {
+  font-size: 16px;
+  line-height: 1.56;
+  color: var(--muted);
+  max-width: 50ch;
+}
+
+.ctas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin-top: 6px;
+}
+
+.ctasCenter {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 14px;
+  margin-top: 6px;
+}
+
+.install {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-radius: 999px;
+  background: var(--ember-gradient);
+  color: #1a0a0a;
+  font-size: 14.5px;
+  font-weight: 500;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: opacity 0.18s ease;
+}
+
+.install:hover {
+  opacity: 0.9;
+}
+
+.install svg {
+  width: 17px;
+  height: 17px;
+  flex: none;
+}
+
+.quietLink {
+  font-size: 14.5px;
+  font-weight: 450;
+  color: var(--muted);
+  text-decoration: none;
+  padding: 8px 4px;
+  transition: color 0.18s ease;
+}
+
+.quietLink:hover {
+  color: var(--fg);
+}
+
+/* a blueprint or custom card the beat's example takes (BEAT_NEEDS): a quiet chip, its kind in mono */
+.need {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 6px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--edge);
+  font-size: 13.5px;
+  font-weight: 450;
+  color: var(--muted);
+  text-decoration: none;
+  transition:
+    color 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.need:hover {
+  color: var(--fg);
+  border-color: color-mix(in srgb, var(--fg) 30%, transparent);
+}
+
+.needKind {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--hover);
+  font-family: var(--f-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/* Future ghost silhouettes at Beat 5 */
+.ghostLayer {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 416px;
+  transform: translateY(-82px);
+  z-index: 2;
+  transition: opacity 0.35s ease;
+}
+
+.ghost {
+  appearance: none;
+  border: 1px dashed color-mix(in srgb, var(--fg) 24%, transparent);
+  background: color-mix(in srgb, var(--glass) 60%, transparent);
+  color: var(--muted);
+  cursor: pointer;
+  display: grid;
+  place-content: center;
+  gap: 4px;
+  text-align: center;
+  transition:
+    border-color 0.22s ease,
+    color 0.22s ease,
+    background 0.22s ease,
+    transform 0.22s ease;
+}
+
+.ghost:hover {
+  border-color: color-mix(in srgb, var(--sky) 55%, var(--edge));
+  color: var(--fg);
+  background: color-mix(in srgb, var(--sky) 8%, var(--glass));
+  transform: translateY(-2px);
+}
+
+.ghostActive {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--sky) 55%, var(--edge));
+  color: var(--fg);
+}
+
+.ghost span {
+  font-family: var(--f-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  font-weight: 500;
+}
+
+.ghost small {
+  font-size: 11.5px;
+  color: var(--faint);
+}
+
+.ghostRound {
+  width: 156px;
+  height: 156px;
+  border-radius: 50%;
+}
+
+.ghostBedside {
+  width: 190px;
+  height: 114px;
+  border-radius: 26px;
+}
+
+/* The single gliding, morphing piece of precision hardware */
+.hardwareCarrier {
+  grid-area: 1 / 1;
+  position: relative;
+  z-index: 4;
+  width: 100%;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  will-change: transform;
+}
+
+/* Shadow strengths: the glass's own (--box-a) and the one the tablet beat casts (--drop-a), lighter on a light page */
+.hardwareCarrier {
+  --box-a: 0.3;
+  --drop-a: 0.2;
+}
+
+@media (prefers-color-scheme: dark) {
+  :global(:root:not([data-theme="light"])) .hardwareCarrier {
+    --box-a: 0.56;
+    --drop-a: 0.55;
+  }
+}
+
+:global(:root[data-theme="dark"]) .hardwareCarrier {
+  --box-a: 0.56;
+  --drop-a: 0.55;
+}
+
+/* the glass and the tablet's model, stacked; the tablet beat's drop shadow is set on this inline */
+.devices {
+  grid-area: 1 / 1;
+  display: grid;
+  place-items: center;
+}
+
+/* Beat 4's lines sit beside the device, outside the glass's 3D pose, so their labels stay flat */
+.raysAnchor {
+  grid-area: 1 / 1;
+  position: relative;
+  height: 0;
+  pointer-events: none;
+}
+
+.hardwareScale {
+  grid-area: 1 / 1;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+  will-change: transform;
+}
+
+/* A beat's own 3D model (@glassworks/frame-card), where the glass was. Its width is set inline: the stage
+   that draws its body at the glass's width (modelPose). */
+.beatModel {
+  grid-area: 1 / 1;
+  position: relative;
+  z-index: 1;
+  transform: scale(var(--bezel-scale, 1));
+  will-change: opacity;
+}
+
+/* a model's floor shadow (the blurred polygon under a standing device) is drawn for a dark page; on a
+   light one it reads as a dark puddle, so it is lighter there */
+.beatModel svg > polygon[filter],
+.modelCompact svg > polygon[filter] {
+  fill-opacity: 0.2;
+}
+
+@media (prefers-color-scheme: dark) {
+  :global(:root:not([data-theme="light"])) .beatModel svg > polygon[filter],
+  :global(:root:not([data-theme="light"])) .modelCompact svg > polygon[filter] {
+    fill-opacity: 0.5;
+  }
+}
+
+:global(:root[data-theme="dark"]) .beatModel svg > polygon[filter],
+:global(:root[data-theme="dark"]) .modelCompact svg > polygon[filter] {
+  fill-opacity: 0.5;
+}
+
+/* MorphStory owns undock state so the 3D lift and the Docked wire-ray label never diverge */
+.beatModel [data-dock],
+.modelCompact [data-dock] {
+  --undock: var(--story-undock, 0);
+}
+
+/* a dock standing still at its beat (docks), behind the travelling device; its device's body is not drawn */
+.dockCarrier {
+  z-index: 3;
+}
+
+.beatDock [data-dock] > svg {
+  opacity: var(--dock-o, 1);
+}
+
+.beatDock [data-dock] > [data-body] {
+  visibility: hidden;
+}
+
+/* the travelling device: its ground (a floor or wall shadow, or its own copy of a dock) only while it holds */
+.travel [data-mount] > svg,
+.travel [data-mount] > div:not([data-body]) {
+  opacity: var(--ground-o, 1);
+}
+
+/* the model's screen, as the glass's .screen: the cards' @container rules query its height too */
+.modelScreen {
+  position: absolute;
+  inset: 0;
+  container-type: size;
+  background: var(--ha-bg);
+  color: var(--ha-text);
+  border: 1px solid var(--ha-screen-edge);
+  border-radius: inherit;
+  overflow: hidden;
+}
+
+/* A mirror's screen sits behind continuous glass: no background or edge of its own, which showed as a
+   light outline on a light page once the dashboard tucked away */
+.screen[data-mirror],
+.modelScreen[data-mirror] {
+  background: transparent;
+  border-color: transparent;
+}
+
+/* the phone layout's models: the width is set inline. On a narrow screen the stage shrinks, and the
+   screen's content is drawn at full size and zoomed down (--screen-zoom), so the dashboard keeps its layout */
+.modelCompact {
+  max-width: 100%;
+}
+
+.modelCompact .modelScreen {
+  zoom: var(--screen-zoom, 1);
+}
+
+.bezelRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.bezel {
+  position: relative;
+  pointer-events: auto;
+  /* --face at --face-o: a frame's own front colour fading in over the dark glass */
+  --face-layer: color-mix(in srgb, var(--face, transparent) calc(var(--face-o, 0) * 100%), transparent);
+  background:
+    linear-gradient(var(--face-layer), var(--face-layer)),
+    linear-gradient(155deg, #252832 0%, #11131a 48%, #0a0b0f 100%);
+  border: 1px solid color-mix(in srgb, var(--face, transparent) calc(var(--face-o, 0) * 100%), rgba(255, 255, 255, 0.14));
+  box-shadow:
+    0 34px 78px -28px rgb(0 0 0 / calc(var(--box-a, 0.56) * (1 - var(--drop-o, 0)))),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  overflow: hidden;
+  will-change: width, height, border-radius;
+}
+
+/* Silvered full-height mirror body surface (forehead + chin stay real reflective glass) */
+.mirrorBodySurface {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: linear-gradient(155deg, #2c303a 0%, #171920 46%, #242833 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.24);
+}
+
+
+/* Mirror forehead camera / presence sensor lens + sky-blue pulse ring */
+.mirrorSensor {
+  position: absolute;
+  top: 6.3%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 5;
+  width: 10px;
+  height: 10px;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+
+.sensorLens {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #263147 0%, #090b10 72%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  transition:
+    border-color 0.35s ease,
+    box-shadow 0.35s ease;
+}
+
+.sensorLensLit {
+  border-color: rgba(56, 189, 248, 0.85);
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.65);
+}
+
+.sensorPulse {
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  border: 1.5px solid #38bdf8;
+  animation: sensorRipple 1.15s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+@keyframes sensorRipple {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.95;
+  }
+  100% {
+    transform: scale(4.2);
+    opacity: 0;
+  }
+}
+
+
+
+
+/* Beat 4: 3 sleek animated horizontal dashed light lines sweeping from the glass to open-air labels */
+.wireRays {
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  margin-top: -66px;
+  display: grid;
+  gap: 20px;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.wireRay {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+}
+
+.wireRaySvg {
+  width: 82px;
+  height: 12px;
+  flex: none;
+  overflow: visible;
+}
+
+.wireRayDash {
+  animation: rayFlow 1.6s linear infinite;
+}
+
+@keyframes rayFlow {
+  from {
+    stroke-dashoffset: 20;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.rayText {
+  display: grid;
+  line-height: 1.2;
+}
+
+.rayText b {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg);
+}
+
+.rayText small {
+  font-family: var(--f-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--ink-sky);
+}
+
+/* the Docked line's button: lifts the tablet off its dock, as hovering it does */
+.dockToggle {
+  pointer-events: auto;
+  margin-left: 2px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--edge);
+  background: var(--glass);
+  color: var(--muted);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition:
+    color 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.dockToggle:hover:not(:disabled) {
+  color: var(--fg);
+  border-color: color-mix(in srgb, var(--fg) 30%, transparent);
+}
+
+.dockToggle:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.morphSmooth {
+  transition:
+    transform 0.52s cubic-bezier(0.22, 1, 0.36, 1),
+    width 0.52s cubic-bezier(0.22, 1, 0.36, 1),
+    height 0.52s cubic-bezier(0.22, 1, 0.36, 1),
+    border-radius 0.52s cubic-bezier(0.22, 1, 0.36, 1),
+    top 0.52s cubic-bezier(0.22, 1, 0.36, 1),
+    bottom 0.52s cubic-bezier(0.22, 1, 0.36, 1),
+    left 0.52s cubic-bezier(0.22, 1, 0.36, 1),
+    right 0.52s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.glare {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 4;
+  background: linear-gradient(
+    115deg,
+    transparent 32%,
+    rgba(255, 255, 255, calc(var(--glare-a, 0.11) * 0.45)) 43%,
+    rgba(255, 255, 255, var(--glare-a, 0.11)) 49%,
+    rgba(255, 255, 255, calc(var(--glare-a, 0.11) * 0.35)) 55%,
+    transparent 65%
+  );
+  background-size: 260% 100%;
+  background-position: var(--sheen, 34%) 0;
+  transition: background-position 0.45s ease;
+}
+
+/*
+ * The dashboard's colours follow the page, as globals.css does: Home Assistant's default light theme,
+ * or its dark theme on a dark page. The app's own overlays (Assist, notifications, timers) stay dark
+ * glass, as on a panel.
+ */
+.screen,
+.modelScreen {
+  --ha-bg: #fafafa;
+  --ha-card: #ffffff;
+  --ha-card-hover: #f5f5f5;
+  --ha-edge: rgba(0, 0, 0, 0.08);
+  --ha-text: #212121;
+  --ha-muted: #727272;
+  --ha-btn: #f2f2f2;
+  --ha-btn-hover: #e8e8e8;
+  --ha-btn-edge: rgba(0, 0, 0, 0.1);
+  --ha-track: rgba(0, 0, 0, 0.1);
+  --ha-slider: rgba(0, 0, 0, 0.08);
+  --ha-screen-edge: rgba(0, 0, 0, 0.12);
+  /* the thermostat's mode labels, readable on their tints */
+  --ha-heat: #b45309;
+  --ha-cool: #0369a1;
+}
+
+@media (prefers-color-scheme: dark) {
+  :global(:root:not([data-theme="light"])) .screen,
+  :global(:root:not([data-theme="light"])) .modelScreen {
+    --ha-bg: #111111;
+    --ha-card: #1c1c1c;
+    --ha-card-hover: #232323;
+    --ha-edge: rgba(255, 255, 255, 0.07);
+    --ha-text: #e1e1e1;
+    --ha-muted: #9b9b9b;
+    --ha-btn: #262626;
+    --ha-btn-hover: #333333;
+    --ha-btn-edge: rgba(255, 255, 255, 0.1);
+    --ha-track: rgba(255, 255, 255, 0.12);
+    --ha-slider: rgba(255, 255, 255, 0.09);
+    --ha-screen-edge: rgba(255, 255, 255, 0.08);
+    --ha-heat: #ff8100;
+    --ha-cool: #03a9f4;
+  }
+}
+
+:global(:root[data-theme="dark"]) .screen,
+:global(:root[data-theme="dark"]) .modelScreen {
+  --ha-bg: #111111;
+  --ha-card: #1c1c1c;
+  --ha-card-hover: #232323;
+  --ha-edge: rgba(255, 255, 255, 0.07);
+  --ha-text: #e1e1e1;
+  --ha-muted: #9b9b9b;
+  --ha-btn: #262626;
+  --ha-btn-hover: #333333;
+  --ha-btn-edge: rgba(255, 255, 255, 0.1);
+  --ha-track: rgba(255, 255, 255, 0.12);
+  --ha-slider: rgba(255, 255, 255, 0.09);
+  --ha-screen-edge: rgba(255, 255, 255, 0.08);
+  --ha-heat: #ff8100;
+  --ha-cool: #03a9f4;
+}
+
+/* Inner screen positioned by real frame inset percentages; container-type: size lets HA cards reflow */
+.screen {
+  position: absolute;
+  z-index: 2;
+  container-type: size;
+  background: var(--ha-bg);
+  color: var(--ha-text);
+  border: 1px solid var(--ha-screen-edge);
+  overflow: hidden;
+  will-change: top, bottom, left, right, border-radius;
+}
+
+.screenInner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+/* ==================== LIVE RESPONSIVE HOME ASSISTANT LOVELACE SECTIONS DASHBOARD ==================== */
+.haRoot {
+  width: 100%;
+  height: 100%;
+  background: var(--ha-bg);
+  color: var(--ha-text);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+  font-family: var(--f-sans);
+  transform-origin: right center;
+  transition:
+    transform 0.48s cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Beat 3: Collapse full HA dashboard smoothly into the right-edge mirror side pill */
+/* someone at the Mirror: the dashboard fades away where it is, as the Mirror's own card does (nothing moves) */
+.haRootCollapsed {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.haBadges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  flex: none;
+}
+
+.haBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--ha-card);
+  border: 1px solid var(--ha-edge);
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--ha-text);
+  white-space: nowrap;
+  flex: none;
+}
+
+.haBadgeDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  flex: none;
+}
+
+.dotAmber {
+  background: #ffc107;
+}
+.dotGreen {
+  background: #4caf50;
+}
+.dotOrange {
+  background: #ff8100;
+}
+.dotBlue {
+  background: #03a9f4;
+}
+.dotMuted {
+  background: #6b7280;
+}
+
+.haCard {
+  background: var(--ha-card);
+  border: 1px solid var(--ha-edge);
+  border-radius: 12px;
+  color: var(--ha-text);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.haGrid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
+  gap: 8px;
+}
+
+.haWeatherCard {
+  grid-column: span 2;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.haWeatherLeft {
+  display: grid;
+  gap: 1px;
+}
+
+.haClock {
+  font-size: 26px;
+  font-weight: 300;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.haWeatherCond {
+  font-size: 11px;
+  color: var(--ha-muted);
+}
+
+.haWeatherRight {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+}
+
+.haSunIcon {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+}
+
+.haSunIcon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.haHiLo {
+  font-size: 10px;
+  color: var(--ha-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.haClimateCard {
+  grid-column: span 2;
+  grid-row: span 2;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.haClimateHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+}
+
+.haCardTitle {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--ha-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.haModePill {
+  font-size: 9.5px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.haModeHeat {
+  background: rgba(255, 129, 0, 0.16);
+  color: var(--ha-heat);
+}
+
+.haModeCool {
+  background: rgba(3, 169, 244, 0.16);
+  color: var(--ha-cool);
+}
+
+.haDialStage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+}
+
+.haDialSvg {
+  width: min(100%, 96px);
+  height: min(100%, 96px);
+  transform: rotate(90deg);
+}
+
+.haDialTrack {
+  fill: none;
+  stroke: var(--ha-track);
+  stroke-width: 6.5;
+  stroke-linecap: round;
+}
+
+.haDialHeat {
+  fill: none;
+  stroke: #ff8100;
+  stroke-width: 7;
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.2s ease;
+}
+
+.haDialCool {
+  fill: none;
+  stroke: #03a9f4;
+  stroke-width: 7;
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.2s ease;
+}
+
+.haDialCenter {
+  position: absolute;
+  display: grid;
+  justify-items: center;
+  line-height: 1.05;
+}
+
+.haDialTemp {
+  font-size: 24px;
+  font-weight: 400;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+.haDialSub {
+  font-size: 9px;
+  color: var(--ha-muted);
+}
+
+.haDialControls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.haStepBtn {
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid var(--ha-btn-edge);
+  background: var(--ha-btn);
+  color: var(--ha-text);
+  font-size: 14px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.haStepBtn:hover {
+  background: var(--ha-btn-hover);
+}
+
+.haDialTarget {
+  font-size: 10px;
+  color: var(--ha-muted);
+}
+
+.haTile {
+  appearance: none;
+  font: inherit;
+  text-align: left;
+  padding: 8px 9px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.haTile:hover {
+  background: var(--ha-card-hover);
+}
+
+.haTileAmber {
+  border-color: rgba(255, 193, 7, 0.26);
+}
+
+.haTileBlue {
+  border-color: rgba(56, 189, 248, 0.35);
+}
+
+.haTileRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.haCircle {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.haCircle svg {
+  width: 15px;
+  height: 15px;
+}
+
+.haCircleAmber {
+  background: rgba(255, 193, 7, 0.2);
+  color: #ffc107;
+}
+
+.haCircleOff {
+  background: rgba(155, 155, 155, 0.16);
+  color: var(--ha-muted);
+}
+
+.haCircleGreen {
+  background: rgba(76, 175, 80, 0.2);
+  color: #4caf50;
+}
+
+.haCircleOrange {
+  background: rgba(255, 129, 0, 0.2);
+  color: #ff8100;
+}
+
+.haCircleBlue {
+  background: rgba(3, 169, 244, 0.2);
+  color: #03a9f4;
+}
+
+.haTileMeta {
+  display: grid;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.haTileMeta b {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ha-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.haTileMeta small {
+  font-size: 10px;
+  color: var(--ha-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.haSlider {
+  display: block;
+  width: 100%;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--ha-slider);
+  overflow: hidden;
+}
+
+.haSliderFillAmber {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #ffc107;
+  transition: width 0.22s ease;
+}
+
+.haSparkCard,
+.haCamCard,
+.haLockTile,
+.haMediaTile {
+  display: none;
+}
+
+.haSparkCard {
+  padding: 9px 11px;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.haSparkHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.haSparkLabel {
+  font-size: 10.5px;
+  color: var(--ha-muted);
+}
+
+.haSparkVal {
+  font-size: 12px;
+  font-weight: 500;
+  color: #03a9f4;
+  font-variant-numeric: tabular-nums;
+}
+
+.haSparkSvg {
+  width: 100%;
+  height: 36px;
+  display: block;
+}
+
+.haCamCard {
+  position: relative;
+  padding: 0;
+}
+
+.haCamSvg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.haCamOverlay {
+  position: absolute;
+  inset: auto 0 0;
+  padding: 5px 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.72));
+  font-size: 10px;
+  /* over the camera's picture, light in either theme */
+  color: #f4f4f5;
+}
+
+.haCamBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 500;
+}
+
+.liveDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: #34d399;
+}
+
+.haCamFps {
+  font-family: var(--f-mono);
+  font-size: 9px;
+  color: rgba(244, 244, 245, 0.72);
+}
+
+/* ==================== @CONTAINER REFLOW RULES (REAL HA CARDS REFLOW LIVE) ==================== */
+
+/* 1. Wide Landscape Tablet */
+@container (min-width: 350px) and (height >= 242px) {
+  .haGrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-rows: auto 1fr 1fr;
+  }
+
+  .haWeatherCard {
+    grid-column: 1 / span 2;
+    grid-row: 1;
+  }
+
+  .haClimateCard {
+    grid-column: 3 / span 2;
+    grid-row: 1 / span 2;
+  }
+
+  .haKitchenTile {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .haLivingTile {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  /* When Beat 4 shows the Sendspin tile in col 2 row 2, hide Living Room so it isn't covered */
+  .haRoot[data-sendspin] .haLivingTile {
+    display: none;
+  }
+
+  .haSparkCard {
+    display: flex;
+    grid-column: 1 / span 2;
+    grid-row: 3;
+  }
+
+  .haCamCard {
+    display: block;
+    grid-column: 3 / span 2;
+    grid-row: 3;
+  }
+
+  /* Beat 4's TimerDock sits in the bottom-right corner: the camera takes one column, and the thermostat's buttons
+     keep clear of it */
+  .haRoot[data-sendspin] .haCamCard {
+    grid-column: 3;
+  }
+
+  .haRoot[data-sendspin] .haClimateCard .haDialControls {
+    justify-content: flex-start;
+    gap: 6px;
+    padding-right: 62px;
+  }
+
+  .haRoot[data-sendspin] .haClimateCard .haDialTarget {
+    display: none;
+  }
+}
+
+/* 2. Wide Short Wall Switch & Kitchen Display */
+@container (min-width: 270px) and (height < 242px) {
+  .haGrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-rows: 1fr 1fr;
+  }
+
+  .haWeatherCard {
+    grid-column: 1 / span 2;
+    grid-row: 1;
+  }
+
+  .haKitchenTile {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .haLivingTile {
+    display: none;
+  }
+
+  .haLockTile {
+    display: flex;
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .haClimateCard {
+    grid-column: 3 / span 2;
+    grid-row: 1 / span 2;
+  }
+
+  /* Keep Beat 4's bottom-right TimerDock from covering the thermostat's increase button */
+  .haRoot[data-sendspin] .haClimateCard .haDialControls {
+    justify-content: flex-start;
+    gap: 6px;
+    padding-right: 62px;
+  }
+
+  .haRoot[data-sendspin] .haClimateCard .haDialTarget {
+    display: none;
+  }
+}
+
+/* Beat 4 Kitchen/Bedside: swap Front Door slot to live Sendspin audio tile so music playback is visible */
+.haRoot[data-sendspin] .haLockTile {
+  display: none;
+}
+
+.haRoot[data-sendspin] .haMediaTile {
+  display: flex;
+  grid-column: 2;
+  grid-row: 2;
+}
+
+/* Compact Bedside Display */
+@container (max-width: 340px) and (max-height: 165px) {
+  .haBadges {
+    display: none;
+  }
+
+  .haGrid {
+    grid-template-columns: 1.1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+  }
+
+  .haWeatherCard {
+    grid-column: 1;
+    grid-row: 1;
+    padding: 8px 10px;
+  }
+
+  .haClock {
+    font-size: 22px;
+  }
+
+  .haKitchenTile {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .haLivingTile,
+  .haLockTile,
+  .haMediaTile {
+    display: none;
+  }
+
+  /* Give Sendspin its own cell in col 1 row 2 instead of overlapping the thermostat in col 2 */
+  .haRoot[data-sendspin] .haKitchenTile {
+    display: none;
+  }
+
+  .haRoot[data-sendspin] .haMediaTile {
+    display: flex;
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  .haClimateCard {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    padding: 8px;
+  }
+
+  /* Keep Beat 4's bottom-right TimerDock from covering the thermostat's increase button */
+  .haRoot[data-sendspin] .haClimateCard .haDialControls {
+    justify-content: flex-start;
+    gap: 6px;
+    padding-right: 58px;
+  }
+
+  .haRoot[data-sendspin] .haClimateCard .haDialTarget {
+    display: none;
+  }
+
+  .haDialSvg {
+    width: 68px;
+    height: 68px;
+  }
+
+  .haDialTemp {
+    font-size: 19px;
+  }
+
+  .haDialSub {
+    display: none;
+  }
+}
+
+/* 3. Tall Narrow Portrait Studio Mirror Inset */
+@container (max-width: 259px) and (min-height: 260px) {
+  .haRoot {
+    padding: 8px;
+    gap: 6px;
+  }
+
+  .haBadgeExtra {
+    display: none;
+  }
+
+  .haBadge {
+    padding: 3px 7px;
+    font-size: 9.5px;
+  }
+
+  .haGrid {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1.15fr auto auto 0.9fr;
+    gap: 6px;
+  }
+
+  .haWeatherCard {
+    grid-column: 1;
+    grid-row: 1;
+    padding: 7px 9px;
+  }
+
+  .haClock {
+    font-size: 20px;
+  }
+
+  .haClimateCard {
+    grid-column: 1;
+    grid-row: 2;
+    padding: 7px 9px;
+    gap: 2px;
+  }
+
+  .haDialSvg {
+    width: 58px;
+    height: 58px;
+  }
+
+  .haDialTemp {
+    font-size: 18px;
+  }
+
+  .haDialSub {
+    display: none;
+  }
+
+  .haStepBtn {
+    width: 20px;
+    height: 20px;
+    font-size: 12px;
+  }
+
+  .haKitchenTile {
+    grid-column: 1;
+    grid-row: 3;
+    padding: 6px 8px;
+    gap: 4px;
+  }
+
+  .haLivingTile {
+    display: none;
+  }
+
+  .haMediaTile {
+    display: flex;
+    grid-column: 1;
+    grid-row: 4;
+    padding: 6px 8px;
+  }
+
+  .haCamCard {
+    display: block;
+    grid-column: 1;
+    grid-row: 5;
+  }
+}
+
+/* 4. Compact Square 4" & Round Dial — Thermostat Dial becomes solo centerpiece */
+@container (max-width: 259px) and (max-height: 259px) {
+  .haRoot {
+    padding: 10px;
+  }
+
+  .haBadges,
+  .haWeatherCard,
+  .haKitchenTile,
+  .haLivingTile,
+  .haLockTile,
+  .haMediaTile,
+  .haSparkCard,
+  .haCamCard {
+    display: none;
+  }
+
+  .haGrid {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr;
+  }
+
+  .haClimateCard {
+    grid-column: 1;
+    grid-row: 1;
+    padding: 12px;
+    border-radius: 14px;
+  }
+
+  .haDialSvg {
+    width: 118px;
+    height: 118px;
+  }
+
+  .haDialTemp {
+    font-size: 32px;
+  }
+
+  .haDialSub {
+    font-size: 10px;
+  }
+}
+
+.haRoot[data-round] {
+  padding: 0;
+  background: var(--ha-card);
+}
+
+.haRoot[data-round] .haClimateCard {
+  background: transparent;
+  border: 0;
+  padding: 20px 24px 18px;
+  align-items: center;
+}
+
+.haRoot[data-round] .haClimateHead {
+  justify-content: center;
+}
+
+.haRoot[data-round] .haCardTitle {
+  display: none;
+}
+
+.haRoot[data-round] .haDialControls {
+  justify-content: center;
+  gap: 14px;
+}
+
+.haRoot[data-round] .haDialTarget {
+  display: none;
+}
+
+/* ==================== BEAT 1: ASSIST AS SPARK, THE EDGE GLOW (EdgeGlow.kt + EdgeGlowOverlay.kt) ====================
+   The Glassworks theme's palettes (Themes.GLASSWORKS): its two lights, a and b, and its ground, light or dark with the
+   page (the light one here, the dark one below). On a dark ground the edge glows white-hot; on a light one, the
+   lights' middle shows instead. */
+.spark {
+  --sp-a: #0ea5e9;
+  --sp-b: #8b5cf6;
+  --sp-ground: #eceef2;
+  --sp-ink: #0c0e13;
+  --sp-hot: color-mix(in srgb, var(--sp-mid) 80%, black);
+  --sp-lit: #0369a1;
+  /* EdgeGlow's dim, deepening to the bottom: 26, 56 and 140 of 255 on a light ground */
+  --sp-dim-0: 10%;
+  --sp-dim-1: 22%;
+  --sp-dim-2: 55%;
+  --sp-mid: color-mix(in srgb, var(--sp-a), var(--sp-b));
+  --sp-edge: conic-gradient(
+    from 0deg,
+    var(--sp-mid),
+    var(--sp-b) 50deg,
+    var(--sp-b) 130deg,
+    var(--sp-mid) 180deg,
+    var(--sp-a) 230deg,
+    var(--sp-a) 310deg,
+    var(--sp-mid)
+  );
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: inherit;
+  overflow: hidden;
+  cursor: pointer;
+  user-select: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :global(:root:not([data-theme="light"])) .spark {
+    --sp-a: #38bdf8;
+    --sp-b: #a78bfa;
+    --sp-ground: #0a0b0f;
+    --sp-ink: #f4f4f5;
+    --sp-hot: #ffffff;
+    --sp-lit: #38bdf8;
+    /* 41, 72 and 153 of 255 on a dark ground */
+    --sp-dim-0: 16%;
+    --sp-dim-1: 28%;
+    --sp-dim-2: 60%;
+  }
+}
+
+:global(:root[data-theme="dark"]) .spark {
+  --sp-a: #38bdf8;
+  --sp-b: #a78bfa;
+  --sp-ground: #0a0b0f;
+  --sp-ink: #f4f4f5;
+  --sp-hot: #ffffff;
+  --sp-lit: #38bdf8;
+  /* 41, 72 and 153 of 255 on a dark ground */
+  --sp-dim-0: 16%;
+  --sp-dim-1: 28%;
+  --sp-dim-2: 60%;
+}
+
+/* the overlay is one button over the whole screen: its focus ring is drawn inside it, where the screen doesn't clip it */
+.spark:focus-visible {
+  outline: 2px solid var(--sp-a);
+  outline-offset: -3px;
+}
+
+/* a light dim that deepens to the bottom, where the caption sits: the dashboard stays in view */
+.sparkDim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--sp-ground) var(--sp-dim-0), transparent),
+    color-mix(in srgb, var(--sp-ground) var(--sp-dim-1), transparent) 50%,
+    color-mix(in srgb, var(--sp-ground) var(--sp-dim-2), transparent)
+  );
+}
+
+/* the lit edge: a sharp core, a glow and a haze, each the two lights round the edge cut to a ring */
+@property --sp-reveal {
+  syntax: "<angle>";
+  inherits: true;
+  initial-value: 180deg;
+}
+
+.sparkRing {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  /* lit from the mic both ways round, to meet at the bottom */
+  --sp-reveal: 180deg;
+  mask: conic-gradient(from 0deg, #000 var(--sp-reveal), transparent 0 calc(360deg - var(--sp-reveal)), #000 0);
+  transition: opacity 0.6s ease;
+}
+
+.spark[data-phase="listening"] .sparkRing {
+  animation: sparkIgnite 0.65s cubic-bezier(0.3, 0, 0.2, 1) both;
+}
+
+.spark[data-phase="thinking"] .sparkRing {
+  opacity: 0.45;
+}
+
+.spark[data-phase="speaking"] .sparkRing {
+  animation: sparkBreathe 2.6s ease-in-out infinite;
+}
+
+.sparkEdge,
+.sparkGlow,
+.sparkHaze {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--sp-edge);
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+}
+
+.sparkEdge {
+  padding: 1.5px;
+  background:
+    linear-gradient(color-mix(in srgb, var(--sp-hot) 45%, transparent) 0 0),
+    var(--sp-edge);
+}
+
+.sparkGlow {
+  padding: 5px;
+  filter: blur(6px);
+  opacity: 0.75;
+}
+
+.sparkHaze {
+  padding: 16px;
+  filter: blur(20px);
+  opacity: 0.4;
+}
+
+/* the mic, the middle of the top edge: it glows with the voice while listening */
+.sparkMic {
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  width: 34%;
+  height: 26px;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--sp-hot) 85%, transparent), transparent);
+  opacity: 0.35;
+  transition: opacity 0.4s ease;
+}
+
+.spark[data-phase="listening"] .sparkMic {
+  animation: sparkVoice 1.3s ease-in-out infinite;
+}
+
+/* loud words: ripples run from the mic along the top edge, sky to the left and violet to the right */
+.sparkRipples i {
+  position: absolute;
+  top: -4px;
+  left: 50%;
+  width: 16%;
+  height: 9px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--sp-a), transparent);
+  animation: sparkRippleLeft 1.3s ease-out infinite;
+}
+
+.sparkRipples i:nth-child(2) {
+  background: radial-gradient(closest-side, var(--sp-b), transparent);
+  animation-name: sparkRippleRight;
+}
+
+/* thinking: the lights shuttle along the top and bottom edges, half a lap apart, and cross in the middle */
+.sparkShuttles i {
+  position: absolute;
+  top: -5px;
+  width: 22px;
+  height: 10px;
+  margin-left: -11px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--sp-hot) 50%, var(--sp-a)), transparent);
+  animation: sparkLap 1.7s ease-in-out infinite alternate;
+}
+
+.sparkShuttles i:nth-child(2) {
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--sp-hot) 50%, var(--sp-b)), transparent);
+  animation-direction: alternate-reverse;
+}
+
+.sparkShuttles i:nth-child(n + 3) {
+  top: auto;
+  bottom: -5px;
+  animation-delay: -0.85s;
+}
+
+.sparkShuttles i:nth-child(4) {
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--sp-hot) 50%, var(--sp-b)), transparent);
+  animation-direction: alternate-reverse;
+}
+
+/* the glass caption: what was heard, and the reply */
+.sparkCaption {
+  position: absolute;
+  left: 50%;
+  bottom: 6%;
+  transform: translateX(-50%);
+  width: min(72%, 360px);
+  padding: 9px 16px 10px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--sp-ground) 86%, transparent);
+  border: 1px solid color-mix(in srgb, var(--sp-ground), var(--sp-ink) 12%);
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  text-align: center;
+  animation: sparkCaptionIn 0.2s ease 0.36s both;
+}
+
+.sparkLabel {
+  font-size: 8.5px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+
+.sparkLabelLit {
+  color: var(--sp-lit);
+}
+
+/* quieter than the reply, but readable at this size: 62 % ink (the panel's faint is 42 %, on a larger screen) */
+.sparkFaint {
+  color: color-mix(in srgb, var(--sp-ink) 62%, var(--sp-ground));
+}
+
+.sparkHeard {
+  font-size: 9.5px;
+  line-height: 1.25;
+  color: color-mix(in srgb, var(--sp-ink) 65%, var(--sp-ground));
+}
+
+.sparkMain {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: var(--sp-ink);
+}
+
+.sparkMuted {
+  color: color-mix(in srgb, var(--sp-ink) 65%, var(--sp-ground));
+}
+
+@container (max-height: 210px) {
+  .sparkMain {
+    font-size: 12.5px;
+  }
+
+  .sparkCaption {
+    padding: 7px 12px 8px;
+  }
+}
+
+@keyframes sparkIgnite {
+  from {
+    --sp-reveal: 0deg;
+  }
+  to {
+    --sp-reveal: 180deg;
+  }
+}
+
+@keyframes sparkBreathe {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 0.95;
+  }
+}
+
+@keyframes sparkVoice {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  30% {
+    opacity: 1;
+  }
+  55% {
+    opacity: 0.6;
+  }
+  75% {
+    opacity: 0.9;
+  }
+}
+
+@keyframes sparkRippleLeft {
+  from {
+    transform: translateX(-50%);
+    opacity: 0.9;
+  }
+  to {
+    transform: translateX(-310%);
+    opacity: 0;
+  }
+}
+
+@keyframes sparkRippleRight {
+  from {
+    transform: translateX(-50%);
+    opacity: 0.9;
+  }
+  to {
+    transform: translateX(210%);
+    opacity: 0;
+  }
+}
+
+@keyframes sparkLap {
+  from {
+    left: 8%;
+  }
+  to {
+    left: 92%;
+  }
+}
+
+@keyframes sparkCaptionIn {
+  from {
+    opacity: 0;
+  }
+}
+
+/* ==================== BEAT 2 (NOTIFICATIONS) & BEAT 3 (TIMER DOCK) OVERLAY SLOTS ==================== */
+.overlaySlot {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+}
+
+/* NotificationOverlay.kt: top-right #16171c glass card, 1px white@0.12, AMBER label, SKY→VIOLET TimeLeft */
+.gwNotifCard {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: min(214px, calc(100% - 20px));
+  border-radius: 16px;
+  background: #16171c;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.54);
+  padding: 10px 12px 9px;
+  display: grid;
+  gap: 4px;
+  text-align: left;
+}
+
+.gwNotifHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.gwNotifLabel {
+  font-size: 8px;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #fbbf24;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gwNotifClose {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: #a1a1aa;
+  font-size: 15px;
+  font-weight: 300;
+  line-height: 1;
+  padding: 0 0 0 4px;
+  cursor: pointer;
+}
+
+.gwNotifClose:hover {
+  color: #f4f4f5;
+}
+
+.gwNotifTitle {
+  font-size: 13px;
+  font-weight: 500;
+  color: #f4f4f5;
+  line-height: 1.15;
+}
+
+.gwNotifBody {
+  font-size: 10px;
+  color: #a1a1aa;
+  line-height: 1.25;
+}
+
+.gwNotifPic {
+  margin-top: 3px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  height: 54px;
+  background: #101218;
+}
+
+.gwNotifPicSvg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.gwNotifActions {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.gwPillBtn {
+  appearance: none;
+  flex: 1;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.07);
+  color: #f4f4f5;
+  font: 500 10px/1 var(--f-sans);
+  padding: 6.5px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.16s ease, border-color 0.16s ease;
+}
+
+.gwPillBtn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.gwPillBtnOk {
+  border-color: rgba(52, 211, 153, 0.4);
+  background: rgba(52, 211, 153, 0.16);
+  color: #34d399;
+}
+
+.gwTimeLeftTrack {
+  margin-top: 4px;
+  height: 2.5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.gwTimeLeftFill {
+  width: 68%;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #38bdf8, #a78bfa);
+}
+
+.gwNotifPill {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  appearance: none;
+  border-radius: 999px;
+  background: #16171c;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 6px 11px;
+  font: 400 10px/1 var(--f-sans);
+  color: #a1a1aa;
+  cursor: pointer;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+}
+
+.gwNotifPill b {
+  font-weight: 500;
+  color: #f4f4f5;
+}
+
+@container (max-height: 175px) {
+  .gwNotifCard {
+    top: 7px;
+    right: 7px;
+    width: min(176px, calc(100% - 14px));
+    padding: 8px 9px 7px;
+    gap: 3px;
+  }
+
+  .gwNotifPic {
+    height: 36px;
+  }
+}
+
+/* ==================== BEAT 3: STUDIO MIRROR PRESENCE COLLAPSE ==================== */
+.presenceLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Deep reflective silvered architectural mirror surface taking over 90%+ of the 40" glass */
+.mirrorReflectGlass {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      128deg,
+      rgba(255, 255, 255, 0.04) 0%,
+      rgba(255, 255, 255, 0.14) 24%,
+      rgba(255, 255, 255, 0.03) 34%,
+      rgba(255, 255, 255, 0.11) 52%,
+      rgba(255, 255, 255, 0.02) 66%,
+      rgba(255, 255, 255, 0.07) 100%
+    ),
+    linear-gradient(160deg, #272c36 0%, #161920 46%, #20242e 100%);
+  transition: opacity 0.52s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.mirrorReflectGlassOn {
+  opacity: 1;
+}
+
+/* Subtle top-rim presence micro-chip (binary_sensor.presence) */
+.presenceChip {
+  appearance: none;
+  position: absolute;
+  top: 7px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(10, 11, 15, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  font-family: var(--f-mono);
+  font-size: 7px;
+  letter-spacing: 0.02em;
+  max-width: calc(100% - 14px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #a1a1aa;
+  white-space: nowrap;
+  transition:
+    border-color 0.32s ease,
+    color 0.32s ease,
+    background 0.32s ease;
+}
+
+.presenceChipDetected {
+  border-color: rgba(56, 189, 248, 0.42);
+  background: rgba(10, 11, 15, 0.84);
+  color: #e0f2fe;
+}
+
+.presenceDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #6b7280;
+  flex: none;
+  transition:
+    background 0.3s ease,
+    box-shadow 0.3s ease;
+}
+
+.presenceDotLit {
+  background: #38bdf8;
+  box-shadow: 0 0 8px #38bdf8;
+}
+
+/* The capsule on the right edge while someone is at the Mirror; it fades in where it stands, as on the
+   Mirror's own dashboard card */
+.mirrorSidePill {
+  appearance: none;
+  position: absolute;
+  right: 7px;
+  top: 50%;
+  z-index: 3;
+  width: 36px;
+  padding: 11px 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  opacity: 0;
+  transform: translateY(-50%);
+  cursor: pointer;
+  pointer-events: none;
+  transition: opacity 0.8s ease;
+}
+
+.mirrorSidePillOn {
+  opacity: 1;
+}
+
+.sidePillTime {
+  font-size: 10px;
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  color: #f4f4f5;
+  font-variant-numeric: tabular-nums;
+}
+
+.sidePillSep {
+  width: 14px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.sidePillItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  font-size: 8.5px;
+  color: #a1a1aa;
+  font-variant-numeric: tabular-nums;
+}
+
+.sidePillIcon {
+  width: 13px;
+  height: 13px;
+  fill: none;
+}
+
+.sidePillEq {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 10px;
+}
+
+.sidePillEq i {
+  width: 2.5px;
+  height: 100%;
+  border-radius: 2px;
+  background: #34d399;
+  transform-origin: bottom;
+  transform: scaleY(0.35);
+  animation: sidePillEq 1.1s ease-in-out infinite;
+}
+
+.sidePillEq i:nth-child(2) {
+  animation-delay: -0.45s;
+  animation-duration: 0.9s;
+}
+
+.sidePillEq i:nth-child(3) {
+  animation-delay: -0.2s;
+  animation-duration: 1.3s;
+}
+
+@keyframes sidePillEq {
+  0%,
+  100% {
+    transform: scaleY(0.25);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+.sidePillLight {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #6b7280;
+}
+
+.sidePillLightOn .sidePillLight {
+  background: #ffc107;
+  box-shadow: 0 0 8px rgba(255, 193, 7, 0.65);
+}
+
+/* Beat 4 — TimerDock.kt + RingView.kt: bottom-right floating 80dp ring scaled to 64px + dark glass orb + PASTA tag */
+.timerDock {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+}
+
+.ringWrap {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  display: grid;
+  place-items: center;
+}
+
+.ringHalo {
+  position: absolute;
+  inset: -18px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(10, 11, 15, 0.78) 0%,
+    rgba(10, 11, 15, 0.42) 48%,
+    transparent 72%
+  );
+  pointer-events: none;
+}
+
+.ringGlow {
+  position: absolute;
+  inset: -14px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(251, 191, 36, 0.24) 0%, transparent 64%);
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+.timerDockPaused .ringGlow {
+  opacity: 0;
+}
+
+.ringSvg {
+  position: relative;
+  z-index: 1;
+  width: 64px;
+  height: 64px;
+  transform: rotate(-90deg);
+}
+
+.ringTrack {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.1);
+  stroke-width: 2.5;
+}
+
+.ringArc {
+  fill: none;
+  stroke: rgba(251, 191, 36, 0.92);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.35s linear;
+}
+
+.ringArcPaused {
+  fill: none;
+  stroke: rgba(244, 244, 245, 0.38);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+
+.ringSphere {
+  position: absolute;
+  z-index: 2;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: rgba(14, 15, 20, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.ringCore {
+  position: absolute;
+  inset: 5px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(251, 191, 36, 0.38) 0%,
+    rgba(251, 191, 36, 0.14) 52%,
+    transparent 74%
+  );
+  transition: opacity 0.25s ease;
+}
+
+.timerDockPaused .ringCore {
+  opacity: 0;
+}
+
+.ringShine {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.26) 0%, transparent 42%);
+  pointer-events: none;
+}
+
+.ringPauseBars {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  gap: 2.5px;
+  margin-bottom: 1.5px;
+}
+
+.ringPauseBars span {
+  width: 2px;
+  height: 6.5px;
+  border-radius: 1px;
+  background: rgba(244, 244, 245, 0.8);
+}
+
+.ringDigits {
+  position: relative;
+  z-index: 1;
+  font-size: 16px;
+  font-weight: 300;
+  color: #f4f4f5;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+}
+
+.timerDockPaused .ringDigits {
+  font-size: 13px;
+  color: #a1a1aa;
+}
+
+.ringTag {
+  position: relative;
+  z-index: 2;
+  padding: 3.5px 9px;
+  border-radius: 999px;
+  background: rgba(10, 11, 15, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 8px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #a1a1aa;
+  line-height: 1;
+}
+
+/* Keep Beat 4 TimerDock crisp on compact mobile kitchen display */
+@container (max-height: 180px) {
+  .timerDock {
+    right: 8px;
+    bottom: 8px;
+    gap: 4px;
+  }
+
+  .ringWrap,
+  .ringSvg {
+    width: 52px;
+    height: 52px;
+  }
+
+  .ringSphere {
+    width: 40px;
+    height: 40px;
+  }
+
+  .ringDigits {
+    font-size: 13px;
+  }
+
+  .ringTag {
+    font-size: 7px;
+    padding: 2.5px 7px;
+  }
+}
+
+@media (max-width: 1180px), (max-height: 820px) {
+  .hardwareCarrier {
+    --bezel-scale: 0.84;
+  }
+
+  .ghostLayer {
+    gap: 330px;
+  }
+
+  .wireRaySvg {
+    width: 56px;
+  }
+}
+
+/* ==================== COMPACT / MOBILE / REDUCED-MOTION VERTICAL 6-BEAT STACK ==================== */
+.compactStack {
+  /* shown by the media query that hides the scroll story, below */
+  display: none;
+  gap: 64px;
+  padding: 18px 0 40px;
+}
+
+.compactBeat {
+  display: grid;
+  gap: 22px;
+  justify-items: center;
+}
+
+.compactStage {
+  width: 100%;
+  display: grid;
+  place-items: center;
+}
+
+
+.compactCopy {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: 12px;
+  max-width: 540px;
+}
+
+.compactCopy .eyebrow,
+.compactCopy .newPill {
+  justify-self: center;
+}
+
+.compactCopy .h1 {
+  font-size: clamp(32px, 8vw, 44px);
+}
+
+.compactCopy .h2 {
+  font-size: clamp(26px, 7vw, 36px);
+}
+
+.compactCopy .ctas {
+  justify-content: center;
+}
+
+.compactRays {
+  display: grid;
+  gap: 10px;
+  width: min(336px, calc(100vw - 32px));
+}
+
+.compactRayRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rayDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--sky);
+  flex: none;
+}
+
+.compactRayDash {
+  width: 28px;
+  height: 1px;
+  border-top: 1.5px dashed color-mix(in srgb, var(--sky) 65%, var(--violet));
+  flex: none;
+}
+
+.compactGhosts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.compactGhostBtn {
+  appearance: none;
+  border: 1px dashed color-mix(in srgb, var(--fg) 26%, transparent);
+  background: color-mix(in srgb, var(--glass) 60%, transparent);
+  color: var(--muted);
+  font-family: var(--f-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 8px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+/* CSS picks the initial desktop vs compact layout before hydration (zero layout shift on mobile / short
+   viewports); one query decides both, so every viewport gets exactly one, as the script's own queries do */
+@media (max-width: 900px), (max-height: 620px), (prefers-reduced-motion: reduce) {
+  .story {
+    display: none;
+  }
+
+  .compactStack {
+    display: grid;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sparkRing,
+  .sparkMic,
+  .sparkRipples i,
+  .sparkShuttles i,
+  .sparkCaption,
+  .wireRayDash,
+  .sensorPulse,
+  .sidePillEq i {
+    animation: none;
+  }
+
+  /* the finale's chosen shape appears at once */
+  .morphSmooth {
+    transition: none;
+  }
+}
