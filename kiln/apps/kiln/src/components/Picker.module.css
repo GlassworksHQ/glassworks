@@ -1,0 +1,4 @@
+.group { font-size: 13px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); padding-top: 6px; }
+.needs { display: grid; gap: 10px; padding: 18px 20px; border-radius: var(--r-tile); }
+.needs h3 { font-size: 16px; font-weight: 500; }
+.needs ul { display: grid; gap: 6px; padding-left: 18px; color: var(--muted); font-size: 14px; }

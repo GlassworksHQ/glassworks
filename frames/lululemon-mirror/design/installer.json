@@ -141,5 +141,13 @@
         "remove"
       ]
     }
+  },
+  "picker": {
+    "needs": [
+      "A micro-USB data cable",
+      "On a first install from lululemon's software, a screwdriver for the back cover"
+    ],
+    "wayBack": "The Mirror's bootloader can't read its software back, so there is no backup. Kiln can always install the plain Glass Panes image instead.",
+    "why": "The picker's What you'll need bar (#672), as the frame's README and its fastboot steps say it"
   }
 }
