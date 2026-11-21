@@ -127,9 +127,10 @@ export interface OnDevice {
 
 /**
  * The browsers the on-device page's demos show: a model Kiln knows, a brand it knows, a phone, an unknown device, one
- * that fits only the legacy build, one whose version is hidden (either build), one too old, and a computer.
+ * that fits only the legacy build, one whose version is hidden (either build), one too old, a computer, and one whose
+ * browser says it runs only 32-bit code.
  */
-export type OnDeviceRole = 'known' | 'branded' | 'phone' | 'unknown' | 'legacy' | 'either' | 'too-old' | 'computer';
+export type OnDeviceRole = 'known' | 'branded' | 'phone' | 'unknown' | 'legacy' | 'either' | 'too-old' | 'computer' | 'bits32';
 
 /**
  * The install from the device's own browser, no computer: its route under the frame's (installer.json `onDevice`), how
@@ -193,7 +194,11 @@ export interface UsbSim {
    * The device for a demo (Kiln's demo names, kiln/apps/kiln/src/device/usbDemo.ts), set up as that demo needs it: the
    * APK that matches it, what WebUSB says of it, and whether Kiln knows its model. `fast`: no delays (the tests).
    */
-  demo(name: string, o: { fast: boolean }): { device: PanelShell & { app?: UsbApp }; apk: Uint8Array; apkName: string; usb: { vendorId: number; productName?: string }; known: boolean };
+  demo(name: string, o: { fast: boolean }): {
+    device: PanelShell & { app?: UsbApp }; apk: Uint8Array; apkName: string; usb: { vendorId: number; productName?: string }; known: boolean;
+    /** the stand-in release's APK for each ABI, for the release demos; without it, `apk` for every ABI */
+    release?: Readonly<Record<string, Uint8Array>>;
+  };
   /** Its detection fixtures, by the role the on-device page's ?demo=… states ask for (OnDeviceRole). */
   browsers?: Partial<Record<OnDeviceRole, BrowserFacts>>;
   /** The cards its simulated app's Panes step shows, for ?demo=setup-panes. */

@@ -8,6 +8,12 @@
 // Chrome 157, 2026-11-16 (#403). The frozen "Linux armv81" stays in desktop mode, so it still says Android.
 // In mobile mode, client hints give the real model and version. Firefox keeps the real version in its user
 // agent. A model the page can't read may still match a GPU and screen fingerprint.
+//
+// 32 or 64-bit (issue 700): a browser that isn't frozen says what it runs as in navigator.platform: "Linux armv7l", or
+// "Linux armv8l" for 32-bit code on a 64-bit chip, as Android's own 32-bit userspace on a Galaxy Tab A 10.1 is; "Linux
+// aarch64" for 64-bit code. A device that runs a 32-bit browser runs the armeabi-v7a build; one that runs a 64-bit
+// browser, the arm64-v8a one. Chrome's frozen "Linux armv81" says neither, and Chrome on Android leaves the bitness
+// client hint empty (read on a Pixel Tablet, 2026-11-16), so there Kiln can't tell.
 import { BRANDS, GENERIC_STEPS, MODELS, type Brand, type BrandId, type Identified, type Model } from './devices';
 
 /** What the page reads: navigator, screen, WebGL and the high-entropy client hints, where the browser has them. */
@@ -38,7 +44,7 @@ export interface OnDevice {
   app: AppFit;
   /** the model code as read ("SM-X200"), before any lookup */
   modelCode?: string;
-  /** 64 or 32, from client hints; undefined when the browser won't say */
+  /** 64 or 32: what the browser runs as (navigator.platform), else client hints; undefined when the browser won't say */
   bits?: 64 | 32;
   identified: Identified;
 }
@@ -104,6 +110,14 @@ function fingerprint(f: BrowserFacts): Model | undefined {
   return hit && MODELS.find((m) => m.name === hit.model);
 }
 
+/** 32 or 64-bit, from the browser's own machine name where it isn't frozen, else the bitness client hint. */
+function bitsOf(f: BrowserFacts): 64 | 32 | undefined {
+  if (/^Linux armv[78]l$/.test(f.platform)) return 32;
+  if (f.platform === 'Linux aarch64') return 64;
+  const b = f.hints?.bitness;
+  return b === '64' ? 64 : b === '32' ? 32 : undefined;
+}
+
 /** Read what the page can about the device it runs on. */
 export function identifyBrowser(f: BrowserFacts): OnDevice {
   const ua = f.userAgent;
@@ -117,7 +131,7 @@ export function identifyBrowser(f: BrowserFacts): OnDevice {
   const brand = brandId ? brandById(brandId) : undefined;
   const desktopSite = android && !uaAndroid;
   const why = brand ? undefined : desktopSite ? 'In desktop mode the browser doesn\'t say the model.' : 'The browser doesn\'t say the model.';
-  const bitness = f.hints?.bitness;
+  const bits = android ? bitsOf(f) : undefined;
   return {
     android,
     form: Math.min(f.screen.width, f.screen.height) >= 600 ? 'tablet' : 'phone',
@@ -125,7 +139,7 @@ export function identifyBrowser(f: BrowserFacts): OnDevice {
     ...(release ? { release } : {}),
     app: android ? fit(release, ua) : 'either',
     ...(modelCode ? { modelCode } : {}),
-    ...(bitness === '64' || bitness === '32' ? { bits: Number(bitness) as 64 | 32 } : {}),
+    ...(bits ? { bits } : {}),
     identified: {
       ...(brand ? { brand } : {}),
       ...(model ? { model } : {}),

@@ -6,14 +6,16 @@
 //
 // The APK: with ?apk=release, the newest release of the frame's line (its installer.json `device.apk`), checked against
 // its .sha256 (release/apk.ts, as the device flows do); with ?apk=local, a file picked on this computer. Without either
-// the page stays locked until the frame's frame.json makes it installable (usbOpen).
+// the page stays locked until the frame's frame.json makes it installable (usbOpen). The first screen downloads the
+// line's default ABI (`device.apk.abi`) before Kiln can read the device; once it can, a device that runs another of the
+// frame's ABIs (frame.json `abis`) gets that build from the same release, before anything is written (issue 700).
 import type { PanelShell } from '@glassworks/adb';
 import { apkPackage } from '@glassworks/app-adb';
 import { OwnFrameRefused, Refused, cap, type OwnFrame, type UsbApp, type UsbFrame, type UsbIdentified, type UsbInstalled, type UsbPhase, type UsbGrant, type UsbPlan, type UsbSilentUpdates } from '@glassworks/kiln-core';
 import { FRAMES } from '../frames/catalog';
 import { askAdb, nothingPicked } from './adbAsk';
 import type { DeviceProgress } from './imageSession';
-import { NoRelease, apkMode, installable, releaseApk, type ApkFrom, type ReleaseApk, type ReleaseLine } from '../release/apk';
+import { NoRelease, apkAbi, apkMode, installable, releaseApk, type ApkFrom, type ReleaseApk, type ReleaseLine } from '../release/apk';
 
 /** The page is everyone's once the frame's frame.json makes it installable (release/apk.ts `installable`). */
 export const usbOpen = (f: Pick<UsbFrame, 'id'>) => { const d = FRAMES.find((x) => x.id === f.id); return !!d && installable(d); };
@@ -112,6 +114,8 @@ export class UsbSession {
    */
   private device?: Device;
   private picks = 0;
+  /** With the APK from the release: the ABI of the one `apk` holds. */
+  private releaseAbi?: string;
 
   constructor(private readonly d: UsbDeps, on: boolean) {
     this.state = { screen: on ? 'find' : 'off', flow: 'install', phases: [], log: [], ...(d.release ? { release: { state: 'waiting' } } : {}), ...(on && d.progress?.get() ? { changed: true } : {}) };
@@ -160,6 +164,7 @@ export class UsbSession {
       const { bytes, ready } = await releaseApk(this.d.frame.apk as ReleaseLine, this.d.release, (release) => this.set({ release }));
       this.log(`${ready.name} from ${ready.tag}: SHA-256 ${ready.sha256}, as the release publishes it`);
       await this.pickApk(ready.name, bytes);
+      this.releaseAbi = this.apk ? this.d.frame.apk.abi : undefined;
       // an APK the checks refuse is an error of the release, so Try again can fetch a fixed one
       const refused = this.state.apk?.error;
       this.set({ release: refused ? { state: 'error', why: `Kiln can't install it: ${refused}` } : ready });
@@ -261,6 +266,7 @@ export class UsbSession {
 
   private async install(): Promise<void> {
     await this.work(async () => {
+      if (this.d.release) await this.releaseFor(this.device!);
       const plan = await this.d.frame.plan(this.device!, this.apk!);
       this.set({ plan, identified: plan.identified });
       const installed = await this.d.frame.install(this.device!, {
@@ -271,6 +277,34 @@ export class UsbSession {
       });
       return { flow: 'install', installed };
     });
+  }
+
+  /**
+   * With the APK from the release: the build for the ABIs this device runs (`ro.product.cpu.abilist`, preferred
+   * first), from the same release line, when it isn't the one the first screen downloaded. Reads only.
+   */
+  private async releaseFor(p: Device): Promise<void> {
+    const abis = (await p.run('getprop ro.product.cpu.abilist')).out.split(',').map((a) => a.trim()).filter(Boolean);
+    const ships = FRAMES.find((x) => x.id === this.d.frame.id)?.abis ?? [];
+    const abi = apkAbi(abis, ships);
+    if (!abi) {
+      if (abis.length && ships.length) throw new Refused(`This ${this.d.frame.short} runs ${abis.join(', ')}, and ${this.d.frame.app} is built for ${ships.join(' and ')} only.`);
+      return; // the recipe reads the device itself, and says what it can't take
+    }
+    if (abi === this.releaseAbi && this.apk) return;
+    this.log(`${cap(this.d.frame.the)} runs ${abis.join(', ')}: the release's ${abi} build`);
+    const got = await releaseApk({ line: this.d.frame.apk.line, abi } as ReleaseLine, this.d.release!, (release) => this.set({ release })).catch((e: unknown) => {
+      if (!(e instanceof NoRelease)) throw e;
+      this.set({ release: { state: 'none' } });
+      throw new Refused(`The newest release of ${this.d.frame.app} has no ${abi} build, which this ${this.d.frame.short} needs.`);
+    });
+    const { bytes, ready } = got;
+    this.log(`${ready.name} from ${ready.tag}: SHA-256 ${ready.sha256}, as the release publishes it`);
+    await this.pickApk(ready.name, bytes);
+    const refused = this.state.apk?.error;
+    this.set({ release: refused ? { state: 'error', why: `Kiln can't install it: ${refused}` } : ready });
+    if (refused || !this.apk) throw new Refused(`The release's ${abi} build can't go on ${this.d.frame.the}: ${refused ?? 'it couldn\'t be read'}.`);
+    this.releaseAbi = abi;
   }
 
   private async undo(): Promise<void> {

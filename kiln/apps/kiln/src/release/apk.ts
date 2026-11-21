@@ -31,6 +31,15 @@ export function apkMode(search: string, demosOn: boolean, demos: readonly string
 /** Which APK a page installs: its release line, and the ABI it downloads. */
 export interface ReleaseLine { line: Line; abi: Abi }
 
+/**
+ * The ABI of the release APK for a device: the first of its ABIs (`ro.product.cpu.abilist`, preferred first) that the
+ * frame ships (frame.json `abis`). A 64-bit SoC with a 32-bit userspace lists only `armeabi-v7a,armeabi` (a Galaxy
+ * Tab A 10.1 on Samsung's Android 8.1, issue 700), so it gets that build. Undefined when the frame ships none of them.
+ */
+export function apkAbi(deviceAbis: readonly string[], ships: readonly string[]): Abi | undefined {
+  return deviceAbis.find((a) => ships.includes(a)) as Abi | undefined;
+}
+
 /** Where the release's APK is, from waiting for the first look to checked against its published SHA-256. */
 export type ReleaseApk =
   | { state: 'waiting' }

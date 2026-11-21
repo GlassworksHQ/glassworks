@@ -57,8 +57,11 @@ describe('the build and APK', () => {
     expect(buildFor(on('OLD_CHROME_DESKTOP'))).toBe('generic');
   });
 
-  it('the ABI from client hints, else a tested model\'s one ABI, else 64-bit and unsure', () => {
+  it('the ABI from what the browser runs as, else a tested model\'s one ABI, else 64-bit and unsure', () => {
     expect(abiFor(on('GALAXY_TAB'), FRAMES)).toEqual({ abi: 'arm64-v8a', sure: true });
+    // issue 700: a 32-bit userspace on a 64-bit chip, in a browser that says so, and in Chrome, which doesn't
+    expect(abiFor(on('GALAXY_TAB_A_2016_SAMSUNG'), FRAMES)).toEqual({ abi: 'armeabi-v7a', sure: true });
+    expect(abiFor(on('GALAXY_TAB_A_2016'), FRAMES)).toEqual({ abi: 'arm64-v8a', sure: false });
     expect(abiFor({ ...on('GALAXY_TAB'), bits: 32 }, FRAMES)).toEqual({ abi: 'armeabi-v7a', sure: true });
     expect(abiFor(on('PIXEL_DESKTOP'), FRAMES)).toEqual({ abi: 'arm64-v8a', sure: true });
     expect(abiFor(on('UNKNOWN_DESKTOP'), FRAMES)).toEqual({ abi: 'arm64-v8a', sure: false });
@@ -133,10 +136,32 @@ describe('the screens', () => {
     expect(screen.queryByText(/Get that build/)).toBeNull();
   });
 
-  it('Get on a tablet of unknown ABI: 64-bit first, the 32-bit build one tap away', async () => {
+  it('Get on a tablet whose browser doesn\'t say 32 or 64-bit: both builds, 64-bit first, never one picked silently (issue 700)', async () => {
     await show('get-unsure');
-    fireEvent.click(screen.getByText('A 32-bit tablet? Get that build'));
-    expect(screen.getByText('Download').getAttribute('href')).toContain('glassworks-generic-android-armeabi-v7a-1.0.0.apk');
+    expect(screen.getByText('Download 64-bit').getAttribute('href')).toContain('glassworks-generic-android-arm64-v8a-1.0.0.apk');
+    expect(screen.getByText('Download 32-bit').getAttribute('href')).toContain('glassworks-generic-android-armeabi-v7a-1.0.0.apk');
+    expect(screen.getByText('Download 32-bit').getAttribute('download')).toBe('glassworks-generic-android-armeabi-v7a-1.0.0.apk');
+    expect(embers()).toEqual(['Download 64-bit']);
+    expect(screen.getByText('For Android 8 and newer · 64-bit or 32-bit')).toBeTruthy();
+    expect(screen.getByText('This browser doesn\'t say whether the tablet runs 64-bit or 32-bit apps. Try 64-bit first.')).toBeTruthy();
+    expect(screen.getByText(/Download the 32-bit build instead\./)).toBeTruthy();
+  });
+
+  it('Get on a tablet whose browser runs 32-bit code: the 32-bit build alone (issue 700)', async () => {
+    await show('get-32bit');
+    const a = screen.getByText('Download');
+    expect(a.getAttribute('href')).toBe('/api/release/generic-android?tag=generic-android-v1.0.0&name=glassworks-generic-android-armeabi-v7a-1.0.0.apk');
+    expect(screen.getByText('For Android 8 and newer · 32-bit')).toBeTruthy();
+    expect(document.querySelectorAll('a[download]')).toHaveLength(1);
+    expect(screen.queryByText(/64-bit/)).toBeNull();
+  });
+
+  it('a release with one build only, on a tablet of unknown ABI: that one, named', async () => {
+    const only64 = { ...rel('generic-android'), assets: ['glassworks-generic-android-arm64-v8a-1.0.0.apk'] };
+    render(<TabletScreens on={on('GALAXY_TAB_A_2016')} start="get" load={async () => only64} />);
+    await screen.findByText('Download');
+    expect(screen.getByText('For Android 8 and newer · 64-bit')).toBeTruthy();
+    expect(screen.queryByText(/Try 64-bit first/)).toBeNull();
   });
 
   it('Get on Android 7: the legacy build, and Unknown sources first', async () => {
@@ -147,10 +172,10 @@ describe('the screens', () => {
 
   it('Get with the version hidden on an older Chrome: either build', async () => {
     await show('get-either');
-    expect(screen.getByText('Download').getAttribute('href')).toContain('tag=generic-android-v1.0.0');
+    expect(screen.getByText('Download 64-bit').getAttribute('href')).toContain('tag=generic-android-v1.0.0');
     fireEvent.click(screen.getByText('Android 6 or 7? Get the legacy build'));
     await act(() => new Promise((r) => setTimeout(r, 0)));
-    expect(screen.getByText('Download').getAttribute('href')).toContain('tag=generic-android-legacy-v1.0.0');
+    expect(screen.getByText('Download 64-bit').getAttribute('href')).toContain('tag=generic-android-legacy-v1.0.0');
   });
 
   it('Get before the first release: not out yet, and no download', async () => {
@@ -165,7 +190,7 @@ describe('the screens', () => {
     render(<TabletScreens on={on('OLD_CHROME_DESKTOP')} start="get" load={load} />);
     await screen.findByText('Glassworks for Android isn\'t out yet');
     fireEvent.click(screen.getByText('Android 6 or 7? Get the legacy build'));
-    expect((await screen.findByText('Download')).getAttribute('href')).toContain('tag=generic-android-legacy-v1.0.0');
+    expect((await screen.findByText('Download 64-bit')).getAttribute('href')).toContain('tag=generic-android-legacy-v1.0.0');
   });
 
   it('Get when the releases can\'t be read: says so, and tries again', async () => {

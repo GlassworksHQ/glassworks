@@ -47,6 +47,20 @@ export const BROWSERS = {
     userAgent: 'Mozilla/5.0 (Linux; Android 7.0; SM-T580) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.5060.129 Safari/537.36',
     platform: 'Linux armv8l', maxTouchPoints: 10, screen: { width: 1280, height: 800, dpr: 1.5 },
   },
+  /**
+   * A Galaxy Tab A 10.1 (SM-T580) on Samsung's Android 8.1, a 64-bit chip with a 32-bit userspace (issue 700), in
+   * Chrome's mobile site: the frozen platform and an empty bitness hint, so the page can't tell 32 from 64-bit.
+   */
+  GALAXY_TAB_A_2016: {
+    userAgent: CHROME_REDUCED, platform: 'Linux armv81', maxTouchPoints: 10,
+    screen: { width: 1280, height: 800, dpr: 1.5 },
+    hints: { platform: 'Android', model: 'SM-T580', platformVersion: '8.1.0', bitness: '' },
+  },
+  /** the same tablet in Samsung Internet, whose platform still says the 32-bit machine it runs as */
+  GALAXY_TAB_A_2016_SAMSUNG: {
+    userAgent: 'Mozilla/5.0 (Linux; Android 8.1.0; SAMSUNG SM-T580) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/16.0 Chrome/92.0.4515.166 Safari/537.36',
+    platform: 'Linux armv8l', maxTouchPoints: 10, screen: { width: 1280, height: 800, dpr: 1.5 },
+  },
   /** a Fire HD 10 (2021) in Silk, which names the model */
   FIRE_SILK: {
     userAgent: 'Mozilla/5.0 (Linux; Android 11; KFTRWI) AppleWebKit/537.36 (KHTML, like Gecko) Silk/120.4.1 like Chrome/120.0.6099.230 Safari/537.36',

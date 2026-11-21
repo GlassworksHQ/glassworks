@@ -11,29 +11,37 @@ export const demoRelease = (line: string) => ({ tag: `${line}-v0.2.0`, apk: `gla
 const sha256 = async (b: Uint8Array) =>
   [...new Uint8Array(await crypto.subtle.digest('SHA-256', b as Uint8Array<ArrayBuffer>))].map((x) => x.toString(16).padStart(2, '0')).join('');
 
-export function fakeReleaseRoute(kind: FakeRelease, apk: Uint8Array, tick: (ms: number) => Promise<void>, line: string): typeof fetch {
+/**
+ * `apk`: the release's APK for every ABI, or one per ABI (the others then aren't in the release's files). Its APK for
+ * an ABI is named as `demoRelease`'s arm64-v8a one, with that ABI.
+ */
+export function fakeReleaseRoute(kind: FakeRelease, apk: Uint8Array | Readonly<Record<string, Uint8Array>>, tick: (ms: number) => Promise<void>, line: string): typeof fetch {
   const { tag: DEMO_TAG, apk: DEMO_APK } = demoRelease(line);
+  const byAbi: Record<string, Uint8Array> = ArrayBuffer.isView(apk) ? { 'arm64-v8a': apk as Uint8Array, 'armeabi-v7a': apk as Uint8Array } : { ...(apk as Readonly<Record<string, Uint8Array>>) };
+  const named = Object.fromEntries(Object.entries(byAbi).map(([abi, bytes]) => [DEMO_APK.replace('arm64-v8a', abi), bytes]));
   return (async (input: RequestInfo | URL) => {
     const url = new URL(String(input), 'https://kiln.invalid');
     if (url.pathname === `/api/release/${line}/latest`) {
-      const assets = [DEMO_APK, DEMO_APK.replace('arm64-v8a', 'armeabi-v7a')];
+      const assets = Object.keys(named);
       return Response.json({ release: kind === 'none' ? null : { tag: DEMO_TAG, version: '0.2.0', assets } });
     }
     const name = url.searchParams.get('name');
     if (url.pathname !== `/api/release/${line}` || url.searchParams.get('tag') !== DEMO_TAG) return new Response('not a release asset of this frame', { status: 400 });
-    if (name === `${DEMO_APK}.sha256`) return new Response(`${kind === 'bad' ? 'ab'.repeat(32) : await sha256(apk)}  ${DEMO_APK}\n`);
-    if (name !== DEMO_APK) return new Response('not a release asset of this frame', { status: 400 });
-    const step = Math.ceil(apk.length / 8);
+    const sum = name?.endsWith('.sha256') ? name.slice(0, -'.sha256'.length) : undefined;
+    if (sum && named[sum]) return new Response(`${kind === 'bad' ? 'ab'.repeat(32) : await sha256(named[sum])}  ${sum}\n`);
+    const bytes = name ? named[name] : undefined;
+    if (!bytes) return new Response('not a release asset of this frame', { status: 400 });
+    const step = Math.ceil(bytes.length / 8);
     let at = 0;
     const body = new ReadableStream<Uint8Array>({
       async pull(c) {
         if (kind === 'stuck' && at >= step * 3) return new Promise(() => {});
-        if (at >= apk.length) { c.close(); return; }
+        if (at >= bytes.length) { c.close(); return; }
         await tick(150);
-        c.enqueue(apk.slice(at, at + step));
+        c.enqueue(bytes.slice(at, at + step));
         at += step;
       },
     });
-    return new Response(body, { headers: { 'content-length': String(apk.length) } });
+    return new Response(body, { headers: { 'content-length': String(bytes.length) } });
   }) as typeof fetch;
 }

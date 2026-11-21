@@ -131,14 +131,14 @@ function Get({ on, go, releases, load }: P & { releases: Partial<Record<Line, Re
   const { dev } = useWhere();
   const [legacy, setLegacy] = useState(buildFor(on) === 'legacy');
   const guess = abiFor(on, FRAMES);
-  const [abi, setAbi] = useState<Abi>(guess.abi);
   const line = dev.onDevice.lines[legacy ? 'legacy' : 'generic'];
   const r = releases[line] ?? { state: 'loading' };
-  const dl = download(line, r, abi);
-  const other: Abi = abi === 'arm64-v8a' ? 'armeabi-v7a' : 'arm64-v8a';
+  // the build Kiln knows fits, or both when the browser doesn't say which the device runs (issue 700): 64-bit first
+  const builds = (guess.sure ? [guess.abi] : (['arm64-v8a', 'armeabi-v7a'] as Abi[])).flatMap((a) => { const d = download(line, r, a); return d ? [{ abi: a, ...d }] : []; });
+  const dl = builds[0];
+  const both = builds.length > 1;
   const bits = (a: Abi) => (a === 'arm64-v8a' ? '64-bit' : '32-bit');
   const buildSwitch = on.app === 'either' && <button key="build" type="button" className="link" onClick={() => setLegacy(!legacy)}>{legacy ? 'Android 8 or newer? Get Glassworks' : 'Android 6 or 7? Get the legacy build'}</button>;
-  const abiSwitch = !guess.sure && <button key="abi" type="button" className="link" onClick={() => setAbi(other)}>{`A ${bits(other)} ${on.form}? Get that build`}</button>;
   const links = (...b: ReactNode[]) => b.filter(Boolean).map((x, i) => <Fragment key={i}><span aria-hidden="true">·</span>{x}</Fragment>);
 
   if (r.state === 'none') {
@@ -163,16 +163,19 @@ function Get({ on, go, releases, load }: P & { releases: Partial<Record<Line, Re
         <p className="status err" role="alert">Kiln couldn&apos;t read the releases: {r.why}.</p>
         <span className="row"><button type="button" className="btn ghost" onClick={() => load(line)}>Try again</button></span>
       </>}
-      {r.state === 'out' && !dl && <p className="status err" role="alert">Glassworks {r.version} has no {bits(abi)} build.</p>}
+      {r.state === 'out' && !dl && <p className="status err" role="alert">Glassworks {r.version} has no {guess.sure ? `${bits(guess.abi)} ` : ''}build{guess.sure ? '' : ` for this ${on.form}`}.</p>}
       {dl && (
         <div className="well">
           <span className="grow">
             <b className="fg">Glassworks {dl.version}{legacy ? ', legacy build' : ''}</b>
-            <span className="small">{legacy ? 'For Android 6 and 7' : 'For Android 8 and newer'} · {bits(abi)}</span>
+            <span className="small">{legacy ? 'For Android 6 and 7' : 'For Android 8 and newer'} · {both ? '64-bit or 32-bit' : bits(dl.abi)}</span>
           </span>
-          <a className="btn ember" href={dl.href} download={dl.name}>Download</a>
+          {both
+            ? builds.map((b, i) => <a key={b.abi} className={`btn ${i ? 'ghost' : 'ember'}`} href={b.href} download={b.name}>{`Download ${bits(b.abi)}`}</a>)
+            : <a className="btn ember" href={dl.href} download={dl.name}>Download</a>}
         </div>
       )}
+      {both && <p className="small">{`This browser doesn't say whether the ${on.form} runs 64-bit or 32-bit apps. Try 64-bit first.`}</p>}
       <ol className="num">
         {legacy && (
           <li><b>First</b> <Path path={['Settings', 'Security', 'Unknown sources']} /> <a className="link" href={SETTINGS_LINKS.settings}>Open Settings</a>
@@ -181,12 +184,12 @@ function Get({ on, go, releases, load }: P & { releases: Partial<Record<Line, Re
         )}
         <li><b>Open</b> the download when it finishes.<small>From the notification, or the browser&apos;s Downloads.</small></li>
         {!legacy && <li><b>Allow</b> this browser if Android asks.<small>Tap <b>Settings</b>, turn on <b>Allow from this source</b>, then go back.</small></li>}
-        <li><b>Install</b><small>Android says “App not installed”? {guess.sure ? 'Tell us on GitHub.' : `This ${on.form} may need the ${bits(other)} build.`}</small></li>
+        <li><b>Install</b><small>Android says “App not installed”? {both ? 'Download the 32-bit build instead.' : 'Tell us on GitHub.'}</small></li>
       </ol>
       <div className="foot">
         <span className="links">
           <button type="button" className="link" onClick={() => go('device')}>Back</button>
-          {links(buildSwitch, abiSwitch)}
+          {links(buildSwitch)}
         </span>
         <button type="button" className="btn ghost" onClick={() => go('setup')}>It&apos;s installed</button>
       </div>

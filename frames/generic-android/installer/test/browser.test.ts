@@ -55,10 +55,25 @@ describe('the version and the build that fits', () => {
     expect(read('OLD_CHROME_DESKTOP').release).toBeUndefined();
   });
 
-  it('bitness only from client hints', () => {
+  it('bitness from client hints, where the browser gives one', () => {
     expect(read('GALAXY_TAB').bits).toBe(64);
     expect(read('PIXEL_DESKTOP').bits).toBeUndefined();
     expect(identifyBrowser({ ...BROWSERS.GALAXY_TAB, hints: { ...BROWSERS.GALAXY_TAB.hints, bitness: '32' } }).bits).toBe(32);
+  });
+
+  it('bitness from what the browser runs as, where its platform isn\'t frozen (issue 700)', () => {
+    // a 32-bit browser on a 64-bit chip: Samsung's Android 8.1 on a Galaxy Tab A 10.1 runs only 32-bit code
+    expect(read('GALAXY_TAB_A_2016_SAMSUNG')).toMatchObject({ android: true, bits: 32, release: '8.1', app: 'generic', identified: { brand: { id: 'samsung' } } });
+    expect(read('NOUGAT_TAB').bits).toBe(32);
+    expect(read('LOLLIPOP').bits).toBe(32);
+    expect(identifyBrowser({ ...BROWSERS.GALAXY_TAB, platform: 'Linux aarch64', hints: { ...BROWSERS.GALAXY_TAB.hints, bitness: '' } }).bits).toBe(64);
+    // the platform says what the browser runs as, so it wins over a hint
+    expect(identifyBrowser({ ...BROWSERS.GALAXY_TAB, platform: 'Linux armv8l' }).bits).toBe(32);
+    // Chrome's frozen "Linux armv81" and an empty hint say nothing: the same tablet in Chrome
+    expect(read('GALAXY_TAB_A_2016')).toMatchObject({ release: '8.1', modelCode: 'SM-T580', app: 'generic' });
+    expect(read('GALAXY_TAB_A_2016')).not.toHaveProperty('bits');
+    // a computer's or a Pi's machine isn't an Android device's
+    expect(read('PI_TOUCH').bits).toBeUndefined();
   });
 });
 
