@@ -1623,8 +1623,8 @@ Assistant:
   and doesn't measure it. It covers only the processes still running, with a readable `VmHWM`, when it
   is read.
 - **Per pane**, with `--pane-ram assist=on,sendspin=on,wall-base=on,time-zone=on,diagnostics=on,mic=on`
-  (the settings now, put back
-  afterwards). The kiosk is pointed at the typical reference dashboard. In each run the runner turns every switchable
+  on the S1, or `--pane-ram assist=on,sendspin=on,camera=on,diagnostics=on,mic=on` on Generic Android
+  and the frames based on it, such as the Pixel Tablet (the settings now, put back afterwards). The kiosk is pointed at the typical reference dashboard. In each run the runner turns every switchable
   pane off and takes an idle sample (`ref-panes-off`), then turns each pane on by itself and takes one
   (`ref-<pane>-on`). Before the first run it does one **warm-up cycle**, every state once, whose
   files (its idle and pane files, and its `thermal.tsv` rows) go to `warmup/` and aren't in the
