@@ -265,6 +265,14 @@ describe('every flash demo screen', () => {
     expect(embers().length).toBeLessThanOrEqual(1);
   });
 
+  it('the first start\'s two endings have their demos: never let in (#672), and a first start that stopped', async () => {
+    const refused = await imageDemo(mirrorEntry, 'flash-adb-refused', true);
+    expect(refused.image.state).toMatchObject({ screen: 'adb', connecting: false, connectError: expect.stringMatching(/didn't let this browser in through its first start/) });
+    const stopped = await imageDemo(mirrorEntry, 'flash-error-first-start', true);
+    expect(stopped.image.state).toMatchObject({ screen: 'error', work: { step: 'first-boot' } });
+    expect(stopped.image.tryAgainLands()).toBe('adb');
+  });
+
   it('one button downloads the image; a failure offers Try again and Report this, never a file to fetch by hand (#579)', async () => {
     const one = await imageDemo(mirrorEntry, 'flash-image', true);
     render(<ImageFlow image={one.image} app={one.app} />);
