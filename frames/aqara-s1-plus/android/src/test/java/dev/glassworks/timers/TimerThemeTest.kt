@@ -81,6 +81,15 @@ class TimerThemeTest {
         assertTrue(Themes.contrast(l.glassAccent, l.glass) >= 3.0)
     }
 
+    @Test fun aMidGrayGroundStillGivesTextThatReadsOnTheGlass() {
+        // Dark glass (the ground is just on the dark side) with the ground's ink black: the glass's own text is light.
+        for (g in listOf(0xff747676.toInt(), 0xff767676.toInt(), 0xff787878.toInt(), 0xff7a7a7a.toInt())) {
+            val l = TimerLook(Themes.Palette(0xff38bdf8.toInt(), 0xffa78bfa.toInt(), g))
+            assertTrue(Themes.hex(g), Themes.contrast(l.glassInk, l.glass) >= 4.5)
+            assertTrue(Themes.hex(g), Themes.contrast(l.glassMu, l.glass) >= 4.5)
+        }
+    }
+
     @Test fun theTextReadsAndTheLastSecondsStayAmberInEveryTheme() {
         val custom = Themes.custom(
             Themes.Palette(0xfffde68a.toInt(), 0xfffef3c7.toInt(), 0xfffffbeb.toInt()), // pale lights on a pale ground
@@ -92,6 +101,8 @@ class TimerThemeTest {
             assertTrue(name, Themes.contrast(l.ink, p.ground) >= 4.5)
             assertTrue("$name: the last seconds' text", Themes.contrast(l.hotText, p.ground) >= 4.5)
             assertTrue("$name: the last seconds' digits, on the glass", Themes.contrast(l.hotDigits, l.glass) >= 3.0)
+            assertTrue("$name: the digits and the chip's label, on the glass", Themes.contrast(l.glassInk, l.glass) >= 4.5)
+            assertTrue("$name: paused digits, on the glass", Themes.contrast(l.glassMu, l.glass) >= 4.5)
             assertTrue("$name: the drag guide's target", Themes.contrast(l.accent, p.ground) >= 3.0)
             assertTrue("$name: the chip's arrow and the peek's arc, on the glass", Themes.contrast(l.glassAccent, l.glass) >= 3.0)
             assertEquals("$name: amber is a status color", TimerLook.AMBER, l.hotRing)

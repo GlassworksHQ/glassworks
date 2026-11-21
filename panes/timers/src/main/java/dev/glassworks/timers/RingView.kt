@@ -178,13 +178,13 @@ class RingView(context: Context) : View(context) {
         }
         digits.textSize = size * dp
         digits.typeface = Inter.typeface(context, Inter.LIGHT, size)
-        digits.color = when { hot -> l.hotDigits; paused -> l.mu; else -> l.ink }
+        digits.color = when { hot -> l.hotDigits; paused -> l.glassMu; else -> l.glassInk }
         digits.fontFeatureSettings = "tnum"
         val fm = digits.fontMetrics
         var baseline = c - (fm.ascent + fm.descent) / 2f
         if (paused) {
             baseline += 6 * dp
-            paint.color = TimerLook.withAlpha(l.ink, 0.8f)
+            paint.color = TimerLook.withAlpha(l.glassInk, 0.8f)
             val bw = 3 * dp; val bh = 10 * dp; val gap = 4 * dp; val top = c - 18 * dp
             cv.drawRoundRect(c - gap / 2 - bw, top, c - gap / 2, top + bh, bw / 2, bw / 2, paint)
             cv.drawRoundRect(c + gap / 2, top, c + gap / 2 + bw, top + bh, bw / 2, bw / 2, paint)

@@ -24,6 +24,13 @@ class TimerLook(val palette: Themes.Palette) {
     /** The glass the orbs, the chip and the peek are made of (opaque: no blur on the S1). */
     val glass = if (light) Color.rgb(251, 251, 252) else Color.rgb(15, 16, 21)
 
+    /**
+     * Text on the [glass] (the digits, the pause mark, the chip's label): the ink that suits the glass itself. The
+     * ground's [ink] can differ near the light/dark line (a mid-gray custom ground can get dark glass and black ink).
+     */
+    val glassInk = if (light) Themes.INK_DARK else Themes.INK_LIGHT
+    val glassMu = Themes.mix(glassInk, glass, 0.35f)
+
     /** A 1 dp rim on the glass. */
     val edge = if (light) Color.argb(26, 16, 20, 32) else Color.argb(36, 255, 255, 255)
 

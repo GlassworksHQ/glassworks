@@ -506,7 +506,7 @@ class TimerOverlay(
 
         override fun onDraw(c: Canvas) {
             val cw = 12 * dp + 16 * dp + 8 * dp + text.measureText(label) + 16 * dp
-            text.color = look.ink; tag.color = look.mu
+            text.color = look.glassInk; tag.color = look.mu // the label on the chip's glass, the tag on the ground
             val chipTop = if (below) 0f else tagH + gap
             val tagTop = if (below) chipH + gap else 0f
             val cx = when (edge) { Edge.LEFT -> 0f; Edge.RIGHT -> width - cw; else -> (width - cw) / 2 }
@@ -585,7 +585,7 @@ class TimerOverlay(
                 Edge.BOTTOM -> 180f to 1f
             }
             val left = t.remaining(now)
-            stroke.color = if (t.active) TimerLook.withAlpha(l.glassAccent, 0.9f) else TimerLook.withAlpha(l.ink, 0.38f)
+            stroke.color = if (t.active) TimerLook.withAlpha(l.glassAccent, 0.9f) else TimerLook.withAlpha(l.glassInk, 0.38f)
             if (left > 0f) c.drawArc(box, start, dir * 180f * left, false, stroke)
             // the core in the theme's light, inside the visible half
             val inward = 11 * dp
