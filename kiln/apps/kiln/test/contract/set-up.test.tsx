@@ -21,6 +21,7 @@ import { HomeAssistant, Wifi } from '../../src/setup/steps';
 import { withAppStreams } from '../../src/wizard/demo';
 import { Session } from '../../src/wizard/session';
 import type { Setup } from '../../src/wizard/state';
+import { android } from '../android-frame';
 import { mirrorFrame } from '../mirror-frame';
 import { frame as s1Frame } from '../s1-frame';
 
@@ -28,7 +29,7 @@ afterEach(() => cleanup());
 
 const touchOf = (id: string) => INSTALLERS[id]!.touch !== false;
 /** Each engine frame's app package, as its session passes it to set-up. */
-const PACKAGES: Record<string, string> = { [s1Frame.id]: s1Frame.appId.package, [mirrorFrame.id]: mirrorFrame.app.package };
+const PACKAGES: Record<string, string> = { [s1Frame.id]: s1Frame.appId.package, [mirrorFrame.id]: mirrorFrame.app.package, [android.id]: android.apps[0]!.package };
 
 /** Set-up as every session builds it, for frame `id`, on `panel`; `shown` is every state it showed, in order. */
 function setUpOn(id: string, panel: PanelShell, simulated = true) {

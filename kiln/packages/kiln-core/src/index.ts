@@ -25,5 +25,5 @@ export {
 export {
   OwnFrameRefused, Refused,
   type OwnFrame, type UsbApp, type UsbDebugSteps, type UsbDeviceFacts, type UsbFrame, type UsbGrant, type UsbIdentified, type UsbInstallOptions, type UsbInstalled,
-  type UsbPhase, type UsbPlace, type UsbPlan, type UsbSilentUpdates,
+  type UsbEntry, type UsbPhase, type UsbPlace, type UsbPlan, type UsbSilentUpdates, type UsbSim,
 } from './usb';

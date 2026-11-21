@@ -7,6 +7,7 @@ import type { ImageFile, ImageRecipe } from './images';
 import type { AskCopy, FrameSim, KilnFrame } from './frame';
 import type { StepCredits } from './recipe';
 import type { RecoveryData } from './recovery';
+import type { UsbEntry } from './usb';
 
 /** A download that Kiln's route couldn't serve: Kiln's bug, never the person's. */
 export class ProxyError extends Error {}
@@ -209,4 +210,4 @@ export type DeviceEntry = { kind: 'device'; frame: DeviceFrame; sim: DeviceSim }
  * wizard (a recipe written over FEL and fastboot, then the app's setup) or the device flows (an image over fastboot, or
  * the app alone over adb). Kiln picks the page from it, never from a frame's id.
  */
-export type KilnEntry = { kind: 'wizard'; frame: KilnFrame; sim: FrameSim } | DeviceEntry;
+export type KilnEntry = { kind: 'wizard'; frame: KilnFrame; sim: FrameSim } | DeviceEntry | UsbEntry;

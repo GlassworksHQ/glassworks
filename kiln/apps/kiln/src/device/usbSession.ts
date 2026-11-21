@@ -119,6 +119,9 @@ export class UsbSession {
 
   get from(): ApkFrom { return this.d.release ? 'release' : 'local'; }
 
+  /** The frame this session installs. */
+  get frame(): UsbFrame { return this.d.frame; }
+
   subscribe = (l: () => void) => { this.listeners.add(l); return () => { this.listeners.delete(l); }; };
   get = () => this.state;
   private set(patch: Partial<UsbState>) {

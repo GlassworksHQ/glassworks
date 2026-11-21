@@ -71,7 +71,7 @@ export const INSTALLERS: Record<string, Installer> = {
 };
 
 /** The frames Kiln's shared wizard runs, by id: kiln.ts has a loader for each, and its routes are theirs. */
-export const ENGINE: readonly string[] = [s1Plus.id, mirror.id];
+export const ENGINE: readonly string[] = [s1Plus.id, mirror.id, genericAndroid.id];
 
 /** The frame.json `abis` of each frame, for `{abi}` in its release assets. */
 export const ABIS: Record<string, readonly string[]> = Object.fromEntries(FRAMES.map((f) => [f.id, (f as FrameDesign & { abis?: string[] }).abis ?? []]));

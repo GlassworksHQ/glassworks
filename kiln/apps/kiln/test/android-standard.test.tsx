@@ -11,13 +11,16 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ replace() {}, push() {} 
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: ReactNode }) => <a href={href} {...p}>{children}</a> }));
 
 import { GENERIC } from '@glassworks/generic-android-installer';
-import { AndroidWizard, androidStandard } from '../src/android/AndroidWizard';
-import { androidDemo, type AndroidDemo } from '../src/android/demo';
 import type { Device } from '../src/device/usbSession';
 import type { UsbInstalled } from '@glassworks/kiln-core';
 import { StandardSession } from '../src/standard/session';
 import { StandardWizard } from '../src/standard/StandardWizard';
 import { registry } from '../src/wizard/registry';
+import { usbHandOver } from '../src/device/UsbPage';
+import { type AndroidDemo, ANDROID_BASE, androidDemo, androidStandard, AndroidWizard } from './android-frame';
+import { standardOn } from './mirror-frame';
+import { FakeAndroid } from '@glassworks/generic-android-installer/fakes';
+import { withAppStreams } from '../src/wizard/demo';
 
 beforeAll(() => {
   Object.defineProperty(navigator, 'usb', { configurable: true, value: { getDevices: async () => [] } });
@@ -102,5 +105,27 @@ describe('a reload during the install', () => {
     history.replaceState(null, '', '/android?apk=local');
     render(<AndroidWizard />);
     expect(await screen.findByText('An earlier try already changed the tablet.')).toBeTruthy();
+  });
+});
+
+describe('an install that ends with no page of its frame up', () => {
+  it('waits for its page, and never replaces another frame\'s set-up (CodeRabbit on #718)', async () => {
+    const { s } = await show('done');
+    const installed = (s.state.result as { installed: UsbInstalled }).installed;
+    cleanup();
+    registry.clear();
+    // the Mirror's set-up runs in this tab, its page up; the tablet's install ends in the background
+    const mirror = standardOn(withAppStreams(new FakeAndroid(), { online: true, radio: false }));
+    const close = vi.spyOn(mirror, 'close');
+    registry.set({ base: '/lululemon-mirror', name: 'Mirror', session: mirror, standard: true });
+    const tablet = withAppStreams(new FakeAndroid(), { online: true, radio: false });
+    expect(usbHandOver(ANDROID_BASE)(tablet, installed)).toBeUndefined();
+    expect(registry.get()?.base).toBe('/lululemon-mirror');
+    expect(close).not.toHaveBeenCalled();
+    // the tablet's page opens: it takes the held hand-over, into the tablet's own set-up
+    render(<AndroidWizard />);
+    await settle();
+    expect(registry.get()).toMatchObject({ base: ANDROID_BASE, standard: true });
+    expect(close).toHaveBeenCalled(); // replaced only now, by the tablet's own page
   });
 });

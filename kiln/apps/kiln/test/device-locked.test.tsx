@@ -13,10 +13,10 @@ vi.mock('../src/device/usbSession', async (orig) => {
   return { ...m, usbOpen: () => false };
 });
 
-import { AndroidWizard } from '../src/android/AndroidWizard';
 import { DevicePage } from '../src/device/DevicePage';
 import { registry } from '../src/wizard/registry';
 import { MIRROR_BASE, mirrorEntry, mirrorFrame } from './mirror-frame';
+import { AndroidWizard } from './android-frame';
 
 beforeAll(() => {
   Object.defineProperty(navigator, 'usb', { configurable: true, value: {} });

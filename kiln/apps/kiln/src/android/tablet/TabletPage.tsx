@@ -15,7 +15,7 @@ import { tabletDemo } from './demo';
 import {
   LINES, PICKS, SETTINGS_LINKS, abiFor, buildFor, download, firstScreen, loadRelease, rail, type Abi, type Line, type Release, type TabletScreen,
 } from './model';
-import '../android.css';
+import '../../device/usb.css';
 import './tablet.css';
 
 const DEMO_ON = process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_KILN_DEMO === '1';
