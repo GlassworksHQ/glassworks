@@ -609,12 +609,13 @@ export function MorphStory({
     .filter((d) => d.o > 0.01);
   // the tablet lifted off its dock: one unified state drives both the 3D model's --undock lift and the Docked wire-ray label
   const [modelHover, setModelHover] = useState(false);
-  // the tablet lifted by the Docked line's button, for a keyboard or a touch: the same as the mouse's hover
-  const [liftedByHand, setLiftedByHand] = useState(false);
+  // the dock state asked for with the Docked line's button, for a keyboard or a touch: it overrides the mouse's
+  // hover until the visitor leaves the beat
+  const [dockRequest, setDockRequest] = useState<"lifted" | "docked" | null>(null);
   const [liftBeat, setLiftBeat] = useState(nearBeat);
   if (liftBeat !== nearBeat) {
     setLiftBeat(nearBeat);
-    setLiftedByHand(false);
+    setDockRequest(null);
   }
   // the tablet off its dock as the scroll brings it in (undockAt): a move and scale of the whole travelling
   // model about its body's centre, the same as the hover's lift of the body (geometry's --ux, --uy, --us)
@@ -622,9 +623,11 @@ export function MorphStory({
   const undock = compact || reducedMotion || morphing || !tabletLift ? 0 : undockAt(p);
   const liftK = travelStage / poses[4]!.stage;
   const lift = tabletLift && undock > 0 ? { x: tabletLift.x * undock * liftK, y: tabletLift.y * undock * liftK, s: 1 + tabletLift.s * undock } : undefined;
-  const desktopHoverLift = nearBeat === 4 && modelLive && (liftedByHand || (!reducedMotion && modelHover)) && segT === 0 && undock <= 0.005;
+  // settled on its dock: the scroll's own lift is over, so hover and the button may lift it
+  const tabletSettled = nearBeat === 4 && modelLive && segT === 0 && undock <= 0.005;
+  const desktopHoverLift = tabletSettled && (dockRequest ? dockRequest === "lifted" : !reducedMotion && modelHover);
   const tabletLifted = desktopHoverLift || (nearBeat === 4 && !reducedMotion && undock > 0.005);
-  const compactTabletLifted = liftedByHand || (!reducedMotion && compactTabletHover);
+  const compactTabletLifted = dockRequest ? dockRequest === "lifted" : !reducedMotion && compactTabletHover;
 
   // Preserve keyboard focus across a modelLive handoff if focus was inside the outgoing screen representation
   useEffect(() => {
@@ -961,8 +964,15 @@ export function MorphStory({
   );
 
   /* Beat 4: lifts the tablet off its dock and puts it back, as hovering it does, for a keyboard or a touch */
-  const renderDockToggle = (lifted: boolean) => (
-    <button type="button" className={s.dockToggle} aria-pressed={lifted} onClick={() => setLiftedByHand((v) => !v)}>
+  // `lifted` is what shows; the button asks for the other state. While the scroll lifts the tablet, it waits
+  const renderDockToggle = (lifted: boolean, busy = false) => (
+    <button
+      type="button"
+      className={s.dockToggle}
+      aria-pressed={lifted}
+      disabled={busy}
+      onClick={() => setDockRequest(lifted ? "docked" : "lifted")}
+    >
       {lifted ? "Put it back" : "Lift it off"}
     </button>
   );
@@ -1922,7 +1932,7 @@ export function MorphStory({
                         <b>{ray.title}</b>
                         <small>{ray.detail}</small>
                       </div>
-                      {ray.title === "Docked" && raysO > 0.45 && modelLive && renderDockToggle(tabletLifted)}
+                      {ray.title === "Docked" && raysO > 0.45 && modelLive && renderDockToggle(tabletLifted, !tabletSettled)}
                     </div>
                   ))}
                 </div>

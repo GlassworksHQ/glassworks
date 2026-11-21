@@ -666,9 +666,14 @@ a.eyebrow:hover {
     border-color 0.18s ease;
 }
 
-.dockToggle:hover {
+.dockToggle:hover:not(:disabled) {
   color: var(--fg);
   border-color: color-mix(in srgb, var(--fg) 30%, transparent);
+}
+
+.dockToggle:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .morphSmooth {
