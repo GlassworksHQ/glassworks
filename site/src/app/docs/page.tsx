@@ -62,7 +62,7 @@ export default async function DocsHome() {
       <header className={d.landingHead}>
         <span className="label">Docs</span>
         <h1 className={d.landingH1}>Glassworks documentation</h1>
-        <p className={m.lede}>Choose a track below: set up your wall panel, build a new frame or pane, or browse our hardware research.</p>
+        <p className={m.lede}>Pick a track below to set up your wall panel, build a new frame or pane, or browse our hardware research.</p>
         <SearchButton variant="big" />
       </header>
 
@@ -71,7 +71,7 @@ export default async function DocsHome() {
           <>
             <div className={d.trackHead}>
               <span className="label">User Guide</span>
-              <p>Everything you need to install Glassworks, connect your panel to Home Assistant, and use it every day.</p>
+              <p>Everything you need to install Glassworks, pair your panel with Home Assistant, and get the most out of it every day.</p>
             </div>
             <div className={d.cards}>
               <Card id="start" icon="frame" title="Get started & supported devices" lede="Follow the quickstart or jump straight to your hardware's install guide.">
@@ -118,7 +118,7 @@ export default async function DocsHome() {
           <>
             <div className={d.trackHead}>
               <span className="label">Hardware Research</span>
-              <p>Reverse-engineering logs, bring-up playbooks, protocol captures, and dated hardware measurements.</p>
+              <p>Teardowns, bring-up playbooks, protocol captures, and dated hardware measurements straight from our bench.</p>
             </div>
             <div className={d.cards}>
               <Card id="notes-general" icon="kiln" title="General research & history" lede="How the project started, general bring-up guides, and shared protocol investigations.">

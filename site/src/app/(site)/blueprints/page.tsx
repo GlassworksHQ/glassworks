@@ -32,13 +32,13 @@ export default async function BlueprintsPage() {
     <>
       <PageHead
         title="Home Assistant blueprints"
-        lede="Ready-made automations for your wall panels. Import any blueprint straight into Home Assistant and choose your own doorbells, lights, and rooms."
+        lede="Ready-made automations for your wall panels—import any blueprint straight into Home Assistant and pick your own doorbells, lights, and rooms."
       />
 
       <Tiles cols={3} className={m.trio}>
-        <Tile label="Step 1" value="Open in Home Assistant" sub="Launches your Home Assistant instance and asks for its URL the first time." />
+        <Tile label="Step 1" value="Open in Home Assistant" sub="Opens your Home Assistant instance and asks for its URL the first time." />
         <Tile label="Step 2" value="Import the blueprint" sub="Review the inputs and click Import blueprint as an administrator." />
-        <Tile label="Step 3" value="Pick your devices" sub="Select your doorbell, lights, or wall panels — nothing extra to install." />
+        <Tile label="Step 3" value="Pick your devices" sub="Choose your doorbell, lights, or wall panels—nothing extra to install." />
       </Tiles>
 
       {core.length > 0 && (
@@ -93,7 +93,7 @@ export default async function BlueprintsPage() {
           <span className="label">Dashboard starter prompts</span>
           <h2 id="recipes-heading">Generate a dashboard that fits your home</h2>
           <p>
-            Glassworks shows your Home Assistant dashboard instead of shipping its own home UI. Rather than installing bulky one-size-fits-all custom cards, copy a starter prompt for your screen shape into your favorite LLM and generate a lightweight single-file Lovelace card tailored to your exact rooms and entities.
+            Glassworks displays your own Home Assistant dashboard instead of locking you into a built-in home screen. Rather than wrestling with bulky one-size-fits-all custom cards, copy a starter prompt for your screen shape into your favorite AI assistant and generate a lightweight, single-file Lovelace card tailored to your exact rooms and entities.
           </p>
         </div>
         <RecipeList recipes={RECIPES} />

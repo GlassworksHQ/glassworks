@@ -19,7 +19,7 @@ export default async function Blog() {
       <header className={b.head}>
         <span className="label">Blog</span>
         <h1 className={b.h1}>News from Glassworks</h1>
-        <p className={m.lede}>Release highlights, newly supported wall panels, and engineering stories from building Glassworks.</p>
+        <p className={m.lede}>Release highlights, newly supported devices, and stories from building open wall-panel software.</p>
         <a href="/blog/feed.xml" className={b.feed}>
           <FeedGlyph />
           Atom feed

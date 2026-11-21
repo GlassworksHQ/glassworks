@@ -17,17 +17,20 @@ export default function NotFound() {
       <header className={s.head}>
         <span className="label">404</span>
         <h1 className={s.h1}>Page not found</h1>
-        <p className={s.lede}>There&rsquo;s no page at this address.</p>
+        <p className={s.lede}>We couldn&rsquo;t find a page at this address. Head back home or browse supported devices and docs.</p>
       </header>
       <ul className={s.links}>
         <li>
           <Link href="/">Home</Link>
         </li>
         <li>
-          <Link href="/frames">Frames</Link>
+          <Link href="/frames">Devices</Link>
         </li>
         <li>
-          <Link href="/panes">Panes</Link>
+          <Link href="/panes">Features</Link>
+        </li>
+        <li>
+          <Link href="/docs">Docs</Link>
         </li>
       </ul>
     </div>

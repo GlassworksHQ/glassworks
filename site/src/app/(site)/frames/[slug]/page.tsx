@@ -134,7 +134,7 @@ async function Device({ params }: { params: Params }) {
             {base && (
               <>
                 {" "}
-                A tested device: it runs <Link href={`/frames/${base.id}`}>{base.name}</Link> as it is.
+                This is a tested device—it runs <Link href={`/frames/${base.id}`}>{base.name}</Link> out of the box.
               </>
             )}
           </p>
@@ -188,7 +188,7 @@ async function Device({ params }: { params: Params }) {
 
       <CompletenessPanel c={done} />
 
-      {d.unverified && <p className={s.notice}>These details come from public writeups. Nobody has checked them on hardware yet.</p>}
+      {d.unverified && <p className={s.notice}>These details come from public writeups and haven&rsquo;t been verified on hardware yet.</p>}
 
       <div className={m.cols2}>
         <ListCard id="panes" title="Panes" aside={<span>{live ? `${running} run here` : `${runs.length} planned`}</span>}>
@@ -244,7 +244,7 @@ async function Device({ params }: { params: Params }) {
           ))}
         </dl>
         {/* a tested device's dated run on a real unit is the install these ratings describe */}
-        {((!live && !d.run?.on) || d.unverified) && <p className={s.expected}>Expected. Nothing has run on this device yet.</p>}
+        {((!live && !d.run?.on) || d.unverified) && <p className={s.expected}>Expected—we haven&rsquo;t run this on hardware yet.</p>}
       </section>
 
       {matchingRecipes.length > 0 && (
@@ -262,7 +262,7 @@ async function Device({ params }: { params: Params }) {
       )}
 
       <p className={s.back}>
-        <Link href="/frames">All frames</Link>
+        <Link href="/frames">All supported devices</Link>
       </p>
     </article>
   );

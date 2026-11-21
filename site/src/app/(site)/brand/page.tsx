@@ -24,7 +24,7 @@ import s from "./brand.module.css";
 export const metadata = pageMetadata({
   title: "Brand",
   description:
-    "The Glassworks mark, colour, type and motion, with SVGs, and the badges and banners for READMEs.",
+    "The Glassworks mark, colors, typography, and motion—plus downloadable SVGs, badges, and banners for READMEs.",
   path: "/brand",
 });
 
@@ -149,7 +149,7 @@ const downloads = [
   { file: "lockup-kiln-on-dark.svg", what: "Glassworks Kiln lockup" },
   { file: "mark-on-dark.svg", what: "Mark for dark backgrounds" },
   { file: "mark-on-light.svg", what: "Mark for light backgrounds" },
-  { file: "mark-mono.svg", what: "One colour, follows currentColor" },
+  { file: "mark-mono.svg", what: "One color, follows currentColor" },
   { file: "kiln-on-dark.svg", what: "Kiln mark, ember floor" },
   { file: "app-icon.svg", what: "App icon, 512 × 512" },
   { file: "app-icon-kiln.svg", what: "Kiln app icon, 512 × 512, ember floor" },
@@ -277,10 +277,10 @@ export default function BrandPage() {
       <header className={s.hero}>
         <div className={s.heroCopy}>
           <span className="label">Brand</span>
-          <h1 className={s.h1}>A stack of plates, the top one lit.</h1>
+          <h1 className={s.h1}>A stack of plates, the top one lit</h1>
           <p className={s.heroLede}>
-            Drawn from the exploded stack on the home page: dark glass, thin
-            Inter, sky-to-violet light.
+            Drawn from the exploded stack on the Developers page: dark glass, thin
+            Inter, and sky-to-violet light.
           </p>
         </div>
         <GlassTile
@@ -307,7 +307,7 @@ export default function BrandPage() {
               <span className={s.sw} style={{ background: "var(--lit-gradient)" }} />
               Lit plate
             </h3>
-            <p>The panes. The only colour in the mark.</p>
+            <p>The panes. The only color in the mark.</p>
           </div>
           <div>
             <h3 className={s.chip}>
@@ -355,7 +355,7 @@ export default function BrandPage() {
           </div>
           <div className={`${s.ground} ${s.gMono}`}>
             <Mark variant="mono" />
-            <span className="label">One colour</span>
+            <span className="label">One color</span>
           </div>
         </div>
       </Section>
@@ -451,7 +451,7 @@ export default function BrandPage() {
         </div>
         <ul className={s.badgeRules}>
           <li>
-            Use it as supplied. Don&rsquo;t change the words, colours or
+            Use it as supplied. Don&rsquo;t change the words, colors, or
             proportions.
           </li>
           <li>Link it to glassworks.dev where you can.</li>
@@ -517,7 +517,7 @@ export default function BrandPage() {
         id="info"
         label="Info badges"
         title="Our own shields."
-        lede="Licence, status and roadmap, on the same field as the part badges. Use these instead of shields.io next to a Glassworks badge. Status dots use the status colours, so they only ever mean status."
+        lede="License, status, and roadmap on the same field as the part badges. Use these instead of shields.io next to a Glassworks badge. Status dots use the status colors so they only ever mean status."
       >
         <div className={s.badges}>
           <div className={`${s.badgeGround} ${s.gNight} ${s.infoRow}`}>
@@ -605,9 +605,9 @@ export default function BrandPage() {
 
       <Section
         id="colour"
-        label="Colour"
-        title="Colour means something."
-        lede="Greys from the S1 onboarding screen. Sky and violet mean on. Ember means Kiln. Status colours mean status."
+        label="Color"
+        title="Color means something"
+        lede="Grays from the S1 onboarding screen. Sky and violet mean on. Ember means Kiln. Status colors mean status."
       >
         <div className={s.palette}>
           {swatches.map((g) => (
@@ -882,7 +882,7 @@ export default function BrandPage() {
               <Mark className={s.dontMark} />
             </div>
             <span className={s.x}>Light on light</span>
-            <p>Use one colour on coloured backgrounds.</p>
+            <p>Use one color on colored backgrounds.</p>
           </div>
           <div className={s.dont}>
             <div className={`${s.ground} ${s.gNight}`}>

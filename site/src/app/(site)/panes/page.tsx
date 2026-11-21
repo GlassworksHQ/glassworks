@@ -18,7 +18,7 @@ export default function PanesPage() {
     <>
       <PageHead
         title="Features and panes"
-        lede="Every capability beyond the core ships as a modular pane matched to what your panel supports — some run automatically, while opt-in panes like the Bluetooth proxy stay off until you turn them on."
+        lede="Every feature beyond the core ships as a modular pane matched to your hardware. Core panes work automatically, while optional ones like the Bluetooth proxy stay off until you enable them."
       />
 
       <ListCard id="general" title="Works across devices" aside={<span>{generalPanes.length} panes</span>}>
