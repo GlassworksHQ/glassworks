@@ -7,15 +7,30 @@
   </a>
 </p>
 
-# Overlays: themes, Assist and timers (mockups)
+# Overlays: themes, Assist and timers (design record)
 
 Design mockups for #691: a theme for every native overlay, the Assist overlay as a reworked orb or an
-edge glow, and the timers. Nothing here is built.
+edge glow, and the timers. Kept as the design record: what was decided, and what was tried and
+dropped (the round 1 glow, Sheen and Pour).
 
-**Status (2026-11-20):** the maintainer approved the themes, the picker, the orb and the timers (see
-[Decided](#decided)). The edge glow is in a second round: [edge-lit glass](#assist-the-edge-glow-round-2-edge-lit-glass),
-with Spark chosen as its entrance. Once that is approved, the build follows in small PRs (theme
-plumbing and settings, then Assist, then timers), each with Robolectric mockups of the real views.
+**Status (2026-11-20): built.** Everything in [Decided](#decided) shipped, in these PRs:
+
+| PR | What |
+|---|---|
+| #702 | The theme model (any palette, contrast-derived text) and the Appearance page, on the panel and on Manage |
+| #703 | The voice orb in the theme |
+| #704 | Spark's edge glow as a second Assist look |
+| #705 | The thinking swirl stays round in software |
+| #706 | The Custom theme: six colors, swatches on the panel, a color picker on Manage |
+| #707 | The timers' ring, dock and done screen in the theme |
+| #713 | The timer board (three or more timers) |
+| #721 | The timer done screen on a portrait, no-touch screen (the Mirror) |
+| #724 | Follow Home Assistant's dark mode (the switch under the cards) |
+| #726 | The Home Assistant theme, from the dashboard's own colors |
+
+The built screens are the source of truth now; their Robolectric mockups are `VoiceThemeMockups`,
+`GlowThemeMockups`, `CustomThemeMockups`, `TimerThemeMockups` and `SettingsMockups`. Each PR has a
+panel plan in its body.
 
 | File | What |
 |---|---|
@@ -188,7 +203,7 @@ The maintainer, 2026-11-20, on round 1:
 5. A named theme can also follow Home Assistant's dark mode: the switch under the theme cards, on the
    panel and on Manage.
 
-Not yet: the edge glow. Round 2 is above.
+The edge glow waited for round 2, above.
 
 The maintainer, 2026-11-20, on round 2:
 
@@ -199,7 +214,12 @@ The maintainer, 2026-11-20, on round 2:
 3. The mic is at the top on the S1 and the Mirror: both use the middle of the top edge. The proposed
    `mic` field in `frame.json` stays.
 
-## Open questions for the maintainer
+Later, while building: custom themes with colors people pick, light and dark, on the panel and on
+Manage, with readable text from contrast (this reversed the earlier "no free color picker").
 
-1. Is the calmer speaking state right? A native prototype on the S1 (a throwaway test build, never
-   merged) is measuring how Spark performs, on scripted loops and on real Assist runs.
+## What the S1 prototype measured
+
+A native prototype (a throwaway test build, never merged) ran Spark on the S1, the Pixel Tablet and the
+Mirror, on scripted loops and on real Assist runs. Drawn on the RenderThread from baked bitmaps, the
+glow matched the orb on the S1 (60 fps on real runs) and passed on the tablet; on the Mirror both
+looks ran at about 30 fps, the glow no worse than the orb.
