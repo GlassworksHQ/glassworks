@@ -57,7 +57,7 @@ describe('the tablet after its install', () => {
     expect(s.state.phases.some((p) => p.step === 'handoff')).toBe(false); // no hand-off to its setup page
     expect(rail()).toEqual(['Device', 'Connect', 'Install', 'Set up', 'Done']);
     expect(subs()).toEqual(['App', 'Wi-Fi', 'Home Assistant']); // no Radio: frame.json says none
-    expect(screen.getByRole('heading', { name: 'A few settings.' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Language and time' })).toBeTruthy();
     expect(screen.queryByText('On-screen keyboard')).toBeNull();
     expect(screen.getByRole('button', { name: 'Continue' })).toBeTruthy();
   });
@@ -67,7 +67,7 @@ describe('the tablet after its install', () => {
     expect(screen.getByRole('heading', { name: 'Which Wi-Fi?' })).toBeTruthy();
     cleanup();
     await show('setup-ha');
-    expect(screen.getByRole('heading', { name: 'Sign in to Home Assistant.' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Sign in to Home Assistant' })).toBeTruthy();
     cleanup();
     await show('setup-panes');
     expect(subs()).toEqual(['App', 'Wi-Fi', 'Home Assistant', 'Panes']);
@@ -77,7 +77,7 @@ describe('the tablet after its install', () => {
   it('Done is the S1\'s, with the tablet\'s Manage page', async () => {
     const { standard } = await show('done');
     await vi.waitFor(() => expect(standard.store.state.done?.managePage).toBeDefined());
-    expect(screen.getByRole('heading', { name: 'Done.' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'You\'re all set' })).toBeTruthy();
     expect(screen.getByText(/Change these later on the tablet's Manage page/)).toBeTruthy();
   });
 

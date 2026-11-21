@@ -193,5 +193,28 @@
     "notes": {
       "hardware": "The wall base sends no button presses over its UART (base-protocol.md). The case button isn't checked yet."
     }
+  },
+  "release": {
+    "lines": {
+      "aqara-s1-plus": {
+        "title": "Glassworks for the Aqara S1 Plus",
+        "tag": "aqara-s1-plus-v{version}",
+        "changelog": "CHANGELOG.md",
+        "build": "s1-kiosk",
+        "abis": "every-frame",
+        "assets": { "armeabi-v7a": "s1-kiosk-{version}.apk", "*": "s1-kiosk-{abi}-{version}.apk" },
+        "latest": true
+      }
+    },
+    "app": ["aqara-s1-plus"],
+    "frame": {
+      "bundle": "signed",
+      "title": "Aqara S1 Plus frame",
+      "changelog": "frames/aqara-s1-plus/FRAME-CHANGELOG.md",
+      "script": "frames/aqara-s1-plus/tools/radio/frame-bundle.sh",
+      "pubkey": "frames/aqara-s1-plus/tools/root/glassworks_bundle.pub",
+      "assets": ["frame-bundle-aqara-s1-plus-{version}.zip"],
+      "note": "Panels don't install this zip yet: the Frame update card only says how to update. Until it installs bundles, the S1 app's radio bundle (the boot writer) is what reaches panels."
+    }
   }
 }

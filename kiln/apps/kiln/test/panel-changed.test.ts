@@ -36,7 +36,7 @@ describe('after a run that wrote', () => {
     d({ type: 'go', screen: 'connect' }); // Try again
     d({ type: 'start', flow, now: 1 });
     fail(2, new Error('transferIn: the device was disconnected'));
-    expect(failure()).toMatchObject({ title: 'It disconnected.', wrote: true });
+    expect(failure()).toMatchObject({ title: 'It disconnected', wrote: true });
     expect(failure().body).toBe('This attempt wrote nothing; an earlier try did. Don\'t unplug it yet: put it in recovery mode again and use Undo with your backup.');
   });
 
@@ -65,7 +65,7 @@ describe('after a run that wrote', () => {
     writtenRun('undo', true);
     d({ type: 'go', screen: 'connect' });
     d({ type: 'start', flow: 'undo', now: 1 });
-    d({ type: 'done', done: { title: 'The original software is back.', body: '' } });
+    d({ type: 'done', done: { title: 'The original software is back', body: '' } });
     expect(s.store.state.changed).toBeUndefined();
     d({ type: 'go', screen: 'connect', flow: 'install' });
     fail(1, closed());

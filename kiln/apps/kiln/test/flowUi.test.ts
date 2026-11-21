@@ -156,7 +156,7 @@ describe('the real InstallFlow through the wizard', () => {
     await s.asks.click();
     await done;
     expect(s.store.state.screen).toBe('error');
-    expect(s.store.state.failure).toMatchObject({ title: 'This isn\'t a panel Kiln knows.', wrote: false, at: 2 });
+    expect(s.store.state.failure).toMatchObject({ title: 'This isn\'t a panel Kiln knows', wrote: false, at: 2 });
     expect(s.store.state.failure!.body).toMatch(/^Nothing was written\./);
     expect(uboot.flashed).toEqual([]);
     expect(saved).toEqual([]);

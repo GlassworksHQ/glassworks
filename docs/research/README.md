@@ -236,6 +236,7 @@ This page is the index of every note. Notes about one device live with its frame
 | [magisk-modules.md](magisk-modules.md) | Why Magisk loaded no module on our panels (no busybox in `/data/adb/magisk`, which the Magisk app puts there), read from Magisk v31.1 and AOSP's init, and the fix in the S1's boot image: init copies Magisk's own busybox at `post-fs-data`, before Magisk checks |
 | [s1-boot-writer.md](s1-boot-writer.md) | Putting the frame loader into a 0.4.3 S1's own boot image over the air (#139 route 2): one copy of the FEL patch on host and panel (byte-identical, verified), why Magisk's `boot_patch.sh` runs with `BOOTMODE=true` on a live panel, the guards, the restore, and what the off-device tests cover |
 | [ci-emulator-api34.md](ci-emulator-api34.md) | Why `conformance (API 34)` died mid-test: qemu segfaults under `swiftshader_indirect`, and the permission dialog paused MainActivity. Core dumps, the dead ends (memory, rotation) and the pass rates before and after |
+| [lineageos-frame-updates.md](lineageos-frame-updates.md) | A frame on official LineageOS: finding its OS updates from LineageOS's own server, showing and installing them from Home Assistant (device owner), and keeping our boot animation through `addon.d`. Read from LineageOS 22.2 source, untested |
 
 ### Aqara S1 Plus ([`frames/aqara-s1-plus/`](../../frames/aqara-s1-plus/README.md#research-notes))
 

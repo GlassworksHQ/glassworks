@@ -48,7 +48,7 @@ export function Wifi({ busy, steps, setup }: { busy: boolean; steps: WifiSteps; 
       <section className="card" aria-labelledby="h">
         {/* One polite region from "Sending…" on, so a screen reader hears the change to the last word (CodeRabbit on PR 470). */}
         <div role="status" aria-live="polite">
-          <h2 id="h">{j.step === 'sent' ? 'Sending to the panel…' : 'Sent to the panel.'}</h2>
+          <h2 id="h">{j.step === 'sent' ? 'Sending to the panel…' : 'Sent to the panel'}</h2>
           {setup.joinNote && <p className="lede">{setup.joinNote}</p>}
         </div>
       </section>
@@ -59,7 +59,7 @@ export function Wifi({ busy, steps, setup }: { busy: boolean; steps: WifiSteps; 
     const at = j.step === 'err' ? 1 : order.indexOf(j.step);
     return (
       <section className="card" aria-labelledby="h">
-        <h2 id="h">{j.step === 'ok' ? `On ${j.ssid}.` : j.step === 'err' ? `Couldn't join ${j.ssid}.` : `Joining ${j.ssid}…`}</h2>
+        <h2 id="h">{j.step === 'ok' ? `On ${j.ssid}` : j.step === 'err' ? `Couldn't join ${j.ssid}` : `Joining ${j.ssid}…`}</h2>
         <ol className="join" aria-live="polite">
           {[setup.over === 'lan' ? 'Sent to the panel' : 'Sent to the panel over USB', 'The panel joins the network', 'Connected'].map((t, i) => (
             <li key={t} className={j.step === 'ok' || i < at ? 'done' : i === at ? (j.step === 'err' ? 'fail' : 'cur') : ''}>{t}</li>
@@ -80,7 +80,7 @@ export function Wifi({ busy, steps, setup }: { busy: boolean; steps: WifiSteps; 
     const { ssid, ip } = setup.on;
     return (
       <section className="card" aria-labelledby="h">
-        <h2 id="h">{ssid ? `Connected to ${ssid}.` : 'Connected to Wi-Fi.'}</h2>
+        <h2 id="h">{ssid ? `Connected to ${ssid}` : 'Connected to Wi-Fi'}</h2>
         <p className="lede">The panel is on this network already, at {ip}. Keep it, or use another network.</p>
         <div className="foot">
           <button type="button" className="link" disabled={busy} onClick={() => void steps.click('wifi-scan', () => steps.scanWifi())}>Use another network</button>
@@ -134,7 +134,7 @@ export function HomeAssistant({ busy, steps, setup }: StepProps<'ha'>) {
   const url = typed ?? suggested; // follows what the panel finds until the person types
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h">{setup.ha.signedIn ? 'Signed in to Home Assistant.' : 'Sign in to Home Assistant.'}</h2>
+      <h2 id="h">{setup.ha.signedIn ? 'Signed in to Home Assistant' : 'Sign in to Home Assistant'}</h2>
       <p className="lede">{setup.ha.discovered ? `Found at ${new URL(setup.ha.discovered).host}.` : 'Not found by itself. Type its address.'}</p>
       <label className="field"><span>Address</span><input className="input" value={url} onChange={(e) => { setTyped(e.target.value); steps.haAddress = e.target.value; }} inputMode="url" autoComplete="off" /></label>
       {setup.ha.signedIn && <p className="status ok">The panel is signed in.</p>}

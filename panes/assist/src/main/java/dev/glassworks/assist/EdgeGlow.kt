@@ -6,8 +6,11 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.LinearGradient
 import android.graphics.Paint
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffXfermode
 import android.graphics.RadialGradient
 import android.graphics.Shader
+import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.view.View
@@ -18,6 +21,8 @@ import android.widget.ImageView
 import dev.glassworks.theme.Themes
 import kotlin.math.ceil
 import kotlin.math.exp
+import kotlin.math.max
+import kotlin.math.min
 
 /**
  * Spark, the edge glow (#691's "edge-lit glass"): the screen is a pane of glass whose edges catch the theme's two
@@ -33,6 +38,12 @@ import kotlin.math.exp
  * split at the mic, each three strips (top, side, bottom) of a 1 px colour profile stretched along its edge; strips grow
  * and shrink by scale from a pivot. On a light ground ([Themes.Palette.darkGround] false) the white-hot accents become the
  * theme's own colours, which show there.
+ *
+ * Its look follows the approved renders (#694's edge.js) as closely as baked bitmaps allow: the lights run a to b
+ * diagonally round the whole border (a at the top left, b at the bottom right); on a dark ground they add up, as light
+ * does, so where they meet they go white-hot; the voice swells and brightens the whole border and blooms at the mic
+ * ([level], through [voice]); thinking's lights are comets with long tails, with glints catching here and there; speaking
+ * rests in the corners; an error's rose pulse runs out from the mic.
  */
 class EdgeGlow(context: Context, palette: Themes.Palette) : FrameLayout(context) {
     private val d = resources.displayMetrics.density
@@ -42,7 +53,7 @@ class EdgeGlow(context: Context, palette: Themes.Palette) : FrameLayout(context)
     /** What glows white-hot on a dark ground; on a light one, the lights' middle, which shows there. */
     private val hotColour = if (light) palette.readable(Themes.mix(a, b, .5f)) else Color.WHITE
     private val hotK = if (light) 0f else 1f
-    private val depth = (72 * d).toInt()
+    private val depth = (88 * d).toInt()
     private val lin = LinearInterpolator()
     private val dec = DecelerateInterpolator(1.6f)
 
@@ -67,10 +78,20 @@ class EdgeGlow(context: Context, palette: Themes.Palette) : FrameLayout(context)
 
     private val comets = Array(2) { i -> sprite(dot(if (i == 0) a else b, 26f, hot = .55f * hotK)) } // entrance heads
     private val cometBoxes = Array(2) { FrameLayout(context).apply { clipChildren = false } }
-    private val shuttles = Array(4) { i -> sprite(dot(if (i % 2 == 0) a else b, 22f, hot = .45f * hotK)) } // thinking: top a/b, bottom a/b
-    private val micGlow = sprite(ellipse(hotColour, 130f, 30f))
-    private val ripples = Array(6) { i -> sprite(ellipse(if (i < 3) a else b, 70f, 14f)) } // 3 going left (a), 3 right (b)
+    // thinking: comets with long tails, top a/b, bottom a/b (baked at half length, stretched: the tail is smooth)
+    private val cometA = comet(a, right = true); private val cometB = comet(b, right = false)
+    private val shuttles = Array(4) { i -> stretched(if (i % 2 == 0) cometA else cometB, 2) }
+    private val glints = Array(6) { i -> sprite(dot(if (i % 2 == 0) a else b, 12f, hot = .7f * hotK)) }
+    private var nextGlint = 0
+    // listening: the bloom at the mic, in the lights' colour and white-hot; it widens, brightens and whitens with the voice
+    private val micGlow = stretched(bloom(), 2)
+    private val micHot = stretched(bloom(hot = true), 2)
+    // a loud word: ripples that run from the mic round the border, three each way; and an error's rose pulse
+    private val rippleBoxes = Array(8) { FrameLayout(context).apply { clipChildren = false } }
+    private val ripples = Array(8) { i -> sprite(dot(when { i >= 6 -> rose; i % 2 == 0 -> a; else -> b }, 40f, hot = (if (i >= 6) 0f else .25f) * hotK)) }
     private var nextRipple = intArrayOf(0, 0)
+    // speaking: the light rests in the corners (top left a, bottom right b, the others between)
+    private val corners = Array(4) { i -> stretched(corner(Themes.mix(a, b, floatArrayOf(0f, .5f, .5f, 1f)[i]), i), 2, 2) }
     private val flareBox = Array(3) { FrameLayout(context).apply { clipChildren = false } } // ignite, meet, cross
     private val flares = Array(3) { sprite(flare(hotColour)) }
     private val roseFlare = sprite(flare(rose))
@@ -84,9 +105,12 @@ class EdgeGlow(context: Context, palette: Themes.Palette) : FrameLayout(context)
         for ((i, s) in ringB.withIndex()) halfB.addView(s, stripParams(i, left = false))
         for ((i, s) in roseRing.withIndex()) addView(s, roseParams(i))
         addView(bevel, LayoutParams(-1, -1))
-        addView(micGlow, LayoutParams(-2, -2, Gravity.TOP or Gravity.CENTER_HORIZONTAL))
-        for (r in ripples) addView(r, LayoutParams(-2, -2, Gravity.TOP or Gravity.CENTER_HORIZONTAL))
-        for (s in shuttles) addView(s, LayoutParams(-2, -2))
+        for ((i, c) in corners.withIndex()) addView(c, LayoutParams(c.layoutParams.width, c.layoutParams.height, (if (i < 2) Gravity.TOP else Gravity.BOTTOM) or (if (i % 2 == 0) Gravity.LEFT else Gravity.RIGHT)))
+        // the stretched sprites keep their own size (wrap_content would measure the half-length bitmap)
+        for (m in listOf(micGlow, micHot)) addView(m, LayoutParams(m.layoutParams.width, m.layoutParams.height, Gravity.TOP or Gravity.CENTER_HORIZONTAL))
+        for ((i, box) in rippleBoxes.withIndex()) { box.addView(ripples[i], LayoutParams(-2, -2)); addView(box, LayoutParams(-2, -2)) }
+        for (s in shuttles) addView(s)
+        for (g in glints) addView(g)
         for ((i, box) in cometBoxes.withIndex()) { box.addView(comets[i], LayoutParams(-2, -2)); addView(box, LayoutParams(-2, -2)) }
         for ((i, box) in flareBox.withIndex()) { box.addView(flares[i], LayoutParams(-2, -2, Gravity.CENTER)); addView(box, LayoutParams(-2, -2)) }
         addView(roseFlare, LayoutParams(-2, -2))
@@ -98,10 +122,15 @@ class EdgeGlow(context: Context, palette: Themes.Palette) : FrameLayout(context)
         for (v in all()) { v.animate().cancel(); v.alpha = 0f; v.translationX = 0f; v.translationY = 0f; v.scaleX = 1f; v.scaleY = 1f }
         halfA.alpha = 1f; halfB.alpha = 1f
         for (s in ringA + ringB) s.alpha = 1f
+        for (b in rippleBoxes) b.alpha = 1f
         visibility = INVISIBLE
     }
 
-    private fun all(): List<View> = listOf(dim, bevel, micGlow, roseFlare, halfA, halfB) + ringA + ringB + roseRing + comets + cometBoxes + shuttles + ripples + flareBox + flares
+    private fun all(): List<View> = listOf(dim, bevel, micGlow, micHot, roseFlare, halfA, halfB) + ringA + ringB + roseRing + comets + cometBoxes +
+        shuttles + glints + ripples + rippleBoxes + corners + flareBox + flares
+
+    /** The border's six strips (top, side, bottom of each half): what the voice swells. For the overlay's tests too. */
+    val edges: List<View> get() = (ringA + ringB).toList()
 
     // ------------------------------------------------------------------ the moments (all RenderThread animations)
     /** Spark coming on: the light ignites at the mic, splits both ways round the edge, flares where the halves meet. */
@@ -138,27 +167,58 @@ class EdgeGlow(context: Context, palette: Themes.Palette) : FrameLayout(context)
         flash(1, w / 2, h, from = .7f, to = 1.5f, delay = 520, dur = 650)
     }
 
-    /** Listening: the mic glows with the voice, [l] 0 to 1. From the UI thread, each frame. */
-    fun level(l: Float) {
-        micGlow.alpha = .35f + .65f * l
-        micGlow.scaleX = 1 + 1.4f * l; micGlow.scaleY = 1 + .6f * l
-        halfA.alpha = .75f + .25f * l; halfB.alpha = halfA.alpha
+    /**
+     * Listening: the voice, [v] 0 to 1 ([voice] of the smoothed mic level). From the UI thread, each frame. As in the
+     * render, the whole border answers it: every edge brightens and swells (thicker toward the inside), and at the mic the
+     * light blooms wider, brighter and whiter. Only alpha and scale change, so RenderThread does the drawing.
+     */
+    fun level(v: Float) {
+        halfA.alpha = .5f + .5f * v; halfB.alpha = halfA.alpha
+        swell(1f + .6f * v)
+        micGlow.alpha = min(1f, (.3f + v) / 1.1f)
+        micGlow.scaleX = (34f + 120f * v) / 154f; micGlow.scaleY = 1f + .5f * v
+        micHot.alpha = .6f * v
+        micHot.scaleX = micGlow.scaleX; micHot.scaleY = micGlow.scaleY
     }
 
-    /** A loud word: one ripple each way along the top edge from the mic (reused sprites). */
-    fun ripple(l: Float) {
-        val w = width.toFloat()
-        for (side in 0..1) {
-            val r = ripples[side * 3 + nextRipple[side]]; nextRipple[side] = (nextRipple[side] + 1) % 3
-            r.animate().cancel()
-            r.translationX = 0f; r.translationY = -r.height / 2f; r.alpha = (.9f * l).coerceAtMost(1f)
-            r.animate().translationX(if (side == 0) -w / 2 else w / 2).alpha(0f).setStartDelay(0).setDuration(1500).setInterpolator(dec).start()
+    /** Every strip [k] times as thick, from its edge inward. */
+    private fun swell(k: Float) {
+        for ((i, s) in edges.withIndex()) {
+            val kind = i % 3; val right = i >= 3
+            if (kind == 1) { s.pivotX = if (right) s.width.toFloat() else 0f; s.scaleX = k }
+            else { s.pivotY = if (kind == 0) 0f else s.height.toFloat(); s.scaleY = k }
         }
     }
 
+    /** A word: one ripple each way from the mic, running along the top and round the corner down the side (reused sprites). */
+    fun ripple(v: Float) {
+        for (side in 0..1) {
+            val i = side + 2 * nextRipple[side]; nextRipple[side] = (nextRipple[side] + 1) % 3
+            travel(i, left = side == 0, alpha = (.95f * v).coerceAtMost(1f), durMs = 1600)
+        }
+    }
+
+    /** Ripple [i]: from the mic along the top to the corner, then down the side, fading; the render's .62 dp a millisecond. */
+    private fun travel(i: Int, left: Boolean, alpha: Float, durMs: Long) {
+        val box = rippleBoxes[i]; val r = ripples[i]
+        val w = width.toFloat(); val h = height.toFloat()
+        val speed = .62f * d // px a millisecond
+        val t1 = min(durMs, ((w / 2) / speed).toLong())
+        val down = min(h, speed * (durMs - t1))
+        box.animate().cancel(); r.animate().cancel()
+        box.translationX = w / 2 - r.width / 2f; box.translationY = -r.height / 2f
+        r.alpha = alpha
+        r.animate().alpha(0f).setStartDelay(0).setDuration(durMs).setInterpolator(dec).start()
+        box.animate().translationX(if (left) -r.width / 2f else w - r.width / 2f).setStartDelay(0).setDuration(t1).setInterpolator(lin).start()
+        if (durMs > t1) box.animate().translationY(down - r.height / 2f).setStartDelay(t1).setDuration(durMs - t1).setInterpolator(lin).start()
+    }
+
     fun listening() {
-        micGlow.translationY = -micGlow.height / 2f
+        micGlow.translationY = 0f; micGlow.pivotY = 0f
+        micHot.translationY = 0f; micHot.pivotY = 0f
         for (s in shuttles) { s.animate().cancel(); s.alpha = 0f }
+        for (c in corners) { c.animate().cancel(); c.alpha = 0f }
+        for (s in edges) s.alpha = 1f
         roseFlare.alpha = 0f
     }
 
@@ -170,7 +230,10 @@ class EdgeGlow(context: Context, palette: Themes.Palette) : FrameLayout(context)
     fun thinkingTop(lap: Int) {
         if (lap == 0) {
             micGlow.animate().alpha(0f).setStartDelay(0).setDuration(300).start()
-            halfA.animate().alpha(.35f).setStartDelay(0).setDuration(300).start(); halfB.animate().alpha(.35f).setStartDelay(0).setDuration(300).start()
+            micHot.animate().alpha(0f).setStartDelay(0).setDuration(300).start()
+            // the border dims (the render's .07 between the comets) and settles back to its own thickness
+            halfA.animate().alpha(.28f).setStartDelay(0).setDuration(300).start(); halfB.animate().alpha(.28f).setStartDelay(0).setDuration(300).start()
+            swell(1f)
         }
         shuttle(bottom = false)
         flash(2, width / 2f, 0f, from = .5f, to = 1.2f, delay = LAP_MS / 2, dur = 450) // they cross at the mic
@@ -181,34 +244,62 @@ class EdgeGlow(context: Context, palette: Themes.Palette) : FrameLayout(context)
         flash(1, width / 2f, height.toFloat(), from = .5f, to = 1.2f, delay = LAP_MS / 2, dur = 450) // and at the bottom
     }
 
+    /**
+     * One lap of a lane's two comets: the left one (a) runs right, the right one (b) runs left, each with its tail behind
+     * it (baked facing its way, [comet]). The bottom lane's are flipped so their edge is at the bottom.
+     */
     private fun shuttle(bottom: Boolean) {
-        val w = width.toFloat(); val y = if (bottom) height.toFloat() else 0f
+        val w = width.toFloat(); val h = height.toFloat()
         for (fromLeft in listOf(true, false)) {
             val s = shuttles[(if (bottom) 2 else 0) + (if (fromLeft) 0 else 1)]
+            val len = s.layoutParams.width.toFloat() // its own size (stretched), not wrap_content
+            val head = if (fromLeft) HEAD_FRAC * len else (1 - HEAD_FRAC) * len // where the head is in the view
             s.animate().cancel()
+            s.pivotY = s.layoutParams.height / 2f; s.scaleY = if (bottom) -1f else 1f
+            check(len > 0) { "a comet's size is its own" }
             s.alpha = 1f
-            s.translationY = y - s.height / 2f
-            s.translationX = (if (fromLeft) 0f else w) - s.width / 2f
-            s.animate().translationX((if (fromLeft) w else 0f) - s.width / 2f).setStartDelay(0).setDuration(LAP_MS).setInterpolator(lin).start()
+            s.translationY = if (bottom) h - s.layoutParams.height else 0f
+            s.translationX = (if (fromLeft) 0f else w) - head
+            s.animate().translationX((if (fromLeft) w else 0f) - head).setStartDelay(0).setDuration(LAP_MS).setInterpolator(lin).start()
         }
+    }
+
+    /** Thinking: a glint catches at [x] on the top edge or the [bottom] one, in light a or b (reused sprites; 300 ms). */
+    fun glint(x: Float, bottom: Boolean, inA: Boolean) {
+        val g = glints[(nextGlint++ % 3) * 2 + if (inA) 0 else 1]
+        g.animate().cancel()
+        g.translationX = x - g.layoutParams.width / 2f
+        g.translationY = (if (bottom) height.toFloat() else 0f) - g.layoutParams.height / 2f
+        g.alpha = .9f; g.scaleX = .4f; g.scaleY = .4f
+        g.animate().alpha(0f).scaleX(1.1f).scaleY(1.1f).setStartDelay(0).setDuration(300).setInterpolator(dec).start()
     }
 
     /** Speaking: calm. A soft light that breathes slowly with the reply, [l] 0 to 1 smoothed. From the UI thread, each frame. */
     fun speaking(l: Float) {
-        halfA.alpha = .6f + .25f * l; halfB.alpha = halfA.alpha
+        // the render's (.34 + .36 corner)(.88 + .3L): an even border, its light pooled in the corners, breathing a little
+        halfA.alpha = .5f + .2f * l; halfB.alpha = halfA.alpha
+        for (c in corners) c.alpha = .6f + .25f * l
+        swell(1f + .12f * l)
     }
 
     fun speakingStart() {
         for (s in shuttles) { s.animate().cancel(); s.alpha = 0f }
         micGlow.animate().alpha(0f).setDuration(300).start()
+        micHot.animate().alpha(0f).setDuration(300).start()
+        // the bottom edge, under the caption, stays dimmer
+        ringA[2].alpha = .6f; ringB[2].alpha = .6f
     }
 
     /** An error: rose, a status colour. */
     fun error() {
         for (s in shuttles) { s.animate().cancel(); s.alpha = 0f }
         micGlow.animate().alpha(0f).setDuration(200).start()
+        micHot.animate().alpha(0f).setDuration(200).start()
+        for (c in corners) c.animate().alpha(0f).setStartDelay(0).setDuration(240).start()
         halfA.animate().alpha(0f).setStartDelay(0).setDuration(240).start(); halfB.animate().alpha(0f).setStartDelay(0).setDuration(240).start()
         for (s in roseRing) s.animate().alpha(.9f).setStartDelay(0).setDuration(240).start()
+        // one rose pulse leaves the mic both ways
+        travel(6, left = true, alpha = .9f, durMs = 1100); travel(7, left = false, alpha = .9f, durMs = 1100)
         roseFlare.translationX = width / 2f - roseFlare.width / 2f; roseFlare.translationY = -roseFlare.height / 2f
         roseFlare.alpha = 1f; roseFlare.scaleX = .4f; roseFlare.scaleY = .4f
         roseFlare.animate().alpha(0f).scaleX(1f).scaleY(1f).setStartDelay(0).setDuration(360).start()
@@ -231,6 +322,8 @@ class EdgeGlow(context: Context, palette: Themes.Palette) : FrameLayout(context)
         for (s in roseRing) s.animate().alpha(0f).setStartDelay(0).setDuration(320).start()
         for (s in shuttles) { s.animate().cancel(); s.alpha = 0f }
         micGlow.animate().alpha(0f).setStartDelay(0).setDuration(200).start()
+        micHot.animate().alpha(0f).setStartDelay(0).setDuration(200).start()
+        for (c in corners) c.animate().alpha(0f).setStartDelay(0).setDuration(300).start()
         dim.animate().alpha(0f).setStartDelay(0).setDuration(400).start()
         bevel.animate().alpha(0f).setStartDelay(0).setDuration(400).start()
         flash(0, w / 2, 0f, from = .2f, to = .5f, delay = 300, dur = 140)
@@ -251,41 +344,121 @@ class EdgeGlow(context: Context, palette: Themes.Palette) : FrameLayout(context)
     private fun plain() = object : View(context) { override fun hasOverlappingRendering() = false }
     private fun layer() = object : FrameLayout(context) { override fun hasOverlappingRendering() = false }.apply { clipChildren = false }
 
-    private fun sprite(bmp: Bitmap) = object : ImageView(context) { override fun hasOverlappingRendering() = false }.apply {
+    private fun sprite(bmp: Bitmap) = stretched(bmp, 1)
+
+    /** A sprite drawn [k] times as long ([kh] as tall) as its bitmap (baked smaller where it changes smoothly: less memory). */
+    private fun stretched(bmp: Bitmap, k: Int, kh: Int = 1) = object : ImageView(context) { override fun hasOverlappingRendering() = false }.apply {
         setImageBitmap(bmp); scaleType = ImageView.ScaleType.FIT_XY
-        layoutParams = LayoutParams(bmp.width, bmp.height)
-        minimumWidth = bmp.width; minimumHeight = bmp.height
+        layoutParams = LayoutParams(bmp.width * k, bmp.height * kh)
+        minimumWidth = bmp.width * k; minimumHeight = bmp.height * kh
+        lit()
     }
 
-    /** One strip: [kind] 0 top, 1 side, 2 bottom; a 1 px profile (edge to inside) stretched along the edge. A [right] side's edge is on its right. */
+    /**
+     * On a dark ground the light adds to what is under it, as the render's `lighter` does: where two lights or a light and
+     * a flare meet they go white-hot, instead of the top one covering the other. Per bitmap paint, so it costs nothing
+     * per frame. On a light ground the lights draw over (added light wouldn't show on white).
+     */
+    private fun ImageView.lit() { if (!light) (drawable as? BitmapDrawable)?.paint?.xfermode = PorterDuffXfermode(PorterDuff.Mode.ADD) }
+
+    /**
+     * One strip: [kind] 0 top, 1 side, 2 bottom; a profile from the edge inward, 256 px along the edge and stretched to
+     * it. A [right] side's edge is on its right; a [right] half's top and bottom start at the middle. The half rings
+     * ([toMid]) carry the render's diagonal light, a at the top left to b at the bottom right: the top from 0 to .5 of
+     * the way, the sides from their top corner to the bottom one, the bottom from .5 to 1, so the halves meet in one
+     * colour at the mic and at the bottom middle (no seam). The rose ring is one colour.
+     */
     private fun strip(colour: Int, kind: Int, right: Boolean, toMid: Boolean = false): ImageView {
-        // Top and bottom strips are 256 px along the edge, so a half can run from its corner's light to the a/b middle
-        // at the centre, where it meets the other half in the same colour (no seam). Sides are one colour, 1 px long.
-        val vertical = kind != 1
-        val len = if (vertical) 256 else 1
-        val bw = if (vertical) len else depth; val bh = if (vertical) depth else 1
+        val len = 256
+        val bw = if (kind != 1) len else depth; val bh = if (kind != 1) depth else len
         val px = IntArray(bw * bh)
-        val mid = Color.rgb(lerp(Color.red(a), Color.red(b), .5f), lerp(Color.green(a), Color.green(b), .5f), lerp(Color.blue(a), Color.blue(b), .5f))
         for (x in 0 until len) {
-            // k: 0 at the corner, 1 at the centre (a left half's corner is on its left, a right half's on its right)
-            val k = if (!toMid || len == 1) 0f else if (right) 1f - x / (len - 1f) else x / (len - 1f)
-            val r = lerp(Color.red(colour), Color.red(mid), k); val g = lerp(Color.green(colour), Color.green(mid), k); val bl = lerp(Color.blue(colour), Color.blue(mid), k)
+            val t = x / (len - 1f) // along the strip: left to right for a top or bottom, top to bottom for a side
+            val k = when {
+                !toMid -> -1f
+                kind == 0 -> if (right) .25f + .25f * t else .25f * t
+                kind == 1 -> if (right) .5f + .5f * t else .5f * t
+                else -> if (right) .75f + .25f * t else .5f + .25f * t
+            }
+            val c0 = if (k < 0) colour else Themes.mix(a, b, k)
             for (i in 0 until depth) {
-                val y = i / d // dp from the edge
-                val core = exp(-(y / 2f) * (y / 2f)); val glow = .45f * exp(-(y / 10f) * (y / 10f)); val haze = .22f * exp(-(y / 32f) * (y / 32f))
-                val al = (core + glow + haze).coerceAtMost(1f)
-                val hot = core * .5f * hotK // the edge itself is whiter on a dark ground
-                val c = Color.argb((255 * al).toInt(), mix(r, hot), mix(g, hot), mix(bl, hot))
-                if (vertical) px[(if (kind == 2) depth - 1 - i else i) * bw + x] = c else px[if (right) depth - 1 - i else i] = c
+                val (al, hot) = profile(i / d)
+                val c = Color.argb((255 * al).toInt(), mix(Color.red(c0), hot), mix(Color.green(c0), hot), mix(Color.blue(c0), hot))
+                if (kind != 1) px[(if (kind == 2) depth - 1 - i else i) * bw + x] = c else px[x * bw + (if (right) depth - 1 - i else i)] = c
             }
         }
         val bmp = Bitmap.createBitmap(px, bw, bh, Bitmap.Config.ARGB_8888)
-        return object : ImageView(context) { override fun hasOverlappingRendering() = false }.apply { setImageBitmap(bmp); scaleType = ImageView.ScaleType.FIT_XY }
+        return object : ImageView(context) { override fun hasOverlappingRendering() = false }.apply { setImageBitmap(bmp); scaleType = ImageView.ScaleType.FIT_XY; lit() }
+    }
+
+    /**
+     * The light [y] dp in from the edge, as the render's three stamped sprites add up there (a 4 dp core, a 20 dp glow and a
+     * 64 dp haze): its alpha, and how white-hot it is (the core, on a dark ground).
+     */
+    private fun profile(y: Float): Pair<Float, Float> {
+        val core = exp(-(y / 1.8f) * (y / 1.8f)); val glow = .5f * exp(-(y / 12f) * (y / 12f)); val haze = .26f * exp(-(y / 38f) * (y / 38f))
+        return (core + glow + haze).coerceAtMost(1f) to core * .6f * hotK
+    }
+
+    /**
+     * The bloom at the mic, at its widest (the render's sigma 154 dp): the edge's profile, a gaussian along the edge, in
+     * the lights' colour round the mic (a left, b right); or [hot], white (on a dark ground) and narrower. Baked at half
+     * length.
+     */
+    private fun bloom(hot: Boolean = false): Bitmap {
+        val sigma = (if (hot) 100f else 154f) * d
+        val full = (6 * 154f * d).toInt(); val w = full / 2; val h = depth
+        val px = IntArray(w * h)
+        for (x in 0 until w) {
+            val dx = (x * 2 - full / 2f)
+            val g = exp(-(dx * dx) / (2 * sigma * sigma))
+            val c0 = if (hot) hotColour else Themes.mix(a, b, (.25f + .25f * dx / (full / 2f)).coerceIn(0f, 1f))
+            for (i in 0 until h) {
+                val (al, wh) = profile(i / d)
+                val c = if (hot) c0 else Color.rgb(mix(Color.red(c0), wh), mix(Color.green(c0), wh), mix(Color.blue(c0), wh))
+                px[i * w + x] = withAlpha(c, al * g)
+            }
+        }
+        return Bitmap.createBitmap(px, w, h, Bitmap.Config.ARGB_8888)
+    }
+
+    /**
+     * A thinking comet running [right] or left, as the render's heads: a bright head [HEAD_FRAC] of the way along its run
+     * (28 dp ahead of it), white-hot at its tip on a dark ground, and a long tail behind (340 dp to fall to a third),
+     * tapering to nothing. On the top edge; the bottom lane flips it. Baked at half length.
+     */
+    private fun comet(colour: Int, right: Boolean): Bitmap {
+        val full = (COMET_DP * d).toInt(); val w = full / 2; val h = depth
+        val headX = HEAD_FRAC * full
+        val px = IntArray(w * h)
+        for (x in 0 until w) {
+            val xr = if (right) x * 2 else full - 1 - x * 2 // along the run
+            val dd = (xr - headX) / d // dp ahead of the head (> 0) or behind it
+            // the tail tapers to nothing by the bitmap's end, so it has no edge
+            val tail = HEAD_FRAC * COMET_DP; val left = ((tail + dd) / (.35f * tail)).coerceIn(0f, 1f)
+            val v = if (dd > 0) exp(-dd * dd / (2 * 28f * 28f)) else exp(dd / 340f) * (.5f + .5f * exp(dd / 40f)) * left * left * (3 - 2 * left)
+            val tip = .6f * hotK * exp(-dd * dd / (2 * 16f * 16f))
+            for (i in 0 until h) {
+                val (al, wh) = profile(i / d)
+                val hot = max(wh, tip * al)
+                px[i * w + x] = withAlpha(Color.rgb(mix(Color.red(colour), hot), mix(Color.green(colour), hot), mix(Color.blue(colour), hot)), (al * v).coerceAtMost(1f))
+            }
+        }
+        return Bitmap.createBitmap(px, w, h, Bitmap.Config.ARGB_8888)
+    }
+
+    /** Speaking: the light pooled in corner [i] (0 top left, 1 top right, 2 bottom left, 3 bottom right), 180 dp across; baked at half size. */
+    private fun corner(colour: Int, i: Int): Bitmap {
+        val s = (90 * d).toInt(); val bmp = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
+        val cx = if (i % 2 == 0) 0f else s.toFloat(); val cy = if (i < 2) 0f else s.toFloat()
+        Canvas(bmp).drawRect(0f, 0f, s.toFloat(), s.toFloat(), Paint().apply {
+            shader = RadialGradient(cx, cy, s.toFloat(), intArrayOf(withAlpha(colour, .55f), withAlpha(colour, .18f), withAlpha(colour, 0f)), floatArrayOf(0f, .35f, 1f), Shader.TileMode.CLAMP)
+        })
+        return bmp
     }
 
     private fun mix(c: Int, k: Float) = (c + (255 - c) * k).toInt().coerceIn(0, 255)
 
-    private fun lerp(x: Int, y: Int, k: Float) = (x + (y - x) * k).toInt()
 
     private fun stripParams(kind: Int, left: Boolean): LayoutParams = when (kind) {
         0 -> LayoutParams(0, depth, Gravity.TOP or if (left) Gravity.LEFT else Gravity.RIGHT)
@@ -316,15 +489,6 @@ class EdgeGlow(context: Context, palette: Themes.Palette) : FrameLayout(context)
         return bmp
     }
 
-    private fun ellipse(colour: Int, wDp: Float, hDp: Float): Bitmap {
-        val w = ceil(wDp * d).toInt(); val h = ceil(hDp * d).toInt(); val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-        val c = Canvas(bmp); c.scale(1f, h.toFloat() / w)
-        c.drawRect(0f, 0f, w.toFloat(), w.toFloat(), Paint().apply {
-            shader = RadialGradient(w / 2f, w / 2f, w / 2f, intArrayOf(withAlpha(colour, .9f), withAlpha(colour, .35f), withAlpha(colour, 0f)), floatArrayOf(0f, .4f, 1f), Shader.TileMode.CLAMP)
-        })
-        return bmp
-    }
-
     private fun flare(colour: Int): Bitmap {
         val r = 110 * d; val s = ceil(2 * r).toInt(); val m = s / 2f
         val bmp = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888); val c = Canvas(bmp)
@@ -341,6 +505,22 @@ class EdgeGlow(context: Context, palette: Themes.Palette) : FrameLayout(context)
     private fun withAlpha(c: Int, a: Float) = (c and 0x00ffffff) or ((255 * a.coerceIn(0f, 1f)).toInt() shl 24)
 
     companion object {
+        /** A comet's length, head and tail. */
+        private const val COMET_DP = 950f
+
+        /** How far along its run a comet's head is, in its bitmap (a companion constant: the bake reads it first). */
+        private const val HEAD_FRAC = .9f
+
+        /**
+         * The glow's voice, 0 to 1, from the smoothed mic level ([VoiceLevels.mic]: −55 to −15 dBFS as 0 to 1). Speech at
+         * a panel's distance sits well under the render's illustrative level (which peaks near 1), so the range real
+         * voices use, from the listening floor to about .5, is opened up to the whole scale, eased at both ends.
+         */
+        fun voice(l: Float): Float {
+            val x = ((l - AudioLevel.LISTENING_FLOOR) / .45f).coerceIn(0f, 1f)
+            return x * x * (3 - 2 * x)
+        }
+
         /** One shuttle's run along an edge, and so one thinking lap. */
         const val LAP_MS = 1300L
 

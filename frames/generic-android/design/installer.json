@@ -33,9 +33,9 @@
     "the": "the tablet",
     "app": "Glassworks for Android",
     "needs": { "release": "Android 8", "local": "Android 6", "why": "the release's APK is Glassworks for generic Android (API 26+); a picked file may be its legacy build (API 23+)" },
-    "off": { "title": "Kiln doesn't install on Android devices yet.", "follow": "https://github.com/GlassworksHQ/glassworks/issues/403" },
+    "off": { "title": "Kiln doesn't install on Android devices yet", "follow": "https://github.com/GlassworksHQ/glassworks/issues/403" },
     "picks": ["google", "samsung", "amazon", "lenovo", "xiaomi"],
-    "connect": { "title": "Connect to your tablet.", "body": "Plug it into this computer, with USB debugging on.", "pick": "your tablet" },
+    "connect": { "title": "Connect to your tablet", "body": "Plug it into this computer, with USB debugging on.", "pick": "your tablet" },
     "grants": {
       "microphone": { "name": "Microphone", "without": "Assist can't hear you" },
       "camera": { "name": "Camera", "without": "the camera pane has no picture" },
@@ -53,5 +53,13 @@
       "abi": "arm64-v8a",
       "why": "Glassworks for generic Android (Android 8+), never its legacy build, from Kiln's release route; arm64-v8a, the ABI of the Pixel Tablet and most tablets on 8+. The recipe refuses a device that can't run it before anything is written"
     }
+  },
+  "picker": {
+    "needs": [
+      "The tablet's USB cable",
+      "USB debugging on the tablet: Kiln shows you how"
+    ],
+    "wayBack": "Nothing on the tablet is replaced. Undo removes the app.",
+    "why": "The picker's What you'll need bar (#672)"
   }
 }

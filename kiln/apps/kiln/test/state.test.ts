@@ -94,7 +94,7 @@ describe('wizard state', () => {
     expect(start(flashed)).toMatchObject({ touched: false, changed: 'written' });
     const logged = run(initial(), { type: 'start', flow: 'undo', now: 0 }, { type: 'log', line: '10:00:00 boot restored and verified' });
     expect(start(logged)).toMatchObject({ wrote: false, changed: 'written' });
-    expect(reduce(start(logged), { type: 'done', done: { title: 'Done.', body: '' } }).changed).toBeUndefined();
+    expect(reduce(start(logged), { type: 'done', done: { title: 'You\'re all set', body: '' } }).changed).toBeUndefined();
     const apps = reduce(initial('undo'), { type: 'changed', by: 'apps' });
     expect(apps.changed).toBe('apps');
     expect(reduce(apps, progress(0.4, 'flash')).changed).toBe('written'); // a write outranks the apps

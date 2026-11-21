@@ -457,5 +457,13 @@
       "kiosk": "The only home screen: seen with the probe app on 2026-11-16 (first-boot.md) and with Glassworks on 2026-11-17. The other checks aren't done on a Mirror yet.",
       "setup": "It has no touch. The setup hotspot is meant for it, and hasn't run on a Mirror yet."
     }
+  },
+  "release": {
+    "app": ["generic-android-legacy"],
+    "frame": {
+      "bundle": "notice",
+      "title": "lululemon Mirror frame",
+      "changelog": "frames/lululemon-mirror/FRAME-CHANGELOG.md"
+    }
   }
 }

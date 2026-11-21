@@ -16,6 +16,16 @@ import mirrorRender from '../../../frames/lululemon-mirror/design/render.webp';
 
 export const FRAMES = [s1Plus, mirror, genericAndroid, pixelTablet] as FrameDesign[];
 
+/**
+ * The frame whose install a frame uses: its own, or for a tested device (`kind` tested), its `base`'s. A tested device
+ * has no recipe of its own (frame-card kindProblems); it installs as its base does.
+ */
+export const installsAs = (f: Pick<FrameDesign, 'id' | 'kind' | 'base'>): string => (f.kind === 'tested' && f.base ? f.base : f.id);
+
+/** Where Kiln installs a frame: its `kiln` route, or a tested device's base's. Undefined where Kiln doesn't. */
+export const kilnRoute = (f: Pick<FrameDesign, 'id' | 'kind' | 'base' | 'kiln'>): string | undefined =>
+  f.kiln ?? (f.kind === 'tested' ? FRAMES.find((x) => x.id === installsAs(f))?.kiln : undefined);
+
 /** An image import's URL: Next gives `{ src }`, Vite (the tests) a string. */
 const url = (m: string | { src: string }) => (typeof m === 'string' ? m : m.src);
 
@@ -47,6 +57,8 @@ export interface Installer {
   wayBack?: { how: string };
   /** The device has a touchscreen. Without one (false), set-up never offers "do it on the panel". */
   touch?: boolean;
+  /** The picker's What you'll need bar for this frame: what to have at hand, and its way back, in a sentence or two. */
+  picker?: { needs: string[]; wayBack: string };
   /** An install from the device's own browser, at `route` under the frame's, its page's title `title`. */
   onDevice?: { route: string; title: string };
   /**

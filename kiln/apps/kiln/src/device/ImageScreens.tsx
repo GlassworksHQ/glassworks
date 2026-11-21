@@ -77,7 +77,7 @@ export function ImageImage({ f, s, m, ms }: P) {
   return (
     <section className="card" aria-labelledby="h">
       <TestOnly f={f.frame} />
-      <h2 id="h">{`Install Glassworks on ${d.the}.`}</h2>
+      <h2 id="h">{`Install Glassworks on ${d.the}`}</h2>
       <p className="lede">{d.words['image.lede']}</p>
       {s.changed && <p className="small">{`An earlier try already changed ${d.the}.`}</p>}
       {s.files.map((x) => <FileRow key={x.name} f={f} file={x} />)}
@@ -110,7 +110,7 @@ export function ImageFastboot({ f, s }: P) {
   return (
     <section className="card" aria-labelledby="h">
       {f.recipe.community && <Whose r={f.recipe} />}
-      <h2 id="h">{`Put ${d.the} in fastboot.`}</h2>
+      <h2 id="h">{`Put ${d.the} in fastboot`}</h2>
       {/* by hand first: most people install over the vendor's software, which Kiln can't reach over adb (the maintainer, 2026-11-19) */}
       {s.restarted ? <p className="lede">{rich(d.words['fastboot.restarted'])}</p> : <>
         <Recovery data={d.recovery} />
@@ -187,7 +187,7 @@ export function ImageWorking({ f, s }: P) {
   return (
     <section className="card" aria-labelledby="h">
       {f.recipe.community && <Whose r={f.recipe} />}
-      <h2 id="h" className="huge">Keep it plugged in.</h2>
+      <h2 id="h" className="huge">Keep it plugged in</h2>
       <ol className="join">
         {rows.map((r, i) => <li key={r.id} className={i < at ? 'done' : i === at ? 'cur' : ''}>{r.text}{i === at && x > 0 && x < 1 && <span className="sub-step">{Math.floor(x * 100)}%</span>}
           {/* the image is small to send; the device then writes an empty filesystem (212 MiB on the first frame), with nothing to report (a real run, 2026-11-19) */}
@@ -208,7 +208,7 @@ export function ImageAdb({ f, s }: P) {
     <section className="card" aria-labelledby="h">
       {r.community && <Whose r={r} />}
       <span className="turn-label"><span className="pulse" />Your turn</span>
-      <h2 id="h">One last click.</h2>
+      <h2 id="h">One last click</h2>
       {r.community
         ? <p className="lede">{`Its first start takes a few minutes. Click Connect and ${pickInList(d)}, and Kiln switches its Wi-Fi on.`}</p>
         : <p className="lede">{rich(d.words['adb.firstStart'])}</p>}
@@ -277,7 +277,7 @@ export function ImageError({ f, s }: P) {
   return (
     <section className="card err" aria-labelledby="h">
       {f.recipe.community && <Whose r={f.recipe} />}
-      <h2 id="h">The install stopped.</h2>
+      <h2 id="h">The install stopped</h2>
       <pre className="raw">{s.error}</pre>
       {s.work && !['first-boot', 'hand-back', 'restart', 'wifi-on'].includes(s.work.step) && <p className="small">{`${cap(d.the)} is still in fastboot: leave it plugged in. `}{s.files.every((x) => x.state === 'ok') ? 'Try again connects fastboot again, then you install again.' : 'Try again downloads the files again, then you connect fastboot and install again.'}</p>}
       {s.flashFailed && !f.recipe.community && !s.noFill && (

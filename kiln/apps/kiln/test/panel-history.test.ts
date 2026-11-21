@@ -49,7 +49,7 @@ describe('the panel\'s history', () => {
     const one = fresh();
     registry.set(entry(one));
     writeSome(one);
-    one.store.dispatch({ type: 'done', done: { title: 'Done.', body: '' } });
+    one.store.dispatch({ type: 'done', done: { title: 'You\'re all set', body: '' } });
     expect(sessionStorage.length).toBe(0);
     const two = fresh();
     registry.set(entry(two));
@@ -92,7 +92,7 @@ describe('with this tab\'s storage blocked', () => {
     expect(three.store.state.changed).toBe('unknown');
     writeSome(three);
     expect(three.store.state.changed).toBe('written'); // a write this load saw outranks not knowing
-    three.store.dispatch({ type: 'done', done: { title: 'Done.', body: '' } });
+    three.store.dispatch({ type: 'done', done: { title: 'You\'re all set', body: '' } });
     const four = fresh(demo.demoSession);
     again.registry.set(entry(four)); // this page load saw the Done: nothing since
     expect(four.store.state.changed).toBeUndefined();

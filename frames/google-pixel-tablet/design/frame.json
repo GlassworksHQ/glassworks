@@ -4,7 +4,7 @@
   "base": "generic-android",
   "name": "Google Pixel Tablet",
   "brand": "Google",
-  "status": "planned",
+  "status": "beta",
   "summary": "A common 11-inch tablet that runs Glassworks for generic Android as it is.",
   "model": {
     "body": {
@@ -146,5 +146,8 @@
         "setup": "Home Assistant added it, and the QR sign-in on its screen loaded the dashboard (2026-11-17)."
       }
     }
+  },
+  "release": {
+    "app": ["generic-android"]
   }
 }

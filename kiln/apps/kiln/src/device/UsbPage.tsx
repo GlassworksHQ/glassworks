@@ -159,7 +159,7 @@ function Find({ s, session }: { s: UsbState; session: UsbSession }) {
   const dev = useDevice();
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h">{s.flow === 'undo' ? `Plug in ${dev.the} to undo.` : `Plug in ${dev.the}.`}</h2>
+      <h2 id="h">{s.flow === 'undo' ? `Plug in ${dev.the} to undo` : `Plug in ${dev.the}`}</h2>
       <p className="lede">{s.flow === 'undo'
         ? `Kiln takes Glassworks off ${dev.the} over USB, as it put it on: turn on USB debugging, then tap Allow. Kiln reads ${dev.the} first; nothing changes until then.`
         : `Use its USB cable, with USB debugging still off. Kiln reads what ${dev.the} is; nothing on it changes.`}</p>
@@ -191,7 +191,7 @@ function Named({ s, session }: { s: UsbState; session: UsbSession }) {
   const blocked = session.blocked();
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h">This looks like a {who}.</h2>
+      <h2 id="h">This looks like a {who}</h2>
       <p className="lede">{lede} Next: turn on USB debugging, then Kiln {s.flow === 'undo' ? 'removes' : 'installs'} Glassworks.</p>
       <div className={f ? 'split' : undefined}>
         {f && (
@@ -255,7 +255,7 @@ function Debug({ s, session }: { s: UsbState; session: UsbSession }) {
   const one = st.debugging.length === 1;
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h">Turn on USB debugging.</h2>
+      <h2 id="h">Turn on USB debugging</h2>
       <p className="lede">{`On ${dev.the}. Only you can do this; Kiln can't.`}</p>
       <ol className="num">
         <li><b>Open</b> <Path path={st.unlock.path} />
@@ -287,7 +287,7 @@ function Allow({ s, session }: { s: UsbState; session: UsbSession }) {
   const [help, setHelp] = useState(false);
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h" className="huge">{`Tap Allow on ${dev.the}.`}</h2>
+      <h2 id="h" className="huge">{`Tap Allow on ${dev.the}`}</h2>
       <div className="tab" aria-hidden="true">
         <div className="scr">
           <div className="dlg">
@@ -375,7 +375,7 @@ function Working({ s }: { s: UsbState }) {
   if (s.flow === 'undo') {
     return (
       <section className="card" aria-labelledby="h">
-        <h2 id="h" className="huge">Keep it plugged in.</h2>
+        <h2 id="h" className="huge">Keep it plugged in</h2>
         <p className="lede">Kiln takes back Glassworks&apos; device admin, then removes it.</p>
         <div className="bar wait"><i /></div>
         <div className="foot"><span className="small">{`Nothing else on ${dev.the} changes.`}</span><Log s={s} /></div>
@@ -391,10 +391,10 @@ function Working({ s }: { s: UsbState }) {
   return (
     <section className={`card${pick ? ' turn' : ''}`} aria-labelledby="h">
       {pick ? <>
-        <h2 id="h" className="huge">{`One tap on ${dev.the}.`}</h2>
-        <p className="lede">Pick <b className="fg">{pick}</b>, then <b className="fg">Always</b>.</p>
+        <h2 id="h" className="huge">{`One tap on ${dev.the}`}</h2>
+        <p className="lede">Android asks which app to use as the home screen. Pick <b className="fg">{pick}</b>, then <b className="fg">Always</b>.</p>
       </> : <>
-        <h2 id="h" className="huge">Keep it plugged in.</h2>
+        <h2 id="h" className="huge">Keep it plugged in</h2>
         <div className="prog">
           <div className="spread"><span>{doing}</span><span className="small">{at + 1} of {ROWS.length}</span></div>
           <div className="bar"><i style={{ width: `${((at + 0.5) / ROWS.length) * 100}%` }} /></div>
@@ -421,7 +421,7 @@ function Done({ s, session }: { s: UsbState; session: UsbSession }) {
     return (
       <section className="card" aria-labelledby="h">
         <span className="okmark" aria-hidden="true">✓</span>
-        <h2 id="h">{r.removed.length ? `Glassworks is off ${dev.the}.` : `Glassworks wasn't on ${dev.the}.`}</h2>
+        <h2 id="h">{r.removed.length ? `Glassworks is off ${dev.the}` : `Glassworks wasn't on ${dev.the}`}</h2>
         <p className="lede">{r.removed.length ? 'Android opens the home screen it had, or asks which one to use.' : 'Nothing was changed.'} Unplug it when you like.</p>
         <div className="foot"><Log s={s} /><Link className="btn ghost" href="/">Back to Kiln</Link></div>
       </section>
@@ -435,10 +435,10 @@ function Done({ s, session }: { s: UsbState; session: UsbSession }) {
   return (
     <section className="card" aria-labelledby="h">
       <span className="okmark" aria-hidden="true">✓</span>
-      <h2 id="h">Done.</h2>
+      <h2 id="h">You're all set</h2>
       <p className="lede">
         {home && f ? `Glassworks is the ${name}'s home screen.` : `Glassworks is installed on your ${name}.`}
-        {!home && ` Kiln didn't see it picked as the home screen: on ${dev.the}, pick Glassworks, then Always.`}
+        {!home && ` Kiln couldn't confirm the home screen. In ${dev.the}'s Settings, find Default apps, then Home app, and choose Glassworks.`}
       </p>
       {f ? (
         <div className="fc">
@@ -475,7 +475,7 @@ function Failed({ s, session }: { s: UsbState; session: UsbSession }) {
   if (s.own) {
     return (
       <section className="card err" aria-labelledby="h">
-        <h2 id="h">This is an {s.own.name}.</h2>
+        <h2 id="h">This is an {s.own.name}</h2>
         <p className="lede">It has its own install in Kiln. Glassworks for Android would take its app&apos;s place as the home screen, so Kiln stopped before changing anything.</p>
         <div className="foot">
           <Log s={s} />
@@ -494,7 +494,7 @@ function Stopped({ s, session }: { s: UsbState; session: UsbSession }) {
   const blocked = s.flow === 'install' ? session.blocked() : undefined;
   return (
     <section className="card err" aria-labelledby="h">
-      <h2 id="h">{s.flow === 'undo' ? 'Undo stopped.' : /Nothing was changed\.$/.test(s.error ?? '') ? `Kiln can't install on this ${dev.short}.` : 'The install stopped.'}</h2>
+      <h2 id="h">{s.flow === 'undo' ? 'Undo stopped' : /Nothing was changed\.$/.test(s.error ?? '') ? `Kiln can't install on this ${dev.short}` : 'The install stopped'}</h2>
       <pre className="raw">{s.error}</pre>
       {repick && <ApkField s={s} session={session} />}
       {repick && blocked && s.apk && <p className="status err" role="alert">{blocked}</p>}
@@ -594,7 +594,7 @@ function UsbOutcome({ session }: { session: UsbSession }) {
   const name = deviceName(dev, s);
   return (
     <UsbFrameContext.Provider value={dev}>
-      {installed.home.state !== 'set' && <p className="small" role="alert">{`Kiln didn't see Glassworks picked as the home screen: on ${dev.the}, pick Glassworks, then Always.`}</p>}
+      {installed.home.state !== 'set' && <p className="small" role="alert">{`Kiln couldn't confirm Glassworks as the home screen. In ${dev.the}'s Settings, find Default apps, then Home app, and choose Glassworks.`}</p>}
       {f ? (
         <div className="fc">
           <div className="spread"><b>{f.name}</b>{!MEASURED.has(f.id) && <span className="ctag">Clarity · not measured yet</span>}</div>

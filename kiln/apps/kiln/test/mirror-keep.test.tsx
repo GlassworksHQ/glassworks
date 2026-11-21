@@ -337,14 +337,14 @@ describe('the keep step, on the real session (#580)', () => {
     const first = await ready();
     first.f.toFastboot();
     render(<ImageFlow image={first.f} app={new AppSession({ frame: mirrorFrame, connect: async () => { throw new Error('unused'); } }, true)} />);
-    expect(screen.getByRole('heading').textContent).toBe('Put the Mirror in fastboot.');
+    expect(screen.getByRole('heading').textContent).toBe('Put the Mirror in fastboot');
     expect(screen.getByText(/hold VOL− \(SW3\)/)).toBeTruthy();
     expect(embers()).toEqual(['Connect']);
     cleanup();
     const again = await ready({ flashed: true });
     again.f.toFastboot();
     render(<ImageFlow image={again.f} app={new AppSession({ frame: mirrorFrame, connect: async () => { throw new Error('unused'); } }, true)} />);
-    expect(screen.getByRole('heading').textContent).toBe('Keep the Mirror in Home Assistant.');
+    expect(screen.getByRole('heading').textContent).toBe('Keep the Mirror in Home Assistant');
     expect(screen.queryByText(/hold VOL−/)).toBeNull();
   });
 

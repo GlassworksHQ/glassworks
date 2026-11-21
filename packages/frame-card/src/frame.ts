@@ -136,6 +136,21 @@ export interface FrameDesign {
   facts?: FrameFacts;
   /** a tested device only: its run on a real unit, which its checklist comes from */
   run?: FrameRun;
+  /** what the Release workflow ships for it: its app lines and its frame release (tools/release/plan.py; frames/README.md#release) */
+  release?: FrameRelease;
+}
+
+/**
+ * A frame's `release` block. Read by tools/release/plan.py, the Release workflow's plan (docs/releasing.md); the site
+ * and Kiln don't use it. `lines` are the app lines this frame's app module builds, `app` the lines its devices run.
+ */
+export interface FrameRelease {
+  lines?: Record<string, {
+    title: string; tag: string; changelog: string; build: 's1-kiosk' | 'gradle'; assets: Record<string, string>;
+    abis?: 'every-frame'; latest?: boolean; task?: string; apk?: string; package?: string; minSdk?: number; writeSettings?: boolean;
+  }>;
+  app?: string[];
+  frame?: { bundle: 'signed' | 'notice'; title: string; changelog: string; script?: string; pubkey?: string; assets?: string[]; note?: string };
 }
 
 /** One piece of outside work a frame relies on, and who made it. */
@@ -240,7 +255,7 @@ export function kindProblems(f: Pick<FrameDesign, 'kind' | 'base' | 'kiln' | 'ap
 const FIELDS: Record<keyof FrameDesign, true> = {
   id: true, kind: true, base: true, name: true, brand: true, aka: true, status: true, summary: true, tagline: true, project: true,
   kiln: true, model: true, recovery: true, render: true, display: true, boot: true, abis: true, app: true, specs: true, panes: true,
-  provides: true, agent: true, dock: true, camera: true, install: true, ratings: true, ratingsNote: true, notice: true, legacy: true, unverified: true, credits: true, facts: true, run: true,
+  provides: true, agent: true, dock: true, camera: true, install: true, ratings: true, ratingsNote: true, notice: true, legacy: true, unverified: true, credits: true, facts: true, run: true, release: true,
 };
 
 /**

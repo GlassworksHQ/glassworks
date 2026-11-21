@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds and signs the S1's frame bundle (frames/aqara-s1-plus/research/frame-loader.md, "The bundle"), the
-# way the frame release does it (.github/workflows/frame-release.yml), and the shell tests too:
+# way the frame release does it (.github/workflows/release.yml, sign-bundle), and the shell tests too:
 #
 #   frames/aqara-s1-plus/tools/radio/frame-bundle.sh <frame version> <key.pem> <out dir> <radio dir> <sisdk dir> [pubkey]
 #

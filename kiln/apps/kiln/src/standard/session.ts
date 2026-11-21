@@ -369,7 +369,7 @@ export class StandardSession implements SetupSteps, WifiSteps {
     const total = b ? b.files.reduce((n, f) => n + f.size, 0) : 0;
     this.dispatch({
       type: 'done', done: {
-        title: 'Done.',
+        title: 'You\'re all set',
         body: wifi
           ? `${The} is on ${wifi}. Home Assistant finds it by itself.`
           // without touch nothing is done on the device itself: set-up's Wi-Fi step has no skip there

@@ -129,7 +129,7 @@ export class Session extends StandardSession {
     this.result = undefined;
     this.dispatch({
       type: 'done', done: {
-        title: 'The original software is back.',
+        title: 'The original software is back',
         body: this.s.undo.depth === 'keep'
           ? this.d.frame.undo.keep.restored
           : this.d.frame.undo.factory.restored,

@@ -15,23 +15,23 @@ const named = (name: string) => (e: unknown) => e instanceof DOMException && e.n
 const RULES: Rule[] = [
   // undo's checkRestorable, before any write; the reason is in `raw`, under More help. First, because
   // its words ("install") match the disconnect rule's /stall/.
-  { test: (e) => e instanceof BackupRefused, title: 'This backup can\'t undo the install.',
+  { test: (e) => e instanceof BackupRefused, title: 'This backup can\'t undo the install',
     fix: 'Use the backup from your first install, or undo by hand.' },
-  { test: named('NotFoundError'), title: 'No panel in recovery mode.',
+  { test: named('NotFoundError'), title: 'No panel in recovery mode',
     fix: 'Unplug it, hold the board button first, then plug in and keep holding for 10 seconds.' },
-  { test: (_, m) => /secure boot is enabled/.test(m), title: 'This panel only runs signed software.',
+  { test: (_, m) => /secure boot is enabled/.test(m), title: 'This panel only runs signed software',
     fix: 'Its chip has secure boot on, so Kiln can\'t start on it.' },
-  { test: (_, m) => /does not look like/.test(m), title: 'This isn\'t a panel Kiln knows.',
+  { test: (_, m) => /does not look like/.test(m), title: 'This isn\'t a panel Kiln knows',
     fix: 'Check that you picked the right panel on the first screen.' },
-  { test: (_, m) => /two reads of .* differ/.test(m), title: 'The USB connection isn\'t reliable.',
+  { test: (_, m) => /two reads of .* differ/.test(m), title: 'The USB connection isn\'t reliable',
     fix: 'Try a cable straight into this computer, not through a hub.' },
   { test: (e, m) => named('NetworkError')(e) || /disconnect|transfer|LIBUSB|stall|No device selected|device was lost/i.test(m),
-    title: 'It disconnected.', fix: 'Try a cable straight into this computer.' },
+    title: 'It disconnected', fix: 'Try a cable straight into this computer.' },
   { test: (_, m) => /SHA-256|installer files are missing|could not download|not in the manifest|HTTP \d/.test(m),
-    title: 'A download failed.', fix: 'Check this computer\'s internet connection, then try again.' },
-  { test: (_, m) => /did not finish starting/.test(m), title: 'The panel didn\'t finish starting.',
+    title: 'A download failed', fix: 'Check this computer\'s internet connection, then try again.' },
+  { test: (_, m) => /did not finish starting/.test(m), title: 'The panel didn\'t finish starting',
     fix: 'Unplug it and plug it back in, then use Finish setting up.' },
-  { test: (_, m) => /adb kill-server|another program holds/.test(m), title: 'Another program has the panel.',
+  { test: (_, m) => /adb kill-server|another program holds/.test(m), title: 'Another program has the panel',
     fix: 'Run "adb kill-server" on this computer, then try again.' },
 ];
 
@@ -58,7 +58,7 @@ export function explain(e: unknown, at: number, written: Written, installed = fa
   const raw = e instanceof Error ? e.message : String(e);
   // On an installed panel a cancelled picker is the adb one: the recovery-mode advice doesn't apply.
   const rule = installed && named('NotFoundError')(e)
-    ? { title: 'Nothing was picked.', fix: 'Try again, and pick the panel in the browser\'s list.' }
+    ? { title: 'Nothing was picked', fix: 'Try again, and pick the panel in the browser\'s list.' }
     : RULES.find((r) => r.test(e, raw));
   const known = earlier === 'written' || earlier === 'apps';
   const before = written === 'none' && !installed && known;
@@ -80,8 +80,10 @@ export function explain(e: unknown, at: number, written: Written, installed = fa
       ? 'Don\'t unplug it yet: put it in recovery mode again and use Undo with your backup.'
       : rule?.fix ?? (installed ? 'Unplug it, plug it back in, and use Finish setting up.' : 'Unplug it and start again from recovery mode.');
   return {
-    title: rule?.title ?? (changed ? 'Something went wrong while writing.' : 'Something went wrong.'),
+    title: rule?.title ?? (changed ? 'Something went wrong while writing' : 'Something went wrong'),
     body: `${said} ${fix}`,
+    happened: said,
+    fix,
     wrote: changed,
     tips: changed ? WRITTEN_TIPS : CLEAN_TIPS,
     raw: rule && named('NotFoundError')(e) ? '' : raw,

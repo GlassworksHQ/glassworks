@@ -103,10 +103,9 @@ export function FileRow({ f, file }: { f: ImageSession; file: FileCheck }) {
         {file.state === 'ok' && <span className="status ok">✓ SHA-256 checks out.</span>}
         {failed && (
           <span className="status err" role="alert">
-            {file.state === 'bad'
-              ? 'Its SHA-256 isn’t the release’s, so Kiln deleted it.'
-              : `Kiln couldn’t download it: ${file.error}.`}
-            {` Nothing was written to ${f.frame.the}. This is Kiln’s bug, not yours.`}
+            {/* the error itself goes to the technical log and the report, not on the screen (issue 672) */}
+            {file.state === 'bad' ? 'This download doesn’t match the release, so Kiln deleted it.' : 'Kiln couldn’t download it.'}
+            {` Nothing was written to ${f.frame.the}. The fault is Kiln’s, not yours.`}
           </span>
         )}
         {failed && <span className="small"><a className="link" href={f.reportUrl(file)} target="_blank" rel="noopener">Report this</a> on GitHub.</span>}
@@ -135,11 +134,11 @@ export function Download({ f, s }: P) {
   return (
     <section className="card" aria-labelledby="h">
       <Whose r={r} />
-      <h2 id="h">{idle ? `Install ${r.name} on ${f.frame.the}.` : `Downloading ${r.name}.`}</h2>
+      <h2 id="h">{idle ? `Install ${r.name} on ${f.frame.the}` : `Downloading ${r.name}`}</h2>
       <p className="lede">From its own release on GitHub, checked by SHA-256.</p>
       {s.files.map((x) => <FileRow key={x.name} f={f} file={x} />)}
       {r.steps.some((x) => x.do === 'wifi') && <WifiFields f={f} s={s} r={r} />}
-      <p className="small">{r.release ? <>Release <code>{r.release.name}</code>, through</> : 'Through'} Refract, Kiln&apos;s download proxy, which stores nothing.{r.vendor && ` ${r.vendor}`}</p>
+      {(r.release || r.vendor) && <p className="small">{r.release && <>Release <code>{r.release.name}</code>.</>}{r.release && r.vendor && ' '}{r.vendor}</p>}
       <div className="foot">
         <span className="links">
           {!s.link && <><button type="button" className="link" onClick={() => f.backToChoice()}>Back</button><span aria-hidden="true">·</span></>}
@@ -182,7 +181,7 @@ export function ConfirmCommunity({ f, s, reversible }: P & { reversible?: string
   return (
     <section className="card" aria-labelledby="h">
       <Whose r={r} />
-      <h2 id="h">{`This replaces everything on ${f.frame.the}.`}</h2>
+      <h2 id="h">{`This replaces everything on ${f.frame.the}`}</h2>
       <ol className="join">{s.fastboot!.checks.map((x) => <li key={x.what} className="done">{x.what}: {x.found}</li>)}</ol>
       <p className="lede">
         {`What ${f.frame.the} runs now and its data are replaced, Glassworks included. ${f.frame.words['community.ifVendor']}`}
@@ -222,7 +221,7 @@ export function DoneCommunity({ f, log }: { f: ImageSession; log: React.ReactNod
     <section className="card" aria-labelledby="h">
       <Whose r={r} />
       <span className="okmark" aria-hidden="true">✓</span>
-      <h2 id="h">{r.name}{` is on ${f.frame.the}.`}</h2>
+      <h2 id="h">{r.name}{` is on ${f.frame.the}`}</h2>
       <p className="lede">{f.state.communityWifi === 'on'
         ? `${cap(f.frame.the)} joins your Wi-Fi a few minutes after it starts.`
         : 'Its first start takes a few minutes.'}</p>

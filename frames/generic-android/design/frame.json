@@ -130,5 +130,34 @@
       "install": "Android 6 also asks for a tap on Always, to keep Glassworks as the home app.",
       "silentUpdates": "Depends on the device: Android 12 or newer can update the app with no tap once Install unknown apps is allowed; older Android asks for one unless the app is device owner."
     }
+  },
+  "release": {
+    "lines": {
+      "generic-android": {
+        "title": "Glassworks for generic Android",
+        "tag": "generic-android-v{version}",
+        "changelog": "frames/generic-android/CHANGELOG.md",
+        "build": "gradle",
+        "task": ":generic-android:assembleRelease",
+        "apk": "frames/generic-android/android/build/outputs/apk/release/generic-android-release.apk",
+        "package": "dev.glassworks.generic_android",
+        "minSdk": 26,
+        "writeSettings": false,
+        "assets": { "*": "glassworks-generic-android-{abi}-{version}.apk" }
+      },
+      "generic-android-legacy": {
+        "title": "Glassworks for generic Android, legacy build",
+        "tag": "generic-android-legacy-v{version}",
+        "changelog": "frames/generic-android/CHANGELOG.md",
+        "build": "gradle",
+        "task": ":generic-android:assembleLegacy",
+        "apk": "frames/generic-android/android/build/outputs/apk/legacy/generic-android-legacy.apk",
+        "package": "dev.glassworks.generic_android.legacy",
+        "minSdk": 23,
+        "writeSettings": true,
+        "assets": { "*": "glassworks-generic-android-legacy-{abi}-{version}.apk" }
+      }
+    },
+    "app": ["generic-android", "generic-android-legacy"]
   }
 }
