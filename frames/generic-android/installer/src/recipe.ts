@@ -158,7 +158,7 @@ export async function planInstall(p: PanelShell, apk: Uint8Array): Promise<Plan>
   // without ro.hardware Kiln can't rule out a frame of its own (the S1), so it doesn't guess
   if (!device.hardware) throw new Refused('Kiln couldn\'t read this device\'s hardware (ro.hardware), so it can\'t tell whether it is a panel with its own install, such as the Aqara S1 Plus. Unplug it, plug it in again and try again.');
   const own = ownFrame(device);
-  if (own) throw new OwnFrameRefused(own);
+  if (own) throw new OwnFrameRefused(own, `This is an ${own.name}, which has its own install in Kiln (${own.route}). Glassworks for Android would take its app's place as the home screen.`);
   const app = appFor(device.sdk);
   if (!app) {
     throw new Refused(`Glassworks needs Android 6 (API ${MIN_API}) or newer, and this device runs Android ${device.release || androidName(device.sdk)} (API ${device.sdk || '?'}).`);

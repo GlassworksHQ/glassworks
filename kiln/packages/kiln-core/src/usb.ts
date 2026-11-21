@@ -96,11 +96,9 @@ export class Refused extends Error {
   constructor(why: string) { super(`${why} Nothing was changed.`); }
 }
 
-/** Refused because the device has a frame of its own, which installs from its own page in Kiln. */
+/** Refused because the device has a frame of its own, which installs from its own page in Kiln; `why` is the frame's words. */
 export class OwnFrameRefused extends Refused {
-  constructor(readonly own: OwnFrame) {
-    super(`This is an ${own.name}, which has its own install in Kiln (${own.route}). Glassworks for Android would take its app's place as the home screen.`);
-  }
+  constructor(readonly own: OwnFrame, why: string) { super(why); }
 }
 
 /** What the engine's USB-debugging flow needs from a frame: its words and release line in its data, its code here. */
