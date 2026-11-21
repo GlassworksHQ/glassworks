@@ -66,27 +66,31 @@ function Device({ on, go }: P) {
   const { dev, base } = useWhere();
   const f = on.identified.model?.frame ? FRAMES.find((x) => x.id === on.identified.model!.frame) : undefined;
   const look = lookOf(on, dev.id);
+  const facts = f ? (
+    <div className="fc tab-fc">
+      <div className="spread"><b>{f.name}</b><span className="pill soon">{STAGE_TEXT[f.status]}</span></div>
+      <span className="kind">{KIND_TEXT[f.kind]} · {versionText(on, dev.onDevice.needs)}</span>
+    </div>
+  ) : (
+    <dl className="kv">
+      <dt>Android</dt><dd>{versionText(on, dev.onDevice.needs).replace(/^Android /, '')}</dd>
+      {on.modelCode && <><dt>Model</dt><dd>{on.identified.model ? `${on.identified.model.name} (${on.modelCode})` : on.modelCode}</dd></>}
+      <dt>Tested</dt><dd>Not yet. <a className="link" href={`https://github.com/GlassworksHQ/glassworks/issues/new?title=${encodeURIComponent(`Tested: ${on.identified.model?.name ?? on.modelCode ?? `an Android ${dev.short}`}`)}`}>Tell us how it goes</a></dd>
+    </dl>
+  );
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">{nameOf(on)}</h2>
       <p className="lede">Glassworks installs from this page, as an app. No computer needed.</p>
-      {look && (
-        <div className="tab-model">
-          <DeviceModel id={`on-device-${look.id}`} model={look.model} label={f ? f.name : `An Android ${on.form}`} screen={RENDERS[look.id]} priority />
+      {/* the model and what the page read of it side by side (stacked on a phone); without a model, the facts alone */}
+      {look ? (
+        <div className="tab-device">
+          <div className="tab-model">
+            <DeviceModel id={`on-device-${look.id}`} model={look.model} label={f ? f.name : `An Android ${on.form}`} screen={RENDERS[look.id]} priority />
+          </div>
+          {facts}
         </div>
-      )}
-      {f ? (
-        <div className="fc tab-fc">
-          <div className="spread"><b>{f.name}</b><span className="pill soon">{STAGE_TEXT[f.status]}</span></div>
-          <span className="kind">{KIND_TEXT[f.kind]} · {versionText(on, dev.onDevice.needs)}</span>
-        </div>
-      ) : (
-        <dl className="kv">
-          <dt>Android</dt><dd>{versionText(on, dev.onDevice.needs).replace(/^Android /, '')}</dd>
-          {on.modelCode && <><dt>Model</dt><dd>{on.identified.model ? `${on.identified.model.name} (${on.modelCode})` : on.modelCode}</dd></>}
-          <dt>Tested</dt><dd>Not yet. <a className="link" href={`https://github.com/GlassworksHQ/glassworks/issues/new?title=${encodeURIComponent(`Tested: ${on.identified.model?.name ?? on.modelCode ?? `an Android ${dev.short}`}`)}`}>Tell us how it goes</a></dd>
-        </dl>
-      )}
+      ) : facts}
       {on.app === 'either' && <p className="small">{dev.onDevice.needs.either}</p>}
       <div className="foot">
         <span className="links"><Link className="link" href={base}>Installing from a computer?</Link></span>
