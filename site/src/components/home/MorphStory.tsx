@@ -32,21 +32,24 @@ import { BEDSIDE_DISPLAY, ROUND_DIAL, SQUARE_SWITCH, WIDE_DISPLAY } from "./stor
 type ShapeId = "wall" | "tablet" | "mirror" | "kitchen" | "square" | "round" | "bedside";
 type AssistPhase = "thinking" | "speaking" | "done";
 
-type Keyframe = {
+type BeatStage = {
   w: number;
+  xPct: number; // % of stage width
+  yPx: number;
+  glowX: number;
+  glowY: number;
+};
+
+type Keyframe = BeatStage & {
   h: number;
   bodyR: number;
   insetTop: number; // %
   insetBottom: number; // %
   insetX: number; // %
   screenR: number;
-  xPct: number; // % of stage width
-  yPx: number;
   rx: number;
   ry: number;
-  glowX: number;
-  glowY: number;
-  /* the glass's 3D pose; Beat 1 takes all of these from the Pixel Tablet's model (tabletPose) */
+  /* the glass's 3D pose, derived from DeviceModel's geometry() */
   persp?: number; // px
   lean?: number; // deg, a second rotateX after rotateY, as DeviceModel's front
   z?: number; // px, translateZ
@@ -59,105 +62,24 @@ const PERSPECTIVE = 1200;
 /** A docked model's body lifted off its dock: a 2D move (px) and a scale less 1, about the body's centre */
 type Lift = { x: number; y: number; s: number };
 
-/* Physically accurate proportions from frames/<id>/design/frame.json */
-const KEYFRAMES: Keyframe[] = [
-  // 0: Wall Switch · Aqara S1 Plus (Right, 2:1, 500 × 250; square corners, as frame.json)
-  {
-    w: 500,
-    h: 250,
-    bodyR: 0,
-    insetTop: 4,
-    insetBottom: 4,
-    insetX: 2.2,
-    screenR: 0,
-    xPct: 22,
-    yPx: -4,
-    rx: 2,
-    ry: -6,
-    glowX: 72,
-    glowY: 48,
-  },
-  // 1: Wide Kitchen Display · Assist voice (Left, 440 × 240)
-  {
-    w: 440,
-    h: 240,
-    bodyR: 18,
-    insetTop: 5,
-    insetBottom: 5,
-    insetX: 3.2,
-    screenR: 10,
-    xPct: -22,
-    yPx: -4,
-    rx: 1.5,
-    ry: 5.5,
-    glowX: 28,
-    glowY: 48,
-  },
-  // 2: Wall Switch Landscape · Notifications (Right, 2:1, 500 × 250)
-  {
-    w: 500,
-    h: 250,
-    bodyR: 0,
-    insetTop: 4,
-    insetBottom: 4,
-    insetX: 2.2,
-    screenR: 0,
-    xPct: 22,
-    yPx: -4,
-    rx: 1.5,
-    ry: -5.5,
-    glowX: 72,
-    glowY: 48,
-  },
-  // 3: Full-Length Mirror · lululemon Studio Mirror on its stand (Left; its model sizes the rest)
-  {
-    w: 168,
-    h: 419,
-    bodyR: 6,
-    insetTop: 12.7,
-    insetBottom: 21.1,
-    insetX: 3.5,
-    screenR: 3,
-    xPct: -23,
-    yPx: -8,
-    rx: 1,
-    ry: 5,
-    glowX: 27,
-    glowY: 46,
-  },
-  // 4: Google Pixel Tablet on its dock · timers, Sendspin, Docked (Right, room for right light rays).
-  //    The size, corners, insets and angles here are replaced by tabletPose(), from the tablet's model.
-  {
-    w: 468,
-    h: 306,
-    bodyR: 22,
-    insetTop: 6.5,
-    insetBottom: 6.5,
-    insetX: 4.3,
-    screenR: 8,
-    xPct: 7,
-    yPx: -4,
-    rx: 1.5,
-    ry: -4,
-    glowX: 60,
-    glowY: 48,
-  },
-  // 5: Compact Square · Square 4" Switch + Future Shapes (Center, 244 × 244)
-  {
-    w: 244,
-    h: 244,
-    bodyR: 20,
-    insetTop: 5,
-    insetBottom: 5,
-    insetX: 5,
-    screenR: 12,
-    xPct: 0,
-    yPx: -82,
-    rx: 0,
-    ry: 0,
-    glowX: 50,
-    glowY: 38,
-  },
+/*
+ * Staging coordinates only (width on screen, stage placement, and ambient light position).
+ * All real-device heights, corner radii, bezels, screen insets, and 3D angles come from
+ * frames/<id>/design/frame.json (and storyModels.ts for future concept shapes) via modelPose().
+ */
+const BEAT_STAGES: BeatStage[] = [
+  // 0: Wall Switch · Aqara S1 Plus (Right)
+  { w: 500, xPct: 22, yPx: -4, glowX: 72, glowY: 48 },
+  // 1: Wide Kitchen Display · Assist voice (Left)
+  { w: 440, xPct: -22, yPx: -4, glowX: 28, glowY: 48 },
+  // 2: Wall Switch Landscape · Notifications (Right)
+  { w: 500, xPct: 22, yPx: -4, glowX: 72, glowY: 48 },
+  // 3: Full-Length Mirror · lululemon Studio Mirror on its stand (Left)
+  { w: 168, xPct: -23, yPx: -8, glowX: 27, glowY: 46 },
+  // 4: Google Pixel Tablet on its dock · timers, Sendspin, Docked (Right, room for right light rays)
+  { w: 468, xPct: 7, yPx: -4, glowX: 60, glowY: 48 },
+  // 5: Compact Square · Square 4" Switch + Future Shapes (Center)
+  { w: 244, xPct: 0, yPx: -82, glowX: 50, glowY: 38 },
 ];
 
 /* the finale's shapes: the body's width on screen, px (its height and the rest come from its model) */
@@ -270,7 +192,7 @@ type StoryModel = { id: string; label: string; model: FrameModel; aspect: number
  * width that draws the body that wide. The glass lands on the model's front, so handing over to the model
  * only adds its sides, stand or dock.
  */
-function modelPose(base: Keyframe, sm: StoryModel): { pose: Keyframe; stage: number; face?: string; lift?: Lift } {
+function modelPose(base: BeatStage, sm: StoryModel): { pose: Keyframe; stage: number; face?: string; lift?: Lift } {
   const g = geometry(sm.model, sm.aspect, sm.view);
   const n = (k: string) => parseFloat(g.vars[k] ?? "0");
   const stage = base.w / (n("--wp") / 100);
@@ -358,11 +280,21 @@ export function MorphStory({
 }) {
   const sectionRef = useRef<HTMLElement>(null);
   const bezelRef = useRef<HTMLDivElement>(null);
+  const beatModelRef = useRef<HTMLDivElement>(null);
+  const glassRef = useRef<HTMLDivElement>(null);
+  const compactAssistRef = useRef<HTMLDivElement>(null);
+  const compactTimerRef = useRef<HTMLDivElement>(null);
+  const lastScreenCtlRef = useRef<string | null>(null);
+  const prevModelLiveRef = useRef<boolean>(true);
   const sheenRaf = useRef(0);
 
   const [p, setP] = useState(0);
+  const [mounted, setMounted] = useState(false);
   const [compact, setCompact] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
+  const [compactAssistInView, setCompactAssistInView] = useState(false);
+  const [compactTimerInView, setCompactTimerInView] = useState(false);
+  const [compactTabletHover, setCompactTabletHover] = useState(false);
   const [futureShape, setFutureShape] = useState<"square" | "round" | "bedside">("square");
   const [clickMorph, setClickMorph] = useState(false);
   // the window's width, for the phone layout's models (renderCompactFrame)
@@ -393,22 +325,44 @@ export function MorphStory({
 
   useEffect(() => {
     const mqNarrow = window.matchMedia("(max-width: 900px)");
+    const mqShort = window.matchMedia("(max-height: 620px)");
     const mqReduce = window.matchMedia("(prefers-reduced-motion: reduce)");
     const syncCompact = () => {
       setVw(window.innerWidth);
-      setCompact(mqNarrow.matches || mqReduce.matches);
+      setCompact(mqNarrow.matches || mqShort.matches || mqReduce.matches);
       setReducedMotion(mqReduce.matches);
+      setMounted(true);
     };
     syncCompact();
     window.addEventListener("resize", syncCompact);
     mqNarrow.addEventListener("change", syncCompact);
+    mqShort.addEventListener("change", syncCompact);
     mqReduce.addEventListener("change", syncCompact);
     return () => {
       window.removeEventListener("resize", syncCompact);
       mqNarrow.removeEventListener("change", syncCompact);
+      mqShort.removeEventListener("change", syncCompact);
       mqReduce.removeEventListener("change", syncCompact);
     };
   }, []);
+
+  useEffect(() => {
+    if (!compact || !mounted || typeof IntersectionObserver === "undefined") return;
+    const assistEl = compactAssistRef.current;
+    const timerEl = compactTimerRef.current;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.target === assistEl) setCompactAssistInView(entry.isIntersecting);
+          if (entry.target === timerEl) setCompactTimerInView(entry.isIntersecting);
+        }
+      },
+      { threshold: 0.15 },
+    );
+    if (assistEl) obs.observe(assistEl);
+    if (timerEl) obs.observe(timerEl);
+    return () => obs.disconnect();
+  }, [compact, mounted]);
 
   useEffect(() => {
     if (compact) return;
@@ -484,7 +438,7 @@ export function MorphStory({
             ? models.beats[4]!
             : models.future[shape];
   const poses = useMemo(
-    () => KEYFRAMES.map((k, i) => modelPose(i === 5 ? { ...k, w: FUTURE_W[futureShape] } : k, i === 5 ? models.future[futureShape] : models.beats[i]!)),
+    () => BEAT_STAGES.map((k, i) => modelPose(i === 5 ? { ...k, w: FUTURE_W[futureShape] } : k, i === 5 ? models.future[futureShape] : models.beats[i]!)),
     [models, futureShape],
   );
   const keyframes = useMemo(() => poses.map((x) => x.pose), [poses]);
@@ -502,7 +456,7 @@ export function MorphStory({
   const raysO = compact ? 1 : windowO(seg, 4, 0.22, 0.54);
 
   // Auto-cycle Assist Orb states cleanly while Beat 1 is on screen
-  const assistVisible = compact || assistO > 0.15;
+  const assistVisible = compact ? compactAssistInView : assistO > 0.15;
   useEffect(() => {
     if (!assistVisible || reducedMotion) return;
     const ms = assistPhase === "thinking" ? 2600 : assistPhase === "speaking" ? 2800 : 1800;
@@ -529,8 +483,8 @@ export function MorphStory({
     }
   };
 
-  // Beat 4: Tick real TimerDock RingView live while Kitchen Display is on screen
-  const timerVisible = compact || timerO > 0.15;
+  // Beat 4: Tick real TimerDock RingView live while the timer beat is in view
+  const timerVisible = compact ? compactTimerInView : timerO > 0.15;
   useEffect(() => {
     if (!timerVisible || timerPaused) return;
     const id = window.setInterval(() => {
@@ -620,7 +574,7 @@ export function MorphStory({
     .filter((j) => modelOfBeat(j).model.parts?.some((x) => x.kind === "dock"))
     .map((j) => ({ beat: j, o: compact || morphing ? 0 : windowO(seg, j, 0.15, 0.5) }))
     .filter((d) => d.o > 0.01);
-  // the tablet lifted off its dock: the model's own hover lift (mouse only), which the Docked line follows
+  // the tablet lifted off its dock: one unified state drives both the 3D model's --undock lift and the Docked wire-ray label
   const [modelHover, setModelHover] = useState(false);
   // the tablet off its dock as the scroll brings it in (undockAt): a move and scale of the whole travelling
   // model about its body's centre, the same as the hover's lift of the body (geometry's --ux, --uy, --us)
@@ -628,7 +582,30 @@ export function MorphStory({
   const undock = compact || reducedMotion || morphing || !tabletLift ? 0 : undockAt(p);
   const liftK = travelStage / poses[4]!.stage;
   const lift = tabletLift && undock > 0 ? { x: tabletLift.x * undock * liftK, y: tabletLift.y * undock * liftK, s: 1 + tabletLift.s * undock } : undefined;
-  const tabletLifted = nearBeat === 4 && !reducedMotion && ((modelLive && modelHover && segT === 0) || undock > 0.005);
+  const desktopHoverLift = nearBeat === 4 && !reducedMotion && modelLive && modelHover && segT === 0 && undock <= 0.005;
+  const tabletLifted = desktopHoverLift || (nearBeat === 4 && !reducedMotion && undock > 0.005);
+  const compactTabletLifted = !reducedMotion && compactTabletHover;
+
+  // Preserve keyboard focus across a modelLive handoff if focus was inside the outgoing screen representation
+  useEffect(() => {
+    if (prevModelLiveRef.current === modelLive) return;
+    prevModelLiveRef.current = modelLive;
+    if (compact || !mounted) return;
+    const ctl = lastScreenCtlRef.current;
+    if (!ctl) return;
+    const outgoing = modelLive ? glassRef.current : beatModelRef.current;
+    const incoming = modelLive ? beatModelRef.current : glassRef.current;
+    const active = document.activeElement;
+    const cameFromOutgoing = active === document.body || active === null || Boolean(outgoing?.contains(active));
+    if (!cameFromOutgoing || !incoming) return;
+    const target = incoming.querySelector<HTMLElement>(`[data-story-ctl="${ctl}"]`);
+    target?.focus();
+  }, [modelLive, compact, mounted]);
+
+  const trackScreenFocus = (e: React.FocusEvent<HTMLDivElement>) => {
+    const ctl = (e.target as HTMLElement | null)?.closest<HTMLElement>("[data-story-ctl]")?.dataset.storyCtl ?? null;
+    lastScreenCtlRef.current = ctl;
+  };
   // Mirror body presence factor (Beat 3): the glass looks silvered on its way to the Mirror
   const mirrorFactor = windowO(seg, 3, 0.24, 0.72);
 
@@ -665,7 +642,13 @@ export function MorphStory({
    * ONE live, responsive Home Assistant Lovelace Sections dashboard powered by
    * CSS Grid + @container size queries so actual HA cards reflow as the glass morphs.
    */
-  const renderLiveLovelace = (shape: ShapeId, highlightSendspin = false, collapsed = false) => {
+  const renderLiveLovelace = (
+    shape: ShapeId,
+    highlightSendspin = false,
+    collapsed = false,
+    isInert = false,
+    idScope = "d",
+  ) => {
     const isRound = shape === "round";
     const isSolo = shape === "square" || shape === "round";
     return (
@@ -675,6 +658,7 @@ export function MorphStory({
         data-solo={isSolo || undefined}
         data-round={isRound || undefined}
         data-sendspin={highlightSendspin || undefined}
+        inert={isInert || undefined}
       >
         {/* Top Home Assistant Badges / Chips Bar */}
         <div className={s.haBadges}>
@@ -756,6 +740,7 @@ export function MorphStory({
               <button
                 type="button"
                 className={s.haStepBtn}
+                data-story-ctl="temp-down"
                 onClick={() => setTemp((t) => Math.max(60, t - 1))}
                 aria-label="Decrease target temperature"
               >
@@ -765,6 +750,7 @@ export function MorphStory({
               <button
                 type="button"
                 className={s.haStepBtn}
+                data-story-ctl="temp-up"
                 onClick={() => setTemp((t) => Math.min(80, t + 1))}
                 aria-label="Increase target temperature"
               >
@@ -866,14 +852,14 @@ export function MorphStory({
             </div>
             <svg viewBox="0 0 180 42" className={s.haSparkSvg} preserveAspectRatio="none" aria-hidden="true">
               <defs>
-                <linearGradient id={`ha-spark-${shape}-${highlightSendspin ? "s" : "n"}`} x1="0" y1="0" x2="0" y2="1">
+                <linearGradient id={`ha-spark-${idScope}-${shape}-${highlightSendspin ? "s" : "n"}`} x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0" stopColor="#03a9f4" stopOpacity="0.32" />
                   <stop offset="1" stopColor="#03a9f4" stopOpacity="0" />
                 </linearGradient>
               </defs>
               <path
                 d="M0 32 L20 28 L42 30 L64 20 L86 23 L108 14 L132 18 L156 10 L180 15 L180 42 L0 42 Z"
-                fill={`url(#ha-spark-${shape}-${highlightSendspin ? "s" : "n"})`}
+                fill={`url(#ha-spark-${idScope}-${shape}-${highlightSendspin ? "s" : "n"})`}
               />
               <path
                 d="M0 32 L20 28 L42 30 L64 20 L86 23 L108 14 L132 18 L156 10 L180 15"
@@ -910,15 +896,19 @@ export function MorphStory({
   };
 
   /* The screen's content at this point of the story: the dashboard and the beat's overlay, on the glass or the model */
-  const renderScreenContent = () => (
-    <div className={s.screenInner}>
-      {renderLiveLovelace(currentShape, raysO > 0.35, mirrorPresent && mirrorPresenceO > 0.35)}
-      {renderRealVoiceOverlay(assistO)}
-      {renderRealNotificationOverlay(notifO)}
-      {renderMirrorPresenceOverlay(mirrorPresenceO)}
-      {renderRealTimerOverlay(timerO)}
-    </div>
-  );
+  const renderScreenContent = (idScope = "d") => {
+    const collapsed = mirrorPresent && mirrorPresenceO > 0.35;
+    const dashboardInert = collapsed || assistO > 0.45;
+    return (
+      <div className={s.screenInner}>
+        {renderLiveLovelace(currentShape, raysO > 0.35, collapsed, dashboardInert, idScope)}
+        {renderRealVoiceOverlay(assistO)}
+        {renderRealNotificationOverlay(notifO)}
+        {renderMirrorPresenceOverlay(mirrorPresenceO)}
+        {renderRealTimerOverlay(timerO)}
+      </div>
+    );
+  };
 
   /* A beat's device as its 3D model (frame.json's, or storyModels.ts), with the live screen on it */
   const renderModel = (sm: StoryModel, id: string, shape: ShapeId, content: React.ReactNode, face?: React.ReactNode) => (
@@ -966,16 +956,19 @@ export function MorphStory({
     const nextPhase = () =>
       setAssistPhase((prev) => (prev === "thinking" ? "speaking" : prev === "speaking" ? "done" : "thinking"));
 
+    const interactive = opacity > 0.45;
     return (
       <div
         className={s.voiceScrim}
         style={{
           opacity,
-          pointerEvents: opacity > 0.45 ? "auto" : "none",
+          pointerEvents: interactive ? "auto" : "none",
         }}
+        inert={!interactive || undefined}
+        data-story-ctl="voice-overlay"
         onClick={nextPhase}
         role="button"
-        tabIndex={opacity > 0.45 ? 0 : -1}
+        tabIndex={interactive ? 0 : -1}
         aria-label="Glassworks Assist voice overlay — tap to cycle voice state"
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
@@ -1064,7 +1057,7 @@ export function MorphStory({
           style={{ opacity: assistPhase === "done" ? 0 : 0.85 }}
           aria-hidden="true"
         >
-          Tap anywhere to cancel
+          Tap anywhere to cycle state
         </span>
       </div>
     );
@@ -1077,14 +1070,15 @@ export function MorphStory({
     if (opacity <= 0.01) return null;
     const slideX = (1 - opacity) * 16;
 
+    const interactive = opacity > 0.45;
     return (
-      <div className={s.overlaySlot} style={{ opacity, pointerEvents: "none" }}>
+      <div className={s.overlaySlot} style={{ opacity, pointerEvents: "none" }} inert={!interactive || undefined}>
         {!notifDismissed ? (
           <div
             className={s.gwNotifCard}
             style={{
               transform: `translate3d(${slideX}px, 0, 0)`,
-              pointerEvents: opacity > 0.45 ? "auto" : "none",
+              pointerEvents: interactive ? "auto" : "none",
             }}
           >
             <div className={s.gwNotifHead}>
@@ -1092,6 +1086,7 @@ export function MorphStory({
               <button
                 type="button"
                 className={s.gwNotifClose}
+                data-story-ctl="notif-close"
                 onClick={() => setNotifDismissed(true)}
                 aria-label="Close notification"
               >
@@ -1115,13 +1110,15 @@ export function MorphStory({
               <button
                 type="button"
                 className={`${s.gwPillBtn} ${!doorLocked ? s.gwPillBtnOk : ""}`}
+                data-story-ctl="notif-lock"
                 onClick={() => setDoorLocked((l) => !l)}
               >
-                {doorLocked ? "Unlock" : "✓ Unlocked"}
+                {doorLocked ? "Unlock" : "Lock"}
               </button>
               <button
                 type="button"
                 className={s.gwPillBtn}
+                data-story-ctl="notif-dismiss"
                 onClick={() => setNotifDismissed(true)}
               >
                 Dismiss
@@ -1135,7 +1132,8 @@ export function MorphStory({
           <button
             type="button"
             className={s.gwNotifPill}
-            style={{ pointerEvents: opacity > 0.45 ? "auto" : "none" }}
+            data-story-ctl="notif-show"
+            style={{ pointerEvents: interactive ? "auto" : "none" }}
             onClick={() => setNotifDismissed(false)}
           >
             <b>1 notification</b>
@@ -1156,42 +1154,50 @@ export function MorphStory({
   const renderMirrorPresenceOverlay = (opacity: number) => {
     if (opacity <= 0.01) return null;
     const active = mirrorPresent;
+    const interactive = opacity > 0.45;
 
     return (
       <div
         className={s.presenceLayer}
         style={{
           opacity,
-          pointerEvents: opacity > 0.45 ? "auto" : "none",
+          pointerEvents: "none",
         }}
-        onClick={toggleMirrorPresence}
-        role="button"
-        tabIndex={opacity > 0.45 ? 0 : -1}
-        aria-pressed={active}
-        aria-label={
-          active
-            ? "Presence detected — dashboard collapsed to side pill. Tap to show full dashboard."
-            : "Room clear — full mirror dashboard visible. Tap to simulate presence detection."
-        }
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            toggleMirrorPresence();
-          }
-        }}
+        inert={!interactive || undefined}
       >
         {/* Pure deep reflective mirror glass + diagonal architectural sheen when presence collapses dashboard */}
         <div className={`${s.mirrorReflectGlass} ${active ? s.mirrorReflectGlassOn : ""}`} aria-hidden="true" />
 
-        {/* Subtle monospace presence micro-chip at the top rim */}
-        <div className={`${s.presenceChip} ${active ? s.presenceChipDetected : ""}`}>
+        {/* Subtle monospace presence micro-chip at the top rim (dedicated toggle so expanded dashboard stays clickable) */}
+        <button
+          type="button"
+          className={`${s.presenceChip} ${active ? s.presenceChipDetected : ""}`}
+          data-story-ctl="mirror-presence-chip"
+          style={{ pointerEvents: interactive ? "auto" : "none" }}
+          onClick={toggleMirrorPresence}
+          aria-pressed={active}
+          aria-label={
+            active
+              ? "Presence detected — dashboard collapsed to side pill. Tap to show full dashboard."
+              : "Room clear — full mirror dashboard visible. Tap to simulate presence detection."
+          }
+        >
           <span className={`${s.presenceDot} ${active ? s.presenceDotLit : ""}`} aria-hidden="true" />
           <span>{active ? "camera_presence: on" : "camera_presence: off"}</span>
-        </div>
+        </button>
 
         {/* the capsule the dashboard leaves on the right edge while someone is there: the time, the weather,
             what's playing and how many lights are on, as the Mirror's own dashboard card has it */}
-        <div className={`${s.mirrorSidePill} ${active ? s.mirrorSidePillOn : ""}`} aria-hidden={!active}>
+        <button
+          type="button"
+          className={`${s.mirrorSidePill} ${active ? s.mirrorSidePillOn : ""}`}
+          data-story-ctl="mirror-side-pill"
+          aria-hidden={!active}
+          tabIndex={active && interactive ? 0 : -1}
+          style={{ pointerEvents: active && interactive ? "auto" : "none" }}
+          onClick={toggleMirrorPresence}
+          aria-label="Restore full mirror dashboard"
+        >
           <span className={s.sidePillTime}>19:40</span>
           <span className={s.sidePillSep} aria-hidden="true" />
           <span className={s.sidePillItem}>
@@ -1216,7 +1222,7 @@ export function MorphStory({
             <span className={s.sidePillLight} aria-hidden="true" />
             {activeLightsCount}
           </span>
-        </div>
+        </button>
       </div>
     );
   };
@@ -1227,15 +1233,17 @@ export function MorphStory({
   const renderRealTimerOverlay = (opacity: number) => {
     if (opacity <= 0.01) return null;
     const liftY = (1 - opacity) * 12;
+    const interactive = opacity > 0.45;
 
     return (
-      <div className={s.overlaySlot} style={{ opacity, pointerEvents: "none" }}>
+      <div className={s.overlaySlot} style={{ opacity, pointerEvents: "none" }} inert={!interactive || undefined}>
         <button
           type="button"
           className={`${s.timerDock} ${timerPaused ? s.timerDockPaused : ""}`}
+          data-story-ctl="timer-dock"
           style={{
             transform: `translate3d(0, ${liftY}px, 0)`,
-            pointerEvents: opacity > 0.45 ? "auto" : "none",
+            pointerEvents: interactive ? "auto" : "none",
           }}
           onClick={() => setTimerPaused((v) => !v)}
           aria-label={`Pasta timer ${formatTimer(timerSec)}, ${timerPaused ? "paused, tap to resume" : "running, tap to pause"}`}
@@ -1272,207 +1280,223 @@ export function MorphStory({
   };
 
   /*
-   * Mobile (< 900px) & prefers-reduced-motion:
+   * Mobile (< 900px), short viewports (< 620px tall), & prefers-reduced-motion:
    * Clean vertical stack of all 6 concise beats — zero scroll-jacking, zero bottom dock,
-   * zero horizontal overflow at 375px.
+   * zero horizontal overflow at 375px. Rendered alongside desktop before hydration so CSS
+   * media queries pick the right initial layout with zero layout shift.
    */
-  if (compact) {
-    const renderCompactFrame = (
-      shape: ShapeId,
-      overlay?: "voice" | "notif" | "mirror-presence" | "kitchen-timer",
-      interactiveSmooth?: boolean,
-    ) => {
-      const isMirrorCollapsed = overlay === "mirror-presence" && mirrorPresent;
-      const sm = modelOfShape(shape);
-      // the stage that draws the body MOBILE_W wide; on a narrower screen it shrinks, and the screen's
-      // content is drawn at the full size and zoomed down, so the dashboard keeps its layout
-      const stage = MOBILE_W[shape] / (parseFloat(geometry(sm.model, sm.aspect, sm.view).vars["--wp"] ?? "100") / 100);
-      const zoom = Math.min(1, (vw - 32) / stage);
-      return (
-        <div className={s.compactStage}>
-          <div
-            className={`${s.modelCompact} ${interactiveSmooth ? s.morphSmooth : ""}`}
-            data-still={shape !== "tablet" || undefined}
-            style={{ width: `min(calc(100vw - 32px), ${stage.toFixed(1)}px)`, ["--screen-zoom" as string]: zoom.toFixed(3) }}
-          >
-            {renderModel(
-              sm,
-              `home-${sm.id}-compact`,
-              shape,
-              <div className={s.screenInner}>
-                {renderLiveLovelace(shape, overlay === "kitchen-timer", isMirrorCollapsed)}
-                {overlay === "voice" && renderRealVoiceOverlay(1)}
-                {overlay === "notif" && renderRealNotificationOverlay(1)}
-                {overlay === "mirror-presence" && renderMirrorPresenceOverlay(1)}
-                {overlay === "kitchen-timer" && renderRealTimerOverlay(1)}
-              </div>,
-              overlay === "mirror-presence" ? renderMirrorSensor(sm.model, 1) : undefined,
-            )}
-          </div>
-        </div>
-      );
-    };
-
+  const renderCompactFrame = (
+    shape: ShapeId,
+    overlay?: "voice" | "notif" | "mirror-presence" | "kitchen-timer",
+    interactiveSmooth?: boolean,
+  ) => {
+    const isMirrorCollapsed = overlay === "mirror-presence" && mirrorPresent;
+    const dashboardInert = isMirrorCollapsed || overlay === "voice";
+    const sm = modelOfShape(shape);
+    // the stage that draws the body MOBILE_W wide; on a narrower screen it shrinks, and the screen's
+    // content is drawn at the full size and zoomed down, so the dashboard keeps its layout
+    const stage = MOBILE_W[shape] / (parseFloat(geometry(sm.model, sm.aspect, sm.view).vars["--wp"] ?? "100") / 100);
+    const zoom = Math.min(1, (vw - 32) / stage);
+    const isTablet = shape === "tablet";
     return (
-      <section className={s.compactStack} aria-label="Glassworks across hardware shapes and features">
-        {/* Beat 0: Wall Switch */}
-        <div className={s.compactBeat}>
-          <div className={s.compactCopy}>
-            {post ? (
-              <Link href={post.href} className={s.newPill}>
-                <span className={s.newTag}>New</span>
-                <b>{post.title}</b>
-                <span className={s.newArrow}>→</span>
-              </Link>
-            ) : (
-              <a href={release.href} className={s.eyebrow}>
-                GLASSWORKS {release.version}
-              </a>
-            )}
-            <h1 className={s.h1}>Your home, on the wall</h1>
-            <p className={s.lede}>
-              Your Home Assistant dashboard full screen, with local voice, synced music, and built-in radios — installed from Chrome in minutes.
-            </p>
-            <div className={s.ctas}>
-              <a href={KILN} className={s.install}>
-                <KilnGlyph />
-                Install with Kiln →
-              </a>
-              <a href="#devices" className={s.quietLink}>
-                Explore devices
-              </a>
-            </div>
-          </div>
-          {renderCompactFrame("wall")}
+      <div className={s.compactStage}>
+        <div
+          className={`${s.modelCompact} ${interactiveSmooth ? s.morphSmooth : ""}`}
+          data-still={!isTablet || undefined}
+          onPointerEnter={isTablet ? (e) => e.pointerType === "mouse" && setCompactTabletHover(true) : undefined}
+          onPointerLeave={isTablet ? () => setCompactTabletHover(false) : undefined}
+          style={{
+            width: `min(calc(100vw - 32px), ${stage.toFixed(1)}px)`,
+            ["--screen-zoom" as string]: zoom.toFixed(3),
+            ["--story-undock" as string]: isTablet && compactTabletLifted ? 1 : 0,
+          }}
+        >
+          {renderModel(
+            sm,
+            `home-${sm.id}-compact-${overlay ?? "base"}`,
+            shape,
+            <div className={s.screenInner}>
+              {renderLiveLovelace(shape, overlay === "kitchen-timer", isMirrorCollapsed, dashboardInert, `c-${overlay ?? "base"}`)}
+              {overlay === "voice" && renderRealVoiceOverlay(1)}
+              {overlay === "notif" && renderRealNotificationOverlay(1)}
+              {overlay === "mirror-presence" && renderMirrorPresenceOverlay(1)}
+              {overlay === "kitchen-timer" && renderRealTimerOverlay(1)}
+            </div>,
+            overlay === "mirror-presence" ? renderMirrorSensor(sm.model, 1) : undefined,
+          )}
         </div>
-
-        {/* Beat 1: Wide Kitchen Display + Real Assist Orb */}
-        <div className={s.compactBeat}>
-          <div className={s.compactCopy}>
-            <span className={s.eyebrow}>LOCAL ASSIST VOICE</span>
-            <h2 className={s.h2}>A screen that listens locally</h2>
-            <p className={s.lede}>
-              On-device wake word detection and Home Assistant Assist run right on the hardware, with the same calm glass orb on every screen.
-            </p>
-            <div className={s.ctas}>
-              <Link href="/panes/assist" className={s.quietLink}>
-                Assist pane →
-              </Link>
-              {renderNeeds(1)}
-            </div>
-          </div>
-          {renderCompactFrame("kitchen", "voice")}
-        </div>
-
-        {/* Beat 2: Wall Switch + Real Top-Right Notification Card */}
-        <div className={s.compactBeat}>
-          <div className={s.compactCopy}>
-            <span className={s.eyebrow}>RICH NOTIFICATIONS</span>
-            <h2 className={s.h2}>A panel that keeps you in the loop</h2>
-            <p className={s.lede}>
-              Doorbell cameras, interactive action buttons, and priority alerts from your automations appear cleanly on the glass and fold away when you&rsquo;re done.
-            </p>
-            <div className={s.ctas}>
-              <Link href="/docs/notifications" className={s.quietLink}>
-                Notification docs →
-              </Link>
-              {renderNeeds(2)}
-            </div>
-          </div>
-          {renderCompactFrame("wall", "notif")}
-        </div>
-
-        {/* Beat 3: Studio Mirror + Presence Detection Collapse */}
-        <div className={s.compactBeat}>
-          <div className={s.compactCopy}>
-            <span className={s.eyebrow}>PRESENCE DETECTION</span>
-            <h2 className={s.h2}>A mirror that gets out of your way</h2>
-            <p className={s.lede}>
-              Glassworks tells Home Assistant the moment you step up, without being fooled by a room light switch. Your dashboard can then tuck itself into a slim side pill, so the glass stays a real mirror.
-            </p>
-            <div className={s.ctas}>
-              <Link href="/frames/lululemon-mirror" className={s.quietLink}>
-                Mirror frame details →
-              </Link>
-              {renderNeeds(3)}
-            </div>
-          </div>
-          {renderCompactFrame("mirror", "mirror-presence")}
-        </div>
-
-        {/* Beat 4: Pixel Tablet on its dock + Real TimerDock + what HA reads (ESPHome, Sendspin, Docked) */}
-        <div className={s.compactBeat}>
-          <div className={s.compactCopy}>
-            <span className={s.eyebrow}>TIMERS, MUSIC &amp; SENSORS</span>
-            <h2 className={s.h2}>A fully native Home Assistant device</h2>
-            <p className={s.lede}>
-              Voice timers, synced Music Assistant playback and sensors like the tablet&rsquo;s dock reach Home Assistant over ESPHome. No custom integration, no cloud, and updates arrive under Settings → Updates.
-            </p>
-            <div className={s.ctas}>
-              <Link href="/frames/google-pixel-tablet" className={s.quietLink}>
-                Pixel Tablet details →
-              </Link>
-              {renderNeeds(4)}
-            </div>
-          </div>
-          {renderCompactFrame("tablet", "kitchen-timer")}
-          <div className={s.compactRays} aria-label="Native Home Assistant protocols">
-            {wireRays(true).map((ray) => (
-              <div key={ray.title} className={s.compactRayRow}>
-                <span className={s.rayDot} aria-hidden="true" />
-                <span className={s.compactRayDash} aria-hidden="true" />
-                <span className={s.rayText}>
-                  <b>{ray.title}</b>
-                  <small>{ray.detail}</small>
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Beat 5: Square 4" + Future Shapes */}
-        <div className={s.compactBeat}>
-          {renderCompactFrame(futureShape, undefined, true)}
-          <div className={s.compactGhosts}>
-            <button
-              type="button"
-              className={`${s.compactGhostBtn} ${futureShape === "round" ? s.ghostActive : ""}`}
-              onClick={() => selectFuture(futureShape === "round" ? "square" : "round")}
-              aria-pressed={futureShape === "round"}
-            >
-              {futureShape === "round" ? 'Square 4"' : "Round Dial"}
-            </button>
-            <button
-              type="button"
-              className={`${s.compactGhostBtn} ${futureShape === "bedside" ? s.ghostActive : ""}`}
-              onClick={() => selectFuture(futureShape === "bedside" ? "square" : "bedside")}
-              aria-pressed={futureShape === "bedside"}
-            >
-              {futureShape === "bedside" ? 'Square 4"' : "Bedside Display"}
-            </button>
-          </div>
-          <div className={s.compactCopy}>
-            <span className={s.eyebrow}>ANY SHAPE</span>
-            <h2 className={s.h2}>One open core for whatever&rsquo;s next</h2>
-            <p className={s.lede}>
-              Square switch boxes, round dials, bedside screens, or your own custom hardware — built on one open ESPHome core and installed safely with Kiln.
-            </p>
-            <div className={s.ctas}>
-              <a href={KILN} className={s.install}>
-                <KilnGlyph />
-                Install with Kiln →
-              </a>
-              <Link href="/developers" className={s.quietLink}>
-                For developers →
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
+      </div>
     );
+  };
+
+  const compactView = (
+    <section className={s.compactStack} aria-label="Glassworks across hardware shapes and features">
+      {/* Beat 0: Wall Switch */}
+      <div className={s.compactBeat}>
+        <div className={s.compactCopy}>
+          {post ? (
+            <Link href={post.href} className={s.newPill}>
+              <span className={s.newTag}>New</span>
+              <b>{post.title}</b>
+              <span className={s.newArrow}>→</span>
+            </Link>
+          ) : (
+            <a href={release.href} className={s.eyebrow}>
+              GLASSWORKS {release.version}
+            </a>
+          )}
+          <h1 className={s.h1}>Your home, on the wall</h1>
+          <p className={s.lede}>
+            Your Home Assistant dashboard full screen, with local voice, synced music, and built-in radios — installed from Chrome in minutes.
+          </p>
+          <div className={s.ctas}>
+            <a href={KILN} className={s.install}>
+              <KilnGlyph />
+              Install with Kiln →
+            </a>
+            <a href="#devices" className={s.quietLink}>
+              Explore devices
+            </a>
+          </div>
+        </div>
+        {renderCompactFrame("wall")}
+      </div>
+
+      {/* Beat 1: Wide Kitchen Display + Real Assist Orb */}
+      <div ref={compactAssistRef} className={s.compactBeat}>
+        <div className={s.compactCopy}>
+          <span className={s.eyebrow}>LOCAL ASSIST VOICE</span>
+          <h2 className={s.h2}>A screen that listens locally</h2>
+          <p className={s.lede}>
+            On-device wake word detection runs right on the hardware and hands off to your Home Assistant Assist pipeline, with the same calm glass orb on every screen.
+          </p>
+          <div className={s.ctas}>
+            <Link href="/panes/assist" className={s.quietLink}>
+              Assist pane →
+            </Link>
+            {renderNeeds(1)}
+          </div>
+        </div>
+        {renderCompactFrame("kitchen", "voice")}
+      </div>
+
+      {/* Beat 2: Wall Switch + Real Top-Right Notification Card */}
+      <div className={s.compactBeat}>
+        <div className={s.compactCopy}>
+          <span className={s.eyebrow}>RICH NOTIFICATIONS</span>
+          <h2 className={s.h2}>A panel that keeps you in the loop</h2>
+          <p className={s.lede}>
+            Doorbell cameras, interactive action buttons, and priority alerts from your automations appear cleanly on the glass and fold away when you&rsquo;re done.
+          </p>
+          <div className={s.ctas}>
+            <Link href="/docs/notifications" className={s.quietLink}>
+              Notification docs →
+            </Link>
+            {renderNeeds(2)}
+          </div>
+        </div>
+        {renderCompactFrame("wall", "notif")}
+      </div>
+
+      {/* Beat 3: Studio Mirror + Presence Detection Collapse */}
+      <div className={s.compactBeat}>
+        <div className={s.compactCopy}>
+          <span className={s.eyebrow}>PRESENCE DETECTION</span>
+          <h2 className={s.h2}>A mirror that gets out of your way</h2>
+          <p className={s.lede}>
+            Glassworks tells Home Assistant the moment you step up, without being fooled by a room light switch. Your dashboard can then tuck itself into a slim side pill, so the glass stays a real mirror.
+          </p>
+          <div className={s.ctas}>
+            <Link href="/frames/lululemon-mirror" className={s.quietLink}>
+              Mirror frame details →
+            </Link>
+            {renderNeeds(3)}
+          </div>
+        </div>
+        {renderCompactFrame("mirror", "mirror-presence")}
+      </div>
+
+      {/* Beat 4: Pixel Tablet on its dock + Real TimerDock + what HA reads (ESPHome, Sendspin, Docked) */}
+      <div ref={compactTimerRef} className={s.compactBeat}>
+        <div className={s.compactCopy}>
+          <span className={s.eyebrow}>TIMERS, MUSIC &amp; SENSORS</span>
+          <h2 className={s.h2}>A fully native Home Assistant device</h2>
+          <p className={s.lede}>
+            Voice timers, updates, and sensors like the tablet&rsquo;s dock connect directly to Home Assistant over ESPHome, while synced audio streams straight from Music Assistant over Sendspin — no custom integration and no cloud.
+          </p>
+          <div className={s.ctas}>
+            <Link href="/frames/google-pixel-tablet" className={s.quietLink}>
+              Pixel Tablet details →
+            </Link>
+            <Link href="/panes/sendspin" className={s.quietLink}>
+              Sendspin audio →
+            </Link>
+            {renderNeeds(4)}
+          </div>
+        </div>
+        {renderCompactFrame("tablet", "kitchen-timer")}
+        <div className={s.compactRays} aria-label="Native Home Assistant protocols">
+          {wireRays(!compactTabletLifted).map((ray) => (
+            <div key={ray.title} className={s.compactRayRow}>
+              <span className={s.rayDot} aria-hidden="true" />
+              <span className={s.compactRayDash} aria-hidden="true" />
+              <span className={s.rayText}>
+                <b>{ray.title}</b>
+                <small>{ray.detail}</small>
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Beat 5: Square 4" + Future Shapes */}
+      <div className={s.compactBeat}>
+        {renderCompactFrame(futureShape, undefined, true)}
+        <div className={s.compactGhosts}>
+          <button
+            type="button"
+            className={`${s.compactGhostBtn} ${futureShape === "round" ? s.ghostActive : ""}`}
+            onClick={() => selectFuture(futureShape === "round" ? "square" : "round")}
+            aria-pressed={futureShape === "round"}
+          >
+            {futureShape === "round" ? 'Square 4"' : "Round Dial"}
+          </button>
+          <button
+            type="button"
+            className={`${s.compactGhostBtn} ${futureShape === "bedside" ? s.ghostActive : ""}`}
+            onClick={() => selectFuture(futureShape === "bedside" ? "square" : "bedside")}
+            aria-pressed={futureShape === "bedside"}
+          >
+            {futureShape === "bedside" ? 'Square 4"' : "Bedside Display"}
+          </button>
+        </div>
+        <div className={s.compactCopy}>
+          <span className={s.eyebrow}>ANY SHAPE</span>
+          <h2 className={s.h2}>One open core for whatever&rsquo;s next</h2>
+          <p className={s.lede}>
+            Square switch boxes, round dials, bedside screens, or your own custom hardware — built on one open ESPHome core and installed safely with Kiln.
+          </p>
+          <div className={s.ctas}>
+            <a href={KILN} className={s.install}>
+              <KilnGlyph />
+              Install with Kiln →
+            </a>
+            <Link href="/developers" className={s.quietLink}>
+              For developers →
+            </Link>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+
+  if (mounted && compact) {
+    return compactView;
   }
 
-  return (
+  const ghostsActive = seg >= 4.98;
+
+  const desktopView = (
     <section ref={sectionRef} className={s.story} aria-label="Glassworks across hardware shapes and features">
       <div className={s.sticky}>
         {/* Ambient radial light following the morphing glass */}
@@ -1511,6 +1535,7 @@ export function MorphStory({
               pointerEvents: copy0O > 0.35 ? "auto" : "none",
             }}
             aria-hidden={copy0O < 0.2}
+            inert={copy0O <= 0.35 || undefined}
           >
             {post ? (
               <Link href={post.href} className={s.newPill}>
@@ -1547,11 +1572,12 @@ export function MorphStory({
               pointerEvents: copy1O > 0.35 ? "auto" : "none",
             }}
             aria-hidden={copy1O < 0.2}
+            inert={copy1O <= 0.35 || undefined}
           >
             <span className={s.eyebrow}>LOCAL ASSIST VOICE</span>
             <h2 className={s.h2}>A screen that listens locally</h2>
             <p className={s.lede}>
-              On-device wake word detection and Home Assistant Assist run right on the hardware, with the same calm glass orb on every screen.
+              On-device wake word detection runs right on the hardware and hands off to your Home Assistant Assist pipeline, with the same calm glass orb on every screen.
             </p>
             <div className={s.ctas}>
               <Link href="/panes/assist" className={s.quietLink}>
@@ -1570,6 +1596,7 @@ export function MorphStory({
               pointerEvents: copy2O > 0.35 ? "auto" : "none",
             }}
             aria-hidden={copy2O < 0.2}
+            inert={copy2O <= 0.35 || undefined}
           >
             <span className={s.eyebrow}>RICH NOTIFICATIONS</span>
             <h2 className={s.h2}>A panel that keeps you in the loop</h2>
@@ -1593,6 +1620,7 @@ export function MorphStory({
               pointerEvents: copy3O > 0.35 ? "auto" : "none",
             }}
             aria-hidden={copy3O < 0.2}
+            inert={copy3O <= 0.35 || undefined}
           >
             <span className={s.eyebrow}>PRESENCE DETECTION</span>
             <h2 className={s.h2}>A mirror that gets out of your way</h2>
@@ -1616,15 +1644,19 @@ export function MorphStory({
               pointerEvents: copy4O > 0.35 ? "auto" : "none",
             }}
             aria-hidden={copy4O < 0.2}
+            inert={copy4O <= 0.35 || undefined}
           >
             <span className={s.eyebrow}>TIMERS, MUSIC &amp; SENSORS</span>
             <h2 className={s.h2}>A fully native Home Assistant device</h2>
             <p className={s.lede}>
-              Voice timers, synced Music Assistant playback and sensors like the tablet&rsquo;s dock reach Home Assistant over ESPHome. No custom integration, no cloud, and updates arrive under Settings → Updates.
+              Voice timers, updates, and sensors like the tablet&rsquo;s dock connect directly to Home Assistant over ESPHome, while synced audio streams straight from Music Assistant over Sendspin — no custom integration and no cloud.
             </p>
             <div className={s.ctas}>
               <Link href="/frames/google-pixel-tablet" className={s.quietLink}>
                 Pixel Tablet details →
+              </Link>
+              <Link href="/panes/sendspin" className={s.quietLink}>
+                Sendspin audio →
               </Link>
               {renderNeeds(4)}
             </div>
@@ -1639,6 +1671,7 @@ export function MorphStory({
               pointerEvents: copy5O > 0.35 ? "auto" : "none",
             }}
             aria-hidden={copy5O < 0.2}
+            inert={copy5O <= 0.35 || undefined}
           >
             <span className={s.eyebrow}>ANY SHAPE</span>
             <h2 className={s.h2}>One open core for whatever&rsquo;s next</h2>
@@ -1661,9 +1694,10 @@ export function MorphStory({
             className={s.ghostLayer}
             style={{
               opacity: ghostsO,
-              pointerEvents: ghostsO > 0.4 ? "auto" : "none",
+              pointerEvents: ghostsActive ? "auto" : "none",
             }}
-            aria-hidden={ghostsO < 0.2}
+            aria-hidden={!ghostsActive}
+            inert={!ghostsActive || undefined}
           >
             <button
               type="button"
@@ -1721,11 +1755,18 @@ export function MorphStory({
             >
               {modelO > 0.01 && (
                 <div
+                  ref={beatModelRef}
                   className={s.beatModel}
                   // only the Pixel Tablet lifts off its dock; the wide display's speaker base holds it
                   data-still={nearBeat !== 4 || undefined}
-                  style={{ width: `${travelStage.toFixed(1)}px`, opacity: modelO, pointerEvents: modelLive ? "auto" : "none" }}
-                  inert={!modelLive}
+                  style={{
+                    width: `${travelStage.toFixed(1)}px`,
+                    opacity: modelO,
+                    pointerEvents: modelLive ? "auto" : "none",
+                    ["--story-undock" as string]: desktopHoverLift ? 1 : 0,
+                  }}
+                  inert={!modelLive || undefined}
+                  onFocusCapture={trackScreenFocus}
                   onPointerEnter={(e) => e.pointerType === "mouse" && setModelHover(true)}
                   onPointerLeave={() => setModelHover(false)}
                 >
@@ -1737,14 +1778,16 @@ export function MorphStory({
                       ["--ground-o" as string]: groundO.toFixed(3),
                     }}
                   >
-                    {renderModel(travel, "home-travel", currentShape, renderScreenContent(), renderMirrorSensor(travel.model, mirrorFactor))}
+                    {renderModel(travel, "home-travel", currentShape, renderScreenContent("dm"), renderMirrorSensor(travel.model, mirrorFactor))}
                   </div>
                 </div>
               )}
 
               <div
+                ref={glassRef}
                 className={`${s.hardwareScale} ${clickMorph ? s.morphSmooth : ""}`}
-                inert={modelLive}
+                inert={modelLive || undefined}
+                onFocusCapture={trackScreenFocus}
                 style={{
                   opacity: modelLive ? 0 : 1,
                   transform: `scale(var(--bezel-scale, 1)) translate(${basePose.dx}px, ${basePose.dy}px) perspective(${basePose.persp}px) rotateX(${basePose.rx}deg) rotateY(${basePose.ry}deg) rotateX(${basePose.lean}deg) translateZ(${basePose.z}px)`,
@@ -1803,7 +1846,7 @@ export function MorphStory({
                         borderRadius: `${geom.screenR}px`,
                       }}
                     >
-                      {renderScreenContent()}
+                      {renderScreenContent("dg")}
                     </div>
                   </div>
 
@@ -1860,4 +1903,15 @@ export function MorphStory({
       </div>
     </section>
   );
+
+  if (!mounted) {
+    return (
+      <>
+        {desktopView}
+        {compactView}
+      </>
+    );
+  }
+
+  return desktopView;
 }

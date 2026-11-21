@@ -41,7 +41,7 @@ const KILN_STAGES = [
   {
     num: "04",
     title: "Restore",
-    detail: "Keep your backup to return the hardware to stock firmware in one click at any time.",
+    detail: "Return supported flashable panels to your saved stock backup in one click, or switch the Mirror back to plain Glass Panes.",
   },
 ] as const;
 
@@ -99,7 +99,7 @@ export default async function Home() {
               Flash from Chrome, undo in one click
             </h2>
             <p className={s.sectionLede}>
-              Plug your panel in over USB and open Kiln in Chrome or Edge. No command-line tools, no manual drivers, and no locked-in vendor cloud — every write is verified and every device keeps a clean way back to stock.
+              Plug your panel in over USB and open Kiln in Chrome or Edge. No command-line tools, no manual drivers, and no locked-in vendor cloud. Every write is verified, flashable wall panels back up and restore stock software in one click, and the lululemon Studio Mirror keeps a plain Glass Panes recovery image.
             </p>
             <div className={s.actions}>
               <a href={KILN} className={s.kilnBtn}>
@@ -204,7 +204,7 @@ export default async function Home() {
               We&rsquo;d rather show an honest C than hide it
             </h2>
             <p className={s.sectionLede}>
-              Every supported panel is measured running the real Home Assistant frontend on standardized dashboards — testing tap latency, scrolling frame pacing, live state updates, and camera streams.
+              Measured panels are tested running the real Home Assistant frontend on standardized dashboards for tap latency, scrolling frame pacing, live state updates, and camera streams. Devices without published runs are marked pending until measured.
             </p>
             <div className={s.actions}>
               <Link href="/docs/perf" className={s.textLink}>
@@ -260,7 +260,7 @@ export default async function Home() {
               Everything your panel can do
             </h2>
             <p className={s.sectionLede}>
-              Each capability ships as a modular pane that turns on automatically when your hardware supports it — plus ready-to-import Home Assistant blueprints.
+              Each capability ships as a modular pane matched to your hardware — core features start automatically while opt-in panes like the Bluetooth proxy can be toggled anytime — plus ready-to-import Home Assistant blueprints.
             </p>
           </div>
           <ListCard

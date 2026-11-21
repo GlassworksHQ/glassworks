@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Mark } from "./Mark";
 import { GitHubGlyph, KilnGlyph } from "./Glyphs";
 import { ThemeToggle } from "./shell/ThemeToggle";
@@ -22,6 +22,8 @@ export function TopNav({ hasFreshPost = false }: { hasFreshPost?: boolean }) {
   const path = usePathname();
   const [open, setOpen] = useState(false);
   const [shownOn, setShownOn] = useState(path);
+  const menuBtnRef = useRef<HTMLButtonElement>(null);
+  const drawerRef = useRef<HTMLDivElement>(null);
 
   if (shownOn !== path) {
     setShownOn(path);
@@ -31,7 +33,13 @@ export function TopNav({ hasFreshPost = false }: { hasFreshPost?: boolean }) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") {
+        const focusInDrawer = drawerRef.current?.contains(document.activeElement);
+        setOpen(false);
+        if (focusInDrawer) {
+          menuBtnRef.current?.focus();
+        }
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -90,6 +98,7 @@ export function TopNav({ hasFreshPost = false }: { hasFreshPost?: boolean }) {
         <div className={s.mobileActions}>
           <ThemeToggle />
           <button
+            ref={menuBtnRef}
             type="button"
             className={s.menuBtn}
             aria-label={open ? "Close navigation menu" : "Open navigation menu"}
@@ -104,7 +113,7 @@ export function TopNav({ hasFreshPost = false }: { hasFreshPost?: boolean }) {
         </div>
       </div>
 
-      <div id="topnav-drawer" className={`${s.drawer} ${open ? s.drawerOpen : ""}`} hidden={!open}>
+      <div ref={drawerRef} id="topnav-drawer" className={`${s.drawer} ${open ? s.drawerOpen : ""}`} hidden={!open}>
         <nav className={s.drawerNav} aria-label="Mobile navigation">
           {NAV_ITEMS.map((item) => {
             const active = isActive(item.href);

@@ -440,10 +440,10 @@ a.eyebrow:hover {
   fill-opacity: 0.5;
 }
 
-/* only the Pixel Tablet lifts off its dock on hover; another device's base holds it */
-.beatModel[data-still] [data-dock],
-.modelCompact[data-still] [data-dock] {
-  --undock: 0;
+/* MorphStory owns undock state so the 3D lift and the Docked wire-ray label never diverge */
+.beatModel [data-dock],
+.modelCompact [data-dock] {
+  --undock: var(--story-undock, 0);
 }
 
 /* a dock standing still at its beat (docks), behind the travelling device; its device's body is not drawn */
@@ -1240,6 +1240,11 @@ a.eyebrow:hover {
     grid-row: 2;
   }
 
+  /* When Beat 4 shows the Sendspin tile in col 2 row 2, hide Living Room so it isn't covered */
+  .haRoot[data-sendspin] .haLivingTile {
+    display: none;
+  }
+
   .haSparkCard {
     display: flex;
     grid-column: 1 / span 2;
@@ -1283,6 +1288,17 @@ a.eyebrow:hover {
   .haClimateCard {
     grid-column: 3 / span 2;
     grid-row: 1 / span 2;
+  }
+
+  /* Keep Beat 4's bottom-right TimerDock from covering the thermostat's increase button */
+  .haRoot[data-sendspin] .haClimateCard .haDialControls {
+    justify-content: flex-start;
+    gap: 6px;
+    padding-right: 62px;
+  }
+
+  .haRoot[data-sendspin] .haClimateCard .haDialTarget {
+    display: none;
   }
 }
 
@@ -1329,10 +1345,32 @@ a.eyebrow:hover {
     display: none;
   }
 
+  /* Give Sendspin its own cell in col 1 row 2 instead of overlapping the thermostat in col 2 */
+  .haRoot[data-sendspin] .haKitchenTile {
+    display: none;
+  }
+
+  .haRoot[data-sendspin] .haMediaTile {
+    display: flex;
+    grid-column: 1;
+    grid-row: 2;
+  }
+
   .haClimateCard {
     grid-column: 2;
     grid-row: 1 / span 2;
     padding: 8px;
+  }
+
+  /* Keep Beat 4's bottom-right TimerDock from covering the thermostat's increase button */
+  .haRoot[data-sendspin] .haClimateCard .haDialControls {
+    justify-content: flex-start;
+    gap: 6px;
+    padding-right: 58px;
+  }
+
+  .haRoot[data-sendspin] .haClimateCard .haDialTarget {
+    display: none;
   }
 
   .haDialSvg {
@@ -1944,7 +1982,7 @@ a.eyebrow:hover {
   position: absolute;
   inset: 0;
   z-index: 3;
-  cursor: pointer;
+  pointer-events: none;
   user-select: none;
 }
 
@@ -1974,11 +2012,13 @@ a.eyebrow:hover {
 
 /* Subtle top-rim presence micro-chip (binary_sensor.presence) */
 .presenceChip {
+  appearance: none;
   position: absolute;
   top: 7px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 2;
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -2027,6 +2067,7 @@ a.eyebrow:hover {
 /* The capsule on the right edge while someone is at the Mirror; it fades in where it stands, as on the
    Mirror's own dashboard card */
 .mirrorSidePill {
+  appearance: none;
   position: absolute;
   right: 7px;
   top: 50%;
@@ -2042,6 +2083,7 @@ a.eyebrow:hover {
   gap: 8px;
   opacity: 0;
   transform: translateY(-50%);
+  cursor: pointer;
   pointer-events: none;
   transition: opacity 0.8s ease;
 }
@@ -2428,6 +2470,19 @@ a.eyebrow:hover {
   padding: 8px 14px;
   border-radius: 999px;
   cursor: pointer;
+}
+
+/* CSS picks the initial desktop vs compact layout before hydration (zero layout shift on mobile / short viewports) */
+@media (max-width: 900px), (max-height: 620px), (prefers-reduced-motion: reduce) {
+  .story {
+    display: none;
+  }
+}
+
+@media (min-width: 901px) and (min-height: 621px) and (prefers-reduced-motion: no-preference) {
+  .compactStack {
+    display: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
