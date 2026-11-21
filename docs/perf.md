@@ -1719,7 +1719,10 @@ Assistant:
   run doesn't, so on by itself it would measure an idle pane (#121). The S1 has no camera, so the
   camera pane can't run there; its code still ships, so it keeps a size budget (#117). The report
   lists all four, with why. The wall base, time zone and diagnostics shares
-  have not been measured on a panel yet.
+  have not been measured on a panel yet. Those four are the S1's. Generic Android and the frames
+  based on it switch the camera and diagnostics too, and leave out three: timers, notifications and
+  the Bluetooth proxy, for the same reasons. Its camera, diagnostics, Assist and Sendspin shares have
+  not been measured on a device yet.
 
 **Why not an emulator in CI** (assessed 2026-11-13, from the build and the panes' needs; not tried).
 #68 asked whether an x86_64 Android emulator in CI could measure RAM per pane. Not now:
