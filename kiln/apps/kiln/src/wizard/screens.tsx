@@ -18,6 +18,7 @@ import type { StandardSession } from '../standard/session';
 import type { Session } from './session';
 import { HomeAssistant, Panes, Radio, RadioNext, Wifi } from '../setup/steps';
 import { eta, milestones, type Setup, type WizardState } from './state';
+import x from './screens.module.css';
 
 type P = { s: WizardState; session: Session; frame: KilnFrame };
 /** The standard flow's screens (every frame's steps after its install): any frame's session, the frame as the flow reads it. */
@@ -124,6 +125,10 @@ export function Firing({ s, frame }: P) {
       <ul className="plain">
         {steps.map((m) => <li key={m.text}><span className={m.done ? 'ok' : 'go'}>{m.done ? '✓' : '→'}</span> {m.text}</li>)}
       </ul>
+      {/* what keeps the person safe while it writes (issue 672): the backup comes first, and every write is read back */}
+      <p className="small">{s.flow === 'undo' ? 'Kiln reads every write back to check it.'
+        : s.progress.phase === 'boot' || s.progress.phase === 'backup' ? `Kiln backs up the ${frame.short} before it writes anything.`
+        : 'Your backup is saved in this browser. Kiln reads every write back to check it.'}</p>
       <BuiltOn credits={stepCredits(frame.id, frame.credits, s.flow === 'undo' ? ['boot'] : undefined)} />
       <div className="foot">
         <span />
@@ -309,15 +314,22 @@ export function Done({ s, session, frame, children }: SP & { children?: ReactNod
     <section className="card" aria-labelledby="h">
       <span className="okmark" aria-hidden="true">✓</span>
       <h2 id="h">{d.title}</h2>
-      <p className="lede">{d.body}</p>
-      {d.updates && <SilentUpdates words={d.updates} />}
-      {d.backup && (
-        <div className="well">
-          <span className="grow"><span>{d.backup.hint}</span><span className="small">{d.backup.name} · {d.backup.info}</span></span>
-          <button type="button" className="btn ember" onClick={() => void session.downloadBackup()}>Download</button>
+      {/* with a backup, two steps in order (issue 672): keep the backup first, then Home Assistant */}
+      {d.backup ? <>
+        <div className={x.step} role="group" aria-labelledby="backup-h">
+          <h3 id="backup-h">First, save your backup</h3>
+          <div className="well">
+            <span className="grow"><span>{d.backup.hint}</span><span className="small">{d.backup.name} · {d.backup.info}</span></span>
+            <button type="button" className="btn ember" onClick={() => void session.downloadBackup()}>Download</button>
+          </div>
+          {d.backup.error && <p className="status err" role="alert">{d.backup.error}</p>}
         </div>
-      )}
-      {d.backup?.error && <p className="status err" role="alert">{d.backup.error}</p>}
+        <div className={x.step} role="group" aria-labelledby="next-h">
+          <h3 id="next-h">Then, in Home Assistant</h3>
+          <p className="lede">{d.body}</p>
+        </div>
+      </> : <p className="lede">{d.body}</p>}
+      {d.updates && <SilentUpdates words={d.updates} />}
       {children}
       {d.managePage && <ManagePageRow href={d.managePage} the={`the ${frame.short}`} />}
       {s.flow === 'install' && <BuiltOn credits={stepCredits(frame.id, frame.credits)} />}
@@ -377,7 +389,13 @@ export function Failure({ s, session, help }: { s: WizardState; session: Standar
   return (
     <section className="card err" aria-labelledby="h" role="alert">
       <h2 id="h">{f.title}</h2>
-      <p className="lede">{f.body}</p>
+      {f.happened && f.fix ? <>
+        <p className="lede">{f.happened}</p>
+        <div className={x.fix} role="group" aria-labelledby="fix-h">
+          <b id="fix-h">How to fix it</b>
+          <span>{f.fix}</span>
+        </div>
+      </> : <p className="lede">{f.body}</p>}
       <Collapsible.Root open={open} onOpenChange={setOpen} className="tech">
         <div className="foot">
           <span className="links">
