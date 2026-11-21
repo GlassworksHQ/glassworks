@@ -59,9 +59,11 @@ class ConnectionWriterTest {
         }.also { servers += it }
 
     /** A subscribed client that has read its first states and then stops reading; returns its socket on the server. */
-    private fun stuckClient(s: ApiServer): Pair<PlainClient, StoppableSocket> {
+    /** [cameras]: the server has a camera, so the client first waits for its empty image (sent on subscribe). */
+    private fun stuckClient(s: ApiServer, cameras: Boolean = false): Pair<PlainClient, StoppableSocket> {
         val c = PlainClient(s.localPort)
         c.send(Msg.SUBSCRIBE_STATES_REQUEST)
+        if (cameras) check(c.image().isEmpty())
         c.roundTrip()
         val sock = sockets.last()
         sock.stop()
@@ -101,7 +103,7 @@ class ConnectionWriterTest {
         fun call(id: Int) = ProtoWriter().fixed32(1, echo.key, force = true)
             .message(2, ProtoWriter().uint32(5, id * 2)).uint32(3, id).bool(4, true) // sint32: zigzag
 
-        val (stuck, stuckSock) = stuckClient(s)
+        val (stuck, stuckSock) = stuckClient(s, cameras = true)
         stuck.use {
             // Everything that wrote to it from a shared thread before: states, the camera, an action reply, a ping.
             stuck.send(Msg.CAMERA_IMAGE_REQUEST, ProtoWriter().bool(2, true))
@@ -180,7 +182,7 @@ class ConnectionWriterTest {
     fun aCameraWaitsForAClientThatStopsReadingInsteadOfQueueingItsImage() {
         val jpeg = ByteArray(2 * ApiServer.MAX_QUEUED_BYTES) { (it * 7).toByte() }
         val s = server(CameraEntity("cam", "Cam") { jpeg })
-        val (stuck, stuckSock) = stuckClient(s)
+        val (stuck, stuckSock) = stuckClient(s, cameras = true)
         stuck.use {
             stuck.send(Msg.CAMERA_IMAGE_REQUEST, ProtoWriter().bool(1, true))
             awaitBlocked(stuckSock)

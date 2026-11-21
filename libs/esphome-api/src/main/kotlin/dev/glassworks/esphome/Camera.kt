@@ -18,6 +18,9 @@ import kotlin.concurrent.withLock
  * promptly: a connection's camera thread ends only after [frame] returns.
  * With [authOnly] set, only an authenticated connection (Noise with the provisioned key) gets images.
  *
+ * Unasked, a client gets one thing: an empty image right after it subscribes to states, which Home
+ * Assistant needs to show the camera as available. It carries no bytes and doesn't call [frame].
+ *
  * @property maxFps The most frames a second a stream sends to one connection.
  * @param frame Returns the current JPEG, or null for none.
  */
@@ -92,6 +95,7 @@ internal class CameraFeed(
     private val lock = ReentrantLock()
     private val wake = lock.newCondition()
     private var single = false
+    private var announce = false
     private var streamUntil = 0L
     private var closed = false
     private var thread: Thread? = null
@@ -101,9 +105,32 @@ internal class CameraFeed(
             if (closed) return
             if (single) this.single = true
             if (stream) streamUntil = now() + streamMs
-            if (thread == null) thread = Thread(::loop, threadName).apply { isDaemon = true; start() }
-            wake.signalAll()
+            startAndWake()
         }
+    }
+
+    /**
+     * One empty image (no bytes, `done`) per camera, unasked, sent right after the client subscribed to
+     * states so that Home Assistant shows the cameras as available (#117). HA writes an ESPHome entity
+     * back from "unavailable" only when a state for it arrives (esphome entity.py `_on_device_update`
+     * writes only the drop), and a camera's state is an image: aioesphomeapi turns any `done` image,
+     * empty too, into a `CameraState`. An ESPHome camera gets there with its idle frames; this sends no
+     * pixels and never calls a camera's frame function. It goes out on the camera thread, between whole
+     * images, since a `done` chunk in the middle of an image would cut it in two. An image sent
+     * instead makes it moot: that is a state too.
+     */
+    fun announce() {
+        lock.withLock {
+            if (closed) return
+            announce = true
+            startAndWake()
+        }
+    }
+
+    /** Under [lock]. */
+    private fun startAndWake() {
+        if (thread == null) thread = Thread(::loop, threadName).apply { isDaemon = true; start() }
+        wake.signalAll()
     }
 
     fun close() {
@@ -118,15 +145,28 @@ internal class CameraFeed(
     private fun loop() {
         var nextAt = 0L
         while (true) {
+            var image = false
+            var empty = false
             lock.withLock {
                 while (true) {
                     if (closed) return
                     val now = now()
                     val streaming = now < streamUntil
-                    if (single || (streaming && now >= nextAt)) break
+                    image = single || (streaming && now >= nextAt)
+                    if (image || announce) break
                     if (streaming) wake.await(nextAt - now, TimeUnit.MILLISECONDS) else wake.await()
                 }
+                empty = announce && !image
+                announce = false
                 single = false
+            }
+            if (empty) {
+                for (cam in cameras()) {
+                    for (payload in cam.responses(null)) {
+                        if (!send(Frame(Msg.CAMERA_IMAGE_RESPONSE, payload))) { close(); return }
+                    }
+                }
+                continue
             }
             val start = now()
             val cams = cameras()

@@ -20,6 +20,7 @@ import kotlin.random.Random
  * Actions and the camera against the real client Home Assistant 2026.11 pins (aioesphomeapi 46.25.0),
  * via ESPHOME_PYTHON as in [EspHomeKeepaliveTest]: HA lists the actions, calls them with every
  * argument type and gets their results, then fetches a JPEG of several chunks, alone and as a stream.
+ * Before it asks, the client gets the empty image every camera sends on subscribe (#117) as a state.
  */
 class EspHomeActionsCameraTest {
     private val identity = DeviceIdentity(
@@ -103,6 +104,8 @@ class EspHomeActionsCameraTest {
             assertEquals("speaker busy", failed.getString("error"))
             assertTrue("ring ran with its argument", rang.await(5, TimeUnit.SECONDS))
 
+            assertTrue("an image arrived unasked after subscribing", !r.isNull("on_subscribe"))
+            assertEquals("and it was empty", 0, r.getJSONObject("on_subscribe").getInt("len"))
             val single = r.getJSONObject("single")
             assertEquals(image.size, single.getInt("len"))
             assertEquals(sha256(image), single.getString("sha256"))

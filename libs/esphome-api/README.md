@@ -161,6 +161,10 @@ camera entity `camera.my_device_porch`.
   thread, and the frame function is called when that thread is ready to send, so a slow client gets
   fewer frames, not a queue. Return null when there is no image: HA then reports it at once instead
   of timing out. Images go only to clients that have subscribed to states, as in ESPHome.
+- **Unasked, a client gets one empty image per camera** right after it subscribes to states. Home
+  Assistant shows an ESPHome camera as unavailable after a reconnect until an image arrives for it,
+  and an ESPHome camera gets there with its idle frames. The empty image has no bytes and doesn't
+  call the frame function, so nothing from the camera leaves the device unless a client asks.
 - **`authOnly`** works for both: the action runs, or the camera sends images, only over Noise with
   the provisioned key.
 - **Not in yet:** the camera's idle image every few seconds (ESPHome's `idle_update_interval`), and
@@ -232,7 +236,7 @@ entity types marked Supported or Partial are exactly the ones the server lists.
 | Text (`text`) | 97–99 | Supported | 0.1.0 | |
 | Light (`light`) | 15, 24, 32 | Partial: on, off and brightness only | 0.1.0 | `BrightnessLightEntity`. No color modes, effects, transition or flash |
 | Media player (`media_player`) | 63–65 | Partial: no category or disabled-by-default | 0.1.0 | Supported formats carry the format and purpose, not the sample rate, channels or sample size |
-| Camera (`camera`) | 43–45 | Partial: no idle image | 0.1.0 | Single images and streams work. ESPHome also sends a frame every `idle_update_interval` |
+| Camera (`camera`) | 43–45 | Partial: no idle image | 0.1.0 | Single images and streams work. ESPHome also sends a frame every `idle_update_interval`; this sends one empty image on subscribe instead, which keeps the entity available |
 | Event (`event`) | 107, 108 | Supported | 0.1.0 | |
 | Update (`update`) | 116–118 | Supported | 0.1.0 | Install and check commands go to your callback |
 | Date (`date`) | 100–102 | Not yet | | |

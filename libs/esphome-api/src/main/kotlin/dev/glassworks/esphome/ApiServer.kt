@@ -997,6 +997,7 @@ public class ApiServer(
                 }
                 Msg.SUBSCRIBE_STATES_REQUEST -> {
                     subscribeStates()
+                    camera.announce()
                     try { onStatesSubscribed?.invoke(clientInfo, socket.inetAddress, authenticated) } catch (t: Throwable) { EspHomeLog.w("onStatesSubscribed failed", t) }
                     if (authenticated && onTimeZone != null) send(listOf(Frame(Msg.GET_TIME_REQUEST, ByteArray(0))))
                 }
