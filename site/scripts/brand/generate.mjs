@@ -436,6 +436,72 @@ function kilnBanner(t) {
   );
 }
 
+const DISCORD_PATH =
+  "M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.028zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z";
+
+/** Glassworks-themed Discord invite card (580 × 94) for READMEs. */
+function discordCard(t) {
+  const W = 580;
+  const H = 94;
+  const cell = 96;
+  const tw = W - cell;
+  const light = t.name === "light";
+  const [ra, rb] = PART.pane.rim[t.name];
+  const defs =
+    `<linearGradient id="sweep" gradientUnits="userSpaceOnUse" x1="${cell}" y1="0" x2="${W}" y2="0"><stop offset="0" stop-color="#38bdf8" stop-opacity="${light ? 0.04 : 0.06}"/><stop offset=".55" stop-color="#38bdf8" stop-opacity="${light ? 0.09 : 0.13}"/><stop offset="1" stop-color="#a78bfa" stop-opacity="${light ? 0.2 : 0.28}"/></linearGradient>` +
+    `<linearGradient id="rim" gradientUnits="userSpaceOnUse" x1="${cell}" y1="0" x2="${W}" y2="0"><stop offset="0" stop-color="${ra}"/><stop offset="1" stop-color="${rb}"/></linearGradient>` +
+    `<linearGradient id="ramp" gradientUnits="userSpaceOnUse" x1="${cell}" y1="0" x2="${W - 6}" y2="0"><stop offset="0" stop-color="#fff" stop-opacity=".22"/><stop offset="1" stop-color="#fff"/></linearGradient>` +
+    `<mask id="lit-edge" maskUnits="userSpaceOnUse" x="${cell}" y="0" width="${tw}" height="${H}"><rect x="${cell}" width="${tw}" height="${H}" fill="url(#ramp)"/></mask>` +
+    `<radialGradient id="cellGlow" cx=".5" cy=".5" r=".6"><stop offset="0" stop-color="#38bdf8" stop-opacity="${light ? 0.18 : 0.24}"/><stop offset=".6" stop-color="#a78bfa" stop-opacity="${light ? 0.08 : 0.12}"/><stop offset="1" stop-color="#a78bfa" stop-opacity="0"/></radialGradient>`;
+
+  const box = `x=".5" y=".5" width="${W - 1}" height="${H - 1}" rx="16"`;
+  // Left cell: dot grid, faint construction diagonals, glow, glass tile with lit Discord mark
+  const tile =
+    `<rect x="22" y="21" width="52" height="52" rx="14" fill="${t.bg}" fill-opacity="${light ? 0.92 : 0.88}" stroke="${light ? "#cbd5e1" : "#3a3d46"}"/>` +
+    `<rect x="22.5" y="21.5" width="51" height="51" rx="13.5" fill="url(#lit)" fill-opacity="${light ? 0.08 : 0.1}"/>` +
+    `<g transform="translate(34 33) scale(1.1667)"><path d="${DISCORD_PATH}" fill="url(#lit)"/></g>`;
+
+  // Middle text block
+  const tx = cell + 22;
+  const words =
+    markIcon(t, tx, 17, 13) +
+    text("GLASSWORKS · COMMUNITY", { font: "medium", size: 8.5, ls: 1.7, x: tx + 18, y: 27, fill: t.fa }) +
+    text("Join us on Discord", { font: "semibold", size: 17.5, ls: -0.3, x: tx, y: 52, fill: t.fg }) +
+    text("Install help, hardware bring-up, Clarity & showcase", { size: 11.5, x: tx, y: 72, fill: t.mu });
+
+  // Right CTA pill
+  const ctaLabel = "Join server";
+  const ctaTextW = measure(ctaLabel, { font: "medium", size: 11.5 });
+  const ctaW = Math.round(16 + ctaTextW + 8 + 10 + 14);
+  const ctaX = W - 20 - ctaW;
+  const ctaY = 30;
+  const ctaH = 34;
+  const arrowX = ctaX + 16 + ctaTextW + 8;
+  const arrowY = ctaY + ctaH / 2;
+  const cta =
+    `<rect x="${ctaX}" y="${ctaY}" width="${ctaW}" height="${ctaH}" rx="17" fill="${t.bg}" fill-opacity="${light ? 0.92 : 0.72}" stroke="url(#lit)" stroke-opacity="${light ? 0.85 : 0.9}"/>` +
+    text(ctaLabel, { font: "medium", size: 11.5, x: ctaX + 16, y: ctaY + 21, fill: t.fg }) +
+    `<path d="M${arrowX.toFixed(1)} ${arrowY}h8.5m-3.2-3.2 3.2 3.2-3.2 3.2" fill="none" stroke="url(#lit)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>`;
+
+  const body =
+    `<defs>${defs}</defs><clipPath id="clip"><rect x="1" y="1" width="${W - 2}" height="${H - 2}" rx="15.5"/></clipPath>` +
+    `<rect ${box} fill="${t.bg}"/>` +
+    `<g clip-path="url(#clip)">` +
+    `<rect width="${cell}" height="${H}" fill="url(#dotL)"/>` +
+    guide(`M0 0L${cell} ${H}M0 ${H}L${cell} 0M${cell / 2} 0V${H}M0 ${H / 2}H${cell}`, t, { op: 0.24, w: 0.6, dash: "3 3" }) +
+    `<rect width="${cell}" height="${H}" fill="url(#cellGlow)"/>` +
+    `<rect x="${cell}" width="${tw}" height="${H}" fill="url(#sweep)"/>` +
+    `</g>` +
+    guide(`M${cell} 0V${H}`, t, { op: 0.55, w: 0.7, dash: "4 3" }) +
+    `<rect ${box} fill="none" stroke="${light ? "#c9ccd4" : "#3a3d46"}"/>` +
+    `<rect ${box} fill="none" stroke="url(#rim)" mask="url(#lit-edge)"/>` +
+    tile +
+    words +
+    cta;
+
+  return svg(W, H, "Join the Glassworks Discord community", body, t);
+}
+
 /* ---------- write ---------- */
 
 mkdirSync(out, { recursive: true });
@@ -452,6 +518,7 @@ for (const t of Object.values(THEMES)) {
   for (const id of Object.keys(PART)) write(`badge-${id}-${on}.svg`, partBadge(t, id));
   for (const b of infoBadges) write(`badge-${b.id}-${on}.svg`, infoBadge(t, b));
   for (const id of Object.keys(ICON)) write(`icon-${id}-${on}.svg`, partIcon(t, id));
+  write(`card-discord-${on}.svg`, discordCard(t));
   write(`banner-glassworks-${on}.svg`, glassworksBanner(t));
   write(`banner-core-${on}.svg`, coreBanner(t));
   write(`banner-pane-${on}.svg`, paneBanner(t));
