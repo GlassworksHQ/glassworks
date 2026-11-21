@@ -15,7 +15,11 @@ import { OwnFrameRefused, Refused, cap, type OwnFrame, type UsbApp, type UsbFram
 import { FRAMES } from '../frames/catalog';
 import { askAdb, nothingPicked } from './adbAsk';
 import type { DeviceProgress } from './imageSession';
-import { NoRelease, apkAbi, apkMode, installable, releaseApk, type ApkFrom, type ReleaseApk, type ReleaseLine } from '../release/apk';
+import { NoRelease, apkAbi, apkMode, installable, releaseApk, type ApkFrom, type ListedRelease, type ReleaseApk, type ReleaseLine } from '../release/apk';
+import { within } from './imageSession';
+
+/** How long one read over adb may stay silent before Kiln stops it with Try again (the engine's stall watchdog). */
+export const USB_READ_MS = 30_000;
 
 /** The page is everyone's once the frame's frame.json makes it installable (release/apk.ts `installable`). */
 export const usbOpen = (f: Pick<UsbFrame, 'id'>) => { const d = FRAMES.find((x) => x.id === f.id); return !!d && installable(d); };
@@ -95,6 +99,8 @@ export interface UsbDeps {
   handOver?(device: Device, installed: UsbInstalled): void;
   /** Where an install or undo got to, kept across page loads (device/imageSession.ts `DeviceProgress`). */
   progress?: DeviceProgress;
+  /** How long one read over adb may stay silent (USB_READ_MS) */
+  readMs?: number;
 }
 
 /** Whether the page is on and where its APK comes from (release/apk.ts `apkMode`). */
@@ -114,8 +120,9 @@ export class UsbSession {
    */
   private device?: Device;
   private picks = 0;
-  /** With the APK from the release: the ABI of the one `apk` holds. */
+  /** With the APK from the release: the ABI of the one `apk` holds, and the release it came from. */
   private releaseAbi?: string;
+  private listed?: ListedRelease;
 
   constructor(private readonly d: UsbDeps, on: boolean) {
     this.state = { screen: on ? 'find' : 'off', flow: 'install', phases: [], log: [], ...(d.release ? { release: { state: 'waiting' } } : {}), ...(on && d.progress?.get() ? { changed: true } : {}) };
@@ -161,10 +168,11 @@ export class UsbSession {
     const r = this.state.release;
     if (!this.d.release || !r || !['waiting', 'none', 'error'].includes(r.state)) return;
     try {
-      const { bytes, ready } = await releaseApk(this.d.frame.apk as ReleaseLine, this.d.release, (release) => this.set({ release }));
+      const { bytes, ready, release } = await releaseApk(this.d.frame.apk as ReleaseLine, this.d.release, (release) => this.set({ release }));
       this.log(`${ready.name} from ${ready.tag}: SHA-256 ${ready.sha256}, as the release publishes it`);
       await this.pickApk(ready.name, bytes);
       this.releaseAbi = this.apk ? this.d.frame.apk.abi : undefined;
+      this.listed = this.apk ? release : undefined;
       // an APK the checks refuse is an error of the release, so Try again can fetch a fixed one
       const refused = this.state.apk?.error;
       this.set({ release: refused ? { state: 'error', why: `Kiln can't install it: ${refused}` } : ready });
@@ -281,10 +289,10 @@ export class UsbSession {
 
   /**
    * With the APK from the release: the build for the ABIs this device runs (`ro.product.cpu.abilist`, preferred
-   * first), from the same release line, when it isn't the one the first screen downloaded. Reads only.
+   * first), from the release the first screen downloaded from, when it isn't that ABI. Reads only, each read bounded.
    */
   private async releaseFor(p: Device): Promise<void> {
-    const abis = (await p.run('getprop ro.product.cpu.abilist')).out.split(',').map((a) => a.trim()).filter(Boolean);
+    const abis = (await within(p, 'getprop ro.product.cpu.abilist', this.d.readMs ?? USB_READ_MS, cap(this.d.frame.the))).out.split(',').map((a) => a.trim()).filter(Boolean);
     const ships = FRAMES.find((x) => x.id === this.d.frame.id)?.abis ?? [];
     const abi = apkAbi(abis, ships);
     if (!abi) {
@@ -293,10 +301,10 @@ export class UsbSession {
     }
     if (abi === this.releaseAbi && this.apk) return;
     this.log(`${cap(this.d.frame.the)} runs ${abis.join(', ')}: the release's ${abi} build`);
-    const got = await releaseApk({ line: this.d.frame.apk.line, abi } as ReleaseLine, this.d.release!, (release) => this.set({ release })).catch((e: unknown) => {
+    const got = await releaseApk({ line: this.d.frame.apk.line, abi, ...(this.listed ? { from: this.listed } : {}) }, this.d.release!, (release) => this.set({ release })).catch((e: unknown) => {
       if (!(e instanceof NoRelease)) throw e;
       this.set({ release: { state: 'none' } });
-      throw new Refused(`The newest release of ${this.d.frame.app} has no ${abi} build, which this ${this.d.frame.short} needs.`);
+      throw new Refused(`${this.d.frame.app} ${this.listed?.version ?? ''} has no ${abi} build, which this ${this.d.frame.short} needs.`.replace('  ', ' '));
     });
     const { bytes, ready } = got;
     this.log(`${ready.name} from ${ready.tag}: SHA-256 ${ready.sha256}, as the release publishes it`);

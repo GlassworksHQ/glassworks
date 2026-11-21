@@ -167,7 +167,48 @@ describe('the release\'s APK for the device\'s ABI (issue 700)', () => {
     const tablet = new FakeAndroid(SAMSUNG_32BIT);
     const { s } = await run(tablet, { 'arm64-v8a': APK });
     expect(s.state.screen).toBe('error');
-    expect(s.state.error).toBe('The newest release of Glassworks for Android has no armeabi-v7a build, which this tablet needs. Nothing was changed.');
+    expect(s.state.error).toBe('Glassworks for Android 0.2.0 has no armeabi-v7a build, which this tablet needs. Nothing was changed.');
+    expect(tablet.cmds.filter((c) => !c.startsWith('getprop'))).toEqual([]);
+  });
+
+  it('the 32-bit build comes from the release the first screen used, even when a newer one lands in between', async () => {
+    const r = fakeReleaseRoute('out', BUILDS, async () => {}, 'generic-android');
+    const asked: string[] = [];
+    let latest = 0;
+    const route = (async (u: RequestInfo | URL) => {
+      asked.push(String(u));
+      // after the first look, a newer release with no 32-bit build: never consulted
+      if (String(u).endsWith('/latest') && latest++) return Response.json({ release: { tag: 'generic-android-v0.3.0', version: '0.3.0', assets: ['glassworks-generic-android-arm64-v8a-0.3.0.apk'] } });
+      return r(u);
+    }) as typeof fetch;
+    const s = new AndroidSession({ findUsb: async () => ({ vendorId: 0x04e8 }), connect: async () => new FakeAndroid(SAMSUNG_32BIT), release: route, sleep: async () => {}, setupTries: 1 }, true);
+    await s.loadRelease();
+    await s.find();
+    s.toSteps();
+    await s.connect();
+    expect(s.state.error).toBeUndefined();
+    expect(s.state.plan?.abi).toBe('armeabi-v7a');
+    expect(s.state.release).toMatchObject({ state: 'ready', tag: TAG, name: NAME_32 });
+    expect(asked.filter((u) => u.endsWith('/latest'))).toHaveLength(1);
+  });
+
+  it('a device that stops answering while Kiln reads its ABIs: an error with Try again, not a wait forever', async () => {
+    class Silent extends FakeAndroid {
+      override async run(cmd: string, signal?: AbortSignal) {
+        if (cmd === 'getprop ro.product.cpu.abilist') return new Promise<never>((_, reject) => signal?.addEventListener('abort', () => reject(signal.reason)));
+        return super.run(cmd);
+      }
+    }
+    const tablet = new Silent(SAMSUNG_32BIT);
+    const s = new AndroidSession({
+      findUsb: async () => ({ vendorId: 0x04e8 }), connect: async () => tablet, release: fakeReleaseRoute('out', BUILDS, async () => {}, 'generic-android'), readMs: 20,
+    }, true);
+    await s.loadRelease();
+    await s.find();
+    s.toSteps();
+    await s.connect();
+    expect(s.state.screen).toBe('error');
+    expect(s.state.error).toBe('The tablet didn\'t answer `getprop ro.product.cpu.abilist` in 0 s');
     expect(tablet.cmds.filter((c) => !c.startsWith('getprop'))).toEqual([]);
   });
 
