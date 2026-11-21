@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { CAPABILITIES, PANE_ALIASES, PANE_IDS, RATING_KEYS, agentProblems, creditProblems, factProblems, keyProblems, kindProblems, type FrameDesign, type Stage } from "@glassworks/frame-card";
+import { CAPABILITIES, PANE_ALIASES, PANE_IDS, RATING_KEYS, agentProblems, creditProblems, factProblems, keyProblems, kindProblems, testedProblems, type FrameDesign, type Stage } from "@glassworks/frame-card";
 
 /*
  * The frame catalog: every `frames/<id>/design/frame.json` in this repo, read at build time (the
@@ -32,6 +32,9 @@ function check(file: string, f: FrameDesign, id: string, all: FrameDesign[]) {
   // full frame, device frame or tested device; a tested device names the frame it installs as (#403)
   const kind = kindProblems(f, all);
   if (kind.length) bad(kind.join("; "));
+  // a tested device says who tested it and on what (issue 700)
+  const tested = testedProblems(f);
+  if (tested.length) bad(tested.join("; "));
   // it rates only panes that exist (a pane it doesn't rate is worked out from `provides`; issue 231)
   for (const [p, r] of Object.entries(f.panes ?? {})) {
     if (!PANE_IDS.includes(p) && !(p in PANE_ALIASES)) bad(`panes.${p}: no pane has that id`);
@@ -78,10 +81,11 @@ export const frameById = (id: string) => frames.find((f) => f.id === id);
 
 /**
  * Where to install it, and whether that is Kiln: Kiln's page for the frame whenever it installs from
- * Kiln, else `install.href`, the frame's own installer.
+ * Kiln (a tested device's is its base's, as in Kiln's picker), else `install.href`, the frame's own installer.
  */
-export function installLink(f: FrameDesign): { href: string; kiln: boolean } | undefined {
-  if (f.kiln) return { href: new URL(f.kiln, KILN).href, kiln: true };
+export function installLink(f: FrameDesign, list: FrameDesign[] = frames): { href: string; kiln: boolean } | undefined {
+  const route = f.kiln ?? (f.kind === "tested" && f.base ? list.find((x) => x.id === f.base)?.kiln : undefined);
+  if (route) return { href: new URL(route, KILN).href, kiln: true };
   // the parsed URL, so a value like "https:host" can never resolve against this site
   return f.install.href ? { href: new URL(f.install.href).href, kiln: false } : undefined;
 }
@@ -95,7 +99,7 @@ export type HeroPanel = { frame: FrameDesign; href: string; page: string };
  */
 export function heroPanel(list: FrameDesign[] = frames): HeroPanel | undefined {
   for (const f of list) {
-    const install = installLink(f);
+    const install = installLink(f, list);
     if (f.render && install?.kiln) return { frame: f, href: install.href, page: `/frames/${f.id}` };
   }
   return undefined;

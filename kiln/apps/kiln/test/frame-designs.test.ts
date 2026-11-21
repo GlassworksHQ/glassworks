@@ -4,7 +4,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { ABIS, PANE_IDS, RATING_KEYS, creditProblems, factProblems, framePanes, geometry, isCapability, isPaneAlias, keyProblems, kindProblems, type FrameDesign } from '@glassworks/frame-card';
+import { ABIS, PANE_IDS, RATING_KEYS, creditProblems, factProblems, framePanes, geometry, isCapability, isPaneAlias, keyProblems, kindProblems, testedProblems, type FrameDesign } from '@glassworks/frame-card';
 import { FRAMES, MEASURED, RENDERS } from '../src/frames/catalog';
 
 const frames = fileURLToPath(new URL('../../../../frames', import.meta.url));
@@ -52,6 +52,7 @@ describe('frame designs', () => {
     expect(Object.keys(f.ratings).sort()).toEqual([...RATING_KEYS].sort());
     expect(creditProblems(f), 'credits (frames/README.md#credits)').toEqual([]);
     expect(kindProblems(f, folders.map(read)), 'kind (frames/README.md)').toEqual([]);
+    expect(testedProblems(f), 'tested (frames/README.md#who-tested-it)').toEqual([]);
     expect(factProblems(f), 'facts and run (frames/README.md#how-complete-it-is)').toEqual([]);
     expect(keyProblems(f), 'fields (frames/README.md#designframejson)').toEqual([]);
     // it rates only panes that exist (by id or an old alias); every other pane is worked out, with a reason (#231)
@@ -93,12 +94,13 @@ describe('frame designs', () => {
     expect(RENDERS[id], 'Kiln imports it').toMatch(/render/);
   });
 
-  it('the S1 is stable, the Mirror and generic Android beta, all installable from Kiln; the Pixel Tablet isn\'t', () => {
+  it('the S1 is stable, the Mirror, generic Android and the Pixel Tablet beta, all installable from Kiln', () => {
     expect(read('aqara-s1-plus')).toMatchObject({ status: 'stable', kiln: '/aqara-s1-plus', recovery: 'recovery.json' });
     expect(read('aqara-s1-plus').abis, 'the S1 runs a 32-bit userspace').toEqual(['armeabi-v7a']);
     expect(read('lululemon-mirror')).toMatchObject({ status: 'beta', kiln: '/lululemon-mirror' });
     expect(read('generic-android')).toMatchObject({ status: 'beta', kiln: '/android' });
-    expect(read('google-pixel-tablet')).toMatchObject({ status: 'planned' });
+    // a tested device: beta, with no route of its own; it installs as its base, generic Android (kilnRoute)
+    expect(read('google-pixel-tablet')).toMatchObject({ status: 'beta', base: 'generic-android' });
     expect(read('google-pixel-tablet').kiln).toBeUndefined();
   });
 

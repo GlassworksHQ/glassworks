@@ -13,8 +13,8 @@
     </picture>
   </a>
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-status-planned-on-dark.svg">
-    <img alt="Status: planned" src="https://www.glassworks.dev/brand/badge-status-planned-on-light.svg" height="30">
+    <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-status-beta-on-dark.svg">
+    <img alt="Status: beta" src="https://www.glassworks.dev/brand/badge-status-beta-on-light.svg" height="30">
   </picture>
   <a href="https://github.com/orgs/GlassworksHQ/projects/1">
     <picture>
@@ -28,7 +28,7 @@ The Google Pixel Tablet is a **tested device** that runs [Glassworks for Generic
 
 ## Status
 
-**Installable today via Generic Android** *(listed as planned in the frame catalog while full hardware verification wraps up)*. Plug your Pixel Tablet in over USB and open **[kiln.glassworks.dev/android](https://kiln.glassworks.dev/android)** in Chrome or Edge to install Glassworks, grant permissions, and enable silent self-updates automatically—or sideload the APK directly ([Generic Android install guide](../generic-android/README.md#install)).
+**Installable today via Generic Android**. Plug your Pixel Tablet in over USB and open **[kiln.glassworks.dev/android](https://kiln.glassworks.dev/android)** in Chrome or Edge to install Glassworks, grant permissions, and enable silent self-updates automatically—or sideload the APK directly ([Generic Android install guide](../generic-android/README.md#install)).
 
 **Clarity v1: B (provisional)** — performs well as a wall panel for typical Home Assistant dashboards with a live camera. Large dashboards hold it back from an A grade: on the heavy reference view, the camera takes 2.1 seconds to show its first frame and the main thread blocks for 0.9 seconds after drawing the view. The grade is marked provisional because camera stall stats on the heavy view were not reported in time. You can inspect the full benchmark report in [clarity/report.md](clarity/report.md) and the structured summary in [clarity/clarity.json](clarity/clarity.json) (see [Clarity performance grades](../../docs/clarity.md)).
 

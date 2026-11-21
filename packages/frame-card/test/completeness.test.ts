@@ -239,9 +239,10 @@ describe('the frames', () => {
     return completeness(f, { base: all.find((b) => b.id === f.base), clarity: clarity[id] });
   };
 
-  it('gives each frame that ships its word (the Pixel Tablet is planned: none), and the S1 misses wall base buttons', () => {
+  it('gives each frame that ships its word (the Pixel Tablet through its base\'s route), and the S1 misses wall base buttons', () => {
     expect(Object.fromEntries(ids.map((id) => [id, of(id).word]))).toEqual({
-      'aqara-s1-plus': 'good', 'generic-android': 'good', 'google-pixel-tablet': null, 'lululemon-mirror': 'good',
+      'aqara-s1-plus': 'good', 'generic-android': 'good', 'google-pixel-tablet': 'good', 'lululemon-mirror': 'good',
+      'samsung-galaxy-tab-a-10-1-2016': 'good',
     });
     expect(of('aqara-s1-plus').items.filter((i) => i.state !== 'yes').map((i) => i.key)).toEqual(['hardware']);
   });
@@ -277,8 +278,17 @@ describe('factProblems', () => {
     expect(factProblems(f as FrameDesign)).toContain(why);
   });
 
-  it('fails a tested device without a run', () => {
-    expect(factProblems({ kind: 'tested' })).toEqual(['run: a tested device records its run on a real unit (frames/README.md#a-tested-devices-run)']);
+  it('fails a tested device without a run, unless the community tested it: its report is the record', () => {
+    const why = ['run: a tested device records its run on a real unit (frames/README.md#a-tested-devices-run)'];
+    expect(factProblems({ kind: 'tested' })).toEqual(why);
+    expect(factProblems({ kind: 'tested', tested: { by: 'glassworks' } })).toEqual(why);
+    expect(factProblems({ kind: 'tested', tested: { by: 'community' } })).toEqual([]);
+  });
+
+  it('marks every item of a community-tested device without a run unverified', () => {
+    const c = completeness(frame({ kind: 'tested', base: 'generic-android', run: undefined, tested: { by: 'community', os: 'LineageOS' } }), { base: { kiln: '/android' } });
+    expect(c.noRun).toBe(true);
+    expect(c.items.every((i) => i.unverified)).toBe(true);
   });
 
   it('rejects a field frame.json doesn\'t have, such as a serial beside the run', () => {

@@ -76,6 +76,24 @@ class EdgeGlowOverlay(context: Context) : FrameLayout(context) {
     private var bottomLap = -1
     private var looping = false
     private val mic = LevelSmoother()
+    private val rnd = java.util.Random()
+    private var lastGlint = 0L
+
+    /**
+     * What the voice did to the glow in this run, logged when it ends ("Glow run: …", tag Glassworks.Voice): the raw mic level
+     * and the glow's voice, mean and peak while listening, and how many ripples it sent. For tuning [EdgeGlow.voice] on a
+     * real panel, next to the engine's "Run audio" line.
+     */
+    private class RunLevels {
+        var ms = 0f; var micSum = 0f; var micPeak = 0f; var voiceSum = 0f; var voicePeak = 0f; var ripples = 0
+        fun add(mic: Float, voice: Float, dt: Float) {
+            ms += dt; micSum += mic * dt; voiceSum += voice * dt
+            micPeak = max(micPeak, mic); voicePeak = max(voicePeak, voice)
+        }
+        fun line() = "Glow run: listening %.1f s, mic mean %.2f peak %.2f, voice mean %.2f peak %.2f, %d ripple(s)".format(
+            java.util.Locale.ROOT, ms / 1000f, if (ms > 0) micSum / ms else 0f, micPeak, if (ms > 0) voiceSum / ms else 0f, voicePeak, ripples)
+    }
+    private var run = RunLevels()
     private val tts = LevelSmoother(attackMs = 350f, releaseMs = 700f) // speaking breathes slowly (calm)
 
     private val holdEnd = Runnable { leave() }
@@ -148,6 +166,7 @@ class EdgeGlowOverlay(context: Context) : FrameLayout(context) {
         isClickable = true
         visibility = View.VISIBLE
         phase = Phase.ENTER; pending = Phase.LISTENING
+        run = RunLevels(); lastGlint = 0L
         lap = -1; bottomLap = -1; mic.reset(); tts.reset()
         removeCallbacks(gone)
         postDelayed(entered, ENTER_MS)
@@ -178,6 +197,7 @@ class EdgeGlowOverlay(context: Context) : FrameLayout(context) {
         removeCallbacks(holdEnd)
         if (!active || leavingAt >= 0) return
         leavingAt = SystemClock.uptimeMillis()
+        if (run.ms > 0f) dev.glassworks.assist.VoiceLog.i(run.line())
         isClickable = false
         onShowingChanged?.invoke(false)
         glow?.exit()
@@ -207,9 +227,12 @@ class EdgeGlowOverlay(context: Context) : FrameLayout(context) {
         val g = glow
         if (g != null) when (phase) {
             Phase.LISTENING -> {
-                val l = max(mic.step(VoiceLevels.mic, dt), AudioLevel.LISTENING_FLOOR)
-                g.level(l)
-                if (t - lastRipple >= RIPPLE_MS) { if (l > 0.3f) g.ripple(l); lastRipple = t }
+                val raw = VoiceLevels.mic
+                val l = max(mic.step(raw, dt), AudioLevel.LISTENING_FLOOR)
+                val v = EdgeGlow.voice(l)
+                g.level(v)
+                if (t - lastRipple >= RIPPLE_MS) { if (v > RIPPLE_VOICE) { g.ripple(v); run.ripples++ }; lastRipple = t }
+                run.add(raw, v, dt)
             }
             Phase.THINKING -> {
                 // The top and bottom edges on their own laps, so neither is cut off mid-run.
@@ -218,6 +241,8 @@ class EdgeGlowOverlay(context: Context) : FrameLayout(context) {
                 if (since >= EdgeGlow.BOTTOM_LAG_MS) {
                     val b = ((since - EdgeGlow.BOTTOM_LAG_MS) / EdgeGlow.LAP_MS).toInt(); if (b != bottomLap) { bottomLap = b; g.thinkingBottom() }
                 }
+                // glints catch here and there, as in the render: a chance every 90 ms
+                if (t - lastGlint >= GLINT_MS) { lastGlint = t; if (rnd.nextFloat() >= .45f) g.glint(rnd.nextFloat() * width, rnd.nextBoolean(), rnd.nextBoolean()) }
             }
             Phase.SPEAKING -> g.speaking(tts.step(if (VoiceLevels.ttsPlaying) AudioLevel.ttsPulse((t - phaseAt).toDouble()) else 0f, dt))
             else -> Unit
@@ -280,6 +305,9 @@ class EdgeGlowOverlay(context: Context) : FrameLayout(context) {
         const val ENTER_MS = 650L
         const val EXIT_MS = 420L
         const val RIPPLE_MS = 140L
+        /** A ripple goes out every [RIPPLE_MS] while the voice is above this (the render's .3, on its level). */
+        const val RIPPLE_VOICE = .3f
+        const val GLINT_MS = 90L
         const val ERROR_HOLD_MS = 1_600L
         val ROSE = 0xfffb7185.toInt()
     }

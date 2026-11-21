@@ -313,13 +313,14 @@ function runProblemsOf(r: unknown, out: string[]) {
 /**
  * What's wrong with a frame's `facts` or `run`, one line per problem; empty when it's fine.
  * glassworks.dev's build, Kiln's frame-designs test and this package's tests run it. A tested device has a `run` and no `facts`; any other kind has `facts` and no `run`.
+ * A device the community tested (`tested.by`) may have no run: its report is the record, and every item stays unverified.
  */
-export function factProblems(f: Pick<FrameDesign, 'kind'> & { facts?: unknown; run?: unknown }): string[] {
+export function factProblems(f: Pick<FrameDesign, 'kind'> & { facts?: unknown; run?: unknown; tested?: { by?: unknown } }): string[] {
   const out: string[] = [];
   if (f.kind === 'tested') {
     if (f.facts !== undefined) out.push('facts: a tested device\'s come from its run on a real unit; record them in run');
-    if (f.run === undefined) out.push('run: a tested device records its run on a real unit (frames/README.md#a-tested-devices-run)');
-    else runProblemsOf(f.run, out);
+    if (f.run !== undefined) runProblemsOf(f.run, out);
+    else if (f.tested?.by !== 'community') out.push('run: a tested device records its run on a real unit (frames/README.md#a-tested-devices-run)');
   } else {
     if (f.run !== undefined) out.push('run: only a tested device has one; record what this frame\'s panels show in facts');
     if (f.facts !== undefined) factProblemsOf(f.facts, out);

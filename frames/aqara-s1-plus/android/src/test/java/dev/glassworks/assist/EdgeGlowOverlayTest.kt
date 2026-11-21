@@ -160,4 +160,43 @@ class EdgeGlowOverlayTest {
         assertEquals(View.GONE, g.visibility)
         assertEquals(listOf(true, false), showing)
     }
+
+    private fun glowOf(g: EdgeGlowOverlay): EdgeGlow =
+        (0 until g.childCount).map { g.getChildAt(it) }.filterIsInstance<EdgeGlow>().single()
+
+    /** How thick each strip is now (1 = its own size), and how bright the border is. */
+    private fun border(e: EdgeGlow): Pair<List<Float>, Float> =
+        e.edges.mapIndexed { i, s -> if (i % 3 == 1) s.scaleX else s.scaleY } to (e.edges[0].parent as View).alpha
+
+    @Test fun theWholeBorderAnswersTheVoiceFromTheRealMicLevel() {
+        val g = glow()
+        VoiceLevels.mic = 0f
+        g.update(VoiceUi("listening", seq = 1), true)
+        idle(900)
+        idle(400)
+        val (quietThick, quietBright) = border(glowOf(g))
+        // Speech as a panel's mic hears it (VoiceEngine's level: -55 to -15 dBFS as 0 to 1), through the same
+        // VoiceLevels.mic the orb reads.
+        VoiceLevels.mic = .45f
+        idle(400)
+        val (loudThick, loudBright) = border(glowOf(g))
+        for ((i, k) in loudThick.withIndex()) assertTrue("strip $i swells: $k", k >= 1.3f && k > quietThick[i] + .25f)
+        assertTrue("the border brightens: $quietBright -> $loudBright", loudBright > quietBright + .25f)
+        // Quiet again: it settles back (the smoother's release).
+        VoiceLevels.mic = 0f
+        repeat(10) { idle(300) }
+        val (afterThick, _) = border(glowOf(g))
+        for (k in afterThick) assertTrue("back to its own size: $k", k < 1.05f)
+        VoiceLevels.mic = 0f
+    }
+
+    @Test fun theVoiceCurveOpensUpTheRangeRealSpeechUses() {
+        assertEquals(0f, EdgeGlow.voice(AudioLevel.LISTENING_FLOOR), 1e-6f)
+        assertEquals(0f, EdgeGlow.voice(0f), 1e-6f)
+        assertTrue("normal speech is well up the scale", EdgeGlow.voice(.3f) > .5f)
+        assertEquals("loud speech is the top", 1f, EdgeGlow.voice(.55f), 1e-6f)
+        var last = -1f
+        for (i in 0..100) { val v = EdgeGlow.voice(i / 100f); assertTrue(v >= last); last = v }
+    }
 }
+

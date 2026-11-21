@@ -10,7 +10,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { INSTALLERS } from '@glassworks/frames/catalog';
-import { FRAMES } from '../frames/catalog';
+import { FRAMES, installsAs, kilnRoute } from '../frames/catalog';
 import { registry } from '../wizard/registry';
 import { ROUTES, canonical, fromHash, status } from '../wizard/routes';
 import { STEPS } from '../wizard/state';
@@ -19,7 +19,8 @@ import { LastRun } from './LastRun';
 import p from './Picker.module.css';
 import { Shell, useBrowserChip } from './Shell';
 
-const INSTALLABLE = FRAMES.filter((f) => ships(f.status) && f.kiln);
+// a tested device installs through its base's route (kilnRoute)
+const INSTALLABLE = FRAMES.filter((f) => ships(f.status) && kilnRoute(f));
 const SOON = FRAMES.filter((f) => !INSTALLABLE.includes(f));
 /** The first installer page's old links (/#/wifi, …) belong to the frame it was for (installer.json `legacy.hashLinks`). */
 const OLD_LINKS_FRAME = Object.values(INSTALLERS).find((i) => i.legacy?.hashLinks)?.route;
@@ -51,8 +52,8 @@ export function Picker() {
   const running = useRunning();
   const [picked, setPicked] = useState(INSTALLABLE[0]?.id ?? '');
   const design = FRAMES.find((f) => f.id === picked);
-  const frame = design?.kiln ?? '';
-  const data = INSTALLERS[picked];
+  const frame = (design && kilnRoute(design)) ?? '';
+  const data = design ? INSTALLERS[installsAs(design)] : undefined;
   // undo has routes of its own only where the way back restores a backup; elsewhere it is on the frame's own screens
   const undo = data?.wayBack?.how === 'restore-backup';
   useEffect(() => {

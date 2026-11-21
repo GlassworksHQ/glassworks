@@ -83,7 +83,7 @@ class TheRepoFrames(unittest.TestCase):
     def test_three_app_lines_each_built_once(self):
         self.assertEqual(['aqara-s1-plus', 'generic-android', 'generic-android-legacy'], sorted(self.lines))
         self.assertEqual(['aqara-s1-plus'], self.users['aqara-s1-plus'])
-        self.assertEqual(['generic-android', 'google-pixel-tablet'], self.users['generic-android'])
+        self.assertEqual(['generic-android', 'google-pixel-tablet', 'samsung-galaxy-tab-a-10-1-2016'], self.users['generic-android'])
         self.assertEqual(['generic-android', 'lululemon-mirror'], self.users['generic-android-legacy'])
 
     def test_the_frame_releases(self):
@@ -296,7 +296,8 @@ class NewFramesAreData(Fixture):
         self.sections(generic=['1.0.0'])
         self.frame('example-tablet', {'release': {'app': ['generic-android']}})
         p = self.plan()
-        self.assertEqual(['example-tablet', 'generic-android', 'google-pixel-tablet'], by(p, 'line', 'generic-android')['frames'])
+        self.assertEqual(['example-tablet', 'generic-android', 'google-pixel-tablet', 'samsung-galaxy-tab-a-10-1-2016'],
+                         by(p, 'line', 'generic-android')['frames'])
         self.assertEqual(1, sum(1 for i in p['items'] if i['name'] == 'generic-android' and i['kind'] == 'line'))
         self.assertIn('example-tablet', by(p, 'line', 'generic-android')['frames'])
         self.assertEqual({('line', 'generic-android'), ('line', 'generic-android-legacy')}, due(p))

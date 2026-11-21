@@ -52,6 +52,12 @@ describe('from adb, once debugging is on', () => {
     expect(d.model?.name).toBe(name);
   });
 
+  it('a Galaxy Tab A 10.1 (2016) on LineageOS, which keeps Samsung\'s maker and model: its frame', () => {
+    expect(identifyAdb({ manufacturer: 'Samsung', model: 'SM-T580' })).toMatchObject({
+      brand: { id: 'samsung' }, model: { name: 'Galaxy Tab A 10.1 (2016)', frame: 'samsung-galaxy-tab-a-10-1-2016' }, tested: true,
+    });
+  });
+
   it('an unknown maker: untested, generic steps', () => {
     expect(identifyAdb({ manufacturer: 'Teclast', model: 'P20HD' })).toMatchObject({ steps: GENERIC_STEPS, tested: false, why: 'Kiln doesn\'t know the maker "Teclast".' });
   });

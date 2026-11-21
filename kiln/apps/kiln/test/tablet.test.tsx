@@ -109,7 +109,8 @@ describe('the screens', () => {
     // the frame's own model, so its finish is the frame card's: light-dark() follows the page's theme
     expect(lookOf(on('PIXEL_DESKTOP'), 'generic-android')?.model).toBe(FRAMES.find((f) => f.id === 'google-pixel-tablet')!.model);
     expect(lookOf(on('UNKNOWN_DESKTOP'), 'generic-android')?.id).toBe('generic-android');
-    expect(lookOf(on('NOUGAT_TAB'), 'generic-android')?.id).toBe('generic-android');
+    // the Nougat tablet is an SM-T580, a tested device of its own (#700)
+    expect(lookOf(on('NOUGAT_TAB'), 'generic-android')?.id).toBe('samsung-galaxy-tab-a-10-1-2016');
     expect(lookOf(on('GALAXY_PHONE'), 'generic-android')).toBeUndefined();
   });
 

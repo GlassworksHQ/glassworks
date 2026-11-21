@@ -41,8 +41,8 @@ function Items({ title, items, flag }: { title: string; items: CheckItem[]; flag
   );
 }
 
-/** The frame page's checklist panel. */
-export function CompletenessPanel({ c }: { c: Completeness }) {
+/** The frame page's checklist panel. `community`: a device the community tested, whose report is its only record. */
+export function CompletenessPanel({ c, community = false }: { c: Completeness; community?: boolean }) {
   const w = c.word ?? "none";
   // every item unverified: one line in the head says so instead of a pill on each row
   const allUnverified = c.items.every((i) => i.unverified);
@@ -59,7 +59,10 @@ export function CompletenessPanel({ c }: { c: Completeness }) {
           </span>
           <span className={s.meaning}>
             {WORD_MEANING[w]} {DECIDES}
-            {c.noRun && " These are the values we expect: nothing here has run on a real unit yet."}
+            {c.noRun &&
+              (community
+                ? " These are the values we expect: it comes from a community report, and no run is recorded yet."
+                : " These are the values we expect: nothing here has run on a real unit yet.")}
             {allUnverified && !c.noRun && " Every value here is unverified."}
           </span>
         </div>
