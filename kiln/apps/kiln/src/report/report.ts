@@ -65,8 +65,11 @@ export const EMPTY: ReportFields = { model: '', android: '', osKind: '', customO
 export const LIMITS: Record<keyof ReportFields, number> = {
   model: 100, android: 40, osKind: 10, customOs: 100, abi: 80, flow: 10, step: 10, worked: 4000, didnt: 4000, clarity: 2, appVersion: 40,
 };
-/** The longest request the route reads, in bytes: every field at its limit, with room for JSON's escapes. */
-export const MAX_BYTES = 24_000;
+/**
+ * The longest request the route reads, in bytes: every field at its limit in the widest UTF-8 a JavaScript character can
+ * take (3 bytes for each UTF-16 unit; JSON's escapes of cleaned text are no wider), and room for the keys and the token.
+ */
+export const MAX_BYTES = 3 * Object.values(LIMITS).reduce((a, b) => a + b, 0) + 2048;
 
 /** The characters a one-line field may hold (after the privacy pass). */
 const ONE_LINE: Partial<Record<keyof ReportFields, RegExp>> = {
@@ -137,11 +140,15 @@ const lines = (s: string) => s.replace(/\r\n?/g, '\n').replace(/[\p{Cf}\u2028\u2
 
 /** A field as the report sends it: cleaned and scrubbed, but not escaped. */
 export function clean(f: ReportFields): ReportFields {
-  const one = (s: string, keep: RegExp) => line(scrub(line(s)).replace(keep, ''));
+  // until nothing changes: dropping a character can join two runs into something private (ACME:AB12345678), so
+  // cleaning what's cleaned is a no-op and the preview is what the route sends
+  const settle = (s: string, step: (x: string) => string) => { let t = step(s); for (let i = 0; i < 5; i++) { const n = step(t); if (n === t) break; t = n; } return t; };
+  const one = (s: string, keep: RegExp) => settle(s, (x) => line(scrub(line(x)).replace(keep, '')));
+  const text = (s: string) => settle(s, (x) => scrub(lines(x)));
   return {
     model: one(f.model, NOT_NAME), android: one(f.android, NOT_ANDROID), osKind: f.osKind, customOs: one(f.customOs, NOT_NAME),
     abi: one(f.abi, NOT_ABI).replace(/\s*,\s*/g, ','),
-    flow: f.flow, step: f.step, worked: scrub(lines(f.worked)), didnt: scrub(lines(f.didnt)),
+    flow: f.flow, step: f.step, worked: text(f.worked), didnt: text(f.didnt),
     clarity: line(f.clarity).toUpperCase(), appVersion: line(f.appVersion).replace(/^v/i, ''),
   };
 }
@@ -188,16 +195,18 @@ export function escapeMarkdown(text: string): string {
   return text.split('\n').map((l) => {
     const spans: string[] = [];
     const keep = (s: string) => { spans.push(s); return `\u0000${spans.length - 1}\u0000`; };
-    let t = l
-      // the code spans first, so no rule below touches what's in them
-      .replace(/\b(?:[a-z][a-z0-9+.-]*:\/\/|www\.)[^\s<>`\\]+/gi, (u) => keep(u))
-      .replace(/(?<!\w)@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\/[A-Za-z0-9._-]+)?/g, (m) => keep(m))
+    // the person's own backticks become apostrophes, so the only code spans are the ones made here
+    let t = l.replace(/`/g, '\'')
+      .replace(/\b(?:[a-z][a-z0-9+.-]*:\/\/|www\.)[^\s<>\\]+/gi, (u) => keep(u))
+      // every @name, whatever is before it: what comes before can change once the text around it is escaped
+      .replace(/@[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\/[A-Za-z0-9._-]+)?/g, (m) => keep(m))
       .replace(/(?:\b[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+)?#\d+\b|\bGH-\d+\b/gi, (m) => keep(m));
     t = t
-      .replace(/[\\`*_[\]<>|~]/g, (c) => (c === '<' ? '&lt;' : c === '>' ? '&gt;' : `\\${c}`))
+      .replace(/[\\*_[\]<>|~]/g, (c) => (c === '<' ? '&lt;' : c === '>' ? '&gt;' : `\\${c}`))
       .replace(/&(?![lg]t;)/g, '&amp;')
       .replace(/^(\s*)([#=+-]|\d+[.)])/, '$1\\$2');
-    return t.replace(/\u0000(\d+)\u0000/g, (_, i: string) => `\`${spans[Number(i)]!.replace(/`/g, '')}\``);
+    // two spans side by side would read as one run of two backticks: a space keeps them apart
+    return t.replace(/\u0000(\d+)\u0000/g, (_, i: string) => `\`${spans[Number(i)]!}\``).replace(/``/g, '` `');
   }).join('\n');
 }
 

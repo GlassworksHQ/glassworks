@@ -11,7 +11,7 @@ import { identifyBrowser } from '@glassworks/generic-android-installer';
 import { BROWSERS } from '@glassworks/generic-android-installer/browsers';
 import { registry } from '../src/wizard/registry';
 import { Screens } from '../src/device/UsbPage';
-import { ReportButton, SendError, type ReportTransport } from '../src/report/ReportDialog';
+import { ReportButton, routeTransportFor, SendError, type ReportTransport } from '../src/report/ReportDialog';
 import { onDevicePrefill } from '../src/report/prefill';
 import { reportDemo } from '../src/report/demo';
 import { clean, FLOWS, githubUrl, issueOf, type ReportFields } from '../src/report/report';
@@ -177,6 +177,30 @@ describe('the report sheet', () => {
     const p = onDevicePrefill({ ...on, release: '14', bits: 64, modelCode: 'SM-X200' }, 'get', '1.0.0');
     expect(p).toMatchObject({ android: '14', abi: '64-bit', flow: 'browser', step: 'get', appVersion: '1.0.0' });
     expect(p.model).toMatch(/SM-X200/);
+  });
+});
+
+describe('the page\'s transport', () => {
+  it('gives up on a route that stops answering: open falls back to GitHub, send says it couldn\'t reach', async () => {
+    const saved = globalThis.fetch;
+    // a fetch that never answers until it's aborted
+    globalThis.fetch = ((_: string, init: RequestInit) => new Promise((_r, reject) => init.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError'))))) as typeof fetch;
+    try {
+      const t = routeTransportFor(50);
+      expect(await t.open()).toBe('off');
+      await expect(t.send({} as ReportFields, 't', '')).rejects.toThrow('Kiln couldn\'t reach its server.');
+    } finally { globalThis.fetch = saved; }
+  });
+
+  it('a body that stalls after its headers counts too', async () => {
+    const saved = globalThis.fetch;
+    globalThis.fetch = ((_: string, init: RequestInit) => Promise.resolve({
+      ok: true, status: 201,
+      json: () => new Promise((_r, reject) => init.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))),
+    } as unknown as Response)) as typeof fetch;
+    try {
+      expect(await routeTransportFor(50).open()).toBe('off');
+    } finally { globalThis.fetch = saved; }
   });
 });
 

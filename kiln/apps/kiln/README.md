@@ -167,22 +167,24 @@ from custom Android, so the person picks. They add what worked, what didn't, and
 Before anything is sent the sheet shows the issue exactly as GitHub will have it, and says it's public. **Send it**
 posts the fields to `/api/report`, which opens the issue and the sheet links it. **Open it on GitHub instead** is
 always there: the template on GitHub with the same fields filled in. It's also the way on when Kiln can't send (no
-credentials, an error, the rate limit). Nothing is sent unless the person presses Send, and nothing is kept.
+credentials, an error, the rate limit, or a route that doesn't answer within 20 s). Nothing is sent unless the person
+presses Send, and nothing is kept.
 
 What the route does (`src/report/server.ts`, `src/report/report.ts`, shared with the sheet so the preview is what's sent):
 
-- Takes only the template's fields, as strings, each length-limited (`LIMITS`), and a request of at most 24 KB. It
+- Takes only the template's fields, as strings, each length-limited (`LIMITS`), and a request of at most about 27 KB (every field at its limit, in any script). It
   builds the title (`Tested: <model>`) and body itself, in the issue form's layout, with the template's label
   (`hardware report`). A title, body or label from the browser is ignored.
 - Removes what looks private: IPv4 and IPv6 addresses, MACs and EUI-64s, serials (11+ letters and digits with 4+
   digits), long digit runs (IMEIs), emails, JWTs, local names (`.local`, `.lan`, …), Nabu Casa addresses, and any URL
   except https ones on github.com and glassworks.dev. Each becomes "(removed)".
-- Escapes the person's text for GitHub's markdown: HTML as text, no links or images, and every @mention, issue reference
-  and URL in a code span, so a report can't ping anyone, link out, or load a tracking image.
+- Escapes the person's text for GitHub's markdown: HTML as text, no links or images, their backticks as apostrophes, and
+  every @mention, issue reference and URL in a code span of its own, so a report can't ping anyone, link out, or load a tracking image.
 - Refuses a filled honeypot field, a form sent sooner than 4 s after it opened or older than 2 h (a time token signed
   with a key derived from the credentials, so it needs no state), and more than 3 reports an hour from one address or
   30 from one instance. The address limit is **per instance and in memory**: a cold start or another instance starts
-  its own count. Addresses are kept only as a hash, for an hour.
+  its own count. Addresses are kept only as a hash, and forgotten an hour after their last report (the route sweeps
+  every few minutes).
 - Logs nothing from a report, no address and no token: a failure logs GitHub's status alone.
 
 The sheet's demo states work on any screen that has it, in `next dev` or a build with `NEXT_PUBLIC_KILN_DEMO=1`:

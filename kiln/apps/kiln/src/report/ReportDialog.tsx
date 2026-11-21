@@ -32,26 +32,40 @@ const WHY: Record<string, string> = {
   'not-configured': 'Kiln can\'t send reports from here.',
 };
 
-export const routeTransport: ReportTransport = {
-  async open() {
-    try {
-      const res = await fetch('/api/report', { cache: 'no-store' });
-      if (!res.ok) return 'off';
-      const j = (await res.json()) as { token?: unknown };
-      return typeof j.token === 'string' ? { token: j.token } : 'off';
-    } catch { return 'off'; }
-  },
-  async send(fields, token, honeypot) {
-    let res: Response;
-    try {
-      res = await fetch('/api/report', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ fields, token, kiln_leave_empty: honeypot }) });
-    } catch { throw new SendError('Kiln couldn\'t reach its server.'); }
-    const j = (await res.json().catch(() => ({}))) as { url?: unknown; number?: unknown; error?: unknown; problems?: Problems };
-    if (res.ok && typeof j.url === 'string' && typeof j.number === 'number') return { url: j.url, number: j.number };
-    if (res.status === 422 && j.problems) throw new SendError('Something in the report needs a change.', j.problems);
-    throw new SendError(WHY[typeof j.error === 'string' ? j.error : ''] ?? `Kiln's server answered ${res.status}.`);
-  },
-};
+/** How long a request to the route may take, its answer read included, before the sheet gives up on it. */
+export const REQUEST_MS = 20_000;
+
+/** `init` with a deadline, and what's read of the answer within it; past it, the request is aborted and this throws. */
+async function timed<T>(url: string, init: RequestInit, read: (r: Response) => Promise<T>, ms: number): Promise<T> {
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), ms);
+  try { return await read(await fetch(url, { ...init, signal: abort.signal })); } finally { clearTimeout(timer); }
+}
+
+/** The page's: Kiln's own route, each request bounded by `ms`. */
+export function routeTransportFor(ms = REQUEST_MS): ReportTransport {
+  return {
+    async open() {
+      try {
+        const j = await timed('/api/report', { cache: 'no-store' }, async (res) => (res.ok ? ((await res.json()) as { token?: unknown }) : {}), ms);
+        return typeof j.token === 'string' ? { token: j.token } : 'off';
+      } catch { return 'off'; }
+    },
+    async send(fields, token, honeypot) {
+      let got: { status: number; ok: boolean; j: { url?: unknown; number?: unknown; error?: unknown; problems?: Problems } };
+      try {
+        got = await timed('/api/report', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ fields, token, kiln_leave_empty: honeypot }) },
+          async (res) => ({ status: res.status, ok: res.ok, j: await res.json().catch(() => ({})) }), ms);
+      } catch { throw new SendError('Kiln couldn\'t reach its server.'); }
+      const { j, status, ok } = got;
+      if (ok && typeof j.url === 'string' && typeof j.number === 'number') return { url: j.url, number: j.number };
+      if (status === 422 && j.problems) throw new SendError('Something in the report needs a change.', j.problems);
+      throw new SendError(WHY[typeof j.error === 'string' ? j.error : ''] ?? `Kiln's server answered ${status}.`);
+    },
+  };
+}
+
+export const routeTransport = routeTransportFor();
 
 type Stage = 'form' | 'preview' | 'sending' | 'sent' | 'error';
 

@@ -174,6 +174,16 @@ describe('the route', () => {
     expect((await handlePost(post(valid(TOKEN)), deps(TOKEN, github(), T0 + 60_000 + 3_600_001, limit))).status).toBe(201);
   });
 
+  it('forgets an address an hour after its last report, with or without another report', () => {
+    const l = new RateLimit();
+    l.take('192.0.2.1', T0);
+    l.take('192.0.2.2', T0 + 30 * 60_000);
+    l.sweep(T0 + 60 * 60_000 + 1);
+    expect(l.size).toBe(1); // the first is gone, the second still counts
+    l.take('192.0.2.3', T0 + 2 * 60 * 60_000);
+    expect(l.size).toBe(1); // a report sweeps too
+  });
+
   it('caps the instance across addresses', () => {
     const l = new RateLimit(10, 2);
     expect(l.take('192.0.2.1', T0).ok).toBe(true);
@@ -251,16 +261,28 @@ describe('what a report may say', () => {
     expect(e).toContain('`other/repo#3`');
     expect(e).toContain('`https://github.com/x`');
     expect(e).toContain('\\*\\*bold\\*\\*');
-    expect(e).toContain('\\`code\\`');
+    expect(e).toContain("'code'"); // the person's backticks: apostrophes, so the code spans are only ours
   });
 
   it('a line can\'t pass for one of the form\'s headings', () => {
     expect(escapeMarkdown('### Device model\n- item\n1. one')).toBe('\\### Device model\n\\- item\n\\1. one');
   });
 
-  it('a backtick can\'t open a mention out of its code span', () => {
-    const e = escapeMarkdown('a `@x` b');
-    expect(e).toBe('a \\``@x`\\` b');
+  it('a backtick can\'t open a mention out of its code span: the person\'s backticks become apostrophes', () => {
+    expect(escapeMarkdown('a `@x` b')).toBe('a \'`@x`\' b');
+  });
+
+  it.each([
+    ['`@a`@maintainer', '\'`@a`\'`@maintainer`'],
+    ['@a@b', '`@a` `@b`'], // side by side: a space keeps the two spans apart
+    ['#12@x', '`#12` `@x`'],
+    ['see:@x', 'see:`@x`'],
+    ['a@b', 'a`@b`'],
+  ])('every mention ends up in its own code span, whatever is next to it: %s', (given, want) => {
+    const e = escapeMarkdown(given);
+    expect(e).toBe(want);
+    // outside the code spans, no @ is left
+    expect(e.replace(/`[^`]*`/g, '')).not.toContain('@');
   });
 
   it('the whole issue: the form\'s headings, the template\'s option words, and where it came from', () => {
@@ -294,6 +316,21 @@ describe('what a report may say', () => {
     expect(url.searchParams.get('flow')).toBe(FLOWS.usb);
     expect(url.searchParams.get('worked')).toBe('fine at (removed)');
     expect(url.searchParams.get('clarity')).toBe('C');
+  });
+
+  it('a character dropped can\'t join two runs into a serial the route would then remove: cleaning settles first', () => {
+    const f = clean({ ...FIELDS, model: 'ACME:AB12345678' });
+    expect(f.model).toBe('(removed)');
+    expect(clean(f)).toEqual(f);
+    expect(issueOf(clean(f))).toEqual(issueOf(f));
+  });
+
+  it('the longest report the fields allow, in any script, fits the request limit', async () => {
+    const wide = { ...FIELDS, worked: '漢'.repeat(4000), didnt: '字'.repeat(4000), model: 'Ä'.repeat(100), customOs: 'Ö'.repeat(100), osKind: 'custom' as const };
+    expect(problems(clean(wide))).toEqual({});
+    const body = JSON.stringify({ fields: clean(wide), token: timeToken(credentials(TOKEN)!, T0), [HONEYPOT]: '' });
+    expect(new TextEncoder().encode(body).length).toBeLessThanOrEqual(MAX_BYTES);
+    expect((await handlePost(post(body), deps(TOKEN))).status).toBe(201);
   });
 
   it('cleaning twice changes nothing, so the preview is what the route sends', () => {

@@ -122,9 +122,18 @@ export class RateLimit {
     mine.push(now);
     this.all.push(now);
     this.by.set(key, mine);
-    if (this.by.size > 5_000) for (const [k, v] of this.by) if (!recent(v).length) this.by.delete(k);
+    this.sweep(now);
     return { ok: true };
   }
+
+  /** Forgets every address with nothing in the last hour. Each report runs it, and route.ts every few minutes. */
+  sweep(now: number): void {
+    for (const [k, v] of this.by) if (!v.some((t) => now - t < HOUR)) this.by.delete(k);
+    this.all = this.all.filter((t) => now - t < HOUR);
+  }
+
+  /** How many addresses it holds now (tests). */
+  get size(): number { return this.by.size; }
 }
 
 /** The address a request came from, as Vercel's proxy says it. Used only for the rate limit. */

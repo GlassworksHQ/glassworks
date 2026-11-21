@@ -7,6 +7,8 @@ export const dynamic = 'force-dynamic';
 
 /** Per instance: see server.ts. */
 const limit = new RateLimit();
+// an address with no report in the last hour is forgotten even when no report comes; unref: it keeps no process alive
+setInterval(() => limit.sweep(Date.now()), 5 * 60_000).unref?.();
 const env = () => ({
   REPORT_APP_ID: process.env.REPORT_APP_ID,
   REPORT_APP_PRIVATE_KEY: process.env.REPORT_APP_PRIVATE_KEY,
