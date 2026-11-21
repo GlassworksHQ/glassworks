@@ -146,14 +146,14 @@ Pagefind included, as Vercel would.
 git clone https://github.com/GlassworksHQ/glassworks.git glassworks-deploy   # no --depth
 cd glassworks-deploy
 git checkout origin/main                  # or the commit to deploy
-npx vercel link                           # once per clone: pick the site's project (Root Directory: site)
-npx vercel pull --yes --environment=production
-npx vercel build --prod
-npx vercel deploy --prebuilt --prod --archive=tgz
+npx vercel@65.14.0 link                  # once per clone: pick the site's project (Root Directory: site)
+npx vercel@65.14.0 pull --yes --environment=production
+npx vercel@65.14.0 build --prod
+npx vercel@65.14.0 deploy --prebuilt --prod --archive=tgz
 ```
 
 `--archive=tgz` uploads the build as one archive. File by file, the prebuilt output (about 2,400 files) hits the free plan's upload limit.
 
-A preview, which also shows draft blog posts: `npx vercel pull --yes --environment=preview`, then
-`npx vercel build` and `npx vercel deploy --prebuilt --archive=tgz`, without `--prod`. Run every command from the
+A preview, which also shows draft blog posts: `npx vercel@65.14.0 pull --yes --environment=preview`, then
+`npx vercel@65.14.0 build` and `npx vercel@65.14.0 deploy --prebuilt --archive=tgz`, without `--prod`. Run every command from the
 clone's root, where `vercel link` put `.vercel/`.

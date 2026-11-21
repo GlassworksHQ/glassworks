@@ -74,7 +74,8 @@ jobs:
           KILN = (
               'kiln', 'frames/*/installer', 'frames/*/design', 'packages', 'branding',
               'frames/lululemon-mirror/overlay', 'frames/aqara-s1-plus/tools/root', 'frames/aqara-s1-plus/tools/radio',
-              'frames/aqara-s1-plus/tools/install', 'package.json', 'package-lock.json', 'tsconfig.base.json',
+              'frames/aqara-s1-plus/tools/install', 'docs/img/fel-button.jpg',  # the S1 recipe imports it
+              'package.json', 'package-lock.json', 'tsconfig.base.json',
               '.github/workflows/web-deploy.yml',
               '!**/*.md', '!kiln/test', '!kiln/packages/*/test', '!kiln/apps/*/test', '!kiln/mockup', '!kiln/workers',
               '!frames/*/installer/test', '!frames/aqara-s1-plus/tools/*/test',
@@ -109,8 +110,11 @@ jobs:
       name: glassworks.dev
       url: https://www.glassworks.dev
     steps:
+      # The branch, not the pushed commit: a run that starts after a newer push's run (and cancels it) still deploys
+      # the newest main, which has every change the cancelled run had.
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
+          ref: ${{ github.ref }}
           persist-credentials: false
           # The docs' dates come from git history at build time.
           fetch-depth: 0
@@ -173,8 +177,11 @@ jobs:
       name: kiln.glassworks.dev
       url: https://kiln.glassworks.dev
     steps:
+      # The branch, not the pushed commit: a run that starts after a newer push's run (and cancels it) still deploys
+      # the newest main, which has every change the cancelled run had.
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
+          ref: ${{ github.ref }}
           persist-credentials: false
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
