@@ -6,7 +6,7 @@
 // Nothing is sent or kept unless the person presses Send.
 import * as Dialog from '@radix-ui/react-dialog';
 import { useEffect, useId, useState, type ReactNode } from 'react';
-import { clean, FLOWS, FORM_TEXT, githubCuts, githubUrl, GRADES, issueOf, OS_KINDS, prefilled, problems, STEPS, type Problems, type ReportFields, type ReportPrefill } from './report';
+import { clean, FLOWS, githubForm, GRADES, issueOf, OS_KINDS, prefilled, problems, STEPS, type Problems, type ReportFields, type ReportPrefill } from './report';
 import { reportDemo } from './demo';
 import './report.css';
 
@@ -95,9 +95,10 @@ export function ReportSheet({ prefill, transport = routeTransport, start = 'form
   useEffect(() => { if (start === 'sent' || start === 'error') void go(start); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const set = (k: keyof ReportFields) => (e: { target: { value: string } }) => setF((x) => ({ ...x, [k]: e.target.value }));
   const off = access === 'off';
-  const github = githubUrl(f);
+  const form = githubForm(f);
+  const github = form.url;
   /** Said wherever GitHub's form is offered, when it gets less than was written. */
-  const cut = githubCuts(f) && <p className="small" role="note">{`GitHub's form gets the first ${FORM_TEXT.toLocaleString('en-US')} characters of each answer. Paste the rest there before you submit it.`}</p>;
+  const cut = form.cut && <p className="small" role="note">GitHub&apos;s form can&apos;t take all of your answers from Kiln, so it opens with the start of them. Paste the rest there before you submit it.</p>;
 
   function preview() {
     const wrong = problems(clean(f));

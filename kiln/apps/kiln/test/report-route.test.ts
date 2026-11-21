@@ -3,7 +3,7 @@
 import { generateKeyPairSync, createVerify } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { clean, escapeMarkdown, FLOWS, githubUrl, issueOf, LABEL, MAX_BYTES, OS_KINDS, problems, scrub, type ReportFields } from '../src/report/report';
+import { clean, escapeMarkdown, FLOWS, FORM_URL_MAX, githubForm, githubUrl, issueOf, LABEL, MAX_BYTES, OS_KINDS, problems, scrub, type ReportFields } from '../src/report/report';
 import { appJwt, credentials, forgetToken, handleGet, handlePost, HONEYPOT, MIN_FILL_MS, RateLimit, timeToken, tokenProblem, type Deps, type ReportEnv } from '../src/report/server';
 
 const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
@@ -331,6 +331,25 @@ describe('what a report may say', () => {
     const body = JSON.stringify({ fields: clean(wide), token: timeToken(credentials(TOKEN)!, T0), [HONEYPOT]: '' });
     expect(new TextEncoder().encode(body).length).toBeLessThanOrEqual(MAX_BYTES);
     expect((await handlePost(post(body), deps(TOKEN))).status).toBe(201);
+  });
+
+  it.each([
+    ['short ASCII answers', 'a'.repeat(1000), 'b'.repeat(1000), false],
+    ['long ASCII answers', 'a'.repeat(5000), 'b'.repeat(5000), true],
+    ['CJK answers at the field limit', '漢'.repeat(1500), '字'.repeat(1500), true],
+    ['emoji, never split in half', '😀'.repeat(2000), 'ok', true],
+    ['one long answer and one short', 'a'.repeat(9000), 'fine', true],
+  ])('GitHub\'s form keeps its whole address under the limit, as encoded: %s', (_, worked, didnt, cut) => {
+    const g = githubForm({ ...FIELDS, worked, didnt });
+    expect(g.url.length).toBeLessThanOrEqual(FORM_URL_MAX);
+    expect(g.cut).toBe(cut);
+    const q = new URL(g.url).searchParams;
+    const w = q.get('worked') ?? '', d = q.get('didnt') ?? '';
+    expect(worked.startsWith(w) && didnt.startsWith(d)).toBe(true);
+    if (!cut) expect([w, d]).toEqual([worked, didnt]);
+    expect(w.length + d.length).toBeGreaterThan(0);
+    expect(/[\uD800-\uDBFF]$/.test(w)).toBe(false);
+    if (didnt === 'fine') expect(d).toBe('fine'); // the short one is kept whole, the long one gets the rest
   });
 
   it('cleaning twice changes nothing, so the preview is what the route sends', () => {

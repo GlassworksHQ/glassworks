@@ -143,10 +143,12 @@ describe('the report sheet', () => {
   it('says when GitHub\'s form gets less than was written, and only then', async () => {
     await openFrom({ model: 'Teclast P20HD', android: '10', flow: 'usb' }, fake().t);
     fillPersonalPart();
-    expect(screen.queryByText(/GitHub's form gets the first/)).toBeNull();
-    type('What didn\'t work', 'x '.repeat(900));
-    expect(screen.getByText('GitHub\'s form gets the first 1,500 characters of each answer. Paste the rest there before you submit it.')).toBeTruthy();
-    expect(new URL(screen.getByText('Open it on GitHub instead').getAttribute('href')!).searchParams.get('didnt')).toHaveLength(1500);
+    expect(screen.queryByText(/opens with the start of them/)).toBeNull();
+    type('What didn\'t work', 'x '.repeat(5000));
+    expect(screen.getByText('GitHub\'s form can\'t take all of your answers from Kiln, so it opens with the start of them. Paste the rest there before you submit it.')).toBeTruthy();
+    const href = screen.getByText('Open it on GitHub instead').getAttribute('href')!;
+    expect(href.length).toBeLessThanOrEqual(7500);
+    expect(new URL(href).searchParams.get('didnt')).toMatch(/^x x x/);
   });
 
   it('when Kiln can\'t send (no credentials: 503), the preview\'s one button is GitHub\'s form', async () => {

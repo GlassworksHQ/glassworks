@@ -167,8 +167,8 @@ from custom Android, so the person picks. They add what worked, what didn't, and
 Before anything is sent the sheet shows the issue exactly as GitHub will have it, and says it's public. **Send it**
 posts the fields to `/api/report`, which opens the issue and the sheet links it. **Open it on GitHub instead** is
 always there: the template on GitHub with the same fields filled in, except how far Kiln got (the template has no
-field for it), and the first 1,500 characters of each answer, to keep the address short (the sheet says so when it
-cuts one). It's also the way on when Kiln can't send (no
+field for it), and as much of each answer as fits in an address GitHub opens (7,500 characters as encoded; the sheet says
+so when it cuts one). It's also the way on when Kiln can't send (no
 credentials, an error, the rate limit, or a route that doesn't answer within 20 s). Nothing is sent unless the person
 presses Send, and nothing is kept.
 
