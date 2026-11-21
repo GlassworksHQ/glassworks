@@ -25,6 +25,8 @@ tokens, Wi-Fi passwords and Thread datasets from logs.
 
 A device report can make a device a tested device: its own page on glassworks.dev, known by Kiln,
 marked as tested by the community ([frames/README.md](frames/README.md#who-tested-it)).
+If you installed with Kiln, you can send one from Kiln itself, no GitHub account needed: **Tell us how it goes** on
+its Done screen fills in what Kiln read, shows you the report before it goes on GitHub, and posts it for you.
 
 ## Pull requests
 

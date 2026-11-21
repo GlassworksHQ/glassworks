@@ -1,0 +1,18 @@
+/* The device report sheet (ReportDialog.tsx). Its own file, so the app's setup page (lan/, built from globals.css) doesn't carry it. */
+.sheet.report { width: min(640px, calc(100vw - 32px)); border-color: var(--edge); } /* not the amber of a "your turn" sheet */
+.report-form { display: grid; gap: 12px; }
+.report-form fieldset { border: 1px solid var(--edge); border-radius: 14px; padding: 10px 14px 14px; margin: 0; display: grid; gap: 10px; }
+.report-form legend { padding: 0 6px; font-size: 13px; color: var(--faint); }
+.report-form textarea { resize: vertical; min-height: 72px; font: inherit; font-size: 15px; line-height: 1.45; }
+.report-form .status { font-size: 13px; }
+.report-trap { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+.report-preview { display: grid; gap: 8px; border: 1px solid var(--edge); border-radius: 12px; padding: 12px 14px; background: var(--well); }
+.report-title { font-weight: 500; overflow-wrap: anywhere; }
+.report-preview pre { margin: 0; max-height: 40dvh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 500 12.5px/1.5 var(--f-mono); color: var(--muted); }
+.report-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-top: 4px; }
+.sheet.report .report-foot .btn { margin-top: 0; }
+
+@media (max-width: 760px) {
+  .report-form .fields { grid-template-columns: minmax(0, 1fr); }
+}
+.sheet.report:focus-visible { outline: none; } /* the sheet itself, when its content changes; its controls keep theirs */

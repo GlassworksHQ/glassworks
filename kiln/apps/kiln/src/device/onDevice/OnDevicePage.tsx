@@ -11,6 +11,8 @@ import Link from 'next/link';
 import { Fragment, createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { Shell } from '../../components/Shell';
 import { FRAMES, RENDERS } from '../../frames/catalog';
+import { ReportButton } from '../../report/ReportDialog';
+import { onDevicePrefill } from '../../report/prefill';
 import { readFacts } from './facts';
 import { onDeviceDemo } from './demo';
 import {
@@ -75,7 +77,7 @@ function Device({ on, go }: P) {
     <dl className="kv">
       <dt>Android</dt><dd>{versionText(on, dev.onDevice.needs).replace(/^Android /, '')}</dd>
       {on.modelCode && <><dt>Model</dt><dd>{on.identified.model ? `${on.identified.model.name} (${on.modelCode})` : on.modelCode}</dd></>}
-      <dt>Tested</dt><dd>Not yet. <a className="link" href={`https://github.com/GlassworksHQ/glassworks/issues/new?title=${encodeURIComponent(`Tested: ${on.identified.model?.name ?? on.modelCode ?? `an Android ${dev.short}`}`)}`}>Tell us how it goes</a></dd>
+      <dt>Tested</dt><dd>Not yet. <ReportButton prefill={onDevicePrefill(on, 'device')} /></dd>
     </dl>
   );
   return (
@@ -183,7 +185,7 @@ function Get({ on, go, releases, load }: P & { releases: Partial<Record<Line, Re
         {!legacy && <li><b>Allow</b> this browser if Android asks.<small>Tap <b>Settings</b>, turn on <b>Allow from this source</b>, then go back.</small></li>}
         <li><b>Install</b><small>Android says “App not installed”? {retry
           ? <a className="link" href={retry.href} download={retry.name}>Download the other build</a>
-          : 'Tell us on GitHub.'}</small></li>
+          : <ReportButton prefill={onDevicePrefill(on, 'get', dl?.version)}>Tell us</ReportButton>}</small></li>
       </ol>
       <div className="foot">
         <span className="links">

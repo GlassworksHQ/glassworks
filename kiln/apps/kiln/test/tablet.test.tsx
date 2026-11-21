@@ -146,7 +146,7 @@ describe('the screens', () => {
     expect(a.getAttribute('href')).toBe('/api/release/generic-android?tag=generic-android-v1.0.0&name=glassworks-generic-android-armeabi-v7a-1.0.0.apk');
     expect(document.querySelectorAll('a[download]')).toHaveLength(1);
     expect(document.body.textContent).not.toMatch(/(32|64)-bit/);
-    expect(screen.getByText(/Tell us on GitHub/)).toBeTruthy();
+    expect(screen.getByText('Tell us').tagName).toBe('BUTTON'); // the device report sheet (test/report-form.test.tsx)
     cleanup();
     // the same tablet in Chrome, which hides it: the 64-bit build, and the 32-bit one under "App not installed"
     render(<TabletScreens on={on('GALAXY_TAB_A_2016')} start="get" load={async () => rel('generic-android')} />);

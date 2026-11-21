@@ -31,6 +31,8 @@ import { registry } from '../wizard/registry';
 import { keptUsb } from './usbActivity';
 import { USB_DEMOS, usbDemo, type UsbDemo } from './usbDemo';
 import { ScreenLockBlock } from './ScreenLockBlock';
+import { ReportButton } from '../report/ReportDialog';
+import { usbPrefill } from '../report/prefill';
 import { OnDevicePage } from './onDevice/OnDevicePage';
 import { UsbSession, usbMode, usbOpen, type Device, type UsbState } from './usbSession';
 import type { ApkFrom } from '../release/apk';
@@ -443,12 +445,12 @@ function Done({ s, session }: { s: UsbState; session: UsbSession }) {
       {f ? (
         <div className="fc">
           <div className="spread"><b>{f.name}</b>{!MEASURED.has(f.id) && <span className="ctag">Clarity · not measured yet</span>}</div>
-          <span className="kind">{KIND_TEXT[f.kind]} · <a className="link" href={`${SITE}/${f.id}`}>Its page on glassworks.dev</a></span>
+          <span className="kind">{KIND_TEXT[f.kind]} · <a className="link" href={`${SITE}/${f.id}`}>Its page on glassworks.dev</a> · <ReportButton prefill={usbPrefill(dev, s, 'done')} /></span>
         </div>
       ) : (
         <div className="fc">
           <b>Untested device</b>
-          <span className="small">Nobody has run Glassworks on this model yet. <a className="link" href={`https://github.com/GlassworksHQ/glassworks/issues/new?title=${encodeURIComponent(`Tested: ${name}`)}`}>Tell us how it goes</a></span>
+          <span className="small">Nobody has run Glassworks on this model yet. <ReportButton prefill={usbPrefill(dev, s, 'done')} /></span>
         </div>
       )}
       <SilentUpdates words={dev.silent(installed.silentUpdates, s.plan!.device.release || dev.androidName(s.plan!.device.sdk))} />
@@ -501,6 +503,7 @@ function Stopped({ s, session }: { s: UsbState; session: UsbSession }) {
       <div className="foot">
         <Log s={s} />
         <span className="row">
+          {s.flow === 'install' && <ReportButton prefill={usbPrefill(dev, s, 'stopped')}>Tell us what happened</ReportButton>}
           {s.flow === 'install' && !s.release && !repick && <button type="button" className="link" onClick={() => setRepick(true)}>Pick another APK</button>}
           <button type="button" className="btn ember" disabled={!!blocked} onClick={() => void session.connect()}>Try again</button>
         </span>
@@ -591,19 +594,18 @@ function UsbOutcome({ session }: { session: UsbSession }) {
   if (r?.flow !== 'install') return null;
   const { installed } = r;
   const f = frameOf(s.identified);
-  const name = deviceName(dev, s);
   return (
     <UsbFrameContext.Provider value={dev}>
       {installed.home.state !== 'set' && <p className="small" role="alert">{`Kiln couldn't confirm Glassworks as the home screen. In ${dev.the}'s Settings, find Default apps, then Home app, and choose Glassworks.`}</p>}
       {f ? (
         <div className="fc">
           <div className="spread"><b>{f.name}</b>{!MEASURED.has(f.id) && <span className="ctag">Clarity · not measured yet</span>}</div>
-          <span className="kind">{KIND_TEXT[f.kind]} · <a className="link" href={`${SITE}/${f.id}`}>Its page on glassworks.dev</a></span>
+          <span className="kind">{KIND_TEXT[f.kind]} · <a className="link" href={`${SITE}/${f.id}`}>Its page on glassworks.dev</a> · <ReportButton prefill={usbPrefill(dev, s, 'done')} /></span>
         </div>
       ) : (
         <div className="fc">
           <b>Untested device</b>
-          <span className="small">Nobody has run Glassworks on this model yet. <a className="link" href={`https://github.com/GlassworksHQ/glassworks/issues/new?title=${encodeURIComponent(`Tested: ${name}`)}`}>Tell us how it goes</a></span>
+          <span className="small">Nobody has run Glassworks on this model yet. <ReportButton prefill={usbPrefill(dev, s, 'done')} /></span>
         </div>
       )}
       <ScreenLockBlock lock={installed.screenLock} words={dev.screenLock} />
