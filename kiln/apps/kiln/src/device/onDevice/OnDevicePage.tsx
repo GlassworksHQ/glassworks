@@ -5,7 +5,7 @@
 // own setup asks next, and how to finish with Kiln over USB. Its words, brands and lines are the frame's.
 // Kiln's look (docs/design/kiln): one idea per card, one ember button, details on request.
 import type { OnDevice, UsbFrame, UsbIdentified as Identified, UsbOnDevice, UsbPlace as Place, UsbSim } from '@glassworks/kiln-core';
-import { KIND_TEXT, STAGE_TEXT } from '@glassworks/frame-card';
+import { DeviceModel, KIND_TEXT, STAGE_TEXT, type FrameDesign } from '@glassworks/frame-card';
 import * as RadioGroup from '@radix-ui/react-radio-group';
 import Link from 'next/link';
 import { Fragment, createContext, useContext, useEffect, useState, type ReactNode } from 'react';
@@ -52,16 +52,31 @@ function versionText(on: OnDevice, needs: UsbOnDevice['needs']): string {
 
 interface P { on: OnDevice; go: (s: TabletScreen) => void }
 
+/**
+ * The device's 3D model, as the frame card draws it (its finish follows the page's theme): a model Kiln knows as a frame of
+ * its own is that frame's; any other tablet is this page's frame's. A phone gets none, since this page's frame is a tablet.
+ */
+export function lookOf(on: OnDevice, page: string, frames: readonly FrameDesign[] = FRAMES): FrameDesign | undefined {
+  const own = on.identified.model?.frame;
+  if (own) return frames.find((x) => x.id === own);
+  return on.form === 'tablet' ? frames.find((x) => x.id === page) : undefined;
+}
+
 function Device({ on, go }: P) {
   const { dev, base } = useWhere();
   const f = on.identified.model?.frame ? FRAMES.find((x) => x.id === on.identified.model!.frame) : undefined;
+  const look = lookOf(on, dev.id);
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">{nameOf(on)}</h2>
       <p className="lede">Glassworks installs from this page, as an app. No computer needed.</p>
+      {look && (
+        <div className="tab-model">
+          <DeviceModel id={`on-device-${look.id}`} model={look.model} label={f ? f.name : `An Android ${on.form}`} screen={RENDERS[look.id]} priority />
+        </div>
+      )}
       {f ? (
         <div className="fc tab-fc">
-          {RENDERS[f.id] && <img className="ph" src={RENDERS[f.id]} alt="" />}
           <div className="spread"><b>{f.name}</b><span className="pill soon">{STAGE_TEXT[f.status]}</span></div>
           <span className="kind">{KIND_TEXT[f.kind]} · {versionText(on, dev.onDevice.needs)}</span>
         </div>

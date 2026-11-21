@@ -12,7 +12,8 @@ vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string
 
 import { abiFor, buildFor, download, firstScreen, loadRelease, rail, SETTINGS_LINKS, type Line, type Release } from '../src/device/onDevice/model';
 import { TABLET_DEMOS, TabletPage, TabletScreens, tabletDemo, type TabletDemo } from './android-frame';
-import { FRAMES } from '../src/frames/catalog';
+import { lookOf } from '../src/device/onDevice/OnDevicePage';
+import { FRAMES, RENDERS } from '../src/frames/catalog';
 
 beforeAll(() => {
   window.matchMedia = ((q: string) => ({ matches: false, media: q, addEventListener() {}, removeEventListener() {} })) as never;
@@ -88,6 +89,25 @@ describe('the screens', () => {
     expect(heading()).toBe('This looks like a Pixel Tablet.');
     expect(document.body.textContent).toContain('Tested device · Android 8 or newer');
     expect(embers()).toEqual(['Continue']);
+  });
+
+  it('the device as a 3D model: a model with a frame of its own is that frame, on its dock; any other tablet is the page\'s frame; a phone none (the maintainer, issue 672)', async () => {
+    const model = (name: string) => screen.getByRole('img', { name });
+    const src = (el: HTMLElement) => el.querySelector('img')?.getAttribute('src');
+    await show('pixel');
+    expect(src(model('Google Pixel Tablet'))).toBe(RENDERS['google-pixel-tablet']);
+    expect(model('Google Pixel Tablet').querySelector('[data-dock]')).not.toBeNull();
+    cleanup();
+    await show('galaxy');
+    expect(src(model('An Android tablet'))).toBe(RENDERS['generic-android']);
+    cleanup();
+    await show('phone');
+    expect(screen.queryByRole('img', { name: /Android phone/ })).toBeNull();
+    // the frame's own model, so its finish is the frame card's: light-dark() follows the page's theme
+    expect(lookOf(on('PIXEL_DESKTOP'), 'generic-android')?.model).toBe(FRAMES.find((f) => f.id === 'google-pixel-tablet')!.model);
+    expect(lookOf(on('UNKNOWN_DESKTOP'), 'generic-android')?.id).toBe('generic-android');
+    expect(lookOf(on('NOUGAT_TAB'), 'generic-android')?.id).toBe('generic-android');
+    expect(lookOf(on('GALAXY_PHONE'), 'generic-android')).toBeUndefined();
   });
 
   it('a model read from client hints: named, with its version and model code', async () => {
