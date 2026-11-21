@@ -237,16 +237,19 @@ cleanup() {
 trap cleanup EXIT
 
 if [ -n "$PANE_RAM" ]; then
-  # "<id>=on|off,…" for every pane the frame can switch (frames/<id>/budgets.json, `switch`), and
-  # mic=on|off when one has a microphone mute (`mute`): what to put back. Out: one
-  # "STATE <none|id|restore> extra=true|false,..." line per state the runner sets.
-  PANES=$(python3 - "$HERE/../../frames/$FRAME/budgets.json" "$PANE_RAM" <<'PY'
+  # "<id>=on|off,…" for every pane the frame can switch (frames/<id>/budgets.json or its base
+  # frame's, `switch`), and mic=on|off when one has a microphone mute (`mute`): what to put back.
+  # Out: one "STATE <none|id|restore> extra=true|false,..." line per state the runner sets.
+  PANES=$(python3 - "$HERE" "$FRAME" "$PANE_RAM" <<'PY'
 import json, os, re, sys
-path, spec = sys.argv[1:]
-panes = json.load(open(path))["panes"] if os.path.exists(path) else {}
+here, frame, spec = sys.argv[1:]
+sys.path.insert(0, here)
+from perflib import frame_budgets_path
+path = frame_budgets_path(os.path.join(here, "..", "..", "frames"), frame)
+panes = json.load(open(path))["panes"] if path else {}
 switch = {k: v for k, v in panes.items() if v.get("switch")}
 if not switch:
-    sys.exit(f"--pane-ram: {path} names no pane with a switch")
+    sys.exit(f"--pane-ram: {path or f'frames/{frame}'} names no pane with a switch")
 keys = set(switch) | ({"mic"} if any(v.get("mute") for v in switch.values()) else set())
 got = {}
 for part in spec.split(","):

@@ -5,6 +5,7 @@ frame_stats() is the same definition as page/stats.js; test/stats-cases.json pin
 import calendar
 import json
 import math
+import os
 import re
 import statistics
 
@@ -545,3 +546,19 @@ def pane_state(logcat_text):
         elif "Microphone muted" in line:
             mic = False
     return {"voice": voice, "sendspin": sendspin, "mic": voice and mic, **switched}
+
+
+def frame_budgets_path(frames_dir, frame_id):
+    """frames/<id>/budgets.json, else its base frame's (design/frame.json `base`, #23): a tested frame
+    such as the Pixel Tablet runs its base's app, so its panes and their budgets are the base's.
+    None when neither has one."""
+    own = os.path.join(frames_dir, frame_id, "budgets.json")
+    if os.path.exists(own):
+        return own
+    try:
+        with open(os.path.join(frames_dir, frame_id, "design", "frame.json")) as f:
+            base = json.load(f).get("base")
+    except FileNotFoundError:
+        return None
+    path = os.path.join(frames_dir, base, "budgets.json") if base else None
+    return path if path and os.path.exists(path) else None
