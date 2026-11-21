@@ -253,7 +253,7 @@ class EdgeGlow(context: Context, palette: Themes.Palette) : FrameLayout(context)
         for (fromLeft in listOf(true, false)) {
             val s = shuttles[(if (bottom) 2 else 0) + (if (fromLeft) 0 else 1)]
             val len = s.layoutParams.width.toFloat() // its own size (stretched), not wrap_content
-            val head = if (fromLeft) headFrac * len else (1 - headFrac) * len // where the head is in the view
+            val head = if (fromLeft) HEAD_FRAC * len else (1 - HEAD_FRAC) * len // where the head is in the view
             s.animate().cancel()
             s.pivotY = s.layoutParams.height / 2f; s.scaleY = if (bottom) -1f else 1f
             check(len > 0) { "a comet's size is its own" }
@@ -423,19 +423,19 @@ class EdgeGlow(context: Context, palette: Themes.Palette) : FrameLayout(context)
     }
 
     /**
-     * A thinking comet running [right] or left, as the render's heads: a bright head [headFrac] of the way along its run
+     * A thinking comet running [right] or left, as the render's heads: a bright head [HEAD_FRAC] of the way along its run
      * (28 dp ahead of it), white-hot at its tip on a dark ground, and a long tail behind (340 dp to fall to a third),
      * tapering to nothing. On the top edge; the bottom lane flips it. Baked at half length.
      */
     private fun comet(colour: Int, right: Boolean): Bitmap {
         val full = (COMET_DP * d).toInt(); val w = full / 2; val h = depth
-        val headX = headFrac * full
+        val headX = HEAD_FRAC * full
         val px = IntArray(w * h)
         for (x in 0 until w) {
             val xr = if (right) x * 2 else full - 1 - x * 2 // along the run
             val dd = (xr - headX) / d // dp ahead of the head (> 0) or behind it
             // the tail tapers to nothing by the bitmap's end, so it has no edge
-            val tail = headFrac * COMET_DP; val left = ((tail + dd) / (.35f * tail)).coerceIn(0f, 1f)
+            val tail = HEAD_FRAC * COMET_DP; val left = ((tail + dd) / (.35f * tail)).coerceIn(0f, 1f)
             val v = if (dd > 0) exp(-dd * dd / (2 * 28f * 28f)) else exp(dd / 340f) * (.5f + .5f * exp(dd / 40f)) * left * left * (3 - 2 * left)
             val tip = .6f * hotK * exp(-dd * dd / (2 * 16f * 16f))
             for (i in 0 until h) {
@@ -504,11 +504,12 @@ class EdgeGlow(context: Context, palette: Themes.Palette) : FrameLayout(context)
 
     private fun withAlpha(c: Int, a: Float) = (c and 0x00ffffff) or ((255 * a.coerceIn(0f, 1f)).toInt() shl 24)
 
-    private val headFrac = .9f
-
     companion object {
         /** A comet's length, head and tail. */
         private const val COMET_DP = 950f
+
+        /** How far along its run a comet's head is, in its bitmap (a companion constant: the bake reads it first). */
+        private const val HEAD_FRAC = .9f
 
         /**
          * The glow's voice, 0 to 1, from the smoothed mic level ([VoiceLevels.mic]: −55 to −15 dBFS as 0 to 1). Speech at
