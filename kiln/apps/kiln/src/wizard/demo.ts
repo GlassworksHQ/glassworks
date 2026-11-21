@@ -416,7 +416,7 @@ const ERRORS: Partial<Record<Demo, { error: unknown; at: number; written?: Writt
   'error-not-this-panel': { error: new Error('this does not look like the expected device (product sunxi, boot 0, super 0). Nothing was changed.'), at: 2 },
   'error-usb-unreliable': { error: new Error('the two reads of boot differ'), at: 2 },
   'error-download': { error: new Error('could not download magisk: HTTP 503'), at: 2 },
-  'error-not-started': { error: new Error('the panel did not finish starting in 5 minutes'), at: 3 },
+  'error-not-started': { error: new Error('the panel did not finish starting in 5 minutes'), at: 3, installed: true },
   'error-adb-held': { error: new Error('another program holds the panel\'s adb connection: run "adb kill-server" on this computer and try again'), at: 3, installed: true },
   'error-backup-refused': { error: new BackupRefused('this backup has no super partition'), at: 1, earlier: 'written' },
   'error-nothing-picked': { error: new DOMException('No device selected.', 'NotFoundError'), at: 3, installed: true },

@@ -51,4 +51,13 @@ describe('the error screen, one demo per failure', () => {
     expect(s.store.state.screen).toBe('error');
     expect(document.querySelector('h2')?.textContent).toBe(title);
   }, 20_000);
+
+  it('a failure after the new software is in place says so, as the session\'s own does (fail with installed)', async () => {
+    for (const which of ['error-not-started', 'error-adb-held', 'error-nothing-picked'] as Demo[]) {
+      const s = demoSession(s1Demo, which);
+      open.push(s);
+      await enterDemo(s, s1Demo, which);
+      expect(s.store.state.failure?.body, which).toMatch(/^The new software is in place\./);
+    }
+  });
 });
