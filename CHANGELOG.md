@@ -533,6 +533,10 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   it straight away. The *Thread join* sensor says how it went. Pasting the dataset still works.
 
 ### Fixed
+- **Kiln keeps going on the Mirror where it used to stop.** When the Mirror refuses the browser at first, Kiln
+  keeps asking instead of stopping. If writing the image stops partway, *Try again* goes straight back to fastboot
+  rather than to the download. A download that goes quiet picks up where it left off. Kiln also tells you to pick the
+  Mirror as "Android" in the browser's list, the only name Chrome shows for it.
 - **Snapshot checks over ONVIF give the real size.** A recorder or tool that checks the camera's snapshot before
   downloading it now sees the picture's real size and no stray bytes, so its next request on the same connection
   works.
