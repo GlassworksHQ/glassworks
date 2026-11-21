@@ -41,9 +41,12 @@ if (!input || !output || !opt.apk) {
   process.exit(2);
 }
 
-// The package's sources import each other without extensions, as the bundler allows.
+// The package's sources import each other without extensions, as the bundler allows. The S1's overlay imports the
+// package by name: that is this checkout's source, so the script needs no workspace install.
+const BOOTPATCH = pathToFileURL(join(REPO, 'kiln/packages/bootpatch/src/index.ts')).href;
 registerHooks({
   resolve(spec, ctx, next) {
+    if (spec === '@glassworks/bootpatch') return next(BOOTPATCH, ctx);
     try { return next(spec, ctx); } catch (e) {
       if (!spec.startsWith('.') || /\.[cm]?[jt]s$/.test(spec)) throw e;
       return next(`${spec}.ts`, ctx);
