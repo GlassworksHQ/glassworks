@@ -121,7 +121,7 @@ describe('the set-up forms', () => {
     await act(() => s.installApp({ locale: 'de-DE', timezone: 'Europe/Berlin', clock24: true, keyboard: false }));
     expect(s.store.state.setup.phase).toBe('wifi');
     await act(() => s.route('resume')); // Back, or the rail's App
-    expect(screen.getByRole('heading').textContent).toBe('Update Glassworks.'); // the app is on the panel now
+    expect(screen.getByRole('heading').textContent).toBe('Update Glassworks'); // the app is on the panel now
     const [language, zone] = screen.getAllByRole('combobox') as HTMLSelectElement[];
     expect([language!.value, zone!.value]).toEqual(['de-DE', 'Europe/Berlin']);
     expect(screen.getByRole('radio', { name: '24-hour' }).getAttribute('data-state')).toBe('checked');
@@ -133,7 +133,7 @@ describe('the set-up forms', () => {
     const s = demoSession(s1Demo, 'wifi');
     render(<Wizard session={s} frame={s1PlusUi} base="/aqara-s1-plus" />);
     await act(() => s.route('wifi'));
-    expect(screen.getByRole('heading').textContent).toBe('Connected to Home Net.');
+    expect(screen.getByRole('heading').textContent).toBe('Connected to Home Net');
     expect(screen.queryByRole('radio')).toBeNull(); // no network list, no Connect
     expect(document.querySelectorAll('.btn.ember')).toHaveLength(1);
     expect(screen.getByRole('button', { name: 'Continue' }).className).toMatch(/ember/);
@@ -161,7 +161,7 @@ describe('the set-up forms', () => {
     const rows = () => [...document.querySelectorAll('.join li')].map((li) => `${li.className || '-'} ${li.firstChild?.textContent}`);
     const going = s.installApp({ clock24: true, keyboard: true });
     await act(() => new Promise((r) => setTimeout(r, 1200))); // Glassworks' pm install (the demo holds it 2.5 s)
-    expect(screen.getByRole('heading').textContent).toBe('Installing Glassworks.');
+    expect(screen.getByRole('heading').textContent).toBe('Installing Glassworks');
     expect(rows()).toEqual(['cur Install Glassworks', '- Make it the panel\'s home screen', '- Install the on-screen keyboard', '- Apply your time zone, language and clock', '- First start']);
     expect(document.querySelector('.join li.cur .sub-step')?.textContent).toBe('Android installs it and optimises it for this panel');
     expect(screen.getByRole('status').textContent).toBe('Install Glassworks. Android installs it and optimises it for this panel'); // what a screen reader hears
@@ -182,10 +182,10 @@ describe('the set-up forms', () => {
     const s = demoSession(s1Demo, 'app-update');
     render(<Wizard session={s} frame={s1PlusUi} base="/aqara-s1-plus" />);
     await act(() => s.route('resume'));
-    expect(screen.getByRole('heading').textContent).toBe('Update Glassworks.');
+    expect(screen.getByRole('heading').textContent).toBe('Update Glassworks');
     const going = s.installApp({ clock24: true, keyboard: false });
     await act(() => new Promise((r) => setTimeout(r, 1200))); // Glassworks' pm install
-    expect(screen.getByRole('heading').textContent).toBe('Updating Glassworks.');
+    expect(screen.getByRole('heading').textContent).toBe('Updating Glassworks');
     expect(screen.getByRole('status').textContent).toBe('Install Glassworks. Android installs it and optimises it for this panel. The app on the panel restarts during this.');
     expect([...document.querySelectorAll('.join li')].map((li) => li.firstChild?.textContent)).not.toContain('Install the on-screen keyboard'); // not asked for
     await act(() => going);

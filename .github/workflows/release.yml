@@ -1,85 +1,132 @@
-# Signed kiosk release on a version tag (docs/releasing.md):
-#   git tag -a aqara-s1-plus-v1.2.3 -m "Glassworks 1.2.3" && git push origin aqara-s1-plus-v1.2.3
-# A beta (#605): the same tag with the line "Channel: beta" in its message (-m "Channel: beta"), published as a
-# GitHub pre-release that only panels on the Beta update channel take (tools/release/tag-channel.sh).
-# Builds :kiosk (frames/aqara-s1-plus/android) once per ABI with the release key (secrets of the `release-signing` environment),
-# names the APKs s1-kiosk-<version>.apk (armeabi-v7a, the S1's; never rename it) and
-# s1-kiosk-arm64-v8a-<version>.apk, writes a .sha256 for each and publishes all four on a GitHub
-# Release with notes from CHANGELOG.md. Every ABI's APK has the same versionCode (docs/releasing.md
-# "ABIs"). Panels find theirs through the app's update entity in Home Assistant.
+# Release: every app line and frame release Glassworks ships, from one button (docs/releasing.md, "Release").
 #
-# The APK carries the signed radio bundle (frames/aqara-s1-plus/docs/radio.md "Radio bundles"): the radio helper,
-# otbr-agent/ot-ctl and the Silicon Labs Zigbee runtime (never Silicon Labs' zigbeed itself). Its key
-# lets code run as root on every panel, so it is kept away from everything else:
-#   inputs       builds the Silicon Labs runtime (no secrets); its output must match the committed
-#                frames/aqara-s1-plus/tools/radio/sisdk-runtime.sha256
-#   sign-bundle  the only job that can read S1_RADIO_BUNDLE_KEY (an environment secret of the
-#                `radio-signing` environment). Signs only commits on main, takes nothing from the other
-#                job without checking it against committed hashes, runs no third-party action
-#   release      builds and publishes the APKs, the armeabi-v7a one with the signed bundle (APK key
-#                from the `release-signing` environment; no bundle key). The bundle is the S1's root
-#                side, so the arm64-v8a APK, which no S1 runs, carries none
+# Run it from the Actions tab (Release → Run workflow, on main) or:
+#   gh workflow run release.yml --ref main -f version=1.0.0                      # a dry run: the default
+#   gh workflow run release.yml --ref main -f version=1.0.0 -f dry_run=false     # publish
+#   gh workflow run release.yml --ref main -f version=1.0.1 -f what=aqara-s1-plus -f dry_run=false
+# It is the only way a release starts: no workflow runs on a tag push, so a tag pushed by hand publishes nothing.
+#
+# What ships comes from the frames' data (`release` in frames/<id>/design/frame.json, tools/release/plan.py): each
+# app line some frame runs, built once however many frames run it, and each frame's own release. With `what: all`
+# an item is due when its changelog has a [<version>] section and no release has its tag yet. The plan job writes
+# the plan to the run's summary; in a dry run that table and the build artifacts are the whole output.
+#
+# The jobs keep the keys apart:
+#   plan          the plan, who runs it and on what (no secrets, read-only token)
+#   inputs        builds the Silicon Labs runtime for the S1's bundles (no secrets); its output must match the
+#                 committed frames/aqara-s1-plus/tools/radio/sisdk-runtime.sha256
+#   sign-bundle   the only job that can read S1_RADIO_BUNDLE_KEY (the `radio-signing` environment). Signs only
+#                 commits on main, takes from other jobs nothing but item names it checks, and the runtime, which it
+#                 checks against the committed hashes; reads every fact from the commit; runs no third-party action
+#                 but the artifact ones. Signs the S1 app's radio bundle and the signed frame bundles
+#   build-kiosk   the S1 app, one APK per ABI, the armeabi-v7a one with the signed radio bundle (the S1 app key,
+#                 `release-signing`); the bundle is the S1's root side, so the other ABIs' APKs carry none
+#   build-apps    every other app line, one job each (Glassworks' generic key, GENERIC_*, `release-signing`)
+#   publish       on main, not a dry run, after every build passed: one lock for every line, checks each version
+#                 again, pushes each tag over SSH with the tag deploy key (RELEASE_TAG_DEPLOY_KEY, `release-signing`;
+#                 the release-tag ruleset lets only admins and that key create tags) and creates its release
+#                 (tools/release/publish.sh). The S1 app's stable is --latest, everything else --latest=false:
+#                 panels up to 0.4.3 read only releases/latest
 # Every action is pinned by commit SHA (the tag in the comment is what it was at the time).
 name: Release
 
 on:
-  push:
-    tags: ['v*', 'aqara-s1-plus-v*']   # aqara-s1-plus-v*: the app's own prefix once the repo holds other frames
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version, MAJOR.MINOR.PATCH (e.g. 1.0.0). Every line and frame whose changelog has a [version] section is due'
+        required: true
+        type: string
+      what:
+        description: 'What to release: all (everything due), or e.g. aqara-s1-plus, aqara-s1-plus:app, aqara-s1-plus:frame, google-pixel-tablet:app, lululemon-mirror:frame'
+        required: true
+        default: all
+        type: string
+      channel:
+        description: 'Update channel: beta publishes the app lines as pre-releases (frame releases have no betas)'
+        required: true
+        default: stable
+        type: choice
+        options: [stable, beta]
+      dry_run:
+        description: 'Dry run: build, sign and check everything, publish nothing'
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: read
 
-concurrency:
-  group: release-${{ github.ref }}
-  cancel-in-progress: false
-
 jobs:
-  inputs:
+  plan:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 10
     outputs:
-      version: ${{ steps.version.outputs.version }}
-      channel: ${{ steps.channel.outputs.channel }}
+      plan: ${{ steps.plan.outputs.plan }}
+      kiosk: ${{ steps.plan.outputs.kiosk }}
+      apps: ${{ steps.plan.outputs.apps }}
+      has_apps: ${{ steps.plan.outputs.has_apps }}
+      bundles: ${{ steps.plan.outputs.bundles }}
+      sign: ${{ steps.plan.outputs.sign }}
+      any: ${{ steps.plan.outputs.any }}
+    env:
+      VERSION: ${{ inputs.version }}
+      WHAT: ${{ inputs.what }}
+      CHANNEL: ${{ inputs.channel }}
+      DRY_RUN: ${{ inputs.dry_run }}
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
 
-      - name: Version from the tag
-        id: version
+      - name: An admin, and main for a real release
+        env:
+          ACTOR: ${{ github.triggering_actor }}
         run: |
-          v="${GITHUB_REF_NAME#aqara-s1-plus-}"
-          v="${v#v}"
-          # Same rule as frames/aqara-s1-plus/android/build.gradle.kts: MAJOR.MINOR.PATCH, minor and patch below 100.
-          # No SemVer pre-release tags (v1.2.3-rc.1): they have no versionCode. A beta is a plain version (Channel: beta).
-          if ! [[ "$v" =~ ^(0|[1-9][0-9]{0,3})\.(0|[1-9][0-9]?)\.(0|[1-9][0-9]?)$ ]]; then
-            echo "::error::tag $GITHUB_REF_NAME is not [aqara-s1-plus-]vMAJOR.MINOR.PATCH (minor/patch < 100)"; exit 1
+          # Anyone with write access can press the button; only admins may release (as only they may create the
+          # tags). The environments admit only main (and test-build/**), so a copy of this file on another branch
+          # gets no key either way.
+          role="$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$ACTOR/permission" --jq .permission)" ||
+            { echo "::error::cannot read $ACTOR's permission on $GITHUB_REPOSITORY"; exit 1; }
+          [ "$role" = admin ] || { echo "::error::$ACTOR is $role here: only admins run a release"; exit 1; }
+          if [ "$DRY_RUN" != true ] && [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo "::error::a release runs on main, not $GITHUB_REF (a dry run may run elsewhere)"; exit 1
           fi
-          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "$ACTOR ($role), $GITHUB_REF at $GITHUB_SHA, dry run: $DRY_RUN"
 
-      - name: Channel from the tag's message (stable, or beta)
-        id: channel
+      - name: The plan, from the frames' data
+        id: plan
         run: |
-          # actions/checkout can leave a lightweight copy of an annotated tag: fetch the tag itself.
-          git fetch --no-tags --force origin "+refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
-          channel="$(tools/release/tag-channel.sh "$GITHUB_REF_NAME")"
-          echo "channel=$channel" >> "$GITHUB_OUTPUT"
-          echo "$GITHUB_REF_NAME: $channel"
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 1000 --exclude-drafts --json tagName --jq '.[].tagName' \
+            > "$RUNNER_TEMP/released"
+          dry=(); [ "$DRY_RUN" = true ] && dry=(--dry-run)
+          python3 tools/release/plan.py --version "$VERSION" --what "$WHAT" --channel "$CHANNEL" "${dry[@]}" \
+            --released "$RUNNER_TEMP/released" --json "$RUNNER_TEMP/plan.json" \
+            --summary "$GITHUB_STEP_SUMMARY" --github-output "$GITHUB_OUTPUT"
 
-      - name: Higher than the S1 app's last release or beta
-        # A stable can't go out below a published beta: panels on Beta would never be offered it (#605).
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.version.outputs.version }}
-        run: tools/release/check-newer-than-released.sh aqara-s1-plus "$VERSION"
-
-      - name: Release notes from CHANGELOG.md
-        # Every release needs its section in CHANGELOG.md; checked before the slow build.
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
+      - name: Each due item higher than its line's last release or beta, and its notes
+        # Fails fast, before the slow builds; publish checks the versions again under its lock.
         run: |
-          tools/release/changelog-section.sh "$VERSION" > "$RUNNER_TEMP/notes.md"
-          cat "$RUNNER_TEMP/notes.md"
+          jq -c '.items[] | select(.status == "due")' "$RUNNER_TEMP/plan.json" | while read -r item; do
+            check="$(jq -r .check <<< "$item")" tag="$(jq -r .tag <<< "$item")"
+            tools/release/check-newer-than-released.sh "$check" "$VERSION"
+            # The notes: the version's section (a dry run before it exists shows Unreleased, or a placeholder).
+            notes="$(tools/release/changelog-section.sh "$(jq -r .notes <<< "$item")" "$(jq -r .changelog <<< "$item")")" ||
+              notes="(Unreleased has no entries yet.)"
+            { echo; echo "<details><summary>Notes of <code>$tag</code></summary>"; echo; echo "$notes"; echo; echo "</details>"; } \
+              >> "$GITHUB_STEP_SUMMARY"
+          done
+
+  inputs:
+    needs: plan
+    if: needs.plan.outputs.sign == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
 
       - name: Silicon Labs runtime (no zigbeed), checked against frames/aqara-s1-plus/tools/radio/sisdk-runtime.sha256
         run: frames/aqara-s1-plus/tools/radio/build-sisdk-runtime.sh
@@ -89,13 +136,20 @@ jobs:
           name: sisdk-runtime
           path: frames/aqara-s1-plus/tools/radio/out/sisdk/
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 7   # long enough to rerun a failed later job (Re-run failed jobs)
 
   sign-bundle:
-    needs: inputs
+    needs: [plan, inputs]
+    if: needs.plan.outputs.sign == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     environment: radio-signing
+    env:
+      VERSION: ${{ inputs.version }}
+      # Only these come from the plan job: whether the S1 app is due, and which frames' bundles. Each is checked
+      # here, and every fact about it is read from the commit.
+      KIOSK_DUE: ${{ needs.plan.outputs.kiosk != '' }}
+      BUNDLES: ${{ needs.plan.outputs.bundles }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -106,7 +160,18 @@ jobs:
         run: |
           git fetch --no-tags origin main
           git merge-base --is-ancestor HEAD origin/main ||
-            { echo "::error::$GITHUB_REF_NAME ($GITHUB_SHA) is not on main: refusing to sign a radio bundle"; exit 1; }
+            { echo "::error::$GITHUB_REF_NAME ($GITHUB_SHA) is not on main: refusing to sign a bundle"; exit 1; }
+
+      - name: The frames to sign, from the commit
+        run: |
+          frames="$(jq -r '.[].name' <<< "$BUNDLES")"
+          for id in $frames; do
+            [[ "$id" =~ ^[a-z0-9][a-z0-9-]*$ ]] || { echo "::error::'$id' is not a frame id"; exit 1; }
+            item="$(python3 tools/release/plan.py --version "$VERSION" --item "frame:$id")"
+            [ "$(jq -r .bundle <<< "$item")" = signed ] || { echo "::error::$id has no signed frame bundle"; exit 1; }
+          done
+          echo "FRAMES=$(tr '\n' ' ' <<< "$frames" | sed 's/ *$//')" >> "$GITHUB_ENV"
+          echo "S1 app's radio bundle: $KIOSK_DUE; frame bundles: ${frames:-none}"
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -141,6 +206,7 @@ jobs:
 
       # The S1's setup hotspot name (#197): a one-string resource overlay, built here from the committed sources
       # with the runner's Android SDK (a key made for this build signs it; the bundle's signature is what counts).
+      # Both bundles carry this one build.
       - name: Hotspot name overlay
         run: |
           # This job has no setup-android: the runner image's SDK builds the overlay. Say so plainly if it's gone.
@@ -150,16 +216,21 @@ jobs:
             { echo "::error::no build-tools with aapt2 and apksigner under $ANDROID_HOME"; exit 1; }
           ls "$ANDROID_HOME"/platforms/android-*/android.jar >/dev/null 2>&1 ||
             { echo "::error::no platform android.jar under $ANDROID_HOME"; exit 1; }
-          frames/aqara-s1-plus/tools/radio/hotspot-name/build.sh "$RUNNER_TEMP/hotspot-name"
+          frames/aqara-s1-plus/tools/radio/hotspot-name/build.sh "$RUNNER_TEMP/radio-in"
 
-      - name: Sign the radio bundle
+      - name: The bundle key
         env:
-          VERSION: ${{ needs.inputs.outputs.version }}
           S1_RADIO_BUNDLE_KEY: ${{ secrets.S1_RADIO_BUNDLE_KEY }}
         run: |
           [ -n "$S1_RADIO_BUNDLE_KEY" ] || { echo "::error::secret S1_RADIO_BUNDLE_KEY is not set in the radio-signing environment (docs/releasing.md)"; exit 1; }
           umask 077
           printf '%s\n' "$S1_RADIO_BUNDLE_KEY" > "$RUNNER_TEMP/radio-bundle.pem"
+
+      - name: Sign the radio bundle
+        if: env.KIOSK_DUE == 'true'
+        run: |
+          # The S1 app's rule: MAJOR.MINOR.PATCH, minor and patch below 100.
+          [[ "$VERSION" =~ ^(0|[1-9][0-9]{0,3})\.(0|[1-9][0-9]?)\.(0|[1-9][0-9]?)$ ]] || { echo "::error::$VERSION is not an app version"; exit 1; }
           IFS=. read -r major minor patch <<< "$VERSION"
           code=$((major * 10000 + minor * 100 + patch))   # = the APK's versionCode: only ever goes up
           # The boot writer (#139, route 2): a 0.4.3 boot image gets the frame loader from this bundle, over the air
@@ -170,38 +241,60 @@ jobs:
             --file s1kiosk_radio.sh=frames/aqara-s1-plus/tools/radio/s1kiosk_radio.sh:0700 \
             --file "otbr-agent=$RUNNER_TEMP/radio-in/otbr-agent:0700" \
             --file "ot-ctl=$RUNNER_TEMP/radio-in/ot-ctl:0700" \
-            --file "hotspot-name.apk=$RUNNER_TEMP/hotspot-name/hotspot-name.apk:0644" \
+            --file "hotspot-name.apk=$RUNNER_TEMP/radio-in/hotspot-name.apk:0644" \
             --dir "bootwriter=$RUNNER_TEMP/bootwriter" \
             --dir "sisdk=$RUNNER_TEMP/sisdk"
+
+      - name: Sign the frame bundles
+        if: env.FRAMES != ''
+        run: |
+          for id in $FRAMES; do
+            # Every fact from the commit: the script that builds the bundle, the public key it is checked with, its files.
+            item="$(python3 tools/release/plan.py --version "$VERSION" --item "frame:$id")"
+            script="$(jq -r .script <<< "$item")" pub="$(jq -r .pubkey <<< "$item")"
+            out="$RUNNER_TEMP/frame-out/$id" dist="$RUNNER_TEMP/frame-bundles/$id"
+            mkdir -p "$dist"
+            # The manifest's "created" is the commit's time, so a rebuild gives the same bytes but for
+            # hotspot-name.apk, which build.sh signs with a key made for each build.
+            SOURCE_DATE_EPOCH="$(git log -1 --format=%ct)" "$script" "$VERSION" "$RUNNER_TEMP/radio-bundle.pem" "$out" \
+              "$RUNNER_TEMP/radio-in" "$RUNNER_TEMP/sisdk" "$pub"
+            for zip in $(jq -r '.assets[] | select(endswith(".sha256") | not)' <<< "$item"); do
+              cp "$out/$zip" "$dist/"
+              (cd "$dist" && sha256sum "$zip" > "$zip.sha256" && cat "$zip.sha256")
+            done
+          done
 
       - name: Remove the key
         if: always()
         run: rm -f "$RUNNER_TEMP/radio-bundle.pem"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: env.KIOSK_DUE == 'true'
         with:
           name: radio-bundle
           path: ${{ runner.temp }}/signed/
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 7
 
-  release:
-    needs: [inputs, sign-bundle]
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: env.FRAMES != ''
+        with:
+          name: frame-bundles
+          path: ${{ runner.temp }}/frame-bundles/
+          if-no-files-found: error
+          retention-days: 7
+
+  build-kiosk:
+    needs: [plan, sign-bundle]
+    if: needs.plan.outputs.kiosk != ''
     runs-on: ubuntu-24.04
-    # The APK key lives in this environment, not in repository secrets, so only main, test-build/**
-    # and release tags can reach it, never a workflow on some other branch (docs/releasing.md).
+    # The APK key lives in this environment, not in repository secrets, so only main and test-build/** can reach it,
+    # never a workflow on some other branch (docs/releasing.md).
     environment: release-signing
     timeout-minutes: 60   # two APK builds
-    # One S1 release at a time, whatever its tag (v*, aqara-s1-plus-v*, stable or beta): each checks its version again
-    # just before it publishes, so two tags pushed together can't publish out of order (#605).
-    concurrency:
-      group: release-publish-aqara-s1-plus
-      cancel-in-progress: false
-    permissions:
-      contents: write # create the release and upload its assets (GITHUB_TOKEN only)
     env:
-      VERSION: ${{ needs.inputs.outputs.version }}
-      CHANNEL: ${{ needs.inputs.outputs.channel }}
+      VERSION: ${{ inputs.version }}
+      LINE: ${{ needs.plan.outputs.kiosk && fromJSON(needs.plan.outputs.kiosk).name || '' }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -209,7 +302,12 @@ jobs:
 
       - name: ABIs, one APK each (every frame's abis, tools/release/frame-abis.sh)
         run: |
+          [[ "$LINE" =~ ^[a-z0-9][a-z0-9-]*$ ]] || { echo "::error::'$LINE' is not a line name"; exit 1; }
+          python3 tools/release/plan.py --version "$VERSION" --item "line:$LINE" > "$RUNNER_TEMP/item.json"
+          [ "$(jq -r .build "$RUNNER_TEMP/item.json")" = s1-kiosk ] || { echo "::error::$LINE is not the S1 app's line"; exit 1; }
           abis="$(tools/release/frame-abis.sh)"
+          [ "$abis" = "$(jq -r '.abis | join(" ")' "$RUNNER_TEMP/item.json")" ] ||
+            { echo "::error::the plan's ABIs for $LINE aren't frame-abis.sh's"; exit 1; }
           echo "ABIS=$abis" >> "$GITHUB_ENV"
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -218,9 +316,7 @@ jobs:
           path: ${{ runner.temp }}/radio-bundle-assets
 
       - name: Radio bundle for the APK
-        run: |
-          echo "S1_RADIO_BUNDLE_ASSETS=$RUNNER_TEMP/radio-bundle-assets" >> "$GITHUB_ENV"
-          tools/release/changelog-section.sh "$VERSION" > "$RUNNER_TEMP/notes.md"
+        run: echo "S1_RADIO_BUNDLE_ASSETS=$RUNNER_TEMP/radio-bundle-assets" >> "$GITHUB_ENV"
 
       # AGP 9.3 / Gradle 9.8 / Kotlin 2.4 (build.gradle.kts, gradle-wrapper.properties) need JDK 17+;
       # the app is developed on Temurin 21.
@@ -264,10 +360,14 @@ jobs:
             cp frames/aqara-s1-plus/android/build/outputs/apk/release/kiosk-release.apk "$RUNNER_TEMP/apk/$abi.apk"
           done
 
+      - name: Remove the keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/glassworks-s1-release.jks"
+
       - name: Name, verify and checksum
         run: |
           mkdir dist
-          apksigner="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)/apksigner"
+          apksigner="$(printf '%s\n' "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)/apksigner"
           aapt2="$(dirname "$apksigner")/aapt2"
           # = Releases.kt ApkAbi.apkName (ApkAbiListsTest runs this line). The S1's name has no ABI in it:
           # panels up to 0.4.3 look only for s1-kiosk-<version>.apk.
@@ -294,31 +394,199 @@ jobs:
             if unzip -l "$apk" | grep -q 'assets/radio-bundle/.*zigbeed$'; then echo "::error::Silicon Labs' zigbeed must never be in the APK"; exit 1; fi
             (cd dist && sha256sum "$name" > "$name.sha256" && cat "$name.sha256")
           done
+          # Exactly the files the frames' data names (release.lines.<line>.assets): the names panels look for.
+          diff <(jq -r '.assets[]' "$RUNNER_TEMP/item.json" | LC_ALL=C sort) <(find dist -maxdepth 1 -type f -printf '%f\n' | LC_ALL=C sort) ||
+            { echo "::error::the APKs aren't the ones the frames' data names"; exit 1; }
+          { echo "### $LINE $VERSION"; for f in dist/*; do echo "- \`${f#dist/}\` ($(stat -c %s "$f") bytes)"; done; } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Publish the GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # --latest: apps up to 0.4.3 only read releases/latest, so an S1 release must always be the
-          # one marked latest. Releases of other frames and libraries in this repo use --latest=false.
-          # A beta (#605) is a pre-release and never latest: releases/latest stays the S1 app's stable.
-          # Checked again here, under the job's lock: another S1 tag may have published since the inputs job.
-          tools/release/check-newer-than-released.sh aqara-s1-plus "$VERSION"
-          if [ "$CHANNEL" = beta ]; then flags=(--prerelease --latest=false); title="Glassworks for the Aqara S1 Plus $VERSION beta"
-          else flags=(--latest); title="Glassworks for the Aqara S1 Plus $VERSION"; fi
-          gh release create "$GITHUB_REF_NAME" dist/*.apk dist/*.apk.sha256 \
-            --verify-tag "${flags[@]}" --title "$title" --notes-file "$RUNNER_TEMP/notes.md"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: line-${{ env.LINE }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
 
-      - name: Rebuild the web installer
-        # The installer (https://s1.edm.sh, Vercel) picks the latest release at build time. It skips pre-releases, so
-        # a beta changes nothing there; promoting it runs installer-deploy.yml (docs/releasing.md "Betas").
-        if: env.CHANNEL != 'beta'
-        env:
-          VERCEL_DEPLOY_HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
+  build-apps:
+    needs: plan
+    if: needs.plan.outputs.has_apps == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60   # two APK builds
+    environment: release-signing   # Glassworks' generic key
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.apps) }}
+    env:
+      VERSION: ${{ inputs.version }}
+      LINE: ${{ matrix.name }}
+    name: build ${{ matrix.name }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - name: The line, from the commit
         run: |
-          if [ -z "$VERCEL_DEPLOY_HOOK" ]; then echo "::warning::VERCEL_DEPLOY_HOOK not set: redeploy the installer by hand"; exit 0; fi
-          curl -fsS -X POST "$VERCEL_DEPLOY_HOOK" > /dev/null && echo "installer rebuild requested"
+          # Only the line's name comes from the plan job; the rest from the frames' data (release.lines.<line>).
+          [[ "$LINE" =~ ^[a-z0-9][a-z0-9-]*$ ]] || { echo "::error::'$LINE' is not a line name"; exit 1; }
+          item="$(python3 tools/release/plan.py --version "$VERSION" --item "line:$LINE")"
+          printf '%s\n' "$item" > "$RUNNER_TEMP/item.json"
+          [ "$(jq -r .build <<< "$item")" = gradle ] || { echo "::error::$LINE is not a gradle line"; exit 1; }
+          IFS=. read -r major minor patch <<< "$VERSION"
+          {
+            echo "TASK=$(jq -r .task <<< "$item")"; echo "OUT=$(jq -r .apk <<< "$item")"; echo "PKG=$(jq -r .package <<< "$item")"
+            echo "MIN_SDK=$(jq -r .minSdk <<< "$item")"; echo "ASKS_WRITE_SETTINGS=$(jq -r 'if .writeSettings then "yes" else "no" end' <<< "$item")"
+            echo "ABIS=$(jq -r '.abis | join(" ")' <<< "$item")"; echo "VERSION_CODE=$((major * 10000 + minor * 100 + patch))"
+          } | tee -a "$GITHUB_ENV"
+
+      # AGP 9.3 / Gradle 9.8 / Kotlin 2.4 need JDK 17+; the app is developed on Temurin 21.
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
+        with:
+          packages: platform-tools
+
+      - name: Android SDK platform
+        run: sdkmanager --install "platforms;android-37.2"
+
+      - name: Release keystore
+        env:
+          GENERIC_KEYSTORE_B64: ${{ secrets.GENERIC_KEYSTORE_B64 }}
+        run: |
+          [ -n "$GENERIC_KEYSTORE_B64" ] || { echo "::error::secret GENERIC_KEYSTORE_B64 is not set (frames/generic-android/README.md)"; exit 1; }
+          umask 077
+          printf '%s' "$GENERIC_KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/glassworks-release.jks"
+          echo "GENERIC_KEYSTORE_FILE=$RUNNER_TEMP/glassworks-release.jks" >> "$GITHUB_ENV"
+
+      - name: Build the APKs, one per ABI
+        env:
+          GENERIC_REQUIRE_RELEASE_SIGNING: 'true'
+          GENERIC_KEYSTORE_PASSWORD: ${{ secrets.GENERIC_KEYSTORE_PASSWORD }}
+          GENERIC_KEY_ALIAS: glassworks   # not a secret; as a secret, GitHub would mask every "glassworks" in the log
+          GENERIC_KEY_PASSWORD: ${{ secrets.GENERIC_KEY_PASSWORD }}
+        run: |
+          mkdir dist
+          for abi in $ABIS; do
+            # The legacy engine's GeckoView follows -PlegacyAbi, the APK -Ps1Abi; the release build ignores -PlegacyAbi.
+            ./gradlew --no-daemon "$TASK" -Ps1Abi="$abi" -PlegacyAbi="$abi" -PgenericVersion="$VERSION"
+            # = ReleaseLine.apkName: <line's stem>-<abi>-<version>.apk, as the frames' data names it
+            cp "$OUT" "dist/$(jq -r --arg abi "$abi" '.assets[] | select(contains("-" + $abi + "-") and endswith(".apk"))' "$RUNNER_TEMP/item.json")"
+          done
 
       - name: Remove the keystore
         if: always()
-        run: rm -f "$RUNNER_TEMP/glassworks-s1-release.jks"
+        run: rm -f "$RUNNER_TEMP/glassworks-release.jks"
+
+      - name: Verify and checksum
+        run: |
+          apksigner="$(printf '%s\n' "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)/apksigner"
+          aapt2="$(dirname "$apksigner")/aapt2"
+          cd dist
+          for apk in *.apk; do
+            abi="${apk#glassworks-"$LINE"-}"; abi="${abi%-"$VERSION".apk}"
+            "$apksigner" verify --verbose --print-certs "$apk"
+            # Glassworks' release key, the package, no sharedUserId, the components named from outside the APK.
+            ../tools/release/check-update-compat.sh --app "$LINE" --signed "$apk"
+            badging="$("$aapt2" dump badging "$apk")"
+            echo "${badging%%$'\n'*}"
+            grep -q "^package: name='$PKG' versionCode='$VERSION_CODE' versionName='$VERSION'" <<< "$badging" ||
+              { echo "::error::$apk is not $PKG $VERSION (versionCode $VERSION_CODE)"; exit 1; }
+            grep -q "^minSdkVersion:'$MIN_SDK'" <<< "$badging" || { echo "::error::$apk: minSdk is not $MIN_SDK"; exit 1; }
+            native="$(sed -n "s/^native-code: //p" <<< "$badging")"
+            [ "$native" = "'$abi'" ] || { echo "::error::$apk has native code for $native, not '$abi'"; exit 1; }
+            unzip -l "$apk" | grep -q "lib/$abi/libxul.so" || { echo "::error::$apk has no $abi GeckoView"; exit 1; }
+            # A privileged system app's permissions (the Mirror, #198), as generic-test-build.yml checks.
+            for perm in INSTALL_PACKAGES REBOOT WRITE_SECURE_SETTINGS; do
+              grep -q "^uses-permission: name='android.permission.$perm'" <<< "$badging" || { echo "::error::$apk doesn't ask for $perm"; exit 1; }
+            done
+            # WRITE_SETTINGS: the setup hotspot's setWifiApEnabled on Android 6-7, so the legacy build alone asks for it.
+            asks=no; grep -q "^uses-permission: name='android.permission.WRITE_SETTINGS'" <<< "$badging" && asks=yes
+            [ "$asks" = "$ASKS_WRITE_SETTINGS" ] || { echo "::error::$apk: asks for WRITE_SETTINGS: $asks, should: $ASKS_WRITE_SETTINGS"; exit 1; }
+            sha256sum "$apk" > "$apk.sha256" && cat "$apk.sha256"
+          done
+          # Exactly the files the frames' data names, one APK and its .sha256 per ABI: a release never has half its ABIs.
+          diff <(jq -r '.assets[]' "$RUNNER_TEMP/item.json" | LC_ALL=C sort) <(find . -maxdepth 1 -type f -printf '%f\n' | LC_ALL=C sort) ||
+            { echo "::error::the APKs aren't the ones the frames' data names"; exit 1; }
+          { echo "### $LINE $VERSION"; for f in *; do echo "- \`$f\` ($(stat -c %s "$f") bytes)"; done; } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: line-${{ env.LINE }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: [plan, inputs, sign-bundle, build-kiosk, build-apps]
+    # Not a dry run, and every part the plan needs passed (a skipped job is one the plan didn't need).
+    if: >-
+      !cancelled() && !inputs.dry_run && needs.plan.result == 'success' && needs.plan.outputs.any == 'true' &&
+      (needs.plan.outputs.sign != 'true' || (needs.inputs.result == 'success' && needs.sign-bundle.result == 'success')) &&
+      (needs.plan.outputs.kiosk == '' || needs.build-kiosk.result == 'success') &&
+      (needs.plan.outputs.has_apps != 'true' || needs.build-apps.result == 'success')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: release-signing   # the tag deploy key only; this job builds nothing
+    # One publish at a time for every line and frame: each checks its versions again against the releases that
+    # exist when it runs, so two runs can't publish one line out of order.
+    concurrency:
+      group: release-publish
+      cancel-in-progress: false
+    permissions:
+      contents: write   # create the releases and upload their files (GITHUB_TOKEN; tags go over SSH)
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+
+      - name: Only main
+        run: |
+          [ "$GITHUB_REF" = refs/heads/main ] || { echo "::error::a release publishes from main only, not $GITHUB_REF"; exit 1; }
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: needs.plan.outputs.kiosk != '' || needs.plan.outputs.has_apps == 'true'
+        with:
+          pattern: line-*
+          path: dist
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: needs.plan.outputs.bundles != '[]'
+        with:
+          name: frame-bundles
+          path: dist/frame-bundles
+
+      - name: The tag deploy key
+        env:
+          RELEASE_TAG_DEPLOY_KEY: ${{ secrets.RELEASE_TAG_DEPLOY_KEY }}
+        run: |
+          [ -n "$RELEASE_TAG_DEPLOY_KEY" ] || { echo "::error::secret RELEASE_TAG_DEPLOY_KEY is not set in the release-signing environment (docs/releasing.md)"; exit 1; }
+          umask 077
+          printf '%s\n' "$RELEASE_TAG_DEPLOY_KEY" > "$RUNNER_TEMP/tag-key"
+          # GitHub's SSH host keys, committed (from api.github.com/meta), so the push can't go to anyone else.
+          echo "GIT_SSH_COMMAND=ssh -i $RUNNER_TEMP/tag-key -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$GITHUB_WORKSPACE/tools/release/github-known-hosts" >> "$GITHUB_ENV"
+
+      - name: Publish the releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLAN: ${{ needs.plan.outputs.plan }}
+        run: |
+          printf '%s\n' "$PLAN" > "$RUNNER_TEMP/plan.json"
+          TAG_REMOTE="git@github.com:$GITHUB_REPOSITORY.git" \
+            tools/release/publish.sh "$RUNNER_TEMP/plan.json" dist "$RUNNER_TEMP/published-tags.txt"
+
+      - name: Remove the key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/tag-key"
+
+      # The Discord feed (discord-releases.yml) posts each of these once this run has passed.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: published-tags
+          path: ${{ runner.temp }}/published-tags.txt
+          if-no-files-found: ignore
+          retention-days: 7
+          overwrite: true   # a rerun of publish lists everything it published, the first attempt's too

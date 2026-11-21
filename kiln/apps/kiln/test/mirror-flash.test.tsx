@@ -265,6 +265,14 @@ describe('every flash demo screen', () => {
     expect(embers().length).toBeLessThanOrEqual(1);
   });
 
+  it('the first start\'s two endings have their demos: never let in (#672), and a first start that stopped', async () => {
+    const refused = await imageDemo(mirrorEntry, 'flash-adb-refused', true);
+    expect(refused.image.state).toMatchObject({ screen: 'adb', connecting: false, connectError: expect.stringMatching(/didn't let this browser in through its first start/) });
+    const stopped = await imageDemo(mirrorEntry, 'flash-error-first-start', true);
+    expect(stopped.image.state).toMatchObject({ screen: 'error', work: { step: 'first-boot' } });
+    expect(stopped.image.tryAgainLands()).toBe('adb');
+  });
+
   it('one button downloads the image; a failure offers Try again and Report this, never a file to fetch by hand (#579)', async () => {
     const one = await imageDemo(mirrorEntry, 'flash-image', true);
     render(<ImageFlow image={one.image} app={one.app} />);
@@ -291,14 +299,14 @@ describe('every flash demo screen', () => {
     cleanup();
     await showImage('flash-done');
     expect(screen.getByText((_, el) => el?.tagName === 'SPAN' && /^Built on Glass Panes by git-nimrod\.$/.test(el.textContent ?? ''))).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Done.' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'You\'re all set' })).toBeTruthy();
     expect(screen.getByText("Reversible to the community image, not to lululemon's software.")).toBeTruthy();
   });
 
   it('warns that lululemon\'s software can\'t be restored before anything is written', async () => {
     const { image: flash, app: mirror } = await imageDemo(mirrorEntry, 'flash-confirm', true);
     render(<ImageFlow image={flash} app={mirror} />);
-    expect(screen.getByText('This replaces lululemon’s software for good.')).toBeTruthy();
+    expect(screen.getByText('This replaces lululemon’s software for good')).toBeTruthy();
     expect(screen.getByText(/Everything on the Mirror is replaced, with no backup.*The way back is the plain Glass Panes image\./s)).toBeTruthy();
     expect(screen.getByText("Reversible to the community image, not to lululemon's software.")).toBeTruthy(); // #146
     expect((screen.getByText('Install Glassworks') as HTMLButtonElement).disabled).toBe(true);

@@ -33,7 +33,7 @@ export function Connect({ s, session, frame }: P) {
   const driver = useMemo(() => { const o = os(); return o === 'other' ? undefined : frame.drivers[o]; }, [frame]);
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h" className="huge">Hold the button. Plug it in.</h2>
+      <h2 id="h" className="huge">Enter recovery mode</h2>
       <Recovery data={frame.recovery} />
       <p className="small">Then click Connect and pick <code>{frame.felPick}</code>.{s.flow === 'undo' ? '' : s.changed === 'unknown' ? ' Kiln can\'t tell if an earlier try in this browser tab changed the panel.' : s.changed ? ' An earlier try already changed the panel.' : ''}</p>
       {driver && <p className="small">{driver} <a className="link" href={frame.help.drivers} target="_blank" rel="noopener">How</a></p>}
@@ -114,7 +114,7 @@ export function Firing({ s, frame }: P) {
   const steps = milestones(s, frame.short);
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h" className="huge">Keep it plugged in.</h2>
+      <h2 id="h" className="huge">Keep it plugged in</h2>
       <div style={{ display: 'grid', gap: 8 }}>
         <div className="spread"><span>{s.progress.title}</span><span className="small">{eta(s, now)}</span></div>
         <div className="bar" role="progressbar" aria-label={s.progress.title} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.floor(s.progress.overall * 100)}>
@@ -182,7 +182,7 @@ function Installing({ frame, setup }: { frame: Pick<StandardFrame, 'app'>; setup
   const says = [rows[at]?.text(frame.app), sub, note].filter(Boolean).join('. ').replace(/\.\./g, '.');
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h">{setup.apply ? 'A few settings.' : setup.update ? `Updating ${frame.app}.` : `Installing ${frame.app}.`}</h2>
+      <h2 id="h">{setup.apply ? 'Language and time' : setup.update ? `Updating ${frame.app}` : `Installing ${frame.app}`}</h2>
       <p className="lede">Keep it plugged in.</p>
       <ol className="join">
         {rows.map((r, i) => (
@@ -225,7 +225,7 @@ function Settings({ s, session, frame, setup }: SP & { setup: Extract<Setup, { p
   if (setup.installing) return <Installing frame={frame} setup={setup} />;
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h">{setup.update && !setup.apply ? `Update ${frame.app}.` : 'A few settings.'}</h2>
+      <h2 id="h">{setup.update && !setup.apply ? `Update ${frame.app}` : 'Language and time'}</h2>
       <div className="fields">
         <label className="field"><span>Language</span>
           <select className="select" value={locale} onChange={(e) => setLocale(e.target.value)} disabled={busy}>
@@ -262,7 +262,7 @@ function Settings({ s, session, frame, setup }: SP & { setup: Extract<Setup, { p
 export function Waiting({ setup }: { setup: Extract<Setup, { phase: 'waiting' }> }) {
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h">Starting the panel.</h2>
+      <h2 id="h">Starting the panel</h2>
       <p className="lede">{setup.note}</p>
       <div className="bar wait"><i /></div>
     </section>
@@ -336,7 +336,7 @@ export function Undo({ s, session, frame }: P) {
   const keep = u.depth === 'keep';
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h">Put it back.</h2>
+      <h2 id="h">Restore stock firmware</h2>
       <RadioGroup.Root className="list" value={u.depth} onValueChange={(v) => session.store.dispatch({ type: 'undo', patch: { depth: v as 'factory' | 'keep', appsBack: false, note: undefined } })} aria-label="How far back">
         {(['factory', 'keep'] as const).map((d) => (
           <RadioGroup.Item key={d} value={d} className="opt"><span className="rd" /><span className="t"><span>{frame.undo[d].title}</span><small>{frame.undo[d].detail}</small></span></RadioGroup.Item>
@@ -409,7 +409,7 @@ export function Browser() {
   const secure = typeof window !== 'undefined' && isSecureContext;
   return (
     <section className="card err" aria-labelledby="h">
-      <h2 id="h">{secure ? 'Use Chrome or Edge.' : 'Open this page over https.'}</h2>
+      <h2 id="h">{secure ? 'Use Chrome or Edge' : 'Open this page over https'}</h2>
       <p className="lede">{secure
         ? 'This browser can’t talk to USB devices. Kiln needs Chrome or Edge on a computer, or Chrome on Android.'
         : 'Browsers only open USB devices from a secure page (https, or localhost).'}</p>

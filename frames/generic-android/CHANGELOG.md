@@ -5,140 +5,24 @@ newer) and its legacy build (`dev.glassworks.generic_android.legacy`, Android 6 
 included), for people running one. The S1 app's changes are in the repo's [CHANGELOG.md](../../CHANGELOG.md).
 
 Both builds share this file and one version sequence. A version's section is the release notes of
-`generic-android-v<version>` and of `generic-android-legacy-v<version>`, whichever of the two is tagged
+`generic-android-v<version>` and of `generic-android-legacy-v<version>`, whichever of the two is released
 ([docs/releasing.md](../../docs/releasing.md#glassworks-for-generic-android-and-its-legacy-build)). The first
 line of each version is what Home Assistant shows on the update card. A change only one build gets says which.
 
 ## [Unreleased]
 
 ### Added
-- **Assist can show as an edge glow.** On the *Appearance* page, *Assist* now picks between the orb and an edge
-  glow. With the edge glow, the dashboard stays in view: the theme's two colors light up at the microphone, run
-  around the edge of the screen and meet at the bottom, and a small caption shows what you said and the reply.
-  While you speak the light follows your voice, and while the reply plays it breathes calmly. Tap anywhere to
-  cancel, as with the orb.
-- **Kiln asks which panes to turn on.** After Home Assistant, Kiln's set-up shows the app's Panes step: one switch
-  per pane the device can run, with each pane's icon, and Continue turns them on or off. It is the same answer as
-  the Panes step on the device's own screen, and the same switches as the pane's settings, the Manage page and Home
-  Assistant, so all of them agree. A pane whose hardware the device lacks isn't listed.
-- **Themes for the voice overlay.** A new *Appearance* page in the panel's settings and on the Manage page picks one
-  of five themes, Glassworks, Aurora, Dusk, Dune or Graphite, each light or dark. The voice overlay takes its
-  colors: the orb glows in the theme's first color while it listens and its second while it speaks, and a light
-  theme gives the overlay a light background with dark text. Done stays green and errors stay red. Glassworks dark
-  is the default, so the orb now listens in blue rather than amber.
-- **Pick your own theme colors.** The *Appearance* page now has a Custom theme next to the other five. Pick its
-  accent, second accent and background, one set for light and one for dark, from swatches or by typing a hex code.
-  The Manage page offers the same colors with your browser's color picker. Changing a color switches to Custom
-  right away, and the overlay's text turns light or dark to stay readable on the background you chose.
-- **Timers in your theme.** The timers on the dashboard and the timer done screen now take the theme from the
-  *Appearance* page. The theme's two colors run down each timer's ring, the glass turns light with a light theme,
-  and the done screen's orb and ripples glow in the theme's colors. The last 10 seconds stay amber in every theme so
-  you can tell a timer is about to ring.
-- **Your theme can follow Home Assistant's dark mode.** Under the theme cards on the *Appearance* page, *Follow
-  Home Assistant's dark mode* keeps the theme you picked and turns it light or dark when your dashboard does. The
-  panel reads the mode from the dashboard it already shows, so nothing is added to Home Assistant.
-- **A Home Assistant theme.** Once your dashboard has loaded, the *Appearance* page offers a *Home Assistant* card
-  that uses your dashboard's own colors: its primary and accent colors for the lights, and its background. It turns
-  light or dark with Home Assistant, and follows when you change your theme there. Nothing is added to Home Assistant.
-- **A timer board.** With three or more timers running, they now gather into one glass card that lists each
-  one with a small ring, its name and length, and the time left, soonest first. It takes your theme, moves and hides
-  like the timers do, and has its own *Hide* on touch screens. Up to five are listed, then how many more.
-- **Recorders that record on motion get the camera's motion pushed to them.** With the ONVIF stream on, a network
-  video recorder that subscribes to the camera's motion (many Xiongmai-based NVRs do) now hears about each change
-  the moment it happens, so it can start recording. The recorder must be on your local network and sign in with the
-  stream's username and password. Home Assistant's ONVIF integration can use this too, and then gets motion
-  without asking for it.
-- **Kiln installs Glassworks on Android devices for everyone, in beta.** Open `kiln.glassworks.dev/android` in
-  Chrome or Edge: Kiln takes the newest release, with no `?apk=release` link needed. It is in Kiln's picker, marked
-  Beta.
-- **Reset the panel, and open or close setup over the network, from the Security page.** The panel's settings and
-  the Manage page have a new *Security* page. *Reset the panel* clears the app's settings, its panes' settings and
-  its Home Assistant sign-in, signs every browser out of the Manage page, and restarts into setup. It keeps Wi-Fi,
-  the Log, the radio's settings (so its Zigbee or Thread network stays up) and the panel in Home Assistant. It
-  asks first and says what goes and what stays. *Allow setup over the network* moved here from the dashboard's
-  page, and *Close setup over the network* ends it before the 30 minutes are up. On the Manage page all three
-  need the code the panel shows then.
-- **Notifications and the Bluetooth proxy, in both builds.** Home Assistant can show notifications on the panel
-  with the panel's notify action, and a device with Bluetooth LE can relay nearby BLE sensors to Home Assistant.
-  Notifications are on by default, and the proxy is off until you turn it on. Either changes in the panel's
-  settings, on the Manage page or from Home Assistant. A device
-  without Bluetooth LE doesn't show the proxy anywhere. On a screen without touch, such as the lululemon Mirror, a
-  high or critical notification with no `tag` and no `timeout` closes after 2 minutes, since nothing else could
-  close it. On the Mirror the proxy scans only once the app has the location permission, which Kiln doesn't grant yet.
-  If Home Assistant asks for Bluetooth data without the panel's encryption key, the proxy's settings page and its
-  *Bluetooth proxy status* sensor say *Waiting for the panel's key*. Another app on your network that asks without
-  the key doesn't change that.
-- **Pick an update channel: Stable or Beta.** The device page in the panel's settings and on the Manage page has an
-  *Update channel* row. Stable, the default, gets releases as before. Beta also gets betas, new versions before
-  they're stable, which may have bugs; Home Assistant's update card says when the update it offers is a beta. Going
-  back to Stable never installs an older version: the panel waits for a stable release newer than the one it runs.
+- **Appearance themes, Assist edge glow, and timer board.** A new *Appearance* page (on the panel and in Manage) adds five light/dark themes, a Custom color picker, and a **Home Assistant** theme that mirrors your dashboard's colors and dark mode (plus a toggle to follow Home Assistant's dark mode with any theme). Themes apply to both Assist and timers. Assist can now display as a subtle **edge glow** that keeps your dashboard visible, and three or more active timers group into a single **timer board** card.
+- **Notifications and Bluetooth proxy panes (both builds).** Show rich Home Assistant notifications on screen (on by default; non-touch displays auto-dismiss untagged high/critical alerts after 2 minutes) and relay nearby BLE sensors to Home Assistant over an encrypted connection (off by default).
+- **Security page for reset and network setup.** Reset app and pane settings while keeping Wi-Fi, logs, and Home Assistant pairing intact—or open/close 30-minute network setup—from *Settings → Security* or Manage (with on-panel code confirmation).
+- **ONVIF push motion events.** Local network video recorders and Home Assistant's ONVIF integration now receive motion alerts immediately over authenticated subscriptions.
+- **Public beta in Kiln & pane selection during setup.** `kiln.glassworks.dev/android` and `kiln.glassworks.dev/lululemon-mirror` now install the latest release directly (no test links needed) and let you choose which panes to enable during setup.
+- **Update channels (Stable / Beta).** Choose between Stable and Beta releases from the device page in Settings or Manage.
 
 ### Fixed
-- **The setup Wi-Fi on Android 6 and 7 always gives back the device's Wi-Fi.** If the app stopped while its setup
-  Wi-Fi was open, Android kept that Wi-Fi up, the device's own Wi-Fi stayed off, and the device's hotspot settings
-  kept the setup network. Now the app puts all of that back the next time it starts. If the device's own hotspot is
-  already on, the setup screen says so instead of showing a network the panel can't open. Legacy build only.
-- **The Mirror's dashboard reloads less when memory runs short (legacy build).** On a device that stays low on
-  memory for hours, the web engine was told so only once, so the page grew back until Android closed it and the
-  dashboard reloaded. The legacy build now tells it again every two minutes for as long as memory stays short, so
-  it keeps giving memory back.
-- **The timer done screen fits a portrait screen.** On a portrait screen such as the Mirror, the timer's name,
-  its length and the timers still running now fit the screen's width, as the voice overlay's text does. Before,
-  long names ran off the edges. On a screen without touch, the hint now says the screen closes by itself after a
-  minute instead of asking you to tap it.
-- **The panel's camera no longer shows as unavailable in Home Assistant after the app restarts.** Until now the
-  camera entity stayed unavailable after a restart or a reload of the ESPHome integration, until something asked
-  for a picture. The panel now tells Home Assistant the camera is there as soon as it connects, without sending
-  any picture: Home Assistant still gets one only when it asks.
-- **Snapshot checks over ONVIF give the real size.** A recorder or tool that checks the camera's snapshot before
-  downloading it now sees the picture's real size and no stray bytes, so its next request on the same connection
-  works.
-- **Setup stays on screen when the app restarts after finding Home Assistant.** Once the panel joins Wi-Fi and
-  finds Home Assistant, the app restarts to apply it. The setup screen now comes back at once and says "Connecting
-  to Home Assistant…" until it knows whether the panel needs to sign in, so Home Assistant's page no longer flashes
-  before the sign-in step.
-- **A device without a touchscreen keeps its screen on during setup.** On the lululemon Mirror and other devices
-  without touch, the setup screen no longer goes dark while you set the device up from a computer.
-- **Notifications on a screen without touch show nothing you would have to tap.** On the lululemon Mirror a
-  notification showed Home Assistant's buttons, such as the test notification's OK, and after its card went away an
-  "N notifications · Show all" pill stayed on screen for good. Now cards and critical alerts show without buttons
-  or a close. A normal or low card goes away on its own and leaves nothing behind. A high or critical one with a
-  `tag` stays until Home Assistant clears it, and one without closes after 2 minutes, as before. Do not disturb's
-  pill only says it's on. Touch screens are unchanged.
-- **The lululemon Mirror stays upright after an update.** Android turned auto-rotate back on with every update of
-  the app, so the Mirror's dashboard came up sideways until someone fixed it over adb. The app now holds the Mirror
-  in portrait itself, whatever auto-rotate says. Other devices turn as before.
-- **The camera isn't restarted while it is still starting.** On the lululemon Mirror, turning the camera on could
-  log "no frames" and open the camera a second time, so it took about 12 s to come up. A camera's first picture
-  now gets 10 s from the moment the camera opens; "no frames" shows only after that. A camera that goes quiet
-  later is still restarted after 5 s.
-- **Settings > Log says what the screen senses in plain words.** *Screen and sensors* read like
-  `presence=far (raw 7.7E-4) · lux=NaN · brightness=-1.00 · admin=true`. It now reads like *Someone near: no ·
-  Room light: 120 lux · Brightness: 40 %*, with only what the device has: no room light without a light sensor, no
-  one near without presence. The panel and the Manage page show the same. The raw values are in the app's log.
-- **The Mirror's camera uses less memory while Home Assistant streams it.** On the lululemon Mirror the dashboard
-  could reload every few minutes while Home Assistant streamed the camera, because the device ran out of memory. The
-  camera now runs at most at 720p there, at a size its sensor takes directly, and the stream uses the device's own
-  video encoder when it can, instead of encoding on the CPU.
-- **Setup carries on after you sign in on the panel.** After *Sign in on this panel instead*, the dashboard showed for
-  up to 2 minutes before setup came back on *Add it*, so setup looked finished. Setup now comes back as soon as you're
-  signed in. While Home Assistant may still find the panel by itself, *Add it* says it's checking.
-- **No log-access prompt on every start, on Android 10 and later.** The app asked for the system log for
-  "Allow a new computer", which only works on Android 6 to 9. Where an install over adb granted it, Android 13 and
-  later showed "Allow access to all device logs?" each time the app started. Now only Android 6 to 9 are asked.
-- **Wi-Fi setup over Bluetooth works on the lululemon Mirror.** On a panel with no touchscreen, nobody could press
-  Allow, so Home Assistant and phones could never send it Wi-Fi over Bluetooth. Now, when it starts with no network,
-  Bluetooth setup is open by itself for 5 minutes, and the setup screen says to send the Wi-Fi from Home Assistant or
-  improv-wifi.com on a phone, with the time left. Where the camera sees presence, walking up to the panel opens it
-  again. It never opens while the panel is online. After the 5 minutes the panel opens its own setup Wi-Fi, if it
-  can, and otherwise the setup screen says how to set it up from a computer.
-- **The setup Wi-Fi opens on the lululemon Mirror.** The legacy build's setup screen said "This device doesn't let apps
-  open a Wi-Fi hotspot." on the Mirror. Android 6 and 7 want one more permission for it, which the legacy build now
-  asks for. An update is enough: no new flash. If Android still refuses, the reason is in the log.
-- **Home Assistant's *Silent updates* follows within seconds.** After you allowed "Install unknown apps" for
-  Glassworks, the panel and the Manage page said Silent updates was on, but Home Assistant's sensor could still say
-  no for up to 15 minutes. It now changes when you come back from Android's settings, or as soon as setup, the
-  panel's settings or the Manage page show the new answer.
+- **lululemon Studio Mirror & legacy Android 6–7 stability.** Keeps the Mirror locked upright in portrait across updates, reduces camera streaming RAM with 720p hardware encoding, prevents premature camera restarts during startup, re-notifies the legacy web engine during sustained low memory so dashboards reload less often, and restores device Wi-Fi and hotspot settings reliably after an interrupted setup hotspot.
+- **Touchless setup & notification polish.** Keeps non-touch screens awake during setup, removes tap-only buttons and persistent notification pills on non-touch displays, fits the timer done screen cleanly on portrait screens, and enables automatic Bluetooth and hotspot Wi-Fi setup on the Mirror without touch input.
+- **Setup flow, camera, and sensors.** Keeps the setup screen visible across the post-Wi-Fi restart and immediately after on-panel sign-in, reports the camera entity available as soon as ESPHome connects, returns accurate ONVIF snapshot sizes, formats *Screen and sensors* in plain English, updates Home Assistant's *Silent updates* sensor immediately after permission changes, and stops prompting for system log access on Android 10 and newer.
 
 ## [0.2.0] - 2026-11-19
 

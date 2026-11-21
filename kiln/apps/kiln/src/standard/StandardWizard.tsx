@@ -14,9 +14,9 @@ import type { StandardFrame } from './frame';
 import type { StandardSession } from './session';
 
 function announce(s: WizardState, f: StandardFrame): string {
-  if (s.ask) return `Your turn. ${f.connect.title} Pick ${f.connect.pick} in the list.`;
-  if (s.screen === 'error') return `${s.failure?.title} ${s.failure?.body}`;
-  if (s.screen === 'done') return s.done ? `${s.done.title}${s.done.updates ? ` Silent updates: ${s.done.updates.word}.` : ''}` : '';
+  if (s.ask) return `Your turn. ${f.connect.title}. Pick ${f.connect.pick} in the list.`;
+  if (s.screen === 'error') return `${s.failure?.title}. ${s.failure?.body}`;
+  if (s.screen === 'done') return s.done ? `${s.done.title}.${s.done.updates ? ` Silent updates: ${s.done.updates.word}.` : ''}` : '';
   return '';
 }
 

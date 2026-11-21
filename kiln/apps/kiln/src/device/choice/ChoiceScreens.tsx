@@ -135,7 +135,7 @@ export function Download({ f, s }: P) {
   return (
     <section className="card" aria-labelledby="h">
       <Whose r={r} />
-      <h2 id="h">{idle ? `Install ${r.name} on ${f.frame.the}.` : `Downloading ${r.name}.`}</h2>
+      <h2 id="h">{idle ? `Install ${r.name} on ${f.frame.the}` : `Downloading ${r.name}`}</h2>
       <p className="lede">From its own release on GitHub, checked by SHA-256.</p>
       {s.files.map((x) => <FileRow key={x.name} f={f} file={x} />)}
       {r.steps.some((x) => x.do === 'wifi') && <WifiFields f={f} s={s} r={r} />}
@@ -182,7 +182,7 @@ export function ConfirmCommunity({ f, s, reversible }: P & { reversible?: string
   return (
     <section className="card" aria-labelledby="h">
       <Whose r={r} />
-      <h2 id="h">{`This replaces everything on ${f.frame.the}.`}</h2>
+      <h2 id="h">{`This replaces everything on ${f.frame.the}`}</h2>
       <ol className="join">{s.fastboot!.checks.map((x) => <li key={x.what} className="done">{x.what}: {x.found}</li>)}</ol>
       <p className="lede">
         {`What ${f.frame.the} runs now and its data are replaced, Glassworks included. ${f.frame.words['community.ifVendor']}`}
@@ -222,7 +222,7 @@ export function DoneCommunity({ f, log }: { f: ImageSession; log: React.ReactNod
     <section className="card" aria-labelledby="h">
       <Whose r={r} />
       <span className="okmark" aria-hidden="true">✓</span>
-      <h2 id="h">{r.name}{` is on ${f.frame.the}.`}</h2>
+      <h2 id="h">{r.name}{` is on ${f.frame.the}`}</h2>
       <p className="lede">{f.state.communityWifi === 'on'
         ? `${cap(f.frame.the)} joins your Wi-Fi a few minutes after it starts.`
         : 'Its first start takes a few minutes.'}</p>

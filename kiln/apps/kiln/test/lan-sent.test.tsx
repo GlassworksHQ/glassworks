@@ -20,7 +20,7 @@ const sent = (over: 'lan' | undefined, step: 'sent' | 'join' | 'ok' | 'err'): Wi
 describe('the panel\'s page after the Wi-Fi is sent', () => {
   it('says it is sent, that the page can\'t follow, and to watch the panel; no step list, no buttons', () => {
     const { container } = render(<Wifi busy={false} steps={steps} setup={sent('lan', 'join')} />);
-    expect(screen.getByRole('heading').textContent).toBe('Sent to the panel.');
+    expect(screen.getByRole('heading').textContent).toBe('Sent to the panel');
     const text = container.textContent ?? '';
     expect(text).toMatch(/switching to Example-Home now/);
     expect(text).toMatch(/can't follow it from here/);
@@ -38,7 +38,7 @@ describe('the panel\'s page after the Wi-Fi is sent', () => {
     expect(region.getAttribute('aria-live')).toBe('polite');
     rerender(<Wifi busy={false} steps={steps} setup={sent('lan', 'join')} />);
     expect(screen.getByRole('status')).toBe(region);
-    expect(region.textContent).toMatch(/Sent to the panel\.[\s\S]*watch the panel's screen/);
+    expect(region.textContent).toMatch(/Sent to the panel[\s\S]*watch the panel's screen/);
   });
 
   it('while the reply is on its way: sending, with nothing that waits for more', () => {
@@ -49,7 +49,7 @@ describe('the panel\'s page after the Wi-Fi is sent', () => {
 
   it('the panel answering later that it never left is still an error, with Try again', () => {
     const { container } = render(<Wifi busy={false} steps={steps} setup={sent('lan', 'err')} />);
-    expect(screen.getByRole('heading').textContent).toBe('Couldn\'t join Example-Home.');
+    expect(screen.getByRole('heading').textContent).toBe('Couldn\'t join Example-Home');
     expect(container.querySelector('ol li')?.textContent).toBe('Sent to the panel');
     expect(screen.getByRole('button', { name: 'Try again' })).toBeTruthy();
   });

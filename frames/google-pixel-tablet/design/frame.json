@@ -146,5 +146,8 @@
         "setup": "Home Assistant added it, and the QR sign-in on its screen loaded the dashboard (2026-11-17)."
       }
     }
+  },
+  "release": {
+    "app": ["generic-android"]
   }
 }

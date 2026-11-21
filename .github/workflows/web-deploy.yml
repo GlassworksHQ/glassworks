@@ -1,0 +1,247 @@
+# Deploys glassworks.dev (site/) and Kiln (kiln.glassworks.dev, kiln/apps/kiln) to Vercel production from main.
+#
+# Vercel's Git builds are off for both projects (git.deploymentEnabled false in their vercel.json), so a push
+# deploys nothing on its own. This workflow does it instead:
+#   - on a push to main, each project whose inputs changed (below);
+#   - by hand from the Actions tab (workflow_dispatch), for one project or both.
+#
+# glassworks.dev is built here and uploaded prebuilt (vercel build, then vercel deploy --prebuilt). Its build on
+# Vercel's own machines fails at the Pagefind step, because the newer Vercel CLI there moves Next's output away
+# from .next/server/app before Pagefind reads it ("no html files"). The CLI is pinned to the one this build
+# works with. Kiln builds on Vercel as before (vercel deploy, kiln/apps/kiln/vercel.json's commands).
+#
+# What triggers each project:
+#   - site: tools/ci/changes.py's `site` rule, the same one pr.yml's site job runs on (or every job's paths);
+#   - kiln: KILN below, the app's npm workspaces and the repo files its build stages.
+#   - installer: kiln/s1-redirect, the redirect s1.edm.sh serves (the first installer's address, now Kiln's S1 page).
+#
+# Secrets: VERCEL_SITE_TOKEN, VERCEL_KILN_TOKEN and VERCEL_INSTALLER_TOKEN, one Vercel token per project. Variables:
+# VERCEL_ORG_ID, VERCEL_SITE_PROJECT_ID, VERCEL_KILN_PROJECT_ID, VERCEL_INSTALLER_PROJECT_ID. A missing one fails the job, so a deploy never skips silently.
+name: Web deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      project:
+        description: What to deploy
+        type: choice
+        options: [both, site, kiln, installer]   # both: site and kiln
+        default: both
+
+permissions:
+  contents: read
+
+env:
+  VERCEL_CLI: vercel@65.14.0
+
+jobs:
+  changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      site: ${{ steps.pick.outputs.site }}
+      kiln: ${{ steps.pick.outputs.kiln }}
+      installer: ${{ steps.pick.outputs.installer }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+
+      - name: Pick the projects
+        id: pick
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          PROJECT: ${{ inputs.project }}
+        run: |
+          if [ "$EVENT" = workflow_dispatch ]; then
+            case "$PROJECT" in site) s=true k=false i=false ;; kiln) s=false k=true i=false ;;
+              installer) s=false k=false i=true ;; *) s=true k=true i=false ;; esac
+            printf 'site=%s\nkiln=%s\ninstaller=%s\n' "$s" "$k" "$i" | tee -a "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Without the commit before the push, deploy both (as changes.py runs every job without a base).
+          git fetch -q --depth=1 origin "$BEFORE" 2>/dev/null || BEFORE=
+          python3 - "$BEFORE" <<'EOF' | tee -a "$GITHUB_OUTPUT"
+          import subprocess, sys
+          sys.path.insert(0, 'tools/ci')
+          import changes
+
+          # Kiln's app: its npm workspaces (kiln/, the frames' recipes, packages/), what every workspace builds
+          # with, and the repo files kiln/scripts/stage-assets.mjs stages. Tests, mockups, Markdown and the
+          # Refract worker (kiln/workers, its own deploy) don't go into it.
+          KILN = (
+              'kiln', 'frames/*/installer', 'frames/*/design', 'packages', 'branding',
+              'frames/lululemon-mirror/overlay', 'frames/aqara-s1-plus/tools/root', 'frames/aqara-s1-plus/tools/radio',
+              'frames/aqara-s1-plus/tools/install', 'docs/img/fel-button.jpg',  # the S1 recipe imports it
+              'package.json', 'package-lock.json', 'tsconfig.base.json',
+              '.github/workflows/web-deploy.yml',
+              '!**/*.md', '!kiln/test', '!kiln/packages/*/test', '!kiln/apps/*/test', '!kiln/mockup', '!kiln/workers', '!kiln/s1-redirect',
+              '!frames/*/installer/test', '!frames/aqara-s1-plus/tools/*/test',
+          )
+          base = sys.argv[1]
+          site = changes.from_git(base, 'HEAD')['site'][0]
+          # It fails closed, as changes.py does: without a base or a diff, Kiln deploys too.
+          try:
+              if not base:
+                  raise ValueError('no base commit')
+              files = [f for f in subprocess.run(['git', 'diff', '--no-renames', '--name-only', '-z', '--end-of-options',
+                                                  base, 'HEAD'], check=True, capture_output=True, text=True).stdout.split('\0') if f]
+              kiln = not files or any(changes.matches(f, KILN) for f in files)
+              installer = any(changes.matches(f, ('kiln/s1-redirect',)) for f in files)
+          except (ValueError, subprocess.CalledProcessError, OSError):
+              kiln, installer = True, True
+          print(f'site={str(site).lower()}')
+          print(f'kiln={str(kiln).lower()}')
+          print(f'installer={str(installer).lower()}')
+          EOF
+
+  site:
+    needs: changes
+    if: needs.changes.outputs.site == 'true'
+    # One deploy per project at a time: a newer push that deploys it cancels the older run, since it builds a later
+    # main. Vercel's free plan caps deploys a day, so a burst of merges deploys once. A push that doesn't touch
+    # this project starts no job here, so it never cancels this project's deploy.
+    concurrency:
+      group: web-deploy-site
+      cancel-in-progress: true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment:
+      name: glassworks.dev
+      url: https://www.glassworks.dev
+    steps:
+      # The branch, not the pushed commit: a run that starts after a newer push's run (and cancels it) still deploys
+      # the newest main, which has every change the cancelled run had.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ github.ref }}
+          persist-credentials: false
+          # The docs' dates come from git history at build time.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Check the token and the project
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_SITE_TOKEN }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_SITE_PROJECT_ID }}
+        run: |
+          for v in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
+            if [ -z "${!v}" ]; then echo "::error::$v is not set: glassworks.dev was not deployed"; exit 1; fi
+          done
+
+      # Prerendering /blueprints reads GitHub's API, and a dropped connection there ("fetch failed") fails a build
+      # now and then (pr.yml's site job). Then it builds once more; any other failure fails.
+      - name: Build as Vercel production
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_SITE_TOKEN }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_SITE_PROJECT_ID }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -o pipefail
+          npx -y "$VERCEL_CLI" pull --yes --environment=production --token "$VERCEL_TOKEN" > /dev/null
+          log="$RUNNER_TEMP/site-build.log"
+          if npx -y "$VERCEL_CLI" build --prod --token "$VERCEL_TOKEN" 2>&1 | tee "$log"; then exit 0; fi
+          grep -q 'fetch failed' "$log" || exit 1
+          echo "::warning::The site build lost a connection to GitHub's API (fetch failed). Building once more."
+          npx -y "$VERCEL_CLI" build --prod --token "$VERCEL_TOKEN"
+
+      # One archive: the free plan also caps file uploads a day.
+      - name: Deploy the build to production
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_SITE_TOKEN }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_SITE_PROJECT_ID }}
+        run: |
+          url=$(npx -y "$VERCEL_CLI" deploy --prebuilt --prod --archive=tgz --token "$VERCEL_TOKEN")
+          echo "Deployed: $url" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  kiln:
+    needs: changes
+    if: needs.changes.outputs.kiln == 'true'
+    # One deploy per project at a time: a newer push that deploys it cancels the older run, since it builds a later
+    # main. Vercel's free plan caps deploys a day, so a burst of merges deploys once. A push that doesn't touch
+    # this project starts no job here, so it never cancels this project's deploy.
+    concurrency:
+      group: web-deploy-kiln
+      cancel-in-progress: true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment:
+      name: kiln.glassworks.dev
+      url: https://kiln.glassworks.dev
+    steps:
+      # The branch, not the pushed commit: a run that starts after a newer push's run (and cancels it) still deploys
+      # the newest main, which has every change the cancelled run had.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ github.ref }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+
+      # Vercel builds it from the uploaded repo with kiln/apps/kiln/vercel.json's commands (the project's root
+      # directory is kiln/apps/kiln), and waits until the deployment is ready or fails.
+      - name: Deploy to production
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_KILN_TOKEN }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_KILN_PROJECT_ID }}
+        run: |
+          for v in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
+            if [ -z "${!v}" ]; then echo "::error::$v is not set: Kiln was not deployed"; exit 1; fi
+          done
+          url=$(npx -y "$VERCEL_CLI" deploy --prod --archive=tgz --token "$VERCEL_TOKEN")
+          echo "Deployed: $url" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # s1.edm.sh, the first installer's address, only redirects to Kiln's S1 page: kiln/s1-redirect/vercel.json, which
+  # forwards every path (and so old #/wifi links, which Kiln's S1 page maps). The project's root directory is kiln/,
+  # so the folder goes up as kiln/ in an upload of its own, with nothing to build.
+  installer:
+    needs: changes
+    if: needs.changes.outputs.installer == 'true'
+    concurrency:
+      group: web-deploy-installer
+      cancel-in-progress: true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment:
+      name: s1.edm.sh
+      url: https://s1.edm.sh
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ github.ref }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+
+      - name: Deploy the redirect to production
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_INSTALLER_TOKEN }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_INSTALLER_PROJECT_ID }}
+        run: |
+          for v in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
+            if [ -z "${!v}" ]; then echo "::error::$v is not set: s1.edm.sh was not deployed"; exit 1; fi
+          done
+          up="$RUNNER_TEMP/s1-redirect"
+          mkdir -p "$up"
+          cp -R kiln/s1-redirect "$up/kiln"
+          cd "$up"
+          url=$(npx -y "$VERCEL_CLI" deploy --prod --archive=tgz --token "$VERCEL_TOKEN")
+          echo "Deployed: $url" | tee -a "$GITHUB_STEP_SUMMARY"

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Post one GitHub release to the Glassworks Discord server.
+"""Post GitHub releases to the Glassworks Discord server.
 
-  tools/ci/discord_release.py <tag>
+  tools/ci/discord_release.py <tag> [<tag> ...]
 
 Run by .github/workflows/discord-releases.yml, never by hand. Reads the release with `gh release view`
 (GH_TOKEN), then posts it through a Discord webhook: DISCORD_ECOSYSTEM_WEBHOOK for libraries (`libs/*`),
@@ -11,9 +11,13 @@ from GitHub and writes one Discord message. See docs/releasing.md#discord.
 """
 import json
 import os
+import re
 import subprocess
 import sys
 import urllib.request
+
+# A release tag: an app line's, a frame's or a library's (docs/releasing.md). Anything else is refused before use.
+TAG = re.compile(r'^(?:[a-z0-9][a-z0-9/-]*)?v[0-9]+\.[0-9]+\.[0-9]+$')
 
 # Discord allows 4096 characters in an embed's description. Keep the post short and link the rest.
 MAX_NOTES = 1500
@@ -57,6 +61,8 @@ def valid_webhook(url):
 
 
 def main(tag):
+    if not TAG.match(tag) or '..' in tag or '//' in tag:
+        sys.exit(f'::error::{tag!r} is not a release tag')
     out = subprocess.run(
         ['gh', 'release', 'view', tag, '-R', os.environ['GITHUB_REPOSITORY'],
          '--json', 'name,tagName,url,body,isDraft,isPrerelease'],
@@ -79,6 +85,7 @@ def main(tag):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 2:
+    if len(sys.argv) < 2:
         sys.exit(__doc__)
-    main(sys.argv[1])
+    for t in sys.argv[1:]:
+        main(t)

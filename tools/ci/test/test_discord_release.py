@@ -56,5 +56,33 @@ class Webhook(unittest.TestCase):
         self.assertFalse(dr.valid_webhook('http://discord.com/api/webhooks/1/abc'))
 
 
+class Tags(unittest.TestCase):
+    def test_release_tags_are_accepted(self):
+        for tag in ('v0.4.4', 'aqara-s1-plus-v1.0.0', 'generic-android-legacy-v0.2.0', 'frames/lululemon-mirror/v1.0.0',
+                    'libs/esphome-api/v0.1.1'):
+            self.assertTrue(dr.TAG.match(tag), tag)
+
+    def test_anything_else_is_refused_before_gh_runs(self):
+        # The Release run's published-tags artifact is text: a line that isn't a release tag never reaches gh.
+        for tag in ('--repo=evil/x', 'main', 'v1.2', 'frames/../v1.0.0', 'V1.0.0', 'a b-v1.0.0', ''):
+            with self.assertRaises(SystemExit, msg=tag):
+                dr.main(tag)
+
+
+class Workflow(unittest.TestCase):
+    def test_the_release_buttons_runs_are_posted_from_their_list(self):
+        text = (ROOT / '.github/workflows/discord-releases.yml').read_text()
+        self.assertIn('workflows: ["Release", "Library release"]', text)
+        self.assertIn("github.event.workflow_run.event == 'workflow_dispatch'", text)
+        self.assertIn('-n published-tags', text)
+        # Absent (a dry run) is nothing to post; present but not downloadable fails the job.
+        self.assertIn('artifacts?name=published-tags', text)
+        self.assertIn("won't download", text)
+        self.assertNotIn('2>/dev/null ||', text)
+        release = (ROOT / '.github/workflows/release.yml').read_text()
+        self.assertIn('name: Release\n', release)
+        self.assertIn('name: published-tags', release)
+
+
 if __name__ == '__main__':
     unittest.main()

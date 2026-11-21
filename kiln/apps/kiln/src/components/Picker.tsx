@@ -65,7 +65,7 @@ export function Picker() {
     <Shell steps={steps} level={0} chip={chip}>
       <section className="picker" aria-labelledby="pick">
         <div className="picker-head">
-          <h2 id="pick">Pick your panel.</h2>
+          <h2 id="pick">Pick your panel</h2>
           <p className="lede">Panels Glassworks runs on, or will. Each one is a frame.</p>
         </div>
         {running && (

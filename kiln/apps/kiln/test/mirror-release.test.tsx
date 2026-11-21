@@ -190,7 +190,7 @@ describe('the page', () => {
     await screen.findByText('What goes on the Mirror?');
     expect(screen.queryByText('Test only')).toBeNull(); // beta (frame.json): open to everyone, not a test page
     fireEvent.click(screen.getByRole('button', { name: 'Continue with Glassworks' }));
-    await screen.findByText('Install Glassworks on the Mirror.');
+    await screen.findByText('Install Glassworks on the Mirror');
   };
 
   it('?apk=release: Glassworks from its release, checked, with no file picker', async () => {
@@ -217,7 +217,7 @@ describe('the page', () => {
     vi.stubGlobal('fetch', fakeReleaseRoute('out', APK));
     history.replaceState(null, '', '/lululemon-mirror?apk=release&mode=app');
     render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
-    await screen.findByText('Install Glassworks on the Mirror.');
+    await screen.findByText('Install Glassworks on the Mirror');
     await until(() => !!screen.queryByText('Glassworks 0.2.0'));
     expect(document.querySelector('input[type=file]')).toBeNull();
     expect(embers()).toEqual(['Connect']);
@@ -258,9 +258,9 @@ describe('the page', () => {
       cleanup();
       history.replaceState(null, '', `/lululemon-mirror?apk=${q}`);
       render(<StrictMode><DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} /></StrictMode>);
-      await until(() => !!screen.queryByText('What goes on the Mirror?') || !!screen.queryByText('Install Glassworks on the Mirror.'));
-      if (!screen.queryByText('Install Glassworks on the Mirror.')) fireEvent.click(screen.getByRole('button', { name: 'Continue with Glassworks' }));
-      await screen.findByText('Install Glassworks on the Mirror.');
+      await until(() => !!screen.queryByText('What goes on the Mirror?') || !!screen.queryByText('Install Glassworks on the Mirror'));
+      if (!screen.queryByText('Install Glassworks on the Mirror')) fireEvent.click(screen.getByRole('button', { name: 'Continue with Glassworks' }));
+      await screen.findByText('Install Glassworks on the Mirror');
     };
     await page('release');
     await until(() => gates.length === 1 && !!screen.queryByText('Looking for its newest release…'));

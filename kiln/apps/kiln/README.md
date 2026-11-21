@@ -45,9 +45,8 @@ Kiln installs Glassworks on a wall panel from the browser, over WebUSB. It backs
 first, and can put it back. This is Kiln on Next.js (App Router), built on the design in
 [`docs/design/kiln`](../../../docs/design/kiln/README.md) and the Glassworks brand.
 
-**Status:** live at [kiln.glassworks.dev](https://kiln.glassworks.dev). It has not yet done a full
-install on a real panel. Until it has, s1.edm.sh keeps serving the page in
-[`kiln/src`](../../src/README.md).
+**Status:** live at [kiln.glassworks.dev](https://kiln.glassworks.dev). s1.edm.sh, the first installer's
+address, redirects to its S1 page, and the S1 page maps the old `/#/…` links.
 
 ## Routes
 
@@ -137,13 +136,18 @@ InstallFlow. Other `?demo=` names jump to one screen (`src/wizard/demo.ts`), for
 `app-keyboard` (the install's steps), `wifi` (the panel on Wi-Fi already) and `wifi-new` (it isn't),
 `radio-thread` and `radio-thread-old` (a Thread router on a Glassworks that gets the network from
 Home Assistant, and on 0.4.3, which can't), and `done-old-boot` (Done on a boot image without the root update service,
-so its Silent updates block says each update asks for a tap). The Mirror's test page has its own. The choice and Glass Panes: `?demo=image-choose` (the page's first screen), `image-choose-open`, `image-choose-panes`, `image-link`
+so its Silent updates block says each update asks for a tap). The error screen has one name per failure Kiln tells apart
+(`src/wizard/explain.ts`): `error` (it disconnected), `error-written` (after a verified write), `error-no-recovery`,
+`error-secure-boot`, `error-not-this-panel`, `error-usb-unreliable`, `error-download`, `error-not-started`, `error-adb-held`,
+`error-backup-refused`, `error-nothing-picked`, `error-earlier` (an earlier try may have written), `error-unknown` and
+`error-unknown-written`. The Mirror's test page has its own. The choice and Glass Panes: `?demo=image-choose` (the page's first screen), `image-choose-open`, `image-choose-panes`, `image-link`
 (`?image=glass-panes`), `image-download`, `image-download-done`, `image-download-error` (Refract couldn't serve it), `image-download-bad` (a wrong SHA-256),
 `image-fastboot`, `image-confirm`, `image-writing`, `image-done`, `image-error`, `image-wifi` (a network to save), `image-wifi-writing`, `image-adb` (Wi-Fi on with Glass Panes' own key),
 `image-done-wifi`, `image-done-wifi-unconfirmed`, `image-back-glassworks` and `image-back-panes` (the two ways back;
 the list is in [docs/design/kiln/community-images.md](../../../docs/design/kiln/community-images.md)). Glassworks over fastboot: `?demo=flash-image`, `flash-downloading`,
 `flash-download-error`, `flash-download-bad`, `flash-ready`, `flash-fastboot`, `flash-fastboot-wrong`, `flash-confirm` (the stock warning),
-`flash-working`, `flash-adb`, `flash-done`, `flash-done-chooser` (another launcher survived), `flash-error` (a refused write, with the retry without FILL). The adb-only path: `?demo=run`
+`flash-working`, `flash-adb`, `flash-adb-wait` (it refuses the key while it starts), `flash-adb-refused` (it never lets
+it in), `flash-error-first-start` (the first start stopped), `flash-done`, `flash-done-chooser` (another launcher survived), `flash-error` (a refused write, with the retry without FILL). The adb-only path: `?demo=run`
 clicks through a simulated Mirror (`src/device/demo.ts` on the Mirror's `kilnSim`); `pick`, `pick-wrong` (an APK that isn't Glassworks),
 `checks`, `checks-fail`, `installing`, `done`, `done-unconfirmed` (a launcher `pm hide` couldn't hide, so HOME opened
 Android's list), `undo-done`, `undo-pending` (undo again to finish) and `error` jump to one screen. None waits on a tap

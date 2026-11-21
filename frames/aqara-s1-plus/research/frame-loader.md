@@ -536,7 +536,7 @@ end
 - **The old `S1RADIO-BUNDLE 1` format** is refused cleanly by the new loader ("not a frame bundle").
   The app ships only the frame bundle from S1 frame 1.0.0 on.
 - **Where it comes from.** A frame release of its own: the tag `frames/aqara-s1-plus/v<version>`
-  (the scheme of #544) starts `frame-release.yml`, which builds the bundle with `frame-bundle.sh`, signs it
+  (the scheme of #544), which the Release workflow (`release.yml`, since 2026-11-21; `frame-release.yml` before) makes: it builds the bundle with `frame-bundle.sh`, signs it
   and publishes `frame-bundle-aqara-s1-plus-<version>.zip`. The app's Frame update entity downloads it,
   stages it, starts `glassworks_bundle`, and restarts the panel (planned, not built: it comes after #543 and
   #544). Not an APK asset: the frame version counts separately from the app's, so a frame update shouldn't wait

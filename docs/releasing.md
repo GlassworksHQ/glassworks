@@ -5,9 +5,10 @@ Panels update themselves from GitHub Releases: the app lists
 and shows the result in Home Assistant as **update.s1_panel_app_update** (on a panel added before #63;
 `update.glassworks_panel_app_update` on one added before #260; a newer one starts with the device's
 name, `aqara_s1_plus_` on a new S1, [Names](esphome.md#names))
-([esphome.md](esphome.md#app-updates)). A release is built and published by
-[`.github/workflows/release.yml`](../.github/workflows/release.yml) when you push a `v*` or
-`aqara-s1-plus-v*` tag. It holds one APK per ABI, each with its `.sha256` (see [ABIs](#abis)):
+([esphome.md](esphome.md#app-updates)). Every release, of every app line and every frame, is built and published
+by one workflow, [`.github/workflows/release.yml`](../.github/workflows/release.yml), which an admin starts from the
+Actions tab with a version: [Release](#release). The S1 app's release holds one APK per ABI, each with its
+`.sha256` (see [ABIs](#abis)):
 
 - `s1-kiosk-<version>.apk`, the `armeabi-v7a` APK the S1 runs, signed with the release key;
 - `s1-kiosk-arm64-v8a-<version>.apk`, the same app for `arm64-v8a` devices;
@@ -74,15 +75,14 @@ means changing that file in the same PR as the secrets.
 
 Secrets of the **`release-signing` environment**, not repository secrets. A repository secret can be
 read by any workflow that anyone with write access pushes, on any branch; an environment secret only
-by jobs that run on what the environment allows. Here that's `main`, `test-build/**` branches and the
-`v*` and `aqara-s1-plus-v*` tags (and the generic app's `generic-android-v*` and `generic-android-legacy-v*`,
-[below](#glassworks-for-generic-android-and-its-legacy-build)), and a ruleset lets only admins create those
-branches and tags (see *Who can sign*, below).
+by jobs that run on what the environment allows. Here that's `main` and the `test-build/**` branches, and a ruleset
+lets only admins create those branches (see *Who can sign*, below). Releases run on `main` only
+([Release](#release)), so no tag needs to be let in.
 
 Create the environment once (Settings → Environments → New environment → `release-signing`;
-Deployment branches and tags → Selected: `main`, `test-build/**`, tags `v*`, `aqara-s1-plus-v*`),
-then set the secrets with the [GitHub CLI](https://cli.github.com/). These commands read the values
-from the file or from a prompt, so nothing ends up in your shell history:
+Deployment branches and tags → Selected: `main`, `test-build/**`), then set the secrets with the
+[GitHub CLI](https://cli.github.com/). These commands read the values from the file or from a prompt, so nothing
+ends up in your shell history:
 
 ```sh
 cd ~/secure
@@ -96,26 +96,29 @@ gh secret set S1_KEY_ALIAS --env release-signing --repo GlassworksHQ/glassworks 
 gh secret list --env release-signing --repo GlassworksHQ/glassworks
 ```
 
-The workflow uses only these four secrets, the radio bundle key below, the optional `VERCEL_DEPLOY_HOOK`
-(a Vercel deploy hook URL for the web installer), and the job's own `GITHUB_TOKEN`. The same `release-signing`
-environment also holds Glassworks' own key for the generic app and its legacy build (`GENERIC_*`, since
-2026-11-17), which `generic-test-build.yml` and `generic-release.yml` use: see
-[frames/generic-android/README.md](../frames/generic-android/README.md#signing).
+The same `release-signing` environment also holds Glassworks' own key for the generic app and its legacy build
+(`GENERIC_*`, since 2026-11-17), which `generic-test-build.yml` and the release's `build-apps` job use (see
+[frames/generic-android/README.md](../frames/generic-android/README.md#signing)), and the tag deploy key the release's
+`publish` job pushes tags with, `RELEASE_TAG_DEPLOY_KEY` ([Settings for the button](#settings-for-the-button-admin-once)).
+The release workflow uses only these secrets, the radio bundle key below, and the jobs' own `GITHUB_TOKEN`.
 
 ### Who can sign
 
 Anyone who can run a job in `release-signing` or `radio-signing` can sign code every panel accepts.
 Rulesets (Settings → Rules) keep that to admins:
 
-- **Release tags** (`v*`, `aqara-s1-plus-v*`, and from the generic app's first release `generic-android-v*`
-  and `generic-android-legacy-v*`): only admins can create, move or delete them.
+- **Release tags** (`v*`, `aqara-s1-plus-v*`, `generic-android-v*`, `generic-android-legacy-v*`, `frames/**`): only
+  admins and the tag deploy key can create, move or delete them.
 - **Test builds** (`test-build/**`): only admins can create, push to or delete these branches.
 - **main**: changes go through a pull request with the `app`, `web`, `scripts` and `root` checks
   green; no force pushes or deletion. Admins can bypass, for emergencies.
 
-Pull requests from forks never get any secret, and no workflow uses `pull_request_target` or
-`workflow_run`. Before anyone else gets admin, add yourself as a required reviewer on both
-environments, so every signed build waits for an approval.
+The Release workflow runs only from its button, and its first job stops unless the person who pressed it is an
+admin. Anyone with write access sees the button; a copy of the workflow on another branch gets no key, because the
+environments admit only `main` and `test-build/**`. Pull requests from forks never get any secret, and no workflow
+uses `pull_request_target`. `discord-releases.yml` uses `workflow_run`, runs the default branch's code only, and has
+no key. `radio-signing` has a required reviewer: every bundle signing, dry runs too, waits for an approval. Before
+anyone else gets admin, add yourself as a required reviewer on `release-signing` too.
 
 ## 3b. The radio bundle key (once)
 
@@ -138,13 +141,14 @@ gh secret set S1_RADIO_BUNDLE_KEY --env radio-signing --repo GlassworksHQ/glassw
   < ~/secure/s1kiosk-radio-bundle-ed25519.pem
 ```
 
-- Only the workflow's `sign-bundle` job names that environment. It signs only tags whose commit is on
+- Only the release workflow's `sign-bundle` job names that environment. It signs only commits on
   `main` (`git merge-base --is-ancestor`), runs no third-party action (GitHub's own checkout and
-  download-artifact, pinned by commit SHA), and takes nothing from the unprivileged `inputs` job
-  without checking it: the Silicon Labs runtime against the committed
+  the artifact actions, pinned by commit SHA), and takes nothing from the unprivileged jobs
+  without checking it: from the plan only the names of what to sign, every fact about them read from the commit
+  (`tools/release/plan.py --item`); the Silicon Labs runtime against the committed
   [`frames/aqara-s1-plus/tools/radio/sisdk-runtime.sha256`](../frames/aqara-s1-plus/tools/radio/sisdk-runtime.sha256), otbr-agent/ot-ctl against
-  `kiln/assets.lock.json`, the helper from the checkout. No required reviewer is set on the environment
-  (one releaser); adding one later only needs the environment setting.
+  `kiln/assets.lock.json`, the helper from the checkout. The environment has a required reviewer, so each
+  signing waits for an approval.
 - Keep no repository-level `S1_RADIO_BUNDLE_KEY`: other jobs would then see it.
 
 - Back it up like the APK key. **Losing it** means no more radio bundle updates until panels get a boot
@@ -168,12 +172,175 @@ gh release upload installer-files-3 frames/aqara-s1-plus/tools/root/out/s1kiosk_
 `installer-files-2` plus this file.) Until it is uploaded, the hosted installer's build fails at
 `stage-assets.mjs --remote` with a download error; local builds use `frames/aqara-s1-plus/tools/root/out/` directly.
 
-## 4. Release
+## Release
 
-Versions are `MAJOR.MINOR.PATCH`, with minor and patch below 100. The versionCode is
-`major*10000 + minor*100 + patch`, so `1.2.3` is 10203. Every release must have a higher version
-than the last one. SemVer pre-release tags (`v1.2.3-rc.1`) are refused by the workflow, and the app would
-ignore them anyway: a beta is a plain version, published as a GitHub pre-release ([Betas](#betas)).
+One button releases everything: **Actions → Release → Run workflow**, on `main`, with a version. That is the only
+way a release starts. No workflow runs on a tag push, so a tag pushed by hand publishes nothing.
+
+| Input | What |
+|---|---|
+| `version` | `MAJOR.MINOR.PATCH`, e.g. `1.0.0`. One number for the run: every line and frame whose changelog has a `## [1.0.0]` section is due |
+| `what` | `all` (the default): everything due. Or some of it, comma or space separated: `aqara-s1-plus` (its app line and its frame bundle), `aqara-s1-plus:app`, `aqara-s1-plus:frame`, `generic-android` (both of its lines), `google-pixel-tablet:app` (the generic line), `lululemon-mirror:app` (the legacy line), `lululemon-mirror:frame`, or a line by name (`generic-android-legacy`) |
+| `channel` | `stable` or `beta` ([Betas](#betas)) |
+| `dry_run` | On by default: build, sign and check everything, publish nothing. Turn it off to publish |
+
+```sh
+gh workflow run release.yml --repo GlassworksHQ/glassworks --ref main -f version=1.0.0                    # dry run
+gh workflow run release.yml --repo GlassworksHQ/glassworks --ref main -f version=1.0.0 -f dry_run=false   # publish
+gh run list --repo GlassworksHQ/glassworks --workflow release.yml --limit 1                                 # its run
+```
+
+### What ships
+
+The frames' data says it, not the workflow: each frame's `release` block in `frames/<id>/design/frame.json`
+([frames/README.md](../frames/README.md#release)) names the app lines its devices run and its own frame release.
+`tools/release/plan.py` turns that into the run's plan. An app line several frames run is built once.
+
+| Line or frame release | Tag | Files | Notes from | Run by |
+|---|---|---|---|---|
+| The S1 app | `aqara-s1-plus-v1.2.3` | `s1-kiosk-<version>.apk`, `s1-kiosk-arm64-v8a-<version>.apk` | `CHANGELOG.md` | `aqara-s1-plus` |
+| Glassworks for generic Android | `generic-android-v1.2.3` | `glassworks-generic-android-<abi>-<version>.apk` | `frames/generic-android/CHANGELOG.md` | `generic-android`, `google-pixel-tablet` |
+| Its legacy build | `generic-android-legacy-v1.2.3` | `glassworks-generic-android-legacy-<abi>-<version>.apk` | `frames/generic-android/CHANGELOG.md` | `generic-android`, `lululemon-mirror` |
+| The S1 frame | `frames/aqara-s1-plus/v1.2.3` | `frame-bundle-aqara-s1-plus-<version>.zip` | `frames/aqara-s1-plus/FRAME-CHANGELOG.md` | |
+| The Mirror frame | `frames/lululemon-mirror/v1.2.3` | none: a notice | `frames/lululemon-mirror/FRAME-CHANGELOG.md` | |
+
+Each file comes with its `.sha256`. The tags and file names are the ones the apps' update checks (`ReleaseLine`,
+`FrameOffer` in `core/.../update/`) and Kiln's release route read, so they never change. `tools/release/test`
+checks the plan's names against `Releases.kt`'s, `release.yml`'s `apk_name` and Kiln's release patterns.
+
+A new frame on an existing line needs only its `release` block: a tested device names its line (`"app":
+["generic-android"]`), a device frame with a frame version adds `"frame": {"bundle": "notice", ...}` and a
+`FRAME-CHANGELOG.md`. The workflow stays as it is.
+
+### Cut a release
+
+1. In each changelog that changes, move the *Unreleased* items into `## [1.0.0] - <date>` and add a new empty
+   `## [Unreleased]` above it. The first line of each section is what Home Assistant shows on the update card, so
+   make it a one-sentence summary. The generic app and its legacy build share `frames/generic-android/CHANGELOG.md`
+   and one version sequence: one section is the notes of both. Merge that to `main`.
+2. Dry run it: `-f version=1.0.0`, `dry_run` on. Read the plan in the run's summary (below) and the build
+   artifacts.
+3. Run it again with `dry_run` off.
+
+A line whose changelog has no section for the version is skipped, so a version can be an S1 app release alone, or
+the app lines and not the frames. Versions only go up per line, and the plan refuses a version that isn't higher
+than the line's last release or beta, so after 1.0.0 the S1 app may go to 1.0.1 while the generic line waits for
+1.0.2. A line already released at the version is skipped.
+
+**An S1-only update** is `what: aqara-s1-plus` (its app and its frame bundle, each only if its changelog has the
+section, else the run fails: a line you name must be due), or `aqara-s1-plus:app` for the app alone.
+**`lululemon-mirror:app` is the generic legacy line**, which every other frame on that line gets too: the plan
+warns in the summary.
+
+Panels see a release within 24 hours. To check right away, call `homeassistant.update_entity` on the update
+entity (`update.s1_panel_app_update` on an old S1): HA sends the entity's "check" command. Kiln
+(kiln.glassworks.dev) reads the releases at run time (its release route), so a release needs no Kiln deploy.
+s1.edm.sh, the first installer's address, redirects to Kiln's S1 page (`kiln/s1-redirect`).
+
+### The plan
+
+The run's first job writes the plan to its summary: one row per app line and frame release, its version, its tag,
+and whether it is built and published or skipped, and why; then each item's notes, and any warnings. In a dry run,
+that table and the artifacts are the whole output.
+
+For 1.0.0, once every changelog has its `[1.0.0]` section:
+
+| Line or frame | Kind | Version | Tag | Plan |
+|---|---|---|---|---|
+| `aqara-s1-plus` | app line (s1-kiosk), for aqara-s1-plus | 1.0.0 | `aqara-s1-plus-v1.0.0` | **build, check; publish** (latest) |
+| `generic-android` | app line (gradle), for generic-android, google-pixel-tablet | 1.0.0 | `generic-android-v1.0.0` | **build, check; publish** |
+| `generic-android-legacy` | app line (gradle), for generic-android, lululemon-mirror | 1.0.0 | `generic-android-legacy-v1.0.0` | **build, check; publish** |
+| `aqara-s1-plus` | frame release (signed) | 1.0.0 | `frames/aqara-s1-plus/v1.0.0` | **build, check, sign the bundle; publish** |
+| `lululemon-mirror` | frame release (notice) | 1.0.0 | `frames/lululemon-mirror/v1.0.0` | **notes only; publish** |
+
+The S1 frame's row carries a note: panels don't install the frame bundle zip yet. The Frame update card only says
+how to update until it installs bundles; the boot writer in the S1 app's radio bundle is what reaches panels today.
+
+### Dry run
+
+A dry run builds, signs and checks exactly what the release would publish, keeps the files as artifacts for 7 days
+(`line-<line>` and `frame-bundles`), and publishes nothing:
+
+```sh
+gh workflow run release.yml --repo GlassworksHQ/glassworks --ref main -f version=1.0.0
+gh run download <run-id> --repo GlassworksHQ/glassworks -n line-generic-android-legacy
+```
+
+A dry run before the version's sections exist builds every line and frame anyway, with the *Unreleased* notes (a
+placeholder while *Unreleased* is empty), and warns that the real run would skip each of them. So the whole
+release, the S1 frame bundle included, can be tried on `main` before any section is cut. Run a dry run on `main`:
+the signing job signs only commits on `main`, and `radio-signing` admits nothing else. On a `test-build/**` branch
+only the generic lines can run (`what: generic-android`).
+
+### What the jobs do
+
+1. **`plan`** (no secrets): stops unless the person who pressed the button is an admin, and, for a real release,
+   unless it runs on `main`. Reads the frames' data and the releases that exist, works out the plan, refuses a
+   version that isn't higher than a due line's last release or beta (`tools/release/check-newer-than-released.sh`)
+   and a named item that isn't due, and writes the summary.
+2. **`inputs`** (no secrets), when an S1 bundle is due: builds the Silicon Labs runtime
+   (`frames/aqara-s1-plus/tools/radio/build-sisdk-runtime.sh`, Docker, a pinned image and Ubuntu snapshot; it must
+   reproduce `frames/aqara-s1-plus/tools/radio/sisdk-runtime.sha256`; never Silicon Labs' zigbeed itself). PR CI
+   catches most drift first: the `size` job in `pr.yml` caches the runtime under a key made from the script,
+   `frames/aqara-s1-plus/tools/radio/sisdk/` and the hash file, and rebuilds it when one of them changes. Drift
+   outside the repo (the Ubuntu snapshot, the cpc-daemon tag) still shows first in a release's fresh build.
+3. **`sign-bundle`** (environment `radio-signing`, [3b](#3b-the-radio-bundle-key-once)): signs the S1 app's radio
+   bundle (`make-bundle.py --app-version`, version = the versionCode, checked against
+   `frames/aqara-s1-plus/tools/root/glassworks_bundle.pub`) and each signed frame bundle (its `script` from the
+   frame's data, `frame-bundle.sh` for the S1). Main only, every input checked against committed hashes.
+4. **`build-kiosk`** (environment `release-signing`, the S1 app key): `:kiosk:assembleRelease` with `S1_VERSION`
+   once per ABI, the `armeabi-v7a` one with the radio bundle as APK assets, `S1_REQUIRE_RELEASE_SIGNING=true`.
+   Then `apksigner verify --print-certs` (the certificate fingerprint is in the log),
+   `tools/release/check-update-compat.sh --signed`, the package, version and native code ABI, the signed bundle in
+   the `armeabi-v7a` APK and in no other, no zigbeed anywhere, a `.sha256` each, and exactly the files the data
+   names.
+5. **`build-apps`** (environment `release-signing`, Glassworks' generic key), one job per other app line: its Gradle
+   task with `-PgenericVersion` once per ABI of its frame, `GENERIC_REQUIRE_RELEASE_SIGNING=true`. Then
+   `apksigner verify`, `check-update-compat.sh --app <line> --signed` (Glassworks' certificate, the applicationId,
+   no `sharedUserId`, the components named from outside the APK), the package, versionName and versionCode, the
+   minSdk (26, or 23 for legacy), its ABI's GeckoView, the system permissions the Mirror needs, `WRITE_SETTINGS` in
+   the legacy build only, a `.sha256` each, and exactly the files the data names.
+6. **`publish`** (not on a dry run; `main` only; after every part the plan needs passed; one run at a time for every
+   line, `tools/release/publish.sh`): first checks every item and changes nothing: its files match the plan and
+   their `.sha256`, its notes are the version's changelog section, its version is still higher than its line's last
+   release or beta (another run may have published since), and a tag that exists already names this run's commit.
+   Then, item by item, pushes the tag over SSH with the tag deploy key and creates the release with every file in one
+   `gh release create`, so a release never has half its ABIs. The S1 app's stable is `--latest`; everything else is
+   `--latest=false`, so `releases/latest` stays the S1 app's (panels up to 0.4.3 read only that).
+
+The radio bundle and the frame bundle are not published on their own (the Silicon Labs libcpc may only be
+distributed inside the product): the radio bundle is inside the `armeabi-v7a` APK, the frame bundle only in its zip.
+HA shows the first 255 characters of the notes, with a link to the full release.
+
+### If a run fails
+
+- **Before `publish`:** nothing is published. Fix the cause and run the button again; or, for a failure outside
+  the repo (a download, an approval that timed out), "Re-run failed jobs" within 7 days, while the artifacts last.
+- **In `publish`:** "Re-run failed jobs" reuses this run's files. A release that already has exactly these files is
+  left as it is, a draft from an upload that stopped is deleted (no one saw it) and made again, and the rest are
+  made. After 7 days, run the button again: a new run's frame bundle isn't the same bytes
+  (`hotspot-name/build.sh` signs the overlay with a key made for each build), so a published release with other
+  files fails the run. Never replace a published release's files; panels may have them. Fix a broken release with a
+  higher version.
+- **A tag on another commit** (pushed by hand, or a run on an older `main`) stops `publish` before it changes
+  anything. Delete the tag if no release uses it, or release a higher version.
+
+**Panels on 0.4.0 or older can't install an update from HA.** Their update path refused every release as
+"the APK is not signed": on Android 10, `getPackageArchiveInfo` with only `GET_SIGNING_CERTIFICATES`
+returns no signer for a downloaded APK. 0.4.1 also asks for `GET_SIGNATURES`
+([esphome.md](esphome.md#app-updates)). Because the bug is in the version doing the installing, those
+panels need one manual update to 0.4.1 or later (the web installer's *Already installed? Finish setting
+it up*, or `adb install -r`, see [install.md](../frames/aqara-s1-plus/docs/install.md#updating)); from then on HA installs work.
+
+The Vercel projects have no Git connection, so pushes and PRs start no Vercel deployment (each one counted against
+the free plan's daily deploy limit, even cancelled). Kiln, glassworks.dev and the s1.edm.sh redirect deploy from
+[`web-deploy.yml`](../.github/workflows/web-deploy.yml), on a push to `main` that changes what each one builds from,
+or by hand from the Actions tab.
+
+Versions are `MAJOR.MINOR.PATCH`. For the app lines minor and patch are below 100, and the versionCode is
+`major*10000 + minor*100 + patch`, so `1.2.3` is 10203. Frame versions take each part up to 999. SemVer pre-release
+tags (`1.2.3-rc.1`) are refused, and the apps would ignore them anyway: a beta is a plain version, published as a
+GitHub pre-release ([Betas](#betas)).
 
 ### ABIs
 
@@ -212,87 +379,35 @@ first ABI, `armeabi-v7a`:
   `gh release create`, so a release has all of them unless an upload fails partway. Keep it that
   way, or make the app prefer the ABI it is running.
 - A device whose ABIs the app is not built for (x86_64) gets no offer, and the update entity says why.
-- Adding an ABI means adding it to a frame's `abis`, to `ApkAbi`, to `apk_name` in both workflows
-  if its name differs, and an upload step in `test-build.yml`. Gradle and the workflows' loops take
+- Adding an ABI means adding it to a frame's `abis`, to `ApkAbi`, to `apk_name` in `release.yml` and
+  `test-build.yml` if its name differs, to the line's `assets` in its frame's `release` data, and an upload step in `test-build.yml`. Gradle and the workflows' loops take
   the list from the frames. `ApkAbiListsTest` fails if the app and the frames disagree.
 
-**Tags, now that the repo will hold other frames and libraries (Glassworks).** Each of them releases
-under its own tag prefix, and this app's is `aqara-s1-plus-` (the board id it reports, since other S1
+### Tags
+
+Each app line, frame and library releases under its own tag prefix, and the S1 app's is `aqara-s1-plus-` (the board id it reports, since other S1
 models may get their own frame). From 0.4.4 the app accepts both `v1.2.3` and
 `aqara-s1-plus-v1.2.3` and picks its own newest release from the list, whatever else was released
 after it. Apps up to **0.4.3** only read `releases/latest` and only understand `v1.2.3`.
 
-- `v0.4.4` is the last plain tag. Tag every S1 release after it `aqara-s1-plus-v1.2.3` (maintainer,
+- `v0.4.4` is the last plain tag. Every S1 release after it is tagged `aqara-s1-plus-v1.2.3` (maintainer,
   2026-11-19). A panel on 0.4.3 or older is offered 0.4.4 only while that is `releases/latest`.
   After the next release it sees no update, and needs Kiln or `adb install -r`.
 - The app's blueprint links point at its own release's tag, which `ReleaseLine.tag` builds
   (`aqara-s1-plus-v1.2.3` on the S1). A release tagged any other way gets links to files that aren't
   there ([Blueprints](blueprints.md#which-version-you-get)). The generic app and its legacy build do
   the same with their own tags.
-- An S1 release is always published with `--latest` (the workflow does this), and every other frame's
+- An S1 stable is always published with `--latest` (the frames' data marks its line `latest`), and every other frame's
   or library's release with `--latest=false`, so `releases/latest` stays an S1 release.
 
 First add a `## [1.0.0] - <date>` section to [CHANGELOG.md](../CHANGELOG.md) (move the
-*Unreleased* entries into it). Its first line is what Home Assistant shows on the update card, so make
-it a one-sentence summary. The release fails early if the section is missing.
-
-```sh
-git switch main && git pull
-git tag -a aqara-s1-plus-v1.0.0 -m "Glassworks 1.0.0"
-git push origin aqara-s1-plus-v1.0.0
-gh run watch --repo GlassworksHQ/glassworks   # or the Actions tab
-```
-
-The workflow then:
-
-1. checks the tag;
-2. builds the Silicon Labs runtime (`inputs` job: `frames/aqara-s1-plus/tools/radio/build-sisdk-runtime.sh`, Docker, a pinned
-   image and Ubuntu snapshot; it must reproduce `frames/aqara-s1-plus/tools/radio/sisdk-runtime.sha256`; never Silicon Labs'
-   zigbeed itself), then signs the radio bundle in the `sign-bundle` job (environment `radio-signing`,
-   main only, every input checked against committed hashes; `frames/aqara-s1-plus/tools/radio/make-bundle.py --app-version`,
-   version = the versionCode, checked against `frames/aqara-s1-plus/tools/root/glassworks_bundle.pub`). PR CI catches most drift
-   before a tag does. The `size` job in `pr.yml` caches the runtime under a key made from the script,
-   `frames/aqara-s1-plus/tools/radio/sisdk/` and the hash file. When one of them changes, it rebuilds from scratch and checks
-   the hashes. On a cache hit, it only checks the cached files against the hashes. So drift outside the
-   repo (the Ubuntu snapshot, the cpc-daemon tag) still shows first in this fresh release build;
-3. builds `:kiosk:assembleRelease` with `S1_VERSION=1.0.0` once per ABI, the `armeabi-v7a` one with
-   the bundle as APK assets. The build fails if a key is missing (`S1_REQUIRE_RELEASE_SIGNING=true`);
-4. runs `apksigner verify --print-certs` on each APK, so the certificate fingerprint is in the log,
-   checks the package name, version and native code ABI, that the signed bundle is in the
-   `armeabi-v7a` APK and not in the others, and that no zigbeed is anywhere;
-5. writes a `.sha256` for each;
-6. creates the release, with that version's CHANGELOG.md section as the notes. The bundle is not
-   published on its own (its Silicon Labs libcpc may only be distributed inside the product).
-7. asks Vercel to rebuild the web installer, so it installs the new release (`VERCEL_DEPLOY_HOOK`).
-
-HA shows the first 255 characters of the notes, with a link to the full release.
-
-Panels see the release within 24 hours. To check right away, call `homeassistant.update_entity`
-on `update.s1_panel_app_update`: HA sends the entity's "check" command.
-
-**Panels on 0.4.0 or older can't install it from HA.** Their update path refused every release as
-"the APK is not signed": on Android 10, `getPackageArchiveInfo` with only `GET_SIGNING_CERTIFICATES`
-returns no signer for a downloaded APK. 0.4.1 also asks for `GET_SIGNATURES`
-([esphome.md](esphome.md#app-updates)). Because the bug is in the version doing the installing, those
-panels need one manual update to 0.4.1 or later (the web installer's *Already installed? Finish setting
-it up*, or `adb install -r`, see [install.md](../frames/aqara-s1-plus/docs/install.md#updating)); from then on HA installs work.
-
-The hosted web installer installs the latest release it saw when it was last built
-(`kiln/scripts/stage-assets.mjs`). The workflow's last step asks Vercel to rebuild it through the
-`VERCEL_DEPLOY_HOOK` secret; without that secret it only warns, and you redeploy the installer by hand.
-
-Vercel does not build on pushes (`git.deploymentEnabled: false` in `kiln/vercel.json`), so PRs get no
-Vercel preview. Production builds come only from that deploy hook, called by `release.yml` and by
-[`installer-deploy.yml`](../.github/workflows/installer-deploy.yml). The second runs on a push to
-`main` that changes an installer input (`kiln/`, `branding/`, or a repo file the installer stages), or
-by hand from the Actions tab.
 
 ## The S1 frame bundle
 
 The S1's frame version (#139) is released on its own tag, `frames/aqara-s1-plus/v<version>`, with semantic
-versioning from 1.0.0 (each part 0–999). The tag starts `.github/workflows/frame-release.yml`. It builds the
-frame bundle with `frames/aqara-s1-plus/tools/radio/frame-bundle.sh`, the same script the shell tests install
-through the loader:
+versioning from 1.0.0 (each part 0–999), by the same button: `what: aqara-s1-plus:frame`, or `all` when
+`frames/aqara-s1-plus/FRAME-CHANGELOG.md` has the version's section. The `sign-bundle` job builds it with
+`frames/aqara-s1-plus/tools/radio/frame-bundle.sh`, the same script the shell tests install through the loader:
 
 - **What it holds:** the service scripts (the frame agent, netwatch, first boot, app updates), otbr-agent and ot-ctl (the
   pinned builds in `kiln/assets.lock.json`), the setup hotspot's name overlay (`hotspot-name.apk`, built in the signing
@@ -301,39 +416,14 @@ through the loader:
 - **The key:** the radio bundle's (`S1_RADIO_BUNDLE_KEY`, [3b](#3b-the-radio-bundle-key-once)), whose public half
   boot images carry as `glassworks_bundle.pub`. The signing job only signs commits on `main`.
 - **The release:** `frame-bundle-aqara-s1-plus-<version>.zip` and its `.sha256`, published with
-  `--latest=false`, with notes from that version's section of `frames/aqara-s1-plus/FRAME-CHANGELOG.md` (the
-  release fails without one). The frame bundle's version only goes up: panels refuse a lower one for good, so
-  never tag by hand without checking the last frame release.
+  `--latest=false`, with notes from that version's section of `frames/aqara-s1-plus/FRAME-CHANGELOG.md`. The frame
+  bundle's version only goes up: panels refuse a lower one for good, and the plan refuses a version that isn't
+  higher than the last frame release.
+- **Not installed yet.** The Frame update card says how to update and installs nothing; the zip waits for its
+  installer (the plan's summary says so). The boot writer in the S1 app's radio bundle is what reaches panels.
 
-To cut one:
-
-1. Move the `[Unreleased]` items of `FRAME-CHANGELOG.md` to `## [x.y.z] - YYYY-MM-DD`, and merge that to `main`.
-2. Tag the merged commit itself, not your local `HEAD`:
-   ```sh
-   git fetch origin
-   tools/release/changelog-section.sh x.y.z <(git show origin/main:frames/aqara-s1-plus/FRAME-CHANGELOG.md)   # prints the notes
-   git tag frames/aqara-s1-plus/vx.y.z "$(git rev-parse origin/main)" && git push origin frames/aqara-s1-plus/vx.y.z
-   ```
-3. If a later job fails (signing waits for the `radio-signing` approval, or `publish` fails), "Re-run failed jobs"
-   works for 7 days, while the artifacts last: it reuses the signed zip. After that, re-running the whole workflow
-   signs a new zip, and it is not the same bytes (`hotspot-name/build.sh` signs the overlay with a key made for
-   each build). So:
-   - **No release yet:** re-run the whole workflow.
-   - **A draft release from the first run:** the new zip can't complete it (`publish` refuses a draft that holds
-     other files). Delete the draft (it was never public), then re-run the whole workflow.
-   - **A published release:** never replace its files; panels may have its zip already. If it is broken, fix it
-     with a higher frame version.
-
-The publish job refuses to publish if the tag has moved since the run started.
-
-**What a frame release needs from the repository settings (admin; both set, checked 2026-11-19).** Without
-the first, `sign-bundle` can't get the key, and the release stops there:
-
-1. Settings → Environments → `radio-signing` → deployment branches and tags: the tag pattern
-   `frames/aqara-s1-plus/v*` (next to `main`, `v*` and `aqara-s1-plus-v*`).
-2. Settings → Rules → "Release tags: admins only": `refs/tags/frames/**`, so only admins can create, move
-   or delete a frame tag. The workflow's own "only commits on main" check runs from the tagged commit, so it
-   is no boundary on its own: this ruleset and the environment's tag list are.
+The manifest's "created" is the commit's time, so a rebuild gives the same bytes but for `hotspot-name.apk`, which
+`hotspot-name/build.sh` signs with a key made for each build ([If a run fails](#if-a-run-fails)).
 
 ## Betas
 
@@ -348,23 +438,20 @@ panels on Beta that already run it see no update.
 
 ### Cut a beta
 
-Write the version's CHANGELOG section as for any release (its notes are the update card). Then tag it with the line
-`Channel: beta` in the tag's message, on any line's tag:
+Write the version's changelog section as for any release (its notes are the update card). Then press the button with
+`channel: beta`:
 
 ```sh
-git tag -a aqara-s1-plus-v0.6.0 -m "Glassworks 0.6.0" -m "Channel: beta"
-git tag -a generic-android-legacy-v0.3.0 -m "Glassworks for generic Android 0.3.0, legacy build" -m "Channel: beta"
-git push origin aqara-s1-plus-v0.6.0
+gh workflow run release.yml --repo GlassworksHQ/glassworks --ref main -f version=0.6.0 -f channel=beta -f what=aqara-s1-plus:app
 ```
 
-The workflow reads the channel with `tools/release/tag-channel.sh`, builds and checks everything as usual, and
-publishes with `--prerelease` and `--latest=false`, " beta" after the title. `releases/latest` stays the S1 app's
-last stable, and the S1 workflow doesn't rebuild the web installer, which installs stable releases only. A tag
-without a `Channel:` line, or a lightweight tag, is a stable release, exactly as before. Any other `Channel:` value
-fails the run before the build.
+The workflow builds and checks everything as usual, and publishes each app line with `--prerelease` and
+`--latest=false`, " beta" after the title. `releases/latest` stays the S1 app's last stable, and Kiln, which installs
+stable releases only, doesn't offer it. **Frame releases have no betas** (the apps' frame check skips pre-releases):
+a beta run skips them, and fails if you name one.
 
-Versions keep going up across both channels: `tools/release/check-newer-than-released.sh` compares a new tag with the
-line's releases **and** pre-releases, so a stable can't go out below a published beta. After beta 0.6.0, the next
+Versions keep going up across both channels: `tools/release/check-newer-than-released.sh` compares a new version with
+the line's releases **and** pre-releases, so a stable can't go out below a published beta. After beta 0.6.0, the next
 stable is 0.6.0 promoted, or 0.6.1 and up.
 
 ### Promote a beta
@@ -372,7 +459,6 @@ stable is 0.6.0 promoted, or 0.6.1 and up.
 ```sh
 gh release edit aqara-s1-plus-v0.6.0 --repo GlassworksHQ/glassworks --prerelease=false --latest \
   --title "Glassworks for the Aqara S1 Plus 0.6.0"
-gh workflow run installer-deploy.yml --repo GlassworksHQ/glassworks   # the installer takes the new stable
 gh release edit generic-android-legacy-v0.3.0 --repo GlassworksHQ/glassworks --prerelease=false --latest=false \
   --title "Glassworks for generic Android, legacy build 0.3.0"
 ```
@@ -391,102 +477,26 @@ reads (`ReleaseLine` in `core/.../update/Releases.kt`). So no app ever offers it
 | Glassworks for generic Android (Android 8+) | `dev.glassworks.generic_android` | `generic-android-v1.2.3` | `glassworks-generic-android-<abi>-1.2.3.apk` and its `.sha256` |
 | Its legacy build (Android 6-7, the Mirror) | `dev.glassworks.generic_android.legacy` | `generic-android-legacy-v1.2.3` | `glassworks-generic-android-legacy-<abi>-1.2.3.apk` and its `.sha256` |
 
-[`generic-release.yml`](../.github/workflows/generic-release.yml) builds them. Both are signed with Glassworks'
-own key, never the S1 app's ([frames/generic-android/README.md](../frames/generic-android/README.md#signing)),
-whose certificate is in [`tools/release/generic-release-cert.sha256`](../tools/release/generic-release-cert.sha256).
-The S1 app's `release.yml` never sees these tags, and these releases are published with `--latest=false`, so
-`releases/latest` stays the S1 app's.
+The release's `build-apps` job builds them, one job per line, from the facts in `frames/generic-android/design/frame.json`
+(`release.lines`). Both are signed with Glassworks' own key, never the S1 app's
+([frames/generic-android/README.md](../frames/generic-android/README.md#signing)), whose certificate is in
+[`tools/release/generic-release-cert.sha256`](../tools/release/generic-release-cert.sha256). Both are published with
+`--latest=false`, so `releases/latest` stays the S1 app's.
 
 **Release notes.** Both builds share [`frames/generic-android/CHANGELOG.md`](../frames/generic-android/CHANGELOG.md)
 and one version sequence: the section `## [1.2.3] - <date>` is the notes of `generic-android-v1.2.3` and of
-`generic-android-legacy-v1.2.3`, whichever of the two you tag. The repo's `CHANGELOG.md` stays the S1 app's. A change
-that people running both apps would notice, a core change for example, gets a line in each file. Its first line is
-the update card's text in Home Assistant, as for the S1 app.
+`generic-android-legacy-v1.2.3`. With `what: all` both lines are due once it has the section. To release one alone,
+name it: `google-pixel-tablet:app` is the generic line, `lululemon-mirror:app` the legacy one. Release the other later
+on that same section (add a line to it if the second app changed), so the file never has two `[1.2.3]` headings. The
+repo's `CHANGELOG.md` stays the S1 app's. A change that people running both apps would notice, a core change for
+example, gets a line in each file.
 
-**Versions.** `MAJOR.MINOR.PATCH`, versionCode `major*10000 + minor*100 + patch`, as for the S1 app. The workflow
-refuses a version that isn't higher than the line's last release or beta ([Betas](#betas)). Start at **0.2.0**: test builds are 0.1.0 and
-0.1.1, and a device on test build 0.1.1 is offered only a higher version (and `adb install -r` refuses a lower
-versionCode).
+**Versions.** As for the S1 app. Test builds of the generic app are 0.1.0 and 0.1.1, and a device on test build 0.1.1
+is offered only a higher version (and `adb install -r` refuses a lower versionCode).
 
-### Before the first generic tag (once, admin)
-
-The tags need the same protection as the S1 app's: only admins create them (the ruleset), and only they reach the key
-(the environment). Ruleset first, so the environment never lets in a tag that anyone with write access could push. The
-block stops at the first error, and adds the environment's tags only after it has read both back from the ruleset:
-
-```sh
-(
-  set -euo pipefail
-  repo=repos/GlassworksHQ/glassworks
-  tags=('generic-android-v*' 'generic-android-legacy-v*')
-  # The whole ruleset as it is, with the two tags added to its include list.
-  gh api "$repo/rulesets/27082980" --jq '{name, target, enforcement, bypass_actors, rules,
-      conditions: (.conditions | .ref_name.include += ["refs/tags/generic-android-v*", "refs/tags/generic-android-legacy-v*"]
-        | .ref_name.include |= unique)}' |
-    gh api -X PUT "$repo/rulesets/27082980" --input - > /dev/null
-  for t in "${tags[@]}"; do
-    gh api "$repo/rulesets/27082980" --jq '.conditions.ref_name.include[]' | grep -Fqx "refs/tags/$t" ||
-      { echo "the ruleset doesn't cover $t: stopping before the environment" >&2; exit 1; }
-  done
-  for t in "${tags[@]}"; do
-    gh api -X POST "$repo/environments/release-signing/deployment-branch-policies" -f name="$t" -f type=tag
-  done
-)
-```
-
-Both patterns are needed: `generic-android-v*` doesn't match `generic-android-legacy-v1.2.3`.
-
-### Dry run
-
-A manual run builds, signs and checks exactly what the tag would publish, keeps the APKs as an artifact for 3 days,
-and creates no release. Run it on `main` (or a `test-build/` branch: the environment refuses any other):
-
-```sh
-gh workflow run generic-release.yml --repo GlassworksHQ/glassworks --ref main -f tag=generic-android-legacy-v0.2.0
-gh run download <run-id> --repo GlassworksHQ/glassworks -n generic-android-legacy-v0.2.0
-```
-
-Before the version has its section in the CHANGELOG, the dry run warns and shows *Unreleased* as the notes (or a
-placeholder while *Unreleased* is empty); the tag would fail there.
-
-### Release
-
-1. In `frames/generic-android/CHANGELOG.md`, rename *Unreleased* to `## [0.2.0] - <date>` (one-sentence first
-   line), add a new empty `## [Unreleased]` above it for the next changes, and merge that. If the version already
-   has its section, because the other app was released at it first, don't rename *Unreleased* again: tag the second
-   app on that section (add a line to it if the second app changed), so the file never has two `[0.2.0]` headings.
-2. Tag the merged commit, one tag per app you release:
-
-```sh
-git switch main && git pull
-git tag -a generic-android-v0.2.0 -m "Glassworks for generic Android 0.2.0"
-git tag -a generic-android-legacy-v0.2.0 -m "Glassworks for generic Android 0.2.0, legacy build"
-git push origin generic-android-v0.2.0 generic-android-legacy-v0.2.0
-gh run list --repo GlassworksHQ/glassworks --workflow generic-release.yml --limit 2
-```
-
-Each tag runs the workflow once. Its `build` job (environment `release-signing`, read-only token):
-
-1. reads the app and version from the tag, and refuses a version that isn't higher than the line's last release or
-   beta (`tools/release/check-newer-than-released.sh`), and the channel from the tag's message ([Betas](#betas));
-2. takes the notes from the CHANGELOG, before the slow build;
-3. builds `:generic-android:assembleRelease` (or `assembleLegacy`) with `-PgenericVersion` once per ABI of the
-   frame, with `GENERIC_REQUIRE_RELEASE_SIGNING=true`;
-4. checks each APK: `apksigner verify`, `tools/release/check-update-compat.sh --app <line> --signed` (Glassworks'
-   certificate, the applicationId, no `sharedUserId`, the components named from outside the APK), the package,
-   versionName and versionCode, the minSdk (26, or 23 for legacy), its ABI's GeckoView, and the system
-   permissions the Mirror needs;
-5. writes a `.sha256` for each.
-
-Then `publish` (tag pushes only, write token, no key, one run per line at a time) checks the version again against
-the releases that exist by then, so two tags of one line pushed together can't publish out of order. It creates the release with every APK and `.sha256` in one
-`gh release create`, so a release never has half its ABIs. Installed copies see it within 24 hours, or at once
-through `homeassistant.update_entity` on the app's update entity.
-
-Kiln reads these releases at run time, so the workflow doesn't rebuild the installer. Its release route
-(`kiln/apps/kiln/src/app/api/release/[frame]/route.ts`) serves each line's APKs and their `.sha256`. The Mirror's page
-and `/android`, behind `?apk=release`, install the newest release of their line (`generic-android-legacy-v*` and
-`generic-android-v*`), its arm64-v8a APK, checked against that `.sha256`.
+Kiln's release route (`kiln/apps/kiln/src/app/api/release/[frame]/route.ts`) serves each line's APKs and their
+`.sha256`. The Mirror's page and `/android`, behind `?apk=release`, install the newest release of their line
+(`generic-android-legacy-v*` and `generic-android-v*`), its arm64-v8a APK, checked against that `.sha256`.
 
 ## Frame releases
 
@@ -496,33 +506,83 @@ versioning from 1.0.0. The S1 frame 1.0.0 and the Mirror frame 1.0.0 come out wi
 carries its frame version in `ro.glassworks.frame.id` and `ro.glassworks.frame.version`, and the app's update check
 compares it with the frame's newest release ([esphome.md](esphome.md#frame-updates)).
 
-| Frame | Tag | Who sets the version on the device |
-|---|---|---|
-| Aqara S1 Plus | `frames/aqara-s1-plus/v1.2.3` | The loader in its boot image, at boot |
-| lululemon Mirror | `frames/lululemon-mirror/v1.2.3` | Kiln, in `build.prop`, when it flashes the Mirror |
+| Frame | Tag | Release | Who sets the version on the device |
+|---|---|---|---|
+| Aqara S1 Plus | `frames/aqara-s1-plus/v1.2.3` | The signed frame bundle ([above](#the-s1-frame-bundle)) | The loader in its boot image, at boot |
+| lululemon Mirror | `frames/lululemon-mirror/v1.2.3` | A notice: notes, no files | Kiln, in `build.prop`, when it flashes the Mirror (`MIRROR_FRAME` in `frames/lululemon-mirror/installer/src/image.ts`) |
 
 The tag is `frames/<frame id>/v<version>`, the frame's folder in this repo, like a library's `libs/<name>/v<version>`.
 Nothing else matches it: the S1 app's `v*` and `aqara-s1-plus-v*`, the generic app's `generic-android-*`, Kiln's
 release route and `stage-assets.mjs` all skip it, and `FrameUpdateTest` checks that the app's own update check does.
 
-- **Publish it with `--latest=false`**, like every release that isn't the S1 app's: panels on 0.4.3 read only
+- **Published with `--latest=false`**, like every release that isn't the S1 app's: panels on 0.4.3 read only
   `releases/latest`.
 - **No pre-releases.** The check skips drafts, GitHub pre-releases and SemVer pre-release tags (`v1.1.0-rc.1`).
 - **The notes are the update card.** Home Assistant shows how to install it first, then the notes' first
   paragraph, headings and bullets, up to 255 characters (`Releases.summary`). Start them with a one-line summary.
-- **No assets are needed** for the notice. The S1's signed bundles will be the S1's assets (#139, the loader).
-
-Until a workflow cuts them, an admin tags the commit whose frame parts are released and creates the release:
-
-```sh
-git tag -a frames/lululemon-mirror/v1.0.0 -m "lululemon Mirror frame 1.0.0" <commit>
-git push origin frames/lululemon-mirror/v1.0.0
-gh release create frames/lululemon-mirror/v1.0.0 --repo GlassworksHQ/glassworks --verify-tag --latest=false \
-  --title "lululemon Mirror frame 1.0.0" --notes-file notes.md
-```
+- **The Mirror's notice** comes from `frames/lululemon-mirror/FRAME-CHANGELOG.md`, released with
+  `what: lululemon-mirror:frame` or `all`. Before the Mirror frame 1.0.0 goes out, Kiln's `MIRROR_FRAME.version` must
+  be `1.0.0` too, so freshly flashed Mirrors say the version the release names.
 
 Panels see it within 24 hours, or at once through `homeassistant.update_entity` on the Frame update entity. No
 frame release exists before 1.0.0, so until then every device shows its frame version and no update.
+
+## Settings for the button (admin, once)
+
+The workflow needs three things from the repository's settings. Make them in this order, so nothing is ever more
+open than now. Check each one after.
+
+**1. The tag deploy key.** The `publish` job pushes the release tags over SSH with a deploy key, because the release
+tags ruleset lets only admins and deploy keys create them, and GitHub refuses GitHub Actions as a bypass actor
+there. Make the key on your own computer, give GitHub its public half with write access, and put the private half
+in `release-signing` only:
+
+```sh
+ssh-keygen -t ed25519 -N '' -C "Glassworks release tags" -f ~/secure/glassworks-release-tags
+gh repo deploy-key add ~/secure/glassworks-release-tags.pub --repo GlassworksHQ/glassworks \
+  --allow-write --title "Release tags (release.yml publish)"
+gh secret set RELEASE_TAG_DEPLOY_KEY --env release-signing --repo GlassworksHQ/glassworks \
+  < ~/secure/glassworks-release-tags
+rm ~/secure/glassworks-release-tags   # keep it in the password manager instead, or make a new one when needed
+gh api repos/GlassworksHQ/glassworks/keys --jq '.[] | "\(.id) \(.title) read_only=\(.read_only)"'
+```
+
+- Only `publish` reads it, and only on `main`: `release-signing` admits `main` and `test-build/**`, and only admins
+  can push `test-build/**`.
+- A write deploy key can push to any branch a ruleset doesn't guard, and the tags ruleset lets *every* deploy key
+  bypass it (`actor_id: null`). So keep this one the repo's only deploy key with write access.
+- If it leaks: delete it (`gh repo deploy-key delete <id>`), make a new one, and set the secret again. Check the
+  release tags for any you didn't make.
+
+**2. The ruleset.** "Release tags: admins only" (id 27082980) already covers every release tag and has the deploy
+key bypass (added 2026-11-21). To check it:
+
+```sh
+gh api repos/GlassworksHQ/glassworks/rulesets/27082980 \
+  --jq '{enforcement, bypass: [.bypass_actors[] | "\(.actor_type) \(.actor_id) \(.bypass_mode)"], include: .conditions.ref_name.include}'
+# enforcement active; bypass "DeployKey null always" and "RepositoryRole 5 always" (admins);
+# include refs/tags/aqara-s1-plus-v*, frames/**, generic-android-legacy-v*, generic-android-v*, v*
+```
+
+**3. The environments: `main` (and test builds) only.** With no tag workflow left, the tag patterns in the two
+environments let nothing in that needs to be, and each would let a tag run reach a key. Remove them, so
+`release-signing` admits `main` and `test-build/**`, and `radio-signing` `main` alone:
+
+```sh
+(
+  set -euo pipefail
+  repo=repos/GlassworksHQ/glassworks
+  for env in release-signing radio-signing; do
+    gh api "$repo/environments/$env/deployment-branch-policies" --jq '.branch_policies[] | select(.type == "tag") | .id' |
+      while read -r id; do gh api -X DELETE "$repo/environments/$env/deployment-branch-policies/$id"; done
+    echo "$env:"; gh api "$repo/environments/$env/deployment-branch-policies" --jq '.branch_policies[] | "  \(.type) \(.name)"'
+  done
+)
+# release-signing: branch main, branch test-build/**    radio-signing: branch main
+```
+
+Do it after this workflow is on `main` and the old tag workflows are gone (they are, in the same change). Keep
+`radio-signing`'s required reviewer: each signing waits for an approval, dry runs too.
 
 ## Discord
 
@@ -532,10 +592,11 @@ Every published release is posted to the Glassworks Discord server by
 | Tags | Channel | Secret |
 |---|---|---|
 | `libs/*` | `#ecosystem-updates` | `DISCORD_ECOSYSTEM_WEBHOOK` |
-| Everything else: `v*`, `generic-android-*`, `frames/*` | `#glassworks-releases` | `DISCORD_RELEASES_WEBHOOK` |
+| Everything else: `v*`, `aqara-s1-plus-v*`, `generic-android-*`, `frames/*` | `#glassworks-releases` | `DISCORD_RELEASES_WEBHOOK` |
 
-- It runs after the Release, Generic release and Library release workflows succeed on a tag push, and when a
-  person publishes a release (a frame release, a library's draft). Drafts and pre-releases are skipped.
+- It runs after a Release run succeeds, and posts each tag its `publish` job lists in the run's `published-tags`
+  artifact (a dry run lists none); after the Library release workflow succeeds on a tag push; and when a person
+  publishes a release (a library's draft). Drafts and pre-releases are skipped.
 - The post is the release's title, its notes up to 1,500 characters, and a link to the rest. It never pings anyone.
 - Each secret is a webhook URL of one channel (Channel settings, Integrations, Webhooks). The URL lets anyone
   post to that channel: keep it in the repo's Actions secrets only. If one leaks, delete the webhook, make a new
@@ -677,7 +738,7 @@ The dump comes from the binary-compatibility-validator's tasks, wired by hand. N
 ### Cut a release
 
 The tag is `libs/<name>/v<MAJOR.MINOR.PATCH>`. It must match `version` in that library's
-`gradle.properties`. `release.yml` takes only `v*` and `aqara-s1-plus-v*` tags, and the app's update
+`gradle.properties`. `release.yml` runs only from its button, never on a tag, and the app's update
 check skips any other tag (`Releases.tagVersion`). So a library tag never makes an app release.
 
 1. In a PR: set `version` in `libs/<name>/gradle.properties`, and rename `## [Unreleased]` in
