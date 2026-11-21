@@ -96,8 +96,7 @@ gh secret set S1_KEY_ALIAS --env release-signing --repo GlassworksHQ/glassworks 
 gh secret list --env release-signing --repo GlassworksHQ/glassworks
 ```
 
-The workflow uses only these four secrets, the radio bundle key below, the optional `VERCEL_DEPLOY_HOOK`
-(a Vercel deploy hook URL for the web installer), and the job's own `GITHUB_TOKEN`. The same `release-signing`
+The workflow uses only these four secrets, the radio bundle key below, and the job's own `GITHUB_TOKEN`. The same `release-signing`
 environment also holds Glassworks' own key for the generic app and its legacy build (`GENERIC_*`, since
 2026-11-17), which `generic-test-build.yml` and `generic-release.yml` use: see
 [frames/generic-android/README.md](../frames/generic-android/README.md#signing).
@@ -263,7 +262,6 @@ The workflow then:
 5. writes a `.sha256` for each;
 6. creates the release, with that version's CHANGELOG.md section as the notes. The bundle is not
    published on its own (its Silicon Labs libcpc may only be distributed inside the product).
-7. asks Vercel to rebuild the web installer, so it installs the new release (`VERCEL_DEPLOY_HOOK`).
 
 HA shows the first 255 characters of the notes, with a link to the full release.
 
@@ -277,17 +275,13 @@ returns no signer for a downloaded APK. 0.4.1 also asks for `GET_SIGNATURES`
 panels need one manual update to 0.4.1 or later (the web installer's *Already installed? Finish setting
 it up*, or `adb install -r`, see [install.md](../frames/aqara-s1-plus/docs/install.md#updating)); from then on HA installs work.
 
-The hosted web installer installs the latest release it saw when it was last built
-(`kiln/scripts/stage-assets.mjs`). The workflow's last step asks Vercel to rebuild it through the
-`VERCEL_DEPLOY_HOOK` secret; without that secret it only warns, and you redeploy the installer by hand.
+Kiln (kiln.glassworks.dev) reads the releases at run time (its release route), so a release needs no Kiln deploy.
+s1.edm.sh, the first installer's address, redirects to Kiln's S1 page (`kiln/s1-redirect`).
 
-Vercel does not build on pushes (`git.deploymentEnabled: false` in `kiln/vercel.json`), so PRs get no
-Vercel preview. Production builds come only from that deploy hook, called by `release.yml` and by
-[`installer-deploy.yml`](../.github/workflows/installer-deploy.yml). The second runs on a push to
-`main` that changes an installer input (`kiln/`, `branding/`, or a repo file the installer stages), or
-by hand from the Actions tab. Kiln at kiln.glassworks.dev and glassworks.dev deploy from
+The Vercel projects have no Git connection, so pushes and PRs start no Vercel deployment (each one counted against
+the free plan's daily deploy limit, even cancelled). Kiln, glassworks.dev and the s1.edm.sh redirect deploy from
 [`web-deploy.yml`](../.github/workflows/web-deploy.yml), on a push to `main` that changes what each one builds from,
-or by hand.
+or by hand from the Actions tab.
 
 ## The S1 frame bundle
 
@@ -361,7 +355,7 @@ git push origin aqara-s1-plus-v0.6.0
 
 The workflow reads the channel with `tools/release/tag-channel.sh`, builds and checks everything as usual, and
 publishes with `--prerelease` and `--latest=false`, " beta" after the title. `releases/latest` stays the S1 app's
-last stable, and the S1 workflow doesn't rebuild the web installer, which installs stable releases only. A tag
+last stable, and Kiln, which installs stable releases only, doesn't offer it. A tag
 without a `Channel:` line, or a lightweight tag, is a stable release, exactly as before. Any other `Channel:` value
 fails the run before the build.
 
@@ -374,7 +368,6 @@ stable is 0.6.0 promoted, or 0.6.1 and up.
 ```sh
 gh release edit aqara-s1-plus-v0.6.0 --repo GlassworksHQ/glassworks --prerelease=false --latest \
   --title "Glassworks for the Aqara S1 Plus 0.6.0"
-gh workflow run installer-deploy.yml --repo GlassworksHQ/glassworks   # the installer takes the new stable
 gh release edit generic-android-legacy-v0.3.0 --repo GlassworksHQ/glassworks --prerelease=false --latest=false \
   --title "Glassworks for generic Android, legacy build 0.3.0"
 ```

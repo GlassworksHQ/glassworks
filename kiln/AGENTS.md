@@ -60,7 +60,8 @@ lockfile swap). Its `package.json` lists `kiln` (the page), `kiln/packages/*`, `
 
 | Path | What |
 |---|---|
-| `src/`, `test/`, `index.html` | The page s1.edm.sh serves: `app/` (the UI). Stays until Kiln's Next.js app has passed a real install (#27) |
+| `src/`, `test/`, `index.html` | The first installer page, which s1.edm.sh served: `app/` (the UI). s1.edm.sh now redirects to Kiln's S1 page; the page stays until #27 removes it |
+| `s1-redirect/` | What s1.edm.sh serves: a redirect of every path to `kiln.glassworks.dev/aqara-s1-plus` (deployed by `web-deploy.yml`) |
 | `apps/kiln` | Kiln on Next.js: the device picker and one install engine that runs every frame from its data, on the Kiln design (`docs/design/kiln`). See [One engine, frames as data](#one-engine-frames-as-data) and its [README](apps/kiln/README.md) |
 | `packages/brand` | The Glassworks tokens, mark, and Kiln's favicon (the small cut of its ember-floor mark) and app icon, generated from glassworks.dev by `sync.mjs`. Don't edit `src/` |
 | `packages/fel`, `fastboot`, `adb`, `bootpatch`, `setup-channel`, `improv-serial` | Protocol modules: TypeScript source, each with its own tests. Not published (`"private": true`) |
