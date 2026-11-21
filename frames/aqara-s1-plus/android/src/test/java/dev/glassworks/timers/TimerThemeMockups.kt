@@ -73,18 +73,37 @@ class TimerThemeMockups {
     }
 
     /** The timers over a stand-in dashboard, in [theme] (read when the overlay is attached, as in the app). */
-    private fun scene(theme: String, w: Int, h: Int, dark: Boolean): Pair<FrameLayout, TimerOverlay> {
+    private fun scene(theme: String, w: Int, h: Int, dark: Boolean, touch: Boolean = true): Pair<FrameLayout, TimerOverlay> {
         KioskPrefs(RuntimeEnvironment.getApplication()).overlayTheme = theme
         val a = Robolectric.buildActivity(Activity::class.java).setup().get()
         a.getSharedPreferences("timers", Context.MODE_PRIVATE).edit().clear().commit()
         val root = FrameLayout(a)
         root.addView(Dashboard(a, dark), FrameLayout.LayoutParams(-1, -1))
-        val timers = TimerOverlay(a)
+        val timers = TimerOverlay(a).apply { this.touch = { touch } }
         root.addView(timers, timers.layoutParams())
         a.setContentView(root, ViewGroup.LayoutParams(-1, -1))
         layout(root, w, h)
         idle()
         return root to timers
+    }
+
+    /** The board: three or more timers in one card. [touch] false is the Mirror (no "Hide"). */
+    private fun boards(tag: String, w: Int, h: Int, touch: Boolean) {
+        for ((theme, dark) in listOf("glassworks/dark" to true, "dusk/light" to false, "aurora/dark" to true, "dune/light" to false)) {
+            val (root, timers) = scene(theme, w, h, dark, touch)
+            TimerBoard.update(listOf(
+                Entry("p", "Pasta", 600, 491, true), Entry("r", "Rice", 1200, 892, true),
+                Entry("o", "Oven", 2700, 1470, false), Entry("e", "Eggs", 420, 7, true),
+            ))
+            timers.refresh(); idle(400)
+            save("board-$tag-${theme.replace('/', '-')}", root, w, h)
+            TimerBoard.reset()
+        }
+        val (root, timers) = scene("glassworks/dark", w, h, true, touch)
+        TimerBoard.update((1..7).map { Entry("t$it", listOf("Pasta", "Rice", "Oven", "Eggs", "Tea", "Bread", "Laundry")[it - 1], 300 * it, 280 * it, true) })
+        timers.refresh(); idle(400)
+        save("board-$tag-seven", root, w, h)
+        TimerBoard.reset()
     }
 
     private fun shots(tag: String, w: Int, h: Int) {
@@ -109,12 +128,14 @@ class TimerThemeMockups {
     @Test fun s1() {
         assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", dir != null)
         shots("s1", 1440, 720)
+        boards("s1", 1440, 720, touch = true)
     }
 
     @Config(qualifiers = "w540dp-h960dp-port-xhdpi")
     @Test fun mirror() {
         assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", dir != null)
         shots("mirror", 1080, 1920)
+        boards("mirror", 1080, 1920, touch = false)
     }
 
     /** A stand-in dashboard in HA's dark or light look: cards and a few tiles, so the timers' glass shows. */
