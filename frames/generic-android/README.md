@@ -51,6 +51,8 @@ This folder defines the **Generic Android** frame (`design/frame.json`, [format]
 
 **Status: beta.** You can install Glassworks on any Android 8+ tablet or phone straight from Chrome or Edge at [kiln.glassworks.dev/android](https://kiln.glassworks.dev/android), with a separate legacy build available for Android 6 and 7 devices (including the lululemon Studio Mirror). On a Google Pixel Tablet, dashboard loading, Home Assistant ESPHome adoption, automatic pane hiding, and in-place updates are all verified; hardware testing for wake words, Sendspin audio, and the ambient light sensor is still underway.
 
+**Tested devices:** the [Google Pixel Tablet](../google-pixel-tablet/README.md), tested by Glassworks on stock Android, and the [Samsung Galaxy Tab A 10.1 (2016)](../samsung-galaxy-tab-a-10-1-2016/README.md), tested by the community on LineageOS. Tried Glassworks on another device? Tell us how it went with a [device report](https://github.com/GlassworksHQ/glassworks/issues/new?template=device-report.yml), even if everything worked: it's how a device becomes a tested device.
+
 *(For reference, the Aqara S1 Plus APK also automatically falls back to generic behavior if installed on non-S1 hardware, naming itself after the device model and hiding unsupported panes.)*
 
 ### What the Generic Android app includes
@@ -84,7 +86,7 @@ On the Manage page's Overview screen, the legacy build displays a **Legacy** bad
 
 The app automatically adapts to the device without requiring custom per-device code:
 
-- **Orientation:** Follows Android's auto-rotate or user rotation lock (Kiln locks the Mirror to portrait at first boot), while recognized frames like the Pixel Tablet use the orientation defined in their `frame.json`.
+- **Orientation:** Follows Android's auto-rotate or user rotation lock (Kiln locks the Mirror to portrait at first boot), while recognized frames like the Pixel Tablet and the Galaxy Tab A 10.1 (2016) use the orientation defined in their `frame.json`.
 - **Touchless setup:** When no touchscreen input device is detected, first-boot setup automatically switches to network setup from a phone or computer ([Set up over the network](../../docs/manage.md#set-up-over-the-network)).
 
 Neither build is distributed on Google Play because Glassworks manages its own updates from GitHub Releases and requests privileged permissions (`INSTALL_PACKAGES`, `REBOOT`, `WRITE_SECURE_SETTINGS`) needed for dedicated hardware like the Mirror.

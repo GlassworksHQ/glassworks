@@ -15,7 +15,7 @@ import { frameById, frames, installLink } from "@/lib/frames";
 import { recipesForFrame } from "@/lib/recipes";
 import { getDocs } from "@/lib/docs";
 import { researchUrl } from "@/lib/docs/research";
-import { KIND_TEXT, completeness } from "@glassworks/frame-card";
+import { KIND_TEXT, completeness, testedText } from "@glassworks/frame-card";
 import { frameSeo, ratingKeys, ratingText, ships, type Support } from "@/lib/frameText";
 import { JsonLd } from "@/components/JsonLd";
 import { breadcrumbLd, pageMetadata } from "@/lib/seo";
@@ -137,6 +137,12 @@ async function Device({ params }: { params: Params }) {
                 This is a tested device—it runs <Link href={`/frames/${base.id}`}>{base.name}</Link> out of the box.
               </>
             )}
+            {d.tested && (
+              <>
+                {" "}
+                {testedText(d.tested)}.{d.tested.report && <> <a href={d.tested.report}>Read the report</a></>}
+              </>
+            )}
           </p>
         </div>
         <HeroModel f={d} />
@@ -186,7 +192,7 @@ async function Device({ params }: { params: Params }) {
         <ClarityPanel frameId={d.id} />
       </div>
 
-      <CompletenessPanel c={done} />
+      <CompletenessPanel c={done} community={d.tested?.by === "community"} />
 
       {d.unverified && <p className={s.notice}>These details come from public writeups and haven&rsquo;t been verified on hardware yet.</p>}
 

@@ -30,6 +30,7 @@ Device-specific setup instructions, hardware details, and supported features liv
 | [S1 Plus sensors](../frames/aqara-s1-plus/docs/sensors.md) | Presence (time-of-flight) and ambient light sensors, wake on approach, and auto-brightness |
 | [Generic Android](../frames/generic-android/README.md) | Running Glassworks on Android 8+ tablets and phones (plus the legacy build for Android 6–7) |
 | [Google Pixel Tablet](../frames/google-pixel-tablet/README.md) | Tested device profile, dock sensor behavior, and Clarity results |
+| [Samsung Galaxy Tab A 10.1 (2016)](../frames/samsung-galaxy-tab-a-10-1-2016/README.md) | Tested device profile: tested by the community on LineageOS |
 | [lululemon Studio Mirror](../frames/lululemon-mirror/README.md) | Hardware details and Kiln installation for the 40-inch mirror |
 
 ## Developers and hardware makers

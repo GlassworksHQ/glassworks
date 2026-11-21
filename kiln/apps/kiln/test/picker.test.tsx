@@ -74,6 +74,17 @@ describe('the picker', () => {
     expect(described).toMatch(/Medium install.*Reversible.*Modifies Android/);
   });
 
+  it('a tested device says who tested it and on what, to screen readers too (#700)', () => {
+    render(<Picker />);
+    const tab = screen.getByRole('radio', { name: 'Samsung Galaxy Tab A 10.1 (2016), Beta' });
+    expect(tab).toHaveProperty('disabled', false);
+    const described = (tab.getAttribute('aria-describedby') ?? '').split(' ').map((id) => document.getElementById(id)?.textContent ?? '').join(' ');
+    expect(described).toContain('Tested by the community on LineageOS');
+    fireEvent.click(tab);
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(router.push).toHaveBeenLastCalledWith('/android');
+  });
+
   it('labels the Mirror reversible to the community image, never red "Not reversible" (issue 146)', () => {
     render(<Picker />);
     expect(screen.getAllByText("Reversible to the community image, not to lululemon's software").length).toBeGreaterThan(0);

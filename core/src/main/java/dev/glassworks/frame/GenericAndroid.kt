@@ -112,6 +112,7 @@ class GenericAndroid(
          */
         val KNOWN: Map<String, Known> = mapOf(
             "Pixel Tablet" to Known(Orientation.LANDSCAPE, docks = true), // google-pixel-tablet
+            "SM-T580" to Known(Orientation.LANDSCAPE, docks = false), // samsung-galaxy-tab-a-10-1-2016
         )
 
         /** Google's dock manager, on the Pixel Tablet and its charging speaker dock (read on one, 2026-11-17). */

@@ -136,8 +136,41 @@ export interface FrameDesign {
   facts?: FrameFacts;
   /** a tested device only: its run on a real unit, which its checklist comes from */
   run?: FrameRun;
+  /** a tested device only, and every one has it: who tested it, on which Android, and where they wrote it up */
+  tested?: FrameTested;
   /** what the Release workflow ships for it: its app lines and its frame release (tools/release/plan.py; frames/README.md#release) */
   release?: FrameRelease;
+}
+
+/**
+ * Who tested a tested device, and on what (issue 700). `by`: Glassworks (the maintainers, on their own unit) or the
+ * community (someone who ran it and reported it). `os`: `stock`, the maker's Android, or the custom OS it ran, by name
+ * (`LineageOS`). `report`: the write-up it comes from, an https link; leave it out when there is none.
+ */
+export interface FrameTested {
+  by: 'glassworks' | 'community';
+  os: string;
+  report?: string;
+}
+
+/** The card's line for who tested it: "Tested by the community on LineageOS", "Tested by Glassworks on stock Android". */
+export const testedText = (t: FrameTested) =>
+  `Tested by ${t.by === 'glassworks' ? 'Glassworks' : 'the community'} on ${t.os === 'stock' ? 'stock Android' : t.os}`;
+
+/**
+ * What's wrong with a frame's `tested`, one line per problem; empty when it's fine. Every tested device says who tested
+ * it and on what; no other kind has the field. Kiln's tests and glassworks.dev's build run it.
+ */
+export function testedProblems(f: Pick<FrameDesign, 'kind' | 'tested'>): string[] {
+  if (f.kind !== 'tested') return f.tested === undefined ? [] : ['tested: only a tested device has one'];
+  const t = f.tested as unknown;
+  if (t === null || typeof t !== 'object' || Array.isArray(t)) return ['tested: a tested device says who tested it and on what, { "by", "os", "report" }'];
+  const o = t as Record<string, unknown>;
+  const out = Object.keys(o).filter((k) => !['by', 'os', 'report'].includes(k)).map((k) => `tested.${k}: not a tested field`);
+  if (o.by !== 'glassworks' && o.by !== 'community') out.push('tested.by: should be glassworks or community');
+  if (!isText(o.os)) out.push('tested.os: should be stock, or the custom OS it ran by name, e.g. LineageOS');
+  if (o.report !== undefined && !isHttps(o.report)) out.push('tested.report: should be an https link to the report');
+  return out;
 }
 
 /**
@@ -255,7 +288,7 @@ export function kindProblems(f: Pick<FrameDesign, 'kind' | 'base' | 'kiln' | 'ap
 const FIELDS: Record<keyof FrameDesign, true> = {
   id: true, kind: true, base: true, name: true, brand: true, aka: true, status: true, summary: true, tagline: true, project: true,
   kiln: true, model: true, recovery: true, render: true, display: true, boot: true, abis: true, app: true, specs: true, panes: true,
-  provides: true, agent: true, dock: true, camera: true, install: true, ratings: true, ratingsNote: true, notice: true, legacy: true, unverified: true, credits: true, facts: true, run: true, release: true,
+  provides: true, agent: true, dock: true, camera: true, install: true, ratings: true, ratingsNote: true, notice: true, legacy: true, unverified: true, credits: true, facts: true, run: true, tested: true, release: true,
 };
 
 /**

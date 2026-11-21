@@ -29,5 +29,6 @@ describe("installLink", () => {
     expect(installLink(tested, [base, tested])).toEqual({ href: "https://kiln.glassworks.dev/base", kiln: true });
     expect(installLink(fake("alone", {}), [base])).toBeUndefined();
     expect(installLink(frameById("google-pixel-tablet")!)?.href).toBe("https://kiln.glassworks.dev/android");
+    expect(installLink(frameById("samsung-galaxy-tab-a-10-1-2016")!)?.href).toBe("https://kiln.glassworks.dev/android");
   });
 });

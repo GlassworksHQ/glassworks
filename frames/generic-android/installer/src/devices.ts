@@ -113,6 +113,8 @@ const FIRE_MODELS: Source = { title: 'Amazon: Identify Fire Tablet Devices', hre
 /** ro.product.model, or the USB product name when it carries the code. Matched whole, case as written. */
 export const MODELS: Model[] = [
   { code: /^Pixel Tablet$/, brand: 'google', name: 'Pixel Tablet', frame: 'google-pixel-tablet', source: { title: 'Wikipedia: Pixel Tablet', href: 'https://en.wikipedia.org/wiki/Pixel_Tablet' } },
+  // LineageOS builds for it keep Samsung's model (PRODUCT_MODEL := SM-T580 in its device tree, read 2026-11-20)
+  { code: /^SM-T580$/, brand: 'samsung', name: 'Galaxy Tab A 10.1 (2016)', frame: 'samsung-galaxy-tab-a-10-1-2016', source: { title: 'Wikipedia: Samsung Galaxy Tab A 10.1 (2016)', href: 'https://en.wikipedia.org/wiki/Samsung_Galaxy_Tab_A_10.1_(2016)' } },
   { code: /^SM-X200$/, brand: 'samsung', name: 'Galaxy Tab A8', source: SAMSUNG_A8 },
   { code: /^SM-X110$/, brand: 'samsung', name: 'Galaxy Tab A9', source: { title: 'Samsung Levant: Galaxy Tab A9 (Wi-Fi), SM-X110', href: 'https://www.samsung.com/levant/tablets/galaxy-tab-a/galaxy-tab-a9-wifi-mystic-navy-128gb-sm-x110ndbemea/' } },
   { code: /^SM-X210$/, brand: 'samsung', name: 'Galaxy Tab A9+', source: { title: 'Samsung UK: Galaxy Tab A9+ (11", Wi-Fi) SM-X210', href: 'https://www.samsung.com/uk/support/model/SM-X210NZAAEUB/' } },

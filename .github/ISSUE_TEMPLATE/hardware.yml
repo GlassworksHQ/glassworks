@@ -1,5 +1,5 @@
 name: Hardware report
-description: You tried Glassworks on a model, firmware or wall base we haven't tested. Reports that it worked help too.
+description: You tried Glassworks on an Aqara S1 model, firmware or wall base we haven't tested. Reports that it worked help too. For an Android tablet or phone, use Device report.
 labels: ["hardware report"]
 body:
   - type: markdown

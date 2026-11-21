@@ -1,0 +1,105 @@
+{
+  "id": "samsung-galaxy-tab-a-10-1-2016",
+  "kind": "tested",
+  "base": "generic-android",
+  "name": "Samsung Galaxy Tab A 10.1 (2016)",
+  "brand": "Samsung",
+  "aka": "SM-T580",
+  "status": "beta",
+  "summary": "A common 10-inch tablet from 2016 that runs Glassworks for generic Android on LineageOS.",
+  "notice": "It was tested on an unofficial 64-bit LineageOS build. Samsung's own Android 8.1 on this tablet runs 32-bit apps only, and hasn't been tested with Glassworks.",
+  "model": {
+    "body": {
+      "shape": "rect",
+      "width": 254.2,
+      "height": 155.3,
+      "depth": 8.2,
+      "radius": 10
+    },
+    "bezel": 9.6,
+    "screen": {
+      "radius": 1,
+      "width": 217.7,
+      "height": 136.1,
+      "top": 9.6
+    },
+    "sides": {
+      "dark": "#141518",
+      "light": "#4a4d55"
+    },
+    "finish": "glass",
+    "mount": "wall"
+  },
+  "render": "render.webp",
+  "display": {
+    "width": 1920,
+    "height": 1200
+  },
+  "abis": ["arm64-v8a", "armeabi-v7a"],
+  "specs": [
+    {
+      "label": "Size",
+      "value": "254.2 × 155.3 × 8.2 mm"
+    },
+    {
+      "label": "SoC",
+      "value": "Samsung Exynos 7870, 2 GB RAM"
+    },
+    {
+      "label": "Android",
+      "value": "6.0.1 at launch (2016), 8.1 from Samsung (32-bit apps only); tested on LineageOS (64-bit)"
+    },
+    {
+      "label": "Screen",
+      "value": "10.1-inch, 1920 × 1200"
+    },
+    {
+      "label": "Root",
+      "value": "Not needed"
+    }
+  ],
+  "panes": {},
+  "install": {
+    "how": "It installs as a normal app."
+  },
+  "ratings": {
+    "difficulty": {
+      "value": "easy",
+      "detail": "Install an app"
+    },
+    "reversible": {
+      "value": "yes",
+      "detail": "Uninstall the app"
+    },
+    "modifiesAndroid": {
+      "value": "no"
+    },
+    "root": {
+      "value": "none"
+    },
+    "opensDevice": {
+      "value": "no"
+    },
+    "vendorApps": {
+      "value": "kept"
+    },
+    "wipes": {
+      "value": "no"
+    },
+    "backup": {
+      "value": "none"
+    },
+    "updates": {
+      "value": "planned"
+    }
+  },
+  "ratingsNote": "For Glassworks itself, on LineageOS. Putting LineageOS on the tablet first is a separate step that wipes it.",
+  "tested": {
+    "by": "community",
+    "os": "LineageOS",
+    "report": "https://github.com/GlassworksHQ/glassworks/issues/700"
+  },
+  "release": {
+    "app": ["generic-android"]
+  }
+}

@@ -19,6 +19,7 @@ and glassworks.dev read them from here.
 | [`lululemon-mirror`](lululemon-mirror) | Beta | yes (`/lululemon-mirror`): over fastboot, with Glassworks or the community image, or the app alone over adb onto it | `frame.json`, `recovery.json` |
 | [`generic-android`](generic-android) | Beta | yes (`/android`): the app over adb (#403) | `frame.json` only. Any Android device as an app, no root. It has no `display`: there is no one screen size |
 | [`google-pixel-tablet`](google-pixel-tablet) | Beta | none of its own: it installs as `generic-android` | `frame.json` only. A tested device: the generic app as it is |
+| [`samsung-galaxy-tab-a-10-1-2016`](samsung-galaxy-tab-a-10-1-2016) | Beta | none of its own: it installs as `generic-android` | `frame.json` only. A tested device, tested by the community on LineageOS (#700) |
 
 ### Three kinds of device
 
@@ -29,7 +30,7 @@ the frame's page.
 |---|---|---|---|
 | `full` | Full frame | Its own app and a Kiln recipe (FEL, boot patch, root) | `aqara-s1-plus` |
 | `device` | Device frame | The generic app, with a recipe or settings picked at runtime; no code of its own | `lululemon-mirror`, `generic-android` |
-| `tested` | Tested device | The generic app as it is, installed like on any Android device. No recipe, no code. `base` names the frame it installs as | `google-pixel-tablet` |
+| `tested` | Tested device | The generic app as it is, installed like on any Android device. No recipe, no code. `base` names the frame it installs as | `google-pixel-tablet`, `samsung-galaxy-tab-a-10-1-2016` |
 
 `kindProblems()` ([`packages/frame-card`](../packages/frame-card/README.md)) checks it: a tested device has a
 `base` that is another kind of frame, and no `kiln`, `app` or `recovery`; no other kind has a `base`.
@@ -79,6 +80,7 @@ describes the device's look in millimetres"). Kiln's picker reads it, and glassw
 | `credits` | Optional. The outside work the frame stands on, and who made it ([below](#credits)) |
 | `facts` | Optional, not on a tested device. What its panels show, for the checklist ([below](#how-complete-it-is)) |
 | `run` | A tested device only: its run on a real unit, which its checklist comes from ([below](#a-tested-devices-run)) |
+| `tested` | A tested device only, and every one has it: who tested it and on what ([below](#who-tested-it)) |
 | `release` | Optional. What the Release workflow ships for it: the app lines its devices run and its own frame release ([below](#release)) |
 
 `model`:
@@ -112,6 +114,25 @@ redraws them.
 `frame.json` is written by hand, and the build reads it; nothing generates it (maintainer, 2026-11-13,
 #98). It differs from decisions.md's sketch in two names: the renderer needs side colours (`sides`)
 where the sketch has `color.body`, and the screen is placed with `top` where the sketch has `offset`.
+
+### Who tested it
+
+Every tested device says who tested it, on which Android, and where it was written up (`tested`, #700). Kiln's
+picker and glassworks.dev's cards show it under the summary, and the frame's page links the report.
+
+| Field | What |
+|---|---|
+| `by` | `glassworks`: the maintainers, on a unit of their own. `community`: someone who ran it and reported it |
+| `os` | `stock` for the maker's Android, or the custom OS it ran, by name (`LineageOS`) |
+| `report` | Optional. The write-up it comes from, an https link (a device report issue) |
+
+The card's line: *Tested by the community on LineageOS*, *Tested by Glassworks on stock Android*. `testedProblems()`
+([`packages/frame-card`](../packages/frame-card/README.md)) checks it; glassworks.dev's build and Kiln's
+`frame-designs.test.ts` run it. A device the community tested may have no `run` ([below](#a-tested-devices-run)).
+
+People report a device they tried with the **Device report** issue form
+(`.github/ISSUE_TEMPLATE/device-report.yml`): its model, Android, stock or custom OS, the ABI, which Kiln flow,
+what worked and what didn't.
 
 ### Credits
 
@@ -326,6 +347,9 @@ person saw. It goes in `run`, and a tested device has no `facts`.
 | `panel.silentUpdates` | Optional until someone reads it: the panel's *Silent updates* sensor afterwards, word for word | Silent updates. Left out, it is ✗ "No panel has reported it yet" |
 | `seen` | What the person saw that neither reports: `hardware`, `kiosk`, `setup`, `notes` | The same items. What they saw last supersedes what Kiln saw at install. `seen.hardware` replaces the install's refusals: a grant given by hand after the install and seen working is `[]`, and a refusal that stayed is written there. `seen.kiosk.onlyHome` replaces the one from `install.home`, e.g. after someone taps Always on Android's chooser |
 
+A device the community tested (`tested.by: community`) may have no `run`: its report is the record. Its
+checklist then reads as what we expect, every item unverified, until someone records a run.
+
 After the run, the root sets `on` and the values it found, and drops the frame's `unverified`. Each
 fact the run didn't cover stays out, and its item says "not checked": a ✗, not an unverified ✓.
 
@@ -343,6 +367,7 @@ Worked out from today's data (2026-11-17):
 | `lululemon-mirror` | Not rated yet | Under development, and not in Kiln yet. Its silent updates were seen with the probe app only, and its home screen with Glassworks too (2026-11-17); both stay marked unverified. Nothing records it coming back after a reboot, so that isn't checked |
 | `generic-android` | Not rated yet | Under development, and not in Kiln yet. Silent updates and hardware depend on the device |
 | `google-pixel-tablet` | Good | The root's run on 2026-11-17 (`run-node.ts --plan`, then `--install`, generic test build 9755076; Home Assistant added it and the QR sign-in loaded the dashboard) gives setup ✓. It installs through Generic Android in Kiln (`/android`), with USB debugging. Its *Silent updates* sensor, hardware and three kiosk checks aren't read yet |
+| `samsung-galaxy-tab-a-10-1-2016` | Good, unverified | Beta. Tested by the community on an unofficial 64-bit LineageOS build (#700), with no recorded run, so every item is what we expect. It installs through Generic Android in Kiln (`/android`), with USB debugging. Samsung's own Android 8.1 on it runs a 32-bit userspace and isn't tested |
 
 ## What came from glassworks.dev
 

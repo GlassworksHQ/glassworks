@@ -18,6 +18,7 @@ line of each version is what Home Assistant shows on the update card. A change o
 - **ONVIF push motion events.** Local network video recorders and Home Assistant's ONVIF integration now receive motion alerts immediately over authenticated subscriptions.
 - **Public beta in Kiln & pane selection during setup.** `kiln.glassworks.dev/android` and `kiln.glassworks.dev/lululemon-mirror` now install the latest release directly (no test links needed) and let you choose which panes to enable during setup.
 - **Update channels (Stable / Beta).** Choose between Stable and Beta releases from the device page in Settings or Manage.
+- **The Samsung Galaxy Tab A 10.1 (2016) is a tested device.** The community ran Glassworks on an SM-T580 with LineageOS (64-bit), so it now has its own page on glassworks.dev, Kiln recognizes it by its model, and the app keeps it in landscape. Tested devices also say who tested them and on which Android, and a new *Device report* form on GitHub makes it easy to tell us how your own device did.
 
 ### Fixed
 - **lululemon Studio Mirror & legacy Android 6–7 stability.** Keeps the Mirror locked upright in portrait across updates, reduces camera streaming RAM with 720p hardware encoding, prevents premature camera restarts during startup, re-notifies the legacy web engine during sustained low memory so dashboards reload less often, and restores device Wi-Fi and hotspot settings reliably after an interrupted setup hotspot.

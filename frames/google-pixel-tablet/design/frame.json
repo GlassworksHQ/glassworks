@@ -147,6 +147,10 @@
       }
     }
   },
+  "tested": {
+    "by": "glassworks",
+    "os": "stock"
+  },
   "release": {
     "app": ["generic-android"]
   }

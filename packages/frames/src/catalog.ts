@@ -13,8 +13,10 @@ import pixelTabletRender from '../../../frames/google-pixel-tablet/design/render
 import mirror from '../../../frames/lululemon-mirror/design/frame.json';
 import mirrorInstaller from '../../../frames/lululemon-mirror/design/installer.json';
 import mirrorRender from '../../../frames/lululemon-mirror/design/render.webp';
+import galaxyTabA2016 from '../../../frames/samsung-galaxy-tab-a-10-1-2016/design/frame.json';
+import galaxyTabA2016Render from '../../../frames/samsung-galaxy-tab-a-10-1-2016/design/render.webp';
 
-export const FRAMES = [s1Plus, mirror, genericAndroid, pixelTablet] as FrameDesign[];
+export const FRAMES = [s1Plus, mirror, genericAndroid, pixelTablet, galaxyTabA2016] as FrameDesign[];
 
 /**
  * The frame whose install a frame uses: its own, or for a tested device (`kind` tested), its `base`'s. A tested device
@@ -35,6 +37,7 @@ export const RENDERS: Record<string, string> = {
   [mirror.id]: url(mirrorRender),
   [genericAndroid.id]: url(genericAndroidRender),
   [pixelTablet.id]: url(pixelTabletRender),
+  [galaxyTabA2016.id]: url(galaxyTabA2016Render),
 };
 
 /** Frames with a published Clarity result (`frames/<id>/clarity/clarity.json`); kiln/apps/kiln/test/frame-designs.test.ts keeps it true. */

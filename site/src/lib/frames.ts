@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { CAPABILITIES, PANE_ALIASES, PANE_IDS, RATING_KEYS, agentProblems, creditProblems, factProblems, keyProblems, kindProblems, type FrameDesign, type Stage } from "@glassworks/frame-card";
+import { CAPABILITIES, PANE_ALIASES, PANE_IDS, RATING_KEYS, agentProblems, creditProblems, factProblems, keyProblems, kindProblems, testedProblems, type FrameDesign, type Stage } from "@glassworks/frame-card";
 
 /*
  * The frame catalog: every `frames/<id>/design/frame.json` in this repo, read at build time (the
@@ -32,6 +32,9 @@ function check(file: string, f: FrameDesign, id: string, all: FrameDesign[]) {
   // full frame, device frame or tested device; a tested device names the frame it installs as (#403)
   const kind = kindProblems(f, all);
   if (kind.length) bad(kind.join("; "));
+  // a tested device says who tested it and on what (issue 700)
+  const tested = testedProblems(f);
+  if (tested.length) bad(tested.join("; "));
   // it rates only panes that exist (a pane it doesn't rate is worked out from `provides`; issue 231)
   for (const [p, r] of Object.entries(f.panes ?? {})) {
     if (!PANE_IDS.includes(p) && !(p in PANE_ALIASES)) bad(`panes.${p}: no pane has that id`);

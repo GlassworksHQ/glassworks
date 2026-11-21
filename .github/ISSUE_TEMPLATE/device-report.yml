@@ -1,0 +1,96 @@
+name: Device report
+description: You ran Glassworks on an Android tablet or phone. Tell us how it went, even if everything worked.
+title: "Tested: "
+labels: ["hardware report"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying Glassworks on your device. Reports like this one are how a device becomes a
+        tested device on glassworks.dev and in Kiln. Leave out serial numbers, MAC addresses, Wi-Fi
+        passwords and Home Assistant tokens, in logs and screenshots too.
+
+        For the Aqara S1 Plus, use the **Hardware report** form instead.
+
+  - type: input
+    id: model
+    attributes:
+      label: Device model
+      description: The name, and the model code from Settings → About (or `adb shell getprop ro.product.model`).
+      placeholder: Samsung Galaxy Tab A 10.1 (2016), SM-T580
+    validations:
+      required: true
+
+  - type: input
+    id: android
+    attributes:
+      label: Android version
+      placeholder: "13"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os_kind
+    attributes:
+      label: Stock or custom Android?
+      options:
+        - Stock (the maker's own Android)
+        - Custom (LineageOS or another build)
+    validations:
+      required: true
+
+  - type: input
+    id: custom_os
+    attributes:
+      label: Which custom OS?
+      description: Only for a custom build. Its name, version, and whether it's official or unofficial.
+      placeholder: LineageOS 21, unofficial
+
+  - type: input
+    id: abi
+    attributes:
+      label: ABI
+      description: The one Kiln showed, or the output of `adb shell getprop ro.product.cpu.abilist`.
+      placeholder: arm64-v8a,armeabi-v7a,armeabi
+
+  - type: dropdown
+    id: flow
+    attributes:
+      label: How did you install it?
+      options:
+        - Kiln over USB from a computer
+        - Kiln in the device's own browser
+        - Sideloaded the APK
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: worked
+    attributes:
+      label: What worked
+      description: The dashboard, Home Assistant adding the device, voice, the camera, the screen turning on and off, updates…
+    validations:
+      required: true
+
+  - type: textarea
+    id: didnt
+    attributes:
+      label: What didn't work
+      description: What you saw, and Kiln's log if it stopped. Write "Nothing so far" if everything worked.
+    validations:
+      required: true
+
+  - type: input
+    id: clarity
+    attributes:
+      label: Clarity grade
+      description: Only if you ran Clarity, the performance test (docs/clarity.md).
+      placeholder: B
+
+  - type: input
+    id: app_version
+    attributes:
+      label: Glassworks version
+      description: From the Device page in Glassworks' settings, or Kiln's Done screen.
+      placeholder: 0.2.0

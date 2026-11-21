@@ -10,7 +10,7 @@
 // heading level (`as`), the name is that heading and its wrappers are divs, for a link on a page.
 import { useRef } from 'react';
 import { DeviceModel } from './DeviceModel';
-import { KIND_TEXT, STAGE_TEXT, cardCredit, cardTags, ships, type FrameDesign, type Stage } from './frame';
+import { KIND_TEXT, STAGE_TEXT, cardCredit, cardTags, ships, testedText, type FrameDesign, type Stage } from './frame';
 import s from './FrameCard.module.css';
 
 /** The card's own class: the hover lift, the floating model and the tags. */
@@ -67,7 +67,8 @@ export function useTilt<T extends HTMLElement>() {
 
 /**
  * The card's contents: the model, then the name, stage, kind and aka, summary and tags. With `idPrefix`, the
- * summary, the legacy line and the tags get the ids `<idPrefix>-summary`, `<idPrefix>-legacy` and `<idPrefix>-tags`,
+ * summary, the tested line, the legacy line and the tags get the ids `<idPrefix>-summary`, `<idPrefix>-tested`,
+ * `<idPrefix>-legacy` and `<idPrefix>-tags`,
  * for aria-describedby.
  * `as` makes the name a heading (`h2`…`h4`); leave it out inside a button. `expected` (by default, a
  * frame that doesn't ship yet) tells screen readers the tags are expected, not tested. It is hidden
@@ -75,7 +76,8 @@ export function useTilt<T extends HTMLElement>() {
  * `screen` is the URL the caller's bundler gives the frame's `render` file; without it, the model shows an
  * example dashboard. A frame built on someone else's work (a credit marked `card`) names it under the
  * summary, as plain text: the card is a link or a button, so the credit's own links are on its page. A frame that
- * runs the legacy build says so on its own line (`legacy`), above the credit. `pill: false` leaves out the status pill
+ * runs the legacy build says so on its own line (`legacy`), above the credit. A tested device says who tested it and on
+ * what (`tested`), under the summary; its report's link is on its page too. `pill: false` leaves out the status pill
  * (Kiln's picker shows none for a stable frame).
  */
 export function FrameCardBody({ f, idPrefix, as: Name = 'span', expected = !ships(f.status), screen, pill = true }: {
@@ -96,6 +98,7 @@ export function FrameCardBody({ f, idPrefix, as: Name = 'span', expected = !ship
         </Box>
         <span className={s.aka}>{KIND_TEXT[f.kind]}{f.aka && ` · ${f.aka}`}</span>
         <span id={idPrefix ? `${idPrefix}-summary` : undefined} className={s.summary}>{f.summary}</span>
+        {f.tested && <span id={idPrefix ? `${idPrefix}-tested` : undefined} className={s.credit}><Check />{testedText(f.tested)}</span>}
         {f.legacy && <span id={idPrefix ? `${idPrefix}-legacy` : undefined} className={s.credit}><Lock />{f.legacy}</span>}
         {credit && <span className={s.credit}><Stack />{credit}</span>}
         <span id={idPrefix ? `${idPrefix}-tags` : undefined} className={s.tags}>

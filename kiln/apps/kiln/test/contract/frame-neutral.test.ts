@@ -23,6 +23,7 @@ export const NAMES: [term: string, pattern: RegExp, catches: string[]][] = [
   ['glass-panes', /glass.?panes/i, ['Glass Panes', 'GLASS_PANES', 'glass-panes']],
   ['generic-android', /generic.?android/i, ['Generic Android', 'generic-android', 'genericAndroid', 'generic_android']],
   ['pixel-tablet', /pixel.?tablet/i, ['Google Pixel Tablet', 'google-pixel-tablet', 'pixelTablet']],
+  ['galaxy-tab-a-2016', /galaxy.?tab.?a.?(?:10.?1|2016)/i, ['Samsung Galaxy Tab A 10.1 (2016)', 'samsung-galaxy-tab-a-10-1-2016', 'galaxyTabA2016']],
 ];
 
 /** Where frame names may not be: Kiln's app and its packages, their sources and their file names. */

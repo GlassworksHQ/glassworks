@@ -16,7 +16,7 @@ export function FrameCard({ f }: { f: FrameDesign }) {
   return (
     <RadioGroup.Item {...tilt} value={f.id} disabled={!installable} className={`glass ${frameCardClass} ${s.pick}`}
       aria-label={`${f.name}${stage}${installable ? '' : ', not installable from Kiln yet'}`}
-      aria-describedby={`${id}-summary${f.legacy ? ` ${id}-legacy` : ''} ${id}-tags`}>
+      aria-describedby={`${id}-summary${f.tested ? ` ${id}-tested` : ''}${f.legacy ? ` ${id}-legacy` : ''} ${id}-tags`}>
       <FrameCardBody f={f} idPrefix={id} screen={RENDERS[f.id]} pill={f.status !== 'stable'} />
     </RadioGroup.Item>
   );
