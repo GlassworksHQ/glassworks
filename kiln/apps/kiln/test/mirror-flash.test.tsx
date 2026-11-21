@@ -251,7 +251,7 @@ describe('installing Glassworks over fastboot', () => {
     const { image: flash, app: mirror } = await imageDemo(mirrorEntry, 'flash-download-bad', true);
     expect(flash.state.files[0]).toMatchObject({ state: 'bad' });
     render(<ImageFlow image={flash} app={mirror} />);
-    expect(screen.getByText(/Its SHA-256 isn’t the release’s, so Kiln deleted it\. Nothing was written to the Mirror\. This is Kiln’s bug, not yours\./)).toBeTruthy();
+    expect(screen.getByText(/This download doesn’t match the release, so Kiln deleted it\. Nothing was written to the Mirror\. The fault is Kiln’s, not yours\./)).toBeTruthy();
     expect(embers()).toEqual(['Try again']);
   });
 });
@@ -272,7 +272,7 @@ describe('every flash demo screen', () => {
     cleanup();
     const failed = await imageDemo(mirrorEntry, 'flash-download-error', true);
     render(<ImageFlow image={failed.image} app={failed.app} />);
-    expect(screen.getByText(/Kiln couldn’t download it: the download proxy answered 502: GitHub answered 503\. Nothing was written to the Mirror\./)).toBeTruthy();
+    expect(screen.getByText(/Kiln couldn’t download it\. Nothing was written to the Mirror\./)).toBeTruthy();
     expect(embers()).toEqual(['Try again']);
     const report = new URL(screen.getByText('Report this').closest('a')!.getAttribute('href')!);
     expect(report.origin + report.pathname).toBe('https://github.com/GlassworksHQ/glassworks/issues/new');

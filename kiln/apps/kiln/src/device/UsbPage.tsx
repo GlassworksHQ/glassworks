@@ -392,7 +392,7 @@ function Working({ s }: { s: UsbState }) {
     <section className={`card${pick ? ' turn' : ''}`} aria-labelledby="h">
       {pick ? <>
         <h2 id="h" className="huge">{`One tap on ${dev.the}.`}</h2>
-        <p className="lede">Pick <b className="fg">{pick}</b>, then <b className="fg">Always</b>.</p>
+        <p className="lede">Android asks which app to use as the home screen. Pick <b className="fg">{pick}</b>, then <b className="fg">Always</b>.</p>
       </> : <>
         <h2 id="h" className="huge">Keep it plugged in.</h2>
         <div className="prog">
@@ -438,7 +438,7 @@ function Done({ s, session }: { s: UsbState; session: UsbSession }) {
       <h2 id="h">Done.</h2>
       <p className="lede">
         {home && f ? `Glassworks is the ${name}'s home screen.` : `Glassworks is installed on your ${name}.`}
-        {!home && ` Kiln didn't see it picked as the home screen: on ${dev.the}, pick Glassworks, then Always.`}
+        {!home && ` Kiln couldn't confirm the home screen. On ${dev.the}, press Home, then pick Glassworks and Always.`}
       </p>
       {f ? (
         <div className="fc">
@@ -594,7 +594,7 @@ function UsbOutcome({ session }: { session: UsbSession }) {
   const name = deviceName(dev, s);
   return (
     <UsbFrameContext.Provider value={dev}>
-      {installed.home.state !== 'set' && <p className="small" role="alert">{`Kiln didn't see Glassworks picked as the home screen: on ${dev.the}, pick Glassworks, then Always.`}</p>}
+      {installed.home.state !== 'set' && <p className="small" role="alert">{`Kiln couldn't confirm Glassworks as the home screen. On ${dev.the}, press Home, then pick Glassworks and Always.`}</p>}
       {f ? (
         <div className="fc">
           <div className="spread"><b>{f.name}</b>{!MEASURED.has(f.id) && <span className="ctag">Clarity · not measured yet</span>}</div>

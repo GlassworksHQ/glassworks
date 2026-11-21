@@ -103,10 +103,9 @@ export function FileRow({ f, file }: { f: ImageSession; file: FileCheck }) {
         {file.state === 'ok' && <span className="status ok">✓ SHA-256 checks out.</span>}
         {failed && (
           <span className="status err" role="alert">
-            {file.state === 'bad'
-              ? 'Its SHA-256 isn’t the release’s, so Kiln deleted it.'
-              : `Kiln couldn’t download it: ${file.error}.`}
-            {` Nothing was written to ${f.frame.the}. This is Kiln’s bug, not yours.`}
+            {/* the error itself goes to the technical log and the report, not on the screen (issue 672) */}
+            {file.state === 'bad' ? 'This download doesn’t match the release, so Kiln deleted it.' : 'Kiln couldn’t download it.'}
+            {` Nothing was written to ${f.frame.the}. The fault is Kiln’s, not yours.`}
           </span>
         )}
         {failed && <span className="small"><a className="link" href={f.reportUrl(file)} target="_blank" rel="noopener">Report this</a> on GitHub.</span>}
@@ -139,7 +138,7 @@ export function Download({ f, s }: P) {
       <p className="lede">From its own release on GitHub, checked by SHA-256.</p>
       {s.files.map((x) => <FileRow key={x.name} f={f} file={x} />)}
       {r.steps.some((x) => x.do === 'wifi') && <WifiFields f={f} s={s} r={r} />}
-      <p className="small">{r.release ? <>Release <code>{r.release.name}</code>, through</> : 'Through'} Refract, Kiln&apos;s download proxy, which stores nothing.{r.vendor && ` ${r.vendor}`}</p>
+      {(r.release || r.vendor) && <p className="small">{r.release && <>Release <code>{r.release.name}</code>.</>}{r.release && r.vendor && ' '}{r.vendor}</p>}
       <div className="foot">
         <span className="links">
           {!s.link && <><button type="button" className="link" onClick={() => f.backToChoice()}>Back</button><span aria-hidden="true">·</span></>}

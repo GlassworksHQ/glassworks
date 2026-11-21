@@ -233,9 +233,10 @@ describe('Glass Panes', () => {
   it.each(['image-download-error', 'image-download-bad'] as const)('%s: Kiln\'s bug, Try again and Report this, nothing to pick by hand', async (d) => {
     const flash = await show(d);
     const alert = screen.getByRole('alert').textContent!;
-    expect(alert).toMatch(/Nothing was written to the Mirror\. This is Kiln’s bug, not yours\./);
-    if (d === 'image-download-bad') expect(alert).toMatch(/Its SHA-256 isn’t the release’s, so Kiln deleted it/);
-    else expect(alert).toMatch(/Kiln couldn’t download it: the download proxy answered 502: GitHub answered 503\./);
+    expect(alert).toMatch(/Nothing was written to the Mirror\. The fault is Kiln’s, not yours\./);
+    if (d === 'image-download-bad') expect(alert).toMatch(/This download doesn’t match the release, so Kiln deleted it\./);
+    else expect(alert).toMatch(/^Kiln couldn’t download it\. /);
+    expect(alert).not.toMatch(/proxy|Refract|SHA-256/); // the plumbing stays in the technical log and the report (#672)
     const report = new URL(screen.getByRole('link', { name: 'Report this' }).getAttribute('href')!);
     expect(report.origin + report.pathname).toBe('https://github.com/GlassworksHQ/glassworks/issues/new');
     const file = d === 'image-download-bad' ? 'userdata.sparse (154944572 bytes)' : 'system.img (850905808 bytes)';
