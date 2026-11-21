@@ -81,7 +81,7 @@ class GeckoBehaviourPinTest {
     fun `the page view is the bottom layer under the overlays and fills the window`() = harness().use { h ->
         val views = h.rootChildren()
         assertEquals(
-            listOf("GeckoView", "LoadingOverlay", "SetupOverlay", "TimerOverlay", "NotificationOverlay", "VoiceOverlay", "KioskSettingsOverlay", "ThreadJoinOverlay", "CameraDot"),
+            listOf("GeckoView", "LoadingOverlay", "SetupOverlay", "TimerOverlay", "NotificationOverlay", "VoiceOverlay", "EdgeGlowOverlay", "KioskSettingsOverlay", "ThreadJoinOverlay", "CameraDot"),
             views.map { it.javaClass.simpleName },
         )
         assertEquals(-1, views[0].layoutParams.width)

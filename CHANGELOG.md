@@ -9,6 +9,11 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 ## [Unreleased]
 
 ### Added
+- **Assist can show as an edge glow.** On the *Appearance* page, *Assist* now picks between the orb and an edge
+  glow. With the edge glow, the dashboard stays in view: the theme's two colors light up at the microphone, run
+  around the edge of the screen and meet at the bottom, and a small caption shows what you said and the reply.
+  While you speak the light follows your voice, and while the reply plays it breathes calmly. Tap anywhere to
+  cancel, as with the orb.
 - **Kiln asks which panes to turn on.** After Home Assistant, Kiln's set-up shows the app's Panes step: one switch
   per pane the device can run, with each pane's icon, and Continue turns them on or off. It is the same answer as
   the Panes step on the device's own screen, and the same switches as the pane's settings, the Manage page and Home
