@@ -114,10 +114,12 @@ Nothing to run yet. The first device test, in order, on a spare LineageOS tablet
    with dynamic partitions, `adb remount` sets up OverlayFS instead, `update_engine` may refuse an OTA
    while it is active, and `adb enable-verity` to clear it also drops the test files, so the test can't
    run there. On a device where it writes in place: with "Rooted debugging", `adb root`, then `adb disable-verity`
-   and a reboot if verity is on (the remount fails until then), then `adb remount`,
+   and a reboot if verity is on (the remount fails until then), `adb root` again after the reboot, then
+   `adb remount`,
    add a test `addon.d` script that backs up and restores `/product/media/bootanimation.zip` plus a
-   replaced zip, and install the next monthly update. Undo: delete the script, restore the original
-   zip, and `adb enable-verity` if you disabled it.
+   replaced zip, and install the next monthly update. Undo: the test changes blocks in the
+   verity-protected partitions, so putting files back isn't enough. Sideload the same LineageOS build in
+   LineageOS Recovery (it rewrites `system` and `product`), then `adb enable-verity` if you disabled it.
 
 ## Open questions
 
