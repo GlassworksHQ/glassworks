@@ -127,12 +127,17 @@ builds from the repo root, the npm workspace root: `npm ci`, then `npm run build
 project works the same way (`kiln/apps/kiln/vercel.json`).
 
 Vercel does not build on pushes (`git.deploymentEnabled: false` in `vercel.json`), so branches and
-PRs get no preview. Until 2026-11-15 the site was its own repo, GlassworksHQ/glassworks.dev, and a
-workflow there called a Vercel deploy hook on a push to `main`; that workflow did not move here.
+PRs get no preview.
 
-### Deploying (the maintainer)
+### Deploying
 
-Build on your machine from a full clone, then upload the build. A full clone, because the docs' "Updated"
+Production deploys from GitHub Actions: [`web-deploy.yml`](../.github/workflows/web-deploy.yml) runs on
+every push to `main` that changes something the site reads (the same paths as CI's site job), and by
+hand from the Actions tab (**Web deploy** → Run workflow). It builds the site on the runner from a full
+clone and uploads the build, as below, with a Vercel token in the `VERCEL_SITE_TOKEN` secret. Don't let
+Vercel build it: on Vercel's machines the build fails at the Pagefind step.
+
+To deploy by hand, build on your machine from a full clone, then upload the build. A full clone, because the docs' "Updated"
 dates come from git history: a build without it (a shallow clone, or a plain `vercel deploy`, which
 uploads files without `.git`) shows no dates. `vercel build` runs `vercel.json`'s install and build,
 Pagefind included, as Vercel would.
