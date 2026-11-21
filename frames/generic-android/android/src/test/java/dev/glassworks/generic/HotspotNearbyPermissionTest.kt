@@ -109,9 +109,12 @@ class HotspotNearbyPermissionTest {
 
     private fun GeckoPinHarness.asked(): List<String>? = shadowOf(activity).lastRequestedPermission?.requestedPermissions?.toList()
 
+    /** Android's dialog answers the request the activity made, with its own code and permissions. */
     private fun GeckoPinHarness.answer(result: Int) {
+        val asked = shadowOf(activity).lastRequestedPermission
+        assertTrue("Android's dialog is open", asked != null)
         permissionDialogAnswered()
-        activity.onRequestPermissionsResult(3, arrayOf(nearby), intArrayOf(result))
+        activity.onRequestPermissionsResult(asked!!.requestCode, asked.requestedPermissions, IntArray(asked.requestedPermissions.size) { result })
         advance(2_500)
     }
 
