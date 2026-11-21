@@ -235,3 +235,37 @@ describe('the card', () => {
     expect(body.querySelector('circle')).toBeNull();
   });
 });
+
+describe('dock and screen edge cases', () => {
+  it('hides the charging contacts when the dock plate faces away from the camera', () => {
+    const g = geometry(tablet.model, 2, { rx: 0, ry: 180 });
+    expect(g.dock!.faces.length).toBeGreaterThan(0);
+    expect(g.dock!.plate).toBeUndefined();
+    expect(g.dock!.pins).toBeUndefined();
+    expect(g.floorShadow).toBeDefined();
+  });
+
+  it('paints the tube in both themes without changing its projection', () => {
+    const parts = mirror.model.parts!;
+    const themed = parts.map((p) => p.kind === 'tube' ? { ...p, dark: { color: '#000000' } } : p);
+    const plain = geometry(mirror.model, 0.8);
+    const night = geometry({ ...mirror.model, parts: themed }, 0.8);
+    expect(night.parts.length).toBeGreaterThan(0);
+    expect(night.parts).toEqual(plain.parts.map((p) => ({ ...p, color: `light-dark(${p.color}, #000000)` })));
+  });
+
+  it('uses live content instead of a supplied render and places the face overlay outside the screen', () => {
+    const el = render(
+      <DeviceModel id="pt-overlay" model={tablet.model} label="Pixel Tablet" screen="/render.webp"
+        face={<span data-status>Sensor</span>}>
+        <button type="button">Pause timer</button>
+      </DeviceModel>,
+    );
+    const control = el.querySelector('button')!;
+    const overlay = el.querySelector('[data-status]')!;
+    expect(el.querySelector('img')).toBeNull();
+    expect(control.closest('[role="group"]')).toBe(el.firstElementChild);
+    expect(control.parentElement!.parentElement).toBe(overlay.parentElement);
+    expect(overlay.closest('[aria-hidden="true"]')).toBeNull();
+  });
+});
