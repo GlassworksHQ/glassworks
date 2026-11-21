@@ -43,10 +43,10 @@ sealed interface FrameVersion {
     }
 }
 
-/** A frame release's signed bundle (frame-release.yml): the zip the app stages for the loader, and its `.sha256`. */
+/** A frame release's signed bundle (release.yml, from frame.json's `release.frame.assets`): the zip the app stages for the loader, and its `.sha256`. */
 data class FrameBundleAssets(val zip: ReleaseAsset, val sha256: ReleaseAsset) {
     companion object {
-        /** frame-release.yml's name for [frameId]'s bundle at [version]. */
+        /** The Release workflow's name for [frameId]'s bundle at [version]. */
         fun zipName(frameId: String, version: AppVersion) = "frame-bundle-$frameId-$version.zip"
 
         /** The bundle in [r] for [frameId] at [version], or null when the release has none (the Mirror's notice-only releases). */
