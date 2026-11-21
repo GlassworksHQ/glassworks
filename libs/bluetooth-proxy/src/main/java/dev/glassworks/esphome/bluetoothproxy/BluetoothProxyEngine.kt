@@ -263,6 +263,10 @@ internal class MinuteStats(private val salt: Long = java.security.SecureRandom()
 /**
  * The AD structures in an Android scan record: the zero padding after them dropped, and cut to whole
  * structures within [max] bytes (ESPHome's raw advertisement holds 62).
+ *
+ * Android 10 strips each part's padding before it puts the scan response after the advertisement, and
+ * pads the whole record with zeros to 62 bytes for a legacy scan, so the padding is only ever at the end
+ * (AOSP, read: `frames/aqara-s1-plus/research/bluetooth.md`, Scan-record padding).
  */
 internal fun adStructures(record: ByteArray, max: Int = RawAdvertisement.MAX_DATA): ByteArray {
     var end = 0

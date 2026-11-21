@@ -108,9 +108,8 @@ addresses of bonded and nearby devices: grep for the lines you need, or redact b
 - **Wi-Fi and Sendspin with scanning on.** The panel plan in #121 measures throughput (`iperf3`)
   and Sendspin dropouts with the proxy off, at balanced and at low latency. Untested.
 - **2.4 GHz.** A panel on 2.4 GHz Wi-Fi shares the antenna path with Bluetooth. Not measured.
-- **Does Android pad the scan record?** The library strips trailing zero padding and keeps whole AD
-  structures. If Android 10 pads the advertisement *before* the scan response, the scan response
-  would be lost. Compare a known sensor's data on the panel with an ESP32 proxy's. Untested.
+- **Does Android pad the scan record? No, not between the two parts (read, 2026-11-20).** See
+  [Scan-record padding](#scan-record-padding-read-2026-11-20) below.
 - **GATT connections:** how many links the RTL8821CS holds at once, and whether the handles match an
   ESP32 proxy's. See [GATT connections](#gatt-connections-246) below. Untested.
 - **The scanner's source: decided (maintainer, 2026-11-15).** The proxy sends the real Bluetooth MAC
@@ -129,6 +128,45 @@ addresses of bonded and nearby devices: grep for the lines you need, or redact b
   does nothing; as root it turns Bluetooth off.
 - **Next to the Matter pane's BLE advertising (#47).** Android allows a scan and an advertiser at
   once; the chip doing both was not tried.
+
+## Scan-record padding (read, 2026-11-20)
+
+The question (#246): a legacy advertisement and its scan response each come from the controller in
+a 31-byte field. Does Android 10 hand an app the advertisement's zero padding *before* the scan
+response? The library keeps AD structures up to the first zero-length one, so padding in the middle
+would lose the scan response.
+
+**Answer (read): no.** Android 10 cuts each part's padding before it glues them, then pads the whole
+record at the end. Sources, AOSP tag `android-10.0.0_r47`:
+
+1. `system/bt/stack/btm/btm_ble_gap.cc`, `btm_ble_process_adv_pkt` (about line 1835): a legacy LE
+   Advertising Report becomes `btm_ble_process_adv_pkt_cont` with the report's own `data_len`, and a
+   `SCAN_RSP` becomes event type `0x001B`.
+2. Same file, `btm_ble_process_adv_pkt_cont` (lines 1906–1931): for a legacy event it calls
+   `AdvertiseDataParser::RemoveTrailingZeros(tmp)`, then `cache.Set` for the advertisement and
+   `cache.Append` for the scan response. On an active scan it reports the device only once the scan
+   response is in.
+3. `system/bt/stack/include/advertise_data_parser.h`, `RemoveTrailingZeros` (lines 48–71): at the
+   first zero-length field it erases everything from there to the end. Its comment gives the reason:
+   "Otherwise i.e. gluing scan response to advertise data will result in data with zero padding in
+   the middle."
+4. `packages/apps/Bluetooth/src/com/android/bluetooth/gatt/GattService.java`, `onScanResult`
+   (lines 965–1009): `legacyAdvData = Arrays.copyOfRange(advData, 0, 62)`, and a client with legacy
+   `ScanSettings` (the default; `AndroidBleScanner` doesn't change it) gets those 62 bytes. So the
+   record an app sees is the advertisement, then the scan response, then zeros to 62 bytes.
+
+That is the shape the library already expects: it drops the zeros at the end and keeps both parts.
+`BluetoothProxyEngineTest.adStructuresKeepTheScanResponseAndroidGluesOn` pins it.
+
+What this doesn't cover:
+- A vendor change to the panel's Bluetooth stack. The source read is AOSP's, and the panel's
+  `com.android.bluetooth` and `libbluetooth` weren't compared with it. The Realtek parts sit below the
+  stack, in the HCI transport, which doesn't touch advertising data (believed, not checked).
+- A device that puts a zero-length field *before* real data. Android cuts the rest of that part,
+  so neither the panel nor the library sees it.
+
+To confirm on the panel (optional now): compare one scannable sensor's data, the one HA shows for it
+through the panel and through an ESP32 proxy. The scan response's structures should be in both.
 
 ## GATT connections (#246)
 

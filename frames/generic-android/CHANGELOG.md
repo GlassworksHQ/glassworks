@@ -56,6 +56,9 @@ line of each version is what Home Assistant shows on the update card. A change o
   without Bluetooth LE doesn't show the proxy anywhere. On a screen without touch, such as the lululemon Mirror, a
   high or critical notification with no `tag` and no `timeout` closes after 2 minutes, since nothing else could
   close it. On the Mirror the proxy scans only once the app has the location permission, which Kiln doesn't grant yet.
+  If Home Assistant connects without the panel's encryption key, the proxy's settings page and its *Bluetooth proxy
+  status* sensor say *Waiting for the panel's key*. Another app on your network that tries without the key doesn't
+  change that.
 - **Pick an update channel: Stable or Beta.** The device page in the panel's settings and on the Manage page has an
   *Update channel* row. Stable, the default, gets releases as before. Beta also gets betas, new versions before
   they're stable, which may have bugs; Home Assistant's update card says when the update it offers is a beta. Going
