@@ -85,8 +85,8 @@ const from = opt['overlay-dir']
   }[name] ?? join(root, name));
 const adbKey = opt['adb-key'] ?? join(homedir(), '.android/adbkey.pub');
 
-// The overlay always comes from this checkout, so --package changes only the patch algorithm.
-const { s1Overlay } = await import(pathToFileURL(join(REPO, 'kiln/packages/bootpatch/src/index.ts')).href);
+// The overlay always comes from this checkout (the S1's installer), so --package changes only the patch algorithm.
+const { s1Overlay } = await import(pathToFileURL(join(REPO, 'frames/aqara-s1-plus/installer/src/overlay.ts')).href);
 const overlay = s1Overlay({
   rc: from('glassworks.rc'), loaderSh: from('glassworks_loader.sh'), verify: from('glassworks_verify'), bundlePub: from('glassworks_bundle.pub'),
   adbKeys: adbKey === 'none' ? new Uint8Array(0) : read(adbKey),
