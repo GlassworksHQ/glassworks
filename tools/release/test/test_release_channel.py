@@ -233,10 +233,12 @@ class PublishStepTest(Scratch):
             self.assertIn("tools/release/tag-channel.sh", script, wf)
             self.assertIn("git fetch --no-tags --force origin", script, wf)
 
-    def test_a_beta_doesnt_rebuild_the_installer(self):
-        text = (ROOT / ".github/workflows/release.yml").read_text()
-        block = text.split("- name: Rebuild the web installer", 1)[1].split("- name:", 1)[0]
-        self.assertIn("if: env.CHANNEL != 'beta'", block)
+    def test_no_release_deploys_the_installer(self):
+        # Kiln reads the releases at run time (its release route), and s1.edm.sh only redirects there, so neither a
+        # stable nor a beta redeploys anything (the Vercel projects have no deploy hook since they lost their Git link).
+        for wf in ("release.yml", "generic-release.yml", "frame-release.yml"):
+            text = (ROOT / ".github/workflows" / wf).read_text()
+            self.assertNotIn("VERCEL", text, wf)
 
 
 if __name__ == "__main__":
