@@ -94,7 +94,7 @@ class TheRepoFrames(unittest.TestCase):
         s1 = self.frame_rel['aqara-s1-plus']
         for k in ('script', 'pubkey', 'changelog'):
             self.assertTrue((ROOT / s1[k]).is_file(), s1[k])
-        self.assertIn('install', s1['note'])  # panels don't install the zip yet: the summary says so
+        self.assertIn('Frame update', s1['note'])  # how panels install the zip: the summary says so
 
     def test_tags_and_assets_are_the_ones_panels_and_kiln_read(self):
         p = plan_mod.plan(ROOT, '1.2.3', dry_run=True)
