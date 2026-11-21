@@ -10,7 +10,7 @@ When you say the wake word:
 
 1. The panel plays a short two-tone wake chime (if **Wake sound** is enabled) and wakes the screen.
 2. Any music playing on the panel pauses automatically, and Music Assistant (Sendspin) mutes locally while staying synchronized with your speaker group.
-3. If **Voice overlay** is enabled, a full-screen overlay appears with a reactive orb, live speech text, and the assistant's reply. Tap anywhere on the overlay to cancel the run at any time. The overlay's colors come from the theme you pick on the **Appearance** page, in the panel's settings or on the Manage page: five themes, each light or dark.
+3. If **Voice overlay** is enabled, a full-screen overlay appears with a reactive orb, live speech text, and the assistant's reply. Tap anywhere on the overlay to cancel the run at any time. The overlay's colors come from the theme you pick on the **Appearance** page, in the panel's settings or on the Manage page: five themes, each light or dark, or a Custom theme in your own colors.
 4. Your voice streams to your chosen Home Assistant Assist pipeline, and the reply plays through the panel's speaker.
 5. If your pipeline asks a follow-up question, the panel keeps listening for your answer without requiring the wake word again.
 6. Once the reply finishes, your music resumes automatically.

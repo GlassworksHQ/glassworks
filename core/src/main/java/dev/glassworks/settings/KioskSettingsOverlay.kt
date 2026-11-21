@@ -45,6 +45,7 @@ import dev.glassworks.ui.Inter
 import dev.glassworks.ui.QrCode
 import dev.glassworks.ui.StackView
 import dev.glassworks.ui.TileView
+import dev.glassworks.theme.Themes
 import dev.glassworks.ui.Wrap
 
 /**
@@ -500,6 +501,7 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
 
     private fun item(i: SettingsItem, prefix: String = ""): View = when (i) {
         is SettingsItem.Text -> follow(valueRow(i.title, shownOf(i), chevron = i.enabled(), dim = !i.enabled()) { if (i.enabled()) sheet.text(i) { build() } }) { shownOf(i) }
+            .also { r -> if (i.kind == SettingsItem.TextKind.COLOR) colourDot(r) { shownOf(i) } }
         is SettingsItem.Switch -> toggleRow(i)
         is SettingsItem.Slider -> sliderRow(i)
         is SettingsItem.Duration -> follow(valueRow(i.title, i.shown(i.value()), chevron = true, dim = false) { sheet.duration(i) { build() } }) { i.shown(i.value()) }
@@ -518,6 +520,22 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
     }
 
     /** The row's value follows a change made elsewhere: Home Assistant (the wake word select) or the Manage page (#242). */
+    /** A color row's value with the color itself before it, following it as [follow] follows the text. */
+    private fun colourDot(r: LinearLayout, now: () -> String) {
+        val value = r.findViewWithTag<TextView>(VALUE) ?: return
+        var shown: Int? = null
+        fun bind() {
+            val c = Themes.colour(now())
+            if (c == shown && value.compoundDrawablesRelative[0] != null) return
+            shown = c
+            val dot = c?.let { GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(it); setStroke(px(1f), BD); setBounds(0, 0, px(14f), px(14f)) } }
+            value.setCompoundDrawablesRelative(dot, null, null, null)
+            value.compoundDrawablePadding = px(8f)
+        }
+        bind()
+        live += { bind() }
+    }
+
     private fun follow(r: LinearLayout, now: () -> String): LinearLayout = r.also {
         (r.findViewWithTag<TextView>(VALUE))?.let { value ->
             live += { val n = now(); if (value.text != n) { value.text = n; value.visibility = if (n.isEmpty()) View.GONE else View.VISIBLE } }
@@ -991,7 +1009,8 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
             setBackgroundColor(Color.argb(170, 10, 11, 15))
             isClickable = true
             setOnClickListener { close() }
-            addView(card, LayoutParams(px(560f), -2, Gravity.CENTER_HORIZONTAL or Gravity.TOP).apply { topMargin = px(40f) })
+            // 560 dp, or the screen less a margin on a narrow portrait screen.
+            addView(card, LayoutParams(minOf(px(560f), context.resources.displayMetrics.widthPixels - px(32f)), -2, Gravity.CENTER_HORIZONTAL or Gravity.TOP).apply { topMargin = px(40f) })
             visibility = View.GONE
         }
 
@@ -1016,6 +1035,9 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
             view.visibility = View.VISIBLE
             view.bringToFront()
         }
+
+        /** The color sheet's content while it is open ([text] for a [SettingsItem.TextKind.COLOR]). */
+        private var colour: ColourField? = null
 
         private fun busy(on: Boolean) { saveButton.isEnabled = !on; saveButton.alpha = if (on) 0.5f else 1f }
 
@@ -1042,11 +1064,22 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
                 SettingsItem.TextKind.ADDRESS -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
                 SettingsItem.TextKind.NUMBER -> InputType.TYPE_CLASS_NUMBER
                 SettingsItem.TextKind.DECIMAL -> InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+                SettingsItem.TextKind.COLOR -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
             }
             // Checked as the Manage page checks it (#242): one path for a typed value.
             onSave = { commit(i.restartsApp, after) { done -> SettingsChange.change(i, field.text?.toString().orEmpty(), done) } }
-            open(i.title, i.hint, field, "Save")
+            colour?.release(); colour = null
             field.setText(i.value())
+            if (i.kind == SettingsItem.TextKind.COLOR) {
+                // Swatches to tap, and the field for an exact color; no keyboard until the field is tapped.
+                open(i.title, "", null, "Save")
+                val c = ColourField(context, runCatching { i.suggestions() }.getOrDefault(emptyList()), field).also { colour = it }
+                body.addView(c, LayoutParams(-1, -2)); body.visibility = View.VISIBLE
+                field.hint = i.hint
+                field.setSelection(field.text.length)
+                return
+            }
+            open(i.title, i.hint, field, "Save")
             field.hint = i.hint
             field.setSelection(field.text.length)
             // The keyboard once the field has focus and is laid out: asked at once, it didn't come up on
@@ -1193,6 +1226,7 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
             if (view.visibility != View.VISIBLE) return
             onSave = null
             clearPassword()
+            colour?.release(); colour = null
             hideKeyboard()
             view.visibility = View.GONE
         }
