@@ -121,6 +121,8 @@ class UpdateManager(
         }
         netCallback = null
         exec.shutdownNow()
+        // Frame installs asked for and dropped with the queue still get their one answer.
+        while (true) frameRequests.poll()?.answer(STOPPED) ?: break
     }
 
     /**
@@ -142,22 +144,53 @@ class UpdateManager(
         val f = frame
         val installer = frameInstaller
         if (f == null || installer == null) return done(runtime.frame.frameRelease?.install ?: FrameUpdateModel.NOT_HERE)
-        if (f.busy) return done(FrameUpdateModel.ALREADY)
+        if (f.busy || frameQueued.get()) return done(FrameUpdateModel.ALREADY)
         // Refused here, not queued: the app update holds the update thread, and a frame install waiting behind it would
         // start on its own minutes later, or never (the app update restarts the app).
         if (appBusy()) return refused(f.begin(SystemClock.elapsedRealtime(), FrameInstaller.APP_BUSY), done)
+        if (!frameQueued.compareAndSet(false, true)) return done(FrameUpdateModel.ALREADY)
+        val request = FrameRequest(done)
+        frameRequests.add(request)
         val queued = !stopped && runCatching {
             exec.execute {
-                when (val begin = f.begin(SystemClock.elapsedRealtime(), installer.busy(appBusy()))) {
-                    is FrameUpdateModel.Begin.Refused -> refused(begin, done)
-                    is FrameUpdateModel.Begin.Started -> { done(null); installer.run(begin.attempt) }
+                if (!frameRequests.remove(request)) return@execute // answered by stop()
+                val begin = try {
+                    f.begin(SystemClock.elapsedRealtime(), installer.busy(appBusy()))
+                } finally {
+                    frameQueued.set(false) // after begin: the frame model says busy from here on
+                }
+                when (begin) {
+                    is FrameUpdateModel.Begin.Refused -> refused(begin, request::answer)
+                    is FrameUpdateModel.Begin.Started -> { request.answer(null); installer.run(begin.attempt) }
                 }
             }
         }.isSuccess
-        if (!queued) done("The update service isn't running.")
+        if (!queued) {
+            frameRequests.remove(request)
+            frameQueued.set(false)
+            request.answer(STOPPED)
+        }
     }
 
-    private fun appBusy() = model.currentPhase != UpdateModel.Phase.IDLE
+    /** One frame install asked for: [answer] reaches its caller once, whoever answers first (the install or [stop]). */
+    private class FrameRequest(private val done: (String?) -> Unit) {
+        private val answered = java.util.concurrent.atomic.AtomicBoolean(false)
+        fun answer(why: String?) { if (answered.compareAndSet(false, true)) done(why) }
+    }
+
+    private val frameRequests = java.util.concurrent.ConcurrentLinkedQueue<FrameRequest>()
+
+    /** A frame install is queued on the update thread and hasn't begun ([FrameUpdateModel.busy] covers it after). */
+    private val frameQueued = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /** An app install is queued on the update thread and hasn't begun ([UpdateModel.currentPhase] covers it after). */
+    private val appQueued = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /** An app install queued or running: a frame install is refused. */
+    private fun appBusy() = appQueued.get() || model.currentPhase != UpdateModel.Phase.IDLE
+
+    /** A frame install queued or running, or its loader still copying after the install gave up waiting: an app install is refused. */
+    private fun frameBusy() = frame?.busy == true || frameQueued.get() || frameInstaller?.loaderHolds() == true
 
     private fun refused(begin: FrameUpdateModel.Begin, done: (String?) -> Unit) {
         onChange()
@@ -167,7 +200,11 @@ class UpdateManager(
     /** HA's update entity command (`UpdateCommand`: 1 install, 2 check). */
     fun onCommand(command: Int) {
         when (command) {
-            CMD_INSTALL -> if (frame?.busy == true) refuseForFrame() else exec.execute { install() }
+            CMD_INSTALL -> when {
+                frameBusy() -> refuseForFrame()
+                !appQueued.compareAndSet(false, true) -> Log.i(TAG, "install already queued")
+                else -> if (runCatching { exec.execute { install() } }.isFailure) appQueued.set(false)
+            }
             CMD_CHECK -> exec.execute {
                 if (schedule.tryManual(SystemClock.elapsedRealtime())) check("requested by Home Assistant")
                 else Log.i(TAG, "check requested again within a minute; ignored")
@@ -379,9 +416,12 @@ class UpdateManager(
     }
 
     private fun install() {
-        if (frame?.busy == true) return refuseForFrame()
-        val now = SystemClock.elapsedRealtime()
-        val a = model.beginInstall(now)
+        val a = try {
+            if (frameBusy()) return refuseForFrame()
+            model.beginInstall(SystemClock.elapsedRealtime())
+        } finally {
+            appQueued.set(false) // after beginInstall: the model says busy from here on
+        }
         if (a == null) {
             Log.i(TAG, "install ignored: ${model.statusText()}")
             return
@@ -670,6 +710,7 @@ class UpdateManager(
         /** PackageInstaller where Android asks for a tap ([silentUpdates] says no, and why). */
         const val CONFIRM_NOTE = "Installing asks for confirmation on the screen."
         /** The app's card when its Install comes while a frame update installs. */
+        const val STOPPED = "The update service isn't running."
         const val FRAME_BUSY = "Not installed: a frame update is installing. Try again once the panel has restarted."
         /** PackageInstaller where Android lets the app install without a tap, unless it asks after all. */
         const val NO_TAP_NOTE = "Installs without a tap, unless Android asks for one on the screen."

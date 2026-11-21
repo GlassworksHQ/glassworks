@@ -260,4 +260,62 @@ class FrameInstallerTest {
         assertEquals("1.0.0 (boot image)", model.installed.shown)
         assertEquals("Frame 1.0.0 is staged. It loads at the next restart.", model.installLine())
     }
+
+    private val staged get() = File(files, "${loader.stageDir}/manifest")
+
+    @Test fun anInstallCutShortWhileTheLoaderCopiesLeavesItsFilesAndHoldsAppUpdates() {
+        loader.busy = true
+        val stopping = FrameInstaller("aqara-s1-plus", loader, files, model, net, onChange = {}, now = { clock }, sleep = {
+            if ("request" in loader.calls) throw InterruptedException("the update service stopped")
+            clock += it
+        })
+        model.onChecked(FrameOffer.newest(listOf(release()), "aqara-s1-plus"))
+        stopping.run((model.begin(clock, null) as FrameUpdateModel.Begin.Started).attempt)
+        assertTrue("the loader may still read it", staged.exists())
+        assertTrue("an app update waits for the loader", stopping.loaderHolds())
+        assertEquals(listOf("request"), loader.calls)
+        loader.running = false
+        assertFalse(stopping.loaderHolds())
+    }
+
+    @Test fun aStatusThatStillSaysRunningIsInProgressEvenWhenOneReadMissesTheService() {
+        loader.busy = true
+        var polls = 0
+        val i = FrameInstaller("aqara-s1-plus", loader, files, model, net, onChange = {}, now = { clock }, sleep = {
+            clock += it
+            if ("request" in loader.calls) {
+                polls++
+                // One read that misses the running service, then it runs on, then it stages and stops.
+                loader.running = polls != 1
+                if (polls == 6) { loader.running = false; loader.state = "none - 1000000 1.0.1"; loader.status = "ok: frame bundle 1.0.1 staged (3 files); it loads at the next restart" }
+            }
+        })
+        model.onChecked(FrameOffer.newest(listOf(release()), "aqara-s1-plus"))
+        i.run((model.begin(clock, null) as FrameUpdateModel.Begin.Started).attempt)
+        assertTrue("waited for the end, not the missed read", polls >= 6)
+        assertEquals(listOf("request", "restart"), loader.calls)
+    }
+
+    @Test fun aServiceThatDiesHalfWayIsSaidAndItsFilesGo() {
+        loader.busy = true
+        val i = FrameInstaller("aqara-s1-plus", loader, files, model, net, onChange = {}, now = { clock }, sleep = {
+            clock += it
+            if ("request" in loader.calls) loader.running = false // died, status still "running: …"
+        })
+        model.onChecked(FrameOffer.newest(listOf(release()), "aqara-s1-plus"))
+        i.run((model.begin(clock, null) as FrameUpdateModel.Begin.Started).attempt)
+        assertTrue(last().releaseSummary, last().releaseSummary.contains("the panel didn't stage it (its bundle service stopped without a result)"))
+        assertFalse(staged.exists())
+        assertFalse(i.loaderHolds())
+    }
+
+    @Test fun aLoaderStillCopyingAtTheTimeoutKeepsItsFilesAndHoldsAppUpdates() {
+        loader.busy = true
+        install()
+        assertTrue(last().releaseSummary, last().releaseSummary.contains("timed out while staging"))
+        assertEquals(listOf("request"), loader.calls)
+        assertTrue(staged.exists())
+        assertTrue(installer.loaderHolds())
+        assertEquals("a new install waits too", FrameInstaller.SERVICE_BUSY, installer.busy(false))
+    }
 }

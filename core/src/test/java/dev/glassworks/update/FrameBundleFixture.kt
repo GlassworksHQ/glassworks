@@ -95,6 +95,8 @@ object FrameBundleFixture {
         var refuse: String? = null
         /** The service never starts (status stays `requested`). */
         var dead = false
+        /** The service starts and keeps copying (status `running: …`), until a test says otherwise. */
+        var busy = false
         val calls = ArrayList<String>()
         /** The staging dir's files when [request] ran. */
         var seen: Map<String, ByteArray> = emptyMap()
@@ -109,6 +111,7 @@ object FrameBundleFixture {
             calls += "request"
             status = "requested"
             if (dead) return
+            if (busy) { running = true; status = "running: copying the frame bundle"; return }
             val dir = File(filesDir, stageDir)
             seen = dir.walkTopDown().filter { it.isFile }.associate { it.relativeTo(dir).path to it.readBytes() }
             val v = seen["manifest"]?.toString(Charsets.UTF_8)?.lineSequence()?.firstOrNull { it.startsWith("frame ") }?.split(' ')?.get(2)
