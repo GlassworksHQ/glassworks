@@ -2,6 +2,7 @@
 // real recipe, set up as each of the engine's demos needs it (kiln/apps/kiln/src/device/usbDemo.ts). Never part of the
 // frame Kiln installs (kiln.ts). Addresses are RFC 5737 (192.0.2.x).
 import type { UsbSim } from '@glassworks/kiln-core';
+import { BROWSERS } from '../test/browsers';
 import { FakeAndroid, fakeGenericApk, type FakeAndroidOptions } from '../test/fakes';
 
 /** A Pixel Tablet over WebUSB, before USB debugging is on. */
@@ -42,6 +43,7 @@ export const kilnSim: UsbSim = {
       usb: unknown ? NO_NAME : PIXEL, known: !unknown,
     };
   },
+  browsers: BROWSERS,
   /** The cards Glassworks' Panes step shows on a tablet (each pane's PaneChoice). */
   panes: [
     { id: 'assist', title: 'Voice', detail: 'Assist and timers', on: true },

@@ -1,6 +1,6 @@
-// The tablet page (/android/tablet, issue 403 part 3) without React: which screen comes first, which build and APK fit,
-// and the release each line has. TabletPage.tsx draws it; facts.ts reads the browser.
-import type { BrandId, OnDevice } from '@glassworks/generic-android-installer';
+// The on-device page (issue 403 part 3, #621) without React: which screen comes first, which build and APK fit, and the
+// release each line has. OnDevicePage.tsx draws it; facts.ts reads the browser.
+import type { OnDevice } from '@glassworks/kiln-core';
 import type { FrameDesign } from '@glassworks/frame-card';
 import type { LatestRelease } from '../../app/api/release/[frame]/latest/route';
 import type { RailStep } from '../../wizard/state';
@@ -8,7 +8,8 @@ import type { RailStep } from '../../wizard/state';
 /** Device, Get the app, Set up; `kiln` is Set up's optional finish over USB; `elsewhere`, `too-old` stop at Device. */
 export type TabletScreen = 'device' | 'get' | 'setup' | 'kiln' | 'elsewhere' | 'too-old';
 
-export type Line = 'generic-android' | 'generic-android-legacy';
+/** A release line, as Kiln's release route serves it (a frame's installer.json `releases`). */
+export type Line = string;
 export type Abi = 'arm64-v8a' | 'armeabi-v7a';
 
 export type Release =
@@ -17,13 +18,11 @@ export type Release =
   | { state: 'error'; why: string }
   | ({ state: 'out' } & LatestRelease);
 
-/** Android's Settings, opened from a link. Read on a Pixel Tablet with real taps (issue 403, 2026-11-16): these two open. */
+/** Android's Settings, opened from a link. Read on a tablet with real taps (issue 403, 2026-11-16): these two open. */
 export const SETTINGS_LINKS = {
   about: 'intent:#Intent;action=android.settings.DEVICE_INFO_SETTINGS;end',
   settings: 'intent:#Intent;action=android.settings.SETTINGS;end',
 } as const;
-
-export const LINES: Record<'generic' | 'legacy', Line> = { generic: 'generic-android', legacy: 'generic-android-legacy' };
 
 export function firstScreen(on: OnDevice): TabletScreen {
   if (!on.android) return 'elsewhere';
@@ -69,5 +68,3 @@ export function rail(screen: TabletScreen): RailStep[] {
   return NAMES.map((name, i) => ({ name, mark: i < at ? 'done' : i > at ? 'todo' : screen === 'too-old' ? 'bad' : 'now' }));
 }
 
-/** The brand picker's choices on the Kiln screen, as /android's. */
-export const PICKS: BrandId[] = ['google', 'samsung', 'amazon', 'lenovo', 'xiaomi'];

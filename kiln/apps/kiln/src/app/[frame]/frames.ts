@@ -37,5 +37,7 @@ export function routesOf(id: string): Record<string, string> {
   for (const flow of Object.values(i.flows ?? {})) {
     for (const s of flow.steps) if (s.route) own[s.route] = s.title ?? s.id;
   }
+  // an install from the device's own browser, when the frame declares one (installer.json `onDevice`)
+  if (i.onDevice) own[i.onDevice.route] = i.onDevice.title;
   return { ...own, ...STANDARD_ROUTES, ...(i.wayBack?.how === 'restore-backup' ? UNDO_ROUTES : {}) };
 }

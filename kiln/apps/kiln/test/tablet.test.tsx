@@ -10,9 +10,8 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: ReactNode }) => <a href={href} {...p}>{children}</a> }));
 
-import { TABLET_DEMOS, tabletDemo, type TabletDemo } from '../src/android/tablet/demo';
-import { abiFor, buildFor, download, firstScreen, loadRelease, rail, SETTINGS_LINKS, type Line, type Release } from '../src/android/tablet/model';
-import { TabletPage, TabletScreens } from '../src/android/tablet/TabletPage';
+import { abiFor, buildFor, download, firstScreen, loadRelease, rail, SETTINGS_LINKS, type Line, type Release } from '../src/device/onDevice/model';
+import { TABLET_DEMOS, TabletPage, TabletScreens, tabletDemo, type TabletDemo } from './android-frame';
 import { FRAMES } from '../src/frames/catalog';
 
 beforeAll(() => {

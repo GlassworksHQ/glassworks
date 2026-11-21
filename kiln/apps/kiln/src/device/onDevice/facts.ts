@@ -1,5 +1,5 @@
-// What this browser says about the device it runs on, for identifyBrowser. Browser only.
-import type { BrowserFacts } from '@glassworks/generic-android-installer';
+// What this browser says about the device it runs on, for the frame's UsbOnDevice `identify`. Browser only.
+import type { BrowserFacts } from '@glassworks/kiln-core';
 
 type HighEntropy = { getHighEntropyValues(hints: string[]): Promise<Record<string, unknown>> };
 

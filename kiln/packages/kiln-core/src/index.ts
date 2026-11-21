@@ -24,6 +24,6 @@ export {
 } from './device';
 export {
   OwnFrameRefused, Refused,
-  type OwnFrame, type UsbApp, type UsbDebugSteps, type UsbDeviceFacts, type UsbFrame, type UsbGrant, type UsbIdentified, type UsbInstallOptions, type UsbInstalled,
+  type BrowserFacts, type OnDevice, type OwnFrame, type UsbOnDevice, type UsbApp, type UsbDebugSteps, type UsbDeviceFacts, type UsbFrame, type UsbGrant, type UsbIdentified, type UsbInstallOptions, type UsbInstalled,
   type UsbEntry, type UsbPhase, type UsbPlace, type UsbPlan, type UsbSilentUpdates, type UsbSim,
 } from './usb';

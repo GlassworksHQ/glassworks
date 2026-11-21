@@ -1,12 +1,12 @@
-// Development and preview only (/android/tablet?demo=…): a browser from the detection tests' fixtures, and a
-// release line that is out, not out yet, or unreachable, so each screen can be seen without a tablet.
-import { identifyBrowser, type OnDevice } from '@glassworks/generic-android-installer';
-import { BROWSERS, type BrowserName } from '@glassworks/generic-android-installer/browsers';
+// Development and preview only (<route>/<onDevice route>?demo=…): a browser from the frame's detection fixtures (its
+// UsbSim `browsers`), and a release line that is out, not out yet, or unreachable, so each screen can be seen without
+// the device.
+import type { BrowserFacts, OnDevice, UsbOnDevice } from '@glassworks/kiln-core';
 import type { Line, Release, TabletScreen } from './model';
 
-interface Demo { browser: BrowserName; screen?: TabletScreen; release?: 'out' | 'none' | 'error' | 'loading' }
+interface Demo { browser: string; screen?: TabletScreen; release?: 'out' | 'none' | 'error' | 'loading' }
 
-export const TABLET_DEMOS = {
+export const ON_DEVICE_DEMOS = {
   pixel: { browser: 'PIXEL_DESKTOP' },
   galaxy: { browser: 'GALAXY_TAB' },
   phone: { browser: 'GALAXY_PHONE' },
@@ -28,19 +28,21 @@ export const TABLET_DEMOS = {
   'kiln-unknown': { browser: 'UNKNOWN_DESKTOP', screen: 'kiln' },
 } satisfies Record<string, Demo>;
 
-export type TabletDemo = keyof typeof TABLET_DEMOS;
+export type OnDeviceDemo = keyof typeof ON_DEVICE_DEMOS;
 
 const out = (line: Line): Release => ({
   state: 'out', tag: `${line}-v1.0.0`, version: '1.0.0',
   assets: ['arm64-v8a', 'armeabi-v7a'].map((abi) => `glassworks-${line}-${abi}-1.0.0.apk`),
 });
 
-export function tabletDemo(name: string): { on: OnDevice; screen?: TabletScreen; load: (line: Line) => Promise<Release> } | undefined {
-  if (!Object.hasOwn(TABLET_DEMOS, name)) return undefined;
-  const d: Demo = TABLET_DEMOS[name as TabletDemo];
+export function onDeviceDemo(od: Pick<UsbOnDevice, 'identify'>, browsers: Record<string, BrowserFacts>, name: string): { on: OnDevice; screen?: TabletScreen; load: (line: Line) => Promise<Release> } | undefined {
+  if (!Object.hasOwn(ON_DEVICE_DEMOS, name)) return undefined;
+  const d: Demo = ON_DEVICE_DEMOS[name as OnDeviceDemo];
+  const facts = browsers[d.browser];
+  if (!facts) return undefined;
   const release = d.release ?? 'out';
   return {
-    on: identifyBrowser(BROWSERS[d.browser]),
+    on: od.identify(facts),
     ...(d.screen ? { screen: d.screen } : {}),
     load: (line) => (release === 'loading' ? new Promise<Release>(() => {})
       : Promise.resolve(release === 'out' ? out(line) : release === 'none' ? { state: 'none' } : { state: 'error', why: 'GitHub answered 502' })),

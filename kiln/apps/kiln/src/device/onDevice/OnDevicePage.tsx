@@ -1,25 +1,30 @@
 'use client';
-// /android/tablet (issue 403, part 3): Glassworks from the tablet's own browser, no computer. The page names the device
-// as far as the browser lets it (identifyBrowser), offers the right APK from the generic app's latest release
-// through Kiln's release route, says what the app's own setup asks next, and how to finish with Kiln over USB.
+// The install from the device's own browser, no computer (issue 403, part 3; #621): the engine's page for a UsbFrame's
+// `onDevice` (at /android/tablet for the frame whose route is /android). It names the device as far as the browser lets it (the frame's
+// `identify`), offers the right APK from its build's latest release through Kiln's release route, says what the app's
+// own setup asks next, and how to finish with Kiln over USB. Its words, brands and lines are the frame's.
 // Kiln's look (docs/design/kiln): one idea per card, one ember button, details on request.
-import { BRANDS, identifyBrowser, identifyPicked, type BrandId, type Identified, type OnDevice, type Place } from '@glassworks/generic-android-installer';
+import type { OnDevice, UsbFrame, UsbIdentified as Identified, UsbOnDevice, UsbPlace as Place, UsbSim } from '@glassworks/kiln-core';
 import { KIND_TEXT, STAGE_TEXT } from '@glassworks/frame-card';
 import * as RadioGroup from '@radix-ui/react-radio-group';
 import Link from 'next/link';
-import { Fragment, useEffect, useState, type ReactNode } from 'react';
+import { Fragment, createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { Shell } from '../../components/Shell';
 import { FRAMES, RENDERS } from '../../frames/catalog';
 import { readFacts } from './facts';
-import { tabletDemo } from './demo';
+import { onDeviceDemo } from './demo';
 import {
-  LINES, PICKS, SETTINGS_LINKS, abiFor, buildFor, download, firstScreen, loadRelease, rail, type Abi, type Line, type Release, type TabletScreen,
+  SETTINGS_LINKS, abiFor, buildFor, download, firstScreen, loadRelease, rail, type Abi, type Line, type Release, type TabletScreen,
 } from './model';
-import '../../device/usb.css';
-import './tablet.css';
+import '../usb.css';
+import './onDevice.css';
 
 const DEMO_ON = process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_KILN_DEMO === '1';
-const ISSUE = 'https://github.com/GlassworksHQ/glassworks/issues/403';
+
+/** The frame and where its pages are: `base` its route, `here` this page's. */
+interface Where { dev: UsbFrame & { onDevice: UsbOnDevice }; base: string; here: string }
+const WhereContext = createContext<Where | undefined>(undefined);
+const useWhere = (): Where => useContext(WhereContext)!;
 
 function Path({ path }: { path: string[] }) {
   return (
@@ -40,14 +45,15 @@ function nameOf(on: OnDevice): string {
   return `This is an Android ${on.form}.`;
 }
 
-function versionText(on: OnDevice): string {
+function versionText(on: OnDevice, needs: UsbOnDevice['needs']): string {
   if (on.release) return `Android ${on.release}`;
-  return on.app === 'generic' ? 'Android 8 or newer' : 'Android version not shown';
+  return on.app === 'generic' ? needs.generic : 'Android version not shown';
 }
 
 interface P { on: OnDevice; go: (s: TabletScreen) => void }
 
 function Device({ on, go }: P) {
+  const { dev, base } = useWhere();
   const f = on.identified.model?.frame ? FRAMES.find((x) => x.id === on.identified.model!.frame) : undefined;
   return (
     <section className="card" aria-labelledby="h">
@@ -57,18 +63,18 @@ function Device({ on, go }: P) {
         <div className="fc tab-fc">
           {RENDERS[f.id] && <img className="ph" src={RENDERS[f.id]} alt="" />}
           <div className="spread"><b>{f.name}</b><span className="pill soon">{STAGE_TEXT[f.status]}</span></div>
-          <span className="kind">{KIND_TEXT[f.kind]} · {versionText(on)}</span>
+          <span className="kind">{KIND_TEXT[f.kind]} · {versionText(on, dev.onDevice.needs)}</span>
         </div>
       ) : (
         <dl className="kv">
-          <dt>Android</dt><dd>{versionText(on).replace(/^Android /, '')}</dd>
+          <dt>Android</dt><dd>{versionText(on, dev.onDevice.needs).replace(/^Android /, '')}</dd>
           {on.modelCode && <><dt>Model</dt><dd>{on.identified.model ? `${on.identified.model.name} (${on.modelCode})` : on.modelCode}</dd></>}
-          <dt>Tested</dt><dd>Not yet. <a className="link" href={`https://github.com/GlassworksHQ/glassworks/issues/new?title=${encodeURIComponent(`Tested: ${on.identified.model?.name ?? on.modelCode ?? 'an Android tablet'}`)}`}>Tell us how it goes</a></dd>
+          <dt>Tested</dt><dd>Not yet. <a className="link" href={`https://github.com/GlassworksHQ/glassworks/issues/new?title=${encodeURIComponent(`Tested: ${on.identified.model?.name ?? on.modelCode ?? `an Android ${dev.short}`}`)}`}>Tell us how it goes</a></dd>
         </dl>
       )}
-      {on.app === 'either' && <p className="small">The browser doesn&apos;t say the Android version. Glassworks needs Android 8, or its legacy build on Android 6 and 7. The next step has both.</p>}
+      {on.app === 'either' && <p className="small">{dev.onDevice.needs.either}</p>}
       <div className="foot">
-        <span className="links"><Link className="link" href="/android">Installing from a computer?</Link></span>
+        <span className="links"><Link className="link" href={base}>Installing from a computer?</Link></span>
         <button type="button" className="btn ember" onClick={() => go('get')}>Continue</button>
       </div>
     </section>
@@ -76,16 +82,17 @@ function Device({ on, go }: P) {
 }
 
 function Elsewhere({ onTablet }: { onTablet: () => void }) {
-  const [here, setHere] = useState('');
-  useEffect(() => setHere(`${location.host}/android/tablet`), []);
+  const { dev, base, here } = useWhere();
+  const [shown, setShown] = useState('');
+  useEffect(() => setShown(`${location.host}${here}`), [here]);
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h">Open this page on the tablet.</h2>
-      <p className="lede">This page installs Glassworks on an Android tablet from the tablet&apos;s own browser.</p>
-      <div className="well"><span className="grow"><span className="small">On the tablet, open</span><code className="addr">{here}</code></span></div>
+      <h2 id="h">{`Open this page on ${dev.the}.`}</h2>
+      <p className="lede">{`This page installs Glassworks on an Android ${dev.short} from the ${dev.short}'s own browser.`}</p>
+      <div className="well"><span className="grow"><span className="small">{`On ${dev.the}, open`}</span><code className="addr">{shown}</code></span></div>
       <div className="foot">
-        <span className="links"><button type="button" className="link" onClick={onTablet}>This is the tablet</button></span>
-        <Link className="btn ghost" href="/android">Install from this computer</Link>
+        <span className="links"><button type="button" className="link" onClick={onTablet}>{`This is ${dev.the}`}</button></span>
+        <Link className="btn ghost" href={base}>Install from this computer</Link>
       </div>
     </section>
   );
@@ -102,10 +109,11 @@ function TooOld({ on }: { on: OnDevice }) {
 }
 
 function Get({ on, go, releases, load }: P & { releases: Partial<Record<Line, Release>>; load: (l: Line) => void }) {
+  const { dev } = useWhere();
   const [legacy, setLegacy] = useState(buildFor(on) === 'legacy');
   const guess = abiFor(on, FRAMES);
   const [abi, setAbi] = useState<Abi>(guess.abi);
-  const line = LINES[legacy ? 'legacy' : 'generic'];
+  const line = dev.onDevice.lines[legacy ? 'legacy' : 'generic'];
   const r = releases[line] ?? { state: 'loading' };
   const dl = download(line, r, abi);
   const other: Abi = abi === 'arm64-v8a' ? 'armeabi-v7a' : 'arm64-v8a';
@@ -118,11 +126,11 @@ function Get({ on, go, releases, load }: P & { releases: Partial<Record<Line, Re
     return (
       <section className="card" aria-labelledby="h">
         <span className="row"><span className="pill soon">Not released yet</span></span>
-        <h2 id="h">Glassworks for Android isn&apos;t out yet.</h2>
+        <h2 id="h">{`${dev.app} isn't out yet.`}</h2>
         <p className="lede">When it is, it downloads from this page. Follow it on GitHub to hear first.</p>
         <div className="foot">
           <span className="links"><button type="button" className="link" onClick={() => go('device')}>Back</button>{links(buildSwitch)}</span>
-          <a className="btn ghost" href={ISSUE}>Follow it on GitHub</a>
+          <a className="btn ghost" href={dev.off.follow}>Follow it on GitHub</a>
         </div>
       </section>
     );
@@ -168,12 +176,13 @@ function Get({ on, go, releases, load }: P & { releases: Partial<Record<Line, Re
 }
 
 function Setup({ go }: Pick<P, 'go'>) {
+  const { dev } = useWhere();
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">Open Glassworks.</h2>
-      <p className="lede">Its setup walks you through the rest, on the tablet.</p>
+      <p className="lede">{`Its setup walks you through the rest, on ${dev.the}.`}</p>
       <ol className="num">
-        <li><b>Home Assistant</b><small>Sign in, then add the tablet in Home Assistant.</small></li>
+        <li><b>Home Assistant</b><small>{`Sign in, then add ${dev.the} in Home Assistant.`}</small></li>
         <li><b>Panes</b><small>Pick what it does. Android asks for the microphone for Assist, and the camera for the camera pane.</small></li>
         <li><b>This device</b><small>Make Glassworks the home screen, and let it turn the screen off when idle.</small></li>
         <li><b>Silent updates</b><small>On Android 12 and newer, let it install its own updates.</small></li>
@@ -193,13 +202,14 @@ function Setup({ go }: Pick<P, 'go'>) {
 }
 
 function Kiln({ on, go }: P) {
+  const { dev, base } = useWhere();
   const [picking, setPicking] = useState(false);
   const [picked, setPicked] = useState<Identified>();
   const id = picked ?? on.identified;
   const st = id.steps;
   const one = st.debugging.length === 1;
   const [here, setHere] = useState('');
-  useEffect(() => setHere(`${location.host}/android`), []);
+  useEffect(() => setHere(`${location.host}${base}`), [base]);
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">Turn on USB debugging.</h2>
@@ -220,8 +230,8 @@ function Kiln({ on, go }: P) {
       </ol>
       {picking && (
         <RadioGroup.Root className="brands" value={id.brand?.id ?? (picked ? 'other' : '')} aria-label="Your brand"
-          onValueChange={(v) => setPicked(identifyPicked(v === 'other' ? undefined : (v as BrandId)))}>
-          {PICKS.map((b) => <RadioGroup.Item key={b} value={b} className="brand-pick">{BRANDS.find((x) => x.id === b)!.name}</RadioGroup.Item>)}
+          onValueChange={(v) => setPicked(dev.identifyPicked(v === 'other' ? undefined : v))}>
+          {dev.brands.map((b) => <RadioGroup.Item key={b.id} value={b.id} className="brand-pick">{b.name}</RadioGroup.Item>)}
           <RadioGroup.Item value="other" className="brand-pick">Other<small>Android&apos;s general steps</small></RadioGroup.Item>
         </RadioGroup.Root>
       )}
@@ -237,6 +247,7 @@ function Kiln({ on, go }: P) {
 }
 
 export function TabletScreens({ on: read, start, load }: { on: OnDevice; start?: TabletScreen; load: (line: Line) => Promise<Release> }) {
+  const { dev } = useWhere();
   const [on, setOn] = useState(read);
   const [screen, setScreen] = useState<TabletScreen>(start ?? firstScreen(read));
   const [releases, setReleases] = useState<Partial<Record<Line, Release>>>({});
@@ -246,10 +257,10 @@ export function TabletScreens({ on: read, start, load }: { on: OnDevice; start?:
   };
   useEffect(() => {
     if (screen !== 'get') return;
-    const lines: Line[] = on.app === 'either' ? [LINES.generic, LINES.legacy] : [LINES[buildFor(on)]];
+    const lines: Line[] = on.app === 'either' ? [dev.onDevice.lines.generic, dev.onDevice.lines.legacy] : [dev.onDevice.lines[buildFor(on)]];
     for (const l of lines) if (!releases[l]) fetchLine(l);
   }, [screen, on]);
-  useEffect(() => { document.title = 'Android tablet · Kiln'; }, []);
+  useEffect(() => { document.title = `Android ${dev.short} · Kiln`; }, [dev]);
   useEffect(() => { window.scrollTo?.(0, 0); }, [screen]);
   const steps = rail(screen);
   const level = { device: 0, elsewhere: 0, 'too-old': 0, get: 1, setup: 2, kiln: 2 }[screen];
@@ -266,18 +277,30 @@ export function TabletScreens({ on: read, start, load }: { on: OnDevice; start?:
   );
 }
 
-export function TabletPage() {
+/** The on-device screens' frame and routes, for the screens below it (OnDevicePage gives them; tests too). */
+export function OnDeviceFrame({ frame: dev, base, children }: { frame: UsbFrame & { onDevice: UsbOnDevice }; base: string; children: ReactNode }) {
+  return <WhereContext.Provider value={{ dev, base, here: `${base}/${dev.onDevice.route}` }}>{children}</WhereContext.Provider>;
+}
+
+/**
+ * The page at the frame's `onDevice` route (`base` its own route): the browser's facts read, or a demo's browser from
+ * the frame's sim (?demo=…, development only).
+ */
+export function OnDevicePage({ frame: dev, sim, base }: { frame: UsbFrame & { onDevice: UsbOnDevice }; sim?: UsbSim; base: string }) {
   const [start, setStart] = useState<{ on: OnDevice; screen?: TabletScreen; load: (line: Line) => Promise<Release> }>();
   useEffect(() => {
     const demo = DEMO_ON ? new URLSearchParams(location.search).get('demo') : null;
-    const d = demo ? tabletDemo(demo) : undefined;
+    const d = demo && sim?.browsers ? onDeviceDemo(dev.onDevice, sim.browsers, demo) : undefined;
     if (d) { setStart(d); return; }
-    void readFacts().then((f) => setStart({ on: identifyBrowser(f), load: (line) => loadRelease(line) }));
-  }, []);
-  if (start) return <TabletScreens on={start.on} start={start.screen} load={start.load} />;
+    void readFacts().then((f) => setStart({ on: dev.onDevice.identify(f), load: (line) => loadRelease(line) }));
+  }, [dev, sim]);
   return (
-    <Shell steps={rail('device')} level={0}>
-      <section className="card"><p className="status work" role="status">Reading this device…</p></section>
-    </Shell>
+    <OnDeviceFrame frame={dev} base={base}>
+      {start ? <TabletScreens on={start.on} start={start.screen} load={start.load} /> : (
+        <Shell steps={rail('device')} level={0}>
+          <section className="card"><p className="status work" role="status">Reading this device…</p></section>
+        </Shell>
+      )}
+    </OnDeviceFrame>
   );
 }

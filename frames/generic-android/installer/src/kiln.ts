@@ -4,6 +4,7 @@
 import type { SilentWords, UsbFrame, UsbSilentUpdates } from '@glassworks/kiln-core';
 import installer from '../../design/installer.json';
 import { APPS, androidName } from './app';
+import { identifyBrowser } from './browser';
 import { BRANDS, identifyPicked, identifyUsb, type BrandId } from './devices';
 import { SILENT_LINES, installGeneric, planInstall, undoGeneric } from './recipe';
 
@@ -50,6 +51,7 @@ export const kilnFrame: UsbFrame = {
   screenLock: d.screenLock,
   silent,
   androidName,
+  onDevice: { route: installer.onDevice.route, identify: identifyBrowser, lines: installer.onDevice.lines, needs: installer.onDevice.needs },
   identifyUsb,
   // a brand this frame doesn't list gets Android's general steps, as "Other" does
   identifyPicked: (brand) => identifyPicked(brand as BrandId | undefined),

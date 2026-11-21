@@ -5,7 +5,7 @@ import type { KilnEntry } from '@glassworks/kiln-core';
 import { KILN } from '@glassworks/frames/kiln';
 import { useEffect, useState } from 'react';
 import { DevicePage } from '../device/DevicePage';
-import { UsbPage } from '../device/UsbPage';
+import { UsbRoutes } from '../device/UsbPage';
 import { FrameWizard } from './FrameWizard';
 
 const loads = new Map<string, Promise<KilnEntry>>();
@@ -32,6 +32,6 @@ export function LoadFrame({ id, base }: { id: string; base: string }) {
   if (failed) throw failed;
   if (!d) return null;
   return d.kind === 'device' ? <DevicePage frame={d.frame} demo={d} base={base} />
-    : d.kind === 'usb' ? <UsbPage frame={d.frame} demo={d} base={base} />
+    : d.kind === 'usb' ? <UsbRoutes frame={d.frame} demo={d} base={base} />
     : <FrameWizard frame={d.frame} demo={d} base={base} />;
 }
