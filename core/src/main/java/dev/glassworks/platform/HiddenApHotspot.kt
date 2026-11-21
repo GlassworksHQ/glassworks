@@ -13,6 +13,7 @@ import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Handler
 import android.os.Parcel
+import android.os.SystemClock
 import android.util.Base64
 import android.util.Log
 import java.lang.reflect.InvocationTargetException
@@ -62,10 +63,12 @@ class HiddenApHotspot(
     private var left: ApBefore? = null
 
     /**
-     * What the last stop put back. Its Wi-Fi state counts for the next start: Android may still be turning the client on
-     * (CodeRabbit on #712), and a start then would keep "off" as the state to go back to.
+     * What the last stop put back, and when ([SystemClock.uptimeMillis]). For [WIFI_BACK_MS] its Wi-Fi state counts for a
+     * start: Android may still be turning the client on (CodeRabbit on #712), and a start then would keep "off" as the
+     * state to go back to. After that the switch is the person's again.
      */
     private var putBack: ApBefore? = null
+    private var putBackAt = 0L
     private var unwatch: (() -> Unit)? = null
     private var started = false
     private var timeout: Runnable? = null
@@ -82,12 +85,13 @@ class HiddenApHotspot(
             handler.post { onEvent(Hotspot.Event.Failed(HotspotFailure.FAILED)) }
             return
         }
-        if (ap.apEnabled()) {
+        if (runCatching { ap.apEnabled() }.getOrDefault(false)) {
             log("setup hotspot: an access point is already on, not ours")
             handler.post { onEvent(Hotspot.Event.Failed(HotspotFailure.TETHERING_ON)) }
             return
         }
-        val saved = ApBefore(ap.savedConfig(), ap.wifiEnabled() || putBack?.wifiOn == true)
+        val turningOn = putBack?.wifiOn == true && SystemClock.uptimeMillis() - putBackAt < WIFI_BACK_MS
+        val saved = ApBefore(ap.savedConfig(), ap.wifiEnabled() || turningOn)
         putBack = null
         before = saved
         undo.write(saved)
@@ -168,9 +172,10 @@ class HiddenApHotspot(
         unwatch?.invoke()
         unwatch = null
         val apOff = runCatching { ap.setAp(null, false) }.getOrDefault(false) || !runCatching { ap.apEnabled() }.getOrDefault(true)
-        val configBack = runCatching { ap.restoreConfig(b.config) }.isSuccess || runCatching { ap.savedConfig() == b.config }.getOrDefault(false)
+        val configBack = runCatching { ap.restoreConfig(b.config) }.getOrDefault(false) || runCatching { ap.savedConfig() == b.config }.getOrDefault(false)
         if (b.wifiOn && !ap.wifiEnabled()) runCatching { ap.setWifiEnabled(true) }
         putBack = b
+        putBackAt = SystemClock.uptimeMillis()
         if (!apOff || !configBack) {
             left = b
             log("setup hotspot: couldn't put everything back (AP off $apOff, settings back $configBack); trying again at the next start")
@@ -190,6 +195,7 @@ class HiddenApHotspot(
         private const val LETTERS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789" // no 0/O, 1/I/L: the key may be typed from the screen
         private val random = SecureRandom()
         private const val ADDRESS_POLL_MS = 500L
+        private const val WIFI_BACK_MS = 30_000L
         private const val TAG = "Glassworks.Hotspot"
 
         private fun pick(n: Int) = String(CharArray(n) { LETTERS[random.nextInt(LETTERS.length)] })
@@ -207,13 +213,17 @@ interface ApControls {
 
     fun setWifiEnabled(on: Boolean)
 
-    /** An access point is up: ours, or the device's own hotspot. */
+    /** An access point is up: ours, or the device's own hotspot. Throws when Android can't say. */
     fun apEnabled(): Boolean
 
     /** The device's own hotspot settings as text, kept in a file ([ApUndo]) until [restoreConfig] puts them back. */
     fun savedConfig(): String?
 
-    fun restoreConfig(config: String?)
+    /**
+     * Puts back settings [savedConfig] gave. False when Android refused them. Settings read on another build of Android
+     * can never go back (their parcel wouldn't read): true, and they are dropped, since keeping them would block every start.
+     */
+    fun restoreConfig(config: String?): Boolean
 
     /** Starts the AP as [net], or stops it. False, or a [SecurityException], when Android refuses. */
     fun setAp(net: HotspotNetwork?, on: Boolean): Boolean
@@ -235,12 +245,13 @@ class ReflectedAp(context: Context, private val handler: Handler) : ApControls {
     @Suppress("DEPRECATION")
     override fun setWifiEnabled(on: Boolean) { wifi.isWifiEnabled = on }
 
-    override fun apEnabled() = runCatching { call("isWifiApEnabled") as Boolean }.getOrDefault(false)
+    override fun apEnabled() = call("isWifiApEnabled") as Boolean
 
     override fun savedConfig(): String? = runCatching { (call("getWifiApConfiguration") as WifiConfiguration?)?.let(::encode) }.getOrNull()
 
-    override fun restoreConfig(config: String?) {
-        config?.let(::decode)?.let { call("setWifiApConfiguration", WifiConfiguration::class.java to it) }
+    override fun restoreConfig(config: String?): Boolean {
+        val c = config?.let(::decode) ?: return true
+        return call("setWifiApConfiguration", WifiConfiguration::class.java to c) as Boolean
     }
 
     override fun setAp(net: HotspotNetwork?, on: Boolean): Boolean {
