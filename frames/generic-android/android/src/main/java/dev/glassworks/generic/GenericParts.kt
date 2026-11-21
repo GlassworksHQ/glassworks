@@ -62,6 +62,7 @@ import dev.glassworks.voice.VoiceEngine
 import dev.glassworks.voice.VoiceEvent
 import dev.glassworks.assist.VoiceLevels
 import dev.glassworks.assist.VoicePrefs
+import dev.glassworks.assist.VoiceShowing
 import dev.glassworks.assist.VoiceUi
 import dev.glassworks.assist.chime
 import dev.glassworks.assist.wakeChime
@@ -112,9 +113,11 @@ class GenericParts : AppParts {
     override fun overlays(runtime: GlassworksRuntime, host: OverlayHost): List<PaneOverlay> {
         val activity = host.activity
         val timers = TimerOverlay(activity, runtime.orbs)
+        // Both Assist looks report whether they show; the timers hear one signal (either shows).
+        val showing = VoiceShowing(timers::voiceShowing)
         val voice = VoiceOverlay(activity).apply {
             onCancel = { runtime.voiceCancel?.invoke() }
-            onShowingChanged = { timers.voiceShowing(it) }
+            onShowingChanged = showing::orb
         }
         val notes = NotificationOverlay(activity, notifications, notificationImages(activity), orbs = runtime.orbs).apply {
             screenOn = { runtime.screen.screenOn }
@@ -131,7 +134,7 @@ class GenericParts : AppParts {
         // The Assist look picked on the Appearance page (#691): the orb, or Spark's edge glow. The other one hides.
         val glow = EdgeGlowOverlay(activity).apply {
             onCancel = { runtime.voiceCancel?.invoke() }
-            onShowingChanged = { timers.voiceShowing(it) }
+            onShowingChanged = showing::glow
         }
         val kiosk = KioskPrefs(activity)
         runtime.onVoiceUi = {

@@ -162,24 +162,35 @@ class EdgeGlow(context: Context, palette: Themes.Palette) : FrameLayout(context)
         roseFlare.alpha = 0f
     }
 
-    /** Thinking: light trapped in the glass, shuttling along the top and bottom edges, flaring where it crosses. */
-    fun thinking(lap: Int) {
-        val w = width.toFloat(); val h = height.toFloat()
+    /**
+     * Thinking: light trapped in the glass, shuttling along the top and bottom edges, flaring where it crosses. Each
+     * edge runs its own lap ([LAP_MS]), the bottom half a lap behind the top ([BOTTOM_LAG_MS]): the overlay calls
+     * [thinkingTop] and [thinkingBottom] on their own schedules, so a lap always finishes before the next one starts.
+     */
+    fun thinkingTop(lap: Int) {
         if (lap == 0) {
             micGlow.animate().alpha(0f).setStartDelay(0).setDuration(300).start()
             halfA.animate().alpha(.35f).setStartDelay(0).setDuration(300).start(); halfB.animate().alpha(.35f).setStartDelay(0).setDuration(300).start()
         }
-        for ((i, s) in shuttles.withIndex()) {
-            val bottom = i >= 2; val fromLeft = i % 2 == 0
-            val delay = if (bottom) 650L else 0L
+        shuttle(bottom = false)
+        flash(2, width / 2f, 0f, from = .5f, to = 1.2f, delay = LAP_MS / 2, dur = 450) // they cross at the mic
+    }
+
+    fun thinkingBottom() {
+        shuttle(bottom = true)
+        flash(1, width / 2f, height.toFloat(), from = .5f, to = 1.2f, delay = LAP_MS / 2, dur = 450) // and at the bottom
+    }
+
+    private fun shuttle(bottom: Boolean) {
+        val w = width.toFloat(); val y = if (bottom) height.toFloat() else 0f
+        for (fromLeft in listOf(true, false)) {
+            val s = shuttles[(if (bottom) 2 else 0) + (if (fromLeft) 0 else 1)]
             s.animate().cancel()
             s.alpha = 1f
-            s.translationY = (if (bottom) h else 0f) - s.height / 2f
+            s.translationY = y - s.height / 2f
             s.translationX = (if (fromLeft) 0f else w) - s.width / 2f
-            s.animate().translationX((if (fromLeft) w else 0f) - s.width / 2f).setStartDelay(delay).setDuration(1300).setInterpolator(lin).start()
+            s.animate().translationX((if (fromLeft) w else 0f) - s.width / 2f).setStartDelay(0).setDuration(LAP_MS).setInterpolator(lin).start()
         }
-        flash(2, w / 2, 0f, from = .5f, to = 1.2f, delay = 650, dur = 450) // they cross at the mic
-        flash(1, w / 2, h, from = .5f, to = 1.2f, delay = 1300, dur = 450) // and at the bottom
     }
 
     /** Speaking: calm. A soft light that breathes slowly with the reply, [l] 0 to 1 smoothed. From the UI thread, each frame. */
@@ -328,4 +339,12 @@ class EdgeGlow(context: Context, palette: Themes.Palette) : FrameLayout(context)
     }
 
     private fun withAlpha(c: Int, a: Float) = (c and 0x00ffffff) or ((255 * a.coerceIn(0f, 1f)).toInt() shl 24)
+
+    companion object {
+        /** One shuttle's run along an edge, and so one thinking lap. */
+        const val LAP_MS = 1300L
+
+        /** The bottom edge's laps start this long after the top's. */
+        const val BOTTOM_LAG_MS = 650L
+    }
 }

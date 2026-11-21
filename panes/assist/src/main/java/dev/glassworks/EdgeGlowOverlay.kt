@@ -63,6 +63,7 @@ class EdgeGlowOverlay(context: Context) : FrameLayout(context) {
     private enum class Phase { ENTER, LISTENING, THINKING, SPEAKING, ERROR }
 
     private var ui = VoiceUi()
+    private var errorUi = VoiceUi() // the error's own snapshot: idle may follow before it shows
     private var active = false
     private var phase = Phase.ENTER
     private var pending = Phase.LISTENING
@@ -72,6 +73,7 @@ class EdgeGlowOverlay(context: Context) : FrameLayout(context) {
     private var leavingAt = -1L
     private var lastRipple = 0L
     private var lap = -1
+    private var bottomLap = -1
     private var looping = false
     private val mic = LevelSmoother()
     private val tts = LevelSmoother(attackMs = 350f, releaseMs = 700f) // speaking breathes slowly (calm)
@@ -111,22 +113,30 @@ class EdgeGlowOverlay(context: Context) : FrameLayout(context) {
         val fresh = next.seq != prev.seq
         val st = next.state
         when {
-            st == "wake" || st == "listening" -> request(Phase.LISTENING)
+            st == "wake" || st == "listening" -> {
+                // A new run while the last one is going: it comes back. Thinking or speaking left over from the
+                // cancelled run don't; only a fresh wake or listening starts one.
+                if (fresh && leavingAt >= 0) abandonExit()
+                request(Phase.LISTENING)
+            }
             st == "thinking" -> request(Phase.THINKING)
             st == "speaking" -> request(Phase.SPEAKING)
             st.startsWith("error") -> if (fresh) {
                 // A panel-side problem (mic, models) outside a run doesn't bring the glow up, as with the orb.
                 if (next.errorLocal && !active) return
+                errorUi = next
                 request(Phase.ERROR)
                 removeCallbacks(holdEnd); postDelayed(holdEnd, ERROR_HOLD_MS)
             }
-            else -> if (fresh && active && phase != Phase.ERROR) leave() // idle or off: the run is over
+            // Idle or off: the run is over. An error showing, or waiting for the entrance to end, keeps its hold.
+            else -> if (fresh && active && phase != Phase.ERROR && !(phase == Phase.ENTER && pending == Phase.ERROR)) leave()
         }
         if (active) captionFor(phase)
     }
 
     private fun request(p: Phase) {
         removeCallbacks(holdEnd)
+        if (leavingAt >= 0) return // going: only a fresh wake or listening brings it back (abandonExit)
         if (!active) start()
         if (phase == Phase.ENTER) pending = p else set(p)
     }
@@ -138,7 +148,7 @@ class EdgeGlowOverlay(context: Context) : FrameLayout(context) {
         isClickable = true
         visibility = View.VISIBLE
         phase = Phase.ENTER; pending = Phase.LISTENING
-        lap = -1; mic.reset(); tts.reset()
+        lap = -1; bottomLap = -1; mic.reset(); tts.reset()
         removeCallbacks(gone)
         postDelayed(entered, ENTER_MS)
         onShowingChanged?.invoke(true)
@@ -152,7 +162,7 @@ class EdgeGlowOverlay(context: Context) : FrameLayout(context) {
 
     private fun set(p: Phase) {
         if (p == phase || leavingAt >= 0) return
-        phase = p; phaseAt = SystemClock.uptimeMillis(); lap = -1
+        phase = p; phaseAt = SystemClock.uptimeMillis(); lap = -1; bottomLap = -1
         val g = glow ?: return
         when (p) {
             Phase.LISTENING -> g.listening()
@@ -176,6 +186,12 @@ class EdgeGlowOverlay(context: Context) : FrameLayout(context) {
         postDelayed(gone, EXIT_MS)
     }
 
+    /** Drops the exit underway, so a new run can start from the top. */
+    private fun abandonExit() {
+        removeCallbacks(gone)
+        finish()
+    }
+
     private fun loop() {
         if (looping) return
         looping = true
@@ -195,7 +211,14 @@ class EdgeGlowOverlay(context: Context) : FrameLayout(context) {
                 g.level(l)
                 if (t - lastRipple >= RIPPLE_MS) { if (l > 0.3f) g.ripple(l); lastRipple = t }
             }
-            Phase.THINKING -> { val k = ((t - phaseAt) / LAP_MS).toInt(); if (k != lap) { lap = k; g.thinking(k) } }
+            Phase.THINKING -> {
+                // The top and bottom edges on their own laps, so neither is cut off mid-run.
+                val since = t - phaseAt
+                val k = (since / EdgeGlow.LAP_MS).toInt(); if (k != lap) { lap = k; g.thinkingTop(k) }
+                if (since >= EdgeGlow.BOTTOM_LAG_MS) {
+                    val b = ((since - EdgeGlow.BOTTOM_LAG_MS) / EdgeGlow.LAP_MS).toInt(); if (b != bottomLap) { bottomLap = b; g.thinkingBottom() }
+                }
+            }
             Phase.SPEAKING -> g.speaking(tts.step(if (VoiceLevels.ttsPlaying) AudioLevel.ttsPulse((t - phaseAt).toDouble()) else 0f, dt))
             else -> Unit
         }
@@ -243,7 +266,7 @@ class EdgeGlowOverlay(context: Context) : FrameLayout(context) {
                 if (ui.announcement) VoiceTexts.ANNOUNCEMENT else VoiceTexts.quote(ui.heard), muted,
                 ui.reply, ink,
             )
-            Phase.ERROR -> Quad("Something went wrong", palette.readable(ROSE), VoiceTexts.friendlyError(ui.state, ui.errorLocal), muted)
+            Phase.ERROR -> Quad("Something went wrong", palette.readable(ROSE), VoiceTexts.friendlyError(errorUi.state, errorUi.errorLocal), muted)
         }
         label.isAllCaps = p != Phase.SPEAKING
         label.text = l; label.setTextColor(lc)
@@ -257,7 +280,6 @@ class EdgeGlowOverlay(context: Context) : FrameLayout(context) {
         const val ENTER_MS = 650L
         const val EXIT_MS = 420L
         const val RIPPLE_MS = 140L
-        const val LAP_MS = 1300L
         const val ERROR_HOLD_MS = 1_600L
         val ROSE = 0xfffb7185.toInt()
     }

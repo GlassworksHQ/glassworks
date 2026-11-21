@@ -117,4 +117,47 @@ class EdgeGlowOverlayTest {
         val prompt = Mockup.label(g, VoiceTexts.PROMPT)
         assertTrue(Themes.contrast(prompt.currentTextColor, Themes.DUSK.light.ground) >= 3.0)
     }
+
+    @Test fun anErrorDuringTheEntranceStillShowsWhenIdleFollows() {
+        val g = glow()
+        g.update(VoiceUi("listening", seq = 1), true)
+        idle(100)
+        g.update(VoiceUi("error: Home Assistant is not connected", seq = 2), true)
+        idle(100)
+        g.update(VoiceUi("idle", seq = 3), true) // all inside the 650 ms entrance
+        idle(700)
+        assertEquals(View.VISIBLE, g.visibility)
+        assertTrue(Mockup.label(g, "Can't reach Home Assistant").visibility == View.VISIBLE)
+        idle(2_200)
+        assertEquals(View.GONE, g.visibility)
+    }
+
+    @Test fun aNewRunDuringTheExitBringsItBack() {
+        val g = glow()
+        g.update(VoiceUi("listening", seq = 1), true)
+        idle(700)
+        g.update(VoiceUi("idle", seq = 2), true)
+        idle(100) // going: inside the 420 ms exit
+        g.update(VoiceUi("wake", seq = 3), true)
+        idle(700)
+        assertEquals(View.VISIBLE, g.visibility)
+        assertTrue("it can be tapped to cancel again", g.isClickable)
+        assertEquals(listOf(true, false, true), showing)
+        g.update(VoiceUi("thinking", heard = "What time is it", seq = 4), true)
+        idle(300)
+        assertTrue(Mockup.label(g, VoiceTexts.quote("What time is it")).visibility == View.VISIBLE)
+    }
+
+    @Test fun whatsLeftOfACancelledRunDoesntBringItBack() {
+        val g = glow()
+        g.update(VoiceUi("listening", seq = 1), true)
+        idle(700)
+        g.performClick()
+        idle(100)
+        g.update(VoiceUi("thinking", heard = "Turn off the lights", seq = 2), true)
+        g.update(VoiceUi("speaking", reply = "Done.", seq = 3), true)
+        idle(700)
+        assertEquals(View.GONE, g.visibility)
+        assertEquals(listOf(true, false), showing)
+    }
 }
