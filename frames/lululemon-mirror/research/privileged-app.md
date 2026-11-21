@@ -268,7 +268,8 @@ the dead run's state, so its stop puts back our own network as the device's hots
 
 The app handles it since 2026-11-20 (#197; untested on the unit). Before each start, `HiddenApHotspot` writes what it
 changes (the device's hotspot settings as a parcel with the build fingerprint, and whether Wi-Fi was on) to
-`noBackupFilesDir/setup_hotspot_undo`, sealed with the app's Keystore key, and deletes it once it has put things back.
+`noBackupFilesDir/setup_hotspot_undo`, sealed with the app's Keystore key. It deletes the record only once the AP is off
+and the settings read back as they were; until then, and while the key store can't open the record, no new start runs.
 A new `HiddenApHotspot` (the service's start) reads a record left behind and puts it back at once: it stops the AP, restores the
 settings and turns Wi-Fi back on. A start that finds an AP up with no record of ours (`isWifiApEnabled`) fails as
 `TETHERING_ON` and leaves it alone, so the screen never shows a network the AP doesn't have.

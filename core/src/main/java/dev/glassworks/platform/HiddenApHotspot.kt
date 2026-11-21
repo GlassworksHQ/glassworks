@@ -57,6 +57,15 @@ class HiddenApHotspot(
 ) : Hotspot {
     /** What this run's start changed, also in [undo]. Compared by identity: a callback of an older start finds another. */
     private var before: ApBefore? = null
+
+    /** What a stop couldn't put back (the AP stayed up, or the settings were refused): tried again at each stop and start. */
+    private var left: ApBefore? = null
+
+    /**
+     * What the last stop put back. Its Wi-Fi state counts for the next start: Android may still be turning the client on
+     * (CodeRabbit on #712), and a start then would keep "off" as the state to go back to.
+     */
+    private var putBack: ApBefore? = null
     private var unwatch: (() -> Unit)? = null
     private var started = false
     private var timeout: Runnable? = null
@@ -67,13 +76,19 @@ class HiddenApHotspot(
     }
 
     override fun start(onEvent: (Hotspot.Event) -> Unit) {
-        stop()
+        if (!restore()) {
+            // An earlier start isn't undone yet: a new one would keep the setup network as the device's own settings.
+            log("setup hotspot: an earlier run isn't put back yet; not starting")
+            handler.post { onEvent(Hotspot.Event.Failed(HotspotFailure.FAILED)) }
+            return
+        }
         if (ap.apEnabled()) {
             log("setup hotspot: an access point is already on, not ours")
             handler.post { onEvent(Hotspot.Event.Failed(HotspotFailure.TETHERING_ON)) }
             return
         }
-        val saved = ApBefore(ap.savedConfig(), ap.wifiEnabled())
+        val saved = ApBefore(ap.savedConfig(), ap.wifiEnabled() || putBack?.wifiOn == true)
+        putBack = null
         before = saved
         undo.write(saved)
         started = false
@@ -107,7 +122,9 @@ class HiddenApHotspot(
             .also { handler.postDelayed(it, startTimeoutMs) }
     }
 
-    override fun stop() = restore()
+    override fun stop() {
+        restore()
+    }
 
     /** Up, as far as Android says: started once the interface has an address, failed if it never gets one. */
     private fun waitForAddress(saved: ApBefore, net: HotspotNetwork, onEvent: (Hotspot.Event) -> Unit) {
@@ -132,9 +149,17 @@ class HiddenApHotspot(
         check.run()
     }
 
-    /** Ends the AP, then puts back what a start changed: this run's, or one that died ([undo]). Does nothing when nothing is changed. */
-    private fun restore() {
-        val b = before ?: undo.read()?.also { log("setup hotspot: putting back what a run that died left") } ?: return
+    /**
+     * Ends the AP, then puts back what a start changed: this run's, one a stop couldn't finish, or one that died ([undo]).
+     * True once nothing is left to put back. The record goes only then: the AP off (or not up) and the device's settings
+     * as they were. Turning the Wi-Fi client back on doesn't hold it, since Android does that itself when the AP stops.
+     */
+    private fun restore(): Boolean {
+        val b = before ?: left ?: when (val kept = undo.read()) {
+            ApUndo.Kept.None -> return true
+            ApUndo.Kept.Unreadable -> return false
+            is ApUndo.Kept.Found -> kept.before.also { log("setup hotspot: putting back what a run that died left") }
+        }
         before = null
         started = false
         clearTimeout()
@@ -142,10 +167,18 @@ class HiddenApHotspot(
         addressWait = null
         unwatch?.invoke()
         unwatch = null
-        runCatching { ap.setAp(null, false) }
-        runCatching { ap.restoreConfig(b.config) }
+        val apOff = runCatching { ap.setAp(null, false) }.getOrDefault(false) || !runCatching { ap.apEnabled() }.getOrDefault(true)
+        val configBack = runCatching { ap.restoreConfig(b.config) }.isSuccess || runCatching { ap.savedConfig() == b.config }.getOrDefault(false)
         if (b.wifiOn && !ap.wifiEnabled()) runCatching { ap.setWifiEnabled(true) }
+        putBack = b
+        if (!apOff || !configBack) {
+            left = b
+            log("setup hotspot: couldn't put everything back (AP off $apOff, settings back $configBack); trying again at the next start")
+            return false
+        }
+        left = null
         undo.clear()
+        return true
     }
 
     private fun clearTimeout() {

@@ -19,7 +19,16 @@ data class ApBefore(val config: String?, val wifiOn: Boolean) {
  * dies with it on leaves this for the next run to put back (#197's undo).
  */
 interface ApUndo {
-    fun read(): ApBefore?
+    /** What [read] found. [Unreadable]: a record is there but can't be opened now (the key store is out); it stays. */
+    sealed interface Kept {
+        data object None : Kept
+
+        data object Unreadable : Kept
+
+        data class Found(val before: ApBefore) : Kept
+    }
+
+    fun read(): Kept
 
     fun write(before: ApBefore)
 
@@ -34,13 +43,13 @@ interface ApUndo {
 class ApUndoFile(file: File, private val secrets: SecretStore, private val log: (String) -> Unit = {}) : ApUndo {
     private val file = AtomicFile(file)
 
-    /** The record, or null when there is none. One that never opens (another key, a broken file) is dropped. */
-    override fun read(): ApBefore? {
-        val stored = runCatching { String(file.readFully(), Charsets.UTF_8) }.getOrNull() ?: return null
+    /** The record. One that never opens (another key, a broken file) is dropped, as if there were none. */
+    override fun read(): ApUndo.Kept {
+        val stored = runCatching { String(file.readFully(), Charsets.UTF_8) }.getOrNull() ?: return ApUndo.Kept.None
         val opened = secrets.open(stored, SCOPE)
         if (opened is SecretStore.Opened.Unavailable) {
-            log("setup hotspot: the key store is out; its undo record can't be read now")
-            return null
+            log("setup hotspot: the key store is out; its undo record waits")
+            return ApUndo.Kept.Unreadable
         }
         val before = (opened as? SecretStore.Opened.Value)?.let { v ->
             runCatching { JSONObject(v.text).let { ApBefore(it.optString(CONFIG).takeIf(String::isNotEmpty), it.getBoolean(WIFI_ON)) } }.getOrNull()
@@ -48,8 +57,9 @@ class ApUndoFile(file: File, private val secrets: SecretStore, private val log: 
         if (before == null) {
             log("setup hotspot: its undo record doesn't open; dropped")
             clear()
+            return ApUndo.Kept.None
         }
-        return before
+        return ApUndo.Kept.Found(before)
     }
 
     override fun write(before: ApBefore) {
