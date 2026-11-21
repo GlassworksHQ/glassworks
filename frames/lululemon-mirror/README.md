@@ -62,7 +62,7 @@ These same credits are stored in [`design/frame.json`](design/frame.json) and di
 
 ## Status
 
-**Status: beta.** You can install Glassworks on a supported Mirror directly from Chrome or Edge at [kiln.glassworks.dev/lululemon-mirror](https://kiln.glassworks.dev/lululemon-mirror).
+**Status: beta.** Glassworks for the Mirror is out as the legacy build of Glassworks for Generic Android, and Kiln installs its latest release on a supported Mirror straight from Chrome or Edge at [kiln.glassworks.dev/lululemon-mirror](https://kiln.glassworks.dev/lululemon-mirror). After that, new releases show up in Home Assistant under **Settings → Updates**, as on any Glassworks panel ([Updates](../../docs/updates.md)).
 
 - **Supported hardware:** Original Qualcomm (MSM8916) Mirror units running stock software 1.x. Later revisions switched to an NXP i.MX8 board where only JTAG hardware access has been reported; those revisions are not supported. Note that screen size alone does not identify which board is inside ([see board revisions](research/revisions.md)).
 - **Android 6 legacy build:** Because the original Mirror runs Android 6.0.1, Kiln installs the dedicated legacy build of [Glassworks for Generic Android](../generic-android/README.md#the-legacy-build-android-6-and-7). It runs a frozen browser engine locked strictly to your Home Assistant address, starts upright in portrait mode, and guides you through Wi-Fi and Home Assistant sign-in from your phone or computer since the Mirror has no touchscreen.
