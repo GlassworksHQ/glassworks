@@ -104,7 +104,7 @@ describe('navigation', () => {
     const one = session(undefined, installedPanel);
     const h = harness(one, `${BASE}/set-up/wifi`);
     await until(() => one.s.started && h.state().setup.phase === 'wifi');
-    act(() => one.s.store.dispatch({ type: 'done', done: { title: 'Done.', body: '' } }));
+    act(() => one.s.store.dispatch({ type: 'done', done: { title: 'You\'re all set', body: '' } }));
     await settle();
     expect(h.nav.path).toBe(`${BASE}/done`);
     h.go('/install'); // back into the finished flow: the result stays

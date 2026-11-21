@@ -26,17 +26,17 @@
     "photoAlt": "The S1 Plus board with the back cover off. The recovery button is circled: right of the shield's notch, below the round sensor window.",
     "asks": {
       "fastboot": {
-        "title": "One click to continue.",
+        "title": "One click to continue",
         "body": "The panel restarted into the installer.",
         "pick": "USB download gadget"
       },
       "adb": {
-        "title": "One last click.",
+        "title": "One last click",
         "body": "The panel is starting its new software. Leave its screen alone.",
         "pick": "QUAD-CORE R818 EVB2"
       },
       "connect": {
-        "title": "Connect to your panel.",
+        "title": "Connect to your panel",
         "body": "Plug it into this computer, with Glassworks running.",
         "pick": "QUAD-CORE R818 EVB2"
       }

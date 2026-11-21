@@ -26,14 +26,14 @@ describe('Try again after a failed write', () => {
     const s = demoSession(s1Demo, 'error-written'); // its Connect is a picker closed with nothing picked
     render(<Wizard session={s} frame={s1PlusUi} base="/aqara-s1-plus" />);
     await act(() => enterDemo(s, s1Demo, 'error-written'));
-    expect(screen.getByRole('heading', { name: 'Something went wrong while writing.' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Something went wrong while writing' })).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(await screen.findByText(/An earlier try already changed the panel\./)).toBeTruthy(); // not "Nothing is written yet."
     expect(screen.queryByText(/Nothing is written yet/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
 
-    expect(await screen.findByRole('heading', { name: 'No panel in recovery mode.' })).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'No panel in recovery mode' })).toBeTruthy();
     expect(screen.getByText(/hold the board button first/, { selector: '.lede' }).textContent)
       .toBe('This attempt wrote nothing; an earlier try did. Unplug it, hold the board button first, then plug in and keep holding for 10 seconds. Then use Undo with your backup.');
     expect(screen.getAllByRole('button', { name: 'Undo with your backup' })[0]!.className).toMatch(/ember/);

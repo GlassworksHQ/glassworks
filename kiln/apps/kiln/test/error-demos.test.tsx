@@ -24,18 +24,18 @@ afterEach(() => { cleanup(); for (const s of open.splice(0)) s.close(); });
 
 /** Each error demo and the title explain.ts gives its failure. */
 const TITLES: [Demo, string][] = [
-  ['error-no-recovery', 'No panel in recovery mode.'],
-  ['error-secure-boot', 'This panel only runs signed software.'],
-  ['error-not-this-panel', 'This isn\'t a panel Kiln knows.'],
-  ['error-usb-unreliable', 'The USB connection isn\'t reliable.'],
-  ['error-download', 'A download failed.'],
-  ['error-not-started', 'The panel didn\'t finish starting.'],
-  ['error-adb-held', 'Another program has the panel.'],
-  ['error-backup-refused', 'This backup can\'t undo the install.'],
-  ['error-nothing-picked', 'Nothing was picked.'],
-  ['error-earlier', 'It disconnected.'],
-  ['error-unknown', 'Something went wrong.'],
-  ['error-unknown-written', 'Something went wrong while writing.'],
+  ['error-no-recovery', 'No panel in recovery mode'],
+  ['error-secure-boot', 'This panel only runs signed software'],
+  ['error-not-this-panel', 'This isn\'t a panel Kiln knows'],
+  ['error-usb-unreliable', 'The USB connection isn\'t reliable'],
+  ['error-download', 'A download failed'],
+  ['error-not-started', 'The panel didn\'t finish starting'],
+  ['error-adb-held', 'Another program has the panel'],
+  ['error-backup-refused', 'This backup can\'t undo the install'],
+  ['error-nothing-picked', 'Nothing was picked'],
+  ['error-earlier', 'It disconnected'],
+  ['error-unknown', 'Something went wrong'],
+  ['error-unknown-written', 'Something went wrong while writing'],
 ];
 
 describe('the error screen, one demo per failure', () => {

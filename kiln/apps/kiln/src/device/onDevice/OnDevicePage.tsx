@@ -40,9 +40,9 @@ const pageOf = (p: Place) => (p.path.at(-1) === SWITCH ? p.path.slice(0, -1) : p
 /** What the page calls the device, and whether it is sure (a model read, not guessed from GPU and screen). */
 function nameOf(on: OnDevice): string {
   const { model, brand } = on.identified;
-  if (model) return `${on.modelCode ? 'This is' : 'This looks like'} a ${model.name}.`;
-  if (brand) return `This is a ${brand.name} ${on.form}.`;
-  return `This is an Android ${on.form}.`;
+  if (model) return `${on.modelCode ? 'This is' : 'This looks like'} a ${model.name}`;
+  if (brand) return `This is a ${brand.name} ${on.form}`;
+  return `This is an Android ${on.form}`;
 }
 
 function versionText(on: OnDevice, needs: UsbOnDevice['needs']): string {
@@ -87,7 +87,7 @@ function Elsewhere({ onTablet }: { onTablet: () => void }) {
   useEffect(() => setShown(`${location.host}${here}`), [here]);
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h">{`Open this page on ${dev.the}.`}</h2>
+      <h2 id="h">{`Open this page on ${dev.the}`}</h2>
       <p className="lede">{`This page installs Glassworks on an Android ${dev.short} from the ${dev.short}'s own browser.`}</p>
       <div className="well"><span className="grow"><span className="small">{`On ${dev.the}, open`}</span><code className="addr">{shown}</code></span></div>
       <div className="foot">
@@ -101,7 +101,7 @@ function Elsewhere({ onTablet }: { onTablet: () => void }) {
 function TooOld({ on }: { on: OnDevice }) {
   return (
     <section className="card err" aria-labelledby="h">
-      <h2 id="h">Glassworks needs Android 6 or newer.</h2>
+      <h2 id="h">Glassworks needs Android 6 or newer</h2>
       <p className="lede">This {on.form} runs Android {on.release}. Nothing was downloaded.</p>
       <div className="foot"><span /><Link className="btn ghost" href="/">Pick another panel</Link></div>
     </section>
@@ -126,7 +126,7 @@ function Get({ on, go, releases, load }: P & { releases: Partial<Record<Line, Re
     return (
       <section className="card" aria-labelledby="h">
         <span className="row"><span className="pill soon">Not released yet</span></span>
-        <h2 id="h">{`${dev.app} isn't out yet.`}</h2>
+        <h2 id="h">{`${dev.app} isn't out yet`}</h2>
         <p className="lede">When it is, it downloads from this page. Follow it on GitHub to hear first.</p>
         <div className="foot">
           <span className="links"><button type="button" className="link" onClick={() => go('device')}>Back</button>{links(buildSwitch)}</span>
@@ -137,7 +137,7 @@ function Get({ on, go, releases, load }: P & { releases: Partial<Record<Line, Re
   }
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h">Get Glassworks.</h2>
+      <h2 id="h">Get Glassworks</h2>
       <p className="lede">Download it here, then install it from the download.</p>
       {r.state === 'loading' && <p className="status work" role="status">Looking for the latest release…</p>}
       {r.state === 'error' && <>
@@ -179,7 +179,7 @@ function Setup({ go }: Pick<P, 'go'>) {
   const { dev } = useWhere();
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h">Open Glassworks.</h2>
+      <h2 id="h">Open Glassworks</h2>
       <p className="lede">{`Its setup walks you through the rest, on ${dev.the}.`}</p>
       <ol className="num">
         <li><b>Home Assistant</b><small>{`Sign in, then add ${dev.the} in Home Assistant.`}</small></li>
@@ -212,7 +212,7 @@ function Kiln({ on, go }: P) {
   useEffect(() => setHere(`${location.host}${base}`), [base]);
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h">Turn on USB debugging.</h2>
+      <h2 id="h">Turn on USB debugging</h2>
       <p className="lede">Then Kiln on a computer adds Secure settings over USB. Glassworks and its setup stay.</p>
       <ol className="num">
         <li><b>Open</b> <Path path={st.unlock.path} /> <a className="link" href={SETTINGS_LINKS.about}>Open it</a>

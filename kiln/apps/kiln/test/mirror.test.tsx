@@ -57,14 +57,14 @@ describe('the switch', () => {
     expect(screen.queryByText('Test only')).toBeNull(); // beta (frame.json): open to everyone, not a test page
     expect(embers()).toEqual(['Continue with Glassworks']);
     fireEvent.click(screen.getByRole('button', { name: 'Continue with Glassworks' }));
-    await screen.findByText('Install Glassworks on the Mirror.');
+    await screen.findByText('Install Glassworks on the Mirror');
     expect(embers()).toEqual(['Download the system image']);
   });
 
   it('with &mode=app, the app alone over adb, its APK from this computer, not labelled test only', async () => {
     history.replaceState(null, '', '/lululemon-mirror?apk=local&mode=app');
     render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
-    await screen.findByText('Install a test build on the Mirror.');
+    await screen.findByText('Install a test build on the Mirror');
     expect(screen.queryByText('Test only')).toBeNull(); // beta (frame.json): open to everyone, not a test page
     expect(document.querySelector('input[type=file]')).not.toBeNull();
     expect(embers()).toEqual(['Connect']);

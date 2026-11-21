@@ -85,7 +85,7 @@ describe('the setup steps over the LAN', () => {
     await c.steps.saveHa('http://192.0.2.20:8123');
     expect(c.phase()).toMatchObject({ phase: 'radio', radio: { mode: 'off' } });
     await c.steps.applyRadio('zigbee_tcp');
-    expect(c.phase()).toMatchObject({ phase: 'radio-next', plan: { title: 'Use the radio in Home Assistant.' } });
+    expect(c.phase()).toMatchObject({ phase: 'radio-next', plan: { title: 'Use the radio in Home Assistant' } });
     expect(panel.asked).toEqual(['state', 'set_ha', 'state', 'set_radio']);
     c.steps.close();
   });
@@ -174,7 +174,7 @@ describe('the setup steps over the LAN', () => {
   it('the next steps\' Finish waits while a button\'s work runs', () => {
     const finished: string[] = [];
     const steps: SetupSteps = { click: async () => {}, signIn: () => {}, saveHa: async () => {}, skipHa: async () => {}, panes: async () => {}, applyPanes: async () => {}, radio: async () => {}, applyRadio: async () => {}, finish: () => { finished.push('finish'); } };
-    const plan = { title: 'Use the radio in Home Assistant.', lead: '', steps: [] };
+    const plan = { title: 'Use the radio in Home Assistant', lead: '', steps: [] };
     const { rerender } = render(<RadioNext busy steps={steps} setup={{ phase: 'radio-next', plan }} />);
     const finish = screen.getByRole('button', { name: 'Finish' });
     expect(finish).toHaveProperty('disabled', true);
@@ -193,7 +193,7 @@ describe('the setup steps over the LAN', () => {
       return true;
     }) as typeof document.execCommand;
     const steps: SetupSteps = { click: async () => {}, signIn: () => {}, saveHa: async () => {}, skipHa: async () => {}, panes: async () => {}, applyPanes: async () => {}, radio: async () => {}, applyRadio: async () => {}, finish: () => {} };
-    const plan = { title: 'Use the radio in Home Assistant.', lead: '', steps: [{ title: 'Add the radio', body: '', kv: [['Serial path', 'socket://192.0.2.10:6638', true]] as [string, string, boolean][] }] };
+    const plan = { title: 'Use the radio in Home Assistant', lead: '', steps: [{ title: 'Add the radio', body: '', kv: [['Serial path', 'socket://192.0.2.10:6638', true]] as [string, string, boolean][] }] };
     render(<RadioNext busy={false} steps={steps} setup={{ phase: 'radio-next', plan }} />);
     fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
     await screen.findByRole('button', { name: 'Copied' });

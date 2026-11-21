@@ -50,7 +50,7 @@ describe('the S1', () => {
     await s1('done');
     expect(block()).toBe('Silent updatesOnUpdates from Home Assistant install by themselves.');
     // it lands after Done opens, so the live region says it too
-    expect(document.querySelector('[aria-live="polite"]')?.textContent).toBe('Done. Silent updates: On.');
+    expect(document.querySelector('[aria-live="polite"]')?.textContent).toBe('You\'re all set. Silent updates: On.');
   });
 
   it('Done: a tap each on a boot image from before the service, and how to add it', async () => {

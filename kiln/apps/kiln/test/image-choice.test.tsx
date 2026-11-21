@@ -265,7 +265,7 @@ describe('Glass Panes', () => {
 
   it('Done says what is next in its own project, and the way back to Glassworks', async () => {
     const flash = await show('image-done');
-    expect(screen.getByRole('heading').textContent).toBe('Glass Panes is on the Mirror.');
+    expect(screen.getByRole('heading').textContent).toBe('Glass Panes is on the Mirror');
     expect(screen.getByText(/^Set it up as its README says\.$/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Install Glassworks' }));
     expect(flash.state).toMatchObject({ screen: 'choose', picked: 'glassworks', from: 'glass-panes', open: false });
@@ -294,7 +294,7 @@ describe('?image=<id>', () => {
     expect(calls).toEqual([]);
     render(<ImageFlow image={f} app={new AppSession({ frame: mirrorFrame, connect: async () => { throw new Error('x'); } }, true)} />);
     expect(radios()).toEqual([]);
-    expect(screen.getByRole('heading').textContent).toBe('Install Glass Panes on the Mirror.');
+    expect(screen.getByRole('heading').textContent).toBe('Install Glass Panes on the Mirror');
     expect(document.querySelector('.card')!.textContent).toMatch(WHOSE);
     expect(rail()).toEqual(['Mirror', 'Download', 'Fastboot', 'Install', 'Done']);
     expect(embers()).toEqual(['Download Glass Panes']);
@@ -324,7 +324,7 @@ describe('?image=<id>', () => {
   it('works on the page itself, as a community project would link to it', async () => {
     history.replaceState(null, '', '/lululemon-mirror?apk=local&image=glass-panes');
     render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
-    expect((await screen.findByRole('heading')).textContent).toBe('Install Glass Panes on the Mirror.');
+    expect((await screen.findByRole('heading')).textContent).toBe('Install Glass Panes on the Mirror');
     history.replaceState(null, '', '/');
   });
 });

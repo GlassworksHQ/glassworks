@@ -33,9 +33,9 @@
     "the": "the tablet",
     "app": "Glassworks for Android",
     "needs": { "release": "Android 8", "local": "Android 6", "why": "the release's APK is Glassworks for generic Android (API 26+); a picked file may be its legacy build (API 23+)" },
-    "off": { "title": "Kiln doesn't install on Android devices yet.", "follow": "https://github.com/GlassworksHQ/glassworks/issues/403" },
+    "off": { "title": "Kiln doesn't install on Android devices yet", "follow": "https://github.com/GlassworksHQ/glassworks/issues/403" },
     "picks": ["google", "samsung", "amazon", "lenovo", "xiaomi"],
-    "connect": { "title": "Connect to your tablet.", "body": "Plug it into this computer, with USB debugging on.", "pick": "your tablet" },
+    "connect": { "title": "Connect to your tablet", "body": "Plug it into this computer, with USB debugging on.", "pick": "your tablet" },
     "grants": {
       "microphone": { "name": "Microphone", "without": "Assist can't hear you" },
       "camera": { "name": "Camera", "without": "the camera pane has no picture" },
