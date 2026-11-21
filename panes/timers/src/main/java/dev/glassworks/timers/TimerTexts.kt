@@ -75,4 +75,31 @@ object TimerTexts {
 
     /** The tag under a ring: "PASTA", "TIMER", "PASTA · PAUSED" (upper-cased by the view). */
     fun tag(t: TimerBoard.Shown): String = t.label + if (t.active) "" else " · paused"
+
+    // ---------------------------------------------------------------- the board (#691: three or more timers)
+
+    /** The board's heading: "Timers · 4" (upper-cased by the view). */
+    fun boardTitle(n: Int): String = "Timers · $n"
+
+    /** A length in short: "10 min", "1 h 30 min", "45 s", "2 min 30 s"; "" when unknown. */
+    fun short(seconds: Int): String {
+        if (seconds <= 0) return ""
+        val h = seconds / 3600; val m = seconds / 60 % 60; val s = seconds % 60
+        return listOfNotNull(h.takeIf { it > 0 }?.let { "$it h" }, m.takeIf { it > 0 }?.let { "$it min" }, s.takeIf { it > 0 }?.let { "$it s" })
+            .joinToString(" ")
+    }
+
+    /** The line under a board row's name: its length, and for a paused timer what's left ("45 min · 24:30 left"). */
+    fun boardLine(t: TimerBoard.Shown, now: Long): String {
+        val length = short(t.totalSeconds)
+        if (t.active) return length
+        val left = "${TimerBoard.format(t.secondsLeft(now))} left"
+        return if (length.isEmpty()) left else "$length · $left"
+    }
+
+    /** A board row's time on the right: what's left ("8:11", "0:07"), or "Paused". */
+    fun boardTime(t: TimerBoard.Shown, now: Long): String = if (t.active) TimerBoard.format(t.secondsLeft(now)) else "Paused"
+
+    /** The board's last line when it lists only some: "+2 more"; "" when it lists them all. */
+    fun boardMore(total: Int, shown: Int): String = if (total > shown) "+${total - shown} more" else ""
 }

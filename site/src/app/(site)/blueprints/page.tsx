@@ -3,15 +3,17 @@ import { BlueprintRows } from "@/components/Blueprints";
 import { paneIcon } from "@/components/DeviceBits";
 import { DeviceGlyph } from "@/components/Glyphs";
 import { ListCard, PageHead, Sq, Tile, Tiles, manage as m } from "@/components/Manage";
+import { RecipeList } from "@/components/Recipes";
 import { blueprints, isCore, releaseName } from "@/lib/blueprints";
+import { RECIPES } from "@/lib/recipes";
 import { pageMetadata } from "@/lib/seo";
 import { panes } from "@/lib/site";
 import s from "./blueprints.module.css";
 
 export const metadata = pageMetadata({
-  title: "Blueprints: ready-made Home Assistant automations",
+  title: "Blueprints & starter prompts: Home Assistant automations and dashboards",
   description:
-    "Home Assistant blueprints for Glassworks panels: night mode for the screens, ring the panels when the doorbell rings, ask a question on the panels, lights on at the panel.",
+    "Ready-made Home Assistant blueprints for Glassworks panels, plus copyable LLM starter prompts for building lightweight custom Lovelace dashboards for mirrors, wall switches, and tablets.",
   path: "/blueprints",
 });
 
@@ -29,14 +31,14 @@ export default async function BlueprintsPage() {
   return (
     <>
       <PageHead
-        title="Blueprints"
-        lede="Ready-made Home Assistant automations for the panel and its panes. Home Assistant imports each one, and you pick your devices when you make the automation."
+        title="Home Assistant blueprints"
+        lede="Ready-made automations for your wall panels. Import any blueprint straight into Home Assistant and choose your own doorbells, lights, and rooms."
       />
 
       <Tiles cols={3} className={m.trio}>
-        <Tile label="1" value="Add to Home Assistant" sub="Opens your Home Assistant. The first time, it asks for its address." />
-        <Tile label="2" value="Import" sub="Preview, then Import blueprint. Only an administrator can." />
-        <Tile label="3" value="Create the automation" sub="Pick your doorbell, lights or panels. Nothing else to install." />
+        <Tile label="Step 1" value="Open in Home Assistant" sub="Launches your Home Assistant instance and asks for its URL the first time." />
+        <Tile label="Step 2" value="Import the blueprint" sub="Review the inputs and click Import blueprint as an administrator." />
+        <Tile label="Step 3" value="Pick your devices" sub="Select your doorbell, lights, or wall panels — nothing extra to install." />
       </Tiles>
 
       {core.length > 0 && (
@@ -85,6 +87,17 @@ export default async function BlueprintsPage() {
       {ref && core.length + groups.length > 0 && (
         <p className={s.fine}>From {releaseName(ref)}: the same files a panel on that version offers. MIT, like the rest of the repository.</p>
       )}
+
+      <section id="recipes" className={s.recipes} aria-labelledby="recipes-heading">
+        <div className={s.recipesHead}>
+          <span className="label">Dashboard starter prompts</span>
+          <h2 id="recipes-heading">Generate a dashboard that fits your home</h2>
+          <p>
+            Glassworks shows your Home Assistant dashboard instead of shipping its own home UI. Rather than installing bulky one-size-fits-all custom cards, copy a starter prompt for your screen shape into your favorite LLM and generate a lightweight single-file Lovelace card tailored to your exact rooms and entities.
+          </p>
+        </div>
+        <RecipeList recipes={RECIPES} />
+      </section>
     </>
   );
 }

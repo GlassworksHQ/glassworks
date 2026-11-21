@@ -46,7 +46,7 @@ tools/perf/run.sh --frame aqara-s1-plus --name "Aqara S1 Plus" --runs 3 --out pe
 | `--package` | `sh.edm.s1kiosk` | Glassworks package to test (`dev.glassworks.generic_android` for Generic Android, `dev.glassworks.generic_android.legacy` for Android 6–7 / Mirror) |
 | `--activity` | Auto-detected | Activity accepting Clarity extras (pass manually only if the app has not run since reboot; see [Other Glassworks apps, and Android 6](#other-glassworks-apps-and-android-6)) |
 | `--runs` | `3` | Number of measurement runs (report uses medians and ranges) |
-| `--pane-ram` | Off | Measure per-pane RAM impact by toggling switchable panes and restoring them afterward (`assist`, `sendspin`, `wall-base`, `time-zone`, `diagnostics`, `mic`); includes one unrecorded warm-up cycle (see [RAM](#ram)) |
+| `--pane-ram` | Off | Measure per-pane RAM impact by toggling switchable panes and restoring them afterward (the frame's switchable panes: on the S1 `assist`, `sendspin`, `wall-base`, `time-zone`, `diagnostics`, `mic`; on Generic Android and the frames based on it `assist`, `sendspin`, `camera`, `diagnostics`, `mic`); includes one unrecorded warm-up cycle (see [RAM](#ram)) |
 | `--taps` | `10` | Number of toggle taps per reference view (`0` skips tap timing and yields a provisional E) |
 | `--skip-synthetic`, `--skip-reference`, `--skip-real-use` | Off | Skip the animation ladder, graded reference views (yields no grade), or real-dashboard measurements |
 | `--quick` | Off | Run a shortened animation ladder (1, 16, and 128 elements) to smoke-test setup |
@@ -1557,15 +1557,33 @@ These have no published standard, or depend on your own Home Assistant:
 | Animations it can handle | reported only | A wall panel mostly shows still dashboards; animation capacity is useful to compare frames, not to judge a panel |
 | App memory, peak PSS of all app processes (on the reference dashboards, and on yours) | ≤ 50% of `MemTotal` | An always-on panel shares its RAM with the system, vendor daemons and the radio. Half for the app leaves room for them |
 | Device memory, lowest `MemAvailable` during the run | ≥ 15% of `MemTotal` | Headroom for the system and the radio. A first choice, not a measured limit; change it in the same PR as the evidence |
-| A pane's RAM, its PSS on by itself against every pane off | the frame's `ram_pss_max_kb` for that pane (48 MB for `assist` and `sendspin` on the S1, 16 MB for `wall-base`, `time-zone` and `diagnostics`) | Set on 2026-11-13, before the first per-pane measurement; revisit with the first one. A pane that needs more should say why in its PR |
+| A pane's RAM, its PSS on by itself against every pane off | the frame's `ram_pss_max_kb` for that pane (48 MB for `assist` and `sendspin` on the S1, 16 MB for `wall-base`, `time-zone` and `diagnostics`; 48 MB for `assist`, `sendspin`, `camera` and `diagnostics` on Generic Android) | The S1's were set on 2026-11-13, before the first per-pane measurement; revisit with the first one. Generic Android's follow one rule (below). A pane that needs more should say why in its PR |
 | CPU at idle | reported only | No standard. Lower means less heat and power on a panel that never sleeps |
 | Your dashboard's start and load | reported only | Your dashboard, your network and your Home Assistant, so not comparable between panels |
 | Idle frames | reported only | A still dashboard should present almost nothing. A clock or an animated card adds frames |
 
 The budgets are the frame's own, in `frames/<id>/budgets.json` (#68): `ram` for the frame and
-`panes.<id>` for each pane. `tools/perf/budgets.json` is the default for a frame without one; a
-frame's `ram` names only the keys it changes, and its panes are its own. Clarity reports a budget
-as `ok`, `over` or `n/a`; it doesn't fail the run, because the device run isn't CI.
+`panes.<id>` for each pane. A frame without one that names a `base` in its `design/frame.json` has
+its base's: the Pixel Tablet runs Glassworks for generic Android, so `--frame google-pixel-tablet`
+reads `frames/generic-android/budgets.json`, for `--pane-ram`'s switches and for the report (#23).
+`tools/perf/budgets.json` is the default for a frame with neither; a frame's `ram` names only the
+keys it changes, and its panes are its own. Clarity reports a budget as `ok`, `over` or `n/a`; it
+doesn't fail the run, because the device run isn't CI.
+
+**Generic Android's pane budgets** (#23) follow one rule: the smallest 16 MB step that is at least
+the pane's share plus its tolerance, and at least four times the tolerance. The second part is there
+because the report gives no verdict on a tolerance over a quarter of the budget (below). No frame
+running that app has a per-pane run yet. The Pixel Tablet's graded run (2026-11-19) has
+`ram.panes: []`, and `--pane-ram` couldn't run there then, because it didn't read the base frame's
+switches. So `assist` and `sendspin` take the S1's best per-pane numbers, from the same code (s1p3
+without its cold sample: Assist +2.3 MB within ±10.2, Sendspin −4.4 MB within ±10.4, so four times
+10.4 MB is 41.6 MB, and the step is 48 MB). The camera and diagnostics have never been measured, and
+take the same 48 MB until they are. Notifications and the Bluetooth proxy aren't switched, for the
+same reasons as on the S1 (below). The tablet's three idle samples on the typical dashboard spread
+±36.9 MB over the whole app (`perflib.noise_band`; `main` ±15.5 MB, `gpu` ±17.1 MB, `tab` ±12.9 MB).
+If its `--pane-ram` samples are as noisy, every share there reads not measurable against 48 MB, and
+the run sets the budgets again by the same rule. `ram` stays the default: on that run the app's peak
+PSS was 1279 MB, 17% of the tablet's 7.27 GB, and the lowest `MemAvailable` 2311 MB, 31%.
 
 ### How Home Assistant animates (reference for the animation detail)
 
@@ -1605,8 +1623,8 @@ Assistant:
   and doesn't measure it. It covers only the processes still running, with a readable `VmHWM`, when it
   is read.
 - **Per pane**, with `--pane-ram assist=on,sendspin=on,wall-base=on,time-zone=on,diagnostics=on,mic=on`
-  (the settings now, put back
-  afterwards). The kiosk is pointed at the typical reference dashboard. In each run the runner turns every switchable
+  on the S1, or `--pane-ram assist=on,sendspin=on,camera=on,diagnostics=on,mic=on` on Generic Android
+  and the frames based on it, such as the Pixel Tablet (the settings now, put back afterwards). The kiosk is pointed at the typical reference dashboard. In each run the runner turns every switchable
   pane off and takes an idle sample (`ref-panes-off`), then turns each pane on by itself and takes one
   (`ref-<pane>-on`). Before the first run it does one **warm-up cycle**, every state once, whose
   files (its idle and pane files, and its `thermal.tsv` rows) go to `warmup/` and aren't in the
@@ -1701,7 +1719,10 @@ Assistant:
   run doesn't, so on by itself it would measure an idle pane (#121). The S1 has no camera, so the
   camera pane can't run there; its code still ships, so it keeps a size budget (#117). The report
   lists all four, with why. The wall base, time zone and diagnostics shares
-  have not been measured on a panel yet.
+  have not been measured on a panel yet. Those four are the S1's. Generic Android and the frames
+  based on it switch the camera and diagnostics too, and leave out three: timers, notifications and
+  the Bluetooth proxy, for the same reasons. Its camera, diagnostics, Assist and Sendspin shares have
+  not been measured on a device yet.
 
 **Why not an emulator in CI** (assessed 2026-11-13, from the build and the panes' needs; not tried).
 #68 asked whether an x86_64 Android emulator in CI could measure RAM per pane. Not now:

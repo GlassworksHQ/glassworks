@@ -176,7 +176,7 @@ export async function apkPermissions(apk: Uint8Array, api: number): Promise<stri
     .map((e) => e.attrs['android:name'] as string);
 }
 
-/** The package an APK installs as, e.g. sh.edm.s1kiosk. Throws for a file that isn't an APK. */
+/** The package an APK installs as, e.g. com.example.app. Throws for a file that isn't an APK. */
 export async function apkPackage(apk: Uint8Array): Promise<string> {
   return (await apkInfo(apk)).package;
 }

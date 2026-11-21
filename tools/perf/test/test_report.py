@@ -2087,6 +2087,23 @@ class FakeLog(unittest.TestCase):
             R.load_budgets("aqara-s1-plus", "/nonexistent/budgets.json")
         self.assertIn("assist", R.load_budgets("aqara-s1-plus")["panes"])       # the frame's own file
 
+    def test_a_tested_frame_has_its_base_frames_budgets(self):
+        """#23: the Pixel Tablet runs Glassworks for generic Android, so its report checks that app's panes."""
+        tablet = R.load_budgets("google-pixel-tablet")
+        self.assertEqual(tablet, R.load_budgets("generic-android"))
+        self.assertEqual(tablet["panes"]["camera"]["ram_pss_max_kb"], 49152)
+        tmp = tempfile.mkdtemp()
+        for fid, files in {"base": {"budgets.json": {}}, "own": {"budgets.json": {}, "design/frame.json": {"base": "base"}},
+                           "tested": {"design/frame.json": {"base": "base"}}, "orphan": {"design/frame.json": {"base": "nowhere"}},
+                           "plain": {"design/frame.json": {}}}.items():
+            for name, body in files.items():
+                os.makedirs(os.path.dirname(os.path.join(tmp, fid, name)), exist_ok=True)
+                with open(os.path.join(tmp, fid, name), "w") as f:
+                    json.dump(body, f)
+        for fid, want in {"own": "own", "tested": "base", "orphan": None, "plain": None, "missing": None}.items():
+            got = P.frame_budgets_path(tmp, fid)
+            self.assertEqual(got, want and os.path.join(tmp, want, "budgets.json"), fid)
+
     def test_the_head_must_be_on_the_first_screen(self):
         page = dict(Usable.page, usable=dict(Usable.page["usable"], first_screen_cards=8, head_cards=10))
         self.assertIn("fewer than the 10 head cards", R.usable_on_screen(page, [99_520])[1])

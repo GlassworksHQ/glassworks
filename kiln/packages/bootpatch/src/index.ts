@@ -2,8 +2,9 @@
 // Copyright (c) 2026 aguilaair
 // Written clean-room from docs/research/kiln-cleanroom/bootpatch-spec.md ("Public API to keep").
 //
-// Kiln's boot image patcher: the Magisk patch of frames/aqara-s1-plus/tools/root/patch-boot-magisk.sh,
-// byte for byte, plus the partition edits around it (vbmeta flags, boot logo).
+// Kiln's boot image patcher: the reference CLI's Magisk patch (patch-boot-magisk.sh), byte for byte, plus the
+// partition edits around it (vbmeta flags, boot logo). The files a frame adds to the ramdisk are its own
+// (frames/<id>/installer), passed in as `overlay`.
 
 import { extractMagiskBusybox, extractMagiskPayload, type MagiskBinaries } from './apk';
 import { loadCompressor } from './compress';
@@ -12,7 +13,6 @@ import { type OverlayFile, type PatchImageInput, type PatchResult, openBoot, pat
 export type { OverlayFile, PatchImageInput, PatchResult };
 export { vbmetaFlags, withVbmetaFlags } from './vbmeta';
 export { readBootlogo, replaceBootlogo } from './bootlogo';
-export { s1Overlay, type S1OverlayInputs } from './overlay';
 export { loadCompressor } from './compress';
 export { zipEntries, type ZipEntry, type MagiskBinaries } from './apk';
 
@@ -37,7 +37,7 @@ export async function patchBoot(input: PatchInput): Promise<PatchResult> {
   return patchWith({ boot: input.boot, magisk: binaries, overlay: input.overlay, preinitDevice: input.preinitDevice }, comp);
 }
 
-/** Magisk's own busybox from the Magisk APK (the same one `patchBoot` takes), for s1Overlay's `magiskBusybox`. */
+/** Magisk's own busybox from the Magisk APK (the same one `patchBoot` takes), for a frame's overlay (Magisk loads no module without it). */
 export async function magiskBusybox(magiskApk: Uint8Array): Promise<Uint8Array> {
   return extractMagiskBusybox(magiskApk, await loadCompressor());
 }

@@ -41,8 +41,8 @@ read its shell, which is ours. You may also read Magisk's published documentatio
 | `interface PatchImageInput` | `{ boot: Uint8Array; magisk: MagiskBinaries; overlay: OverlayFile[]; preinitDevice?: string }`. `preinitDevice` defaults to `'cache'` |
 | `interface PatchResult` | `{ image: Uint8Array; wasMagisk: boolean; magiskConfig: string; log: string[] }`. `log` lines are free text in your words |
 | `interface OverlayFile` | `{ path: string; mode: number; data: Uint8Array }` |
-| `magiskBusybox(magiskApk: Uint8Array): Promise<Uint8Array>` | `lib/armeabi-v7a/libbusybox.so` out of the APK, for `s1Overlay`'s `magiskBusybox` (`extractMagiskBusybox` in `apk.ts`). A zip read; it doesn't change the patch |
-| re-exports | `vbmetaFlags`, `withVbmetaFlags` (`vbmeta.ts`), `readBootlogo`, `replaceBootlogo` (`bootlogo.ts`), `s1Overlay`, `type S1OverlayInputs` (`overlay.ts`), `loadCompressor` (`compress.ts`), `zipEntries`, `type ZipEntry`, `type MagiskBinaries` (`apk.ts`) |
+| `magiskBusybox(magiskApk: Uint8Array): Promise<Uint8Array>` | `lib/armeabi-v7a/libbusybox.so` out of the APK, for a frame's overlay (the S1's `s1Overlay`) (`extractMagiskBusybox` in `apk.ts`). A zip read; it doesn't change the patch |
+| re-exports | `vbmetaFlags`, `withVbmetaFlags` (`vbmeta.ts`), `readBootlogo`, `replaceBootlogo` (`bootlogo.ts`), `loadCompressor` (`compress.ts`), `zipEntries`, `type ZipEntry`, `type MagiskBinaries` (`apk.ts`) |
 
 `MagiskBinaries` is `{ magiskinit, magisk, initLd }`: the three `armeabi-v7a` libraries from the APK
 (`libmagiskinit.so`, `libmagisk.so`, `libinit-ld.so`).
@@ -410,5 +410,5 @@ vector is wrong, say so in #355, and the spec owner checks it.
 | `test/legacy-internals.test.ts` | **Delete without opening**. The vectors replace it |
 | `src/wasm/bootpatch.wasm` | Rebuilt by `build-wasm.sh`. Commit the new one |
 | `src/wasm/THIRD_PARTY.txt` | Keep, and correct its last line once `lib.rs` is new |
-| `src/apk.ts`, `src/compress.ts`, `src/overlay.ts`, `src/vbmeta.ts`, `src/bootlogo.ts`, `src/wasm/Cargo.toml`, `src/wasm/Cargo.lock`, `src/wasm/build-wasm.sh` | Keep. You may read and change them |
+| `src/apk.ts`, `src/compress.ts`, `src/vbmeta.ts`, `src/bootlogo.ts`, `src/wasm/Cargo.toml`, `src/wasm/Cargo.lock`, `src/wasm/build-wasm.sh` | Keep. You may read and change them |
 | `test/bootpatch.test.ts`, `test/vectors.test.ts`, `test/vectors/*` | The contract. Read them, don't edit the vectors |

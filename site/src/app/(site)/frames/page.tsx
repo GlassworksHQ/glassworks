@@ -9,7 +9,7 @@ import {
 } from "@/components/DeviceBits";
 import { frames } from "@/lib/frames";
 import { difficultyHelp, ratingKeys, ships } from "@/lib/frameText";
-import { links, panes } from "@/lib/site";
+import { panes } from "@/lib/site";
 import { support } from "@/lib/paneSupport";
 import { pageMetadata } from "@/lib/seo";
 import s from "./frames.module.css";
@@ -24,10 +24,13 @@ export const metadata = pageMetadata({
 export default function DevicesPage() {
   return (
     <div className={s.page}>
-      <PageHead title="Frames" lede="Devices Glassworks runs on, or will." />
-      <FrameGrid id="frames" title="Devices" aside={<span>{frames.length} frames</span>} frames={frames}>
-        <AddCard href={links.org} title="Your panel">
-          Any Android panel can be a frame. A porting guide is planned.
+      <PageHead
+        title="Supported devices"
+        lede="Wall panels, smart mirrors, and Android tablets that run Glassworks, with install details, Clarity grades, and feature support."
+      />
+      <FrameGrid id="frames" title="Devices" aside={<span>{frames.length} supported &amp; planned</span>} frames={frames}>
+        <AddCard href="/docs/frames" title="Bring your own panel">
+          Any Android panel can run Glassworks. Read the porting guide to build a frame for your hardware.
         </AddCard>
       </FrameGrid>
 

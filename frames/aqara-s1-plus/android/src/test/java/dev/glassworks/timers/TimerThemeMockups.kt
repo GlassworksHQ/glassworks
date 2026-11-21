@@ -73,13 +73,13 @@ class TimerThemeMockups {
     }
 
     /** The timers over a stand-in dashboard, in [theme] (read when the overlay is attached, as in the app). */
-    private fun scene(theme: String, w: Int, h: Int, dark: Boolean): Pair<FrameLayout, TimerOverlay> {
+    private fun scene(theme: String, w: Int, h: Int, dark: Boolean, touch: Boolean = true): Pair<FrameLayout, TimerOverlay> {
         KioskPrefs(RuntimeEnvironment.getApplication()).overlayTheme = theme
         val a = Robolectric.buildActivity(Activity::class.java).setup().get()
         a.getSharedPreferences("timers", Context.MODE_PRIVATE).edit().clear().commit()
         val root = FrameLayout(a)
         root.addView(Dashboard(a, dark), FrameLayout.LayoutParams(-1, -1))
-        val timers = TimerOverlay(a)
+        val timers = TimerOverlay(a).apply { this.touch = { touch } }
         root.addView(timers, timers.layoutParams())
         a.setContentView(root, ViewGroup.LayoutParams(-1, -1))
         layout(root, w, h)
@@ -87,16 +87,36 @@ class TimerThemeMockups {
         return root to timers
     }
 
-    private fun shots(tag: String, w: Int, h: Int) {
+    /** The board: three or more timers in one card. [touch] false is the Mirror (no "Hide"). */
+    private fun boards(tag: String, w: Int, h: Int, touch: Boolean) {
+        for ((theme, dark) in listOf("glassworks/dark" to true, "dusk/light" to false, "aurora/dark" to true, "dune/light" to false)) {
+            val (root, timers) = scene(theme, w, h, dark, touch)
+            TimerBoard.update(listOf(
+                Entry("p", "Pasta", 600, 491, true), Entry("r", "Rice", 1200, 892, true),
+                Entry("o", "Oven", 2700, 1470, false), Entry("e", "Eggs", 420, 7, true),
+            ))
+            timers.refresh(); idle(400)
+            save("board-$tag-${theme.replace('/', '-')}", root, w, h)
+            TimerBoard.reset()
+        }
+        val (root, timers) = scene("glassworks/dark", w, h, true, touch)
+        TimerBoard.update((1..7).map { Entry("t$it", listOf("Pasta", "Rice", "Oven", "Eggs", "Tea", "Bread", "Laundry")[it - 1], 300 * it, 280 * it, true) })
+        timers.refresh(); idle(400)
+        save("board-$tag-seven", root, w, h)
+        TimerBoard.reset()
+    }
+
+    /** The rings and the done screen. [touch] false is the Mirror. */
+    private fun shots(tag: String, w: Int, h: Int, touch: Boolean) {
         for ((theme, dark) in listOf("glassworks/dark" to true, "dusk/light" to false, "aurora/dark" to true, "dune/light" to false)) {
             val name = theme.replace('/', '-')
-            var (root, timers) = scene(theme, w, h, dark)
-            // Running, the last 10 seconds, and paused.
-            TimerBoard.update(listOf(Entry("p", "Pasta", 600, 492, true), Entry("e", "Eggs", 420, 7, true), Entry("o", "Oven", 2700, 1470, false)))
+            var (root, timers) = scene(theme, w, h, dark, touch)
+            // Two timers stay rings (three make the board): running, and the last 10 seconds.
+            TimerBoard.update(listOf(Entry("p", "Pasta", 600, 492, true), Entry("e", "Eggs", 420, 7, true)))
             timers.refresh(); idle(400)
             save("timers-$tag-$name-dock", root, w, h)
             // Done: Eggs finished, Pasta still running.
-            val s = scene(theme, w, h, dark); root = s.first; timers = s.second
+            val s = scene(theme, w, h, dark, touch); root = s.first; timers = s.second
             TimerBoard.update(listOf(Entry("p", "Pasta", 600, 491, true), Entry("e", "Eggs", 420, 0, true)))
             TimerBoard.finished("Eggs")
             TimerBoard.update(listOf(Entry("p", "Pasta", 600, 491, true)))
@@ -108,13 +128,33 @@ class TimerThemeMockups {
 
     @Test fun s1() {
         assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", dir != null)
-        shots("s1", 1440, 720)
+        shots("s1", 1440, 720, touch = true)
+        boards("s1", 1440, 720, touch = true)
+    }
+
+    /** The done screen on the Mirror (portrait, no touch) with long names: the texts fit, and the hint says how it ends. */
+    @Config(qualifiers = "w540dp-h960dp-port-xhdpi")
+    @Test fun mirrorDoneLongNames() {
+        assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", dir != null)
+        for ((theme, dark) in listOf("glassworks/dark" to true, "dusk/light" to false)) {
+            val (root, timers) = scene(theme, 1080, 1920, dark, touch = false)
+            TimerBoard.update(listOf(
+                Entry("l", "Laundry in the basement washer", 2700, 0, true), Entry("p", "Pasta for the whole family", 600, 491, true),
+                Entry("r", "Rice in the big pot", 1200, 890, true), Entry("t", "Tea", 300, 200, true),
+            ))
+            TimerBoard.finished("Laundry in the basement washer")
+            TimerBoard.update(listOf(Entry("p", "Pasta for the whole family", 600, 491, true), Entry("r", "Rice in the big pot", 1200, 890, true), Entry("t", "Tea", 300, 200, true)))
+            timers.refresh(); bakeWait(); idle(1200)
+            save("done-mirror-long-${theme.replace('/', '-')}", root, 1080, 1920)
+            TimerBoard.dismissFinished(); TimerBoard.reset()
+        }
     }
 
     @Config(qualifiers = "w540dp-h960dp-port-xhdpi")
     @Test fun mirror() {
         assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", dir != null)
-        shots("mirror", 1080, 1920)
+        shots("mirror", 1080, 1920, touch = false)
+        boards("mirror", 1080, 1920, touch = false)
     }
 
     /** A stand-in dashboard in HA's dark or light look: cards and a few tiles, so the timers' glass shows. */

@@ -21,8 +21,9 @@
 // The Wi-Fi password, the sign-in and the key never go into a command line, a log line or an error message.
 import type { PanelShell } from '@glassworks/adb';
 import {
-  ACT, ADMIN, PKG, type Carries, apiKeyFingerprint, apiKeySocketUp, dropAdmin, handOverApiKey, handOverDone, handOverSignIn, handoverCarries, readApiKey, readSignIn,
+  type Carries, apiKeyFingerprint, apiKeySocketUp, dropAdmin, handOverApiKey, handOverDone, handOverSignIn, handoverCarries, readApiKey, readSignIn,
 } from '@glassworks/app-adb';
+import { ACT, ADMIN, PKG, S1_KIOSK } from './app';
 import { IMPROV_SOCKET, ImprovSerialClient } from './improv';
 import switchScript from '../../tools/install/glassworks-switch.sh?raw';
 
@@ -423,7 +424,7 @@ async function switchSteps(p: PanelShell, apk: Uint8Array, plan: SwitchPlan, log
     await p.run(`am start -n ${PKG}/.improv.ImprovActivity --ez release_device_owner true`);
     await sleep(2000);
   }
-  if (!(await dropAdmin(p, sleep))) log('device admin still active: removing the app may fail');
+  if (!(await dropAdmin(p, sleep, S1_KIOSK))) log('device admin still active: removing the app may fail');
   const undo = async () => {
     await p.run(`pm enable ${PKG}`);
     await p.run(`dpm set-active-admin ${ADMIN}`);

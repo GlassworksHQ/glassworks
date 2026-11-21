@@ -112,7 +112,7 @@ class GenericParts : AppParts {
      */
     override fun overlays(runtime: GlassworksRuntime, host: OverlayHost): List<PaneOverlay> {
         val activity = host.activity
-        val timers = TimerOverlay(activity, runtime.orbs)
+        val timers = TimerOverlay(activity, runtime.orbs).apply { touch = { runtime.frame.input == Input.TOUCH } }
         // Both Assist looks report whether they show; the timers hear one signal (either shows).
         val showing = VoiceShowing(timers::voiceShowing)
         val voice = VoiceOverlay(activity).apply {

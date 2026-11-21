@@ -260,17 +260,19 @@ class Budgets(unittest.TestCase):
             self.assertIsInstance(s1["panes"][pid]["size_max_bytes"], int, pid)
 
     def test_the_generic_apps_budgets(self):
-        """Glassworks for generic Android (#23): a size budget per ABI its frame runs, and per pane it ships.
-        Its RAM budgets wait for a measured run, and say so."""
+        """Glassworks for generic Android (#23): a size budget per ABI its frame runs and per pane it
+        ships, and a RAM budget per pane Clarity switches."""
         g = A.read_json(os.path.join(ROOT, "frames", "generic-android", "budgets.json"))
         frame = A.read_json(os.path.join(ROOT, "frames", "generic-android", "design", "frame.json"))
         self.assertEqual(set(g["size"]["apk_max_bytes"]), set(frame["abis"]))
-        self.assertEqual(set(g["panes"]), {"assist", "sendspin", "timers", "camera"})
+        with open(os.path.join(ROOT, "frames", "generic-android", "android", "build.gradle.kts")) as f:
+            ships = set(re.findall(r'project\(":pane-([a-z0-9-]+)"\)', f.read()))
+        self.assertEqual(set(g["panes"]), ships)
         for pid, pane in g["panes"].items():
             self.assertIn(pid, PARTS["panes"])
             self.assertIsInstance(pane["size_max_bytes"], int, pid)
-            self.assertNotIn("ram_pss_max_kb", pane, "set from a measured run, then drop _todo_ram")
-        self.assertIn("ram_pss_max_kb", g["_todo_ram"])
+            self.assertEqual("ram_pss_max_kb" in pane, "switch" in pane, pid)
+        self.assertNotIn("_todo_ram", g)
 
     def test_a_check_that_builds_no_base_says_so(self):
         d = tempfile.mkdtemp()

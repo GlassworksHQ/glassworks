@@ -1,8 +1,8 @@
 // Fastboot over WebUSB, for every frame. A fork of fastboot.js (kdrag0n, MIT, see README.md):
 // its flashBlob, sparse splitting and bootBlob, on our transport (the one FEL uses, so the tests
-// can run against simulated devices), plus what our FEL-booted U-Boot (frames/aqara-s1-plus/tools/fel/uboot) adds:
+// can run against simulated devices), plus what our FEL-booted U-Boot (the A133 build in the frame's tools/fel/uboot) adds:
 // 'oem run' and the 'upload' of patch 0002, which reads partitions back
-// (frames/aqara-s1-plus/tools/install/fb-read-partition.sh).
+// (the reference CLI's fb-read-partition.sh).
 import { WebUsbBulk, type BulkTransport } from '@glassworks/fel/transport';
 import * as Sparse from './sparse';
 
@@ -13,10 +13,10 @@ const FASTBOOT_INTERFACE = { classCode: 0xff, subclassCode: 0x42, protocolCode: 
 /** CONFIG_FASTBOOT_BUF_ADDR / _SIZE: partitions are staged here for reads and downloads. */
 export const FASTBOOT_BUF = 0x50000000;
 export const FASTBOOT_BUF_SIZE = 0x20000000;
-/** eMMC is mmc 1 on the S1 Plus. */
+/** eMMC is mmc 1 on the boards our U-Boot runs on. */
 const MMC = 1;
 const MAX_COMMAND = 64;
-/** Bytes per USB transfer. Upstream sends 16 KiB; 1 MiB is what the S1 has always used. */
+/** Bytes per USB transfer. Upstream sends 16 KiB; 1 MiB is what our U-Boot has always taken. */
 const XFER = 1024 * 1024;
 const GETVAR_MS = 10_000;
 /** Flashing 32 MiB to eMMC takes a few seconds; 'oem run' of 'mmc read' about as long. */
@@ -171,7 +171,7 @@ export class Fastboot {
    * Flashes a Blob (a File stays on disk) of any image format the bootloader takes. A raw image
    * larger than max-download-size becomes sparse, and a sparse image is split into pieces that
    * each fit, as AOSP fastboot does. Each piece is read from the Blob only when it is sent.
-   * No read-back: verify some other way (on the S1, use flashVerified).
+   * No read-back: verify some other way (on our U-Boot, use flashVerified).
    */
   async flashBlob(partition: string, blob: Blob, onProgress: FlashProgressCallback = () => {}): Promise<void> {
     // Use current slot if partition is A/B
@@ -247,7 +247,7 @@ export class Fastboot {
   }
 }
 
-/** Upstream waits for 'flash:' without a limit. Ours: the S1's 120 s plus 1 s per 4 MiB written. */
+/** Upstream waits for 'flash:' without a limit. Ours: our U-Boot's 120 s plus 1 s per 4 MiB written. */
 function flashTimeout(bytes: number): number {
   return SLOW_MS + Math.ceil(bytes / (4 * 1024 * 1024)) * 1000;
 }

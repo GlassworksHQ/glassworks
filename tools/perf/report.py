@@ -1333,12 +1333,12 @@ def reference_ram(ref_idles, refstarts, package, budgets, mem_total_kb):
 
 
 def load_budgets(frame_id, path=None):
-    """The frame's budgets (frames/<id>/budgets.json, or `path`) over the default (tools/perf/budgets.json)."""
+    """The frame's budgets (frames/<id>/budgets.json or its base frame's, or `path`) over the default (tools/perf/budgets.json)."""
     default = read_json(os.path.join(HERE, "budgets.json"))
     if path and not os.path.exists(path):
         raise SystemExit(f"--budgets {path}: no such file")       # F9: never fall back silently
-    own = path or os.path.join(HERE, "..", "..", "frames", frame_id, "budgets.json")
-    return G.frame_budget(default, read_json(own) if os.path.exists(own) else None)
+    own = path or P.frame_budgets_path(os.path.join(HERE, "..", "..", "frames"), frame_id)
+    return G.frame_budget(default, read_json(own) if own else None)
 
 
 # ---- APK size

@@ -115,7 +115,7 @@ class S1Panes : AppParts {
     override fun overlays(runtime: GlassworksRuntime, host: OverlayHost): List<PaneOverlay> {
         val activity = host.activity
         val panePrefs = PanePrefs(activity)
-        val timers = TimerOverlay(activity, runtime.orbs)
+        val timers = TimerOverlay(activity, runtime.orbs).apply { touch = { runtime.frame.input == dev.glassworks.frame.Input.TOUCH } }
         // Both Assist looks report whether they show; the timers hear one signal (either shows).
         val showing = VoiceShowing(timers::voiceShowing)
         val voice = VoiceOverlay(activity).apply {

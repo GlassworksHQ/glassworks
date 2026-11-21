@@ -56,6 +56,8 @@ class TimerThemeTest {
         t.refresh()
         assertEquals(2, rings(t).size)
         for (r in rings(t)) assertEquals(Themes.DUSK.light, r.look.palette)
+        // The listener outlives a garbage collection (it was once held only weakly and went at the next one).
+        repeat(3) { System.gc(); System.runFinalization() }
         // Picked again on the Appearance page (or on Manage): the rings follow.
         prefs.overlayTheme = "aurora/dark"
         shadowOf(Looper.getMainLooper()).idle()

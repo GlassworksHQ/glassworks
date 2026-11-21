@@ -1,3 +1,4 @@
+export { ACT, S1_KIOSK } from './app';
 export { credits } from './credits';
 export { s1Plus, type AssetName, type SetUpOptions } from './recipe';
 export { DEBLOAT, KeyMismatchError, PKG, type AppApk, type AppPhase, deviceInfo, kioskVersion, parseWifiScan, provision, q, scanWifi, unprovision, type ProvisionOptions, type UndoResult, type Provisioned, type StepFn, type SwitchResult, type WifiNetwork } from './provision';
