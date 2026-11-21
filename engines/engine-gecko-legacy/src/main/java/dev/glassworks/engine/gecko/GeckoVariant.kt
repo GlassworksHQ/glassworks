@@ -5,6 +5,7 @@
 package dev.glassworks.engine.gecko
 
 import dev.glassworks.engine.gecko.legacy.Lockdown
+import dev.glassworks.engine.gecko.legacy.MemoryPressure
 
 /**
  * The legacy engine (#198): engine-gecko's GeckoEngine.kt, compiled against the frozen GeckoView 144, takes this
@@ -17,4 +18,7 @@ internal object GeckoVariant {
     const val LOCKED_DOWN = true
 
     fun guard(logTag: String): PageGuard? = Lockdown(logTag)
+
+    /** The runtime is up, on the main thread: Gecko hears of low memory for as long as it lasts ([MemoryPressure], #684). */
+    fun runtimeStarted(logTag: String) = MemoryPressure.forThisProcess(logTag).start()
 }

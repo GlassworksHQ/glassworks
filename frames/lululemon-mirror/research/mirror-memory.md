@@ -143,6 +143,45 @@ the memory go, and what can the app or the image give back?
    - **Encoding stops when the last viewer leaves** already (`ViewerEncoder`). Home Assistant's two clients kept it
      running the whole time.
 
+9. **Read why Gecko stops giving memory back** (2026-11-21, read; #684). The root's pulls of 2026-11-21 (legacy
+   0.2.0, one dashboard, stream later turned off): the lowmemorykiller took `:tabN` at 00:00, 02:09, 02:55, 03:03 and
+   03:27 UTC after 7 hours with none. At 03:28 main was 158,557 kB PSS (EGL mtrack 61,756, Gfx dev 17,100, Unknown
+   22,280, Dalvik 19,213) plus 114,200 swapped; the page was 121,775 PSS (Unknown 106,390) plus 86,384 swapped;
+   MemFree 51 MB. #684 saw main grow from about 150 to 234 MB in 20 minutes on one view, and drop when the view changed.
+
+   - **Android tells a process once.** AOSP `android-6.0.1_r81` `ActivityManagerService.updateOomAdjLocked` calls
+     `scheduleTrimMemory` for a process in front only when its level rises (`app.trimMemoryLevel < fgTrimLevel`), and
+     sets the level back to 0 only when memory is normal again. The Mirror sits at "critical" (3), so each of our
+     processes hears RUNNING_CRITICAL once and never again.
+   - **GeckoView passes on what it hears, no more.** GeckoView 144's `MemoryController` (jadx of the AAR) turns
+     `onTrimMemory(15)` or `>= 80` into `memory-pressure` "low-memory", 40 to 79 into "low-memory" at most every
+     10 s, and RUNNING_MODERATE, RUNNING_LOW and UI_HIDDEN into nothing. `GeckoRuntime` registers one in the app's
+     process, and `GeckoThread` one in each child.
+   - **What a "low-memory" does** (Gecko `FIREFOX_144_0_RELEASE`): `ContentParent::Observe` forwards it to every
+     content process (`SendFlushMemory`); `nsJSEnvironmentObserver` runs a GC and a CC on "low-memory" (not on
+     "low-memory-ongoing"); `gfxPlatform::OnMemoryPressure` in the parent sends `NotifyMemoryPressure` to the
+     compositor, and `CompositorBridgeParent::NotifyMemoryPressure` calls `wr_api_notify_memory_pressure`, which clears
+     WebRender's caches. With no GPU process the compositor and WebRender are in main, which is where EGL mtrack grows.
+   - **So the legacy engine tells Gecko again** (`engines/engine-gecko-legacy` `MemoryPressure`): every 2 minutes it
+     reads the process's trim level (`ActivityManager.getMyMemoryState`, `lastTrimLevel`) and, at RUNNING_LOW,
+     RUNNING_CRITICAL or any background level, sends "low-memory" (`GeckoAppShell.notifyObservers`). Each one logs
+     `memory-pressure again: Android's trim level is <n>`. Whether this holds main and the page flat on the Mirror is
+     **untested**: a Mirror hour with `tools/mirror/memory-hour.sh` on each build answers it.
+   - **The page process's oom adj is already the best an app gets.** `ServiceAllocator.PriorityLevel.FOREGROUND` is
+     64, `BIND_IMPORTANT` (jadx), so the page gets its client's adj, 0, as the dmesg kill lines show. Only a
+     persistent system app's processes go below 0 (`android:persistent`, -12 and, bound with `BIND_IMPORTANT`,
+     `PERSISTENT_SERVICE_ADJ` -11, same AOSP file, `computeOomAdjLocked`), which the lowmemorykiller's table never
+     reaches. Not tried: memory would still run out, the kernel would evict
+     the file cache that libxul runs from, Android 6's `am force-stop` skips persistent processes (`forceStopPackageLocked` with
+     `evenPersistent` false; Kiln's undo uses it), and the process restarts itself whenever it ends.
+   - **The stream's cost** (read, `panes/camera`). One encoder per RTSP server, shared by every viewer
+     (`ViewerEncoder`); each session queues at most 90 access units (`RtspServer.QUEUE_CAPACITY`), about 6 s at 15 fps
+     and 1.4 Mbit/s, so about 1 MB. Android 6 runs OMX components, `OMX.google.h264.encoder` included, in
+     mediaserver, so the encoder's buffers are in mediaserver's PSS, not ours. The camera2 LEGACY shim draws the
+     preview into each output with GL in the app's process, so its textures are in main's EGL mtrack and Gfx dev.
+     Measuring the stream on and off is in the plan; what to cut first is a lower size and rate on a software
+     encoder.
+
 ## Result
 
 | Cut | Where | Expected on the Mirror | How sure |
@@ -151,7 +190,7 @@ the memory go, and what can the app or the image give back?
 | No crash helper | legacy engine manifest | 6.6 MB and a restart a minute | Emulator verified; Mirror untested |
 | 36 unused system apps out of the image | Kiln's system.img patch | the root's one sample: free RAM 60 → 205 MB | One sample; flash untested |
 | Image and memory cache caps, bfcache off, JS GC heap growth | | nothing measured | Emulator: no change |
-| `onTrimMemory` | | already handled by GeckoView | Read |
+| `onTrimMemory` | legacy engine (`MemoryPressure`, #684) | GeckoView tells Gecko once per rise of the trim level; the legacy engine tells it again every 2 minutes while memory is short | Read (9); Mirror untested |
 | `largeHeap` | | none: Java is 16 MB of main's 123 MB, Gecko's heap is native | Read (meminfo) |
 | lowmemorykiller limits | image | not changed. Lowering adj 0's 72 MB would let the page live longer but evict the file cache that libxul runs from, so the panel thrashes instead | Untested, judgement |
 | zram size | image | not changed: 512 MB with 167 MB used is not the limit; the limit is free plus file cache | Read |
@@ -177,7 +216,8 @@ grep -o 'below limit [0-9]*kB for oom_score_adj [0-9]*' dmesg.txt | sort -u   # 
 ```
 
 `tools/mirror/memory-hour.sh <out> [minutes]` records a run from now on: the same counts since its start, `dumpsys
-meminfo` before and after, and free RAM every 5 minutes. It only reads. Set `MIRROR_ADB` to the adb command that
+meminfo` before and after, free RAM every 5 minutes, and every minute the PSS of the app's process and of the page's
+(`pss.txt`: total, swapped, EGL mtrack, Gfx dev, Unknown, Dalvik, and the page's pid, which changes when it dies). It only reads. Set `MIRROR_ADB` to the adb command that
 reaches the Mirror.
 
 **The emulator numbers.** An API 23 arm64 AVD with `hw.ramSize=1024M`, 1080×1920 at 240 dpi, and the legacy APK.

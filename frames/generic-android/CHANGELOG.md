@@ -78,6 +78,10 @@ line of each version is what Home Assistant shows on the update card. A change o
   Wi-Fi was open, Android kept that Wi-Fi up, the device's own Wi-Fi stayed off, and the device's hotspot settings
   kept the setup network. Now the app puts all of that back the next time it starts. If the device's own hotspot is
   already on, the setup screen says so instead of showing a network the panel can't open. Legacy build only.
+- **The Mirror's dashboard reloads less when memory runs short (legacy build).** On a device that stays low on
+  memory for hours, the web engine was told so only once, so the page grew back until Android closed it and the
+  dashboard reloaded. The legacy build now tells it again every two minutes for as long as memory stays short, so
+  it keeps giving memory back.
 - **The timer done screen fits a portrait screen.** On a portrait screen such as the Mirror, the timer's name,
   its length and the timers still running now fit the screen's width, as the voice overlay's text does. Before,
   long names ran off the edges. On a screen without touch, the hint now says the screen closes by itself after a
