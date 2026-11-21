@@ -245,7 +245,9 @@ export default async function Home() {
                           ? "Measurements pending"
                           : clarity.state === "re-measure"
                             ? "Needs a fresh Clarity run"
-                            : "Measured on an older Clarity rubric"}
+                            : clarity.state === "not-comparable"
+                              ? clarity.grade.why || "Not comparable with current Clarity runs"
+                              : "Measured on an older Clarity rubric"}
                     </span>
                   </div>
                   {clarity.state === "graded" ? (
