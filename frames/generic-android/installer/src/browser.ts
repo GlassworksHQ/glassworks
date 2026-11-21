@@ -9,11 +9,15 @@
 // In mobile mode, client hints give the real model and version. Firefox keeps the real version in its user
 // agent. A model the page can't read may still match a GPU and screen fingerprint.
 //
-// 32 or 64-bit (issue 700): a browser that isn't frozen says what it runs as in navigator.platform: "Linux armv7l", or
-// "Linux armv8l" for 32-bit code on a 64-bit chip, as Android's own 32-bit userspace on a Galaxy Tab A 10.1 is; "Linux
-// aarch64" for 64-bit code. A device that runs a 32-bit browser runs the armeabi-v7a build; one that runs a 64-bit
-// browser, the arm64-v8a one. Chrome's frozen "Linux armv81" says neither, and Chrome on Android leaves the bitness
-// client hint empty (read on a Pixel Tablet, 2026-11-16), so there Kiln can't tell.
+// 32 or 64-bit (issue 700), so the person never has to know: whatever the browser itself runs as, the device runs too,
+// so a 32-bit browser means the armeabi-v7a build installs and a 64-bit one the arm64-v8a build. A browser that isn't
+// frozen says it in navigator.platform: "Linux armv7l", or "Linux armv8l" for 32-bit code on a 64-bit chip (Android's
+// own 32-bit userspace on a Galaxy Tab A 10.1), and "Linux aarch64" for 64-bit code. Chrome freezes it to "Linux armv81"
+// and leaves the bitness client hint empty on Android (read on a Pixel Tablet, 2026-11-16), so there the page asks
+// WebAssembly: V8 bounds a memory's maximum at 65536 pages (4 GiB) in a 64-bit build and lower in a 32-bit one, and
+// refuses a maximum above it with a RangeError (wasm4g; read from V8's kV8MaxWasmMemory32Pages, and the 64-bit bound
+// checked in Node 2026-11-20; not yet read on a 32-bit device). Only V8's yes counts: another engine may clamp the
+// maximum instead of refusing it.
 import { BRANDS, GENERIC_STEPS, MODELS, type Brand, type BrandId, type Identified, type Model } from './devices';
 
 /** What the page reads: navigator, screen, WebGL and the high-entropy client hints, where the browser has them. */
@@ -28,6 +32,11 @@ export interface BrowserFacts {
   gpu?: string;
   /** navigator.userAgentData.getHighEntropyValues: empty strings where the browser won't say */
   hints?: { platform?: string; model?: string; platformVersion?: string; bitness?: string };
+  /**
+   * Whether a WebAssembly memory may reach 4 GiB (65536 pages): true in a 64-bit browser; false where the engine's bound
+   * is lower, as in a 32-bit one; undefined where the page couldn't try
+   */
+  wasm4g?: boolean;
 }
 
 /** Which build of Glassworks fits: from the Android version, or the browser's own minimum when the version is hidden. */
@@ -110,10 +119,15 @@ function fingerprint(f: BrowserFacts): Model | undefined {
   return hit && MODELS.find((m) => m.name === hit.model);
 }
 
-/** 32 or 64-bit, from the browser's own machine name where it isn't frozen, else the bitness client hint. */
+/** Chromium's engine, V8: Chrome, Samsung Internet, Edge, Silk. Not Firefox. */
+const V8 = (ua: string) => /\bChrome\//.test(ua) && !/\bFirefox\//.test(ua);
+
+/** 32 or 64-bit: the browser's own machine name where it isn't frozen, else WebAssembly's bound, else the bitness client hint. */
 function bitsOf(f: BrowserFacts): 64 | 32 | undefined {
   if (/^Linux armv[78]l$/.test(f.platform)) return 32;
   if (f.platform === 'Linux aarch64') return 64;
+  if (f.wasm4g === false) return 32;
+  if (f.wasm4g === true && V8(f.userAgent)) return 64;
   const b = f.hints?.bitness;
   return b === '64' ? 64 : b === '32' ? 32 : undefined;
 }

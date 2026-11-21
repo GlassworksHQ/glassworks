@@ -69,9 +69,14 @@ describe('the version and the build that fits', () => {
     expect(identifyBrowser({ ...BROWSERS.GALAXY_TAB, platform: 'Linux aarch64', hints: { ...BROWSERS.GALAXY_TAB.hints, bitness: '' } }).bits).toBe(64);
     // the platform says what the browser runs as, so it wins over a hint
     expect(identifyBrowser({ ...BROWSERS.GALAXY_TAB, platform: 'Linux armv8l' }).bits).toBe(32);
-    // Chrome's frozen "Linux armv81" and an empty hint say nothing: the same tablet in Chrome
-    expect(read('GALAXY_TAB_A_2016')).toMatchObject({ release: '8.1', modelCode: 'SM-T580', app: 'generic' });
-    expect(read('GALAXY_TAB_A_2016')).not.toHaveProperty('bits');
+    // the same tablet in Chrome: the frozen "Linux armv81" and an empty hint, but WebAssembly's bound says 32-bit
+    expect(read('GALAXY_TAB_A_2016')).toMatchObject({ bits: 32, release: '8.1', modelCode: 'SM-T580', app: 'generic' });
+    // 4 GiB allowed: 64-bit, in V8 (Chrome, Samsung Internet) only, since another engine may clamp instead of refusing
+    expect(identifyBrowser({ ...BROWSERS.GALAXY_TAB_A_2016, wasm4g: true }).bits).toBe(64);
+    expect(identifyBrowser({ ...BROWSERS.FIREFOX_TAB, wasm4g: true })).not.toHaveProperty('bits');
+    expect(identifyBrowser({ ...BROWSERS.FIREFOX_TAB, wasm4g: false }).bits).toBe(32);
+    // nothing to go on: the frozen platform, no hint, no WebAssembly answer
+    expect(read('UNKNOWN_DESKTOP')).not.toHaveProperty('bits');
     // a computer's or a Pi's machine isn't an Android device's
     expect(read('PI_TOUCH').bits).toBeUndefined();
   });

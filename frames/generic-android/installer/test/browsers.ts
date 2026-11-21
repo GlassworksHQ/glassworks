@@ -49,12 +49,12 @@ export const BROWSERS = {
   },
   /**
    * A Galaxy Tab A 10.1 (SM-T580) on Samsung's Android 8.1, a 64-bit chip with a 32-bit userspace (issue 700), in
-   * Chrome's mobile site: the frozen platform and an empty bitness hint, so the page can't tell 32 from 64-bit.
+   * Chrome's mobile site: the frozen platform and an empty bitness hint, and 32-bit Chrome's lower WebAssembly bound.
    */
   GALAXY_TAB_A_2016: {
     userAgent: CHROME_REDUCED, platform: 'Linux armv81', maxTouchPoints: 10,
     screen: { width: 1280, height: 800, dpr: 1.5 },
-    hints: { platform: 'Android', model: 'SM-T580', platformVersion: '8.1.0', bitness: '' },
+    hints: { platform: 'Android', model: 'SM-T580', platformVersion: '8.1.0', bitness: '' }, wasm4g: false,
   },
   /** the same tablet in Samsung Internet, whose platform still says the 32-bit machine it runs as */
   GALAXY_TAB_A_2016_SAMSUNG: {

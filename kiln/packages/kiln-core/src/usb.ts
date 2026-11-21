@@ -110,6 +110,11 @@ export interface BrowserFacts {
   screen: { width: number; height: number; dpr: number };
   gpu?: string;
   hints?: { platform?: string; model?: string; platformVersion?: string; bitness?: string };
+  /**
+   * Whether a WebAssembly memory may reach 4 GiB (65536 pages): true in a 64-bit browser; false where the engine's bound
+   * is lower, as in a 32-bit one; undefined where the page couldn't try
+   */
+  wasm4g?: boolean;
 }
 
 /** The device as its own browser shows it, and which of the frame's builds fits (`either`: the version is hidden). */
