@@ -12,7 +12,7 @@
 # Secrets of the `maven-central` environment, which deploys only from libs/*/v* tags:
 # MAVEN_CENTRAL_USERNAME, MAVEN_CENTRAL_PASSWORD (a Portal user token), SIGNING_IN_MEMORY_KEY (ASCII-armoured
 # private key), SIGNING_IN_MEMORY_KEY_PASSWORD, SIGNING_IN_MEMORY_KEY_ID (last 8 hex of the fingerprint).
-# release.yml takes only v* and aqara-s1-plus-v* tags, so these never start an app release. Every action
+# release.yml runs only from its button (workflow_dispatch), so these never start an app release. Every action
 # is pinned by commit SHA (the tag in the comment is what it was at the time).
 name: Library release
 
