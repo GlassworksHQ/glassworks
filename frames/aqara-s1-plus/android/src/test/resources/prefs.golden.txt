@@ -41,6 +41,8 @@ kiosk|notifications_dnd|Boolean|false
 kiosk|notifications_enabled|Boolean|true
 kiosk|onvif_stream|Boolean|false
 kiosk|overlay_custom|String|null
+kiosk|overlay_follow_ha_dark|Boolean|false
+kiosk|overlay_ha_dark|String|null
 kiosk|overlay_theme|String|null
 kiosk|presence_range_m|Float|0.0
 kiosk|radio_allow|String|""

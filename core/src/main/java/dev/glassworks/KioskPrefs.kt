@@ -273,9 +273,32 @@ class KioskPrefs(
         get() = sp.getString("assist_look", null).takeIf { it == ASSIST_GLOW } ?: ASSIST_ORB
         set(v) = sp.edit().putString("assist_look", if (v == ASSIST_GLOW) ASSIST_GLOW else ASSIST_ORB).apply()
 
-    /** What the overlays draw with now: the saved pick, the custom theme's palettes for `custom/…`. */
+    /**
+     * What the overlays draw with now: the saved pick, the custom theme's palettes for `custom/…`. While
+     * [followHaDark] is on and Home Assistant has said which it is ([haDark]), the picked theme in HA's variant.
+     */
     val overlayPick: dev.glassworks.theme.Themes.Pick
-        get() = dev.glassworks.theme.Themes.pick(sp.getString("overlay_theme", null), customTheme)
+        get() {
+            val saved = dev.glassworks.theme.Themes.pick(sp.getString("overlay_theme", null), customTheme)
+            val dark = haDark?.takeIf { followHaDark } ?: return saved
+            return dev.glassworks.theme.Themes.Pick(saved.theme, dark)
+        }
+
+    /**
+     * The overlays' theme takes Home Assistant's light or dark (#691's "Follow Home Assistant's dark mode"): the picked
+     * theme stays, its variant follows HA's dark mode. Off by default.
+     */
+    var followHaDark: Boolean
+        get() = sp.getBoolean(KEY_FOLLOW_HA_DARK, false)
+        set(v) = sp.edit().putBoolean(KEY_FOLLOW_HA_DARK, v).apply()
+
+    /**
+     * Whether Home Assistant's frontend is in dark mode, as the dashboard last said (`hass.themes.darkMode`, read by the
+     * kiosk extension), or null while it hasn't said. Kept so the overlays have it from the start.
+     */
+    var haDark: Boolean?
+        get() = when (sp.getString(KEY_HA_DARK, null)) { "dark" -> true; "light" -> false; else -> null }
+        set(v) = sp.edit().apply { if (v == null) remove(KEY_HA_DARK) else putString(KEY_HA_DARK, if (v) "dark" else "light") }.apply()
 
     var hideSidebar: Boolean
         get() = sp.getBoolean("hide_sidebar", true)
@@ -439,6 +462,12 @@ class KioskPrefs(
         /** The Assist looks ([assistLook]). */
         const val ASSIST_ORB = "orb"
         const val ASSIST_GLOW = "glow"
+
+        const val KEY_FOLLOW_HA_DARK = "overlay_follow_ha_dark"
+        const val KEY_HA_DARK = "overlay_ha_dark"
+
+        /** The settings the overlays' theme reads ([overlayPick]): a change to one of them, and they take the theme again. */
+        val THEME_KEYS = setOf("overlay_theme", "overlay_custom", KEY_FOLLOW_HA_DARK, KEY_HA_DARK)
 
         val RESET_KEEPS = setOf("api_key", "api_encryption", "device_mac", "setup_device_steps_migrated")
         private val RESET_KEEPS_PREFIXES = listOf("radio_", "setup_radio_")

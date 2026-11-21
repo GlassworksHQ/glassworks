@@ -99,6 +99,10 @@ class SettingsMockups {
         shot("settings-03b-appearance", menu(radioRunning = true), CoreSettings.APPEARANCE)
         KioskPrefs(RuntimeEnvironment.getApplication()).overlayTheme = "dusk/light"
         shot("settings-03c-appearance-dusk-light", menu(radioRunning = true), CoreSettings.APPEARANCE)
+        // Following Home Assistant's dark mode, with the dashboard dark: Dusk's dark orb is ringed.
+        KioskPrefs(RuntimeEnvironment.getApplication()).apply { followHaDark = true; haDark = true }
+        shot("settings-03d-appearance-follow-ha", menu(radioRunning = true), CoreSettings.APPEARANCE)
+        KioskPrefs(RuntimeEnvironment.getApplication()).apply { followHaDark = false; haDark = null }
         KioskPrefs(RuntimeEnvironment.getApplication()).overlayTheme = "glassworks/dark"
         shot("settings-04-about", menu(radioRunning = true), "about")
         shot("settings-05-radio-service-not-running", menu(radioRunning = false), "radio")

@@ -112,7 +112,7 @@ class TimerOverlay(
     private var kiosk: KioskPrefs? = null
 
     private val themeChanged = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key == "overlay_theme" || key == "overlay_custom") post { applyTheme() }
+        if (key in KioskPrefs.THEME_KEYS) post { applyTheme() }
     }
 
     /** Takes the theme now: the rings, the chip, the peek, the guide and the done screen. */

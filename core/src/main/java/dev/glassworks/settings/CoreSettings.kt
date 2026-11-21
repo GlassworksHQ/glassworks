@@ -90,7 +90,7 @@ class CoreSettings(
         )),
         // The panel's own screens over the dashboard (#691): voice, timers, notifications and setup.
         SettingsPlace.APPEARANCE to SettingsSection(APPEARANCE, APPEARANCE_TITLE, listOf(
-            SettingsItem.Group(THEME_TITLE, listOf(SettingsItem.Note { THEME_NOTE }, theme())),
+            SettingsItem.Group(THEME_TITLE, listOf(SettingsItem.Note { THEME_NOTE }, theme(), followHaDark())),
             SettingsItem.Group(CUSTOM_DARK_TITLE, listOf(SettingsItem.Note { CUSTOM_NOTE }) + customColours(dark = true)),
             SettingsItem.Group(CUSTOM_LIGHT_TITLE, customColours(dark = false)),
             assistLook(),
@@ -256,6 +256,15 @@ class CoreSettings(
         done(null)
     }
 
+    /**
+     * The picked theme turns light or dark with Home Assistant (#691): the variant follows the dashboard's dark mode, as
+     * the kiosk extension reads it. The picker then rings the variant shown now.
+     */
+    private fun followHaDark() = switch(FOLLOW_HA_DARK, FOLLOW_HA_DARK_DETAIL, { prefs.followHaDark }) {
+        prefs.followHaDark = it
+        live.theme()
+    }
+
     /** The custom theme as saved, or the one it starts as. */
     private fun custom() = prefs.customTheme ?: Themes.CUSTOM_START
 
@@ -297,6 +306,8 @@ class CoreSettings(
         const val APPEARANCE_TITLE = "Appearance"
         const val THEME_TITLE = "Theme"
         const val THEME_NOTE = "For voice, timers, notifications and setup. Your dashboard keeps its own."
+        const val FOLLOW_HA_DARK = "Follow Home Assistant's dark mode"
+        const val FOLLOW_HA_DARK_DETAIL = "Your theme turns light or dark when your dashboard does"
         const val CUSTOM_DARK_TITLE = "Custom theme, dark"
         const val CUSTOM_LIGHT_TITLE = "Custom theme, light"
         const val CUSTOM_NOTE = "Pick your own colors. Changing one switches to Custom. Text turns light or dark to stay readable on your background."
