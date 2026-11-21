@@ -53,6 +53,17 @@ object Themes {
     /** A custom theme from the palettes someone picked for its dark and its light variant. */
     fun custom(dark: Palette, light: Palette) = Theme(CUSTOM, "Custom", dark, light)
 
+    /** The custom theme before any color is picked: Glassworks' colors, to change from. */
+    val CUSTOM_START: Theme get() = custom(GLASSWORKS.dark, GLASSWORKS.light)
+
+    /**
+     * Colors to offer for a custom theme, `#rrggbb` each: every theme's lights for a light ([ground] false), every
+     * theme's grounds for a ground. Light before dark variant, theme by theme, without repeats.
+     */
+    fun suggestions(ground: Boolean): List<String> = ALL.flatMap { t ->
+        listOf(t.light, t.dark).flatMap { p -> if (ground) listOf(p.ground) else listOf(p.a, p.b) }
+    }.map(::hex).distinct()
+
     val GLASSWORKS = Theme("glassworks", "Glassworks",
         dark = Palette(0xff38bdf8.toInt(), 0xffa78bfa.toInt(), 0xff0a0b0f.toInt()),
         light = Palette(0xff0ea5e9.toInt(), 0xff8b5cf6.toInt(), 0xffeceef2.toInt()))

@@ -26,6 +26,10 @@ line of each version is what Home Assistant shows on the update card. A change o
   colors: the orb glows in the theme's first color while it listens and its second while it speaks, and a light
   theme gives the overlay a light background with dark text. Done stays green and errors stay red. Glassworks dark
   is the default, so the orb now listens in blue rather than amber.
+- **Pick your own theme colors.** The *Appearance* page now has a Custom theme next to the other five. Pick its
+  accent, second accent and background, one set for light and one for dark, from swatches or by typing a hex code.
+  The Manage page offers the same colors with your browser's color picker. Changing a color switches to Custom
+  right away, and the overlay's text turns light or dark to stay readable on the background you chose.
 - **Timers in your theme.** The timers on the dashboard and the timer done screen now take the theme from the
   *Appearance* page. The theme's two colors run down each timer's ring, the glass turns light with a light theme,
   and the done screen's orb and ripples glow in the theme's colors. The last 10 seconds stay amber in every theme so

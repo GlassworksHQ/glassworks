@@ -232,7 +232,8 @@ private fun pruned(s: SettingsSection, ids: Set<String>): SettingsSection {
  */
 sealed interface SettingsItem {
 
-    enum class TextKind { PLAIN, ADDRESS, NUMBER, DECIMAL }
+    /** What a [Text] takes. [COLOR] is `#rrggbb`: the panel offers its [Text.suggestions] as swatches, Manage a color picker. */
+    enum class TextKind { PLAIN, ADDRESS, NUMBER, DECIMAL, COLOR }
 
     /**
      * A value typed in: an address, a number, a list. The menu shows [shown] of the value under the
@@ -252,6 +253,8 @@ sealed interface SettingsItem {
          * another, and a page on another panel can't change it (#466). The panel's own surfaces change it as before.
          */
         val perPanel: Boolean = false,
+        /** Values to offer as well as typing one: a [TextKind.COLOR]'s swatches, `#rrggbb` each. */
+        val suggestions: () -> List<String> = { emptyList() },
         val save: (String, done: (String?) -> Unit) -> Unit,
     ) : SettingsItem
 
