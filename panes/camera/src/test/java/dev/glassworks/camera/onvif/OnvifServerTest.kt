@@ -364,6 +364,28 @@ class OnvifServerTest {
         assertTrue(utc(pulled, "TerminationTime") > utc(pulled, "CurrentTime"))
     }
 
+    /**
+     * stop() wakes a waiting PullMessages and then interrupts the pool's threads. On Android the interrupt can still
+     * throw from the woken wait, which logged `ONVIF handler error: null` each time the stream went off (#684).
+     */
+    @Test fun `an interrupted PullMessages wait answers what it has, not an error`() {
+        val s = newServer()
+        val created = parseOk(call(s, "<tev:CreatePullPointSubscription><tev:InitialTerminationTime>PT60S</tev:InitialTerminationTime></tev:CreatePullPointSubscription>", "/onvif/events_service")).documentElement
+        val path = OnvifXml.text(created, "Address")!!.substringAfter("192.0.2.41:${s.localPort}")
+        parseOk(call(s, "<tev:PullMessages><tev:Timeout>PT0S</tev:Timeout></tev:PullMessages>", path)) // the initial state
+        var answer: Result<OnvifServer.HttpResponse>? = null
+        val waiter = Thread { answer = runCatching { call(s, "<tev:PullMessages><tev:Timeout>PT30S</tev:Timeout></tev:PullMessages>", path) } }
+        waiter.start()
+        val until = System.currentTimeMillis() + 5_000
+        while (waiter.state != Thread.State.TIMED_WAITING && System.currentTimeMillis() < until) Thread.sleep(10)
+        assertEquals("the pull is waiting", Thread.State.TIMED_WAITING, waiter.state)
+        waiter.interrupt()
+        waiter.join(5_000)
+        assertFalse("the interrupt ended the wait", waiter.isAlive)
+        val r = answer!!.getOrThrow()
+        assertEquals(0, parseOk(r).documentElement.getElementsByTagNameNS(OnvifNs.WSNT, "NotificationMessage").length)
+    }
+
     @Test fun `a refused sign-in is logged once a minute per client, without the sign-in`() {
         val s = newServer()
         val pull = "<tev:PullMessages><tev:Timeout>PT0S</tev:Timeout></tev:PullMessages>"
