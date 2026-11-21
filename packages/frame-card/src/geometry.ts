@@ -6,6 +6,7 @@
 // face the viewer, and give the CSS-3D front glass the same transform. A dock part (the Pixel
 // Tablet dock) is built here, on the level floor, and drawn apart from the body so the body can lift off it.
 import type { DockPart, FrameModel, TubePart } from './frame';
+import { PAINT } from './paint';
 
 type V3 = [number, number, number];
 
@@ -34,8 +35,16 @@ function rotate([x0, y0, z0]: V3, view: { rx: number; ry: number }, lean = 0): V
   return [x1, Math.cos(b) * y - Math.sin(b) * z1, Math.sin(b) * y + Math.cos(b) * z1];
 }
 
+/**
+ * Segments per rounded corner: 6 for a corner that is small next to the body, up to 16 as it grows, so a
+ * body that is all corner (a round dial) has 64 sides instead of 24 and its edge stays smooth.
+ */
+function cornerSteps(w: number, h: number, r: number) {
+  return Math.min(16, Math.max(6, Math.round((32 * r) / Math.min(w, h))));
+}
+
 /* the rounded-rectangle outline, clockwise on screen, with outward normals */
-function outline(w: number, h: number, r: number, steps = 6) {
+function outline(w: number, h: number, r: number, steps = cornerSteps(w, h, r)) {
   const hw = w / 2;
   const hh = h / 2;
   const corners: [number, number, number][] = [[hw - r, -hh + r, -90], [hw - r, hh - r, 0], [-hw + r, hh - r, 90], [-hw + r, -hh + r, 180]];
@@ -61,6 +70,9 @@ function mix(a: string, b: string, t: number) {
   const pb = [1, 3, 5].map((i) => parseInt(b.slice(i, i + 2), 16));
   return `#${pa.map((v, i) => Math.round(v + (pb[i]! - v) * t).toString(16).padStart(2, '0')).join('')}`;
 }
+
+/** A colour in both looks: CSS light-dark() when a frame has a dark one, so the page's color-scheme picks it. */
+const either = (light: string, dark?: string) => (dark && dark !== light ? `light-dark(${light}, ${dark})` : light);
 
 const f3 = (n: number) => +n.toFixed(3);
 
@@ -144,7 +156,7 @@ const centroid = (v: V3[]): V3 => v.reduce<V3>((s, p) => [s[0] + p[0] / v.length
  * The faces of a closed, roughly convex solid that face the viewer, shaded like the body's sides,
  * back to front. `lift` lightens them all, for a smoother material.
  */
-function solidFaces(polygons: V3[][], centre: V3, sides: { dark: string; light: string }, view: { rx: number; ry: number }, k: number, Q: (p: V3) => [number, number], lift = 0): Face[] {
+function solidFaces(polygons: V3[][], centre: V3, sides: { dark: string; light: string }, view: { rx: number; ry: number }, k: number, Q: (p: V3) => [number, number], lift = 0, night?: { dark: string; light: string }): Face[] {
   const V = (p: V3) => rotate([p[0] * k, p[1] * k, p[2] * k], view);
   const mid = V(centre);
   const camera: V3 = [0, 0, PERSPECTIVE];
@@ -157,14 +169,16 @@ function solidFaces(polygons: V3[][], centre: V3, sides: { dark: string; light: 
     if (dot(n, sub(c, mid)) < 0) n = [-n[0], -n[1], -n[2]];
     if (dot(n, sub(camera, c)) <= 0) continue;
     const lit = Math.max(0, dot(n, LIGHT));
+    const t = Math.min(1, 0.25 + lift + 0.75 * lit);
     faces.push({
-      face: { points: q.map(Q).map(([x, y]) => `${f3(x)},${f3(y)}`).join(' '), fill: mix(sides.dark, sides.light, Math.min(1, 0.25 + lift + 0.75 * lit)) },
+      face: { points: q.map(Q).map(([x, y]) => `${f3(x)},${f3(y)}`).join(' '), fill: either(mix(sides.dark, sides.light, t), night && mix(night.dark, night.light, t)) },
       z: c[2],
     });
   }
   return faces.sort((a, b) => a.z - b.z).map((f) => f.face);
 }
 
+/** `fill` (and a Line's `color`) may be CSS light-dark(): draw it as a style, which takes CSS colours, not as an attribute */
 export type Face = { points: string; fill: string };
 export type Line = { x1: number; y1: number; x2: number; y2: number; width: number; color: string };
 export type Layout = 'landscape' | 'square' | 'portrait';
@@ -195,8 +209,14 @@ export type Geometry = {
 };
 
 /** Fit, pose and project a model for a stage of the given aspect ratio (width / height). */
-export function geometry(m: FrameModel, stageAspect: number): Geometry {
-  const view = VIEWS[m.mount];
+/** Where the camera looks from, in degrees: `rx` from above, `ry` from the side (negative: from the right). */
+export type View = { rx: number; ry: number };
+
+/**
+ * `view` overrides the mount's camera (VIEWS), e.g. to turn a model toward the text beside it; everything,
+ * the sides, parts, dock, shadow and the glass's CSS pose, follows it.
+ */
+export function geometry(m: FrameModel, stageAspect: number, view: View = VIEWS[m.mount]): Geometry {
   const lean = m.mount === 'lean' || m.mount === 'desk' ? (m.lean ?? 0) : 0;
   const stageH = 100 / stageAspect;
   const cx = 50;
@@ -256,7 +276,7 @@ export function geometry(m: FrameModel, stageAspect: number): Geometry {
     const lit = Math.max(0, n[0] * LIGHT[0] + n[1] * LIGHT[1] + n[2] * LIGHT[2]);
     faces.push({
       points: quad.map(P).map(([x, y]) => `${f3(x)},${f3(y)}`).join(' '),
-      fill: mix(m.sides.dark, m.sides.light, 0.25 + 0.75 * lit),
+      fill: either(mix(m.sides.dark, m.sides.light, 0.25 + 0.75 * lit), m.dark?.sides && mix(m.dark.sides.dark, m.dark.sides.light, 0.25 + 0.75 * lit)),
     });
   }
 
@@ -266,7 +286,7 @@ export function geometry(m: FrameModel, stageAspect: number): Geometry {
       const [x1, y1] = P(p.from);
       const [x2, y2] = P(p.to);
       const z = rotate([0, ((p.from[1] + p.to[1]) / 2) * k, ((p.from[2] + p.to[2]) / 2) * k], view, lean)[2];
-      return { line: { x1: f3(x1), y1: f3(y1), x2: f3(x2), y2: f3(y2), width: f3(p.diameter * k), color: p.color }, z };
+      return { line: { x1: f3(x1), y1: f3(y1), x2: f3(x2), y2: f3(y2), width: f3(p.diameter * k), color: either(p.color, p.dark?.color) }, z };
     })
     .sort((a, b) => a.z - b.z)
     .map((p) => p.line);
@@ -301,9 +321,10 @@ export function geometry(m: FrameModel, stageAspect: number): Geometry {
   if (dock && dockPart) {
     const Q = (p: V3) => project(rotate([p[0] * k, p[1] * k, p[2] * k], view));
     const centre = centroid(dock.points);
-    const faces = solidFaces(dock.polygons, centre, dockPart.sides, view, k, Q);
+    const night = dockPart.dark?.sides;
+    const faces = solidFaces(dock.polygons, centre, dockPart.sides, view, k, Q, 0, night);
     // the plate shows when the front of the fabric does: it lies on it
-    const plate = solidFaces([dock.plate], centre, dockPart.sides, view, k, Q, 0.12)[0];
+    const plate = solidFaces([dock.plate], centre, dockPart.sides, view, k, Q, 0.12, night)[0];
     docked = { faces };
     if (plate) {
       docked.plate = plate;
@@ -343,7 +364,8 @@ export function geometry(m: FrameModel, stageAspect: number): Geometry {
       '--rx': `${view.rx}deg`,
       '--ry': `${view.ry}deg`,
       '--lean': `${lean}deg`,
-      ...(m.face ? { '--dev-face': m.face } : {}),
+      // the front around the screen; a dark look's own, or black glass, on a dark page
+      ...(m.face || m.dark?.face ? { '--dev-face': either(m.face ?? PAINT.glass, m.dark?.face) } : {}),
       ...lift,
     },
     transform: `translate(${f3(dx)}%, ${f3((dy / stageH) * 100)}%)`,

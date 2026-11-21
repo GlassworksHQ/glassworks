@@ -3,9 +3,10 @@
 // plane with the frame's render (or an example dashboard); the body's sides, any parts and a floor shadow are geometry.ts's
 // projection of the frame's model, drawn as SVG behind the glass. Light moves, glass doesn't. A dock is drawn on its
 // own, behind the body, so the body can lift off it on hover (--undock, DeviceModel.module.css).
+// Colours are styles, not attributes: a frame with a dark look paints CSS light-dark() (geometry.ts `either`).
 import { useEffect, useMemo, useRef, type CSSProperties } from 'react';
 import type { FrameModel } from './frame';
-import { geometry, type Layout } from './geometry';
+import { geometry, type Layout, type View } from './geometry';
 import { PAINT } from './paint';
 import s from './DeviceModel.module.css';
 
@@ -17,10 +18,13 @@ const PAINT_VARS = {
  * `aspect` is the stage's width / height: 2 by default, as on Kiln's cards; a taller stage, e.g. 0.8, suits a portrait frame's own page.
  * `screen` is the URL of the frame's render (frame.json `render`) to show on the glass; without it, an example dashboard.
  * The render loads lazily; `priority` loads it at once, for a model that is a page's largest paint.
+ * `view` turns the camera from the mount's own (geometry.ts `View`), e.g. toward the text beside the model.
  */
-export function DeviceModel({ id, model, label, aspect = 2, screen, priority = false }: { id: string; model: FrameModel; label: string; aspect?: number; screen?: string; priority?: boolean }) {
+export function DeviceModel({ id, model, label, aspect = 2, screen, priority = false, view }: { id: string; model: FrameModel; label: string; aspect?: number; screen?: string; priority?: boolean; view?: View }) {
   const stage = useRef<HTMLDivElement>(null);
-  const g = useMemo(() => geometry(model, aspect), [model, aspect]);
+  const rx = view?.rx;
+  const ry = view?.ry;
+  const g = useMemo(() => geometry(model, aspect, rx === undefined || ry === undefined ? undefined : { rx, ry }), [model, aspect, rx, ry]);
   // --u = 1% of the stage width, for the depth and perspective lengths
   useEffect(() => {
     const el = stage.current;
@@ -62,17 +66,17 @@ export function DeviceModel({ id, model, label, aspect = 2, screen, priority = f
               )}
             </defs>
             {g.floorShadow && <polygon points={g.floorShadow} fill="black" fillOpacity={dock ? 0.32 : 0.5} filter={`url(#${blur})`} />}
-            {dock && <g filter={`url(#${heather})`}>{dock.faces.map((f, i) => <polygon key={`d${i}`} points={f.points} fill={f.fill} stroke={f.fill} strokeWidth="0.12" strokeLinejoin="round" />)}</g>}
+            {dock && <g filter={`url(#${heather})`}>{dock.faces.map((f, i) => <polygon key={`d${i}`} points={f.points} style={{ fill: f.fill, stroke: f.fill }} strokeWidth="0.12" strokeLinejoin="round" />)}</g>}
             {dock && <g fill={`url(#${weave})`}>{dock.faces.map((f, i) => <polygon key={`w${i}`} points={f.points} />)}</g>}
-            {dock?.plate && <polygon points={dock.plate.points} fill={dock.plate.fill} />}
+            {dock?.plate && <polygon points={dock.plate.points} style={{ fill: dock.plate.fill }} />}
             {dock?.pins?.map((p, i) => <circle key={`n${i}`} cx={p.cx} cy={p.cy} r={p.r} fill={PAINT.pin} />)}
           </svg>
         )}
         {/* the body, which lifts off a dock on hover (--undock) */}
-        <div className={s.slab}>
+        <div className={s.slab} data-body="">
           <svg className={s.sides} viewBox={`0 0 100 ${g.stageH}`} preserveAspectRatio="none" aria-hidden="true">
-            {g.parts.map((p, i) => <line key={`p${i}`} x1={p.x1} y1={p.y1} x2={p.x2} y2={p.y2} stroke={p.color} strokeWidth={p.width} strokeLinecap="round" />)}
-            {g.faces.map((f, i) => <polygon key={i} points={f.points} fill={f.fill} stroke={f.fill} strokeWidth="0.12" strokeLinejoin="round" />)}
+            {g.parts.map((p, i) => <line key={`p${i}`} x1={p.x1} y1={p.y1} x2={p.x2} y2={p.y2} style={{ stroke: p.color }} strokeWidth={p.width} strokeLinecap="round" />)}
+            {g.faces.map((f, i) => <polygon key={i} points={f.points} style={{ fill: f.fill, stroke: f.fill }} strokeWidth="0.12" strokeLinejoin="round" />)}
           </svg>
           <div className={s.device} aria-hidden="true">
             <div className={s.front}>

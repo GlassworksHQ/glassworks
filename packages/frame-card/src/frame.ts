@@ -3,6 +3,17 @@
 import type { FrameFacts, FrameRun } from './completeness';
 
 type V3 = [number, number, number];
+/** a side's colour facing away from the light, and facing it */
+type Sides = { dark: string; light: string };
+
+/**
+ * A frame's look on a dark page, e.g. the Pixel Tablet in Hazel beside its Porcelain: only the colours that change.
+ * The model draws each colour as CSS light-dark(), so the page's color-scheme picks the look.
+ */
+export interface DarkLook {
+  face?: string;
+  sides?: Sides;
+}
 
 /** The device's look in millimetres; the site and Kiln draw the 3D mockup from it. */
 export interface FrameModel {
@@ -12,7 +23,7 @@ export interface FrameModel {
   /** without width and height, the screen is the face minus the bezel */
   screen: { radius: number; width?: number; height?: number; top?: number };
   /** the body's sides: the colour facing away from the light, and facing it */
-  sides: { dark: string; light: string };
+  sides: Sides;
   finish: 'glass' | 'mirror';
   /** the front's colour around the screen, e.g. a white bezel; black glass when left out */
   face?: string;
@@ -22,10 +33,12 @@ export interface FrameModel {
   lean?: number;
   /** parts outside the body: tubes that move with it, and a dock it sits in */
   parts?: (TubePart | DockPart)[];
+  /** the look on a dark page; a part's own colours have their own `dark` */
+  dark?: DarkLook;
 }
 
 /** A tube, e.g. a stand's leg: mm from the body's centre (x right, y down, z towards you), leaning with the body. */
-export interface TubePart { kind: 'tube'; from: V3; to: V3; diameter: number; color: string }
+export interface TubePart { kind: 'tube'; from: V3; to: V3; diameter: number; color: string; dark?: { color: string } }
 
 /**
  * A dock the body sits in, on the floor behind it (the Pixel Tablet's speaker dock). Its front leans with
@@ -39,7 +52,9 @@ export interface DockPart {
   depth: number;
   height: number;
   gap: number;
-  sides: { dark: string; light: string };
+  sides: Sides;
+  /** its look on a dark page, as the model's `dark` */
+  dark?: { sides: Sides };
 }
 
 /** The same stages as the Glassworks status badges (planned, under development, alpha, beta, stable). */

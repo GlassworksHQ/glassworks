@@ -99,6 +99,19 @@
   opacity: 0;
 }
 
+/* ...and its body, lifted off the dock, bobs as the others do: \`translate\`, which adds to the lift's
+   transform instead of replacing it. The dock stays still */
+.card:hover .bob [data-dock] > [data-body],
+.card:focus-visible .bob [data-dock] > [data-body] {
+  animation: bodyBob 3.6s ease-in-out 0.8s infinite;
+}
+
+@keyframes bodyBob {
+  50% {
+    translate: 0 -5px;
+  }
+}
+
 .shadow {
   position: absolute;
   left: 18%;
@@ -303,7 +316,9 @@
   }
 
   .card:hover .bob,
-  .card:focus-visible .bob {
+  .card:focus-visible .bob,
+  .card:hover .bob [data-dock] > [data-body],
+  .card:focus-visible .bob [data-dock] > [data-body] {
     animation: none;
   }
 

@@ -7,4 +7,4 @@ export type { Abi, AgentCapability, DockPart, FrameCredit, FrameDesign, FrameKin
 export { CHECKS, CHECK_TEXT, COUNTED, DEVICE_STEPS, KIOSK_CHECKS, SETUP_WAYS, WORD_MEANING, WORD_TEXT, completeness, factProblems, factsOf } from './completeness';
 export type { CheckItem, CheckKey, CheckState, Completeness, DeviceStep, FrameFacts, FrameRun, KioskCheck, SetupWay, Word } from './completeness';
 export { geometry } from './geometry';
-export type { Dock, Geometry, Layout } from './geometry';
+export type { Dock, Geometry, Layout, View } from './geometry';
