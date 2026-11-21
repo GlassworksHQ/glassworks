@@ -112,6 +112,16 @@ describe('the screens', () => {
     expect(rail()).toContain('Install:turn');
   });
 
+  it('5: a home screen Kiln couldn\'t confirm: the way that works after another app got Always, not pressing Home (CodeRabbit on #735)', async () => {
+    const s = await androidDemo('done', true);
+    const r = s.state.result as { flow: 'install'; installed: { home: { state: string } } };
+    r.installed.home.state = 'unconfirmed';
+    render(<Screens session={s} />);
+    await until(() => /couldn't confirm/.test(document.querySelector('.lede')?.textContent ?? ''));
+    expect(document.querySelector('.lede')?.textContent).toMatch(/Kiln couldn't confirm the home screen\. In the tablet's Settings, find Default apps, then Home app, and choose Glassworks\./);
+    expect(document.body.textContent).not.toMatch(/press Home/);
+  });
+
   it('5: a tested device: its frame card, its page, and the setup page on the network', async () => {
     await show('done', 'You\'re all set');
     expect(screen.getByText('Glassworks is the Pixel Tablet\'s home screen.')).toBeTruthy();
