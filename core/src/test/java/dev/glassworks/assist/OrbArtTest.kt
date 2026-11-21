@@ -68,4 +68,25 @@ class OrbArtTest {
         assertTrue("shadow offset down", s.a[below] > s.a[above])
         assertEquals(0f, s.r[below], 1e-6f) // black
     }
+
+    /**
+     * The swirl and the cores are cut to the sphere's inside when baked, not only by the view's round outline, which
+     * software drawing ignores (#703's mockups showed the turning swirl as a square).
+     */
+    @Test
+    fun theSwirlAndTheCoresHaveNothingOutsideTheSpheresInside() {
+        fun outside(img: FloatImage): Float {
+            val c = img.w / 2f; val r = OrbArt.INSIDE_DP / 2f * 1.5f
+            var most = 0f
+            for (y in 0 until img.h) for (x in 0 until img.w) {
+                val dx = x + 0.5f - c; val dy = y + 0.5f - c
+                if (Math.sqrt((dx * dx + dy * dy).toDouble()) > r + 1.0) most = maxOf(most, img.a[y * img.w + x])
+            }
+            return most
+        }
+        val swirl = art.swirl()
+        assertEquals("the swirl outside the sphere's inside", 0f, outside(swirl), 0f)
+        assertTrue("and still there inside it", swirl.a.maxOrNull()!! > 0.3f)
+        for (t in OrbArt.Tint.entries) assertEquals("the $t core outside", 0f, outside(art.core(t)), 0f)
+    }
 }
