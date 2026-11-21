@@ -45,7 +45,7 @@ function Connect({ f, s }: P) {
   const reading = at !== undefined && !s.connecting;
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h">{`Keep ${d.the} in Home Assistant.`}</h2>
+      <h2 id="h">{`Keep ${d.the} in Home Assistant`}</h2>
       <p className="lede">So Home Assistant keeps the same device after the install.</p>
       {reading ? (
         <ol className="join" aria-live="polite">
@@ -76,7 +76,7 @@ function Restarted({ f, s }: P) {
   const k = s.key as Extract<KeyStep, { state: 'held' } | { state: 'none' } | { state: 'unreachable' }>;
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h">{`${cap(d.the)} is restarting into fastboot.`}</h2>
+      <h2 id="h">{`${cap(d.the)} is restarting into fastboot`}</h2>
       <p className="lede">
         {`Click Connect and ${pickInList(d)}.`}
         {k.state === 'none' ? ' Home Assistant hasn’t added it yet, so there’s nothing to keep.' : k.state === 'unreachable' ? ' After the install, Home Assistant asks once to keep the device.' : ''}
@@ -100,7 +100,7 @@ function Unreachable({ f, s }: P) {
   const old = k.why === 'old-app';
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h">{old ? 'This Glassworks can’t hand its key over.' : `Kiln can’t reach Glassworks on this ${d.short}.`}</h2>
+      <h2 id="h">{old ? 'This Glassworks can’t hand its key over' : `Kiln can’t reach Glassworks on this ${d.short}`}</h2>
       <p className="lede">You can still reflash it. Home Assistant then asks once to keep the device.</p>
       <p className="small">
         {old

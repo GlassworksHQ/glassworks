@@ -85,23 +85,23 @@ describe('the build and APK', () => {
 describe('the screens', () => {
   it('a Pixel Tablet in desktop mode: named a guess, with its frame card', async () => {
     await show('pixel');
-    expect(heading()).toBe('This looks like a Pixel Tablet.');
+    expect(heading()).toBe('This looks like a Pixel Tablet');
     expect(document.body.textContent).toContain('Tested device · Android 8 or newer');
     expect(embers()).toEqual(['Continue']);
   });
 
   it('a model read from client hints: named, with its version and model code', async () => {
     await show('galaxy');
-    expect(heading()).toBe('This is a Galaxy Tab A8.');
+    expect(heading()).toBe('This is a Galaxy Tab A8');
     expect(document.querySelector('.kv')?.textContent).toContain('Galaxy Tab A8 (SM-X200)');
   });
 
   it('a computer: open it on the tablet, or install from this computer', async () => {
     await show('computer');
-    expect(heading()).toBe('Open this page on the tablet.');
+    expect(heading()).toBe('Open this page on the tablet');
     expect(screen.getByText('Install from this computer').getAttribute('href')).toBe('/android');
     fireEvent.click(screen.getByText('This is the tablet'));
-    expect(heading()).toBe('This is an Android tablet.');
+    expect(heading()).toBe('This is an Android tablet');
   });
 
   it('Get: the latest release\'s APK through Kiln\'s route, as a download', async () => {
@@ -135,7 +135,7 @@ describe('the screens', () => {
 
   it('Get before the first release: not out yet, and no download', async () => {
     await show('get-none');
-    expect(heading()).toBe('Glassworks for Android isn\'t out yet.');
+    expect(heading()).toBe('Glassworks for Android isn\'t out yet');
     expect(screen.getByText('Not released yet')).toBeTruthy();
     expect(document.querySelector('a[download]')).toBeNull();
   });
@@ -143,7 +143,7 @@ describe('the screens', () => {
   it('not out yet with the version hidden: the legacy build is still one tap away', async () => {
     const load = vi.fn(async (line: Line): Promise<Release> => (line === 'generic-android' ? { state: 'none' } : rel(line)));
     render(<TabletScreens on={on('OLD_CHROME_DESKTOP')} start="get" load={load} />);
-    await screen.findByText('Glassworks for Android isn\'t out yet.');
+    await screen.findByText('Glassworks for Android isn\'t out yet');
     fireEvent.click(screen.getByText('Android 6 or 7? Get the legacy build'));
     expect((await screen.findByText('Download')).getAttribute('href')).toContain('tag=generic-android-legacy-v1.0.0');
   });
@@ -160,10 +160,10 @@ describe('the screens', () => {
 
   it('Set up: the app\'s steps, and the one setting that needs a computer', async () => {
     await show('setup');
-    expect(heading()).toBe('Open Glassworks.');
+    expect(heading()).toBe('Open Glassworks');
     expect([...document.querySelectorAll('.num > li > b')].map((b) => b.textContent)).toEqual(['Home Assistant', 'Panes', 'This device', 'Silent updates']);
     fireEvent.click(screen.getByText('Finish with Kiln'));
-    expect(heading()).toBe('Turn on USB debugging.');
+    expect(heading()).toBe('Turn on USB debugging');
   });
 
   it('Kiln: the brand\'s steps, About tablet a link, Developer options not', async () => {

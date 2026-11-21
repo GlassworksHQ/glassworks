@@ -299,14 +299,14 @@ describe('every flash demo screen', () => {
     cleanup();
     await showImage('flash-done');
     expect(screen.getByText((_, el) => el?.tagName === 'SPAN' && /^Built on Glass Panes by git-nimrod\.$/.test(el.textContent ?? ''))).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Done.' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'You\'re all set' })).toBeTruthy();
     expect(screen.getByText("Reversible to the community image, not to lululemon's software.")).toBeTruthy();
   });
 
   it('warns that lululemon\'s software can\'t be restored before anything is written', async () => {
     const { image: flash, app: mirror } = await imageDemo(mirrorEntry, 'flash-confirm', true);
     render(<ImageFlow image={flash} app={mirror} />);
-    expect(screen.getByText('This replaces lululemon’s software for good.')).toBeTruthy();
+    expect(screen.getByText('This replaces lululemon’s software for good')).toBeTruthy();
     expect(screen.getByText(/Everything on the Mirror is replaced, with no backup.*The way back is the plain Glass Panes image\./s)).toBeTruthy();
     expect(screen.getByText("Reversible to the community image, not to lululemon's software.")).toBeTruthy(); // #146
     expect((screen.getByText('Install Glassworks') as HTMLButtonElement).disabled).toBe(true);

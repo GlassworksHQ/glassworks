@@ -24,7 +24,7 @@
   "device": {
     "short": "Mirror",
     "the": "the Mirror",
-    "connect": { "title": "Connect to your Mirror.", "body": "Plug it into this computer over micro-USB, with Glassworks running." },
+    "connect": { "title": "Connect to your Mirror", "body": "Plug it into this computer over micro-USB, with Glassworks running." },
     "listed": {
       "as": "Android",
       "why": "The name Chrome's USB list shows the Mirror by, over adb and in fastboot alike: nobody finds \"the Mirror\" there (maintainer, 2026-11-21). Kiln's screens say it wherever they ask for a pick, and set-up's sheet names it"
@@ -58,7 +58,7 @@
       "fastboot.byHandSteps": "Switch the Mirror off with the rocker switch in its bottom edge, unplug its power cord, and lay it face down.\nTake out the 4 screws in the bottom edge and take the stand off. Take out the 14 screws in the back, 2 of them either side of the recess by the feet, and lift the back off.\nPlug the power cord back into its socket in that recess. Leave the switch off.\nPlug the micro-USB port, in the top end's corner, into this computer.\nOn the small green board at the top end, hold VOL− (SW3): of its two buttons, the one nearer the top end's edge.\nKeep holding while you switch the Mirror on, and for about 5 seconds more. Its screen stays black.",
       "fastboot.byHandNote": "Hold only VOL−: both buttons, or VOL+, start other modes. Some Mirrors have a service hatch in the back that reaches the board.",
       "fastboot.overUsb": "It already runs Glassworks (or Glass Panes): restart it over USB",
-      "confirm.title": "This replaces lululemon’s software for good.",
+      "confirm.title": "This replaces lululemon’s software for good",
       "confirm.lede": "Everything on the Mirror is replaced, with no backup: its bootloader can't read anything back. The way back is the plain Glass Panes image.",
       "confirm.understand": "I understand lululemon's software can't be restored.",
       "adb.firstStart": "Its glass stays dark for a few minutes. Leave it plugged in, click Connect and pick `Android`.",

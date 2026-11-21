@@ -36,7 +36,7 @@ function Pair({ lan, v, busy }: { lan: LanSession; v: Extract<LanView, { at: 'pa
   if (!v.open) {
     return (
       <section className="card" aria-labelledby="h">
-        <h2 id="h">Pairing is off.</h2>
+        <h2 id="h">Pairing is off</h2>
         <p className="lede">Home Assistant has added this panel, so it pairs with a browser only when you allow it. Press <b>Allow setup over the network</b>: on the panel&apos;s device page in Home Assistant, or on the panel in its settings, under Home Assistant &amp; dashboard. It stays allowed for 30 minutes.</p>
         {v.error && <p className="small">{v.error}</p>}
         <div className="foot"><span /><button type="button" className="btn ember" disabled={busy} onClick={() => void lan.click('check', () => lan.start())}>Check again</button></div>
@@ -45,7 +45,7 @@ function Pair({ lan, v, busy }: { lan: LanSession; v: Extract<LanView, { at: 'pa
   }
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h">Pair with the panel.</h2>
+      <h2 id="h">Pair with the panel</h2>
       <p className="lede">{v.note ?? 'The panel shows a 6-digit code on its screen. Typing it here shows you can see the panel, so nobody else on the network can set it up.'}</p>
       {v.shown && (
         <label className="field"><span>Code on the panel</span>
@@ -67,12 +67,12 @@ function Pair({ lan, v, busy }: { lan: LanSession; v: Extract<LanView, { at: 'pa
 function Screen({ lan, v, busy }: { lan: LanSession; v: LanView; busy: boolean }) {
   switch (v.at) {
     case 'connecting':
-      return <section className="card" aria-labelledby="h"><h2 id="h">Connecting to the panel.</h2><div className="bar wait"><i /></div></section>;
+      return <section className="card" aria-labelledby="h"><h2 id="h">Connecting to the panel</h2><div className="bar wait"><i /></div></section>;
     case 'pair': return <Pair lan={lan} v={v} busy={busy} />;
     case 'lost':
       return (
         <section className="card err" aria-labelledby="h">
-          <h2 id="h">{v.again === 'done' ? 'Almost done.' : 'The panel stopped answering.'}</h2>
+          <h2 id="h">{v.again === 'done' ? 'Almost done' : 'The panel stopped answering'}</h2>
           <p className="lede">{v.error}</p>
           <div className="foot"><span /><button type="button" className="btn ember" disabled={busy} onClick={() => void lan.click('retry', () => lan.retry())}>Try again</button></div>
         </section>
@@ -80,7 +80,7 @@ function Screen({ lan, v, busy }: { lan: LanSession; v: LanView; busy: boolean }
     case 'done':
       return (
         <section className="card" aria-labelledby="h">
-          <h2 id="h">Done.</h2>
+          <h2 id="h">You're all set</h2>
           <p className="lede">The panel is set up, and this browser is no longer paired with it. If Home Assistant hasn&apos;t added the panel yet, it finds it by itself as an ESPHome device. You can close this page.</p>
         </section>
       );
@@ -93,7 +93,7 @@ function Screen({ lan, v, busy }: { lan: LanSession; v: LanView; busy: boolean }
         case 'radio': return <Radio key={s.radio.mode} busy={busy} steps={lan} setup={s} />;
         case 'radio-next': return <RadioNext busy={busy} steps={lan} setup={s} />;
         default:
-          return <section className="card" aria-labelledby="h"><h2 id="h">Connecting to the panel.</h2><div className="bar wait"><i /></div></section>;
+          return <section className="card" aria-labelledby="h"><h2 id="h">Connecting to the panel</h2><div className="bar wait"><i /></div></section>;
       }
     }
   }

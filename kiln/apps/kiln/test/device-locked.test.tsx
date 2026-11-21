@@ -45,7 +45,7 @@ describe('a device frame that isn\'t open', () => {
   it('with ?apk=local, a test install, labelled Test only', async () => {
     history.replaceState(null, '', `${MIRROR_BASE}?apk=local&mode=app`);
     render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
-    await screen.findByText('Install a test build on the Mirror.');
+    await screen.findByText('Install a test build on the Mirror');
     expect(screen.getByText('Test only')).toBeTruthy();
     expect(document.querySelector('input[type=file]')).not.toBeNull();
   });
@@ -66,7 +66,7 @@ describe('/android while generic-android isn\'t open', () => {
   it('with ?apk=local, a test install, labelled Test only', async () => {
     history.replaceState(null, '', '/android?apk=local');
     render(<AndroidWizard />);
-    await screen.findByText('Plug in the tablet.');
+    await screen.findByText('Plug in the tablet');
     expect(screen.getByText('Test only')).toBeTruthy();
   });
 });

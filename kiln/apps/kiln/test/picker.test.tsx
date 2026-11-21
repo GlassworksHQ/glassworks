@@ -76,13 +76,13 @@ describe('the picker', () => {
     expect(screen.getByRole('link', { name: 'Back to it' }).getAttribute('href')).toBe('/aqara-s1-plus/install');
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     expect(router.push).toHaveBeenCalledWith('/aqara-s1-plus/install');
-    act(() => store.dispatch({ type: 'done', done: { title: 'Done.', body: '' } }));
+    act(() => store.dispatch({ type: 'done', done: { title: 'You\'re all set', body: '' } }));
     expect(screen.queryByText(/still working/)).toBeNull();
   });
 
   it('keeps the last stopped run\'s details', () => {
     const store = installing();
-    store.dispatch({ type: 'fail', failure: { title: 'It disconnected.', body: 'Nothing was written.', wrote: false, tips: [], raw: 'x', at: 2 } });
+    store.dispatch({ type: 'fail', failure: { title: 'It disconnected', body: 'Nothing was written.', wrote: false, tips: [], raw: 'x', at: 2 } });
     store.dispatch({ type: 'go', screen: 'connect' });
     render(<Picker />);
     expect(screen.getByRole('status').textContent).toMatch(/The last run stopped: It disconnected\. Download its log/);
