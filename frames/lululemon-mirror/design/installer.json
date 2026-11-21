@@ -24,7 +24,11 @@
   "device": {
     "short": "Mirror",
     "the": "the Mirror",
-    "connect": { "title": "Connect to your Mirror.", "body": "Plug it into this computer over micro-USB, with Glassworks running.", "pick": "MSM8916 for arm64" },
+    "connect": { "title": "Connect to your Mirror.", "body": "Plug it into this computer over micro-USB, with Glassworks running." },
+    "listed": {
+      "as": "Android",
+      "why": "The name Chrome's USB list shows the Mirror by, over adb and in fastboot alike: nobody finds \"the Mirror\" there (maintainer, 2026-11-21). Kiln's screens say it wherever they ask for a pick, and set-up's sheet names it"
+    },
     "board": "msm8916",
     "apk": {
       "line": "generic-android-legacy",

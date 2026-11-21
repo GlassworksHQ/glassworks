@@ -7,6 +7,7 @@ import type { PanelShell } from '@glassworks/adb';
 import { apkPackage } from '@glassworks/app-adb';
 import { cap, type DeviceFrame, type DevicePhase, type DeviceReport, type Installed, type Removed } from '@glassworks/kiln-core';
 import { FRAMES } from '../frames/catalog';
+import { askAdb } from './adbAsk';
 import type { DeviceProgress } from './imageSession';
 import { NoRelease, apkMode, installable, releaseApk, type ApkFrom, type ReleaseApk, type ReleaseLine } from '../release/apk';
 
@@ -49,9 +50,17 @@ export interface AppDeps {
   frame: DeviceFrame;
   /**
    * Opens the browser's device list and authenticates. Called inside the click, before any await:
-   * WebUSB only shows its list during the click's user activation.
+   * WebUSB only shows its list during the click's user activation. With `authMs`, it gives up when the device hasn't
+   * let this browser's key in by then.
    */
-  connect(): Promise<PanelShell>;
+  connect(o?: { authMs?: number }): Promise<PanelShell>;
+  /**
+   * The device `connect` picked, again with no list, after it refused this browser's key (still starting, or Allow not
+   * tapped yet): Kiln asks again every 5 s (adbAsk.ts). Without it, a refusal ends the connect.
+   */
+  reopen?(o?: { authMs?: number }): Promise<PanelShell>;
+  /** Whether the last `connect` picked a device, so its refusal came from the device. */
+  picked?(): boolean;
   sleep?: (ms: number) => Promise<void>;
   /** The APK from the frame's newest release, through Kiln's release route; without it, a file the tester picks. */
   release?: typeof fetch;
@@ -185,10 +194,18 @@ export class AppSession {
   /** Must run inside the click: the browser's device list opens before its first await. */
   async connect(): Promise<void> {
     if (this.state.connecting) return;
-    const req = this.d.connect(); // inside the click: the device list opens first
+    const { reopen, picked } = this.d;
+    // inside the click: the device list opens first. A refusal is asked again, with no list and no click (adbAsk.ts)
+    const asking = askAdb({ request: (o) => this.d.connect(o), ...(reopen ? { reopen: (o) => reopen.call(this.d, o) } : {}), ...(picked ? { picked: () => picked.call(this.d) } : {}) }, {
+      // every try has a deadline, the first too: a claim or a key that never answers is asked again, not waited on for ever
+      firstAuthMs: this.d.frame.timings.authMs, authMs: this.d.frame.timings.authMs, sleep: this.d.sleep ?? ((ms) => new Promise<void>((r) => setTimeout(r, ms))),
+      onWait: (why) => this.log('', `${cap(this.d.frame.the)} didn't let this browser in yet (${why}). Asking again in 5 s.`),
+    });
     this.set({ connecting: true, connectError: undefined });
     try {
-      this.panel = await req;
+      const asked = await asking;
+      if (!asked.panel) throw asked.last;
+      this.panel = asked.panel;
       await this.check(); // Connect stays off until the check settles: a second device can't slip in under this report
       this.set({ connecting: false });
     } catch (e) {

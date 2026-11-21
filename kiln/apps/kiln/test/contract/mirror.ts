@@ -14,7 +14,7 @@ import { withAppStreams } from '../../src/wizard/demo';
 import type { StandardSession } from '../../src/standard/session';
 import { mirrorFrame, standardOn } from '../mirror-frame';
 import {
-  Clicks, REFUSED, UNPLUGGED, body, fastSleep, never, type Driver, type Knobs, type Look, type Page, type World, type Write,
+  Clicks, REFUSED, STALL_MS, UNPLUGGED, body, fastSleep, never, type Driver, type Knobs, type Look, type Page, type World, type Write,
 } from './harness';
 
 /**
@@ -64,7 +64,7 @@ function flashWorld(k: Knobs): World {
   }) as unknown as typeof fetch;
   const images: ImageMaker = {
     async fetch(url, onProgress) {
-      const reader = resumableBody(url, IMAGE.length, { fetch: net, sleep: fastSleep }).stream().getReader();
+      const reader = resumableBody(url, IMAGE.length, { fetch: net, sleep: fastSleep, stallMs: STALL_MS }).stream().getReader();
       let got = 0;
       for (;;) {
         const { done, value } = await reader.read();
@@ -180,11 +180,11 @@ function flashWorld(k: Knobs): World {
         if (s.screen === 'adb' || s.work?.step === 'first-boot') return 'first-boot';
         return 'install';
       },
-      // the error screen's "Back to the download" (ImageScreens ImageError), or the standard flow's Try again
+      // the error screen's Try again (ImageScreens ImageError), or the standard flow's
       async retry() {
         clicks.reset();
         if (standard) { const ss = standard; await ss.click('resume', () => ss.route('resume')); return; }
-        f.retry();
+        f.tryAgain();
       },
       // the page knows from the tab's mark (ImageDeps `progress`) that an earlier load wrote
       remembers: () => !!f.state.changed,
@@ -231,15 +231,24 @@ function appWorld(k: Knobs): World {
   // Nobody touches it with or without the noTouch knob: the flow hides the other home apps over adb (#607).
   const mirror = new FakeMirror({ kiosk: 'none' });
   const apk = fakeMirrorApk();
+  /** adb with this browser's key: refused while the Mirror comes up, the first `refuseAuth` times */
+  const allowed = async (): Promise<PanelShell> => {
+    if (fired.refused < (k.refuseAuth ?? 0)) { fired.refused++; throw new Error(REFUSED); }
+    // Glassworks answers set-up over its setup channel and Improv once installed, on Wi-Fi already
+    return withAppStreams(await link(mirror, k, fired, writes, partial, reloadAt), { online: true, radio: false });
+  };
+  let picked = false;
   const deps = {
     frame: mirrorFrame,
+    // as DevicePage wires them (webUsbAdb): the browser's list once, then the picked Mirror again with no list
     async connect(): Promise<PanelShell> {
       const r = reloadAt<PanelShell>('connect');
       if (r) return r;
-      if (fired.refused < (k.refuseAuth ?? 0)) { fired.refused++; throw new Error(REFUSED); }
-      // Glassworks answers set-up over its setup channel and Improv once installed, on Wi-Fi already
-      return withAppStreams(await link(mirror, k, fired, writes, partial, reloadAt), { online: true, radio: false });
+      picked = true;
+      return allowed();
     },
+    reopen: allowed,
+    picked: () => picked,
     sleep: fastSleep,
     progress: tabProgress(),
   };

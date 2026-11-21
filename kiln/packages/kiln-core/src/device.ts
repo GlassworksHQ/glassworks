@@ -132,6 +132,8 @@ export interface DeviceFrame {
   wifiName?(p: PanelShell, signal?: AbortSignal): Promise<{ ssid?: string }>;
   /** The browser's list when set-up connects to the device again over adb (a reload, a route): its "your turn" sheet. */
   connect: AskCopy;
+  /** The name the browser's USB list shows the device by, when it isn't the one Kiln calls it: `Android`. */
+  listed?: string;
   /** Whether updates install with nobody at the device, read back: one of `silent`'s states, and a line for the log. */
   updates(p: PanelShell, signal?: AbortSignal): Promise<{ state: string; log: string }>;
   /** The board `getprop ro.board.platform` gives: anything else isn't this device. */
@@ -167,6 +169,12 @@ export function deviceWords(w: Record<string, unknown>): Record<DeviceWord, stri
   for (const k of DEVICE_WORDS) if (typeof w[k] !== 'string' || !w[k]) throw new Error(`installer.json words.${k}: missing`);
   return w as Record<DeviceWord, string>;
 }
+
+/**
+ * "pick the hub, listed as “Android”, in the browser's list": the device as the browser's list shows it, when its
+ * data says (`listed`). Without, "pick the <short> in the browser's list".
+ */
+export const pickInList = (f: Pick<DeviceFrame, 'the' | 'listed'>) => `pick ${f.the}${f.listed ? `, listed as “${f.listed}”,` : ''} in the browser's list`;
 
 /** A sentence's first word, capitalised: `the <short>` at its start. */
 export const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);

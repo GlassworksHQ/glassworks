@@ -102,8 +102,9 @@ function abortable(source: { size: number; stream(): ReadableStream<Uint8Array> 
 }
 
 /** `f` (or the global fetch) with `signal` on every request, so a cancel also ends the connection. */
+/** `f` under the job's signal, and under the request's own when it has one (resumableBody aborts a silent attempt). */
 const withSignal = (signal: AbortSignal, f: typeof fetch = fetch.bind(globalThis)): typeof fetch =>
-  ((u: RequestInfo | URL, init?: RequestInit) => f(u, { ...init, signal })) as typeof fetch;
+  ((u: RequestInfo | URL, init?: RequestInit) => f(u, { ...init, signal: init?.signal ? AbortSignal.any([signal, init.signal]) : signal })) as typeof fetch;
 
 export function imageJobs(open: (name: string) => Promise<JobHandle>, removeAll: () => Promise<void>,
   want: { name: string; size: number; sha256: string } = GLASS_PANES.system,

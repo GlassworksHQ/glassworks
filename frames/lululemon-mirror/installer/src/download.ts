@@ -1,7 +1,8 @@
 // The system image straight from Refract (#347, kiln/workers/refract: our Cloudflare Worker that
 // streams allowlisted release files with CORS for Kiln and Range, and stores nothing; maintainer,
 // 2026-11-15) into the image loader, as one stream.
-// A dropped connection resumes with Range where it stopped, so nothing is read twice. A 429 (Refract's
+// A dropped connection resumes with Range where it stopped, so nothing is read twice, and so does one that goes
+// silent: no answer or no bytes for kiln-core's STALL_MS counts as dropped (#621). A 429 (Refract's
 // rate limit) waits as long as its Retry-After asks, up to a minute, then tries again. When the proxy
 // can't serve the file (a network error that keeps coming back, a 5xx, a wrong size), Kiln shows it
 // as its own bug, with Try again and Report this: there is no download-and-select (#579).
@@ -13,7 +14,7 @@ export const IMAGE_PROXY = {
 } as const;
 
 /** The proxy couldn't give us the file: Kiln's bug, shown with Try again and Report this. */
-import { ProxyError } from '@glassworks/kiln-core';
+import { ProxyError, STALL_MS } from '@glassworks/kiln-core';
 
 /** Kiln's route couldn't serve a download (kiln-core's, so the engine knows it). */
 export { ProxyError };
@@ -38,6 +39,8 @@ export interface ResumeOptions {
   /** Reconnects after a dropped connection before giving up; default 5. */
   retries?: number;
   sleep?: (ms: number) => Promise<void>;
+  /** No answer, or no bytes, for this long counts as a dropped connection; default kiln-core's STALL_MS. */
+  stallMs?: number;
 }
 
 /** The file at `url`, `size` bytes, as a stream that resumes with Range. Shaped like a Blob for loadSystem. */
@@ -45,6 +48,18 @@ export function resumableBody(url: string, size: number, o: ResumeOptions = {}):
   const f = o.fetch ?? fetch.bind(globalThis);
   const sleep = o.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const retries = o.retries ?? 5;
+  const stallMs = o.stallMs ?? STALL_MS;
+  /**
+   * `p`, or a ProxyError once it has been silent for stallMs: the proxy (or the network) stopped sending. `onSilent`
+   * lets go of what was waiting (the attempt's request), so a retry never leaves an earlier one open.
+   */
+  const unlessSilent = <T>(p: Promise<T>, onSilent?: () => void): Promise<T> => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const silent = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => { onSilent?.(); reject(new ProxyError(`the download proxy sent nothing for ${Math.ceil(stallMs / 1000)} s`)); }, stallMs);
+    });
+    return Promise.race([p, silent]).finally(() => clearTimeout(timer));
+  };
   return {
     size,
     stream() {
@@ -54,9 +69,11 @@ export function resumableBody(url: string, size: number, o: ResumeOptions = {}):
       let cancelled = false;
       const open = async () => {
         let r: Response;
+        const attempt = new AbortController();
         try {
-          r = await f(url, { headers: got ? { Range: `bytes=${got}-` } : {}, cache: 'no-store' });
+          r = await unlessSilent(f(url, { headers: got ? { Range: `bytes=${got}-` } : {}, cache: 'no-store', signal: attempt.signal }), () => attempt.abort());
         } catch (e) {
+          if (e instanceof ProxyError) throw e;
           throw new ProxyError(`the download proxy can't be reached (${(e as Error).message})`);
         }
         if (r.status === 429 || (r.status === 503 && r.headers.has('retry-after'))) {
@@ -64,9 +81,11 @@ export function resumableBody(url: string, size: number, o: ResumeOptions = {}):
           if (ms !== undefined && ms > MAX_RETRY_AFTER_MS) throw new Refused(`the download proxy is busy for ${Math.ceil(ms / 1000)} s (${r.status})`);
           throw new Busy(`the download proxy is busy (${r.status})`, ms ?? 0);
         }
-        if (r.status >= 500) throw new Refused(`the download proxy answered ${r.status}${await reason(r)}`);
+        // an error answer's body is read under the same watchdog: one that stalls is a silent attempt, let go and retried
+        const why = () => unlessSilent(reason(r), () => attempt.abort());
+        if (r.status >= 500) throw new Refused(`the download proxy answered ${r.status}${await why()}`);
         if (got === 0) {
-          if (r.status !== 200) throw new Refused(`the download proxy answered ${r.status}${await reason(r)}`);
+          if (r.status !== 200) throw new Refused(`the download proxy answered ${r.status}${await why()}`);
           const len = Number(r.headers.get('content-length') ?? NaN);
           if (Number.isFinite(len) && len !== size) throw new Refused(`the download proxy offers ${len} bytes, not the image's ${size}`);
         } else {
@@ -82,7 +101,7 @@ export function resumableBody(url: string, size: number, o: ResumeOptions = {}):
             if (cancelled) return;
             try {
               if (!reader) await open();
-              const { done, value } = await reader!.read();
+              const { done, value } = await unlessSilent(reader!.read());
               if (done) {
                 if (got === size) { c.close(); return; }
                 throw new ProxyError(`the connection closed at byte ${got} of ${size}`);
@@ -92,6 +111,7 @@ export function resumableBody(url: string, size: number, o: ResumeOptions = {}):
               c.enqueue(value);
               return;
             } catch (e) {
+              void reader?.cancel().catch(() => {}); // a silent one is let go: the next try opens a new one
               reader = undefined;
               if (cancelled) return;
               if (e instanceof Refused || ++tries > retries) { c.error(e instanceof ProxyError ? e : new ProxyError((e as Error).message)); return; }

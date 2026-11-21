@@ -9,8 +9,9 @@
 // Assistant's ESPHome key from the running app over adb and gives it back at the first start.
 import { AdbAuthTimeout, AdbBusy, pemToPkcs8, type PanelShell } from '@glassworks/adb';
 import { apiKeyFingerprint, apiKeySocketUp, kioskVersion, readApiKey } from '@glassworks/app-adb';
+import { askAdb, nothingPicked } from './adbAsk';
 import {
-  ProxyError, WrongImage, cap, imageFromLink, plan, wifiStep,
+  ProxyError, WrongImage, cap, imageFromLink, pickInList, plan, wifiStep,
   type DeviceFrame, type FastbootLike, type FastbootReport, type FirstStart, type ImageFile, type ImageMaker, type ImageRecipe, type PlannedStep, type PrepareStep,
 } from '@glassworks/kiln-core';
 
@@ -105,9 +106,6 @@ export function sessionProgress(key: string): DeviceProgress {
     set: (m) => { try { if (m) sessionStorage.setItem(key, JSON.stringify(m)); else sessionStorage.removeItem(key); } catch { /* storage off */ } },
   };
 }
-
-/** The browser's list was closed with nothing picked: nothing to ask again. */
-const nothingPicked = (e: unknown) => (e as { name?: string } | undefined)?.name === 'NotFoundError' || (e as Error | undefined)?.message === 'no panel selected';
 
 /** `image`: Glassworks' download and settings; `download`: a community image's. */
 /** `done`: a community image's end (Glassworks' is the standard flow's Done). */
@@ -786,32 +784,26 @@ export class ImageSession {
     const run = ++this.connects;
     // the screen says it waits from the pick on: the first try alone can take firstStartAuthMs (a real run, 2026-11-19)
     let pickedNow = false;
-    const onPicked = () => { pickedNow = true; if (run === this.connects && this.state.connecting) this.set({ adbWaiting: true }); };
-    const req = this.d.requestAdb({ authMs: this.d.frame.timings.firstStartAuthMs, onPicked });
-    this.set({ connecting: true, connectError: undefined, adbWaiting: pickedNow });
     const sleep = this.d.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
-    let p: PanelShell | undefined;
-    let last: unknown;
-    try { p = await req; } catch (e) { last = e; }
-    // a list closed with nothing picked, or a device another program holds (the computer's adb): asking again changes nothing
-    const picked = this.d.adbPicked?.() ?? !nothingPicked(last);
-    const tries = this.d.reopenAdb && picked && !(last instanceof AdbBusy) ? this.d.adbTries ?? 60 : 0;
-    const until = Date.now() + (this.d.adbWindowMs ?? 5 * 60_000);
-    for (let i = 0; !p && i < tries && Date.now() < until; i++) {
-      this.log('', `${cap(this.d.frame.the)} didn't let this browser in yet (${(last as Error).message}): it is still starting. Asking again in 5 s.`);
-      this.set({ adbWaiting: true });
-      await sleep(Math.min(5000, Math.max(0, until - Date.now())));
-      const left = until - Date.now();
-      if (left <= 0) break;
-      try { p = await this.d.reopenAdb!({ authMs: Math.min(this.d.frame.timings.authMs, left) }); } catch (e) { last = e; }
-      if (last instanceof AdbBusy) break;
-    }
-    if (!p) {
+    const { reopenAdb, adbPicked } = this.d;
+    const asking = askAdb({ request: (o) => this.d.requestAdb(o), ...(reopenAdb ? { reopen: (o) => reopenAdb.call(this.d, o) } : {}), ...(adbPicked ? { picked: () => adbPicked.call(this.d) } : {}) }, {
+      firstAuthMs: this.d.frame.timings.firstStartAuthMs, authMs: this.d.frame.timings.authMs, sleep, tries: this.d.adbTries, windowMs: this.d.adbWindowMs,
+      onPicked: () => { pickedNow = true; if (run === this.connects && this.state.connecting) this.set({ adbWaiting: true }); },
+      onWait: (why) => {
+        this.log('', `${cap(this.d.frame.the)} didn't let this browser in yet (${why}): it is still starting. Asking again in 5 s.`);
+        this.set({ adbWaiting: true });
+      },
+    });
+    this.set({ connecting: true, connectError: undefined, adbWaiting: pickedNow });
+    const asked = await asking;
+    if (!asked.panel) {
+      const { last, picked, retried } = asked;
       const why = (last as Error).message;
-      this.set({ connecting: false, adbWaiting: false, connectError: !picked && nothingPicked(last) ? `Nothing was picked. Click Connect and pick ${this.d.frame.the} (Android) in the browser's list.`
-        : tries && !(last instanceof AdbBusy) ? `${cap(this.d.frame.the)} didn't let this browser in through its first start (${why}). It knows only the key of the browser that installed it: use that browser, then Connect again.` : why });
+      this.set({ connecting: false, adbWaiting: false, connectError: !picked && nothingPicked(last) ? `Nothing was picked. Click Connect and ${pickInList(this.d.frame)}.`
+        : retried && !(last instanceof AdbBusy) ? `${cap(this.d.frame.the)} didn't let this browser in through its first start (${why}). It knows only the key of the browser that installed it: use that browser, then Connect again.` : why });
       return;
     }
+    const p = asked.panel;
     this.panel = p;
     this.set({ connecting: false, adbWaiting: false, screen: 'working', work: { step: 'first-boot', x: 0 } });
     try {
@@ -862,6 +854,25 @@ export class ImageSession {
       // WebUSB holds the device until the connection is released: a retry opens a fresh one
       await (p as PanelShell & { close?(): Promise<void> }).close?.().catch(() => {});
     }
+  }
+
+  /**
+   * Where the error screen's Try again lands: the step that stopped, on its own screen. A first start (or its key
+   * hand-back) connects over adb again (`adb`); a write or a build, on a device still in fastboot, connects fastboot
+   * again (`fastboot`), unless its files went; anything else is the image's first screen (`image`), to download again.
+   */
+  tryAgainLands(): 'adb' | 'fastboot' | 'image' {
+    const step = this.state.work?.step;
+    if (step === 'first-boot' || step === 'hand-back') return 'adb';
+    return step && step !== 'restart' && step !== 'wifi-on' && this.state.files.every((x) => x.state === 'ok') ? 'fastboot' : 'image';
+  }
+
+  /** The error screen's Try again (tryAgainLands). */
+  tryAgain() {
+    const at = this.tryAgainLands();
+    if (at === 'adb') this.finishFirstStart();
+    else if (at === 'fastboot') this.reconnectFastboot();
+    else this.retry();
   }
 
   /** From an error: back to the image's first screen, keeping what checked out (a fetched image builds again). */

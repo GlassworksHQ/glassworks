@@ -152,7 +152,7 @@ describe('connecting while the Mirror is still starting', () => {
     await flashed(f, mirror);
     await f.connectAdb();
     expect(reopen).not.toHaveBeenCalled();
-    expect(f.state.connectError).toBe('Nothing was picked. Click Connect and pick the Mirror (Android) in the browser\'s list.');
+    expect(f.state.connectError).toBe('Nothing was picked. Click Connect and pick the Mirror, listed as “Android”, in the browser\'s list.');
   });
 
   it('says the glass stays dark during the first start', async () => {
@@ -169,7 +169,7 @@ describe('connecting while the Mirror is still starting', () => {
     render(<ImageFlow image={f} app={mirror} />);
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
     expect(await screen.findByText('Waiting for the Mirror to finish starting…')).toBeTruthy();
-    expect(screen.queryByText('Pick the Mirror in the browser\'s list…')).toBeNull();
+    expect(screen.queryByText('Pick the Mirror, listed as “Android”, in the browser\'s list…')).toBeNull();
     expect(f.state).toMatchObject({ screen: 'adb', connecting: true, adbWaiting: true });
     answer(withAppStreams(new FirstBootMirror(), { online: true, radio: false }));
     await vi.waitFor(() => expect(handed).toHaveLength(1)); // the first start, then the standard flow has the Mirror
@@ -181,7 +181,7 @@ describe('connecting while the Mirror is still starting', () => {
     await flashed(f, mirror);
     render(<ImageFlow image={f} app={mirror} />);
     fireEvent.click(screen.getByRole('button', { name: 'Connect' }));
-    expect(await screen.findByText('Pick the Mirror in the browser\'s list…')).toBeTruthy();
+    expect(await screen.findByText('Pick the Mirror, listed as “Android”, in the browser\'s list…')).toBeTruthy();
     expect(screen.queryByText(/Waiting for the Mirror/)).toBeNull();
   });
 });
@@ -209,7 +209,7 @@ describe('finishing a first start that didn\'t finish', () => {
     expect(f.state).toMatchObject({ screen: 'error', error: 'the device was disconnected' });
     render(<ImageFlow image={f} app={mirror} />);
     fail = false;
-    fireEvent.click(screen.getByRole('button', { name: 'Try the first start again' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(f.state.screen).toBe('adb');
     expect(close).toHaveBeenCalledTimes(1); // the stopped first start's connection, let go before Connect opens a new one
     await f.connectAdb();
@@ -261,14 +261,18 @@ describe('restarting into fastboot over adb: no button to hold', () => {
     expect(close).toHaveBeenCalledTimes(1);
   });
 
-  it('Connect fastboot again with files Kiln dropped goes back to the download first', async () => {
+  it('Try again after a write lands on fastboot; with files Kiln dropped, on the download first', async () => {
     const { f } = setup({ request: async () => new FirstBootMirror() });
     f.state = { ...f.state, screen: 'error', work: { step: 'patch', x: 0.5 }, files: f.state.files.map((x) => ({ ...x, state: 'waiting' as const })) };
-    f.reconnectFastboot();
+    expect(f.tryAgainLands()).toBe('image');
+    f.tryAgain();
     expect(f.state.screen).toBe('image');
     f.state = { ...f.state, screen: 'error', work: { step: 'flash-system', x: 0.5 }, files: f.state.files.map((x) => ({ ...x, state: 'ok' as const })) };
-    f.reconnectFastboot();
+    expect(f.tryAgainLands()).toBe('fastboot');
+    f.tryAgain();
     expect(f.state).toMatchObject({ screen: 'fastboot', restarted: true });
+    f.state = { ...f.state, screen: 'error', work: { step: 'restart', x: 1 } };
+    expect(f.tryAgainLands()).toBe('image'); // restarting into what was written: fastboot is gone
   });
 
   it('restarts only a Mirror: another device (its board isn\'t msm8916) is let go, with nothing changed', async () => {
@@ -350,7 +354,7 @@ describe('a Wi-Fi switch-on that stopped (a community image)', () => {
     const { f, mirror } = setup({ request: async () => new FirstBootMirror() });
     f.state = { ...f.state, screen: 'error', error: 'USB transfer failed', work: { step: 'wifi-on', x: 0 }, files: f.state.files.map((x) => ({ ...x, state: 'ok' as const })) };
     render(<ImageFlow image={f} app={mirror} />);
-    expect(screen.queryByRole('button', { name: 'Connect fastboot again' })).toBeNull();
+    expect(f.tryAgainLands()).toBe('image');
     expect(screen.queryByText(/still in fastboot/)).toBeNull();
   });
 });
@@ -361,8 +365,9 @@ describe('a first start that stopped during the key hand-back', () => {
     await flashed(f, mirror);
     f.state = { ...f.state, screen: 'error', error: 'USB transfer failed', work: { step: 'hand-back', x: 0 } };
     render(<ImageFlow image={f} app={mirror} />);
-    expect(screen.getByRole('button', { name: 'Try the first start again' })).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Connect fastboot again' })).toBeNull();
+    expect(f.tryAgainLands()).toBe('adb');
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(f.state.screen).toBe('adb');
     expect(screen.queryByText(/still in fastboot/)).toBeNull();
   });
 });

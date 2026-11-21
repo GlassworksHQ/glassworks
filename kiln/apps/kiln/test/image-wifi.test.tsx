@@ -254,7 +254,7 @@ describe('the screens', () => {
 
   it('One last click says what Kiln does there', async () => {
     await show('image-adb');
-    expect(screen.getByText(/Click Connect and pick the Mirror in the browser's list, and Kiln switches its Wi-Fi on\./)).toBeTruthy();
+    expect(screen.getByText(/Click Connect and pick the Mirror, listed as “Android”, in the browser's list, and Kiln switches its Wi-Fi on\./)).toBeTruthy();
   });
 
   it('Done says Wi-Fi is on, or how to switch it on once', async () => {

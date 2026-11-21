@@ -5,7 +5,7 @@
 // until then ?apk=release (its newest release) and ?apk=local (a file from this computer) are test links, or a demo.
 // The screens follow Kiln's (docs/design/kiln): one idea each, one ember button, the log one click away.
 import { Panel, adbKeyFromPkcs8, loadOrCreateAdbKey, type AdbKey, type PanelShell } from '@glassworks/adb';
-import { Assets, cap, fmtSize, webUsbDevices, type DeviceEntry, type DeviceFrame, type DevicePhase } from '@glassworks/kiln-core';
+import { Assets, cap, fmtSize, pickInList, webUsbDevices, type DeviceEntry, type DeviceFrame, type DevicePhase } from '@glassworks/kiln-core';
 import * as Collapsible from '@radix-ui/react-collapsible';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -19,6 +19,7 @@ import { ROUTES, status, stepOf, type Step } from '../wizard/routes';
 import type { RailMark, RailStep } from '../wizard/state';
 import { Fastboot } from '@glassworks/fastboot';
 import { APP_DEMOS, appDemo, type AppDemo } from './demo';
+import type { AdbAsk } from './adbAsk';
 import { ImageSession, sessionProgress } from './imageSession';
 import { IMAGE_DEMOS, imageDemo, type ImageDemo } from './imageDemo';
 import { KEEP_DEMOS, keepDemo, type KeepDemo } from './keepDemo';
@@ -76,6 +77,30 @@ export function leaveWarning(target: Pick<Window, 'addEventListener' | 'removeEv
   return (on) => (on ? target.addEventListener('beforeunload', warn) : target.removeEventListener('beforeunload', warn));
 }
 
+/**
+ * The device over WebUSB adb with this browser's key (adbAsk.ts): the browser's list inside the click, then the device
+ * it picked again with no list while it refuses the key. One per session, so each asks again for its own pick.
+ */
+export function webUsbAdb(keys: ReturnType<typeof adbKeyHolder>, authMs: number): Required<AdbAsk> {
+  let picked: USBDevice | undefined;
+  return {
+    request: (o) => {
+      picked = undefined; // a click that fails before the list (the key still loading) picks nothing
+      return keys.connectWith(async (k) => {
+        picked = await Panel.pick();
+        o?.onPicked?.();
+        return Panel.connect(k, picked, { authMs: o?.authMs });
+      })();
+    },
+    reopen: async (o) => {
+      const k = keys.key();
+      if (!k || !picked) throw new Error('no panel selected');
+      return Panel.connect(k, picked, { authMs: o?.authMs ?? authMs });
+    },
+    picked: () => !!picked,
+  };
+}
+
 /** The install's end: the device, handed to the standard flow (its session, when there is one to take it). */
 export type HandOver = (panel: PanelShell) => StandardSession | undefined;
 
@@ -87,9 +112,12 @@ function realSessions(frame: DeviceFrame, on: boolean, from: ApkFrom = 'local', 
     return { app, image: new ImageSession({ frame, images: flow.images(), requestFastboot: () => Promise.reject(new Error('off')), requestAdb: () => Promise.reject(new Error('off')), adbKey: () => undefined, apk: () => undefined }) };
   }
   const keys = adbKeyHolder(loadOrCreateAdbKey);
+  const appAdb = webUsbAdb(keys, frame.timings.authMs);
   const app = new AppSession({
     frame,
-    connect: keys.connectWith((k) => Panel.connect(k)),
+    connect: (o) => appAdb.request(o),
+    reopen: appAdb.reopen,
+    picked: appAdb.picked,
     ...(from === 'release' ? { release: releaseRoute } : {}),
     handOver: (p) => { handOver?.(p); },
     progress: sessionProgress(`kiln:device:${base}:app`),
@@ -97,8 +125,8 @@ function realSessions(frame: DeviceFrame, on: boolean, from: ApkFrom = 'local', 
   const assets = new Assets<string>('/assets/');
   /** a staged asset the frame names, checked by SHA-256, when Kiln has it */
   const staged = (name?: string) => async () => (name && (await assets.has(name)) ? assets.get(name) : undefined);
-  // the device picked for the first start's adb: asked again with no list while the device is still starting
-  let adbDevice: USBDevice | undefined;
+  // the first start's adb: asked again with no list while the device is still starting
+  const imageAdb = webUsbAdb(keys, frame.timings.authMs);
   const image = new ImageSession({
     frame,
     // the frame's boot animation and settings APK, staged with Kiln's other assets
@@ -110,20 +138,9 @@ function realSessions(frame: DeviceFrame, on: boolean, from: ApkFrom = 'local', 
     // ?image=<id>: a community image's install, with no choice first (issue 579)
     search: location.search,
     requestFastboot: () => Fastboot.request([flow.fastbootFilter]),
-    requestAdb: (o) => {
-      adbDevice = undefined; // a click that fails before the list (the key still loading) picks nothing
-      return keys.connectWith(async (k) => {
-        adbDevice = await Panel.pick();
-        o?.onPicked?.();
-        return Panel.connect(k, adbDevice, { authMs: o?.authMs });
-      })();
-    },
-    adbPicked: () => !!adbDevice,
-    reopenAdb: async (o) => {
-      const k = keys.key();
-      if (!k || !adbDevice) throw new Error('no panel selected');
-      return Panel.connect(k, adbDevice, { authMs: o?.authMs ?? frame.timings.authMs });
-    },
+    requestAdb: imageAdb.request,
+    adbPicked: imageAdb.picked,
+    reopenAdb: imageAdb.reopen,
     // a community image's own published key (its wifi-on step): in memory, for that one connection
     adbWithKey: (pkcs8) => adbKeyHolder(async () => adbKeyFromPkcs8(pkcs8, 'kiln@published-key')).connectWith((k) => Panel.connect(k)),
     adbKey: () => keys.key()?.publicKey,
@@ -308,7 +325,7 @@ function Pick({ s, session }: { s: AppState; session: AppSession }) {
       <Inputs s={s} session={session} />
       <BuiltOn credits={stepCredits(f.id, f.credits)} />
       <p className="small">{rich(f.words['app.connectHelp'])}{s.changed ? ` An earlier try already changed ${f.the}.` : ''}</p>
-      {s.connecting && <p className="status work" role="status">{`Pick ${f.the} in the browser's list, then choose Allow on ${f.the}'s screen…`}</p>}
+      {s.connecting && <p className="status work" role="status">{`${cap(pickInList(f))}, then choose Allow on ${f.the}'s screen…`}</p>}
       {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
       <div className="foot">
         <span />
