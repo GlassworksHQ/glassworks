@@ -82,6 +82,8 @@ export function explain(e: unknown, at: number, written: Written, installed = fa
   return {
     title: rule?.title ?? (changed ? 'Something went wrong while writing' : 'Something went wrong'),
     body: `${said} ${fix}`,
+    happened: said,
+    fix,
     wrote: changed,
     tips: changed ? WRITTEN_TIPS : CLEAN_TIPS,
     raw: rule && named('NotFoundError')(e) ? '' : raw,
