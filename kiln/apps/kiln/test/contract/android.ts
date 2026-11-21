@@ -5,12 +5,12 @@
 import type { PanelShell } from '@glassworks/adb';
 import { FakeAndroid, fakeGenericApk } from '@glassworks/generic-android-installer/fakes';
 import { GENERIC } from '@glassworks/generic-android-installer';
-import { androidStandard } from '../../src/android/AndroidWizard';
 import { UsbSession, type Device, type UsbDeps } from '../../src/device/usbSession';
 import { kilnFrame as genericFrame } from '@glassworks/generic-android-installer/kiln';
 import type { DeviceProgress, ProgressMark } from '../../src/device/imageSession';
 import { StandardSession } from '../../src/standard/session';
 import { withAppStreams } from '../../src/wizard/demo';
+import { androidStandard } from '../android-frame';
 import {
   Clicks, REFUSED, UNPLUGGED, fastSleep, flowData, never, tick, type Driver, type Knobs, type Look, type Page, type World, type Write,
 } from './harness';

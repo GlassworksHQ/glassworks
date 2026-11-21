@@ -5,6 +5,7 @@
 // removes the app. The frame's code is behind UsbFrame, in frames/<id>/installer; these types are what the engine reads.
 import type { PanelShell } from '@glassworks/adb';
 import type { AppId } from '@glassworks/app-adb';
+import type { AskCopy, SilentWords } from './frame';
 
 /** An app the frame installs: its ids, and what the screens call it. */
 export interface UsbApp extends AppId { name: string }
@@ -117,6 +118,22 @@ export interface UsbFrame {
   apk: { line: string; abi: string };
   /** The apps it installs: a picked APK must be one of them. */
   apps: readonly UsbApp[];
+  /** The Android it needs, as the first screen says it: with the release's APK, and with a picked file (any build). */
+  needs: { release: string; local: string };
+  /** The page while it is locked to the public: its heading, and where to follow its work. */
+  off: { title: string; follow: string };
+  /** The brands the brand screen offers, in order; "Other" follows them. */
+  brands: { id: string; name: string }[];
+  /** Each grant's name and what is missing without it, by UsbGrant `what`. */
+  grants: Record<string, { name: string; without: string } | undefined>;
+  /** The standard flow's "your turn" sheet when set-up connects to it again (its `pick`: the model, when known). */
+  connect: AskCopy;
+  /** Done's screen-lock block, for a device with a PIN, pattern or password: what it means, and where to change it. */
+  screenLock: { line: string; help: string };
+  /** Done's Silent updates block for what the install read back; without one (a reload), what Kiln can say. Null: say nothing. */
+  silent(u: UsbSilentUpdates | undefined, release: string): SilentWords | null;
+  /** An API level's Android version, for a device that doesn't say its release. */
+  androidName(sdk: number): string;
   /** From WebUSB, before USB debugging is on. */
   identifyUsb(d: { vendorId: number; productName?: string }): UsbIdentified;
   /** The person's pick of a brand, or none ("Other"): its steps. */
@@ -126,3 +143,16 @@ export interface UsbFrame {
   install(p: PanelShell, o: UsbInstallOptions): Promise<UsbInstalled>;
   undo(p: PanelShell, o: { onStep?: (step: string, detail?: string) => void; sleep?: (ms: number) => Promise<void> }): Promise<{ removed: UsbApp[] }>;
 }
+
+/** A UsbFrame's simulated device, for ?demo=… and tests only: never part of the frame Kiln installs. */
+export interface UsbSim {
+  /**
+   * The device for a demo (Kiln's demo names, kiln/apps/kiln/src/device/usbDemo.ts), set up as that demo needs it: the
+   * APK that matches it, what WebUSB says of it, and whether Kiln knows its model. `fast`: no delays (the tests).
+   */
+  demo(name: string, o: { fast: boolean }): { device: PanelShell & { app?: UsbApp }; apk: Uint8Array; apkName: string; usb: { vendorId: number; productName?: string }; known: boolean };
+  /** The cards its simulated app's Panes step shows, for ?demo=setup-panes. */
+  panes?: { id: string; title: string; detail: string; on: boolean }[];
+}
+
+export type UsbEntry = { kind: 'usb'; frame: UsbFrame; sim: UsbSim };

@@ -19,7 +19,7 @@ describe('the frames registry', () => {
     for (const id of ENGINE) {
       const { kind, frame, sim } = await KILN[id]!();
       expect(frame.id).toBe(id);
-      expect(['wizard', 'device']).toContain(kind); // the install's kind: the page is the same for every frame
+      expect(['wizard', 'device', 'usb']).toContain(kind); // the install's kind: the page is the same for every frame
       expect(INSTALLERS[id]).not.toHaveProperty('page');
       expect(frame).not.toHaveProperty('sim');
       expect(sim).toBeTruthy();

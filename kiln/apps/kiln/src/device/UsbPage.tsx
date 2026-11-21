@@ -1,45 +1,43 @@
 'use client';
-// /android (issue 403): Glassworks on any Android 6+ device, over USB. The screens are the approved mockup's
-// (maintainer, 2026-11-17): the device named or its brand asked, the brand's steps to turn on USB
-// debugging, Allow on the device, the install with each grant read back, Done with the frame card or
-// "untested device". Off unless the address has ?apk=release (the newest generic-android release) or ?apk=local (a
-// file from this computer), or a demo, until generic-android's frame.json makes it installable (usbOpen).
-import { Panel, loadOrCreateAdbKey } from '@glassworks/adb';
-import { fmtSize } from '@glassworks/kiln-core';
+// An Android device over USB debugging, the engine's page for a UsbFrame (issue 621; first built for /android, issue
+// 403). The screens are the approved mockup's (maintainer, 2026-11-17): the device named or its brand asked, the brand's
+// steps to turn on USB debugging, Allow on the device, the install with each grant read back, then the standard flow,
+// whose Done carries the frame card or "untested device". Off unless the address has ?apk=release (the newest release
+// of the frame's line) or ?apk=local (a file from this computer), or a demo, until its frame.json makes it installable
+// (usbOpen). The frame's words, brands and grants come from its data and its code (kiln-core UsbFrame).
+import { loadOrCreateAdbKey } from '@glassworks/adb';
+import { fmtSize, webUsbDevices, type SilentWords, type UsbApp, type UsbFrame, type UsbGrant, type UsbIdentified, type UsbInstalled, type UsbPhase, type UsbPlace, type UsbSilentUpdates, type UsbSim } from '@glassworks/kiln-core';
 import { KIND_TEXT, STAGE_TEXT, type FrameDesign } from '@glassworks/frame-card';
-import { BRANDS, SILENT_LINES, androidName, type BrandId } from '@glassworks/generic-android-installer';
 import * as Collapsible from '@radix-ui/react-collapsible';
 import * as RadioGroup from '@radix-ui/react-radio-group';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Fragment, useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { webUsbDevices } from '@glassworks/kiln-core';
+import { Fragment, createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { wifiSsid } from '@glassworks/app-adb';
-import type { UsbApp, UsbGrant, UsbIdentified, UsbInstalled, UsbPhase, UsbPlace, UsbSilentUpdates } from '@glassworks/kiln-core';
 import { INSTALLERS } from '@glassworks/frames/catalog';
-import { sessionProgress } from '../device/imageSession';
+import { sessionProgress } from './imageSession';
 import { standardData, type StandardFrame } from '../standard/frame';
 import { StandardSession } from '../standard/session';
 import { StandardRoutes } from '../standard/StandardWizard';
 import { status, stepOf, type Step } from '../wizard/routes';
 import type { Entry } from '../wizard/registry';
 import { Shell, useBrowserChip } from '../components/Shell';
-import { SilentUpdates, type SilentWords } from '../components/SilentUpdates';
+import { SilentUpdates } from '../components/SilentUpdates';
 import { FRAMES, MEASURED, RENDERS } from '../frames/catalog';
-import { adbKeyHolder, webUsbAdb } from '../device/DevicePage';
+import { adbKeyHolder, webUsbAdb } from './DevicePage';
 import type { RailMark, RailStep } from '../wizard/state';
 import { ReleaseRow } from '../release/ReleaseRow';
 import { registry } from '../wizard/registry';
-import { ANDROID_BASE, keptAndroid } from './activity';
-import { ANDROID_DEMOS, androidDemo, type AndroidDemo } from './demo';
+import { keptUsb } from './usbActivity';
+import { USB_DEMOS, usbDemo, type UsbDemo } from './usbDemo';
 import { ScreenLockBlock } from './ScreenLockBlock';
-import { UsbSession, usbMode, usbOpen, type Device, type UsbState } from '../device/usbSession';
-import { kilnFrame as android } from '@glassworks/generic-android-installer/kiln';
+import { UsbSession, usbMode, usbOpen, type Device, type UsbState } from './usbSession';
 import type { ApkFrom } from '../release/apk';
-import './android.css';
+import './usb.css';
 
-/** generic-android's frame id: its data in the catalog. */
-const ANDROID_ID = 'generic-android';
+/** The frame the screens are for: its words, brands and grants. */
+const UsbFrameContext = createContext<UsbFrame | undefined>(undefined);
+const useDevice = (): UsbFrame => useContext(UsbFrameContext)!;
 
 const DEMO_ON = process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_KILN_DEMO === '1';
 const SITE = 'https://www.glassworks.dev/frames';
@@ -47,13 +45,13 @@ const SITE = 'https://www.glassworks.dev/frames';
 /** Kiln's release route, from the page (a bare `fetch` held by an object is an illegal invocation). */
 const releaseRoute = (...a: Parameters<typeof fetch>) => fetch(...a);
 
-function realSession(on: boolean, from: ApkFrom = 'local', handOver?: (p: Device, installed: UsbInstalled) => void): UsbSession {
-  if (!on) return new UsbSession({ frame: android, findUsb: () => Promise.reject(new Error('off')), connect: () => Promise.reject(new Error('off')) }, false);
+function realSession(dev: UsbFrame, base: string, on: boolean, from: ApkFrom = 'local', handOver?: (p: Device, installed: UsbInstalled) => void): UsbSession {
+  if (!on) return new UsbSession({ frame: dev, findUsb: () => Promise.reject(new Error('off')), connect: () => Promise.reject(new Error('off')) }, false);
   const keys = adbKeyHolder(loadOrCreateAdbKey);
-  // the browser's list once, then the picked tablet again with no list while it refuses the key (adbAsk.ts)
+  // the browser's list once, then the picked device again with no list while it refuses the key (adbAsk.ts)
   const adb = webUsbAdb(keys, Number.POSITIVE_INFINITY);
   return new UsbSession({
-    frame: android,
+    frame: dev,
     // no filter: before USB debugging is on, the device shows only as itself (charging or file transfer)
     findUsb: async () => {
       const d = await navigator.usb.requestDevice({ filters: [] });
@@ -64,7 +62,7 @@ function realSession(on: boolean, from: ApkFrom = 'local', handOver?: (p: Device
     picked: adb.picked,
     ...(from === 'release' ? { release: releaseRoute } : {}),
     handOver: (p, i) => { handOver?.(p, i); },
-    progress: sessionProgress(`kiln:device:${ANDROID_BASE}:app`),
+    progress: sessionProgress(`kiln:device:${base}:app`),
   }, true);
 }
 
@@ -93,9 +91,9 @@ function level(s: UsbState): number {
 const frameOf = (i?: UsbIdentified): FrameDesign | undefined => (i?.model?.frame ? FRAMES.find((f) => f.id === i.model!.frame) : undefined);
 
 /** What Kiln calls the device: the model it knows, else what adb or USB said, else its brand. */
-function deviceName(s: UsbState): string {
+function deviceName(dev: UsbFrame, s: UsbState): string {
   const d = s.plan?.device;
-  return s.identified?.model?.name ?? (d ? `${d.manufacturer} ${d.model}`.trim() : undefined) ?? s.usbName ?? s.identified?.brand?.name ?? 'tablet';
+  return s.identified?.model?.name ?? (d ? `${d.manufacturer} ${d.model}`.trim() : undefined) ?? s.usbName ?? s.identified?.brand?.name ?? dev.short;
 }
 
 function Log({ s }: { s: UsbState }) {
@@ -111,12 +109,13 @@ function Log({ s }: { s: UsbState }) {
 }
 
 function Off() {
+  const dev = useDevice();
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h">Kiln doesn&apos;t install on Android devices yet.</h2>
+      <h2 id="h">{dev.off.title}</h2>
       <p className="lede">Its installer is still being tested. Follow it on GitHub, or pick another panel.</p>
       <div className="foot">
-        <a className="link" href="https://github.com/GlassworksHQ/glassworks/issues/403">Follow it on GitHub</a>
+        <a className="link" href={dev.off.follow}>Follow it on GitHub</a>
         <Link className="btn ghost" href="/">Pick a panel</Link>
       </div>
     </section>
@@ -125,12 +124,13 @@ function Off() {
 
 /** The APK: the newest release's, checked, or (test only) a file from this computer. */
 function ApkField({ s, session }: { s: UsbState; session: UsbSession }) {
+  const dev = useDevice();
   const load = useCallback(() => { void session.loadRelease(); }, [session]);
   if (s.flow === 'undo') return null;
   if (s.release) return (
     <>
-      {!usbOpen(android) && <span className="row"><span className="pill soon">Test only</span></span>}
-      <ReleaseRow r={s.release} line={android.apk.line} what="Glassworks for Android" device="the tablet" apkError={s.apk?.error} load={load} />
+      {!usbOpen(dev) && <span className="row"><span className="pill soon">Test only</span></span>}
+      <ReleaseRow r={s.release} line={dev.apk.line} what={dev.app} device={dev.the} apkError={s.apk?.error} load={load} />
       {s.apk?.error && <span className="status err" role="alert">{s.apk.error}.</span>}
     </>
   );
@@ -155,16 +155,17 @@ function ApkField({ s, session }: { s: UsbState; session: UsbSession }) {
 const WHAT_KILN_DOES = 'Installs the app, grants what it can, sets it as the home screen. Your apps and data stay. Undo removes it.';
 
 function Find({ s, session }: { s: UsbState; session: UsbSession }) {
+  const dev = useDevice();
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h">{s.flow === 'undo' ? 'Plug in the tablet to undo.' : 'Plug in the tablet.'}</h2>
+      <h2 id="h">{s.flow === 'undo' ? `Plug in ${dev.the} to undo.` : `Plug in ${dev.the}.`}</h2>
       <p className="lede">{s.flow === 'undo'
-        ? 'Kiln takes Glassworks off the tablet over USB, as it put it on: turn on USB debugging, then tap Allow. Kiln reads the tablet first; nothing changes until then.'
-        : 'Use its USB cable, with USB debugging still off. Kiln reads what the tablet is; nothing on it changes.'}</p>
+        ? `Kiln takes Glassworks off ${dev.the} over USB, as it put it on: turn on USB debugging, then tap Allow. Kiln reads ${dev.the} first; nothing changes until then.`
+        : `Use its USB cable, with USB debugging still off. Kiln reads what ${dev.the} is; nothing on it changes.`}</p>
       <ApkField s={s} session={session} />
-      {s.flow === 'install' && <p className="small">{s.release ? 'Android 8' : 'Android 6'} or newer, over USB. {WHAT_KILN_DOES}</p>}
-      {s.changed && <p className="small">An earlier try already changed the tablet.</p>}
-      {s.finding && <p className="status work" role="status">Pick the tablet in the browser&apos;s list…</p>}
+      {s.flow === 'install' && <p className="small">{s.release ? dev.needs.release : dev.needs.local} or newer, over USB. {WHAT_KILN_DOES}</p>}
+      {s.changed && <p className="small">{`An earlier try already changed ${dev.the}.`}</p>}
+      {s.finding && <p className="status work" role="status">{`Pick ${dev.the} in the browser's list…`}</p>}
       {s.findError && <p className="status err" role="alert">{s.findError}</p>}
       <div className="foot">
         <span className="links">
@@ -181,9 +182,10 @@ function Find({ s, session }: { s: UsbState; session: UsbSession }) {
 }
 
 function Named({ s, session }: { s: UsbState; session: UsbSession }) {
+  const dev = useDevice();
   const i = s.identified!;
   const f = frameOf(i);
-  const who = i.model?.name ?? i.brand?.name ?? deviceName(s);
+  const who = i.model?.name ?? i.brand?.name ?? deviceName(dev, s);
   const lede = f ? `${f.brand ?? i.brand?.name} · a ${KIND_TEXT[f.kind].toLowerCase()}.` : i.model ? `${i.brand?.name} · not tested yet.` : `Kiln knows the brand, not the model.`;
   const blocked = session.blocked();
   return (
@@ -210,18 +212,17 @@ function Named({ s, session }: { s: UsbState; session: UsbSession }) {
   );
 }
 
-/** The brands drawn in the mockup; the rest get Android's general steps, as Other does. */
-const PICKS: BrandId[] = ['google', 'samsung', 'amazon', 'lenovo', 'xiaomi'];
 
 function Brand({ s, session }: { s: UsbState; session: UsbSession }) {
+  const dev = useDevice();
   const blocked = session.blocked();
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">Which brand is it?</h2>
       <p className="lede">{s.identified?.why ?? 'Kiln shows its steps to turn on USB debugging.'}</p>
-      <RadioGroup.Root className="brands" value={s.brand ?? ''} onValueChange={(v) => session.pickBrand(v as BrandId | 'other')} aria-labelledby="h">
-        {PICKS.map((id) => (
-          <RadioGroup.Item key={id} value={id} className="brand-pick">{BRANDS.find((b) => b.id === id)!.name}</RadioGroup.Item>
+      <RadioGroup.Root className="brands" value={s.brand ?? ''} onValueChange={(v) => session.pickBrand(v)} aria-labelledby="h">
+        {dev.brands.map((b) => (
+          <RadioGroup.Item key={b.id} value={b.id} className="brand-pick">{b.name}</RadioGroup.Item>
         ))}
         <RadioGroup.Item value="other" className="brand-pick">Other<small>Android&apos;s general steps</small></RadioGroup.Item>
       </RadioGroup.Root>
@@ -248,12 +249,13 @@ const SWITCH = 'USB debugging';
 const pageOf = (p: UsbPlace) => (p.path.at(-1) === SWITCH ? p.path.slice(0, -1) : p.path);
 
 function Debug({ s, session }: { s: UsbState; session: UsbSession }) {
+  const dev = useDevice();
   const st = s.identified!.steps;
   const one = st.debugging.length === 1;
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">Turn on USB debugging.</h2>
-      <p className="lede">On the tablet. Only you can do this; Kiln can&apos;t.</p>
+      <p className="lede">{`On ${dev.the}. Only you can do this; Kiln can't.`}</p>
       <ol className="num">
         <li><b>Open</b> <Path path={st.unlock.path} />
           <small>Tap <b>{st.unlock.tap}</b> seven times, until it says you&apos;re a developer.{st.unlock.note && <> {st.unlock.note}</>}</small>
@@ -280,10 +282,11 @@ function Debug({ s, session }: { s: UsbState; session: UsbSession }) {
 }
 
 function Allow({ s, session }: { s: UsbState; session: UsbSession }) {
+  const dev = useDevice();
   const [help, setHelp] = useState(false);
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h" className="huge">Tap Allow on the tablet.</h2>
+      <h2 id="h" className="huge">{`Tap Allow on ${dev.the}.`}</h2>
       <div className="tab" aria-hidden="true">
         <div className="scr">
           <div className="dlg">
@@ -298,16 +301,16 @@ function Allow({ s, session }: { s: UsbState; session: UsbSession }) {
       <Collapsible.Root open={help} onOpenChange={setHelp} className="tech">
         <Collapsible.Content>
           <ul className="tips">
-            <li>Pick the tablet in the browser&apos;s list first. It shows once USB debugging is on.</li>
+            <li>{`Pick ${dev.the} in the browser's list first. It shows once USB debugging is on.`}</li>
             <li>Unplug the cable and plug it in again, then click <b>Try again</b>.</li>
             <li>Turn USB debugging off and on again.</li>
-            <li>Another adb on this computer may hold the tablet: run <code>adb kill-server</code>.</li>
+            <li>{`Another adb on this computer may hold ${dev.the}: run `}<code>adb kill-server</code>.</li>
           </ul>
         </Collapsible.Content>
         <div className="foot">
           {s.connectError
             ? <button type="button" className="btn ember" onClick={() => void session.connect()}>Try again</button>
-            : <span className="chip inline"><span className="pulse" />Waiting for the tablet</span>}
+            : <span className="chip inline"><span className="pulse" />{`Waiting for ${dev.the}`}</span>}
           <Collapsible.Trigger className="link">Nothing on the screen?</Collapsible.Trigger>
         </div>
       </Collapsible.Root>
@@ -317,7 +320,7 @@ function Allow({ s, session }: { s: UsbState; session: UsbSession }) {
 
 type RowId = 'read' | 'apk' | 'grant' | 'start' | 'home' | 'handoff';
 const ROWS: { id: RowId; doing: string; done: string }[] = [
-  { id: 'read', doing: 'Reading the tablet', done: '' },
+  { id: 'read', doing: 'Reading', done: '' },
   { id: 'apk', doing: 'Installing Glassworks', done: 'Glassworks installed' },
   { id: 'grant', doing: 'Giving permissions', done: 'Permissions given' },
   { id: 'start', doing: 'Starting Glassworks', done: 'Glassworks started' },
@@ -326,75 +329,47 @@ const ROWS: { id: RowId; doing: string; done: string }[] = [
 ];
 const rowOf = (p: UsbPhase): RowId => (p.step === 'updates' || p.step === 'granted' ? 'grant' : p.step);
 
-const GRANT_TEXT: Record<string, { name: string; without: string } | undefined> = {
-  'microphone': { name: 'Microphone', without: 'Assist can\'t hear you' },
-  'camera': { name: 'Camera', without: 'the camera pane has no picture' },
-  // What the generic app does with each (read in its code, 2026-11-18): secure settings let the Bluetooth proxy turn
-  // Location on; the device admin is what turns the screen off when idle (lockNow).
-  'secure-settings': { name: 'Secure settings', without: 'the Bluetooth proxy can\'t turn Location on by itself' },
-  'overlay': { name: 'Show over other apps', without: 'its codes can\'t show over other apps' },
-  'device-admin': { name: 'Turn the screen off', without: 'Glassworks can\'t turn the screen off by itself' },
-};
-
-/** A grant's words; one the frame's recipe added since, by its own id. */
-const grantText = (what: string) => GRANT_TEXT[what] ?? { name: what, without: `${what} is off` };
+/** A grant's words, from the frame; one its recipe added since, by its own id. */
+const grantText = (dev: UsbFrame, what: string) => dev.grants[what] ?? { name: what, without: `${what} is off` };
 
 function GrantList({ grants, updates }: { grants: UsbGrant[]; updates?: UsbSilentUpdates }) {
+  const dev = useDevice();
   const shown = grants.filter((g) => g.result !== 'not-asked' || g.what === 'camera');
   return (
     <div className="grants">
       {shown.map((g) => (
-        <div key={g.what}>{grantText(g.what).name}
-          {g.result === 'granted' ? <i className="y">On</i> : g.result === 'refused' ? <i className="w" title={g.detail}>This tablet said no</i> : <i className="n">Not asked by this build</i>}
+        <div key={g.what}>{grantText(dev, g.what).name}
+          {g.result === 'granted' ? <i className="y">On</i> : g.result === 'refused' ? <i className="w" title={g.detail}>{`This ${dev.short} said no`}</i> : <i className="n">Not asked by this build</i>}
         </div>
       ))}
       {updates && updates.state !== 'not-asked' && (
         <div>Updates without a tap
-          {updates.state === 'allowed' ? <i className="y">On</i> : updates.state === 'refused' ? <i className="w" title={updates.detail}>This tablet said no</i> : <i className="n">{updates.state === 'old-android' ? 'Needs Android 12' : 'Off'}</i>}
+          {updates.state === 'allowed' ? <i className="y">On</i> : updates.state === 'refused' ? <i className="w" title={updates.detail}>{`This ${dev.short} said no`}</i> : <i className="n">{updates.state === 'old-android' ? 'Needs Android 12' : 'Off'}</i>}
         </div>
       )}
     </div>
   );
 }
 
-/**
- * Done's Silent updates block (issue 422, the maintainer, 2026-11-18): in place of the grants list's row, what Kiln did and
- * what it means, with a word in the grants list's colours. Null where this build doesn't ask.
- */
-export function silentBlock(u: UsbSilentUpdates, release: string): SilentWords | null {
-  switch (u.state) {
-    case 'allowed':
-      return { word: 'On', tone: 'y', line: 'Updates from Home Assistant install with nobody at the tablet. Kiln allowed “Install unknown apps” for Glassworks only. Undo takes it back.' };
-    case 'old-android':
-      return { word: 'A tap each', tone: 'n', line: `Android ${release} asks for a tap on each update. Updates still come from Home Assistant; someone taps Install on the tablet. Only a device owner skips the tap.` };
-    case 'declined':
-      return { word: 'A tap each', tone: 'n', line: 'Each update waits for a tap on the tablet, as asked. Updates still come from Home Assistant.' };
-    case 'refused':
-      if (u.line === SILENT_LINES.off) return { word: 'This tablet said no', tone: 'w', line: 'This tablet\'s software keeps “Install unknown apps” off. Updates still come from Home Assistant, with a tap on the tablet.' };
-      if (u.line === SILENT_LINES.allowed) return { word: 'Still on', tone: 'w', line: 'Android kept “Install unknown apps” allowed from an earlier install, so updates still install with nobody at the tablet.' };
-      return { word: 'Not confirmed', tone: 'n', line: 'Kiln couldn\'t read “Install unknown apps” back. Glassworks\' Device page on the tablet says which it is.' };
-    case 'not-asked':
-      return null;
-  }
-}
-
 /** What didn't apply, said once, with what it means. [updates]: left out where Done's block says it. */
 function Refusals({ grants, updates }: { grants: UsbGrant[]; updates?: UsbSilentUpdates }) {
-  const lines = grants.filter((g) => g.result === 'refused').map((g) => grantText(g.what).without);
+  const dev = useDevice();
+  const lines = grants.filter((g) => g.result === 'refused').map((g) => grantText(dev, g.what).without);
   if (updates?.state === 'refused') lines.push('each update may ask for a tap');
   if (!lines.length) return null;
-  const what = grants.filter((g) => g.result === 'refused').map((g) => grantText(g.what).name.toLowerCase());
+  const what = grants.filter((g) => g.result === 'refused').map((g) => grantText(dev, g.what).name.toLowerCase());
   if (updates?.state === 'refused') what.push('silent updates');
-  return <div className="warnbox" role="status">This tablet&apos;s software refused {what.join(', ')}. Glassworks works without it; {lines.join(', and ')}.</div>;
+  return <div className="warnbox" role="status">{`This ${dev.short}'s software refused `}{what.join(', ')}. Glassworks works without it; {lines.join(', and ')}.</div>;
 }
 
-function deviceLine(s: UsbState): string {
+function deviceLine(dev: UsbFrame, s: UsbState): string {
   const d = s.plan!.device;
   const abi = s.plan!.abi ?? d.abis[0] ?? '';
-  return `${deviceName(s)}, Android ${d.release || androidName(d.sdk)}${abi ? `, ${abi.includes('64') ? '64' : '32'}-bit` : ''}`;
+  return `${deviceName(dev, s)}, Android ${d.release || dev.androidName(d.sdk)}${abi ? `, ${abi.includes('64') ? '64' : '32'}-bit` : ''}`;
 }
 
 function Working({ s }: { s: UsbState }) {
+  const dev = useDevice();
   const last = s.phases.at(-1);
   if (s.flow === 'undo') {
     return (
@@ -402,7 +377,7 @@ function Working({ s }: { s: UsbState }) {
         <h2 id="h" className="huge">Keep it plugged in.</h2>
         <p className="lede">Kiln takes back Glassworks&apos; device admin, then removes it.</p>
         <div className="bar wait"><i /></div>
-        <div className="foot"><span className="small">Nothing else on the tablet changes.</span><Log s={s} /></div>
+        <div className="foot"><span className="small">{`Nothing else on ${dev.the} changes.`}</span><Log s={s} /></div>
       </section>
     );
   }
@@ -410,12 +385,12 @@ function Working({ s }: { s: UsbState }) {
   const pick = last?.step === 'home' ? last.pick : undefined;
   const grants = s.granted?.grants;
   const now = ROWS[at]!;
-  const doing = last?.step === 'apk' && last.stage === 'copy' ? 'Copying Glassworks to the tablet' : now.doing;
-  const done = (r: (typeof ROWS)[number]) => (r.id === 'read' && s.plan ? deviceLine(s) : r.id === 'apk' && s.plan?.installed ? 'Glassworks updated' : r.done);
+  const doing = last?.step === 'apk' && last.stage === 'copy' ? `Copying Glassworks to ${dev.the}` : now.id === 'read' ? `Reading ${dev.the}` : now.doing;
+  const done = (r: (typeof ROWS)[number]) => (r.id === 'read' && s.plan ? deviceLine(dev, s) : r.id === 'apk' && s.plan?.installed ? 'Glassworks updated' : r.done);
   return (
     <section className={`card${pick ? ' turn' : ''}`} aria-labelledby="h">
       {pick ? <>
-        <h2 id="h" className="huge">One tap on the tablet.</h2>
+        <h2 id="h" className="huge">{`One tap on ${dev.the}.`}</h2>
         <p className="lede">Pick <b className="fg">{pick}</b>, then <b className="fg">Always</b>.</p>
       </> : <>
         <h2 id="h" className="huge">Keep it plugged in.</h2>
@@ -431,7 +406,7 @@ function Working({ s }: { s: UsbState }) {
       {grants && <GrantList grants={grants} updates={s.granted?.silentUpdates} />}
       {grants && <Refusals grants={grants} updates={s.granted?.silentUpdates} />}
       <div className="foot">
-        {pick ? <span className="chip inline"><span className="pulse" />Waiting for your tap</span> : <span className="small">Nothing else on the tablet changes.</span>}
+        {pick ? <span className="chip inline"><span className="pulse" />Waiting for your tap</span> : <span className="small">{`Nothing else on ${dev.the} changes.`}</span>}
         <Log s={s} />
       </div>
     </section>
@@ -439,12 +414,13 @@ function Working({ s }: { s: UsbState }) {
 }
 
 function Done({ s, session }: { s: UsbState; session: UsbSession }) {
+  const dev = useDevice();
   const r = s.result!;
   if (r.flow === 'undo') {
     return (
       <section className="card" aria-labelledby="h">
         <span className="okmark" aria-hidden="true">✓</span>
-        <h2 id="h">{r.removed.length ? 'Glassworks is off the tablet.' : 'Glassworks wasn\'t on the tablet.'}</h2>
+        <h2 id="h">{r.removed.length ? `Glassworks is off ${dev.the}.` : `Glassworks wasn't on ${dev.the}.`}</h2>
         <p className="lede">{r.removed.length ? 'Android opens the home screen it had, or asks which one to use.' : 'Nothing was changed.'} Unplug it when you like.</p>
         <div className="foot"><Log s={s} /><Link className="btn ghost" href="/">Back to Kiln</Link></div>
       </section>
@@ -452,7 +428,7 @@ function Done({ s, session }: { s: UsbState; session: UsbSession }) {
   }
   const { installed } = r;
   const f = frameOf(s.identified);
-  const name = deviceName(s);
+  const name = deviceName(dev, s);
   const home = installed.home.state === 'set';
   const page = installed.handoff.setupPage;
   return (
@@ -461,7 +437,7 @@ function Done({ s, session }: { s: UsbState; session: UsbSession }) {
       <h2 id="h">Done.</h2>
       <p className="lede">
         {home && f ? `Glassworks is the ${name}'s home screen.` : `Glassworks is installed on your ${name}.`}
-        {!home && ' Kiln didn\'t see it picked as the home screen: on the tablet, pick Glassworks, then Always.'}
+        {!home && ` Kiln didn't see it picked as the home screen: on ${dev.the}, pick Glassworks, then Always.`}
       </p>
       {f ? (
         <div className="fc">
@@ -474,8 +450,8 @@ function Done({ s, session }: { s: UsbState; session: UsbSession }) {
           <span className="small">Nobody has run Glassworks on this model yet. <a className="link" href={`https://github.com/GlassworksHQ/glassworks/issues/new?title=${encodeURIComponent(`Tested: ${name}`)}`}>Tell us how it goes</a></span>
         </div>
       )}
-      <SilentUpdates words={silentBlock(installed.silentUpdates, s.plan!.device.release || androidName(s.plan!.device.sdk))} />
-      <ScreenLockBlock lock={installed.screenLock} />
+      <SilentUpdates words={dev.silent(installed.silentUpdates, s.plan!.device.release || dev.androidName(s.plan!.device.sdk))} />
+      <ScreenLockBlock lock={installed.screenLock} words={dev.screenLock} />
       <Refusals grants={installed.grants} />
       {page ? <>
         <div className="well">
@@ -484,7 +460,7 @@ function Done({ s, session }: { s: UsbState; session: UsbSession }) {
         </div>
         <span className="small">{page} · unplug when you like</span>
       </> : (
-        <p className="small">{installed.handoff.why} Finish setting up on the tablet: Glassworks shows its setup screen.</p>
+        <p className="small">{installed.handoff.why}{` Finish setting up on ${dev.the}: Glassworks shows its setup screen.`}</p>
       )}
       <div className="foot">
         <button type="button" className="link" onClick={() => void session.undoFromDone()}>Undo</button>
@@ -512,11 +488,12 @@ function Failed({ s, session }: { s: UsbState; session: UsbSession }) {
 
 /** The run stopped. Try again reconnects if the device went away; a refused APK can be swapped here, keeping the device. */
 function Stopped({ s, session }: { s: UsbState; session: UsbSession }) {
+  const dev = useDevice();
   const [repick, setRepick] = useState(false);
   const blocked = s.flow === 'install' ? session.blocked() : undefined;
   return (
     <section className="card err" aria-labelledby="h">
-      <h2 id="h">{s.flow === 'undo' ? 'Undo stopped.' : /Nothing was changed\.$/.test(s.error ?? '') ? 'Kiln can\'t install on this tablet.' : 'The install stopped.'}</h2>
+      <h2 id="h">{s.flow === 'undo' ? 'Undo stopped.' : /Nothing was changed\.$/.test(s.error ?? '') ? `Kiln can't install on this ${dev.short}.` : 'The install stopped.'}</h2>
       <pre className="raw">{s.error}</pre>
       {repick && <ApkField s={s} session={session} />}
       {repick && blocked && s.apk && <p className="status err" role="alert">{blocked}</p>}
@@ -534,7 +511,8 @@ function Stopped({ s, session }: { s: UsbState; session: UsbSession }) {
 /** `base`: the page's route, whose step routes the address follows (installer.json); none in tests. */
 export function Screens({ session, base }: { session: UsbSession; base?: string }) {
   const s = useSyncExternalStore(session.subscribe, session.get, session.get);
-  const route = base === undefined || s.screen === 'off' ? undefined : installRoute(s);
+  const dev = session.frame;
+  const route = base === undefined || s.screen === 'off' ? undefined : installRoute(dev.id, s);
   useEffect(() => {
     if (route === undefined || base === undefined) return;
     const want = `${base}${route ? `/${route}` : ''}`;
@@ -542,47 +520,51 @@ export function Screens({ session, base }: { session: UsbSession; base?: string 
   }, [base, route]);
   const chip = useBrowserChip();
   const turn = rail(s).some((x) => x.mark === 'turn');
-  useEffect(() => { document.title = `${turn ? 'Your turn · ' : ''}Android device · Kiln`; }, [turn]);
+  useEffect(() => { document.title = `${turn ? 'Your turn · ' : ''}${dev.name} · Kiln`; }, [turn, dev]);
   const p = { s, session };
   return (
-    <Shell steps={rail(s)} level={level(s)} error={s.screen === 'error'} chip={chip}>
-      {s.screen === 'off' ? <Off />
-        : s.screen === 'find' ? <Find {...p} />
-        : s.screen === 'named' ? <Named {...p} />
-        : s.screen === 'brand' ? <Brand {...p} />
-        : s.screen === 'debug' ? <Debug {...p} />
-        : s.screen === 'allow' ? <Allow {...p} />
-        : s.screen === 'working' ? <Working s={s} />
-        : s.screen === 'done' ? <Done {...p} />
-        : <Failed {...p} />}
-    </Shell>
+    <UsbFrameContext.Provider value={dev}>
+      <Shell steps={rail(s)} level={level(s)} error={s.screen === 'error'} chip={chip}>
+        {s.screen === 'off' ? <Off />
+          : s.screen === 'find' ? <Find {...p} />
+          : s.screen === 'named' ? <Named {...p} />
+          : s.screen === 'brand' ? <Brand {...p} />
+          : s.screen === 'debug' ? <Debug {...p} />
+          : s.screen === 'allow' ? <Allow {...p} />
+          : s.screen === 'working' ? <Working s={s} />
+          : s.screen === 'done' ? <Done {...p} />
+          : <Failed {...p} />}
+      </Shell>
+    </UsbFrameContext.Provider>
   );
 }
 
-/** The app the last install put on, kept for the tab: a reload at a set-up step talks to the right one (generic or legacy). */
-const APP_KEY = `kiln:standard:${ANDROID_BASE}:app`;
-const keptApp = (): UsbApp => { try { const pkg = sessionStorage.getItem(APP_KEY); return android.apps.find((a) => a.package === pkg) ?? android.apps[0]!; } catch { return android.apps[0]!; } };
+/** The app the last install put on, kept for the tab: a reload at a set-up step talks to the right one. */
+const appKey = (base: string) => `kiln:standard:${base}:app`;
+const keptApp = (dev: UsbFrame, base: string): UsbApp => {
+  try { const pkg = sessionStorage.getItem(appKey(base)); return dev.apps.find((a) => a.package === pkg) ?? dev.apps[0]!; } catch { return dev.apps[0]!; }
+};
 
 /**
- * The tablet as the standard flow reads it (issue 621): the S1's steps on the S1's screens after its install. `installed`:
- * what the install found, for Done's Silent updates; without it (a reload at a set-up step), they are read as not confirmed.
+ * The device as the standard flow reads it (issue 621): the same steps on the same screens as every frame after its
+ * install. `installed`: what the install found, for Done's Silent updates; without it (a reload at a set-up step), the
+ * frame's words for an update setting Kiln didn't read.
  */
-export function androidStandard(app: UsbApp, installed?: UsbInstalled, model?: string): StandardFrame {
-  const release = installed ? installed.plan.device.release || androidName(installed.plan.device.sdk) : '';
-  const words = installed ? silentBlock(installed.silentUpdates, release) : null;
+export function usbStandard(dev: UsbFrame, app: UsbApp, installed?: UsbInstalled, model?: string): StandardFrame {
+  const release = installed ? installed.plan.device.release || dev.androidName(installed.plan.device.sdk) : '';
   return {
-    id: ANDROID_ID, name: 'Android device', short: 'tablet', the: 'the tablet', app: app.name, appId: app,
-    connect: { title: 'Connect to your tablet.', body: 'Plug it into this computer, with USB debugging on.', pick: model ?? 'your tablet' },
+    id: dev.id, name: dev.name, short: dev.short, the: dev.the, app: app.name, appId: app,
+    connect: { ...dev.connect, pick: model ?? dev.connect.pick },
     credits: {},
-    silent: { install: words ?? { word: 'Not confirmed', tone: 'n', line: 'Glassworks\' Device page on the tablet says whether updates install by themselves.' } },
+    silent: { install: dev.silent(installed?.silentUpdates, release) ?? dev.silent(undefined, release)! },
     wifiName: (p, signal) => wifiSsid(p, signal),
     updates: async () => ({ state: 'install', log: 'silent updates: as the install read them back' }),
-    ...standardData(ANDROID_ID),
+    ...standardData(dev.id),
   };
 }
 
-/** The tablet's standard flow, as Kiln's registry entry for /android. `device`: a demo's simulated tablet. */
-function standardEntry(f: StandardFrame, o: { demo?: string; device?: Device } = {}): Entry {
+/** The device's standard flow, as Kiln's registry entry for its page. `device`: a demo's simulated device. */
+function standardEntry(f: StandardFrame, base: string, o: { demo?: string; device?: Device } = {}): Entry {
   const device = o.device;
   const session = new StandardSession({
     standard: f,
@@ -590,27 +572,28 @@ function standardEntry(f: StandardFrame, o: { demo?: string; device?: Device } =
     loadKey: device ? async () => ({ publicKey: 'QAAAAdemo kiln@demo' }) as never : loadOrCreateAdbKey,
     ...(device ? { simulated: true, sleep: (ms: number) => new Promise<void>((r) => setTimeout(r, Math.min(ms, 800))) } : {}),
   });
-  return { base: ANDROID_BASE, name: 'Android device', session, demo: o.demo, standard: true };
+  return { base, name: f.name, session, demo: o.demo, standard: true };
 }
 
-/** The install's step routes from generic-android's installer.json: `find`, `connect`, `install`. */
-function installRoute(s: UsbState): string | undefined {
-  const steps = (INSTALLERS[ANDROID_ID]?.flows?.install?.steps ?? []) as { id: string; route?: string }[];
-  const id = s.screen === 'working' || (s.screen === 'error' && s.phases.length) ? 'install' : s.screen === 'debug' || s.screen === 'allow' ? 'connect' : 'find';
-  return steps.find((x) => x.id === id)?.route;
+/** The install's step routes from the frame's installer.json flow (`find`, `connect`, `install`). */
+function installRoute(id: string, s: UsbState): string | undefined {
+  const steps = (Object.values(INSTALLERS[id]?.flows ?? {})[0]?.steps ?? []) as { id: string; route?: string }[];
+  const step = s.screen === 'working' || (s.screen === 'error' && s.phases.length) ? 'install' : s.screen === 'debug' || s.screen === 'allow' ? 'connect' : 'find';
+  return steps.find((x) => x.id === step)?.route;
 }
 
 /** What the install left to say on the standard flow's Done: the frame card, the screen lock, what didn't apply, the home screen. */
-function AndroidOutcome({ session }: { session: UsbSession }) {
+function UsbOutcome({ session }: { session: UsbSession }) {
   const s = useSyncExternalStore(session.subscribe, session.get, session.get);
+  const dev = session.frame;
   const r = s.result;
   if (r?.flow !== 'install') return null;
   const { installed } = r;
   const f = frameOf(s.identified);
-  const name = deviceName(s);
+  const name = deviceName(dev, s);
   return (
-    <>
-      {installed.home.state !== 'set' && <p className="small" role="alert">Kiln didn&apos;t see Glassworks picked as the home screen: on the tablet, pick Glassworks, then Always.</p>}
+    <UsbFrameContext.Provider value={dev}>
+      {installed.home.state !== 'set' && <p className="small" role="alert">{`Kiln didn't see Glassworks picked as the home screen: on ${dev.the}, pick Glassworks, then Always.`}</p>}
       {f ? (
         <div className="fc">
           <div className="spread"><b>{f.name}</b>{!MEASURED.has(f.id) && <span className="ctag">Clarity · not measured yet</span>}</div>
@@ -622,52 +605,53 @@ function AndroidOutcome({ session }: { session: UsbSession }) {
           <span className="small">Nobody has run Glassworks on this model yet. <a className="link" href={`https://github.com/GlassworksHQ/glassworks/issues/new?title=${encodeURIComponent(`Tested: ${name}`)}`}>Tell us how it goes</a></span>
         </div>
       )}
-      <ScreenLockBlock lock={installed.screenLock} />
+      <ScreenLockBlock lock={installed.screenLock} words={dev.screenLock} />
       <Refusals grants={installed.grants} />
-    </>
+    </UsbFrameContext.Provider>
   );
 }
 
-/** The page that hands the tablet over now: sessions kept in the registry reach today's, not the mount that made them. */
-const HAND_NOW: { current?: (p: Device, installed: UsbInstalled) => StandardSession | undefined } = {};
+/** The page that hands the device over now, by its base: sessions kept in the registry reach today's, not the mount that made them. */
+const HAND_NOW = new Map<string, (p: Device, installed: UsbInstalled) => StandardSession | undefined>();
 
 const STANDARD_STEPS: readonly Step[] = ['set-up', 'resume', 'wifi', 'home-assistant', 'panes', 'radio', 'done'];
 const noSubscribe = () => () => {};
 const noState = () => undefined as never;
 
-export function AndroidWizard() {
+/** The page for a UsbFrame at `base` (its installer.json route): its install, then the standard flow. */
+export function UsbPage({ frame: dev, demo: sim, base }: { frame: UsbFrame; demo?: { sim: UsbSim }; base: string }) {
   const path = usePathname() ?? '';
   const [start] = useState(() => {
-    const m = usbMode(location.search, DEMO_ON, ANDROID_DEMOS, usbOpen(android));
-    if (m.demo) return { m, demo: m.demo as AndroidDemo, search: location.search };
+    const m = usbMode(location.search, DEMO_ON && !!sim, USB_DEMOS, usbOpen(dev));
+    if (m.demo) return { m, demo: m.demo as UsbDemo, search: location.search };
     // a running install outlives the picker (wizard/registry.ts), so a link back without ?apk=… finds it
-    if (!m.on && !registry.activity(ANDROID_BASE)) return { m, search: location.search, real: realSession(false) };
+    if (!m.on && !registry.activity(base)) return { m, search: location.search, real: realSession(dev, base, false) };
     // a session kept from an earlier visit hands over through whichever page is up then (HAND_NOW), not the one that made it
-    return { m, search: location.search, real: keptAndroid(() => realSession(true, m.apk, (p, i) => HAND_NOW.current?.(p, i)), m.apk).session };
+    return { m, search: location.search, real: keptUsb(base, dev.name, () => realSession(dev, base, true, m.apk, (p, i) => HAND_NOW.get(base)?.(p, i)), m.apk).session };
   });
   const handRef = useRef<((p: Device, installed: UsbInstalled) => StandardSession | undefined) | undefined>(undefined);
-  HAND_NOW.current = (p, installed) => handRef.current?.(p, installed);
+  HAND_NOW.set(base, (p, installed) => handRef.current?.(p, installed));
   handRef.current = (p, installed) => {
-    try { sessionStorage.setItem(APP_KEY, installed.plan.app.package); } catch { /* storage off: a reload talks to the generic build */ }
-    const e = registry.set(standardEntry(androidStandard(installed.plan.app, installed, installed.plan.device.model), { demo: start.demo, device: start.demo ? p : undefined }));
+    try { sessionStorage.setItem(appKey(base), installed.plan.app.package); } catch { /* storage off: a reload talks to the frame's first app */ }
+    const e = registry.set(standardEntry(usbStandard(dev, installed.plan.app, installed, installed.plan.device.model), base, { demo: start.demo, device: start.demo ? p : undefined }));
     e.handed = true;
     void e.session.handOver(p);
     return e.session;
   };
   const [demo, setDemo] = useState<UsbSession>();
-  useEffect(() => { if (start.demo) void androidDemo(start.demo, false, (p, i) => handRef.current?.(p, i)).then(setDemo); }, [start]);
-  const current = useCallback(() => { const e = registry.get(); return e?.base === ANDROID_BASE && e.standard ? e : undefined; }, []);
+  useEffect(() => { if (start.demo && sim) void usbDemo(dev, sim.sim, start.demo, false, (p, i) => handRef.current?.(p, i)).then(setDemo); }, [start, dev, sim]);
+  const current = useCallback(() => { const e = registry.get(); return e?.base === base && e.standard ? e : undefined; }, [base]);
   const entry = useSyncExternalStore(registry.subscribe, current, current);
   const ws = useSyncExternalStore(entry?.session.store.subscribe ?? noSubscribe, entry?.session.store.get ?? noState, entry?.session.store.get ?? noState);
-  const step = path.startsWith(ANDROID_BASE) ? stepOf(path.slice(ANDROID_BASE.length)) : undefined;
+  const step = path.startsWith(base) ? stepOf(path.slice(base.length)) : undefined;
   const onStandard = !!step && STANDARD_STEPS.includes(step);
-  // a set-up step opened with no session for it (a reload, a link): a new one, which connects to the tablet
-  useEffect(() => { if (onStandard && !current() && !start.demo) registry.set(standardEntry(androidStandard(keptApp()))); }, [onStandard, current, start]);
-  const renew = useCallback(() => registry.set(standardEntry(androidStandard(keptApp()))), []);
+  // a set-up step opened with no session for it (a reload, a link): a new one, which connects to the device
+  useEffect(() => { if (onStandard && !current() && !start.demo) registry.set(standardEntry(usbStandard(dev, keptApp(dev, base)), base)); }, [onStandard, current, start, dev, base]);
+  const renew = useCallback(() => registry.set(standardEntry(usbStandard(dev, keptApp(dev, base)), base)), [dev, base]);
   const live = start.real ?? demo;
   if (entry && (onStandard || (entry.handed && status(ws) !== 'finished'))) {
-    return <StandardRoutes entry={entry} renew={renew} before={['Device', 'Connect', 'Install']} outcome={live ? <AndroidOutcome session={live} /> : undefined} />;
+    return <StandardRoutes entry={entry} renew={renew} before={['Device', 'Connect', 'Install']} outcome={live ? <UsbOutcome session={live} /> : undefined} />;
   }
   if (onStandard) return null;
-  return live ? <Screens session={live} base={ANDROID_BASE} /> : null;
+  return live ? <Screens session={live} base={base} /> : null;
 }

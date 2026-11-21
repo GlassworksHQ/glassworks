@@ -9,7 +9,8 @@
     ".": "./src/index.ts",
     "./fakes": "./test/fakes.ts",
     "./browsers": "./test/browsers.ts",
-    "./kiln": "./src/kiln.ts"
+    "./kiln": "./src/kiln.ts",
+    "./sim": "./src/sim.ts"
   },
   "scripts": {
     "test": "vitest run",

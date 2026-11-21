@@ -11,13 +11,12 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ replace() {}, push() {} 
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: ReactNode }) => <a href={href} {...p}>{children}</a> }));
 
 import { GENERIC } from '@glassworks/generic-android-installer';
-import { AndroidWizard, androidStandard } from '../src/android/AndroidWizard';
-import { androidDemo, type AndroidDemo } from '../src/android/demo';
 import type { Device } from '../src/device/usbSession';
 import type { UsbInstalled } from '@glassworks/kiln-core';
 import { StandardSession } from '../src/standard/session';
 import { StandardWizard } from '../src/standard/StandardWizard';
 import { registry } from '../src/wizard/registry';
+import { type AndroidDemo, androidDemo, androidStandard, AndroidWizard } from './android-frame';
 
 beforeAll(() => {
   Object.defineProperty(navigator, 'usb', { configurable: true, value: { getDevices: async () => [] } });

@@ -6,15 +6,11 @@ import { INSTALLERS } from '@glassworks/frames/catalog';
 import { describe, expect, it } from 'vitest';
 import { STANDARD_ROUTES, routesOf } from '../../src/app/[frame]/frames';
 import { generateStaticParams } from '../../src/app/[frame]/[...step]/page';
-import { generateStaticParams as androidParams } from '../../src/app/android/(flow)/[...step]/page';
 import { installers } from './harness';
 import { DRIVERS, cases } from './suite';
 
-/** Every step page Kiln builds: the engine's frames under [frame], and /android's own. */
-const pages = () => [
-  ...generateStaticParams().map(({ frame, step }) => `/${frame}/${step.join('/')}`),
-  ...androidParams().map(({ step }) => `/android/${step.join('/')}`),
-];
+/** Every step page Kiln builds: every frame's, under [frame]. */
+const pages = () => generateStaticParams().map(({ frame, step }) => `/${frame}/${step.join('/')}`);
 
 /** Every frame with a page in Kiln: each has a contract driver (gate.test.ts). */
 const WITH_A_PAGE = [...new Set(DRIVERS.map((d) => d.frame))];

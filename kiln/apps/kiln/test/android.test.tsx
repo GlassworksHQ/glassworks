@@ -9,17 +9,9 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: ReactNode }) => <a href={href} {...p}>{children}</a> }));
 
-import { ANDROID_BASE, AndroidActivity, keptAndroid } from '../src/android/activity';
-import { AndroidWizard, Screens } from '../src/android/AndroidWizard';
-import { ANDROID_DEMOS, androidDemo, type AndroidDemo } from '../src/android/demo';
-import { UsbSession, usbMode, usbOpen, type UsbDeps } from '../src/device/usbSession';
-import { kilnFrame as android } from '@glassworks/generic-android-installer/kiln';
-
-/** /android's session, on generic Android's frame. */
-const AndroidSession = class extends UsbSession { constructor(d: Omit<UsbDeps, 'frame'>, on: boolean) { super({ frame: android, ...d }, on); } };
-const androidMode = (s: string, demosOn: boolean, demos: readonly string[], open = usbOpen(android)) => usbMode(s, demosOn, demos, open);
-import { SCREEN_LOCK_HELP, SCREEN_LOCK_LINE } from '../src/android/ScreenLockBlock';
 import { registry } from '../src/wizard/registry';
+import { android, ANDROID_BASE, ANDROID_DEMOS, AndroidActivity, type AndroidDemo, androidDemo, androidMode, AndroidSession, AndroidWizard, keptAndroid, SCREEN_LOCK_HELP, SCREEN_LOCK_LINE } from './android-frame';
+import { Screens } from '../src/device/UsbPage';
 
 beforeAll(() => {
   Object.defineProperty(navigator, 'usb', { configurable: true, value: {} });
@@ -352,7 +344,7 @@ describe('the session', () => {
 
   it('a finished session isn\'t kept: coming back after Done starts a new install', async () => {
     const done = await androidDemo('done', true);
-    registry.keep(new AndroidActivity(done));
+    registry.keep(new AndroidActivity(ANDROID_BASE, android.name, done));
     const fresh = keptAndroid(() => new AndroidSession({ findUsb: vi.fn(), connect: vi.fn() }, true));
     expect(fresh.session).not.toBe(done);
     expect(fresh.session.state.screen).toBe('find');
@@ -362,10 +354,10 @@ describe('the session', () => {
 
   it('is kept in Kiln\'s registry: the picker\'s way back while it works, and LeaveGuard while it writes', async () => {
     const s = await androidDemo('installing', true);
-    const a = new AndroidActivity(s);
+    const a = new AndroidActivity(ANDROID_BASE, android.name, s);
     await until(() => s.state.screen === 'working');
     expect(a.writing()).toBe(true);
     expect(a.running()).toBe('/android?apk=local');
-    expect(new AndroidActivity(await androidDemo('find', true)).running()).toBeUndefined();
+    expect(new AndroidActivity(ANDROID_BASE, android.name, await androidDemo('find', true)).running()).toBeUndefined();
   });
 });

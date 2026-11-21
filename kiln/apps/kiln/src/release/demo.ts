@@ -2,17 +2,16 @@
 // with a stand-in release, so the ?apk=release screens can be seen without a real one.
 //   out: <line>-v0.2.0 with its APKs and .sha256   none: no release yet
 //   bad: a .sha256 that isn't the APK's                          stuck: the APK download stops part way
-import type { Line } from '../android/tablet/model';
 
 export type FakeRelease = 'out' | 'none' | 'bad' | 'stuck';
 
 /** The stand-in release of `line`: its tag and its arm64-v8a APK. */
-export const demoRelease = (line: Line) => ({ tag: `${line}-v0.2.0`, apk: `glassworks-${line}-arm64-v8a-0.2.0.apk` });
+export const demoRelease = (line: string) => ({ tag: `${line}-v0.2.0`, apk: `glassworks-${line}-arm64-v8a-0.2.0.apk` });
 
 const sha256 = async (b: Uint8Array) =>
   [...new Uint8Array(await crypto.subtle.digest('SHA-256', b as Uint8Array<ArrayBuffer>))].map((x) => x.toString(16).padStart(2, '0')).join('');
 
-export function fakeReleaseRoute(kind: FakeRelease, apk: Uint8Array, tick: (ms: number) => Promise<void>, line: Line): typeof fetch {
+export function fakeReleaseRoute(kind: FakeRelease, apk: Uint8Array, tick: (ms: number) => Promise<void>, line: string): typeof fetch {
   const { tag: DEMO_TAG, apk: DEMO_APK } = demoRelease(line);
   return (async (input: RequestInfo | URL) => {
     const url = new URL(String(input), 'https://kiln.invalid');
