@@ -162,7 +162,8 @@ describe('the screens', () => {
     await show('done-untested', 'You\'re all set');
     expect(screen.getByText('Glassworks is installed on your Teclast P20HD.')).toBeTruthy();
     expect(screen.getByText('Untested device')).toBeTruthy();
-    expect(screen.getByText('Tell us how it goes').getAttribute('href')).toContain('issues/new?title=Tested%3A%20Teclast%20P20HD');
+    // the report sheet (test/report-form.test.tsx), not a bare link to GitHub
+    expect(screen.getByText('Tell us how it goes').tagName).toBe('BUTTON');
   });
 
   it('a refused install: nothing changed, said so, with Try again', async () => {

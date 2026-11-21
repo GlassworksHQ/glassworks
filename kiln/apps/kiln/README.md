@@ -66,6 +66,7 @@ address, redirects to its S1 page, and the S1 page maps the old `/#/…` links.
 | `/android/tablet` | Glassworks from the tablet's own browser, no computer (#403): the USB-debugging flow's on-device page (`src/device/onDevice`), at generic Android's `installer.json` `onDevice` route. Kiln reads what the browser lets it (`identifyBrowser` in `frames/generic-android/installer/src/browser.ts`): Android or not, tablet or phone, the Android version and the build that fits, the model from client hints or a GPU and screen fingerprint (Chrome's desktop site hides it). Then: Device, Get the app (the newest release's APK for its ABI through `/api/release/<line>`, or "not out yet" before the first), Set up (what the app's own setup asks), and Finish with Kiln (USB debugging, with a link to About tablet; Android won't open Developer options from a link). On a computer it says to open it on the tablet. Demos: `?demo=pixel`, `galaxy`, `phone`, `unknown`, `nougat`, `old-chrome`, `lollipop`, `computer`, `get`, `get-unsure`, `get-legacy`, `get-either`, `get-none`, `get-error`, `get-loading`, `setup`, `kiln`, `kiln-galaxy`, `kiln-unknown` (`src/device/onDevice/demo.ts`) | shows Device, or "open it on the tablet" |
 | `/api/release/<line>?tag=…&name=…` | Streams a release line's APK from this repo's GitHub Releases (no CORS there). Only allowlisted lines, tags and names pass (`RELEASES` in `src/app/api/release/lines.ts`): `aqara-s1-plus` (`vX.Y.Z` or `aqara-s1-plus-vX.Y.Z` with `s1-kiosk-X.Y.Z.apk`), `generic-android` and `generic-android-legacy` (`<line>-vX.Y.Z` with `glassworks-<line>-<abi>-X.Y.Z.apk`, one per ABI in `frames/generic-android/design/frame.json`). An unknown line gets 404, any other tag or name 400, both before GitHub is asked | — |
 | `/api/release/<line>/latest` | The line's newest published release and the files of it Kiln serves, as JSON, or `{ "release": null }` before its first. Asks GitHub's REST API unauthenticated, every page up to a short one (10 at most, else 502), so the CDN keeps each answer 10 minutes | — |
+| `/api/report` | A device report as a GitHub issue, opened by Kiln's bot, so people without a GitHub account can send one ([Device reports](#device-reports)). GET: a time token for the form just opened, or 503 when the deployment has no credentials. POST: the report's fields, checked and rebuilt into the issue | — |
 | `/api/release-asset` | The S1's address before #28: a 308 redirect to `/api/release/aqara-s1-plus` with the same query | — |
 
 The session is the truth and the address bar follows it (`src/wizard/routes.ts`, `useRouteSync.ts`).
@@ -153,6 +154,71 @@ clicks through a simulated Mirror (`src/device/demo.ts` on the Mirror's `kilnSim
 Android's list), `undo-done`, `undo-pending` (undo again to finish) and `error` jump to one screen. None waits on a tap
 on the Mirror: it has no touchscreen. They work in `next dev`,
 or in a build made with `NEXT_PUBLIC_KILN_DEMO=1`.
+
+## Device reports
+
+"Tell us how it goes" on an Android device's Done (tested or not), on the install's error screen, and on the on-device
+page's Device and Get screens opens a sheet (`src/report/ReportDialog.tsx`) with the fields of
+`.github/ISSUE_TEMPLATE/device-report.yml`. What Kiln read comes filled in, and every field can be changed: the model and
+its maker, Android and its API level, the ABIs (the bitness from the device's own browser), how it was installed, the
+Glassworks version from the release and how far Kiln got (`src/report/prefill.ts`, a whitelist). Kiln can't tell stock
+from custom Android, so the person picks. They add what worked, what didn't, and a Clarity grade if they ran it.
+
+Before anything is sent the sheet shows the issue exactly as GitHub will have it, and says it's public. **Send it**
+posts the fields to `/api/report`, which opens the issue and the sheet links it. **Open it on GitHub instead** is
+always there: the template on GitHub with the same fields filled in. It's also the way on when Kiln can't send (no
+credentials, an error, the rate limit). Nothing is sent unless the person presses Send, and nothing is kept.
+
+What the route does (`src/report/server.ts`, `src/report/report.ts`, shared with the sheet so the preview is what's sent):
+
+- Takes only the template's fields, as strings, each length-limited (`LIMITS`), and a request of at most 24 KB. It
+  builds the title (`Tested: <model>`) and body itself, in the issue form's layout, with the template's label
+  (`hardware report`). A title, body or label from the browser is ignored.
+- Removes what looks private: IPv4 and IPv6 addresses, MACs and EUI-64s, serials (11+ letters and digits with 4+
+  digits), long digit runs (IMEIs), emails, JWTs, local names (`.local`, `.lan`, …), Nabu Casa addresses, and any URL
+  except https ones on github.com and glassworks.dev. Each becomes "(removed)".
+- Escapes the person's text for GitHub's markdown: HTML as text, no links or images, and every @mention, issue reference
+  and URL in a code span, so a report can't ping anyone, link out, or load a tracking image.
+- Refuses a filled honeypot field, a form sent sooner than 4 s after it opened or older than 2 h (a time token signed
+  with a key derived from the credentials, so it needs no state), and more than 3 reports an hour from one address or
+  30 from one instance. The address limit is **per instance and in memory**: a cold start or another instance starts
+  its own count. Addresses are kept only as a hash, for an hour.
+- Logs nothing from a report, no address and no token: a failure logs GitHub's status alone.
+
+The sheet's demo states work on any screen that has it, in `next dev` or a build with `NEXT_PUBLIC_KILN_DEMO=1`:
+`&report=form`, `preview`, `sent`, `error` and `off` (no credentials), for example
+`/android?demo=done-untested&report=preview` or `/android/tablet?demo=unknown&report=form` (`src/report/demo.ts`).
+
+### Credentials
+
+Set one of these in the Vercel project (Production). With neither, `/api/report` answers 503 and the sheet offers
+GitHub's form.
+
+| Variable | What |
+|---|---|
+| `REPORT_APP_ID` | The GitHub App's ID (its settings page, "App ID") |
+| `REPORT_APP_PRIVATE_KEY` | One of the app's private keys, the whole PEM. Pasted with its newlines, or on one line with `\n` |
+| `REPORT_APP_INSTALLATION_ID` | The installation's ID on GlassworksHQ: the number at the end of its settings URL (`/settings/installations/<id>`) |
+| `REPORT_GITHUB_TOKEN` | The simpler alternative: a fine-grained token with **Issues: Read and write** on GlassworksHQ/glassworks only. Issues then show as the token's owner |
+
+The app comes first when all three of its values are set. Kiln mints a JWT for it, then an installation token for this
+repo alone with `issues: write`, and keeps that token until five minutes before it expires. Issues show as the app's bot.
+
+To create the app (an org owner, once):
+
+1. GlassworksHQ → Settings → Developer settings → GitHub Apps → **New GitHub App**. A name (for example "Glassworks
+   Reports"), the homepage `https://kiln.glassworks.dev`, **Webhook** off (no URL, no secret), no callback URL, no
+   user authorization, no device flow.
+2. **Repository permissions: Issues, Read and write.** Nothing else: Metadata read-only is added by GitHub and stays.
+   No organization or account permissions, no events.
+3. **Only on this account.** Create it, note its **App ID**, and generate a **private key** (the `.pem` download).
+4. **Install App** → GlassworksHQ → **Only select repositories** → GlassworksHQ/glassworks. The installation's URL ends
+   in its ID.
+5. Put the three values in the Vercel project, redeploy, and open `/api/report` in a browser: it answers with a token,
+   not 503. Then send one report from a demo-free page and close the issue.
+
+To turn reports off, remove the variables (the sheet falls back to GitHub's form). To rotate the key, generate a new
+one on the app, update `REPORT_APP_PRIVATE_KEY`, redeploy, then delete the old key.
 
 ## The panel's setup page
 
