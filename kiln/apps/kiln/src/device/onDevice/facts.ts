@@ -14,26 +14,11 @@ function gpu(): string | undefined {
   }
 }
 
-/**
- * Whether this browser lets a WebAssembly memory reach 4 GiB: only a 64-bit one does (the frame's identify says why).
- * Allocates one 64 KiB page, which the page drops at once.
- */
-function wasm4g(): boolean | undefined {
-  if (typeof WebAssembly === 'undefined') return undefined;
-  try {
-    new WebAssembly.Memory({ initial: 1, maximum: 65536 });
-    return true;
-  } catch (e) {
-    return e instanceof RangeError ? false : undefined;
-  }
-}
-
 export async function readFacts(): Promise<BrowserFacts> {
   const data = (navigator as Navigator & { userAgentData?: HighEntropy }).userAgentData;
   const h = await data?.getHighEntropyValues(['platform', 'model', 'platformVersion', 'bitness']).catch(() => undefined);
   const hints = h && { platform: String(h.platform ?? ''), model: String(h.model ?? ''), platformVersion: String(h.platformVersion ?? ''), bitness: String(h.bitness ?? '') };
   const g = gpu();
-  const w = wasm4g();
   return {
     userAgent: navigator.userAgent,
     platform: navigator.platform,
@@ -41,6 +26,5 @@ export async function readFacts(): Promise<BrowserFacts> {
     screen: { width: screen.width, height: screen.height, dpr: devicePixelRatio },
     ...(g ? { gpu: g } : {}),
     ...(hints ? { hints } : {}),
-    ...(w === undefined ? {} : { wasm4g: w }),
   };
 }
