@@ -32,7 +32,10 @@ export function firstScreen(on: OnDevice): TabletScreen {
 /** The legacy build only where the version says 6 or 7; where it's hidden the page offers both, Android 8+ first. */
 export const buildFor = (on: OnDevice): 'generic' | 'legacy' => (on.app === 'legacy' ? 'legacy' : 'generic');
 
-/** The ABI and whether Kiln knows it: client hints' bitness, else a tested model's one ABI, else 64-bit (unsure). */
+/**
+ * The ABI and whether Kiln knows it: what the browser says it runs as (OnDevice `bits`), else a tested model's one ABI,
+ * else 64-bit, unsure: the Get screen then offers both builds (issue 700).
+ */
 export function abiFor(on: OnDevice, frames: readonly FrameDesign[]): { abi: Abi; sure: boolean } {
   if (on.bits) return { abi: on.bits === 64 ? 'arm64-v8a' : 'armeabi-v7a', sure: true };
   const abis = frames.find((f) => f.id === on.identified.model?.frame)?.abis;

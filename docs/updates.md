@@ -39,7 +39,7 @@ While an update is running, the **Update status** diagnostic sensor shows whethe
 
 In addition to the Glassworks app itself, dedicated frames like the **Aqara S1 Plus** and **lululemon Studio Mirror** have a **Frame update** entity in Home Assistant (and a **Frame version** row on the panel's Device page and Manage page). This tracks the Glassworks-managed system layer—such as the S1 Plus boot-side helper scripts and boot animation, or the Mirror's patched system image.
 
-- **Aqara S1 Plus:** Radio helper updates ship alongside app updates once your panel has the matching boot image. Check the **Radio helper** diagnostic sensor in Home Assistant to see if your boot image needs a refresh. When a boot-image update is needed, run a full install again in [Kiln](https://kiln.glassworks.dev/aqara-s1-plus). Keep the backup `.zip` from your **first** install, as it holds your original Aqara boot partition.
+- **Aqara S1 Plus:** Once the panel's boot image has the frame loader, press **Install** on the **Frame update** card (or on the Device page). The panel downloads the signed frame bundle, checks it, and restarts once to finish. Until then, the card says how to get the loader. Keep the backup `.zip` from your **first** Kiln install, as it holds your original Aqara boot partition.
 - **lululemon Studio Mirror:** Frame updates are installed by reflashing the updated image with Kiln over USB.
 - **Generic Android tablets and phones:** Your device manufacturer handles Android OS updates, so there is no Frame update entity.
 

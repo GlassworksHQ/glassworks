@@ -9,7 +9,7 @@ import { withAppStreams } from '../wizard/demo';
 import { UsbSession, type Device } from './usbSession';
 
 export const USB_DEMOS = [
-  'run', 'find', 'find-release', 'find-release-none', 'find-release-bad', 'undo-find', 'named', 'brand', 'debug', 'debug-generic', 'allow', 'installing', 'vendor', 'setup', 'setup-wifi', 'setup-ha', 'setup-panes', 'done', 'done-untested', 'done-old', 'done-refused', 'done-lock', 'undo-done', 'error', 'own-frame',
+  'run', 'find', 'find-release', 'find-release-none', 'find-release-bad', 'undo-find', 'named', 'brand', 'debug', 'debug-generic', 'allow', 'installing', 'vendor', 'setup', 'setup-wifi', 'setup-ha', 'setup-panes', 'done', 'done-untested', 'done-old', 'done-refused', 'done-lock', 'done-32bit', 'undo-done', 'error', 'own-frame',
 ] as const;
 export type UsbDemo = (typeof USB_DEMOS)[number];
 
@@ -24,8 +24,9 @@ export async function usbDemo(frame: UsbFrame, sim: UsbSim, name: UsbDemo, fast 
   const device: Device = handOver
     ? Object.assign(withAppStreams(d.device, { online: name !== 'setup-wifi', radio: false, ...(name === 'setup-panes' && sim.panes ? { panes: { cards: sim.panes } } : {}) }), { app: d.device.app })
     : d.device;
-  // find-release…: the APK from a stand-in release of the frame's line (?apk=release); the first screen downloads it
-  const kind = ({ 'find-release': 'out', 'find-release-none': 'none', 'find-release-bad': 'bad' } as Partial<Record<UsbDemo, FakeRelease>>)[name];
+  // find-release…: the APK from a stand-in release of the frame's line (?apk=release); the first screen downloads it.
+  // done-32bit: the release on a device whose ABI isn't the line's default, through to Done (issue 700)
+  const kind = ({ 'find-release': 'out', 'find-release-none': 'none', 'find-release-bad': 'bad', 'done-32bit': 'out' } as Partial<Record<UsbDemo, FakeRelease>>)[name];
   let standard: StandardSession | undefined;
   const s = new UsbSession({
     frame,
@@ -35,10 +36,11 @@ export async function usbDemo(frame: UsbFrame, sim: UsbSim, name: UsbDemo, fast 
     homeTimeoutMs: 10 * 60_000,
     setupTries: 2,
     ...(handOver ? { handOver: (p: Device, i: UsbInstalled) => { standard = handOver(p, i); } } : {}),
-    ...(kind ? { release: fakeReleaseRoute(kind, d.apk, (ms) => new Promise((r) => setTimeout(r, fast ? 0 : ms)), frame.apk.line) } : {}),
+    ...(kind ? { release: fakeReleaseRoute(kind, d.release ?? d.apk, (ms) => new Promise((r) => setTimeout(r, fast ? 0 : ms)), frame.apk.line) } : {}),
   }, true);
-  if (kind) return s;
-  await s.pickApk(d.apkName, d.apk);
+  if (kind && name !== 'done-32bit') return s;
+  if (kind) await s.loadRelease();
+  else await s.pickApk(d.apkName, d.apk);
   if (name === 'run' || name === 'find') return s;
   if (name === 'undo-done' || name === 'undo-find') s.setFlow('undo');
   if (name === 'undo-find') return s;

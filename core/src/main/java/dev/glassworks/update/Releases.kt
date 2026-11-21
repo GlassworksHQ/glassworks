@@ -243,14 +243,18 @@ object Releases {
         return UpdateOffer(v, r.tag, r.body, r.htmlUrl.takeIf(::isHttps).orEmpty(), apk, sha, prerelease = r.prerelease)
     }
 
-    /** `https://github.com/<owner>/<repo>/releases/download/<tag>/<name>` (owner/repo may differ after a rename). */
+    /**
+     * `https://github.com/<owner>/<repo>/releases/download/<tag>/<name>` (owner/repo may differ after a rename). A frame's
+     * tag has slashes (`frames/aqara-s1-plus/v1.0.1`), which the URL may give as they are or as `%2F`: the path is
+     * compared decoded.
+     */
     fun isReleaseDownload(url: String, tag: String, name: String): Boolean {
         val u = try { URI(url) } catch (_: Exception) { return false }
         if (u.scheme != "https" || u.host != "github.com" || u.rawQuery != null || u.rawFragment != null) return false
-        val p = u.path.split('/')
-        // ["", owner, repo, "releases", "download", tag, name]
-        return p.size == 7 && p[0].isEmpty() && p[1].isNotEmpty() && p[2].isNotEmpty() &&
-            p[3] == "releases" && p[4] == "download" && p[5] == tag && p[6] == name
+        val p = u.path.split('/', limit = 6)
+        // ["", owner, repo, "releases", "download", "<tag>/<name>"]
+        return p.size == 6 && p[0].isEmpty() && p[1].isNotEmpty() && p[2].isNotEmpty() &&
+            p[3] == "releases" && p[4] == "download" && p[5] == "$tag/$name"
     }
 
     private fun isHttps(url: String) = url.startsWith("https://")

@@ -132,10 +132,14 @@ PRs get no preview.
 ### Deploying
 
 Production deploys from GitHub Actions: [`web-deploy.yml`](../.github/workflows/web-deploy.yml) runs on
-every push to `main` that changes something the site reads (the same paths as CI's site job), and by
-hand from the Actions tab (**Web deploy** → Run workflow). It builds the site on the runner from a full
-clone and uploads the build, as below, with a Vercel token in the `VERCEL_SITE_TOKEN` secret. Don't let
-Vercel build it: on Vercel's machines the build fails at the Pagefind step.
+every push to `main`, every 6 hours, and by hand from the Actions tab (**Web deploy** → Run workflow). On a
+push or a scheduled run it deploys the site when something the site reads (the same paths as CI's site job)
+changed since its last successful deploy, so a deploy that failed or was cancelled, for example at Vercel's
+daily deploy limit, goes out on the next push or within 6 hours. When nothing changed, nothing deploys.
+`tools/ci/web_deploy.py` decides, from the commit each successful deploy records as a GitHub deployment in
+the `glassworks.dev` environment, and each run's summary says what it deployed and why. It builds the site on the runner from a full clone and uploads
+the build, as below, with a Vercel token in the `VERCEL_SITE_TOKEN` secret. Don't let Vercel build it: on
+Vercel's machines the build fails at the Pagefind step.
 
 To deploy by hand, build on your machine from a full clone, then upload the build. A full clone, because the docs' "Updated"
 dates come from git history: a build without it (a shallow clone, or a plain `vercel deploy`, which

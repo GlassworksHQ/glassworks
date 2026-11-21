@@ -214,7 +214,7 @@
       "script": "frames/aqara-s1-plus/tools/radio/frame-bundle.sh",
       "pubkey": "frames/aqara-s1-plus/tools/root/glassworks_bundle.pub",
       "assets": ["frame-bundle-aqara-s1-plus-{version}.zip"],
-      "note": "Panels don't install this zip yet: the Frame update card only says how to update. Until it installs bundles, the S1 app's radio bundle (the boot writer) is what reaches panels."
+      "note": "Panels with the frame loader install this zip from Home Assistant's Frame update card and restart once. A 0.4.x panel gets the loader first, from the S1 app's radio bundle (the boot writer)."
     }
   }
 }

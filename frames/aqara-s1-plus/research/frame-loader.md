@@ -538,8 +538,9 @@ end
 - **Where it comes from.** A frame release of its own: the tag `frames/aqara-s1-plus/v<version>`
   (the scheme of #544), which the Release workflow (`release.yml`, since 2026-11-21; `frame-release.yml` before) makes: it builds the bundle with `frame-bundle.sh`, signs it
   and publishes `frame-bundle-aqara-s1-plus-<version>.zip`. The app's Frame update entity downloads it,
-  stages it, starts `glassworks_bundle`, and restarts the panel (planned, not built: it comes after #543 and
-  #544). Not an APK asset: the frame version counts separately from the app's, so a frame update shouldn't wait
+  stages it, starts `glassworks_bundle`, and restarts the panel (built, `update/FrameInstaller.kt`; untested on a
+  panel as of 2026-11-20). The restart is `setprop sys.powerctl reboot,glassworks-frame-update` from the app, the
+  transport it uses for `ctl.start` (permissive SELinux), and the boot writer's own restart. Not an APK asset: the frame version counts separately from the app's, so a frame update shouldn't wait
   for an app release. During the #528 transition the APK still carries the old radio bundle, for 0.4.3 boot
   images only; frame bundles never ship in the APK. What runs today: the shell tests build the release's zip,
   unpack it, stage it in the app's staging dir by hand, and install and load it through the loader.

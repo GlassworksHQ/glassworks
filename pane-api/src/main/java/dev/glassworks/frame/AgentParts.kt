@@ -100,6 +100,12 @@ interface BundleAgent {
 
     /** The last install's status: `requested`, `running: …`, `ok: …`, `error: …`. */
     fun status(): String
+
+    /**
+     * Restarts the device, so the frame's loader loads a staged bundle at boot (a frame update from Home Assistant,
+     * #139). The way the frame's root side restarts it; returns only if the restart doesn't happen.
+     */
+    fun restart()
 }
 
 /** The `time-zone` part of a frame's agent ([FrameAgent.timeZone]). */

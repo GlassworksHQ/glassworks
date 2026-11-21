@@ -57,8 +57,13 @@ describe('the build and APK', () => {
     expect(buildFor(on('OLD_CHROME_DESKTOP'))).toBe('generic');
   });
 
-  it('the ABI from client hints, else a tested model\'s one ABI, else 64-bit and unsure', () => {
+  it('the ABI from what the browser runs as, else a tested model\'s one ABI, else 64-bit and unsure', () => {
     expect(abiFor(on('GALAXY_TAB'), FRAMES)).toEqual({ abi: 'arm64-v8a', sure: true });
+    // issue 700: a 32-bit userspace on a 64-bit chip, in a browser that says so, and in Chrome, which doesn't
+    expect(abiFor(on('GALAXY_TAB_A_2016_SAMSUNG'), FRAMES)).toEqual({ abi: 'armeabi-v7a', sure: true });
+    // its tested-device frame lists both ABIs, so the frame doesn't settle it
+    expect(FRAMES.find((f) => f.id === 'samsung-galaxy-tab-a-10-1-2016')?.abis).toEqual(['arm64-v8a', 'armeabi-v7a']);
+    expect(abiFor(on('GALAXY_TAB_A_2016'), FRAMES)).toEqual({ abi: 'arm64-v8a', sure: false });
     expect(abiFor({ ...on('GALAXY_TAB'), bits: 32 }, FRAMES)).toEqual({ abi: 'armeabi-v7a', sure: true });
     expect(abiFor(on('PIXEL_DESKTOP'), FRAMES)).toEqual({ abi: 'arm64-v8a', sure: true });
     expect(abiFor(on('UNKNOWN_DESKTOP'), FRAMES)).toEqual({ abi: 'arm64-v8a', sure: false });
@@ -134,10 +139,36 @@ describe('the screens', () => {
     expect(screen.queryByText(/Get that build/)).toBeNull();
   });
 
-  it('Get on a tablet of unknown ABI: 64-bit first, the 32-bit build one tap away', async () => {
+  it('Get never asks 32 or 64-bit: one Download, the build Kiln picked (issue 700)', async () => {
+    // a 32-bit userspace on a 64-bit chip, in Samsung Internet, whose platform says what it runs as
+    await show('get-32bit');
+    const a = screen.getByText('Download');
+    expect(a.getAttribute('href')).toBe('/api/release/generic-android?tag=generic-android-v1.0.0&name=glassworks-generic-android-armeabi-v7a-1.0.0.apk');
+    expect(document.querySelectorAll('a[download]')).toHaveLength(1);
+    expect(document.body.textContent).not.toMatch(/(32|64)-bit/);
+    expect(screen.getByText('Tell us').tagName).toBe('BUTTON'); // the device report sheet (test/report-form.test.tsx)
+    cleanup();
+    // the same tablet in Chrome, which hides it: the 64-bit build, and the 32-bit one under "App not installed"
+    render(<TabletScreens on={on('GALAXY_TAB_A_2016')} start="get" load={async () => rel('generic-android')} />);
+    expect((await screen.findByText('Download')).getAttribute('href')).toContain('arm64-v8a');
+    expect(screen.getByText('Download the other build').getAttribute('href')).toContain('armeabi-v7a');
+  });
+
+  it('Get where the browser says nothing at all: the 64-bit build, and the other one only if Android refuses it', async () => {
     await show('get-unsure');
-    fireEvent.click(screen.getByText('A 32-bit tablet? Get that build'));
-    expect(screen.getByText('Download').getAttribute('href')).toContain('glassworks-generic-android-armeabi-v7a-1.0.0.apk');
+    expect(screen.getByText('Download').getAttribute('href')).toContain('glassworks-generic-android-arm64-v8a-1.0.0.apk');
+    expect(embers()).toEqual(['Download']);
+    const other = screen.getByText('Download the other build');
+    expect(other.getAttribute('href')).toContain('glassworks-generic-android-armeabi-v7a-1.0.0.apk');
+    expect(other.getAttribute('download')).toBe('glassworks-generic-android-armeabi-v7a-1.0.0.apk');
+    expect(document.body.textContent).not.toMatch(/(32|64)-bit/);
+  });
+
+  it('a release without the build Kiln picked: says so, offers nothing else', async () => {
+    const only64 = { ...rel('generic-android'), assets: ['glassworks-generic-android-arm64-v8a-1.0.0.apk'] };
+    render(<TabletScreens on={on('GALAXY_TAB_A_2016_SAMSUNG')} start="get" load={async () => only64} />);
+    await screen.findByText('Glassworks 1.0.0 has no build for this tablet yet.');
+    expect(document.querySelector('a[download]')).toBeNull();
   });
 
   it('Get on Android 7: the legacy build, and Unknown sources first', async () => {

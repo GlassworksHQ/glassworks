@@ -7,6 +7,16 @@ import { FakeAndroid, fakeGenericApk, type FakeAndroidOptions } from '../test/fa
 
 /** A Pixel Tablet over WebUSB, before USB debugging is on. */
 const PIXEL = { vendorId: 0x18d1, productName: 'Pixel Tablet' };
+/** A Galaxy Tab A 10.1 over WebUSB: Samsung's vendor ID and its usual product name */
+const GALAXY = { vendorId: 0x04e8, productName: 'SAMSUNG_Android' };
+/**
+ * A 64-bit chip with a 32-bit userspace: a Galaxy Tab A 10.1 (SM-T580, Exynos 7870) on Samsung's Android 8.1, as
+ * issue 700 reports it. Its abilist names no 64-bit ABI, so only the armeabi-v7a build installs.
+ */
+export const SAMSUNG_32BIT: FakeAndroidOptions = {
+  manufacturer: 'samsung', model: 'SM-T580', release: '8.1.0', sdk: 27, abilist: 'armeabi-v7a,armeabi', hardware: 'samsungexynos7870',
+};
+
 /** A no-name tablet that keeps its chip maker's vendor ID (Allwinner): Kiln asks for its brand */
 const NO_NAME = { vendorId: 0x1f3a, productName: 'Android' };
 
@@ -35,18 +45,23 @@ export const kilnSim: UsbSim = {
     if (name === 'done-lock') o.lock = 'pin';
     // a device with a frame of its own and USB debugging on, as the S1 reads (AqaraS1Plus.kt, 2026-11-14)
     if (name === 'own-frame') Object.assign(o, { sdk: 29, release: '10', abilist: 'armeabi-v7a,armeabi', manufacturer: 'Allwinner', model: 'QUAD-CORE R818 EVB2', hardware: 'sun50iw10p1' });
+    // issue 700: the release flow on a 64-bit chip with a 32-bit userspace
+    if (name === 'done-32bit') Object.assign(o, SAMSUNG_32BIT);
     if (name === 'error') o.installFails = 'Failure [INSTALL_FAILED_USER_RESTRICTED: Install canceled by user]';
     const device = new Held(o, name === 'installing' ? /^cmd package set-home-activity / : /^$/, fast ? 0 : 60);
-    const abi = name === 'own-frame' ? 'armeabi-v7a' : 'arm64-v8a';
+    const abi = name === 'own-frame' || name === 'done-32bit' ? 'armeabi-v7a' : 'arm64-v8a';
     return {
       device, apk: fakeGenericApk({ app: device.app, abis: [abi] }), apkName: `glassworks-generic-android-${abi}-test.apk`,
-      usb: unknown ? NO_NAME : PIXEL, known: !unknown,
+      // the release's build for each ABI the frame ships (design/frame.json `abis`)
+      release: Object.fromEntries((['arm64-v8a', 'armeabi-v7a'] as const).map((a) => [a, fakeGenericApk({ app: device.app, abis: [a] })])),
+      usb: unknown ? NO_NAME : name === 'done-32bit' ? GALAXY : PIXEL, known: !unknown,
     };
   },
   // the on-device page's demo roles, each one of the detection tests' browsers
   browsers: {
     known: BROWSERS.PIXEL_DESKTOP, branded: BROWSERS.GALAXY_TAB, phone: BROWSERS.GALAXY_PHONE, unknown: BROWSERS.UNKNOWN_DESKTOP,
     legacy: BROWSERS.NOUGAT_TAB, either: BROWSERS.OLD_CHROME_DESKTOP, 'too-old': BROWSERS.LOLLIPOP, computer: BROWSERS.MAC,
+    bits32: BROWSERS.GALAXY_TAB_A_2016_SAMSUNG,
   },
   /** The cards Glassworks' Panes step shows on a tablet (each pane's PaneChoice). */
   panes: [

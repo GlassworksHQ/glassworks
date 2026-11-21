@@ -334,8 +334,13 @@ it up*, or `adb install -r`, see [install.md](../frames/aqara-s1-plus/docs/insta
 
 The Vercel projects have no Git connection, so pushes and PRs start no Vercel deployment (each one counted against
 the free plan's daily deploy limit, even cancelled). Kiln, glassworks.dev and the s1.edm.sh redirect deploy from
-[`web-deploy.yml`](../.github/workflows/web-deploy.yml), on a push to `main` that changes what each one builds from,
-or by hand from the Actions tab.
+[`web-deploy.yml`](../.github/workflows/web-deploy.yml), on a push to `main` or every 6 hours when what each one
+builds from changed since its last successful deploy, or by hand from the Actions tab. A deploy that failed at the
+limit goes out again on the next push or schedule; a running deploy is never cancelled, because a newer one waits
+for it. `tools/ci/web_deploy.py` decides. Each job records its upload as a GitHub deployment (task `web-deploy`) of the commit it
+checked out, in the project's environment, and marks it a success once Vercel takes it. The next run diffs from
+that commit. When a newer record never reached success, the next run deploys anyway, because what's live is
+unknown. Each run's summary lists what it deployed, from which commit, and why.
 
 Versions are `MAJOR.MINOR.PATCH`. For the app lines minor and patch are below 100, and the versionCode is
 `major*10000 + minor*100 + patch`, so `1.2.3` is 10203. Frame versions take each part up to 999. SemVer pre-release
