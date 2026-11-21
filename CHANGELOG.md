@@ -9,6 +9,11 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 ## [Unreleased]
 
 ### Added
+- **Frame updates install from Home Assistant.** On a panel with the frame loader, Install on the Frame update card
+  (or an automation's `update.install`) downloads the S1's signed frame bundle, checks it, and restarts the panel
+  once to load it. The card shows the download's progress, and says why when it stops: a download that doesn't match,
+  a bundle the panel refuses, no network, or an app update in progress. The Device page and the Manage page have the
+  same Install button; from the Manage page it asks for the code the panel shows, as Reboot does.
 - **Browser Manage page & multi-panel control.** Click *Visit* from Home Assistant (or open `http://<panel>:8099/`) to inspect health, edit every setting live (including radio roles, wall base relays, Bluetooth proxy, and time zone), view rolling 7-day logs, download redacted diagnostics, send test notifications, and reset the panel or toggle network setup from a new **Security** page. Under **All panels**, Home Assistant administrators can manage every panel from one sign-in and copy settings between them.
 - **Appearance themes, Assist edge glow, and timer board.** A new **Appearance** page offers five light/dark themes, a **Custom** color picker, and a **Home Assistant** theme that mirrors your dashboard's colors and dark mode (plus a toggle to follow Home Assistant's dark mode with any theme). Themes apply to both Assist and timers. Assist now shows as an **edge glow** by default, keeping your dashboard visible (the orb is still a pick under *Assist* on the *Appearance* page): the whole border swells and brightens with your voice, light trails around the edges while Assist thinks, and it rests in the corners while the reply plays. Three or more active timers group into one **timer board** card.
 - **Notifications pane.** Show rich Home Assistant notifications with `esphome.<panel>_notify`, including camera snapshots, up to three action buttons, sounds, *Do not disturb*, and full-screen or half-screen (`"size": "half"`) dashboard views that queue cleanly ([docs/notifications.md](docs/notifications.md)). On by default.

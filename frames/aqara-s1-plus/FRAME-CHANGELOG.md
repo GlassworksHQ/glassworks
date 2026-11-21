@@ -14,3 +14,6 @@ its first line is what Home Assistant's Frame update card shows.
 - **The frame loader.** The S1's boot image gets a small loader that runs the panel's services from a signed
   frame bundle, and falls back to its own copies when there is none. After this one Kiln update, frame
   updates come from Home Assistant's Frame update card. Needs a Kiln update.
+- **Frame updates install from Home Assistant.** Press Install on the Frame update card, or on the Device
+  page, and the panel downloads this frame's signed bundle, checks it, and restarts once to load it. Needs the
+  frame loader and an S1 app with frame updates.

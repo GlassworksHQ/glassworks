@@ -80,6 +80,10 @@ class S1NamesTest {
         )
         assertEquals("frame/bundle-in", agent.bundle.stageDir)
         assertEquals("GLASSWORKS-BUNDLE 1", agent.bundle.format)
+        // A frame update's restart (#139): init's sys.powerctl, set as ctl.start is, the boot writer's restart.
+        r.ops.clear()
+        agent.bundle.restart()
+        assertEquals(listOf("set sys.powerctl=reboot,glassworks-frame-update"), r.ops)
         assertTrue(S1Names.LOADER.diagnostics.containsAll(listOf("sys.glassworks.agent.version", "sys.glassworks.net.status")))
     }
 
