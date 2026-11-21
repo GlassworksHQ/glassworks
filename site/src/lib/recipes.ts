@@ -18,8 +18,11 @@ export type DashboardRecipe = {
   prompt: string;
 };
 
+/** A frame's screen, width over height, from its `display`: the body's outline says nothing about it */
+type Screen = { ratio: number; finish: FrameDesign["model"]["finish"] };
+
 type RecipeEntry = DashboardRecipe & {
-  matches: (frame: FrameDesign) => boolean;
+  matches: (screen: Screen) => boolean;
 };
 
 const ENTRIES: readonly RecipeEntry[] = [
@@ -39,6 +42,7 @@ const ENTRIES: readonly RecipeEntry[] = [
       "Use pure #000000 black as the page background so unlit areas stay fully reflective behind two-way glass.",
       "Fade cards out in place instead of sliding them so nothing distracts you when stepping in front of the mirror.",
       "Keep the presence capsule narrow along one edge with only time, weather, active music, and light counts.",
+      "Camera presence sees movement, and clears 8 seconds after it stops: hold the capsule for a while after it clears, so standing still doesn't bring the dashboard back.",
     ],
     prompt: `Build a single-file Home Assistant custom Lovelace card (vanilla JS Web Component extending HTMLElement, no build step, placed in /config/www/mirror-dashboard-card.js) for a tall portrait two-way smart mirror running Glassworks.
 
@@ -48,12 +52,13 @@ Hardware & visual rules:
 - No touchscreen is required: the card is glanceable and driven by Home Assistant state.
 
 Presence behavior:
-- Read a configurable presence entity (default: binary_sensor.mirror_camera_presence).
-- When presence is "off": show the full portrait dashboard (clock, weather forecast, active lights, media player, and upcoming calendar/to-do items).
-- When presence turns "on": smoothly fade the main dashboard out in place (opacity 0, no layout shift) and fade in a slim translucent glass capsule docked along the right edge (~12% width) showing only the time, current temperature, a tiny equalizer when media is playing, and a count of lights currently on.
+- Read a configurable presence entity (default: binary_sensor.mirror_camera_presence). It is motion-triggered: it turns "on" when something moves in view and "off" 8 seconds after movement stops, even if someone is still standing there.
+- Treat someone as present from presence turning "on" until it has been "off" for a configurable hold time (hold_seconds, default 60), so a person standing still doesn't bring the dashboard back. If I give an occupancy sensor (occupancy_entity, e.g. a mmWave sensor in the room), count someone as present while either is "on".
+- When no one is present: show the full portrait dashboard (clock, weather forecast, active lights, media player, and upcoming calendar/to-do items).
+- When someone is present: smoothly fade the main dashboard out in place (opacity 0, no layout shift) and fade in a slim translucent glass capsule docked along the right edge (~12% width) showing only the time, current temperature, a tiny equalizer when media is playing, and a count of lights currently on.
 
-Make all entity IDs configurable via standard Lovelace card YAML (presence_entity, weather_entity, media_player, lights, todo_entities) with sensible defaults and clean fallback text when an entity is unavailable.`,
-    matches: (f) => f.model.finish === "mirror",
+Make all entity IDs and the hold configurable via standard Lovelace card YAML (presence_entity, occupancy_entity, hold_seconds, weather_entity, media_player, lights, todo_entities) with sensible defaults and clean fallback text when an entity is unavailable.`,
+    matches: (s) => s.finish === "mirror",
   },
   {
     id: "wide-wall-switch",
@@ -82,7 +87,7 @@ Layout & ergonomics:
 - Clicking a light tile toggles it immediately via hass.callService("light", "toggle", ...); holding or tapping a slider adjusts brightness.
 
 Make all entity IDs configurable in YAML (weather_entity, climate_entity, media_player, and a lights array with name + entity_id).`,
-    matches: (f) => f.model.body.width / f.model.body.height >= 1.7,
+    matches: (s) => s.ratio >= 1.7,
   },
   {
     id: "docked-tablet-hub",
@@ -111,10 +116,7 @@ Structure:
   3. Right column: Live front door camera card (with a tap action to toggle the front door lock) and a Music Assistant media player card.
 
 Keep the YAML clean, commented, and easy to swap in my own entity IDs.`,
-    matches: (f) => {
-      const ratio = f.model.body.width / f.model.body.height;
-      return f.model.finish !== "mirror" && ratio >= 1.25 && ratio < 1.7;
-    },
+    matches: (s) => s.finish !== "mirror" && s.ratio >= 1.25 && s.ratio < 1.7,
   },
   {
     id: "compact-square-dial",
@@ -136,7 +138,7 @@ Design:
 - Keep touch targets generous and readable from 2 meters away.
 
 Accept climate_entity and an optional lights array in the Lovelace card config.`,
-    matches: (f) => Math.abs(f.model.body.width / f.model.body.height - 1) <= 0.2,
+    matches: (s) => Math.abs(s.ratio - 1) <= 0.2,
   },
 ];
 
@@ -147,7 +149,12 @@ const toPublic = ({ matches: _matches, ...recipe }: RecipeEntry): DashboardRecip
 
 export const RECIPES: readonly DashboardRecipe[] = ENTRIES.map(toPublic);
 
-/** Starter prompts whose form factor matches a given frame. */
+/**
+ * Starter prompts whose form factor matches a given frame's screen. A frame without a known screen (Generic
+ * Android: tablets, phones and panels of every shape, its model only an illustration) gets them all.
+ */
 export function recipesForFrame(frame: FrameDesign): DashboardRecipe[] {
-  return ENTRIES.filter((r) => r.matches(frame)).map(toPublic);
+  if (!frame.display) return [...RECIPES];
+  const screen: Screen = { ratio: frame.display.width / frame.display.height, finish: frame.model.finish };
+  return ENTRIES.filter((r) => r.matches(screen)).map(toPublic);
 }

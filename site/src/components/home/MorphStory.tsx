@@ -134,6 +134,8 @@ const HOLDS: [number, number][] = (
 
 /** Beat 3's Mirror sees someone from the middle of its hold */
 const MIRROR_PRESENCE_P = (HOLDS[3]![0] + HOLDS[3]![1]) / 2;
+/** The Mirror is on screen (seg, from morphSegment): its presence follows the scroll, or the visitor's tap, here */
+const onMirror = (seg: number) => seg >= 2.45 && seg <= 3.55;
 
 /** Where the glass is: a whole number while a beat holds, between two while it travels */
 function morphSegment(p: number): number {
@@ -257,10 +259,17 @@ function formatTimer(totalSec: number) {
  * What a beat's example takes besides Glassworks itself: a Home Assistant blueprint to import, or a starter
  * prompt to generate your own Lovelace card against the entities the panel exposes.
  */
-type BeatNeed = { kind: "Blueprint" | "Starter prompt"; name: string; href?: string };
+type BeatNeed = { kind: "Blueprint" | "Starter prompt"; name: string; href?: string; /** a blueprint's file, shown only when the build's catalog has it */ blueprint?: string };
 const BEAT_NEEDS: Partial<Record<number, readonly BeatNeed[]>> = {
   // the doorbell notification, with its camera and Unlock button
-  2: [{ kind: "Blueprint", name: "Doorbell on Glassworks panels", href: "/blueprints#bp-notifications" }],
+  2: [
+    {
+      kind: "Blueprint",
+      name: "Doorbell on Glassworks panels",
+      href: "/blueprints#bp-notifications",
+      blueprint: "panes/notifications/blueprints/doorbell-panels.yaml",
+    },
+  ],
   // the fade and side capsule can be built as a single-file Lovelace card reading camera_presence
   3: [{ kind: "Starter prompt", name: "Presence-aware mirror dashboard", href: "/blueprints#recipe-two-way-mirror-presence" }],
 };
@@ -272,11 +281,14 @@ export function MorphStory({
   release,
   post,
   frames,
+  blueprints,
 }: {
   release: MorphRelease;
   post?: MorphPost;
   /** the frames whose models the story draws: the S1 (Beats 0 and 2), the Mirror (3), the Pixel Tablet (4) */
   frames: { s1: FrameDesign; mirror: FrameDesign; tablet: FrameDesign };
+  /** the files of the blueprints /blueprints lists (lib/blueprints.ts), so a beat links only one it has */
+  blueprints: readonly string[];
 }) {
   const sectionRef = useRef<HTMLElement>(null);
   const bezelRef = useRef<HTMLDivElement>(null);
@@ -314,6 +326,20 @@ export function MorphStory({
 
   // Beat 2: Real NotificationOverlay card dismissed/collapsed state
   const [notifDismissed, setNotifDismissed] = useState(false);
+  // the control that takes focus when the focused one goes with the card (Close or Dismiss) or the pill (Show)
+  const notifFocus = useRef<string | null>(null);
+  const showNotif = (shown: boolean, e: React.MouseEvent<HTMLElement>) => {
+    if (e.currentTarget === document.activeElement) notifFocus.current = shown ? "notif-close" : "notif-show";
+    setNotifDismissed(!shown);
+  };
+  useEffect(() => {
+    const ctl = notifFocus.current;
+    if (!ctl) return;
+    notifFocus.current = null;
+    // the live copy: the screen is drawn on the model and on the glass, and the hidden one is inert
+    const all = document.querySelectorAll<HTMLElement>(`[data-story-ctl="${ctl}"]`);
+    [...all].find((el) => !el.closest("[inert]"))?.focus();
+  }, [notifDismissed]);
 
   // Beat 3: Studio Mirror presence collapse — scroll-driven on desktop (from MIRROR_PRESENCE_P), click-to-override
   const [mirrorOverride, setMirrorOverride] = useState<boolean | null>(null);
@@ -382,7 +408,8 @@ export function MorphStory({
       const settled = Math.abs(t - cur) < 0.0004;
       if (settled) cur = t;
       setP(cur);
-      if (cur < 0.48 || cur > 0.69) {
+      // a visitor's own presence choice holds while the Mirror is on screen, and resets once they leave it
+      if (!onMirror(morphSegment(cur))) {
         setMirrorOverride(null);
       }
       if (cur < 0.84) {
@@ -468,7 +495,7 @@ export function MorphStory({
 
   // Beat 3: Presence driven directly by scroll progress inside Beat 3's hold window (from MIRROR_PRESENCE_P)
   // with manual click-to-toggle override that resets when scrolling out of Beat 3
-  const scrollMirrorPresent = p >= MIRROR_PRESENCE_P && seg >= 2.45 && seg <= 3.55;
+  const scrollMirrorPresent = p >= MIRROR_PRESENCE_P && onMirror(seg);
   const mirrorPresent = compact
     ? compactMirrorPresent
     : mirrorOverride !== null
@@ -923,7 +950,7 @@ export function MorphStory({
   /* a beat's blueprints and dashboard cards that are published (BEAT_NEEDS), as links beside its own */
   const renderNeeds = (beat: number) =>
     BEAT_NEEDS[beat]
-      ?.filter((n) => n.href)
+      ?.filter((n) => n.href && (!n.blueprint || blueprints.includes(n.blueprint)))
       .map((n) => (
         <Link key={n.name} href={n.href!} className={s.need}>
           <span className={s.needKind}>{n.kind}</span>
@@ -957,109 +984,121 @@ export function MorphStory({
       setAssistPhase((prev) => (prev === "thinking" ? "speaking" : prev === "speaking" ? "done" : "thinking"));
 
     const interactive = opacity > 0.45;
+    // what the overlay says, for a screen reader: a button's own text is not read, so it is announced here
+    const said =
+      assistPhase === "thinking"
+        ? "Assist is thinking: “Set a 5-minute pasta timer”"
+        : assistPhase === "speaking"
+          ? "Assist says: Timer started for 5 minutes."
+          : "Done: Timer started for 5 minutes.";
     return (
-      <div
-        className={s.voiceScrim}
-        style={{
-          opacity,
-          pointerEvents: interactive ? "auto" : "none",
-        }}
-        inert={!interactive || undefined}
-        data-story-ctl="voice-overlay"
-        onClick={nextPhase}
-        role="button"
-        tabIndex={interactive ? 0 : -1}
-        aria-label="Glassworks Assist voice overlay — tap to cycle voice state"
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            nextPhase();
-          }
-        }}
-      >
-        <div className={s.orbStage} style={{ transform: `scale(${0.86 + opacity * 0.14})` }}>
-          <div
-            className={`${s.orbGlow} ${s.orbGlowThink}`}
-            style={{ opacity: assistPhase === "thinking" ? 1 : 0 }}
-            aria-hidden="true"
-          />
-          <div
-            className={`${s.orbGlow} ${s.orbGlowSky}`}
-            style={{ opacity: assistPhase === "speaking" ? 1 : 0 }}
-            aria-hidden="true"
-          />
-          <div
-            className={`${s.orbGlow} ${s.orbGlowGreen}`}
-            style={{ opacity: assistPhase === "done" ? 1 : 0 }}
-            aria-hidden="true"
-          />
-
-          {assistPhase === "speaking" && (
-            <>
-              <span className={`${s.orbRipple} ${s.orbRippleA}`} aria-hidden="true" />
-              <span className={`${s.orbRipple} ${s.orbRippleB}`} aria-hidden="true" />
-            </>
-          )}
-
-          <div className={s.orbSphere}>
-            <div className={s.orbClip}>
-              <div
-                className={s.orbSwirl}
-                style={{ opacity: assistPhase === "thinking" ? 0.95 : 0 }}
-                aria-hidden="true"
-              />
-              <div
-                className={s.orbCoreSky}
-                style={{ opacity: assistPhase === "speaking" ? 1 : 0 }}
-                aria-hidden="true"
-              />
-              <div
-                className={s.orbCoreGreen}
-                style={{ opacity: assistPhase === "done" ? 1 : 0 }}
-                aria-hidden="true"
-              />
-              <div className={s.orbShine} aria-hidden="true" />
-            </div>
-
-            <svg
-              viewBox="0 0 112 112"
-              className={`${s.orbCheck} ${assistPhase === "done" ? s.orbCheckShow : ""}`}
-              aria-hidden="true"
-            >
-              <path d="M40 57.5 l11 11 l22 -24" />
-            </svg>
-          </div>
-        </div>
-
-        <div className={s.voiceTexts}>
-          {assistPhase === "thinking" && (
-            <>
-              <span className={`${s.voiceLabel} ${s.voiceLabelFaint}`}>Thinking</span>
-              <p className={s.voiceMain}>“Set a 5-minute pasta timer”</p>
-            </>
-          )}
-          {assistPhase === "speaking" && (
-            <>
-              <span className={s.voiceQuote}>“Set a 5-minute pasta timer”</span>
-              <p className={s.voiceMain}>Timer started for 5 minutes.</p>
-            </>
-          )}
-          {assistPhase === "done" && (
-            <>
-              <span className={`${s.voiceLabel} ${s.voiceLabelGreen}`}>Done</span>
-              <p className={s.voiceMain}>Timer started for 5 minutes.</p>
-            </>
-          )}
-        </div>
-
-        <span
-          className={s.voiceHint}
-          style={{ opacity: assistPhase === "done" ? 0 : 0.85 }}
-          aria-hidden="true"
+      <>
+        <div
+          className={s.voiceScrim}
+          style={{
+            opacity,
+            pointerEvents: interactive ? "auto" : "none",
+          }}
+          inert={!interactive || undefined}
+          data-story-ctl="voice-overlay"
+          onClick={nextPhase}
+          role="button"
+          tabIndex={interactive ? 0 : -1}
+          aria-label="Glassworks Assist voice overlay — tap to cycle voice state"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              nextPhase();
+            }
+          }}
         >
-          Tap anywhere to cycle state
+          <div className={s.orbStage} style={{ transform: `scale(${0.86 + opacity * 0.14})` }}>
+            <div
+              className={`${s.orbGlow} ${s.orbGlowThink}`}
+              style={{ opacity: assistPhase === "thinking" ? 1 : 0 }}
+              aria-hidden="true"
+            />
+            <div
+              className={`${s.orbGlow} ${s.orbGlowSky}`}
+              style={{ opacity: assistPhase === "speaking" ? 1 : 0 }}
+              aria-hidden="true"
+            />
+            <div
+              className={`${s.orbGlow} ${s.orbGlowGreen}`}
+              style={{ opacity: assistPhase === "done" ? 1 : 0 }}
+              aria-hidden="true"
+            />
+
+            {assistPhase === "speaking" && (
+              <>
+                <span className={`${s.orbRipple} ${s.orbRippleA}`} aria-hidden="true" />
+                <span className={`${s.orbRipple} ${s.orbRippleB}`} aria-hidden="true" />
+              </>
+            )}
+
+            <div className={s.orbSphere}>
+              <div className={s.orbClip}>
+                <div
+                  className={s.orbSwirl}
+                  style={{ opacity: assistPhase === "thinking" ? 0.95 : 0 }}
+                  aria-hidden="true"
+                />
+                <div
+                  className={s.orbCoreSky}
+                  style={{ opacity: assistPhase === "speaking" ? 1 : 0 }}
+                  aria-hidden="true"
+                />
+                <div
+                  className={s.orbCoreGreen}
+                  style={{ opacity: assistPhase === "done" ? 1 : 0 }}
+                  aria-hidden="true"
+                />
+                <div className={s.orbShine} aria-hidden="true" />
+              </div>
+
+              <svg
+                viewBox="0 0 112 112"
+                className={`${s.orbCheck} ${assistPhase === "done" ? s.orbCheckShow : ""}`}
+                aria-hidden="true"
+              >
+                <path d="M40 57.5 l11 11 l22 -24" />
+              </svg>
+            </div>
+          </div>
+
+          <div className={s.voiceTexts} aria-hidden="true">
+            {assistPhase === "thinking" && (
+              <>
+                <span className={`${s.voiceLabel} ${s.voiceLabelFaint}`}>Thinking</span>
+                <p className={s.voiceMain}>“Set a 5-minute pasta timer”</p>
+              </>
+            )}
+            {assistPhase === "speaking" && (
+              <>
+                <span className={s.voiceQuote}>“Set a 5-minute pasta timer”</span>
+                <p className={s.voiceMain}>Timer started for 5 minutes.</p>
+              </>
+            )}
+            {assistPhase === "done" && (
+              <>
+                <span className={`${s.voiceLabel} ${s.voiceLabelGreen}`}>Done</span>
+                <p className={s.voiceMain}>Timer started for 5 minutes.</p>
+              </>
+            )}
+          </div>
+
+          <span
+            className={s.voiceHint}
+            style={{ opacity: assistPhase === "done" ? 0 : 0.85 }}
+            aria-hidden="true"
+          >
+            Tap anywhere to cycle state
+          </span>
+        </div>
+        <span className="visually-hidden" role="status">
+          {interactive ? said : ""}
         </span>
-      </div>
+      </>
     );
   };
 
@@ -1087,7 +1126,7 @@ export function MorphStory({
                 type="button"
                 className={s.gwNotifClose}
                 data-story-ctl="notif-close"
-                onClick={() => setNotifDismissed(true)}
+                onClick={(e) => showNotif(false, e)}
                 aria-label="Close notification"
               >
                 ×
@@ -1119,7 +1158,7 @@ export function MorphStory({
                 type="button"
                 className={s.gwPillBtn}
                 data-story-ctl="notif-dismiss"
-                onClick={() => setNotifDismissed(true)}
+                onClick={(e) => showNotif(false, e)}
               >
                 Dismiss
               </button>
@@ -1134,7 +1173,7 @@ export function MorphStory({
             className={s.gwNotifPill}
             data-story-ctl="notif-show"
             style={{ pointerEvents: interactive ? "auto" : "none" }}
-            onClick={() => setNotifDismissed(false)}
+            onClick={(e) => showNotif(true, e)}
           >
             <b>1 notification</b>
             <span> · Show</span>

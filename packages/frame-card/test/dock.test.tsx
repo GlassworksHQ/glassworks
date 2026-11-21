@@ -169,9 +169,28 @@ describe('the model', () => {
     expect(stage.getAttribute('aria-label')).toBe('Pixel Tablet');
     const button = live.querySelector('button')!;
     expect(button.closest('[aria-hidden="true"]')).toBeNull();
+    // the live content takes the example dashboard's place on the screen
+    expect([...button.parentElement!.children]).toEqual([button]);
+    expect(live.textContent).not.toContain('3 lights on');
     expect(live.querySelector('img')).toBeNull();
     // the dock and its lift are the same as without children
     expect(live.querySelector('[data-dock]')).not.toBeNull();
+  });
+
+  it('is a group with live face content alone, its screen picture hidden', () => {
+    const faced = render(<DeviceModel id="pt-face" model={tablet.model} label="Pixel Tablet" face={<button type="button">Wake</button>} />);
+    expect(faced.firstElementChild!.getAttribute('role')).toBe('group');
+    expect(faced.querySelector('button')!.closest('[aria-hidden="true"]')).toBeNull();
+    // the example dashboard is still drawn, but hidden from assistive technology
+    expect(faced.textContent).toContain('3 lights on');
+    const screen = [...faced.querySelectorAll('[aria-hidden="true"]')].find((n) => n.textContent!.includes('3 lights on'));
+    expect(screen).toBeDefined();
+  });
+
+  it('renders no empty slot as live content', () => {
+    const none = render(<DeviceModel id="pt-none" model={tablet.model} label="Pixel Tablet" face={false}>{null}</DeviceModel>);
+    expect(none.firstElementChild!.getAttribute('role')).toBe('img');
+    expect(none.textContent).toContain('3 lights on');
   });
 });
 

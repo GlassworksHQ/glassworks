@@ -24,7 +24,8 @@
   z-index: 0;
 }
 
-/* Whisper-quiet far-right vertical progress rail (6 tiny 4px dots, active elongates to 18px sky) */
+/* Whisper-quiet far-right vertical progress rail (6 tiny 4px dots, active elongates to 18px sky); each dot
+   sits in a 24px button, so it is easy to hit */
 .edgeRail {
   position: absolute;
   right: 18px;
@@ -34,29 +35,38 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
 }
 
 .edgeDot {
   appearance: none;
   border: 0;
   padding: 0;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  cursor: pointer;
+}
+
+.edgeDot::before {
+  content: "";
   width: 4px;
   height: 4px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--fg) 24%, transparent);
-  cursor: pointer;
   transition:
     height 0.28s cubic-bezier(0.22, 1, 0.36, 1),
     background 0.24s ease,
     opacity 0.24s ease;
 }
 
-.edgeDot:hover {
+.edgeDot:hover::before {
   background: color-mix(in srgb, var(--fg) 56%, transparent);
 }
 
-.edgeDotActive {
+.edgeDotActive::before,
+.edgeDotActive:hover::before {
   height: 18px;
   background: var(--sky);
   box-shadow: 0 0 10px color-mix(in srgb, var(--sky) 55%, transparent);
@@ -2381,7 +2391,8 @@ a.eyebrow:hover {
 
 /* ==================== COMPACT / MOBILE / REDUCED-MOTION VERTICAL 6-BEAT STACK ==================== */
 .compactStack {
-  display: grid;
+  /* shown by the media query that hides the scroll story, below */
+  display: none;
   gap: 64px;
   padding: 18px 0 40px;
 }
@@ -2472,16 +2483,15 @@ a.eyebrow:hover {
   cursor: pointer;
 }
 
-/* CSS picks the initial desktop vs compact layout before hydration (zero layout shift on mobile / short viewports) */
+/* CSS picks the initial desktop vs compact layout before hydration (zero layout shift on mobile / short
+   viewports); one query decides both, so every viewport gets exactly one, as the script's own queries do */
 @media (max-width: 900px), (max-height: 620px), (prefers-reduced-motion: reduce) {
   .story {
     display: none;
   }
-}
 
-@media (min-width: 901px) and (min-height: 621px) and (prefers-reduced-motion: no-preference) {
   .compactStack {
-    display: none;
+    display: grid;
   }
 }
 
@@ -2494,5 +2504,10 @@ a.eyebrow:hover {
   .sensorPulse,
   .sidePillEq i {
     animation: none;
+  }
+
+  /* the finale's chosen shape appears at once */
+  .morphSmooth {
+    transition: none;
   }
 }

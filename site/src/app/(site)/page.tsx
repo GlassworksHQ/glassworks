@@ -5,6 +5,7 @@ import { FrameGrid } from "@/components/FrameGrid";
 import { PaneRows } from "@/components/PaneRows";
 import { KilnGlyph } from "@/components/Glyphs";
 import { CLARITY, clarityFor, rubric } from "@/lib/clarity";
+import { blueprints } from "@/lib/blueprints";
 import { frames, KILN } from "@/lib/frames";
 import { release } from "@/lib/release";
 import { panes } from "@/lib/site";
@@ -26,7 +27,7 @@ const KILN_STAGES = [
   {
     num: "01",
     title: "Backup",
-    detail: "Reads and saves your stock partitions to your computer before a single byte changes.",
+    detail: "Saves your stock partitions to your computer before a single byte changes. The Mirror is the exception: installing erases lululemon's software, with no backup.",
   },
   {
     num: "02",
@@ -46,7 +47,7 @@ const KILN_STAGES = [
 ] as const;
 
 export default async function Home() {
-  const [[post], latest] = await Promise.all([getPosts(), release()]);
+  const [[post], latest, catalog] = await Promise.all([getPosts(), release(), blueprints()]);
   // the story draws these frames' own models
   const frame = (id: string) => {
     const f = frames.find((x) => x.id === id);
@@ -55,7 +56,9 @@ export default async function Home() {
   };
   const storyFrames = { s1: frame("aqara-s1-plus"), mirror: frame("lululemon-mirror"), tablet: frame("google-pixel-tablet") };
 
-  const clarityLetters = rubric.grade.letters.map((l) => l.letter);
+  // every letter Clarity gives, the fallback (E) last
+  const clarityLetters = [...rubric.grade.letters.map((l) => l.letter), rubric.grade.fallback.letter];
+  const clarityScale = `${clarityLetters[0]} to ${clarityLetters[clarityLetters.length - 1]}`;
   const clarityRows = frames.map((f) => ({
     frame: f,
     clarity: clarityFor(f.id),
@@ -69,6 +72,7 @@ export default async function Home() {
         release={{ version: latest.version, href: latest.href }}
         post={post?.fresh ? { title: post.title, href: post.url } : undefined}
         frames={storyFrames}
+        blueprints={catalog.list.map((b) => b.path)}
       />
 
       <div className={s.below}>
@@ -217,7 +221,7 @@ export default async function Home() {
           </div>
 
           <div className={`glass ${s.clarityCard}`}>
-            <div className={s.clarityScale} aria-label="Clarity grade scale from A+ to E">
+            <div className={s.clarityScale} aria-label={`${CLARITY} grade scale from ${clarityScale}`}>
               <span className={s.clarityScaleLabel}>{CLARITY} scale</span>
               <div className={s.letterStrip}>
                 {clarityLetters.map((letter) => (
@@ -236,7 +240,11 @@ export default async function Home() {
                     <span>
                       {clarity.state === "graded"
                         ? clarity.grade.meaning ?? `${CLARITY} ${clarity.grade.grade}`
-                        : "Measurements pending"}
+                        : clarity.state === "none"
+                          ? "Measurements pending"
+                          : clarity.state === "re-measure"
+                            ? "Measured before this version of Clarity: needs a new run"
+                            : "Measured, but not comparable with this version of Clarity"}
                     </span>
                   </div>
                   {clarity.state === "graded" ? (

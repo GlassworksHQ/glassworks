@@ -25,6 +25,9 @@ const PAINT_VARS = {
  * `face` is drawn on the front itself, over the screen and the frame around it, e.g. a sensor in a mirror's
  * forehead; it is placed in the front's box (a percentage of the body) and turns with the model.
  */
+/** A slot holds something to render: React renders nothing for these */
+const present = (n: ReactNode) => n !== undefined && n !== null && typeof n !== 'boolean' && n !== '';
+
 export function DeviceModel({ id, model, label, aspect = 2, screen, priority = false, view, children, face }: { id: string; model: FrameModel; label: string; aspect?: number; screen?: string; priority?: boolean; view?: View; children?: ReactNode; face?: ReactNode }) {
   const stage = useRef<HTMLDivElement>(null);
   const rx = view?.rx;
@@ -44,8 +47,12 @@ export function DeviceModel({ id, model, label, aspect = 2, screen, priority = f
   const weave = `frame-weave-${id}`;
   const heather = `frame-heather-${id}`;
   const { dock } = g;
+  // live content in either slot makes the model a group that assistive technology can enter; with only a
+  // `face`, the screen's own picture stays hidden. Without either, the model is one image
+  const live = present(children);
+  const open = live || present(face);
   return (
-    <div ref={stage} className={s.stage} style={{ ...PAINT_VARS, aspectRatio: aspect }} role={children ? 'group' : 'img'} aria-label={label}>
+    <div ref={stage} className={s.stage} style={{ ...PAINT_VARS, aspectRatio: aspect }} role={open ? 'group' : 'img'} aria-label={label}>
       <div className={s.model} data-layout={g.layout} data-finish={g.finish} data-mount={g.mount} data-dock={dock ? '' : undefined} style={{ transform: g.transform, ...g.vars } as CSSProperties}>
         {g.mount === 'wall' && <div className={s.shadow} aria-hidden="true" />}
         {(g.floorShadow || dock) && (
@@ -84,9 +91,9 @@ export function DeviceModel({ id, model, label, aspect = 2, screen, priority = f
             {g.faces.map((f, i) => <polygon key={i} points={f.points} style={{ fill: f.fill, stroke: f.fill }} strokeWidth="0.12" strokeLinejoin="round" />)}
           </svg>
           {/* a picture, unless the caller's screen content is live and can be used */}
-          <div className={s.device} aria-hidden={children ? undefined : 'true'}>
+          <div className={s.device} aria-hidden={open ? undefined : 'true'}>
             <div className={s.front}>
-              <div className={s.screen}>{children ?? (screen ? <img className={s.render} src={screen} alt="" decoding="async" loading={priority ? 'eager' : 'lazy'} fetchPriority={priority ? 'high' : undefined} /> : <Dashboard layout={g.layout} />)}</div>
+              <div className={s.screen} aria-hidden={open && !live ? 'true' : undefined}>{live ? children : (screen ? <img className={s.render} src={screen} alt="" decoding="async" loading={priority ? 'eager' : 'lazy'} fetchPriority={priority ? 'high' : undefined} /> : <Dashboard layout={g.layout} />)}</div>
               <div className={s.glare} />
               {face}
             </div>

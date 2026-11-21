@@ -583,3 +583,10 @@
   color: var(--faint);
   font-size: 13px;
 }
+
+/* the active track's tree, as the tabs' panel: it fills the sidebar as the nav inside it did */
+.trackPanel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
