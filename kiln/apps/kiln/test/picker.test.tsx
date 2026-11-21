@@ -106,6 +106,17 @@ describe('the picker, calm for a first visit and a returning one (#672)', () => 
     expect([...group('soon').querySelectorAll('[role=radio]')].every((r) => r.hasAttribute('disabled') || r.getAttribute('data-disabled') !== null)).toBe(true);
   });
 
+  it('puts what you\'ll need first, keeps Continue last and pinned, and shows no "Your panel" card (the maintainer, #672)', () => {
+    render(<Picker />);
+    const order = [...document.querySelectorAll('[aria-labelledby="needs"], [aria-labelledby="ready"], [aria-labelledby="soon"]')].map((e) => e.getAttribute('aria-labelledby'));
+    expect(order).toEqual(['needs', 'ready', 'soon']);
+    const section = document.querySelector('section.picker')!;
+    const continueRow = screen.getByRole('button', { name: 'Continue' }).closest('.foot')!;
+    expect(section.lastElementChild).toBe(continueRow);
+    expect(continueRow.className).toMatch(/sticky/);
+    expect(screen.queryByText('Your panel')).toBeNull();
+  });
+
   it('says what the picked frame needs, from its data, and its way back', () => {
     render(<Picker />);
     const needs = within(group('needs'));

@@ -2,3 +2,4 @@
 .needs { display: grid; gap: 10px; padding: 18px 20px; border-radius: var(--r-tile); }
 .needs h3 { font-size: 16px; font-weight: 500; }
 .needs ul { display: grid; gap: 6px; padding-left: 18px; color: var(--muted); font-size: 14px; }
+.sticky { position: sticky; bottom: 0; z-index: 2; margin: 0 -12px; padding: 12px 12px calc(12px + env(safe-area-inset-bottom)); border-radius: var(--r-tile) var(--r-tile) 0 0; }
