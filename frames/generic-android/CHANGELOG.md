@@ -34,6 +34,9 @@ line of each version is what Home Assistant shows on the update card. A change o
   *Appearance* page. The theme's two colors run down each timer's ring, the glass turns light with a light theme,
   and the done screen's orb and ripples glow in the theme's colors. The last 10 seconds stay amber in every theme so
   you can tell a timer is about to ring.
+- **Your theme can follow Home Assistant's dark mode.** Under the theme cards on the *Appearance* page, *Follow
+  Home Assistant's dark mode* keeps the theme you picked and turns it light or dark when your dashboard does. The
+  panel reads the mode from the dashboard it already shows, so nothing is added to Home Assistant.
 - **A timer board.** With three or more timers running, they now gather into one glass card that lists each
   one with a small ring, its name and length, and the time left, soonest first. It takes your theme, moves and hides
   like the timers do, and has its own *Hide* on touch screens. Up to five are listed, then how many more.

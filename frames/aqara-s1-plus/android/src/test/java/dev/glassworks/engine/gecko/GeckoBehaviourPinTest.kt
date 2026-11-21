@@ -576,6 +576,23 @@ class GeckoBehaviourPinTest {
     }
 
     @Test
+    fun `Home Assistant's dark mode is believed only from the top-level Home Assistant page`() = harness().use { h ->
+        val prefs = dev.glassworks.KioskPrefs(h.activity)
+        val frame = h.connect(dash, topLevel = false)
+        h.send(frame, org.json.JSONObject().put("type", "haTheme").put("dark", true), replies = 0)
+        assertNull(prefs.haDark)
+        assertTrue(h.logs("Glassworks").contains("theme from $dash ignored (not the Home Assistant in use)"))
+        val top = h.connect(dash)
+        assertEquals(emptyList<org.json.JSONObject>(), h.send(top, org.json.JSONObject().put("type", "haTheme").put("dark", true), replies = 0))
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertEquals(true, prefs.haDark)
+        // Something that isn't a yes or no changes nothing.
+        h.send(top, org.json.JSONObject().put("type", "haTheme").put("dark", "maybe"), replies = 0)
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertEquals(true, prefs.haDark)
+    }
+
+    @Test
     fun `state and config changes are pushed to every connected port until it disconnects`() = harness().use { h ->
         val a = h.connect(dash)
         val b = h.connect(dash)

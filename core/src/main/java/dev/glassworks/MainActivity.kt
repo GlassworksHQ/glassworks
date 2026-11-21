@@ -1273,6 +1273,7 @@ open class MainActivity : Activity() {
      */
     private fun onPortRequest(m: JSONObject, port: PagePort) {
         if (m.optString("type") == "dashboards") { onDashboards(m, port); return }
+        if (m.optString("type") == "haTheme") { onHaTheme(m, port); return }
         if (m.optString("type") == "ready") { onPageReady(port, m.optString("why")); return }
         if (m.optString("type") == "launch") {
             if (port.topLevel) handler.post { frontendLoading = true; Log.i(TAG, "Home Assistant's launch screen is up: waiting for it to go") }
@@ -1321,6 +1322,20 @@ open class MainActivity : Activity() {
         val list = DashboardOptions.parse(m.optString("json")) ?: return
         Log.d(TAG, "${list.size} dashboard(s) from the frontend")
         Dashboards.report(list)
+    }
+
+    /**
+     * `{type: "haTheme", dark}` from the HA frontend (content.js, the page's `hass.themes.darkMode`), for the overlays
+     * that follow Home Assistant's dark mode (#691). Only the top-level page on the Home Assistant the panel uses is
+     * believed, as with the dashboards; saved, so the overlays have it from the next start.
+     */
+    private fun onHaTheme(m: JSONObject, sender: PagePort) {
+        if (!sender.topLevel || !FrontendUrls.sameOrigin(sender.url, prefs.haBase)) {
+            Log.w(TAG, "theme from ${sender.url} ignored (not the Home Assistant in use)")
+            return
+        }
+        val dark = m.opt("dark") as? Boolean ?: return
+        handler.post { if (prefs.haDark != dark) { prefs.haDark = dark; Log.i(TAG, "Home Assistant is in ${if (dark) "dark" else "light"} mode") } }
     }
 
     /** Only the signed-in HA origin may ask for tokens. */
