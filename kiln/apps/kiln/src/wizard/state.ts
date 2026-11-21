@@ -71,7 +71,11 @@ export interface RadioPlan {
 
 export interface Failure {
   title: string;
+  /** what happened and how to fix it, in one paragraph: for announcements and the failure report */
   body: string;
+  /** the screen's two parts of `body` (explain.ts): what happened, then how to fix it, in its own callout */
+  happened?: string;
+  fix?: string;
   /** whether anything may have reached the panel's storage before it stopped */
   wrote: boolean;
   tips: [string, string][];
