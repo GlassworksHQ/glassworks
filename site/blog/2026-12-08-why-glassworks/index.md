@@ -8,29 +8,44 @@ draft: true
 
 <!--
 Draft. Planned for Week 2 (after Glassworks 1.0 and Introducing Clarity are both live).
-Update any launch-week questions or new community frames before setting `draft: false`.
+Update any bracketed launch-week text or new community frames before setting `draft: false`.
 -->
 
-Since sharing [Glassworks 1.0](https://www.glassworks.dev/blog/glassworks-1-0) and [Clarity](https://www.glassworks.dev/blog/clarity), two questions have come up over and over:
+[Since sharing [Glassworks 1.0](https://www.glassworks.dev/blog/glassworks-1-0) and [Clarity](https://www.glassworks.dev/blog/clarity), two questions have come up over and over:]
 
-1. **For Home Assistant users:** *"How is Glassworks different from Fully Kiosk, Kiosk Satellite, the Companion App, or ESPHome LVGL?"*
+1. **For Home Assistant users:** *"Why should I use Glassworks over Fully Kiosk, Kiosk Satellite, the Companion App, or ESPHome LVGL—and when shouldn't I?"*
 2. **For hardware hackers, image maintainers, and makers:** *"If I'm bringing up a new wall switch, smart mirror, or custom display, why should I build on Glassworks instead of shipping my own app or bare ROM?"*
 
 Those are both fair questions—and answering them honestly is the clearest way to explain what Glassworks is trying to be (and what it isn't).
 
-## How Glassworks compares to the alternatives
+## Why use Glassworks
 
-There are genuinely great projects in the Home Assistant wall-panel space, and Glassworks isn't trying to replace every single one of them. Different tools shine on different hardware:
+- **Your own Home Assistant dashboard, zero HA plugins.** Glassworks renders the dashboard you already built full screen and joins Home Assistant as a single native ESPHome device. Nothing to install from HACS, no cloud service, and no account with us.
+- **True open source (MPL-2.0 core + MIT libraries).** You can inspect, fork, port new devices, ship commercial hardware on top of it, or drop our standalone MIT protocol libraries into your own project without worrying about paywalls or non-commercial restrictions.
+- **Built for real wall hardware, not just modern tablets.** [Kiln](https://kiln.glassworks.dev) unlocks and flashes supported hardware straight from Chrome or Edge over USB, backs up stock firmware first where the bootloader allows it, and bundles a modern GeckoView web engine so older panels (whose stock WebView can't load Home Assistant) still work.
+- **Modular hardware features that stay out of your way.** Local Assist wake word and timers, Sendspin synced multi-room audio, built-in Zigbee/Thread radio modes, lighting-invariant camera presence, Bluetooth proxy, and rich notifications are all modular panes—optional ones stay off until you turn them on so they never burn RAM or CPU.
+- **Honest performance expectations.** Every supported frame gets a public [Clarity](../../../docs/clarity.md) grade (A+ to E) measured on the real Home Assistant frontend, so you know what a panel can handle before you buy or mount it.
+- **One shared stack for new devices.** If you're porting a new panel or maintaining a community ROM, you write only the thin device layer instead of rebuilding onboarding, ESPHome, updates, and a WebUSB flasher from scratch.
+
+## Why not to use Glassworks
+
+Glassworks is opinionated on purpose ([docs/principles.md](../../../docs/principles.md)), which means there are plenty of cases where another tool is a better fit:
+
+- **You're using an ESP32 or microcontroller screen.** If you want instant boot, ultra-low power, and hand-crafted widgets on a small embedded display, use **ESPHome LVGL** or **OpenHASP**—Glassworks is for Android screens running the full Home Assistant web frontend.
+- **You just want a quick dashboard on an everyday tablet.** If you don't need kiosk lockdown, local Assist wake word, Sendspin audio, or native ESPHome sensors, the official **Home Assistant Companion App** is simpler and already on the Play Store.
+- **You want built-in photo-frame screensavers, view cycling, or tablet-to-tablet intercom.** Glassworks intentionally leaves dashboards, media, and automations to Home Assistant rather than duplicating them inside the kiosk app. If you want an all-in-one Android app with those built in, **Kiosk Satellite** or **Fully Kiosk Browser** may fit you better.
+- **You're running iPads (iOS) or Raspberry Pi / Linux touchscreens.** Glassworks targets Android-based wall panels, mirrors, and tablets today.
+- **You want to keep vendor apps and cloud features on locked wall hardware.** On devices like the Aqara S1 Plus or lululemon Studio Mirror, Glassworks replaces the vendor experience (though Kiln backs up the S1 Plus first so you can restore stock firmware anytime, and offers a clean path back to plain Glass Panes on the Mirror).
+
+## How Glassworks compares to the alternatives
 
 | Option | Best when you want… | Where Glassworks is different |
 |---|---|---|
 | **Home Assistant Companion App** | The simplest possible setup on a regular Android tablet or phone | No kiosk lockdown, no local Assist wake word, no Sendspin multi-room audio, no built-in Zigbee/Thread radio modes, and no browser ROM installer for locked wall hardware. |
 | **Fully Kiosk Browser** | A battle-tested web wrapper on an everyday Android tablet | Closed source, with per-device paid licenses for features like motion detection and remote admin. Relies on the device's system WebView (which breaks on older panels) and doesn't act as a native ESPHome voice/radio/Sendspin device. |
 | **Kiosk Satellite** | A feature-packed Android app with built-in photo-frame screensavers, view rotation, and tablet-to-tablet intercom | Kiosk Satellite is a great all-in-one Android app, but it's **source-available (`CC BY-NC-ND 4.0`)**—you can't fork it, ship modified builds, or bundle it on hardware—and it only runs on already-unlocked Android devices. Glassworks is **true open source (MPL-2.0 core + MIT libraries)**, includes a **WebUSB browser installer (Kiln)** for locked vendor hardware, bundles its own modern web engine for old Android panels, exposes hardware radios and wall-base relays, and stays strictly native ESPHome with nothing to install in Home Assistant. |
-| **ESPHome LVGL / OpenHASP** | Tiny ESP32 microcontroller displays with instant boot and ultra-low power | You have to design and maintain a separate UI in YAML/JSON instead of using your existing Home Assistant dashboard. Glassworks targets Android/Linux screens where you want your real HA dashboard full screen. |
+| **ESPHome LVGL / OpenHASP** | Tiny ESP32 microcontroller displays with instant boot and ultra-low power | You have to design and maintain a separate UI in YAML/JSON instead of using your existing Home Assistant dashboard. Glassworks targets Android screens where you want your real HA dashboard full screen. |
 | **Rolling your own ROM or kiosk app** | Complete custom control for a one-off hardware hack | Every device ends up rebuilding Wi-Fi setup, ESPHome integration, OTA updates, camera presence, voice, and an installer—spreading maintenance across a dozen small repos. |
-
-The short version: **if you want an all-in-one photo frame + intercom app on a regular tablet, Kiosk Satellite or Fully Kiosk might already fit what you want. If you want an open-source, zero-HACS, native ESPHome platform that unlocks real wall hardware from Chrome—and lets you build on or ship it freely—that's Glassworks.**
 
 ## The wall-panel tax (and why we built a shared core)
 
@@ -51,19 +66,19 @@ Glassworks exists so you never have to pay that tax again.
 ## What you get out of the box when you build on Glassworks
 
 ### 1. Frames as data—write only the thin hardware layer
-Every supported device in Glassworks is a self-contained folder under [`frames/<id>/`](../../../frames/README.md): a `frame.json` declaring specs and hardware capabilities (`provides`), a `recovery.json` for hardware button diagrams, an optional Kiln installer recipe, and research notes.
+Every supported device in Glassworks is a self-contained folder under [`frames/<id>/`](../../../frames/README.md): a `design/frame.json` declaring specs and hardware capabilities (`provides`), an optional `design/recovery.json` for hardware button diagrams (only frames with hardware recovery steps need one), an optional Kiln installer recipe, and research notes.
 
 Glassworks Core handles everything else automatically:
 - Full-screen Home Assistant dashboard rendering (with an embedded modern GeckoView engine—and a legacy engine path for older Android 6–7 devices)
 - Local Wi-Fi onboarding (Improv Bluetooth, setup hotspot, or browser setup)
-- Native ESPHome discovery, encrypted API, and automatic updates under Home Assistant's *Settings → Updates*
+- Native ESPHome discovery, encrypted API, and automatic update checks under Home Assistant's *Settings → Updates*—tap **Install** in Home Assistant, with hands-free installation on rooted/system-app panels, Android 12+ with "Install unknown apps" allowed, or device-owner setups on Android 8–11
 - Consistent native overlays for setup, Assist voice, timers, and notifications
 - A local, PIN-protected Manage web UI that works across all your panels
 
-### 2. One browser installer (Kiln) for every frame—and community image hosting
+### 2. One browser installer (Kiln) for every frame—and community image support
 [Kiln](https://kiln.glassworks.dev) isn't hardcoded to one device. It's a single WebUSB engine driven by per-frame data and recipes: SHA-256 download verification, animated step-by-step recovery guides, automatic stock partition backups and guided restore where the bootloader allows it, and clean ADB/fastboot/FEL orchestration right inside Chrome or Edge.
 
-Even better: **if you already maintain a custom community image for a smart display, mirror, or panel, I'm happy to collaborate and host your community image right in Kiln**—just like we did with [Glass Panes](https://github.com/git-nimrod/glass-panes) on the lululemon Studio Mirror, with full credit in the installer, docs, and website. Users get a reliable browser install (and a clean path back to your plain image anytime), and you don't have to build or host a WebUSB flasher yourself.
+Even better: **if you already maintain a custom community image for a smart display, mirror, or panel, I'm happy to collaborate so users can flash it cleanly through Kiln.** On the lululemon Studio Mirror, Kiln fetches [Glass Panes](https://github.com/git-nimrod/glass-panes) directly from its maintainer's GitHub release through a pass-through proxy without storing it—with full credit in the installer, docs, and website, plus a clean path back to the plain image anytime. And if your project needs direct hosting for a community image instead of pulling from your own release host, I'm happy to work with you on that too so your users never have to wrestle with `fastboot` in a terminal.
 
 ### 3. Modular panes matched by hardware capability
 Features in Glassworks live behind the [Pane API](../../../pane-api/src/main/java/dev/glassworks/README.md). A pane declares what hardware it `requires` (microphone, speaker, camera, Bluetooth LE, Silicon Labs radio, etc.), and a frame declares what it `provides`.
@@ -86,7 +101,7 @@ If you're building a completely different Kotlin or Android app for Home Assista
 ### 5. MPL-2.0 open core: built for both hackers and hardware makers
 We chose **MPL-2.0** for Glassworks Core intentionally. Because MPL-2.0 is file-level copyleft:
 - **Community hackers** can fork, port new devices, and improve the core knowing the platform can't suddenly close up behind a paywall.
-- **Commercial hardware makers** can ship Glassworks on their own wall panels and keep proprietary device drivers, frames, or panes separate—as long as improvements to Glassworks core files themselves are shared back.
+- **Commercial hardware makers** can ship Glassworks on their own wall panels and keep proprietary device drivers, frames, or panes separate—when distributing binaries, they only need to make the covered Glassworks source files (including any modifications to those files) available to recipients, with no requirement to open their own separate files.
 
 Wall hardware stays mounted for years, usually longer than any single startup or vendor cloud. An open core keeps both users and hardware makers protected.
 
