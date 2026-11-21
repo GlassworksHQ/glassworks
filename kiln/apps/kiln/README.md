@@ -45,9 +45,8 @@ Kiln installs Glassworks on a wall panel from the browser, over WebUSB. It backs
 first, and can put it back. This is Kiln on Next.js (App Router), built on the design in
 [`docs/design/kiln`](../../../docs/design/kiln/README.md) and the Glassworks brand.
 
-**Status:** live at [kiln.glassworks.dev](https://kiln.glassworks.dev). It has not yet done a full
-install on a real panel. Until it has, s1.edm.sh keeps serving the page in
-[`kiln/src`](../../src/README.md).
+**Status:** live at [kiln.glassworks.dev](https://kiln.glassworks.dev). s1.edm.sh, the first installer's
+address, redirects to its S1 page, and the S1 page maps the old `/#/…` links.
 
 ## Routes
 

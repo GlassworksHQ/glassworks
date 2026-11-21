@@ -1,0 +1,22 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "",
+  "buildCommand": "",
+  "outputDirectory": ".",
+  "git": {
+    "deploymentEnabled": false
+  },
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "https://kiln.glassworks.dev/aqara-s1-plus",
+      "permanent": false
+    },
+    {
+      "source": "/:path+",
+      "destination": "https://kiln.glassworks.dev/aqara-s1-plus",
+      "permanent": false
+    }
+  ]
+}

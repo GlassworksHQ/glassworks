@@ -13,10 +13,10 @@
 # What triggers each project:
 #   - site: tools/ci/changes.py's `site` rule, the same one pr.yml's site job runs on (or every job's paths);
 #   - kiln: KILN below, the app's npm workspaces and the repo files its build stages.
-# The installer at s1.edm.sh (kiln/src) has its own workflow, installer-deploy.yml.
+#   - installer: kiln/s1-redirect, the redirect s1.edm.sh serves (the first installer's address, now Kiln's S1 page).
 #
-# Secrets: VERCEL_SITE_TOKEN and VERCEL_KILN_TOKEN, one Vercel token per project. Variables: VERCEL_ORG_ID,
-# VERCEL_SITE_PROJECT_ID, VERCEL_KILN_PROJECT_ID. A missing one fails the job, so a deploy never skips silently.
+# Secrets: VERCEL_SITE_TOKEN, VERCEL_KILN_TOKEN and VERCEL_INSTALLER_TOKEN, one Vercel token per project. Variables:
+# VERCEL_ORG_ID, VERCEL_SITE_PROJECT_ID, VERCEL_KILN_PROJECT_ID, VERCEL_INSTALLER_PROJECT_ID. A missing one fails the job, so a deploy never skips silently.
 name: Web deploy
 
 on:
@@ -27,7 +27,7 @@ on:
       project:
         description: What to deploy
         type: choice
-        options: [both, site, kiln]
+        options: [both, site, kiln, installer]   # both: site and kiln
         default: both
 
 permissions:
@@ -43,6 +43,7 @@ jobs:
     outputs:
       site: ${{ steps.pick.outputs.site }}
       kiln: ${{ steps.pick.outputs.kiln }}
+      installer: ${{ steps.pick.outputs.installer }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
@@ -57,8 +58,9 @@ jobs:
           PROJECT: ${{ inputs.project }}
         run: |
           if [ "$EVENT" = workflow_dispatch ]; then
-            case "$PROJECT" in site) s=true k=false ;; kiln) s=false k=true ;; *) s=true k=true ;; esac
-            printf 'site=%s\nkiln=%s\n' "$s" "$k" | tee -a "$GITHUB_OUTPUT"
+            case "$PROJECT" in site) s=true k=false i=false ;; kiln) s=false k=true i=false ;;
+              installer) s=false k=false i=true ;; *) s=true k=true i=false ;; esac
+            printf 'site=%s\nkiln=%s\ninstaller=%s\n' "$s" "$k" "$i" | tee -a "$GITHUB_OUTPUT"
             exit 0
           fi
           # Without the commit before the push, deploy both (as changes.py runs every job without a base).
@@ -77,7 +79,7 @@ jobs:
               'frames/aqara-s1-plus/tools/install', 'docs/img/fel-button.jpg',  # the S1 recipe imports it
               'package.json', 'package-lock.json', 'tsconfig.base.json',
               '.github/workflows/web-deploy.yml',
-              '!**/*.md', '!kiln/test', '!kiln/packages/*/test', '!kiln/apps/*/test', '!kiln/mockup', '!kiln/workers',
+              '!**/*.md', '!kiln/test', '!kiln/packages/*/test', '!kiln/apps/*/test', '!kiln/mockup', '!kiln/workers', '!kiln/s1-redirect',
               '!frames/*/installer/test', '!frames/aqara-s1-plus/tools/*/test',
           )
           base = sys.argv[1]
@@ -89,10 +91,12 @@ jobs:
               files = [f for f in subprocess.run(['git', 'diff', '--no-renames', '--name-only', '-z', '--end-of-options',
                                                   base, 'HEAD'], check=True, capture_output=True, text=True).stdout.split('\0') if f]
               kiln = not files or any(changes.matches(f, KILN) for f in files)
+              installer = any(changes.matches(f, ('kiln/s1-redirect',)) for f in files)
           except (ValueError, subprocess.CalledProcessError, OSError):
-              kiln = True
+              kiln, installer = True, True
           print(f'site={str(site).lower()}')
           print(f'kiln={str(kiln).lower()}')
+          print(f'installer={str(installer).lower()}')
           EOF
 
   site:
@@ -199,5 +203,45 @@ jobs:
           for v in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
             if [ -z "${!v}" ]; then echo "::error::$v is not set: Kiln was not deployed"; exit 1; fi
           done
+          url=$(npx -y "$VERCEL_CLI" deploy --prod --archive=tgz --token "$VERCEL_TOKEN")
+          echo "Deployed: $url" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # s1.edm.sh, the first installer's address, only redirects to Kiln's S1 page: kiln/s1-redirect/vercel.json, which
+  # forwards every path (and so old #/wifi links, which Kiln's S1 page maps). The project's root directory is kiln/,
+  # so the folder goes up as kiln/ in an upload of its own, with nothing to build.
+  installer:
+    needs: changes
+    if: needs.changes.outputs.installer == 'true'
+    concurrency:
+      group: web-deploy-installer
+      cancel-in-progress: true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment:
+      name: s1.edm.sh
+      url: https://s1.edm.sh
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ github.ref }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+
+      - name: Deploy the redirect to production
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_INSTALLER_TOKEN }}
+          VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ vars.VERCEL_INSTALLER_PROJECT_ID }}
+        run: |
+          for v in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
+            if [ -z "${!v}" ]; then echo "::error::$v is not set: s1.edm.sh was not deployed"; exit 1; fi
+          done
+          up="$RUNNER_TEMP/s1-redirect"
+          mkdir -p "$up"
+          cp -R kiln/s1-redirect "$up/kiln"
+          cd "$up"
           url=$(npx -y "$VERCEL_CLI" deploy --prod --archive=tgz --token "$VERCEL_TOKEN")
           echo "Deployed: $url" | tee -a "$GITHUB_STEP_SUMMARY"
