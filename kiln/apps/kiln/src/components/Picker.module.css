@@ -1,0 +1,16 @@
+.group { font-size: 13px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); padding-top: 6px; }
+.needs { display: grid; gap: 10px; padding: 18px 20px; border-radius: var(--r-tile); }
+.needs h3 { font-size: 16px; font-weight: 500; }
+.needs ul { display: grid; gap: 6px; padding-left: 18px; color: var(--muted); font-size: 14px; }
+/*
+ * Over the cards as they scroll: solid, so their text never shows through its own (the glass alone lets it). A sticky
+ * row stops where its section ends, above .app's bottom padding (globals.css: 32px, 24px on a phone), so at the end of
+ * the page that padding would show under it; its second shadow, its own colour 40px lower, covers it down to the
+ * window's edge (40px: more than the padding, less than the row's height less its corners, which the shadow copies). Only
+ * its top edge is drawn, so the row and that shadow read as one.
+ */
+.sticky {
+  position: sticky; bottom: 0; z-index: 2; margin: 0 -12px; padding: 12px 12px calc(12px + env(safe-area-inset-bottom));
+  border-width: 1px 0 0; border-radius: var(--r-tile) var(--r-tile) 0 0; background: var(--bg);
+  box-shadow: 0 -8px 24px -12px color-mix(in srgb, var(--fg) 18%, transparent), 0 40px 0 0 var(--bg);
+}
