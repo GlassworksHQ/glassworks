@@ -43,7 +43,11 @@ export const kilnSim: UsbSim = {
       usb: unknown ? NO_NAME : PIXEL, known: !unknown,
     };
   },
-  browsers: BROWSERS,
+  // the on-device page's demo roles, each one of the detection tests' browsers
+  browsers: {
+    known: BROWSERS.PIXEL_DESKTOP, branded: BROWSERS.GALAXY_TAB, phone: BROWSERS.GALAXY_PHONE, unknown: BROWSERS.UNKNOWN_DESKTOP,
+    legacy: BROWSERS.NOUGAT_TAB, either: BROWSERS.OLD_CHROME_DESKTOP, 'too-old': BROWSERS.LOLLIPOP, computer: BROWSERS.MAC,
+  },
   /** The cards Glassworks' Panes step shows on a tablet (each pane's PaneChoice). */
   panes: [
     { id: 'assist', title: 'Voice', detail: 'Assist and timers', on: true },

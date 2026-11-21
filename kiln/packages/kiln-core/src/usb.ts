@@ -126,6 +126,12 @@ export interface OnDevice {
 }
 
 /**
+ * The browsers the on-device page's demos show: a model Kiln knows, a brand it knows, a phone, an unknown device, one
+ * that fits only the legacy build, one whose version is hidden (either build), one too old, and a computer.
+ */
+export type OnDeviceRole = 'known' | 'branded' | 'phone' | 'unknown' | 'legacy' | 'either' | 'too-old' | 'computer';
+
+/**
  * The install from the device's own browser, no computer: its route under the frame's (installer.json `onDevice`), how
  * the browser's facts name the device, the release line of each build, and what the first screen says it needs.
  */
@@ -188,8 +194,8 @@ export interface UsbSim {
    * APK that matches it, what WebUSB says of it, and whether Kiln knows its model. `fast`: no delays (the tests).
    */
   demo(name: string, o: { fast: boolean }): { device: PanelShell & { app?: UsbApp }; apk: Uint8Array; apkName: string; usb: { vendorId: number; productName?: string }; known: boolean };
-  /** Browsers by name, as its detection tests read them, for the on-device page's ?demo=… */
-  browsers?: Record<string, BrowserFacts>;
+  /** Its detection fixtures, by the role the on-device page's ?demo=… states ask for (OnDeviceRole). */
+  browsers?: Partial<Record<OnDeviceRole, BrowserFacts>>;
   /** The cards its simulated app's Panes step shows, for ?demo=setup-panes. */
   panes?: { id: string; title: string; detail: string; on: boolean }[];
 }
