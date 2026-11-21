@@ -10,7 +10,10 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.net.wifi.WifiConfiguration
 import android.net.wifi.WifiManager
+import android.os.Build
 import android.os.Handler
+import android.os.Parcel
+import android.util.Base64
 import android.util.Log
 import java.lang.reflect.InvocationTargetException
 import java.security.SecureRandom
@@ -30,9 +33,14 @@ import java.security.SecureRandom
  * - Android turns the Wi-Fi client off to start the AP. When it was on before, it goes back on.
  *
  * The same happens when Android ends the AP by itself ([Hotspot.Event.Stopped]) or it fails to start.
+ *
+ * Android keeps the AP up after the app dies, and while it is up it ignores both another start and the Wi-Fi switch
+ * (`WifiController.ApEnabledState`, AOSP 6.0.1; 7.1 turns the AP off for the switch). So what a start changes is kept
+ * in [undo] until it is put back, and a new hotspot puts back what a run that died left ([init]). An AP that is up
+ * with no record of ours is the device's own hotspot: the start fails as [HotspotFailure.TETHERING_ON] and leaves it be.
  */
-class HiddenApHotspot<C>(
-    private val ap: ApControls<C>,
+class HiddenApHotspot(
+    private val ap: ApControls,
     private val handler: Handler,
     /**
      * The hotspot's address once its interface has one ([HotspotAddress.now]). "Started" waits for it: on Android 7.1,
@@ -41,24 +49,33 @@ class HiddenApHotspot<C>(
      * clear failure, with everything put back.
      */
     private val address: () -> String?,
+    private val undo: ApUndo,
     private val newNetwork: () -> HotspotNetwork = ::randomNetwork,
     private val startTimeoutMs: Long = 20_000,
     private val addressTimeoutMs: Long = 5_000,
     private val log: (String) -> Unit = { Log.w(TAG, it) },
 ) : Hotspot {
-    /** What the start changed, to put back: the device's hotspot settings and whether Wi-Fi was on. */
-    private class Before<C>(val config: C?, val wifiOn: Boolean)
-
-    private var before: Before<C>? = null
+    /** What this run's start changed, also in [undo]. Compared by identity: a callback of an older start finds another. */
+    private var before: ApBefore? = null
     private var unwatch: (() -> Unit)? = null
     private var started = false
     private var timeout: Runnable? = null
     private var addressWait: Runnable? = null
 
+    init {
+        restore() // a run that died with the AP up
+    }
+
     override fun start(onEvent: (Hotspot.Event) -> Unit) {
         stop()
-        val saved = Before(ap.savedConfig(), ap.wifiEnabled())
+        if (ap.apEnabled()) {
+            log("setup hotspot: an access point is already on, not ours")
+            handler.post { onEvent(Hotspot.Event.Failed(HotspotFailure.TETHERING_ON)) }
+            return
+        }
+        val saved = ApBefore(ap.savedConfig(), ap.wifiEnabled())
         before = saved
+        undo.write(saved)
         started = false
         val net = newNetwork()
         unwatch = ap.watch { state ->
@@ -93,7 +110,7 @@ class HiddenApHotspot<C>(
     override fun stop() = restore()
 
     /** Up, as far as Android says: started once the interface has an address, failed if it never gets one. */
-    private fun waitForAddress(saved: Before<C>, net: HotspotNetwork, onEvent: (Hotspot.Event) -> Unit) {
+    private fun waitForAddress(saved: ApBefore, net: HotspotNetwork, onEvent: (Hotspot.Event) -> Unit) {
         var tries = (addressTimeoutMs / ADDRESS_POLL_MS).toInt()
         val check = object : Runnable {
             override fun run() {
@@ -115,9 +132,9 @@ class HiddenApHotspot<C>(
         check.run()
     }
 
-    /** Ends the AP, then puts back what [start] changed. Does nothing when nothing is changed. */
+    /** Ends the AP, then puts back what a start changed: this run's, or one that died ([undo]). Does nothing when nothing is changed. */
     private fun restore() {
-        val b = before ?: return
+        val b = before ?: undo.read() ?: return
         before = null
         started = false
         clearTimeout()
@@ -128,6 +145,7 @@ class HiddenApHotspot<C>(
         runCatching { ap.setAp(null, false) }
         runCatching { ap.restoreConfig(b.config) }
         if (b.wifiOn && !ap.wifiEnabled()) runCatching { ap.setWifiEnabled(true) }
+        undo.clear()
     }
 
     private fun clearTimeout() {
@@ -149,17 +167,20 @@ class HiddenApHotspot<C>(
 }
 
 /** The hidden hotspot calls of Android 6 and 7, behind a seam so a test can stand in for the device. */
-interface ApControls<C> {
+interface ApControls {
     enum class State { ENABLED, DISABLED, FAILED, OTHER }
 
     fun wifiEnabled(): Boolean
 
     fun setWifiEnabled(on: Boolean)
 
-    /** The device's own hotspot settings, to put back with [restoreConfig]. */
-    fun savedConfig(): C?
+    /** An access point is up: ours, or the device's own hotspot. */
+    fun apEnabled(): Boolean
 
-    fun restoreConfig(config: C?)
+    /** The device's own hotspot settings as text, kept in a file ([ApUndo]) until [restoreConfig] puts them back. */
+    fun savedConfig(): String?
+
+    fun restoreConfig(config: String?)
 
     /** Starts the AP as [net], or stops it. False, or a [SecurityException], when Android refuses. */
     fun setAp(net: HotspotNetwork?, on: Boolean): Boolean
@@ -172,7 +193,7 @@ interface ApControls<C> {
  * [ApControls] on a real device: reflection on `WifiManager` (no hidden-API blocks before Android 9). The AP's
  * state comes on [handler].
  */
-class ReflectedAp(context: Context, private val handler: Handler) : ApControls<WifiConfiguration> {
+class ReflectedAp(context: Context, private val handler: Handler) : ApControls {
     private val ctx = context.applicationContext
     private val wifi = ctx.getSystemService(WifiManager::class.java)
 
@@ -181,10 +202,12 @@ class ReflectedAp(context: Context, private val handler: Handler) : ApControls<W
     @Suppress("DEPRECATION")
     override fun setWifiEnabled(on: Boolean) { wifi.isWifiEnabled = on }
 
-    override fun savedConfig(): WifiConfiguration? = runCatching { call("getWifiApConfiguration") as WifiConfiguration? }.getOrNull()
+    override fun apEnabled() = runCatching { call("isWifiApEnabled") as Boolean }.getOrDefault(false)
 
-    override fun restoreConfig(config: WifiConfiguration?) {
-        if (config != null) call("setWifiApConfiguration", WifiConfiguration::class.java to config)
+    override fun savedConfig(): String? = runCatching { (call("getWifiApConfiguration") as WifiConfiguration?)?.let(::encode) }.getOrNull()
+
+    override fun restoreConfig(config: String?) {
+        config?.let(::decode)?.let { call("setWifiApConfiguration", WifiConfiguration::class.java to it) }
     }
 
     override fun setAp(net: HotspotNetwork?, on: Boolean): Boolean {
@@ -219,14 +242,45 @@ class ReflectedAp(context: Context, private val handler: Handler) : ApControls<W
         throw e.targetException
     }
 
-    private companion object {
+    companion object {
+        /**
+         * [c] as text: its parcel, which keeps every field (the band and channel are hidden ones), and the build it was
+         * read on. A parcel only reads back on the same Android, so [decode] gives null for another build.
+         */
+        internal fun encode(c: WifiConfiguration): String {
+            val p = Parcel.obtain()
+            try {
+                p.writeParcelable(c, 0)
+                return Build.FINGERPRINT + "\n" + Base64.encodeToString(p.marshall(), Base64.NO_WRAP)
+            } finally {
+                p.recycle()
+            }
+        }
+
+        internal fun decode(text: String): WifiConfiguration? {
+            val build = text.substringBefore('\n')
+            if (build != Build.FINGERPRINT) return null
+            val p = Parcel.obtain()
+            return try {
+                val bytes = Base64.decode(text.substringAfter('\n'), Base64.NO_WRAP)
+                p.unmarshall(bytes, 0, bytes.size)
+                p.setDataPosition(0)
+                @Suppress("DEPRECATION") // the typed one is Android 13's
+                p.readParcelable<WifiConfiguration>(WifiConfiguration::class.java.classLoader)
+            } catch (e: RuntimeException) {
+                null
+            } finally {
+                p.recycle()
+            }
+        }
+
         // Hidden in Android 6 and 7: WifiManager.WIFI_AP_STATE_CHANGED_ACTION, EXTRA_WIFI_AP_STATE and its values,
         // and WifiConfiguration.KeyMgmt.WPA2_PSK.
-        const val ACTION = "android.net.wifi.WIFI_AP_STATE_CHANGED"
-        const val EXTRA_STATE = "wifi_state"
-        const val DISABLED = 11
-        const val ENABLED = 13
-        const val FAILED = 14
-        const val WPA2_PSK = 4
+        private const val ACTION = "android.net.wifi.WIFI_AP_STATE_CHANGED"
+        private const val EXTRA_STATE = "wifi_state"
+        private const val DISABLED = 11
+        private const val ENABLED = 13
+        private const val FAILED = 14
+        private const val WPA2_PSK = 4
     }
 }

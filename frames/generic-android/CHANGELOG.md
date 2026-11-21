@@ -62,6 +62,10 @@ line of each version is what Home Assistant shows on the update card. A change o
   back to Stable never installs an older version: the panel waits for a stable release newer than the one it runs.
 
 ### Fixed
+- **The setup Wi-Fi on Android 6 and 7 always gives back the device's Wi-Fi.** If the app stopped while its setup
+  Wi-Fi was open, Android kept that Wi-Fi up, the device's own Wi-Fi stayed off, and the device's hotspot settings
+  kept the setup network. Now the app puts all of that back the next time it starts. If the device's own hotspot is
+  already on, the setup screen says so instead of showing a network the panel can't open. Legacy build only.
 - **Snapshot checks over ONVIF give the real size.** A recorder or tool that checks the camera's snapshot before
   downloading it now sees the picture's real size and no stray bytes, so its next request on the same connection
   works.

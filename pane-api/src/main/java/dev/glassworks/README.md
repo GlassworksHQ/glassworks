@@ -568,7 +568,9 @@ minutes; the setup screen can ask for the hotspot at once.
 The S1 needs no root for it: the local-only hotspot is open to any app in the foreground, and the
 kiosk's foreground service counts. The hidden API changes two things on the device, and
 `HiddenApHotspot` puts both back whenever the hotspot ends: the device's saved hotspot settings, and
-the Wi-Fi client that Android turns off to start the AP. On most devices, the S1 among them, the Wi-Fi
+the Wi-Fi client that Android turns off to start the AP. Android keeps that AP up after the app dies, so
+what a start changes is kept in a sealed file until it is put back, and the app's next start puts back
+what a run that died left behind. On most devices, the S1 among them, the Wi-Fi
 client is off while the hotspot runs. A captive portal needs root, so only a frame whose agent declares
 `hotspot-portal` can have one ([docs/frame-agent.md](../../../../../../docs/frame-agent.md)): on the S1, a phone that
 joins shows its Wi-Fi sign-in prompt, which opens the setup page. The address on the screen stays the way in when no
