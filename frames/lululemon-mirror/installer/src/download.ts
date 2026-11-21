@@ -81,9 +81,11 @@ export function resumableBody(url: string, size: number, o: ResumeOptions = {}):
           if (ms !== undefined && ms > MAX_RETRY_AFTER_MS) throw new Refused(`the download proxy is busy for ${Math.ceil(ms / 1000)} s (${r.status})`);
           throw new Busy(`the download proxy is busy (${r.status})`, ms ?? 0);
         }
-        if (r.status >= 500) throw new Refused(`the download proxy answered ${r.status}${await reason(r)}`);
+        // an error answer's body is read under the same watchdog: one that stalls is a silent attempt, let go and retried
+        const why = () => unlessSilent(reason(r), () => attempt.abort());
+        if (r.status >= 500) throw new Refused(`the download proxy answered ${r.status}${await why()}`);
         if (got === 0) {
-          if (r.status !== 200) throw new Refused(`the download proxy answered ${r.status}${await reason(r)}`);
+          if (r.status !== 200) throw new Refused(`the download proxy answered ${r.status}${await why()}`);
           const len = Number(r.headers.get('content-length') ?? NaN);
           if (Number.isFinite(len) && len !== size) throw new Refused(`the download proxy offers ${len} bytes, not the image's ${size}`);
         } else {

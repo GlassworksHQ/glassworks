@@ -106,6 +106,9 @@ describe('the image from the release proxy', () => {
     await expect(read(resumableBody(URL, 10, { fetch: never, retries: 2, sleep: noSleep, stallMs: 20 }).stream())).rejects.toThrow(/sent nothing for 1 s/);
     // each silent attempt is let go before the next: no request left open behind a retry
     expect(signals.map((s) => s.aborted)).toEqual([true, true, true]);
+    // a 503 whose body stalls after its headers: its reason is read under the watchdog too
+    const stalled503 = (async () => new Response(new ReadableStream({ pull: () => new Promise(() => {}) }), { status: 503 })) as typeof fetch;
+    await expect(read(resumableBody(URL, 10, { fetch: stalled503, retries: 2, sleep: noSleep, stallMs: 20 }).stream())).rejects.toThrow(/sent nothing for 1 s/);
     const mute = (async () => new Response(new ReadableStream({ pull: () => new Promise(() => {}) }), { headers: { 'content-length': '10' } })) as typeof fetch;
     const e = await read(resumableBody(URL, 10, { fetch: mute, retries: 2, sleep: noSleep, stallMs: 20 }).stream()).then(() => undefined, (x: unknown) => x);
     expect(e).toBeInstanceOf(ProxyError);
