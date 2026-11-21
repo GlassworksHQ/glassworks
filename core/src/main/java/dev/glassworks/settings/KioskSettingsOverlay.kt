@@ -241,7 +241,9 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         }
         // Only the page on screen: the others' views wait until they are shown again.
         natives.values.forEach { if (it.view.parent != null) it.refresh() }
-        live.forEach { it() }
+        // A row can draw the page again (the theme picker, when its colors changed): the rest of the old page's rows stop.
+        val page = pages
+        for (l in live.toList()) { l(); if (pages != page) break }
         bindRail()
         bindMaster()
         if (current == SettingsNav.OVERVIEW) bindOverview()
@@ -266,6 +268,9 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
 
     /** The page's read-only rows ([SettingsItem.States]) that read their values again on [refresh]. */
     private val live = ArrayList<() -> Unit>()
+
+    /** How many times a page was drawn: [refresh] stops reading the old page's rows once one draws it again. */
+    private var pages = 0
 
     /** Previews (the mock-ups): a section's page, an open editor or picker, a native view, the restart banner. */
     fun previewSection(id: String) { current = id; build() }
@@ -334,7 +339,7 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
         bindMaster()
         banner.bind()
         rows.removeAllViews()
-        live.clear()
+        live.clear(); pages++
         natives.values.forEach { n -> (n.view.parent as? android.view.ViewGroup)?.removeView(n.view); n.reset() }
         // A key no section has now (a pane from before a device restart, another base) is let go of.
         val keys = m.sections.flatMap { nativeKeys(it.items) }.toSet()
@@ -572,11 +577,15 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
 
     /**
      * A choice with swatches as the theme picker (#691): a tap on an orb picks it at once. A pick made elsewhere (the
-     * Manage page) while the page is open draws the page again.
+     * Manage page) while the page is open draws the page again, and so does a change to the colors the orbs were drawn
+     * in (a Custom color changed there keeps the same pick).
      */
     private fun themes(i: SettingsItem.Choice): View {
-        val shown = runCatching { i.value() }.getOrNull()
-        live += { if (runCatching { i.value() }.getOrNull() != shown) build() }
+        fun look(): List<Any?> = runCatching {
+            listOf<Any?>(i.value()) + i.options().flatMap { (id, _) -> i.swatch?.invoke(id)?.let { listOf(it.a, it.b, it.ground) }.orEmpty() }
+        }.getOrDefault(emptyList())
+        val shown = look()
+        live += { if (look() != shown) build() }
         return ThemePicker(context, i) { id ->
             save({ done -> i.save(id, done) }) { why -> if (why != null) showProblem(why) else { problem.visibility = View.GONE; build() } }
         }.apply { setPadding(0, px(6f), 0, px(8f)) }

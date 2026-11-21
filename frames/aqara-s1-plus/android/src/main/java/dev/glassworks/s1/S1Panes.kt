@@ -45,6 +45,7 @@ import dev.glassworks.assist.SpeakerMedia
 import dev.glassworks.voice.VoiceEngine
 import dev.glassworks.voice.VoiceEvent
 import dev.glassworks.assist.VoiceLevels
+import dev.glassworks.assist.VoiceShowing
 import dev.glassworks.assist.VoiceUi
 import dev.glassworks.assist.chime
 import dev.glassworks.assist.wakeChime
@@ -54,6 +55,7 @@ import dev.glassworks.KioskPrefs
 import dev.glassworks.OverlayHost
 import dev.glassworks.PaneOverlay
 import dev.glassworks.TimerOverlay
+import dev.glassworks.EdgeGlowOverlay
 import dev.glassworks.VoiceOverlay
 import dev.glassworks.glassworks
 import sh.edm.s1kiosk.AdminReceiver
@@ -114,9 +116,11 @@ class S1Panes : AppParts {
         val activity = host.activity
         val panePrefs = PanePrefs(activity)
         val timers = TimerOverlay(activity, runtime.orbs)
+        // Both Assist looks report whether they show; the timers hear one signal (either shows).
+        val showing = VoiceShowing(timers::voiceShowing)
         val voice = VoiceOverlay(activity).apply {
             onCancel = { runtime.voiceCancel?.invoke() }
-            onShowingChanged = { timers.voiceShowing(it) } // a timer set by voice flies out of the orb
+            onShowingChanged = showing::orb // a timer set by voice flies out of the orb
         }
         val notes = NotificationOverlay(activity, notifications, notificationImages(activity), orbs = runtime.orbs).apply {
             screenOn = { runtime.screen.screenOn }
@@ -130,7 +134,18 @@ class S1Panes : AppParts {
         notifications.addListener(listener)
         notifications.onOpenList = { host.post { host.hideMenu(); notes.openList() } }
         notifications.onReveal = { host.post { host.hideMenu() } }
-        runtime.onVoiceUi = { voice.update(voiceUi, panePrefs.voice.overlay) }
+        // The Assist look picked on the Appearance page (#691): the orb, or Spark's edge glow. The other one hides.
+        val glow = EdgeGlowOverlay(activity).apply {
+            onCancel = { runtime.voiceCancel?.invoke() }
+            onShowingChanged = showing::glow
+        }
+        val kiosk = KioskPrefs(activity)
+        runtime.onVoiceUi = {
+            val enabled = panePrefs.voice.overlay
+            val edge = kiosk.assistLook == KioskPrefs.ASSIST_GLOW
+            voice.update(voiceUi, enabled && !edge)
+            glow.update(voiceUi, enabled && edge)
+        }
         return listOf(
             object : PaneOverlay {
                 override val view = timers
@@ -152,6 +167,10 @@ class S1Panes : AppParts {
                 override val view = voice
                 override val layoutParams = FrameLayout.LayoutParams(-1, -1)
                 override fun destroy() { runtime.onVoiceUi = null }
+            },
+            object : PaneOverlay {
+                override val view = glow
+                override val layoutParams = FrameLayout.LayoutParams(-1, -1)
             },
             // Images leaving the panel (#117): the dot follows, on the main thread (the device posts each change).
             CameraWiring.dot(runtime, activity),

@@ -93,6 +93,17 @@ class AppearanceTest {
         assertEquals(custom.light, prefs.overlayPick.palette)
     }
 
+    @Test fun theAssistLookIsTheOrbOrTheEdgeGlow() {
+        val c = SettingsChange.find(section(), CoreSettings.ASSIST_TITLE) as SettingsItem.Choice
+        assertEquals("orb", c.value())
+        assertEquals(listOf("orb" to "Orb", "glow" to "Edge glow"), c.options())
+        assertEquals(CoreSettings.ASSIST_GLOW_LINE, c.cards!!("glow"))
+        SettingsChange.change(c, "glow") {}
+        assertEquals(KioskPrefs.ASSIST_GLOW, prefs.assistLook)
+        app.getSharedPreferences("kiosk", 0).edit().putString("assist_look", "sparkles").commit()
+        assertEquals("anything else reads as the orb", KioskPrefs.ASSIST_ORB, KioskPrefs(app).assistLook)
+    }
+
     @Test fun anUnknownSavedThemeReadsAsTheDefaultAndAResetClearsIt() {
         app.getSharedPreferences("kiosk", 0).edit().putString("overlay_theme", "neon/dark").commit()
         assertEquals("glassworks/dark", KioskPrefs(app).overlayTheme)
@@ -119,6 +130,7 @@ class AppearanceTest {
         val after = b.get("/${CoreSettings.APPEARANCE}").text()
         assertTrue(after.contains("""value="dune/light" aria-pressed="true""""))
         assertTrue(after.contains("""class="bd sun""""))
+        assertTrue("the Assist look's two cards", after.contains(">Orb</b>") && after.contains(">Edge glow</b>"))
     }
 
     // ---- #691's Custom themes: six colors, a light and a dark of each, on both surfaces
@@ -194,6 +206,29 @@ class AppearanceTest {
         val r = b.post("/settings", mapOf("csrf" to b.csrf(), "section" to CoreSettings.APPEARANCE, "key" to key, "value" to "#22d3ee"))
         assertEquals(303, r.status)
         assertEquals(0xff22d3ee.toInt(), prefs.customTheme!!.dark.a)
+        assertEquals("custom/dark", prefs.overlayTheme)
+    }
+
+    @Test fun thePanelsPickerRedrawsWhenTheCustomColorsChangeElsewhere() {
+        prefs.customTheme = Themes.CUSTOM_START
+        prefs.overlayTheme = "custom/dark"
+        val o = dev.glassworks.ui.Mockup.show(KioskSettingsOverlay(dev.glassworks.ui.Mockup.activity()))
+        val radio = dev.glassworks.radio.radioDefinition(app, dev.glassworks.radio.FixedReadout(null, running = false))
+        o.show(MenuFixture.model(app, radio, panes = listOf(radio)))
+        o.previewSection(CoreSettings.APPEARANCE)
+        fun picker(v: android.view.View = o): ThemePicker? = when (v) {
+            is ThemePicker -> v
+            is android.view.ViewGroup -> (0 until v.childCount).firstNotNullOfOrNull { picker(v.getChildAt(it)) }
+            else -> null
+        }
+        val first = picker()!!
+        o.refresh()
+        assertTrue("nothing changed: the same picker", first === picker())
+        // Manage changes the dark Custom accent: the pick is still custom/dark, but the Custom orb's colors changed.
+        prefs.customTheme = Themes.custom(Themes.Palette(0xff22d3ee.toInt(), Themes.GLASSWORKS.dark.b, Themes.GLASSWORKS.dark.ground), Themes.GLASSWORKS.light)
+        o.refresh()
+        val next = picker()!!
+        assertTrue("drawn again", first !== next)
         assertEquals("custom/dark", prefs.overlayTheme)
     }
 }

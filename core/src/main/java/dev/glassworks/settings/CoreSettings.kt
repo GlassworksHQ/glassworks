@@ -93,6 +93,7 @@ class CoreSettings(
             SettingsItem.Group(THEME_TITLE, listOf(SettingsItem.Note { THEME_NOTE }, theme())),
             SettingsItem.Group(CUSTOM_DARK_TITLE, listOf(SettingsItem.Note { CUSTOM_NOTE }) + customColours(dark = true)),
             SettingsItem.Group(CUSTOM_LIGHT_TITLE, customColours(dark = false)),
+            assistLook(),
         )),
         SettingsPlace.LOG to SettingsSection("log", "Log", listOf(
             SettingsItem.Info(title = { "Screen and sensors" }, detail = status),
@@ -244,6 +245,17 @@ class CoreSettings(
         done(null)
     }
 
+    /** How a voice run shows (#691): the orb, or Spark's edge glow. Two cards on the Manage page, a choice on the panel. */
+    private fun assistLook() = SettingsItem.Choice(
+        ASSIST_TITLE,
+        value = { prefs.assistLook },
+        options = { listOf(KioskPrefs.ASSIST_ORB to "Orb", KioskPrefs.ASSIST_GLOW to "Edge glow") },
+        cards = { id -> if (id == KioskPrefs.ASSIST_GLOW) ASSIST_GLOW_LINE else ASSIST_ORB_LINE },
+    ) { v, done ->
+        prefs.assistLook = v
+        done(null)
+    }
+
     /** The custom theme as saved, or the one it starts as. */
     private fun custom() = prefs.customTheme ?: Themes.CUSTOM_START
 
@@ -291,6 +303,9 @@ class CoreSettings(
         const val CUSTOM_LIGHT_A = "Accent"
         const val CUSTOM_LIGHT_B = "Second accent"
         const val CUSTOM_GROUND = "Background"
+        const val ASSIST_TITLE = "Assist"
+        const val ASSIST_ORB_LINE = "A glass orb with what you said and the reply, over a dimmed dashboard."
+        const val ASSIST_GLOW_LINE = "Light runs along the screen's edge. The dashboard stays in view."
         const val WAKE_TITLE = "Wake when someone's near"
         const val SETUP_OVER_NETWORK = "Allow setup over the network"
         const val CLOSE_SETUP = "Close setup over the network"
