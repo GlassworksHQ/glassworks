@@ -32,7 +32,7 @@ const KILN_STAGES = [
   {
     num: "02",
     title: "Verify",
-    detail: "Hashes every image and backup on both sides so corrupted writes never reach flash.",
+    detail: "Checks every download before it's written. On the S1, each partition is read back after writing to confirm every byte.",
   },
   {
     num: "03",
@@ -42,7 +42,7 @@ const KILN_STAGES = [
   {
     num: "04",
     title: "Restore",
-    detail: "Return supported flashable panels to your saved stock backup in one click, or switch the Mirror back to plain Glass Panes.",
+    detail: "A guided restore puts the S1 back on your saved stock backup, and the Mirror can go back to plain Glass Panes.",
   },
 ] as const;
 
@@ -100,10 +100,10 @@ export default async function Home() {
           <div className={s.splitCopy}>
             <span className={`${s.eyebrow} ${s.eyebrowEmber}`}>KILN WEB INSTALLER</span>
             <h2 id="kiln-heading" className={s.sectionH2}>
-              Flash from Chrome, undo in one click
+              Flash from Chrome, with a way back
             </h2>
             <p className={s.sectionLede}>
-              Plug your panel in over USB and open Kiln in Chrome or Edge. No command-line tools, no manual drivers, and no locked-in vendor cloud. Every write is verified, flashable wall panels back up and restore stock software in one click, and the lululemon Studio Mirror keeps a plain Glass Panes recovery image.
+              Plug your panel in over USB and open Kiln in Chrome or Edge. There are no command-line tools and no vendor cloud; on Windows, the S1 needs a <Link href="/docs/frames/aqara-s1-plus/install#one-time-setup-for-your-computer">one-time USB driver step</Link>. Wall panels keep a backup of their stock software and a guided way back to it, and the lululemon Studio Mirror keeps a plain Glass Panes recovery image.
             </p>
             <div className={s.actions}>
               <a href={KILN} className={s.kilnBtn}>
@@ -134,7 +134,7 @@ export default async function Home() {
           <div className={`glass ${s.esphomeCard}`} aria-label="Example Home Assistant ESPHome device card">
             <div className={s.esphomeHead}>
               <div>
-                <b>Glassworks · Kitchen Panel</b>
+                <b>Glassworks · Kitchen Tablet</b>
                 <span>ESPHome Native API · Local</span>
               </div>
               <span className={s.statusChip}>
@@ -155,9 +155,9 @@ export default async function Home() {
                 <span className={s.mutedVal}>Binary sensor</span>
               </div>
               <div className={s.esphomeRow}>
-                <span>Presence</span>
-                <b>ToF sensor</b>
-                <span className={s.mutedVal}>Ignores light switches</span>
+                <span>Camera presence</span>
+                <b>Clear</b>
+                <span className={s.mutedVal}>Motion in view</span>
               </div>
               <div className={s.esphomeRow}>
                 <span>Ambient light</span>

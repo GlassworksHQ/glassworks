@@ -191,6 +191,16 @@ describe('the model', () => {
     const none = render(<DeviceModel id="pt-none" model={tablet.model} label="Pixel Tablet" face={false}>{null}</DeviceModel>);
     expect(none.firstElementChild!.getAttribute('role')).toBe('img');
     expect(none.textContent).toContain('3 lights on');
+    // a list filtered down to nothing, or of nothing, is empty too
+    for (const empty of [[], [null, false, '']]) {
+      const list = render(<DeviceModel id="pt-list" model={tablet.model} label="Pixel Tablet" face={empty}>{empty}</DeviceModel>);
+      expect(list.firstElementChild!.getAttribute('role')).toBe('img');
+      expect(list.textContent).toContain('3 lights on');
+    }
+    // 0 is content
+    const zero = render(<DeviceModel id="pt-zero" model={tablet.model} label="Pixel Tablet">{0}</DeviceModel>);
+    expect(zero.firstElementChild!.getAttribute('role')).toBe('group');
+    expect(zero.textContent).not.toContain('3 lights on');
   });
 });
 

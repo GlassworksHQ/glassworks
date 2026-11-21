@@ -484,11 +484,17 @@ export function MorphStory({
   const timerO = compact ? 1 : windowO(seg, 4, 0.22, 0.56);
   const raysO = compact ? 1 : windowO(seg, 4, 0.22, 0.54);
 
-  // Spark steps through its run on its own while Beat 1 is on screen
+  // Spark steps through one run on its own while Beat 1 is on screen, and stops on the reply: a tap starts it over.
+  // Leaving the beat sets it back to listening, so it runs again next time
   const assistVisible = compact ? compactAssistInView : assistO > 0.15;
+  const [assistShown, setAssistShown] = useState(assistVisible);
+  if (assistShown !== assistVisible) {
+    setAssistShown(assistVisible);
+    if (!assistVisible) setAssistPhase("listening");
+  }
   useEffect(() => {
-    if (!assistVisible || reducedMotion) return;
-    const ms = assistPhase === "speaking" ? 3200 : 2400;
+    if (!assistVisible || reducedMotion || assistPhase === "speaking") return;
+    const ms = 2400;
     const id = window.setTimeout(() => setAssistPhase(nextAssistPhase), ms);
     return () => window.clearTimeout(id);
   }, [assistVisible, assistPhase, reducedMotion]);
@@ -603,15 +609,22 @@ export function MorphStory({
     .filter((d) => d.o > 0.01);
   // the tablet lifted off its dock: one unified state drives both the 3D model's --undock lift and the Docked wire-ray label
   const [modelHover, setModelHover] = useState(false);
+  // the tablet lifted by the Docked line's button, for a keyboard or a touch: the same as the mouse's hover
+  const [liftedByHand, setLiftedByHand] = useState(false);
+  const [liftBeat, setLiftBeat] = useState(nearBeat);
+  if (liftBeat !== nearBeat) {
+    setLiftBeat(nearBeat);
+    setLiftedByHand(false);
+  }
   // the tablet off its dock as the scroll brings it in (undockAt): a move and scale of the whole travelling
   // model about its body's centre, the same as the hover's lift of the body (geometry's --ux, --uy, --us)
   const tabletLift = poses[4]!.lift;
   const undock = compact || reducedMotion || morphing || !tabletLift ? 0 : undockAt(p);
   const liftK = travelStage / poses[4]!.stage;
   const lift = tabletLift && undock > 0 ? { x: tabletLift.x * undock * liftK, y: tabletLift.y * undock * liftK, s: 1 + tabletLift.s * undock } : undefined;
-  const desktopHoverLift = nearBeat === 4 && !reducedMotion && modelLive && modelHover && segT === 0 && undock <= 0.005;
+  const desktopHoverLift = nearBeat === 4 && modelLive && (liftedByHand || (!reducedMotion && modelHover)) && segT === 0 && undock <= 0.005;
   const tabletLifted = desktopHoverLift || (nearBeat === 4 && !reducedMotion && undock > 0.005);
-  const compactTabletLifted = !reducedMotion && compactTabletHover;
+  const compactTabletLifted = liftedByHand || (!reducedMotion && compactTabletHover);
 
   // Preserve keyboard focus across a modelLive handoff if focus was inside the outgoing screen representation
   useEffect(() => {
@@ -703,7 +716,7 @@ export function MorphStory({
           </span>
           <span className={`${s.haBadge} ${s.haBadgeExtra}`}>
             <span className={`${s.haBadgeDot} ${s.dotBlue}`} aria-hidden="true" />
-            {highlightSendspin ? "Thread + Zigbee" : "Armed"}
+            {highlightSendspin ? "Sendspin" : "Armed"}
           </span>
         </div>
 
@@ -945,6 +958,13 @@ export function MorphStory({
         {content}
       </div>
     </DeviceModel>
+  );
+
+  /* Beat 4: lifts the tablet off its dock and puts it back, as hovering it does, for a keyboard or a touch */
+  const renderDockToggle = (lifted: boolean) => (
+    <button type="button" className={s.dockToggle} aria-pressed={lifted} onClick={() => setLiftedByHand((v) => !v)}>
+      {lifted ? "Put it back" : "Lift it off"}
+    </button>
   );
 
   /* a beat's blueprints and dashboard cards that are published (BEAT_NEEDS), as links beside its own */
@@ -1198,7 +1218,12 @@ export function MorphStory({
           aria-hidden={!active}
           tabIndex={active && interactive ? 0 : -1}
           style={{ pointerEvents: active && interactive ? "auto" : "none" }}
-          onClick={toggleMirrorPresence}
+          onClick={(e) => {
+            // the pill fades away: focus goes to the presence chip beside it, if the pill had it
+            const chip = e.currentTarget === document.activeElement && e.currentTarget.parentElement?.querySelector<HTMLElement>('[data-story-ctl="mirror-presence-chip"]');
+            toggleMirrorPresence();
+            if (chip) chip.focus();
+          }}
           aria-label="Restore full mirror dashboard"
         >
           <span className={s.sidePillTime}>19:40</span>
@@ -1447,6 +1472,7 @@ export function MorphStory({
                 <b>{ray.title}</b>
                 <small>{ray.detail}</small>
               </span>
+              {ray.title === "Docked" && renderDockToggle(compactTabletLifted)}
             </div>
           ))}
         </div>
@@ -1896,6 +1922,7 @@ export function MorphStory({
                         <b>{ray.title}</b>
                         <small>{ray.detail}</small>
                       </div>
+                      {ray.title === "Docked" && raysO > 0.45 && modelLive && renderDockToggle(tabletLifted)}
                     </div>
                   ))}
                 </div>

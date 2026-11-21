@@ -4,7 +4,7 @@
 // projection of the frame's model, drawn as SVG behind the glass. Light moves, glass doesn't. A dock is drawn on its
 // own, behind the body, so the body can lift off it on hover (--undock, DeviceModel.module.css).
 // Colours are styles, not attributes: a frame with a dark look paints CSS light-dark() (geometry.ts `either`).
-import { useEffect, useMemo, useRef, type CSSProperties, type ReactNode } from 'react';
+import { Children, useEffect, useMemo, useRef, type CSSProperties, type ReactNode } from 'react';
 import type { FrameModel } from './frame';
 import { geometry, type Layout, type View } from './geometry';
 import { PAINT } from './paint';
@@ -25,8 +25,8 @@ const PAINT_VARS = {
  * `face` is drawn on the front itself, over the screen and the frame around it, e.g. a sensor in a mirror's
  * forehead; it is placed in the front's box (a percentage of the body) and turns with the model.
  */
-/** A slot holds something to render: React renders nothing for these */
-const present = (n: ReactNode) => n !== undefined && n !== null && typeof n !== 'boolean' && n !== '';
+/** A slot holds something to render: not nothing, and not a list of nothing (React renders none of null, a boolean or '') */
+const present = (n: ReactNode) => Children.toArray(n).some((c) => c !== '');
 
 export function DeviceModel({ id, model, label, aspect = 2, screen, priority = false, view, children, face }: { id: string; model: FrameModel; label: string; aspect?: number; screen?: string; priority?: boolean; view?: View; children?: ReactNode; face?: ReactNode }) {
   const stage = useRef<HTMLDivElement>(null);

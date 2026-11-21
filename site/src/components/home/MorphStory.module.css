@@ -649,6 +649,28 @@ a.eyebrow:hover {
   color: var(--ink-sky);
 }
 
+/* the Docked line's button: lifts the tablet off its dock, as hovering it does */
+.dockToggle {
+  pointer-events: auto;
+  margin-left: 2px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--edge);
+  background: var(--glass);
+  color: var(--muted);
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition:
+    color 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.dockToggle:hover {
+  color: var(--fg);
+  border-color: color-mix(in srgb, var(--fg) 30%, transparent);
+}
+
 .morphSmooth {
   transition:
     transform 0.52s cubic-bezier(0.22, 1, 0.36, 1),
@@ -699,6 +721,9 @@ a.eyebrow:hover {
   --ha-track: rgba(0, 0, 0, 0.1);
   --ha-slider: rgba(0, 0, 0, 0.08);
   --ha-screen-edge: rgba(0, 0, 0, 0.12);
+  /* the thermostat's mode labels, readable on their tints */
+  --ha-heat: #b45309;
+  --ha-cool: #0369a1;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -716,6 +741,8 @@ a.eyebrow:hover {
     --ha-track: rgba(255, 255, 255, 0.12);
     --ha-slider: rgba(255, 255, 255, 0.09);
     --ha-screen-edge: rgba(255, 255, 255, 0.08);
+    --ha-heat: #ff8100;
+    --ha-cool: #03a9f4;
   }
 }
 
@@ -733,6 +760,8 @@ a.eyebrow:hover {
   --ha-track: rgba(255, 255, 255, 0.12);
   --ha-slider: rgba(255, 255, 255, 0.09);
   --ha-screen-edge: rgba(255, 255, 255, 0.08);
+  --ha-heat: #ff8100;
+  --ha-cool: #03a9f4;
 }
 
 /* Inner screen positioned by real frame inset percentages; container-type: size lets HA cards reflow */
@@ -932,12 +961,12 @@ a.eyebrow:hover {
 
 .haModeHeat {
   background: rgba(255, 129, 0, 0.16);
-  color: #ff8100;
+  color: var(--ha-heat);
 }
 
 .haModeCool {
   background: rgba(3, 169, 244, 0.16);
-  color: #03a9f4;
+  color: var(--ha-cool);
 }
 
 .haDialStage {
@@ -1199,6 +1228,8 @@ a.eyebrow:hover {
   align-items: center;
   background: linear-gradient(transparent, rgba(0, 0, 0, 0.72));
   font-size: 10px;
+  /* over the camera's picture, light in either theme */
+  color: #f4f4f5;
 }
 
 .haCamBadge {
@@ -1218,13 +1249,13 @@ a.eyebrow:hover {
 .haCamFps {
   font-family: var(--f-mono);
   font-size: 9px;
-  color: var(--ha-muted);
+  color: rgba(244, 244, 245, 0.72);
 }
 
 /* ==================== @CONTAINER REFLOW RULES (REAL HA CARDS REFLOW LIVE) ==================== */
 
 /* 1. Wide Landscape Tablet */
-@container (min-width: 350px) and (min-height: 242px) {
+@container (min-width: 350px) and (height >= 242px) {
   .haGrid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
     grid-template-rows: auto 1fr 1fr;
@@ -1266,10 +1297,26 @@ a.eyebrow:hover {
     grid-column: 3 / span 2;
     grid-row: 3;
   }
+
+  /* Beat 4's TimerDock sits in the bottom-right corner: the camera takes one column, and the thermostat's buttons
+     keep clear of it */
+  .haRoot[data-sendspin] .haCamCard {
+    grid-column: 3;
+  }
+
+  .haRoot[data-sendspin] .haClimateCard .haDialControls {
+    justify-content: flex-start;
+    gap: 6px;
+    padding-right: 62px;
+  }
+
+  .haRoot[data-sendspin] .haClimateCard .haDialTarget {
+    display: none;
+  }
 }
 
 /* 2. Wide Short Wall Switch & Kitchen Display */
-@container (min-width: 270px) and (max-height: 241px) {
+@container (min-width: 270px) and (height < 242px) {
   .haGrid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
     grid-template-rows: 1fr 1fr;
@@ -1613,6 +1660,12 @@ a.eyebrow:hover {
   --sp-dim-0: 16%;
   --sp-dim-1: 28%;
   --sp-dim-2: 60%;
+}
+
+/* the overlay is one button over the whole screen: its focus ring is drawn inside it, where the screen doesn't clip it */
+.spark:focus-visible {
+  outline: 2px solid var(--sp-a);
+  outline-offset: -3px;
 }
 
 /* a light dim that deepens to the bottom, where the caption sits: the dashboard stays in view */

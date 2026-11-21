@@ -43,10 +43,16 @@ function trackForPath(path: string, tracks: NavTrack[]): Section {
 export function DocsTree({ tracks }: { tracks: NavTrack[] }) {
   const path = usePathname();
   const routeTrack = trackForPath(path, tracks);
-  const [picked, setPicked] = useState<{ path: string; id: Section } | null>(null);
-  const activeId = picked && picked.path === path ? picked.id : routeTrack;
+  // a track picked by hand holds only on the page it was picked on: any navigation, back to that page too, drops it
+  const [picked, setPicked] = useState<Section | null>(null);
+  const [pickedOn, setPickedOn] = useState(path);
+  if (pickedOn !== path) {
+    setPickedOn(path);
+    setPicked(null);
+  }
+  const activeId = (pickedOn === path ? picked : null) ?? routeTrack;
   const active = tracks.find((t) => t.id === activeId) ?? tracks[0];
-  const pick = (id: Section) => setPicked({ path, id });
+  const pick = (id: Section) => setPicked(id);
   const base = useId();
   const tabId = (id: Section) => `${base}-tab-${id}`;
   const panel = `${base}-panel`;
