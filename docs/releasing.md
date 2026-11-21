@@ -355,7 +355,7 @@ git push origin aqara-s1-plus-v0.6.0
 
 The workflow reads the channel with `tools/release/tag-channel.sh`, builds and checks everything as usual, and
 publishes with `--prerelease` and `--latest=false`, " beta" after the title. `releases/latest` stays the S1 app's
-last stable, and the S1 workflow doesn't rebuild the web installer, which installs stable releases only. A tag
+last stable, and Kiln, which installs stable releases only, doesn't offer it. A tag
 without a `Channel:` line, or a lightweight tag, is a stable release, exactly as before. Any other `Channel:` value
 fails the run before the build.
 
