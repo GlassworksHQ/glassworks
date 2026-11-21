@@ -41,7 +41,8 @@ If a frame's base image is LineageOS (an old Samsung tablet, say), can it:
    `DevicePolicyManagerService.installUpdateFromFile` (`lineage-22.2`, about line 20209) checks the
    caller with `Preconditions.checkCallAuthorization(... isDefaultDeviceOwner ... ||
    isProfileOwnerOfOrganizationOwnedDevice(caller))`. The public API is
-   `DevicePolicyManager.installSystemUpdate(Uri, Executor, InstallSystemUpdateCallback)`, Android 10+.
+   `DevicePolicyManager.installSystemUpdate(ComponentName admin, Uri, Executor, InstallSystemUpdateCallback)`,
+   Android 10+, where `admin` is the device owner's `DeviceAdminReceiver`.
    It takes an OTA zip that the device's own keys must accept, so a LineageOS-signed zip from
    LineageOS's server qualifies. A/B devices install through `update_engine` in the background. Non-A/B
    devices copy the zip and reboot into recovery. Glassworks for generic Android already supports
@@ -87,9 +88,12 @@ A frame that only runs the app, plus the `addon.d` animation, has no conflict.
 **Licences:** this route ships no OS bytes, so hard rules 3 and 4 aren't touched. Kiln installs the
 image the user downloads from LineageOS, and the `addon.d` script and animation are ours.
 
-**Fallback for the animation:** if `addon.d` can't write on a device (read-only system images), the frame
-agent can copy the animation back after boot. That needs root, and the first boot after each update
-shows LineageOS's animation once. A Magisk module that overlays the file would also work, but on non-A/B
+**Fallback for the animation:** if `addon.d` can't write on a device (read-only system images such as
+EROFS), copying the file back doesn't work either: root can't write a read-only filesystem. What works
+there is a bind mount of our zip from `/data` over `/product/media/bootanimation.zip` early in every boot,
+which is how the S1 tried its animation (`frames/aqara-s1-plus/research/boot-animation.md`). That needs
+root and a boot-time hook that runs before `bootanimation` starts; a mount made later only shows from
+the next boot. Also untested on LineageOS. A Magisk module that overlays the file would also work, but on non-A/B
 devices it goes away with Magisk at the first update, so it's the weakest choice.
 
 ## How to reproduce
@@ -103,16 +107,20 @@ Nothing to run yet. The first device test, in order, on a spare LineageOS tablet
 3. Writes storage: make a test app the device owner (`dpm set-device-owner`, no accounts on the
    device), call `installSystemUpdate` with the latest LineageOS zip, and time the restart. Undo:
    `dpm remove-active-admin` on a test-only admin, or a factory reset.
-4. Writes `/system`: with "Rooted debugging", `adb root && adb remount`, then add a test
-   `addon.d` script that backs up and restores `/product/media/bootanimation.zip` plus a replaced zip,
-   and install the next monthly update. Undo: delete the script and restore the original zip.
+4. Writes `/system`: only on a device where `adb remount` writes the partitions in place. On devices
+   with dynamic partitions, `adb remount` sets up OverlayFS instead, `update_engine` may refuse an OTA
+   while it is active, and `adb enable-verity` to clear it also drops the test files, so the test can't
+   run there. On a device where it writes in place: with "Rooted debugging", `adb root && adb remount`,
+   add a test `addon.d` script that backs up and restores `/product/media/bootanimation.zip` plus a
+   replaced zip, and install the next monthly update. Undo: delete the script and restore the original
+   zip.
 
 ## Open questions
 
 - Does `backuptool_ab.sh` restore files in `/product` on devices with a separate `product` partition,
   or only `/system`? The script lists paths relative to `$S`. Check `backuptool_ab.functions`.
-- Which LineageOS builds ship read-only system images (EROFS) that `adb remount` can't write, and does
-  `addon.d` still run there?
+- Which LineageOS builds ship read-only system images (EROFS) or remount through OverlayFS, and how does
+  Kiln put an `addon.d` script in place there (recovery, or not at all)?
 - Does LineageOS's Updater honour a device owner's `setSystemUpdatePolicy` (a maintenance window), or
   do we schedule installs only from Glassworks?
 
