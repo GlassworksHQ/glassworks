@@ -24,7 +24,7 @@ sealed interface FrameVersion {
      */
     data class Stamped(val version: AppVersion, val bundle: Boolean = true) : FrameVersion {
         override val shown get() = if (bundle) version.toString() else "$version ($BOOT_IMAGE)"
-        override fun olderThan(latest: AppVersion) = latest > version || (!bundle && latest == version)
+        override fun olderThan(latest: AppVersion) = latest > version || !bundle // THROWAWAY (test-build only): offer any bundle while none is loaded, so a temporary 0.5.0 can be tested
     }
 
     /** Flashed before the stamps, or the stamp isn't a version. [image]: what it runs, when the frame can tell. */
