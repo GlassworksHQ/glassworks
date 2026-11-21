@@ -9,6 +9,7 @@ export function SiteFooter({ layout = "sidebar" }: { layout?: "sidebar" | "quiet
       <footer className={chrome.foot}>
         <span>Home Assistant is a trademark of the Open Home Foundation. Glassworks isn&rsquo;t affiliated with it.</span>
         <span className={chrome.footLinks}>
+          <a href={links.discord}>Discord</a>
           <a href="/blog/feed.xml">Feed</a>
           <a href={links.contact}>Contact</a>
         </span>
@@ -33,6 +34,7 @@ export function SiteFooter({ layout = "sidebar" }: { layout?: "sidebar" | "quiet
           <Link href="/brand">Brand</Link>
           <Link href="/trademarks">Trademarks</Link>
           <a href={KILN}>Kiln ↗</a>
+          <a href={links.discord}>Discord ↗</a>
           <a href="/blog/feed.xml">Feed</a>
           <a href={links.contact}>Contact</a>
         </nav>

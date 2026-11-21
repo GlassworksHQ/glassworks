@@ -15,7 +15,7 @@ Alongside [Glassworks 1.0](https://www.glassworks.dev/blog/glassworks-1-0), I'm 
 
 ## The question spec sheets can't answer
 
-Every time I look at a new wall panel or cheap tablet, I have the same question: will this actually feel good to use every day? [Your own moment: a panel you bought that looked great on paper and felt sluggish, or one you nearly skipped.]
+Every time I look at a new wall panel or cheap tablet, I have the same question: will this actually feel good to use every day? There are a lot of panels out there—like the SONOFF NSPanel Pro—that look sleek on a product page and fine on paper, only to feel painfully sluggish once you throw a real Home Assistant dashboard at an underpowered processor.
 
 Hardware specs barely help. Knowing a panel has a quad-core A53 and 2 GB of RAM doesn't tell you whether tapping a light feels instant or takes a full second, or whether opening a history graph freezes the screen. Reviews are usually just someone saying "feels snappy" or "a bit laggy" on whatever tiny or massive dashboard they happen to run on their own Wi-Fi.
 
@@ -71,10 +71,10 @@ Every Glassworks frame gets a Clarity run, and its grade appears right on [glass
 
 A Clarity run also logs metrics that don't affect the letter grade but are genuinely useful when setting up a panel: per-process memory usage, the RAM cost of enabling each pane, idle CPU, animation headroom, and restart time on **your own** dashboard. If you want to know whether turning on Assist voice or Music Assistant will push an older panel over its memory limit, the report shows you directly.
 
-## Where Clarity goes next
+## Run it on your own panel
 
-Even though Clarity started as Glassworks' own benchmark, nothing about it is tied to Glassworks. The next step is making it easy to run against **any** Home Assistant wall panel—an Android tablet, a smart display, or a completely different kiosk app. [Status at release.]
+Even though Clarity started as Glassworks' own benchmark, nothing about it is tied to Glassworks. It already runs fine on other Android wall panels, tablets, and kiosk apps today.
 
-If you build or test wall panels, run Clarity on your hardware and share the results. And if you spot a flaw in the rubric, [open a discussion](https://github.com/GlassworksHQ/glassworks/discussions)—the rules evolve in public for every device at once.
+If you build or test wall panels, run Clarity on your hardware and share the results. Join us on [Discord](https://discord.gg/BTn9NstFM) or [open a discussion](https://github.com/GlassworksHQ/glassworks/discussions) if you spot a flaw in the rubric—the rules evolve in public for every device at once.
 
 Eduardo

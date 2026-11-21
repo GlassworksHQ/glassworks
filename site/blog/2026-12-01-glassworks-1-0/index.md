@@ -22,11 +22,11 @@ This has been a labor of love, and before getting into everything in 1.0, I want
 
 I've been running Home Assistant since 2020, and I've spent way too many evenings dialing in my dashboards. For a long time, the main place I actually saw them was on my phone. A wall panel is supposed to fix that: it's the one screen in the house everyone touches, whether they care about Home Assistant or just want to turn off the kitchen lights.
 
-My first wall panel was a Pixel Tablet. To get it working the way I wanted, I ran a kiosk app for the dashboard alongside a separate IP camera app just so Home Assistant could tell when someone walked up to the screen. It worked, sort of—except every time I turned on the room lights, the motion detector thought someone had walked up to the tablet. I ended up taking an open-source camera app and rewriting its motion detection to ignore lighting changes. What surprised me was how many community presence setups have that exact same bug: flip a light switch and they all trigger. [That detector is now what powers Glassworks' camera presence.]
+My first wall panel was a Pixel Tablet. To get it working the way I wanted, I ran a kiosk app for the dashboard alongside a separate IP camera app just so Home Assistant could tell when someone walked up to the screen. It worked, sort of—except every time I turned on the room lights, the motion detector thought someone had walked up to the tablet. I ended up taking an open-source camera app and rewriting its motion detection to ignore lighting changes. What surprised me was how many community presence setups have that exact same bug: flip a light switch and they all trigger. That detector is now what powers Glassworks' camera presence.
 
 Then I picked up an Aqara Panel Hub S1 Plus. Hardware-wise, it was everything I wanted: a sharp touchscreen, mics, a speaker, a time-of-flight presence sensor, and a Zigbee/Thread radio in a unit that replaces a standard light switch. Then I turned it on and ran straight into Aqara's launcher, Aqara's cloud, and a system WebView so old it couldn't even load Home Assistant.
 
-So I spent a weekend figuring out how to get it into the chip's recovery mode and boot my own code from RAM. By the next day it was showing my dashboard and responding to a wake word. [Your moment, in a line or two: where you were, what you did.]
+So I spent a weekend figuring out how to get it into the chip's recovery mode and boot my own code from RAM. I taped wires to the UART pads to get a serial console, then spent literal hours banging my head against the wall trying different DRAM timing combinations to figure out what we were missing. It was the only thing I could think about—and right when I was about to give up, after a lot of trial and error, it finally came up. By the next day it was showing my dashboard and responding to a wake word.
 
 After that, I got a lululemon Studio Mirror and tried to do the same thing, and that's where I hit a wall. The existing options wanted me to use their own dashboards, so I had to hack around them just to show mine. Installing anything felt like crossing my fingers while commands scrolled past with no idea whether it was succeeding or about to brick the device.
 
@@ -91,7 +91,9 @@ I'd love to hear from you as people start running 1.0 on real walls:
 - **What panes are missing?** What do you wish your wall panel exposed to Home Assistant?
 - **What rough edges did you hit on day one?** The small annoyances matter most—let us know what felt clunky or broke your expectations.
 
-Drop ideas in [GitHub Discussions](https://github.com/GlassworksHQ/glassworks/discussions) or open a [feature request](https://github.com/GlassworksHQ/glassworks/issues/new?template=feature.yml). [Two lines from the roadmap: the frames and panes already on the way.]
+I want the community to shape what comes next. I'd love to collaborate with hardware makers and maintainers who already have custom device images but don't have a great Home Assistant panel app to run on them—and I'm happy to host community images right in Kiln so people can install whatever they want cleanly from the browser.
+
+Join us on [Discord](https://discord.gg/BTn9NstFM), drop ideas in [GitHub Discussions](https://github.com/GlassworksHQ/glassworks/discussions), or open a [feature request](https://github.com/GlassworksHQ/glassworks/issues/new?template=feature.yml).
 
 And if you enjoy cracking open hardware and want to bring up a new device, come build a frame with us. The core app, panes, Kiln engine, and research templates are already there—check out [how frames work](../../../frames/README.md) and [CONTRIBUTING.md](../../../CONTRIBUTING.md) to get started. Or if you want to take Glassworks and build your own custom hardware or product around it, go for it—I'd love to see what you build.
 
