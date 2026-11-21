@@ -49,7 +49,7 @@ This folder defines the **Generic Android** frame (`design/frame.json`, [format]
 
 ## Status
 
-**Status: beta.** Kiln installs it for everyone at `kiln.glassworks.dev/android` (2026-11-20). Generic Android ships its own dedicated app, **Glassworks** (`dev.glassworks.generic_android`, built from [`android/`](android)), targeting Android 8.0 or newer (`minSdk` 26), alongside a separate legacy build for Android 6 and 7. On a Google Pixel Tablet (Android 17), dashboard loading, Home Assistant ESPHome adoption, automatic pane hiding, and in-place updates have all been verified; hardware testing for wake words, Sendspin, and the ambient light sensor is still underway.
+**Status: beta.** You can install Glassworks on any Android 8+ tablet or phone straight from Chrome or Edge at [kiln.glassworks.dev/android](https://kiln.glassworks.dev/android), with a separate legacy build available for Android 6 and 7 devices (including the lululemon Studio Mirror). On a Google Pixel Tablet, dashboard loading, Home Assistant ESPHome adoption, automatic pane hiding, and in-place updates are all verified; hardware testing for wake words, Sendspin audio, and the ambient light sensor is still underway.
 
 *(For reference, the Aqara S1 Plus APK also automatically falls back to generic behavior if installed on non-S1 hardware, naming itself after the device model and hiding unsupported panes.)*
 
@@ -76,18 +76,11 @@ Both apps keep separate data and keys, so both can coexist on a test device—ju
 
 ### The legacy build (Android 6 and 7)
 
-Devices running Android 6 or 7 (API 23–25), including older tablets and the **lululemon Studio Mirror**, use a dedicated legacy build: `dev.glassworks.generic_android.legacy`. It runs GeckoView 144 (`:engine-gecko-legacy`), locks navigation strictly to your Home Assistant origin ([legacy-engine.md](../../docs/research/legacy-engine.md)), disables remote debugging, and follows its own release channel so it never conflicts with the modern Android 8+ build.
+Devices running Android 6 or 7 (API 23–25), including older tablets and the **lululemon Studio Mirror**, use a dedicated legacy build (`dev.glassworks.generic_android.legacy`). It runs a frozen browser engine locked strictly to your Home Assistant address ([why](../../docs/research/legacy-engine.md)), disables remote debugging, and follows its own release channel so it never conflicts with the modern Android 8+ app.
 
-To build it locally (note that `-PlegacyAbi` must match `-Ps1Abi`):
+On the Manage page's Overview screen, the legacy build displays a **Legacy** badge next to the version number summarizing those security boundaries.
 
-```sh
-./gradlew :generic-android:assembleLegacy -Ps1Abi=arm64-v8a -PlegacyAbi=arm64-v8a
-# Output: frames/generic-android/android/build/outputs/apk/legacy/generic-android-legacy-unsigned.apk
-```
-
-Because Android Gradle Plugin applies core library desugaring module-wide, the legacy build includes `desugar_jdk_libs` (GPL-2.0 with Classpath exception, approved for legacy Android 6–7 support; see `THIRD-PARTY-NOTICES.md`), while the modern Android 8+ release APK contains no desugared library code.
-
-On the Manage page's Overview screen, the legacy build displays a **Legacy** badge next to the version number summarizing its security restrictions (frozen browser engine locked to Home Assistant, remote debugging disabled).
+*(For contributors building locally: run `./gradlew :generic-android:assembleLegacy -Ps1Abi=arm64-v8a -PlegacyAbi=arm64-v8a`, keeping `-PlegacyAbi` matched to `-Ps1Abi`. Because Android Gradle Plugin applies core library desugaring module-wide, the legacy APK includes `desugar_jdk_libs` under GPL-2.0 with the Classpath exception—see `THIRD-PARTY-NOTICES.md`—while the modern Android 8+ APK contains no desugared library code.)*
 
 The app automatically adapts to the device without requiring custom per-device code:
 

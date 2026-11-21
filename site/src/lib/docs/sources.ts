@@ -54,7 +54,9 @@ function findReadme(dir: string): string | undefined {
 
 /* a frame's guides, in reading order and with short nav labels; the rest follow alphabetically */
 const FRAME_DOC_ORDER = ["install", "radio-guide", "sensors", "radio"];
-const FRAME_DOC_LABEL: Record<string, string> = { install: "Install", "radio-guide": "Using the radio", sensors: "Sensors", radio: "Radio reference" };
+const FRAME_DOC_LABEL: Record<string, string> = { install: "Install", "radio-guide": "Using the radio", sensors: "Sensors", radio: "S1 Plus radio reference" };
+/** Frame docs that are deep technical references rather than everyday user guides. */
+const DEVELOPER_FRAME_DOCS = new Set(["radio"]);
 const byOrder = (order: string[]) => (a: string, b: string) => {
   const ia = order.indexOf(a);
   const ib = order.indexOf(b);
@@ -74,7 +76,8 @@ function load(): Source[] {
     if (!exists(`frames/${id}/design/frame.json`)) continue;
     add({ file: `frames/${id}/README.md`, url: `/docs/frames/${id}`, section: "user", frame: id });
     for (const slug of md(`frames/${id}/docs`).sort(byOrder(FRAME_DOC_ORDER))) {
-      add({ file: `frames/${id}/docs/${slug}.md`, url: `/docs/frames/${id}/${slug}`, section: "user", frame: id, label: FRAME_DOC_LABEL[slug] });
+      const section: Section = DEVELOPER_FRAME_DOCS.has(slug) ? "developers" : "user";
+      add({ file: `frames/${id}/docs/${slug}.md`, url: `/docs/frames/${id}/${slug}`, section, frame: id, label: FRAME_DOC_LABEL[slug] });
     }
     for (const slug of md(`frames/${id}/research`, ["README.md"])) {
       add({ file: `frames/${id}/research/${slug}.md`, url: `/docs/frames/${id}/notes/${slug}`, section: "notes", frame: id });
@@ -89,7 +92,7 @@ function load(): Source[] {
     ["esphome", "ESPHome & Automations"],
     ["updates", "Updates"],
     ["blueprints", "Blueprints"],
-    ["perf", "Clarity Grades"],
+    ["clarity", "Clarity Grades"],
   ];
   for (const [slug, label] of dailyFeatures) {
     add({ file: `docs/${slug}.md`, url: `/docs/${slug}`, section: "user", label });
@@ -116,6 +119,7 @@ function load(): Source[] {
   add({ file: "docs/secrets.md", url: "/docs/secrets", section: "developers", label: "Panel secrets & security" });
 
   const projectOps: [string, string][] = [
+    ["perf", "Clarity benchmark spec"],
     ["size", "APK size"],
     ["ci", "CI"],
     ["releasing", "Releasing"],

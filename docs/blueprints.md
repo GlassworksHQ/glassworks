@@ -63,6 +63,10 @@ Every blueprint link points to the exact GitHub tag matching your panel's instal
 
 You can also browse the latest published blueprints online at [glassworks.dev/blueprints](https://www.glassworks.dev/blueprints).
 
+## Dashboard starter prompts
+
+Because Glassworks displays your own Home Assistant dashboard rather than shipping a custom home screen, you don't need bulky one-size-fits-all custom cards to get a great layout on a wide wall switch, docked tablet, or two-way mirror. On [glassworks.dev/blueprints#recipes](https://www.glassworks.dev/blueprints#recipes) (and on each device's page), you can copy form-factor starter prompts into your favorite AI assistant to generate a clean, single-file Lovelace card tailored to your own rooms and entities.
+
 ## For pane authors
 
 To bundle a blueprint with a pane or core settings page:

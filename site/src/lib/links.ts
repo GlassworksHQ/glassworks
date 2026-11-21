@@ -9,6 +9,7 @@ export const KILN = "https://kiln.glassworks.dev";
 export const links = {
   org: "https://github.com/GlassworksHQ",
   s1: "https://github.com/GlassworksHQ/glassworks",
+  discord: "https://discord.gg/BTn9NstFM",
   /** the project's public email (maintainer, 2026-11-13) */
   contact: "mailto:hi@glassworks.dev",
 } as const;
