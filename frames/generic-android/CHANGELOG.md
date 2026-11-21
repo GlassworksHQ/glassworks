@@ -5,7 +5,7 @@ newer) and its legacy build (`dev.glassworks.generic_android.legacy`, Android 6 
 included), for people running one. The S1 app's changes are in the repo's [CHANGELOG.md](../../CHANGELOG.md).
 
 Both builds share this file and one version sequence. A version's section is the release notes of
-`generic-android-v<version>` and of `generic-android-legacy-v<version>`, whichever of the two is tagged
+`generic-android-v<version>` and of `generic-android-legacy-v<version>`, whichever of the two is released
 ([docs/releasing.md](../../docs/releasing.md#glassworks-for-generic-android-and-its-legacy-build)). The first
 line of each version is what Home Assistant shows on the update card. A change only one build gets says which.
 

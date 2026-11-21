@@ -79,6 +79,7 @@ describes the device's look in millimetres"). Kiln's picker reads it, and glassw
 | `credits` | Optional. The outside work the frame stands on, and who made it ([below](#credits)) |
 | `facts` | Optional, not on a tested device. What its panels show, for the checklist ([below](#how-complete-it-is)) |
 | `run` | A tested device only: its run on a real unit, which its checklist comes from ([below](#a-tested-devices-run)) |
+| `release` | Optional. What the Release workflow ships for it: the app lines its devices run and its own frame release ([below](#release)) |
 
 `model`:
 
@@ -172,6 +173,28 @@ way), so today: `armeabi-v7a` and `arm64-v8a`. `ApkAbiListsTest` checks that the
 | `lululemon-mirror` | `arm64-v8a`, `armeabi-v7a` | The community image's `ro.product.cpu.abilist` (`arm64-v8a,armeabi-v7a,armeabi`, read from its `system.img` 2026-11-12). Not read on a stock unit ([mirror-abis.md](lululemon-mirror/research/mirror-abis.md)) |
 | `generic-android` | `arm64-v8a`, `armeabi-v7a` | The ARM tablets and phones it targets. No x86 APK is built |
 | `google-pixel-tablet` | `arm64-v8a` | Tensor G2's 64-bit-only userspace, a public fact for the Pixel 7. Not read on a Pixel Tablet yet |
+
+### `release`
+
+What the Release button ships ([docs/releasing.md](../docs/releasing.md#release)). `tools/release/plan.py` reads
+it, and the plan comes out of it alone: adding a frame needs data here, not a new workflow.
+
+| Field | What |
+|---|---|
+| `app` | The app lines its devices run, by name. Several frames can name one line; it is built once |
+| `lines` | Only in the frame whose app module builds the line: `{ "<line>": { title, tag, changelog, build, assets, … } }`. `tag` and `assets` use `{version}` and `{abi}`, and are the names panels and Kiln read, so they never change. `build` is `s1-kiosk` (the S1 app, with its radio bundle) or `gradle` (`task`, `apk`, `package`, `minSdk`, `writeSettings`). `abis: "every-frame"` builds every frame's ABIs; else the frame's own. `latest: true` on the one line whose stable release is `releases/latest` (the S1 app's) |
+| `frame` | Its own frame release, tagged `frames/<id>/v<version>`: `bundle` is `notice` (notes only, no files) or `signed` (a bundle signed with the frame bundle key: `script`, `pubkey`, `assets`), with `title`, `changelog` and an optional `note` for the run's summary |
+
+| Frame | `app` | `frame` |
+|---|---|---|
+| `aqara-s1-plus` | `aqara-s1-plus` (defined here) | `signed`: `frame-bundle-aqara-s1-plus-<version>.zip` |
+| `generic-android` | `generic-android`, `generic-android-legacy` (both defined here) | none |
+| `google-pixel-tablet` | `generic-android` | none |
+| `lululemon-mirror` | `generic-android-legacy` | `notice`, notes from `lululemon-mirror/FRAME-CHANGELOG.md` |
+
+A signed bundle gets the S1's radio inputs (the Silicon Labs runtime, otbr-agent and ot-ctl, the hotspot name
+overlay) and is built as `<script> <version> <key> <out> <radio dir> <sisdk dir> <pubkey>`. A second frame with a
+signed bundle of other inputs needs them added to the workflow's `sign-bundle` job.
 
 ### The render
 

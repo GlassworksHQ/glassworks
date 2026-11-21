@@ -1,16 +1,18 @@
 # Posts each published release to the Glassworks Discord server (docs/releasing.md#discord).
 #
 # A release that a workflow creates with GITHUB_TOKEN starts no `release` event, so this runs after those
-# workflows finish (workflow_run, tag pushes only, not their dry runs). A release a person publishes (a frame
-# release, a library's draft) does start one, and is caught by `release: published`. Neither path sees the
-# other's releases, so each release posts once. tools/ci/discord_release.py skips drafts and pre-releases,
-# posts libraries to #ecosystem-updates and the rest to #glassworks-releases. It runs the default branch's
-# code only, and nothing from the release but its text.
+# workflows finish (workflow_run). The Release workflow (release.yml, the button) publishes several releases in one
+# run and lists their tags in its `published-tags` artifact; its dry runs publish none and leave no list. Library
+# release runs on a tag push, which is the run's head_branch. A release a person publishes (a library's draft) does
+# start a `release` event, and is caught by `release: published`. Neither path sees the other's releases, so each
+# release posts once. tools/ci/discord_release.py skips drafts and pre-releases, posts libraries to
+# #ecosystem-updates and the rest to #glassworks-releases. It runs the default branch's code only, and nothing from
+# the release or the artifact but text: each tag is checked against the release tag patterns before it is used.
 name: Discord release feed
 
 on:
   workflow_run:
-    workflows: ["Release", "Generic release", "Library release"]
+    workflows: ["Release", "Library release"]
     types: [completed]
   release:
     types: [published]
@@ -22,20 +24,44 @@ jobs:
   post:
     if: >-
       github.event_name == 'release' ||
-      (github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'success')
+      (github.event.workflow_run.conclusion == 'success' &&
+       (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch'))
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read   # the Release run's published-tags artifact
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           persist-credentials: false
           sparse-checkout: tools/ci
 
-      - name: Post the release
+      - name: The releases to post
         env:
           GH_TOKEN: ${{ github.token }}
-          # For a tag push, the run's head_branch is the tag.
+          EVENT: ${{ github.event_name }}
+          RUN_EVENT: ${{ github.event.workflow_run.event }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          # A release event's tag, or a tag push's (the run's head_branch is the tag).
           TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || github.event.workflow_run.head_branch }}
+        run: |
+          if [ "$EVENT" = workflow_run ] && [ "$RUN_EVENT" = workflow_dispatch ]; then
+            # The Release button: the tags its publish job wrote. A dry run, or a run that published nothing, has none.
+            gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n published-tags -D "$RUNNER_TEMP/published" 2>/dev/null ||
+              { echo "run $RUN_ID published nothing: not posted."; : > "$RUNNER_TEMP/tags"; exit 0; }
+            cp "$RUNNER_TEMP/published/published-tags.txt" "$RUNNER_TEMP/tags"
+          else
+            printf '%s\n' "$TAG" > "$RUNNER_TEMP/tags"
+          fi
+          cat "$RUNNER_TEMP/tags"
+
+      - name: Post the releases
+        env:
+          GH_TOKEN: ${{ github.token }}
           DISCORD_RELEASES_WEBHOOK: ${{ secrets.DISCORD_RELEASES_WEBHOOK }}
           DISCORD_ECOSYSTEM_WEBHOOK: ${{ secrets.DISCORD_ECOSYSTEM_WEBHOOK }}
-        run: python3 tools/ci/discord_release.py "$TAG"
+        run: |
+          mapfile -t tags < <(grep -v '^$' "$RUNNER_TEMP/tags" || true)
+          [ "${#tags[@]}" -gt 0 ] || { echo "nothing to post"; exit 0; }
+          python3 tools/ci/discord_release.py "${tags[@]}"

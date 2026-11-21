@@ -513,7 +513,7 @@ check "...2.0.9 stays staged" test "$(L check "$B/next")" = "2.0.9 2000009" -a !
 rm -f "$T/mv-fail"; L boot
 check "...and loads once it can" test "$(prop ro.glassworks.frame.version)" = 2.0.9 -a "$(cat "$B/version")" = 2000009
 
-# The frame release's own bundle (frame-bundle.sh, as frame-release.yml runs it), unpacked from its zip as the
+# The frame release's own bundle (frame-bundle.sh, as release.yml runs it), unpacked from its zip as the
 # app will: it installs and loads.
 mkdir -p "$T/fakert/lib"; cp "$R/frames/aqara-s1-plus/tools/radio/sisdk/zigbeed.sh" "$T/fakert/"
 for l in ld-linux-armhf.so.3 libc.so.6 libcpc.so.3; do echo stub > "$T/fakert/lib/$l"; done
