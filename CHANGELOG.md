@@ -22,7 +22,11 @@ below as the release notes. Glassworks for generic Android and its legacy build 
   of five themes, Glassworks, Aurora, Dusk, Dune or Graphite, each light or dark. The voice overlay takes its
   colors: the orb glows in the theme's first color while it listens and its second while it speaks, and a light
   theme gives the overlay a light background with dark text. Done stays green and errors stay red. Glassworks dark
-  is the default, so the orb now listens in blue rather than amber. Timers follow in a later release.
+  is the default, so the orb now listens in blue rather than amber.
+- **Timers in your theme.** The timers on the dashboard and the timer done screen now take the theme from the
+  *Appearance* page. The theme's two colors run down each timer's ring, the glass turns light with a light theme,
+  and the done screen's orb and ripples glow in the theme's colors. The last 10 seconds stay amber in every theme so
+  you can tell a timer is about to ring.
 - **Recorders that record on motion get the camera's motion pushed to them.** With the ONVIF stream on, a network
   video recorder that subscribes to the camera's motion (many Xiongmai-based NVRs do) now hears about each change
   the moment it happens, so it can start recording. The recorder must be on your local network and sign in with the

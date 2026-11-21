@@ -30,12 +30,15 @@ import dev.glassworks.assist.MainTextFit
 import dev.glassworks.assist.OrbArt
 import dev.glassworks.assist.OrbBakes
 import dev.glassworks.assist.OrbBakes.Companion.bitmap
+import dev.glassworks.assist.ThemedBackdrop
+import dev.glassworks.theme.Themes
 import kotlin.math.sin
 
 /**
  * "Timer done" (0.4.3; mock-ups 0.4.3-timers/05-done*): the voice overlay's stage, the backdrop as a
- * 90 % scrim and the glass orb, here with the amber core and a ripple going out every 1.5 s (the
- * chimes), "TIMER DONE", the name(s), the length, and the timers still running. A tap anywhere
+ * 90 % scrim and the glass orb, here with a ripple going out every 1.5 s (the chimes), "TIMER DONE", the
+ * name(s), the length, and the timers still running. In the overlays' theme ([theme], #691): the orb and its
+ * first ripple in the theme's light a, the second in b, the scrim in its ground, the text in its ink. A tap anywhere
  * dismisses it ([TimerBoard.dismissFinished], which also stops the chimes); it also ends by itself
  * 60 s after the last finish. Same layout numbers as VoiceOverlay (orb centre 480,162 dp; label 252;
  * main text 282). Main thread.
@@ -50,7 +53,9 @@ class TimerDoneView(
     var onDismissed: (() -> Unit)? = null
 
     private val dp = resources.displayMetrics.density
-    private val art = OrbArt(dp)
+    private var art = OrbArt(dp)
+    private var pick: Themes.Pick? = null
+    private var tx = TX; private var mu = MU; private var fa = FA
     private fun px(v: Float) = art.px(v)
     private val interp = PathInterpolator(0.65f, 0f, 0.35f, 1f)
     private val ease: (Float) -> Float = { interp.getInterpolation(it.coerceIn(0f, 1f)) }
@@ -219,15 +224,43 @@ class TimerDoneView(
         startLoop()
     }
 
+    /**
+     * Takes [p]'s colors: the orb's light, the ripples, the scrim and the text. Glassworks dark keeps the onboarding
+     * backdrop itself, as the voice overlay does. A new theme bakes the orb again (once it was baked).
+     */
+    fun theme(p: Themes.Pick) {
+        if (pick?.id == p.id && pick?.palette == p.palette) return
+        pick = p
+        val palette = p.palette
+        val light = !palette.darkGround
+        art = OrbArt(dp, palette, light)
+        tx = palette.ink
+        mu = Themes.mix(tx, palette.ground, 0.35f)
+        fa = Themes.mix(tx, palette.ground, 0.58f)
+        scrim.background = if (p.id == Themes.DEFAULT.id) Backdrop() else ThemedBackdrop(palette)
+        rings[0].tint(palette.a); rings[1].tint(palette.b)
+        label.setTextColor(palette.readable(palette.a))
+        main.setTextColor(tx); sub.setTextColor(mu); rest.setTextColor(mu)
+        restHead.setTextColor(fa); hint.setTextColor(fa)
+        if (baked) { baked = false; if (isAttachedToWindow) bake() }
+    }
+
     private fun bake() {
         if (baked) return
         baked = true
-        // The amber layers are the timer's own; the sphere and shine are shared (OrbBakes).
+        val art = art // this theme's, even if another is picked while it bakes (that one bakes after)
+        val light = pick?.palette?.darkGround == false
+        // The orb's light is the timer's own; a dark glass's sphere and shine are shared (OrbBakes), a light one's
+        // (a light theme) are baked here.
         Bakery.bake("timer orb", {
             val d = Dither(0x51ED270B)
-            listOf(art.glow(OrbArt.Tint.AMBER).bitmap(d), art.core(OrbArt.Tint.AMBER).bitmap(d))
-        }) { b -> listOf(glow, core).zip(b).forEach { (view, bmp) -> view.setImageBitmap(bmp) } }
-        orbs.layers(art) { l -> sphere.setImageBitmap(l.sphere); shine.setImageBitmap(l.shine) }
+            listOf(art.glow(OrbArt.Tint.AMBER).bitmap(d), art.core(OrbArt.Tint.AMBER).bitmap(d)) +
+                (if (light) listOf(art.sphere().bitmap(d), art.shine().bitmap(d)) else emptyList())
+        }) { b ->
+            // A bake for a theme that was replaced meanwhile: the newer one's bake (already asked for) wins.
+            if (art === this.art) listOf(glow, core, sphere, shine).zip(b).forEach { (view, bmp) -> view.setImageBitmap(bmp) }
+        }
+        if (!light) orbs.layers(art) { l -> sphere.setImageBitmap(l.sphere); shine.setImageBitmap(l.shine) }
     }
 
     // ---------------------------------------------------------------- pieces
@@ -252,7 +285,7 @@ class TimerDoneView(
     /** As VoiceOverlay's main text: 36 sp light on up to 2 lines, then 30, then 26 on 3. */
     private fun styleMain(tv: TextView, text: String) {
         tv.letterSpacing = -0.02f
-        tv.setTextColor(TX)
+        tv.setTextColor(tx)
         val width = px(820f)
         val paint = TextPaint(tv.paint)
         fun sizePx(sp: Float) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, sp, resources.displayMetrics)
@@ -271,10 +304,11 @@ class TimerDoneView(
         tv.ellipsize = TextUtils.TruncateAt.END
     }
 
-    /** A 1 dp amber ring around the sphere: scale 1 → 1.85 while fading out. */
+    /** A 1 dp ring around the sphere in one of the theme's lights: scale 1 → 1.85 while fading out. */
     private inner class Ripple(context: Context) : View(context) {
         private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = dp; color = AMBER }
         override fun hasOverlappingRendering() = false
+        fun tint(c: Int) { paint.color = c or 0xff000000.toInt(); invalidate() }
         override fun onDraw(c: Canvas) = c.drawCircle(width / 2f, height / 2f, width / 2f - dp / 2, paint)
         fun ripple(p: Float, strength: Float) {
             val k = ease(p)

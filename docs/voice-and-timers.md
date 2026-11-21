@@ -38,10 +38,10 @@ One wake word can be active at a time. Panels upgrading from older openWakeWord 
 
 Voice timers are managed by Home Assistant and displayed automatically on the panel whenever the Voice pane is active. There is no separate setup required—just ask your assistant to set, pause, cancel, or add time to a timer (for example, *"Set a 10-minute pasta timer"* or *"Pause the pasta timer"*).
 
-- **Running timers** appear as small glass orbs in the bottom-right corner, ordered with the soonest timer closest to the corner. Each orb shows the remaining time, an amber countdown ring, and the timer's name underneath (or `TIMER` if unnamed). Paused timers show a pause symbol with a gray ring.
+- **Running timers** appear as small glass orbs in the bottom-right corner, ordered with the soonest timer closest to the corner. Each orb shows the remaining time, a countdown ring in your theme's two colors, and the timer's name underneath (or `TIMER` if unnamed). The ring turns amber for the last 10 seconds. Paused timers show a pause symbol with a dimmed ring. The timers take the theme you pick on the **Appearance** page, light or dark.
 - **Final countdown:** During the last 10 seconds, the orb glows and switches to large digits with a subtle ripple each second.
 - **Moving timers:** Drag the timers to any corner or the center of any edge—they snap into place and remember your preferred spot for future timers.
-- **Hiding timers:** Tap a running timer and select **Hide timers** to tuck them into the nearest edge as a compact half-orb that still shows the amber progress arc. Tap the half-orb to expand them again. Hidden timers automatically reappear for their final 10 seconds or whenever a new timer is started.
+- **Hiding timers:** Tap a running timer and select **Hide timers** to tuck them into the nearest edge as a compact half-orb that still shows the progress arc. Tap the half-orb to expand them again. Hidden timers automatically reappear for their final 10 seconds or whenever a new timer is started.
 - **When a timer finishes:** The screen wakes up, displays a full-screen completion screen showing the timer's name and duration (or *"2 timers done"* if several finish together), and plays a chime three times about 3 seconds apart. Tap anywhere to dismiss the screen and silence remaining chimes, or let it close automatically after 60 seconds.
 
 ## Announcements across panels
