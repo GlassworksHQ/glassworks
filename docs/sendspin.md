@@ -1,46 +1,51 @@
 # Music Assistant player (Sendspin)
 
-Glassworks includes a native **Sendspin** music player, so [Music Assistant](https://music-assistant.io/) sees your panel as a first-class player right alongside your other speakers. It plays synchronized multi-room audio in groups without needing Music Assistant's *Home Assistant MediaPlayers* bridge (which routes through `media_player.<device>_speaker` without synchronization).
-
-The player is powered by our standalone MIT-licensed [`sendspin`](../libs/sendspin/README.md) library (`dev.glassworks.sendspin`), wrapped by the Sendspin pane (`panes/sendspin/src/main/java/dev/glassworks/speaker/`) for settings, ESPHome entities, and sealed key storage. Logs appear under `adb logcat -s Glassworks.Sendspin`.
+Glassworks includes a native **Sendspin** music player, so [Music Assistant](https://music-assistant.io/) sees your panel as a first-class speaker right alongside the rest of your house. It plays synchronized multi-room audio in speaker groups without needing Music Assistant's *Home Assistant MediaPlayers* bridge (which routes through `media_player.<device>_speaker` without synchronization).
 
 ## Setup
 
 If your panel is already added to Home Assistant via ESPHome with encryption enabled (automatic on Home Assistant 2026.11 and newer) and Music Assistant is connected to Home Assistant, setup happens automatically:
 
-1. The panel discovers Music Assistant's Sendspin server over mDNS (or falls back to your Home Assistant host on port `8927`) and connects.
-2. Home Assistant requests the panel's Sendspin **pairing token** over the encrypted ESPHome API and hands it to Music Assistant.
+1. The panel finds Music Assistant's Sendspin server over your local network (or falls back to your Home Assistant host on port `8927`) and connects.
+2. Home Assistant requests the panel's Sendspin **pairing token** over the encrypted ESPHome connection and hands it to Music Assistant.
 3. Music Assistant pairs automatically and creates a player named after your panel—for example, **Aqara S1 Plus** (`media_player.aqara_s1_plus`, or `media_player.glassworks_panel` / `media_player.s1_panel` on panels paired in earlier releases).
 
-Your Music Assistant player entity is completely separate from the ESPHome speaker entity (`media_player.<device>_speaker`), which continues handling Assist replies, TTS, and Home Assistant announcements. Whenever you trigger a wake word or play an announcement, Sendspin mutes locally while maintaining timeline sync, then fades right back in once the assistant finishes speaking.
+Your Music Assistant player is completely separate from the ESPHome speaker entity (`media_player.<device>_speaker`), which continues handling Assist replies, TTS, and Home Assistant announcements. Whenever you say a wake word or play an announcement, Sendspin mutes locally while staying in sync with your speaker group, then fades right back in when the assistant finishes speaking.
 
 ### Settings
 
-You can control Sendspin from the panel's settings menu (**Settings → Panes → Sendspin**), from the [Manage page](manage.md), or via Home Assistant entities and adb extras:
+You can control Sendspin from the panel's settings menu (**Settings → Panes → Sendspin**), from the [Manage page](manage.md), or through Home Assistant:
 
-| Control | Purpose | Default |
-|---|---|---|
-| HA switch `switch.<device>_music_assistant_player_sendspin` / `--ez sendspin_enabled` | Enable or disable the Sendspin player | On |
-| HA diagnostic `sensor.<device>_music_assistant_player_status` | Live status (for example, `ready, paired with Music Assistant (…)`, `playing from … (FLAC): Artist – Title`, `waiting for pairing or approval by …`, or `…; FLAC off, using PCM: <reason>`) | — |
-| `--es sendspin_server <host[:port][/path] or ws://…>` | Override server address (`auto` uses discovery) | `auto` |
-| `--ez sendspin_unpaired_access true` | Allow playback without pairing (guest mode); Music Assistant approves automatically | Off |
-| `--ez sendspin_flac false` | Offer PCM only instead of FLAC (re-enabling retries FLAC after a fallback) | On (FLAC preferred, PCM fallback) |
+- **Enable or disable:** Toggle the switch in settings or use `switch.<device>_music_assistant_player_sendspin` in Home Assistant (on by default).
+- **Live status:** Check `sensor.<device>_music_assistant_player_status` in Home Assistant or the Sendspin settings page to see whether the player is paired, playing FLAC or PCM, or waiting for approval.
+- **Volume and group sync:** Sendspin saves its own volume, mute, and output delay separately from voice replies and announcements (Android's master media volume scales both). If your panel sounds slightly ahead of or behind another speaker in a group, adjust **Static delay** on the player's settings page in Music Assistant.
 
-Pass `--e…` extras to `adb shell am start -n sh.edm.s1kiosk/.MainActivity` (or `dev.glassworks.generic_android/dev.glassworks.MainActivity` on generic Android). Changing the server address, unpaired access, or FLAC setting reconnects cleanly so the updated capabilities take effect immediately.
-
-Volume, mute, and static output delay are stored independently for Sendspin (`sendspin.xml`) so adjusting music volume does not alter your voice assistant or announcement volume (Android's master media volume scales both).
+*(Advanced overrides—such as setting a custom server address, disabling FLAC, or enabling guest mode—are also available via `adb` extras in the [Technical reference](#protocol-what-is-implemented-with-sources) below.)*
 
 ### If pairing needs you
 
 Automatic pairing requires an encrypted ESPHome connection in Home Assistant and Music Assistant's Home Assistant provider running (the default when Music Assistant runs as a Home Assistant app/add-on). If the status sensor stays on `waiting for pairing or approval by …` and Music Assistant lists the panel as unpaired, you have two options:
 
-- **Pair with token (recommended):** Home Assistant does not include a raw WebSocket sender in its Developer Tools UI, so retrieve the pairing token using any authenticated WebSocket client (such as `websocat` or a short Python script) connected to `ws://<ha-host>:8123/api/websocket` with an administrator long-lived access token:
-  1. Find your panel's 43-character `client_id` by sending `{"id": 1, "type": "sendspin/subscribe_clients"}` (it is also logged on the panel under `Glassworks.Sendspin` and shown in Music Assistant's player details).
+- **Pair with a token (recommended):** Retrieve the pairing token from Home Assistant's WebSocket API (`ws://<ha-host>:8123/api/websocket`, authenticated with an administrator long-lived access token). Because `ws://` is unencrypted, anyone observing the network path can read that token—use it only on a trusted local network, or connect over `wss://` if Home Assistant serves HTTPS:
+  1. Find your panel's 43-character `client_id` by sending `{"id": 1, "type": "sendspin/subscribe_clients"}` (it is also shown in Music Assistant's player details).
   2. Request the token by sending `{"id": 2, "type": "sendspin/get_pairing_token", "client_id": "<panel client id>"}`.
   3. Open **Settings → Players → \<Your panel\>** in Music Assistant and paste the returned pairing token. Treat this token like a password—anyone holding it can pair a server with your speaker.
-- **Enable guest mode:** Pass `--ez sendspin_unpaired_access true` so Music Assistant approves the panel automatically without a token. Guest mode disables mutual authentication, so only use it on a trusted local network (see [Security](#security)).
+- **Enable guest mode (trusted LAN only):** Pass `--ez sendspin_unpaired_access true` over `adb` so Music Assistant approves the panel automatically without a token. Guest mode disables mutual authentication, so only use it on a trusted local network (see [Security](#security)).
+
+---
 
 ## Protocol (what is implemented, with sources)
+
+> The rest of this page is the developer and protocol reference. The underlying player is also available as our standalone MIT-licensed [`sendspin`](../libs/sendspin/README.md) library (`dev.glassworks.sendspin`), wrapped by the Sendspin pane (`panes/sendspin/src/main/java/dev/glassworks/speaker/`). Logs appear under `adb logcat -s Glassworks.Sendspin`.
+
+Advanced `adb` extras (pass to `adb shell am start -n sh.edm.s1kiosk/.MainActivity` or `dev.glassworks.generic_android/dev.glassworks.MainActivity`):
+
+| Extra | Purpose | Default |
+|---|---|---|
+| `--ez sendspin_enabled <true\|false>` | Enable or disable the Sendspin player | `true` |
+| `--es sendspin_server <host[:port][/path] or ws://…>` | Override server address (`auto` uses discovery) | `auto` |
+| `--ez sendspin_unpaired_access true` | Allow playback without pairing (guest mode) | `false` |
+| `--ez sendspin_flac false` | Offer PCM only instead of FLAC (re-enabling retries FLAC after a fallback) | `true` (FLAC preferred, PCM fallback) |
 
 Glassworks implements the [Sendspin wire protocol](https://github.com/Sendspin/spec) strictly against **`aiosendspin[server]==10.2.1`** (as shipped in Music Assistant 2.10.9), passing with `allow_noncompliant_clients=False` and zero compliance warnings.
 

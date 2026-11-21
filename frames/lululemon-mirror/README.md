@@ -10,8 +10,8 @@
 <h1 align="center">lululemon Studio Mirror</h1>
 
 <p align="center">
-  <b>A 40-inch mirror with Android behind it.</b><br>
-  A full-length mirror with a 40-inch portrait screen behind it. The original version takes a new Android image over fastboot.<br>
+  <b>A 40-inch full-length mirror powered by Home Assistant</b><br>
+  A two-way mirror with a 40-inch portrait screen behind the glass—repurposed into a local Home Assistant panel from your browser with Kiln.<br>
   Originally sold as Mirror, by Mirror.co.
 </p>
 
@@ -46,116 +46,102 @@
   </a>
 </p>
 
-A Glassworks **frame**: the device definition for the lululemon Studio Mirror. Its data is in [`design/frame.json`](design/frame.json) (format: [frames/README.md](../README.md)), and [glassworks.dev/frames/lululemon-mirror](https://www.glassworks.dev/frames/lululemon-mirror) shows it.
+This folder defines the Glassworks **frame** for the lululemon Studio Mirror. Its hardware profile lives in [`design/frame.json`](design/frame.json) (see [frames/README.md](../README.md)) and is published at [glassworks.dev/frames/lululemon-mirror](https://www.glassworks.dev/frames/lululemon-mirror).
 
 ## Credits
 
-This frame stands on other people's work. Glassworks adds its app to the Mirror; making the Mirror
-run Android in the first place was theirs. Thank you.
+This frame stands on the hard work of the mirror-repurposing community. Glassworks brings the panel app and browser installer; making the Mirror run open Android in the first place was their work. Thank you.
 
-- **The Android image: [Glass Panes](https://github.com/git-nimrod/glass-panes), by
-  [git-nimrod](https://github.com/git-nimrod).** The Mirror runs their Android 6.0.1 image, release
-  [`mirror-android-2`](https://github.com/git-nimrod/glass-panes/releases/tag/mirror-android-2)
-  (2026-11-16: image 1 with a fully dark panel in sleep). In
-  their words: "Ready-made system.img and userdata.sparse for the Lululemon Studio mirror (board
-  MIR63A0-00-P1, revision RevP21)."
-  Kiln fetches it from their GitHub release through Refract, our download proxy, which passes it
-  through without storing it. The project's code is MIT;
-  the image's Android and kernel source keep their own licences, and its vendor files belong to
-  Qualcomm and Quectel. Glass Panes credits, in turn: "This build stands on the work of the
-  Lululemon-mirror community. Thank you to Onemoremichael, lrinQVQ, TimStewartJ, repairman29,
-  porcuswine, vgab7 and everyone in the mirror-repurposing community."
-- **Research: [lululemon-mirror-repurpose](https://github.com/repairman29/lululemon-mirror-repurpose),
-  by [repairman29](https://github.com/repairman29)** (Apache-2.0). Which boards run Android 6.0.1,
-  why the later NXP revisions differ, and the limits of the boot chain
-  ([revisions.md](research/revisions.md), [mirror-android.md](research/mirror-android.md)).
-- **Research: [lulu-mirror-software-only](https://github.com/Onemoremichael/lulu-mirror-software-only),
-  by [Onemoremichael](https://github.com/Onemoremichael).** The stock kernel's config, the research
-  on the NXP revisions, and why size and year don't identify a board (same notes).
-- **Research: [mirror](https://github.com/olm3ca/mirror), by [olm3ca](https://github.com/olm3ca).**
-  The move from 40-inch to 43-inch panels ([revisions.md](research/revisions.md)).
-- **Teardown: [Smart Mirror Teardown](https://mdthats.me/projects/lululemon-smart-mirror-p1/), by
-  [MDME](https://mdthats.me/).** The chips inside: the SoC, Wi-Fi and Bluetooth, audio and camera
-  ([mirror-android.md](research/mirror-android.md)).
+- **Android image: [Glass Panes](https://github.com/git-nimrod/glass-panes), by [git-nimrod](https://github.com/git-nimrod).** The Mirror runs their Android 6.0.1 image (`mirror-android-2`, which keeps the display completely dark while asleep). In their words: *"Ready-made system.img and userdata.sparse for the Lululemon Studio mirror (board MIR63A0-00-P1, revision RevP21)."* Kiln fetches the image from their GitHub release through a pass-through proxy without storing it. The project code is MIT; the Android and kernel sources keep their own licenses, and vendor files belong to Qualcomm and Quectel. Glass Panes credits, in turn: *"This build stands on the work of the Lululemon-mirror community. Thank you to Onemoremichael, lrinQVQ, TimStewartJ, repairman29, porcuswine, vgab7 and everyone in the mirror-repurposing community."*
+- **Hardware research: [lululemon-mirror-repurpose](https://github.com/repairman29/lululemon-mirror-repurpose), by [repairman29](https://github.com/repairman29)** (Apache-2.0) — identifying Qualcomm Android 6.0.1 boards, how later NXP revisions differ, and boot-chain limits ([revisions.md](research/revisions.md), [mirror-android.md](research/mirror-android.md)).
+- **Hardware research: [lulu-mirror-software-only](https://github.com/Onemoremichael/lulu-mirror-software-only), by [Onemoremichael](https://github.com/Onemoremichael)** — stock kernel configuration, NXP board notes, and why screen size or purchase year do not identify the internal board.
+- **Hardware research: [mirror](https://github.com/olm3ca/mirror), by [olm3ca](https://github.com/olm3ca)** — documenting the transition from 40-inch to 43-inch panels ([revisions.md](research/revisions.md)).
+- **Teardown: [Smart Mirror Teardown](https://mdthats.me/projects/lululemon-smart-mirror-p1/), by [MDME](https://mdthats.me/)** — identifying the internal SoC, Wi-Fi/Bluetooth chip, audio hardware, and camera ([mirror-android.md](research/mirror-android.md)).
 
-The same list is in [`design/frame.json`](design/frame.json) (`credits`), which glassworks.dev and
-Kiln show ([how](../README.md#credits)).
+These same credits are stored in [`design/frame.json`](design/frame.json) and displayed on glassworks.dev and inside Kiln.
 
 ## Status
 
-**Status: beta.** Kiln installs it for everyone at `kiln.glassworks.dev/lululemon-mirror` (2026-11-20). Some of Kiln's forgiveness is still missing on it: its marked contract failures, #621. The target is the Qualcomm (MSM8916) board with stock software 1.x. Later revisions use an NXP i.MX8 board, where only hardware-assisted (JTAG) access has been reported; they are not a target. Screen size doesn't tell them apart ([revisions.md](research/revisions.md)).
+**Status: beta.** You can install Glassworks on a supported Mirror directly from Chrome or Edge at [kiln.glassworks.dev/lululemon-mirror](https://kiln.glassworks.dev/lululemon-mirror).
 
-The original version runs Android 6.0.1, and the S1 app needs Android 8.0 or newer (`minSdk` 26), so today's app doesn't install on it. Kiln's Mirror recipe installs the legacy build of Glassworks for generic Android (`dev.glassworks.generic_android.legacy`, #198) instead, which asks for Android 6.0 (API 23). It has run on a Mirror: it starts with no crashes and stands upright (2026-11-17, #443), and the dashboard loads after a sign-in from a phone (2026-11-17, #459). It runs a frozen engine and opens only your Home Assistant ([legacy-engine.md](../../docs/research/legacy-engine.md)). Why a newer Android is hard on this board: [mirror-android.md](research/mirror-android.md).
-
-The Clarity badge shows its Clarity grade ([docs/perf.md](../../docs/perf.md)) once one is published; none is yet.
+- **Supported hardware:** Original Qualcomm (MSM8916) Mirror units running stock software 1.x. Later revisions switched to an NXP i.MX8 board where only JTAG hardware access has been reported; those revisions are not supported. Note that screen size alone does not identify which board is inside ([see board revisions](research/revisions.md)).
+- **Android 6 legacy build:** Because the original Mirror runs Android 6.0.1, Kiln installs the dedicated legacy build of [Glassworks for Generic Android](../generic-android/README.md#the-legacy-build-android-6-and-7). It runs a frozen browser engine locked strictly to your Home Assistant address, starts upright in portrait mode, and guides you through Wi-Fi and Home Assistant sign-in from your phone or computer since the Mirror has no touchscreen.
+- **Performance grade:** A [Clarity performance grade](../../docs/clarity.md) will appear on the device page once benchmark runs are published.
 
 ## Hardware
 
-| | |
+| Component | Details |
 |---|---|
-| Size | About 1336 × 536 × 43 mm (40-inch version, from reviews) |
-| SoC | Qualcomm MSM8916 |
-| Android | 6.0.1 (stock software 1.x) |
-| Screen | 40-inch 1080p, portrait, behind a two-way mirror |
-| Presence | 5 MP front camera |
-| Audio | Microphone and stereo speakers |
-| Mount | Leans on the wall on its stand, or mounts flat on the wall |
+| Dimensions | About 1336 × 536 × 43 mm (40-inch model) |
+| Processor | Qualcomm MSM8916 |
+| Android | 6.0.1 (original stock software 1.x) |
+| Display | 40-inch 1080p portrait screen behind two-way mirror glass (no touchscreen) |
+| Camera & presence | 5 MP front camera (used for motion presence) |
+| Audio | Built-in microphone and stereo speakers |
+| Mounting | Floor stand leaning against the wall, or flat wall mount |
 
 ## Install
 
-**Beta**, in Kiln ([its recipe](installer)): `kiln.glassworks.dev/lululemon-mirror` installs Glassworks from its newest `generic-android-legacy-v*` release (the arm64-v8a APK, checked against the release's `.sha256`), and `?apk=local` from an APK file on the computer. The fastboot path has run end to end on a real Mirror from the command line, with `tools/mirror/flash-node.ts`, which runs the same steps without a browser ([image-patch.md](research/image-patch.md#the-first-real-flash-2026-11-16-verified-by-the-root)). In that run the home-screen step failed: its test APK had no home screen. The legacy build has been the home screen since (2026-11-17, #443). It hasn't run from Kiln's page yet.
+Open **[kiln.glassworks.dev/lululemon-mirror](https://kiln.glassworks.dev/lululemon-mirror)** in Chrome or Edge on a computer connected to the Mirror with a micro-USB data cable.
 
-**Over fastboot, from lululemon's software or the community image (#40):**
+> [!IMPORTANT]
+> **Installing permanently replaces lululemon's stock software.** The Mirror's bootloader cannot read existing partitions back, so Kiln cannot back up or restore lululemon's original firmware. Kiln asks you to confirm before writing anything. If you ever want to switch away from Glassworks later, Kiln offers a one-click path to install the plain **Glass Panes** Android image instead.
 
-1. Kiln downloads `system.img`, the [Glass Panes](https://github.com/git-nimrod/glass-panes) community image by [git-nimrod](https://github.com/git-nimrod), from its release through Refract, Kiln's download proxy (a Cloudflare Worker that stores nothing, #347), resuming if the connection drops, and checks its SHA-256 as it arrives. If the proxy can't serve it, Kiln says it's a bug in Kiln and offers *Try again* and *Report this*; you never download a file by hand (#579).
-2. Kiln adds the legacy build of Glassworks (as a privileged app in `/system/priv-app/Glassworks`), and the Glassworks boot animation to the image, in your browser, and lets only your browser's adb key in without asking, in place of the Glass Panes project key, which is published with its private half. It leaves out 36 of the image's apps a Mirror never uses (phone and SMS front ends, Qualcomm diagnostics, demos and test tools), which otherwise restart over and over and take RAM the dashboard needs ([the list](installer/src/unused.ts)). It also makes a fresh userdata. Nothing is uploaded. What changes, and why: [image-patch.md](research/image-patch.md).
-3. On a Mirror that already runs Glassworks, Kiln first keeps its Home Assistant device: you switch the Mirror on with the back off and USB in, click Connect, and Kiln reads the key Home Assistant set from the running app over adb, keeps it in the browser tab only, and restarts the Mirror into fastboot itself, with no buttons to hold. At the first start it gives the key back, so Home Assistant reconnects with no click. The first flash that gives the Mirror its id from its serial still shows up as a new device once ([esphome.md](../../docs/esphome.md#identity-across-reinstalls)). Only the browser that last installed Glassworks on the Mirror gets in. Kiln opens this step by itself in that browser; elsewhere it is a link under the fastboot steps. When Kiln can't read the key, the reflash still works and Home Assistant asks once. Not yet run on a real Mirror (#580).
-4. A Mirror that runs Glassworks from this browser goes into fastboot with no button to hold: Kiln restarts it over USB (`reboot bootloader` over adb, with this browser's key; for a Glassworks install, step 3 does it after reading the key). A Mirror on the Glass Panes image will restart the same way with the Glass Panes project key once #620 lands. Fastboot by hand is the fallback whenever Kiln can't restart a Mirror over adb: one still on lululemon's software, or one on Glassworks that doesn't let this browser's key in (installed from another browser). It is under "Fastboot by hand" on Kiln's card, which plays how ([`design/recovery.json`](design/recovery.json)): switch it off with the rocker switch in its bottom edge, unplug its power cord and lay it face down. Take out the 4 screws in the bottom edge that hold the stand, take the stand off, then take out the 14 screws in the back (2 of them either side of the recess by the feet) and lift the back off. Plug the power cord back into its socket in the recess, with the switch still off, and plug the micro-USB port, in the top end's corner, into the computer. On the small green board at the top end, hold **VOL−** (SW3), the one of its two buttons nearer the top end's edge, and keep holding while you switch the Mirror on, for about 5 seconds more. Only VOL−: both buttons together start Qualcomm's download mode (EDL), which Kiln can't use, and VOL+ opens lululemon's update screen. Some units have a service hatch in the back that reaches the board instead. Kiln then checks the partition sizes the image is made for, and stops if they differ.
-5. Kiln writes system and userdata, restarts the Mirror, and finishes over adb: the screen upright in portrait, Glassworks as the only home screen. Then Kiln's Set up, as on every frame: the Wi-Fi (over Improv), then Home Assistant.
+### How the browser install works
 
-**That erases lululemon's software for good.** The Mirror's bootloader can't read anything back, so there is no backup, and no way to restore lululemon's software. Kiln says so and waits for your confirmation before it writes. The way back from Glassworks is the plain Glass Panes image: Glassworks' Done has *Install Glass Panes instead*, and Kiln's page offers it as a community image (#579). Kiln downloads both of its files, `system.img` and `userdata.sparse`, checks them, and writes them as published. It brings back the apps Kiln left out too. Optionally, Kiln saves your Wi-Fi network in Glass Panes' userdata before it writes, and after the first start switches Wi-Fi on with Glass Panes' own published adb key (`svc wifi enable`, nothing else), so the Mirror joins by itself with no scrcpy step. That's only the network's key, never the password ([first-boot.md](research/first-boot.md#a-community-images-wi-fi-glass-panes-2026-11-19)). Not yet run on a Mirror.
+1. **Download and verify:** Kiln downloads the [Glass Panes](https://github.com/git-nimrod/glass-panes) community system image and the latest Glassworks legacy APK, resuming automatically if your connection drops and verifying every SHA-256 checksum before proceeding.
+2. **Prepare the image locally:** Inside your browser—without uploading anything—Kiln bundles Glassworks as a privileged system app, adds the Glassworks boot animation, removes 36 unused phone/carrier apps that would otherwise waste RAM, and pairs USB debugging strictly with your browser's own key.
+3. **Enter fastboot mode:**
+   - **Already running Glassworks from this browser?** Kiln can back up your Home Assistant encryption key over USB and reboot the Mirror into fastboot automatically with no buttons to hold, so Home Assistant reconnects seamlessly after reflashing.
+   - **First install from stock software (or reflashing from another browser):** Flashing from a different browser does not back up your existing Home Assistant encryption key, and step 4 writes a fresh `userdata` partition that erases it. To keep your existing Home Assistant pairing, reflash from the same browser you originally used; otherwise you can simply reconnect Home Assistant after first boot. Kiln plays an animated hardware guide ([`design/recovery.json`](design/recovery.json)): power off the Mirror with the bottom rocker switch, unplug power, lay it face down, remove the 4 stand screws and 14 back-panel screws (or open the rear service hatch if your unit has one), reconnect power with the switch still off, plug micro-USB into your computer, then hold **VOL− (SW3)** (the button nearer the top edge of the small green board) while switching the Mirror on for about 5 seconds. *(Do not hold both buttons—that enters Qualcomm EDL mode—and VOL+ opens lululemon's updater.)*
+4. **Flash and finish setup:** Kiln checks that your partition layout matches, flashes the system and userdata partitions, reboots into portrait mode with Glassworks as the home screen, and walks you through Wi-Fi and Home Assistant setup right in your browser (or from your phone via QR code).
 
-The boot logo before Android starts stays lululemon's: it lives in the signed bootloader, which nothing here can change.
+The initial boot logo before Android starts remains lululemon's logo, since it lives inside the locked signed bootloader.
 
-**Over adb, onto a Mirror that already runs the community image (`&mode=app`):** Kiln installs the legacy build of Glassworks from an APK file on your computer. Nothing asks for a tap on the Mirror, which has no touchscreen (Mirror run, 2026-11-19). As the fastboot path's first start does, Kiln turns the screen upright, then makes Glassworks the only home screen: it hides the image's launcher and the home app Glassworks replaces (`pm hide`), records which on the Mirror, and checks what HOME opens ([home-app.md](research/home-app.md)). Then Kiln's Set up, as after the fastboot path: the Wi-Fi, then Home Assistant. Undo removes the app and unhides the home app the Mirror had, then checks HOME again. Untested on a real Mirror, undo included.
+### Returning to plain Glass Panes
+
+At the end of setup—or anytime from Kiln's community image option—choose **Install Glass Panes instead** to flash the unmodified Glass Panes `system.img` and `userdata.sparse` images with all original image apps restored. Kiln can optionally pre-save your Wi-Fi network so the Mirror comes online without needing `scrcpy`.
+
+### Installing over adb on an existing Glass Panes Mirror
+
+If your Mirror already runs the Glass Panes image and you only want to install the Glassworks app without reflashing, open `kiln.glassworks.dev/lululemon-mirror?mode=app`. Kiln installs the legacy APK, locks portrait rotation, sets Glassworks as the home screen without requiring any screen taps, and launches network setup. Using **Undo** removes Glassworks and restores your previous launcher.
 
 ## Panes
 
-| Pane | Support | Note |
+| Pane | Support | Notes |
 |---|---|---|
-| Assist | Alpha | It has a microphone. In the legacy build. |
-| Timers | Alpha | Needs Assist. |
-| Sendspin | Alpha | It has stereo speakers. In the legacy build. |
-| Zigbee and Thread radio | No | No Zigbee or Thread radio. |
-| Time zone | No | Worked out: only on the S1 (`aqara-s1-plus`). |
-| Diagnostics | Alpha | In the legacy build, with no CPU temperature. Not yet run on a Mirror. |
-| Bluetooth proxy | Alpha | It has Bluetooth LE (its WCN3660B, read from a teardown). In the legacy build. It scans only once the location permission is granted, which Kiln doesn't do yet. Not yet run on a Mirror. |
-| Notifications | Alpha | In the legacy build. No touch, so an urgent one with no tag or timeout closes after 2 minutes. Not yet run on a Mirror. |
-| Camera | Alpha | It has a camera (5 MP, front). In the legacy build: presence wakes the screen when someone walks up, and no image leaves the Mirror in Presence only. Off until turned on (`camera_pane` in Home Assistant); Kiln grants the camera. Not yet run on a Mirror. |
-| Wall base | No | S1 only. |
-
-"Worked out" means `frame.json` doesn't rate the pane; its support comes from what the pane needs and what the frame has ([how](../README.md#the-panes-a-frame-runs)).
+| **Assist** | Alpha | Uses the built-in microphone for local wake word detection. |
+| **Timers** | Alpha | On-screen voice timers paired with Assist. |
+| **Sendspin** | Alpha | Synced Music Assistant playback over the Mirror's stereo speakers. |
+| **Notifications** | Alpha | Because the Mirror has no touchscreen, high/critical alerts without a tag or timeout dismiss automatically after 2 minutes. |
+| **Camera** | Alpha | Uses the 5 MP front camera for local motion presence (no images leave the Mirror in *Presence only* mode). Starts off until enabled in Home Assistant. |
+| **Bluetooth proxy** | Alpha | Uses the built-in Bluetooth LE radio once location permission is granted. |
+| **Diagnostics** | Alpha | Reports uptime and memory (no CPU temperature sensor on this board). |
+| **Zigbee and Thread radio** | No | No 802.15.4 radio hardware. |
+| **Time zone** | No | Aqara S1 Plus only. |
+| **Wall base** | No | Aqara S1 Plus only. |
 
 ## Research notes
 
-What we found on this device, and how ([all notes](../../docs/research/README.md#the-research-notes)):
+Deep engineering notes from bringing up the Mirror (see [all research notes](../../docs/research/README.md#the-research-notes)):
 
-- [mirror-android.md](research/mirror-android.md): Can the lululemon Mirror run Android 8+ for the current GeckoView? The signed boot image blocks it; the kexec idea, the paths, blobs and read-only probes (desk research, #39)
-- [revisions.md](research/revisions.md): Which Mirror revisions are a target: the later NXP i.MX8 revisions, and why screen size doesn't identify it (read, no hardware)
-- [mirror-abis.md](research/mirror-abis.md): Which ABIs the Mirror's userspace runs: 64-bit in the community image, stock untested (#98)
-- [home-app.md](research/home-app.md): How adb without root makes the app the home screen on Android 6: no `cmd`; first Android's chooser and an Always tap (read-only, 2026-11-15), since 2026-11-19 `pm hide` on the other home apps, as the first start does
-- [image-patch.md](research/image-patch.md): What Kiln changes in the community system image and what a fresh userdata needs for Kiln's own adb key; flashed on a real Mirror once (2026-11-16): boots, takes the adb key; the boot animation rendered sideways (hwrotation doesn't turn it) and the test APK has no home screen (#40)
-- [first-boot.md](research/first-boot.md): A first boot with nothing to tap: Wi-Fi on with the network saved, no screen timeout, no lock screen, no auto-rotate; read from AOSP 6.0.1 and the image, verified on the unit 2026-11-16 (#29)
-- [community-image-terms.md](research/community-image-terms.md): May Kiln download and modify the community system image? No licence for its vendor binaries, no CORS; open (#40)
-- [mirror-root.md](research/mirror-root.md): Can we root the Mirror dev unit cheaply and safely? The AOSP `su` route is a dead end; a platform test-key app gives uid system with no flash; three `system`-only leads stay open. Nothing flashed (#40)
-- [privileged-app.md](research/privileged-app.md): Does an app in `/system/priv-app` get Android 6's privileged permissions (silent updates, reboot, secure settings) and keep them after it updates? Yes: read from AOSP 6.0.1 and verified on the unit with the probe app (2026-11-16). Whether it can approve a computer's adb key: yes, for one connection at a time, verified on the unit (2026-11-16), and again on each connection with a shell loop (2026-11-17, #435). The app's own approval is untested on the unit (#29, #435)
-- [adbd-keys.md](research/adbd-keys.md): Why doesn't adbd accept a key from `/data/misc/adb/adb_keys`? The stock lululemon boot's adbd most likely doesn't verify against that file. The AOSP key-loading timing is ruled out and SELinux is ruled out by the policy; a malformed key file is narrowed, not ruled out. So the `services.jar` rewrite (#426) is the only lever Kiln has without the boot partition, which it never writes (read/inferred, 2026-11-16, #29)
-- [mirror-memory.md](research/mirror-memory.md): Why Glassworks "crashes" on the Mirror: the lowmemorykiller at memory status critical, not a crash; the memory budget, why GeckoView 144's GPU process dies when the app leaves the front, and what the app and the image cut (2026-11-18)
-- [option-c.md](research/option-c.md): Our own system image with vendor files taken off the person's Mirror (option C): which files (about 140 without the camera), which adb's shell can read (all but 13 daemons), the AOSP 6 build and its CI cost, how Kiln would assemble it, and the plan (read, off-device, 2026-11-18, #334)
-- [community-root-and-network-adb.md](research/community-root-and-network-adb.md): Two community projects read for #573. `shihanqu`'s kernel-module root (the §4 `.ko`, built: full permissive root via the free `adsprpc.ko` slot — borrow the method, don't ship the GPL module) and `jstriblet`'s network adb on a stock Mirror (a key + TCP port in a fresh userdata — a stock-adb data point, skip adopting). Bearing on #334/#435/#486/#574/#577 and hard rules 1/4/5 (read, off-device, 2026-11-18, #573)
+- [mirror-android.md](research/mirror-android.md) — Why the signed bootloader keeps the Mirror on Android 6.0.1
+- [revisions.md](research/revisions.md) — Qualcomm MSM8916 vs. NXP i.MX8 board revisions
+- [mirror-abis.md](research/mirror-abis.md) — 64-bit userspace ABI verification
+- [home-app.md](research/home-app.md) — Setting the home screen on Android 6 without touch input
+- [image-patch.md](research/image-patch.md) — System image patching and userdata creation in Kiln
+- [first-boot.md](research/first-boot.md) — Zero-touch first boot (Wi-Fi, portrait rotation, no lock screen)
+- [community-image-terms.md](research/community-image-terms.md) — Licensing and distribution notes for the community image
+- [mirror-root.md](research/mirror-root.md) — Root exploration and system-uid analysis
+- [privileged-app.md](research/privileged-app.md) — Privileged system-app permissions and silent updates on Android 6
+- [adbd-keys.md](research/adbd-keys.md) — Why stock `adbd` rejects custom keys and how `services.jar` patching works
+- [mirror-memory.md](research/mirror-memory.md) — Android 6 low-memory-killer tuning and GeckoView GPU memory budget
+- [option-c.md](research/option-c.md) — Notes on building a clean AOSP 6 image from on-device vendor files
+- [community-root-and-network-adb.md](research/community-root-and-network-adb.md) — Review of community root and network-adb methods
 
 ## Files
 
-- [`design/frame.json`](design/frame.json): the catalog data and the 3D model, and the boot branding's target
-- [`design/recovery.json`](design/recovery.json): the way into fastboot, as data for Kiln's animation ([fields](../../docs/design/kiln/README.md#the-recovery-section)). The screw order and the button come from the maintainer (2026-11-18, #521), and the buttons' names and the modes from the [Glass Panes guide](https://github.com/git-nimrod/glass-panes/blob/main/docs/mirror-app/install-android-lululemon-studio.md). The maintainer's review of the drawing (2026-11-18, #561) added the rest: the side screws hold a stand, one bar along the bottom edge; the back is one piece; the two buttons sit side by side; the micro-USB port is in the top end's corner; and the order is USB, then VOL−, then the rocker power switch in the bottom edge. They also gave the switch's place (the middle of the bottom edge) and photos of the stand, the back by the feet and the board: the stand is the U of tube the 3D model in `frame.json` draws, closed by a top bar of the same tube along the bottom edge, which its 4 screws go through; the back has two speaker grilles and, by the feet, a recess for the power cord that belongs to the body and stays when the back lifts, with a screw either side of it; the power cord goes back in once the back is off; and the two buttons sit about 5 mm apart. The micro-USB in the corner is an extension of the board's own. Positions are drawn from these, not measured.
-- [`research/`](research/): the notes above
+- [`design/frame.json`](design/frame.json) — Catalog profile, 3D model, and boot branding target
+- [`design/recovery.json`](design/recovery.json) — Animated fastboot recovery instructions for Kiln
+- [`installer/`](installer/) — Kiln WebUSB fastboot and app-mode recipes
+- [`research/`](research/) — Engineering notes listed above

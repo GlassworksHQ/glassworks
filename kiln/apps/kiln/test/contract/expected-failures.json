@@ -1,6 +1,3 @@
 {
-  "$comment": "Contract cases a flow fails on main, by driver id and case id, each with the issue that fixes it. contract.test.ts runs these as it.fails: fix one and its test turns red until the line here goes. gate.test.ts refuses a public frame with any line here. This file only shrinks (#621).",
-  "generic-android": {
-    "auth-refused-while-booting": "#621: AndroidSession.connect stops at the first refusal"
-  }
+  "$comment": "Contract cases a flow fails on main, by driver id and case id, each with the issue that fixes it. contract.test.ts runs these as it.fails: fix one and its test turns red until the line here goes. gate.test.ts refuses a public frame with any line here. This file only shrinks (#621)."
 }

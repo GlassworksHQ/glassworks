@@ -108,7 +108,7 @@ Kiln installs Glassworks straight from Chrome or Edge over WebUSB, backing up or
 
 ## Contributing
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) and [Glassworks Principles](docs/principles.md) before proposing a feature. Share questions, ideas, and new device bring-up threads in [Discussions](https://github.com/GlassworksHQ/glassworks/discussions), and file bugs or hardware reports as GitHub issues. Report security vulnerabilities privately following [SECURITY.md](SECURITY.md). For other private inquiries, email [hi@glassworks.dev](mailto:hi@glassworks.dev). Everyone participating in this project follows the [code of conduct](CODE_OF_CONDUCT.md).
+Read [CONTRIBUTING.md](CONTRIBUTING.md) and [Glassworks Principles](docs/principles.md) before proposing a feature. Chat with the community on [Discord](https://discord.gg/BTn9NstFM), share questions, ideas, and new device bring-up threads in [Discussions](https://github.com/GlassworksHQ/glassworks/discussions), and file bugs or hardware reports as GitHub issues. Report security vulnerabilities privately following [SECURITY.md](SECURITY.md). For other private inquiries, email [hi@glassworks.dev](mailto:hi@glassworks.dev). Everyone participating in this project follows the [code of conduct](CODE_OF_CONDUCT.md).
 
 ## Repository layout
 
