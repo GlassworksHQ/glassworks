@@ -6,6 +6,7 @@
 //
 // Every brand's steps come from a page named in `sources`, read on 2026-11-16. Brands whose own page
 // couldn't be read get Android's general steps, never steps made up for them.
+import type { OwnFrame } from '@glassworks/kiln-core';
 
 export interface Source { title: string; href: string }
 
@@ -175,7 +176,7 @@ export function identifyPicked(id?: BrandId): Identified {
  * A device with a frame of its own, which Kiln installs from that frame's page: the generic app would take its
  * app's place as the home screen. Matched by `ro.hardware`, the check its own app uses to know its frame.
  */
-export interface OwnFrame { frame: string; name: string; route: string; hardware: string }
+export type { OwnFrame } from '@glassworks/kiln-core';
 
 export const OWN_FRAMES: OwnFrame[] = [
   // AqaraS1Plus.HARDWARE (frames/aqara-s1-plus/android, read 2026-11-14). Its maker and model are Allwinner's SDK

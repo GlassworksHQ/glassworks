@@ -22,3 +22,8 @@ export {
   type AppOverAdb, type AppVersion, type DeviceCheck, type DeviceEntry, type DeviceFrame, type KilnEntry, type DevicePhase, type DeviceReport, type DeviceSim, type DeviceWord,
   type FastbootLike, type FastbootReport, type FirstStart, type HomeCheck, type ImageMaker, type ImageOverFastboot, type Installed, type PrepareStep, type Removed,
 } from './device';
+export {
+  OwnFrameRefused, Refused,
+  type OwnFrame, type UsbApp, type UsbDebugSteps, type UsbDeviceFacts, type UsbFrame, type UsbGrant, type UsbIdentified, type UsbInstallOptions, type UsbInstalled,
+  type UsbPhase, type UsbPlace, type UsbPlan, type UsbSilentUpdates,
+} from './usb';

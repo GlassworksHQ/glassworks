@@ -12,7 +12,12 @@ vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string
 import { ANDROID_BASE, AndroidActivity, keptAndroid } from '../src/android/activity';
 import { AndroidWizard, Screens } from '../src/android/AndroidWizard';
 import { ANDROID_DEMOS, androidDemo, type AndroidDemo } from '../src/android/demo';
-import { AndroidSession, androidMode } from '../src/android/session';
+import { UsbSession, usbMode, usbOpen, type UsbDeps } from '../src/device/usbSession';
+import { kilnFrame as android } from '@glassworks/generic-android-installer/kiln';
+
+/** /android's session, on generic Android's frame. */
+const AndroidSession = class extends UsbSession { constructor(d: Omit<UsbDeps, 'frame'>, on: boolean) { super({ frame: android, ...d }, on); } };
+const androidMode = (s: string, demosOn: boolean, demos: readonly string[], open = usbOpen(android)) => usbMode(s, demosOn, demos, open);
 import { SCREEN_LOCK_HELP, SCREEN_LOCK_LINE } from '../src/android/ScreenLockBlock';
 import { registry } from '../src/wizard/registry';
 
@@ -247,6 +252,24 @@ describe('the session', () => {
     await s.find();
     s.toSteps();
     expect(s.state.screen).toBe('named');
+  });
+
+  it('a tablet that refuses the key is asked again with no list and no click; a closed list is not (adbAsk)', async () => {
+    let refusals = 2;
+    const tablet = new FakeAndroid();
+    const reopen = vi.fn(async () => { if (refusals-- > 0) throw new Error('No authenticator can handle the request'); return tablet; });
+    const asked = new AndroidSession({ ...deps(), connect: vi.fn(async () => { refusals--; throw new Error('No authenticator can handle the request'); }), reopen, picked: () => true, sleep: async () => {} }, true);
+    await asked.pickApk('a.apk', fakeGenericApk());
+    await asked.find();
+    asked.toSteps();
+    await asked.connect();
+    expect(reopen).toHaveBeenCalledTimes(2);
+    expect(asked.state.log.filter((l) => /didn't let this browser in yet/.test(l))).toHaveLength(2);
+    expect(asked.state.connectError).toBeUndefined();
+    const closed = new AndroidSession({ ...deps(), connect: vi.fn(() => Promise.reject(new DOMException('No device selected.', 'NotFoundError'))), reopen, picked: () => false }, true);
+    await closed.connect();
+    expect(reopen).toHaveBeenCalledTimes(2);
+    expect(closed.state.connectError).toBe('Nothing was picked. Pick the tablet in the browser\'s list, then tap Allow on it.');
   });
 
   it('a closed list is said plainly, and changes nothing', async () => {

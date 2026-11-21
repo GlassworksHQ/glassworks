@@ -17,7 +17,8 @@ import { Steps, apkInfo, apkPermissions, dropAdmin, kioskVersion, startApp, type
 import { parsePreferredHome } from '@glassworks/lululemon-mirror-installer';
 import { SETUP_SOCKET, SetupChannel, type SetupState } from '@glassworks/setup-channel';
 import { APPS, MIN_API, androidName, appFor, type GenericApp } from './app';
-import { identifyAdb, ownFrame, type Identified, type OwnFrame } from './devices';
+import { OwnFrameRefused, Refused } from '@glassworks/kiln-core';
+import { identifyAdb, ownFrame, type Identified } from './devices';
 
 /** What adb reads off the device before anything changes. */
 export interface DeviceFacts {
@@ -34,17 +35,8 @@ export interface DeviceFacts {
 
 export interface AppVersion { name?: string; code: number }
 
-/** Refused before anything changed on the device. */
-export class Refused extends Error {
-  constructor(why: string) { super(`${why} Nothing was changed.`); }
-}
-
-/** Refused because the device has a frame of its own, which installs from its own page in Kiln. */
-export class OwnFrameRefused extends Refused {
-  constructor(readonly own: OwnFrame) {
-    super(`This is an ${own.name}, which has its own install in Kiln (${own.route}). Glassworks for Android would take its app's place as the home screen.`);
-  }
-}
+/** Refused before anything changed on the device; OwnFrameRefused, for a device with a frame of its own (kiln-core's). */
+export { OwnFrameRefused, Refused };
 
 /** What install will do, worked out read-only. */
 export interface Plan {

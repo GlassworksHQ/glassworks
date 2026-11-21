@@ -1,13 +1,13 @@
-// /android's flow for the contract, through AndroidSession's existing exports (the file is open in #617; phase 2
-// of #621 moves it onto the shared engine): any Android tablet over adb, Glassworks installed and granted. The
-// tablet has a touchscreen and the flow declares its one tap (Allow USB debugging), so the person makes it.
+// /android's flow for the contract, on the engine's USB-debugging flow (UsbSession) with generic Android's frame: any
+// Android tablet over adb, Glassworks installed and granted. The tablet has a touchscreen and the flow declares its one tap (Allow USB debugging), so the person makes it.
 // The install hands the tablet to the standard flow (as the page does), driven as the S1's set-up is: the App step,
 // then done once the app answers its Wi-Fi step. A reload is a new session over the same tablet, as a page load makes one.
 import type { PanelShell } from '@glassworks/adb';
 import { FakeAndroid, fakeGenericApk } from '@glassworks/generic-android-installer/fakes';
 import { GENERIC } from '@glassworks/generic-android-installer';
 import { androidStandard } from '../../src/android/AndroidWizard';
-import { AndroidSession, type AndroidDeps, type Device } from '../../src/android/session';
+import { UsbSession, type Device, type UsbDeps } from '../../src/device/usbSession';
+import { kilnFrame as genericFrame } from '@glassworks/generic-android-installer/kiln';
 import type { DeviceProgress, ProgressMark } from '../../src/device/imageSession';
 import { StandardSession } from '../../src/standard/session';
 import { withAppStreams } from '../../src/wizard/demo';
@@ -71,21 +71,30 @@ function world(k: Knobs): World {
     return d;
   };
 
-  const deps: AndroidDeps = {
+  /** adb with this browser's key: refused the first `refuseAuth` times, then Allow, the tap this flow declares */
+  const allowed = async (): Promise<Device> => {
+    if (fired.refused < (k.refuseAuth ?? 0)) { fired.refused++; throw new Error(REFUSED); }
+    // Allow on the tablet's screen: without that tap, adb never lets the browser in
+    if (!tapped('allow-usb-debugging')) return never<Device>();
+    return link();
+  };
+  let picked = false;
+  const deps: UsbDeps = {
+    frame: genericFrame,
     async findUsb() {
       const r = reloadAt<never>('find');
       if (r) return r;
       return { vendorId: 0x18d1, productName: 'Tablet' };
     },
-    // the browser's list, then Allow on the tablet: the tap this flow declares
+    // as the page wires them (webUsbAdb): the browser's list once, then the picked tablet again with no list
     async connect() {
       const r = reloadAt<Device>('connect');
       if (r) return r;
-      if (fired.refused < (k.refuseAuth ?? 0)) { fired.refused++; throw new Error(REFUSED); }
-      // Allow on the tablet's screen: without that tap, adb never lets the browser in
-      if (!tapped('allow-usb-debugging')) return never<Device>();
-      return link();
+      picked = true;
+      return allowed();
     },
+    reopen: allowed,
+    picked: () => picked,
     sleep: fastSleep,
     homeTimeoutMs: 300,
     setupTries: 1,
@@ -96,7 +105,7 @@ function world(k: Knobs): World {
 
   function load(): Page {
     let standard: StandardSession | undefined;
-    const s = new AndroidSession({
+    const s = new UsbSession({
       ...deps, progress,
       handOver: (d, installed) => {
         // Glassworks answers set-up over its setup channel and Improv once it is on, on Wi-Fi already
@@ -144,7 +153,7 @@ function world(k: Knobs): World {
         if (standard) { const ss = standard; await ss.click('resume', () => ss.route('resume')); return; }
         void s.connect(); await tick();
       },
-      // the page knows from the tab's mark (AndroidDeps `progress`) that an earlier load wrote
+      // the page knows from the tab's mark (UsbDeps `progress`) that an earlier load wrote
       remembers: () => !!s.state.changed,
       snapshot: () => JSON.stringify({ ...s.state, log: s.state.log.length, standard: standard && { ...standard.store.state, log: [] } }),
       close: () => s.close(),
