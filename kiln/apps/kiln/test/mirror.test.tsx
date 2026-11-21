@@ -139,6 +139,17 @@ describe('the test install', () => {
     expect(connect).toHaveBeenCalledTimes(1);
   });
 
+  it('the first try has the frame\'s deadline too, and the Mirror is asked again after it (#621)', async () => {
+    const connect = vi.fn(async (_o?: { authMs?: number }) => { throw new Error('the device didn\'t let this browser\'s adb key in'); });
+    const reopen = vi.fn(async () => withApp());
+    const withApp = () => new FakeMirror({ kiosk: 'none' });
+    const s = new AppSession({ frame: mirrorFrame, connect, reopen, picked: () => true, sleep: async () => {} }, true);
+    await s.connect();
+    expect(connect).toHaveBeenCalledWith(expect.objectContaining({ authMs: mirrorFrame.timings.authMs }));
+    expect(reopen).toHaveBeenCalledTimes(1);
+    expect(s.state).toMatchObject({ screen: 'checks', connecting: false });
+  });
+
   it('the key loads with the page, so the click goes straight to the device list', async () => {
     const connect = vi.fn(() => new Promise<never>(() => {}));
     const go = keyedConnect(async () => ({}) as never, connect);

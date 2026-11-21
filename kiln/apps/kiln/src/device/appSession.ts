@@ -50,9 +50,10 @@ export interface AppDeps {
   frame: DeviceFrame;
   /**
    * Opens the browser's device list and authenticates. Called inside the click, before any await:
-   * WebUSB only shows its list during the click's user activation.
+   * WebUSB only shows its list during the click's user activation. With `authMs`, it gives up when the device hasn't
+   * let this browser's key in by then.
    */
-  connect(): Promise<PanelShell>;
+  connect(o?: { authMs?: number }): Promise<PanelShell>;
   /**
    * The device `connect` picked, again with no list, after it refused this browser's key (still starting, or Allow not
    * tapped yet): Kiln asks again every 5 s (adbAsk.ts). Without it, a refusal ends the connect.
@@ -195,8 +196,9 @@ export class AppSession {
     if (this.state.connecting) return;
     const { reopen, picked } = this.d;
     // inside the click: the device list opens first. A refusal is asked again, with no list and no click (adbAsk.ts)
-    const asking = askAdb({ request: () => this.d.connect(), ...(reopen ? { reopen: (o) => reopen.call(this.d, o) } : {}), ...(picked ? { picked: () => picked.call(this.d) } : {}) }, {
-      authMs: this.d.frame.timings.authMs, sleep: this.d.sleep ?? ((ms) => new Promise<void>((r) => setTimeout(r, ms))),
+    const asking = askAdb({ request: (o) => this.d.connect(o), ...(reopen ? { reopen: (o) => reopen.call(this.d, o) } : {}), ...(picked ? { picked: () => picked.call(this.d) } : {}) }, {
+      // every try has a deadline, the first too: a claim or a key that never answers is asked again, not waited on for ever
+      firstAuthMs: this.d.frame.timings.authMs, authMs: this.d.frame.timings.authMs, sleep: this.d.sleep ?? ((ms) => new Promise<void>((r) => setTimeout(r, ms))),
       onWait: (why) => this.log('', `${cap(this.d.frame.the)} didn't let this browser in yet (${why}). Asking again in 5 s.`),
     });
     this.set({ connecting: true, connectError: undefined });

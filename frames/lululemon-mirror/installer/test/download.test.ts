@@ -101,8 +101,11 @@ describe('the image from the release proxy', () => {
   });
 
   it('a proxy that never answers, or stays silent, ends with ProxyError after its retries, not a wait for ever', async () => {
-    const never = (async () => new Promise<Response>(() => {})) as typeof fetch;
+    const signals: AbortSignal[] = [];
+    const never = (async (_u: string, init?: RequestInit) => { signals.push(init!.signal!); return new Promise<Response>(() => {}); }) as unknown as typeof fetch;
     await expect(read(resumableBody(URL, 10, { fetch: never, retries: 2, sleep: noSleep, stallMs: 20 }).stream())).rejects.toThrow(/sent nothing for 1 s/);
+    // each silent attempt is let go before the next: no request left open behind a retry
+    expect(signals.map((s) => s.aborted)).toEqual([true, true, true]);
     const mute = (async () => new Response(new ReadableStream({ pull: () => new Promise(() => {}) }), { headers: { 'content-length': '10' } })) as typeof fetch;
     const e = await read(resumableBody(URL, 10, { fetch: mute, retries: 2, sleep: noSleep, stallMs: 20 }).stream()).then(() => undefined, (x: unknown) => x);
     expect(e).toBeInstanceOf(ProxyError);

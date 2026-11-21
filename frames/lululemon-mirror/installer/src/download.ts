@@ -49,11 +49,14 @@ export function resumableBody(url: string, size: number, o: ResumeOptions = {}):
   const sleep = o.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const retries = o.retries ?? 5;
   const stallMs = o.stallMs ?? STALL_MS;
-  /** `p`, or a ProxyError once it has been silent for stallMs: the proxy (or the network) stopped sending. */
-  const unlessSilent = <T>(p: Promise<T>): Promise<T> => {
+  /**
+   * `p`, or a ProxyError once it has been silent for stallMs: the proxy (or the network) stopped sending. `onSilent`
+   * lets go of what was waiting (the attempt's request), so a retry never leaves an earlier one open.
+   */
+  const unlessSilent = <T>(p: Promise<T>, onSilent?: () => void): Promise<T> => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const silent = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new ProxyError(`the download proxy sent nothing for ${Math.ceil(stallMs / 1000)} s`)), stallMs);
+      timer = setTimeout(() => { onSilent?.(); reject(new ProxyError(`the download proxy sent nothing for ${Math.ceil(stallMs / 1000)} s`)); }, stallMs);
     });
     return Promise.race([p, silent]).finally(() => clearTimeout(timer));
   };
@@ -66,8 +69,9 @@ export function resumableBody(url: string, size: number, o: ResumeOptions = {}):
       let cancelled = false;
       const open = async () => {
         let r: Response;
+        const attempt = new AbortController();
         try {
-          r = await unlessSilent(f(url, { headers: got ? { Range: `bytes=${got}-` } : {}, cache: 'no-store' }));
+          r = await unlessSilent(f(url, { headers: got ? { Range: `bytes=${got}-` } : {}, cache: 'no-store', signal: attempt.signal }), () => attempt.abort());
         } catch (e) {
           if (e instanceof ProxyError) throw e;
           throw new ProxyError(`the download proxy can't be reached (${(e as Error).message})`);

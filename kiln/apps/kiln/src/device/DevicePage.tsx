@@ -115,7 +115,7 @@ function realSessions(frame: DeviceFrame, on: boolean, from: ApkFrom = 'local', 
   const appAdb = webUsbAdb(keys, frame.timings.authMs);
   const app = new AppSession({
     frame,
-    connect: () => appAdb.request(),
+    connect: (o) => appAdb.request(o),
     reopen: appAdb.reopen,
     picked: appAdb.picked,
     ...(from === 'release' ? { release: releaseRoute } : {}),
