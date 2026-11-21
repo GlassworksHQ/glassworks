@@ -611,8 +611,22 @@ function UsbOutcome({ session }: { session: UsbSession }) {
   );
 }
 
-/** The page that hands the device over now, by its base: sessions kept in the registry reach today's, not the mount that made them. */
-const HAND_NOW = new Map<string, (p: Device, installed: UsbInstalled) => StandardSession | undefined>();
+type UsbHandOver = (p: Device, installed: UsbInstalled) => StandardSession | undefined;
+/** The page up now for each base: sessions kept in the registry reach today's, not the mount that made them. */
+const HANDS = new Map<string, UsbHandOver>();
+/** An install that ended while no page of its frame was up: its page takes it when it opens (as DevicePage's PENDING). */
+const PENDING = new Map<string, { p: Device; installed: UsbInstalled }>();
+
+/**
+ * The hand-over a frame's session is made with: its page's, while one is up, or else held for it. Never another frame's
+ * standard session replaced by an install that ended in the background.
+ */
+export const usbHandOver = (base: string): UsbHandOver => (p, installed) => {
+  const page = HANDS.get(base);
+  if (page) return page(p, installed);
+  PENDING.set(base, { p, installed });
+  return undefined;
+};
 
 const STANDARD_STEPS: readonly Step[] = ['set-up', 'resume', 'wifi', 'home-assistant', 'panes', 'radio', 'done'];
 const noSubscribe = () => () => {};
@@ -626,11 +640,19 @@ export function UsbPage({ frame: dev, demo: sim, base }: { frame: UsbFrame; demo
     if (m.demo) return { m, demo: m.demo as UsbDemo, search: location.search };
     // a running install outlives the picker (wizard/registry.ts), so a link back without ?apk=… finds it
     if (!m.on && !registry.activity(base)) return { m, search: location.search, real: realSession(dev, base, false) };
-    // a session kept from an earlier visit hands over through whichever page is up then (HAND_NOW), not the one that made it
-    return { m, search: location.search, real: keptUsb(base, dev.name, () => realSession(dev, base, true, m.apk, (p, i) => HAND_NOW.get(base)?.(p, i)), m.apk).session };
+    // a session kept from an earlier visit hands over through whichever page is up then (usbHandOver), not the one that made it
+    return { m, search: location.search, real: keptUsb(base, dev.name, () => realSession(dev, base, true, m.apk, usbHandOver(base)), m.apk).session };
   });
-  const handRef = useRef<((p: Device, installed: UsbInstalled) => StandardSession | undefined) | undefined>(undefined);
-  HAND_NOW.set(base, (p, installed) => handRef.current?.(p, installed));
+  const handRef = useRef<UsbHandOver | undefined>(undefined);
+  // registered while this page is up: gone when it goes, so an install that ends meanwhile waits for it (PENDING)
+  const mine = useRef<UsbHandOver>((p, installed) => handRef.current?.(p, installed));
+  HANDS.set(base, mine.current);
+  useEffect(() => {
+    HANDS.set(base, mine.current);
+    const waiting = PENDING.get(base);
+    if (waiting) { PENDING.delete(base); handRef.current?.(waiting.p, waiting.installed); }
+    return () => { if (HANDS.get(base) === mine.current) HANDS.delete(base); };
+  }, [base]);
   handRef.current = (p, installed) => {
     try { sessionStorage.setItem(appKey(base), installed.plan.app.package); } catch { /* storage off: a reload talks to the frame's first app */ }
     const e = registry.set(standardEntry(usbStandard(dev, installed.plan.app, installed, installed.plan.device.model), base, { demo: start.demo, device: start.demo ? p : undefined }));
