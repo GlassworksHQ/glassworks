@@ -74,7 +74,11 @@ class GeckoEngine(
             .aboutConfigEnabled(true)
             .remoteDebuggingEnabled(s.remoteDebugging)
             .build()
-        return GeckoRuntime.create(app, rs).also { runtime = it; guard?.attach(it) }
+        return GeckoRuntime.create(app, rs).also {
+            runtime = it
+            guard?.attach(it)
+            GeckoVariant.runtimeStarted(logTag)
+        }
     }
 
     private fun helper(context: Context): GeckoResult<WebExtension> {

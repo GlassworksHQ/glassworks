@@ -68,6 +68,10 @@ line of each version is what Home Assistant shows on the update card. A change o
   back to Stable never installs an older version: the panel waits for a stable release newer than the one it runs.
 
 ### Fixed
+- **The Mirror's dashboard reloads less when memory runs short (legacy build).** On a device that stays low on
+  memory for hours, the web engine was told so only once, so the page grew back until Android closed it and the
+  dashboard reloaded. The legacy build now tells it again every two minutes for as long as memory stays short, so
+  it keeps giving memory back.
 - **The timer done screen fits a portrait screen.** On a portrait screen such as the Mirror, the timer's name,
   its length and the timers still running now fit the screen's width, as the voice overlay's text does. Before,
   long names ran off the edges. On a screen without touch, the hint now says the screen closes by itself after a
