@@ -144,8 +144,9 @@ record at the end. Sources, AOSP tag `android-10.0.0_r47`:
    `SCAN_RSP` becomes event type `0x001B`.
 2. Same file, `btm_ble_process_adv_pkt_cont` (lines 1906–1931): for a legacy event it calls
    `AdvertiseDataParser::RemoveTrailingZeros(tmp)`, then `cache.Set` for the advertisement and
-   `cache.Append` for the scan response. On an active scan it reports the device only once the scan
-   response is in.
+   `cache.Append` for the scan response. On an active scan it holds back a *scannable* advertisement
+   until its scan response is in (`is_active_scan && is_scannable && !is_scan_resp`). A non-scannable
+   one is reported straight away, with no scan response.
 3. `system/bt/stack/include/advertise_data_parser.h`, `RemoveTrailingZeros` (lines 48–71): at the
    first zero-length field it erases everything from there to the end. Its comment gives the reason:
    "Otherwise i.e. gluing scan response to advertise data will result in data with zero padding in
