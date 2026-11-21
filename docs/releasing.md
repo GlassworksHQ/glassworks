@@ -285,7 +285,9 @@ Vercel does not build on pushes (`git.deploymentEnabled: false` in `kiln/vercel.
 Vercel preview. Production builds come only from that deploy hook, called by `release.yml` and by
 [`installer-deploy.yml`](../.github/workflows/installer-deploy.yml). The second runs on a push to
 `main` that changes an installer input (`kiln/`, `branding/`, or a repo file the installer stages), or
-by hand from the Actions tab.
+by hand from the Actions tab. Kiln at kiln.glassworks.dev and glassworks.dev deploy from
+[`web-deploy.yml`](../.github/workflows/web-deploy.yml), on a push to `main` that changes what each one builds from,
+or by hand.
 
 ## The S1 frame bundle
 
