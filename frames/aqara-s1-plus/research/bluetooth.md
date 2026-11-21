@@ -110,8 +110,12 @@ addresses of bonded and nearby devices: grep for the lines you need, or redact b
 - **2.4 GHz.** A panel on 2.4 GHz Wi-Fi shares the antenna path with Bluetooth. Not measured.
 - **Does Android pad the scan record? No, not between the two parts (read, 2026-11-20).** See
   [Scan-record padding](#scan-record-padding-read-2026-11-20) below.
-- **GATT connections:** how many links the RTL8821CS holds at once, and whether the handles match an
-  ESP32 proxy's. See [GATT connections](#gatt-connections-246) below. Untested.
+- **GATT connections:** two links at once hold, with scanning alongside (**verified**, 2026-11-21). The
+  third slot and whether the handles match an ESP32 proxy's are untested. See
+  [GATT connections](#gatt-connections-246) below.
+- **An hour of scanning: no opportunistic downgrade (verified, 2026-11-21).** Android 10 turns an unfiltered
+  scan opportunistic after 30 min unless the app is exempt. The engine restarts its scan every 25 min, so it
+  never gets there. See [An hour of *Listen only*](#verified-an-hour-of-listen-only-2026-11-21) below.
 - **The scanner's source: decided (maintainer, 2026-11-15).** The proxy sends the real Bluetooth MAC
   as `bluetooth_mac_address`, like ESPHome proxies. Android 10 hides it from apps (`getAddress()`
   answers `02:00:00:00:00:00`), so the root helper reads `settings get secure bluetooth_address` and
@@ -168,6 +172,8 @@ What this doesn't cover:
 
 To confirm on the panel (optional now): compare one scannable sensor's data, the one HA shows for it
 through the panel and through an ESP32 proxy. The scan response's structures should be in both.
+Not run on 2026-11-21: every ESP32 proxy on the test network scans passively, so none of them sees a scan
+response to compare with.
 
 ## GATT connections (#246)
 
@@ -268,17 +274,75 @@ What it shows:
 - Such a device takes one of the 3 slots for as long as HA uses it through the S1. Two of them would leave one slot for polling devices.
 - Still **one link at a time**. The link was closed by turning the pane off, not by picking *Listen only*.
 
+### Verified: two links at once, and *Listen only* closing them (2026-11-21)
+
+**Verified** on 2026-11-21, 03:18–03:30 UTC, the root's run for #246 (plan v1, steps A and B). Setup:
+- S1 Plus on the test build `s1-kiosk-test-069a54c` (0.4.5, after all of #246's GATT work), radio `thread_router`,
+  Home Assistant 2026.11, Wi-Fi on 5 GHz;
+- two devices that hold their links: the indoor garden (Auk Mini 2, `auk_mini2`) and the GATT thermostat from the
+  2026-11-17 runs. The thermostat sits next to one of the ESP32 proxies;
+- the three ESP32 proxies were taken out for step A by disabling their ESPHome entries (HA's Bluetooth entries
+  untouched), and put back before step B;
+- addresses were compared in the shell only; none is recorded here.
+
+| What | Result |
+|---|---|
+| Proxy on, *Listen only* | "Listening for Home Assistant · 49 devices nearby", Scanner **On**, **1805** advertisements a minute |
+| *Listen and connect* | HA: the S1 is connectable, `slots: 3, free: 3` |
+| Both devices onto the S1 | With the ESP32 entries disabled, reloading each device's config entry made HA pick the S1. HA: the S1's allocations hold the two addresses, `free: 1`. The page: **"2 of 3 · In use now"**. Android's *Connection Events* show both links up (the garden at 03:21:10, the thermostat at 03:21:44 UTC). Its *GATT Client Map* lists one client, `sh.edm.s1kiosk`, with only the first link under it |
+| Both devices answer | The garden's *Sync clock*, then *Clock drift* read back **135 ms** later. The thermostat polled every 10 s through the S1 in **86–97 ms** (RSSI -66) |
+| Scanning alongside | **2007**, then **2252** advertisements a minute, from 56 devices: no drop with two links up |
+| Held 5 min | Both links stayed up for over 6 min (the garden 409 s, the thermostat's own uptime sensor 391 s). The thermostat's disconnect count didn't move. No "didn't come up", "got no answer" or "connecting failed" line |
+| *Listen only* from the panel's page | Tapped at 03:28:52.9 UTC. Android: both links down at 03:28:54.96 (**2.1 s**, reason 22, the host closed them). The page: "— · None in listen only". HA: the S1 no longer connectable (`slots: 0`). The garden went unavailable for **1.2 s**, then came back through an ESP32. The thermostat's *Active proxy* named an ESP32 **4.9 s** after the tap, and the thermostat never went unavailable. No errors, no pairing dialog |
+| *Listen and connect* again | HA: the S1 connectable again, `slots: 3, free: 3` |
+| Put back | The pane off and `bluetooth_proxy_connect` false, as found; the same APK (hash checked); radio `ok thread_router`; Bluetooth on; no GATT client left; the ESP32 entries enabled; the garden's *Light intensity* on `auto` |
+
+What it shows:
+- The S1 holds two links at once, next to full-rate scanning. The engine's limit of 3 is still the stated one; the
+  third slot wasn't tried, because the test network has only two devices that hold links.
+- The panel's *Listen only* closes held links within about 2 s, and HA moves each device to another proxy on its
+  own.
+- Android's *GATT Client Map* lists one connection per app client even with two links up. Read *Connection Events*
+  (or HA's allocations) to count links.
+
+### Verified: an hour of *Listen only* (2026-11-21)
+
+**Verified** on 2026-11-21, 03:30:37–04:41 UTC, the same run (plan v1, step D): the proxy left on in *Listen only*,
+untouched, while `logcat -v time -s BtGatt.ScanManager:V BtGatt.GattService:V Glassworks.ESPHome:V` ran.
+
+| What | Result |
+|---|---|
+| Opportunistic | **None**: no "opportunistic" line in the log. Android's *GATT Scanner Map* lists the app's scans as `Filter` scans, each about 1500 s long |
+| The engine's restarts | Every **25 min** (at 25, 50 and 75 min after the pane came on): "scan stopped", then "scanning (LOW_LATENCY)" 8–25 ms later. 55,772–59,018 results per 25-min scan |
+| Advertisements a minute (HA) | 69 samples: median **2291**, lowest **2143**, highest 2572. None at 0, and none below half the median between minutes 25 and 35 |
+| *Bluetooth proxy status* | `Listening` throughout |
+
+How each number was taken:
+- **The log**: the `logcat` command above, run for the whole window and filtered through the plan's MAC `sed`, then
+  `grep -ci opportunistic` (0) and `grep "Bluetooth proxy"` (the restart pairs and their times).
+- **Android's scans**: `dumpsys bluetooth_manager`, its *GATT Scanner Map* section, after the window: the app's
+  last scans, their lengths and result counts, each marked `Filter`.
+- **The rate**: Home Assistant's recorder history of `sensor.<panel>_bluetooth_advertisements`, which the panel
+  updates once a minute with the past minute's count. The history API was read for 03:30:37–04:41 UTC in ascending
+  order: 69 values, one a minute. The median, lowest and highest are over all 69. Minutes count from the window's
+  start, so "minutes 25–35" are the values stamped 25 to 35 min after 03:30:37. "Below half the median" compares each
+  of those with 2291 / 2.
+- **The status**: the same history for `sensor.<panel>_bluetooth_proxy_status`, one value (`Listening`) for the
+  whole window.
+
+What it shows: the 25-min restart keeps Android 10 from downgrading the scan, and the rate holds steady across
+the restarts.
+
 ### Still open (untested)
 
-- **The link limit.** Android's stack allows 7 GATT links (believed, not checked). The RTL8821CS
-  may hold fewer. The engine starts at 3, like ESPHome. Only one link at a time has been tried, with
-  two devices (2026-11-17).
-- **Picking *Listen only* on the panel's page while a device holds its link.** The garden's link was
-  closed by turning the pane off. The thermostat's closed on *Listen only* (above), but its
-  integration may not hold a link between polls, so that run doesn't show the page closing a held one.
+- **The third link.** Android's stack allows 7 GATT links (believed, not checked). The RTL8821CS
+  may hold fewer. The engine starts at 3, like ESPHome. Two at once hold (2026-11-21); a third needs a third
+  device that holds its link.
+- **A passive sensor with the S1 as its only proxy.** Not run on 2026-11-21: the test network's HA has no
+  passive BLE sensor integration set up (the ones it found are ignored), so there was no named sensor to follow.
 - **Handles against an ESP32 proxy.** Connect the same device through both and compare the services
   HA caches. A mismatch breaks a cache HA built from the other proxy.
 - **`refresh()` on the panel.** Whether reflection reaches it with target SDK 35, and whether it
   clears anything. Needed before `CACHE_CLEARING`.
-- **Scanning next to 1–3 links,** and next to the Matter pane's BLE advertising (#47).
+- **Scanning next to the Matter pane's BLE advertising (#47).** Next to two links it holds its rate (2026-11-21).
 
