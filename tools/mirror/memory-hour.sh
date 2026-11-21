@@ -7,6 +7,8 @@
 # from all the saves together. It stops with an error if any read fails, rather than report zero.
 # Output: <out-dir>/summary.txt (counts and sizes, no serials, MACs or IPs), and the raw dumps, which hold
 # device-unique values: never paste those into an issue or PR.
+# Every minute it also reads `dumpsys meminfo` of the app's process and of the page's (`:tabN`) into pss.txt: a
+# new tab pid is a page that died and came back (#684).
 set -euo pipefail
 OUT=$1; MIN=${2:-60}
 # the counts merge every save in samples/: an earlier run's saves would count again. A plain mkdir reserves the
@@ -32,10 +34,26 @@ sample() {
   sh 'dmesg' | awk -v t="$START_UP" -F'[][]' '$2 + 0 >= t' > "$OUT/samples/dmesg-$1.txt"
   echo "$(date -u +%H:%M:%SZ) $(sh 'dumpsys meminfo' | grep -E 'Free RAM|Lost RAM' | awk '{printf "%s %s ", $1, $3}')" >> "$OUT/free.txt"
 }
-left=$((MIN * 60)); n=0
-sample $n
+# one process's PSS from `dumpsys meminfo <pid>`, in kB: total, swapped, EGL mtrack, Gfx dev, Unknown, Dalvik Heap
+pss() {
+  [ "$1" = - ] && { echo "0 0 0 0 0 0"; return; }
+  sh "dumpsys meminfo $1" | awk '
+    /^ *TOTAL /{t=$2; s=$5} /^ *EGL mtrack /{e=$3} /^ *Gfx dev /{g=$3} /^ *Unknown /{u=$2} /^ *Dalvik Heap /{d=$3}
+    END{printf "%d %d %d %d %d %d\n", t, s, e, g, u, d}'
+}
+echo "utc main_pid main_pss main_swap main_egl main_gfx main_unknown main_dalvik tab_pid tab_pss tab_swap tab_egl tab_gfx tab_unknown tab_dalvik memfree_kb" > "$OUT/pss.txt"
+minute() {
+  local ps main tab
+  ps=$(sh 'ps')
+  main=$(printf '%s\n' "$ps" | awk -v p="$P" '$NF == p {print $2; exit}'); main=${main:--}
+  tab=$(printf '%s\n' "$ps" | awk -v p="$P:tab" 'index($NF, p) == 1 {print $2; exit}'); tab=${tab:--}
+  echo "$(date -u +%H:%M:%SZ) $main $(pss "$main") $tab $(pss "$tab") $(sh 'cat /proc/meminfo' | awk '/^MemFree:/{print $2}')" >> "$OUT/pss.txt"
+}
+left=$((MIN * 60)); n=0; m=0
+sample $n; minute
 while ((left > 0)); do
-  step=$((left < 300 ? left : 300)); sleep $step; left=$((left - step)); n=$((n + 1)); sample $n
+  step=$((left < 60 ? left : 60)); sleep $step; left=$((left - step)); m=$((m + 1)); minute
+  if ((m % 5 == 0 || left == 0)); then n=$((n + 1)); sample $n; fi
 done
 sh 'dumpsys meminfo' > "$OUT/meminfo-after.txt"
 sh 'ps' | grep "$P" | awk '{print $NF}' > "$OUT/procs-after.txt" || true
@@ -58,6 +76,11 @@ died() { grep 'am_proc_died' "$OUT/events.txt" | count -F "$1"; }
     echo "meminfo $f: $(grep -E 'Total RAM|Free RAM|Lost RAM|ZRAM' "$OUT/meminfo-$f.txt" | sed 's/^ *//' | tr '\n' ';')"
     echo "  ours (PSS kB): $(awk '/Total PSS by process/,/Total PSS by OOM/' "$OUT/meminfo-$f.txt" | grep -E "kB: $P" | sed -E "s/ *([0-9,]+) kB: $P(:[a-z0-9]+)? .*/\2=\1/; s/^=/main=/" | tr '\n' ' ')"
   done
+  # the minute samples, after the first 5 (the page settles): a process's range, and how often the page's pid changed
+  awk 'NR > 6 && $3 > 0 {n++; if (!mn || $3 < mn) mn = $3; if ($3 > mx) mx = $3}
+       NR > 6 && $10 > 0 {k++; if (!tn || $10 < tn) tn = $10; if ($10 > tx) tx = $10}
+       NR > 1 && $9 != "-" {if (last && $9 != last) moved++; last = $9}
+       END {printf "PSS from minute 5 (kB): main %d..%d (spread %d, %d samples), tab %d..%d (spread %d, %d samples); tab pid changes: %d\n", mn, mx, mx - mn, n, tn, tx, tx - tn, k, moved}' "$OUT/pss.txt"
   echo "free RAM at each save:"; cat "$OUT/free.txt"
 } > "$OUT/summary.txt"
 cat "$OUT/summary.txt"

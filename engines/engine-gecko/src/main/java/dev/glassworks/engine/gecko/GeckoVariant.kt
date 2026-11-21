@@ -16,4 +16,7 @@ internal object GeckoVariant {
     const val LOCKED_DOWN = false
 
     fun guard(logTag: String): PageGuard? = null
+
+    /** The runtime is up. Nothing more here: GeckoView's own MemoryController is enough where RAM isn't this short (#684). */
+    fun runtimeStarted(logTag: String) {}
 }
