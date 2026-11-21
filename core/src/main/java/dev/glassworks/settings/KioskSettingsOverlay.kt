@@ -585,7 +585,10 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
             listOf<Any?>(i.value()) + i.options().flatMap { (id, _) -> i.swatch?.invoke(id)?.let { listOf(it.a, it.b, it.ground) }.orEmpty() }
         }.getOrDefault(emptyList())
         val shown = look()
-        live += { if (look() != shown) build() }
+        live += {
+            // Drawn again where the person had scrolled it, as refresh does for a page whose shape changed.
+            if (look() != shown) { val y = scroll.scrollY; build(); if (y > 0) scroll.post { scroll.scrollTo(0, y) } }
+        }
         return ThemePicker(context, i) { id ->
             save({ done -> i.save(id, done) }) { why -> if (why != null) showProblem(why) else { problem.visibility = View.GONE; build() } }
         }.apply { setPadding(0, px(6f), 0, px(8f)) }

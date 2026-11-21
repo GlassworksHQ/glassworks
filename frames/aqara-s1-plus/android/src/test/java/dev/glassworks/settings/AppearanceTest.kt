@@ -224,11 +224,24 @@ class AppearanceTest {
         val first = picker()!!
         o.refresh()
         assertTrue("nothing changed: the same picker", first === picker())
+        // The page's scroll, the one the picker is in (the sidebar has its own).
+        fun scroll(): android.widget.ScrollView? {
+            var v: android.view.View? = picker()
+            while (v != null && v !is android.widget.ScrollView) v = v.parent as? android.view.View
+            return v as? android.widget.ScrollView
+        }
+        dev.glassworks.ui.Mockup.layout(o)
+        scroll()!!.scrollTo(0, 200)
+        val y = scroll()!!.scrollY
+        assertTrue("the page scrolls", y > 0)
         // Manage changes the dark Custom accent: the pick is still custom/dark, but the Custom orb's colors changed.
         prefs.customTheme = Themes.custom(Themes.Palette(0xff22d3ee.toInt(), Themes.GLASSWORKS.dark.b, Themes.GLASSWORKS.dark.ground), Themes.GLASSWORKS.light)
         o.refresh()
         val next = picker()!!
         assertTrue("drawn again", first !== next)
+        dev.glassworks.ui.Mockup.layout(o)
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertEquals("where the person had scrolled it", y, scroll()!!.scrollY)
         assertEquals("custom/dark", prefs.overlayTheme)
     }
 }
