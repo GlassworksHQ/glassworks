@@ -177,7 +177,7 @@ All Android 6–7 devices—including the lululemon Studio Mirror—share the si
 
 ## Signing
 
-Generic Android uses its own dedicated release signing key (`CN=Glassworks, O=GlassworksHQ`, RSA 4096, SHA-256 `564d1367c4eafeac81e80b5b51d4db090a5df9b615d5aa46a83c4c33d5c67caa`), shared by both `dev.glassworks.generic_android` and `.legacy` and kept separate from the S1 Plus release key. Both official releases ([generic-release.yml](../../.github/workflows/generic-release.yml)) and signed test builds ([generic-test-build.yml](../../.github/workflows/generic-test-build.yml)) sign with this key, and CI verifies the certificate fingerprint against [`tools/release/generic-release-cert.sha256`](../../tools/release/generic-release-cert.sha256) so updates always install cleanly in place.
+Generic Android uses its own dedicated release signing key (`CN=Glassworks, O=GlassworksHQ`, RSA 4096, SHA-256 `564d1367c4eafeac81e80b5b51d4db090a5df9b615d5aa46a83c4c33d5c67caa`), shared by both `dev.glassworks.generic_android` and `.legacy` and kept separate from the S1 Plus release key. Both official releases ([release.yml](../../.github/workflows/release.yml)) and signed test builds ([generic-test-build.yml](../../.github/workflows/generic-test-build.yml)) sign with this key, and CI verifies the certificate fingerprint against [`tools/release/generic-release-cert.sha256`](../../tools/release/generic-release-cert.sha256) so updates always install cleanly in place.
 
 Local release signing reads environment variables (if none are set, Gradle builds an unsigned APK):
 

@@ -274,7 +274,7 @@ function Log({ s }: { s: AppState }) {
 function Off({ f }: { f: DeviceFrame }) {
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h">{`${cap(f.the)} doesn't install from Kiln yet.`}</h2>
+      <h2 id="h">{`${cap(f.the)} doesn't install from Kiln yet`}</h2>
       <p className="lede">Its installer is still being tested.</p>
       <div className="foot">
         <a className="link" href={`https://github.com/GlassworksHQ/glassworks/tree/main/frames/${f.id}`}>{`${cap(f.the)} on GitHub`}</a>
@@ -316,10 +316,10 @@ function Pick({ s, session }: { s: AppState; session: AppSession }) {
     <section className="card" aria-labelledby="h">
       <TestOnly f={f} />
       {s.release ? <>
-        <h2 id="h">{`Install Glassworks on ${f.the}.`}</h2>
+        <h2 id="h">{`Install Glassworks on ${f.the}`}</h2>
         <p className="lede">{f.words['app.pick.release']}</p>
       </> : <>
-        <h2 id="h">{`Install a test build on ${f.the}.`}</h2>
+        <h2 id="h">{`Install a test build on ${f.the}`}</h2>
         <p className="lede">{f.words['app.pick.local']}</p>
       </>}
       <Inputs s={s} session={session} />
@@ -342,7 +342,7 @@ function Checks({ s, session }: { s: AppState; session: AppSession }) {
   return (
     <section className="card" aria-labelledby="h">
       <TestOnly f={f} />
-      <h2 id="h">{r.ok ? `This is your ${f.short}.` : 'Kiln can\'t install on this device.'}</h2>
+      <h2 id="h">{r.ok ? `This is your ${f.short}` : 'Kiln can\'t install on this device'}</h2>
       <ol className="join">
         {r.checks.map((c) => (
           <li key={c.what} className={c.ok ? 'done' : 'fail'}>
@@ -377,7 +377,7 @@ function Working({ s, f }: { s: AppState; f: DeviceFrame }) {
   // no step here waits on the person: a frame without touch can't answer one (a real run, 2026-11-19)
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h">{s.flow === 'undo' ? 'Removing Glassworks.' : 'Installing Glassworks.'}</h2>
+      <h2 id="h">{s.flow === 'undo' ? 'Removing Glassworks' : 'Installing Glassworks'}</h2>
       <p className="lede">{`Keep ${f.the} plugged in.`}</p>
       <ol className="join">
         {rows.map((r, i) => <li key={r.id} className={i < at ? 'done' : i === at ? 'cur' : ''}>{r.text}</li>)}
@@ -426,7 +426,7 @@ export function AppOutcome({ s, f }: { s: AppState; f: DeviceFrame }) {
 function Failed({ s, session }: { s: AppState; session: AppSession }) {
   return (
     <section className="card err" aria-labelledby="h">
-      <h2 id="h">{s.flow === 'undo' ? 'Undo stopped.' : 'The install stopped.'}</h2>
+      <h2 id="h">{s.flow === 'undo' ? 'Undo stopped' : 'The install stopped'}</h2>
       <pre className="raw">{s.error}</pre>
       <div className="foot">
         <Log s={s} />

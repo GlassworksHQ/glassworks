@@ -44,7 +44,7 @@ describe('the standard flow after the Mirror\'s image install', () => {
     expect(rail()).toEqual(['Mirror', 'Choose', 'Download', 'Fastboot', 'Install', 'Set up', 'Done']);
     // App first, as on the S1; no Panes until the app offers it, no Radio (frame.json: none)
     expect(subs()).toEqual(['App', 'Wi-Fi', 'Home Assistant']);
-    expect(screen.getByRole('heading', { name: 'A few settings.' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Language and time' })).toBeTruthy();
     expect(screen.getByRole('combobox', { name: 'Language' })).toBeTruthy();
     expect(screen.getByRole('combobox', { name: 'Time zone' })).toBeTruthy();
     expect(screen.queryByText('On-screen keyboard')).toBeNull(); // no touch: its hardware can't use one
@@ -82,7 +82,7 @@ describe('the standard flow after the Mirror\'s image install', () => {
     await imageDemo(mirrorEntry, 'flash-setup-ha', true, {}, ha.handOver);
     show(ha.standard(), IMAGE);
     await settle();
-    expect(screen.getByRole('heading', { name: 'Sign in to Home Assistant.' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Sign in to Home Assistant' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Skip, sign in later' })).toBeTruthy();
   });
 
@@ -93,7 +93,7 @@ describe('the standard flow after the Mirror\'s image install', () => {
     show(h.standard(), IMAGE, <ImageOutcome f={image} s={image.state} away={away} />);
     await settle();
     expect(h.standard().store.state.screen).toBe('done');
-    expect(screen.getByRole('heading', { name: 'Done.' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'You\'re all set' })).toBeTruthy();
     expect(screen.getByText('The Mirror is on Wi-Fi at 192.0.2.50. Home Assistant finds it by itself.')).toBeTruthy();
     expect(screen.getByText('http://192.0.2.50:8099/')).toBeTruthy();
     expect(screen.getByText('Change these later on the Mirror\'s Manage page. It asks for a code the Mirror shows.')).toBeTruthy();
@@ -121,7 +121,7 @@ describe('the standard flow after the app alone', () => {
     await settle();
     expect(rail()).toEqual(['Mirror', 'Connect', 'Check', 'Install', 'Set up', 'Done']);
     expect(subs()).toEqual(['App', 'Wi-Fi', 'Home Assistant']);
-    expect(screen.getByRole('heading', { name: 'A few settings.' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Language and time' })).toBeTruthy();
   });
 
   it('Panes once the app offers it, the S1\'s step: its cards as switches', async () => {

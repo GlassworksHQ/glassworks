@@ -1,7 +1,9 @@
 'use client';
 // Screen 1: pick your panel, with the frames drawn as on glassworks.dev/frames. Each card's data is
-// the frame's own (frames/<id>/design/frame.json). Undo and "finish setting up" stay one quiet link
-// away. A running install shows here too, with the way back to it.
+// the frame's own (frames/<id>/design/frame.json). What the picked frame needs comes first (its installer.json `picker`),
+// then the frames Kiln installs, then the ones still to come (issue 672). Continue stays pinned to the bottom of the
+// screen, with, for a returning person, finishing the picked frame's set-up or undoing its install. A running install
+// shows here too, with the way back to it.
 import { ships } from '@glassworks/frame-card';
 import * as RadioGroup from '@radix-ui/react-radio-group';
 import Link from 'next/link';
@@ -14,9 +16,11 @@ import { ROUTES, canonical, fromHash, status } from '../wizard/routes';
 import { STEPS } from '../wizard/state';
 import { FrameCard } from './FrameCard';
 import { LastRun } from './LastRun';
+import p from './Picker.module.css';
 import { Shell, useBrowserChip } from './Shell';
 
 const INSTALLABLE = FRAMES.filter((f) => ships(f.status) && f.kiln);
+const SOON = FRAMES.filter((f) => !INSTALLABLE.includes(f));
 /** The first installer page's old links (/#/wifi, …) belong to the frame it was for (installer.json `legacy.hashLinks`). */
 const OLD_LINKS_FRAME = Object.values(INSTALLERS).find((i) => i.legacy?.hashLinks)?.route;
 
@@ -46,7 +50,11 @@ export function Picker() {
   const router = useRouter();
   const running = useRunning();
   const [picked, setPicked] = useState(INSTALLABLE[0]?.id ?? '');
-  const frame = FRAMES.find((f) => f.id === picked)?.kiln ?? '';
+  const design = FRAMES.find((f) => f.id === picked);
+  const frame = design?.kiln ?? '';
+  const data = INSTALLERS[picked];
+  // undo has routes of its own only where the way back restores a backup; elsewhere it is on the frame's own screens
+  const undo = data?.wayBack?.how === 'restore-backup';
   useEffect(() => {
     const old = fromHash(location.hash);
     if (old && OLD_LINKS_FRAME) router.replace(OLD_LINKS_FRAME + ROUTES[old]);
@@ -56,7 +64,7 @@ export function Picker() {
     <Shell steps={steps} level={0} chip={chip}>
       <section className="picker" aria-labelledby="pick">
         <div className="picker-head">
-          <h2 id="pick">Pick your panel.</h2>
+          <h2 id="pick">Pick your panel</h2>
           <p className="lede">Panels Glassworks runs on, or will. Each one is a frame.</p>
         </div>
         {running && (
@@ -66,19 +74,31 @@ export function Picker() {
           </div>
         )}
         <LastRun />
-        <RadioGroup.Root className="frames" value={picked} onValueChange={setPicked} aria-labelledby="pick">
-          {FRAMES.map((f) => <FrameCard key={f.id} f={f} />)}
-          <a className="yours" href="https://github.com/GlassworksHQ">
-            <span className="plus" aria-hidden="true">+</span>
-            <b>Your panel</b>
-            <p>Any Android panel can be a frame. Follow along on GitHub.</p>
-          </a>
+        {data?.picker && design && (
+          <div className={`glass ${p.needs}`} role="group" aria-labelledby="needs">
+            <h3 id="needs">What you&apos;ll need</h3>
+            <ul>
+              <li>Chrome or Edge on this computer</li>
+              {data.picker.needs.map((x) => <li key={x}>{x}</li>)}
+            </ul>
+            <p className="small">{data.picker.wayBack}</p>
+          </div>
+        )}
+        <h3 className={p.group} id="ready">Ready to install</h3>
+        <RadioGroup.Root className="frames" value={picked} onValueChange={setPicked} aria-labelledby="ready">
+          {INSTALLABLE.map((f) => <FrameCard key={f.id} f={f} />)}
         </RadioGroup.Root>
-        <div className="foot">
+        {SOON.length > 0 && <>
+          <h3 className={p.group} id="soon">Coming soon</h3>
+          <RadioGroup.Root className="frames" aria-labelledby="soon" disabled>
+            {SOON.map((f) => <FrameCard key={f.id} f={f} />)}
+          </RadioGroup.Root>
+        </>}
+        <div className={`foot glass ${p.sticky}`}>
           <span className="links">
-            <Link className="link" href={`${frame}${ROUTES.undo}`}>Undo an install</Link>
-            <span aria-hidden="true">·</span>
-            <Link className="link" href={`${frame}${ROUTES['set-up']}`}>Finish setting up</Link>
+            {design && <span>{`Already installed on ${design.name}?`}</span>}
+            {design && <Link className="link" href={`${frame}${ROUTES['set-up']}`}>Finish setting up</Link>}
+            {design && undo && <><span aria-hidden="true">·</span><Link className="link" href={`${frame}${ROUTES.undo}`}>Undo an install</Link></>}
           </span>
           <button type="button" className="btn ember" disabled={!frame} onClick={() => router.push(running && isUnder(running.href, frame) ? running.href : frame)}>Continue</button>
         </div>

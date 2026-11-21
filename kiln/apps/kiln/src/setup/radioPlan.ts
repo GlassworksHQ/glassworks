@@ -28,7 +28,7 @@ export function radioPlan(mode: string, ip: string, haUrl: string, allowed: stri
   const joining: RadioStep = { title: 'Watch it join', body: 'The panel\'s Radio status says “joined … as a child”, then “as a router” once the network promotes it, which takes a few minutes.' };
   const plans: Record<string, RadioPlan> = {
     zigbee_tcp: {
-      title: 'Use the radio in Home Assistant.', lead: 'The panel is now a Zigbee coordinator. Add it to Home Assistant, then pair your devices.',
+      title: 'Use the radio in Home Assistant', lead: 'The panel is now a Zigbee coordinator. Add it to Home Assistant, then pair your devices.',
       steps: [
         { title: 'Add the radio to Home Assistant', body: 'Opens Zigbee (ZHA) setup. Choose Enter manually, then use these values. When ZHA asks about network settings, keep the radio\'s current ones: creating a new network from ZHA doesn\'t work with this radio yet.',
           kv: [['Radio type', 'EZSP'], ['Serial path', `socket://${ip}:6638`, true], ['Port speed', 'Leave as is (115200)']],
@@ -39,28 +39,28 @@ export function radioPlan(mode: string, ip: string, haUrl: string, allowed: stri
       ],
     },
     thread: {
-      title: 'Use the border router in Home Assistant.', lead: 'The panel now runs its own Thread network for Home Assistant\'s OpenThread Border Router integration.',
+      title: 'Use the border router in Home Assistant', lead: 'The panel now runs its own Thread network for Home Assistant\'s OpenThread Border Router integration.',
       steps: [
         { title: 'Add OpenThread Border Router', body: 'Opens the integration setup in Home Assistant. Enter this URL. If you already have a border router, Home Assistant can use both.',
           kv: [['URL', `http://${ip}:8081`, true]], link: otbrAdd },
       ],
     },
     zigbee_router: {
-      title: 'Join your Zigbee network.', lead: 'The panel is now a Zigbee router (repeater, experimental). It joins your existing network and extends it.',
+      title: 'Join your Zigbee network', lead: 'The panel is now a Zigbee router (repeater, experimental). It joins your existing network and extends it.',
       steps: [
         { title: 'Open pairing in Home Assistant', body: 'Opens your Zigbee “Add device”, which lets new devices join for a few minutes.', link: zhaAdd },
         { title: 'Tell the panel to join', body: 'In Home Assistant, open the panel\'s ESPHome device and press Join Zigbee network. It shows up in ZHA as a router.' },
       ],
     },
     thread_router: (app.code ?? 0) >= THREAD_FROM_HA ? {
-      title: 'Join your Thread network.', lead: 'The panel is now a Thread router (repeater, experimental). It gets your Thread network from Home Assistant and extends it.',
+      title: 'Join your Thread network', lead: 'The panel is now a Thread router (repeater, experimental). It gets your Thread network from Home Assistant and extends it.',
       steps: [
         { title: 'Let the panel get it from Home Assistant', body: 'On the panel\'s ESPHome device in Home Assistant, press Join Home Assistant\'s Thread network. Or tap Get it from Home Assistant on the panel\'s Thread router card. The panel reads your preferred Thread network from Home Assistant itself. Home Assistant gives it only to administrators: if the panel isn\'t signed in as one, it shows a QR code. Scan it and sign in as an administrator on your phone; the panel uses that sign-in once.',
           link: esphome, primary: 'Open the panel in Home Assistant' },
         { ...joining, body: `The panel's Thread join sensor says how it went. ${joining.body}` },
       ],
     } : {
-      title: 'Join your Thread network.',
+      title: 'Join your Thread network',
       lead: `The panel is now a Thread router (repeater, experimental). Glassworks ${app.version ?? 'on this panel'} can't get your Thread network from Home Assistant itself; newer versions can. Until it updates, More help shows how to give it the network by hand.`,
       steps: [joining],
       more: [

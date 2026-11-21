@@ -177,7 +177,7 @@ export const registry = {
 export function failureLog(f: LastFailure): string {
   return [
     `Kiln, ${f.name}`,
-    `Stopped ${f.when.toISOString()}: ${f.failure.title}`,
+    `Stopped ${f.when.toISOString()}: ${f.failure.title}.`,
     f.failure.body,
     ...(f.failure.raw ? [`Error: ${f.failure.raw}`] : []),
     '',

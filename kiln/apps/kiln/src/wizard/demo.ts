@@ -347,7 +347,7 @@ export async function enterDemo(session: Session, d: DemoFrame, which: Demo): Pr
     case 'done':
     case 'done-old-boot': // set up on a panel whose boot image is from before the root update service
       dispatch({ type: 'done', done: {
-        title: 'Done.', body: 'The panel is on Home Net. Home Assistant finds it by itself.',
+        title: 'You\'re all set', body: 'The panel is on Home Net. Home Assistant finds it by itself.',
         backup: { name: `${plan.idPrefix}-20261112-101500.zip`, info: sim.backupInfo, hint: 'Original software, backed up. Keep it.' },
         managePage: `http://${IP}:8099/`,
         updates: frame.silent[(await frame.updates(simulatedPanel(d, false, true, undefined, which === 'done'))).state],
@@ -388,7 +388,7 @@ export async function enterDemo(session: Session, d: DemoFrame, which: Demo): Pr
       return;
     case 'undo-done':
       dispatch({ type: 'start', flow: 'undo', now: Date.now() });
-      dispatch({ type: 'done', done: { title: 'The original software is back.', body: 'One last step, on the panel: swipe down, tap Settings on the app\'s notification, then Advanced settings → Factory reset.' } });
+      dispatch({ type: 'done', done: { title: 'The original software is back', body: 'One last step, on the panel: swipe down, tap Settings on the app\'s notification, then Advanced settings → Factory reset.' } });
       return;
     case 'error':
       install();

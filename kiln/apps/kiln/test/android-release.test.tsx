@@ -104,7 +104,7 @@ describe('the page', () => {
     vi.stubGlobal('fetch', route('out'));
     history.replaceState(null, '', '/android?apk=release');
     render(<AndroidWizard />);
-    await screen.findByText('Plug in the tablet.');
+    await screen.findByText('Plug in the tablet');
     expect(screen.queryByText('Test only')).toBeNull(); // beta (frame.json): open to everyone, not a test page
     await screen.findByText('Glassworks 0.2.0');
     expect(screen.getByText(/SHA-256 checks out/)).toBeTruthy();
@@ -128,7 +128,7 @@ describe('the page', () => {
     vi.stubGlobal('fetch', fetch);
     history.replaceState(null, '', '/android?apk=local');
     render(<AndroidWizard />);
-    await screen.findByText('Plug in the tablet.');
+    await screen.findByText('Plug in the tablet');
     expect(document.querySelector('input[type=file]')).not.toBeNull();
     expect(fetch).not.toHaveBeenCalled();
   });
@@ -137,7 +137,7 @@ describe('the page', () => {
     vi.stubGlobal('fetch', route('out'));
     history.replaceState(null, '', '/android');
     render(<AndroidWizard />);
-    await screen.findByText('Plug in the tablet.');
+    await screen.findByText('Plug in the tablet');
     await screen.findByText('Glassworks 0.2.0');
     expect(document.querySelector('input[type=file]')).toBeNull();
     expect(embers()).toEqual(['Find it']);
@@ -147,7 +147,7 @@ describe('the page', () => {
     vi.stubGlobal('fetch', route('out'));
     history.replaceState(null, '', '/android?apk=local');
     render(<AndroidWizard />);
-    await screen.findByText('Plug in the tablet.');
+    await screen.findByText('Plug in the tablet');
     const first = registry.activity(ANDROID_BASE) as AndroidActivity;
     expect(first.session.from).toBe('local');
     cleanup();

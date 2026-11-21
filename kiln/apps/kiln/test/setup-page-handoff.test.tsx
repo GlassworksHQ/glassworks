@@ -62,7 +62,7 @@ describe('the hand-off to the panel\'s setup page', () => {
     });
     // the hand-off has run to its end: it asked, and let the channel go
     await vi.waitFor(() => expect([asked, closed]).toEqual([1, 1]));
-    expect(s.store.state.done?.title).toBe('Done.');
+    expect(s.store.state.done?.title).toBe('You\'re all set');
     expect(s.store.state.done?.managePage).toBeUndefined();
     s.close();
   });

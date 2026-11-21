@@ -5,7 +5,7 @@
 // own setup asks next, and how to finish with Kiln over USB. Its words, brands and lines are the frame's.
 // Kiln's look (docs/design/kiln): one idea per card, one ember button, details on request.
 import type { OnDevice, UsbFrame, UsbIdentified as Identified, UsbOnDevice, UsbPlace as Place, UsbSim } from '@glassworks/kiln-core';
-import { KIND_TEXT, STAGE_TEXT } from '@glassworks/frame-card';
+import { DeviceModel, KIND_TEXT, STAGE_TEXT, type FrameDesign } from '@glassworks/frame-card';
 import * as RadioGroup from '@radix-ui/react-radio-group';
 import Link from 'next/link';
 import { Fragment, createContext, useContext, useEffect, useState, type ReactNode } from 'react';
@@ -40,9 +40,9 @@ const pageOf = (p: Place) => (p.path.at(-1) === SWITCH ? p.path.slice(0, -1) : p
 /** What the page calls the device, and whether it is sure (a model read, not guessed from GPU and screen). */
 function nameOf(on: OnDevice): string {
   const { model, brand } = on.identified;
-  if (model) return `${on.modelCode ? 'This is' : 'This looks like'} a ${model.name}.`;
-  if (brand) return `This is a ${brand.name} ${on.form}.`;
-  return `This is an Android ${on.form}.`;
+  if (model) return `${on.modelCode ? 'This is' : 'This looks like'} a ${model.name}`;
+  if (brand) return `This is a ${brand.name} ${on.form}`;
+  return `This is an Android ${on.form}`;
 }
 
 function versionText(on: OnDevice, needs: UsbOnDevice['needs']): string {
@@ -52,26 +52,45 @@ function versionText(on: OnDevice, needs: UsbOnDevice['needs']): string {
 
 interface P { on: OnDevice; go: (s: TabletScreen) => void }
 
+/**
+ * The device's 3D model, as the frame card draws it (its finish follows the page's theme): a model Kiln knows as a frame of
+ * its own is that frame's; any other tablet is this page's frame's. A phone gets none, since this page's frame is a tablet.
+ */
+export function lookOf(on: OnDevice, page: string, frames: readonly FrameDesign[] = FRAMES): FrameDesign | undefined {
+  const own = on.identified.model?.frame;
+  if (own) return frames.find((x) => x.id === own);
+  return on.form === 'tablet' ? frames.find((x) => x.id === page) : undefined;
+}
+
 function Device({ on, go }: P) {
   const { dev, base } = useWhere();
   const f = on.identified.model?.frame ? FRAMES.find((x) => x.id === on.identified.model!.frame) : undefined;
+  const look = lookOf(on, dev.id);
+  const facts = f ? (
+    <div className="fc tab-fc">
+      <div className="spread"><b>{f.name}</b><span className="pill soon">{STAGE_TEXT[f.status]}</span></div>
+      <span className="kind">{KIND_TEXT[f.kind]} · {versionText(on, dev.onDevice.needs)}</span>
+    </div>
+  ) : (
+    <dl className="kv">
+      <dt>Android</dt><dd>{versionText(on, dev.onDevice.needs).replace(/^Android /, '')}</dd>
+      {on.modelCode && <><dt>Model</dt><dd>{on.identified.model ? `${on.identified.model.name} (${on.modelCode})` : on.modelCode}</dd></>}
+      <dt>Tested</dt><dd>Not yet. <a className="link" href={`https://github.com/GlassworksHQ/glassworks/issues/new?title=${encodeURIComponent(`Tested: ${on.identified.model?.name ?? on.modelCode ?? `an Android ${dev.short}`}`)}`}>Tell us how it goes</a></dd>
+    </dl>
+  );
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">{nameOf(on)}</h2>
       <p className="lede">Glassworks installs from this page, as an app. No computer needed.</p>
-      {f ? (
-        <div className="fc tab-fc">
-          {RENDERS[f.id] && <img className="ph" src={RENDERS[f.id]} alt="" />}
-          <div className="spread"><b>{f.name}</b><span className="pill soon">{STAGE_TEXT[f.status]}</span></div>
-          <span className="kind">{KIND_TEXT[f.kind]} · {versionText(on, dev.onDevice.needs)}</span>
+      {/* the model and what the page read of it side by side (stacked on a phone); without a model, the facts alone */}
+      {look ? (
+        <div className="tab-device">
+          <div className="tab-model">
+            <DeviceModel id={`on-device-${look.id}`} model={look.model} label={f ? f.name : `An Android ${on.form}`} screen={RENDERS[look.id]} priority />
+          </div>
+          {facts}
         </div>
-      ) : (
-        <dl className="kv">
-          <dt>Android</dt><dd>{versionText(on, dev.onDevice.needs).replace(/^Android /, '')}</dd>
-          {on.modelCode && <><dt>Model</dt><dd>{on.identified.model ? `${on.identified.model.name} (${on.modelCode})` : on.modelCode}</dd></>}
-          <dt>Tested</dt><dd>Not yet. <a className="link" href={`https://github.com/GlassworksHQ/glassworks/issues/new?title=${encodeURIComponent(`Tested: ${on.identified.model?.name ?? on.modelCode ?? `an Android ${dev.short}`}`)}`}>Tell us how it goes</a></dd>
-        </dl>
-      )}
+      ) : facts}
       {on.app === 'either' && <p className="small">{dev.onDevice.needs.either}</p>}
       <div className="foot">
         <span className="links"><Link className="link" href={base}>Installing from a computer?</Link></span>
@@ -87,7 +106,7 @@ function Elsewhere({ onTablet }: { onTablet: () => void }) {
   useEffect(() => setShown(`${location.host}${here}`), [here]);
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h">{`Open this page on ${dev.the}.`}</h2>
+      <h2 id="h">{`Open this page on ${dev.the}`}</h2>
       <p className="lede">{`This page installs Glassworks on an Android ${dev.short} from the ${dev.short}'s own browser.`}</p>
       <div className="well"><span className="grow"><span className="small">{`On ${dev.the}, open`}</span><code className="addr">{shown}</code></span></div>
       <div className="foot">
@@ -101,7 +120,7 @@ function Elsewhere({ onTablet }: { onTablet: () => void }) {
 function TooOld({ on }: { on: OnDevice }) {
   return (
     <section className="card err" aria-labelledby="h">
-      <h2 id="h">Glassworks needs Android 6 or newer.</h2>
+      <h2 id="h">Glassworks needs Android 6 or newer</h2>
       <p className="lede">This {on.form} runs Android {on.release}. Nothing was downloaded.</p>
       <div className="foot"><span /><Link className="btn ghost" href="/">Pick another panel</Link></div>
     </section>
@@ -126,7 +145,7 @@ function Get({ on, go, releases, load }: P & { releases: Partial<Record<Line, Re
     return (
       <section className="card" aria-labelledby="h">
         <span className="row"><span className="pill soon">Not released yet</span></span>
-        <h2 id="h">{`${dev.app} isn't out yet.`}</h2>
+        <h2 id="h">{`${dev.app} isn't out yet`}</h2>
         <p className="lede">When it is, it downloads from this page. Follow it on GitHub to hear first.</p>
         <div className="foot">
           <span className="links"><button type="button" className="link" onClick={() => go('device')}>Back</button>{links(buildSwitch)}</span>
@@ -137,7 +156,7 @@ function Get({ on, go, releases, load }: P & { releases: Partial<Record<Line, Re
   }
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h">Get Glassworks.</h2>
+      <h2 id="h">Get Glassworks</h2>
       <p className="lede">Download it here, then install it from the download.</p>
       {r.state === 'loading' && <p className="status work" role="status">Looking for the latest release…</p>}
       {r.state === 'error' && <>
@@ -179,7 +198,7 @@ function Setup({ go }: Pick<P, 'go'>) {
   const { dev } = useWhere();
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h">Open Glassworks.</h2>
+      <h2 id="h">Open Glassworks</h2>
       <p className="lede">{`Its setup walks you through the rest, on ${dev.the}.`}</p>
       <ol className="num">
         <li><b>Home Assistant</b><small>{`Sign in, then add ${dev.the} in Home Assistant.`}</small></li>
@@ -212,7 +231,7 @@ function Kiln({ on, go }: P) {
   useEffect(() => setHere(`${location.host}${base}`), [base]);
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h">Turn on USB debugging.</h2>
+      <h2 id="h">Turn on USB debugging</h2>
       <p className="lede">Then Kiln on a computer adds Secure settings over USB. Glassworks and its setup stay.</p>
       <ol className="num">
         <li><b>Open</b> <Path path={st.unlock.path} /> <a className="link" href={SETTINGS_LINKS.about}>Open it</a>

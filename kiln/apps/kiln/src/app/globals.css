@@ -120,11 +120,6 @@ code { font: 500 0.82em var(--f-mono); background: var(--well); padding: 2px 6px
 .picker-head .lede { font-size: 16px; }
 .frames { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .frames > * { min-width: 0; }
-.yours { display: grid; gap: 10px; align-content: center; justify-items: start; padding: 28px; border-radius: var(--r-tile); border: 1px dashed color-mix(in srgb, var(--fg) 24%, transparent); text-decoration: none; color: inherit; min-height: 240px; }
-.yours:hover { border-color: var(--sky); }
-.yours .plus { font-size: 26px; font-weight: 200; color: var(--faint); }
-.yours b { font-size: 18px; font-weight: 500; letter-spacing: -0.01em; }
-.yours p { color: var(--muted); font-size: 14px; }
 .running { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: 12px 16px; border-radius: 14px; border: 1px solid color-mix(in srgb, var(--turn) 40%, transparent); background: color-mix(in srgb, var(--turn) 7%, transparent); }
 
 /* ---- the card ---- */
@@ -185,7 +180,6 @@ h2.huge { font-size: 44px; font-weight: 200; }
 .dev[aria-disabled="true"] { cursor: default; opacity: 0.7; }
 .dev .ph { aspect-ratio: 2 / 1; border-radius: 10px; background: linear-gradient(160deg, color-mix(in srgb, var(--s-fg) 9%, var(--night)), var(--night)); border: 1px solid var(--edge); display: grid; place-items: center; font: 300 24px var(--f-sans); color: var(--s-mu); }
 .dev .n { font-weight: 500; font-size: 14px; }
-.dev.yours { border-style: dashed; place-content: center; text-align: center; color: var(--muted); background: none; }
 .pill { font: 500 10.5px/1 var(--f-sans); letter-spacing: 0.06em; text-transform: uppercase; padding: 4px 8px; border-radius: 999px; }
 .pill.beta { color: var(--work-ink); background: color-mix(in srgb, var(--amber) 16%, transparent); }
 .pill.soon { color: var(--muted); background: var(--well); }

@@ -47,6 +47,8 @@ export interface Installer {
   wayBack?: { how: string };
   /** The device has a touchscreen. Without one (false), set-up never offers "do it on the panel". */
   touch?: boolean;
+  /** The picker's What you'll need bar for this frame: what to have at hand, and its way back, in a sentence or two. */
+  picker?: { needs: string[]; wayBack: string };
   /** An install from the device's own browser, at `route` under the frame's, its page's title `title`. */
   onDevice?: { route: string; title: string };
   /**

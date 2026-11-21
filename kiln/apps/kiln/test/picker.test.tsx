@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // The picker: s1.edm.sh's old #/ links, the running install's way back, and Continue during one.
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -8,7 +8,10 @@ const router = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => router }));
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: ReactNode }) => <a href={href} {...p}>{children}</a> }));
 
+import { ships } from '@glassworks/frame-card';
+import { INSTALLERS } from '@glassworks/frames/catalog';
 import { Picker } from '../src/components/Picker';
+import { FRAMES } from '../src/frames/catalog';
 import { registry } from '../src/wizard/registry';
 import { Store } from '../src/wizard/session';
 import { initial } from '../src/wizard/state';
@@ -76,15 +79,71 @@ describe('the picker', () => {
     expect(screen.getByRole('link', { name: 'Back to it' }).getAttribute('href')).toBe('/aqara-s1-plus/install');
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     expect(router.push).toHaveBeenCalledWith('/aqara-s1-plus/install');
-    act(() => store.dispatch({ type: 'done', done: { title: 'Done.', body: '' } }));
+    act(() => store.dispatch({ type: 'done', done: { title: 'You\'re all set', body: '' } }));
     expect(screen.queryByText(/still working/)).toBeNull();
   });
 
   it('keeps the last stopped run\'s details', () => {
     const store = installing();
-    store.dispatch({ type: 'fail', failure: { title: 'It disconnected.', body: 'Nothing was written.', wrote: false, tips: [], raw: 'x', at: 2 } });
+    store.dispatch({ type: 'fail', failure: { title: 'It disconnected', body: 'Nothing was written.', wrote: false, tips: [], raw: 'x', at: 2 } });
     store.dispatch({ type: 'go', screen: 'connect' });
     render(<Picker />);
     expect(screen.getByRole('status').textContent).toMatch(/The last run stopped: It disconnected\. Download its log/);
+  });
+});
+
+describe('the picker, calm for a first visit and a returning one (#672)', () => {
+  const group = (id: string) => document.querySelector<HTMLElement>(`[aria-labelledby="${id}"]`)!;
+  const names = (id: string) => [...group(id).querySelectorAll('[role=radio]')].map((r) => r.getAttribute('aria-label'));
+
+  it('puts the frames Kiln installs first, and the ones to come in their own group, none of them pickable', () => {
+    render(<Picker />);
+    expect(screen.getByRole('heading', { name: 'Ready to install' })).toBeTruthy();
+    expect(names('ready')).toEqual(expect.arrayContaining(['Aqara S1 Plus']));
+    expect(names('ready').every((n) => !/not installable/.test(n ?? ''))).toBe(true);
+    expect(screen.getByRole('heading', { name: 'Coming soon' })).toBeTruthy();
+    expect(names('soon').length).toBeGreaterThan(0);
+    expect([...group('soon').querySelectorAll('[role=radio]')].every((r) => r.hasAttribute('disabled') || r.getAttribute('data-disabled') !== null)).toBe(true);
+  });
+
+  it('puts what you\'ll need first, keeps Continue last and pinned, and shows no "Your panel" card (the maintainer, #672)', () => {
+    render(<Picker />);
+    const order = [...document.querySelectorAll('[aria-labelledby="needs"], [aria-labelledby="ready"], [aria-labelledby="soon"]')].map((e) => e.getAttribute('aria-labelledby'));
+    expect(order).toEqual(['needs', 'ready', 'soon']);
+    const section = document.querySelector('section.picker')!;
+    const continueRow = screen.getByRole('button', { name: 'Continue' }).closest('.foot')!;
+    expect(section.lastElementChild).toBe(continueRow);
+    expect(continueRow.className).toMatch(/sticky/);
+    expect(screen.queryByText('Your panel')).toBeNull();
+  });
+
+  it('says what the picked frame needs, from its data, and its way back', () => {
+    render(<Picker />);
+    const needs = within(group('needs'));
+    expect(needs.getByText('Chrome or Edge on this computer')).toBeTruthy();
+    expect(needs.getByText('A USB-C data cable, plugged straight into this computer')).toBeTruthy();
+    expect(needs.getByText(/Kiln backs up the panel before it writes anything\./)).toBeTruthy();
+  });
+
+  it('offers a returning person set-up for the picked frame, and Undo only where the frame has undo routes', () => {
+    render(<Picker />);
+    expect(screen.getByText('Already installed on Aqara S1 Plus?')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Finish setting up' }).getAttribute('href')).toBe('/aqara-s1-plus/set-up');
+    expect(screen.getByRole('link', { name: 'Undo an install' }).getAttribute('href')).toBe('/aqara-s1-plus/undo');
+    fireEvent.click(screen.getByRole('radio', { name: /^lululemon Studio Mirror/ }));
+    expect(screen.getByRole('link', { name: 'Finish setting up' }).getAttribute('href')).toBe('/lululemon-mirror/set-up');
+    // the Mirror's way back is its own image, on its own screens: no undo routes to send anyone to
+    expect(screen.queryByRole('link', { name: 'Undo an install' })).toBeNull();
+    expect(within(group('needs')).getByText('A micro-USB data cable')).toBeTruthy();
+  });
+
+  it('every frame Kiln installs says what it needs and its way back (installer.json picker)', () => {
+    const ready = FRAMES.filter((f) => ships(f.status) && f.kiln);
+    expect(ready.length).toBeGreaterThan(0);
+    for (const f of ready) {
+      const d = INSTALLERS[f.id]?.picker;
+      expect(d?.needs.length, f.id).toBeGreaterThan(0);
+      expect(d?.wayBack, f.id).toMatch(/\.$/);
+    }
   });
 });

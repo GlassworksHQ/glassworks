@@ -32,7 +32,7 @@ describe('LeaveGuard', () => {
     expect(leave()).toBe(true);
     await act(() => Promise.resolve());
     expect(request).toHaveBeenCalledWith('screen');
-    act(() => store.dispatch({ type: 'done', done: { title: 'Done.', body: '' } }));
+    act(() => store.dispatch({ type: 'done', done: { title: 'You\'re all set', body: '' } }));
     expect(leave()).toBe(false);
     expect(release).toHaveBeenCalled();
   });
@@ -88,7 +88,7 @@ describe('LeaveGuard', () => {
     visibility('visible');
     expect(request).toHaveBeenCalledTimes(2);
     await act(async () => { answers.shift()!(); });
-    act(() => store.dispatch({ type: 'done', done: { title: 'Done.', body: '' } }));
+    act(() => store.dispatch({ type: 'done', done: { title: 'You\'re all set', body: '' } }));
     expect(locks.every((l) => l.released)).toBe(true); // none left holding the screen on
   });
 
