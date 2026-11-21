@@ -102,7 +102,7 @@ Neither build is distributed on Google Play because Glassworks manages its own u
 
 ## Install
 
-Generic Android installs as a standard APK. Open `kiln.glassworks.dev/android` in Chrome or Edge: Kiln downloads the arm64-v8a APK of the newest `generic-android-v*` release and checks it against the release's `.sha256`. That build needs Android 8 or newer on a 64-bit (arm64-v8a) device. Kiln reads the device's Android version and processor first, and refuses one the APK doesn't fit before it writes anything. For **Android 6 or 7** (the legacy build, `dev.glassworks.generic_android.legacy`) or a 32-bit device (the armeabi-v7a APK), open `kiln.glassworks.dev/android?apk=local` and pick the APK that fits from your computer, as you would a test build.
+Generic Android installs as a standard APK. Open `kiln.glassworks.dev/android` in Chrome or Edge: Kiln downloads the newest `generic-android-v*` release and checks it against the release's `.sha256`. That build needs Android 8 or newer. Kiln reads the device's Android version and processor before it writes anything, and installs the 64-bit (arm64-v8a) or 32-bit (armeabi-v7a) APK, whichever the device runs. Some tablets with a 64-bit chip run only 32-bit apps, such as Samsung's own Android 8.1 on the Galaxy Tab A 10.1, and they get the 32-bit one. For **Android 6 or 7** (the legacy build, `dev.glassworks.generic_android.legacy`), open `kiln.glassworks.dev/android?apk=local` and pick the APK that fits from your computer, as you would a test build.
 
 Kiln's Generic Android recipe ([`installer/`](installer)) guides you through enabling USB debugging for your tablet's brand, then automatically:
 

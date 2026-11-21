@@ -18,6 +18,7 @@ export const ON_DEVICE_DEMOS = {
   computer: { browser: 'computer' },
   get: { browser: 'known', screen: 'get' },
   'get-unsure': { browser: 'unknown', screen: 'get' },
+  'get-32bit': { browser: 'bits32', screen: 'get' },
   'get-legacy': { browser: 'legacy', screen: 'get' },
   'get-either': { browser: 'either', screen: 'get' },
   'get-none': { browser: 'known', screen: 'get', release: 'none' },

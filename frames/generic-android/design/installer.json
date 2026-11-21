@@ -51,7 +51,7 @@
     "apk": {
       "line": "generic-android",
       "abi": "arm64-v8a",
-      "why": "Glassworks for generic Android (Android 8+), never its legacy build, from Kiln's release route; arm64-v8a, the ABI of the Pixel Tablet and most tablets on 8+. The recipe refuses a device that can't run it before anything is written"
+      "why": "Glassworks for generic Android (Android 8+), never its legacy build, from Kiln's release route. `abi` is what the first screen downloads before Kiln can read the device: arm64-v8a, the ABI of the Pixel Tablet and most tablets on 8+. Once it reads ro.product.cpu.abilist, a device that runs another of frame.json's `abis` first (armeabi-v7a on a 32-bit userspace, issue 700) gets that APK from the same release; one that runs none of them is refused before anything is written"
     }
   },
   "picker": {

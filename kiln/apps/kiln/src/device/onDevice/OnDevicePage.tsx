@@ -130,15 +130,15 @@ function TooOld({ on }: { on: OnDevice }) {
 function Get({ on, go, releases, load }: P & { releases: Partial<Record<Line, Release>>; load: (l: Line) => void }) {
   const { dev } = useWhere();
   const [legacy, setLegacy] = useState(buildFor(on) === 'legacy');
+  // Kiln picks the build from what the browser runs as (issue 700); the person never picks 32 or 64-bit
   const guess = abiFor(on, FRAMES);
-  const [abi, setAbi] = useState<Abi>(guess.abi);
   const line = dev.onDevice.lines[legacy ? 'legacy' : 'generic'];
   const r = releases[line] ?? { state: 'loading' };
-  const dl = download(line, r, abi);
-  const other: Abi = abi === 'arm64-v8a' ? 'armeabi-v7a' : 'arm64-v8a';
-  const bits = (a: Abi) => (a === 'arm64-v8a' ? '64-bit' : '32-bit');
+  const dl = download(line, r, guess.abi);
+  const other: Abi = guess.abi === 'arm64-v8a' ? 'armeabi-v7a' : 'arm64-v8a';
+  // only where the browser said nothing: the other build, should Android refuse this one
+  const retry = !guess.sure && download(line, r, other);
   const buildSwitch = on.app === 'either' && <button key="build" type="button" className="link" onClick={() => setLegacy(!legacy)}>{legacy ? 'Android 8 or newer? Get Glassworks' : 'Android 6 or 7? Get the legacy build'}</button>;
-  const abiSwitch = !guess.sure && <button key="abi" type="button" className="link" onClick={() => setAbi(other)}>{`A ${bits(other)} ${on.form}? Get that build`}</button>;
   const links = (...b: ReactNode[]) => b.filter(Boolean).map((x, i) => <Fragment key={i}><span aria-hidden="true">·</span>{x}</Fragment>);
 
   if (r.state === 'none') {
@@ -163,12 +163,12 @@ function Get({ on, go, releases, load }: P & { releases: Partial<Record<Line, Re
         <p className="status err" role="alert">Kiln couldn&apos;t read the releases: {r.why}.</p>
         <span className="row"><button type="button" className="btn ghost" onClick={() => load(line)}>Try again</button></span>
       </>}
-      {r.state === 'out' && !dl && <p className="status err" role="alert">Glassworks {r.version} has no {bits(abi)} build.</p>}
+      {r.state === 'out' && !dl && <p className="status err" role="alert">{`Glassworks ${r.version} has no build for this ${on.form} yet.`}</p>}
       {dl && (
         <div className="well">
           <span className="grow">
             <b className="fg">Glassworks {dl.version}{legacy ? ', legacy build' : ''}</b>
-            <span className="small">{legacy ? 'For Android 6 and 7' : 'For Android 8 and newer'} · {bits(abi)}</span>
+            <span className="small">{legacy ? 'For Android 6 and 7' : 'For Android 8 and newer'}</span>
           </span>
           <a className="btn ember" href={dl.href} download={dl.name}>Download</a>
         </div>
@@ -181,12 +181,14 @@ function Get({ on, go, releases, load }: P & { releases: Partial<Record<Line, Re
         )}
         <li><b>Open</b> the download when it finishes.<small>From the notification, or the browser&apos;s Downloads.</small></li>
         {!legacy && <li><b>Allow</b> this browser if Android asks.<small>Tap <b>Settings</b>, turn on <b>Allow from this source</b>, then go back.</small></li>}
-        <li><b>Install</b><small>Android says “App not installed”? {guess.sure ? 'Tell us on GitHub.' : `This ${on.form} may need the ${bits(other)} build.`}</small></li>
+        <li><b>Install</b><small>Android says “App not installed”? {retry
+          ? <a className="link" href={retry.href} download={retry.name}>Download the other build</a>
+          : 'Tell us on GitHub.'}</small></li>
       </ol>
       <div className="foot">
         <span className="links">
           <button type="button" className="link" onClick={() => go('device')}>Back</button>
-          {links(buildSwitch, abiSwitch)}
+          {links(buildSwitch)}
         </span>
         <button type="button" className="btn ghost" onClick={() => go('setup')}>It&apos;s installed</button>
       </div>

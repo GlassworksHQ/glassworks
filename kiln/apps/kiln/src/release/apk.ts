@@ -4,7 +4,7 @@
 // hash before the file exists, and a Glassworks release isn't known until its tag is cut. Never releases/latest: that
 // is another line's.
 import { ships, type Support } from '@glassworks/frame-card';
-import { download, loadRelease, type Abi, type Line } from '../device/onDevice/model';
+import { download, loadRelease, type Abi, type Line, type Release } from '../device/onDevice/model';
 
 /** Where a page's APK comes from: the newest release, or a file the tester picks. */
 export type ApkFrom = 'release' | 'local';
@@ -30,6 +30,18 @@ export function apkMode(search: string, demosOn: boolean, demos: readonly string
 
 /** Which APK a page installs: its release line, and the ABI it downloads. */
 export interface ReleaseLine { line: Line; abi: Abi }
+
+/** A release as the route listed it: its tag, version and files. */
+export type ListedRelease = Extract<Release, { state: 'out' }>;
+
+/**
+ * The ABI of the release APK for a device: the first of its ABIs (`ro.product.cpu.abilist`, preferred first) that the
+ * frame ships (frame.json `abis`). A 64-bit SoC with a 32-bit userspace lists only `armeabi-v7a,armeabi` (a Galaxy
+ * Tab A 10.1 on Samsung's Android 8.1, issue 700), so it gets that build. Undefined when the frame ships none of them.
+ */
+export function apkAbi(deviceAbis: readonly string[], ships: readonly string[]): Abi | undefined {
+  return deviceAbis.find((a) => ships.includes(a)) as Abi | undefined;
+}
 
 /** Where the release's APK is, from waiting for the first look to checked against its published SHA-256. */
 export type ReleaseApk =
@@ -76,10 +88,11 @@ async function body(res: Response, onGot: (got: number, size?: number) => void, 
 
 /**
  * The newest release's APK for `of`, its bytes checked against the release's .sha256. Throws NoRelease before the
- * first release, and an Error that says what went wrong otherwise, including when the route stays silent for
- * `stallMs`.
+ * first release (or when the release has no APK for the ABI), and an Error that says what went wrong otherwise,
+ * including when the route stays silent for `stallMs`. `of.from`: that release, as an earlier call listed it, not the
+ * newest one now. Returns the release it took the APK from.
  */
-export async function releaseApk(of: ReleaseLine, get: typeof fetch, onState: (s: ReleaseApk) => void, stallMs = RELEASE_STALL_MS): Promise<{ bytes: Uint8Array; ready: Extract<ReleaseApk, { state: 'ready' }> }> {
+export async function releaseApk(of: ReleaseLine & { from?: ListedRelease }, get: typeof fetch, onState: (s: ReleaseApk) => void, stallMs = RELEASE_STALL_MS): Promise<{ bytes: Uint8Array; ready: Extract<ReleaseApk, { state: 'ready' }>; release: ListedRelease }> {
   const abort = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const poke = () => { clearTimeout(timer); timer = setTimeout(() => abort.abort(), stallMs); };
@@ -94,9 +107,9 @@ export async function releaseApk(of: ReleaseLine, get: typeof fetch, onState: (s
   }
 }
 
-async function fetchApk(of: ReleaseLine, get: typeof fetch, onState: (s: ReleaseApk) => void, poke: () => void) {
+async function fetchApk(of: ReleaseLine & { from?: ListedRelease }, get: typeof fetch, onState: (s: ReleaseApk) => void, poke: () => void) {
   onState({ state: 'looking' });
-  const r = await loadRelease(of.line, get);
+  const r: Release = of.from ?? await loadRelease(of.line, get);
   if (r.state === 'error') throw new Error(`Kiln couldn't read the releases: ${r.why}`);
   const apk = download(of.line, r, of.abi);
   if (r.state !== 'out' || !apk) throw new NoRelease();
@@ -114,5 +127,5 @@ async function fetchApk(of: ReleaseLine, get: typeof fetch, onState: (s: Release
   const bytes = await body(res, (got, size) => onState({ state: 'downloading', tag, version, name, got, size }), poke);
   const sha256 = hex(await crypto.subtle.digest('SHA-256', bytes as Uint8Array<ArrayBuffer>));
   if (sha256 !== want) throw new Error(`${name} isn't the file ${tag} publishes: its SHA-256 is ${sha256}, the release says ${want}. Kiln dropped it`);
-  return { bytes, ready: { state: 'ready' as const, tag, version, name, size: bytes.length, sha256 } };
+  return { bytes, ready: { state: 'ready' as const, tag, version, name, size: bytes.length, sha256 }, release: r };
 }
