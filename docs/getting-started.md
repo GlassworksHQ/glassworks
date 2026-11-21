@@ -10,9 +10,9 @@ Glassworks supports dedicated wall panels as well as standard Android tablets:
 
 | Device | Support | How it installs |
 |---|---|---|
-| [Aqara Panel Hub S1 Plus](../frames/aqara-s1-plus/README.md) | Beta | Rooted install from your browser with Kiln over USB-C. Supports every feature, including the built-in Zigbee/Thread radio, presence sensor, and wall base relays. |
-| [Generic Android](../frames/generic-android/README.md) | Under development | Installs as a regular Android app (Android 8+, with a legacy build for Android 6–7). No root needed. Runs every feature your device's hardware supports, including tested devices like the [Google Pixel Tablet](../frames/google-pixel-tablet/README.md). |
-| [lululemon Studio Mirror](../frames/lululemon-mirror/README.md) | Under development | Installs the legacy Android build via Kiln onto the 40-inch mirror display. |
+| [Aqara Panel Hub S1 Plus](../frames/aqara-s1-plus/README.md) | Stable | Rooted install from your browser with Kiln over USB-C. Supports every feature, including the built-in Zigbee/Thread radio, presence sensor, and wall base relays. |
+| [Generic Android](../frames/generic-android/README.md) | Beta | Installs as a regular Android app from Kiln or APK (Android 8+, plus a legacy build for Android 6–7). No root needed. Runs every feature your device's hardware supports, including tested tablets like the [Google Pixel Tablet](../frames/google-pixel-tablet/README.md). |
+| [lululemon Studio Mirror](../frames/lululemon-mirror/README.md) | Beta | Installs the legacy Android build via Kiln onto the 40-inch mirror display over fastboot. |
 
 You can also browse all supported and planned hardware with interactive 3D previews at [glassworks.dev/frames](https://www.glassworks.dev/frames).
 
@@ -90,3 +90,4 @@ Once your dashboard is up and running, explore what else your panel can do:
 - **[Blueprints](blueprints.md)** — Import ready-made Home Assistant automations for night mode, doorbells, interactive prompts, and motion lighting.
 - **[Using the Zigbee/Thread radio](../frames/aqara-s1-plus/docs/radio-guide.md)** — Turn the Aqara S1 Plus radio into a ZHA coordinator, Zigbee2MQTT coordinator, Thread border router, or network repeater.
 - **[Updates and restoring stock software](updates.md)** — Keep Glassworks updated through Home Assistant and learn how to revert to stock firmware.
+- **[Clarity performance grades](clarity.md)** — Understand what each Clarity grade means and how devices compare on real Home Assistant dashboards.

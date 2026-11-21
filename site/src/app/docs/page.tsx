@@ -50,7 +50,7 @@ export default async function DocsHome() {
   const dailyFeatures = of("user").filter((x) => !x.frame && x.url !== "/docs/getting-started");
   const architectureDocs = byUrls(["/docs/principles", "/docs/what-makes-a-pane", "/docs/frames", "/docs/frame-agent", "/docs/core/pane-api"]);
   const kilnDocs = byUrls(["/docs/kiln", "/docs/kiln/design", "/docs/kiln/images"]);
-  const opsDocs = byUrls(["/docs/secrets", "/docs/size", "/docs/ci", "/docs/releasing", "/docs/branding", "/docs/legal", "/changelog"]);
+  const opsDocs = byUrls(["/docs/secrets", "/docs/perf", "/docs/frames/aqara-s1-plus/radio", "/docs/size", "/docs/ci", "/docs/releasing", "/docs/branding", "/docs/legal", "/changelog"]);
   const libraries = docs.filter((x) => x.url.startsWith("/docs/libraries/"));
   const notes = of("notes").filter((n) => n.url !== "/docs/notes");
   const frameNotes = frames

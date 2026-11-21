@@ -122,7 +122,7 @@ export async function docsTracks(): Promise<NavTrack[]> {
           label: "Security & operations",
           items: [
             ...byUrl("/docs/secrets"),
-            ...["/docs/size", "/docs/ci", "/docs/releasing", "/docs/branding", "/docs/legal", "/changelog"].flatMap(byUrl),
+            ...["/docs/perf", "/docs/frames/aqara-s1-plus/radio", "/docs/size", "/docs/ci", "/docs/releasing", "/docs/branding", "/docs/legal", "/changelog"].flatMap(byUrl),
           ],
         },
       ],

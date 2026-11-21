@@ -1,0 +1,80 @@
+---
+title: "Introducing Clarity: an open performance grade for Home Assistant wall panels"
+date: 2026-12-01
+author: "Eduardo"
+summary: "Spec sheets can't tell you whether a wall panel will feel snappy on your actual dashboard. Clarity runs the real Home Assistant frontend on fixed reference dashboards and gives every device an honest A+ to E grade."
+draft: true
+---
+
+<!--
+Draft. Text in [brackets] waits on the release; fill it from each frame's clarity/clarity.json
+on the day it goes out. The date in the folder name and `date:` is a placeholder too.
+-->
+
+Alongside [Glassworks 1.0](https://www.glassworks.dev/blog/glassworks-1-0), I'm also releasing **Clarity**—an open performance benchmark and A+ to E grading system for Home Assistant wall panels.
+
+## The question spec sheets can't answer
+
+Every time I look at a new wall panel or cheap tablet, I have the same question: will this actually feel good to use every day? [Your own moment: a panel you bought that looked great on paper and felt sluggish, or one you nearly skipped.]
+
+Hardware specs barely help. Knowing a panel has a quad-core A53 and 2 GB of RAM doesn't tell you whether tapping a light feels instant or takes a full second, or whether opening a history graph freezes the screen. Reviews are usually just someone saying "feels snappy" or "a bit laggy" on whatever tiny or massive dashboard they happen to run on their own Wi-Fi.
+
+When a screen hangs on your wall, those tiny interactions are the whole experience. You tap a toggle on your way out the door, glance at an updating sensor, or pull up a camera feed. If those feel sluggish, you stop using the panel. So I built a repeatable way to measure them across any device.
+
+## One letter from A+ to E
+
+Clarity boils a full test run down to a single letter grade, answering a practical question: **how heavy a Home Assistant dashboard can this device run while still feeling responsive?**
+
+| Grade | What it means |
+|---|---|
+| **A+** | Handles heavy dashboards smoothly, holding 60 fps across every task |
+| **A** | Good wall panel, even with heavy dashboards |
+| **B** | Good wall panel for typical dashboards, including a live camera feed |
+| **C** | Good wall panel for typical dashboards without a camera feed |
+| **D** | Best kept to light, simple dashboards |
+| **E** | Struggles even with light dashboards |
+
+Every grade is paired with a single plain-English summary saying what the device handles well and what kept it from the next letter up.
+
+## How the test actually works
+
+Instead of synthetic JavaScript benchmarks, Clarity runs a pinned version of the **real Home Assistant frontend** on three standardized reference dashboards (light, typical, and heavy). A lightweight mock Home Assistant server runs locally on your computer and replays the exact same entity states and live update stream every time. Because your own server, custom cards, and Wi-Fi aren't part of the equation, two panels tested months apart on different networks are measured under identical conditions.
+
+On each dashboard, Clarity tests the things you actually do on a wall panel:
+
+- **Tapping controls** while live state updates are streaming in
+- **Scrolling and flinging** through cards
+- **Live update latency** — how fast a state change from Home Assistant reaches the pixels on screen
+- **Switching views** across dashboard tabs
+- **Opening more-info dialogs** for lights, thermostats, and sensors with history graphs
+- **Live camera streams** — how quickly the first frame appears and how smoothly video plays
+- **Cold restart time** back to a usable dashboard
+
+## Built to be hard to game
+
+A benchmark only matters if people trust it, so we set a few strict ground rules from the start:
+
+- **Industry thresholds.** Passing and failing numbers come from established web and mobile guidelines—Google's Core Web Vitals, RAIL, and Android vitals—rather than arbitrary numbers we made up. Anywhere we had to choose a cutoff ourselves, the spec explains why.
+- **Perceived responsiveness over vanity numbers.** Humans immediately feel a 400 ms delay after tapping a light; they don't care whether a background repaint hit 54 or 60 fps. The grade weights what you actually notice.
+- **No moving the goalposts.** The rubric was written before devices were graded against it. Rules can only change publicly for reasons that apply to every panel—never to bump a specific device up a letter.
+- **Everything is open.** [The full spec](../../../docs/perf.md), test runner, reference dashboards, and published results all live in the repo so anyone can verify our numbers or test their own hardware.
+
+## Grading our own panel first
+
+To keep ourselves honest, we started with our own reference device. The Aqara Panel Hub S1 Plus grades **[grade at release]**—[one line from its Clarity card]. It's an older 32-bit chip doing real work on Home Assistant's modern JavaScript frontend. We spent a lot of time trying to squeeze more speed out of it and documented [everything that worked and everything that didn't](../../../frames/aqara-s1-plus/research/view-open.md).
+
+I'd much rather publish an honest D than massage the test into a B. If you know we won't fudge the grade on our own flagship device, you can actually trust the A's when you see them.
+
+Every Glassworks frame gets a Clarity run, and its grade appears right on [glassworks.dev/frames](https://www.glassworks.dev/frames) and inside Kiln. [Other frames' grades at release.]
+
+## Beyond the letter grade
+
+A Clarity run also logs metrics that don't affect the letter grade but are genuinely useful when setting up a panel: per-process memory usage, the RAM cost of enabling each pane, idle CPU, animation headroom, and restart time on **your own** dashboard. If you want to know whether turning on Assist voice or Music Assistant will push an older panel over its memory limit, the report shows you directly.
+
+## Where Clarity goes next
+
+Even though Clarity started as Glassworks' own benchmark, nothing about it is tied to Glassworks. The next step is making it easy to run against **any** Home Assistant wall panel—an Android tablet, a smart display, or a completely different kiosk app. [Status at release.]
+
+If you build or test wall panels, run Clarity on your hardware and share the results. And if you spot a flaw in the rubric, [open a discussion](https://github.com/GlassworksHQ/glassworks/discussions)—the rules evolve in public for every device at once.
+
+Eduardo

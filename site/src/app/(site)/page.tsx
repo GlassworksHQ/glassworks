@@ -47,7 +47,11 @@ const KILN_STAGES = [
 ] as const;
 
 export default async function Home() {
-  const [[post], latest, catalog] = await Promise.all([getPosts(), release(), blueprints()]);
+  const [posts, latest, catalog] = await Promise.all([getPosts(), release(), blueprints()]);
+  const clarityPost = posts.find((p) => p.slug === "clarity");
+  // When Clarity launches alongside another post on the same day, feature the other post in the hero
+  // because the Clarity section below already links straight to Introducing Clarity.
+  const post = posts.find((p) => p.date === posts[0]?.date && p.slug !== "clarity") ?? posts[0];
   // the story draws these frames' own models
   const frame = (id: string) => {
     const f = frames.find((x) => x.id === id);
@@ -212,8 +216,8 @@ export default async function Home() {
               We benchmark panels on the real Home Assistant frontend—measuring tap latency, scroll smoothness, live state updates, and camera streams on standardized dashboards so you know what to expect before you buy. Devices without a published run stay marked pending until tested.
             </p>
             <div className={s.actions}>
-              <Link href="/docs/perf" className={s.textLink}>
-                How {CLARITY} grades work →
+              <Link href={clarityPost ? clarityPost.url : "/docs/clarity"} className={s.textLink}>
+                {clarityPost ? `Introducing ${CLARITY} →` : `How ${CLARITY} grades work →`}
               </Link>
               <Link href="/frames" className={s.textLink}>
                 Compare all devices →
