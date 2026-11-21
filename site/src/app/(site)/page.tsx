@@ -27,22 +27,22 @@ const KILN_STAGES = [
   {
     num: "01",
     title: "Backup",
-    detail: "Saves your stock partitions to your computer before a single byte changes. The Mirror is the exception: installing erases lululemon's software, with no backup.",
+    detail: "Saves your stock firmware to your computer before a single byte changes on panels that support it. (Installing on the Mirror replaces lululemon's software with no stock backup.)",
   },
   {
     num: "02",
     title: "Verify",
-    detail: "Checks every download before it's written. On the S1, each partition is read back after writing to confirm every byte.",
+    detail: "Checks every download before flashing—and on the S1, reads every written partition back to confirm it matches byte for byte.",
   },
   {
     num: "03",
     title: "Flash",
-    detail: "Installs Glassworks and hands off Wi-Fi and Home Assistant setup straight from Chrome.",
+    detail: "Installs Glassworks and walks you straight into Wi-Fi and Home Assistant setup from the browser.",
   },
   {
     num: "04",
     title: "Restore",
-    detail: "A guided restore puts the S1 back on your saved stock backup, and the Mirror can go back to plain Glass Panes.",
+    detail: "Return the S1 to your saved stock backup with a guided restore, or switch the Mirror back to plain Glass Panes anytime.",
   },
 ] as const;
 
@@ -81,10 +81,10 @@ export default async function Home() {
           <div className={s.sectionIntro}>
             <span className={s.eyebrow}>SUPPORTED HARDWARE</span>
             <h2 id="devices-heading" className={s.sectionH2}>
-              Real wall hardware — and the tablet in your drawer
+              Real wall hardware—and the tablet in your drawer
             </h2>
             <p className={s.sectionLede}>
-              Dedicated wall switches, full-length mirrors, and everyday Android tablets running the same open Home Assistant panel core.
+              Turn dedicated wall switches, full-length smart mirrors, and everyday Android tablets into fast, local Home Assistant panels.
             </p>
           </div>
           <FrameGrid
@@ -100,10 +100,11 @@ export default async function Home() {
           <div className={s.splitCopy}>
             <span className={`${s.eyebrow} ${s.eyebrowEmber}`}>KILN WEB INSTALLER</span>
             <h2 id="kiln-heading" className={s.sectionH2}>
-              Flash from Chrome, with a way back
+              Install from your browser, with a way back
             </h2>
             <p className={s.sectionLede}>
-              Plug your panel in over USB and open Kiln in Chrome or Edge. There are no command-line tools and no vendor cloud; on Windows, the S1 needs a <Link href="/docs/frames/aqara-s1-plus/install#one-time-setup-for-your-computer">one-time USB driver step</Link>. Wall panels keep a backup of their stock software and a guided way back to it, and the lululemon Studio Mirror keeps a plain Glass Panes recovery image.
+              Plug in over USB and open Kiln in Chrome or Edge—no terminal commands and no vendor cloud (just a quick{" "}
+              <Link href="/docs/frames/aqara-s1-plus/install#one-time-setup-for-your-computer">one-time USB driver</Link> for the S1 on Windows). Supported wall switches back up their stock software first so you can return anytime, while the Studio Mirror keeps a clean recovery path back to plain Glass Panes.
             </p>
             <div className={s.actions}>
               <a href={KILN} className={s.kilnBtn}>
@@ -187,7 +188,7 @@ export default async function Home() {
               Updates, sensors, and settings right where they belong
             </h2>
             <p className={s.sectionLede}>
-              Glassworks speaks the native ESPHome API directly to Home Assistant. Nothing installs in HACS, no custom integration is required, no cloud account sits in the middle, and panel updates arrive under <em>Settings → Updates</em>.
+              Glassworks speaks the native ESPHome API straight to Home Assistant. There is nothing to install in HACS, no custom integration to maintain, and no cloud account in the middle—even updates show up right under <em>Settings → Updates</em>.
             </p>
             <div className={s.actions}>
               <Link href="/docs/esphome" className={s.textLink}>
@@ -208,7 +209,7 @@ export default async function Home() {
               We&rsquo;d rather show an honest C than hide it
             </h2>
             <p className={s.sectionLede}>
-              Measured panels are tested running the real Home Assistant frontend on standardized dashboards for tap latency, scrolling frame pacing, live state updates, and camera streams. Devices without published runs are marked pending until measured.
+              We benchmark panels on the real Home Assistant frontend—measuring tap latency, scroll smoothness, live state updates, and camera streams on standardized dashboards so you know what to expect before you buy. Devices without a published run stay marked pending until tested.
             </p>
             <div className={s.actions}>
               <Link href="/docs/perf" className={s.textLink}>
@@ -243,8 +244,8 @@ export default async function Home() {
                         : clarity.state === "none"
                           ? "Measurements pending"
                           : clarity.state === "re-measure"
-                            ? "Measured before this version of Clarity: needs a new run"
-                            : "Measured, but not comparable with this version of Clarity"}
+                            ? "Needs a fresh Clarity run"
+                            : "Measured on an older Clarity rubric"}
                     </span>
                   </div>
                   {clarity.state === "graded" ? (
@@ -268,7 +269,7 @@ export default async function Home() {
               Everything your panel can do
             </h2>
             <p className={s.sectionLede}>
-              Each capability ships as a modular pane matched to your hardware — core features start automatically while opt-in panes like the Bluetooth proxy can be toggled anytime — plus ready-to-import Home Assistant blueprints.
+              Features ship as modular panes matched to your hardware. Core capabilities work out of the box, optional ones like the Bluetooth proxy can be toggled on whenever you want them, and ready-to-import blueprints make automations effortless.
             </p>
           </div>
           <ListCard
@@ -307,9 +308,9 @@ export default async function Home() {
           <div className={`glass ${s.devCallout}`}>
             <div className={s.devCopy}>
               <span className={s.eyebrow}>OPEN CORE · MPL-2.0</span>
-              <h2>Port Glassworks to new glass — or build with our MIT libraries</h2>
+              <h2>Port Glassworks to new glass—or build with our MIT libraries</h2>
               <p>
-                Explore the 6-layer architecture, inspect the Pane API, grab our standalone MIT Kotlin and TypeScript libraries, or ship Glassworks on your own hardware under MPL-2.0.
+                Bringing up a new wall panel or building smart-home software of your own? Explore the 6-layer architecture, browse the Pane API, reuse our standalone MIT libraries, or ship Glassworks on your hardware under MPL-2.0.
               </p>
             </div>
             <div className={s.devActions}>

@@ -1385,7 +1385,7 @@ export function MorphStory({
           )}
           <h1 className={s.h1}>Your home, on the wall</h1>
           <p className={s.lede}>
-            Your Home Assistant dashboard full screen, with local voice, synced music, and built-in radios — installed from Chrome in minutes.
+            Your Home Assistant dashboard, full screen on the wall—with local voice, synced music, and built-in radios, ready in minutes.
           </p>
           <div className={s.ctas}>
             <a href={KILN} className={s.install}>
@@ -1406,7 +1406,7 @@ export function MorphStory({
           <span className={s.eyebrow}>LOCAL ASSIST VOICE</span>
           <h2 className={s.h2}>A screen that listens locally</h2>
           <p className={s.lede}>
-            On-device wake word detection runs right on the hardware and hands off to your Home Assistant Assist pipeline.
+            Wake word detection runs right on the panel and hands your request straight to Home Assistant Assist—no cloud wake word listening in.
           </p>
           <div className={s.ctas}>
             <Link href="/panes/assist" className={s.quietLink}>
@@ -1424,7 +1424,7 @@ export function MorphStory({
           <span className={s.eyebrow}>RICH NOTIFICATIONS</span>
           <h2 className={s.h2}>A panel that keeps you in the loop</h2>
           <p className={s.lede}>
-            Doorbell cameras, interactive action buttons, and priority alerts from your automations appear cleanly on the glass and fold away when you&rsquo;re done.
+            See who&rsquo;s at the front door, unlock it in one tap, or catch urgent alerts from your automations—then watch them tuck cleanly out of the way.
           </p>
           <div className={s.ctas}>
             <Link href="/docs/notifications" className={s.quietLink}>
@@ -1442,7 +1442,7 @@ export function MorphStory({
           <span className={s.eyebrow}>PRESENCE DETECTION</span>
           <h2 className={s.h2}>A mirror that gets out of your way</h2>
           <p className={s.lede}>
-            Glassworks tells Home Assistant the moment you step up, without being fooled by a room light switch. Your dashboard can then tuck itself into a slim side pill, so the glass stays a real mirror.
+            Glassworks lets Home Assistant know the moment someone steps up, without getting tripped up by a light switch, so your dashboard can fade into a slim side pill and leave you a real mirror.
           </p>
           <div className={s.ctas}>
             <Link href="/frames/lululemon-mirror" className={s.quietLink}>
@@ -1460,7 +1460,7 @@ export function MorphStory({
           <span className={s.eyebrow}>TIMERS, MUSIC &amp; SENSORS</span>
           <h2 className={s.h2}>A fully native Home Assistant device</h2>
           <p className={s.lede}>
-            Voice timers, updates, and sensors like the tablet&rsquo;s dock connect directly to Home Assistant over ESPHome, while synced audio streams straight from Music Assistant over Sendspin — no custom integration and no cloud.
+            Timers, updates, and sensors like the tablet&rsquo;s dock show up natively in Home Assistant over ESPHome, while synced audio streams straight from Music Assistant over Sendspin. No custom integrations, no HACS, and no cloud.
           </p>
           <div className={s.ctas}>
             <Link href="/frames/google-pixel-tablet" className={s.quietLink}>
@@ -1513,7 +1513,7 @@ export function MorphStory({
           <span className={s.eyebrow}>ANY SHAPE</span>
           <h2 className={s.h2}>One open core for whatever&rsquo;s next</h2>
           <p className={s.lede}>
-            Square switch boxes, round dials, bedside screens, or your own custom hardware — built on one open ESPHome core and installed safely with Kiln.
+            Square wall switches, round dials, bedside displays, or hardware you build yourself—all powered by the same open Home Assistant panel core.
           </p>
           <div className={s.ctas}>
             <a href={KILN} className={s.install}>
@@ -1589,7 +1589,7 @@ export function MorphStory({
             )}
             <h1 className={s.h1}>Your home, on the wall</h1>
             <p className={s.lede}>
-              Your Home Assistant dashboard full screen, with local voice, synced music, and built-in radios — installed from Chrome in minutes.
+              Your Home Assistant dashboard, full screen on the wall—with local voice, synced music, and built-in radios, ready in minutes.
             </p>
             <div className={s.ctas}>
               <a href={KILN} className={s.install}>
@@ -1616,7 +1616,7 @@ export function MorphStory({
             <span className={s.eyebrow}>LOCAL ASSIST VOICE</span>
             <h2 className={s.h2}>A screen that listens locally</h2>
             <p className={s.lede}>
-              On-device wake word detection runs right on the hardware and hands off to your Home Assistant Assist pipeline.
+              Wake word detection runs right on the panel and hands your request straight to Home Assistant Assist—no cloud wake word listening in.
             </p>
             <div className={s.ctas}>
               <Link href="/panes/assist" className={s.quietLink}>
@@ -1640,7 +1640,7 @@ export function MorphStory({
             <span className={s.eyebrow}>RICH NOTIFICATIONS</span>
             <h2 className={s.h2}>A panel that keeps you in the loop</h2>
             <p className={s.lede}>
-              Doorbell cameras, interactive action buttons, and priority alerts from your automations appear cleanly on the glass and fold away when you&rsquo;re done.
+              See who&rsquo;s at the front door, unlock it in one tap, or catch urgent alerts from your automations—then watch them tuck cleanly out of the way.
             </p>
             <div className={s.ctas}>
               <Link href="/docs/notifications" className={s.quietLink}>
@@ -1664,7 +1664,7 @@ export function MorphStory({
             <span className={s.eyebrow}>PRESENCE DETECTION</span>
             <h2 className={s.h2}>A mirror that gets out of your way</h2>
             <p className={s.lede}>
-              Glassworks tells Home Assistant the moment you step up, without being fooled by a room light switch. Your dashboard can then tuck itself into a slim side pill, so the glass stays a real mirror.
+              Glassworks lets Home Assistant know the moment someone steps up, without getting tripped up by a light switch, so your dashboard can fade into a slim side pill and leave you a real mirror.
             </p>
             <div className={s.ctas}>
               <Link href="/frames/lululemon-mirror" className={s.quietLink}>
@@ -1688,7 +1688,7 @@ export function MorphStory({
             <span className={s.eyebrow}>TIMERS, MUSIC &amp; SENSORS</span>
             <h2 className={s.h2}>A fully native Home Assistant device</h2>
             <p className={s.lede}>
-              Voice timers, updates, and sensors like the tablet&rsquo;s dock connect directly to Home Assistant over ESPHome, while synced audio streams straight from Music Assistant over Sendspin — no custom integration and no cloud.
+              Timers, updates, and sensors like the tablet&rsquo;s dock show up natively in Home Assistant over ESPHome, while synced audio streams straight from Music Assistant over Sendspin. No custom integrations, no HACS, and no cloud.
             </p>
             <div className={s.ctas}>
               <Link href="/frames/google-pixel-tablet" className={s.quietLink}>
@@ -1715,7 +1715,7 @@ export function MorphStory({
             <span className={s.eyebrow}>ANY SHAPE</span>
             <h2 className={s.h2}>One open core for whatever&rsquo;s next</h2>
             <p className={s.ledeCenter}>
-              Square switch boxes, round dials, bedside screens, or your own custom hardware — built on one open ESPHome core and installed safely with Kiln.
+              Square wall switches, round dials, bedside displays, or hardware you build yourself—all powered by the same open Home Assistant panel core.
             </p>
             <div className={s.ctasCenter}>
               <a href={KILN} className={s.install}>

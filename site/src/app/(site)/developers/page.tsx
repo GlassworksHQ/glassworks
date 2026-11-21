@@ -74,8 +74,8 @@ export default async function DevelopersPage() {
         </div>
         <Tiles className={m.trio}>
           <Tile value="Port it" sub="Write a frame for any Android wall panel, smart mirror, or tablet." />
-          <Tile value="Ship your own hardware" sub="Bundle Glassworks on panels you sell. Your custom frames and panes can stay closed." />
-          <Tile value="Share core fixes back" sub="Changes to Glassworks' own core files stay open so every device benefits." />
+          <Tile value="Ship your own hardware" sub="Bundle Glassworks on hardware you sell. Your custom frames and panes can stay closed." />
+          <Tile value="Share core fixes back" sub="Improvements to Glassworks core files stay open so every supported device gets better." />
         </Tiles>
       </section>
 

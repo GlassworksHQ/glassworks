@@ -22,7 +22,7 @@ export const SITE_NAME = "Glassworks";
 
 /** The site's description: the home page's, and the fallback for a page without one. */
 export const SITE_DESCRIPTION =
-  "Open-source core for Home Assistant wall panels: dashboard, ESPHome device, setup and updates, with plugins for everything else.";
+  "Turn wall switches, smart mirrors, and Android tablets into fast, local Home Assistant panels—with voice, synced music, and native ESPHome updates.";
 
 /** The site's card (app/opengraph-image.png, drawn by scripts/brand/raster.mjs) and its alt text. */
 const SITE_CARD = { width: 1200, height: 630, alt: "Glassworks: the open core for Home Assistant wall panels" };

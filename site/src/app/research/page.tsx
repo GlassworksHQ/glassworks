@@ -11,7 +11,7 @@ import "@/components/docs/prose.css";
 
 export const metadata = pageMetadata({
   title: "Research",
-  description: "Glassworks' engineering notes: how each device was opened up, what failed, and how sure we are, by frame and by topic.",
+  description: "Engineering notes from Glassworks: how each device was opened up, what worked, what failed, and what we verified on hardware.",
   path: "/research",
 });
 
@@ -32,8 +32,7 @@ export default async function Research() {
         <span className="label">Research</span>
         <h1 className={d.landingH1}>Research</h1>
         <p className={m.lede}>
-          How each device was opened up, what failed, and how sure we are. Each note says what was verified on a device, read
-          from source or a binary, or is still untested. The story is in <Link href="/docs/notes">How we got here</Link>.
+          How each device was opened up, what worked, what hit a dead end, and how confident we are. Every note is tagged as verified on hardware, read from source or binaries, or untested. Start with <Link href="/docs/notes">How we got here</Link> for the full story.
         </p>
       </header>
       <ResearchIndex notes={notes.map(noteItem)} frameNames={Object.fromEntries(frames.map((f) => [f.id, f.name]))}>

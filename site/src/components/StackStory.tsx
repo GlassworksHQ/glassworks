@@ -265,8 +265,7 @@ export function StackStory({
             </span>
             <h1 className={s.h1}>The open core for Home Assistant wall panels</h1>
             <p className={s.lede}>
-              Dashboard, ESPHome device, setup, and updates for any wall panel. Everything else is a pane: voice, music,
-              Zigbee/Thread, or one you write.
+              One open core handles the dashboard, ESPHome device, setup flow, and updates for any wall panel. Everything else plugs in as a pane—voice, synced music, Zigbee/Thread radios, or features you build yourself.
             </p>
             <div className={s.ctas}>
               {mode === "developers" ? (

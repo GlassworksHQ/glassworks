@@ -26,11 +26,11 @@ export default function DevicesPage() {
     <div className={s.page}>
       <PageHead
         title="Supported devices"
-        lede="Wall panels, smart mirrors, and Android tablets that run Glassworks, with install details, Clarity grades, and feature support."
+        lede="Wall switches, smart mirrors, and everyday Android tablets running Glassworks—compare install steps, Clarity performance grades, and supported features side by side."
       />
       <FrameGrid id="frames" title="Devices" aside={<span>{frames.length} supported &amp; planned</span>} frames={frames}>
         <AddCard href="/docs/frames" title="Bring your own panel">
-          Any Android panel can run Glassworks. Read the porting guide to build a frame for your hardware.
+          Have another Android panel in mind? Read the porting guide to bring Glassworks to your hardware.
         </AddCard>
       </FrameGrid>
 
@@ -80,8 +80,7 @@ export default function DevicesPage() {
           ))}
         </dl>
         <p className={s.note}>
-          Planned devices show what the install is expected to do. Nothing has
-          been run on them yet.
+          Planned devices show what the install is expected to do—we haven&rsquo;t run it on hardware yet.
         </p>
       </section>
 
@@ -124,9 +123,8 @@ export default function DevicesPage() {
           </table>
         </div>
         <p className={s.note}>
-          &ldquo;Depends&rdquo; means it needs hardware some devices have.
-          &ldquo;Not checked&rdquo; means nobody has confirmed it on a real
-          device yet.
+          &ldquo;Depends&rdquo; means the feature requires hardware only some devices include.
+          &ldquo;Not checked&rdquo; means we haven&rsquo;t verified it on that device yet.
         </p>
       </section>
     </div>
