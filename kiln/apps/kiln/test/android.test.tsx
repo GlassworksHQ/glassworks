@@ -105,7 +105,7 @@ describe('the screens', () => {
 
   it('4b: a vendor build that refuses a grant and the home screen: said once, then one tap', async () => {
     await show('vendor', 'One tap on the tablet');
-    expect(document.querySelector('.lede')?.textContent).toBe('Pick Glassworks, then Always.');
+    expect(document.querySelector('.lede')?.textContent).toBe('Android asks which app to use as the home screen. Pick Glassworks, then Always.');
     expect(document.querySelector('.grants')?.textContent).toContain('Secure settingsThis tablet said no');
     expect(document.querySelector('.warnbox')?.textContent).toBe('This tablet\'s software refused secure settings. Glassworks works without it; the Bluetooth proxy can\'t turn Location on by itself.');
     expect(screen.getByText('Waiting for your tap')).toBeTruthy();
