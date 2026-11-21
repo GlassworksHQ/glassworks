@@ -129,7 +129,7 @@ class TimerDoneView(
 
         styleLabel(hint, FA)
         hint.gravity = Gravity.CENTER
-        hint.text = "Tap anywhere to dismiss"
+        hint.text = TAP_HINT
         addView(hint, LayoutParams(-1, -2, Gravity.BOTTOM).apply { bottomMargin = px(22f) })
     }
 
@@ -146,6 +146,35 @@ class TimerDoneView(
     }
 
     val showing: Boolean get() = active
+
+    /**
+     * A touch screen: a tap dismisses it, and the hint says so. Without touch (the Mirror) nothing can be tapped, so
+     * the hint says how it ends instead: by itself, [TimerBoard.DONE_HOLD_MS] after the last timer finished.
+     */
+    var touch = true
+        set(v) { if (v != field) { field = v; hint.text = if (v) TAP_HINT else SELF_HINT; isClickable = active && v } }
+
+    /** The texts' column: [COLUMN_DP], or the screen less a [GUTTER_DP] each side (the Mirror, 540 dp wide). */
+    private var columnPx = px(COLUMN_DP)
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        val w = MeasureSpec.getSize(widthMeasureSpec)
+        if (w > 0) fit(w)
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+    }
+
+    /** Sizes the texts to a screen [screenPx] wide, as the voice overlay does, and fits the name again. */
+    private fun fit(screenPx: Int) {
+        val col = minOf(px(COLUMN_DP), screenPx - 2 * px(GUTTER_DP)).coerceAtLeast(1)
+        if (col == columnPx) return
+        columnPx = col
+        label.layoutParams.width = minOf(px(COLUMN_DP + 20f), col)
+        column.layoutParams.width = col
+        main.layoutParams.width = col
+        sub.layoutParams.width = col
+        rest.maxWidth = (col - px(14f) - restHead.paint.measureText(restHead.text.toString().uppercase()).toInt()).coerceAtLeast(1)
+        lastTexts?.let { styleMain(main, it.main) }
+    }
 
     /** Shows, updates or hides from [TimerBoard.done]; call when timers change and once a second. */
     fun refresh(now: Long = SystemClock.elapsedRealtime()) {
@@ -177,7 +206,7 @@ class TimerDoneView(
     private fun show() {
         if (active) return
         active = true
-        isClickable = true
+        isClickable = touch
         val now = SystemClock.uptimeMillis()
         if (visibility != View.VISIBLE) {
             vis.snap(0f)
@@ -286,7 +315,7 @@ class TimerDoneView(
     private fun styleMain(tv: TextView, text: String) {
         tv.letterSpacing = -0.02f
         tv.setTextColor(tx)
-        val width = px(820f)
+        val width = columnPx
         val paint = TextPaint(tv.paint)
         fun sizePx(sp: Float) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, sp, resources.displayMetrics)
         fun extra(p: TextPaint) = p.fontMetricsInt.let { 1.2f * p.textSize - (it.descent - it.ascent) }
@@ -317,11 +346,17 @@ class TimerDoneView(
         }
     }
 
-    private companion object {
-        const val RIPPLE_MS = 1500f
-        val TX = Color.parseColor("#f4f4f5")
-        val MU = Color.parseColor("#a1a1aa")
-        val FA = Color.parseColor("#63636b")
-        val AMBER = Color.parseColor("#fbbf24")
+    companion object {
+        private const val RIPPLE_MS = 1500f
+        const val COLUMN_DP = 820f
+        /** As the voice overlay's: room each side of the texts on a narrow screen. */
+        const val GUTTER_DP = 32f
+        const val TAP_HINT = "Tap anywhere to dismiss"
+        /** [TimerBoard.DONE_HOLD_MS] in words: how it ends where nothing can be tapped. */
+        const val SELF_HINT = "Closes by itself after a minute"
+        private val TX = Color.parseColor("#f4f4f5")
+        private val MU = Color.parseColor("#a1a1aa")
+        private val FA = Color.parseColor("#63636b")
+        private val AMBER = Color.parseColor("#fbbf24")
     }
 }

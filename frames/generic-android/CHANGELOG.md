@@ -65,6 +65,10 @@ line of each version is what Home Assistant shows on the update card. A change o
   back to Stable never installs an older version: the panel waits for a stable release newer than the one it runs.
 
 ### Fixed
+- **The timer done screen fits a portrait screen.** On a portrait screen such as the Mirror, the timer's name,
+  its length and the timers still running now fit the screen's width, as the voice overlay's text does. Before,
+  long names ran off the edges. On a screen without touch, the hint now says the screen closes by itself after a
+  minute instead of asking you to tap it.
 - **Snapshot checks over ONVIF give the real size.** A recorder or tool that checks the camera's snapshot before
   downloading it now sees the picture's real size and no stray bytes, so its next request on the same connection
   works.

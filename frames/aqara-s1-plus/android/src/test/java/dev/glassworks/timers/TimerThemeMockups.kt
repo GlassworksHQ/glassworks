@@ -132,6 +132,24 @@ class TimerThemeMockups {
         boards("s1", 1440, 720, touch = true)
     }
 
+    /** The done screen on the Mirror (portrait, no touch) with long names: the texts fit, and the hint says how it ends. */
+    @Config(qualifiers = "w540dp-h960dp-port-xhdpi")
+    @Test fun mirrorDoneLongNames() {
+        assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", dir != null)
+        for ((theme, dark) in listOf("glassworks/dark" to true, "dusk/light" to false)) {
+            val (root, timers) = scene(theme, 1080, 1920, dark, touch = false)
+            TimerBoard.update(listOf(
+                Entry("l", "Laundry in the basement washer", 2700, 0, true), Entry("p", "Pasta for the whole family", 600, 491, true),
+                Entry("r", "Rice in the big pot", 1200, 890, true), Entry("t", "Tea", 300, 200, true),
+            ))
+            TimerBoard.finished("Laundry in the basement washer")
+            TimerBoard.update(listOf(Entry("p", "Pasta for the whole family", 600, 491, true), Entry("r", "Rice in the big pot", 1200, 890, true), Entry("t", "Tea", 300, 200, true)))
+            timers.refresh(); bakeWait(); idle(1200)
+            save("done-mirror-long-${theme.replace('/', '-')}", root, 1080, 1920)
+            TimerBoard.dismissFinished(); TimerBoard.reset()
+        }
+    }
+
     @Config(qualifiers = "w540dp-h960dp-port-xhdpi")
     @Test fun mirror() {
         assumeTrue("set -Ps1MockupDir=<dir> to write the mock-ups", dir != null)

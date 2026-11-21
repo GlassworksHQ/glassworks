@@ -102,8 +102,14 @@ class TimerOverlay(
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         applyTheme()
-        runCatching { KioskPrefs(context).registerListener(themeChanged) }
+        kiosk = runCatching { KioskPrefs(context) }.getOrNull()?.also { it.registerListener(themeChanged) }
     }
+
+    /**
+     * The settings the theme listener is registered on, held while attached: the file keeps its listeners only weakly,
+     * and the settings object holds the one it registered, so a throwaway one let the listener go at the next GC.
+     */
+    private var kiosk: KioskPrefs? = null
 
     private val themeChanged = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key == "overlay_theme" || key == "overlay_custom") post { applyTheme() }
@@ -144,6 +150,7 @@ class TimerOverlay(
         if (voice) waiting += fresh
         waiting.retainAll(timers.map { it.id }.toSet())
         syncRings(timers, fresh)
+        done.touch = runCatching { touch() }.getOrDefault(true)
         done.refresh(now)
         applyMode(state.mode(timers, now))
         peek.invalidate()
@@ -321,7 +328,7 @@ class TimerOverlay(
     }
 
     override fun onDetachedFromWindow() {
-        runCatching { KioskPrefs(context).unregisterListener(themeChanged) }
+        runCatching { kiosk?.unregisterListener(themeChanged) }; kiosk = null
         removeCallbacks(tick)
         removeCallbacks(chipEnd)
         super.onDetachedFromWindow()
