@@ -10,11 +10,16 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
+import dev.glassworks.secrets.SecretStore
+import java.io.File
 import java.time.Duration
+import javax.crypto.KeyGenerator
 
 /**
  * The hidden-API hotspot of Android 6 and 7 against a fake device: it starts and reports, a refusal is a clear
@@ -23,22 +28,46 @@ import java.time.Duration
 @RunWith(RobolectricTestRunner::class)
 class HiddenApHotspotTest {
     /** A device: its saved hotspot settings, its Wi-Fi switch, and an AP that answers as told. */
-    private class FakeDevice(var wifiOn: Boolean, var config: String? = "Home hotspot") : ApControls<String> {
+    private class FakeDevice(var wifiOn: Boolean, var config: String? = "Home hotspot") : ApControls {
         var apOn = false
+
+        /** The network the AP is up as. */
+        var apSsid: String? = null
         var refuse: Throwable? = null
         var answer = true
+
+        /** Android refuses to take the hotspot settings back: by throwing, or (6.0.1 after a RemoteException) with false. */
+        var refuseConfig = false
+        var configAnswersFalse = false
+
+        /** Android can't say whether an AP is up. */
+        var apStateUnknown = false
+
+        /** The Wi-Fi switch takes a while: on asks Android, and [wifiOn] follows only when the test says so. */
+        var wifiLags = false
+        var wifiAsked: Boolean? = null
         var listener: ((ApControls.State) -> Unit)? = null
 
         override fun wifiEnabled() = wifiOn
-        override fun setWifiEnabled(on: Boolean) { wifiOn = on }
+        override fun apEnabled() = if (apStateUnknown) throw IllegalStateException("no answer") else apOn
+
+        // Android 6 ignores the switch while the AP is up (ApEnabledState).
+        override fun setWifiEnabled(on: Boolean) { if (!apOn) { wifiAsked = on; if (!wifiLags) wifiOn = on } }
         override fun savedConfig() = config
-        override fun restoreConfig(config: String?) { this.config = config }
+        override fun restoreConfig(config: String?): Boolean {
+            if (refuseConfig) throw SecurityException("no")
+            if (configAnswersFalse) return false
+            this.config = config
+            return true
+        }
 
         override fun setAp(net: HotspotNetwork?, on: Boolean): Boolean {
             refuse?.let { throw it }
             if (!answer) return false
+            if (on && apOn) return true // up already: Android ignores another start, and keeps the network it has
             if (on) { config = net!!.ssid; wifiOn = false } // what Android 6 does: saves it, and drops the client
             apOn = on
+            apSsid = net?.ssid
             return true
         }
 
@@ -53,7 +82,15 @@ class HiddenApHotspotTest {
     /** The hotspot interface's address, as the hotspot reads it; null until tethering gives it one. */
     private var address: String? = "192.168.43.1"
 
-    private fun hotspot(d: FakeDevice) = HiddenApHotspot(d, handler, address = { address }, newNetwork = { net }, startTimeoutMs = 5_000, log = { logged += it })
+    @get:Rule val dir = TemporaryFolder()
+
+    /** The undo record's file, which outlives the app's process; sealed with a software key, as the Keystore's would. */
+    private val undoFile by lazy { File(dir.root, Hotspot.UNDO_FILE) }
+    private val key = KeyGenerator.getInstance("AES").apply { init(256) }.generateKey()
+    private fun undo() = ApUndoFile(undoFile, SecretStore { key }, log = { logged += it })
+
+    private fun hotspot(d: FakeDevice, network: HotspotNetwork = net) =
+        HiddenApHotspot(d, handler, address = { address }, undo = undo(), newNetwork = { network }, startTimeoutMs = 5_000, log = { logged += it })
 
     private fun idle() = shadowOf(Looper.getMainLooper()).idle()
 
@@ -77,6 +114,187 @@ class HiddenApHotspotTest {
         assertFalse(d.apOn)
         assertEquals("Home hotspot", d.config)
         assertTrue(d.wifiOn)
+        assertFalse("the undo record goes once things are back", undoFile.exists())
+    }
+
+    @Test
+    fun `a run that died with the AP up is put back when the app starts again`() {
+        val d = FakeDevice(wifiOn = true)
+        hotspot(d).start { events += it }
+        d.listener!!(ApControls.State.ENABLED)
+        // The process dies: no stop. Android keeps the AP up, with our network as the device's hotspot settings.
+        d.listener = null
+        assertTrue(d.apOn)
+        assertEquals(net.ssid, d.config)
+
+        hotspot(d) // the app's next start
+        assertEquals(listOf("setup hotspot: putting back what a run that died left"), logged)
+        assertFalse(d.apOn)
+        assertEquals("Home hotspot", d.config)
+        assertTrue(d.wifiOn)
+        assertFalse(undoFile.exists())
+    }
+
+    @Test
+    fun `after a run that died, the next start's network is the one the AP has, and its stop puts back the device's own`() {
+        val d = FakeDevice(wifiOn = true)
+        hotspot(d).start { events += it }
+        d.listener!!(ApControls.State.ENABLED)
+        events.clear()
+
+        val next = HotspotNetwork("Glassworks-NEXT", "pqrstuvwxyz2")
+        val h = hotspot(d, next)
+        h.start { events += it }
+        d.listener!!(ApControls.State.ENABLED)
+        assertEquals(listOf<Hotspot.Event>(Hotspot.Event.Started(next)), events)
+        assertEquals("the network the screen shows is the AP's", next.ssid, d.apSsid)
+        h.stop()
+        assertEquals("Home hotspot", d.config)
+        assertTrue(d.wifiOn)
+    }
+
+    @Test
+    fun `an AP that is already on and not ours is a clear failure, and stays as it was`() {
+        val d = FakeDevice(wifiOn = false).apply { apOn = true; apSsid = "Home hotspot" }
+        val h = hotspot(d)
+        h.start { events += it }
+        idle()
+        assertEquals(listOf<Hotspot.Event>(Hotspot.Event.Failed(HotspotFailure.TETHERING_ON)), events)
+        h.stop()
+        assertTrue(d.apOn)
+        assertEquals("Home hotspot", d.apSsid)
+        assertEquals("Home hotspot", d.config)
+        assertFalse(undoFile.exists())
+    }
+
+    @Test
+    fun `the undo record keeps the device's hotspot settings sealed`() {
+        val d = FakeDevice(wifiOn = true, config = "Home hotspot key-1234")
+        hotspot(d).start { events += it }
+        assertTrue(undoFile.exists())
+        assertFalse("key-1234" in undoFile.readText())
+        assertEquals(ApUndo.Kept.Found(ApBefore("Home hotspot key-1234", wifiOn = true)), undo().read())
+    }
+
+    /** The app dies with the AP up, and a new hotspot (the app's next start) is made. */
+    private fun diedWithTheApUp(d: FakeDevice) {
+        hotspot(d).start { events += it }
+        d.listener!!(ApControls.State.ENABLED)
+        d.listener = null
+        events.clear()
+        logged.clear()
+    }
+
+    @Test
+    fun `a record the key store can't open now stays, and no start replaces it`() {
+        val d = FakeDevice(wifiOn = true)
+        diedWithTheApUp(d)
+        val out = HiddenApHotspot(d, handler, address = { address }, undo = ApUndoFile(undoFile, SecretStore({ key }, { null })),
+            newNetwork = { net }, log = { logged += it })
+        out.start { events += it }
+        idle()
+        assertEquals(listOf<Hotspot.Event>(Hotspot.Event.Failed(HotspotFailure.FAILED)), events)
+        assertTrue("the record waits", undoFile.exists())
+        assertEquals("its record still holds the device's own settings", ApUndo.Kept.Found(ApBefore("Home hotspot", wifiOn = true)), undo().read())
+
+        hotspot(d) // the key store is back
+        assertEquals("Home hotspot", d.config)
+        assertFalse(d.apOn)
+        assertTrue(d.wifiOn)
+        assertFalse(undoFile.exists())
+    }
+
+    @Test
+    fun `settings Android won't take back keep the record, and the next start tries again before anything else`() {
+        val d = FakeDevice(wifiOn = true)
+        diedWithTheApUp(d)
+        d.refuseConfig = true
+        val h = hotspot(d)
+        assertFalse(d.apOn)
+        assertTrue("kept for another try", undoFile.exists())
+        h.start { events += it }
+        idle()
+        assertEquals(listOf<Hotspot.Event>(Hotspot.Event.Failed(HotspotFailure.FAILED)), events)
+        assertEquals("not started over a record that isn't back", null, d.apSsid)
+
+        d.refuseConfig = false
+        events.clear()
+        h.start { events += it }
+        assertTrue(d.apOn)
+        assertEquals(ApUndo.Kept.Found(ApBefore("Home hotspot", wifiOn = true)), undo().read())
+        h.stop()
+        assertEquals("Home hotspot", d.config)
+        assertFalse(undoFile.exists())
+    }
+
+    @Test
+    fun `a start while Android is still turning the Wi-Fi client back on keeps it to go back on`() {
+        val d = FakeDevice(wifiOn = true).apply { wifiLags = true }
+        diedWithTheApUp(d)
+        val h = hotspot(d) // puts things back: asks for the client, which isn't on yet
+        assertEquals(true, d.wifiAsked)
+        assertFalse(d.wifiOn)
+        h.start { events += it }
+        assertEquals(ApUndo.Kept.Found(ApBefore("Home hotspot", wifiOn = true)), undo().read())
+        d.wifiAsked = null
+        h.stop()
+        assertEquals("the client asked back on at the stop", true, d.wifiAsked)
+    }
+
+    @Test
+    fun `settings Android answers false to keep the record too`() {
+        val d = FakeDevice(wifiOn = true)
+        diedWithTheApUp(d)
+        d.configAnswersFalse = true
+        hotspot(d)
+        assertTrue(undoFile.exists())
+        d.configAnswersFalse = false
+        hotspot(d)
+        assertEquals("Home hotspot", d.config)
+        assertFalse(undoFile.exists())
+    }
+
+    @Test
+    fun `an AP stop Android refuses, with no word on the AP's state, keeps the record`() {
+        val d = FakeDevice(wifiOn = true)
+        diedWithTheApUp(d)
+        d.refuse = SecurityException("no")
+        d.apStateUnknown = true
+        hotspot(d)
+        assertTrue(d.apOn)
+        assertTrue(undoFile.exists())
+    }
+
+    @Test
+    fun `half a minute after the stop, the Wi-Fi switch is the person's again`() {
+        val d = FakeDevice(wifiOn = true).apply { wifiLags = true }
+        diedWithTheApUp(d)
+        val h = hotspot(d) // asks for the client, which never comes on: the person turned Wi-Fi off
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(31))
+        h.start { events += it }
+        assertEquals(ApUndo.Kept.Found(ApBefore("Home hotspot", wifiOn = false)), undo().read())
+    }
+
+    @Test
+    fun `once the client is back on, a Wi-Fi switched off right after stays off`() {
+        val d = FakeDevice(wifiOn = true).apply { wifiLags = true }
+        diedWithTheApUp(d)
+        val h = hotspot(d)
+        d.wifiOn = true // Android finishes turning it on
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(1))
+        d.wifiOn = false // and the person turns it off, well within half a minute
+        h.start { events += it }
+        assertEquals(ApUndo.Kept.Found(ApBefore("Home hotspot", wifiOn = false)), undo().read())
+    }
+
+    @Test
+    fun `an undo record that no longer opens is dropped, and changes nothing`() {
+        undoFile.writeText("not sealed")
+        val d = FakeDevice(wifiOn = false, config = "Home hotspot")
+        hotspot(d)
+        assertFalse(undoFile.exists())
+        assertEquals("Home hotspot", d.config)
+        assertFalse(d.wifiOn)
     }
 
     @Test

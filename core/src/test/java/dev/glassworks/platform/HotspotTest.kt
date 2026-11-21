@@ -29,7 +29,7 @@ class HotspotTest {
 
     @Test
     fun `Android 6 and 7 get the hidden-API hotspot, 8 and newer the local-only one`() {
-        for (level in 23..25) assertTrue("API $level", Hotspot.of(app, handler, PlatformApi(level)) is HiddenApHotspot<*>)
+        for (level in 23..25) assertTrue("API $level", Hotspot.of(app, handler, PlatformApi(level)) is HiddenApHotspot)
         for (level in 26..36) assertTrue("API $level", Hotspot.of(app, handler, PlatformApi(level)) is LocalOnlyHotspot)
     }
 
