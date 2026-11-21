@@ -95,13 +95,14 @@ class AppearanceTest {
 
     @Test fun theAssistLookIsTheOrbOrTheEdgeGlow() {
         val c = SettingsChange.find(section(), CoreSettings.ASSIST_TITLE) as SettingsItem.Choice
-        assertEquals("orb", c.value())
+        assertEquals("the edge glow is the default", "glow", c.value())
         assertEquals(listOf("orb" to "Orb", "glow" to "Edge glow"), c.options())
         assertEquals(CoreSettings.ASSIST_GLOW_LINE, c.cards!!("glow"))
-        SettingsChange.change(c, "glow") {}
-        assertEquals(KioskPrefs.ASSIST_GLOW, prefs.assistLook)
+        SettingsChange.change(c, "orb") {}
+        assertEquals(KioskPrefs.ASSIST_ORB, prefs.assistLook)
+        assertEquals("a picked orb is kept", "orb", app.getSharedPreferences("kiosk", 0).getString("assist_look", null))
         app.getSharedPreferences("kiosk", 0).edit().putString("assist_look", "sparkles").commit()
-        assertEquals("anything else reads as the orb", KioskPrefs.ASSIST_ORB, KioskPrefs(app).assistLook)
+        assertEquals("anything else reads as the edge glow", KioskPrefs.ASSIST_GLOW, KioskPrefs(app).assistLook)
     }
 
     @Test fun anUnknownSavedThemeReadsAsTheDefaultAndAResetClearsIt() {

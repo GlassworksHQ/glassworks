@@ -266,12 +266,12 @@ class KioskPrefs(
         set(v) = sp.edit().apply { if (v == null) remove("overlay_custom") else putString("overlay_custom", dev.glassworks.theme.Themes.encode(v)) }.apply()
 
     /**
-     * How a voice run shows (#691): `orb`, the glass orb over a dimmed dashboard (the default), or `glow`, Spark's edge
-     * glow with the dashboard in view. Anything else reads as the orb.
+     * How a voice run shows (#691): `glow`, Spark's edge glow with the dashboard in view (the default), or `orb`, the
+     * glass orb over a dimmed dashboard. Anything else, or nothing saved, reads as the edge glow.
      */
     var assistLook: String
-        get() = sp.getString("assist_look", null).takeIf { it == ASSIST_GLOW } ?: ASSIST_ORB
-        set(v) = sp.edit().putString("assist_look", if (v == ASSIST_GLOW) ASSIST_GLOW else ASSIST_ORB).apply()
+        get() = sp.getString("assist_look", null).takeIf { it == ASSIST_ORB } ?: ASSIST_GLOW
+        set(v) = sp.edit().putString("assist_look", if (v == ASSIST_ORB) ASSIST_ORB else ASSIST_GLOW).apply()
 
     /**
      * What the overlays draw with now: the saved pick, the custom theme's palettes for `custom/…`. While
