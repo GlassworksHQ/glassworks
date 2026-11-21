@@ -7,16 +7,19 @@ import type { PanelShell } from '@glassworks/adb';
 import type { Fastboot } from '@glassworks/fastboot';
 import type { FelDevice } from '@glassworks/fel';
 import { isMagiskPatched, loadCompressor } from '@glassworks/bootpatch';
-import { Assets, checkRestorable, fmtSize, type BackupFile, type BackupMeta } from '@glassworks/kiln-core';
+import { Assets, BackupRefused, checkRestorable, fmtSize, type BackupFile, type BackupMeta } from '@glassworks/kiln-core';
 import { IMPROV_SOCKET } from '@glassworks/app-adb';
 import { SETUP_SOCKET, type PaneCard, type SetupState } from '@glassworks/setup-channel';
 import { PacketReader, PacketType, Rpc, State as ImprovState, frame as packet, parseResult, strings, type ByteStream } from 'improv-serial';
-import { explain } from './explain';
+import { explain, type Written } from './explain';
+import type { Changed } from './state';
 import type { AppPhase, DemoFrame } from '@glassworks/kiln-core';
 import { Session, type SessionDeps } from './session';
 
 export const DEMOS = ['run', 'selftest', 'connect', 'ask-fastboot', 'install', 'ask-adb', 'app', 'app-update', 'app-installing', 'app-keyboard', 'wifi', 'wifi-new', 'wifi-fail', 'home-assistant', 'panes', 'panes-busy', 'panes-refused', 'radio', 'radio-next', 'radio-thread', 'radio-thread-old',
-  'done', 'done-old-boot', 'undo', 'undo-refused', 'undo-refused-splash', 'undo-apps-back', 'undo-still-on', 'undo-unreadable', 'undo-connect', 'restore', 'undo-done', 'error', 'error-written'] as const;
+  'done', 'done-old-boot', 'undo', 'undo-refused', 'undo-refused-splash', 'undo-apps-back', 'undo-still-on', 'undo-unreadable', 'undo-connect', 'restore', 'undo-done', 'error', 'error-written',
+  'error-no-recovery', 'error-secure-boot', 'error-not-this-panel', 'error-usb-unreliable', 'error-download', 'error-not-started', 'error-adb-held',
+  'error-backup-refused', 'error-nothing-picked', 'error-earlier', 'error-unknown', 'error-unknown-written'] as const;
 export type Demo = (typeof DEMOS)[number];
 
 const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -396,8 +399,31 @@ export async function enterDemo(session: Session, d: DemoFrame, which: Demo): Pr
       dispatch({ type: 'log', line: '10:15:00 vbmeta flashed and verified' });
       dispatch({ type: 'fail', failure: explain(new Error('boot: read-back does not match what was written'), 2, 'verified') });
       return;
+    default: {
+      // every other way explain.ts can put a failure, one demo each (ERRORS)
+      const e = ERRORS[which as keyof typeof ERRORS];
+      if (!e) return;
+      install();
+      dispatch({ type: 'fail', failure: explain(e.error, e.at, e.written ?? 'none', e.installed, e.earlier) });
+    }
   }
 }
+
+/** The failures explain.ts tells apart, as the engine raises them: each its own ?demo=error-…, for the error screen. */
+const ERRORS: Partial<Record<Demo, { error: unknown; at: number; written?: Written; installed?: boolean; earlier?: Changed }>> = {
+  'error-no-recovery': { error: new DOMException('No device selected.', 'NotFoundError'), at: 1 },
+  'error-secure-boot': { error: new Error('secure boot is enabled on this chip (SID+0xa0 = 0x00000001): its boot ROM only runs signed code'), at: 1 },
+  'error-not-this-panel': { error: new Error('this does not look like the expected device (product sunxi, boot 0, super 0). Nothing was changed.'), at: 2 },
+  'error-usb-unreliable': { error: new Error('the two reads of boot differ'), at: 2 },
+  'error-download': { error: new Error('could not download magisk: HTTP 503'), at: 2 },
+  'error-not-started': { error: new Error('the panel did not finish starting in 5 minutes'), at: 3, installed: true },
+  'error-adb-held': { error: new Error('another program holds the panel\'s adb connection: run "adb kill-server" on this computer and try again'), at: 3, installed: true },
+  'error-backup-refused': { error: new BackupRefused('this backup has no super partition'), at: 1, earlier: 'written' },
+  'error-nothing-picked': { error: new DOMException('No device selected.', 'NotFoundError'), at: 3, installed: true },
+  'error-earlier': { error: new Error('transfer error: the device was disconnected'), at: 2, earlier: 'unknown' },
+  'error-unknown': { error: new Error('something Kiln has no words for'), at: 2 },
+  'error-unknown-written': { error: new Error('something Kiln has no words for'), at: 2, written: 'maybe' },
+};
 
 /**
  * ?demo=selftest: what #27 asks of the bundler, checked in the built page. bootpatch.wasm loads from

@@ -12,7 +12,7 @@ import type { StandardSession } from '../standard/session';
 import { withAppStreams } from '../wizard/demo';
 
 export const IMAGE_DEMOS = ['flash-image', 'flash-release', 'flash-release-downloading', 'flash-release-none', 'flash-release-bad', 'flash-downloading', 'flash-download-error', 'flash-download-bad', 'flash-ready', 'flash-fastboot', 'flash-fastboot-wrong', 'flash-confirm',
-  'flash-working', 'flash-adb', 'flash-adb-wait', 'flash-setup', 'flash-setup-wifi', 'flash-setup-ha', 'flash-done', 'flash-done-chooser', 'flash-done-no-home', 'flash-error', 'flash-run',
+  'flash-working', 'flash-adb', 'flash-adb-wait', 'flash-adb-refused', 'flash-error-first-start', 'flash-setup', 'flash-setup-wifi', 'flash-setup-ha', 'flash-done', 'flash-done-chooser', 'flash-done-no-home', 'flash-error', 'flash-run',
   'image-choose', 'image-choose-open', 'image-choose-panes', 'image-link', 'image-download', 'image-download-done', 'image-download-error', 'image-download-bad',
   'image-fastboot', 'image-confirm', 'image-writing', 'image-done', 'image-error', 'image-back-glassworks', 'image-back-panes',
   'image-wifi', 'image-wifi-writing', 'image-adb', 'image-done-wifi', 'image-done-wifi-unconfirmed'] as const;
@@ -77,11 +77,15 @@ export async function imageDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim
     refract: 'https://refract.glassworks.dev',
     search: name === 'image-link' ? `?image=${community.id}` : '',
     requestFastboot: async () => fastboot(name === 'flash-fastboot-wrong' ? sim.wrongSystemBytes : sim.systemBytes),
-    // flash-adb-wait: the device refuses this browser's key while it starts, and Kiln asks again
-    ...(name === 'flash-adb-wait' ? { reopenAdb: async () => { throw new Error('No authenticator can handle the request'); } } : {}),
+    // flash-adb-wait: the device refuses this browser's key while it starts, and Kiln asks again; flash-adb-refused: it
+    // never lets it in, and Kiln stops asking (two tries here, five minutes on a device)
+    ...(name === 'flash-adb-wait' || name === 'flash-adb-refused' ? { reopenAdb: async () => { throw new Error('No authenticator can handle the request'); } } : {}),
+    ...(name === 'flash-adb-refused' ? { adbTries: 2 } : {}),
     requestAdb: async (o) => {
       o?.onPicked?.();
-      if (name === 'flash-adb-wait') throw new Error('No authenticator can handle the request');
+      if (name === 'flash-adb-wait' || name === 'flash-adb-refused') throw new Error('No authenticator can handle the request');
+      // flash-error-first-start: the cable goes during the first start: its error, whose Try again connects over adb again
+      if (name === 'flash-error-first-start') return { run: async () => { throw new Error('transferOut: the device was disconnected'); }, push: async () => {} };
       // the device after its first start, with Glassworks' setup channel and Improv (flash-setup: not on Wi-Fi yet)
       return withAppStreams(sim.firstStart({ hideFails: name === 'flash-done-chooser', noHome: name === 'flash-done-no-home' }), { online: name !== 'flash-setup-wifi', radio: false });
     },
@@ -121,6 +125,7 @@ export async function imageDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim
   await flashing;
   if (name === 'flash-adb' || name === 'flash-error') return done;
   if (name === 'flash-adb-wait') { void image.connectAdb(); return done; }
+  if (name === 'flash-adb-refused' || name === 'flash-error-first-start') { await image.connectAdb(); return done; }
   await image.connectAdb(); // then the standard flow: App, Wi-Fi, Home Assistant, Panes, Done
   await standardDemo(standard, name === 'flash-setup' ? 'app' : name === 'flash-setup-wifi' ? 'wifi' : name === 'flash-setup-ha' ? 'home-assistant' : 'done');
   return done;
