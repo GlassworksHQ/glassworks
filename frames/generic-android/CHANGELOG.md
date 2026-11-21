@@ -34,6 +34,9 @@ line of each version is what Home Assistant shows on the update card. A change o
   *Appearance* page. The theme's two colors run down each timer's ring, the glass turns light with a light theme,
   and the done screen's orb and ripples glow in the theme's colors. The last 10 seconds stay amber in every theme so
   you can tell a timer is about to ring.
+- **A timer board.** With three or more timers running, they now gather into one glass card that lists each
+  one with a small ring, its name and length, and the time left, soonest first. It takes your theme, moves and hides
+  like the timers do, and has its own *Hide* on touch screens. Up to five are listed, then how many more.
 - **Recorders that record on motion get the camera's motion pushed to them.** With the ONVIF stream on, a network
   video recorder that subscribes to the camera's motion (many Xiongmai-based NVRs do) now hears about each change
   the moment it happens, so it can start recording. The recorder must be on your local network and sign in with the

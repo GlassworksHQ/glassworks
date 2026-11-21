@@ -26,6 +26,7 @@ import dev.glassworks.timers.TimerDoneView
 import dev.glassworks.ui.Inter
 import dev.glassworks.assist.OrbBakes
 import dev.glassworks.theme.Themes
+import dev.glassworks.timers.BoardView
 import dev.glassworks.timers.TimerLook
 
 /**
@@ -59,6 +60,9 @@ class TimerOverlay(
     private val chip = HideChip(context)
     private val peek = Peek(context)
     private val done = TimerDoneView(context, orbs)
+
+    /** A touch screen: the board offers "Hide" (#691). The app's frame says; the Mirror has none. */
+    var touch: () -> Boolean = { true }
 
     /** The overlays' theme now: the app's setting by default; a test gives its own. */
     var theme: () -> Themes.Pick = { KioskPrefs(context).overlayPick }
@@ -112,6 +116,7 @@ class TimerOverlay(
         pick = p
         look = TimerLook(p.palette)
         for (r in rings.values) r.look = look
+        dock.board.look = look
         chip.invalidate(); peek.invalidate(); guide.invalidate()
         done.theme(p)
     }
@@ -155,6 +160,12 @@ class TimerOverlay(
             r.timer = t
             r.alpha = if (t.id in waiting) 0f else r.alpha
         }
+        // Three or more: one board that lists them (#691), in place of the rings.
+        val board = timers.size >= BoardView.MIN_TIMERS
+        dock.board.visibility = if (board) View.VISIBLE else View.GONE
+        for (r in rings.values) r.visibility = if (board) View.GONE else View.VISIBLE
+        dock.board.touch = runCatching { touch() }.getOrDefault(true)
+        dock.board.timers = if (board) timers else emptyList()
         val order = DockMath.order(timers, anchor).map { it.id }
         if (dock.order != order) { dock.order = order; dock.requestLayout() }
         if (!voice) dock.post { for (id in fresh) rings[id]?.let { arrive(it, fromOrb = false) } }
@@ -329,26 +340,36 @@ class TimerOverlay(
         var order: List<String> = emptyList()
         var dragging = false
         val pad = RingView.PAD_DP * dp
-        /** Size of the rings and tags without the room around them. */
+        /** Size of the rings and tags (or the board) without the room around them. */
         var bodyW = 0f; private set
-        val bodyH = RingView.BODY_H_DP * dp
+        var bodyH = RingView.BODY_H_DP * dp; private set
+        /** Three or more timers: the board, in place of the rings (#691). */
+        val board = BoardView(context).apply { visibility = View.GONE }
         private val slop = ViewConfiguration.get(context).scaledTouchSlop
         private var downX = 0f; private var downY = 0f
         private var startX = 0f; private var startY = 0f
         private var tapped: RingView? = null
 
-        init { clipChildren = false; clipToPadding = false; outlineProvider = null }
+        init { clipChildren = false; clipToPadding = false; outlineProvider = null; addView(board) }
 
         override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
             val spec = MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
             for (i in 0 until childCount) getChildAt(i).measure(spec, spec)
+            if (board.visibility == View.VISIBLE) {
+                // The board in the same room as the rings: [pad] all round, so placing and dragging work as before.
+                bodyW = board.measuredWidth.toFloat(); bodyH = board.measuredHeight.toFloat()
+                setMeasuredDimension((bodyW + 2 * pad).toInt(), (bodyH + 2 * pad).toInt())
+                return
+            }
             val n = order.size.coerceAtLeast(1)
             bodyW = n * RingView.RING_DP * dp + (n - 1) * GAP_DP * dp
-            val h = if (childCount > 0) getChildAt(0).measuredHeight else (pad + bodyH).toInt()
+            bodyH = RingView.BODY_H_DP * dp
+            val h = rings.values.firstOrNull()?.measuredHeight ?: (pad + bodyH).toInt()
             setMeasuredDimension((bodyW + 2 * pad).toInt(), h)
         }
 
         override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
+            if (board.visibility == View.VISIBLE) board.layout(pad.toInt(), pad.toInt(), pad.toInt() + board.measuredWidth, pad.toInt() + board.measuredHeight)
             val step = (RingView.RING_DP + GAP_DP) * dp
             order.forEachIndexed { i, id ->
                 val v = rings[id] ?: return@forEachIndexed
@@ -373,7 +394,7 @@ class TimerOverlay(
             when (e.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     downX = e.rawX; downY = e.rawY; startX = x; startY = y
-                    tapped = ringAt(e.x)
+                    tapped = if (board.visibility == View.VISIBLE) null else ringAt(e.x)
                     dragging = false
                 }
                 MotionEvent.ACTION_MOVE -> {
@@ -388,7 +409,11 @@ class TimerOverlay(
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     if (dragging) endDrag()
-                    else if (e.actionMasked == MotionEvent.ACTION_UP) {
+                    else if (e.actionMasked == MotionEvent.ACTION_UP && board.visibility == View.VISIBLE &&
+                        board.hideBox.contains(e.x - board.left, e.y - board.top)) {
+                        // The board's own "Hide": tucked into the edge at once.
+                        showChip(false); state.hide(); refresh()
+                    } else if (e.actionMasked == MotionEvent.ACTION_UP) {
                         val show = chip.visibility != View.VISIBLE
                         showChip(show)
                         if (show) tapped?.highlighted = true
