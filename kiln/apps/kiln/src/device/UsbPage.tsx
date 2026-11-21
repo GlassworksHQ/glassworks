@@ -438,7 +438,7 @@ function Done({ s, session }: { s: UsbState; session: UsbSession }) {
       <h2 id="h">Done.</h2>
       <p className="lede">
         {home && f ? `Glassworks is the ${name}'s home screen.` : `Glassworks is installed on your ${name}.`}
-        {!home && ` Kiln couldn't confirm the home screen. On ${dev.the}, press Home, then pick Glassworks and Always.`}
+        {!home && ` Kiln couldn't confirm the home screen. In ${dev.the}'s Settings, find Default apps, then Home app, and choose Glassworks.`}
       </p>
       {f ? (
         <div className="fc">
@@ -594,7 +594,7 @@ function UsbOutcome({ session }: { session: UsbSession }) {
   const name = deviceName(dev, s);
   return (
     <UsbFrameContext.Provider value={dev}>
-      {installed.home.state !== 'set' && <p className="small" role="alert">{`Kiln couldn't confirm Glassworks as the home screen. On ${dev.the}, press Home, then pick Glassworks and Always.`}</p>}
+      {installed.home.state !== 'set' && <p className="small" role="alert">{`Kiln couldn't confirm Glassworks as the home screen. In ${dev.the}'s Settings, find Default apps, then Home app, and choose Glassworks.`}</p>}
       {f ? (
         <div className="fc">
           <div className="spread"><b>{f.name}</b>{!MEASURED.has(f.id) && <span className="ctag">Clarity · not measured yet</span>}</div>
