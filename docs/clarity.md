@@ -8,18 +8,18 @@ Each letter answers one practical question: **how busy a Home Assistant dashboar
 
 | Grade | What it means |
 |---|---|
-| **A+** | Handles heavy dashboards smoothly, holding a steady 60 fps across every task |
+| **A+** | Handles heavy dashboards smoothly, with 60 fps scrolling and responsive camera playback within tight stall and dropped-frame limits |
 | **A** | Great wall panel even for large, dense dashboards |
 | **B** | Great wall panel for typical dashboards with a live camera stream |
 | **C** | Great wall panel for typical dashboards without a live camera |
 | **D** | Best suited for light, focused dashboards |
 | **E** | Struggles to feel responsive even on light dashboards |
 
-Because a live WebRTC camera feed is the heaviest load most dashboards carry—and plenty of wall panels don't show cameras—Clarity grades typical dashboards both without a camera (**C**) and with a live 720p camera (**B**).
+Because a live WebRTC camera feed is the heaviest load most dashboards carry—and plenty of wall panels don't show cameras—Clarity grades typical dashboards both without a camera (**C**) and with a live 720p camera (**B**). Separate from dashboard load, a cold restart to the reference dashboard that takes 5 seconds or more also caps the grade at **C**, even if the panel passes the heavy dashboard tests.
 
 ## What Clarity measures
 
-Instead of synthetic browser benchmarks, Clarity loads a pinned version of the real Home Assistant frontend on standardized **light**, **typical**, and **heavy** reference dashboards served from a local test server. Every device receives the exact same cards, live entity updates, and camera stream, so grades reflect the panel itself rather than your home Wi-Fi or personal dashboard setup.
+Instead of synthetic browser benchmarks, Clarity loads a pinned version of the real Home Assistant frontend on standardized **light**, **typical**, and **heavy** reference dashboards served from a local test server. Every device receives the same cards, live entity updates, and camera stream over a wired USB connection or quiet local network—note that wireless ADB or LAN camera streaming over a noisy Wi-Fi link can still affect measurements and mark a result **provisional**.
 
 On each dashboard, Clarity tests the interactions you notice every day on a wall panel:
 

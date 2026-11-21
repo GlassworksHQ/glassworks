@@ -26,7 +26,7 @@ You can control Sendspin from the panel's settings menu (**Settings → Panes �
 
 Automatic pairing requires an encrypted ESPHome connection in Home Assistant and Music Assistant's Home Assistant provider running (the default when Music Assistant runs as a Home Assistant app/add-on). If the status sensor stays on `waiting for pairing or approval by …` and Music Assistant lists the panel as unpaired, you have two options:
 
-- **Pair with a token (recommended):** Retrieve the pairing token from Home Assistant's WebSocket API (`ws://<ha-host>:8123/api/websocket`, authenticated with an administrator long-lived access token):
+- **Pair with a token (recommended):** Retrieve the pairing token from Home Assistant's WebSocket API (`ws://<ha-host>:8123/api/websocket`, authenticated with an administrator long-lived access token). Because `ws://` is unencrypted, anyone observing the network path can read that token—use it only on a trusted local network, or connect over `wss://` if Home Assistant serves HTTPS:
   1. Find your panel's 43-character `client_id` by sending `{"id": 1, "type": "sendspin/subscribe_clients"}` (it is also shown in Music Assistant's player details).
   2. Request the token by sending `{"id": 2, "type": "sendspin/get_pairing_token", "client_id": "<panel client id>"}`.
   3. Open **Settings → Players → \<Your panel\>** in Music Assistant and paste the returned pairing token. Treat this token like a password—anyone holding it can pair a server with your speaker.

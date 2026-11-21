@@ -57,7 +57,7 @@ Here's what you get today.
 
 Optional panes like the Bluetooth proxy and camera stay off until you turn them on, and every pane can be toggled anytime so features you don't use never eat memory or CPU.
 
-**Honest performance grades with [Clarity](../../../docs/clarity.md).** Spec sheets don't tell you whether a wall panel will actually feel snappy with a real Home Assistant dashboard. So we built Clarity—a standardized, open benchmark that runs the real HA frontend on every device and gives it a public grade from A+ to E. The S1 Plus scores **[grade at release]** ([one line from its Clarity card]). If a piece of hardware has limits, you should know before you buy it or mount it on a wall. I wrote a separate post about how Clarity works: [Introducing Clarity](https://www.glassworks.dev/blog/clarity).
+**Honest performance grades with [Clarity](../../../docs/clarity.md).** Spec sheets don't tell you whether a wall panel will actually feel snappy with a real Home Assistant dashboard. So we built Clarity—a standardized, open benchmark that runs the real HA frontend on every device and gives it a public grade from A+ to E. The S1 Plus scores **[grade at release]** ([one line from its Clarity card]). If a piece of hardware has limits, you should know before you buy it or mount it on a wall. <!-- Once /blog/clarity publishes, add: I wrote a separate post about how Clarity works: [Introducing Clarity](https://www.glassworks.dev/blog/clarity). -->
 
 **Supported devices ("frames") at 1.0:**
 

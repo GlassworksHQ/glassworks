@@ -1,6 +1,6 @@
 ---
 title: "Introducing Clarity: an open performance grade for Home Assistant wall panels"
-date: 2026-12-01
+date: 2026-12-03
 author: "Eduardo"
 summary: "Spec sheets can't tell you whether a wall panel will feel snappy on your actual dashboard. Clarity runs the real Home Assistant frontend on fixed reference dashboards and gives every device an honest A+ to E grade."
 draft: true
@@ -11,7 +11,7 @@ Draft. Text in [brackets] waits on the release; fill it from each frame's clarit
 on the day it goes out. The date in the folder name and `date:` is a placeholder too.
 -->
 
-Alongside [Glassworks 1.0](https://www.glassworks.dev/blog/glassworks-1-0), I'm also releasing **Clarity**—an open performance benchmark and A+ to E grading system for Home Assistant wall panels.
+Earlier this week I shared [Glassworks 1.0](https://www.glassworks.dev/blog/glassworks-1-0). Today I'm introducing **Clarity**—an open performance benchmark and A+ to E grading system for Home Assistant wall panels.
 
 ## The question spec sheets can't answer
 
@@ -27,7 +27,7 @@ Clarity boils a full test run down to a single letter grade, answering a practic
 
 | Grade | What it means |
 |---|---|
-| **A+** | Handles heavy dashboards smoothly, holding 60 fps across every task |
+| **A+** | Handles heavy dashboards smoothly, with 60 fps scrolling and responsive camera playback within tight stall and dropped-frame limits |
 | **A** | Good wall panel, even with heavy dashboards |
 | **B** | Good wall panel for typical dashboards, including a live camera feed |
 | **C** | Good wall panel for typical dashboards without a camera feed |
@@ -38,7 +38,7 @@ Every grade is paired with a single plain-English summary saying what the device
 
 ## How the test actually works
 
-Instead of synthetic JavaScript benchmarks, Clarity runs a pinned version of the **real Home Assistant frontend** on three standardized reference dashboards (light, typical, and heavy). A lightweight mock Home Assistant server runs locally on your computer and replays the exact same entity states and live update stream every time. Because your own server, custom cards, and Wi-Fi aren't part of the equation, two panels tested months apart on different networks are measured under identical conditions.
+Instead of synthetic JavaScript benchmarks, Clarity runs a pinned version of the **real Home Assistant frontend** on three standardized reference dashboards (light, typical, and heavy). A lightweight mock Home Assistant server runs locally on your computer and replays the same entity states and live update stream every time. Because your own server and custom cards aren't part of the equation, two panels tested months apart are measured under matching conditions over a wired USB connection or quiet local network (wireless ADB or LAN camera streaming over noisy Wi-Fi can affect results and marks a run provisional).
 
 On each dashboard, Clarity tests the things you actually do on a wall panel:
 
@@ -69,7 +69,7 @@ Every Glassworks frame gets a Clarity run, and its grade appears right on [glass
 
 ## Beyond the letter grade
 
-A Clarity run also logs metrics that don't affect the letter grade but are genuinely useful when setting up a panel: per-process memory usage, the RAM cost of enabling each pane, idle CPU, animation headroom, and restart time on **your own** dashboard. If you want to know whether turning on Assist voice or Music Assistant will push an older panel over its memory limit, the report shows you directly.
+A Clarity run also logs metrics that don't affect the letter grade but are genuinely useful when setting up a panel: per-process memory usage, idle CPU, animation headroom, restart time on **your own** dashboard, and—when you enable the optional `--pane-ram` flag—the RAM cost of turning on each pane. If you want to know whether enabling Assist voice or Music Assistant will push an older panel over its memory limit, the report shows you directly.
 
 ## Run it on your own panel
 
