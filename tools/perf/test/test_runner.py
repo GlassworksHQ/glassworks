@@ -1961,6 +1961,17 @@ class PaneRamRuns(unittest.TestCase):
                 self.assertIn("--pane-ram", p.stderr)
                 self.assertFalse(os.path.exists(os.path.join(state, "intents.json")))
 
+    def test_a_tested_frame_switches_its_base_frames_panes(self):
+        """#23: the Pixel Tablet's --pane-ram asks for Glassworks for generic Android's panes (its frame.json `base`)."""
+        tmp = tempfile.mkdtemp()
+        env, state = fake_env(tmp)
+        p = subprocess.run([RUN, "--frame", "google-pixel-tablet", "--out", os.path.join(tmp, "out"), "--skip-synthetic",
+                            "--skip-reference", "--skip-real-use", "--pane-ram", "assist=on"],
+                           env=env, capture_output=True, text=True, timeout=60)
+        self.assertEqual(p.returncode, 2, p.stderr)
+        self.assertIn("--pane-ram needs the setting now of: assist, camera, diagnostics, mic, sendspin", p.stderr)
+        self.assertFalse(os.path.exists(os.path.join(state, "intents.json")))
+
     def test_a_run_that_stops_partway_puts_the_panes_and_the_dashboard_back(self):
         tmp = tempfile.mkdtemp()
         env, state = fake_env(tmp, FAKE_IDLE_FAILS="1")

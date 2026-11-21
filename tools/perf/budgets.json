@@ -1,5 +1,5 @@
 {
-  "_comment": "The default budgets, for a frame without frames/<id>/budgets.json. Read by tools/perf/report.py. Project choices, not published standards; docs/perf.md, \"RAM\", says why.",
+  "_comment": "The default budgets, for a frame without frames/<id>/budgets.json or a base frame (design/frame.json `base`) with one. Read by tools/perf/report.py. Project choices, not published standards; docs/perf.md, \"RAM\", says why.",
   "ram": { "app_pss_max_pct_of_ram": 50, "device_available_min_pct": 15 },
   "panes": {}
 }
