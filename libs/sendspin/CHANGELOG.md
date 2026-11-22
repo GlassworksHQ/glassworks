@@ -5,7 +5,7 @@ What changed in each release of `dev.glassworks:sendspin` on Maven Central. Vers
 cut from `libs/sendspin/v<version>` tags ([docs/releasing.md](../../docs/releasing.md#libraries)), which
 publish the matching section below as the release notes.
 
-## [Unreleased]
+## [0.1.0] - 2026-11-22
 
 ### Added
 - **First release on Maven Central.** `SendspinPlayer` is a native Sendspin player for Music Assistant:

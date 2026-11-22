@@ -314,7 +314,7 @@ On Maven Central as `dev.glassworks:esphome-api` ([changelog](CHANGELOG.md)).
 ```kotlin
 repositories { mavenCentral() }
 dependencies {
-    implementation("dev.glassworks:esphome-api:0.1.1")
+    implementation("dev.glassworks:esphome-api:0.2.0")
 }
 ```
 

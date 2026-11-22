@@ -5,7 +5,7 @@ What changed in each release of `dev.glassworks:esphome-api` on Maven Central. V
 cut from `libs/esphome-api/v<version>` tags ([docs/releasing.md](../../docs/releasing.md#libraries)), which
 publish the matching section below as the release notes.
 
-## [Unreleased]
+## [0.2.0] - 2026-11-22
 
 ### Added
 - **Active Bluetooth connections (GATT).** Set `ApiServer.bluetoothConnections` to a
