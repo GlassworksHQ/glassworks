@@ -6,10 +6,10 @@
 # Touches no device and no network. Writes only to $STOCK_PROBE_OUT (default: out/, git-ignored).
 set -euo pipefail
 
-HERE="$(cd "$(dirname "$0")" && pwd)"
+HERE="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 OUT="${STOCK_PROBE_OUT:-$HERE/out}"
 mkdir -p "$OUT"
-OUT="$(cd "$OUT" && pwd)"
+OUT="$(CDPATH= cd -- "$OUT" && pwd)"
 export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 
 BT="$(ls -d "$ANDROID_HOME"/build-tools/* 2>/dev/null | grep -v -- -rc | sort -V | tail -1 || true)"

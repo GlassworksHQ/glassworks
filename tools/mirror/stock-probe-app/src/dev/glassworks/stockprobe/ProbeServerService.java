@@ -8,17 +8,16 @@ import android.os.Build;
 import android.os.IBinder;
 import android.os.Process;
 import android.util.Log;
-import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.lang.reflect.Method;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
@@ -26,6 +25,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Tiny read-only HTTP probe server for stock Mirrors where 1.2x+ adbd rejects /data/misc/adb/adb_keys.
@@ -54,8 +58,14 @@ public final class ProbeServerService extends Service {
 
     private static final Set<String> SAFE_PROPS_SET = new HashSet<>(Arrays.asList(SAFE_PROPS));
 
+    private static final int MAX_WORKERS = 8;
+    private static final int MAX_QUEUE = 16;
+    private static final int MAX_REQUEST_LINE_BYTES = 4096;
+    private static final long REQUEST_DEADLINE_MS = 15_000L;
+
     private volatile boolean running;
     private volatile ServerSocket server;
+    private volatile ExecutorService requestPool;
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
@@ -96,7 +106,10 @@ public final class ProbeServerService extends Service {
     @Override
     public void onDestroy() {
         running = false;
-        try { if (server != null) server.close(); } catch (IOException ignored) {}
+        ServerSocket listener = server;
+        try { if (listener != null) listener.close(); } catch (IOException ignored) {}
+        ExecutorService pool = requestPool;
+        if (pool != null) pool.shutdownNow();
         super.onDestroy();
     }
 
@@ -107,6 +120,16 @@ public final class ProbeServerService extends Service {
 
     private void serveLoop() {
         ServerSocket listener = null;
+        ExecutorService pool = new ThreadPoolExecutor(
+                2, MAX_WORKERS, 30L, TimeUnit.SECONDS,
+                new ArrayBlockingQueue<>(MAX_QUEUE),
+                r -> {
+                    Thread t = new Thread(r, "stock-probe-req");
+                    t.setDaemon(true);
+                    return t;
+                }
+        );
+        requestPool = pool;
         try {
             listener = new ServerSocket(PORT);
             server = listener;
@@ -114,14 +137,18 @@ public final class ProbeServerService extends Service {
             Log.i(TAG, "HTTP probe listening on port " + PORT + " uid=" + Process.myUid() + " fiemap=" + Fiemap.isAvailable());
             while (running) {
                 Socket sock = listener.accept();
-                Thread worker = new Thread(() -> handle(sock), "stock-probe-req");
-                worker.setDaemon(true);
-                worker.start();
+                try {
+                    pool.execute(() -> handle(sock));
+                } catch (RejectedExecutionException rejected) {
+                    try { sock.close(); } catch (IOException ignored) {}
+                }
             }
         } catch (IOException e) {
             if (running) Log.e(TAG, "server loop failed", e);
         } finally {
             server = null;
+            requestPool = null;
+            pool.shutdownNow();
             try { if (listener != null) listener.close(); } catch (IOException ignored) {}
         }
     }
@@ -173,16 +200,46 @@ public final class ProbeServerService extends Service {
                 || canonical.startsWith("/sys/devices/");
     }
 
+    private static String readBoundedRequestLine(Socket s, long deadlineMs) throws IOException {
+        InputStream in = s.getInputStream();
+        ByteArrayOutputStream buf = new ByteArrayOutputStream(256);
+        while (true) {
+            long rem = deadlineMs - System.currentTimeMillis();
+            if (rem <= 0) throw new SocketTimeoutException("request deadline exceeded");
+            s.setSoTimeout((int) Math.min(rem, Integer.MAX_VALUE));
+            int b = in.read();
+            if (b < 0) return buf.size() == 0 ? null : new String(buf.toByteArray(), StandardCharsets.US_ASCII);
+            if (b == '\n') break;
+            if (b == '\r') continue;
+            if (buf.size() >= MAX_REQUEST_LINE_BYTES) {
+                throw new IllegalArgumentException("request line too long");
+            }
+            buf.write(b);
+        }
+        return new String(buf.toByteArray(), StandardCharsets.US_ASCII);
+    }
+
     private void handle(Socket sock) {
         try (Socket s = sock) {
-            s.setSoTimeout(15000);
-            BufferedReader rd = new BufferedReader(new InputStreamReader(s.getInputStream(), StandardCharsets.US_ASCII));
-            String reqLine = rd.readLine();
+            long deadlineMs = System.currentTimeMillis() + REQUEST_DEADLINE_MS;
+            s.setSoTimeout((int) REQUEST_DEADLINE_MS);
+            String reqLine;
+            try {
+                reqLine = readBoundedRequestLine(s, deadlineMs);
+            } catch (IllegalArgumentException tooLong) {
+                sendText(s.getOutputStream(), 414, "text/plain", "request URI too long\n");
+                return;
+            }
             if (reqLine == null || !reqLine.startsWith("GET ")) {
                 sendText(s.getOutputStream(), 405, "text/plain", "GET only\n");
                 return;
             }
-            String target = reqLine.split(" ")[1];
+            String[] parts = reqLine.split(" ");
+            if (parts.length < 2) {
+                sendText(s.getOutputStream(), 400, "text/plain", "bad request\n");
+                return;
+            }
+            String target = parts[1];
             String route = target;
             String query = "";
             int q = target.indexOf('?');

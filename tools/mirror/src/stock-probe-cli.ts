@@ -3,7 +3,7 @@
 import { execFile } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, realpathSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -535,7 +535,96 @@ function isInsideRepo(dir: string): boolean {
   const realRepo = existsSync(REPO) ? realpathSync(REPO) : resolve(REPO);
   const realTarget = realResolve(dir);
   const rel = relative(realRepo, realTarget);
-  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
+  const isOutside = rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel);
+  return !isOutside;
+}
+
+/**
+ * Runs one ADB poll (`adb connect`, `adb devices`, and optional pinned-serial TCP identity check)
+ * under a single shared deadline so sequential subprocesses cannot exceed the caller's budget.
+ */
+export async function checkHostAdb(o: {
+  adbBin: string;
+  tcpTarget?: string;
+  activePin?: string;
+  timeoutMs?: number;
+  nowMs?: () => number;
+  run?: (bin: string, args: string[], timeoutMs: number, serialToRedact?: string) => Promise<{ stdout: string; stderr: string }>;
+  makeSession?: (target: string, serialToRedact?: string) => StockAdbSession;
+}): Promise<{ usb: AdbState; tcp?: AdbState; session?: StockAdbSession }> {
+  const nowMs = o.nowMs ?? (() => Date.now());
+  const run = o.run ?? execText;
+  const makeSession = o.makeSession ?? ((target, serialToRedact) => createHostAdbSession(target, o.adbBin, serialToRedact));
+  const budgetMs = Math.max(0, Math.min(10_000, o.timeoutMs ?? 10_000));
+  const deadline = nowMs() + budgetMs;
+  const remaining = () => deadline - nowMs();
+
+  if (o.tcpTarget) {
+    const rem = remaining();
+    if (rem <= 0) return { usb: 'not-seen', tcp: 'not-seen' };
+    await run(o.adbBin, ['connect', o.tcpTarget], rem, o.activePin).catch(() => {});
+  }
+
+  const devRem = remaining();
+  if (devRem <= 0) {
+    return { usb: 'not-seen', ...(o.tcpTarget ? { tcp: 'not-seen' as AdbState } : {}) };
+  }
+  const { stdout } = await run(o.adbBin, ['devices'], devRem, o.activePin).catch(() => ({ stdout: '' }));
+  const map = parseAdbDevices(stdout);
+
+  let usb: AdbState = 'not-seen';
+  let usbTarget: string | undefined;
+  if (o.activePin) {
+    usb = map.get(o.activePin) ?? 'not-seen';
+    if (usb === 'device') usbTarget = o.activePin;
+  } else {
+    const usbEntries = [...map.entries()].filter(([id]) => !id.includes(':'));
+    if (usbEntries.length > 1) {
+      throw new Error(`${usbEntries.length} USB adb devices are connected: pass --serial-file or unplug other devices`);
+    }
+    if (usbEntries.length === 1) {
+      usb = usbEntries[0]![1];
+      if (usb === 'device') {
+        // Do not mutate pinnedSerial from an unidentified preflight ADB device:
+        // fastboot discovery (or an explicit --serial/--serial-file) owns the pin.
+        usbTarget = usbEntries[0]![0];
+      }
+    }
+  }
+
+  let tcp: AdbState | undefined;
+  let verifiedTcpTarget: string | undefined;
+  if (o.tcpTarget) {
+    tcp = map.get(o.tcpTarget) ?? 'not-seen';
+    if (tcp === 'device') {
+      if (o.activePin) {
+        // When a serial is pinned, verify that the TCP endpoint belongs to that exact device.
+        const verifyRem = remaining();
+        if (verifyRem <= 0) {
+          tcp = 'not-seen';
+        } else {
+          const serialCheck = await run(
+            o.adbBin,
+            ['-s', o.tcpTarget, 'shell', 'getprop ro.serialno'],
+            Math.min(5000, verifyRem),
+            o.activePin,
+          ).catch(() => null);
+          if (serialCheck && serialCheck.stdout.trim() === o.activePin) {
+            verifiedTcpTarget = o.tcpTarget;
+          } else {
+            tcp = 'not-seen';
+          }
+        }
+      } else {
+        verifiedTcpTarget = o.tcpTarget;
+      }
+    }
+  }
+
+  const activeTarget = usb === 'device' ? usbTarget : verifiedTcpTarget;
+  const serialToRedact = o.activePin ?? (usb === 'device' ? usbTarget : undefined);
+  const session = activeTarget ? makeSession(activeTarget, serialToRedact) : undefined;
+  return { usb, ...(tcp !== undefined ? { tcp } : {}), ...(session ? { session } : {}) };
 }
 
 export async function stockProbeCli(argv: string[], log: (l: string) => void = (l) => console.log(l)): Promise<number> {
@@ -641,62 +730,12 @@ export async function stockProbeCli(argv: string[], log: (l: string) => void = (
       }),
       connectHttp: (host, port) => createHostHttpSession(host, port),
       async checkAdb(tcpTarget?: string, opts?: { timeoutMs?: number; preflight?: boolean }) {
-        const cmdTimeout = Math.max(1000, Math.min(10_000, opts?.timeoutMs ?? 10_000));
-        if (tcpTarget) {
-          await execText(adbBin, ['connect', tcpTarget], cmdTimeout, pinnedSerial).catch(() => {});
-        }
-        const { stdout } = await execText(adbBin, ['devices'], cmdTimeout, pinnedSerial).catch(() => ({ stdout: '' }));
-        const map = parseAdbDevices(stdout);
-
-        const activePin = opts?.preflight ? explicitSerial : pinnedSerial;
-        let usb: AdbState = 'not-seen';
-        let usbTarget: string | undefined;
-        if (activePin) {
-          usb = map.get(activePin) ?? 'not-seen';
-          if (usb === 'device') usbTarget = activePin;
-        } else {
-          const usbEntries = [...map.entries()].filter(([id]) => !id.includes(':'));
-          if (usbEntries.length > 1) {
-            throw new Error(`${usbEntries.length} USB adb devices are connected: pass --serial-file or unplug other devices`);
-          }
-          if (usbEntries.length === 1) {
-            usb = usbEntries[0]![1];
-            if (usb === 'device') {
-              // Do not mutate pinnedSerial from an unidentified preflight ADB device:
-              // fastboot discovery (or an explicit --serial/--serial-file) owns the pin.
-              usbTarget = usbEntries[0]![0];
-            }
-          }
-        }
-
-        let tcp: AdbState | undefined;
-        let verifiedTcpTarget: string | undefined;
-        if (tcpTarget) {
-          tcp = map.get(tcpTarget) ?? 'not-seen';
-          if (tcp === 'device') {
-            if (activePin) {
-              // When a serial is pinned, verify that the TCP endpoint belongs to that exact device.
-              const serialCheck = await execText(
-                adbBin,
-                ['-s', tcpTarget, 'shell', 'getprop ro.serialno'],
-                Math.min(5000, cmdTimeout),
-                activePin,
-              ).catch(() => null);
-              if (serialCheck && serialCheck.stdout.trim() === activePin) {
-                verifiedTcpTarget = tcpTarget;
-              } else {
-                tcp = 'not-seen';
-              }
-            } else {
-              verifiedTcpTarget = tcpTarget;
-            }
-          }
-        }
-
-        const activeTarget = usb === 'device' ? usbTarget : verifiedTcpTarget;
-        const serialToRedact = activePin ?? (usb === 'device' ? usbTarget : undefined);
-        const session = activeTarget ? createHostAdbSession(activeTarget, adbBin, serialToRedact) : undefined;
-        return { usb, ...(tcp !== undefined ? { tcp } : {}), ...(session ? { session } : {}) };
+        return checkHostAdb({
+          adbBin,
+          tcpTarget,
+          activePin: opts?.preflight ? explicitSerial : pinnedSerial,
+          timeoutMs: opts?.timeoutMs,
+        });
       },
       async fastboot() {
         for (let i = 0; i < 60; i++) {

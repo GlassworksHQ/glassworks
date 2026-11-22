@@ -12,7 +12,7 @@
 // any checkpoint; raw device files stay locally in <out>/raw/ (outside git, never committed).
 import { createHash } from 'node:crypto';
 import { chmodSync, closeSync, fchmodSync, mkdirSync, mkdtempSync, openSync, writeFileSync, writeSync } from 'node:fs';
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import { Disk, MemoryStore, writeSparse } from '@glassworks/ext4';
 import {
@@ -212,6 +212,9 @@ export async function buildStockProbeUserdata(disk: Disk, o: StockProbeUserdataO
   }
   if (o.tcpPort !== undefined && o.tcpPort !== 0 && (!Number.isInteger(o.tcpPort) || o.tcpPort < 1024 || o.tcpPort > 65535)) {
     throw new Error(`invalid tcpPort ${o.tcpPort}: expected an integer from 1024 to 65535 (or 0 to disable)`);
+  }
+  if (adbKeyLines(o.adbKey).some((l) => adbFingerprint(l) === GLASS_PANES_KEY_FINGERPRINT)) {
+    throw new Error('refusing the published Glass Panes project key; pass your own --adb-key');
   }
 
   const time = o.time ?? Math.floor(Date.now() / 1000);
@@ -525,7 +528,7 @@ function containedRawPath(rawBase: string, ...segments: string[]): string {
   const base = resolve(rawBase);
   const dest = resolve(base, ...segments);
   const rel = relative(base, dest);
-  if (!rel || rel === '.' || rel.startsWith('..') || isAbsolute(rel)) {
+  if (!rel || rel === '.' || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
     throw new Error(`refusing raw artifact path outside ${base}`);
   }
   return dest;
@@ -628,7 +631,7 @@ export function renderReportMarkdown(r: ProbeReport): string {
   lines.push('');
   for (const s of r.steps) {
     const box = s.status === 'done' ? 'x' : ' ';
-    const note = s.note ? ` — ${s.note.replace(/[\r\n]+/g, ' ')}` : '';
+    const note = s.note ? ` — ${mdCode(s.note)}` : '';
     lines.push(`- [${box}] **Step ${s.number}/${r.steps.length}: ${s.title}** (\`${s.status}\`)${note}`);
   }
 
@@ -862,10 +865,11 @@ export async function runStockProbe(o: StockProbeOptions, d: StockProbeDeps): Pr
   const rawRoot = join(o.outDir, 'raw');
   ensurePrivateDir(rawRoot);
   // Private per-run directory (owner-only 0700) so concurrent runs sharing --out cannot clobber
-  // each other's sparse image or raw dumps, and local users on a shared host cannot read them.
+  // each other's sparse image, authoritative checkpoint report, or raw dumps.
   const rawDir = mkdtempSync(join(rawRoot, 'run-'));
   try { chmodSync(rawDir, 0o700); } catch { /* ignore on platforms without POSIX chmod */ }
-  const reportPath = join(o.outDir, 'report.md');
+  const reportPath = containedRawPath(rawDir, 'report.md');
+  const latestReportCopy = join(o.outDir, 'report.md');
 
   const report: ProbeReport = {
     startedAt: now().toISOString(),
@@ -877,7 +881,9 @@ export async function runStockProbe(o: StockProbeOptions, d: StockProbeDeps): Pr
 
   const saveReport = () => {
     report.updatedAt = now().toISOString();
-    writeFileSync(reportPath, renderReportMarkdown(report), 'utf8');
+    const md = renderReportMarkdown(report);
+    writePrivateFile(reportPath, md, 'utf8');
+    writeFileSync(latestReportCopy, md, 'utf8');
   };
   const setStep = (idx: number, status: StepStatus, note?: string) => {
     report.steps[idx]!.status = status;
@@ -947,7 +953,7 @@ export async function runStockProbe(o: StockProbeOptions, d: StockProbeDeps): Pr
     if (o.adbKey) {
       const keyLines = adbKeyLines(o.adbKey);
       fp = adbFingerprint(keyLines[0]!);
-      if (fp === GLASS_PANES_KEY_FINGERPRINT) {
+      if (keyLines.some((l) => adbFingerprint(l) === GLASS_PANES_KEY_FINGERPRINT)) {
         throw new Error('refusing the published Glass Panes project key; pass your own --adb-key');
       }
     } else if (o.extractOnly || o.httpOnly) {
@@ -1117,8 +1123,9 @@ export async function runStockProbe(o: StockProbeOptions, d: StockProbeDeps): Pr
     const elapsedMs = () => Math.max(monotonicMs() - startMs, sleptMs);
 
     for (let i = 0; ; i++) {
-      const remainingBefore = Math.max(0, deadlineMs - elapsedMs());
-      const reqTimeout = Math.max(1000, Math.min(5000, remainingBefore || 1000));
+      const remainingBefore = deadlineMs - elapsedMs();
+      if (i > 0 && remainingBefore <= 0) break;
+      const reqTimeout = Math.min(5000, Math.max(1, remainingBefore));
       const st = await sess.status(reqTimeout).catch(() => null);
       if (st?.ok) {
         report.httpFallback = {
@@ -1179,8 +1186,9 @@ export async function runStockProbe(o: StockProbeOptions, d: StockProbeDeps): Pr
       adbSession = undefined;
 
       for (let i = 0; ; i++) {
-        const remainingBefore = Math.max(0, deadlineMs - elapsedMs());
-        const cmdTimeout = Math.max(1000, Math.min(10_000, remainingBefore || 1000));
+        const remainingBefore = deadlineMs - elapsedMs();
+        if (i > 0 && remainingBefore <= 0) break;
+        const cmdTimeout = Math.min(10_000, Math.max(1, remainingBefore));
         const st = await d.checkAdb(tcpTarget, { timeoutMs: cmdTimeout });
         lastUsb = st.usb;
         lastTcp = st.tcp;
@@ -1228,8 +1236,8 @@ export async function runStockProbe(o: StockProbeOptions, d: StockProbeDeps): Pr
         d.log(`    ${outcome.toUpperCase()}: ${hint}`);
         saveReport();
 
-        // Offer the no-ADB fallback (plant /data/app + 1-entry packages.xml in userdata and extract over HTTP).
-        const canFallback = !!d.connectHttp && (probeAppPlanted || (!!d.loadProbeApp && userdataBytes > 0 && !!o.adbKey));
+        // Offer the no-ADB fallback only when this run already flashed userdata (never in --extract-only).
+        const canFallback = didFlash && !!d.connectHttp && (probeAppPlanted || (!!d.loadProbeApp && userdataBytes > 0 && !!o.adbKey));
         const tryFallback = canFallback && (await d.confirm(
           probeAppPlanted
             ? 'No ADB — probe APK is already planted. Connect to the Mirror\'s HTTP probe server now?'

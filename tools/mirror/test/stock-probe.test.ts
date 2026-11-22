@@ -15,7 +15,7 @@ import {
   buildPackagesXml, buildStockProbeUserdata, parseVendorTsv, renderReportMarkdown, runStockProbe,
   type AdbState, type StockAdbSession, type StockHttpSession, type StockProbeDeps,
 } from '../src/stock-probe';
-import { StockProbeUsageError, parseFiemapResponse, stockProbeCli } from '../src/stock-probe-cli';
+import { StockProbeUsageError, checkHostAdb, parseFiemapResponse, stockProbeCli } from '../src/stock-probe-cli';
 import { DRY_USERDATA } from '../src/dry';
 
 const KEY = fakeAdbKey(11, 'probe@host');
@@ -401,22 +401,26 @@ describe('runStockProbe guided flow', () => {
     await expect(buildStockProbeUserdata(disk, { adbKey: KEY, tcpPort: 80 })).rejects.toThrow(/invalid tcpPort/);
     expect(GLASS_PANES_KEY_FINGERPRINT).toMatch(/^([0-9A-F]{2}:){15}[0-9A-F]{2}$/);
 
-    // Any --out inside the repo is rejected (even without --pull-system-blobs, and through symlinks).
+    // Any --out inside the repo is rejected (including ..-prefixed repo children and symlinked parents).
+    const repoRoot = join(__dirname, '../../..');
     await expect(stockProbeCli(['--dry-run', '--out', join(__dirname, 'inside-repo')])).rejects.toBeInstanceOf(StockProbeUsageError);
+    await expect(stockProbeCli(['--dry-run', '--out', join(repoRoot, '..probe-output')])).rejects.toBeInstanceOf(StockProbeUsageError);
     await expect(stockProbeCli(['--dry-run', '--extract-only', '--out', join(__dirname, 'inside-repo')])).rejects.toBeInstanceOf(StockProbeUsageError);
     const repoLink = join(work, 'repo-symlink');
     symlinkSync(__dirname, repoLink);
     await expect(stockProbeCli(['--dry-run', '--out', join(repoLink, 'sub')])).rejects.toBeInstanceOf(StockProbeUsageError);
   });
 
-  it('isolates sparse images per run, persists flash before reboot failure, and enforces elapsed wait deadlines', async () => {
-    // 1. Two runs sharing --out get distinct private per-run sparse image paths.
+  it('isolates sparse images and checkpoint reports per run, persists flash before reboot failure, and enforces shared deadlines', async () => {
+    // 1. Two runs sharing --out get distinct private per-run sparse image AND authoritative report paths.
     const sharedOut = join(work, 'shared');
     const b1 = await runStockProbe({ outDir: sharedOut, adbKey: KEY, buildOnly: true, userdataBytesOverride: DRY_USERDATA }, makeFakeDeps().deps);
-    const b2 = await runStockProbe({ outDir: sharedOut, adbKey: KEY, buildOnly: true, userdataBytesOverride: DRY_USERDATA }, makeFakeDeps().deps);
+    const b2 = await runStockProbe({ outDir: sharedOut, adbKey: KEY, readOnly: true }, makeFakeDeps().deps);
     expect(b1.sparsePath).not.toBe(b2.sparsePath);
+    expect(b1.reportPath).not.toBe(b2.reportPath);
     expect(existsSync(b1.sparsePath!)).toBe(true);
-    expect(existsSync(b2.sparsePath!)).toBe(true);
+    expect(readFileSync(b1.reportPath, 'utf8')).toContain('Step 3 — Sparse `userdata` image');
+    expect(readFileSync(b2.reportPath, 'utf8')).not.toContain('Step 3 — Sparse `userdata` image');
 
     // 2. If reboot fails after flashUserdata succeeds, report.md still records userdataFlashed=true.
     const rebootFailOut = join(work, 'reboot-fail');
@@ -451,17 +455,60 @@ describe('runStockProbe guided flow', () => {
     expect(resWait.outcome).toBe('blocked');
     expect(seenTimeouts).toEqual([10_000, 2000]);
     expect(seenSleeps).toEqual([2000]);
+
+    // 4. checkHostAdb applies one shared deadline across connect, devices, and TCP serial verification.
+    let adbClock = 50_000;
+    const cmdBudgets: Array<{ cmd: string; timeoutMs: number }> = [];
+    const pollRes = await checkHostAdb({
+      adbBin: 'adb',
+      tcpTarget: '192.0.2.10:5555',
+      activePin: 'MIRROR123',
+      timeoutMs: 1500,
+      nowMs: () => adbClock,
+      run: async (_bin, args, timeoutMs) => {
+        cmdBudgets.push({ cmd: args[0]!, timeoutMs });
+        if (args[0] === 'connect') { adbClock += 700; return { stdout: 'connected', stderr: '' }; }
+        if (args[0] === 'devices') { adbClock += 800; return { stdout: 'List of devices attached\n192.0.2.10:5555\tdevice\n', stderr: '' }; }
+        adbClock += 500;
+        return { stdout: 'MIRROR123\n', stderr: '' };
+      },
+    });
+    // Budget exhausted after connect (700ms) + devices (800ms) == 1500ms, so serial verification is skipped.
+    expect(cmdBudgets).toEqual([
+      { cmd: 'connect', timeoutMs: 1500 },
+      { cmd: 'devices', timeoutMs: 800 },
+    ]);
+    expect(pollRes.tcp).toBe('not-seen');
+    expect(pollRes.session).toBeUndefined();
   });
 
-  it('aborts Step 6 on ADB disconnect or HTTP transport error, blocks fallback fastboot mismatch, and sanitizes FIEMAP/report output', async () => {
-    // 1. Extract-only without adbKey works, and unauthorized in extract-only does not blame planted adb_keys.
-    const u = makeFakeDeps({ preFlashAdb: 'unauthorized' });
-    const uRes = await runStockProbe({ outDir: join(work, 'eo-unauth'), extractOnly: true, waitSeconds: 1 }, u.deps);
+  it('aborts Step 6 on ADB disconnect, blocks extract-only fallback writes, rejects multi-line published keys, and sanitizes report notes', async () => {
+    // 1. Extract-only never triggers fallback userdata writes even if userdataBytesOverride & loadProbeApp are set.
+    const u = makeFakeDeps({ preFlashAdb: 'unauthorized', enableHttpFallback: true });
+    const uRes = await runStockProbe({
+      outDir: join(work, 'eo-unauth'),
+      adbKey: KEY,
+      extractOnly: true,
+      userdataBytesOverride: DRY_USERDATA,
+      waitSeconds: 1,
+    }, u.deps);
     expect(uRes.outcome).toBe('blocked');
+    expect(u.flashed).toHaveLength(0);
     expect(uRes.report.adbWait?.nextHint).toContain('no userdata was flashed');
     expect(uRes.report.adbWait?.nextHint).not.toContain('Stock adbd rejected');
 
-    // 2. Step 6 fails (not complete) if ADB disconnects (code -1) during extraction.
+    // 2. Rejects the published Glass Panes key even when placed on line 2 after a personal key.
+    const pubKeyPath = join(__dirname, '../../../frames/lululemon-mirror/research/image-patch.md');
+    const pubKeyMatch = /([A-Za-z0-9+/=]{300,}\s+\S+)/.exec(readFileSync(pubKeyPath, 'utf8'));
+    if (pubKeyMatch && adbFingerprint(pubKeyMatch[1]!) === GLASS_PANES_KEY_FINGERPRINT) {
+      await expect(runStockProbe({
+        outDir: join(work, 'gp-line2'),
+        adbKey: `${KEY}\n${pubKeyMatch[1]!}\n`,
+        readOnly: true,
+      }, makeFakeDeps().deps)).rejects.toThrow(/Glass Panes project key/);
+    }
+
+    // 3. Step 6 fails (not complete) if ADB disconnects (code -1) during extraction.
     const disc = makeFakeDeps({ preFlashAdb: 'device' });
     const discOrig = disc.deps.checkAdb;
     disc.deps.checkAdb = async (tcp, opts) => {
@@ -480,7 +527,7 @@ describe('runStockProbe guided flow', () => {
     };
     await expect(runStockProbe({ outDir: join(work, 'adb-disc'), extractOnly: true }, disc.deps)).rejects.toThrow(/ADB transport lost/);
 
-    // 3. Fallback Step 5b refuses to flash if the second fastboot session is a different device.
+    // 4. Fallback Step 5b refuses to flash if the second fastboot session is a different device.
     const mis = makeFakeDeps({ adbAfterFlash: 'unauthorized', enableHttpFallback: true });
     let fbCalls = 0;
     const origMisFb = mis.deps.fastboot;
@@ -493,7 +540,7 @@ describe('runStockProbe guided flow', () => {
     expect(misRes.outcome).toBe('blocked');
     expect(mis.flashed).toHaveLength(1);
 
-    // 4. Malformed FIEMAP payloads become per-file errors and Markdown-injecting errors are escaped cleanly.
+    // 5. Malformed FIEMAP payloads become per-file errors and Markdown-injecting notes/errors are escaped cleanly.
     expect(parseFiemapResponse('/system/build.prop', { extents: { bad: true } }).error).toMatch(/missing extents array/);
     expect(parseFiemapResponse('/system/build.prop', { error: 'libfiemap.so not bundled' })).toEqual({
       path: '/system/build.prop',
@@ -504,7 +551,7 @@ describe('runStockProbe guided flow', () => {
       updatedAt: '2026-11-22T08:00:00.000Z',
       mode: 'http-only',
       dryRun: true,
-      steps: [],
+      steps: [{ number: 2, title: 'Fastboot', status: 'blocked', note: 'product is "[click](https://evil.example)", not MSM8916' }],
       extraction: {
         transport: 'http',
         props: {},
@@ -522,6 +569,7 @@ describe('runStockProbe guided flow', () => {
         pulledVendorBlobs: 0,
       },
     });
+    expect(fakeReport).toContain('— `product is "[click](https://evil.example)", not MSM8916`');
     expect(fakeReport).toContain('``bad `tick` \\| pipe ## Injected``');
     expect(fakeReport).not.toContain('\n## Injected');
   });
