@@ -540,8 +540,10 @@ function isInsideRepo(dir: string): boolean {
 }
 
 /**
- * Runs one ADB poll (`adb connect`, `adb devices`, and optional pinned-serial TCP identity check)
- * under a single shared deadline so sequential subprocesses cannot exceed the caller's budget.
+ * Runs one ADB poll under a single shared monotonic deadline.
+ * Lists USB devices first so an unreachable optional `--tcp-host` can never starve an
+ * already-authorized USB session; only spends remaining budget on TCP connect and pinned
+ * serial verification when USB is not authorized.
  */
 export async function checkHostAdb(o: {
   adbBin: string;
@@ -552,25 +554,19 @@ export async function checkHostAdb(o: {
   run?: (bin: string, args: string[], timeoutMs: number, serialToRedact?: string) => Promise<{ stdout: string; stderr: string }>;
   makeSession?: (target: string, serialToRedact?: string) => StockAdbSession;
 }): Promise<{ usb: AdbState; tcp?: AdbState; session?: StockAdbSession }> {
-  const nowMs = o.nowMs ?? (() => Date.now());
+  const nowMs = o.nowMs ?? (() => performance.now());
   const run = o.run ?? execText;
   const makeSession = o.makeSession ?? ((target, serialToRedact) => createHostAdbSession(target, o.adbBin, serialToRedact));
   const budgetMs = Math.max(0, Math.min(10_000, o.timeoutMs ?? 10_000));
   const deadline = nowMs() + budgetMs;
   const remaining = () => deadline - nowMs();
 
-  if (o.tcpTarget) {
-    const rem = remaining();
-    if (rem <= 0) return { usb: 'not-seen', tcp: 'not-seen' };
-    await run(o.adbBin, ['connect', o.tcpTarget], rem, o.activePin).catch(() => {});
-  }
-
   const devRem = remaining();
   if (devRem <= 0) {
     return { usb: 'not-seen', ...(o.tcpTarget ? { tcp: 'not-seen' as AdbState } : {}) };
   }
   const { stdout } = await run(o.adbBin, ['devices'], devRem, o.activePin).catch(() => ({ stdout: '' }));
-  const map = parseAdbDevices(stdout);
+  let map = parseAdbDevices(stdout);
 
   let usb: AdbState = 'not-seen';
   let usbTarget: string | undefined;
@@ -592,10 +588,29 @@ export async function checkHostAdb(o: {
     }
   }
 
+  // If USB is already authorized, return it right away without spending budget on optional TCP.
+  if (usb === 'device' && usbTarget) {
+    const serialToRedact = o.activePin ?? usbTarget;
+    const tcp = o.tcpTarget ? (map.get(o.tcpTarget) ?? 'not-seen') : undefined;
+    return { usb, ...(tcp !== undefined ? { tcp } : {}), session: makeSession(usbTarget, serialToRedact) };
+  }
+
   let tcp: AdbState | undefined;
   let verifiedTcpTarget: string | undefined;
   if (o.tcpTarget) {
     tcp = map.get(o.tcpTarget) ?? 'not-seen';
+    if (tcp !== 'device') {
+      const connRem = remaining();
+      if (connRem > 0) {
+        await run(o.adbBin, ['connect', o.tcpTarget], connRem, o.activePin).catch(() => {});
+        const refreshRem = remaining();
+        if (refreshRem > 0) {
+          const refreshed = await run(o.adbBin, ['devices'], refreshRem, o.activePin).catch(() => ({ stdout: '' }));
+          map = parseAdbDevices(refreshed.stdout);
+          tcp = map.get(o.tcpTarget) ?? 'not-seen';
+        }
+      }
+    }
     if (tcp === 'device') {
       if (o.activePin) {
         // When a serial is pinned, verify that the TCP endpoint belongs to that exact device.
@@ -621,9 +636,7 @@ export async function checkHostAdb(o: {
     }
   }
 
-  const activeTarget = usb === 'device' ? usbTarget : verifiedTcpTarget;
-  const serialToRedact = o.activePin ?? (usb === 'device' ? usbTarget : undefined);
-  const session = activeTarget ? makeSession(activeTarget, serialToRedact) : undefined;
+  const session = verifiedTcpTarget ? makeSession(verifiedTcpTarget, o.activePin) : undefined;
   return { usb, ...(tcp !== undefined ? { tcp } : {}), ...(session ? { session } : {}) };
 }
 

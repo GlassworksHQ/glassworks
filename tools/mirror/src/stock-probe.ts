@@ -196,6 +196,15 @@ export function buildPackagesXml(o: {
 `;
 }
 
+/** Validates every line of an ADB public key input and refuses any forbidden fingerprint. */
+export function validateStockAdbKey(adbKey: string, forbiddenFingerprint = GLASS_PANES_KEY_FINGERPRINT): string {
+  const keyLines = adbKeyLines(adbKey);
+  if (keyLines.some((l) => adbFingerprint(l) === forbiddenFingerprint)) {
+    throw new Error('refusing the published Glass Panes project key; pass your own --adb-key');
+  }
+  return adbFingerprint(keyLines[0]!);
+}
+
 /**
  * Builds a fresh ext4 userdata image tailored to reach a stock Mirror without touching system:
  * /misc/adb/adb_keys (via buildUserdata), /property/persist.sys.usb.config, optional
@@ -213,9 +222,7 @@ export async function buildStockProbeUserdata(disk: Disk, o: StockProbeUserdataO
   if (o.tcpPort !== undefined && o.tcpPort !== 0 && (!Number.isInteger(o.tcpPort) || o.tcpPort < 1024 || o.tcpPort > 65535)) {
     throw new Error(`invalid tcpPort ${o.tcpPort}: expected an integer from 1024 to 65535 (or 0 to disable)`);
   }
-  if (adbKeyLines(o.adbKey).some((l) => adbFingerprint(l) === GLASS_PANES_KEY_FINGERPRINT)) {
-    throw new Error('refusing the published Glass Panes project key; pass your own --adb-key');
-  }
+  validateStockAdbKey(o.adbKey);
 
   const time = o.time ?? Math.floor(Date.now() / 1000);
   const fs = await buildUserdata(disk, {
@@ -853,7 +860,7 @@ export interface StockProbeResult {
 
 export async function runStockProbe(o: StockProbeOptions, d: StockProbeDeps): Promise<StockProbeResult> {
   const now = d.now ?? (() => new Date());
-  const monotonicMs = d.monotonicMs ?? (() => Date.now());
+  const monotonicMs = d.monotonicMs ?? (() => performance.now());
   const sleep = d.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const mode: ProbeReport['mode'] = o.httpOnly ? 'http-only'
     : o.extractOnly ? 'extract-only'
@@ -870,6 +877,7 @@ export async function runStockProbe(o: StockProbeOptions, d: StockProbeDeps): Pr
   try { chmodSync(rawDir, 0o700); } catch { /* ignore on platforms without POSIX chmod */ }
   const reportPath = containedRawPath(rawDir, 'report.md');
   const latestReportCopy = join(o.outDir, 'report.md');
+  let warnedConvenienceCopy = false;
 
   const report: ProbeReport = {
     startedAt: now().toISOString(),
@@ -883,7 +891,14 @@ export async function runStockProbe(o: StockProbeOptions, d: StockProbeDeps): Pr
     report.updatedAt = now().toISOString();
     const md = renderReportMarkdown(report);
     writePrivateFile(reportPath, md, 'utf8');
-    writeFileSync(latestReportCopy, md, 'utf8');
+    try {
+      writeFileSync(latestReportCopy, md, 'utf8');
+    } catch (e) {
+      if (!warnedConvenienceCopy) {
+        warnedConvenienceCopy = true;
+        d.log(`    WARNING: could not update convenience report copy ${latestReportCopy} (${(e as Error).message}); authoritative report is at ${reportPath}`);
+      }
+    }
   };
   const setStep = (idx: number, status: StepStatus, note?: string) => {
     report.steps[idx]!.status = status;
@@ -951,11 +966,7 @@ export async function runStockProbe(o: StockProbeOptions, d: StockProbeDeps): Pr
   try {
     let fp: string;
     if (o.adbKey) {
-      const keyLines = adbKeyLines(o.adbKey);
-      fp = adbFingerprint(keyLines[0]!);
-      if (keyLines.some((l) => adbFingerprint(l) === GLASS_PANES_KEY_FINGERPRINT)) {
-        throw new Error('refusing the published Glass Panes project key; pass your own --adb-key');
-      }
+      fp = validateStockAdbKey(o.adbKey);
     } else if (o.extractOnly || o.httpOnly) {
       fp = `skipped (${mode})`;
     } else {

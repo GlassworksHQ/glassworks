@@ -27,7 +27,10 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
@@ -62,10 +65,36 @@ public final class ProbeServerService extends Service {
     private static final int MAX_QUEUE = 16;
     private static final int MAX_REQUEST_LINE_BYTES = 4096;
     private static final long REQUEST_DEADLINE_MS = 15_000L;
+    private static final long RESPONSE_DEADLINE_MS = 60_000L;
 
     private volatile boolean running;
     private volatile ServerSocket server;
     private volatile ExecutorService requestPool;
+    private volatile ScheduledExecutorService deadlineTimer;
+
+    private final class RequestTask implements Runnable {
+        private final Socket sock;
+
+        RequestTask(Socket sock) {
+            this.sock = sock;
+        }
+
+        void closeSocket() {
+            try { sock.close(); } catch (IOException ignored) {}
+        }
+
+        @Override
+        public void run() {
+            handle(sock);
+        }
+    }
+
+    private static void shutdownPool(ExecutorService pool) {
+        if (pool == null) return;
+        for (Runnable queued : pool.shutdownNow()) {
+            if (queued instanceof RequestTask) ((RequestTask) queued).closeSocket();
+        }
+    }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
@@ -108,8 +137,9 @@ public final class ProbeServerService extends Service {
         running = false;
         ServerSocket listener = server;
         try { if (listener != null) listener.close(); } catch (IOException ignored) {}
-        ExecutorService pool = requestPool;
-        if (pool != null) pool.shutdownNow();
+        shutdownPool(requestPool);
+        ScheduledExecutorService timer = deadlineTimer;
+        if (timer != null) timer.shutdownNow();
         super.onDestroy();
     }
 
@@ -129,7 +159,13 @@ public final class ProbeServerService extends Service {
                     return t;
                 }
         );
+        ScheduledExecutorService timer = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "stock-probe-deadline");
+            t.setDaemon(true);
+            return t;
+        });
         requestPool = pool;
+        deadlineTimer = timer;
         try {
             listener = new ServerSocket(PORT);
             server = listener;
@@ -137,10 +173,11 @@ public final class ProbeServerService extends Service {
             Log.i(TAG, "HTTP probe listening on port " + PORT + " uid=" + Process.myUid() + " fiemap=" + Fiemap.isAvailable());
             while (running) {
                 Socket sock = listener.accept();
+                RequestTask task = new RequestTask(sock);
                 try {
-                    pool.execute(() -> handle(sock));
+                    pool.execute(task);
                 } catch (RejectedExecutionException rejected) {
-                    try { sock.close(); } catch (IOException ignored) {}
+                    task.closeSocket();
                 }
             }
         } catch (IOException e) {
@@ -148,7 +185,9 @@ public final class ProbeServerService extends Service {
         } finally {
             server = null;
             requestPool = null;
-            pool.shutdownNow();
+            deadlineTimer = null;
+            shutdownPool(pool);
+            timer.shutdownNow();
             try { if (listener != null) listener.close(); } catch (IOException ignored) {}
         }
     }
@@ -220,7 +259,16 @@ public final class ProbeServerService extends Service {
     }
 
     private void handle(Socket sock) {
+        ScheduledFuture<?> killer = null;
         try (Socket s = sock) {
+            ScheduledExecutorService timer = deadlineTimer;
+            if (timer != null && !timer.isShutdown()) {
+                try {
+                    killer = timer.schedule(() -> {
+                        try { s.close(); } catch (IOException ignored) {}
+                    }, RESPONSE_DEADLINE_MS, TimeUnit.MILLISECONDS);
+                } catch (RejectedExecutionException ignored) {}
+            }
             long deadlineMs = System.currentTimeMillis() + REQUEST_DEADLINE_MS;
             s.setSoTimeout((int) REQUEST_DEADLINE_MS);
             String reqLine;
@@ -320,6 +368,8 @@ public final class ProbeServerService extends Service {
             }
         } catch (Throwable t) {
             Log.w(TAG, "request failed", t);
+        } finally {
+            if (killer != null) killer.cancel(false);
         }
     }
 

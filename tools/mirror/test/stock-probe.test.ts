@@ -12,7 +12,7 @@ import { clean, debugfs, debugfsCat, dump, fsck, haveTools } from '@glassworks/e
 import { GLASS_PANES_KEY_FINGERPRINT, USERDATA_BYTES, adbFingerprint } from '@glassworks/lululemon-mirror-installer';
 import { fakeAdbKey } from '@glassworks/lululemon-mirror-installer/fakes';
 import {
-  buildPackagesXml, buildStockProbeUserdata, parseVendorTsv, renderReportMarkdown, runStockProbe,
+  buildPackagesXml, buildStockProbeUserdata, parseVendorTsv, renderReportMarkdown, runStockProbe, validateStockAdbKey,
   type AdbState, type StockAdbSession, type StockHttpSession, type StockProbeDeps,
 } from '../src/stock-probe';
 import { StockProbeUsageError, checkHostAdb, parseFiemapResponse, stockProbeCli } from '../src/stock-probe-cli';
@@ -412,15 +412,16 @@ describe('runStockProbe guided flow', () => {
   });
 
   it('isolates sparse images and checkpoint reports per run, persists flash before reboot failure, and enforces shared deadlines', async () => {
-    // 1. Two runs sharing --out get distinct private per-run sparse image AND authoritative report paths.
+    // 1. Two buildOnly runs sharing --out get distinct private per-run sparse image AND authoritative report paths.
     const sharedOut = join(work, 'shared');
-    const b1 = await runStockProbe({ outDir: sharedOut, adbKey: KEY, buildOnly: true, userdataBytesOverride: DRY_USERDATA }, makeFakeDeps().deps);
-    const b2 = await runStockProbe({ outDir: sharedOut, adbKey: KEY, readOnly: true }, makeFakeDeps().deps);
+    const b1 = await runStockProbe({ outDir: sharedOut, adbKey: KEY, usbConfig: 'adb', buildOnly: true, userdataBytesOverride: DRY_USERDATA }, makeFakeDeps().deps);
+    const b2 = await runStockProbe({ outDir: sharedOut, adbKey: KEY, usbConfig: 'diag,adb', buildOnly: true, userdataBytesOverride: DRY_USERDATA }, makeFakeDeps().deps);
     expect(b1.sparsePath).not.toBe(b2.sparsePath);
     expect(b1.reportPath).not.toBe(b2.reportPath);
     expect(existsSync(b1.sparsePath!)).toBe(true);
-    expect(readFileSync(b1.reportPath, 'utf8')).toContain('Step 3 — Sparse `userdata` image');
-    expect(readFileSync(b2.reportPath, 'utf8')).not.toContain('Step 3 — Sparse `userdata` image');
+    expect(existsSync(b2.sparsePath!)).toBe(true);
+    expect(readFileSync(b1.reportPath, 'utf8')).toContain('| Planned `persist.sys.usb.config` | `adb` |');
+    expect(readFileSync(b2.reportPath, 'utf8')).toContain('| Planned `persist.sys.usb.config` | `diag,adb` |');
 
     // 2. If reboot fails after flashUserdata succeeds, report.md still records userdataFlashed=true.
     const rebootFailOut = join(work, 'reboot-fail');
@@ -456,8 +457,25 @@ describe('runStockProbe guided flow', () => {
     expect(seenTimeouts).toEqual([10_000, 2000]);
     expect(seenSleeps).toEqual([2000]);
 
-    // 4. checkHostAdb applies one shared deadline across connect, devices, and TCP serial verification.
+    // 4a. checkHostAdb returns an already-authorized USB session before touching optional --tcp-host.
+    const usbCalls: string[] = [];
+    const usbRes = await checkHostAdb({
+      adbBin: 'adb',
+      tcpTarget: '192.0.2.10:5555',
+      activePin: 'MIRROR123',
+      timeoutMs: 2000,
+      run: async (_bin, args) => {
+        usbCalls.push(args[0]!);
+        return { stdout: 'List of devices attached\nMIRROR123\tdevice\n', stderr: '' };
+      },
+    });
+    expect(usbCalls).toEqual(['devices']);
+    expect(usbRes.usb).toBe('device');
+    expect(usbRes.session).toBeDefined();
+
+    // 4b. When USB is absent, checkHostAdb applies one shared deadline across devices -> connect -> devices -> verify.
     let adbClock = 50_000;
+    let devicesCalls = 0;
     const cmdBudgets: Array<{ cmd: string; timeoutMs: number }> = [];
     const pollRes = await checkHostAdb({
       adbBin: 'adb',
@@ -467,16 +485,26 @@ describe('runStockProbe guided flow', () => {
       nowMs: () => adbClock,
       run: async (_bin, args, timeoutMs) => {
         cmdBudgets.push({ cmd: args[0]!, timeoutMs });
-        if (args[0] === 'connect') { adbClock += 700; return { stdout: 'connected', stderr: '' }; }
-        if (args[0] === 'devices') { adbClock += 800; return { stdout: 'List of devices attached\n192.0.2.10:5555\tdevice\n', stderr: '' }; }
+        if (args[0] === 'devices') {
+          devicesCalls += 1;
+          adbClock += 500;
+          return {
+            stdout: devicesCalls === 1
+              ? 'List of devices attached\n'
+              : 'List of devices attached\n192.0.2.10:5555\tdevice\n',
+            stderr: '',
+          };
+        }
+        if (args[0] === 'connect') { adbClock += 500; return { stdout: 'connected', stderr: '' }; }
         adbClock += 500;
         return { stdout: 'MIRROR123\n', stderr: '' };
       },
     });
-    // Budget exhausted after connect (700ms) + devices (800ms) == 1500ms, so serial verification is skipped.
+    // Budget exhausted after devices (500ms) + connect (500ms) + devices (500ms) == 1500ms, so serial verification is skipped.
     expect(cmdBudgets).toEqual([
-      { cmd: 'connect', timeoutMs: 1500 },
-      { cmd: 'devices', timeoutMs: 800 },
+      { cmd: 'devices', timeoutMs: 1500 },
+      { cmd: 'connect', timeoutMs: 1000 },
+      { cmd: 'devices', timeoutMs: 500 },
     ]);
     expect(pollRes.tcp).toBe('not-seen');
     expect(pollRes.session).toBeUndefined();
@@ -497,16 +525,12 @@ describe('runStockProbe guided flow', () => {
     expect(uRes.report.adbWait?.nextHint).toContain('no userdata was flashed');
     expect(uRes.report.adbWait?.nextHint).not.toContain('Stock adbd rejected');
 
-    // 2. Rejects the published Glass Panes key even when placed on line 2 after a personal key.
-    const pubKeyPath = join(__dirname, '../../../frames/lululemon-mirror/research/image-patch.md');
-    const pubKeyMatch = /([A-Za-z0-9+/=]{300,}\s+\S+)/.exec(readFileSync(pubKeyPath, 'utf8'));
-    if (pubKeyMatch && adbFingerprint(pubKeyMatch[1]!) === GLASS_PANES_KEY_FINGERPRINT) {
-      await expect(runStockProbe({
-        outDir: join(work, 'gp-line2'),
-        adbKey: `${KEY}\n${pubKeyMatch[1]!}\n`,
-        readOnly: true,
-      }, makeFakeDeps().deps)).rejects.toThrow(/Glass Panes project key/);
-    }
+    // 2. Rejects a forbidden project key unconditionally even when placed on line 2 after a personal key.
+    const forbiddenKey = fakeAdbKey(99, 'published@project');
+    const forbiddenFp = adbFingerprint(forbiddenKey);
+    expect(forbiddenFp).not.toBe(adbFingerprint(KEY));
+    expect(() => validateStockAdbKey(`${KEY}\n${forbiddenKey}\n`, forbiddenFp)).toThrow(/Glass Panes project key/);
+    expect(validateStockAdbKey(KEY, forbiddenFp)).toBe(adbFingerprint(KEY));
 
     // 3. Step 6 fails (not complete) if ADB disconnects (code -1) during extraction.
     const disc = makeFakeDeps({ preFlashAdb: 'device' });
