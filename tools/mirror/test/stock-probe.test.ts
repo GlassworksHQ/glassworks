@@ -473,8 +473,9 @@ describe('runStockProbe guided flow', () => {
     expect(usbRes.usb).toBe('device');
     expect(usbRes.session).toBeDefined();
 
-    // 4b. When USB is absent, checkHostAdb applies one shared deadline across devices -> connect -> devices -> verify.
-    let adbClock = 50_000;
+    // 4b. When USB is absent, checkHostAdb applies one shared integer-ms deadline (even with fractional performance.now() ticks).
+    const fractionalTicks = [1000, 1000.25, 1500.75, 2499.4, 2499.4];
+    let tickIdx = 0;
     let devicesCalls = 0;
     const cmdBudgets: Array<{ cmd: string; timeoutMs: number }> = [];
     const pollRes = await checkHostAdb({
@@ -482,12 +483,12 @@ describe('runStockProbe guided flow', () => {
       tcpTarget: '192.0.2.10:5555',
       activePin: 'MIRROR123',
       timeoutMs: 1500,
-      nowMs: () => adbClock,
+      nowMs: () => fractionalTicks[Math.min(tickIdx++, fractionalTicks.length - 1)]!,
       run: async (_bin, args, timeoutMs) => {
+        expect(Number.isInteger(timeoutMs) && timeoutMs >= 1).toBe(true);
         cmdBudgets.push({ cmd: args[0]!, timeoutMs });
         if (args[0] === 'devices') {
           devicesCalls += 1;
-          adbClock += 500;
           return {
             stdout: devicesCalls === 1
               ? 'List of devices attached\n'
@@ -495,16 +496,14 @@ describe('runStockProbe guided flow', () => {
             stderr: '',
           };
         }
-        if (args[0] === 'connect') { adbClock += 500; return { stdout: 'connected', stderr: '' }; }
-        adbClock += 500;
+        if (args[0] === 'connect') return { stdout: 'connected', stderr: '' };
         return { stdout: 'MIRROR123\n', stderr: '' };
       },
     });
-    // Budget exhausted after devices (500ms) + connect (500ms) + devices (500ms) == 1500ms, so serial verification is skipped.
+    // Remaining falls from 1499.75 -> floor 1499, 999.25 -> floor 999, then 0.6ms (< 1ms) so no 0ms timeout is passed.
     expect(cmdBudgets).toEqual([
-      { cmd: 'devices', timeoutMs: 1500 },
-      { cmd: 'connect', timeoutMs: 1000 },
-      { cmd: 'devices', timeoutMs: 500 },
+      { cmd: 'devices', timeoutMs: 1499 },
+      { cmd: 'connect', timeoutMs: 999 },
     ]);
     expect(pollRes.tcp).toBe('not-seen');
     expect(pollRes.session).toBeUndefined();

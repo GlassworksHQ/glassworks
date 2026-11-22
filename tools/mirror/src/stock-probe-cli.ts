@@ -76,8 +76,9 @@ function redact(text: string, serial?: string): string {
 }
 
 function execText(bin: string, args: string[], timeoutMs = 120_000, serialToRedact?: string): Promise<{ stdout: string; stderr: string }> {
+  const timeout = Math.max(1, Math.floor(timeoutMs));
   return new Promise((res, rej) => {
-    execFile(bin, args, { timeout: timeoutMs, maxBuffer: 64 << 20, encoding: 'utf8' }, (err, stdout, stderr) => {
+    execFile(bin, args, { timeout, maxBuffer: 64 << 20, encoding: 'utf8' }, (err, stdout, stderr) => {
       if (err) {
         const msg = `${bin} ${args.join(' ')}: ${String(stderr || stdout || err.message).trim()}`;
         rej(new Error(redact(msg, serialToRedact)));
@@ -89,8 +90,9 @@ function execText(bin: string, args: string[], timeoutMs = 120_000, serialToReda
 }
 
 function execBuffer(bin: string, args: string[], timeoutMs = 120_000, serialToRedact?: string): Promise<Buffer> {
+  const timeout = Math.max(1, Math.floor(timeoutMs));
   return new Promise((res, rej) => {
-    execFile(bin, args, { timeout: timeoutMs, maxBuffer: 128 << 20, encoding: 'buffer' }, (err, stdout, stderr) => {
+    execFile(bin, args, { timeout, maxBuffer: 128 << 20, encoding: 'buffer' }, (err, stdout, stderr) => {
       if (err) {
         const msg = `${bin} ${args.join(' ')}: ${String(stderr || stdout || err.message).trim()}`;
         rej(new Error(redact(msg, serialToRedact)));
@@ -557,12 +559,12 @@ export async function checkHostAdb(o: {
   const nowMs = o.nowMs ?? (() => performance.now());
   const run = o.run ?? execText;
   const makeSession = o.makeSession ?? ((target, serialToRedact) => createHostAdbSession(target, o.adbBin, serialToRedact));
-  const budgetMs = Math.max(0, Math.min(10_000, o.timeoutMs ?? 10_000));
+  const budgetMs = Math.max(0, Math.min(10_000, Math.floor(o.timeoutMs ?? 10_000)));
   const deadline = nowMs() + budgetMs;
-  const remaining = () => deadline - nowMs();
+  const remaining = () => Math.floor(deadline - nowMs());
 
   const devRem = remaining();
-  if (devRem <= 0) {
+  if (devRem < 1) {
     return { usb: 'not-seen', ...(o.tcpTarget ? { tcp: 'not-seen' as AdbState } : {}) };
   }
   const { stdout } = await run(o.adbBin, ['devices'], devRem, o.activePin).catch(() => ({ stdout: '' }));

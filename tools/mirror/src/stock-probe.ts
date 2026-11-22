@@ -1134,8 +1134,8 @@ export async function runStockProbe(o: StockProbeOptions, d: StockProbeDeps): Pr
     const elapsedMs = () => Math.max(monotonicMs() - startMs, sleptMs);
 
     for (let i = 0; ; i++) {
-      const remainingBefore = deadlineMs - elapsedMs();
-      if (i > 0 && remainingBefore <= 0) break;
+      const remainingBefore = Math.floor(deadlineMs - elapsedMs());
+      if (i > 0 && remainingBefore < 1) break;
       const reqTimeout = Math.min(5000, Math.max(1, remainingBefore));
       const st = await sess.status(reqTimeout).catch(() => null);
       if (st?.ok) {
@@ -1197,8 +1197,8 @@ export async function runStockProbe(o: StockProbeOptions, d: StockProbeDeps): Pr
       adbSession = undefined;
 
       for (let i = 0; ; i++) {
-        const remainingBefore = deadlineMs - elapsedMs();
-        if (i > 0 && remainingBefore <= 0) break;
+        const remainingBefore = Math.floor(deadlineMs - elapsedMs());
+        if (i > 0 && remainingBefore < 1) break;
         const cmdTimeout = Math.min(10_000, Math.max(1, remainingBefore));
         const st = await d.checkAdb(tcpTarget, { timeoutMs: cmdTimeout });
         lastUsb = st.usb;

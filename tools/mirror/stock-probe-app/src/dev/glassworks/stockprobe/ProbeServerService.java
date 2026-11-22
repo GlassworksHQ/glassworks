@@ -21,11 +21,13 @@ import java.net.SocketTimeoutException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
@@ -71,6 +73,7 @@ public final class ProbeServerService extends Service {
     private volatile ServerSocket server;
     private volatile ExecutorService requestPool;
     private volatile ScheduledExecutorService deadlineTimer;
+    private final Set<Socket> activeSockets = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
     private final class RequestTask implements Runnable {
         private final Socket sock;
@@ -89,11 +92,18 @@ public final class ProbeServerService extends Service {
         }
     }
 
-    private static void shutdownPool(ExecutorService pool) {
-        if (pool == null) return;
-        for (Runnable queued : pool.shutdownNow()) {
-            if (queued instanceof RequestTask) ((RequestTask) queued).closeSocket();
+    private void shutdownWorkers(ExecutorService pool, ScheduledExecutorService timer) {
+        if (pool != null) {
+            for (Runnable queued : pool.shutdownNow()) {
+                if (queued instanceof RequestTask) ((RequestTask) queued).closeSocket();
+            }
         }
+        // Close active sockets before stopping the deadline timer so workers blocked in
+        // socket reads or response writes unblock immediately on shutdown.
+        for (Socket active : activeSockets) {
+            try { active.close(); } catch (IOException ignored) {}
+        }
+        if (timer != null) timer.shutdownNow();
     }
 
     @Override
@@ -137,9 +147,7 @@ public final class ProbeServerService extends Service {
         running = false;
         ServerSocket listener = server;
         try { if (listener != null) listener.close(); } catch (IOException ignored) {}
-        shutdownPool(requestPool);
-        ScheduledExecutorService timer = deadlineTimer;
-        if (timer != null) timer.shutdownNow();
+        shutdownWorkers(requestPool, deadlineTimer);
         super.onDestroy();
     }
 
@@ -186,8 +194,7 @@ public final class ProbeServerService extends Service {
             server = null;
             requestPool = null;
             deadlineTimer = null;
-            shutdownPool(pool);
-            timer.shutdownNow();
+            shutdownWorkers(pool, timer);
             try { if (listener != null) listener.close(); } catch (IOException ignored) {}
         }
     }
@@ -260,7 +267,9 @@ public final class ProbeServerService extends Service {
 
     private void handle(Socket sock) {
         ScheduledFuture<?> killer = null;
+        activeSockets.add(sock);
         try (Socket s = sock) {
+            if (!running) return;
             ScheduledExecutorService timer = deadlineTimer;
             if (timer != null && !timer.isShutdown()) {
                 try {
@@ -369,6 +378,7 @@ public final class ProbeServerService extends Service {
         } catch (Throwable t) {
             Log.w(TAG, "request failed", t);
         } finally {
+            activeSockets.remove(sock);
             if (killer != null) killer.cancel(false);
         }
     }
