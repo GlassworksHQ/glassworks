@@ -1,5 +1,5 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": { "types": ["node", "w3c-web-usb"] },
-  "include": ["src", "test", "flash-node.ts", "list-apps.ts"]
+  "include": ["src", "test", "flash-node.ts", "list-apps.ts", "stock-probe.ts"]
 }

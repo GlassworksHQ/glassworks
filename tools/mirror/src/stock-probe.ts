@@ -1,0 +1,1027 @@
+// Guided, step-by-step probe for a stock lululemon Studio Mirror (MSM8916).
+//
+// NEVER touches system, boot, recovery, modem, persist, or aboot.
+// Steps 1-3 are read-only on the device (fastboot getvar + local sparse userdata build).
+// Step 4 WRITES ONLY userdata (wiping stock app data, leaving stock system untouched).
+// Steps 5-6 wait for stock Android over USB/TCP adb and extract safe, redacted findings
+// into report.md (updated after every step so progress can be reported at any checkpoint),
+// while raw device files stay locally in <out>/raw/ (outside git, never committed).
+import { createHash } from 'node:crypto';
+import { closeSync, mkdirSync, openSync, writeFileSync, writeSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { gunzipSync } from 'node:zlib';
+import { Disk, MemoryStore, writeSparse } from '@glassworks/ext4';
+import {
+  GLASS_PANES_KEY_FINGERPRINT, LABELS, SYSTEM_BYTES, adbFingerprint, adbKeyLines, buildUserdata,
+} from '@glassworks/lululemon-mirror-installer';
+
+export const STOCK_PROBE_LABELS = {
+  ...LABELS,
+  /** /data/property(/.*)? (AOSP 6.0.1 file_contexts). */
+  property: 'u:object_r:property_data_file:s0',
+} as const;
+
+/** Standard Android 6 wpa_supplicant header (same lines as Glass Panes /etc/wifi/wpa_supplicant.conf). */
+export const DEFAULT_WIFI_TEMPLATE = [
+  'update_config=1',
+  'eapol_version=1',
+  'ap_scan=1',
+  'fast_reauth=1',
+  'pmf=1',
+  'p2p_no_group_iface=1',
+  '',
+].join('\n');
+
+/** Read-only fastboot variables queried one at a time (this LK answers empty for `getvar all`; serialno is never logged). */
+export const FASTBOOT_VARS = [
+  'product',
+  'variant',
+  'secure',
+  'version-bootloader',
+  'max-download-size',
+  'partition-type:system',
+  'partition-size:system',
+  'partition-type:userdata',
+  'partition-size:userdata',
+  'partition-size:boot',
+  'partition-size:modem',
+  'partition-size:persist',
+] as const;
+
+/** Safe, non-unique build/hardware properties allowed into the shareable report.md. */
+export const STOCK_PROPS_ALLOWLIST = [
+  'ro.build.fingerprint',
+  'ro.bootimage.build.fingerprint',
+  'ro.build.version.release',
+  'ro.build.version.sdk',
+  'ro.build.type',
+  'ro.build.tags',
+  'ro.board.platform',
+  'ro.product.model',
+  'ro.product.device',
+  'ro.product.manufacturer',
+  'ro.hardware',
+  'ro.crypto.state',
+  'ro.adb.secure',
+  'ro.secure',
+  'ro.debuggable',
+  'ro.sf.hwrotation',
+  'persist.sys.usb.config',
+  'persist.adb.tcp.port',
+] as const;
+
+/** Ramdisk policy & config files pulled locally in Step 6 (only readable/denied status goes in report.md). */
+export const RAMDISK_FILES = [
+  '/sepolicy',
+  '/file_contexts',
+  '/seapp_contexts',
+  '/property_contexts',
+  '/service_contexts',
+  '/default.prop',
+] as const;
+
+/** Key stock /system paths audited by presence, size, and SHA-256 (bytes stay local in raw/). */
+export const KEY_SYSTEM_FILES = [
+  '/system/build.prop',
+  '/system/etc/wifi/wpa_supplicant.conf',
+  '/system/etc/init.qcom.post_boot.sh',
+  '/system/lib/modules/adsprpc.ko',
+  '/system/lib/modules/pronto/pronto_wlan.ko',
+  '/system/xbin/su',
+  '/system/framework/services.jar',
+] as const;
+
+const SAFE_PATH = /^\/[A-Za-z0-9._+/-]+$/;
+const SAFE_USB_CONFIG = /^[a-z0-9_,]+$/;
+
+export const STOCK_USERDATA_WARNING = [
+  'Step 4 flashes ONLY the userdata partition; stock system, boot, recovery, modem, and persist are NOT touched.',
+  'Wiping userdata erases stock account/onboarding data, which is likely a one-way door off lululemon\'s stock app.',
+  'Fastboot stays open, so you can still flash Glass Panes or Glassworks later.',
+];
+
+export interface StockProbeUserdataOptions {
+  adbKey: string;
+  /** Value for /data/property/persist.sys.usb.config (default: "adb"). No trailing newline. */
+  usbConfig?: string;
+  /** Port for /data/property/persist.adb.tcp.port (default: 5555; omit or 0 to skip). */
+  tcpPort?: number;
+  /** Optional Wi-Fi credentials pre-saved as a PBKDF2 PSK in /data/misc/wifi/wpa_supplicant.conf. */
+  wifi?: { ssid: string; password: string; template?: string };
+  time?: number;
+  uuid?: Uint8Array;
+}
+
+/**
+ * Builds a fresh ext4 userdata image tailored to reach adb on a stock Mirror without touching system:
+ * /misc/adb/adb_keys (via buildUserdata), /property/persist.sys.usb.config, optional
+ * /property/persist.adb.tcp.port, and optional /misc/wifi/wpa_supplicant.conf.
+ *
+ * AOSP 6.0.1 init's load_persistent_properties() reads raw file bytes without trimming newlines,
+ * so property files are written with exact UTF-8 bytes and no trailing '\n'.
+ */
+export async function buildStockProbeUserdata(disk: Disk, o: StockProbeUserdataOptions): Promise<{ plantedPaths: string[] }> {
+  const usbConfig = o.usbConfig ?? 'adb';
+  if (!SAFE_USB_CONFIG.test(usbConfig)) {
+    throw new Error(`invalid usbConfig "${usbConfig}": expected comma-separated lowercase names (e.g. adb or diag,serial_smd,rmnet_bam,adb)`);
+  }
+  if (o.tcpPort !== undefined && o.tcpPort !== 0 && (!Number.isInteger(o.tcpPort) || o.tcpPort < 1024 || o.tcpPort > 65535)) {
+    throw new Error(`invalid tcpPort ${o.tcpPort}: expected an integer from 1024 to 65535 (or 0 to disable)`);
+  }
+
+  const time = o.time ?? Math.floor(Date.now() / 1000);
+  const fs = await buildUserdata(disk, {
+    adbKey: o.adbKey,
+    time,
+    uuid: o.uuid,
+    ...(o.wifi ? { wifi: { ssid: o.wifi.ssid, password: o.wifi.password, template: o.wifi.template ?? DEFAULT_WIFI_TEMPLATE } } : {}),
+  });
+
+  const enc = new TextEncoder();
+  const plantedPaths = ['/data/misc/adb/adb_keys'];
+  if (o.wifi) plantedPaths.push('/data/misc/wifi/wpa_supplicant.conf');
+
+  // init.rc: mkdir /data/property 0700 root root; property files are 0600 root:root, property_data_file.
+  await fs.mkdir('/property', { mode: 0o700, uid: 0, gid: 0, label: STOCK_PROBE_LABELS.property, time });
+  await fs.writeFile('/property/persist.sys.usb.config', enc.encode(usbConfig), {
+    mode: 0o600, uid: 0, gid: 0, label: STOCK_PROBE_LABELS.property, time,
+  });
+  plantedPaths.push('/data/property/persist.sys.usb.config');
+
+  if (o.tcpPort) {
+    await fs.writeFile('/property/persist.adb.tcp.port', enc.encode(String(o.tcpPort)), {
+      mode: 0o600, uid: 0, gid: 0, label: STOCK_PROBE_LABELS.property, time,
+    });
+    plantedPaths.push('/data/property/persist.adb.tcp.port');
+  }
+
+  await fs.flush();
+  return { plantedPaths };
+}
+
+export interface VendorEntry {
+  part: string;
+  path: string;
+  bytes: number;
+  sha256: string;
+  label: string;
+  shell: string;
+}
+
+/** Parses frames/lululemon-mirror/research/option-c-vendor-files.tsv, validating every path. */
+export function parseVendorTsv(text: string): VendorEntry[] {
+  const out: VendorEntry[] = [];
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith('#') || line.startsWith('part\t')) continue;
+    const cols = line.split('\t');
+    if (cols.length < 6) continue;
+    const [part, path, bytesStr, sha256, label, shell] = cols;
+    if (!part || !path || !SAFE_PATH.test(path)) throw new Error(`unsafe vendor path in TSV: ${path}`);
+    out.push({ part, path, bytes: Number.parseInt(bytesStr ?? '0', 10) || 0, sha256: sha256 ?? '', label: label ?? '', shell: shell ?? '' });
+  }
+  return out;
+}
+
+export type AdbState = 'device' | 'unauthorized' | 'offline' | 'not-seen';
+
+export interface StockFastboot {
+  /** `fastboot oem device-info` raw lines (serials already redacted). */
+  oemDeviceInfo(): Promise<string[]>;
+  /** `fastboot getvar <name>` value, or undefined if unsupported/failed. */
+  getvar(name: string): Promise<string | undefined>;
+  /** `fastboot flash userdata <file>` — only userdata is ever allowed here. */
+  flashUserdata(sparsePath: string): Promise<void>;
+  /** `fastboot reboot`. */
+  reboot(): Promise<void>;
+}
+
+export interface StockAdbSession {
+  /** Runs a read-only shell command and returns stdout + exit code. */
+  shell(cmd: string): Promise<{ out: string; code: number }>;
+  /** Reads raw file bytes via `adb exec-out cat <path>` (null if unreadable/missing). */
+  readFile(path: string): Promise<Uint8Array | null>;
+}
+
+export interface StockProbeDeps {
+  log(line: string): void;
+  confirm(question: string): Promise<boolean>;
+  /** Checks current USB adb state (and optionally tries TCP connect if tcpHost is provided). */
+  checkAdb(tcpTarget?: string): Promise<{ usb: AdbState; tcp?: AdbState; session?: StockAdbSession }>;
+  /** Waits for / opens the Mirror in fastboot. */
+  fastboot(): Promise<StockFastboot>;
+  /** Optional vendor TSV rows (option-c-vendor-files.tsv) for Step 6 comparison. */
+  vendorEntries?: VendorEntry[];
+  sleep?: (ms: number) => Promise<void>;
+  now?: () => Date;
+}
+
+export type StepStatus = 'pending' | 'done' | 'skipped' | 'stopped' | 'blocked' | 'failed';
+
+export interface StepRecord {
+  number: number;
+  title: string;
+  status: StepStatus;
+  note?: string;
+}
+
+export interface FileAudit {
+  path: string;
+  status: 'readable' | 'denied' | 'missing';
+  bytes?: number;
+  sha256?: string;
+}
+
+export interface VendorPartSummary {
+  part: string;
+  total: number;
+  match: number;
+  differs: number;
+  missing: number;
+  denied: number;
+}
+
+export interface ProbeReport {
+  startedAt: string;
+  updatedAt: string;
+  mode: 'full' | 'read-only' | 'build-only' | 'extract-only';
+  dryRun: boolean;
+  steps: StepRecord[];
+  preflight?: {
+    adbKeyFingerprint: string;
+    usbConfig: string;
+    tcpPort?: number;
+    wifiConfigured: boolean;
+    preFlashUsbAdb: AdbState;
+  };
+  fastboot?: {
+    oemDeviceInfo: string[];
+    vars: Record<string, string>;
+    productOk: boolean;
+    userdataBytes?: number;
+    userdataOk: boolean;
+    systemBytes?: number;
+    systemOk: boolean;
+  };
+  sparseBuild?: {
+    userdataBytes: number;
+    blocks: number;
+    sparseBytes: number;
+    fill: boolean;
+    plantedPaths: string[];
+  };
+  flash?: {
+    userdataFlashed: boolean;
+    systemTouched: false;
+  };
+  adbWait?: {
+    usb: AdbState;
+    tcp?: AdbState;
+    outcome: 'authorized' | 'unauthorized' | 'not-seen';
+    nextHint: string;
+  };
+  extraction?: {
+    props: Record<string, string>;
+    selinuxEnforce?: string;
+    shellId?: string;
+    procVersion?: string;
+    kernelConfigFlags: string[];
+    procModules?: string;
+    meminfoHead?: string;
+    partitions?: string;
+    initServices: Record<string, string>;
+    ramdiskFiles: FileAudit[];
+    rotation?: string;
+    backlightEntries: string[];
+    dtPanelLines: string[];
+    dmesgHighlights: string[];
+    keySystemFiles: FileAudit[];
+    extraConfigFiles: FileAudit[];
+    vendorSummary: VendorPartSummary[];
+    vendorCameraIncluded: boolean;
+    pulledVendorBlobs: number;
+  };
+}
+
+export interface StockProbeOptions {
+  outDir: string;
+  adbKey: string;
+  usbConfig?: string;
+  tcpPort?: number;
+  tcpHost?: string;
+  wifi?: { ssid: string; password: string };
+  fill?: boolean;
+  readOnly?: boolean;
+  buildOnly?: boolean;
+  extractOnly?: boolean;
+  includeCamera?: boolean;
+  pullSystemBlobs?: boolean;
+  waitSeconds?: number;
+  /** Override userdata size in bytes (used by --dry-run tests so sparse images stay small). */
+  userdataBytesOverride?: number;
+  dryRun?: boolean;
+}
+
+function parseHexBytes(v: string | undefined): number | undefined {
+  if (!v) return undefined;
+  const s = v.trim();
+  if (!/^0x[0-9a-f]+$/i.test(s)) return undefined;
+  const n = Number.parseInt(s, 16);
+  return Number.isSafeInteger(n) && n > 0 ? n : undefined;
+}
+
+function sha256Hex(data: Uint8Array): string {
+  return createHash('sha256').update(data).digest('hex');
+}
+
+function redactPossibleIds(text: string): string {
+  // Strip 6-byte MAC addresses and androidboot.serialno=... tokens from free-form outputs like dmesg.
+  return text
+    .replace(/androidboot\.serialno=[^\s]+/gi, 'androidboot.serialno=<redacted>')
+    .replace(/\b([0-9a-f]{2}:){5}[0-9a-f]{2}\b/gi, '<mac-redacted>');
+}
+
+function fileSink(path: string) {
+  mkdirSync(dirname(path), { recursive: true });
+  const fd = openSync(path, 'w');
+  let pos = 0;
+  return {
+    write(b: Uint8Array) { writeSync(fd, b, 0, b.length, pos); pos += b.length; },
+    bytes: () => pos,
+    close: () => closeSync(fd),
+  };
+}
+
+/** Renders the redacted, copy-pasteable Markdown progress report. */
+export function renderReportMarkdown(r: ProbeReport): string {
+  const lines: string[] = [];
+  lines.push('# lululemon Studio Mirror — Stock Firmware Probe Report');
+  lines.push('');
+  lines.push('> Redacted progress report — safe to paste into a GitHub issue, PR, or chat.');
+  lines.push('> Raw device dumps live locally in `raw/` and must never be committed.');
+  lines.push('');
+  lines.push(`- **Mode:** \`${r.mode}\`${r.dryRun ? ' *(dry run — fake device)*' : ''}`);
+  lines.push(`- **Started:** ${r.startedAt}`);
+  lines.push(`- **Updated:** ${r.updatedAt}`);
+  lines.push('');
+  lines.push('## Progress');
+  lines.push('');
+  for (const s of r.steps) {
+    const box = s.status === 'done' ? 'x' : ' ';
+    const note = s.note ? ` — ${s.note}` : '';
+    lines.push(`- [${box}] **Step ${s.number}/${r.steps.length}: ${s.title}** (\`${s.status}\`)${note}`);
+  }
+
+  if (r.preflight) {
+    lines.push('');
+    lines.push('## Step 1 — Preflight');
+    lines.push('');
+    lines.push('| Field | Value |');
+    lines.push('|---|---|');
+    lines.push(`| ADB key fingerprint | \`${r.preflight.adbKeyFingerprint}\` |`);
+    lines.push(`| Planned \`persist.sys.usb.config\` | \`${r.preflight.usbConfig}\` |`);
+    lines.push(`| Planned \`persist.adb.tcp.port\` | ${r.preflight.tcpPort ? `\`${r.preflight.tcpPort}\`` : 'disabled'} |`);
+    lines.push(`| Pre-saved Wi-Fi in userdata | ${r.preflight.wifiConfigured ? 'yes (PBKDF2 PSK only)' : 'no'} |`);
+    lines.push(`| Pre-flash USB adb state | \`${r.preflight.preFlashUsbAdb}\` |`);
+  }
+
+  if (r.fastboot) {
+    lines.push('');
+    lines.push('## Step 2 — Fastboot (read-only)');
+    lines.push('');
+    lines.push(`- **Board gate (\`product == MSM8916\`):** ${r.fastboot.productOk ? 'PASS' : 'FAIL — STOP'}`);
+    lines.push(`- **Userdata gate (>= 1 GiB, 4 KiB blocks):** ${r.fastboot.userdataOk ? `PASS (${r.fastboot.userdataBytes} bytes)` : 'FAIL — STOP'}`);
+    lines.push(`- **System size vs Glass Panes (${SYSTEM_BYTES} bytes):** ${r.fastboot.systemBytes === undefined ? 'not reported' : `${r.fastboot.systemBytes} bytes (${r.fastboot.systemOk ? 'fits' : 'smaller than Glass Panes'})`}`);
+    lines.push('');
+    if (r.fastboot.oemDeviceInfo.length) {
+      lines.push('`fastboot oem device-info`:');
+      lines.push('```');
+      for (const l of r.fastboot.oemDeviceInfo) lines.push(l);
+      lines.push('```');
+      lines.push('');
+    }
+    lines.push('| Variable | Value |');
+    lines.push('|---|---|');
+    for (const [k, v] of Object.entries(r.fastboot.vars)) {
+      lines.push(`| \`${k}\` | \`${v}\` |`);
+    }
+  }
+
+  if (r.sparseBuild) {
+    lines.push('');
+    lines.push('## Step 3 — Sparse `userdata` image');
+    lines.push('');
+    lines.push(`- **Partition size:** ${r.sparseBuild.userdataBytes} bytes (${r.sparseBuild.blocks} × 4 KiB blocks)`);
+    lines.push(`- **Sparse image size:** ${r.sparseBuild.sparseBytes} bytes (FILL chunks: ${r.sparseBuild.fill ? 'on' : 'off'})`);
+    lines.push(`- **Planted paths:** ${r.sparseBuild.plantedPaths.map((p) => `\`${p}\``).join(', ')}`);
+  }
+
+  if (r.flash) {
+    lines.push('');
+    lines.push('## Step 4 — Flash `userdata` ONLY');
+    lines.push('');
+    lines.push(`- **\`userdata\` flashed:** ${r.flash.userdataFlashed ? 'yes' : 'no'}`);
+    lines.push('- **`system` / `boot` / `recovery` / `modem` / `persist` touched:** **NO**');
+  }
+
+  if (r.adbWait) {
+    lines.push('');
+    lines.push('## Step 5 — Stock Android ADB Check');
+    lines.push('');
+    lines.push(`- **USB adb state:** \`${r.adbWait.usb}\``);
+    if (r.adbWait.tcp !== undefined) lines.push(`- **TCP adb state:** \`${r.adbWait.tcp}\``);
+    lines.push(`- **Outcome:** \`${r.adbWait.outcome}\``);
+    lines.push(`- **Next:** ${r.adbWait.nextHint}`);
+  }
+
+  if (r.extraction) {
+    const ex = r.extraction;
+    lines.push('');
+    lines.push('## Step 6 — Stock System Extraction (redacted)');
+    lines.push('');
+    lines.push('### Identity & Security');
+    lines.push('');
+    lines.push('| Property / Check | Value |');
+    lines.push('|---|---|');
+    for (const [k, v] of Object.entries(ex.props)) {
+      lines.push(`| \`${k}\` | \`${v}\` |`);
+    }
+    if (ex.selinuxEnforce) lines.push(`| \`getenforce\` | \`${ex.selinuxEnforce}\` |`);
+    if (ex.shellId) lines.push(`| \`id\` | \`${ex.shellId}\` |`);
+    if (ex.procVersion) lines.push(`| \`/proc/version\` | \`${ex.procVersion}\` |`);
+    if (ex.rotation) lines.push(`| Display \`mRotation\` | \`${ex.rotation}\` |`);
+
+    if (ex.kernelConfigFlags.length) {
+      lines.push('');
+      lines.push('### Kernel Config Flags (`/proc/config.gz`)');
+      lines.push('');
+      lines.push('```');
+      for (const l of ex.kernelConfigFlags) lines.push(l);
+      lines.push('```');
+    }
+
+    if (Object.keys(ex.initServices).length) {
+      lines.push('');
+      lines.push(`### Init Services (\`init.svc.*\`, ${Object.keys(ex.initServices).length} entries)`);
+      lines.push('');
+      lines.push('| Service | State |');
+      lines.push('|---|---|');
+      for (const [k, v] of Object.entries(ex.initServices)) {
+        lines.push(`| \`${k}\` | \`${v}\` |`);
+      }
+    }
+
+    if (ex.ramdiskFiles.length) {
+      lines.push('');
+      lines.push('### Ramdisk / SELinux Files');
+      lines.push('');
+      lines.push('| Path | Status | Bytes | SHA-256 (prefix) |');
+      lines.push('|---|---|---:|---|');
+      for (const f of ex.ramdiskFiles) {
+        lines.push(`| \`${f.path}\` | \`${f.status}\` | ${f.bytes ?? '—'} | ${f.sha256 ? `\`${f.sha256.slice(0, 12)}\`` : '—'} |`);
+      }
+    }
+
+    if (ex.dtPanelLines.length || ex.backlightEntries.length || ex.procModules) {
+      lines.push('');
+      lines.push('### Hardware, Display & Modules');
+      lines.push('');
+      if (ex.procModules) {
+        lines.push('`/proc/modules`:');
+        lines.push('```');
+        lines.push(ex.procModules);
+        lines.push('```');
+      }
+      if (ex.backlightEntries.length) {
+        lines.push('Backlight / LEDs:');
+        lines.push('```');
+        for (const l of ex.backlightEntries) lines.push(l);
+        lines.push('```');
+      }
+      if (ex.dtPanelLines.length) {
+        lines.push('Device-tree panel/bridge nodes (excluding `/chosen`):');
+        lines.push('```');
+        for (const l of ex.dtPanelLines) lines.push(l);
+        lines.push('```');
+      }
+    }
+
+    if (ex.dmesgHighlights.length) {
+      lines.push('');
+      lines.push('### `dmesg` Highlights (`adsprpc` / `insmod` / `adb_keys_file`)');
+      lines.push('');
+      lines.push('```');
+      for (const l of ex.dmesgHighlights) lines.push(l);
+      lines.push('```');
+    }
+
+    const auditedFiles = [...ex.keySystemFiles, ...ex.extraConfigFiles];
+    if (auditedFiles.length) {
+      lines.push('');
+      lines.push('### Key Stock `/system` Files (hashes only)');
+      lines.push('');
+      lines.push('| Path | Status | Bytes | SHA-256 |');
+      lines.push('|---|---|---:|---|');
+      for (const f of auditedFiles) {
+        lines.push(`| \`${f.path}\` | \`${f.status}\` | ${f.bytes ?? '—'} | ${f.sha256 ? `\`${f.sha256}\`` : '—'} |`);
+      }
+    }
+
+    if (ex.vendorSummary.length) {
+      lines.push('');
+      lines.push(`### Option C Vendor File Audit (${ex.vendorCameraIncluded ? 'all parts' : 'non-camera parts; pass --include-camera for camera'})`);
+      lines.push('');
+      lines.push('| Part | Total | Match Glass Panes | Differs (stock-specific) | Missing | Denied (SELinux/DAC) |');
+      lines.push('|---|---:|---:|---:|---:|---:|');
+      for (const v of ex.vendorSummary) {
+        lines.push(`| \`${v.part}\` | ${v.total} | ${v.match} | ${v.differs} | ${v.missing} | ${v.denied} |`);
+      }
+      if (ex.pulledVendorBlobs > 0) {
+        lines.push('');
+        lines.push(`Local pull: ${ex.pulledVendorBlobs} readable stock vendor files saved under \`raw/system/\` (do not commit).`);
+      }
+    }
+  }
+
+  lines.push('');
+  return lines.join('\n');
+}
+
+function initialSteps(): StepRecord[] {
+  return [
+    { number: 1, title: 'Preflight & ADB key check (read-only)', status: 'pending' },
+    { number: 2, title: 'Fastboot device info & partition checks (read-only)', status: 'pending' },
+    { number: 3, title: 'Build sparse userdata probe image (local file only)', status: 'pending' },
+    { number: 4, title: 'Flash userdata ONLY & reboot (WRITES userdata; system untouched)', status: 'pending' },
+    { number: 5, title: 'Wait for stock Android & check ADB authorization', status: 'pending' },
+    { number: 6, title: 'Extract stock diagnostics & vendor inventory (read-only over ADB)', status: 'pending' },
+  ];
+}
+
+export interface StockProbeResult {
+  report: ProbeReport;
+  reportPath: string;
+  sparsePath?: string;
+  outcome: 'complete' | 'read-only-done' | 'build-only-done' | 'stopped' | 'blocked';
+}
+
+export async function runStockProbe(o: StockProbeOptions, d: StockProbeDeps): Promise<StockProbeResult> {
+  const now = d.now ?? (() => new Date());
+  const sleep = d.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  const mode: ProbeReport['mode'] = o.extractOnly ? 'extract-only'
+    : o.readOnly ? 'read-only'
+      : o.buildOnly ? 'build-only'
+        : 'full';
+
+  mkdirSync(o.outDir, { recursive: true });
+  const rawDir = join(o.outDir, 'raw');
+  mkdirSync(rawDir, { recursive: true });
+  const reportPath = join(o.outDir, 'report.md');
+
+  const report: ProbeReport = {
+    startedAt: now().toISOString(),
+    updatedAt: now().toISOString(),
+    mode,
+    dryRun: !!o.dryRun,
+    steps: initialSteps(),
+  };
+
+  const saveReport = () => {
+    report.updatedAt = now().toISOString();
+    writeFileSync(reportPath, renderReportMarkdown(report), 'utf8');
+  };
+  const setStep = (idx: number, status: StepStatus, note?: string) => {
+    report.steps[idx]!.status = status;
+    if (note !== undefined) report.steps[idx]!.note = note;
+    saveReport();
+  };
+  const checkpoint = (idx: number, hint?: string) => {
+    const s = report.steps[idx]!;
+    d.log(`    [checkpoint ${s.number}/6: ${s.status}] report updated -> ${reportPath}`);
+    if (hint) d.log(`    ${hint}`);
+  };
+  const ask = async (idx: number, prompt: string): Promise<boolean> => {
+    const s = report.steps[idx]!;
+    d.log(`\n[${s.number}/6] ${s.title}`);
+    const ok = await d.confirm(prompt);
+    if (!ok) {
+      setStep(idx, 'stopped', 'declined by user');
+      checkpoint(idx, 'Stopped safely. You can share report.md as-is to report progress so far.');
+      return false;
+    }
+    return true;
+  };
+
+  const usbConfig = o.usbConfig ?? 'adb';
+  const tcpPort = o.tcpPort;
+  const tcpTarget = o.tcpHost && tcpPort ? `${o.tcpHost}:${tcpPort}` : undefined;
+
+  let fb: StockFastboot | undefined;
+  let userdataBytes = o.userdataBytesOverride ?? 0;
+  let sparsePath: string | undefined;
+  let adbSession: StockAdbSession | undefined;
+
+  saveReport();
+
+  // ---- Step 1: Preflight ----
+  if (!(await ask(0, 'Check ADB key and pre-flash ADB state (read-only)?'))) {
+    return { report, reportPath, outcome: 'stopped' };
+  }
+  try {
+    const keyLines = adbKeyLines(o.adbKey);
+    const fp = adbFingerprint(keyLines[0]!);
+    if (fp === GLASS_PANES_KEY_FINGERPRINT) {
+      throw new Error('refusing the published Glass Panes project key; pass your own --adb-key');
+    }
+    const pre = await d.checkAdb(tcpTarget);
+    report.preflight = {
+      adbKeyFingerprint: fp,
+      usbConfig,
+      ...(tcpPort ? { tcpPort } : {}),
+      wifiConfigured: !!o.wifi,
+      preFlashUsbAdb: pre.usb,
+    };
+    d.log(`    ADB key fingerprint: ${fp}`);
+    d.log(`    Pre-flash USB adb state: ${pre.usb}`);
+    if (pre.usb === 'device' && !o.extractOnly) {
+      d.log('    NOTE: Mirror already responds as authorized over ADB! You may not need to wipe userdata — rerun with --extract-only to keep stock userdata intact.');
+      adbSession = pre.session;
+    }
+    setStep(0, 'done', `key ${fp}, pre-flash adb: ${pre.usb}`);
+    checkpoint(0);
+  } catch (e) {
+    setStep(0, 'failed', (e as Error).message);
+    throw e;
+  }
+
+  // ---- Steps 2-4 (skipped in --extract-only mode) ----
+  if (o.extractOnly) {
+    setStep(1, 'skipped', '--extract-only');
+    setStep(2, 'skipped', '--extract-only');
+    setStep(3, 'skipped', '--extract-only');
+  } else {
+    // ---- Step 2: Fastboot (read-only) ----
+    d.log('    (If not in fastboot yet: power off, hold VOL- [SW3, top button on small green board], switch power on for ~5s.)');
+    if (!(await ask(1, 'Query fastboot device-info and partition sizes (read-only)?'))) {
+      return { report, reportPath, outcome: 'stopped' };
+    }
+    try {
+      fb = await d.fastboot();
+      const oemDeviceInfo = await fb.oemDeviceInfo();
+      const vars: Record<string, string> = {};
+      for (const v of FASTBOOT_VARS) {
+        const val = await fb.getvar(v);
+        if (val !== undefined) vars[v] = val;
+      }
+      const product = (vars.product ?? '').trim();
+      const productOk = product === 'MSM8916';
+      const udBytes = parseHexBytes(vars['partition-size:userdata']);
+      const userdataOk = udBytes !== undefined && udBytes >= 1024 ** 3 && udBytes % 4096 === 0;
+      const sysBytes = parseHexBytes(vars['partition-size:system']);
+      const systemOk = sysBytes !== undefined && sysBytes >= SYSTEM_BYTES;
+
+      report.fastboot = {
+        oemDeviceInfo,
+        vars,
+        productOk,
+        ...(udBytes !== undefined ? { userdataBytes: udBytes } : {}),
+        userdataOk,
+        ...(sysBytes !== undefined ? { systemBytes: sysBytes } : {}),
+        systemOk,
+      };
+      for (const l of oemDeviceInfo) d.log(`    ${l}`);
+      d.log(`    product=${product || 'unknown'} (${productOk ? 'MSM8916 OK' : 'NOT MSM8916'}), userdata=${udBytes ?? 'unknown'} bytes, system=${sysBytes ?? 'unknown'} bytes`);
+
+      if (!productOk || !userdataOk) {
+        const why = !productOk ? `product is "${product || 'unknown'}", not MSM8916` : 'partition-size:userdata is missing or invalid';
+        setStep(1, 'blocked', `${why} — stopped before any write`);
+        checkpoint(1, 'Safety stop-gate triggered. Share report.md before doing anything else.');
+        return { report, reportPath, outcome: 'blocked' };
+      }
+
+      if (!userdataBytes) userdataBytes = udBytes!;
+      setStep(1, 'done', `product MSM8916, userdata ${udBytes} bytes`);
+      checkpoint(1, 'You can share report.md now if you want to confirm hardware/partitions before writing anything.');
+    } catch (e) {
+      setStep(1, 'failed', (e as Error).message);
+      throw e;
+    }
+
+    if (o.readOnly) {
+      setStep(2, 'skipped', '--read-only');
+      setStep(3, 'skipped', '--read-only');
+      setStep(4, 'skipped', '--read-only');
+      setStep(5, 'skipped', '--read-only');
+      return { report, reportPath, outcome: 'read-only-done' };
+    }
+
+    // ---- Step 3: Build sparse userdata probe image ----
+    if (!(await ask(2, 'Build sparse userdata-probe.sparse locally (no device writes yet)?'))) {
+      return { report, reportPath, outcome: 'stopped' };
+    }
+    try {
+      const blocks = Math.floor(userdataBytes / 4096);
+      const disk = new Disk(new MemoryStore(), 4096, blocks, { zeroed: true });
+      const { plantedPaths } = await buildStockProbeUserdata(disk, {
+        adbKey: o.adbKey,
+        usbConfig,
+        tcpPort,
+        wifi: o.wifi,
+      });
+      sparsePath = join(rawDir, 'userdata-probe.sparse');
+      const sink = fileSink(sparsePath);
+      const fill = o.fill ?? true;
+      try {
+        await writeSparse(disk, (b) => sink.write(b), { fill });
+      } finally {
+        sink.close();
+      }
+      const sparseBytes = sink.bytes();
+      report.sparseBuild = { userdataBytes, blocks, sparseBytes, fill, plantedPaths };
+      d.log(`    wrote ${sparsePath} (${sparseBytes} bytes sparse for ${userdataBytes} byte partition)`);
+      d.log(`    planted: ${plantedPaths.join(', ')}`);
+      setStep(2, 'done', `${sparseBytes} bytes sparse (${plantedPaths.length} files)`);
+      checkpoint(2);
+    } catch (e) {
+      setStep(2, 'failed', (e as Error).message);
+      throw e;
+    }
+
+    if (o.buildOnly) {
+      setStep(3, 'skipped', '--build-only');
+      setStep(4, 'skipped', '--build-only');
+      setStep(5, 'skipped', '--build-only');
+      return { report, reportPath, sparsePath, outcome: 'build-only-done' };
+    }
+
+    // ---- Step 4: Flash userdata ONLY & reboot ----
+    for (const line of STOCK_USERDATA_WARNING) d.log(`    WARNING: ${line}`);
+    if (!(await ask(3, 'FLASH userdata ONLY and reboot into stock system? (wipes stock userdata; system untouched)'))) {
+      report.flash = { userdataFlashed: false, systemTouched: false };
+      saveReport();
+      return { report, reportPath, sparsePath, outcome: 'stopped' };
+    }
+    try {
+      await fb!.flashUserdata(sparsePath!);
+      await fb!.reboot();
+      report.flash = { userdataFlashed: true, systemTouched: false };
+      d.log('    userdata flashed and reboot sent (stock system untouched).');
+      setStep(3, 'done', 'userdata flashed, rebooted (system untouched)');
+      checkpoint(3);
+    } catch (e) {
+      setStep(3, 'failed', (e as Error).message);
+      throw e;
+    }
+  }
+
+  // ---- Step 5: Wait for stock Android & check ADB authorization ----
+  if (!(await ask(4, 'Wait for stock Android to boot and check USB/TCP ADB state?'))) {
+    return { report, reportPath, sparsePath, outcome: 'stopped' };
+  }
+  try {
+    const waitSec = o.waitSeconds ?? 180;
+    const pollMs = 2000;
+    const maxTries = Math.max(1, Math.ceil((waitSec * 1000) / pollMs));
+    let lastUsb: AdbState = 'not-seen';
+    let lastTcp: AdbState | undefined;
+    adbSession = undefined;
+
+    for (let i = 0; i < maxTries; i++) {
+      const st = await d.checkAdb(tcpTarget);
+      lastUsb = st.usb;
+      lastTcp = st.tcp;
+      if (st.session && (st.usb === 'device' || st.tcp === 'device')) {
+        adbSession = st.session;
+        break;
+      }
+      if (i % 10 === 0) {
+        d.log(`    waiting for stock adb (${i * 2}s/${waitSec}s): usb=${st.usb}${st.tcp ? `, tcp=${st.tcp}` : ''}`);
+      }
+      if (i + 1 < maxTries) await sleep(pollMs);
+    }
+
+    if (adbSession) {
+      report.adbWait = {
+        usb: lastUsb,
+        ...(lastTcp !== undefined ? { tcp: lastTcp } : {}),
+        outcome: 'authorized',
+        nextHint: 'Authorized ADB on untouched stock system! Proceeding to Step 6 extraction.',
+      };
+      d.log(`    AUTHORIZED over ${lastUsb === 'device' ? 'USB' : 'TCP'}!`);
+      setStep(4, 'done', `authorized (usb=${lastUsb}${lastTcp ? `, tcp=${lastTcp}` : ''})`);
+      checkpoint(4);
+    } else if (lastUsb === 'unauthorized' || lastTcp === 'unauthorized') {
+      const hint = 'Stock adbd saw the computer but rejected /data/misc/adb/adb_keys (likely firmware 1.2x+ / S22Q401 behavior). Share report.md — this is a key finding!';
+      report.adbWait = {
+        usb: lastUsb,
+        ...(lastTcp !== undefined ? { tcp: lastTcp } : {}),
+        outcome: 'unauthorized',
+        nextHint: hint,
+      };
+      d.log(`    UNAUTHORIZED: ${hint}`);
+      setStep(4, 'blocked', 'adb unauthorized (adbd rejected adb_keys)');
+      setStep(5, 'skipped', 'adb unauthorized');
+      checkpoint(4, 'Please share report.md now.');
+      return { report, reportPath, sparsePath, outcome: 'blocked' };
+    } else {
+      const hint = 'No adb device appeared. Try reflashing userdata with --usb-config diag,serial_smd,rmnet_bam,adb, or plug in Ethernet and rerun --extract-only --tcp-host <mirror-ip>.';
+      report.adbWait = {
+        usb: lastUsb,
+        ...(lastTcp !== undefined ? { tcp: lastTcp } : {}),
+        outcome: 'not-seen',
+        nextHint: hint,
+      };
+      d.log(`    NOT SEEN: ${hint}`);
+      setStep(4, 'blocked', 'no adb device seen before timeout');
+      setStep(5, 'skipped', 'no adb device');
+      checkpoint(4, 'Please share report.md now.');
+      return { report, reportPath, sparsePath, outcome: 'blocked' };
+    }
+  } catch (e) {
+    setStep(4, 'failed', (e as Error).message);
+    throw e;
+  }
+
+  // ---- Step 6: Extract stock diagnostics & vendor inventory ----
+  if (!(await ask(5, 'Run read-only stock diagnostics & Option C vendor file audit over ADB?'))) {
+    return { report, reportPath, sparsePath, outcome: 'stopped' };
+  }
+  try {
+    const sh = adbSession!;
+    // Wait briefly for boot_completed so init.svc.* and display are settled.
+    for (let i = 0; i < 30; i++) {
+      const bc = (await sh.shell('getprop sys.boot_completed')).out.trim();
+      if (bc === '1') break;
+      await sleep(1000);
+    }
+
+    const rawGetprop = (await sh.shell('getprop')).out;
+    writeFileSync(join(rawDir, 'getprop.txt'), rawGetprop, 'utf8');
+
+    const allProps = new Map<string, string>();
+    for (const line of rawGetprop.split(/\r?\n/)) {
+      const m = /^\[([^\]]+)\]: \[(.*)\]$/.exec(line.trim());
+      if (m) allProps.set(m[1]!, m[2]!);
+    }
+    const props: Record<string, string> = {};
+    for (const k of STOCK_PROPS_ALLOWLIST) {
+      const v = allProps.get(k);
+      if (v !== undefined && v !== '') props[k] = v;
+    }
+    const initServices: Record<string, string> = {};
+    for (const [k, v] of [...allProps.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+      if (k.startsWith('init.svc.')) initServices[k.slice('init.svc.'.length)] = v;
+    }
+
+    const selinuxEnforce = (await sh.shell('getenforce')).out.trim();
+    const shellId = (await sh.shell('id')).out.trim();
+    const procVersion = (await sh.shell('cat /proc/version')).out.trim();
+    const procModules = (await sh.shell('cat /proc/modules')).out.trim();
+    const meminfoHead = (await sh.shell('head -3 /proc/meminfo')).out.trim();
+    const partitions = (await sh.shell('cat /proc/partitions')).out.trim();
+
+    writeFileSync(join(rawDir, 'proc-version.txt'), `${procVersion}\n`, 'utf8');
+    writeFileSync(join(rawDir, 'partitions.txt'), `${partitions}\n`, 'utf8');
+
+    // /proc/config.gz
+    const kernelConfigFlags: string[] = [];
+    const cfgGz = await sh.readFile('/proc/config.gz');
+    if (cfgGz && cfgGz.length > 0) {
+      writeFileSync(join(rawDir, 'config.gz'), cfgGz);
+      try {
+        const cfgText = gunzipSync(cfgGz).toString('utf8');
+        writeFileSync(join(rawDir, 'kernel.config'), cfgText, 'utf8');
+        for (const l of cfgText.split(/\r?\n/)) {
+          if (/^(# )?CONFIG_(LOCALVERSION|IKCONFIG_PROC|MODULES|MODULE_SIG|MODVERSIONS|KALLSYMS_ALL|PID_NS|KEXEC|ARM_PSCI|MSM_SCM)(=| is not set)/.test(l)) {
+            kernelConfigFlags.push(l);
+          }
+        }
+      } catch {
+        kernelConfigFlags.push('(config.gz pulled but gunzip failed)');
+      }
+    }
+
+    // dmesg (raw locally; only filtered & redacted lines in report)
+    const dmesg = (await sh.shell('dmesg')).out;
+    writeFileSync(join(rawDir, 'dmesg.txt'), dmesg, 'utf8');
+    const dmesgHighlights = dmesg
+      .split(/\r?\n/)
+      .filter((l) => /adsprpc|insmod|adb_keys_file|install-recovery|qcom-post-boot/i.test(l))
+      .slice(0, 40)
+      .map((l) => redactPossibleIds(l));
+
+    // Display, rotation, audio, backlight, device-tree (skips /chosen serials)
+    const dumpsysDisplay = (await sh.shell('dumpsys display')).out;
+    const dumpsysWindow = (await sh.shell('dumpsys window windows')).out;
+    const dumpsysAudio = (await sh.shell('dumpsys audio')).out;
+    writeFileSync(join(rawDir, 'dumpsys-display.txt'), dumpsysDisplay, 'utf8');
+    writeFileSync(join(rawDir, 'dumpsys-window.txt'), dumpsysWindow, 'utf8');
+    writeFileSync(join(rawDir, 'dumpsys-audio.txt'), dumpsysAudio, 'utf8');
+    const rotation = /(?:^|\s)mRotation=(\d)\b/m.exec(dumpsysWindow)?.[1];
+
+    const backlightOut = (await sh.shell('ls -la /sys/class/backlight /sys/class/leds 2>&1')).out.trim();
+    const backlightEntries = backlightOut ? backlightOut.split(/\r?\n/).slice(0, 30) : [];
+
+    const dtCmd = 'find /proc/device-tree \\( -name compatible -o -name qcom,mdss-dsi-panel-name \\) 2>/dev/null | grep -v /chosen/ | while read f; do c=$(tr "\\0" " " < "$f"); case "$f$c" in *panel-name*|*lvds*|*panel*|*bridge*|*dsi*|*sn65*|*tc358*|*lt89*|*it6*) echo "${f%/*}: ${f##*/}=$c";; esac; done';
+    const dtOut = (await sh.shell(dtCmd)).out.trim();
+    const dtPanelLines = dtOut ? dtOut.split(/\r?\n/).slice(0, 50) : [];
+    writeFileSync(join(rawDir, 'dt-panel.txt'), `${dtOut}\n`, 'utf8');
+
+    const auditFile = async (path: string, saveUnder?: string): Promise<FileAudit> => {
+      const data = await sh.readFile(path);
+      if (data !== null) {
+        if (saveUnder) {
+          const dest = join(rawDir, saveUnder, path.replace(/^\/+/, ''));
+          mkdirSync(dirname(dest), { recursive: true });
+          writeFileSync(dest, data);
+        }
+        return { path, status: 'readable', bytes: data.length, sha256: sha256Hex(data) };
+      }
+      const ls = (await sh.shell(`ls -ld '${path}' 2>&1`)).out;
+      return { path, status: /no such file/i.test(ls) ? 'missing' : 'denied' };
+    };
+
+    // Ramdisk / SELinux files
+    const ramdiskFiles: FileAudit[] = [];
+    for (const p of RAMDISK_FILES) ramdiskFiles.push(await auditFile(p, 'ramdisk'));
+
+    // Key stock /system files + mixer_paths / thermal-engine discovery
+    const keySystemFiles: FileAudit[] = [];
+    for (const p of KEY_SYSTEM_FILES) keySystemFiles.push(await auditFile(p, 'key-system'));
+
+    const extraPaths = (await sh.shell('ls /system/etc/mixer_paths*.xml /system/etc/thermal-engine*.conf 2>/dev/null')).out
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => SAFE_PATH.test(l));
+    const extraConfigFiles: FileAudit[] = [];
+    for (const p of extraPaths) extraConfigFiles.push(await auditFile(p, 'key-system'));
+
+    // Option C vendor comparison
+    const vendorEntries = (d.vendorEntries ?? []).filter((e) => o.includeCamera || e.part !== 'camera');
+    const byPart = new Map<string, VendorPartSummary>();
+    let pulledVendorBlobs = 0;
+    const vendorAuditLog: string[] = ['status\tpart\tpath\tbytes\tsha256'];
+
+    for (const entry of vendorEntries) {
+      let s = byPart.get(entry.part);
+      if (!s) {
+        s = { part: entry.part, total: 0, match: 0, differs: 0, missing: 0, denied: 0 };
+        byPart.set(entry.part, s);
+      }
+      s.total += 1;
+      const data = await sh.readFile(entry.path);
+      if (data !== null) {
+        const hash = sha256Hex(data);
+        const status = hash === entry.sha256 ? 'match' : 'differs';
+        if (status === 'match') s.match += 1;
+        else s.differs += 1;
+        vendorAuditLog.push(`${status}\t${entry.part}\t${entry.path}\t${data.length}\t${hash}`);
+        if (o.pullSystemBlobs) {
+          const dest = join(rawDir, 'system', entry.path.replace(/^\/system\//, ''));
+          mkdirSync(dirname(dest), { recursive: true });
+          writeFileSync(dest, data);
+          pulledVendorBlobs += 1;
+        }
+      } else {
+        const ls = (await sh.shell(`ls -ld '${entry.path}' 2>&1`)).out;
+        const status = /no such file/i.test(ls) ? 'missing' : 'denied';
+        if (status === 'missing') s.missing += 1;
+        else s.denied += 1;
+        vendorAuditLog.push(`${status}\t${entry.part}\t${entry.path}\t0\t`);
+      }
+    }
+    if (vendorEntries.length) {
+      writeFileSync(join(rawDir, 'vendor-audit.tsv'), `${vendorAuditLog.join('\n')}\n`, 'utf8');
+    }
+
+    report.extraction = {
+      props,
+      selinuxEnforce,
+      shellId,
+      procVersion,
+      kernelConfigFlags,
+      procModules,
+      meminfoHead,
+      partitions,
+      initServices,
+      ramdiskFiles,
+      rotation,
+      backlightEntries,
+      dtPanelLines,
+      dmesgHighlights,
+      keySystemFiles,
+      extraConfigFiles,
+      vendorSummary: [...byPart.values()],
+      vendorCameraIncluded: !!o.includeCamera,
+      pulledVendorBlobs,
+    };
+
+    d.log(`    extracted ${Object.keys(props).length} props, ${Object.keys(initServices).length} init services, ${ramdiskFiles.filter((f) => f.status === 'readable').length}/${ramdiskFiles.length} ramdisk files, ${vendorEntries.length} vendor paths audited`);
+    setStep(5, 'done', `extracted stock info (${Object.keys(initServices).length} services, ${vendorEntries.length} vendor paths)`);
+    checkpoint(5, 'All steps complete! Share report.md below (never commit raw/).');
+    return { report, reportPath, sparsePath, outcome: 'complete' };
+  } catch (e) {
+    setStep(5, 'failed', (e as Error).message);
+    throw e;
+  }
+}

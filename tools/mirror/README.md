@@ -107,3 +107,36 @@ Two read-only scripts for #334 ([option-c.md](../../frames/lululemon-mirror/rese
 - `vendor-pull-check.sh -s <serial> <list.tsv> [part ...]` reads each file of the list off a running
   Mirror as adb's shell and compares its hash. Nothing is written on the Mirror or kept on the
   computer but the hash. Only the root runs it, through the adb server already bound to the Mirror.
+
+## Stock Mirror probe (`stock-probe.ts`)
+
+`stock-probe.ts` is a guided 6-step tool for inspecting a Mirror that is still running lululemon's
+stock firmware. It **never** writes `system`, `boot`, `recovery`, `modem`, or `persist`. After every
+step, it updates `<out>/report.md` (a redacted Markdown progress report safe to paste into an issue
+or chat) and prints a checkpoint so you can report progress at any stage.
+
+1. **Preflight (read-only):** checks your `--adb-key` (refuses the published Glass Panes project key)
+   and checks whether stock already answers on USB adb.
+2. **Fastboot checks (read-only):** runs `fastboot oem device-info` and individual `getvar` queries
+   (`product`, `variant`, `secure`, `version-bootloader`, `max-download-size`, partition sizes).
+   Stops before any write unless `product` is `MSM8916` and `partition-size:userdata` is valid.
+3. **Build sparse `userdata` (local file only):** uses `@glassworks/ext4` to build a fresh sparse
+   `userdata-probe.sparse` containing `/data/misc/adb/adb_keys`, `/data/property/persist.sys.usb.config`,
+   optional `/data/property/persist.adb.tcp.port` (default `5555`), and optional pre-saved Wi-Fi
+   (PBKDF2 PSK only).
+4. **Flash `userdata` ONLY & reboot:** prompts with a warning (wipes stock account/onboarding data;
+   leaves stock `system` untouched), then flashes `userdata` and reboots.
+5. **Wait for stock ADB:** polls USB (and optional `--tcp-host <ip>`) and records whether stock
+   returns `device`, `unauthorized` (expected on `1.2x+` / `S22Q401` boot builds), or `not-seen`.
+6. **Extract stock info (read-only over ADB):** saves raw files locally in `<out>/raw/` (outside the
+   repo — never commit them) and writes redacted findings into `<out>/report.md`: build/hardware
+   properties, `init.svc.*`, `/proc/config.gz` flags, `dmesg` highlights, display/LVDS device-tree
+   nodes, key `/system` hashes, and an Option C comparison against `option-c-vendor-files.tsv`.
+
+```sh
+npx -y tsx@4.23.15 tools/mirror/stock-probe.ts --dry-run        # all 6 steps on a fake stock Mirror
+npx -y tsx@4.23.15 tools/mirror/stock-probe.ts --read-only      # Steps 1-2 only (no flash)
+npx -y tsx@4.23.15 tools/mirror/stock-probe.ts                  # full 6-step guided run
+npx -y tsx@4.23.15 tools/mirror/stock-probe.ts --extract-only   # Steps 5-6 only (already on stock adb)
+npx -y tsx@4.23.15 tools/mirror/stock-probe.ts --help
+```
