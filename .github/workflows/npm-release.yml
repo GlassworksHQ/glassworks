@@ -45,6 +45,13 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
+      # First, before any of the tag's own code runs.
+      - name: Only commits on main
+        run: |
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor HEAD origin/main ||
+            { echo "::error::$GITHUB_REF_NAME ($GITHUB_SHA) is not on main: refusing to publish it"; exit 1; }
+
       - name: Package and version from the tag
         id: tag
         run: |
@@ -63,12 +70,6 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "dir=$dir" >> "$GITHUB_OUTPUT"
           echo "pkg=$pkg" >> "$GITHUB_OUTPUT"
-
-      - name: Only commits on main
-        run: |
-          git fetch --no-tags origin main
-          git merge-base --is-ancestor HEAD origin/main ||
-            { echo "::error::$GITHUB_REF_NAME ($GITHUB_SHA) is not on main: refusing to publish it"; exit 1; }
 
       - name: Release notes from the package's CHANGELOG.md
         env:

@@ -913,6 +913,15 @@ fails while that version isn't there.
 
 **A version can be unpublished only within 72 hours, and its number can never be used again.**
 
+If the job published the package but failed at the GitHub release, a rerun stops at "Not on npm yet".
+Make the release by hand from the same tag, without publishing again (here `fel` 0.1.0):
+
+```sh
+{ printf 'npm: [`@glassworks/fel@0.1.0`](https://www.npmjs.com/package/@glassworks/fel/v/0.1.0)\n\n'
+  tools/release/changelog-section.sh 0.1.0 kiln/packages/fel/CHANGELOG.md; } > /tmp/notes.md
+gh release create npm/fel/v0.1.0 --verify-tag --latest=false --title "@glassworks/fel 0.1.0" --notes-file /tmp/notes.md
+```
+
 ### Access
 
 The job runs in the `npm` environment (Settings → Environments), which should deploy only from `npm/*/v*`
@@ -921,8 +930,9 @@ that built the package. npm sets trusted publishing up per package, and only for
 exists, so the first release of each goes out with a token:
 
 1. On npmjs.com, the `glassworks` organization owns the `@glassworks` scope.
-2. Make a granular access token that may read and write `@glassworks` packages (short expiry), and set
-   it as `NPM_TOKEN` in the `npm` environment (`gh secret set NPM_TOKEN --env npm`).
+2. Make a granular access token that may read and write `@glassworks` packages, with a short expiry and
+   **Bypass two-factor authentication** on (a new package asks for 2FA to publish, which a job can't
+   give), and set it as `NPM_TOKEN` in the `npm` environment (`gh secret set NPM_TOKEN --env npm`).
 3. Push the first tags (`fel` first). Each package is published with the token.
 4. For each package, on npmjs.com → the package → Settings → Trusted publishing: GitHub Actions,
    `GlassworksHQ/glassworks`, workflow `npm-release.yml`, environment `npm`. Then set "Require two-factor

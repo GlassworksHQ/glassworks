@@ -66,6 +66,7 @@ export async function boot(spl: Uint8Array, uboot: Uint8Array): Promise<void> {
   try {
     await bootUboot(fel, spl, uboot, (p) => console.log(`${Math.round(p * 100)} %`));
   } catch (e) {
+    await fel.close(); // bootUboot closes it once it boots; on an error the device is still open
     if (e instanceof WrongChip) console.log(`not an A133: SoC 0x${e.socId.toString(16)}`);
     throw e;
   }
