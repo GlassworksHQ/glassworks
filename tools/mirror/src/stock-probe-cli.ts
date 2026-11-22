@@ -1,9 +1,9 @@
 // CLI runner for tools/mirror/stock-probe.ts: real fastboot/adb subprocess adapters, HTTP probe
 // client for the 1.2x+ no-ADB fallback, --dry-run fake stock Mirror, and progress report output.
 import { execFile } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { dirname, join, relative, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -35,8 +35,8 @@ fallback: planting the read-only HTTP probe APK in /data/app/ + a 1-entry packag
 Modes (default: full 6-step guided run):
   --read-only               Run Steps 1-2 only (ADB key check + fastboot read-only info)
   --build-only              Run Steps 1-3 only (also build sparse userdata locally; no flash)
-  --extract-only            Skip fastboot/flash; jump straight to Steps 5-6 over ADB
-  --http-only               Skip fastboot/flash; connect straight to HTTP probe app (--probe-host)
+  --extract-only            Run Step 1 preflight, skip Steps 2-4, and run Steps 5-6 over ADB
+  --http-only               Run Step 1 preflight, skip Steps 2-4, and connect to HTTP probe app (--probe-host)
   --dry-run                 Run all 6 steps on a fake stock Mirror; no device is touched
 
 Options:
@@ -51,7 +51,7 @@ Options:
   --probe-cert-hex <file>   Path to hex DER cert for --probe-apk (default: cert.hex beside the APK)
   --probe-fiemap-so <file>  Optional arm64 libfiemap.so (default: libfiemap.so beside the APK if present)
   --probe-host <ip>         Mirror LAN IP for the no-ADB HTTP probe app (port ${DEFAULT_PROBE_HTTP_PORT})
-  --probe-http-port <port>  Override HTTP probe app port (default: ${DEFAULT_PROBE_HTTP_PORT})
+  --probe-http-port <port>  Client port to contact for HTTP probe (default: ${DEFAULT_PROBE_HTTP_PORT}; bundled APK listens on ${DEFAULT_PROBE_HTTP_PORT}, so another port needs a matching listener/forward)
   --wifi-ssid <name> --wifi-pass-file <file>
                             Pre-save Wi-Fi (PBKDF2 PSK only) in userdata
   --no-fill                 Write zero blocks as RAW instead of FILL 0 in the sparse image
@@ -71,26 +71,34 @@ function fastbootPath(): string {
   return existsSync(p) ? p : 'fastboot';
 }
 
-function execText(bin: string, args: string[], timeoutMs = 120_000): Promise<{ stdout: string; stderr: string }> {
-  return new Promise((res, rej) => {
-    execFile(bin, args, { timeout: timeoutMs, maxBuffer: 64 << 20, encoding: 'utf8' }, (err, stdout, stderr) => {
-      if (err) rej(new Error(`${bin} ${args.join(' ')}: ${String(stderr || stdout || err.message).trim()}`));
-      else res({ stdout, stderr });
-    });
-  });
-}
-
-function execBuffer(bin: string, args: string[], timeoutMs = 120_000): Promise<Buffer> {
-  return new Promise((res, rej) => {
-    execFile(bin, args, { timeout: timeoutMs, maxBuffer: 128 << 20, encoding: 'buffer' }, (err, stdout, stderr) => {
-      if (err) rej(new Error(`${bin} ${args.join(' ')}: ${String(stderr || stdout || err.message).trim()}`));
-      else res(stdout);
-    });
-  });
-}
-
 function redact(text: string, serial?: string): string {
   return serial ? text.split(serial).join('<serial>') : text;
+}
+
+function execText(bin: string, args: string[], timeoutMs = 120_000, serialToRedact?: string): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((res, rej) => {
+    execFile(bin, args, { timeout: timeoutMs, maxBuffer: 64 << 20, encoding: 'utf8' }, (err, stdout, stderr) => {
+      if (err) {
+        const msg = `${bin} ${args.join(' ')}: ${String(stderr || stdout || err.message).trim()}`;
+        rej(new Error(redact(msg, serialToRedact)));
+      } else {
+        res({ stdout, stderr });
+      }
+    });
+  });
+}
+
+function execBuffer(bin: string, args: string[], timeoutMs = 120_000, serialToRedact?: string): Promise<Buffer> {
+  return new Promise((res, rej) => {
+    execFile(bin, args, { timeout: timeoutMs, maxBuffer: 128 << 20, encoding: 'buffer' }, (err, stdout, stderr) => {
+      if (err) {
+        const msg = `${bin} ${args.join(' ')}: ${String(stderr || stdout || err.message).trim()}`;
+        rej(new Error(redact(msg, serialToRedact)));
+      } else {
+        res(stdout);
+      }
+    });
+  });
 }
 
 function parseFastbootDevices(out: string): string[] {
@@ -118,7 +126,7 @@ function createHostAdbSession(target: string, bin: string, serialToRedact?: stri
   return {
     async shell(cmd: string) {
       try {
-        const { stdout } = await execText(bin, [...targetArgs, 'shell', `${cmd}; echo "${RC}$?"`]);
+        const { stdout } = await execText(bin, [...targetArgs, 'shell', `${cmd}; echo "${RC}$?"`], 120_000, serialToRedact);
         const i = stdout.lastIndexOf(RC);
         const rawOut = i < 0 ? stdout : stdout.slice(0, i);
         const code = i < 0 ? -1 : Number.parseInt(stdout.slice(i + RC.length).trim(), 10);
@@ -129,22 +137,22 @@ function createHostAdbSession(target: string, bin: string, serialToRedact?: stri
     },
     async readFile(path: string) {
       const check = await this.shell(`cat '${path}' >/dev/null 2>&1`);
+      if (check.code === -1) throw new Error(`ADB transport lost reading ${path}: ${check.out}`);
       if (check.code !== 0) return null;
-      try {
-        const buf = await execBuffer(bin, [...targetArgs, 'exec-out', 'cat', path]);
-        return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
-      } catch {
-        return null;
-      }
+      const buf = await execBuffer(bin, [...targetArgs, 'exec-out', 'cat', path], 120_000, serialToRedact);
+      return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
     },
   };
 }
 
 function createHostFastboot(serial: string, bin: string): StockFastboot {
   const sArgs = ['-s', serial];
+  const runFb = (opArgs: string[], timeoutMs: number) =>
+    execText(bin, [...sArgs, ...opArgs], timeoutMs, serial);
   return {
+    serial,
     async oemDeviceInfo() {
-      const { stdout, stderr } = await execText(bin, [...sArgs, 'oem', 'device-info'], 15_000);
+      const { stdout, stderr } = await runFb(['oem', 'device-info'], 15_000);
       return `${stdout}\n${stderr}`
         .split(/\r?\n/)
         .map((l) => redact(l.replace(/^\(bootloader\)\s*/i, '').trim(), serial))
@@ -152,7 +160,7 @@ function createHostFastboot(serial: string, bin: string): StockFastboot {
     },
     async getvar(name: string) {
       try {
-        const { stdout, stderr } = await execText(bin, [...sArgs, 'getvar', name], 15_000);
+        const { stdout, stderr } = await runFb(['getvar', name], 15_000);
         const combined = `${stdout}\n${stderr}`;
         const prefix = `${name}:`;
         for (const raw of combined.split(/\r?\n/)) {
@@ -165,67 +173,136 @@ function createHostFastboot(serial: string, bin: string): StockFastboot {
       }
     },
     async flashUserdata(sparsePath: string) {
-      await execText(bin, [...sArgs, 'flash', 'userdata', sparsePath], 180_000);
+      await runFb(['flash', 'userdata', sparsePath], 180_000);
     },
     async reboot() {
-      await execText(bin, [...sArgs, 'reboot'], 30_000);
+      await runFb(['reboot'], 30_000);
     },
+  };
+}
+
+const isFiniteNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+
+/** Validates the JSON payload returned by `/fiemap` before it reaches report rendering. */
+export function parseFiemapResponse(path: string, raw: unknown): FiemapResult {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return { path, error: 'invalid FIEMAP response (expected JSON object)' };
+  }
+  const obj = raw as Record<string, unknown>;
+  if (typeof obj.error === 'string') {
+    return { path, error: obj.error };
+  }
+  if (!Array.isArray(obj.extents)) {
+    return { path, error: 'invalid FIEMAP response (missing extents array)' };
+  }
+  const extents: NonNullable<FiemapResult['extents']> = [];
+  for (const item of obj.extents) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      return { path, error: 'invalid FIEMAP response (malformed extent entry)' };
+    }
+    const e = item as Record<string, unknown>;
+    if (
+      !isFiniteNum(e.logical) || !isFiniteNum(e.physical) || !isFiniteNum(e.block)
+      || !isFiniteNum(e.length) || !isFiniteNum(e.blocks) || !isFiniteNum(e.flags)
+    ) {
+      return { path, error: 'invalid FIEMAP response (non-numeric extent fields)' };
+    }
+    extents.push({
+      logical: e.logical,
+      physical: e.physical,
+      block: e.block,
+      length: e.length,
+      blocks: e.blocks,
+      flags: e.flags,
+    });
+  }
+  if (obj.size !== undefined && !isFiniteNum(obj.size)) {
+    return { path, error: 'invalid FIEMAP response (non-numeric size)' };
+  }
+  if (obj.ino !== undefined && !isFiniteNum(obj.ino)) {
+    return { path, error: 'invalid FIEMAP response (non-numeric inode)' };
+  }
+  return {
+    path,
+    ...(obj.size !== undefined ? { size: obj.size } : {}),
+    ...(obj.ino !== undefined ? { ino: obj.ino } : {}),
+    extents,
   };
 }
 
 function createHostHttpSession(host: string, port: number): StockHttpSession {
   const base = `http://${host}:${port}`;
-  const get = async (path: string, timeoutMs = 15_000) => {
+  const withTimeout = async <T>(path: string, timeoutMs: number, read: (r: Response) => Promise<T>): Promise<T> => {
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), timeoutMs);
     try {
-      return await fetch(`${base}${path}`, { signal: ctl.signal });
+      const r = await fetch(`${base}${path}`, { signal: ctl.signal });
+      return await read(r);
     } finally {
       clearTimeout(timer);
     }
   };
   return {
-    async status() {
+    async status(timeoutMs = 5000) {
       try {
-        const r = await get('/status', 5000);
-        if (!r.ok) return null;
-        return (await r.json()) as { ok: boolean; uid: number; pid: number; sdk: number; fiemap: boolean; bootCompleted: string };
+        return await withTimeout('/status', timeoutMs, async (r) => {
+          if (!r.ok) return null;
+          const body = (await r.json()) as Record<string, unknown>;
+          if (!body || body.ok !== true || !isFiniteNum(body.uid) || !isFiniteNum(body.pid) || !isFiniteNum(body.sdk) || typeof body.fiemap !== 'boolean') {
+            return null;
+          }
+          return {
+            ok: true,
+            uid: body.uid,
+            pid: body.pid,
+            sdk: body.sdk,
+            fiemap: body.fiemap,
+            bootCompleted: typeof body.bootCompleted === 'string' ? body.bootCompleted : '',
+          };
+        });
       } catch {
         return null;
       }
     },
     async props() {
-      const r = await get('/props');
-      return r.ok ? await r.text() : '';
+      return withTimeout('/props', 15_000, async (r) => {
+        if (!r.ok) throw new Error(`HTTP probe /props failed with status ${r.status}`);
+        return await r.text();
+      });
     },
     async dtPanel() {
-      const r = await get('/dt-panel', 30_000);
-      return r.ok ? await r.text() : '';
+      return withTimeout('/dt-panel', 30_000, async (r) => {
+        if (!r.ok) throw new Error(`HTTP probe /dt-panel failed with status ${r.status}`);
+        return await r.text();
+      });
     },
     async list(path: string) {
-      try {
-        const r = await get(`/list?path=${encodeURIComponent(path)}`);
-        if (!r.ok) return [];
+      return withTimeout(`/list?path=${encodeURIComponent(path)}`, 15_000, async (r) => {
+        if (r.status === 404 || r.status === 403) return [];
+        if (!r.ok) throw new Error(`HTTP probe /list(${path}) failed with status ${r.status}`);
         return (await r.text()).split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-      } catch {
-        return [];
-      }
+      });
     },
     async readFile(path: string) {
-      try {
-        const r = await get(`/file?path=${encodeURIComponent(path)}`, 60_000);
-        if (r.status === 200) return { status: 'ok', data: new Uint8Array(await r.arrayBuffer()) };
-        if (r.status === 404) return { status: 'missing' };
-        return { status: 'denied' };
-      } catch {
-        return { status: 'denied' };
-      }
+      return withTimeout(`/file?path=${encodeURIComponent(path)}`, 60_000, async (r) => {
+        if (r.status === 200) return { status: 'ok' as const, data: new Uint8Array(await r.arrayBuffer()) };
+        if (r.status === 404) return { status: 'missing' as const };
+        if (r.status === 403) return { status: 'denied' as const };
+        throw new Error(`HTTP probe /file(${path}) returned unexpected status ${r.status}`);
+      });
     },
     async fiemap(path: string): Promise<FiemapResult> {
       try {
-        const r = await get(`/fiemap?path=${encodeURIComponent(path)}`);
-        const body = (await r.json()) as Omit<FiemapResult, 'path'>;
-        return { path, ...body };
+        return await withTimeout(`/fiemap?path=${encodeURIComponent(path)}`, 15_000, async (r) => {
+          const text = await r.text();
+          let parsed: unknown;
+          try {
+            parsed = JSON.parse(text);
+          } catch {
+            return { path, error: `HTTP ${r.status}: non-JSON FIEMAP response` };
+          }
+          return parseFiemapResponse(path, parsed);
+        });
       } catch (e) {
         return { path, error: (e as Error).message };
       }
@@ -261,10 +338,7 @@ async function loadOrBuildProbeApp(opts: {
 function makePrompters(yes: boolean) {
   let rl: ReturnType<typeof createInterface> | undefined;
   const getRl = () => {
-    if (!rl) {
-      rl = createInterface({ input: process.stdin, output: process.stdout });
-      process.on('exit', () => rl?.close());
-    }
+    if (!rl) rl = createInterface({ input: process.stdin, output: process.stdout });
     return rl;
   };
   return {
@@ -272,11 +346,12 @@ function makePrompters(yes: boolean) {
       ? async () => true
       : async (q: string) => /^y(es)?$/i.test((await getRl().question(`    ${q} [y/N] `)).trim()),
     promptText: async (q: string) => (await getRl().question(`    ${q} `)).trim(),
+    close: () => { rl?.close(); rl = undefined; },
   };
 }
 
 /** Realistic fake stock Mirror for --dry-run (touches no device). */
-function createDryDeps(log: (l: string) => void): StockProbeDeps {
+function createDryDeps(log: (l: string) => void, opts: { extractOnly?: boolean } = {}): StockProbeDeps {
   const fakeConfig = gzipSync(Buffer.from([
     'CONFIG_LOCALVERSION="-perf-gf46dad5260f"',
     'CONFIG_IKCONFIG_PROC=y',
@@ -290,6 +365,10 @@ function createDryDeps(log: (l: string) => void): StockProbeDeps {
 
   const fakeFiles = new Map<string, Uint8Array>([
     ['/proc/config.gz', new Uint8Array(fakeConfig)],
+    ['/proc/version', new TextEncoder().encode('Linux version 3.10.49-perf-gf46dad5260f (dry@run)\n')],
+    ['/proc/modules', new TextEncoder().encode('wlan 4312975 0 - Live 0x0000000000000000 (O)\n')],
+    ['/proc/meminfo', new TextEncoder().encode('MemTotal: 924000 kB\nMemFree: 210000 kB\nMemAvailable: 350000 kB\n')],
+    ['/proc/partitions', new TextEncoder().encode('major minor #blocks name\n 179 19 32768 mmcblk0p19\n')],
     ['/sepolicy', new TextEncoder().encode('fake-stock-sepolicy')],
     ['/file_contexts', new TextEncoder().encode('/data/property(/.*)? u:object_r:property_data_file:s0\n')],
     ['/seapp_contexts', new TextEncoder().encode('user=system seinfo=platform domain=system_app\n')],
@@ -306,35 +385,32 @@ function createDryDeps(log: (l: string) => void): StockProbeDeps {
     ['/system/etc/firmware/a300_pfp.fw', new TextEncoder().encode('dry-stock-fw')],
   ]);
 
+  const fakeProps = [
+    '[ro.build.fingerprint]: [mirror/mirror/msm8916_64:6.0.1/IFC-6309-2.0-MIR/673:user/test-keys]',
+    '[ro.bootimage.build.fingerprint]: [mirror/mirror/msm8916_64:6.0.1/IFC-6309-2.0-MIR/673:user/test-keys]',
+    '[ro.build.version.release]: [6.0.1]',
+    '[ro.build.version.sdk]: [23]',
+    '[ro.build.type]: [user]',
+    '[ro.build.tags]: [test-keys]',
+    '[ro.board.platform]: [msm8916]',
+    '[ro.product.model]: [MIRROR]',
+    '[ro.crypto.state]: [unencrypted]',
+    '[ro.adb.secure]: [1]',
+    '[ro.secure]: [1]',
+    '[ro.debuggable]: [0]',
+    '[persist.sys.usb.config]: [adb]',
+    '[persist.adb.tcp.port]: [5555]',
+    '[init.svc.adbd]: [running]',
+    '[init.svc.qcom-post-boot]: [stopped]',
+    '[init.svc.thermal-engine]: [running]',
+    '[init.svc.wcnss-service]: [running]',
+  ].join('\n') + '\n';
+
   let flashed = false;
   const session: StockAdbSession = {
     async shell(cmd: string) {
       if (cmd === 'getprop sys.boot_completed') return { out: '1\n', code: 0 };
-      if (cmd === 'getprop') {
-        return {
-          out: [
-            '[ro.build.fingerprint]: [mirror/mirror/msm8916_64:6.0.1/IFC-6309-2.0-MIR/673:user/test-keys]',
-            '[ro.bootimage.build.fingerprint]: [mirror/mirror/msm8916_64:6.0.1/IFC-6309-2.0-MIR/673:user/test-keys]',
-            '[ro.build.version.release]: [6.0.1]',
-            '[ro.build.version.sdk]: [23]',
-            '[ro.build.type]: [user]',
-            '[ro.build.tags]: [test-keys]',
-            '[ro.board.platform]: [msm8916]',
-            '[ro.product.model]: [MIRROR]',
-            '[ro.crypto.state]: [unencrypted]',
-            '[ro.adb.secure]: [1]',
-            '[ro.secure]: [1]',
-            '[ro.debuggable]: [0]',
-            '[persist.sys.usb.config]: [adb]',
-            '[persist.adb.tcp.port]: [5555]',
-            '[init.svc.adbd]: [running]',
-            '[init.svc.qcom-post-boot]: [stopped]',
-            '[init.svc.thermal-engine]: [running]',
-            '[init.svc.wcnss-service]: [running]',
-          ].join('\n') + '\n',
-          code: 0,
-        };
-      }
+      if (cmd === 'getprop') return { out: fakeProps, code: 0 };
       if (cmd === 'getenforce') return { out: 'Enforcing\n', code: 0 };
       if (cmd === 'id') return { out: 'uid=2000(shell) gid=2000(shell) context=u:r:shell:s0\n', code: 0 };
       if (cmd === 'cat /proc/version') return { out: 'Linux version 3.10.49-perf-gf46dad5260f (dry@run)\n', code: 0 };
@@ -363,6 +439,34 @@ function createDryDeps(log: (l: string) => void): StockProbeDeps {
     },
   };
 
+  const httpSession: StockHttpSession = {
+    async status() { return { ok: true, uid: 10099, pid: 1234, sdk: 23, fiemap: true, bootCompleted: '1' }; },
+    async props() { return fakeProps; },
+    async dtPanel() { return '/proc/device-tree/soc/qcom,mdss_dsi_panel: qcom,mdss-dsi-panel-name=dry lvds 1080p panel\n'; },
+    async list(path: string) {
+      if (path === '/sys/class/backlight') return ['d\tr\t0\t/sys/class/backlight/lcd-backlight'];
+      if (path === '/system/etc') {
+        return [
+          'f\tr\t9\t/system/etc/mixer_paths_mtp.xml',
+          'f\tr\t14\t/system/etc/thermal-engine.conf',
+        ];
+      }
+      return [];
+    },
+    async readFile(path: string) {
+      const data = fakeFiles.get(path);
+      if (data) return { status: 'ok', data };
+      if (path === '/system/lib/modules/adsprpc.ko' || path === '/system/xbin/su') return { status: 'missing' };
+      return { status: 'denied' };
+    },
+    async fiemap(path: string) {
+      if (path === '/system/etc/init.qcom.post_boot.sh') {
+        return { path, size: 80502, ino: 631, extents: [{ logical: 0, physical: 137732096, block: 33626, length: 81920, blocks: 20, flags: 1 }] };
+      }
+      return { path, size: 7539, ino: 16, extents: [{ logical: 0, physical: 19640320, block: 4795, length: 8192, blocks: 2, flags: 1 }] };
+    },
+  };
+
   return {
     log,
     confirm: async () => true,
@@ -373,15 +477,17 @@ function createDryDeps(log: (l: string) => void): StockProbeDeps {
       certHex: 'ab'.repeat(64),
       fiemapLib: new Uint8Array([0x7f, 0x45, 0x4c, 0x46]),
     }),
+    connectHttp: () => httpSession,
     vendorEntries: [
       { part: 'gpu-display', path: '/system/etc/firmware/a300_pfp.fw', bytes: 1156, sha256: '0000', label: 'system_file', shell: 'yes' },
       { part: 'gpu-display', path: '/system/bin/mm-pp-daemon', bytes: 141704, sha256: '1111', label: 'mm-pp-daemon_exec', shell: 'no' },
     ],
     async checkAdb() {
-      return flashed ? { usb: 'device', session } : { usb: 'not-seen' };
+      return (flashed || opts.extractOnly) ? { usb: 'device', session } : { usb: 'not-seen' };
     },
     async fastboot() {
       return {
+        serial: 'dry-mirror',
         async oemDeviceInfo() { return ['Device tampered: false', 'Device unlocked: false']; },
         async getvar(name: string) {
           const map: Record<string, string> = {
@@ -411,9 +517,25 @@ function timestampSlug(d = new Date()): string {
   return d.toISOString().replace(/[:.]/g, '-').slice(0, 19);
 }
 
+/** Resolves existing ancestor symlinks so symlinked paths into the repo are caught too. */
+function realResolve(target: string): string {
+  let cur = resolve(target);
+  const tail: string[] = [];
+  while (!existsSync(cur)) {
+    const parent = dirname(cur);
+    if (parent === cur) break;
+    tail.unshift(cur.slice(parent.length + (parent.endsWith('/') ? 0 : 1)));
+    cur = parent;
+  }
+  const base = existsSync(cur) ? realpathSync(cur) : cur;
+  return tail.length ? join(base, ...tail) : base;
+}
+
 function isInsideRepo(dir: string): boolean {
-  const rel = relative(REPO, resolve(dir));
-  return rel === '' || (!rel.startsWith('..') && !rel.startsWith('/'));
+  const realRepo = existsSync(REPO) ? realpathSync(REPO) : resolve(REPO);
+  const realTarget = realResolve(dir);
+  const rel = relative(realRepo, realTarget);
+  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
 }
 
 export async function stockProbeCli(argv: string[], log: (l: string) => void = (l) => console.log(l)): Promise<number> {
@@ -457,10 +579,10 @@ export async function stockProbeCli(argv: string[], log: (l: string) => void = (
 
   const dry = !!a['dry-run'];
   const outDir = resolve(a.out ?? join(tmpdir(), `mirror-stock-probe-${timestampSlug()}`));
-  if (a['pull-system-blobs'] && isInsideRepo(outDir)) {
-    fail(`--out (${outDir}) is inside the git repo; pick a folder outside the repo when using --pull-system-blobs`);
+  if (isInsideRepo(outDir)) {
+    fail(`--out (${outDir}) is inside the git repo; pick a folder outside the repo so raw probe output can never be committed`);
   }
-  mkdirSync(outDir, { recursive: true });
+  mkdirSync(outDir, { recursive: true, mode: 0o700 });
 
   const tcpPort = a['no-tcp'] ? undefined : a['tcp-port'] ? Number.parseInt(a['tcp-port'], 10) : 5555;
   const probeHttpPort = a['probe-http-port'] ? Number.parseInt(a['probe-http-port'], 10) : DEFAULT_PROBE_HTTP_PORT;
@@ -477,24 +599,33 @@ export async function stockProbeCli(argv: string[], log: (l: string) => void = (
       }
     : undefined;
 
-  let adbKey: string;
-  if (dry && !a['adb-key']) {
-    adbKey = fakeAdbKey(7, 'dry@stock-probe');
-  } else {
-    const keyFile = a['adb-key'] ?? join(homedir(), '.android/adbkey.pub');
-    if (!existsSync(keyFile)) fail(`no adb public key at ${keyFile} (run \`adb devices\` once or pass --adb-key <file>)`);
-    adbKey = readFileSync(keyFile, 'utf8').trim();
+  const needsAdbKey = !a['extract-only'] && !a['http-only'];
+  let adbKey: string | undefined;
+  if (a['adb-key']) {
+    if (!existsSync(a['adb-key'])) fail(`no adb public key at ${a['adb-key']}`);
+    adbKey = readFileSync(a['adb-key'], 'utf8').trim();
+  } else if (needsAdbKey) {
+    if (dry) {
+      adbKey = fakeAdbKey(7, 'dry@stock-probe');
+    } else {
+      const keyFile = join(homedir(), '.android/adbkey.pub');
+      if (!existsSync(keyFile)) fail(`no adb public key at ${keyFile} (run \`adb devices\` once or pass --adb-key <file>)`);
+      adbKey = readFileSync(keyFile, 'utf8').trim();
+    }
   }
 
+  let prompters: ReturnType<typeof makePrompters> | undefined;
   let deps: StockProbeDeps;
   if (dry) {
     log('DRY RUN: fake stock Mirror; no real device is touched.');
-    deps = createDryDeps(log);
+    deps = createDryDeps(log, { extractOnly: !!a['extract-only'] });
   } else {
     const fbBin = fastbootPath();
     const adbBin = adbPath();
-    let pinnedSerial = a.serial ?? (a['serial-file'] ? readSerial(a['serial-file']) : undefined);
-    const { confirm, promptText } = makePrompters(!!a.yes);
+    const explicitSerial = a.serial ?? (a['serial-file'] ? readSerial(a['serial-file']) : undefined);
+    let pinnedSerial = explicitSerial;
+    prompters = makePrompters(!!a.yes);
+    const { confirm, promptText } = prompters;
     const vendorEntries = existsSync(VENDOR_TSV) ? parseVendorTsv(readFileSync(VENDOR_TSV, 'utf8')) : [];
 
     deps = {
@@ -509,18 +640,20 @@ export async function stockProbeCli(argv: string[], log: (l: string) => void = (
         log,
       }),
       connectHttp: (host, port) => createHostHttpSession(host, port),
-      async checkAdb(tcpTarget?: string) {
+      async checkAdb(tcpTarget?: string, opts?: { timeoutMs?: number; preflight?: boolean }) {
+        const cmdTimeout = Math.max(1000, Math.min(10_000, opts?.timeoutMs ?? 10_000));
         if (tcpTarget) {
-          await execText(adbBin, ['connect', tcpTarget], 10_000).catch(() => {});
+          await execText(adbBin, ['connect', tcpTarget], cmdTimeout, pinnedSerial).catch(() => {});
         }
-        const { stdout } = await execText(adbBin, ['devices'], 10_000).catch(() => ({ stdout: '' }));
+        const { stdout } = await execText(adbBin, ['devices'], cmdTimeout, pinnedSerial).catch(() => ({ stdout: '' }));
         const map = parseAdbDevices(stdout);
 
+        const activePin = opts?.preflight ? explicitSerial : pinnedSerial;
         let usb: AdbState = 'not-seen';
         let usbTarget: string | undefined;
-        if (pinnedSerial) {
-          usb = map.get(pinnedSerial) ?? 'not-seen';
-          if (usb === 'device') usbTarget = pinnedSerial;
+        if (activePin) {
+          usb = map.get(activePin) ?? 'not-seen';
+          if (usb === 'device') usbTarget = activePin;
         } else {
           const usbEntries = [...map.entries()].filter(([id]) => !id.includes(':'));
           if (usbEntries.length > 1) {
@@ -529,22 +662,45 @@ export async function stockProbeCli(argv: string[], log: (l: string) => void = (
           if (usbEntries.length === 1) {
             usb = usbEntries[0]![1];
             if (usb === 'device') {
+              // Do not mutate pinnedSerial from an unidentified preflight ADB device:
+              // fastboot discovery (or an explicit --serial/--serial-file) owns the pin.
               usbTarget = usbEntries[0]![0];
-              pinnedSerial = usbTarget;
             }
           }
         }
 
         let tcp: AdbState | undefined;
-        if (tcpTarget) tcp = map.get(tcpTarget) ?? 'not-seen';
+        let verifiedTcpTarget: string | undefined;
+        if (tcpTarget) {
+          tcp = map.get(tcpTarget) ?? 'not-seen';
+          if (tcp === 'device') {
+            if (activePin) {
+              // When a serial is pinned, verify that the TCP endpoint belongs to that exact device.
+              const serialCheck = await execText(
+                adbBin,
+                ['-s', tcpTarget, 'shell', 'getprop ro.serialno'],
+                Math.min(5000, cmdTimeout),
+                activePin,
+              ).catch(() => null);
+              if (serialCheck && serialCheck.stdout.trim() === activePin) {
+                verifiedTcpTarget = tcpTarget;
+              } else {
+                tcp = 'not-seen';
+              }
+            } else {
+              verifiedTcpTarget = tcpTarget;
+            }
+          }
+        }
 
-        const activeTarget = usb === 'device' ? usbTarget : tcp === 'device' ? tcpTarget : undefined;
-        const session = activeTarget ? createHostAdbSession(activeTarget, adbBin, pinnedSerial) : undefined;
+        const activeTarget = usb === 'device' ? usbTarget : verifiedTcpTarget;
+        const serialToRedact = activePin ?? (usb === 'device' ? usbTarget : undefined);
+        const session = activeTarget ? createHostAdbSession(activeTarget, adbBin, serialToRedact) : undefined;
         return { usb, ...(tcp !== undefined ? { tcp } : {}), ...(session ? { session } : {}) };
       },
       async fastboot() {
         for (let i = 0; i < 60; i++) {
-          const { stdout } = await execText(fbBin, ['devices'], 10_000);
+          const { stdout } = await execText(fbBin, ['devices'], 10_000, pinnedSerial);
           const found = parseFastbootDevices(stdout);
           const pick = pinnedSerial
             ? (found.includes(pinnedSerial) ? pinnedSerial : undefined)
@@ -563,31 +719,35 @@ export async function stockProbeCli(argv: string[], log: (l: string) => void = (
     };
   }
 
-  const res = await runStockProbe({
-    outDir,
-    adbKey,
-    usbConfig: a['usb-config'],
-    tcpPort,
-    tcpHost: a['tcp-host'],
-    probeHost: a['probe-host'],
-    probeHttpPort,
-    withProbeApk: !!a['with-probe-apk'],
-    wifi,
-    fill: !a['no-fill'],
-    readOnly: !!a['read-only'],
-    buildOnly: !!a['build-only'],
-    extractOnly: !!a['extract-only'],
-    httpOnly: !!a['http-only'],
-    includeCamera: !!a['include-camera'],
-    pullSystemBlobs: !!a['pull-system-blobs'],
-    waitSeconds,
-    ...(dry ? { userdataBytesOverride: DRY_USERDATA } : {}),
-    dryRun: dry,
-  }, deps);
+  try {
+    const res = await runStockProbe({
+      outDir,
+      ...(adbKey !== undefined ? { adbKey } : {}),
+      usbConfig: a['usb-config'],
+      tcpPort,
+      tcpHost: a['tcp-host'],
+      probeHost: a['probe-host'],
+      probeHttpPort,
+      withProbeApk: !!a['with-probe-apk'],
+      wifi,
+      fill: !a['no-fill'],
+      readOnly: !!a['read-only'],
+      buildOnly: !!a['build-only'],
+      extractOnly: !!a['extract-only'],
+      httpOnly: !!a['http-only'],
+      includeCamera: !!a['include-camera'],
+      pullSystemBlobs: !!a['pull-system-blobs'],
+      waitSeconds,
+      ...(dry ? { userdataBytesOverride: DRY_USERDATA } : {}),
+      dryRun: dry,
+    }, deps);
 
-  log('\n--- copy-paste progress report below ---\n');
-  log(renderReportMarkdown(res.report));
-  log(`--- report saved to: ${res.reportPath} ---`);
+    log('\n--- copy-paste progress report below ---\n');
+    log(renderReportMarkdown(res.report));
+    log(`--- report saved to: ${res.reportPath} ---`);
 
-  return res.outcome === 'blocked' ? 1 : 0;
+    return res.outcome === 'blocked' ? 1 : 0;
+  } finally {
+    prompters?.close();
+  }
 }

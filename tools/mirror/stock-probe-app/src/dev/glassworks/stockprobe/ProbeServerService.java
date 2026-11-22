@@ -22,8 +22,10 @@ import java.net.Socket;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 /**
  * Tiny read-only HTTP probe server for stock Mirrors where 1.2x+ adbd rejects /data/misc/adb/adb_keys.
@@ -50,8 +52,10 @@ public final class ProbeServerService extends Service {
             "sys.boot_completed"
     };
 
+    private static final Set<String> SAFE_PROPS_SET = new HashSet<>(Arrays.asList(SAFE_PROPS));
+
     private volatile boolean running;
-    private ServerSocket server;
+    private volatile ServerSocket server;
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
@@ -102,28 +106,71 @@ public final class ProbeServerService extends Service {
     }
 
     private void serveLoop() {
+        ServerSocket listener = null;
         try {
-            server = new ServerSocket(PORT);
+            listener = new ServerSocket(PORT);
+            server = listener;
+            if (!running) return;
             Log.i(TAG, "HTTP probe listening on port " + PORT + " uid=" + Process.myUid() + " fiemap=" + Fiemap.isAvailable());
             while (running) {
-                Socket sock = server.accept();
+                Socket sock = listener.accept();
                 Thread worker = new Thread(() -> handle(sock), "stock-probe-req");
                 worker.setDaemon(true);
                 worker.start();
             }
         } catch (IOException e) {
             if (running) Log.e(TAG, "server loop failed", e);
+        } finally {
+            server = null;
+            try { if (listener != null) listener.close(); } catch (IOException ignored) {}
         }
+    }
+
+    private static boolean isExcludedChosen(String path) {
+        return path.equals("/proc/device-tree/chosen")
+                || path.startsWith("/proc/device-tree/chosen/")
+                || path.equals("/sys/firmware/devicetree/base/chosen")
+                || path.startsWith("/sys/firmware/devicetree/base/chosen/");
+    }
+
+    private static String normalizeLexical(String p) {
+        StringBuilder sb = new StringBuilder();
+        for (String seg : p.split("/")) {
+            if (seg.isEmpty() || ".".equals(seg)) continue;
+            if ("..".equals(seg)) return null;
+            sb.append('/').append(seg);
+        }
+        return sb.length() == 0 ? "/" : sb.toString();
     }
 
     private static boolean isAllowedPath(String p) {
         if (p == null || !p.startsWith("/") || p.contains("..") || p.contains("\0")) return false;
-        if (p.equals("/proc/device-tree/chosen") || p.startsWith("/proc/device-tree/chosen/")) return false;
-        if (RAMDISK_EXACT.contains(p)) return true;
-        return p.startsWith("/system/")
-                || p.startsWith("/proc/")
-                || p.startsWith("/sys/class/backlight")
-                || p.startsWith("/sys/class/leds");
+        String normalized = normalizeLexical(p);
+        if (normalized == null || isExcludedChosen(normalized)) return false;
+        String canonical;
+        try {
+            canonical = new File(normalized).getCanonicalPath();
+        } catch (IOException e) {
+            return false;
+        }
+        if (isExcludedChosen(canonical)) return false;
+        if (RAMDISK_EXACT.contains(normalized) && RAMDISK_EXACT.contains(canonical)) return true;
+        boolean prefixAllowed = normalized.startsWith("/system/")
+                || normalized.startsWith("/proc/")
+                || normalized.equals("/sys/class/backlight")
+                || normalized.startsWith("/sys/class/backlight/")
+                || normalized.equals("/sys/class/leds")
+                || normalized.startsWith("/sys/class/leds/");
+        if (!prefixAllowed) return false;
+        return canonical.startsWith("/system/")
+                || canonical.startsWith("/proc/")
+                || canonical.equals("/sys/firmware/devicetree/base")
+                || canonical.startsWith("/sys/firmware/devicetree/base/")
+                || canonical.equals("/sys/class/backlight")
+                || canonical.startsWith("/sys/class/backlight/")
+                || canonical.equals("/sys/class/leds")
+                || canonical.startsWith("/sys/class/leds/")
+                || canonical.startsWith("/sys/devices/");
     }
 
     private void handle(Socket sock) {
@@ -219,13 +266,32 @@ public final class ProbeServerService extends Service {
         }
     }
 
+    private static String filterGetpropOutput(String raw) {
+        StringBuilder sb = new StringBuilder();
+        for (String line : raw.split("\\r?\\n")) {
+            String trimmed = line.trim();
+            if (!trimmed.startsWith("[")) continue;
+            int sep = trimmed.indexOf("]: [");
+            if (sep <= 1 || !trimmed.endsWith("]")) continue;
+            String key = trimmed.substring(1, sep);
+            if (SAFE_PROPS_SET.contains(key) || key.startsWith("init.svc.")) {
+                sb.append(trimmed).append('\n');
+            }
+        }
+        return sb.toString();
+    }
+
     private static String readAllProps() {
-        // Try /system/bin/getprop first so we also capture init.svc.* entries.
+        // Try /system/bin/getprop first so we also capture init.svc.* entries,
+        // filtering to SAFE_PROPS and init.svc.* before leaving the device.
         try {
             java.lang.Process p = new ProcessBuilder("/system/bin/getprop").redirectErrorStream(true).start();
             byte[] bytes = readAll(p.getInputStream());
             p.waitFor();
-            if (bytes.length > 0) return new String(bytes, StandardCharsets.UTF_8);
+            if (bytes.length > 0) {
+                String filtered = filterGetpropOutput(new String(bytes, StandardCharsets.UTF_8));
+                if (!filtered.isEmpty()) return filtered;
+            }
         } catch (Throwable ignored) {}
         // Fallback: in-process SystemProperties reflection for the allowlisted keys.
         StringBuilder sb = new StringBuilder();
@@ -249,7 +315,11 @@ public final class ProbeServerService extends Service {
 
     private static void walkDt(File dir, StringBuilder out) {
         if (dir == null || !dir.isDirectory()) return;
-        if ("/proc/device-tree/chosen".equals(dir.getAbsolutePath())) return;
+        try {
+            if (isExcludedChosen(dir.getAbsolutePath()) || isExcludedChosen(dir.getCanonicalPath())) return;
+        } catch (IOException e) {
+            return;
+        }
         File[] kids = dir.listFiles();
         if (kids == null) return;
         Arrays.sort(kids, (a, b) -> a.getName().compareTo(b.getName()));

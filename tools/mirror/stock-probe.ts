@@ -15,7 +15,9 @@
 //   npx -y tsx@4.23.15 tools/mirror/stock-probe.ts --extract-only
 import { StockProbeUsageError, stockProbeCli } from './src/stock-probe-cli';
 
-stockProbeCli(process.argv.slice(2)).then((code) => process.exit(code), (e: unknown) => {
+stockProbeCli(process.argv.slice(2)).then((code) => {
+  process.exitCode = code;
+}, (e: unknown) => {
   console.error(`\nstock-probe: ${(e as Error).message}`);
-  process.exit(e instanceof StockProbeUsageError ? 2 : 1);
+  process.exitCode = e instanceof StockProbeUsageError ? 2 : 1;
 });
