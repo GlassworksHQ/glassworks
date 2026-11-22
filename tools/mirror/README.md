@@ -123,20 +123,30 @@ or chat) and prints a checkpoint so you can report progress at any stage.
 3. **Build sparse `userdata` (local file only):** uses `@glassworks/ext4` to build a fresh sparse
    `userdata-probe.sparse` containing `/data/misc/adb/adb_keys`, `/data/property/persist.sys.usb.config`,
    optional `/data/property/persist.adb.tcp.port` (default `5555`), and optional pre-saved Wi-Fi
-   (PBKDF2 PSK only).
+   (PBKDF2 PSK only). Pass `--with-probe-apk` to also bundle the no-ADB fallback app below on the
+   first flash.
 4. **Flash `userdata` ONLY & reboot:** prompts with a warning (wipes stock account/onboarding data;
    leaves stock `system` untouched), then flashes `userdata` and reboots.
-5. **Wait for stock ADB:** polls USB (and optional `--tcp-host <ip>`) and records whether stock
-   returns `device`, `unauthorized` (expected on `1.2x+` / `S22Q401` boot builds), or `not-seen`.
-6. **Extract stock info (read-only over ADB):** saves raw files locally in `<out>/raw/` (outside the
-   repo — never commit them) and writes redacted findings into `<out>/report.md`: build/hardware
-   properties, `init.svc.*`, `/proc/config.gz` flags, `dmesg` highlights, display/LVDS device-tree
-   nodes, key `/system` hashes, and an Option C comparison against `option-c-vendor-files.tsv`.
+5. **Wait for stock ADB (with automatic `1.2x+` no-ADB fallback):** polls USB (and optional
+   `--tcp-host <ip>`). If ADB authorizes (`device`), it proceeds straight to Step 6. If ADB stays
+   `unauthorized` or `not-seen` (expected on `1.2x+` / `S22Q401` boot builds), it offers the
+   **no-ADB HTTP probe app fallback**: builds `tools/mirror/stock-probe-app/` (`dev.glassworks.stockprobe`,
+   a plain read-only HTTP server + optional `libfiemap.so` JNI), plants `/data/app/dev.glassworks.stockprobe-1/base.apk`
+   along with a verified 1-entry `/data/system/packages.xml` (so Android 6 boots it `stopped=false`
+   and delivers `BOOT_COMPLETED` automatically without ADB or touch), flashes `userdata` only, and
+   connects over HTTP (port `18765`) on Ethernet/Wi-Fi.
+6. **Extract stock info (read-only over ADB or HTTP):** saves raw files locally in `<out>/raw/`
+   (outside the repo — never commit them) and writes redacted findings into `<out>/report.md`:
+   build/hardware properties, `init.svc.*`, `/proc/config.gz` flags, `dmesg` highlights,
+   display/LVDS device-tree nodes, key `/system` hashes, `FS_IOC_FIEMAP` physical block extents
+   (via HTTP probe app), and an Option C comparison against `option-c-vendor-files.tsv`.
 
 ```sh
 npx -y tsx@4.23.15 tools/mirror/stock-probe.ts --dry-run        # all 6 steps on a fake stock Mirror
 npx -y tsx@4.23.15 tools/mirror/stock-probe.ts --read-only      # Steps 1-2 only (no flash)
-npx -y tsx@4.23.15 tools/mirror/stock-probe.ts                  # full 6-step guided run
-npx -y tsx@4.23.15 tools/mirror/stock-probe.ts --extract-only   # Steps 5-6 only (already on stock adb)
+npx -y tsx@4.23.15 tools/mirror/stock-probe.ts                  # full 6-step run (auto-falls back if no ADB)
+npx -y tsx@4.23.15 tools/mirror/stock-probe.ts --with-probe-apk # single userdata flash for 1.2x+ stock
+npx -y tsx@4.23.15 tools/mirror/stock-probe.ts --extract-only   # Steps 5-6 only (already on stock ADB)
+npx -y tsx@4.23.15 tools/mirror/stock-probe.ts --http-only --probe-host 192.0.2.10  # Steps 5-6 over HTTP
 npx -y tsx@4.23.15 tools/mirror/stock-probe.ts --help
 ```

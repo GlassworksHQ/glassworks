@@ -1,5 +1,5 @@
-// CLI runner for tools/mirror/stock-probe.ts: real fastboot/adb subprocess adapters, --dry-run
-// fake stock Mirror, argument parsing, and copy-pasteable progress report output.
+// CLI runner for tools/mirror/stock-probe.ts: real fastboot/adb subprocess adapters, HTTP probe
+// client for the 1.2x+ no-ADB fallback, --dry-run fake stock Mirror, and progress report output.
 import { execFile } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
@@ -13,12 +13,13 @@ import { fakeAdbKey } from '@glassworks/lululemon-mirror-installer/fakes';
 import { adbPath, readSerial } from './adb';
 import { DRY_USERDATA } from './dry';
 import {
-  parseVendorTsv, renderReportMarkdown, runStockProbe,
-  type AdbState, type StockAdbSession, type StockFastboot, type StockProbeDeps,
+  DEFAULT_PROBE_HTTP_PORT, parseVendorTsv, renderReportMarkdown, runStockProbe,
+  type AdbState, type FiemapResult, type ProbeAppPayload, type StockAdbSession, type StockFastboot, type StockHttpSession, type StockProbeDeps,
 } from './stock-probe';
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const VENDOR_TSV = join(REPO, 'frames/lululemon-mirror/research/option-c-vendor-files.tsv');
+const PROBE_APP_DIR = join(REPO, 'tools/mirror/stock-probe-app');
 
 export const STOCK_PROBE_HELP = `usage: stock-probe.ts [options]
 
@@ -27,11 +28,15 @@ Updates <out>/report.md after EVERY step so you can report progress at any point
 
 NEVER touches system, boot, recovery, modem, persist, or aboot.
 Step 4 writes ONLY userdata (wiping stock app data, leaving stock system untouched).
+If Step 5 gets no ADB (1.2x+ unauthorized / not-seen), it automatically offers the no-ADB
+fallback: planting the read-only HTTP probe APK in /data/app/ + a 1-entry packages.xml
+(still userdata-only!) and extracting Step 6 + FS_IOC_FIEMAP physical block offsets over HTTP.
 
 Modes (default: full 6-step guided run):
   --read-only               Run Steps 1-2 only (ADB key check + fastboot read-only info)
   --build-only              Run Steps 1-3 only (also build sparse userdata locally; no flash)
   --extract-only            Skip fastboot/flash; jump straight to Steps 5-6 over ADB
+  --http-only               Skip fastboot/flash; connect straight to HTTP probe app (--probe-host)
   --dry-run                 Run all 6 steps on a fake stock Mirror; no device is touched
 
 Options:
@@ -41,6 +46,12 @@ Options:
   --tcp-port <port>         persist.adb.tcp.port value (default: 5555)
   --no-tcp                  Do not plant persist.adb.tcp.port
   --tcp-host <ip>           Also try \`adb connect <ip>:<tcp-port>\` in Step 5 (for Ethernet/Wi-Fi adb)
+  --with-probe-apk          Plant /data/app probe APK + 1-entry packages.xml in Step 3 right away (1 flash for 1.2x+)
+  --probe-apk <file>        Path to stock-probe.apk (default: auto-build tools/mirror/stock-probe-app/out/)
+  --probe-cert-hex <file>   Path to hex DER cert for --probe-apk (default: cert.hex beside the APK)
+  --probe-fiemap-so <file>  Optional arm64 libfiemap.so (default: libfiemap.so beside the APK if present)
+  --probe-host <ip>         Mirror LAN IP for the no-ADB HTTP probe app (port ${DEFAULT_PROBE_HTTP_PORT})
+  --probe-http-port <port>  Override HTTP probe app port (default: ${DEFAULT_PROBE_HTTP_PORT})
   --wifi-ssid <name> --wifi-pass-file <file>
                             Pre-save Wi-Fi (PBKDF2 PSK only) in userdata
   --no-fill                 Write zero blocks as RAW instead of FILL 0 in the sparse image
@@ -48,7 +59,7 @@ Options:
   --pull-system-blobs       Also save readable stock vendor files locally under <out>/raw/system/
   --serial <id>             Target a specific fastboot/adb device serial (redacted in logs/report)
   --serial-file <file>      Read target serial from a file (e.g. /tmp/mirror-serial)
-  --wait-seconds <n>        Seconds to wait for stock ADB after reboot (default: 180)
+  --wait-seconds <n>        Seconds to wait for stock ADB / HTTP after reboot (default: 180)
   --yes                     Answer yes to all step prompts
   --help                    Show this help`;
 
@@ -72,7 +83,7 @@ function execText(bin: string, args: string[], timeoutMs = 120_000): Promise<{ s
 function execBuffer(bin: string, args: string[], timeoutMs = 120_000): Promise<Buffer> {
   return new Promise((res, rej) => {
     execFile(bin, args, { timeout: timeoutMs, maxBuffer: 128 << 20, encoding: 'buffer' }, (err, stdout, stderr) => {
-      if (err) rej(new Error(`${bin} ${args.join(' ')}: ${String(stderr || err.message).trim()}`));
+      if (err) rej(new Error(`${bin} ${args.join(' ')}: ${String(stderr || stdout || err.message).trim()}`));
       else res(stdout);
     });
   });
@@ -162,11 +173,106 @@ function createHostFastboot(serial: string, bin: string): StockFastboot {
   };
 }
 
-async function confirmer(yes: boolean): Promise<(q: string) => Promise<boolean>> {
-  if (yes) return async () => true;
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
-  process.on('exit', () => rl.close());
-  return async (q: string) => /^y(es)?$/i.test((await rl.question(`    ${q} [y/N] `)).trim());
+function createHostHttpSession(host: string, port: number): StockHttpSession {
+  const base = `http://${host}:${port}`;
+  const get = async (path: string, timeoutMs = 15_000) => {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), timeoutMs);
+    try {
+      return await fetch(`${base}${path}`, { signal: ctl.signal });
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  return {
+    async status() {
+      try {
+        const r = await get('/status', 5000);
+        if (!r.ok) return null;
+        return (await r.json()) as { ok: boolean; uid: number; pid: number; sdk: number; fiemap: boolean; bootCompleted: string };
+      } catch {
+        return null;
+      }
+    },
+    async props() {
+      const r = await get('/props');
+      return r.ok ? await r.text() : '';
+    },
+    async dtPanel() {
+      const r = await get('/dt-panel', 30_000);
+      return r.ok ? await r.text() : '';
+    },
+    async list(path: string) {
+      try {
+        const r = await get(`/list?path=${encodeURIComponent(path)}`);
+        if (!r.ok) return [];
+        return (await r.text()).split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+      } catch {
+        return [];
+      }
+    },
+    async readFile(path: string) {
+      try {
+        const r = await get(`/file?path=${encodeURIComponent(path)}`, 60_000);
+        if (r.status === 200) return { status: 'ok', data: new Uint8Array(await r.arrayBuffer()) };
+        if (r.status === 404) return { status: 'missing' };
+        return { status: 'denied' };
+      } catch {
+        return { status: 'denied' };
+      }
+    },
+    async fiemap(path: string): Promise<FiemapResult> {
+      try {
+        const r = await get(`/fiemap?path=${encodeURIComponent(path)}`);
+        const body = (await r.json()) as Omit<FiemapResult, 'path'>;
+        return { path, ...body };
+      } catch (e) {
+        return { path, error: (e as Error).message };
+      }
+    },
+  };
+}
+
+async function loadOrBuildProbeApp(opts: {
+  apkPath?: string;
+  certHexPath?: string;
+  fiemapPath?: string;
+  log: (l: string) => void;
+}): Promise<ProbeAppPayload | undefined> {
+  const defaultOut = join(PROBE_APP_DIR, 'out');
+  const apkPath = opts.apkPath ?? join(defaultOut, 'stock-probe.apk');
+  const certPath = opts.certHexPath ?? join(dirname(apkPath), 'cert.hex');
+  const fiemapPath = opts.fiemapPath ?? join(dirname(apkPath), 'libfiemap.so');
+
+  if (!existsSync(apkPath) || !existsSync(certPath)) {
+    const buildSh = join(PROBE_APP_DIR, 'build.sh');
+    if (opts.apkPath || !existsSync(buildSh)) return undefined;
+    opts.log('    building stock-probe-app (tools/mirror/stock-probe-app/build.sh)...');
+    await execText(buildSh, [], 60_000);
+  }
+  if (!existsSync(apkPath) || !existsSync(certPath)) return undefined;
+  return {
+    apk: new Uint8Array(readFileSync(apkPath)),
+    certHex: readFileSync(certPath, 'utf8').trim(),
+    ...(existsSync(fiemapPath) ? { fiemapLib: new Uint8Array(readFileSync(fiemapPath)) } : {}),
+  };
+}
+
+function makePrompters(yes: boolean) {
+  let rl: ReturnType<typeof createInterface> | undefined;
+  const getRl = () => {
+    if (!rl) {
+      rl = createInterface({ input: process.stdin, output: process.stdout });
+      process.on('exit', () => rl?.close());
+    }
+    return rl;
+  };
+  return {
+    confirm: yes
+      ? async () => true
+      : async (q: string) => /^y(es)?$/i.test((await getRl().question(`    ${q} [y/N] `)).trim()),
+    promptText: async (q: string) => (await getRl().question(`    ${q} `)).trim(),
+  };
 }
 
 /** Realistic fake stock Mirror for --dry-run (touches no device). */
@@ -260,7 +366,13 @@ function createDryDeps(log: (l: string) => void): StockProbeDeps {
   return {
     log,
     confirm: async () => true,
+    promptText: async () => '192.0.2.10',
     sleep: async () => {},
+    loadProbeApp: async () => ({
+      apk: new Uint8Array([0x50, 0x4b, 0x03, 0x04]),
+      certHex: 'ab'.repeat(64),
+      fiemapLib: new Uint8Array([0x7f, 0x45, 0x4c, 0x46]),
+    }),
     vendorEntries: [
       { part: 'gpu-display', path: '/system/etc/firmware/a300_pfp.fw', bytes: 1156, sha256: '0000', label: 'system_file', shell: 'yes' },
       { part: 'gpu-display', path: '/system/bin/mm-pp-daemon', bytes: 141704, sha256: '1111', label: 'mm-pp-daemon_exec', shell: 'no' },
@@ -313,6 +425,7 @@ export async function stockProbeCli(argv: string[], log: (l: string) => void = (
       'read-only': { type: 'boolean' },
       'build-only': { type: 'boolean' },
       'extract-only': { type: 'boolean' },
+      'http-only': { type: 'boolean' },
       yes: { type: 'boolean' },
       out: { type: 'string' },
       'adb-key': { type: 'string' },
@@ -320,6 +433,12 @@ export async function stockProbeCli(argv: string[], log: (l: string) => void = (
       'tcp-port': { type: 'string' },
       'no-tcp': { type: 'boolean' },
       'tcp-host': { type: 'string' },
+      'with-probe-apk': { type: 'boolean' },
+      'probe-apk': { type: 'string' },
+      'probe-cert-hex': { type: 'string' },
+      'probe-fiemap-so': { type: 'string' },
+      'probe-host': { type: 'string' },
+      'probe-http-port': { type: 'string' },
       'wifi-ssid': { type: 'string' },
       'wifi-pass-file': { type: 'string' },
       'no-fill': { type: 'boolean' },
@@ -333,8 +452,8 @@ export async function stockProbeCli(argv: string[], log: (l: string) => void = (
 
   if (a.help) { log(STOCK_PROBE_HELP); return 0; }
 
-  const modes = [a['read-only'], a['build-only'], a['extract-only']].filter(Boolean).length;
-  if (modes > 1) fail('pick at most one of --read-only, --build-only, --extract-only');
+  const modes = [a['read-only'], a['build-only'], a['extract-only'], a['http-only']].filter(Boolean).length;
+  if (modes > 1) fail('pick at most one of --read-only, --build-only, --extract-only, --http-only');
 
   const dry = !!a['dry-run'];
   const outDir = resolve(a.out ?? join(tmpdir(), `mirror-stock-probe-${timestampSlug()}`));
@@ -344,8 +463,10 @@ export async function stockProbeCli(argv: string[], log: (l: string) => void = (
   mkdirSync(outDir, { recursive: true });
 
   const tcpPort = a['no-tcp'] ? undefined : a['tcp-port'] ? Number.parseInt(a['tcp-port'], 10) : 5555;
+  const probeHttpPort = a['probe-http-port'] ? Number.parseInt(a['probe-http-port'], 10) : DEFAULT_PROBE_HTTP_PORT;
   const waitSeconds = a['wait-seconds'] ? Number.parseInt(a['wait-seconds'], 10) : 180;
   if (!Number.isInteger(waitSeconds) || waitSeconds < 1) fail('--wait-seconds must be a positive integer');
+  if (!Number.isInteger(probeHttpPort) || probeHttpPort < 1 || probeHttpPort > 65535) fail('--probe-http-port must be 1..65535');
 
   const wifi = a['wifi-ssid']
     ? {
@@ -373,13 +494,21 @@ export async function stockProbeCli(argv: string[], log: (l: string) => void = (
     const fbBin = fastbootPath();
     const adbBin = adbPath();
     let pinnedSerial = a.serial ?? (a['serial-file'] ? readSerial(a['serial-file']) : undefined);
-    const confirm = await confirmer(!!a.yes);
+    const { confirm, promptText } = makePrompters(!!a.yes);
     const vendorEntries = existsSync(VENDOR_TSV) ? parseVendorTsv(readFileSync(VENDOR_TSV, 'utf8')) : [];
 
     deps = {
       log,
       confirm,
+      promptText,
       vendorEntries,
+      loadProbeApp: () => loadOrBuildProbeApp({
+        apkPath: a['probe-apk'],
+        certHexPath: a['probe-cert-hex'],
+        fiemapPath: a['probe-fiemap-so'],
+        log,
+      }),
+      connectHttp: (host, port) => createHostHttpSession(host, port),
       async checkAdb(tcpTarget?: string) {
         if (tcpTarget) {
           await execText(adbBin, ['connect', tcpTarget], 10_000).catch(() => {});
@@ -440,11 +569,15 @@ export async function stockProbeCli(argv: string[], log: (l: string) => void = (
     usbConfig: a['usb-config'],
     tcpPort,
     tcpHost: a['tcp-host'],
+    probeHost: a['probe-host'],
+    probeHttpPort,
+    withProbeApk: !!a['with-probe-apk'],
     wifi,
     fill: !a['no-fill'],
     readOnly: !!a['read-only'],
     buildOnly: !!a['build-only'],
     extractOnly: !!a['extract-only'],
+    httpOnly: !!a['http-only'],
     includeCamera: !!a['include-camera'],
     pullSystemBlobs: !!a['pull-system-blobs'],
     waitSeconds,

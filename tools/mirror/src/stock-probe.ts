@@ -3,9 +3,13 @@
 // NEVER touches system, boot, recovery, modem, persist, or aboot.
 // Steps 1-3 are read-only on the device (fastboot getvar + local sparse userdata build).
 // Step 4 WRITES ONLY userdata (wiping stock app data, leaving stock system untouched).
-// Steps 5-6 wait for stock Android over USB/TCP adb and extract safe, redacted findings
-// into report.md (updated after every step so progress can be reported at any checkpoint),
-// while raw device files stay locally in <out>/raw/ (outside git, never committed).
+// Step 5 waits for stock ADB (USB/TCP); if stock blocks ADB (1.2x+ unauthorized / not-seen),
+// the flow seamlessly leads into the no-ADB fallback: planting a tiny read-only HTTP probe APK
+// in /data/app/ + a verified 1-entry /data/system/packages.xml (still userdata-only!), rebooting,
+// and running Step 6 extraction (including optional FS_IOC_FIEMAP physical block offsets) over HTTP.
+//
+// Redacted progress is written to <out>/report.md after EVERY step so progress can be reported at
+// any checkpoint; raw device files stay locally in <out>/raw/ (outside git, never committed).
 import { createHash } from 'node:crypto';
 import { closeSync, mkdirSync, openSync, writeFileSync, writeSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -19,7 +23,13 @@ export const STOCK_PROBE_LABELS = {
   ...LABELS,
   /** /data/property(/.*)? (AOSP 6.0.1 file_contexts). */
   property: 'u:object_r:property_data_file:s0',
+  /** /data/app(/.*)? (AOSP 6.0.1 file_contexts). */
+  apk: 'u:object_r:apk_data_file:s0',
 } as const;
+
+export const DEFAULT_PROBE_APP_PACKAGE = 'dev.glassworks.stockprobe';
+export const DEFAULT_PROBE_APP_UID = 10099;
+export const DEFAULT_PROBE_HTTP_PORT = 18765;
 
 /** Standard Android 6 wpa_supplicant header (same lines as Glass Panes /etc/wifi/wpa_supplicant.conf). */
 export const DEFAULT_WIFI_TEMPLATE = [
@@ -91,14 +101,33 @@ export const KEY_SYSTEM_FILES = [
   '/system/framework/services.jar',
 ] as const;
 
+/** Paths queried with FS_IOC_FIEMAP when native libfiemap.so is available. */
+export const FIEMAP_TARGETS = [
+  '/system/etc/init.qcom.post_boot.sh',
+  '/system/build.prop',
+] as const;
+
 const SAFE_PATH = /^\/[A-Za-z0-9._+/-]+$/;
 const SAFE_USB_CONFIG = /^[a-z0-9_,]+$/;
+const SAFE_PKG = /^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$/;
+const HEX_CERT = /^[0-9a-fA-F]{64,}$/;
 
 export const STOCK_USERDATA_WARNING = [
-  'Step 4 flashes ONLY the userdata partition; stock system, boot, recovery, modem, and persist are NOT touched.',
+  'This flashes ONLY the userdata partition; stock system, boot, recovery, modem, and persist are NOT touched.',
   'Wiping userdata erases stock account/onboarding data, which is likely a one-way door off lululemon\'s stock app.',
   'Fastboot stays open, so you can still flash Glass Panes or Glassworks later.',
 ];
+
+export interface ProbeAppPayload {
+  /** Signed v1 APK for Android 6 (e.g. tools/mirror/stock-probe-app/out/stock-probe.apk). */
+  apk: Uint8Array;
+  /** Hex-encoded DER signing certificate for /data/system/packages.xml <cert key="...">. */
+  certHex: string;
+  /** Optional arm64-v8a libfiemap.so unpacked to /data/app/<pkg>-1/lib/arm64/libfiemap.so. */
+  fiemapLib?: Uint8Array;
+  packageName?: string;
+  userId?: number;
+}
 
 export interface StockProbeUserdataOptions {
   adbKey: string;
@@ -108,14 +137,61 @@ export interface StockProbeUserdataOptions {
   tcpPort?: number;
   /** Optional Wi-Fi credentials pre-saved as a PBKDF2 PSK in /data/misc/wifi/wpa_supplicant.conf. */
   wifi?: { ssid: string; password: string; template?: string };
+  /**
+   * Optional no-ADB fallback APK planted in /data/app/<pkg>-1/base.apk along with the verified
+   * 1-entry /data/system/packages.xml so Android 6 boots it stopped=false and fires BOOT_COMPLETED.
+   */
+  probeApp?: ProbeAppPayload;
   time?: number;
   uuid?: Uint8Array;
 }
 
 /**
- * Builds a fresh ext4 userdata image tailored to reach adb on a stock Mirror without touching system:
+ * Minimal Android 6.0.1 /data/system/packages.xml that prevents Settings.getPackageLPw()
+ * (Settings.java:641-673) from marking a freshly scanned /data/app APK as stopped=true on first boot.
+ * Verified live on Android 6.0 (API 23, arm64-v8a):
+ *  - Both <version> tags (internal + primary_physical) are required by PMS and MountService.
+ *  - <permissions> must pre-declare RECEIVE_BOOT_COMPLETED before <package> so PMS grants it.
+ */
+export function buildPackagesXml(o: {
+  packageName: string;
+  certHex: string;
+  userId: number;
+  hasNativeArm64: boolean;
+}): string {
+  if (!SAFE_PKG.test(o.packageName)) throw new Error(`invalid packageName "${o.packageName}"`);
+  const cert = o.certHex.trim().toLowerCase();
+  if (!HEX_CERT.test(cert)) throw new Error('invalid certHex: expected hex-encoded DER certificate');
+  if (!Number.isInteger(o.userId) || o.userId < 10000 || o.userId > 19999) {
+    throw new Error(`invalid userId ${o.userId}: expected 10000..19999`);
+  }
+  const codePath = `/data/app/${o.packageName}-1`;
+  const abiAttr = o.hasNativeArm64 ? ' primaryCpuAbi="arm64-v8a"' : '';
+  return `<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<packages>
+  <version sdkVersion="23" databaseVersion="3" fingerprint="placeholder" />
+  <version volumeUuid="primary_physical" sdkVersion="23" databaseVersion="3" fingerprint="placeholder" />
+  <permissions>
+    <item name="android.permission.RECEIVE_BOOT_COMPLETED" package="android" />
+  </permissions>
+  <package name="${o.packageName}" codePath="${codePath}" nativeLibraryPath="${codePath}/lib"${abiAttr} publicFlags="0" privateFlags="0" ft="19000000000" it="19000000000" ut="19000000000" version="1" userId="${o.userId}">
+    <sigs count="1">
+      <cert index="0" key="${cert}" />
+    </sigs>
+    <perms>
+      <item name="android.permission.RECEIVE_BOOT_COMPLETED" granted="true" flags="0" />
+      <item name="android.permission.INTERNET" granted="true" flags="0" />
+    </perms>
+  </package>
+</packages>
+`;
+}
+
+/**
+ * Builds a fresh ext4 userdata image tailored to reach a stock Mirror without touching system:
  * /misc/adb/adb_keys (via buildUserdata), /property/persist.sys.usb.config, optional
- * /property/persist.adb.tcp.port, and optional /misc/wifi/wpa_supplicant.conf.
+ * /property/persist.adb.tcp.port, optional /misc/wifi/wpa_supplicant.conf, and optional
+ * /app/<pkg>-1/base.apk (+ lib/arm64/libfiemap.so) + /system/packages.xml for the no-ADB fallback.
  *
  * AOSP 6.0.1 init's load_persistent_properties() reads raw file bytes without trimming newlines,
  * so property files are written with exact UTF-8 bytes and no trailing '\n'.
@@ -153,6 +229,39 @@ export async function buildStockProbeUserdata(disk: Disk, o: StockProbeUserdataO
       mode: 0o600, uid: 0, gid: 0, label: STOCK_PROBE_LABELS.property, time,
     });
     plantedPaths.push('/data/property/persist.adb.tcp.port');
+  }
+
+  if (o.probeApp) {
+    const pkg = o.probeApp.packageName ?? DEFAULT_PROBE_APP_PACKAGE;
+    const uid = o.probeApp.userId ?? DEFAULT_PROBE_APP_UID;
+    const xml = buildPackagesXml({
+      packageName: pkg,
+      certHex: o.probeApp.certHex,
+      userId: uid,
+      hasNativeArm64: !!o.probeApp.fiemapLib,
+    });
+    const apkDir = `/app/${pkg}-1`;
+    await fs.mkdir('/app', { mode: 0o771, uid: 1000, gid: 1000, label: STOCK_PROBE_LABELS.apk, time });
+    await fs.mkdir(apkDir, { mode: 0o755, uid: 1000, gid: 1000, label: STOCK_PROBE_LABELS.apk, time });
+    await fs.writeFile(`${apkDir}/base.apk`, o.probeApp.apk, {
+      mode: 0o644, uid: 1000, gid: 1000, label: STOCK_PROBE_LABELS.apk, time,
+    });
+    plantedPaths.push(`/data${apkDir}/base.apk`);
+
+    if (o.probeApp.fiemapLib) {
+      await fs.mkdir(`${apkDir}/lib`, { mode: 0o755, uid: 1000, gid: 1000, label: STOCK_PROBE_LABELS.apk, time });
+      await fs.mkdir(`${apkDir}/lib/arm64`, { mode: 0o755, uid: 1000, gid: 1000, label: STOCK_PROBE_LABELS.apk, time });
+      await fs.writeFile(`${apkDir}/lib/arm64/libfiemap.so`, o.probeApp.fiemapLib, {
+        mode: 0o755, uid: 1000, gid: 1000, label: STOCK_PROBE_LABELS.apk, time,
+      });
+      plantedPaths.push(`/data${apkDir}/lib/arm64/libfiemap.so`);
+    }
+
+    await fs.mkdir('/system', { mode: 0o775, uid: 1000, gid: 1000, label: STOCK_PROBE_LABELS.data, time });
+    await fs.writeFile('/system/packages.xml', enc.encode(xml), {
+      mode: 0o660, uid: 1000, gid: 1000, label: STOCK_PROBE_LABELS.data, time,
+    });
+    plantedPaths.push('/data/system/packages.xml');
   }
 
   await fs.flush();
@@ -203,13 +312,45 @@ export interface StockAdbSession {
   readFile(path: string): Promise<Uint8Array | null>;
 }
 
+export interface FiemapExtent {
+  logical: number;
+  physical: number;
+  block: number;
+  length: number;
+  blocks: number;
+  flags: number;
+}
+
+export interface FiemapResult {
+  path: string;
+  size?: number;
+  ino?: number;
+  extents?: FiemapExtent[];
+  error?: string;
+}
+
+export interface StockHttpSession {
+  status(): Promise<{ ok: boolean; uid: number; pid: number; sdk: number; fiemap: boolean; bootCompleted: string } | null>;
+  props(): Promise<string>;
+  dtPanel(): Promise<string>;
+  list(path: string): Promise<string[]>;
+  readFile(path: string): Promise<{ status: 'ok'; data: Uint8Array } | { status: 'missing' | 'denied' }>;
+  fiemap(path: string): Promise<FiemapResult>;
+}
+
 export interface StockProbeDeps {
   log(line: string): void;
   confirm(question: string): Promise<boolean>;
+  /** Optional free-text prompt (e.g. asking for the Mirror's LAN IP during no-ADB HTTP fallback). */
+  promptText?(question: string): Promise<string>;
   /** Checks current USB adb state (and optionally tries TCP connect if tcpHost is provided). */
   checkAdb(tcpTarget?: string): Promise<{ usb: AdbState; tcp?: AdbState; session?: StockAdbSession }>;
   /** Waits for / opens the Mirror in fastboot. */
   fastboot(): Promise<StockFastboot>;
+  /** Loads or builds the no-ADB fallback probe APK (+ cert.hex + optional libfiemap.so). */
+  loadProbeApp?(): Promise<ProbeAppPayload | undefined>;
+  /** Connects to the HTTP probe server running on the Mirror (default port 18765). */
+  connectHttp?(host: string, port: number): StockHttpSession;
   /** Optional vendor TSV rows (option-c-vendor-files.tsv) for Step 6 comparison. */
   vendorEntries?: VendorEntry[];
   sleep?: (ms: number) => Promise<void>;
@@ -244,7 +385,7 @@ export interface VendorPartSummary {
 export interface ProbeReport {
   startedAt: string;
   updatedAt: string;
-  mode: 'full' | 'read-only' | 'build-only' | 'extract-only';
+  mode: 'full' | 'read-only' | 'build-only' | 'extract-only' | 'http-only';
   dryRun: boolean;
   steps: StepRecord[];
   preflight?: {
@@ -252,6 +393,7 @@ export interface ProbeReport {
     usbConfig: string;
     tcpPort?: number;
     wifiConfigured: boolean;
+    probeAppPrePlanted: boolean;
     preFlashUsbAdb: AdbState;
   };
   fastboot?: {
@@ -280,7 +422,18 @@ export interface ProbeReport {
     outcome: 'authorized' | 'unauthorized' | 'not-seen';
     nextHint: string;
   };
+  httpFallback?: {
+    triggered: boolean;
+    reFlashedUserdataWithApp: boolean;
+    port: number;
+    connected: boolean;
+    uid?: number;
+    sdk?: number;
+    fiemapAvailable?: boolean;
+    note?: string;
+  };
   extraction?: {
+    transport: 'adb' | 'http';
     props: Record<string, string>;
     selinuxEnforce?: string;
     shellId?: string;
@@ -297,6 +450,7 @@ export interface ProbeReport {
     dmesgHighlights: string[];
     keySystemFiles: FileAudit[];
     extraConfigFiles: FileAudit[];
+    fiemapResults: FiemapResult[];
     vendorSummary: VendorPartSummary[];
     vendorCameraIncluded: boolean;
     pulledVendorBlobs: number;
@@ -309,11 +463,17 @@ export interface StockProbeOptions {
   usbConfig?: string;
   tcpPort?: number;
   tcpHost?: string;
+  /** Optional LAN IP of the Mirror for the no-ADB HTTP probe server (port 18765). */
+  probeHost?: string;
+  probeHttpPort?: number;
+  /** Plant /data/app + 1-entry packages.xml on the first userdata flash (single flash for 1.2x+). */
+  withProbeApk?: boolean;
   wifi?: { ssid: string; password: string };
   fill?: boolean;
   readOnly?: boolean;
   buildOnly?: boolean;
   extractOnly?: boolean;
+  httpOnly?: boolean;
   includeCamera?: boolean;
   pullSystemBlobs?: boolean;
   waitSeconds?: number;
@@ -335,7 +495,6 @@ function sha256Hex(data: Uint8Array): string {
 }
 
 function redactPossibleIds(text: string): string {
-  // Strip 6-byte MAC addresses and androidboot.serialno=... tokens from free-form outputs like dmesg.
   return text
     .replace(/androidboot\.serialno=[^\s]+/gi, 'androidboot.serialno=<redacted>')
     .replace(/\b([0-9a-f]{2}:){5}[0-9a-f]{2}\b/gi, '<mac-redacted>');
@@ -350,6 +509,42 @@ function fileSink(path: string) {
     bytes: () => pos,
     close: () => closeSync(fd),
   };
+}
+
+function parseGetprop(rawGetprop: string): { props: Record<string, string>; initServices: Record<string, string> } {
+  const allProps = new Map<string, string>();
+  for (const line of rawGetprop.split(/\r?\n/)) {
+    const m = /^\[([^\]]+)\]: \[(.*)\]$/.exec(line.trim());
+    if (m) allProps.set(m[1]!, m[2]!);
+  }
+  const props: Record<string, string> = {};
+  for (const k of STOCK_PROPS_ALLOWLIST) {
+    const v = allProps.get(k);
+    if (v !== undefined && v !== '') props[k] = v;
+  }
+  const initServices: Record<string, string> = {};
+  for (const [k, v] of [...allProps.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    if (k.startsWith('init.svc.')) initServices[k.slice('init.svc.'.length)] = v;
+  }
+  return { props, initServices };
+}
+
+function extractKernelConfigFlags(cfgGz: Uint8Array | null, rawDir: string): string[] {
+  const flags: string[] = [];
+  if (!cfgGz || cfgGz.length === 0) return flags;
+  writeFileSync(join(rawDir, 'config.gz'), cfgGz);
+  try {
+    const cfgText = gunzipSync(cfgGz).toString('utf8');
+    writeFileSync(join(rawDir, 'kernel.config'), cfgText, 'utf8');
+    for (const l of cfgText.split(/\r?\n/)) {
+      if (/^(# )?CONFIG_(LOCALVERSION|IKCONFIG_PROC|MODULES|MODULE_SIG|MODVERSIONS|KALLSYMS_ALL|PID_NS|KEXEC|ARM_PSCI|MSM_SCM)(=| is not set)/.test(l)) {
+        flags.push(l);
+      }
+    }
+  } catch {
+    flags.push('(config.gz pulled but gunzip failed)');
+  }
+  return flags;
 }
 
 /** Renders the redacted, copy-pasteable Markdown progress report. */
@@ -382,6 +577,7 @@ export function renderReportMarkdown(r: ProbeReport): string {
     lines.push(`| Planned \`persist.sys.usb.config\` | \`${r.preflight.usbConfig}\` |`);
     lines.push(`| Planned \`persist.adb.tcp.port\` | ${r.preflight.tcpPort ? `\`${r.preflight.tcpPort}\`` : 'disabled'} |`);
     lines.push(`| Pre-saved Wi-Fi in userdata | ${r.preflight.wifiConfigured ? 'yes (PBKDF2 PSK only)' : 'no'} |`);
+    lines.push(`| No-ADB HTTP probe APK pre-planted | ${r.preflight.probeAppPrePlanted ? 'yes' : 'no (auto-fallback if ADB blocked)'} |`);
     lines.push(`| Pre-flash USB adb state | \`${r.preflight.preFlashUsbAdb}\` |`);
   }
 
@@ -434,10 +630,21 @@ export function renderReportMarkdown(r: ProbeReport): string {
     lines.push(`- **Next:** ${r.adbWait.nextHint}`);
   }
 
+  if (r.httpFallback) {
+    lines.push('');
+    lines.push('## Step 5b — No-ADB HTTP Probe App Fallback (`userdata`-only)');
+    lines.push('');
+    lines.push(`- **Triggered:** ${r.httpFallback.triggered ? 'yes' : 'no'}`);
+    lines.push(`- **Re-flashed \`userdata\` with probe APK + \`packages.xml\`:** ${r.httpFallback.reFlashedUserdataWithApp ? 'yes (stock `system` untouched)' : 'no'}`);
+    lines.push(`- **HTTP probe connected (port ${r.httpFallback.port}):** ${r.httpFallback.connected ? 'yes' : 'no'}`);
+    if (r.httpFallback.uid !== undefined) lines.push(`- **Probe app runtime:** \`uid=${r.httpFallback.uid}\`, SDK \`${r.httpFallback.sdk}\`, \`FS_IOC_FIEMAP\`: ${r.httpFallback.fiemapAvailable ? 'available' : 'not bundled'}`);
+    if (r.httpFallback.note) lines.push(`- **Note:** ${r.httpFallback.note}`);
+  }
+
   if (r.extraction) {
     const ex = r.extraction;
     lines.push('');
-    lines.push('## Step 6 — Stock System Extraction (redacted)');
+    lines.push(`## Step 6 — Stock System Extraction (via \`${ex.transport}\`, redacted)`);
     lines.push('');
     lines.push('### Identity & Security');
     lines.push('');
@@ -527,6 +734,20 @@ export function renderReportMarkdown(r: ProbeReport): string {
       }
     }
 
+    if (ex.fiemapResults.length) {
+      lines.push('');
+      lines.push('### Physical Block Extents (`FS_IOC_FIEMAP`, read-only)');
+      lines.push('');
+      lines.push('| Path | Size | Extents (physical 4 KiB block + count) |');
+      lines.push('|---|---:|---|');
+      for (const fm of ex.fiemapResults) {
+        const desc = fm.error
+          ? `error: \`${fm.error}\``
+          : (fm.extents ?? []).map((e) => `block \`${e.block}\` × \`${e.blocks}\` (logical ${e.logical})`).join('; ') || 'none';
+        lines.push(`| \`${fm.path}\` | ${fm.size ?? '—'} | ${desc} |`);
+      }
+    }
+
     if (ex.vendorSummary.length) {
       lines.push('');
       lines.push(`### Option C Vendor File Audit (${ex.vendorCameraIncluded ? 'all parts' : 'non-camera parts; pass --include-camera for camera'})`);
@@ -553,8 +774,8 @@ function initialSteps(): StepRecord[] {
     { number: 2, title: 'Fastboot device info & partition checks (read-only)', status: 'pending' },
     { number: 3, title: 'Build sparse userdata probe image (local file only)', status: 'pending' },
     { number: 4, title: 'Flash userdata ONLY & reboot (WRITES userdata; system untouched)', status: 'pending' },
-    { number: 5, title: 'Wait for stock Android & check ADB authorization', status: 'pending' },
-    { number: 6, title: 'Extract stock diagnostics & vendor inventory (read-only over ADB)', status: 'pending' },
+    { number: 5, title: 'Wait for stock ADB (auto-fallback to HTTP probe app if blocked)', status: 'pending' },
+    { number: 6, title: 'Extract stock diagnostics & vendor inventory (read-only)', status: 'pending' },
   ];
 }
 
@@ -568,10 +789,11 @@ export interface StockProbeResult {
 export async function runStockProbe(o: StockProbeOptions, d: StockProbeDeps): Promise<StockProbeResult> {
   const now = d.now ?? (() => new Date());
   const sleep = d.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
-  const mode: ProbeReport['mode'] = o.extractOnly ? 'extract-only'
-    : o.readOnly ? 'read-only'
-      : o.buildOnly ? 'build-only'
-        : 'full';
+  const mode: ProbeReport['mode'] = o.httpOnly ? 'http-only'
+    : o.extractOnly ? 'extract-only'
+      : o.readOnly ? 'read-only'
+        : o.buildOnly ? 'build-only'
+          : 'full';
 
   mkdirSync(o.outDir, { recursive: true });
   const rawDir = join(o.outDir, 'raw');
@@ -615,11 +837,35 @@ export async function runStockProbe(o: StockProbeOptions, d: StockProbeDeps): Pr
   const usbConfig = o.usbConfig ?? 'adb';
   const tcpPort = o.tcpPort;
   const tcpTarget = o.tcpHost && tcpPort ? `${o.tcpHost}:${tcpPort}` : undefined;
+  const probeHttpPort = o.probeHttpPort ?? DEFAULT_PROBE_HTTP_PORT;
 
   let fb: StockFastboot | undefined;
   let userdataBytes = o.userdataBytesOverride ?? 0;
   let sparsePath: string | undefined;
   let adbSession: StockAdbSession | undefined;
+  let httpSession: StockHttpSession | undefined;
+  let probeAppPlanted = false;
+
+  const writeSparseUserdata = async (fileName: string, probeApp?: ProbeAppPayload) => {
+    const blocks = Math.floor(userdataBytes / 4096);
+    const disk = new Disk(new MemoryStore(), 4096, blocks, { zeroed: true });
+    const { plantedPaths } = await buildStockProbeUserdata(disk, {
+      adbKey: o.adbKey,
+      usbConfig,
+      tcpPort,
+      wifi: o.wifi,
+      ...(probeApp ? { probeApp } : {}),
+    });
+    const outPath = join(rawDir, fileName);
+    const sink = fileSink(outPath);
+    const fill = o.fill ?? true;
+    try {
+      await writeSparse(disk, (b) => sink.write(b), { fill });
+    } finally {
+      sink.close();
+    }
+    return { outPath, blocks, sparseBytes: sink.bytes(), fill, plantedPaths };
+  };
 
   saveReport();
 
@@ -633,17 +879,18 @@ export async function runStockProbe(o: StockProbeOptions, d: StockProbeDeps): Pr
     if (fp === GLASS_PANES_KEY_FINGERPRINT) {
       throw new Error('refusing the published Glass Panes project key; pass your own --adb-key');
     }
-    const pre = await d.checkAdb(tcpTarget);
+    const pre = o.httpOnly ? { usb: 'not-seen' as AdbState } : await d.checkAdb(tcpTarget);
     report.preflight = {
       adbKeyFingerprint: fp,
       usbConfig,
       ...(tcpPort ? { tcpPort } : {}),
       wifiConfigured: !!o.wifi,
+      probeAppPrePlanted: !!o.withProbeApk,
       preFlashUsbAdb: pre.usb,
     };
     d.log(`    ADB key fingerprint: ${fp}`);
     d.log(`    Pre-flash USB adb state: ${pre.usb}`);
-    if (pre.usb === 'device' && !o.extractOnly) {
+    if (pre.usb === 'device' && !o.extractOnly && !o.httpOnly) {
       d.log('    NOTE: Mirror already responds as authorized over ADB! You may not need to wipe userdata — rerun with --extract-only to keep stock userdata intact.');
       adbSession = pre.session;
     }
@@ -654,11 +901,12 @@ export async function runStockProbe(o: StockProbeOptions, d: StockProbeDeps): Pr
     throw e;
   }
 
-  // ---- Steps 2-4 (skipped in --extract-only mode) ----
-  if (o.extractOnly) {
-    setStep(1, 'skipped', '--extract-only');
-    setStep(2, 'skipped', '--extract-only');
-    setStep(3, 'skipped', '--extract-only');
+  // ---- Steps 2-4 (skipped in --extract-only and --http-only modes) ----
+  if (o.extractOnly || o.httpOnly) {
+    const why = o.httpOnly ? '--http-only' : '--extract-only';
+    setStep(1, 'skipped', why);
+    setStep(2, 'skipped', why);
+    setStep(3, 'skipped', why);
   } else {
     // ---- Step 2: Fastboot (read-only) ----
     d.log('    (If not in fastboot yet: power off, hold VOL- [SW3, top button on small green board], switch power on for ~5s.)');
@@ -720,27 +968,24 @@ export async function runStockProbe(o: StockProbeOptions, d: StockProbeDeps): Pr
       return { report, reportPath, outcome: 'stopped' };
     }
     try {
-      const blocks = Math.floor(userdataBytes / 4096);
-      const disk = new Disk(new MemoryStore(), 4096, blocks, { zeroed: true });
-      const { plantedPaths } = await buildStockProbeUserdata(disk, {
-        adbKey: o.adbKey,
-        usbConfig,
-        tcpPort,
-        wifi: o.wifi,
-      });
-      sparsePath = join(rawDir, 'userdata-probe.sparse');
-      const sink = fileSink(sparsePath);
-      const fill = o.fill ?? true;
-      try {
-        await writeSparse(disk, (b) => sink.write(b), { fill });
-      } finally {
-        sink.close();
+      let probeApp: ProbeAppPayload | undefined;
+      if (o.withProbeApk) {
+        probeApp = await d.loadProbeApp?.();
+        if (!probeApp) throw new Error('--with-probe-apk requested, but stock-probe.apk could not be loaded or built');
+        probeAppPlanted = true;
       }
-      const sparseBytes = sink.bytes();
-      report.sparseBuild = { userdataBytes, blocks, sparseBytes, fill, plantedPaths };
-      d.log(`    wrote ${sparsePath} (${sparseBytes} bytes sparse for ${userdataBytes} byte partition)`);
-      d.log(`    planted: ${plantedPaths.join(', ')}`);
-      setStep(2, 'done', `${sparseBytes} bytes sparse (${plantedPaths.length} files)`);
+      const built = await writeSparseUserdata('userdata-probe.sparse', probeApp);
+      sparsePath = built.outPath;
+      report.sparseBuild = {
+        userdataBytes,
+        blocks: built.blocks,
+        sparseBytes: built.sparseBytes,
+        fill: built.fill,
+        plantedPaths: built.plantedPaths,
+      };
+      d.log(`    wrote ${sparsePath} (${built.sparseBytes} bytes sparse for ${userdataBytes} byte partition)`);
+      d.log(`    planted: ${built.plantedPaths.join(', ')}`);
+      setStep(2, 'done', `${built.sparseBytes} bytes sparse (${built.plantedPaths.length} files${probeAppPlanted ? ', incl. HTTP probe APK' : ''})`);
       checkpoint(2);
     } catch (e) {
       setStep(2, 'failed', (e as Error).message);
@@ -774,227 +1019,390 @@ export async function runStockProbe(o: StockProbeOptions, d: StockProbeDeps): Pr
     }
   }
 
-  // ---- Step 5: Wait for stock Android & check ADB authorization ----
-  if (!(await ask(4, 'Wait for stock Android to boot and check USB/TCP ADB state?'))) {
-    return { report, reportPath, sparsePath, outcome: 'stopped' };
-  }
-  try {
-    const waitSec = o.waitSeconds ?? 180;
+  // ---- Step 5: Wait for stock ADB — or seamlessly transition to the No-ADB HTTP Probe App Fallback ----
+  const waitForHttpProbe = async (host: string, waitSec: number): Promise<StockHttpSession | undefined> => {
+    if (!d.connectHttp) return undefined;
+    const sess = d.connectHttp(host, probeHttpPort);
     const pollMs = 2000;
     const maxTries = Math.max(1, Math.ceil((waitSec * 1000) / pollMs));
-    let lastUsb: AdbState = 'not-seen';
-    let lastTcp: AdbState | undefined;
-    adbSession = undefined;
-
     for (let i = 0; i < maxTries; i++) {
-      const st = await d.checkAdb(tcpTarget);
-      lastUsb = st.usb;
-      lastTcp = st.tcp;
-      if (st.session && (st.usb === 'device' || st.tcp === 'device')) {
-        adbSession = st.session;
-        break;
+      const st = await sess.status().catch(() => null);
+      if (st?.ok) {
+        report.httpFallback = {
+          ...(report.httpFallback ?? { triggered: true, reFlashedUserdataWithApp: false, port: probeHttpPort }),
+          connected: true,
+          uid: st.uid,
+          sdk: st.sdk,
+          fiemapAvailable: st.fiemap,
+        };
+        d.log(`    HTTP probe app answered! uid=${st.uid}, sdk=${st.sdk}, fiemap=${st.fiemap}`);
+        return sess;
       }
-      if (i % 10 === 0) {
-        d.log(`    waiting for stock adb (${i * 2}s/${waitSec}s): usb=${st.usb}${st.tcp ? `, tcp=${st.tcp}` : ''}`);
-      }
+      if (i % 10 === 0) d.log(`    waiting for HTTP probe app on port ${probeHttpPort} (${i * 2}s/${waitSec}s)...`);
       if (i + 1 < maxTries) await sleep(pollMs);
     }
+    return undefined;
+  };
 
-    if (adbSession) {
-      report.adbWait = {
-        usb: lastUsb,
-        ...(lastTcp !== undefined ? { tcp: lastTcp } : {}),
-        outcome: 'authorized',
-        nextHint: 'Authorized ADB on untouched stock system! Proceeding to Step 6 extraction.',
-      };
-      d.log(`    AUTHORIZED over ${lastUsb === 'device' ? 'USB' : 'TCP'}!`);
-      setStep(4, 'done', `authorized (usb=${lastUsb}${lastTcp ? `, tcp=${lastTcp}` : ''})`);
-      checkpoint(4);
-    } else if (lastUsb === 'unauthorized' || lastTcp === 'unauthorized') {
-      const hint = 'Stock adbd saw the computer but rejected /data/misc/adb/adb_keys (likely firmware 1.2x+ / S22Q401 behavior). Share report.md — this is a key finding!';
-      report.adbWait = {
-        usb: lastUsb,
-        ...(lastTcp !== undefined ? { tcp: lastTcp } : {}),
-        outcome: 'unauthorized',
-        nextHint: hint,
-      };
-      d.log(`    UNAUTHORIZED: ${hint}`);
-      setStep(4, 'blocked', 'adb unauthorized (adbd rejected adb_keys)');
-      setStep(5, 'skipped', 'adb unauthorized');
-      checkpoint(4, 'Please share report.md now.');
-      return { report, reportPath, sparsePath, outcome: 'blocked' };
-    } else {
-      const hint = 'No adb device appeared. Try reflashing userdata with --usb-config diag,serial_smd,rmnet_bam,adb, or plug in Ethernet and rerun --extract-only --tcp-host <mirror-ip>.';
-      report.adbWait = {
-        usb: lastUsb,
-        ...(lastTcp !== undefined ? { tcp: lastTcp } : {}),
-        outcome: 'not-seen',
-        nextHint: hint,
-      };
-      d.log(`    NOT SEEN: ${hint}`);
-      setStep(4, 'blocked', 'no adb device seen before timeout');
-      setStep(5, 'skipped', 'no adb device');
-      checkpoint(4, 'Please share report.md now.');
+  if (o.httpOnly) {
+    if (!(await ask(4, `Connect directly to the stock HTTP probe app on port ${probeHttpPort}?`))) {
+      return { report, reportPath, sparsePath, outcome: 'stopped' };
+    }
+    const host = (o.probeHost ?? (await d.promptText?.('Enter the Mirror\'s LAN IP address:')) ?? '').trim();
+    if (!host) {
+      setStep(4, 'blocked', 'no Mirror IP provided for --http-only');
+      setStep(5, 'skipped', 'no probe host');
       return { report, reportPath, sparsePath, outcome: 'blocked' };
     }
-  } catch (e) {
-    setStep(4, 'failed', (e as Error).message);
-    throw e;
+    report.httpFallback = { triggered: true, reFlashedUserdataWithApp: false, port: probeHttpPort, connected: false };
+    httpSession = await waitForHttpProbe(host, o.waitSeconds ?? 60);
+    if (!httpSession) {
+      report.httpFallback.note = `no answer on port ${probeHttpPort} before timeout`;
+      setStep(4, 'blocked', 'HTTP probe app did not answer');
+      setStep(5, 'skipped', 'HTTP probe app unreachable');
+      checkpoint(4, 'Check Ethernet/Wi-Fi and IP, then retry --http-only --probe-host <ip>.');
+      return { report, reportPath, sparsePath, outcome: 'blocked' };
+    }
+    setStep(4, 'done', `connected to HTTP probe app (uid=${report.httpFallback.uid}, fiemap=${report.httpFallback.fiemapAvailable})`);
+    checkpoint(4);
+  } else {
+    if (!(await ask(4, 'Wait for stock Android to boot and check USB/TCP ADB state?'))) {
+      return { report, reportPath, sparsePath, outcome: 'stopped' };
+    }
+    try {
+      const waitSec = o.waitSeconds ?? 180;
+      const pollMs = 2000;
+      const maxTries = Math.max(1, Math.ceil((waitSec * 1000) / pollMs));
+      let lastUsb: AdbState = 'not-seen';
+      let lastTcp: AdbState | undefined;
+      adbSession = undefined;
+
+      for (let i = 0; i < maxTries; i++) {
+        const st = await d.checkAdb(tcpTarget);
+        lastUsb = st.usb;
+        lastTcp = st.tcp;
+        if (st.session && (st.usb === 'device' || st.tcp === 'device')) {
+          adbSession = st.session;
+          break;
+        }
+        if (i % 10 === 0) {
+          d.log(`    waiting for stock adb (${i * 2}s/${waitSec}s): usb=${st.usb}${st.tcp ? `, tcp=${st.tcp}` : ''}`);
+        }
+        if (i + 1 < maxTries) await sleep(pollMs);
+      }
+
+      if (adbSession) {
+        report.adbWait = {
+          usb: lastUsb,
+          ...(lastTcp !== undefined ? { tcp: lastTcp } : {}),
+          outcome: 'authorized',
+          nextHint: 'Authorized ADB on untouched stock system! Proceeding to Step 6 extraction.',
+        };
+        d.log(`    AUTHORIZED over ${lastUsb === 'device' ? 'USB' : 'TCP'}!`);
+        setStep(4, 'done', `authorized (usb=${lastUsb}${lastTcp ? `, tcp=${lastTcp}` : ''})`);
+        checkpoint(4);
+      } else {
+        const isUnauth = lastUsb === 'unauthorized' || lastTcp === 'unauthorized';
+        const outcome: 'unauthorized' | 'not-seen' = isUnauth ? 'unauthorized' : 'not-seen';
+        const hint = isUnauth
+          ? 'Stock adbd rejected /data/misc/adb/adb_keys (1.2x+ / S22Q401 behavior). Stock system is untouched — falling back to the no-ADB HTTP probe app in userdata.'
+          : 'No adb device appeared. Stock system is untouched — falling back to the no-ADB HTTP probe app in userdata (or retry with --usb-config diag,serial_smd,rmnet_bam,adb).';
+        report.adbWait = {
+          usb: lastUsb,
+          ...(lastTcp !== undefined ? { tcp: lastTcp } : {}),
+          outcome,
+          nextHint: hint,
+        };
+        d.log(`    ${outcome.toUpperCase()}: ${hint}`);
+        saveReport();
+
+        // Offer the no-ADB fallback (plant /data/app + 1-entry packages.xml in userdata and extract over HTTP).
+        const canFallback = !!d.connectHttp && (probeAppPlanted || (!!d.loadProbeApp && userdataBytes > 0));
+        const tryFallback = canFallback && (await d.confirm(
+          probeAppPlanted
+            ? 'No ADB — probe APK is already planted. Connect to the Mirror\'s HTTP probe server now?'
+            : 'No ADB — run the no-ADB fallback? (Builds & flashes userdata ONLY with /data/app probe APK + 1-entry packages.xml; stock system stays untouched)',
+        ));
+
+        if (!tryFallback) {
+          setStep(4, 'blocked', isUnauth ? 'adb unauthorized (adbd rejected adb_keys)' : 'no adb device seen before timeout');
+          setStep(5, 'skipped', outcome);
+          checkpoint(4, 'Please share report.md now.');
+          return { report, reportPath, sparsePath, outcome: 'blocked' };
+        }
+
+        report.httpFallback = { triggered: true, reFlashedUserdataWithApp: false, port: probeHttpPort, connected: false };
+        if (!probeAppPlanted) {
+          const probeApp = await d.loadProbeApp?.();
+          if (!probeApp) {
+            report.httpFallback.note = 'stock-probe.apk not available (run tools/mirror/stock-probe-app/build.sh first)';
+            setStep(4, 'blocked', 'no-ADB fallback aborted: probe APK not built');
+            setStep(5, 'skipped', 'probe APK missing');
+            checkpoint(4, 'Build the probe APK with tools/mirror/stock-probe-app/build.sh and rerun.');
+            return { report, reportPath, sparsePath, outcome: 'blocked' };
+          }
+          const built = await writeSparseUserdata('userdata-probe-app.sparse', probeApp);
+          sparsePath = built.outPath;
+          report.sparseBuild = {
+            userdataBytes,
+            blocks: built.blocks,
+            sparseBytes: built.sparseBytes,
+            fill: built.fill,
+            plantedPaths: built.plantedPaths,
+          };
+          d.log(`    built ${sparsePath} (${built.sparseBytes} bytes sparse, incl. /data/app probe APK + 1-entry packages.xml)`);
+          d.log('    Put the Mirror back into fastboot now (power off, hold VOL- [SW3], switch on ~5s).');
+          if (!(await d.confirm('Mirror in fastboot — FLASH userdata ONLY with the probe APK and reboot?'))) {
+            report.httpFallback.note = 'declined before flashing probe-app userdata';
+            setStep(4, 'stopped', 'declined no-ADB fallback flash');
+            setStep(5, 'skipped', 'stopped');
+            return { report, reportPath, sparsePath, outcome: 'stopped' };
+          }
+          fb = await d.fastboot();
+          await fb.flashUserdata(sparsePath);
+          await fb.reboot();
+          report.httpFallback.reFlashedUserdataWithApp = true;
+          probeAppPlanted = true;
+          d.log('    userdata (with probe APK + packages.xml) flashed and rebooted; stock system untouched.');
+          saveReport();
+        }
+
+        d.log('    Plug Ethernet into the Mirror (or let pre-saved Wi-Fi join) and find its LAN IP from your router.');
+        const host = (o.probeHost ?? (await d.promptText?.(`Enter the Mirror's LAN IP (for http://<ip>:${probeHttpPort}/status), or leave blank to stop:`)) ?? '').trim();
+        if (!host) {
+          report.httpFallback.note = 'waiting for LAN IP — rerun with --http-only --probe-host <mirror-ip>';
+          setStep(4, 'blocked', 'probe APK flashed; rerun with --http-only --probe-host <ip>');
+          setStep(5, 'skipped', 'waiting for LAN IP');
+          checkpoint(4, 'Once you have the Mirror\'s IP, run with --http-only --probe-host <ip> (no reflash needed).');
+          return { report, reportPath, sparsePath, outcome: 'blocked' };
+        }
+
+        httpSession = await waitForHttpProbe(host, waitSec);
+        if (!httpSession) {
+          report.httpFallback.note = `no HTTP response on port ${probeHttpPort} within ${waitSec}s`;
+          setStep(4, 'blocked', 'HTTP probe app did not answer before timeout');
+          setStep(5, 'skipped', 'HTTP probe app unreachable');
+          checkpoint(4, 'Share report.md, or retry with --http-only --probe-host <ip> once the Mirror is online.');
+          return { report, reportPath, sparsePath, outcome: 'blocked' };
+        }
+
+        setStep(4, 'done', `ADB ${outcome} -> HTTP probe connected (uid=${report.httpFallback.uid}, fiemap=${report.httpFallback.fiemapAvailable})`);
+        checkpoint(4);
+      }
+    } catch (e) {
+      setStep(4, 'failed', (e as Error).message);
+      throw e;
+    }
   }
 
-  // ---- Step 6: Extract stock diagnostics & vendor inventory ----
-  if (!(await ask(5, 'Run read-only stock diagnostics & Option C vendor file audit over ADB?'))) {
+  // ---- Step 6: Extract stock diagnostics & vendor inventory (over ADB or HTTP) ----
+  const transport: 'adb' | 'http' = adbSession ? 'adb' : 'http';
+  if (!(await ask(5, `Run read-only stock diagnostics & Option C vendor file audit (via ${transport.toUpperCase()})?`))) {
     return { report, reportPath, sparsePath, outcome: 'stopped' };
   }
   try {
-    const sh = adbSession!;
-    // Wait briefly for boot_completed so init.svc.* and display are settled.
-    for (let i = 0; i < 30; i++) {
-      const bc = (await sh.shell('getprop sys.boot_completed')).out.trim();
-      if (bc === '1') break;
-      await sleep(1000);
-    }
-
-    const rawGetprop = (await sh.shell('getprop')).out;
-    writeFileSync(join(rawDir, 'getprop.txt'), rawGetprop, 'utf8');
-
-    const allProps = new Map<string, string>();
-    for (const line of rawGetprop.split(/\r?\n/)) {
-      const m = /^\[([^\]]+)\]: \[(.*)\]$/.exec(line.trim());
-      if (m) allProps.set(m[1]!, m[2]!);
-    }
-    const props: Record<string, string> = {};
-    for (const k of STOCK_PROPS_ALLOWLIST) {
-      const v = allProps.get(k);
-      if (v !== undefined && v !== '') props[k] = v;
-    }
-    const initServices: Record<string, string> = {};
-    for (const [k, v] of [...allProps.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-      if (k.startsWith('init.svc.')) initServices[k.slice('init.svc.'.length)] = v;
-    }
-
-    const selinuxEnforce = (await sh.shell('getenforce')).out.trim();
-    const shellId = (await sh.shell('id')).out.trim();
-    const procVersion = (await sh.shell('cat /proc/version')).out.trim();
-    const procModules = (await sh.shell('cat /proc/modules')).out.trim();
-    const meminfoHead = (await sh.shell('head -3 /proc/meminfo')).out.trim();
-    const partitions = (await sh.shell('cat /proc/partitions')).out.trim();
-
-    writeFileSync(join(rawDir, 'proc-version.txt'), `${procVersion}\n`, 'utf8');
-    writeFileSync(join(rawDir, 'partitions.txt'), `${partitions}\n`, 'utf8');
-
-    // /proc/config.gz
-    const kernelConfigFlags: string[] = [];
-    const cfgGz = await sh.readFile('/proc/config.gz');
-    if (cfgGz && cfgGz.length > 0) {
-      writeFileSync(join(rawDir, 'config.gz'), cfgGz);
-      try {
-        const cfgText = gunzipSync(cfgGz).toString('utf8');
-        writeFileSync(join(rawDir, 'kernel.config'), cfgText, 'utf8');
-        for (const l of cfgText.split(/\r?\n/)) {
-          if (/^(# )?CONFIG_(LOCALVERSION|IKCONFIG_PROC|MODULES|MODULE_SIG|MODVERSIONS|KALLSYMS_ALL|PID_NS|KEXEC|ARM_PSCI|MSM_SCM)(=| is not set)/.test(l)) {
-            kernelConfigFlags.push(l);
-          }
-        }
-      } catch {
-        kernelConfigFlags.push('(config.gz pulled but gunzip failed)');
-      }
-    }
-
-    // dmesg (raw locally; only filtered & redacted lines in report)
-    const dmesg = (await sh.shell('dmesg')).out;
-    writeFileSync(join(rawDir, 'dmesg.txt'), dmesg, 'utf8');
-    const dmesgHighlights = dmesg
-      .split(/\r?\n/)
-      .filter((l) => /adsprpc|insmod|adb_keys_file|install-recovery|qcom-post-boot/i.test(l))
-      .slice(0, 40)
-      .map((l) => redactPossibleIds(l));
-
-    // Display, rotation, audio, backlight, device-tree (skips /chosen serials)
-    const dumpsysDisplay = (await sh.shell('dumpsys display')).out;
-    const dumpsysWindow = (await sh.shell('dumpsys window windows')).out;
-    const dumpsysAudio = (await sh.shell('dumpsys audio')).out;
-    writeFileSync(join(rawDir, 'dumpsys-display.txt'), dumpsysDisplay, 'utf8');
-    writeFileSync(join(rawDir, 'dumpsys-window.txt'), dumpsysWindow, 'utf8');
-    writeFileSync(join(rawDir, 'dumpsys-audio.txt'), dumpsysAudio, 'utf8');
-    const rotation = /(?:^|\s)mRotation=(\d)\b/m.exec(dumpsysWindow)?.[1];
-
-    const backlightOut = (await sh.shell('ls -la /sys/class/backlight /sys/class/leds 2>&1')).out.trim();
-    const backlightEntries = backlightOut ? backlightOut.split(/\r?\n/).slice(0, 30) : [];
-
-    const dtCmd = 'find /proc/device-tree \\( -name compatible -o -name qcom,mdss-dsi-panel-name \\) 2>/dev/null | grep -v /chosen/ | while read f; do c=$(tr "\\0" " " < "$f"); case "$f$c" in *panel-name*|*lvds*|*panel*|*bridge*|*dsi*|*sn65*|*tc358*|*lt89*|*it6*) echo "${f%/*}: ${f##*/}=$c";; esac; done';
-    const dtOut = (await sh.shell(dtCmd)).out.trim();
-    const dtPanelLines = dtOut ? dtOut.split(/\r?\n/).slice(0, 50) : [];
-    writeFileSync(join(rawDir, 'dt-panel.txt'), `${dtOut}\n`, 'utf8');
-
-    const auditFile = async (path: string, saveUnder?: string): Promise<FileAudit> => {
-      const data = await sh.readFile(path);
-      if (data !== null) {
-        if (saveUnder) {
-          const dest = join(rawDir, saveUnder, path.replace(/^\/+/, ''));
-          mkdirSync(dirname(dest), { recursive: true });
-          writeFileSync(dest, data);
-        }
-        return { path, status: 'readable', bytes: data.length, sha256: sha256Hex(data) };
-      }
-      const ls = (await sh.shell(`ls -ld '${path}' 2>&1`)).out;
-      return { path, status: /no such file/i.test(ls) ? 'missing' : 'denied' };
-    };
-
-    // Ramdisk / SELinux files
+    let rawGetprop = '';
+    let selinuxEnforce: string | undefined;
+    let shellId: string | undefined;
+    let procVersion = '';
+    let procModules = '';
+    let meminfoHead = '';
+    let partitions = '';
+    let kernelConfigFlags: string[] = [];
+    let rotation: string | undefined;
+    let backlightEntries: string[] = [];
+    let dtPanelLines: string[] = [];
+    let dmesgHighlights: string[] = [];
     const ramdiskFiles: FileAudit[] = [];
-    for (const p of RAMDISK_FILES) ramdiskFiles.push(await auditFile(p, 'ramdisk'));
-
-    // Key stock /system files + mixer_paths / thermal-engine discovery
     const keySystemFiles: FileAudit[] = [];
-    for (const p of KEY_SYSTEM_FILES) keySystemFiles.push(await auditFile(p, 'key-system'));
-
-    const extraPaths = (await sh.shell('ls /system/etc/mixer_paths*.xml /system/etc/thermal-engine*.conf 2>/dev/null')).out
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter((l) => SAFE_PATH.test(l));
     const extraConfigFiles: FileAudit[] = [];
-    for (const p of extraPaths) extraConfigFiles.push(await auditFile(p, 'key-system'));
-
-    // Option C vendor comparison
+    const fiemapResults: FiemapResult[] = [];
     const vendorEntries = (d.vendorEntries ?? []).filter((e) => o.includeCamera || e.part !== 'camera');
     const byPart = new Map<string, VendorPartSummary>();
     let pulledVendorBlobs = 0;
     const vendorAuditLog: string[] = ['status\tpart\tpath\tbytes\tsha256'];
 
-    for (const entry of vendorEntries) {
-      let s = byPart.get(entry.part);
-      if (!s) {
-        s = { part: entry.part, total: 0, match: 0, differs: 0, missing: 0, denied: 0 };
-        byPart.set(entry.part, s);
+    if (adbSession) {
+      const sh = adbSession;
+      for (let i = 0; i < 30; i++) {
+        const bc = (await sh.shell('getprop sys.boot_completed')).out.trim();
+        if (bc === '1') break;
+        await sleep(1000);
       }
-      s.total += 1;
-      const data = await sh.readFile(entry.path);
-      if (data !== null) {
-        const hash = sha256Hex(data);
-        const status = hash === entry.sha256 ? 'match' : 'differs';
-        if (status === 'match') s.match += 1;
-        else s.differs += 1;
-        vendorAuditLog.push(`${status}\t${entry.part}\t${entry.path}\t${data.length}\t${hash}`);
-        if (o.pullSystemBlobs) {
-          const dest = join(rawDir, 'system', entry.path.replace(/^\/system\//, ''));
-          mkdirSync(dirname(dest), { recursive: true });
-          writeFileSync(dest, data);
-          pulledVendorBlobs += 1;
+      rawGetprop = (await sh.shell('getprop')).out;
+      selinuxEnforce = (await sh.shell('getenforce')).out.trim();
+      shellId = (await sh.shell('id')).out.trim();
+      procVersion = (await sh.shell('cat /proc/version')).out.trim();
+      procModules = (await sh.shell('cat /proc/modules')).out.trim();
+      meminfoHead = (await sh.shell('head -3 /proc/meminfo')).out.trim();
+      partitions = (await sh.shell('cat /proc/partitions')).out.trim();
+      kernelConfigFlags = extractKernelConfigFlags(await sh.readFile('/proc/config.gz'), rawDir);
+
+      const dmesg = (await sh.shell('dmesg')).out;
+      writeFileSync(join(rawDir, 'dmesg.txt'), dmesg, 'utf8');
+      dmesgHighlights = dmesg
+        .split(/\r?\n/)
+        .filter((l) => /adsprpc|insmod|adb_keys_file|install-recovery|qcom-post-boot/i.test(l))
+        .slice(0, 40)
+        .map((l) => redactPossibleIds(l));
+
+      const dumpsysDisplay = (await sh.shell('dumpsys display')).out;
+      const dumpsysWindow = (await sh.shell('dumpsys window windows')).out;
+      const dumpsysAudio = (await sh.shell('dumpsys audio')).out;
+      writeFileSync(join(rawDir, 'dumpsys-display.txt'), dumpsysDisplay, 'utf8');
+      writeFileSync(join(rawDir, 'dumpsys-window.txt'), dumpsysWindow, 'utf8');
+      writeFileSync(join(rawDir, 'dumpsys-audio.txt'), dumpsysAudio, 'utf8');
+      rotation = /(?:^|\s)mRotation=(\d)\b/m.exec(dumpsysWindow)?.[1];
+
+      const backlightOut = (await sh.shell('ls -la /sys/class/backlight /sys/class/leds 2>&1')).out.trim();
+      backlightEntries = backlightOut ? backlightOut.split(/\r?\n/).slice(0, 30) : [];
+
+      const dtCmd = 'find /proc/device-tree \\( -name compatible -o -name qcom,mdss-dsi-panel-name \\) 2>/dev/null | grep -v /chosen/ | while read f; do c=$(tr "\\0" " " < "$f"); case "$f$c" in *panel-name*|*lvds*|*panel*|*bridge*|*dsi*|*sn65*|*tc358*|*lt89*|*it6*) echo "${f%/*}: ${f##*/}=$c";; esac; done';
+      const dtOut = (await sh.shell(dtCmd)).out.trim();
+      dtPanelLines = dtOut ? dtOut.split(/\r?\n/).slice(0, 50) : [];
+      writeFileSync(join(rawDir, 'dt-panel.txt'), `${dtOut}\n`, 'utf8');
+
+      const auditFile = async (path: string, saveUnder?: string): Promise<FileAudit> => {
+        const data = await sh.readFile(path);
+        if (data !== null) {
+          if (saveUnder) {
+            const dest = join(rawDir, saveUnder, path.replace(/^\/+/, ''));
+            mkdirSync(dirname(dest), { recursive: true });
+            writeFileSync(dest, data);
+          }
+          return { path, status: 'readable', bytes: data.length, sha256: sha256Hex(data) };
         }
-      } else {
-        const ls = (await sh.shell(`ls -ld '${entry.path}' 2>&1`)).out;
-        const status = /no such file/i.test(ls) ? 'missing' : 'denied';
-        if (status === 'missing') s.missing += 1;
-        else s.denied += 1;
-        vendorAuditLog.push(`${status}\t${entry.part}\t${entry.path}\t0\t`);
+        const ls = (await sh.shell(`ls -ld '${path}' 2>&1`)).out;
+        return { path, status: /no such file/i.test(ls) ? 'missing' : 'denied' };
+      };
+
+      for (const p of RAMDISK_FILES) ramdiskFiles.push(await auditFile(p, 'ramdisk'));
+      for (const p of KEY_SYSTEM_FILES) keySystemFiles.push(await auditFile(p, 'key-system'));
+
+      const extraPaths = (await sh.shell('ls /system/etc/mixer_paths*.xml /system/etc/thermal-engine*.conf 2>/dev/null')).out
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter((l) => SAFE_PATH.test(l));
+      for (const p of extraPaths) extraConfigFiles.push(await auditFile(p, 'key-system'));
+
+      for (const entry of vendorEntries) {
+        let s = byPart.get(entry.part);
+        if (!s) {
+          s = { part: entry.part, total: 0, match: 0, differs: 0, missing: 0, denied: 0 };
+          byPart.set(entry.part, s);
+        }
+        s.total += 1;
+        const data = await sh.readFile(entry.path);
+        if (data !== null) {
+          const hash = sha256Hex(data);
+          const status = hash === entry.sha256 ? 'match' : 'differs';
+          if (status === 'match') s.match += 1;
+          else s.differs += 1;
+          vendorAuditLog.push(`${status}\t${entry.part}\t${entry.path}\t${data.length}\t${hash}`);
+          if (o.pullSystemBlobs) {
+            const dest = join(rawDir, 'system', entry.path.replace(/^\/system\//, ''));
+            mkdirSync(dirname(dest), { recursive: true });
+            writeFileSync(dest, data);
+            pulledVendorBlobs += 1;
+          }
+        } else {
+          const ls = (await sh.shell(`ls -ld '${entry.path}' 2>&1`)).out;
+          const status = /no such file/i.test(ls) ? 'missing' : 'denied';
+          if (status === 'missing') s.missing += 1;
+          else s.denied += 1;
+          vendorAuditLog.push(`${status}\t${entry.part}\t${entry.path}\t0\t`);
+        }
+      }
+    } else if (httpSession) {
+      const hs = httpSession;
+      const dec = new TextDecoder();
+      const readText = async (path: string) => {
+        const r = await hs.readFile(path);
+        return r.status === 'ok' ? dec.decode(r.data).trim() : '';
+      };
+
+      rawGetprop = await hs.props();
+      procVersion = await readText('/proc/version');
+      procModules = await readText('/proc/modules');
+      meminfoHead = (await readText('/proc/meminfo')).split(/\r?\n/).slice(0, 3).join('\n');
+      partitions = await readText('/proc/partitions');
+      const cfgRes = await hs.readFile('/proc/config.gz');
+      kernelConfigFlags = extractKernelConfigFlags(cfgRes.status === 'ok' ? cfgRes.data : null, rawDir);
+
+      const dtOut = (await hs.dtPanel()).trim();
+      dtPanelLines = dtOut ? dtOut.split(/\r?\n/).slice(0, 50) : [];
+      writeFileSync(join(rawDir, 'dt-panel.txt'), `${dtOut}\n`, 'utf8');
+
+      const bl = await hs.list('/sys/class/backlight');
+      const leds = await hs.list('/sys/class/leds');
+      backlightEntries = [...bl, ...leds].slice(0, 30);
+
+      const auditFileHttp = async (path: string, saveUnder?: string): Promise<FileAudit> => {
+        const r = await hs.readFile(path);
+        if (r.status === 'ok') {
+          if (saveUnder) {
+            const dest = join(rawDir, saveUnder, path.replace(/^\/+/, ''));
+            mkdirSync(dirname(dest), { recursive: true });
+            writeFileSync(dest, r.data);
+          }
+          return { path, status: 'readable', bytes: r.data.length, sha256: sha256Hex(r.data) };
+        }
+        return { path, status: r.status };
+      };
+
+      for (const p of RAMDISK_FILES) ramdiskFiles.push(await auditFileHttp(p, 'ramdisk'));
+      for (const p of KEY_SYSTEM_FILES) keySystemFiles.push(await auditFileHttp(p, 'key-system'));
+
+      const etcEntries = await hs.list('/system/etc');
+      const extraPaths = etcEntries
+        .map((l) => l.split('\t').at(-1)?.trim() ?? '')
+        .filter((p) => /^\/system\/etc\/(mixer_paths.*\.xml|thermal-engine.*\.conf)$/.test(p) && SAFE_PATH.test(p));
+      for (const p of extraPaths) extraConfigFiles.push(await auditFileHttp(p, 'key-system'));
+
+      for (const target of FIEMAP_TARGETS) {
+        const fm = await hs.fiemap(target);
+        fiemapResults.push(fm);
+      }
+      writeFileSync(join(rawDir, 'fiemap.json'), JSON.stringify(fiemapResults, null, 2), 'utf8');
+
+      for (const entry of vendorEntries) {
+        let s = byPart.get(entry.part);
+        if (!s) {
+          s = { part: entry.part, total: 0, match: 0, differs: 0, missing: 0, denied: 0 };
+          byPart.set(entry.part, s);
+        }
+        s.total += 1;
+        const r = await hs.readFile(entry.path);
+        if (r.status === 'ok') {
+          const hash = sha256Hex(r.data);
+          const status = hash === entry.sha256 ? 'match' : 'differs';
+          if (status === 'match') s.match += 1;
+          else s.differs += 1;
+          vendorAuditLog.push(`${status}\t${entry.part}\t${entry.path}\t${r.data.length}\t${hash}`);
+          if (o.pullSystemBlobs) {
+            const dest = join(rawDir, 'system', entry.path.replace(/^\/system\//, ''));
+            mkdirSync(dirname(dest), { recursive: true });
+            writeFileSync(dest, r.data);
+            pulledVendorBlobs += 1;
+          }
+        } else {
+          if (r.status === 'missing') s.missing += 1;
+          else s.denied += 1;
+          vendorAuditLog.push(`${r.status}\t${entry.part}\t${entry.path}\t0\t`);
+        }
       }
     }
+
+    writeFileSync(join(rawDir, 'getprop.txt'), rawGetprop, 'utf8');
+    writeFileSync(join(rawDir, 'proc-version.txt'), `${procVersion}\n`, 'utf8');
+    writeFileSync(join(rawDir, 'partitions.txt'), `${partitions}\n`, 'utf8');
     if (vendorEntries.length) {
       writeFileSync(join(rawDir, 'vendor-audit.tsv'), `${vendorAuditLog.join('\n')}\n`, 'utf8');
     }
 
+    const { props, initServices } = parseGetprop(rawGetprop);
     report.extraction = {
+      transport,
       props,
       selinuxEnforce,
       shellId,
@@ -1011,13 +1419,14 @@ export async function runStockProbe(o: StockProbeOptions, d: StockProbeDeps): Pr
       dmesgHighlights,
       keySystemFiles,
       extraConfigFiles,
+      fiemapResults,
       vendorSummary: [...byPart.values()],
       vendorCameraIncluded: !!o.includeCamera,
       pulledVendorBlobs,
     };
 
-    d.log(`    extracted ${Object.keys(props).length} props, ${Object.keys(initServices).length} init services, ${ramdiskFiles.filter((f) => f.status === 'readable').length}/${ramdiskFiles.length} ramdisk files, ${vendorEntries.length} vendor paths audited`);
-    setStep(5, 'done', `extracted stock info (${Object.keys(initServices).length} services, ${vendorEntries.length} vendor paths)`);
+    d.log(`    extracted via ${transport.toUpperCase()}: ${Object.keys(props).length} props, ${Object.keys(initServices).length} init services, ${ramdiskFiles.filter((f) => f.status === 'readable').length}/${ramdiskFiles.length} ramdisk files, ${vendorEntries.length} vendor paths audited`);
+    setStep(5, 'done', `extracted via ${transport} (${Object.keys(initServices).length} services, ${vendorEntries.length} vendor paths${fiemapResults.length ? `, ${fiemapResults.length} fiemap` : ''})`);
     checkpoint(5, 'All steps complete! Share report.md below (never commit raw/).');
     return { report, reportPath, sparsePath, outcome: 'complete' };
   } catch (e) {
