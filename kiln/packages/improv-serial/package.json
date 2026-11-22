@@ -1,8 +1,17 @@
 {
-  "name": "improv-serial",
+  "name": "@glassworks/improv-serial",
   "version": "0.1.0",
   "private": true,
   "description": "Improv Wi-Fi Serial client for the browser, over any byte stream or over WebUSB adb to an Android app.",
+  "keywords": [
+    "improv",
+    "improv-wifi",
+    "wifi",
+    "provisioning",
+    "serial",
+    "adb",
+    "webusb"
+  ],
   "license": "MIT",
   "type": "module",
   "exports": {
@@ -17,6 +26,8 @@
     "@yume-chan/adb": ">=2.0.0"
   },
   "peerDependenciesMeta": {
-    "@yume-chan/adb": { "optional": true }
+    "@yume-chan/adb": {
+      "optional": true
+    }
   }
 }

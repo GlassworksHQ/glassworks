@@ -1,7 +1,7 @@
 // Kiln over USB signs the panel in to Home Assistant in a window it opens (issue 453): the panel's sign-in with
 // then=kiln, whose last page closes that window, and Kiln moves on when the panel reports the sign-in, with no click.
 import { SetupChannel, type SetupState } from '@glassworks/setup-channel';
-import type { ByteStream } from 'improv-serial';
+import type { ByteStream } from '@glassworks/improv-serial';
 import { describe, expect, it, vi } from 'vitest';
 import { ChannelSetup } from '../src/setup/channelSetup';
 import type { Setup } from '../src/wizard/state';

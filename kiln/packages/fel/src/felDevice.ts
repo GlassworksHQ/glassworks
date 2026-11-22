@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: MIT
+/// <reference types="w3c-web-usb" preserve="true" />
 // Copyright (c) 2026 Glassworks contributors
 // Written clean-room from docs/research/kiln-cleanroom/fel-spec.md (#355).
 //
 // One FEL session with an Allwinner boot ROM over a bulk transport. The wire format is on the
 // linux-sunxi wiki (FEL/Protocol): every exchange is a 32-byte AWUC request, an optional data
 // phase and a 13-byte AWUS status, and a FEL request is a 16-byte message sent as such an exchange.
-import { A133, FEL_CHUNK } from './a133';
-import { readSctlr, readWord, warmReset64, type ReadRoutine, type Routine } from './routines';
-import { splLength, splWrites, thunkImage } from './spl';
-import { WebUsbBulk, type BulkTransport } from './transport';
+import { A133, FEL_CHUNK } from './a133.ts';
+import { readSctlr, readWord, warmReset64, type ReadRoutine, type Routine } from './routines.ts';
+import { splLength, splWrites, thunkImage } from './spl.ts';
+import { WebUsbBulk, type BulkTransport } from './transport.ts';
 
 export const FEL_FILTER = { vendorId: 0x1f3a, productId: 0xefe8 } as const;
 

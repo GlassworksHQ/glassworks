@@ -47,6 +47,17 @@ this monorepo and changed for Kiln (#111). It has two kinds of methods:
 Kiln's S1 install uses only the second row. `flashBlob` is for frames whose bootloader cannot read
 partitions back, such as the Mirror's Qualcomm LK (#41).
 
+## Install
+
+```sh
+npm install @glassworks/fastboot
+```
+
+An ES module with its own types, for a browser with WebUSB (Chrome, Edge and other Chromium browsers).
+It brings in [`@glassworks/fel`](../fel/README.md) for its USB transport, and the WebUSB types
+(`@types/w3c-web-usb`). Versions start at 0, so a minor version may change the API
+([changelog](CHANGELOG.md)).
+
 ## Upstream
 
 | | |

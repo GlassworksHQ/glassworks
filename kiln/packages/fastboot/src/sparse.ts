@@ -1,4 +1,4 @@
-import * as common from "./common";
+import * as common from "./common.ts";
 
 const FILE_MAGIC = 0xed26ff3a;
 

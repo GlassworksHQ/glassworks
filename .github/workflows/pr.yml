@@ -21,7 +21,9 @@
 #   web     the npm workspaces from the repo root (job id kept, as branch protection names it):
 #            Kiln, its packages, the frame recipes and packages/*: typecheck, tests, both builds, and
 #            that the FEL routines' words in kiln/packages/fel/src/routines.ts are what routines.S
-#            assembles to (scripts/check-routines.sh, with Ubuntu's LLVM 18)
+#            assembles to (scripts/check-routines.sh, with Ubuntu's LLVM 18). Then a dry run of the npm
+#            release (docs/releasing.md "npm packages"): every published package built and packed, installed
+#            into a fresh project, type-checked from there and imported in Node
 #   refract  Refract, Kiln's download Worker (kiln/workers/refract, its own lockfile, not a root
 #            workspace): typecheck and its tests in workerd
 #   scripts  frames/aqara-s1-plus/tools/install.sh's off-device tests, the perf test's rubric, report and grade
@@ -463,6 +465,8 @@ jobs:
           [ -x "$llvm/clang" ] && [ -x "$llvm/llvm-objdump" ] || { sudo apt-get -qq update && sudo apt-get -qq install -y --no-install-recommends clang-18 llvm-18 > /dev/null; }
           "$llvm/clang" --version | head -1
           LLVM=$llvm kiln/packages/fel/scripts/check-routines.sh
+      - name: The npm packages, as a consumer gets them (npm-release.yml's dry run)
+        run: node tools/release/npm-consumer-check.mjs
       - name: The page s1.edm.sh serves builds
         run: npm run build -w kiln
       - name: Kiln (Next.js) builds

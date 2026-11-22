@@ -12,10 +12,10 @@
   "dependencies": {
     "@glassworks/adb": "0.0.0",
     "@glassworks/app-adb": "0.0.0",
-    "@glassworks/ext4": "0.0.0",
-    "@glassworks/fastboot": "0.0.0",
+    "@glassworks/ext4": "0.1.0",
+    "@glassworks/fastboot": "0.1.0",
     "@glassworks/lululemon-mirror-installer": "0.0.0",
-    "improv-serial": "0.1.0"
+    "@glassworks/improv-serial": "0.1.0"
   },
   "optionalDependencies": {
     "usb": "3.2.1"

@@ -4,7 +4,7 @@
 // (frames/<id>/installer). The same "try" (never fails) vs "run" (must succeed) split as the
 // reference CLI's install.sh.
 import type { PanelShell } from '@glassworks/adb';
-import { ImprovSerialClient } from 'improv-serial';
+import { ImprovSerialClient } from '@glassworks/improv-serial';
 
 /**
  * Which app the steps below act on: its package, the activity adb starts it with (and whose extras

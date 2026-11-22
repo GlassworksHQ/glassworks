@@ -1,23 +1,60 @@
-<p>
-  <a href="https://www.glassworks.dev/brand#parts">
+<p align="center">
+  <a href="https://www.glassworks.dev">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-kiln-on-dark.svg">
-      <img alt="Glassworks Kiln" src="https://www.glassworks.dev/brand/badge-kiln-on-light.svg" height="30">
+      <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/banner-library-ext4-on-dark.svg">
+      <img alt="ext4, a Glassworks library" src="https://www.glassworks.dev/brand/banner-library-ext4-on-light.svg" width="640">
     </picture>
   </a>
 </p>
 
-# ext4 for Kiln
+<h1 align="center">ext4</h1>
 
-`@glassworks/ext4` lets Kiln change an Android partition image in the browser. The image is a
-system image the person downloaded themselves, about a gigabyte. Kiln reads it as an Android sparse
-image, edits its ext4 (adds and removes files with their owner, mode and SELinux label), or builds a
-fresh ext4. It then writes a sparse image that `@glassworks/fastboot` flashes. Nothing is uploaded:
-the bytes stay on the person's computer, in the browser's private storage (OPFS).
+<p align="center">
+  <b>ext4 and Android sparse images, in the browser.</b><br>
+  Edit a gigabyte system image on the person's own computer, then flash it.
+</p>
 
-The Lululemon Mirror's recipe uses it first: Android 6's `system.img` from the Glass Panes release,
-and a new `userdata` that carries Kiln's adb key (#29, #40). A later frame that brings its own system
-image can reuse it (option C in #40).
+<p align="center">
+  <a href="../../../LICENSE">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-license-mit-on-dark.svg">
+      <img alt="License: MIT" src="https://www.glassworks.dev/brand/badge-license-mit-on-light.svg" height="30">
+    </picture>
+  </a>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-status-alpha-on-dark.svg">
+    <img alt="Status: alpha" src="https://www.glassworks.dev/brand/badge-status-alpha-on-light.svg" height="30">
+  </picture>
+  <a href="https://github.com/orgs/GlassworksHQ/projects/1">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://www.glassworks.dev/brand/badge-roadmap-on-dark.svg">
+      <img alt="Roadmap" src="https://www.glassworks.dev/brand/badge-roadmap-on-light.svg" height="30">
+    </picture>
+  </a>
+</p>
+
+---
+
+`@glassworks/ext4` changes an Android partition image in the browser. It reads an Android sparse
+image, edits its ext4 (adds and removes files with their owner, mode and SELinux label) or builds a
+fresh ext4, then writes a sparse image that fastboot flashes, such as with
+[`@glassworks/fastboot`](../fastboot/README.md). Nothing is uploaded: the bytes stay on the person's
+computer, in the browser's private storage (OPFS). It has no dependencies.
+
+[Kiln](../../apps/kiln/README.md) uses it for the Lululemon Mirror: Android 6's `system.img` from the
+Glass Panes release, and a new `userdata` that carries Kiln's adb key. Any frame that brings its own
+system image can use it the same way.
+
+## Install
+
+```sh
+npm install @glassworks/ext4
+```
+
+An ES module with its own types. `MemoryStore` works anywhere, including Node. For an image of a
+gigabyte or more, use OPFS: `syncHandleStore` takes a `FileSystemSyncAccessHandle`, which only a
+dedicated worker can open. Versions start at 0, so a minor version may change the API
+([changelog](CHANGELOG.md)).
 
 ## How it fits together
 

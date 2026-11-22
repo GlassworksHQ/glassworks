@@ -2,7 +2,7 @@
 // and write a Disk back out as one, a chunk at a time. Format: a 28-byte file header, then chunks,
 // each a 12-byte header and its data: RAW (blocks), FILL (a 4-byte pattern), DONT_CARE (nothing),
 // CRC32 (4 bytes, skipped).
-import { Disk, type Store } from './disk';
+import { Disk, type Store } from './disk.ts';
 
 export const SPARSE_MAGIC = 0xed26ff3a;
 const FILE_HDR = 28;

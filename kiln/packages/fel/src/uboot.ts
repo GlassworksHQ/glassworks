@@ -1,8 +1,8 @@
 // The reference CLI's fel-boot.sh with NO_BL31=1, in the browser: check the chip, run the SPL (DRAM init),
 // upload u-boot.bin to DRAM in 64 KiB writes, then warm-reset into it. Nothing is written to eMMC.
 // Our U-Boot then starts USB fastboot by itself (BOOTCOMMAND "fastboot usb 0").
-import { A133 } from './a133';
-import { hex, type FelDevice } from './felDevice';
+import { A133 } from './a133.ts';
+import { hex, type FelDevice } from './felDevice.ts';
 
 export interface ChipCheck { socId: number; secureBoot: number }
 

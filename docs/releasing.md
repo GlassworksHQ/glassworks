@@ -14,7 +14,8 @@ Actions tab with a version: [Release](#release). The S1 app's release holds one 
 - `s1-kiosk-arm64-v8a-<version>.apk`, the same app for `arm64-v8a` devices;
 - `s1-kiosk-<version>.apk.sha256` and `s1-kiosk-arm64-v8a-<version>.apk.sha256`, their `sha256sum` lines.
 
-The libraries in `libs/` are released to Maven Central on their own tags: see [Libraries](#libraries).
+The libraries in `libs/` are released to Maven Central on their own tags: see [Libraries](#libraries). A few of
+Kiln's packages go to npm the same way: see [npm packages](#npm-packages).
 
 Every release **must be signed with the same key**. Android only installs an update signed with the
 key of the installed app, and the app refuses anything else before trying. Lose the key and every
@@ -843,3 +844,87 @@ The secrets are in the `maven-central` environment (Settings → Environments, o
   the old key leaked, publish its revocation certificate too.
 - No dry run tests the secrets; the next release tag does. The workflow checks that all five are set
   before it builds.
+
+## npm packages
+
+Four of Kiln's packages go to npm as `@glassworks/<name>`: `fel`, `fastboot`, `ext4` and `improv-serial`
+(all in `kiln/packages/`). The rest (`adb`, `app-adb`, `bootpatch`, `setup-channel`, `kiln-core`, `brand`, and
+`packages/*`) are Kiln's and the site's own, and aren't published. Like the Maven libraries, each package has
+its own semver `version` (in its `package.json`) and its own `CHANGELOG.md`, apart from the apps'.
+
+In the workspace every package stays `"private": true`, and its `exports` point at `src/*.ts`, so Kiln, the
+frames and the site build from source. What npm gets is built from that source by
+`tools/release/npm-package.mjs`:
+
+- `dist/`: `src/` compiled by the package's `tsconfig.build.json` (which extends its `tsconfig.json`, then the
+  root `tsconfig.npm.json`): Node ESM, `.d.ts`, source maps. `src/` ships too, for the maps.
+- `package.json`: without `private` and `scripts`. Each `./src/X.ts` export becomes `./dist/X.js` with its
+  types. Exports of `./test/*` (the fakes our own tests use, such as `@glassworks/fel/fakes`) are left out. A
+  workspace `@glassworks` dependency becomes `^` its version, and must itself be published.
+- `README.md`, with its relative links made absolute on GitHub at the release's tag; `LICENSE`, the repo's MIT
+  (and, for a fork such as `fastboot`, upstream's licence under it); `CHANGELOG.md`.
+
+A package is published when its folder has a `CHANGELOG.md` and a `tsconfig.build.json`. To add one: give it
+those two, a version other than `0.0.0`, a name in the `@glassworks` scope, and a README with a library banner
+([docs/branding.md](branding.md#adding-a-library)). Its source names the `.ts` file in relative imports
+(`from './felDevice.ts'`): Node ESM needs an extension, the build rewrites it to `.js`
+(`rewriteRelativeImportExtensions`; the script does the same in the `.d.ts`), and Vite, Next.js (Turbopack)
+and vitest find the file as named. `tsconfig.base.json` allows it (`allowImportingTsExtensions`). A WebUSB package puts `/// <reference types="w3c-web-usb" preserve="true" />` at the top of each
+file whose types use WebUSB, and depends on `@types/w3c-web-usb`, so a consumer gets those types without
+setting anything up.
+
+### The dry run
+
+Every PR that the `web` job runs for (`pr.yml`) packs every package and checks it as someone else gets it:
+
+```sh
+node tools/release/npm-consumer-check.mjs          # or: … fel   (one package)
+node tools/release/npm-package.mjs fel --out /tmp/npm   # build and pack one, to look inside
+```
+
+The check installs the tarballs into a fresh project (with the network: their dependencies come from npm),
+type-checks every entry point from there under `moduleResolution` `nodenext` and `bundler` with `skipLibCheck`
+off and `types: []`, and imports each one in Node.
+
+### Cut an npm release
+
+The tag is `npm/<name>/v<MAJOR.MINOR.PATCH>`, where `<name>` is the package's folder. It must match
+`version` in that package's `package.json`.
+
+1. In a PR: set `version` in the package's `package.json`, and in every workspace `package.json` that
+   depends on it (the pins are exact, or npm stops linking the workspace copy). Rename `## [Unreleased]`
+   in its `CHANGELOG.md` to `## [<version>] - <date>`. Merge it.
+2. Tag the merged commit on `main` and push the tag:
+
+   ```sh
+   git fetch origin
+   git tag npm/fel/v0.1.0 origin/main
+   git push origin npm/fel/v0.1.0
+   ```
+
+3. [`npm-release.yml`](../.github/workflows/npm-release.yml) publishes it: it checks the tag (the package,
+   its version, the commit on `main`, its changelog section, the version not on npm yet), runs the
+   package's typecheck and tests, runs the consumer check on it alone, then `npm publish --provenance` and
+   a GitHub release `@glassworks/<name> <version>` with `--latest=false` (`releases/latest` stays the S1
+   app's).
+
+Release `fel` before `fastboot`: the consumer check installs `fastboot`'s `@glassworks/fel` from npm, and
+fails while that version isn't there.
+
+**A version can be unpublished only within 72 hours, and its number can never be used again.**
+
+### Access
+
+The job runs in the `npm` environment (Settings → Environments), which should deploy only from `npm/*/v*`
+tags. It publishes with npm's trusted publishing (OIDC): no token, and the provenance shows the workflow
+that built the package. npm sets trusted publishing up per package, and only for a package that already
+exists, so the first release of each goes out with a token:
+
+1. On npmjs.com, the `glassworks` organization owns the `@glassworks` scope.
+2. Make a granular access token that may read and write `@glassworks` packages (short expiry), and set
+   it as `NPM_TOKEN` in the `npm` environment (`gh secret set NPM_TOKEN --env npm`).
+3. Push the first tags (`fel` first). Each package is published with the token.
+4. For each package, on npmjs.com → the package → Settings → Trusted publishing: GitHub Actions,
+   `GlassworksHQ/glassworks`, workflow `npm-release.yml`, environment `npm`. Then set "Require two-factor
+   authentication and disallow tokens".
+5. Delete the `NPM_TOKEN` secret and revoke the token. Without it, the job publishes through OIDC.

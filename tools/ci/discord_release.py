@@ -4,7 +4,8 @@
   tools/ci/discord_release.py <tag> [<tag> ...]
 
 Run by .github/workflows/discord-releases.yml, never by hand. Reads the release with `gh release view`
-(GH_TOKEN), then posts it through a Discord webhook: DISCORD_ECOSYSTEM_WEBHOOK for libraries (`libs/*`),
+(GH_TOKEN), then posts it through a Discord webhook: DISCORD_ECOSYSTEM_WEBHOOK for libraries (`libs/*` on Maven Central,
+`npm/*` on npm),
 DISCORD_RELEASES_WEBHOOK for everything else (the apps and the frames). Drafts and pre-releases are skipped.
 A missing webhook secret skips the post, so a fork or a repo without the secrets passes. It only reads
 from GitHub and writes one Discord message. See docs/releasing.md#discord.
@@ -25,7 +26,7 @@ MAX_NOTES = 1500
 
 def channel(tag):
     """Which webhook secret a tag posts to."""
-    return 'DISCORD_ECOSYSTEM_WEBHOOK' if tag.startswith('libs/') else 'DISCORD_RELEASES_WEBHOOK'
+    return 'DISCORD_ECOSYSTEM_WEBHOOK' if tag.startswith(('libs/', 'npm/')) else 'DISCORD_RELEASES_WEBHOOK'
 
 
 def trim(notes, limit=MAX_NOTES):

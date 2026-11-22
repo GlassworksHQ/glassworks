@@ -1,8 +1,17 @@
 {
   "name": "@glassworks/ext4",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "ext4 and Android sparse images in the browser: stream a sparse image into a block device (OPFS), edit its ext4 (add and remove files with owners and SELinux labels), build a fresh ext4, and stream it back out as a sparse image.",
+  "keywords": [
+    "ext4",
+    "android",
+    "sparse",
+    "simg",
+    "opfs",
+    "filesystem",
+    "selinux"
+  ],
   "license": "MIT",
   "type": "module",
   "exports": {

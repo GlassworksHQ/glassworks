@@ -10,7 +10,7 @@ import { isMagiskPatched, loadCompressor } from '@glassworks/bootpatch';
 import { Assets, BackupRefused, checkRestorable, fmtSize, type BackupFile, type BackupMeta } from '@glassworks/kiln-core';
 import { IMPROV_SOCKET } from '@glassworks/app-adb';
 import { SETUP_SOCKET, type PaneCard, type SetupState } from '@glassworks/setup-channel';
-import { PacketReader, PacketType, Rpc, State as ImprovState, frame as packet, parseResult, strings, type ByteStream } from 'improv-serial';
+import { PacketReader, PacketType, Rpc, State as ImprovState, frame as packet, parseResult, strings, type ByteStream } from '@glassworks/improv-serial';
 import { explain, type Written } from './explain';
 import type { Changed } from './state';
 import type { AppPhase, DemoFrame } from '@glassworks/kiln-core';
