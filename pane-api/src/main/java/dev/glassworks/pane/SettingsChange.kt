@@ -143,9 +143,9 @@ object SettingsChange {
     fun signIn(item: SettingsItem.SignIn, user: String, password: String, done: (String?) -> Unit) {
         val u = user.trim()
         val problem = when {
-            u.isEmpty() -> "Type a user name."
-            u.length > USER_MAX -> "Use at most $USER_MAX characters for the user name."
-            u.any { it == ':' || it.isWhitespace() || it.code < 0x20 } -> "A user name can't have a colon or spaces."
+            u.isEmpty() -> "Enter a username."
+            u.length > USER_MAX -> "Use at most $USER_MAX characters for the username."
+            u.any { it == ':' || it.isWhitespace() || it.code < 0x20 } -> "A username can't contain spaces or a colon."
             password.isEmpty() && !runCatching { item.isSet() }.getOrDefault(false) -> TYPE_PASSWORD
             password.length > PASSWORD_MAX -> "Use at most $PASSWORD_MAX characters for the password."
             password.any { it.code < 0x20 || it.code == 0x7f } -> "That password has characters a sign-in can't take."
@@ -211,7 +211,7 @@ object SettingsChange {
 
     /** A sign-in's save that threw: no exception text, which could hold what was typed. */
     const val COULD_NOT_SIGN_IN = "That sign-in didn't save."
-    const val TYPE_PASSWORD = "Type a password."
+    const val TYPE_PASSWORD = "Enter a password."
     /** A set sign-in's password field: the stored one never shows, so it takes a new one. */
     const val NEW_PASSWORD = "Set a new password · leave empty to keep it"
 

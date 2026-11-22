@@ -26,7 +26,7 @@ import dev.glassworks.ui.Mockup
 @Config(sdk = [34], application = Application::class, qualifiers = "w960dp-h480dp-land-hdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class SigninMovedTest {
-    private val moved = "Home Assistant moved to a new address. Sign in again."
+    private val moved = "Home Assistant moved to a new address. Scan to sign in again."
     private val online = WifiSetupStatus.Snapshot(WifiSetupStatus.State.CONNECTED, "Example-WiFi")
 
     private fun screen(input: Input, signinMoved: Boolean, setUp: (SetupOverlay) -> Unit = {}): SetupOverlay {
@@ -50,7 +50,7 @@ class SigninMovedTest {
     @Test fun signInSaysHomeAssistantMovedWithItsPhoneCode() {
         for (input in listOf(Input.TOUCH, Input.NONE)) {
             val t = texts(screen(input, signinMoved = true))
-            assertTrue("$input: $t", "Scan to sign in." in t)
+            assertTrue("$input: $t", "Scan to sign in" in t)
             assertTrue("$input: $t", moved in t)
         }
     }
@@ -73,7 +73,7 @@ class SigninMovedTest {
 
     @Test fun aFirstSignInKeepsItsUsualLine() {
         val t = texts(screen(Input.TOUCH, signinMoved = false))
-        assertTrue(t.toString(), "Sign in to Home Assistant on your phone. Nothing to type here." in t)
+        assertTrue(t.toString(), "Scan with your phone to sign in to Home Assistant — nothing to type here." in t)
         assertFalse(t.toString(), moved in t)
     }
 

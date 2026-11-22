@@ -74,7 +74,7 @@ describe('the standard flow after the Mirror\'s image install', () => {
     await imageDemo(mirrorEntry, 'flash-setup-wifi', true, {}, wifi.handOver);
     show(wifi.standard(), IMAGE);
     await settle();
-    expect(screen.getByRole('heading', { name: 'Which Wi-Fi?' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Connect to Wi-Fi' })).toBeTruthy();
     expect(screen.getByRole('radio', { name: /Home Net 5G/ })).toBeTruthy();
     expect(screen.queryByText(/on the panel/)).toBeNull(); // no touch: nothing to do on the Mirror
     cleanup();
@@ -96,7 +96,7 @@ describe('the standard flow after the Mirror\'s image install', () => {
     expect(screen.getByRole('heading', { name: 'You\'re all set' })).toBeTruthy();
     expect(screen.getByText('The Mirror is on Wi-Fi at 192.0.2.50. Home Assistant finds it by itself.')).toBeTruthy();
     expect(screen.getByText('http://192.0.2.50:8099/')).toBeTruthy();
-    expect(screen.getByText('Change these later on the Mirror\'s Manage page. It asks for a code the Mirror shows.')).toBeTruthy();
+    expect(screen.getByText('You can change any of these later on the Manage page, using a 6-digit code shown on the Mirror.')).toBeTruthy();
     expect(screen.getByText('The way back')).toBeTruthy();
     expect(rail().at(-1)).toBe('Done');
     // the image's way back leaves Done for the install's first screen
@@ -130,7 +130,7 @@ describe('the standard flow after the app alone', () => {
     show(h.standard(), APP);
     await settle();
     expect(subs()).toEqual(['App', 'Wi-Fi', 'Home Assistant', 'Panes']);
-    expect(screen.getByRole('heading', { name: 'What should it do?' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Choose what your panel does' })).toBeTruthy();
     expect(screen.getAllByRole('switch').length).toBe(mirrorEntry.sim.panes!.length);
   });
 

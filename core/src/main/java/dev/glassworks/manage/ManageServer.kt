@@ -611,7 +611,7 @@ class ManageServer(
     private fun codeDialog(req: HttpRequest, problem: String?, next: String = safeNext(req.query["next"]),
                            remember: Boolean = req.query["remember"] == "1", status: Int = 200): HttpResponse {
         val html = pages.codeDialog(
-            name(), "Enter the code on the panel.", "The panel is showing a 6-digit code now.", "/manage/code", "Sign in",
+            name(), "Enter the code shown on the panel", "The panel is showing a 6-digit code right now.", "/manage/code", "Sign in",
             "/", mapOf("next" to next) + if (remember) mapOf("remember" to "1") else emptyMap(), problem, danger = false,
         )
         return html(status, html, extra = preCookie(req))
@@ -776,7 +776,7 @@ class ManageServer(
                                  item: SettingsItem.Action, problem: String?): String {
         val run = SettingsItem.Action.RUN
         val behind = settingsPage(host.status(), viewer, page.removePrefix("/"), mine = s.id)?.body?.toString(Charsets.UTF_8).orEmpty()
-        return pages.codeDialog(name(), "Enter the code on the panel.", "${item.title} needs someone at the panel. It's showing a 6-digit code now.",
+        return pages.codeDialog(name(), "Enter the code shown on the panel", "${item.title} requires someone at the panel. Enter the 6-digit code shown on its screen.",
             "/settings", item.confirm?.action ?: item.label, page,
             mapOf("csrf" to viewer.csrf, "section" to section, "key" to key, "value" to run, "answer" to ask(s.id, section, key, run)), problem,
             // An action that asks first costs something (the reset): its button is rose, as Reboot's.
@@ -879,7 +879,7 @@ class ManageServer(
     }
 
     private fun rebootDialog(status: PanelStatus, viewer: ManagePages.Viewer, problem: String?): String =
-        pages.codeDialog(name(), "Enter the code on the panel.", "Rebooting needs someone at the panel. It's showing a 6-digit code now.",
+        pages.codeDialog(name(), "Enter the code shown on the panel", "Restarting requires someone at the panel. Enter the 6-digit code shown on its screen.",
             "/confirm/reboot", "Reboot the panel", "/", mapOf("csrf" to viewer.csrf), problem, danger = true,
             // The overview the reboot was asked from, dimmed behind the dialog.
             behindHtml = pages.overview(status, viewer, host.actions, null).substringAfter("<body>").substringBeforeLast("</body>"))
@@ -914,7 +914,7 @@ class ManageServer(
     }
 
     private fun notice(done: String?): String? = OverviewAction.entries.firstOrNull { it.key == done }?.started ?: when (done) {
-        "reboot" -> "The panel is rebooting. This page comes back in about a minute."
+        "reboot" -> "The panel is restarting. This page will come back in about a minute."
         "signedout" -> "That browser is signed out."
         "failed" -> "That didn't work. The Log says why."
         "nocode" -> "$NO_CODE Rebooting needs it."

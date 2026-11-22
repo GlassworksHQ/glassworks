@@ -83,7 +83,7 @@ function Device({ on, go }: P) {
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">{nameOf(on)}</h2>
-      <p className="lede">Glassworks installs from this page, as an app. No computer needed.</p>
+      <p className="lede">Install Glassworks right from this browser — no computer needed.</p>
       {/* the model and what the page read of it side by side (stacked on a phone); without a model, the facts alone */}
       {look ? (
         <div className="tab-device">
@@ -109,10 +109,10 @@ function Elsewhere({ onTablet }: { onTablet: () => void }) {
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">{`Open this page on ${dev.the}`}</h2>
-      <p className="lede">{`This page installs Glassworks on an Android ${dev.short} from the ${dev.short}'s own browser.`}</p>
+      <p className="lede">{`This page installs Glassworks directly from the browser on your Android ${dev.short}.`}</p>
       <div className="well"><span className="grow"><span className="small">{`On ${dev.the}, open`}</span><code className="addr">{shown}</code></span></div>
       <div className="foot">
-        <span className="links"><button type="button" className="link" onClick={onTablet}>{`This is ${dev.the}`}</button></span>
+        <span className="links"><button type="button" className="link" onClick={onTablet}>{`I'm already on ${dev.the}`}</button></span>
         <Link className="btn ghost" href={base}>Install from this computer</Link>
       </div>
     </section>
@@ -148,7 +148,7 @@ function Get({ on, go, releases, load }: P & { releases: Partial<Record<Line, Re
       <section className="card" aria-labelledby="h">
         <span className="row"><span className="pill soon">Not released yet</span></span>
         <h2 id="h">{`${dev.app} isn't out yet`}</h2>
-        <p className="lede">When it is, it downloads from this page. Follow it on GitHub to hear first.</p>
+        <p className="lede">Once a release is published, you&apos;ll be able to download it right here. Follow the project on GitHub to hear first.</p>
         <div className="foot">
           <span className="links"><button type="button" className="link" onClick={() => go('device')}>Back</button>{links(buildSwitch)}</span>
           <a className="btn ghost" href={dev.off.follow}>Follow it on GitHub</a>
@@ -159,10 +159,10 @@ function Get({ on, go, releases, load }: P & { releases: Partial<Record<Line, Re
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">Get Glassworks</h2>
-      <p className="lede">Download it here, then install it from the download.</p>
-      {r.state === 'loading' && <p className="status work" role="status">Looking for the latest release…</p>}
+      <p className="lede">Download the app below, then open the file to install it.</p>
+      {r.state === 'loading' && <p className="status work" role="status">Checking for the latest release…</p>}
       {r.state === 'error' && <>
-        <p className="status err" role="alert">Kiln couldn&apos;t read the releases: {r.why}.</p>
+        <p className="status err" role="alert">Kiln couldn&apos;t load the releases ({r.why}). Try again in a moment.</p>
         <span className="row"><button type="button" className="btn ghost" onClick={() => load(line)}>Try again</button></span>
       </>}
       {r.state === 'out' && !dl && <p className="status err" role="alert">{`Glassworks ${r.version} has no build for this ${on.form} yet.`}</p>}
@@ -181,18 +181,18 @@ function Get({ on, go, releases, load }: P & { releases: Partial<Record<Line, Re
             <small>Turn on <b>Unknown sources</b>, so Android installs an app from outside its store.</small>
           </li>
         )}
-        <li><b>Open</b> the download when it finishes.<small>From the notification, or the browser&apos;s Downloads.</small></li>
+        <li><b>Open</b> the downloaded file when it finishes.<small>Tap it in your notifications or in your browser&apos;s Downloads list.</small></li>
         {!legacy && <li><b>Allow</b> this browser if Android asks.<small>Tap <b>Settings</b>, turn on <b>Allow from this source</b>, then go back.</small></li>}
-        <li><b>Install</b><small>Android says “App not installed”? {retry
-          ? <a className="link" href={retry.href} download={retry.name}>Download the other build</a>
-          : <ReportButton prefill={onDevicePrefill(on, 'get', dl?.version)}>Tell us</ReportButton>}</small></li>
+        <li><b>Install</b><small>If Android says “App not installed”, {retry
+          ? <a className="link" href={retry.href} download={retry.name}>download the other build</a>
+          : <ReportButton prefill={onDevicePrefill(on, 'get', dl?.version)}>let us know</ReportButton>}.</small></li>
       </ol>
       <div className="foot">
         <span className="links">
           <button type="button" className="link" onClick={() => go('device')}>Back</button>
           {links(buildSwitch)}
         </span>
-        <button type="button" className="btn ghost" onClick={() => go('setup')}>It&apos;s installed</button>
+        <button type="button" className="btn ghost" onClick={() => go('setup')}>I&apos;ve installed it</button>
       </div>
     </section>
   );
@@ -203,17 +203,17 @@ function Setup({ go }: Pick<P, 'go'>) {
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">Open Glassworks</h2>
-      <p className="lede">{`Its setup walks you through the rest, on ${dev.the}.`}</p>
+      <p className="lede">{`Setup walks you through the rest right on ${dev.the}.`}</p>
       <ol className="num">
         <li><b>Home Assistant</b><small>{`Sign in, then add ${dev.the} in Home Assistant.`}</small></li>
-        <li><b>Panes</b><small>Pick what it does. Android asks for the microphone for Assist, and the camera for the camera pane.</small></li>
+        <li><b>Panes</b><small>Choose which features you want. Android asks for the microphone for Assist, and the camera for the camera pane.</small></li>
         <li><b>This device</b><small>Make Glassworks the home screen, and let it turn the screen off when idle.</small></li>
-        <li><b>Silent updates</b><small>On Android 12 and newer, let it install its own updates.</small></li>
+        <li><b>Silent updates</b><small>On Android 12 and newer, let Glassworks install its own updates automatically.</small></li>
       </ol>
       <div className="well">
         <span className="grow">
-          <span>One setting needs a computer</span>
-          <span className="small">Secure settings, which lets the Bluetooth proxy turn on Location by itself. Glassworks works without it.</span>
+          <span>One optional permission needs a computer</span>
+          <span className="small">Allowing the Bluetooth proxy to turn on Location automatically requires a quick one-time USB step. Glassworks works great without it.</span>
         </span>
       </div>
       <div className="foot">
@@ -236,7 +236,7 @@ function Kiln({ on, go }: P) {
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">Turn on USB debugging</h2>
-      <p className="lede">Then Kiln on a computer adds Secure settings over USB. Glassworks and its setup stay.</p>
+      <p className="lede">Then connect to Kiln on a computer to grant that extra permission over USB. Your Glassworks settings stay untouched.</p>
       <ol className="num">
         <li><b>Open</b> <Path path={st.unlock.path} /> <a className="link" href={SETTINGS_LINKS.about}>Open it</a>
           <small>Tap <b>{st.unlock.tap}</b> seven times, until it says you&apos;re a developer.{st.unlock.note && <> {st.unlock.note}</>}</small>
@@ -321,7 +321,7 @@ export function OnDevicePage({ frame: dev, sim, base }: { frame: UsbFrame & { on
     <OnDeviceFrame frame={dev} base={base}>
       {start ? <TabletScreens on={start.on} start={start.screen} load={start.load} /> : (
         <Shell steps={rail('device')} level={0}>
-          <section className="card"><p className="status work" role="status">Reading this device…</p></section>
+          <section className="card"><p className="status work" role="status">Checking your device…</p></section>
         </Shell>
       )}
     </OnDeviceFrame>

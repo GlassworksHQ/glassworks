@@ -29,7 +29,7 @@ export function ReleaseRow({ r, line, what, device, apkError, load }: ReleaseRow
       <div className="grow">
         {r.state === 'waiting' || r.state === 'looking' ? <>
           <b>{what}</b>
-          <span className="small" role="status">Looking for its newest release…</span>
+          <span className="small" role="status">Checking for the latest release…</span>
         </> : r.state === 'downloading' ? <>
           <span className={c.fileHead}><code>{r.name}</code><span className="small">{r.size ? fmtSize(r.size) : ''}</span></span>
           <div className={c.progress} role="status">
@@ -40,13 +40,13 @@ export function ReleaseRow({ r, line, what, device, apkError, load }: ReleaseRow
         </> : r.state === 'ready' ? <>
           <span className={c.fileHead}><b>Glassworks {r.version}</b><span className="small">{fmtSize(r.size)}</span></span>
           <span className="small"><a className="link" href={releasePage(r.tag)} target="_blank" rel="noopener"><code>{r.name}</code></a></span>
-          {!apkError && <span className="status ok">✓ SHA-256 checks out.</span>}
+          {!apkError && <span className="status ok">✓ Download verified</span>}
         </> : r.state === 'none' ? <>
-          <b>There is no release of {what} yet.</b>
-          <span className="status err" role="alert">Kiln found no <code>{line}</code> release on GitHub. Nothing was written to {device}.</span>
+          <b>No release of {what} yet</b>
+          <span className="status err" role="alert">Kiln didn&apos;t find a published release on GitHub yet. Nothing was written to {device}.</span>
           <span className="small">{again}, or <a className="link" href="https://github.com/GlassworksHQ/glassworks/releases" target="_blank" rel="noopener">see the releases</a>.</span>
         </> : <>
-          <b>Kiln couldn&apos;t get Glassworks from its release.</b>
+          <b>Couldn&apos;t download Glassworks</b>
           <span className="status err" role="alert">{r.why}. Nothing was written to {device}.</span>
           <span className="small">{again}.</span>
         </>}

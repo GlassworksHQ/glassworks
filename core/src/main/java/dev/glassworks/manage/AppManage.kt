@@ -84,7 +84,7 @@ open class AppManage(
         /** The app's own log tags, in words, before [AppManage.logSource]'s. */
         val logSource: (String) -> String? = { null },
         /** The About section's licence line. */
-        val licence: String = "MPL-2.0 and MIT (Open source licences has each)",
+        val licence: String = "MPL-2.0 and MIT (see Open source licenses)",
     )
     private val app = context.applicationContext
     private val dir = File(app.filesDir, "manage")
@@ -239,7 +239,7 @@ open class AppManage(
                     "Frame" to runtime.frame.hardware.let { "${it.manufacturer} ${it.model}" },
                     "Android" to Build.VERSION.RELEASE,
                     "Engine" to runtime.engine.name.ifEmpty { "Unknown" },
-                    "Licence" to own.licence,
+                    "License" to own.licence,
                     "Source" to "github.com/GlassworksHQ/glassworks",
                 ),
                 legacy = runtime.engine.lockedDown,
@@ -372,7 +372,7 @@ open class AppManage(
         override val canReboot: Boolean get() = holdsReboot || (deviceOwner && Platform.hasDeviceOwnerReboot)
 
         override fun reboot(): String? {
-            if (!canReboot) return "The app can only reboot the panel as its device owner (Android 7 or newer), or as a system app."
+            if (!canReboot) return "Glassworks can only restart the device when installed as a system app or set as device owner (Android 7 or newer)."
             main.postDelayed({
                 runCatching {
                     if (holdsReboot) app.getSystemService(PowerManager::class.java)?.reboot(null)

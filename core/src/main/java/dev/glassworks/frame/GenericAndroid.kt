@@ -99,7 +99,7 @@ class GenericAndroid(
                     else -> SCREEN_OFF_YES
                 }
             }, fixable = { !adminActive(context) }),
-            SettingsItem.Info({ OWNER_TITLE }, { if (SilentUpdates.deviceOwner(context)) "Yes: the app can reboot the device and keep its screen" else "No" }),
+            SettingsItem.Info({ OWNER_TITLE }, { if (SilentUpdates.deviceOwner(context)) "Yes: Glassworks can restart the device and turn the screen off when idle" else "No" }),
             SettingsItem.Info({ MODEL_TITLE }, { "${hardware.manufacturer} ${hardware.model}".trim() }),
             *frameRelease?.let { frameVersionItems(context, it, FrameUpdateModel.installs(it, agent)) }.orEmpty().toTypedArray(),
             SettingsItem.Info({ ANDROID_TITLE }, { Build.VERSION.RELEASE.orEmpty() }),
@@ -135,15 +135,15 @@ class GenericAndroid(
         const val HOME_TITLE = "Home screen"
         const val HOME_YES = "Yes: Glassworks is the default Home app"
         /** Settings paths differ by Android version and maker, so the rows say what to search Android's Settings for. */
-        const val HOME_NO = "No: Glassworks isn't the default Home app. To change it: search Android's Settings for “Home”"
+        const val HOME_NO = "No: Glassworks isn't the default Home app. To change this, search Android's settings for “Home”"
         const val SCREEN_OFF_TITLE = "Turn the screen off"
-        const val SCREEN_OFF_YES = "Yes: Glassworks is a device admin, so it can turn the screen off when idle. " +
-            "Before you uninstall it, turn that off: search Android's Settings for “Device admin”"
+        const val SCREEN_OFF_YES = "Yes: Glassworks has device administrator permission, so it can turn the screen off when idle. " +
+            "Turn this off in Android's settings (“Device admin”) before uninstalling."
         /** A device owner is also a device admin, and Android won't let Settings turn that off: undo device owner first. */
-        const val SCREEN_OFF_YES_OWNER = "Yes: Glassworks is the device owner, so it can turn the screen off when idle. " +
-            "Before you uninstall it, undo device owner (Kiln's Undo)"
-        const val SCREEN_OFF_NO = "No: Glassworks can't turn the screen off by itself. To change it: setup's This device " +
-            "step, or search Android's Settings for “Device admin”"
+        const val SCREEN_OFF_YES_OWNER = "Yes: Glassworks is set as device owner, so it can turn the screen off when idle. " +
+            "Undo device owner in Kiln before uninstalling."
+        const val SCREEN_OFF_NO = "No: Glassworks can't turn the screen off automatically. Enable it in setup's This device " +
+            "step, or search Android's settings for “Device admin”"
 
         /** One of this app's components is an active device admin (the receiver Kiln or setup's This device step activates). */
         fun adminActive(context: Context): Boolean = runCatching {

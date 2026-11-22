@@ -100,7 +100,7 @@ object WifiStep {
                 val fail = f.failure
                 if (input == Input.NONE) ImprovLine(
                     if (fail != null) Phase.FAILED else Phase.AUTHORIZED, "$label · open for ${clock(f.authLeftMs)}",
-                    if (fail != null) "Couldn't connect to ${ssid ?: "the network"}" else "Send the Wi-Fi from a phone.",
+                    if (fail != null) "Couldn't connect to ${ssid ?: "the network"}" else "Send Wi-Fi from a phone",
                     if (fail != null) failureText(fail) else NO_TOUCH_HOW + approval(f),
                     if (fail != null) Tone.ROSE else Tone.AMBER, emptyList(),
                 ) else if (fail != null) ImprovLine(
@@ -110,7 +110,7 @@ object WifiStep {
                     Tone.ROSE, listOf(Action.STOP),
                 ) else ImprovLine(
                     Phase.AUTHORIZED, "$label · allowed for ${clock(f.authLeftMs)}", "Waiting for Wi-Fi details",
-                    "Enter your Wi-Fi in Home Assistant's “Improv via BLE” dialog." + approval(f),
+                    "Enter your Wi-Fi details in Home Assistant's Bluetooth setup dialog." + approval(f),
                     Tone.AMBER, listOf(Action.STOP),
                 )
             }

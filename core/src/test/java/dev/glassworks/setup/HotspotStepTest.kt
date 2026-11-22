@@ -27,7 +27,7 @@ class HotspotStepTest {
     fun `on - the join QR code, the setup address, the key, the minutes left and Close it`() {
         val c = HotspotStep.card(SetupHotspot.View.On(net, 14 * 60_000L + 1, asked = false), ready, url)
         assertEquals(net.qrText(), c.qr)
-        assertEquals("Join the panel's Wi-Fi.", c.title)
+        assertEquals("Join the panel's Wi-Fi", c.title)
         val body = c.body!!
         assertTrue(body, "\n$url\n" in body && "abcdefghjkmn" in body && "“Example-Setup”" in body)
         assertEquals("Wi-Fi · closes within 15 minutes", c.label)
@@ -55,7 +55,7 @@ class HotspotStepTest {
     fun `on, once a phone reached the panel over it - the setup page's QR code, its address written out`() {
         val c = HotspotStep.card(SetupHotspot.View.On(net, 14 * 60_000L, asked = true, phone = true), ready, url)
         assertEquals(url, c.qr)
-        assertEquals("Open the setup page.", c.title)
+        assertEquals("Open the setup page", c.title)
         assertTrue(c.body!!, "\n$url\n" in c.body!!)
         assertEquals("Wi-Fi · closes within 14 minutes", c.label)
         assertEquals(Action.STOP, c.action)
@@ -70,9 +70,9 @@ class HotspotStepTest {
     @Test
     fun `a start the person asked for that failed - the reason in the same card, with Try again`() {
         val c = HotspotStep.card(off(Stop.FAILED, HotspotFailure.TETHERING_ON), ready, null, asked = true)
-        assertEquals(Card(title = "The setup Wi-Fi didn't start.", status = HotspotFailure.TETHERING_ON.text, tone = Tone.ROSE, action = Action.RETRY), c)
+        assertEquals(Card(title = "Couldn't start setup Wi-Fi", status = HotspotFailure.TETHERING_ON.text, tone = Tone.ROSE, action = Action.RETRY), c)
         val wifiOff = HotspotStep.card(off(error = HotspotFailure.WIFI_OFF), ready, null, asked = true)
-        assertEquals("The setup Wi-Fi didn't start.", wifiOff.title)
+        assertEquals("Couldn't start setup Wi-Fi", wifiOff.title)
         assertEquals(Action.WIFI_SETTINGS, wifiOff.action)
         val noReason = HotspotStep.card(off(Stop.FAILED, HotspotFailure.FAILED), ready, null, asked = true)
         assertEquals("the title says it already", "Android didn't say why.", noReason.status)

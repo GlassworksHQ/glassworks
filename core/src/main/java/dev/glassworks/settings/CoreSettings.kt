@@ -136,7 +136,7 @@ class CoreSettings(
     private fun rangeSlider() = SettingsItem.Slider(
         "Presence range", value = { prefs.presenceRangeM }, min = 0f, max = RANGE_MAX_M, step = 0.1f,
         // 0 leaves the sensor's threshold as it is (Vi5300Presence.setRange): no distance to promise.
-        shown = { v -> if (v <= 0f) "The sensor's own setting" else "Up to ${number(v)} m" },
+        shown = { v -> if (v <= 0f) "Sensor default" else "Up to ${number(v)} m" },
     ) { v, done ->
         val old = prefs.presenceRangeM
         prefs.presenceRangeM = v
@@ -308,14 +308,14 @@ class CoreSettings(
         const val APPEARANCE = "appearance"
         const val APPEARANCE_TITLE = "Appearance"
         const val THEME_TITLE = "Theme"
-        const val THEME_NOTE = "For voice, timers, notifications and setup. Your dashboard keeps its own."
+        const val THEME_NOTE = "Applies to voice, timers, notifications, and setup. Your dashboard keeps its own theme."
         const val FOLLOW_HA_DARK = "Follow Home Assistant's dark mode"
         /** Under Home Assistant's theme card: where its colors come from. */
-        const val HA_THEME_NOTE = "Your dashboard's"
-        const val FOLLOW_HA_DARK_DETAIL = "Your theme turns light or dark when your dashboard does"
+        const val HA_THEME_NOTE = "From your dashboard"
+        const val FOLLOW_HA_DARK_DETAIL = "Automatically switch between light and dark when your dashboard does"
         const val CUSTOM_DARK_TITLE = "Custom theme, dark"
         const val CUSTOM_LIGHT_TITLE = "Custom theme, light"
-        const val CUSTOM_NOTE = "Pick your own colors. Changing one switches to Custom. Text turns light or dark to stay readable on your background."
+        const val CUSTOM_NOTE = "Pick your own colors. Changing one switches to Custom, and text adjusts automatically to stay readable."
         const val CUSTOM_LIGHT_A = "Accent"
         const val CUSTOM_LIGHT_B = "Second accent"
         const val CUSTOM_GROUND = "Background"
@@ -328,12 +328,12 @@ class CoreSettings(
         /** The Security page's id: a System page on both surfaces ([dev.glassworks.manage.SettingsNav.SYSTEM]). */
         const val SECURITY = "security"
         const val LOCK_TITLE = "Screen lock"
-        const val LOCK_TURNS_OFF = "This panel has a screen lock. When the screen turns off, someone has to unlock it. " +
-            "Turn the lock off in Android's settings, or keep the screen always on."
-        const val LOCK_ALWAYS_ON = "This panel has a screen lock. If Home Assistant turns the screen off, someone has to " +
-            "unlock it. Turn the lock off in Android's settings."
-        const val LICENCES_TITLE = "Open source licences"
-        const val LICENCES_DETAIL = "The open-source software in the app and the radio package"
+        const val LOCK_TURNS_OFF = "This panel has a screen lock, so turning the screen off locks the device. " +
+            "Remove the lock in Android's settings, or keep the screen always on."
+        const val LOCK_ALWAYS_ON = "This panel has a screen lock. If Home Assistant turns the screen off, someone will " +
+            "need to unlock it. Remove the lock in Android's settings."
+        const val LICENCES_TITLE = "Open source licenses"
+        const val LICENCES_DETAIL = "Third-party software included with Glassworks"
 
         /** The presence sensor's furthest (Home Assistant's `Presence range` number goes as far). */
         const val RANGE_MAX_M = 2.5f

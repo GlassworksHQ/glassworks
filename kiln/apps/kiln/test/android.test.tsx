@@ -49,16 +49,16 @@ describe('the switch', () => {
     history.replaceState(null, '', '/android?apk=local');
     render(<AndroidWizard />);
     await screen.findByText('Plug in the tablet');
-    expect(screen.getByText('Pick a test build\'s APK.')).toBeTruthy(); // a file from this computer is a test build, open page or not
+    expect(screen.getByText('Choose a test APK file.')).toBeTruthy(); // a file from this computer is a test build, open page or not
     expect(document.querySelector('input[type=file]')).toBeTruthy();
-    expect(embers()).toEqual(['Find it']);
+    expect(embers()).toEqual(['Find device']);
   });
 });
 
 describe('the screens', () => {
   it('1: a Pixel Tablet is named from USB, with its frame card', async () => {
     await show('named', 'This looks like a Pixel Tablet');
-    expect(screen.getByText(/Google · a tested device\./)).toBeTruthy();
+    expect(screen.getByText(/Google · tested device\./)).toBeTruthy();
     expect(document.querySelector('.fc')?.textContent).toContain('Google Pixel Tablet');
     expect(document.querySelector('.fc')?.textContent).toContain('Tested device');
     expect(embers()).toEqual(['Continue']);
@@ -77,7 +77,7 @@ describe('the screens', () => {
     const paths = [...document.querySelectorAll('.num > li > .path')].map((p) => [...p.querySelectorAll('span')].map((x) => x.textContent));
     expect(paths).toEqual([['Settings', 'About tablet'], ['Settings', 'System', 'Developer options']]);
     expect(screen.getByText(/Tap/).textContent).toMatch(/Build number seven times/);
-    expect(embers()).toEqual(['It\'s on']);
+    expect(embers()).toEqual(['USB debugging is on']);
   });
 
   it('2, Other: Android\'s general steps, one path per Android version', async () => {
@@ -98,7 +98,7 @@ describe('the screens', () => {
     expect(heading()).toBe('Keep it plugged in');
     expect(document.querySelector('.plain')?.textContent).toContain('Pixel Tablet, Android 14, 64-bit');
     const grants = [...document.querySelectorAll('.grants > div')].map((g) => g.textContent);
-    expect(grants).toEqual(['MicrophoneOn', 'CameraNot asked by this build', 'Secure settingsOn', 'Show over other appsOn', 'Turn the screen offOn', 'Updates without a tapOn']);
+    expect(grants).toEqual(['MicrophoneOn', 'CameraNot requested', 'Automatic locationOn', 'Show over other appsOn', 'Turn the screen offOn', 'Updates without a tapOn']);
     expect(document.querySelector('.warnbox')).toBeNull();
     expect(rail()).toContain('Install:now');
   });
@@ -106,8 +106,8 @@ describe('the screens', () => {
   it('4b: a vendor build that refuses a grant and the home screen: said once, then one tap', async () => {
     await show('vendor', 'One tap on the tablet');
     expect(document.querySelector('.lede')?.textContent).toBe('Android asks which app to use as the home screen. Pick Glassworks, then Always.');
-    expect(document.querySelector('.grants')?.textContent).toContain('Secure settingsThis tablet said no');
-    expect(document.querySelector('.warnbox')?.textContent).toBe('This tablet\'s software refused secure settings. Glassworks works without it; the Bluetooth proxy can\'t turn Location on by itself.');
+    expect(document.querySelector('.grants')?.textContent).toContain('Automatic locationNot allowed');
+    expect(document.querySelector('.warnbox')?.textContent).toBe('Android on this tablet didn\'t allow automatic location. Glassworks still works without it — the Bluetooth proxy can\'t turn Location on automatically.');
     expect(screen.getByText('Waiting for your tap')).toBeTruthy();
     expect(rail()).toContain('Install:turn');
   });
@@ -118,13 +118,13 @@ describe('the screens', () => {
     r.installed.home.state = 'unconfirmed';
     render(<Screens session={s} />);
     await until(() => /couldn't confirm/.test(document.querySelector('.lede')?.textContent ?? ''));
-    expect(document.querySelector('.lede')?.textContent).toMatch(/Kiln couldn't confirm the home screen\. In the tablet's Settings, find Default apps, then Home app, and choose Glassworks\./);
+    expect(document.querySelector('.lede')?.textContent).toMatch(/Kiln couldn't confirm the home screen automatically\. In Settings on the tablet, open Default apps → Home app, and choose Glassworks\./);
     expect(document.body.textContent).not.toMatch(/press Home/);
   });
 
   it('5: a tested device: its frame card, its page, and the setup page on the network', async () => {
     await show('done', 'You\'re all set');
-    expect(screen.getByText('Glassworks is the Pixel Tablet\'s home screen.')).toBeTruthy();
+    expect(screen.getByText('Glassworks is now the home screen on your Pixel Tablet.')).toBeTruthy();
     // The Pixel Tablet has a published Clarity result (frames/google-pixel-tablet/clarity, Clarity v1): no "not measured" tag.
     expect(screen.queryByText('Clarity · not measured yet')).toBeNull();
     expect(screen.getByText('Its page on glassworks.dev').getAttribute('href')).toBe('https://www.glassworks.dev/frames/google-pixel-tablet');
@@ -188,7 +188,7 @@ describe('the screens', () => {
 
   it('Undo an install keeps the first screen, says what happens, and goes back to installing', async () => {
     const s = await show('undo-find', 'Plug in the tablet to undo');
-    expect(document.querySelector('.lede')?.textContent).toMatch(/takes Glassworks off the tablet over USB/);
+    expect(document.querySelector('.lede')?.textContent).toMatch(/removes Glassworks over USB/);
     expect(document.querySelector('input[type=file]')).toBeNull();
     fireEvent.click(screen.getByText('Install instead'));
     await until(() => heading() === 'Plug in the tablet');

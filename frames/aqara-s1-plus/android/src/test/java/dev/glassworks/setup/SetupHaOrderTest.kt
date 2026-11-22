@@ -26,21 +26,21 @@ class SetupHaOrderTest {
 
     /** Per case: the current step, the card's label, its title. */
     private val s1 = mapOf(
-        "neither" to Triple(SetupFlow.SIGNIN, "Home Assistant · Sign in", "Scan to sign in."),
-        "neither-page-loading" to Triple(SetupFlow.SIGNIN, "Home Assistant · Sign in", "Scan to sign in."),
-        "signed-in-not-added" to Triple(SetupFlow.HA, "Home Assistant · Add it", "Add it in Home Assistant."),
-        "added-not-signed-in" to Triple(SetupFlow.SIGNIN, "Home Assistant · Sign in", "Scan to sign in."),
+        "neither" to Triple(SetupFlow.SIGNIN, "Home Assistant · Sign in", "Scan to sign in"),
+        "neither-page-loading" to Triple(SetupFlow.SIGNIN, "Home Assistant · Sign in", "Scan to sign in"),
+        "signed-in-not-added" to Triple(SetupFlow.HA, "Home Assistant · Add it", "Add it in Home Assistant"),
+        "added-not-signed-in" to Triple(SetupFlow.SIGNIN, "Home Assistant · Sign in", "Scan to sign in"),
         "both" to Triple(SetupFlow.PANES, "Panes · Choose", "What should it do?"),
-        "moved" to Triple(SetupFlow.SIGNIN, "Home Assistant · Sign in", "Scan to sign in."),
-        "not-found" to Triple(SetupFlow.SIGNIN, "Home Assistant · Sign in", "Find Home Assistant."),
+        "moved" to Triple(SetupFlow.SIGNIN, "Home Assistant · Sign in", "Scan to sign in"),
+        "not-found" to Triple(SetupFlow.SIGNIN, "Home Assistant · Sign in", "Find Home Assistant"),
     )
 
     /** Without touch, Sign in is the setup page's until Home Assistant added the panel. */
     private val mirror = s1 + mapOf(
-        "neither" to Triple(SetupFlow.SIGNIN, "Home Assistant · Sign in", "Scan to set it up."),
-        "neither-page-loading" to Triple(SetupFlow.SIGNIN, "Home Assistant · Sign in", "Scan to set it up."),
-        "not-found" to Triple(SetupFlow.SIGNIN, "Home Assistant · Sign in", "Scan to set it up."),
-        "both" to Triple(SetupFlow.PANES, "Panes · Choose", "Scan to set it up."),
+        "neither" to Triple(SetupFlow.SIGNIN, "Home Assistant · Sign in", "Scan to set it up"),
+        "neither-page-loading" to Triple(SetupFlow.SIGNIN, "Home Assistant · Sign in", "Scan to set it up"),
+        "not-found" to Triple(SetupFlow.SIGNIN, "Home Assistant · Sign in", "Scan to set it up"),
+        "both" to Triple(SetupFlow.PANES, "Panes · Choose", "Scan to set it up"),
     )
 
     private fun views(v: View): Sequence<View> = sequence {
@@ -79,9 +79,9 @@ class SetupHaOrderTest {
         val a = Robolectric.buildActivity(android.app.Activity::class.java).setup().get()
         val s = HaOrderCases.screen(a, TestFrames.s1(), HaOrderCases.all.toMap().getValue("added-not-signed-in"))
         views(s).first { it.contentDescription == "Add it" && it.isClickable }.performClick()
-        assertEquals(true, "Added to Home Assistant." in texts(s))
+        assertEquals(true, "Added to Home Assistant" in texts(s))
         views(s).filterIsInstance<TextView>().first { it.isShown && it.text.toString() == "Continue" }.performClick()
-        assertEquals(texts(s).toString(), true, "Scan to sign in." in texts(s))
+        assertEquals(texts(s).toString(), true, "Scan to sign in" in texts(s))
     }
 
     @Test

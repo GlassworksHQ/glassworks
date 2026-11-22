@@ -77,9 +77,9 @@ describe('the report sheet', () => {
     await screen.findByText('Tell us how it went');
     expect(input('Device model').value).toMatch(/Teclast/);
     expect(input('Android version').value).toMatch(/^\d+(\.\d+)* \(API \d+\)$/);
-    expect(input('ABI').value).toMatch(/arm/);
+    expect(input('Processor architecture (ABI)').value).toMatch(/arm/);
     expect((screen.getByLabelText('How you installed it') as HTMLSelectElement).value).toBe('usb');
-    expect((screen.getByLabelText('Kiln got to') as HTMLSelectElement).value).toBe('done');
+    expect((screen.getByLabelText('How far Kiln got') as HTMLSelectElement).value).toBe('done');
     // stock or custom isn't something Kiln reads: the person says
     expect((screen.getByLabelText('Stock or custom Android?') as HTMLSelectElement).value).toBe('');
     const all = [...document.querySelectorAll('.report-form input, .report-form select, .report-form textarea')].map((e) => (e as HTMLInputElement).value).join(' ');
@@ -88,7 +88,7 @@ describe('the report sheet', () => {
 
   it('every prefilled field can be changed', async () => {
     await openFrom({ model: 'Teclast P20HD', android: '10 (API 29)', abi: 'arm64-v8a', flow: 'usb', step: 'done', appVersion: '0.2.0' }, fake().t);
-    for (const [label, v] of [['Device model', 'Teclast P20HD (2021)'], ['Android version', '11'], ['ABI', 'armeabi-v7a'], ['Glassworks version', '0.2.1']] as const) {
+    for (const [label, v] of [['Device model', 'Teclast P20HD (2021)'], ['Android version', '11'], ['Processor architecture (ABI)', 'armeabi-v7a'], ['Glassworks version', '0.2.1']] as const) {
       type(label, v);
       expect(input(label).value).toBe(v);
     }
@@ -99,8 +99,8 @@ describe('the report sheet', () => {
   it('Preview asks for what\'s missing first, by field', async () => {
     await openFrom({ model: 'Teclast P20HD', android: '10', flow: 'usb' }, fake().t);
     fireEvent.click(screen.getByText('Preview'));
-    expect(screen.getByText('Pick stock or custom.')).toBeTruthy();
-    expect(screen.getByText('Say what worked, even if it was nothing.')).toBeTruthy();
+    expect(screen.getByText('Choose stock or custom Android.')).toBeTruthy();
+    expect(screen.getByText('Share what worked, even if nothing did yet.')).toBeTruthy();
     expect(screen.queryByText('This goes on GitHub, in public')).toBeNull();
   });
 
@@ -116,7 +116,7 @@ describe('the report sheet', () => {
     expect(shownBody).toContain('`@someone`'); // no ping
     expect(shownBody).toContain('(removed)'); // no address
     expect(shownBody).not.toContain('192.168.1.5');
-    fireEvent.click(screen.getByText('Send it'));
+    fireEvent.click(screen.getByText('Send report'));
     await screen.findByText('Thanks, it\'s on GitHub');
     expect(sent).toHaveLength(1);
     expect(sent[0]!.token).toBe('t0');
@@ -156,7 +156,7 @@ describe('the report sheet', () => {
     fillPersonalPart();
     fireEvent.click(screen.getByText('Preview'));
     await screen.findByText(/can't send reports from here right now/);
-    expect(screen.queryByText('Send it')).toBeNull();
+    expect(screen.queryByText('Send report')).toBeNull();
     const gh = screen.getByText('Open it on GitHub');
     expect(gh.className).toContain('ember');
     expect(gh.getAttribute('href')).toContain('template=device-report.yml');
@@ -166,7 +166,7 @@ describe('the report sheet', () => {
     await openFrom({ model: 'Teclast P20HD', android: '10', flow: 'usb' }, fake({ fail: new SendError('GitHub didn\'t take it just now.') }).t);
     fillPersonalPart();
     fireEvent.click(screen.getByText('Preview'));
-    fireEvent.click(await screen.findByText('Send it'));
+    fireEvent.click(await screen.findByText('Send report'));
     await screen.findByText('Kiln couldn\'t send it');
     expect(screen.getByText(/GitHub didn't take it just now/)).toBeTruthy();
     const gh = screen.getByText('Open it on GitHub instead');
@@ -178,7 +178,7 @@ describe('the report sheet', () => {
     await openFrom({ model: 'Teclast P20HD', android: '10', flow: 'usb' }, fake({ fail: new SendError('x', { model: 'Say which device it is.' }) }).t);
     fillPersonalPart();
     fireEvent.click(screen.getByText('Preview'));
-    fireEvent.click(await screen.findByText('Send it'));
+    fireEvent.click(await screen.findByText('Send report'));
     await screen.findByText('Say which device it is.');
     expect(screen.getByText('Tell us how it went')).toBeTruthy();
   });

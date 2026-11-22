@@ -51,89 +51,89 @@
       "why": "localStorage: this browser has flashed a Mirror (issue 580). Browsers hold it: never rename"
     },
     "words": {
-      "image.vendor": "Its vendor files are Qualcomm's and Quectel's, from the Glass Panes release.",
-      "image.lede": "Kiln adds Glassworks to the Glass Panes image and writes it over USB.",
+      "image.vendor": "Its vendor files come from Qualcomm and Quectel, via the Glass Panes release.",
+      "image.lede": "Kiln adds Glassworks to the Glass Panes system image and writes it over USB.",
       "image.apkLabel": "Glassworks APK (legacy build, test only)",
-      "fastboot.restarted": "The Mirror is restarting into fastboot. Click Connect and pick `Android`.",
-      "fastboot.byHandSteps": "Switch the Mirror off with the rocker switch in its bottom edge, unplug its power cord, and lay it face down.\nTake out the 4 screws in the bottom edge and take the stand off. Take out the 14 screws in the back, 2 of them either side of the recess by the feet, and lift the back off.\nPlug the power cord back into its socket in that recess. Leave the switch off.\nPlug the micro-USB port, in the top end's corner, into this computer.\nOn the small green board at the top end, hold VOL− (SW3): of its two buttons, the one nearer the top end's edge.\nKeep holding while you switch the Mirror on, and for about 5 seconds more. Its screen stays black.",
-      "fastboot.byHandNote": "Hold only VOL−: both buttons, or VOL+, start other modes. Some Mirrors have a service hatch in the back that reaches the board.",
-      "fastboot.overUsb": "It already runs Glassworks (or Glass Panes): restart it over USB",
+      "fastboot.restarted": "The Mirror is restarting into fastboot mode. Click Connect and pick `Android`.",
+      "fastboot.byHandSteps": "Switch the Mirror off with the rocker switch in its bottom edge, unplug its power cord, and lay it face down.\nRemove the 4 screws in the bottom edge and lift off the stand. Remove the 14 screws in the back (including 2 on either side of the recess by the feet) and lift off the back cover.\nPlug the power cord back into its socket in that recess, keeping the switch off.\nConnect the micro-USB port near the top corner to this computer.\nOn the small green board at the top end, press and hold VOL− (SW3) — the one of its two buttons closer to the top edge.\nKeep holding while you switch the Mirror on, and for about 5 seconds more. The screen will stay dark, which is normal.",
+      "fastboot.byHandNote": "Hold only VOL−, since pressing VOL+ or both buttons starts other modes. Some Mirrors have a small service hatch on the back that lets you reach the board without removing the whole cover.",
+      "fastboot.overUsb": "Already running Glassworks or Glass Panes? Restart over USB",
       "confirm.title": "This replaces lululemon’s software for good",
-      "confirm.lede": "Everything on the Mirror is replaced, with no backup: its bootloader can't read anything back. The way back is the plain Glass Panes image.",
-      "confirm.understand": "I understand lululemon's software can't be restored.",
-      "adb.firstStart": "Its glass stays dark for a few minutes. Leave it plugged in, click Connect and pick `Android`.",
-      "done.noTouch": "The Mirror has no touchscreen: hide the other launcher again, or use a USB mouse to choose Glassworks, then Always.",
-      "done.noHomeFix": "Add a build of Glassworks made for Android 6, over adb.",
-      "error.noFill": "If the bootloader refused a FILL chunk, try again without FILL. It sends about 200 MB more.",
-      "keep.steps": "Plug the Mirror's micro-USB into this computer, with Glassworks running.",
-      "community.ifVendor": "If it still has lululemon's software, that can't be restored, by Kiln or anyone.",
-      "app.pick.release": "Kiln installs Glassworks' newest release over USB and makes it the Mirror's only home screen.",
-      "app.pick.local": "Pick the legacy build of Glassworks for generic Android. Kiln makes it the Mirror's only home screen.",
-      "app.connectHelp": "Plug the Mirror into this computer, click Connect and pick it. Then choose **Allow** on the Mirror, with a USB mouse.",
-      "app.toImage": "A Mirror with lululemon's software?",
-      "fastboot.notLetIn": "The Mirror didn't let this browser in: it runs lululemon's software, or Glassworks from another browser. Put it in fastboot with the steps above."
+      "confirm.lede": "The Mirror's bootloader can't read its original software back, so Kiln can't create a backup before replacing it. You can always return to the plain Glass Panes image from Kiln.",
+      "confirm.understand": "I understand lululemon's original software can't be restored.",
+      "adb.firstStart": "The screen stays dark for a few minutes on first boot — that's normal. Leave it plugged in, click Connect, and pick `Android`.",
+      "done.noTouch": "Because the Mirror has no touchscreen, hide the other launcher again or plug in a USB mouse to choose Glassworks, then Always.",
+      "done.noHomeFix": "Install a build of Glassworks made for Android 6 over USB.",
+      "error.noFill": "If the write failed on a sparse chunk, try compatibility write mode below — it transfers about 200 MB more, which works around older bootloaders.",
+      "keep.steps": "Plug the Mirror's micro-USB cable into this computer with Glassworks running.",
+      "community.ifVendor": "If the Mirror still runs lululemon's software, that original software can't be restored afterward.",
+      "app.pick.release": "Kiln installs the latest Glassworks release over USB and sets it as the Mirror's only home screen.",
+      "app.pick.local": "Choose the legacy build of Glassworks for Android. Kiln will set it as the Mirror's only home screen.",
+      "app.connectHelp": "Plug the Mirror into this computer, click Connect, and select it in the list. Then choose **Allow** on the Mirror using a USB mouse.",
+      "app.toImage": "Mirror still running lululemon's software?",
+      "fastboot.notLetIn": "The Mirror didn't allow this browser to connect — it may still run lululemon's software, or Glassworks installed from another browser. Put it into fastboot mode using the steps above."
     },
     "silent": {
       "on": {
         "word": "On",
         "tone": "y",
-        "line": "Updates from Home Assistant install by themselves."
+        "line": "Updates from Home Assistant install automatically in the background."
       },
       "normal-app": {
         "word": "A click each",
         "tone": "n",
-        "line": "Android asks before each update, and the Mirror has no touchscreen to answer: use a USB mouse. An install over fastboot makes updates silent."
+        "line": "Android asks before each update, which needs a USB mouse since the Mirror has no touchscreen. Installing over fastboot makes updates automatic."
       },
       "not-granted": {
         "word": "Not granted",
         "tone": "w",
-        "line": "Android didn't let Glassworks install its own updates, so each one asks first. Write the image again to fix it."
+        "line": "Android didn't let Glassworks install its own updates automatically, so each one asks first. Reinstalling the image fixes this."
       },
       "unknown": {
         "word": "Not confirmed",
         "tone": "n",
-        "line": "Kiln couldn't read it back. Glassworks' Device page on the Mirror says."
+        "line": "Kiln couldn't read this back — check Settings → Device on the Mirror to see its status."
       }
     },
     "appRows": {
       "install": [
         {
           "id": "copy",
-          "text": "Copy the APK to the Mirror"
+          "text": "Copy Glassworks to the Mirror"
         },
         {
           "id": "install",
-          "text": "Android installs it and optimises it"
+          "text": "Android is installing and optimizing it"
         },
         {
           "id": "grant",
-          "text": "Permissions"
+          "text": "Grant permissions"
         },
         {
           "id": "portrait",
-          "text": "Turn the screen upright"
+          "text": "Set the screen upright"
         },
         {
           "id": "start",
-          "text": "First start, with your Home Assistant"
+          "text": "Start Glassworks for the first time"
         },
         {
           "id": "home",
-          "text": "Make it the only home screen"
+          "text": "Set as the only home screen"
         }
       ],
       "undo": [
         {
           "id": "admin",
-          "text": "Take back Glassworks' device admin"
+          "text": "Remove Glassworks' screen-lock permission"
         },
         {
           "id": "remove",
-          "text": "Remove Glassworks"
+          "text": "Uninstall Glassworks"
         },
         {
           "id": "home",
-          "text": "Give the home screen back"
+          "text": "Restore the previous home screen"
         }
       ],
       "level3": [

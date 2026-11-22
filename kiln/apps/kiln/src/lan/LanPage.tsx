@@ -37,7 +37,7 @@ function Pair({ lan, v, busy }: { lan: LanSession; v: Extract<LanView, { at: 'pa
     return (
       <section className="card" aria-labelledby="h">
         <h2 id="h">Pairing is off</h2>
-        <p className="lede">Home Assistant has added this panel, so it pairs with a browser only when you allow it. Press <b>Allow setup over the network</b>: on the panel&apos;s device page in Home Assistant, or on the panel in its settings, under Home Assistant &amp; dashboard. It stays allowed for 30 minutes.</p>
+        <p className="lede">Home Assistant has already added this panel, so it only pairs with a browser when you allow it. Choose <b>Allow setup over the network</b> on the panel&apos;s device page in Home Assistant, or in the panel&apos;s settings under Home Assistant &amp; dashboard. Pairing stays open for 30 minutes.</p>
         {v.error && <p className="small">{v.error}</p>}
         <div className="foot"><span /><button type="button" className="btn ember" disabled={busy} onClick={() => void lan.click('check', () => lan.start())}>Check again</button></div>
       </section>
@@ -72,7 +72,7 @@ function Screen({ lan, v, busy }: { lan: LanSession; v: LanView; busy: boolean }
     case 'lost':
       return (
         <section className="card err" aria-labelledby="h">
-          <h2 id="h">{v.again === 'done' ? 'Almost done' : 'The panel stopped answering'}</h2>
+          <h2 id="h">{v.again === 'done' ? 'Almost done' : 'Lost connection to the panel'}</h2>
           <p className="lede">{v.error}</p>
           <div className="foot"><span /><button type="button" className="btn ember" disabled={busy} onClick={() => void lan.click('retry', () => lan.retry())}>Try again</button></div>
         </section>

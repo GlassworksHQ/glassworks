@@ -43,7 +43,7 @@ class RebootRouteTest {
     @Test fun withoutRebootOrDeviceOwnerThereIsNoReboot() {
         val a = actions()
         assertFalse(a.canReboot)
-        assertEquals("The app can only reboot the panel as its device owner (Android 7 or newer), or as a system app.", a.reboot())
+        assertEquals("Glassworks can only restart the device when installed as a system app or set as device owner (Android 7 or newer).", a.reboot())
     }
 
     @Test fun aSystemAppWithRebootRebootsThroughPowerManager() {

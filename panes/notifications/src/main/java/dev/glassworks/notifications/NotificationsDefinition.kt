@@ -48,7 +48,7 @@ class NotificationsDefinition(
                 SettingsItem.Link("Notifications on the panel", listLine(s), twin = ::listed) { hub.openList() },
             )),
             SettingsItem.Group("Try it", listOf(
-                SettingsItem.Action("Send a test notification", { "A normal one, with a chime and one button" }, "Send") { done ->
+                SettingsItem.Action("Send a test notification", { "Sends a sample notification with a chime and one button" }, "Send") { done ->
                     done(if (hub.sendTest()) null else NOT_RUNNING)
                 },
             )),

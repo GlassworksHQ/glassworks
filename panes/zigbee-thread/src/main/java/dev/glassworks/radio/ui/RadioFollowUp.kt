@@ -103,9 +103,9 @@ object RadioFollowUp {
     /** A refused mode switch (RadioController's status) in plain words. */
     fun refusedText(status: String): String = when {
         status.contains("needs the root helper v") ->
-            "The panel's boot software is too old for this role. Update it once with the web installer; your settings stay."
+            "The panel's system software is too old for this role. Update it once with Kiln — your settings stay safe."
         status.contains("needs the root helper") ->
-            "The panel has no root helper, so only Off works. Install the panel's software with the web installer first."
+            "The panel needs its radio helper before this role can run. Run Kiln once to install it."
         status.contains("firmware update is running") -> "A radio firmware update is running. Try again when it's done."
         else -> status
     }
@@ -211,7 +211,7 @@ object RadioFollowUp {
                     kv += Kv("Zigbee2MQTT port", RadioStep.z2mPort(f.panelIp))
                     note = "Zigbee2MQTT on another computer: add its address under Who may connect, below."
                 } else if (!f.helper.v4) {
-                    note = "Zigbee2MQTT needs Silicon Labs' stack, which needs the panel's boot software updated once with the web installer."
+                    note = "Zigbee2MQTT uses Silicon Labs' stack, which needs a one-time update from Kiln."
                 }
                 Card(
                     f.mode, if (add != null) "Add it to ZHA · scan to pair" else "Add it to ZHA", emptyList(), kv,
@@ -263,7 +263,7 @@ object RadioFollowUp {
                 val more = listOf(
                     "The panel joins your Thread network as a router and extends its range. It needs the network's active " +
                         "dataset, which Home Assistant shows on its Thread page: Preferred network → ⓘ Network information → " +
-                        "Active dataset TLVs (for admin users, for a network from an OpenThread Border Router it manages).",
+                        "Active dataset TLVs (for administrator users, for a network from an OpenThread Border Router it manages).",
                     "Paste it into the panel's Thread dataset in Home Assistant (the panel's device page → Configuration), " +
                         "or under Advanced here. $DATASET_KEY",
                     "Get it from Home Assistant does that for you: Home Assistant only gives the dataset to administrators, " +
@@ -283,7 +283,7 @@ object RadioFollowUp {
                     datasetField = true, actions = leave, more = more,
                 ) else Card(
                     f.mode, "Give the panel your Thread network",
-                    listOf("Get it from Home Assistant. Not signed in as an admin? It shows a code to sign in once."),
+                    listOf("Get it from Home Assistant. Not signed in as an administrator? The panel will show a QR code for a one-time sign-in."),
                     // No network yet: the title says it all, and the one way forward is Get it from Home Assistant.
                     // A network but not in it yet (joining): Leave, to start over.
                     state = if (t?.dataset == true) t.describe() else if (t == null) statusDetail(f) else null,
@@ -339,7 +339,7 @@ object RadioFollowUp {
         RadioMode.THREAD_ROUTER -> {
             Card(
                 f.mode, "Join your Thread network",
-                listOf("Get it from Home Assistant. Not signed in as an admin? It shows a code to sign in once."),
+                listOf("Get it from Home Assistant. Not signed in as an administrator? The panel will show a QR code for a one-time sign-in."),
                 state = f.thread?.short() ?: statusDetail(f),
                 actions = if (f.thread?.joined == true) emptyList() else listOf(Action.THREAD_JOIN_HA),
             )

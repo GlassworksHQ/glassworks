@@ -473,7 +473,7 @@ class RadioDefinition(
         private const val TAG = "Glassworks.SetupChannel"
         private const val MAIN_TAG = "Glassworks"
         internal const val NATIVE_KEY = "radio"
-        internal const val NOT_RUNNING = "The kiosk service isn't running yet; try again in a moment."
+        internal const val NOT_RUNNING = "Glassworks is still starting up. Try again in a moment."
         /** Why the radio can't run (the settings page; the nav says "Can't run"). Public for tests. */
         const val NO_HELPER = "it needs the root helper, which the installer puts on the panel"
         private const val CHANNEL_NOT_RUNNING = "The radio controller isn't running yet; try again in a moment."
@@ -487,7 +487,7 @@ class RadioDefinition(
 
         /** The line under the radio allow-list: who may connect right now. */
         fun allowedNow(radioRunning: Boolean, allowNow: String?): String = when {
-            !radioRunning -> "Kiosk service not running"
+            !radioRunning -> "Glassworks isn't running yet"
             allowNow == null -> "Allowed now: no firewall active (radio off or old root helper)"
             allowNow.isEmpty() -> "Allowed now: only the panel itself (Home Assistant hasn't connected yet)"
             else -> "Allowed now: ${allowNow.replace(" ", ", ")}"

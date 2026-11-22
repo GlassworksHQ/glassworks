@@ -225,7 +225,7 @@ open class KioskService : Service() {
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         if (Platform.hasNotificationChannels) {
             nm.createNotificationChannel(
-                NotificationChannel(CHANNEL, "Kiosk", NotificationManager.IMPORTANCE_MIN)
+                NotificationChannel(CHANNEL, "Glassworks", NotificationManager.IMPORTANCE_MIN)
                     .apply { setShowBadge(false) }
             )
         }
@@ -243,7 +243,7 @@ open class KioskService : Service() {
         else Notification.Builder(this)
         b.setSmallIcon(notificationIcon())
             .setContentTitle(glassworks.build.product)
-            .setContentText("Tap for kiosk settings · screen, sensors & ESPHome API running")
+            .setContentText("Tap for panel settings · screen, sensors & Home Assistant running")
             .setContentIntent(menu)
             .setOngoing(true)
         // The shade has no settings gear until Aqara's own onboarding ran: Aqara's settings app from here too.

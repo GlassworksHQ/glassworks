@@ -79,7 +79,7 @@ class NotificationsDefinitionTest {
         val t = texts(d.settings().single().items)
         assertEquals("2 on the panel · 1 held · last one 2 min ago", t.first())
         assertTrue("Notifications on the panel: 2 · open the list" in t)
-        assertTrue("Send a test notification: A normal one, with a chime and one button" in t)
+        assertTrue("Send a test notification: Sends a sample notification with a chime and one button" in t)
         assertTrue("Do not disturb: Off" in t)
         assertTrue("Button taps: event esphome.notification_action" in t)
     }

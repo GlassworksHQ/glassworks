@@ -84,7 +84,7 @@ class RadioFollowUpTest {
         val old = RadioFollowUp.card(facts(RadioMode.ZIGBEE_TCP, stack = ZigbeeStack.SISDK, helper = v3), Place.SETTINGS)
         assertFalse(old.stackChoice)
         assertEquals(2, old.kv.size)
-        assertTrue(old.note!!.contains("web installer"))
+        assertTrue(old.note!!.contains("Kiln"))
     }
 
     @Test
@@ -135,7 +135,7 @@ class RadioFollowUpTest {
         assertEquals(1, c.lines.size)
         assertTrue(c.lines[0].startsWith("Get it from Home Assistant"))
         assertTrue(c.more.any { it.contains("Active dataset TLVs") }) // copying by hand: behind "How does this work?"
-        assertTrue(c.more.any { it.contains("admin users") })
+        assertTrue(c.more.any { it.contains("administrator users") })
         // joined: the network's name large, the role under it, no QR (nothing left to scan)
         val joined = RadioFollowUp.card(facts(RadioMode.THREAD_ROUTER, thread = ThreadRouterState(true, "router", "Example-Net")), Place.SETTINGS)
         assertEquals("Example-Net", joined.headline)
@@ -300,10 +300,10 @@ class RadioFollowUpTest {
         for (m in RadioMode.entries) assertTrue(m.name, RadioFollowUp.pitch(m).isNotBlank())
         assertTrue(RadioFollowUp.pitch(RadioMode.THREAD_ROUTER).contains("already have"))
         assertEquals(
-            "The panel's boot software is too old for this role. Update it once with the web installer; your settings stay.",
+            "The panel's system software is too old for this role. Update it once with Kiln — your settings stay safe.",
             RadioFollowUp.refusedText("Thread router (repeater) needs the root helper v2 or newer (installed: v1; update the panel's boot image). Still in Off."),
         )
-        assertTrue(RadioFollowUp.refusedText("Thread border router needs the root helper (init service s1kiosk_radio is not installed; …)").contains("only Off works"))
+        assertTrue(RadioFollowUp.refusedText("Thread border router needs the root helper (init service s1kiosk_radio is not installed; …)").contains("radio helper"))
         assertEquals("something else", RadioFollowUp.refusedText("something else"))
     }
 

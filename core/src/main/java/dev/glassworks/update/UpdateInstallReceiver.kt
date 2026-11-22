@@ -41,7 +41,7 @@ open class UpdateInstallReceiver : BroadcastReceiver() {
 
     private fun describe(status: Int, message: String): String {
         val what = when (status) {
-            PackageInstaller.STATUS_FAILURE_ABORTED -> "cancelled"
+            PackageInstaller.STATUS_FAILURE_ABORTED -> "canceled"
             PackageInstaller.STATUS_FAILURE_BLOCKED -> "blocked"
             PackageInstaller.STATUS_FAILURE_CONFLICT -> "conflict with the installed app"
             PackageInstaller.STATUS_FAILURE_INCOMPATIBLE -> "incompatible"

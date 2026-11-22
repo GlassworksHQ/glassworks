@@ -32,7 +32,7 @@ class RadioTwinTest {
     private val app = RuntimeEnvironment.getApplication()
 
     /** RadioDefinition's answer without a radio controller (its constant is internal to the pane). */
-    private val NOT_RUNNING = "The kiosk service isn't running yet; try again in a moment."
+    private val NOT_RUNNING = "Glassworks is still starting up. Try again in a moment."
 
     private fun facts(mode: RadioMode, status: String = "ok ${mode.label}: listening", thread: ThreadRouterState? = null, stored: Boolean? = null) =
         RadioFollowUp.Facts(mode, status, HelperFacts(true, 4), ZigbeeStack.AQARA, stored, thread, "http://homeassistant.local:8123", "192.0.2.10")

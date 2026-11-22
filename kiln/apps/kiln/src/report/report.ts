@@ -158,17 +158,17 @@ export type Problems = Partial<Record<keyof ReportFields, string>>;
 /** What's wrong with the fields (already cleaned), in Kiln's words, by field; empty when they can be sent. */
 export function problems(f: ReportFields): Problems {
   const p: Problems = {};
-  if (!f.model) p.model = 'Say which device it is.';
-  if (!f.android) p.android = 'Say which Android it runs.';
-  if (!f.osKind || !Object.hasOwn(OS_KINDS, f.osKind)) p.osKind = 'Pick stock or custom.';
-  if (!f.flow || !Object.hasOwn(FLOWS, f.flow)) p.flow = 'Pick how you installed it.';
-  if (f.step && !Object.hasOwn(STEPS, f.step)) p.step = 'Not a step Kiln has.';
-  if (!f.worked) p.worked = 'Say what worked, even if it was nothing.';
-  if (!f.didnt) p.didnt = 'Say what didn\'t, or "Nothing so far".';
-  if (f.clarity && !(GRADES as readonly string[]).includes(f.clarity)) p.clarity = 'A grade from A+ to E, or leave it empty.';
+  if (!f.model) p.model = 'Enter the device model.';
+  if (!f.android) p.android = 'Enter the Android version it runs.';
+  if (!f.osKind || !Object.hasOwn(OS_KINDS, f.osKind)) p.osKind = 'Choose stock or custom Android.';
+  if (!f.flow || !Object.hasOwn(FLOWS, f.flow)) p.flow = 'Choose how you installed Glassworks.';
+  if (f.step && !Object.hasOwn(STEPS, f.step)) p.step = 'Choose a step from the list, or leave it blank.';
+  if (!f.worked) p.worked = 'Share what worked, even if nothing did yet.';
+  if (!f.didnt) p.didnt = 'Share what didn\'t work, or write "Nothing so far".';
+  if (f.clarity && !(GRADES as readonly string[]).includes(f.clarity)) p.clarity = 'Choose a grade from A+ to E, or leave it blank.';
   for (const k of Object.keys(LIMITS) as (keyof ReportFields)[]) {
-    if (f[k].length > LIMITS[k]) p[k] = `At most ${LIMITS[k]} characters.`;
-    else if (ONE_LINE[k] && !ONE_LINE[k].test(f[k])) p[k] ??= k === 'appVersion' ? 'A version like 0.2.0.' : 'Only letters, digits and simple punctuation.';
+    if (f[k].length > LIMITS[k]) p[k] = `Keep this under ${LIMITS[k]} characters.`;
+    else if (ONE_LINE[k] && !ONE_LINE[k].test(f[k])) p[k] ??= k === 'appVersion' ? 'Use a version number like 0.2.0.' : 'Use only letters, numbers, and simple punctuation.';
   }
   return p;
 }

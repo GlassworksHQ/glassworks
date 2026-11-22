@@ -97,7 +97,7 @@ class ScreenByFrameTest {
             rows.titles(),
         )
         assertEquals("Uses the presence sensor", rows.wake().detail)
-        for (s in listOf("Uses the presence sensor", "The sensor's own setting", "Follows the room's light", AqaraS1Plus.SETTINGS_TITLE)) assertTrue(s, s in html)
+        for (s in listOf("Uses the presence sensor", "Sensor default", "Follows the room's light", AqaraS1Plus.SETTINGS_TITLE)) assertTrue(s, s in html)
     }
 
     @Test fun aTabletWithNothingShowsNoPresenceLightOrRange() {

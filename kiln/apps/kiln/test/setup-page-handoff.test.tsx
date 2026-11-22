@@ -137,7 +137,7 @@ describe('the hand-off to the panel\'s setup page', () => {
     expect(open.getAttribute('href')).toBe('http://192.0.2.50:8099/');
     expect(open.getAttribute('target')).toBe('_blank');
     expect(screen.getByText('http://192.0.2.50:8099/')).toBeTruthy();
-    expect(screen.getByText('Change these later on the S1 Plus\'s Manage page. It asks for a code the S1 Plus shows.')).toBeTruthy();
+    expect(screen.getByText('You can change any of these later on the Manage page, using a 6-digit code shown on the S1 Plus.')).toBeTruthy();
     s.close();
   });
 });
