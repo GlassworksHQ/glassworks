@@ -173,6 +173,8 @@ export function buildPackagesXml(o: {
   <version volumeUuid="primary_physical" sdkVersion="23" databaseVersion="3" fingerprint="placeholder" />
   <permissions>
     <item name="android.permission.RECEIVE_BOOT_COMPLETED" package="android" />
+    <item name="android.permission.ACCESS_WIFI_STATE" package="android" />
+    <item name="android.permission.CHANGE_WIFI_STATE" package="android" />
   </permissions>
   <package name="${o.packageName}" codePath="${codePath}" nativeLibraryPath="${codePath}/lib"${abiAttr} publicFlags="0" privateFlags="0" ft="19000000000" it="19000000000" ut="19000000000" version="1" userId="${o.userId}">
     <sigs count="1">
@@ -181,6 +183,8 @@ export function buildPackagesXml(o: {
     <perms>
       <item name="android.permission.RECEIVE_BOOT_COMPLETED" granted="true" flags="0" />
       <item name="android.permission.INTERNET" granted="true" flags="0" />
+      <item name="android.permission.ACCESS_WIFI_STATE" granted="true" flags="0" />
+      <item name="android.permission.CHANGE_WIFI_STATE" granted="true" flags="0" />
     </perms>
   </package>
 </packages>

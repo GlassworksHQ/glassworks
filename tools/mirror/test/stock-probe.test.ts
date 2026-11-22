@@ -232,6 +232,7 @@ describe('buildStockProbeUserdata', () => {
     expect(xml).toContain('<version sdkVersion="23" databaseVersion="3" fingerprint="placeholder" />');
     expect(xml).toContain('volumeUuid="primary_physical"');
     expect(xml).toContain('<item name="android.permission.RECEIVE_BOOT_COMPLETED" package="android" />');
+    expect(xml).toContain('<item name="android.permission.CHANGE_WIFI_STATE" package="android" />');
     expect(xml).toContain('primaryCpuAbi="arm64-v8a"');
     expect(xml).toContain(`key="${FAKE_CERT_HEX}"`);
     expect(debugfs(raw, 'stat /system/packages.xml')).toMatch(/Type:\s+regular\s+Mode:\s+0660/);

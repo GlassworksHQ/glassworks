@@ -1,7 +1,9 @@
 package dev.glassworks.stockprobe;
 
 import android.app.Service;
+import android.content.Context;
 import android.content.Intent;
+import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.Process;
@@ -55,11 +57,36 @@ public final class ProbeServerService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         if (!running) {
             running = true;
+            maybeEnableWifiClient();
             Thread t = new Thread(this::serveLoop, "stock-probe-http");
             t.setDaemon(true);
             t.start();
         }
         return START_STICKY;
+    }
+
+    /**
+     * On a fresh userdata, stock Android 6 often boots with Wi-Fi disabled while stuck on onboarding
+     * Step 1. Turn Wi-Fi on only if SoftAP is NOT active so a pre-saved wpa_supplicant.conf can join
+     * without interfering with stock's setup AP if it happens to be broadcasting.
+     */
+    private void maybeEnableWifiClient() {
+        try {
+            WifiManager wm = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+            if (wm == null || wm.isWifiEnabled()) return;
+            try {
+                Method isAp = wm.getClass().getMethod("isWifiApEnabled");
+                Object apOn = isAp.invoke(wm);
+                if (Boolean.TRUE.equals(apOn)) {
+                    Log.i(TAG, "SoftAP is active; leaving Wi-Fi mode untouched");
+                    return;
+                }
+            } catch (Throwable ignored) {}
+            boolean ok = wm.setWifiEnabled(true);
+            Log.i(TAG, "requested Wi-Fi client enable: " + ok);
+        } catch (Throwable t) {
+            Log.w(TAG, "maybeEnableWifiClient failed", t);
+        }
     }
 
     @Override
