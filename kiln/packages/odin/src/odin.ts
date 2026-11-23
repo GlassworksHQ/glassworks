@@ -139,17 +139,20 @@ export class OdinDevice {
       if (!options.resume) await this.handshake();
 
       const answer = await this.command(P.beginSession(), P.Control.Session);
-      // "0 means changing the packet size is not supported" (BridgeManager::BeginSession).
+      // "0 means changing the packet size is not supported" (BridgeManager::BeginSession). The shape is kept only
+      // once the whole setup succeeds, so a failed attempt leaves nothing behind for a retry.
+      let shape = P.LEGACY_TRANSFER;
       if (answer !== 0) {
         const result = await this.command(P.filePartSize(P.FAST_TRANSFER.packetSize), P.Control.Session);
         if (result !== 0) throw new OdinError('protocol', `the device refused a ${P.FAST_TRANSFER.packetSize}-byte part size (answer ${result})`);
-        this.shape = P.FAST_TRANSFER;
+        shape = P.FAST_TRANSFER;
       }
       if (total > 0) {
         const result = await this.command(P.totalBytes(total), P.Control.Session);
         if (result !== 0) throw new OdinError('protocol', `the device refused the session's total of ${total} bytes (answer ${result})`);
       }
       this.budget = total;
+      this.shape = shape;
       this.state = 'session';
     });
   }

@@ -87,6 +87,10 @@ export class WebUsbOdinTransport implements OdinTransport {
     if (!found) {
       throw new OdinError('not-download-mode', 'this device has no Download mode interface (CDC Data, one bulk IN and one OUT)');
     }
+    // Claimed already means another connection on this page holds it: two would mix their packets.
+    if (found.claimed) {
+      throw new OdinError('claim-failed', 'this page already has the Download mode interface open: close that connection first');
+    }
     try {
       await device.claimInterface(found.interfaceNumber);
     } catch (e) {
@@ -97,7 +101,8 @@ export class WebUsbOdinTransport implements OdinTransport {
       try {
         await device.selectAlternateInterface(found.interfaceNumber, found.alternateSetting);
       } catch (e) {
-        // Give back what this attempt took, so another tab or program can claim the device.
+        // Give back what this attempt took (the claim is always this call's: one held already is refused above),
+        // so another tab or program can claim the device.
         try { await device.releaseInterface(found.interfaceNumber); } catch { /* already gone */ }
         if (openedHere) { try { await device.close(); } catch { /* already gone */ } }
         throw new OdinError('claim-failed', `${CLAIM_HELP} (alternate setting: ${message(e)})`, { cause: e });
@@ -150,7 +155,7 @@ function message(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-interface Found { interfaceNumber: number; alternateSetting: number; epIn: number; epOut: number }
+interface Found { interfaceNumber: number; alternateSetting: number; epIn: number; epOut: number; claimed: boolean }
 
 /** The first CDC Data setting with exactly two endpoints, one bulk IN and one bulk OUT. */
 export function findInterface(interfaces: readonly USBInterface[]): Found | undefined {
@@ -160,7 +165,10 @@ export function findInterface(interfaces: readonly USBInterface[]): Found | unde
       const epIn = alt.endpoints.find((e) => e.direction === 'in' && e.type === 'bulk');
       const epOut = alt.endpoints.find((e) => e.direction === 'out' && e.type === 'bulk');
       if (epIn && epOut) {
-        return { interfaceNumber: iface.interfaceNumber, alternateSetting: alt.alternateSetting, epIn: epIn.endpointNumber, epOut: epOut.endpointNumber };
+        return {
+          interfaceNumber: iface.interfaceNumber, alternateSetting: alt.alternateSetting,
+          epIn: epIn.endpointNumber, epOut: epOut.endpointNumber, claimed: iface.claimed,
+        };
       }
     }
   }

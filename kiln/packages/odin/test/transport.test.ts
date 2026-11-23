@@ -68,7 +68,7 @@ describe('finding the device', () => {
       iface(1, 0x0a, [...bulkPair, { endpointNumber: 4, direction: 'in', type: 'bulk' }]), // three endpoints
       iface(2, 0xff, bulkPair), // vendor class
       iface(3, 0x0a, [{ endpointNumber: 5, direction: 'in', type: 'bulk' }, { endpointNumber: 6, direction: 'out', type: 'bulk' }], 1),
-    ])).toEqual({ interfaceNumber: 3, alternateSetting: 1, epIn: 5, epOut: 6 });
+    ])).toEqual({ interfaceNumber: 3, alternateSetting: 1, epIn: 5, epOut: 6, claimed: false });
     expect(findInterface([iface(0, 0x02, bulkPair)])).toBeUndefined();
   });
 });
@@ -95,6 +95,14 @@ describe('opening it', () => {
     });
     await expect(WebUsbOdinTransport.open(usb.device)).rejects.toMatchObject({ code: 'claim-failed' });
     expect(usb.calls).toEqual(['open', 'claim 0', 'alternate 0 2', 'release 0', 'close']);
+  });
+
+  it('refuses an interface this page has claimed already, and leaves that claim alone', async () => {
+    const claimed = iface(0, 0x0a, bulkPair, 2);
+    (claimed as { claimed: boolean }).claimed = true;
+    const usb = usbDevice({ interfaces: [claimed] });
+    await expect(WebUsbOdinTransport.open(usb.device)).rejects.toMatchObject({ code: 'claim-failed', message: /already has/ });
+    expect(usb.calls).toEqual(['open']);
   });
 
   it('says what to do when the browser can\'t claim it (WinUSB on Windows)', async () => {

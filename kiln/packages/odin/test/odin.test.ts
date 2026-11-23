@@ -330,6 +330,17 @@ describe('failures part way', () => {
     await expect(new OdinDevice(device).beginSession()).rejects.toMatchObject({ code: 'protocol', message: /type 0x64, got 0x65/ });
   });
 
+  it('keeps no transfer shape from a session setup that failed', async () => {
+    const device = fake({ beginAnswer: 1 });
+    device.override = (type, request) => type === 0x64 && request === 2 ? response(0x64, 3) : undefined;
+    const odin = new OdinDevice(device);
+    await expect(odin.beginSession({ totalBytes: 5 })).rejects.toThrow(/refused the session's total/);
+    expect(odin.transferShape.packetSize).toBe(128 * KiB); // not the 1 MiB the failed attempt agreed to
+    device.override = (type, request) => type === 0x64 && request === 0 ? response(0x64, 0) : undefined;
+    await odin.beginSession({ totalBytes: 5, resume: true });
+    expect(odin.transferShape.packetSize).toBe(128 * KiB);
+  });
+
   it('a device that refuses the part size or the total', async () => {
     const partSize = fake({ beginAnswer: 1 });
     partSize.override = (type, request) => type === 0x64 && request === 5 ? response(0x64, 1) : undefined;

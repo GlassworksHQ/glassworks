@@ -110,8 +110,9 @@ export async function flashRecovery(recovery: File): Promise<void> {
 | `close()` | Releases the USB interface | |
 
 Calls run one at a time. A call made while another is still running, such as `end()` from an
-`onProgress` callback or a second `flash` that wasn't awaited, throws an `OdinError` with the code
-`state` and sends nothing. It isn't queued.
+`onProgress` callback or a second `flash` that wasn't awaited, sends nothing and isn't queued. Its
+promise rejects with an `OdinError` whose code is `state`, so handle that with `.catch()` or with
+`await` in a `try`. A plain `try` around a call that isn't awaited won't catch it.
 
 Also exported: `parsePit` and `partitionBytes` for a PIT on its own, `ODIN_USB_FILTERS` for
 `requestDevice`, `WebUsbOdinTransport`, `OdinError` (with a `code` to act on), and `CLAIM_HELP`.
