@@ -97,8 +97,16 @@ export class OdinDevice {
 
   /** Opens a WebUSB device (from `navigator.usb.requestDevice({ filters: ODIN_USB_FILTERS })`) and claims it. */
   static async open(device: USBDevice, options: OdinOptions = {}): Promise<OdinDevice> {
-    writableSet(options); // before the claim: a bad option must not leave the interface held
-    return new OdinDevice(await WebUsbOdinTransport.open(device), options);
+    // Checked and copied before the claim, so a bad option, or one changed while the device opens, can't leave the
+    // interface held.
+    const writable = [...writableSet(options)];
+    const transport = await WebUsbOdinTransport.open(device);
+    try {
+      return new OdinDevice(transport, { writable });
+    } catch (e) {
+      await transport.close();
+      throw e;
+    }
   }
 
   /** The file transfer's packet and sequence sizes, which {@link beginSession} settles. */

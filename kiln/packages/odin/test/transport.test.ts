@@ -130,6 +130,16 @@ describe('opening it', () => {
     expect(usb.calls).toEqual(['open', 'claim 1']);
   });
 
+  it('uses the options as they were when open was called, even if they change while the device opens', async () => {
+    const { OdinDevice } = await import('../src/index.ts');
+    const writable: string[] = ['RECOVERY'];
+    const usb = usbDevice({ open: async () => { writable[0] = 'BOOT'; } }); // changed mid-open
+    const odin = await OdinDevice.open(usb.device, { writable: writable as 'RECOVERY'[] });
+    expect(usb.calls).toEqual(['open', 'claim 1']);
+    await odin.close();
+    expect(usb.calls).toEqual(['open', 'claim 1', 'release 1', 'close']);
+  });
+
   it('refuses a device that isn\'t in Download mode', async () => {
     await expect(WebUsbOdinTransport.open(usbDevice({ productId: 0x6860 }).device)).rejects.toMatchObject({ code: 'not-download-mode', message: /04e8:6860/ });
     const noData = usbDevice({ interfaces: [iface(0, 0x02, [])] });
