@@ -1383,7 +1383,8 @@ def cmd_coldstart(dev, a):
                 if st.get("recovering") and not st["recovering"].get("launched"):
                     rv["launch"] = "am-start"
                     dev.sh(f"am start -W -n {dev.component}", timeout=120)
-            elif C.now() - rv["at"] > RECOVER_WAIT_S:
+            elif not rv.get("usable_at") and C.now() - rv["at"] > RECOVER_WAIT_S:
+                # RECOVER_WAIT_S is for the page to come back usable; once it has, the fallback above ends the wait.
                 res["error"] = (f"the kiosk didn't come back within {RECOVER_WAIT_S:.0f} s after "
                                 f"{res['recoveries'][-1]['after']} timed out")
                 break

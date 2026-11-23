@@ -759,7 +759,7 @@ def page_gone():
     """The view's browser page gone mid-view, as MainActivity.onContentGone logs it and then loads the kiosk's page
     again (the test dashboard's start view, which says when it is usable and done, as after a restart).
     FAKE_PAGE_GONE_HOW: killed (the default), crashed, or none: the reload alone, with no line before it (a sign-in or
-    a navigation, which still fails the run). FAKE_LMK: the low-memory killer's line for the page's process, in dmesg
+    a navigation, which still fails the run). FAKE_PAGE_GONE_LATE_S: seconds before the page comes back. FAKE_LMK: the low-memory killer's line for the page's process, in dmesg
     (kernel) or logcat (lmkd), just before."""
     how = os.environ.get("FAKE_PAGE_GONE_HOW", "killed")
     C.sleep(0.2)
@@ -772,6 +772,7 @@ def page_gone():
         line("Glassworks", f"Content process {how}; restarting session")
     C.sleep(0.2)
     saved = (state("test_dash.json") if held() else None) or state("saved_url.json") or os.environ.get("FAKE_SAVED_URL")
+    C.sleep(float(os.environ.get("FAKE_PAGE_GONE_LATE_S", "0")))   # the page comes back this late
     restart_page(saved, done=not os.environ.get("FAKE_PAGE_GONE_NO_DONE"))
 
 

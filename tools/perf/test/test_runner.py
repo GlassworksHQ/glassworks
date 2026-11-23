@@ -1656,6 +1656,16 @@ class PageGone(unittest.TestCase):
         self.assertTrue(c["recoveries"][0].get("done_missing"), c["recoveries"])
         self.assertTrue(c["tiers"]["heavy"].get("done"))
 
+    def test_a_page_usable_just_before_the_recovery_deadline_still_ends_the_wait(self):
+        """CodeRabbit on #781: the start view came back usable shortly before RECOVER_WAIT_S and its done line was
+        lost. The deadline is for coming back usable, so the fallback still ends the wait and the run goes on."""
+        p, c, _ = self.run_short(90, FAKE_PAGE_GONE="typical", FAKE_LMK="kernel", FAKE_PAGE_GONE_NO_DONE="1",
+                                 FAKE_PAGE_GONE_LATE_S="2", GW_PERF_RECOVER_WAIT_S="7")
+        self.assertEqual(p.returncode, 0, p.stderr[-1500:])
+        self.assertIsNone(c["error"])
+        self.assertTrue(c["recoveries"][0].get("done_missing"), c["recoveries"])
+        self.assertTrue(c["tiers"]["heavy"].get("done"))
+
     def test_a_reload_without_a_kill_still_fails_the_run(self):
         """A sign-in or a navigation: the page the kiosk loads again with no line before it."""
         p, c, _ = self.run_short(90, FAKE_PAGE_GONE="typical", FAKE_PAGE_GONE_HOW="none")
