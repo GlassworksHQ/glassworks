@@ -15,7 +15,7 @@ import java.lang.annotation.RetentionPolicy;
 
 @Note(value = "Bravo note", more = {"Echo", "0 zero", "F last", "z last"})
 public class UsbDebuggingFixture {
-    static final String OWNER = "D1:13:60:89:B6:16:00:75:63:92:56:96:F5:46:42:4A";
+    static final String OWNER = "A1:EC:24:9E:F0:8B:80:55:C5:A7:0A:89:A4:F0:D5:8B";
     static final String EARLY = "0 early";
     static String mutable = "Alpha";
 

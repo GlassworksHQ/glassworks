@@ -181,7 +181,11 @@ describe('the image worker\'s jobs', () => {
 
   it('what a wifi step makes is never Kiln\'s own scratch file, whatever the recipe names it', () => {
     for (const n of ['userdata+wifi', 'scratch.raw', 'scratch-wifi.raw', '../x', '']) expect(madeFile(n)).not.toBe(WIFI_SCRATCH);
-    expect(madeFile('userdata+wifi')).toBe('made-userdata_wifi');
+    expect(madeFile('userdata+wifi')).toBe('made-userdata_2bwifi');
+    // one stored file per name a recipe may choose: image+key and image_key don't share one
+    expect(madeFile('image+key')).not.toBe(madeFile('image_key'));
+    expect(madeFile('image_key')).toBe('made-image_5fkey');
+    expect(madeFile('../x')).toBe('made-.._2fx');
   });
 
   it('a failed write cancels that download\'s own request; a handle that won\'t empty is closed', async () => {

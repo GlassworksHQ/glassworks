@@ -41,19 +41,36 @@ export type ImageStep =
   /** Kiln's first start over adb with this browser's key. Only an image that trusts that key: Glassworks. */
   | { do: 'first-start' }
   /**
-   * The person's Wi-Fi network, saved in a copy of a checked userdata image (`file`), named `makes`.
-   * It writes one file and nothing else: `/misc/wifi/wpa_supplicant.conf`, which is the template from
-   * the checked system image (`template`'s `/etc/wifi/wpa_supplicant.conf`), then the network with its
-   * PSK, never the password. Optional: when the person gives no network, `makes` is `file` as checked.
-   * Writes nothing to the device.
+   * This browser's adb key in a copy of a checked userdata image (`file`), named `makes`, in place of the
+   * key the image publishes there, for an image that lets in a key listed in its adb_keys (as its own
+   * installer does it). It writes one file and nothing else: `/misc/adb/adb_keys`, keeping its owner,
+   * mode and label. Not optional: a published key's private half is everyone's. Writes nothing to the
+   * device.
+   */
+  | { do: 'adb-key'; file: string; makes: string }
+  /**
+   * This browser's adb key in a copy of a checked system image (`file`), named `makes`, in place of a key
+   * the image's framework lets in without asking, for an image that hardcodes one nobody can take back
+   * (no user can remove it, and its owner can get into every device on the image). It changes one file,
+   * the one the frame names (the framework jar with the key in it), and in it only that key's
+   * fingerprint. Writes nothing to the device.
+   */
+  | { do: 'system-key'; file: string; makes: string }
+  /**
+   * The person's Wi-Fi network, saved in a copy of a checked userdata image (`file`), or of what an
+   * `adb-key` step made from one, named `makes`. It writes one file and nothing else:
+   * `/misc/wifi/wpa_supplicant.conf`, which is the template from the checked system image (`template`'s
+   * `/etc/wifi/wpa_supplicant.conf`), then the network with its PSK, never the password. Optional: when
+   * the person gives no network, `makes` is `file` as it was. Writes nothing to the device.
    */
   | { do: 'wifi'; file: string; template: string; makes: string }
   /**
-   * After the restart, over adb with the image's own published key (`key`, a checked download, used for
-   * this one session and never stored), runs `svc wifi enable` and nothing else, so a saved network
-   * joins without anyone opening Settings. Only after a `wifi` step, and only when a network was saved.
+   * After the restart, over adb, runs `svc wifi enable` and nothing else, so a saved network joins
+   * without anyone opening Settings. With this browser's key after an `adb-key` step; or with the
+   * image's own published key (`key`, a checked download, used for this one session and never stored).
+   * Only after a `wifi` step, and only when a network was saved.
    */
-  | { do: 'wifi-on'; key: string };
+  | { do: 'wifi-on'; key?: string };
 
 export type StepKind = ImageStep['do'];
 
@@ -65,6 +82,8 @@ export const STEP_LIBRARY: Readonly<Record<StepKind, { fields: readonly string[]
   flash: { fields: ['partition', 'file'], writes: true, device: true },
   restart: { fields: [], writes: false, device: true },
   'first-start': { fields: [], writes: false, device: true },
+  'adb-key': { fields: ['file', 'makes'], writes: false, device: false },
+  'system-key': { fields: ['file', 'makes'], writes: false, device: false },
   wifi: { fields: ['file', 'template', 'makes'], writes: false, device: false },
   'wifi-on': { fields: ['key'], writes: false, device: true },
 };
@@ -143,6 +162,9 @@ export function validateImage(r: ImageRecipe, frame: FrameAccess): string[] {
   const checked = new Set<string>();
   const made = new Set<string>();
   const downloaded = new Set<string>();
+  const keyed = new Set<string>();
+  let systemKeyed = false;
+  const flashed = new Set<string>();
   let device = false, fastboot = false, restarted = false, writes = 0, wifi = false, wifiOn = false;
   (r.steps ?? []).forEach((s, i) => {
     const kind = (s as { do?: string }).do ?? '';
@@ -162,11 +184,13 @@ export function validateImage(r: ImageRecipe, frame: FrameAccess): string[] {
         checked.add(s.file);
         break;
       case 'patch':
-        if (r.community) bad.push(`${at(i)}: a community image goes on as its project publishes it, with no patch`);
+        if (r.community) bad.push(`${at(i)}: a community image gets no patch: only the library's own changes (adb-key, system-key, wifi)`);
         if (!checked.has(s.file)) bad.push(`${at(i)}: patch needs ${s.file} downloaded first`);
         // Kiln runs it after its checks and the warning (it uses what fastboot reports), so before fastboot it would be skipped
         if (!fastboot || restarted) bad.push(`${at(i)}: patch comes after fastboot and before restart`);
         if (!Array.isArray(s.makes) || !s.makes.length) bad.push(`${at(i)}: patch must say what it makes`);
+        // Kiln's build replaces every file made before it: a copy made first (adb-key, system-key, wifi) would be gone
+        if (made.size) bad.push(`${at(i)}: patch comes before any step that makes a file: Kiln's build replaces what they made`);
         for (const m of s.makes ?? []) made.add(m);
         break;
       case 'fastboot':
@@ -177,6 +201,9 @@ export function validateImage(r: ImageRecipe, frame: FrameAccess): string[] {
         writes++;
         if (!fastboot || restarted) bad.push(`${at(i)}: flash needs the device in fastboot first`);
         if (!frame.partitions.includes(s.partition)) bad.push(`${at(i)}: this frame doesn't let a recipe write "${s.partition}"`);
+        // the last write wins: a second one would replace what the first wrote (a keyed copy with the published file)
+        if (flashed.has(s.partition)) bad.push(`${at(i)}: ${s.partition} is written once`);
+        flashed.add(s.partition);
         if (!checked.has(s.file) && !made.has(s.file)) bad.push(`${at(i)}: ${s.file} isn't a checked download or something Kiln made from one`);
         break;
       case 'restart':
@@ -187,12 +214,29 @@ export function validateImage(r: ImageRecipe, frame: FrameAccess): string[] {
         if (r.community) bad.push(`${at(i)}: Kiln's first start needs an image that trusts this browser's key: only Glassworks`);
         if (!restarted) bad.push(`${at(i)}: first-start comes after restart`);
         break;
+      case 'adb-key':
+        if (keyed.size) bad.push(`${at(i)}: the adb key is put in once`);
+        // like wifi: after Kiln's checks and the warning, before the writes
+        if (!fastboot || restarted) bad.push(`${at(i)}: adb-key comes after fastboot and before restart`);
+        if (!checked.has(s.file)) bad.push(`${at(i)}: adb-key needs ${s.file} downloaded first`);
+        if (typeof s.makes !== 'string' || !FILE_NAME.test(s.makes) || files.has(s.makes) || made.has(s.makes)) bad.push(`${at(i)}: adb-key must name a new file it makes`);
+        else { made.add(s.makes); keyed.add(s.makes); }
+        break;
+      case 'system-key':
+        if (systemKeyed) bad.push(`${at(i)}: the system image's key is changed once`);
+        systemKeyed = true;
+        // like adb-key: after Kiln's checks and the warning, before the writes
+        if (!fastboot || restarted) bad.push(`${at(i)}: system-key comes after fastboot and before restart`);
+        if (!checked.has(s.file)) bad.push(`${at(i)}: system-key needs ${s.file} downloaded first`);
+        if (typeof s.makes !== 'string' || !FILE_NAME.test(s.makes) || files.has(s.makes) || made.has(s.makes)) bad.push(`${at(i)}: system-key must name a new file it makes`);
+        else made.add(s.makes);
+        break;
       case 'wifi':
         if (wifi) bad.push(`${at(i)}: the Wi-Fi is saved once`);
         wifi = true;
         // Kiln runs it after its checks and the warning, before the writes: between fastboot and restart
         if (!fastboot || restarted) bad.push(`${at(i)}: wifi comes after fastboot and before restart`);
-        if (!checked.has(s.file)) bad.push(`${at(i)}: wifi needs ${s.file} downloaded first`);
+        if (!checked.has(s.file) && !keyed.has(s.file)) bad.push(`${at(i)}: wifi needs ${s.file} downloaded first, or made by adb-key`);
         if (!checked.has(s.template)) bad.push(`${at(i)}: wifi needs ${s.template} downloaded first`);
         if (typeof s.makes !== 'string' || !FILE_NAME.test(s.makes) || files.has(s.makes) || made.has(s.makes)) bad.push(`${at(i)}: wifi must name a new file it makes`);
         else made.add(s.makes);
@@ -202,11 +246,31 @@ export function validateImage(r: ImageRecipe, frame: FrameAccess): string[] {
         wifiOn = true;
         if (!wifi) bad.push(`${at(i)}: wifi-on needs a wifi step first: there is no network to join otherwise`);
         if (!restarted) bad.push(`${at(i)}: wifi-on comes after restart`);
-        if (!checked.has(s.key)) bad.push(`${at(i)}: wifi-on's key must be a checked download`);
+        if (s.key !== undefined && !checked.has(s.key)) bad.push(`${at(i)}: wifi-on's key must be a checked download`);
+        if (s.key === undefined && !keyed.size) bad.push(`${at(i)}: wifi-on without a key connects with this browser's, so it needs an adb-key step first`);
         break;
     }
   });
   for (const f of files.keys()) if (!downloaded.has(f)) bad.push(`${f} is never downloaded`);
+  // a copy with this browser's key that nothing writes leaves the device on the image's own keys: wifi-on with
+  // this browser's would then be refused. What reaches a flash: each flashed file, and what a wifi step whose
+  // copy is flashed starts from (without a network, that source is written in its place).
+  const written = new Set((r.steps ?? []).flatMap((s) => (s.do === 'flash' ? [s.file] : [])));
+  const wifis = (r.steps ?? []).filter((s): s is Extract<ImageStep, { do: 'wifi' }> => s.do === 'wifi');
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const w of wifis) if (written.has(w.makes) && !written.has(w.file)) { written.add(w.file); grew = true; }
+  }
+  for (const s of r.steps ?? []) {
+    if ((s.do === 'adb-key' || s.do === 'system-key') && typeof s.makes === 'string' && !written.has(s.makes)) {
+      bad.push(`${s.do} makes ${s.makes}, but nothing writes it: flash it, or a wifi step's copy of it`);
+    }
+    if (s.do === 'wifi' && typeof s.makes === 'string' && !written.has(s.makes)) bad.push(`wifi makes ${s.makes}, but nothing writes it: flash it`);
+  }
+  const wifiFrom = wifis[0];
+  if (wifiFrom && keyed.size && !keyed.has(wifiFrom.file) && written.has(wifiFrom.makes)) {
+    bad.push(`wifi starts from ${wifiFrom.file}, not the copy with this browser's key: what it makes would leave the key out`);
+  }
   if (!writes) bad.push('the recipe writes nothing');
   if (!restarted) bad.push('the recipe must end by restarting the device');
   return bad;
@@ -255,4 +319,30 @@ export function writtenAsIs(r: ImageRecipe): ImageFile[] {
 /** The `wifi` step that makes `name`, when there is one: its source file is what gets written when no network is saved. */
 export function wifiStep(r: ImageRecipe, name: string): Extract<ImageStep, { do: 'wifi' }> | undefined {
   return r.steps.find((s): s is Extract<ImageStep, { do: 'wifi' }> => s.do === 'wifi' && s.makes === name);
+}
+
+/** The `adb-key` step that makes `name`, when there is one. */
+export function adbKeyStep(r: ImageRecipe, name: string): Extract<ImageStep, { do: 'adb-key' }> | undefined {
+  return r.steps.find((s): s is Extract<ImageStep, { do: 'adb-key' }> => s.do === 'adb-key' && s.makes === name);
+}
+
+/** The `system-key` step that makes `name`, when there is one. */
+export function systemKeyStep(r: ImageRecipe, name: string): Extract<ImageStep, { do: 'system-key' }> | undefined {
+  return r.steps.find((s): s is Extract<ImageStep, { do: 'system-key' }> => s.do === 'system-key' && s.makes === name);
+}
+
+/**
+ * The recipe's file a written `name` comes from: itself when it is one, else what the `wifi`, `adb-key`
+ * and `system-key` steps that make it start from, followed back to a checked download. Undefined for
+ * what a `patch` builds.
+ */
+export function sourceFile(r: ImageRecipe, name: string): ImageFile | undefined {
+  for (let n = name, hops = 0; hops <= r.steps.length; hops++) {
+    const f = r.files.find((x) => x.name === n);
+    if (f) return f;
+    const from = wifiStep(r, n)?.file ?? adbKeyStep(r, n)?.file ?? systemKeyStep(r, n)?.file;
+    if (from === undefined) return undefined;
+    n = from;
+  }
+  return undefined;
 }

@@ -65,6 +65,16 @@ function setup(o: { search?: string; fail?: 'route' | 'hash' | 'flash' | 'change
     },
     async build() { calls.push('build'); return { system: new Blob(['S']), userdata: new Blob(['U']) }; },
     async wifi(o) { calls.push(`wifi ${o.userdata.name} ${o.system.name}`); return Object.assign(new Blob(['W']), { tag: o.makes }); },
+    async adbKey(o) {
+      calls.push(`adb-key ${o.userdata.name} -> ${o.makes}`);
+      // it hashes the stored userdata as it reads it: one that no longer checks out stops here, before any write
+      if (fail === 'changed') { fail = undefined; throw new WrongImage('the stored userdata.sparse no longer checks out (SHA-256 00…), so Kiln didn\'t put this browser\'s key in it'); }
+      return Object.assign(new Blob(['K']), { tag: o.makes });
+    },
+    async systemKey(o) {
+      calls.push(`system-key ${o.system.name} -> ${o.makes}`);
+      if (fail === 'gone') { fail = undefined; throw new DOMException('A requested file or directory could not be found', 'NotFoundError'); }
+      return Object.assign(new Blob(['Y']), { tag: o.makes }); },
     async discard() { calls.push('discard'); if (fail === 'discard') throw new Error('the browser\'s storage is busy'); },
   };
   const fb: FastbootLike = {
@@ -117,12 +127,12 @@ describe('the choice', () => {
 });
 
 describe('Glass Panes', () => {
-  it('runs its recipe inside Kiln\'s safety steps: both files checked, Kiln\'s checks, the warning, then the writes as published', async () => {
+  it('runs its recipe inside Kiln\'s safety steps: both files checked, Kiln\'s checks, the warning, this browser\'s key in its system and its userdata, then the writes', async () => {
     const { f, calls } = setup();
     f.showCommunity(true); f.pick('glass-panes'); f.choose();
     expect(f.blocked()).toMatch(/Download system\.img first/);
     await f.download();
-    expect(f.state.files.map((x) => [x.name, x.state])).toEqual([['system.img', 'ok'], ['userdata.sparse', 'ok'], ['adbkey', 'ok']]);
+    expect(f.state.files.map((x) => [x.name, x.state])).toEqual([['system.img', 'ok'], ['userdata.sparse', 'ok']]);
     expect(f.blocked()).toBeUndefined(); // no APK, Home Assistant or Wi-Fi: it goes on as published
     f.toFastboot();
     await f.connectFastboot(); // Kiln's checks, read-only
@@ -132,15 +142,16 @@ describe('Glass Panes', () => {
     f.understand(true);
     await f.flash();
     expect(calls).toEqual([
-      'download https://refract.test/glass-panes/mirror-android-2/system.img',
-      'download https://refract.test/glass-panes/mirror-android-2/userdata.sparse',
-      'download https://refract.test/glass-panes/project-key/adbkey',
+      'download https://refract.test/glass-panes/mirror-android-3/system.img',
+      'download https://refract.test/glass-panes/mirror-android-3/userdata.sparse',
       'read system size', 'read userdata size',
-      // every file checked again before the first write, as the very Blobs fastboot then sends
-      'file system.img', 'check system.img bdb6b844', 'file userdata.sparse', 'check userdata.sparse 74b1f57a',
-      'flash system system.img', 'flash userdata userdata.sparse', 'reboot', 'discard',
+      // system: this browser's key in a copy, in place of the one its services.jar hardcodes, hashed against its pin as it is read
+      'system-key system.img -> system+key',
+      // userdata: this browser's key in a copy, hashed against its pin as it is read
+      'adb-key userdata.sparse -> userdata+key',
+      'flash system system+key', 'flash userdata userdata+key', 'reboot', 'discard',
     ]);
-    expect(f.state.screen).toBe('done'); // no first start over adb: it doesn't trust Kiln's key
+    expect(f.state.screen).toBe('done'); // no first start over adb: Glass Panes sets itself up
     expect(f.state.files.every((x) => x.state === 'waiting')).toBe(true); // discarded: another install downloads again
     // the backup step: the Mirror can't be read back, so the log keeps each written file's hash
     expect(f.state.log.join('\n')).toContain(`system.img: SHA-256 ${GLASS_PANES.system.sha256}`);
@@ -151,12 +162,12 @@ describe('Glass Panes', () => {
     const { f, calls } = setup({ fail: 'route' });
     f.showCommunity(true); f.pick('glass-panes'); f.choose();
     await f.download();
-    expect(f.state.files.map((x) => x.state)).toEqual(['ok', 'error', 'waiting']);
+    expect(f.state.files.map((x) => x.state)).toEqual(['ok', 'error']);
     expect(f.blocked()).toMatch(/userdata\.sparse/);
     f.toFastboot();
     expect(f.state.screen).toBe('download');
     await f.download();
-    expect(f.state.files.map((x) => x.state)).toEqual(['ok', 'ok', 'ok']);
+    expect(f.state.files.map((x) => x.state)).toEqual(['ok', 'ok']);
     expect(calls.filter((c) => c.endsWith('system.img'))).toHaveLength(1); // not downloaded twice
   });
 
@@ -168,7 +179,7 @@ describe('Glass Panes', () => {
     expect(calls.filter((c) => c.startsWith('flash'))).toEqual([]);
     expect(calls).not.toContain('reboot');
     f.retry();
-    expect(f.state.files.map((x) => x.state)).toEqual(['waiting', 'waiting', 'waiting']);
+    expect(f.state.files.map((x) => x.state)).toEqual(['waiting', 'waiting']);
     expect(f.blocked()).toMatch(/Download system\.img first/);
   });
 
@@ -178,7 +189,7 @@ describe('Glass Panes', () => {
     await f.download(); f.toFastboot(); await f.connectFastboot(); f.understand(true); await f.flash();
     expect(f.state.screen).toBe('error');
     expect(calls.filter((c) => c.startsWith('flash'))).toEqual([]);
-    expect(f.state.files.map((x) => x.state)).toEqual(['waiting', 'waiting', 'waiting']);
+    expect(f.state.files.map((x) => x.state)).toEqual(['waiting', 'waiting']);
   });
 
   it('a userdata partition smaller than its published userdata image stops at fastboot, with nothing written', async () => {
@@ -227,7 +238,7 @@ describe('Glass Panes', () => {
     expect(f.state.files.every((x) => x.state === 'ok')).toBe(true);
     f.toFastboot(); await f.connectFastboot(); f.understand(true); await f.flash();
     expect(f.state.screen).toBe('done');
-    expect(calls.filter((c) => c.startsWith('download'))).toHaveLength(3);
+    expect(calls.filter((c) => c.startsWith('download'))).toHaveLength(2);
   });
 
   it.each(['image-download-error', 'image-download-bad'] as const)('%s: Kiln\'s bug, Try again and Report this, nothing to pick by hand', async (d) => {
@@ -239,7 +250,7 @@ describe('Glass Panes', () => {
     expect(alert).not.toMatch(/proxy|Refract|SHA-256/); // the plumbing stays in the technical log and the report (#672)
     const report = new URL(screen.getByRole('link', { name: 'Report this' }).getAttribute('href')!);
     expect(report.origin + report.pathname).toBe('https://github.com/GlassworksHQ/glassworks/issues/new');
-    const file = d === 'image-download-bad' ? 'userdata.sparse (154944572 bytes)' : 'system.img (850905808 bytes)';
+    const file = d === 'image-download-bad' ? 'userdata.sparse (154952764 bytes)' : 'system.img (1074051108 bytes)';
     expect(report.searchParams.get('body')).toContain(`Image: glass-panes\nFile: ${file}\nWhat Kiln saw: `);
     expect(embers()).toEqual(['Try again']);
     expect(document.querySelector('input[type="file"]')).toBeNull();
@@ -279,7 +290,7 @@ describe('Glassworks\' Done', () => {
     const { image: flash, app } = await showImage('flash-done');
     expect(screen.queryByText(/choose Way back/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Install Glass Panes instead' }));
-    expect(flash.state).toMatchObject({ screen: 'choose', picked: 'glass-panes', from: 'glassworks', open: true, files: [{ state: 'waiting' }, { state: 'waiting' }, { state: 'waiting' }] });
+    expect(flash.state).toMatchObject({ screen: 'choose', picked: 'glass-panes', from: 'glassworks', open: true, files: [{ state: 'waiting' }, { state: 'waiting' }] });
     // the page leaves Done for the install's first screen
     cleanup();
     render(<ImageFlow image={flash} app={app} />);
@@ -300,7 +311,7 @@ describe('?image=<id>', () => {
     expect(rail()).toEqual(['Mirror', 'Download', 'Fastboot', 'Install', 'Done']);
     expect(embers()).toEqual(['Download Glass Panes']);
     expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
-    expect(screen.getAllByText('Ready to download.')).toHaveLength(3);
+    expect(screen.getAllByText('Ready to download.')).toHaveLength(2);
   });
 
   it.each(['', '?image=', '?image=nope', '?image=glassworks', '?image=Glass-Panes'])('%s opens the normal page', (q) => {

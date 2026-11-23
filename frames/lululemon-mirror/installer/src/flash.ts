@@ -16,7 +16,7 @@ import { describeMirrorUpdates, readMirrorUpdates, type MirrorUpdates } from './
 export const MIRROR_FASTBOOT: USBDeviceFilter = { vendorId: 0x18d1, productId: 0xd00d };
 
 /**
- * The Glass Panes `system.img`'s size: 314,554 blocks of 4 KiB. The partition must be at least this:
+ * The Glass Panes `system.img`'s size: 314,554 blocks of 4 KiB (images 2 and 3). The partition must be at least this:
  * the real Mirror's is 314,573 blocks (1,288,491,008 bytes, read 2026-11-16).
  */
 export const SYSTEM_BYTES = 1_288_413_184;
@@ -290,9 +290,9 @@ export async function firstBoot(p: PanelShell, o: { haUrl?: string; locale?: str
 /** Glass Panes' userdata, as its release publishes it: Kiln's Glass Panes install (choices.ts) and the CLI's way back. */
 export const GLASS_PANES_USERDATA = {
   name: 'userdata.sparse',
-  url: 'https://github.com/git-nimrod/glass-panes/releases/download/mirror-android-2/userdata.sparse',
-  size: 154_944_572,
-  sha256: '74b1f57ac20ce7c56065083a2bc3ddd283493be29d851fd04efc156ec96cf908',
+  url: 'https://github.com/git-nimrod/glass-panes/releases/download/mirror-android-3/userdata.sparse',
+  size: 154_952_764,
+  sha256: '81eb5648ec0b5ed13d520e90c597c9ff50f3ea57524e9d9554c2a71dc94c521d',
 } as const;
 
 /** Checks a downloaded file against its published size and SHA-256, streaming (the CLI, tools/mirror). */

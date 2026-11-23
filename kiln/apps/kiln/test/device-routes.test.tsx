@@ -104,14 +104,17 @@ describe('a community image written as published', () => {
 });
 
 describe('a community image after a reload at its last step', () => {
-  it('comes back on it, with no rewrite: Connect says to switch Wi-Fi on in the image\'s Settings, its key gone with the restart', async () => {
+  it('comes back on it, with no rewrite: Connect switches Wi-Fi on with this browser\'s key, which the install put in its userdata', async () => {
     const community = mirrorFrame.imageFlow.recipes.find((r) => r.community)!;
     sessionStorage.setItem(`kiln:device:${MIRROR_BASE}:image`, JSON.stringify({ at: 'flashed', image: community.id }));
-    const image = new ImageSession({ frame: mirrorFrame, images: {} as never, requestFastboot: () => new Promise(() => {}), requestAdb: () => new Promise(() => {}),
+    const ran: string[] = [];
+    const shell = { async run(c: string) { ran.push(c); return { out: c === 'getprop sys.boot_completed' ? '1' : c === 'dumpsys wifi' ? 'Wi-Fi is enabled\n' : '', code: 0 }; }, async push() {} };
+    const image = new ImageSession({ frame: mirrorFrame, images: {} as never, requestFastboot: () => new Promise(() => {}), requestAdb: async () => shell, sleep: async () => {},
       adbKey: () => undefined, apk: () => undefined, progress: (await import('../src/device/imageSession')).sessionProgress(`kiln:device:${MIRROR_BASE}:image`) });
     expect(image.state).toMatchObject({ screen: 'adb', picked: community.id, changed: true });
     await image.connectAdb();
-    expect(image.state.connectError).toMatch(/Turn Wi-Fi on in the Mirror's Settings once instead/);
+    expect(ran).toContain('svc wifi enable');
+    expect(image.state).toMatchObject({ screen: 'done', communityWifi: 'on' });
   });
 });
 

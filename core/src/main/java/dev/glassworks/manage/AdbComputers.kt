@@ -66,7 +66,7 @@ class AdbKey private constructor(val base64: String, val name: String?, bytes: B
 /**
  * The computers the panel lets in over USB adb, and the one asking now (#435). For a panel whose app may answer
  * Android's "Allow USB debugging?" (it holds `MANAGE_USB`, the Mirror's privileged app) and whose adbd forgets
- * every approval (the Glass Panes image ignores `adb_keys`): the app keeps the list and approves a listed
+ * every approval (its adbd ignores `adb_keys`, and the app never writes there): the app keeps the list and approves a listed
  * computer each time it connects. The computer that installed Glassworks needs no place here: the image lets it
  * in itself.
  *

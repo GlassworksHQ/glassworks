@@ -173,6 +173,8 @@ const rowsOf = (d: DeviceFrame): Record<string, { id: WorkStep; text: string }[]
   'flash-userdata': [{ id: 'flash-userdata', text: 'Write fresh storage' }],
   restart: [{ id: 'restart', text: `Restart ${d.the}` }],
   'first-start': [{ id: 'first-boot', text: 'Finish first-time setup' }],
+  'system-key': [{ id: 'system-key', text: 'Replace the built-in USB key with this browser’s' }],
+  'adb-key': [{ id: 'adb-key', text: 'Replace the shared USB key with this browser’s' }],
   wifi: [{ id: 'wifi', text: 'Save your Wi-Fi network for first start' }],
   'wifi-on': [{ id: 'wifi-on', text: 'Turn Wi-Fi on after first start' }],
 });

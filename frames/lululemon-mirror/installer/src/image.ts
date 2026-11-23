@@ -1,10 +1,10 @@
 // The Mirror's images, made in the person's browser (#40, option A). `system` is the Glass Panes
 // community image the person downloaded themselves. Kiln checks its SHA-256 and adds the legacy build of
 // Glassworks as a privileged system app and the Glassworks boot animation (the screen's rotation is
-// set on the first boot: flash.ts setPortrait), and leaves out the image's apps a Mirror never uses
-// (unused.ts). The
+// set on the first boot: flash.ts setPortrait), and leaves out the image's own kiosk app (Glassworks is
+// the Mirror's app) and the apps a Mirror never uses (unused.ts). The
 // Mirror has no touchscreen to answer "Allow USB debugging?", and the image lets one key in without
-// asking (services.ts): Kiln makes that this browser's key instead of the published Glass Panes one.
+// asking (services.ts): Kiln makes that this browser's key instead of the image's own.
 // `userdata` is new and empty. Nothing here is downloaded from or uploaded to anyone: the person's
 // file goes in, and the patched copy stays in their browser until fastboot writes it.
 // The findings behind each step: frames/lululemon-mirror/research/image-patch.md.
@@ -18,16 +18,24 @@ import { UNUSED_APPS } from './unused';
 export const GLASS_PANES = {
   /** The project and its developer: credited where the image is downloaded and on Done. */
   project: { name: 'Glass Panes', href: 'https://github.com/git-nimrod/glass-panes', developer: 'git-nimrod', developerHref: 'https://github.com/git-nimrod' },
-  release: 'https://github.com/git-nimrod/glass-panes/releases/tag/mirror-android-2',
+  release: 'https://github.com/git-nimrod/glass-panes/releases/tag/mirror-android-3',
   system: {
     name: 'system.img',
-    url: 'https://github.com/git-nimrod/glass-panes/releases/download/mirror-android-2/system.img',
-    size: 850_905_808,
-    sha256: 'bdb6b8445296666162256affa968d590075f56a8ad2229930f8502b9703e35c1',
+    url: 'https://github.com/git-nimrod/glass-panes/releases/download/mirror-android-3/system.img',
+    size: 1_074_051_108,
+    sha256: 'bd7f2e33599a2ceaac5e442fabcadf9a0aa5b31f3be4db2d2e1303711f4bec19',
   },
-  /** Its build.prop's fingerprint: read from the image on 2026-11-16 (image 1's was …/11041605:…). */
-  fingerprint: 'Android/msm8916_64/msm8916_64:6.0.1/MMB29M/11120023:userdebug/test-keys',
+  /** Its build.prop's fingerprint: read from the image on 2026-11-22 (image 2's was …/11120023:…, image 1's …/11041605:…). */
+  fingerprint: 'Android/msm8916_64/msm8916_64:6.0.1/MMB29M/11212248:userdebug/test-keys',
 } as const;
+
+/**
+ * The image's own kiosk app, which image 3 builds in as a persistent privileged app and home screen
+ * (Glass Panes' Mirror Kiosk, com.nimrod.mirrorkiosk; read 2026-11-22). Glassworks is the Mirror's app,
+ * so patchSystem leaves it out: kept, it would run beside Glassworks, as a second home screen, with
+ * the camera and microphone the image grants it on first boot. The way back is the plain image.
+ */
+export const IMAGE_KIOSK = { package: 'com.nimrod.mirrorkiosk', dir: '/priv-app/MirrorKiosk' } as const;
 
 /**
  * The Mirror frame's version (#139): Kiln writes it into build.prop with the frame's id, and the app shows it and
@@ -73,7 +81,7 @@ export function apkLibs(apk: Uint8Array): { abi: string; dir: string; names: str
 export interface SystemPatch {
   /**
    * The adb key the Mirror lets in without asking, as an adb_keys line (e.g. Kiln's AdbKey.publicKey).
-   * With several lines, the first. services.jar trusts it in place of the Glass Panes project key.
+   * With several lines, the first. services.jar trusts it in place of the image's own key.
    */
   adbKey: string;
   /** The app's APK: Glassworks' legacy build, or the probe with `app: MIRROR_PROBE`. */
@@ -227,6 +235,9 @@ export async function patchSystem(fs: Ext4, o: SystemPatch, log: (line: string) 
     log(`${native.names.length} native librar${native.names.length === 1 ? 'y' : 'ies'} for ${native.abi} in ${app.dir}/lib/${native.dir}`);
   }
 
+  // the image's own kiosk: Glassworks is the Mirror's app. A second run finds it gone.
+  if (await fs.exists(IMAGE_KIOSK.dir)) { await fs.remove(IMAGE_KIOSK.dir, { recursive: true, time }); log(`left out the image's own kiosk app: ${IMAGE_KIOSK.package}`); }
+
   // apps a Mirror never uses: they restart after every lowmemorykiller kill. A second run finds them gone.
   const left: string[] = [];
   for (const u of UNUSED_APPS) if (await fs.exists(u.dir)) { await fs.remove(u.dir, { recursive: true, time }); left.push(u.package); }
@@ -261,7 +272,7 @@ export async function patchSystem(fs: Ext4, o: SystemPatch, log: (line: string) 
   // image's services and SettingsProvider dex have the string, read 2026-11-16).
   if (o.settingsOverlay) { next = setProp(next, 'ro.lockscreen.disable.default', 'true'); set.push('ro.lockscreen.disable.default=true'); }
   if (next !== prop) { await fs.replaceFile('/build.prop', new TextEncoder().encode(next), time); log(`build.prop: ${set.join(', ')}`); }
-  if (services) { await fs.replaceFile(SERVICES_JAR, services, time); log(`${SERVICES_JAR}: lets in this adb key without asking, not the Glass Panes project key`); }
+  if (services) { await fs.replaceFile(SERVICES_JAR, services, time); log(`${SERVICES_JAR}: lets in this adb key without asking, not the image's own`); }
   await fs.flush();
 }
 
@@ -269,8 +280,8 @@ export async function patchSystem(fs: Ext4, o: SystemPatch, log: (line: string) 
  * A new, empty userdata with /data/misc/adb/adb_keys, owned and labelled as Android 6's init and
  * file_contexts make them. Init creates everything else on first boot. `adbKey`: the line(s) adb_keys
  * takes, e.g. Kiln's AdbKey.publicKey; every line goes in. adbd on the Glass Panes image ignores this file (verified
- * 2026-11-16): the key gets in through services.jar (patchSystem). The file is kept because Android
- * writes keys there itself and a stock adbd would read it.
+ * 2026-11-16), but since image 3 its framework lets in a key listed here (services.ts), as it does the one
+ * services.jar names (patchSystem).
  */
 export async function buildUserdata(disk: Disk, o: { adbKey: string; time?: number; uuid?: Uint8Array;
   /** the person's network, saved for Android's Wi-Fi; `template` is the image's /etc/wifi/wpa_supplicant.conf */
@@ -285,10 +296,39 @@ export async function buildUserdata(disk: Disk, o: { adbKey: string; time?: numb
   // init.rc (Android 6): mkdir /data/misc 01771 system misc; mkdir /data/misc/adb 02750 system shell
   await fs.mkdir('/misc', { mode: 0o1771, uid: AID.system, gid: AID.misc, label: LABELS.data, time });
   await fs.mkdir('/misc/adb', { mode: 0o2750, uid: AID.system, gid: AID.shell, label: LABELS.adbKeys, time });
-  await fs.writeFile('/misc/adb/adb_keys', new TextEncoder().encode(`${keys.join('\n')}\n`), { mode: 0o640, uid: AID.system, gid: AID.shell, label: LABELS.adbKeys, time });
+  await fs.writeFile(ADB_KEYS, new TextEncoder().encode(`${keys.join('\n')}\n`), { mode: 0o640, uid: AID.system, gid: AID.shell, label: LABELS.adbKeys, time });
   if (o.wifi) await saveWifi(fs, o.wifi.template, o.wifi, time);
   await fs.flush();
   return fs;
+}
+
+/**
+ * Makes the image's framework let in `adbKey` (this browser's) without asking, in place of the key its
+ * services.jar hardcodes (services.ts): replaces /framework/services.jar, in which only that fingerprint
+ * changes, and writes nothing else. For a community image Kiln otherwise writes as published, whose
+ * hardcoded key would let its owner into every Mirror on it. The caller flushes.
+ */
+export async function setImageKey(fs: Ext4, adbKey: string, time = Math.floor(Date.now() / 1000)): Promise<void> {
+  const prop = new TextDecoder().decode(await fs.readFile('/build.prop'));
+  if (!prop.includes(`ro.build.fingerprint=${GLASS_PANES.fingerprint}\n`)) throw new Error('this isn\'t the Glass Panes Mirror image Kiln knows (its build fingerprint differs). Nothing was changed.');
+  if (!(await fs.exists(SERVICES_JAR))) throw new Error(`this image has no /system${SERVICES_JAR}. Nothing was changed.`);
+  const services = await trustAdbKey(await fs.readFile(SERVICES_JAR), adbKeyLines(adbKey)[0]!);
+  if (services) await fs.replaceFile(SERVICES_JAR, services, time);
+}
+
+/** Where userdata keeps the adb keys Android lets in; Android mounts it as /data/misc/adb/adb_keys. */
+export const ADB_KEYS = '/misc/adb/adb_keys';
+
+/**
+ * Makes `adbKey`'s line(s) the only keys in an image's own userdata (a community image's, which lists
+ * its published key there): replaces `/misc/adb/adb_keys`, keeping its owner, mode and label, and
+ * writes nothing else. The image must have the file already, as Glass Panes' image 3 does: Kiln doesn't
+ * guess its owner or label. The caller flushes.
+ */
+export async function setAdbKeys(fs: Ext4, adbKey: string, time = Math.floor(Date.now() / 1000)): Promise<void> {
+  const keys = adbKeyLines(adbKey); // refuses a bad key, and the project key on any line, before any write
+  if (!(await fs.exists(ADB_KEYS))) throw new Error(`this userdata has no ${ADB_KEYS}, so it isn't the image Kiln knows. Nothing was changed.`);
+  await fs.replaceFile(ADB_KEYS, new TextEncoder().encode(`${keys.join('\n')}\n`), time);
 }
 
 /** Where userdata keeps the saved networks; Android mounts it as /data/misc/wifi/wpa_supplicant.conf. */

@@ -47,11 +47,18 @@ The ids today:
 | `glass-panes/mirror-android-2/userdata.sparse` | the same release | 154,944,572 bytes |
 | `glass-panes/project-key/adbkey` | [the Glass Panes repository](https://github.com/git-nimrod/glass-panes/tree/8ea31141cecc9d3e42ceb72ec08f92bd8ed38801/mirror-app/android/project-key) at commit `8ea31141`: the project adb key its images trust, published on purpose | 1,704 bytes |
 | `glass-panes/mirror-android-2/SHA256SUMS` | the same release | 159 bytes |
+| `glass-panes/mirror-android-3/system.img` | [git-nimrod/glass-panes `mirror-android-3`](https://github.com/git-nimrod/glass-panes/releases/tag/mirror-android-3) | 1,074,051,108 bytes |
+| `glass-panes/mirror-android-3/userdata.sparse` | the same release | 154,952,764 bytes |
+| `glass-panes/mirror-android-3/SHA256SUMS` | the same release | 159 bytes |
 
 So Kiln downloads the Mirror's image from
-`https://refract.glassworks.dev/glass-panes/mirror-android-2/system.img` (image 1's ids left the
-allowlist on 2026-11-16, when Kiln moved to image 2). Kiln's Glass Panes install (#579) downloads
-`userdata.sparse` too: Kiln writes both as published, the way back from Glassworks. Each id matches a
+`https://refract.glassworks.dev/glass-panes/mirror-android-3/system.img` (image 1's ids left the
+allowlist on 2026-11-16, when Kiln moved to image 2). Image 2's ids and the project key stay until the
+Kiln that still asks for them is replaced; then they go, as image 1's did. Kiln's Glass Panes install
+(#579) downloads `userdata.sparse` too, the way back from Glassworks. Kiln writes neither as published:
+the system image with this browser's adb key in place of the one its `services.jar` hardcodes, and the
+userdata with this browser's key in place of the project key (one file each). What Refract serves still
+matches the release's hashes; what reaches the Mirror differs from them in those two files. Each id matches a
 file in an image recipe (`frames/<id>/installer`), and the frame's tests check the size and SHA-256
 are the same in both ([docs/kiln-images.md](../../../docs/kiln-images.md)).
 
