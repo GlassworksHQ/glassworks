@@ -1,7 +1,6 @@
 // /api/release/<line>/latest: a line's newest published release with the files Kiln serves, or null before its
 // first; refused before GitHub is asked for a line Kiln doesn't serve.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { GET as getAsset } from '../src/app/api/release/[frame]/route';
 import { GET, latestOf } from '../src/app/api/release/[frame]/latest/route';
 import { RELEASES } from '../src/app/api/release/lines';
 
@@ -95,33 +94,6 @@ describe('the latest release of a line', () => {
     const fetch = vi.fn();
     vi.stubGlobal('fetch', fetch);
     expect((await latest(frame)).status).toBe(404);
-    expect(fetch).not.toHaveBeenCalled();
-  });
-});
-
-describe('the release route serves the generic lines', () => {
-  const asset = (frame: string, q: string) => getAsset(new Request(`https://kiln.example/api/release/${frame}?${q}`), { params: Promise.resolve({ frame }) });
-
-  it.each([
-    ['generic-android', 'generic-android-v1.0.0', 'glassworks-generic-android-arm64-v8a-1.0.0.apk'],
-    ['generic-android', 'generic-android-v1.0.0', 'glassworks-generic-android-armeabi-v7a-1.0.0.apk'],
-    ['generic-android-legacy', 'generic-android-legacy-v1.0.0', 'glassworks-generic-android-legacy-arm64-v8a-1.0.0.apk'],
-  ])('%s: %s %s', async (frame, tag, name) => {
-    const fetch = vi.fn(async () => new Response(new Uint8Array([0x50, 0x4b])));
-    vi.stubGlobal('fetch', fetch);
-    expect((await asset(frame, `tag=${tag}&name=${name}`)).status).toBe(200);
-    expect(fetch).toHaveBeenCalledExactlyOnceWith(`https://github.com/GlassworksHQ/glassworks/releases/download/${tag}/${name}`, { redirect: 'follow' });
-  });
-
-  it.each([
-    ['generic-android', 'tag=generic-android-legacy-v1.0.0&name=glassworks-generic-android-legacy-arm64-v8a-1.0.0.apk'],
-    ['generic-android', 'tag=generic-android-v1.0.0&name=glassworks-generic-android-x86_64-1.0.0.apk'],
-    ['generic-android', 'tag=v0.4.3&name=s1-kiosk-0.4.3.apk'],
-    ['generic-android-legacy', 'tag=generic-android-v1.0.0&name=glassworks-generic-android-arm64-v8a-1.0.0.apk'],
-  ])('%s refuses another line\'s or ABI\'s file: %s', async (frame, q) => {
-    const fetch = vi.fn();
-    vi.stubGlobal('fetch', fetch);
-    expect((await asset(frame, q)).status).toBe(400);
     expect(fetch).not.toHaveBeenCalled();
   });
 });

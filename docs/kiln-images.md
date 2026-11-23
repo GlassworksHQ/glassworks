@@ -14,8 +14,8 @@ project's software for the same device, as that project publishes it. On the lul
 [Glass Panes](https://github.com/git-nimrod/glass-panes). We'd like more of them: if your project
 makes an image for a frame Kiln supports, this page says how to add it.
 
-Kiln downloads the image itself, checks every file against the SHA-256 you publish, and writes it
-with the same safety steps as Glassworks. The person doesn't download or select anything. Your image
+Kiln downloads the image itself, through Refract, checks every file against the SHA-256 you publish,
+and writes it with the same safety steps as Glassworks. The person doesn't download or select anything. Your image
 gets a card on the frame's page, a line that says you make it and that questions go to your project,
 and a link of its own that opens straight into its install.
 
@@ -120,6 +120,10 @@ CI:
   It takes no command: what it runs is Kiln's code.
 - The frame's own test checks each file against Refract's allowlist: the same source (a release
   file, or a repository file at a pinned commit), size and SHA-256.
+
+Refract ([`kiln/workers/refract`](../kiln/workers/refract/README.md)) is how Kiln downloads every
+large file: your image's files by their allowlist id, and Glassworks' own APKs by their release line.
+None of it goes through Kiln's own site, and Refract keeps no copy.
 
 ## Adding your image, step by step
 

@@ -1,5 +1,6 @@
-// Development, preview and tests only: Kiln's release route for one line (/api/release/<line>), answered in the page
-// with a stand-in release, so the ?apk=release screens can be seen without a real one.
+// Development, preview and tests only: one line's releases (Kiln's /api/release/<line>/latest) and its files on Refract
+// (<refract>/glassworks/<tag>/<name>, with Range as Refract answers it), answered in the page with a stand-in release,
+// so the ?apk=release screens can be seen without a real one.
 //   out: <line>-v0.2.0 with its APKs and .sha256   none: no release yet
 //   bad: a .sha256 that isn't the APK's                          stuck: the APK download stops part way
 
@@ -19,29 +20,33 @@ export function fakeReleaseRoute(kind: FakeRelease, apk: Uint8Array | Readonly<R
   const { tag: DEMO_TAG, apk: DEMO_APK } = demoRelease(line);
   const byAbi: Record<string, Uint8Array> = ArrayBuffer.isView(apk) ? { 'arm64-v8a': apk as Uint8Array, 'armeabi-v7a': apk as Uint8Array } : { ...(apk as Readonly<Record<string, Uint8Array>>) };
   const named = Object.fromEntries(Object.entries(byAbi).map(([abi, bytes]) => [DEMO_APK.replace('arm64-v8a', abi), bytes]));
-  return (async (input: RequestInfo | URL) => {
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), 'https://kiln.invalid');
     if (url.pathname === `/api/release/${line}/latest`) {
       const assets = Object.keys(named);
       return Response.json({ release: kind === 'none' ? null : { tag: DEMO_TAG, version: '0.2.0', assets } });
     }
-    const name = url.searchParams.get('name');
-    if (url.pathname !== `/api/release/${line}` || url.searchParams.get('tag') !== DEMO_TAG) return new Response('not a release asset of this frame', { status: 400 });
-    const sum = name?.endsWith('.sha256') ? name.slice(0, -'.sha256'.length) : undefined;
+    const [, prefix, tag, name, ...more] = url.pathname.split('/').map(decodeURIComponent);
+    if (prefix !== 'glassworks' || tag !== DEMO_TAG || !name || more.length) return new Response('not on the allowlist', { status: 404 });
+    const sum = name.endsWith('.sha256') ? name.slice(0, -'.sha256'.length) : undefined;
     if (sum && named[sum]) return new Response(`${kind === 'bad' ? 'ab'.repeat(32) : await sha256(named[sum])}  ${sum}\n`);
-    const bytes = name ? named[name] : undefined;
-    if (!bytes) return new Response('not a release asset of this frame', { status: 400 });
+    const bytes = named[name];
+    if (!bytes) return new Response('not on the allowlist', { status: 404 });
+    const from = Number(/^bytes=(\d+)-$/.exec(new Headers(init?.headers).get('range') ?? '')?.[1] ?? 0);
     const step = Math.ceil(bytes.length / 8);
-    let at = 0;
+    let at = from;
     const body = new ReadableStream<Uint8Array>({
       async pull(c) {
         if (kind === 'stuck' && at >= step * 3) return new Promise(() => {});
         if (at >= bytes.length) { c.close(); return; }
         await tick(150);
-        c.enqueue(bytes.slice(at, at + step));
+        c.enqueue(bytes.slice(at, Math.min(at + step, bytes.length)));
         at += step;
       },
     });
-    return new Response(body, { headers: { 'content-length': String(bytes.length) } });
+    const size = String(bytes.length - from);
+    return from
+      ? new Response(body, { status: 206, headers: { 'content-length': size, 'content-range': `bytes ${from}-${bytes.length - 1}/${bytes.length}` } })
+      : new Response(body, { headers: { 'content-length': size } });
   }) as typeof fetch;
 }

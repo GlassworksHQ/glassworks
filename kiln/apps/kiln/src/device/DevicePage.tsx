@@ -54,7 +54,7 @@ export function keyedConnect(loadKey: () => Promise<AdbKey>, connect: (key: AdbK
   return adbKeyHolder(loadKey).connectWith(connect);
 }
 
-/** Kiln's release route, from the page (a bare `fetch` held by an object is an illegal invocation). */
+/** The release list and Refract, from the page (a bare `fetch` held by an object is an illegal invocation). */
 const releaseRoute = (...a: Parameters<typeof fetch>) => fetch(...a);
 
 /**

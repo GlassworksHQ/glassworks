@@ -234,8 +234,8 @@ Everything here already exists for option A except the pull and the base image
 1. **The base image.** Our CI builds `system-base.img`: our own `system`, vendor slots empty, signed
    with our own keys, and a `vendor-slots.json`. For each slot it gives the path, SHA-256, mode,
    owner, SELinux label (a daemon's `*_exec` label, as our build's `file_contexts` gives it) and
-   part. We publish both on our release. Kiln fetches them through its own release-asset route, as
-   it does for APKs (GitHub sends no CORS headers).
+   part. We publish both on our release. Kiln fetches them through Refract, as it does for APKs
+   (GitHub sends no CORS headers): a line in the frame's `installer.json` `releases`.
 2. **Connect.** The Mirror runs option A, and Kiln holds its key (in the browser, as today).
    Kiln checks the fingerprint, the board (`msm8916`) and the space it has in the browser (OPFS).
 3. **Pull.** Kiln reads each slot over adb's sync protocol and hashes it as it streams.

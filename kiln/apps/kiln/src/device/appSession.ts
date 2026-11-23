@@ -9,9 +9,9 @@ import { cap, type DeviceFrame, type DevicePhase, type DeviceReport, type Instal
 import { FRAMES } from '../frames/catalog';
 import { askAdb } from './adbAsk';
 import type { DeviceProgress } from './imageSession';
-import { NoRelease, apkMode, installable, releaseApk, type ApkFrom, type ReleaseApk, type ReleaseLine } from '../release/apk';
+import { NoRelease, apkMode, installable, releaseApk, type ApkFrom, type ReleaseApk, type ReleaseFetch, type ReleaseLine } from '../release/apk';
 
-/** The frame's APK release line: one Kiln's release route serves (the frames' installer.json `releases`). */
+/** The frame's APK release line: one Refract serves (the frames' installer.json `releases`). */
 export const releaseLine = (f: Pick<DeviceFrame, 'apk'>) => f.apk as ReleaseLine;
 
 export type { ApkFrom };
@@ -62,10 +62,10 @@ export interface AppDeps {
   /** Whether the last `connect` picked a device, so its refusal came from the device. */
   picked?(): boolean;
   sleep?: (ms: number) => Promise<void>;
-  /** The APK from the frame's newest release, through Kiln's release route; without it, a file the tester picks. */
+  /** The APK from the frame's newest release, through Refract; without it, a file the tester picks. */
   release?: typeof fetch;
-  /** How long the release route may stay silent (release.ts RELEASE_STALL_MS); tests make it short. */
-  releaseStallMs?: number;
+  /** How long Refract may stay silent, and how often a release download resumes (apk.ts ReleaseFetch); tests make it short. */
+  releaseFetch?: ReleaseFetch;
   /** Opens Home Assistant's sign-in for set-up; the browser's own tab by default. */
   openTab?: (url: string) => Window | null;
   /**
@@ -92,7 +92,7 @@ export class AppSession {
   private panel?: PanelShell;
   /** Picks so far: a slower read of an earlier file never replaces a later one. */
   private picks = 0;
-  /** The release route, while the APK comes from the release (switchApk changes it). */
+  /** The release list and Refract, while the APK comes from the release (switchApk changes it). */
   private release?: typeof fetch;
   /** Source changes so far: a release download started before the latest one no longer counts. */
   private sources = 0;
@@ -162,7 +162,7 @@ export class AppSession {
     const source = this.sources;
     const current = () => this.sources === source;
     try {
-      const { bytes, ready } = await releaseApk(releaseLine(this.d.frame), get, (release) => { if (current()) this.set({ release }); }, this.d.releaseStallMs);
+      const { bytes, ready } = await releaseApk(releaseLine(this.d.frame), get, (release) => { if (current()) this.set({ release }); }, this.d.releaseFetch);
       if (!current()) return;
       this.log(`${ready.name} from ${ready.tag}: SHA-256 ${ready.sha256}, as the release publishes it`);
       await this.pickApk(ready.name, bytes);
