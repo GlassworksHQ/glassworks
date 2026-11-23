@@ -11,6 +11,9 @@ line of each version is what Home Assistant shows on the update card. A change o
 
 ## [Unreleased]
 
+### Fixed
+- **Kiln installs Glassworks on the Mirror again.** Since Kiln moved to Glass Panes image 3, building the Mirror's system stopped with "no room for … libxul.so". Kiln now clears out the image's own kiosk app and the apps a Mirror never uses before it adds Glassworks, so the app fits with room to spare.
+
 ## [0.3.0] - 2026-11-23
 
 **Themes and an edge glow for Assist, notifications and Bluetooth proxy panes, and setup with no touch on the lululemon Mirror.**
