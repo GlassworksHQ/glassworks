@@ -66,6 +66,7 @@ public final class ProbeServerService extends Service {
     private static final int MAX_WORKERS = 8;
     private static final int MAX_QUEUE = 16;
     private static final int MAX_REQUEST_LINE_BYTES = 4096;
+    private static final int MAX_HEADER_LINES = 64;
     private static final long REQUEST_DEADLINE_MS = 15_000L;
     private static final long RESPONSE_DEADLINE_MS = 60_000L;
 
@@ -297,6 +298,18 @@ public final class ProbeServerService extends Service {
                 sendText(s.getOutputStream(), 405, "text/plain", "GET only\n");
                 return;
             }
+            // Drain request headers until the blank line so closing the socket never sends a TCP
+            // RST due to unread request bytes (which breaks Windows Chrome and Node undici/fetch).
+            for (int h = 0; h < MAX_HEADER_LINES; h++) {
+                String hdrLine;
+                try {
+                    hdrLine = readBoundedRequestLine(s, deadlineMs);
+                } catch (IllegalArgumentException tooLong) {
+                    sendText(s.getOutputStream(), 431, "text/plain", "header too large\n");
+                    return;
+                }
+                if (hdrLine == null || hdrLine.isEmpty()) break;
+            }
             String[] parts = reqLine.split(" ");
             if (parts.length < 2) {
                 sendText(s.getOutputStream(), 400, "text/plain", "bad request\n");
@@ -381,6 +394,7 @@ public final class ProbeServerService extends Service {
             } else {
                 sendText(out, 404, "text/plain", "unknown route\n");
             }
+            try { s.shutdownOutput(); } catch (IOException ignored) {}
         } catch (Throwable t) {
             Log.w(TAG, "request failed", t);
         } finally {
@@ -499,7 +513,7 @@ public final class ProbeServerService extends Service {
     }
 
     private static void sendBytes(OutputStream out, int status, String contentType, byte[] body) throws IOException {
-        String hdr = "HTTP/1.0 " + status + " " + (status == 200 ? "OK" : "ERR") + "\r\n"
+        String hdr = "HTTP/1.1 " + status + " " + (status == 200 ? "OK" : "ERR") + "\r\n"
                 + "Content-Type: " + contentType + "\r\n"
                 + "Content-Length: " + body.length + "\r\n"
                 + "Connection: close\r\n\r\n";
