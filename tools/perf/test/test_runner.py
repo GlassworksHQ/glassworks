@@ -1625,6 +1625,8 @@ class PageGone(unittest.TestCase):
         self.assertFalse(own("system_server"))
         self.assertFalse(own("tab_disable_art_image_24_and_more"))   # longer than the kernel keeps: not a cut name
         self.assertFalse(own("sh"))                        # CodeRabbit on #781: a short name inside a longer one
+        self.assertFalse(own(full[-14:]))                  # CodeRabbit on #781: 14 characters, but not the cut minus one
+        self.assertFalse(own(full[-16:-1]))                # 15 characters, but not the kernel's cut
         self.assertFalse(own(full[16:31]))                 # 15 characters from the middle, no colon: not the kernel's cut
 
     def test_the_kernels_name_alone_when_the_start_wasnt_seen(self):

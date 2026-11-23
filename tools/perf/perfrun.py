@@ -739,9 +739,8 @@ def own_process(name, pid, package, procs):
     # The kernel keeps the last TASK_COMM_LEN characters of a longer name. Some zygote versions copy one character
     # fewer than they cut to, so a name one shorter may also miss the last character. Only those two forms: a short
     # name that merely occurs inside a longer one ("sh") is someone else's process.
-    if len(name) in (TASK_COMM_LEN - 1, TASK_COMM_LEN) and any(
-            len(full) > len(name) and (full.endswith(name) or full[-len(name) - 1:-1] == name)
-            for full in procs.values()):
+    if any(len(full) > TASK_COMM_LEN and name in (full[-TASK_COMM_LEN:], full[-TASK_COMM_LEN:-1])
+           for full in procs.values()):
         return True
     base, sep, rest = name.partition(":")
     return bool(sep and rest) and package.endswith(base)
