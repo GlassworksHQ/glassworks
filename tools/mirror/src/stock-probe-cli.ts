@@ -47,7 +47,7 @@ Options:
   --no-tcp                  Do not plant persist.adb.tcp.port
   --tcp-host <ip>           Also try \`adb connect <ip>:<tcp-port>\` in Step 5 (for Ethernet/Wi-Fi adb)
   --with-probe-apk          Plant /data/app probe APK + 1-entry packages.xml in Step 3 right away (1 flash for 1.2x+)
-  --probe-apk <file>        Path to stock-probe.apk (default: auto-build tools/mirror/stock-probe-app/out/)
+  --probe-apk <file>        Path to stock-probe.apk (default: local out/, else bundled prebuilt/, else build.sh)
   --probe-cert-hex <file>   Path to hex DER cert for --probe-apk (default: cert.hex beside the APK)
   --probe-fiemap-so <file>  Optional arm64 libfiemap.so (default: libfiemap.so beside the APK if present)
   --probe-host <ip>         Mirror LAN IP for the no-ADB HTTP probe app (port ${DEFAULT_PROBE_HTTP_PORT})
@@ -324,18 +324,42 @@ async function loadOrBuildProbeApp(opts: {
   apkPath?: string;
   certHexPath?: string;
   fiemapPath?: string;
+  confirm: (q: string) => Promise<boolean>;
   log: (l: string) => void;
 }): Promise<ProbeAppPayload | undefined> {
   const defaultOut = join(PROBE_APP_DIR, 'out');
-  const apkPath = opts.apkPath ?? join(defaultOut, 'stock-probe.apk');
-  const certPath = opts.certHexPath ?? join(dirname(apkPath), 'cert.hex');
-  const fiemapPath = opts.fiemapPath ?? join(dirname(apkPath), 'libfiemap.so');
+  const prebuiltDir = join(PROBE_APP_DIR, 'prebuilt');
+  let apkPath = opts.apkPath ?? join(defaultOut, 'stock-probe.apk');
+  let certPath = opts.certHexPath ?? join(dirname(apkPath), 'cert.hex');
+  let fiemapPath = opts.fiemapPath ?? join(dirname(apkPath), 'libfiemap.so');
 
-  if (!existsSync(apkPath) || !existsSync(certPath)) {
-    const buildSh = join(PROBE_APP_DIR, 'build.sh');
-    if (opts.apkPath || !existsSync(buildSh)) return undefined;
-    opts.log('    building stock-probe-app (bash tools/mirror/stock-probe-app/build.sh)...');
-    await execText('bash', [buildSh], 60_000);
+  if (!opts.apkPath) {
+    const outReady = existsSync(join(defaultOut, 'stock-probe.apk')) && existsSync(join(defaultOut, 'cert.hex'));
+    const prebuiltReady = existsSync(join(prebuiltDir, 'stock-probe.apk')) && existsSync(join(prebuiltDir, 'cert.hex'));
+    const existingDir = outReady ? defaultOut : prebuiltReady ? prebuiltDir : undefined;
+    const existingLabel = outReady ? 'out/' : 'prebuilt/';
+    const hasFiemap = existingDir ? existsSync(join(existingDir, 'libfiemap.so')) : false;
+
+    const reuse = existingDir
+      ? await opts.confirm(
+          `Detected existing stock-probe.apk in ${existingLabel}${hasFiemap ? ' (with libfiemap.so)' : ''} — reuse it instead of rebuilding?`,
+        )
+      : false;
+
+    if (reuse && existingDir) {
+      apkPath = join(existingDir, 'stock-probe.apk');
+      certPath = opts.certHexPath ?? join(existingDir, 'cert.hex');
+      fiemapPath = opts.fiemapPath ?? join(existingDir, 'libfiemap.so');
+      opts.log(`    reusing existing stock-probe.apk (tools/mirror/stock-probe-app/${existingLabel})`);
+    } else {
+      const buildSh = join(PROBE_APP_DIR, 'build.sh');
+      if (!existsSync(buildSh)) return undefined;
+      opts.log('    building stock-probe-app (bash tools/mirror/stock-probe-app/build.sh)...');
+      await execText('bash', [buildSh], 60_000);
+      apkPath = join(defaultOut, 'stock-probe.apk');
+      certPath = opts.certHexPath ?? join(defaultOut, 'cert.hex');
+      fiemapPath = opts.fiemapPath ?? join(defaultOut, 'libfiemap.so');
+    }
   }
   if (!existsSync(apkPath) || !existsSync(certPath)) return undefined;
   return {
@@ -749,6 +773,7 @@ export async function stockProbeCli(argv: string[], log: (l: string) => void = (
         apkPath: a['probe-apk'],
         certHexPath: a['probe-cert-hex'],
         fiemapPath: a['probe-fiemap-so'],
+        confirm,
         log,
       }),
       connectHttp: (host, port) => createHostHttpSession(host, port),

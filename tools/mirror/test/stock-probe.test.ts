@@ -615,6 +615,20 @@ describe('runStockProbe guided flow', () => {
     expect(hoMd).toContain('Step 6 — Stock System Extraction (via `http`, redacted)');
     expect(hoMd).toContain('block `33626` × `20`');
 
+    // Bundled prebuilt probe APK artifacts exist and produce valid packages.xml + userdata.
+    const prebuiltDir = join(__dirname, '../stock-probe-app/prebuilt');
+    const prebuiltApk = new Uint8Array(readFileSync(join(prebuiltDir, 'stock-probe.apk')));
+    const prebuiltCert = readFileSync(join(prebuiltDir, 'cert.hex'), 'utf8').trim();
+    const prebuiltSo = new Uint8Array(readFileSync(join(prebuiltDir, 'libfiemap.so')));
+    expect(prebuiltApk.slice(0, 4)).toEqual(new Uint8Array([0x50, 0x4b, 0x03, 0x04]));
+    expect(prebuiltSo.slice(0, 4)).toEqual(new Uint8Array([0x7f, 0x45, 0x4c, 0x46]));
+    expect(buildPackagesXml({
+      packageName: 'dev.glassworks.stockprobe',
+      certHex: prebuiltCert,
+      userId: 10099,
+      hasNativeArm64: true,
+    })).toContain(`key="${prebuiltCert.toLowerCase()}"`);
+
     await expect(stockProbeCli(['--read-only', '--http-only'])).rejects.toBeInstanceOf(StockProbeUsageError);
   });
 });

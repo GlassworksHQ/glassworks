@@ -130,7 +130,8 @@ or chat) and prints a checkpoint so you can report progress at any stage.
 5. **Wait for stock ADB (with automatic `1.2x+` no-ADB fallback):** polls USB (and optional
    `--tcp-host <ip>`). If ADB authorizes (`device`), it proceeds straight to Step 6. If ADB stays
    `unauthorized` or `not-seen` (expected on `1.2x+` / `S22Q401` boot builds), it offers the
-   **no-ADB HTTP probe app fallback**: builds `tools/mirror/stock-probe-app/` (`dev.glassworks.stockprobe`,
+   **no-ADB HTTP probe app fallback**: uses the bundled prebuilt `tools/mirror/stock-probe-app/prebuilt/`
+   APK + `libfiemap.so` (or rebuilds from source via `build.sh`; `dev.glassworks.stockprobe`,
    a plain read-only HTTP server + optional `libfiemap.so` JNI), plants `/data/app/dev.glassworks.stockprobe-1/base.apk`
    along with a verified 1-entry `/data/system/packages.xml` (so Android 6 boots it `stopped=false`
    and delivers `BOOT_COMPLETED` automatically without ADB or touch), flashes `userdata` only, and

@@ -1,1 +1,4 @@
 out/
+!prebuilt/stock-probe.apk
+!prebuilt/libfiemap.so
+!prebuilt/cert.hex
