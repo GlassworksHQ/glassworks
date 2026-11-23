@@ -164,6 +164,7 @@ export function validateImage(r: ImageRecipe, frame: FrameAccess): string[] {
   const downloaded = new Set<string>();
   const keyed = new Set<string>();
   let systemKeyed = false;
+  const flashed = new Set<string>();
   let device = false, fastboot = false, restarted = false, writes = 0, wifi = false, wifiOn = false;
   (r.steps ?? []).forEach((s, i) => {
     const kind = (s as { do?: string }).do ?? '';
@@ -198,6 +199,9 @@ export function validateImage(r: ImageRecipe, frame: FrameAccess): string[] {
         writes++;
         if (!fastboot || restarted) bad.push(`${at(i)}: flash needs the device in fastboot first`);
         if (!frame.partitions.includes(s.partition)) bad.push(`${at(i)}: this frame doesn't let a recipe write "${s.partition}"`);
+        // the last write wins: a second one would replace what the first wrote (a keyed copy with the published file)
+        if (flashed.has(s.partition)) bad.push(`${at(i)}: ${s.partition} is written once`);
+        flashed.add(s.partition);
         if (!checked.has(s.file) && !made.has(s.file)) bad.push(`${at(i)}: ${s.file} isn't a checked download or something Kiln made from one`);
         break;
       case 'restart':

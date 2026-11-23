@@ -243,6 +243,9 @@ describe('the adb-key step', () => {
       'adb-key makes userdata+key, but nothing writes it: flash it, or a wifi step\'s copy of it',
       'wifi makes userdata+wifi, but nothing writes it: flash it',
     ]));
+    // the keyed copy written, then the published userdata over it: the Mirror would keep the published key
+    const overwritten = keyed({ steps: [...steps.slice(0, 7), { do: 'flash', partition: 'userdata', file: 'userdata.img' }, ...steps.slice(7)] });
+    expect(validateImage(overwritten, KEYED)).toContain('step 8: userdata is written once');
     const fromBuilt = keyed({ steps: steps.map((s) => (s.do === 'wifi' ? { ...s, file: 'system' } : s)) });
     expect(validateImage(fromBuilt, KEYED)).toContain('step 5: wifi needs system downloaded first, or made by adb-key');
   });
