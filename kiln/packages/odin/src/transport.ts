@@ -72,8 +72,9 @@ export class WebUsbOdinTransport implements OdinTransport {
       throw new OdinError('not-download-mode',
         `USB device ${id(device.vendorId)}:${id(device.productId)} is not a Samsung device in Download mode`);
     }
+    const openedHere = !device.opened;
     try {
-      if (!device.opened) await device.open();
+      if (openedHere) await device.open();
     } catch (e) {
       throw new OdinError('claim-failed', `${CLAIM_HELP} (open: ${message(e)})`, { cause: e });
     }
@@ -96,6 +97,9 @@ export class WebUsbOdinTransport implements OdinTransport {
       try {
         await device.selectAlternateInterface(found.interfaceNumber, found.alternateSetting);
       } catch (e) {
+        // Give back what this attempt took, so another tab or program can claim the device.
+        try { await device.releaseInterface(found.interfaceNumber); } catch { /* already gone */ }
+        if (openedHere) { try { await device.close(); } catch { /* already gone */ } }
         throw new OdinError('claim-failed', `${CLAIM_HELP} (alternate setting: ${message(e)})`, { cause: e });
       }
     }
@@ -121,9 +125,12 @@ export class WebUsbOdinTransport implements OdinTransport {
       if (data.length > maxLength) throw new OdinError('protocol', `got ${data.length} bytes, expected at most ${maxLength}`);
       return data;
     }
-    const promise = this.device.transferIn(this.epIn, maxLength);
-    this.pending = { promise, maxLength };
-    const r = await timeout(promise, 'read', timeoutMs);
+    const pending = { promise: this.device.transferIn(this.epIn, maxLength), maxLength };
+    this.pending = pending;
+    // A read the browser itself fails is over: forget it, so the next receive starts a new one. A read that only
+    // outlived our timeout stays, for the next receive to take.
+    pending.promise.catch(() => { if (this.pending === pending) this.pending = null; });
+    const r = await timeout(pending.promise, 'read', timeoutMs);
     this.pending = null;
     return result(r);
   }

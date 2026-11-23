@@ -109,6 +109,10 @@ export async function flashRecovery(recovery: File): Promise<void> {
 | `end({ reboot })` | Ends the session; with `reboot`, the device restarts | `EndSession` |
 | `close()` | Releases the USB interface | |
 
+Calls run one at a time. A call made while another is still running, such as `end()` from an
+`onProgress` callback or a second `flash` that wasn't awaited, throws an `OdinError` with the code
+`state` and sends nothing. It isn't queued.
+
 Also exported: `parsePit` and `partitionBytes` for a PIT on its own, `ODIN_USB_FILTERS` for
 `requestDevice`, `WebUsbOdinTransport`, `OdinError` (with a `code` to act on), and `CLAIM_HELP`.
 `@glassworks/odin/fake` is the simulated device the tests use, with `buildPit` for synthetic PITs.

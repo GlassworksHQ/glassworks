@@ -304,6 +304,18 @@ describe('failures part way', () => {
     await expect(odin.flash({ partition: 'RECOVERY', entry: pit.find('RECOVERY')!, image: image(10) })).rejects.toThrow(/stopped part way/);
   });
 
+  it('doesn\'t commit a sequence when aborted after its last part', async () => {
+    const device = fake();
+    const { odin, pit } = await ready(device, MiB);
+    const abort = new AbortController();
+    await expect(odin.flash({
+      partition: 'RECOVERY', entry: pit.find('RECOVERY')!, image: image(1000), signal: abort.signal,
+      onProgress: () => abort.abort(),
+    })).rejects.toMatchObject({ name: 'AbortError' });
+    expect(device.wire.some((w) => w.what === 'control' && w.type === 0x66 && w.request === 3)).toBe(false);
+    expect(device.written).toBe(0);
+  });
+
   it('doesn\'t start an aborted flash at all', async () => {
     const device = fake();
     const { odin, pit } = await ready(device, MiB);
@@ -339,6 +351,22 @@ describe('the session\'s order', () => {
     const pit = await odin.pit();
     await odin.end();
     await expect(odin.flash({ partition: 'RECOVERY', entry: pit.find('RECOVERY')!, image: image(1) })).rejects.toMatchObject({ code: 'state' });
+  });
+
+  it('runs one call at a time, and refuses a second one while the first runs', async () => {
+    const device = fake();
+    const { odin, pit } = await ready(device, MiB);
+    const inside: unknown[] = [];
+    const flashing = odin.flash({
+      partition: 'RECOVERY', entry: pit.find('RECOVERY')!, image: image(300 * KiB),
+      onProgress: () => { inside.push(odin.end().catch((e: unknown) => e)); }, // from a progress callback
+    });
+    await expect(odin.deviceType()).rejects.toMatchObject({ code: 'state', message: /while flash\(\) is running/ });
+    await expect(odin.close()).rejects.toMatchObject({ code: 'state' });
+    await flashing;
+    for (const e of await Promise.all(inside)) expect(e).toMatchObject({ code: 'state', message: /end\(\) can't start/ });
+    expect(device.partitions.get(RECOVERY_ID)!.subarray(0, 300 * KiB)).toEqual(image(300 * KiB));
+    await odin.end(); // free again
   });
 
   it('ends with a reboot even when the device restarts before it answers', async () => {

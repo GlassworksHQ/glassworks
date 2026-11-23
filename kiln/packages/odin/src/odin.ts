@@ -86,6 +86,8 @@ export class OdinDevice {
   private downloaded: Pit | null = null;
   /** Set when a write stopped part way: the device's state is unknown, so no more writes this session. */
   private broken = false;
+  /** The call using the transport now. One at a time: two would mix their packets and answers. */
+  private busy: string | null = null;
 
   /** `transport`: WebUSB from {@link OdinDevice.open}, or any other (the tests' fake). */
   constructor(readonly transport: OdinTransport, options: OdinOptions = {}) {
@@ -112,15 +114,17 @@ export class OdinDevice {
    * that don't know it don't answer, and this throws.
    */
   async info(): Promise<DeviceInfo> {
-    this.need('connected', 'device info is asked before the session begins');
-    await this.transport.send(new TextEncoder().encode('DVIF'), P.Timeouts.handshake);
-    let data: Uint8Array;
-    try {
-      data = await this.transport.receive(1024, P.Timeouts.handshake);
-    } catch (e) {
-      throw new OdinError('protocol', "the device didn't answer the device info query (DVIF)", { cause: e });
-    }
-    return parseDeviceInfo(new TextDecoder('latin1').decode(data));
+    return this.exclusive('info()', async () => {
+      this.need('connected', 'device info is asked before the session begins');
+      await this.transport.send(new TextEncoder().encode('DVIF'), P.Timeouts.handshake);
+      let data: Uint8Array;
+      try {
+        data = await this.transport.receive(1024, P.Timeouts.handshake);
+      } catch (e) {
+        throw new OdinError('protocol', "the device didn't answer the device info query (DVIF)", { cause: e });
+      }
+      return parseDeviceInfo(new TextDecoder('latin1').decode(data));
+    });
   }
 
   /**
@@ -128,53 +132,59 @@ export class OdinDevice {
    * `totalBytes`, if given, is announced. Heimdall's order: Initialise, BeginSession, then FlashAction's total bytes.
    */
   async beginSession(options: SessionOptions = {}): Promise<void> {
-    this.need('connected', 'a session begins once per connection');
-    const total = options.totalBytes ?? 0;
-    if (!Number.isSafeInteger(total) || total < 0) throw new RangeError(`totalBytes must be a whole number, not ${total}`);
-    if (!options.resume) await this.handshake();
+    return this.exclusive('beginSession()', async () => {
+      this.need('connected', 'a session begins once per connection');
+      const total = options.totalBytes ?? 0;
+      if (!Number.isSafeInteger(total) || total < 0) throw new RangeError(`totalBytes must be a whole number, not ${total}`);
+      if (!options.resume) await this.handshake();
 
-    const answer = await this.command(P.beginSession(), P.Control.Session);
-    // "0 means changing the packet size is not supported" (BridgeManager::BeginSession).
-    if (answer !== 0) {
-      const result = await this.command(P.filePartSize(P.FAST_TRANSFER.packetSize), P.Control.Session);
-      if (result !== 0) throw new OdinError('protocol', `the device refused a ${P.FAST_TRANSFER.packetSize}-byte part size (answer ${result})`);
-      this.shape = P.FAST_TRANSFER;
-    }
-    if (total > 0) {
-      const result = await this.command(P.totalBytes(total), P.Control.Session);
-      if (result !== 0) throw new OdinError('protocol', `the device refused the session's total of ${total} bytes (answer ${result})`);
-    }
-    this.budget = total;
-    this.state = 'session';
+      const answer = await this.command(P.beginSession(), P.Control.Session);
+      // "0 means changing the packet size is not supported" (BridgeManager::BeginSession).
+      if (answer !== 0) {
+        const result = await this.command(P.filePartSize(P.FAST_TRANSFER.packetSize), P.Control.Session);
+        if (result !== 0) throw new OdinError('protocol', `the device refused a ${P.FAST_TRANSFER.packetSize}-byte part size (answer ${result})`);
+        this.shape = P.FAST_TRANSFER;
+      }
+      if (total > 0) {
+        const result = await this.command(P.totalBytes(total), P.Control.Session);
+        if (result !== 0) throw new OdinError('protocol', `the device refused the session's total of ${total} bytes (answer ${result})`);
+      }
+      this.budget = total;
+      this.state = 'session';
+    });
   }
 
   /** Heimdall's RequestDeviceType: a number the device sends back. What it means isn't known ("kDeviceType = 1, // ?"). */
   async deviceType(): Promise<number> {
-    this.need('session', 'the device type is asked during a session');
-    return this.command(P.deviceType(), P.Control.Session);
+    return this.exclusive('deviceType()', async () => {
+      this.need('session', 'the device type is asked during a session');
+      return this.command(P.deviceType(), P.Control.Session);
+    });
   }
 
   /** Downloads and parses the device's PIT (BridgeManager::ReceivePitFile). A flash needs an entry from it. */
   async pit(): Promise<Pit> {
-    this.need('session', 'the PIT is downloaded during a session');
-    const size = await this.command(P.pitDump(), P.Control.PitFile);
-    if (size === 0 || size > MAX_PIT_BYTES) throw new OdinError('protocol', `the device announced a ${size}-byte PIT`);
-    const parts = Math.ceil(size / P.PIT_PART_SIZE);
-    const data = new Uint8Array(size);
-    let got = 0;
-    for (let i = 0; i < parts; i++) {
-      await this.sendPacket(P.pitPart(i), { after: true });
-      const part = await this.transport.receive(P.PIT_PART_SIZE, P.Timeouts.receive);
-      if (got + part.length > size) throw new OdinError('protocol', `the PIT ran past its announced ${size} bytes`);
-      data.set(part, got);
-      got += part.length;
-    }
-    await this.emptyReceive(); // after the last part, as Heimdall reads it
-    if (got !== size) throw new OdinError('protocol', `got ${got} of the PIT's ${size} bytes`);
-    await this.command(P.pitEnd(), P.Control.PitFile);
-    const pit = parsePit(data);
-    this.downloaded = pit;
-    return pit;
+    return this.exclusive('pit()', async () => {
+      this.need('session', 'the PIT is downloaded during a session');
+      const size = await this.command(P.pitDump(), P.Control.PitFile);
+      if (size === 0 || size > MAX_PIT_BYTES) throw new OdinError('protocol', `the device announced a ${size}-byte PIT`);
+      const parts = Math.ceil(size / P.PIT_PART_SIZE);
+      const data = new Uint8Array(size);
+      let got = 0;
+      for (let i = 0; i < parts; i++) {
+        await this.sendPacket(P.pitPart(i), { after: true });
+        const part = await this.transport.receive(P.PIT_PART_SIZE, P.Timeouts.receive);
+        if (got + part.length > size) throw new OdinError('protocol', `the PIT ran past its announced ${size} bytes`);
+        data.set(part, got);
+        got += part.length;
+      }
+      await this.emptyReceive(); // after the last part, as Heimdall reads it
+      if (got !== size) throw new OdinError('protocol', `got ${got} of the PIT's ${size} bytes`);
+      await this.command(P.pitEnd(), P.Control.PitFile);
+      const pit = parsePit(data);
+      this.downloaded = pit;
+      return pit;
+    });
   }
 
   /**
@@ -184,43 +194,46 @@ export class OdinDevice {
    * with a known size; the image isn't empty and fits it; and the session's `totalBytes` covers it.
    */
   async flash(request: FlashRequest): Promise<void> {
-    const { partition, entry, image, onProgress, signal } = request;
-    this.need('session', 'a flash happens during a session');
-    const size = image instanceof Uint8Array ? image.length : image.size;
-    this.check(partition, entry, size);
-    signal?.throwIfAborted();
+    return this.exclusive('flash()', async () => {
+      const { partition, entry, image, onProgress, signal } = request;
+      this.need('session', 'a flash happens during a session');
+      const size = image instanceof Uint8Array ? image.length : image.size;
+      this.check(partition, entry, size);
+      signal?.throwIfAborted();
 
-    this.budget -= size;
-    try {
-      await this.command(P.fileFlash(), P.Control.FileTransfer);
-      const { packetSize, sequenceTimeoutMs } = this.shape;
-      const packet = new Uint8Array(packetSize);
-      const sequences = P.plan(size, this.shape);
-      let sent = 0;
-      for (const [s, sequence] of sequences.entries()) {
-        signal?.throwIfAborted();
-        await this.command(P.fileSequence(sequence.parts * packetSize), P.Control.FileTransfer);
-        for (let part = 0; part < sequence.parts; part++) {
+      this.budget -= size;
+      try {
+        await this.command(P.fileFlash(), P.Control.FileTransfer);
+        const { packetSize, sequenceTimeoutMs } = this.shape;
+        const packet = new Uint8Array(packetSize);
+        const sequences = P.plan(size, this.shape);
+        let sent = 0;
+        for (const [s, sequence] of sequences.entries()) {
           signal?.throwIfAborted();
-          const bytes = Math.min(packetSize, size - sent);
-          packet.set(await read(image, sent, bytes));
-          if (bytes < packetSize) packet.fill(0, bytes); // Heimdall sends every part whole, zero-padded
-          // "This empty transfer thing is entirely ridiculous, but sadly it seems to be required." (Heimdall)
-          await this.sendPacket(packet, { before: part > 0 });
-          const index = await this.response(P.RESPONSE_FILE_PART, P.Timeouts.receive);
-          if (index !== part) throw new OdinError('protocol', `the device acknowledged part ${index}, expected ${part}`);
-          sent += bytes;
-          onProgress?.({ sentBytes: sent, totalBytes: size });
+          await this.command(P.fileSequence(sequence.parts * packetSize), P.Control.FileTransfer);
+          for (let part = 0; part < sequence.parts; part++) {
+            signal?.throwIfAborted();
+            const bytes = Math.min(packetSize, size - sent);
+            packet.set(await read(image, sent, bytes));
+            if (bytes < packetSize) packet.fill(0, bytes); // Heimdall sends every part whole, zero-padded
+            // "This empty transfer thing is entirely ridiculous, but sadly it seems to be required." (Heimdall)
+            await this.sendPacket(packet, { before: part > 0 });
+            const index = await this.response(P.RESPONSE_FILE_PART, P.Timeouts.receive);
+            if (index !== part) throw new OdinError('protocol', `the device acknowledged part ${index}, expected ${part}`);
+            sent += bytes;
+            onProgress?.({ sentBytes: sent, totalBytes: size });
+          }
+          signal?.throwIfAborted(); // before the end packet, which has the device write the sequence
+          const last = s === sequences.length - 1;
+          await this.sendPacket(P.filePhoneEnd(sequence.effectiveBytes, entry.deviceType, entry.identifier, last),
+            { before: true, after: true });
+          await this.response(P.Control.FileTransfer, sequenceTimeoutMs);
         }
-        const last = s === sequences.length - 1;
-        await this.sendPacket(P.filePhoneEnd(sequence.effectiveBytes, entry.deviceType, entry.identifier, last),
-          { before: true, after: true });
-        await this.response(P.Control.FileTransfer, sequenceTimeoutMs);
+      } catch (e) {
+        this.broken = true;
+        throw e;
       }
-    } catch (e) {
-      this.broken = true;
-      throw e;
-    }
+    });
   }
 
   /**
@@ -228,21 +241,39 @@ export class OdinDevice {
    * Download mode, and a new connection can begin another session with `resume`.
    */
   async end(options: { reboot?: boolean } = {}): Promise<void> {
-    this.need('session', 'only a session can end');
-    this.state = 'ended';
-    await this.command(P.endSession(), P.Control.EndSession);
-    if (options.reboot) {
-      await this.sendPacket(P.reboot(), { after: true });
-      // Heimdall waits for this answer; a device may restart before it sends one (samloader-rs reads it
-      // best-effort), and by then nothing is left to go wrong.
-      try { await this.response(P.Control.EndSession, P.Timeouts.receive); } catch { /* rebooting */ }
-    }
+    return this.exclusive('end()', async () => {
+      this.need('session', 'only a session can end');
+      this.state = 'ended';
+      await this.command(P.endSession(), P.Control.EndSession);
+      if (options.reboot) {
+        await this.sendPacket(P.reboot(), { after: true });
+        // Heimdall waits for this answer; a device may restart before it sends one (samloader-rs reads it
+        // best-effort), and by then nothing is left to go wrong.
+        try { await this.response(P.Control.EndSession, P.Timeouts.receive); } catch { /* rebooting */ }
+      }
+    });
   }
 
   /** Releases the USB interface. */
   async close(): Promise<void> {
-    this.state = 'closed';
-    await this.transport.close();
+    return this.exclusive('close()', async () => {
+      this.state = 'closed';
+      await this.transport.close();
+    });
+  }
+
+  /**
+   * Runs one public call with the transport to itself. A call made while another runs (from a progress callback,
+   * or without awaiting the last one) is refused with a `state` error; it isn't queued.
+   */
+  private async exclusive<T>(what: string, run: () => Promise<T>): Promise<T> {
+    if (this.busy) throw new OdinError('state', `${what} can't start while ${this.busy} is running: one call at a time`);
+    this.busy = what;
+    try {
+      return await run();
+    } finally {
+      this.busy = null;
+    }
   }
 
   // --- the checks before a write

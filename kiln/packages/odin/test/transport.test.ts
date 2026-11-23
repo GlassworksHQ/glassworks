@@ -12,10 +12,11 @@ const iface = (interfaceNumber: number, cls: number, endpoints: Ep[], alternateS
 const bulkPair: Ep[] = [{ endpointNumber: 1, direction: 'in', type: 'bulk' }, { endpointNumber: 2, direction: 'out', type: 'bulk' }];
 
 /** A Download mode device as Heimdall finds it: a CDC communications interface, then the CDC data interface. */
-function usbDevice(overrides: Partial<Record<'claimInterface' | 'open', () => Promise<void>>> & { productId?: number; interfaces?: USBInterface[] } = {}) {
+function usbDevice(overrides: Partial<Record<'claimInterface' | 'open' | 'selectAlternateInterface', () => Promise<void>>> & { productId?: number; interfaces?: USBInterface[] } = {}) {
   const calls: string[] = [];
   const out: Uint8Array[] = [];
   const reads: ((r: USBInTransferResult) => void)[] = [];
+  const rejects: ((e: unknown) => void)[] = [];
   const interfaces = overrides.interfaces ?? [
     iface(0, 0x02, [{ endpointNumber: 3, direction: 'in', type: 'interrupt' }]),
     iface(1, 0x0a, bulkPair),
@@ -28,7 +29,7 @@ function usbDevice(overrides: Partial<Record<'claimInterface' | 'open', () => Pr
     async open() { calls.push('open'); await overrides.open?.(); device.opened = true; },
     async selectConfiguration() { calls.push('selectConfiguration'); },
     async claimInterface(n: number) { calls.push(`claim ${n}`); await overrides.claimInterface?.(); },
-    async selectAlternateInterface(n: number, alt: number) { calls.push(`alternate ${n} ${alt}`); },
+    async selectAlternateInterface(n: number, alt: number) { calls.push(`alternate ${n} ${alt}`); await overrides.selectAlternateInterface?.(); },
     async releaseInterface(n: number) { calls.push(`release ${n}`); },
     async close() { calls.push('close'); },
     async transferOut(ep: number, data: Uint8Array) {
@@ -38,15 +39,17 @@ function usbDevice(overrides: Partial<Record<'claimInterface' | 'open', () => Pr
     },
     transferIn(ep: number, length: number) {
       calls.push(`in ${ep} ${length}`);
-      return new Promise<USBInTransferResult>((resolve) => reads.push(resolve));
+      return new Promise<USBInTransferResult>((resolve, reject) => { reads.push(resolve); rejects.push(reject); });
     },
   };
   const deliver = (bytes: number[]) => {
     const resolve = reads.shift();
+    rejects.shift();
     if (!resolve) throw new Error('no read is waiting');
     resolve({ status: 'ok', data: new DataView(new Uint8Array(bytes).buffer) } as USBInTransferResult);
   };
-  return { device: device as unknown as USBDevice, calls, out, deliver, reads };
+  const fail = (e: unknown) => { reads.shift(); rejects.shift()!(e); };
+  return { device: device as unknown as USBDevice, calls, out, deliver, fail, reads };
 }
 
 describe('finding the device', () => {
@@ -83,6 +86,15 @@ describe('opening it', () => {
     const usb = usbDevice({ interfaces: [iface(0, 0x0a, bulkPair, 2)] });
     await WebUsbOdinTransport.open(usb.device);
     expect(usb.calls).toEqual(['open', 'claim 0', 'alternate 0 2']);
+  });
+
+  it('gives the interface back when its alternate setting can\'t be selected', async () => {
+    const usb = usbDevice({
+      interfaces: [iface(0, 0x0a, bulkPair, 2)],
+      selectAlternateInterface: async () => { throw new DOMException('Unable to set device interface.', 'NetworkError'); },
+    });
+    await expect(WebUsbOdinTransport.open(usb.device)).rejects.toMatchObject({ code: 'claim-failed' });
+    expect(usb.calls).toEqual(['open', 'claim 0', 'alternate 0 2', 'release 0', 'close']);
   });
 
   it('says what to do when the browser can\'t claim it (WinUSB on Windows)', async () => {
@@ -126,6 +138,25 @@ describe('transfers', () => {
     usb.deliver([0x65, 0, 0, 0, 0, 0, 0, 0]); // the answer the next read is waiting for
     expect(Array.from(await next)).toEqual([0x65, 0, 0, 0, 0, 0, 0, 0]);
     expect(usb.calls.filter((c) => c.startsWith('in '))).toEqual(['in 1 512']); // one read in all
+  });
+
+  it('starts a new read after the browser fails one, even one that had timed out', async () => {
+    const usb = usbDevice();
+    const t = await WebUsbOdinTransport.open(usb.device);
+    await expect(t.receive(512, 10)).rejects.toMatchObject({ code: 'timeout' });
+    usb.fail(new DOMException('The transfer was cancelled.', 'AbortError'));
+    await new Promise((r) => setTimeout(r, 0));
+    const next = t.receive(8, 1000);
+    usb.deliver([0x64, 0, 0, 0, 0, 0, 0, 0]);
+    expect(Array.from(await next)).toEqual([0x64, 0, 0, 0, 0, 0, 0, 0]);
+    expect(usb.calls.filter((c) => c.startsWith('in '))).toEqual(['in 1 512', 'in 1 8']);
+
+    const failing = t.receive(8, 1000); // and one that fails while it's being waited on
+    usb.fail(new DOMException('The device was disconnected.', 'NetworkError'));
+    await expect(failing).rejects.toThrow(/disconnected/);
+    const after = t.receive(8, 1000);
+    usb.deliver([0x67, 0, 0, 0, 0, 0, 0, 0]);
+    expect(Array.from(await after)).toEqual([0x67, 0, 0, 0, 0, 0, 0, 0]);
   });
 
   it('skips the zero-length packet a timed-out read was waiting for', async () => {
