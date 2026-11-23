@@ -11,6 +11,10 @@ line of each version is what Home Assistant shows on the update card. A change o
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-23
+
+**Themes and an edge glow for Assist, notifications and Bluetooth proxy panes, and setup with no touch on the lululemon Mirror.**
+
 ### Added
 - **Appearance themes, Assist edge glow, and timer board.** A new *Appearance* page (on the panel and in Manage) adds five light/dark themes, a Custom color picker, and a **Home Assistant** theme that mirrors your dashboard's colors and dark mode (plus a toggle to follow Home Assistant's dark mode with any theme). Themes apply to both Assist and timers. Assist now shows as an **edge glow** by default, keeping your dashboard visible (the orb is still a pick under *Assist* on the *Appearance* page): the whole border swells and brightens with your voice, light trails around the edges while Assist thinks, and it rests in the corners while the reply plays. Three or more active timers group into a single **timer board** card.
 - **Notifications and Bluetooth proxy panes (both builds).** Show rich Home Assistant notifications on screen (on by default; non-touch displays auto-dismiss untagged high/critical alerts after 2 minutes) and relay nearby BLE sensors to Home Assistant over an encrypted connection (off by default).
