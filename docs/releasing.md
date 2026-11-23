@@ -917,7 +917,10 @@ The tag is `npm/<name>/v<MAJOR.MINOR.PATCH>`, where `<name>` is the package's fo
 Release `fel` before `fastboot`: the consumer check installs `fastboot`'s `@glassworks/fel` from npm, and
 fails while that version isn't there.
 
-**A version can be unpublished only within 72 hours, and its number can never be used again.**
+**Treat a published version as permanent: its number can never be used again, even after an unpublish.** npm lets
+a version be unpublished only while no other package on npm depends on it, and after 72 hours only if it also
+had under 300 downloads last week and has one owner ([npm's unpublish policy](https://docs.npmjs.com/policies/unpublish)).
+Once `@glassworks/fastboot` is out, `@glassworks/fel` has a dependent.
 
 If the job published the package but failed at the GitHub release, a rerun stops at "Not on npm yet".
 Make the release by hand from the same tag, without publishing again (here `fel` 0.1.0):

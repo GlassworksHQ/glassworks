@@ -9,7 +9,8 @@
 # Runs in the `npm` environment, which deploys only from npm/*/v* tags. It authenticates with npm's trusted
 # publishing (OIDC, this workflow and that environment) once a package has it; until then (a package's first
 # release can't have it) with the environment's NPM_TOKEN secret, a granular token that may publish @glassworks.
-# A version can be unpublished only within 72 hours, and never used again. Every action is pinned by commit SHA
+# A published version is for good: its number is never reusable, and npm unpublishes only under its policy's
+# conditions (docs/releasing.md "npm packages"). Every action is pinned by commit SHA
 # (the tag in the comment is what it was at the time).
 name: npm release
 
