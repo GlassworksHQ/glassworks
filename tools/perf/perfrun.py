@@ -711,29 +711,44 @@ SLEEP_RE = re.compile(r"PowerManagerService.*Going to sleep|Going to sleep due t
 CONTENT_GONE_TAG = "Glassworks"
 CONTENT_GONE_RE = re.compile(r"Content process (killed|crashed); restarting session")
 # Android's low-memory killer naming the process it ended: lmkd's line in logcat (Android 9 and later, tag
-# lowmemorykiller), or the kernel's in dmesg (Android 8 and earlier: "lowmemorykiller: Killing '<name>' (<pid>)", the
-# name cut to its last 15 characters). Only these name the killer; without one the report says only that Android
-# closed the page.
+# lowmemorykiller, the full name), or the kernel's in dmesg (Android 8 and earlier: "lowmemorykiller: Killing '<name>'
+# (<pid>)", the task name, which Android's zygote cuts to the last 15 characters of a longer process name, so a long
+# child name such as `<package>:sandboxed_tab_disable_art_image_24` keeps no colon: `le_art_image_24`). Only these
+# name the killer; without one the report says only that Android closed the page.
 LMK_TAG = "lowmemorykiller"
 LMK_RE = re.compile(r"\bKill(?:ing)? '([^']+)' \((\d+)\)")
 DMESG_TIME_RE = re.compile(r"\[\s*(\d+\.\d+)\]")
+# ActivityManager starting one of the kiosk's other processes (its browser page's among them): its pid and full name,
+# which the kernel's cut name and pid are matched against.
+CHILD_PROC_RE = r"Start proc (\d+):({pkg}:[^/\s]+)/"
+# The kernel's task names hold at most this many characters.
+TASK_COMM_LEN = 15
 # A low-memory kill counts for the page when it came this long before the app's line at most (or up to 5 s after:
 # the kernel's clock and logcat's needn't agree to the millisecond).
 LMK_WINDOW_S = 120
 
 
-def own_process(name, package):
-    """True when a process name the low-memory killer gave is one of the kiosk's own other processes (its page's):
-    `<package>:<name>`, or the kernel's last 15 characters of it."""
+def own_process(name, pid, package, procs):
+    """True when a process the low-memory killer named (`name`, `pid`) is one of the kiosk's own other processes (its
+    page's). `procs`: {pid: full name} of the ones ActivityManager started during the run (CHILD_PROC_RE). By its pid
+    or full name among those; by a part of one of those names when the kernel cut it (no colon left); else, for a
+    process started before the runner read logcat, `<package>:<name>` or the end of it that still keeps the colon."""
+    procs = procs or {}
+    if procs.get(str(pid)) or name in procs.values():
+        return True
+    # Within, not only at the end: some zygote versions copy one character fewer than they cut to.
+    if len(name) <= TASK_COMM_LEN and any(len(full) > len(name) and name in full for full in procs.values()):
+        return True
     base, sep, rest = name.partition(":")
     return bool(sep and rest) and package.endswith(base)
 
 
-def low_memory_kill(dev, seen, gone_mono):
+def low_memory_kill(dev, seen, gone_mono, procs=None):
     """Whether the low-memory killer closed one of the kiosk's processes just before the app said its page was killed:
-    lmkd's line already in logcat (`seen`: [(mono, name)]), or the kernel's in dmesg, read once now (read-only; a
-    build whose shell can't read it gives nothing). False when neither names it: then nothing says why."""
-    if any(gone_mono - LMK_WINDOW_S <= m <= gone_mono + 5 and own_process(n, dev.package) for m, n in seen):
+    lmkd's line already in logcat (`seen`: [(mono, name, pid)]), or the kernel's in dmesg, read once now (read-only; a
+    build whose shell can't read it gives nothing). `procs`: own_process's. False when neither names it: then nothing
+    says why."""
+    if any(gone_mono - LMK_WINDOW_S <= m <= gone_mono + 5 and own_process(n, pid, dev.package, procs) for m, n, pid in seen):
         return True
     try:
         out = dev.sh("dmesg", timeout=20)
@@ -743,7 +758,8 @@ def low_memory_kill(dev, seen, gone_mono):
         if LMK_TAG not in line:
             continue
         m, t = LMK_RE.search(line), DMESG_TIME_RE.search(line)
-        if m and t and gone_mono - LMK_WINDOW_S <= float(t.group(1)) <= gone_mono + 5 and own_process(m.group(1), dev.package):
+        if m and t and gone_mono - LMK_WINDOW_S <= float(t.group(1)) <= gone_mono + 5 \
+                and own_process(m.group(1), m.group(2), dev.package, procs):
             return True
     return False
 # Once the restart page is done, the kiosk's test hold keeps the screen on through the views (#240).
@@ -939,7 +955,7 @@ def cmd_coldstart(dev, a):
            "fallback": {}}
     page_lines = P.PageLines()
     st = {"engine_at": None, "own_stop_at": 0.0, "current": None, "measure_mono": None, "sf_reads": None, "break_after": None,
-          "opened": 0, "next_at": None, "gestures": [], "lmk_seen": []}
+          "opened": 0, "next_at": None, "gestures": [], "lmk_seen": [], "own_procs": {}}
     # The threads start once `res` and `st` exist: they write to both at once (#250's verifier).
     poller = threading.Thread(target=poll, daemon=True)
     poller.start()
@@ -948,6 +964,7 @@ def cmd_coldstart(dev, a):
         threading.Thread(target=cpu_clock, daemon=True).start()
     size = screen_size(dev) if ref else None
     proc_re = re.compile(rf"Start proc \d+:{re.escape(dev.package)}/")
+    child_re = re.compile(CHILD_PROC_RE.format(pkg=re.escape(dev.package)))
 
     def entry_of(slot):
         if slot == "warmup":
@@ -1064,10 +1081,14 @@ def cmd_coldstart(dev, a):
         if ref and SLEEP_RE.search(msg) and res["proc_mono"] is not None:
             res.setdefault("screen_off", []).append({"mono": rec["mono"], "during": cur[0] if cur else
                                                      "recovery" if st.get("recovering") else "the restart"})
+        if ref and "Start proc" in msg:
+            m = child_re.search(msg)
+            if m:
+                st["own_procs"][m.group(1)] = m.group(2)
         if ref and rec["tag"] == LMK_TAG:
             m = LMK_RE.search(msg)
             if m:
-                st["lmk_seen"].append((rec["mono"], m.group(1)))
+                st["lmk_seen"].append((rec["mono"], m.group(1), m.group(2)))
         if ref and rec["tag"] == CONTENT_GONE_TAG and st["opened"] and not st.get("recovering"):
             m = CONTENT_GONE_RE.search(msg)
             if m:
@@ -1078,13 +1099,10 @@ def cmd_coldstart(dev, a):
             if proc_re.search(msg):
                 st["recovering"]["launched"] = True
             pl = page_lines.feed(msg)
+            if pl and pl.get("nonce") == "" and pl.get("t") == "refdash":
+                st["recovering"].setdefault("usable_at", C.now())   # the done line may be lost: end_recovery
             if pl and pl.get("nonce") == "" and pl.get("t") in ("done", "error"):
-                rv = st.pop("recovering")
-                res["recoveries"][-1].update(back_s=round(C.now() - rv["at"], 1), launch=rv.get("launch") or "relaunched-by-system",
-                                             **({"error": pl.get("message")} if pl.get("t") == "error" else {}))
-                st["no_memory"] = True        # RAM right after a restart isn't the views' peak
-                st["next_at"] = C.now()
-                print(f"  the kiosk is back after {res['recoveries'][-1]['back_s']} s; carrying on", file=sys.stderr)
+                end_recovery(**({"error": pl.get("message")} if pl.get("t") == "error" else {}))
             return False
         pl = page_lines.feed(msg)
         res["bad_page_lines"] = page_lines.bad
@@ -1121,40 +1139,56 @@ def cmd_coldstart(dev, a):
                 return True
         return False
 
+    def end_recovery(**extra):
+        """The kiosk's start view is back after a lost or timed-out view (its restart page's done or error line, or its
+        usable line RESTART_DONE_WAIT_S ago with no done line since): the next view opens once the screen is still."""
+        rv = st.pop("recovering")
+        res["recoveries"][-1].update(back_s=round(C.now() - rv["at"], 1), launch=rv.get("launch") or "relaunched-by-system",
+                                     **extra)
+        st["no_memory"] = True        # RAM right after a restart isn't the views' peak
+        st["next_at"] = C.now()
+        print(f"  the kiosk is back after {res['recoveries'][-1]['back_s']} s; carrying on", file=sys.stderr)
+
     def content_gone(cause, rec):
         """The app's browser page process is gone (CONTENT_GONE_RE) and the app is loading the kiosk's page again. The
         open view is lost in this run: a graded one is measured as failing every task (report.py), a fallback copy
         fails only itself, the warm-up says so; a view already done loses nothing. Then, as after a timed-out view, the
         runner waits for the start view to be usable again and opens the rest. True when nothing is left to open."""
-        cur = st["current"]
+        cur, now0 = st["current"], C.now()
         slot = cur[0] if cur else None
         entry = entry_of(slot) if slot else None
         lost = entry is not None and not entry.get("done") and not entry.get("error")
-        gone = {"cause": cause, "low_memory": cause == "killed" and low_memory_kill(dev, st["lmk_seen"], rec["mono"])}
+        at_end = st["opened"] == len(slots) and (lost or entry is None or entry.get("done") or entry.get("error"))
+        # The lost view ends before anything here can block (the dmesg read below takes up to 20 s, while the app is
+        # already loading its page again): its gestures stop (send checks the page), and its command goes, so the
+        # page the app loads doesn't run it when it asks the fake Home Assistant for one (CodeRabbit on #781).
+        st["current"], st["next_at"] = None, None
+        if lost:
+            st["live"] = st["view_open"] = False
+            threading.Thread(target=still, args=(cur[1],), daemon=True).start()
+        if not at_end:
+            try:
+                with urllib.request.urlopen(f"{a.url.rstrip('/')}/clarity/cancel", timeout=10) as r:
+                    r.read()
+            except OSError:
+                pass
+        gone = {"cause": cause,
+                "low_memory": cause == "killed" and low_memory_kill(dev, st["lmk_seen"], rec["mono"], st["own_procs"])}
         res.setdefault("content_gone", []).append(dict(gone, during=slot if lost else "between views", mono=rec["mono"]))
         if lost:
-            entry["content_gone"] = dict(gone, after_s=round(C.now() - st["opened_at"], 1),
+            entry["content_gone"] = dict(gone, after_s=round(now0 - st["opened_at"], 1),
                                          after=st.get("last_line") or "usable")
             entry["lost_lines"] = page_lines.close(cur[1])
             if slot in fallback:
                 entry["error"] = P.content_gone_why(gone)
-            st["live"] = st["view_open"] = False
             if st["sf_reads"]:
                 st["sf_reads"].stop()
                 st["sf_reads"] = None
-            threading.Thread(target=still, args=(cur[1],), daemon=True).start()
-        st["current"], st["next_at"] = None, None       # its gestures stop (send checks the page)
         print(f"  {slot if lost else 'between views'}: {P.content_gone_why(gone)}", file=sys.stderr)
-        if st["opened"] == len(slots) and (lost or entry is None or entry.get("done") or entry.get("error")):
+        if at_end:
             st["gone_at_end"] = True
             return True                       # the run's last view: nothing left to open
-        # No command left from the lost view: the frontend the app loads again must not run it.
-        try:
-            with urllib.request.urlopen(f"{a.url.rstrip('/')}/clarity/cancel", timeout=10) as r:
-                r.read()
-        except OSError:
-            pass
-        st["recovering"] = {"at": C.now(), "launched": True, "launch": "session-restart"}
+        st["recovering"] = {"at": now0, "launched": True, "launch": "session-restart"}
         st["held"] = False                    # the wake key again until the next view's hold
         res.setdefault("recoveries", []).append({"after": slot, "content_gone": cause})
         print("  waiting for the kiosk's page to come back", file=sys.stderr)
@@ -1331,6 +1365,11 @@ def cmd_coldstart(dev, a):
                 continue
         if st.get("recovering"):
             rv = st["recovering"]
+            if rv.get("usable_at") and C.now() - rv["usable_at"] > RESTART_DONE_WAIT_S:
+                # Its usable line came, its done line didn't (lost in logcat), as for the run's own restart below:
+                # carry on from the usable line rather than fail the run at RECOVER_WAIT_S (CodeRabbit on #781).
+                end_recovery(done_missing=True)
+                continue
             if not rv.get("launched") and not rv.get("launch") and C.now() - rv["at"] > RECOVER_LAUNCH_S:
                 if drain():
                     break

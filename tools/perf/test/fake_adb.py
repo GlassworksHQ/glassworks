@@ -398,9 +398,19 @@ def shell(cmd):
         # The kernel's log, read-only: FAKE_LMK=kernel puts the low-memory killer's line for the page's process in it,
         # stamped (seconds since boot, the monotonic clock) when the page went; the name cut to its last 15 characters.
         at = state("lmk_at.json")
+        if at is not None and os.environ.get("FAKE_HA_URL"):
+            # A slow read (up to 20 s on a panel), while the page the app loaded again asks for a command, as a fresh
+            # harness does (no `after`): whatever the fake Home Assistant hands it now, it would run.
+            import urllib.request
+            try:
+                with urllib.request.urlopen(os.environ["FAKE_HA_URL"].rstrip("/") + "/clarity/next?after=", timeout=1) as r:
+                    cmd_ = json.loads(r.read()) if r.status == 200 else None
+            except (OSError, ValueError):
+                cmd_ = None
+            mark(f"dmesg: the page back got {cmd_['view'] if cmd_ else 'no command'}")
         out = "[    0.000000] Booting Linux on physical CPU 0x0\n"
         if at is not None and os.environ.get("FAKE_LMK") == "kernel":
-            name = f"{PKG}:tab"[-15:]
+            name = child_proc()[-15:]
             out += (f"[{at - float(os.environ.get('FAKE_LMK_AGO_S', '0.1')):12.6f}] lowmemorykiller: Killing '{name}' (4301), "
                     "adj 0,\n   to free 172032kB on behalf of 'kswapd0' (77) because\n")
         return out
@@ -739,6 +749,12 @@ def refdash(nonce, url):
         C.sleep(0.3)
         line("GeckoSession", "handleMessage GeckoView:PageStart uri=http://192.0.2.10:8123/lovelace?external_auth=1")
 
+def child_proc():
+    """The browser page's process name: FAKE_CHILD_PROC after the package's colon (`tab` by default; a long one such as
+    `sandboxed_tab_disable_art_image_24` keeps no colon in the kernel's last 15 characters)."""
+    return f"{PKG}:{os.environ.get('FAKE_CHILD_PROC', 'tab')}"
+
+
 def page_gone():
     """The view's browser page gone mid-view, as MainActivity.onContentGone logs it and then loads the kiosk's page
     again (the test dashboard's start view, which says when it is usable and done, as after a restart).
@@ -751,24 +767,25 @@ def page_gone():
     if os.environ.get("FAKE_LMK"):
         save("lmk_at.json", now())
         if os.environ["FAKE_LMK"] == "lmkd":
-            line("lowmemorykiller", f"Kill '{PKG}:tab' (4301), uid 10083, oom_adj 0 to free 172032kB", pid=600)
+            line("lowmemorykiller", f"Kill '{child_proc()}' (4301), uid 10083, oom_adj 0 to free 172032kB", pid=600)
     if how != "none":
         line("Glassworks", f"Content process {how}; restarting session")
     C.sleep(0.2)
     saved = (state("test_dash.json") if held() else None) or state("saved_url.json") or os.environ.get("FAKE_SAVED_URL")
-    restart_page(saved)
+    restart_page(saved, done=not os.environ.get("FAKE_PAGE_GONE_NO_DONE"))
 
 
-def restart_page(saved):
+def restart_page(saved, done=True):
     """The kiosk's page on the start view, as after a restart: its load, the harness's usable and done lines (no
-    nonce: restart mode)."""
+    nonce: restart mode). done=False: its done line lost in logcat."""
     line("GeckoSession", f"handleMessage GeckoView:PageStart uri={saved}")
     origin = C.now() * 1000 - 200
     C.sleep(0.5)
     page_log(restart_refdash(origin), record=False)
     line("GeckoSession", "handleMessage GeckoView:PageStop uri=null")
     C.sleep(0.2)
-    page_log({"t": "done", "stage": "restart", "run": 1, "nonce": ""}, record=False)
+    if done:
+        page_log({"t": "done", "stage": "restart", "run": 1, "nonce": ""}, record=False)
 
 
 def restart_refdash(origin):
@@ -785,6 +802,11 @@ def dashboard():
     """A cold start as on the S1: Displayed, then 0.6 s later GeckoView's own about:blank (the session
     is up from here), then the kiosk's own dashboard."""
     line("ActivityManager", f"Start proc 5555:{PKG}/u0a83 for activity {{{PKG}/{PKG}.MainActivity}}", pid=1918)
+    if not os.environ.get("FAKE_NO_CHILD_START"):
+        # The browser page's process, which the low-memory killer names (FAKE_LMK); FAKE_NO_CHILD_START: started
+        # before the runner read logcat, so no line for it.
+        line("ActivityManager", f"Start proc 4301:{child_proc()}/u0i12 for service {{{PKG}/org.mozilla.gecko.process."
+                                f"GeckoChildProcessServices$tab0}}", pid=1918)
     save("kiosk_awake_at.json", C.now())   # the new process's idle timer starts
     # The generic app comes back as the home app through its launcher alias, and is displayed under it.
     line("ActivityTaskManager", f"Displayed {PKG}/{'dev.glassworks.generic.Launcher' if ANDROID6 else '.MainActivity'}: +1s714ms", pid=1918)

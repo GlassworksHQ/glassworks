@@ -322,6 +322,12 @@ class Parity(unittest.TestCase):
         self.assertNotIn("lost_runs", self.sums["B"]["pages"]["typical"])      # other summaries as they were
         self.assertEqual([r.get("lost") for r in one["pages"]["typical"]["camera"]["runs"]], [None, True, None])
         self.assertEqual(one["pages"]["typical"]["dialog"]["runs"][1], {"lost": True})
+        # A lost run has no transport (CodeRabbit on #781): the path comes from the measured runs, unknown with none.
+        self.assertEqual(one["pages"]["typical"]["camera"]["path"], self.sums["B"]["pages"]["typical"]["camera"]["path"])
+        self.assertIsNone(every["pages"]["typical"]["camera"]["path"])
+        rtc = S.camera_summary({"camera_runs": [{"path": "web_rtc", "first_frame_ms": 900}, {"lost": True}]})
+        self.assertEqual((rtc["path"], rtc["runs"][1]), ("web_rtc", {"first_frame_ms": None, "shown_pct": None,
+                                                                     "max_gap_ms": None, "stall_total_ms": None, "lost": True}))
         self.assertTrue(one["complete"] and every["complete"])
         for g in (G.grade_summary(one), self.ts["lost-one"], self.reps["lost-one"]["grade"]):
             self.assertEqual((g["grade"], g["provisional"], g["missing"]), ("B", False, []))

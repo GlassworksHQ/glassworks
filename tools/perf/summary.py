@@ -121,7 +121,9 @@ def camera_summary(s):
                          # #265: what the receiver's counts left out of the window (the graders hold
                          # the fluid total bar against stalls + it); WebRTC runs only.
                          **({"uncovered_ms": r["uncovered_ms"]} if r.get("uncovered_ms") is not None else {}))
-    fb, paths = s.get("camera_fallback"), {r.get("path") or "hls" for r in runs}
+    # A lost run (its page closed before the camera window) has no transport: the path comes from the others, and
+    # is unknown (None) when every run was lost.
+    fb, paths = s.get("camera_fallback"), {r.get("path") or "hls" for r in runs if not r.get("lost")}
     return {"runs": [dict({k: r.get(k) for k in keys}, **tag(r)) for r in runs],
             "path": paths.pop() if len(paths) == 1 else None,
             "fallback": fb and {"path": fb["path"], "runs": [{k: r.get(k) for k in keys} for r in fb["runs"]]}}

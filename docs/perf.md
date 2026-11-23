@@ -955,15 +955,20 @@ the run:
    puts below the lowest bar. The page can't reach a level in that run, the median and run rules are
    the usual ones, and the grade isn't provisional for it.
 2. `low_memory` is true only when the killer said so: lmkd's line in logcat (Android 9 and later), or
-   the kernel's `lowmemorykiller: Killing '<name>'` in `dmesg` (Android 8 and earlier), naming one
-   of the app's own processes, at most 120 s before the app's line. The runner reads `dmesg` once at
-   the kill (read-only; a build whose shell can't read it gives nothing). The report says "the panel
+   the kernel's `lowmemorykiller: Killing '<name>' (<pid>)` in `dmesg` (Android 8 and earlier), naming
+   one of the app's own processes, at most 120 s before the app's line. The kernel keeps only the last
+   15 characters of a longer process name, so a long one may keep no colon: the runner matches by the
+   pid and full name ActivityManager started each of the app's processes under during the run, and
+   otherwise by `<package>:<name>` or an end of it that keeps the colon. It reads `dmesg` once at the
+   kill, after the lost view's gestures and command have stopped (read-only; a build whose shell
+   can't read it gives nothing). The report says "the panel
    ran out of memory and its browser page was closed (low-memory killer)" then, "Android closed the
    panel's browser page" when nothing named the killer, and "the panel's browser page crashed" for a
    crash.
 3. The runner waits for the start view to say it is usable again (at most 180 s, or the run fails),
-   as after a timed-out view but with no force-stop, and opens the run's remaining views
-   (`recoveries`, `launch: session-restart`). A lost view that was the run's last ends the run,
+   as after a timed-out view but with no force-stop, and opens the run's remaining views once it says
+   done, or 10 s after its usable line when the done line was lost (`recoveries`, `launch:
+   session-restart`, and `done_missing` for a lost done line). A lost view that was the run's last ends the run,
    graded. A lost HLS copy fails only itself, and a kill between two views loses nothing.
 4. report.md lists each lost page, in how many runs and why, and its table and headline say "page
    lost" instead of the deadline. The report's `lost` ([run, view, why]) and each page's `lost_runs`

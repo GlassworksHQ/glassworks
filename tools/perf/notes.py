@@ -185,10 +185,13 @@ def _name(p, rep=None):
 
 def _with_camera(rep):
     """When typical reaches a level without its camera and not with it: (task, phrase) of the worst
-    thing the camera page fails on, to say beside it ("with one, it ..."); else None."""
+    thing the camera page fails on, to say beside it ("with one, it ..."); else None, and None when its lost runs
+    decide its median (lost_decides)."""
     levels = (rep.get("grade") or {}).get("levels") or {}
     if not levels.get("typical-nocam") or levels.get("typical") or "typical" not in _tiers(rep):
         return None
+    if lost_decides(_tiers(rep).get("typical")):
+        return None                          # its numbers are the lost runs' deadlines: lost_sentence says it
     b = _bands(rep).get("typical") or {}
     scored = [(s, G.TASKS.index(t), t) for t in G.TASKS if _is_limit(t, b.get(t))
               for s in [_limit(t, _tiers(rep).get("typical"))] if s]

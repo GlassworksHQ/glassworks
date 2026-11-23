@@ -1600,6 +1600,60 @@ class PageGone(unittest.TestCase):
         self.assertEqual(p.returncode, 0, p.stderr[-1500:])
         self.assertEqual(c["tiers"]["typical"]["content_gone"]["low_memory"], False)
 
+    def test_a_long_child_name_the_kernel_cut_is_still_the_pages(self):
+        """CodeRabbit on #781: the kernel keeps a process name's last 15 characters, so a long child name keeps no
+        colon (`le_art_image_24`). Its pid and the full name ActivityManager started it under say it is the page's."""
+        p, c, _ = self.run_short(90, FAKE_PAGE_GONE="typical", FAKE_LMK="kernel",
+                                 FAKE_CHILD_PROC="sandboxed_tab_disable_art_image_24")
+        self.assertEqual(p.returncode, 0, p.stderr[-1500:])
+        self.assertEqual(c["tiers"]["typical"]["content_gone"]["low_memory"], True)
+        self.assertEqual(self.build(self.last_out)["graded"]["reference"]["lost"],
+                         [[1, "typical", "the panel ran out of memory and its browser page was closed (low-memory killer)"]])
+
+    def test_which_names_are_the_kiosks(self):
+        sys.path.insert(0, os.path.dirname(HERE))
+        import perfrun
+        pkg, full = "sh.edm.s1kiosk", "sh.edm.s1kiosk:sandboxed_tab_disable_art_image_24"
+        procs = {"4301": full}
+        own = lambda name, pid="1": perfrun.own_process(name, pid, pkg, procs)  # noqa: E731
+        self.assertTrue(own(full[-15:]))                   # the kernel's cut: no colon left
+        self.assertTrue(own(full[-15:-1]))                 # a zygote that copies one character fewer
+        self.assertTrue(own("anything", "4301"))           # its pid
+        self.assertTrue(own(full))                         # lmkd's full name
+        self.assertTrue(own("edm.s1kiosk:tab"))            # unknown start, the colon kept
+        self.assertFalse(own("com.other.app:tab"))
+        self.assertFalse(own("system_server"))
+        self.assertFalse(own("tab_disable_art_image_24_and_more"))   # longer than the kernel keeps: not a cut name
+
+    def test_the_kernels_name_alone_when_the_start_wasnt_seen(self):
+        """No Start proc line for the page's process: a cut name that keeps its colon is still matched by name; one
+        that keeps none names nothing, so the report doesn't blame the killer."""
+        p, c, _ = self.run_short(90, FAKE_PAGE_GONE="typical", FAKE_LMK="kernel", FAKE_NO_CHILD_START="1")
+        self.assertEqual(p.returncode, 0, p.stderr[-1500:])
+        self.assertEqual(c["tiers"]["typical"]["content_gone"]["low_memory"], True)
+        p, c, _ = self.run_short(90, FAKE_PAGE_GONE="typical", FAKE_LMK="kernel", FAKE_NO_CHILD_START="1",
+                                 FAKE_CHILD_PROC="sandboxed_tab_disable_art_image_24")
+        self.assertEqual(p.returncode, 0, p.stderr[-1500:])
+        self.assertEqual(c["tiers"]["typical"]["content_gone"]["low_memory"], False)
+
+    def test_the_lost_view_ends_before_the_kernels_log_is_read(self):
+        """CodeRabbit on #781: dmesg can take up to 20 s while the app already loads its page again. The lost view's
+        command is cancelled before that read, so the page coming back, asking for one, gets none to run."""
+        p, c, log = self.run_short(90, FAKE_PAGE_GONE="typical", FAKE_LMK="kernel")
+        self.assertEqual(p.returncode, 0, p.stderr[-1500:])
+        self.assertIn("dmesg: the page back got no command", log)
+        self.assertEqual(c["tiers"]["typical"]["content_gone"]["low_memory"], True)
+        self.assertTrue(c["tiers"]["heavy"].get("done"))
+
+    def test_a_lost_done_line_after_the_page_came_back_doesnt_stall_the_run(self):
+        """CodeRabbit on #781: the start view came back usable and its done line was lost in logcat. As for the run's
+        own restart, the usable line ends the wait after RESTART_DONE_WAIT_S, and the rest of the views open."""
+        p, c, _ = self.run_short(90, FAKE_PAGE_GONE="typical", FAKE_LMK="kernel", FAKE_PAGE_GONE_NO_DONE="1")
+        self.assertEqual(p.returncode, 0, p.stderr[-1500:])
+        self.assertIsNone(c["error"])
+        self.assertTrue(c["recoveries"][0].get("done_missing"), c["recoveries"])
+        self.assertTrue(c["tiers"]["heavy"].get("done"))
+
     def test_a_reload_without_a_kill_still_fails_the_run(self):
         """A sign-in or a navigation: the page the kiosk loads again with no line before it."""
         p, c, _ = self.run_short(90, FAKE_PAGE_GONE="typical", FAKE_PAGE_GONE_HOW="none")
