@@ -139,10 +139,12 @@ Branches among maintained files: 24.0 (253), 22.2 (141), 23.2 (61).
   device that starts in fastboot or Download mode. *Latest update* isn't something Kiln can read: no
   vendor publishes it in a form the browser can fetch. So the person establishes it: a check step
   shows the device's own update (`ro.build.version.security_patch`, `ro.build.version.incremental`)
-  and asks them to run the device's system update until it says it's up to date. When they confirm,
-  Kiln **reads the props again** and checks the Android version once more, because an update can move
-  the device to a newer Android than LineageOS asks for, and LineageOS wants the given version even then.
-  Only that second read opens the unlock screen. The log keeps what was confirmed and what was read.
+  and asks them to install **only the updates for the required Android version**: if the device then
+  offers a newer Android, they stop there. LineageOS wants the latest update *of that version*, and
+  going back down from a newer Android can take a vendor downgrade. A device that's already on a newer
+  Android than the required one stops at the first read, with that said, before anything is written.
+  When they confirm, Kiln **reads the props again** and checks the Android version once more, in case
+  an update moved it anyway. Only that second read opens the unlock screen. The log keeps what was confirmed and what was read.
 - `before_recovery_install` adds steps for 292 maintained files. In the two families Kiln reaches, the
   values are `boot_stack` (234: flash extra partitions such as `dtbo` and `vendor_kernel_boot`, listed
   in the data), `samsung_exynos9xxx` (23), `samsung_qcom` (20; it also flashes LineageOS's `vbmeta.img`
@@ -389,8 +391,8 @@ For a `vendor` unlock:
 
 > **Update the tablet first**
 > LineageOS needs the newest Android 17 update on it. On the tablet, open Settings, then System update,
-> and install updates until it says it's up to date.
-> It's on the update from November 1, 2026. [It's up to date]
+> and install the Android 17 updates it offers. If it offers Android 18, stop there and don't install it.
+> It's on the update from November 1, 2026. [It's on the newest Android 17 update]
 
 **Confirm before the first write** (step 5):
 
