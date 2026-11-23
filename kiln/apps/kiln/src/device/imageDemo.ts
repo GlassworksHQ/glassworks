@@ -28,7 +28,7 @@ const REFRACT_DOWN = 'the download proxy answered 502: GitHub answered 503';
 export async function imageDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim'>, name: ImageDemo, fast = false, deps: Partial<ImageDeps> = {}, handOver?: (p: PanelShell) => StandardSession | undefined): Promise<{ image: ImageSession; app: AppSession; standard?: () => StandardSession | undefined }> {
   let standard: StandardSession | undefined;
   const tick = (ms: number) => new Promise<void>((r) => setTimeout(r, fast ? 0 : ms));
-  // the frame's community image: its id, its files in download order, and the published key its wifi-on step uses
+  // the frame's community image: its id, its files in download order, and the published key its wifi-on step uses, if any
   const community = frame.imageFlow.recipes.find((x) => x.community)!;
   const [firstFile, secondFile] = community.files;
   const keyFile = community.steps.find((x) => x.do === 'wifi-on')?.key;
@@ -54,6 +54,14 @@ export async function imageDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim
       for (let i = 1; i <= 5; i++) { await tick(150); onProgress(i / 5); }
       return new Blob([new Uint8Array(16)]);
     },
+    async adbKey(_, onProgress) {
+      for (let i = 1; i <= 5; i++) { await tick(150); onProgress(i / 5); }
+      return new Blob([new Uint8Array(16)]);
+    },
+    async systemKey(_, onProgress) {
+      for (let i = 1; i <= 10; i++) { await tick(150); onProgress(i / 10); }
+      return new Blob([new Uint8Array(16)]);
+    },
     async build(_, onProgress) {
       for (const step of ['patch', 'system', 'userdata'] as const) {
         for (let i = 1; i <= 5; i++) {
@@ -65,6 +73,11 @@ export async function imageDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim
     },
     async discard() {},
   };
+  /** A community image after its first start: takes svc wifi enable and reports Wi-Fi on (or not). */
+  const wifiShell = (): PanelShell => ({
+    async run(c: string) { return { out: c === 'getprop sys.boot_completed' ? '1' : c === 'dumpsys wifi' ? `Wi-Fi is ${name === 'image-done-wifi-unconfirmed' ? 'disabled' : 'enabled'}\n` : '', code: 0 }; },
+    async push() { throw new Error('not in this demo'); },
+  });
   const fastboot = (system: number) => sim.fastboot(system, { fails: name === 'flash-error' || name === 'image-error', stuck: name === 'image-writing', tick });
   // flash-release…: the APK from a stand-in release (?apk=release), as the image screen shows it
   const release = name.startsWith('flash-release')
@@ -83,6 +96,8 @@ export async function imageDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim
     ...(name === 'flash-adb-refused' ? { adbTries: 2 } : {}),
     requestAdb: async (o) => {
       o?.onPicked?.();
+      // a community image's Wi-Fi on, with this browser's key: the image's own shell
+      if (image.recipe.community) return wifiShell();
       if (name === 'flash-adb-wait' || name === 'flash-adb-refused') throw new Error('No authenticator can handle the request');
       // flash-error-first-start: the cable goes during the first start: its error, whose Try again connects over adb again
       if (name === 'flash-error-first-start') return { run: async () => { throw new Error('transferOut: the device was disconnected'); }, push: async () => {} };
@@ -90,10 +105,7 @@ export async function imageDemo({ frame, sim }: Pick<DeviceEntry, 'frame' | 'sim
       return withAppStreams(sim.firstStart({ hideFails: name === 'flash-done-chooser', noHome: name === 'flash-done-no-home' }), { online: name !== 'flash-setup-wifi', radio: false });
     },
     // the image's own key: an adb shell that has started, takes svc wifi enable and reports Wi-Fi on (or not)
-    adbWithKey: () => async () => ({
-      async run(c: string) { return { out: c === 'getprop sys.boot_completed' ? '1' : c === 'dumpsys wifi' ? `Wi-Fi is ${name === 'image-done-wifi-unconfirmed' ? 'disabled' : 'enabled'}\n` : '', code: 0 }; },
-      async push() { throw new Error('not in this demo'); },
-    }),
+    adbWithKey: () => async () => wifiShell(),
     adbKey: () => 'QAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA= kiln@glassworks',
     apk: () => app.apkBytes(),
     apkBlocked: () => app.releaseBlocked(),

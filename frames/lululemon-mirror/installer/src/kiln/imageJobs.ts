@@ -9,7 +9,7 @@ import { resumableBody } from '../download';
 import { checkDownload, loadSystem, type Loaded } from '../flash';
 import { buildImages } from '../flash';
 import { GLASS_PANES } from '../image';
-import { userdataWithWifi, wifiTemplate } from '../wifi';
+import { systemWithKey, userdataWithKey, userdataWithWifi, wifiTemplate } from '../wifi';
 
 /**
  * Each page's own storage folder, so another Kiln tab can't change a file between its check and its
@@ -49,9 +49,9 @@ export async function claimAndSweep(locks: Locks, own: string, list: () => Promi
 
 /** Where download() keeps a file, apart from the images Kiln builds. */
 export const downloaded = (name: string) => `download-${name}`;
-/** Where a community image's `wifi` step keeps what it makes: always `made-…`, so it can't be Kiln's own scratch file. */
+/** Where a community image's `wifi`, `adb-key` and `system-key` steps keep what they make: always `made-…`, so it can't be Kiln's own scratch file. */
 export const madeFile = (name: string) => `made-${name.replace(/[^A-Za-z0-9._-]/g, '_')}`;
-/** The wifi job's working copy of userdata: outside the `made-` names a recipe can choose. */
+/** The wifi, adb-key and system-key jobs' working copy of the image: outside the `made-` names a recipe can choose. */
 export const WIFI_SCRATCH = 'scratch-wifi.raw';
 
 export interface JobHandle extends SyncHandle { truncate(n: number): void; flush(): void; close(): void }
@@ -121,6 +121,26 @@ export function imageJobs(open: (name: string) => Promise<JobHandle>, removeAll:
     return h;
   };
   const close = (name: string) => { const h = handles.get(name); if (h) { h.flush(); h.close(); handles.delete(name); } };
+  /** An image copy `make` writes to madeFile(makes), through the scratch file; emptied if it fails. */
+  const copy = async (makes: string, make: (store: ReturnType<typeof syncHandleStore>, sink: (b: Uint8Array) => void) => Promise<void>) => {
+    const scratch = await fresh(WIFI_SCRATCH);
+    const out = await fresh(madeFile(makes));
+    let at = 0;
+    try {
+      await make(syncHandleStore(scratch), (b) => {
+        const wrote = out.write(b, { at });
+        if (wrote !== b.length) throw new Error(`the browser stored ${wrote} of ${b.length} bytes (is its storage full?)`);
+        at += b.length;
+      });
+    } catch (e) {
+      out.truncate(0);
+      throw e;
+    } finally {
+      close(madeFile(makes));
+      scratch.truncate(0);
+      close(WIFI_SCRATCH);
+    }
+  };
   const loadFrom = async (source: { size: number; stream(): ReadableStream<Uint8Array> }, onProgress: (x: number) => void) => {
     loaded = undefined;
     loaded = await loadSystem(source, syncHandleStore(await fresh('system.raw')), onProgress, want);
@@ -197,28 +217,30 @@ export function imageJobs(open: (name: string) => Promise<JobHandle>, removeAll:
     check: (file: Blob, want: ImageFile, onProgress: (x: number) => void) => checkDownload(file, want, onProgress),
     /**
      * A community image's `wifi` step: the template read from the stored system image where it lies,
-     * the stored userdata read and checked against its pin as it goes, the network saved (one file),
-     * and the copy written to madeFile(makes).
+     * the stored userdata read and checked against its pin as it goes (or, with `made`, the copy an
+     * earlier step made from it), the network saved (one file), and the copy written to madeFile(makes).
      */
-    async wifi(o: { userdata: ImageFile; system: ImageFile; makes: string; wifi: { ssid: string; password: string } }, onProgress: (x: number) => void): Promise<void> {
+    async wifi(o: { userdata: ImageFile; made?: string; system: ImageFile; makes: string; wifi: { ssid: string; password: string } }, onProgress: (x: number) => void): Promise<void> {
       const template = await wifiTemplate(await blobOf(downloaded(o.system.name)));
-      const scratch = await fresh(WIFI_SCRATCH);
-      const out = await fresh(madeFile(o.makes));
-      let at = 0;
-      try {
-        await userdataWithWifi(await blobOf(downloaded(o.userdata.name)), o.userdata, syncHandleStore(scratch), template, o.wifi, (b) => {
-          const wrote = out.write(b, { at });
-          if (wrote !== b.length) throw new Error(`the browser stored ${wrote} of ${b.length} bytes (is its storage full?)`);
-          at += b.length;
-        }, onProgress);
-      } catch (e) {
-        out.truncate(0);
-        throw e;
-      } finally {
-        close(madeFile(o.makes));
-        scratch.truncate(0);
-        close(WIFI_SCRATCH);
-      }
+      const source = await blobOf(o.made ? madeFile(o.made) : downloaded(o.userdata.name));
+      await copy(o.makes, (store, sink) => userdataWithWifi(source, o.made ? undefined : o.userdata, store, template, o.wifi, sink, onProgress));
+    },
+    /**
+     * A community image's `adb-key` step: the stored userdata read and checked against its pin as it
+     * goes, `adbKey` put in place of the published key (one file), and the copy written to madeFile(makes).
+     */
+    async adbKey(o: { userdata: ImageFile; makes: string; adbKey: string }, onProgress: (x: number) => void): Promise<void> {
+      const source = await blobOf(downloaded(o.userdata.name));
+      await copy(o.makes, (store, sink) => userdataWithKey(source, o.userdata, store, o.adbKey, sink, onProgress));
+    },
+    /**
+     * A community image's `system-key` step: the stored system image read and checked against its pin as
+     * it goes, its framework made to let in `adbKey` in place of the key it hardcodes (one file), and the
+     * copy written to madeFile(makes).
+     */
+    async systemKey(o: { system: ImageFile; makes: string; adbKey: string }, onProgress: (x: number) => void): Promise<void> {
+      const source = await blobOf(downloaded(o.system.name));
+      await copy(o.makes, (store, sink) => systemWithKey(source, o.system, store, o.adbKey, sink, onProgress));
     },
     async discard(): Promise<void> {
       loaded = undefined;

@@ -36,6 +36,14 @@ export function workerImages(): ImageMaker {
       await call({ op: 'wifi', ...o }, (_, x) => onProgress(x));
       return file(madeFile(o.makes));
     },
+    async adbKey(o, onProgress) {
+      await call({ op: 'adb-key', ...o }, (_, x) => onProgress(x));
+      return file(madeFile(o.makes));
+    },
+    async systemKey(o, onProgress) {
+      await call({ op: 'system-key', ...o }, (_, x) => onProgress(x));
+      return file(madeFile(o.makes));
+    },
     async build(o, onProgress) {
       await call({ op: 'build', ...o }, (step, x) => onProgress(step as Parameters<typeof onProgress>[0], x));
       return { system: await file('system.sparse'), userdata: await file('userdata.sparse') };

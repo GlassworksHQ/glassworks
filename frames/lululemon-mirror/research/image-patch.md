@@ -22,8 +22,12 @@ Mirror still waits on an app that runs on API 23. Since 2026-11-16 Kiln installs
 Glassworks for generic Android instead ([The app](#the-app-the-legacy-build-of-glassworks)). It runs on the Mirror:
 the only home screen, upright, with no crashes (2026-11-17, #443's run).
 
+**2026-11-22: Kiln pins image 3 (`mirror-android-3`)** ([Image 3](#image-3-mirror-android-3-2026-11-22)).
+Read from its files and checked offline against the real image; **untested on a unit**.
+
 Device: lululemon Mirror (MSM8916), community image Glass Panes `mirror-android-1` (the real flash
-below), and since 2026-11-16 `mirror-android-2` (below; on the unit since 2026-11-17) (Android 6.0.1,
+below), and since 2026-11-16 `mirror-android-2` (below; on the unit since 2026-11-17), and since
+2026-11-22 `mirror-android-3` in Kiln (below; not on a unit yet) (Android 6.0.1,
 `userdebug`, `test-keys`), stock signed `boot` (`IFC-6309-2.0-MIR.S22Q401`). Tools:
 `@glassworks/ext4` (#353), e2fsprogs 1.47.4.
 
@@ -174,6 +178,62 @@ after):
 flashed result that the original doesn't have. The patch's checks read the fingerprint, so image 1
 is refused from now on, and the way back (`checkDownload`) takes image 2's `system.img`.
 
+## Image 3 (`mirror-android-3`, 2026-11-22)
+
+Kiln pins Glass Panes `mirror-android-3` (published 2026-11-22), for Glassworks and for the Glass Panes
+option. Read 2026-11-22 from GitHub's release API and the files (downloaded to `/tmp` for the
+tests only, deleted after). Commands:
+
+```sh
+gh release view mirror-android-3 -R git-nimrod/glass-panes --json assets -q '.assets[]|"\(.name) \(.size) \(.digest)"'
+npx -y tsx@4.23.15 tools/mirror/image-facts.ts system.img userdata.sparse   # read-only
+npx -y tsx@4.23.15 tools/mirror/list-apps.ts system.img                     # read-only
+dexdump -d services.dex                                                     # build-tools 37, on the jar's classes.dex
+```
+
+| | Image 2 | Image 3 |
+|---|---|---|
+| `system.img` | 850,905,808 bytes, `bdb6b844…e35c1` | 1,074,051,108 bytes, `bd7f2e33…ec19` (same 314,554 blocks of 4 KiB) |
+| `userdata.sparse` | 154,944,572 bytes, `74b1f57a…cf908` | 154,952,764 bytes, `81eb5648…c521d` (same 1,363,149 blocks) |
+| `SHA256SUMS` | `c3cbc377…4d02a` | `cf9660a2…7bd87` |
+| `ro.build.fingerprint` | `…/MMB29M/11120023:userdebug/test-keys` | `…/MMB29M/11212248:userdebug/test-keys` |
+| `build.prop` otherwise | | `service.adb.tcp.port=-1` gone; network adb is now `persist.adb.tcp.port` in userdata (`/property/persist.adb.tcp.port` = `0000 glass-panes-network-adb`, off) |
+| Their kiosk app | in userdata, installed by hand | `/priv-app/MirrorKiosk` (`com.nimrod.mirrorkiosk`), `android:persistent`, a HOME app, with its GeckoView and TFLite libraries in `lib/arm64` |
+| `services.jar` | the owner constant is the project key | a new owner constant, an `adb_keys` path, and default grants for the kiosk ([below](#image-3-a-new-constant-and-adb_keys)) |
+| Apps | | 33 folders fewer: 24 of Kiln's 36 `UNUSED_APPS`, `/priv-app/Launcher3` (Trebuchet stays, also `com.android.launcher3`), `PicoTts`, `PrintSpooler`, `HTMLViewer`, the dreams and live wallpapers, `OpenWnn` |
+| Overlays | none in `/vendor/overlay` | the same: Kiln's settings overlay is still the only one |
+
+What Kiln changes for it (read, then checked offline):
+
+- `patchSystem` refuses image 2 now (the fingerprint), and leaves out `/priv-app/MirrorKiosk`
+  (`IMAGE_KIOSK`): kept, it would run beside Glassworks as a persistent second home app. Its
+  default grants in `services.jar` name its package only, so they grant nothing once it's gone.
+- `UNUSED_APPS` keeps all 36: `patchSystem` skips a folder that isn't there. 12 are still in image 3.
+- Nothing in the Glassworks app needs the removed `PicoTts` (no `TextToSpeech` use, grep 2026-11-22).
+- `GW_MIRROR_SYSTEM_IMG=<image 3> npx vitest run test/image.test.ts` passed on 2026-11-22 in 30 s: the
+  hash, the 12 unused apps and the kiosk read and left out, `services.jar` retargeted, and e2fsck finds
+  nothing in the flashed result that the original doesn't have. `GP_DIR=<image 3> npx vitest run
+  test/glass-panes-files.test.ts` passed: Kiln's key in the release's userdata, then the network,
+  one file each, `adb_keys` keeping 0640 1000:2000 `adb_keys_file`; `e2fsck -fn` clean before and
+  after (16 → 18 inodes).
+
+- The kiosk is the only thing of Glass Panes' own in image 3's `system` (read 2026-11-22): every APK
+  in `/app` and `/priv-app` read by package name, and every file under 4 MiB that isn't an APK, jar,
+  oat or library searched for `nimrod`, `mirrorkiosk` and `glass panes`. Besides
+  `/priv-app/MirrorKiosk`, the only Glass Panes name is `com.nimrod.mirrorkiosk` in `services.jar`'s
+  default grants (above). The other non-AOSP apps are stock: `com.dsi.ant.server` (ANT HAL) and
+  `com.gd.mobicore.pa` (Trustonic's RootPA). No init script or binary is named for it.
+- The Glass Panes option gets one change to `system` (the `system-key` step, `systemWithKey` in
+  `installer/src/wifi.ts`): `services.jar` with this browser's fingerprint in place of `A1:EC:…`, by the
+  same string move as Glassworks', nothing else. `GP_DIR=<image 3> GP_RAW=1 npx vitest run
+  test/glass-panes-files.test.ts` passed on 2026-11-22 (36 s for both tests): the dex names this key
+  and not `A1:EC:…`, `services.jar` keeps its mode, owner and label, `build.prop` and the kiosk are as
+  released; `e2fsck -fn` on the image before and after reports the same one finding (the stock
+  image's "Padding at end of inode bitmap is not set"), 23 blocks more in use (the re-deflated jar).
+
+Not checked: a flash on a unit (Glassworks or Glass Panes), and whether the kiosk's removal leaves
+anything behind that expects it (a receiver, a job). **Untested.**
+
 ## The first real flash (2026-11-16, verified by the root)
 
 The root ran the install headless with `tools/mirror/flash-node.ts` (#370), the same installer
@@ -275,6 +335,42 @@ the other entry and every header as they were.
 
 On the unit (2026-11-17, #443's run): flashed with a throwaway key, the first boot came up over it alone. Not
 checked in that run: that the project key is refused.
+
+### Image 3: a new constant, and `adb_keys`
+
+**Read 2026-11-22** from image 3's `/framework/services.jar` (2,404,392 bytes, one `classes.dex`,
+5,351,048 bytes), with build-tools 37's `dexdump -d`:
+
+- `MIRROR_OWNER_ADB_FINGERPRINT` is still there, now `A1:EC:24:9E:F0:8B:80:55:C5:A7:0A:89:A4:F0:D5:8B`
+  (`IMAGE_OWNER_FINGERPRINT`). It is **not** the project key (`D1:13:60:…`), and no key in the
+  repository at tag `v0.13.0` has it (`mirror-app/android/project-key/` holds only the project key).
+  Whose it is: **unknown**. `handleMessage` checks it first: a match logs `Authorizing the Mirror
+  owner's ADB key`, writes the key and answers `OK`. So every unit on image 3 as released lets that
+  computer in over USB, whatever key its userdata lists.
+- Then a new branch: `isListedInUserKeyFile(key)` reads `/data/misc/adb/adb_keys` line by line, takes
+  each line's first word, and on an equal key logs `Authorizing an ADB key listed in adb_keys` and
+  answers `OK`. adbd still ignores the file; the framework now reads it.
+- The release's userdata lists one key there, the project key (0640 1000:2000 `adb_keys_file`). Glass
+  Panes' `install-mirror.ps1` swaps it, byte for byte, for the user's `adbkey.pub` before flashing.
+- `DefaultPermissionGrantPolicy.grantDefaultSystemHandlerPermissions` names `com.nimrod.mirrorkiosk`
+  (camera, microphone, location, per the release notes).
+- The constant's neighbours in the string table are `A package name must be specified.` and
+  `A2dp connection list not empty, purge it, size `, so the in-place swap fails for most keys, as on
+  image 2; Kiln's string move handles it. The dex fixture (`test/fixtures/dex`) was rebuilt with the
+  new constant.
+
+What it means:
+
+| | Image 3 as released | Kiln's Glassworks | Kiln's Glass Panes option |
+|---|---|---|---|
+| The owner constant | `A1:EC:…` | this browser's key (`services.ts`) | this browser's key (`system-key` step) |
+| `adb_keys` | the project key | this browser's key (a fresh userdata) | this browser's key (`adb-key` step) |
+| Who gets in | `A1:EC:…` and anyone with the published project key | this browser only | this browser only |
+
+The app's Manage page hears both log lines as "let in by the image" (`UsbDebugging.heard`), and
+still never writes `adb_keys` itself (`allowUsbDebugging(false, …)`), so Remove still takes a computer
+out. Not checked on a unit: that image 3 lets in a key listed in `adb_keys` (read only), and that a
+Glassworks flash refuses the project key. **Untested.**
 
 ## The rotation (2026-11-17)
 

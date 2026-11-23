@@ -10,7 +10,7 @@ import { HOME_ACTIVITY, app, fakeApk, filter, zip, type FakeEl } from '@glasswor
 import { Disk, Ext4, MemoryStore, Sha256, hex, readSparse, writeSparse, type Store } from '@glassworks/ext4';
 import { clean, cleanup, debugfs, debugfsCat, dump, fsck, haveTools, load, mke2fs, scratch } from '@glassworks/ext4/testing';
 import { axmlAttribute, zipEntry } from '@glassworks/app-adb';
-import { GLASS_PANES, GLASS_PANES_KEY_FINGERPRINT, GLASSWORKS, KEPT_APPS, UNUSED_APPS, MIRROR_PROBE, PRIVILEGED, SETTINGS_OVERLAY, adbFingerprint, adbKeyLines, buildUserdata, checkMirrorApk, patchSystem, setProp, wpaPsk, wpaSupplicantConf } from '../src';
+import { GLASS_PANES, GLASS_PANES_KEY_FINGERPRINT, IMAGE_KIOSK, IMAGE_OWNER_FINGERPRINT, GLASSWORKS, KEPT_APPS, UNUSED_APPS, MIRROR_PROBE, PRIVILEGED, SETTINGS_OVERLAY, adbFingerprint, adbKeyLines, buildUserdata, checkMirrorApk, patchSystem, setProp, wpaPsk, wpaSupplicantConf } from '../src';
 import { API_KEY_HANDOVER_PROP, DEVICE_MAC_PROP, MIRROR_FRAME } from '../src/image';
 import { fakeAdbKey, fakeServicesJar } from './fakes';
 import { DEXDUMP, disassemble } from './dexdump';
@@ -149,8 +149,9 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
 
   function systemTree(fingerprint: string = GLASS_PANES.fingerprint, services: Uint8Array | null = jar): string {
     const root = join(dir, `sys-${Math.random().toString(36).slice(2)}`);
-    for (const d of ['priv-app/Settings', 'app/Provision', 'media/audio', 'framework', 'app/Stk', 'priv-app/Dialer', 'priv-app/TeleService']) mkdirSync(join(root, d), { recursive: true });
-    for (const a of ['app/Stk/Stk.apk', 'priv-app/Dialer/Dialer.apk', 'priv-app/TeleService/TeleService.apk']) writeFileSync(join(root, a), randomBytes(20_000));
+    for (const d of ['priv-app/Settings', 'app/Provision', 'media/audio', 'framework', 'app/Stk', 'priv-app/Dialer', 'priv-app/TeleService', 'priv-app/MirrorKiosk/lib/arm64']) mkdirSync(join(root, d), { recursive: true });
+    // image 3's own kiosk app, as it builds it in: the APK and its unpacked libraries
+    for (const a of ['app/Stk/Stk.apk', 'priv-app/Dialer/Dialer.apk', 'priv-app/TeleService/TeleService.apk', 'priv-app/MirrorKiosk/MirrorKiosk.apk', 'priv-app/MirrorKiosk/lib/arm64/libxul.so']) writeFileSync(join(root, a), randomBytes(20_000));
     mkdirSync(join(root, 'priv-app/Dialer/oat/arm64'), { recursive: true });
     writeFileSync(join(root, 'priv-app/Dialer/oat/arm64/Dialer.odex'), randomBytes(30_000));
     if (services) writeFileSync(join(root, 'framework/services.jar'), services);
@@ -203,6 +204,9 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
     expect(log).toContain('2 native libraries for arm64-v8a in /priv-app/Glassworks/lib/arm64');
     // the unused apps are gone, folders and all; the phone stack stays
     expect(log).toContain('left out 2 unused apps: com.android.dialer, com.android.stk');
+    // the image's own kiosk goes too, folder and libraries: Glassworks is the Mirror's app
+    expect(log).toContain(`left out the image's own kiosk app: ${IMAGE_KIOSK.package}`);
+    expect(debugfs(img, 'ls /priv-app')).not.toContain('MirrorKiosk');
     expect(debugfs(img, 'ls /app')).not.toContain('Stk');
     expect(debugfs(img, 'ls /priv-app')).not.toContain('Dialer');
     expect(debugfs(img, 'ls /priv-app')).toContain('TeleService');
@@ -210,10 +214,10 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
     const services = debugfsCat(img, '/framework/services.jar');
     const dex = Buffer.from((await zipEntry(new Uint8Array(services), 'classes.dex'))!).toString('latin1');
     expect(dex).toContain(adbFingerprint(KEY));
-    expect(dex).not.toContain(GLASS_PANES_KEY_FINGERPRINT);
+    expect(dex).not.toContain(IMAGE_OWNER_FINGERPRINT);
     expect(owner(debugfs(img, 'stat /framework/services.jar'))).toEqual(jarOwner);
     expect(debugfs(img, 'ea_get /framework/services.jar security.selinux')).toContain('u:object_r:system_file:s0');
-    expect(log).toContain('/framework/services.jar: lets in this adb key without asking, not the Glass Panes project key');
+    expect(log).toContain('/framework/services.jar: lets in this adb key without asking, not the image\'s own');
   }, 60_000);
 
   it('refuses, with nothing written, an image without services.jar or one Kiln can\'t retarget, and the project key', async () => {
@@ -423,17 +427,22 @@ describe.skipIf(!REAL || !haveTools || !existsSync(REAL ?? ''))('the real Glass 
       const baseline = problems(fsck(join(dir, 'original.raw')).out);
 
       const real = await Ext4.open(disk);
-      // the template buildImages puts the saved network after (read 2026-11-16 from image 2)
+      // the template buildImages puts the saved network after (read 2026-11-16 from image 2, the same in image 3)
       expect(new TextDecoder().decode(await real.readFile('/etc/wifi/wpa_supplicant.conf'))).toBe(TEMPLATE);
       expect((await real.readdir('/vendor')).map((e) => e.name)).not.toContain('overlay'); // ours is the only overlay
-      // every unused folder is in the pinned image and holds the app the list names
-      for (const u of UNUSED_APPS) {
-        const apk = (await real.readdir(u.dir)).find((e) => e.name.endsWith('.apk'))!;
-        const manifest = (await zipEntry(await real.readFile(`${u.dir}/${apk.name}`), 'AndroidManifest.xml'))!;
-        expect(axmlAttribute(manifest, 'manifest', 'package'), u.dir).toBe(u.package);
-      }
+      // each unused folder the pinned image still has holds the app the list names (image 3 leaves 24 of the 36 out itself)
+      const packageIn = async (dir: string) => {
+        const apk = (await real.readdir(dir)).find((e) => e.name.endsWith('.apk'))!;
+        return axmlAttribute((await zipEntry(await real.readFile(`${dir}/${apk.name}`), 'AndroidManifest.xml'))!, 'manifest', 'package');
+      };
+      const present: string[] = [];
+      for (const u of UNUSED_APPS) if (await real.exists(u.dir)) { expect(await packageIn(u.dir), u.dir).toBe(u.package); present.push(u.package); }
+      expect(present).toHaveLength(12);
+      // and its own kiosk, which Glassworks replaces
+      expect(await packageIn(IMAGE_KIOSK.dir)).toBe(IMAGE_KIOSK.package);
       await patchSystem(real, { adbKey: KEY, apk: APK, bootAnimation: ANIM, settingsOverlay: OVERLAY });
       for (const u of UNUSED_APPS) expect(await real.exists(u.dir), u.dir).toBe(false);
+      expect(await real.exists(IMAGE_KIOSK.dir)).toBe(false);
       for (const d of ['/priv-app/TeleService', '/priv-app/TelephonyProvider', '/priv-app/Telecom', '/priv-app/ContactsProvider', '/app/LatinIME', '/app/PPPreference', '/app/SVIService', '/app/CABLService']) expect(await real.exists(d), d).toBe(true);
       const out = openSync(join(dir, 'out.img'), 'w');
       let pos = 0;
@@ -462,7 +471,7 @@ describe.skipIf(!REAL || !haveTools || !existsSync(REAL ?? ''))('the real Glass 
       const original = (await zipEntry(new Uint8Array(debugfsCat(join(dir, 'original.raw'), '/framework/services.jar')), 'classes.dex'))!;
       const patched = (await zipEntry(new Uint8Array(debugfsCat(img, '/framework/services.jar')), 'classes.dex'))!;
       expect(Buffer.from(patched).toString('latin1')).toContain(adbFingerprint(KEY));
-      expect(Buffer.from(patched).toString('latin1')).not.toContain(GLASS_PANES_KEY_FINGERPRINT);
+      expect(Buffer.from(patched).toString('latin1')).not.toContain(IMAGE_OWNER_FINGERPRINT);
       if (DEXDUMP) {
         const a = disassemble(original), b = disassemble(patched);
         expect(b.err).toBe('');

@@ -23,12 +23,13 @@ Each step is printed and waits for `y`. `--yes` answers every question.
 3. Load `system.img` (a local file, or `--refract`), and check its size and SHA-256.
 4. `adb reboot bootloader`.
 5. Fastboot checks, read-only: partition sizes and `max-download-size`.
-6. Build the images: the app as a priv-app (`/priv-app/Glassworks`, the probe in `/priv-app/S1Kiosk`), the boot animation, the
-   settings overlay and `ro.lockscreen.disable.default` (a first boot with nothing to tap),
-   `/framework/services.jar` letting in the first `--adb-key` (default `~/.android/adbkey.pub`) in
-   place of the Glass Panes project key, and a fresh userdata with the keys in `adb_keys` and, with
-   `--wifi-ssid`, the saved network. This image's adbd ignores `adb_keys`: the key gets in through
-   services.jar ([image-patch.md](../../frames/lululemon-mirror/research/image-patch.md#who-the-image-lets-in-over-adb)).
+6. Build the images: the app as a priv-app (`/priv-app/Glassworks`, the probe in `/priv-app/S1Kiosk`), without the
+   image's own kiosk app (`/priv-app/MirrorKiosk`), the boot animation, the settings overlay and
+   `ro.lockscreen.disable.default` (a first boot with nothing to tap), `/framework/services.jar` letting in the first
+   `--adb-key` (default `~/.android/adbkey.pub`) in place of the key the image names, and a fresh userdata with the
+   keys in `adb_keys` and, with `--wifi-ssid`, the saved network. This image's adbd ignores `adb_keys`, but its
+   framework lets in a key listed there, as it does the one services.jar names
+   ([image-patch.md](../../frames/lululemon-mirror/research/image-patch.md#who-the-image-lets-in-over-adb)).
 7. Flash system. 8. Flash userdata. 9. Reboot.
 10. Wait for adb and `sys.boot_completed`. `unauthorized` for a while after each start is normal: the
     framework lets the key in once it runs. Still `unauthorized` after 6 minutes means adb's server

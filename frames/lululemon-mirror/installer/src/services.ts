@@ -1,18 +1,29 @@
-// Which computer the Mirror lets in over adb. The Glass Panes image's services.jar (rebuilt
-// 2026-11-04) authorizes one key with no dialog: UsbDebuggingManager compares each new computer's
-// key fingerprint with a constant, and on a match writes the key and answers "OK". adbd on this image
-// ignores /data/misc/adb/adb_keys (verified 2026-11-16), so that constant is the only way in on a
-// Mirror with no touchscreen. It is the Glass Panes project key, published with its private half, so
-// anyone with a USB cable gets in. Kiln puts the fingerprint of the installer's own key in its place.
+// Which computer the Mirror lets in over adb. The Glass Panes image's services.jar authorizes one key
+// with no dialog: UsbDebuggingManager compares each new computer's key fingerprint with a constant
+// (MIRROR_OWNER_ADB_FINGERPRINT), and on a match writes the key and answers "OK". Since image 3 it also
+// lets in any key listed in /data/misc/adb/adb_keys (isListedInUserKeyFile; read 2026-11-22), which is
+// how Kiln's fresh userdata gets this browser in. adbd itself ignores that file (verified 2026-11-16).
+// The constant is still there in image 3, now a key Glass Panes never published, so every unit on the
+// image as released lets that computer in. Kiln puts the fingerprint of the installer's own key in its
+// place, so a Mirror Kiln installs, Glassworks or Glass Panes (the `system-key` step), lets in only the
+// browser that installed it.
 // Findings: frames/lululemon-mirror/research/image-patch.md#who-the-image-lets-in-over-adb.
 import { zipEntry } from '@glassworks/app-adb';
 
 /**
- * The fingerprint the Glass Panes image trusts: the project key, git-nimrod/glass-panes
- * `mirror-app/android/project-key/adbkey.pub` (commit 8ea31141, 2026-11-04), published there with its
- * private half on purpose. Kiln looks for exactly this value in services.jar.
+ * The Glass Panes project key, git-nimrod/glass-panes `mirror-app/android/project-key/adbkey.pub`
+ * (commit 8ea31141, 2026-11-04), published there with its private half on purpose. Images 1 and 2 had
+ * it as their services.jar constant, and image 3's userdata.sparse lists it in adb_keys. Kiln never
+ * lets a Mirror trust it.
  */
 export const GLASS_PANES_KEY_FINGERPRINT = 'D1:13:60:89:B6:16:00:75:63:92:56:96:F5:46:42:4A';
+
+/**
+ * The fingerprint the pinned image (mirror-android-3) hardcodes in services.jar, read from its
+ * UsbDebuggingManager on 2026-11-22: a key Glass Panes didn't publish. Kiln looks for exactly this
+ * value in services.jar and puts this browser's in its place.
+ */
+export const IMAGE_OWNER_FINGERPRINT = 'A1:EC:24:9E:F0:8B:80:55:C5:A7:0A:89:A4:F0:D5:8B';
 
 export const SERVICES_JAR = '/framework/services.jar';
 
@@ -279,10 +290,10 @@ export async function replaceDexString(dex: Uint8Array, from: string, to: string
   await checkHeader(dex);
   const raw = new TextEncoder().encode(from);
   const seen = count(dex, raw);
-  if (seen !== 1) throw new Error(`services.jar's classes.dex holds the Glass Panes key's fingerprint ${seen === 0 ? 'nowhere' : `${seen} times`}: Kiln knows the image with it exactly once.${done}`);
+  if (seen !== 1) throw new Error(`services.jar's classes.dex holds the image's adb key fingerprint ${seen === 0 ? 'nowhere' : `${seen} times`}: Kiln knows the image with it exactly once.${done}`);
   const { text, data } = dexStrings(dex);
   const p = text.indexOf(from);
-  if (p < 0) throw new Error(`services.jar's classes.dex has the Glass Panes key's fingerprint inside a longer string, not as its own.${done}`);
+  if (p < 0) throw new Error(`services.jar's classes.dex has the image's adb key fingerprint inside a longer string, not as its own.${done}`);
   if (text.includes(to)) throw new Error(`services.jar's classes.dex has the new fingerprint already as another string.${done}`);
   // k: where `to` goes among the others; every other index keeps its order, shifted by one between p and k
   const k = text.reduce((n, s, i) => n + (i !== p && s < to ? 1 : 0), 0);
@@ -387,7 +398,7 @@ async function replaceEntry(jar: Uint8Array, name: string, data: Uint8Array): Pr
 }
 
 /**
- * services.jar that trusts only `adbKey` (an adb_keys line) in place of the Glass Panes project key,
+ * services.jar that trusts only `adbKey` (an adb_keys line) in place of the image's own constant,
  * or undefined if it trusts that key already (a second run). Throws, before anything is written,
  * for the project key itself, a jar Kiln doesn't know, or a dex it can't change.
  */
@@ -409,11 +420,11 @@ export async function trustFingerprint(jar: Uint8Array, to: string): Promise<Uin
   await checkHeader(dex);
   const enc = new TextEncoder();
   // a second run: the dex already names this key, as a string of its own, once
-  if (count(dex, enc.encode(GLASS_PANES_KEY_FINGERPRINT)) === 0 && count(dex, enc.encode(to)) === 1) {
+  if (count(dex, enc.encode(IMAGE_OWNER_FINGERPRINT)) === 0 && count(dex, enc.encode(to)) === 1) {
     if (!dexStrings(dex).text.includes(to)) throw new Error(`services.jar's classes.dex has this key's fingerprint only inside a longer string.${done}`);
     return undefined;
   }
-  const next = await replaceDexString(dex, GLASS_PANES_KEY_FINGERPRINT, to);
+  const next = await replaceDexString(dex, IMAGE_OWNER_FINGERPRINT, to);
   const out = await replaceEntry(jar, 'classes.dex', next);
   const back = await zipEntry(out, 'classes.dex');
   if (!back || back.length !== next.length || !back.every((x, i) => x === next[i])) throw new Error(`the rewritten services.jar doesn't read back.${done}`);

@@ -1,14 +1,18 @@
-// A community image's Wi-Fi, set up from Kiln (#579 follow-up; maintainer, 2026-11-19). Glass Panes
-// ships with Wi-Fi off and no saved network (its userdata has no /misc/wifi, read 2026-11-19), and
-// its guide has you switch Wi-Fi on in Settings through scrcpy. Kiln instead:
-// 1. saves the person's network in a copy of the checked userdata.sparse (saveWifi: one file,
-//    /misc/wifi/wpa_supplicant.conf, from the template in the image's own system.img), and
-// 2. after the first start, switches Wi-Fi on over adb with the image's published project key:
-//    `svc wifi enable`, nothing else (wifiOn).
+// A community image set up from Kiln (#579 follow-up; maintainer, 2026-11-19), each change in a copy of
+// a checked download, one file each:
+// 0. this browser's adb key in place of the one its services.jar hardcodes (systemWithKey:
+//    /framework/services.jar, only that fingerprint): image 3's lets in a key Glass Panes never published;
+// 1. this browser's adb key in place of the published one (userdataWithKey: /misc/adb/adb_keys), as the
+//    image's own installer does it since image 3, whose framework lets in a key listed there;
+// 2. the person's network (userdataWithWifi: /misc/wifi/wpa_supplicant.conf, from the template in the
+//    image's own system.img): Glass Panes ships with no saved network, and its guide has you join one
+//    through scrcpy;
+// 3. after the first start, Wi-Fi switched on over adb with this browser's key: `svc wifi enable`,
+//    nothing else (wifiOn).
 // Research: frames/lululemon-mirror/research/first-boot.md, "A community image's Wi-Fi".
 import type { PanelShell } from '@glassworks/adb';
 import { Disk, Ext4, Sha256, hex, readSparse, sparseStore, writeSparse, type RandomReadable, type Store } from '@glassworks/ext4';
-import { WIFI_TEMPLATE, saveWifi } from './image';
+import { WIFI_TEMPLATE, saveWifi, setAdbKeys, setImageKey } from './image';
 import { WrongImage } from './flash';
 
 /**
@@ -23,27 +27,60 @@ export async function wifiTemplate(system: RandomReadable): Promise<string> {
 }
 
 /**
- * Copies the checked userdata.sparse with the person's network saved in it: reads it into `store`
- * (unwritten bytes must read as zeros), hashing every byte against `want` on the way, saves the
- * network (saveWifi: one file), and writes the result as a sparse image to `sink`.
+ * A copy of a sparse ext4 image (a userdata.sparse or a system.img) with one change (`edit`): reads it into `store` (unwritten bytes must read
+ * as zeros), hashing every byte against `want` on the way when it is the download itself (`want`
+ * undefined: a copy this page made from one), applies `edit`, and writes the result as a sparse image
+ * to `sink`.
  */
-export async function userdataWithWifi(source: { stream(): ReadableStream<Uint8Array> }, want: { name: string; size: number; sha256: string }, store: Store,
-  template: string, wifi: { ssid: string; password: string }, sink: (b: Uint8Array) => Promise<void> | void,
-  onProgress: (x: number) => void = () => {}): Promise<void> {
+async function copyImage(source: { size?: number; stream(): ReadableStream<Uint8Array> }, want: { name: string; size: number; sha256: string } | undefined,
+  store: Store, edit: (fs: Ext4) => Promise<void>, sink: (b: Uint8Array) => Promise<void> | void, onProgress: (x: number) => void, what: string): Promise<void> {
   const sha = new Sha256();
   let read = 0;
+  const size = want?.size ?? source.size ?? 1;
   const { disk } = await readSparse(source.stream(), (h) => new Disk(store, h.blockSize, h.blocks, { zeroed: true }),
-    { onBytes: (b) => { sha.update(b); read += b.length; }, onProgress: (n) => onProgress(0.8 * (n / want.size)) });
-  const got = hex(sha.digest());
-  if (read !== want.size || got !== want.sha256) throw new WrongImage(`the stored ${want.name} no longer checks out (SHA-256 ${got}), so Kiln didn't save the network in it`);
+    { onBytes: (b) => { if (want) sha.update(b); read += b.length; }, onProgress: (n) => onProgress(0.8 * Math.min(1, n / size)) });
+  if (want) {
+    const got = hex(sha.digest());
+    if (read !== want.size || got !== want.sha256) throw new WrongImage(`the stored ${want.name} no longer checks out (SHA-256 ${got}), so Kiln didn't ${what} it`);
+  }
   const fs = await Ext4.open(disk);
-  await saveWifi(fs, template, wifi);
+  await edit(fs);
   await fs.flush();
   await writeSparse(disk, sink, { onProgress: (b) => onProgress(0.8 + 0.2 * (b / disk.blocks)) });
 }
 
 /**
- * After the first start, over adb with the image's own published key: waits for Android to finish
+ * Copies a userdata.sparse with the person's network saved in it (saveWifi: one file). `want`: the
+ * checked download's pin, hashed as it is read; undefined for a copy this page made from it (its
+ * `adb-key` step's).
+ */
+export async function userdataWithWifi(source: { size?: number; stream(): ReadableStream<Uint8Array> }, want: { name: string; size: number; sha256: string } | undefined, store: Store,
+  template: string, wifi: { ssid: string; password: string }, sink: (b: Uint8Array) => Promise<void> | void,
+  onProgress: (x: number) => void = () => {}): Promise<void> {
+  await copyImage(source, want, store, (fs) => saveWifi(fs, template, wifi), sink, onProgress, 'save the network in');
+}
+
+/**
+ * Copies the checked userdata.sparse with `adbKey` (this browser's) as its only adb key, in place of the
+ * one the image publishes (setAdbKeys: one file, its owner, mode and label kept).
+ */
+export async function userdataWithKey(source: { stream(): ReadableStream<Uint8Array> }, want: { name: string; size: number; sha256: string }, store: Store,
+  adbKey: string, sink: (b: Uint8Array) => Promise<void> | void, onProgress: (x: number) => void = () => {}): Promise<void> {
+  await copyImage(source, want, store, (fs) => setAdbKeys(fs, adbKey), sink, onProgress, 'put this browser\'s key in');
+}
+
+/**
+ * Copies the checked system.img with its framework letting in `adbKey` (this browser's) in place of the
+ * key its services.jar hardcodes (setImageKey: one file, one fingerprint in it). `store` holds the
+ * expanded image (about 1.3 GB on the Mirror).
+ */
+export async function systemWithKey(source: { stream(): ReadableStream<Uint8Array> }, want: { name: string; size: number; sha256: string }, store: Store,
+  adbKey: string, sink: (b: Uint8Array) => Promise<void> | void, onProgress: (x: number) => void = () => {}): Promise<void> {
+  await copyImage(source, want, store, (fs) => setImageKey(fs, adbKey), sink, onProgress, 'put this browser\'s key in');
+}
+
+/**
+ * After the first start, over adb with this browser's key (or the image's published one): waits for Android to finish
  * starting, then `svc wifi enable`, then reads back the Wi-Fi state machine's own state from
  * `dumpsys wifi` ("Wi-Fi is enabled": the driver and supplicant are up). `wifi_on` would only say the
  * switch was asked for (AOSP 6.0.1 WifiServiceImpl.dump). That one command is all it runs that

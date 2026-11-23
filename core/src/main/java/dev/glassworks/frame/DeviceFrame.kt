@@ -59,6 +59,7 @@ class DeviceFrame(
         val GLASS_PANES = mapOf(
             "Android/msm8916_64/msm8916_64:6.0.1/MMB29M/11041605:userdebug/test-keys" to "Glass Panes image 1",
             "Android/msm8916_64/msm8916_64:6.0.1/MMB29M/11120023:userdebug/test-keys" to "Glass Panes image 2",
+            "Android/msm8916_64/msm8916_64:6.0.1/MMB29M/11212248:userdebug/test-keys" to "Glass Panes image 3",
         )
 
         const val MIRROR_INSTALL = "To install it: flash the device again with Kiln, at ${FrameRelease.KILN}"

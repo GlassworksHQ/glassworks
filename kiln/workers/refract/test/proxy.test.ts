@@ -140,6 +140,16 @@ describe('the allowlist', () => {
     expect(allowlist[USERDATA].size).toBe(154944572);
   });
 
+  it("pins image 3's files to its own SHA256SUMS (read 2026-11-22), whose own hash is pinned too", () => {
+    const sums3 = 'bd7f2e33599a2ceaac5e442fabcadf9a0aa5b31f3be4db2d2e1303711f4bec19  system.img\n' +
+      '81eb5648ec0b5ed13d520e90c597c9ff50f3ea57524e9d9554c2a71dc94c521d  userdata.sparse\n';
+    const at = (n: string) => allowlist[`glass-panes/mirror-android-3/${n}` as keyof typeof allowlist];
+    expect(createHash('sha256').update(sums3).digest('hex')).toBe(at('SHA256SUMS').sha256);
+    expect(sums3).toContain(`${at('system.img').sha256}  system.img`);
+    expect(sums3).toContain(`${at('userdata.sparse').sha256}  userdata.sparse`);
+    expect([at('system.img').size, at('userdata.sparse').size, at('SHA256SUMS').size]).toEqual([1074051108, 154952764, 159]);
+  });
+
   it.each(['nope', 'glass-panes/mirror-android-1/system.img', 'glass-panes/mirror-android-2/boot.img', 'https://example.com/x', '__proto__', 'toString', `${IMG}/`, IMG.toUpperCase()])(
     'answers 404 to %s and never asks GitHub',
     async (path) => {

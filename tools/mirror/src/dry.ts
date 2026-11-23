@@ -34,8 +34,8 @@ export async function dryRoom(apk: Uint8Array, extra = 0): Promise<number> {
 }
 
 /**
- * A small system.img made like the Glass Panes one: its fingerprint in /build.prop, Launcher3 in
- * /priv-app, and a services.jar that trusts the Glass Panes project key. `room`: bytes the patch will add (the APK, its libraries, the boot animation, the settings overlay).
+ * A small system.img made like the Glass Panes one: its fingerprint in /build.prop, Launcher3 and its
+ * own kiosk app in /priv-app, and a services.jar that trusts the image's own key. `room`: bytes the patch will add (the APK, its libraries, the boot animation, the settings overlay).
  */
 export async function dryImage(work: string, room = 0): Promise<{ path: string; want: Want; bytes: number }> {
   const blocks = Math.ceil((32 * MiB + room * 1.5) / 4096);
@@ -50,6 +50,8 @@ export async function dryImage(work: string, room = 0): Promise<{ path: string; 
   await fs.writeFile('/etc/wifi/wpa_supplicant.conf', new TextEncoder().encode('update_config=1\neapol_version=1\nap_scan=1\nfast_reauth=1\npmf=1\np2p_no_group_iface=1\n'), f);
   await fs.writeFile('/build.prop', new TextEncoder().encode(`ro.build.fingerprint=${GLASS_PANES.fingerprint}\n`), f);
   await fs.writeFile('/priv-app/Launcher3/Launcher3.apk', new Uint8Array(64 * 1024).fill(0x4c), f);
+  await fs.mkdirs('/priv-app/MirrorKiosk', a);
+  await fs.writeFile('/priv-app/MirrorKiosk/MirrorKiosk.apk', new Uint8Array(64 * 1024).fill(0x4d), f);
   await fs.flush();
   const parts: Uint8Array[] = [];
   await writeSparse(disk, (b) => { parts.push(b.slice()); });

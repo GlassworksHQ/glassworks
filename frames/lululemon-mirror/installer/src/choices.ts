@@ -8,27 +8,13 @@ import { GLASS_PANES_USERDATA } from './flash';
 import { GLASS_PANES } from './image';
 
 /** The steps the Mirror's page runs, and the partitions a recipe may write: never LK, boot or the modem. */
-export const MIRROR_ACCESS: FrameAccess = { steps: ['download', 'patch', 'fastboot', 'flash', 'restart', 'first-start', 'wifi', 'wifi-on'], partitions: ['system', 'userdata'] };
+export const MIRROR_ACCESS: FrameAccess = { steps: ['download', 'patch', 'fastboot', 'flash', 'restart', 'first-start', 'system-key', 'adb-key', 'wifi', 'wifi-on'], partitions: ['system', 'userdata'] };
 
 /** Refract's ids for the Glass Panes release files (kiln/workers/refract/allowlist.json). */
-const onRefract = <F extends { name: string }>(f: F) => ({ ...f, refract: `glass-panes/mirror-android-2/${f.name}` });
+const onRefract = <F extends { name: string }>(f: F) => ({ ...f, refract: `glass-panes/mirror-android-3/${f.name}` });
 const SYSTEM = onRefract(GLASS_PANES.system);
 const USERDATA = onRefract(GLASS_PANES_USERDATA);
 const panes = GLASS_PANES.project;
-
-/**
- * The Glass Panes project adb key, which its images trust and which it publishes on purpose
- * (git-nimrod/glass-panes `mirror-app/android/project-key/README.md`). Kiln uses it for one command
- * after the first start (`wifi-on`: `svc wifi enable`), for that session only, and never stores it.
- * Fetched through Refract at a pinned commit; never committed here (maintainer, 2026-11-19).
- */
-export const GLASS_PANES_KEY = {
-  name: 'adbkey',
-  url: 'https://raw.githubusercontent.com/git-nimrod/glass-panes/8ea31141cecc9d3e42ceb72ec08f92bd8ed38801/mirror-app/android/project-key/adbkey',
-  refract: 'glass-panes/project-key/adbkey',
-  size: 1704,
-  sha256: '89908fe23b497864d623c2e6567df4a6a9e4bfa7c8281f78e5ce61cb6c38da2d',
-} as const;
 
 export const GLASSWORKS_IMAGE: ImageRecipe = {
   id: 'glassworks',
@@ -52,7 +38,7 @@ export const GLASSWORKS_IMAGE: ImageRecipe = {
   ],
 };
 
-/** Glass Panes as its release has it: today's way back from Glassworks, as data. */
+/** Glass Panes as its release has it, but for who it lets in over adb: today's way back from Glassworks, as data. */
 export const GLASS_PANES_IMAGE: ImageRecipe = {
   id: 'glass-panes',
   name: panes.name,
@@ -63,21 +49,27 @@ export const GLASS_PANES_IMAGE: ImageRecipe = {
   summary: 'Android 6.0.1 for the Mirror as its release has it, with its own Mirror Kiosk app.',
   support: { name: 'Glass Panes on GitHub', href: `${panes.href}/issues` },
   vendor: 'Its vendor files belong to Qualcomm and Quectel.',
-  release: { name: 'mirror-android-2', href: GLASS_PANES.release },
+  release: { name: 'mirror-android-3', href: GLASS_PANES.release },
   next: { name: 'its README', href: `${panes.href}#readme` },
-  files: [SYSTEM, USERDATA, GLASS_PANES_KEY],
+  files: [SYSTEM, USERDATA],
   steps: [
     { do: 'download', file: SYSTEM.name },
     { do: 'download', file: USERDATA.name },
-    { do: 'download', file: GLASS_PANES_KEY.name },
     { do: 'fastboot' },
-    // optional: the person's network, saved in a copy of its userdata (one file); without one, userdata as published
-    { do: 'wifi', file: USERDATA.name, template: SYSTEM.name, makes: 'userdata+wifi' },
-    { do: 'flash', partition: 'system', file: SYSTEM.name },
+    // this browser's adb key in a copy of its system image, in place of the one its services.jar lets in without
+    // asking (one file, one fingerprint in it): image 3's is a key Glass Panes never published, so every Mirror on
+    // the image as released lets that computer in, and nobody on the Mirror can take it back
+    { do: 'system-key', file: SYSTEM.name, makes: 'system+key' },
+    // this browser's adb key in a copy of its userdata, in place of the published project key (one file), as the
+    // image's own installer does it: the Mirror then lets in only this browser
+    { do: 'adb-key', file: USERDATA.name, makes: 'userdata+key' },
+    // optional: the person's network, saved in that copy (one file); without one, the copy with the key alone
+    { do: 'wifi', file: 'userdata+key', template: SYSTEM.name, makes: 'userdata+wifi' },
+    { do: 'flash', partition: 'system', file: 'system+key' },
     { do: 'flash', partition: 'userdata', file: 'userdata+wifi' },
     { do: 'restart' },
-    // with a network saved: Wi-Fi on, over adb with the image's own published key, so nobody opens Settings
-    { do: 'wifi-on', key: GLASS_PANES_KEY.name },
+    // with a network saved: Wi-Fi on, over adb with this browser's key, so nobody opens Settings
+    { do: 'wifi-on' },
   ],
 };
 

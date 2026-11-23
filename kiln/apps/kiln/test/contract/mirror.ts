@@ -78,6 +78,8 @@ function flashWorld(k: Knobs): World {
     download: async () => {},
     file: async (n) => new Blob([n]),
     wifi: async () => { throw new Error('not for Glassworks'); },
+    adbKey: async () => { throw new Error('not for Glassworks'); },
+    systemKey: async () => { throw new Error('not for Glassworks'); },
     check: async () => {},
     discard: async () => {},
   };

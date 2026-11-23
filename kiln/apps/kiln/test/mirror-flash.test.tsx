@@ -43,6 +43,8 @@ function setup(o: { system?: number; flashFails?: number; buildFails?: boolean; 
     async file(name) { calls.push(`file ${name}`); return new Blob([name]); },
     async check(_b, want) { calls.push(`check ${want.name}`); },
     async wifi() { throw new Error('not for Glassworks'); },
+    async adbKey() { throw new Error('not for Glassworks'); },
+    async systemKey() { throw new Error('not for Glassworks'); },
     async build(b, onProgress) { built.push(b); if (o.buildFails) throw new Error('No space left on the device'); calls.push(`build userdata=${b.userdataBytes} key=${b.adbKey.split(' ')[1]}${b.fill === false ? ' nofill' : ''}`); onProgress('patch', 1); return { system: new Blob(['SS']), userdata: new Blob(['U']) }; },
     async discard() { calls.push('discard'); },
   };
@@ -93,7 +95,7 @@ describe('installing Glassworks over fastboot', () => {
     await f.connectFastboot();
     expect(f.state.screen).toBe('confirm');
     await f.flash(); // not understood yet: nothing happens
-    const fetched = 'fetch https://proxy.test/glass-panes/mirror-android-2/system.img';
+    const fetched = 'fetch https://proxy.test/glass-panes/mirror-android-3/system.img';
     expect(calls).toEqual([fetched]);
     f.understand(true);
     await f.flash();
@@ -123,7 +125,7 @@ describe('installing Glassworks over fastboot', () => {
     expect(f.state.files[0]).toMatchObject({ state: 'error', error: expect.stringMatching(/answered 502: GitHub answered 503/) });
     expect(f.blocked()).toMatch(/Download system\.img first/);
     await f.download(); // Try again: the same route
-    expect(calls).toEqual(['fetch https://proxy.test/glass-panes/mirror-android-2/system.img', 'fetch https://proxy.test/glass-panes/mirror-android-2/system.img']);
+    expect(calls).toEqual(['fetch https://proxy.test/glass-panes/mirror-android-3/system.img', 'fetch https://proxy.test/glass-panes/mirror-android-3/system.img']);
   });
 
   it('a file that isn\'t the release\'s is refused as Kiln\'s bug too', async () => {
@@ -284,7 +286,7 @@ describe('every flash demo screen', () => {
     expect(embers()).toEqual(['Try again']);
     const report = new URL(screen.getByText('Report this').closest('a')!.getAttribute('href')!);
     expect(report.origin + report.pathname).toBe('https://github.com/GlassworksHQ/glassworks/issues/new');
-    expect(report.searchParams.get('body')).toMatch(/Image: glassworks\nFile: system\.img \(850905808 bytes\)\nWhat Kiln saw: the download proxy answered 502/);
+    expect(report.searchParams.get('body')).toMatch(/Image: glassworks\nFile: system\.img \(1074051108 bytes\)\nWhat Kiln saw: the download proxy answered 502/);
     expect(document.querySelector('a[href*="releases/download"]')).toBeNull();
     expect(document.querySelector('input[type="file"][accept*=".img"]')).toBeNull();
     expect(screen.queryByText(/yourself|Select the downloaded/)).toBeNull();

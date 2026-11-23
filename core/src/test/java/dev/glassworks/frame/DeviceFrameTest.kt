@@ -104,6 +104,8 @@ class DeviceFrameTest {
         assertEquals("Glass Panes image 2", image2.image)
         val image1 = mirror + ("ro.build.fingerprint" to "Android/msm8916_64/msm8916_64:6.0.1/MMB29M/11041605:userdebug/test-keys")
         assertEquals("Glass Panes image 1", device("Android", "MSM8916 for arm64", image1).frameRelease!!.image)
+        val image3 = mirror + ("ro.build.fingerprint" to "Android/msm8916_64/msm8916_64:6.0.1/MMB29M/11212248:userdebug/test-keys")
+        assertEquals("Glass Panes image 3", device("Android", "MSM8916 for arm64", image3).frameRelease!!.image)
         val other = mirror + ("ro.build.fingerprint" to "Android/msm8916_64/msm8916_64:6.0.1/MMB29M/1:userdebug/test-keys")
         assertNull("an image Kiln doesn't know isn't named", device("Android", "MSM8916 for arm64", other).frameRelease!!.image)
     }
@@ -111,7 +113,7 @@ class DeviceFrameTest {
     @Test fun theImageKilnFlashesIsNamed() {
         val ts = RepoFiles.file("frames/lululemon-mirror/installer/src/image.ts").readText()
         val fingerprint = Regex("""fingerprint: '([^']+)'""").find(ts)!!.groupValues[1]
-        assertEquals("Glass Panes image 2", DeviceFrame.GLASS_PANES[fingerprint])
+        assertEquals("Glass Panes image 3", DeviceFrame.GLASS_PANES[fingerprint])
     }
 
     @Test fun aDeviceWithoutAFrameHasNoFrameReleases() {

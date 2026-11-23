@@ -7,13 +7,13 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { zipEntry } from '@glassworks/app-adb';
-import { GLASS_PANES_KEY_FINGERPRINT as FROM, adbFingerprint, adbKeyLines, md5, replaceDexString, trustAdbKey, trustFingerprint } from '../src';
+import { GLASS_PANES_KEY_FINGERPRINT, IMAGE_OWNER_FINGERPRINT as FROM, adbFingerprint, adbKeyLines, md5, replaceDexString, trustAdbKey, trustFingerprint } from '../src';
 import { DEXDUMP, disassemble } from './dexdump';
 import { SERVICES_STRINGS, fakeAdbKey, fakeDex, fakeServicesJar } from './fakes';
 
 const FIXTURE = new Uint8Array(readFileSync(join(__dirname, 'fixtures/dex/classes.dex')));
-/** before every other string, after every other one, and in the fingerprint's own slot ("D" < it < "D: ") */
-const TARGETS = { early: '00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF', late: 'FF:EE:DD:CC:BB:AA:99:88:77:66:55:44:33:22:11:00', same: 'D5:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00' };
+/** before every other string, after every other one, and in the fingerprint's own slot (in the fixture "A first" < it < "Alpha") */
+const TARGETS = { early: '00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF', late: 'FF:EE:DD:CC:BB:AA:99:88:77:66:55:44:33:22:11:00', same: 'A1:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00' };
 
 const enc = (s: string) => new TextEncoder().encode(s);
 const occurrences = (b: Uint8Array, s: string) => Buffer.from(b).toString('latin1').split(s).length - 1;
@@ -98,8 +98,8 @@ describe('replaceDexString: the fingerprint moves to its sorted place, every ref
   });
 
   it.each([
-    ['without the fingerprint', SERVICES_STRINGS.filter((x) => x !== FROM), /holds the Glass Panes key's fingerprint nowhere/],
-    ['with it twice (once inside another string)', [...SERVICES_STRINGS, `owner ${FROM}`], /holds the Glass Panes key's fingerprint 2 times/],
+    ['without the fingerprint', SERVICES_STRINGS.filter((x) => x !== FROM), /holds the image's adb key fingerprint nowhere/],
+    ['with it twice (once inside another string)', [...SERVICES_STRINGS, `owner ${FROM}`], /holds the image's adb key fingerprint 2 times/],
     ['with it only inside a longer string', [...SERVICES_STRINGS.filter((x) => x !== FROM), `owner ${FROM}`], /inside a longer string/],
   ])('refuses a dex %s, changing nothing', async (_, list, msg) => {
     const dex = await fakeDex(list);
@@ -153,7 +153,7 @@ describe('trustAdbKey: services.jar that lets in the installer\'s key, not the p
   });
 
   it('refuses the published project key itself', async () => {
-    await expect(trustFingerprint(await fakeServicesJar(), FROM)).rejects.toThrow(/is the Glass Panes project key, published with its private half.*Nothing was changed/);
+    await expect(trustFingerprint(await fakeServicesJar(), GLASS_PANES_KEY_FINGERPRINT)).rejects.toThrow(/is the Glass Panes project key, published with its private half.*Nothing was changed/);
   });
 
   it('refuses a jar with the fingerprint twice, a second dex, or a classes.dex that fails its CRC', async () => {

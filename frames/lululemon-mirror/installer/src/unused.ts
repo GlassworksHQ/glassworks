@@ -2,7 +2,9 @@
 // cost RAM: the Qualcomm services died and restarted 53 to 55 times each in 43 minutes while the Mirror
 // sat at "critical" (frames/lululemon-mirror/research/mirror-memory.md). The list is what
 // the root hid on the unit on 2026-11-18 (pm hide), which took free RAM from about 60 MB to 205 MB
-// (one sample). Folders read from the pinned image 2 with tools/mirror/list-apps.ts (2026-11-18).
+// (one sample). Folders read from image 2 with tools/mirror/list-apps.ts (2026-11-18). Image 3 leaves 24
+// of them out itself; 12 are still in it (list-apps.ts, 2026-11-22). The list keeps them all: patchSystem
+// skips a folder the image doesn't have, so an image that brings one back still gets it left out.
 // The way back is Kiln's restore: the plain Glass Panes images bring every app back.
 
 /** An app Kiln leaves out: its package, and its folder in the pinned image. */

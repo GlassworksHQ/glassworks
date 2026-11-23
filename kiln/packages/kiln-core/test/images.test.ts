@@ -1,7 +1,7 @@
 // Image recipes are data from pull requests: Kiln refuses an unknown step, a file without its hash,
 // a write before every file is checked, and any attempt to name, skip or move Kiln's safety steps.
 import { describe, expect, it } from 'vitest';
-import { SAFETY_STEPS, assertImages, imageFromLink, plan, validateImage, wifiStep, writtenAsIs, type FrameAccess, type ImageRecipe, type ImageStep } from '../src/images';
+import { SAFETY_STEPS, adbKeyStep, assertImages, imageFromLink, plan, sourceFile, systemKeyStep, validateImage, wifiStep, writtenAsIs, type FrameAccess, type ImageRecipe, type ImageStep } from '../src/images';
 
 const FRAME: FrameAccess = { steps: ['download', 'patch', 'fastboot', 'flash', 'restart', 'first-start', 'wifi', 'wifi-on'], partitions: ['system', 'userdata'] };
 const H = 'a'.repeat(64);
@@ -80,11 +80,11 @@ describe('a recipe', () => {
     expect(validateImage({ ...early, steps: [st[0]!, st[2]!, st[1]!, ...st.slice(3)] }, FRAME)).toContain('step 2: patch comes after fastboot and before restart');
   });
 
-  it('keeps a community image as published: no patch, no first start with Kiln\'s key', () => {
+  it('keeps a community image as published but for the library\'s own changes: no patch, no first start with Kiln\'s key', () => {
     const r = community({ steps: steps({ do: 'download', file: 'system.img' }, { do: 'download', file: 'userdata.img' }, { do: 'patch', file: 'system.img', makes: ['system'] },
       ...community().steps.slice(2), { do: 'first-start' }) });
     expect(validateImage(r, FRAME)).toEqual(expect.arrayContaining([
-      'step 3: a community image goes on as its project publishes it, with no patch',
+      'step 3: a community image gets no patch: only the library\'s own changes (adb-key, system-key, wifi)',
       'step 8: Kiln\'s first start needs an image that trusts this browser\'s key: only Glassworks',
     ]));
   });
@@ -165,7 +165,7 @@ describe('the Wi-Fi steps', () => {
     const at = (i: number, step: unknown) => withWifi({ steps: steps.map((s, k) => (k === i ? step : s)) as ImageStep[] });
     expect(validateImage(at(4, { do: 'wifi', file: 'userdata.img', template: 'system.img', makes: 'userdata+wifi', path: '/system/build.prop' }), FRAME))
       .toContain('step 5: "wifi" takes no path');
-    expect(validateImage(at(4, { do: 'wifi', file: 'nope.img', template: 'system.img', makes: 'userdata+wifi' }), FRAME)).toContain('step 5: wifi needs nope.img downloaded first');
+    expect(validateImage(at(4, { do: 'wifi', file: 'nope.img', template: 'system.img', makes: 'userdata+wifi' }), FRAME)).toContain('step 5: wifi needs nope.img downloaded first, or made by adb-key');
     expect(validateImage(at(4, { do: 'wifi', file: 'userdata.img', template: 'system.img', makes: 'userdata.img' }), FRAME)).toContain('step 5: wifi must name a new file it makes');
     expect(validateImage(at(4, { do: 'wifi', file: 'userdata.img', template: 'system.img', makes: '' }), FRAME)).toContain('step 5: wifi must name a new file it makes');
     // before fastboot it would run before Kiln's warning, where the install skips it: refused
@@ -184,6 +184,96 @@ describe('the Wi-Fi steps', () => {
 
   it('a frame that doesn\'t run them refuses them', () => {
     expect(validateImage(withWifi(), { ...FRAME, steps: FRAME.steps.filter((s) => s !== 'wifi-on') })).toContain('step 9: this frame can\'t run "wifi-on"');
+  });
+});
+
+describe('the adb-key step', () => {
+  const KEYED: FrameAccess = { ...FRAME, steps: [...FRAME.steps, 'adb-key'] };
+  /** A community image whose userdata gets this browser's key, then the network on top, then Wi-Fi on with this browser's key. */
+  const keyed = (o: Partial<ImageRecipe> = {}): ImageRecipe => community({
+    files: [file('system.img'), file('userdata.img')],
+    steps: [
+      { do: 'download', file: 'system.img' }, { do: 'download', file: 'userdata.img' }, { do: 'fastboot' },
+      { do: 'adb-key', file: 'userdata.img', makes: 'userdata+key' },
+      { do: 'wifi', file: 'userdata+key', template: 'system.img', makes: 'userdata+wifi' },
+      { do: 'flash', partition: 'system', file: 'system.img' }, { do: 'flash', partition: 'userdata', file: 'userdata+wifi' },
+      { do: 'restart' }, { do: 'wifi-on' },
+    ],
+    ...o,
+  });
+
+  it('puts the key in a copy, the network goes on that copy, and wifi-on uses this browser\'s key', () => {
+    expect(validateImage(keyed(), KEYED)).toEqual([]);
+    expect(plan(keyed()).map((s) => s.do)).toEqual(['download', 'download', 'fastboot', 'checks', 'backup', 'confirm',
+      'adb-key', 'wifi', 'flash', 'flash', 'restart', 'wifi-on', 'way-back']);
+    // what gets written, followed back to the checked download it comes from
+    expect(sourceFile(keyed(), 'userdata+wifi')?.name).toBe('userdata.img');
+    expect(sourceFile(keyed(), 'userdata+key')?.name).toBe('userdata.img');
+    expect(sourceFile(keyed(), 'system.img')?.name).toBe('system.img');
+    expect(sourceFile(keyed(), 'system')).toBeUndefined();
+    expect(adbKeyStep(keyed(), 'userdata+key')?.file).toBe('userdata.img');
+  });
+
+  it('takes a checked download, names one new file, runs once between fastboot and restart, and takes no path', () => {
+    const steps = keyed().steps;
+    const at = (i: number, step: unknown) => keyed({ steps: steps.map((s, k) => (k === i ? step : s)) as ImageStep[] });
+    expect(validateImage(at(3, { do: 'adb-key', file: 'userdata.img', makes: 'userdata+key', path: '/misc/adb/adb_keys' }), KEYED)).toContain('step 4: "adb-key" takes no path');
+    expect(validateImage(at(3, { do: 'adb-key', file: 'nope.img', makes: 'userdata+key' }), KEYED)).toContain('step 4: adb-key needs nope.img downloaded first');
+    expect(validateImage(at(3, { do: 'adb-key', file: 'userdata.img', makes: 'userdata.img' }), KEYED)).toContain('step 4: adb-key must name a new file it makes');
+    const early = keyed({ steps: [steps[0]!, steps[1]!, steps[3]!, steps[2]!, ...steps.slice(4)] });
+    expect(validateImage(early, KEYED)).toContain('step 3: adb-key comes after fastboot and before restart');
+    const twice = keyed({ steps: [...steps.slice(0, 4), { do: 'adb-key', file: 'userdata.img', makes: 'userdata+key2' }, ...steps.slice(4)] });
+    expect(validateImage(twice, KEYED)).toContain('step 5: the adb key is put in once');
+    expect(validateImage(keyed(), FRAME)).toContain('step 4: this frame can\'t run "adb-key"');
+  });
+
+  it('wifi-on with no key needs an adb-key step first; wifi starts only from a download or adb-key\'s copy', () => {
+    const steps = keyed().steps;
+    const unkeyed = keyed({ steps: [...steps.slice(0, 3), { do: 'wifi', file: 'userdata.img', template: 'system.img', makes: 'userdata+wifi' }, ...steps.slice(5)] });
+    expect(validateImage(unkeyed, KEYED)).toContain('step 8: wifi-on without a key connects with this browser\'s, so it needs an adb-key step first');
+    const fromBuilt = keyed({ steps: steps.map((s) => (s.do === 'wifi' ? { ...s, file: 'system' } : s)) });
+    expect(validateImage(fromBuilt, KEYED)).toContain('step 5: wifi needs system downloaded first, or made by adb-key');
+  });
+});
+
+describe('the system-key step', () => {
+  const KEYED: FrameAccess = { ...FRAME, steps: [...FRAME.steps, 'system-key', 'adb-key'] };
+  /** A community image whose system lets in this browser's key in place of the one it hardcodes, and whose userdata lists it. */
+  const keyed = (o: Partial<ImageRecipe> = {}): ImageRecipe => community({
+    files: [file('system.img'), file('userdata.img')],
+    steps: [
+      { do: 'download', file: 'system.img' }, { do: 'download', file: 'userdata.img' }, { do: 'fastboot' },
+      { do: 'system-key', file: 'system.img', makes: 'system+key' },
+      { do: 'adb-key', file: 'userdata.img', makes: 'userdata+key' },
+      { do: 'flash', partition: 'system', file: 'system+key' }, { do: 'flash', partition: 'userdata', file: 'userdata+key' },
+      { do: 'restart' },
+    ],
+    ...o,
+  });
+
+  it('puts the key in a copy of the checked system image, which is what gets written', () => {
+    expect(validateImage(keyed(), KEYED)).toEqual([]);
+    expect(plan(keyed()).map((s) => s.do)).toEqual(['download', 'download', 'fastboot', 'checks', 'backup', 'confirm',
+      'system-key', 'adb-key', 'flash', 'flash', 'restart', 'way-back']);
+    expect(sourceFile(keyed(), 'system+key')?.name).toBe('system.img');
+    expect(systemKeyStep(keyed(), 'system+key')?.file).toBe('system.img');
+    expect(systemKeyStep(keyed(), 'userdata+key')).toBeUndefined();
+    // made by Kiln, hashed as it reads the download: not a file written as published
+    expect(writtenAsIs(keyed())).toEqual([]);
+  });
+
+  it('takes a checked download, names one new file, runs once between fastboot and restart, and takes no path', () => {
+    const steps = keyed().steps;
+    const at = (i: number, step: unknown) => keyed({ steps: steps.map((s, k) => (k === i ? step : s)) as ImageStep[] });
+    expect(validateImage(at(3, { do: 'system-key', file: 'system.img', makes: 'system+key', path: '/framework/services.jar' }), KEYED)).toContain('step 4: "system-key" takes no path');
+    expect(validateImage(at(3, { do: 'system-key', file: 'nope.img', makes: 'system+key' }), KEYED)).toContain('step 4: system-key needs nope.img downloaded first');
+    expect(validateImage(at(3, { do: 'system-key', file: 'system.img', makes: 'userdata.img' }), KEYED)).toContain('step 4: system-key must name a new file it makes');
+    expect(validateImage(at(3, { do: 'system-key', file: 'system.img', makes: 'userdata+key' }), KEYED)).toContain('step 5: adb-key must name a new file it makes');
+    const early = keyed({ steps: [steps[0]!, steps[1]!, steps[3]!, steps[2]!, ...steps.slice(4)] });
+    expect(validateImage(early, KEYED)).toContain('step 3: system-key comes after fastboot and before restart');
+    const twice = keyed({ steps: [...steps.slice(0, 4), { do: 'system-key', file: 'system.img', makes: 'system+key2' }, ...steps.slice(4)] });
+    expect(validateImage(twice, KEYED)).toContain('step 5: the system image\'s key is changed once');
+    expect(validateImage(keyed(), FRAME)).toContain('step 4: this frame can\'t run "system-key"');
   });
 });
 

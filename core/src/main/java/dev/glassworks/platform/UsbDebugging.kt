@@ -111,7 +111,10 @@ object UsbDebugging {
         /** A computer asked with this key line (`<base64> user@host`). */
         data class Asked(val key: String) : Heard
 
-        /** The Glass Panes image let its owner's key in by itself (its services.jar, image-patch.md). */
+        /**
+         * The Glass Panes image let a key in by itself: the owner's its services.jar names, or (image 3) one listed in
+         * `adb_keys` (image-patch.md).
+         */
         data object LetInByImage : Heard
 
         /** Android refused an approval of [got]: [waiting] is the computer it waits on, null when none (`:241`). */
@@ -134,7 +137,7 @@ object UsbDebugging {
     /** SystemUI's `UsbDebuggingActivity` (or its secondary-user twin) starting: `START u0 {… cmp=com.android.systemui/.usb.UsbDebuggingActivity …}`. */
     private val SHOWN = Regex("START u\\d+ \\{[^}]*cmp=\\S+/\\S*UsbDebugging\\w*Activity")
     /** The image's own line when it lets its owner in ("Authorizing the … owner's ADB key", image-patch.md), whatever device it names. */
-    private val OWNER = Regex("Authorizing the \\S+ owner's ADB key")
+    private val OWNER = Regex("Authorizing (the \\S+ owner's ADB key|an ADB key listed in adb_keys)")
     private val REFUSED = Regex("Fingerprints do not match\\. Got ([0-9A-F:]+), expected (\\S+)")
 
     /**
