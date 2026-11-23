@@ -1810,7 +1810,7 @@ class Build(unittest.TestCase):
 
     def test_this_clarity_is_this_clarity(self):
         self.assertEqual((self.rep["clarity"], self.rep["protocol_version"]), (G.CLARITY, G.PROTOCOL_VERSION))
-        self.assertEqual((G.CLARITY, G.PROTOCOL_VERSION, G.RUBRIC_VERSION), (1, 1, 1))   # Clarity v1, Glassworks 1.0.0
+        self.assertEqual((G.CLARITY, G.PROTOCOL_VERSION, G.RUBRIC_VERSION), (1, 1, 2))   # Clarity v1, Glassworks 1.0.0; rubric 2: no_touch
 
     def test_js_band_is_reported_but_not_graded(self):
         self.assertEqual(self.rep["detail"]["synthetic"]["js_burst_ms"]["median"], 10.0)
@@ -2418,6 +2418,106 @@ class TestNetwork(unittest.TestCase):
     def test_runs_before_the_check(self):
         self.assertIsNone(self.rep["test_network"])
         self.assertNotIn("The test computer's network", R.markdown(self.rep))
+
+
+class NoTouch(unittest.TestCase):
+    """Rubric 2 (2026-11-23): a frame without touch (the Mirror) isn't graded on scrolling. Nobody scrolls a panel they
+    can't touch, so the runner sends no swipes there, the scroll is n/a on every page, the letter comes from the other
+    tasks, and the scroll makes nothing provisional. Every other task's missing evidence still does, and a frame with
+    touch whose scroll is missing is provisional as before."""
+
+    def build(self, touch, tweak=None):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d)
+        dev = {"frame": "test-frame", "model": "Panel", "android": "6.0.1", "api": 23, "abi": "armeabi-v7a",
+               "cpu": {"cores": 4}, "mem_total_kb": 2_000_000, "display": {"vsync_ms": 16.667, "density": "240"},
+               "app": {"package": PKG, "version_name": "0.2.0"}, "measured_on": "2026-11-23", "touch": touch}
+        for name, obj in [("device.json", dev)] + [(f"refstart-{k}.json", refstart(k, 100, heavy_missed=0)) for k in (1, 2, 3)]:
+            if name.startswith("refstart"):
+                for t in obj["tiers"].values():
+                    t["swipes"] = []                      # no swipes ran: the runner sends none without touch
+                if tweak:
+                    tweak(obj)
+            with open(os.path.join(d, name), "w") as f:
+                json.dump(obj, f)
+        write_fake_log(d)
+        return R.build(d)
+
+    def test_scroll_is_not_applicable_and_the_grade_comes_from_the_rest(self):
+        rep = self.build(False)
+        g = rep["grade"]
+        self.assertEqual((g["grade"], g["provisional"], g["missing"]), ("A+", False, []))
+        self.assertNotIn("provisional_reasons", g)
+        self.assertEqual({b["scroll"] for b in g["bands"].values()}, {G.NOT_APPLICABLE})
+        self.assertEqual(g["not_applicable"], {"scroll": "this frame has no touch"})
+        self.assertIs(rep["frame"]["device"]["touch"], False)
+        # The headline says nothing about scrolling; A+ claims 60 fps only for the tasks it was graded on.
+        self.assertNotIn("scroll", g["headline"].lower())
+        self.assertIn("Every graded task holds 60 fps", g["headline"])
+        self.assertNotIn("scroll", rep["notes"]["text"].lower())
+        md = R.markdown(rep)
+        self.assertIn("\nScrolling: not applicable, this frame has no touch.\n", md)
+        self.assertIn("| n/a (no touch) |", md)
+        self.assertNotIn("scroll not measured", md)
+        # A report graded again from report.json alone (a published folder) keeps it: the fact is in frame.device.
+        again = R.regrade_report(json.loads(json.dumps(rep)))
+        self.assertEqual(again["grade"], g)
+        # And its summary says so, complete: nothing is missing.
+        s = S.summarise(rep)
+        self.assertEqual((s["touch"], s["complete"]), (False, True))
+
+    def test_swipes_that_ran_anyway_say_nothing(self):
+        """A no-touch run with swipe records (rAF only, at an edge): not graded, so neither a reason for provisional nor a
+        line in report.md (CodeRabbit on #776)."""
+        def swiped(run):
+            for t, e in run["tiers"].items():
+                e["swipes"] = [swipe(NAV[t], i, late(60, 20), sf=False) for i in range(3)]
+        rep = self.build(False, swiped)
+        self.assertEqual((rep["grade"]["grade"], rep["grade"]["provisional"]), ("A+", False))
+        md = R.markdown(rep)
+        self.assertNotIn("rAF only", md)
+        self.assertNotIn("swipe", md.split("## ")[0].split("| Page |")[0].lower())
+        self.assertTrue(sum(self.build(True, swiped)["graded"]["reference"]["tiers"]["heavy"]["scroll_raf_only"]))
+        self.assertIn("rAF only", R.markdown(self.build(True, swiped)))      # with touch: as before
+
+    def test_other_missing_evidence_is_still_provisional(self):
+        def no_tap(run):
+            run["tiers"]["light"]["input"] = None         # light's taps lost: not measured
+        g = self.build(False, no_tap)["grade"]
+        self.assertTrue(g["provisional"])
+        self.assertEqual(g["missing"], ["light.tap"])
+        self.assertFalse(any("scroll" in r for r in g.get("provisional_reasons") or []), g.get("provisional_reasons"))
+
+    def test_a_frame_with_touch_whose_scroll_is_missing_is_provisional_as_before(self):
+        rep = self.build(True)
+        g = rep["grade"]
+        self.assertTrue(g["provisional"])
+        self.assertEqual([m for m in g["missing"] if m.endswith(".scroll")], [f"{t}.scroll" for t in G.TIERS])
+        self.assertNotIn("not_applicable", g)
+        self.assertNotIn("Scrolling: not applicable", R.markdown(rep))
+        self.assertIn("scroll not measured", R.markdown(rep))
+        self.assertNotIn("touch", S.summarise(rep, allow_provisional=True))
+
+    def test_a_report_from_before_the_field_has_touch(self):
+        rep = self.build(True)
+        del rep["frame"]["device"]["touch"]
+        self.assertEqual(R.regrade_report(rep)["grade"], rep["grade"])
+
+    def test_scroll_reasons_are_left_out_only_without_touch(self):
+        ref = {"graded_runs": 1, "tiers": {"heavy": {"inp_ms": {"n": 1}, "scroll_bands": [], "updates_runs": [{}],
+                                                    "load_ms": {"n": 1}, "swipes_during_updates": [False],
+                                                    "scroll_raf_only": [True]}}}
+        with_touch = R.coverage_reasons(ref, 1)
+        self.assertTrue(any("scroll" in r for r in with_touch), with_touch)
+        self.assertFalse(any("scroll" in r for r in R.coverage_reasons(ref, 1, touch=False)))
+
+    def test_the_frame_data_says_which_frames_have_touch(self):
+        """frames/<id>/design/installer.json `touch`, else the base frame's: the Mirror alone has none."""
+        frames = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(HERE))), "frames")
+        self.assertIs(P.frame_touch(frames, "lululemon-mirror"), False)
+        for f in ("aqara-s1-plus", "generic-android", "google-pixel-tablet", "samsung-galaxy-tab-a-10-1-2016",
+                  "test-frame", "unknown", "", "../frames"):
+            self.assertIs(P.frame_touch(frames, f), True, f)
 
 
 class Regrade(unittest.TestCase):

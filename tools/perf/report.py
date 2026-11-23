@@ -1035,8 +1035,9 @@ def headline(name, g, ref):
     hb = held_back(g, ref)
     out = f"{name}: {G.NAME} {g['grade']}, {g['meaning']}."
     if g["grade"] == G.LETTER_ORDER[0] and not g["missing"]:
-        # Only when everything was measured: A+ needs only heavy, and it isn't absolute without the rest.
-        out += " Every task holds 60 fps on large dashboards."
+        # Only when everything was measured: A+ needs only heavy, and it isn't absolute without the rest. On a frame
+        # without touch, only of the tasks it was graded on: it says nothing about scrolling.
+        out += f" Every {'graded ' if g.get('not_applicable') else ''}task holds 60 fps on large dashboards."
     lead = "Short of A+ on" if g["grade"] == G.LETTER_ORDER[1] else "Held back by"
     for t, phrases in hb:
         if phrases:
@@ -1432,10 +1433,11 @@ def fake_ha_reasons(log, protocol4):
     return out
 
 
-def coverage_reasons(ref, attempted):
+def coverage_reasons(ref, attempted, touch=True):
     """Why the grade is short of data: each band is over the runs attempted, not only those that
     finished. A run that failed, a page that didn't finish, a task not measured, or a scroll that rests
-    on rAF only, each make the grade provisional."""
+    on rAF only, each make the grade provisional. On a frame without touch (touch False) the scroll isn't
+    graded (rubric.json no_touch), so nothing about it is a reason; every other task's still is."""
     if not ref:
         return []
     out = []
@@ -1447,7 +1449,7 @@ def coverage_reasons(ref, attempted):
     for t in G.TIERS:
         s_ = ref["tiers"].get(t)
         got = {"tap": s_ and (s_["inp_ms"] or {}).get("n", 0) or 0,
-               "scroll": s_ and len(s_["scroll_bands"]) or 0,
+               **({"scroll": s_ and len(s_["scroll_bands"]) or 0} if touch else {}),
                "updates": s_ and len(s_["updates_runs"]) or 0,
                "load": s_ and (s_["load_ms"] or {}).get("n", 0) or 0,
                "blocking": s_ and (s_.get("blocking_ms") or {}).get("n", 0) or 0}
@@ -1484,7 +1486,7 @@ def coverage_reasons(ref, attempted):
         if any(r is None or r > CLOCK_RTT_MS for r in rtts):
             out.append(f"{t}: the live changes' send times rest on a clock tie looser than ±{CLOCK_RTT_MS // 2} ms in some run")
         during = [d for d in (s_ or {}).get("swipes_during_updates") or [] if d is not None]
-        if during and not any(during):
+        if touch and during and not any(during):
             out.append(f"{t}: no swipe ran while the live updates did, so scroll wasn't measured during updates")
         # Protocol 3: HA's sheet and graph don't animate under prefers-reduced-motion, so its dialogs
         # aren't timed as a panel at its defaults is (the S1's is off).
@@ -1493,7 +1495,7 @@ def coverage_reasons(ref, attempted):
             out.append(f"{t}: the more-info dialogs ran with prefers-reduced-motion in {k} run(s): no open animation, "
                        "so they aren't timed as at the panel's defaults")
         k = sum((s_ or {}).get("scroll_raf_only") or [])
-        if k:
+        if touch and k:
             out.append(f"{t}: scrolling rests on rAF only in {k} run(s); SurfaceFlinger's history didn't cover its swipes")
     return out
 
@@ -1505,9 +1507,12 @@ def grade_part(device, refs, attempted, fake_log, transport_of, net_of):
     regrade_report() share it, so a report graded again from report.json is the one its raw files would give.
     -> (graded, grade, transport, net)."""
     measured_on = device.get("measured_on")
+    # A frame without touch (device.json `touch`, from its frame data; rubric 2): its scroll isn't graded. A run from
+    # before the field had touch.
+    touch = device.get("touch") is not False
     graded = {"reference": reference_summary(refs) if refs else None}
     tiers, start = grade_inputs(graded)
-    grade = G.grade(tiers, start)
+    grade = G.grade(tiers, start, touch=touch)
     ref = graded["reference"]
     reasons = []
     if ref and "never-finished" in ref["own_page_states"]:
@@ -1516,12 +1521,12 @@ def grade_part(device, refs, attempted, fake_log, transport_of, net_of):
         # measurement would let Home Assistant move it) and flagged. A page that finished but kept
         # painting (a clock card) is normal and changes nothing.
         reasons.append("the kiosk's own page never finished loading in a graded run (Home Assistant down?)")
-    reasons += coverage_reasons(ref, attempted)
+    reasons += coverage_reasons(ref, attempted, touch)
     # The fake's log exists since pre-release protocol 4, and in v1.
     reasons += fake_ha_reasons(fake_log, is_current(ref, measured_on) or any(isinstance(p, int) and p >= 4 for p in (ref or {}).get("protocols") or []))
     if ref and ref.get("bad_page_lines"):
         reasons.append(f"{ref['bad_page_lines']} page line(s) didn't parse or never arrived whole (cut off in logcat?)")
-    if ref and ref.get("lost_scroll_steps"):
+    if touch and ref and ref.get("lost_scroll_steps"):
         # A swipe whose step never came isn't in the pool, so the scroll level rests on fewer swipes.
         reasons.append(f"{ref['lost_scroll_steps']} swipe(s) answered with no scroll step back")
     # Only the graded runs' pages count; a run that failed has none (smoke7 printed "protocol " with
@@ -1993,12 +1998,19 @@ def notes_md(n):
 UPDATE_MS = {lv["level"]: lv["latency_p95_max_ms"] for lv in G.UPDATE_LEVELS}
 
 
+# The tasks a frame can be exempt from (rubric.json no_touch), as report.md names them.
+NA_WORDS = {"scroll": "Scrolling"}
+
+
 def markdown(rep):
     g = rep["grade"]
     dev = rep["frame"]["device"]
     app = rep["frame"]["app"]
+    na = g.get("not_applicable") or {}
     out = [f"# {G.NAME} report: {rep['frame']['name']}", "", device_line(dev, app), "",
            f"**{g['headline']}**", "", notes_md(rep.get("notes") or N.notes(rep)), "",
+           # Rubric 2: a frame without touch isn't graded on scrolling, and says so plainly.
+           *[x for task, why in na.items() for x in (f"{NA_WORDS.get(task, task)}: not applicable, {why}.", "")],
            "The grade comes only from the reference dashboards this test ships (light, typical without and with a "
            "camera, heavy), "
            "so it doesn't depend on your Home Assistant. Background load (panes, the radio, heat) still reaches it.", ""]
@@ -2025,8 +2037,9 @@ def markdown(rep):
             out.append(
                 f"| {t} ({', '.join(map(str, s_['cards']))} cards) | {lvl or 'neither'} "
                 f"| {fmt(s_['inp_ms'], ' ms')}, {band_cell(b['tap'])} "
-                f"| {fmt(s_['scroll']['fps'], ' fps')}, p95 {fmt(s_['scroll']['p95_ms'], ' ms')}, {b['scroll'] or 'n/a'} "
-                f"| {fmt(s_['latency_p95_ms'], ' ms')} to show (p95), {b['updates'] or 'n/a'}; pacing p95 {fmt(s_['updates']['p95_ms'], ' ms')} "
+                + (f"| {G.NOT_APPLICABLE} (no touch) " if "scroll" in na else
+                   f"| {fmt(s_['scroll']['fps'], ' fps')}, p95 {fmt(s_['scroll']['p95_ms'], ' ms')}, {b['scroll'] or 'n/a'} ")
+                + f"| {fmt(s_['latency_p95_ms'], ' ms')} to show (p95), {b['updates'] or 'n/a'}; pacing p95 {fmt(s_['updates']['p95_ms'], ' ms')} "
                 f"| {fmt(s_['load_ms'], ' ms')}, {band_cell(b['load'])} "
                 f"| {fmt(s_.get('blocking_ms'), ' ms')}, {band_cell(b.get('blocking'))} (usable at {fmt(s_.get('usable_ms'), ' ms')}) "
                 f"| {camera_cell(s_, b)} | {dialog_cell(s_, b)} | {held} |")
@@ -2069,7 +2082,7 @@ def markdown(rep):
         out += camera_detail(ref)
         out += dialog_detail(ref)
         for t, s_ in ref["tiers"].items():
-            for what in ("scroll", "updates", "load"):
+            for what in [w for w in ("scroll", "updates", "load") if w not in na]:
                 errs = s_[f"{what}_errors"]
                 if errs:
                     out.append(f"{t}: {what} not measured in {len(errs)} run(s) ({'; '.join(sorted(set(errs)))}).")
@@ -2078,6 +2091,8 @@ def markdown(rep):
         if "never-finished" in ref["own_page_states"]:
             out.append("Some runs opened the reference dashboards before the kiosk's own page finished loading.")
         for t, s_ in ref["tiers"].items():
+            if "scroll" in na:
+                break                        # rubric 2: no scroll graded, so no word on its swipes (CodeRabbit on #776)
             k = sum(s_["scroll_raf_only"])
             if k:
                 out.append(f"{t}: scrolling from rAF only in {k} run(s): SurfaceFlinger's history didn't cover any of "
@@ -2100,7 +2115,8 @@ def markdown(rep):
                 cells = []
                 for pos in map(str, range(1, npos + 1)):
                     cells.append("; ".join(
-                        f"scroll {fmt_n(x['scroll_fps'], ' fps')} ({x['scroll_level'] or 'n/a'}), updates p95 "
+                        ("scroll n/a, " if "scroll" in na else f"scroll {fmt_n(x['scroll_fps'], ' fps')} ({x['scroll_level'] or 'n/a'}), ")
+                        + "updates p95 "
                         f"{fmt_n(x['latency_p95_ms'], ' ms')} ({x['updates_level'] or 'n/a'}), opens in {fmt_n(x['load_ms'], ' ms')}"
                         for x in bp.get(pos, [])) or "")
                 out.append(f"| {t} | " + " | ".join(cells) + " |")

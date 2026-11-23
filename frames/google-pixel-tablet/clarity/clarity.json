@@ -757,7 +757,7 @@
    "Memory isn't the limit (1279 of 3721 MB)."
   ],
   "text": "Typical with a camera dashboards feel good: taps, live updates, opening a view, more-info dialogs and the cameras are quick, and scrolling is smooth. Bigger dashboards slow down: heavy blocks for 0.9 s after it is drawn. Memory isn't the limit (1279 of 3721 MB). Provisional: 2 things weren't measured fully.",
-  "rubric": 1
+  "rubric": 2
  },
  "webrtc_transport": {
   "transport": "lan-udp",

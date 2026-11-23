@@ -8,7 +8,7 @@ Each letter answers one practical question: **how busy a Home Assistant dashboar
 
 | Grade | What it means |
 |---|---|
-| **A+** | Handles heavy dashboards smoothly, with 60 fps scrolling and responsive camera playback within tight stall and dropped-frame limits |
+| **A+** | Handles heavy dashboards smoothly, with 60 fps scrolling (on devices with a touchscreen) and responsive camera playback within tight stall and dropped-frame limits |
 | **A** | Great wall panel even for large, dense dashboards |
 | **B** | Great wall panel for typical dashboards with a live camera stream |
 | **C** | Great wall panel for typical dashboards without a live camera |
@@ -29,6 +29,8 @@ On each dashboard, Clarity tests the interactions you notice every day on a wall
 - **Opening views** — how quickly a view draws and becomes responsive
 - **More-info dialogs** — opening lights, thermostats, and sensor history graphs
 - **Live camera streams** — how quickly the first frame appears and how smoothly video plays
+
+Some devices, like the lululemon Mirror, have no touchscreen, so nobody can scroll them. Clarity doesn't grade those devices on scrolling. It skips the swipes and grades every other task as usual, and the report says "Scrolling: not applicable, this frame has no touch." A missing scroll result doesn't make their grade provisional, though anything else that's missing still does.
 
 All thresholds come from published web and mobile UX standards (Core Web Vitals, RAIL, and Android vitals) rather than numbers tuned to any particular piece of hardware.
 

@@ -170,6 +170,9 @@ def measurements(rep, report_url="report.json"):
     except ValueError:
         default_dpr = None
     vp = g.get("viewport") or {}
+    # Rubric 2: a frame without touch isn't graded on scrolling (grade_summary reads `touch`). Only said when false, so
+    # a frame with touch keeps its summary byte for byte (test_summary).
+    no_touch = {"touch": False} if (rep["frame"].get("device") or {}).get("touch") is False else {}
     return {
         "schema": SCHEMA,
         "test": G.NAME,
@@ -179,6 +182,7 @@ def measurements(rep, report_url="report.json"):
         "report_schema": rep["schema"],
         "measured_on": rep.get("measured_on"),
         "frame": {"id": rep["frame"]["id"], "name": rep["frame"]["name"]},
+        **no_touch,
         "app_version": (rep["frame"].get("app") or {}).get("version_name"),
         "viewport": {"css": list(seen[0][0]) if len(seen) == 1 and seen[0][0] else None,
                      "dpr": seen[0][1] if len(seen) == 1 else None, "default_dpr": default_dpr},

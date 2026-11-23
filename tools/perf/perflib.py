@@ -562,3 +562,24 @@ def frame_budgets_path(frames_dir, frame_id):
         return None
     path = os.path.join(frames_dir, base, "budgets.json") if base else None
     return path if path and os.path.exists(path) else None
+
+
+def frame_touch(frames_dir, frame_id):
+    """Whether the frame has a touchscreen, as its frame data says: `touch` in frames/<id>/design/installer.json, else
+    in its base frame's (design/frame.json `base`), as Kiln reads it. False only when it says false (the Mirror); a frame
+    the repo doesn't know, or that doesn't say, has touch. Without touch the runner sends no swipes and the scroll isn't
+    graded (rubric.json no_touch)."""
+    def read(*parts):
+        try:
+            with open(os.path.join(frames_dir, *parts)) as f:
+                return json.load(f)
+        except (FileNotFoundError, NotADirectoryError):
+            return None
+    if not frame_id or os.sep in frame_id or frame_id.startswith("."):
+        return True
+    own = read(frame_id, "design", "installer.json")
+    if own is not None and "touch" in own:
+        return own["touch"] is not False
+    base = (read(frame_id, "design", "frame.json") or {}).get("base")
+    inherited = read(base, "design", "installer.json") if base else None
+    return (inherited or {}).get("touch") is not False

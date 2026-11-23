@@ -6,7 +6,8 @@
  "_clarity": "Clarity's version: v1, the version that ships with Glassworks 1.0.0 (the maintainer, 2026-11-19): measured with protocol 1 and graded with rubric 1. A report or summary of any other version is graded only by its own rules: re-measure under these. One without `clarity` was measured with a pre-release version: re-measure. The numbers start again from 1, as they did on 2026-11-14 (#205), so the earlier versions that said 1 to 3 are history (docs/perf.md, \"Versions\"). Their pages differ only where noted: the earlier v3's pages (protocol 3) measured exactly what protocol 1 measures now, so report.py reads them as v1 (a run of theirs graded again from its raw files or its report.json gets a v1 grade); the first v1's pages (2026-11-14) also said `clarity: 1` and protocol 1, so a v1 measured before clarity_measured_since is theirs: re-measure.",
  "clarity_measured_since": "2026-11-16",
  "_clarity_measured_since": "The first day (UTC, a report's measured_on) a v1 report or summary can be from. The first v1 (protocol 1, rubric 1) ran on 2026-11-14 only (UTC 2026-11-14 to 15); the earlier v3, whose pages this v1 reads as its own, from 2026-11-17 UTC.",
- "version": 1,
+ "version": 2,
+ "_version": "The rubric's version within Clarity v1: 1 when v1 shipped (2026-11-19); 2 (2026-11-23) adds no_touch, so a frame without a touchscreen isn't graded on scrolling. Nothing else moved: a frame with touch is judged as under 1. Raise it with each change to how results are judged (docs/perf.md, \"Protocol and rubric versions\").",
  "protocol_version": 1,
  "_protocol": "The measurement protocol these rules apply to (tools/perf/page/tiers.json PROTOCOL): the pages, the swipes, the update rate, the windows and how the runner reads them. A summary from another protocol can't be graded with this file: re-measure. Protocol 1 (Clarity v1): Home Assistant's real frontend on a fake HA; a restart, then light, typical without its camera, typical with it, and heavy, each opened in the loaded frontend; live updates, taps and swipes on each; the blocking time from each view's first screen drawn to usable; HA's more-info dialog on each view (a light's, a thermostat's and a sensor's with its history graph, tiers.json DIALOG), timed to settled; live cameras played over WebRTC, as HA with go2rtc does (over the LAN when the panel can reach the computer, else through adb reverse, and the run records which), graded on the receiver's own counts over a fixed 30 s window, with HLS copies as detail; each task its own budget. Its history (the earlier protocols, #158, #174, #202, #205, #264, #410) is in docs/perf.md, \"Versions\".",
  "one_frame_ms": 16.667,
@@ -154,6 +155,14 @@
    }
   ],
   "below": "slow",
+  "no_touch": {
+   "tasks": [
+    "scroll"
+   ],
+   "value": "n/a",
+   "reason": "this frame has no touch",
+   "_comment": "A frame without a touchscreen (its design/installer.json says touch: false; the report's frame.device.touch, the summary's touch) isn't graded on the tasks here: nobody scrolls a panel they can't touch (the maintainer, 2026-11-23). Each takes `value` on every page, which every level accepts, so it never holds a page back and is never missing (not provisional for it). The runner sends no swipes there. Every other task is graded as on any frame, and missing evidence for them is still provisional. Rubric 2."
+  },
   "levels": [
    {
     "level": "premium",
@@ -162,7 +171,8 @@
       "good"
      ],
      "scroll": [
-      "premium"
+      "premium",
+      "n/a"
      ],
      "updates": [
       "premium"
@@ -192,7 +202,8 @@
      ],
      "scroll": [
       "premium",
-      "good"
+      "good",
+      "n/a"
      ],
      "updates": [
       "premium",
@@ -225,7 +236,8 @@
      "scroll": [
       "premium",
       "good",
-      "fluid"
+      "fluid",
+      "n/a"
      ],
      "updates": [
       "premium",

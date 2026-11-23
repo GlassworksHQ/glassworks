@@ -121,8 +121,14 @@ export const ROWS: string[][] = TASKS.filter((t) => t !== "blocking").map((t) =>
   t === "load" && TASKS.includes("blocking") ? ["load", "blocking"] : [t],
 );
 const words = (key: string) => cap(key.replace(/-/g, " "));
+/** A task a frame without touch isn't graded on (rubric.json no_touch): every level accepts it, like a page's "none" camera */
+export const NOT_APPLICABLE = rubric.grade.no_touch.value;
+/** A band that stands for no measurement on purpose (no camera on the page, no touch on the frame), never a goal */
+export const notGraded = (v: string | null | undefined) => v === "none" || v === NOT_APPLICABLE;
 export const levelName = (v: string | null) =>
-  v ? (v === rubric.grade.below ? "Below fluid" : v === "none" ? "No camera" : words(v)) : "Not measured";
+  v
+    ? v === rubric.grade.below ? "Below fluid" : v === "none" ? "No camera" : v === NOT_APPLICABLE ? "No touch" : words(v)
+    : "Not measured";
 
 /*
  * A level or band as a status, ranked from rubric.json rather than by name: the levels in
@@ -244,8 +250,8 @@ function steadyGoal(runs: FrameRun[]): { want: string; now: string } {
 export function goal(task: string, need: string, page: Page | undefined): { want: string; now: string } | null {
   const R = rubric.grade;
   const M = rubric.metrics;
-  // "none" (a page without cameras) is accepted, never a goal: the lowest real value is
-  const accepts = R.levels.find((l) => l.level === need)?.accepts[task]?.filter((a) => a !== "none");
+  // "none" (a page without cameras) and n/a (a frame without touch) are accepted, never a goal: the lowest real value is
+  const accepts = R.levels.find((l) => l.level === need)?.accepts[task]?.filter((a) => !notGraded(a));
   if (!accepts?.length || !page) return null;
   const min = accepts[accepts.length - 1];
 

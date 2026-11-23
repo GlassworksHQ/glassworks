@@ -52,6 +52,11 @@ CAMERA_PAGES = RULES["camera_pages"]
 # of the tile's event, fluid within 2 s; premium adds the 60 fps bar on the open animation's frames.
 DIALOG_LEVELS = RULES["dialog_levels"]
 NO_CAMERA = "none"            # a page without streams: every level accepts it
+# A frame without a touchscreen (rubric 2, 2026-11-23): nobody scrolls it, so its scroll isn't graded. Each task in
+# no_touch.tasks takes no_touch.value on every page, which every level accepts: never a limit, never missing.
+NO_TOUCH = RULES["no_touch"]
+NOT_APPLICABLE = NO_TOUCH["value"]
+NO_TOUCH_REASON = NO_TOUCH["reason"]
 TASK_ORDER = [lv["level"] for lv in SCROLL_LEVELS] + [BELOW]
 SCROLL_ORDER = TASK_ORDER
 
@@ -208,11 +213,12 @@ def median_level(levels):
     return ls[len(ls) // 2] if ls else None
 
 
-def tier_bands(tier, page=None):
+def tier_bands(tier, page=None, touch=True):
     """The band of each task on one page (None when it wasn't measured). Frames bands come from the
-    caller as the median of each run's band. The camera task is `none` on a page without streams."""
+    caller as the median of each run's band. The camera task is `none` on a page without streams; on a
+    frame without touch (touch False), each no_touch task is NOT_APPLICABLE, whatever was measured."""
     tier = tier or {}
-    return {
+    out = {
         "tap": band(tier.get("inp_ms"), METRICS["inp_ms"]),
         "scroll": tier.get("scroll_level"),
         "updates": tier.get("updates_level"),
@@ -223,6 +229,9 @@ def tier_bands(tier, page=None):
         # Rubric 3: HA's more-info dialogs, the median of each run's level.
         "dialog": tier.get("dialog_level"),
     }
+    if touch is False:
+        out.update({task: NOT_APPLICABLE for task in NO_TOUCH["tasks"]})
+    return out
 
 
 def page_level(bands):
@@ -238,13 +247,14 @@ def limits(bands, level):
     return [task for task, ok in LEVELS[level].items() if bands.get(task) not in ok]
 
 
-def grade(tiers, start_ms):
+def grade(tiers, start_ms, touch=True):
     """tiers: {light|typical|heavy: {"inp_ms", "load_ms", "blocking_ms", "scroll_level", "updates_level", "camera_level",
     "dialog_level"}};
     start_ms: the restart, process start to the start view usable (protocol 4; engine ready before
-    it). Returns the letter, its plain meaning, each page's bands and level, and what is missing. A
+    it). touch: False for a frame without a touchscreen (rubric 2): its no_touch tasks are not applicable.
+    Returns the letter, its plain meaning, each page's bands and level, and what is missing. A
     missing measurement fails whatever needs it, and the grade is then provisional."""
-    bands = {t: tier_bands((tiers or {}).get(t), t) for t in TIERS}
+    bands = {t: tier_bands((tiers or {}).get(t), t, touch) for t in TIERS}
     levels = {t: page_level(bands[t]) for t in TIERS}
     start = band(start_ms, METRICS["start_ms"])
     missing = [f"{t}.{m}" for t in TIERS for m, b in bands[t].items() if b is None] + ([] if start else ["start"])
@@ -254,7 +264,7 @@ def grade(tiers, start_ms):
     capped = start == RULES["start_cap"]["band"] and LETTER_ORDER.index(letter) < LETTER_ORDER.index(START_CAP)
     if capped:
         letter = START_CAP
-    return {
+    out = {
         "rubric_version": RUBRIC_VERSION,
         "grade": letter,
         "meaning": MEANINGS[letter],
@@ -265,6 +275,11 @@ def grade(tiers, start_ms):
         "levels": levels,
         "start": {"value": start_ms, "band": start},
     }
+    if touch is False:
+        # Said, not only implied by the bands: report.md and the headline read it (only on such a frame, so a frame
+        # with touch keeps its record as it was).
+        out["not_applicable"] = {task: NO_TOUCH_REASON for task in NO_TOUCH["tasks"]}
+    return out
 
 
 def median_band(bands):
@@ -327,7 +342,8 @@ def grade_summary(summary):
         return {"status": "re-measure", "grade": None, "meaning": None,
                 "why": f"measured with protocol {protocol_name(summary.get('protocol_version'))}, "
                        f"these rules are for protocol {PROTOCOL_VERSION}"}
-    g = grade(*summary_inputs(summary))
+    # A summary says touch: false only for a frame without a touchscreen (summary.py); without it, touch.
+    g = grade(*summary_inputs(summary), touch=summary.get("touch") is not False)
     g["provisional"] = bool(g["missing"] or summary.get("gaps"))
     g["status"] = "graded"
     g["limits"] = next_limits(g)
