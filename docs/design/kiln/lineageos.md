@@ -272,7 +272,7 @@ Samsung's Knox flag.** Kiln says both before the first write ([§5](#5-kiln-copy
 
 | # | Step | Writes | Undo |
 |---|---|---|---|
-| 4 | Into Download mode: through the modem port where samloader-rs can (`reboot_download`, read, untested), else the key combination from the data (`download_boot`), shown by the recovery player | Nothing | — |
+| 4 | Into Download mode with the key combination from the data (`download_boot`), shown by the recovery player. Later, through the modem port as samloader-rs does (`reboot_download`, read, untested), once the library has it | Nothing | — |
 | 5 | **Unlock**, on the device only: the OEM unlocking switch (step 1 checks it), then hold Volume Up in Download mode ("Device unlock mode"). The device wipes itself and reboots; the person goes through Android setup and turns on Developer options and USB debugging again. Kiln resumes at step 1 | **Wipes userdata. Trips Knox for good** | **No undo for either.** Knox is an e-fuse. Samsung's stock firmware (samloader-rs `download`, or Samsung Smart Switch) restores the software, not the flag |
 | 6 | `samsung_qcom`: flash LineageOS's `vbmeta.img` (Odin `VBMETA`). The device wipes itself again, and the person goes through setup again | `vbmeta` | Samsung firmware |
 | 7 | Flash the recovery (Odin `RECOVERY`, or `RECOVERY_A`/`RECOVERY_B` on A/B) with no reboot | `recovery` | Samsung firmware. **No read-back**: Odin can't read partitions. It logs the hash |
@@ -390,7 +390,7 @@ spare devices, cheap used and maintained on 24.0 or 23.2:
 | # | Risk | What | Device | Writes |
 |---|---|---|---|---|
 | S0 | — | Device data, the download API, CORS (this note) | None | Nothing. **Done 2026-11-23** |
-| S1 | **Highest: can the browser reach Download mode at all?** macOS, Windows and Linux each bind their own CDC-ACM driver to it, so WebUSB may not be able to claim the interface. Web Serial goes through the OS driver | samloader-rs's web build (or our wrapper) on Chrome, on macOS, Windows and Linux: detect, `DVIF`, PIT dump, over **both** WebUSB and Web Serial | Any Samsung phone or tablet, even one LineageOS doesn't support | Nothing. A PIT read reboots the device, which is harmless |
+| S1 | **Highest: can the browser reach Download mode at all?** macOS, Windows and Linux each bind their own CDC-ACM driver to it, so WebUSB may not be able to claim the interface. Web Serial goes through the OS driver | `@glassworks/odin` (#777) on Chrome on macOS, Windows and Linux: detect, `DVIF`, PIT dump over WebUSB. Where WebUSB can't claim the interface, samloader-rs's web build over Web Serial shows whether Web Serial is the way | Any Samsung phone or tablet, even one LineageOS doesn't support | Nothing. A PIT read reboots the device, which is harmless |
 | S2 | High: `adb sideload` from the browser, 1.5 GB, odd endings (the wiki's "47%, `failed to read command: Success`" note) | The sideload library against LineageOS Recovery: sideload the device's current build again | The spare Pixel, already on LineageOS (S3 can go first) | Rewrites the OS with the same build |
 | S3 | Medium | The whole fastboot family in Kiln, then Glassworks as device owner | The spare Pixel | Everything. Way back: Google's Android Flash Tool |
 | S4 | Medium | `fastboot boot` of recovery from RAM, where the recovery is the `boot` image | The Pixel 4a (`recovery_partition_name: boot`) | Nothing (RAM) |
@@ -438,34 +438,45 @@ contract needs a fake for it: a recovery that asks for blocks out of order, drop
 47%. Restarting into the bootloader is `PanelShell.rebootToBootloader` today; a `reboot:recovery` beside it
 is a small addition.
 
-### Odin, Samsung Download mode (a new package, `@glassworks/odin`)
+### Odin, Samsung Download mode (`@glassworks/odin`, PR #777)
 
-**Recommended reference: samloader-rs** ([topjohnwu/samloader-rs](https://github.com/topjohnwu/samloader-rs),
-Apache-2.0, head `e47c733`, 2026-11-21). It's the tool LineageOS's Samsung guides use. Its `odin` crate
-is a Rust port of Heimdall that keeps Heimdall's MIT notice (`LICENSE-MIT`), and its `web` crate already
-builds it to WASM with a **WebUSB** backend (`nusb`, Samsung's vendor id `0x04E8`, the CDC data class)
-and a **Web Serial** backend (`vcom`), plus a mock backend for tests. Heimdall (MIT) is the older
-reference behind it. Two ways to build ours, which the maintainer picks ([decision
-3](#decisions-for-the-maintainer)): wrap samloader-odin as WASM, as `bootpatch` ships magiskboot's
-crates, or port it to TypeScript. Either way it goes in `THIRD-PARTY-NOTICES.md` (Apache-2.0 and the MIT
-notice), and no GPL.
+Built in parallel as **a TypeScript port of Heimdall (MIT)**, with its library banner in #773. It also
+draws on [samloader-rs](https://github.com/topjohnwu/samloader-rs) (Apache-2.0, head `e47c733`), the
+tool LineageOS's Samsung guides use, but for protocol facts only, with no code taken: `DVIF`, the
+`0xFFFFFFFF` fail status with its signed code, skipping a stale FAIL before `LOKE`, and a best-effort
+reboot answer. samloader-rs also builds its own Odin crate to WASM with WebUSB and Web Serial backends.
+It's the second opinion when spike S1 misbehaves. The package README lists where samloader-rs and
+Heimdall differ on the wire (zero-length packets only after commands on "Gadget Serial" devices, sequences
+rounded to 128 KiB, protocol version 5 against 4), and those are the first things to check.
 
 ```ts
-interface OdinDevice {
-  /** WebUSB or Web Serial; which one works per OS is spike S1. Needs a user gesture. */
-  static request(via: 'usb' | 'serial'): Promise<OdinDevice>;
-  /** DVIF, before the handshake. Never logs or returns the serial (`UN`). */
+/** WebUSB today; Web Serial is the follow-up for systems whose CDC-ACM driver holds Download mode (spike S1). */
+interface OdinTransport { send(data: Uint8Array): Promise<void>; /* empty = ZLP */ receive(): Promise<Uint8Array>; close(): Promise<void> }
+
+class OdinDevice {
+  /** Only the partitions named in `writable` can ever be flashed; VBMETA is opt-in (samsung_qcom). */
+  static open(usb: USBDevice, o: { writable: string[] }): Promise<OdinDevice>;
+  /** DVIF, before the handshake. The parser drops the serial (`UN`). */
   info(): Promise<{ model?: string; salesCode?: string; bootloader?: string }>;
-  /** Partition table: names Kiln flashes by (RECOVERY, VBMETA, RECOVERY_A…). */
-  pit(): Promise<{ partitions: { name: string; blockSize: number; blocks: number }[] }>;
-  /** Raw image to one partition, streamed from the Blob. No read-back exists in the protocol. */
-  flash(partition: string, image: Blob, onProgress?: (done: number, total: number) => void): Promise<void>;
-  /** End the session; `reboot: false` leaves the device in Download mode (the wiki's --no-reboot). */
+  beginSession(o: { totalBytes: number; resume?: boolean }): Promise<void>;
+  deviceType(): Promise<number>;
+  /** The partition table, which Kiln flashes by (RECOVERY, VBMETA, RECOVERY_A…). */
+  pit(): Promise<Pit>;
+  /**
+   * Streams one image to one partition. It refuses before sending anything unless the partition is in
+   * `writable`, `entry` is this session's own PIT entry and the only one with that name, the entry is AP
+   * on eMMC or UFS with a block count, the image fits, and `totalBytes` covers it. Odin can't read back.
+   */
+  flash(o: { partition: string; entry: PitEntry; image: Blob | Uint8Array;
+    onProgress?(done: number, total: number): void; signal?: AbortSignal }): Promise<void>;
+  /** `reboot: false` leaves the device in Download mode, as the wiki's `--no-reboot` does. */
   end(o: { reboot: boolean }): Promise<void>;
+  close(): Promise<void>;
 }
-/** A running Samsung device's modem port: ask it into Download mode, if it answers. */
-function rebootToDownload(via: 'usb' | 'serial'): Promise<'sent' | 'already' | 'unsupported'>;
 ```
+
+Not in it yet: asking a running device into Download mode through its modem port (samloader-rs's
+`reboot_download`). Until it's added, the flow uses the key combination from the data.
 
 ### LineageOS device data (`frames/lineageos/installer/src/devices.ts`)
 
@@ -495,8 +506,10 @@ Only maintained devices in the `fastboot` (not `closed`) and `samsung` (not `clo
    line on `/android`. Or only a choice on `/android`.
 2. **Download and pick:** accept it as the scoped exception to #579 for files Kiln can't serve
    (recommended), and ask LineageOS for CORS on mirrorbits and its mirrors.
-3. **Odin library:** wrap samloader-odin's WASM (fastest, and it tracks upstream fixes) or port it to
-   TypeScript (one language, smaller). Either keeps the Apache-2.0 and MIT notices.
+3. **Odin library, after spike S1:** #777 is a TypeScript port of Heimdall (MIT) over WebUSB. If S1
+   shows WebUSB can't claim Download mode on macOS or Windows, either add Web Serial to it, or use
+   samloader-rs's WASM, which already has Web Serial (Apache-2.0, and its notice goes in
+   `THIRD-PARTY-NOTICES.md`).
 4. **The wiki snapshot's licence:** commit `devices.json` with its CC BY-SA 3.0 notice (and the
    licence text in `LICENSES/`), or fetch it at build time without committing it. The bundle carries
    it either way.
