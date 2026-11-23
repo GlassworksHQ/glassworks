@@ -114,6 +114,9 @@ class RadioController(
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     companion object {
+        /** The radio helper's own `ok <version>` (`sys.s1kiosk.radio.bundle`), shown when there is no record. */
+        private val LEGACY_OK = Regex("ok [0-9]+")
+
         const val TAG = "Glassworks.Radio"
         private const val SISDK_V = SisdkZigbeed.VERSION
         private val RANGE = Regex("""\(clients from ([^)]+)\)""")
@@ -434,9 +437,9 @@ class RadioController(
                 "new radio stacks and radio firmware come with app updates"
         }
         val src = radio.status(RadioStatus.SOURCE).ifEmpty { "?" }
-        // Without a record (an image older than the loader), the property is all there is, but only a record can say a
-        // bundle was rejected: a `bad` property on its own reads as unknown (#772 review).
-        val inst = bundle?.shown() ?: radio.status(RadioStatus.BUNDLE).takeUnless { it.startsWith("bad") }?.ifEmpty { null } ?: "?"
+        // Without a record (an image older than the loader), the property is all there is. Only its own formats show
+        // (`ok <version>`, `none`): a rejection is said only from a record, so anything else reads as unknown (#772 review).
+        val inst = bundle?.shown() ?: radio.status(RadioStatus.BUNDLE).takeIf { it == "none" || LEGACY_OK.matches(it) } ?: "?"
         val shipped = bundle?.shippedVersion()
         val last = bundle?.lastResult?.takeIf { it.startsWith("error") || it.startsWith("no answer") || it.startsWith("couldn't") }
         return listOfNotNull(
