@@ -189,6 +189,8 @@ export function validateImage(r: ImageRecipe, frame: FrameAccess): string[] {
         // Kiln runs it after its checks and the warning (it uses what fastboot reports), so before fastboot it would be skipped
         if (!fastboot || restarted) bad.push(`${at(i)}: patch comes after fastboot and before restart`);
         if (!Array.isArray(s.makes) || !s.makes.length) bad.push(`${at(i)}: patch must say what it makes`);
+        // Kiln's build replaces every file made before it: a copy made first (adb-key, system-key, wifi) would be gone
+        if (made.size) bad.push(`${at(i)}: patch comes before any step that makes a file: Kiln's build replaces what they made`);
         for (const m of s.makes ?? []) made.add(m);
         break;
       case 'fastboot':

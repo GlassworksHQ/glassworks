@@ -126,15 +126,15 @@ A new, empty ext4 the size of the partition, with only this:
 | `/` | `system:system` 0771 | `system_data_file` | As `init.rc` sets it on `post-fs-data` |
 | `/misc` | `system:misc` 01771 | `system_data_file` | `init.rc`: `mkdir /data/misc 01771 system misc` |
 | `/misc/adb` | `system:shell` 02750 | `adb_keys_file` | `init.rc`: `mkdir /data/misc/adb 02750 system shell` |
-| `/misc/adb/adb_keys` | `system:shell` 0640 | `adb_keys_file` | AOSP 6's `adbd` takes keys from `/adb_keys` (the signed ramdisk: out of reach) and `/data/misc/adb/adb_keys`. **This image's adbd ignores the file** (verified 2026-11-16, cause unknown, [below](#who-the-image-lets-in-over-adb)). Kiln still writes it: harmless, and Android appends to it itself |
+| `/misc/adb/adb_keys` | `system:shell` 0640 | `adb_keys_file` | AOSP 6's `adbd` takes keys from `/adb_keys` (the signed ramdisk: out of reach) and `/data/misc/adb/adb_keys`. **Image 2's adbd ignores the file** (verified 2026-11-16, cause unknown, [below](#who-the-image-lets-in-over-adb)); image 3's framework lets in the keys it lists (read, [below](#image-3-a-new-constant-and-adb_keys)). Kiln writes this browser's key there: on image 3 that is a second way in for the same key, and Android appends to it itself |
 | `/lost+found` | `root:root` 0770 | `system_data_file` | e2fsck expects it |
 
 Everything else is made by init on the first boot (`mkdir` sets owner and mode even on a directory
-that exists), and `restorecon_recursive /data` relabels anything mislabelled. The key in it doesn't
-let anyone in on this image: `services.jar` does that (above).
+that exists), and `restorecon_recursive /data` relabels anything mislabelled. On image 2 the key in it doesn't
+let anyone in: `services.jar` does that (above). On image 3 it does, and it is this browser's key.
 
 What a fresh `userdata` loses: the community kiosk (good), the shared key in its `adb_keys` (which
-this adbd ignores anyway), the Mirror's
+image 2's adbd ignores, and which image 3 would let in), the Mirror's
 Wi-Fi, and the screen rotation (`user_rotation=3`, which the first boot sets again over adb, [below](#the-rotation-2026-11-17)). After the first boot, Kiln
 gives the app the Wi-Fi (over its Improv socket) and the Home Assistant URL over adb, as it does on
 the S1.

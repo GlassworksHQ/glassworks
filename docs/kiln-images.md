@@ -124,6 +124,8 @@ CI:
   but for the library's own changes (`system-key`, `adb-key`, `wifi`).
 - `system-key` and `adb-key` each take a checked download and name one new file, between `fastboot`
   and `restart`; each is listed once.
+- `patch` comes before any step that makes a file, and is listed once: Kiln's build replaces what was
+  made before it.
 - `wifi` takes a checked download, or what `adb-key` made, and names one new file; it's listed once.
 - `wifi-on` comes after `restart` and a `wifi` step, once, with a key that is a checked download, or
   with none after an `adb-key` step. It takes no command: what it runs is Kiln's code.

@@ -80,6 +80,20 @@ describe('a recipe', () => {
     expect(validateImage({ ...early, steps: [st[0]!, st[2]!, st[1]!, ...st.slice(3)] }, FRAME)).toContain('step 2: patch comes after fastboot and before restart');
   });
 
+  it('runs patch before any step that makes a file: its build replaces them', () => {
+    const all: FrameAccess = { ...FRAME, steps: [...FRAME.steps, 'adb-key', 'system-key'] };
+    const g = glassworks();
+    const r = { ...g, files: [file('system.img'), file('userdata.img')], steps: steps(
+      { do: 'download', file: 'system.img' }, { do: 'download', file: 'userdata.img' }, { do: 'fastboot' },
+      { do: 'adb-key', file: 'userdata.img', makes: 'userdata+key' }, { do: 'patch', file: 'system.img', makes: ['system'] },
+      { do: 'flash', partition: 'system', file: 'system' }, { do: 'flash', partition: 'userdata', file: 'userdata+key' }, { do: 'restart' }) };
+    expect(validateImage(r, all)).toContain('step 5: patch comes before any step that makes a file: Kiln\'s build replaces what they made');
+    const first = { ...r, steps: [r.steps[0]!, r.steps[1]!, r.steps[2]!, r.steps[4]!, r.steps[3]!, ...r.steps.slice(5)] };
+    expect(validateImage(first, all)).toEqual([]);
+    const twice = { ...g, steps: [...g.steps.slice(0, 3), { do: 'patch', file: 'system.img', makes: ['other'] } as ImageStep, ...g.steps.slice(3)] };
+    expect(validateImage(twice, all)).toContain('step 4: patch comes before any step that makes a file: Kiln\'s build replaces what they made');
+  });
+
   it('keeps a community image as published but for the library\'s own changes: no patch, no first start with Kiln\'s key', () => {
     const r = community({ steps: steps({ do: 'download', file: 'system.img' }, { do: 'download', file: 'userdata.img' }, { do: 'patch', file: 'system.img', makes: ['system'] },
       ...community().steps.slice(2), { do: 'first-start' }) });
