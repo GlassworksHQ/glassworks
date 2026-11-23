@@ -71,7 +71,7 @@ describe('requestDevice() runs inside the click', () => {
     const { session } = await setup('undo');
     await session.undoFromBrowser();
     session.store.dispatch({ type: 'undo', patch: { depth: 'keep' } });
-    await click(await screen.findByRole('button', { name: 'Give back Aqara’s apps' }));
+    await click(await screen.findByRole('button', { name: 'Restore Aqara’s apps' }));
     expect(calls).toEqual([true]);
   });
 });

@@ -3,7 +3,7 @@
 # A release that a workflow creates with GITHUB_TOKEN starts no `release` event, so this runs after those
 # workflows finish (workflow_run). The Release workflow (release.yml, the button) publishes several releases in one
 # run and lists their tags in its `published-tags` artifact; its dry runs publish none and leave no list. Library
-# release runs on a tag push, which is the run's head_branch. A release a person publishes (a library's draft) does
+# release and npm release run on a tag push, which is the run's head_branch. A release a person publishes (a library's draft) does
 # start a `release` event, and is caught by `release: published`. Neither path sees the other's releases, so each
 # release posts once. tools/ci/discord_release.py skips drafts and pre-releases, posts libraries to
 # #ecosystem-updates and the rest to #glassworks-releases. It runs the default branch's code only, and nothing from
@@ -12,7 +12,7 @@ name: Discord release feed
 
 on:
   workflow_run:
-    workflows: ["Release", "Library release"]
+    workflows: ["Release", "Library release", "npm release"]
     types: [completed]
   release:
     types: [published]

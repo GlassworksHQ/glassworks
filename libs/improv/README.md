@@ -168,7 +168,7 @@ What the [Improv Wi-Fi](https://www.improv-wifi.com/) spec defines, and what eac
 this library on the device, and [`improv-serial`](../../kiln/packages/improv-serial/README.md) in
 the browser. Checked on 2026-11-15 against the [BLE spec](https://www.improv-wifi.com/ble/) at
 revision 2.4 and the [serial spec](https://www.improv-wifi.com/serial/) as published that day.
-"Since" is this library's version; `improv-serial` isn't on npm yet. The adb transport is ours, not
+"Since" is this library's version. Everything in the improv-serial column is in `@glassworks/improv-serial` 0.1.0, its first release on npm. The adb transport is ours, not
 the spec's: it carries Improv Serial unchanged.
 
 Status words:
@@ -216,7 +216,7 @@ On Maven Central as `dev.glassworks:improv` ([changelog](CHANGELOG.md)).
 ```kotlin
 repositories { mavenCentral() }
 dependencies {
-    implementation("dev.glassworks:improv:0.1.0")
+    implementation("dev.glassworks:improv:0.2.0")
 }
 ```
 

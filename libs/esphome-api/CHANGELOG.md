@@ -5,7 +5,7 @@ What changed in each release of `dev.glassworks:esphome-api` on Maven Central. V
 cut from `libs/esphome-api/v<version>` tags ([docs/releasing.md](../../docs/releasing.md#libraries)), which
 publish the matching section below as the release notes.
 
-## [Unreleased]
+## [0.2.0] - 2026-11-22
 
 ### Added
 - **Active Bluetooth connections (GATT).** Set `ApiServer.bluetoothConnections` to a
@@ -41,7 +41,8 @@ publish the matching section below as the release notes.
 - **Home Assistant finds the Bluetooth proxy's flags where API 1.15 and later put them.** With
   `ApiServer.bluetooth` set, `DeviceCapabilitiesResponse` now carries the `bluetooth_proxy` block with
   the feature flags. HA still reads them from DeviceInfo too, so nothing changes today; this keeps the
-  proxy working once HA reads only the capabilities. The proxy's MAC address isn't sent yet (#246).
+  proxy working once HA reads only the capabilities. With
+  `ApiServer.bluetoothMacAddress` set, the block carries it as `mac_address` too (#246).
 - **The time zone still arrives when Home Assistant sends only `parsed_timezone`.** ESPHome 2026.9
   deprecated the `timezone` string in `GetTimeResponse`. While HA sends the string, `onTimeZone` gets it
   as before. An answer without it now gives the same POSIX rule rebuilt from the parsed zone, with

@@ -30,6 +30,6 @@ class WallBasePageTest {
         assertEquals("Long press · 2 min ago", WallBasePage.press("long" to now - 120_000, now))
         val older = WallBasePage.press("single" to now - 7_200_000, now)
         assertTrue("an older press has its time: $older", Regex("""Single · \d\d:\d\d""").matches(older))
-        assertEquals("Overload" to "It cut the load", WallBasePage.protection(2))
+        assertEquals("Overload" to "Power cut for safety", WallBasePage.protection(2))
     }
 }

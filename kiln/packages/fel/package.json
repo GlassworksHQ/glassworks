@@ -1,10 +1,19 @@
 {
   "name": "@glassworks/fel",
-  "version": "0.0.0",
+  "version": "0.1.1",
   "private": true,
-  "description": "FEL over WebUSB: boots our U-Boot on the A133. Written clean-room from docs/research/kiln-cleanroom/fel-spec.md.",
+  "description": "FEL, the USB boot mode of Allwinner chips, over WebUSB: load and start an SPL and U-Boot from the browser (A133 for now). Written clean-room.",
+  "keywords": [
+    "allwinner",
+    "fel",
+    "sunxi",
+    "webusb",
+    "u-boot",
+    "a133"
+  ],
   "license": "MIT",
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
     "./transport": "./src/transport.ts",
@@ -13,5 +22,8 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@types/w3c-web-usb": "^1.0.14"
   }
 }

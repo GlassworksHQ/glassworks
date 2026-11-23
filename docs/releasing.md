@@ -14,7 +14,8 @@ Actions tab with a version: [Release](#release). The S1 app's release holds one 
 - `s1-kiosk-arm64-v8a-<version>.apk`, the same app for `arm64-v8a` devices;
 - `s1-kiosk-<version>.apk.sha256` and `s1-kiosk-arm64-v8a-<version>.apk.sha256`, their `sha256sum` lines.
 
-The libraries in `libs/` are released to Maven Central on their own tags: see [Libraries](#libraries).
+The libraries in `libs/` are released to Maven Central on their own tags: see [Libraries](#libraries). A few of
+Kiln's packages go to npm the same way: see [npm packages](#npm-packages).
 
 Every release **must be signed with the same key**. Android only installs an update signed with the
 key of the installed app, and the app refuses anything else before trying. Lose the key and every
@@ -205,7 +206,7 @@ The frames' data says it, not the workflow: each frame's `release` block in `fra
 | The Mirror frame | `frames/lululemon-mirror/v1.2.3` | none: a notice | `frames/lululemon-mirror/FRAME-CHANGELOG.md` | |
 
 Each file comes with its `.sha256`. The tags and file names are the ones the apps' update checks (`ReleaseLine`,
-`FrameOffer` in `core/.../update/`) and Kiln's release route read, so they never change. `tools/release/test`
+`FrameOffer` in `core/.../update/`), Kiln and Refract read, so they never change. `tools/release/test`
 checks the plan's names against `Releases.kt`'s, `release.yml`'s `apk_name` and Kiln's release patterns.
 
 A new frame on an existing line needs only its `release` block: a tested device names its line (`"app":
@@ -234,7 +235,8 @@ warns in the summary.
 
 Panels see a release within 24 hours. To check right away, call `homeassistant.update_entity` on the update
 entity (`update.s1_panel_app_update` on an old S1): HA sends the entity's "check" command. Kiln
-(kiln.glassworks.dev) reads the releases at run time (its release route), so a release needs no Kiln deploy.
+(kiln.glassworks.dev) reads the releases at run time (`/api/release/<line>/latest`) and downloads the APKs through Refract
+(refract.glassworks.dev), so a release needs no Kiln or Refract deploy. A new release line does: see below.
 s1.edm.sh, the first installer's address, redirects to Kiln's S1 page (`kiln/s1-redirect`).
 
 ### The plan
@@ -341,6 +343,9 @@ for it. `tools/ci/web_deploy.py` decides. Each job records its upload as a GitHu
 checked out, in the project's environment, and marks it a success once Vercel takes it. The next run diffs from
 that commit. When a newer record never reached success, the next run deploys anyway, because what's live is
 unknown. Each run's summary lists what it deployed, from which commit, and why.
+
+Refract (refract.glassworks.dev), the Cloudflare Worker Kiln downloads every APK and image through, isn't on Vercel
+and isn't in `web-deploy.yml`: it deploys by hand ([its README](../kiln/workers/refract/README.md#deploying)).
 
 Versions are `MAJOR.MINOR.PATCH`. For the app lines minor and patch are below 100, and the versionCode is
 `major*10000 + minor*100 + patch`, so `1.2.3` is 10203. Frame versions take each part up to 999. SemVer pre-release
@@ -499,9 +504,12 @@ example, gets a line in each file.
 **Versions.** As for the S1 app. Test builds of the generic app are 0.1.0 and 0.1.1, and a device on test build 0.1.1
 is offered only a higher version (and `adb install -r` refuses a lower versionCode).
 
-Kiln's release route (`kiln/apps/kiln/src/app/api/release/[frame]/route.ts`) serves each line's APKs and their
-`.sha256`. The Mirror's page and `/android`, behind `?apk=release`, install the newest release of their line
-(`generic-android-legacy-v*` and `generic-android-v*`), its arm64-v8a APK, checked against that `.sha256`.
+Refract ([`kiln/workers/refract`](../kiln/workers/refract/README.md#glassworks-own-releases)) serves each line's
+APKs and their `.sha256` to Kiln, by the line's tag pattern and file names in its `releases.json`. The Mirror's page
+and `/android`, behind `?apk=release`, install the newest release of their line (`generic-android-legacy-v*` and
+`generic-android-v*`), the APK for the device's ABI, checked against that `.sha256`. A new line, or a new file name
+on a line, is a change to the frame's `installer.json` `releases`: write Refract's `releases.json` again
+(`REFRACT_RELEASES=write npm test -w @glassworks/kiln-app -- refract-releases`) and deploy Refract after the merge.
 
 ## Frame releases
 
@@ -517,8 +525,8 @@ compares it with the frame's newest release ([esphome.md](esphome.md#frame-updat
 | lululemon Mirror | `frames/lululemon-mirror/v1.2.3` | A notice: notes, no files | Kiln, in `build.prop`, when it flashes the Mirror (`MIRROR_FRAME` in `frames/lululemon-mirror/installer/src/image.ts`) |
 
 The tag is `frames/<frame id>/v<version>`, the frame's folder in this repo, like a library's `libs/<name>/v<version>`.
-Nothing else matches it: the S1 app's `v*` and `aqara-s1-plus-v*`, the generic app's `generic-android-*`, Kiln's
-release route and `stage-assets.mjs` all skip it, and `FrameUpdateTest` checks that the app's own update check does.
+Nothing else matches it: the S1 app's `v*` and `aqara-s1-plus-v*`, the generic app's `generic-android-*`, Refract's
+release lines and `stage-assets.mjs` all skip it, and `FrameUpdateTest` checks that the app's own update check does.
 
 - **Published with `--latest=false`**, like every release that isn't the S1 app's: panels on 0.4.3 read only
   `releases/latest`.
@@ -691,8 +699,7 @@ pairing key, options). See [install.md](../frames/aqara-s1-plus/docs/install.md#
 ## Libraries
 
 The libraries in `libs/` go to Maven Central as `dev.glassworks:<name>` (#153): `esphome-api` (a jar),
-`esphome-api-android`, `improv`, `sendspin` and `voice` (AARs). `sendspin` and `voice` (#152) are set up
-but have no release yet. Each has its own semver version, in `version=` in
+`esphome-api-android`, `improv`, `sendspin` and `voice` (AARs). Each has its own semver version, in `version=` in
 `libs/<name>/gradle.properties`, and its own `libs/<name>/CHANGELOG.md`, apart from the app's. Each
 release ships the jar or AAR, a sources jar, a KDoc jar (Dokka), the POM (MIT, the GlassworksHQ org as
 developer) and a `.asc` signature for each. The licence is in the jar as `META-INF/LICENSE`. Their
@@ -843,3 +850,104 @@ The secrets are in the `maven-central` environment (Settings → Environments, o
   the old key leaked, publish its revocation certificate too.
 - No dry run tests the secrets; the next release tag does. The workflow checks that all five are set
   before it builds.
+
+## npm packages
+
+Four of Kiln's packages go to npm as `@glassworks/<name>`: `fel`, `fastboot`, `ext4` and `improv-serial`
+(all in `kiln/packages/`). The rest (`adb`, `app-adb`, `bootpatch`, `setup-channel`, `kiln-core`, `brand`, and
+`packages/*`) are Kiln's and the site's own, and aren't published. Like the Maven libraries, each package has
+its own semver `version` (in its `package.json`) and its own `CHANGELOG.md`, apart from the apps'.
+
+In the workspace every package stays `"private": true`, and its `exports` point at `src/*.ts`, so Kiln, the
+frames and the site build from source. What npm gets is built from that source by
+`tools/release/npm-package.mjs`:
+
+- `dist/`: `src/` compiled by the package's `tsconfig.build.json` (which extends its `tsconfig.json`, then the
+  root `tsconfig.npm.json`): Node ESM, `.d.ts`, source maps. `src/` ships too, for the maps.
+- `package.json`: without `private` and `scripts`. Each `./src/X.ts` export becomes `./dist/X.js` with its
+  types. Exports of `./test/*` (the fakes our own tests use, such as `@glassworks/fel/fakes`) are left out. A
+  workspace `@glassworks` dependency becomes `^` its version, and must itself be published.
+- `README.md`, with its relative links made absolute on GitHub at the release's tag; `LICENSE`, the repo's MIT
+  (and, for a fork such as `fastboot`, upstream's licence under it); `CHANGELOG.md`.
+
+A package is published when its folder has a `CHANGELOG.md` and a `tsconfig.build.json`. To add one: give it
+those two, a version other than `0.0.0`, a name in the `@glassworks` scope, and a README with a library banner
+([docs/branding.md](branding.md#adding-a-library)). Its source names the `.ts` file in relative imports
+(`from './felDevice.ts'`): Node ESM needs an extension, the build rewrites it to `.js`
+(`rewriteRelativeImportExtensions`; the script does the same in the `.d.ts`), and Vite, Next.js (Turbopack)
+and vitest find the file as named. `tsconfig.base.json` allows it (`allowImportingTsExtensions`). A WebUSB package puts `/// <reference types="w3c-web-usb" preserve="true" />` at the top of each
+file whose types use WebUSB, and depends on `@types/w3c-web-usb`, so a consumer gets those types without
+setting anything up.
+
+### The dry run
+
+Every PR that the `web` job runs for (`pr.yml`) packs every package and checks it as someone else gets it:
+
+```sh
+node tools/release/npm-consumer-check.mjs          # or: … fel   (one package)
+node tools/release/npm-package.mjs fel --out /tmp/npm   # build and pack one, to look inside
+```
+
+The check installs the tarballs into a fresh project (with the network: their dependencies come from npm),
+type-checks every entry point from there under `moduleResolution` `nodenext` and `bundler` with `skipLibCheck`
+off and `types: []`, and imports each one in Node.
+
+### Cut an npm release
+
+The tag is `npm/<name>/v<MAJOR.MINOR.PATCH>`, where `<name>` is the package's folder. It must match
+`version` in that package's `package.json`.
+
+1. In a PR: set `version` in the package's `package.json`, and in every workspace `package.json` that
+   depends on it (the pins are exact, or npm stops linking the workspace copy). Rename `## [Unreleased]`
+   in its `CHANGELOG.md` to `## [<version>] - <date>`. Merge it.
+2. Tag the merged commit on `main` and push the tag:
+
+   ```sh
+   git fetch origin
+   git tag npm/fel/v0.1.0 origin/main
+   git push origin npm/fel/v0.1.0
+   ```
+
+3. [`npm-release.yml`](../.github/workflows/npm-release.yml) publishes it: it checks the tag (the package,
+   its version, the commit on `main`, its changelog section, the version not on npm yet), runs the
+   package's typecheck and tests, runs the consumer check on it alone, then `npm publish --provenance` and
+   a GitHub release `@glassworks/<name> <version>` with `--latest=false` (`releases/latest` stays the S1
+   app's).
+
+Release `fel` before `fastboot`: the consumer check installs `fastboot`'s `@glassworks/fel` from npm, and
+fails while that version isn't there.
+
+**Treat a published version as permanent: its number can never be used again, even after an unpublish.** npm lets
+a version be unpublished only while no other package on npm depends on it, and after 72 hours only if it also
+had under 300 downloads last week and has one owner ([npm's unpublish policy](https://docs.npmjs.com/policies/unpublish)).
+Once `@glassworks/fastboot` is out, `@glassworks/fel` has a dependent.
+
+If the job published the package but failed at the GitHub release, a rerun stops at "Not on npm yet".
+Make the release by hand from the same tag, without publishing again (here `fel` 0.1.0):
+
+```sh
+{ printf 'npm: [`@glassworks/fel@0.1.0`](https://www.npmjs.com/package/@glassworks/fel/v/0.1.0)\n\n'
+  tools/release/changelog-section.sh 0.1.0 kiln/packages/fel/CHANGELOG.md; } > /tmp/notes.md
+gh release create npm/fel/v0.1.0 --verify-tag --latest=false --title "@glassworks/fel 0.1.0" --notes-file /tmp/notes.md
+```
+
+### Access
+
+The job runs in the `npm` environment (Settings → Environments), which should deploy only from `npm/*/v*`
+tags. It publishes with npm's trusted publishing (OIDC): no token, and the provenance shows the workflow
+that built the package. npm sets trusted publishing up per package, and only for a package that already
+exists, so the first release of each goes out with a token:
+
+1. On npmjs.com, the `glassworks` organization owns the `@glassworks` scope.
+2. Make a granular access token that may read and write `@glassworks` packages, with a short expiry and
+   **Bypass two-factor authentication** on (a new package asks for 2FA to publish, which a job can't
+   give), and set it as `NPM_TOKEN` in the `npm` environment (`gh secret set NPM_TOKEN --env npm`).
+3. Push the first tags (`fel` first). Each package is published with the token.
+4. For each package, on npmjs.com → the package → Settings → Trusted publishing: GitHub Actions,
+   `GlassworksHQ/glassworks`, workflow `npm-release.yml`, environment `npm`. Under "Allowed actions", turn
+   on `npm publish`: a new setup allows only `npm stage publish`, and the job publishes directly. Then set
+   "Require two-factor authentication and disallow tokens".
+5. Delete the `NPM_TOKEN` secret and revoke the token. Without it, the job publishes through OIDC.
+6. Publish a release through it within 2 days. npm doesn't check a trusted publishing setup when it's saved:
+   the first publish through it does, and a setup nothing has published through in 2 days expires. Delete an
+   expired one and set it up again, right before the package's next tag.

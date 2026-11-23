@@ -14,6 +14,7 @@ URL = 'https://github.com/GlassworksHQ/glassworks/releases/tag/v1.2.3'
 class Channel(unittest.TestCase):
     def test_libraries_go_to_ecosystem_updates(self):
         self.assertEqual(dr.channel('libs/improv/v0.1.0'), 'DISCORD_ECOSYSTEM_WEBHOOK')
+        self.assertEqual(dr.channel('npm/improv-serial/v0.1.0'), 'DISCORD_ECOSYSTEM_WEBHOOK')
 
     def test_apps_and_frames_go_to_glassworks_releases(self):
         for tag in ('v0.4.4', 'aqara-s1-plus-v1.0.0', 'generic-android-v0.2.0', 'generic-android-legacy-v0.2.0',
@@ -72,7 +73,7 @@ class Tags(unittest.TestCase):
 class Workflow(unittest.TestCase):
     def test_the_release_buttons_runs_are_posted_from_their_list(self):
         text = (ROOT / '.github/workflows/discord-releases.yml').read_text()
-        self.assertIn('workflows: ["Release", "Library release"]', text)
+        self.assertIn('workflows: ["Release", "Library release", "npm release"]', text)
         self.assertIn("github.event.workflow_run.event == 'workflow_dispatch'", text)
         self.assertIn('-n published-tags', text)
         # Absent (a dry run) is nothing to post; present but not downloadable fails the job.

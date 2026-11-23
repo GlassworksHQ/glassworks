@@ -1,3 +1,4 @@
+/// <reference types="w3c-web-usb" preserve="true" />
 // A bulk IN/OUT pair. WebUSB in the browser; simulated devices in the tests.
 
 export interface BulkTransport {

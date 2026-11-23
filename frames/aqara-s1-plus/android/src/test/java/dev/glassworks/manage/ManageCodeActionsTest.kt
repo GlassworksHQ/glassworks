@@ -37,8 +37,8 @@ class ManageCodeActionsTest {
     @Test fun anActionThatNeedsTheCodeRunsOnlyWithTheCodeThePanelShows() {
         val asked = b.post("/settings", form(allow))
         assertEquals(200, asked.status)
-        assertTrue("the code dialog", asked.text().contains("Enter the code on the panel."))
-        assertTrue("it says what for", asked.text().contains("Allow setup over the network needs someone at the panel."))
+        assertTrue("the code dialog", asked.text().contains("Enter the code shown on the panel"))
+        assertTrue("it says what for", asked.text().contains("Allow setup over the network requires someone at the panel."))
         val shown = f.shown.last()!!
         assertEquals("the panel names the action", "Allow setup over the network", shown.label)
         assertEquals("nothing ran yet", emptyList<String>(), runs)
@@ -87,7 +87,7 @@ class ManageCodeActionsTest {
         assertTrue("no code yet", f.shown.isEmpty())
 
         val asked = b.post("/settings", form(reset, mapOf("answer" to question.answer()!!)))
-        assertTrue("then the code", asked.text().contains("Enter the code on the panel."))
+        assertTrue("then the code", asked.text().contains("Enter the code shown on the panel"))
         assertTrue("its button is the reset's, in rose", asked.text().contains("""class="pill danger" type="submit">Reset the panel<"""))
         assertEquals(emptyList<String>(), runs)
 

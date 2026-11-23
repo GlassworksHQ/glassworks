@@ -1,7 +1,7 @@
 // The setup channel over the LAN (#34): the panel's `/setup/channel` WebSocket as a ByteStream, so
 // SetupChannel runs on it unchanged. The panel's page opens it on its own origin; until the browser has
 // paired with the code on the panel's screen, every request but `state` is refused (NOT_PAIRED).
-import type { ByteStream } from 'improv-serial';
+import type { ByteStream } from '@glassworks/improv-serial';
 
 /** The WebSocket's path on the panel's web port (8099). */
 export const LAN_CHANNEL_PATH = '/setup/channel';

@@ -76,7 +76,7 @@ export interface WifiSteps {
  * it, within moments, so this is the page's last word (issue 460).
  */
 export const joinNote = (ssid: string) =>
-  `The panel is switching to ${ssid} now. This page can't follow it from here, so watch the panel's screen: setup carries on there. Put this phone back on your own Wi-Fi.`;
+  `The panel is switching to ${ssid} now. This page can't follow it across networks, so continue on the panel's screen and reconnect this device to your regular Wi-Fi.`;
 
 /** How long after a join the page asks whether the panel is still on its setup Wi-Fi (the join didn't happen). */
 export const JOIN_CHECK_MS = 45_000;
@@ -218,7 +218,7 @@ export class ChannelSetup {
       if (e.message === NOT_PAIRED) { this.d.show({ ...looking, status: e.message }); return; }
     }
     if (!this.d.here() || this.d.phase().phase !== 'wifi') return;
-    this.d.show({ ...looking, networks, status: networks.length ? `${networks.length} in range of the panel` : 'None found. Type the name.' });
+    this.d.show({ ...looking, networks, status: networks.length ? `${networks.length} in range of the panel` : 'No networks found. Choose manual entry to type a network name.' });
   }
 
   /**
@@ -228,14 +228,14 @@ export class ChannelSetup {
   async joinWifi(ssid: string, psk: string): Promise<void> {
     const s = this.d.phase();
     if (s.phase !== 'wifi') return;
-    if (!ssid) { this.d.show({ ...s, joining: { ssid, step: 'err', error: 'Pick or type a network.' } }); return; }
+    if (!ssid) { this.d.show({ ...s, joining: { ssid, step: 'err', error: 'Choose a network or enter its name.' } }); return; }
     this.d.show({ ...s, joining: { ssid, step: 'sent' } });
     try {
       await this.channel!.joinWifi(ssid, psk);
     } catch (e) {
       if (e instanceof Refused) { this.d.show({ ...s, joining: { ssid, step: 'err', error: e.message } }); return; }
       // Never written: the panel has nothing, so this is an error to try again from, not a join under way.
-      if (e instanceof NotSent) { this.d.show({ ...s, joining: { ssid, step: 'err', error: 'This page lost the panel before it could send the network. Try again.' } }); return; }
+      if (e instanceof NotSent) { this.d.show({ ...s, joining: { ssid, step: 'err', error: 'Lost connection to the panel before sending the network. Try again.' } }); return; }
       // Written, but no answer: the panel may have closed its hotspot as it joined
     }
     this.d.show({ ...s, joining: { ssid, step: 'join' }, joinNote: joinNote(ssid) });
@@ -271,7 +271,7 @@ export class ChannelSetup {
     if (!validHaUrl(url)) { this.haState({ ...this.channel!.state!, ha: s.ha }, { error: NOT_AN_ADDRESS }); return; }
     const here = this.d.signInHere;
     const tab = here ? null : (this.d.openTab ?? (() => openSignInWindow()))('about:blank');
-    const note = here ? 'Opening Home Assistant\'s sign-in. You come back here after it.' : 'Sign in to Home Assistant in the window that opened. This step moves on by itself when the panel is signed in.';
+    const note = here ? 'Opening Home Assistant sign-in. You\'ll return here automatically once you\'re signed in.' : 'Sign in to Home Assistant in the window that opened. This step moves on by itself once the panel is signed in.';
     this.d.show({ ...s, error: undefined, signingIn: true, note });
     const g = this.gen;
     // The person may have moved on (or the session closed) while the address was saved: then the sign-in is dropped,
@@ -288,7 +288,7 @@ export class ChannelSetup {
         else {
           // The panel's own page (above) signs in on its own address and needs no `signinUrl`, which the panel leaves
           // out when it has no Wi-Fi IPv4 address. Kiln's window needs it: it is Kiln's only way there.
-          if (!st.ha.signinUrl) throw new Error('the panel has no sign-in page yet (is it on Wi-Fi?)');
+          if (!st.ha.signinUrl) throw new Error('The panel doesn\'t have a sign-in page ready yet. Make sure it is connected to Wi-Fi and try again.');
           const to = kilnSignInUrl(st.ha.signinUrl);
           const w = tab ?? window.open(to, '_blank');
           if (!w) throw new Error('The browser blocked the sign-in window. Allow pop-ups for this page, then sign in again.');
@@ -421,7 +421,7 @@ export class ChannelSetup {
     if (!st.radio) { await this.d.done(); return; }
     this.d.show({
       phase: 'radio', radio: st.radio,
-      note: st.radio.helper ? `Now: ${st.radio.status}` : 'Only Off is available: this panel has no root helper for the radio.',
+      note: st.radio.helper ? `Current status: ${st.radio.status}` : 'Only Off is available until the panel\'s system software is updated with Kiln.',
     });
   }
 

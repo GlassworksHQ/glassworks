@@ -46,7 +46,7 @@ export function adbKeyHolder(loadKey: () => Promise<AdbKey>) {
   return {
     key: () => key,
     connectWith: <T,>(connect: (key: AdbKey) => Promise<T>) => (): Promise<T> =>
-      (key ? connect(key) : ready.then(() => { throw new Error('Kiln was still making its key for this browser. Click Connect again.'); })),
+      (key ? connect(key) : ready.then(() => { throw new Error('Kiln is finishing its one-time browser setup. Click Connect again in a moment.'); })),
   };
 }
 
@@ -54,7 +54,7 @@ export function keyedConnect(loadKey: () => Promise<AdbKey>, connect: (key: AdbK
   return adbKeyHolder(loadKey).connectWith(connect);
 }
 
-/** Kiln's release route, from the page (a bare `fetch` held by an object is an illegal invocation). */
+/** The release list and Refract, from the page (a bare `fetch` held by an object is an illegal invocation). */
 const releaseRoute = (...a: Parameters<typeof fetch>) => fetch(...a);
 
 /**
@@ -342,7 +342,7 @@ function Checks({ s, session }: { s: AppState; session: AppSession }) {
   return (
     <section className="card" aria-labelledby="h">
       <TestOnly f={f} />
-      <h2 id="h">{r.ok ? `This is your ${f.short}` : 'Kiln can\'t install on this device'}</h2>
+      <h2 id="h">{r.ok ? `Your ${f.short} is ready` : 'Kiln can\'t install on this device'}</h2>
       <ol className="join">
         {r.checks.map((c) => (
           <li key={c.what} className={c.ok ? 'done' : 'fail'}>
@@ -378,7 +378,7 @@ function Working({ s, f }: { s: AppState; f: DeviceFrame }) {
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">{s.flow === 'undo' ? 'Removing Glassworks' : 'Installing Glassworks'}</h2>
-      <p className="lede">{`Keep ${f.the} plugged in.`}</p>
+      <p className="lede">{`Keep ${f.the} plugged in while Glassworks ${s.flow === 'undo' ? 'is removed' : 'installs'}.`}</p>
       <ol className="join">
         {rows.map((r, i) => <li key={r.id} className={i < at ? 'done' : i === at ? 'cur' : ''}>{r.text}</li>)}
       </ol>
@@ -394,9 +394,9 @@ const opened = (f?: string) => (!f ? 'nothing Kiln could read' : /ResolverActivi
 function Done({ s, session }: { s: AppState; session: AppSession }) {
   const f = session.frame;
   const r = s.result as Extract<NonNullable<AppState['result']>, { flow: 'undo' }>;
-  const title = r.removed.removed ? `Glassworks is off ${f.the}.` : `Glassworks wasn't on ${f.the}.`;
-  const body = r.removed.home === 'set' ? `The home screen is ${r.removed.previousHome?.split('/')[0] ?? 'yours'} again.`
-    : `Android opened ${opened(r.removed.focused)} for the home screen, not ${r.removed.previousHome?.split('/')[0] ?? 'the app you had before'}. Undo again.`;
+  const title = r.removed.removed ? `Glassworks is off ${f.the}` : `Glassworks wasn't on ${f.the}`;
+  const body = r.removed.home === 'set' ? `Your previous home screen (${r.removed.previousHome?.split('/')[0] ?? 'default'}) is restored.`
+    : `Android opened ${opened(r.removed.focused)} for the home screen instead of ${r.removed.previousHome?.split('/')[0] ?? 'your previous launcher'}. Run Undo once more to finish restoring it.`;
   return (
     <section className="card" aria-labelledby="h">
       <span className="okmark" aria-hidden="true">✓</span>
@@ -426,11 +426,12 @@ export function AppOutcome({ s, f }: { s: AppState; f: DeviceFrame }) {
 function Failed({ s, session }: { s: AppState; session: AppSession }) {
   return (
     <section className="card err" aria-labelledby="h">
-      <h2 id="h">{s.flow === 'undo' ? 'Undo stopped' : 'The install stopped'}</h2>
+      <h2 id="h">{s.flow === 'undo' ? 'Undo didn\'t finish' : 'The install didn\'t finish'}</h2>
+      <p className="lede">You can check your device and try again, or review the technical details below.</p>
       <pre className="raw">{s.error}</pre>
       <div className="foot">
         <Log s={s} />
-        <button type="button" className="btn ghost" onClick={() => void session.again()}>Back to the checks</button>
+        <button type="button" className="btn ghost" onClick={() => void session.again()}>Back to device checks</button>
       </div>
     </section>
   );
@@ -581,7 +582,7 @@ export function ImageFlow({ image, app, toApp, base }: { image: ImageSession; ap
   return (
     <Shell steps={imageRail(s, f, image.recipe.community)} level={imageLevel(s, image.recipe.community)} error={s.screen === 'error'} chip={chip}>
       <ImageScreens f={image} s={s} m={app} ms={ms} />
-      {toApp && community && s.screen === 'image' && <p className="small">{`Already runs the ${community.name} image? `}<button type="button" className="link" onClick={toApp}>Add the app only, over adb</button></p>}
+      {toApp && community && s.screen === 'image' && <p className="small">{`Already running the ${community.name} image? `}<button type="button" className="link" onClick={toApp}>Install just the app over USB</button></p>}
     </Shell>
   );
 }

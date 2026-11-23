@@ -15,7 +15,7 @@
   "dependencies": {
     "@glassworks/adb": "0.0.0",
     "@glassworks/app-adb": "0.0.0",
-    "@glassworks/fastboot": "0.0.0",
-    "@glassworks/fel": "0.0.0"
+    "@glassworks/fastboot": "0.1.1",
+    "@glassworks/fel": "0.1.1"
   }
 }

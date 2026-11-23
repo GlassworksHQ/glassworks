@@ -44,7 +44,7 @@ class ManageUsbDebugging(
 
     /** A computer's lines: [what] (or its name, when it gives one), then its fingerprint. */
     private fun about(key: AdbKey, what: String?): String {
-        val line = what ?: key.name?.let { "Calls itself $it" }
+        val line = what ?: key.name?.let { "Reported name: $it" }
         return (line?.let { "<span>${esc(it)}</span>" }.orEmpty()) + """<span class="fp">Fingerprint ${esc(key.fingerprint).replace(":", ":<wbr>")}</span>"""
     }
 

@@ -120,11 +120,11 @@ class RadioV4Test {
         val f = fw(p)
         f.select(RadioFirmware.STOCK)
         assertEquals("a flash is already running", f.flash())
-        assertTrue(f.statusText().startsWith("FLASHING stock"))
+        assertTrue(f.statusText().startsWith("Updating radio firmware (stock)"))
         val old = V4Props(version = 3).apply { props[RadioHelper.PROP_FW_TARGETS] = "stock:$stockSha:0017" }
         val f3 = fw(old)
         assertTrue(f3.select(RadioFirmware.STOCK)!!.contains("root helper v4 (installed: v3)"))
-        assertTrue(f3.statusText().contains("update the panel's boot image once"))
+        assertTrue(f3.statusText().contains("update the panel's system software once"))
     }
 
     // ------------------------------------------------------------------------------ bundle
@@ -437,6 +437,6 @@ class RadioV4Test {
         assertEquals(false, ok)
         assertEquals(RadioMode.OFF, c.mode)
         assertTrue(p.ops.none { it.startsWith("restart") })
-        assertTrue(c.firmwareText(), c.firmwareText().startsWith("FLASHING stock"))
+        assertTrue(c.firmwareText(), c.firmwareText().startsWith("Updating radio firmware (stock)"))
     }
 }

@@ -1,5 +1,6 @@
-// /api/release/<line>/latest: a release line's newest published release and the files of it Kiln serves, or
-// `{ release: null }` before its first. The tablet page (/android/tablet) links its APK through ../route.ts.
+// /api/release/<line>/latest: a release line's newest published release and the files of it Kiln downloads, or
+// `{ release: null }` before its first: a small JSON answer, the only release route left on Vercel. The files
+// themselves come from Refract (refract.glassworks.dev/glassworks/<tag>/<name>, kiln-core releaseFileUrl).
 // GitHub's REST API allows 60 unauthenticated calls an hour per address, so the CDN keeps each answer 10 minutes.
 import { RELEASES, REPO, type ReleaseLine } from '../../lines';
 

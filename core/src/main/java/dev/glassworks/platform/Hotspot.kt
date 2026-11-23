@@ -65,14 +65,14 @@ data class HotspotNetwork(val ssid: String, val passphrase: String) {
 
 /** Why a hotspot didn't start, in words for the setup screen. */
 enum class HotspotFailure(val text: String) {
-    NO_PERMISSION("The panel isn't allowed to open its own Wi-Fi."),
-    LOCATION_OFF("Android opens the panel's own Wi-Fi only while location is on."),
-    TETHERING_ON("Android's own hotspot is on. Turn it off to open the setup Wi-Fi."),
-    NOT_ALLOWED("This device doesn't let apps open a Wi-Fi hotspot."),
-    NO_CHANNEL("No free Wi-Fi channel for the setup Wi-Fi."),
-    NOT_TETHERED("The setup Wi-Fi started, but Android gave it no address, so a phone couldn't reach the panel."),
-    WIFI_OFF("The panel's Wi-Fi is turned off, and the panel can't turn it on itself. Turn on Wi-Fi first."),
-    FAILED("The setup Wi-Fi didn't start."),
+    NO_PERMISSION("Glassworks doesn't have permission to open a setup Wi-Fi network."),
+    LOCATION_OFF("Android requires Location to be turned on before Glassworks can open its setup Wi-Fi."),
+    TETHERING_ON("Turn off Android's hotspot first so Glassworks can open its setup Wi-Fi."),
+    NOT_ALLOWED("This device doesn't allow apps to open a Wi-Fi hotspot."),
+    NO_CHANNEL("No free Wi-Fi channel is available for setup Wi-Fi right now."),
+    NOT_TETHERED("The setup Wi-Fi started, but Android didn't assign it an address, so a phone can't reach the panel."),
+    WIFI_OFF("Wi-Fi is turned off, and Glassworks can't turn it on automatically. Turn on Wi-Fi first."),
+    FAILED("Couldn't start the setup Wi-Fi network."),
 }
 
 /** The address a phone on the hotspot reaches the panel on. */

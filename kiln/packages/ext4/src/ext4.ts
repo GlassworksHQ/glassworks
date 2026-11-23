@@ -7,11 +7,11 @@
 // 4 KiB (or other) blocks, extents, filetype, sparse_super, large_file, huge_file, gdt_csum,
 // flex_bg, dir_nlink, extra_isize, a journal, a resize inode. Refused: 64bit, meta_bg, inline data,
 // metadata_csum, bigalloc, encryption, and a journal that needs recovery.
-import type { Disk } from './disk';
+import type { Disk } from './disk.ts';
 import {
   BgFlag, Compat, EXTENT_MAGIC, EXTENT_MAX_LEN, EXT4_MAGIC, FileType, InodeFlag, Incompat, ROOT_INO, RoCompat, S_IFDIR, S_IFLNK,
   S_IFMT, S_IFREG, SB_OFFSET, SUPPORTED_INCOMPAT, SUPPORTED_RO, XATTR_MAGIC, XATTR_PREFIXES, XattrIndex, crc16, hasSuperBackup, xattrHash,
-} from './layout';
+} from './layout.ts';
 
 /** Owner, mode and label for something new. `mode` is the permission bits (e.g. 0o644). */
 /** `xattrs`: more than the label (e.g. security.capability), kept in the inode. `time`: seconds since 1970, default now. */

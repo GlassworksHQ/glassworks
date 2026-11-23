@@ -10,7 +10,7 @@ import { isMagiskPatched, loadCompressor } from '@glassworks/bootpatch';
 import { Assets, BackupRefused, checkRestorable, fmtSize, type BackupFile, type BackupMeta } from '@glassworks/kiln-core';
 import { IMPROV_SOCKET } from '@glassworks/app-adb';
 import { SETUP_SOCKET, type PaneCard, type SetupState } from '@glassworks/setup-channel';
-import { PacketReader, PacketType, Rpc, State as ImprovState, frame as packet, parseResult, strings, type ByteStream } from 'improv-serial';
+import { PacketReader, PacketType, Rpc, State as ImprovState, frame as packet, parseResult, strings, type ByteStream } from '@glassworks/improv-serial';
 import { explain, type Written } from './explain';
 import type { Changed } from './state';
 import type { AppPhase, DemoFrame } from '@glassworks/kiln-core';
@@ -428,7 +428,7 @@ const ERRORS: Partial<Record<Demo, { error: unknown; at: number; written?: Writt
 /**
  * ?demo=selftest: what #27 asks of the bundler, checked in the built page. bootpatch.wasm loads from
  * where Next put it, and every staged blob downloads and passes its SHA-256 (the APK through
- * /api/release/<frame>). Results go to the technical log; the page title ends in PASS or FAIL.
+ * Refract). Results go to the technical log; the page title ends in PASS or FAIL.
  */
 async function selfTest(session: Session) {
   const { dispatch } = session.store;
@@ -451,7 +451,7 @@ async function selfTest(session: Session) {
   for (const [i, a] of list.entries()) {
     try {
       const b = await assets.get(a.name);
-      say(`${a.name} ${fmtSize(b.length)} sha256 OK (${a.path.startsWith('/api/') ? 'release route' : 'static'})`);
+      say(`${a.name} ${fmtSize(b.length)} sha256 OK (${/^https?:/.test(a.path) ? 'Refract' : 'static'})`);
     } catch (e) { ok = false; say(`FAIL ${a.name}: ${(e as Error).message}`); }
     dispatch({ type: 'progress', p: { overall: (i + 1) / list.length * 0.97, phase: 'backup', phasePct: 0, title: `Checked ${i + 1} of ${list.length} files`, sub: '' } });
   }

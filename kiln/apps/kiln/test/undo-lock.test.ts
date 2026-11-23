@@ -139,7 +139,7 @@ describe('giving the apps back', () => {
     const giving = s.click('undo-continue', () => s.undoContinue());
     pick();
     await giving;
-    expect(s.store.state.undo.note?.title).toBe('This backup can\'t undo the install.');
+    expect(s.store.state.undo.note?.title).toBe('This backup can\'t undo the install');
     expect(s.store.state.changed).toBeUndefined();
   });
 });

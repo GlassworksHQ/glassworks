@@ -90,7 +90,7 @@ export interface UsbDeps {
   sleep?: (ms: number) => Promise<void>;
   homeTimeoutMs?: number;
   setupTries?: number;
-  /** The APK from the newest release of the frame's line, through Kiln's release route; without it, a file the tester picks. */
+  /** The APK from the newest release of the frame's line, through Refract; without it, a file the tester picks. */
   release?: typeof fetch;
   /**
    * The install is through: the standard flow takes the device from here (its App step first, issue 621), so the install

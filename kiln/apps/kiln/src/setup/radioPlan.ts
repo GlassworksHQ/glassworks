@@ -34,7 +34,7 @@ export function radioPlan(mode: string, ip: string, haUrl: string, allowed: stri
           kv: [['Radio type', 'EZSP'], ['Serial path', `socket://${ip}:6638`, true], ['Port speed', 'Leave as is (115200)']],
           link: 'https://my.home-assistant.io/redirect/config_flow_start/?domain=zha' },
         { title: 'Pair your Zigbee devices', body: 'Opens Home Assistant\'s Zigbee “Add device”, which starts pairing for a few minutes. Put each device in pairing mode.', link: zhaAdd },
-        { title: 'Using Zigbee2MQTT instead? (experimental)', body: 'On the panel\'s ESPHome device in Home Assistant, set Zigbee stack to Silicon Labs 8.2.2. The panel downloads it from Silicon Labs, which takes a minute. Then point Zigbee2MQTT at the panel. If the panel\'s Radio helper says v3, install the panel\'s software with Kiln once more first.',
+        { title: 'Using Zigbee2MQTT instead? (experimental)', body: 'On the panel\'s ESPHome device in Home Assistant, set Zigbee stack to Silicon Labs 8.2.2. The panel downloads it from Silicon Labs, which takes a minute. Then point Zigbee2MQTT at the panel. If you installed the panel with an older version of Kiln, run Kiln once more to update its system software first.',
           kv: [['adapter', 'ember'], ['port', `tcp://${ip}:6638`, true]] },
       ],
     },
@@ -74,7 +74,7 @@ export function radioPlan(mode: string, ip: string, haUrl: string, allowed: stri
   if (!plan) return undefined;
   // Helper v3 firewall: the radio's ports only open to Home Assistant, once it has added the panel.
   if ((mode === 'zigbee_tcp' || mode === 'thread') && allowed === '') {
-    return { ...plan, steps: [{ title: 'First, add the panel to Home Assistant', body: 'Only Home Assistant can reach the radio, and the panel learns its address when Home Assistant adds the panel. If you haven\'t yet: in Home Assistant open Settings → Devices & services, and add the panel shown under Discovered (ESPHome). Until then the radio refuses every connection.',
+    return { ...plan, steps: [{ title: 'First, add the panel to Home Assistant', body: 'Only Home Assistant can reach the radio, and the panel learns its address when Home Assistant adds it. If you haven\'t done that yet, open Settings → Devices & services in Home Assistant and add the panel under Discovered (ESPHome). This keeps the radio private on your network until Home Assistant connects.',
       link: 'https://my.home-assistant.io/redirect/integrations/' }, ...plan.steps] };
   }
   return plan;

@@ -17,7 +17,7 @@ class LicencesTest {
         )
         assertEquals(listOf("0BSD", "Apache-2.0", "MPL-2.0"), docs.drop(2).map { it.label })
         // The repo's own licence, named for the project, not one app: every app on the core shows it (#23).
-        assertEquals("Glassworks licence (MIT)", docs[1].label)
+        assertEquals("Glassworks license (MIT)", docs[1].label)
     }
 
     /** Every SPDX id the notices name must have its text in LICENSES/, or the app's screen would lack it. */

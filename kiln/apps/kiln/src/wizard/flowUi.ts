@@ -46,7 +46,7 @@ export class AskBridge {
       },
       (e: unknown) => {
         if (this.pending !== p) return; // a stale picker, from an ask that was called off
-        this.dispatch({ type: 'ask-error', error: notPicked(e) ? 'Nothing was picked. Click the button again.' : String((e as Error)?.message ?? e) });
+        this.dispatch({ type: 'ask-error', error: notPicked(e) ? 'No device was selected. Click the button again to open the list.' : String((e as Error)?.message ?? e) });
       },
     );
   }

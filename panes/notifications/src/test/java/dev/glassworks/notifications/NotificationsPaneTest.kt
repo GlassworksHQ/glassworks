@@ -198,7 +198,7 @@ class NotificationsPaneTest {
         d.switch.on = true
         fun groups() = d.settings().single().items.filterIsInstance<SettingsItem.Group>()
         val send = groups().first { it.title == "Try it" }.items.single() as SettingsItem.Action
-        assertEquals("Send" to "A normal one, with a chime and one button", send.label to send.detail())
+        assertEquals("Send" to "Sends a sample notification with a chime and one button", send.label to send.detail())
         val said = mutableListOf<String?>()
         send.run { said += it }
         assertEquals("on, not running yet: says so", listOf<String?>(NotificationsDefinition.NOT_RUNNING), said)

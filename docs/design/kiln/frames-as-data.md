@@ -101,7 +101,7 @@ install shows. The frame Kiln installs (`KilnFrame`) never carries it. The demo 
 
 **The frames registry** (`packages/frames`, `@glassworks/frames`) is the one place that names frames,
 and the only way Kiln reaches one. `catalog` is each frame's design data (frame.json, installer.json,
-its render), light enough for the picker, the routes and the release route. `kiln` loads each engine
+its render), light enough for the picker, the routes and the release list (Refract's `releases.json` is written from it). `kiln` loads each engine
 frame's `kilnFrame` and `kilnSim` on demand. One route, `apps/kiln/src/app/[frame]`, serves every frame
 on the shared wizard (the catalog's `ENGINE`), titled from its `words.name`. Release lines come from
 `installer.json` `releases`, and the first installer page's links from `legacy`.

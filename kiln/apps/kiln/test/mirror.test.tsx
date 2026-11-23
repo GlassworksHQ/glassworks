@@ -45,7 +45,7 @@ describe('the switch', () => {
 
   it('without it, the page opens on the choice, for everyone (the locked page: device-locked.test.tsx)', async () => {
     render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
-    await screen.findByText('What goes on the Mirror?');
+    await screen.findByText('Choose what to install on the Mirror');
     expect(screen.queryByText(/doesn.t install from Kiln yet/)).toBeNull();
     expect(screen.queryByText('Test only')).toBeNull();
   });
@@ -53,7 +53,7 @@ describe('the switch', () => {
   it('with it, Kiln installs Glassworks over fastboot by default: first and picked on the choice (#579)', async () => {
     history.replaceState(null, '', '/lululemon-mirror?apk=local');
     render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
-    await screen.findByText('What goes on the Mirror?');
+    await screen.findByText('Choose what to install on the Mirror');
     expect(screen.queryByText('Test only')).toBeNull(); // beta (frame.json): open to everyone, not a test page
     expect(embers()).toEqual(['Continue with Glassworks']);
     fireEvent.click(screen.getByRole('button', { name: 'Continue with Glassworks' }));
@@ -153,7 +153,7 @@ describe('the test install', () => {
   it('the key loads with the page, so the click goes straight to the device list', async () => {
     const connect = vi.fn(() => new Promise<never>(() => {}));
     const go = keyedConnect(async () => ({}) as never, connect);
-    await expect(go()).rejects.toThrow(/still making its key/); // clicked before the key was ready: says so
+    await expect(go()).rejects.toThrow(/finishing its one-time browser setup/); // clicked before the key was ready: says so
     const broken = keyedConnect(async () => { throw new Error('indexedDB is not defined'); }, connect);
     await new Promise((r) => setTimeout(r, 0)); // no unhandled rejection while nobody has clicked
     await expect(broken()).rejects.toThrow(/indexedDB is not defined/);

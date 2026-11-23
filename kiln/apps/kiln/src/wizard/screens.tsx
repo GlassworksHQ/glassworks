@@ -35,9 +35,12 @@ export function Connect({ s, session, frame }: P) {
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h" className="huge">Enter recovery mode</h2>
+      <p className="lede">{s.flow === 'undo'
+        ? 'Put the panel into recovery mode so Kiln can restore your saved backup.'
+        : `Nothing changes on ${frame.the} yet. Kiln backs up your original software first, before writing anything.`}</p>
       <Recovery data={frame.recovery} />
-      <p className="small">Then click Connect and pick <code>{frame.felPick}</code>.{s.flow === 'undo' ? '' : s.changed === 'unknown' ? ' Kiln can\'t tell if an earlier try in this browser tab changed the panel.' : s.changed ? ' An earlier try already changed the panel.' : ''}</p>
-      {driver && <p className="small">{driver} <a className="link" href={frame.help.drivers} target="_blank" rel="noopener">How</a></p>}
+      <p className="small">Next, click Connect and pick <code>{frame.felPick}</code> in the browser list (that&apos;s your panel in recovery mode).{s.flow === 'undo' ? '' : s.changed === 'unknown' ? ' Kiln can\'t tell whether an earlier attempt in this tab changed the panel.' : s.changed ? ' An earlier attempt already changed the panel.' : ''}</p>
+      {driver && <p className="small">{driver} <a className="link" href={frame.help.drivers} target="_blank" rel="noopener">Setup guide</a></p>}
       <LastRun />
       <BuiltOn credits={stepCredits(frame.id, frame.credits, s.flow === 'undo' ? ['boot'] : undefined)} />
       <div className="foot">
@@ -49,7 +52,7 @@ export function Connect({ s, session, frame }: P) {
               <Dialog.Content className="sheet" style={{ width: 'min(640px, calc(100vw - 32px))' }}>
                 <Dialog.Title asChild><h3>The recovery button</h3></Dialog.Title>
                 <img className="photo" src={frame.photo.src} width={frame.photo.width} height={frame.photo.height} alt={frame.photoAlt} />
-                <Dialog.Description>It&apos;s {frame.recovery.button?.what}. Not the reset button on the case.</Dialog.Description>
+                <Dialog.Description>Look for {frame.recovery.button?.what}, rather than the reset button on the outside of the case.</Dialog.Description>
                 <Dialog.Close className="btn ghost">Close</Dialog.Close>
               </Dialog.Content>
             </Dialog.Portal>
@@ -74,9 +77,9 @@ export function YourTurn({ s, session, asks }: { s: WizardState; session: Standa
           {copy && <>
             <span className="label"><span className="pulse" />Your turn</span>
             <Dialog.Title asChild><h3>{copy.title}</h3></Dialog.Title>
-            <Dialog.Description>{copy.body} Pick <code>{copy.pick}</code> in the list.</Dialog.Description>
+            <Dialog.Description>{copy.body} Your browser asks for a fresh confirmation whenever a USB device switches modes, so pick <code>{copy.pick}</code> in the list.</Dialog.Description>
             <button type="button" className="btn ember pulsing" disabled={ask.busy} onClick={() => void session.asks.click()}>Choose the panel</button>
-            {ask.busy && <p className="status work" role="status">Pick it in the browser&apos;s list…</p>}
+            {ask.busy && <p className="status work" role="status">Select the panel in the browser list…</p>}
             {ask.error && <p className="status err" role="alert">{ask.error}</p>}
           </>}
         </Dialog.Content>
@@ -151,10 +154,10 @@ const LOCALES = ['en-US', 'en-GB', 'en-AU', 'en-CA', 'de-DE', 'fr-FR', 'fr-CA', 
 type Row = 'kiosk' | 'home' | 'keyboard' | 'prefs' | 'start';
 const ROWS: { id: Row; text: (app: string) => string }[] = [
   { id: 'kiosk', text: (app) => `Install ${app}` },
-  { id: 'home', text: () => 'Make it the panel\'s home screen' },
+  { id: 'home', text: () => 'Set it as the home screen' },
   { id: 'keyboard', text: () => 'Install the on-screen keyboard' },
-  { id: 'prefs', text: () => 'Apply your time zone, language and clock' },
-  { id: 'start', text: () => 'First start' },
+  { id: 'prefs', text: () => 'Apply your language, time zone, and clock' },
+  { id: 'start', text: () => 'Start Glassworks' },
 ];
 const rowOf = (p: AppPhase): Row => (p.step === 'apk' ? (p.apk as Row) : p.step);
 
@@ -164,11 +167,11 @@ const rowOf = (p: AppPhase): Row => (p.step === 'apk' ? (p.apk as Row) : p.step)
  * install has no app running, so nothing there is said to restart.
  */
 function nowSays(p: AppPhase, update: boolean): { sub?: string; note?: string } {
-  if (p.step === 'apk' && p.stage === 'copy') return { sub: 'Copying it to the panel' };
+  if (p.step === 'apk' && p.stage === 'copy') return { sub: 'Copying the app to the panel' };
   if (p.step === 'apk' && p.apk === 'kiosk') {
-    return { sub: 'Android installs it and optimises it for this panel', note: update ? 'The app on the panel restarts during this.' : undefined };
+    return { sub: 'Android is installing and optimizing it for this panel', note: update ? 'The app restarts briefly while it updates — that\'s normal.' : undefined };
   }
-  if (p.step === 'apk') return { sub: 'Android installs it' };
+  if (p.step === 'apk') return { sub: 'Android is installing it' };
   return {};
 }
 
@@ -188,7 +191,7 @@ function Installing({ frame, setup }: { frame: Pick<StandardFrame, 'app'>; setup
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">{setup.apply ? 'Language and time' : setup.update ? `Updating ${frame.app}` : `Installing ${frame.app}`}</h2>
-      <p className="lede">Keep it plugged in.</p>
+      <p className="lede">Keep the panel plugged in while this finishes. It usually takes about a minute.</p>
       <ol className="join">
         {rows.map((r, i) => (
           <li key={r.id} className={i < at ? 'done' : i === at ? 'cur' : ''}>
@@ -231,6 +234,9 @@ function Settings({ s, session, frame, setup }: SP & { setup: Extract<Setup, { p
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">{setup.update && !setup.apply ? `Update ${frame.app}` : 'Language and time'}</h2>
+      <p className="lede">{setup.update && !setup.apply
+        ? 'Your panel\'s Wi-Fi and Home Assistant setup stay intact. Review language and time below (or choose “Leave as it is”), then install the update.'
+        : 'These start from your computer\'s settings, and you can change them anytime later.'}</p>
       <div className="fields">
         <label className="field"><span>Language</span>
           <select className="select" value={locale} onChange={(e) => setLocale(e.target.value)} disabled={busy}>
@@ -254,7 +260,7 @@ function Settings({ s, session, frame, setup }: SP & { setup: Extract<Setup, { p
       </div>
       {setup.error && <p className="status err" role="alert">{setup.error}</p>}
       <div className="foot">
-        {setup.apply ? <span /> : <span className="small">About a minute.</span>}
+        {setup.apply ? <span /> : <span className="small">Takes about a minute.</span>}
         <button type="button" className="btn ember" disabled={busy || !!s.busy}
           onClick={() => void session.click('install-app', () => session.installApp({ locale: locale || undefined, timezone: tz || undefined, clock24: clock === '24', keyboard }))}>
           {setup.apply ? 'Continue' : setup.update ? 'Update and continue' : `Install ${frame.app}`}
@@ -265,9 +271,10 @@ function Settings({ s, session, frame, setup }: SP & { setup: Extract<Setup, { p
 }
 
 export function Waiting({ setup }: { setup: Extract<Setup, { phase: 'waiting' }> }) {
+  const connecting = /^Connecting\b/.test(setup.note);
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h">Starting the panel</h2>
+      <h2 id="h">{connecting ? 'Connecting to the panel' : 'Starting the panel'}</h2>
       <p className="lede">{setup.note}</p>
       <div className="bar wait"><i /></div>
     </section>
@@ -298,7 +305,7 @@ export function SetUp(p: SP) {
 export function ManagePageRow({ href, the }: { href: string; the: string }) {
   return (
     <div className="well">
-      <span className="grow"><span>{`Change these later on ${the}'s Manage page. It asks for a code ${the} shows.`}</span><span className="small"><code>{href}</code></span></span>
+      <span className="grow"><span>{`You can change any of these later on the Manage page, using a 6-digit code shown on ${the}.`}</span><span className="small"><code>{href}</code></span></span>
       <a className="btn ghost" href={href} target="_blank" rel="noopener">Open</a>
     </div>
   );
@@ -348,7 +355,8 @@ export function Undo({ s, session, frame }: P) {
   const keep = u.depth === 'keep';
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h">Restore stock firmware</h2>
+      <h2 id="h">Restore original software</h2>
+      <p className="lede">Kiln uses your saved backup to put the original software back, and checks every write along the way.</p>
       <RadioGroup.Root className="list" value={u.depth} onValueChange={(v) => session.store.dispatch({ type: 'undo', patch: { depth: v as 'factory' | 'keep', appsBack: false, note: undefined } })} aria-label="How far back">
         {(['factory', 'keep'] as const).map((d) => (
           <RadioGroup.Item key={d} value={d} className="opt"><span className="rd" /><span className="t"><span>{frame.undo[d].title}</span><small>{frame.undo[d].detail}</small></span></RadioGroup.Item>
@@ -357,22 +365,22 @@ export function Undo({ s, session, frame }: P) {
       {u.note && <p className={`status ${u.note.kind === 'err' ? 'err' : u.note.kind === 'ok' ? 'ok' : 'work'}`} role="status"><b style={{ fontWeight: 500 }}>{u.note.title}</b> {u.note.sub}{u.note.link && <> <a className="link" href={u.note.link.href} target="_blank" rel="noopener">{u.note.link.text}</a></>}</p>}
       {u.source === 'browser' && u.inBrowser && (
         <div className="well">
-          <span className="grow"><span>The backup in this browser</span><span className="small">{u.inBrowser}</span></span>
+          <span className="grow"><span>Saved backup in this browser</span><span className="small">{u.inBrowser}</span></span>
           <button type="button" className="btn ghost" onClick={() => session.downloadUndoBackup()}>Download this backup</button>
         </div>
       )}
       <input ref={file} type="file" accept=".zip" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) void session.undoFromFile(f); }} />
       <div className="foot">
         <span className="links">
-          {u.source !== 'browser' && <><span>{u.file ?? 'No backup in this browser.'}</span><span aria-hidden="true">·</span></>}
-          {u.source === 'file' && u.inBrowser && <><button type="button" className="link" disabled={u.checking || u.locked || !!s.busy} onClick={() => void session.undoFromBrowser()}>Use this browser&apos;s</button><span aria-hidden="true">·</span></>}
-          <button type="button" className="link" disabled={u.checking || u.locked || !!s.busy} onClick={() => file.current?.click()}>{u.source === 'file' ? 'Another file' : 'Use a backup file'}</button>
+          {u.source !== 'browser' && <><span>{u.file ?? 'No backup saved in this browser — choose a backup .zip file to continue.'}</span><span aria-hidden="true">·</span></>}
+          {u.source === 'file' && u.inBrowser && <><button type="button" className="link" disabled={u.checking || u.locked || !!s.busy} onClick={() => void session.undoFromBrowser()}>Use saved backup</button><span aria-hidden="true">·</span></>}
+          <button type="button" className="link" disabled={u.checking || u.locked || !!s.busy} onClick={() => file.current?.click()}>{u.source === 'file' ? 'Choose a different file' : 'Use a backup file'}</button>
         </span>
         <button type="button" className="btn ember" disabled={!u.ready || !!s.busy} onClick={() => void session.click('undo-continue', () => session.undoContinue())}>
           {keep && !u.appsBack ? frame.undo.keep.button : 'Continue'}
         </button>
       </div>
-      <p className="small">From a terminal instead: <code>{frame.help.undoCli}</code></p>
+      <p className="small">Prefer the command line? <code>{frame.help.undoCli}</code></p>
     </section>
   );
 }
@@ -399,7 +407,7 @@ export function Failure({ s, session, help }: { s: WizardState; session: Standar
       <Collapsible.Root open={open} onOpenChange={setOpen} className="tech">
         <div className="foot">
           <span className="links">
-            <Collapsible.Trigger className="link">{open ? 'Less' : 'More help'}</Collapsible.Trigger>
+            <Collapsible.Trigger className="link">{open ? 'Hide help' : 'More help'}</Collapsible.Trigger>
             {f.wrote && <><span aria-hidden="true">·</span><button type="button" className="link" onClick={retry}>Try again</button></>}
           </span>
           {f.wrote
@@ -414,7 +422,7 @@ export function Failure({ s, session, help }: { s: WizardState; session: Standar
             <span aria-hidden="true">·</span>
             <button type="button" className="link" onClick={() => void session.undo()}>Undo with your backup</button>
           </p>}
-          {help && <p className="small">Undo from a terminal: <code>{help.undoCli}</code> (<a className="link" href={help.undo} target="_blank" rel="noopener">how</a>)</p>}
+          {help && <p className="small">Prefer the command line? <code>{help.undoCli}</code> (<a className="link" href={help.undo} target="_blank" rel="noopener">restore guide</a>)</p>}
           <TechLog s={s} />
         </Collapsible.Content>
       </Collapsible.Root>
@@ -427,10 +435,10 @@ export function Browser() {
   const secure = typeof window !== 'undefined' && isSecureContext;
   return (
     <section className="card err" aria-labelledby="h">
-      <h2 id="h">{secure ? 'Use Chrome or Edge' : 'Open this page over https'}</h2>
+      <h2 id="h">{secure ? 'Use Chrome or Edge' : 'Open this page over HTTPS'}</h2>
       <p className="lede">{secure
-        ? 'This browser can’t talk to USB devices. Kiln needs Chrome or Edge on a computer, or Chrome on Android.'
-        : 'Browsers only open USB devices from a secure page (https, or localhost).'}</p>
+        ? 'This browser can’t talk to USB devices. Open Kiln in Chrome or Edge on a computer, or Chrome on Android.'
+        : 'Browsers only allow USB connections from a secure page (HTTPS or localhost).'}</p>
     </section>
   );
 }

@@ -56,6 +56,6 @@ class S1ManageOwnTest {
     }
 
     @Test fun aboutKeepsTheS1sLicenceLine() {
-        assertEquals("MIT, with the Glassworks core under MPL-2.0", manage().status().about.toMap()["Licence"])
+        assertEquals("MIT, with the Glassworks core under MPL-2.0", manage().status().about.toMap()["License"])
     }
 }

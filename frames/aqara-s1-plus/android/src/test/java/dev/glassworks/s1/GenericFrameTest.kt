@@ -205,7 +205,7 @@ class GenericFrameTest {
     }
 
     @Test fun theDeviceSettingsLinkNamesTheDevicesOwnApp() {
-        assertEquals("Aqara's own settings", SettingsMenu.deviceSettingsTitle(AqaraS1Plus()))
+        assertEquals("Aqara settings", SettingsMenu.deviceSettingsTitle(AqaraS1Plus()))
         assertEquals("Android settings", SettingsMenu.deviceSettingsTitle(GenericAndroid(app)))
     }
 

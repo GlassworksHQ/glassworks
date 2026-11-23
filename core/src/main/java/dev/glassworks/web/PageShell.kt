@@ -131,7 +131,7 @@ button.btn,button.lk{border:0;font:inherit;cursor:pointer}button.lk{background:n
         name: String, title: String, text: String, look: Look,
         tile: String = "", button: String = "", foot: String = "", footHtml: String = "", headerRight: String = "", extraCss: String = "",
     ): String {
-        val heading = esc(title).let { if (it.endsWith(".")) it else "$it." }
+        val heading = esc(title.removeSuffix("."))
         val footer = when {
             footHtml.isNotEmpty() -> "<div class=\"foot\">$footHtml</div>"
             foot.isNotEmpty() -> "<div class=\"foot\">${esc(foot)}</div>"

@@ -1,7 +1,7 @@
 // A ByteStream over adb (Tango / ya-webadb, e.g. on WebUSB) to a `localabstract:` socket in an
 // Android app, such as the improv library's ImprovAdbServer.
 import type { Adb } from '@yume-chan/adb';
-import type { ByteStream } from './serial';
+import type { ByteStream } from './serial.ts';
 
 /** The adb service for an app's abstract socket `@name`. */
 export function localAbstract(name: string): string {

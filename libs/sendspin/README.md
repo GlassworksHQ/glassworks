@@ -96,9 +96,7 @@ contain a key or token. How the player behaves on the S1, and how its sync was m
 
 ## Gradle
 
-On Maven Central as `dev.glassworks:sendspin` ([changelog](CHANGELOG.md)). The first release, 0.1.0,
-is not out yet: until it is, use the module from this repository
-(`implementation(project(":sendspin"))`).
+On Maven Central as `dev.glassworks:sendspin` ([changelog](CHANGELOG.md)).
 
 ```kotlin
 repositories { mavenCentral() }

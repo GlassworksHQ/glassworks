@@ -4,7 +4,7 @@
 import type { PanelShell } from '@glassworks/adb';
 import { IMPROV_SOCKET } from '@glassworks/app-adb';
 import { SETUP_SOCKET, SetupChannel } from '@glassworks/setup-channel';
-import { ImprovSerialClient, State as ImprovState, type ByteStream } from 'improv-serial';
+import { ImprovSerialClient, State as ImprovState, type ByteStream } from '@glassworks/improv-serial';
 import type { Setup } from '../wizard/state';
 import { ChannelSetup, type SetupSteps, type WifiSteps } from './channelSetup';
 import type { PanelApp } from './radioPlan';
@@ -214,7 +214,7 @@ export class AdbSetUp implements SetupSteps, WifiSteps {
     const s = this.d.phase();
     this.d.show({
       phase: 'wifi', on: was, changing: !!was, networks, hint: s.phase === 'wifi' ? s.hint : undefined,
-      status: networks.length ? `${networks.length} in range of the panel` : 'None found. Type the name.',
+      status: networks.length ? `${networks.length} in range of the panel` : 'No networks found. Choose manual entry to type a network name.',
     });
   }
 
@@ -222,7 +222,7 @@ export class AdbSetUp implements SetupSteps, WifiSteps {
     const cur = this.d.phase();
     const base = cur.phase === 'wifi' ? cur : { phase: 'wifi' as const, status: '' };
     const step = (st: 'sent' | 'join' | 'ok' | 'err', error?: string) => this.d.show({ ...base, joining: { ssid, step: st, error } });
-    if (!ssid) { step('err', 'Pick or type a network.'); return; }
+    if (!ssid) { step('err', 'Choose a network or enter its name.'); return; }
     step('sent');
     const succeeded = () => {
       this.d.note(`panel connected to Wi-Fi ${ssid}`);
@@ -268,10 +268,10 @@ export class AdbSetUp implements SetupSteps, WifiSteps {
   async homeAssistant(): Promise<void> {
     if (this.d.has?.('home-assistant') === false) return this.steps.homeAssistant(); // it passes over to the next one
     if (!this.d.simulated && !(await this.socketUp(SETUP_SOCKET))) {
-      this.d.show({ phase: 'waiting', note: `Waiting for ${this.d.appName} to start again…` });
+      this.d.show({ phase: 'waiting', note: `Waiting for ${this.d.appName} to finish restarting…` });
       // not back within the minute: an error with Try again, never the older-app way on to Done
       if (!(await this.waitForSocket(SETUP_SOCKET, 60_000))) {
-        this.d.unreachable(new Error(`${this.d.appName} didn't start again within a minute. Try again.`));
+        this.d.unreachable(new Error(`${this.d.appName} took longer than expected to restart. Click Try again to reconnect.`));
         return;
       }
     }

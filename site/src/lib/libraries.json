@@ -8,6 +8,8 @@
   { "name": "improv-serial", "description": "Improv Wi-Fi Serial for the browser, and over adb." },
   { "name": "ha-auth", "description": "Home Assistant sign-in and tokens." },
   { "name": "sendspin-protocol", "description": "The Sendspin synced-audio protocol." },
+  { "name": "fel", "description": "Allwinner FEL boot over WebUSB, in the browser." },
+  { "name": "ext4", "description": "ext4 and Android sparse images, in the browser." },
   { "name": "fastboot", "description": "Fastboot over WebUSB, for every frame Kiln installs." },
   { "name": "frame-card", "description": "The frame card and 3D renderer, for Kiln and the site." }
 ]

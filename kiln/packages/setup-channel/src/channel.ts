@@ -39,7 +39,7 @@
 //   The same protocol runs over the LAN (#34): a WebSocket at http://<panel>:8099/setup/channel
 //   (lan.ts). There the panel answers `state` only, until the browser pairs with the code on the panel's
 //   screen (POST /setup/pair); every other request gets NOT_PAIRED.
-import type { ByteStream } from 'improv-serial';
+import type { ByteStream } from '@glassworks/improv-serial';
 
 export { LAN_CHANNEL_PATH, NOT_PAIRED, openWebSocketStream, type WebSocketStream } from './lan';
 

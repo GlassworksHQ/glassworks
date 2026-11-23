@@ -66,12 +66,12 @@ export function Picker() {
       <section className="picker" aria-labelledby="pick">
         <div className="picker-head">
           <h2 id="pick">Pick your panel</h2>
-          <p className="lede">Panels Glassworks runs on, or will. Each one is a frame.</p>
+          <p className="lede">Choose the device you want to set up. Kiln guides you step by step and shows what you&apos;ll need before anything starts.</p>
         </div>
         {running && (
           <div className="running" role="status">
             <span>Kiln is still working on your {running.name}.</span>
-            <Link className="link" href={running.href}>Back to it</Link>
+            <Link className="link" href={running.href}>Return to install</Link>
           </div>
         )}
         <LastRun />

@@ -57,7 +57,7 @@ class NoTouchImprovScreenTest {
     @Test fun theOpenWindowSaysWhatToDoWithNoButton() {
         val s = screen(open, Input.NONE) { TestFrames.mirror(it) }
         val t = texts(s)
-        assertTrue(t.toString(), "Send the Wi-Fi from a phone." in t)
+        assertTrue(t.toString(), "Send Wi-Fi from a phone" in t)
         assertTrue(t.toString(), "Open Home Assistant or improv-wifi.com on your phone to send the Wi-Fi." in t)
         assertTrue(t.toString(), "Bluetooth setup · open for 5:00" in t)
         assertFalse(t.toString(), t.any { it == "Allow" || it == "Stop" || it == "Not now" })
@@ -65,13 +65,13 @@ class NoTouchImprovScreenTest {
 
     @Test fun afterTheWindowTheStepIsAsBefore() {
         val t = texts(screen(closed, Input.NONE) { TestFrames.mirror(it) })
-        assertTrue(t.toString(), "Waiting for Wi-Fi." in t)
-        assertFalse(t.toString(), "Send the Wi-Fi from a phone." in t)
+        assertTrue(t.toString(), "Waiting for Wi-Fi" in t)
+        assertFalse(t.toString(), "Send Wi-Fi from a phone" in t)
     }
 
     @Test fun aTouchscreenKeepsAllow() {
         val t = texts(screen(open.copy(authLeftMs = 119_001), Input.TOUCH) { TestFrames.tablet(it) })
         assertTrue(t.toString(), "Waiting for Wi-Fi details" in t)
-        assertFalse(t.toString(), "Send the Wi-Fi from a phone." in t)
+        assertFalse(t.toString(), "Send Wi-Fi from a phone" in t)
     }
 }

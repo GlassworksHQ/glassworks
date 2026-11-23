@@ -95,7 +95,7 @@ describe('the picker', () => {
     const store = installing();
     render(<Picker />);
     expect(screen.getByText('Kiln is still working on your Aqara S1 Plus.')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Back to it' }).getAttribute('href')).toBe('/aqara-s1-plus/install');
+    expect(screen.getByRole('link', { name: 'Return to install' }).getAttribute('href')).toBe('/aqara-s1-plus/install');
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
     expect(router.push).toHaveBeenCalledWith('/aqara-s1-plus/install');
     act(() => store.dispatch({ type: 'done', done: { title: 'You\'re all set', body: '' } }));
@@ -107,7 +107,7 @@ describe('the picker', () => {
     store.dispatch({ type: 'fail', failure: { title: 'It disconnected', body: 'Nothing was written.', wrote: false, tips: [], raw: 'x', at: 2 } });
     store.dispatch({ type: 'go', screen: 'connect' });
     render(<Picker />);
-    expect(screen.getByRole('status').textContent).toMatch(/The last run stopped: It disconnected\. Download its log/);
+    expect(screen.getByRole('status').textContent).toMatch(/Your last attempt stopped: It disconnected\. Download log/);
   });
 });
 
