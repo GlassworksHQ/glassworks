@@ -944,6 +944,10 @@ exists, so the first release of each goes out with a token:
    give), and set it as `NPM_TOKEN` in the `npm` environment (`gh secret set NPM_TOKEN --env npm`).
 3. Push the first tags (`fel` first). Each package is published with the token.
 4. For each package, on npmjs.com → the package → Settings → Trusted publishing: GitHub Actions,
-   `GlassworksHQ/glassworks`, workflow `npm-release.yml`, environment `npm`. Then set "Require two-factor
-   authentication and disallow tokens".
+   `GlassworksHQ/glassworks`, workflow `npm-release.yml`, environment `npm`. Under "Allowed actions", turn
+   on `npm publish`: a new setup allows only `npm stage publish`, and the job publishes directly. Then set
+   "Require two-factor authentication and disallow tokens".
 5. Delete the `NPM_TOKEN` secret and revoke the token. Without it, the job publishes through OIDC.
+6. Publish a release through it within 2 days. npm doesn't check a trusted publishing setup when it's saved:
+   the first publish through it does, and a setup nothing has published through in 2 days expires. Delete an
+   expired one and set it up again, right before the package's next tag.

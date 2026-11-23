@@ -24,7 +24,7 @@ def node(expr):
 
 PKG = {
     'name': '@glassworks/widget', 'version': '0.2.0', 'private': True, 'description': 'A widget.', 'license': 'MIT',
-    'type': 'module', 'keywords': ['widget'],
+    'type': 'module', 'sideEffects': False, 'keywords': ['widget'],
     'exports': {'.': './src/index.ts', './wire': './src/wire/index.ts', './fakes': './test/fakes.ts'},
     'scripts': {'test': 'vitest run'}, 'devDependencies': {'vitest': '*'},
     'dependencies': {'@glassworks/fel': '0.1.0', '@types/w3c-web-usb': '^1.0.14'},
@@ -51,6 +51,7 @@ class Manifest(unittest.TestCase):
         for field in ('private', 'scripts', 'devDependencies'):
             self.assertNotIn(field, m)
         self.assertEqual({'access': 'public'}, m['publishConfig'])
+        self.assertIs(False, m['sideEffects'])
         self.assertEqual(['dist', 'src', 'CHANGELOG.md'], m['files'])
         self.assertEqual({'type': 'git', 'url': 'git+https://github.com/GlassworksHQ/glassworks.git',
                           'directory': 'kiln/packages/widget'}, m['repository'])
@@ -113,6 +114,10 @@ class TheRepo(unittest.TestCase):
         # The workspace pins of one published package on another must stay its version (release fel before fastboot).
         names = node('publishable().map((p) => manifest(p, publishable()).name)')
         self.assertEqual(['@glassworks/ext4', '@glassworks/fastboot', '@glassworks/fel', '@glassworks/improv-serial'], names)
+
+    def test_each_one_says_it_has_no_side_effects(self):
+        # Nothing in them runs on import, so a bundler may drop every module a consumer doesn't use.
+        self.assertEqual([False] * 4, node('publishable().map((p) => manifest(p, publishable()).sideEffects)'))
 
     def test_each_one_has_a_changelog_section_for_its_version(self):
         for p in node('publishable().map((p) => [p.dir, p.pkg.version])'):

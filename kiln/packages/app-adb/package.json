@@ -15,6 +15,6 @@
   },
   "dependencies": {
     "@glassworks/adb": "0.0.0",
-    "@glassworks/improv-serial": "0.1.0"
+    "@glassworks/improv-serial": "0.1.1"
   }
 }

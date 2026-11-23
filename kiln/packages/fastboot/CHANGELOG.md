@@ -5,6 +5,13 @@ they start with 0, a minor version may change the API. Releases are cut from `np
 ([docs/releasing.md](../../../docs/releasing.md#npm-packages)), which publish the matching section below as
 the release notes.
 
+## [0.1.1] - 2026-11-23
+
+### Changed
+- **Bundlers keep only what you import.** The package now says it has no side effects (`"sideEffects": false`),
+  so webpack, Rollup, esbuild and Vite can leave out every module you don't use.
+- Needs `@glassworks/fel` 0.1.1, which says the same.
+
 ## [0.1.0] - 2026-11-22
 
 ### Added

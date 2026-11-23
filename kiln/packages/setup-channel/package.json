@@ -11,6 +11,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@glassworks/improv-serial": "0.1.0"
+    "@glassworks/improv-serial": "0.1.1"
   }
 }
