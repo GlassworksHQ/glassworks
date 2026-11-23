@@ -736,8 +736,12 @@ def own_process(name, pid, package, procs):
     procs = procs or {}
     if procs.get(str(pid)) or name in procs.values():
         return True
-    # Within, not only at the end: some zygote versions copy one character fewer than they cut to.
-    if len(name) <= TASK_COMM_LEN and any(len(full) > len(name) and name in full for full in procs.values()):
+    # The kernel keeps the last TASK_COMM_LEN characters of a longer name. Some zygote versions copy one character
+    # fewer than they cut to, so a name one shorter may also miss the last character. Only those two forms: a short
+    # name that merely occurs inside a longer one ("sh") is someone else's process.
+    if len(name) in (TASK_COMM_LEN - 1, TASK_COMM_LEN) and any(
+            len(full) > len(name) and (full.endswith(name) or full[-len(name) - 1:-1] == name)
+            for full in procs.values()):
         return True
     base, sep, rest = name.partition(":")
     return bool(sep and rest) and package.endswith(base)
@@ -1098,6 +1102,9 @@ def cmd_coldstart(dev, a):
             # they end the recovery; the run's own restart measurement stays the first one's.
             if proc_re.search(msg):
                 st["recovering"]["launched"] = True
+            if ref and rec["tag"] == CONTENT_GONE_TAG and CONTENT_GONE_RE.search(msg):
+                # The replacement page was lost too: its usable line no longer says the kiosk is back.
+                st["recovering"].pop("usable_at", None)
             pl = page_lines.feed(msg)
             if pl and pl.get("nonce") == "" and pl.get("t") == "refdash":
                 st["recovering"].setdefault("usable_at", C.now())   # the done line may be lost: end_recovery
