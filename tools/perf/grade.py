@@ -111,11 +111,18 @@ def capacity(steps, accept):
     return best
 
 
+def failed_run(run):
+    """A run record that stands for a task the view never got to measure, measured as failing: the view didn't finish
+    within the runner's deadline (timed_out), or its browser page was closed (lost, the app said its page's process was
+    killed or crashed). Below fluid, never missing. grade.ts's failedRun is the same."""
+    return bool(run) and bool(run.get("timed_out") or run.get("lost"))
+
+
 def scroll_level(stats):
     """One run's scroll level: the first of rubric.json's scroll_levels whose rule holds, or "slow"
     (measured, below fluid); None when it wasn't measured."""
-    if stats and stats.get("timed_out"):
-        return BELOW                    # the view didn't finish within the runner's deadline: measured, failed
+    if failed_run(stats):
+        return BELOW                    # the view didn't finish, or its page was lost: measured, failed
     if not stats or not stats.get("n"):
         return None
     for lv in SCROLL_LEVELS:
@@ -130,7 +137,7 @@ def scroll_level(stats):
 def update_level(run):
     """One run's live-updates level from its change-to-screen p95 (and, for premium, the frames that
     had a change to draw), or "slow"; None when it wasn't measured."""
-    if run and run.get("timed_out"):
+    if failed_run(run):
         return BELOW
     if not run or not run.get("latency_n") or run.get("latency_p95_ms") is None:
         return None
@@ -147,7 +154,7 @@ def dialog_level(run):
     """One run's more-info level (rubric 3): from the slowest dialog's time to settled and, for
     premium, the open animations' frames; "slow" when a dialog never opened or never settled, or the
     view didn't get to them; None when they weren't measured."""
-    if run and run.get("timed_out"):
+    if failed_run(run):
         return BELOW
     if not run or not run.get("n"):
         return None
@@ -179,7 +186,7 @@ def camera_level_why(run):
     the same levels; the reasons are the report's."""
     if not run:
         return None, None
-    if run.get("timed_out"):
+    if failed_run(run):
         return BELOW, None
     if run.get("first_frame_ms") is None or run.get("shown_pct") is None:
         return BELOW, None

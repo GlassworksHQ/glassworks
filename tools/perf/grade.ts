@@ -43,17 +43,17 @@ export interface Rubric {
   };
 }
 
-export interface FrameRun { timed_out?: boolean; p95_ms?: number | null; jank_pct?: number | null; frozen_pct?: number | null; fps?: number | null; n?: number | null }
+export interface FrameRun { timed_out?: boolean; lost?: boolean; p95_ms?: number | null; jank_pct?: number | null; frozen_pct?: number | null; fps?: number | null; n?: number | null }
 
 /** One run's live updates: change to screen, and the frames that had a change to draw. */
-export interface UpdateRun { timed_out?: boolean; latency_n?: number | null; latency_median_ms?: number | null; latency_p95_ms?: number | null; frames?: FrameRun | null }
+export interface UpdateRun { timed_out?: boolean; lost?: boolean; latency_n?: number | null; latency_median_ms?: number | null; latency_p95_ms?: number | null; frames?: FrameRun | null }
 
 /** One run's live camera streams (#174), the worst stream's numbers. */
-export interface CameraRun { timed_out?: boolean; stalls_reported?: boolean; uncovered_ms?: number | null; first_frame_ms?: number | null; shown_pct?: number | null; max_gap_ms?: number | null; stall_total_ms?: number | null }
+export interface CameraRun { timed_out?: boolean; lost?: boolean; stalls_reported?: boolean; uncovered_ms?: number | null; first_frame_ms?: number | null; shown_pct?: number | null; max_gap_ms?: number | null; stall_total_ms?: number | null }
 
 /** One run's more-info dialogs (rubric 3, #211): how many ran and failed, the slowest to settle
  * (null when one failed), and the open animations' frames. */
-export interface DialogRun { timed_out?: boolean; n?: number | null; failed?: number | null; settled_ms?: number | null; frames?: FrameRun | null }
+export interface DialogRun { timed_out?: boolean; lost?: boolean; n?: number | null; failed?: number | null; settled_ms?: number | null; frames?: FrameRun | null }
 
 export interface PageSummary {
   inp_ms?: number | null;
@@ -64,6 +64,8 @@ export interface PageSummary {
   camera?: { runs?: CameraRun[] } & Record<string, unknown>;
   dialog?: { runs?: DialogRun[] } & Record<string, unknown>;   // HA's more-info dialogs (#211)
   timed_out_runs?: number;     // runs in which the page didn't finish within the runner's deadline (#202)
+  lost_runs?: number;          // runs in which the panel closed the page's browser page (its page was killed or crashed)
+  lost_why?: string[];         // why, in words
 }
 
 export interface Summary {
@@ -140,10 +142,16 @@ export function medianBand(bands: (Band | null)[]): Band | null {
   return bs.length ? bs[Math.floor(bs.length / 2)] : null;
 }
 
+/** A run record that stands for a task the view never got to measure, measured as failing: the view didn't finish
+ * within the runner's deadline (timed_out), or its browser page was closed (lost). grade.py's failed_run is the same. */
+export function failedRun(run: { timed_out?: boolean; lost?: boolean } | null | undefined): boolean {
+  return !!run && !!(run.timed_out || run.lost);
+}
+
 /** One run's scroll level: the first of rubric.json's scroll_levels whose rule holds, or
  * `below` (measured, below fluid); null when it wasn't measured. */
 export function scrollLevel(st: FrameRun | null | undefined, rubric: Rubric): string | null {
-  if (st && st.timed_out) return rubric.grade.below;     // the view didn't finish: measured, failed
+  if (failedRun(st)) return rubric.grade.below;     // the view didn't finish, or its page was lost: measured, failed
   if (!st || !st.n) return null;
   for (const lv of rubric.grade.scroll_levels) {
     if (lv.frames_band) {
@@ -159,7 +167,7 @@ export function scrollLevel(st: FrameRun | null | undefined, rubric: Rubric): st
 /** One run's live-updates level from its change-to-screen p95 (and, for premium, the frames that had
  * a change to draw), or `below`; null when it wasn't measured. */
 export function updateLevel(run: UpdateRun | null | undefined, rubric: Rubric): string | null {
-  if (run && run.timed_out) return rubric.grade.below;
+  if (failedRun(run)) return rubric.grade.below;
   if (!run || !run.latency_n || run.latency_p95_ms === null || run.latency_p95_ms === undefined) return null;
   for (const lv of rubric.grade.update_levels) {
     if (run.latency_p95_ms > lv.latency_p95_max_ms) continue;
@@ -176,7 +184,7 @@ export function updateLevel(run: UpdateRun | null | undefined, rubric: Rubric): 
  * open animations' frames; `below` when a dialog never opened or settled, or the view didn't get to
  * them; null when they weren't measured. */
 export function dialogLevel(run: DialogRun | null | undefined, rubric: Rubric): string | null {
-  if (run && run.timed_out) return rubric.grade.below;
+  if (failedRun(run)) return rubric.grade.below;
   if (!run || !run.n) return null;
   if (run.failed || run.settled_ms === null || run.settled_ms === undefined) return rubric.grade.below;
   for (const lv of rubric.grade.dialog_levels) {
@@ -194,7 +202,7 @@ export function dialogLevel(run: DialogRun | null | undefined, rubric: Rubric): 
  * gaps over 500 ms added up; `below` when a stream showed no frame; null without a camera record. */
 export function cameraLevel(run: CameraRun | null | undefined, rubric: Rubric): string | null {
   if (!run) return null;
-  if (run.timed_out) return rubric.grade.below;
+  if (failedRun(run)) return rubric.grade.below;
   if (run.first_frame_ms === null || run.first_frame_ms === undefined || run.shown_pct === null || run.shown_pct === undefined) return rubric.grade.below;
   if (run.stalls_reported === false) {
     // Stalls n/a (no freeze counts, or counts that left part of the window out): not measured,

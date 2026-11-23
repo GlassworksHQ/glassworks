@@ -32,6 +32,8 @@ On each dashboard, Clarity tests the interactions you notice every day on a wall
 
 Some devices, like the lululemon Mirror, have no touchscreen, so nobody can scroll them. Clarity doesn't grade those devices on scrolling. It skips the swipes and grades every other task as usual, and the report says "Scrolling: not applicable, this frame has no touch." A missing scroll result doesn't make their grade provisional, though anything else that's missing still does whenever it could change the letter.
 
+Some panels run short of memory on the bigger dashboards, and Android closes the browser page to free some. When that happens mid-test, Clarity counts that dashboard as failed for that run and carries on with the rest, so a panel that can't hold a dashboard isn't graded as if it could. The device card says which dashboard was lost, in how many runs, and why. This isn't a missing measurement, so it never makes the grade provisional.
+
 All thresholds come from published web and mobile UX standards (Core Web Vitals, RAIL, and Android vitals) rather than numbers tuned to any particular piece of hardware.
 
 ## Reading a device's Clarity card

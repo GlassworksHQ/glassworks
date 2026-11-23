@@ -1529,6 +1529,107 @@ class ForeignPage(unittest.TestCase):
         self.assertEqual(c["error"], "the kiosk loaded another page while a reference dashboard was measured")
 
 
+class PageGone(unittest.TestCase):
+    """The lululemon Mirror (2026-11-23): the low-memory killer closed typical's browser page mid-view, the app loaded
+    the kiosk's start view again, and every graded run failed as a whole for "another page". Now the app's own line
+    before the reload (MainActivity.onContentGone) makes it that view's loss: the view fails every task in that run,
+    and the run carries on once the start view is back. A reload with no such line still fails the run."""
+    build = Restart.build
+    run_short = Restart.run_short
+
+    def test_a_page_killed_mid_view_is_lost_and_the_run_carries_on(self):
+        p, c, log = self.run_short(90, fallback="typical-hls", FAKE_PAGE_GONE="typical", FAKE_LMK="kernel")
+        self.assertEqual(p.returncode, 0, p.stderr[-1500:])
+        self.assertIsNone(c["error"])
+        gone = c["tiers"]["typical"]["content_gone"]
+        self.assertEqual((gone["cause"], gone["low_memory"], gone["after"]), ("killed", True, "warmup"))
+        self.assertNotIn("done", c["tiers"]["typical"])
+        self.assertTrue(c["tiers"]["heavy"].get("done"))                  # opened once the start view was back
+        self.assertTrue(c["fallback"]["typical-hls"].get("done"))
+        self.assertEqual(c["recoveries"], [{"after": "typical", "content_gone": "killed", "back_s": c["recoveries"][0]["back_s"],
+                                            "launch": "session-restart"}])
+        self.assertEqual([x["during"] for x in c["content_gone"]], ["typical"])
+        self.assertEqual(c["missing_steps"], [])
+        # The app reloaded its own page: no force-stop, no am start after the run's own restart.
+        order = [x for x in log if x.startswith(("view ", "page gone", "shell am force-stop", "shell am start -W -n", "shell dmesg"))]
+        i = order.index("page gone")
+        self.assertEqual(order[i + 1], "shell dmesg", order)                 # read once, for the killer's line
+        self.assertTrue(order[i + 2].startswith("view heavy"), order)
+        self.assertEqual(sum(1 for x in log if x.startswith("shell am force-stop")), 1)
+        self.assertEqual(c["restart_page"]["tier"], "start")                # the run's restart stays the first one's
+        self.assertLess(c["restart_page"]["mono"], c["tiers"]["light"]["page"]["mono"])
+        rep = self.build(self.last_out)
+        g, ref = rep["grade"], rep["graded"]["reference"]
+        self.assertEqual(g["levels"]["typical"], None)
+        self.assertTrue(all(b in ("slow", "poor") for b in g["bands"]["typical"].values()), g["bands"]["typical"])
+        self.assertEqual([m for m in g["missing"] if m.startswith("typical.")], [])      # failing, not missing
+        self.assertFalse(any("typical" in r for r in g.get("provisional_reasons") or []), g.get("provisional_reasons"))
+        why = "the panel ran out of memory and its browser page was closed (low-memory killer)"
+        self.assertEqual(ref["lost"], [[1, "typical", why]])
+        self.assertEqual((ref["tiers"]["typical"]["lost_runs"], ref["tiers"]["typical"]["lost_why"]), (1, [why]))
+        self.assertNotIn("lost_runs", ref["tiers"]["heavy"])
+        self.assertTrue(ref["tiers"]["heavy"]["dialog_level"])              # heavy graded as usual
+        md = report.markdown(rep)
+        self.assertIn(f"typical in 1 of 1 run(s) (run 1): {why}", md)
+        self.assertIn(f"On typical with a camera, the page was lost in 1 of 1 runs: {why}.", rep["notes"]["text"])
+        out = summary.summarise(rep, allow_provisional=True)
+        self.assertEqual((out["pages"]["typical"]["lost_runs"], out["pages"]["typical"]["lost_why"]), (1, [why]))
+        self.assertEqual(out["pages"]["typical"]["scroll"]["runs"][0].get("lost"), True)
+        self.assertEqual([m for m in grade.grade_summary(out).get("missing") or [] if m.startswith("typical.")], [])
+
+    def test_without_the_killers_line_it_doesnt_name_it(self):
+        p, c, _ = self.run_short(90, FAKE_PAGE_GONE="typical-nocam")
+        self.assertEqual(p.returncode, 0, p.stderr[-1500:])
+        self.assertEqual(c["tiers"]["typical-nocam"]["content_gone"]["low_memory"], False)
+        rep = self.build(self.last_out)
+        self.assertEqual(rep["graded"]["reference"]["lost"], [[1, "typical-nocam", "Android closed the panel's browser page"]])
+
+    def test_lmkds_line_in_logcat_names_it_and_a_crash_is_a_crash(self):
+        p, c, _ = self.run_short(90, FAKE_PAGE_GONE="light", FAKE_LMK="lmkd")
+        self.assertEqual(p.returncode, 0, p.stderr[-1500:])
+        self.assertEqual(c["tiers"]["light"]["content_gone"]["low_memory"], True)
+        p, c, _ = self.run_short(90, FAKE_PAGE_GONE="light", FAKE_PAGE_GONE_HOW="crashed", FAKE_LMK="lmkd")
+        self.assertEqual(p.returncode, 0, p.stderr[-1500:])
+        self.assertEqual((c["tiers"]["light"]["content_gone"]["cause"], c["tiers"]["light"]["content_gone"]["low_memory"]),
+                         ("crashed", False))
+        self.assertEqual(self.build(self.last_out)["graded"]["reference"]["lost"], [[1, "light", "the panel's browser page crashed"]])
+
+    def test_a_kill_long_before_isnt_the_pages(self):
+        """The kernel's line names the page's process, but from minutes before (an earlier kill): not this one's."""
+        p, c, _ = self.run_short(90, FAKE_PAGE_GONE="typical", FAKE_LMK="kernel", FAKE_LMK_AGO_S="600")
+        self.assertEqual(p.returncode, 0, p.stderr[-1500:])
+        self.assertEqual(c["tiers"]["typical"]["content_gone"]["low_memory"], False)
+
+    def test_a_reload_without_a_kill_still_fails_the_run(self):
+        """A sign-in or a navigation: the page the kiosk loads again with no line before it."""
+        p, c, _ = self.run_short(90, FAKE_PAGE_GONE="typical", FAKE_PAGE_GONE_HOW="none")
+        self.assertNotEqual(p.returncode, 0)
+        self.assertEqual(c["error"], "the kiosk loaded another page while a reference dashboard was measured")
+        self.assertNotIn("content_gone", c)
+        self.assertNotIn("content_gone", c["tiers"]["typical"])
+
+    def test_a_kill_on_the_last_view_ends_the_run_graded(self):
+        """Run 1's last view is heavy: nothing is left to open, so the run ends there, graded."""
+        p, c, log = self.run_short(90, FAKE_PAGE_GONE="heavy", FAKE_LMK="kernel")
+        self.assertEqual(p.returncode, 0, p.stderr[-1500:])
+        self.assertIsNone(c["error"])
+        self.assertEqual(c["tiers"]["heavy"]["content_gone"]["low_memory"], True)
+        self.assertNotIn("recoveries", c)
+        self.assertTrue(all(c["tiers"][t].get("done") for t in ("light", "typical-nocam", "typical")))
+        rep = self.build(self.last_out)
+        self.assertEqual(rep["graded"]["reference"]["graded_runs"], 1)
+        self.assertEqual(rep["grade"]["levels"]["heavy"], None)
+        self.assertEqual([m for m in rep["grade"]["missing"] if m.startswith("heavy.")], [])
+
+    def test_on_android_6(self):
+        """The Mirror's logcat has wall-clock stamps (perflib ties them to the monotonic clock), and its kernel's
+        low-memory killer writes only to dmesg."""
+        p, c, _ = self.run_short(90, FAKE_ANDROID6="1", FAKE_PAGE_GONE="typical", FAKE_LMK="kernel")
+        self.assertEqual(p.returncode, 0, p.stderr[-1500:])
+        self.assertEqual(c["tiers"]["typical"]["content_gone"]["low_memory"], True)
+        self.assertTrue(c["tiers"]["heavy"].get("done"))
+
+
 class LiveLayer(unittest.TestCase):
     """After a restart SurfaceFlinger can still list the old layer; frames come from the live one."""
 
