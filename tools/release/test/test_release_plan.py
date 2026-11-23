@@ -138,8 +138,10 @@ class TheRepoFrames(unittest.TestCase):
                     names = {a.replace('{abi}', abi).replace('{version}', '1.2.3') for abi in item['abis']}
                     self.assertTrue(names & set(item['assets']), f'{r["line"]}: {a}')
 
-    def test_only_the_s1_app_is_releases_latest(self):
-        self.assertEqual(['aqara-s1-plus'], [n for n, l in self.lines.items() if l.get('latest')])
+    def test_no_line_is_releases_latest_while_v0_4_4_holds_it(self):
+        # Panels on 0.4.3 read only releases/latest and only understand v1.2.3: v0.4.4 keeps it, and they reach
+        # anything newer through 0.4.4 until 1.0.0 marks the S1 line latest again (docs/releasing.md#tags).
+        self.assertEqual([], [n for n, l in self.lines.items() if l.get('latest')])
 
     def test_the_s1_app_builds_every_frames_abi_and_the_generic_lines_their_frames(self):
         p = plan_mod.plan(ROOT, '1.2.3', dry_run=True)
@@ -167,7 +169,7 @@ class Due(Fixture):
         # One item per line, however many frames run it.
         self.assertEqual(5, len(p['items']))
         s1 = by(p, 'line', 'aqara-s1-plus')
-        self.assertTrue(s1['latest'])
+        self.assertFalse(s1['latest'])  # v0.4.4 stays releases/latest
         self.assertFalse(by(p, 'line', 'generic-android')['latest'])
         self.assertEqual('Glassworks for the Aqara S1 Plus 1.0.0', s1['title'])
         self.assertEqual('Glassworks for generic Android, legacy build 1.0.0', by(p, 'line', 'generic-android-legacy')['title'])
@@ -263,7 +265,7 @@ class Channel(Fixture):
         self.assertEqual({('line', 'aqara-s1-plus'), ('line', 'generic-android'), ('line', 'generic-android-legacy')}, due(p))
         s1 = by(p, 'line', 'aqara-s1-plus')
         self.assertTrue(s1['prerelease'])
-        self.assertFalse(s1['latest'])  # releases/latest stays the S1 app's last stable
+        self.assertFalse(s1['latest'])  # never releases/latest
         self.assertEqual('Glassworks for the Aqara S1 Plus 1.1.0 beta', s1['title'])
         self.assertEqual('frame releases have no betas', by(p, 'frame', 'aqara-s1-plus')['why'])
 
@@ -326,7 +328,14 @@ class BadData(Fixture):
             self.plan()
         self.assertIn('defined by both', str(e.exception))
 
+    def test_a_line_marked_latest_is_latest_on_a_stable_only(self):
+        self.edit('aqara-s1-plus', lambda d: d['release']['lines']['aqara-s1-plus'].update(latest=True))
+        self.sections(app=['1.1.0'])
+        self.assertTrue(by(self.plan('1.1.0'), 'line', 'aqara-s1-plus')['latest'])
+        self.assertFalse(by(self.plan('1.1.0', channel='beta'), 'line', 'aqara-s1-plus')['latest'])
+
     def test_two_latest_lines(self):
+        self.edit('aqara-s1-plus', lambda d: d['release']['lines']['aqara-s1-plus'].update(latest=True))
         self.edit('generic-android', lambda d: d['release']['lines']['generic-android'].update(latest=True))
         with self.assertRaises(PlanError) as e:
             self.plan()
@@ -374,7 +383,7 @@ class Outputs(Fixture):
                             '--github-output', str(tmp / 'out'), '--json', str(tmp / 'plan.json')],
                            capture_output=True, text=True)
         self.assertEqual(0, r.returncode, r.stderr)
-        self.assertIn('| `aqara-s1-plus` | app line (s1-kiosk), for aqara-s1-plus | 1.0.0 | `aqara-s1-plus-v1.0.0` | **build, check; publish** (latest) |',
+        self.assertIn('| `aqara-s1-plus` | app line (s1-kiosk), for aqara-s1-plus | 1.0.0 | `aqara-s1-plus-v1.0.0` | **build, check; publish** |',
                       (tmp / 'summary').read_text())
         self.assertIn('kiosk={', (tmp / 'out').read_text())
         r = subprocess.run(['python3', str(ROOT / 'tools/release/plan.py'), '--root', str(self.root), '--version', '9.9.9',
