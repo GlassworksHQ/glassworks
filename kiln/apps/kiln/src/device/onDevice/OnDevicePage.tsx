@@ -1,7 +1,7 @@
 'use client';
 // The install from the device's own browser, no computer (issue 403, part 3; issue 621): the engine's page for a UsbFrame's
 // `onDevice` (at /android/tablet for the frame whose route is /android). It names the device as far as the browser lets it (the frame's
-// `identify`), offers the right APK from its build's latest release through Kiln's release route, says what the app's
+// `identify`), offers the right APK from its build's latest release through Refract, says what the app's
 // own setup asks next, and how to finish with Kiln over USB. Its words, brands and lines are the frame's.
 // Kiln's look (docs/design/kiln): one idea per card, one ember button, details on request.
 import type { OnDevice, UsbFrame, UsbIdentified as Identified, UsbOnDevice, UsbPlace as Place, UsbSim } from '@glassworks/kiln-core';
@@ -136,10 +136,10 @@ function Get({ on, go, releases, load }: P & { releases: Partial<Record<Line, Re
   const guess = abiFor(on, FRAMES);
   const line = dev.onDevice.lines[legacy ? 'legacy' : 'generic'];
   const r = releases[line] ?? { state: 'loading' };
-  const dl = download(line, r, guess.abi);
+  const dl = download(r, guess.abi);
   const other: Abi = guess.abi === 'arm64-v8a' ? 'armeabi-v7a' : 'arm64-v8a';
   // only where the browser said nothing: the other build, should Android refuse this one
-  const retry = !guess.sure && download(line, r, other);
+  const retry = !guess.sure && download(r, other);
   const buildSwitch = on.app === 'either' && <button key="build" type="button" className="link" onClick={() => setLegacy(!legacy)}>{legacy ? 'Android 8 or newer? Get Glassworks' : 'Android 6 or 7? Get the legacy build'}</button>;
   const links = (...b: ReactNode[]) => b.filter(Boolean).map((x, i) => <Fragment key={i}><span aria-hidden="true">·</span>{x}</Fragment>);
 

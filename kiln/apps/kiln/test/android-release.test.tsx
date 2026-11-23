@@ -59,8 +59,8 @@ describe('the release\'s APK', () => {
     await s.loadRelease();
     expect(asked).toEqual([
       '/api/release/generic-android/latest',
-      `/api/release/generic-android?tag=${TAG}&name=${NAME}.sha256`,
-      `/api/release/generic-android?tag=${TAG}&name=${NAME}`,
+      `https://refract.glassworks.dev/glassworks/${TAG}/${NAME}.sha256`,
+      `https://refract.glassworks.dev/glassworks/${TAG}/${NAME}`,
     ]);
     expect(TAG).toBe('generic-android-v0.2.0');
     expect(s.state.release).toMatchObject({ state: 'ready', tag: TAG, name: NAME });
@@ -78,7 +78,7 @@ describe('the release\'s APK', () => {
 
   it('a release APK the checks refuse is an error with Try again: a fixed release then goes through', async () => {
     let apk = fakeGenericApk({ package: 'com.example.other', abis: ['arm64-v8a'] });
-    const s = session(((u: RequestInfo | URL) => fakeReleaseRoute('out', apk, async () => {}, 'generic-android')(u)) as typeof fetch);
+    const s = session(((u: RequestInfo | URL, init?: RequestInit) => fakeReleaseRoute('out', apk, async () => {}, 'generic-android')(u, init)) as typeof fetch);
     await s.loadRelease();
     expect(s.state.release).toMatchObject({ state: 'error', why: expect.stringMatching(/^Kiln can't install it: /) });
     expect(s.blocked()).toMatch(/^The release's APK can't go on the tablet: /);
@@ -138,8 +138,8 @@ describe('the release\'s APK for the device\'s ABI (issue 700)', () => {
     expect(s.state.release).toMatchObject({ state: 'ready', name: NAME_32 });
     // the first screen's download, then the 32-bit build from the same release once Kiln could read the device
     expect(asked.filter((u) => !u.endsWith('/latest'))).toEqual([
-      `/api/release/generic-android?tag=${TAG}&name=${NAME}.sha256`, `/api/release/generic-android?tag=${TAG}&name=${NAME}`,
-      `/api/release/generic-android?tag=${TAG}&name=${NAME_32}.sha256`, `/api/release/generic-android?tag=${TAG}&name=${NAME_32}`,
+      `https://refract.glassworks.dev/glassworks/${TAG}/${NAME}.sha256`, `https://refract.glassworks.dev/glassworks/${TAG}/${NAME}`,
+      `https://refract.glassworks.dev/glassworks/${TAG}/${NAME_32}.sha256`, `https://refract.glassworks.dev/glassworks/${TAG}/${NAME_32}`,
     ]);
     // read before it wrote anything: the abilist came before the APK went on
     const first = tablet.cmds.findIndex((c) => c.startsWith('push '));

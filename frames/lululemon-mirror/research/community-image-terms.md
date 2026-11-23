@@ -57,8 +57,9 @@ person's browser. Do the image's terms allow that, and can Kiln do it without ho
    HTTP/2 200
    ```
    No `Access-Control-Allow-Origin`, so a page can't read the bytes. Kiln's release APKs have the
-   same problem, and `kiln/apps/kiln/src/app/api/release-asset` streams them through Kiln's own
-   domain. Doing that for this image makes our server send out Qualcomm and Quectel binaries that
+   same problem, and `kiln/apps/kiln/src/app/api/release-asset` streamed them through Kiln's own
+   domain (until 2026-11-23, when they moved to Refract too: that route's traffic got the Vercel team
+   paused). Doing that for this image makes our server send out Qualcomm and Quectel binaries that
    nobody licensed to us. The first decision ruled that out on hard rule 3's reasoning ("no vendor
    binaries or firmware"). The maintainer then accepted it for this image, streaming only, through
    Refract (see Result).

@@ -70,8 +70,8 @@ export interface Installer {
    */
   setUp?: { remove?: Record<string, string> };
   releases?: Release[];
-  /** The first installer page's links: its hash links (/#/wifi) and its release route (/api/release-asset) lead here. */
-  legacy?: { hashLinks?: boolean; releaseAsset?: string };
+  /** The first installer page's links: its hash links (/#/wifi) lead here. */
+  legacy?: { hashLinks?: boolean };
 }
 
 /** An installer.json as Kiln reads it, checked where it comes in: a frame names no page of its own (issue 621). */

@@ -58,8 +58,8 @@ describe('the release\'s APK', () => {
     await s.loadRelease();
     expect(asked).toEqual([
       '/api/release/generic-android-legacy/latest',
-      `/api/release/generic-android-legacy?tag=${DEMO_TAG}&name=${DEMO_APK}.sha256`,
-      `/api/release/generic-android-legacy?tag=${DEMO_TAG}&name=${DEMO_APK}`,
+      `https://refract.glassworks.dev/glassworks/${DEMO_TAG}/${DEMO_APK}.sha256`,
+      `https://refract.glassworks.dev/glassworks/${DEMO_TAG}/${DEMO_APK}`,
     ]);
     expect(s.state.release).toMatchObject({ state: 'ready', tag: DEMO_TAG, version: '0.2.0', name: DEMO_APK, size: APK.length });
     expect(s.apkBytes()).toEqual(APK);
@@ -111,14 +111,14 @@ describe('the release\'s APK', () => {
     expect(s.state.release).toEqual({ state: 'none' });
   });
 
-  it('a failing release route or a missing .sha256 is an error, not "no release"', async () => {
+  it('a failing release list or a missing .sha256 is an error, not "no release"', async () => {
     const down = session((async () => new Response('', { status: 502 })) as typeof fetch);
     await down.loadRelease();
     expect(down.state.release).toEqual({ state: 'error', why: 'Couldn\'t check for releases: the release server answered 502' });
     const route = fakeReleaseRoute('out', APK);
     const noSum = session((async (u: RequestInfo | URL) => (String(u).endsWith('.sha256') ? new Response('', { status: 502 }) : route(u))) as typeof fetch);
     await noSum.loadRelease();
-    expect(noSum.state.release).toEqual({ state: 'error', why: 'Couldn\'t verify the release checksum for 0.2.0 (status 502)' });
+    expect(noSum.state.release).toEqual({ state: 'error', why: 'Couldn\'t verify the release checksum for 0.2.0 (the download proxy answered 502)' });
   });
 
   /** A request that never answers, until its signal aborts (the real fetch rejects then). */
@@ -129,12 +129,27 @@ describe('the release\'s APK', () => {
     let hang = true;
     const s = new AppSession({ frame: mirrorFrame,
       connect: async () => { throw new Error('unused'); },
-      release: (async (u: RequestInfo | URL, init?: RequestInit) => (hang && String(u).endsWith('.sha256') ? silent(init) : route(u))) as typeof fetch,
-      releaseStallMs: 50,
+      release: (async (u: RequestInfo | URL, init?: RequestInit) => (hang && String(u).endsWith('.sha256') ? silent(init) : route(u, init))) as typeof fetch,
+      releaseFetch: { stallMs: 50, retries: 1, sleep: async () => {} },
     }, true);
     await s.loadRelease();
-    expect(s.state.release).toEqual({ state: 'error', why: 'The download server stopped responding after 0.05 seconds' });
+    expect(s.state.release).toEqual({ state: 'error', why: 'Couldn\'t verify the release checksum for 0.2.0 (the download proxy sent nothing for 1 s)' });
     expect(s.releaseBlocked()).toBe('Kiln couldn\'t get Glassworks from its release. Try again.');
+    hang = false;
+    await s.loadRelease(); // Try again
+    expect(s.state.release?.state).toBe('ready');
+  });
+
+  it('a release list that never answers ends in Try again too, not a row stuck on "Looking"', async () => {
+    const route = fakeReleaseRoute('out', APK);
+    let hang = true;
+    const s = new AppSession({ frame: mirrorFrame,
+      connect: async () => { throw new Error('unused'); },
+      release: (async (u: RequestInfo | URL, init?: RequestInit) => (hang && String(u).endsWith('/latest') ? silent(init) : route(u, init))) as typeof fetch,
+      releaseFetch: { stallMs: 50, retries: 0, sleep: async () => {} },
+    }, true);
+    await s.loadRelease();
+    expect(s.state.release).toEqual({ state: 'error', why: 'Couldn\'t check for releases: the release server stopped responding after 0.05 seconds' });
     hang = false;
     await s.loadRelease(); // Try again
     expect(s.state.release?.state).toBe('ready');
@@ -161,7 +176,7 @@ describe('the release\'s APK', () => {
     const s = new AppSession({ frame: mirrorFrame,
       connect: async () => { throw new Error('unused'); },
       release: (async (u: RequestInfo | URL, init?: RequestInit) => {
-        const res = await route(u);
+        const res = await route(u, init);
         if (!String(u).endsWith(DEMO_APK)) return res;
         const reader = res.body!.getReader();
         // the stand-in route stalls after three chunks; the real fetch's body errors when its signal aborts
@@ -169,13 +184,41 @@ describe('the release\'s APK', () => {
           start(c) { init?.signal?.addEventListener('abort', () => c.error(new DOMException('aborted', 'AbortError'))); },
           async pull(c) { const { done, value } = await reader.read(); if (done) c.close(); else c.enqueue(value); },
         });
-        return new Response(body, { headers: res.headers });
+        return new Response(body, { status: res.status, headers: res.headers });
       }) as typeof fetch,
-      releaseStallMs: 50,
+      releaseFetch: { stallMs: 50, retries: 1, sleep: async () => {} },
     }, true);
     await s.loadRelease();
-    expect(s.state.release).toEqual({ state: 'error', why: 'The download server stopped responding after 0.05 seconds' });
+    // it resumed once where it stopped, and the stand-in stalled there again
+    expect(s.state.release).toEqual({ state: 'error', why: 'Couldn\'t download Glassworks 0.2.0 (the download proxy sent nothing for 1 s)' });
     expect(s.apkBytes()).toBeUndefined();
+  });
+
+  it('an APK download that drops resumes with Range where it stopped, and the bytes still match the .sha256', async () => {
+    const route = fakeReleaseRoute('out', APK);
+    const ranges: (string | null)[] = [];
+    let drops = 1;
+    const s = new AppSession({ frame: mirrorFrame,
+      connect: async () => { throw new Error('unused'); },
+      release: (async (u: RequestInfo | URL, init?: RequestInit) => {
+        const res = await route(u, init);
+        if (!String(u).endsWith(DEMO_APK)) return res;
+        ranges.push(new Headers(init?.headers).get('range'));
+        if (drops-- <= 0) return res;
+        // the connection drops after the first chunk
+        const reader = res.body!.getReader();
+        let sent = false;
+        const body = new ReadableStream<Uint8Array>({
+          async pull(c) { if (sent) { c.error(new TypeError('network error')); return; } const { value } = await reader.read(); c.enqueue(value!); sent = true; },
+        });
+        return new Response(body, { status: res.status, headers: res.headers });
+      }) as typeof fetch,
+      releaseFetch: { stallMs: 1000, sleep: async () => {} },
+    }, true);
+    await s.loadRelease();
+    expect(s.state.release).toMatchObject({ state: 'ready', size: APK.length });
+    expect(s.apkBytes()).toEqual(APK);
+    expect(ranges).toEqual([null, `bytes=${Math.ceil(APK.length / 8)}-`]);
   });
 });
 

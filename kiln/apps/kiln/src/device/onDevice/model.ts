@@ -1,6 +1,6 @@
 // The on-device page (issue 403 part 3, issue 621) without React: which screen comes first, which build and APK fit, and the
 // release each line has. OnDevicePage.tsx draws it; facts.ts reads the browser.
-import type { OnDevice } from '@glassworks/kiln-core';
+import { REFRACT, releaseFileUrl, type OnDevice } from '@glassworks/kiln-core';
 import type { FrameDesign } from '@glassworks/frame-card';
 import type { LatestRelease } from '../../app/api/release/[frame]/latest/route';
 import type { RailStep } from '../../wizard/state';
@@ -8,7 +8,7 @@ import type { RailStep } from '../../wizard/state';
 /** Device, Get the app, Set up; `kiln` is Set up's optional finish over USB; `elsewhere`, `too-old` stop at Device. */
 export type TabletScreen = 'device' | 'get' | 'setup' | 'kiln' | 'elsewhere' | 'too-old';
 
-/** A release line, as Kiln's release route serves it (a frame's installer.json `releases`). */
+/** A release line, as Refract serves it (a frame's installer.json `releases`). */
 export type Line = string;
 export type Abi = 'arm64-v8a' | 'armeabi-v7a';
 
@@ -43,12 +43,18 @@ export function abiFor(on: OnDevice, frames: readonly FrameDesign[]): { abi: Abi
   return { abi: 'arm64-v8a', sure: false };
 }
 
-/** The download link for `abi` from a line's latest release, through Kiln's release route; undefined before a release. */
-export function download(line: Line, r: Release, abi: Abi): { href: string; name: string; version: string } | undefined {
+/** Where Kiln downloads Glassworks' release files: Refract, or the Worker NEXT_PUBLIC_KILN_PROXY names at build time. */
+export const RELEASE_FILES = process.env.NEXT_PUBLIC_KILN_PROXY || REFRACT;
+
+/**
+ * The download link for `abi` from a line's latest release, through Refract (it admits the line's files by
+ * kiln/workers/refract/releases.json); undefined before a release.
+ */
+export function download(r: Release, abi: Abi): { href: string; name: string; version: string } | undefined {
   if (r.state !== 'out') return undefined;
   const name = r.assets.find((n) => n.endsWith(`-${abi}-${r.version}.apk`));
   if (!name) return undefined;
-  return { href: `/api/release/${line}?tag=${encodeURIComponent(r.tag)}&name=${encodeURIComponent(name)}`, name, version: r.version };
+  return { href: releaseFileUrl(RELEASE_FILES, r.tag, name), name, version: r.version };
 }
 
 /** A line's latest release from Kiln's route. */

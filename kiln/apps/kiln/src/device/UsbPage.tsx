@@ -45,7 +45,7 @@ const useDevice = (): UsbFrame => useContext(UsbFrameContext)!;
 const DEMO_ON = process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_KILN_DEMO === '1';
 const SITE = 'https://www.glassworks.dev/frames';
 
-/** Kiln's release route, from the page (a bare `fetch` held by an object is an illegal invocation). */
+/** The release list and Refract, from the page (a bare `fetch` held by an object is an illegal invocation). */
 const releaseRoute = (...a: Parameters<typeof fetch>) => fetch(...a);
 
 function realSession(dev: UsbFrame, base: string, on: boolean, from: ApkFrom = 'local', handOver?: (p: Device, installed: UsbInstalled) => void): UsbSession {

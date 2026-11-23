@@ -69,13 +69,13 @@ describe('the build and APK', () => {
     expect(abiFor(on('UNKNOWN_DESKTOP'), FRAMES)).toEqual({ abi: 'arm64-v8a', sure: false });
   });
 
-  it('links the APK through Kiln\'s release route, and nothing before a release', () => {
-    expect(download('generic-android', rel('generic-android'), 'armeabi-v7a')).toEqual({
-      href: '/api/release/generic-android?tag=generic-android-v1.0.0&name=glassworks-generic-android-armeabi-v7a-1.0.0.apk',
+  it('links the APK through Refract, and nothing before a release', () => {
+    expect(download(rel('generic-android'), 'armeabi-v7a')).toEqual({
+      href: 'https://refract.glassworks.dev/glassworks/generic-android-v1.0.0/glassworks-generic-android-armeabi-v7a-1.0.0.apk',
       name: 'glassworks-generic-android-armeabi-v7a-1.0.0.apk', version: '1.0.0',
     });
-    expect(download('generic-android', { state: 'none' }, 'arm64-v8a')).toBeUndefined();
-    expect(download('generic-android', { ...rel('generic-android'), assets: [] }, 'arm64-v8a')).toBeUndefined();
+    expect(download({ state: 'none' }, 'arm64-v8a')).toBeUndefined();
+    expect(download({ ...rel('generic-android'), assets: [] }, 'arm64-v8a')).toBeUndefined();
   });
 
   it('reads the line\'s latest from Kiln\'s route', async () => {
@@ -130,10 +130,10 @@ describe('the screens', () => {
     expect(heading()).toBe('This is an Android tablet');
   });
 
-  it('Get: the latest release\'s APK through Kiln\'s route, as a download', async () => {
+  it('Get: the latest release\'s APK through Refract, as a download', async () => {
     await show('get');
     const a = screen.getByText('Download');
-    expect(a.getAttribute('href')).toBe('/api/release/generic-android?tag=generic-android-v1.0.0&name=glassworks-generic-android-arm64-v8a-1.0.0.apk');
+    expect(a.getAttribute('href')).toBe('https://refract.glassworks.dev/glassworks/generic-android-v1.0.0/glassworks-generic-android-arm64-v8a-1.0.0.apk');
     expect(a.getAttribute('download')).toBe('glassworks-generic-android-arm64-v8a-1.0.0.apk');
     expect(embers()).toEqual(['Download']);
     expect(screen.queryByText(/Get that build/)).toBeNull();
@@ -143,7 +143,7 @@ describe('the screens', () => {
     // a 32-bit userspace on a 64-bit chip, in Samsung Internet, whose platform says what it runs as
     await show('get-32bit');
     const a = screen.getByText('Download');
-    expect(a.getAttribute('href')).toBe('/api/release/generic-android?tag=generic-android-v1.0.0&name=glassworks-generic-android-armeabi-v7a-1.0.0.apk');
+    expect(a.getAttribute('href')).toBe('https://refract.glassworks.dev/glassworks/generic-android-v1.0.0/glassworks-generic-android-armeabi-v7a-1.0.0.apk');
     expect(document.querySelectorAll('a[download]')).toHaveLength(1);
     expect(document.body.textContent).not.toMatch(/(32|64)-bit/);
     expect(screen.getByText('let us know').tagName).toBe('BUTTON'); // the device report sheet (test/report-form.test.tsx)
@@ -173,16 +173,16 @@ describe('the screens', () => {
 
   it('Get on Android 7: the legacy build, and Unknown sources first', async () => {
     await show('get-legacy');
-    expect(screen.getByText('Download').getAttribute('href')).toContain('tag=generic-android-legacy-v1.0.0');
+    expect(screen.getByText('Download').getAttribute('href')).toContain('/glassworks/generic-android-legacy-v1.0.0/');
     expect(screen.getByText('Open Settings').getAttribute('href')).toBe(SETTINGS_LINKS.settings);
   });
 
   it('Get with the version hidden on an older Chrome: either build', async () => {
     await show('get-either');
-    expect(screen.getByText('Download').getAttribute('href')).toContain('tag=generic-android-v1.0.0');
+    expect(screen.getByText('Download').getAttribute('href')).toContain('/glassworks/generic-android-v1.0.0/');
     fireEvent.click(screen.getByText('Android 6 or 7? Get the legacy build'));
     await act(() => new Promise((r) => setTimeout(r, 0)));
-    expect(screen.getByText('Download').getAttribute('href')).toContain('tag=generic-android-legacy-v1.0.0');
+    expect(screen.getByText('Download').getAttribute('href')).toContain('/glassworks/generic-android-legacy-v1.0.0/');
   });
 
   it('Get before the first release: not out yet, and no download', async () => {
@@ -197,7 +197,7 @@ describe('the screens', () => {
     render(<TabletScreens on={on('OLD_CHROME_DESKTOP')} start="get" load={load} />);
     await screen.findByText('Glassworks for Android isn\'t out yet');
     fireEvent.click(screen.getByText('Android 6 or 7? Get the legacy build'));
-    expect((await screen.findByText('Download')).getAttribute('href')).toContain('tag=generic-android-legacy-v1.0.0');
+    expect((await screen.findByText('Download')).getAttribute('href')).toContain('/glassworks/generic-android-legacy-v1.0.0/');
   });
 
   it('Get when the releases can\'t be read: says so, and tries again', async () => {

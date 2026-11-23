@@ -8,6 +8,7 @@ import { build } from 'esbuild';
 import { Miniflare, type MiniflareOptions, type Request as MfRequest, Response as MfResponse } from 'miniflare';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import allowlist from '../allowlist.json';
+import lines from '../releases.json';
 
 const dir = join(__dirname, '..');
 const config = JSON.parse(readFileSync(join(dir, 'wrangler.json'), 'utf8'));
@@ -26,12 +27,14 @@ const TIMEOUT_MS = 300;
 const limit = (name: string): number => config.ratelimits.find((r: { name: string }) => r.name === name).simple.limit;
 const FULL = limit('FULL_DOWNLOADS');
 const RESUMES = limit('RESUMES');
+const SMALL = limit('SMALL_FILES');
 const DATE = 'Thu, 05 Nov 2026 00:58:46 GMT';
 
 /** A release file the fake host serves: its length and the byte at each offset. */
 interface FakeFile { size: number; byte: (i: number) => number }
 const sums: FakeFile = { size: SUMS_TEXT.length, byte: (i) => SUMS_TEXT.charCodeAt(i) };
 const pattern: FakeFile = { size: allowlist[IMG].size, byte: (i) => i % 251 };
+const apkFile: FakeFile = { size: 100_000, byte: (i) => (i * 7) % 256 };
 const pick = (f: FakeFile, from: number, to: number) => Uint8Array.from({ length: to - from + 1 }, (_, k) => f.byte(from + k));
 /** The bytes from..to, made 64 KiB at a time as they are read, so a whole image never sits in memory. */
 function stream(f: FakeFile, from: number, to: number): ReadableStream<Uint8Array> {
@@ -583,5 +586,166 @@ describe('a file from a repository at a pinned commit', () => {
   it('is listed at / with its source at the commit', async () => {
     const index = (await (await fake.dispatchFetch('http://localhost:8787/')).json()) as { assets: { id: string; source: string }[] };
     expect(index.assets.find((a) => a.id === KEY)?.source).toBe(`https://raw.githubusercontent.com/git-nimrod/glass-panes/${pinned.commit}/mirror-app/android/project-key/adbkey`);
+  });
+});
+
+describe("Glassworks' own release files (releases.json)", () => {
+  const S1 = 'glassworks/v0.4.3/s1-kiosk-0.4.3.apk';
+  const GENERIC = 'glassworks/generic-android-v1.2.3/glassworks-generic-android-armeabi-v7a-1.2.3.apk';
+  const SUM_OF = (name: string) => `${'ab'.repeat(32)}  ${name}\n`;
+  const text = (t: string): FakeFile => ({ size: t.length, byte: (i) => t.charCodeAt(i) });
+  beforeEach(() => {
+    files['s1-kiosk-0.4.3.apk'] = apkFile;
+    files['glassworks-generic-android-armeabi-v7a-1.2.3.apk'] = apkFile;
+    files['s1-kiosk-0.4.3.apk.sha256'] = text(SUM_OF('s1-kiosk-0.4.3.apk'));
+  });
+
+  it('is this repository only, with anchored tag patterns and {version} in every name', () => {
+    expect(lines).toMatchObject({ owner: 'GlassworksHQ', repo: 'glassworks', prefix: 'glassworks' });
+    expect(Object.keys(allowlist).some((id) => id.split('/')[0] === lines.prefix)).toBe(false);
+    for (const l of lines.lines) {
+      expect(l.tag).toMatch(/^\^.*\$$/);
+      expect(new RegExp(`${l.tag}|`).exec('')!.length - 1, l.line).toBe(1);
+      for (const a of l.assets) expect(a).toMatch(/^[A-Za-z0-9][A-Za-z0-9._-]*\{version\}[A-Za-z0-9._-]*\.apk$/);
+    }
+  });
+
+  it.each([
+    ['v0.4.3', 's1-kiosk-0.4.3.apk'],
+    ['aqara-s1-plus-v1.12.0', 's1-kiosk-1.12.0.apk'],
+    ['generic-android-v1.0.0', 'glassworks-generic-android-arm64-v8a-1.0.0.apk'],
+    ['generic-android-v1.0.0', 'glassworks-generic-android-armeabi-v7a-1.0.0.apk'],
+    ['generic-android-legacy-v0.2.0', 'glassworks-generic-android-legacy-arm64-v8a-0.2.0.apk'],
+    ['generic-android-legacy-v0.2.0', 'glassworks-generic-android-legacy-armeabi-v7a-0.2.0.apk.sha256'],
+  ])('admits %s %s, from this repository', async (tag, name) => {
+    files[name] = name.endsWith('.sha256') ? text(SUM_OF(name)) : apkFile;
+    const res = await get(`glassworks/${tag}/${name}`, { method: 'HEAD' });
+    expect(res.status).toBe(200);
+    expect(seen[0]!.url).toBe(`https://github.com/GlassworksHQ/glassworks/releases/download/${tag}/${name}`);
+  });
+
+  it("streams a line's APK from this repository's release, as an APK, and resumes it", async () => {
+    const res = await get(S1);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toBe('application/vnd.android.package-archive');
+    expect(res.headers.get('Content-Length')).toBe('100000');
+    expect(res.headers.get('Accept-Ranges')).toBe('bytes');
+    expect(res.headers.get('Content-Disposition')).toBe('attachment; filename="s1-kiosk-0.4.3.apk"');
+    expect(res.headers.get('Cache-Control')).toBe('no-store');
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBe(KILN);
+    expect(res.headers.get('Link')).toBe('<https://github.com/GlassworksHQ/glassworks>; rel="author", <https://github.com/GlassworksHQ/glassworks/releases/download/v0.4.3/s1-kiosk-0.4.3.apk>; rel="canonical"');
+    expect(new Uint8Array(await res.arrayBuffer())).toEqual(pick(apkFile, 0, apkFile.size - 1));
+    expect(seen[0]!.url).toBe('https://github.com/GlassworksHQ/glassworks/releases/download/v0.4.3/s1-kiosk-0.4.3.apk');
+    for (const r of seen) expect(r.cf).toMatchObject({ cacheLevel: 'bypass' });
+
+    const part = await get(GENERIC, { headers: { Range: 'bytes=99990-', 'If-Range': ETAG } });
+    expect(part.status).toBe(206);
+    expect(part.headers.get('Content-Range')).toBe('bytes 99990-99999/100000');
+    expect(new Uint8Array(await part.arrayBuffer())).toEqual(pick(apkFile, 99990, 99999));
+  });
+
+  it('answers HEAD with the size, and a range past the end with 416 and the size GitHub gives', async () => {
+    const head = await get(S1, { method: 'HEAD' });
+    expect(head.status).toBe(200);
+    expect(head.headers.get('Content-Length')).toBe('100000');
+    expect((await head.arrayBuffer()).byteLength).toBe(0);
+    const past = await get(S1, { headers: { Range: 'bytes=100000-' } });
+    expect(past.status).toBe(416);
+    expect(past.headers.get('Content-Range')).toBe('bytes */100000');
+    await past.arrayBuffer();
+  });
+
+  it("answers a malformed Range with 416 before asking GitHub, without a size it doesn't know yet", async () => {
+    const res = await get(S1, { headers: { Range: 'bytes=0-1,5-6' } });
+    expect(res.status).toBe(416);
+    expect(res.headers.get('Content-Range')).toBeNull();
+    await res.arrayBuffer();
+    expect(seen).toEqual([]);
+  });
+
+  it("reads an APK's .sha256 whole, checks it holds a SHA-256, and sends it as text with a Range ignored", async () => {
+    const res = await get(`${S1}.sha256`, { headers: { Range: 'bytes=5-' } });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Content-Type')).toBe('text/plain; charset=utf-8');
+    expect(await res.text()).toBe(SUM_OF('s1-kiosk-0.4.3.apk'));
+    expect(seen.map((r) => new URL(r.url).host)).toEqual(['github.com', 'release-assets.githubusercontent.com']);
+    expect(seen.every((r) => !r.headers.has('Range'))).toBe(true);
+  });
+
+  it.each([
+    ['not a SHA-256', 'hello\n'],
+    ['too long', `${'ab'.repeat(32)}  ${'x'.repeat(2000)}\n`],
+  ])('refuses a .sha256 that is %s, sending nothing', async (_, body) => {
+    files['s1-kiosk-0.4.3.apk.sha256'] = text(body);
+    const res = await get(`${S1}.sha256`);
+    expect(res.status).toBe(502);
+    expect(res.headers.get('Content-Disposition')).toBeNull();
+    await res.arrayBuffer();
+  });
+
+  it('refuses an APK bigger than Refract serves, or without a length', async () => {
+    files['s1-kiosk-0.4.3.apk'] = { size: 256 * 1024 * 1024 + 1, byte: () => 0 };
+    let res = await get(S1, { headers: { Range: 'bytes=0-0' } });
+    expect(res.status).toBe(502);
+    expect(await res.text()).toMatch(/at most 268435456/);
+    releases = () => new MfResponse(new ReadableStream({ start: (c) => (c.enqueue(new Uint8Array(3)), c.close()) }));
+    res = await get(S1);
+    expect(res.status).toBe(502);
+    await res.arrayBuffer();
+  });
+
+  it.each([
+    ['another line\'s file for the tag', 'glassworks/v0.4.3/glassworks-generic-android-arm64-v8a-0.4.3.apk'],
+    ['another version\'s file', 'glassworks/v0.4.3/s1-kiosk-0.4.4.apk'],
+    ['an ABI the line doesn\'t build', 'glassworks/generic-android-v1.2.3/glassworks-generic-android-x86_64-1.2.3.apk'],
+    ['a tag no line has', 'glassworks/v0.4.3-rc1/s1-kiosk-0.4.3.apk'],
+    ['another file of the release', 'glassworks/v0.4.3/s1-bundle-0.4.3.zip'],
+    ['a .sha256 of a .sha256', `${S1}.sha256.sha256`],
+    ['another prefix', 'glass-panes/v0.4.3/s1-kiosk-0.4.3.apk'],
+    ['a path inside the tag', 'glassworks/v0.4.3/x/s1-kiosk-0.4.3.apk'],
+    ['an encoded slash', 'glassworks/v0.4.3%2F..%2Fx/s1-kiosk-0.4.3.apk'],
+    ['a trailing slash', `${S1}/`],
+    ['upper case', S1.toUpperCase()],
+    ['the prefix alone', 'glassworks'],
+    ['another file of the release', 'glassworks/v0.4.3/SHA256SUMS'],
+    ['a .sha256 beside no APK', 'glassworks/v0.4.3/s1-kiosk-0.4.3.sha256'],
+    ['a .sha256 of another version', 'glassworks/v0.4.3/s1-kiosk-0.4.4.apk.sha256'],
+    ['any name', 'glassworks/v0.4.3/evil.apk'],
+    ["another line's tag", 'glassworks/generic-android-v0.4.3/s1-kiosk-0.4.3.apk'],
+    ['a branch', 'glassworks/main/s1-kiosk-0.4.3.apk'],
+    ['a pre-release', 'glassworks/v0.4.3-rc1/s1-kiosk-0.4.3-rc1.apk'],
+    ['a path out of the tag', 'glassworks/v0.4.3/../../evil/repo/s1-kiosk-0.4.3.apk'],
+    ['an encoded dot-dot', 'glassworks/%2E%2E/s1-kiosk-0.4.3.apk'],
+    ['a full URL as the name', 'glassworks/v0.4.3/https:%2F%2Fgithub.com%2Fevil%2Frepo%2Fs1-kiosk-0.4.3.apk'],
+  ])('answers 404 to %s and never asks GitHub', async (_, path) => {
+    const res = await get(path);
+    expect(res.status).toBe(404);
+    await res.arrayBuffer();
+    expect(seen).toEqual([]);
+  });
+
+  it('counts an APK on FULL_DOWNLOADS and a .sha256 on SMALL_FILES, so a .sha256 never uses up a download', async () => {
+    const ip = '198.51.100.20';
+    for (let i = 0; i < SMALL; i++) {
+      const res = await get(`${S1}.sha256`, { ip });
+      expect(res.status).toBe(200);
+      await res.arrayBuffer();
+    }
+    const busy = await get(`${S1}.sha256`, { ip });
+    expect(busy.status).toBe(429);
+    expect(busy.headers.get('Retry-After')).toBe('60');
+    await busy.arrayBuffer();
+    for (let i = 0; i < FULL; i++) {
+      const res = await get(S1, { ip });
+      expect(res.status).toBe(200);
+      await res.arrayBuffer();
+    }
+    expect((await get(S1, { ip })).status).toBe(429);
+  });
+
+  it('lists the lines at /', async () => {
+    const index = (await (await get('')).json()) as { releases: { url: string; lines: unknown } };
+    expect(index.releases.url).toBe('https://refract.glassworks.dev/glassworks/<tag>/<name>');
+    expect(index.releases.lines).toEqual(lines.lines);
   });
 });

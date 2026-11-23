@@ -30,6 +30,7 @@ line of each version is what Home Assistant shows on the update card. A change o
 - **Touchless setup & notification polish.** Keeps non-touch screens awake during setup, removes tap-only buttons and persistent notification pills on non-touch displays, fits the timer done screen cleanly on portrait screens, and enables automatic Bluetooth and hotspot Wi-Fi setup on the Mirror without touch input.
 - **Setup flow, camera, and sensors.** Keeps the setup screen visible across the post-Wi-Fi restart and immediately after on-panel sign-in, reports the camera entity available as soon as ESPHome connects, returns accurate ONVIF snapshot sizes, formats *Screen and sensors* in plain English, updates Home Assistant's *Silent updates* sensor immediately after permission changes, and stops prompting for system log access on Android 10 and newer.
 - **The screen stays on while Assist answers.** The screen no longer turns off in the middle of a voice run when the idle timeout hits, whether Assist is listening, thinking or reading a long answer, with the orb or the edge glow. The idle countdown starts again once the run is over.
+- **Kiln's app download picks up where it stopped.** When the connection drops while Kiln downloads Glassworks for your tablet or Mirror, it carries on from where it was instead of failing, and when the download server is busy it waits a moment and tries again. The download still has to match the hash published with the release before Kiln uses it.
 
 ## [0.2.0] - 2026-11-19
 
