@@ -56,7 +56,7 @@ open an adb stream, and the device's mode when it's known. The tests drive it wi
 | `source` | A `Blob` (a `File`), or a `SideloadReader`: `{ size, read(offset, length) }` for bytes from somewhere else. A source must not change during the transfer: the recovery checks each block against the first time it read it |
 | `onProgress` | Called after every block with `{ block, sent, size }`. `sent` counts repeats: a recovery may read a block more than once. LineageOS's wiki says its builds are usually read about once (adb's `Total xfer: 1.00x`), and adb counts on about twice for other packages (once to verify, once to install), so `sent / size` is a fair bar for the first and runs to 2 for the second |
 | `signal` | Cancels. The stream closes, so the recovery stops the install, and the call rejects with the signal's reason |
-| `stallMs` | How long the device may go without asking for a block before the call gives up. The default is 10 minutes. A prompt on the device's screen (an unsigned build's "Install anyway?") stops its requests until someone answers it; `Infinity` waits for ever |
+| `stallMs` | How long the device may go without asking for a block, or the source take to give one, before the call gives up. The default is 10 minutes. A prompt on the device's screen (an unsigned build's "Install anyway?") stops its requests until someone answers it; `Infinity` waits for ever |
 
 It resolves with `{ ended, sent }` when the transfer is over:
 
@@ -76,7 +76,7 @@ It rejects with a `SideloadError` whose `code` says what went wrong:
 | `closed` | The device closed the stream before it asked for a block, or while it waited for one, or the connection went |
 | `out-of-range` | The device asked for a block past the end of the package |
 | `bad-request` | The device sent something that is neither a block number nor the end |
-| `stalled` | Nothing from the device for `stallMs` |
+| `stalled` | Nothing from the device, or no block from the source, for `stallMs` |
 | `failed` | The device ended with `FAILFAIL`, which only a recovery in rescue mode sends |
 | `source` | The package couldn't be read (a file changed or removed on disk, or a reader that returned the wrong length) |
 

@@ -62,7 +62,8 @@ export interface SideloadOptions {
   /** Stops the sideload: the stream is closed (the device stops the install) and the call rejects with the signal's reason. */
   signal?: AbortSignal;
   /**
-   * How long the device may go without asking for a block (or taking one) before the call gives up with `stalled`.
+   * How long the device may go without asking for a block (or taking one), or the source take to give one, before the
+   * call gives up with `stalled`.
    * Default 10 minutes. A prompt on the device's screen (an unsigned build's "Install anyway?") stops its requests
    * until someone answers it. `Infinity` waits for ever.
    */
@@ -202,7 +203,10 @@ export async function sideload(device: SideloadTransport, source: SideloadSource
 
   try {
     for (;;) {
+      // an abort from onProgress, with the next request or the end already buffered, still stops the sideload
+      stop.signal.throwIfAborted();
       const message = await next();
+      stop.signal.throwIfAborted();
       if (message === undefined) return { ended: 'closed', sent };
       if (message === DONE) return { ended: 'done', sent };
       if (message === FAIL) throw new SideloadError('failed', 'the device says the install failed: its screen says why');
@@ -213,7 +217,7 @@ export async function sideload(device: SideloadTransport, source: SideloadSource
       const length = Math.min(SIDELOAD_BLOCK_SIZE, size - offset);
       let data: Uint8Array;
       try {
-        data = await wait(reader.read(offset, length), undefined);
+        data = await wait(reader.read(offset, length), `the package didn't give block ${block}`);
       } catch (e) {
         if (stop.signal.aborted) throw stop.signal.reason;
         throw new SideloadError('source', `couldn't read block ${block} of the package: was the file changed or moved?`, { cause: e });

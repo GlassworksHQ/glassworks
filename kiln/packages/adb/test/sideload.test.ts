@@ -190,6 +190,16 @@ describe('sideload', () => {
     expect(dev.closed()).toBeGreaterThan(0);
   });
 
+  it('cancel from onProgress with the end already buffered still rejects', async () => {
+    const dev = fakeDevice([[req(0)], [ascii('00000001DONEDONE')]]);
+    const ac = new AbortController();
+    const going = sideload(dev.transport, new Blob([pkg(2 * BS)]), {
+      signal: ac.signal,
+      onProgress: (p) => { if (p.block === 1) ac.abort(new Error('cancelled')); },
+    });
+    await expect(going).rejects.toThrow('cancelled');
+  });
+
   it('cancel before the start opens nothing', async () => {
     const dev = fakeDevice([]);
     await expect(sideload(dev.transport, new Blob([pkg(BS)]), { signal: AbortSignal.abort(new Error('no')) })).rejects.toThrow('no');
@@ -218,6 +228,19 @@ describe('sideload', () => {
       const going = sideload(dev.transport, new Blob([pkg(BS)]), { stallMs: 1000 }).catch((x: unknown) => x);
       await vi.advanceTimersByTimeAsync(1500);
       expect(await going).toMatchObject({ code: 'stalled' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('stalled: a source that never gives a block', async () => {
+    vi.useFakeTimers();
+    try {
+      const dev = fakeDevice([req(0)]);
+      const going = sideload(dev.transport, { size: BS, read: () => new Promise(() => {}) }, { stallMs: 1000 }).catch((x: unknown) => x);
+      await vi.advanceTimersByTimeAsync(1500);
+      expect(await going).toMatchObject({ code: 'stalled', message: expect.stringMatching(/didn't give block 0/) });
+      expect(dev.closed()).toBeGreaterThan(0);
     } finally {
       vi.useRealTimers();
     }
