@@ -90,6 +90,45 @@ const missingName = (m: string) => {
   return task ? `${pageName(page).toLowerCase()} ${TASK_NAME[task]?.toLowerCase() ?? task}` : m === "start" ? "restart" : m;
 };
 
+/** What a missing task is in a sentence, and whether the words are plural (report.py's settled_note says the same) */
+const MISSING_WORDS: Record<string, [string, boolean]> = {
+  tap: ["taps", true],
+  scroll: ["scrolling", false],
+  updates: ["live updates", true],
+  load: ["opening the view", false],
+  camera: ["cameras", true],
+  blocking: ["blocking", false],
+  dialog: ["more-info dialogs", true],
+};
+const missingWords = (task: string): [string, boolean] => MISSING_WORDS[task] ?? [task, false];
+const and = (words: string[]) => (words.length < 2 ? words.join("") : `${words.slice(0, -1).join(", ")} and ${words[words.length - 1]}`);
+
+/**
+ * What wasn't measured, when it can't change the letter (grade.ts missing_settled_by), and why: "Cameras on heavy
+ * weren't measured fully, but that can't change the letter: heavy already falls short on blocking."
+ */
+function settledNote(g: Graded["grade"]): string | null {
+  const by = g.missing_settled_by;
+  const missing = g.missing ?? [];
+  if (!by || !missing.length) return null;
+  const named = missing.map((m): [string, boolean] => {
+    if (m === "start") return ["the restart", false];
+    const [page, task] = m.split(".");
+    const [word, plural] = missingWords(task);
+    return [`${word} on ${pageName(page).toLowerCase()}`, plural];
+  });
+  const plural = named.length > 1 || named[0][1];
+  const top = rubric.grade.letters.find((l) => l.letter === g.grade);
+  const why = by.capped_by_start
+    ? `a slow restart already caps it at ${rubric.grade.start_cap.letter}`
+    : by.limits.length
+      ? by.limits.map((x) => `${pageName(x.page).toLowerCase()} already falls short on ${and(x.tasks.map((t) => missingWords(t)[0]))}`).join("; ")
+      : top
+        ? `${top.letter} needs only ${and(Object.keys(top.needs).map((p) => pageName(p).toLowerCase()))}`
+        : "the letter doesn't rest on it";
+  return `${cap(and(named.map(([n]) => n)))} ${plural ? "weren't" : "wasn't"} measured fully, but that can't change the letter: ${why}.`;
+}
+
 function Levels({ c }: { c: Graded }) {
   return (
     <span className={s.levels}>
@@ -248,10 +287,14 @@ function Meta({ c }: { c: Graded }) {
           <span className={s.prov}>Provisional</span>
           {[
             ...(sum.gaps ?? []),
-            ...((c.grade.missing ?? []).length ? [`not measured: ${c.grade.missing!.map(missingName).join(", ")}`] : []),
+            // What is missing makes it provisional only when it could change the letter; else it is said below.
+            ...((c.grade.missing ?? []).length && !c.grade.missing_settled_by
+              ? [`not measured: ${c.grade.missing!.map(missingName).join(", ")}`]
+              : []),
           ].join("; ")}
         </p>
       )}
+      {settledNote(c.grade) && <p>{settledNote(c.grade)}</p>}
       {c.grade.transport_caveat && (
         <p>
           {cap(c.grade.transport_caveat)}. Letters measured over different camera paths aren&apos;t comparable.

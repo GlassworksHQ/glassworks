@@ -1442,7 +1442,8 @@ class Build(unittest.TestCase):
         self.assertEqual(g["grade"], "E")
         self.assertEqual(g["headline"], "test-frame: Clarity E, not a good wall panel, even for light dashboards. Held back by "
                                         "light dashboards: scrolling averages 18.5 fps (p95 67 ms); opening the "
-                                        "view wasn't measured. Provisional: not everything was measured.")
+                                        "view wasn't measured. Opening the view on light wasn't measured fully, but that can't "
+                                        "change the letter: light already falls short on scrolling.")
         self.assertNotIn("53 fps", g["headline"])
 
     def test_an_a_says_every_task_holds(self):
@@ -1713,7 +1714,10 @@ class Build(unittest.TestCase):
         g = R.build(self.dir)["grade"]
         self.assertEqual(g["grade"], "A+")                     # the rule: A+ needs only heavy
         self.assertNotIn("Every task holds", g["headline"])
-        self.assertIn("Provisional", g["headline"])
+        # The missing pages can't change it: not provisional, and the headline says what is missing and why.
+        self.assertFalse(g["provisional"])
+        self.assertNotIn("Provisional", g["headline"])
+        self.assertIn("weren't measured fully, but that can't change the letter: A+ needs only heavy.", g["headline"])
 
     def build_with(self, measured_on=None, **page):
         if measured_on:
@@ -2482,10 +2486,10 @@ class NoTouch(unittest.TestCase):
 
     def test_other_missing_evidence_is_still_provisional(self):
         def no_tap(run):
-            run["tiers"]["light"]["input"] = None         # light's taps lost: not measured
+            run["tiers"]["heavy"]["input"] = None         # heavy's taps lost: not measured, and they decide an A+
         g = self.build(False, no_tap)["grade"]
         self.assertTrue(g["provisional"])
-        self.assertEqual(g["missing"], ["light.tap"])
+        self.assertEqual(g["missing"], ["heavy.tap"])
         self.assertFalse(any("scroll" in r for r in g.get("provisional_reasons") or []), g.get("provisional_reasons"))
 
     def test_a_frame_with_touch_whose_scroll_is_missing_is_provisional_as_before(self):
@@ -2633,8 +2637,9 @@ class Regrade(unittest.TestCase):
         self.assertEqual(R.censoring_band(runs), 0)
 
     def test_a_published_incomplete_summary_stays_published(self):
-        """The Pixel Tablet's published result (run 4, 2026-11-19) is provisional on heavy's late getStats, so its
-        clarity.json was exported incomplete (complete: false). Graded again, it stays so: the same three files."""
+        """The Pixel Tablet's published result (run 4, 2026-11-19) misses heavy's camera stalls (getStats answered
+        late), so its clarity.json was exported incomplete (complete: false). Graded again, it stays so: the same three
+        files. Heavy already fails on blocking, so the B is final."""
         src = os.path.join(os.path.dirname(os.path.dirname(self.PERF)), "frames", "google-pixel-tablet", "clarity")
         d = tempfile.mkdtemp()
         for name in ("report.json", "report.md", "clarity.json"):
@@ -2647,7 +2652,10 @@ class Regrade(unittest.TestCase):
         with open(os.path.join(d, "clarity.json")) as f:
             summ = json.load(f)
         g = G.grade_summary(summ)
-        self.assertEqual((summ["complete"], g["status"], g["grade"], g["provisional"]), (False, "graded", "B", True))
+        # Heavy's camera is missing, but heavy already fails on blocking: a final B, and complete stays false.
+        self.assertEqual((summ["complete"], g["status"], g["grade"], g["provisional"]), (False, "graded", "B", False))
+        self.assertEqual((g["missing"], summ["gaps"]), (["heavy.camera"], []))
+        self.assertIn("getStats answered late", " ".join(summ["unmeasured"]))
 
     def test_raw_files_that_lost_a_run_dont_overwrite_the_report(self):
         """CodeRabbit on #656: with a refstart file gone, a rebuild would drop that graded run from the report."""

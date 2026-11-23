@@ -14,9 +14,10 @@ device-unique (no serial, no addresses).
   tools/perf/summary.py perf-s1/report.json perf-s1/summary.json [--report-url report.json]
                         [--allow-provisional]
 
-A summary with gaps (a run failed, a task not measured) or one that isn't comparable (not at the
-default zoom) is not written unless --allow-provisional is given; then `complete` is false and the
-facts say why.
+A summary with gaps (a run failed, a task not measured that could change the letter) or one that isn't
+comparable (not at the default zoom) is not written unless --allow-provisional is given; then `complete` is
+false and the facts say why. One missing only what can't change the letter is written: `complete` is false,
+and `unmeasured` says why it is missing.
 """
 import argparse
 import json
@@ -191,6 +192,9 @@ def measurements(rep, report_url="report.json"):
         "restart_ms": _graded(ref.get("start_ms")),
         # Measurement facts, not grade states: what is short, and why the numbers can't be compared.
         "gaps": list(g.get("provisional_reasons") or []),
+        # Why a measurement is missing that can't change the letter (grade.py missing_settled_by): a fact, not a gap.
+        # Only when there is one, so every other summary stays as it was.
+        **({"unmeasured": list(g["unmeasured"])} if g.get("unmeasured") else {}),
         # Not comparable: not at the default zoom, or nothing was measured to grade (--skip-reference).
         "not_comparable": (vp.get("reason") if vp.get("state") == "refused"
                            else g.get("refused") if g.get("grade") is None else None),
@@ -213,13 +217,15 @@ def transport_summary(t):
 
 
 def summarise(rep, report_url="report.json", allow_provisional=False):
-    """The summary, refused (Refused) when it has gaps, missing measurements or isn't comparable,
-    unless allow_provisional; `complete` says which."""
+    """The summary, refused (Refused) when its letter is provisional (gaps, or missing measurements that could change
+    it), there is none, or it isn't comparable, unless allow_provisional. `complete` says whether everything was
+    measured: a summary missing only what can't change the letter is exported, with complete false."""
     out = measurements(rep, report_url)
     g = G.grade_summary(out)
     missing = g.get("missing") or []
     complete = not out["gaps"] and not out["not_comparable"] and not missing and g["status"] == "graded"
-    if not complete and not allow_provisional:
+    final = not out["not_comparable"] and g["status"] == "graded" and not g["provisional"]
+    if not final and not allow_provisional:
         why = out["not_comparable"] or "; ".join(out["gaps"] + (["not measured: " + ", ".join(missing)] if missing else [])) \
             or g.get("why", "")
         raise Refused(f"the measurements are incomplete or not comparable ({why}); "

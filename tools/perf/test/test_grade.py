@@ -425,25 +425,35 @@ class SharedCases(unittest.TestCase):
         for c in self.data["cases"]:
             with self.subTest(c["name"]):
                 g = G.grade(c["tiers"], c["start_ms"], touch=c.get("touch", True))   # touch: false, rubric 2
-                got = {k: g[k] for k in c["expect"] if k != "limits"}
+                got = {k: g[k] for k in c["expect"] if k != "limits" and k in g}
                 got["limits"] = G.next_limits(g)
                 self.assertEqual(got, c["expect"])
+                # Only when something is missing and it can't change the letter (grade.ts the same).
+                self.assertEqual("missing_settled_by" in g, "missing_settled_by" in c["expect"])
 
-    def test_no_touch_cases_are_there(self):
-        """Rubric 2: the shared cases cover a frame without touch (scroll n/a, from the rest, provisional only for the
-        rest) and a frame with touch whose scroll is missing (provisional, as before)."""
-        no_touch = [c for c in self.data["cases"] if c.get("touch") is False]
-        self.assertTrue(any(not c["expect"]["provisional"] for c in no_touch))
-        self.assertTrue(any(c["expect"]["provisional"] and "scroll" not in " ".join(c["expect"]["missing"]) for c in no_touch))
-        for c in no_touch:
-            self.assertEqual({b["scroll"] for b in c["expect"]["bands"].values()}, {G.NOT_APPLICABLE}, c["name"])
-            self.assertEqual(c["expect"]["not_applicable"], {"scroll": "this frame has no touch"}, c["name"])
-            self.assertFalse(any(t.endswith(".scroll") for t in c["expect"]["missing"]), c["name"])
-            self.assertFalse(any("scroll" in x["tasks"] for x in c["expect"]["limits"]), c["name"])
-        touch = next(c for c in self.data["cases"] if c["name"].startswith("rubric 2: touch, scroll not measured"))
-        self.assertTrue(touch["expect"]["provisional"])
-        self.assertIn("light.scroll", touch["expect"]["missing"])
-        self.assertNotIn("not_applicable", G.grade(touch["tiers"], touch["start_ms"]))   # a frame with touch: as before
+    def test_missing_makes_it_provisional_only_when_it_could_change_the_letter(self):
+        """The shared cases cover each side of the rule: missing on a page that already fails a measured task (not
+        provisional, and why), missing that alone holds back the next letter, a missing restart that could cap the
+        letter, and one that can't."""
+        by = {c["name"]: c["expect"] for c in self.data["cases"]}
+        settled = by["missing, can't change the letter: heavy's camera not measured, heavy already fails on blocking: "
+                     "B, not provisional"]
+        self.assertEqual((settled["grade"], settled["provisional"], settled["missing"]), ("B", False, ["heavy.camera"]))
+        self.assertEqual(settled["missing_settled_by"],
+                         {"capped_by_start": False, "limits": [{"page": "heavy", "needs": "good", "tasks": ["blocking"]}]})
+        alone = by["missing, alone holds back the next letter: heavy's camera not measured, the rest premium: B, provisional"]
+        self.assertEqual((alone["grade"], alone["provisional"], alone["missing"]), ("B", True, ["heavy.camera"]))
+        start = by["missing restart, could cap the letter at C: A+, provisional"]
+        self.assertEqual((start["grade"], start["provisional"], start["missing"]), ("A+", True, ["start"]))
+        low = by["missing restart, can't change a D (the cap never raises a letter): not provisional"]
+        self.assertEqual((low["grade"], low["provisional"], low["missing"]), ("D", False, ["start"]))
+        capped = by["missing, can't change the letter: heavy's camera not measured, a slow restart caps it at C: "
+                    "not provisional"]
+        self.assertEqual((capped["grade"], capped["provisional"], capped["missing_settled_by"]),
+                         ("C", False, {"capped_by_start": True, "limits": []}))
+        for c in self.data["cases"]:
+            if "provisional" in c["expect"] and not c["expect"].get("missing"):
+                self.assertFalse(c["expect"]["provisional"], c["name"])
 
     def test_the_name_lives_in_rubric_json(self):
         self.assertEqual((G.NAME, G.RUBRIC["name"]), ("Clarity", "Clarity"))

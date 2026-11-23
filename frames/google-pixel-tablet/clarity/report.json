@@ -251,7 +251,7 @@
   "grade": "B",
   "meaning": "a good wall panel for typical dashboards, with a camera",
   "capped_by_start": false,
-  "provisional": true,
+  "provisional": false,
   "missing": [
    "heavy.camera"
   ],
@@ -303,14 +303,26 @@
    "value": 2926.0,
    "band": "needs-improvement"
   },
+  "missing_settled_by": {
+   "capped_by_start": false,
+   "limits": [
+    {
+     "page": "heavy",
+     "needs": "good",
+     "tasks": [
+      "blocking"
+     ]
+    }
+   ]
+  },
+  "unmeasured": [
+   "heavy: 3 camera run(s) whose receiver counts left up to 1.0 s of the window out (getStats answered late): stalls n/a, not measured"
+  ],
   "viewport": {
    "state": "ok",
    "reason": null
   },
-  "provisional_reasons": [
-   "heavy: 3 camera run(s) whose receiver counts left up to 1.0 s of the window out (getStats answered late): stalls n/a, not measured"
-  ],
-  "headline": "Google Pixel Tablet: Clarity B, a good wall panel for typical dashboards, with a camera. Held back by large dashboards: a camera takes 2.1 s to show its first frame and shows 100% of its frames; its stalls weren't measured in 3 of 3 run(s); the main thread is blocked for 0.9 s after the view is drawn. Provisional: heavy: 3 camera run(s) whose receiver counts left up to 1.0 s of the window out (getStats answered late): stalls n/a, not measured; not everything was measured."
+  "headline": "Google Pixel Tablet: Clarity B, a good wall panel for typical dashboards, with a camera. Held back by large dashboards: a camera takes 2.1 s to show its first frame and shows 100% of its frames; its stalls weren't measured in 3 of 3 run(s); the main thread is blocked for 0.9 s after the view is drawn. Cameras on heavy weren't measured fully, but that can't change the letter: heavy already falls short on blocking."
  },
  "graded": {
   "reference": {
@@ -15070,7 +15082,7 @@
   "causes": [
    "Memory isn't the limit (1279 of 3721 MB)."
   ],
-  "text": "Typical with a camera dashboards feel good: taps, live updates, opening a view, more-info dialogs and the cameras are quick, and scrolling is smooth. Bigger dashboards slow down: heavy blocks for 0.9 s after it is drawn. Memory isn't the limit (1279 of 3721 MB). Provisional: 2 things weren't measured fully.",
+  "text": "Typical with a camera dashboards feel good: taps, live updates, opening a view, more-info dialogs and the cameras are quick, and scrolling is smooth. Bigger dashboards slow down: heavy blocks for 0.9 s after it is drawn. Memory isn't the limit (1279 of 3721 MB).",
   "rubric": 2
  }
 }

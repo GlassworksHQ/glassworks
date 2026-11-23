@@ -1048,10 +1048,44 @@ def headline(name, g, ref):
             out += f" {lead} {label}: " + "; ".join(phrases) + "."
     if g["capped_by_start"]:
         out += f" A slow restart ({g['start']['value'] / 1000:.1f} s) caps it at {G.START_CAP}."
+    settled = "missing_settled_by" in g
     if g["provisional"]:
-        why = list(g.get("provisional_reasons") or []) + (["not everything was measured"] if g["missing"] else [])
+        why = list(g.get("provisional_reasons") or []) + (["not everything was measured"] if g["missing"] and not settled else [])
         out += " Provisional: " + "; ".join(why) + "."
+    if settled:
+        out += f" {settled_note(g)}."
     return out
+
+
+# What a missing measurement is, in settled_note's words, and whether the words are plural (the site's are the same).
+MISSING_WORDS = {"tap": ("taps", True), "scroll": ("scrolling", False), "updates": ("live updates", True),
+                 "load": ("opening the view", False), "camera": ("cameras", True), "blocking": ("blocking", False),
+                 "dialog": ("more-info dialogs", True)}
+
+
+def _and(words):
+    return words[0] if len(words) == 1 else ", ".join(words[:-1]) + " and " + words[-1]
+
+
+def settled_note(g):
+    """"Cameras on heavy weren't measured fully, but that can't change the letter: heavy already falls short on
+    blocking": what is missing, said plainly when it can't change the letter (grade.py missing_settled_by), and why."""
+    def word(task):
+        return MISSING_WORDS.get(task, (task, False))
+    named = [("the restart", False) if m == "start" else (f"{word(m.split('.')[1])[0]} on {m.split('.')[0]}",
+                                                          word(m.split(".")[1])[1]) for m in g["missing"]]
+    plural = len(named) > 1 or named[0][1]
+    by = g["missing_settled_by"]
+    if by["capped_by_start"]:
+        why = f"a slow restart already caps it at {G.START_CAP}"
+    elif by["limits"]:
+        why = "; ".join(f"{x['page']} already falls short on {_and([word(k)[0] for k in x['tasks']])}" for x in by["limits"])
+    else:
+        # Nothing above the letter: the best one, which needs only its pages.
+        needs = next((n for l, _, n in G.LETTERS if l == g["grade"]), None)
+        why = f"{g['grade']} needs only {_and(list(needs))}" if needs else "the letter doesn't rest on it"
+    what = _and([n for n, _ in named])
+    return f"{what[0].upper()}{what[1:]} {'weren' if plural else 'wasn'}'t measured fully, but that can't change the letter: {why}"
 
 
 # ---- real use (not graded)
@@ -1433,11 +1467,13 @@ def fake_ha_reasons(log, protocol4):
     return out
 
 
-def coverage_reasons(ref, attempted, touch=True):
+def coverage_reasons(ref, attempted, touch=True, settled=(), unmeasured=None):
     """Why the grade is short of data: each band is over the runs attempted, not only those that
     finished. A run that failed, a page that didn't finish, a task not measured, or a scroll that rests
     on rAF only, each make the grade provisional. On a frame without touch (touch False) the scroll isn't
-    graded (rubric.json no_touch), so nothing about it is a reason; every other task's still is."""
+    graded (rubric.json no_touch), so nothing about it is a reason; every other task's still is.
+    settled: the missing measurements that can't change the letter (grade.py missing_settled_by). Why a page's
+    camera is one of them (its runs left open) isn't a reason: it goes to the list `unmeasured`, when given."""
     if not ref:
         return []
     out = []
@@ -1469,18 +1505,20 @@ def coverage_reasons(ref, attempted, touch=True):
         short = [c for c in open_ if (c.get("uncovered_ms") or 0) > CAMERA_UNCOVERED_MAX_MS]
         na = len(open_) - len(short)
         gap, total = whys.count(G.OPEN_GOOD_GAP), whys.count(G.OPEN_FLUID_TOTAL)
+        # Every run open (the page's camera missing) and the letter settled without it: said, not a reason.
+        cam = unmeasured if unmeasured is not None and f"{t}.camera" in settled else out
         if gap:
-            out.append(f"{t}: {gap} camera run(s) whose longest gap, with the part of the window their receiver counts "
+            cam.append(f"{t}: {gap} camera run(s) whose longest gap, with the part of the window their receiver counts "
                        f"left out, could pass good's {CAMERA_UNCOVERED_MAX_MS} ms: good couldn't be confirmed, not measured")
         if total:
-            out.append(f"{t}: {total} camera run(s) whose stalls, with the part of the window their receiver counts left "
+            cam.append(f"{t}: {total} camera run(s) whose stalls, with the part of the window their receiver counts left "
                        f"out, could reach fluid's {FLUID_STALL_TOTAL_MS} ms in all: fluid couldn't be confirmed, not measured")
         if short:
             worst = max(c["uncovered_ms"] for c in short)
-            out.append(f"{t}: {len(short)} camera run(s) whose receiver counts left up to {worst / 1000:.1f} s of the "
+            cam.append(f"{t}: {len(short)} camera run(s) whose receiver counts left up to {worst / 1000:.1f} s of the "
                        "window out (getStats answered late): stalls n/a, not measured")
         if na:
-            out.append(f"{t}: {na} camera run(s) whose stalls couldn't be measured (no freeze counts from the receiver, "
+            cam.append(f"{t}: {na} camera run(s) whose stalls couldn't be measured (no freeze counts from the receiver, "
                        "or no frames to measure gaps over): n/a, not measured")
         rtts = (s_ or {}).get("clock_rtt_ms") or []
         if any(r is None or r > CLOCK_RTT_MS for r in rtts):
@@ -1521,7 +1559,12 @@ def grade_part(device, refs, attempted, fake_log, transport_of, net_of):
         # measurement would let Home Assistant move it) and flagged. A page that finished but kept
         # painting (a clock card) is normal and changes nothing.
         reasons.append("the kiosk's own page never finished loading in a graded run (Home Assistant down?)")
-    reasons += coverage_reasons(ref, attempted, touch)
+    unmeasured = []
+    settled = grade["missing"] if "missing_settled_by" in grade else ()
+    reasons += coverage_reasons(ref, attempted, touch, settled, unmeasured)
+    if unmeasured:
+        # Why a measurement is missing that can't change the letter: kept, and said, but not a reason for provisional.
+        grade["unmeasured"] = unmeasured
     # The fake's log exists since pre-release protocol 4, and in v1.
     reasons += fake_ha_reasons(fake_log, is_current(ref, measured_on) or any(isinstance(p, int) and p >= 4 for p in (ref or {}).get("protocols") or []))
     if ref and ref.get("bad_page_lines"):
@@ -2011,6 +2054,9 @@ def markdown(rep):
            f"**{g['headline']}**", "", notes_md(rep.get("notes") or N.notes(rep)), "",
            # Rubric 2: a frame without touch isn't graded on scrolling, and says so plainly.
            *[x for task, why in na.items() for x in (f"{NA_WORDS.get(task, task)}: not applicable, {why}.", "")],
+           # A measurement missing that can't change the letter: why it is missing (the headline says it can't).
+           *(["Not measured, and it can't change the letter (not a reason for provisional):", "",
+              *[f"- {x}" for x in g["unmeasured"]], ""] if g.get("unmeasured") else []),
            "The grade comes only from the reference dashboards this test ships (light, typical without and with a "
            "camera, heavy), "
            "so it doesn't depend on your Home Assistant. Background load (panes, the radio, heat) still reaches it.", ""]
