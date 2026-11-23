@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MemoryKeyStorage, adbKeyFromPkcs8, loadOrCreateAdbKey, pemToPkcs8 } from '../src';
+import { MemoryKeyStorage, MovedKeyStorage, adbKeyFromPkcs8, loadOrCreateAdbKey, pemToPkcs8 } from '../src';
 
 describe('adb key', () => {
   it('is created once, kept, and its public key is an adb_keys line for the same modulus', async () => {
@@ -32,5 +32,29 @@ describe('adb key', () => {
     expect(k.publicKey.split(' ')[0]).toBe((await loadOrCreateAdbKey(storage)).publicKey.split(' ')[0]);
     expect(k.publicKey.endsWith(' kiln@published-key')).toBe(true);
     expect(() => pemToPkcs8('-----BEGIN RSA PRIVATE KEY-----\nAQID\n-----END RSA PRIVATE KEY-----')).toThrow(/isn't an adb key file/);
+  });
+
+  it('brings the key an older Kiln saved across once, keeps the old copy, and never makes a second key', async () => {
+    const before = new MemoryKeyStorage();
+    const old = await loadOrCreateAdbKey(before); // a browser that used Kiln before the move
+    const now = new MemoryKeyStorage();
+    const moved = await loadOrCreateAdbKey(new MovedKeyStorage(now, before));
+    expect(moved.publicKey).toBe(old.publicKey); // the same key: every device that let it in still does
+    expect(await now.load()).toEqual(await before.load());
+    expect(await before.load()).toBeDefined(); // kept, for a Kiln rolled back to before the move
+    // the next visit reads the new place, even if the old one is gone by then
+    expect((await loadOrCreateAdbKey(new MovedKeyStorage(now, new MemoryKeyStorage()))).publicKey).toBe(old.publicKey);
+  });
+
+  it('a new browser gets a key in the new place only, and an old place it can\'t read is an error, not a new key', async () => {
+    const before = new MemoryKeyStorage();
+    const now = new MemoryKeyStorage();
+    await loadOrCreateAdbKey(new MovedKeyStorage(now, before));
+    expect(await now.load()).toBeDefined();
+    expect(await before.load()).toBeUndefined();
+    const broken = { load: async () => { throw new Error('IndexedDB open failed'); }, save: async () => {} };
+    const empty = new MemoryKeyStorage();
+    await expect(loadOrCreateAdbKey(new MovedKeyStorage(empty, broken))).rejects.toThrow(/IndexedDB open failed/);
+    expect(await empty.load()).toBeUndefined();
   });
 });
