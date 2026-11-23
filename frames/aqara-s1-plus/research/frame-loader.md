@@ -801,19 +801,41 @@ entity showed `1.0.0 (boot image)`, as with no bundle, and the `Radio helper` se
 on the panel or in HA is a small app change, if #139 wants it.
 
 How to reproduce (dev panel, adb root):
-1. Back up `/data/glassworks/bundle/` (the `version` file's bytes, mode and owner too) and snapshot
-   `getprop | grep glassworks` and the directory listings.
+1. Back up all of `/data/glassworks/bundle/` with its modes and owners, and hash the archive:
+   `adb exec-out "su -c 'tar -cf - -C /data/glassworks bundle'" > "$B/bundle-before.tar"`, read twice and
+   compared with `cmp`, then `shasum -a 256 "$B/bundle-before.tar"`. Snapshot `getprop | grep glassworks`, `ls -lanR` of the directory and
+   each file's hash (`su -c 'find /data/glassworks/bundle -type f -exec sha256sum {} +'`). (On 2026-11-23 the store held only `version`: no bundle was loaded.)
 2. Make the three trees from #744's signed 0.5.0 bundle on the host: `current` with one byte of
    `sisdk/NOTICE.txt` flipped; `next` untouched; `next.old` with `manifest` truncated to 1200 bytes.
 3. As root on the panel, `echo 5001 > /data/glassworks/bundle/version`, then push each tree with
    `tar -cf - <dir> | adb exec-in "su -c 'tar -xf - -C /data/glassworks/bundle'"`.
 4. `adb reboot`; at adb's first answer, `adb shell dmesg | grep glassworks_loader`, then read the record,
    the properties, `/dev/glassworks/active` and the slots' sources.
-5. L9, no reboot: `make-bundle.py --frame <id> --frame-version <version> --key <throwaway> --pubkey <throwaway.pub> …`
-   for this frame at 1.0.1, for `lululemon-mirror`, and for this frame at 0.4.9; push each and run
-   `GW_PUBKEY=<throwaway.pub> sh /sbin/glassworks_loader.sh check <dir>`; then the 1.0.1 one without `GW_PUBKEY`.
-   Remove them.
-6. Restore: delete the test dirs, put `version` back byte for byte, reboot, and compare with step 1's snapshot.
+5. L9, no reboot. The run's record (#139) gives the method and the results, not each invocation; the commands
+   below follow `make-bundle.py`'s interface (read) and the shell tests' key setup. On the host, a throwaway
+   Ed25519 key and its public key in the verifier's format (64 hex digits):
+   ```sh
+   T=$(mktemp -d)
+   openssl genpkey -algorithm ed25519 -out "$T/k.pem"
+   openssl pkey -in "$T/k.pem" -pubout -outform DER | tail -c 32 | xxd -p -c 64 > "$T/k.pub"
+   M=frames/aqara-s1-plus/tools/radio/make-bundle.py
+   for c in "s1 aqara-s1-plus 1.0.1" "mirror lululemon-mirror 1.0.1" "low aqara-s1-plus 0.4.9"; do
+     set -- $c
+     python3 "$M" --frame "$2" --frame-version "$3" --key "$T/k.pem" --pubkey "$T/k.pub" --out "$T/$1" \
+       --file services/agent.sh=frames/aqara-s1-plus/tools/radio/glassworks_agent.sh:0700
+   done
+   adb push "$T/k.pub" /data/local/tmp/gw-test.pub
+   for d in s1 mirror low; do
+     tar -cf - -C "$T/$d" frame-bundle | adb exec-in "su -c 'mkdir -p /data/local/tmp/gw-$d && tar -xf - -C /data/local/tmp/gw-$d'"
+   done
+   ```
+   Then as root on the panel, `GW_PUBKEY=/data/local/tmp/gw-test.pub sh /sbin/glassworks_loader.sh check /data/local/tmp/gw-<d>/frame-bundle`
+   for each of `s1`, `mirror` and `low`, and once more for `s1` without `GW_PUBKEY` (the trusted key). What came
+   back is L9's row. Remove `/data/local/tmp/gw-*` and `rm -rf "$T"`.
+6. Restore: delete the test dirs (`current`, `next`, `next.old`), extract the step 1 archive over
+   `/data/glassworks/` as root (`adb exec-in "su -c 'tar -xpf - -C /data/glassworks'" < "$B/bundle-before.tar"`),
+   check that the file hashes, modes and owners match step 1's snapshot, reboot, and compare the properties.
+   A fresh archive's hash isn't the check: the directory's own mtime changes with the deletions.
 
 ## Open questions
 
