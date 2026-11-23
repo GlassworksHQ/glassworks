@@ -3,6 +3,7 @@ import { Adb, AdbDaemonTransport } from '@yume-chan/adb';
 import { AdbDaemonWebUsbDevice, AdbDaemonWebUsbDeviceManager } from '@yume-chan/adb-daemon-webusb';
 import { ReadableStream } from '@yume-chan/stream-extra';
 import { run } from './run';
+import { sideload, type SideloadOptions, type SideloadResult, type SideloadSource } from './sideload';
 import { openAdbStream } from '@glassworks/improv-serial/adb';
 import type { ByteStream } from '@glassworks/improv-serial';
 import type { AdbKey } from './key';
@@ -34,6 +35,9 @@ const RELEASE_MS = 1000;
 const REBOOT_MS = 5000;
 
 /** Another program (the computer's own adb) holds the device's adb interface: asking again won't help until it lets go. */
+/** A device's mode as its adb banner names it (adb.cpp's parse_banner knows these; anything else passes through). */
+export type AdbMode = 'device' | 'recovery' | 'sideload' | 'rescue' | 'bootloader' | (string & {});
+
 export class AdbBusy extends Error {
   constructor() { super('another program holds the panel\'s adb connection: run "adb kill-server" on this computer and try again'); this.name = 'AdbBusy'; }
 }
@@ -46,6 +50,15 @@ export class Panel implements PanelShell {
   private constructor(private readonly adb: Adb) {}
 
   get serial(): string { return this.adb.serial; }
+
+  /**
+   * The device's mode, the first field of its adb banner: `device` (Android), `recovery` (a recovery's menu), `sideload`
+   * (a recovery waiting in "Apply from ADB", whose adb lets any key in), `rescue`. Undefined when the banner has none.
+   */
+  get mode(): AdbMode | undefined {
+    // Tango types it as its own server's states, narrower than what a device sends
+    return (this.adb.banner.state as string | undefined) || undefined;
+  }
 
   /** The browser's list of adb devices (needs a user gesture): the device picked, not yet connected. */
   static async pick(): Promise<USBDevice> {
@@ -143,6 +156,19 @@ export class Panel implements PanelShell {
   openStream(service: string): Promise<ByteStream> {
     // Adds the NUL terminator Android 10's adbd needs (see openAdbStream).
     return openAdbStream(this.adb, service);
+  }
+
+  /**
+   * `adb sideload`: sends an OTA package to a device waiting in sideload mode (a recovery's "Apply from ADB"). See
+   * sideload.ts. A device on adb in any other mode is refused before anything is opened.
+   */
+  sideload(source: SideloadSource, options?: SideloadOptions): Promise<SideloadResult> {
+    const adb = this.adb;
+    return sideload({
+      mode: this.mode,
+      // with the NUL real adb sends (see openAdbStream)
+      open: async (service) => adb.createSocket(`${service}\0`),
+    }, source, options);
   }
 
   /** adb's `reboot:bootloader`. The device drops the connection as it restarts, so a lost reply counts as done. */
