@@ -135,12 +135,15 @@ or chat) and prints a checkpoint so you can report progress at any stage.
    a plain read-only HTTP server + optional `libfiemap.so` JNI), plants `/data/app/dev.glassworks.stockprobe-1/base.apk`
    along with a verified 1-entry `/data/system/packages.xml` (so Android 6 boots it `stopped=false`
    and delivers `BOOT_COMPLETED` automatically without ADB or touch), flashes `userdata` only, and
-   connects over HTTP (port `18765`) on Ethernet/Wi-Fi.
+   connects over HTTP (port `18765`). Without `--wifi-ssid`, stock's own `mirror-<serial>` setup
+   SoftAP (`192.168.43.1`) stays untouched and is the easiest transport (first boot after flashing
+   fresh `userdata` takes ~4–5 minutes for `dex2oat`; subsequent reboots take ~45 s).
 6. **Extract stock info (read-only over ADB or HTTP):** saves raw files locally in `<out>/raw/`
    (outside the repo — never commit them) and writes redacted findings into `<out>/report.md`:
    build/hardware properties, `init.svc.*`, `/proc/config.gz` flags, `dmesg` highlights (ADB-only),
    display/LVDS device-tree nodes, key `/system` hashes, `FS_IOC_FIEMAP` physical block extents
    (via HTTP probe app), and an Option C comparison against `option-c-vendor-files.tsv`.
+   Verified live on an untouched stock `1.24.0` Mirror ([stock-firmware-probe.md](../../frames/lululemon-mirror/research/stock-firmware-probe.md)).
 
 ```sh
 npx -y tsx@4.23.15 tools/mirror/stock-probe.ts --dry-run        # all 6 steps on a fake stock Mirror
@@ -148,6 +151,6 @@ npx -y tsx@4.23.15 tools/mirror/stock-probe.ts --read-only      # Steps 1-2 only
 npx -y tsx@4.23.15 tools/mirror/stock-probe.ts                  # full 6-step run (auto-falls back if no ADB)
 npx -y tsx@4.23.15 tools/mirror/stock-probe.ts --with-probe-apk # single userdata flash for 1.2x+ stock
 npx -y tsx@4.23.15 tools/mirror/stock-probe.ts --extract-only   # Step 1 preflight + Steps 5-6 over ADB (no flash)
-npx -y tsx@4.23.15 tools/mirror/stock-probe.ts --http-only --probe-host 192.0.2.10  # Step 1 preflight + Steps 5-6 over HTTP (no flash)
+npx --prefer-offline tsx@4.23.15 tools/mirror/stock-probe.ts --http-only --probe-host 192.168.43.1  # over stock SoftAP (no flash)
 npx -y tsx@4.23.15 tools/mirror/stock-probe.ts --help
 ```
