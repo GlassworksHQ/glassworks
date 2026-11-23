@@ -140,6 +140,21 @@ describe('the release\'s APK', () => {
     expect(s.state.release?.state).toBe('ready');
   });
 
+  it('a release list that never answers ends in Try again too, not a row stuck on "Looking"', async () => {
+    const route = fakeReleaseRoute('out', APK);
+    let hang = true;
+    const s = new AppSession({ frame: mirrorFrame,
+      connect: async () => { throw new Error('unused'); },
+      release: (async (u: RequestInfo | URL, init?: RequestInit) => (hang && String(u).endsWith('/latest') ? silent(init) : route(u, init))) as typeof fetch,
+      releaseFetch: { stallMs: 50, retries: 0, sleep: async () => {} },
+    }, true);
+    await s.loadRelease();
+    expect(s.state.release).toEqual({ state: 'error', why: 'Kiln couldn\'t read the releases: Kiln\'s release list sent nothing for 0.05 s' });
+    hang = false;
+    await s.loadRelease(); // Try again
+    expect(s.state.release?.state).toBe('ready');
+  });
+
   it('updates the screen in whole-percent steps, not once per chunk', async () => {
     const big = new Uint8Array(1_000_000);
     const route = fakeReleaseRoute('out', big);

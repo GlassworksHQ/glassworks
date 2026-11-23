@@ -80,6 +80,21 @@ const step = (got: number, before: number, size?: number) =>
   size ? Math.floor((got * 100) / size) !== Math.floor((before * 100) / size) : got >> 20 !== before >> 20;
 
 /**
+ * The line's newest release from Kiln's list, or an error once it has been silent for `stallMs` (no answer, or no
+ * body): without that deadline a list that never answers left the row on "Looking…" (first real run, 2026-11-19).
+ */
+async function listed(line: Line, get: typeof fetch, stallMs: number): Promise<Release> {
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), stallMs);
+  try {
+    const r = await loadRelease(line, ((u: RequestInfo | URL, init?: RequestInit) => get(u, { ...init, signal: abort.signal })) as typeof fetch);
+    return abort.signal.aborted ? { state: 'error', why: `Kiln's release list sent nothing for ${stallMs / 1000} s` } : r;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * The newest release's APK for `of`, its bytes checked against the release's .sha256. Throws NoRelease before the
  * first release (or when the release has no APK for the ABI), and an Error that says what went wrong otherwise,
  * including when Refract stays silent through every resume. `of.from`: that release, as an earlier call listed it, not
@@ -88,7 +103,7 @@ const step = (got: number, before: number, size?: number) =>
 export async function releaseApk(of: ReleaseLine & { from?: ListedRelease }, get: typeof fetch, onState: (s: ReleaseApk) => void, o: ReleaseFetch = {}): Promise<{ bytes: Uint8Array; ready: Extract<ReleaseApk, { state: 'ready' }>; release: ListedRelease }> {
   const dl = { fetch: get, stallMs: o.stallMs ?? RELEASE_STALL_MS, ...(o.retries !== undefined ? { retries: o.retries } : {}), ...(o.sleep ? { sleep: o.sleep } : {}) };
   onState({ state: 'looking' });
-  const r: Release = of.from ?? await loadRelease(of.line, get);
+  const r: Release = of.from ?? await listed(of.line, get, dl.stallMs);
   if (r.state === 'error') throw new Error(`Kiln couldn't read the releases: ${r.why}`);
   const apk = download(r, of.abi);
   if (r.state !== 'out' || !apk) throw new NoRelease();
