@@ -241,7 +241,7 @@ describe('the page', () => {
     vi.stubGlobal('fetch', route('none'));
     history.replaceState(null, '', '/android?apk=release');
     render(<AndroidWizard />);
-    await screen.findByText('No release of Glassworks for Android yet');
+    await screen.findByText('No compatible Glassworks for Android release yet');
     expect(screen.getByRole('alert').textContent).toMatch(/No compatible release package for this device is available on GitHub yet\. Nothing was written to the tablet/);
     expect(document.querySelector('input[type=file]')).toBeNull();
   });

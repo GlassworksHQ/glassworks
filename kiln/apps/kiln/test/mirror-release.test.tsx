@@ -208,7 +208,7 @@ describe('the page', () => {
     vi.stubGlobal('fetch', fakeReleaseRoute('none', APK));
     history.replaceState(null, '', '/lululemon-mirror?apk=release');
     await toImage();
-    await screen.findByText('No release of Glassworks for the Mirror yet');
+    await screen.findByText('No compatible Glassworks for the Mirror release yet');
     expect(screen.getByRole('alert').textContent).toMatch(/No compatible release package for this device is available on GitHub yet\. Nothing was written to the Mirror/);
     expect(document.querySelector('input[type=file]')).toBeNull();
   });

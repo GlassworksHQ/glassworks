@@ -37,7 +37,7 @@ const RULES: Rule[] = [
 
 const WRITTEN_TIPS: [string, string][] = [
   ['Recovery mode still works.', 'Even if the panel doesn\'t start normally, you can always put it back into recovery mode and restore your saved backup.'],
-  ['Keep your backup handy.', 'If Kiln backed up the panel in this browser, you can download a copy from Undo; if you chose a backup ZIP file, keep that file for another try.'],
+  ['Keep your backup handy.', 'If a saved backup is still readable in this browser, you can download a copy from Undo; otherwise keep your backup ZIP file handy for another try.'],
 ];
 
 const CLEAN_TIPS: [string, string][] = [

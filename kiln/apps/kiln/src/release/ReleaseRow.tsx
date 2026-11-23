@@ -42,7 +42,7 @@ export function ReleaseRow({ r, line, what, device, apkError, load }: ReleaseRow
           <span className="small"><a className="link" href={releasePage(r.tag)} target="_blank" rel="noopener"><code>{r.name}</code></a></span>
           {!apkError && <span className="status ok">✓ Download verified</span>}
         </> : r.state === 'none' ? <>
-          <b>No release of {what} yet</b>
+          <b>No compatible {what} release yet</b>
           <span className="status err" role="alert">No compatible release package for this device is available on GitHub yet. Nothing was written to {device}.</span>
           <span className="small">{again}, or <a className="link" href="https://github.com/GlassworksHQ/glassworks/releases" target="_blank" rel="noopener">see the releases</a>.</span>
         </> : <>
