@@ -288,9 +288,10 @@ function sha512Of(integrity) {
 async function npmTarball(lib, version, dist) {
   const file = `${lib.name}-${version}.tgz`;
   const dir = join(NPM_CACHE, lib.name, version);
-  const cached = cachedTarball(dir, file);
-  if (cached) return cached;
   const hex = sha512Of(dist.integrity);
+  // only a cached tarball that is still the one the registry names now
+  const cached = cachedTarball(dir, file);
+  if (cached && digest("sha512", cached) === hex) return cached;
   const tgz = await get(dist.tarball);
   if (!tgz) throw new Error(`${dist.tarball}: not found, though npm lists ${lib.pkg}@${version}`);
   const got = digest("sha512", tgz);
