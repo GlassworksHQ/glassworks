@@ -548,6 +548,8 @@ def tier_run(tier, entry, presents_ms):
     proto, clarity = page_version(page)
     out = {"tier": tier, "css": page and page.get("css"), "dpr": page and page.get("dpr"),
            "protocol": proto, "clarity": clarity}
+    if entry.get("content_gone"):
+        return lost(tier, out, entry["content_gone"])
     if entry.get("timed_out_s") and not entry.get("error"):
         return dict(timed_out(tier, tier_run(tier, dict(entry, timed_out_s=None), presents_ms) if page else out,
                               entry["timed_out_s"]), timed_out_after=entry.get("timed_out_after"))
@@ -682,29 +684,40 @@ def timed_out(tier, out, deadline_s):
     keeps its open, from its `drawn` line); scroll, live updates and the cameras a `timed_out` record,
     which the graders read as below fluid."""
     out = {k: v for k, v in out.items() if k != "error"}
-    for k in ("inp_ms", "input_method", "fcp_ms", "nodes", "cards", "load_ms", "updates", "latency", "arrivals",
-              "camera_run", "updates_run", "scroll", "blocking_ms", "dialog_run"):
+    for k in TASK_KEYS:
         out.setdefault(k, None)                  # a view that timed out before it was usable reported none
-    ms = round(deadline_s * 1000)
     out["timed_out_s"] = deadline_s
     out["timed_out_tasks"] = []
+    return fail_unmeasured(tier, out, round(deadline_s * 1000), "timed_out", "timed out")
+
+
+# What a view's run record holds for its tasks (tier_run), each None when it wasn't measured.
+TASK_KEYS = ("inp_ms", "input_method", "fcp_ms", "nodes", "cards", "load_ms", "updates", "latency", "arrivals",
+             "camera_run", "updates_run", "scroll", "blocking_ms", "dialog_run")
+
+
+def fail_unmeasured(tier, out, ms, flag, source):
+    """Each task `out` has no measurement for, as failing in this run (timed_out, lost): tap, and blocking and open
+    when they are missing too, take `ms`; scroll, live updates, the cameras and the dialogs a `{flag: true}` record,
+    which every grader reads as below fluid. Each one goes in out[flag + "_tasks"]."""
+    tasks = out[flag + "_tasks"]
     if out.get("load_ms") is None:
         out.update(load_ms=ms, load_error=None)
-        out["timed_out_tasks"].append("open")
+        tasks.append("open")
     if out.get("inp_ms") is None:
         out["inp_ms"] = ms
-        out["timed_out_tasks"].append("tap")
+        tasks.append("tap")
     if out.get("blocking_ms") is None:
         # Never free within the deadline: blocked for the whole of it (rubric 2).
         out["blocking_ms"] = ms
-        out["timed_out_tasks"].append("blocking")
+        tasks.append("blocking")
     if not out.get("scroll"):
-        out.update(scroll={"timed_out": True, "p95_ms": None, "jank_pct": None, "frozen_pct": None, "fps": None, "n": 0},
-                   scroll_error=None, scroll_source="timed out")
-        out["timed_out_tasks"].append("scroll")
+        out.update(scroll={flag: True, "p95_ms": None, "jank_pct": None, "frozen_pct": None, "fps": None, "n": 0},
+                   scroll_error=None, scroll_source=source)
+        tasks.append("scroll")
     if not out.get("updates_run"):
-        out.update(updates_run={"timed_out": True}, updates_error=None)
-        out["timed_out_tasks"].append("updates")
+        out.update(updates_run={flag: True}, updates_error=None)
+        tasks.append("updates")
     # The more-info dialogs are part of v1 (#211): a view of another version (the earlier v2, the first v1's
     # pages, which read as v1 but are re-measure by date anyway) or a pre-release one that timed out didn't miss
     # them. By the marker, not the number: pre-release protocols reuse the numbers.
@@ -713,13 +726,28 @@ def timed_out(tier, out, deadline_s):
     if not out.get("dialog_run") and not known_older:
         # Protocol 3: the view never got to its dialogs (they come last). A view that said nothing
         # (never usable) is taken to be this version's, as its other tasks are.
-        out.update(dialog_run={"timed_out": True}, dialog_error=None)
-        out["timed_out_tasks"].append("dialog")
+        out.update(dialog_run={flag: True}, dialog_error=None)
+        tasks.append("dialog")
     if tier in G.CAMERA_PAGES and not out.get("camera_run"):
-        out["camera_run"] = {"timed_out": True, "first_frame_ms": None, "shown_pct": None, "max_gap_ms": None,
+        out["camera_run"] = {flag: True, "first_frame_ms": None, "shown_pct": None, "max_gap_ms": None,
                              "stall_total_ms": None, "streams": 0, "detail": []}
-        out["timed_out_tasks"].append("camera")
+        tasks.append("camera")
     return out
+
+
+def lost(tier, out, gone):
+    """A view whose browser page was closed in this run (perfrun.py content_gone: the app said its page's process was
+    killed or crashed, and loaded the kiosk's page again): lost whole. Nothing it measured before stands, and every
+    task fails in this run, measured, not missing: the panel couldn't hold the page, and that is the result. Tap, open
+    and blocking take the runner's view deadline (VIEW_DEADLINE_S), as a view that never answered within it; scroll,
+    live updates, the cameras and the dialogs a `{"lost": true}` record, which every grader reads as below fluid. The
+    page can't reach a level in this run, and the grade isn't provisional for it. `lost` says why, in words."""
+    out = dict(out)
+    for k in TASK_KEYS:
+        out[k] = None
+    out["lost"] = P.content_gone_why(gone)
+    out["lost_tasks"] = []
+    return fail_unmeasured(tier, out, round(VIEW_DEADLINE_S * 1000), "lost", "page lost")
 
 
 def reference_run(c):
@@ -766,6 +794,10 @@ def reference_run(c):
     # Views that timed out (#202): what they measured stands, the rest fails (timed_out above); the
     # runner restarted the kiosk and opened the run's other views.
     base["timed_out"] = list(c.get("timed_out") or [])
+    if c.get("content_gone"):
+        # Each time the app said its browser page's process was gone (perfrun.py content_gone): the view it took is
+        # lost (lost above); one between views took none. Only when there was one, so other records stay as they were.
+        base["content_gone"] = [dict(x, why=P.content_gone_why(x)) for x in c["content_gone"]]
     # The CPU clock while each view was open (detail, #244), in kHz per core per sample.
     base["cpu_khz"] = [[v, t, by_cpu(ks)] for v, t, ks in c.get("cpu_khz") or []]
     base["cpu_max_khz"] = by_cpu(c.get("cpu_max_khz"))
@@ -785,7 +817,7 @@ median_band = G.median_band
 def frame_facts(st):
     """The frame stats a band reads (and their count); a timed-out view's run says so (#202)."""
     return dict({k: st.get(k) for k in ("p95_ms", "jank_pct", "frozen_pct", "fps", "n")},
-                **({"timed_out": True} if st.get("timed_out") else {}))
+                **({"timed_out": True} if st.get("timed_out") else {}), **({"lost": True} if st.get("lost") else {}))
 
 
 def by_position(rs):
@@ -896,7 +928,17 @@ def reference_summary(all_runs):
             "cards": sorted({x["cards"] for x in rs if x.get("cards")}),
             "viewport": sorted({(tuple(x["css"]) if x.get("css") else None, x.get("dpr")) for x in rs}, key=str),
         }
+        k = sum(1 for x in rs if x.get("lost"))
+        if k:
+            # Runs in which this view's browser page was closed (lost): every task failed in them, measured, not
+            # missing. Only when there was one, so other reports stay as they were, byte for byte.
+            tiers[t].update(lost_runs=k, lost_why=sorted({x["lost"] for x in rs if x.get("lost")}))
+    lost_views = [[i + 1, t, x["lost"]] for i, r in enumerate(all_runs) if not r.get("error")
+                  for t, x in (r.get("tiers") or {}).items() if x.get("lost") and t in G.TIERS]
     return {
+        # Graded views whose browser page was closed, as [run, view, why] (lost). Not a reason for "provisional": the
+        # panel couldn't hold the page, and every task of it failed in that run. Only when there was one.
+        **({"lost": lost_views} if lost_views else {}),
         "runs": len(all_runs),
         "graded_runs": len(runs),
         "start_ms": P.spread([r["start_ms"] for r in runs]),
@@ -920,16 +962,20 @@ def reference_summary(all_runs):
         # reason for "provisional": not finishing is the measurement, and its tasks fail.
         "timed_out": [[i + 1, t] for i, r in enumerate(all_runs) for t in r.get("timed_out") or [] if t in G.TIERS],
         # The protocol of every page that reported; a page that was lost says nothing about it.
-        "protocols": sorted({x.get("protocol") for r in runs for x in r["tiers"].values()
-                             if not x.get("error") and not (x.get("timed_out_s") and x.get("protocol") is None)}, key=str),
+        "protocols": sorted({x.get("protocol") for r in runs for x in r["tiers"].values() if said_version(x)}, key=str),
         # And their Clarity version: [1] for v1; None for a page from before v1 (pre-release).
-        "clarity": sorted({x.get("clarity") for r in runs for x in r["tiers"].values()
-                           if not x.get("error") and not (x.get("timed_out_s") and x.get("protocol") is None)}, key=str),
+        "clarity": sorted({x.get("clarity") for r in runs for x in r["tiers"].values() if said_version(x)}, key=str),
         "warmups": [r.get("warmup") for r in runs],
         "tiers": tiers,
         "errors": [r["error"] for r in all_runs if r.get("error")],
         "per_run": all_runs,
     }
+
+
+def said_version(x):
+    """A view's run record that says which protocol its page ran: not one that failed, nor one that timed out or was
+    lost before its page said anything."""
+    return not x.get("error") and not ((x.get("timed_out_s") or x.get("lost")) and x.get("protocol") is None)
 
 
 def grade_inputs(graded):
@@ -985,14 +1031,16 @@ def task_phrase(task, s_):
         runs = (s_ or {}).get("camera_runs") or []
         if not runs:
             return "the cameras weren't measured"
+        gone = sum(1 for r in runs if r.get("lost"))
         ff = [r["first_frame_ms"] for r in runs if r.get("first_frame_ms") is not None]
         if not ff:
-            return "a camera never showed a frame"
+            return f"the page was lost in {gone} of {len(runs)} run(s)" if gone == len(runs) else "a camera never showed a frame"
         shown = statistics.median(r["shown_pct"] for r in runs if r.get("shown_pct") is not None)
-        failed = len(runs) - len(ff)
+        failed = len(runs) - len(ff) - gone
         na = sum(1 for r in runs if r.get("stalls_reported") is False)
         return (f"a camera takes {statistics.median(ff) / 1000:.1f} s to show its first frame and shows {shown:.0f}% of its frames"
                 + (f" ({failed} of {len(runs)} run(s) had a stream that showed no frame)" if failed else "")
+                + (f" (the page was lost in {gone} of {len(runs)} run(s))" if gone else "")
                 + (f"; its stalls weren't measured in {na} of {len(runs)} run(s)" if na else ""))
     if task == "blocking":
         # Rubric 2: the wait after the draw, its own task; never the open's words (s1rtc10's headline
@@ -1009,9 +1057,12 @@ def task_phrase(task, s_):
         late = sum(1 for r in runs if r.get("timed_out"))
         if late == len(runs):
             return f"the view didn't get to its more-info dialogs in {late} of {len(runs)} run(s)"
+        gone = sum(1 for r in runs if r.get("lost"))
         failed = sum(1 for r in runs if r.get("failed") or r.get("timed_out"))
-        if failed:
-            return f"a more-info dialog didn't open fully in {failed} of {len(runs)} run(s)"
+        if failed or gone:
+            return ", and ".join(x for x in (
+                failed and f"a more-info dialog didn't open fully in {failed} of {len(runs)} run(s)",
+                gone and f"the page was lost in {gone} of {len(runs)} run(s)") if x)
         return f"a more-info dialog takes {statistics.median(r['settled_ms'] for r in runs) / 1000:.1f} s to open"
     if task != "load":
         raise ValueError(f"no words for task {task!r}")
@@ -1020,10 +1071,18 @@ def task_phrase(task, s_):
     return "opening the view wasn't measured"
 
 
+def lost_phrase(s_):
+    """'the page was lost in 3 of 3 run(s) because the panel ran out of memory ...'."""
+    return (f"the page was lost in {s_['lost_runs']} of {len(s_.get('positions') or [])} run(s) because "
+            + " or ".join(s_.get("lost_why") or ["the panel closed it"]))
+
+
 def held_back(g, ref):
-    """What keeps the frame from the next letter up, in words: [(tier, [task phrases])]."""
+    """What keeps the frame from the next letter up, in words: [(tier, [task phrases])]. A page whose lost runs decide
+    it (notes.lost_decides) gets one phrase for them."""
     tiers = (ref or {}).get("tiers") or {}
-    return [(x["page"], [task_phrase(task, tiers.get(x["page"])) for task in x["tasks"]]) for x in G.next_limits(g)]
+    return [(x["page"], [lost_phrase(tiers[x["page"]])] if N.lost_decides(tiers.get(x["page"])) and x["tasks"] else
+             [task_phrase(task, tiers.get(x["page"])) for task in x["tasks"]]) for x in G.next_limits(g)]
 
 
 def headline(name, g, ref):
@@ -1500,8 +1559,9 @@ def coverage_reasons(ref, attempted, touch=True, settled=(), unmeasured=None):
         # stalls n/a; good's gap, which with what the counts left out could pass 500 ms; or fluid's
         # total, which could reach 1 s. A first frame or frames shown that already fail every level
         # decide it, and those aren't open.
-        whys = [G.camera_level_why(c)[1] for c in (s_ or {}).get("camera_runs") or [] if not c.get("timed_out")]
-        open_ = [c for c in (s_ or {}).get("camera_runs") or [] if not c.get("timed_out") and G.camera_level_why(c)[1] == G.OPEN_STALLS_NA]
+        whys = [G.camera_level_why(c)[1] for c in (s_ or {}).get("camera_runs") or [] if not c.get("timed_out") and not c.get("lost")]
+        open_ = [c for c in (s_ or {}).get("camera_runs") or []
+                 if not c.get("timed_out") and not c.get("lost") and G.camera_level_why(c)[1] == G.OPEN_STALLS_NA]
         short = [c for c in open_ if (c.get("uncovered_ms") or 0) > CAMERA_UNCOVERED_MAX_MS]
         na = len(open_) - len(short)
         gap, total = whys.count(G.OPEN_GOOD_GAP), whys.count(G.OPEN_FLUID_TOTAL)
@@ -1962,17 +2022,19 @@ def camera_cell(s_, b):
     med = lambda k: P.spread([r.get(k) for r in runs])  # noqa: E731
     ff = med("first_frame_ms")
     late = sum(1 for r in runs if r.get("timed_out"))
-    late_note = f"the view didn't finish in {late} of {len(runs)} run(s)" if late else ""
+    gone = sum(1 for r in runs if r.get("lost"))
+    late_note = ", ".join(x for x in (late and f"the view didn't finish in {late} of {len(runs)} run(s)",
+                                      gone and f"the page was lost in {gone} of {len(runs)} run(s)") if x)
     if ff is None:
         return f"{late_note or 'a stream showed no frame'}, {b.get('camera') or 'n/a'}"
     # The numbers are the runs whose streams all played; say how many didn't (they make the level).
-    failed = sum(1 for r in runs if r.get("first_frame_ms") is None and not r.get("timed_out"))
+    failed = sum(1 for r in runs if r.get("first_frame_ms") is None and not r.get("timed_out") and not r.get("lost"))
     # The stalls median is over the runs that measured them: say how many didn't, and how many runs'
     # levels are left open (#265: s1rtc9's typical read "stalls 0 ms, n=2" with run 3 n/a).
     na = sum(1 for r in runs if r.get("stalls_reported") is False)
-    open_ = sum(1 for r in runs if not r.get("timed_out") and G.camera_level(r) is None)
+    open_ = sum(1 for r in runs if not r.get("timed_out") and not r.get("lost") and G.camera_level(r) is None)
     note = (f", {failed} of {len(runs)} run(s) had a stream that showed no frame" if failed else "") \
-        + (f", {late_note}" if late else "") \
+        + (f", {late_note}" if late_note else "") \
         + (f", stalls n/a in {na} of {len(runs)} run(s)" if 0 < na < len(runs) else "") \
         + (f", the level not measured in {open_} of {len(runs)} run(s)" if 0 < open_ < len(runs) else "")
     return (f"first frame {fmt(ff, ' ms')}, {fmt(med('shown_pct'), ' %')} shown, stalls {fmt(med('stall_total_ms'), ' ms')}, "
@@ -1989,12 +2051,15 @@ def dialog_cell(s_, b):
         return "not measured"
     failed = sum(1 for r in runs if r.get("failed"))
     late = sum(1 for r in runs if r.get("timed_out"))
+    gone = sum(1 for r in runs if r.get("lost"))
     st = s_.get("dialog_settled_ms")
     head = (f"settled in {fmt(st, ' ms')}" if st and st.get("median") is not None
-            else "the view didn't get to them" if late == len(runs) else "never settled")
+            else "the view didn't get to them" if late == len(runs)
+            else "the page was lost" if gone == len(runs) else "never settled")
     return (f"{head}, {b.get('dialog') or 'n/a'}"
             + (f", {failed} of {len(runs)} run(s) had one that didn't open fully" if failed else "")
-            + (f", the view didn't finish in {late} of {len(runs)} run(s)" if late and late < len(runs) else ""))
+            + (f", the view didn't finish in {late} of {len(runs)} run(s)" if late and late < len(runs) else "")
+            + (f", the page was lost in {gone} of {len(runs)} run(s)" if gone and gone < len(runs) else ""))
 
 
 def dialog_detail(ref):
@@ -2002,7 +2067,7 @@ def dialog_detail(ref):
     them, and why any didn't open fully."""
     out = []
     for t, s_ in ref["tiers"].items():
-        runs = [r for r in s_.get("dialog_runs") or [] if not r.get("timed_out")]
+        runs = [r for r in s_.get("dialog_runs") or [] if not r.get("timed_out") and not r.get("lost")]
         if not runs:
             continue
         modes = sorted({m for r in runs for m in r.get("modes") or []})
@@ -2026,6 +2091,22 @@ def dialog_detail(ref):
                        + (f" ({', '.join(back)}: HA's late history.back() took it back)" if back else "")
                        + ". What the dialogs did within their wait is this view's result.")
     return out
+
+
+def lost_words(ref):
+    """'typical in 3 of 3 runs (runs 1, 2 and 3): the panel ran out of memory ...': each lost page, in how many of its
+    runs, and why, lightest page first."""
+    out = []
+    for t in G.TIERS:
+        ks = [k for k, v, _ in ref.get("lost") or [] if v == t]
+        if not ks:
+            continue
+        s_ = (ref.get("tiers") or {}).get(t) or {}
+        n = len(s_.get("positions") or []) or len(ks)
+        whys = sorted({w for _, v, w in ref["lost"] if v == t})
+        out.append(f"{t} in {len(ks)} of {n} run(s) (run{'s' if len(ks) > 1 else ''} {_and([str(k) for k in ks])}): "
+                   + "; ".join(whys))
+    return "; ".join(out)
 
 
 def band_cell(b):
@@ -2080,14 +2161,20 @@ def markdown(rep):
             up = {None: "fluid", "fluid": "good", "good": "premium"}
             target = up.get(lvl)
             held = ", ".join(G.limits(b, target)) if target else ""
+            # Lost in most runs (notes.lost_decides): its medians are the deadline that stands for those runs, not the
+            # panel's numbers, so the cells say the page was lost instead.
+            lost_cell = (f"page lost in {s_['lost_runs']} of {len(s_.get('positions') or [])} run(s)"
+                         if N.lost_decides(s_) else None)
+            val = lambda sp: lost_cell or fmt(sp, " ms")  # noqa: E731
+            cards = f" ({', '.join(map(str, s_['cards']))} cards)" if s_["cards"] else ""
+            scroll = (f"{G.NOT_APPLICABLE} (no touch)" if "scroll" in na else f"{lost_cell}, {b['scroll'] or 'n/a'}" if lost_cell
+                      else f"{fmt(s_['scroll']['fps'], ' fps')}, p95 {fmt(s_['scroll']['p95_ms'], ' ms')}, {b['scroll'] or 'n/a'}")
+            updates = (f"{lost_cell}, {b['updates'] or 'n/a'}" if lost_cell else
+                       f"{fmt(s_['latency_p95_ms'], ' ms')} to show (p95), {b['updates'] or 'n/a'}; pacing p95 {fmt(s_['updates']['p95_ms'], ' ms')}")
+            usable = "" if lost_cell else f" (usable at {fmt(s_.get('usable_ms'), ' ms')})"
             out.append(
-                f"| {t} ({', '.join(map(str, s_['cards']))} cards) | {lvl or 'neither'} "
-                f"| {fmt(s_['inp_ms'], ' ms')}, {band_cell(b['tap'])} "
-                + (f"| {G.NOT_APPLICABLE} (no touch) " if "scroll" in na else
-                   f"| {fmt(s_['scroll']['fps'], ' fps')}, p95 {fmt(s_['scroll']['p95_ms'], ' ms')}, {b['scroll'] or 'n/a'} ")
-                + f"| {fmt(s_['latency_p95_ms'], ' ms')} to show (p95), {b['updates'] or 'n/a'}; pacing p95 {fmt(s_['updates']['p95_ms'], ' ms')} "
-                f"| {fmt(s_['load_ms'], ' ms')}, {band_cell(b['load'])} "
-                f"| {fmt(s_.get('blocking_ms'), ' ms')}, {band_cell(b.get('blocking'))} (usable at {fmt(s_.get('usable_ms'), ' ms')}) "
+                f"| {t}{cards} | {lvl or 'neither'} | {val(s_['inp_ms'])}, {band_cell(b['tap'])} | {scroll} | {updates} "
+                f"| {val(s_['load_ms'])}, {band_cell(b['load'])} | {val(s_.get('blocking_ms'))}, {band_cell(b.get('blocking'))}{usable} "
                 f"| {camera_cell(s_, b)} | {dialog_cell(s_, b)} | {held} |")
         vp = g.get("viewport") or {}
         seen = sorted({str(v) for s_ in ref["tiers"].values() for v in s_["viewport"]})
@@ -2118,6 +2205,9 @@ def markdown(rep):
                        f"for {int(STAGE_IDLE_S)} s), measured as failing what they didn't get to (not \"not measured\"): "
                        + "; ".join(f"{t} in run {k} ({', '.join((ref['tiers'].get(t) or {}).get('timed_out_tasks') or []) or 'nothing left'})"
                                    for k, t in ref["timed_out"]) + ".")
+        if ref.get("lost"):
+            out.append("Pages lost when the panel closed its browser page, measured as failing every task in that run "
+                       "(not \"not measured\"; the run's other pages count as usual): " + lost_words(ref) + ".")
         detail_late = (rep.get("fake_ha") or {}).get("stream_late_detail_max_ms")
         if (detail_late or 0) > STREAM_LATE_MS:
             # Not a reason for "provisional": no graded view's stream was late (#205).

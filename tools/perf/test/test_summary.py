@@ -67,6 +67,10 @@ def fixture(variant):
             run["tiers"]["heavy"]["swipes"] = [T.swipe(50.0, i, T.late(60, 20), sf=False) for i in range(3)]
         elif variant == "pre-v10":      # a report without typical-nocam: C's page is missing, provisional
             del run["tiers"]["typical-nocam"]
+        elif variant == "lost-one" and k == 2:    # the panel closed typical's browser page in run 2 (the Mirror)
+            run["tiers"]["typical"]["content_gone"] = {"cause": "killed", "low_memory": True, "after_s": 3.0, "after": "warmup"}
+        elif variant == "lost-all":     # ... and in every run
+            run["tiers"]["typical"]["content_gone"] = {"cause": "killed", "low_memory": True, "after_s": 3.0, "after": "warmup"}
         elif variant == "even":         # two runs: the worse middle band
             if k == 3:
                 continue
@@ -82,7 +86,8 @@ def fixture(variant):
     return rep
 
 
-VARIANTS = ["B", "A", "premium", "E", "capped", "zoom", "raf-only", "even", "missing-run", "pre-v10", "no-touch", "no-swipes"]
+VARIANTS = ["B", "A", "premium", "E", "capped", "zoom", "raf-only", "even", "missing-run", "pre-v10", "no-touch", "no-swipes",
+            "lost-one", "lost-all"]
 
 
 def ts_grades(summaries):
@@ -304,6 +309,43 @@ class Parity(unittest.TestCase):
             self.assertNotIn("not_applicable", g)
         self.assertFalse(touch["complete"])
         self.assertNotEqual(rep_t["grade"], "A+")
+
+    def test_a_lost_page_fails_its_runs_in_both_and_never_makes_it_provisional(self):
+        """The Mirror (2026-11-23): the panel closed typical's browser page. Lost in one of three runs, the other two
+        decide typical's median and the letter stays B. Lost in all three, typical reaches no level and the letter
+        drops, final: the panel couldn't hold the page, which is a result, not a missing measurement."""
+        why = "the panel ran out of memory and its browser page was closed (low-memory killer)"
+        one, every = self.sums["lost-one"], self.sums["lost-all"]
+        self.assertEqual((one["pages"]["typical"]["lost_runs"], one["pages"]["typical"]["lost_why"]), (1, [why]))
+        self.assertEqual(every["pages"]["typical"]["lost_runs"], 3)
+        self.assertNotIn("lost_runs", one["pages"]["heavy"])
+        self.assertNotIn("lost_runs", self.sums["B"]["pages"]["typical"])      # other summaries as they were
+        self.assertEqual([r.get("lost") for r in one["pages"]["typical"]["camera"]["runs"]], [None, True, None])
+        self.assertEqual(one["pages"]["typical"]["dialog"]["runs"][1], {"lost": True})
+        # A lost run has no transport (CodeRabbit on #781): the path comes from the measured runs, unknown with none.
+        self.assertEqual(one["pages"]["typical"]["camera"]["path"], self.sums["B"]["pages"]["typical"]["camera"]["path"])
+        self.assertIsNone(every["pages"]["typical"]["camera"]["path"])
+        rtc = S.camera_summary({"camera_runs": [{"path": "web_rtc", "first_frame_ms": 900}, {"lost": True}]})
+        self.assertEqual((rtc["path"], rtc["runs"][1]), ("web_rtc", {"first_frame_ms": None, "shown_pct": None,
+                                                                     "max_gap_ms": None, "stall_total_ms": None, "lost": True}))
+        self.assertTrue(one["complete"] and every["complete"])
+        for g in (G.grade_summary(one), self.ts["lost-one"], self.reps["lost-one"]["grade"]):
+            self.assertEqual((g["grade"], g["provisional"], g["missing"]), ("B", False, []))
+        for g in (G.grade_summary(every), self.ts["lost-all"], self.reps["lost-all"]["grade"]):
+            self.assertEqual((g["grade"], g["provisional"], g["missing"], g["levels"]["typical"]), ("C", False, [], None))
+            self.assertEqual(set(g["bands"]["typical"].values()), {"slow", "poor"})
+        rep = self.reps["lost-all"]
+        self.assertIn(f"Held back by typical dashboards with a camera: the page was lost in 3 of 3 run(s) because {why}.",
+                      rep["grade"]["headline"])
+        self.assertIn(f"On typical with a camera, the page was lost in 3 of 3 runs: {why}.", rep["notes"]["text"])
+        self.assertNotIn("Memory isn't the limit", rep["notes"]["text"])
+        self.assertNotIn("typical with a camera takes", rep["notes"]["text"])  # no deadline quoted as a time
+        md = R.markdown(rep)
+        self.assertIn(f"typical in 3 of 3 run(s) (runs 1, 2 and 3): {why}", md)
+        self.assertIn("the page was lost in 3 of 3 run(s), slow", md)        # its camera cell
+        one_md = R.markdown(self.reps["lost-one"])
+        self.assertIn(f"typical in 1 of 3 run(s) (run 2): {why}", one_md)
+        self.assertNotIn("had a stream that showed no frame", one_md)
 
     def test_the_transport_goes_with_the_letter_in_both_and_never_changes_it(self):
         """Protocol 7 (#202, option B): the camera video's path is in the summary, and both graders pass

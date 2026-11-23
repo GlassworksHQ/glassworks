@@ -336,6 +336,18 @@
     "frozen_pct": null
    },
    "level": "slow"
+  },
+  {
+   "name": "the panel closed the view's browser page (lost): measured, slow",
+   "stats": {
+    "lost": true,
+    "n": 0,
+    "fps": null,
+    "p95_ms": null,
+    "jank_pct": null,
+    "frozen_pct": null
+   },
+   "level": "slow"
   }
  ],
  "update_levels": [
@@ -497,6 +509,13 @@
    "name": "the view didn't finish before its updates (#202): measured, slow",
    "run": {
     "timed_out": true
+   },
+   "level": "slow"
+  },
+  {
+   "name": "the panel closed the view's browser page (lost): measured, slow",
+   "run": {
+    "lost": true
    },
    "level": "slow"
   }
@@ -8123,6 +8142,17 @@
     "uncovered_ms": 284.0
    },
    "level": null
+  },
+  {
+   "name": "the panel closed the view's browser page (lost): measured, slow",
+   "run": {
+    "lost": true,
+    "first_frame_ms": null,
+    "shown_pct": null,
+    "max_gap_ms": null,
+    "stall_total_ms": null
+   },
+   "level": "slow"
   }
  ],
  "dialog_levels": [
@@ -8268,6 +8298,13 @@
     "n": 0
    },
    "level": null
+  },
+  {
+   "name": "the panel closed the view's browser page (lost): measured, slow",
+   "run": {
+    "lost": true
+   },
+   "level": "slow"
   }
  ]
 }

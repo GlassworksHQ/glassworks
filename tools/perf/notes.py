@@ -1,8 +1,8 @@
 """Clarity's notes (MIT): a short paragraph on what is good on a frame and what holds it back (#201).
 
 Built from a finished report (report.json) by fixed rules: the same report always gives the same
-text. At most four sentences (five when the grade is provisional): the best page's strengths, the
-three worst limits with one number each, the likely cause, memory. The report body has the rest.
+text. At most four sentences (five when the grade is provisional, and one more when the panel lost a page): the best
+page's strengths, the three worst limits with one number each, the likely cause, memory. The report body has the rest.
 docs/perf.md, "The notes", lists each rule and its evidence.
 """
 import statistics
@@ -96,13 +96,22 @@ def _camera_options(r):
     return out
 
 
+def lost_decides(t):
+    """True when a page's lost runs (report.py lost: the panel closed its browser page) reach the middle of its runs, so
+    they decide its median on every task: the numbers there would be the deadline that stands for them, not anything
+    the panel did, so the page's words are about the lost page instead."""
+    n, k = len((t or {}).get("positions") or []), (t or {}).get("lost_runs") or 0
+    return k > 0 and k >= n - n // 2
+
+
 def _camera_limit(t):
     """From the runs whose camera level fails (the grade takes the median of per-run levels): the
     median of each number over those runs, the one furthest past its bar. When no such median fails
-    (the runs fail on different numbers), the worst failing number of a single run."""
-    runs = t.get("camera_runs") or []
-    levels = t.get("camera_levels") or []
-    failing = [r for r, lv in zip(runs, levels) if lv not in GOOD | FLUID | {None}] or runs
+    (the runs fail on different numbers), the worst failing number of a single run. A run whose page was lost has no
+    numbers to quote."""
+    pairs = [(r, lv) for r, lv in zip(t.get("camera_runs") or [], t.get("camera_levels") or []) if not r.get("lost")]
+    runs = [r for r, _ in pairs]
+    failing = [r for r, lv in pairs if lv not in GOOD | FLUID | {None}] or runs
     if not failing:
         return None
     if all(r.get("first_frame_ms") is not None for r in failing):
@@ -147,7 +156,8 @@ def _limit(task, t):
         failing = [r for r in t.get("dialog_runs") or [] if G.dialog_level(r) == G.BELOW]
         if not failing:
             return None
-        late = [r["settled_ms"] for r in failing if not r.get("timed_out") and not r.get("failed") and r.get("settled_ms") is not None]
+        late = [r["settled_ms"] for r in failing
+                if not r.get("timed_out") and not r.get("lost") and not r.get("failed") and r.get("settled_ms") is not None]
         if len(failing) - len(late) >= len(late):
             return 10.0, "doesn't open a more-info dialog fully"
         v = statistics.median(late)
@@ -175,10 +185,13 @@ def _name(p, rep=None):
 
 def _with_camera(rep):
     """When typical reaches a level without its camera and not with it: (task, phrase) of the worst
-    thing the camera page fails on, to say beside it ("with one, it ..."); else None."""
+    thing the camera page fails on, to say beside it ("with one, it ..."); else None, and None when its lost runs
+    decide its median (lost_decides)."""
     levels = (rep.get("grade") or {}).get("levels") or {}
     if not levels.get("typical-nocam") or levels.get("typical") or "typical" not in _tiers(rep):
         return None
+    if lost_decides(_tiers(rep).get("typical")):
+        return None                          # its numbers are the lost runs' deadlines: lost_sentence says it
     b = _bands(rep).get("typical") or {}
     scored = [(s, G.TASKS.index(t), t) for t in G.TASKS if _is_limit(t, b.get(t))
               for s in [_limit(t, _tiers(rep).get("typical"))] if s]
@@ -224,8 +237,10 @@ def limits_sentence(rep):
     found = []
     best, reached = best_page(rep)
     said = _with_camera(rep) if best == "typical-nocam" and reached else None   # in the good sentence already
+    lost = {p for p in PAGES if lost_decides(tiers.get(p))}            # lost_sentence says those
     for t in G.TASKS:
-        bad = [p for p in PAGES if _is_limit(t, (bands.get(p) or {}).get(t)) and not (said and p == "typical" and t == said[0])]
+        bad = [p for p in PAGES if _is_limit(t, (bands.get(p) or {}).get(t)) and not (said and p == "typical" and t == said[0])
+               and p not in lost]
         scored = [(p, _limit(t, tiers.get(p))) for p in bad]
         scored = [(p, s) for p, s in scored if s]
         if scored:
@@ -325,6 +340,25 @@ def cause_sentence(rep):
     return None
 
 
+def lost_sentence(rep):
+    """The pages the panel lost (report.py lost: it closed their browser page), in how many runs, and why: "On typical
+    with a camera, the page was lost in 3 of 3 runs: the panel ran out of memory and its browser page was closed
+    (low-memory killer)." None when none was."""
+    tiers = _tiers(rep)
+    lost = [(p, tiers[p]) for p in PAGES if (tiers.get(p) or {}).get("lost_runs")]
+    if not lost:
+        return None
+    where = _join(f"{_name(p, rep)} ({t['lost_runs']} of {len(t.get('positions') or []) or t['lost_runs']} runs)"
+                  for p, t in lost) if len(lost) > 1 else _name(lost[0][0], rep)
+    n = "" if len(lost) > 1 else f" in {lost[0][1]['lost_runs']} of {len(lost[0][1].get('positions') or []) or lost[0][1]['lost_runs']} runs"
+    whys = sorted({w for _, t in lost for w in t.get("lost_why") or []})
+    return f"On {where}, the page was lost{n}" + (f": {'; '.join(whys)}." if whys else ".")
+
+
+def _lost_to_memory(rep):
+    return any("low-memory killer" in w for t in _tiers(rep).values() for w in (t or {}).get("lost_why") or [])
+
+
 def memory_sentence(rep):
     checks = ((((rep.get("ram") or {}).get("budget")) or {}).get("checks")) or {}
     peak, avail = checks.get("app_pss_peak") or {}, checks.get("device_available_min") or {}
@@ -335,6 +369,8 @@ def memory_sentence(rep):
         return f"Memory is a limit: the app peaks at {mb(peak['value_kb'])} MB, over its {mb(peak['budget_kb'])} MB budget."
     if avail.get("ok") is False:
         return f"Memory is a limit: free memory falls to {mb(avail['value_kb'])} MB, under the {mb(avail['budget_kb'])} MB the frame keeps."
+    if _lost_to_memory(rep):
+        return None                          # the low-memory killer closed a page: lost_sentence says memory ran out
     if peak.get("ok") and avail.get("ok"):
         return f"Memory isn't the limit ({mb(peak['value_kb'])} of {mb(peak['budget_kb'])} MB)."
     if peak.get("ok"):
@@ -381,6 +417,6 @@ def notes(rep):
         return {"good": None, "limits": None, "causes": [], "rubric": g.get("rubric_version"),
                 "text": f"Not graded: {g['refused']}."}
     good, limits = good_sentence(rep), limits_sentence(rep)
-    causes = [s for s in (cause_sentence(rep), memory_sentence(rep)) if s]
+    causes = [s for s in (lost_sentence(rep), cause_sentence(rep), memory_sentence(rep)) if s]
     parts = [s for s in [good, limits] + causes + [provisional_sentence(rep)] if s]
     return {"good": good, "limits": limits, "causes": causes, "text": " ".join(parts), "rubric": g.get("rubric_version")}

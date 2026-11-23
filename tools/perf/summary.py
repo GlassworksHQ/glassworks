@@ -89,6 +89,12 @@ def page_summary(s):
                  "blocking": _n(s.get("blocking_ms")),
                  "camera": len(s.get("camera_runs") or [])},
     }
+    if s.get("lost_runs"):
+        # Runs in which the panel closed this page's browser page (report.py lost): every task failed in them, as
+        # `{"lost": true}` records and tap, open and blocking at the runner's view deadline; `lost_why` says why in
+        # words. Only when there was one, so every other summary stays as it was, byte for byte (test_summary).
+        out["lost_runs"] = s["lost_runs"]
+        out["lost_why"] = list(s.get("lost_why") or [])
     if "dialog_runs" in s:
         # Clarity v3 (#211), added within /3: HA's more-info dialogs, each run's record (graded per run:
         # the slowest to settle, how many failed, the open animations' frames). Absent for a report
@@ -101,7 +107,7 @@ def page_summary(s):
 def dialog_summary(s):
     keys = ("n", "failed", "settled_ms")
     return {"settled_ms": _med(s.get("dialog_settled_ms")),
-            "runs": [dict({"timed_out": True} if r.get("timed_out") else
+            "runs": [dict({"timed_out": True} if r.get("timed_out") else {"lost": True} if r.get("lost") else
                           dict({k: r.get(k) for k in keys}, frames=r.get("frames")))
                      for r in s["dialog_runs"]]}
 
@@ -110,11 +116,14 @@ def camera_summary(s):
     keys = ("first_frame_ms", "shown_pct", "max_gap_ms", "stall_total_ms")
     runs = s.get("camera_runs") or []
     tag = lambda r: dict({"timed_out": True} if r.get("timed_out") else {},  # noqa: E731
+                         **({"lost": True} if r.get("lost") else {}),
                          **({"stalls_reported": False} if r.get("stalls_reported") is False else {}),
                          # #265: what the receiver's counts left out of the window (the graders hold
                          # the fluid total bar against stalls + it); WebRTC runs only.
                          **({"uncovered_ms": r["uncovered_ms"]} if r.get("uncovered_ms") is not None else {}))
-    fb, paths = s.get("camera_fallback"), {r.get("path") or "hls" for r in runs}
+    # A lost run (its page closed before the camera window) has no transport: the path comes from the others, and
+    # is unknown (None) when every run was lost.
+    fb, paths = s.get("camera_fallback"), {r.get("path") or "hls" for r in runs if not r.get("lost")}
     return {"runs": [dict({k: r.get(k) for k in keys}, **tag(r)) for r in runs],
             "path": paths.pop() if len(paths) == 1 else None,
             "fallback": fb and {"path": fb["path"], "runs": [{k: r.get(k) for k in keys} for r in fb["runs"]]}}

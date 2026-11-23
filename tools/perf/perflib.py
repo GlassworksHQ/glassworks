@@ -583,3 +583,16 @@ def frame_touch(frames_dir, frame_id):
     base = (read(frame_id, "design", "frame.json") or {}).get("base")
     inherited = read(base, "design", "installer.json") if base else None
     return (inherited or {}).get("touch") is not False
+
+
+# ---- a view whose browser page was closed (perfrun.py content_gone)
+
+def content_gone_why(gone):
+    """Why a view's browser page went, in words, from perfrun's record ({"cause": killed or crashed, "low_memory"}):
+    the low-memory killer is named only when its own line said so; otherwise Android closed the page, or it crashed."""
+    gone = gone or {}
+    if gone.get("cause") == "crashed":
+        return "the panel's browser page crashed"
+    if gone.get("low_memory"):
+        return "the panel ran out of memory and its browser page was closed (low-memory killer)"
+    return "Android closed the panel's browser page"

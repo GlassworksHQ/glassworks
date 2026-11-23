@@ -9,6 +9,8 @@ import {
   clarityFor,
   goal,
   levelName,
+  lostDecides,
+  lostText,
   notGraded,
   measured,
   nextLetter,
@@ -158,13 +160,15 @@ function Detail({ c }: { c: Graded }) {
       const need = held.get(`${p}.${t}`);
       return { t, band, need, goal: need && up ? goal(t, need, page) : null };
     });
+    // A page lost in most runs says so once, not once for the open and again for the blocking
+    const shown = lostDecides(page) ? parts.slice(0, 1) : parts;
     return {
-      value: parts.map(({ t, band }, i) => (
+      value: shown.map(({ t, band }, i) => (
         <span key={t} className={parts.length > 1 ? s.line : undefined}>
           <span className={`${s.dot} ${s[tone(band)]}`} aria-hidden="true" />
           {notGraded(band) ? levelName(band) : (measured(page, t) ?? (i ? `${TASK_NAME[t].toLowerCase()} not measured` : "Not measured"))}
           {!notGraded(band) && <span className="visually-hidden">, {levelName(band)}</span>}
-          {i < parts.length - 1 && !notGraded(band) && ","}
+          {i < shown.length - 1 && !notGraded(band) && ","}
         </span>
       )),
       held: parts.some((x) => x.need),
@@ -295,6 +299,11 @@ function Meta({ c }: { c: Graded }) {
         </p>
       )}
       {settledNote(c.grade) && <p>{settledNote(c.grade)}</p>}
+      {PAGES.filter((p) => lostText(sum.pages?.[p])).map((p) => (
+        <p key={p}>
+          {pageName(p)}: {lostText(sum.pages?.[p])}. Every task on it counts as failed in those runs.
+        </p>
+      ))}
       {c.grade.transport_caveat && (
         <p>
           {cap(c.grade.transport_caveat)}. Letters measured over different camera paths aren&apos;t comparable.
