@@ -424,10 +424,26 @@ class SharedCases(unittest.TestCase):
     def test_letters_and_levels(self):
         for c in self.data["cases"]:
             with self.subTest(c["name"]):
-                g = G.grade(c["tiers"], c["start_ms"])
+                g = G.grade(c["tiers"], c["start_ms"], touch=c.get("touch", True))   # touch: false, rubric 2
                 got = {k: g[k] for k in c["expect"] if k != "limits"}
                 got["limits"] = G.next_limits(g)
                 self.assertEqual(got, c["expect"])
+
+    def test_no_touch_cases_are_there(self):
+        """Rubric 2: the shared cases cover a frame without touch (scroll n/a, from the rest, provisional only for the
+        rest) and a frame with touch whose scroll is missing (provisional, as before)."""
+        no_touch = [c for c in self.data["cases"] if c.get("touch") is False]
+        self.assertTrue(any(not c["expect"]["provisional"] for c in no_touch))
+        self.assertTrue(any(c["expect"]["provisional"] and "scroll" not in " ".join(c["expect"]["missing"]) for c in no_touch))
+        for c in no_touch:
+            self.assertEqual({b["scroll"] for b in c["expect"]["bands"].values()}, {G.NOT_APPLICABLE}, c["name"])
+            self.assertEqual(c["expect"]["not_applicable"], {"scroll": "this frame has no touch"}, c["name"])
+            self.assertFalse(any(t.endswith(".scroll") for t in c["expect"]["missing"]), c["name"])
+            self.assertFalse(any("scroll" in x["tasks"] for x in c["expect"]["limits"]), c["name"])
+        touch = next(c for c in self.data["cases"] if c["name"].startswith("rubric 2: touch, scroll not measured"))
+        self.assertTrue(touch["expect"]["provisional"])
+        self.assertIn("light.scroll", touch["expect"]["missing"])
+        self.assertNotIn("not_applicable", G.grade(touch["tiers"], touch["start_ms"]))   # a frame with touch: as before
 
     def test_the_name_lives_in_rubric_json(self):
         self.assertEqual((G.NAME, G.RUBRIC["name"]), ("Clarity", "Clarity"))

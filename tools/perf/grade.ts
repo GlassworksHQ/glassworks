@@ -34,6 +34,8 @@ export interface Rubric {
     /** Rubric 3 (#211): HA's more-info dialog, the slowest of a view's dialogs to settle. */
     dialog_levels: { level: string; settled_max_ms: number; frames_band?: Band[] }[];
     below: string;
+    /** Rubric 2: a frame without a touchscreen isn't graded on these tasks; each is `value` on every page, which every level accepts. */
+    no_touch: { tasks: string[]; value: string; reason: string };
     levels: { level: string; accepts: Record<string, string[]> }[];
     letters: { letter: string; meaning: string; needs: Record<string, string> }[];
     fallback: { letter: string; meaning: string };
@@ -68,6 +70,8 @@ export interface Summary {
   clarity?: number | null;
   measured_on?: string | null;
   protocol_version?: number | null;
+  /** false for a frame without a touchscreen (rubric 2): its scroll isn't graded. Absent: it has touch. */
+  touch?: boolean;
   webrtc_transport?: { transport?: string | null; chosen_by?: string | null; reason?: string | null; possibly_limited?: boolean } | null;
   pages?: Record<string, PageSummary>;
   restart_ms?: number | null;
@@ -96,6 +100,8 @@ export interface Grade {
   transport?: string | null;
   /** Over adb: heavy's cameras may be limited by the test's link. Never changes the letter. */
   transport_caveat?: string | null;
+  /** On a frame without touch (rubric 2): the tasks not graded there, and why. */
+  not_applicable?: Record<string, string>;
 }
 
 export const TRANSPORT_CAVEAT = "heavy's cameras went through the test's adb link and may be limited by it, not by the panel";
@@ -213,10 +219,11 @@ export function medianLevel(levels: (string | null)[], rubric: Rubric): string |
   return ls.length ? ls[Math.floor(ls.length / 2)] : null;
 }
 
-/** Each task's band on one page. The camera task is `none` on a page without streams. */
-export function tierBands(tier: TierInputs | undefined, rubric: Rubric, page?: string): Bands {
+/** Each task's band on one page. The camera task is `none` on a page without streams; on a frame without
+ * touch (touch false), each no_touch task is its `value`, whatever was measured. */
+export function tierBands(tier: TierInputs | undefined, rubric: Rubric, page?: string, touch = true): Bands {
   const t = tier || {};
-  return {
+  const out: Bands = {
     tap: band(t.inp_ms, rubric.metrics.inp_ms),
     scroll: t.scroll_level ?? null,
     updates: t.updates_level ?? null,
@@ -225,6 +232,8 @@ export function tierBands(tier: TierInputs | undefined, rubric: Rubric, page?: s
     blocking: band(t.blocking_ms, rubric.metrics.blocking_ms),
     dialog: t.dialog_level ?? null,
   };
+  if (touch === false) for (const task of rubric.grade.no_touch.tasks) out[task] = rubric.grade.no_touch.value;
+  return out;
 }
 
 export function pageLevel(bands: Bands, rubric: Rubric): Level {
@@ -247,12 +256,12 @@ function levelRank(level: Level, rubric: Rubric): number {
 }
 
 /** The letter from each page's inputs (median tap and load, median-of-runs frames bands) and the restart. */
-export function gradeBands(tiers: Record<string, TierInputs>, startMs: number | null | undefined, rubric: Rubric): Grade {
+export function gradeBands(tiers: Record<string, TierInputs>, startMs: number | null | undefined, rubric: Rubric, touch = true): Grade {
   const R = rubric.grade;
   const bands: Record<string, Bands> = {};
   const levels: Record<string, Level> = {};
   for (const t of R.pages) {
-    bands[t] = tierBands((tiers || {})[t], rubric, t);
+    bands[t] = tierBands((tiers || {})[t], rubric, t, touch);
     levels[t] = pageLevel(bands[t], rubric);
   }
   const start = band(startMs, rubric.metrics.start_ms);
@@ -271,10 +280,12 @@ export function gradeBands(tiers: Record<string, TierInputs>, startMs: number | 
   const capped = start === R.start_cap.band && order.indexOf(letter) < order.indexOf(R.start_cap.letter);
   if (capped) letter = R.start_cap.letter;
   const meaning = (R.letters.find((l) => l.letter === letter) || R.fallback).meaning;
-  return {
+  const g: Grade = {
     status: "graded", grade: letter, meaning, rubric_version: rubric.version, capped_by_start: capped,
     provisional: missing.length > 0, missing, bands, levels, start: { value: startMs ?? null, band: start },
   };
+  if (touch === false) g.not_applicable = Object.fromEntries(R.no_touch.tasks.map((t) => [t, R.no_touch.reason]));
+  return g;
 }
 
 /** What keeps a grade from the next letter up. Empty for the best letter. */
@@ -337,7 +348,8 @@ export function gradeSummary(summary: Summary, rubric: Rubric): Grade {
              why: `measured with protocol ${summary.protocol_version ?? "unknown"}, these rules are for protocol ${rubric.protocol_version}` };
   }
   const [tiers, start] = summaryInputs(summary, rubric);
-  const g = gradeBands(tiers, start, rubric);
+  // A summary says touch: false only for a frame without a touchscreen (summary.py); without it, touch.
+  const g = gradeBands(tiers, start, rubric, summary.touch !== false);
   g.provisional = (g.missing || []).length > 0 || (summary.gaps || []).length > 0;
   g.limits = nextLimits(g, rubric);
   g.transport = summary.webrtc_transport?.transport ?? null;

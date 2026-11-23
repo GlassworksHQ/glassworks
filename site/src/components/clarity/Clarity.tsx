@@ -9,6 +9,7 @@ import {
   clarityFor,
   goal,
   levelName,
+  notGraded,
   measured,
   nextLetter,
   notesFor,
@@ -122,9 +123,9 @@ function Detail({ c }: { c: Graded }) {
       value: parts.map(({ t, band }, i) => (
         <span key={t} className={parts.length > 1 ? s.line : undefined}>
           <span className={`${s.dot} ${s[tone(band)]}`} aria-hidden="true" />
-          {band === "none" ? levelName(band) : (measured(page, t) ?? (i ? `${TASK_NAME[t].toLowerCase()} not measured` : "Not measured"))}
-          {band !== "none" && <span className="visually-hidden">, {levelName(band)}</span>}
-          {i < parts.length - 1 && band !== "none" && ","}
+          {notGraded(band) ? levelName(band) : (measured(page, t) ?? (i ? `${TASK_NAME[t].toLowerCase()} not measured` : "Not measured"))}
+          {!notGraded(band) && <span className="visually-hidden">, {levelName(band)}</span>}
+          {i < parts.length - 1 && !notGraded(band) && ","}
         </span>
       )),
       held: parts.some((x) => x.need),

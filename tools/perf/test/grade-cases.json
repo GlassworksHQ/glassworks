@@ -1,6 +1,6 @@
 {
  "_comment": "Shared grade cases (MIT): every scroll level, live-update level, page level and letter boundary from test_grade.py, with the answer. grade.py (test_grade.py) and grade.ts (grade.test.mjs) must both give it. Regenerate only on purpose, with the rubric and the docs.",
- "rubric_version": 1,
+ "rubric_version": 2,
  "bands": [
   {
    "metric": "frame_p95_ms",
@@ -6704,6 +6704,508 @@
       ]
      }
     ]
+   }
+  },
+  {
+   "name": "rubric 2: no touch, scroll not measured, every other task at 60 fps: scroll n/a, A+, not provisional",
+   "tiers": {
+    "light": {
+     "inp_ms": 100,
+     "load_ms": 1000,
+     "updates_level": "premium",
+     "blocking_ms": 100,
+     "dialog_level": "premium"
+    },
+    "typical-nocam": {
+     "inp_ms": 100,
+     "load_ms": 1000,
+     "updates_level": "premium",
+     "blocking_ms": 100,
+     "dialog_level": "premium"
+    },
+    "typical": {
+     "inp_ms": 100,
+     "load_ms": 1000,
+     "updates_level": "premium",
+     "camera_level": "good",
+     "blocking_ms": 100,
+     "dialog_level": "premium"
+    },
+    "heavy": {
+     "inp_ms": 100,
+     "load_ms": 1000,
+     "updates_level": "premium",
+     "camera_level": "good",
+     "blocking_ms": 100,
+     "dialog_level": "premium"
+    }
+   },
+   "start_ms": 1000,
+   "touch": false,
+   "expect": {
+    "grade": "A+",
+    "meaning": "premium",
+    "levels": {
+     "light": "premium",
+     "typical-nocam": "premium",
+     "typical": "premium",
+     "heavy": "premium"
+    },
+    "bands": {
+     "light": {
+      "tap": "good",
+      "scroll": "n/a",
+      "updates": "premium",
+      "load": "good",
+      "camera": "none",
+      "blocking": "good",
+      "dialog": "premium"
+     },
+     "typical-nocam": {
+      "tap": "good",
+      "scroll": "n/a",
+      "updates": "premium",
+      "load": "good",
+      "camera": "none",
+      "blocking": "good",
+      "dialog": "premium"
+     },
+     "typical": {
+      "tap": "good",
+      "scroll": "n/a",
+      "updates": "premium",
+      "load": "good",
+      "camera": "good",
+      "blocking": "good",
+      "dialog": "premium"
+     },
+     "heavy": {
+      "tap": "good",
+      "scroll": "n/a",
+      "updates": "premium",
+      "load": "good",
+      "camera": "good",
+      "blocking": "good",
+      "dialog": "premium"
+     }
+    },
+    "capped_by_start": false,
+    "missing": [],
+    "provisional": false,
+    "start": {
+     "value": 1000,
+     "band": "good"
+    },
+    "not_applicable": {
+     "scroll": "this frame has no touch"
+    },
+    "limits": []
+   }
+  },
+  {
+   "name": "rubric 2: touch, scroll not measured: missing on every page, provisional (no letter above E)",
+   "tiers": {
+    "light": {
+     "inp_ms": 100,
+     "load_ms": 1000,
+     "updates_level": "premium",
+     "blocking_ms": 100,
+     "dialog_level": "premium"
+    },
+    "typical-nocam": {
+     "inp_ms": 100,
+     "load_ms": 1000,
+     "updates_level": "premium",
+     "blocking_ms": 100,
+     "dialog_level": "premium"
+    },
+    "typical": {
+     "inp_ms": 100,
+     "load_ms": 1000,
+     "updates_level": "premium",
+     "camera_level": "good",
+     "blocking_ms": 100,
+     "dialog_level": "premium"
+    },
+    "heavy": {
+     "inp_ms": 100,
+     "load_ms": 1000,
+     "updates_level": "premium",
+     "camera_level": "good",
+     "blocking_ms": 100,
+     "dialog_level": "premium"
+    }
+   },
+   "start_ms": 1000,
+   "expect": {
+    "grade": "E",
+    "meaning": "not a good wall panel, even for light dashboards",
+    "levels": {
+     "light": null,
+     "typical-nocam": null,
+     "typical": null,
+     "heavy": null
+    },
+    "bands": {
+     "light": {
+      "tap": "good",
+      "scroll": null,
+      "updates": "premium",
+      "load": "good",
+      "camera": "none",
+      "blocking": "good",
+      "dialog": "premium"
+     },
+     "typical-nocam": {
+      "tap": "good",
+      "scroll": null,
+      "updates": "premium",
+      "load": "good",
+      "camera": "none",
+      "blocking": "good",
+      "dialog": "premium"
+     },
+     "typical": {
+      "tap": "good",
+      "scroll": null,
+      "updates": "premium",
+      "load": "good",
+      "camera": "good",
+      "blocking": "good",
+      "dialog": "premium"
+     },
+     "heavy": {
+      "tap": "good",
+      "scroll": null,
+      "updates": "premium",
+      "load": "good",
+      "camera": "good",
+      "blocking": "good",
+      "dialog": "premium"
+     }
+    },
+    "capped_by_start": false,
+    "missing": [
+     "light.scroll",
+     "typical-nocam.scroll",
+     "typical.scroll",
+     "heavy.scroll"
+    ],
+    "provisional": true,
+    "start": {
+     "value": 1000,
+     "band": "good"
+    },
+    "limits": [
+     {
+      "page": "light",
+      "needs": "fluid",
+      "tasks": [
+       "scroll"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "rubric 2: no touch, a slow scroll measured anyway doesn't count: n/a, A+",
+   "tiers": {
+    "light": {
+     "inp_ms": 100,
+     "load_ms": 1000,
+     "scroll_level": "slow",
+     "updates_level": "premium",
+     "blocking_ms": 100,
+     "dialog_level": "premium"
+    },
+    "typical-nocam": {
+     "inp_ms": 100,
+     "load_ms": 1000,
+     "scroll_level": "slow",
+     "updates_level": "premium",
+     "blocking_ms": 100,
+     "dialog_level": "premium"
+    },
+    "typical": {
+     "inp_ms": 100,
+     "load_ms": 1000,
+     "scroll_level": "slow",
+     "updates_level": "premium",
+     "camera_level": "good",
+     "blocking_ms": 100,
+     "dialog_level": "premium"
+    },
+    "heavy": {
+     "inp_ms": 100,
+     "load_ms": 1000,
+     "scroll_level": "slow",
+     "updates_level": "premium",
+     "camera_level": "good",
+     "blocking_ms": 100,
+     "dialog_level": "premium"
+    }
+   },
+   "start_ms": 1000,
+   "touch": false,
+   "expect": {
+    "grade": "A+",
+    "meaning": "premium",
+    "levels": {
+     "light": "premium",
+     "typical-nocam": "premium",
+     "typical": "premium",
+     "heavy": "premium"
+    },
+    "bands": {
+     "light": {
+      "tap": "good",
+      "scroll": "n/a",
+      "updates": "premium",
+      "load": "good",
+      "camera": "none",
+      "blocking": "good",
+      "dialog": "premium"
+     },
+     "typical-nocam": {
+      "tap": "good",
+      "scroll": "n/a",
+      "updates": "premium",
+      "load": "good",
+      "camera": "none",
+      "blocking": "good",
+      "dialog": "premium"
+     },
+     "typical": {
+      "tap": "good",
+      "scroll": "n/a",
+      "updates": "premium",
+      "load": "good",
+      "camera": "good",
+      "blocking": "good",
+      "dialog": "premium"
+     },
+     "heavy": {
+      "tap": "good",
+      "scroll": "n/a",
+      "updates": "premium",
+      "load": "good",
+      "camera": "good",
+      "blocking": "good",
+      "dialog": "premium"
+     }
+    },
+    "capped_by_start": false,
+    "missing": [],
+    "provisional": false,
+    "start": {
+     "value": 1000,
+     "band": "good"
+    },
+    "not_applicable": {
+     "scroll": "this frame has no touch"
+    },
+    "limits": []
+   }
+  },
+  {
+   "name": "rubric 2: no touch, heavy's live updates good: A, held back by updates only (never scroll)",
+   "tiers": {
+    "light": {
+     "inp_ms": 100,
+     "load_ms": 1000,
+     "updates_level": "premium",
+     "blocking_ms": 100,
+     "dialog_level": "premium"
+    },
+    "typical-nocam": {
+     "inp_ms": 100,
+     "load_ms": 1000,
+     "updates_level": "premium",
+     "blocking_ms": 100,
+     "dialog_level": "premium"
+    },
+    "typical": {
+     "inp_ms": 100,
+     "load_ms": 1000,
+     "updates_level": "premium",
+     "camera_level": "good",
+     "blocking_ms": 100,
+     "dialog_level": "premium"
+    },
+    "heavy": {
+     "inp_ms": 100,
+     "load_ms": 1000,
+     "updates_level": "good",
+     "camera_level": "good",
+     "blocking_ms": 100,
+     "dialog_level": "premium"
+    }
+   },
+   "start_ms": 1000,
+   "touch": false,
+   "expect": {
+    "grade": "A",
+    "meaning": "a good wall panel even for large dashboards",
+    "levels": {
+     "light": "premium",
+     "typical-nocam": "premium",
+     "typical": "premium",
+     "heavy": "good"
+    },
+    "bands": {
+     "light": {
+      "tap": "good",
+      "scroll": "n/a",
+      "updates": "premium",
+      "load": "good",
+      "camera": "none",
+      "blocking": "good",
+      "dialog": "premium"
+     },
+     "typical-nocam": {
+      "tap": "good",
+      "scroll": "n/a",
+      "updates": "premium",
+      "load": "good",
+      "camera": "none",
+      "blocking": "good",
+      "dialog": "premium"
+     },
+     "typical": {
+      "tap": "good",
+      "scroll": "n/a",
+      "updates": "premium",
+      "load": "good",
+      "camera": "good",
+      "blocking": "good",
+      "dialog": "premium"
+     },
+     "heavy": {
+      "tap": "good",
+      "scroll": "n/a",
+      "updates": "good",
+      "load": "good",
+      "camera": "good",
+      "blocking": "good",
+      "dialog": "premium"
+     }
+    },
+    "capped_by_start": false,
+    "missing": [],
+    "provisional": false,
+    "start": {
+     "value": 1000,
+     "band": "good"
+    },
+    "not_applicable": {
+     "scroll": "this frame has no touch"
+    },
+    "limits": [
+     {
+      "page": "heavy",
+      "needs": "premium",
+      "tasks": [
+       "updates"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "rubric 2: no touch, light's tap not measured: still missing and provisional; only scroll is exempt",
+   "tiers": {
+    "light": {
+     "load_ms": 1000,
+     "updates_level": "premium",
+     "blocking_ms": 100,
+     "dialog_level": "premium"
+    },
+    "typical-nocam": {
+     "inp_ms": 100,
+     "load_ms": 1000,
+     "updates_level": "premium",
+     "blocking_ms": 100,
+     "dialog_level": "premium"
+    },
+    "typical": {
+     "inp_ms": 100,
+     "load_ms": 1000,
+     "updates_level": "premium",
+     "camera_level": "good",
+     "blocking_ms": 100,
+     "dialog_level": "premium"
+    },
+    "heavy": {
+     "inp_ms": 100,
+     "load_ms": 1000,
+     "updates_level": "premium",
+     "camera_level": "good",
+     "blocking_ms": 100,
+     "dialog_level": "premium"
+    }
+   },
+   "start_ms": 1000,
+   "touch": false,
+   "expect": {
+    "grade": "A+",
+    "meaning": "premium",
+    "levels": {
+     "light": null,
+     "typical-nocam": "premium",
+     "typical": "premium",
+     "heavy": "premium"
+    },
+    "bands": {
+     "light": {
+      "tap": null,
+      "scroll": "n/a",
+      "updates": "premium",
+      "load": "good",
+      "camera": "none",
+      "blocking": "good",
+      "dialog": "premium"
+     },
+     "typical-nocam": {
+      "tap": "good",
+      "scroll": "n/a",
+      "updates": "premium",
+      "load": "good",
+      "camera": "none",
+      "blocking": "good",
+      "dialog": "premium"
+     },
+     "typical": {
+      "tap": "good",
+      "scroll": "n/a",
+      "updates": "premium",
+      "load": "good",
+      "camera": "good",
+      "blocking": "good",
+      "dialog": "premium"
+     },
+     "heavy": {
+      "tap": "good",
+      "scroll": "n/a",
+      "updates": "premium",
+      "load": "good",
+      "camera": "good",
+      "blocking": "good",
+      "dialog": "premium"
+     }
+    },
+    "capped_by_start": false,
+    "missing": [
+     "light.tap"
+    ],
+    "provisional": true,
+    "start": {
+     "value": 1000,
+     "band": "good"
+    },
+    "not_applicable": {
+     "scroll": "this frame has no touch"
+    },
+    "limits": []
    }
   }
  ],

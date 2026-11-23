@@ -1757,6 +1757,49 @@ class Android6(unittest.TestCase):
         self.assertLess(abs(note["drift_ms"]), 100)
 
 
+class NoTouch(unittest.TestCase):
+    """Rubric 2 (2026-11-23): the Mirror has no touch (frames/lululemon-mirror/design/installer.json), so nobody scrolls
+    it. The runner reads that from the frame data, sends its graded views no swipes (the taps still go), and the report
+    grades it without scrolling: n/a, said plainly, and not provisional for it."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp()
+        env, cls.state = fake_env(cls.tmp, FAKE_HA_URL=f"http://127.0.0.1:{port(84)}", GW_PERF_COLD_SETTLE="0",
+                                  GW_PERF_RUN_GAP="0", GW_PERF_BETWEEN_QUIET="0.5")
+        cls.out = os.path.join(cls.tmp, "out")
+        cls.proc = subprocess.run([RUN, "--frame", "lululemon-mirror", "--name", "lululemon Mirror", "--runs", "1",
+                                   "--out", cls.out, "--port", port(84), "--taps", "2", "--skip-synthetic",
+                                   "--skip-real-use"], env=env, capture_output=True, text=True, timeout=300)
+        with open(os.path.join(cls.state, "commands.log")) as f:
+            cls.commands = f.read().splitlines()
+        cls.rep = None
+        if cls.proc.returncode == 0:
+            with open(os.path.join(cls.out, "report.json")) as f:
+                cls.rep = json.load(f)
+
+    def test_no_swipe_is_sent_and_the_taps_are(self):
+        self.assertEqual(self.proc.returncode, 0, self.proc.stderr[-3000:])
+        self.assertEqual([c for c in self.commands if "input swipe" in c], [])
+        self.assertTrue([c for c in self.commands if "input tap" in c])
+        self.assertIn("lululemon-mirror has no touch: no swipes, and scrolling isn't graded", self.proc.stderr)
+        with open(os.path.join(self.out, "device.json")) as f:
+            self.assertIs(json.load(f)["touch"], False)
+
+    def test_the_grade_comes_from_the_other_tasks(self):
+        self.assertEqual(self.proc.returncode, 0, self.proc.stderr[-3000:])
+        g = self.rep["grade"]
+        self.assertEqual((g["grade"], g["provisional"], g["missing"]), ("A+", False, []))   # the fake holds 60 fps
+        self.assertEqual({b["scroll"] for b in g["bands"].values()}, {"n/a"})
+        self.assertEqual(g["not_applicable"], {"scroll": "this frame has no touch"})
+        self.assertNotIn("scroll", g["headline"].lower())
+        for t, s_ in self.rep["graded"]["reference"]["tiers"].items():
+            self.assertIsNotNone(s_["inp_ms"], t)
+            self.assertIsNotNone(s_["latency_p95_ms"], t)
+        with open(os.path.join(self.out, "report.md")) as f:
+            self.assertIn("Scrolling: not applicable, this frame has no touch.", f.read())
+
+
 class PaneRamTestDashboard(unittest.TestCase):
     def test_a_kiosk_that_ignores_the_test_dashboard_takes_no_pane_sample(self):
         """CodeRabbit on #623: am says "Status: ok" to a kiosk that ignores the extra, and the pane samples would be of

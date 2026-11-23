@@ -30,6 +30,7 @@ SUMMARY_KEYS = {"schema", "test", "clarity", "protocol_version", "report_schema"
 PAGE_KEYS = {"inp_ms", "open_ms", "blocking_ms", "usable_ms", "scroll", "updates", "camera", "runs", "timed_out_runs",
              "dialog"}   # Clarity v3 (#211): the more-info dialogs, in a report that has them
 GRADE_KEYS = ("grade", "meaning", "levels", "bands", "capped_by_start", "missing", "provisional", "start")
+OPTIONAL_GRADE_KEYS = ("not_applicable",)   # rubric 2: only on a frame without touch
 
 
 def fixture(variant):
@@ -37,7 +38,9 @@ def fixture(variant):
     b = T.Build()
     b.setUp()
     with open(os.path.join(b.dir, "device.json")) as f:
-        b.write("device.json", dict(json.load(f), measured_on="2026-11-20"))
+        # Rubric 2: a frame without touch (the Mirror) says so in device.json, from its frame data.
+        touch = {"touch": False} if variant == "no-touch" else {}
+        b.write("device.json", dict(json.load(f), measured_on="2026-11-20", **touch))
     for k in (1, 2, 3):
         run = T.refstart(k, [120, 180, 150][k - 1])
         if variant == "A":
@@ -55,6 +58,10 @@ def fixture(variant):
         elif variant == "premium":
             run = T.refstart(k, 100, heavy_missed=0)
             run["tiers"]["heavy"]["swipes"] = [T.swipe(50.0, i, T.late(60, 6)) for i in range(3)]   # good, not premium
+        elif variant in ("no-touch", "no-swipes"):   # rubric 2: no swipes ran (the runner sends none without touch)
+            run = T.refstart(k, 100, heavy_missed=0)
+            for t in run["tiers"].values():
+                t["swipes"] = []
         elif variant == "raf-only":
             run["tiers"]["heavy"]["swipes"] = [T.swipe(50.0, i, T.late(60, 20), sf=False) for i in range(3)]
         elif variant == "pre-v10":      # a report without typical-nocam: C's page is missing, provisional
@@ -74,7 +81,7 @@ def fixture(variant):
     return rep
 
 
-VARIANTS = ["B", "A", "premium", "E", "capped", "zoom", "raf-only", "even", "missing-run", "pre-v10"]
+VARIANTS = ["B", "A", "premium", "E", "capped", "zoom", "raf-only", "even", "missing-run", "pre-v10", "no-touch", "no-swipes"]
 
 
 def ts_grades(summaries):
@@ -257,6 +264,8 @@ class Parity(unittest.TestCase):
                 self.assertEqual(py["status"], "graded")
                 for k in GRADE_KEYS:
                     self.assertEqual(py[k], rep_g[k], k)
+                for k in OPTIONAL_GRADE_KEYS:
+                    self.assertEqual(py.get(k), rep_g.get(k), k)
 
     def test_typescript_equals_python(self):
         for v in VARIANTS:
@@ -266,6 +275,28 @@ class Parity(unittest.TestCase):
                 for k in GRADE_KEYS + ("limits", "why"):
                     if k in py:
                         self.assertEqual(ts[k], py[k], k)
+                for k in OPTIONAL_GRADE_KEYS:
+                    self.assertEqual(ts.get(k), py.get(k), k)
+
+    def test_a_frame_without_touch_is_graded_without_scrolling_in_both(self):
+        """Rubric 2: the no-touch fixture ran no swipes. Its summary says touch: false, and both graders make its
+        scroll n/a: the letter comes from the other tasks (A+ here, as A's fixture), not provisional for the scroll.
+        The same runs on a frame with touch are short of scrolling on every page: provisional, as before."""
+        s, rep_g = self.sums["no-touch"], self.reps["no-touch"]["grade"]
+        self.assertIs(s["touch"], False)
+        self.assertTrue(s["complete"])
+        for g in (G.grade_summary(s), self.ts["no-touch"], rep_g):
+            self.assertEqual((g["grade"], g["provisional"], g["missing"]), ("A+", False, []))
+            self.assertEqual({b["scroll"] for b in g["bands"].values()}, {"n/a"})
+            self.assertEqual(g["not_applicable"], {"scroll": "this frame has no touch"})
+        touch, rep_t = self.sums["no-swipes"], self.reps["no-swipes"]["grade"]
+        self.assertNotIn("touch", touch)                 # a frame with touch: the summary as it was
+        for g in (G.grade_summary(touch), self.ts["no-swipes"], rep_t):
+            self.assertTrue(g["provisional"])
+            self.assertEqual([m for m in g["missing"] if m.endswith(".scroll")], [f"{t}.scroll" for t in G.TIERS])
+            self.assertNotIn("not_applicable", g)
+        self.assertFalse(touch["complete"])
+        self.assertNotEqual(rep_t["grade"], "A+")
 
     def test_the_transport_goes_with_the_letter_in_both_and_never_changes_it(self):
         """Protocol 7 (#202, option B): the camera video's path is in the summary, and both graders pass

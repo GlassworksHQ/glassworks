@@ -44,6 +44,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import clock as C  # noqa: E402
 import perflib as P  # noqa: E402
 
+FRAMES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "frames")
+
 
 class Device:
     def __init__(self, serial, package, activity=""):
@@ -292,6 +294,9 @@ def cmd_device(dev, a):
     zones = dev.sh("for z in /sys/class/thermal/thermal_zone*; do echo $(cat $z/type) $(cat $z/temp); done 2>/dev/null")
     write_json(os.path.join(a.out, "device.json"), {
         "frame": a.frame, "frame_name": a.name or a.frame,
+        # From the frame's data (design/installer.json `touch`): without touch nobody scrolls it, so the runner sends
+        # no swipes and the scroll isn't graded (rubric.json no_touch, rubric 2).
+        "touch": P.frame_touch(FRAMES, a.frame),
         "measured_on": time.strftime("%Y-%m-%d", time.gmtime()),   # UTC date of the run, from this computer
         "model": props["ro.product.model"], "manufacturer": props["ro.product.manufacturer"],
         "android": props["ro.build.version.release"], "api": int(props["ro.build.version.sdk"] or 0),
@@ -787,6 +792,11 @@ def cmd_coldstart(dev, a):
         # would skip building it.
         sys.exit(f"--warmup-tier {a.warmup_tier} is also graded; a view shown twice is cached the second time")
     turn = (a.run - 1) % len(base) if base else 0
+    # A frame without touch (its design/installer.json says so): nobody scrolls it, so its graded views get no swipes,
+    # and the scroll isn't graded (rubric.json no_touch). The taps still go: injected taps reach the page there.
+    touch = P.frame_touch(FRAMES, a.frame)
+    if ref and not touch:
+        print(f"{a.frame} has no touch: no swipes, and scrolling isn't graded", file=sys.stderr)
     tiers = base[turn:] + base[:turn]
     # The HLS fallback views (#202; detail, not graded) come after the graded ones, in a fixed order.
     fallback = [t for t in a.fallback.split(",") if t] if ref else []
@@ -958,7 +968,7 @@ def cmd_coldstart(dev, a):
             tier, extra = slot, {"taps": a.taps, "swipes": 0, "dialogs": 0}
             res["fallback"][slot] = {"nonce": nonce, "swipes": []}
         else:
-            tier, extra = slot, {"taps": a.taps}
+            tier, extra = slot, dict({"taps": a.taps}, **({} if touch else {"swipes": 0}))
             res["tiers"][tier] = {"nonce": nonce, "swipes": []}
         # Protocol 4: the frontend is already loaded on the start view. The fake Home Assistant hands
         # this command to the harness, which opens the view with HA's own navigation (no page load).

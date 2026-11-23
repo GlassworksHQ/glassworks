@@ -104,8 +104,9 @@ test("the pages' protocol is the one rubric.json's rules are for", () => {
   assert.equal(T.PROTOCOL, rubric.protocol_version);
   // The pages and the rules carry the same version marker.
   assert.equal(T.CLARITY, rubric.clarity);
-  // Clarity v1, the version Glassworks 1.0.0 ships with (2026-11-19): the numbers started again at 1.
-  assert.deepEqual([T.CLARITY, T.PROTOCOL, rubric.version], [1, 1, 1]);
+  // Clarity v1, the version Glassworks 1.0.0 ships with (2026-11-19): the numbers started again at 1. Rubric 2
+  // (2026-11-23): a frame without touch isn't graded on scrolling; the pages didn't change.
+  assert.deepEqual([T.CLARITY, T.PROTOCOL, rubric.version], [1, 1, 2]);
   assert.match(rubric.clarity_measured_since, /^\d{4}-\d{2}-\d{2}$/);
 });
 

@@ -30,6 +30,8 @@ On each dashboard, Clarity tests the interactions you notice every day on a wall
 - **More-info dialogs** — opening lights, thermostats, and sensor history graphs
 - **Live camera streams** — how quickly the first frame appears and how smoothly video plays
 
+Some devices, like the lululemon Mirror, have no touchscreen, so nobody can scroll them. Clarity doesn't grade those devices on scrolling. It skips the swipes and grades every other task as usual, and the report says "Scrolling: not applicable, this frame has no touch." A missing scroll result doesn't make their grade provisional, though anything else that's missing still does.
+
 All thresholds come from published web and mobile UX standards (Core Web Vitals, RAIL, and Android vitals) rather than numbers tuned to any particular piece of hardware.
 
 ## Reading a device's Clarity card

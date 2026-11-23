@@ -24,7 +24,7 @@ Because a live WebRTC camera stream is the heaviest load most dashboards carry�
 
 Every report opens with a plain-English headline and summary naming both the grade and the specific tasks holding the device back from the next letter up (for example: *"Aqara S1 Plus: Clarity C, a good wall panel for typical dashboards without a camera. Held back by large dashboards: scrolling averages 41.5 fps (p95 50 ms)."*). Grades are never hardcoded: each frame stores its measured [summary](#the-summary-glassworksperf-summary3), and `glassworks.dev` calculates the letter at render time against `tools/perf/page/rubric.json` (see [Showing the grade](#showing-the-grade)).
 
-Clarity runs **Clarity v1** (protocol 1, rubric 1) on three standardized **reference dashboards**—*light*, *typical*, and *heavy*—using a pinned release of Home Assistant's real frontend served by a local fake Home Assistant (`tools/perf/fakeha.py`). Because every panel receives identical cards, layout, and update streams from the test machine rather than from your Home Assistant server or personal dashboard, grades reflect the hardware and Glassworks runtime. When a run uses wireless adb or LAN camera streaming instead of staying strictly over USB, graded traffic crosses your local network—`netcheck.py` checks gateway latency before the run and marks the grade provisional if the test machine's network adds latency (see [The test computer's network](#the-test-computers-network)). Background panes, the radio, and device thermals remain active just as they do in daily use (see [What the grade does and doesn't tell you](#what-the-grade-does-and-doesnt-tell-you)), and thresholds come from published web and mobile UX guidelines (Core Web Vitals, RAIL, Android vitals) rather than tuning to any specific panel.
+Clarity runs **Clarity v1** (protocol 1, rubric 2) on three standardized **reference dashboards**—*light*, *typical*, and *heavy*—using a pinned release of Home Assistant's real frontend served by a local fake Home Assistant (`tools/perf/fakeha.py`). Because every panel receives identical cards, layout, and update streams from the test machine rather than from your Home Assistant server or personal dashboard, grades reflect the hardware and Glassworks runtime. When a run uses wireless adb or LAN camera streaming instead of staying strictly over USB, graded traffic crosses your local network—`netcheck.py` checks gateway latency before the run and marks the grade provisional if the test machine's network adds latency (see [The test computer's network](#the-test-computers-network)). Background panes, the radio, and device thermals remain active just as they do in daily use (see [What the grade does and doesn't tell you](#what-the-grade-does-and-doesnt-tell-you)), and thresholds come from published web and mobile UX guidelines (Core Web Vitals, RAIL, Android vitals) rather than tuning to any specific panel.
 
 Alongside the graded tasks, Clarity records per-process and per-pane RAM usage, idle CPU, real-dashboard reload times, and animation capacity for engineering visibility without affecting the letter grade. For pre-release protocol and renumbering notes, see [Version history](#version-history) at the bottom of this page.
 
@@ -147,6 +147,8 @@ Because `fakeha.py` runs on your computer, connect your test machine over wired 
   taps (and no more than `--taps`), a swipe of 50 to 2000 ms. A bad request isn't sent; that page
   gets an error and isn't graded. A gesture is sent only while its page is still the current one,
   and the next page opens only after the last page's gestures are done. Nothing else is touched.
+  On a frame without touch ([No touchscreen](#other-glassworks-apps-and-android-6)) the graded views ask for no
+  swipes: only the taps go.
 - **Restarts** send the system `KEYCODE_WAKEUP` key (the kiosk's wake intent would start the app)
   and force-stop the app. A kiosk that is the device's home app, like the S1's, is started again by
   the system at once (0.2 s on the S1). Otherwise the runner starts it with `am start -W` after 3 s.
@@ -267,9 +269,30 @@ touchscreen. The API 23 emulator was set up without one (`hw.screen=no-touch`, w
 `-touch`), with the Mirror's legacy build of the app (0.2.0). There (2026-11-18) the taps reached the page:
 the first two views counted all their taps by the page's own `pointerdown`, and Event Timing measured them. But
 no swipe scrolled the page, on any view, while the same `input swipe` scrolled Android's own Settings list. So
-on a frame without a touchscreen, the legacy engine takes injected taps but doesn't scroll for injected swipes,
-and the scroll task isn't measured there: the grade comes out provisional. How the rubric treats a frame without
-touch is an open question; nothing in the rubric changed for it.
+on a frame without a touchscreen, the legacy engine takes injected taps but doesn't scroll for injected swipes.
+
+**A frame without touch isn't graded on scrolling** (rubric 2, the maintainer, 2026-11-23). Nobody can scroll a
+Mirror, so the scroll task doesn't apply to it. A frame says it has no touch in its frame data:
+`frames/<id>/design/installer.json` `"touch": false` (the Mirror's), the same field Kiln reads, or its base frame's
+(`design/frame.json` `base`); a frame that doesn't say, or that the repo doesn't know, has touch
+(`perflib.frame_touch`). Then:
+
+- The runner records it (`device.json` `touch`) and sends the graded views no swipes (`swipes=0`, as the HLS copies
+  already get). The taps go as before: they reach the page there.
+- The scroll is `n/a` on every page (`rubric.json` `grade.no_touch`), which every level accepts. It never holds a
+  page back and is never missing, so it makes nothing provisional, and nothing about swipes (none during the live
+  updates, rAF only, lost scroll steps) is a reason either. The letter comes from the other tasks: taps, live
+  updates, opening the view, the blocking after it, cameras and more-info dialogs.
+- Every other task is graded as on any frame. Missing evidence for one of them still makes the grade provisional.
+- report.json says so: `frame.device.touch` is `false`, each page's `grade.bands.<page>.scroll` is `n/a`, and
+  `grade.not_applicable` is `{"scroll": "this frame has no touch"}`. report.md says it under the notes, "Scrolling:
+  not applicable, this frame has no touch.", and its table's scroll cells read `n/a (no touch)`. The summary carries
+  `touch: false` (only on such a frame), so `grade.ts` grades it the same way.
+- The headline says nothing about scrolling; an A+ there says every *graded* task holds 60 fps on large dashboards.
+
+A frame with touch is graded exactly as before, and a missing scroll there is still "not measured" and provisional.
+This isn't a new protocol: on every frame with touch the runner does what it did, record for record, and on the Mirror
+the swipes it no longer sends never scrolled (as with #643's reads during a window, no stored result changes meaning).
 
 **Portrait.** The pages place their taps and swipes from the page's own size (`innerWidth`, `innerHeight`,
 `devicePixelRatio`): the swipe runs down the middle from 85 % to 15 % of the height. Nothing assumes landscape.
@@ -1175,7 +1198,7 @@ gets an error, which the frontend handles as it would from HA, and the fake logs
 | Task | How | Where it comes from |
 |---|---|---|
 | Tap | INP: the worst of 10 taps on the toggle, taken while the live updates run. Event Timing gives the delay, the handler time and the time to the next paint. Taps under 16 ms aren't reported by Event Timing; they count as 16 ms | Each page |
-| Scroll | Real swipes (`input swipe`), while the live updates run. A swipe's window runs from its first scroll event until 400 ms with no scroll event, the fling included, capped at 100 refreshes. A swipe that reached the end of the page anyway (`hit_edge`) is left out and counted: it stops early, so its window is mostly the flick's slow start. All of a run's other swipes are pooled: rAF over every swipe, SurfaceFlinger over the swipes whose history it kept (decided swipe by swipe). The frames are the worse of the two, judged on the run's scroll level (average fps over the swipes and p95; see [The grade](#the-grade)), and the page takes the median level. A run in which SurfaceFlinger kept no swipe rests on rAF only, which can't see frames the compositor dropped: the report says so and the grade is provisional. `scrolled_px` proves the page moved: a page that didn't move is "not measured". Each swipe logs how many state changes (sensor values and on/off changes, not the clock) ran during it (`changes_during`); a page where none did is provisional | Each page; SurfaceFlinger |
+| Scroll | Real swipes (`input swipe`), while the live updates run. A swipe's window runs from its first scroll event until 400 ms with no scroll event, the fling included, capped at 100 refreshes. A swipe that reached the end of the page anyway (`hit_edge`) is left out and counted: it stops early, so its window is mostly the flick's slow start. All of a run's other swipes are pooled: rAF over every swipe, SurfaceFlinger over the swipes whose history it kept (decided swipe by swipe). The frames are the worse of the two, judged on the run's scroll level (average fps over the swipes and p95; see [The grade](#the-grade)), and the page takes the median level. A run in which SurfaceFlinger kept no swipe rests on rAF only, which can't see frames the compositor dropped: the report says so and the grade is provisional. `scrolled_px` proves the page moved: a page that didn't move is "not measured". Each swipe logs how many state changes (sensor values and on/off changes, not the clock) ran during it (`changes_during`); a page where none did is provisional. A frame without touch isn't graded on it: `n/a`, no swipes sent ([No touchscreen](#other-glassworks-apps-and-android-6), rubric 2) | Each page; SurfaceFlinger |
 | Live updates | **Change to screen**: per change, from when the fake sent it (from the stream's schedule; see [Change to screen](#change-to-screen)) to the first frame on screen that can show it. The harness notes when each change reached the page (before HA's own listener), when HA changed the card, and the next animation frame (the frame the change is drawn in); that frame can reach the screen one refresh later at the earliest, so the first SurfaceFlinger present after that is taken (frames presented sooner were already on their way). A change with no frame by the window's end counts as the time from it to the window's end, which is conservative: it may show later still (one less than 250 ms from the end isn't counted, and one that is counts as at least 250.1 ms, so it never passes fluid's 250 ms). A change that never reached the page in the window counts the same way. One SurfaceFlinger's history doesn't reach isn't counted, and if fewer than half are counted the run isn't. The two clocks are tied by the page's log line to within a few ms, so a value can be a refresh off; the bars are 150 and 250 ms. Each run's level is from the p95 over the window's changes; the page takes the median level. **Frame pacing** over the frames that had a change to draw (a rAF interval counts when it overlaps a change, from when it was due to when it ran plus its transition) decides only the premium level (A+) and is reported. A **live check** at the window's start logs whether the toggle and everything that changes are on screen, and the change log proves the updates ran. If something was off screen or there were no targets, the updates aren't graded (and, if off screen, the taps neither). The change log is the fake's schedule (since pre-release protocol 4), so updates that didn't arrive are never a reason to skip the window: they count | Each view; SurfaceFlinger |
 | Open the view | From the navigation to the view (HA's `navigate()`, as a view tab calls it, in the frontend that is already loaded) to the view's head and every card on its first screen **drawn**, on screen (the first v1's rubric 1 ran to usable: drawn and the main thread free; see [Open the view](#open-the-view-a-navigation-in-the-loaded-frontend) and [Usable](#usable)). The times come from the page's own clock, tied to logcat's by its log line. If the view never says it was usable, or no frame reached the screen after it, it is "not measured", never 0. (Pre-release protocols 1 to 3, and protocol 4 as first written, loaded the whole page for each dashboard) | Each view; SurfaceFlinger |
 | Blocking after the open | From the first screen drawn to usable (the main thread free for 500 ms), each animation frame's time past 50 ms, added up: Total Blocking Time measured on frames ([Usable](#usable)). A view that never became usable within the runner's deadline blocks for all of it | Each view's page |
@@ -1355,6 +1378,10 @@ summary says it isn't comparable.
 dashboard after a restart (an update, a crash, a power cut) is not an A+, A or B panel. A cap never raises a
 letter. Letters rank by their place in the table, not by spelling.
 
+**A frame without touch isn't graded on scrolling** (rubric 2, 2026-11-23). Its scroll is `n/a` on every page
+(`grade.no_touch` in rubric.json), which every level accepts, so the letter comes from the other tasks and the
+scroll is never missing. The runner sends it no swipes. See [No touchscreen](#other-glassworks-apps-and-android-6).
+
 A measurement that is missing fails whatever needs it, and the grade is marked **provisional**, with
 what is missing listed. Each band counts over the runs **attempted** (`plan.json`, written by
 `run.sh`), not only those that finished: a run that failed or left no file, a task measured in fewer
@@ -1442,6 +1469,10 @@ had results under the new definition:
 3. Then came the final definition: **every wall-panel task** (tap, scroll, live updates, opening a
    view, restart) on dashboards of growing size. No frame had scroll or wall-panel results when it
    was set. The S1's D under the animation pages was not the reason for either change.
+
+Rubric 2's rule for a frame without touch (its scroll is `n/a`) is the same kind of choice: it holds for every frame
+that has no touchscreen, it changes nothing for a frame that has one, and it came before any such frame had a result
+(the Mirror has none published).
 
 The S1 is just the first frame graded under it. Its result goes in this document whatever letter it
 gets. The thresholds, the pages and the tables must not be moved to change a particular frame's
@@ -1782,14 +1813,14 @@ spread of the `all-on` samples, the report says "within noise". On the S1:
 | `protocol_version` | The measurement protocol the pages ran (`null` if the runs disagree). See [Protocol and rubric versions](#protocol-and-rubric-versions) |
 | `measured_on` | The run's date (UTC, from the computer that ran it) |
 | `runs_attempted` | Graded runs attempted (`plan.json`), the count each band is over |
-| `frame` | `id`, `name`, `device` (model, Android, API, ABI, SoC, CPU, RAM, display with density and refresh, temperatures), `app` (package, version, APK bytes on the device, GeckoView version) |
+| `frame` | `id`, `name`, `device` (model, Android, API, ABI, SoC, CPU, RAM, display with density and refresh, temperatures, `touch`: whether the frame has a touchscreen, from its frame data; a report from before it has none and is graded as having touch), `app` (package, version, APK bytes on the device, GeckoView version) |
 | `apk` | One entry per APK given with `--apk`: `abis`, `bytes`, `parts_bytes` (dex, native, assets, resources, other) |
 | `notes` | What's good and what holds it back, in words ([The notes](#the-notes-whats-good-what-holds-it-back)): `good` and `limits` (a sentence each, or `null`), `causes` (the likely cause and memory, each a sentence, either may be missing), `text` (the paragraph), `rubric` (the rubric version it judged by) |
 | `thermal` | Each stage's thermal zones from `thermal.tsv`, in order: `phase`, `zones` (°C) |
 | `webrtc_transport` | Protocol 7: `transport` (`lan-udp`, `lan-turn`, `adb`), `chosen_by` (`auto`, `flag`), `reason` (lanprobe.py's), `limited` (over adb with heavy's cameras measured: why heavy's camera result may be the link's; else `null`). `null` before protocol 7 |
 | `fake_ha` | What the fake Home Assistant's log (`fakeha.jsonl`) says: `commands` (the frontend sent), `unknown` and `failed` (per command; any makes the grade provisional), `stream_sent`, `stream_late_max_ms` (the graded views' streams only; over 200 ms, one update interval, is provisional), `stream_late_detail_max_ms` (the views that aren't graded: the HLS copies and a warm-up; detail, a line in report.md, never provisional: #205, s1rtc8's one 2 s burst on typical-hls). Each change belongs to the view open when it was sent. `null` without the log, which is provisional |
 | `ram` | Not graded. RAM on the reference dashboards (`null` if none was sampled): `reference_idle` (`samples`, `app_pss_kb`, `by_role_pss_kb`, `main_kb`, `device_used_pct`, `cpu_app_pct_of_core`), `graded_peak` (`samples`, `app_pss_kb`, `by_role_pss_kb`, `app_rss_hwm_kb`, `mem_available_min_kb`), `panes` (each: `id`, `method` `on-alone`, `samples_on`, `samples_off`, `pss_kb`, `pss_tolerance_kb` (`null` under two samples a side), `pss_measurable`, `by_role_pss_kb`, `cpu_pct_of_core`, `cpu_tolerance_pct`, `cpu_measurable`, `verified`, `excluded`, `boot_samples_on` and `boot_samples_off` (samples `:boot` ran in, left out of the share), `boot_pss_kb` (its median PSS, or `null`), and `off_by: "mute"` when Assist was off by its mute alone; or `id`, `method` and `error` when no sample ran as asked), `screen_off_samples` (idle samples the screen went off in, left out), `panes_waiting` (`id`, `waiting_on`, `note`; empty since #67, kept because this version only adds fields), `panes_not_switched` (`id`, `why`, `note`: a pane not measured on its own, and why), `budget` (the frame's `ram` checks) and `pane_budget` (per pane: `value_kb`, `budget_kb`, `tolerance_kb`, `measurable` (three samples a side and a tolerance at most a quarter of the budget), `ok` (`null` when not measurable: read it as unknown, not as over)). See [RAM](#ram) |
-| `grade` | `grade` (`null` when refused), `meaning`, `headline`, `levels` (per page: `premium`, `good`, `fluid` or `null`), `bands` (per page: `tap`, `load` and `blocking` bands, `scroll`, `updates`, `camera` and, since Clarity v3, `dialog` levels), `start`, `capped_by_start`, `viewport` (`state`, `reason`), `refused`, `provisional`, `provisional_reasons`, `missing`, `rubric_version`. Computed from `graded` only. `provisional_reasons` are measurement facts: the kiosk's own page never finished loading in a graded run; graded runs failed or are missing; the restart or a task was measured in fewer runs than attempted; a page's live changes rest on a loose clock tie; no swipe ran during the live updates; scrolling rests on rAF only; the fake Home Assistant's log is missing, or it didn't know or failed a command, or sent a graded view's change late; page lines didn't parse or never arrived whole (`bad_page_lines`); swipes were answered with no scroll step back (`lost_scroll_steps`); "measured with a pre-release version of Clarity (protocol N): re-measure"; the pages ran another protocol; "<page>: N camera run(s) whose stalls couldn't be measured (no freeze counts from the receiver, or no frames to measure gaps over): n/a, not measured"; the viewport couldn't be checked |
+| `grade` | `grade` (`null` when refused), `meaning`, `headline`, `levels` (per page: `premium`, `good`, `fluid` or `null`), `bands` (per page: `tap`, `load` and `blocking` bands, `scroll`, `updates`, `camera` and, since Clarity v3, `dialog` levels), `start`, `capped_by_start`, `viewport` (`state`, `reason`), `refused`, `provisional`, `provisional_reasons`, `missing`, `rubric_version`, and on a frame without touch (rubric 2) `not_applicable` (`{"scroll": "this frame has no touch"}`; its `bands` say `n/a` for the scroll). Computed from `graded` only. `provisional_reasons` are measurement facts: the kiosk's own page never finished loading in a graded run; graded runs failed or are missing; the restart or a task was measured in fewer runs than attempted; a page's live changes rest on a loose clock tie; no swipe ran during the live updates; scrolling rests on rAF only; the fake Home Assistant's log is missing, or it didn't know or failed a command, or sent a graded view's change late; page lines didn't parse or never arrived whole (`bad_page_lines`); swipes were answered with no scroll step back (`lost_scroll_steps`); "measured with a pre-release version of Clarity (protocol N): re-measure"; the pages ran another protocol; "<page>: N camera run(s) whose stalls couldn't be measured (no freeze counts from the receiver, or no frames to measure gaps over): n/a, not measured"; the viewport couldn't be checked |
 | `graded` | `reference`: `start_ms`, `restart_to` (`usable` since protocol 4, else `engine-ready`), `engine_ready_ms` (detail), `start_errors`, `engine_uris`, `android_ttid_ms` (not graded), `launch`, `own_page_states`, `orders` (each run's page order), `warmups`, `protocols`, `bad_page_lines` (page lines that didn't parse or never arrived whole), `lost_scroll_steps` (swipes answered with no scroll step back), `errors`, `runs`, `graded_runs`, `per_run` (each with its `order` and `between`, whether the screen was still before each page opened), and `tiers` with, per page: `inp_ms`, `load_ms` (rubric 2: to the first screen drawn), `blocking_ms` (rubric 2: from the draw to usable, graded), `usable_ms` (detail), `load_errors`, `paint_to_screen_ms`, `scroll` (p95, jank, frozen, fps, n), `scroll_levels` (per run) and `scroll_level` (graded), `scroll_bands` and `scroll_band` (the 60 fps rule, detail), `scroll_runs` (each run's frame stats), `scroll_sources`, `scroll_limited_by`, `scroll_raf_only` (per run), `sf_swipes`, `swipes_moved`, `swipes_at_edge` (left out), `swipes_during_updates` (per run), `scroll_errors`, `scrolled_px`, `first_scroll_ms`, `sf_valid` (per run), `latency_p95_ms` and `latency_median_ms` (change to screen), `updates_levels` (per run) and `updates_level` (graded), `updates_runs` (each run's latency and change frames), `updates` and `updates_bands` (pacing of the frames that had a change to draw, detail), `updates_all_p95_ms` (every frame of the pacing stretch, detail), `updates_errors`, `camera_runs` (each run's worst stream and its `path`, with each stream as `detail`, and as detail `fetches` (the HLS fetch times) and `media` (the decoders the view got, from logcat)), `camera_levels` (per run) and `camera_level` (graded), `camera_fallback` (protocol 6, detail: `path` `hls`, `runs` (each run's worst HLS stream on the view's HLS copy, with its `view`, `media` and `error`), `levels` and `level` as the camera bars would give them; `null` on a page without streams), Clarity v3's more-info dialogs: `dialog_runs` (each run's `n`, `failed`, `settled_ms` (the slowest; `null` when one failed), `frames` (the open animations' frame stats, pooled), and as detail `open_ms`, `close_ms`, `longest_frame_ms`, `dropped`, `modes`, `reduced_motion`, `errors` and each dialog; `{"timed_out": true}` when the view didn't get to them), `dialog_levels` (per run) and `dialog_level` (graded), `dialog_settled_ms`, `dialog_open_ms` and `dialog_close_ms` (spreads), `dialog_errors`, `dialog_settles_away` (#410, detail: each run's `settle` in which the view was left for the start view); `state_ticks`, `positions` and `by_position` (the page's results at each place in the order), `fcp_ms`, `nodes`, `cards`, `viewport` |
 | `detail` | `synthetic`, the animation test page: `ladder` (per family: `held_60fps`, `held_30fps`, `…_at_top`), `steps_without_sf`, `screen_off_runs` (left out of the rest), `scroll`, `scroll_moved`, `js_burst_ms`, `js_band`, `js_checksum_ok`, `page_lcp_ms`, `page_lcp_from`, `per_run` |
 | `real_use` | Not graded. Your dashboard: `app_start_to_dashboard_ms`, `android_ttid_ms`, `launch`, `stop_to_dashboard_ms`, `dashboard_load_ms`, `dashboard_page_stop_ms`, `settle_how`, `errors`, `screen_off_samples`, `per_run`. Then `idle`, `peak`, `memory` (`idle`, `peak`, `budget`) and `panes` |
@@ -1817,6 +1848,7 @@ from real use, and nothing device-unique.
 | `report_schema` | The report it came from, `"glassworks.perf/4"` |
 | `measured_on` | The run's date, `YYYY-MM-DD` (UTC) |
 | `frame` | `id`, `name` |
+| `touch` | Rubric 2: `false` for a frame without a touchscreen, whose scroll isn't graded. Only there: a frame with touch has no `touch`, and its summary is as before |
 | `app_version` | The kiosk's version name |
 | `viewport` | `css` (CSS px), `dpr` (device pixel ratio), `default_dpr` (density / 160) |
 | `runs` | `attempted`, `graded` |
@@ -1886,15 +1918,25 @@ v3's protocol 3, which is v1's protocol 1 (#643, 2026-11-19): where SurfaceFling
 the window too. That isn't a new protocol: what is measured, the frames on screen in the window, is the
 same. Where one read covered a window (the S1), nothing changes, record for record. Where it didn't,
 the old result rested on rAF and said so (provisional), so no stored grade changes meaning.
+Rubric 2 of Clarity v1 (2026-11-23, the maintainer: "a frame without touch just doesn't scroll") changes how a
+result is judged, so it raises the rubric, not the protocol: on a frame without touch the scroll is `n/a`, accepted
+at every level ([No touchscreen](#other-glassworks-apps-and-android-6)). Nothing else moved, and a frame with touch is
+judged as under rubric 1, so the published results were graded again with `regrade.py` and kept their letters (the
+S1 D, the Pixel Tablet B, provisional as before): only their `rubric_version` and notes' `rubric` read 2. The runner
+sends a frame without touch no swipes; that isn't a new protocol either, for #643's reason: on a frame with touch it
+does what it did, and on the Mirror those swipes never scrolled. (The earlier v2's "rubric 2", in the history below, is
+another one: the numbers started again.)
 
 ### Versions
 
-**Clarity v1, the version Glassworks 1.0.0 ships with (the maintainer, 2026-11-19): protocol 1, rubric 1.**
+**Clarity v1, the version Glassworks 1.0.0 ships with (the maintainer, 2026-11-19): protocol 1, rubric 1; rubric 2
+since 2026-11-23** (a frame without touch isn't graded on scrolling, [above](#protocol-and-rubric-versions)).
 It measures what the earlier v3 measured (below), and moves one bar: live updates are good within
 150 ms and fluid within 250 ms ([Why live updates aren't held to 100 ms](#the-grade)). The numbers
 start again at 1, as they did on 2026-11-14, so everything below this entry is history:
 
-- Each page line, report and summary says `clarity: 1`, protocol 1 and rubric 1.
+- Each page line, report and summary says `clarity: 1` and protocol 1; reports are graded by rubric 2 (rubric 1
+  until 2026-11-23, with the same rules for a frame with touch).
 - **The earlier v3's runs are v1's.** Their pages (`clarity: 3`, protocol 3) measured exactly what
   protocol 1 measures, so report.py reads them as v1 (`SAME_AS_V1`). A stored v3 report or summary
   says "re-measure" until it is graded again, with `tools/perf/regrade.py <run-dir>`: from the raw files
@@ -2303,7 +2345,7 @@ CI runs both in the `scripts` job.
 
 ## Version history
 
-Clarity shipped with Glassworks 1.0.0 as **Clarity v1** (`clarity: 1`, protocol 1, rubric 1). During pre-release development, the protocol and rubric went through two earlier numbering sequences before resetting to v1 for release:
+Clarity shipped with Glassworks 1.0.0 as **Clarity v1** (`clarity: 1`, protocol 1, rubric 1). Rubric 2 stops grading scrolling on a frame without touch (the lululemon Mirror); every other frame is judged as before. During pre-release development, the protocol and rubric went through two earlier numbering sequences before resetting to v1 for release:
 
 - **Pre-release protocols 1–8 and rubrics 1–11:** Iterated from synthetic pages to Home Assistant's real frontend (protocol 4), live HLS and WebRTC cameras (protocols 5–8), and feel-based grading for live updates and scrolling (rubric v5–v11). Pre-release summaries carry no `clarity` field and are flagged as `re-measure`.
 - **Early v1–v3 iterations:** Split view-open paint time from post-draw Total Blocking Time (`blocking_ms`, early v2), added Home Assistant more-info dialog grading (early v3), and widened the live-update threshold to 150 ms good / 250 ms fluid. When the numbers reset to **Clarity v1** (`clarity: 1`, protocol 1, rubric 1), early v3 measurements remained byte-compatible and can be regraded with `tools/perf/regrade.py <run-dir>`, while runs dated before `clarity_measured_since` (`2026-11-16 UTC`) or from early v2 are marked `re-measure`.

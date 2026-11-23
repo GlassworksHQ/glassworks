@@ -20,7 +20,7 @@ for (const c of data.bands) {
 
 for (const c of data.cases) {
   test(`grade: ${c.name}`, () => {
-    const g = G.gradeBands(c.tiers, c.start_ms, rubric);
+    const g = G.gradeBands(c.tiers, c.start_ms, rubric, c.touch !== false);   // touch: false, rubric 2
     const got = {};
     for (const k of Object.keys(c.expect)) if (k !== "limits") got[k] = g[k];
     got.limits = G.nextLimits(g, rubric);
@@ -42,7 +42,7 @@ test("another protocol is re-measured, not graded", () => {
 });
 
 test("an earlier Clarity's summary, or the first v1's, is re-measured under v1's rules, and says so", () => {
-  assert.deepEqual([rubric.clarity, rubric.protocol_version, rubric.version], [1, 1, 1]);
+  assert.deepEqual([rubric.clarity, rubric.protocol_version, rubric.version], [1, 1, 2]);
   for (const v of [2, 3]) {
     const g = G.gradeSummary({ clarity: v, protocol_version: v, measured_on: "2026-11-17", pages: {} }, rubric);
     assert.deepEqual([g.status, g.grade], ["re-measure", null]);
