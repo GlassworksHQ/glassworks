@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { ByteStream } from 'improv-serial';
+import type { ByteStream } from '@glassworks/improv-serial';
 import { kilnSignInUrl, openSignInWindow, SetupChannel, validHaUrl, type SetupState } from '../src/channel';
 
 const base: SetupState = {

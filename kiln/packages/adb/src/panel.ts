@@ -3,8 +3,8 @@ import { Adb, AdbDaemonTransport } from '@yume-chan/adb';
 import { AdbDaemonWebUsbDevice, AdbDaemonWebUsbDeviceManager } from '@yume-chan/adb-daemon-webusb';
 import { ReadableStream } from '@yume-chan/stream-extra';
 import { run } from './run';
-import { openAdbStream } from 'improv-serial/adb';
-import type { ByteStream } from 'improv-serial';
+import { openAdbStream } from '@glassworks/improv-serial/adb';
+import type { ByteStream } from '@glassworks/improv-serial';
 import type { AdbKey } from './key';
 
 /** What provisioning needs from a panel. Panel implements it over adb; the tests use a fake. */

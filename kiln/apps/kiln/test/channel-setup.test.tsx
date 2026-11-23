@@ -3,7 +3,7 @@
 // screens serve the panel's own page over the LAN, where an unpaired browser is refused every change.
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { NOT_PAIRED, SetupChannel, type SetupState } from '@glassworks/setup-channel';
-import type { ByteStream } from 'improv-serial';
+import type { ByteStream } from '@glassworks/improv-serial';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ChannelSetup, type SetupSteps } from '../src/setup/channelSetup';
 import { HomeAssistant, Panes, Radio, RadioNext } from '../src/setup/steps';

@@ -4,8 +4,8 @@
 //
 // The SPL part of u-boot-sunxi-with-spl.bin: its eGON header (linux-sunxi wiki, EGON), where its
 // bytes go so the thunk's buffer swap puts them at the SPL address, and the thunk's memory image.
-import { A133 } from './a133';
-import { FEL_TO_SPL_THUNK } from './thunk';
+import { A133 } from './a133.ts';
+import { FEL_TO_SPL_THUNK } from './thunk.ts';
 
 const EGON_MAGIC = 'eGON.BT0';
 const EGON_HEADER = 32;

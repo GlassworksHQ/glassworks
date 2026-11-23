@@ -7,7 +7,7 @@ import { createConnection } from 'node:net';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { PanelShell } from '@glassworks/adb';
-import type { ByteStream } from 'improv-serial';
+import type { ByteStream } from '@glassworks/improv-serial';
 
 export function adbPath(): string {
   const p = process.env.ADB ?? join(homedir(), 'Library/Android/sdk/platform-tools/adb');

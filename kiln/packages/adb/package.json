@@ -14,6 +14,6 @@
     "@yume-chan/adb": "2.6.4",
     "@yume-chan/adb-daemon-webusb": "2.3.2",
     "@yume-chan/stream-extra": "2.6.1",
-    "improv-serial": "0.1.0"
+    "@glassworks/improv-serial": "0.1.0"
   }
 }

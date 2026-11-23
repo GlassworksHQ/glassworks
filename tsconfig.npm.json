@@ -1,0 +1,15 @@
+{
+  "//": "The build of a package published to npm (docs/releasing.md \"npm packages\"): its src/ to dist/ as Node ESM with types. A package's tsconfig.build.json extends its own tsconfig.json, then this.",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "rewriteRelativeImportExtensions": true,
+    "rootDir": "${configDir}/src",
+    "outDir": "${configDir}/dist"
+  },
+  "include": ["${configDir}/src"]
+}

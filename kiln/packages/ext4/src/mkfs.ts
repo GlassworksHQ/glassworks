@@ -3,13 +3,13 @@
 // a journal, and lost+found. For a new userdata image: the partition's size, nothing in it but what
 // the caller adds after. Every metadata block is written (inode tables as zeros), so nothing left on
 // the partition from before is read as metadata.
-import type { Disk } from './disk';
-import { Ext4, Inode, selinux } from './ext4';
+import type { Disk } from './disk.ts';
+import { Ext4, Inode, selinux } from './ext4.ts';
 import {
   Compat, EXT4_MAGIC, EXTENT_MAGIC, FileType, InodeFlag, Incompat, JOURNAL_INO, ROOT_INO, RoCompat, S_IFDIR, S_IFREG, SB_OFFSET,
   hasSuperBackup,
-} from './layout';
-import type { Attrs } from './ext4';
+} from './layout.ts';
+import type { Attrs } from './ext4.ts';
 
 export interface MkfsOptions {
   /** The filesystem's size in blocks; default the whole disk. */

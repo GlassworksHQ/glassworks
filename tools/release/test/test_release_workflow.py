@@ -32,12 +32,14 @@ class OneButton(unittest.TestCase):
 
     def test_no_workflow_runs_on_a_release_tag(self):
         # A tag the publish job pushes, or one pushed by hand, must start nothing: the button is the only way in.
+        # Only the libraries' own tags start a workflow: Maven Central's and npm's.
+        library_tags = {'libs-release.yml': ['libs/*/v*'], 'npm-release.yml': ['npm/*/v*']}
         for wf in WORKFLOWS.glob('*.yml'):
             m = re.search(r'^\s+tags:\s*\[([^\]]*)\]', wf.read_text(), flags=re.M)
             if not m:
                 continue
             patterns = [p.strip().strip("'\"") for p in m.group(1).split(',')]
-            self.assertEqual(['libs/*/v*'], patterns, wf.name)
+            self.assertEqual(library_tags.get(wf.name), patterns, wf.name)
 
     def test_the_old_workflows_are_gone(self):
         for old in ('generic-release.yml', 'frame-release.yml'):

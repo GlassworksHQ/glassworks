@@ -2,7 +2,7 @@
 // aqara-s1-plus-transcript.json), played back through this package's client. If the app's side of the
 // protocol changes, that test fails; if what this client needs from the replies changes, this one does.
 import { describe, expect, it } from 'vitest';
-import type { ByteStream } from 'improv-serial';
+import type { ByteStream } from '@glassworks/improv-serial';
 import { SetupChannel } from '../src/channel';
 import transcript from './aqara-s1-plus-transcript.json';
 

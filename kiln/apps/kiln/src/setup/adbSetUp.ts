@@ -4,7 +4,7 @@
 import type { PanelShell } from '@glassworks/adb';
 import { IMPROV_SOCKET } from '@glassworks/app-adb';
 import { SETUP_SOCKET, SetupChannel } from '@glassworks/setup-channel';
-import { ImprovSerialClient, State as ImprovState, type ByteStream } from 'improv-serial';
+import { ImprovSerialClient, State as ImprovState, type ByteStream } from '@glassworks/improv-serial';
 import type { Setup } from '../wizard/state';
 import { ChannelSetup, type SetupSteps, type WifiSteps } from './channelSetup';
 import type { PanelApp } from './radioPlan';

@@ -1,0 +1,151 @@
+# Publishes one npm package from its tag (docs/releasing.md "npm packages"):
+#   git tag npm/fel/v0.1.0 && git push origin npm/fel/v0.1.0
+# The tag names the package's folder (kiln/packages/<name> or packages/<name>) and its version, which must equal
+# `version` in its package.json and have a section in its CHANGELOG.md. The job runs that package's typecheck and
+# tests, builds it for npm (tools/release/npm-package.mjs), checks it from a fresh project
+# (tools/release/npm-consumer-check.mjs), publishes it as @glassworks/<name> with provenance, and makes a GitHub
+# release with the changelog section.
+#
+# Runs in the `npm` environment, which deploys only from npm/*/v* tags. It authenticates with npm's trusted
+# publishing (OIDC, this workflow and that environment) once a package has it; until then (a package's first
+# release can't have it) with the environment's NPM_TOKEN secret, a granular token that may publish @glassworks.
+# A published version is for good: its number is never reusable, and npm unpublishes only under its policy's
+# conditions (docs/releasing.md "npm packages"). Every action is pinned by commit SHA
+# (the tag in the comment is what it was at the time).
+name: npm release
+
+on:
+  push:
+    tags: ['npm/*/v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: npm
+    permissions:
+      contents: write   # the GitHub release
+      id-token: write   # npm provenance, and trusted publishing
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # No registry-url: that writes an .npmrc with an auth token, which would stand in front of trusted publishing.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      # First, before any of the tag's own code runs.
+      - name: Only commits on main
+        run: |
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor HEAD origin/main ||
+            { echo "::error::$GITHUB_REF_NAME ($GITHUB_SHA) is not on main: refusing to publish it"; exit 1; }
+
+      - name: Package and version from the tag
+        id: tag
+        run: |
+          if ! [[ "$GITHUB_REF_NAME" =~ ^npm/([a-z0-9-]+)/v((0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*))$ ]]; then
+            echo "::error::tag $GITHUB_REF_NAME is not npm/<name>/vMAJOR.MINOR.PATCH"; exit 1
+          fi
+          name=${BASH_REMATCH[1]} version=${BASH_REMATCH[2]}
+          node tools/release/npm-package.mjs --list | grep -qx "$name" ||
+            { echo "::error::$name is not a published npm package (no CHANGELOG.md and tsconfig.build.json in its folder)"; exit 1; }
+          dir=$(ls -d "kiln/packages/$name" "packages/$name" 2>/dev/null | head -1)
+          have=$(node -p "require('./$dir/package.json').version")
+          pkg=$(node -p "require('./$dir/package.json').name")
+          [ "$have" = "$version" ] ||
+            { echo "::error::the tag says $version, $dir/package.json says $have"; exit 1; }
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "dir=$dir" >> "$GITHUB_OUTPUT"
+          echo "pkg=$pkg" >> "$GITHUB_OUTPUT"
+
+      - name: Release notes from the package's CHANGELOG.md
+        env:
+          DIR: ${{ steps.tag.outputs.dir }}
+          PKG: ${{ steps.tag.outputs.pkg }}
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          {
+            printf 'npm: [`%s@%s`](https://www.npmjs.com/package/%s/v/%s)\n\n' "$PKG" "$VERSION" "$PKG" "$VERSION"
+            tools/release/changelog-section.sh "$VERSION" "$DIR/CHANGELOG.md"
+          } > "$RUNNER_TEMP/notes.md"
+          cat "$RUNNER_TEMP/notes.md"
+
+      # Trusted publishing needs npm 11.5.1 or newer.
+      - name: npm is new enough
+        run: |
+          v=$(npm --version)
+          [ "$(printf '%s\n' 11.5.1 "$v" | sort -V | head -1)" = 11.5.1 ] ||
+            { echo "::error::npm $v is older than 11.5.1, which trusted publishing needs"; exit 1; }
+
+      - name: Not on npm yet
+        env:
+          PKG: ${{ steps.tag.outputs.pkg }}
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          if npm view "$PKG@$VERSION" version > /dev/null 2>&1; then
+            echo "::error::$PKG@$VERSION is already on npm: a version can't be published twice. Bump it."; exit 1
+          fi
+
+      - run: npm ci
+
+      - name: e2fsprogs, which checks the ext4 images @glassworks/ext4 writes
+        run: command -v e2fsck debugfs mke2fs || { sudo apt-get -qq update && sudo apt-get -qq install -y --no-install-recommends e2fsprogs > /dev/null; }
+
+      - name: Typecheck and tests
+        env:
+          PKG: ${{ steps.tag.outputs.pkg }}
+          GW_EXT4_TOOLS: require
+        run: |
+          npm run typecheck -w "$PKG"
+          npm test -w "$PKG"
+
+      # Packs this package alone into a fresh project, so its @glassworks dependencies come from npm: release fel
+      # before fastboot. Fails if one isn't there yet.
+      - name: Build and check it as a consumer gets it
+        env:
+          NAME: ${{ steps.tag.outputs.name }}
+        run: node tools/release/npm-consumer-check.mjs "$NAME"
+
+      - name: Pack
+        id: pack
+        env:
+          NAME: ${{ steps.tag.outputs.name }}
+        run: echo "tgz=$(node tools/release/npm-package.mjs "$NAME" --out "$RUNNER_TEMP/pack")" >> "$GITHUB_OUTPUT"
+
+      - name: Publish to npm
+        env:
+          TGZ: ${{ steps.pack.outputs.tgz }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          if [ -n "$NPM_TOKEN" ]; then
+            # Only for this command, outside the workspace: the token never lands in the checkout.
+            export NPM_CONFIG_USERCONFIG="$RUNNER_TEMP/npmrc"
+            printf '//registry.npmjs.org/:_authToken=%s\n' "$NPM_TOKEN" > "$NPM_CONFIG_USERCONFIG"
+          else
+            echo "No NPM_TOKEN: publishing with trusted publishing (OIDC)."
+          fi
+          npm publish "$TGZ" --provenance --access public
+
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PKG: ${{ steps.tag.outputs.pkg }}
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          # --latest=false: apps up to 0.4.3 read releases/latest, which must stay the S1 app's release.
+          gh release create "$GITHUB_REF_NAME" --verify-tag --latest=false \
+            --title "$PKG $VERSION" --notes-file "$RUNNER_TEMP/notes.md"

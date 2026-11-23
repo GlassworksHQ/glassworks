@@ -45,11 +45,21 @@ The Android side is `ImprovAdbServer` in the [improv](../../../libs/improv/READM
 library. Both were extracted from Glassworks, whose web installer uses this package to set up
 the panel's Wi-Fi. MIT licensed.
 
+## Install
+
+```sh
+npm install @glassworks/improv-serial
+```
+
+An ES module with its own types. `@yume-chan/adb` is an optional peer dependency, needed only for
+`@glassworks/improv-serial/adb`. Versions start at 0, so a minor version may change the API
+([changelog](CHANGELOG.md)).
+
 ## Use
 
 ```ts
-import { ImprovSerialClient, State } from 'improv-serial';
-import { localAbstract, openAdbStream } from 'improv-serial/adb';
+import { ImprovSerialClient, State } from '@glassworks/improv-serial';
+import { localAbstract, openAdbStream } from '@glassworks/improv-serial/adb';
 import type { Adb } from '@yume-chan/adb';
 
 export async function setUpWifi(adb: Adb, ssid: string, password: string): Promise<string> {
@@ -78,7 +88,7 @@ name, which Tango leaves out on newer protocol versions. Without the NUL, adbd c
 
 Exports: `ImprovSerialClient` (`requestState`, `info`, `scan`, `provision`, `close`, `onState`),
 the packet helpers `frame`, `rpc`, `strings`, `wifiSettings`, `parseResult` and `PacketReader`,
-the constants `PacketType`, `Rpc` and `State`, and `errorMessage`. From `improv-serial/adb`:
+the constants `PacketType`, `Rpc` and `State`, and `errorMessage`. From `@glassworks/improv-serial/adb`:
 `openAdbStream` and `localAbstract`.
 
 ## Compared with the Improv spec
@@ -87,10 +97,6 @@ One table covers both sides, this client and the device library: [improv](../../
 In short, the client does the serial spec's first four commands. It doesn't do hostname, device
 name or network state, or BLE.
 
-## Status
-
-Not on npm yet (`"private": true`). It ships as TypeScript source, so use it from a bundler (Vite,
-esbuild…). `@yume-chan/adb` is an optional peer dependency, needed only for `improv-serial/adb`.
 
 ## Tests
 

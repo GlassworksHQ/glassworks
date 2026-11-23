@@ -1,10 +1,11 @@
+/// <reference types="w3c-web-usb" preserve="true" />
 // Fastboot over WebUSB, for every frame. A fork of fastboot.js (kdrag0n, MIT, see README.md):
 // its flashBlob, sparse splitting and bootBlob, on our transport (the one FEL uses, so the tests
 // can run against simulated devices), plus what our FEL-booted U-Boot (the A133 build in the frame's tools/fel/uboot) adds:
 // 'oem run' and the 'upload' of patch 0002, which reads partitions back
 // (the reference CLI's fb-read-partition.sh).
 import { WebUsbBulk, type BulkTransport } from '@glassworks/fel/transport';
-import * as Sparse from './sparse';
+import * as Sparse from './sparse.ts';
 
 /** U-Boot's fastboot gadget (CONFIG_USB_GADGET_VENDOR_NUM/PRODUCT_NUM in our defconfig). */
 export const FASTBOOT_FILTER: USBDeviceFilter = { vendorId: 0x1f3a, productId: 0x1010 };
