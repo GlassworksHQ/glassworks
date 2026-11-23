@@ -1,6 +1,7 @@
 package dev.glassworks.radio
 
 import dev.glassworks.frame.AgentCapability
+import dev.glassworks.frame.BundleAgent
 import dev.glassworks.frame.FrameAgent
 import dev.glassworks.frame.RadioAgent
 import dev.glassworks.frame.RadioFile
@@ -434,7 +435,13 @@ class RadioController(
                 "new radio stacks and radio firmware come with app updates"
         }
         val src = radio.status(RadioStatus.SOURCE).ifEmpty { "?" }
-        val inst = bundle?.installed()?.let { "${it.state} ${it.version}" } ?: radio.status(RadioStatus.BUNDLE).ifEmpty { "?" }
+        val prop = radio.status(RadioStatus.BUNDLE)
+        // A rejected bundle, with the why from the property. RadioBundle reads only the 0.4.3 image's record; on the frame
+        // loader image (its four-field record) the property alone says it, as it did before. Wording only.
+        val why = BundleAgent.rejectedWhy(prop)
+        fun rejected(w: String?) = "rejected" + w?.ifEmpty { null }?.let { " ($it)" }.orEmpty()
+        val inst = bundle?.installed()?.let { if (it.state == "bad") rejected(why) else "${it.state} ${it.version}" }
+            ?: why?.let(::rejected) ?: prop.ifEmpty { "?" }
         val shipped = bundle?.shippedVersion()
         val last = bundle?.lastResult?.takeIf { it.startsWith("error") || it.startsWith("no answer") || it.startsWith("couldn't") }
         return listOfNotNull(

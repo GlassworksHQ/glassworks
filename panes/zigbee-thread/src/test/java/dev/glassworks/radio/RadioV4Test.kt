@@ -302,13 +302,35 @@ class RadioV4Test {
 
     // ------------------------------------------------------------------------------ controller
 
-    private fun controller(p: V4Props, mode: String, stack: StackStore = MemoryStackStore(), fetcher: ((File, (String) -> Unit) -> Unit)? = null): RadioController {
+    private fun controller(
+        p: V4Props, mode: String, stack: StackStore = MemoryStackStore(), bundle: RadioBundle? = null, fetcher: ((File, (String) -> Unit) -> Unit)? = null,
+    ): RadioController {
         var stored: String? = mode
         p.props[RadioHelper.PROP_MODE] = mode
         return RadioController(
             s1Agent(p), load = { stored }, store = { stored = it }, inline = true, log = {}, panelIp = { "198.51.100.7" },
-            filesDir = tmp.root, stackStore = stack, zigbeedFetcher = fetcher,
+            filesDir = tmp.root, stackStore = stack, zigbeedFetcher = fetcher, bundle = bundle,
         )
+    }
+
+    /** A bundle the loader rejected: the record says `bad`, the property why (#139). */
+    @Test
+    fun aRejectedBundleIsSaidWithWhy() {
+        val p = V4Props().apply {
+            props[RadioHelper.PROP_STATUS] = "ok thread: border router"; props[RadioHelper.PROP_SOURCE] = "boot"
+            props[RadioHelper.PROP_BUNDLE] = "bad: sisdk/NOTICE.txt does not match the manifest"
+        }
+        val (b, pub) = bundle(p, "bad 30200 30200\n")
+        fun text() = controller(p, "thread", bundle = b).also { it.refresh() }.helperStatusText()
+        assertTrue(text(), text().contains("; radio bundle on the panel: rejected (sisdk/NOTICE.txt does not match the manifest)"))
+        // The frame loader image's four-field record, which RadioBundle doesn't read: the property says it.
+        pub.writeText("bad - 5001 -\n")
+        assertTrue(text(), text().contains("; radio bundle on the panel: rejected (sisdk/NOTICE.txt does not match the manifest)"))
+        p.props[RadioHelper.PROP_BUNDLE] = "bad"
+        assertTrue(text(), text().contains("; radio bundle on the panel: rejected;") || text().endsWith("radio bundle on the panel: rejected"))
+        p.props[RadioHelper.PROP_BUNDLE] = "none"
+        pub.writeText("none - 5000 -\n")
+        assertTrue(text(), text().contains("; radio bundle on the panel: none"))
     }
 
     @Test

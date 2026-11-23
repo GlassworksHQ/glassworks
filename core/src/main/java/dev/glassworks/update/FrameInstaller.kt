@@ -52,7 +52,7 @@ class FrameInstaller(
         // is one an install of this app handed over (every other way out deletes it), so a loader running now copies it:
         // app updates wait for it as before the restart ([loaderHolds]). A loader run nobody here started has no dir.
         if (bundle.running() && stage.exists()) handedOff = true else stage.deleteRecursively()
-        model.onLoaderRecord(FrameBundleState.parse(bundle.state()))
+        model.onLoaderRecord(FrameBundleState.parse(bundle.state()), bundle.rejected())
     }
 
     /**

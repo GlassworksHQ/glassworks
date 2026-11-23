@@ -89,6 +89,8 @@ object FrameBundleFixture {
      */
     class Loader(private val filesDir: File) : BundleAgent {
         var state: String? = "none - 1000000 -"
+        /** What the loader's state property says about a rejected bundle ([BundleAgent.rejected]). */
+        var why: String? = null
         var status = ""
         var running = false
         /** What the loader says instead of staging, e.g. `error: refused: ...`; null stages it. */
@@ -104,6 +106,7 @@ object FrameBundleFixture {
         override val stageDir = "frame/bundle-in"
         override val format = FORMAT
         override fun state() = state
+        override fun rejected() = why
         override fun running() = running
         override fun status() = status
 

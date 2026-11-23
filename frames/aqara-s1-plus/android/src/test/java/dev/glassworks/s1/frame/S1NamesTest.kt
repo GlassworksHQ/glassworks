@@ -105,6 +105,15 @@ class S1NamesTest {
         assertEquals("the loader's own Bluetooth file", "/data/glassworks-pub/bluetooth-address", S1Names.LOADER.bluetoothFile)
     }
 
+    /** Why a rejected bundle was rejected: the loader's state property, on each image (#139). */
+    @Test fun theBundleSaysWhyTheLoaderRejectedIt() {
+        val r = loader
+        r.p["sys.glassworks.bundle.state"] = "bad: sisdk/NOTICE.txt does not match the manifest"
+        assertEquals("sisdk/NOTICE.txt does not match the manifest", S1Agent(r, bluetoothFile = File("/nonexistent")).bundle.rejected())
+        r.p["sys.glassworks.bundle.state"] = "ok 1.0.0"
+        assertNull(S1Agent(r, bluetoothFile = File("/nonexistent")).bundle.rejected())
+    }
+
     @Test fun onTheLoaderNothingFromTheOldNamesCounts() {
         val r = loader
         for (k in S1Names.OLD.diagnostics + listOf("init.svc.s1kiosk_radio", "sys.s1kiosk.update.version", "sys.s1kiosk.bundle.loader")) r.p[k] = "1"

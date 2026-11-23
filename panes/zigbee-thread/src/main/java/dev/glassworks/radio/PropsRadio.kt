@@ -98,7 +98,8 @@ class PropsRadio(private val props: SysProps, private val names: RadioNames) : R
 /**
  * A [BundleAgent] over Android's properties and an init service: the app stages the bundle in [stageDir], sets
  * [statusProp] to `requested` and starts [service]; the state comes from [stateFile], trusted only when root owns it
- * and its folder ([ownerUid], without following symlinks): any app may set a property.
+ * and its folder ([ownerUid], without following symlinks): any app may set a property. [stateProp]: the loader's state
+ * property, which only words why a bundle was rejected ([BundleAgent.rejected]).
  */
 class PropsBundle(
     private val props: SysProps,
@@ -108,7 +109,10 @@ class PropsBundle(
     private val stateFile: File,
     private val ownerUid: (File) -> Int? = ::lstatUid,
     override val format: String = "S1RADIO-BUNDLE 1",
+    private val stateProp: String? = null,
 ) : BundleAgent {
+    override fun rejected(): String? = stateProp?.let { BundleAgent.rejectedWhy(props.get(it)) }
+
     override fun state(): String? {
         if (ownerUid(stateFile) != 0 || stateFile.parentFile?.let(ownerUid) != 0) return null
         return runCatching { stateFile.readText() }.getOrNull()

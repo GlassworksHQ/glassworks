@@ -13,6 +13,7 @@ import dev.glassworks.frame.AgentCapability.RADIO_MODE
 import dev.glassworks.frame.AgentCapability.TIME_ZONE
 import dev.glassworks.frame.BundleAgent
 import dev.glassworks.frame.FrameAgent
+import dev.glassworks.frame.RadioStatus
 import dev.glassworks.radio.PropsBundle
 import dev.glassworks.radio.PropsRadio
 import dev.glassworks.radio.RadioReports
@@ -48,7 +49,8 @@ class S1Agent(
 
     /** The bundle install and its state, from the root-owned file. The radio pane installs only a bundle in [S1Names.bundleFormat]. */
     override val bundle: BundleAgent by lazy {
-        bundle ?: PropsBundle(props, names.bundleService, names.bundleStatus, names.bundleStage, File(names.bundleState), format = names.bundleFormat)
+        bundle ?: PropsBundle(props, names.bundleService, names.bundleStatus, names.bundleStage, File(names.bundleState), format = names.bundleFormat,
+            stateProp = names.radio.status.getValue(RadioStatus.BUNDLE))
     }
 
     override val appUpdates: RootUpdateInstaller by lazy { appUpdates ?: RootUpdateInstaller(props, names) }
