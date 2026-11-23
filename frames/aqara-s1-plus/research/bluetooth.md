@@ -201,7 +201,7 @@ How it was taken:
   (the device-info byte, a packet id object, a temperature object); the scan response holds one AD structure, the
   complete local name. Any BTHome v2 sender with the name only in its scan response repeats the case. The test
   firmware's YAML is kept with the root's run notes, not in the repo, because it's specific to one device.
-- **E**: HA's BTHome discovery flow for the sensor (its title), and *Settings → Bluetooth → Advertisement monitor*
+- **E**: HA's BTHome discovery flow for the sensor (its title), and the Bluetooth integration's *Advertisement monitor*
   with the S1 as the source (the Name column).
 - **C**: the *Advertisement monitor*'s source column, then the state changes of the sensor's temperature entity in
   HA for 05:05–05:15 UTC: their count (120) and the longest gap between two of them. *Bluetooth proxy status*:
