@@ -173,7 +173,7 @@ describe('installing Glassworks over fastboot', () => {
     await mirror.pickApk('kiosk.apk', fakeMirrorApk());
     f.toFastboot(); await f.connectFastboot(); f.understand(true); await f.flash();
     render(<ImageFlow image={f} app={mirror} />);
-    expect(screen.getByText('Try again without FILL')).toBeTruthy();
+    expect(screen.getByText('Try compatibility write mode')).toBeTruthy();
     cleanup();
     f.retryWithoutFill();
     expect(f.state.screen).toBe('fastboot');
@@ -186,7 +186,7 @@ describe('installing Glassworks over fastboot', () => {
     const { image: flash } = await showImage('flash-done-chooser');
     expect(flash.state.firstBoot?.home.result).toBe('chooser');
     expect(screen.getByText('Glassworks isn\'t the only home screen yet.')).toBeTruthy();
-    expect(screen.getByText(/no touchscreen: hide the other launcher again, or use a USB mouse/)).toBeTruthy();
+    expect(screen.getByText(/no touchscreen, hide the other launcher again or plug in a USB mouse/)).toBeTruthy();
   });
 
   it('Done says when the Glassworks build has no home screen, and offers no hiding: the launcher stays (2026-11-16)', async () => {
@@ -204,12 +204,12 @@ describe('installing Glassworks over fastboot', () => {
     expect(flash.state.screen).toBe('fastboot');
     render(<ImageFlow image={flash} app={mirror} />);
     expect(embers()).toEqual(['Connect']);
-    expect(screen.getByRole('button', { name: 'It already runs Glassworks (or Glass Panes): restart it over USB' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Already running Glassworks or Glass Panes? Restart over USB' })).toBeTruthy();
     expect(screen.getByRole('img', { name: /lululemon Studio Mirror in recovery mode: Unscrew the stand and the back, Lift off the back, Plug in the power cord, Plug in the micro-USB, Hold VOL−, Switch the power on\. VOL− \(SW3\)/ })).toBeTruthy();
-    expect(screen.getByText(/hold VOL− \(SW3\): of its two buttons, the one nearer the top end's edge/)).toBeTruthy();
+    expect(screen.getByText(/hold VOL− \(SW3\) — the one of its two buttons closer to the top edge/)).toBeTruthy();
     expect(screen.getByText(/Keep holding while you switch the Mirror on/)).toBeTruthy();
     expect(screen.getByText(/Plug the power cord back into its socket in that recess/)).toBeTruthy();
-    expect(screen.getByText(/Hold only VOL−: both buttons, or VOL\+, start other modes/)).toBeTruthy();
+    expect(screen.getByText(/Hold only VOL−, since pressing VOL\+ or both buttons starts other modes/)).toBeTruthy();
   });
 
   it('asks for the fastboot device inside the click, before anything is awaited', () => {
@@ -235,10 +235,10 @@ describe('installing Glassworks over fastboot', () => {
     const { image: flash } = await imageDemo(mirrorEntry, 'flash-error', true);
     expect(flash.state).toMatchObject({ screen: 'error', error: expect.stringMatching(/FAILed/) });
     render(<ImageFlow image={flash} app={new AppSession({ frame: mirrorFrame, connect: async () => { throw new Error('x'); } }, true)} />);
-    expect(screen.getByText(/The Mirror is still in fastboot: leave it plugged in\. Try again connects fastboot again/)).toBeTruthy();
+    expect(screen.getByText(/The Mirror is still in fastboot mode, so leave it plugged in\. Click Try again to reconnect/)).toBeTruthy();
     // one ember, Try again, on the step that stopped: fastboot, not the download two steps back
     expect(embers()).toEqual(['Try again']);
-    expect(screen.getByRole('button', { name: 'Back to the download' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Back to download' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(flash.state).toMatchObject({ screen: 'fastboot', restarted: true }); // no restart needed: Connect is the ember
     expect(embers()).toEqual(['Connect']);
@@ -251,7 +251,7 @@ describe('installing Glassworks over fastboot', () => {
     const { image: flash, app: mirror } = await imageDemo(mirrorEntry, 'flash-download-bad', true);
     expect(flash.state.files[0]).toMatchObject({ state: 'bad' });
     render(<ImageFlow image={flash} app={mirror} />);
-    expect(screen.getByText(/This download doesn’t match the release, so Kiln deleted it\. Nothing was written to the Mirror\. The fault is Kiln’s, not yours\./)).toBeTruthy();
+    expect(screen.getByText(/This download doesn’t match the published release, so Kiln discarded it\. Nothing was written to the Mirror — this is a problem on Kiln's side\./)).toBeTruthy();
     expect(embers()).toEqual(['Try again']);
   });
 });
@@ -280,7 +280,7 @@ describe('every flash demo screen', () => {
     cleanup();
     const failed = await imageDemo(mirrorEntry, 'flash-download-error', true);
     render(<ImageFlow image={failed.image} app={failed.app} />);
-    expect(screen.getByText(/Kiln couldn’t download it\. Nothing was written to the Mirror\./)).toBeTruthy();
+    expect(screen.getByText(/Kiln couldn’t download this file\. Nothing was written to the Mirror/)).toBeTruthy();
     expect(embers()).toEqual(['Try again']);
     const report = new URL(screen.getByText('Report this').closest('a')!.getAttribute('href')!);
     expect(report.origin + report.pathname).toBe('https://github.com/GlassworksHQ/glassworks/issues/new');
@@ -295,7 +295,7 @@ describe('every flash demo screen', () => {
     render(<ImageFlow image={flash} app={mirror} />);
     const credit = screen.getByText((_, el) => el?.tagName === 'SPAN' && /^This image is built by git-nimrod as part of Glass Panes\.$/.test(el.textContent ?? ''));
     expect([...credit.querySelectorAll('a')].map((a) => a.getAttribute('href'))).toEqual(['https://github.com/git-nimrod', 'https://github.com/git-nimrod/glass-panes']);
-    expect(screen.getByText(/vendor files are Qualcomm's and Quectel's, from the Glass Panes release/)).toBeTruthy();
+    expect(screen.getByText(/vendor files come from Qualcomm and Quectel, via the Glass Panes release/)).toBeTruthy();
     cleanup();
     await showImage('flash-done');
     expect(screen.getByText((_, el) => el?.tagName === 'SPAN' && /^Built on Glass Panes by git-nimrod\.$/.test(el.textContent ?? ''))).toBeTruthy();
@@ -307,7 +307,7 @@ describe('every flash demo screen', () => {
     const { image: flash, app: mirror } = await imageDemo(mirrorEntry, 'flash-confirm', true);
     render(<ImageFlow image={flash} app={mirror} />);
     expect(screen.getByText('This replaces lululemon’s software for good')).toBeTruthy();
-    expect(screen.getByText(/Everything on the Mirror is replaced, with no backup.*The way back is the plain Glass Panes image\./s)).toBeTruthy();
+    expect(screen.getByText(/Kiln can't create a backup before replacing it.*return to the plain Glass Panes image/s)).toBeTruthy();
     expect(screen.getByText("Reversible to the community image, not to lululemon's software.")).toBeTruthy(); // #146
     expect((screen.getByText('Install Glassworks') as HTMLButtonElement).disabled).toBe(true);
   });

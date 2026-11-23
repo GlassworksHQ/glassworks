@@ -29,6 +29,7 @@ below as the release notes. Glassworks for generic Android and its legacy build 
 - **Dashboard JS API (`window.glassworks`).** Dashboards can read presence, ambient light, and screen state via `window.glassworks` and `glassworks-state` events (`window.s1kiosk` stays supported).
 
 ### Changed
+- **Calmer, clearer wording across Glassworks and Kiln.** Rewrote onboarding steps, settings descriptions, Manage dialogs, sign-in pages, and Kiln install/recovery screens in plainer, more explanatory American English—removing leftover "kiosk" and protocol jargon, explaining why steps are needed, and clarifying what stays safe while waiting or recovering.
 - **S1 Kiosk is now Glassworks.** The app, icon, boot logo/animation (on next Kiln install), connecting screen, setup flow, and settings menu now use the Glassworks brand and unified layout. Existing Home Assistant devices, entity IDs, and settings carry over on update.
 - **Switched wake-word engine to microWakeWord (~9× lower CPU).** Drops S1 microphone-thread CPU from ~37% to ~4% and adds **Okay Nabu**. Models download automatically; custom openWakeWord thresholds reset to per-word defaults (old openWakeWord models remain selectable for this release).
 - **Room "lights off" no longer turns off the panel screen.** The *Screen* light entity is now categorized under Configuration in Home Assistant so area, floor, and Assist "turn off all lights" actions skip it (reload the ESPHome integration after updating; on existing panels, turn off Expose once in *Settings → Voice assistants → Expose*).

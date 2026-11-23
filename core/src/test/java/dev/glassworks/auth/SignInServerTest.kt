@@ -108,7 +108,7 @@ class SignInServerTest {
         // The QR code's page says what signing in is for, then Continue goes to Home Assistant (#63).
         val (landing, _, page) = get("/signin")
         assertEquals(200, landing)
-        assertTrue(page, page.contains("Sign in this panel.") && page.contains("href=\"${SignInServer.CONTINUE}\""))
+        assertTrue(page, page.contains("Sign in to this panel") && page.contains("href=\"${SignInServer.CONTINUE}\""))
         assertTrue(page, page.contains("never sees your password"))
         val (code, location, _) = get(SignInServer.CONTINUE)
         assertEquals(302, code)
@@ -591,7 +591,7 @@ class SignInServerTest {
         val r = callback(server, state, null)
         assertEquals(200, r.status)
         val html = text(r)
-        assertTrue(html, html.contains("Signed in.") && html.contains("Kiln has moved on.") && html.contains("<script>window.close()</script>"))
+        assertTrue(html, html.contains("<h1>Signed in</h1>") && html.contains("Kiln has moved on.") && html.contains("<script>window.close()</script>"))
         for (tab in listOf("close this page", "other tab", "Panel signed in")) assertTrue(tab, !html.contains(tab, ignoreCase = true))
         // the browser runs that one script and nothing else
         val sha = java.util.Base64.getEncoder().encodeToString(java.security.MessageDigest.getInstance("SHA-256").digest("window.close()".toByteArray()))

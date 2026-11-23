@@ -64,21 +64,21 @@ describe('the tablet after its install', () => {
 
   it('then Wi-Fi, Home Assistant and Panes, the S1\'s screens', async () => {
     await show('setup-wifi');
-    expect(screen.getByRole('heading', { name: 'Which Wi-Fi?' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Connect to Wi-Fi' })).toBeTruthy();
     cleanup();
     await show('setup-ha');
     expect(screen.getByRole('heading', { name: 'Sign in to Home Assistant' })).toBeTruthy();
     cleanup();
     await show('setup-panes');
     expect(subs()).toEqual(['App', 'Wi-Fi', 'Home Assistant', 'Panes']);
-    expect(screen.getByRole('heading', { name: 'What should it do?' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Choose what your panel does' })).toBeTruthy();
   });
 
   it('Done is the S1\'s, with the tablet\'s Manage page', async () => {
     const { standard } = await show('done');
     await vi.waitFor(() => expect(standard.store.state.done?.managePage).toBeDefined());
     expect(screen.getByRole('heading', { name: 'You\'re all set' })).toBeTruthy();
-    expect(screen.getByText(/Change these later on the tablet's Manage page/)).toBeTruthy();
+    expect(screen.getByText(/change any of these later on the Manage page, using a 6-digit code shown on the tablet/i)).toBeTruthy();
   });
 
   it('reads the frame from the catalog: the standard steps less Radio, touch on', () => {
@@ -104,7 +104,7 @@ describe('a reload during the install', () => {
     sessionStorage.setItem('kiln:device:/android:app', JSON.stringify({ at: 'written' }));
     history.replaceState(null, '', '/android?apk=local');
     render(<AndroidWizard />);
-    expect(await screen.findByText('An earlier try already changed the tablet.')).toBeTruthy();
+    expect(await screen.findByText('An earlier attempt already changed the tablet.')).toBeTruthy();
   });
 });
 

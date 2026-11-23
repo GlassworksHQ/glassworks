@@ -74,7 +74,7 @@ class SetupPortraitTest {
 
     @Test fun theTitleWrapsBetweenWords() {
         val s = screen(SetupFlow.WIFI, wifi = offline, panelIp = null)
-        val title = Mockup.label(s, "Waiting for Wi-Fi.")
+        val title = Mockup.label(s, "Waiting for Wi-Fi")
         val text = title.text.toString()
         val layout = title.layout
         for (line in 0 until layout.lineCount - 1) {

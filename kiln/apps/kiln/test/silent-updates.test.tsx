@@ -48,14 +48,14 @@ describe('the S1', () => {
 
   it('Done: On when the boot image has the root update service', async () => {
     await s1('done');
-    expect(block()).toBe('Silent updatesOnUpdates from Home Assistant install by themselves.');
+    expect(block()).toBe('Silent updatesOnUpdates from Home Assistant install automatically in the background.');
     // it lands after Done opens, so the live region says it too
     expect(document.querySelector('[aria-live="polite"]')?.textContent).toBe('You\'re all set. Silent updates: On.');
   });
 
   it('Done: a tap each on a boot image from before the service, and how to add it', async () => {
     await s1('done-old-boot');
-    expect(block()).toBe('Silent updatesA tap eachEach update waits for a tap on the panel. Install again with Kiln to make them silent.');
+    expect(block()).toBe('Silent updatesA tap eachEach update asks for a tap on the panel. Run Kiln again anytime to enable automatic updates.');
   });
 
   /** A set-up session on the simulated panel reaches Done; `prop` is what the panel answers for the update service's prop. */
@@ -95,14 +95,14 @@ describe('the Mirror', () => {
     const h = handTo();
     await imageDemo(mirrorEntry, 'flash-done', true, {}, h.handOver);
     await done(h.standard());
-    expect(block()).toBe('Silent updatesOnUpdates from Home Assistant install by themselves.');
+    expect(block()).toBe('Silent updatesOnUpdates from Home Assistant install automatically in the background.');
   });
 
   it('Done after the app alone over adb: a normal app, so a click each, and what makes it silent', async () => {
     const h = handTo();
     await appDemo(mirrorEntry, 'done', true, h.handOver);
     await done(h.standard());
-    expect(block()).toBe('Silent updatesA click eachAndroid asks before each update, and the Mirror has no touchscreen to answer: use a USB mouse. An install over fastboot makes updates silent.');
+    expect(block()).toBe('Silent updatesA click eachAndroid asks before each update, which needs a USB mouse since the Mirror has no touchscreen. Installing over fastboot makes updates automatic.');
   });
 
   it('Done after an adb update of the image\'s copy: On', async () => {
@@ -131,7 +131,7 @@ describe('the Mirror', () => {
     await s.install();
     await setUp();
     await done(standard());
-    expect(block()).toBe('Silent updatesNot confirmedKiln couldn\'t read it back. Glassworks\' Device page on the Mirror says.');
+    expect(block()).toBe('Silent updatesNot confirmedKiln couldn\'t read this back — check Settings → Device on the Mirror to see its status.');
     cleanup();
     render(<AppFlow session={await appDemo(mirrorEntry, 'undo-done', true)} />);
     expect(block()).toBeUndefined();

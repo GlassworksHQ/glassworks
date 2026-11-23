@@ -446,7 +446,7 @@ class SetupOverlay(
         orientation = LinearLayout.VERTICAL
         gravity = Gravity.CENTER
         addView(StackView(context), LinearLayout.LayoutParams(px(108f), px(103f)))
-        addView(g.heading(44f).apply { text = "You're all set." }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = px(40f) })
+        addView(g.heading(44f).apply { text = "You're all set" }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = px(40f) })
         addView(g.text(17f, MU).apply { text = "Opening your dashboard…" }, LinearLayout.LayoutParams(-2, -2).apply { topMargin = px(18f) })
         addView(donePreviewChip, LinearLayout.LayoutParams(-2, -2).apply { topMargin = px(28f) })
         visibility = View.GONE
@@ -755,7 +755,7 @@ class SetupOverlay(
         val spot = m.hotspot?.takeIf { !w.online && !done }
         if (spot?.title != null) return bindHotspotCard(spot)
         if (w.online || done) {
-            cardTitle.text = if (w.ethernet) "Connected over Ethernet." else "Connected to ${w.ssid ?: "Wi-Fi"}."
+            cardTitle.text = if (w.ethernet) "Connected over Ethernet" else "Connected to ${w.ssid ?: "Wi-Fi"}"
             cardBody.text = "The panel is on the network."
             // Nor an older line: a failed join from before it connected (a preview keeps the step across refreshes).
             status.visibility = View.GONE
@@ -796,7 +796,7 @@ class SetupOverlay(
         }
         val content: View? = when (plan.lead) {
             WifiWays.Way.IMPROV -> {
-                cardTitle.text = if (joining) "Connecting to ${w.ssid ?: "Wi-Fi"}…" else "Connect to Wi-Fi."
+                cardTitle.text = if (joining) "Connecting to ${w.ssid ?: "Wi-Fi"}…" else "Connect to Wi-Fi"
                 cardBody.text = "Home Assistant sends it over Bluetooth, from its app or its settings." // one line on the S1
                 improvTile.bind(m.improv)
                 // Not now and Stop end the Bluetooth window: the quietest words on the card.
@@ -809,15 +809,15 @@ class SetupOverlay(
             }
             WifiWays.Way.HOTSPOT -> {
                 val a = spot!!.action!!
-                cardTitle.text = if (joining) "Connecting to ${w.ssid ?: "Wi-Fi"}…" else "Set up from a phone."
-                cardBody.text = "A phone joins the panel's own Wi-Fi, then sends yours from a page. Nothing to type here."
+                cardTitle.text = if (joining) "Connecting to ${w.ssid ?: "Wi-Fi"}…" else "Set up from a phone"
+                cardBody.text = "Join the panel's setup Wi-Fi on your phone to send your network — nothing to type here."
                 primary.text = if (a == dev.glassworks.setup.HotspotStep.Action.ALLOW) a.label else dev.glassworks.setup.HotspotStep.Action.OPEN.label
                 primary.visibility = View.VISIBLE
                 primary.setOnClickListener { onHotspotAction?.invoke(a) }
                 null
             }
             WifiWays.Way.MANUAL -> {
-                cardTitle.text = if (joining) "Connecting to ${w.ssid ?: "Wi-Fi"}…" else "Choose your Wi-Fi."
+                cardTitle.text = if (joining) "Connecting to ${w.ssid ?: "Wi-Fi"}…" else "Choose your Wi-Fi"
                 cardBody.text = "Pick your network and type its password here."
                 primary.text = "Choose a network"
                 primary.visibility = View.VISIBLE
@@ -907,7 +907,7 @@ class SetupOverlay(
 
     private fun bindHa(m: Model, done: Boolean): View? {
         if (done) {
-            cardTitle.text = "Added to Home Assistant."
+            cardTitle.text = "Added to Home Assistant"
             cardBody.text = SpannableStringBuilder().apply {
                 append("As ")
                 val start = length
@@ -922,7 +922,7 @@ class SetupOverlay(
             plainLeft.setOnClickListener { manualShown = true; bind(m, false) }
             return null
         }
-        cardTitle.text = "Add it in Home Assistant."
+        cardTitle.text = "Add it in Home Assistant"
         waitingText.text = if (m.haChecking) HA_CHECKING else "Waiting for Home Assistant…"
         cardBody.text = SpannableStringBuilder().apply {
             append("Settings → Devices & services → ")
@@ -942,8 +942,8 @@ class SetupOverlay(
 
     /** Home Assistant not found yet: the panel looks for it, or takes its address. */
     private fun bindFind(): View {
-        cardTitle.text = "Find Home Assistant."
-        cardBody.text = "The panel is looking for it on the network. If it doesn't show up, enter its address."
+        cardTitle.text = "Find Home Assistant"
+        cardBody.text = "Looking for Home Assistant on your network. If it doesn't appear, enter its address below."
         primary.text = "Connect"
         primary.visibility = View.VISIBLE
         primary.setOnClickListener { submit() }
@@ -989,7 +989,7 @@ class SetupOverlay(
 
     private fun bindSignin(m: Model, done: Boolean) {
         if (done) {
-            cardTitle.text = "Signed in."
+            cardTitle.text = "Signed in"
             cardBody.text = "The panel can show your Home Assistant dashboard."
             continueButton()
             return
@@ -1001,9 +1001,9 @@ class SetupOverlay(
             qrFor = url
         }
         qrGlow.visibility = View.VISIBLE
-        cardTitle.text = "Scan to sign in."
-        cardBody.text = if (m.signinMoved) "Home Assistant moved to a new address. Sign in again."
-            else "Sign in to Home Assistant on your phone. Nothing to type here."
+        cardTitle.text = "Scan to sign in"
+        cardBody.text = if (m.signinMoved) "Home Assistant moved to a new address. Scan to sign in again."
+            else "Scan with your phone to sign in to Home Assistant — nothing to type here."
         plainLeft.text = "Sign in on this panel instead"
         plainLeft.visibility = View.VISIBLE
         plainLeft.setOnClickListener { onUsePanel?.invoke() }
@@ -1026,8 +1026,8 @@ class SetupOverlay(
         }
         val ip = m.panelIp
         if (ip == null) {
-            cardTitle.text = "Waiting for Wi-Fi."
-            cardBody.text = "Put the panel on Wi-Fi with Kiln on a computer, over USB. Then this screen shows where to set it up."
+            cardTitle.text = "Waiting for Wi-Fi"
+            cardBody.text = "Connect this panel to Wi-Fi using Kiln on a computer over USB. Once online, this screen will show where to finish setup."
             // Why the panel's own Wi-Fi isn't up (Wi-Fi off, Android closed it): nothing to press here, but said (A-N3).
             m.hotspot?.status?.let { showStatus(it, tone(m.hotspot.tone)) }
             return null
@@ -1040,14 +1040,14 @@ class SetupOverlay(
             qrFor = url
         }
         qrGlow.visibility = View.VISIBLE
-        cardTitle.text = "Scan to set it up."
-        cardBody.text = "Or open $url on a computer on this network. When it asks for a code, the code shows here."
+        cardTitle.text = "Scan to set it up"
+        cardBody.text = "Or open $url on a computer on this network. When it asks for a code, it will appear here."
         return null
     }
 
     /** Without touch, signed in: waiting for Home Assistant to add the panel, and where to do that. */
     private fun bindAddWait(url: String, checking: Boolean): View {
-        cardTitle.text = "Add it in Home Assistant."
+        cardTitle.text = "Add it in Home Assistant"
         cardBody.text = SpannableStringBuilder().apply {
             append("Settings → Devices & services, where ")
             val start = length

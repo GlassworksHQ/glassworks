@@ -82,7 +82,7 @@ function setup(o: { search?: string; fail?: 'route' | 'hash' | 'flash' | 'change
 describe('the choice', () => {
   it('opens on Glassworks alone, first and picked, with no badge; the community images are one quiet click away', async () => {
     await show('image-choose');
-    expect(screen.getByRole('heading').textContent).toBe('What goes on the Mirror?');
+    expect(screen.getByRole('heading').textContent).toBe('Choose what to install on the Mirror');
     expect(radios()).toEqual(['Glassworks']);
     expect(screen.getByRole('radio', { name: 'Glassworks' }).getAttribute('aria-checked')).toBe('true');
     expect(screen.getByRole('radio', { name: 'Glassworks' }).querySelector('.pill')).toBeNull();
@@ -233,9 +233,9 @@ describe('Glass Panes', () => {
   it.each(['image-download-error', 'image-download-bad'] as const)('%s: Kiln\'s bug, Try again and Report this, nothing to pick by hand', async (d) => {
     const flash = await show(d);
     const alert = screen.getByRole('alert').textContent!;
-    expect(alert).toMatch(/Nothing was written to the Mirror\. The fault is Kiln’s, not yours\./);
-    if (d === 'image-download-bad') expect(alert).toMatch(/This download doesn’t match the release, so Kiln deleted it\./);
-    else expect(alert).toMatch(/^Kiln couldn’t download it\. /);
+    expect(alert).toMatch(/Nothing was written to the Mirror — this is a problem on Kiln's side\./);
+    if (d === 'image-download-bad') expect(alert).toMatch(/This download doesn’t match the published release, so Kiln discarded it\./);
+    else expect(alert).toMatch(/^Kiln couldn’t download this file\. /);
     expect(alert).not.toMatch(/proxy|Refract|SHA-256/); // the plumbing stays in the technical log and the report (#672)
     const report = new URL(screen.getByRole('link', { name: 'Report this' }).getAttribute('href')!);
     expect(report.origin + report.pathname).toBe('https://github.com/GlassworksHQ/glassworks/issues/new');
@@ -252,7 +252,7 @@ describe('Glass Panes', () => {
     expect(screen.getByText(/hold VOL− \(SW3\)/)).toBeTruthy();
     expect(embers()).toEqual(['Connect']);
     const restart = vi.spyOn(flash, 'restartToFastboot').mockResolvedValue();
-    fireEvent.click(screen.getByRole('button', { name: 'It already runs Glassworks (or Glass Panes): restart it over USB' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Already running Glassworks or Glass Panes? Restart over USB' }));
     expect(restart).toHaveBeenCalledTimes(1);
     expect(flash.state.screen).toBe('fastboot');
   });
@@ -267,7 +267,7 @@ describe('Glass Panes', () => {
   it('Done says what is next in its own project, and the way back to Glassworks', async () => {
     const flash = await show('image-done');
     expect(screen.getByRole('heading').textContent).toBe('Glass Panes is on the Mirror');
-    expect(screen.getByText(/^Set it up as its README says\.$/)).toBeTruthy();
+    expect(screen.getByText(/^Follow the setup instructions in its README\.$/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Install Glassworks' }));
     expect(flash.state).toMatchObject({ screen: 'choose', picked: 'glassworks', from: 'glass-panes', open: false });
     expect(screen.getByRole('status').textContent).toMatch(/^Glassworks replaces Glass Panes and everything on the Mirror\./);
@@ -300,7 +300,7 @@ describe('?image=<id>', () => {
     expect(rail()).toEqual(['Mirror', 'Download', 'Fastboot', 'Install', 'Done']);
     expect(embers()).toEqual(['Download Glass Panes']);
     expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
-    expect(screen.getAllByText('Not downloaded yet.')).toHaveLength(3);
+    expect(screen.getAllByText('Ready to download.')).toHaveLength(3);
   });
 
   it.each(['', '?image=', '?image=nope', '?image=glassworks', '?image=Glass-Panes'])('%s opens the normal page', (q) => {

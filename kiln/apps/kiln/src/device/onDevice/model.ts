@@ -55,7 +55,7 @@ export function download(line: Line, r: Release, abi: Abi): { href: string; name
 export async function loadRelease(line: Line, get: typeof fetch = fetch): Promise<Release> {
   try {
     const r = await get(`/api/release/${line}/latest`);
-    if (!r.ok) return { state: 'error', why: `Kiln's release route answered ${r.status}` };
+    if (!r.ok) return { state: 'error', why: `the release server answered ${r.status}` };
     const { release } = (await r.json()) as { release: LatestRelease | null };
     return release ? { state: 'out', ...release } : { state: 'none' };
   } catch (e) {

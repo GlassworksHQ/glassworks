@@ -157,7 +157,7 @@ describe.each(ENGINE)('set-up on %s', (id) => {
     };
     const { s, shown, ends, now } = setUpOn(id, panel, false);
     await s.homeAssistant();
-    expect(shown[0]).toEqual({ phase: 'waiting', note: 'Waiting for Glassworks to start again…' });
+    expect(shown[0]).toEqual({ phase: 'waiting', note: 'Waiting for Glassworks to finish restarting…' });
     expect(now()).toMatchObject({ phase: 'ha', ha: { signedIn: false } });
     expect(shown.map((x) => x.phase).filter((x, i, a) => x !== a[i - 1])).toEqual(['waiting', 'ha']); // no bounce
     expect(ends).toEqual({ done: false, error: undefined });
@@ -174,7 +174,7 @@ describe.each(ENGINE)('set-up on %s', (id) => {
     Date.now = () => (t += 5000); // the minute passes in a few reads
     try { await s.homeAssistant(); } finally { Date.now = now; }
     expect(ends.done).toBe(false);
-    expect((ends.error as Error).message).toBe('Glassworks didn\'t start again within a minute. Try again.');
+    expect((ends.error as Error).message).toBe('Glassworks took longer than expected to restart. Click Try again to reconnect.');
   });
 
   it('the Panes step: the app\'s cards, and Continue answers them with panes.set (issue 621)', async () => {

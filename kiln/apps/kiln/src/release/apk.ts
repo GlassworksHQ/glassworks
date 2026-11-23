@@ -100,7 +100,7 @@ export async function releaseApk(of: ReleaseLine & { from?: ListedRelease }, get
   try {
     return await fetchApk(of, timed, onState, poke);
   } catch (e) {
-    if (abort.signal.aborted) throw new Error(`Kiln's release route stopped answering for ${stallMs / 1000} s`);
+    if (abort.signal.aborted) throw new Error(`The download server stopped responding after ${stallMs / 1000} seconds`);
     throw e;
   } finally {
     clearTimeout(timer);
@@ -110,22 +110,22 @@ export async function releaseApk(of: ReleaseLine & { from?: ListedRelease }, get
 async function fetchApk(of: ReleaseLine & { from?: ListedRelease }, get: typeof fetch, onState: (s: ReleaseApk) => void, poke: () => void) {
   onState({ state: 'looking' });
   const r: Release = of.from ?? await loadRelease(of.line, get);
-  if (r.state === 'error') throw new Error(`Kiln couldn't read the releases: ${r.why}`);
+  if (r.state === 'error') throw new Error(`Couldn't check for releases: ${r.why}`);
   const apk = download(of.line, r, of.abi);
   if (r.state !== 'out' || !apk) throw new NoRelease();
   const { tag } = r;
   const { version, name } = apk;
 
   const sum = await get(`${apk.href}.sha256`);
-  if (!sum.ok) throw new Error(`Kiln couldn't read ${name}.sha256 from ${tag} (its release route answered ${sum.status})`);
+  if (!sum.ok) throw new Error(`Couldn't verify the release checksum for ${version} (status ${sum.status})`);
   const want = (await sum.text()).trim().split(/\s+/)[0]?.toLowerCase() ?? '';
-  if (!/^[0-9a-f]{64}$/.test(want)) throw new Error(`${name}.sha256 in ${tag} isn't a SHA-256`);
+  if (!/^[0-9a-f]{64}$/.test(want)) throw new Error(`The release checksum for ${version} wasn't valid`);
 
   onState({ state: 'downloading', tag, version, name, got: 0 });
   const res = await get(apk.href);
-  if (!res.ok || !res.body) throw new Error(`Kiln couldn't download ${name} from ${tag} (its release route answered ${res.status})`);
+  if (!res.ok || !res.body) throw new Error(`Couldn't download Glassworks ${version} (status ${res.status})`);
   const bytes = await body(res, (got, size) => onState({ state: 'downloading', tag, version, name, got, size }), poke);
   const sha256 = hex(await crypto.subtle.digest('SHA-256', bytes as Uint8Array<ArrayBuffer>));
-  if (sha256 !== want) throw new Error(`${name} isn't the file ${tag} publishes: its SHA-256 is ${sha256}, the release says ${want}. Kiln dropped it`);
+  if (sha256 !== want) throw new Error(`The downloaded file didn't match the published release, so Kiln discarded it`);
   return { bytes, ready: { state: 'ready' as const, tag, version, name, size: bytes.length, sha256 }, release: r };
 }

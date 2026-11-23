@@ -36,8 +36,8 @@ describe('Undo, keeping the settings', () => {
     expect(session.store.state.undo).toMatchObject({
       appsBack: false,
       note: {
-        kind: 'err', title: 'This backup can\'t undo the install.', sub: expect.stringMatching(/^This backup has no .+\. This step changed nothing on the panel\.$/),
-        link: { href: s1PlusUi.help.undo, text: 'Undo by hand' }, // frames/aqara-s1-plus/docs/install.md#undo: the way on
+        kind: 'err', title: 'This backup can\'t undo the install', sub: expect.stringMatching(/^This backup has no .+\. Nothing on the panel was changed\.$/),
+        link: { href: s1PlusUi.help.undo, text: 'Manual restore guide' }, // frames/aqara-s1-plus/docs/install.md#undo: the way on
       },
     });
   });
@@ -48,8 +48,8 @@ describe('Undo, keeping the settings', () => {
     await session.undoContinue();
     expect(panel.run).not.toHaveBeenCalled();
     const note = session.store.state.undo.note!;
-    expect(note).toMatchObject({ kind: 'err', title: 'Kiln can\'t check this backup.', link: { href: s1PlusUi.help.undo } });
-    expect(note.sub).toMatch(/not-backed-up.*This step changed nothing on the panel\.$/);
+    expect(note).toMatchObject({ kind: 'err', title: 'Kiln couldn\'t verify this backup', link: { href: s1PlusUi.help.undo } });
+    expect(note.sub).toMatch(/not-backed-up.*Nothing on the panel was changed\.$/);
     expect(note.title).not.toMatch(/adb/);
   });
 
@@ -66,7 +66,7 @@ describe('Undo, keeping the settings', () => {
     expect(session.store.state.undo).toMatchObject({
       appsBack: false,
       locked: true,
-      note: { kind: 'err', title: 'Aqara\'s apps are back, but Glassworks is still on.', sub: expect.stringMatching(/would not turn Glassworks off[\s\S]*"As it came from Aqara"/) },
+      note: { kind: 'err', title: 'Aqara\'s apps are back, though Glassworks is still running', sub: expect.stringMatching(/would not turn Glassworks off[\s\S]*"As it came from Aqara"/) },
     });
     expect(panel.close).toHaveBeenCalledTimes(1); // "Try again" picks the panel afresh
   });
@@ -78,7 +78,7 @@ describe('Undo, keeping the settings', () => {
       : cmd === 'pm uninstall sh.edm.s1kiosk' ? { out: 'Success\n', code: 0 }
       : { out: '', code: 0 }));
     await session.undoContinue();
-    expect(session.store.state.undo).toMatchObject({ appsBack: true, note: { kind: 'ok', sub: expect.stringMatching(/^Glassworks is removed\. Next/) } });
+    expect(session.store.state.undo).toMatchObject({ appsBack: true, note: { kind: 'ok', sub: expect.stringMatching(/^Glassworks is removed\. Click Continue/) } });
     expect(panel.close).toHaveBeenCalledTimes(1);
   });
 
@@ -86,6 +86,6 @@ describe('Undo, keeping the settings', () => {
     const { session, panel } = await setup({ boot: demoBootImage(), vbmeta: new Uint8Array(4096), bootloader: new Uint8Array(4096) });
     await session.undoContinue();
     expect(panel.run).toHaveBeenCalled(); // unprovision ran (the stand-in panel then fails it; that's not this test)
-    expect(session.store.state.undo.note?.title).not.toBe('This backup can\'t undo the install.');
+    expect(session.store.state.undo.note?.title).not.toBe('This backup can\'t undo the install');
   });
 });

@@ -48,14 +48,14 @@ object HotspotStep {
     fun card(view: SetupHotspot.View, permission: HotspotPermission.Step, setupUrl: String?, asked: Boolean = false): Card = when (view) {
         is SetupHotspot.View.On -> if (view.phone && setupUrl != null) Card(
             label = label(view),
-            title = "Open the setup page.",
+            title = "Open the setup page",
             // The address on its own line, as on the join card; the network stays written for a second phone.
             body = "Scan it on the phone, or open\n$setupUrl\nWi-Fi “${view.network.ssid}”\nPassword ${view.network.passphrase}",
             qr = setupUrl,
             action = Action.STOP,
         ) else Card(
             label = label(view),
-            title = "Join the panel's Wi-Fi.",
+            title = "Join the panel's Wi-Fi",
             // Short lines that fit beside the QR code; the address alone on one, as Android would break it at a dot.
             body = "Scan it with a phone, then open\n" + (setupUrl ?: "the address that shows here") +
                 "\nWi-Fi “${view.network.ssid}”\nPassword ${view.network.passphrase}",
@@ -64,7 +64,7 @@ object HotspotStep {
         )
         SetupHotspot.View.Starting -> Card(
             title = "Starting the setup Wi-Fi…",
-            body = "A phone joins it to set the panel up. Its QR code shows here in a few seconds.",
+            body = "Join it from your phone to finish setup. The QR code will appear here in a few seconds.",
             waiting = "Looking for Wi-Fi networks, then opening it…",
             action = Action.STOP,
         )
@@ -72,7 +72,7 @@ object HotspotStep {
             permission is HotspotPermission.Step.Blocked -> Card(status = permission.why, tone = Tone.ROSE)
             permission is HotspotPermission.Step.Explain -> Card(status = permission.why, tone = Tone.AMBER, action = Action.ALLOW)
             asked && view.error != null && view.error != HotspotFailure.NO_PERMISSION -> Card(
-                title = "The setup Wi-Fi didn't start.",
+                title = "Couldn't start setup Wi-Fi",
                 status = if (view.error == HotspotFailure.FAILED) "Android didn't say why." else view.error.text,
                 tone = Tone.ROSE,
                 action = if (view.error == HotspotFailure.WIFI_OFF) Action.WIFI_SETTINGS else Action.RETRY,
@@ -80,11 +80,11 @@ object HotspotStep {
             view.error == HotspotFailure.WIFI_OFF -> Card(status = view.error.text, tone = Tone.ROSE, action = Action.WIFI_SETTINGS)
             view.error != null && view.error != HotspotFailure.NO_PERMISSION -> Card(status = view.error.text, tone = Tone.ROSE, action = Action.RETRY)
             view.stopped == Stop.ANDROID -> Card(
-                status = "Android closed the panel's own Wi-Fi: nobody joined it for a while. It opens again if no Wi-Fi works.",
+                status = "Android closed the setup Wi-Fi because no device joined for a while. It will open again if Wi-Fi stays disconnected.",
                 action = Action.OPEN,
             )
             view.stopped == Stop.TIMED_OUT -> Card(
-                status = "The panel's own Wi-Fi closed after 15 minutes, and the panel tries your Wi-Fi again.", action = Action.OPEN,
+                status = "The setup Wi-Fi closed after 15 minutes, and the panel is trying your Wi-Fi again.", action = Action.OPEN,
             )
             else -> Card(action = Action.OPEN)
         }

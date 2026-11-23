@@ -22,14 +22,14 @@ object Licences {
     fun documents(texts: List<String>): List<Doc> =
         listOf(
             Doc("Notices: what ships, versions, sources", "$DIR/$NOTICES"),
-            Doc("Glassworks licence (MIT)", "$DIR/$LICENSE"),
+            Doc("Glassworks license (MIT)", "$DIR/$LICENSE"),
         ) + texts.filter { it.endsWith(".txt") }.sorted().map { Doc(it.removeSuffix(".txt"), "$DIR/texts/$it") }
 
     fun show(activity: Activity) {
         val texts = try { activity.assets.list("$DIR/texts")?.toList().orEmpty() } catch (_: Exception) { emptyList() }
         val docs = documents(texts)
         AlertDialog.Builder(activity)
-            .setTitle("Open source licences")
+            .setTitle("Open source licenses")
             .setItems(docs.map { it.label }.toTypedArray()) { _, i -> showText(activity, docs[i]) }
             .setNegativeButton("Close", null)
             .show()
@@ -38,8 +38,8 @@ object Licences {
     private fun showText(activity: Activity, doc: Doc) {
         val text = try {
             activity.assets.open(doc.path).bufferedReader().use { it.readText() }
-        } catch (e: Exception) {
-            "Couldn't read ${doc.path}: $e"
+        } catch (_: Exception) {
+            "Couldn't open this license file."
         }
         val pad = (16 * activity.resources.displayMetrics.density).toInt()
         val view = TextView(activity).apply {

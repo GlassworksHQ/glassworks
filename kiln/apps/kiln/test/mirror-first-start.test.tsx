@@ -159,7 +159,7 @@ describe('connecting while the Mirror is still starting', () => {
     const { f, mirror } = setup({ request: async () => new FirstBootMirror() });
     await flashed(f, mirror);
     render(<ImageFlow image={f} app={mirror} />);
-    expect(screen.getByText(/Its glass stays dark for a few minutes\. Leave it plugged in/)).toBeTruthy();
+    expect(screen.getByText(/The screen stays dark for a few minutes on first boot/)).toBeTruthy();
   });
 
   it('says it waits for the Mirror from the moment it is picked, before the Mirror answers or refuses', async () => {
@@ -191,7 +191,7 @@ describe('finishing a first start that didn\'t finish', () => {
     const adb = new FirstBootMirror();
     const { f, mirror } = setup({ request: async () => adb });
     render(<ImageFlow image={f} app={mirror} />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Finish its first start' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Finish first-time setup' }));
     expect(f.state.screen).toBe('adb');
     await f.connectAdb();
     expect(handed).toHaveLength(1); // the first start is through: the standard flow has the Mirror
@@ -345,7 +345,7 @@ describe('restarting into fastboot over adb: no button to hold', () => {
     const { f } = setup({ request: async () => { throw new AdbAuthTimeout(); } });
     await f.restartToFastboot();
     expect(f.state).toMatchObject({ restarted: false, connecting: false });
-    expect(f.state.connectError).toMatch(/didn't let this browser in: .*Put it in fastboot with the steps above\./);
+    expect(f.state.connectError).toMatch(/didn't allow this browser to connect.*Put it into fastboot mode using the steps above\./);
   });
 });
 
