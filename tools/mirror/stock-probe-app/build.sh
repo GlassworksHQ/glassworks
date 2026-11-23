@@ -10,6 +10,14 @@ HERE="$(CDPATH= cd -- "$(dirname "$0")" && pwd)"
 OUT="${STOCK_PROBE_OUT:-$HERE/out}"
 mkdir -p "$OUT"
 OUT="$(CDPATH= cd -- "$OUT" && pwd)"
+if [[ -z "${ANDROID_HOME:-}" ]]; then
+  for cand in "$HOME/Library/Android/sdk" "$HOME/Android/Sdk" "${LOCALAPPDATA:-}/Android/Sdk"; do
+    if [[ -n "$cand" && -d "$cand" ]]; then
+      export ANDROID_HOME="$cand"
+      break
+    fi
+  done
+fi
 export ANDROID_HOME="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 
 BT="$(ls -d "$ANDROID_HOME"/build-tools/* 2>/dev/null | grep -v -- -rc | sort -V | tail -1 || true)"
@@ -38,7 +46,12 @@ javac --release 8 -cp "$PLAT_JAR" -d "$WORK/classes" \
   --ks "$KS" --ks-pass "pass:$PASS" --ks-key-alias probe \
   --out "$OUT/stock-probe.apk" "$WORK/aligned.apk"
 rm -f "$OUT/stock-probe.apk.idsig"
-keytool -exportcert -keystore "$KS" -storepass "$PASS" -alias probe | xxd -p -c 100000 > "$OUT/cert.hex"
+if command -v xxd >/dev/null 2>&1; then
+  keytool -exportcert -keystore "$KS" -storepass "$PASS" -alias probe | xxd -p -c 100000 > "$OUT/cert.hex"
+else
+  keytool -exportcert -keystore "$KS" -storepass "$PASS" -alias probe | od -An -tx1 | tr -d ' \n' > "$OUT/cert.hex"
+  printf '\n' >> "$OUT/cert.hex"
+fi
 
 # Optional arm64 JNI library for FS_IOC_FIEMAP (unpacked into /data/app/.../lib/arm64/libfiemap.so)
 NDK_CC="$(ls "$ANDROID_HOME"/ndk/*/toolchains/llvm/prebuilt/*/bin/aarch64-linux-android23-clang 2>/dev/null | sort -V | tail -1 || true)"

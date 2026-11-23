@@ -78,28 +78,36 @@ function redact(text: string, serial?: string): string {
 function execText(bin: string, args: string[], timeoutMs = 120_000, serialToRedact?: string): Promise<{ stdout: string; stderr: string }> {
   const timeout = Math.max(1, Math.floor(timeoutMs));
   return new Promise((res, rej) => {
-    execFile(bin, args, { timeout, maxBuffer: 64 << 20, encoding: 'utf8' }, (err, stdout, stderr) => {
-      if (err) {
-        const msg = `${bin} ${args.join(' ')}: ${String(stderr || stdout || err.message).trim()}`;
-        rej(new Error(redact(msg, serialToRedact)));
-      } else {
-        res({ stdout, stderr });
-      }
-    });
+    try {
+      execFile(bin, args, { timeout, maxBuffer: 64 << 20, encoding: 'utf8' }, (err, stdout, stderr) => {
+        if (err) {
+          const msg = `${bin} ${args.join(' ')}: ${String(stderr || stdout || err.message).trim()}`;
+          rej(new Error(redact(msg, serialToRedact)));
+        } else {
+          res({ stdout, stderr });
+        }
+      });
+    } catch (e) {
+      rej(new Error(redact(`${bin} ${args.join(' ')}: ${(e as Error).message}`, serialToRedact)));
+    }
   });
 }
 
 function execBuffer(bin: string, args: string[], timeoutMs = 120_000, serialToRedact?: string): Promise<Buffer> {
   const timeout = Math.max(1, Math.floor(timeoutMs));
   return new Promise((res, rej) => {
-    execFile(bin, args, { timeout, maxBuffer: 128 << 20, encoding: 'buffer' }, (err, stdout, stderr) => {
-      if (err) {
-        const msg = `${bin} ${args.join(' ')}: ${String(stderr || stdout || err.message).trim()}`;
-        rej(new Error(redact(msg, serialToRedact)));
-      } else {
-        res(stdout);
-      }
-    });
+    try {
+      execFile(bin, args, { timeout, maxBuffer: 128 << 20, encoding: 'buffer' }, (err, stdout, stderr) => {
+        if (err) {
+          const msg = `${bin} ${args.join(' ')}: ${String(stderr || stdout || err.message).trim()}`;
+          rej(new Error(redact(msg, serialToRedact)));
+        } else {
+          res(stdout);
+        }
+      });
+    } catch (e) {
+      rej(new Error(redact(`${bin} ${args.join(' ')}: ${(e as Error).message}`, serialToRedact)));
+    }
   });
 }
 
@@ -326,8 +334,8 @@ async function loadOrBuildProbeApp(opts: {
   if (!existsSync(apkPath) || !existsSync(certPath)) {
     const buildSh = join(PROBE_APP_DIR, 'build.sh');
     if (opts.apkPath || !existsSync(buildSh)) return undefined;
-    opts.log('    building stock-probe-app (tools/mirror/stock-probe-app/build.sh)...');
-    await execText(buildSh, [], 60_000);
+    opts.log('    building stock-probe-app (bash tools/mirror/stock-probe-app/build.sh)...');
+    await execText('bash', [buildSh], 60_000);
   }
   if (!existsSync(apkPath) || !existsSync(certPath)) return undefined;
   return {
