@@ -14,9 +14,11 @@ setup SoftAP (`192.168.43.1:18765`). The probe extracted `/proc/config.gz`, ramd
 full 462-file Option C vendor audit including camera (**443/462** readable without root — 39 MB
 pulled cleanly; exact same 14 `*_exec` daemons denied as predicted in [option-c.md](option-c.md)).
 Two high-impact findings: stock `1.24.0` has **no active `dm-verity`** (single contiguous `FIEMAP`
-extents for `/system/etc/init.qcom.post_boot.sh` and `/system/build.prop`), and it runs a
-**different kernel build** (`3.10.49-perf-g4869d64961b`) than the dev unit (`gf46dad5260f`), so
-Wi-Fi on a `1.24.0` boot image requires `1.24.0`'s own `pronto_wlan.ko`.
+extents for `/system/etc/init.qcom.post_boot.sh` and `/system/build.prop`), and although it runs a
+different kernel git hash (`3.10.49-perf-g4869d64961b`) than the dev unit (`gf46dad5260f`), its
+`__versions` symbol CRCs (`module_layout=0xa5b7f7dd`, `printk=0x27e1a049`, `__kmalloc=0xd2b09ce5`)
+match `gf46dad5260f` — explaining why Linux 3.10's `same_magic()` accepts Glass Panes'
+`pronto_wlan.ko` when `CONFIG_MODVERSIONS=y`.
 
 Device: untouched stock lululemon Studio Mirror (`MSM8916`, `variant: SBC eMMC`, `secure: yes`,
 `Device unlocked: false`, `ro.build.version.mirror=1.24.0`, `ro.build.hwver.mirror=mirror-v1`).
@@ -40,6 +42,34 @@ untouched stock `1.2x+` Mirror:
    have contiguous physical block extents usable for surgical sparse `system` patching?
 4. How closely do stock `1.24.0`'s vendor binaries and kernel match Glass Panes (`mirror-android-2`)
    and our Option C inventory ([option-c-vendor-files.tsv](option-c-vendor-files.tsv))?
+
+## How the `userdata`-only breakthrough works
+
+Before this run, untouched stock `1.2x+` Mirrors looked completely sealed to read-only inspection:
+fastboot has no partition read-back and no `fastboot boot`, there is no touchscreen to approve an
+ADB prompt, stock `adbd` ignores `/data/misc/adb/adb_keys`, and flashing a replacement `system.img`
+permanently destroys stock firmware. Four small Android 6 facts chained together to break that wall
+without writing a single byte outside `userdata`:
+
+1. **Pre-installing an APK in a fresh `userdata`:** Android 6's `PackageManagerService` scans
+   `/data/app/<pkg>-1/base.apk` at boot and registers any properly signed APK it finds.
+2. **Defeating Android's `stopped=true` lock with a 1-entry `packages.xml`:** Normally, a newly
+   scanned APK starts in `stopped=true, notLaunched=true`, so Android refuses to deliver
+   `BOOT_COMPLETED` until a user taps its icon or ADB launches it. By pre-populating a minimal
+   1-entry `/data/system/packages.xml` (with Android 6's exact `<version sdkVersion="23"
+   databaseVersion="3"/>` tags, `<permissions>` granting `RECEIVE_BOOT_COMPLETED` and `INTERNET`,
+   and omitting `stopped="true"`), `PackageManagerService` treats the app as already launched and
+   delivers `BOOT_COMPLETED` automatically on cold boot — with zero ADB and zero touchscreen.
+3. **Piggybacking on stock's own `mirror-<serial>` SoftAP (`192.168.43.1`):** On a fresh `userdata`,
+   stock's `MirrorApService` (`/system/bin/mapd`) automatically broadcasts `mirror-<serial>` for
+   onboarding. Leaving Wi-Fi mode untouched whenever `--wifi-ssid` is omitted lets our tiny HTTP
+   probe server (`port 18765`) answer straight over lululemon's own setup SoftAP — no Ethernet
+   adapter and no Wi-Fi credentials needed.
+4. **Physical eMMC block maps without root (`FS_IOC_FIEMAP`):** Even from an unprivileged
+   `untrusted_app` (`uid=10099`), Linux's `FS_IOC_FIEMAP` ioctl on read-only `/system/` file
+   descriptors is allowed by stock's SELinux policy. Combined with no active `dm-verity` and
+   fastboot's sparse `DONT_CARE` chunks, knowing a file's exact 4 KiB physical extents unlocks
+   byte-for-byte reversible surgical patching of individual `/system` files.
 
 ## What we tried
 
@@ -163,21 +193,24 @@ Because `/system` is not dm-verity protected and `fastboot flash system` with An
 `/system/etc/init.qcom.post_boot.sh` (blocks `22517..22536`) is feasible on untouched stock
 `1.24.0`**, with a byte-exact rollback using the original 20 blocks already read over HTTP.
 
-### 3. `pronto_wlan.ko` kernel mismatch across Mirror stock revisions (verified)
+### 3. `pronto_wlan.ko` kernel git hash vs matching ABI CRCs (verified)
 
 - Stock `1.24.0`'s `/system/lib/modules/pronto/pronto_wlan.ko` is **5,778,672 B** (stripped, SHA-256
   `1894373d68175b0f54fc7a0a51ede96c18b59b02b5b2935778821c73ef636356`), with:
   ```
   license=Dual BSD/GPL
   vermagic=3.10.49-perf-g4869d64961b SMP preempt mod_unload modversions aarch64
+  __versions: module_layout=0xa5b7f7dd, printk=0x27e1a049, __kmalloc=0xd2b09ce5
   ```
 - Compare our dev Mirror ([mirror-root.md](mirror-root.md) §4): `pronto_wlan.ko` is a 70 MB debug
-  build for `3.10.49-perf-gf46dad5260f`.
-- Because `CONFIG_MODVERSIONS=y` and `CONFIG_MODULE_FORCE_LOAD` is unset, **a `pronto_wlan.ko`
-  built for `gf46dad5260f` will not load on a `1.24.0` Mirror's `g4869d64961b` kernel**. For
-  Option C (or any custom `system.img` targeting diverse stock `boot` partitions), pulling the
-  device's own `/system/lib/modules/pronto/pronto_wlan.ko` (which is world-readable) is required to
-  keep Wi-Fi working across stock boot revisions.
+  build for `3.10.49-perf-gf46dad5260f`, carrying the **exact same CRCs** (`module_layout=0xa5b7f7dd`,
+  `printk=0x27e1a049`, `__kmalloc=0xd2b09ce5`).
+- In Linux 3.10 (`kernel/module.c`), `same_magic(modmagic, vermagic, has_crcs)` skips the kernel
+  version prefix before the first space whenever `CONFIG_MODVERSIONS=y` and compares only
+  `SMP preempt mod_unload modversions aarch64` plus the `__versions` symbol CRCs. That explains why
+  community reports show Glass Panes' `pronto_wlan.ko` loading cleanly on `1.24.0`'s `g4869d64961b`
+  kernel despite the different git hash. Keeping `1.24.0`'s own 5.78 MB `pronto_wlan.ko` (or
+  running stock-in-place) remains even cleaner and 64 MB smaller.
 
 ### 4. Stock `adbd`, `init.qcom.post_boot.sh`, `services.jar`, and `MirrorApService` (verified / read)
 

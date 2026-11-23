@@ -154,3 +154,30 @@ npx -y tsx@4.23.15 tools/mirror/stock-probe.ts --extract-only   # Step 1 preflig
 npx --prefer-offline tsx@4.23.15 tools/mirror/stock-probe.ts --http-only --probe-host 192.168.43.1  # over stock SoftAP (no flash)
 npx -y tsx@4.23.15 tools/mirror/stock-probe.ts --help
 ```
+
+## Phase 2: Reversible surgical ADB & optional stock backup (`stock-surgical-adb.ts`)
+
+`stock-surgical-adb.ts` builds on a Mirror that already has the Phase 1 HTTP probe app running on
+stock's `mirror-<serial>` SoftAP (`192.168.43.1:18765`). Instead of overwriting `system` with a
+third-party image, it backs up the original `/system/framework/services.jar` (and
+`/system/etc/init.qcom.post_boot.sh`) + their `FS_IOC_FIEMAP` block maps first, writes byte-exact
+`restore-*.sparse` undo images under `<out>/backup/`, and patches **only** `services.jar`'s
+physical 4 KiB blocks (`DONT_CARE` everywhere else) to authorize your own `--adb-key` in
+`UsbDebuggingManager.startConfirmation()`.
+
+- **Hard stop-gate:** aborts before any write if `/system/framework/oat/.../services.odex` exists.
+- **Exact byte size:** recompresses `classes.dex` with `@glassworks/bootpatch`'s `zlib-rs` level-9
+  deflate and pads the ZIP EOCD comment so `patched.length === original.length` (zero ext4 metadata
+  edits).
+- **Optional Step 4 raw backup (`--backup-module <path-to-ko>`):** accepts a user-supplied external
+  AArch64 `.ko` (never shipped in this repo, Hard Rule 4) to temporarily flip SELinux Permissive
+  for one boot via `init.qcom.post_boot.sh` (20 blocks), stream raw `system` (`mmcblk0p22`) + `boot`
+  (`mmcblk0p19`) over USB ADB to `<out>/backup/`, and automatically flash `restore-post-boot.sparse`
+  back.
+
+```sh
+npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --preflight-only   # Step 1 only (read-only over SoftAP)
+npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --build-only       # Steps 1-2 locally (no flash)
+npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts                    # Steps 1-3: reversible authorized USB ADB
+npx --prefer-offline tsx@4.23.15 tools/mirror/stock-surgical-adb.ts --undo --backup-dir <out>/backup --erase-userdata
+```
