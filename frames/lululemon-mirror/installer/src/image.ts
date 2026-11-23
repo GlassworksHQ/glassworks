@@ -223,6 +223,16 @@ export async function patchSystem(fs: Ext4, o: SystemPatch, log: (line: string) 
   if (!(await fs.exists(SERVICES_JAR))) throw new Error(`this image has no /system${SERVICES_JAR}. Nothing was changed.`);
   const services = await trustAdbKey(await fs.readFile(SERVICES_JAR), adbKeyLines(o.adbKey)[0]!);
 
+  // What Kiln leaves out goes before the app goes in: image 3's own kiosk alone takes about 246 MB, and with it still
+  // there the app's libraries don't fit (no room for libxul.so, Mirror run 2026-11-23).
+  // the image's own kiosk: Glassworks is the Mirror's app. A second run finds it gone.
+  if (await fs.exists(IMAGE_KIOSK.dir)) { await fs.remove(IMAGE_KIOSK.dir, { recursive: true, time }); log(`left out the image's own kiosk app: ${IMAGE_KIOSK.package}`); }
+
+  // apps a Mirror never uses: they restart after every lowmemorykiller kill. A second run finds them gone.
+  const left: string[] = [];
+  for (const u of UNUSED_APPS) if (await fs.exists(u.dir)) { await fs.remove(u.dir, { recursive: true, time }); left.push(u.package); }
+  if (left.length) log(`left out ${left.length} unused apps: ${left.join(', ')}`);
+
   // one app of ours per image: any earlier one (Glassworks or the probe) goes first
   for (const dir of APP_DIRS) if (await fs.exists(dir)) { await fs.remove(dir, { recursive: true, time }); log(`replaced ${dir}`); }
   await fs.mkdir(app.dir, dirAttrs(time));
@@ -234,14 +244,6 @@ export async function patchSystem(fs: Ext4, o: SystemPatch, log: (line: string) 
     for (const [name, data] of payloads) await fs.writeFile(`${app.dir}/lib/${native.dir}/${name}`, data, fileAttrs(time));
     log(`${native.names.length} native librar${native.names.length === 1 ? 'y' : 'ies'} for ${native.abi} in ${app.dir}/lib/${native.dir}`);
   }
-
-  // the image's own kiosk: Glassworks is the Mirror's app. A second run finds it gone.
-  if (await fs.exists(IMAGE_KIOSK.dir)) { await fs.remove(IMAGE_KIOSK.dir, { recursive: true, time }); log(`left out the image's own kiosk app: ${IMAGE_KIOSK.package}`); }
-
-  // apps a Mirror never uses: they restart after every lowmemorykiller kill. A second run finds them gone.
-  const left: string[] = [];
-  for (const u of UNUSED_APPS) if (await fs.exists(u.dir)) { await fs.remove(u.dir, { recursive: true, time }); left.push(u.package); }
-  if (left.length) log(`left out ${left.length} unused apps: ${left.join(', ')}`);
 
   if (o.bootAnimation) {
     if (await fs.exists('/media/bootanimation.zip')) await fs.remove('/media/bootanimation.zip', { time });

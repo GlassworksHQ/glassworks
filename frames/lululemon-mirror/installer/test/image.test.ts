@@ -220,6 +220,25 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
     expect(log).toContain('/framework/services.jar: lets in this adb key without asking, not the image\'s own');
   }, 60_000);
 
+  it('leaves out the image\'s kiosk and the unused apps before the app goes in: image 3 has room for Glassworks only after', async () => {
+    // image 3's own kiosk took 246 MB of its 1.2 GB, and the app's libraries didn't fit beside it (Mirror run 2026-11-23)
+    const root = systemTree();
+    writeFileSync(join(root, 'priv-app/MirrorKiosk/lib/arm64/libbig.so'), randomBytes(2_000_000));
+    const img = join(dir, 'system-full.img');
+    mke2fs(img, 64, MAKE_EXT4FS, root);
+    const disk = await load(img);
+    const fs = await Ext4.open(disk);
+    // fill the image until the app no longer fits beside the kiosk (the APK and its libraries need about 165 blocks)
+    await fs.writeFile('/filler', new Uint8Array((fs.freeBlocks - 120) * 4096), { mode: 0o644, uid: 0, gid: 0, label: 'u:object_r:system_file:s0', time: T });
+    expect(fs.freeBlocks).toBeLessThanOrEqual(120);
+    await patchSystem(fs, { adbKey: KEY, apk: APK, time: T });
+    await dump(disk, img);
+    const r = fsck(img);
+    expect(clean(r), r.out).toBe(true);
+    expect(Buffer.from(debugfsCat(img, `${DIR}/lib/arm64/libxul.so`))).toEqual(Buffer.from(libs['arm64-v8a']['libxul.so']));
+    expect(debugfs(img, 'ls /priv-app')).not.toContain('MirrorKiosk');
+  });
+
   it('refuses, with nothing written, an image without services.jar or one Kiln can\'t retarget, and the project key', async () => {
     for (const [services, msg] of [[null, /has no \/system\/framework\/services\.jar/], [await fakeServicesJar({ dex: new TextEncoder().encode('dex\n035\0') }), /isn't dex 035|cut short/]] as const) {
       const img = join(dir, `nojar-${Math.random().toString(36).slice(2)}.img`);

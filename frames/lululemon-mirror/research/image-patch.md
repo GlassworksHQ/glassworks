@@ -235,6 +235,23 @@ What Kiln changes for it (read, then checked offline):
 Not checked: a flash on a unit (Glassworks or Glass Panes), and whether the kiosk's removal leaves
 anything behind that expects it (a receiver, a job). **Untested.**
 
+**Room for the app (verified 2026-11-23, the root, offline).** The first Kiln run on a unit with image 3
+stopped in the build: `no room for /priv-app/Glassworks/lib/arm64/libxul.so: it needs up to 35906 blocks,
+18451 are free`. The `GW_MIRROR_SYSTEM_IMG` test above patches with a small fake APK, so it never saw this.
+Read with Kiln's ext4 package on the real image 3 and the real legacy 0.3.0 arm64 APK (96,035,319 bytes;
+its 13 arm64 libraries unpack to 170 MB, `libxul.so` alone 147 MB):
+
+| | Free blocks (4 KiB) |
+|---|---|
+| Image 3 as released | 47,556 (186 MB) |
+| `/priv-app/MirrorKiosk` left out | +63,091 (246 MB: its own GeckoView) |
+| The 12 unused apps left out | +6,462 |
+| After the whole patch (app and libraries in) | 52,077 (203 MB) |
+
+`patchSystem` wrote the app before it left anything out, so the kiosk still held its 246 MB when the
+libraries went in. It now leaves out the kiosk and the unused apps first. Image 2 had no kiosk in
+`system` and about 437 MB free, so the order never mattered before.
+
 ## The first real flash (2026-11-16, verified by the root)
 
 The root ran the install headless with `tools/mirror/flash-node.ts` (#370), the same installer
