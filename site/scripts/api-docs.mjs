@@ -289,9 +289,11 @@ async function npmTarball(lib, version, dist) {
   const file = `${lib.name}-${version}.tgz`;
   const dir = join(NPM_CACHE, lib.name, version);
   const hex = sha512Of(dist.integrity);
-  // only a cached tarball that is still the one the registry names now
+  // only a cached tarball that is still the one the registry names now; one that isn't goes, so a failed
+  // download below can't fall back to it
   const cached = cachedTarball(dir, file);
   if (cached && digest("sha512", cached) === hex) return cached;
+  if (cached) rmSync(dir, { recursive: true, force: true });
   const tgz = await get(dist.tarball);
   if (!tgz) throw new Error(`${dist.tarball}: not found, though npm lists ${lib.pkg}@${version}`);
   const got = digest("sha512", tgz);
