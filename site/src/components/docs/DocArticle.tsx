@@ -21,12 +21,12 @@ function ApiStrip({ name, reference: r }: { name: string; reference: ApiReferenc
           <span>
             API reference: <a href={r.href}>{name} {r.version}</a>
           </span>
-          <code>dev.glassworks:{name}:{r.version}</code>
+          <code>{r.coordinate}</code>
         </>
       )}
-      {r.kind === "javadoc.io" && (
+      {r.kind === "elsewhere" && (
         <span>
-          API reference: <a href={r.href}>on javadoc.io</a>
+          API reference: <a href={r.href}>on {r.host}</a>
         </span>
       )}
       {r.kind === "unreleased" && <span>API reference: after the first release</span>}

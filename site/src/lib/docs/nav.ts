@@ -10,7 +10,7 @@ export type NavItem = {
   href: string;
   aside?: string;
   children?: NavItem[];
-  /** a page Next doesn't route (the static API reference, javadoc.io): a plain link */
+  /** a page Next doesn't route (the static API reference, javadoc.io, jsdocs.io): a plain link */
   plain?: boolean;
   /** one step deeper than a child */
   deep?: boolean;
@@ -106,8 +106,8 @@ export async function docsTracks(): Promise<NavTrack[]> {
                 const ref: NavItem[] =
                   api?.kind === "site"
                     ? [{ label: "API", href: api.href, aside: api.version, plain: true, deep: true }]
-                    : api?.kind === "javadoc.io"
-                      ? [{ label: "API", href: api.href, aside: "javadoc.io", plain: true, deep: true }]
+                    : api?.kind === "elsewhere"
+                      ? [{ label: "API", href: api.href, aside: api.host, plain: true, deep: true }]
                       : [];
                 return [item(d), ...ref];
               }),

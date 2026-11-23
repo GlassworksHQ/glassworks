@@ -3,29 +3,37 @@ import path from "node:path";
 import type { SitePath } from "./seo";
 
 /*
- * Each Kotlin library's API reference, as scripts/api-docs.mjs found it on Maven Central when the build
- * started: unpacked here from its javadoc jar, linked on javadoc.io when Central didn't answer, or not
- * released yet. Only the libraries in ../libs have one; the TypeScript ones in packages/ don't.
+ * Each library's API reference, as scripts/api-docs.mjs found it when the build started: a Kotlin library
+ * in ../libs from its javadoc jar on Maven Central, an npm package from its tarball through TypeDoc. It is
+ * served here, linked on javadoc.io or jsdocs.io when the registry didn't answer, or not released yet.
+ * `coordinate` is what a build names it by: dev.glassworks:<name>:<version> or @glassworks/<name>@<version>.
  */
 export type ApiReference =
-  | { kind: "site"; version: string; href: SitePath }
-  | { kind: "javadoc.io"; href: string }
+  | { kind: "site"; version: string; href: SitePath; coordinate: string }
+  | { kind: "elsewhere"; host: string; href: string }
   | { kind: "unreleased" };
 
 const FILE = path.join(/* turbopackIgnore: true */ process.cwd(), ".api-docs/libraries.json");
 
 function parse(name: string, v: unknown): ApiReference {
-  const r = v as Partial<Record<"kind" | "version" | "href", unknown>>;
+  const r = v as Partial<Record<"kind" | "version" | "href" | "coordinate" | "host", unknown>>;
   if (r?.kind === "unreleased") return { kind: "unreleased" };
-  if (r?.kind === "javadoc.io" && typeof r.href === "string") return { kind: "javadoc.io", href: r.href };
-  if (r?.kind === "site" && typeof r.version === "string" && typeof r.href === "string" && r.href.startsWith("/"))
-    return { kind: "site", version: r.version, href: r.href as SitePath };
+  if (r?.kind === "elsewhere" && typeof r.host === "string" && typeof r.href === "string" && r.href.startsWith("https://"))
+    return { kind: "elsewhere", host: r.host, href: r.href };
+  if (
+    r?.kind === "site" &&
+    typeof r.version === "string" &&
+    typeof r.coordinate === "string" &&
+    typeof r.href === "string" &&
+    r.href.startsWith("/")
+  )
+    return { kind: "site", version: r.version, href: r.href as SitePath, coordinate: r.coordinate };
   throw new Error(`${FILE}: ${name}: ${JSON.stringify(v)} isn't an API reference`);
 }
 
 let cache: Map<string, ApiReference> | undefined;
 
-/** Every library in ../libs, by name. */
+/** Every library in ../libs and every published npm package, by name. */
 export function apiReferences(): Map<string, ApiReference> {
   if (cache) return cache;
   if (!fs.existsSync(FILE)) throw new Error(`${FILE} is missing: run node scripts/api-docs.mjs (npm run build and npm run dev do)`);
@@ -34,9 +42,9 @@ export function apiReferences(): Map<string, ApiReference> {
   return cache;
 }
 
-/** The API reference of the library a doc is the README of (libs/<name>/README.md), if it's one. */
+/** The API reference of the library a doc is the README of (libs/, kiln/packages/ or packages/<name>/README.md), if it's one. */
 export function apiReferenceOf(file: string): { name: string; reference: ApiReference } | undefined {
-  const name = file.match(/^libs\/([^/]+)\/README\.md$/)?.[1];
+  const name = file.match(/^(?:libs|kiln\/packages|packages)\/([^/]+)\/README\.md$/)?.[1];
   const reference = name ? apiReferences().get(name) : undefined;
   return name && reference ? { name, reference } : undefined;
 }

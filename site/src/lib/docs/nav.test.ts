@@ -25,9 +25,9 @@ vi.mock("../frames", () => ({
 vi.mock("../apiDocs", () => ({
   apiReferenceOf: (file: string) => ({
     reference: file === "site-ref"
-      ? { kind: "site", href: "/docs/api/site-ref", version: "1.2.3" }
+      ? { kind: "site", href: "/docs/api/site-ref", version: "1.2.3", coordinate: "dev.glassworks:site-ref:1.2.3" }
       : file === "external-ref"
-        ? { kind: "javadoc.io", href: "https://javadoc.io/doc/example/external-ref" }
+        ? { kind: "elsewhere", host: "javadoc.io", href: "https://javadoc.io/doc/example/external-ref" }
         : { kind: "unreleased" },
   }),
 }));
