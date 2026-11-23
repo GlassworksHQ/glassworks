@@ -434,7 +434,9 @@ class RadioController(
                 "new radio stacks and radio firmware come with app updates"
         }
         val src = radio.status(RadioStatus.SOURCE).ifEmpty { "?" }
-        val inst = bundle?.shown() ?: radio.status(RadioStatus.BUNDLE).ifEmpty { "?" }
+        // Without a record (an image older than the loader), the property is all there is, but only a record can say a
+        // bundle was rejected: a `bad` property on its own reads as unknown (#772 review).
+        val inst = bundle?.shown() ?: radio.status(RadioStatus.BUNDLE).takeUnless { it.startsWith("bad") }?.ifEmpty { null } ?: "?"
         val shipped = bundle?.shippedVersion()
         val last = bundle?.lastResult?.takeIf { it.startsWith("error") || it.startsWith("no answer") || it.startsWith("couldn't") }
         return listOfNotNull(

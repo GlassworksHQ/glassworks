@@ -334,6 +334,11 @@ class RadioV4Test {
         assertEquals("ok 1.0.0", inst())
         pub.writeText("ok 30200 30200\n") // the radio record, as before
         assertEquals("ok 30200", inst())
+        pub.writeText("garbage\n") // no record to read: a `bad` property alone claims nothing
+        p.props[RadioHelper.PROP_BUNDLE] = "bad: forged"
+        assertEquals("?", inst())
+        p.props[RadioHelper.PROP_BUNDLE] = "ok 30100" // an older image's property still shows
+        assertEquals("ok 30100", inst())
     }
 
     @Test
