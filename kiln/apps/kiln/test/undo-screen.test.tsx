@@ -29,31 +29,31 @@ const link = (name: RegExp) => screen.getByRole('button', { name }) as HTMLButto
 const pick = (name: string) => fireEvent.change(document.querySelector('input[type=file]')!, { target: { files: [new File(['not a zip'], name)] } });
 
 describe('the Undo screen', () => {
-  it('turns "Use this browser\'s" off while a file is checked', async () => {
+  it('turns "Use saved backup" off while a file is checked', async () => {
     const s = await undo('undo');
     expect(s.store.state.undo.source).toBe('browser');
     pick('mine.zip');
-    expect(link(/Use this browser/).disabled).toBe(true);
+    expect(link(/Use saved backup/).disabled).toBe(true);
     await vi.waitFor(() => expect(s.store.state.undo.checking).toBe(false)); // this file isn't a backup
-    expect(link(/Use this browser/).disabled).toBe(false);
-    expect(link(/Another file/).disabled).toBe(false); // a file is always one click away, whatever this browser holds
+    expect(link(/Use saved backup/).disabled).toBe(false);
+    expect(link(/Choose a different file/).disabled).toBe(false); // a file is always one click away, whatever this browser holds
     s.close();
   });
 
-  it('turns "Another file" off while a file is checked', async () => {
+  it('turns "Choose a different file" off while a file is checked', async () => {
     const s = await undo('connect'); // no backup in this browser
     await act(() => s.openUndo());
     expect(link(/Use a backup file/).disabled).toBe(false);
     pick('mine.zip');
-    expect(link(/Another file/).disabled).toBe(true);
+    expect(link(/Choose a different file/).disabled).toBe(true);
     await vi.waitFor(() => expect(s.store.state.undo.checking).toBe(false));
-    expect(link(/Another file/).disabled).toBe(false);
+    expect(link(/Choose a different file/).disabled).toBe(false);
     s.close();
   });
 
   it('keeps the backup once the apps are back: the give-back was checked against it', async () => {
     const s = await undo('undo-apps-back');
-    expect(screen.getByText('Aqara\'s apps are back.')).toBeTruthy();
+    expect(screen.getByText('Aqara\'s apps are back')).toBeTruthy();
     expect(link(/Use a backup file/).disabled).toBe(true);
     expect(link(/^Continue$/).disabled).toBe(false);
     fireEvent.click(screen.getByRole('radio', { name: /As it came from Aqara/ })); // a depth change doesn't unlock it
@@ -72,8 +72,8 @@ describe('the Undo screen', () => {
 
   it('says when this browser\'s backup can\'t be read', async () => {
     const s = await undo('undo-unreadable');
-    expect(screen.getByText('Couldn\'t read the backup in this browser.')).toBeTruthy();
-    expect(screen.queryByText('No backup in this browser.')).toBeNull();
+    expect(screen.getByText('Couldn\'t read the saved backup')).toBeTruthy();
+    expect(screen.queryByText(/No backup saved in this browser/)).toBeNull();
     expect(link(/Use a backup file/).disabled).toBe(false);
     expect(link(/^Continue$/).disabled).toBe(true);
     s.close();

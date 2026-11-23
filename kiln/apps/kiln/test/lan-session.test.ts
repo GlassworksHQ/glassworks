@@ -142,7 +142,7 @@ describe('the panel\'s setup page', () => {
     expect(panel.joined).toEqual({ ssid: 'Example-Home', password: 'correct horse' });
     expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'wifi', joining: { ssid: 'Example-Home', step: 'join' } } });
     const v = lan.state.view as { setup: { joinNote?: string } };
-    expect(v.setup.joinNote).toMatch(/can't follow it from here/);
+    expect(v.setup.joinNote).toMatch(/can't follow it across networks/);
     expect(panel.asked).toEqual(['state', 'wifi.scan', 'wifi.join']);
   });
 
@@ -193,7 +193,7 @@ describe('the panel\'s setup page', () => {
     const lan = new LanSession(panel);
     await lan.start();
     await lan.click('join', () => lan.joinWifi('Example-Home', 'correct horse'));
-    expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'wifi', joining: { step: 'err', error: expect.stringMatching(/lost the panel/) } } });
+    expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'wifi', joining: { step: 'err', error: expect.stringMatching(/Lost connection to the panel/) } } });
   });
 
   it('a join refused because the pairing ran out pairs again, and comes back to Wi-Fi', async () => {
@@ -283,7 +283,7 @@ describe('the panel\'s setup page', () => {
     await lan.start();
     await lan.showCode();
     await lan.enterCode('4829');
-    expect(lan.state.view).toMatchObject({ at: 'pair', error: 'The code has 6 digits.' });
+    expect(lan.state.view).toMatchObject({ at: 'pair', error: 'Enter the 6-digit code shown on the panel.' });
     expect(panel.calls.filter((c) => c.includes('code='))).toEqual([]);
   });
 
@@ -293,7 +293,7 @@ describe('the panel\'s setup page', () => {
     panel.channelDead = true;
     const lan = new LanSession(panel);
     await lan.start();
-    expect(lan.state.view).toMatchObject({ at: 'lost', again: 'start', error: expect.stringMatching(/didn't open its setup channel/) });
+    expect(lan.state.view).toMatchObject({ at: 'lost', again: 'start', error: expect.stringMatching(/Couldn't connect to the panel right now/) });
     expect(panel.calls).not.toContain('POST /setup/done');
     expect(panel.closedChannels).toBe(5); // every try's socket, once its first request failed
     panel.channelDead = false;
@@ -347,7 +347,7 @@ describe('the panel\'s setup page', () => {
       await lan.start();
       panel.doneAnswer = answer;
       await lan.finish();
-      expect(lan.state.view).toMatchObject({ at: 'lost', again: 'done', error: expect.stringMatching(/didn't end this browser's pairing/) });
+      expect(lan.state.view).toMatchObject({ at: 'lost', again: 'done', error: expect.stringMatching(/didn't finish closing this browser's pairing session/) });
       panel.doneAnswer = undefined;
       await lan.retry();
       expect(lan.state.view).toEqual({ at: 'done' });
@@ -416,7 +416,7 @@ describe('the panel\'s setup page', () => {
       const lan = new LanSession({ ...panel, navigate: (p) => went.push(p), openTab });
       await lan.start();
       lan.signIn('http://192.0.2.20:8123');
-      expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'ha', signingIn: true, note: expect.stringMatching(/come back here/) } });
+      expect(lan.state.view).toMatchObject({ at: 'setup', setup: { phase: 'ha', signingIn: true, note: expect.stringMatching(/return here automatically/) } });
       await vi.waitFor(() => expect(went).toEqual([SIGN_IN_HERE]));
       expect(panel.asked.indexOf('set_ha')).toBeGreaterThan(-1);
       expect(panel.st.ha.url).toBe('http://192.0.2.20:8123');

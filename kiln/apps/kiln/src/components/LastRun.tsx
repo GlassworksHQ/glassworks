@@ -16,8 +16,8 @@ export function LastRun() {
   };
   return (
     <p className="small" role="status">
-      The last run stopped: {f.failure.title}.{' '}
-      <button type="button" className="link" onClick={download}>Download its log</button>
+      Your last attempt stopped: {f.failure.title}.{' '}
+      <button type="button" className="link" onClick={download}>Download log</button>
     </p>
   );
 }

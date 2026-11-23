@@ -150,7 +150,7 @@ class SetupPanesTest {
         val s = overlay(slow)
         s.panesBudgetMs = 300
         shown(s, "Continue")!!.performClick()
-        waitFor("named") { shown(s, "The Music didn't answer.") != null }
+        waitFor("named") { shown(s, "Music didn't respond in time.") != null }
         assertTrue(s.holdsPanes) // there is a way out: try again, or turn it off
         assertTrue(shown(s, "Continue")!!.isEnabled)
         stuck.countDown()
@@ -305,11 +305,11 @@ class SetupPanesTest {
     fun aWifiStepThatIsDoneLeadsWithContinue() {
         // Reopened on a connected panel (a preview here): Continue moves on, another network is second.
         val s = overlay(m = model(SetupFlow.WIFI, done = setOf(SetupFlow.WIFI), preview = true))
-        assertTrue(shown(s, "Connected to Example-WiFi.") != null)
+        assertTrue(shown(s, "Connected to Example-WiFi") != null)
         assertTrue(shown(s, "Use another network") != null)
         shown(s, "Continue")!!.performClick()
         Mockup.idle()
-        assertTrue(shown(s, "Scan to sign in.") != null) // Home Assistant's first step
+        assertTrue(shown(s, "Scan to sign in") != null) // Home Assistant's first step
     }
 
     @Test
@@ -318,11 +318,11 @@ class SetupPanesTest {
         val p = overlay(m = model(SetupFlow.WIFI, done = emptySet(), preview = true, online = false))
         all(p, View::class.java).first { it.contentDescription == "Home Assistant" && it.isClickable }.performClick()
         Mockup.idle()
-        assertTrue(shown(p, "Scan to sign in.") != null)
+        assertTrue(shown(p, "Scan to sign in") != null)
         // Live: a step that isn't reached yet doesn't open.
         val live = overlay(m = model(SetupFlow.WIFI, done = emptySet(), online = false))
         all(live, View::class.java).firstOrNull { it.contentDescription == "Home Assistant" && it.isClickable }?.performClick()
         Mockup.idle()
-        assertTrue(shown(live, "Connect to Wi-Fi.") != null)
+        assertTrue(shown(live, "Connect to Wi-Fi") != null)
     }
 }

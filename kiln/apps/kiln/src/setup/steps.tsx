@@ -59,7 +59,7 @@ export function Wifi({ busy, steps, setup }: { busy: boolean; steps: WifiSteps; 
     const at = j.step === 'err' ? 1 : order.indexOf(j.step);
     return (
       <section className="card" aria-labelledby="h">
-        <h2 id="h">{j.step === 'ok' ? `On ${j.ssid}` : j.step === 'err' ? `Couldn't join ${j.ssid}` : `Joining ${j.ssid}…`}</h2>
+        <h2 id="h">{j.step === 'ok' ? `Connected to ${j.ssid}` : j.step === 'err' ? `Couldn't join ${j.ssid}` : `Joining ${j.ssid}…`}</h2>
         <ol className="join" aria-live="polite">
           {[setup.over === 'lan' ? 'Sent to the panel' : 'Sent to the panel over USB', 'The panel joins the network', 'Connected'].map((t, i) => (
             <li key={t} className={j.step === 'ok' || i < at ? 'done' : i === at ? (j.step === 'err' ? 'fail' : 'cur') : ''}>{t}</li>
@@ -91,12 +91,12 @@ export function Wifi({ busy, steps, setup }: { busy: boolean; steps: WifiSteps; 
   }
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h">Which Wi-Fi?</h2>
+      <h2 id="h">Connect to Wi-Fi</h2>
       {setup.hint && <p className="lede">{setup.hint}</p>}
       {setup.networks === undefined && !setup.unreachable ? (
         <><p className="status" role="status">{setup.status}</p><div className="bar wait"><i /></div></>
       ) : setup.unreachable ? (
-        <p className="status err" role="alert">{setup.status}{steps.touch !== false ? ' Try again, or set up Wi-Fi on the panel: it shows Wi-Fi first.' : ' Try again.'}</p>
+        <p className="status err" role="alert">{setup.status}{steps.touch !== false ? ' Try again, or set up Wi-Fi directly on the panel.' : ' Try again.'}</p>
       ) : (
         <>
           <RadioGroup.Root className="list" value={pick} onValueChange={setPick} aria-label="Networks">
@@ -105,7 +105,7 @@ export function Wifi({ busy, steps, setup }: { busy: boolean; steps: WifiSteps; 
                 <span className="rd" /><span className="t">{n.ssid}</span>{n.secure && <Lock />}<Signal rssi={n.rssi} />
               </RadioGroup.Item>
             ))}
-            <RadioGroup.Item value={'\u0000other'} className="opt"><span className="rd" /><span className="t">Other…</span></RadioGroup.Item>
+            <RadioGroup.Item value={'\u0000other'} className="opt"><span className="rd" /><span className="t">Enter a network manually…</span></RadioGroup.Item>
           </RadioGroup.Root>
           <p className="small">{setup.status}</p>
           {isOther && <label className="field"><span>Network name</span><input className="input" value={other} onChange={(e) => setOther(e.target.value)} autoComplete="off" /></label>}
@@ -135,7 +135,7 @@ export function HomeAssistant({ busy, steps, setup }: StepProps<'ha'>) {
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">{setup.ha.signedIn ? 'Signed in to Home Assistant' : 'Sign in to Home Assistant'}</h2>
-      <p className="lede">{setup.ha.discovered ? `Found at ${new URL(setup.ha.discovered).host}.` : 'Not found by itself. Type its address.'}</p>
+      <p className="lede">{setup.ha.discovered ? `Found Home Assistant at ${new URL(setup.ha.discovered).host}.` : 'We couldn\'t find Home Assistant automatically. Enter its address below.'}</p>
       <label className="field"><span>Address</span><input className="input" value={url} onChange={(e) => { setTyped(e.target.value); steps.haAddress = e.target.value; }} inputMode="url" autoComplete="off" /></label>
       {setup.ha.signedIn && <p className="status ok">The panel is signed in.</p>}
       {setup.note && !setup.ha.signedIn && <p className="status" role="status">{setup.note}</p>}
@@ -177,7 +177,8 @@ export function Panes({ busy, steps, setup, icons }: StepProps<'panes'> & { icon
   const set = (next: Record<string, boolean>) => { setOn(next); steps.panesDraft = next; };
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h">What should it do?</h2>
+      <h2 id="h">Choose what your panel does</h2>
+      <p className="lede">Turn on the features you want now. You can change any of these later in settings.</p>
       <ul className="panes" aria-label="Panes">
         {setup.panes.map((p) => (
           <li key={p.id}>
@@ -191,7 +192,7 @@ export function Panes({ busy, steps, setup, icons }: StepProps<'panes'> & { icon
         ))}
       </ul>
       {setup.error && <p className="status err" role="alert">{setup.error}</p>}
-      {setup.busy && <p className="status work" role="status">Setting up…</p>}
+      {setup.busy && <p className="status work" role="status">Saving your choices…</p>}
       <div className="foot">
         <span />
         <button type="button" className="btn ember" disabled={setup.busy || busy}
@@ -207,7 +208,7 @@ export function Radio({ busy, steps, setup }: StepProps<'radio'>) {
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">What should the radio do?</h2>
-      <p className="lede">The panel has a Zigbee and Thread radio. Leave it off, or let Home Assistant use it.</p>
+      <p className="lede">The panel includes a built-in Zigbee and Thread radio. Leave it off if you don&apos;t need it yet — you can change this anytime later.</p>
       <RadioGroup.Root className="list" value={mode} onValueChange={setMode} aria-label="Radio role" disabled={setup.busy}>
         {setup.radio.options.map((o) => (
           <RadioGroup.Item key={o.id} value={o.id} className="opt" disabled={!setup.radio.helper && o.id !== 'off'}>
@@ -246,7 +247,7 @@ async function copy(value: string): Promise<boolean> {
 function Copy({ value }: { value: string }) {
   const [t, setT] = useState('Copy');
   return <button type="button" className="link" onClick={async () => {
-    setT((await copy(value)) ? 'Copied' : 'Select it');
+    setT((await copy(value)) ? 'Copied' : 'Copy manually');
     setTimeout(() => setT('Copy'), 1600);
   }}>{t}</button>;
 }
@@ -283,7 +284,7 @@ export function RadioNext({ busy, steps, setup }: StepProps<'radio-next'>) {
       <ol className="next" style={list}>{plan.steps.map((st) => <PlanStep key={st.title} st={st} />)}</ol>
       {plan.more && (
         <Collapsible.Root open={more} onOpenChange={setMore} className="tech">
-          <Collapsible.Trigger className="link" style={{ justifySelf: 'start' }}>{more ? 'Less' : 'More help'}</Collapsible.Trigger>
+          <Collapsible.Trigger className="link" style={{ justifySelf: 'start' }}>{more ? 'Hide help' : 'More help'}</Collapsible.Trigger>
           <Collapsible.Content><ol className="next" style={list}>{plan.more.map((st) => <PlanStep key={st.title} st={st} />)}</ol></Collapsible.Content>
         </Collapsible.Root>
       )}

@@ -88,7 +88,7 @@ async function listed(line: Line, get: typeof fetch, stallMs: number): Promise<R
   const timer = setTimeout(() => abort.abort(), stallMs);
   try {
     const r = await loadRelease(line, ((u: RequestInfo | URL, init?: RequestInit) => get(u, { ...init, signal: abort.signal })) as typeof fetch);
-    return abort.signal.aborted ? { state: 'error', why: `Kiln's release list sent nothing for ${stallMs / 1000} s` } : r;
+    return abort.signal.aborted ? { state: 'error', why: `the release server stopped responding after ${stallMs / 1000} seconds` } : r;
   } finally {
     clearTimeout(timer);
   }
@@ -104,7 +104,7 @@ export async function releaseApk(of: ReleaseLine & { from?: ListedRelease }, get
   const dl = { fetch: get, stallMs: o.stallMs ?? RELEASE_STALL_MS, ...(o.retries !== undefined ? { retries: o.retries } : {}), ...(o.sleep ? { sleep: o.sleep } : {}) };
   onState({ state: 'looking' });
   const r: Release = of.from ?? await listed(of.line, get, dl.stallMs);
-  if (r.state === 'error') throw new Error(`Kiln couldn't read the releases: ${r.why}`);
+  if (r.state === 'error') throw new Error(`Couldn't check for releases: ${r.why}`);
   const apk = download(r, of.abi);
   if (r.state !== 'out' || !apk) throw new NoRelease();
   const { tag } = r;
@@ -114,10 +114,10 @@ export async function releaseApk(of: ReleaseLine & { from?: ListedRelease }, get
   try {
     sum = await downloadWhole(`${apk.href}.sha256`, dl);
   } catch (e) {
-    throw new Error(`Kiln couldn't read ${name}.sha256 from ${tag}: ${e instanceof ProxyError ? e.message : String(e)}`);
+    throw new Error(`Couldn't verify the release checksum for ${version} (${e instanceof ProxyError ? e.message : String(e)})`);
   }
   const want = new TextDecoder().decode(sum).trim().split(/\s+/)[0]?.toLowerCase() ?? '';
-  if (!/^[0-9a-f]{64}$/.test(want)) throw new Error(`${name}.sha256 in ${tag} isn't a SHA-256`);
+  if (!/^[0-9a-f]{64}$/.test(want)) throw new Error(`The release checksum for ${version} wasn't valid`);
 
   onState({ state: 'downloading', tag, version, name, got: 0 });
   let before = 0;
@@ -128,9 +128,9 @@ export async function releaseApk(of: ReleaseLine & { from?: ListedRelease }, get
       onProgress: (got, size) => { if (step(got, before, size)) onState({ state: 'downloading', tag, version, name, got, ...(size ? { size } : {}) }); before = got; },
     });
   } catch (e) {
-    throw new Error(`Kiln couldn't download ${name} from ${tag}: ${e instanceof ProxyError ? e.message : String(e)}`);
+    throw new Error(`Couldn't download Glassworks ${version} (${e instanceof ProxyError ? e.message : String(e)})`);
   }
   const sha256 = hex(await crypto.subtle.digest('SHA-256', bytes as Uint8Array<ArrayBuffer>));
-  if (sha256 !== want) throw new Error(`${name} isn't the file ${tag} publishes: its SHA-256 is ${sha256}, the release says ${want}. Kiln dropped it`);
+  if (sha256 !== want) throw new Error(`The downloaded file didn't match the published release, so Kiln discarded it`);
   return { bytes, ready: { state: 'ready' as const, tag, version, name, size: bytes.length, sha256 }, release: r };
 }

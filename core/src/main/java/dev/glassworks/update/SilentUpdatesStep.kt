@@ -125,31 +125,31 @@ class SilentUpdatesStep(
 
     companion object {
         const val ID = "silent_updates"
-        const val ALLOW_TITLE = "Install updates by themselves?"
-        const val ALLOW_BODY = "Allow “Install unknown apps” for Glassworks, and updates from Home Assistant install with " +
-            "nobody at the screen. Glassworks uses it only for its own updates, signed with its key."
+        const val ALLOW_TITLE = "Allow automatic updates?"
+        const val ALLOW_BODY = "Allow “Install unknown apps” for Glassworks so updates from Home Assistant install automatically. " +
+            "Glassworks only installs its own signed updates."
         const val OFF = "Off: each update asks for a tap on this screen"
-        const val ON = "On: updates install by themselves"
-        const val NO_SETTINGS = "Android didn't open the page. Allow it under Settings, Apps, Glassworks, Install unknown apps."
+        const val ON = "On: updates install automatically"
+        const val NO_SETTINGS = "Android didn't open that page. Allow it under Settings → Apps → Glassworks → Install unknown apps."
         const val OPEN_SETTINGS = "Open Android's settings"
-        const val OWNER_TITLE = "A tap per update"
+        const val OWNER_TITLE = "Updates need a tap"
         const val OPTIONAL = "Optional"
         const val CHECKING_TITLE = "Checking updates"
-        const val CHECKING_BODY = "A moment: Glassworks is reading whether updates can install by themselves here."
+        const val CHECKING_BODY = "Checking whether updates can install automatically on this device…"
         /** The setup channel's answer while [answer] isn't known yet. */
         const val NOT_READ = "Silent updates isn't read yet. Try again in a moment."
         const val KILN = "https://kiln.glassworks.dev"
 
         fun ownerBody(android: String) =
-            "On Android $android, only a device owner skips it. Kiln can set that up on a reset device with no accounts, and undo it."
+            "On Android $android, only a device owner can install updates without a tap. Kiln can set that up on a factory-reset device with no accounts, and undo it anytime."
 
         /** The S1 with a boot image from before the root update service. */
-        const val BOOT_IMAGE_BODY = "This panel's boot image has no update service. Kiln adds it from a computer, and keeps your settings."
+        const val BOOT_IMAGE_BODY = "This panel's system software doesn't include automatic updates yet. Update it once with Kiln on a computer — your settings stay safe."
 
         fun targetBody(s: SilentUpdates.TargetTooLow) =
-            "Android ${s.android} skips the tap only for apps that target API ${s.needed} or higher, and this one targets ${s.has}. " +
-                (if (s.unknownApps) "" else "Such a release also needs “Install unknown apps” allowed for Glassworks. ") +
-                "Until then, only a device owner skips it. Kiln can set that up."
+            "Android ${s.android} only allows automatic updates for apps targeting API ${s.needed} or higher (this build targets ${s.has}). " +
+                (if (s.unknownApps) "" else "That release will also need “Install unknown apps” allowed for Glassworks. ") +
+                "Until then, only a device owner can skip the tap — Kiln can set that up."
 
         /** What the step offers for [s], or null when there's nothing to do on this device. */
         fun offer(s: SilentUpdates?): Offer? = when (s) {

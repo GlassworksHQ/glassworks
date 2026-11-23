@@ -23,9 +23,9 @@ describe('the panel\'s page after the Wi-Fi is sent', () => {
     expect(screen.getByRole('heading').textContent).toBe('Sent to the panel');
     const text = container.textContent ?? '';
     expect(text).toMatch(/switching to Example-Home now/);
-    expect(text).toMatch(/can't follow it from here/);
-    expect(text).toMatch(/watch the panel's screen/);
-    expect(text).toMatch(/Put this phone back on your own Wi-Fi/);
+    expect(text).toMatch(/can't follow it across networks/);
+    expect(text).toMatch(/continue on the panel's screen/);
+    expect(text).toMatch(/reconnect this device to your regular Wi-Fi/);
     expect(container.querySelector('ol')).toBeNull();
     expect(container.querySelector('.bar, [role=progressbar]')).toBeNull();
     expect(screen.queryAllByRole('button')).toHaveLength(0);
@@ -38,7 +38,7 @@ describe('the panel\'s page after the Wi-Fi is sent', () => {
     expect(region.getAttribute('aria-live')).toBe('polite');
     rerender(<Wifi busy={false} steps={steps} setup={sent('lan', 'join')} />);
     expect(screen.getByRole('status')).toBe(region);
-    expect(region.textContent).toMatch(/Sent to the panel[\s\S]*watch the panel's screen/);
+    expect(region.textContent).toMatch(/Sent to the panel[\s\S]*continue on the panel's screen/);
   });
 
   it('while the reply is on its way: sending, with nothing that waits for more', () => {

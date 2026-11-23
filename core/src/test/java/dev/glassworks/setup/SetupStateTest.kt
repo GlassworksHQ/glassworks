@@ -527,7 +527,7 @@ class SetupStateTest {
         val open = ImprovFacts(running = true, advertising = true, state = dev.glassworks.improv.ImprovState.AUTHORIZED, authLeftMs = 299_001)
         val mirror = fresh.copy(online = false, offlineForMs = 60_000, neverSetUp = true, input = Input.NONE, improv = open)
         val d = SetupState.decide(mirror)
-        assertEquals("Send the Wi-Fi from a phone.", d.improv.title)
+        assertEquals("Send Wi-Fi from a phone", d.improv.title)
         assertTrue(d.improv.actions.isEmpty())
         assertEquals("a touchscreen keeps Stop", listOf(WifiStep.Action.STOP), SetupState.decide(mirror.copy(input = Input.TOUCH)).improv.actions)
     }

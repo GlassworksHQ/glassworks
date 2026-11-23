@@ -84,7 +84,7 @@ describe('the build and APK', () => {
     expect(await loadRelease('generic-android', out)).toEqual({ state: 'out', tag: 'generic-android-v1.0.0', version: '1.0.0', assets: [] });
     expect(out).toHaveBeenCalledWith('/api/release/generic-android/latest');
     expect(await loadRelease('generic-android', answer({ release: null }))).toEqual({ state: 'none' });
-    expect(await loadRelease('generic-android', answer('no', 502))).toEqual({ state: 'error', why: 'Kiln\'s release route answered 502' });
+    expect(await loadRelease('generic-android', answer('no', 502))).toEqual({ state: 'error', why: 'the release server answered 502' });
   });
 });
 
@@ -126,7 +126,7 @@ describe('the screens', () => {
     await show('computer');
     expect(heading()).toBe('Open this page on the tablet');
     expect(screen.getByText('Install from this computer').getAttribute('href')).toBe('/android');
-    fireEvent.click(screen.getByText('This is the tablet'));
+    fireEvent.click(screen.getByText('I\'m already on the tablet'));
     expect(heading()).toBe('This is an Android tablet');
   });
 
@@ -146,19 +146,19 @@ describe('the screens', () => {
     expect(a.getAttribute('href')).toBe('https://refract.glassworks.dev/glassworks/generic-android-v1.0.0/glassworks-generic-android-armeabi-v7a-1.0.0.apk');
     expect(document.querySelectorAll('a[download]')).toHaveLength(1);
     expect(document.body.textContent).not.toMatch(/(32|64)-bit/);
-    expect(screen.getByText('Tell us').tagName).toBe('BUTTON'); // the device report sheet (test/report-form.test.tsx)
+    expect(screen.getByText('let us know').tagName).toBe('BUTTON'); // the device report sheet (test/report-form.test.tsx)
     cleanup();
     // the same tablet in Chrome, which hides it: the 64-bit build, and the 32-bit one under "App not installed"
     render(<TabletScreens on={on('GALAXY_TAB_A_2016')} start="get" load={async () => rel('generic-android')} />);
     expect((await screen.findByText('Download')).getAttribute('href')).toContain('arm64-v8a');
-    expect(screen.getByText('Download the other build').getAttribute('href')).toContain('armeabi-v7a');
+    expect(screen.getByText('download the other build').getAttribute('href')).toContain('armeabi-v7a');
   });
 
   it('Get where the browser says nothing at all: the 64-bit build, and the other one only if Android refuses it', async () => {
     await show('get-unsure');
     expect(screen.getByText('Download').getAttribute('href')).toContain('glassworks-generic-android-arm64-v8a-1.0.0.apk');
     expect(embers()).toEqual(['Download']);
-    const other = screen.getByText('Download the other build');
+    const other = screen.getByText('download the other build');
     expect(other.getAttribute('href')).toContain('glassworks-generic-android-armeabi-v7a-1.0.0.apk');
     expect(other.getAttribute('download')).toBe('glassworks-generic-android-armeabi-v7a-1.0.0.apk');
     expect(document.body.textContent).not.toMatch(/(32|64)-bit/);
@@ -203,7 +203,7 @@ describe('the screens', () => {
   it('Get when the releases can\'t be read: says so, and tries again', async () => {
     const load = vi.fn(async (): Promise<Release> => ({ state: 'error', why: 'GitHub answered 502' }));
     render(<TabletScreens on={on('PIXEL_DESKTOP')} start="get" load={load} />);
-    await screen.findByText(/couldn.t read the releases: GitHub answered 502/);
+    await screen.findByText(/couldn.t load the releases \(GitHub answered 502\)/);
     load.mockResolvedValueOnce(rel('generic-android'));
     fireEvent.click(screen.getByText('Try again'));
     await screen.findByText('Download');
@@ -235,7 +235,7 @@ describe('the screens', () => {
 
   it('says it is reading the device until the browser answers', async () => {
     render(<TabletPage />);
-    expect(screen.getByRole('status').textContent).toBe('Reading this device…');
+    expect(screen.getByRole('status').textContent).toBe('Checking your device…');
     await screen.findByRole('heading');
   });
 

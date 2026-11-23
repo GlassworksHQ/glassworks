@@ -70,7 +70,7 @@ export function cameBackFromSignIn(loc: Pick<Location, 'hash' | 'pathname' | 'se
 }
 
 /** The note when the panel ended the pairing under the page: it lasts 30 minutes without a change. */
-export const RAN_OUT = 'The pairing ran out: it lasts 30 minutes without a change. Pair again to carry on where you were.';
+export const RAN_OUT = 'Your pairing session expired after 30 minutes of inactivity. Pair again to pick up where you left off.';
 
 export class LanSession implements SetupSteps, WifiSteps {
   state: LanState = { view: { at: 'connecting' }, rail: FULL_RAIL };
@@ -99,13 +99,13 @@ export class LanSession implements SetupSteps, WifiSteps {
             await (d.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms))))(1000);
           }
         }
-        throw new Error(`The panel didn't open its setup channel${last instanceof Error ? ` (${last.message})` : ''}. Try again in a moment.`);
+        throw new Error('Couldn\'t connect to the panel right now. Make sure it is powered on and on this network, then try again.');
       },
       phase: () => (this.state.view.at === 'setup' ? this.state.view.setup : { phase: 'waiting', note: '' }),
       show: (setup) => this.showStep(setup),
       here: () => this.state.view.at === 'setup',
       done: () => this.done(),
-      unreachable: (e) => this.set({ view: { at: 'lost', error: e instanceof Error ? e.message : 'The panel stopped answering.' } }),
+      unreachable: (e) => this.set({ view: { at: 'lost', error: e instanceof Error ? e.message : 'Lost connection to the panel. Try again in a moment.' } }),
       // this page comes from the app on the panel, which has everything the Thread step can ask for
       app: async () => ({ code: THREAD_FROM_HA }),
       openTab: d.openTab,
@@ -194,7 +194,7 @@ export class LanSession implements SetupSteps, WifiSteps {
     const res = await this.d.fetch(PAIR, { method: 'POST' });
     const r = await res.json();
     if (r.ok === true) this.set({ view: { ...v, shown: true, error: undefined } });
-    else this.set({ view: { ...v, open: res.status !== 403, error: String(r.error ?? 'The panel didn\'t show a code.') } });
+    else this.set({ view: { ...v, open: res.status !== 403, error: String(r.error ?? 'The panel couldn\'t show a pairing code right now. Try again.') } });
   }
 
   /** Checks the code typed; the right one pairs this browser and setup goes on where it was. */
@@ -202,12 +202,12 @@ export class LanSession implements SetupSteps, WifiSteps {
     const v = this.state.view;
     if (v.at !== 'pair') return;
     const digits = code.replace(/\D/g, '');
-    if (digits.length !== 6) { this.set({ view: { ...v, error: 'The code has 6 digits.' } }); return; }
+    if (digits.length !== 6) { this.set({ view: { ...v, error: 'Enter the 6-digit code shown on the panel.' } }); return; }
     const res = await this.d.fetch(PAIR, { method: 'POST', body: `code=${digits}` });
     const r = await res.json();
     if (r.ok !== true) {
       // a dead code (used up, run out) needs a new one on the screen
-      this.set({ view: { ...v, shown: res.status === 401 && !/last try/.test(String(r.error)), error: String(r.error ?? 'That didn\'t work.') } });
+      this.set({ view: { ...v, shown: res.status === 401 && !/last try/.test(String(r.error)), error: String(r.error ?? 'That code wasn\'t accepted. Try again.') } });
       return;
     }
     await this.begin().catch((e) => this.lose(e));
@@ -256,9 +256,9 @@ export class LanSession implements SetupSteps, WifiSteps {
     this.steps.close();
     try {
       const res = await this.d.fetch(DONE, { method: 'POST' });
-      if (res.status !== 200 || (await res.json()).ok !== true) throw new Error(`the panel answered ${res.status}`);
-    } catch (e) {
-      this.lose(new Error(`Setup is done, but the panel didn't end this browser's pairing (${(e as Error).message}). Try again.`), 'done');
+      if (res.status !== 200 || (await res.json()).ok !== true) throw new Error('the panel didn\'t confirm');
+    } catch {
+      this.lose(new Error('Setup is saved, but the panel didn\'t finish closing this browser\'s pairing session. Click Try again to close it cleanly.'), 'done');
       return;
     }
     this.set({ view: { at: 'done' } });

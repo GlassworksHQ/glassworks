@@ -248,7 +248,7 @@ describe('the screens', () => {
   it('the install lists saving the network and switching Wi-Fi on', async () => {
     await show('image-wifi-writing');
     expect([...document.querySelectorAll('ol.join li')].map((li) => li.textContent?.replace(/\d+%$/, ''))).toEqual([
-      'Save your Wi-Fi network in its userdata', 'Flash system', 'Flash userdata', 'Restart the Mirror', 'After its first start: switch Wi-Fi on',
+      'Save your Wi-Fi network for first start', 'Write the operating system', 'Write fresh storage', 'Restart the Mirror', 'Turn Wi-Fi on after first start',
     ]);
   });
 
@@ -262,7 +262,7 @@ describe('the screens', () => {
     expect(screen.getByText(/The Mirror joins your Wi-Fi a few minutes after it starts\./)).toBeTruthy();
     cleanup();
     await show('image-done-wifi-unconfirmed');
-    expect(screen.getByText(/Android didn't confirm Wi-Fi is on: switch it on once in Glass Panes’ Settings/)).toBeTruthy();
+    expect(screen.getByText(/Android didn't confirm Wi-Fi is on — switch it on once in Settings inside Glass Panes/)).toBeTruthy();
   });
 });
 

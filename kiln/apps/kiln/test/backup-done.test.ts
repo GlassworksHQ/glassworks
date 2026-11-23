@@ -108,6 +108,6 @@ describe('Done\'s backup download', () => {
     s.finish();
     (s as unknown as { d: { backups: { files: () => Promise<never> } } }).d.backups.files = () => Promise.reject(new Error('quota'));
     await s.downloadBackup();
-    expect(s.store.state.done!.backup!.error).toBe('Couldn\'t read it from this browser: quota');
+    expect(s.store.state.done!.backup!.error).toMatch(/Couldn't read the backup from this browser \(quota\)/);
   });
 });

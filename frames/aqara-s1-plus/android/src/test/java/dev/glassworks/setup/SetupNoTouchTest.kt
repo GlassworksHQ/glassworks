@@ -75,7 +75,7 @@ class SetupNoTouchTest {
         for (step in listOf(SetupFlow.SIGNIN, SetupFlow.HA, SetupFlow.PANES, "radio")) {
             val s = screen(step, theMirror())
             val texts = shown(s).map { it.first }
-            assertTrue("$step: $texts", "Scan to set it up." in texts)
+            assertTrue("$step: $texts", "Scan to set it up" in texts)
             assertTrue("$step: $texts", texts.any { "http://$ip:8099/setup" in it })
             assertEquals("$step: nothing to tap", emptyList<String>(), taps(s))
         }
@@ -97,7 +97,7 @@ class SetupNoTouchTest {
         val texts = shown(s).map { it.first }
         assertTrue(texts.toString(), "Waiting for Home Assistant to add it…" in texts)
         assertTrue(texts.toString(), texts.any { "Devices & services" in it && "discovered" in it && "re-authenticate" in it })
-        assertTrue(texts.toString(), "Scan to set it up." !in texts)
+        assertTrue(texts.toString(), "Scan to set it up" !in texts)
         assertTrue("the address stays, for a second computer: $texts", texts.any { "http://$ip:8099/setup" in it })
         assertTrue("no QR code", views(s).none { it is ImageView && it.isShown && it.drawable is BitmapDrawable })
         assertEquals(emptyList<String>(), taps(s))
@@ -105,7 +105,7 @@ class SetupNoTouchTest {
 
     @Test fun onceAddedTheNextStepPointsAtTheSetupPageAgain() {
         val s = screen(SetupFlow.PANES, theMirror(), done = setOf(SetupFlow.WIFI, SetupFlow.HA, SetupFlow.SIGNIN), signedIn = true)
-        assertTrue("Scan to set it up." in shown(s).map { it.first })
+        assertTrue("Scan to set it up" in shown(s).map { it.first })
     }
 
     @Test fun theSetupScreenWakesAScreenNothingElseCanWakeOnceEachTimeItAppears() {
@@ -156,7 +156,7 @@ class SetupNoTouchTest {
     @Test fun withoutWifiItSaysToUseKiln() {
         val s = screen(SetupFlow.WIFI, theMirror(), wifi = offline, panelIp = null)
         val texts = shown(s).map { it.first }
-        assertTrue(texts.toString(), "Waiting for Wi-Fi." in texts)
+        assertTrue(texts.toString(), "Waiting for Wi-Fi" in texts)
         assertEquals(emptyList<String>(), taps(s))
     }
 
@@ -164,13 +164,13 @@ class SetupNoTouchTest {
         // Home Assistant added it first (a reinstall it remembers): the sign-in's own code.
         val s = screen(SetupFlow.SIGNIN, theMirror(), done = setOf(SetupFlow.WIFI, SetupFlow.HA))
         val texts = shown(s).map { it.first }
-        assertTrue(texts.toString(), "Scan to sign in." in texts)
+        assertTrue(texts.toString(), "Scan to sign in" in texts)
         assertTrue(texts.toString(), "Sign in on this panel instead" !in texts)
     }
 
     @Test fun signInDoneHasNoContinueToTap() {
         val s = screen(SetupFlow.SIGNIN, theMirror(), done = setOf(SetupFlow.WIFI, SetupFlow.HA, SetupFlow.SIGNIN))
-        assertTrue(shown(s).map { it.first }.toString(), "Signed in." in shown(s).map { it.first })
+        assertTrue(shown(s).map { it.first }.toString(), "Signed in" in shown(s).map { it.first })
         assertEquals(emptyList<String>(), taps(s))
     }
 

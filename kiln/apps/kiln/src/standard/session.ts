@@ -85,7 +85,7 @@ export class StandardSession implements SetupSteps, WifiSteps {
       has: (step) => f.steps.includes(step),
       here: () => !this.closed && this.s.screen === 'setup',
       done: () => this.finish(),
-      unreachable: (e) => this.fail(3, e ?? new Error(`${f.app} isn't answering. Is it installed and running?`), true),
+      unreachable: (e) => this.fail(3, e ?? new Error(`${f.app} isn't responding yet. Make sure it is installed and open on the panel, then try again.`), true),
       // which Glassworks is on the device decides how a Thread router gets its network (read-only)
       app: async () => {
         const v = await kioskVersion(this.panel!, this.lid(), f.appId);
@@ -379,8 +379,8 @@ export class StandardSession implements SetupSteps, WifiSteps {
           name: `${b.id}.zip`,
           info: `${b.files.length} partitions · ${fmtSize(total)}`,
           hint: b.bootWasPatched
-            ? 'This panel already had the software, so this backup isn\'t the original. Keep the one from your first install.'
-            : 'Original software, backed up. Keep it.',
+            ? 'This panel already had modified software, so this backup isn\'t the factory original. Keep the backup from your first install.'
+            : 'Your original software is backed up. Save a copy somewhere safe in case you ever want to restore it.',
         },
       },
     });

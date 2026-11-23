@@ -108,7 +108,7 @@ class PanesStep(
             val problems = panes.indices.mapNotNull { i ->
                 val title = panes[i].choice.title
                 when {
-                    !ended[i] -> "The $title didn't answer."
+                    !ended[i] -> "$title didn't respond in time."
                     results[i] != null -> "$title: ${results[i]}"
                     else -> null
                 }

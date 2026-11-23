@@ -421,7 +421,7 @@ ${foot(viewer)}"""
                 is SettingsItem.SignIn -> {
                     val set = runCatching { item.isSet() }.getOrDefault(false)
                     sheet(item.title, "",
-                        """<div class="flds"><input class="fld" name="user" value="${esc(safe { item.user() })}" placeholder="User name" autocomplete="username" autocapitalize="none" spellcheck="false" autofocus aria-label="User name">""" +
+                        """<div class="flds"><input class="fld" name="user" value="${esc(safe { item.user() })}" placeholder="Username" autocomplete="username" autocapitalize="none" spellcheck="false" autofocus aria-label="Username">""" +
                             """<input class="fld" type="password" name="password" value="" placeholder="${if (set) SettingsChange.NEW_PASSWORD else "Password"}" autocomplete="new-password" aria-label="Password"></div>""",
                         "Save", d.problem, more = if (set) """<button class="pill" type="submit" name="clear" value="1">Clear</button>""" else "")
                 }

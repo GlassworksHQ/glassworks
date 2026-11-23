@@ -54,7 +54,7 @@ class ManageUsbDebuggingTest {
         val page = ha().get("/security").text()
         assertTrue(page.contains("Allow a new computer"))
         assertTrue(page.contains("Fingerprint ${a.fingerprint.replace(":", ":<wbr>")}"))
-        assertTrue(page.contains("Calls itself alex@laptop"))
+        assertTrue(page.contains("Reported name: alex@laptop"))
         assertTrue(page.contains("""name="fingerprint" value="${a.fingerprint}""""))
         assertTrue(page.contains(">Allow this computer</button>"))
         assertFalse("never the key", page.contains(a.base64.take(40)))

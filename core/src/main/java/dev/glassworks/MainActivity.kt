@@ -818,7 +818,7 @@ open class MainActivity : Activity() {
         }
         val d = glassworks.discovery
         if (d == null) {
-            setupOverlay.manualResult(false, "The kiosk service isn't running yet; try again in a moment.")
+            setupOverlay.manualResult(false, "Glassworks is still starting up. Try again in a moment.")
             return
         }
         d.setManual(raw) { ok, url ->

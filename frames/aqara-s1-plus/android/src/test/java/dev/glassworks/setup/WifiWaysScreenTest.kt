@@ -46,16 +46,16 @@ class WifiWaysScreenTest {
     private class Lead(val name: String, val improv: ImprovFacts, val spot: HotspotStep.Card, val title: String, val buttons: List<String>, val others: List<String>)
 
     private val leads = listOf(
-        Lead("Bluetooth on", btOn, offer, "Connect to Wi-Fi.", listOf("Allow", LINK, "Not now"), listOf("Set up from a phone", "Choose a network")),
+        Lead("Bluetooth on", btOn, offer, "Connect to Wi-Fi", listOf("Allow", LINK, "Not now"), listOf("Set up from a phone", "Choose a network")),
         // Wi-Fi off: the hotspot can't open, so it isn't offered, and Turn on Wi-Fi says what fixes it. It opens the Wi-Fi
         // settings, as Choose a network would, so there is no other way to offer.
-        Lead("Bluetooth on, Wi-Fi off", btOn, wifiOff, "Connect to Wi-Fi.", listOf("Allow", "Turn on Wi-Fi", "Not now"), emptyList()),
-        Lead("Bluetooth switched off, Wi-Fi off", btOff, wifiOff, "Connect to Wi-Fi.", listOf("Use Bluetooth", "Turn on Wi-Fi"), emptyList()),
-        Lead("Bluetooth switched off", btOff, offer, "Set up from a phone.", listOf(LINK, "Set up from a phone"), listOf("Use Bluetooth", "Choose a network")),
+        Lead("Bluetooth on, Wi-Fi off", btOn, wifiOff, "Connect to Wi-Fi", listOf("Allow", "Turn on Wi-Fi", "Not now"), emptyList()),
+        Lead("Bluetooth switched off, Wi-Fi off", btOff, wifiOff, "Connect to Wi-Fi", listOf("Use Bluetooth", "Turn on Wi-Fi"), emptyList()),
+        Lead("Bluetooth switched off", btOff, offer, "Set up from a phone", listOf(LINK, "Set up from a phone"), listOf("Use Bluetooth", "Choose a network")),
         // Bluetooth couldn't start: it never leads, but a retry stays behind the link.
-        Lead("no Bluetooth", noBt, offer, "Set up from a phone.", listOf(LINK, "Set up from a phone"), listOf("Try Bluetooth again", "Choose a network")),
+        Lead("no Bluetooth", noBt, offer, "Set up from a phone", listOf(LINK, "Set up from a phone"), listOf("Try Bluetooth again", "Choose a network")),
         // Wi-Fi is off, so the hotspot can't open: what fixes it, and Bluetooth's retry behind the link.
-        Lead("neither", noBt, wifiOff, "Choose your Wi-Fi.", listOf(LINK, "Turn on Wi-Fi", "Choose a network"), listOf("Try Bluetooth again")),
+        Lead("neither", noBt, wifiOff, "Choose your Wi-Fi", listOf(LINK, "Turn on Wi-Fi", "Choose a network"), listOf("Try Bluetooth again")),
     )
 
     private fun model(improv: ImprovFacts, spot: HotspotStep.Card?, step: String = SetupFlow.WIFI) = SetupOverlay.Model(
@@ -172,7 +172,7 @@ class WifiWaysScreenTest {
         assertTrue(texts(s).toString(), texts(s).any { it.startsWith("Couldn't join") })
         s.render(s.model!!.copy(wifi = WifiSetupStatus.Snapshot(WifiSetupStatus.State.CONNECTED, "Example-WiFi")))
         relayout(s)
-        assertTrue(texts(s).toString(), "Connected to Example-WiFi." in texts(s))
+        assertTrue(texts(s).toString(), "Connected to Example-WiFi" in texts(s))
         assertFalse(texts(s).toString(), texts(s).any { it.startsWith("Couldn't join") })
     }
 
@@ -248,7 +248,7 @@ class WifiWaysScreenTest {
         val s = screen(btOn, firstVisit)
         val asked = mutableListOf<HotspotStep.Action>()
         s.onHotspotAction = { asked += it }
-        assertTrue(texts(s).toString(), "Connect to Wi-Fi." in texts(s))
+        assertTrue(texts(s).toString(), "Connect to Wi-Fi" in texts(s))
         assertEquals(listOf("Allow", LINK, "Not now"), buttons(s))
         assertFalse("no reason under the Bluetooth tile", why in texts(s))
         button(s, LINK).performClick()

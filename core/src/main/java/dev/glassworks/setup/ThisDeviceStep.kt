@@ -134,21 +134,21 @@ class ThisDeviceStep(
     companion object {
         const val ID = "this_device"
         const val TITLE = "This device"
-        const val TITLE_TEXT = "Make it a panel."
+        const val TITLE_TEXT = "Set up this device"
         const val HOME = "Home screen"
         const val HOME_ON = "On: Glassworks is the default Home app"
         const val HOME_OFF = "Off: Glassworks isn't the default Home app"
         const val NO_HOME = "Android didn't open it: search its Settings for “Home”"
         const val SCREEN = "Turn the screen off"
-        const val SCREEN_ON = "On: Glassworks can turn the screen off when idle. Turn this off before you uninstall it."
-        const val SCREEN_OFF = "Android asks to make Glassworks a device admin, so it can turn the screen off when idle. " +
-            "To uninstall it later, turn that off first."
+        const val SCREEN_ON = "On: Glassworks can turn the screen off when idle. Turn this off before uninstalling."
+        const val SCREEN_OFF = "Allows Glassworks to turn the screen off when idle (Android calls this device admin). " +
+            "Turn this off before uninstalling."
         const val NO_ADMIN = "Android didn't open it: search its Settings for “Device admin”"
         const val MAKE_HOME = "Make it the home screen"
         const val ALLOW_SCREEN_OFF = "Let it turn the screen off"
         /** What Android's "Activate device admin app?" dialog says Glassworks wants it for (`EXTRA_ADD_EXPLANATION`). */
-        const val ADMIN_EXPLANATION = "Glassworks turns the screen off when the panel is idle, or when Home Assistant " +
-            "turns it off. With a PIN or password, Android then locks the device. Turn this off before you uninstall Glassworks."
+        const val ADMIN_EXPLANATION = "Glassworks turns the screen off when the panel is idle or when Home Assistant " +
+            "turns it off. If you set a screen lock, Android locks the device too. Turn this off before uninstalling Glassworks."
         const val TILE_GAP_DP = 11f
         const val FADE_DP = 28f
     }

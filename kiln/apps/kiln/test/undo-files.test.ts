@@ -60,7 +60,7 @@ describe('Undo with backup files', () => {
     await file;
     gates.open('browser');
     await opening;
-    expect(s.store.state.undo).toMatchObject({ source: 'file', ready: true, file: 'b · 1 partitions · checked' });
+    expect(s.store.state.undo).toMatchObject({ source: 'file', ready: true, file: 'b · 1 partitions · verified' });
     expect(boot(s)).toEqual(new Uint8Array([2]));
 
     const back = s.undoFromBrowser(); // the same through "Use this browser's"
@@ -84,7 +84,7 @@ describe('Undo with backup files', () => {
     await b;
     gates.open('a.zip');
     await a;
-    expect(s.store.state.undo).toMatchObject({ source: 'file', ready: true, checking: false, file: 'b · 1 partitions · checked' });
+    expect(s.store.state.undo).toMatchObject({ source: 'file', ready: true, checking: false, file: 'b · 1 partitions · verified' });
     expect(boot(s)).toEqual(new Uint8Array([2]));
   });
 
@@ -105,8 +105,8 @@ describe('Undo with backup files', () => {
     const s = session(async () => { throw new DOMException('The operation failed for reasons unrelated to the database itself.', 'UnknownError'); });
     await expect(s.openUndo()).resolves.toBeUndefined();
     expect(s.store.state.undo).toMatchObject({
-      ready: false, source: undefined, file: 'This browser\'s backup can\'t be read.',
-      note: { kind: 'err', title: 'Couldn\'t read the backup in this browser.', sub: 'The operation failed for reasons unrelated to the database itself. Use a backup file instead.' },
+      ready: false, source: undefined, file: 'The backup stored in this browser couldn\'t be read.',
+      note: { kind: 'err', title: 'Couldn\'t read the saved backup', sub: 'This browser couldn\'t open its stored copy. Choose a backup .zip file instead.' },
     });
     expect(boot(s)).toBeUndefined();
   });
@@ -119,8 +119,8 @@ describe('Undo with backup files', () => {
     await file;
     await expect(s.undoFromBrowser()).resolves.toBeUndefined();
     expect(s.store.state.undo).toMatchObject({
-      source: 'file', ready: true, file: 'b · 1 partitions · checked',
-      note: { kind: 'err', sub: 'IndexedDB is closed. Use a backup file instead.' },
+      source: 'file', ready: true, file: 'b · 1 partitions · verified',
+      note: { kind: 'err', sub: 'This browser couldn\'t open its stored copy. Choose a backup .zip file instead.' },
     });
     expect(boot(s)).toEqual(new Uint8Array([2]));
   });
@@ -135,7 +135,7 @@ describe('Undo with backup files', () => {
     void s.undoFromFile(new File(['a'], 'a.zip'));
     expect(gates.waiting.has('a.zip')).toBe(false); // not even read
     await s.undoFromBrowser();
-    expect(s.store.state.undo).toMatchObject({ source: 'file', ready: true, file: 'b · 1 partitions · checked' });
+    expect(s.store.state.undo).toMatchObject({ source: 'file', ready: true, file: 'b · 1 partitions · verified' });
     expect(boot(s)).toEqual(new Uint8Array([2]));
   });
 });

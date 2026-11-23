@@ -345,17 +345,17 @@ export function milestones(s: WizardState, panelName: string): Milestone[] {
   const rows: [string, boolean, boolean][] = s.flow === 'undo'
     ? [
         [`Found your ${panelName}`, overall > 0, overall >= 0.01],
-        ['Started the installer in its memory', overall >= 0.01, at >= 3],
-        ['Putting the original software back', at >= 3, restarting],
-        ['Restarting it', restarting, false],
+        ['Started the installer in memory', overall >= 0.01, at >= 3],
+        ['Restoring your original software', at >= 3, restarting],
+        ['Restarting the panel', restarting, false],
       ]
     : [
         [`Found your ${panelName}`, overall > 0, overall >= 0.01],
-        ['Started the installer in its memory', overall >= 0.01, at >= 1],
-        ['Backed up and checked', at >= 1, at >= 2],
+        ['Started the installer in memory', overall >= 0.01, at >= 1],
+        ['Backed up and verified the copy', at >= 1, at >= 2],
         ['Prepared the new software', at >= 2, at >= 3],
-        ['Writing the new software', at >= 3, restarting],
-        ['Restarting it', restarting, false],
+        ['Writing and verifying the new software', at >= 3, restarting],
+        ['Restarting the panel', restarting, false],
       ];
   return rows.filter(([, reached]) => reached).map(([text, , done]) => ({ text, done }));
 }

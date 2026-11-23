@@ -74,9 +74,9 @@ describe('the release\'s APK', () => {
     await s.loadRelease();
     expect(s.apkBytes()).toBeUndefined();
     expect(s.state.release).toMatchObject({ state: 'error' });
-    expect(s.state.release?.state === 'error' && s.state.release.why).toMatch(new RegExp(`^${DEMO_APK} isn't the file ${DEMO_TAG} publishes: its SHA-256 is [0-9a-f]{64}, the release says (ab){32}`));
+    expect(s.state.release?.state === 'error' && s.state.release.why).toMatch(/^The downloaded file didn't match the published release, so Kiln discarded it$/);
     expect(s.releaseBlocked()).toBe('Kiln couldn\'t get Glassworks from its release. Try again.');
-    expect(s.state.log.at(-1)).toMatch(/^The release's APK: .* isn't the file/);
+    expect(s.state.log.at(-1)).toMatch(/^The release's APK: The downloaded file didn't match/);
   });
 
   it('a release APK that isn\'t the Mirror\'s app is refused before any write, and Try again fetches the release again', async () => {
@@ -114,11 +114,11 @@ describe('the release\'s APK', () => {
   it('a failing release list or a missing .sha256 is an error, not "no release"', async () => {
     const down = session((async () => new Response('', { status: 502 })) as typeof fetch);
     await down.loadRelease();
-    expect(down.state.release).toEqual({ state: 'error', why: 'Kiln couldn\'t read the releases: Kiln\'s release route answered 502' });
+    expect(down.state.release).toEqual({ state: 'error', why: 'Couldn\'t check for releases: the release server answered 502' });
     const route = fakeReleaseRoute('out', APK);
     const noSum = session((async (u: RequestInfo | URL) => (String(u).endsWith('.sha256') ? new Response('', { status: 502 }) : route(u))) as typeof fetch);
     await noSum.loadRelease();
-    expect(noSum.state.release).toEqual({ state: 'error', why: `Kiln couldn't read ${DEMO_APK}.sha256 from ${DEMO_TAG}: the download proxy answered 502` });
+    expect(noSum.state.release).toEqual({ state: 'error', why: 'Couldn\'t verify the release checksum for 0.2.0 (the download proxy answered 502)' });
   });
 
   /** A request that never answers, until its signal aborts (the real fetch rejects then). */
@@ -133,7 +133,7 @@ describe('the release\'s APK', () => {
       releaseFetch: { stallMs: 50, retries: 1, sleep: async () => {} },
     }, true);
     await s.loadRelease();
-    expect(s.state.release).toEqual({ state: 'error', why: `Kiln couldn't read ${DEMO_APK}.sha256 from ${DEMO_TAG}: the download proxy sent nothing for 1 s` });
+    expect(s.state.release).toEqual({ state: 'error', why: 'Couldn\'t verify the release checksum for 0.2.0 (the download proxy sent nothing for 1 s)' });
     expect(s.releaseBlocked()).toBe('Kiln couldn\'t get Glassworks from its release. Try again.');
     hang = false;
     await s.loadRelease(); // Try again
@@ -149,7 +149,7 @@ describe('the release\'s APK', () => {
       releaseFetch: { stallMs: 50, retries: 0, sleep: async () => {} },
     }, true);
     await s.loadRelease();
-    expect(s.state.release).toEqual({ state: 'error', why: 'Kiln couldn\'t read the releases: Kiln\'s release list sent nothing for 0.05 s' });
+    expect(s.state.release).toEqual({ state: 'error', why: 'Couldn\'t check for releases: the release server stopped responding after 0.05 seconds' });
     hang = false;
     await s.loadRelease(); // Try again
     expect(s.state.release?.state).toBe('ready');
@@ -190,7 +190,7 @@ describe('the release\'s APK', () => {
     }, true);
     await s.loadRelease();
     // it resumed once where it stopped, and the stand-in stalled there again
-    expect(s.state.release).toEqual({ state: 'error', why: `Kiln couldn't download ${DEMO_APK} from ${DEMO_TAG}: the download proxy sent nothing for 1 s` });
+    expect(s.state.release).toEqual({ state: 'error', why: 'Couldn\'t download Glassworks 0.2.0 (the download proxy sent nothing for 1 s)' });
     expect(s.apkBytes()).toBeUndefined();
   });
 
@@ -230,7 +230,7 @@ describe('the page', () => {
   };
   const toImage = async () => {
     render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
-    await screen.findByText('What goes on the Mirror?');
+    await screen.findByText('Choose what to install on the Mirror');
     expect(screen.queryByText('Test only')).toBeNull(); // beta (frame.json): open to everyone, not a test page
     fireEvent.click(screen.getByRole('button', { name: 'Continue with Glassworks' }));
     await screen.findByText('Install Glassworks on the Mirror');
@@ -241,7 +241,7 @@ describe('the page', () => {
     history.replaceState(null, '', '/lululemon-mirror?apk=release');
     await toImage();
     await screen.findByText('Glassworks 0.2.0');
-    expect(screen.getByText(/SHA-256 checks out/)).toBeTruthy();
+    expect(screen.getByText(/Download verified/)).toBeTruthy();
     expect(screen.getByRole('link', { name: DEMO_APK }).getAttribute('href')).toBe(`https://github.com/GlassworksHQ/glassworks/releases/tag/${DEMO_TAG}`);
     expect(document.querySelector('input[type=file]')).toBeNull();
     expect(embers()).toEqual(['Download the system image']);
@@ -251,8 +251,8 @@ describe('the page', () => {
     vi.stubGlobal('fetch', fakeReleaseRoute('none', APK));
     history.replaceState(null, '', '/lululemon-mirror?apk=release');
     await toImage();
-    await screen.findByText('There is no release of Glassworks for the Mirror yet.');
-    expect(screen.getByRole('alert').textContent).toMatch(/found no .* release on GitHub\. Nothing was written to the Mirror/);
+    await screen.findByText('No compatible Glassworks for the Mirror release yet');
+    expect(screen.getByRole('alert').textContent).toMatch(/No compatible release package for this device is available on GitHub yet\. Nothing was written to the Mirror/);
     expect(document.querySelector('input[type=file]')).toBeNull();
   });
 
@@ -301,12 +301,12 @@ describe('the page', () => {
       cleanup();
       history.replaceState(null, '', `/lululemon-mirror?apk=${q}`);
       render(<StrictMode><DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} /></StrictMode>);
-      await until(() => !!screen.queryByText('What goes on the Mirror?') || !!screen.queryByText('Install Glassworks on the Mirror'));
+      await until(() => !!screen.queryByText('Choose what to install on the Mirror') || !!screen.queryByText('Install Glassworks on the Mirror'));
       if (!screen.queryByText('Install Glassworks on the Mirror')) fireEvent.click(screen.getByRole('button', { name: 'Continue with Glassworks' }));
       await screen.findByText('Install Glassworks on the Mirror');
     };
     await page('release');
-    await until(() => gates.length === 1 && !!screen.queryByText('Looking for its newest release…'));
+    await until(() => gates.length === 1 && !!screen.queryByText('Checking for the latest release…'));
     await page('local');
     expect(document.querySelector('input[type=file]')).not.toBeNull();
     await page('release');
@@ -324,7 +324,7 @@ describe('the page', () => {
     vi.stubGlobal('fetch', fakeReleaseRoute('out', APK));
     history.replaceState(null, '', '/lululemon-mirror?apk=release');
     render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
-    await screen.findByText('What goes on the Mirror?');
+    await screen.findByText('Choose what to install on the Mirror');
     expect(kept().sessions.app.from).toBe('release');
     kept().sessions.image.state = { ...kept().sessions.image.state, screen: 'working' };
     expect(kept().running()).toBe('/lululemon-mirror?apk=release');
@@ -334,7 +334,7 @@ describe('the page', () => {
     vi.stubGlobal('fetch', fakeReleaseRoute('out', APK));
     history.replaceState(null, '', '/lululemon-mirror?apk=local');
     render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
-    await screen.findByText('What goes on the Mirror?');
+    await screen.findByText('Choose what to install on the Mirror');
     const first = kept();
     await act(() => first.sessions.app.pickApk('local.apk', APK));
     cleanup();
@@ -351,7 +351,7 @@ describe('the page', () => {
     vi.stubGlobal('fetch', fakeReleaseRoute('out', APK));
     history.replaceState(null, '', '/lululemon-mirror?apk=local');
     render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
-    await screen.findByText('What goes on the Mirror?');
+    await screen.findByText('Choose what to install on the Mirror');
     const first = kept();
     await act(() => first.sessions.app.pickApk('local.apk', APK));
     first.sessions.image.state = { ...first.sessions.image.state, screen: 'done' };
@@ -368,7 +368,7 @@ describe('the page', () => {
     vi.stubGlobal('fetch', fakeReleaseRoute('out', APK));
     history.replaceState(null, '', '/lululemon-mirror?apk=local');
     render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
-    await screen.findByText('What goes on the Mirror?');
+    await screen.findByText('Choose what to install on the Mirror');
     const first = kept();
     await act(() => first.sessions.app.pickApk('local.apk', APK));
     first.sessions.image.state = { ...first.sessions.image.state, screen: 'fastboot' };

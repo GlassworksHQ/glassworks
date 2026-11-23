@@ -16,34 +16,34 @@ const RULES: Rule[] = [
   // undo's checkRestorable, before any write; the reason is in `raw`, under More help. First, because
   // its words ("install") match the disconnect rule's /stall/.
   { test: (e) => e instanceof BackupRefused, title: 'This backup can\'t undo the install',
-    fix: 'Use the backup from your first install, or undo by hand.' },
+    fix: 'Choose the backup from your first install, or follow the manual restore guide.' },
   { test: named('NotFoundError'), title: 'No panel in recovery mode',
-    fix: 'Unplug it, hold the board button first, then plug in and keep holding for 10 seconds.' },
+    fix: 'Unplug it, hold the recovery button on the board first, then plug it in and keep holding for 10 seconds.' },
   { test: (_, m) => /secure boot is enabled/.test(m), title: 'This panel only runs signed software',
-    fix: 'Its chip has secure boot on, so Kiln can\'t start on it.' },
-  { test: (_, m) => /does not look like/.test(m), title: 'This isn\'t a panel Kiln knows',
+    fix: 'Its chip has secure boot enabled, so Kiln can\'t start on it.' },
+  { test: (_, m) => /does not look like/.test(m), title: 'This isn\'t a panel Kiln recognizes',
     fix: 'Check that you picked the right panel on the first screen.' },
-  { test: (_, m) => /two reads of .* differ/.test(m), title: 'The USB connection isn\'t reliable',
-    fix: 'Try a cable straight into this computer, not through a hub.' },
+  { test: (_, m) => /two reads of .* differ/.test(m), title: 'The USB connection isn\'t steady',
+    fix: 'Plug the cable straight into this computer rather than through a hub, then try again.' },
   { test: (e, m) => named('NetworkError')(e) || /disconnect|transfer|LIBUSB|stall|No device selected|device was lost/i.test(m),
-    title: 'It disconnected', fix: 'Try a cable straight into this computer.' },
+    title: 'The panel disconnected', fix: 'Plug the cable straight into this computer or try another USB port, then try again.' },
   { test: (_, m) => /SHA-256|installer files are missing|could not download|not in the manifest|HTTP \d/.test(m),
     title: 'A download failed', fix: 'Check this computer\'s internet connection, then try again.' },
-  { test: (_, m) => /did not finish starting/.test(m), title: 'The panel didn\'t finish starting',
-    fix: 'Unplug it and plug it back in, then use Finish setting up.' },
-  { test: (_, m) => /adb kill-server|another program holds/.test(m), title: 'Another program has the panel',
-    fix: 'Run "adb kill-server" on this computer, then try again.' },
+  { test: (_, m) => /did not finish starting/.test(m), title: 'The panel took too long to start',
+    fix: 'Unplug it and plug it back in, then choose Finish setting up.' },
+  { test: (_, m) => /adb kill-server|another program holds/.test(m), title: 'Another program is using the panel',
+    fix: 'Close any other browser tab or Android tool using the panel (or run "adb kill-server"), then try again.' },
 ];
 
 const WRITTEN_TIPS: [string, string][] = [
-  ['Don\'t unplug it if it was writing.', 'If a write failed its check, the panel may not start. Put it in recovery mode again and use Undo with your backup.'],
-  ['Your backup is safe.', 'It is kept in this browser, and you can download it from the Undo screen.'],
+  ['Recovery mode still works.', 'Even if the panel doesn\'t start normally, you can always put it back into recovery mode and restore your saved backup.'],
+  ['Keep your backup handy.', 'If a saved backup is still readable in this browser, you can download a copy from Undo; otherwise keep your backup ZIP file handy for another try.'],
 ];
 
 const CLEAN_TIPS: [string, string][] = [
-  ['Try another cable or port.', 'Plug straight into this computer, not through a hub or dock.'],
-  ['Is adb running on this computer?', 'Only one program can hold the panel. Run "adb kill-server" and try again.'],
-  ['Windows or Linux?', 'Check the one-time driver step.'],
+  ['Try another cable or USB port.', 'Plug straight into this computer instead of through a hub or dock, and make sure the cable carries data.'],
+  ['Another program may be using the panel.', 'Only one app can connect over USB at a time. Close other Kiln tabs or Android tools (or run "adb kill-server") and try again.'],
+  ['On Windows or Linux?', 'Make sure the one-time USB driver step from the first screen is set up.'],
 ];
 
 /**
@@ -77,8 +77,8 @@ export function explain(e: unknown, at: number, written: Written, installed = fa
     : before && named('NotFoundError')(e) && at === 1
     ? `${rule!.fix} Then use Undo with your backup.`
     : changed
-      ? 'Don\'t unplug it yet: put it in recovery mode again and use Undo with your backup.'
-      : rule?.fix ?? (installed ? 'Unplug it, plug it back in, and use Finish setting up.' : 'Unplug it and start again from recovery mode.');
+      ? 'Put the panel back into recovery mode and use Undo with your saved backup (in this browser or your backup ZIP file).'
+      : rule?.fix ?? (installed ? 'Unplug it, plug it back in, and choose Finish setting up.' : 'Unplug it and start again from recovery mode.');
   return {
     title: rule?.title ?? (changed ? 'Something went wrong while writing' : 'Something went wrong'),
     body: `${said} ${fix}`,

@@ -44,10 +44,10 @@ object WallBasePage {
     fun protection(v: Int?): Pair<String, String> = when (v) {
         null -> NONE to ""
         0 -> "Normal" to "No overload"
-        1 -> "Too hot" to "It cut the load"
-        2 -> "Overload" to "It cut the load"
-        3 -> "Too hot" to "It needs a restart"
-        4 -> "Overload" to "It needs a restart"
+        1 -> "Too hot" to "Power cut for safety"
+        2 -> "Overload" to "Power cut for safety"
+        3 -> "Too hot" to "Needs a restart"
+        4 -> "Overload" to "Needs a restart"
         5, 6 -> "Normal" to "Recovered"
         else -> "Unknown" to "Code $v"
     }

@@ -14,7 +14,7 @@ export function useBrowserChip(): Chip | undefined {
   const [chip, setChip] = useState<Chip>();
   useEffect(() => {
     const usb = 'usb' in navigator;
-    setChip(usb && isSecureContext ? { kind: 'ok', text: 'Ready' } : { kind: 'bad', text: usb ? 'Needs https' : 'Use Chrome or Edge' });
+    setChip(usb && isSecureContext ? { kind: 'ok', text: 'Ready' } : { kind: 'bad', text: usb ? 'Needs HTTPS' : 'Use Chrome or Edge' });
   }, []);
   return chip;
 }

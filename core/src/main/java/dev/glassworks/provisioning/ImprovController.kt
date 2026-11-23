@@ -589,7 +589,7 @@ object ImprovController {
                 label = "Wi-Fi setup · Bluetooth",
                 title = "Allow Wi-Fi setup over Bluetooth?",
                 body = (if (auto) "This panel has no network. " else "") +
-                    "Home Assistant (Improv via BLE) or improv-wifi.com on a phone can send it Wi-Fi details. " +
+                    "Home Assistant or improv-wifi.com on a phone can send Wi-Fi details over Bluetooth. " +
                     "Only allow this if you're setting it up now.",
                 primary = "Allow" to { authorize("button") },
                 secondary = "Not now" to { stop("dismissed on panel") },
@@ -601,7 +601,7 @@ object ImprovController {
                     label = "Wi-Fi setup · allowed for ${left / 60}:${"%02d".format(left % 60)}",
                     title = if (fail != null) "Couldn't connect to $connectingSsid" else "Ready for Wi-Fi details",
                     body = if (fail != null) WifiStep.failureText(fail) else
-                        "Open the “Improv via BLE” discovery for this panel in Home Assistant and enter your Wi-Fi." +
+                        "Open the Bluetooth setup prompt for this panel in Home Assistant and enter your Wi-Fi." +
                             if (!wifi.legacyApiAllowed) " You'll then be asked to approve the network in a notification." else "",
                     secondary = ("Stop" to { stop("stopped on panel") }).takeIf { input == Input.TOUCH },
                     accent = if (fail != null) ImprovOverlay.ROSE else ImprovOverlay.SKY,

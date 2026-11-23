@@ -117,7 +117,7 @@ class AqaraS1Plus(private val aqaraCloud: AqaraCloud = AqaraCloud()) : Frame {
         const val DISPLAY_NAME = "Aqara S1 Plus"
 
         /** What the settings menu calls the S1's own settings app (com.lumi.settings). */
-        const val SETTINGS_TITLE = "Aqara's own settings"
+        const val SETTINGS_TITLE = "Aqara settings"
 
         /** How a panel without the loader gets a frame update (#139): over the air with our root helper, else Kiln. */
         const val NEEDS_LOADER = "The app's radio bundle puts the frame loader into the boot image over the air " +

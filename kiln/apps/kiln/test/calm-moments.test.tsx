@@ -48,6 +48,6 @@ describe('the calm moments', () => {
   it('an error: what happened in the lede, how to fix it in its own callout', async () => {
     await show('error');
     expect(document.querySelector('.lede')?.textContent).toBe('Nothing was written.');
-    expect(screen.getByRole('group', { name: 'How to fix it' }).textContent).toMatch(/^How to fix itTry a cable straight into this computer\.$/);
+    expect(screen.getByRole('group', { name: 'How to fix it' }).textContent).toMatch(/^How to fix itPlug the cable straight into this computer/);
   });
 });

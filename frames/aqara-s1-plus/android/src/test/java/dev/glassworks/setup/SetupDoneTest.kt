@@ -46,7 +46,7 @@ class SetupDoneTest {
     fun theRealDoneFadesOut() {
         val s = overlay(preview = false)
         after(1)
-        assertTrue(Mockup.label(s, "You're all set.").isShown)
+        assertTrue(Mockup.label(s, "You're all set").isShown)
         assertEquals(0, closeShown(s).size)
         after(3)
         assertFalse(s.isShowing)
@@ -59,7 +59,7 @@ class SetupDoneTest {
         s.onClosePreview = { closed++ }
         after(10)
         assertTrue(s.isShowing)
-        assertTrue(Mockup.label(s, "You're all set.").isShown)
+        assertTrue(Mockup.label(s, "You're all set").isShown)
         val chip = closeShown(s).single() // the way out is on the screen
         chip.performClick()
         assertEquals(1, closed)

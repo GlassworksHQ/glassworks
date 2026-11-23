@@ -137,9 +137,9 @@ class SignInServer(
     private fun landing(): Response {
         val ha = haBase()?.let(OAuth::trimBase) ?: return notFoundHa()
         return page(
-            200, "OK", "Sign in this panel", "So it can show your Home Assistant dashboard.", Look.START,
+            200, "OK", "Sign in to this panel", "This lets the panel show your Home Assistant dashboard.", Look.START,
             tile = haTile(ha), button = button("Continue to Home Assistant", CONTINUE),
-            foot = "You sign in on Home Assistant's own page. The panel never sees your password.",
+            foot = "You sign in directly on Home Assistant. The panel never sees your password.",
         )
     }
 
@@ -194,7 +194,7 @@ class SignInServer(
             null -> "Start the sign-in again where you began it."
         }
         q["error"]?.let { err ->
-            return page(400, "Bad Request", "Sign-in cancelled", "Home Assistant answered: ${esc(err)}. $again", button = back)
+            return page(400, "Bad Request", "Sign-in canceled", "Home Assistant answered: ${esc(err)}. $again", button = back)
         }
         pending ?: return expired(then)
         // Another browser finishing the setup page's sign-in (login CSRF): refused, the code is not used. Usually an
@@ -202,11 +202,11 @@ class SignInServer(
         if (then == Then.SETUP && !bound) return page(403, "Forbidden", "Can't sign in",
             "This sign-in was started in another browser. Start it again from the setup page, in this browser.", button = back)
         val code = q["code"]?.takeIf { it.isNotEmpty() }
-            ?: return page(400, "Bad Request", "Can't sign in", "Home Assistant didn't send an authorization code. $again", button = back)
+            ?: return page(400, "Bad Request", "Can't sign in", "Home Assistant didn't finish sending the sign-in response. $again", button = back)
         return when (val r = tokens.exchangeCode(pending.haBase, pending.clientId, code, pending.codeVerifier)) {
             is TokenResult.Ok -> {
                 val rt = r.refreshToken
-                    ?: return page(502, "Bad Gateway", "Can't sign in", "Home Assistant didn't return a refresh token.", button = back)
+                    ?: return page(502, "Bad Gateway", "Can't sign in", "Home Assistant didn't finish creating the sign-in session.", button = back)
                 try {
                     onSignedIn(StoredAuth(pending.haBase, pending.clientId, rt), r)
                 } catch (t: Throwable) {
@@ -217,7 +217,7 @@ class SignInServer(
                 AuthLog.i("Signed in to ${pending.haBase} (refresh token stored)")
                 if (then == Then.SETUP) return backToSetup()
                 if (then == Then.KILN) return kilnDone()
-                page(200, "OK", "Panel signed in", "It's loading your dashboard now. You can close this page.", Look.DONE,
+                page(200, "OK", "Panel signed in", "Your dashboard is loading now. You can close this page.", Look.DONE,
                     tile = haTile(pending.haBase, dot = true), footHtml = MANAGE_FOOT)
             }
             is TokenResult.Error -> {
@@ -239,15 +239,15 @@ class SignInServer(
         if (!join.armed()) return notWaiting()
         haBase() ?: return notFoundHa()
         return page(
-            200, "OK", "Share your Thread network", "The panel joins it as a Thread router.", Look.START,
-            tile = infoTile("Sign in as a Home Assistant <b>administrator</b>. The panel uses it once to copy the network's settings, then signs out."),
+            200, "OK", "Share your Thread network", "This lets the panel join as a Thread router.", Look.START,
+            tile = infoTile("Sign in as a Home Assistant <b>administrator</b>. The panel copies the network settings once, then signs right back out."),
             button = button("Continue to Home Assistant", THREAD_CONTINUE),
             foot = "Your network key is never shown or logged.",
         )
     }
 
     private fun notWaiting() = page(409, "Conflict", "Not waiting for a sign-in",
-        "Start “Join Home Assistant's Thread network” on the panel first, then scan the code it shows.")
+        "Start “Get it from Home Assistant” on the panel first, then scan the code it shows.")
 
     private fun retry(then: Then) = when (then) {
         Then.QR -> "scan the code again"
@@ -307,7 +307,7 @@ class SignInServer(
         val join = thread ?: return page(404, "Not Found", "Not found", "This panel only serves the sign-in pages.")
         val q = req.query
         q["error"]?.let { err ->
-            return page(400, "Bad Request", "Sign-in cancelled", "Home Assistant answered: ${esc(err)}. Scan the code to try again.")
+            return page(400, "Bad Request", "Sign-in canceled", "Home Assistant answered: ${esc(err)}. Scan the code to try again.")
         }
         val pending = states.consume(q["state"], PendingSignIn.PURPOSE_THREAD)
             ?: return expired()
@@ -315,11 +315,11 @@ class SignInServer(
         if (!join.armed()) return page(409, "Conflict", "Not waiting for a sign-in",
             "The panel stopped waiting. Start “Get it from Home Assistant” on the panel again, then scan the new code.")
         val code = q["code"]?.takeIf { it.isNotEmpty() }
-            ?: return page(400, "Bad Request", "Can't sign in", "Home Assistant didn't send an authorization code. Scan the code to try again.")
+            ?: return page(400, "Bad Request", "Can't sign in", "Home Assistant didn't finish sending the sign-in response. Scan the code to try again.")
         return when (val r = tokens.exchangeCode(pending.haBase, pending.clientId, code, pending.codeVerifier)) {
             is TokenResult.Ok -> {
                 val rt = r.refreshToken
-                    ?: return page(502, "Bad Gateway", "Can't sign in", "Home Assistant didn't return a refresh token.")
+                    ?: return page(502, "Bad Gateway", "Can't sign in", "Home Assistant didn't finish creating the sign-in session.")
                 val o = join.onGrant(StoredAuth(pending.haBase, pending.clientId, rt), r)
                 if (o.ok) page(200, "OK", o.title, esc(o.text), Look.DONE, tile = o.network?.let { networkTile(it, o.channel) }.orEmpty(),
                     footHtml = MANAGE_FOOT)
