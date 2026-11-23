@@ -2,7 +2,10 @@
 // optional full raw system/boot backup on an untouched stock 1.2x+ lululemon Studio Mirror.
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { createWriteStream, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import {
+  closeSync, createReadStream, createWriteStream, existsSync, mkdirSync, openSync, readFileSync,
+  realpathSync, writeFileSync, writeSync,
+} from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { createInterface } from 'node:readline/promises';
@@ -373,6 +376,34 @@ export async function surgicalAdbCli(argv: string[], log: (l: string) => void = 
       loadProbeApp: () => loadOrBuildProbeApp({ confirm, log }),
       writeFile: writeOutFile,
       readHostFile: async (p) => new Uint8Array(readFileSync(p)),
+      restoreExtentsInRawImage: async (rawImagePath, patches) => {
+        const fd = openSync(rawImagePath, 'r+');
+        try {
+          for (const { extents, origData } of patches) {
+            const byLogical = [...extents].sort((a, b) => a.logical - b.logical);
+            const neededBytes = Math.ceil(origData.length / 4096) * 4096;
+            for (const e of byLogical) {
+              if (e.logical >= neededBytes) break;
+              const useBytes = Math.min(e.length, neededBytes - e.logical);
+              const buf = new Uint8Array(useBytes);
+              if (e.logical < origData.length) {
+                const end = Math.min(origData.length, e.logical + useBytes);
+                buf.set(origData.subarray(e.logical, end), 0);
+              }
+              writeSync(fd, buf, 0, buf.length, e.physical);
+            }
+          }
+        } finally {
+          closeSync(fd);
+        }
+        return await new Promise<string>((res, rej) => {
+          const hash = createHash('sha256');
+          const rs = createReadStream(rawImagePath);
+          rs.on('data', (c) => hash.update(c));
+          rs.on('end', () => res(hash.digest('hex')));
+          rs.on('error', rej);
+        });
+      },
     };
 
     const res = await runStockSurgicalAdb({

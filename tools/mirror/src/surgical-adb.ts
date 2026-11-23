@@ -592,9 +592,11 @@ export function buildSurgicalSparseImage(
 }
 
 /**
- * Surgically inserts a one-shot `insmod <modulePath>` line into `/system/etc/init.qcom.post_boot.sh`
- * while preserving the EXACT original byte length by shortening an existing `#` comment block
- * (never modifying `#!/system/bin/sh` or any executable statement).
+ * Surgically inserts a one-shot `insmod <modulePath>` + read-only `chmod 0444` (RAM devtmpfs
+ * only, cleared on reboot) for `mmcblk0p22` (`system`) and `mmcblk0p19` (`boot`) into
+ * `/system/etc/init.qcom.post_boot.sh` while preserving the EXACT original byte length by
+ * shortening an existing `#` comment block (never modifying `#!/system/bin/sh` or any executable
+ * statement).
  */
 export function patchPostBootForBackup(orig: Uint8Array, modulePath = REMOTE_BACKUP_KO_PATH): Uint8Array {
   if (!/^\/data\/local\/tmp\/[A-Za-z0-9._-]+\.ko$/.test(modulePath)) {
@@ -602,7 +604,7 @@ export function patchPostBootForBackup(orig: Uint8Array, modulePath = REMOTE_BAC
   }
   const text = td.decode(orig);
   if (!text.startsWith('#!/')) throw new Error('init.qcom.post_boot.sh does not start with a shebang');
-  const snippet = `\n[ -f ${modulePath} ] && insmod ${modulePath}\n`;
+  const snippet = `\n[ -f ${modulePath} ] && insmod ${modulePath} && chmod 0444 /dev/block/mmcblk0p22 /dev/block/mmcblk0p19\n`;
   if (text.includes(modulePath)) {
     throw new Error(`init.qcom.post_boot.sh already references ${modulePath}`);
   }
@@ -752,6 +754,10 @@ export interface SurgicalAdbDeps {
   loadProbeApp: () => Promise<ProbeAppPayload | undefined>;
   writeFile: (relPath: string, data: Uint8Array | string) => Promise<string>;
   readHostFile: (absPath: string) => Promise<Uint8Array>;
+  restoreExtentsInRawImage?: (
+    rawImagePath: string,
+    patches: Array<{ extents: readonly FiemapExtent[]; origData: Uint8Array }>,
+  ) => Promise<string>;
 }
 
 export interface SurgicalAdbReport {
@@ -1272,6 +1278,16 @@ export async function runStockSurgicalAdb(
   report.backupSystemPath = `${o.outDir}/backup/system-stock.raw.img`;
   report.backupSystemBytes = sysDump.bytes;
   report.backupSystemSha256 = sysDump.sha256;
+  if (sysDump.bytes === defaultSystemBytes && d.restoreExtentsInRawImage) {
+    d.log('  scrubbing temporary services.jar + post_boot.sh patches out of system-stock.raw.img -> pure untouched stock...');
+    report.backupSystemSha256 = await d.restoreExtentsInRawImage(report.backupSystemPath, [
+      { extents: report.servicesFiemap.extents, origData: origServices },
+      ...(origPostBoot && report.postBootFiemap?.extents
+        ? [{ extents: report.postBootFiemap.extents, origData: origPostBoot }]
+        : []),
+    ]);
+    report.notes.push('Restored original services.jar and init.qcom.post_boot.sh blocks inside system-stock.raw.img so the saved image is pure untouched stock.');
+  }
 
   d.log('  streaming raw boot (/dev/block/mmcblk0p19, 32 MiB) over USB ADB...');
   const bootDump = await backupAdb.streamCommandToFile(

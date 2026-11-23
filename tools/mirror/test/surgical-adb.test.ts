@@ -160,7 +160,7 @@ describe('patchPostBootForBackup', () => {
     const text = new TextDecoder().decode(patched);
     expect(text.startsWith('#!/system/bin/sh\n')).toBe(true);
     expect(text).toContain('setprop persist.sys.usb.config mtp,adb');
-    expect(text).toContain('[ -f /data/local/tmp/gw_backup.ko ] && insmod /data/local/tmp/gw_backup.ko');
+    expect(text).toContain('[ -f /data/local/tmp/gw_backup.ko ] && insmod /data/local/tmp/gw_backup.ko && chmod 0444 /dev/block/mmcblk0p22 /dev/block/mmcblk0p19');
   });
 
   it('rejects unsafe shell paths', () => {
