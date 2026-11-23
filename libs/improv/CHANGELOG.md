@@ -5,7 +5,7 @@ What changed in each release of `dev.glassworks:improv` on Maven Central. Versio
 cut from `libs/improv/v<version>` tags ([docs/releasing.md](../../docs/releasing.md#libraries)), which
 publish the matching section below as the release notes.
 
-## [Unreleased]
+## [0.2.0] - 2026-11-22
 
 ### Added
 - **`WifiProvisioner.saysWhatToDo(reason)`.** True when a failure reason already tells the user what to do

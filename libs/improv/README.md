@@ -216,7 +216,7 @@ On Maven Central as `dev.glassworks:improv` ([changelog](CHANGELOG.md)).
 ```kotlin
 repositories { mavenCentral() }
 dependencies {
-    implementation("dev.glassworks:improv:0.1.0")
+    implementation("dev.glassworks:improv:0.2.0")
 }
 ```
 
