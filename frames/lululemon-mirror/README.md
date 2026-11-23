@@ -138,6 +138,7 @@ Deep engineering notes from bringing up the Mirror (see [all research notes](../
 - [mirror-memory.md](research/mirror-memory.md) — Android 6 low-memory-killer tuning and GeckoView GPU memory budget
 - [option-c.md](research/option-c.md) — Notes on building a clean AOSP 6 image from on-device vendor files
 - [community-root-and-network-adb.md](research/community-root-and-network-adb.md) — Review of community root and network-adb methods
+- [stock-firmware-probe.md](research/stock-firmware-probe.md) — Live probe of untouched stock 1.24.0 firmware via userdata-only HTTP app and `FS_IOC_FIEMAP`
 
 ## Files
 
