@@ -487,7 +487,7 @@ class RadioDefinition(
 
         /** The line under the radio allow-list: who may connect right now. */
         fun allowedNow(radioRunning: Boolean, allowNow: String?): String = when {
-            !radioRunning -> "Glassworks isn't running yet"
+            !radioRunning -> "The radio isn't running. Turn it on to see who may connect."
             allowNow == null -> "Allowed now: no firewall active (radio off or old root helper)"
             allowNow.isEmpty() -> "Allowed now: only the panel itself (Home Assistant hasn't connected yet)"
             else -> "Allowed now: ${allowNow.replace(" ", ", ")}"

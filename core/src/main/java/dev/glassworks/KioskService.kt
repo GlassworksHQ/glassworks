@@ -243,7 +243,7 @@ open class KioskService : Service() {
         else Notification.Builder(this)
         b.setSmallIcon(notificationIcon())
             .setContentTitle(glassworks.build.product)
-            .setContentText("Tap for panel settings · screen, sensors & Home Assistant running")
+            .setContentText("Tap for panel settings · screen, sensors & panel service running")
             .setContentIntent(menu)
             .setOngoing(true)
         // The shade has no settings gear until Aqara's own onboarding ran: Aqara's settings app from here too.

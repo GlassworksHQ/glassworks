@@ -235,7 +235,7 @@ function Settings({ s, session, frame, setup }: SP & { setup: Extract<Setup, { p
     <section className="card" aria-labelledby="h">
       <h2 id="h">{setup.update && !setup.apply ? `Update ${frame.app}` : 'Language and time'}</h2>
       <p className="lede">{setup.update && !setup.apply
-        ? 'Your existing settings stay in place. Review language and time below, or continue to install the update.'
+        ? 'Your panel\'s Wi-Fi and Home Assistant setup stay intact. Review language and time below (or choose “Leave as it is”), then install the update.'
         : 'These start from your computer\'s settings, and you can change them anytime later.'}</p>
       <div className="fields">
         <label className="field"><span>Language</span>

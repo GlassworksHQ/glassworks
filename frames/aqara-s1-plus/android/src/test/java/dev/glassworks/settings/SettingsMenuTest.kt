@@ -122,7 +122,7 @@ class SettingsMenuTest {
         val off = menu(radioRunning = false).first { it.id == "radio" }.items
         assertEquals(listOf("IP addresses or ranges, or any", "note"), titles(off))
         assertFalse((off[0] as SettingsItem.Text).enabled())
-        assertEquals("Glassworks isn't running yet", (off[1] as SettingsItem.Note).text())
+        assertEquals("The radio isn't running. Turn it on to see who may connect.", (off[1] as SettingsItem.Note).text())
     }
 
     @Test
@@ -186,7 +186,7 @@ class SettingsMenuTest {
 
     @Test
     fun allowedNowLine() {
-        assertEquals("Glassworks isn't running yet", RadioDefinition.allowedNow(false, "192.0.2.20"))
+        assertEquals("The radio isn't running. Turn it on to see who may connect.", RadioDefinition.allowedNow(false, "192.0.2.20"))
         assertTrue(RadioDefinition.allowedNow(true, null).startsWith("Allowed now: no firewall"))
         assertTrue(RadioDefinition.allowedNow(true, "").contains("only the panel itself"))
         assertEquals("Allowed now: 192.0.2.20, 2001:db8::20", RadioDefinition.allowedNow(true, "192.0.2.20 2001:db8::20"))
@@ -223,7 +223,7 @@ class SettingsMenuTest {
         assertTrue(screen.none { it is SettingsItem.Text })
         val range = screen.filterIsInstance<SettingsItem.Slider>().single()
         assertEquals(0f, range.min); assertEquals(CoreSettings.RANGE_MAX_M, range.max); assertEquals(0.1f, range.step)
-        assertEquals("Sensor default", range.shown(0f))
+        assertEquals("Sensor's current setting", range.shown(0f))
         assertEquals("Up to 2.1 m", range.shown(2.1f))
         val idle = screen.filterIsInstance<SettingsItem.Duration>().first()
         assertEquals(listOf("After 30 s", "After 1 minute", "After 2 minutes", "After 5 minutes", "After 10 minutes", "After 30 minutes", "Never"), idle.choices.map(idle.shown))
@@ -254,7 +254,7 @@ class SettingsMenuTest {
         val prefs = KioskPrefs(app)
         prefs.presenceRangeM = 0f
         val items = screen()
-        assertEquals("Sensor default", items.filterIsInstance<SettingsItem.Slider>().single().shown(0f))
+        assertEquals("Sensor's current setting", items.filterIsInstance<SettingsItem.Slider>().single().shown(0f))
         assertEquals("Uses the presence sensor", items.filterIsInstance<SettingsItem.Switch>().first().detail)
         prefs.presenceRangeM = 2.1f
         assertEquals("Uses the presence sensor · up to 2.1 m", screen().filterIsInstance<SettingsItem.Switch>().first().detail)

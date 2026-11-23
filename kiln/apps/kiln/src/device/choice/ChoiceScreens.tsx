@@ -105,7 +105,9 @@ export function FileRow({ f, file }: { f: ImageSession; file: FileCheck }) {
           <span className="status err" role="alert">
             {/* the error itself goes to the technical log and the report, not on the screen (issue 672) */}
             {file.state === 'bad' ? 'This download doesn’t match the published release, so Kiln discarded it.' : 'Kiln couldn’t download this file.'}
-            {` Nothing was written to ${f.frame.the} — this is a problem on Kiln's side.`}
+            {f.state.changed
+              ? ` This download didn't write anything, though an earlier attempt may have changed ${f.frame.the}. This is a problem on Kiln's side.`
+              : ` Nothing was written to ${f.frame.the} — this is a problem on Kiln's side.`}
           </span>
         )}
         {failed && <span className="small"><a className="link" href={f.reportUrl(file)} target="_blank" rel="noopener">Report this</a> on GitHub.</span>}

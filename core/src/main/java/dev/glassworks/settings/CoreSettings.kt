@@ -136,7 +136,7 @@ class CoreSettings(
     private fun rangeSlider() = SettingsItem.Slider(
         "Presence range", value = { prefs.presenceRangeM }, min = 0f, max = RANGE_MAX_M, step = 0.1f,
         // 0 leaves the sensor's threshold as it is (Vi5300Presence.setRange): no distance to promise.
-        shown = { v -> if (v <= 0f) "Sensor default" else "Up to ${number(v)} m" },
+        shown = { v -> if (v <= 0f) "Sensor's current setting" else "Up to ${number(v)} m" },
     ) { v, done ->
         val old = prefs.presenceRangeM
         prefs.presenceRangeM = v

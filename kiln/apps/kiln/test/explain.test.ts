@@ -35,7 +35,7 @@ describe('a failure, in words', () => {
   it('after a verified write, says so and points to Undo, whatever the error', () => {
     const f = explain(new Error('transferIn: the device was disconnected'), 2, 'verified');
     expect(f.title).toBe('The panel disconnected');
-    expect(f.body).toBe('Part of the new software was written. Your backup is still safe in this browser. Put the panel back into recovery mode and use Undo with your backup.');
+    expect(f.body).toBe('Part of the new software was written. Put the panel back into recovery mode and use Undo with your saved backup (in this browser or your backup ZIP file).');
     expect(f.wrote).toBe(true);
     expect(f.tips[0]![0]).toMatch(/Recovery mode still works/);
   });
@@ -59,7 +59,7 @@ describe('a failure, in words', () => {
     expect(closed.wrote).toBe(true);
     expect(closed.tips[0]![0]).toMatch(/Recovery mode still works/);
     const step2 = explain(new Error('transferIn: the device was disconnected'), 2, 'none', false, 'written');
-    expect(step2.body).toBe('This attempt wrote nothing; an earlier try did. Your backup is still safe in this browser. Put the panel back into recovery mode and use Undo with your backup.');
+    expect(step2.body).toBe('This attempt wrote nothing; an earlier try did. Put the panel back into recovery mode and use Undo with your saved backup (in this browser or your backup ZIP file).');
     expect(step2.wrote).toBe(true);
     expect(explain(new Error('x'), 2, 'verified', false, 'written').body).toMatch(/^Part of the new software was written\./); // this attempt's write comes first
   });
@@ -84,7 +84,7 @@ describe('a failure, in words', () => {
 
   it('after a write started but before it was verified, doesn\'t say nothing was written', () => {
     const f = explain(new Error('transferOut: the device was disconnected'), 2, 'maybe');
-    expect(f.body).toBe('Part of the new software may have been written. Your backup is still safe in this browser. Put the panel back into recovery mode and use Undo with your backup.');
+    expect(f.body).toBe('Part of the new software may have been written. Put the panel back into recovery mode and use Undo with your saved backup (in this browser or your backup ZIP file).');
     expect(f.wrote).toBe(true);
     expect(f.tips[0]![0]).toMatch(/Recovery mode still works/);
   });

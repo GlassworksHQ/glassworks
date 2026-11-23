@@ -37,7 +37,7 @@ describe('after a run that wrote', () => {
     d({ type: 'start', flow, now: 1 });
     fail(2, new Error('transferIn: the device was disconnected'));
     expect(failure()).toMatchObject({ title: 'The panel disconnected', wrote: true });
-    expect(failure().body).toBe('This attempt wrote nothing; an earlier try did. Your backup is still safe in this browser. Put the panel back into recovery mode and use Undo with your backup.');
+    expect(failure().body).toBe('This attempt wrote nothing; an earlier try did. Put the panel back into recovery mode and use Undo with your saved backup (in this browser or your backup ZIP file).');
   });
 
   it('a fastboot device list closed on the retry (step 2) keeps Undo', () => {

@@ -37,7 +37,7 @@ const RULES: Rule[] = [
 
 const WRITTEN_TIPS: [string, string][] = [
   ['Recovery mode still works.', 'Even if the panel doesn\'t start normally, you can always put it back into recovery mode and restore your saved backup.'],
-  ['Your backup is safe.', 'It stays saved in this browser, and you can download a copy from the Undo screen.'],
+  ['Keep your backup handy.', 'If Kiln backed up the panel in this browser, you can download a copy from Undo; if you chose a backup ZIP file, keep that file for another try.'],
 ];
 
 const CLEAN_TIPS: [string, string][] = [
@@ -77,7 +77,7 @@ export function explain(e: unknown, at: number, written: Written, installed = fa
     : before && named('NotFoundError')(e) && at === 1
     ? `${rule!.fix} Then use Undo with your backup.`
     : changed
-      ? 'Your backup is still safe in this browser. Put the panel back into recovery mode and use Undo with your backup.'
+      ? 'Put the panel back into recovery mode and use Undo with your saved backup (in this browser or your backup ZIP file).'
       : rule?.fix ?? (installed ? 'Unplug it, plug it back in, and choose Finish setting up.' : 'Unplug it and start again from recovery mode.');
   return {
     title: rule?.title ?? (changed ? 'Something went wrong while writing' : 'Something went wrong'),

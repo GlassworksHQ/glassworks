@@ -278,7 +278,9 @@ export function ImageError({ f, s }: P) {
     <section className="card err" aria-labelledby="h">
       {f.recipe.community && <Whose r={f.recipe} />}
       <h2 id="h">The install didn&apos;t finish</h2>
-      <p className="lede">{s.work && !['first-boot', 'hand-back', 'restart', 'wifi-on'].includes(s.work.step)
+      <p className="lede">{s.wifiOnFailed
+        ? 'Wi-Fi didn\'t turn on yet. Check the details below and click Connect again when you\'re ready.'
+        : s.work && !['first-boot', 'hand-back', 'restart', 'wifi-on'].includes(s.work.step)
         ? `${cap(d.the)} is still in fastboot mode, so leave it plugged in. ${s.files.every((x) => x.state === 'ok') ? 'Click Try again to reconnect and pick up from fastboot.' : 'Click Try again to redownload the files and continue.'}`
         : 'Review the details below and click Try again when you\'re ready.'}</p>
       <pre className="raw">{s.error}</pre>
