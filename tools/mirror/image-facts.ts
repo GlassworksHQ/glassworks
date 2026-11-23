@@ -15,16 +15,21 @@ import { ADB_KEYS, GLASS_PANES, GLASS_PANES_KEY_FINGERPRINT, IMAGE_KIOSK, IMAGE_
 const [systemPath, userdataPath] = process.argv.slice(2);
 if (!systemPath) { console.error('usage: image-facts.ts <system.img> [userdata.sparse]'); process.exit(2); }
 
-/** The strings of a dex 035, by index (string_ids_size at 0x38, string_ids_off at 0x3c; MUTF-8 read as Latin-1). */
+/**
+ * The strings of a dex 035, by index (string_ids_size at 0x38, string_ids_off at 0x3c; MUTF-8 read as
+ * Latin-1). Throws on a table or string that runs past the end of the dex, instead of reading on.
+ */
 function dexStrings(dex: Uint8Array): string[] {
   const dv = new DataView(dex.buffer, dex.byteOffset, dex.byteLength);
   const n = dv.getUint32(0x38, true), off = dv.getUint32(0x3c, true);
+  if (off + 4 * n > dex.length) throw new Error('classes.dex: its string table runs past the end');
   return Array.from({ length: n }, (_, i) => {
     let at = dv.getUint32(off + 4 * i, true);
-    while (dex[at]! & 0x80) at++; // the uleb128 length
+    while (at < dex.length && dex[at]! & 0x80) at++; // the uleb128 length
     at++;
     let end = at;
-    while (dex[end] !== 0) end++;
+    while (end < dex.length && dex[end] !== 0) end++;
+    if (end >= dex.length) throw new Error(`classes.dex: string ${i} has no end`);
     return Buffer.from(dex.subarray(at, end)).toString('latin1');
   });
 }

@@ -231,6 +231,12 @@ describe('the adb-key step', () => {
     const steps = keyed().steps;
     const unkeyed = keyed({ steps: [...steps.slice(0, 3), { do: 'wifi', file: 'userdata.img', template: 'system.img', makes: 'userdata+wifi' }, ...steps.slice(5)] });
     expect(validateImage(unkeyed, KEYED)).toContain('step 8: wifi-on without a key connects with this browser\'s, so it needs an adb-key step first');
+    // the network saved on the published userdata, not adb-key's copy: what gets written has no browser key
+    const besideKey = keyed({ steps: steps.map((s) => (s.do === 'wifi' ? { ...s, file: 'userdata.img' } : s)) });
+    expect(validateImage(besideKey, KEYED)).toEqual(expect.arrayContaining([
+      'adb-key makes userdata+key, but nothing writes it: flash it, or start a wifi step from it',
+      'wifi starts from userdata.img, not the copy with this browser\'s key: what it makes would leave the key out',
+    ]));
     const fromBuilt = keyed({ steps: steps.map((s) => (s.do === 'wifi' ? { ...s, file: 'system' } : s)) });
     expect(validateImage(fromBuilt, KEYED)).toContain('step 5: wifi needs system downloaded first, or made by adb-key');
   });
@@ -274,6 +280,9 @@ describe('the system-key step', () => {
     const twice = keyed({ steps: [...steps.slice(0, 4), { do: 'system-key', file: 'system.img', makes: 'system+key2' }, ...steps.slice(4)] });
     expect(validateImage(twice, KEYED)).toContain('step 5: the system image\'s key is changed once');
     expect(validateImage(keyed(), FRAME)).toContain('step 4: this frame can\'t run "system-key"');
+    // made, then not written: the device would keep the image's own key
+    const unwritten = keyed({ steps: steps.map((s) => (s.do === 'flash' && s.partition === 'system' ? { ...s, file: 'system.img' } : s)) });
+    expect(validateImage(unwritten, KEYED)).toContain('system-key makes system+key, but nothing writes it: flash it, or start a wifi step from it');
   });
 });
 

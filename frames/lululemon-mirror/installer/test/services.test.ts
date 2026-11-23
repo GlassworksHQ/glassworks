@@ -52,6 +52,13 @@ describe('the key fingerprint Android 6 makes', () => {
     expect(() => adbKeyLines('\n')).toThrow(/no adb key given/);
     expect(() => adbKeyLines(`${a}\n${fakeAdbKey(3, 'x\ty')}`)).toThrow(/^adb key 2 of 2: that isn't an adb public key line/);
   });
+  it('adbKeyLines refuses a published key on any line, not only the first (the framework lets in every listed key)', () => {
+    const [a, b] = [fakeAdbKey(1), fakeAdbKey(2)];
+    // the real project key can't be in the repo: the same check, with a made-up key in its place
+    expect(() => adbKeyLines(`${a}\n${b}`, [adbFingerprint(b)])).toThrow(/^adb key 2 of 2: that adb key is the Glass Panes project key.*Nothing was changed/);
+    expect(() => adbKeyLines(`${b}\n${a}`, [adbFingerprint(b)])).toThrow(/^adb key 1 of 2: that adb key is the Glass Panes project key/);
+    expect(adbKeyLines(`${a}\n${b}`)).toEqual([a, b]);
+  });
   it('refuses a line that isn\'t a 524-byte adb key', () => {
     for (const line of ['QAAA= kiln@glassworks', 'not base64!', '', fakeAdbKey().slice(0, 100)]) expect(() => adbFingerprint(line)).toThrow(/isn't an adb public key.*Nothing was changed/);
   });

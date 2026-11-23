@@ -49,8 +49,12 @@ export async function claimAndSweep(locks: Locks, own: string, list: () => Promi
 
 /** Where download() keeps a file, apart from the images Kiln builds. */
 export const downloaded = (name: string) => `download-${name}`;
-/** Where a community image's `wifi`, `adb-key` and `system-key` steps keep what they make: always `made-…`, so it can't be Kiln's own scratch file. */
-export const madeFile = (name: string) => `made-${name.replace(/[^A-Za-z0-9._-]/g, '_')}`;
+/**
+ * Where a community image's `wifi`, `adb-key` and `system-key` steps keep what they make: always `made-…`, so
+ * it can't be Kiln's own scratch file, and one stored name per recipe name (`_` and every character outside
+ * letters, digits, `.` and `-` become `_` and its code in hex), so two steps' copies never share a file.
+ */
+export const madeFile = (name: string) => `made-${[...name].map((c) => (/[A-Za-z0-9.-]/.test(c) ? c : `_${c.codePointAt(0)!.toString(16).padStart(2, '0')}`)).join('')}`;
 /** The wifi, adb-key and system-key jobs' working copy of the image: outside the `made-` names a recipe can choose. */
 export const WIFI_SCRATCH = 'scratch-wifi.raw';
 

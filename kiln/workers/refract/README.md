@@ -55,8 +55,10 @@ So Kiln downloads the Mirror's image from
 `https://refract.glassworks.dev/glass-panes/mirror-android-3/system.img` (image 1's ids left the
 allowlist on 2026-11-16, when Kiln moved to image 2). Image 2's ids and the project key stay until the
 Kiln that still asks for them is replaced; then they go, as image 1's did. Kiln's Glass Panes install
-(#579) downloads `userdata.sparse` too: Kiln writes the system image as published, and the userdata
-with this browser's adb key in place of the project key, the way back from Glassworks. Each id matches a
+(#579) downloads `userdata.sparse` too, the way back from Glassworks. Kiln writes neither as published:
+the system image with this browser's adb key in place of the one its `services.jar` hardcodes, and the
+userdata with this browser's key in place of the project key (one file each). What Refract serves still
+matches the release's hashes; what reaches the Mirror differs from them in those two files. Each id matches a
 file in an image recipe (`frames/<id>/installer`), and the frame's tests check the size and SHA-256
 are the same in both ([docs/kiln-images.md](../../../docs/kiln-images.md)).
 

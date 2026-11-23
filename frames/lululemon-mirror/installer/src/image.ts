@@ -11,7 +11,7 @@
 import { ManifestError, apkHome, apkInfo, apkPermissions, zipEntry, zipNames, type ApkInfo } from '@glassworks/app-adb';
 import { APP_DIRS, GLASSWORKS, PRIVILEGED, type MirrorApp } from './app';
 import { mkfs, type Attrs, type Disk, type Ext4 } from '@glassworks/ext4';
-import { GLASS_PANES_KEY_FINGERPRINT, SERVICES_JAR, adbFingerprint, adbKeyLines, trustAdbKey } from './services';
+import { SERVICES_JAR, adbKeyLines, trustAdbKey } from './services';
 import { UNUSED_APPS } from './unused';
 
 /** The Glass Panes release the person downloads `system.img` from, and what Kiln expects of it. */
@@ -326,8 +326,7 @@ export const ADB_KEYS = '/misc/adb/adb_keys';
  * guess its owner or label. The caller flushes.
  */
 export async function setAdbKeys(fs: Ext4, adbKey: string, time = Math.floor(Date.now() / 1000)): Promise<void> {
-  const keys = adbKeyLines(adbKey); // refuses a bad key before any write
-  if (keys.some((k) => adbFingerprint(k) === GLASS_PANES_KEY_FINGERPRINT)) throw new Error('that adb key is the Glass Panes project key, published with its private half: anyone could use it. Nothing was changed.');
+  const keys = adbKeyLines(adbKey); // refuses a bad key, and the project key on any line, before any write
   if (!(await fs.exists(ADB_KEYS))) throw new Error(`this userdata has no ${ADB_KEYS}, so it isn't the image Kiln knows. Nothing was changed.`);
   await fs.replaceFile(ADB_KEYS, new TextEncoder().encode(`${keys.join('\n')}\n`), time);
 }

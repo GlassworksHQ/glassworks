@@ -77,16 +77,17 @@ export const ADB_KEY_LINE = /^[A-Za-z0-9+/=]+( [\x20-\x7e]*)?$/;
 
 /**
  * The adb_keys lines in `text`, each checked as an adb key, in order: the first is the one the image
- * lets in. Throws, naming the line, for any line that isn't one, so a caller can stop before anything
- * is written or restarted.
+ * lets in. Throws, naming the line, for any line that isn't one, or that is a key whose private half is
+ * published (`refused`: the Glass Panes project key), so a caller can stop before anything is written or
+ * restarted. Every line counts: image 3's framework lets in each key adb_keys lists.
  */
-export function adbKeyLines(text: string): string[] {
+export function adbKeyLines(text: string, refused: readonly string[] = [GLASS_PANES_KEY_FINGERPRINT]): string[] {
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   if (!lines.length) throw new Error(`no adb key given.${done}`);
   lines.forEach((l, i) => {
     try {
       if (!ADB_KEY_LINE.test(l)) throw new Error(`that isn't an adb public key line (base64, then a comment in printable ASCII).${done}`);
-      adbFingerprint(l);
+      if (refused.includes(adbFingerprint(l))) throw new Error(`that adb key is the Glass Panes project key, published with its private half: anyone could use it. Use this computer's own key.${done}`);
     } catch (e) { throw new Error(`adb key ${i + 1} of ${lines.length}: ${(e as Error).message}`); }
   });
   return lines;
