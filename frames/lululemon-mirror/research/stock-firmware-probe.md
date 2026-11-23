@@ -321,7 +321,23 @@ Using [`tools/mirror/stock-probe.ts`](../../../tools/mirror/stock-probe.ts):
      `flash_recovery` → `/system/bin/install-recovery.sh` for `boot`) to read the 14 denied daemons
      or take a full bit-for-bit `system` + `boot` backup before flashing Glassworks.
 2. **Does Glass Panes `mirror-android-2` / `mirror-android-3` break Wi-Fi on `1.24.0` units?**
-   Stock `1.24.0`'s boot kernel is `3.10.49-perf-g4869d64961b`, whereas Glass Panes ships a
-   `pronto_wlan.ko` for `gf46dad5260f`. Verify whether `1.24.0` units need their own `pronto_wlan.ko`
-   transplanted into `system.img` during Kiln install (or whether Glass Panes image 3 already
-   handles multiple `vermagic` builds).
+   Even though `__versions` CRCs match (`module_layout=0xa5b7f7dd`, `printk=0x27e1a049`,
+   `__kmalloc=0xd2b09ce5`) and Linux 3.10's `same_magic()` ignores the `-perf-g...` prefix under
+   `CONFIG_MODVERSIONS=y`, diff every `__versions` CRC between `1.24.0`'s `pronto_wlan.ko` and
+   Glass Panes' `pronto_wlan.ko` (or test on a `1.24.0` unit) to be 100% certain.
+3. **Zero-Wi-Fi-swap transport & Stock-in-place Kiln checks (next on dev Mirror once stock `1.24.0`
+   `system.img` is backed up):**
+   - **MTP over the existing micro-USB cable:** stock `1.24.0` sets `persist.sys.usb.config=mtp,adb`
+     and `persist.fuse_sdcard=true`. Test whether Android 6's `MtpService` automatically exposes
+     `/sdcard` over USB without a screen tap on fresh OOBE (no lock screen). If so, the probe app
+     can write `services.jar` + `FIEMAP` metadata to `/sdcard/Glassworks/stock-backup.bin`, letting
+     Kiln read it directly over WebUSB MTP (macOS/Linux) or the file picker (Windows) with **zero
+     Wi-Fi swapping and zero HTTPS→HTTP mixed content**.
+   - **Fallback if MTP stays locked until tapped:** test pre-saving the user's home Wi-Fi in Stage 1
+     `userdata` + `enable_wifi` marker to see if stock joins home Wi-Fi cleanly instead of
+     `mirror-<serial>` SoftAP.
+   - **Stock-in-place viability:** once authorized ADB works on stock `1.24.0`, check (a) whether
+     `/system/framework/oat/arm64/services.odex` is absent, (b) free RAM after `pm disable-user` on
+     lululemon's stock apps, (c) whether stock `1.24.0` turns the backlight completely dark on
+     sleep, (d) `/data/local/bootanimation.zip` SELinux access vs surgical `/system/media/bootanimation.zip`
+     size, and (e) silent-update options (in-place priv-app slot vs device-owner).
