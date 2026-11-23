@@ -345,7 +345,8 @@ def memory_sentence(rep):
 
 def provisional_sentence(rep):
     """One plain clause for why the grade is provisional; the report lists the reasons in full.
-    From the run's protocols and what is missing, not from the reasons' wording."""
+    From the run's protocols and what is missing, not from the reasons' wording. What is missing counts only when it
+    could change the letter (no missing_settled_by): the report says what can't, and isn't provisional for it."""
     g = rep.get("grade") or {}
     if not g.get("provisional"):
         return None
@@ -355,7 +356,7 @@ def provisional_sentence(rep):
     # protocol's number (they start again from 1 in v1).
     pre = bool(protocols) and None in (ref.get("clarity") or [None])
     other = protocols if pre else [p for p in protocols if p != G.PROTOCOL_VERSION]
-    missing = list(g.get("missing") or [])
+    missing = [] if "missing_settled_by" in g else list(g.get("missing") or [])
     parts = []
     if other:
         clause = f"measured with a {'pre-release' if pre else 'different'} version of {G.NAME}"

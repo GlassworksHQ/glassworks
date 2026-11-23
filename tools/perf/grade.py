@@ -247,39 +247,69 @@ def limits(bands, level):
     return [task for task, ok in LEVELS[level].items() if bands.get(task) not in ok]
 
 
+# The best each task can be: the first of its levels (scroll, live updates, the camera, dialogs), else good. Every
+# level accepts it, so a missing measurement set to it holds no page back: grade() grades with it for the best case.
+BEST = {task: (RULES[src][0]["level"] if isinstance(RULES.get(src), list) else GOOD) for task, src in RULES["tasks"].items()}
+
+
+def letter_of(levels, start):
+    """(letter, capped): the first letter whose every page need holds, then the start cap (never raises it)."""
+    letter = next((l for l, _, needs in LETTERS
+                   if all(LEVEL_RANK[levels[t]] >= LEVEL_RANK[need] for t, need in needs.items())),
+                  RULES["fallback"]["letter"])
+    capped = start == RULES["start_cap"]["band"] and LETTER_ORDER.index(letter) < LETTER_ORDER.index(START_CAP)
+    return (START_CAP if capped else letter), capped
+
+
 def grade(tiers, start_ms, touch=True):
     """tiers: {light|typical|heavy: {"inp_ms", "load_ms", "blocking_ms", "scroll_level", "updates_level", "camera_level",
     "dialog_level"}};
     start_ms: the restart, process start to the start view usable (protocol 4; engine ready before
     it). touch: False for a frame without a touchscreen (rubric 2): its no_touch tasks are not applicable.
     Returns the letter, its plain meaning, each page's bands and level, and what is missing. A
-    missing measurement fails whatever needs it, and the grade is then provisional."""
+    missing measurement fails whatever needs it, and a missing restart caps nothing. The grade is provisional only
+    when what is missing could change the letter: when the best case (each missing band, and a missing restart, at the
+    best it can be) and the worst (each missing band failing, as in the letter, and a missing restart slow enough to
+    cap it) give different letters; the start cap applies in both. When they agree, missing_settled_by says what
+    decides the letter instead."""
     bands = {t: tier_bands((tiers or {}).get(t), t, touch) for t in TIERS}
     levels = {t: page_level(bands[t]) for t in TIERS}
     start = band(start_ms, METRICS["start_ms"])
     missing = [f"{t}.{m}" for t in TIERS for m, b in bands[t].items() if b is None] + ([] if start else ["start"])
-    letter = next((l for l, _, needs in LETTERS
-                   if all(LEVEL_RANK[levels[t]] >= LEVEL_RANK[need] for t, need in needs.items())),
-                  RULES["fallback"]["letter"])
-    capped = start == RULES["start_cap"]["band"] and LETTER_ORDER.index(letter) < LETTER_ORDER.index(START_CAP)
-    if capped:
-        letter = START_CAP
+    letter, capped = letter_of(levels, start)
+    # The worst case is the letter, but for a missing restart: the letter doesn't cap it, the worst case does.
+    lowest, _ = letter_of(levels, start or RULES["start_cap"]["band"])
+    highest, _ = letter_of({t: page_level({m: BEST[m] if b is None else b for m, b in bands[t].items()}) for t in TIERS},
+                        start or GOOD)
     out = {
         "rubric_version": RUBRIC_VERSION,
         "grade": letter,
         "meaning": MEANINGS[letter],
         "capped_by_start": capped,
-        "provisional": bool(missing),
+        "provisional": highest != lowest,
         "missing": missing,
         "bands": bands,
         "levels": levels,
         "start": {"value": start_ms, "band": start},
     }
+    if missing and highest == lowest:
+        out["missing_settled_by"] = settled_by(out)
     if touch is False:
         # Said, not only implied by the bands: report.md and the headline read it (only on such a frame, so a frame
         # with touch keeps its record as it was).
         out["not_applicable"] = {task: NO_TOUCH_REASON for task in NO_TOUCH["tasks"]}
     return out
+
+
+def settled_by(g):
+    """Why a grade's missing measurements can't change its letter: {"capped_by_start": the restart caps the letter
+    (it was measured, and slow), "limits": next_limits without the missing tasks, so what measured already keeps the
+    grade from the next letter up}. Both empty when the next letter up doesn't need the missing pages (or there is
+    none)."""
+    missing = set(g["missing"])
+    lims = [dict(x, tasks=[k for k in x["tasks"] if f"{x['page']}.{k}" not in missing]) for x in next_limits(g)]
+    return {"capped_by_start": g["start"]["band"] == RULES["start_cap"]["band"] and g["grade"] == START_CAP,
+            "limits": [x for x in lims if x["tasks"]]}
 
 
 def median_band(bands):
@@ -344,7 +374,8 @@ def grade_summary(summary):
                        f"these rules are for protocol {PROTOCOL_VERSION}"}
     # A summary says touch: false only for a frame without a touchscreen (summary.py); without it, touch.
     g = grade(*summary_inputs(summary), touch=summary.get("touch") is not False)
-    g["provisional"] = bool(g["missing"] or summary.get("gaps"))
+    # Missing measurements only when they could change the letter (grade); a gap always.
+    g["provisional"] = bool(g["provisional"] or summary.get("gaps"))
     g["status"] = "graded"
     g["limits"] = next_limits(g)
     # The camera video's path (protocol 7): letters from different transports aren't comparable, so

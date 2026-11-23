@@ -4686,6 +4686,546 @@
    }
   },
   {
+   "name": "missing, can't change the letter: heavy's camera not measured, heavy already fails on blocking: B, not provisional",
+   "tiers": {
+    "light": {
+     "inp_ms": 100,
+     "load_ms": 1000,
+     "scroll_level": "premium",
+     "updates_level": "premium",
+     "blocking_ms": 100,
+     "dialog_level": "premium"
+    },
+    "typical-nocam": {
+     "inp_ms": 100,
+     "load_ms": 1000,
+     "scroll_level": "premium",
+     "updates_level": "premium",
+     "blocking_ms": 100,
+     "dialog_level": "premium"
+    },
+    "typical": {
+     "inp_ms": 100,
+     "load_ms": 1000,
+     "scroll_level": "premium",
+     "updates_level": "premium",
+     "blocking_ms": 100,
+     "dialog_level": "premium",
+     "camera_level": "good"
+    },
+    "heavy": {
+     "inp_ms": 100,
+     "load_ms": 1000,
+     "scroll_level": "premium",
+     "updates_level": "premium",
+     "blocking_ms": 700,
+     "dialog_level": "premium"
+    }
+   },
+   "start_ms": 1000,
+   "expect": {
+    "grade": "B",
+    "meaning": "a good wall panel for typical dashboards, with a camera",
+    "levels": {
+     "light": "premium",
+     "typical-nocam": "premium",
+     "typical": "premium",
+     "heavy": null
+    },
+    "bands": {
+     "light": {
+      "tap": "good",
+      "scroll": "premium",
+      "updates": "premium",
+      "load": "good",
+      "camera": "none",
+      "blocking": "good",
+      "dialog": "premium"
+     },
+     "typical-nocam": {
+      "tap": "good",
+      "scroll": "premium",
+      "updates": "premium",
+      "load": "good",
+      "camera": "none",
+      "blocking": "good",
+      "dialog": "premium"
+     },
+     "typical": {
+      "tap": "good",
+      "scroll": "premium",
+      "updates": "premium",
+      "load": "good",
+      "camera": "good",
+      "blocking": "good",
+      "dialog": "premium"
+     },
+     "heavy": {
+      "tap": "good",
+      "scroll": "premium",
+      "updates": "premium",
+      "load": "good",
+      "camera": null,
+      "blocking": "poor",
+      "dialog": "premium"
+     }
+    },
+    "capped_by_start": false,
+    "missing": [
+     "heavy.camera"
+    ],
+    "provisional": false,
+    "start": {
+     "value": 1000,
+     "band": "good"
+    },
+    "missing_settled_by": {
+     "capped_by_start": false,
+     "limits": [
+      {
+       "page": "heavy",
+       "needs": "good",
+       "tasks": [
+        "blocking"
+       ]
+      }
+     ]
+    },
+    "limits": [
+     {
+      "page": "heavy",
+      "needs": "good",
+      "tasks": [
+       "camera",
+       "blocking"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "missing, alone holds back the next letter: heavy's camera not measured, the rest premium: B, provisional",
+   "tiers": {
+    "light": {
+     "inp_ms": 100,
+     "load_ms": 1000,
+     "scroll_level": "premium",
+     "updates_level": "premium",
+     "blocking_ms": 100,
+     "dialog_level": "premium"
+    },
+    "typical-nocam": {
+     "inp_ms": 100,
+     "load_ms": 1000,
+     "scroll_level": "premium",
+     "updates_level": "premium",
+     "blocking_ms": 100,
+     "dialog_level": "premium"
+    },
+    "typical": {
+     "inp_ms": 100,
+     "load_ms": 1000,
+     "scroll_level": "premium",
+     "updates_level": "premium",
+     "blocking_ms": 100,
+     "dialog_level": "premium",
+     "camera_level": "good"
+    },
+    "heavy": {
+     "inp_ms": 100,
+     "load_ms": 1000,
+     "scroll_level": "premium",
+     "updates_level": "premium",
+     "blocking_ms": 100,
+     "dialog_level": "premium"
+    }
+   },
+   "start_ms": 1000,
+   "expect": {
+    "grade": "B",
+    "meaning": "a good wall panel for typical dashboards, with a camera",
+    "levels": {
+     "light": "premium",
+     "typical-nocam": "premium",
+     "typical": "premium",
+     "heavy": null
+    },
+    "bands": {
+     "light": {
+      "tap": "good",
+      "scroll": "premium",
+      "updates": "premium",
+      "load": "good",
+      "camera": "none",
+      "blocking": "good",
+      "dialog": "premium"
+     },
+     "typical-nocam": {
+      "tap": "good",
+      "scroll": "premium",
+      "updates": "premium",
+      "load": "good",
+      "camera": "none",
+      "blocking": "good",
+      "dialog": "premium"
+     },
+     "typical": {
+      "tap": "good",
+      "scroll": "premium",
+      "updates": "premium",
+      "load": "good",
+      "camera": "good",
+      "blocking": "good",
+      "dialog": "premium"
+     },
+     "heavy": {
+      "tap": "good",
+      "scroll": "premium",
+      "updates": "premium",
+      "load": "good",
+      "camera": null,
+      "blocking": "good",
+      "dialog": "premium"
+     }
+    },
+    "capped_by_start": false,
+    "missing": [
+     "heavy.camera"
+    ],
+    "provisional": true,
+    "start": {
+     "value": 1000,
+     "band": "good"
+    },
+    "limits": [
+     {
+      "page": "heavy",
+      "needs": "good",
+      "tasks": [
+       "camera"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "missing restart, could cap the letter at C: A+, provisional",
+   "tiers": {
+    "light": {
+     "inp_ms": 100,
+     "load_ms": 1000,
+     "scroll_level": "premium",
+     "updates_level": "premium",
+     "blocking_ms": 100,
+     "dialog_level": "premium"
+    },
+    "typical-nocam": {
+     "inp_ms": 100,
+     "load_ms": 1000,
+     "scroll_level": "premium",
+     "updates_level": "premium",
+     "blocking_ms": 100,
+     "dialog_level": "premium"
+    },
+    "typical": {
+     "inp_ms": 100,
+     "load_ms": 1000,
+     "scroll_level": "premium",
+     "updates_level": "premium",
+     "blocking_ms": 100,
+     "dialog_level": "premium",
+     "camera_level": "good"
+    },
+    "heavy": {
+     "inp_ms": 100,
+     "load_ms": 1000,
+     "scroll_level": "premium",
+     "updates_level": "premium",
+     "blocking_ms": 100,
+     "dialog_level": "premium",
+     "camera_level": "good"
+    }
+   },
+   "start_ms": null,
+   "expect": {
+    "grade": "A+",
+    "meaning": "premium",
+    "levels": {
+     "light": "premium",
+     "typical-nocam": "premium",
+     "typical": "premium",
+     "heavy": "premium"
+    },
+    "bands": {
+     "light": {
+      "tap": "good",
+      "scroll": "premium",
+      "updates": "premium",
+      "load": "good",
+      "camera": "none",
+      "blocking": "good",
+      "dialog": "premium"
+     },
+     "typical-nocam": {
+      "tap": "good",
+      "scroll": "premium",
+      "updates": "premium",
+      "load": "good",
+      "camera": "none",
+      "blocking": "good",
+      "dialog": "premium"
+     },
+     "typical": {
+      "tap": "good",
+      "scroll": "premium",
+      "updates": "premium",
+      "load": "good",
+      "camera": "good",
+      "blocking": "good",
+      "dialog": "premium"
+     },
+     "heavy": {
+      "tap": "good",
+      "scroll": "premium",
+      "updates": "premium",
+      "load": "good",
+      "camera": "good",
+      "blocking": "good",
+      "dialog": "premium"
+     }
+    },
+    "capped_by_start": false,
+    "missing": [
+     "start"
+    ],
+    "provisional": true,
+    "start": {
+     "value": null,
+     "band": null
+    },
+    "limits": []
+   }
+  },
+  {
+   "name": "missing restart, can't change a D (the cap never raises a letter): not provisional",
+   "tiers": {
+    "light": {
+     "inp_ms": 100,
+     "load_ms": 1000,
+     "scroll_level": "premium",
+     "updates_level": "premium",
+     "blocking_ms": 100,
+     "dialog_level": "premium"
+    },
+    "typical-nocam": {
+     "inp_ms": 600,
+     "load_ms": 1000,
+     "scroll_level": "premium",
+     "updates_level": "premium",
+     "blocking_ms": 100,
+     "dialog_level": "premium"
+    },
+    "typical": {
+     "inp_ms": 600,
+     "load_ms": 1000,
+     "scroll_level": "premium",
+     "updates_level": "premium",
+     "blocking_ms": 100,
+     "dialog_level": "premium",
+     "camera_level": "good"
+    },
+    "heavy": {
+     "inp_ms": 600,
+     "load_ms": 1000,
+     "scroll_level": "premium",
+     "updates_level": "premium",
+     "blocking_ms": 100,
+     "dialog_level": "premium",
+     "camera_level": "good"
+    }
+   },
+   "start_ms": null,
+   "expect": {
+    "grade": "D",
+    "meaning": "a good wall panel for light dashboards",
+    "levels": {
+     "light": "premium",
+     "typical-nocam": null,
+     "typical": null,
+     "heavy": null
+    },
+    "bands": {
+     "light": {
+      "tap": "good",
+      "scroll": "premium",
+      "updates": "premium",
+      "load": "good",
+      "camera": "none",
+      "blocking": "good",
+      "dialog": "premium"
+     },
+     "typical-nocam": {
+      "tap": "poor",
+      "scroll": "premium",
+      "updates": "premium",
+      "load": "good",
+      "camera": "none",
+      "blocking": "good",
+      "dialog": "premium"
+     },
+     "typical": {
+      "tap": "poor",
+      "scroll": "premium",
+      "updates": "premium",
+      "load": "good",
+      "camera": "good",
+      "blocking": "good",
+      "dialog": "premium"
+     },
+     "heavy": {
+      "tap": "poor",
+      "scroll": "premium",
+      "updates": "premium",
+      "load": "good",
+      "camera": "good",
+      "blocking": "good",
+      "dialog": "premium"
+     }
+    },
+    "capped_by_start": false,
+    "missing": [
+     "start"
+    ],
+    "provisional": false,
+    "start": {
+     "value": null,
+     "band": null
+    },
+    "missing_settled_by": {
+     "capped_by_start": false,
+     "limits": [
+      {
+       "page": "typical-nocam",
+       "needs": "fluid",
+       "tasks": [
+        "tap"
+       ]
+      }
+     ]
+    },
+    "limits": [
+     {
+      "page": "typical-nocam",
+      "needs": "fluid",
+      "tasks": [
+       "tap"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "name": "missing, can't change the letter: heavy's camera not measured, a slow restart caps it at C: not provisional",
+   "tiers": {
+    "light": {
+     "inp_ms": 100,
+     "load_ms": 1000,
+     "scroll_level": "premium",
+     "updates_level": "premium",
+     "blocking_ms": 100,
+     "dialog_level": "premium"
+    },
+    "typical-nocam": {
+     "inp_ms": 100,
+     "load_ms": 1000,
+     "scroll_level": "premium",
+     "updates_level": "premium",
+     "blocking_ms": 100,
+     "dialog_level": "premium"
+    },
+    "typical": {
+     "inp_ms": 100,
+     "load_ms": 1000,
+     "scroll_level": "premium",
+     "updates_level": "premium",
+     "blocking_ms": 100,
+     "dialog_level": "premium",
+     "camera_level": "good"
+    },
+    "heavy": {
+     "inp_ms": 100,
+     "load_ms": 1000,
+     "scroll_level": "premium",
+     "updates_level": "premium",
+     "blocking_ms": 100,
+     "dialog_level": "premium"
+    }
+   },
+   "start_ms": 6000,
+   "expect": {
+    "grade": "C",
+    "meaning": "a good wall panel for typical dashboards without a camera",
+    "levels": {
+     "light": "premium",
+     "typical-nocam": "premium",
+     "typical": "premium",
+     "heavy": null
+    },
+    "bands": {
+     "light": {
+      "tap": "good",
+      "scroll": "premium",
+      "updates": "premium",
+      "load": "good",
+      "camera": "none",
+      "blocking": "good",
+      "dialog": "premium"
+     },
+     "typical-nocam": {
+      "tap": "good",
+      "scroll": "premium",
+      "updates": "premium",
+      "load": "good",
+      "camera": "none",
+      "blocking": "good",
+      "dialog": "premium"
+     },
+     "typical": {
+      "tap": "good",
+      "scroll": "premium",
+      "updates": "premium",
+      "load": "good",
+      "camera": "good",
+      "blocking": "good",
+      "dialog": "premium"
+     },
+     "heavy": {
+      "tap": "good",
+      "scroll": "premium",
+      "updates": "premium",
+      "load": "good",
+      "camera": null,
+      "blocking": "good",
+      "dialog": "premium"
+     }
+    },
+    "capped_by_start": true,
+    "missing": [
+     "heavy.camera"
+    ],
+    "provisional": false,
+    "start": {
+     "value": 6000,
+     "band": "poor"
+    },
+    "missing_settled_by": {
+     "capped_by_start": true,
+     "limits": []
+    },
+    "limits": []
+   }
+  },
+  {
    "name": "camera: heavy's streams fluid, every other task at 60 fps: heavy fluid, so B",
    "tiers": {
     "light": {
@@ -7112,7 +7652,7 @@
    }
   },
   {
-   "name": "rubric 2: no touch, light's tap not measured: still missing and provisional; only scroll is exempt",
+   "name": "rubric 2: no touch, light's tap not measured: still missing; A+ needs only heavy, so not provisional",
    "tiers": {
     "light": {
      "load_ms": 1000,
@@ -7197,6 +7737,107 @@
     "missing": [
      "light.tap"
     ],
+    "provisional": false,
+    "start": {
+     "value": 1000,
+     "band": "good"
+    },
+    "missing_settled_by": {
+     "capped_by_start": false,
+     "limits": []
+    },
+    "not_applicable": {
+     "scroll": "this frame has no touch"
+    },
+    "limits": []
+   }
+  },
+  {
+   "name": "rubric 2: no touch, light's tap not measured and the letter rests on light: still missing and provisional; only scroll is exempt",
+   "tiers": {
+    "light": {
+     "load_ms": 1000,
+     "updates_level": "premium",
+     "blocking_ms": 100,
+     "dialog_level": "premium"
+    },
+    "typical-nocam": {
+     "inp_ms": 600,
+     "load_ms": 1000,
+     "updates_level": "premium",
+     "blocking_ms": 100,
+     "dialog_level": "premium"
+    },
+    "typical": {
+     "inp_ms": 600,
+     "load_ms": 1000,
+     "updates_level": "premium",
+     "camera_level": "good",
+     "blocking_ms": 100,
+     "dialog_level": "premium"
+    },
+    "heavy": {
+     "inp_ms": 600,
+     "load_ms": 1000,
+     "updates_level": "premium",
+     "camera_level": "good",
+     "blocking_ms": 100,
+     "dialog_level": "premium"
+    }
+   },
+   "start_ms": 1000,
+   "touch": false,
+   "expect": {
+    "grade": "E",
+    "meaning": "not a good wall panel, even for light dashboards",
+    "levels": {
+     "light": null,
+     "typical-nocam": null,
+     "typical": null,
+     "heavy": null
+    },
+    "bands": {
+     "light": {
+      "tap": null,
+      "scroll": "n/a",
+      "updates": "premium",
+      "load": "good",
+      "camera": "none",
+      "blocking": "good",
+      "dialog": "premium"
+     },
+     "typical-nocam": {
+      "tap": "poor",
+      "scroll": "n/a",
+      "updates": "premium",
+      "load": "good",
+      "camera": "none",
+      "blocking": "good",
+      "dialog": "premium"
+     },
+     "typical": {
+      "tap": "poor",
+      "scroll": "n/a",
+      "updates": "premium",
+      "load": "good",
+      "camera": "good",
+      "blocking": "good",
+      "dialog": "premium"
+     },
+     "heavy": {
+      "tap": "poor",
+      "scroll": "n/a",
+      "updates": "premium",
+      "load": "good",
+      "camera": "good",
+      "blocking": "good",
+      "dialog": "premium"
+     }
+    },
+    "capped_by_start": false,
+    "missing": [
+     "light.tap"
+    ],
     "provisional": true,
     "start": {
      "value": 1000,
@@ -7205,7 +7846,15 @@
     "not_applicable": {
      "scroll": "this frame has no touch"
     },
-    "limits": []
+    "limits": [
+     {
+      "page": "light",
+      "needs": "fluid",
+      "tasks": [
+       "tap"
+      ]
+     }
+    ]
    }
   }
  ],

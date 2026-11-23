@@ -30,7 +30,8 @@ SUMMARY_KEYS = {"schema", "test", "clarity", "protocol_version", "report_schema"
 PAGE_KEYS = {"inp_ms", "open_ms", "blocking_ms", "usable_ms", "scroll", "updates", "camera", "runs", "timed_out_runs",
              "dialog"}   # Clarity v3 (#211): the more-info dialogs, in a report that has them
 GRADE_KEYS = ("grade", "meaning", "levels", "bands", "capped_by_start", "missing", "provisional", "start")
-OPTIONAL_GRADE_KEYS = ("not_applicable",)   # rubric 2: only on a frame without touch
+OPTIONAL_GRADE_KEYS = ("not_applicable",      # rubric 2: only on a frame without touch
+                       "missing_settled_by")  # only when something missing can't change the letter
 
 
 def fixture(variant):
@@ -209,12 +210,17 @@ class Export(unittest.TestCase):
         self.assertIsNone(re.search(r"([0-9a-f]{2}:){5}", text))             # no MACs
 
     def test_incomplete_or_not_comparable_is_refused_unless_asked(self):
-        for v in ("zoom", "raf-only", "missing-run", "E"):
+        for v in ("zoom", "raf-only", "missing-run"):
             with self.subTest(v):
                 with self.assertRaises(S.Refused):
                     S.summarise(self.reps[v])
                 s = S.summarise(self.reps[v], allow_provisional=True)
                 self.assertFalse(s["complete"])
+        # E's light open is missing, but light already fails on scrolling: the letter is final, so it is exported
+        # without the flag, still incomplete.
+        s = S.summarise(self.reps["E"])
+        self.assertFalse(s["complete"])
+        self.assertFalse(G.grade_summary(s)["provisional"])
         self.assertIn("expected 1.5", S.summarise(self.reps["zoom"], allow_provisional=True)["not_comparable"])
         self.assertIn("1 of 4 graded runs failed or are missing", S.summarise(self.reps["missing-run"], allow_provisional=True)["gaps"])
 
@@ -248,11 +254,12 @@ class Parity(unittest.TestCase):
         self.assertEqual(letters["capped"], "C")
         self.assertIsNone(letters["zoom"])
         self.assertTrue(self.reps["raf-only"]["grade"]["provisional"])
-        # Rubric v10 (#205): without typical-nocam, B still stands on typical with its camera, and the
-        # grade is provisional: the camera-free typical wasn't measured.
+        # Rubric v10 (#205): without typical-nocam, B still stands on typical with its camera. The camera-free typical
+        # wasn't measured, but only C needs it: the B can't change, so it isn't provisional (heavy decides A).
         g = self.reps["pre-v10"]["grade"]
-        self.assertEqual((g["grade"], g["provisional"]), ("B", True))
+        self.assertEqual((g["grade"], g["provisional"]), ("B", False))
         self.assertIn("typical-nocam.scroll", g["missing"])
+        self.assertEqual(g["missing_settled_by"]["limits"][0]["page"], "heavy")
 
     def test_python_from_the_summary_equals_the_report(self):
         for v in VARIANTS:

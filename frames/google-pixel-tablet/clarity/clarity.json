@@ -720,7 +720,8 @@
   }
  },
  "restart_ms": 2926.0,
- "gaps": [
+ "gaps": [],
+ "unmeasured": [
   "heavy: 3 camera run(s) whose receiver counts left up to 1.0 s of the window out (getStats answered late): stalls n/a, not measured"
  ],
  "not_comparable": null,
@@ -756,7 +757,7 @@
   "causes": [
    "Memory isn't the limit (1279 of 3721 MB)."
   ],
-  "text": "Typical with a camera dashboards feel good: taps, live updates, opening a view, more-info dialogs and the cameras are quick, and scrolling is smooth. Bigger dashboards slow down: heavy blocks for 0.9 s after it is drawn. Memory isn't the limit (1279 of 3721 MB). Provisional: 2 things weren't measured fully.",
+  "text": "Typical with a camera dashboards feel good: taps, live updates, opening a view, more-info dialogs and the cameras are quick, and scrolling is smooth. Bigger dashboards slow down: heavy blocks for 0.9 s after it is drawn. Memory isn't the limit (1279 of 3721 MB).",
   "rubric": 2
  },
  "webrtc_transport": {

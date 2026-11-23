@@ -22,9 +22,11 @@ for (const c of data.cases) {
   test(`grade: ${c.name}`, () => {
     const g = G.gradeBands(c.tiers, c.start_ms, rubric, c.touch !== false);   // touch: false, rubric 2
     const got = {};
-    for (const k of Object.keys(c.expect)) if (k !== "limits") got[k] = g[k];
+    for (const k of Object.keys(c.expect)) if (k !== "limits" && k in g) got[k] = g[k];
     got.limits = G.nextLimits(g, rubric);
     assert.deepEqual(got, c.expect);
+    // Only when something is missing and it can't change the letter (grade.py the same).
+    assert.equal("missing_settled_by" in g, "missing_settled_by" in c.expect);
   });
 }
 
