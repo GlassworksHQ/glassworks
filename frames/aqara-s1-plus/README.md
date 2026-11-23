@@ -124,6 +124,7 @@ Here is the current feature maturity on `main` (rows marked **New** ship in the 
 | Browser Manage page (`:8099`, HA sign-in, logs, diagnostics, multi-panel) | 🧪 New · HA sign-in and core pages checked on hardware; ongoing polish |
 | Network setup page (`:8099/setup`, 6-digit pairing code) | 🧪 New · core setup flow verified on hardware |
 | Phone setup via temporary setup Wi-Fi | 🧪 New · unit-tested, awaiting hardware run |
+| Change Wi-Fi after setup (Network page, goes back on its own if the new network fails) | 🧪 New · unit-tested, awaiting hardware run |
 | Panel health diagnostics (CPU, temperature, RAM, storage, Wi-Fi, uptime) | 🧪 New · awaiting hardware check |
 | Bluetooth proxy (listen and active GATT connections) | 🧪 New · scanning and single-device GATT verified on hardware; concurrent multi-device links untested |
 | Hands-free app updates from Home Assistant | ✅ Works from v0.4.1 onward ([one manual update](#updates) needed on older versions) |

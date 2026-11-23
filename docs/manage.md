@@ -15,6 +15,7 @@ Because Manage is part of Glassworks Core, every supported frame—from the Aqar
 | **All panels** | View every Glassworks panel in your Home Assistant instance in one place, jump into any panel's Manage page without signing in again, and copy settings from one panel to another ([details below](#other-panels-through-home-assistant)). |
 | **Home Assistant & dashboard, Screen, Appearance, and each pane** | Every setting from the panel's on-device settings menu, laid out in the same order with live editing. Under **Appearance**, pick the color theme for Glassworks overlays: five built-in themes in light and dark, a custom theme you can dial in with your browser's color picker, and, once your dashboard has loaded, a **Home Assistant** theme that uses your dashboard's own colors. A switch below the themes follows Home Assistant's dark mode automatically. The voice overlay and the timers both use the theme. Screen and supported panes also include one-click [Home Assistant blueprints](blueprints.md#adding-one-from-the-manage-page). Each pane page has an on/off toggle in the top right and live status details. |
 | **Device page** *(e.g. S1 Plus or Pixel Tablet)* | Hardware-specific details that do not belong to a single pane: on the S1 Plus, **Block Aqara cloud**, disabled Aqara apps, radio mode shortcut, and **Silent updates**; on Android tablets, **Silent updates**, device owner status, dock status, model, and Android version ([Silent updates](esphome.md#silent-updates)). |
+| **Network** | The Wi-Fi network the panel is on, with **Change** to move it to another one. Behind the panel's code, and the panel goes back to its old network on its own if the new one doesn't work ([details below](#changing-the-panels-wi-fi)). |
 | **Log** | Rolling 7-day log persisted across reboots. Filter by warnings or errors, search by keyword, or click **Download diagnostics** to export a redacted troubleshooting bundle. |
 | **Security** | Lists every browser currently signed in to Manage, with one-click **Sign out**. Below it are the actions that need someone at the panel: **Allow setup over the network**, **Close setup over the network** and **Reset the panel** ([details below](#actions-that-need-the-panels-code)). On devices where Glassworks manages USB debugging authorization (such as the lululemon Mirror), you can also approve or revoke authorized computers here. |
 | **About** | App and frame versions, hardware frame ID, and open-source licenses. |
@@ -70,6 +71,23 @@ Every change you make on Manage validates and saves through the exact same check
 
 Manage renders live values when each page loads rather than streaming updates over JavaScript, so refresh the page if you changed a setting simultaneously on the panel or in Home Assistant. *(The one exception is a docking tablet's Device page, which refreshes every 3 seconds while showing **Docked / Not docked**—with a **Pause** link whenever you want to freeze it—and never refreshes while a dialog is open.)* Every setting change is recorded in the **Log** with the administrator's name and the new value.
 
+### Changing the panel's Wi-Fi
+
+You can move a panel that is already set up to another Wi-Fi network from **Settings → Network** on the panel, or from the **Network** page on Manage. Pick a network from the list of networks nearby (or type a hidden network's name), enter its password, and select **Join**. On Manage, you also enter the 6-digit code the panel shows, the same as the other [actions that need the panel's code](#actions-that-need-the-panels-code).
+
+The panel keeps its current network saved the whole time, so a mistake can't strand it:
+
+1. **The change starts:** The panel leaves its network a couple of seconds after you select **Join**. The Wi-Fi row says where it's going and that it comes back within 2 minutes if the new network doesn't work.
+2. **It stays if it works:** The change counts once the panel is on the new network and can reach Home Assistant there. If the panel doesn't have a Home Assistant address yet, being on the network is enough.
+3. **It goes back on its own if not:** A wrong password, a network it can't connect to, or a network where Home Assistant doesn't answer within 2 minutes all end with the panel back on its old network. The Wi-Fi row then says what happened, in amber. If the app restarts in the middle of a change, it finishes the change when it starts again: it keeps the new network only if Home Assistant answers there within a minute.
+4. **If even the old network is gone:** In the rare case the old network doesn't come back either, the row says so, and the panel opens its [setup Wi-Fi](#the-panels-own-wi-fi) once it has been offline for a few minutes, as it does after any new Wi-Fi details.
+
+The Manage page you sent the change from loses the panel while it switches. Once the panel is on the new network, open its page again with **Visit** on its device page in Home Assistant. If the new network doesn't work, the panel comes back to the old one, and the same address works again.
+
+The password goes to Android's Wi-Fi settings and nowhere else: neither surface shows it again, and it never appears in the Log or the diagnostics.
+
+**Where it's available:** Changing Wi-Fi needs Android to let Glassworks add and select networks itself, and to tell it which network it is on, so it knows the way back. That's the case on the Aqara S1 Plus, on Android 6–9 devices, and on any device where Glassworks is the [device owner](../frames/generic-android/README.md#device-owner), as long as the app has location access. Elsewhere Android only lets apps *suggest* a network, and a suggestion never moves a device off a network that works, so the Network page shows the current connection and says to change Wi-Fi in Android's settings instead.
+
 **Camera stream credentials:** Passwords for the ONVIF/RTSP stream are strictly write-only—once saved, neither the panel nor Manage will ever display the password again. Open the Sign-in dialog to update the username (leaving the password blank keeps the existing one), set a new password, or **Clear** both. Write the password down in your password manager when creating it so you can enter it into Home Assistant's ONVIF integration, Frigate, or UniFi Protect.
 
 ## Signing in
@@ -85,7 +103,7 @@ Check **Remember this browser for 30 days** to stay signed in across browser res
 
 ### Actions that need the panel's code
 
-Just like **Reboot**, a few sensitive actions verify that someone is physically standing in front of the panel before running. When triggered from Manage, each one displays a one-time 6-digit code on the wall screen that you enter in your browser, so a stolen browser session cannot run them. On the panel itself under **Settings → Security**, those actions run directly without an extra code.
+Just like **Reboot**, a few sensitive actions verify that someone is physically standing in front of the panel before running. When triggered from Manage, each one displays a one-time 6-digit code on the wall screen that you enter in your browser, so a stolen browser session cannot run them. On the panel itself under **Settings → Security**, those actions run directly without an extra code. [Changing the panel's Wi-Fi](#changing-the-panels-wi-fi) from the **Network** page asks for the code the same way.
 
 | Action | What it does |
 |---|---|

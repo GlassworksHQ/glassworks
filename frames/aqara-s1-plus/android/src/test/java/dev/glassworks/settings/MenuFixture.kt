@@ -57,6 +57,8 @@ object MenuFixture {
         panelIp: () -> String? = { null },
         /** What the device has for the Screen page; the S1's by default. */
         hardware: ScreenHardware = S1_HARDWARE,
+        /** The Network page's Wi-Fi row ([WifiSettings.item]); none by default, so the page is left out. */
+        wifi: SettingsItem? = null,
     ): KioskSettingsOverlay.Model {
         val core = CoreSettings(
             KioskPrefs(context), version, status = { status },
@@ -67,6 +69,7 @@ object MenuFixture {
             screenBlueprints = blueprints(CoreSettings.SCREEN),
             account = { account },
             panelIp = panelIp,
+            wifi = wifi,
         )
         val sections = paneSections(panes, blueprints, running)
         return KioskSettingsOverlay.Model(withHaLink(settingsOrder(core.sections(), sections), link), version, sections.map { it.id }.toSet())

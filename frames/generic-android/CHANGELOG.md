@@ -12,6 +12,10 @@ line of each version is what Home Assistant shows on the update card. A change o
 ## [Unreleased]
 
 ### Added
+- **Change the panel's Wi-Fi after setup (both builds).** A new *Network* page, on the panel and in Manage, moves the
+  panel to another network, and it goes back to the old one on its own within 2 minutes if it can't join the new one
+  or reach Home Assistant there. It works on Android 6–9, or with Glassworks as the device owner, and needs location
+  access; elsewhere the page says to change Wi-Fi in Android's settings.
 - **Appearance themes, Assist edge glow, and timer board.** A new *Appearance* page (on the panel and in Manage) adds five light/dark themes, a Custom color picker, and a **Home Assistant** theme that mirrors your dashboard's colors and dark mode (plus a toggle to follow Home Assistant's dark mode with any theme). Themes apply to both Assist and timers. Assist now shows as an **edge glow** by default, keeping your dashboard visible (the orb is still a pick under *Assist* on the *Appearance* page): the whole border swells and brightens with your voice, light trails around the edges while Assist thinks, and it rests in the corners while the reply plays. Three or more active timers group into a single **timer board** card.
 - **Notifications and Bluetooth proxy panes (both builds).** Show rich Home Assistant notifications on screen (on by default; non-touch displays auto-dismiss untagged high/critical alerts after 2 minutes) and relay nearby BLE sensors to Home Assistant over an encrypted connection (off by default).
 - **Security page for reset and network setup.** Reset app and pane settings while keeping Wi-Fi, logs, and Home Assistant pairing intact—or open/close 30-minute network setup—from *Settings → Security* or Manage (with on-panel code confirmation).

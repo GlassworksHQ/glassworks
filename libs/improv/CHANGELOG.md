@@ -5,6 +5,15 @@ What changed in each release of `dev.glassworks:improv` on Maven Central. Versio
 cut from `libs/improv/v<version>` tags ([docs/releasing.md](../../docs/releasing.md#libraries)), which
 publish the matching section below as the release notes.
 
+## [Unreleased]
+
+### Added
+- **A way back after a join.** `WifiProvisioner.goBack(to, leave, forget, cb)` takes the device from a network a
+  `connect` joined back to the saved network it was on, forgetting the new one when the join saved it, and reports
+  once it is back. `onNetwork()` reads the saved network the device is on (its name and `netId`), `isSaved(name)` says
+  whether a network is saved, and `switchBlock()` says why this app can't move the device between networks and back
+  (`SUGGESTIONS_ONLY`, `NO_LOCATION`), or null when it can. Neither name is logged.
+
 ## [0.2.0] - 2026-11-22
 
 ### Added

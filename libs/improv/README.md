@@ -87,6 +87,22 @@ wifi.connect(ssid, password) { outcome -> /* any thread */ }
 `admin` is optional: when it's null and the app is device owner, the provisioner finds the app's
 active admin itself. Call it from the main thread. Logs go under `WifiProvisioner.logTag`.
 
+To move a device that is already online to another network, and back if the new one turns out not to work, check
+`switchBlock()` first: it is null when the app may add and select networks itself and can see which one it is on.
+Read the network it is on with `onNetwork()`, join the new one with `connect`, and if that network doesn't do what
+you need, `goBack(previous, leave = newName, forget = !wasSaved)` selects the old network again, forgetting the new
+one when the join saved it (`isSaved(name)` tells you beforehand), and reports once the device is back.
+
+```kotlin
+val previous = wifi.onNetwork() ?: return
+val forget = !wifi.isSaved(newName)
+wifi.connect(newName, password) { joined ->
+    if (joined is WifiProvisioner.Outcome.Connected && !reachesMyServer()) {
+        wifi.goBack(previous, leave = newName, forget = forget) { back -> /* Connected once on `previous` again */ }
+    }
+}
+```
+
 ## Use (BLE)
 
 ```kotlin
@@ -230,5 +246,6 @@ up. A Kotlin build needs Kotlin 2.0 or newer; a Java build needs Java 17 (so com
 ```
 
 The protocol, both sessions, the adb peer check and the Wi-Fi security rules have JVM unit tests.
-`ImprovBleServer` and `WifiProvisioner` have no automated tests. Glassworks has only lightly tested them end to end on the panel (see
+`ImprovBleServer` has no automated tests; `WifiProvisioner`'s waits and its way back (`goBack`) have Robolectric
+tests in Glassworks' core module. Glassworks has only lightly tested them end to end on the panel (see
 [onboarding.md](../../docs/onboarding.md)).

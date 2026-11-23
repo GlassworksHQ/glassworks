@@ -196,6 +196,7 @@ class GlassworksRuntime(
 
     @Volatile override var discovery: HaDiscovery? = null
     @Volatile override var setupHotspot: dev.glassworks.setup.SetupHotspot? = null
+    @Volatile override var wifiChange: dev.glassworks.net.WifiChange? = null
     @Volatile override var lanSetup: dev.glassworks.setup.LanSetup? = null
     @Volatile override var hotspotScan: List<dev.glassworks.setup.WifiNetwork> = emptyList()
 

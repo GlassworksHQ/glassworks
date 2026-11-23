@@ -212,6 +212,13 @@ ${foot(viewer)}"""
          * running the action there ([SettingsItem.Action.RUN]). [answer]: the one-shot token the form sends back.
          */
         class Confirm(override val key: String, val value: String, val ask: SettingsItem.Confirm, val answer: String) : Dialog
+
+        /**
+         * The Wi-Fi sheet for [key] (#660): a network nearby or a typed one, its password, and, when [code], the code the
+         * panel shows now. [answer]: the one-shot token the form sends back. [typed]: the name sent last time, shown
+         * again; the password never is.
+         */
+        class Wifi(override val key: String, val answer: String, val code: Boolean, val problem: String? = null, val typed: String? = null) : Dialog
     }
 
     private fun fields(v: Viewer, section: String, key: String) =
@@ -247,6 +254,16 @@ ${foot(viewer)}"""
             is SettingsItem.Choice -> item.swatch?.let { sw -> themes(v, section, key, item, sw) }
                 ?: item.cards?.let { lines -> cards(v, section, key, item, lines) } ?: edit(item.title, safe { SettingsChange.shown(item) })
             is SettingsItem.SignIn -> edit(item.title, safe { item.shown(item.isSet()) })
+            // As the panel: its line (amber when the last change didn't work) and Change, which opens the sheet behind the
+            // panel's code (ManageServer); no button while a change is under way.
+            is SettingsItem.Wifi -> {
+                val detail = safe { item.detail() }
+                val fix = runCatching { item.problem() }.getOrDefault(false)
+                val line = if (detail.isNotEmpty()) "<span${if (fix) " class=\"fix\"" else ""}>${esc(detail)}</span>" else ""
+                if (!runCatching { item.open() }.getOrDefault(false)) """<div class="row static" id="${anchor(key)}"><div><b>${esc(item.title)}</b>$line</div></div>"""
+                else """<form class="row" id="${anchor(key)}" method="post" action="/settings">${fields(v, section, key)}<div><b>${esc(item.title)}</b>$line</div>""" +
+                    """<button class="pill sm" type="submit">${esc(item.label)}</button></form>"""
+            }
             // As the panel: a line that says what's missing and can be set is amber (fixable).
             is SettingsItem.Info -> row(safe { item.title() }, safe { item.detail() }, fix = runCatching { item.fixable() }.getOrDefault(false))
             is SettingsItem.Note -> """<div class="row static note"><span>${esc(safe { item.text() })}</span></div>"""
@@ -398,6 +415,7 @@ ${foot(viewer)}"""
             """<button class="pc${if (value == now) " on" else ""}" type="submit" name="value" value="${esc(value)}"${if (value == now) " aria-current=\"true\" autofocus" else ""}>${esc(name)}</button>"""
         } + "</div>"
         return when (d) {
+            is Dialog.Wifi -> (item as? SettingsItem.Wifi)?.let { wifi(it, d, ::sheet) }.orEmpty()
             is Dialog.Confirm -> sheet(d.ask.title, d.ask.detail,
                 """<input type="hidden" name="value" value="${esc(d.value)}"><input type="hidden" name="answer" value="${esc(d.answer)}">""", d.ask.action, null)
             is Dialog.Edit -> when (item) {
@@ -438,6 +456,25 @@ ${foot(viewer)}"""
                 else -> ""
             }
         }
+    }
+
+    /**
+     * The Wi-Fi sheet's fields: the networks nearby in a `<select>` (the page has no scripts), a name typed instead,
+     * which wins when given, the password, always empty, and the panel's code as the code dialog asks for it.
+     */
+    private fun wifi(item: SettingsItem.Wifi, d: Dialog.Wifi, sheet: (String, String, String, String?, String?, String) -> String): String {
+        val near = runCatching { item.nearby() }.getOrDefault(emptyList())
+        val typed = d.typed.orEmpty()
+        val pick = if (near.isEmpty()) "" else """<select class="fld" name="pick" aria-label="${esc(WIFI_NEARBY)}"${if (typed.isEmpty()) " autofocus" else ""}>""" +
+            """<option value="">${esc(WIFI_NEARBY)}</option>""" + near.joinToString("") { n ->
+                """<option value="${esc(n)}"${if (n == typed) " selected" else ""}>${esc(n)}</option>""" } + "</select>"
+        val name = """<input class="fld" name="network" value="${esc(if (typed in near) "" else typed)}" placeholder="${esc(if (near.isEmpty()) SettingsChange.WIFI_NAME else WIFI_OTHER)}" """ +
+            """autocomplete="off" autocapitalize="none" spellcheck="false"${if (near.isEmpty()) " autofocus" else ""} aria-label="${esc(SettingsChange.WIFI_NAME)}">"""
+        val password = """<input class="fld" type="password" name="password" value="" placeholder="${esc(SettingsChange.WIFI_PASSWORD)}" autocomplete="new-password" aria-label="Password">"""
+        val code = if (!d.code) "" else """<p class="wcd">${esc(WIFI_CODE)}</p><div class="code"><span></span><span></span><span></span><span></span><span></span><span></span>""" +
+            """<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required aria-label="The 6-digit code"></div>"""
+        return sheet(item.title, item.hint, """<input type="hidden" name="answer" value="${esc(d.answer)}"><div class="flds">$pick$name$password</div>$code""",
+            SettingsChange.WIFI_JOIN, d.problem, "")
     }
 
     /**
@@ -608,6 +645,10 @@ label.row.cp{cursor:pointer}.row.cp input{width:20px;height:20px;accent-color:va
         const val ON_THE_PANEL = "On the panel"
         /** A long choice's first line while nothing in it is picked. */
         const val PICK_ONE = "Pick one"
+        /** The Wi-Fi sheet's list, the field for another name, and the line over the code (#660). */
+        const val WIFI_NEARBY = "Networks nearby"
+        const val WIFI_OTHER = "Or type a network's name"
+        const val WIFI_CODE = "Changing Wi-Fi requires someone at the panel. Enter the 6-digit code shown on its screen."
         /** The Blueprints card's line with the panel's code: Manage doesn't know who you are in Home Assistant. */
         const val BLUEPRINTS_CODE = "You signed in with the panel's code. Home Assistant asks who you are, and only an administrator can add blueprints."
 
@@ -746,7 +787,7 @@ background:radial-gradient(circle at 30% 26%,rgba(255,255,255,.95),transparent 3
 .scrim .dlg{max-height:calc(100vh - 32px);overflow:auto}
 .pcs{display:flex;flex-wrap:wrap;gap:10px;margin:4px 0}.pc{padding:10px 17px;border-radius:999px;border:1px solid var(--edge);background:var(--glass);color:var(--muted);font:inherit;font-size:15.5px;font-weight:500;cursor:pointer}
 .pc:hover{background:var(--hover)}.pc.on{background:linear-gradient(90deg,var(--sky),var(--violet));color:#0a0b0f;border-color:transparent}
-.dflt{position:absolute;width:1px;height:1px;padding:0;border:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.flds{display:flex;flex-direction:column;gap:12px}.fld{width:100%;padding:14px 18px;border-radius:16px;border:1px solid var(--edge);background:var(--field);color:var(--fg);font:inherit;font-size:17px}.fld:focus{outline:none;border-color:rgba(56,189,248,.55)}.cpk input{display:block;width:100%;height:64px;padding:6px;border-radius:16px;border:1px solid var(--edge);background:var(--field);cursor:pointer}.cpk input:focus-visible{outline:2px solid var(--sky);outline-offset:3px}.row .dot{display:inline-block;width:13px;height:13px;border-radius:50%;margin-right:7px;vertical-align:-1px;border:1px solid var(--edge)}select.fld{cursor:pointer}select.fld option,select.fld optgroup{background:var(--bg);color:var(--fg)}
+.dflt{position:absolute;width:1px;height:1px;padding:0;border:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}.flds{display:flex;flex-direction:column;gap:12px}.fld{width:100%;padding:14px 18px;border-radius:16px;border:1px solid var(--edge);background:var(--field);color:var(--fg);font:inherit;font-size:17px}.fld:focus{outline:none;border-color:rgba(56,189,248,.55)}.cpk input{display:block;width:100%;height:64px;padding:6px;border-radius:16px;border:1px solid var(--edge);background:var(--field);cursor:pointer}.cpk input:focus-visible{outline:2px solid var(--sky);outline-offset:3px}.row .dot{display:inline-block;width:13px;height:13px;border-radius:50%;margin-right:7px;vertical-align:-1px;border:1px solid var(--edge)}select.fld{cursor:pointer}select.fld option,select.fld optgroup{background:var(--bg);color:var(--fg)}.dlg>p.wcd{margin:22px 0 14px}
 .sw{display:flex;justify-content:space-between;align-items:center;gap:12px;color:var(--fg);font-size:16.5px;cursor:pointer}
 .sw input{appearance:none;-webkit-appearance:none;margin:0;width:${Tokens.Toggle.W}px;height:${Tokens.Toggle.H}px;border-radius:999px;background:var(--field);border:1px solid var(--edge);position:relative;cursor:pointer;flex:none;order:2}
 .sw input::after{content:"";position:absolute;top:${Tokens.Toggle.KNOB_INSET - 1}px;left:${Tokens.Toggle.KNOB_INSET - 1}px;width:${Tokens.Toggle.H - 2 * Tokens.Toggle.KNOB_INSET}px;height:${Tokens.Toggle.H - 2 * Tokens.Toggle.KNOB_INSET}px;border-radius:50%;background:var(--muted)}

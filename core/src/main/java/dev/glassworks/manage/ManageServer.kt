@@ -685,6 +685,7 @@ class ManageServer(
     private fun sectionNotice(done: String?): String? = when (done) {
         "gone" -> "That setting isn't on this page now. Here is the page as it is."
         "pending" -> "The panel is still applying that. Reload in a moment to see it."
+        DONE_WIFI -> dev.glassworks.settings.WifiSettings.SWITCHING
         else -> null
     }
 
@@ -704,6 +705,7 @@ class ManageServer(
         val item = SettingsChange.find(section, key) ?: return HttpResponse.seeOther("$page?done=gone")
         val what = ManageApi.what(section, key)
         if (item is SettingsItem.SignIn) return changeSignIn(req, s, viewer, page, key, what, item)
+        if (item is SettingsItem.Wifi) return changeWifi(req, s, viewer, id, page, key, what, item)
         // The time window's dialog sends On, From and To; the rest send their value as text. Trimmed here, as
         // SettingsChange.change trims it, so a padded value (" run ") can't skip the question (CodeRabbit on #331).
         val raw = (if (item is SettingsItem.TimeRange) (if (req.form["on"] == "1") "${req.form["from"].orEmpty()}-${req.form["to"].orEmpty()}" else "")
@@ -782,6 +784,61 @@ class ManageServer(
             // An action that asks first costs something (the reset): its button is rose, as Reboot's.
             danger = item.confirm != null,
             behindHtml = behind.substringAfter("<body>").substringBeforeLast("</body>"))
+    }
+
+    /**
+     * The Wi-Fi row (#660). Change opens the sheet and, for an item that [SettingsItem.Wifi.needsCode], shows the panel's
+     * code for this browser at the same time; Join sends the network, its password, the code and the sheet's one-shot
+     * answer. The name's checks come before the code's, so a typo doesn't use the code up; the change starts only with
+     * the right code. The password goes to the item's join and nowhere else: not to the Log, not back into the sheet.
+     * Started, the page says the panel is switching ([WifiSettings.SWITCHING][dev.glassworks.settings.WifiSettings]).
+     */
+    private fun changeWifi(req: HttpRequest, s: Session, viewer: ManagePages.Viewer, section: String, page: String,
+                           key: String, what: String, item: SettingsItem.Wifi): HttpResponse {
+        val purpose = "$PURPOSE_ACTION:$section/$key"
+        val network = req.form["network"]?.takeIf { it.isNotBlank() } ?: req.form["pick"]
+        fun sheet(problem: String?, status: Int) = settingsPage(host.status(), viewer, page.removePrefix("/"),
+            ManagePages.Dialog.Wifi(key, ask(s.id, section, key, WIFI_JOIN), item.needsCode, problem, network), code = status, mine = s.id)!!
+        fun refused(problem: String, status: Int) = settingsPage(host.status(), viewer, page.removePrefix("/"), problem = problem, code = status, mine = s.id)!!
+        /** A code for this browser and the sheet with it, or why not. */
+        fun withCode(problem: String?, status: Int): HttpResponse {
+            if (!item.needsCode) return sheet(problem, status)
+            return when (val shown = code.show(purpose, WIFI_CODE_LABEL, s.id)) {
+                is PanelCode.Show.Ok -> sheet(problem, status)
+                is PanelCode.Show.Locked -> sheet(lockedText(), 429)
+                is PanelCode.Show.Busy -> { capped(req, shown); sheet(busyText(shown), 429) }
+                PanelCode.Show.Unavailable -> {
+                    event("${who(s)}: $what refused, the panel can't show a code")
+                    refused("$NO_CODE Changing Wi-Fi needs it.", 503)
+                }
+            }
+        }
+        if (!runCatching { item.open() }.getOrDefault(false)) return refused(SettingsChange.WIFI_BUSY, 409)
+        // Change on the row (no network yet), or a stale answer: the sheet, with the panel's code.
+        if (network == null || !answered(req.form["answer"], s.id, section, key, WIFI_JOIN)) return withCode(null, 200)
+        SettingsChange.wifiProblem(item, network, req.form["password"].orEmpty())?.let { return sheet(it, 422) }
+        if (item.needsCode) when (val c = code.check(purpose, s.id, req.form["code"].orEmpty())) {
+            PanelCode.Check.Ok -> {}
+            is PanelCode.Check.Wrong -> {
+                event("Wrong code typed for $what")
+                return sheet(if (c.triesLeft > 0) "That's not the code. ${c.triesLeft} ${if (c.triesLeft == 1) "try" else "tries"} left." else "That was the last try. Cancel and start again.", 401)
+            }
+            PanelCode.Check.NoCode -> return sheet("That code has run out. Cancel and start again.", 401)
+            is PanelCode.Check.Locked -> return sheet(lockedText(), 429)
+        }
+        val problem = onMain { done -> SettingsChange.wifi(item, network, req.form["password"].orEmpty(), done) }
+        if (problem == PENDING) {
+            event("${who(s)} started a Wi-Fi change (still starting)")
+            return HttpResponse.seeOther("$page?done=pending")
+        }
+        if (problem == null) {
+            // Never the network's name: the Log goes into the diagnostics.
+            event("${who(s)} started a Wi-Fi change")
+            return HttpResponse.seeOther("$page?done=$DONE_WIFI")
+        }
+        event("${who(s)} couldn't start a Wi-Fi change: $problem")
+        // The code was used: another for the next try.
+        return withCode(problem, 422)
     }
 
     /**
@@ -1019,6 +1076,11 @@ class ManageServer(
         const val PURPOSE_REBOOT = "reboot"
         /** A settings action that needs someone at the panel; the code's purpose names its section and key. */
         const val PURPOSE_ACTION = "action"
+        /** A Wi-Fi change's sheet answers this (#660), and its page says so after ([sectionNotice]). */
+        private const val WIFI_JOIN = "join"
+        private const val DONE_WIFI = "wifi"
+        /** What the panel shows over a Wi-Fi change's code. */
+        const val WIFI_CODE_LABEL = "Change the panel's Wi-Fi"
 
         /** How long a question's answer stays good, and how many may wait at once. */
         private const val ASK_MS = 5 * 60_000L

@@ -11,7 +11,7 @@ import java.util.Locale
 
 /**
  * The settings sections the app has itself, before and after the panes': Home Assistant & dashboard, Screen, Appearance, Log,
- * Security and About (#63). Network has nothing yet. Durations are picked, the
+ * Network (its Wi-Fi, #660), Security and About (#63). Durations are picked, the
  * presence range is a slider: nothing on the Screen page is typed (#63 round 2). Values are read when the menu opens; each change
  * applies on its own. The ones Gecko reads at start (the dashboard's address, zoom, secure hosts) ask
  * for a restart, as their adb extras always did.
@@ -39,6 +39,8 @@ class CoreSettings(
     private val now: () -> Long = System::currentTimeMillis,
     /** The device has a PIN, pattern or password ([dev.glassworks.platform.ScreenLock]): the Screen page says what that means. */
     private val screenLock: () -> Boolean = { false },
+    /** The Network page's Wi-Fi row ([WifiSettings.item]), or null to leave the page out. */
+    private val wifi: SettingsItem? = null,
 ) {
     class Live(
         /** Full screen: the page hides or shows HA's header and sidebar. */
@@ -95,6 +97,8 @@ class CoreSettings(
             SettingsItem.Group(CUSTOM_LIGHT_TITLE, customColours(dark = false)),
             assistLook(),
         )),
+        // Wi-Fi after setup (#660): the Manage page asks for the panel's code before a change.
+        SettingsPlace.NETWORK to SettingsSection(NETWORK, NETWORK_TITLE, listOfNotNull(wifi)),
         SettingsPlace.LOG to SettingsSection("log", "Log", listOf(
             SettingsItem.Info(title = { "Screen and sensors" }, detail = status),
         )),
@@ -304,6 +308,9 @@ class CoreSettings(
         /** The Screen page's id, and its blueprints' `pane` in the app's blueprint list (core/src/main/java/dev/glassworks/screen/page.json). */
         const val SCREEN = "screen"
         const val ACCOUNT_TITLE = "Dashboard sign-in"
+        /** The Network page's id and name (#660). */
+        const val NETWORK = "network"
+        const val NETWORK_TITLE = "Network"
         /** The Appearance page's id (#691). */
         const val APPEARANCE = "appearance"
         const val APPEARANCE_TITLE = "Appearance"

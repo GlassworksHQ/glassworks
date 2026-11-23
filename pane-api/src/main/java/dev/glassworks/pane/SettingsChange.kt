@@ -49,7 +49,7 @@ object SettingsChange {
     fun canChange(i: SettingsItem): Boolean = when (i) {
         is SettingsItem.Text -> runCatching { i.enabled() }.getOrDefault(false)
         is SettingsItem.Switch, is SettingsItem.Slider, is SettingsItem.Duration, is SettingsItem.TimeRange, is SettingsItem.Choice,
-        is SettingsItem.SignIn, is SettingsItem.Action -> true
+        is SettingsItem.SignIn, is SettingsItem.Action, is SettingsItem.Wifi -> true
         else -> false
     }
 
@@ -62,6 +62,7 @@ object SettingsChange {
         is SettingsItem.Choice -> i.title
         is SettingsItem.SignIn -> i.title
         is SettingsItem.Action -> i.title
+        is SettingsItem.Wifi -> i.title
         is SettingsItem.Link -> i.title
         is SettingsItem.Group -> i.title
         is SettingsItem.States -> i.title
@@ -155,6 +156,32 @@ object SettingsChange {
         try { item.save(u to password.ifEmpty { null }, done) } catch (e: Throwable) { done(COULD_NOT_SIGN_IN) }
     }
 
+    /**
+     * Joins the Wi-Fi network [network] with [password] ([SettingsItem.Wifi]) after the checks every surface makes: a
+     * name of 1 to 32 bytes (Wi-Fi's limit), a password of at most 63 characters or 64 hex digits (empty for an open
+     * network), neither with control characters. Whether the password fits the network's security is the join's to
+     * say. The password is never in what [done] says, nor in a thrown exception's text.
+     */
+    fun wifi(item: SettingsItem.Wifi, network: String, password: String, done: (String?) -> Unit) {
+        // A space typed or pasted around the name; the password is taken as typed.
+        val name = network.trim()
+        wifiProblem(item, name, password)?.let { return done(it) }
+        try { item.join(name, password, done) } catch (e: Throwable) { done(COULD_NOT_JOIN) }
+    }
+
+    /** What [wifi] refuses before it joins, or null: a surface checks this before asking for the panel's code. */
+    fun wifiProblem(item: SettingsItem.Wifi, network: String, password: String): String? = when {
+        // The same name [wifi] joins.
+        network.trim() != network -> wifiProblem(item, network.trim(), password)
+        !runCatching { item.open() }.getOrDefault(false) -> WIFI_BUSY
+        network.isBlank() -> "Pick a network, or type its name."
+        network.toByteArray(Charsets.UTF_8).size > WIFI_NAME_MAX -> "A Wi-Fi network's name has at most $WIFI_NAME_MAX characters."
+        network.any { it.code < 0x20 || it.code == 0x7f } -> "That network name has characters Wi-Fi can't take."
+        password.length > WIFI_PASSWORD_MAX -> "A Wi-Fi password has at most $WIFI_PASSWORD_MAX characters."
+        password.any { it.code < 0x20 || it.code == 0x7f } -> "That password has characters Wi-Fi can't take."
+        else -> null
+    }
+
     /** Clear: the sign-in is removed. */
     fun clear(item: SettingsItem.SignIn, done: (String?) -> Unit) {
         try { item.save(null, done) } catch (e: Throwable) { done(COULD_NOT_SIGN_IN) }
@@ -214,6 +241,18 @@ object SettingsChange {
     const val TYPE_PASSWORD = "Enter a password."
     /** A set sign-in's password field: the stored one never shows, so it takes a new one. */
     const val NEW_PASSWORD = "Set a new password · leave empty to keep it"
+
+    /** A Wi-Fi network's name: 32 bytes ([wifi]). */
+    const val WIFI_NAME_MAX = 32
+    /** A WPA passphrase is 8 to 63 characters, a raw key 64 hex digits ([wifi]). */
+    const val WIFI_PASSWORD_MAX = 64
+    /** The Wi-Fi sheet's fields and its button, on both surfaces. */
+    const val WIFI_NAME = "Network name"
+    const val WIFI_PASSWORD = "Password, if it has one"
+    const val WIFI_JOIN = "Join"
+    const val WIFI_BUSY = "A Wi-Fi change is under way. Wait for it to finish."
+    /** A Wi-Fi join that threw: no exception text, which could hold what was typed. */
+    const val COULD_NOT_JOIN = "The panel couldn't start joining that network."
 
     const val CANT_NOW = "This can't change now."
     const val CANT_HERE = "This can't be changed here."
