@@ -119,12 +119,18 @@ public final class ProbeServerService extends Service {
     }
 
     /**
-     * On a fresh userdata, stock Android 6 often boots with Wi-Fi disabled while stuck on onboarding
-     * Step 1. Turn Wi-Fi on only if SoftAP is NOT active so a pre-saved wpa_supplicant.conf can join
-     * without interfering with stock's setup AP if it happens to be broadcasting.
+     * On a fresh userdata with pre-saved Wi-Fi credentials (--wifi-ssid), stock Android 6 often
+     * boots with Wi-Fi disabled while stuck on onboarding Step 1. Turn Wi-Fi client on ONLY when
+     * stock-probe planted the `enable_wifi` marker next to base.apk AND SoftAP is not active, so
+     * runs without --wifi-ssid never race or interfere with stock's mirror-<serial> setup SoftAP.
      */
     private void maybeEnableWifiClient() {
         try {
+            File apkDir = new File(getApplicationInfo().sourceDir).getParentFile();
+            if (apkDir == null || !new File(apkDir, "enable_wifi").exists()) {
+                Log.i(TAG, "no enable_wifi marker; leaving Wi-Fi/SoftAP untouched");
+                return;
+            }
             WifiManager wm = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
             if (wm == null || wm.isWifiEnabled()) return;
             try {

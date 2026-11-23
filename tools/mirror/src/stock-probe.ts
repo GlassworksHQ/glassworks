@@ -276,6 +276,13 @@ export async function buildStockProbeUserdata(disk: Disk, o: StockProbeUserdataO
       plantedPaths.push(`/data${apkDir}/lib/arm64/libfiemap.so`);
     }
 
+    if (o.wifi) {
+      await fs.writeFile(`${apkDir}/enable_wifi`, new Uint8Array(0), {
+        mode: 0o644, uid: 1000, gid: 1000, label: STOCK_PROBE_LABELS.apk, time,
+      });
+      plantedPaths.push(`/data${apkDir}/enable_wifi`);
+    }
+
     await fs.mkdir('/system', { mode: 0o775, uid: 1000, gid: 1000, label: STOCK_PROBE_LABELS.data, time });
     await fs.writeFile('/system/packages.xml', enc.encode(xml), {
       mode: 0o660, uid: 1000, gid: 1000, label: STOCK_PROBE_LABELS.data, time,

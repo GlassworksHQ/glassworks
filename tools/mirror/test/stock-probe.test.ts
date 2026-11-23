@@ -193,8 +193,18 @@ describe('buildStockProbeUserdata', () => {
       '/data/property/persist.adb.tcp.port',
       '/data/app/dev.glassworks.stockprobe-1/base.apk',
       '/data/app/dev.glassworks.stockprobe-1/lib/arm64/libfiemap.so',
+      '/data/app/dev.glassworks.stockprobe-1/enable_wifi',
       '/data/system/packages.xml',
     ]);
+
+    // Without wifi credentials, enable_wifi marker is omitted so stock SoftAP stays untouched.
+    const noWifiDisk = new Disk(new MemoryStore(), 4096, blocks, { zeroed: true });
+    const noWifiRes = await buildStockProbeUserdata(noWifiDisk, {
+      adbKey: KEY,
+      probeApp: { apk: FAKE_APK, certHex: FAKE_CERT_HEX },
+      time: 1_700_000_000,
+    });
+    expect(noWifiRes.plantedPaths).not.toContain('/data/app/dev.glassworks.stockprobe-1/enable_wifi');
 
     const chunks: Uint8Array[] = [];
     await writeSparse(disk, (b) => { chunks.push(b.slice()); });
