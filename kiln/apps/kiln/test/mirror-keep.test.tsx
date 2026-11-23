@@ -45,11 +45,11 @@ describe('keeping the Mirror in Home Assistant over a reflash', () => {
     const d = await imageDemo(mirrorEntry, 'flash-fastboot', true);
     await show(d);
     expect(screen.getByText(/hold VOL− \(SW3\)/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'It already runs Glassworks (or Glass Panes): restart it over USB' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Already running Glassworks or Glass Panes? Restart over USB' }));
     expect(d.image.state.screen).toBe('keep');
     cleanup();
     await show(await keepDemo(mirrorEntry, 'flash-keep', true));
-    expect([...document.querySelectorAll('ol.join li')].map((li) => li.textContent)).toEqual(['Plug the Mirror\'s micro-USB into this computer, with Glassworks running.']);
+    expect([...document.querySelectorAll('ol.join li')].map((li) => li.textContent)).toEqual(['Plug the Mirror\'s micro-USB cable into this computer with Glassworks running.']);
     expect(screen.queryByText(/switch|unplug|screws|the back off/i)).toBeNull(); // Kiln restarts it into fastboot over adb (the Mirror run, 2026-11-19)
     expect(embers()).toEqual(['Connect']);
   });
@@ -63,20 +63,20 @@ describe('keeping the Mirror in Home Assistant over a reflash', () => {
 
   it('the hand-back row shows only with a key held', async () => {
     await show(await keepDemo(mirrorEntry, 'flash-keep-working', true));
-    expect(screen.getByText('Give Glassworks Home Assistant’s key back')).toBeTruthy();
+    expect(screen.getByText('Restore your Home Assistant connection key')).toBeTruthy();
     cleanup();
     await show(await imageDemo(mirrorEntry, 'flash-working', true));
-    expect(screen.queryByText('Give Glassworks Home Assistant’s key back')).toBeNull();
+    expect(screen.queryByText('Restore your Home Assistant connection key')).toBeNull();
   });
 
-  it('Done says Same device when the key went back, Asks once with the HA steps otherwise, nothing on a first install', async () => {
+  it('Done says Same device when the key went back, Confirm once with the HA steps otherwise, nothing on a first install', async () => {
     await showDone('flash-done-kept');
     expect(screen.getByText('Same device')).toBeTruthy();
     expect(screen.queryByText('Reconfigure')).toBeNull();
     cleanup();
     for (const d of ['flash-done-asks', 'flash-done-refused'] as const) {
       await showDone(d);
-      expect(screen.getByText('Asks once')).toBeTruthy();
+      expect(screen.getByText('Confirm once')).toBeTruthy();
       expect(screen.getByText('Reconfigure')).toBeTruthy();
       cleanup();
     }
@@ -337,7 +337,7 @@ describe('the keep step, on the real session (#580)', () => {
     const first = await ready();
     first.f.toFastboot();
     render(<ImageFlow image={first.f} app={new AppSession({ frame: mirrorFrame, connect: async () => { throw new Error('unused'); } }, true)} />);
-    expect(screen.getByRole('heading').textContent).toBe('Put the Mirror in fastboot');
+    expect(screen.getByRole('heading').textContent).toBe('Put the Mirror in fastboot mode');
     expect(screen.getByText(/hold VOL− \(SW3\)/)).toBeTruthy();
     expect(embers()).toEqual(['Connect']);
     cleanup();

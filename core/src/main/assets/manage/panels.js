@@ -105,7 +105,7 @@ async function finishSignIn() {
   const verifier = load(VERIFIER);
   keep(STATE, null);
   keep(VERIFIER, null);
-  if (q.has('error')) throw new Error('Sign-in cancelled.');
+  if (q.has('error')) throw new Error('Sign-in canceled.');
   if (!want || !verifier || q.get('state') !== want) throw new Error('This sign-in has expired. Start again.');
   const j = await tokenCall({ grant_type: 'authorization_code', code: q.get('code'), client_id: clientId, code_verifier: verifier });
   keep(KEY, JSON.stringify({ ha, session, access: j.access_token, refresh: j.refresh_token, until: Date.now() + j.expires_in * 1000 }));
@@ -214,7 +214,7 @@ function ask(access, types) {
       else if (m.type === 'auth_ok') types.forEach((type, i) => ws.send(JSON.stringify({ id: i + 1, type })));
       else if (m.type === 'auth_invalid') end(() => reject(Object.assign(new Error('Home Assistant refused the sign-in. Sign in again.'), { signIn: true })));
       else if (m.type === 'result') {
-        if (!m.success) return end(() => reject(new Error('Home Assistant said no: ' + ((m.error && m.error.message) || 'unknown error') + '.')));
+        if (!m.success) return end(() => reject(new Error("Home Assistant couldn't complete the request: " + ((m.error && m.error.message) || 'unknown error') + '.')));
         out[m.id - 1] = m.result;
         if (--left === 0) end(() => resolve(out));
       }
@@ -357,7 +357,7 @@ function drawCopy(fromP, toP, result) {
     apply(fromP, toP, send.filter((r) => picked.has(r.section + '\n' + r.key)), null);
   } }, ...lines, asks, foot);
   copyCard.replaceChildren(
-    head('Copy settings', h('span', {}, 'Changes only what you tick, on one panel')),
+    head('Copy settings', h('span', {}, 'Changes only what you check, on one panel')),
     h('div', { class: 'cph' }, h('label', {}, 'From', pick('from', fromP, null)), h('span', { class: 'arrow' }, '→'), h('label', {}, 'To', pick('to', toP, fromP))),
     form,
   );
@@ -365,7 +365,7 @@ function drawCopy(fromP, toP, result) {
 
 /** Why nothing (more) goes to [p]: it isn't a local, trusted panel with settings now. */
 function stopped(p) {
-  return 'Nothing more goes to ' + p.name + '. ' + ((p.reach && p.reach.state !== 'up' && p.reach.why) || "it isn't reachable as a Glassworks panel now.");
+  return 'Nothing more goes to ' + p.name + '. ' + ((p.reach && p.reach.state !== 'up' && p.reach.why) || "It isn't reachable as a Glassworks panel right now.");
 }
 
 /** "Copied 4 settings to Bedroom panel. ", once a copy has run. */

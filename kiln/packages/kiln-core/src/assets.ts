@@ -2,14 +2,19 @@
 // against its SHA-256 before use; a mismatch is refused. A download that stops sending ends with an
 // error after `stallMs` without a byte, so the step can be tried again (#621). `A` is the recipe's asset names.
 import { toHex } from './backup';
+import { MAX_RETRY_AFTER_MS, STALL_MS, retryAfterMs } from './download';
 
-/** How long a download may go without a byte before it fails: the stall watchdog's default. */
-export const STALL_MS = 30_000;
+export { STALL_MS };
 
 export interface AssetsOptions {
   /** No bytes (or no answer) for this long ends the download with an error; default STALL_MS. */
   stallMs?: number;
+  /** How a busy answer's Retry-After is waited out; tests make it instant. */
+  sleep?: (ms: number) => Promise<void>;
 }
+
+/** Busy answers (429, or 503 with Retry-After: Refract's rate limit) a blob's download waits out before it fails. */
+const BUSY_TRIES = 3;
 
 /**
  * A stall watchdog for one download: `arm()` starts (or restarts) the clock, and `race(p)` fails `p` once
@@ -104,7 +109,23 @@ export class Assets<A extends string> {
   private async load(name: A, onProgress?: (done: number, total: number) => void): Promise<Uint8Array> {
     const entry = (await this.getManifest()).assets.find((a) => a.name === name);
     if (!entry) throw new Error(`installer file ${name} is not in the manifest`);
+    // a release APK comes from Refract (an absolute URL); the other blobs sit beside the manifest
     const url = /^(\/|https?:)/.test(entry.path) ? entry.path : `${this.base}${entry.path}`;
+    let out: Uint8Array;
+    for (let busy = 1; ; busy++) {
+      const got = await this.fetchOnce(name, url, entry, onProgress);
+      if (got instanceof Uint8Array) { out = got; break; }
+      // a busy answer (Refract's rate limit): wait as long as it asks, up to a minute, a few times
+      if (busy >= BUSY_TRIES || got.wait > MAX_RETRY_AFTER_MS) throw new Error(`could not download ${name}: the server is busy, try again in a minute`);
+      await (this.o.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms))))(got.wait);
+    }
+    const sha = toHex(await crypto.subtle.digest('SHA-256', out as Uint8Array<ArrayBuffer>));
+    if (sha !== entry.sha256) throw new Error(`${name} failed its SHA-256 check (got ${sha.slice(0, 16)}…): refusing to use it`);
+    return out;
+  }
+
+  /** One try at a blob: its bytes, or how long a busy answer asks to wait. */
+  private async fetchOnce(name: A, url: string, entry: AssetEntry<A>, onProgress?: (done: number, total: number) => void): Promise<Uint8Array | { wait: number }> {
     // re-armed by every chunk: a download that stops sending fails, and its request is aborted
     const w = watchdog(this.stallMs, name);
     const out = new Uint8Array(entry.size);
@@ -113,6 +134,10 @@ export class Assets<A extends string> {
     try {
       w.arm();
       const r = await w.race(this.f(url, { signal: w.signal }));
+      if (r.status === 429 || (r.status === 503 && r.headers.has('retry-after'))) {
+        void r.body?.cancel().catch(() => {});
+        return { wait: retryAfterMs(r.headers.get('retry-after')) ?? 1000 };
+      }
       if (!r.ok || !r.body) throw new Error(`could not download ${name} (HTTP ${r.status})`);
       reader = r.body.getReader();
       for (;;) {
@@ -131,8 +156,6 @@ export class Assets<A extends string> {
       w.stop();
     }
     if (got !== entry.size) throw new Error(`${name}: got ${got} bytes, expected ${entry.size}`);
-    const sha = toHex(await crypto.subtle.digest('SHA-256', out));
-    if (sha !== entry.sha256) throw new Error(`${name} failed its SHA-256 check (got ${sha.slice(0, 16)}…): refusing to use it`);
     return out;
   }
 }

@@ -24,7 +24,7 @@ class ManageServerTest {
         val r = b.get("/log?level=error")
         assertEquals(200, r.status)
         val html = r.text()
-        assertTrue(html.contains("Manage this panel."))
+        assertTrue(html.contains("Manage this panel</h1>"))
         assertTrue(html.contains("""name="next" value="/log?level=error""""))
         assertFalse("no Manage content before signing in", html.contains("Download diagnostics"))
         val cb = b.signInWithHa(next = "/log?level=error")
@@ -44,7 +44,7 @@ class ManageServerTest {
         f.setUp = false
         assertTrue(f.Browser().get("/").text().contains("QR /"))
         f.setUp = true
-        assertTrue(f.Browser().get("/").text().contains("Manage this panel."))
+        assertTrue(f.Browser().get("/").text().contains("Manage this panel</h1>"))
     }
 
     @Test fun aQrPageOffersTheWayBackToManageOnlyToASignedInBrowser() {
@@ -185,7 +185,7 @@ class ManageServerTest {
     @Test fun theSessionIsNewAtSignInNeverOneTheBrowserBrought() {
         val b = f.Browser()
         b.cookies[ManageServer.SESSION] = "chosen-by-an-attacker-0123456789"
-        assertTrue(b.get("/").text().contains("Manage this panel."))
+        assertTrue(b.get("/").text().contains("Manage this panel</h1>"))
         b.signInWithHa()
         assertNotEquals("chosen-by-an-attacker-0123456789", b.cookies[ManageServer.SESSION])
         assertTrue(b.get("/").text().contains("Running"))
@@ -195,7 +195,7 @@ class ManageServerTest {
         val b = f.Browser()
         b.signInWithHa()
         f.haBase = "http://192.0.2.11:8123"
-        assertTrue(b.get("/").text().contains("Manage this panel."))
+        assertTrue(b.get("/").text().contains("Manage this panel</h1>"))
     }
 
     // ------------------------------------------------------------------ forms from elsewhere
@@ -382,7 +382,7 @@ class ManageServerTest {
         assertTrue(page.contains("Chrome on Windows"))
         val other = f.sessions.list(f.haBase).first { it.browser == "Chrome on Windows" }
         assertEquals(303, a.post("/security/signout", mapOf("csrf" to a.csrf(), "id" to other.id)).status)
-        assertTrue(b.get("/").text().contains("Manage this panel."))
+        assertTrue(b.get("/").text().contains("Manage this panel</h1>"))
         assertTrue(a.get("/").text().contains("Running"))
     }
 

@@ -55,7 +55,7 @@ class S1Device(
     fun section(context: Context, release: FrameRelease? = null, installs: Boolean = false, running: (String) -> Pane?): SettingsSection {
         val wallBase = PanePrefs(context).wallBase
         return SettingsSection(GenericAndroid.DEVICE, TITLE, listOfNotNull(
-            SettingsItem.Switch(BLOCK_TITLE, "Stops ha_master, the panel's link to Aqara's cloud", { wallBase.blockAqaraCloud }) { v, done ->
+            SettingsItem.Switch(BLOCK_TITLE, "Stops ha_master, the native Aqara gateway service, unless the wall base needs it", { wallBase.blockAqaraCloud }) { v, done ->
                 wallBase.blockAqaraCloud = v
                 done(null)
             },

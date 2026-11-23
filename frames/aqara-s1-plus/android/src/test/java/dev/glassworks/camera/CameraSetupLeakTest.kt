@@ -89,7 +89,7 @@ class CameraSetupLeakTest {
 
     @Test fun theCameraLineStaysOnTheCameraStep() {
         val (s, _) = setUp()
-        assertTrue("Sign in is current", all(s).filterIsInstance<TextView>().any { it.text.toString() == "Sign in to Home Assistant on your phone. Nothing to type here." && visible(it) })
+        assertTrue("Sign in is current", all(s).filterIsInstance<TextView>().any { it.text.toString() == "Scan with your phone to sign in to Home Assistant — nothing to type here." && visible(it) })
         assertEquals(false, cameraLineShown(s))
         tap(s, "Panes") // the rail: steps that are done can be opened, Panes and then its Camera step
         tap(s, "Camera")

@@ -1,8 +1,9 @@
 // Glassworks' APK from its release, for a page that installs it: the newest release of the line the page names
-// (drafts, prereleases and other lines' tags never count), its APK for one ABI, and that APK's .sha256, through Kiln's
-// release route, as Kiln's other release APKs come. Refract can't serve it: its allowlist pins each file's size and
-// hash before the file exists, and a Glassworks release isn't known until its tag is cut. Never releases/latest: that
-// is another line's.
+// (drafts, prereleases and other lines' tags never count), its APK for one ABI, and that APK's .sha256, through Refract
+// (refract.glassworks.dev), which admits this repo's release lines (kiln/workers/refract/releases.json). The APK
+// resumes where a connection dropped and waits out Refract's rate limit (kiln-core downloadWhole), and nothing is used
+// before its SHA-256 matches the .sha256 the release publishes. Never releases/latest: that is another line's.
+import { ProxyError, downloadWhole } from '@glassworks/kiln-core';
 import { ships, type Support } from '@glassworks/frame-card';
 import { download, loadRelease, type Abi, type Line, type Release } from '../device/onDevice/model';
 
@@ -56,76 +57,80 @@ export type ReleaseApk =
 export class NoRelease extends Error {}
 
 /**
- * How long the release route may stay silent, waiting for an answer or for the APK's next bytes, before Kiln gives
- * up with Try again. Without it a request that never answers left the row on "Looking…" (first real run, 2026-11-19, PR 607).
+ * How long Refract may stay silent, waiting for an answer or for the APK's next bytes, before Kiln counts the connection
+ * as dropped and resumes it. Without it a request that never answers left the row on "Looking…" (first real run,
+ * 2026-11-19, PR 607).
  */
 export const RELEASE_STALL_MS = 30_000;
+
+/** How a release download waits: the stall time above, and how often a dropped connection resumes before Try again. */
+export interface ReleaseFetch {
+  stallMs?: number;
+  /** Resumes after a dropped or silent connection; default kiln-core's (5). */
+  retries?: number;
+  sleep?: (ms: number) => Promise<void>;
+}
 
 export const releasePage = (tag: string) => `https://github.com/GlassworksHQ/glassworks/releases/tag/${encodeURIComponent(tag)}`;
 
 const hex = (b: ArrayBuffer) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, '0')).join('');
 
-async function body(res: Response, onGot: (got: number, size?: number) => void, poke: () => void): Promise<Uint8Array> {
-  const size = Number(res.headers.get('content-length')) || undefined;
-  const parts: Uint8Array[] = [];
-  let got = 0;
-  const reader = res.body!.getReader();
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    poke();
-    parts.push(value);
-    const before = got;
-    got += value.length;
-    // a whole-percent step (or each MiB without a size): one screen update, not one per USB-sized chunk
-    if (size ? Math.floor((got * 100) / size) !== Math.floor((before * 100) / size) : got >> 20 !== before >> 20) onGot(got, size);
-  }
-  const out = new Uint8Array(got);
-  let at = 0;
-  for (const p of parts) { out.set(p, at); at += p.length; }
-  return out;
-}
+/** A whole-percent step (or each MiB without a size): one screen update, not one per USB-sized chunk. */
+const step = (got: number, before: number, size?: number) =>
+  size ? Math.floor((got * 100) / size) !== Math.floor((before * 100) / size) : got >> 20 !== before >> 20;
 
 /**
- * The newest release's APK for `of`, its bytes checked against the release's .sha256. Throws NoRelease before the
- * first release (or when the release has no APK for the ABI), and an Error that says what went wrong otherwise,
- * including when the route stays silent for `stallMs`. `of.from`: that release, as an earlier call listed it, not the
- * newest one now. Returns the release it took the APK from.
+ * The line's newest release from Kiln's list, or an error once it has been silent for `stallMs` (no answer, or no
+ * body): without that deadline a list that never answers left the row on "Looking…" (first real run, 2026-11-19).
  */
-export async function releaseApk(of: ReleaseLine & { from?: ListedRelease }, get: typeof fetch, onState: (s: ReleaseApk) => void, stallMs = RELEASE_STALL_MS): Promise<{ bytes: Uint8Array; ready: Extract<ReleaseApk, { state: 'ready' }>; release: ListedRelease }> {
+async function listed(line: Line, get: typeof fetch, stallMs: number): Promise<Release> {
   const abort = new AbortController();
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const poke = () => { clearTimeout(timer); timer = setTimeout(() => abort.abort(), stallMs); };
-  const timed = (async (url: string) => { poke(); const res = await get(url, { signal: abort.signal }); poke(); return res; }) as typeof fetch;
+  const timer = setTimeout(() => abort.abort(), stallMs);
   try {
-    return await fetchApk(of, timed, onState, poke);
-  } catch (e) {
-    if (abort.signal.aborted) throw new Error(`Kiln's release route stopped answering for ${stallMs / 1000} s`);
-    throw e;
+    const r = await loadRelease(line, ((u: RequestInfo | URL, init?: RequestInit) => get(u, { ...init, signal: abort.signal })) as typeof fetch);
+    return abort.signal.aborted ? { state: 'error', why: `the release server stopped responding after ${stallMs / 1000} seconds` } : r;
   } finally {
     clearTimeout(timer);
   }
 }
 
-async function fetchApk(of: ReleaseLine & { from?: ListedRelease }, get: typeof fetch, onState: (s: ReleaseApk) => void, poke: () => void) {
+/**
+ * The newest release's APK for `of`, its bytes checked against the release's .sha256. Throws NoRelease before the
+ * first release (or when the release has no APK for the ABI), and an Error that says what went wrong otherwise,
+ * including when Refract stays silent through every resume. `of.from`: that release, as an earlier call listed it, not
+ * the newest one now. Returns the release it took the APK from.
+ */
+export async function releaseApk(of: ReleaseLine & { from?: ListedRelease }, get: typeof fetch, onState: (s: ReleaseApk) => void, o: ReleaseFetch = {}): Promise<{ bytes: Uint8Array; ready: Extract<ReleaseApk, { state: 'ready' }>; release: ListedRelease }> {
+  const dl = { fetch: get, stallMs: o.stallMs ?? RELEASE_STALL_MS, ...(o.retries !== undefined ? { retries: o.retries } : {}), ...(o.sleep ? { sleep: o.sleep } : {}) };
   onState({ state: 'looking' });
-  const r: Release = of.from ?? await loadRelease(of.line, get);
-  if (r.state === 'error') throw new Error(`Kiln couldn't read the releases: ${r.why}`);
-  const apk = download(of.line, r, of.abi);
+  const r: Release = of.from ?? await listed(of.line, get, dl.stallMs);
+  if (r.state === 'error') throw new Error(`Couldn't check for releases: ${r.why}`);
+  const apk = download(r, of.abi);
   if (r.state !== 'out' || !apk) throw new NoRelease();
   const { tag } = r;
   const { version, name } = apk;
 
-  const sum = await get(`${apk.href}.sha256`);
-  if (!sum.ok) throw new Error(`Kiln couldn't read ${name}.sha256 from ${tag} (its release route answered ${sum.status})`);
-  const want = (await sum.text()).trim().split(/\s+/)[0]?.toLowerCase() ?? '';
-  if (!/^[0-9a-f]{64}$/.test(want)) throw new Error(`${name}.sha256 in ${tag} isn't a SHA-256`);
+  let sum: Uint8Array;
+  try {
+    sum = await downloadWhole(`${apk.href}.sha256`, dl);
+  } catch (e) {
+    throw new Error(`Couldn't verify the release checksum for ${version} (${e instanceof ProxyError ? e.message : String(e)})`);
+  }
+  const want = new TextDecoder().decode(sum).trim().split(/\s+/)[0]?.toLowerCase() ?? '';
+  if (!/^[0-9a-f]{64}$/.test(want)) throw new Error(`The release checksum for ${version} wasn't valid`);
 
   onState({ state: 'downloading', tag, version, name, got: 0 });
-  const res = await get(apk.href);
-  if (!res.ok || !res.body) throw new Error(`Kiln couldn't download ${name} from ${tag} (its release route answered ${res.status})`);
-  const bytes = await body(res, (got, size) => onState({ state: 'downloading', tag, version, name, got, size }), poke);
+  let before = 0;
+  let bytes: Uint8Array;
+  try {
+    bytes = await downloadWhole(apk.href, {
+      ...dl,
+      onProgress: (got, size) => { if (step(got, before, size)) onState({ state: 'downloading', tag, version, name, got, ...(size ? { size } : {}) }); before = got; },
+    });
+  } catch (e) {
+    throw new Error(`Couldn't download Glassworks ${version} (${e instanceof ProxyError ? e.message : String(e)})`);
+  }
   const sha256 = hex(await crypto.subtle.digest('SHA-256', bytes as Uint8Array<ArrayBuffer>));
-  if (sha256 !== want) throw new Error(`${name} isn't the file ${tag} publishes: its SHA-256 is ${sha256}, the release says ${want}. Kiln dropped it`);
+  if (sha256 !== want) throw new Error(`The downloaded file didn't match the published release, so Kiln discarded it`);
   return { bytes, ready: { state: 'ready' as const, tag, version, name, size: bytes.length, sha256 }, release: r };
 }

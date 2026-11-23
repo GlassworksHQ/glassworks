@@ -81,8 +81,8 @@ describe('the last failure', () => {
     expect(registry.lastFailure()).toBeUndefined();
     session.store.dispatch({ type: 'go', screen: 'connect' }); // Try again
     const f = registry.lastFailure()!;
-    expect(f.failure.title).toBe('It disconnected');
-    expect(failureLog(f)).toMatch(/^Kiln, Aqara S1 Plus\nStopped .+: It disconnected\.\nNothing was written\. .+\nError: transferIn: the device was disconnected\n\nTechnical log:\n10:00:00 boot saved, 32 MiB\n$/);
+    expect(f.failure.title).toBe('The panel disconnected');
+    expect(failureLog(f)).toMatch(/^Kiln, Aqara S1 Plus\nStopped .+: The panel disconnected\.\nNothing was written\. .+\nError: transferIn: the device was disconnected\n\nTechnical log:\n10:00:00 boot saved, 32 MiB\n$/);
     session.store.dispatch({ type: 'start', flow: 'install', now: 1 });
     expect(registry.lastFailure()).toBeUndefined();
   });
@@ -90,6 +90,6 @@ describe('the last failure', () => {
   it('is kept when a new session replaces one that failed', () => {
     registry.set({ base: '/aqara-s1-plus', name: 'Aqara S1 Plus', session: failing() as never });
     registry.set({ base: '/aqara-s1-plus', name: 'Aqara S1 Plus', session: { store: new Store(initial()), close: () => {} } as never });
-    expect(registry.lastFailure()?.failure.title).toBe('It disconnected');
+    expect(registry.lastFailure()?.failure.title).toBe('The panel disconnected');
   });
 });

@@ -206,7 +206,7 @@ The frames' data says it, not the workflow: each frame's `release` block in `fra
 | The Mirror frame | `frames/lululemon-mirror/v1.2.3` | none: a notice | `frames/lululemon-mirror/FRAME-CHANGELOG.md` | |
 
 Each file comes with its `.sha256`. The tags and file names are the ones the apps' update checks (`ReleaseLine`,
-`FrameOffer` in `core/.../update/`) and Kiln's release route read, so they never change. `tools/release/test`
+`FrameOffer` in `core/.../update/`), Kiln and Refract read, so they never change. `tools/release/test`
 checks the plan's names against `Releases.kt`'s, `release.yml`'s `apk_name` and Kiln's release patterns.
 
 A new frame on an existing line needs only its `release` block: a tested device names its line (`"app":
@@ -235,7 +235,8 @@ warns in the summary.
 
 Panels see a release within 24 hours. To check right away, call `homeassistant.update_entity` on the update
 entity (`update.s1_panel_app_update` on an old S1): HA sends the entity's "check" command. Kiln
-(kiln.glassworks.dev) reads the releases at run time (its release route), so a release needs no Kiln deploy.
+(kiln.glassworks.dev) reads the releases at run time (`/api/release/<line>/latest`) and downloads the APKs through Refract
+(refract.glassworks.dev), so a release needs no Kiln or Refract deploy. A new release line does: see below.
 s1.edm.sh, the first installer's address, redirects to Kiln's S1 page (`kiln/s1-redirect`).
 
 ### The plan
@@ -342,6 +343,9 @@ for it. `tools/ci/web_deploy.py` decides. Each job records its upload as a GitHu
 checked out, in the project's environment, and marks it a success once Vercel takes it. The next run diffs from
 that commit. When a newer record never reached success, the next run deploys anyway, because what's live is
 unknown. Each run's summary lists what it deployed, from which commit, and why.
+
+Refract (refract.glassworks.dev), the Cloudflare Worker Kiln downloads every APK and image through, isn't on Vercel
+and isn't in `web-deploy.yml`: it deploys by hand ([its README](../kiln/workers/refract/README.md#deploying)).
 
 Versions are `MAJOR.MINOR.PATCH`. For the app lines minor and patch are below 100, and the versionCode is
 `major*10000 + minor*100 + patch`, so `1.2.3` is 10203. Frame versions take each part up to 999. SemVer pre-release
@@ -500,9 +504,12 @@ example, gets a line in each file.
 **Versions.** As for the S1 app. Test builds of the generic app are 0.1.0 and 0.1.1, and a device on test build 0.1.1
 is offered only a higher version (and `adb install -r` refuses a lower versionCode).
 
-Kiln's release route (`kiln/apps/kiln/src/app/api/release/[frame]/route.ts`) serves each line's APKs and their
-`.sha256`. The Mirror's page and `/android`, behind `?apk=release`, install the newest release of their line
-(`generic-android-legacy-v*` and `generic-android-v*`), its arm64-v8a APK, checked against that `.sha256`.
+Refract ([`kiln/workers/refract`](../kiln/workers/refract/README.md#glassworks-own-releases)) serves each line's
+APKs and their `.sha256` to Kiln, by the line's tag pattern and file names in its `releases.json`. The Mirror's page
+and `/android`, behind `?apk=release`, install the newest release of their line (`generic-android-legacy-v*` and
+`generic-android-v*`), the APK for the device's ABI, checked against that `.sha256`. A new line, or a new file name
+on a line, is a change to the frame's `installer.json` `releases`: write Refract's `releases.json` again
+(`REFRACT_RELEASES=write npm test -w @glassworks/kiln-app -- refract-releases`) and deploy Refract after the merge.
 
 ## Frame releases
 
@@ -518,8 +525,8 @@ compares it with the frame's newest release ([esphome.md](esphome.md#frame-updat
 | lululemon Mirror | `frames/lululemon-mirror/v1.2.3` | A notice: notes, no files | Kiln, in `build.prop`, when it flashes the Mirror (`MIRROR_FRAME` in `frames/lululemon-mirror/installer/src/image.ts`) |
 
 The tag is `frames/<frame id>/v<version>`, the frame's folder in this repo, like a library's `libs/<name>/v<version>`.
-Nothing else matches it: the S1 app's `v*` and `aqara-s1-plus-v*`, the generic app's `generic-android-*`, Kiln's
-release route and `stage-assets.mjs` all skip it, and `FrameUpdateTest` checks that the app's own update check does.
+Nothing else matches it: the S1 app's `v*` and `aqara-s1-plus-v*`, the generic app's `generic-android-*`, Refract's
+release lines and `stage-assets.mjs` all skip it, and `FrameUpdateTest` checks that the app's own update check does.
 
 - **Published with `--latest=false`**, like every release that isn't the S1 app's: panels on 0.4.3 read only
   `releases/latest`.
@@ -692,8 +699,7 @@ pairing key, options). See [install.md](../frames/aqara-s1-plus/docs/install.md#
 ## Libraries
 
 The libraries in `libs/` go to Maven Central as `dev.glassworks:<name>` (#153): `esphome-api` (a jar),
-`esphome-api-android`, `improv`, `sendspin` and `voice` (AARs). `sendspin` and `voice` (#152) are set up
-but have no release yet. Each has its own semver version, in `version=` in
+`esphome-api-android`, `improv`, `sendspin` and `voice` (AARs). Each has its own semver version, in `version=` in
 `libs/<name>/gradle.properties`, and its own `libs/<name>/CHANGELOG.md`, apart from the app's. Each
 release ships the jar or AAR, a sources jar, a KDoc jar (Dokka), the POM (MIT, the GlassworksHQ org as
 developer) and a `.asc` signature for each. The licence is in the jar as `META-INF/LICENSE`. Their

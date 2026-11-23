@@ -5,7 +5,7 @@ What changed in each release of `dev.glassworks:voice` on Maven Central. Version
 cut from `libs/voice/v<version>` tags ([docs/releasing.md](../../docs/releasing.md#libraries)), which
 publish the matching section below as the release notes.
 
-## [Unreleased]
+## [0.1.0] - 2026-11-22
 
 ### Added
 - **First release on Maven Central.** An on-device wake word (microWakeWord, with openWakeWord models as

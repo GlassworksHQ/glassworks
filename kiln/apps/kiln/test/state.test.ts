@@ -64,12 +64,12 @@ describe('wizard state', () => {
     expect(milestones(s, 'S1 Plus')).toEqual([{ text: 'Found your S1 Plus', done: false }]);
     s = reduce(s, progress(0.3, 'backup'));
     expect(milestones(s, 'S1 Plus').map((m) => `${m.done ? '✓' : '→'} ${m.text}`)).toEqual([
-      '✓ Found your S1 Plus', '✓ Started the installer in its memory', '→ Backed up and checked',
+      '✓ Found your S1 Plus', '✓ Started the installer in memory', '→ Backed up and verified the copy',
     ]);
     s = reduce(s, progress(0.7, 'flash'));
-    expect(milestones(s, 'S1 Plus').at(-1)).toEqual({ text: 'Writing the new software', done: false });
+    expect(milestones(s, 'S1 Plus').at(-1)).toEqual({ text: 'Writing and verifying the new software', done: false });
     s = reduce(s, progress(0.98, 'verify'));
-    expect(milestones(s, 'S1 Plus').slice(-2)).toEqual([{ text: 'Writing the new software', done: true }, { text: 'Restarting it', done: false }]);
+    expect(milestones(s, 'S1 Plus').slice(-2)).toEqual([{ text: 'Writing and verifying the new software', done: true }, { text: 'Restarting the panel', done: false }]);
   });
 
   it('estimates the time left only once there is enough to go on', () => {

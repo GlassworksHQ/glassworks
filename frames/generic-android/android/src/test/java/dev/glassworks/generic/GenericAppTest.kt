@@ -410,7 +410,7 @@ class GenericAppTest {
         assertTrue(diagnostics, diagnostics.lineSequence().first().startsWith("Version: Glassworks 1.0.0 "))
         assertFalse("no root side here", "Root side" in diagnostics)
         val status = manage(runtime()).status()
-        assertEquals("MPL-2.0 and MIT (Open source licences has each)", status.about.toMap()["Licence"])
+        assertEquals("MPL-2.0 and MIT (see Open source licenses)", status.about.toMap()["License"])
         assertTrue("no pane links of the S1's", status.panes.all { it.links.isEmpty() })
     }
 }

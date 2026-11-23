@@ -46,7 +46,7 @@ function Connect({ f, s }: P) {
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">{`Keep ${d.the} in Home Assistant`}</h2>
-      <p className="lede">So Home Assistant keeps the same device after the install.</p>
+      <p className="lede">Kiln can read your existing connection key first so Home Assistant recognizes {d.the} as the same device after reinstalling.</p>
       {reading ? (
         <ol className="join" aria-live="polite">
           {READ_ROWS.map((r, i) => <li key={r} className={i < at! ? 'done' : i === at ? 'cur' : ''}>{r}</li>)}
@@ -60,7 +60,7 @@ function Connect({ f, s }: P) {
       {s.connecting && <p className="status work" role="status">{`${cap(pickInList(d))}…`}</p>}
       {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
       <div className="foot">
-        <span className="links"><button type="button" className="link" onClick={() => f.skipKeep()}>It doesn&apos;t run Glassworks: fastboot by hand</button></span>
+        <span className="links"><button type="button" className="link" onClick={() => f.skipKeep()}>First-time install? Enter fastboot manually</button></span>
         <button type="button" className="btn ember" disabled={reading || s.connecting} onClick={() => void f.readKey()}>{reading ? 'Reading…' : 'Connect'}</button>
       </div>
     </section>
@@ -86,7 +86,7 @@ function Restarted({ f, s }: P) {
       {s.connecting && <p className="status work" role="status">{`${cap(pickInList(d))}…`}</p>}
       {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
       <div className="foot">
-        <span className="links"><button type="button" className="link" onClick={() => f.skipKeep()}>Still on Glassworks? Fastboot by hand</button></span>
+        <span className="links"><button type="button" className="link" onClick={() => f.skipKeep()}>Still showing Glassworks? Enter fastboot manually</button></span>
         <button type="button" className="btn ember" disabled={s.connecting} onClick={() => void f.connectFastboot()}>Connect</button>
       </div>
     </section>
@@ -100,20 +100,20 @@ function Unreachable({ f, s }: P) {
   const old = k.why === 'old-app';
   return (
     <section className="card" aria-labelledby="h">
-      <h2 id="h">{old ? 'This Glassworks can’t hand its key over' : `Kiln can’t reach Glassworks on this ${d.short}`}</h2>
-      <p className="lede">You can still reflash it. Home Assistant then asks once to keep the device.</p>
+      <h2 id="h">{old ? 'This version of Glassworks can\'t transfer its key' : `Kiln can't reach Glassworks on this ${d.short}`}</h2>
+      <p className="lede">You can still reinstall cleanly — Home Assistant will just ask you to confirm the device once afterward.</p>
       <p className="small">
         {old
-          ? <>Glassworks {k.app} is too old to hand it over.</>
-          : <>Only the browser that last installed Glassworks gets in, once Glassworks has started.</>}
+          ? <>Glassworks {k.app} predates automatic key transfer.</>
+          : <>Once Glassworks is running, only the browser that installed it can connect over USB.</>}
       </p>
       <HaAsksOnce d={d} />
       {s.connectError && <p className="status err" role="alert">{s.connectError}</p>}
       <div className="foot">
         <span className="links">{old
-          ? <button type="button" className="link" onClick={() => f.skipKeep()}>Fastboot by hand</button>
+          ? <button type="button" className="link" onClick={() => f.skipKeep()}>Enter fastboot manually</button>
           : <button type="button" className="link" onClick={() => f.toKeep()}>Try again</button>}</span>
-        <button type="button" className="btn ember" disabled={s.connecting} onClick={() => (old ? void f.restartOld() : f.skipKeep())}>{old ? 'Restart into fastboot' : 'Reflash anyway'}</button>
+        <button type="button" className="btn ember" disabled={s.connecting} onClick={() => (old ? void f.restartOld() : f.skipKeep())}>{old ? 'Restart into fastboot' : 'Continue with install'}</button>
       </div>
     </section>
   );
@@ -130,9 +130,9 @@ export function ImageKeep(p: P) {
 export function KeyOutcome({ k, d }: { k?: KeyStep; d: DeviceFrame }) {
   if (!k || k.state === 'reading' || k.state === 'held') return null;
   const [word, tone, line] =
-    k.state === 'handed' ? ['Same device', 'y', 'Glassworks has Home Assistant’s key back, so it stays the same device.']
+    k.state === 'handed' ? ['Same device', 'y', 'Glassworks restored your Home Assistant connection key, so it stays the same device.']
     : k.state === 'none' ? ['Not added yet', 'n', 'Add it in Settings → Devices & services, under Discovered.']
-    : ['Asks once', 'w', k.state === 'refused' ? 'Glassworks didn’t take the key back.' : 'Kiln couldn’t read the key before the install.'];
+    : ['Confirm once', 'w', k.state === 'refused' ? 'Glassworks couldn\'t restore the saved connection key.' : 'Kiln couldn\'t read the existing connection key before reinstalling.'];
   return (
     <>
       <div className="su" role="group" aria-label="Home Assistant">

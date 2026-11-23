@@ -72,7 +72,7 @@ class WifiStepTest {
         val l = WifiStep.improv(on.copy(state = ImprovState.AUTHORIZED, authLeftMs = 299_001), Input.NONE)
         assertEquals(Phase.AUTHORIZED, l.phase)
         assertEquals("Bluetooth setup · open for 5:00", l.label)
-        assertEquals("Send the Wi-Fi from a phone.", l.title)
+        assertEquals("Send Wi-Fi from a phone", l.title)
         assertEquals("Open Home Assistant or improv-wifi.com on your phone to send the Wi-Fi.", l.detail)
         assertTrue(l.actions.isEmpty())
         val failed = WifiStep.improv(on.copy(state = ImprovState.AUTHORIZED, ssid = "Home", failure = "wrong password"), Input.NONE)

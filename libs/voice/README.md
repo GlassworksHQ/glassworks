@@ -90,8 +90,7 @@ how the wake word was measured, is in [docs/esphome.md](../../docs/esphome.md) a
 
 ## Gradle
 
-On Maven Central as `dev.glassworks:voice` ([changelog](CHANGELOG.md)). The first release, 0.1.0, is
-not out yet: until it is, use the module from this repository (`implementation(project(":voice"))`).
+On Maven Central as `dev.glassworks:voice` ([changelog](CHANGELOG.md)).
 
 ```kotlin
 repositories { mavenCentral() }

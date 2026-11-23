@@ -360,7 +360,7 @@ class RadioDefinitionTest {
         // "The kiosk service isn't running yet" after a dataset was stored.
         val d = definition(controller())
         assertNull(d.setDataset(DATASET))
-        assertEquals("The kiosk service isn't running yet; try again in a moment.", definition().setDataset(DATASET))
+        assertEquals("Glassworks is still starting up. Try again in a moment.", definition().setDataset(DATASET))
         assertTrue(definition(controller()).setDataset("not hex")!!.isNotEmpty())
     }
 

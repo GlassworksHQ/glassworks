@@ -25,7 +25,8 @@
 #            release (docs/releasing.md "npm packages"): every published package built and packed, installed
 #            into a fresh project, type-checked from there and imported in Node
 #   refract  Refract, Kiln's download Worker (kiln/workers/refract, its own lockfile, not a root
-#            workspace): typecheck and its tests in workerd
+#            workspace): typecheck and its tests in workerd. Its releases.json is kept in step with the
+#            frames' installer.json by Kiln's own tests (web: refract-releases.test.ts)
 #   scripts  frames/aqara-s1-plus/tools/install.sh's off-device tests, the perf test's rubric, report and grade
 #            (tools/perf), the docs' relative links, the libraries' parity tables, and that every glassworks.dev brand image the
 #            Markdown uses is live (a 404 fails; an unreachable site only warns)

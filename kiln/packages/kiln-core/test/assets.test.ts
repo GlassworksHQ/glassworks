@@ -108,3 +108,22 @@ describe('Assets', () => {
     expect(await new Assets('/a/', f, { stallMs: 50 }).get('blob')).toEqual(BLOB);
   });
 });
+
+describe('Assets and a busy server', () => {
+  it("waits out a 429's Retry-After, then downloads (Refract's rate limit)", async () => {
+    let tries = 0;
+    const waits: number[] = [];
+    const { f } = fakeFetch(async () => (++tries < 3 ? new Response('busy', { status: 429, headers: { 'retry-after': '2' } }) : new Response(body([BLOB], false))));
+    expect(await new Assets('/a/', f, { stallMs: 50, sleep: async (ms) => { waits.push(ms); } }).get('blob')).toEqual(BLOB);
+    expect(waits).toEqual([2000, 2000]);
+  });
+
+  it('fails, for Try again, when it stays busy or asks for more than a minute', async () => {
+    const { f } = fakeFetch(async () => new Response('busy', { status: 429, headers: { 'retry-after': '1' } }));
+    await expect(new Assets('/a/', f, { stallMs: 50, sleep: async () => {} }).get('blob')).rejects.toThrow(/the server is busy/);
+    const { f: long } = fakeFetch(async () => new Response('busy', { status: 503, headers: { 'retry-after': '3600' } }));
+    const waits: number[] = [];
+    await expect(new Assets('/a/', long, { stallMs: 50, sleep: async (ms) => { waits.push(ms); } }).get('blob')).rejects.toThrow(/the server is busy/);
+    expect(waits).toEqual([]);
+  });
+});

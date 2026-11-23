@@ -28,7 +28,7 @@ const WHY: Record<string, string> = {
   'rate-limited': 'Kiln has had a few reports from your network this hour. Try again later, or send it on GitHub.',
   'too-fast': 'That was quick. Wait a few seconds, then send it again.',
   expired: 'This form was open a long time. Send it again in a few seconds.',
-  github: 'GitHub didn\'t take it just now.',
+  github: 'GitHub couldn\'t accept the report just now.',
   'not-configured': 'Kiln can\'t send reports from here.',
 };
 
@@ -59,8 +59,8 @@ export function routeTransportFor(ms = REQUEST_MS): ReportTransport {
       } catch { throw new SendError('Kiln couldn\'t reach its server.'); }
       const { j, status, ok } = got;
       if (ok && typeof j.url === 'string' && typeof j.number === 'number') return { url: j.url, number: j.number };
-      if (status === 422 && j.problems) throw new SendError('Something in the report needs a change.', j.problems);
-      throw new SendError(WHY[typeof j.error === 'string' ? j.error : ''] ?? `Kiln's server answered ${status}.`);
+      if (status === 422 && j.problems) throw new SendError('A few fields need a quick look before sending.', j.problems);
+      throw new SendError(WHY[typeof j.error === 'string' ? j.error : ''] ?? 'Kiln couldn\'t send the report right now.');
     },
   };
 }
@@ -163,8 +163,8 @@ export function ReportSheet({ prefill, transport = routeTransport, start = 'form
         <div className="report-foot">
           {off
             ? <a className="btn ember" href={github} target="_blank" rel="noreferrer">Open it on GitHub</a>
-            : <button type="button" className="btn ember" disabled={stage === 'sending' || !access} onClick={() => void go()}>{stage === 'sending' ? 'Sending…' : 'Send it'}</button>}
-          <button type="button" className="link" disabled={stage === 'sending'} onClick={() => setStage('form')}>Change something</button>
+            : <button type="button" className="btn ember" disabled={stage === 'sending' || !access} onClick={() => void go()}>{stage === 'sending' ? 'Sending…' : 'Send report'}</button>}
+          <button type="button" className="link" disabled={stage === 'sending'} onClick={() => setStage('form')}>Edit report</button>
           {!off && <a className="link" href={github} target="_blank" rel="noreferrer">Open it on GitHub instead</a>}
         </div>
       </>
@@ -180,17 +180,17 @@ export function ReportSheet({ prefill, transport = routeTransport, start = 'form
           <div className="fields">
             <Field label="Device model" error={shown.model}>{(id) => <input id={id} className="input" value={f.model} onChange={set('model')} maxLength={100} autoComplete="off" />}</Field>
             <Field label="Android version" error={shown.android}>{(id) => <input id={id} className="input" value={f.android} onChange={set('android')} maxLength={40} autoComplete="off" />}</Field>
-            <Field label="ABI" error={shown.abi}>{(id) => <input id={id} className="input" value={f.abi} onChange={set('abi')} maxLength={80} autoComplete="off" />}</Field>
+            <Field label="Processor architecture (ABI)" error={shown.abi}>{(id) => <input id={id} className="input" value={f.abi} onChange={set('abi')} maxLength={80} autoComplete="off" />}</Field>
             <Field label="Glassworks version" error={shown.appVersion}>{(id) => <input id={id} className="input" value={f.appVersion} onChange={set('appVersion')} maxLength={40} placeholder="0.2.0" autoComplete="off" />}</Field>
             <Field label="How you installed it" error={shown.flow}>{(id) => (
               <select id={id} className="select" value={f.flow} onChange={set('flow')}>
-                <option value="">Pick one</option>
+                <option value="">Choose one</option>
                 {Object.entries(FLOWS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
             )}</Field>
-            <Field label="Kiln got to" error={shown.step}>{(id) => (
+            <Field label="How far Kiln got" error={shown.step}>{(id) => (
               <select id={id} className="select" value={f.step} onChange={set('step')}>
-                <option value="">Don&apos;t say</option>
+                <option value="">Skip</option>
                 {Object.entries(STEPS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
               </select>
             )}</Field>

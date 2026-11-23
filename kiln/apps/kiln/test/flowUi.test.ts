@@ -47,7 +47,7 @@ describe('AskBridge', () => {
       return 'fb';
     }, new AbortController().signal);
     await bridge.click();
-    expect(st.get().ask).toEqual({ kind: 'fastboot', busy: false, error: 'Nothing was picked. Click the button again.' });
+    expect(st.get().ask).toEqual({ kind: 'fastboot', busy: false, error: 'No device was selected. Click the button again to open the list.' });
     await bridge.click();
     await expect(asked).resolves.toBe('fb');
     expect(st.get().ask).toBeUndefined();
@@ -156,7 +156,7 @@ describe('the real InstallFlow through the wizard', () => {
     await s.asks.click();
     await done;
     expect(s.store.state.screen).toBe('error');
-    expect(s.store.state.failure).toMatchObject({ title: 'This isn\'t a panel Kiln knows', wrote: false, at: 2 });
+    expect(s.store.state.failure).toMatchObject({ title: 'This isn\'t a panel Kiln recognizes', wrote: false, at: 2 });
     expect(s.store.state.failure!.body).toMatch(/^Nothing was written\./);
     expect(uboot.flashed).toEqual([]);
     expect(saved).toEqual([]);

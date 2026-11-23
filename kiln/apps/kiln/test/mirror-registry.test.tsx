@@ -81,9 +81,9 @@ describe('the Mirror in Kiln\'s registry', () => {
     const { done } = await midFlash();
     render(<Picker />);
     expect(screen.getByText('Kiln is still working on your lululemon Studio Mirror.')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Back to it' }).getAttribute('href')).toBe(`${MIRROR_BASE}?apk=local`);
+    expect(screen.getByRole('link', { name: 'Return to install' }).getAttribute('href')).toBe(`${MIRROR_BASE}?apk=local`);
     await done(); // flashed: the Mirror now waits for its first boot over adb, still a way back
-    expect(screen.getByRole('link', { name: 'Back to it' }).getAttribute('href')).toBe(`${MIRROR_BASE}?apk=local`);
+    expect(screen.getByRole('link', { name: 'Return to install' }).getAttribute('href')).toBe(`${MIRROR_BASE}?apk=local`);
   });
 
   it('an S1 session and the Mirror\'s don\'t close each other, and either one writing guards the page', async () => {
@@ -100,19 +100,19 @@ describe('the Mirror in Kiln\'s registry', () => {
   it('the page keeps its sessions across a trip to the picker', async () => {
     history.replaceState(null, '', `${MIRROR_BASE}?apk=local`);
     const first = render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
-    await screen.findByText('What goes on the Mirror?');
+    await screen.findByText('Choose what to install on the Mirror');
     const kept = registry.activity(MIRROR_BASE) as DeviceActivity;
     expect(kept).toBeInstanceOf(DeviceActivity);
     first.unmount(); // to the picker and back
-    history.replaceState(null, '', MIRROR_BASE); // "Back to it" or Continue, without the switch
+    history.replaceState(null, '', MIRROR_BASE); // "Return to install" or Continue, without the switch
     render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
-    await screen.findByText('What goes on the Mirror?');
+    await screen.findByText('Choose what to install on the Mirror');
     expect(registry.activity(MIRROR_BASE)).toBe(kept);
   });
 
   it('the page keeps its session in the registry with or without ?apk=…: the Mirror is open (beta)', async () => {
     render(<DevicePage frame={mirrorFrame} demo={mirrorEntry} base={MIRROR_BASE} />);
-    await screen.findByText('What goes on the Mirror?');
+    await screen.findByText('Choose what to install on the Mirror');
     expect(registry.activities()).toHaveLength(1);
   });
 });

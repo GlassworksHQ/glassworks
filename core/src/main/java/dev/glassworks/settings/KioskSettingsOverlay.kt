@@ -1117,7 +1117,7 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
             password.hint = if (set) SettingsChange.NEW_PASSWORD else "Password"
             fields.addView(passwordRow, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(12f) })
             field.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-            field.hint = "User name"
+            field.hint = "Username"
             field.setText(i.user().orEmpty())
             onSave = { commit(false, after) { done -> SettingsChange.signIn(i, field.text?.toString().orEmpty(), password.text?.toString().orEmpty(), done) } }
             if (set) {

@@ -81,7 +81,7 @@ class PanesStepTest {
     fun aCardThatDoesntAnswerIsNamed() {
         val stuck = CountDownLatch(1)
         val s = PanesStep(listOf(SetupPane(PaneChoice("Music", "A Sendspin speaker", on = { true }, apply = { stuck.await(10, TimeUnit.SECONDS); null }), emptyList(), "sendspin")))
-        assertEquals("The Music didn't answer.", s.set(setOf("sendspin"), budgetMs = 200))
+        assertEquals("Music didn't respond in time.", s.set(setOf("sendspin"), budgetMs = 200))
         assertFalse(s.chosen)
         stuck.countDown()
     }
@@ -91,7 +91,7 @@ class PanesStepTest {
         // CodeRabbit on #699: a retry must not race a timed-out card's late write.
         val stuck = CountDownLatch(1)
         val s = PanesStep(listOf(SetupPane(PaneChoice("Music", "A Sendspin speaker", on = { music }, apply = { v -> stuck.await(10, TimeUnit.SECONDS); music = v; null }), emptyList(), "sendspin")))
-        assertEquals("The Music didn't answer.", s.set(setOf("sendspin"), budgetMs = 100))
+        assertEquals("Music didn't respond in time.", s.set(setOf("sendspin"), budgetMs = 100))
         assertEquals(PanesStep.BUSY, s.set(emptySet()))
         stuck.countDown()
         val until = System.currentTimeMillis() + 5_000

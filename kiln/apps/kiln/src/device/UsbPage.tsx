@@ -45,7 +45,7 @@ const useDevice = (): UsbFrame => useContext(UsbFrameContext)!;
 const DEMO_ON = process.env.NODE_ENV === 'development' || process.env.NEXT_PUBLIC_KILN_DEMO === '1';
 const SITE = 'https://www.glassworks.dev/frames';
 
-/** Kiln's release route, from the page (a bare `fetch` held by an object is an illegal invocation). */
+/** The release list and Refract, from the page (a bare `fetch` held by an object is an illegal invocation). */
 const releaseRoute = (...a: Parameters<typeof fetch>) => fetch(...a);
 
 function realSession(dev: UsbFrame, base: string, on: boolean, from: ApkFrom = 'local', handOver?: (p: Device, installed: UsbInstalled) => void): UsbSession {
@@ -140,7 +140,7 @@ function ApkField({ s, session }: { s: UsbState; session: UsbSession }) {
   return (
     <div className="well">
       <div className="grow">
-        <span className="row"><span className="pill soon">Test only</span><span className="small">Pick a test build's APK.</span></span>
+        <span className="row"><span className="pill soon">Test only</span><span className="small">Choose a test APK file.</span></span>
         <label className="field"><span>APK file</span>
           <input className="input" type="file" accept=".apk,application/vnd.android.package-archive"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) void session.pickApk(f.name, f.arrayBuffer().then((b) => new Uint8Array(b))); }} />
@@ -155,7 +155,7 @@ function ApkField({ s, session }: { s: UsbState; session: UsbSession }) {
   );
 }
 
-const WHAT_KILN_DOES = 'Installs the app, grants what it can, sets it as the home screen. Your apps and data stay. Undo removes it.';
+const WHAT_KILN_DOES = 'Kiln installs Glassworks, grants the permissions it needs, and sets it as the home screen. Your existing apps and data stay untouched, and Undo removes Glassworks anytime.';
 
 function Find({ s, session }: { s: UsbState; session: UsbSession }) {
   const dev = useDevice();
@@ -163,12 +163,12 @@ function Find({ s, session }: { s: UsbState; session: UsbSession }) {
     <section className="card" aria-labelledby="h">
       <h2 id="h">{s.flow === 'undo' ? `Plug in ${dev.the} to undo` : `Plug in ${dev.the}`}</h2>
       <p className="lede">{s.flow === 'undo'
-        ? `Kiln takes Glassworks off ${dev.the} over USB, as it put it on: turn on USB debugging, then tap Allow. Kiln reads ${dev.the} first; nothing changes until then.`
-        : `Use its USB cable, with USB debugging still off. Kiln reads what ${dev.the} is; nothing on it changes.`}</p>
+        ? `Kiln removes Glassworks over USB: turn on USB debugging, then tap Allow. Kiln checks ${dev.the} first, so nothing changes until then.`
+        : `Plug it in with its USB cable (USB debugging can stay off for now). Kiln only identifies ${dev.the} here — nothing on it changes.`}</p>
       <ApkField s={s} session={session} />
-      {s.flow === 'install' && <p className="small">{s.release ? dev.needs.release : dev.needs.local} or newer, over USB. {WHAT_KILN_DOES}</p>}
-      {s.changed && <p className="small">{`An earlier try already changed ${dev.the}.`}</p>}
-      {s.finding && <p className="status work" role="status">{`Pick ${dev.the} in the browser's list…`}</p>}
+      {s.flow === 'install' && <p className="small">Needs {s.release ? dev.needs.release : dev.needs.local} or newer. {WHAT_KILN_DOES}</p>}
+      {s.changed && <p className="small">{`An earlier attempt already changed ${dev.the}.`}</p>}
+      {s.finding && <p className="status work" role="status">{`Pick ${dev.the} in the browser list…`}</p>}
       {s.findError && <p className="status err" role="alert">{s.findError}</p>}
       <div className="foot">
         <span className="links">
@@ -178,7 +178,7 @@ function Find({ s, session }: { s: UsbState; session: UsbSession }) {
             ? <button type="button" className="link" onClick={() => session.setFlow('undo')}>Undo an install</button>
             : <button type="button" className="link" onClick={() => session.setFlow('install')}>Install instead</button>}
         </span>
-        <button type="button" className="btn ember" disabled={s.finding} onClick={() => void session.find()}>Find it</button>
+        <button type="button" className="btn ember" disabled={s.finding} onClick={() => void session.find()}>Find device</button>
       </div>
     </section>
   );
@@ -189,12 +189,12 @@ function Named({ s, session }: { s: UsbState; session: UsbSession }) {
   const i = s.identified!;
   const f = frameOf(i);
   const who = i.model?.name ?? i.brand?.name ?? deviceName(dev, s);
-  const lede = f ? `${f.brand ?? i.brand?.name} · a ${KIND_TEXT[f.kind].toLowerCase()}.` : i.model ? `${i.brand?.name} · not tested yet.` : `Kiln knows the brand, not the model.`;
+  const lede = f ? `${f.brand ?? i.brand?.name} · ${KIND_TEXT[f.kind].toLowerCase()}.` : i.model ? `${i.brand?.name} · not tested yet.` : 'Kiln recognized the brand, though not the exact model.';
   const blocked = session.blocked();
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">This looks like a {who}</h2>
-      <p className="lede">{lede} Next: turn on USB debugging, then Kiln {s.flow === 'undo' ? 'removes' : 'installs'} Glassworks.</p>
+      <p className="lede">{lede} Next, we&apos;ll walk you through turning on USB debugging so Kiln can {s.flow === 'undo' ? 'remove' : 'install'} Glassworks.</p>
       <div className={f ? 'split' : undefined}>
         {f && (
           <div className="fc">
@@ -222,7 +222,7 @@ function Brand({ s, session }: { s: UsbState; session: UsbSession }) {
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">Which brand is it?</h2>
-      <p className="lede">{s.identified?.why ?? 'Kiln shows its steps to turn on USB debugging.'}</p>
+      <p className="lede">{s.identified?.why ?? 'Kiln will show the exact steps to turn on USB debugging for your brand.'}</p>
       <RadioGroup.Root className="brands" value={s.brand ?? ''} onValueChange={(v) => session.pickBrand(v)} aria-labelledby="h">
         {dev.brands.map((b) => (
           <RadioGroup.Item key={b.id} value={b.id} className="brand-pick">{b.name}</RadioGroup.Item>
@@ -258,7 +258,7 @@ function Debug({ s, session }: { s: UsbState; session: UsbSession }) {
   return (
     <section className="card" aria-labelledby="h">
       <h2 id="h">Turn on USB debugging</h2>
-      <p className="lede">{`On ${dev.the}. Only you can do this; Kiln can't.`}</p>
+      <p className="lede">{`Follow these steps on ${dev.the}. Android requires you to turn this on by hand for security.`}</p>
       <ol className="num">
         <li><b>Open</b> <Path path={st.unlock.path} />
           <small>Tap <b>{st.unlock.tap}</b> seven times, until it says you&apos;re a developer.{st.unlock.note && <> {st.unlock.note}</>}</small>
@@ -278,7 +278,7 @@ function Debug({ s, session }: { s: UsbState; session: UsbSession }) {
           Steps from {st.sources.map((src, i) => <span key={src.href}>{i > 0 && ' and '}<a className="link" href={src.href} target="_blank" rel="noreferrer">{src.title.split(':')[0]}</a></span>)}
           {' · '}<button type="button" className="link" onClick={() => session.brands()}>Different on yours?</button>
         </span>
-        <button type="button" className="btn ember" onClick={() => void session.connect()}>It&apos;s on</button>
+        <button type="button" className="btn ember" onClick={() => void session.connect()}>USB debugging is on</button>
       </div>
     </section>
   );
@@ -307,7 +307,7 @@ function Allow({ s, session }: { s: UsbState; session: UsbSession }) {
             <li>{`Pick ${dev.the} in the browser's list first. It shows once USB debugging is on.`}</li>
             <li>Unplug the cable and plug it in again, then click <b>Try again</b>.</li>
             <li>Turn USB debugging off and on again.</li>
-            <li>{`Another adb on this computer may hold ${dev.the}: run `}<code>adb kill-server</code>.</li>
+            <li>{`Another tool on this computer may be using ${dev.the}: close other Kiln tabs or Android tools, or run `}<code>adb kill-server</code>.</li>
           </ul>
         </Collapsible.Content>
         <div className="foot">
@@ -323,12 +323,12 @@ function Allow({ s, session }: { s: UsbState; session: UsbSession }) {
 
 type RowId = 'read' | 'apk' | 'grant' | 'start' | 'home' | 'handoff';
 const ROWS: { id: RowId; doing: string; done: string }[] = [
-  { id: 'read', doing: 'Reading', done: '' },
+  { id: 'read', doing: 'Reading device info', done: '' },
   { id: 'apk', doing: 'Installing Glassworks', done: 'Glassworks installed' },
-  { id: 'grant', doing: 'Giving permissions', done: 'Permissions given' },
+  { id: 'grant', doing: 'Granting permissions', done: 'Permissions granted' },
   { id: 'start', doing: 'Starting Glassworks', done: 'Glassworks started' },
-  { id: 'home', doing: 'Setting the home screen', done: 'It is the home screen' },
-  { id: 'handoff', doing: 'Handing over to setup', done: 'Handed over' },
+  { id: 'home', doing: 'Setting as home screen', done: 'Set as home screen' },
+  { id: 'handoff', doing: 'Preparing setup', done: 'Ready for setup' },
 ];
 const rowOf = (p: UsbPhase): RowId => (p.step === 'updates' || p.step === 'granted' ? 'grant' : p.step);
 
@@ -342,12 +342,12 @@ function GrantList({ grants, updates }: { grants: UsbGrant[]; updates?: UsbSilen
     <div className="grants">
       {shown.map((g) => (
         <div key={g.what}>{grantText(dev, g.what).name}
-          {g.result === 'granted' ? <i className="y">On</i> : g.result === 'refused' ? <i className="w" title={g.detail}>{`This ${dev.short} said no`}</i> : <i className="n">Not asked by this build</i>}
+          {g.result === 'granted' ? <i className="y">On</i> : g.result === 'refused' ? <i className="w" title={g.detail}>Not allowed</i> : <i className="n">Not requested</i>}
         </div>
       ))}
       {updates && updates.state !== 'not-asked' && (
         <div>Updates without a tap
-          {updates.state === 'allowed' ? <i className="y">On</i> : updates.state === 'refused' ? <i className="w" title={updates.detail}>{`This ${dev.short} said no`}</i> : <i className="n">{updates.state === 'old-android' ? 'Needs Android 12' : 'Off'}</i>}
+          {updates.state === 'allowed' ? <i className="y">On</i> : updates.state === 'refused' ? <i className="w" title={updates.detail}>Not allowed</i> : <i className="n">{updates.state === 'old-android' ? 'Needs Android 12' : 'Off'}</i>}
         </div>
       )}
     </div>
@@ -362,7 +362,7 @@ function Refusals({ grants, updates }: { grants: UsbGrant[]; updates?: UsbSilent
   if (!lines.length) return null;
   const what = grants.filter((g) => g.result === 'refused').map((g) => grantText(dev, g.what).name.toLowerCase());
   if (updates?.state === 'refused') what.push('silent updates');
-  return <div className="warnbox" role="status">{`This ${dev.short}'s software refused `}{what.join(', ')}. Glassworks works without it; {lines.join(', and ')}.</div>;
+  return <div className="warnbox" role="status">{`Android on this ${dev.short} didn't allow `}{what.join(', ')}. Glassworks still works without it — {lines.join(', and ')}.</div>;
 }
 
 function deviceLine(dev: UsbFrame, s: UsbState): string {
@@ -378,7 +378,7 @@ function Working({ s }: { s: UsbState }) {
     return (
       <section className="card" aria-labelledby="h">
         <h2 id="h" className="huge">Keep it plugged in</h2>
-        <p className="lede">Kiln takes back Glassworks&apos; device admin, then removes it.</p>
+        <p className="lede">Kiln removes Glassworks&apos; screen-lock permission and uninstalls the app.</p>
         <div className="bar wait"><i /></div>
         <div className="foot"><span className="small">{`Nothing else on ${dev.the} changes.`}</span><Log s={s} /></div>
       </section>
@@ -439,8 +439,8 @@ function Done({ s, session }: { s: UsbState; session: UsbSession }) {
       <span className="okmark" aria-hidden="true">✓</span>
       <h2 id="h">You're all set</h2>
       <p className="lede">
-        {home && f ? `Glassworks is the ${name}'s home screen.` : `Glassworks is installed on your ${name}.`}
-        {!home && ` Kiln couldn't confirm the home screen. In ${dev.the}'s Settings, find Default apps, then Home app, and choose Glassworks.`}
+        {home && f ? `Glassworks is now the home screen on your ${name}.` : `Glassworks is installed on your ${name}.`}
+        {!home && ` Kiln couldn't confirm the home screen automatically. In Settings on ${dev.the}, open Default apps → Home app, and choose Glassworks.`}
       </p>
       {f ? (
         <div className="fc">
@@ -475,10 +475,11 @@ function Done({ s, session }: { s: UsbState; session: UsbSession }) {
 
 function Failed({ s, session }: { s: UsbState; session: UsbSession }) {
   if (s.own) {
+    const article = /^[aeiou]/i.test(s.own.name) ? 'an' : 'a';
     return (
       <section className="card err" aria-labelledby="h">
-        <h2 id="h">This is an {s.own.name}</h2>
-        <p className="lede">It has its own install in Kiln. Glassworks for Android would take its app&apos;s place as the home screen, so Kiln stopped before changing anything.</p>
+        <h2 id="h">This is {article} {s.own.name}</h2>
+        <p className="lede">It has its own dedicated installer in Kiln. Installing Glassworks for Android here would replace its built-in app, so Kiln stopped before changing anything.</p>
         <div className="foot">
           <Log s={s} />
           <Link className="btn ember" href={s.own.route}>Go to the {s.own.name}</Link>
@@ -494,9 +495,11 @@ function Stopped({ s, session }: { s: UsbState; session: UsbSession }) {
   const dev = useDevice();
   const [repick, setRepick] = useState(false);
   const blocked = s.flow === 'install' ? session.blocked() : undefined;
+  const untouched = /Nothing was changed\.$/.test(s.error ?? '');
   return (
     <section className="card err" aria-labelledby="h">
-      <h2 id="h">{s.flow === 'undo' ? 'Undo stopped' : /Nothing was changed\.$/.test(s.error ?? '') ? `Kiln can't install on this ${dev.short}` : 'The install stopped'}</h2>
+      <h2 id="h">{s.flow === 'undo' ? 'Undo didn\'t finish' : untouched ? `Kiln can't install on this ${dev.short}` : 'The install didn\'t finish'}</h2>
+      {!untouched && <p className="lede">Check the cable and device, then click Try again. Details are below if you need them.</p>}
       <pre className="raw">{s.error}</pre>
       {repick && <ApkField s={s} session={session} />}
       {repick && blocked && s.apk && <p className="status err" role="alert">{blocked}</p>}

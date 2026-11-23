@@ -98,8 +98,8 @@ class RadioFirmware(
         val st = status()
         val base = when (st?.state) {
             null -> "no status from the root helper yet"
-            "idle" -> "Aqara's stock firmware, never flashed by the kiosk"
-            "flashing" -> "FLASHING ${st.id}: ${st.detail}. Don't unplug the panel."
+            "idle" -> "Aqara's stock firmware (never flashed by Glassworks)"
+            "flashing" -> "Updating radio firmware (${st.id}): ${st.detail}. Keep the panel powered on."
             "ok" -> "${label(st.id)}: ${st.detail}"
             else -> "error ${st.id}: ${st.detail}"
         }
@@ -118,7 +118,7 @@ class RadioFirmware(
     private fun label(id: String) = if (id == "stock") "Aqara stock" else "bundle image $id"
 
     private fun needsV4() = "need the root helper v${RadioReports.BUNDLE_VERSION} (installed: v${helperVersion()}): " +
-        "update the panel's boot image once with the web installer"
+        "update the panel's system software once with Kiln"
 
     companion object {
         const val KEEP = "Keep current"

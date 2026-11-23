@@ -99,7 +99,7 @@ export function ImageImage({ f, s, m, ms }: P) {
         <DownloadButton f={f} s={s} label="Download the system image" />
       </div>
       {/* the flashed device is fine and keeps this browser's key: only the first start over adb is left (a real run, 2026-11-19) */}
-      <p className="small">{`Flashed already, but its first start didn't finish? `}<button type="button" className="link" onClick={() => f.finishFirstStart()}>Finish its first start</button>.</p>
+      <p className="small">{`Already wrote the system image, but first-time setup didn't finish? `}<button type="button" className="link" onClick={() => f.finishFirstStart()}>Finish first-time setup</button>.</p>
     </section>
   );
 }
@@ -110,7 +110,7 @@ export function ImageFastboot({ f, s }: P) {
   return (
     <section className="card" aria-labelledby="h">
       {f.recipe.community && <Whose r={f.recipe} />}
-      <h2 id="h">{`Put ${d.the} in fastboot`}</h2>
+      <h2 id="h">{`Put ${d.the} in fastboot mode`}</h2>
       {/* by hand first: most people install over the vendor's software, which Kiln can't reach over adb (the maintainer, 2026-11-19) */}
       {s.restarted ? <p className="lede">{rich(d.words['fastboot.restarted'])}</p> : <>
         <Recovery data={d.recovery} />
@@ -166,18 +166,18 @@ export function ImageConfirm(p: P) {
 const rowsOf = (d: DeviceFrame): Record<string, { id: WorkStep; text: string }[]> => ({
   patch: [
     { id: 'patch', text: 'Add Glassworks and the boot animation to the image' },
-    { id: 'system', text: 'Write the system image as fastboot sends it' },
-    { id: 'userdata', text: 'Make a fresh userdata with this browser’s key' },
+    { id: 'system', text: 'Prepare the system image for writing' },
+    { id: 'userdata', text: 'Prepare fresh storage for this browser' },
   ],
-  'flash-system': [{ id: 'flash-system', text: 'Flash system' }],
-  'flash-userdata': [{ id: 'flash-userdata', text: 'Flash userdata' }],
+  'flash-system': [{ id: 'flash-system', text: 'Write the operating system' }],
+  'flash-userdata': [{ id: 'flash-userdata', text: 'Write fresh storage' }],
   restart: [{ id: 'restart', text: `Restart ${d.the}` }],
-  'first-start': [{ id: 'first-boot', text: 'First start: Home Assistant, Wi-Fi, home screen' }],
-  wifi: [{ id: 'wifi', text: 'Save your Wi-Fi network in its userdata' }],
-  'wifi-on': [{ id: 'wifi-on', text: 'After its first start: switch Wi-Fi on' }],
+  'first-start': [{ id: 'first-boot', text: 'Finish first-time setup' }],
+  wifi: [{ id: 'wifi', text: 'Save your Wi-Fi network for first start' }],
+  'wifi-on': [{ id: 'wifi-on', text: 'Turn Wi-Fi on after first start' }],
 });
 /** Issue 580: the hand-back row joins Glassworks' first start, when the tab holds Home Assistant's key. */
-const HAND_BACK = { id: 'hand-back' as WorkStep, text: 'Give Glassworks Home Assistant’s key back' };
+const HAND_BACK = { id: 'hand-back' as WorkStep, text: 'Restore your Home Assistant connection key' };
 
 export function ImageWorking({ f, s }: P) {
   const ROWS = rowsOf(f.frame);
@@ -191,7 +191,7 @@ export function ImageWorking({ f, s }: P) {
       <ol className="join">
         {rows.map((r, i) => <li key={r.id} className={i < at ? 'done' : i === at ? 'cur' : ''}>{r.text}{i === at && x > 0 && x < 1 && <span className="sub-step">{Math.floor(x * 100)}%</span>}
           {/* the image is small to send; the device then writes an empty filesystem (212 MiB on the first frame), with nothing to report (a real run, 2026-11-19) */}
-          {i === at && r.id === 'flash-userdata' && <span className="sub-step">A minute or two. The bar hardly moves.</span>}</li>)}
+          {i === at && r.id === 'flash-userdata' && <span className="sub-step">This takes a minute or two, and the progress bar may pause — that&apos;s normal.</span>}</li>)}
       </ol>
       <div className="bar" role="progressbar" aria-label={rows[at]?.text} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.floor(((at + x) / rows.length) * 100)}>
         <i style={{ width: `${Math.max(2, ((at + x) / rows.length) * 100)}%` }} />
@@ -277,20 +277,24 @@ export function ImageError({ f, s }: P) {
   return (
     <section className="card err" aria-labelledby="h">
       {f.recipe.community && <Whose r={f.recipe} />}
-      <h2 id="h">The install stopped</h2>
+      <h2 id="h">The install didn&apos;t finish</h2>
+      <p className="lede">{s.wifiOnFailed
+        ? 'Wi-Fi didn\'t turn on yet. Check the details below and click Connect again when you\'re ready.'
+        : s.work && !['first-boot', 'hand-back', 'restart', 'wifi-on'].includes(s.work.step)
+        ? `${cap(d.the)} is still in fastboot mode, so leave it plugged in. ${s.files.every((x) => x.state === 'ok') ? 'Click Try again to reconnect and pick up from fastboot.' : 'Click Try again to redownload the files and continue.'}`
+        : 'Review the details below and click Try again when you\'re ready.'}</p>
       <pre className="raw">{s.error}</pre>
-      {s.work && !['first-boot', 'hand-back', 'restart', 'wifi-on'].includes(s.work.step) && <p className="small">{`${cap(d.the)} is still in fastboot: leave it plugged in. `}{s.files.every((x) => x.state === 'ok') ? 'Try again connects fastboot again, then you install again.' : 'Try again downloads the files again, then you connect fastboot and install again.'}</p>}
       {s.flashFailed && !f.recipe.community && !s.noFill && (
         <p className="small">{d.words['error.noFill']}</p>
       )}
       <div className="foot">
         <Log s={s} />
         <span className="links">
-          {s.flashFailed && !f.recipe.community && !s.noFill && <button type="button" className="btn ghost" onClick={() => f.retryWithoutFill()}>Try again without FILL</button>}
+          {s.flashFailed && !f.recipe.community && !s.noFill && <button type="button" className="btn ghost" onClick={() => f.retryWithoutFill()}>Try compatibility write mode</button>}
           {s.wifiOnFailed && s.connecting && <span className="status work" role="status">{`${cap(pickInList(d))}…`}</span>}
           {s.wifiOnFailed && s.connectError && <span className="status err" role="alert">{s.connectError}</span>}
           {s.wifiOnFailed && <button type="button" className="btn ghost" disabled={s.connecting} onClick={() => void f.connectAdb()}>Connect again</button>}
-          {!s.wifiOnFailed && f.tryAgainLands() !== 'image' && <button type="button" className="btn ghost" onClick={() => f.retry()}>Back to the download</button>}
+          {!s.wifiOnFailed && f.tryAgainLands() !== 'image' && <button type="button" className="btn ghost" onClick={() => f.retry()}>Back to download</button>}
         </span>
         {/* the step that stopped, on its own screen: the first start over adb, a write over fastboot, else the download */}
         {!s.wifiOnFailed && <button type="button" className="btn ember" onClick={() => f.tryAgain()}>Try again</button>}

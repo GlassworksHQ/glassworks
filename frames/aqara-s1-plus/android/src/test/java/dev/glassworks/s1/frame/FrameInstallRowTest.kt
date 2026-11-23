@@ -110,7 +110,7 @@ class FrameInstallRowTest {
             val question = b.post("/settings", form())
             assertTrue("the panel's question first", question.text().contains("Install the frame update?"))
             val asked = b.post("/settings", form(mapOf("answer" to question.answer()!!)))
-            assertTrue("then the code", asked.text().contains("Enter the code on the panel."))
+            assertTrue("then the code", asked.text().contains("Enter the code shown on the panel"))
             val ran = b.post("/settings", form(mapOf("answer" to asked.answer()!!, "code" to f.shown.last()!!.code)))
             // Robolectric has no loader record: the install refuses, and says so on both surfaces.
             assertTrue(ran.text(), ran.text().contains(esc(FrameInstaller.NO_LOADER.substringBefore("."))))

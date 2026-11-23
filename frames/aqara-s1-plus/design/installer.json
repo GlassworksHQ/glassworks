@@ -4,7 +4,7 @@
   "releases": [
     { "line": "aqara-s1-plus", "tag": "^(?:aqara-s1-plus-)?v(\\d+\\.\\d+\\.\\d+)$", "assets": ["s1-kiosk-{version}.apk"], "why": "Glassworks: vX.Y.Z (every release so far) or aqara-s1-plus-vX.Y.Z, and the S1's armeabi-v7a APK" }
   ],
-  "legacy": { "hashLinks": true, "releaseAsset": "aqara-s1-plus", "why": "s1.edm.sh, the first installer page, was the S1's: its hash links (/#/wifi) and its release route before #28 (/api/release-asset) lead here" },
+  "legacy": { "hashLinks": true, "why": "s1.edm.sh, the first installer page, was the S1's: its hash links (/#/wifi) lead here" },
   "touch": true,
   "flows": {
     "install": {
@@ -27,17 +27,17 @@
     "asks": {
       "fastboot": {
         "title": "One click to continue",
-        "body": "The panel restarted into the installer.",
+        "body": "The panel restarted into Kiln's temporary installer.",
         "pick": "USB download gadget"
       },
       "adb": {
         "title": "One last click",
-        "body": "The panel is starting its new software. Leave its screen alone.",
+        "body": "The panel is starting its new software — leave its screen alone for a moment while it finishes booting.",
         "pick": "QUAD-CORE R818 EVB2"
       },
       "connect": {
         "title": "Connect to your panel",
-        "body": "Plug it into this computer, with Glassworks running.",
+        "body": "Plug it into this computer with Glassworks running.",
         "pick": "QUAD-CORE R818 EVB2"
       }
     },
@@ -56,34 +56,34 @@
     "undo": {
       "factory": {
         "title": "As it came from Aqara",
-        "detail": "The original software, then a factory reset on the panel. Everything is removed.",
-        "restored": "One last step, on the panel: swipe down, tap Settings on the app's notification, then Advanced settings → Factory reset."
+        "detail": "Restores the original software, then lets you factory-reset the panel so everything starts fresh.",
+        "restored": "One last step on the panel: swipe down, tap Settings on the notification, then Advanced settings → Factory reset."
       },
       "keep": {
         "title": "Keep its settings",
-        "detail": "Aqara's apps come back, with the panel running. Wi-Fi and the rest stay.",
-        "button": "Give back Aqara’s apps",
-        "giving": "Giving the panel back to Aqara's apps",
-        "back": "Aqara's apps are back.",
-        "stillOn": "Aqara's apps are back, but Glassworks is still on.",
-        "restored": "It is restarting with Aqara's software and apps. Your settings and Wi-Fi are as they were."
+        "detail": "Brings back Aqara's built-in apps while keeping your Wi-Fi and panel settings intact.",
+        "button": "Restore Aqara’s apps",
+        "giving": "Restoring Aqara's built-in apps",
+        "back": "Aqara's apps are back",
+        "stillOn": "Aqara's apps are back, though Glassworks is still running",
+        "restored": "Your panel is restarting with Aqara's original software and apps. Your Wi-Fi and settings stayed intact."
       }
     },
     "silent": {
       "on": {
         "word": "On",
         "tone": "y",
-        "line": "Updates from Home Assistant install by themselves."
+        "line": "Updates from Home Assistant install automatically in the background."
       },
       "missing": {
         "word": "A tap each",
         "tone": "n",
-        "line": "Each update waits for a tap on the panel. Install again with Kiln to make them silent."
+        "line": "Each update asks for a tap on the panel. Run Kiln again anytime to enable automatic updates."
       },
       "unknown": {
         "word": "Not confirmed",
         "tone": "n",
-        "line": "Kiln couldn't read it back. Glassworks' Device page on the panel says."
+        "line": "Kiln couldn't read this back — check Settings → Device on the panel to see its status."
       }
     }
   },

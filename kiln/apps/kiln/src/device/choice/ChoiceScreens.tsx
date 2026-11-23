@@ -42,7 +42,7 @@ function Card({ r }: { r: ImageRecipe }) {
       <span className={c.summary}>{r.summary}</span>
       <dl className={c.facts}>
         <dt>By</dt><dd>{r.by.name}</dd>
-        <dt>Licence</dt><dd>{r.licence}</dd>
+        <dt>License</dt><dd>{r.licence}</dd>
         <dt>Support</dt><dd>{r.community ? 'Its project, on GitHub' : r.support.name}</dd>
         <dt>Project</dt><dd><a className="link" href={r.project.href} target="_blank" rel="noopener" onClick={(e) => e.stopPropagation()}>{r.project.name}</a></dd>
       </dl>
@@ -59,8 +59,8 @@ export function Choose({ f, s }: P) {
   return (
     <section className="card" aria-labelledby="h">
       <TestOnly f={f.frame} />
-      <h2 id="h">{`What goes on ${f.frame.the}?`}</h2>
-      {s.open && <p className="lede">Glassworks, or a community image as its project publishes it.</p>}
+      <h2 id="h">{`Choose what to install on ${f.frame.the}`}</h2>
+      {s.open && <p className="lede">Install Glassworks, or choose a community image published by its own project.</p>}
       {from && (
         <p className={`small ${c.from}`} role="status">
           {r.name}{` replaces ${from.name} and everything on ${f.frame.the}.`}
@@ -72,7 +72,7 @@ export function Choose({ f, s }: P) {
       {others > 0 && (
         <p className={`small ${c.more}`}>
           <button type="button" className="link" aria-expanded={s.open} aria-controls="images" onClick={() => f.showCommunity(!s.open)}>{s.open ? 'Hide community images' : `Show community images (${others})`}</button>
-          {!s.open && <span>Made by other projects.</span>}
+          {!s.open && <span>Maintained by other community projects.</span>}
         </p>
       )}
       <div className="foot">
@@ -99,13 +99,15 @@ export function FileRow({ f, file }: { f: ImageSession; file: FileCheck }) {
             <div className="bar" role="progressbar" aria-label={`Downloading ${file.name}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}><i style={{ width: `${Math.max(2, pct)}%` }} /></div>
           </div>
         )}
-        {file.state === 'waiting' && <span className="small">{started && before && before.state !== 'ok' ? `Next, once ${before.name} is in.` : 'Not downloaded yet.'}</span>}
-        {file.state === 'ok' && <span className="status ok">✓ SHA-256 checks out.</span>}
+        {file.state === 'waiting' && <span className="small">{started && before && before.state !== 'ok' ? `Waiting for ${before.name} to finish.` : 'Ready to download.'}</span>}
+        {file.state === 'ok' && <span className="status ok">✓ Download verified</span>}
         {failed && (
           <span className="status err" role="alert">
             {/* the error itself goes to the technical log and the report, not on the screen (issue 672) */}
-            {file.state === 'bad' ? 'This download doesn’t match the release, so Kiln deleted it.' : 'Kiln couldn’t download it.'}
-            {` Nothing was written to ${f.frame.the}. The fault is Kiln’s, not yours.`}
+            {file.state === 'bad' ? 'This download doesn’t match the published release, so Kiln discarded it.' : 'Kiln couldn’t download this file.'}
+            {f.state.changed
+              ? ` This download didn't write anything, though an earlier attempt may have changed ${f.frame.the}. This is a problem on Kiln's side.`
+              : ` Nothing was written to ${f.frame.the} — this is a problem on Kiln's side.`}
           </span>
         )}
         {failed && <span className="small"><a className="link" href={f.reportUrl(file)} target="_blank" rel="noopener">Report this</a> on GitHub.</span>}
@@ -135,7 +137,7 @@ export function Download({ f, s }: P) {
     <section className="card" aria-labelledby="h">
       <Whose r={r} />
       <h2 id="h">{idle ? `Install ${r.name} on ${f.frame.the}` : `Downloading ${r.name}`}</h2>
-      <p className="lede">From its own release on GitHub, checked by SHA-256.</p>
+      <p className="lede">Downloaded from its official GitHub release and verified before writing.</p>
       {s.files.map((x) => <FileRow key={x.name} f={f} file={x} />)}
       {r.steps.some((x) => x.do === 'wifi') && <WifiFields f={f} s={s} r={r} />}
       {(r.release || r.vendor) && <p className="small">{r.release && <>Release <code>{r.release.name}</code>.</>}{r.release && r.vendor && ' '}{r.vendor}</p>}
@@ -225,11 +227,11 @@ export function DoneCommunity({ f, log }: { f: ImageSession; log: React.ReactNod
       <p className="lede">{f.state.communityWifi === 'on'
         ? `${cap(f.frame.the)} joins your Wi-Fi a few minutes after it starts.`
         : 'Its first start takes a few minutes.'}</p>
-      {f.state.communityWifi === 'unconfirmed' && <p className="small" role="status">Android didn&apos;t confirm Wi-Fi is on: switch it on once in {possessive(r.name)} Settings.</p>}
+      {f.state.communityWifi === 'unconfirmed' && <p className="small" role="status">Android didn&apos;t confirm Wi-Fi is on — switch it on once in Settings inside {r.name}.</p>}
       <div className="well">
         <div className="grow">
           <span className="small">Next, in {r.name}</span>
-          <span>Set it up as {r.next ? r.next.name : 'its project'} says.</span>
+          <span>Follow the setup instructions in {r.next ? r.next.name : 'its project page'}.</span>
         </div>
       </div>
       <WayBack f={f} other={f.recipes[0]!} />

@@ -1,0 +1,36 @@
+{
+  "comment": "Generated from frames/*/design/installer.json `releases` by refractReleases() in kiln/apps/kiln/src/app/api/release/lines.ts. Don't edit it by hand: REFRACT_RELEASES=write npm test -w @glassworks/kiln-app -- refract-releases",
+  "owner": "GlassworksHQ",
+  "repo": "glassworks",
+  "prefix": "glassworks",
+  "credit": {
+    "name": "Glassworks",
+    "url": "https://github.com/GlassworksHQ/glassworks",
+    "project": "Glassworks"
+  },
+  "lines": [
+    {
+      "line": "aqara-s1-plus",
+      "tag": "^(?:aqara-s1-plus-)?v(\\d+\\.\\d+\\.\\d+)$",
+      "assets": [
+        "s1-kiosk-{version}.apk"
+      ]
+    },
+    {
+      "line": "generic-android",
+      "tag": "^generic-android-v(\\d+\\.\\d+\\.\\d+)$",
+      "assets": [
+        "glassworks-generic-android-arm64-v8a-{version}.apk",
+        "glassworks-generic-android-armeabi-v7a-{version}.apk"
+      ]
+    },
+    {
+      "line": "generic-android-legacy",
+      "tag": "^generic-android-legacy-v(\\d+\\.\\d+\\.\\d+)$",
+      "assets": [
+        "glassworks-generic-android-legacy-arm64-v8a-{version}.apk",
+        "glassworks-generic-android-legacy-armeabi-v7a-{version}.apk"
+      ]
+    }
+  ]
+}

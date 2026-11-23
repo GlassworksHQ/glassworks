@@ -1,5 +1,6 @@
 export { Assets, STALL_MS, type AssetEntry, type Manifest } from './assets';
 export { webUsbDevices } from './devices';
+export { MAX_RETRY_AFTER_MS, REFRACT, downloadWhole, releaseFileUrl, resumableBody, retryAfterMs, type ResumeOptions } from './download';
 export {
   BackupStore, backupFile, backupId, backupZip, readBackupZip, sha256sums, toHex, type BackupFile, type BackupMeta,
 } from './backup';

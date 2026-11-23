@@ -173,7 +173,7 @@ export class Session extends StandardSession {
       // Done itself can be redrawn meanwhile (the hand-off adds the setup page's link), so the error goes into it as it is now.
       const cur = this.s.done;
       if (this.closed || this.s.screen !== 'done' || !cur?.backup || cur.backup.name !== shown?.backup?.name) return;
-      this.dispatch({ type: 'done', done: { ...cur, backup: { ...cur.backup, error: `Couldn't read it from this browser: ${(e as Error).message}` } } });
+      this.dispatch({ type: 'done', done: { ...cur, backup: { ...cur.backup, error: `Couldn't read the backup from this browser (${(e as Error).message}). Try again, or use a backup file on the Undo screen.` } } });
     }
   }
 
@@ -205,10 +205,9 @@ export class Session extends StandardSession {
       files = await this.d.backups.files(meta);
     } catch (e) {
       if (mine !== this.choice) return;
-      const msg = String((e as Error)?.message ?? e);
-      const note = { kind: 'err' as const, title: 'Couldn\'t read the backup in this browser.', sub: `${msg}${/[.!?]$/.test(msg) ? '' : '.'} Use a backup file instead.` };
+      const note = { kind: 'err' as const, title: 'Couldn\'t read the saved backup', sub: 'This browser couldn\'t open its stored copy. Choose a backup .zip file instead.' };
       // a file already in use stays; with none, the label must not say this browser has no backup
-      this.dispatch({ type: 'undo', patch: this.s.undo.source ? { note } : { note, file: 'This browser\'s backup can\'t be read.' } });
+      this.dispatch({ type: 'undo', patch: this.s.undo.source ? { note } : { note, file: 'The backup stored in this browser couldn\'t be read.' } });
       return;
     }
     if (mine !== this.choice) return;
@@ -239,7 +238,7 @@ export class Session extends StandardSession {
       if (mine !== this.choice) return;
       this.undoBackup = undefined;
       this.undoFiles = b.files;
-      this.dispatch({ type: 'undo', patch: { ready: true, checking: false, file: `${b.id} · ${b.files.size} partitions · checked` } });
+      this.dispatch({ type: 'undo', patch: { ready: true, checking: false, file: `${b.id} · ${b.files.size} partitions · verified` } });
     } catch (e) {
       if (mine !== this.choice) return;
       this.dispatch({ type: 'undo', patch: { ready: false, checking: false, file: (e as Error).message } });
@@ -262,7 +261,7 @@ export class Session extends StandardSession {
     if (!this.undoFiles) return Promise.resolve();
     if (u.depth === 'keep' && !u.appsBack) {
       const key = this.key;
-      if (!key) { this.dispatch({ type: 'undo', patch: { note: { kind: 'err', title: 'Not ready yet.', sub: 'Click Continue again in a moment.' } } }); return Promise.resolve(); }
+      if (!key) { this.dispatch({ type: 'undo', patch: { note: { kind: 'err', title: 'Almost ready', sub: 'Kiln is finishing browser setup. Click Continue again in a moment.' } } }); return Promise.resolve(); }
       const picked = this.d.devices.requestAdb(key);
       // the give-back takes the choice: a backup read still pending can no longer land
       ++this.choice;
@@ -293,9 +292,9 @@ export class Session extends StandardSession {
         const msg = String((e as Error)?.message ?? e);
         this.dispatch({ type: 'undo', patch: { note: {
           kind: 'err',
-          title: e instanceof BackupRefused ? 'This backup can\'t undo the install.' : 'Kiln can\'t check this backup.',
-          sub: `${msg.charAt(0).toUpperCase()}${msg.slice(1)}. This step changed nothing on the panel.`,
-          link: { href: this.d.frame.help.undo, text: 'Undo by hand' },
+          title: e instanceof BackupRefused ? 'This backup can\'t undo the install' : 'Kiln couldn\'t verify this backup',
+          sub: `${msg.charAt(0).toUpperCase()}${msg.slice(1)}. Nothing on the panel was changed.`,
+          link: { href: this.d.frame.help.undo, text: 'Manual restore guide' },
         } } });
         return;
       }
@@ -306,10 +305,10 @@ export class Session extends StandardSession {
         this.dispatch({ type: 'undo', patch: { locked: true, note: { kind: 'err', title: keep.stillOn, sub: `${r.note} Try again, or choose "${this.d.frame.undo.factory.title}".` } } });
         return;
       }
-      this.dispatch({ type: 'undo', patch: { appsBack: true, locked: true, note: { kind: 'ok', title: keep.back, sub: `${r.note} Next, put the original software back: Continue, then recovery mode.` } } });
+      this.dispatch({ type: 'undo', patch: { appsBack: true, locked: true, note: { kind: 'ok', title: keep.back, sub: `${r.note} Click Continue to put the panel in recovery mode and restore your original software.` } } });
     } catch (e) {
-      const msg = notPicked(e) ? 'Nothing was picked.' : (e as Error).message;
-      this.dispatch({ type: 'undo', patch: { note: { kind: 'err', title: 'Couldn\'t reach the panel over adb.', sub: `${msg} Is it running and plugged in?` } } });
+      const msg = notPicked(e) ? 'No device was selected.' : (e as Error).message;
+      this.dispatch({ type: 'undo', patch: { note: { kind: 'err', title: 'Couldn\'t reach the panel over USB', sub: `${msg} Make sure it is powered on and plugged into this computer.` } } });
     } finally {
       // each give-back picks the panel again: let go of this one's USB first
       await (panel as { close?: () => Promise<void> } | undefined)?.close?.().catch(() => {});

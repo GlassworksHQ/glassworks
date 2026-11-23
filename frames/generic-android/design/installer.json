@@ -37,15 +37,15 @@
     "picks": ["google", "samsung", "amazon", "lenovo", "xiaomi"],
     "connect": { "title": "Connect to your tablet", "body": "Plug it into this computer, with USB debugging on.", "pick": "your tablet" },
     "grants": {
-      "microphone": { "name": "Microphone", "without": "Assist can't hear you" },
-      "camera": { "name": "Camera", "without": "the camera pane has no picture" },
-      "secure-settings": { "name": "Secure settings", "without": "the Bluetooth proxy can't turn Location on by itself" },
-      "overlay": { "name": "Show over other apps", "without": "its codes can't show over other apps" },
-      "device-admin": { "name": "Turn the screen off", "without": "Glassworks can't turn the screen off by itself" },
+      "microphone": { "name": "Microphone", "without": "Assist won't be able to hear you" },
+      "camera": { "name": "Camera", "without": "the camera pane won't have a picture" },
+      "secure-settings": { "name": "Automatic location", "without": "the Bluetooth proxy can't turn Location on automatically" },
+      "overlay": { "name": "Show over other apps", "without": "pairing codes can't appear over other apps" },
+      "device-admin": { "name": "Turn the screen off", "without": "Glassworks can't turn the screen off automatically" },
       "why": "What the generic app does with each (read in its code, 2026-11-18): secure settings let the Bluetooth proxy turn Location on; the device admin is what turns the screen off when idle (lockNow)"
     },
     "screenLock": {
-      "line": "This tablet has a PIN, pattern or password. When the screen turns off, someone has to unlock it. Glassworks keeps the screen on until you pick a time in its Screen settings. Before you do, turn the lock off in Android's Settings → Security → Screen lock → None or Swipe.",
+      "line": "This tablet has a PIN, pattern, or password, so someone would need to unlock it whenever the screen turns off. Glassworks keeps the screen awake until you choose an idle timeout in Screen settings. Before turning on an idle timeout, set Settings → Security → Screen lock to None or Swipe.",
       "help": "https://support.google.com/android/answer/9079129"
     },
     "apk": {
