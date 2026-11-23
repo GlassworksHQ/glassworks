@@ -196,10 +196,22 @@ scans passively, so none of them sees a scan response. The 2026-11-23 sensor doe
 | C: named sensor, the S1 as its source | **Pass.** With the box next to the S1, the *Advertisement monitor* named the S1 as the source. (In another room, a passive ESPHome proxy won on RSSI.) Over 10 min, 05:05–05:15 UTC, the temperature entity updated **120 times** for a 5 s send interval, every step of the cycle; longest gap about **9 s**. *Bluetooth proxy status* read `Listening` throughout |
 | Put back | The box back on its own firmware, OTA from the build that was on it (same file, same build time); HA shows the same entities and settings for it. The BTHome entry removed, no discovery flow left. The S1's *Bluetooth proxy* switch off, as found |
 
+How it was taken:
+- **The sensor's payload**: 3 bytes of flags, then 10 bytes of service data `0xFCD2` in the BTHome v2 format
+  (the device-info byte, a packet id object, a temperature object); the scan response holds one AD structure, the
+  complete local name. Any BTHome v2 sender with the name only in its scan response repeats the case. The test
+  firmware's YAML is kept with the root's run notes, not in the repo, because it's specific to one device.
+- **E**: HA's BTHome discovery flow for the sensor (its title), and *Settings → Bluetooth → Advertisement monitor*
+  with the S1 as the source (the Name column).
+- **C**: the *Advertisement monitor*'s source column, then the state changes of the sensor's temperature entity in
+  HA for 05:05–05:15 UTC: their count (120) and the longest gap between two of them. *Bluetooth proxy status*:
+  `sensor.<panel>_bluetooth_proxy_status` over the same window.
+
 What it shows:
 - On the S1 (Android 10) a scannable advertisement's scan response reaches HA whole: the padding concern doesn't
   apply here.
-- A passive BLE sensor follows the S1 as its proxy when the S1 is the closest, at the sensor's own rate.
+- A passive BLE sensor follows the S1 as its proxy when the S1 is the closest, at the sensor's own rate. Another
+  ESPHome proxy was in range, so the S1 as the *only* proxy is still open (below).
 
 ## GATT connections (#246)
 
@@ -364,6 +376,9 @@ the restarts.
 - **The third link.** Android's stack allows 7 GATT links (believed, not checked). The RTL8821CS
   may hold fewer. The engine starts at 3, like ESPHome. Two at once hold (2026-11-21); a third needs a third
   device that holds its link.
+- **A passive sensor with the S1 as its only proxy.** On 2026-11-23 the S1 was the source when it was the
+  closest, with another ESPHome proxy in range ([above](#verified-a-named-sensor-through-the-s1-2026-11-23)).
+  The S1 alone wasn't tried.
 - **Handles against an ESP32 proxy.** Connect the same device through both and compare the services
   HA caches. A mismatch breaks a cache HA built from the other proxy.
 - **`refresh()` on the panel.** Whether reflection reaches it with target SDK 35, and whether it
