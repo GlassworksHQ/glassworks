@@ -139,8 +139,10 @@ Branches among maintained files: 24.0 (253), 22.2 (141), 23.2 (61).
   device that starts in fastboot or Download mode. *Latest update* isn't something Kiln can read: no
   vendor publishes it in a form the browser can fetch. So the person establishes it: a check step
   shows the device's own update (`ro.build.version.security_patch`, `ro.build.version.incremental`)
-  and asks them to run the device's system update until it says it's up to date. The unlock screen
-  doesn't appear until they confirm, and the log keeps what they confirmed against.
+  and asks them to run the device's system update until it says it's up to date. When they confirm,
+  Kiln **reads the props again** and checks the Android version once more, because an update can move
+  the device to a newer Android than LineageOS asks for, and LineageOS wants the given version even then.
+  Only that second read opens the unlock screen. The log keeps what was confirmed and what was read.
 - `before_recovery_install` adds steps for 292 maintained files. In the two families Kiln reaches, the
   values are `boot_stack` (234: flash extra partitions such as `dtbo` and `vendor_kernel_boot`, listed
   in the data), `samsung_exynos9xxx` (23), `samsung_qcom` (20; it also flashes LineageOS's `vbmeta.img`
@@ -278,7 +280,7 @@ Samsung's Knox flag.** Kiln says both before the first write ([§5](#5-kiln-copy
 |---|---|---|---|
 | 0 | The person reads the page's ratings and the "Before you start" sheet | Nothing | — |
 | 1 | Connect over USB debugging. Read the props, match the device, check the API has a build | Nothing | — |
-| 2 | Check the firmware against `before_install` (Android version, or the variant's build). Stop if Kiln can't establish it. For the Android-version form, the person runs the device's system update and confirms it's up to date (a declared check step) | Nothing | — |
+| 2 | Check the firmware against `before_install` (Android version, or the variant's build). Stop if Kiln can't establish it. For the Android-version form, the person runs the device's system update and confirms it's up to date (a declared check step), then Kiln reads and checks the version again before step 5 can start | Nothing | — |
 | 3 | Pick the downloaded files, then check sizes and hashes | Nothing on the device | — |
 
 ### fastboot families
@@ -290,10 +292,21 @@ Samsung's Knox flag.** Kiln says both before the first write ([§5](#5-kiln-copy
 | 6 | Flash the boot stack from the data (`boot_stack`: e.g. `boot`, `dtbo`, `vendor_kernel_boot`), then the recovery: **`fastboot boot` from RAM when the recovery is the `boot` image**, else `fastboot flash <recovery_partition_name>` as the wiki does (`vendor_boot` devices like `tangorpro`). On A/B devices, both slots where the wiki says so | Boot partitions | Vendor firmware. **No read-back**: production bootloaders don't read partitions. The proof is the hash before the write and recovery booting with `ro.lineage.device` set. **The RAM boot is untested** on a device whose recovery lives in `boot`; the spike decides |
 | 7 | **After a RAM boot: skip.** The device is already starting recovery, and Kiln waits for it (engine rule 3). **After a flash**, by `recoveryReboot`: `fastboot_reboot` sends `fastboot reboot recovery`; `fastboot_menu` is a declared tap on the bootloader's menu; `fastboot_boot` boots the recovery image from RAM; none shows the `recovery_boot` keys. `fastboot_misc` writes `misc`, so that device is "not yet" | Nothing | — |
 | 8 | In recovery: **Factory reset → Format data** (a declared tap, keys or touch) | **Wipes userdata again** | None needed: the device was already wiped at step 5 |
-| 8b | `beforeLineage: ab_copy_partitions` only: **Apply update → Apply from ADB** (a tap), sideload `copy-partitions-<date>-signed.zip`, then **Advanced → Reboot to recovery** (a tap). The file's name and SHA-256 are pinned in `methods.json`, refreshed with the snapshot. The person downloads it, since its mirrors send no CORS either, and recovery checks LineageOS's signature on it. `m1s1` is "not yet" | The inactive slot's firmware partitions, copied from the active slot | Vendor firmware. Nothing of the device's own is lost: the active slot is the source |
+| 8b | `beforeLineage: ab_copy_partitions` only: **Apply update → Apply from ADB** (a tap), sideload `copy-partitions-<date>-signed.zip`, then **Advanced → Reboot to recovery** (a tap). The file's name and SHA-256 are pinned in `methods.json`, refreshed with the snapshot. The person downloads it, since its mirrors send no CORS either, and recovery checks LineageOS's signature on it. **Before the reboot, the person confirms recovery reported success** ([below](#after-every-sideload)); on an error Kiln stops and offers Try again on this step, never step 9. `m1s1` is "not yet" | The inactive slot's firmware partitions, copied from the active slot | Vendor firmware. Nothing of the device's own is lost: the active slot is the source |
 | 9 | **Apply update → Apply from ADB** (a tap), then Kiln sideloads the zip (`sideload-host`). Recovery checks LineageOS's signature | `system`, `vendor`, `product`, boot (the inactive slot on A/B) | Vendor firmware, or sideload another LineageOS build |
 | 10 | A/B only: recovery asks to reboot to recovery for add-ons; the person taps Yes. Then the Glassworks add-on ([below](#the-glassworks-part-every-family)) | `/product/media/bootanimation.zip`, `/system/addon.d/50-glassworks.sh` | The undo add-on (sideloaded the same way) puts LineageOS's animation back and removes the script |
 | 11 | Reboot to system. First boot takes several minutes, and Kiln waits through it (engine rule 3) | — | — |
+
+#### After every sideload
+
+`sideload` resolving says only how the stream ended ([§7](#7-libraries)). It doesn't say whether the
+package installed: recovery can still report an error after it has every block. LineageOS Recovery
+gives adb no shell in sideload mode, so the person reads its screen. After steps 8b, 9 and 10, Kiln
+shows what success looks like on the screen ("Install completed with status 0", untested on
+LineageOS Recovery's current wording), and asks **Did the
+tablet say it installed?** with *Yes* and *It showed an error*. An error stops the flow on that step,
+with Try again, and the next step never starts. The device's state is then whatever recovery left,
+which is the same way back as the step's own.
 
 ### Samsung Download mode
 
