@@ -2466,6 +2466,20 @@ class NoTouch(unittest.TestCase):
         s = S.summarise(rep)
         self.assertEqual((s["touch"], s["complete"]), (False, True))
 
+    def test_swipes_that_ran_anyway_say_nothing(self):
+        """A no-touch run with swipe records (rAF only, at an edge): not graded, so neither a reason for provisional nor a
+        line in report.md (CodeRabbit on #776)."""
+        def swiped(run):
+            for t, e in run["tiers"].items():
+                e["swipes"] = [swipe(NAV[t], i, late(60, 20), sf=False) for i in range(3)]
+        rep = self.build(False, swiped)
+        self.assertEqual((rep["grade"]["grade"], rep["grade"]["provisional"]), ("A+", False))
+        md = R.markdown(rep)
+        self.assertNotIn("rAF only", md)
+        self.assertNotIn("swipe", md.split("## ")[0].split("| Page |")[0].lower())
+        self.assertTrue(sum(self.build(True, swiped)["graded"]["reference"]["tiers"]["heavy"]["scroll_raf_only"]))
+        self.assertIn("rAF only", R.markdown(self.build(True, swiped)))      # with touch: as before
+
     def test_other_missing_evidence_is_still_provisional(self):
         def no_tap(run):
             run["tiers"]["light"]["input"] = None         # light's taps lost: not measured

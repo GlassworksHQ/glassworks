@@ -8,7 +8,7 @@ Each letter answers one practical question: **how busy a Home Assistant dashboar
 
 | Grade | What it means |
 |---|---|
-| **A+** | Handles heavy dashboards smoothly, with 60 fps scrolling and responsive camera playback within tight stall and dropped-frame limits |
+| **A+** | Handles heavy dashboards smoothly, with 60 fps scrolling (on devices with a touchscreen) and responsive camera playback within tight stall and dropped-frame limits |
 | **A** | Great wall panel even for large, dense dashboards |
 | **B** | Great wall panel for typical dashboards with a live camera stream |
 | **C** | Great wall panel for typical dashboards without a live camera |

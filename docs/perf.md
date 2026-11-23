@@ -292,7 +292,10 @@ Mirror, so the scroll task doesn't apply to it. A frame says it has no touch in 
 
 A frame with touch is graded exactly as before, and a missing scroll there is still "not measured" and provisional.
 This isn't a new protocol: on every frame with touch the runner does what it did, record for record, and on the Mirror
-the swipes it no longer sends never scrolled (as with #643's reads during a window, no stored result changes meaning).
+the swipes it no longer sends never scrolled. A protocol marks results whose numbers mean something else, and no stored
+result's do. #643 changed what the device does too (a SurfaceFlinger read every 0.3 s during each window on the
+tablet), within its protocol, for the same reason. A bump here would send the S1's and the Pixel Tablet's results to
+"re-measure" for a change that doesn't touch them. No frame without touch has a stored result.
 
 **Portrait.** The pages place their taps and swipes from the page's own size (`innerWidth`, `innerHeight`,
 `devicePixelRatio`): the swipe runs down the middle from 85 % to 15 % of the height. Nothing assumes landscape.

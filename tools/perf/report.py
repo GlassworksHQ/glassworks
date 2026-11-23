@@ -2091,6 +2091,8 @@ def markdown(rep):
         if "never-finished" in ref["own_page_states"]:
             out.append("Some runs opened the reference dashboards before the kiosk's own page finished loading.")
         for t, s_ in ref["tiers"].items():
+            if "scroll" in na:
+                break                        # rubric 2: no scroll graded, so no word on its swipes (CodeRabbit on #776)
             k = sum(s_["scroll_raf_only"])
             if k:
                 out.append(f"{t}: scrolling from rAF only in {k} run(s): SurfaceFlinger's history didn't cover any of "
