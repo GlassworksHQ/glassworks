@@ -11,12 +11,12 @@ evidence: verified
 `BOOT_COMPLETED` with zero ADB and zero touchscreen, reachable over stock's own `mirror-<serial>`
 setup SoftAP (`192.168.43.1:18765`). The probe extracted `/proc/config.gz`, ramdisk SELinux files,
 `init.svc.*`, `services.jar`, `pronto_wlan.ko`, `FS_IOC_FIEMAP` physical block extents, and the
-non-camera Option C vendor audit (123/141 readable without root; exact same 13 `*_exec` daemons
-denied as predicted in [option-c.md](option-c.md)). Two high-impact findings: stock `1.24.0` has
-**no active `dm-verity`** (single contiguous `FIEMAP` extents for `/system/etc/init.qcom.post_boot.sh`
-and `/system/build.prop`), and it runs a **different kernel build** (`3.10.49-perf-g4869d64961b`)
-than the dev unit (`gf46dad5260f`), so Wi-Fi on a `1.24.0` boot image requires `1.24.0`'s own
-`pronto_wlan.ko`.
+full 462-file Option C vendor audit including camera (**443/462** readable without root — 39 MB
+pulled cleanly; exact same 14 `*_exec` daemons denied as predicted in [option-c.md](option-c.md)).
+Two high-impact findings: stock `1.24.0` has **no active `dm-verity`** (single contiguous `FIEMAP`
+extents for `/system/etc/init.qcom.post_boot.sh` and `/system/build.prop`), and it runs a
+**different kernel build** (`3.10.49-perf-g4869d64961b`) than the dev unit (`gf46dad5260f`), so
+Wi-Fi on a `1.24.0` boot image requires `1.24.0`'s own `pronto_wlan.ko`.
 
 Device: untouched stock lululemon Studio Mirror (`MSM8916`, `variant: SBC eMMC`, `secure: yes`,
 `Device unlocked: false`, `ro.build.version.mirror=1.24.0`, `ro.build.hwver.mirror=mirror-v1`).
@@ -95,8 +95,10 @@ outside the repository.
    Step 5/6: connected to HTTP probe app (uid=10099, fiemap=true)
    Step 6/6: extracted via http (58 services, 141 vendor paths, 2 fiemap)
    ```
-   Extraction completed in 51 s over the SoftAP (`--prefer-offline` avoids npm network lookups
-   while the PC is connected to the offline SoftAP).
+   The non-camera pass completed in 51 s over the SoftAP (`--prefer-offline` avoids npm network
+   lookups while the PC is connected to the offline SoftAP). A second pass immediately afterward
+   with `--include-camera --pull-system-blobs` audited all 462 vendor paths and pulled all 443
+   readable stock vendor files (39 MB uncompressed) locally outside the repo.
 
 4. **Off-device inspection of pulled metadata and `services.jar`** (2026-11-22, read from pull)
    Inspected pulled `getprop.txt`, `kernel.config`, `partitions.txt`, `fiemap.json`,
@@ -200,10 +202,10 @@ Because `/system` is not dm-verity protected and `fastboot flash system` with An
   (`hostapd_ctrl_file`), `/data/ota_package(/.*)?` (`ota_file`), `mmcblk0p19` (`boot_block_device`),
   and `mmcblk0p20` (`recovery_block_device`).
 
-### 5. Option C vendor file audit — non-camera parts (verified)
+### 5. Option C vendor file audit — all 6 parts including camera (verified)
 
-Compared 141 non-camera paths from [option-c-vendor-files.tsv](option-c-vendor-files.tsv) over HTTP
-as `uid=10099` (`untrusted_app`):
+Compared all 462 paths from [option-c-vendor-files.tsv](option-c-vendor-files.tsv) over HTTP as
+`uid=10099` (`untrusted_app`):
 
 | Part | Total | Match Glass Panes | Differs (stock-specific) | Missing | Denied (SELinux/DAC) |
 |---|---:|---:|---:|---:|---:|
@@ -212,15 +214,18 @@ as `uid=10099` (`untrusted_app`):
 | `wifi-bt` | 17 | 0 | 14 | 1 | 2 |
 | `audio` | 36 | 21 | 12 | 3 | 0 |
 | `video` | 17 | 1 | 16 | 0 | 0 |
-| **Total** | **141** | **26** | **97** | **5** | **13** |
+| `camera` | 321 | 8 | 312 | 0 | 1 |
+| **Total (without camera)** | **141** | **26** | **97** | **5** | **13** |
+| **Total (all parts)** | **462** | **34** | **409** | **5** | **14** |
 
-- **123/141** read cleanly over HTTP without root (`26` exact SHA-256 matches to Glass Panes —
-  Adreno `a300`/`a330` microcode, all 21 `acdbdata` files, and `venus.b04`; `97` stock-specific
-  Qualcomm BSP builds).
-- **13 denied** — the **exact 13 `*_exec` daemons** predicted by SELinux policy analysis in
+- **443/462** (39 MB uncompressed; **123/141** non-camera, **320/321** camera) read cleanly over
+  HTTP without root (`34` exact SHA-256 matches to Glass Panes — Adreno `a300`/`a330` microcode,
+  all 21 `acdbdata` files, `venus.b04`, and 8 camera blobs; `409` stock-specific Qualcomm BSP
+  builds).
+- **14 denied** — the **exact 14 `*_exec` daemons** predicted by SELinux policy analysis in
   [option-c.md](option-c.md): `mm-pp-daemon`, `irsc_util`, `msm_irqbalance`, `pm-service`,
   `qcom-system-daemon`, `qmuxd`, `qseecomd`, `rmt_storage`, `tftp_server`, `time_daemon`,
-  `thermal-engine`, `cnss-daemon`, `wcnss_service`.
+  `thermal-engine`, `cnss-daemon`, `wcnss_service`, and `mm-qcamera-daemon`.
 - **5 missing** on stock `1.24.0`: `/system/vendor/lib64/libthermalioctl.so`,
   `/system/vendor/lib/libqmi_client_qmux.so`, `/system/vendor/lib/libsurround_proc.so`,
   `/system/vendor/lib64/libacdbrtac.so`, `/system/vendor/lib64/libadiertac.so`.
@@ -271,20 +276,18 @@ Using [`tools/mirror/stock-probe.ts`](../../../tools/mirror/stock-probe.ts):
 
 ## Open questions
 
-1. **Camera vendor audit (321 files):** Pending the `--include-camera` run on the same `1.24.0`
-   unit.
-2. **Reading the 13 SELinux-denied daemons (and full `system` / `boot` backup):** `untrusted_app`
-   and `shell` cannot read the 13 `*_exec` daemons ([option-c.md](option-c.md)), and `qti_init_shell`
+1. **Reading the 14 SELinux-denied daemons (and full `system` / `boot` backup):** `untrusted_app`
+   and `shell` cannot read the 14 `*_exec` daemons ([option-c.md](option-c.md)), and `qti_init_shell`
    cannot read `*_exec` or block devices either ([mirror-root.md](mirror-root.md) §5, §7). Because
    `FS_IOC_FIEMAP` now gives us exact physical blocks for `/system/etc/init.qcom.post_boot.sh` and
    `CONFIG_MODULE_SIG` is off, the two next paths to test on stock are:
    - **Surgical `services.jar` + `post_boot.sh` sparse patch** (blocks from `FIEMAP`, fully
      reversible by flashing back the original blocks) to get authorized USB ADB + `qti_init_shell`
-     on untouched stock without replacing `system`.
+     on untouched stock without replacing `system` (and test running Glassworks directly on stock).
    - **Loading a kernel module built against `g4869d64961b`'s `vermagic`/CRCs** (or testing
-     `flash_recovery` → `/system/bin/install-recovery.sh` for `boot`) to read the 13 denied daemons
+     `flash_recovery` → `/system/bin/install-recovery.sh` for `boot`) to read the 14 denied daemons
      or take a full bit-for-bit `system` + `boot` backup before flashing Glassworks.
-3. **Does Glass Panes `mirror-android-2` / `mirror-android-3` break Wi-Fi on `1.24.0` units?**
+2. **Does Glass Panes `mirror-android-2` / `mirror-android-3` break Wi-Fi on `1.24.0` units?**
    Stock `1.24.0`'s boot kernel is `3.10.49-perf-g4869d64961b`, whereas Glass Panes ships a
    `pronto_wlan.ko` for `gf46dad5260f`. Verify whether `1.24.0` units need their own `pronto_wlan.ko`
    transplanted into `system.img` during Kiln install (or whether Glass Panes image 3 already
