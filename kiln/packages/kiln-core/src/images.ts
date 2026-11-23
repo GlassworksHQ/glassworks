@@ -247,15 +247,22 @@ export function validateImage(r: ImageRecipe, frame: FrameAccess): string[] {
   });
   for (const f of files.keys()) if (!downloaded.has(f)) bad.push(`${f} is never downloaded`);
   // a copy with this browser's key that nothing writes leaves the device on the image's own keys: wifi-on with
-  // this browser's would then be refused. Each key step's copy must be written, directly or through wifi.
-  const consumed = new Set((r.steps ?? []).flatMap((s) => (s.do === 'flash' || s.do === 'wifi' ? [s.file] : [])));
-  for (const s of r.steps ?? []) {
-    if ((s.do === 'adb-key' || s.do === 'system-key') && typeof s.makes === 'string' && !consumed.has(s.makes)) {
-      bad.push(`${s.do} makes ${s.makes}, but nothing writes it: flash it, or start a wifi step from it`);
-    }
+  // this browser's would then be refused. What reaches a flash: each flashed file, and what a wifi step whose
+  // copy is flashed starts from (without a network, that source is written in its place).
+  const written = new Set((r.steps ?? []).flatMap((s) => (s.do === 'flash' ? [s.file] : [])));
+  const wifis = (r.steps ?? []).filter((s): s is Extract<ImageStep, { do: 'wifi' }> => s.do === 'wifi');
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const w of wifis) if (written.has(w.makes) && !written.has(w.file)) { written.add(w.file); grew = true; }
   }
-  const wifiFrom = (r.steps ?? []).find((s): s is Extract<ImageStep, { do: 'wifi' }> => s.do === 'wifi');
-  if (wifiFrom && keyed.size && !keyed.has(wifiFrom.file) && consumed.has(wifiFrom.makes)) {
+  for (const s of r.steps ?? []) {
+    if ((s.do === 'adb-key' || s.do === 'system-key') && typeof s.makes === 'string' && !written.has(s.makes)) {
+      bad.push(`${s.do} makes ${s.makes}, but nothing writes it: flash it, or a wifi step's copy of it`);
+    }
+    if (s.do === 'wifi' && typeof s.makes === 'string' && !written.has(s.makes)) bad.push(`wifi makes ${s.makes}, but nothing writes it: flash it`);
+  }
+  const wifiFrom = wifis[0];
+  if (wifiFrom && keyed.size && !keyed.has(wifiFrom.file) && written.has(wifiFrom.makes)) {
     bad.push(`wifi starts from ${wifiFrom.file}, not the copy with this browser's key: what it makes would leave the key out`);
   }
   if (!writes) bad.push('the recipe writes nothing');

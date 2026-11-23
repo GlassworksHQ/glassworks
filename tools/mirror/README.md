@@ -70,8 +70,9 @@ folder, which is removed at the end unless `--keep` or `--work` is given.
 
 ## A throwaway key
 
-The Mirror lets in only the first `--adb-key`, and adb's server answers with the key in its
-`HOME`'s `.android/adbkey`. To flash with a key other than this computer's (a throwaway one for a
+The Mirror lets in every `--adb-key` you give: `services.jar` names the first, and image 3's framework
+lets in each key the fresh userdata's `adb_keys` lists. So give only keys you mean to let in. adb's
+server answers with the key in its `HOME`'s `.android/adbkey`. To flash with a key other than this computer's (a throwaway one for a
 test), give the server that key for the Mirror only. This stops adb for every other device on this
 computer until the last command: check no one is using them first.
 

@@ -234,8 +234,14 @@ describe('the adb-key step', () => {
     // the network saved on the published userdata, not adb-key's copy: what gets written has no browser key
     const besideKey = keyed({ steps: steps.map((s) => (s.do === 'wifi' ? { ...s, file: 'userdata.img' } : s)) });
     expect(validateImage(besideKey, KEYED)).toEqual(expect.arrayContaining([
-      'adb-key makes userdata+key, but nothing writes it: flash it, or start a wifi step from it',
+      'adb-key makes userdata+key, but nothing writes it: flash it, or a wifi step\'s copy of it',
       'wifi starts from userdata.img, not the copy with this browser\'s key: what it makes would leave the key out',
+    ]));
+    // the network saved on the keyed copy, but userdata written as published: neither copy reaches the Mirror
+    const wifiUnwritten = keyed({ steps: steps.map((s) => (s.do === 'flash' && s.partition === 'userdata' ? { ...s, file: 'userdata.img' } : s)) });
+    expect(validateImage(wifiUnwritten, KEYED)).toEqual(expect.arrayContaining([
+      'adb-key makes userdata+key, but nothing writes it: flash it, or a wifi step\'s copy of it',
+      'wifi makes userdata+wifi, but nothing writes it: flash it',
     ]));
     const fromBuilt = keyed({ steps: steps.map((s) => (s.do === 'wifi' ? { ...s, file: 'system' } : s)) });
     expect(validateImage(fromBuilt, KEYED)).toContain('step 5: wifi needs system downloaded first, or made by adb-key');
@@ -282,7 +288,7 @@ describe('the system-key step', () => {
     expect(validateImage(keyed(), FRAME)).toContain('step 4: this frame can\'t run "system-key"');
     // made, then not written: the device would keep the image's own key
     const unwritten = keyed({ steps: steps.map((s) => (s.do === 'flash' && s.partition === 'system' ? { ...s, file: 'system.img' } : s)) });
-    expect(validateImage(unwritten, KEYED)).toContain('system-key makes system+key, but nothing writes it: flash it, or start a wifi step from it');
+    expect(validateImage(unwritten, KEYED)).toContain('system-key makes system+key, but nothing writes it: flash it, or a wifi step\'s copy of it');
   });
 });
 
