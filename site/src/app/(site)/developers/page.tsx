@@ -46,7 +46,7 @@ export default async function DevelopersPage() {
           const docPath = `/docs/libraries/${lib.name}`;
           const href = docUrls.has(docPath) ? docPath : links.s1;
           const api = apiRefs.get(lib.name);
-          const apiLabel = api?.kind === "site" ? `API ${api.version}` : api?.kind === "javadoc.io" ? "API" : undefined;
+          const apiLabel = api?.kind === "site" ? `API ${api.version}` : api?.kind === "elsewhere" ? "API" : undefined;
 
           return (
             <Row

@@ -24,20 +24,24 @@ npm run brand:raster -w site      # re-render the PNGs (app icon, GitHub avatar,
 `npm run build` and `npm run dev` first run `scripts/api-docs.mjs`. For each library in `libs/` that is
 published to Maven Central, it reads the latest release from `maven-metadata.xml`, downloads its
 `-javadoc.jar` (Dokka HTML), checks it against Central's `.sha256` or `.sha1`, and unpacks it to
-`public/docs/libraries/<name>/api/`. The site serves those pages as they are, with
+`public/docs/libraries/<name>/api/`. For each npm package (the ones `tools/release/npm-package.mjs`
+publishes), it reads the version npm tags `latest`, downloads that tarball, checks it against npm's
+`sha512` integrity, and runs TypeDoc on the type declarations it ships, one module per entry of its
+`exports`, into the same folder. The site serves those pages as they are, with
 `public/api-reference.css` and a breadcrumb back to the docs added to each. The library's docs page
 and the sidebar link it with its version. It sits under the library's own page (`/docs/libraries/<name>`)
 rather than at `/api/`, which reads like a server endpoint.
 
-| Central says | The library's page shows |
+| The registry says | The library's page shows |
 |---|---|
 | a release | "API reference: <name> <version>", served here, and in the sitemap |
 | 404 (not released yet) | "API reference: after the first release" |
-| nothing (no network) | the cached jar if there is one, else a link to javadoc.io |
-| a jar whose checksum doesn't match | nothing, because the build fails |
+| nothing (no network) | the cached jar or tarball if there is one, else a link to javadoc.io or jsdocs.io |
+| a file whose checksum doesn't match | nothing, because the build fails |
 
-Jars are cached in `.api-docs/cache/`, one folder per repository. `MAVEN_REPO=<url>` reads another Maven repository, e.g. a
-release in a local repository before Central has it.
+Jars and tarballs are cached in `.api-docs/cache/`, one folder per repository. `MAVEN_REPO=<url>` reads another
+Maven repository, e.g. a release in a local repository before Central has it; `NPM_REGISTRY=<url>` another npm
+registry.
 
 Opening `npm run dev` from another machine (a tailnet name, a LAN IP)? Next.js blocks its dev scripts
 for unknown hosts, so the page renders but nothing interactive works. List the host in a git-ignored
@@ -85,7 +89,7 @@ src/app/frames/[slug]/render.webp/route.ts  each frame's render (frame.json `ren
 scripts/brand/clarity.mjs the Clarity README badge, served per frame at /frames/<id>/clarity-on-*.svg
 tests/clarity/         made-up Clarity summaries for working on the site (CLARITY_FIXTURES)
 src/lib/libraries.json the standalone libraries, one banner each
-src/lib/apiDocs.ts     each library's API reference, as scripts/api-docs.mjs found it on Maven Central
+src/lib/apiDocs.ts     each library's API reference, as scripts/api-docs.mjs found it on Maven Central or npm
 scripts/brand/         `npm run brand` and `npm run brand:raster`: every brand file, from src/lib/markGeometry.ts
 public/brand/          downloadable SVGs
 ```

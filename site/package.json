@@ -46,6 +46,7 @@
     "eslint-config-next": "16.4.6",
     "opentype.js": "^2.0.0",
     "pagefind": "1.6.0",
+    "typedoc": "0.28.20",
     "typescript": "6.0.3"
   }
 }
