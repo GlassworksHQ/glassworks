@@ -1647,6 +1647,13 @@ class PageGone(unittest.TestCase):
         self.assertEqual(c["tiers"]["typical"]["content_gone"]["low_memory"], True)
         self.assertTrue(c["tiers"]["heavy"].get("done"))
 
+    def test_the_last_lost_view_ends_before_the_kernels_log_is_read_too(self):
+        """CodeRabbit on #781: the same when the page goes on the run's last view, where nothing is left to open."""
+        p, c, log = self.run_short(90, FAKE_PAGE_GONE="heavy", FAKE_LMK="kernel")
+        self.assertEqual(p.returncode, 0, p.stderr[-1500:])
+        self.assertIn("dmesg: the page back got no command", log)
+        self.assertEqual(c["tiers"]["heavy"]["content_gone"]["low_memory"], True)
+
     def test_a_lost_done_line_after_the_page_came_back_doesnt_stall_the_run(self):
         """CodeRabbit on #781: the start view came back usable and its done line was lost in logcat. As for the run's
         own restart, the usable line ends the wait after RESTART_DONE_WAIT_S, and the rest of the views open."""

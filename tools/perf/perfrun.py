@@ -1172,13 +1172,12 @@ def cmd_coldstart(dev, a):
         st["current"], st["next_at"] = None, None
         if lost:
             st["live"] = st["view_open"] = False
-            threading.Thread(target=still, args=(cur[1],), daemon=True).start()
-        if not at_end:
-            try:
-                with urllib.request.urlopen(f"{a.url.rstrip('/')}/clarity/cancel", timeout=10) as r:
-                    r.read()
-            except OSError:
-                pass
+        # The run's last view too: the page coming back must find no command, whatever comes after.
+        try:
+            with urllib.request.urlopen(f"{a.url.rstrip('/')}/clarity/cancel", timeout=10) as r:
+                r.read()
+        except OSError:
+            pass
         gone = {"cause": cause,
                 "low_memory": cause == "killed" and low_memory_kill(dev, st["lmk_seen"], rec["mono"], st["own_procs"])}
         res.setdefault("content_gone", []).append(dict(gone, during=slot if lost else "between views", mono=rec["mono"]))
