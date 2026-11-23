@@ -80,6 +80,9 @@ class WifiChange(
 
         /** The change couldn't be saved before leaving: without it a restart part way would lose the way back. */
         data object NotSaved : Refusal
+
+        /** Whether the new network is saved already couldn't be read: a way back might forget the person's own. */
+        data object SavedUnknown : Refusal
     }
 
     /** The device's Wi-Fi, as a change needs it. Main thread; every `done` is called once, on it. */
@@ -90,8 +93,8 @@ class WifiChange(
         /** The saved network the panel is on now, or null when it is on none (or can't tell). */
         fun current(): Network?
 
-        /** Whether a network called [name] is saved already: a way back then leaves it saved. */
-        fun isSaved(name: String): Boolean
+        /** Whether a network called [name] is saved already (a way back then leaves it saved), or null when it can't tell. */
+        fun isSaved(name: String): Boolean?
 
         /** Networks nearby, strongest first, for the person to pick from. */
         fun nearby(): List<String> = emptyList()
@@ -169,7 +172,8 @@ class WifiChange(
         if (state !is State.Idle) return Refusal.Busy
         val prev = radio.current() ?: return Refusal.NotOnWifi
         if (prev.name == name) return Refusal.Same
-        val p = Pending(name, prev, forget = !radio.isSaved(name))
+        val saved = radio.isSaved(name) ?: return Refusal.SavedUnknown
+        val p = Pending(name, prev, forget = !saved)
         if (!store.save(p)) return Refusal.NotSaved
         val mine = ++run
         pending = p
@@ -230,15 +234,29 @@ class WifiChange(
         }
     }
 
-    /** On the new network: Home Assistant answers, or ask again until the deadline. */
+    /**
+     * On the new network: Home Assistant answers there, or ask again until the deadline. The answer counts only while the
+     * panel is still on the new network after it, so one that came over another network never keeps the change.
+     */
     private fun check(mine: Int) {
         radio.reaches { ok ->
-            if (mine != run || state !is State.Joining) return@reaches
-            if (ok) {
+            if (mine != run) return@reaches
+            val s = state as? State.Joining ?: return@reaches
+            if (ok && radio.current()?.name == s.target) {
                 log("Wi-Fi change: Home Assistant answers on the new network; it stays")
-                finish(mine, Last.Joined((state as State.Joining).target))
+                finish(mine, Last.Joined(s.target))
             } else later(mine, checkEveryMs) { check(mine) }
         }
+    }
+
+    /**
+     * The service is ending: nothing of this run answers or fires any more. A change under way stays saved, so the next
+     * start finishes it ([resume]).
+     */
+    fun close() {
+        run++
+        cancelLater?.invoke(); cancelLater = null
+        cancelDeadline?.invoke(); cancelDeadline = null
     }
 
     private fun deadline(mine: Int, ms: Long) {

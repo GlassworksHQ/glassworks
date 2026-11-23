@@ -55,7 +55,7 @@ private object ReadmeExamples {
     fun switchAndBack(wifi: WifiProvisioner, newName: String, password: String, reachesMyServer: () -> Boolean) {
         if (wifi.switchBlock() != null) return
         val previous = wifi.onNetwork() ?: return
-        val forget = !wifi.isSaved(newName)
+        val forget = !(wifi.isSaved(newName) ?: return) // can't tell: don't risk forgetting the person's own
         wifi.connect(newName, password) { joined ->
             if (joined is WifiProvisioner.Outcome.Connected && !reachesMyServer()) {
                 wifi.goBack(previous, leave = newName, forget = forget) { back -> /* Connected once on `previous` again */ }

@@ -82,6 +82,7 @@ object WifiSettings {
         Refusal.NotOnWifi -> "The panel isn't on Wi-Fi now, so it would have no network to go back to. Set up Wi-Fi from the panel's setup instead."
         Refusal.Same -> "The panel is already on that network."
         Refusal.NotSaved -> "The panel couldn't save the change, so it didn't start. Try again."
+        Refusal.SavedUnknown -> "The panel couldn't read its saved networks, so it didn't start. Try again."
     }
 
     /** Why this device can't change Wi-Fi from the app, after what it is on ([now]), if given. */

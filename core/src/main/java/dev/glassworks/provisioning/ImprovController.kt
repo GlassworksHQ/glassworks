@@ -146,6 +146,9 @@ object ImprovController {
     /** A Wi-Fi change from the settings (#660) is joining or going back: as [installerJoining], no restart then. */
     private var settingsJoining = false
 
+    /** Counts settings joins and ways back: only the latest one's answer clears [settingsJoining]. */
+    private var settingsSeq = 0
+
     /** Installer requests in this process; an outcome only updates [installerWifi] if it's the latest. */
     private var installerSeq = 0
     private var notifying = false
@@ -316,17 +319,26 @@ object ImprovController {
     fun joinFromSettings(ssid: String, psk: String, done: (WifiProvisioner.Outcome) -> Unit): Boolean {
         if (!initialized) return false
         Log.i(TAG, "settings Wi-Fi change: joining the chosen network")
+        val seq = ++settingsSeq
         settingsJoining = true
-        wifi.connect(ssid, psk) { o -> main.post { settingsJoining = false; settleUntil = SystemClock.elapsedRealtime() + SETTLE_MS; done(o) } }
+        wifi.connect(ssid, psk) { o -> main.post { settingsDone(seq); done(o) } }
         return true
     }
 
     /** [WifiProvisioner.goBack] for a Wi-Fi change from the settings; false if the controller isn't up yet. */
     fun goBackFromSettings(to: WifiProvisioner.OnNetwork, leave: String, forget: Boolean, done: (WifiProvisioner.Outcome) -> Unit): Boolean {
         if (!initialized) return false
+        val seq = ++settingsSeq
         settingsJoining = true
-        wifi.goBack(to, leave, forget) { o -> main.post { settingsJoining = false; settleUntil = SystemClock.elapsedRealtime() + SETTLE_MS; done(o) } }
+        wifi.goBack(to, leave, forget) { o -> main.post { settingsDone(seq); done(o) } }
         return true
+    }
+
+    /** A settings join or way back answered: busy ends only with the latest one's answer, a superseded one's changes nothing. */
+    private fun settingsDone(seq: Int) {
+        if (seq != settingsSeq) return
+        settingsJoining = false
+        settleUntil = SystemClock.elapsedRealtime() + SETTLE_MS
     }
 
     /**

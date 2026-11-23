@@ -27,10 +27,10 @@ class WifiChangeChecksTest {
         return answer
     }
 
-    @Test fun aGoodNameAndPasswordJoinTrimmed() {
-        assertNull(wifi("  Garden Shed ", "correct horse"))
+    @Test fun aGoodNameAndPasswordJoinExactlyAsGiven() {
+        assertNull(wifi(" Garden Shed", "correct horse"))
         assertNull("an open network", wifi("Attic", ""))
-        assertEquals(listOf("Garden Shed" to "correct horse", "Attic" to ""), joins)
+        assertEquals("a real leading space stays", listOf(" Garden Shed" to "correct horse", "Attic" to ""), joins)
     }
 
     @Test fun badNamesAndPasswordsNeverJoin() {

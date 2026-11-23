@@ -38,7 +38,7 @@ class SettingsWifiRadio(
 
     override fun current(): WifiChange.Network? = runCatching { p?.onNetwork() }.getOrNull()?.let { WifiChange.Network(it.name, it.netId) }
 
-    override fun isSaved(name: String): Boolean = runCatching { p?.isSaved(name) }.getOrNull() == true
+    override fun isSaved(name: String): Boolean? = runCatching { p?.isSaved(name) }.getOrNull()
 
     /** Names from the last scan, strongest first; asks for a new scan when read, for the next look. */
     override fun nearby(): List<String> {

@@ -31,6 +31,7 @@ class WifiChangeTest {
         var block: WifiChange.Block? = null
         var on: Network? = home
         val saved = hashSetOf(home.name)
+        var savedReadable = true
         var joinDone: ((Joined) -> Unit)? = null
         val joins = ArrayList<String>()
         val passwords = ArrayList<String>()
@@ -43,7 +44,7 @@ class WifiChangeTest {
 
         override fun block() = block
         override fun current() = on
-        override fun isSaved(name: String) = name in saved
+        override fun isSaved(name: String) = if (savedReadable) name in saved else null
         override fun join(name: String, password: String, done: (Joined) -> Unit) { joins += name; passwords += password; joinDone = done }
         override fun cancel() { cancels++ }
         override fun goBack(to: Network, leave: String, forget: Boolean, done: (Boolean) -> Unit) {
@@ -143,11 +144,38 @@ class WifiChangeTest {
 
     @Test fun homeAssistantAnsweringLateStillCounts() {
         startAndJoin()
+        radio.on = Network("Garden Shed", 7)
         radio.joinDone!!(Joined.Ok)
         advance(30_000)
         radio.reach = true
         advance(5_000)
         assertEquals(State.Idle(Last.Joined("Garden Shed")), c.state)
+    }
+
+    @Test fun anAnswerWhileNotOnTheNewNetworkDoesntKeepTheChange() {
+        startAndJoin()
+        radio.reach = true // Home Assistant answers, but over the old network the panel fell back to
+        radio.joinDone!!(Joined.Ok)
+        assertTrue("not kept", c.state is State.Joining)
+        advance(120_000)
+        assertEquals(State.Idle(Last.Back("Garden Shed", home.name, Why.NO_HOME_ASSISTANT)), c.state)
+    }
+
+    @Test fun savedNetworksThatCantBeReadRefuseRatherThanRiskForgettingOne() {
+        radio.savedReadable = false
+        assertEquals(Refusal.SavedUnknown, c.start("Garden Shed", "x"))
+        assertNull(store.saved)
+        assertTrue(radio.joins.isEmpty())
+    }
+
+    @Test fun closingStopsEveryTimerAndAnswerButKeepsTheChangeForTheNextStart() {
+        startAndJoin()
+        c.close()
+        radio.joinDone!!(Joined.Failed(Why.PASSWORD))
+        advance(10 * 60_000)
+        assertTrue("no way back taken by an ended service", radio.backs.isEmpty())
+        assertEquals(WifiChange.Pending("Garden Shed", home, forget = true), store.saved)
+        assertTrue(timers.isEmpty())
     }
 
     @Test fun aJoinThatNeverAnswersTimesOutCancelsAndGoesBack() {

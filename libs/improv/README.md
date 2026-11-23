@@ -91,11 +91,12 @@ To move a device that is already online to another network, and back if the new 
 `switchBlock()` first: it is null when the app may add and select networks itself and can see which one it is on.
 Read the network it is on with `onNetwork()`, join the new one with `connect`, and if that network doesn't do what
 you need, `goBack(previous, leave = newName, forget = !wasSaved)` selects the old network again, forgetting the new
-one when the join saved it (`isSaved(name)` tells you beforehand), and reports once the device is back.
+one when the join saved it (`isSaved(name)` tells you beforehand, or null when it can't tell), and reports once the
+device is back.
 
 ```kotlin
 val previous = wifi.onNetwork() ?: return
-val forget = !wifi.isSaved(newName)
+val forget = !(wifi.isSaved(newName) ?: return) // can't tell: don't risk forgetting the person's own
 wifi.connect(newName, password) { joined ->
     if (joined is WifiProvisioner.Outcome.Connected && !reachesMyServer()) {
         wifi.goBack(previous, leave = newName, forget = forget) { back -> /* Connected once on `previous` again */ }

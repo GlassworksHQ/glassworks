@@ -95,8 +95,11 @@ class WifiProvisionerGoBackTest {
     @Test fun itReadsTheNetworkItIsOnAndWhatIsSaved() {
         assertEquals(WifiProvisioner.OnNetwork("Garden Shed", shed), p.onNetwork())
         assertFalse("the log line has no name", p.onNetwork().toString().contains("Garden"))
-        assertTrue(p.isSaved("Brightside Home"))
-        assertFalse(p.isSaved("Attic"))
+        assertEquals(true, p.isSaved("Brightside Home"))
+        assertEquals(false, p.isSaved("Attic"))
+        shadowOf(ctx.getSystemService(LocationManager::class.java)).setLocationEnabled(false)
+        assertNull("can't tell isn't no", p.isSaved("Attic"))
+        shadowOf(ctx.getSystemService(LocationManager::class.java)).setLocationEnabled(true)
         on(null, -1)
         assertNull(p.onNetwork())
     }

@@ -187,6 +187,7 @@ open class KioskService : Service() {
     }
 
     override fun onDestroy() {
+        glassworks.wifiChange?.close()
         glassworks.wifiChange = null
         hotspotNetworks?.let { cb -> runCatching { getSystemService(ConnectivityManager::class.java)?.unregisterNetworkCallback(cb) } }
         hotspotNetworks = null

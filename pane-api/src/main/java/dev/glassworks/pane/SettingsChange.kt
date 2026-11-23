@@ -163,16 +163,14 @@ object SettingsChange {
      * say. The password is never in what [done] says, nor in a thrown exception's text.
      */
     fun wifi(item: SettingsItem.Wifi, network: String, password: String, done: (String?) -> Unit) {
-        // A space typed or pasted around the name; the password is taken as typed.
-        val name = network.trim()
-        wifiProblem(item, name, password)?.let { return done(it) }
-        try { item.join(name, password, done) } catch (e: Throwable) { done(COULD_NOT_JOIN) }
+        // The name goes to the join exactly as picked or typed: Android matches a network by its exact bytes, and a
+        // name may really start or end with a space. A stray space typed by mistake fails the join, which goes back.
+        wifiProblem(item, network, password)?.let { return done(it) }
+        try { item.join(network, password, done) } catch (e: Throwable) { done(COULD_NOT_JOIN) }
     }
 
     /** What [wifi] refuses before it joins, or null: a surface checks this before asking for the panel's code. */
     fun wifiProblem(item: SettingsItem.Wifi, network: String, password: String): String? = when {
-        // The same name [wifi] joins.
-        network.trim() != network -> wifiProblem(item, network.trim(), password)
         !runCatching { item.open() }.getOrDefault(false) -> WIFI_BUSY
         network.isBlank() -> "Pick a network, or type its name."
         network.toByteArray(Charsets.UTF_8).size > WIFI_NAME_MAX -> "A Wi-Fi network's name has at most $WIFI_NAME_MAX characters."

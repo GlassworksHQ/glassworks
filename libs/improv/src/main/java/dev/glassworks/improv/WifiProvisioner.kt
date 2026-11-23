@@ -121,8 +121,10 @@ public class WifiProvisioner(
         "fineLocation=$hasLocationPermission locationOn=$locationEnabled wifiOn=${wm.isWifiEnabled}"
 
     /**
-     * A saved network the device is on: its [name], and Android's id for its saved configuration ([netId]). For
-     * [onNetwork] and [goBack].
+     * A saved network the device is on, for [onNetwork] and [goBack].
+     *
+     * @property name The network's name (SSID), unquoted.
+     * @property netId Android's id for its saved configuration.
      */
     public data class OnNetwork(public val name: String, public val netId: Int) {
         /** For a log: the id, never the network's name. */
@@ -166,12 +168,16 @@ public class WifiProvisioner(
         return OnNetwork(name, i.networkId)
     }
 
-    /** Whether a network called [name] is saved on the device now. False when this app can't list them (see [switchBlock]). */
+    /**
+     * Whether a network called [name] is saved on the device now, or null when this app can't tell: no location access
+     * (see [switchBlock]), or Android refused the list. A caller that forgets what it saved must not read null as no.
+     */
     @Suppress("DEPRECATION")
-    public fun isSaved(name: String): Boolean {
+    public fun isSaved(name: String): Boolean? {
         ensureLocationIfDeviceOwner()
-        if (!hasLocationAccess) return false
-        return runCatching { wm.configuredNetworks.orEmpty().any { WifiSecurityRules.unquote(it.SSID) == name } }.getOrDefault(false)
+        if (!hasLocationAccess) return null
+        val saved = runCatching { wm.configuredNetworks }.getOrNull() ?: return null
+        return saved.any { WifiSecurityRules.unquote(it.SSID) == name }
     }
 
     /**
@@ -206,6 +212,7 @@ public class WifiProvisioner(
     private var returning: Return? = null
 
     /** A [goBack] waiting for the device to be on [to] again. */
+    @Suppress("DEPRECATION")
     private inner class Return(val to: OnNetwork, val cb: (Outcome) -> Unit, val deadline: Long) : Runnable {
         override fun run() {
             if (returning !== this) return

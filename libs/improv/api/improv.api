@@ -237,7 +237,7 @@ public final class dev/glassworks/improv/WifiProvisioner {
 	public final fun getLegacyApiAllowed ()Z
 	public final fun getOnProgress ()Lkotlin/jvm/functions/Function1;
 	public final fun goBack (Ldev/glassworks/improv/WifiProvisioner$OnNetwork;Ljava/lang/String;ZLkotlin/jvm/functions/Function1;)V
-	public final fun isSaved (Ljava/lang/String;)Z
+	public final fun isSaved (Ljava/lang/String;)Ljava/lang/Boolean;
 	public final fun onNetwork ()Ldev/glassworks/improv/WifiProvisioner$OnNetwork;
 	public final fun requestScan ()Z
 	public final fun scan ()Ljava/util/List;

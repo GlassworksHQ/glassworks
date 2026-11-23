@@ -1168,9 +1168,14 @@ class KioskSettingsOverlay(context: Context) : FrameLayout(context) {
             open(i.title, i.hint, fields, SettingsChange.WIFI_JOIN)
             val near = runCatching { i.nearby() }.getOrDefault(emptyList())
             if (near.isNotEmpty()) {
-                val chips = Wrap(context, px(10f), px(10f))
-                near.forEach { n -> chips.addView(g.chip(n).apply { setOnClickListener { field.setText(n); field.setSelection(n.length); password.requestFocus() } }) }
-                fields.addView(chips, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = px(14f) })
+                // One row that scrolls sideways: however many networks are near, the fields and Join stay in view.
+                val chips = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+                near.forEach { n ->
+                    chips.addView(g.chip(n).apply { setOnClickListener { field.setText(n); field.setSelection(n.length); password.requestFocus() } },
+                        LinearLayout.LayoutParams(-2, -2).apply { marginEnd = px(10f) })
+                }
+                val row = android.widget.HorizontalScrollView(context).apply { isHorizontalScrollBarEnabled = false; addView(chips) }
+                fields.addView(row, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = px(14f) })
             }
             field.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
             field.hint = SettingsChange.WIFI_NAME
