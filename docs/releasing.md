@@ -410,7 +410,8 @@ after it. Apps up to **0.4.3** only read `releases/latest` and only understand `
   Install. GitHub's page shows 0.4.4 as *Latest* meanwhile; nothing else reads it (Kiln, the site and the apps from
   0.4.4 on pick from the list).
 - **1.0.0 sets `latest` back to `true`**, in the same PR as its changelog sections, and is published as
-  `releases/latest`. A panel still on 0.4.3 after that sees no update, and needs Kiln or `adb install -r`.
+  `releases/latest`. That PR also changes `test_no_line_is_releases_latest_while_v0_4_4_holds_it` in
+  `tools/release/test/test_release_plan.py` to expect the S1 line (the other tests read the flag from the data). A panel still on 0.4.3 after that sees no update, and needs Kiln or `adb install -r`.
 - The app's blueprint links point at its own release's tag, which `ReleaseLine.tag` builds
   (`aqara-s1-plus-v1.2.3` on the S1). A release tagged any other way gets links to files that aren't
   there ([Blueprints](blueprints.md#which-version-you-get)). The generic app and its legacy build do
