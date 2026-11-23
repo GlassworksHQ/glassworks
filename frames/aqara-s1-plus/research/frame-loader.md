@@ -26,6 +26,13 @@ already wrapped when it was read. It now writes its lines to the kernel log too,
 `dmesg` at the first adb answer: L5 passed without a bundle, the boot step costs about 0.5 s. L5 with a bundle
 (the full check of its files) is still pending: it needs a frame release (#550).
 
+**Bad bundles on the dev S1, 2026-11-23 (verified; #139 issuecomment-7094237228).** With #744's signed 0.5.0
+bundle tampered with, a corrupted `current` falls back to the boot image's copies, and a staged bundle below the
+floor and one with a truncated manifest are dropped at boot (L6–L8). Another frame's bundle and a low version
+are refused by the panel's own `loader check` with a throwaway key (L9). Another frame's bundle signed with the
+trusted key, refused at boot, is still open. Nothing a person sees says the bundle was rejected
+([Bad bundles](#bad-bundles-on-the-panel-l6l9)).
+
 Device: Aqara S1 Plus, firmware 4.5.80. Sources: the stock `boot`, `misc` and boot package
 backups and Aqara's 4.5.80 OTA package, all outside the repo; AOSP `android-10.0.0_r41`; this repo at
 `c8b0493f9`. Tools: `strings` (macOS), `brotli` 1.1, Python 3.11.
@@ -499,6 +506,9 @@ Every S1 in the field needs one more Kiln update to get the loader. Before build
   each last under 60 s, 3 runs in a row, is marked bad for that bundle version, and that slot runs the boot
   copy from then on. The run-once slots (`firstboot`, `update`) have no retry loop: their bundle script runs
   once per start. That was the 0.4.3 radio helper's rule, applied to the long-running slots.
+  - A failed check of `current` falls back as above and leaves `current` and the floor in place (no quarantine);
+    a staged bundle that fails is deleted. Verified on the panel 2026-11-23 (L6–L8). The 60 s rule is untested
+    on the panel.
 
 ### What the app reads
 
@@ -610,7 +620,8 @@ stopping after step 3 leaves the panel working as before.
    `ok 1.0.1 1000001 -`), has `ok` in its first field and the release's version in its second. The boot step deletes that file
    before it starts, so a record there was written by the reboot Kiln asked for. `ro.glassworks.frame.version`
    alone doesn't prove it: the boot image and the first bundle are both 1.0.0. The radio status is a
-   separate check after that.
+   separate check after that. Kiln has to read this record, not the app's entities: on 2026-11-23 (L6) a
+   rejected bundle showed in HA the same as no bundle.
 
 If the panel never reaches fastboot, or stock fastboot refuses `boot` or `flash`, the route stops
 before any write, and the FEL button stays the way in. **Route 2** (root writes `boot` from Android,
@@ -630,6 +641,9 @@ All host-side and read-only. The images are local backups, never in the repo.
 3. The kernel and command line: the `boot` header (v2, page size 2048, command line at offset 64),
    and `strings` over the kernel at page 1.
 4. `misc`: bytes 0–2047 of a `misc` backup are the bootloader message (all zero on the panel).
+
+L6–L9 are not host-side: they write in `/data/glassworks/bundle/` on a dev panel (adb root), and need its
+backup first. The steps are under [Bad bundles](#bad-bundles-on-the-panel-l6l9).
 
 ## Panel tests
 
@@ -746,7 +760,60 @@ Results, 2026-11-19 (dev S1, the loader image written by #651's boot writer; #65
 | L2 | **Pass:** `glassworks_agent` and `glassworks_netwatch` running, `glassworks_firstboot` stopped; of the old services only `s1kiosk_devsu` (the dev image's, carried over on purpose) |
 | L3 | **Pass:** `persist.glassworks.radio_mode` = `thread_router`; otbr-agent up within 4 min, `sys.glassworks.radio.status` = `ok thread_router: joined as router` |
 | L4 | **Pass:** the boot animation plays as before (watched), `bootanimation.zip` mounted |
-| L5 | 2026-11-19 **inconclusive:** no `glassworks_loader` line in `logcat -b all` or `dmesg` (`log -t` before logd, and the kernel log had wrapped). 2026-11-20 (#651 issuecomment-7028522330), **without a bundle: pass**, `dmesg` read at the first adb answer after a restart: `boot: checking the frame bundle` at 3.743 s, `boot: done: frame 1.0.0, bundle none, boot animation …` at 4.211 s; init says the `exec` took 0.516 s. **With a bundle: pending** (it needs a frame release, #550) |
+| L5 | 2026-11-19 **inconclusive:** no `glassworks_loader` line in `logcat -b all` or `dmesg` (`log -t` before logd, and the kernel log had wrapped). 2026-11-20 (#651 issuecomment-7028522330), **without a bundle: pass**, `dmesg` read at the first adb answer after a restart: `boot: checking the frame bundle` at 3.743 s, `boot: done: frame 1.0.0, bundle none, boot animation …` at 4.211 s; init says the `exec` took 0.516 s. **With a bundle: pending** (it needs a frame release, #550). 2026-11-23, three bad bundles (L6–L8): the boot step took 3.6 s for three checks over about 45 MB; not the cost of an `ok` bundle |
+
+### Bad bundles on the panel (L6–L9)
+
+**Verified 2026-11-23** (#139 issuecomment-7094237228). Dev S1 on the frame-loader boot image (frame 1.0.0),
+app 0.4.10, radio `thread_router`, loader from `97a36bd65`. Writes only in `/data/glassworks/bundle/`, backed up
+first and put back byte for byte. No partition written. Two reboots. The release key wasn't used: the real
+bundle is #744's signed 0.5.0 (`version 5000`).
+
+| Test | What it settles | Staged | Result |
+|---|---|---|---|
+| L6 | A loaded bundle with a file that doesn't match its manifest falls back | `current`: 0.5.0 with one byte flipped in `sisdk/NOTICE.txt` (never executed; the signature still verifies) | **Pass:** `frame bundle rejected: sisdk/NOTICE.txt does not match the manifest; running the boot image's copies`. `/data/glassworks-pub/frame-bundle` = `bad - 5001 -`, `sys.glassworks.bundle.state` = `bad: sisdk/NOTICE.txt does not match the manifest`, no `/dev/glassworks/active`. Boot animation, agent and netwatch ran from the ramdisk (`/sbin`), `sys.glassworks.agent.source` = `boot`, radio `ok thread_router`. `current` left byte for byte, floor unchanged |
+| L7 | A staged bundle below the floor is dropped | `next`: 0.5.0, untouched, with `/data/glassworks/bundle/version` raised to 5001 first | **Pass:** `staged bundle (next) dropped: version 0.5.0 is below the floor 5001`; `next` deleted |
+| L8 | A staged bundle with a truncated manifest is dropped | `next.old`: 0.5.0 with its manifest cut to 1200 bytes | **Pass:** `staged bundle (next.old) dropped: bad signature (not signed with the project's key)`; `next.old` deleted |
+| L9 | Another frame's bundle and a low version, through `loader check` (no reboot) | Bundles made with `make-bundle.py` and a throwaway key, checked with `GW_PUBKEY` at its public key, then removed | **Pass:** control for this frame `1.0.1 1000001`; one for `lululemon-mirror`: `a bundle for lululemon-mirror, not aqara-s1-plus`; one at 0.4.9: `version 0.4.9 is below the floor 5000`; the control against the trusted key: `bad signature (not signed with the project's key)` |
+
+The kernel log of L6–L8, one boot, read at adb's first answer, in this order:
+```
+boot: checking the frame bundle
+staged bundle (next) dropped: version 0.5.0 is below the floor 5001
+staged bundle (next.old) dropped: bad signature (not signed with the project's key)
+frame bundle rejected: sisdk/NOTICE.txt does not match the manifest; running the boot image's copies
+boot: done: frame 1.0.0, bundle bad (sisdk/NOTICE.txt does not match the manifest), boot animation /sbin/glassworks_bootanimation.zip
+```
+The step took 3.6 s. The restore boot: `bundle none`, record `none - 5000 -`; `version` has the same bytes, mode
+and owner; the properties and directory listings match the pre-run snapshot; app still 0.4.10; radio
+`ok thread_router: joined`.
+
+What it doesn't prove:
+- **Another frame's bundle signed with the trusted key, refused at boot: open.** Making one needs the release
+  key, which wasn't used. L9's `check` goes through the same `check_dir` the boot step calls, so the frame-id
+  refusal is covered there with a throwaway key.
+- **The install service refusing these:** covered by the off-device shell tests only.
+- **An `ok` bundle's boot cost** (L5 with a bundle): still pending.
+
+**Gap (verified 2026-11-23): a rejected bundle looks like no bundle to a person.** During L6, HA's Frame update
+entity showed `1.0.0 (boot image)`, as with no bundle, and the `Radio helper` sensor said
+`radio bundle on the panel: none`. Only `sys.glassworks.bundle.state` and the kernel log said `bad`. Showing it
+on the panel or in HA is a small app change, if #139 wants it.
+
+How to reproduce (dev panel, adb root):
+1. Back up `/data/glassworks/bundle/` (the `version` file's bytes, mode and owner too) and snapshot
+   `getprop | grep glassworks` and the directory listings.
+2. Make the three trees from #744's signed 0.5.0 bundle on the host: `current` with one byte of
+   `sisdk/NOTICE.txt` flipped; `next` untouched; `next.old` with `manifest` truncated to 1200 bytes.
+3. As root on the panel, `echo 5001 > /data/glassworks/bundle/version`, then push each tree with
+   `tar -cf - <dir> | adb exec-in "su -c 'tar -xf - -C /data/glassworks/bundle'"`.
+4. `adb reboot`; at adb's first answer, `adb shell dmesg | grep glassworks_loader`, then read the record,
+   the properties, `/dev/glassworks/active` and the slots' sources.
+5. L9, no reboot: `make-bundle.py --frame <id> --frame-version <version> --key <throwaway> --pubkey <throwaway.pub> …`
+   for this frame at 1.0.1, for `lululemon-mirror`, and for this frame at 0.4.9; push each and run
+   `GW_PUBKEY=<throwaway.pub> sh /sbin/glassworks_loader.sh check <dir>`; then the 1.0.1 one without `GW_PUBKEY`.
+   Remove them.
+6. Restore: delete the test dirs, put `version` back byte for byte, reboot, and compare with step 1's snapshot.
 
 ## Open questions
 
@@ -763,4 +830,8 @@ Results, 2026-11-19 (dev S1, the loader image written by #651's boot writer; #65
 - Does `fastboot boot` give Android the env's arguments (`partitions=`, `snum`, MACs)? From the
   source, no: a non-empty header command line replaces `bootargs` (attempt 8).
 - How long does the full bundle check take at `post-fs-data` on the panel? About 40 MB is hashed
-  (otbr, the Zigbee runtime and the boot animation). The loader PR measures it.
+  (otbr, the Zigbee runtime and the boot animation). The loader PR measures it. A data point
+  (2026-11-23, L6–L8): three checks of bad bundles over about 45 MB took 3.6 s.
+- Another frame's bundle signed with the trusted key, refused at boot (L9 covers it with a throwaway key).
+- Should the panel or HA say a bundle was rejected? Today only `sys.glassworks.bundle.state` and the kernel log
+  do ([the gap](#bad-bundles-on-the-panel-l6l9)).
