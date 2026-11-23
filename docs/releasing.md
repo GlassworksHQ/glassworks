@@ -345,9 +345,10 @@ that commit. When a newer record never reached success, the next run deploys any
 unknown. Each run's summary lists what it deployed, from which commit, and why.
 
 Refract (refract.glassworks.dev), the Cloudflare Worker Kiln downloads every APK and image through, deploys from the
-same workflow, to Cloudflare, when its code, allowlist or release lines changed. Kiln's job waits for it: when Refract
-needs a deploy and it fails, Kiln isn't deployed either, so a Kiln that names a new download never goes live before
-Refract serves it ([its README](../kiln/workers/refract/README.md#deploying)).
+same workflow, to Cloudflare, when its code, allowlist or release lines changed. Kiln's job waits for it, and Kiln
+doesn't deploy a commit whose Refract files changed since Refract's last successful deploy (when that deploy failed,
+or main moved on in between), so a Kiln that names a new download never goes live before Refract serves it. Running
+the workflow by hand for Kiln deploys Refract first when it needs it ([its README](../kiln/workers/refract/README.md#deploying)).
 
 Versions are `MAJOR.MINOR.PATCH`. For the app lines minor and patch are below 100, and the versionCode is
 `major*10000 + minor*100 + patch`, so `1.2.3` is 10203. Frame versions take each part up to 999. SemVer pre-release

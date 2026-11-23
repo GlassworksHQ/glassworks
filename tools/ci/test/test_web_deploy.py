@@ -262,14 +262,27 @@ class Schedule(InRepo):
         self.assertEqual({p: d for p, (d, _, _) in got.items()}, {'site': False, 'kiln': False, 'installer': False, 'refract': False})
 
 
-class Dispatch(unittest.TestCase):
+class Dispatch(InRepo):
     def test_by_hand_deploys_what_was_asked_with_no_diff(self):
-        def never(_):
-            raise AssertionError('a deploy by hand reads no deployments')
+        head = self.repo.commit('docs/esphome.md')
+
+        def refract_only(projects):
+            self.assertEqual(projects, ['refract'], 'a deploy by hand reads only Refract\'s record, for Kiln')
+            return {'refract': head}
         for project, want in (('both', {'site', 'kiln'}), ('site', {'site'}), ('kiln', {'kiln'}),
                               ('installer', {'installer'}), ('refract', {'refract'})):
-            got = wd.plan(list(wd.ENVIRONMENTS), 'workflow_dispatch', project, fetch=never)
+            got = wd.plan(list(wd.ENVIRONMENTS), 'workflow_dispatch', project, fetch=refract_only)
             self.assertEqual({p for p, (d, _, _) in got.items() if d}, want, project)
+
+    def test_kiln_by_hand_deploys_refract_first_when_what_it_serves_changed(self):
+        deployed = self.repo.commit('kiln/workers/refract/src/index.ts')
+        self.repo.commit('kiln/workers/refract/allowlist.json')
+        for project in ('kiln', 'both'):
+            got = wd.plan(list(wd.ENVIRONMENTS), 'workflow_dispatch', project, fetch=lambda _: {'refract': deployed})
+            self.assertTrue(got['refract'][0], project)
+            self.assertIn('Kiln was asked for by hand', got['refract'][2])
+        got = wd.plan(list(wd.ENVIRONMENTS), 'workflow_dispatch', 'site', fetch=lambda _: {'refract': deployed})
+        self.assertFalse(got['refract'][0])
 
 
 class Check(InRepo):
@@ -294,9 +307,29 @@ class Check(InRepo):
         old = self.repo.commit('site/x')
         mine = self.repo.commit('kiln/apps/kiln/src/page.tsx')
         newer = self.repo.commit('kiln/apps/kiln/src/other.tsx')
-        with mock.patch.object(wd, 'bases', lambda _: {'kiln': old}):
+        with mock.patch.object(wd, 'bases', lambda _: {'kiln': old, 'refract': old}):
             code, out = self.run_check(mine)
         self.assertEqual((code, out['deploy'], out['commit']), (0, 'true', newer))
+
+    def test_kiln_waits_when_main_has_refract_inputs_newer_than_refract_deployed(self):
+        # Refract deployed A; B, pushed before Kiln's checkout, adds a download to Kiln and Refract's allowlist.
+        a = self.repo.commit('kiln/workers/refract/allowlist.json', 'kiln/apps/kiln/src/page.tsx')
+        self.repo.commit('kiln/workers/refract/allowlist.json', 'kiln/apps/kiln/src/page.tsx')  # B
+        for refract in (wd.Last(a), wd.Last(None), wd.Last(a, 'f' * 40)):
+            with mock.patch.object(wd, 'bases', lambda _: {'kiln': a, 'refract': refract}):
+                code, out = self.run_check(a)
+            self.assertEqual((code, out['deploy']), (0, 'false'), refract)
+        head = self.repo.git('rev-parse', 'HEAD')
+        with mock.patch.object(wd, 'bases', lambda _: {'kiln': a, 'refract': head}):
+            code, out = self.run_check(a)
+        self.assertEqual((code, out['deploy']), (0, 'true'))
+
+    def test_kiln_by_hand_also_waits_for_refract(self):
+        a = self.repo.commit('kiln/workers/refract/allowlist.json')
+        self.repo.commit('kiln/workers/refract/allowlist.json')
+        with mock.patch.object(wd, 'bases', lambda _: {'refract': a}):
+            code, out = self.run_check(a, event='workflow_dispatch')
+        self.assertEqual((code, out['deploy']), (0, 'false'))
 
     def test_a_job_started_by_hand_always_deploys(self):
         mine = self.repo.commit('docs/esphome.md')

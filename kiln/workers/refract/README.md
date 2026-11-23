@@ -244,7 +244,7 @@ that workerd's date (2026-07-30), so the tests run the runtime production runs.
 something it's built from changed: its code, `allowlist.json` or `releases.json`. Its tests and notes don't count. The
 job runs `deploy.sh` with the repo secret `CLOUDFLARE_REFRACT_TOKEN` (the permissions below) and the variable
 `CLOUDFLARE_ACCOUNT_ID`, then reads the live listing until it has every id in the allowlist. Kiln's job waits for it,
-and doesn't deploy when it failed. To deploy it again by hand from GitHub, run the workflow from the Actions tab
+and Kiln doesn't deploy a commit with Refract files newer than Refract's last successful deploy. To deploy it again by hand from GitHub, run the workflow from the Actions tab
 with `refract`.
 
 From a computer, from the repo root:

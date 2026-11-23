@@ -224,11 +224,12 @@ jobs:
         id: check
         env:
           EVENT: ${{ github.event_name }}
+          PROJECT: ${{ inputs.project }}
           STARTED_FOR: ${{ github.sha }}
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           python3 tools/ci/web_deploy.py check refract --event "$EVENT" --started-for "$STARTED_FOR" \
-            --summary "$GITHUB_STEP_SUMMARY" | tee -a "$GITHUB_OUTPUT"
+            --asked "${PROJECT:-refract}" --summary "$GITHUB_STEP_SUMMARY" | tee -a "$GITHUB_OUTPUT"
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: steps.check.outputs.deploy == 'true'
@@ -301,7 +302,8 @@ jobs:
   kiln:
     # After Refract: Kiln downloads every APK and image through it, so a Refract deploy this run needed must have
     # gone through first. Skipped (nothing of Refract's changed) is fine; failed or cancelled leaves Kiln for the
-    # next push or schedule, which deploys it once Refract is live.
+    # next push or schedule, which deploys it once Refract is live. Kiln's check also holds it when the main it
+    # checked out has Refract inputs newer than Refract's last successful deploy (a push between the two checkouts).
     needs: [changes, refract]
     if: >-
       ${{ !cancelled() && needs.changes.outputs.kiln == 'true'
@@ -334,11 +336,12 @@ jobs:
         id: check
         env:
           EVENT: ${{ github.event_name }}
+          PROJECT: ${{ inputs.project }}
           STARTED_FOR: ${{ github.sha }}
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           python3 tools/ci/web_deploy.py check kiln --event "$EVENT" --started-for "$STARTED_FOR" \
-            --summary "$GITHUB_STEP_SUMMARY" | tee -a "$GITHUB_OUTPUT"
+            --asked "${PROJECT:-kiln}" --summary "$GITHUB_STEP_SUMMARY" | tee -a "$GITHUB_OUTPUT"
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: steps.check.outputs.deploy == 'true'

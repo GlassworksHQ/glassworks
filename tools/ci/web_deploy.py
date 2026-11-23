@@ -8,8 +8,9 @@ adds a status to it.
 Usage:
   tools/ci/web_deploy.py pick --event <event> [--project both|site|kiln|installer|refract] [--summary <file>]
       site=, kiln=, installer=, refract= true|false, for $GITHUB_OUTPUT (the changes job)
-  tools/ci/web_deploy.py check <project> --event <event> --started-for <sha> [--summary <file>]
-      deploy=true|false, commit=<sha> and base=<sha>, in a deploy job once it holds the project's queue
+  tools/ci/web_deploy.py check <project> --event <event> --started-for <sha> [--asked <project>] [--summary <file>]
+      deploy=true|false, commit=<sha> and base=<sha>, in a deploy job once it holds the project's queue (--asked:
+      what a run by hand asked for)
   tools/ci/web_deploy.py start <project> --commit <sha>
       just before the upload: a GitHub deployment of that commit (task TASK), in progress; prints id=<id>
   tools/ci/web_deploy.py finish <project> --id <id> --state success|failure
@@ -25,8 +26,14 @@ Unsettled. A record newer than the base that never reached success (the upload f
 timed out, or GitHub didn't take the success status) may or may not be live. Then production can't be read from
 the base, so the project deploys whatever the diff says.
 
+Refract first. Kiln downloads every APK and image through Refract, so Kiln never deploys a commit whose Refract
+inputs changed since Refract's last successful deploy: `check kiln` says deploy=false then (Kiln's record stays
+where it was, so the run after Refract's deploy takes it). That covers a Refract deploy that failed, and a push that
+landed on main between Refract's checkout and Kiln's. A run by hand that asks for Kiln plans Refract as a push would.
+
 Events:
-  - workflow_dispatch: the project(s) asked for, with no diff (a deploy by hand always deploys);
+  - workflow_dispatch: the project(s) asked for, with no diff (a deploy by hand always deploys), and Refract by its
+    diff when Kiln is asked for;
   - push: what changed since the base. With no record in the last DEPTH deployments, or when GitHub's API or
     git fails, it deploys, failing closed as changes.py does;
   - schedule: the same, so a deploy that failed is tried again without a push, and nothing deploys when nothing
@@ -224,7 +231,12 @@ def plan(projects, event, project='both', head='HEAD', fetch=None):
     """{project: (deploy, base, why)}. `fetch`: bases() unless given."""
     if event == 'workflow_dispatch':
         chosen = DISPATCH.get(project or 'both', DISPATCH['both'])
-        return {p: (p in chosen, None, 'asked for by hand' if p in chosen else 'not asked for') for p in projects}
+        out = {p: (p in chosen, None, 'asked for by hand' if p in chosen else 'not asked for') for p in projects}
+        if 'kiln' in chosen and 'refract' in projects and 'refract' not in chosen:
+            # Kiln goes out through Refract: Refract first, when what it serves changed.
+            deploy, base, why = plan(['refract'], 'push', head=head, fetch=fetch)['refract']
+            out['refract'] = (deploy, base, f'Kiln was asked for by hand, and {why}')
+        return out
     unread = None
     try:
         found = (fetch or bases)(projects)
@@ -240,6 +252,14 @@ def plan(projects, event, project='both', head='HEAD', fetch=None):
     return out
 
 
+def refract_behind(head='HEAD', fetch=None):
+    """Why Refract may not serve what Kiln at `head` downloads, or None: a Refract input changed since its last
+    successful deploy, a newer Refract deploy never reached success, Refract has no recorded deploy, or GitHub
+    couldn't say. Kiln waits then."""
+    deploy, _, why = plan(['refract'], 'push', head=head, fetch=fetch)['refract']
+    return why if deploy else None
+
+
 def main(argv):
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     sub = ap.add_subparsers(dest='cmd', required=True)
@@ -248,6 +268,7 @@ def main(argv):
     check = sub.add_parser('check')
     check.add_argument('project', choices=list(ENVIRONMENTS))
     check.add_argument('--started-for', required=True, help='the commit the run was started for (github.sha)')
+    check.add_argument('--asked', help='what a run by hand asked for (inputs.project); the project itself if not given')
     st = sub.add_parser('start')
     st.add_argument('project', choices=list(ENVIRONMENTS))
     st.add_argument('--commit', required=True, help='the commit the job checked out and is about to upload')
@@ -294,7 +315,12 @@ def main(argv):
         print(f'::error::main at {short(commit)} does not have {short(a.started_for)}, the commit this run was '
               f'started for: {NAMES[a.project]} was not deployed', file=sys.stderr)
         return 1
-    deploy, base, why = plan([a.project], a.event, a.project, head=commit)[a.project]
+    deploy, base, why = plan([a.project], a.event, a.asked or a.project, head=commit)[a.project]
+    if deploy and a.project == 'kiln':
+        behind = refract_behind(commit)
+        if behind:
+            deploy, why = False, f'Refract may not serve its downloads yet ({behind}), so Kiln waits for Refract\'s deploy'
+            print(f'::warning::Kiln not deployed: {why}', file=sys.stderr)
     print(f'deploy={"true" if deploy else "false"}')
     print(f'commit={commit}')
     print(f'base={base or ""}')
