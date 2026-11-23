@@ -1,10 +1,11 @@
 // The image patcher on make_ext4fs-style images (as the Glass Panes system.img is), judged by
 // e2fsprogs. With GW_MIRROR_SYSTEM_IMG=<path to the real system.img> it also patches the real image
-// (sparse in, sparse out, then "flashed" onto junk) and checks it the same way. That file is the
+// (sparse in, sparse out, then "flashed" onto junk) and checks it the same way, with a fake APK, or with
+// GW_MIRROR_APK=<a real legacy arm64 APK> that one, so the image's room for the real app is checked too. That file is the
 // person's download: never commit it, and nothing in CI has it.
 import { createReadStream, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, writeFileSync, writeSync } from 'node:fs';
 import { join } from 'node:path';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { HOME_ACTIVITY, app, fakeApk, filter, zip, type FakeEl } from '@glassworks/app-adb/fakes';
 import { Disk, Ext4, MemoryStore, Sha256, hex, readSparse, writeSparse, type Store } from '@glassworks/ext4';
@@ -425,6 +426,8 @@ describe.skipIf(!haveTools)('the Mirror\'s images, judged by e2fsprogs', () => {
 });
 
 const REAL = process.env.GW_MIRROR_SYSTEM_IMG;
+/** A real Glassworks legacy APK to patch in, in place of the fake one: the real app's libraries need most of the room. */
+const REAL_APK = process.env.GW_MIRROR_APK;
 
 /** A Store on a file: the real image is too big for memory. */
 const fileStore = (fd: number): Store => ({
@@ -432,7 +435,7 @@ const fileStore = (fd: number): Store => ({
   async write(o, d) { writeSync(fd, d, 0, d.length, o); },
 });
 
-describe.skipIf(!REAL || !haveTools || !existsSync(REAL ?? ''))('the real Glass Panes system.img (GW_MIRROR_SYSTEM_IMG)', () => {
+describe.skipIf(!REAL || !haveTools || !existsSync(REAL ?? ''))('the real Glass Panes system.img (GW_MIRROR_SYSTEM_IMG, GW_MIRROR_APK)', () => {
   it('checks its hash, patches it, and the flashed result has no e2fsck finding the original hasn\'t', async () => {
     const dir = scratch();
     try {
@@ -459,7 +462,10 @@ describe.skipIf(!REAL || !haveTools || !existsSync(REAL ?? ''))('the real Glass 
       expect(present).toHaveLength(12);
       // and its own kiosk, which Glassworks replaces
       expect(await packageIn(IMAGE_KIOSK.dir)).toBe(IMAGE_KIOSK.package);
-      await patchSystem(real, { adbKey: KEY, apk: APK, bootAnimation: ANIM, settingsOverlay: OVERLAY });
+      const apk = REAL_APK ? new Uint8Array(readFileSync(REAL_APK)) : APK;
+      const log: string[] = [];
+      await patchSystem(real, { adbKey: KEY, apk, bootAnimation: ANIM, settingsOverlay: OVERLAY }, (l) => log.push(l));
+      console.info(`free after the patch: ${real.freeBlocks} blocks of 4 KiB; ${log.find((l) => l.includes('native librar')) ?? 'no native libraries'}`);
       for (const u of UNUSED_APPS) expect(await real.exists(u.dir), u.dir).toBe(false);
       expect(await real.exists(IMAGE_KIOSK.dir)).toBe(false);
       for (const d of ['/priv-app/TeleService', '/priv-app/TelephonyProvider', '/priv-app/Telecom', '/priv-app/ContactsProvider', '/app/LatinIME', '/app/PPPreference', '/app/SVIService', '/app/CABLService']) expect(await real.exists(d), d).toBe(true);
@@ -481,7 +487,10 @@ describe.skipIf(!REAL || !haveTools || !existsSync(REAL ?? ''))('the real Glass 
       const r = fsck(join(dir, 'flashed.raw'));
       expect(problems(r.out)).toEqual(baseline); // the image's own make_ext4fs quirk, nothing new
       const img = join(dir, 'flashed.raw');
-      expect(Buffer.from(debugfsCat(img, `${DIR}/Glassworks.apk`))).toEqual(Buffer.from(APK));
+      // by hash: a real APK is ~96 MB, too big for toEqual's diff
+      const sha256 = (b: Uint8Array) => createHash('sha256').update(b).digest('hex');
+      expect(sha256(debugfsCat(img, `${DIR}/Glassworks.apk`))).toBe(sha256(apk));
+      expect(debugfs(img, `ls ${DIR}/lib/arm64`)).toContain('libxul.so');
       expect(new TextDecoder().decode(debugfsCat(img, '/build.prop'))).toMatch(/\nro\.lockscreen\.disable\.default=true\n$/);
       expect(Buffer.from(debugfsCat(img, SETTINGS_OVERLAY.path))).toEqual(Buffer.from(OVERLAY));
       expect(debugfs(img, 'ls /app')).toContain('Provision');

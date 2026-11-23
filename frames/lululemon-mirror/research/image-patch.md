@@ -238,15 +238,27 @@ anything behind that expects it (a receiver, a job). **Untested.**
 **Room for the app (verified 2026-11-23, the root, offline).** The first Kiln run on a unit with image 3
 stopped in the build: `no room for /priv-app/Glassworks/lib/arm64/libxul.so: it needs up to 35906 blocks,
 18451 are free`. The `GW_MIRROR_SYSTEM_IMG` test above patches with a small fake APK, so it never saw this.
-Read with Kiln's ext4 package on the real image 3 and the real legacy 0.3.0 arm64 APK (96,035,319 bytes;
-its 13 arm64 libraries unpack to 170 MB, `libxul.so` alone 147 MB):
+That test now takes a real APK too (`GW_MIRROR_APK`). Read on the real image 3 and the real legacy 0.3.0 arm64
+APK (96,035,319 bytes; its 13 arm64 libraries unpack to 170 MB, `libxul.so` alone 147 MB):
+
+```sh
+curl -sSfLO https://refract.glassworks.dev/glass-panes/mirror-android-3/system.img
+curl -sSfLO https://refract.glassworks.dev/glassworks/generic-android-legacy-v0.3.0/glassworks-generic-android-legacy-arm64-v8a-0.3.0.apk
+unzip -lv glassworks-generic-android-legacy-arm64-v8a-0.3.0.apk 'lib/arm64-v8a/*'   # unpacked sizes
+cd frames/lululemon-mirror/installer
+GW_MIRROR_SYSTEM_IMG=<system.img> GW_MIRROR_APK=<the APK> npx vitest run test/image.test.ts   # e2fsprogs on PATH; ~45 s
+```
+
+The test prints the free blocks after the patch (`free after the patch: …`). The rows before it were read with
+`Ext4.freeBlocks` from `@glassworks/ext4` after each `fs.remove` of the same folders, in a one-off script
+that wasn't kept. Without the fix, the same test stops at `libxul.so` with the error above.
 
 | | Free blocks (4 KiB) |
 |---|---|
 | Image 3 as released | 47,556 (186 MB) |
 | `/priv-app/MirrorKiosk` left out | +63,091 (246 MB: its own GeckoView) |
 | The 12 unused apps left out | +6,462 |
-| After the whole patch (app and libraries in) | 52,077 (203 MB) |
+| After the whole patch (app and libraries, boot animation, settings overlay in) | 53,154 (208 MB), the test above |
 
 `patchSystem` wrote the app before it left anything out, so the kiosk still held its 246 MB when the
 libraries went in. It now leaves out the kiosk and the unused apps first. Image 2 had no kiosk in
