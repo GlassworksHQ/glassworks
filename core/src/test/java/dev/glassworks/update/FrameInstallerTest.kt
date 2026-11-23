@@ -5,6 +5,7 @@
 package dev.glassworks.update
 
 import dev.glassworks.esphome.UpdateStateData
+import dev.glassworks.frame.BundleAgent
 import dev.glassworks.frame.FrameRelease
 import dev.glassworks.update.FrameBundleFixture.FILES
 import java.io.File
@@ -14,6 +15,7 @@ import java.nio.file.Files
 import java.security.MessageDigest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -262,6 +264,52 @@ class FrameInstallerTest {
         assertEquals("1.0.0", next.installed.shown)
         assertFalse(next.updateAvailable)
         assertEquals(next.view().currentVersion, next.view().latestVersion)
+    }
+
+    private val REJECTED = "The frame bundle was rejected at boot (sisdk/NOTICE.txt does not match the manifest), so the panel runs its boot image's copies."
+
+    /** The loader rejected the bundle at boot (#139): the boot image's version, and the Device page and HA say why. */
+    @Test fun aRejectedBundleIsSaidWithWhyAndTheUpdateIsStillOffered() {
+        loader.state = "bad - 1000000 -"
+        loader.why = "sisdk/NOTICE.txt does not match the manifest"
+        installer.atStart()
+        assertEquals("1.0.0 (boot image)", model.installed.shown)
+        assertEquals("sisdk/NOTICE.txt does not match the manifest", model.rejected)
+        assertEquals("1.0.0 (boot image). Bundle rejected: sisdk/NOTICE.txt does not match the manifest", model.detail())
+        model.onChecked(null)
+        assertEquals("1.0.0 (boot image)", model.view().currentVersion)
+        assertEquals(model.view().currentVersion, model.view().latestVersion)
+        assertEquals(REJECTED, model.view().releaseSummary)
+
+        model.onChecked(FrameOffer.newest(listOf(release()), "aqara-s1-plus"))
+        assertTrue(model.updateAvailable)
+        assertEquals("1.0.0 (boot image). Bundle rejected: sisdk/NOTICE.txt does not match the manifest. 1.0.1 is out", model.detail())
+        assertEquals("Frame 1.0.1 is out. Installing it restarts the panel once", model.installLine())
+        val v = model.view()
+        assertEquals("1.0.0 (boot image)", v.currentVersion)
+        assertEquals("1.0.1", v.latestVersion)
+        assertTrue(v.releaseSummary, v.releaseSummary.startsWith("$REJECTED\n\n"))
+        assertTrue(model.begin(clock, installer.busy(false)) is FrameUpdateModel.Begin.Started)
+    }
+
+    @Test fun aRejectedBundleWithNoWhyStillSaysSoAndANoneOneDoesnt() {
+        model.onLoaderRecord(FrameBundleState.parse("bad - 1000000 -"))
+        assertEquals("", model.rejected)
+        assertEquals("1.0.0 (boot image). Bundle rejected", model.detail())
+        assertEquals("The frame bundle was rejected at boot, so the panel runs its boot image's copies.", model.view().releaseSummary)
+        // A property that says bad while the record says none: the record decides.
+        model.onLoaderRecord(FrameBundleState.parse("none - 1000000 -"), "forged")
+        assertNull(model.rejected)
+        assertEquals("1.0.0 (boot image)", model.detail())
+    }
+
+    @Test fun theStatePropertysWhy() {
+        assertEquals("sisdk/NOTICE.txt does not match the manifest", BundleAgent.rejectedWhy("bad: sisdk/NOTICE.txt does not match the manifest\n"))
+        assertEquals("", BundleAgent.rejectedWhy("bad"))
+        assertNull(BundleAgent.rejectedWhy("ok 1.0.0"))
+        assertNull(BundleAgent.rejectedWhy("none"))
+        assertNull(BundleAgent.rejectedWhy("badger"))
+        assertNull(BundleAgent.rejectedWhy(""))
     }
 
     @Test fun aBadBundleCountsAsNoneAndAStagedOneIsSaidEvenAtTheSameVersion() {

@@ -46,6 +46,17 @@ class RadioBundle(
     /** The panel's bundle state, from the root-owned state file; null without a v4 boot image (or before its helper ran). */
     fun installed(): Installed? = bundle.state()?.let(::parsePub)
 
+    /**
+     * The panel's record for the Radio helper sensor, in either image's format (the radio record or the frame loader's):
+     * `ok <version>`, `none …`, or `rejected (<why>)` when the record says `bad` ([BundleAgent.rejected] words why).
+     * Null without a record.
+     */
+    fun shown(): String? {
+        val p = bundle.state()?.trim()?.split(' ')?.takeIf { it.size >= 3 && it[0] in STATES } ?: return null
+        if (p[0] == "bad") return "rejected" + bundle.rejected()?.ifEmpty { null }?.let { " ($it)" }.orEmpty()
+        return p[0] + p[1].takeUnless { it == "-" }?.let { " $it" }.orEmpty()
+    }
+
     /** The boot image has the bundle service and the loader (its helper writes the state file at every start). */
     fun loaderPresent(): Boolean = installed() != null
 
@@ -131,9 +142,11 @@ class RadioBundle(
         const val RETRY_MS = 60 * 60_000L
 
         /** "<ok|bad|none> <version> <floor>" -> Installed. */
+        private val STATES = setOf("ok", "bad", "none")
+
         fun parsePub(text: String): Installed? {
             val p = text.trim().split(' ')
-            if (p.size != 3 || p[0] !in setOf("ok", "bad", "none")) return null
+            if (p.size != 3 || p[0] !in STATES) return null
             val v = p[1].toIntOrNull() ?: return null
             val f = p[2].toIntOrNull() ?: return null
             return Installed(p[0], v, f)

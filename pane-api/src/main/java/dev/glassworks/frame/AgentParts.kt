@@ -86,6 +86,12 @@ interface BundleAgent {
     /** The installed bundle's state line (`<ok|bad|none> <version> <floor>`), from a file only root writes; null when there is none. */
     fun state(): String?
 
+    /**
+     * Why the loader rejected the installed bundle at boot, as its state property words it (`bad: <why>`), or null.
+     * Wording only: any app may set a property, so whether a bundle was rejected comes from [state].
+     */
+    fun rejected(): String? = null
+
     /** Where the app stages a bundle, relative to its files dir. */
     val stageDir: String
 
@@ -106,6 +112,15 @@ interface BundleAgent {
      * #139). The way the frame's root side restarts it; returns only if the restart doesn't happen.
      */
     fun restart()
+
+    companion object {
+        /** The why in a bundle state property (`bad: <why>`, both S1 images): "" when it gives none, null when not `bad`. */
+        fun rejectedWhy(prop: String): String? {
+            val p = prop.trim()
+            if (p != "bad" && !p.startsWith("bad:")) return null
+            return p.removePrefix("bad").removePrefix(":").trim()
+        }
+    }
 }
 
 /** The `time-zone` part of a frame's agent ([FrameAgent.timeZone]). */

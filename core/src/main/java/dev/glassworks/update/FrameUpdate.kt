@@ -115,6 +115,10 @@ class FrameUpdateModel(
     @Volatile var installed: FrameVersion = FrameVersion.of(release)
         private set
 
+    /** Why the loader rejected the installed bundle at this boot ("" when it doesn't say); null when it didn't. */
+    @Volatile var rejected: String? = null
+        private set
+
     @Volatile private var checked = false
     @Volatile var offer: FrameOffer? = null
         private set
@@ -145,11 +149,13 @@ class FrameUpdateModel(
 
     /**
      * At start, on a frame that [installs]: the loader's [record]. No bundle loaded: the stamp is the boot image's own
-     * version ([FrameVersion.Stamped.bundle]). A bundle staged and not loaded: an update whose restart didn't happen.
+     * version ([FrameVersion.Stamped.bundle]). A bad one: also [rejected], with the loader's [why] ([BundleAgent.rejected]).
+     * A bundle staged and not loaded: an update whose restart didn't happen.
      */
-    @Synchronized fun onLoaderRecord(record: FrameBundleState?) {
+    @Synchronized fun onLoaderRecord(record: FrameBundleState?, why: String? = null) {
         if (record == null) return
         (installed as? FrameVersion.Stamped)?.let { if (record.loaded == null) installed = it.copy(bundle = false) }
+        rejected = if (record.state == "bad") why?.trim().orEmpty() else null
         val staged = record.staged
         if (staged != null && staged != record.loaded && phase == Phase.IDLE && kind == Kind.NONE) {
             setStatus("Frame $staged is staged. It loads at the next restart.", Kind.INFO)
@@ -221,8 +227,14 @@ class FrameUpdateModel(
 
     /** The Device page's Frame version row: the installed version, and the newer one with how to install it. */
     fun detail(): String {
-        val o = newer() ?: return installed.shown
-        return "${installed.shown}. ${o.version} is out" + release.install?.let { ". $it" }.orEmpty()
+        val shown = installed.shown + rejected?.let { ". Bundle rejected" + it.ifEmpty { null }?.let { w -> ": $w" }.orEmpty() }.orEmpty()
+        val o = newer() ?: return shown
+        return "$shown. ${o.version} is out" + release.install?.let { ". $it" }.orEmpty()
+    }
+
+    /** Home Assistant's card line for a [rejected] bundle. */
+    private fun rejectedLine(): String? = rejected?.let { w ->
+        "The frame bundle was rejected at boot" + w.ifEmpty { null }?.let { " ($it)" }.orEmpty() + ", so the panel runs its boot image's copies."
     }
 
     /** The Device page's Frame update row, on a frame that [installs]: what Install does now, or how the last one went. */
@@ -240,7 +252,8 @@ class FrameUpdateModel(
 
     @Synchronized fun view(): UpdateStateData {
         val o = newer()
-        val top = listOfNotNull(release.install, status.takeIf { it.isNotEmpty() }).joinToString("\n")
+        val now = listOfNotNull(rejectedLine(), status.takeIf { it.isNotEmpty() }).joinToString("\n")
+        val top = listOfNotNull(release.install, now.ifEmpty { null }).joinToString("\n")
         return UpdateStateData(
             missingState = !checked,
             inProgress = phase != Phase.IDLE,
@@ -252,7 +265,7 @@ class FrameUpdateModel(
             title = title,
             releaseSummary = when {
                 o != null -> Releases.summary(o.notes, top)
-                status.isNotEmpty() -> Releases.summary("", status)
+                now.isNotEmpty() -> Releases.summary("", now)
                 else -> ""
             },
             releaseUrl = o?.releaseUrl.orEmpty(),
