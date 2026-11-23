@@ -7,7 +7,7 @@ describe('adb key', () => {
     const a = await loadOrCreateAdbKey(storage);
     const b = await loadOrCreateAdbKey(storage);
     expect(b.publicKey).toBe(a.publicKey);
-    expect(a.publicKey).toMatch(/^QAAAA[A-Za-z0-9+/=]+ s1-unleashed-web@browser$/);
+    expect(a.publicKey).toMatch(/^QAAAA[A-Za-z0-9+/=]+ kiln@glassworks$/);
     // Android RSAPublicKey: u32 len (64 words), u32 n0inv, n[256] LE, rr[256] LE, u32 e
     const raw = Uint8Array.from(atob(a.publicKey.split(' ')[0]!), (c) => c.charCodeAt(0));
     expect(raw.length).toBe(524);

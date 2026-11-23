@@ -4,7 +4,11 @@
 // (undo, re-run) is still authorized.
 import { adbGeneratePublicKey, type AdbCredentialStore, type AdbPrivateKey } from '@yume-chan/adb';
 
-export const KEY_NAME = 's1-unleashed-web@browser';
+/**
+ * The name this browser's key gives itself (the `user@host` after the key), which a device shows next to it, e.g. on
+ * Manage → Security. Display only: devices match the key itself, so a key saved under an older name still gets in.
+ */
+export const KEY_NAME = 'kiln@glassworks';
 
 /** Where the PKCS#8 private key lives. IndexedDB in the browser, memory in the tests. */
 export interface KeyStorage {
@@ -13,6 +17,7 @@ export interface KeyStorage {
 }
 
 export class IndexedDbKeyStorage implements KeyStorage {
+  // the database keeps its first name: renaming it would lose every browser's saved key, and with it the devices that let it in
   constructor(private readonly db = 's1-unleashed', private readonly store = 'adb-key') {}
 
   private open(): Promise<IDBDatabase> {
