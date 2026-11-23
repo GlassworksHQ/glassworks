@@ -102,7 +102,7 @@ export async function flashRecovery(recovery: File): Promise<void> {
 |---|---|---|
 | `OdinDevice.open(usb, { writable })` | Opens the device and claims its Download mode interface (CDC Data, one bulk pair). `writable` defaults to `['RECOVERY']` | `BridgeManager::Initialise` |
 | `info()` | The model, sales code and bootloader version, before any session. The device's serial number is dropped. Older devices don't answer | Not in Heimdall: samloader-rs's `DVIF` |
-| `beginSession({ totalBytes, resume })` | The `ODIN`/`LOKE` handshake (unless `resume`), the session, the transfer size, and the bytes this session may write | `InitialiseProtocol`, `BeginSession`, the total-bytes packet |
+| `beginSession({ totalBytes, resume })` | The `ODIN`/`LOKE` handshake (unless `resume`), the session, the transfer size, and the bytes this session may write. If it fails part way, the device may keep what it already agreed to, so this connection is done: `close()` it and open a new one | `InitialiseProtocol`, `BeginSession`, the total-bytes packet |
 | `deviceType()` | A number the device sends back; what it means isn't known | `RequestDeviceType` |
 | `pit()` | Downloads and parses the PIT, in parts of 500 bytes | `ReceivePitFile`, libpit |
 | `flash({ partition, entry, image, onProgress, signal })` | Writes `image` (a `Blob` or bytes) to the partition, in sequences of parts | `SendFile` |

@@ -121,6 +121,15 @@ describe('opening it', () => {
     await expect(WebUsbOdinTransport.open(usb.device)).rejects.toMatchObject({ code: 'claim-failed', message: /WinUSB.*Access denied/s });
   });
 
+  it('checks OdinDevice.open\'s options before it claims anything', async () => {
+    const { OdinDevice } = await import('../src/index.ts');
+    const usb = usbDevice();
+    await expect(OdinDevice.open(usb.device, { writable: ['BOOT' as 'RECOVERY'] })).rejects.toMatchObject({ code: 'refused' });
+    expect(usb.calls).toEqual([]);
+    await OdinDevice.open(usb.device, { writable: ['RECOVERY', 'VBMETA'] });
+    expect(usb.calls).toEqual(['open', 'claim 1']);
+  });
+
   it('refuses a device that isn\'t in Download mode', async () => {
     await expect(WebUsbOdinTransport.open(usbDevice({ productId: 0x6860 }).device)).rejects.toMatchObject({ code: 'not-download-mode', message: /04e8:6860/ });
     const noData = usbDevice({ interfaces: [iface(0, 0x02, [])] });

@@ -71,7 +71,8 @@ export interface FlashRequest {
   signal?: AbortSignal;
 }
 
-type State = 'connected' | 'session' | 'ended' | 'closed';
+/** `failed`: a session setup went wrong part way, so the device may hold settings this side doesn't know. */
+type State = 'connected' | 'session' | 'ended' | 'failed' | 'closed';
 
 /** No PIT is near this (one is 28 bytes plus 132 an entry); a bigger announcement means something is wrong. */
 const MAX_PIT_BYTES = 1024 * 1024;
@@ -91,15 +92,12 @@ export class OdinDevice {
 
   /** `transport`: WebUSB from {@link OdinDevice.open}, or any other (the tests' fake). */
   constructor(readonly transport: OdinTransport, options: OdinOptions = {}) {
-    const writable = options.writable ?? ['RECOVERY'];
-    for (const p of writable) {
-      if (!WRITABLE.includes(p)) throw new OdinError('refused', `${String(p)} can't be made writable: only ${WRITABLE.join(' and ')} can`);
-    }
-    this.writable = new Set(writable);
+    this.writable = writableSet(options);
   }
 
   /** Opens a WebUSB device (from `navigator.usb.requestDevice({ filters: ODIN_USB_FILTERS })`) and claims it. */
   static async open(device: USBDevice, options: OdinOptions = {}): Promise<OdinDevice> {
+    writableSet(options); // before the claim: a bad option must not leave the interface held
     return new OdinDevice(await WebUsbOdinTransport.open(device), options);
   }
 
@@ -136,11 +134,13 @@ export class OdinDevice {
       this.need('connected', 'a session begins once per connection');
       const total = options.totalBytes ?? 0;
       if (!Number.isSafeInteger(total) || total < 0) throw new RangeError(`totalBytes must be a whole number, not ${total}`);
+      // From here a failure ends this connection: the device may have taken a part size or a total that this side
+      // can't undo, so a retry starts over (a new connection, with `resume` if the handshake was done).
+      this.state = 'failed';
       if (!options.resume) await this.handshake();
 
       const answer = await this.command(P.beginSession(), P.Control.Session);
-      // "0 means changing the packet size is not supported" (BridgeManager::BeginSession). The shape is kept only
-      // once the whole setup succeeds, so a failed attempt leaves nothing behind for a retry.
+      // "0 means changing the packet size is not supported" (BridgeManager::BeginSession).
       let shape = P.LEGACY_TRANSFER;
       if (answer !== 0) {
         const result = await this.command(P.filePartSize(P.FAST_TRANSFER.packetSize), P.Control.Session);
@@ -365,6 +365,15 @@ async function read(image: Blob | Uint8Array, offset: number, length: number): P
 
 function text(data: Uint8Array): string {
   return new TextDecoder('latin1').decode(data).replace(/\0+$/, '');
+}
+
+/** The writable partitions in `options`, or a `refused` error for any other. */
+function writableSet(options: OdinOptions): ReadonlySet<WritablePartition> {
+  const writable = options.writable ?? ['RECOVERY'];
+  for (const p of writable) {
+    if (!WRITABLE.includes(p)) throw new OdinError('refused', `${String(p)} can't be made writable: only ${WRITABLE.join(' and ')} can`);
+  }
+  return new Set(writable);
 }
 
 /** Parses DVIF's `@#KEY=VALUE;KEY=VALUE;…`. Drops `UN`, the device's serial number. */

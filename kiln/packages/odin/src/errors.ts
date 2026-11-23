@@ -16,7 +16,10 @@ export type OdinErrorCode =
   | 'device'
   /** This library refused to write, before anything was sent ({@link OdinDevice.flash}'s checks). */
   | 'refused'
-  /** A call out of order: e.g. a PIT before the session, or a flash after the session ended. */
+  /**
+   * A call out of order (a PIT before the session, a flash after it ended), one made while another runs, or any
+   * call after a session setup that failed part way.
+   */
   | 'state';
 
 export class OdinError extends Error {
