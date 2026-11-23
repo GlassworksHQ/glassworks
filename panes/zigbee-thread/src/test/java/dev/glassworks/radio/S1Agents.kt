@@ -20,4 +20,4 @@ fun s1Agent(props: SysProps): FrameAgent = object : FrameAgent {
 
 /** The S1's bundle install over [props], its state in [stateFile] owned as [ownerUid] says. */
 fun s1Bundle(props: SysProps, stateFile: File, format: String = "S1RADIO-BUNDLE 1", ownerUid: (File) -> Int?) =
-    PropsBundle(props, RadioHelper.BUNDLE_SERVICE, RadioHelper.PROP_BUNDLE_STATUS, RadioHelper.BUNDLE_STAGE_DIR, stateFile, ownerUid, format)
+    PropsBundle(props, RadioHelper.BUNDLE_SERVICE, RadioHelper.PROP_BUNDLE_STATUS, RadioHelper.BUNDLE_STAGE_DIR, stateFile, ownerUid, format, stateProp = RadioHelper.PROP_BUNDLE)

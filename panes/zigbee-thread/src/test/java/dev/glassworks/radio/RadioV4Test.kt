@@ -313,7 +313,7 @@ class RadioV4Test {
         )
     }
 
-    /** A bundle the loader rejected: the record says `bad`, the property why (#139). */
+    /** A bundle the loader rejected: the record says `bad`, in either image's format, and the property only why (#139). */
     @Test
     fun aRejectedBundleIsSaidWithWhy() {
         val p = V4Props().apply {
@@ -321,16 +321,19 @@ class RadioV4Test {
             props[RadioHelper.PROP_BUNDLE] = "bad: sisdk/NOTICE.txt does not match the manifest"
         }
         val (b, pub) = bundle(p, "bad 30200 30200\n")
-        fun text() = controller(p, "thread", bundle = b).also { it.refresh() }.helperStatusText()
-        assertTrue(text(), text().contains("; radio bundle on the panel: rejected (sisdk/NOTICE.txt does not match the manifest)"))
-        // The frame loader image's four-field record, which RadioBundle doesn't read: the property says it.
-        pub.writeText("bad - 5001 -\n")
-        assertTrue(text(), text().contains("; radio bundle on the panel: rejected (sisdk/NOTICE.txt does not match the manifest)"))
-        p.props[RadioHelper.PROP_BUNDLE] = "bad"
-        assertTrue(text(), text().contains("; radio bundle on the panel: rejected;") || text().endsWith("radio bundle on the panel: rejected"))
+        fun inst() = controller(p, "thread", bundle = b).also { it.refresh() }.helperStatusText().substringAfter("radio bundle on the panel: ").substringBefore(';')
+        assertEquals("rejected (sisdk/NOTICE.txt does not match the manifest)", inst())
+        pub.writeText("bad - 5001 -\n") // the frame loader's record
+        assertEquals("rejected (sisdk/NOTICE.txt does not match the manifest)", inst())
         p.props[RadioHelper.PROP_BUNDLE] = "none"
+        assertEquals("the record decides, the property only words it", "rejected", inst())
+        p.props[RadioHelper.PROP_BUNDLE] = "bad: forged"
         pub.writeText("none - 5000 -\n")
-        assertTrue(text(), text().contains("; radio bundle on the panel: none"))
+        assertEquals("none", inst())
+        pub.writeText("ok 1.0.0 5000 -\n")
+        assertEquals("ok 1.0.0", inst())
+        pub.writeText("ok 30200 30200\n") // the radio record, as before
+        assertEquals("ok 30200", inst())
     }
 
     @Test
