@@ -130,11 +130,17 @@ Branches among maintained files: 24.0 (253), 22.2 (141), 23.2 (61).
   instead list a firmware build per regional variant in `before_install_device_variants` (`beryllium`,
   the POCO F1: `V12.0.3.0.QEJMIXM` for Global, another for Russia), with no Android version at all. The
   snapshot keeps both forms (`firmware` in [§7](#lineageos-device-data-frameslineageosinstallersrcdevicests)).
-  Kiln checks only what it can establish on the stock OS over adb: `ro.build.version.release` against
-  the Android version, `ro.build.version.incremental` and `ro.build.display.id` against a variant's
-  build. **When it can't establish the firmware, it stops before any write** and says which firmware
-  the device needs. That covers a device on another custom ROM, whose Android version says nothing
-  about its firmware, and a device that starts in fastboot or Download mode.
+  The Android-version form also asks for *the latest update* of that version
+  (`device_specific/before_install_needs_specific_android_fw.md`). Kiln checks what it can establish
+  on the stock OS over adb: `ro.build.version.release` against the Android version, and
+  `ro.build.version.incremental` and `ro.build.display.id` against a variant's build. **When it can't
+  establish the firmware, it stops before any write** and says which firmware the device needs. That
+  covers a device on another custom ROM, whose Android version says nothing about its firmware, and a
+  device that starts in fastboot or Download mode. *Latest update* isn't something Kiln can read: no
+  vendor publishes it in a form the browser can fetch. So the person establishes it: a check step
+  shows the device's own update (`ro.build.version.security_patch`, `ro.build.version.incremental`)
+  and asks them to run the device's system update until it says it's up to date. The unlock screen
+  doesn't appear until they confirm, and the log keeps what they confirmed against.
 - `before_recovery_install` adds steps for 292 maintained files. In the two families Kiln reaches, the
   values are `boot_stack` (234: flash extra partitions such as `dtbo` and `vendor_kernel_boot`, listed
   in the data), `samsung_exynos9xxx` (23), `samsung_qcom` (20; it also flashes LineageOS's `vbmeta.img`
@@ -142,6 +148,15 @@ Branches among maintained files: 24.0 (253), 22.2 (141), 23.2 (61).
   `samsung_universal7904`, `ellis` and `TP1803`. The snapshot keeps the value (`beforeRecovery`), and
   the recipe picks its pre-recovery steps from it. Method and family can't tell `samsung_qcom` from
   `samsung_exynos9xxx`.
+- `before_lineage_install` runs in recovery before LineageOS is sideloaded: `ab_copy_partitions` (69),
+  which sideloads LineageOS's `copy-partitions-<date>-signed.zip` so the inactive slot's firmware
+  matches the active one (the wiki warns of a hard brick otherwise), and `m1s1` (2). The snapshot keeps it
+  (`beforeLineage`).
+- `recovery_reboot` says how to get from the bootloader to recovery after a flash: `fastboot_menu`
+  (187: pick Recovery in the bootloader's menu), `fastboot_reboot` (61: `fastboot reboot recovery`),
+  `fastboot_boot` (10: `fastboot boot <recovery>.img`, from RAM), `fastboot_misc` (1: write a
+  `misc` image that boots recovery), or none (158: the `recovery_boot` keys). The snapshot keeps it
+  (`recoveryReboot`), and step 7 dispatches on it.
 
 ## 2. How Kiln knows the device
 
@@ -179,7 +194,7 @@ and nothing that names LineageOS or a device:
 | The frame: route, catalog facts, ratings, way back, words | `frames/lineageos/design/frame.json`, `installer.json` | Data, by hand |
 | One flow per method family: `fastboot`, `samsung`. Their steps, transports, inputs, checks, taps | `installer.json` `flows` | Data, by hand |
 | Method table: each `install_method` → family, unlock kind, the vendor's unlock page, Kiln's words | `frames/lineageos/installer/src/methods.json` | Data, by hand. Reviewed when the wiki adds a method |
-| Each device: codename, variant, name, vendor, type, models, method, `is_ab_device`, `recovery_partition_name`, `before_recovery_install` and its boot-stack partitions, the firmware it needs (Android version or per-variant builds), key combinations (`download_boot`, `recovery_boot`) | `frames/lineageos/installer/data/devices.json` | **Generated** from the wiki, never edited by hand |
+| Each device: codename, variant, name, vendor, type, models, method, `is_ab_device`, `recovery_partition_name`, `recovery_reboot`, `before_lineage_install`, `before_recovery_install` and its boot-stack partitions, the firmware it needs (Android version or per-variant builds), key combinations (`download_boot`, `recovery_boot`) | `frames/lineageos/installer/data/devices.json` | **Generated** from the wiki, never edited by hand |
 | What data can't say: building the fastboot write list from a build listing, Download mode's partition names from the PIT, the add-on zip | `frames/lineageos/installer/src/` behind `FrameSteps` (`check`, `build`, `setUp`) | Code, per method family |
 | Builds, files, sizes, SHA-256 | `download.lineageos.org/api/v2/devices/<codename>/builds`, at install time | Live (CORS allows it, [§3](#3-downloads)) |
 
@@ -263,7 +278,7 @@ Samsung's Knox flag.** Kiln says both before the first write ([§5](#5-kiln-copy
 |---|---|---|---|
 | 0 | The person reads the page's ratings and the "Before you start" sheet | Nothing | — |
 | 1 | Connect over USB debugging. Read the props, match the device, check the API has a build | Nothing | — |
-| 2 | Check the firmware against `before_install` (Android version, or the variant's build). Stop if Kiln can't establish it | Nothing | — |
+| 2 | Check the firmware against `before_install` (Android version, or the variant's build). Stop if Kiln can't establish it. For the Android-version form, the person runs the device's system update and confirms it's up to date (a declared check step) | Nothing | — |
 | 3 | Pick the downloaded files, then check sizes and hashes | Nothing on the device | — |
 
 ### fastboot families
@@ -273,8 +288,9 @@ Samsung's Knox flag.** Kiln says both before the first write ([§5](#5-kiln-copy
 | 4 | `adb reboot bootloader` (engine rule 5: no buttons while adb works) | Nothing | — |
 | 5 | **Unlock.** `kiln`: read `getvar unlocked`; if it's no, send the method's command (`fastboot flashing unlock`, or `custom_unlock_cmd` from the data) and the person confirms on the device with its keys (a declared tap). `vendor`: if `unlocked` is no, Kiln stops and links the vendor's unlock page, and nothing is written. `done`: skip | **Wipes userdata.** Unlocking erases the device | **No undo for the data.** The lock state comes back only with the vendor's firmware (for Pixels, Google's Android Flash Tool) |
 | 6 | Flash the boot stack from the data (`boot_stack`: e.g. `boot`, `dtbo`, `vendor_kernel_boot`), then the recovery: **`fastboot boot` from RAM when the recovery is the `boot` image**, else `fastboot flash <recovery_partition_name>` as the wiki does (`vendor_boot` devices like `tangorpro`). On A/B devices, both slots where the wiki says so | Boot partitions | Vendor firmware. **No read-back**: production bootloaders don't read partitions. The proof is the hash before the write and recovery booting with `ro.lineage.device` set. **The RAM boot is untested** on a device whose recovery lives in `boot`; the spike decides |
-| 7 | **After a RAM boot: skip.** The device is already starting recovery, and Kiln waits for it (engine rule 3). **After a flash:** reboot to recovery (`fastboot reboot recovery`, or `recovery_reboot: fastboot_menu`: a declared tap on the bootloader menu) | Nothing | — |
+| 7 | **After a RAM boot: skip.** The device is already starting recovery, and Kiln waits for it (engine rule 3). **After a flash**, by `recoveryReboot`: `fastboot_reboot` sends `fastboot reboot recovery`; `fastboot_menu` is a declared tap on the bootloader's menu; `fastboot_boot` boots the recovery image from RAM; none shows the `recovery_boot` keys. `fastboot_misc` writes `misc`, so that device is "not yet" | Nothing | — |
 | 8 | In recovery: **Factory reset → Format data** (a declared tap, keys or touch) | **Wipes userdata again** | None needed: the device was already wiped at step 5 |
+| 8b | `beforeLineage: ab_copy_partitions` only: **Apply update → Apply from ADB** (a tap), sideload `copy-partitions-<date>-signed.zip`, then **Advanced → Reboot to recovery** (a tap). The file's name and SHA-256 are pinned in `methods.json`, refreshed with the snapshot. The person downloads it, since its mirrors send no CORS either, and recovery checks LineageOS's signature on it. `m1s1` is "not yet" | The inactive slot's firmware partitions, copied from the active slot | Vendor firmware. Nothing of the device's own is lost: the active slot is the source |
 | 9 | **Apply update → Apply from ADB** (a tap), then Kiln sideloads the zip (`sideload-host`). Recovery checks LineageOS's signature | `system`, `vendor`, `product`, boot (the inactive slot on A/B) | Vendor firmware, or sideload another LineageOS build |
 | 10 | A/B only: recovery asks to reboot to recovery for add-ons; the person taps Yes. Then the Glassworks add-on ([below](#the-glassworks-part-every-family)) | `/product/media/bootanimation.zip`, `/system/addon.d/50-glassworks.sh` | The undo add-on (sideloaded the same way) puts LineageOS's animation back and removes the script |
 | 11 | Reboot to system. First boot takes several minutes, and Kiln waits through it (engine rule 3) | — | — |
@@ -355,6 +371,13 @@ For a `vendor` unlock:
 
 > - **Unlock it with \<Xiaomi\> first.** \<Xiaomi\> makes you ask for an unlock. *How to unlock* (the vendor's page). Kiln
 >   carries on once it's unlocked.
+
+**The firmware check** (step 2, Android-version form):
+
+> **Update the tablet first**
+> LineageOS needs the newest Android 17 update on it. On the tablet, open Settings, then System update,
+> and install updates until it says it's up to date.
+> It's on the update from November 1, 2026. [It's up to date]
 
 **Confirm before the first write** (step 5):
 
@@ -506,8 +529,12 @@ interface LineageDevice {
   beforeRecovery: 'none' | 'boot_stack' | 'samsung_qcom' | 'samsung_exynos9xxx' | 'samsung_a21s'
     | 'samsung_universal7904' | 'g12' | 'nubia' | 'foster' | 'ellis' | 'TP1803';
   bootStack: string[];
-  /** `before_install`: an Android version, or one firmware build per regional variant. */
-  firmware?: { android: string; shipsFw: boolean } | { variants: { name: string; build: string }[] };
+  /** `before_lineage_install`, a closed set like `beforeRecovery`. */
+  beforeLineage: 'none' | 'ab_copy_partitions' | 'm1s1';
+  /** `recovery_reboot`: how step 7 reaches recovery after a flash; 'keys' when the wiki gives none. */
+  recoveryReboot: 'fastboot_menu' | 'fastboot_reboot' | 'fastboot_boot' | 'fastboot_misc' | 'keys';
+  /** `before_install`: an Android version (its latest update), or one firmware build per regional variant. */
+  firmware?: { android: string; latestUpdate: true; shipsFw: boolean } | { variants: { name: string; build: string }[] };
   keys: { download?: string[]; recovery?: string[] }; branch: string;
 }
 /** devices.json: { source: { repo, commit, date }, license: 'CC-BY-SA-3.0', devices: LineageDevice[] } */
@@ -517,7 +544,8 @@ function match(seen: { lineage?: string; device?: string; vendorDevice?: string;
 function builds(codename: string, fetch?: typeof globalThis.fetch): Promise<Build[]>;
 ```
 
-The recipe dispatches its pre-recovery steps on `beforeRecovery`. A value the recipe has no steps for yet
+The recipe dispatches its pre-recovery steps on `beforeRecovery`, step 8b on `beforeLineage` and step 7 on
+`recoveryReboot`. A value the recipe has no steps for yet
 (the one-device ones at first) marks the device "not yet" in Kiln, before anything is written.
 Only maintained devices in the `fastboot` (not `closed`) and `samsung` (not `closed`) families go in
 `devices.json`. The script's counts keep the rest.
