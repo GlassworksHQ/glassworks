@@ -153,8 +153,8 @@ class Push(InRepo):
         deployed = self.repo.commit('kiln/apps/kiln/src/page.tsx', 'site/src/app/page.tsx')
         self.repo.commit('kiln/apps/kiln/src/wizard/Flow.tsx')  # A
         self.repo.commit('docs/esphome.md')  # B
-        got = self.plan({'site': self.repo.git('rev-parse', 'HEAD'), 'kiln': deployed, 'installer': deployed})
-        self.assertEqual(got, {'site': False, 'kiln': True, 'installer': False})
+        got = self.plan({'site': self.repo.git('rev-parse', 'HEAD'), 'kiln': deployed, 'installer': deployed, 'refract': deployed})
+        self.assertEqual(got, {'site': False, 'kiln': True, 'installer': False, 'refract': False})
 
     def test_a_revert_after_the_deployed_commit_deploys(self):
         # A's run starts; B, pushed before A's job checks out main, changes Kiln again, so A's job deploys B. C
@@ -163,8 +163,8 @@ class Push(InRepo):
         a = self.repo.commit('kiln/apps/kiln/src/page.tsx')
         b = self.repo.commit('kiln/apps/kiln/src/flow.tsx')
         self.repo.git('revert', '--no-edit', 'HEAD')  # C
-        self.assertTrue(self.plan({'site': b, 'kiln': b, 'installer': b})['kiln'])
-        self.assertFalse(self.plan({'site': a, 'kiln': a, 'installer': a})['kiln'])  # what the old base missed
+        self.assertTrue(self.plan({'site': b, 'kiln': b, 'installer': b, 'refract': b})['kiln'])
+        self.assertFalse(self.plan({'site': a, 'kiln': a, 'installer': a, 'refract': a})['kiln'])  # what the old base missed
 
     def test_an_upload_whose_success_was_never_recorded_deploys_after_a_revert(self):
         # B is recorded as started but never reached success (Vercel took it, GitHub didn't take the status). C
@@ -172,49 +172,65 @@ class Push(InRepo):
         a = self.repo.commit('kiln/apps/kiln/src/page.tsx')
         b = self.repo.commit('kiln/apps/kiln/src/flow.tsx')
         self.repo.git('revert', '--no-edit', 'HEAD')
-        got = self.plan({'site': wd.Last(a), 'kiln': wd.Last(a, b), 'installer': wd.Last(a)})
-        self.assertEqual(got, {'site': False, 'kiln': True, 'installer': False})
-        got = self.plan({'site': wd.Last(a), 'kiln': wd.Last(a, b), 'installer': wd.Last(a)}, event='schedule')
+        got = self.plan({'site': wd.Last(a), 'kiln': wd.Last(a, b), 'installer': wd.Last(a), 'refract': wd.Last(a)})
+        self.assertEqual(got, {'site': False, 'kiln': True, 'installer': False, 'refract': False})
+        got = self.plan({'site': wd.Last(a), 'kiln': wd.Last(a, b), 'installer': wd.Last(a), 'refract': wd.Last(a)}, event='schedule')
         self.assertTrue(got['kiln'])
 
     def test_nothing_deploys_when_nothing_it_builds_from_changed(self):
         deployed = self.repo.commit('kiln/apps/kiln/src/page.tsx')
         self.repo.commit('kiln/apps/kiln/test/flow.test.ts', 'kiln/README.md', 'kiln/workers/refract/src/a.ts')
-        self.assertEqual(self.plan({'site': None, 'kiln': deployed, 'installer': deployed})['kiln'], False)
+        self.assertEqual(self.plan({'site': None, 'kiln': deployed, 'installer': deployed, 'refract': deployed})['kiln'], False)
 
     def test_an_already_deployed_commit_deploys_nothing_even_the_site(self):
         # changes.py runs everything on an empty diff; here an empty diff means it is live already.
         head = self.repo.commit('site/src/app/page.tsx')
-        self.assertEqual(self.plan({'site': head, 'kiln': head, 'installer': head}),
-                         {'site': False, 'kiln': False, 'installer': False})
+        self.assertEqual(self.plan({'site': head, 'kiln': head, 'installer': head, 'refract': head}),
+                         {'site': False, 'kiln': False, 'installer': False, 'refract': False})
 
     def test_the_site_follows_changes_py_site_rule(self):
         deployed = self.repo.commit('site/src/app/page.tsx')
         self.repo.commit('docs/esphome.md')
-        self.assertTrue(self.plan({'site': deployed, 'kiln': deployed, 'installer': deployed})['site'])
+        self.assertTrue(self.plan({'site': deployed, 'kiln': deployed, 'installer': deployed, 'refract': deployed})['site'])
         deployed = self.repo.commit('core/src/main/java/a/B.kt')
         self.repo.commit('core/src/main/java/a/C.kt')
-        self.assertFalse(self.plan({'site': deployed, 'kiln': deployed, 'installer': deployed})['site'])
+        self.assertFalse(self.plan({'site': deployed, 'kiln': deployed, 'installer': deployed, 'refract': deployed})['site'])
 
     def test_a_deleted_file_deploys_the_site(self):
         deployed = self.repo.commit('core/src/main/java/a/B.kt')
         self.repo.commit(delete=('core/src/main/java/a/B.kt',))
-        self.assertTrue(self.plan({'site': deployed, 'kiln': deployed, 'installer': deployed})['site'])
+        self.assertTrue(self.plan({'site': deployed, 'kiln': deployed, 'installer': deployed, 'refract': deployed})['site'])
 
     def test_the_redirect_deploys_the_installer_and_not_kiln(self):
         deployed = self.repo.commit('kiln/apps/kiln/src/page.tsx')
         self.repo.commit('kiln/s1-redirect/vercel.json')
-        self.assertEqual(self.plan({'site': deployed, 'kiln': deployed, 'installer': deployed}),
-                         {'site': False, 'kiln': False, 'installer': True})
+        self.assertEqual(self.plan({'site': deployed, 'kiln': deployed, 'installer': deployed, 'refract': deployed}),
+                         {'site': False, 'kiln': False, 'installer': True, 'refract': False})
+
+    def test_the_worker_deploys_refract_and_not_kiln(self):
+        deployed = self.repo.commit('kiln/apps/kiln/src/page.tsx')
+        self.repo.commit('kiln/workers/refract/allowlist.json')
+        self.assertEqual(self.plan({'site': deployed, 'kiln': deployed, 'installer': deployed, 'refract': deployed}),
+                         {'site': False, 'kiln': False, 'installer': False, 'refract': True})
+
+    def test_refract_tests_and_notes_deploy_nothing(self):
+        deployed = self.repo.commit('kiln/workers/refract/src/index.ts')
+        self.repo.commit('kiln/workers/refract/test/proxy.test.ts', 'kiln/workers/refract/README.md')
+        self.assertFalse(self.plan({'site': deployed, 'kiln': deployed, 'installer': deployed, 'refract': deployed})['refract'])
+
+    def test_a_kiln_change_leaves_refract(self):
+        deployed = self.repo.commit('kiln/workers/refract/src/index.ts')
+        self.repo.commit('kiln/apps/kiln/src/page.tsx')
+        self.assertFalse(self.plan({'site': deployed, 'kiln': deployed, 'installer': deployed, 'refract': deployed})['refract'])
 
     def test_never_deployed_fails_closed(self):
         self.repo.commit('docs/esphome.md')
-        self.assertEqual(self.plan({'site': None, 'kiln': None, 'installer': None}),
-                         {'site': True, 'kiln': True, 'installer': True})
+        self.assertEqual(self.plan({'site': None, 'kiln': None, 'installer': None, 'refract': None}),
+                         {'site': True, 'kiln': True, 'installer': True, 'refract': True})
 
     def test_a_base_git_does_not_have_fails_closed(self):
         self.repo.commit('docs/esphome.md')
-        self.assertTrue(self.plan({'site': None, 'kiln': 'f' * 40, 'installer': None})['kiln'])
+        self.assertTrue(self.plan({'site': None, 'kiln': 'f' * 40, 'installer': None, 'refract': None})['kiln'])
 
     def test_an_api_failure_fails_closed(self):
         self.repo.commit('docs/esphome.md')
@@ -222,7 +238,7 @@ class Push(InRepo):
         def broken(_):
             raise OSError('network down')
         got = wd.plan(list(wd.ENVIRONMENTS), 'push', fetch=broken)
-        self.assertEqual({p: d for p, (d, _, _) in got.items()}, {'site': True, 'kiln': True, 'installer': True})
+        self.assertEqual({p: d for p, (d, _, _) in got.items()}, {'site': True, 'kiln': True, 'installer': True, 'refract': True})
 
 
 class Schedule(InRepo):
@@ -230,12 +246,12 @@ class Schedule(InRepo):
         deployed = self.repo.commit('kiln/apps/kiln/src/page.tsx')
         self.repo.commit('kiln/apps/kiln/src/wizard/Flow.tsx')
         head = self.repo.git('rev-parse', 'HEAD')
-        self.assertEqual(self.plan({'site': head, 'kiln': deployed, 'installer': head}, event='schedule'),
-                         {'site': False, 'kiln': True, 'installer': False})
+        self.assertEqual(self.plan({'site': head, 'kiln': deployed, 'installer': head, 'refract': head}, event='schedule'),
+                         {'site': False, 'kiln': True, 'installer': False, 'refract': False})
 
     def test_a_project_that_never_deployed_is_tried(self):
         self.repo.commit('docs/esphome.md')
-        self.assertTrue(self.plan({'site': None, 'kiln': None, 'installer': None}, event='schedule')['installer'])
+        self.assertTrue(self.plan({'site': None, 'kiln': None, 'installer': None, 'refract': None}, event='schedule')['installer'])
 
     def test_an_api_failure_deploys_nothing(self):
         self.repo.commit('docs/esphome.md')
@@ -243,7 +259,7 @@ class Schedule(InRepo):
         def broken(_):
             raise OSError('network down')
         got = wd.plan(list(wd.ENVIRONMENTS), 'schedule', fetch=broken)
-        self.assertEqual({p: d for p, (d, _, _) in got.items()}, {'site': False, 'kiln': False, 'installer': False})
+        self.assertEqual({p: d for p, (d, _, _) in got.items()}, {'site': False, 'kiln': False, 'installer': False, 'refract': False})
 
 
 class Dispatch(unittest.TestCase):
@@ -251,7 +267,7 @@ class Dispatch(unittest.TestCase):
         def never(_):
             raise AssertionError('a deploy by hand reads no deployments')
         for project, want in (('both', {'site', 'kiln'}), ('site', {'site'}), ('kiln', {'kiln'}),
-                              ('installer', {'installer'})):
+                              ('installer', {'installer'}), ('refract', {'refract'})):
             got = wd.plan(list(wd.ENVIRONMENTS), 'workflow_dispatch', project, fetch=never)
             self.assertEqual({p for p, (d, _, _) in got.items() if d}, want, project)
 
@@ -326,6 +342,15 @@ class Workflow(unittest.TestCase):
             self.assertTrue("if: steps.check.outputs.deploy == 'true'" in step('Record the deploy as done'), project)
             self.assertTrue(f'web_deploy.py finish {project} --id "$ID" --state success' in step('Record the deploy as done'))
             self.assertTrue("if: failure() && steps.start.outputs.id != ''" in step('Record the deploy as failed'), project)
+
+    def test_kiln_waits_for_refract_and_skips_when_it_failed(self):
+        jobs = {k: re.search(rf'^  {k}:\n(.*?)(?=^  \S|\Z)', WORKFLOW, re.M | re.S).group(1) for k in ('kiln', 'refract')}
+        self.assertIn('needs: [changes, refract]', jobs['kiln'])
+        cond = re.sub(r'\s+', ' ', jobs['kiln'].split('if: >-', 1)[1].split('}}', 1)[0])
+        self.assertIn("needs.changes.outputs.kiln == 'true'", cond)
+        self.assertIn("(needs.refract.result == 'success' || needs.refract.result == 'skipped')", cond)
+        self.assertIn('secrets.CLOUDFLARE_REFRACT_TOKEN', jobs['refract'])
+        self.assertIn('kiln/workers/refract/deploy.sh', jobs['refract'])
 
     def test_the_workflow_picks_with_the_script_and_retries_on_a_schedule(self):
         self.assertTrue('tools/ci/web_deploy.py pick' in WORKFLOW)

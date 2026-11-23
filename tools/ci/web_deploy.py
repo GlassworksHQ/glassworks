@@ -6,8 +6,8 @@ diff, writing nothing but their output and the run summary. `start` creates one 
 adds a status to it.
 
 Usage:
-  tools/ci/web_deploy.py pick --event <event> [--project both|site|kiln|installer] [--summary <file>]
-      site=, kiln=, installer= true|false, for $GITHUB_OUTPUT (the changes job)
+  tools/ci/web_deploy.py pick --event <event> [--project both|site|kiln|installer|refract] [--summary <file>]
+      site=, kiln=, installer=, refract= true|false, for $GITHUB_OUTPUT (the changes job)
   tools/ci/web_deploy.py check <project> --event <event> --started-for <sha> [--summary <file>]
       deploy=true|false, commit=<sha> and base=<sha>, in a deploy job once it holds the project's queue
   tools/ci/web_deploy.py start <project> --commit <sha>
@@ -16,9 +16,9 @@ Usage:
       after the upload: its outcome
 
 The base. A project's base is the commit of its newest record that reached success: the commit the deploy job
-checked out, marked only once Vercel took the upload. Not the push's `before`: a deploy that was cancelled by a
-newer run or failed (Vercel's daily cap) left its change undeployed, and a later push that doesn't touch the
-project would never deploy it. Not the deployment GitHub makes for each job in an environment either: that one has
+checked out, marked only once Vercel (or Cloudflare, for Refract) took the upload. Not the push's `before`: a
+deploy that was cancelled by a newer run or failed (Vercel's daily cap) left its change undeployed, and a later push
+that doesn't touch the project would never deploy it. Not the deployment GitHub makes for each job in an environment either: that one has
 the commit the run was started for, older than main at checkout, and succeeds when `check` skips the deploy too.
 
 Unsettled. A record newer than the base that never reached success (the upload failed, the job was cancelled or
@@ -45,13 +45,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import changes  # noqa: E402
 
 # The GitHub environment each deploy job runs in (its `environment` in web-deploy.yml), where `record` writes.
-ENVIRONMENTS = {'site': 'glassworks.dev', 'kiln': 'kiln.glassworks.dev', 'installer': 's1.edm.sh'}
-URLS = {'site': 'https://www.glassworks.dev', 'kiln': 'https://kiln.glassworks.dev', 'installer': 'https://s1.edm.sh'}
-NAMES = {'site': 'glassworks.dev', 'kiln': 'Kiln', 'installer': 's1.edm.sh'}
+ENVIRONMENTS = {'site': 'glassworks.dev', 'kiln': 'kiln.glassworks.dev', 'installer': 's1.edm.sh',
+                'refract': 'refract.glassworks.dev'}
+URLS = {'site': 'https://www.glassworks.dev', 'kiln': 'https://kiln.glassworks.dev', 'installer': 'https://s1.edm.sh',
+        'refract': 'https://refract.glassworks.dev'}
+NAMES = {'site': 'glassworks.dev', 'kiln': 'Kiln', 'installer': 's1.edm.sh', 'refract': 'Refract'}
 
 # Kiln's app: its npm workspaces (kiln/, the frames' recipes, packages/), what every workspace builds with, and
 # the repo files kiln/scripts/stage-assets.mjs stages. Tests, mockups, Markdown and the Refract worker
-# (kiln/workers, its own deploy) don't go into it. The workflow and this picker redeploy it, to try a change to them.
+# (kiln/workers, its own job below) don't go into it. The workflow and this picker redeploy it, to try a change to them.
 KILN = (
     'kiln', 'frames/*/installer', 'frames/*/design', 'packages', 'branding',
     'frames/lululemon-mirror/overlay', 'frames/aqara-s1-plus/tools/root', 'frames/aqara-s1-plus/tools/radio',
@@ -65,6 +67,15 @@ KILN = (
 # s1.edm.sh's redirect.
 INSTALLER = ('kiln/s1-redirect',)
 
+# Refract, the Cloudflare Worker Kiln downloads every APK and image through: its code, its allowlist and the
+# release lines generated from the frames (releases.json), and what it's deployed with. Kiln's job waits for this
+# one, so a Kiln that names a new download never goes live before Refract serves it.
+REFRACT = (
+    'kiln/workers/refract', '.github/workflows/web-deploy.yml', 'tools/ci/web_deploy.py',
+    '!**/*.md', '!kiln/workers/refract/test',
+)
+PATTERNS = {'kiln': KILN, 'installer': INSTALLER, 'refract': REFRACT}
+
 # How many of a project's newest deployments to look through for a record (each deploy makes two: the job's and
 # the record).
 DEPTH = 50
@@ -72,7 +83,8 @@ DEPTH = 50
 # The task of a `record` deployment; the ones GitHub makes for a job have the task `deploy`.
 TASK = 'web-deploy'
 
-DISPATCH = {'both': ('site', 'kiln'), 'site': ('site',), 'kiln': ('kiln',), 'installer': ('installer',)}
+DISPATCH = {'both': ('site', 'kiln'), 'site': ('site',), 'kiln': ('kiln',), 'installer': ('installer',),
+            'refract': ('refract',)}
 
 
 def short(sha):
@@ -88,8 +100,7 @@ def wants(project, changed, deleted=()):
     if project == 'site':
         runs, why = changes.select(list(changed), list(deleted))['site']
         return why if runs else None
-    patterns = KILN if project == 'kiln' else INSTALLER
-    return next((f for f in changed if changes.matches(f, patterns)), None)
+    return next((f for f in changed if changes.matches(f, PATTERNS[project])), None)
 
 
 class Last(tuple):

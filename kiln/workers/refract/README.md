@@ -240,7 +240,14 @@ that workerd's date (2026-07-30), so the tests run the runtime production runs.
 
 ## Deploying
 
-The root thread deploys, never a PR. From the repo root:
+[`web-deploy.yml`](../../../.github/workflows/web-deploy.yml) deploys it from `main`, before Kiln, whenever
+something it's built from changed: its code, `allowlist.json` or `releases.json`. Its tests and notes don't count. The
+job runs `deploy.sh` with the repo secret `CLOUDFLARE_REFRACT_TOKEN` (the permissions below) and the variable
+`CLOUDFLARE_ACCOUNT_ID`, then reads the live listing until it has every id in the allowlist. Kiln's job waits for it,
+and doesn't deploy when it failed. To deploy it again by hand from GitHub, run the workflow from the Actions tab
+with `refract`.
+
+From a computer, from the repo root:
 
 ```sh
 npm ci --prefix kiln/workers/refract
@@ -268,8 +275,7 @@ With an API token instead of `wrangler login`, put `CLOUDFLARE_API_TOKEN` and
 | Zone `glassworks.dev` | Workers Routes: Edit |
 | Zone `glassworks.dev` | DNS: Edit (the custom domain adds a DNS record) |
 
-These come from Cloudflare's permission list and its custom domain docs (read 2026-11-15). They
-have not been tried yet.
+These come from Cloudflare's permission list and its custom domain docs (read 2026-11-15).
 
 ## Cost
 

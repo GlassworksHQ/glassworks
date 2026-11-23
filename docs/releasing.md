@@ -344,8 +344,10 @@ checked out, in the project's environment, and marks it a success once Vercel ta
 that commit. When a newer record never reached success, the next run deploys anyway, because what's live is
 unknown. Each run's summary lists what it deployed, from which commit, and why.
 
-Refract (refract.glassworks.dev), the Cloudflare Worker Kiln downloads every APK and image through, isn't on Vercel
-and isn't in `web-deploy.yml`: it deploys by hand ([its README](../kiln/workers/refract/README.md#deploying)).
+Refract (refract.glassworks.dev), the Cloudflare Worker Kiln downloads every APK and image through, deploys from the
+same workflow, to Cloudflare, when its code, allowlist or release lines changed. Kiln's job waits for it: when Refract
+needs a deploy and it fails, Kiln isn't deployed either, so a Kiln that names a new download never goes live before
+Refract serves it ([its README](../kiln/workers/refract/README.md#deploying)).
 
 Versions are `MAJOR.MINOR.PATCH`. For the app lines minor and patch are below 100, and the versionCode is
 `major*10000 + minor*100 + patch`, so `1.2.3` is 10203. Frame versions take each part up to 999. SemVer pre-release
