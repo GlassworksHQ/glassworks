@@ -18,8 +18,8 @@
   "dependencies": {
     "@glassworks/adb": "0.0.0",
     "@glassworks/app-adb": "0.0.0",
-    "@glassworks/ext4": "0.1.0",
-    "@glassworks/fastboot": "0.1.0",
+    "@glassworks/ext4": "0.1.1",
+    "@glassworks/fastboot": "0.1.1",
     "@glassworks/kiln-core": "0.0.0"
   }
 }

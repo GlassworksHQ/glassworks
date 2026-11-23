@@ -12,7 +12,8 @@
 //     src/ names .ts files in relative imports; the build and this script make them .js
 //   - package.json: `private` and `scripts` dropped; every export of ./src/X.ts becomes ./dist/X.js with its
 //     types; exports of ./test/* (fakes for our own tests) are left out; a workspace @glassworks dependency
-//     gets ^ its version, and must itself be publishable; repository, homepage and bugs point at this repo
+//     gets ^ its version, and must itself be publishable; repository, homepage and bugs point at this repo;
+//     `sideEffects` kept, so a bundler may drop the modules a consumer doesn't import
 //   - README.md with its relative links made absolute, at the release's tag (npm/<name>/v<version>);
 //     LICENSE (the repo's MIT, and under it the package's own LICENSE if it's a fork); CHANGELOG.md
 // Writes only <out> and the package's dist/ (git-ignored). Reads nothing from the network.
@@ -107,6 +108,7 @@ export function manifest({ name, dir, pkg }, all) {
     repository: { type: 'git', url: `git+${GITHUB}.git`, directory: dir },
     license: pkg.license,
     type: pkg.type,
+    sideEffects: pkg.sideEffects,
     exports,
     files: ['dist', 'src', 'CHANGELOG.md'],
     dependencies: Object.keys(deps).length ? deps : undefined,

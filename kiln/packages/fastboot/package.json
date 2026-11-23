@@ -1,6 +1,6 @@
 {
   "name": "@glassworks/fastboot",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Fastboot over WebUSB: a fork of fastboot.js, with oem run and partition read-back for U-Boot.",
   "keywords": [
@@ -12,6 +12,7 @@
   ],
   "license": "MIT",
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
     "./fake-lk": "./test/fake-lk.ts"
@@ -21,7 +22,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@glassworks/fel": "0.1.0",
+    "@glassworks/fel": "0.1.1",
     "@types/w3c-web-usb": "^1.0.14"
   }
 }

@@ -947,3 +947,6 @@ exists, so the first release of each goes out with a token:
    `GlassworksHQ/glassworks`, workflow `npm-release.yml`, environment `npm`. Then set "Require two-factor
    authentication and disallow tokens".
 5. Delete the `NPM_TOKEN` secret and revoke the token. Without it, the job publishes through OIDC.
+6. Publish a release through it within 2 days. npm doesn't check a trusted publishing setup when it's saved:
+   the first publish through it does, and a setup nothing has published through in 2 days expires. Delete an
+   expired one and set it up again, right before the package's next tag.

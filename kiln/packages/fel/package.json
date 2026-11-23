@@ -1,6 +1,6 @@
 {
   "name": "@glassworks/fel",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "FEL, the USB boot mode of Allwinner chips, over WebUSB: load and start an SPL and U-Boot from the browser (A133 for now). Written clean-room.",
   "keywords": [
@@ -13,6 +13,7 @@
   ],
   "license": "MIT",
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
     "./transport": "./src/transport.ts",
