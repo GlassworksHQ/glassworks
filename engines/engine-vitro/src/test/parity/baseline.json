@@ -1,11 +1,11 @@
 {
  "_comment": "Known drift per frame/case: the harness fails when a case gets worse than this (plus slack: 2.0% pixels, 1.0 px bounds, 0.5 px font). Regenerate with -PvitroParityUpdateBaseline=true; keep or write each \"reason\". An update records regressions too: read the diff before committing it, and keep the entries of cases with an open regression. #794 empties this file.",
  "mirror/clock-date": {
-  "pixel": 0.1676,
+  "pixel": 0.0233,
   "bounds": 0,
   "font": 0,
-  "missingText": 1,
-  "reason": "Vitro doesn't draw date_format's date line (HA: \"Monday November 23\" under the time, which HA moves up to make room; at this size HA clips the date's first letter itself). #791"
+  "missingText": 0,
+  "reason": "the date line and layout match HA (its start cut off at the large size, as HA's marquee rests); what is left is glyph antialiasing on the 64 px digits and 24 px date, just over the 2% line"
  },
  "mirror/markdown-cardmod": {
   "pixel": 0.0202,
@@ -43,11 +43,11 @@
   "reason": "the dial's texts (Off, 17.5 °C) are drawn on its canvas, so the harness can't find them as text runs; pixels 0.2%"
  },
  "s1/clock-date": {
-  "pixel": 0.1676,
+  "pixel": 0.0233,
   "bounds": 0,
   "font": 0,
-  "missingText": 1,
-  "reason": "Vitro doesn't draw date_format's date line (HA: \"Monday November 23\" under the time, which HA moves up to make room; at this size HA clips the date's first letter itself). #791"
+  "missingText": 0,
+  "reason": "the date line and layout match HA (its start cut off at the large size, as HA's marquee rests); what is left is glyph antialiasing on the 64 px digits and 24 px date, just over the 2% line"
  },
  "s1/markdown-cardmod": {
   "pixel": 0.0148,
@@ -85,11 +85,11 @@
   "reason": "the dial's texts (Off, 17.5 °C) are drawn on its canvas, so the harness can't find them as text runs; pixels 0.2%"
  },
  "tablet/clock-date": {
-  "pixel": 0.1611,
+  "pixel": 0.0271,
   "bounds": 0,
   "font": 0,
-  "missingText": 1,
-  "reason": "Vitro doesn't draw date_format's date line (HA: \"Monday November 23\" under the time, which HA moves up to make room; at this size HA clips the date's first letter itself). #791"
+  "missingText": 0,
+  "reason": "the date line and layout match HA (its start cut off at the large size, as HA's marquee rests); what is left is glyph antialiasing on the 64 px digits and 24 px date, just over the 2% line"
  },
  "tablet/markdown-cardmod": {
   "pixel": 0.0097,
