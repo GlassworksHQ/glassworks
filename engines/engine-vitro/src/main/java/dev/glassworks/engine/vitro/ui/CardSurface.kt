@@ -74,6 +74,16 @@ class VitroCardContext(
      * stream, so [startCameraStream] reports a fallback straight away and cards poll snapshots instead.
      */
     val cameraStream: ((entityId: String, entityPicture: String?, onFrame: (Bitmap) -> Unit, onFallback: () -> Unit) -> () -> Unit)? = null,
+    /**
+     * A WebSocket subscription (`history/stream`, say): every event of [msg]'s subscription reaches `onEvent`, on any
+     * thread, until the returned handle is called; `onError` runs once, on any thread, if Home Assistant rejects it, the
+     * connection drops before it starts (its `error`) or it can't be sent (null). A delivery already under way when the
+     * handle is called may still finish, so a consumer checks on its own thread that the subscription is still its
+     * current one before using an event. The default (tests, no engine) never delivers anything.
+     */
+    val subscribeWs: (msg: JSONObject, onEvent: (JSONObject) -> Unit, onError: (JSONObject?) -> Unit) -> () -> Unit = { _, _, _ -> {} },
+    /** The wall clock, ms since the epoch: what HA's frontend reads as `new Date()` for its time windows. */
+    val now: () -> Long = System::currentTimeMillis,
 ) {
     val dp: Float = context.resources.displayMetrics.density
     val main: Handler = Handler(Looper.getMainLooper())
@@ -118,6 +128,8 @@ class VitroCardContext(
         fetchForecast = fetchForecast,
         haUser = haUser,
         cameraStream = cameraStream,
+        subscribeWs = subscribeWs,
+        now = now,
     ).also {
         it.cardVars = cardVars
         it.cardLayout = cardLayout

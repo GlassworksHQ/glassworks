@@ -1,0 +1,4 @@
+{
+  "title": "Sensor: a line graph of a sensor without a state class",
+  "card": { "type": "sensor", "entity": "sensor.living_room_airdot_living_room_backlight_level", "name": "Backlight", "graph": "line" }
+}

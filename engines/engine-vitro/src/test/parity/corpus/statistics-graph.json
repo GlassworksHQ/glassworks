@@ -1,0 +1,9 @@
+{
+  "title": "Statistics graph: a week of hourly temperature statistics",
+  "card": {
+    "type": "statistics-graph",
+    "title": "Temperature",
+    "entities": [{ "entity": "sensor.living_room_airdot_living_room_temperature", "name": "Living room" }],
+    "days_to_show": 7
+  }
+}

@@ -205,6 +205,12 @@ class ParityReference(val png: File, val json: JSONObject) {
     /** Image paths HA's page asked for and didn't get (written by the capture only when there are some). */
     val imagesHaMissing: Set<String> get() = json.optJSONArray("imagesHaMissing")?.let { a -> (0 until a.length()).map { a.getString(it) }.toSet() }.orEmpty()
 
+    /**
+     * The history and statistics calls HA's page made for the case's graphs, with what came back (`request`, then
+     * `result` or `error`, and a subscription's `events`): written by the capture only when there are some.
+     */
+    val ws: JSONArray? get() = json.optJSONArray("ws")
+
     /** What HaDisplay held for the case's entities (registry entries, device names, icons, state labels), or null. */
     val display: JSONObject? get() = json.optJSONObject("display")
     val slots: List<CssRect> get() = json.getJSONArray("slots").let { a -> (0 until a.length()).map { CssRect.finite(a.getJSONObject(it), "slot $it") } }
@@ -253,5 +259,77 @@ object ParityInputs {
         val missing = asked.distinct().sorted()
         val haToo = ref.imagesHaMissing
         return missing.filter { it !in haToo } to missing.filter { it in haToo }
+    }
+}
+
+/**
+ * Answers Vitro's history and statistics calls with what HA's page got for the same calls ([ParityReference.ws]),
+ * so a graph draws exactly the data HA drew. A call must match one HA made, field for field (its times included,
+ * which come from the pinned clock): one that doesn't is listed in [unmatched], and the case fails as a different
+ * input rather than as drift.
+ */
+class ParityWs(recorded: JSONArray?) {
+    private val calls: List<JSONObject> = recorded?.let { a -> (0 until a.length()).map { a.getJSONObject(it) } }.orEmpty()
+    val unmatched = java.util.concurrent.CopyOnWriteArrayList<String>()
+
+    /**
+     * The recorded call whose request is [msg] (its `id` aside), or null. When the page made the same call more than
+     * once, the last one: its answer is the one HA held when the screenshot was taken.
+     */
+    fun find(msg: JSONObject): JSONObject? {
+        val want = canonical(msg)
+        return calls.lastOrNull { canonical(it.getJSONObject("request")) == want }
+    }
+
+    /** A one-shot command: its recorded result, or its recorded error. */
+    fun call(msg: JSONObject, done: (Boolean, Any?, JSONObject?) -> Unit) {
+        val hit = find(msg)
+        when {
+            hit == null -> {
+                unmatched += canonical(msg)
+                done(false, null, JSONObject().put("code", "not_recorded"))
+            }
+            hit.has("result") -> done(true, hit.opt("result").takeIf { it != JSONObject.NULL }, null)
+            else -> done(false, null, hit.optJSONObject("error") ?: JSONObject().put("code", "unknown"))
+        }
+    }
+
+    /**
+     * A subscription: its recorded events, in order, each through [deliver], or its recorded rejection to [onError].
+     * Returns the unsubscribe handle.
+     */
+    fun subscribe(msg: JSONObject, deliver: (Runnable) -> Unit, onEvent: (JSONObject) -> Unit, onError: (JSONObject?) -> Unit = {}): () -> Unit {
+        val hit = find(msg)
+        if (hit == null) {
+            unmatched += canonical(msg)
+            return {}
+        }
+        var live = true
+        if (hit.has("error")) {
+            val error = hit.optJSONObject("error")
+            deliver(Runnable { if (live) onError(error) })
+            return { live = false }
+        }
+        val events = hit.optJSONArray("events") ?: JSONArray()
+        for (i in 0 until events.length()) {
+            val ev = events.optJSONObject(i) ?: continue
+            deliver(Runnable { if (live) onEvent(ev) })
+        }
+        return { live = false }
+    }
+
+    companion object {
+        /** [o] without its top-level `id`, as JSON text with keys sorted at every level: equal for equal requests. */
+        fun canonical(o: JSONObject): String = text(o, top = true)
+
+        private fun text(v: Any?, top: Boolean = false): String = when (v) {
+            is JSONObject -> v.keys().asSequence().filter { !(top && it == "id") }.sorted()
+                .joinToString(",", "{", "}") { k -> JSONObject.quote(k) + ":" + text(v.get(k)) }
+            is JSONArray -> (0 until v.length()).joinToString(",", "[", "]") { text(v.get(it)) }
+            is String -> JSONObject.quote(v)
+            null, JSONObject.NULL -> "null"
+            is Number -> JSONObject.numberToString(v)
+            else -> v.toString()
+        }
     }
 }

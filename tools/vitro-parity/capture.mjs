@@ -29,12 +29,13 @@ import { dirname, join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { connect, loadCredentials, redact } from './lib/ha.mjs';
-import { referencedEntities, scrubStates, scrubText, checkDenylist, findPrivate, hasMacFragment } from './lib/scrub.mjs';
+import { referencedEntities, scrubStates, scrubText, checkDenylist, findPrivate, hasMacFragment, scrubGraphCalls } from './lib/scrub.mjs';
 import { parseArgs, pick } from './lib/args.mjs';
 import { aliasPaths, assetDestination, canonicalPath, capturableImage, staleAssets } from './lib/assets.mjs';
 import { applyEntityEvent, unmetExpectations } from './lib/states.mjs';
 import { imageOutcomes, noteSaved } from './lib/images.mjs';
 import { buildDisplay } from './lib/display.mjs';
+import { wsRecorder, snapshotCalls, pendingOneShots } from './lib/wsdata.mjs';
 import { HARNESS, HARNESS_META, MARKER_KEY, MARKER_VALUE, notOurs } from './lib/harness.mjs';
 import { FIXTURE_PREFIX, fixtureFile, fixtureResources } from './lib/fixtures.mjs';
 
@@ -340,21 +341,26 @@ const TEXTS_JS = (slot) => {
   return out.slice(0, 300);
 };
 
-/** Follows HA's subscribe_entities stream on the page's own socket, so the states are exactly what it drew. */
-function recordStates(page) {
+/**
+ * Follows HA's subscribe_entities stream on the page's own socket, so the states are exactly what it drew, and
+ * records the history and statistics calls its graphs make, with their answers ([graphs], see wsdata.mjs).
+ */
+function recordStates(page, graphs) {
   const states = {};
   page.on('websocket', (ws) => {
     if (!ws.url().endsWith('/api/websocket')) return;
     // Per socket: message ids start again on every connection, and a new connection's first event replaces.
     const entitySubs = new Set();
     const seen = new Set();
+    const graphSocket = graphs.socket();
     const each = (payload, fn) => {
       let m;
       try { m = JSON.parse(payload); } catch { return; }
       (Array.isArray(m) ? m : [m]).forEach(fn);
     };
-    ws.on('framesent', (f) => each(f.payload, (m) => { if (m.type === 'subscribe_entities') entitySubs.add(m.id); }));
+    ws.on('framesent', (f) => each(f.payload, (m) => { if (m.type === 'subscribe_entities') entitySubs.add(m.id); graphSocket.sent(m); }));
     ws.on('framereceived', (f) => each(f.payload, (m) => {
+      graphSocket.received(m);
       if (m.type !== 'event' || !entitySubs.has(m.id)) return;
       const first = !seen.has(m.id);
       seen.add(m.id);
@@ -476,9 +482,10 @@ async function newPage(browser, frame, dark, now, cardModUrl, tz) {
   });
   const page = await ctx.newPage();
   page.on('pageerror', (e) => log(`  pageerror: ${scrubText(e.message, creds).slice(0, 200)}`));
-  const states = recordStates(page);
+  const graphs = wsRecorder();
+  const states = recordStates(page, graphs);
   const images = recordImages(page);
-  return { ctx, page, states, images };
+  return { ctx, page, states, images, graphs };
 }
 
 /** A deep copy of the states of [ids] (sorted), as the page holds them right now. */
@@ -636,11 +643,13 @@ async function capture() {
     for (const dark of [true, false]) {
       const group = mine.filter((c) => (c.dark ?? true) === dark);
       if (!group.length) continue;
-      const { ctx, page, states, images } = await newPage(browser, frame, dark, now, cardModUrl, haConfig.time_zone);
+      const { ctx, page, states, images, graphs } = await newPage(browser, frame, dark, now, cardModUrl, haConfig.time_zone);
       let loaded = false;
       for (const c of group) {
         const t0 = Date.now();
         images.failed.clear();
+        // The history and statistics this case's cards ask for, from its navigation on.
+        graphs.reset();
         try {
           const path = c.card ? `/${HARNESS}/${c.id}` : `/${c.dashboard}/${c.view}`;
           const resources = fixtureResources(c);
@@ -669,11 +678,22 @@ async function capture() {
           const config = c.card ?? JSON.parse(readFileSync(join(corpusRoot, 'dashboards', `${c.dashboard}.json`), 'utf8'));
           const outDir = join(refs, frame.id);
           mkdirSync(outDir, { recursive: true });
-          let info, stable, clip, slots, png, texts, templates, ids, drawnStates, drawn, display;
+          let info, stable, clip, slots, png, texts, templates, ids, drawnStates, drawn, display, drawnGraphs;
           // The PNG, its texts and the states saved with them must be one instant: an entity that changes while
           // they're taken makes the pair disagree, so the capture starts over (three tries).
           for (let attempt = 1; ; attempt++) {
             ({ info, stable } = await settle(page, c.card ? cardElement(c.card) : null, c.dashboard ? 20000 : 15000));
+            // A graph waits on one-shot answers (the statistics card asks for statistics after its metadata): a call
+            // still unanswered means the card isn't drawn yet. Wait for them (10 s at most), then settle again.
+            if (pendingOneShots(graphs.calls).length) {
+              const w0 = Date.now();
+              while (pendingOneShots(graphs.calls).length && Date.now() - w0 < 10000) await page.waitForTimeout(100);
+              const left = pendingOneShots(graphs.calls);
+              if (left.length) throw new Error(`graph call(s) never answered: ${left.join(', ')}`);
+              if (attempt >= 3) throw new Error('graph answers kept arriving during the capture (3 tries)');
+              log(`${frame.id}/${c.id}: a graph answer arrived after the page settled: again`);
+              continue;
+            }
             if (!info.slots.length && c.card) throw new Error('no card on the page');
             if (!info.slots.length) log(`${frame.id}/${c.id}: HA shows no card (all hidden?): comparing the whole page`);
             if (c.card) {
@@ -688,6 +708,9 @@ async function capture() {
             // one that appears during the capture then starts it over, like any other change.
             for (const id of Object.keys(c.expect || {})) ids.add(id);
             drawnStates = snapshotStates(states, ids);
+            // The history and statistics the graphs drew, as of the screenshot (an answer after it would be data HA
+            // never showed: the same check as the states).
+            drawnGraphs = snapshotCalls(graphs.calls);
             // The images the screenshot shows, read just before it and checked again after (bracketed like the
             // states): saved for Vitro's fixture server after the checks.
             drawn = await page.evaluate(DRAWN_IMAGES_JS, slots);
@@ -707,9 +730,10 @@ async function capture() {
             // One instant for the PNG, its states and its images: anything that moved meanwhile starts it over.
             const sameStates = JSON.stringify(snapshotStates(states, ids)) === JSON.stringify(drawnStates);
             const sameImages = JSON.stringify(await page.evaluate(DRAWN_IMAGES_JS, slots)) === JSON.stringify(drawn);
-            if (sameStates && sameImages) break;
-            if (attempt >= 3) throw new Error('entity states or drawn images kept changing during the capture (3 tries)');
-            log(`${frame.id}/${c.id}: ${sameStates ? 'a drawn image' : 'an entity'} changed during the capture: again`);
+            const sameGraphs = JSON.stringify(graphs.calls) === JSON.stringify(drawnGraphs);
+            if (sameStates && sameImages && sameGraphs) break;
+            if (attempt >= 3) throw new Error('entity states, drawn images or graph data kept changing during the capture (3 tries)');
+            log(`${frame.id}/${c.id}: ${!sameStates ? 'an entity' : !sameImages ? 'a drawn image' : 'graph data'} changed during the capture: again`);
           }
           // A case that covers one state (a light on, an alarm disarmed) keeps its reference when HA isn't in it.
           const unmet = unmetExpectations(c.expect, drawnStates);
@@ -748,6 +772,9 @@ async function capture() {
             // Image paths HA's page asked for and didn't get: Vitro missing them too is no capture gap. Only
             // written when there are some, so a clean reference doesn't change.
             ...(failedDrawn.length ? { imagesHaMissing: failedDrawn } : {}),
+            // The history and statistics calls the card's graphs made and what came back, for Vitro's same calls.
+            // Only written when there are some.
+            ...(drawnGraphs.length ? { ws: scrubGraphCalls(drawnGraphs) } : {}),
           };
           if (!committed) {
             // Pictures that templates point at (a plant's image entity inside Markdown, say), unredacted from the raw text.

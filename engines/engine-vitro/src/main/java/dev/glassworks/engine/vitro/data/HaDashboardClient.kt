@@ -323,6 +323,17 @@ class HaDashboardClient(
         return 0.0
     }
 
+    /**
+     * Subscribes [msg] (any subscription command, e.g. `history/stream`) and hands each of its events to [onEvent], on
+     * the socket's thread. [onError] runs once if Home Assistant rejects the command (with its `error`), or with null
+     * when it can't be sent; cancelling with the returned handle never calls it.
+     */
+    fun subscribeWs(msg: JSONObject, onEvent: (JSONObject) -> Unit, onError: (JSONObject?) -> Unit): () -> Unit {
+        val subId = subscribeWithId(JSONObject(msg.toString()), onError) { _, ev -> onEvent(ev) }
+        if (subId <= 0) onError(null)
+        return { if (subId > 0) unsubscribe(subId) }
+    }
+
     /** Subscribes to HA's server-side Jinja2 `render_template` (for markdown & mushroom-template-card). */
     fun subscribeTemplate(template: String, onRendered: (String) -> Unit): () -> Unit {
         val msg = JSONObject()
@@ -677,22 +688,53 @@ class HaDashboardClient(
         subscribeWithId(msg) { _, ev -> onEvent(ev) }
 
     /** [subscribe] whose callback also gets its own subscription id, valid even for an event that beats the return. */
-    private fun subscribeWithId(msg: JSONObject, onEvent: (id: Int, event: JSONObject) -> Unit): Int = synchronized(queueLock) {
+    private fun subscribeWithId(
+        msg: JSONObject,
+        onError: ((JSONObject?) -> Unit)? = null,
+        onEvent: (id: Int, event: JSONObject) -> Unit,
+    ): Int = synchronized(queueLock) {
         val id = nextId.getAndIncrement()
         msg.put("id", id)
         subscriptions[id] = { ev -> onEvent(id, ev) }
+        val state = SubscriptionState()
+        subscriptionStates[id] = state
         pending[id] = { res ->
-            if (!res.optBoolean("success", false)) subscriptions.remove(id)
+            // The result and a cancel decide under the subscription's own lock, so neither can slip past the other.
+            val report = synchronized(state) {
+                state.settled = true
+                subscriptionStates.remove(id)
+                if (res.optBoolean("success", false)) {
+                    false
+                } else {
+                    subscriptions.remove(id)
+                    // Only an explicit cancel keeps it quiet: a rejection or a lost connection (which clears the
+                    // subscriptions before it answers this) is reported once.
+                    !state.cancelled
+                }
+            }
+            if (report) onError?.invoke(res.optJSONObject("error"))
         }
         if (!send(msg)) {
             subscriptions.remove(id)
+            subscriptionStates.remove(id)
             pending.remove(id)
             return -1
         }
         id
     }
 
+    /** Subscriptions cancelled before their result came: their failure is the cancel's, not an error to report. */
+    /** One subscription until its result: whether it was cancelled first, and whether the result has settled it. */
+    private class SubscriptionState {
+        var cancelled = false
+        var settled = false
+    }
+
+    /** Subscriptions waiting for their result; each leaves the map when it settles, so nothing outlives a subscription. */
+    private val subscriptionStates = java.util.concurrent.ConcurrentHashMap<Int, SubscriptionState>()
+
     private fun unsubscribe(subscriptionId: Int) {
+        subscriptionStates[subscriptionId]?.let { st -> synchronized(st) { if (!st.settled) st.cancelled = true } }
         subscriptions.remove(subscriptionId)
         val msg = JSONObject().put("type", "unsubscribe_events").put("subscription", subscriptionId)
         request(msg) {}

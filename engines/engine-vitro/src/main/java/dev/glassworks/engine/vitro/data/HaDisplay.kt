@@ -92,13 +92,14 @@ object HaDisplay {
      * The name HA's cards give an entity on a device (`hass.formatEntityName`'s default): the device's name, then the
      * entity's own name as it is ("Sunset Lamp Sunset"; "Fridge" + "Fridge temperature" stays "Fridge Fridge
      * temperature", as HA's page draws it), or the device's name alone for its main entity. Null when the entity has
-     * no device (or the registries haven't arrived): callers use the friendly name.
+     * no device (or the registries haven't arrived): callers use the friendly name. [separator] joins the two (HA's
+     * history charts use " ▸ ").
      */
-    fun deviceEntityName(entityId: String): String? {
+    fun deviceEntityName(entityId: String, separator: String = " "): String? {
         val entry = registry[entityId] ?: return null
         val device = entry.deviceId?.let { devices[it] } ?: return null
         val own = entry.name?.trim()
-        return if (own.isNullOrEmpty() || own.equals(device, ignoreCase = true)) device else "$device $own"
+        return if (own.isNullOrEmpty() || own.equals(device, ignoreCase = true)) device else "$device$separator$own"
     }
 
     /** The domains and platforms among [entityIds] whose icons and translations aren't loaded yet. */

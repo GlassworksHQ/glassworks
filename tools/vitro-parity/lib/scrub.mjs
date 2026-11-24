@@ -123,3 +123,27 @@ export function findPrivate(text, creds) {
   }
   return found;
 }
+
+/**
+ * Recorded graph calls (wsdata.mjs) without private attributes: every state's `a` object in a history answer
+ * (`history/stream` events and `history/history_during_period` results) loses the keys scrubStates drops. Requests,
+ * statistics and metadata carry no attributes and stay as they are.
+ */
+export function scrubGraphCalls(calls) {
+  const scrubA = (states) => {
+    if (!states || typeof states !== 'object') return states;
+    return Object.fromEntries(Object.entries(states).map(([id, list]) => [id, Array.isArray(list)
+      ? list.map((st) => (st && typeof st === 'object' && st.a && typeof st.a === 'object'
+        ? { ...st, a: Object.fromEntries(Object.entries(st.a).filter(([k]) => !PRIVATE_KEY.test(k) && !PRIVATE_LIST.test(k)).map(([k, v]) => [k, dropPrivateKeys(v)])) }
+        : st))
+      : list]));
+  };
+  return calls.map((c) => {
+    if (!String(c.request?.type).startsWith('history/')) return c;
+    return {
+      ...c,
+      ...(c.result && typeof c.result === 'object' ? { result: scrubA(c.result) } : {}),
+      events: c.events.map((ev) => (ev && ev.states ? { ...ev, states: scrubA(ev.states) } : ev)),
+    };
+  });
+}

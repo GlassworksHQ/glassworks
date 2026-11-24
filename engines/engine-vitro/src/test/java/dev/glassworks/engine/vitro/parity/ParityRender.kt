@@ -49,6 +49,8 @@ class VitroRender(
     val templatesAsked: List<String>,
     val templatesMissing: List<String>,
     val assetsMissing: List<String>,
+    /** History or statistics calls Vitro made that HA's page didn't (ParityWs.canonical form). */
+    val wsUnmatched: List<String> = emptyList(),
 ) {
     /**
      * The texts slot [i] draws on a canvas (a thermostat dial, a gauge), from the content description those views set
@@ -265,6 +267,8 @@ class ParityRenderer(private val activity: Activity, private val frame: ParityFr
         val asked = CopyOnWriteArrayList<String>()
         val missing = CopyOnWriteArrayList<String>()
         val haConfig = shared?.haConfig ?: JSONObject()
+        val ws = ParityWs(ref?.ws)
+        val main = android.os.Handler(Looper.getMainLooper())
         FixtureHttp(File(root, "assets"), ref?.imagesHaMissing.orEmpty(), File(root, "fixtures")).use { http ->
             val view = VitroView(activity, store, Color.BLACK)
             view.cardLayers = VitroView.CardLayers.forTotalMem(frame.memTotalKb * 1024)
@@ -282,6 +286,10 @@ class ParityRenderer(private val activity: Activity, private val frame: ParityFr
                     navigate = {},
                     openMoreInfo = {},
                     fetchHistory = { _, _, done -> done(emptyMap()) },
+                    callWs = { msg, done -> ws.call(msg) { ok, result, error -> main.post { done(ok, result, error) } } },
+                    subscribeWs = { msg, onEvent, onError -> ws.subscribe(msg, { main.post(it) }, onEvent, onError) },
+                    // HA's page drew at the pinned instant (refs/*.json "now"): the graphs' time windows end there too.
+                    now = { ref?.now ?: System.currentTimeMillis() },
                     subscribeTemplate = { tpl, onRendered ->
                         if (tpl !in asked) asked += tpl
                         val r = templates[tpl]
@@ -324,7 +332,7 @@ class ParityRenderer(private val activity: Activity, private val frame: ParityFr
                 val (x, y) = ParityViews.offsetIn(view, s)
                 CssRect(x / frame.density.toDouble(), y / frame.density.toDouble(), s.width / frame.density.toDouble(), s.height / frame.density.toDouble())
             }
-            return VitroRender(bmp, frame.density, slots, slotViews, view, asked.toList(), missing.toList(), http.missing.toList())
+            return VitroRender(bmp, frame.density, slots, slotViews, view, asked.toList(), missing.toList(), http.missing.toList(), ws.unmatched.toList())
         }
     }
 
