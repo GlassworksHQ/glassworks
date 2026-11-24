@@ -177,7 +177,8 @@ class CompatCheckerTest {
 
     @Test
     fun whatHaDropsIsNotAReason() {
-        // Declarations outside a rule and `!important` are dropped by HA too: dropping them is parity.
+        // Declarations outside a rule are dropped by HA too: dropping them is parity. `!important` on the card itself
+        // keeps its value, and wins among the card's own declarations as it does in HA.
         val v = assertNative(
             """{"type": "tile", "entity": "light.a", "card_mod": {"style": ${style("background: red; ha-card { background: none !important; border-radius: 12px !important }")}}}""",
         )
@@ -298,6 +299,9 @@ class CompatCheckerTest {
     fun loggedReasonsDropUrlsAndCapLongValues() {
         assertEquals("url(…) no-repeat", CardCompat.loggable("url('https://example.invalid/a.png?token=abc') no-repeat"))
         assertEquals("url(…), url(…)", CardCompat.loggable("url(\"x\"), url(y)"))
+        // A CSS escape doesn't end the URL early.
+        assertEquals("url(…)", CardCompat.loggable("url(https://h/a\\)?token=x)"))
+        assertEquals("url(…) center", CardCompat.loggable("url(\"https://h/a\\\"?token=x\") center"))
         val long = CardCompat.loggable("a".repeat(200))
         assertEquals(81, long.length)
         assertTrue(long.endsWith("…"))
@@ -453,6 +457,107 @@ class CompatCheckerTest {
     }
 
     @Test
+    fun importantWinsTheCardsPositionAsInHa() {
+        // card-mod keeps `!important` (checked on card-mod 4.2.1): the fixed position beats the later static one.
+        assertNative(
+            """{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style(
+                "ha-card { position: fixed !important; top: 0 } :host { position: static; width: 300px }",
+            )}}}""",
+        )
+        val mod = ThemeResolver.parseCardMod("ha-card { position: fixed !important; opacity: 0.5 !important } ha-card { position: static; opacity: 0.8 }")
+        assertTrue(mod.positionFixed)
+        assertEquals(0.5f, mod.opacity!!, 0.001f)
+        // Inside Markdown, Vitro keeps the value but not the priority: a note.
+        val v = assertNative(
+            """{"type": "markdown", "content": "## Hi", "card_mod": {"style": {"ha-markdown$": ${style("h2 { font-size: 34px !important }")}}}}""",
+        )
+        assertTrue(v.notes.toString(), v.notes.any { "!important" in it })
+    }
+
+    @Test
+    fun anInteractionStateIsBenignOnlyWhenEveryAlternativeHasOne() {
+        assertIsland(
+            """{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style("ha-card:is(:hover, ha-card) { filter: grayscale(1) }")}}}""",
+            "reaches inside the card",
+        )
+        assertNative("""{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style("ha-card:is(:hover, :focus) { filter: grayscale(1) }")}}}""")
+        assertNative("""{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style("ha-card:hover { filter: grayscale(1) }")}}}""")
+    }
+
+    @Test
+    fun aPinnedTranslateMustBeOneTheOverlayApplies() {
+        fun pinned(transform: String) =
+            """{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style("ha-card { position: fixed; left: 50%; top: 0; transform: $transform }")}}}"""
+        assertNative(pinned("translate(-50%, 0)"))
+        assertNative(pinned("translate(-50%, -50%)"))
+        assertNative(pinned("translate(-50%)"))
+        assertIsland(pinned("translate(-50%, 12px)"), "only centering a pinned card")
+        assertIsland(pinned("translateY(20px)"), "only centering a pinned card")
+    }
+
+    @Test
+    fun pointerEventsNoneChangesWhatATapDoes() {
+        fun mushroomWith(css: String) = """{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style(css)}}}"""
+        assertIsland(mushroomWith("ha-card { pointer-events: none }"), "`pointer-events: none`")
+        assertNative(mushroomWith("ha-card { pointer-events: auto }"))
+        // A built-in card stays native and notes it.
+        assertIsland("""{"type": "tile", "entity": "light.a", "card_mod": {"style": ${style("ha-card { pointer-events: none }")}}}""", "pointer-events")
+    }
+
+    @Test
+    fun aPseudoElementOfTheCardIsNotTheCard() {
+        assertFalse(ThemeResolver.isHostSelector("ha-card.warning::before"))
+        assertFalse(ThemeResolver.isHostSelector("ha-card.warning:after"))
+        assertTrue(ThemeResolver.isHostSelector("ha-card.warning"))
+        assertEquals(null, ThemeResolver.parseCardMod("ha-card.warning::before { opacity: 0 }").opacity)
+        assertIsland(
+            """{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style("ha-card.warning::before { opacity: 0 }")}}}""",
+            "pseudo-element `::before`",
+        )
+    }
+
+    @Test
+    fun autoEntitiesBuildingBuiltInCardsStaysNative() {
+        val media = style("@media (min-width: 1px) { :host { margin: 0 } }")
+        // Its default `entities` card, and with `card_param: cards` a tile per entity, would be summaries in the island.
+        val v = verdict("""{"type": "custom:auto-entities", "filter": {"include": [{"domain": "light"}]}, "card_mod": {"style": $media}}""")
+        assertEquals(CardRoute.NATIVE, v.route)
+        assertTrue(v.notes.toString(), v.notes.any { "built-in cards inside it" in it })
+        assertEquals(
+            CardRoute.NATIVE,
+            verdict(
+                """{"type": "custom:auto-entities", "card": {"type": "custom:layout-card"}, "card_param": "cards",
+                    "filter": {"include": [{"domain": "light"}]}, "card_mod": {"style": $media}}""",
+            ).route,
+        )
+        // Custom cards all the way down: the island runs them all.
+        assertIsland(
+            """{"type": "custom:auto-entities", "card": {"type": "custom:layout-card"}, "card_param": "cards",
+                "filter": {"include": [{"domain": "light", "options": {"type": "custom:mushroom-light-card"}}]}, "card_mod": {"style": $media}}""",
+            "`@media`",
+        )
+    }
+
+    @Test
+    fun aCardModFallbackNeedsCardModInTheIsland() {
+        val c = card("""{"type": "custom:mushroom-template-card", "card_mod": {"style": {"mushroom-shape-icon$": ".shape { color: red }"}}}""")
+        assertTrue(c.compat.cardModOnly)
+        assertTrue(c.compat.inIsland(cardModInIsland = true))
+        // card-mod only as a frontend module: the island couldn't apply the style either, so the card stays native.
+        assertFalse(c.compat.inIsland(cardModInIsland = false))
+        assertEquals(CardTier.NATIVE_HACS, CardRouter.tier(c, cardModInIsland = false))
+        // A card the island draws for other reasons still goes there.
+        assertTrue(card("""{"type": "custom:acme-card"}""").compat.inIsland(cardModInIsland = false))
+        val view = LovelaceParser.parseView(0, JSONObject("""{"cards": [${c.raw}]}"""))
+        val report = CompatChecker.check(view, cardModInIsland = false)
+        assertTrue(report.islands.isEmpty())
+        assertTrue(report.notes.toString(), report.notes.any { "card-mod" in it.second && "Lovelace resource" in it.second })
+        assertEquals(1, CompatChecker.check(view).islands.size)
+        assertTrue(CardRouter.cardModInIsland(listOf(dev.glassworks.engine.vitro.model.LovelaceResource("/hacsfiles/lovelace-card-mod/card-mod.js?hacstag=1", "module"))))
+        assertFalse(CardRouter.cardModInIsland(emptyList()))
+    }
+
+    @Test
     fun aFullyNativeDashboardSaysSo() {
         val dash = LovelaceParser.parseDashboard(
             JSONObject("""{"views": [{"path": "home", "sections": [{"cards": [{"type": "tile", "entity": "light.a"}, {"type": "markdown", "content": "hi"}]}]}]}"""),
@@ -499,6 +604,7 @@ class CompatCheckerLocalDashboardsTest {
         val withIslands = ArrayList<String>()
         for (f in files) {
             val report = CompatChecker.check(LovelaceParser.parseDashboard(JSONObject(f.readText())))
+            assertTrue("${f.name} has no cards", report.entries.isNotEmpty())
             println("== ${f.name}\n${report.format()}\n")
             if (report.islands.isNotEmpty()) withIslands += f.name
         }

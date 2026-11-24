@@ -383,31 +383,37 @@ object CardRouter {
      * The card's tier. A card of a native type still goes to an island when something in its config is outside
      * [VitroSupport] ([CardConfig.compat]).
      */
-    fun tier(card: CardConfig): CardTier = when {
-        card.compat.route == CardRoute.ISLAND -> CardTier.WEB_ISLAND
+    fun tier(card: CardConfig, cardModInIsland: Boolean = true): CardTier = when {
+        card.compat.inIsland(cardModInIsland) -> CardTier.WEB_ISLAND
         card.type in NATIVE_CORE_TYPES -> CardTier.NATIVE_CORE
         card.type in NATIVE_HACS_TYPES -> CardTier.NATIVE_HACS
         else -> CardTier.WEB_ISLAND
     }
 
     /** Counts how many cards in [view] fall into each [CardTier] (flattening layout containers). */
-    fun tierCounts(view: ViewConfig): Map<CardTier, Int> {
+    fun tierCounts(view: ViewConfig, cardModInIsland: Boolean = true): Map<CardTier, Int> {
         val counts = linkedMapOf(
             CardTier.NATIVE_CORE to 0,
             CardTier.NATIVE_HACS to 0,
             CardTier.WEB_ISLAND to 0,
         )
         fun walk(c: CardConfig) {
-            if (c.childCards.isNotEmpty() && c.type in CONTAINER_TYPES && c.compat.isNative) {
+            if (c.childCards.isNotEmpty() && c.type in CONTAINER_TYPES && !c.compat.inIsland(cardModInIsland)) {
                 c.childCards.forEach(::walk)
             } else {
-                val t = tier(c)
+                val t = tier(c, cardModInIsland)
                 counts[t] = (counts[t] ?: 0) + 1
             }
         }
         viewRoots(view).forEach { walk(it.card) }
         return counts
     }
+
+    /**
+     * Whether an island can apply card-mod: only when card-mod is one of the dashboard's Lovelace [resources], which
+     * the island loads. Installed only as a frontend module, it isn't there.
+     */
+    fun cardModInIsland(resources: List<LovelaceResource>): Boolean = resources.any { "card-mod" in it.url.lowercase() }
 
     /** One top-level card `VitroView` builds for a view, with its section (null outside sections) and index. */
     data class ViewRoot(val section: Int?, val index: Int, val card: CardConfig)

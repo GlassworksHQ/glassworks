@@ -43,23 +43,25 @@ data class CompatReport(val entries: List<CompatEntry>) {
 
 /** Builds [CompatReport]s by walking a dashboard the way `VitroView` builds it. */
 object CompatChecker {
-    fun check(dashboard: DashboardConfig): CompatReport =
-        CompatReport(dashboard.views.flatMap { check(it).entries })
+    fun check(dashboard: DashboardConfig, cardModInIsland: Boolean = true): CompatReport =
+        CompatReport(dashboard.views.flatMap { check(it, cardModInIsland).entries })
 
-    fun check(view: ViewConfig): CompatReport {
+    /** [cardModInIsland]: whether card-mod is a Lovelace resource, so an island can apply it ([CardVerdict.inIsland]). */
+    fun check(view: ViewConfig, cardModInIsland: Boolean = true): CompatReport {
         val out = ArrayList<CompatEntry>()
         val viewName = view.path ?: view.title
         for (root in CardRouter.viewRoots(view)) {
             val where = root.section?.let { "$viewName › section ${it + 1} › card ${root.index + 1}" } ?: "$viewName › card ${root.index + 1}"
-            walk(root.card, where, out)
+            walk(root.card, where, cardModInIsland, out)
         }
         return CompatReport(out)
     }
 
-    private fun walk(card: CardConfig, path: String, out: MutableList<CompatEntry>) {
+    private fun walk(card: CardConfig, path: String, cardModInIsland: Boolean, out: MutableList<CompatEntry>) {
         val here = "$path (${card.type})"
-        out += CompatEntry(here, card.compat)
-        if (!card.compat.isNative) return
-        card.childCards.forEachIndexed { i, child -> walk(child, "$here › card ${i + 1}", out) }
+        val verdict = card.compat.effective(cardModInIsland)
+        out += CompatEntry(here, verdict)
+        if (!verdict.isNative) return
+        card.childCards.forEachIndexed { i, child -> walk(child, "$here › card ${i + 1}", cardModInIsland, out) }
     }
 }

@@ -453,8 +453,9 @@ class VitroView(
         }
 
         val elapsed = SystemClock.elapsedRealtime() - t0
-        val compat = CompatChecker.check(viewCfg)
-        val tiers = CardRouter.tierCounts(viewCfg)
+        val cardModInIsland = CardRouter.cardModInIsland(resourcesList)
+        val compat = CompatChecker.check(viewCfg, cardModInIsland)
+        val tiers = CardRouter.tierCounts(viewCfg, cardModInIsland)
         val entities = CardRouter.referencedEntities(viewCfg)
         val metrics = VitroMetrics(
             viewTitle = viewCfg.title,
@@ -873,7 +874,9 @@ class VitroView(
             }
         }
         // Anything outside Vitro's supported set goes to an island on purpose (CardCompat), decided once per card.
-        val built: View = if (!card.compat.isNative) WebIslandCardView(ctx, card, fillViewport = fillViewport) else when (card.type) {
+        val built: View = if (card.compat.inIsland(CardRouter.cardModInIsland(ctx.resources))) {
+            WebIslandCardView(ctx, card, fillViewport = fillViewport)
+        } else when (card.type) {
             // Layout containers
             "vertical-stack" -> LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL

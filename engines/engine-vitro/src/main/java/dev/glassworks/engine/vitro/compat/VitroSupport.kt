@@ -22,8 +22,12 @@ package dev.glassworks.engine.vitro.compat
  *   today, but not exact yet. They never force an island either (an island wouldn't do better, or the parity work
  *   is open); the checker reports them as notes so they stay visible.
  *
- * What HA itself drops (declarations outside a rule, `!important`, tags outside its sanitizer) is dropped by Vitro
- * too: that *is* parity, so it never counts against a card.
+ * What HA itself drops (declarations outside a rule, tags outside its sanitizer) is dropped by Vitro too: that *is*
+ * parity, so it never counts against a card.
+ *
+ * `!important` is kept by card-mod and wins in HA. On the card itself Vitro honors it among the card's own card_mod
+ * declarations. In Markdown and clock sheets Vitro strips the flag and keeps the value at normal precedence, so where
+ * an `!important` card-mod rule beats HA's own styles in HA, HA's rule can win in Vitro. The checker notes it.
  *
  * When a renderer learns something new, add it here, and the README's "What Vitro draws natively" table with it.
  */
@@ -235,7 +239,6 @@ object VitroSupport {
         "user-select" to "text selection only",
         "-webkit-user-select" to "text selection only",
         "-webkit-tap-highlight-color" to "the browser's tap flash; Vitro draws HA's ripple instead",
-        "pointer-events" to "which element a tap reaches, not how it looks",
         "touch-action" to "which gestures the browser handles, not how it looks",
         "will-change" to "a browser performance hint",
         "contain" to "a browser performance hint",
@@ -256,6 +259,8 @@ object VitroSupport {
         "animation" to setOf("none"),
         "filter" to setOf("none"),
         "text-shadow" to setOf("none"),
+        // `none` lets taps through the card in HA, which a native card doesn't do: only the default is harmless.
+        "pointer-events" to setOf("auto"),
     )
 
     /**
@@ -263,6 +268,7 @@ object VitroSupport {
      * either the difference only shows in rare content, or an island couldn't do better.
      */
     val KNOWN_GAP_PROPERTIES: Map<String, String> = mapOf(
+        "!important" to "Vitro keeps the value at normal precedence here, so HA's own rule can win where card-mod's wins in HA",
         "backdrop-filter" to "Vitro doesn't blur what's behind a card; an island can't blur native views either",
         "-webkit-backdrop-filter" to "Vitro doesn't blur what's behind a card; an island can't blur native views either",
         "text-overflow" to "no ellipsis yet; it only shows when the text doesn't fit",
