@@ -360,16 +360,28 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
         val strokePx = ((mod.borderWidthDp ?: theme.cardBorderWidthDp) * ctx.dp).toInt()
         val strokeColor = mod.borderColor ?: theme.cardBorderColor
         val gradient = mod.backgroundGradient
-        val restyle = gradient != null || mod.backgroundColor != null || mod.borderColor != null ||
+        val layers = mod.backgroundLayers
+        val restyle = gradient != null || layers != null || mod.backgroundColor != null || mod.borderColor != null ||
             mod.borderWidthDp != null || mod.borderRadiusDp != null
         if (restyle && !seamless) {
             val fillColor = mod.backgroundColor ?: theme.cardBackgroundColor
-            val invisibleSurface = gradient == null && Color.alpha(fillColor) == 0 && strokePx == 0
+            val invisibleSurface = gradient == null && layers == null && Color.alpha(fillColor) == 0 && strokePx == 0
             if (invisibleSurface) {
                 // Transparent, borderless card (`background: transparent; border: none;`): drop the rounded
                 // outline so Android's clipToOutline never clips text at the card's corners.
                 background = null
                 clipToOutline = false
+            } else if (layers != null) {
+                // Gradients paint like the browser (angle, stop positions, layers), under the card's border.
+                background = android.graphics.drawable.LayerDrawable(arrayOf(
+                    CssBackgroundDrawable(layers, ctx.dp, radiusPx),
+                    GradientDrawable().apply {
+                        cornerRadius = radiusPx
+                        setColor(Color.TRANSPARENT)
+                        if (strokePx > 0) setStroke(strokePx, strokeColor)
+                    },
+                ))
+                clipToOutline = true
             } else {
                 background = (if (gradient != null) GradientDrawable(orientationFor(gradient.angleDeg), gradient.colors) else GradientDrawable()).apply {
                     if (gradient == null) setColor(fillColor)

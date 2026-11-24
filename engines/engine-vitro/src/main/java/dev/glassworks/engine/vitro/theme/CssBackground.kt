@@ -92,12 +92,14 @@ class CssBackground(val layers: List<Layer>, val color: Int?) {
 
     companion object {
         private val SQRT2 = sqrt(2f)
-        private val FN = Regex("""^(repeating-)?(linear|radial)-gradient\((.*)\)$""", RegexOption.IGNORE_CASE)
+        private val FN = Regex("""^(repeating-)?(linear|radial)-gradient\((.*)\)$""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+        private val WS = Regex("""\s+""")
         private val LEN = Regex("""^(-?[\d.]+)(px|%)?$""")
 
         /** Parses a `background` value; null when it holds no gradient (a plain color or an image). */
         fun parse(spec: String?): CssBackground? {
-            val s = spec?.trim().orEmpty()
+            // Theme YAML can fold a long value over several lines: whitespace runs are one space, as in CSS.
+            val s = spec?.replace(WS, " ")?.trim().orEmpty()
             if ("gradient(" !in s.lowercase(Locale.ROOT)) return null
             val parts = splitTopLevel(s, ',')
             val layers = ArrayList<Layer>()
@@ -153,7 +155,10 @@ class CssBackground(val layers: List<Layer>, val color: Int?) {
             val args = splitTopLevel(body, ',').map { it.trim() }
             if (args.isEmpty()) return null
             val head = args[0].lowercase(Locale.ROOT)
-            val isShape = ThemeResolver.parseColor(head) == null && ThemeResolver.parseColor(head.substringBefore(' ')) == null
+            // The first argument is a color stop when it starts with a color, functional ones (`rgba(0, 0, 0, .5) 10%`)
+            // included, so split it outside parentheses.
+            val firstToken = splitTopLevel(head, ' ').firstOrNull()?.trim().orEmpty()
+            val isShape = ThemeResolver.parseColor(head) == null && ThemeResolver.parseColor(firstToken) == null
             var circle = false
             var extent = "farthest-corner"
             var sx: Float? = null
@@ -236,6 +241,10 @@ class CssBackground(val layers: List<Layer>, val color: Int?) {
             val pos = FloatArray(stops.size) { i -> stops[i].pos ?: stops[i].px?.let { it * scale / rayLength } ?: Float.NaN }
             if (pos[0].isNaN()) pos[0] = 0f
             if (pos[pos.lastIndex].isNaN()) pos[pos.lastIndex] = 1f
+            // CSS: an explicit position under an earlier one is raised to it first; the missing ones then spread
+            // evenly between their corrected neighbors.
+            var floor = Float.NEGATIVE_INFINITY
+            for (k in pos.indices) if (!pos[k].isNaN()) { if (pos[k] < floor) pos[k] = floor; floor = pos[k] }
             var i = 1
             while (i < pos.size) {
                 if (pos[i].isNaN()) {

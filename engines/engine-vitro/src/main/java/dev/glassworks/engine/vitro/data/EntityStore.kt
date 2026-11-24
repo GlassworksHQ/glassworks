@@ -79,12 +79,17 @@ data class EntityState(
             return when (u) { null -> n; "%" -> "$n%"; else -> "$n $u" }
         }
         if (u != null) return if (u == "%") "$state$u" else "$state $u"
-        if (domain != "light" && domain != "cover" && domain != "climate") HaDisplay.stateLabel(this)?.let { return it }
+        if (domain != "light" && domain != "cover" && domain != "climate" && domain != "fan") HaDisplay.stateLabel(this)?.let { return it }
+        // Options and text are the user's own strings: HA shows them as they are, never capitalized.
+        if (domain in VERBATIM_DOMAINS) return state
         return when (domain) {
             "light" -> {
                 val pct = brightnessPct
                 if (state == "on" && pct != null) "$pct%" else state.replaceFirstChar { it.titlecase(Locale.ROOT) }
             }
+            // HA's tile shows a running fan's speed instead of "On".
+            "fan" -> (attributes["percentage"] as? Number)?.toInt()?.takeIf { state == "on" }?.let { "$it%" }
+                ?: HaDisplay.stateLabel(this) ?: state.replaceFirstChar { it.titlecase(Locale.ROOT) }
             "binary_sensor" -> when (deviceClass) {
                 "door", "window", "garage_door", "opening" -> if (state == "on") "Open" else "Closed"
                 "motion", "occupancy", "presence" -> if (state == "on") "Detected" else "Clear"
@@ -148,6 +153,7 @@ data class EntityState(
  * cards bound to that `entity_id`.
  */
 private val NUMBER_DOMAINS = setOf("number", "input_number", "counter")
+private val VERBATIM_DOMAINS = setOf("select", "input_select", "text", "input_text")
 
 class EntityStore {
     private val states = ConcurrentHashMap<String, EntityState>()

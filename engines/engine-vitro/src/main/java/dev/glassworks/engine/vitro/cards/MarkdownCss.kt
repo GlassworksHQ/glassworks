@@ -54,6 +54,13 @@ class MdStyle {
     var borderCollapse = false
     var tableLayoutFixed = false
     var verticalAlign = "baseline"
+    /** `position` and its `top` / `bottom` offsets (CSS px); only `relative` moves anything. */
+    var position = "static"
+    var offsetTop: Float? = null
+    var offsetBottom: Float? = null
+
+    /** How far `position: relative` moves the box down (CSS px): `top`, else minus `bottom`. */
+    fun relativeShiftY(): Float = if (position != "relative") 0f else offsetTop ?: offsetBottom?.let { -it } ?: 0f
     var overflowHidden = false
     var listStyleNone = false
 
@@ -656,6 +663,9 @@ object MdCascade {
                 "border-collapse" -> s.borderCollapse = if (inheritKw) p.borderCollapse else lower == "collapse"
                 "table-layout" -> s.tableLayoutFixed = lower == "fixed"
                 "vertical-align" -> s.verticalAlign = if (inheritKw) p.verticalAlign else if (initialKw) "baseline" else lower
+                "position" -> s.position = if (inheritKw) p.position else if (initialKw) "static" else lower
+                "top" -> s.offsetTop = if (lower == "auto" || initialKw) null else length(lower, s.fontSize, 0f)
+                "bottom" -> s.offsetBottom = if (lower == "auto" || initialKw) null else length(lower, s.fontSize, 0f)
                 "overflow", "overflow-x", "overflow-y" -> if (lower == "hidden" || lower == "clip") s.overflowHidden = true
                 "align-items" -> s.alignItems = if (initialKw) null else lower
                 "align-self" -> s.alignSelf = if (initialKw) null else lower
