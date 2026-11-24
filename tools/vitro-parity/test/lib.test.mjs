@@ -199,3 +199,17 @@ test('findPrivate flags a MAC fragment but not a colour or a model id', async ()
   assert.ok(!hasMacFragment('{"color": "#a1b2c3", "lc": 1795504930.063075}'));
   for (const ok of ['#34d399', 'TS0501B', '_TZB210_gumjktrw', 'abcdef', '123456', 'Fog 8.3 °C']) assert.deepEqual(findPrivate(ok, null), [], ok);
 });
+
+test('imagePaths finds image and picture values and Markdown <img> sources', async () => {
+  const { imagePaths } = await import('../lib/assets.mjs');
+  const card = {
+    type: 'vertical-stack',
+    cards: [
+      { type: 'picture-entity', image: '/static/icons/a.png?v=1' },
+      { type: 'custom:mushroom-template-card', picture: '/static/icons/b.png' },
+      { type: 'markdown', content: 'Hi <img src="/static/icons/c.png"> and <IMG alt="x" src="/local/d.png?x=1">, not <img src="https://example.test/e.png">' },
+      { type: 'tile', entity: 'light.x', image: 'https://example.test/f.png' },
+    ],
+  };
+  assert.deepEqual(imagePaths(card).sort(), ['/local/d.png', '/static/icons/a.png', '/static/icons/b.png', '/static/icons/c.png']);
+});

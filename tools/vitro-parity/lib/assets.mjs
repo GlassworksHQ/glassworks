@@ -30,3 +30,21 @@ export function assetDestination(assetsDir, path, committed) {
 export function canonicalPath(pathAndQuery) {
   return new URL(pathAndQuery, 'http://homeassistant.local').pathname;
 }
+
+/**
+ * HA's own static images a card shows, saved so Vitro's fixture server can serve them: `image:` and `picture:`
+ * values (picture-entity, Mushroom's picture) and `<img src="/...">` in Markdown content.
+ */
+export function imagePaths(card) {
+  const out = new Set();
+  const walk = (o) => {
+    if (Array.isArray(o)) o.forEach(walk);
+    else if (o && typeof o === 'object') for (const [k, v] of Object.entries(o)) {
+      if (/(image|picture)$/.test(k) && typeof v === 'string' && v.startsWith('/')) out.add(v.split('?')[0]);
+      else walk(v);
+    }
+    else if (typeof o === 'string') for (const m of o.matchAll(/<img\b[^>]*\bsrc="(\/[^"?]*)/gi)) out.add(m[1]);
+  };
+  walk(card);
+  return [...out];
+}

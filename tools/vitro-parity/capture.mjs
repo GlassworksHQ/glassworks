@@ -27,7 +27,7 @@ import { fileURLToPath } from 'node:url';
 import { connect, loadCredentials, redact } from './lib/ha.mjs';
 import { referencedEntities, scrubStates, scrubText, checkDenylist, findPrivate, hasMacFragment } from './lib/scrub.mjs';
 import { parseArgs, pick } from './lib/args.mjs';
-import { assetDestination, canonicalPath } from './lib/assets.mjs';
+import { assetDestination, canonicalPath, imagePaths } from './lib/assets.mjs';
 import { applyEntityEvent } from './lib/states.mjs';
 import { buildDisplay } from './lib/display.mjs';
 import { HARNESS, HARNESS_META, MARKER_KEY, MARKER_VALUE, notOurs } from './lib/harness.mjs';
@@ -124,19 +124,6 @@ async function saveHarness(ha, config, caseIds) {
   await ha.call({ type: 'lovelace/config/save', url_path: HARNESS, config });
 }
 
-/** HA's own static images a card shows (`image: /static/...`), saved so Vitro's fixture server can serve them. */
-function imagePaths(card) {
-  const out = new Set();
-  const walk = (o) => {
-    if (Array.isArray(o)) o.forEach(walk);
-    else if (o && typeof o === 'object') for (const [k, v] of Object.entries(o)) {
-      if (/image$/.test(k) && typeof v === 'string' && v.startsWith('/')) out.add(v.split('?')[0]);
-      else walk(v);
-    }
-  };
-  walk(card);
-  return [...out];
-}
 
 /** Saves an image HA serves at [path] (fetched from [url], default the path) under assets/. */
 async function fetchAsset(path, url = path) {
@@ -157,7 +144,7 @@ async function prepare() {
   if (cardCases.length) {
     const all = loadCasesAll();
     await saveHarness(ha, harnessConfig(all), all.filter((c) => c.card).map((c) => c.id));
-    log(`saved ${HARNESS}: ${cardCases.length} card views`);
+    log(`saved ${HARNESS}: ${all.filter((c) => c.card).length} card views (every corpus case)`);
   }
   for (const c of cases) for (const p of c.card ? imagePaths(c.card) : []) await fetchAsset(p);
   for (const c of cases.filter((c) => c.dashboard)) {
