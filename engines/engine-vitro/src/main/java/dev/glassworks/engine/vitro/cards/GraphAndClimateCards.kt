@@ -28,6 +28,7 @@ import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.TextView
 import dev.glassworks.engine.vitro.data.ForecastDay
+import dev.glassworks.engine.vitro.data.HaDisplay
 import dev.glassworks.engine.vitro.data.HistoryPoint
 import dev.glassworks.engine.vitro.model.ActionConfig
 import dev.glassworks.engine.vitro.model.CardConfig
@@ -430,17 +431,25 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
     }
     private var modes: List<String> = emptyList()
     private val modeButtons = ArrayList<Pair<FrameLayout, MdiIconView>>()
+    private var steppers: View? = null
 
     init {
+        // hui-thermostat-card: a 48 px title row over the 262 px dial; the mode bar only when its feature is set
+        // (Mushroom's climate card: when `hvac_modes` is).
+        val showModes = if (config.type == "thermostat") {
+            config.raw.optJSONArray("features")?.let { a -> (0 until a.length()).any { a.optJSONObject(it)?.optString("type") == "climate-hvac-modes" } } == true
+        } else {
+            config.raw.has("hvac_modes")
+        }
         val col = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(ctx.px(12f), ctx.px(8f), ctx.px(12f), ctx.px(12f))
+            setPadding(ctx.px(12f), 0, ctx.px(12f), if (showModes) ctx.px(12f) else 0)
         }
         val eid = config.entity
 
         // Header: the name centred, a ⋮ button for more-info pinned to the right.
         val header = FrameLayout(ctx.context)
-        header.addView(titleView, LayoutParams(MATCH_PARENT, ctx.px(36f)).apply {
+        header.addView(titleView, LayoutParams(MATCH_PARENT, ctx.px(48f)).apply {
             leftMargin = ctx.px(40f); rightMargin = ctx.px(40f)
         })
         val dots = FrameLayout(ctx.context).apply {
@@ -451,12 +460,12 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
                 LayoutParams(ctx.px(20f), ctx.px(20f), Gravity.CENTER))
             setOnClickListener { eid?.let { ctx.performAction(ActionConfig("more-info"), it) } }
         }
-        header.addView(dots, LayoutParams(ctx.px(36f), ctx.px(36f), Gravity.END or Gravity.CENTER_VERTICAL))
-        col.addView(header, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(36f)))
+        header.addView(dots, LayoutParams(ctx.px(48f), ctx.px(48f), Gravity.END or Gravity.CENTER_VERTICAL).apply { rightMargin = -ctx.px(11f) })
+        col.addView(header, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(48f)))
 
         // Dial, with the outlined − and + in the opening at its bottom.
         val dialFrame = FrameLayout(ctx.context)
-        dialFrame.addView(dial, LayoutParams(MATCH_PARENT, ctx.px(240f)))
+        dialFrame.addView(dial, LayoutParams(MATCH_PARENT, ctx.px(262f)))
         val steppers = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -478,9 +487,10 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
         steppers.addView(stepBtn("−", -1), LinearLayout.LayoutParams(btn, btn).apply { marginEnd = ctx.px(16f) })
         steppers.addView(stepBtn("+", 1), LinearLayout.LayoutParams(btn, btn))
         dialFrame.addView(steppers, LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL))
-        col.addView(dialFrame, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(240f)))
+        col.addView(dialFrame, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(262f)))
 
-        col.addView(modeBar, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(46f)).apply { topMargin = ctx.px(8f) })
+        if (showModes) col.addView(modeBar, LinearLayout.LayoutParams(MATCH_PARENT, ctx.px(46f)).apply { topMargin = ctx.px(8f) })
+        this.steppers = steppers
         addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
 
         if (eid != null) {
@@ -501,7 +511,10 @@ class ThermostatCardView(ctx: VitroCardContext, config: CardConfig) : CardSurfac
                     target = (attrs["temperature"] as? Number)?.toDouble(),
                     mode = mode,
                     action = action,
+                    stateLabel = s?.let { HaDisplay.stateLabel(it) } ?: mode.replace('_', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) },
                 )
+                // HA shows the steppers only while there's a target to step.
+                this.steppers?.visibility = if (attrs["temperature"] is Number) VISIBLE else GONE
                 val list = (attrs["hvac_modes"] as? List<*>)?.mapNotNull { it?.toString() }?.takeIf { it.isNotEmpty() }
                     ?: listOf("off", "heat", "cool")
                 renderModes(list, mode, eid)
@@ -586,7 +599,8 @@ internal class ThermostatDialView(
     private val showCurrentInDial: Boolean = true,
 ) : View(ctx.context) {
     private val dp = ctx.dp
-    private val strokeW = 14f * dp
+    /** ha-control-circular-slider: a 24 / 320 ring at radius 145 / 320 of the dial's size. */
+    private var strokeW = 14f * dp
     private val arcPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.STROKE
         strokeWidth = strokeW
@@ -603,6 +617,26 @@ internal class ThermostatDialView(
     private val unitPaint = textPaint(13f, Inter.REGULAR)
     private val decPaint = textPaint(20f, Inter.REGULAR)
     private val curPaint = textPaint(14f, Inter.MEDIUM)
+    private val offPaint = textPaint(36f, Inter.REGULAR).apply { textAlign = Paint.Align.CENTER }
+    private val offCurPaint = textPaint(16f, Inter.MEDIUM)
+
+    /** The thermometer and the current temperature, centered on [centerY]. */
+    private fun drawCurrent(canvas: Canvas, cur: Double, color: Int, paint: Paint, iconSize: Float, centerY: Float) {
+        val curText = HaDisplay.formatValue(cur, 1).let { if ('.' in it) it else String.format(Locale.US, "%.1f", cur) } + " " + unit
+        paint.color = color
+        val textW = paint.measureText(curText)
+        val gap = 4f * dp
+        val left = cx - (iconSize + gap + textW) / 2f
+        iconPath.set(MdiIcons.pathFor("mdi:thermometer"))
+        iconMatrix.setScale(iconSize / 24f, iconSize / 24f)
+        iconMatrix.postTranslate(left, centerY - iconSize / 2f)
+        iconPath.transform(iconMatrix)
+        fill.color = color
+        canvas.drawPath(iconPath, fill)
+        paint.textAlign = Paint.Align.LEFT
+        val fm = paint.fontMetrics
+        canvas.drawText(curText, left + iconSize + gap, centerY - (fm.ascent + fm.descent) / 2f, paint)
+    }
     private val iconMatrix = Matrix()
     private val iconPath = Path()
     private val oval = RectF()
@@ -626,7 +660,11 @@ internal class ThermostatDialView(
 
     var onCommit: (Double) -> Unit = {}
 
-    fun bind(min: Double, max: Double, step: Double, current: Double?, target: Double?, mode: String, action: String?) {
+    /** The state as HA shows it big when there's no target ("Off"). */
+    private var stateLabel = ""
+
+    fun bind(min: Double, max: Double, step: Double, current: Double?, target: Double?, mode: String, action: String?, stateLabel: String = "") {
+        this.stateLabel = stateLabel
         this.min = min
         this.max = if (max > min) max else min + 1.0
         this.step = step
@@ -698,7 +736,10 @@ internal class ThermostatDialView(
         super.onSizeChanged(w, h, oldw, oldh)
         cx = w / 2f
         cy = h / 2f
-        radius = (minOf(w, h) / 2f - strokeW / 2f - 4f * dp).coerceAtLeast(10f)
+        val size = minOf(w, h).toFloat()
+        strokeW = size * 24f / 320f
+        arcPaint.strokeWidth = strokeW
+        radius = (size * 145f / 320f).coerceAtLeast(10f)
         glowKey = 0
     }
 
@@ -753,6 +794,10 @@ internal class ThermostatDialView(
         } else if (isAutoIdle && cur != null) {
             fill.color = CardSurface.withAlpha(Color.WHITE, 0.7f)
             pointAt(angleOf(cur)).let { (x, y) -> canvas.drawCircle(x, y, 3f * dp, fill) }
+        } else if (tgt == null && cur != null) {
+            // With no target HA still marks the current temperature on the ring.
+            fill.color = ctx.theme.secondaryTextColor
+            pointAt(angleOf(cur)).let { (x, y) -> canvas.drawCircle(x, y, 4f * dp, fill) }
         }
         if (tgt != null) {
             val (x, y) = pointAt(angleOf(tgt))
@@ -763,6 +808,15 @@ internal class ThermostatDialView(
         }
 
         // Centre: action label, split target temperature, current temperature.
+        if (target == null) {
+            // ha-state-control-climate-temperature with no target: the state big (36 px) in the middle, the current
+            // temperature (16 px / 500, primary color) 49 px under it, no label above.
+            offPaint.color = ctx.theme.primaryTextColor
+            val fm = offPaint.fontMetrics
+            canvas.drawText(stateLabel, cx, cy - (fm.ascent + fm.descent) / 2f - 1.6f * dp, offPaint)
+            if (cur != null && showCurrentInDial) drawCurrent(canvas, cur, ctx.theme.primaryTextColor, offCurPaint, 16f * dp, cy + 48.8f * dp)
+            return
+        }
         val labelText = (action ?: mode).replace('_', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) }
         labelPaint.color = activeTint ?: ctx.theme.secondaryTextColor
         canvas.drawText(labelText, cx, cy - 34f * dp, labelPaint)

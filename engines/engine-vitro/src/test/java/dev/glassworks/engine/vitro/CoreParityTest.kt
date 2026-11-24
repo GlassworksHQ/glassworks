@@ -271,6 +271,21 @@ class CoreParityTest {
         assertTrue(t.all().none { it is dev.glassworks.engine.vitro.cards.HaHorizontalSliderView })
     }
 
+    @Test
+    fun thermostatShowsModesOnlyAsAFeatureAndStepsOnlyWithATarget() {
+        val store = EntityStore()
+        store.putLocal(EntityState("climate.ac", "off", mapOf("hvac_modes" to listOf("off", "heat"), "current_temperature" to 17.5)))
+        val plain = dev.glassworks.engine.vitro.cards.ThermostatCardView(context(store), card("""{"type": "thermostat", "entity": "climate.ac"}"""))
+        // HA's card has no mode bar unless the climate-hvac-modes feature is configured, and no − / + without a target.
+        assertTrue(plain.all().none { it.contentDescription == "heat" })
+        val raise = plain.all().single { it.contentDescription == "Raise target temperature" }
+        assertEquals(View.GONE, (raise.parent as View).visibility)
+        val withModes = dev.glassworks.engine.vitro.cards.ThermostatCardView(context(store), card(
+            """{"type": "thermostat", "entity": "climate.ac", "features": [{"type": "climate-hvac-modes"}]}""",
+        ))
+        assertTrue(withModes.all().any { it.contentDescription == "heat" })
+    }
+
     // ---- Tile features ----
 
     private fun tile(store: EntityStore, calls: MutableList<Call>, entity: String, feature: String) =
