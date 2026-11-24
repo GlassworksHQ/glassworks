@@ -84,13 +84,6 @@
   "missingText": 0,
   "reason": "a different design: HA's idle card is a filled accent-blue block with placeholder art, a large play button and browse/source icons; Vitro draws a dark card with prev/play/next, \"Idle\" and a volume slider, ~37 px taller (coverage #794, 2026-11-24)"
  },
- "mirror/mushroom-climate": {
-  "pixel": 0.0718,
-  "bounds": 64,
-  "font": 2,
-  "missingText": 2,
-  "reason": "not drawn as a Mushroom card: Vitro shows only a centered \"AC\" and a menu button; no icon, no \"Heat - 19.5 °C\" state, no -/22.0/+ temperature row or mode button; 64 px shorter (coverage #794, 2026-11-24)"
- },
  "mirror/mushroom-title": {
   "pixel": 0.038,
   "bounds": 53.3,
@@ -189,13 +182,6 @@
   "missingText": 0,
   "reason": "a different design: HA's idle card is a filled accent-blue block with placeholder art, a large play button and browse/source icons; Vitro draws a dark card with prev/play/next, \"Idle\" and a volume slider, ~37 px taller (coverage #794, 2026-11-24)"
  },
- "s1/mushroom-climate": {
-  "pixel": 0.0718,
-  "bounds": 64,
-  "font": 2,
-  "missingText": 2,
-  "reason": "not drawn as a Mushroom card: Vitro shows only a centered \"AC\" and a menu button; no icon, no \"Heat - 19.5 °C\" state, no -/22.0/+ temperature row or mode button; 64 px shorter (coverage #794, 2026-11-24)"
- },
  "s1/mushroom-title": {
   "pixel": 0.038,
   "bounds": 53.3,
@@ -293,13 +279,6 @@
   "font": 2,
   "missingText": 0,
   "reason": "a different design: HA's idle card is a filled accent-blue block with placeholder art, a large play button and browse/source icons; Vitro draws a dark card with prev/play/next, \"Idle\" and a volume slider, ~37 px taller (coverage #794, 2026-11-24)"
- },
- "tablet/mushroom-climate": {
-  "pixel": 0.069,
-  "bounds": 64,
-  "font": 2,
-  "missingText": 2,
-  "reason": "not drawn as a Mushroom card: Vitro shows only a centered \"AC\" and a menu button; no icon, no \"Heat - 19.5 °C\" state, no -/22.0/+ temperature row or mode button; 64 px shorter (coverage #794, 2026-11-24)"
  },
  "tablet/mushroom-entity": {
   "pixel": 0.0225,
