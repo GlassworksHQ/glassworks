@@ -207,9 +207,9 @@ test('imagePaths finds image and picture values and Markdown <img> sources', asy
     cards: [
       { type: 'picture-entity', image: '/static/icons/a.png?v=1' },
       { type: 'custom:mushroom-template-card', picture: '/static/icons/b.png' },
-      { type: 'markdown', content: 'Hi <img src="/static/icons/c.png"> and <IMG alt="x" src="/local/d.png?x=1">, not <img src="https://example.test/e.png">' },
+      { type: 'markdown', content: 'Hi <img src="/static/icons/c.png"> and <IMG alt="x" src="/local/d.png?x=1">, <img src='/local/g.png'>, not <img src="https://example.test/e.png">' },
       { type: 'tile', entity: 'light.x', image: 'https://example.test/f.png' },
     ],
   };
-  assert.deepEqual(imagePaths(card).sort(), ['/local/d.png', '/static/icons/a.png', '/static/icons/b.png', '/static/icons/c.png']);
+  assert.deepEqual(imagePaths(card).sort(), ['/local/d.png', '/local/g.png', '/static/icons/a.png', '/static/icons/b.png', '/static/icons/c.png']);
 });

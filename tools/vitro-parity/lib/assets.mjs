@@ -33,7 +33,7 @@ export function canonicalPath(pathAndQuery) {
 
 /**
  * HA's own static images a card shows, saved so Vitro's fixture server can serve them: `image:` and `picture:`
- * values (picture-entity, Mushroom's picture) and `<img src="/...">` in Markdown content.
+ * values (picture-entity, Mushroom's picture) and `<img src="/...">` (or single-quoted) in Markdown content.
  */
 export function imagePaths(card) {
   const out = new Set();
@@ -43,7 +43,7 @@ export function imagePaths(card) {
       if (/(image|picture)$/.test(k) && typeof v === 'string' && v.startsWith('/')) out.add(v.split('?')[0]);
       else walk(v);
     }
-    else if (typeof o === 'string') for (const m of o.matchAll(/<img\b[^>]*\bsrc="(\/[^"?]*)/gi)) out.add(m[1]);
+    else if (typeof o === 'string') for (const m of o.matchAll(/<img\b[^>]*\bsrc=(["'])(\/[^"'?]*)\1?/gi)) out.add(m[2]);
   };
   walk(card);
   return [...out];
