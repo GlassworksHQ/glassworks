@@ -21,13 +21,6 @@
   "missingText": 0,
   "reason": "the chart's geometry follows HA (grid, ECharts 6 nice axis, 4 h ticks, step lines, legend). Left: HA's y-axis width comes from measureTextWidth in the capture host's Chrome, which has no Roboto and measures in its sans-serif fallback (\"1,018.5\": 41 px), then draws the labels in Roboto; Vitro measures in Roboto as a panel's browser does, so its axis is ~2 px narrower and every point moves 2 px left. With that 2 px added the case is 1.7-2.3 % (2026-11-24)"
  },
- "mirror/entity-filter": {
-  "pixel": 0.0336,
-  "bounds": 49.5,
-  "font": 0,
-  "missingText": 3,
-  "reason": "the wrapped entities card loses its title (\"Lights off\") and header toggle, and rows show the bare entity name (\"Window\") where HA prefixes the device (\"LED Strip Window\"); card ~50 px shorter (coverage #794, 2026-11-24)"
- },
  "mirror/markdown-cardmod": {
   "pixel": 0.0202,
   "bounds": 2.7,
@@ -77,13 +70,6 @@
   "missingText": 0,
   "reason": "the chart's geometry follows HA (grid, ECharts 6 nice axis, 4 h ticks, step lines, legend). Left: HA's y-axis width comes from measureTextWidth in the capture host's Chrome, which has no Roboto and measures in its sans-serif fallback (\"1,018.5\": 41 px), then draws the labels in Roboto; Vitro measures in Roboto as a panel's browser does, so its axis is ~2 px narrower and every point moves 2 px left. With that 2 px added the case is 1.7-2.3 % (2026-11-24)"
  },
- "s1/entity-filter": {
-  "pixel": 0.0336,
-  "bounds": 49.5,
-  "font": 0,
-  "missingText": 3,
-  "reason": "the wrapped entities card loses its title (\"Lights off\") and header toggle, and rows show the bare entity name (\"Window\") where HA prefixes the device (\"LED Strip Window\"); card ~50 px shorter (coverage #794, 2026-11-24)"
- },
  "s1/markdown-cardmod": {
   "pixel": 0.0148,
   "bounds": 2.7,
@@ -132,13 +118,6 @@
   "font": 0,
   "missingText": 0,
   "reason": "the chart's geometry follows HA (grid, ECharts 6 nice axis, 4 h ticks, step lines, legend). Left: HA's y-axis width comes from measureTextWidth in the capture host's Chrome, which has no Roboto and measures in its sans-serif fallback (\"1,018.5\": 41 px), then draws the labels in Roboto; Vitro measures in Roboto as a panel's browser does, so its axis is ~2 px narrower and every point moves 2 px left. With that 2 px added the case is 1.7-2.3 % (2026-11-24)"
- },
- "tablet/entity-filter": {
-  "pixel": 0.0331,
-  "bounds": 48.8,
-  "font": 0,
-  "missingText": 3,
-  "reason": "the wrapped entities card loses its title (\"Lights off\") and header toggle, and rows show the bare entity name (\"Window\") where HA prefixes the device (\"LED Strip Window\"); card ~50 px shorter (coverage #794, 2026-11-24)"
  },
  "tablet/markdown-cardmod": {
   "pixel": 0.0097,
