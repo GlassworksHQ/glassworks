@@ -674,7 +674,8 @@ object MdCascade {
                 "font-style" -> s.italic = if (inheritKw) p.italic else lower == "italic" || lower == "oblique"
                 "font-family" -> s.fontFamily = when {
                     inheritKw -> p.fontFamily
-                    initialKw -> null
+                    // The browser's default font, not the card's: initial isn't inherit.
+                    initialKw -> dev.glassworks.engine.vitro.theme.ThemeResolver.INITIAL_FONT_FAMILY
                     else -> lower
                 }
                 "line-height" -> when {

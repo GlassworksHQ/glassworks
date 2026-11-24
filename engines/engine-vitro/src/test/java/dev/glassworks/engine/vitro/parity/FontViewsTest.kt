@@ -6,8 +6,10 @@ package dev.glassworks.engine.vitro.parity
 
 import android.app.Activity
 import android.app.Application
+import android.view.View
 import android.widget.TextView
 import dev.glassworks.engine.vitro.fonts.WebFonts
+import dev.glassworks.engine.vitro.ui.VitroFonts
 import dev.glassworks.testing.RepoFiles
 import dev.glassworks.ui.Inter
 import org.junit.Assert.assertTrue
@@ -49,5 +51,48 @@ class FontViewsTest {
         assertTrue("Pacifico arrived", pacifico != null)
         // The tile's name (500) and state (400) both draw in the one 400 face, not in a fallback.
         assertTrue("its text is in the web font", texts.all { it.typeface === pacifico })
+    }
+
+    @Test
+    fun aCardKeepsItsViewsFontWhenAnotherViewRendersLater() {
+        Inter.load = { File(RepoFiles.root, "core/src/main/res/font/inter.ttf").readBytes() }
+        WebFonts.reset()
+        val root = ParityFiles.committed
+        val frame = ParityFrame.load().first { it.id == "s1" }
+        val shared = ParityShared.load(root)
+        val case = ParityCase.loadAll(root).first { it.id == "font-theme-web" }
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val render = ParityRenderer(activity, frame, root, shared).render(case, null)
+        val text = ParityViews.all(render.root).filterIsInstance<TextView>().first { it.isShown && it.text.isNotBlank() }
+        // Another view renders with another theme: the global body font moves, a card's own context doesn't.
+        VitroFonts.family = "serif"
+        assertTrue("Product Sans" in VitroFonts.familyOf(text.context))
+    }
+
+    @Test
+    fun aViewBackOnScreenAfterAnotherDashboardTookTheFontsRebuilds() {
+        Inter.load = { File(RepoFiles.root, "core/src/main/res/font/inter.ttf").readBytes() }
+        WebFonts.reset()
+        val root = ParityFiles.committed
+        val frame = ParityFrame.load().first { it.id == "s1" }
+        val shared = ParityShared.load(root)
+        val cases = ParityCase.loadAll(root)
+        val first = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val a = ParityRenderer(first, frame, root, shared).render(cases.first { it.id == "font-cardmod" }, null)
+        val before = a.slotViews.first()
+        // A leaves the screen; another dashboard (another server, its own stylesheet) takes the font loader meanwhile.
+        // It draws in built-in fonts only, so no font notice reaches A: the loader just stops being A's.
+        first.setContentView(View(first))
+        val second = Robolectric.buildActivity(Activity::class.java).setup().get()
+        val plain = ParityCase.parse(
+            "plain-with-sheet",
+            org.json.JSONObject().put("card", org.json.JSONObject().put("type", "tile").put("entity", "light.entryway_ceiling_halo"))
+                .put("resources", org.json.JSONArray().put(org.json.JSONObject().put("type", "css").put("url", "${ParityCase.FIXTURE_PREFIX}fonts/markdown.css"))),
+        )
+        ParityRenderer(second, frame, root, shared).render(plain, null)
+        // A comes back: it builds again (and takes the loader back), rather than keep what it drew before.
+        first.setContentView(a.root)
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle()
+        assertTrue("A was built again", ParityViews.all(a.root).none { it === before })
     }
 }

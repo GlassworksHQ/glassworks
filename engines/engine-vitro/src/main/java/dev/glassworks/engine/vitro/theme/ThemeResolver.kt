@@ -274,7 +274,13 @@ object ThemeResolver {
     private val WHITESPACE = Regex("""\s+""")
     private val CUSTOM_PROPERTY = Regex("""(?:^|[;\n{])\s*--([\w-]+)\s*:\s*([^;\n]+)""")
     /** `font-family` values that keep the inherited list. */
-    private val FONT_KEYWORDS = setOf("inherit", "initial", "unset", "revert", "revert-layer")
+    private val FONT_KEYWORDS = setOf("inherit", "unset", "revert", "revert-layer")
+
+    /**
+     * What `font-family: initial` resets to: the browser's own default font, a serif in Chrome and Firefox alike,
+     * not the font the card would inherit.
+     */
+    const val INITIAL_FONT_FAMILY = "serif"
     private val LETTER_SPACING = Regex("""(-?[\d.]+)\s*(em|px|rem)?""", RegexOption.IGNORE_CASE)
     private val TRANSLATE = Regex("""translate\(([^,)]+)(?:,([^)]+))?\)""")
     private val STOP_PERCENT = Regex("""\s+[\d.]+%$""")
@@ -283,8 +289,10 @@ object ThemeResolver {
     private val declProps = java.util.concurrent.ConcurrentHashMap<String, Regex>()
     private val themeVarProps = java.util.concurrent.ConcurrentHashMap<String, Regex>()
     private fun declProp(name: String): Regex = declProps.getOrPut(name) {
-        // The value keeps a trailing `!important`: [parseCardMod] lets it win, as the browser does.
-        Regex("""(?:^|[;\n])\s*$name\s*:\s*([^;\n]+)""", RegexOption.IGNORE_CASE)
+        // The value keeps a trailing `!important`: [parseCardMod] lets it win, as the browser does. A font list runs to
+        // the declaration's end, line breaks included (`font-family: Missing,\n  Pacifico, serif;`).
+        if (name == "font-family") Regex("""(?:^|[;\n{])\s*font-family\s*:\s*([^;}]+)""", RegexOption.IGNORE_CASE)
+        else Regex("""(?:^|[;\n])\s*$name\s*:\s*([^;\n]+)""", RegexOption.IGNORE_CASE)
     }
     private fun themeVarProp(name: String): Regex = themeVarProps.getOrPut(name) {
         Regex("""(?:^|[;\n{])\s*$name\s*:\s*([^;!\n}]+)""", RegexOption.IGNORE_CASE)
@@ -852,7 +860,9 @@ object ThemeResolver {
             ?.let { parseDimensionDp(it, -1f) }?.takeIf { it >= 0f }
         val fontSize = prop("font-size")?.let { parseDimensionDp(it, -1f) }?.takeIf { it > 0f }
         val fontWeight = prop("font-weight")?.let(::parseFontWeight)
-        val fontFamily = prop("font-family")?.takeUnless { it.lowercase(Locale.ROOT) in FONT_KEYWORDS }
+        val fontFamily = prop("font-family")?.replace(Regex("\\s+"), " ")?.trim()
+            ?.let { if (it.equals("initial", ignoreCase = true)) INITIAL_FONT_FAMILY else it }
+            ?.takeUnless { it.lowercase(Locale.ROOT) in FONT_KEYWORDS }
         val letterSpacing = prop("letter-spacing")?.let { ls ->
             val m = LETTER_SPACING.find(ls) ?: return@let null
             val v = m.groupValues[1].toFloatOrNull() ?: return@let null

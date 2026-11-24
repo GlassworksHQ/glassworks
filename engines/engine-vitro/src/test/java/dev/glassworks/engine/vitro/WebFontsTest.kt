@@ -195,6 +195,46 @@ class WebFontsTest {
         drain()
         assertEquals(0, WebFonts.pending.get())
         assertSame(VitroFonts.system(400), VitroFonts.typeface(activity, 400, 14f, fontFamily = list))
+        // The face is failed, not still loading, and the view heard so (one redraw for the batch).
+        assertTrue(WebFonts.lookup("Pacifico", 400, false) === WebFonts.Lookup.Absent)
+        assertTrue("the listener ran", notified > 0)
+    }
+
+    @Test
+    fun aWarmCacheKeepsTheSourceOrder() {
+        // Brand lists a.ttf before b.ttf; Other already cached b.ttf. After a restart Brand must still try a.ttf first.
+        css("fonts.css", "@font-face { font-family: Brand; src: url(a.ttf), url(b.ttf) } @font-face { font-family: Other; src: url(b.ttf) }")
+        font("a.ttf", "comic-neue-400.ttf")
+        font("b.ttf", "pacifico.ttf")
+        configure("fonts.css")
+        VitroFonts.typeface(activity, 400, 14f, fontFamily = "Other")
+        drain()
+        VitroFonts.typeface(activity, 400, 14f, fontFamily = "Other")
+        drain()
+        WebFonts.reset()
+        fetched.clear()
+        configure("fonts.css")
+        drain()
+        VitroFonts.typeface(activity, 400, 14f, fontFamily = "Brand")
+        drain()
+        assertTrue("a.ttf is tried first: $fetched", "$base/local/a.ttf" in fetched)
+        val brand = VitroFonts.typeface(activity, 400, 14f, fontFamily = "Brand")
+        assertNotEquals("Brand draws a.ttf, not the cached b.ttf", VitroFonts.typeface(activity, 400, 14f, fontFamily = "Other"), brand)
+    }
+
+    @Test
+    fun aFontAndroidCantLoadIsAFailedSource() {
+        // A TrueType signature, then nothing: Sfnt passes it, Android can't load it (Android 10 answers DEFAULT).
+        css("fonts.css", "@font-face { font-family: P; src: url(cut.ttf), url(p.ttf) }")
+        served["$base/local/cut.ttf"] = File(fonts, "pacifico.ttf").readBytes().copyOf(64)
+        font("p.ttf", "pacifico.ttf")
+        configure("fonts.css")
+        VitroFonts.typeface(activity, 400, 14f, fontFamily = "P, sans-serif")
+        drain()
+        val tf = VitroFonts.typeface(activity, 400, 14f, fontFamily = "P, sans-serif")
+        assertTrue("$base/local/p.ttf" in fetched)
+        assertNotEquals(Typeface.DEFAULT, tf)
+        assertNotEquals(VitroFonts.system(400), tf)
     }
 
     @Test

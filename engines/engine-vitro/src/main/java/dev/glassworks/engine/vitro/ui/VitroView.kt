@@ -542,7 +542,9 @@ class VitroView(
         val viewRoot = if (cached != null) {
             cached
         } else {
-            val cardCtx = contextFactory?.invoke(theme) ?: return
+            // The view's body font rides on the cards' context, not only on VitroFonts.family: a card that builds a
+            // child later (auto-entities' refresh) while another view is shown still gets this view's font.
+            val cardCtx = contextFactory?.invoke(theme)?.withFontFamily(VitroFonts.familyFor(theme)) ?: return
             // The fonts the dashboard's stylesheets declare: read only once a card draws a family Vitro doesn't have.
             WebFonts.configure(cardCtx.haBase, cardCtx.resources, context.cacheDir)
             fontsFor = cardCtx.haBase to cardCtx.resources
@@ -1074,8 +1076,7 @@ class VitroView(
             contextFactory?.invoke(overrideTheme)?.let { themed ->
                 // The card's theme sets the body font for the text inside it only if it sets one; a theme of colors
                 // only keeps the font in force outside the card.
-                val family = VitroFonts.declaredFamily(overrideTheme) ?: VitroFonts.familyOf(parentCtx.context)
-                if (family != VitroFonts.family) themed.withFontFamily(family) else themed
+                themed.withFontFamily(VitroFonts.declaredFamily(overrideTheme) ?: VitroFonts.familyOf(parentCtx.context))
             } ?: parentCtx
         } else {
             parentCtx
@@ -1417,8 +1418,10 @@ class VitroView(
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
         scheduleTick()
-        // Back on screen after fonts changed elsewhere: build again, taking the font loader back for this dashboard.
-        if (fontsStale) rebuildForFonts()
+        // Back on screen after fonts changed elsewhere, or after another dashboard took the font loader (which drops
+        // the loads this view was waiting for, with no notice): build again, taking the loader back.
+        val retired = fontsFor?.let { !WebFonts.isConfiguredFor(it.first, it.second) } == true
+        if (fontsStale || retired) rebuildForFonts()
     }
 
     override fun onDetachedFromWindow() {

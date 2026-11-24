@@ -148,14 +148,14 @@ object WebFonts {
             for (face in parsed.values.flatten()) {
                 val key = faceKey(face) ?: continue
                 if (key in ready || ready.size >= MAX_FACES) continue
-                for (url in face.supportedUrls) {
-                    val file = fontFile(dir, url)
-                    val tf = if (file.isFile) loadTypeface(file) else null
-                    if (tf != null) {
-                        pin(file, gen)
-                        ready[key] = Face.Ready(file, tf)
-                        break
-                    }
+                // Only the face's first source counts here: a later one on disk is a guess until the earlier ones fail,
+                // which loadFace finds out, in order.
+                val url = face.supportedUrls.first()
+                val file = fontFile(dir, url)
+                val tf = if (file.isFile) loadTypeface(file) else null
+                if (tf != null) {
+                    pin(file, gen)
+                    ready[key] = Face.Ready(file, tf)
                 }
             }
             ({
@@ -301,7 +301,7 @@ object WebFonts {
             tf = runCatching {
                 Typeface.Builder(ready.file).setFontVariationSettings("'wght' $effective").setWeight(effective)
                     .setItalic(face.italic).build()
-            }.getOrNull() ?: tf
+            }.getOrNull()?.takeUnless { it === Typeface.DEFAULT } ?: tf
         }
         val style = (if (fakeBold) Typeface.BOLD else 0) or (if (fakeItalic) Typeface.ITALIC else 0)
         if (style != 0) tf = Typeface.create(tf, style)
@@ -446,11 +446,21 @@ object WebFonts {
         return true
     }
 
-    private fun loadTypeface(file: File): Typeface? = try {
-        Typeface.createFromFile(file)
-    } catch (_: Exception) {
-        file.delete()
-        null
+    /**
+     * [file] as a Typeface, or null (and the file deleted) when it isn't one. Android 10 answers a file it can't load
+     * with [Typeface.DEFAULT] instead of throwing: that's a failure too, so the next source gets its turn.
+     */
+    private fun loadTypeface(file: File): Typeface? {
+        val tf = try {
+            Typeface.createFromFile(file)
+        } catch (_: Exception) {
+            null
+        }
+        if (tf == null || tf === Typeface.DEFAULT) {
+            file.delete()
+            return null
+        }
+        return tf
     }
 
     /**
