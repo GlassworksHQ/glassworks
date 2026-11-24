@@ -90,13 +90,15 @@ The checker reports every card Vitro builds in a view, whether it renders native
 
 - **Logcat:** each time Vitro builds a view, it logs one `Island <where>: <why>` line per fallback under the `Glassworks.Vitro` tag.
 - **The test app:** tap the HUD to expand it. It lists the islands in the current view.
-- **From code or a test:** `CompatChecker.check(dashboard).format()` gives the same report as text, starting with a line such as `116 cards: 116 native, 0 island (fully native)`.
+- **From code or a test:** `CompatChecker.check(dashboard, CardRouter.cardModInIsland(resources)).format()` gives the same report as text, starting with a line such as `116 cards: 116 native, 0 island (fully native)`. Pass the dashboard's Lovelace resources so the report knows whether islands can load card-mod. Without them, it assumes they can.
 
 To check your own dashboards without a panel, save each Lovelace config (`lovelace/config` over the WebSocket API) as a `*-new.json` file in one folder and run:
 
 ```sh
 VITRO_PARITY_DIR=/path/to/folder ./gradlew :engine-vitro:testDebugUnitTest --tests '*CompatCheckerLocal*' -i
 ```
+
+This check reads only the exported configs, not the resource list, so it assumes card-mod is a Lovelace resource the islands can load. With card-mod installed only as a frontend module, a card that falls back just for its card-mod styles stays native on the panel even though the check lists it as an island.
 
 ## Key optimizations
 

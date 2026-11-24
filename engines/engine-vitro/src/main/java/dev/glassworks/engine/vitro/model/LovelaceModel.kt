@@ -413,7 +413,9 @@ object CardRouter {
      * Whether an island can apply card-mod: only when card-mod is one of the dashboard's Lovelace [resources], which
      * the island loads. Installed only as a frontend module, it isn't there.
      */
-    fun cardModInIsland(resources: List<LovelaceResource>): Boolean = resources.any { "card-mod" in it.url.lowercase() }
+    fun cardModInIsland(resources: List<LovelaceResource>): Boolean =
+        // The island loads every type but `css` as a script (`WebIslandCardView.buildIslandHtml`).
+        resources.any { it.type != "css" && "card-mod" in it.url.lowercase() }
 
     /** One top-level card `VitroView` builds for a view, with its section (null outside sections) and index. */
     data class ViewRoot(val section: Int?, val index: Int, val card: CardConfig)

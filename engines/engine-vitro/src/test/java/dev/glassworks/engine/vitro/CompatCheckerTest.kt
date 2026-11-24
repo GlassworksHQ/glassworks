@@ -306,6 +306,9 @@ class CompatCheckerTest {
         )
         assertEquals("-webkit-image-set(\"…\" 1x)", CardCompat.loggable("-webkit-image-set('/api/image/a?token=abc' 1x)"))
         assertEquals("\"Roboto\", sans-serif", CardCompat.loggable("\"Roboto\", sans-serif"))
+        // A declaration cut inside a quoted address (a `;` in it) leaves the rest of the address out.
+        assertEquals("…", CardCompat.loggable("url(\"https://h/a?sig=abc"))
+        assertEquals("#fff image-set(…", CardCompat.loggable("#fff image-set('https://h/a?sig=abc"))
         // A CSS escape doesn't end the URL early.
         assertEquals("url(…)", CardCompat.loggable("url(https://h/a\\)?token=x)"))
         assertEquals("url(…) center", CardCompat.loggable("url(\"https://h/a\\\"?token=x\") center"))
@@ -507,6 +510,9 @@ class CompatCheckerTest {
         assertNative(pinnedAt("left: 50%; top: 50%", "translate(-50%, -50%)"))
         assertNative(pinnedAt("right: 20px; top: 50%", "translateY(-50%)"))
         assertIsland(pinnedAt("left: 20px; top: 50%", "translate(-50%, -50%)"), "only centering a pinned card")
+        // One centering shift per axis: two on X would move the card a whole width.
+        assertIsland(pinnedAt("left: 50%; top: 0", "translateX(-50%) translateX(-50%)"), "only centering a pinned card")
+        assertNative(pinnedAt("left: 50%; top: 50%", "translateX(-50%) translateY(-50%)"))
         // The offset that wins counts, `!important` included.
         assertNative(pinnedAt("left: 50%; top: 0 !important; top: 50% !important; top: 10px", "translateY(-50%)"))
     }
@@ -518,6 +524,33 @@ class CompatCheckerTest {
         assertNative(mushroomWith("ha-card { pointer-events: auto }"))
         // A built-in card stays native and notes it.
         assertIsland("""{"type": "tile", "entity": "light.a", "card_mod": {"style": ${style("ha-card { pointer-events: none }")}}}""", "pointer-events")
+    }
+
+    @Test
+    fun aFocusStateOfTheCardIsNotTheCardAtRest() {
+        assertFalse(ThemeResolver.isHostSelector("ha-card.warning:focus-visible"))
+        assertFalse(ThemeResolver.isHostSelector("ha-card.warning:focus"))
+        assertEquals(null, ThemeResolver.parseCardMod("ha-card.warning:focus-visible { opacity: 0 }").opacity)
+        assertNative("""{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style("ha-card.warning:focus-visible { opacity: 0 }")}}}""")
+    }
+
+    @Test
+    fun aPinnedWidthMustBeOneTheOverlayReads() {
+        fun pinnedWidth(w: String) =
+            """{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style("ha-card { position: fixed; top: 0; left: 0; width: $w }")}}}"""
+        assertNative(pinnedWidth("300px"))
+        assertNative(pinnedWidth("50%"))
+        assertNative(pinnedWidth("20rem"))
+        assertIsland(pinnedWidth("calc(100% - 24px)"), "a pinned width")
+    }
+
+    @Test
+    fun sizeContainmentIsNotAHint() {
+        fun mushroomWith(css: String) = """{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style(css)}}}"""
+        assertIsland(mushroomWith("ha-card { contain: size }"), "`contain: size`")
+        assertIsland(mushroomWith("ha-card { contain: strict }"), "`contain: strict`")
+        assertNative(mushroomWith("ha-card { contain: content }"))
+        assertNative(mushroomWith("ha-card { contain: layout paint }"))
     }
 
     @Test
@@ -579,6 +612,8 @@ class CompatCheckerTest {
         assertEquals(1, CompatChecker.check(view).islands.size)
         assertTrue(CardRouter.cardModInIsland(listOf(dev.glassworks.engine.vitro.model.LovelaceResource("/hacsfiles/lovelace-card-mod/card-mod.js?hacstag=1", "module"))))
         assertFalse(CardRouter.cardModInIsland(emptyList()))
+        // A stylesheet isn't card-mod: the island loads `css` resources as styles, not scripts.
+        assertFalse(CardRouter.cardModInIsland(listOf(dev.glassworks.engine.vitro.model.LovelaceResource("/local/card-mod-preview.css", "css"))))
     }
 
     @Test
@@ -619,9 +654,10 @@ class CompatCheckerLocalDashboardsTest {
     @Test
     fun realDashboardsRenderFullyNative() {
         val env = System.getenv("VITRO_PARITY_DIR")
-        assumeTrue("VITRO_PARITY_DIR not set", !env.isNullOrBlank())
+        assumeTrue("VITRO_PARITY_DIR not set", env != null)
+        assertTrue("VITRO_PARITY_DIR is set but blank", env!!.isNotBlank())
         // Set means asked for: a wrong path or an empty folder fails instead of passing by skipping.
-        val dir = File(env!!)
+        val dir = File(env)
         assertTrue("VITRO_PARITY_DIR $dir isn't a readable folder", dir.isDirectory && dir.canRead())
         val files = dir.listFiles { f -> f.name.endsWith("-new.json") }.orEmpty().sortedBy { it.name }
         assertTrue("no *-new.json files in $dir", files.isNotEmpty())

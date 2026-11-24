@@ -241,7 +241,6 @@ object VitroSupport {
         "-webkit-tap-highlight-color" to "the browser's tap flash; Vitro draws HA's ripple instead",
         "touch-action" to "which gestures the browser handles, not how it looks",
         "will-change" to "a browser performance hint",
-        "contain" to "a browser performance hint",
         "-webkit-font-smoothing" to "a macOS font-smoothing hint",
         "-moz-osx-font-smoothing" to "a macOS font-smoothing hint",
         "text-rendering" to "a font-rendering hint",
@@ -261,6 +260,8 @@ object VitroSupport {
         "text-shadow" to setOf("none"),
         // `none` lets taps through the card in HA, which a native card doesn't do: only the default is harmless.
         "pointer-events" to setOf("auto"),
+        // Layout, paint and style containment are performance hints; `size` (and `strict`) change how the card sizes.
+        "contain" to setOf("none", "layout", "paint", "style", "content", "layout paint", "paint layout", "layout style", "paint style", "layout paint style"),
     )
 
     /**

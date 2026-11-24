@@ -142,8 +142,14 @@ object CardCompat {
             val inner = m.value.substring(1, m.value.length - 1).trim()
             if ("://" in inner || inner.startsWith("/")) "\"…\"" else m.value
         }
-        return if (noUrls.length <= MAX_LOGGED_VALUE) noUrls else noUrls.take(MAX_LOGGED_VALUE) + "…"
+        // A declaration split inside a quoted address (a `;` in it) leaves an unterminated `url(` or quote: cut there.
+        val masked = QUOTED.replace(noUrls) { "x".repeat(it.value.length) }
+        val open = UNTERMINATED.find(masked)?.range?.first
+        val safe = if (open != null) noUrls.substring(0, open) + "…" else noUrls
+        return if (safe.length <= MAX_LOGGED_VALUE) safe else safe.take(MAX_LOGGED_VALUE) + "…"
     }
+
+    private val UNTERMINATED = Regex("""url\((?!…\))|["']""", RegexOption.IGNORE_CASE)
 
     // CSS escapes (`\)`, `\"`) don't end a URL, quoted or not.
     private val QUOTED = Regex(""""(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'""")
@@ -441,6 +447,7 @@ object CardCompat {
     // -------------------------------------------------------------------------------------------------------------
 
     private val SPACE = Regex("""\s+""")
+    private val PINNED_WIDTH = Regex("""^-?[\d.]+(px|dp|%|r?em)?$""")
     private val TRANSLATE = Regex("""^(translate[xy]?)\((.*)\)$""")
     private val CENTER_OR_ZERO = setOf("-50%", "0", "0px", "0%")
     private val BORDER_STYLE_WORDS = setOf("dashed", "dotted", "double", "groove", "ridge", "inset", "outset")
@@ -521,7 +528,12 @@ object CardCompat {
             if (!pinned && position != null && position != "static") notes += gap("position: relative", shown)
             null
         }
-        "width" -> if (pinned || value in setOf("auto", "100%", "initial", "unset")) null else "only applies to pinned (`position: fixed`) cards"
+        "width" -> when {
+            value in setOf("auto", "100%", "initial", "unset") -> null
+            // The overlay reads a pinned width as px, dp, rem/em or %; anything else (`calc()`) would wrap the content.
+            pinned -> if (PINNED_WIDTH.matches(value)) null else "isn't drawn natively (a pinned width is px, rem or %)"
+            else -> "only applies to pinned (`position: fixed`) cards"
+        }
         "height" -> if (value in setOf("auto", "100%", "initial", "unset", "inherit", "fit-content")) null else "isn't drawn natively (only `auto` and `100%`)"
         "transform" -> when {
             value == "none" -> null
@@ -546,20 +558,21 @@ object CardCompat {
      * dropped) and `top: 0` with `translate(-50%, -50%)` (HA moves the card up by half its height) don't count.
      */
     private fun centersAtHalf(value: String, placement: Map<String, String>): Boolean {
-        var x = false
-        var y = false
+        // The overlay centers each axis once: two `-50%` shifts on one axis (`translateX(-50%) translateX(-50%)`) don't fit.
+        var x = 0
+        var y = 0
         for (fn in CssSelector.splitTopLevel(value, ' ').filter { it.isNotBlank() }) {
             val m = TRANSLATE.matchEntire(fn) ?: return false
             val args = CssSelector.splitTopLevel(m.groupValues[2], ',').map { it.trim() }
             val maxArgs = if (m.groupValues[1] == "translate") 2 else 1
             if (args.size !in 1..maxArgs || args.any { it !in CENTER_OR_ZERO }) return false
             when (m.groupValues[1]) {
-                "translate" -> { x = x || args[0] == "-50%"; y = y || args.getOrNull(1) == "-50%" }
-                "translatex" -> x = x || args[0] == "-50%"
-                "translatey" -> y = y || args[0] == "-50%"
+                "translate" -> { if (args[0] == "-50%") x++; if (args.getOrNull(1) == "-50%") y++ }
+                "translatex" -> if (args[0] == "-50%") x++
+                "translatey" -> if (args[0] == "-50%") y++
             }
         }
-        return (!x || placement["left"] == "50%") && (!y || placement["top"] == "50%")
+        return x <= 1 && y <= 1 && (x == 0 || placement["left"] == "50%") && (y == 0 || placement["top"] == "50%")
     }
 
     /** Why a cascade value can't be drawn, or null when it can. */
