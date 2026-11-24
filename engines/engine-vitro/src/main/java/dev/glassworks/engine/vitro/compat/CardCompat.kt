@@ -109,27 +109,44 @@ object CardCompat {
 
     /**
      * True when `auto-entities` builds built-in cards at runtime: its `card:` (an `entities` card by default), or with
-     * `card_param: cards` one card per entity from each rule's `options` (a `tile` by default).
+     * `card_param: cards` one card per entity, from each top-level `entities:` entry and each rule's `options`
+     * (a `tile` by default), the way [dev.glassworks.engine.vitro.cards.AutoEntitiesCardView] builds them.
      */
     private fun generatesBuiltInCards(card: CardConfig): Boolean {
         if (card.type != "custom:auto-entities") return false
         val inner = card.raw.optJSONObject("card")?.optString("type", "")?.ifEmpty { null } ?: "entities"
         if (!inner.startsWith("custom:")) return true
         if (card.raw.optString("card_param", "entities") != "cards") return false
-        val rules = card.raw.optJSONObject("filter")?.optJSONArray("include") ?: return true
-        return objects(rules).any { r -> !(r.optJSONObject("options")?.optString("type", "")?.ifEmpty { null } ?: "tile").startsWith("custom:") }
+        val listed = card.raw.optJSONArray("entities")
+        val entryTypes = (0 until (listed?.length() ?: 0)).mapNotNull { i ->
+            when (val e = listed?.opt(i)) {
+                is String -> "tile"
+                is JSONObject -> e.optString("type", "").ifEmpty { "tile" }
+                else -> null
+            }
+        }
+        val ruleTypes = objects(card.raw.optJSONObject("filter")?.optJSONArray("include")).map { r ->
+            r.optJSONObject("options")?.optString("type", "")?.ifEmpty { null } ?: "tile"
+        }
+        val types = entryTypes + ruleTypes
+        return types.isEmpty() || types.any { !it.startsWith("custom:") }
     }
 
     /**
-     * A CSS value as the checker may log it. The reasons go to logcat and the HUD, so a `url(...)` (which can carry a
-     * signed or tokenised address) is shown without its address, and a long value is cut short.
+     * A CSS value as the checker may log it. The reasons go to logcat and the HUD, so an address (which can carry a
+     * signed or tokenised query) never shows: a `url(...)` becomes `url(…)`, and a quoted string that looks like an
+     * address (`://`, or a leading `/`), in `image-set()` or any other function, becomes `"…"`. A long value is cut.
      */
     internal fun loggable(value: String): String {
-        val noUrls = URL_FN.replace(value.trim()) { "url(…)" }
+        val noUrls = QUOTED.replace(URL_FN.replace(value.trim()) { "url(…)" }) { m ->
+            val inner = m.value.substring(1, m.value.length - 1).trim()
+            if ("://" in inner || inner.startsWith("/")) "\"…\"" else m.value
+        }
         return if (noUrls.length <= MAX_LOGGED_VALUE) noUrls else noUrls.take(MAX_LOGGED_VALUE) + "…"
     }
 
     // CSS escapes (`\)`, `\"`) don't end a URL, quoted or not.
+    private val QUOTED = Regex(""""(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'""")
     private val URL_FN = Regex("""url\(\s*(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|(?:\\.|[^)\\])*)\s*\)""", RegexOption.IGNORE_CASE)
     private const val MAX_LOGGED_VALUE = 80
 
@@ -272,9 +289,12 @@ object CardCompat {
         // Vitro merges every rule on the card itself into one style, so the `position` that wins there pins the card
         // for all of them (`ha-card { position: fixed }` then `:host { width: … }`). As in the browser, and in
         // [ThemeResolver.parseCardMod], the last `!important` one wins, else the last one.
-        val hostPositions = rules.filter { (_, _, v) -> v.any { it is Sel.Honored && it.host } }
-            .flatMap { (_, decls, _) -> decls }.filter { it.first == "position" }
-        val hostPosition = (hostPositions.lastOrNull { it.third } ?: hostPositions.lastOrNull())?.second?.trim()?.lowercase(Locale.ROOT)
+        // The offsets settle the same way, so a centering transform is checked against the offset it pairs with.
+        val hostDecls = rules.filter { (_, _, v) -> v.any { it is Sel.Honored && it.host } }.flatMap { (_, decls, _) -> decls }
+        val hostPlacement = (listOf("position") + OFFSETS).mapNotNull { name ->
+            val all = hostDecls.filter { it.first == name }
+            (all.lastOrNull { it.third } ?: all.lastOrNull())?.let { name to it.second.trim().lowercase(Locale.ROOT) }
+        }.toMap()
         for ((_, important, verdicts) in rules) {
             val decls = important.map { it.first to it.second }
             // Card-mod keeps `!important`; the cascade inside Markdown and the clock doesn't honor it yet.
@@ -286,7 +306,7 @@ object CardCompat {
             val honored = verdicts.filterIsInstance<Sel.Honored>()
             if (honored.isEmpty()) continue
             val host = honored.any { it.host }
-            checkDeclarations(type, key, decls, sheet, host, if (host) hostPosition else null, propertyReasons, notes)
+            checkDeclarations(type, key, decls, sheet, host, if (host) hostPlacement else emptyMap(), propertyReasons, notes)
         }
     }
 
@@ -439,7 +459,7 @@ object CardCompat {
         decls: List<Pair<String, String>>,
         sheet: Sheet,
         host: Boolean,
-        hostPosition: String?,
+        hostPlacement: Map<String, String>,
         reasons: MutableSet<String>,
         notes: MutableSet<String>,
     ) {
@@ -447,8 +467,9 @@ object CardCompat {
         val surface = sheet == Sheet.CARD || (host && (sheet == Sheet.MARKDOWN_CARD || sheet == Sheet.CLOCK_CARD))
         val cascade = cascadeSheet
         val byName = decls.associate { it.first to it.second.trim().lowercase(Locale.ROOT) }
-        // On the card itself, the position all its rules settle on; inside it, this rule's own.
-        val position = if (host) hostPosition else byName["position"]
+        // On the card itself, the position and offsets all its rules settle on; inside it, this rule's own.
+        val placement = if (host) hostPlacement else byName
+        val position = placement["position"]
         val pinned = position == "fixed" || position == "absolute"
         for ((name, rawValue) in decls) {
             val shown = "`$name: ${loggable(rawValue)}`"
@@ -476,7 +497,7 @@ object CardCompat {
                 continue
             }
             if (!checkable) continue
-            val problem = if (asCard) checkCardValue(name, value, pinned, position, shown, notes)
+            val problem = if (asCard) checkCardValue(name, value, pinned, position, placement, shown, notes)
             else if (asCascade) checkCascadeValue(sheet, name, value, position, shown, notes)
             else null
             problem?.let { reasons += "card_mod `$key` $shown $it" }
@@ -484,7 +505,15 @@ object CardCompat {
     }
 
     /** Why a card-surface value can't be drawn, or null when it can. */
-    private fun checkCardValue(name: String, value: String, pinned: Boolean, position: String?, shown: String, notes: MutableSet<String>): String? = when (name) {
+    private fun checkCardValue(
+        name: String,
+        value: String,
+        pinned: Boolean,
+        position: String?,
+        placement: Map<String, String>,
+        shown: String,
+        notes: MutableSet<String>,
+    ): String? = when (name) {
         "background", "background-image" -> backgroundProblem(value, allowGradient = true)
         "border" -> if (SPACE.split(value).any { it in BORDER_STYLE_WORDS }) "isn't drawn natively (only solid borders)" else null
         "position" -> if (value in setOf("fixed", "absolute", "static", "relative", "initial", "unset", "inherit")) null else "isn't drawn natively"
@@ -496,8 +525,8 @@ object CardCompat {
         "height" -> if (value in setOf("auto", "100%", "initial", "unset", "inherit", "fit-content")) null else "isn't drawn natively (only `auto` and `100%`)"
         "transform" -> when {
             value == "none" -> null
-            pinned && CssSelector.splitTopLevel(value, ' ').filter { it.isNotBlank() }.all(::centersOnly) -> null
-            else -> "isn't drawn natively (only centering a pinned card)"
+            pinned && centersAtHalf(value, placement) -> null
+            else -> "isn't drawn natively (only centering a pinned card at `left: 50%` / `top: 50%`)"
         }
         "box-shadow" -> when {
             value == "none" -> null
@@ -511,14 +540,26 @@ object CardCompat {
     }
 
     /**
-     * True for a translate the pinned overlay applies exactly: each axis either centers (`-50%`) or stays put (`0`).
-     * `translate(-50%, 12px)` would center X but drop the 12px, so it doesn't count.
+     * True for a transform the pinned overlay places exactly. The overlay centers an axis in the viewport and ignores
+     * that axis's offset, which is what HA does only for the centering idiom: `left: 50%` with a `-50%` X translate,
+     * `top: 50%` with a `-50%` Y translate. Every other translate is `0`. So `translate(-50%, 12px)` (the 12px is
+     * dropped) and `top: 0` with `translate(-50%, -50%)` (HA moves the card up by half its height) don't count.
      */
-    private fun centersOnly(fn: String): Boolean {
-        val m = TRANSLATE.matchEntire(fn) ?: return false
-        val args = CssSelector.splitTopLevel(m.groupValues[2], ',').map { it.trim() }
-        val maxArgs = if (m.groupValues[1] == "translate") 2 else 1
-        return args.size in 1..maxArgs && args.all { it in CENTER_OR_ZERO }
+    private fun centersAtHalf(value: String, placement: Map<String, String>): Boolean {
+        var x = false
+        var y = false
+        for (fn in CssSelector.splitTopLevel(value, ' ').filter { it.isNotBlank() }) {
+            val m = TRANSLATE.matchEntire(fn) ?: return false
+            val args = CssSelector.splitTopLevel(m.groupValues[2], ',').map { it.trim() }
+            val maxArgs = if (m.groupValues[1] == "translate") 2 else 1
+            if (args.size !in 1..maxArgs || args.any { it !in CENTER_OR_ZERO }) return false
+            when (m.groupValues[1]) {
+                "translate" -> { x = x || args[0] == "-50%"; y = y || args.getOrNull(1) == "-50%" }
+                "translatex" -> x = x || args[0] == "-50%"
+                "translatey" -> y = y || args[0] == "-50%"
+            }
+        }
+        return (!x || placement["left"] == "50%") && (!y || placement["top"] == "50%")
     }
 
     /** Why a cascade value can't be drawn, or null when it can. */

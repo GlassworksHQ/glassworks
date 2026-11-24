@@ -299,6 +299,13 @@ class CompatCheckerTest {
     fun loggedReasonsDropUrlsAndCapLongValues() {
         assertEquals("url(…) no-repeat", CardCompat.loggable("url('https://example.invalid/a.png?token=abc') no-repeat"))
         assertEquals("url(…), url(…)", CardCompat.loggable("url(\"x\"), url(y)"))
+        // A quoted address in any function, such as image-set(), shows as "…"; other quoted strings stay.
+        assertEquals(
+            "image-set(\"…\" 1x), linear-gradient(red, blue)",
+            CardCompat.loggable("image-set(\"https://example.invalid/a?token=abc\" 1x), linear-gradient(red, blue)"),
+        )
+        assertEquals("-webkit-image-set(\"…\" 1x)", CardCompat.loggable("-webkit-image-set('/api/image/a?token=abc' 1x)"))
+        assertEquals("\"Roboto\", sans-serif", CardCompat.loggable("\"Roboto\", sans-serif"))
         // A CSS escape doesn't end the URL early.
         assertEquals("url(…)", CardCompat.loggable("url(https://h/a\\)?token=x)"))
         assertEquals("url(…) center", CardCompat.loggable("url(\"https://h/a\\\"?token=x\") center"))
@@ -489,10 +496,19 @@ class CompatCheckerTest {
         fun pinned(transform: String) =
             """{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style("ha-card { position: fixed; left: 50%; top: 0; transform: $transform }")}}}"""
         assertNative(pinned("translate(-50%, 0)"))
-        assertNative(pinned("translate(-50%, -50%)"))
         assertNative(pinned("translate(-50%)"))
         assertIsland(pinned("translate(-50%, 12px)"), "only centering a pinned card")
         assertIsland(pinned("translateY(20px)"), "only centering a pinned card")
+        // The overlay centers an axis and ignores its offset, which matches HA only at 50%: at `top: 0`,
+        // `translate(-50%, -50%)` moves the card up by half its height in HA.
+        assertIsland(pinned("translate(-50%, -50%)"), "only centering a pinned card")
+        fun pinnedAt(offsets: String, transform: String) =
+            """{"type": "custom:mushroom-template-card", "card_mod": {"style": ${style("ha-card { position: fixed; $offsets; transform: $transform }")}}}"""
+        assertNative(pinnedAt("left: 50%; top: 50%", "translate(-50%, -50%)"))
+        assertNative(pinnedAt("right: 20px; top: 50%", "translateY(-50%)"))
+        assertIsland(pinnedAt("left: 20px; top: 50%", "translate(-50%, -50%)"), "only centering a pinned card")
+        // The offset that wins counts, `!important` included.
+        assertNative(pinnedAt("left: 50%; top: 0 !important; top: 50% !important; top: 10px", "translateY(-50%)"))
     }
 
     @Test
@@ -530,6 +546,14 @@ class CompatCheckerTest {
                     "filter": {"include": [{"domain": "light"}]}, "card_mod": {"style": $media}}""",
             ).route,
         )
+        // Top-level `entities:` entries become cards too: a string as a tile, an object as its own `type` (a tile by default).
+        fun autoWith(entities: String) = verdict(
+            """{"type": "custom:auto-entities", "card": {"type": "custom:layout-card"}, "card_param": "cards",
+                "entities": $entities, "filter": {"include": []}, "card_mod": {"style": $media}}""",
+        )
+        assertEquals(CardRoute.NATIVE, autoWith("""[{"entity": "light.a", "type": "tile"}]""").route)
+        assertEquals(CardRoute.NATIVE, autoWith("""["light.a"]""").route)
+        assertEquals(CardRoute.ISLAND, autoWith("""[{"entity": "light.a", "type": "custom:mushroom-light-card"}]""").route)
         // Custom cards all the way down: the island runs them all.
         assertIsland(
             """{"type": "custom:auto-entities", "card": {"type": "custom:layout-card"}, "card_param": "cards",

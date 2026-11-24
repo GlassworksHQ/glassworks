@@ -276,6 +276,21 @@ class CardModAndOverlayTest {
 
     // ---- VitroView: pinned overlay and visibility ----
 
+    @Test
+    fun theCenteringIdiomIsPlacedAtTheViewportCenter() {
+        // `left: 50%; top: 50%; transform: translate(-50%, -50%)` centers the card in HA, and the overlay centers it too.
+        val vv = VitroView(activity, EntityStore(), 0xFF000000.toInt())
+        val both = vv.pinnedLayoutParams(ThemeResolver.parseCardMod("ha-card { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%) }"))
+        assertEquals(Gravity.CENTER_HORIZONTAL or Gravity.CENTER_VERTICAL, both.gravity)
+        assertEquals(0, both.topMargin)
+        assertEquals(0, both.marginStart)
+        // One axis: `top: 50%` with translateY(-50%) centers vertically; the other axis keeps its offset.
+        val dp = activity.resources.displayMetrics.density
+        val side = vv.pinnedLayoutParams(ThemeResolver.parseCardMod("ha-card { position: fixed; right: 24px; top: 50%; transform: translateY(-50%) }"))
+        assertEquals(Gravity.END or Gravity.CENTER_VERTICAL, side.gravity)
+        assertEquals((24 * dp).toInt(), side.marginEnd)
+    }
+
     private fun vitroView(store: EntityStore, dashboard: String): VitroView {
         val vv = VitroView(activity, store, 0xFF000000.toInt())
         vv.contextFactory = { theme ->
