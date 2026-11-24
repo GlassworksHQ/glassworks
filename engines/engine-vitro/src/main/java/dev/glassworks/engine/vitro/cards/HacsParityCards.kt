@@ -138,6 +138,8 @@ abstract class MushroomShellCardView(ctx: VitroCardContext, protected val config
                 addView(shape, LinearLayout.LayoutParams(ctx.px(36f), ctx.px(36f)).apply { marginEnd = ctx.px(10f) })
             }
             addView(texts, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            // The state item keeps its own 10 px end padding inside its half (HA: a 129 px info box in a 400 px card).
+            if (horizontal) setPadding(0, 0, ctx.px(10f), 0)
         }
         val header = LinearLayout(ctx.context).apply {
             orientation = LinearLayout.HORIZONTAL
