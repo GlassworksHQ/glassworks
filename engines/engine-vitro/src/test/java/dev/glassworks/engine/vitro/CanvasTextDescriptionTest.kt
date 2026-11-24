@@ -32,10 +32,12 @@ import org.robolectric.annotation.Config
 class CanvasTextDescriptionTest {
     private val activity: Activity by lazy { Robolectric.buildActivity(Activity::class.java).setup().get() }
 
+    private val calls = ArrayList<String>()
+
     private fun context(store: EntityStore = EntityStore()) = VitroCardContext(
         context = activity, haBase = FakeHaServer.BASE, store = store,
         theme = ThemeResolver.resolve(ThemeCatalog(), true), resources = emptyList(),
-        accessToken = { FakeHaServer.TOKEN }, callService = { _, _, _, _ -> }, navigate = {}, openMoreInfo = {},
+        accessToken = { FakeHaServer.TOKEN }, callService = { d, sv, _, _ -> calls += "$d.$sv" }, navigate = {}, openMoreInfo = {},
         fetchHistory = { _, _, _ -> }, subscribeTemplate = { _, _ -> {} },
     )
 
@@ -88,5 +90,41 @@ class CanvasTextDescriptionTest {
         assertEquals(true, "Off" in described())
         // HA's light card spans the section.
         assertEquals(12, dev.glassworks.engine.vitro.ui.HaGridSize.of(LovelaceParser.parseCard(JSONObject("""{"type": "light", "entity": "light.desk"}"""))).columns)
+    }
+
+    @Test
+    fun theLightDialTogglesFromAClickToo() {
+        // TalkBack and a keyboard click the dial: it toggles the light, as a tap on its icon does.
+        val store = EntityStore()
+        store.putLocal(EntityState("light.desk", "on", mapOf("brightness" to 128, "supported_color_modes" to listOf("brightness"))))
+        val card = LightCardView(context(store), LovelaceParser.parseCard(JSONObject("""{"type": "light", "entity": "light.desk"}""")))
+        fun all(v: View): List<View> = listOf(v) + ((v as? ViewGroup)?.let { g -> (0 until g.childCount).flatMap { all(g.getChildAt(it)) } } ?: emptyList())
+        val dial = all(card).single { it.contentDescription?.toString() == "Brightness 50%" }
+        assertEquals(true, dial.isClickable)
+        dial.performClick()
+        assertEquals(1, calls.size)
+        assertEquals(true, calls.single().startsWith("light."))
+    }
+
+    @Test
+    fun anUnsubmittedAlarmCodeIsForgottenWhenTheCardIsHidden() {
+        val store = EntityStore()
+        store.putLocal(EntityState("alarm_control_panel.home", "disarmed", mapOf("code_format" to "number", "supported_features" to 3)))
+        val card = dev.glassworks.engine.vitro.cards.AlarmPanelCardView(
+            context(store), LovelaceParser.parseCard(JSONObject("""{"type": "alarm-panel", "entity": "alarm_control_panel.home"}""")),
+        )
+        val holder = android.widget.FrameLayout(activity).apply { addView(card) }
+        activity.setContentView(holder)
+        val onKey = card.javaClass.getDeclaredMethod("onKey", String::class.java).apply { isAccessible = true }
+        val code = card.javaClass.getDeclaredField("code").apply { isAccessible = true }.get(card) as StringBuilder
+        onKey.invoke(card, "1"); onKey.invoke(card, "2")
+        assertEquals("12", code.toString())
+        // A cached view hidden behind another hides the card through its ancestor.
+        holder.visibility = View.GONE
+        assertEquals("", code.toString())
+        holder.visibility = View.VISIBLE
+        onKey.invoke(card, "3")
+        (holder.parent as ViewGroup).removeView(holder)
+        assertEquals("", code.toString())
     }
 }

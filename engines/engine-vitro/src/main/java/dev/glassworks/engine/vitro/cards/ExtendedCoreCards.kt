@@ -420,10 +420,8 @@ internal class BrightnessDialView(
             MotionEvent.ACTION_UP -> {
                 when (touchMode) {
                     TOUCH_DRAG -> dragFraction?.let { onBrightness?.invoke((it * 100f).roundToInt()) }
-                    TOUCH_TOGGLE -> if (d <= r * 0.6f) {
-                        performClick()
-                        onToggle?.invoke()
-                    }
+                    // One path for a tap, a keyboard and TalkBack: performClick toggles.
+                    TOUCH_TOGGLE -> if (d <= r * 0.6f) performClick()
                 }
                 dragFraction = null
                 touchMode = TOUCH_NONE
@@ -439,8 +437,14 @@ internal class BrightnessDialView(
         return true
     }
 
+    init {
+        isClickable = true
+        isFocusable = true
+    }
+
     override fun performClick(): Boolean {
         super.performClick()
+        onToggle?.invoke()
         return true
     }
 
@@ -627,6 +631,30 @@ class AlarmPanelCardView(ctx: VitroCardContext, private val config: CardConfig) 
                 setMargins(ctx.px(4f), ctx.px(4f), ctx.px(4f), ctx.px(4f))
             })
         }
+    }
+
+    /** Forgets a code that wasn't submitted: on a shared panel the next person must not find it entered. */
+    private fun clearCode() {
+        if (code.isEmpty() && textCode.text.isNullOrEmpty()) return
+        code.setLength(0)
+        textCode.setText("")
+        renderCode()
+    }
+
+    // Called for this card and for any ancestor (a cached view hidden behind another): API 23 has no aggregate.
+    override fun onVisibilityChanged(changedView: View, visibility: Int) {
+        super.onVisibilityChanged(changedView, visibility)
+        if (visibility != VISIBLE) clearCode()
+    }
+
+    override fun onWindowVisibilityChanged(visibility: Int) {
+        super.onWindowVisibilityChanged(visibility)
+        if (visibility != VISIBLE) clearCode()
+    }
+
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        clearCode()
     }
 
     private fun run(action: String) {
