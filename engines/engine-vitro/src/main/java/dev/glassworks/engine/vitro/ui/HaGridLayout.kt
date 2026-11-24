@@ -7,6 +7,7 @@ package dev.glassworks.engine.vitro.ui
 import android.content.Context
 import android.view.View
 import android.view.ViewGroup
+import dev.glassworks.engine.vitro.model.AreaCardConfig
 import dev.glassworks.engine.vitro.model.CardConfig
 import kotlin.math.max
 import kotlin.math.min
@@ -209,7 +210,13 @@ data class HaGridSize(val columns: Int?, val rows: Int?) {
                     val inline = features > 0 && !vertical && raw.optString("features_position") == "inline"
                     HaGridSize(if (inline) 12 else 6, 1 + (if (inline) 0 else features) + if (vertical) 1 else 0)
                 }
-                "entity", "sensor", "area" -> HaGridSize(6, null)
+                "entity", "sensor" -> HaGridSize(6, null)
+                // hui-area-card's getGridOptions: 6 columns; one row for the tile, two more for the picture (not
+                // compact), one more for a vertical compact tile. Its features aren't drawn yet, so they add none.
+                "area" -> {
+                    val compact = AreaCardConfig.displayType(raw) == "compact"
+                    HaGridSize(6, 1 + (if (compact) 0 else 2) + (if (compact && raw.optBoolean("vertical", false)) 1 else 0))
+                }
                 // Measured in HA: the light card spans the section's width.
                 "light" -> HaGridSize(12, null)
                 // hui-button-card's getGridOptions: 6 columns, 2 rows.

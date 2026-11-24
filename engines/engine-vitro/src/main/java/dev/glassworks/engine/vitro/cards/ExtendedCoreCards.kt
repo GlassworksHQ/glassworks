@@ -33,12 +33,14 @@ import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.data.EntityStore
 import dev.glassworks.engine.vitro.data.HaDisplay
 import dev.glassworks.engine.vitro.model.ActionConfig
+import dev.glassworks.engine.vitro.model.AreaCardConfig
 import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.ui.CardSurface
 import dev.glassworks.engine.vitro.ui.MdiIconView
 import dev.glassworks.engine.vitro.ui.MdiIcons
 import dev.glassworks.engine.vitro.ui.VitroCardContext
 import dev.glassworks.engine.vitro.ui.bindHoldAction
+import dev.glassworks.engine.vitro.theme.ThemeResolver
 import dev.glassworks.ui.Inter
 import dev.glassworks.engine.vitro.ui.VitroFonts
 import org.json.JSONArray
@@ -1179,98 +1181,300 @@ internal class StatisticsChartView(context: Context, private val gridColor: Int,
 // ---------------------------------------------------------------------------------------------
 
 /**
- * Native HA `area` card, compact: a tinted header band with the area name and icon, then a live summary of the
- * entities the card names (`temperature_entity`, `humidity_entity`, `entity`, `entities`). Vitro has no area
- * registry, so `sensor_classes` / `alert_classes` only apply to those named entities.
+ * Native HA `area` card, as HA 2026's `hui-area-card` draws it. The default (`display_type: picture`) is a header
+ * that takes the card's spare height (16:9 outside a grid) over a tile row. The header shows the area's picture,
+ * the first camera of the area (`display_type: camera`), or else the area's icon, 48 px, on the tile color at 12%.
+ * The tile row is the area's icon (`mdi:texture-box` without one) and its name, with the `sensor_classes` line
+ * under it. `display_type: compact` keeps only the tile row (`vertical` stacks it). Active `alert_classes` sit as
+ * orange boxes over the header, or as a badge on the icon when compact. The area itself (name, icon, picture,
+ * temperature and humidity sensors) and its entities come from HA's registries ([HaDisplay]). `features` aren't
+ * drawn yet.
  */
 class AreaCardView(ctx: VitroCardContext, private val config: CardConfig) : CardSurface(ctx) {
-    private val summary = LinearLayout(ctx.context).apply {
+    private val raw = config.raw
+    private val areaId = raw.optString("area", "")
+    private val displayType = AreaCardConfig.displayType(raw)
+    private val vertical = displayType == "compact" && raw.optBoolean("vertical", false)
+    private val sensorClasses = strings(raw.optJSONArray("sensor_classes"))
+    private val alertClasses = strings(raw.optJSONArray("alert_classes"))
+    private val excluded = strings(raw.optJSONArray("exclude_entities")).toSet()
+    private val tileColor: Int = raw.optString("color", "").takeIf { it.isNotEmpty() }?.let { c ->
+        ThemeResolver.parseColor(ctx.theme.vars["$c-color"]) ?: MushroomColors.parse(c, ctx.theme)
+    } ?: ctx.theme.stateIconColor
+    private val ratio = PictureCardView.parseAspectRatio(raw.opt("aspect_ratio")?.toString())
+
+    private val header = FrameLayout(ctx.context)
+    private val headerIcon = MdiIconView(ctx.context)
+    private val picture = ImageView(ctx.context).apply { scaleType = ImageView.ScaleType.CENTER_CROP; visibility = GONE }
+    private val alerts = LinearLayout(ctx.context).apply {
         orientation = LinearLayout.HORIZONTAL
-        gravity = Gravity.CENTER_VERTICAL
+        setPadding(ctx.px(8f), ctx.px(8f), ctx.px(8f), ctx.px(8f))
     }
-    private val summaryIds: List<String> = summaryEntities(config.raw)
+    private val tileIcon = MdiIconView(ctx.context)
+    private val badge = FrameLayout(ctx.context).apply {
+        visibility = GONE
+        background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(ALERT_ORANGE) }
+    }
+    private val badgeIcon = MdiIconView(ctx.context)
+    private val nameView = extLabel(ctx, 14f, ctx.theme.primaryTextColor, Inter.MEDIUM)
+    private val secondaryView = extLabel(ctx, 12f, ctx.theme.primaryTextColor)
+
+    /** The area's entities the card reads (sensors, alerts, its camera), for the state changes it follows. */
+    private var watched: Set<String> = emptySet()
+    private var pictureUrl: String? = null
+
+    private val col = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
 
     init {
-        val col = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
-        val accent = ctx.theme.primaryColor
-        val radius = ctx.theme.cardBorderRadiusDp * ctx.dp
-        val band = LinearLayout(ctx.context).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(ctx.px(16f), ctx.px(14f), ctx.px(16f), ctx.px(14f))
-            background = GradientDrawable().apply {
-                cornerRadii = floatArrayOf(radius, radius, radius, radius, 0f, 0f, 0f, 0f)
-                setColor(CardSurface.withAlpha(accent, 0.14f))
+        if (displayType != "compact") {
+            header.setBackgroundColor(CardSurface.withAlpha(tileColor, 0.12f))
+            header.addView(picture, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT))
+            header.addView(headerIcon, FrameLayout.LayoutParams(ctx.px(48f), ctx.px(48f), Gravity.CENTER))
+            header.addView(alerts, FrameLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.TOP or Gravity.START))
+            col.addView(header, LinearLayout.LayoutParams(MATCH_PARENT, 0, 1f))
+        }
+        col.addView(tileRow(), LinearLayout.LayoutParams(MATCH_PARENT, if (displayType == "compact") 0 else WRAP_CONTENT,
+            if (displayType == "compact") 1f else 0f))
+        addView(col, LayoutParams(MATCH_PARENT, MATCH_PARENT))
+
+        // HA: `tap_action` defaults to none (`navigation_path` makes it navigate); the header has its own
+        // `image_tap_action` (more-info on the camera for display_type camera), else the card's.
+        val nav = raw.optString("navigation_path", "").ifEmpty { null }
+        val tap = when {
+            raw.has("tap_action") -> ActionConfig.parse(raw.optJSONObject("tap_action"), "none")
+            nav != null -> ActionConfig("navigate", navigationPath = nav)
+            else -> ActionConfig("none")
+        }
+        val imageTap = when {
+            raw.has("image_tap_action") -> ActionConfig.parse(raw.optJSONObject("image_tap_action"), "none")
+            displayType == "camera" -> ActionConfig("more-info")
+            else -> null
+        }
+        if (tap.action != "none") {
+            isClickable = true
+            setOnClickListener { ctx.performAction(tap, null) }
+            enablePressFeedback()
+        }
+        if (displayType != "compact" && (imageTap ?: tap).action != "none") {
+            header.isClickable = true
+            header.setOnClickListener {
+                if (imageTap != null && imageTap.action != "none") ctx.performAction(imageTap, cameraEntity()) else ctx.performAction(tap, null)
             }
         }
-        val icon = MdiIconView(ctx.context).apply { setIcon(config.icon ?: "mdi:sofa", accent) }
-        band.addView(icon, LinearLayout.LayoutParams(ctx.px(24f), ctx.px(24f)).apply { marginEnd = ctx.px(12f) })
-        band.addView(extLabel(ctx, 16f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
-            text = areaName(config)
-            maxLines = 1
-            ellipsize = TextUtils.TruncateAt.END
-        }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
-        col.addView(band, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-        summary.setPadding(ctx.px(16f), ctx.px(10f), ctx.px(16f), ctx.px(12f))
-        col.addView(summary, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-        addView(col, LayoutParams(MATCH_PARENT, WRAP_CONTENT))
 
-        val nav = config.raw.optString("navigation_path", "").ifEmpty { null }
-        val tap = when {
-            config.raw.has("tap_action") -> ActionConfig.parse(config.raw.optJSONObject("tap_action"), "more-info")
-            nav != null -> ActionConfig("navigate", navigationPath = nav)
-            else -> ActionConfig("more-info")
+        render()
+        // The area and its entities arrive with HA's registries: the store renotifies its listeners then.
+        observe(EntityStore.DISPLAY_KEY) { render() }
+        track(ctx.store.subscribeAny { changed -> if (changed.any { it in watched }) ctx.main.post { render() } })
+    }
+
+    override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+        if (displayType != "compact") {
+            // In a grid the header takes the height the row leaves; elsewhere it keeps the aspect ratio (16:9).
+            val lp = header.layoutParams as LinearLayout.LayoutParams
+            val grid = MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY
+            val h = if (grid) 0 else (MeasureSpec.getSize(widthMeasureSpec) / ratio).roundToInt()
+            val w = if (grid) 1f else 0f
+            if (lp.height != h || lp.weight != w) { lp.height = h; lp.weight = w }
+            // In a grid HA's header and 56 px tile row fill the card's whole height, border included (the row runs
+            // over the bottom border): the header is the border's width taller than the inside would leave.
+            val over = if (grid) -2 * drawnBorderPx else 0
+            val colLp = col.layoutParams as LayoutParams
+            if (colLp.bottomMargin != over) colLp.bottomMargin = over
+            clipToPadding = !grid
         }
-        val first = summaryIds.firstOrNull()
-        isClickable = true
-        setOnClickListener { ctx.performAction(tap, first) }
-        enablePressFeedback()
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+    }
 
-        if (summaryIds.isEmpty()) {
-            summary.visibility = GONE
+    /** ha-tile-container: a 36 px icon 10 px in, the name 14 px / 500 and the sensors line, 56 px tall. */
+    private fun tileRow(): LinearLayout {
+        val pad = ctx.px(10f)
+        val row = LinearLayout(ctx.context).apply {
+            orientation = if (vertical) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+            gravity = if (vertical) Gravity.CENTER else Gravity.CENTER_VERTICAL
+            if (vertical) setPadding(pad, pad, pad, pad) else setPadding(pad, 0, pad, 0)
+            minimumHeight = ctx.px(56f)
+            clipChildren = false
+            clipToPadding = false
+        }
+        val iconPad = ctx.px(6f)
+        val iconFrame = FrameLayout(ctx.context).apply {
+            clipChildren = false
+            clipToPadding = false
+            addView(tileIcon, LayoutParams(MATCH_PARENT, MATCH_PARENT).apply { setMargins(iconPad, iconPad, iconPad, iconPad) })
+            badge.addView(badgeIcon, LayoutParams(ctx.px(12f), ctx.px(12f), Gravity.CENTER))
+            addView(badge, LayoutParams(ctx.px(16f), ctx.px(16f), Gravity.TOP or Gravity.END).apply {
+                topMargin = -ctx.px(3f); rightMargin = -ctx.px(3f)
+            })
+        }
+        row.addView(iconFrame, LinearLayout.LayoutParams(ctx.px(36f), ctx.px(36f)).apply {
+            if (vertical) bottomMargin = ctx.px(8f) else marginEnd = ctx.px(10f)
+        })
+        val info = LinearLayout(ctx.context).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = if (vertical) Gravity.CENTER_HORIZONTAL else Gravity.START
+            for (t in listOf(nameView, secondaryView)) {
+                t.maxLines = 1
+                t.ellipsize = TextUtils.TruncateAt.END
+                t.gravity = Gravity.CENTER_VERTICAL or (if (vertical) Gravity.CENTER_HORIZONTAL else Gravity.START)
+            }
+            nameView.letterSpacing = 0.1f / 14f
+            secondaryView.letterSpacing = 0.4f / 12f
+            val w = if (vertical) WRAP_CONTENT else MATCH_PARENT
+            addView(nameView, LinearLayout.LayoutParams(w, (22.4f * ctx.dp).roundToInt()))
+            addView(secondaryView, LinearLayout.LayoutParams(w, (14.4f * ctx.dp).roundToInt()))
+        }
+        row.addView(info, LinearLayout.LayoutParams(if (vertical) WRAP_CONTENT else 0, WRAP_CONTENT, if (vertical) 0f else 1f))
+        return row
+    }
+
+    private fun render() {
+        val area = HaDisplay.areas[areaId]
+        nameView.text = config.name ?: area?.name ?: areaName(config)
+        val icon = area?.icon
+        tileIcon.setIcon(icon ?: "mdi:texture-box", tileColor)
+        headerIcon.visibility = if (icon != null) VISIBLE else GONE
+        icon?.let { headerIcon.setIcon(it, tileColor) }
+
+        val members = if (area != null) HaDisplay.areaEntityIds(areaId).filter { it !in excluded } else emptyList()
+        val sensors = sensorLine(area, members)
+        secondaryView.text = sensors
+        secondaryView.visibility = if (sensors.isEmpty()) GONE else VISIBLE
+        val active = activeAlerts(members)
+        if (displayType == "compact") {
+            badge.visibility = if (active.isEmpty()) GONE else VISIBLE
+            active.firstOrNull()?.let { badgeIcon.setIcon(MdiIcons.resolveIconName(null, it), Color.WHITE) }
         } else {
-            summaryIds.forEach { eid -> observe(eid) { renderSummary() } }
+            renderAlerts(active)
+        }
+        val camera = cameraEntity()
+        watched = (members + listOfNotNull(area?.temperatureEntityId, area?.humidityEntityId)).toSet()
+        if (displayType != "compact") showPicture(camera?.let { ctx.store[it]?.entityPicture } ?: area?.picture)
+        contentDescription = listOf(nameView.text, sensors).filter { it.isNotEmpty() }.joinToString(", ")
+    }
+
+    private fun renderAlerts(active: List<EntityState>) {
+        alerts.removeAllViews()
+        for ((i, s) in active.withIndex()) {
+            val box = FrameLayout(ctx.context).apply {
+                background = GradientDrawable().apply { cornerRadius = ctx.px(12f).toFloat(); setColor(ALERT_ORANGE) }
+                addView(MdiIconView(ctx.context).apply { setIcon(MdiIcons.resolveIconName(null, s), Color.WHITE) },
+                    LayoutParams(ctx.px(16f), ctx.px(16f), Gravity.CENTER))
+            }
+            alerts.addView(box, LinearLayout.LayoutParams(ctx.px(24f), ctx.px(24f)).apply { if (i > 0) marginStart = ctx.px(8f) })
         }
     }
 
-    private fun renderSummary() {
-        summary.removeAllViews()
-        for (eid in summaryIds) {
-            val s = ctx.store[eid] ?: continue
-            val chip = LinearLayout(ctx.context).apply {
-                orientation = LinearLayout.HORIZONTAL
-                gravity = Gravity.CENTER_VERTICAL
+    private fun showPicture(url: String?) {
+        if (url == pictureUrl) return
+        pictureUrl = url
+        if (url == null) {
+            picture.setImageDrawable(null)
+            picture.visibility = GONE
+            header.setBackgroundColor(CardSurface.withAlpha(tileColor, 0.12f))
+            return
+        }
+        ctx.loadImage(url, this) { bmp ->
+            if (bmp != null && pictureUrl == url) {
+                picture.setImageBitmap(bmp)
+                picture.visibility = VISIBLE
+                headerIcon.visibility = GONE
+                header.background = null
             }
-            chip.addView(MdiIconView(ctx.context).apply { setIcon(MdiIcons.resolveIconName(null, s), iconColorFor(ctx, s)) },
-                LinearLayout.LayoutParams(ctx.px(16f), ctx.px(16f)).apply { marginEnd = ctx.px(4f) })
-            chip.addView(extLabel(ctx, 13f, ctx.theme.secondaryTextColor, Inter.MEDIUM).apply { text = s.formattedState() })
-            summary.addView(chip, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginEnd = ctx.px(14f) })
+        }
+    }
+
+    /** The area's first camera, for `display_type: camera`. */
+    private fun cameraEntity(): String? =
+        if (displayType != "camera" || HaDisplay.areas[areaId] == null) null
+        else HaDisplay.areaEntityIds(areaId).firstOrNull { it.startsWith("camera.") && ctx.store[it] != null }
+
+    /** The `sensor_classes` line: per class, the area's temperature/humidity sensor, else the median (or sum). */
+    private fun sensorLine(area: HaDisplay.Area?, members: List<String>): String {
+        if (area == null || sensorClasses.isEmpty()) return ""
+        return sensorClasses.mapNotNull { cls -> sensorValue(cls, area, members) }.filter { it.isNotEmpty() }.joinToString(" · ")
+    }
+
+    private fun sensorValue(cls: String, area: HaDisplay.Area, members: List<String>): String? {
+        val own = when (cls) { "temperature" -> area.temperatureEntityId; "humidity" -> area.humidityEntityId; else -> null }
+        if (own != null) {
+            val s = ctx.store[own] ?: return ""
+            return if (s.isUnavailable) "" else s.formattedState()
+        }
+        val values = ArrayList<Double>()
+        var unit: String? = null
+        val devicesWithValues = HashSet<String>()
+        for (id in members) {
+            if (!id.startsWith("sensor.")) continue
+            val s = ctx.store[id] ?: continue
+            if (s.deviceClass != cls || s.isUnavailable) continue
+            val v = s.state.toDoubleOrNull()?.takeIf { it.isFinite() } ?: continue
+            if (unit == null) unit = s.unit
+            if (s.unit == unit) {
+                values += v
+                HaDisplay.registry[id]?.deviceId?.let { devicesWithValues += it }
+            }
+        }
+        // HA also reads climate (and humidifier) entities' current temperature / humidity, once per device.
+        val attr = ATTRIBUTE_SOURCES[cls]
+        if (attr != null) {
+            for (id in members) {
+                val dom = id.substringBefore('.')
+                val attribute = attr[dom] ?: continue
+                if (HaDisplay.registry[id]?.deviceId?.let { it in devicesWithValues } == true) continue
+                val v = (ctx.store[id]?.attributes?.get(attribute) as? Number)?.toDouble()
+                    ?: (ctx.store[id]?.attributes?.get(attribute) as? String)?.toDoubleOrNull() ?: continue
+                if (unit == null) unit = if (cls == "temperature") ThermostatCardView.temperatureUnit(ctx) else "%"
+                values += v
+            }
+        }
+        if (values.isEmpty()) return null
+        val value = if (cls in SUM_CLASSES) values.sum() else median(values)
+        return formatWithUnit(value, unit)
+    }
+
+    /** Per `alert_classes` entry, the first of the area's binary sensors of that class that is on. */
+    private fun activeAlerts(members: List<String>): List<EntityState> {
+        if (alertClasses.isEmpty()) return emptyList()
+        return alertClasses.mapNotNull { cls ->
+            members.asSequence().filter { it.startsWith("binary_sensor.") }.mapNotNull { ctx.store[it] }
+                .firstOrNull { it.deviceClass == cls && it.state == "on" }
         }
     }
 
     companion object {
-        /** The card's `name`, else the area id in words (`living_room` → `Living room`). */
+        private val ALERT_ORANGE = 0xFFFF9800.toInt()
+        private val SUM_CLASSES = setOf("power", "apparent_power", "reactive_power", "energy", "reactive_energy",
+            "current", "gas", "monetary", "volume", "water")
+        private val ATTRIBUTE_SOURCES = mapOf(
+            "temperature" to mapOf("climate" to "current_temperature"),
+            "humidity" to mapOf("climate" to "current_humidity", "humidifier" to "current_humidity"),
+        )
+
+        /** The card's `name`, else the area id in words (`living_room` → `Living room`), until HA's registry is in. */
         fun areaName(config: CardConfig): String =
             config.name ?: config.raw.optString("area", "").ifEmpty { "Area" }
                 .replace('_', ' ').replaceFirstChar { it.titlecase(Locale.ROOT) }
 
-        /** Entity ids an area card names directly, in display order. */
-        fun summaryEntities(raw: JSONObject): List<String> {
-            val out = LinkedHashSet<String>()
-            for (key in listOf("temperature_entity", "humidity_entity", "entity")) {
-                raw.optString(key, "").takeIf { it.contains('.') }?.let { out += it }
-            }
-            val arr = raw.optJSONArray("entities")
-            if (arr != null) {
-                for (i in 0 until arr.length()) {
-                    when (val item = arr.opt(i)) {
-                        is String -> if (item.contains('.')) out += item
-                        is JSONObject -> item.optString("entity", "").takeIf { it.contains('.') }?.let { out += it }
-                    }
-                }
-            }
-            return out.toList()
+        internal fun median(values: List<Double>): Double {
+            val s = values.sorted()
+            return if (s.size % 2 == 0) (s[s.size / 2] + s[s.size / 2 - 1]) / 2 else s[s.size / 2]
         }
+
+        /** HA's `formatNumberWithUnit` (en, at most one decimal): no space before `%` or `°`. */
+        internal fun formatWithUnit(value: Double, unit: String?): String {
+            // Intl's halfExpand on the number's exact value: 0.25 → 0.3, 21.45 (21.4499…) → 21.4.
+            val n = java.text.DecimalFormat("#,##0.#", java.text.DecimalFormatSymbols(Locale.US))
+                .apply { roundingMode = java.math.RoundingMode.HALF_UP }.format(value)
+            return when {
+                unit.isNullOrEmpty() -> n
+                unit == "%" || unit == "°" -> n + unit
+                else -> "$n $unit"
+            }
+        }
+
+        private fun strings(arr: JSONArray?): List<String> =
+            if (arr == null) emptyList() else (0 until arr.length()).mapNotNull { arr.optString(it).ifEmpty { null } }
     }
 }
 

@@ -829,6 +829,8 @@ class MdiIconView(context: Context) : View(context) {
     private val matrix = Matrix()
     private var iconPath: Path = MdiIcons.pathFor("home")
     private var iconName = "home"
+    /** The icon's name as given to [setIcon] (`mdi:` prefix and all). */
+    val icon: String get() = iconName
 
     var tintColor: Int = 0xFFFFFFFF.toInt()
         set(v) { if (field != v) { field = v; paint.color = v; invalidate() } }

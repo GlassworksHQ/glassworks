@@ -232,6 +232,7 @@ class EntityStore {
 
     /** Calls every listener again with its entity's current state (HA's display data arrived: re-render). */
     fun renotifyAll() {
+        // Listeners of [DISPLAY_KEY] (no entity has that id) hear only this: a card that reads HA's registries alone.
         for ((id, list) in listeners) {
             val st = states[id]
             list.forEach { it(st) }
@@ -375,6 +376,12 @@ class EntityStore {
     }
 
     companion object {
+        /**
+         * Not an entity id (no dot): [subscribe] to it to hear when HA's display data (registries, icons, labels)
+         * lands, through [renotifyAll]. For cards that read the registries but follow no entity, like the area card.
+         */
+        const val DISPLAY_KEY = "vitro:display"
+
         private val ISO = Regex("""^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})(?:\.(\d+))?\s*(Z|[+-]\d{2}(?::?\d{2})?)?$""")
         private val isoFormat = object : ThreadLocal<java.text.SimpleDateFormat>() {
             override fun initialValue() = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).apply {

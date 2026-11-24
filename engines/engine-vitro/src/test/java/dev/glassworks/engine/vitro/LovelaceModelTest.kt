@@ -18,6 +18,7 @@ import dev.glassworks.engine.vitro.cards.TodoListCardView
 import dev.glassworks.engine.vitro.cards.WebIslandCardView
 import dev.glassworks.engine.vitro.data.EntityState
 import dev.glassworks.engine.vitro.model.ActionConfig
+import dev.glassworks.engine.vitro.model.AreaCardConfig
 import dev.glassworks.engine.vitro.model.CardConfig
 import dev.glassworks.engine.vitro.model.CardRouter
 import dev.glassworks.engine.vitro.model.CardTier
@@ -714,13 +715,25 @@ class LovelaceModelTest {
     }
 
     @Test
-    fun areaCardNamesAndSummaryEntities() {
+    fun areaCardNamesDisplayTypesAndSensorFormat() {
         assertEquals("Living room", AreaCardView.areaName(card("""{"type": "area", "area": "living_room"}""")))
         assertEquals("Den", AreaCardView.areaName(card("""{"type": "area", "area": "x", "name": "Den"}""")))
-        assertEquals(
-            listOf("sensor.t", "sensor.h", "light.a"),
-            AreaCardView.summaryEntities(JSONObject("""{"temperature_entity": "sensor.t", "humidity_entity": "sensor.h", "entities": ["light.a", "sensor.t"]}""")),
-        )
+        // HA's setConfig: display_type, else camera for the old show_camera, else picture.
+        assertEquals("picture", AreaCardConfig.displayType(JSONObject("""{"area": "x"}""")))
+        assertEquals("camera", AreaCardConfig.displayType(JSONObject("""{"area": "x", "show_camera": true}""")))
+        assertEquals("compact", AreaCardConfig.displayType(JSONObject("""{"area": "x", "display_type": "compact", "show_camera": true}""")))
+        // Only sensors, alerts or a camera need the area's entities (and so every entity of the view).
+        assertFalse(AreaCardConfig.readsAreaEntities(JSONObject("""{"area": "x"}""")))
+        assertTrue(AreaCardConfig.readsAreaEntities(JSONObject("""{"area": "x", "sensor_classes": ["temperature"]}""")))
+        assertTrue(AreaCardConfig.readsAreaEntities(JSONObject("""{"area": "x", "alert_classes": ["moisture"]}""")))
+        assertFalse(CardRouter.followsAllEntities(view("""{"cards": [{"type": "area", "area": "x"}]}""")))
+        assertTrue(CardRouter.followsAllEntities(view("""{"cards": [{"type": "area", "area": "x", "show_camera": true}]}""")))
+        // formatNumberWithUnit (en, one decimal at most): no space before % or °.
+        assertEquals("21.5 °C", AreaCardView.formatWithUnit(21.46, "°C"))
+        assertEquals("0.3 kWh", AreaCardView.formatWithUnit(0.25, "kWh"))
+        assertEquals("48%", AreaCardView.formatWithUnit(48.0, "%"))
+        assertEquals("1,250 W", AreaCardView.formatWithUnit(1250.0, "W"))
+        assertEquals(20.5, AreaCardView.median(listOf(22.0, 19.0, 21.0, 20.0)), 0.0)
     }
 
     @Test

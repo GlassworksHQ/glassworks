@@ -591,7 +591,9 @@ object CardRouter {
      * every entity rather than only the ones [referencedEntities] names.
      */
     fun followsAllEntities(view: ViewConfig): Boolean {
+        // An area card's sensors, alerts and camera are its area's entities, known only from HA's registries.
         fun walk(c: CardConfig): Boolean = c.type in FOLLOWS_ALL_TYPES || c.childCards.any(::walk) ||
+            (c.type == "area" && AreaCardConfig.readsAreaEntities(c.raw)) ||
             (c.type.startsWith("custom:") && c.raw.optJSONObject("card")?.optString("type") in FOLLOWS_ALL_TYPES)
         return view.sections.any { s -> s.cards.any(::walk) } || view.cards.any(::walk)
     }
@@ -790,4 +792,16 @@ object LovelaceParser {
         "logbook", "history", "energy", "map", "media-browser", "calendar",
         "todo", "api", "static", "frontend_latest", "local", "hacsfiles",
     )
+}
+
+/** What HA's area card config means, for the card and for the entity subscription. */
+object AreaCardConfig {
+    /** `display_type`, else `camera` for the old `show_camera`, else `picture`. */
+    fun displayType(raw: JSONObject): String =
+        raw.optString("display_type", "").ifEmpty { if (raw.optBoolean("show_camera", false)) "camera" else "picture" }
+
+    /** True when the card reads its area's entities (sensors, alerts, its camera), not only HA's registries. */
+    fun readsAreaEntities(raw: JSONObject): Boolean =
+        (raw.optJSONArray("sensor_classes")?.length() ?: 0) > 0 || (raw.optJSONArray("alert_classes")?.length() ?: 0) > 0 ||
+            displayType(raw) == "camera"
 }
