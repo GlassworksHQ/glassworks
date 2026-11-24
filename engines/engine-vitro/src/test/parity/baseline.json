@@ -92,21 +92,21 @@
   "reason": "off: Vitro shows \"Off\" small with a dash and adds +/- and mode buttons; HA shows a large \"Off\" and no controls, so Vitro is ~38 px taller"
  },
  "mirror/tile-cover": {
-  "pixel": 0.0521,
+  "pixel": 0.0328,
   "bounds": 0,
   "font": 0,
   "missingText": 0,
   "reason": "not triaged yet (#794)"
  },
  "mirror/tile-fan": {
-  "pixel": 0.1511,
+  "pixel": 0.0671,
   "bounds": 0,
   "font": 0,
-  "missingText": 1,
+  "missingText": 0,
   "reason": "not triaged yet (#794)"
  },
  "mirror/tile-light": {
-  "pixel": 0.1693,
+  "pixel": 0.0912,
   "bounds": 0,
   "font": 0,
   "missingText": 0,
@@ -120,7 +120,7 @@
   "reason": "not triaged yet (#794)"
  },
  "mirror/tile-number": {
-  "pixel": 0.0461,
+  "pixel": 0.0239,
   "bounds": 0,
   "font": 0,
   "missingText": 0,
@@ -131,7 +131,7 @@
   "bounds": 0,
   "font": 0,
   "missingText": 1,
-  "reason": "numbers from before the YIQ threshold fix, kept on purpose: exp/vitro capitalizes the option (\"Open\", HA shows \"open\"), a regression being fixed there. Re-base this entry after that fix (--cases tile-select --update-baseline)"
+  "reason": "open regression, kept out of the baseline on purpose: the option's capitalization is fixed on exp/vitro (60cae9997), but the select's value renders at 13.3 px where HA uses 14 px (and its pill sits a little higher), font Δ0.7 against this entry's 0. Re-base this entry once that is fixed (--cases tile-select --update-baseline)"
  },
  "mirror/tile-sensor": {
   "pixel": 0.0207,
@@ -141,11 +141,11 @@
   "reason": "not triaged yet (#794)"
  },
  "mirror/tile-toggle": {
-  "pixel": 0.1703,
+  "pixel": 0.0782,
   "bounds": 0,
   "font": 0,
   "missingText": 0,
-  "reason": "vertical tile: Vitro shows \"…\" for the name, and an Off/On segmented control instead of HA's toggle switch feature"
+  "reason": "vertical tile: same name, state and toggle switch as HA, but the feature sits about 20 px higher and the name a little lower (spacing)"
  },
  "mirror/vertical-stack": {
   "pixel": 0.0153,
@@ -246,21 +246,21 @@
   "reason": "off: Vitro shows \"Off\" small with a dash and adds +/- and mode buttons; HA shows a large \"Off\" and no controls, so Vitro is ~38 px taller"
  },
  "s1/tile-cover": {
-  "pixel": 0.0521,
+  "pixel": 0.0328,
   "bounds": 0,
   "font": 0,
   "missingText": 0,
   "reason": "not triaged yet (#794)"
  },
  "s1/tile-fan": {
-  "pixel": 0.1511,
+  "pixel": 0.0671,
   "bounds": 0,
   "font": 0,
-  "missingText": 1,
+  "missingText": 0,
   "reason": "not triaged yet (#794)"
  },
  "s1/tile-light": {
-  "pixel": 0.1693,
+  "pixel": 0.0912,
   "bounds": 0,
   "font": 0,
   "missingText": 0,
@@ -274,7 +274,7 @@
   "reason": "not triaged yet (#794)"
  },
  "s1/tile-number": {
-  "pixel": 0.0461,
+  "pixel": 0.0239,
   "bounds": 0,
   "font": 0,
   "missingText": 0,
@@ -285,7 +285,7 @@
   "bounds": 0,
   "font": 0,
   "missingText": 1,
-  "reason": "numbers from before the YIQ threshold fix, kept on purpose: exp/vitro capitalizes the option (\"Open\", HA shows \"open\"), a regression being fixed there. Re-base this entry after that fix (--cases tile-select --update-baseline)"
+  "reason": "open regression, kept out of the baseline on purpose: the option's capitalization is fixed on exp/vitro (60cae9997), but the select's value renders at 13.3 px where HA uses 14 px (and its pill sits a little higher), font Δ0.7 against this entry's 0. Re-base this entry once that is fixed (--cases tile-select --update-baseline)"
  },
  "s1/tile-sensor": {
   "pixel": 0.0201,
@@ -295,11 +295,11 @@
   "reason": "not triaged yet (#794)"
  },
  "s1/tile-toggle": {
-  "pixel": 0.1703,
+  "pixel": 0.0782,
   "bounds": 0,
   "font": 0,
   "missingText": 0,
-  "reason": "vertical tile: Vitro shows \"…\" for the name, and an Off/On segmented control instead of HA's toggle switch feature"
+  "reason": "vertical tile: same name, state and toggle switch as HA, but the feature sits about 20 px higher and the name a little lower (spacing)"
  },
  "s1/vertical-stack": {
   "pixel": 0.0153,
@@ -386,21 +386,21 @@
   "reason": "off: Vitro shows \"Off\" small with a dash and adds +/- and mode buttons; HA shows a large \"Off\" and no controls, so Vitro is ~38 px taller"
  },
  "tablet/tile-cover": {
-  "pixel": 0.0476,
+  "pixel": 0.0275,
   "bounds": 0,
   "font": 0,
   "missingText": 0,
   "reason": "not triaged yet (#794)"
  },
  "tablet/tile-fan": {
-  "pixel": 0.1616,
+  "pixel": 0.0646,
   "bounds": 0,
   "font": 0,
-  "missingText": 1,
+  "missingText": 0,
   "reason": "not triaged yet (#794)"
  },
  "tablet/tile-light": {
-  "pixel": 0.1747,
+  "pixel": 0.0859,
   "bounds": 0,
   "font": 0,
   "missingText": 0,
@@ -414,7 +414,7 @@
   "reason": "not triaged yet (#794)"
  },
  "tablet/tile-number": {
-  "pixel": 0.0408,
+  "pixel": 0.0211,
   "bounds": 0,
   "font": 0,
   "missingText": 0,
@@ -425,7 +425,7 @@
   "bounds": 0,
   "font": 0,
   "missingText": 1,
-  "reason": "numbers from before the YIQ threshold fix, kept on purpose: exp/vitro capitalizes the option (\"Open\", HA shows \"open\"), a regression being fixed there. Re-base this entry after that fix (--cases tile-select --update-baseline)"
+  "reason": "open regression, kept out of the baseline on purpose: the option's capitalization is fixed on exp/vitro (60cae9997), but the select's value renders at 13.3 px where HA uses 14 px (and its pill sits a little higher), font Δ0.7 against this entry's 0. Re-base this entry once that is fixed (--cases tile-select --update-baseline)"
  },
  "tablet/tile-sensor": {
   "pixel": 0.0208,
@@ -435,11 +435,11 @@
   "reason": "not triaged yet (#794)"
  },
  "tablet/tile-toggle": {
-  "pixel": 0.1668,
+  "pixel": 0.0794,
   "bounds": 0,
   "font": 0,
   "missingText": 0,
-  "reason": "vertical tile: Vitro shows \"…\" for the name, and an Off/On segmented control instead of HA's toggle switch feature"
+  "reason": "vertical tile: same name, state and toggle switch as HA, but the feature sits about 20 px higher and the name a little lower (spacing)"
  },
  "tablet/vertical-stack": {
   "pixel": 0.0168,
