@@ -171,7 +171,8 @@ class ParityBaseline(private val file: File) {
                 .put("reason", entry(r.key)?.optString("reason")?.takeIf { it.isNotBlank() } ?: "not triaged yet (#794)")
         }
         entries.forEach { (k, v) -> out.put(k, v) }
-        file.writeText(out.toString(1) + "\n")
+        // org.json escapes "/" as "\/" (valid either way): plain slashes keep the keys readable and diffs small.
+        file.writeText(out.toString(1).replace("\\/", "/") + "\n")
     }
 
     companion object {
