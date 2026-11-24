@@ -1,0 +1,4 @@
+{
+  "title": "Mushroom entity card: a light, default horizontal layout",
+  "card": { "type": "custom:mushroom-entity-card", "entity": "light.window_accent" }
+}
