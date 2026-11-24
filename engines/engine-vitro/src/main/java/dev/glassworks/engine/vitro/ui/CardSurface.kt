@@ -318,6 +318,12 @@ class VitroCardContext(
 open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.context) {
     private val subscriptions = ArrayList<() -> Unit>()
 
+    /** The shadow the card has without a card_mod `box-shadow`: the theme's, or none once it shares a surface. */
+    private var baselineElevationDp = 0f
+
+    /** True once the card shares a parent's surface (stack-in-card): no shadow of its own, even from card_mod. */
+    private var shadowless = false
+
     // The padding cards and card_mod set (CSS padding), and the border drawn around it: like `ha-card`'s
     // `border: 1px solid`, the content sits inside the border, so a card's height is its content plus both borders.
     // Read before the constructor finishes (View may set padding), hence nullable.
@@ -377,7 +383,8 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
             setBorderInset(0)
         }
         theme.cardMod.opacity?.let { alpha = it }
-        elevation = theme.cardElevationDp * ctx.dp
+        baselineElevationDp = theme.cardElevationDp
+        elevation = baselineElevationDp * ctx.dp
     }
 
     /**
@@ -390,6 +397,8 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
     /** Drops the card's background, border and shadow so it shares a parent card's surface (stack-in-card). */
     fun makeSeamless(keepBackground: Boolean = false, keepRadius: Boolean = false) {
         seamless = !keepBackground
+        shadowless = true
+        baselineElevationDp = 0f
         elevation = 0f
         if (!keepBackground) {
             background = null
@@ -516,6 +525,8 @@ open class CardSurface(protected val ctx: VitroCardContext) : FrameLayout(ctx.co
             // The template dropped its `opacity`: back to the theme's card opacity, or opaque.
             previous.opacity != null -> alpha = ctx.theme.cardMod.opacity?.coerceIn(0f, 1f) ?: 1f
         }
+        // A templated style re-renders here: when it stops setting `box-shadow`, the theme's shadow comes back.
+        if (!shadowless) elevation = (mod.elevationDp ?: baselineElevationDp) * ctx.dp
         onCardModApplied(mod)
     }
 

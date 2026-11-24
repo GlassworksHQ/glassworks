@@ -307,8 +307,9 @@ class VitroEngine(
                 return
             }
 
-            // New HA origin: start (or restart) the native WebSocket data plane.
+            // New HA origin: start (or restart) the native WebSocket data plane, and drop the old server's views.
             if (origin != currentOrigin) {
+                if (currentOrigin != null) vitroView.resetForServer()
                 // Nothing of the previous Home Assistant carries over: not its token, entity states or images. Its
                 // client closes first: once close() returns it writes nothing more, so the clear below sticks.
                 client?.close()

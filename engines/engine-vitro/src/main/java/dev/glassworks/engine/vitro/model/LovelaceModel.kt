@@ -4,6 +4,11 @@
 
 package dev.glassworks.engine.vitro.model
 
+import dev.glassworks.engine.vitro.compat.CardCompat
+import dev.glassworks.engine.vitro.compat.CardRoute
+import dev.glassworks.engine.vitro.compat.CardVerdict
+import dev.glassworks.engine.vitro.compat.IslandScripts
+import dev.glassworks.engine.vitro.compat.VitroSupport
 import dev.glassworks.engine.vitro.data.EntityState
 import org.json.JSONArray
 import org.json.JSONObject
@@ -407,6 +412,12 @@ data class CardConfig(
     val name: String? get() = raw.optString("name", "").ifEmpty { null }
     val icon: String? get() = raw.optString("icon", "").ifEmpty { null }
 
+    /**
+     * Whether Vitro draws this card natively or sends it to a web island, and why ([CardCompat]). Decided once,
+     * the first time it's asked after the dashboard is parsed, and never per frame.
+     */
+    val compat: CardVerdict by lazy { CardCompat.check(this) }
+
     fun entities(): List<EntityRowConfig> {
         val arr = raw.optJSONArray("entities") ?: return emptyList()
         val out = ArrayList<EntityRowConfig>(arr.length())
@@ -444,71 +455,14 @@ data class CardConfig(
 
 /** Classifies cards into Native Core, Native HACS Fast-Paths, or Micro-Web Islands. */
 object CardRouter {
-    val NATIVE_CORE_TYPES = setOf(
-        "tile",
-        "entities",
-        "glance",
-        "button",
-        "heading",
-        "clock",
-        "sensor",
-        "history-graph",
-        "gauge",
-        "thermostat",
-        "weather-forecast",
-        "markdown",
-        "picture",
-        "picture-entity",
-        "picture-glance",
-        "media-control",
-        "grid",
-        "horizontal-stack",
-        "vertical-stack",
-        "conditional",
-        "entity-filter",
-        "entity",
-        "light",
-        "alarm-panel",
-        "todo-list",
-        "statistics-graph",
-        "area",
-        "picture-elements",
-        "humidifier",
-        "calendar",
-        "logbook",
-    )
+    /** Built-in cards with a native renderer; defined in [VitroSupport.CORE_CARD_TYPES]. */
+    val NATIVE_CORE_TYPES: Set<String> get() = VitroSupport.CORE_CARD_TYPES
 
     /** Keys besides `entity` / `entities` where core cards name an entity id. */
     private val EXTRA_ENTITY_KEYS = listOf("temperature_entity", "humidity_entity", "camera_image")
 
-    val NATIVE_HACS_TYPES = setOf(
-        "custom:mushroom-entity-card",
-        "custom:mushroom-light-card",
-        "custom:mushroom-title-card",
-        "custom:mushroom-chips-card",
-        "custom:mushroom-template-card",
-        "custom:mushroom-climate-card",
-        "custom:mushroom-fan-card",
-        "custom:mushroom-cover-card",
-        "custom:mushroom-person-card",
-        "custom:bubble-card",
-        "custom:mini-graph-card",
-        "custom:clock-weather-card",
-        "custom:modern-circular-gauge",
-        "custom:bar-card",
-        "custom:mushroom-media-player-card",
-        "custom:mushroom-lock-card",
-        "custom:mushroom-alarm-control-panel-card",
-        "custom:mushroom-vacuum-card",
-        "custom:mushroom-humidifier-card",
-        "custom:mushroom-number-card",
-        "custom:mushroom-select-card",
-        "custom:mini-media-player",
-        "custom:auto-entities",
-        "custom:stack-in-card",
-        "custom:vertical-stack-in-card",
-        "custom:layout-card",
-    )
+    /** HACS cards with a native fast path; defined in [VitroSupport.HACS_CARD_TYPES]. */
+    val NATIVE_HACS_TYPES: Set<String> get() = VitroSupport.HACS_CARD_TYPES
 
     /**
      * Cards that only lay out the cards in their `cards:` list. [tierCounts] counts what is inside them, not the
@@ -522,30 +476,107 @@ object CardRouter {
     /** Cards that pick their entities at runtime from the whole state machine (`auto-entities` filters). */
     private val FOLLOWS_ALL_TYPES = setOf("custom:auto-entities")
 
-    fun tier(card: CardConfig): CardTier = when {
+    /**
+     * The card's tier. A card of a native type still goes to an island when something in its config is outside
+     * [VitroSupport] ([CardConfig.compat]).
+     */
+    fun tier(card: CardConfig, scripts: IslandScripts = IslandScripts.ANY): CardTier = when {
+        card.compat.inIsland(scripts) -> CardTier.WEB_ISLAND
         card.type in NATIVE_CORE_TYPES -> CardTier.NATIVE_CORE
         card.type in NATIVE_HACS_TYPES -> CardTier.NATIVE_HACS
         else -> CardTier.WEB_ISLAND
     }
 
     /** Counts how many cards in [view] fall into each [CardTier] (flattening layout containers). */
-    fun tierCounts(view: ViewConfig): Map<CardTier, Int> {
+    fun tierCounts(view: ViewConfig, scripts: IslandScripts = IslandScripts.ANY): Map<CardTier, Int> {
         val counts = linkedMapOf(
             CardTier.NATIVE_CORE to 0,
             CardTier.NATIVE_HACS to 0,
             CardTier.WEB_ISLAND to 0,
         )
         fun walk(c: CardConfig) {
-            if (c.childCards.isNotEmpty() && c.type in CONTAINER_TYPES) {
-                c.childCards.forEach(::walk)
+            if (c.childCards.isNotEmpty() && c.type in CONTAINER_TYPES && !c.compat.inIsland(scripts)) {
+                builtChildren(c).forEach { walk(it.value) }
             } else {
-                val t = tier(c)
+                val t = tier(c, scripts)
                 counts[t] = (counts[t] ?: 0) + 1
             }
         }
-        view.sections.forEach { s -> s.cards.forEach(::walk) }
-        view.cards.forEach(::walk)
+        viewRoots(view).forEach { walk(it.card) }
         return counts
+    }
+
+    /**
+     * The children a container builds, with their index in its `cards:`. A vertical layout-card consumes its
+     * `custom:layout-break` markers instead of building them ([dev.glassworks.engine.vitro.cards.LayoutCardView]).
+     */
+    fun builtChildren(card: CardConfig): List<IndexedValue<CardConfig>> {
+        val all = card.childCards.withIndex().toList()
+        if (card.type != "custom:layout-card") return all
+        val layout = card.raw.optString("layout_type", "masonry-layout").removePrefix("custom:")
+        return if (layout == "vertical-layout" || layout == "vertical") all.filter { it.value.type != LAYOUT_BREAK } else all
+    }
+
+    const val LAYOUT_BREAK = "custom:layout-break"
+
+    /**
+     * Every card [card]'s config produces, one level down, each with an index for report paths: a container's or a
+     * conditional's cards ([builtChildren]), and auto-entities' `card:` (an `entities` card by default) as
+     * `AutoEntitiesCardView` builds it, with its `card_param` field (`entities` by default) replaced. Under
+     * `card_param: cards`, that field holds one card per top-level `entities:` entry and include rule's `options` (a
+     * `tile` by default), so the inner card's own verdict sees them. With [perEntity] those generated cards are listed
+     * here too, for routing. The report leaves [perEntity] off and doesn't walk into the inner card's generated
+     * cards ([generatesCards]), because which of them exist depends on live states.
+     */
+    fun producedCards(card: CardConfig, perEntity: Boolean = true): List<IndexedValue<CardConfig>> {
+        val out = builtChildren(card).toMutableList()
+        if (card.type != "custom:auto-entities") return out
+        val inner = card.raw.optJSONObject("card")?.let { JSONObject(it.toString()) } ?: JSONObject()
+        if (!inner.has("type")) inner.put("type", "entities")
+        val param = card.raw.optString("card_param", "entities").ifEmpty { "entities" }
+        // auto-entities replaces this field with what it matched, so what the config wrote there never shows.
+        inner.remove(param)
+        val generated = if (param == "cards") generatedCards(card) else emptyList()
+        if (param == "cards") inner.put("cards", JSONArray().apply { generated.forEach { put(JSONObject(it.toString())) } })
+        out += IndexedValue(out.size, LovelaceParser.parseCard(inner))
+        if (perEntity) generated.forEach { out += IndexedValue(out.size, LovelaceParser.parseCard(it)) }
+        return out
+    }
+
+    /** True when [card] is auto-entities building one card per entity: its inner card's cards are all generated. */
+    fun generatesCards(card: CardConfig): Boolean =
+        card.type == "custom:auto-entities" && card.raw.optString("card_param", "entities") == "cards"
+
+    /** The cards auto-entities builds per entity, one per `entities:` entry and include rule (no entity filled in). */
+    private fun generatedCards(card: CardConfig): List<JSONObject> {
+        val templates = ArrayList<JSONObject>()
+        card.raw.optJSONArray("entities")?.let { arr ->
+            for (i in 0 until arr.length()) {
+                when (val e = arr.opt(i)) {
+                    is String -> templates += JSONObject()
+                    is JSONObject -> templates += JSONObject(e.toString()).apply { remove("entity") }
+                }
+            }
+        }
+        card.raw.optJSONObject("filter")?.optJSONArray("include")?.let { rules ->
+            for (i in 0 until rules.length()) templates += rules.optJSONObject(i)?.optJSONObject("options")?.let { JSONObject(it.toString()) } ?: JSONObject()
+        }
+        templates.forEach { if (!it.has("type")) it.put("type", "tile") }
+        return templates
+    }
+
+    /** One top-level card `VitroView` builds for a view, with its section (null outside sections) and index. */
+    data class ViewRoot(val section: Int?, val index: Int, val card: CardConfig)
+
+    /**
+     * The top-level cards `VitroView` builds for [view], the same choice its `buildViewTree` makes: a panel view's
+     * first card, a sections view's section cards, or else the view's own cards (masonry).
+     */
+    fun viewRoots(view: ViewConfig): List<ViewRoot> = when {
+        view.type == "panel" && view.cards.isNotEmpty() -> listOf(ViewRoot(null, 0, view.cards.first()))
+        view.type == "sections" && view.sections.isNotEmpty() ->
+            view.sections.flatMapIndexed { s, section -> section.cards.mapIndexed { i, c -> ViewRoot(s, i, c) } }
+        else -> view.cards.mapIndexed { i, c -> ViewRoot(null, i, c) }
     }
 
     /**
@@ -698,11 +729,15 @@ object LovelaceParser {
         return out
     }
 
+    /** Card types whose children are their `cards:` list (a conditional's is its `card:`). */
+    val CARDS_FIELD_TYPES: Set<String> = setOf(
+        "grid", "horizontal-stack", "vertical-stack", "custom:stack-in-card", "custom:vertical-stack-in-card", "custom:layout-card",
+    )
+
     fun parseCard(raw: JSONObject): CardConfig {
         val type = raw.optString("type", "entities").ifEmpty { "entities" }
         val children = when (type) {
-            "grid", "horizontal-stack", "vertical-stack",
-            "custom:stack-in-card", "custom:vertical-stack-in-card", "custom:layout-card" -> parseCards(raw.optJSONArray("cards"))
+            in CARDS_FIELD_TYPES -> parseCards(raw.optJSONArray("cards"))
             "conditional" -> listOfNotNull(raw.optJSONObject("card")?.let(::parseCard))
             else -> emptyList()
         }

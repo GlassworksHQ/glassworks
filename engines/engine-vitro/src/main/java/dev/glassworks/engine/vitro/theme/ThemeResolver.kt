@@ -4,6 +4,7 @@
 
 package dev.glassworks.engine.vitro.theme
 
+import dev.glassworks.engine.vitro.cards.CssSelector
 import org.json.JSONObject
 import java.util.Locale
 import kotlin.math.abs
@@ -84,6 +85,8 @@ data class CardModStyle(
     val customProperties: Map<String, String> = emptyMap(),
     /** CSS `margin` on the card (an inset inside its grid cell or stack slot), in dp. */
     val marginInsets: EdgeInsetsDp? = null,
+    /** `box-shadow` on the card as a native elevation in dp (`none` is 0), or null to keep the theme's. */
+    val elevationDp: Float? = null,
 )
 
 /** HA's base theme (`color.globals`): the domains whose `--state-<domain>-active-color` it defines itself. */
@@ -264,14 +267,14 @@ object ThemeResolver {
     private val CUSTOM_PROPERTY = Regex("""(?:^|[;\n{])\s*--([\w-]+)\s*:\s*([^;\n]+)""")
     private val LETTER_SPACING = Regex("""(-?[\d.]+)\s*(em|px|rem)?""", RegexOption.IGNORE_CASE)
     private val TRANSLATE = Regex("""translate\(([^,)]+)(?:,([^)]+))?\)""")
-    private val IMPORTANT_ANYWHERE = Regex("""\s*!\s*important""", RegexOption.IGNORE_CASE)
     private val STOP_PERCENT = Regex("""\s+[\d.]+%$""")
     private val STOP_POSITION = Regex("""\s+[\d.]+(?:%|px)$""")
     // One pattern per property name; the names are the literals below, so these stay small.
     private val declProps = java.util.concurrent.ConcurrentHashMap<String, Regex>()
     private val themeVarProps = java.util.concurrent.ConcurrentHashMap<String, Regex>()
     private fun declProp(name: String): Regex = declProps.getOrPut(name) {
-        Regex("""(?:^|[;\n])\s*$name\s*:\s*([^;!\n]+)""", RegexOption.IGNORE_CASE)
+        // The value keeps a trailing `!important`: [parseCardMod] lets it win, as the browser does.
+        Regex("""(?:^|[;\n])\s*$name\s*:\s*([^;\n]+)""", RegexOption.IGNORE_CASE)
     }
     private fun themeVarProp(name: String): Regex = themeVarProps.getOrPut(name) {
         Regex("""(?:^|[;\n{])\s*$name\s*:\s*([^;!\n}]+)""", RegexOption.IGNORE_CASE)
@@ -437,19 +440,27 @@ object ThemeResolver {
 
     /**
      * Maps a CSS `box-shadow` (`0px 2px 6px rgba(0,0,0,0.2)`) to an Android elevation of 1..12 dp: half the blur
-     * plus the vertical offset. `none`, blank, inset-only or unparsable values give 0.
+     * plus the vertical offset, from the first visible outer shadow. `none`, blank, unparsable values and shadows
+     * that are all inset or fully transparent give 0.
      */
     fun parseBoxShadowElevationDp(raw: String?): Float {
         val value = raw?.trim().orEmpty()
         if (value.isEmpty() || value.equals("none", ignoreCase = true)) return 0f
-        val first = splitTopLevelCommas(value).firstOrNull { it.isNotBlank() }?.trim() ?: return 0f
-        if (first.startsWith("inset", ignoreCase = true) || first.endsWith("inset", ignoreCase = true)) return 0f
+        val first = splitTopLevelCommas(value).map { it.trim() }.firstOrNull { it.isNotEmpty() && isVisibleOuterShadow(it) } ?: return 0f
         val lengths = SHADOW_LENGTH.findAll(SHADOW_COLOR.replace(first, " ").trim())
             .mapNotNull { it.groupValues[1].toFloatOrNull() }.toList()
         if (lengths.size < 2) return 0f
         val offsetY = lengths[1]
         val blur = lengths.getOrElse(2) { 0f }.coerceAtLeast(0f)
         return (blur / 2f + abs(offsetY)).coerceIn(1f, 12f)
+    }
+
+    /** False for an inset shadow and for a transparent one (`transparent`, `rgba(0,0,0,0)`), which draw no elevation. */
+    private fun isVisibleOuterShadow(layer: String): Boolean {
+        val tokens = splitTopLevelSpaces(layer)
+        if (tokens.any { it.equals("inset", ignoreCase = true) }) return false
+        val color = tokens.firstOrNull { !SHADOW_LENGTH.matches(it) } ?: return true
+        return !color.equals("transparent", ignoreCase = true) && parseColor(color)?.let { it ushr 24 } != 0
     }
 
     /** Recursively substitutes `var(--name, fallback)` up to depth 8. */
@@ -660,7 +671,13 @@ object ThemeResolver {
         val cleaned = JINJA_PATTERN.replace(CSS_COMMENT.replace(css, " "), " ")
         if (cleaned.isBlank()) return CardModStyle()
         val (decls, otherRules) = hostDeclarations(cleaned)
-        val rawCustom = CUSTOM_PROPERTY.findAll(decls).associate { it.groupValues[1] to it.groupValues[2].trim() }
+        // Custom properties cascade like any other: per name, the last `!important` declaration wins, else the last.
+        val rawCustom = CUSTOM_PROPERTY.findAll(decls)
+            .groupBy({ it.groupValues[1] }, { it.groupValues[2] })
+            .mapValues { (_, values) ->
+                val winner = values.lastOrNull { IMPORTANT.containsMatchIn(it) } ?: values.last()
+                winner.replace(IMPORTANT, "").trim()
+            }
         // The card's own custom properties come before the theme's, as they would on its ha-card, and they may refer
         // to each other (`--inset: var(--spacing)`): resolved against that whole scope.
         val rawScope = if (rawCustom.isEmpty()) vars else vars + rawCustom
@@ -669,10 +686,13 @@ object ThemeResolver {
         // Most of the properties asked for below aren't there: skip the pattern when the name isn't in the text at all
         // (the pattern matches ASCII case-insensitively, so a lowercase miss is always a pattern miss).
         val lowerDecls = decls.lowercase(Locale.ROOT)
-        fun prop(name: String): String? = if (name !in lowerDecls) null else
-            declProp(name).findAll(decls)
-                .lastOrNull()?.groupValues?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
-                ?.let { resolveValue(it, scope, 0) }
+        // As in the browser: the last `!important` declaration wins, else the last one. card-mod keeps the flag.
+        fun prop(name: String): String? {
+            if (name !in lowerDecls) return null
+            val values = declProp(name).findAll(decls).map { it.groupValues[1] }.toList()
+            val winner = values.lastOrNull { IMPORTANT.containsMatchIn(it) } ?: values.lastOrNull()
+            return winner?.replace(IMPORTANT, "")?.trim()?.takeIf { it.isNotEmpty() }?.let { resolveValue(it, scope, 0) }
+        }
 
         val bgImage = prop("background-image")
         val bgShort = prop("background")
@@ -728,9 +748,10 @@ object ThemeResolver {
         val transitionMs = prop("transition")?.let(::parseOpacityTransitionMs)
         val position = prop("position")?.lowercase(Locale.ROOT)
         val transform = prop("transform")?.lowercase(Locale.ROOT).orEmpty().replace(" ", "")
-        val translate = TRANSLATE.find(transform)
-        val centerY = "translatey(-50%)" in transform || translate?.groupValues?.get(2) == "-50%"
-        val centerX = "translatex(-50%)" in transform || translate?.groupValues?.get(1) == "-50%"
+        // Every translate in the list counts, as the checker reads it (`translate(0, 0) translate(0, -50%)` centers Y).
+        val translates = TRANSLATE.findAll(transform).toList()
+        val centerY = "translatey(-50%)" in transform || translates.any { it.groupValues[2] == "-50%" }
+        val centerX = "translatex(-50%)" in transform || translates.any { it.groupValues[1] == "-50%" }
 
         return CardModStyle(
             backgroundColor = bg,
@@ -750,11 +771,12 @@ object ThemeResolver {
             letterSpacingEm = letterSpacing,
             transitionOpacityMs = transitionMs,
             positionFixed = position == "fixed" || position == "absolute",
-            fixedTop = prop("top"),
-            fixedRight = prop("right"),
-            fixedBottom = prop("bottom"),
-            fixedLeft = prop("left"),
-            fixedWidth = prop("width"),
+            // `auto` (and `unset`, `initial`) is no inset: the overlay must not anchor the card to that edge.
+            fixedTop = prop("top")?.let(::inset),
+            fixedRight = prop("right")?.let(::inset),
+            fixedBottom = prop("bottom")?.let(::inset),
+            fixedLeft = prop("left")?.let(::inset),
+            fixedWidth = prop("width")?.let(::inset),
             fixedCenterY = centerY,
             fixedCenterX = centerX,
             textColor = prop("color")?.let(::parseColor),
@@ -767,6 +789,7 @@ object ThemeResolver {
                 bottom = prop("margin-bottom"),
                 left = prop("margin-left"),
             ),
+            elevationDp = prop("box-shadow")?.let(::parseBoxShadowElevationDp),
         )
     }
 
@@ -786,12 +809,16 @@ object ThemeResolver {
 
     /**
      * Splits a CSS sheet into `(selector, declarations)` rules the way the browser reads it: comments and Jinja
-     * dropped, `!important` ignored, bare top-level declarations dropped (they are not valid CSS, so card-mod's
+     * dropped, `!important` stripped from the value (see [cssRulesImportant] for the flag), bare top-level declarations dropped (they are not valid CSS, so card-mod's
      * `<style>` ignores them). A comma selector list stays one rule; declarations keep source order.
      */
-    fun cssRules(css: String): List<Pair<String, List<Pair<String, String>>>> {
+    fun cssRules(css: String): List<Pair<String, List<Pair<String, String>>>> =
+        cssRulesImportant(css).map { (sel, decls) -> sel to decls.map { (n, v, _) -> n to v } }
+
+    /** [cssRules] with each declaration's `!important` flag kept, for code that resolves the cascade. */
+    fun cssRulesImportant(css: String): List<Pair<String, List<Triple<String, String, Boolean>>>> {
         val cleaned = JINJA_PATTERN.replace(CSS_COMMENT.replace(css, " "), " ")
-        val out = ArrayList<Pair<String, List<Pair<String, String>>>>()
+        val out = ArrayList<Pair<String, List<Triple<String, String, Boolean>>>>()
         var depth = 0
         var segStart = 0
         var bodyStart = 0
@@ -811,8 +838,9 @@ object ThemeResolver {
                         val decls = cleaned.substring(bodyStart, i).split(';').mapNotNull { d ->
                             val c = d.indexOf(':').takeIf { it > 0 } ?: return@mapNotNull null
                             val name = d.substring(0, c).trim().lowercase(Locale.ROOT)
-                            val value = d.substring(c + 1).replace(IMPORTANT, "").trim()
-                            if (name.isEmpty() || value.isEmpty()) null else name to value
+                            val rawValue = d.substring(c + 1)
+                            val value = rawValue.replace(IMPORTANT, "").trim()
+                            if (name.isEmpty() || value.isEmpty()) null else Triple(name, value, IMPORTANT.containsMatchIn(rawValue))
                         }
                         if (selector.isNotEmpty() && !selector.startsWith("@")) out += selector to decls
                         segStart = i + 1
@@ -873,13 +901,47 @@ object ThemeResolver {
                 ';' -> if (depth == 0) segStart = i + 1
             }
         }
-        return host.toString().replace(IMPORTANT_ANYWHERE, "") to other
+        // `!important` stays on each declaration: [parseCardMod] lets it win, as the browser does.
+        return host.toString() to other
     }
 
-    private fun isHostSelector(selector: String): Boolean = selector.split(',').any { raw ->
+    /**
+     * True when [selector] (a comma list) styles the card itself: `ha-card`, `:host`, `:host ha-card`, `ha-card.x`.
+     * A compound that goes on to a descendant or sibling (`ha-card.x .primary`) styles something inside the card,
+     * not the card.
+     */
+    internal fun isHostSelector(selector: String): Boolean = CssSelector.splitTopLevel(selector, ',').any { raw ->
         val s = raw.trim().lowercase(Locale.ROOT).replace(WHITESPACE, " ")
         s == "ha-card" || s == ":host" || s == "." || s == ":host ha-card" || s == ":host > ha-card" ||
-            (s.startsWith("ha-card") && s.length > 7 && s[7] in ".[#" && ":hover" !in s && ":active" !in s)
+            (s.startsWith("ha-card") && s.length > 7 && s[7] in ".[#" && !INTERACTION.containsMatchIn(s) &&
+                !hasCombinator(s) && !PSEUDO_ELEMENT.containsMatchIn(s.replace(ATTRIBUTE, "[]")))
+    }
+
+    private val NO_INSET = setOf("auto", "unset", "initial")
+    private val ATTRIBUTE = Regex("""\[[^\]]*\]""")
+
+    private fun inset(value: String): String? = value.takeUnless { it.trim().lowercase(Locale.ROOT) in NO_INSET }
+
+    /** States a card is in only while touched or focused: a rule for one isn't the card at rest. */
+    private val INTERACTION = Regex(""":(hover|active|focus|focus-visible|focus-within)\b""")
+
+    /** `::before`, `::part()` and the legacy one-colon forms: they style a box inside the card, not the card. */
+    private val PSEUDO_ELEMENT = Regex("""::|:(before|after|first-line|first-letter)\b""")
+
+    /** True when [s] has a combinator (whitespace, `>`, `+`, `~`) outside brackets, parentheses and quotes. */
+    private fun hasCombinator(s: String): Boolean {
+        var depth = 0
+        var quote: Char? = null
+        for (c in s) {
+            when {
+                quote != null -> if (c == quote) quote = null
+                c == '"' || c == '\'' -> quote = c
+                c == '(' || c == '[' -> depth++
+                c == ')' || c == ']' -> if (depth > 0) depth--
+                depth == 0 && (c == ' ' || c == '>' || c == '+' || c == '~') -> return true
+            }
+        }
+        return false
     }
 
     private fun parseEdgeInsets(
