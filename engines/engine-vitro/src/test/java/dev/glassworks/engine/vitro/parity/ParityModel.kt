@@ -103,6 +103,9 @@ data class ParityCase(
 ) {
     fun runsOn(frame: ParityFrame) = frames == null || frame.id in frames
 
+    /** The frame ids this case lists that aren't in frames.json: a typo ("sl") would otherwise skip the case. */
+    fun unknownFrames(frameIds: Set<String>): List<String> = frames.orEmpty().filter { it !in frameIds }.sorted()
+
     /** The Lovelace dashboard Vitro renders: the same one-card view capture.mjs saves to `vitro-harness`. */
     fun dashboardJson(root: File): JSONObject {
         if (dashboard != null) return JSONObject(File(root, "dashboards/$dashboard.json").readText())
@@ -144,7 +147,11 @@ data class ParityCase(
 }
 
 /** A text run HA drew: where (CSS px, relative to its card slot), and in what font. */
-data class RefText(val slot: Int, val text: String, val box: CssRect, val size: Double, val weight: Int, val transform: String)
+data class RefText(
+    val slot: Int, val text: String, val box: CssRect, val size: Double, val weight: Int, val transform: String,
+    /** HA cuts this text itself (overflow, an ellipsis): null in references taken before the capture recorded it. */
+    val clipped: Boolean? = null,
+)
 
 /** What capture.mjs recorded for one case on one frame. */
 class ParityReference(val png: File, val json: JSONObject) {
@@ -163,7 +170,8 @@ class ParityReference(val png: File, val json: JSONObject) {
 
     val texts: List<RefText> get() = json.optJSONArray("texts")?.let { a ->
         (0 until a.length()).map { a.getJSONObject(it) }.map {
-            RefText(it.optInt("slot"), it.getString("text"), CssRect.of(it), it.optDouble("size"), it.optInt("weight", 400), it.optString("transform", "none"))
+            RefText(it.optInt("slot"), it.getString("text"), CssRect.of(it), it.optDouble("size"), it.optInt("weight", 400), it.optString("transform", "none"),
+                if (it.has("clipped")) it.optBoolean("clipped") else null)
         }
     }.orEmpty()
 

@@ -28,10 +28,11 @@ import { connect, loadCredentials, redact } from './lib/ha.mjs';
 import { referencedEntities, scrubStates, scrubText, checkDenylist, findPrivate } from './lib/scrub.mjs';
 import { parseArgs, pick } from './lib/args.mjs';
 import { assetDestination, canonicalPath } from './lib/assets.mjs';
+import { applyEntityEvent } from './lib/states.mjs';
+import { HARNESS, HARNESS_META, MARKER_KEY, MARKER_VALUE, notOurs } from './lib/harness.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DEFAULT_CORPUS = join(ROOT, 'engines', 'engine-vitro', 'src', 'test', 'parity');
-const HARNESS = 'vitro-harness';
 /** CSS px of page around each card in the reference crop, so an offset card still shows. */
 const MARGIN = 8;
 
@@ -85,7 +86,8 @@ function loadCases() {
 /** The harness dashboard: one sections view per card case, one section holding the one card. */
 function harnessConfig(cases) {
   return {
-    title: 'Vitro harness',
+    title: HARNESS_META.title,
+    [MARKER_KEY]: MARKER_VALUE,
     views: cases.filter((c) => c.card).map((c) => {
       const span = c.span || 1;
       return {
@@ -100,11 +102,22 @@ function harnessConfig(cases) {
   };
 }
 
-async function saveHarness(ha, config) {
+async function saveHarness(ha, config, caseIds) {
   const list = await ha.call({ type: 'lovelace/dashboards/list' });
-  if (!list.some((d) => d.url_path === HARNESS)) {
+  const entry = list.find((d) => d.url_path === HARNESS);
+  if (!entry) {
     log(`creating dashboard ${HARNESS} (admin-only, hidden from the sidebar)`);
-    await ha.call({ type: 'lovelace/dashboards/create', url_path: HARNESS, title: 'Vitro harness', icon: 'mdi:test-tube', show_in_sidebar: false, require_admin: true, mode: 'storage' });
+    await ha.call({ type: 'lovelace/dashboards/create', ...HARNESS_META });
+  } else {
+    // Never overwrite a dashboard of the same name that this tool didn't make.
+    let current = null;
+    try {
+      current = await ha.call({ type: 'lovelace/config', url_path: HARNESS, force: true });
+    } catch (e) {
+      if (!/config_not_found/.test(String(e.message))) throw e;
+    }
+    const why = notOurs(entry, current, caseIds);
+    if (why) fail(`refusing to overwrite the dashboard ${HARNESS}: ${why}. Rename or delete it in Home Assistant, or point this tool at another HA.`);
   }
   // The only write this tool makes to Home Assistant.
   await ha.call({ type: 'lovelace/config/save', url_path: HARNESS, config });
@@ -141,7 +154,8 @@ async function prepare() {
   const cases = loadCases();
   const cardCases = cases.filter((c) => c.card);
   if (cardCases.length) {
-    await saveHarness(ha, harnessConfig(loadCasesAll()));
+    const all = loadCasesAll();
+    await saveHarness(ha, harnessConfig(all), all.filter((c) => c.card).map((c) => c.id));
     log(`saved ${HARNESS}: ${cardCases.length} card views`);
   }
   for (const c of cases) for (const p of c.card ? imagePaths(c.card) : []) await fetchAsset(p);
@@ -229,7 +243,16 @@ const TEXTS_JS = (slot) => {
         const r = range.getBoundingClientRect();
         if (!within(r) || !visible(n.parentElement)) continue;
         const s = getComputedStyle(n.parentElement);
-        out.push({
+        // HA cuts this text itself when an ancestor that hides its overflow is narrower than the text.
+        let clipped = false;
+        for (let e = n.parentElement; e && e.nodeType === 1 && !clipped; e = e.parentElement || (e.getRootNode && e.getRootNode().host)) {
+          const es = getComputedStyle(e);
+          if (es.overflowX === 'visible' && es.textOverflow !== 'ellipsis') continue;
+          const er = e.getBoundingClientRect();
+          if (r.left < er.left - 0.5 || r.right > er.right + 0.5) clipped = true;
+          if (e.localName === 'ha-card') break;
+        }
+        out.push({ ...(clipped ? { clipped } : {}),
           text, x: r.x + scrollX - slot.x, y: r.y + scrollY - slot.y, w: r.width, h: r.height,
           size: parseFloat(s.fontSize), weight: +s.fontWeight || 400, color: s.color, transform: s.textTransform,
         });
@@ -247,9 +270,11 @@ const TEXTS_JS = (slot) => {
 /** Follows HA's subscribe_entities stream on the page's own socket, so the states are exactly what it drew. */
 function recordStates(page) {
   const states = {};
-  const entitySubs = new Set();
   page.on('websocket', (ws) => {
     if (!ws.url().endsWith('/api/websocket')) return;
+    // Per socket: message ids start again on every connection, and a new connection's first event replaces.
+    const entitySubs = new Set();
+    const seen = new Set();
     const each = (payload, fn) => {
       let m;
       try { m = JSON.parse(payload); } catch { return; }
@@ -258,18 +283,9 @@ function recordStates(page) {
     ws.on('framesent', (f) => each(f.payload, (m) => { if (m.type === 'subscribe_entities') entitySubs.add(m.id); }));
     ws.on('framereceived', (f) => each(f.payload, (m) => {
       if (m.type !== 'event' || !entitySubs.has(m.id)) return;
-      const ev = m.event || {};
-      for (const [id, s] of Object.entries(ev.a || {})) states[id] = { ...s };
-      for (const [id, d] of Object.entries(ev.c || {})) {
-        const cur = states[id] || (states[id] = { s: '', a: {} });
-        const plus = d['+'] || {};
-        if ('s' in plus) cur.s = plus.s;
-        if ('lc' in plus) { cur.lc = plus.lc; delete cur.lu; }
-        if ('lu' in plus) cur.lu = plus.lu;
-        if (plus.a) cur.a = { ...(cur.a || {}), ...plus.a };
-        for (const k of (d['-'] || {}).a || []) delete cur.a[k];
-      }
-      for (const id of ev.r || []) delete states[id];
+      const first = !seen.has(m.id);
+      seen.add(m.id);
+      applyEntityEvent(states, m.event || {}, first);
     }));
   });
   return states;

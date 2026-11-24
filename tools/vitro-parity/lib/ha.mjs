@@ -17,12 +17,20 @@ export function loadCredentials() {
   if (!existsSync(p)) return null;
   const { origin, token } = JSON.parse(readFileSync(p, 'utf8'));
   if (!origin || !token) throw new Error(`${p} needs "origin" and "token"`);
+  // One canonical form (scheme://host[:non-default port], no path): Chromium's location.origin compares with it.
+  let url;
+  try {
+    url = new URL(origin);
+  } catch {
+    throw new Error(`${p}: "origin" isn't a URL`);
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error(`${p}: "origin" must be http or https`);
   // Like HA's own frontend, the harness talks to the HA it's pointed at, over that origin's scheme. Over plain
   // http the token travels unencrypted, as it does for every browser on that origin: say so, don't refuse.
-  if (!/^https:\/\//i.test(origin)) {
+  if (url.protocol !== 'https:') {
     console.error(`warning: the Home Assistant origin in ${p} is not https: the access token travels unencrypted to it, as it does for HA's own frontend there`);
   }
-  return { origin: origin.replace(/\/$/, ''), token };
+  return { origin: url.origin, token };
 }
 
 /** Removes the origin and token from text before it reaches a log or a file. */

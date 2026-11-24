@@ -30,6 +30,15 @@ export function scrubText(text, creds) {
   });
 }
 
+/** [v] with private keys dropped at every depth, objects inside arrays included. */
+function dropPrivateKeys(v) {
+  if (Array.isArray(v)) return v.map(dropPrivateKeys);
+  if (v && typeof v === 'object') {
+    return Object.fromEntries(Object.entries(v).filter(([k]) => !PRIVATE_KEY.test(k) && !PRIVATE_LIST.test(k)).map(([k, x]) => [k, dropPrivateKeys(x)]));
+  }
+  return v;
+}
+
 /**
  * Compressed states ({id: {s, a, lc, lu}}) without private attributes or context ids. keepPictures keeps
  * entity_picture (its token parameter still redacted), for a local corpus that never leaves the computer.
@@ -41,7 +50,7 @@ export function scrubStates(states, creds, { keepPictures = false } = {}) {
     for (const [k, v] of Object.entries(st.a || {})) {
       if (keepPictures && k === 'entity_picture') { a[k] = v; continue; }
       if (PRIVATE_KEY.test(k) || PRIVATE_LIST.test(k)) continue;
-      a[k] = v;
+      a[k] = dropPrivateKeys(v);
     }
     out[id] = { s: st.s, a, ...(st.lc != null ? { lc: st.lc } : {}), ...(st.lu != null ? { lu: st.lu } : {}) };
   }

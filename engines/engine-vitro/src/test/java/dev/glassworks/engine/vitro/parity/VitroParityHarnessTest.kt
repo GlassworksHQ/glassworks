@@ -48,7 +48,10 @@ class VitroParityHarnessTest {
             ParityFiles.onlyCases, roots.flatMap { (_, root) -> ParityCase.loadAll(root).map { it.id } }.toSet(),
             ParityFiles.onlyFrames, allFrames.map { it.id }.toSet(),
         )
-        if (unknown.isNotEmpty()) fail("Vitro parity: " + unknown.joinToString("; "))
+        val badCases = roots.flatMap { (_, root) -> ParityCase.loadAll(root) }.mapNotNull { c ->
+            c.unknownFrames(allFrames.map { it.id }.toSet()).takeIf { it.isNotEmpty() }?.let { "case ${c.id} lists unknown frame(s) $it" }
+        }
+        if (unknown.isNotEmpty() || badCases.isNotEmpty()) fail("Vitro parity: " + (unknown + badCases).joinToString("; "))
         val frames = allFrames.filter { ParityFiles.onlyFrames == null || it.id in ParityFiles.onlyFrames!! }
         val outDir = ParityFiles.out
         val tz = TimeZone.getDefault()

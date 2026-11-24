@@ -94,3 +94,59 @@ test('run.sh rejects an empty or missing operand instead of selecting everything
     assert.match(r.stderr, /needs a value/);
   }
 });
+
+test('a vitro-harness dashboard the tool did not make is never overwritten', async () => {
+  const { notOurs, HARNESS_META, MARKER_KEY, MARKER_VALUE } = await import('../lib/harness.mjs');
+  const entry = { ...HARNESS_META, id: 'x' };
+  assert.equal(notOurs(entry, null, ['clock']), null, 'just created, no config yet');
+  assert.equal(notOurs(entry, { [MARKER_KEY]: MARKER_VALUE, views: [{ path: 'anything' }] }, ['clock']), null, 'marked');
+  assert.equal(notOurs(entry, { title: 'Vitro harness', views: [{ path: 'clock' }] }, ['clock']), null, 'an earlier version of the tool');
+  assert.match(notOurs(entry, { title: 'My stuff', views: [{ path: 'home' }] }, ['clock']), /isn't one this tool saved/);
+  assert.match(notOurs(entry, { title: 'Vitro harness', views: [{ path: 'home' }] }, ['clock']), /isn't one this tool saved/);
+  assert.match(notOurs({ ...entry, require_admin: false }, null, []), /hidden, admin-only/);
+  assert.match(notOurs({ ...entry, show_in_sidebar: true }, null, []), /hidden, admin-only/);
+  assert.match(notOurs({ ...entry, mode: 'yaml' }, null, []), /hidden, admin-only/);
+  assert.match(notOurs({ ...entry, title: 'Harness' }, null, []), /hidden, admin-only/);
+});
+
+test('a fresh subscription replaces the recorded states; later events merge', async () => {
+  const { applyEntityEvent } = await import('../lib/states.mjs');
+  const states = {};
+  applyEntityEvent(states, { a: { 'light.a': { s: 'on', a: { b: 1 } }, 'light.gone': { s: 'off', a: {} } } }, true);
+  applyEntityEvent(states, { c: { 'light.a': { '+': { s: 'off', lc: 2, a: { c: 2 } }, '-': { a: ['b'] } } } }, false);
+  assert.deepEqual(states['light.a'], { s: 'off', a: { c: 2 }, lc: 2 });
+  // The next page load's snapshot no longer has light.gone.
+  applyEntityEvent(states, { a: { 'light.a': { s: 'on', a: {} } } }, true);
+  assert.deepEqual(Object.keys(states), ['light.a']);
+  applyEntityEvent(states, { r: ['light.a'] }, false);
+  assert.deepEqual(states, {});
+});
+
+test('the HA origin is canonical, so the browser origin check matches it', async () => {
+  const { mkdtempSync, writeFileSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { spawnSync } = await import('node:child_process');
+  const dir = mkdtempSync(join(tmpdir(), 'vp-'));
+  const load = (origin) => {
+    writeFileSync(join(dir, 'ha.json'), JSON.stringify({ origin, token: 't' }));
+    return spawnSync(process.execPath, ['-e', "import('./lib/ha.mjs').then((m) => { try { process.stdout.write(m.loadCredentials().origin) } catch (e) { process.stdout.write('ERR ' + e.message) } })"], {
+      cwd: new URL('..', import.meta.url).pathname, env: { ...process.env, VITRO_PARITY_HA: join(dir, 'ha.json') }, encoding: 'utf8',
+    }).stdout;
+  };
+  assert.equal(load('https://homeassistant.local:443/'), 'https://homeassistant.local');
+  assert.equal(load('http://homeassistant.local:8123/lovelace'), 'http://homeassistant.local:8123');
+  assert.match(load('ftp://homeassistant.local'), /^ERR .*http or https/);
+  assert.match(load('not a url'), /^ERR .*isn't a URL/);
+});
+
+test('scrub drops private keys at every depth', async () => {
+  const states = { 'sensor.x': { s: '1', a: { friendly_name: 'X', info: { model: 'M', serial_number: 'SN123', nested: [{ mac: 'm', name: 'n' }] } } } };
+  assert.deepEqual(scrubStates(states, null)['sensor.x'].a, { friendly_name: 'X', info: { model: 'M', nested: [{ name: 'n' }] } });
+});
+
+test('run.sh rejects an explicitly empty --local path', async () => {
+  const { spawnSync } = await import('node:child_process');
+  const r = spawnSync('bash', [new URL('../run.sh', import.meta.url).pathname, '--refresh', '--local', ''], { encoding: 'utf8' });
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /--local needs a path/);
+});

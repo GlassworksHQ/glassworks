@@ -85,6 +85,18 @@ class VitroRender(
 }
 
 object ParityViews {
+    /** Whether any char of [tv]'s text in [start, end) falls in a range its layout replaces with an ellipsis. */
+    fun elided(tv: TextView, start: Int, end: Int): Boolean {
+        val layout = tv.layout ?: return false
+        for (line in 0 until layout.lineCount) {
+            val count = layout.getEllipsisCount(line)
+            if (count <= 0) continue
+            val from = layout.getLineStart(line) + layout.getEllipsisStart(line)
+            if (start < from + count && end > from) return true
+        }
+        return false
+    }
+
     fun all(v: View): Sequence<View> = sequence {
         yield(v)
         if (v is ViewGroup) for (i in 0 until v.childCount) yieldAll(all(v.getChildAt(i)))

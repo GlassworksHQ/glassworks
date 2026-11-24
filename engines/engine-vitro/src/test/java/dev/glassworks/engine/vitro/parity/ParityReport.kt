@@ -20,7 +20,11 @@ enum class ParityStatus(val label: String) {
 }
 
 /** One HA text run and where Vitro has it. Positions are CSS px relative to each side's own card slot. */
-data class TextCheck(val text: String, val sizeHa: Double, val sizeVitro: Double?, val dx: Double?, val dy: Double?) {
+data class TextCheck(
+    val text: String, val sizeHa: Double, val sizeVitro: Double?, val dx: Double?, val dy: Double?,
+    /** Vitro has the text but cuts it with an ellipsis while HA shows it whole: counted as missing. */
+    val elided: Boolean = false,
+) {
     val found get() = sizeVitro != null
 }
 
@@ -38,7 +42,7 @@ data class ParityMeasure(
 
     val fontDelta: Double get() = texts.mapNotNull { t -> t.sizeVitro?.let { abs(it - t.sizeHa) } }.maxOrNull() ?: 0.0
     val positionDelta: Double get() = texts.mapNotNull { t -> if (t.dx == null || t.dy == null) null else max(abs(t.dx), abs(t.dy)) }.maxOrNull() ?: 0.0
-    val missingTexts: List<String> get() = texts.filter { !it.found }.map { it.text }
+    val missingTexts: List<String> get() = texts.filter { !it.found }.map { if (it.elided) "${it.text} (cut by Vitro's ellipsis)" else it.text }
 
     fun over(t: Threshold): List<String> = buildList {
         if (pixel.tolerant > t.pixel) add("pixels ${pct(pixel.tolerant)} > ${pct(t.pixel)}")
@@ -76,6 +80,12 @@ internal fun pct(v: Double) = String.format(Locale.ROOT, "%.1f%%", v * 100)
 internal fun num(v: Double) = if (v.isInfinite()) "∞" else String.format(Locale.ROOT, "%.1f", v)
 
 object ParityCompare {
+    /**
+     * Whether HA cuts [t] too: as the capture recorded it, or (older references) when its full text box runs past
+     * HA's card slot.
+     */
+    fun haCuts(t: RefText, slot: CssRect?): Boolean = t.clipped ?: (slot != null && t.box.x + t.box.w > slot.w + 0.5)
+
     /** [c] lowercased on its own: one char in, one char out (String.lowercase can turn "İ" into two). */
     private fun fold(c: Char): Char = Character.toLowerCase(c)
 
@@ -140,7 +150,14 @@ object ParityCompare {
             }
             val (vt, idx) = hit
             used[vt] = idx + needle.length
-            val (x, center, size) = render.textMetrics(vt.view, vt.offsets[idx])
+            // The view holds the whole text even when its layout cuts it: a cut HA doesn't make is a missing text.
+            val start = vt.offsets[idx]
+            val end = vt.offsets[idx + needle.length - 1] + 1
+            if (ParityViews.elided(vt.view, start, end) && !haCuts(t, ref.slots.getOrNull(t.slot))) {
+                texts += TextCheck(t.text, t.size, null, null, null, elided = true)
+                continue
+            }
+            val (x, center, size) = render.textMetrics(vt.view, start)
             val slotV = render.slots[t.slot]
             texts += TextCheck(t.text, t.size, size, (x - slotV.x) - t.box.x, (center - slotV.y) - (t.box.y + t.box.h / 2))
         }

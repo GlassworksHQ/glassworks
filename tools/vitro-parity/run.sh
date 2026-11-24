@@ -33,6 +33,8 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --refresh) refresh=1 ;;
     --local)
+      # Bare --local is the default local corpus; an explicitly empty path is an error, not the committed corpus.
+      if [ $# -gt 1 ] && [ -z "$2" ]; then echo "--local needs a path (or none, for $LOCAL_DEFAULT)" >&2; exit 2; fi
       if [ $# -gt 1 ] && [ "${2#--}" = "$2" ]; then local_dir="$2"; shift; else local_dir="$LOCAL_DEFAULT"; fi ;;
     --frames) need_value "$@"; frames="$2"; shift ;;
     --cases) need_value "$@"; cases="$2"; shift ;;

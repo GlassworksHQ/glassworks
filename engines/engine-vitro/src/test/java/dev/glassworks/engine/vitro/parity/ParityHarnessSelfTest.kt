@@ -146,6 +146,42 @@ class ParityHarnessSelfTest {
     }
 
     @Test
+    fun textCutByAnEllipsisIsTold() {
+        val activity = org.robolectric.Robolectric.buildActivity(android.app.Activity::class.java).setup().get()
+        fun tv(width: Int) = android.widget.TextView(activity).apply {
+            text = "Kitchen Blind Position"
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            textSize = 14f
+            measure(android.view.View.MeasureSpec.makeMeasureSpec(width, android.view.View.MeasureSpec.EXACTLY),
+                android.view.View.MeasureSpec.makeMeasureSpec(0, android.view.View.MeasureSpec.UNSPECIFIED))
+            layout(0, 0, width, measuredHeight)
+        }
+        val narrow = tv(80)
+        assertTrue("the end is cut", ParityViews.elided(narrow, 0, narrow.text.length))
+        assertTrue("its first word isn't", !ParityViews.elided(narrow, 0, 3))
+        val wide = tv(2000)
+        assertTrue(!ParityViews.elided(wide, 0, wide.text.length))
+    }
+
+    @Test
+    fun aTextHaCutsItselfIsNotChargedToVitro() {
+        val slot = CssRect(0.0, 0.0, 246.0, 120.0)
+        fun t(w: Double, clipped: Boolean? = null) = RefText(0, "Entryway Ceiling Light", CssRect(56.0, 17.0, w, 16.0), 14.0, 500, "none", clipped)
+        assertTrue("runs past HA's card", ParityCompare.haCuts(t(282.0), slot))
+        assertTrue("fits HA's card", !ParityCompare.haCuts(t(140.0), slot))
+        assertTrue("the capture's own flag wins", ParityCompare.haCuts(t(140.0, clipped = true), slot))
+        assertTrue(!ParityCompare.haCuts(t(282.0, clipped = false), slot))
+    }
+
+    @Test
+    fun aCaseWithAMistypedFrameIsCaught() {
+        val ids = setOf("s1", "tablet", "mirror")
+        assertEquals(listOf("sl"), ParityCase.parse("x", JSONObject().put("frames", org.json.JSONArray().put("sl").put("tablet"))).unknownFrames(ids))
+        assertTrue(ParityCase.parse("x", JSONObject()).unknownFrames(ids).isEmpty())
+    }
+
+    @Test
     fun anUnknownCaseOrFrameIsRejected() {
         assertTrue(ParityFiles.unknownSelections(setOf("clock"), setOf("clock", "tile-light"), setOf("s1"), setOf("s1", "tablet")).isEmpty())
         assertTrue(ParityFiles.unknownSelections(null, setOf("clock"), null, setOf("s1")).isEmpty())
@@ -227,6 +263,9 @@ class ParityHarnessSelfTest {
     @Test
     fun everyCaseHasAReferenceOnEachOfItsFrames() {
         val root = ParityFiles.committed
+        val frameIds = ParityFrame.load().map { it.id }.toSet()
+        val typos = ParityCase.loadAll(root).associate { it.id to it.unknownFrames(frameIds) }.filterValues { it.isNotEmpty() }
+        assertTrue("cases list frames frames.json doesn't have: $typos", typos.isEmpty())
         val missing = ParityCase.loadAll(root).flatMap { c ->
             ParityFrame.load().filter { c.runsOn(it) && ParityReference.find(root, it, c) == null }.map { "${it.id}/${c.id}" }
         }
