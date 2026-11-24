@@ -202,7 +202,6 @@ class HaDashboardClient(
     fun fetchDashboard(urlPath: String?) {
         requestedDashboardPath = urlPath
         dashboardActive = true
-        missedRefetch = false
         val msg = JSONObject().put("type", "lovelace/config")
         if (!urlPath.isNullOrEmpty()) msg.put("url_path", urlPath)
         request(msg) { res ->
@@ -211,6 +210,8 @@ class HaDashboardClient(
             // The connection, not Home Assistant, failed: the reconnect asks again (onAuthenticated). Reporting it
             // would send a dashboard that exists to the fallback as "not found".
             if (isTransportError(res)) return@request
+            // An answer for the dashboard the page shows: the skipped refetch is made up now (a discarded one isn't).
+            missedRefetch = false
             if (res.optBoolean("success", false)) {
                 val cfgObj = res.optJSONObject("result") ?: JSONObject()
                 listener.onDashboardConfig(urlPath, LovelaceParser.parseDashboard(cfgObj))

@@ -373,6 +373,10 @@ class HacsParityWaveTest {
                 JSONObject("""{"filter": {"include": [{"domain": "sensor", "not": {"area": "kitchen"}}]}}"""), st.all().values, st::get,
             ).isEmpty(),
         )
+        // A malformed or empty rule under `not` matches nothing, rather than everything.
+        for (bad in listOf("""{"domain": "sensor", "not": {"attributes": "invalid"}}""", """{"domain": "sensor", "not": {}}""")) {
+            assertTrue(bad, AutoEntitiesFilter.evaluate(JSONObject("""{"filter": {"include": [$bad]}}"""), st.all().values, st::get).isEmpty())
+        }
         // A rule's own sort and count pick from its matches before the global list is built.
         val top = AutoEntitiesFilter.evaluate(
             JSONObject(

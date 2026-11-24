@@ -1100,15 +1100,20 @@ object AutoEntitiesFilter {
     }
 
     /** True when every key of [rule], nested ones included, is one Vitro evaluates. */
-    private fun supported(rule: JSONObject): Boolean = rule.keys().asSequence().all { k ->
-        k in RULE_KEYS && when (k) {
-            "not" -> (rule.opt(k) as? JSONObject)?.let(::supported) ?: false
-            "or", "and" -> (rule.opt(k) as? JSONArray)?.let { arr ->
-                (0 until arr.length()).all { i -> arr.optJSONObject(i)?.let(::supported) ?: false }
-            } ?: false
-            else -> true
-        }
-    }
+    private fun supported(rule: JSONObject): Boolean =
+        // An empty rule, or one whose value has the wrong shape (`attributes: "x"`), matches nothing; negated it
+        // would match everything.
+        rule.keys().asSequence().any { it != "options" && it != "sort" } &&
+            rule.keys().asSequence().all { k ->
+                k in RULE_KEYS && when (k) {
+                    "not" -> (rule.opt(k) as? JSONObject)?.let(::supported) ?: false
+                    "or", "and" -> (rule.opt(k) as? JSONArray)?.let { arr ->
+                        (0 until arr.length()).all { i -> arr.optJSONObject(i)?.let(::supported) ?: false }
+                    } ?: false
+                    "attributes" -> rule.opt(k) is JSONObject
+                    else -> true
+                }
+            }
 
     /** An attribute as text, `a:b` reaching into a nested map. */
     private fun attributeString(s: EntityState, key: String): String? {

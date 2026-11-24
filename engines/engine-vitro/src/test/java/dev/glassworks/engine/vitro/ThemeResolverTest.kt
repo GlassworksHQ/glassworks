@@ -661,7 +661,15 @@ class ThemeResolverTest {
         val chain = (1..6).joinToString(" ") { "--v$it: var(--v${it + 1});" } + " --v7: 9px;"
         val deep = ThemeResolver.parseCardMod("ha-card { $chain padding: var(--v1); }")
         assertEquals(9f, deep.paddingInsets!!.top, 0.001f)
-        // Expansion past the cap is empty, as an invalid value.
+        // Growth past the cap in one pass is empty, as an invalid value.
         assertEquals("", ThemeResolver.resolveValue("var(--x)", mapOf("x" to "y".repeat(20_000)), 0))
+    }
+
+    @Test
+    fun aLongThemeCardModStylesheetKeepsItsStyling() {
+        // A theme's card-mod-card over 16 KiB (a long comment first) with one short variable: it must survive whole.
+        val sheet = "/* " + "x".repeat(17_000) + " */ ha-card { background-color: var(--brand); }"
+        val theme = resolveWith("""{"brand": "#ff0000", "card-mod-card": ${org.json.JSONObject.quote(sheet)}}""")
+        assertEquals(0xFFFF0000.toInt(), theme.cardMod.backgroundColor)
     }
 }

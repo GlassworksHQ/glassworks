@@ -466,15 +466,15 @@ object ThemeResolver {
     /** Recursively substitutes `var(--name, fallback)` up to depth 8. */
     fun resolveValue(input: String, map: Map<String, String>, depth: Int): String {
         if (depth >= 8 || "var(" !in input) return input.trim()
-        // Bounded like the browser's: a value that grows past the limit (`--a: var(--a) var(--a)` doubles every pass)
-        // is invalid, an empty value, instead of filling the heap on the main thread.
-        if (input.length > MAX_VAR_EXPANSION) return ""
+        // Bounded like the browser's: substitution that grows a value by more than the limit in one pass
+        // (`--a: var(--a) var(--a)` doubles every pass) makes it invalid, an empty value, instead of filling the heap
+        // on the main thread. The growth is what's capped, not the length: a long card-mod stylesheet stays whole.
         val replaced = substituteVars(input) { key, fallback -> map[key] ?: fallback }
-        if (replaced.length > MAX_VAR_EXPANSION) return ""
+        if (replaced.length - input.length > MAX_VAR_EXPANSION) return ""
         return if (replaced == input) replaced.trim() else resolveValue(replaced, map, depth + 1)
     }
 
-    /** The longest a value may grow while its `var()`s are substituted. */
+    /** How much a value may grow in one substitution pass. */
     private const val MAX_VAR_EXPANSION = 16 * 1024
 
     private val VAR_NAME = Regex("""var\(\s*--([\w-]+)""")

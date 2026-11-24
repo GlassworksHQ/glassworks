@@ -807,6 +807,36 @@ class HaDashboardClientTest {
     }
 
     @Test
+    fun aMissedRefetchSurvivesARequestWhoseAnswerIsDiscarded() {
+        // While `swallow` is set, HA never answers lovelace/config.
+        val swallow = java.util.concurrent.atomic.AtomicBoolean(false)
+        val c = connected(connect = { url ->
+            val inner = server.connect(url)
+            object : HaSocket by inner {
+                override fun send(text: String) {
+                    if (swallow.get() && JSONObject(text).optString("type") == "lovelace/config") {
+                        server.received += JSONObject(text)
+                        return
+                    }
+                    inner.send(text)
+                }
+            }
+        })
+        c.releaseDashboard()
+        server.pushEvent(server.eventSubscriptionId("lovelace_updated")!!, JSONObject().put("event_type", "lovelace_updated"))
+        Thread.sleep(100)
+        assertEquals(1, server.commands("lovelace/config").size) // skipped: the fallback shows
+        swallow.set(true)
+        c.claimDashboard(null) // asks, but the answer never comes
+        awaitCondition("asked on claim") { server.commands("lovelace/config").size == 2 }
+        c.releaseDashboard()
+        swallow.set(false)
+        // The refetch was never made up: the next claim asks again and gets the dashboard.
+        c.claimDashboard(null)
+        awaitCondition("asked again") { server.commands("lovelace/config").size == 3 }
+    }
+
+    @Test
     fun aDashboardHaRejectsIsReported() {
         val c = connected()
         c.fetchDashboard("missing")
