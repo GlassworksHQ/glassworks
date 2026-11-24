@@ -1249,7 +1249,9 @@ open class StackInCardView(
     private val stack: LinearLayout
 
     init {
-        val column = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL }
+        // A child whose content overflows its slot (a big heading in a 1-row Markdown card) paints past it, as in
+        // the browser; only the card's own rounded outline clips.
+        val column = LinearLayout(ctx.context).apply { orientation = LinearLayout.VERTICAL; clipChildren = false; clipToPadding = false }
         config.title?.let { t ->
             column.addView(label(ctx, 16f, ctx.theme.primaryTextColor, Inter.MEDIUM).apply {
                 text = t
@@ -1261,6 +1263,8 @@ open class StackInCardView(
         val outerPadding = if (keep.has("outer_padding")) keep.optBoolean("outer_padding") else keep.optBoolean("margin", false)
         stack = LinearLayout(ctx.context).apply {
             orientation = if (horizontal) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+            clipChildren = false
+            clipToPadding = false
             if (outerPadding) {
                 val pad = ctx.px(8f)
                 setPadding(pad, pad, pad, pad)

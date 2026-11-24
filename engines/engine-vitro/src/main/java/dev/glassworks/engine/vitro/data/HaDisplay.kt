@@ -112,6 +112,13 @@ object HaDisplay {
         return fromTranslations(byClass, s)
     }
 
+    /** The domain's own icon for [s]'s state and device class, skipping the entity's and its integration's. */
+    fun domainIcon(s: EntityState): String? {
+        val comp = componentIcons[s.domain] ?: return null
+        val byClass = s.deviceClass?.let { comp.optJSONObject(it) } ?: comp.optJSONObject("_") ?: return null
+        return fromTranslations(byClass, s)
+    }
+
     /** `state` match, then the `range` step at or under a numeric state, then `default`. */
     private fun fromTranslations(t: JSONObject, s: EntityState): String? {
         t.optJSONObject("state")?.optString(s.state)?.takeIf { it.isNotEmpty() }?.let { return it }
