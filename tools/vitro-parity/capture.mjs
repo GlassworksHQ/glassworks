@@ -29,7 +29,7 @@ import { connect, loadCredentials, redact } from './lib/ha.mjs';
 import { referencedEntities, scrubStates, scrubText, checkDenylist, findPrivate, hasMacFragment } from './lib/scrub.mjs';
 import { parseArgs, pick } from './lib/args.mjs';
 import { aliasPaths, assetDestination, canonicalPath, capturableImage, staleAssets } from './lib/assets.mjs';
-import { applyEntityEvent } from './lib/states.mjs';
+import { applyEntityEvent, unmetExpectations } from './lib/states.mjs';
 import { imageOutcomes, noteSaved } from './lib/images.mjs';
 import { buildDisplay } from './lib/display.mjs';
 import { HARNESS, HARNESS_META, MARKER_KEY, MARKER_VALUE, notOurs } from './lib/harness.mjs';
@@ -605,6 +605,9 @@ async function capture() {
               clip = { x: 0, y: 0, width: info.docW, height: info.docH };
             }
             ids = referencedEntities(config, states);
+            // The entities a case expects a state of are part of its snapshot even when HA has no state for them yet:
+            // one that appears during the capture then starts it over, like any other change.
+            for (const id of Object.keys(c.expect || {})) ids.add(id);
             drawnStates = snapshotStates(states, ids);
             // The images the screenshot shows, read just before it and checked again after (bracketed like the
             // states): saved for Vitro's fixture server after the checks.
@@ -627,6 +630,9 @@ async function capture() {
             if (attempt >= 3) throw new Error('entity states or drawn images kept changing during the capture (3 tries)');
             log(`${frame.id}/${c.id}: ${sameStates ? 'a drawn image' : 'an entity'} changed during the capture: again`);
           }
+          // A case that covers one state (a light on, an alarm disarmed) keeps its reference when HA isn't in it.
+          const unmet = unmetExpectations(c.expect, drawnStates);
+          if (unmet.length) throw new Error(`not in the state the case expects (${unmet.join('; ')}): neither its PNG nor its JSON is written`);
           // The screenshot shows what the JSON scrubs: check the raw text HA drew and the templates before writing.
           if (committed) {
             const shown = findPrivate(JSON.stringify({ texts, templates }), creds);

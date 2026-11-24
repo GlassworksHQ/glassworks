@@ -1,0 +1,13 @@
+{
+  "title": "auto-entities: open covers as an entities card, sorted by name",
+  "card": {
+    "type": "custom:auto-entities",
+    "card": { "type": "entities", "title": "Open blinds" },
+    "filter": { "include": [
+      { "entity_id": "cover.kitchen_blind", "state": "open" },
+      { "entity_id": "cover.side_blinds", "state": "open" },
+      { "entity_id": "cover.side", "state": "open" }
+    ] },
+    "sort": { "method": "name" }
+  }
+}

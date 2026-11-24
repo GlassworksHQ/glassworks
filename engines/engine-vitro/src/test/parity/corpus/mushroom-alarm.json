@@ -1,0 +1,5 @@
+{
+  "title": "Mushroom alarm control panel card: disarmed, with arm buttons",
+  "expect": {"alarm_control_panel.home_alarm": "disarmed"},
+  "card": { "type": "custom:mushroom-alarm-control-panel-card", "entity": "alarm_control_panel.home_alarm", "name": "Alarm", "states": ["armed_home", "armed_away"] }
+}

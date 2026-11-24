@@ -1,0 +1,4 @@
+{
+  "title": "Mushroom climate card: the AC with its mode and temperature controls",
+  "card": { "type": "custom:mushroom-climate-card", "entity": "climate.ac", "show_temperature_control": true, "hvac_modes": ["heat", "cool", "off"] }
+}

@@ -260,3 +260,12 @@ test('noteSaved reports one path saved with two different images in a run', asyn
   assert.match(noteSaved(seen, '/static/x.png', 'bbb'), /changed during the run/);
   assert.equal(noteSaved(seen, '/static/y.png', 'bbb'), null);
 });
+
+test('unmetExpectations names the entities not in the state a case expects', async () => {
+  const { unmetExpectations } = await import('../lib/states.mjs');
+  const states = { 'light.a': { s: 'on', a: {} }, 'light.b': { s: 'off', a: {} } };
+  assert.deepEqual(unmetExpectations(undefined, states), []);
+  assert.deepEqual(unmetExpectations({ 'light.a': 'on' }, states), []);
+  assert.deepEqual(unmetExpectations({ 'light.a': 'on', 'light.b': 'on', 'light.c': 'off' }, states),
+    ['light.b: expected on, got off', 'light.c: expected off, got no state']);
+});

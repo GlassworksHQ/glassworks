@@ -1,0 +1,4 @@
+{
+  "title": "Entity: a percentage sensor",
+  "card": { "type": "entity", "entity": "sensor.epson_et_2800_series_black_ink", "name": "Black ink" }
+}

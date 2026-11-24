@@ -22,3 +22,13 @@ export function applyEntityEvent(states, ev, first) {
   for (const id of ev.r || []) delete states[id];
   return states;
 }
+
+/**
+ * The entities whose state in [states] isn't the one a case's `expect` ({entity_id: state}) asks for, as
+ * `id: wanted, got` strings: a refresh must not write an "on" case's reference while the light is off.
+ */
+export function unmetExpectations(expect, states) {
+  return Object.entries(expect || {})
+    .filter(([id, want]) => states[id]?.s !== want)
+    .map(([id, want]) => `${id}: expected ${want}, got ${states[id]?.s ?? 'no state'}`);
+}

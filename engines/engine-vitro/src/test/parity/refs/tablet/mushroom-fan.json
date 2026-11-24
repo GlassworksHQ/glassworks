@@ -1,0 +1,145 @@
+{
+ "case": "mushroom-fan",
+ "frame": "tablet",
+ "haVersion": "2026.11.0",
+ "now": 1795543680000,
+ "stable": true,
+ "viewport": {
+  "width": 1280,
+  "height": 800,
+  "density": 2
+ },
+ "clip": {
+  "x": 382,
+  "y": 16,
+  "width": 262,
+  "height": 136
+ },
+ "docSize": {
+  "width": 1280,
+  "height": 800
+ },
+ "slots": [
+  {
+   "x": 390,
+   "y": 24,
+   "w": 246,
+   "h": 120,
+   "type": "mushroom-fan-card"
+  }
+ ],
+ "texts": [
+  {
+   "slot": 0,
+   "text": "Air purifier",
+   "x": 56,
+   "y": 17,
+   "w": 67.64,
+   "h": 16,
+   "size": 14,
+   "weight": 500,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  },
+  {
+   "slot": 0,
+   "text": "20%",
+   "x": 56,
+   "y": 36,
+   "w": 23.47,
+   "h": 14,
+   "size": 12,
+   "weight": 400,
+   "color": "rgb(225, 225, 225)",
+   "transform": "none"
+  }
+ ],
+ "states": {
+  "fan.air_purifier": {
+   "s": "on",
+   "a": {
+    "preset_modes": [
+     "auto"
+    ],
+    "percentage": 20,
+    "percentage_step": 10,
+    "preset_mode": null,
+    "friendly_name": "Air purifier",
+    "supported_features": 57
+   },
+   "lc": 1795504930.0582252
+  }
+ },
+ "templates": {},
+ "display": {
+  "entities": [
+   {
+    "ei": "fan.air_purifier",
+    "pl": "zha",
+    "tk": "fan",
+    "di": "device-1"
+   }
+  ],
+  "devices": [
+   {
+    "id": "device-1",
+    "name": "Air purifier"
+   }
+  ],
+  "requested": {
+   "domains": [
+    "fan"
+   ],
+   "platforms": [
+    "zha"
+   ]
+  },
+  "icons": {
+   "entity_component": {
+    "fan": {
+     "_": {
+      "default": "mdi:fan",
+      "state": {
+       "off": "mdi:fan-off"
+      },
+      "state_attributes": {
+       "direction": {
+        "default": "mdi:rotate-right",
+        "state": {
+         "reverse": "mdi:rotate-left"
+        }
+       },
+       "preset_mode": {
+        "default": "mdi:circle-medium",
+        "state": {}
+       }
+      }
+     }
+    }
+   },
+   "entity": {
+    "zha": {
+     "fan": {
+      "fan": {
+       "state_attributes": {
+        "preset_mode": {
+         "state": {
+          "auto": "mdi:fan-auto",
+          "smart": "mdi:fan-auto"
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "translations": {
+   "entity_component": {
+    "component.fan.entity_component._.state.off": "Off",
+    "component.fan.entity_component._.state.on": "On"
+   },
+   "entity": {}
+  }
+ }
+}
