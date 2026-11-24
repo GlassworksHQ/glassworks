@@ -297,7 +297,8 @@ class LovelaceModelTest {
                "cards": [{"type": "entities", "entities": ["sensor.kitchen_temp"]}]}""",
         )
         val counts = CardRouter.tierCounts(v)
-        assertEquals(2, counts[CardTier.NATIVE_CORE]) // tile + entities; the stack itself does not count
+        // The tile; the stack itself does not count, and a sections view doesn't build its top-level `cards:`.
+        assertEquals(1, counts[CardTier.NATIVE_CORE])
         assertEquals(1, counts[CardTier.NATIVE_HACS])
         assertEquals(1, counts[CardTier.WEB_ISLAND])
     }

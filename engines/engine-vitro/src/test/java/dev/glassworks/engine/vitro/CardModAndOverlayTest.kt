@@ -189,6 +189,30 @@ class CardModAndOverlayTest {
     // ---- CardSurface.applyCardMod ----
 
     @Test
+    fun aRestyleWithoutBoxShadowBringsTheThemeShadowBack() {
+        val store = EntityStore()
+        store.putLocal(EntityState("light.lounge", "off", mapOf("friendly_name" to "Lounge")))
+        val ctx = context(store)
+        val tile = TileCardView(ctx, card("""{"type": "tile", "entity": "light.lounge"}"""))
+        val baseline = ctx.theme.cardElevationDp * ctx.dp
+        // A templated style re-renders: first with a shadow, then without one.
+        tile.applyStyleCss("ha-card { box-shadow: 0 2px 6px #000 }")
+        assertEquals(5f * ctx.dp, tile.elevation, 0.001f)
+        tile.applyStyleCss("ha-card { padding: 4px }")
+        assertEquals(baseline, tile.elevation, 0.001f)
+        tile.applyStyleCss("ha-card { box-shadow: none }")
+        assertEquals(0f, tile.elevation, 0.001f)
+        // A card that shares its parent's surface keeps no shadow of its own.
+        tile.applyStyleCss("ha-card { box-shadow: 0 2px 6px #000 }")
+        tile.makeSeamless(keepBackground = true)
+        tile.applyStyleCss("ha-card { padding: 4px }")
+        assertEquals(0f, tile.elevation, 0.001f)
+        // Even an explicit shadow: the card shares its parent's surface, background kept or not.
+        tile.applyStyleCss("ha-card { box-shadow: 0 2px 6px #000 }")
+        assertEquals(0f, tile.elevation, 0.001f)
+    }
+
+    @Test
     fun staticCardModRestylesTheSurface() {
         val store = EntityStore()
         store.putLocal(EntityState("light.lounge", "off", mapOf("friendly_name" to "Lounge")))
@@ -256,15 +280,156 @@ class CardModAndOverlayTest {
 
     // ---- VitroView: pinned overlay and visibility ----
 
-    private fun vitroView(store: EntityStore, dashboard: String): VitroView {
+    @Test
+    fun anIslandThatLoadsCardModGetsTheOpacityOnce() {
+        fun islandAlpha(resources: List<dev.glassworks.engine.vitro.model.LovelaceResource>): Float {
+            val vv = vitroView(
+                EntityStore(),
+                """{"views": [{"cards": [{"type": "custom:acme-card", "card_mod": {"style": "ha-card { opacity: 0.5 }"}}]}]}""",
+                resources,
+            )
+            fun find(v: View): dev.glassworks.engine.vitro.cards.WebIslandCardView? = when (v) {
+                is dev.glassworks.engine.vitro.cards.WebIslandCardView -> v
+                is ViewGroup -> (0 until v.childCount).firstNotNullOfOrNull { find(v.getChildAt(it)) }
+                else -> null
+            }
+            return assertNotNull(find(vv)).let { find(vv)!!.alpha }
+        }
+        // card-mod in the island applies the 0.5 there, so the native frame stays at 1 (not 0.25 overall).
+        assertEquals(1f, islandAlpha(listOf(dev.glassworks.engine.vitro.model.LovelaceResource("/hacsfiles/lovelace-card-mod/card-mod.js", "module"))), 0.001f)
+        // Without card-mod in the island, the native frame is the only layer that applies it.
+        assertEquals(0.5f, islandAlpha(emptyList()), 0.001f)
+    }
+
+    @Test
+    fun aConditionalAroundAnIslandKeepsItsOwnCardMod() {
+        // The island receives only the child's config, so the conditional's own opacity is drawn natively.
+        val vv = vitroView(
+            EntityStore(),
+            """{"views": [{"cards": [{"type": "conditional", "conditions": [], "card_mod": {"style": "ha-card { opacity: 0.5 }"},
+                "card": {"type": "custom:acme-card"}}]}]}""",
+            listOf(dev.glassworks.engine.vitro.model.LovelaceResource("/hacsfiles/lovelace-card-mod/card-mod.js", "module")),
+        )
+        fun find(v: View): dev.glassworks.engine.vitro.cards.WebIslandCardView? = when (v) {
+            is dev.glassworks.engine.vitro.cards.WebIslandCardView -> v
+            is ViewGroup -> (0 until v.childCount).firstNotNullOfOrNull { find(v.getChildAt(it)) }
+            else -> null
+        }
+        val island = find(vv)
+        assertNotNull(island)
+        assertEquals(0.5f, island!!.alpha, 0.001f)
+    }
+
+    @Test
+    fun anIslandThatLoadsCardModGetsTheMarginOnce() {
+        fun islandParent(resources: List<dev.glassworks.engine.vitro.model.LovelaceResource>): ViewGroup? {
+            val vv = vitroView(
+                EntityStore(),
+                """{"views": [{"cards": [{"type": "custom:acme-card", "card_mod": {"style": "ha-card { margin: 12px }"}}]}]}""",
+                resources,
+            )
+            fun find(v: View): dev.glassworks.engine.vitro.cards.WebIslandCardView? = when (v) {
+                is dev.glassworks.engine.vitro.cards.WebIslandCardView -> v
+                is ViewGroup -> (0 until v.childCount).firstNotNullOfOrNull { find(v.getChildAt(it)) }
+                else -> null
+            }
+            val island = find(vv)
+            assertNotNull(island)
+            return island!!.parent as? ViewGroup
+        }
+        val dp = activity.resources.displayMetrics.density
+        // card-mod in the island draws the margin there, so the native frame adds no padding around it.
+        val styled = islandParent(listOf(dev.glassworks.engine.vitro.model.LovelaceResource("/hacsfiles/lovelace-card-mod/card-mod.js", "module")))
+        assertEquals(0, styled?.paddingLeft ?: 0)
+        // Without card-mod there, the native frame is the only layer that insets it.
+        assertEquals((12 * dp).toInt(), islandParent(emptyList())?.paddingLeft)
+    }
+
+    @Test
+    fun resourcesArrivingLaterRebuildTheViews() {
+        // Built before the resources arrive, a card-mod-only fallback stays native; once card-mod arrives, the view
+        // is rebuilt and the card goes to its island.
+        val vv = vitroView(
+            EntityStore(),
+            """{"views": [{"cards": [{"type": "custom:mushroom-template-card", "card_mod": {"style": {"mushroom-shape-icon$": ".shape { color: red }"}}}]}]}""",
+        )
+        assertEquals(0, vv.lastMetrics.webIslandCards)
+        val cardMod = listOf(
+            dev.glassworks.engine.vitro.model.LovelaceResource("/hacsfiles/lovelace-mushroom/mushroom.js?hacstag=1", "module"),
+            dev.glassworks.engine.vitro.model.LovelaceResource("/hacsfiles/lovelace-card-mod/card-mod.js?hacstag=1", "module"),
+        )
+        vv.resourcesList = cardMod
+        assertEquals(1, vv.lastMetrics.webIslandCards)
+        assertFalse(vv.lastMetrics.cacheHit)
+        assertEquals(1, vv.lastMetrics.islands.size)
+        // The same list again changes nothing.
+        val metrics = vv.lastMetrics
+        vv.resourcesList = cardMod.toList()
+        assertTrue(metrics === vv.lastMetrics)
+    }
+
+    @Test
+    fun aNewServerDropsTheOldDashboard() {
+        // The new server's resources must not rebuild the old server's dashboard before its own arrives.
+        val store = EntityStore()
+        store.putLocal(EntityState("light.a", "on", mapOf("friendly_name" to "A")))
+        val vv = vitroView(store, """{"views": [{"cards": [{"type": "tile", "entity": "light.a"}]}]}""")
+        assertNotNull(vv.dashboard)
+        vv.openMoreInfo("light.a")
+        vv.resetForServer()
+        assertNull(vv.dashboard)
+        // Nothing of the old server stays on screen: no More-Info sheet either.
+        assertFalse(vv.closeMoreInfo())
+        val metrics = vv.lastMetrics
+        vv.resourcesList = listOf(dev.glassworks.engine.vitro.model.LovelaceResource("/local/other.js", "module"))
+        assertTrue("nothing rebuilt", metrics === vv.lastMetrics)
+    }
+
+    @Test
+    fun autoIsNoInsetAndLeftWinsOverRight() {
+        val vv = VitroView(activity, EntityStore(), 0xFF000000.toInt())
+        val dp = activity.resources.displayMetrics.density
+        // `right: auto` doesn't anchor the card to the right edge.
+        val auto = vv.pinnedLayoutParams(ThemeResolver.parseCardMod("ha-card { position: fixed; left: 24px; right: auto; top: auto; bottom: 0; width: 120px }"))
+        assertEquals(Gravity.START or Gravity.BOTTOM, auto.gravity)
+        assertEquals((24 * dp).toInt(), auto.marginStart)
+        // Both insets with a width: `left` wins, as in CSS.
+        val both = vv.pinnedLayoutParams(ThemeResolver.parseCardMod("ha-card { position: fixed; left: 24px; right: 24px; top: 0; width: 120px }"))
+        assertEquals(Gravity.START or Gravity.TOP, both.gravity)
+    }
+
+    @Test
+    fun theCenteringIdiomIsPlacedAtTheViewportCenter() {
+        // `left: 50%; top: 50%; transform: translate(-50%, -50%)` centers the card in HA, and the overlay centers it too.
+        val vv = VitroView(activity, EntityStore(), 0xFF000000.toInt())
+        val both = vv.pinnedLayoutParams(ThemeResolver.parseCardMod("ha-card { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%) }"))
+        assertEquals(Gravity.CENTER_HORIZONTAL or Gravity.CENTER_VERTICAL, both.gravity)
+        assertEquals(0, both.topMargin)
+        assertEquals(0, both.marginStart)
+        // One axis: `top: 50%` with translateY(-50%) centers vertically; the other axis keeps its offset.
+        val dp = activity.resources.displayMetrics.density
+        val side = vv.pinnedLayoutParams(ThemeResolver.parseCardMod("ha-card { position: fixed; right: 24px; top: 50%; transform: translateY(-50%) }"))
+        assertEquals(Gravity.END or Gravity.CENTER_VERTICAL, side.gravity)
+        assertEquals((24 * dp).toInt(), side.marginEnd)
+        // The overlay reads every translate in the list, as the checker does.
+        val list = vv.pinnedLayoutParams(ThemeResolver.parseCardMod("ha-card { position: fixed; left: 0; top: 50%; transform: translate(0, 0) translate(0, -50%) }"))
+        assertEquals(Gravity.START or Gravity.CENTER_VERTICAL, list.gravity)
+    }
+
+    private fun vitroView(
+        store: EntityStore,
+        dashboard: String,
+        resources: List<dev.glassworks.engine.vitro.model.LovelaceResource> = emptyList(),
+    ): VitroView {
         val vv = VitroView(activity, store, 0xFF000000.toInt())
+        vv.resourcesList = resources
         vv.contextFactory = { theme ->
             VitroCardContext(
                 context = activity,
                 haBase = FakeHaServer.BASE,
                 store = store,
                 theme = theme,
-                resources = emptyList(),
+                resources = vv.resourcesList,
                 accessToken = { FakeHaServer.TOKEN },
                 callService = { _, _, _, _ -> },
                 navigate = {},
