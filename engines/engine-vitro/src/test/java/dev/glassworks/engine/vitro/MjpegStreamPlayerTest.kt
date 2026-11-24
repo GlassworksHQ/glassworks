@@ -91,6 +91,24 @@ class MjpegStreamPlayerTest {
     }
 
     @Test
+    fun anExifThumbnailsEoiDoesNotEndTheFrame() {
+        // SOI, APP1 holding a whole thumbnail (its own SOI..EOI), SOS with scan data (a stuffed FF 00), EOI.
+        val thumb = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 1, 2, 0xFF.toByte(), 0xD9.toByte())
+        val out = ByteArrayOutputStream()
+        out.write(byteArrayOf(0xFF.toByte(), 0xD8.toByte()))
+        out.write(byteArrayOf(0xFF.toByte(), 0xE1.toByte(), 0, (thumb.size + 2).toByte()))
+        out.write(thumb)
+        out.write(byteArrayOf(0xFF.toByte(), 0xDA.toByte(), 0, 4, 9, 9))
+        out.write(byteArrayOf(5, 0xFF.toByte(), 0, 6, 0xFF.toByte(), 0xD0.toByte(), 7))
+        out.write(byteArrayOf(0xFF.toByte(), 0xD9.toByte()))
+        val frame = out.toByteArray()
+        val got = collect(multipart(listOf(frame, jpeg(10)), withLength = false))
+        assertEquals(2, got.size)
+        assertArrayEquals(frame, got[0])
+        assertArrayEquals(jpeg(10), got[1])
+    }
+
+    @Test
     fun skipsPartsOverTheCapAndKeepsReading() {
         val small = jpeg(8, 16)
         val huge = jpeg(9, 4_096)

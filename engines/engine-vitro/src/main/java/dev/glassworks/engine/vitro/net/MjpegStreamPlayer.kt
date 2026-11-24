@@ -37,6 +37,9 @@ class MjpegStreamPlayer(
     private val maxWidthPx: Int = DEFAULT_MAX_WIDTH_PX,
 ) {
     @Volatile private var running = false
+
+    /** Set by [stop]: an error the worker already posted is dropped, as [onError] never runs after [stop]. */
+    @Volatile private var cancelled = false
     @Volatile private var conn: HttpURLConnection? = null
     private var thread: Thread? = null
     private val frameInFlight = AtomicBoolean(false)
@@ -48,6 +51,7 @@ class MjpegStreamPlayer(
     fun start() {
         if (running) return
         running = true
+        cancelled = false
         thread = Thread({ runLoop() }, "vitro-mjpeg-${entityLabel(url)}").apply {
             isDaemon = true
             start()
@@ -55,6 +59,7 @@ class MjpegStreamPlayer(
     }
 
     fun stop() {
+        cancelled = true
         running = false
         runCatching { conn?.disconnect() }
         conn = null
@@ -102,7 +107,7 @@ class MjpegStreamPlayer(
             conn = null
             if (running && errorSent.compareAndSet(false, true)) {
                 running = false
-                main.post { onError() }
+                main.post { if (!cancelled) onError() }
             }
         }
     }
@@ -236,15 +241,17 @@ private fun skipToSoi(inp: InputStream): Boolean {
     }
 }
 
-/** Reads one JPEG starting at SOI through EOI. Empty array if it was larger than [maxBytes]; null at end of stream. */
+/**
+ * Reads one JPEG starting at SOI through EOI. Empty array if it was larger than [maxBytes]; null at end of stream.
+ * It walks the JPEG's segments by their lengths, so an EOI inside one (an Exif thumbnail in APP1) doesn't end the
+ * frame; only entropy-coded scan data is scanned for markers. Bytes that aren't segments fall back to a plain scan.
+ */
 private fun readSoiToEoi(inp: InputStream, maxBytes: Int): ByteArray? {
     val out = ByteArrayOutputStream(64 * 1024)
     var tooBig = false
-    var prev = -1
-    while (true) {
+    fun read(): Int {
         val b = inp.read()
-        if (b == -1) return null
-        if (!tooBig) {
+        if (b != -1 && !tooBig) {
             if (out.size() >= maxBytes) {
                 tooBig = true
                 out.reset()
@@ -252,8 +259,50 @@ private fun readSoiToEoi(inp: InputStream, maxBytes: Int): ByteArray? {
                 out.write(b)
             }
         }
-        if (prev == 0xFF && b == 0xD9) return if (tooBig) ByteArray(0) else out.toByteArray()
-        prev = b
+        return b
+    }
+    fun done() = if (tooBig) ByteArray(0) else out.toByteArray()
+    if (read() == -1 || read() == -1) return null // SOI
+    var code = -1 // a marker code already read, else -1
+    while (true) {
+        if (code == -1) {
+            val ff = read()
+            if (ff == -1) return null
+            if (ff != 0xFF) {
+                // Not a segment where one belongs: find the EOI the plain way.
+                var prev = ff
+                while (true) {
+                    val x = read()
+                    if (x == -1) return null
+                    if (prev == 0xFF && x == 0xD9) return done()
+                    prev = x
+                }
+            }
+            code = read()
+            while (code == 0xFF) code = read() // fill bytes
+            if (code == -1) return null
+        }
+        val c = code
+        code = -1
+        if (c == 0xD9) return done()
+        if (c in 0xD0..0xD7 || c == 0x01) continue // no length
+        val hi = read()
+        val lo = read()
+        if (hi == -1 || lo == -1) return null
+        for (i in 0 until ((hi shl 8) or lo) - 2) if (read() == -1) return null
+        if (c == 0xDA) {
+            // Scan data: FF 00 is a stuffed byte and FF D0..D7 a restart; any other FF xx is the next marker.
+            var prev = -1
+            while (true) {
+                val x = read()
+                if (x == -1) return null
+                if (prev == 0xFF && x != 0x00 && x != 0xFF && x !in 0xD0..0xD7) {
+                    code = x
+                    break
+                }
+                prev = x
+            }
+        }
     }
 }
 
